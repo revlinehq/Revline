@@ -16,6 +16,6 @@ function Stage({ project, assets, playerRef, onFrame, onPlaying }: { project: Pr
     player.addEventListener("play", play); player.addEventListener("pause", pause); player.addEventListener("ended", pause);
     return () => { player.removeEventListener("frameupdate", frameListener); player.removeEventListener("play", play); player.removeEventListener("pause", pause); player.removeEventListener("ended", pause); };
   }, [playerRef, onFrame, onPlaying, project.aspect]);
-  return <Player ref={playerRef} component={MotionComposition} inputProps={inputProps} durationInFrames={durationFrames(project)} fps={FPS} compositionWidth={size.width} compositionHeight={size.height} initialFrame={25} controls={false} loop clickToPlay={false} style={{ width: "100%", aspectRatio: `${size.width}/${size.height}` }} errorFallback={({ error }) => <div className="p-8 text-sm text-red-300">Preview error: {error.message}</div>}/>;
+  return <Player ref={playerRef} component={MotionComposition} inputProps={inputProps} durationInFrames={durationFrames(project)} fps={FPS} compositionWidth={size.width} compositionHeight={size.height} initialFrame={Math.min(45,durationFrames(project) - 1)} controls={false} loop clickToPlay={false} style={{ width: "100%", aspectRatio: `${size.width}/${size.height}` }} errorFallback={({ error }) => <div className="p-8 text-sm text-red-300">Preview error: {error.message}</div>}/>;
 }
 export const PlayerStage = memo(Stage);

@@ -4,11 +4,11 @@ import { assertProject, assetsSchema, createScene, dimensions, durationFrames, i
 import { demoEdit } from "../src/lib/demo-engine";
 
 test("a targeted timing edit preserves every other scene and project setting", () => {
-  const result = demoEdit("Make scene 2 last 6 seconds", initialProject, "intro");
-  assert.equal(result.project.scenes[1].duration, 6);
+  const result = demoEdit("Make scene 2 last 8 seconds", initialProject, "intro");
+  assert.equal(result.project.scenes[1].duration, 8);
   for (const index of [0, 2, 3, 4]) assert.deepEqual(result.project.scenes[index], initialProject.scenes[index]);
   assert.equal(result.project.theme, initialProject.theme);
-  assert.equal(initialProject.scenes[1].duration, 5);
+  assert.equal(initialProject.scenes[1].duration, 6);
 });
 test("creation honors brand, duration, aspect style, and produces valid scenes", () => {
   const { project } = demoEdit("Create a 20-second launch video for Nova with electric purple accents", initialProject, "intro");
@@ -29,7 +29,7 @@ test("all formats preserve duration and give correct output dimensions", () => {
   assert.deepEqual(dimensions("landscape"), { width: 1920, height: 1080 });
   assert.deepEqual(dimensions("portrait", "720p"), { width: 720, height: 1280 });
   assert.deepEqual(dimensions("square"), { width: 1080, height: 1080 });
-  assert.equal(sceneStart(initialProject, 2), 240);
+  assert.equal(sceneStart(initialProject, 2), 270);
   assert.equal(durationFrames(initialProject), 570);
 });
 test("uploads reject URLs, executable SVG, and oversized payloads", () => {

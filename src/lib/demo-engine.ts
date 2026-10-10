@@ -1,3 +1,4 @@
+import { textLayer } from "../motion/schema";
 import { createScene, Project, SceneType, sceneTypes } from "./project";
 
 // An intentionally limited local engine for trying the editor without an API key.
@@ -5,20 +6,28 @@ export function demoEdit(prompt: string, current: Project, selectedId: string | 
   const project = structuredClone(current);
   const lower = prompt.toLowerCase();
   const specific = /(?:scene|shot)\s*(\d+)/i.exec(prompt);
-  const index = specific ? Number(specific[1]) - 1 : project.scenes.findIndex(s => s.id === selectedId);
+  const index = /(?:into|to|the) (?:the )?result/.test(lower) && !specific ? project.scenes.findIndex(s => s.type === "result") : specific ? Number(specific[1]) - 1 : project.scenes.findIndex(s => s.id === selectedId);
   const target = project.scenes[index >= 0 ? index : 0];
   if (specific && !project.scenes[index]) return { project, message: "That scene doesn’t exist. Select a scene from the timeline and try again." };
   const seconds = /(?:for|to|last|hold|duration|make|total)?\s*(\d+(?:\.\d+)?)\s*[- ]?\s*(?:seconds?|secs?|s\b)/i.exec(prompt);
   if (/\b(create|generate|build|make)\b/.test(lower) && /\b(demo|video|launch|intro)\b/.test(lower) && !/\b(scene|shot)\b/.test(lower)) {
     const brand = /(?:for|called|named|introducing)\s+["“]?([A-Za-z][\w -]{1,35}?)(?:["”.,]|\s+(?:with|in|using|that|a|an|and)|$)/i.exec(prompt)?.[1]?.trim() || "Your product";
-    const types: SceneType[] = ["title", "screenshot", "feature", /chart|growth|data/.test(lower) ? "chart" : /workflow|steps/.test(lower) ? "workflow" : "cards", "outro"];
+    const composer = /composer|typing|prompt-to|ai demo/.test(lower);
+    const types: SceneType[] = ["title", composer ? "composer" : "screenshot", composer ? "result" : "feature", /chart|growth|data/.test(lower) ? "chart" : /workflow|steps/.test(lower) ? "workflow" : "cards", "outro"];
     const duration = Math.max(5, Math.min(60, Number(seconds?.[1] || 20))) / types.length;
     project.name = `Introducing ${brand}`;
-    project.scenes = types.map((type, i) => ({ ...createScene(type), duration, kicker: i === 0 ? `INTRODUCING ${brand}`.slice(0, 40) : ["", "MEET YOUR WORKSPACE", "THE DETAILS MATTER", "MAKE IT HAPPEN", "START TODAY"][i], title: [ `Meet ${brand}.`, "Everything, in one place.", "Designed to keep you moving.", "Do more of what matters.", `Your next chapter.\n${brand}.` ][i], subtitle: i === 4 ? `Discover ${brand} →` : "A simpler way to turn your ideas into progress." }));
+    const total = duration * 5; const composerDuration = Math.max(1,Math.min(12,Math.max(total - 48,Math.min(total - 4,Math.max(5,total * .3)))));
+    project.scenes = types.map((type, i) => ({ ...createScene(type), duration: composer ? i === 1 ? composerDuration : (total - composerDuration) / 4 : duration, kicker: i === 0 ? `INTRODUCING ${brand}`.slice(0, 40) : ["", "MEET YOUR WORKSPACE", "THE DETAILS MATTER", "MAKE IT HAPPEN", "START TODAY"][i], title: [ `Meet ${brand}.`, "Everything, in one place.", "Designed to keep you moving.", "Do more of what matters.", `Your next chapter.\n${brand}.` ][i], subtitle: type === "composer" ? `Create a cinematic launch video for ${brand}. Reveal the UI, zoom into the details, and end on the logo.` : i === 4 ? `Discover ${brand} →` : "A simpler way to turn your ideas into progress." }));
     const screenshotId = current.scenes.find(s => s.assetId)?.assetId;
     if (screenshotId) project.scenes[1].assetId = screenshotId;
     applyStyle(lower, project);
     return { project, message: `Built a ${Math.round(duration * 5)}-second, five-scene demo for ${brand}. This is the local demo engine; connect an AI model for open-ended creative direction.` };
+  }
+  if (/\b(add|insert)\b/.test(lower) && /layer|caption|overlay/.test(lower)) {
+    if (target.design.layers.length >= 6) return { project, message: "This shot supports up to six independent layers." };
+    const text = /["“]([^"”]+)["”]/.exec(prompt)?.[1] || "Your caption";
+    target.design.layers.push(textLayer(text.slice(0,140)));
+    return { project,message: "Added an independent text layer. Open Layers in the inspector to edit its keyframes." };
   }
   if (/\b(add|insert)\b/.test(lower)) {
     const type = sceneTypes.find(t => lower.includes(t)) || (/typography|text/.test(lower) ? "title" : "feature");
@@ -39,13 +48,25 @@ export function demoEdit(prompt: string, current: Project, selectedId: string | 
     } else target.duration = Math.max(1, Math.min(12, Number(seconds[1])));
     changed = true;
   }
-  const copy = /(?:title|headline|text|say|read)[^"“\n]{0,30}["“]([^"”]+)["”]/i.exec(prompt)?.[1];
-  if (copy) { target.title = copy.slice(0, 100); changed = true; }
+  const copy = /(?:title|headline|text|prompt|typing|say|read)[^"“\n]{0,30}["“]([^"”]+)["”]/i.exec(prompt)?.[1];
+  if (copy) { if (target.type === "composer" && /prompt|typing|typed/.test(lower)) target.subtitle = copy.slice(0,200); else target.title = copy.slice(0, 100); changed = true; }
   if (/slower|longer/.test(lower) && !seconds) { target.duration = Math.min(12, target.duration + 1); changed = true; }
   if (/faster|shorter/.test(lower) && !seconds) { target.duration = Math.max(1, target.duration - 1); changed = true; }
   if (/spring|bouncy/.test(lower)) { target.motion = "spring"; changed = true; }
   if (/snappy|punchy/.test(lower)) { target.motion = "snappy"; changed = true; }
   if (/smooth|calm/.test(lower)) { target.motion = "smooth"; changed = true; }
+  if (/zoom|closer|push.in/.test(lower)) { target.design.camera.mode = target.type === "composer" ? "focus" : "push-in"; target.design.camera.strength = .8; changed = true; }
+  if (/pull.back|zoom.out/.test(lower)) { target.design.camera.mode = "pull-back"; changed = true; }
+  if (/pan left|pan right/.test(lower)) { target.design.camera.mode = lower.includes("left") ? "pan-left" : "pan-right"; changed = true; }
+  if (/static camera|no zoom/.test(lower)) { target.design.camera.mode = "static"; changed = true; }
+  for (const type of ["wipe","push","zoom","dissolve","cut"] as const) if (new RegExp(`\\b${type}\\b`).test(lower) && /transition|into|between|cut|wipe|dissolve/.test(lower)) { target.design.transition.type = type; changed = true; }
+  if (/word.reveal|word by word/.test(lower)) { target.design.reveal = "words"; changed = true; }
+  if (/mask|line.reveal/.test(lower)) { target.design.reveal = "lines"; changed = true; }
+  if (/cinematic/.test(lower)) { project.scenes.forEach(s => { s.design.easing = "cinematic"; s.design.motionBlur = true; }); changed = true; }
+  for (const bg of ["grid","orbit","plain"] as const) if (new RegExp(`\\b${bg}\\b`).test(lower) && /background/.test(lower)) { target.design.background = bg; changed = true; }
+  if (/ambient/.test(lower)) { project.soundtrack = "ambient"; changed = true; }
+  if (/pulse|music/.test(lower)) { project.soundtrack = "pulse"; changed = true; }
+  if (/silent|mute|no music/.test(lower)) { project.soundtrack = "silent"; changed = true; }
   if (applyStyle(lower, project)) changed = true;
   if (/portrait|vertical|9:16/.test(lower)) { project.aspect = "portrait"; changed = true; }
   if (/square|1:1/.test(lower)) { project.aspect = "square"; changed = true; }

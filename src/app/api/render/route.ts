@@ -6,10 +6,10 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { bundle } from "@remotion/bundler";
 import { makeCancelSignal, renderMedia, selectComposition } from "@remotion/renderer";
-import { assertProject, assetsSchema, dimensions, projectSchema } from "@/lib/project";
+import { missingAsset, assertProject, assetsSchema, dimensions } from "@/lib/project";
 export const runtime = "nodejs";
 export const maxDuration = 600;
-const schema = z.object({ project: projectSchema, assets: assetsSchema, resolution: z.enum(["720p", "1080p"]) });
+const schema = z.object({ project: z.unknown().transform(assertProject), assets: assetsSchema, resolution: z.enum(["720p", "1080p"]) });
 export async function POST(request: Request) {
   const rejected = requestError(request); if (rejected) return rejected;
   if (Number(request.headers.get("content-length")) > 24_000_000) return NextResponse.json({ error: "Keep uploads under 15 MB total" }, { status: 413 });
@@ -19,7 +19,7 @@ export async function POST(request: Request) {
     if (text.length > 24_000_000) return NextResponse.json({ error: "The composition is too large" }, { status: 413 });
     input = schema.parse(JSON.parse(text));
     assertProject(input.project);
-    if (input.project.scenes.some(s => s.assetId && !input.assets.some(a => a.id === s.assetId))) throw new Error("A scene references a missing asset");
+    if (missingAsset(input.project,input.assets)) throw new Error("A scene references a missing asset");
   } catch (error) { return NextResponse.json({ error: error instanceof z.ZodError ? "Invalid composition or uploaded image" : error instanceof Error ? error.message : "Invalid request" }, { status: 400 }); }
   const encoder = new TextEncoder();
   const { cancel, cancelSignal } = makeCancelSignal();
@@ -33,7 +33,7 @@ export async function POST(request: Request) {
       try {
         emit({ type: "progress", progress: 0, stage: "Preparing composition" });
         directory = await mkdtemp(join(tmpdir(), "motion-demo-"));
-        const serveUrl = await bundle({ entryPoint: join(process.cwd(), "src/remotion/index.tsx"), outDir: join(directory, "bundle"), onProgress: progress => emit({ type: "progress", progress: Math.round(progress * .12), stage: "Preparing composition" }) });
+        const serveUrl = await bundle({ entryPoint: join(process.cwd(), "src/remotion/index.tsx"), outDir: join(directory, "bundle"), publicDir: join(process.cwd(), "public"), onProgress: progress => emit({ type: "progress", progress: Math.round(progress * .12), stage: "Preparing composition" }) });
         const inputProps = { project: input.project, assets: input.assets };
         const composition = await selectComposition({ serveUrl, id: "MotionDemo", inputProps });
         emit({ type: "progress", progress: 12, stage: "Rendering frames" });

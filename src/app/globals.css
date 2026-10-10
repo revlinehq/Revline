@@ -225,3 +225,18 @@ svg { stroke-width: 1.65; }
 .studio-dialog { background: #1c1c1c; border-color: #3c3c3c; border-radius: 9px !important; }.export-summary { background: #222; border-color: #333; border-radius: 5px; }.progress-track > span { background: #eee; }
 .error-banner { background: #292929; color: #ddd; border-color: #444; }.dialog-error { color: #ddd; }
 .mobile-navigation { background: #191919; border-color: #333; }.mobile-navigation button.active { border-color: #ddd; color: #eee; }
+.direction-controls { margin-top: 20px; border-top: 1px solid #333; }
+.direction-controls > details { border-bottom: 1px solid #333; }
+.direction-controls summary { display: flex; align-items: center; justify-content: space-between; padding: 15px 0; cursor: pointer; font-size: 11px; color: #ddd; list-style: none; }
+.direction-controls summary::before { content: '+'; width: 15px; font-size: 13px; color: #999; }
+.direction-controls details[open] > summary::before { content: '−'; }
+.direction-controls summary > span { margin-left: auto; color: #888; font-size: 9px; }
+.direction-fields { display: flex; flex-direction: column; gap: 13px; padding-bottom: 15px; }
+.direction-field { display: flex; flex-direction: column; gap: 7px; color: #aaa; font-size: 10px; min-width: 0; }
+.direction-field [data-slot=input], .direction-field [data-slot=textarea] { background: #202020; border-color: #353535; font-size: 11px; height: 33px; border-radius: 5px; box-shadow: none; }
+.direction-toggle { font-size: 10px; color: #aaa; display: flex; gap: 8px; align-items: center; }
+.direction-toggle input { accent-color: #ddd; }
+.layer-actions { display: flex; gap: 5px; flex-wrap: wrap; }
+.layer-actions [data-slot=button] { font-size: 10px; padding: 0 9px; }
+.layer-editor { border: 1px solid #333; border-radius: 5px; padding: 0 10px; }
+.layer-editor summary { gap: 5px; font-size: 10px; }
