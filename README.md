@@ -1,6 +1,8 @@
-# Frame — Motion Studio
+# Revline — AI Video Editor
 
-A functional, local-first motion design MVP for short product demos. Built with Next.js, React, TypeScript, shadcn/ui (Base UI), and Remotion. Describe a demo in chat, upload product imagery, edit a storyboard, preview the result, and export an MP4.
+Revline is an AI video editor: add your footage, describe the edit in chat, watch the preview update, and export your video.
+
+The current Revline implementation uses Next.js, Clerk, Convex, Cloudflare R2, and HyperFrames, with Claude calling validated editing tools. The source currently on this branch is the earlier motion prototype; the setup notes below apply to that prototype until the current editor source is published.
 
 ## Run
 
