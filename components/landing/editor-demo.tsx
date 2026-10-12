@@ -8,6 +8,7 @@ import { Brand } from '@/components/workspace/brand';
 import { PrimaryButton } from '@/components/workspace/primary-button';
 import { EditorStateProvider } from '@/components/editor/editor-state';
 import { EditorPlaybackControls } from '@/components/editor/playback-controls';
+import { AspectRatioControl } from '@/components/editor/aspect-ratio-control';
 import { Preview, type PreviewHandle } from '@/components/editor/preview';
 import { PreviewZoomControls, PreviewZoomProvider, PreviewViewport } from '@/components/editor/preview-zoom';
 import { TimelinePanel } from '@/components/editor/timeline';
@@ -117,7 +118,7 @@ export function ProductDemo() {
         <div className="landing-demo-workspace">
           <PreviewZoomProvider canvas={canvas}>
             <section className="landing-demo-preview" aria-label="Sample video preview">
-              <div className="landing-demo-preview-toolbar canvas-toolbar"><span>9:16</span><PreviewZoomControls /></div>
+              <div className="landing-demo-preview-toolbar canvas-toolbar"><AspectRatioControl value={timeline.aspectRatio} onChange={aspectRatio => { preview.current?.pause(); change({ ...timeline, aspectRatio }); }} /><PreviewZoomControls /></div>
               <div className="landing-demo-preview-stage stage-center"><PreviewViewport><Preview ref={preview} timeline={timeline} assets={assets} time={time} onTime={setTime} onPlaying={setPlaying} onError={report} muted={muted} selectedClip={clip} onSelectClip={select} onEditText={editText} onClipChange={(id, patch) => change(patchClip(timeline, id, patch))} onVisualChange={patch => { if (clip) change(patchClip(timeline, clip.id, patch)); }} /></PreviewViewport></div>
             </section>
           </PreviewZoomProvider>
