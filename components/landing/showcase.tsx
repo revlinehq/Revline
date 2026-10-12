@@ -1,7 +1,3 @@
-import { Caveat } from 'next/font/google';
-
-const handwriting = Caveat({ subsets: ['latin'], weight: '500', display: 'swap' });
-
 const examples: { title: string; src?: string; poster?: string }[] = [
   { title: 'Professional Edits' },
   { title: 'Short form' },
@@ -10,7 +6,7 @@ const examples: { title: string; src?: string; poster?: string }[] = [
 
 export function LandingShowcase() {
   return <section className="landing-showcase landing-section" aria-labelledby="landing-showcase-heading">
-    <h2 id="landing-showcase-heading" className={handwriting.className}>made with revline</h2>
+    <h2 id="landing-showcase-heading">made with revline</h2>
     <div className="landing-showcase-grid">
       {examples.map(example => <figure className="landing-showcase-example" key={example.title}>
         <figcaption>{example.title}</figcaption>
