@@ -57,11 +57,11 @@ Media preparation, AI-requested analysis, and exports use `@convex-dev/workflow`
 
 ## Production deployment
 
-The hosted app is https://editor.tryrevline.com, in Vercel project `techson1cs-projects/revline-editor`. The connected GitHub repository is `zuraHQ/revline-editor`; pushes to `codex/mvp` trigger production builds. Production uses Clerk's live instance for `tryrevline.com` and Convex `different-gnu-398`. Localhost continues to use the development instance and Convex `majestic-alpaca-541` through `.env.local`.
+The hosted app is https://tryrevline.com, in Vercel project `techson1cs-projects/revline-editor`; https://editor.tryrevline.com remains an alias. Cloudflare continues to manage DNS and email records. The connected GitHub repository is `zuraHQ/revline-editor`; pushes to `codex/mvp` trigger production builds. Production uses Clerk's live instance for `tryrevline.com` and Convex `different-gnu-398`, with `APP_ORIGIN=https://tryrevline.com`. Localhost continues to use the development instance and Convex `majestic-alpaca-541` through `.env.local`.
 
 Vercel holds the production Clerk secret and public Convex/Clerk settings. The Anthropic key and media-worker credentials belong in production Convex. Gemini and TwelveLabs keys belong only in the processing worker's environment. Environment files, generated build output, and private fixtures are excluded from Git and Vercel uploads.
 
-The production R2 gateway uses `cloudflare/media/wrangler.production.jsonc`, allows the hosted origin, and has its own signing secret. Deploy it with `npx wrangler deploy --config cloudflare/media/wrangler.production.jsonc`. Deploy Convex changes to the announced production target with `npx convex deploy --yes --typecheck enable`; verify the selected deployment before running this command.
+The production R2 gateway uses `cloudflare/media/wrangler.production.jsonc`, allows both hosted origins, and has its own signing secret. Deploy it with `npx wrangler deploy --config cloudflare/media/wrangler.production.jsonc`. Deploy Convex changes to the announced production target with `npx convex deploy --yes --typecheck enable`; verify the selected deployment before running this command.
 
 `npm run worker:production` starts the production processing daemon with the private `.env.production.local` settings. It currently runs on this computer; an always-running worker host is still required to process media and exports while this computer is off. Queued jobs remain saved in Convex until a worker can claim them.
 
