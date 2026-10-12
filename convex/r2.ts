@@ -1,3 +1,4 @@
+import { requireEditorAccess } from './lib/billing_access';
 import type { Id, Doc } from './_generated/dataModel';
 import { ConvexError, v } from 'convex/values';
 import { action, internalAction, internalMutation, internalQuery } from './_generated/server';
@@ -18,6 +19,7 @@ export const authorize = internalQuery({ args: { projectId: v.id('projects'), jo
   const task = args.taskId && args.leaseToken ? await requireMediaTask(ctx, args.taskId, args.leaseToken) : null;
   if (args.taskId && !task) throw new ConvexError('Media task credentials are required');
   const ownerId = task?.ownerId ?? await requireOwner(ctx); await requireProject(ctx, args.projectId, ownerId);
+  if (!task && !args.jobId) await requireEditorAccess(ctx, ownerId);
   if (task && (task.projectId !== args.projectId || !['extract', 'render'].includes(task.kind) || (task.kind === 'extract' && (args.jobId || args.kind !== 'audio' || args.contentType !== 'audio/mp4')) || (task.kind === 'render' && (args.jobId !== task.renderJobId || args.kind !== 'video' || args.contentType !== 'video/mp4')))) throw new ConvexError('This task cannot upload that media');
   if (args.jobId && !task) {
     if (!process.env.RENDER_WORKER_SECRET || args.workerSecret !== process.env.RENDER_WORKER_SECRET) throw new ConvexError('Render worker authentication required');

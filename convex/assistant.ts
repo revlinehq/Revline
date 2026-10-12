@@ -1,3 +1,4 @@
+import { requireEditorAccess } from './lib/billing_access';
 import { abortStream, createThread, listStreams, listUIMessages, saveMessage, syncStreams, vPaginationResult, vStreamArgs } from "@convex-dev/agent";
 import { vStreamDelta, vStreamMessage } from "@convex-dev/agent/validators";
 import { paginationOptsValidator } from "convex/server";
@@ -15,7 +16,7 @@ export const status = query({ args: { projectId: v.id("projects") }, returns: v.
   const project = await requireProject(ctx, args.projectId, await requireOwner(ctx)); return { configured: configured(), running: project.aiRunning ?? false, error: project.aiError ?? null, reason: configured() ? null : providerReason };
 }});
 export const send = mutation({ args: { projectId: v.id("projects"), prompt: v.string(), selectedClipId: v.optional(v.string()), selectedClipIds: v.optional(v.array(v.string())), playhead: v.optional(v.number()) }, returns: v.null(), handler: async (ctx, args) => {
-  const ownerId = await requireOwner(ctx); const project = await requireProject(ctx, args.projectId, ownerId);
+  const ownerId = await requireOwner(ctx); await requireEditorAccess(ctx, ownerId); const project = await requireProject(ctx, args.projectId, ownerId);
   const clipIds = new Set(currentTimeline(project).clips.map(clip => clip.id));
   if (args.selectedClipId !== undefined && !clipIds.has(args.selectedClipId)) throw new ConvexError("Selected clip does not belong to this project");
   if (args.selectedClipIds) {

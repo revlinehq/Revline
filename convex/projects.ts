@@ -1,3 +1,4 @@
+import { requireEditorAccess } from './lib/billing_access';
 import { mediaUrl } from './lib/media_storage';
 import { ConvexError, v } from "convex/values";
 import { components, internal } from "./_generated/api";
@@ -12,7 +13,7 @@ import { aspectRatio, projectDocument, timelineValidator } from "./schema";
 import { cancelMediaTask } from './mediaTasks';
 function projectTitle(value: string) { const title = value.trim(); if (!title || title.length > 120) throw new ConvexError("Title must contain between 1 and 120 characters"); return title; }
 export const create = mutation({ args: { title: v.string(), aspectRatio, assetIds: v.optional(v.array(v.id('assets'))) }, returns: v.id("projects"), handler: async (ctx, args) => {
-  const ownerId = await requireOwner(ctx); const now = Date.now();
+  const ownerId = await requireOwner(ctx); await requireEditorAccess(ctx, ownerId); const now = Date.now();
   if ((args.assetIds?.length ?? 0) > 200) throw new ConvexError('Choose up to 200 uploads');
   const sources = await Promise.all([...new Set(args.assetIds ?? [])].map(id => ctx.db.get(id)));
   if (sources.some(asset => !asset || asset.ownerId !== ownerId || (!asset.r2Key && !asset.storageId))) throw new ConvexError('Saved footage is unavailable or belongs to another account');
@@ -77,13 +78,13 @@ export const list = query({ args: { limit: v.optional(v.number()) }, returns: v.
   }));
 }});
 export const update = mutation({ args: { projectId: v.id("projects"), title: v.optional(v.string()), aspectRatio: v.optional(aspectRatio) }, returns: v.null(), handler: async (ctx, args) => {
-  const project = await requireProject(ctx, args.projectId, await requireOwner(ctx));
+  const project = await requireProject(ctx, args.projectId, await requireOwner(ctx)); await requireEditorAccess(ctx, project.ownerId);
   if (args.aspectRatio !== undefined) await commitTimeline(ctx, project, { ...currentTimeline(project), aspectRatio: args.aspectRatio }, project.revision ?? 0);
   if (args.title !== undefined) await ctx.db.patch(project._id, { title: projectTitle(args.title), updatedAt: Date.now() });
   return null;
 }});
 export const saveTimeline = mutation({ args: { projectId: v.id("projects"), timeline: timelineValidator, baseTimeline: v.optional(timelineValidator), expectedRevision: v.number() }, returns: v.object({ revision: v.number(), timeline: timelineValidator }), handler: async (ctx, args) => {
-  const project = await requireProject(ctx, args.projectId, await requireOwner(ctx));
+  const project = await requireProject(ctx, args.projectId, await requireOwner(ctx)); await requireEditorAccess(ctx, project.ownerId);
   let timeline = await validateTimeline(ctx, project, args.timeline);
   let expectedRevision = args.expectedRevision;
   if (args.baseTimeline) {
@@ -96,7 +97,7 @@ export const saveTimeline = mutation({ args: { projectId: v.id("projects"), time
   return { revision, timeline: normalizeTimeline(timeline) };
 }});
 export const undo = mutation({ args: { projectId: v.id("projects") }, returns: v.number(), handler: async (ctx, args) => {
-  const project = await requireProject(ctx, args.projectId, await requireOwner(ctx)); const history = (project.history ?? []).map(normalizeTimeline); const previous = history.pop();
+  const project = await requireProject(ctx, args.projectId, await requireOwner(ctx)); await requireEditorAccess(ctx, project.ownerId); const history = (project.history ?? []).map(normalizeTimeline); const previous = history.pop();
   if (!previous) throw new ConvexError("No edits to undo"); const revision = (project.revision ?? 0) + 1;
   await ctx.db.patch(project._id, { timeline: previous, aspectRatio: previous.aspectRatio, history, revision, updatedAt: Date.now() }); return revision;
 }});

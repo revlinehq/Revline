@@ -1,3 +1,4 @@
+import { requireEditorAccess } from './lib/billing_access';
 import { mediaUrl } from './lib/media_storage';
 import { ConvexError, v } from "convex/values";
 import { mutation, query, type MutationCtx } from "./_generated/server";
@@ -17,7 +18,7 @@ async function requireJob(ctx: MutationCtx, jobId: Id<"renderJobs">, workerSecre
   await requireProject(ctx, job.projectId, ownerId); return job;
 }
 export const start = mutation({ args: { projectId: v.id("projects"), resolution: v.number(), fps: v.number(), quality: v.string() }, returns: v.id("renderJobs"), handler: async (ctx, args) => {
-  const ownerId = await requireOwner(ctx); const project = await requireProject(ctx, args.projectId, ownerId);
+  const ownerId = await requireOwner(ctx); await requireEditorAccess(ctx, ownerId); const project = await requireProject(ctx, args.projectId, ownerId);
   if (![720, 1080].includes(args.resolution) || ![24, 30, 60].includes(args.fps) || !["draft", "standard", "high"].includes(args.quality)) throw new ConvexError("Invalid export settings");
   const timeline = await validateTimeline(ctx, project, currentTimeline(project)); if (!timeline.clips.length) throw new ConvexError("Add a clip before exporting");
   const active = await ctx.db.query("renderJobs").withIndex("by_ownerId_projectId", q => q.eq("ownerId", ownerId).eq("projectId", project._id)).order("desc").take(501);

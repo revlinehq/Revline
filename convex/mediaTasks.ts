@@ -1,3 +1,4 @@
+import { requireEditorAccess } from './lib/billing_access';
 import { ConvexError, v, type Infer } from 'convex/values';
 import { vResultValidator, vWorkflowId, type WorkflowId } from '@convex-dev/workflow';
 import { internal } from './_generated/api';
@@ -85,7 +86,7 @@ export const settle = internalMutation({ args: { workflowId: vWorkflowId, result
 export const cleanup = internalMutation({ args: { workflowId: vWorkflowId }, returns: v.null(), handler: async (ctx, args) => { await mediaWorkflow.cleanup(ctx, args.workflowId); return null; } });
 
 export const start = mutation({ args: { projectId: v.id('projects'), assetId: v.id('assets'), kind: mediaTaskKind }, returns: v.id('mediaTasks'), handler: async (ctx, args): Promise<Id<'mediaTasks'>> => {
-  const ownerId = await requireOwner(ctx); await requireProject(ctx, args.projectId, ownerId);
+  const ownerId = await requireOwner(ctx); await requireEditorAccess(ctx, ownerId); await requireProject(ctx, args.projectId, ownerId);
   const asset = await ctx.db.get(args.assetId);
   if (!asset || asset.ownerId !== ownerId || asset.projectId !== args.projectId || asset.kind === 'image' || args.kind === 'render') throw new ConvexError('Choose media from this project.');
   if (['extract', 'shots', 'understand', 'track'].includes(args.kind) && asset.kind !== 'video') throw new ConvexError('This operation requires a video.');

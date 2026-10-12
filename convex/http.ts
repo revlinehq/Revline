@@ -23,7 +23,7 @@ http.route({ path: "/uploads", method: "POST", handler: httpAction(async (ctx, r
     return new Response(JSON.stringify({ error: "Upload failed. Request a new upload URL and retry." }), { status: 400, headers });
   }
 }) });
-if (process.env.BILLING_ENABLED === "true" && process.env.STRIPE_SECRET_KEY && process.env.STRIPE_WEBHOOK_SECRET && process.env.STRIPE_PRO_PRICE_ID && process.env.APP_ORIGIN) {
+if (process.env.STRIPE_SECRET_KEY && process.env.STRIPE_WEBHOOK_SECRET) {
   registerRoutes(http, components.stripe, { webhookPath: "/stripe/webhook" });
 } else {
   http.route({ path: "/stripe/webhook", method: "POST", handler: httpAction(async () => new Response("Billing is not active", { status: 503 })) });

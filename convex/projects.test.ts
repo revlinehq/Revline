@@ -130,7 +130,7 @@ describe("inactive providers", () => {
   });
   test("disabled billing performs zero Stripe network calls and rejects webhook processing", async () => {
     const fetch = vi.spyOn(globalThis, "fetch"); const t = makeTest(); const owner = t.withIdentity(identity("owner"));
-    expect(await owner.query(api.billing.status, {})).toEqual({ enabled: false, configured: false, subscribed: false, trialEligible: true, plan: "free" });
+    expect(await owner.query(api.billing.status, {})).toEqual({ enabled: false, configured: false, subscribed: false, trialEligible: true, needsPayment: false, plan: "free" });
     expect(await owner.query(api.billing.isSubscribed, {})).toBe(false);
     await expect(owner.action(api.billing.createCheckout, { plan: "pro" })).rejects.toThrow("Billing is not active");
     await expect(owner.action(api.billing.createPortal, {})).rejects.toThrow("Billing is not active");

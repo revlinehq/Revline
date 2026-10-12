@@ -1,3 +1,4 @@
+import { requireEditorAccess } from './lib/billing_access';
 import { mediaUrl } from './lib/media_storage';
 import { removeMediaAttachment } from './lib/shared_media';
 import { paginationOptsValidator } from 'convex/server';
@@ -11,10 +12,10 @@ import { parseShots } from '../lib/media-analysis/shots';
 import { serializedBytes, validateFocus } from "./lib/timeline";
 import { consumeUpload, issueUpload } from "./uploads";
 export const generateUploadUrl = mutation({ args: { projectId: v.id("projects") }, returns: v.string(), handler: async (ctx, args) => {
-  const ownerId = await requireOwner(ctx); await requireProject(ctx, args.projectId, ownerId); return await issueUpload(ctx, ownerId, args.projectId);
+  const ownerId = await requireOwner(ctx); await requireEditorAccess(ctx, ownerId); await requireProject(ctx, args.projectId, ownerId); return await issueUpload(ctx, ownerId, args.projectId);
 }});
 export const create = mutation({ args: { projectId: v.id("projects"), storageId: v.id("_storage"), fileName: v.string(), kind: assetKind, duration: v.optional(v.number()), width: v.optional(v.number()), height: v.optional(v.number()) }, returns: v.id("assets"), handler: async (ctx, args) => {
-  const ownerId = await requireOwner(ctx); await requireProject(ctx, args.projectId, ownerId);
+  const ownerId = await requireOwner(ctx); await requireEditorAccess(ctx, ownerId); await requireProject(ctx, args.projectId, ownerId);
   const fileName = args.fileName.trim(); if (!fileName || fileName.length > 255) throw new ConvexError("File name must contain between 1 and 255 characters");
   const existing = await ctx.db.query("assets").withIndex("by_storageId", q => q.eq("storageId", args.storageId)).first();
   if (existing) throw new ConvexError("File is already attached to a project");
