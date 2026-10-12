@@ -7,5 +7,4 @@
 .aspect-ratio-menu [role=menuitemradio]{min-height:34px;font-size:12px}
 .aspect-ratio-menu [role=menuitemradio]:focus{background:var(--ws-hover,var(--accent));color:var(--ws-text,var(--foreground))}
 .aspect-ratio-option{width:36px;flex-shrink:0}
-body:has(.landing) .aspect-ratio-menu{--ws-bg:#fff;--ws-text:#292929;--ws-hover:#f1f3f7;color-scheme:light}
-@media(max-width:600px){.aspect-ratio-label{display:none}.aspect-ratio-trigger[data-slot=button]{height:32px;padding:0 8px}.landing-demo-nav .landing-demo-project{display:none}.landing-demo-nav .aspect-ratio-trigger{margin-left:auto}.canvas-toolbar .aspect-ratio-trigger{height:32px}}
+@media(max-width:600px){.aspect-ratio-label{display:none}.aspect-ratio-trigger[data-slot=button]{height:32px;padding:0 8px}.canvas-toolbar .aspect-ratio-trigger{height:32px}}
