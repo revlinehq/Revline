@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { Brand } from '@/components/workspace/brand';
 import { LandingHero } from '@/components/landing/hero';
+import { LandingShowcase } from '@/components/landing/showcase';
 import { Workflow } from '@/components/landing/workflow';
 import { LandingFeatures } from '@/components/landing/features';
 import { LandingPricing } from '@/components/landing/pricing';
@@ -16,6 +17,7 @@ export default function Home() {
       <LandingStartButton compact play={false} className="landing-nav-start" />
     </nav>
     <LandingHero />
+    <LandingShowcase />
     <Workflow heading="The simplest way to edit." />
     <LandingFeatures />
     <LandingPricing />
