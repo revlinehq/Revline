@@ -11,3 +11,6 @@ public/vendor/gsap.min.js
 .wrangler/
 public/vendor/mediapipe/
 public/vendor/space-grotesk.woff2
+
+next-env.d.ts
+.vercel/

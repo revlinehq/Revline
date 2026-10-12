@@ -6,7 +6,7 @@
     "dev": "next dev --hostname localhost",
     "build": "next build",
     "start": "next start --hostname localhost",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "next typegen && tsc --noEmit",
     "test": "vitest run",
     "postinstall": "node scripts/copy-vendor.mjs",
     "convex:dev": "convex dev",

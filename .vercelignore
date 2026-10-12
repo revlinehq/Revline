@@ -1,0 +1,9 @@
+.git/
+.next/
+.next-build/
+.data/
+.wrangler/
+.env*
+*.tsbuildinfo
+design/
+public/uploads/
