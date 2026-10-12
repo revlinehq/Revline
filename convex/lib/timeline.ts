@@ -41,7 +41,7 @@ export async function validateTimeline(ctx: MutationCtx | QueryCtx, project: Doc
     ids.add(clip.id);
     if (![clip.start, clip.duration, clip.sourceStart].every(Number.isFinite) || clip.start < 0 || clip.sourceStart < 0 || clip.duration < 1 / timeline.fps || clip.start + clip.duration > 300) throw new ConvexError("Clip timing must fit within five minutes and have a positive duration");
     for (const key of ["x", "y"] as const) if (clip[key] !== undefined && (!Number.isFinite(clip[key]) || clip[key] < 0 || clip[key] > 1)) throw new ConvexError("Position must be between 0 and 1");
-    if (clip.volume !== undefined && (!Number.isFinite(clip.volume) || clip.volume < 0 || clip.volume > 1)) throw new ConvexError("Volume must be between 0 and 1");
+    if (clip.volume !== undefined && (!Number.isFinite(clip.volume) || clip.volume < 0 || clip.volume > 2)) throw new ConvexError("Volume must be between 0 and 2");
     if (clip.audioSeparated && (clip.kind !== 'video' || clip.volume !== 0)) throw new ConvexError('Separated video audio must remain muted');
     if (clip.linkedClipId) {
       const pair = clipsById.get(clip.linkedClipId);

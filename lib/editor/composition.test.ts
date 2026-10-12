@@ -17,6 +17,11 @@ describe('trusted composition generation', () => {
     expect(html).toContain('data-start="1" data-duration="2"');
     expect(html).toContain('data-media-start="3" data-volume="0.25"');
   });
+  test('preserves above-unity gain for playback and export without violating native media limits', () => {
+    const html = generateComposition({ ...timeline, clips: [{ id: 'audio', kind: 'audio', assetId: 'asset', start: 0, duration: 2, sourceStart: 0, volume: 2 }] }, [{ _id: 'asset', fileName: 'tone.wav', kind: 'audio', url: '/tone.wav' }]);
+    expect(html).toContain('data-volume="2"');
+    expect(html).toContain('media.volume=Math.min(1,Number(media.dataset.volume))');
+  });
   test('rejects unavailable media, unsafe URLs, and unbounded duration', () => {
     const clip = { id: 'video', kind: 'video' as const, assetId: 'asset', start: 0, duration: 2, sourceStart: 0 };
     expect(() => generateComposition({ ...timeline, clips: [clip] }, [])).toThrow('unavailable');

@@ -1,5 +1,6 @@
 'use client';
-import { useEffect, useRef, useState, forwardRef, useImperativeHandle } from 'react';
+import { useEffect, useRef, useState, useMemo, forwardRef, useImperativeHandle } from 'react';
+import { clipVolumeEnvelope } from '@/lib/editor/clip-volume';
 import type { HyperframesPlayer } from '@hyperframes/player';
 import { LoaderCircle } from 'lucide-react';
 import { calculateVisualRect, compositionTrackIndex, generateComposition, layerZIndex } from '@/lib/editor/composition';
@@ -27,21 +28,30 @@ export const Preview = forwardRef<PreviewHandle,{timeline:Timeline;assets:MediaA
   useEffect(()=>{if(player.current)player.current.muted=muted;},[muted]);
   const [ready,setReady]=useState(false);const [revision,setRevision]=useState(0);const seekPosition=useRef(time);
   const latestTimeline=useRef(timeline);latestTimeline.current=timeline;
+  const clipIndex=useRef(new Map<string,{clip:Clip;index:number}>());
+  clipIndex.current=useMemo(()=>new Map(timeline.clips.map((clip,index)=>[clip.id,{clip,index}])),[timeline.clips]);
   const previewVolumes=useRef(new Map<string,number>());
   // Layer order and gain update in place without rebuilding or decoding footage.
-  const contentKey=JSON.stringify({timeline:{...timeline,tracks:undefined,clips:timeline.clips.map(({track,volume,...clip})=>clip)},assets:assets.map(asset=>({...asset,url:asset.url?.split('?token=')[0]??null}))});
-  function updateLayers(p:HyperframesPlayer,current:Timeline){
+  const contentKey=useMemo(()=>JSON.stringify({timeline:{...timeline,tracks:undefined,clips:timeline.clips.map(({track,volume,...clip})=>clip)},assets:assets.map(asset=>({...asset,url:asset.url?.split('?token=')[0]??null}))}),[timeline,assets]);
+  function updateClip(p:HyperframesPlayer,clip:Clip,index:number){
     const doc=p.iframeElement?.contentDocument;if(!doc)return;
-    current.clips.forEach((clip,index)=>{
-      const node=doc.getElementById(`clip-${index}`);if(!node)return;
-      node.dataset.trackIndex=String(compositionTrackIndex(clip));
-      const frame=doc.getElementById(`clip-${index}-frame`);(frame??node).style.zIndex=String(layerZIndex(clip,index));
-      if(clip.kind==='video'||clip.kind==='audio'){
-        const volume=previewVolumes.current.get(clip.id)??clip.volume??1;
-        const media=node as HTMLMediaElement;media.dataset.volume=String(volume);media.volume=volume;
-        if(clip.kind==='video'){media.toggleAttribute('muted',volume===0);media.muted=volume===0||p.muted;}
+    const node=doc.getElementById(`clip-${index}`);if(!node)return;
+    const trackIndex=String(compositionTrackIndex(clip));if(node.dataset.trackIndex!==trackIndex)node.dataset.trackIndex=trackIndex;
+    const frame=doc.getElementById(`clip-${index}-frame`),visual=frame??node,zIndex=String(layerZIndex(clip,index));if(visual.style.zIndex!==zIndex)visual.style.zIndex=zIndex;
+    if(clip.kind==='video'||clip.kind==='audio'){
+      const volume=previewVolumes.current.get(clip.id)??clip.volume??1;
+      const media=node as HTMLMediaElement;if(media.dataset.volume!==String(volume)){
+        media.dataset.volume=String(volume);
+        // HyperFrames watches automation changes and samples this lane live;
+        // native HTML volume cannot carry gain above unity.
+        media.dataset.automation=clipVolumeEnvelope(volume);
       }
-    });
+      media.volume=Math.min(1,volume);
+      if(clip.kind==='video'){media.toggleAttribute('muted',volume===0);media.muted=volume===0||p.muted;}
+    }
+  }
+  function updateLayers(p:HyperframesPlayer,current:Timeline){
+    current.clips.forEach((clip,index)=>updateClip(p,clip,index));
   }
   useEffect(()=>{previewVolumes.current.clear();if(player.current)updateLayers(player.current,latestTimeline.current);},[committedTimeline]);
   useEffect(()=>()=>{player.current?.pause();player.current?.remove();player.current=null;callbacks.current.onPlaying(false);},[]);
@@ -63,7 +73,7 @@ export const Preview = forwardRef<PreviewHandle,{timeline:Timeline;assets:MediaA
     callbacks.current.onPlaying(false);
   },currentTime:()=>frameTime(player.current,seekPosition.current),mute:(v)=>{if(player.current)player.current.muted=v;},clipVolume:(id,volume)=>{
     if(volume===null)previewVolumes.current.delete(id);else previewVolumes.current.set(id,volume);
-    if(player.current)updateLayers(player.current,latestTimeline.current);
+    const entry=clipIndex.current.get(id);if(player.current&&entry)updateClip(player.current,entry.clip,entry.index);
   },resetCrop:()=>cropControls.current?.reset(),finishCrop:(cancel=false)=>{if(cancel)cropControls.current?.cancel();else cropControls.current?.done();}}),[]);
   useEffect(()=>{
     let cancelled=false,loaded=false,swapped=false;let p:HyperframesPlayer|null=null;let swapFrame=0;

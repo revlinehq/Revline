@@ -1,3 +1,4 @@
+import { MAX_CLIP_VOLUME } from './clip-volume';
 import { dimensions, timelineDuration, deriveTrackCounts, normalizeTimeline, trackOf, DEFAULT_CROP, DEFAULT_TRANSFORM, type Clip, type MediaAsset, type Timeline, type SourceCrop } from './types';
 
 export type CompositionOptions = {
@@ -144,12 +145,12 @@ export function generateComposition(timeline: Timeline, assets: MediaAsset[], op
         }
       }
     }
-    const volume = bounded(clip.volume, 1, 0, 1);
+    const volume = bounded(clip.volume, 1, 0, MAX_CLIP_VOLUME);
     const attrs = `${timing} data-media-start="${clip.sourceStart}" data-volume="${volume}"`;
     const frame = (media: string) => `<div id="${id}-frame" data-visual-clip="${escapeHtml(clip.id)}" class="visual-frame" style="${frameStyle}"><div class="source-window" style="${windowStyle}">${media}</div></div>`;
     if (clip.kind === 'image') return frame(`<img ${attrs} src="${src}" class="visual" style="${sourceStyle}" alt="" />`);
-    if (clip.kind === 'audio') return `<audio ${attrs} src="${src}" preload="auto"></audio>`;
-    return frame(`<video ${attrs} src="${src}" class="visual" style="${sourceStyle}" playsinline preload="auto"${volume === 0 ? ' muted' : ''}></video>`);
+    if (clip.kind === 'audio') return `<audio ${attrs} crossorigin="anonymous" src="${src}" preload="auto"></audio>`;
+    return frame(`<video ${attrs} crossorigin="anonymous" src="${src}" class="visual" style="${sourceStyle}" playsinline preload="auto"${volume === 0 ? ' muted' : ''}></video>`);
   }).join('\n');
   const safeDuration = Math.max(duration, 1 / fps);
   const gsapUrl = mediaUrl(options.gsapUrl ?? '/vendor/gsap.min.js');
@@ -163,6 +164,6 @@ const timeline=gsap.timeline({paused:true});
 ${animation.join('\n')}
 timeline.to({},{duration:${safeDuration}},0);
 window.__timelines=window.__timelines||{};window.__timelines.revline=timeline;
-document.querySelectorAll('video,audio').forEach(media=>{media.volume=Number(media.dataset.volume);});
+document.querySelectorAll('video,audio').forEach(media=>{media.volume=Math.min(1,Number(media.dataset.volume));});
 </script></body></html>`;
 }

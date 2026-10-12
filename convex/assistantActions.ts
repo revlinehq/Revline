@@ -101,7 +101,7 @@ export const respond = internalAction({
           if (!Object.values(style).some(value => value !== undefined)) throw new Error("Specify a text style change");
           return patchClip(t, clipId, style);
         }) }),
-        setVolume: createTool({ description: "Set volume from 0 (muted) to 1 (original volume). A linked video controls its separate audio clip.", inputSchema: z.object({ clipId: z.string(), volume: z.number().min(0).max(1) }), execute: async (_ctx, input) => checkpoint(t => {
+        setVolume: createTool({ description: "Set volume from 0 (muted) through 1 (100%, original volume) to 2 (200%, boosted). A linked video controls its separate audio clip.", inputSchema: z.object({ clipId: z.string(), volume: z.number().min(0).max(2) }), execute: async (_ctx, input) => checkpoint(t => {
           const clip = find(t, input.clipId); if (clip.kind !== "video" && clip.kind !== "audio") throw new Error("Choose a video or audio clip"); return patchClip(t, clip.id, { volume: input.volume });
         }) }),
         addSubtitlesFromTranscript: createTool({ description: "Add captions from this asset's saved transcript. Map source-relative timestamps into every occurrence of the source on the timeline; never invent spoken text.", inputSchema: z.object({ assetId: z.string() }), execute: async (_ctx, input) => checkpoint(t => {

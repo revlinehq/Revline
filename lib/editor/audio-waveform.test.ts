@@ -13,6 +13,7 @@ it('keeps silent regions empty and samples source offsets after a trim', () => {
 it('follows gain without changing time and limits work to the visible zoomed region', () => {
   expect(waveformBars(data, 2, 1, 300, 0, 300, .5)[0].amplitude).toBe(.5);
   expect(waveformBars(data, 2, 1, 300, 0, 300, 0).every(bar => bar.amplitude === 0)).toBe(true);
+  expect(waveformBars(data, 1, 1, 300, 0, 300, 2)[0].amplitude).toBeCloseTo(128 / 191);
   const zoomed = waveformBars(data, 0, 3, 90_000, 60_000, 60_300);
   expect(zoomed).toHaveLength(100);
   expect(zoomed[0]).toEqual({ left: 60_000, amplitude: 1 });

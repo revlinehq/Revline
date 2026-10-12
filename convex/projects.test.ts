@@ -295,7 +295,7 @@ test("visual layers, transforms, and crop bounds persist with undo and reject ma
     { ...timeline, tracks: { visual: 13, overlay: 2, audio: 1 } },
     { ...timeline, clips: [{ ...clip, transform: { ...clip.transform, scale: 6 } }] },
     { ...timeline, clips: [{ ...clip, crop: { ...clip.crop, left: 0.6, right: 0.4 } }] },
-    { ...timeline, clips: [{ ...clip, volume: 1.5 }] },
+    { ...timeline, clips: [{ ...clip, volume: 2.5 }] },
     { ...textTimeline, clips: [{ ...textTimeline.clips[0], transform: clip.transform }] },
     { ...textTimeline, clips: [{ ...textTimeline.clips[0], fit: "contain" as const }] },
     { ...textTimeline, clips: [{ ...textTimeline.clips[0], color: "url(https://example.com)" }] },
@@ -424,4 +424,18 @@ test("AI edits after inspecting a manual revision start a new undo group preserv
   expect((await owner.query(api.projects.get, { projectId })).history).toHaveLength(3);
   await owner.mutation(api.projects.undo, { projectId });
   expect((await owner.query(api.projects.get, { projectId })).timeline).toEqual(manual);
+});
+
+ test("above-unity audio gain persists, snapshots for export, and undoes to the original level", async () => {
+  const t=makeTest(), projectId=await project(t), owner=t.withIdentity(identity("owner"));
+  const storageId=await uploadedFile(t,"owner",projectId,"audio/mp4");
+  const assetId=await owner.mutation(api.assets.create,{projectId,storageId,fileName:"tone.m4a",kind:"audio",duration:5});
+  const timeline:Timeline={fps:30,aspectRatio:"vertical",tracks:{visual:0,overlay:0,audio:1},clips:[{id:"sound",kind:"audio",assetId,track:1,start:0,duration:2,sourceStart:0,volume:1}]};
+  await owner.mutation(api.projects.saveTimeline,{projectId,expectedRevision:0,timeline});
+  await owner.mutation(api.projects.saveTimeline,{projectId,expectedRevision:1,timeline:{...timeline,clips:[{...timeline.clips[0],volume:2}]}});
+  expect((await owner.query(api.projects.get,{projectId})).timeline?.clips[0].volume).toBe(2);
+  const jobId=await owner.mutation(api.renders.start,{projectId,resolution:720,fps:30,quality:"draft"});
+  expect((await owner.mutation(api.renders.claim,{jobId,workerSecret:"test-worker-secret"})).timeline.clips[0].volume).toBe(2);
+  await owner.mutation(api.projects.undo,{projectId});
+  expect((await owner.query(api.projects.get,{projectId})).timeline?.clips[0].volume).toBe(1);
 });

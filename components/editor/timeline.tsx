@@ -11,8 +11,8 @@ import { paintPlayhead, useTimelinePlayhead, useEdgeAutoScroll } from './use-tim
 import { deriveTrackCounts, layerGroup, trackOf, clipColor, timelineDuration, formatTime, maxTrackCount, type Timeline, type MediaAsset, type Clip, type LayerGroup } from '@/lib/editor/types';
 import { snapTime, addMediaClip, addTextClip, splitClip, frameSeekTime, linkedClipIds, unlinkClips, patchClip } from '@/lib/editor/operations';
 import { timelineLayout, TIMELINE_RULER_HEIGHT, TIMELINE_ORIGIN, TIMELINE_TOP_SPACE, TIMELINE_BOTTOM_SPACE } from '@/lib/editor/timeline-layout';
-import { clipVolumeAtPointer } from '@/lib/editor/clip-volume';
-import { zoomAtAnchor, reorderLayer, deleteEmptyLayer, removeEmptyLayers, resizeSelectedClips,moveSelectedClips,moveSelectionToNewLayers,layerDropTarget,clipLayerDropTarget,intersectsSelection,shouldCommitClipGesture,isDoubleTimelineTap,timelineTimeAtPointer,type SelectionBounds,type TimelineTap } from '@/lib/editor/timeline-controls';
+import { clipVolumeAtPointer, clipVolumeAtFraction, MAX_CLIP_VOLUME } from '@/lib/editor/clip-volume';
+import { zoomAtAnchor, reorderLayer, deleteEmptyLayer, removeEmptyLayers, resizeSelectedClips,moveSelectedClips,moveSelectionToNewLayers,layerDropTarget,clipLayerDropTarget,intersectsSelection,shouldCommitClipGesture,isDoubleTimelineTap,timelineTimeAtPointer,type TimelineTap } from '@/lib/editor/timeline-controls';
 import { isTimelineGestureRejection, TimelineGestureRejection } from '@/lib/editor/timeline-edit-errors';
 import { timelineGestureFrame } from '@/lib/editor/timeline-gesture-frame';
 import './custom-timeline.css';
@@ -49,8 +49,8 @@ function TimelinePlayheadClock(props: Omit<Parameters<typeof useTimelinePlayhead
 export function TimelinePanel(p:Props){
   const {timeline,assets,selected,onSelect,time,onSeek,onChange}=p;
   const store=useEditorStore();const zoom=useEditorState(s=>s.zoom);const snap=useEditorState(s=>s.snapping);const dense=useEditorState(s=>s.compactTracks);const RULER_HEIGHT=TIMELINE_RULER_HEIGHT;const origin=TIMELINE_ORIGIN;
-  const selectedIds=useEditorState(s=>s.selectedIds);const [box,setBox]=useState<SelectionBounds|null>(null);const [selecting,setSelecting]=useState(false);
-  const linkedSelection=new Set(linkedClipIds(timeline,selectedIds.length?selectedIds:selected?[selected]:[]));
+  const selectedIds=useEditorState(s=>s.selectedIds);const selectionBox=useRef<HTMLDivElement>(null);const [selecting,setSelecting]=useState(false);
+  const linkedSelection=useMemo(()=>new Set(linkedClipIds(timeline,selectedIds.length?selectedIds:selected?[selected]:[])),[timeline,selectedIds,selected]);
   const [drag,setDrag]=useState<Clip|null>(null);const [insertion,setInsertion]=useState<{group:LayerGroup;edge:'above'|'below';track?:number}|null>(null);const [layerDrop,setLayerDrop]=useState<string|null>(null);const [movingLayer,setMovingLayer]=useState<string|null>(null);const [scrubbing,setScrubbing]=useState(false);
   const [viewportHeight,setViewportHeight]=useState(0);const [scrollbarHeight,setScrollbarHeight]=useState(0);
   const [context,setContext]=useState<{clipId?:string;group?:LayerGroup;track?:number;time:number}|null>(null);
@@ -195,7 +195,7 @@ export function TimelinePanel(p:Props){
     if(mode==='move'&&(e.shiftKey||e.ctrlKey||e.metaKey)){lastTap.current=null;const ids=current.includes(clip.id)?current.filter(id=>id!==clip.id):[...current,clip.id];store.setState({selectedIds:ids,selectedId:ids.at(-1)??null});return;}
     const members=current.includes(clip.id)?current:[clip.id];
     if(!current.includes(clip.id))onSelect(clip.id);
-    const gestureMembers=linkedClipIds(timeline,members);const selectedClips=timeline.clips.filter(c=>gestureMembers.includes(c.id));
+    const gestureMembers=linkedClipIds(timeline,members),gestureIds=new Set(gestureMembers);const selectedClips=timeline.clips.filter(c=>gestureIds.has(c.id));
     const viewport=scroll.current;const host=previews.current;if(!viewport||!host)return;
     const startX=e.clientX,startY=e.clientY,startScrollX=viewport.scrollLeft,startScrollY=viewport.scrollTop;
     const tapSlop=e.pointerType==='touch'?8:3;
@@ -205,6 +205,9 @@ export function TimelinePanel(p:Props){
       const node=area.current?.querySelector<HTMLElement>(`.timeline-track[data-group="${row.group}"][data-layer="${row.number}"]`);
       const rect=node?.getBoundingClientRect();return {track:row.number,group:row.group,top:rect?.top??0,bottom:rect?.bottom??0};
     });
+    const trackMap=new Map(tracks.map(row=>[`${row.group}-${row.number}`,row]));
+    const minimumTime=-Math.min(...selectedClips.map(c=>c.start)),maximumTime=300-Math.max(...selectedClips.map(c=>c.start+c.duration));
+    let placedClips=new Map(timeline.clips.map(c=>[c.id,c])),targetTrackMap=trackMap,targetTrackKey='';
     const sourceRow=rows.find(row=>row.group===group&&row.track===trackOf(clip))!;
     const grabOffsetY=startY-sourceRow.top-3;
     const draggedHeight=tracks.find(row=>row.group===group&&row.number===trackOf(clip))!.clipHeight;
@@ -216,7 +219,7 @@ export function TimelinePanel(p:Props){
     const previousCursor=document.body.style.cursor;let unwatch=()=>{};
     const gestureCursor=mode==='move'?'default':'ew-resize';document.body.style.cursor=gestureCursor;
     const cursorStyle=document.createElement('style');cursorStyle.textContent=`.editor-app *{cursor:${gestureCursor}!important}`;document.head.appendChild(cursorStyle);
-    const marks=[0,p.readPlaybackTime?.()??store.getState().playhead,...timeline.clips.filter(c=>!gestureMembers.includes(c.id)).flatMap(c=>[c.start,c.start+c.duration])];
+    const marks=[0,p.readPlaybackTime?.()??store.getState().playhead,...timeline.clips.filter(c=>!gestureIds.has(c.id)).flatMap(c=>[c.start,c.start+c.duration])];
     const verticalMarks=[...marks,clip.start,clip.start+clip.duration];
     const beginPreview=()=>{
       lastTap.current=null;setDrag(clip);host.replaceChildren();
@@ -237,7 +240,7 @@ export function TimelinePanel(p:Props){
       }
     };
     const showSnapGuide=(enabled:boolean,scrollTop:number,viewportHeight:number)=>{
-      const candidates=mode==='move'?placed.clips.filter(c=>gestureMembers.includes(c.id)).flatMap(c=>[c.start,c.start+c.duration]):[next.start+(mode==='right'?next.duration:0)];
+      const candidates=mode==='move'?selectedClips.flatMap(c=>{const candidate=placedClips.get(c.id)!;return [candidate.start,candidate.start+candidate.duration];}):[next.start+(mode==='right'?next.duration:0)];
       const mark=enabled&&!dropError?marks.find(mark=>candidates.some(edge=>Math.abs(edge-mark)<1e-7)):undefined;
       if(snapGuide){
         snapGuide.style.display=mark===undefined?'none':'block';
@@ -254,12 +257,12 @@ export function TimelinePanel(p:Props){
       if(mode==='move'){
         const scrollDelta=scrollTop-startScrollY;
         const target=clipLayerDropTarget(clientY+scrollDelta-grabOffsetY+draggedHeight/2,rows,group);
-        const timeDelta=Math.max(-Math.min(...selectedClips.map(c=>c.start)),Math.min(300-Math.max(...selectedClips.map(c=>c.start+c.duration)),rawDelta));
+        const timeDelta=Math.max(minimumTime,Math.min(maximumTime,rawDelta));
         let insertionNext:typeof insertion=null;
         try{
           if(!target)throw new TimelineGestureRejection('Keep visual clips on V tracks and audio on A tracks.');
           placed=target&&'edge' in target?moveSelectionToNewLayers(timeline,members,timeDelta,target.edge,clip.id,magnet):moveSelectedClips(timeline,members,timeDelta,(target&&'track' in target?target.track:trackOf(clip))-trackOf(clip),target&&'direction' in target?target.direction:'above',clip.id,magnet);
-          next=placed.clips.find(c=>c.id===clip.id)!;dropError=null;
+          placedClips=new Map(placed.clips.map(c=>[c.id,c]));next=placedClips.get(clip.id)!;dropError=null;
           if(target&&'edge' in target)insertionNext={group,edge:target.edge};
           else if(deriveTrackCounts(placed)[group]>deriveTrackCounts(timeline)[group])insertionNext={group,edge:target&&'direction' in target?target.direction:'above',track:target&&'track' in target?target.track:trackOf(clip)};
         }catch(error){dropError=error;}
@@ -284,21 +287,22 @@ export function TimelinePanel(p:Props){
           }
         }
         const magnetized=showSnapGuide(!!magnet,scrollTop,viewportHeight);
-        const targetRows=timelineLayout(placed,dense).tracks;
+        const counts=deriveTrackCounts(placed),key=`${counts.visual}-${counts.audio}`;
+        if(key!==targetTrackKey){targetTrackKey=key;targetTrackMap=new Map(timelineLayout(placed,dense).tracks.map(row=>[`${row.group}-${row.number}`,row]));}
         for(const member of selectedClips){
           const pair=elements.get(member.id);if(!pair)continue;
-          const sourceRow=tracks.find(row=>row.group===layerGroup(member.kind)&&row.number===trackOf(member))!;
-          const candidate=placed.clips.find(c=>c.id===member.id)!;
+          const sourceRow=trackMap.get(`${layerGroup(member.kind)}-${trackOf(member)}`)!;
+          const candidate=placedClips.get(member.id)!;
           // Lock to a magnetic join; otherwise keep the floating clip under the pointer.
           pair.floating.style.transform=`translate3d(${origin+(magnetized?candidate.start:member.start+rawDelta)*px}px,${sourceRow.top+3+(layerGroup(member.kind)===group?clientY-startY+scrollDelta:0)}px,0)`;
-          const row=targetRows.find(row=>row.group===layerGroup(candidate.kind)&&row.number===trackOf(candidate))!;
+          const row=targetTrackMap.get(`${layerGroup(candidate.kind)}-${trackOf(candidate)}`)!;
           pair.placement.style.transform=`translate3d(${origin+candidate.start*px}px,${row.top+3}px,0)`;
           pair.placement.style.width=`${Math.max(6,candidate.duration*px)}px`;pair.placement.style.height=`${row.clipHeight}px`;
         }
       }else{
-        placed=resizeSelectedClips(timeline,assets,[clip.id,...members.filter(id=>id!==clip.id)],mode,rawDelta,magnet);next=placed.clips.find(c=>c.id===clip.id)!;
+        placed=resizeSelectedClips(timeline,assets,[clip.id,...members.filter(id=>id!==clip.id)],mode,rawDelta,magnet);placedClips=new Map(placed.clips.map(c=>[c.id,c]));next=placedClips.get(clip.id)!;
         showSnapGuide(!!magnet,scrollTop,viewportHeight);
-        for(const member of selectedClips){const node=sourceNodes.get(member.id),candidate=placed.clips.find(c=>c.id===member.id)!;if(node){node.style.left=`${origin+candidate.start*px}px`;node.style.width=`${Math.max(6,candidate.duration*px)}px`;if(candidate.kind==='audio')node.dispatchEvent(new CustomEvent('revline:clip-trim-preview',{detail:{sourceStart:candidate.sourceStart,duration:candidate.duration}}));}}
+        for(const member of selectedClips){const node=sourceNodes.get(member.id),candidate=placedClips.get(member.id)!;if(node){node.style.left=`${origin+candidate.start*px}px`;node.style.width=`${Math.max(6,candidate.duration*px)}px`;if(candidate.kind==='audio')node.dispatchEvent(new CustomEvent('revline:clip-trim-preview',{detail:{sourceStart:candidate.sourceStart,duration:candidate.duration}}));}}
         if(readout){readout.textContent=`${next.duration.toFixed(2)}s`;readout.style.left=`${origin+(next.start+next.duration)*px}px`;readout.style.top=`${(tracks.find(row=>row.group===group&&row.number===trackOf(clip))?.top??RULER_HEIGHT)-18}px`;}
       }
     };
@@ -338,20 +342,26 @@ export function TimelinePanel(p:Props){
     const rect=el.getBoundingClientRect();const start={x:e.clientX-rect.left,y:e.clientY-rect.top};
     const initial=e.shiftKey||e.ctrlKey||e.metaKey?store.getState().selectedIds:[];
     const previousSelection=store.getState().selectedIds;
-    let unwatch=()=>{};
-    let active=false;pointerX.current=e.clientX;pointerY.current=e.clientY;
-    const move=(event:PointerEvent)=>{
-      pointerX.current=event.clientX;pointerY.current=event.clientY;
-      const r=el.getBoundingClientRect();const x=event.clientX-r.left,y=event.clientY-r.top;
+    const rowMap=new Map(tracks.map(row=>[`${row.group}-${row.number}`,row]));
+    const clipBounds=timeline.clips.map(clip=>{const row=rowMap.get(`${layerGroup(clip.kind)}-${trackOf(clip)}`)!;return {id:clip.id,left:origin+clip.start*px,top:row.top+3,width:clip.duration*px,height:row.clipHeight};});
+    let unwatch=()=>{},active=false;
+    pointerX.current=e.clientX;pointerY.current=e.clientY;
+    const update=()=>{
+      const r=el.getBoundingClientRect(),x=pointerX.current-r.left,y=pointerY.current-r.top;
       if(Math.abs(x-start.x)<5&&Math.abs(y-start.y)<5&&!active)return;
-      active=true;setSelecting(true);
-      const bounds={left:Math.min(start.x,x),top:Math.min(start.y,y),width:Math.abs(x-start.x),height:Math.abs(y-start.y)};setBox(bounds);
-      const hits=timeline.clips.filter(clip=>{const row=tracks.findIndex(t=>t.group===layerGroup(clip.kind)&&t.number===trackOf(clip));return intersectsSelection(bounds,{left:origin+clip.start*px,top:tracks[row].top+3,width:clip.duration*px,height:tracks[row].clipHeight});}).map(c=>c.id);
-      const ids=[...new Set([...initial,...hits])];store.setState({selectedIds:ids,selectedId:ids.at(-1)??null});
+      if(!active){active=true;setSelecting(true);}
+      const bounds={left:Math.min(start.x,x),top:Math.min(start.y,y),width:Math.abs(x-start.x),height:Math.abs(y-start.y)};
+      const node=selectionBox.current;
+      if(node){node.style.display='block';node.style.transform=`translate3d(${bounds.left}px,${bounds.top}px,0)`;node.style.width=`${bounds.width}px`;node.style.height=`${bounds.height}px`;}
+      const hits=clipBounds.filter(clip=>intersectsSelection(bounds,clip)).map(clip=>clip.id);
+      const ids=[...new Set([...initial,...hits])],current=store.getState().selectedIds;
+      if(ids.length!==current.length||ids.some((id,index)=>id!==current[index]))store.setState({selectedIds:ids,selectedId:ids.at(-1)??null});
     };
-    const cleanup=()=>{unwatch();gestureUpdate.current=null;window.removeEventListener('pointermove',move);window.removeEventListener('pointerup',finish);window.removeEventListener('pointercancel',cancel);setBox(null);setSelecting(false);gestureCleanup.current=null;};
-    const finish=()=>{cleanup();if(!active){onSeek(frameSeekTime((start.x-origin)/px,timeline.fps,end));if(!initial.length)onSelect(null);}};
-    const cancel=()=>{cleanup();store.setState({selectedIds:previousSelection,selectedId:previousSelection.at(-1)??null});};gestureCleanup.current=cancel;unwatch=watchCancellation(cancel);gestureUpdate.current=()=>move(new PointerEvent('pointermove',{clientX:pointerX.current,clientY:pointerY.current}));
+    const frame=timelineGestureFrame(update);
+    const move=(event:PointerEvent)=>{if(event.pointerId!==e.pointerId)return;pointerX.current=event.clientX;pointerY.current=event.clientY;frame.request();};
+    const cleanup=()=>{unwatch();frame.cancel();gestureUpdate.current=null;window.removeEventListener('pointermove',move);window.removeEventListener('pointerup',finish);window.removeEventListener('pointercancel',cancel);if(selectionBox.current)selectionBox.current.style.display='none';setSelecting(false);gestureCleanup.current=null;};
+    const finish=(event:PointerEvent)=>{if(event.pointerId!==e.pointerId)return;pointerX.current=event.clientX;pointerY.current=event.clientY;frame.flush();cleanup();if(!active){onSeek(frameSeekTime((start.x-origin)/px,timeline.fps,end));if(!initial.length)onSelect(null);}};
+    const cancel=()=>{cleanup();store.setState({selectedIds:previousSelection,selectedId:previousSelection.at(-1)??null});};gestureCleanup.current=cancel;unwatch=watchCancellation(cancel);gestureUpdate.current=frame.request;
     window.addEventListener('pointermove',move);window.addEventListener('pointerup',finish);window.addEventListener('pointercancel',cancel);
   }
 
@@ -400,15 +410,17 @@ export function TimelinePanel(p:Props){
     const handle=e.currentTarget,rect=handle.getBoundingClientRect();
     const initial=Math.max(...clips.map(clip=>clip.volume??1));let volume=initial,pointerX=e.clientX,unwatch=()=>{};
     handle.focus({preventScroll:true});handle.setPointerCapture(e.pointerId);
+    const nodes=new Map(Array.from(area.current?.querySelectorAll<HTMLElement>('.timeline-clip[data-clip-id]')??[]).map(node=>[node.dataset.clipId!,node]));
+    const rails=new Map(clips.map(clip=>[clip.id,nodes.get(clip.id)?.querySelector<HTMLElement>('.audio-clip-volume')]));
     const paint=(next:number|null)=>{
-      const value=next??initial;handle.value=String(Math.round(value*100));handle.style.setProperty('--track-volume',`${value*100}%`);handle.setAttribute('aria-valuetext',`${Math.round(value*100)}%`);
+      const value=next??initial;handle.value=String(Math.round(value*100));handle.style.setProperty('--track-volume',`${value/MAX_CLIP_VOLUME*100}%`);handle.setAttribute('aria-valuetext',`${Math.round(value*100)}%`);
       for(const clip of clips){
-        const gain=next??clip.volume??1,node=Array.from(area.current?.querySelectorAll<HTMLElement>('.timeline-clip[data-clip-id]')??[]).find(node=>node.dataset.clipId===clip.id);
-        if(node){node.querySelector<HTMLElement>('.audio-clip-volume')?.style.setProperty('--clip-volume',String(gain));node.dispatchEvent(new CustomEvent('revline:clip-volume-preview',{detail:gain}));}
+        const gain=next??clip.volume??1,node=nodes.get(clip.id);
+        if(node){rails.get(clip.id)?.style.setProperty('--clip-volume',String(gain));node.dispatchEvent(new CustomEvent('revline:clip-volume-preview',{detail:gain}));}
         p.onPreviewVolume?.(clip.id,next);
       }
     };
-    const frame=timelineGestureFrame(()=>{volume=Math.round(Math.max(0,Math.min(1,(pointerX-rect.left-6)/Math.max(1,rect.width-12)))*100)/100;paint(volume);});
+    const frame=timelineGestureFrame(()=>{volume=clipVolumeAtFraction((pointerX-rect.left-6)/Math.max(1,rect.width-12));paint(volume);});
     const move=(event:PointerEvent)=>{if(event.pointerId!==e.pointerId)return;pointerX=event.clientX;frame.request();};
     const cleanup=()=>{
       unwatch();frame.cancel();handle.removeEventListener('pointermove',move);handle.removeEventListener('pointerup',finish);handle.removeEventListener('pointercancel',cancel);handle.removeEventListener('lostpointercapture',cancel);
@@ -425,7 +437,7 @@ export function TimelinePanel(p:Props){
   function volumeWithKeyboard(e:React.KeyboardEvent<HTMLDivElement>,clip:Clip){
     if(e.ctrlKey||e.metaKey||e.altKey)return;
     const step=e.shiftKey ? .1 : .01,current=clip.volume??1;
-    const next=e.key==='Home'?0:e.key==='End'?1:e.key==='ArrowUp'||e.key==='ArrowRight'?Math.min(1,current+step):e.key==='ArrowDown'||e.key==='ArrowLeft'?Math.max(0,current-step):undefined;
+    const next=e.key==='Home'?0:e.key==='End'?MAX_CLIP_VOLUME:e.key==='ArrowUp'||e.key==='ArrowRight'?Math.min(MAX_CLIP_VOLUME,current+step):e.key==='ArrowDown'||e.key==='ArrowLeft'?Math.max(0,current-step):undefined;
     if(next===undefined)return;e.preventDefault();e.stopPropagation();
     gestureCleanup.current?.();onSelect(clip.id);const volume=Math.round(next*100)/100;
     if(volume!==current)onChange(patchClip(timeline,clip.id,{volume}));
@@ -477,7 +489,7 @@ export function TimelinePanel(p:Props){
         </DropdownMenuContent></DropdownMenu>
         {track.group==='audio'&&<div className="track-audio-controls" onPointerDown={e=>e.stopPropagation()}>
           <button type="button" className="track-audio-toggle" aria-label={`${muted?'Unmute':'Mute'} ${track.label}`} title={`${muted?'Unmute':'Mute'} audio track`} aria-pressed={muted} disabled={!audible.length} onClick={()=>toggleTrackSound(audible)}>{muted?<VolumeX size={14}/>:<Volume2 size={14}/>}</button>
-          <input type="range" min="0" max="100" step="1" value={Math.round(Math.max(0,...audible.map(clip=>clip.volume??1))*100)} aria-label={`Volume for ${track.label}`} aria-valuetext={`${Math.round(Math.max(0,...audible.map(clip=>clip.volume??1))*100)}%`} disabled={!audible.length} style={{'--track-volume':`${Math.max(0,...audible.map(clip=>clip.volume??1))*100}%`} as React.CSSProperties} onPointerDown={e=>startTrackVolume(e,audible)} onChange={e=>{if(!gestureCleanup.current)onChange(audible.reduce((next,clip)=>patchClip(next,clip.id,{volume:Number(e.target.value)/100}),timeline));}}/>
+          <input type="range" min="0" max={MAX_CLIP_VOLUME*100} step="1" value={Math.round(Math.max(0,...audible.map(clip=>clip.volume??1))*100)} aria-label={`Volume for ${track.label}`} aria-valuetext={`${Math.round(Math.max(0,...audible.map(clip=>clip.volume??1))*100)}%`} disabled={!audible.length} style={{'--track-volume':`${Math.max(0,...audible.map(clip=>clip.volume??1))/MAX_CLIP_VOLUME*100}%`} as React.CSSProperties} onPointerDown={e=>startTrackVolume(e,audible)} onChange={e=>{if(!gestureCleanup.current)onChange(audible.reduce((next,clip)=>patchClip(next,clip.id,{volume:Number(e.target.value)/100}),timeline));}}/>
         </div>}
       </div>;
     })}<div aria-hidden="true" style={{height:Math.max(TIMELINE_BOTTOM_SPACE,viewportHeight-layout.height)}}/></div>
@@ -489,7 +501,7 @@ export function TimelinePanel(p:Props){
               const position=clip;const asset=assetMap.get(clip.assetId??'');const isMedia=clip.kind==='video'||clip.kind==='image';
               return <div key={clip.id} data-clip-id={clip.id} role="button" tabIndex={0} aria-label={`${clip.text||asset?.fileName||clip.kind}, ${track.label}, ${formatTime(clip.start)}, ${clip.duration.toFixed(1)} seconds`} aria-pressed={linkedSelection.has(clip.id)} onDragStart={e=>e.preventDefault()} onKeyDown={e=>{if(e.target!==e.currentTarget)return;if(e.key==='Enter'||e.code==='Space'){e.preventDefault();e.stopPropagation();onSelect(clip.id);if(e.key==='Enter'&&(clip.kind==='caption'||clip.kind==='graphic'))p.onEditText?.(clip.id);} }} onPointerDown={e=>startDrag(e,clip,'move')} className={`timeline-clip ${(linkedSelection.has(clip.id))?'selected':''} clip-${isMedia?'video':clip.kind}`} style={{'--clip-height':`${track.clipHeight}px`,height:track.clipHeight,left:origin+position.start*px,width:Math.max(6,position.duration*px),background:clipColor(clip.kind),...(drag&&activeMode.current==='move'&&(linkedSelection.has(clip.id)||drag.id===clip.id)?{visibility:'hidden'}: {})} as React.CSSProperties}>
                 {asset?.url&&isMedia&&<MediaFilmstrip asset={asset} width={Math.max(6,position.duration*px)} height={track.clipHeight} sourceStart={clip.sourceStart} duration={clip.duration} timelineStart={clip.start} px={px} fps={timeline.fps} viewport={scroll} paused={!!drag||scrubbing||!!movingLayer}/>} {clip.kind==='audio'&&<AudioWaveform waveform={asset?.waveform} sourceStart={clip.sourceStart} duration={clip.duration} volume={clip.volume} timelineStart={clip.start} viewport={scroll}/>}<span>{clip.text||asset?.fileName||'Clip'}</span>
-                {clip.kind==='audio'&&<div className="audio-clip-volume" style={{'--clip-volume':clip.volume??1} as React.CSSProperties}><div className="audio-volume-line" role="slider" tabIndex={0} aria-label={`Volume for ${asset?.fileName||'audio clip'}`} aria-orientation="vertical" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round((clip.volume??1)*100)} aria-valuetext={clip.volume===0?'Muted':`${Math.round((clip.volume??1)*100)}%`} onPointerDown={e=>startVolume(e,clip)} onKeyDown={e=>volumeWithKeyboard(e,clip)}><output aria-hidden="true">{clip.volume===0?'Muted':`${Math.round((clip.volume??1)*100)}%`}</output></div></div>}
+                {clip.kind==='audio'&&<div className="audio-clip-volume" style={{'--clip-volume':clip.volume??1} as React.CSSProperties}><div className="audio-volume-line" role="slider" tabIndex={0} aria-label={`Volume for ${asset?.fileName||'audio clip'}`} aria-orientation="vertical" aria-valuemin={0} aria-valuemax={MAX_CLIP_VOLUME*100} aria-valuenow={Math.round((clip.volume??1)*100)} aria-valuetext={clip.volume===0?'Muted':`${Math.round((clip.volume??1)*100)}%`} onPointerDown={e=>startVolume(e,clip)} onKeyDown={e=>volumeWithKeyboard(e,clip)}><output aria-hidden="true">{clip.volume===0?'Muted':`${Math.round((clip.volume??1)*100)}%`}</output></div></div>}
                 <button className="clip-trim left" aria-label="Trim clip start" title="Drag or use arrow keys to trim; Shift moves ten frames" onKeyDown={e=>trimWithKeyboard(e,clip,'left')} onPointerDown={e=>startDrag(e,clip,'left')}/><button className="clip-trim right" aria-label="Trim clip end" title="Drag or use arrow keys to trim; Shift moves ten frames" onKeyDown={e=>trimWithKeyboard(e,clip,'right')} onPointerDown={e=>startDrag(e,clip,'right')}/>
               </div>;
             })}
@@ -500,7 +512,7 @@ export function TimelinePanel(p:Props){
             if(!row)return null;const top=row.top+(insertion.edge==='below'?row.height:0);
             return <div className="timeline-insert-indicator" style={{top}} aria-label={`Create ${insertion.group} layer ${insertion.edge}`}><span style={{left:(scroll.current?.scrollLeft??0)+12}}>New {insertion.group==='audio'?'audio':'visual'} layer</span></div>;
           })()}
-          {box&&<div className="timeline-selection-box" style={box} aria-hidden="true"/>}
+          <div ref={selectionBox} className="timeline-selection-box" style={{display:'none',left:0,top:0}} aria-hidden="true"/>
           <div ref={previews} className="timeline-drag-previews" aria-hidden="true"/>
           {!timeline.clips.length&&<div className="timeline-empty">Your clips will land here.</div>}
           <div ref={head} className="playhead" style={{left:0,height:"100%"}} onPointerDown={startScrub} aria-label="Timeline playhead"/>

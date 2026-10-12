@@ -3,6 +3,7 @@ import { memo, useEffect, useMemo, useRef, useState, type RefObject } from 'reac
 import { Film } from 'lucide-react';
 import { filmstripFrames, filmstripFrameWidth } from '@/lib/editor/filmstrip';
 import { cachedVideoThumbnail, videoThumbnails } from '@/lib/editor/video-thumbnails';
+import { observeTimelineViewport } from '@/lib/editor/timeline-viewport';
 import type { MediaAsset } from '@/lib/editor/types';
 
 type Props = { asset: MediaAsset; width: number; height: number; sourceStart: number; duration: number; timelineStart: number; px: number; fps: number; viewport: RefObject<HTMLDivElement | null>; paused?: boolean };
@@ -17,22 +18,13 @@ export const MediaFilmstrip = memo(function MediaFilmstrip({ asset, width, heigh
   useEffect(() => {
     const node = root.current, rail = viewport.current;
     if (!node || !rail) return;
-    let tick = 0;
-    const measure = () => {
-      tick = 0;
-      const clip = node.getBoundingClientRect(), visible = rail.getBoundingClientRect();
+    const observer = observeTimelineViewport(rail, node, (clip, visible) => {
       const intersects = clip.bottom > visible.top && clip.top < visible.bottom;
       const start = intersects ? Math.max(0, Math.floor((visible.left - clip.left) / frameWidth) * frameWidth - frameWidth) : 0;
       const end = intersects ? Math.min(width, Math.ceil((visible.right - clip.left) / frameWidth) * frameWidth + frameWidth) : 0;
       setRange(old => old.start === start && old.end === end ? old : { start, end });
-    };
-    const schedule = () => { if (!tick) tick = requestAnimationFrame(measure); };
-    const observer = new ResizeObserver(schedule); observer.observe(rail); observer.observe(node);
-    // Track visibility also changes when panels or track rows move without resizing.
-    const visibility = new IntersectionObserver(schedule, { root: rail }); visibility.observe(node);
-    rail.addEventListener('scroll', schedule, { passive: true }); measure();
-    schedule();
-    return () => { cancelAnimationFrame(tick); observer.disconnect(); visibility.disconnect(); rail.removeEventListener('scroll', schedule); };
+    });
+    return observer.unsubscribe;
   }, [frameWidth, width, timelineStart, viewport]);
   const samples = useMemo(() => filmstripFrames({ clipWidth: width, frameWidth, visibleStart: range.start, visibleEnd: range.end, pxPerSecond: px, sourceStart, duration, fps, sourceDuration: asset.duration }), [width, frameWidth, range, px, sourceStart, duration, fps, asset.duration]);
   useEffect(() => {
