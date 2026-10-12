@@ -1,22 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isDoubleTimelineTap, timelineTimeAtPointer, type TimelineTap } from './timeline-controls';
-
-const first:TimelineTap={clipId:'video',pointerType:'mouse',time:1000,x:240,y:180};
-
-describe('clip click and tap seeking',()=>{
-  it('keeps a single click as selection and recognizes a nearby second click on that clip',()=>{
-    expect(isDoubleTimelineTap(null,first)).toBe(false);
-    expect(isDoubleTimelineTap(first,{...first,time:1250,x:242})).toBe(true);
-    const touch={...first,pointerType:'touch'};
-    expect(isDoubleTimelineTap(touch,{...touch,time:1250,x:245,y:183})).toBe(true);
-  });
-  it('does not combine separate clips, input devices, slow clicks, or distant taps',()=>{
-    expect(isDoubleTimelineTap(first,{...first,clipId:'caption',time:1250})).toBe(false);
-    expect(isDoubleTimelineTap(first,{...first,pointerType:'touch',time:1250})).toBe(false);
-    expect(isDoubleTimelineTap(first,{...first,time:1500})).toBe(false);
-    expect(isDoubleTimelineTap(first,{...first,time:1250,x:260})).toBe(false);
-  });
-});
+import { timelineTimeAtPointer } from './timeline-controls';
 
 describe('seek position at the pointer',()=>{
   const viewport={left:200,scrollLeft:162,origin:0,px:54,end:15,fps:30};

@@ -12,7 +12,7 @@ import { deriveTrackCounts, layerGroup, trackOf, clipColor, timelineDuration, fo
 import { snapTime, addMediaClip, addTextClip, splitClip, frameSeekTime, linkedClipIds, unlinkClips, patchClip } from '@/lib/editor/operations';
 import { timelineLayout, TIMELINE_RULER_HEIGHT, TIMELINE_ORIGIN, TIMELINE_TOP_SPACE, TIMELINE_BOTTOM_SPACE } from '@/lib/editor/timeline-layout';
 import { clipVolumeAtPointer, clipVolumeAtFraction, MAX_CLIP_VOLUME } from '@/lib/editor/clip-volume';
-import { zoomAtAnchor, reorderLayer, deleteEmptyLayer, removeEmptyLayers, resizeSelectedClips,moveSelectedClips,moveSelectionToNewLayers,layerDropTarget,clipLayerDropTarget,intersectsSelection,shouldCommitClipGesture,isDoubleTimelineTap,timelineTimeAtPointer,type TimelineTap } from '@/lib/editor/timeline-controls';
+import { zoomAtAnchor, reorderLayer, deleteEmptyLayer, removeEmptyLayers, resizeSelectedClips,moveSelectedClips,moveSelectionToNewLayers,layerDropTarget,clipLayerDropTarget,intersectsSelection,shouldCommitClipGesture,timelineTimeAtPointer } from '@/lib/editor/timeline-controls';
 import { isTimelineGestureRejection, TimelineGestureRejection } from '@/lib/editor/timeline-edit-errors';
 import { timelineGestureFrame } from '@/lib/editor/timeline-gesture-frame';
 import './custom-timeline.css';
@@ -55,12 +55,12 @@ export function TimelinePanel(p:Props){
   const [viewportHeight,setViewportHeight]=useState(0);const [scrollbarHeight,setScrollbarHeight]=useState(0);
   const [context,setContext]=useState<{clipId?:string;group?:LayerGroup;track?:number;time:number}|null>(null);
   const scroll=useRef<HTMLDivElement>(null);const labels=useRef<HTMLDivElement>(null);const head=useRef<HTMLDivElement>(null);const cap=useRef<HTMLDivElement>(null);
-  const previews=useRef<HTMLDivElement>(null);const activeMode=useRef<'move'|'left'|'right'>('move');const lastTap=useRef<TimelineTap|null>(null);
+  const previews=useRef<HTMLDivElement>(null);const activeMode=useRef<'move'|'left'|'right'>('move');
   const gestureCleanup=useRef<(()=>void)|null>(null);
   const gestureUpdate=useRef<(()=>void)|null>(null);
   const volumesBeforeMute=useRef(new Map<string,number>());
   useEffect(()=>()=>gestureCleanup.current?.(),[]);
-  useEffect(()=>{gestureCleanup.current?.();lastTap.current=null;},[timeline]);
+  useEffect(()=>{gestureCleanup.current?.();},[timeline]);
   const area=useRef<HTMLDivElement>(null);const scrubRef=useRef(false);const pointerX=useRef(0);const pointerY=useRef(0);const zoomAnchor=useRef<number|null>(null);
   const px=54*zoom;const end=timelineDuration(timeline);const duration=Math.max(15,end+1);const width=Math.max(720,duration*px);
   const layout=useMemo(()=>timelineLayout(timeline,dense),[timeline,dense]);const tracks=layout.tracks;const assetMap=useMemo(()=>new Map(assets.map(a=>[a._id,a])),[assets]);
@@ -124,20 +124,9 @@ export function TimelinePanel(p:Props){
     onChange({...timeline,tracks:{...counts,[group]:counts[group]+1}});
   }
   function paint(t:number){paintPlayhead(head.current,origin+t*px,scroll.current,cap.current);}
-  function seekAtPointer(x:number,bypassSnap=false){
-    const el=scroll.current;if(!el)return;
-    const marks=snap&&!bypassSnap?[0,end,...timeline.clips.flatMap(clip=>[clip.start,clip.start+clip.duration])]:undefined;
-    const at=timelineTimeAtPointer(x,{left:el.getBoundingClientRect().left,scrollLeft:el.scrollLeft,origin,px,end,fps:timeline.fps,marks});
-    paint(at);onSeek(at);
-  }
-  function finishClipTap(clipId:string,event:PointerEvent){
-    const next={clipId,pointerType:event.pointerType,time:performance.now(),x:event.clientX,y:event.clientY};
-    const double=isDoubleTimelineTap(lastTap.current,next);lastTap.current=double?null:next;
-    if(double)seekAtPointer(event.clientX,event.altKey);
-  }
   function startScrub(e:React.PointerEvent<HTMLElement>){
     if(e.button!==0)return;e.preventDefault();e.stopPropagation();
-    gestureCleanup.current?.();lastTap.current=null;
+    gestureCleanup.current?.();
     const target=e.currentTarget;target.setPointerCapture(e.pointerId);pointerX.current=e.clientX;
     const originalTime=frameSeekTime(p.readPlaybackTime?.()??time,timeline.fps,end);
     scrubRef.current=true;setScrubbing(true);let frame=0;let last=-1;let bypassSnap=e.altKey;
@@ -159,7 +148,7 @@ export function TimelinePanel(p:Props){
   function startLayerDrag(e:React.PointerEvent,group:LayerGroup,number:number){
     // Menu items render in a portal but their React events still bubble here.
     if(e.button!==0||!e.currentTarget.contains(e.target as Node)||(e.target as HTMLElement).closest('button'))return;
-    e.preventDefault();gestureCleanup.current?.();lastTap.current=null;
+    e.preventDefault();gestureCleanup.current?.();
     const source=`${group}-${number}`;setMovingLayer(source);let target=number;
     pointerX.current=e.clientX;pointerY.current=e.clientY;
     const viewport=scroll.current;if(!viewport){setMovingLayer(null);return;}
@@ -191,8 +180,7 @@ export function TimelinePanel(p:Props){
   function startDrag(e:React.PointerEvent,clip:Clip,mode:'move'|'left'|'right'){
     if(e.button!==0)return;e.preventDefault();e.stopPropagation();gestureCleanup.current?.();
     const current=store.getState().selectedIds;
-    if(mode!=='move')lastTap.current=null;
-    if(mode==='move'&&(e.shiftKey||e.ctrlKey||e.metaKey)){lastTap.current=null;const ids=current.includes(clip.id)?current.filter(id=>id!==clip.id):[...current,clip.id];store.setState({selectedIds:ids,selectedId:ids.at(-1)??null});return;}
+    if(mode==='move'&&(e.shiftKey||e.ctrlKey||e.metaKey)){const ids=current.includes(clip.id)?current.filter(id=>id!==clip.id):[...current,clip.id];store.setState({selectedIds:ids,selectedId:ids.at(-1)??null});return;}
     const members=current.includes(clip.id)?current:[clip.id];
     if(!current.includes(clip.id))onSelect(clip.id);
     const gestureMembers=linkedClipIds(timeline,members),gestureIds=new Set(gestureMembers);const selectedClips=timeline.clips.filter(c=>gestureIds.has(c.id));
@@ -222,7 +210,7 @@ export function TimelinePanel(p:Props){
     const marks=[0,p.readPlaybackTime?.()??store.getState().playhead,...timeline.clips.filter(c=>!gestureIds.has(c.id)).flatMap(c=>[c.start,c.start+c.duration])];
     const verticalMarks=[...marks,clip.start,clip.start+clip.duration];
     const beginPreview=()=>{
-      lastTap.current=null;setDrag(clip);host.replaceChildren();
+      setDrag(clip);host.replaceChildren();
       snapGuide=document.createElement('div');snapGuide.className='timeline-snap-guide';snapGuide.setAttribute('aria-hidden','true');snapGuide.style.display='none';host.appendChild(snapGuide);
       if(mode!=='move'){readout=document.createElement('div');readout.className='timeline-resize-readout';host.appendChild(readout);return;}
       insertionGuide=document.createElement('div');insertionGuide.className='timeline-insert-indicator';insertionGuide.style.display='none';const insertionLabel=document.createElement('span');insertionLabel.textContent=`New ${group==='audio'?'audio':'visual'} layer`;insertionGuide.appendChild(insertionLabel);host.appendChild(insertionGuide);
@@ -324,21 +312,17 @@ export function TimelinePanel(p:Props){
       const bounds=viewport.getBoundingClientRect();
       const commit=shouldCommitClipGesture(mode,{x:clientX,y:clientY},{left:bounds.left,top:bounds.top,width:viewport.clientWidth,height:viewport.clientHeight});
       if(commit)frame.flush();cleanup();
-      if(!moved){
-        if(mode==='move'&&commit&&!event.shiftKey&&!event.ctrlKey&&!event.metaKey&&Math.hypot(clientX-startX,clientY-startY)<=tapSlop)finishClipTap(clip.id,event);
-        else lastTap.current=null;
-        return;
-      }
+      if(!moved)return;
       if(!commit)return;if(dropError){report(dropError);return;}
       if(placed.clips.some((candidate,index)=>{const original=timeline.clips[index];return candidate.start!==original.start||candidate.duration!==original.duration||candidate.sourceStart!==original.sourceStart||trackOf(candidate)!==trackOf(original);})||JSON.stringify(deriveTrackCounts(placed))!==JSON.stringify(deriveTrackCounts(timeline))){try{onChange(placed);}catch(error){report(error);}}
     };
-    const cancel=()=>{lastTap.current=null;cleanup();};gestureCleanup.current=cancel;unwatch=watchCancellation(cancel);gestureUpdate.current=frame.request;
+    const cancel=()=>{cleanup();};gestureCleanup.current=cancel;unwatch=watchCancellation(cancel);gestureUpdate.current=frame.request;
     window.addEventListener('pointermove',move);window.addEventListener('pointerup',finish);window.addEventListener('pointercancel',cancel);
   }
 
   function selectBox(e:React.PointerEvent<HTMLDivElement>){
     if(e.button!==0||(e.target as HTMLElement).closest('.timeline-clip,.playhead,.time-ruler'))return;
-    e.preventDefault();gestureCleanup.current?.();lastTap.current=null;const el=area.current;if(!el)return;
+    e.preventDefault();gestureCleanup.current?.();const el=area.current;if(!el)return;
     const rect=el.getBoundingClientRect();const start={x:e.clientX-rect.left,y:e.clientY-rect.top};
     const initial=e.shiftKey||e.ctrlKey||e.metaKey?store.getState().selectedIds:[];
     const previousSelection=store.getState().selectedIds;
@@ -378,7 +362,7 @@ export function TimelinePanel(p:Props){
   }
 
   function startVolume(e:React.PointerEvent<HTMLDivElement>,clip:Clip){
-    if(e.button!==0)return;e.preventDefault();e.stopPropagation();gestureCleanup.current?.();lastTap.current=null;
+    if(e.button!==0)return;e.preventDefault();e.stopPropagation();gestureCleanup.current?.();
     const handle=e.currentTarget,rail=handle.parentElement!,node=rail.parentElement!;
     const initial=clip.volume??1,startY=e.clientY,height=rail.getBoundingClientRect().height;
     let volume=initial,pointerY=startY,unwatch=()=>{};
@@ -406,7 +390,7 @@ export function TimelinePanel(p:Props){
     handle.addEventListener('pointermove',move);handle.addEventListener('pointerup',finish);handle.addEventListener('pointercancel',cancel);handle.addEventListener('lostpointercapture',cancel);
   }
   function startTrackVolume(e:React.PointerEvent<HTMLInputElement>,clips:Clip[]){
-    if(e.button!==0||!clips.length)return;e.preventDefault();e.stopPropagation();gestureCleanup.current?.();lastTap.current=null;
+    if(e.button!==0||!clips.length)return;e.preventDefault();e.stopPropagation();gestureCleanup.current?.();
     const handle=e.currentTarget,rect=handle.getBoundingClientRect();
     const initial=Math.max(...clips.map(clip=>clip.volume??1));let volume=initial,pointerX=e.clientX,unwatch=()=>{};
     handle.focus({preventScroll:true});handle.setPointerCapture(e.pointerId);

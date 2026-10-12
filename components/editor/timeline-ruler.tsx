@@ -21,7 +21,7 @@ export const TimelineRulerTicks = memo(function TimelineRulerTicks({px,duration,
     const time=index*tick,major=Math.abs(time/label-Math.round(time/label))<.0001;
     const x=Math.round(origin+time*px)+.5;
     path+=`M${x} ${major?19:23}V27`;
-    if(major)labels.push(<span key={index} style={{left:origin+time*px}}>{formatRulerLabel(time)}</span>);
+    if(major)labels.push(<span key={index} className={index===0?'ruler-origin-label':undefined} style={{left:x}}>{formatRulerLabel(time)}</span>);
   }
   return <><svg className="ruler-ticks" width={Math.ceil(origin+duration*px)+2} height={28} aria-hidden="true"><path d={path}/></svg>{labels}</>;
 });

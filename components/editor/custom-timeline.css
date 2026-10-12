@@ -28,7 +28,8 @@ html[data-workspace-theme=dark] .editor-app:not(.landing-product-demo) .custom-t
 .conversation-editor .custom-timeline .track-label,.custom-timeline .timeline-track{background:var(--ws-bg);border-bottom:1px solid var(--timeline-divider);color:var(--ws-muted)}
 .custom-timeline .timeline-top-space{border-bottom:1px solid var(--timeline-divider)}
 .custom-timeline .time-ruler,.custom-timeline .track-ruler-label{height:28px;background:var(--ws-bg);border-bottom-color:var(--ws-artifact-border);color:var(--ws-muted)}
-.custom-timeline .time-ruler span{top:4px;padding-left:3px;font-size:11px;line-height:14px;color:var(--ws-muted);pointer-events:none}
+.custom-timeline .time-ruler span{top:4px;padding-left:0;transform:translateX(-50%);font-size:11px;line-height:14px;white-space:nowrap;color:var(--ws-muted);pointer-events:none}
+.custom-timeline .time-ruler .ruler-origin-label{padding-left:3px;transform:none}
 .custom-timeline .ruler-ticks{position:absolute;inset:0;overflow:visible;pointer-events:none}
 .custom-timeline .ruler-ticks path{fill:none;stroke:color-mix(in srgb,var(--ws-text) 24%,var(--ws-bg));stroke-width:1}
 .conversation-editor .custom-timeline .track-label.layer-drop-target{background:color-mix(in srgb,var(--ws-text) 6%,var(--ws-bg));box-shadow:inset 0 2px #009DFF,inset 0 -2px #009DFF}
@@ -79,8 +80,8 @@ html[data-workspace-theme=dark] .editor-app:not(.landing-product-demo) .custom-t
 .custom-timeline.tracks-compact .timeline-clip.clip-audio>span{height:15px;padding-top:3px;font-size:10px;line-height:12px}
 .custom-timeline .audio-clip-volume{position:absolute;inset:25px 0 8px;z-index:2;pointer-events:none}
 .custom-timeline .audio-volume-line{position:absolute;top:calc((1 - var(--clip-volume)/2)*100%);left:0;right:0;height:14px;transform:translateY(-50%);cursor:ns-resize;touch-action:none;pointer-events:auto;outline:none}
-.custom-timeline .audio-volume-line::before{content:'';position:absolute;top:6px;left:0;right:0;height:1px;background:#ffffff73;box-shadow:0 1px #0002}
-.custom-timeline .audio-volume-line:hover::before,.custom-timeline .audio-volume-line:focus-visible::before,.custom-timeline .audio-clip-volume[data-adjusting] .audio-volume-line::before{background:#fff;height:2px}
+.custom-timeline .audio-volume-line::before{content:'';position:absolute;top:6px;left:0;right:0;height:1px;background:#ffffff38;box-shadow:0 1px #0002}
+.custom-timeline .audio-volume-line:hover::before,.custom-timeline .audio-volume-line:focus-visible::before,.custom-timeline .audio-clip-volume[data-adjusting] .audio-volume-line::before{background:#ffffffb3;height:2px}
 .custom-timeline .audio-volume-line output{position:absolute;right:6px;bottom:12px;padding:2px 5px;border-radius:3px;background:#23192fe6;color:#fff;font-size:10px;line-height:14px;white-space:nowrap;opacity:0;pointer-events:none}
 .custom-timeline .audio-volume-line:hover output,.custom-timeline .audio-volume-line:focus-visible output,.custom-timeline .audio-clip-volume[data-adjusting] output{opacity:1}
 .custom-timeline.tracks-compact .audio-clip-volume{inset:19px 0 5px}

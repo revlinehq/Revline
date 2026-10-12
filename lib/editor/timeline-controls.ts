@@ -3,10 +3,6 @@
 import { layerGroup,trackOf,deriveTrackCounts,normalizeTimeline,maxTrackCount,type Timeline,type LayerGroup,type MediaAsset,type Clip } from './types';
 import { frameSeekTime, linkedClipIds } from './operations';
 import { TimelineGestureRejection } from './timeline-edit-errors';
-export type TimelineTap={clipId:string;pointerType:string;time:number;x:number;y:number};
-export function isDoubleTimelineTap(previous:TimelineTap|null,next:TimelineTap){
-  return !!previous&&previous.clipId===next.clipId&&previous.pointerType===next.pointerType&&next.time>=previous.time&&next.time-previous.time<=400&&Math.hypot(next.x-previous.x,next.y-previous.y)<=12;
-}
 export function timelineTimeAtPointer(x:number,geometry:{left:number;scrollLeft:number;origin:number;px:number;end:number;fps:number;marks?:number[]}){
   const raw=Math.max(0,Math.min(geometry.end,(x-geometry.left+geometry.scrollLeft-geometry.origin)/geometry.px));
   const at=geometry.marks?closestSnap(raw,geometry.marks,7/geometry.px):raw;
