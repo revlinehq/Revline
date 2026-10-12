@@ -112,6 +112,17 @@ it('rejects clips crossing into or beyond the other stack while preserving outer
  expect(clipLayerDropTarget(95,rows,'visual')).toEqual({track:1,direction:'above'});
  expect(clipLayerDropTarget(93,rows,'visual')).toEqual({edge:'above'});
  expect(clipLayerDropTarget(245,rows,'audio')).toEqual({track:1,direction:'below'});
+ expect(clipLayerDropTarget(249,rows,'audio')).toEqual({edge:'below'});
+});
+it('creates an audio layer below the audio stack without shifting linked video vertically or changing timing',()=>{
+ const timeline:Timeline={fps:30,aspectRatio:'vertical',tracks:{visual:1,overlay:0,audio:1},clips:[
+  {id:'video',kind:'video',track:1,start:0,duration:2,sourceStart:1,linkedClipId:'audio',audioSeparated:true,volume:0},
+  {id:'audio',kind:'audio',track:1,start:0,duration:2,sourceStart:1,linkedClipId:'video'},
+  {id:'other',kind:'audio',track:1,start:3,duration:2,sourceStart:0},
+ ]};
+ const next=moveSelectionToNewLayers(timeline,['audio'],0,'below','audio');
+ expect(next.tracks).toEqual({visual:1,overlay:0,audio:2});
+ expect(next.clips).toEqual([timeline.clips[0],timeline.clips[1],{...timeline.clips[2],track:2}]);
 });
 it('keeps the twenty-four visual-layer limit instead of silently losing an extra track',()=>{
  const timeline={fps:30,aspectRatio:'vertical' as const,tracks:{visual:24,overlay:0,audio:0},clips:[{id:'v',kind:'video' as const,track:1,start:0,duration:2,sourceStart:0}]};

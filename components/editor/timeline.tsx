@@ -1,6 +1,6 @@
 'use client';
 import { useState, useRef, useCallback, useLayoutEffect, useEffect, useMemo } from 'react';
-import { Scissors, Copy, Trash2, Magnet, Minus, Plus, Type, Layers, Volume2, VolumeX, ChevronDown, ChevronUp, MoreHorizontal, Rows3, ListMinus, Unlink } from 'lucide-react';
+import { Scissors, Copy, ClipboardPaste, Trash2, Magnet, Minus, Plus, Type, Layers, Volume2, VolumeX, ChevronDown, ChevronUp, MoreHorizontal, Rows3, ListMinus, Unlink } from 'lucide-react';
 import { IconButton } from './primitives';
 import { TimelineRulerTicks } from './timeline-ruler';
 import { EditorPlaybackTime } from './playback-time';
@@ -23,6 +23,7 @@ type Props={
   timeline:Timeline;assets:MediaAsset[];selected:string|null;onSelect:(id:string|null)=>void;
   time:number;playing:boolean;readPlaybackTime?:()=>number;onSeek:(time:number)=>void;onChange:(timeline:Timeline)=>void;
   onSplit:()=>void;onDelete:()=>void;onDuplicate:()=>void;onAddText:(kind:'caption'|'graphic')=>void;
+  onCopy?:()=>void;onPaste?:(time?:number)=>void;canPaste?:boolean;
   onTogglePlay?:()=>void;muted?:boolean;onToggleMute?:()=>void;
   playbackControls?:React.ReactNode;
   onPreviewVolume?:(id:string,volume:number|null)=>void;
@@ -204,6 +205,9 @@ export function TimelinePanel(p:Props){
       const node=area.current?.querySelector<HTMLElement>(`.timeline-track[data-group="${row.group}"][data-layer="${row.number}"]`);
       const rect=node?.getBoundingClientRect();return {track:row.number,group:row.group,top:rect?.top??0,bottom:rect?.bottom??0};
     });
+    const sourceRow=rows.find(row=>row.group===group&&row.track===trackOf(clip))!;
+    const grabOffsetY=startY-sourceRow.top-3;
+    const draggedHeight=tracks.find(row=>row.group===group&&row.number===trackOf(clip))!.clipHeight;
     const sourceNodes=new Map(Array.from(area.current?.querySelectorAll<HTMLElement>('.timeline-clip[data-clip-id]')??[]).map(node=>[node.dataset.clipId!,node]));
     const elements=new Map<string,{floating:HTMLElement;placement:HTMLElement}>();
     let clientX=startX,clientY=startY,next=clip,placed=timeline,moved=false,dropError:unknown=null,bypassSnap=e.altKey,lastInsertion='';
@@ -213,6 +217,7 @@ export function TimelinePanel(p:Props){
     const gestureCursor=mode==='move'?'default':'ew-resize';document.body.style.cursor=gestureCursor;
     const cursorStyle=document.createElement('style');cursorStyle.textContent=`.editor-app *{cursor:${gestureCursor}!important}`;document.head.appendChild(cursorStyle);
     const marks=[0,p.readPlaybackTime?.()??store.getState().playhead,...timeline.clips.filter(c=>!gestureMembers.includes(c.id)).flatMap(c=>[c.start,c.start+c.duration])];
+    const verticalMarks=[...marks,clip.start,clip.start+clip.duration];
     const beginPreview=()=>{
       lastTap.current=null;setDrag(clip);host.replaceChildren();
       snapGuide=document.createElement('div');snapGuide.className='timeline-snap-guide';snapGuide.setAttribute('aria-hidden','true');snapGuide.style.display='none';host.appendChild(snapGuide);
@@ -245,10 +250,10 @@ export function TimelinePanel(p:Props){
       // Read geometry before painting any preview nodes; avoid forced layout between writes.
       const geometry=viewport.getBoundingClientRect(),scrollLeft=viewport.scrollLeft,scrollTop=viewport.scrollTop,viewportHeight=viewport.clientHeight;
       const rawDelta=(clientX-startX+scrollLeft-startScrollX)/px;
-      const magnet=snap&&!bypassSnap&&(mode!=='move'||Math.abs(rawDelta)>1e-6)?{marks,threshold:12/px}:undefined;
+      const magnet=snap&&!bypassSnap&&(mode!=='move'||Math.abs(rawDelta)>1e-6)?{marks:mode==='move'&&Math.abs(clientY-startY)>Math.abs(clientX-startX)?verticalMarks:marks,threshold:12/px}:undefined;
       if(mode==='move'){
         const scrollDelta=scrollTop-startScrollY;
-        const target=clipLayerDropTarget(clientY+scrollDelta,rows,group);
+        const target=clipLayerDropTarget(clientY+scrollDelta-grabOffsetY+draggedHeight/2,rows,group);
         const timeDelta=Math.max(-Math.min(...selectedClips.map(c=>c.start)),Math.min(300-Math.max(...selectedClips.map(c=>c.start+c.duration)),rawDelta));
         let insertionNext:typeof insertion=null;
         try{
@@ -505,6 +510,8 @@ export function TimelinePanel(p:Props){
     </div>
   </section></ContextMenuTrigger><ContextMenuContent aria-label="Timeline actions">
     <ContextMenuLabel>{contextClip?'Clip':context?.track?`${context.group==='audio'?'A':'V'}${context.track}`:'Timeline'}</ContextMenuLabel>
+    {contextClip&&p.onCopy&&<ContextMenuItem onSelect={p.onCopy}><Copy/>Copy</ContextMenuItem>}
+    {p.onPaste&&<ContextMenuItem disabled={!p.canPaste} onSelect={()=>p.onPaste?.(contextTime)}><ClipboardPaste/>Paste here</ContextMenuItem>}
     {contextClip?<>
       {(contextClip.kind==='caption'||contextClip.kind==='graphic')&&<ContextMenuItem onSelect={()=>p.onEditText?.(contextClip.id)}><Type/>Edit text</ContextMenuItem>}
       <ContextMenuItem disabled={contextTime<contextClip.start+1/timeline.fps||contextTime>contextClip.start+contextClip.duration-1/timeline.fps} onSelect={()=>runContext(()=>{onSeek(contextTime);onChange(splitClip(timeline,contextClip.id,contextTime,crypto.randomUUID()));})}><Scissors/>Split here</ContextMenuItem>
