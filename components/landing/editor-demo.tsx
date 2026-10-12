@@ -10,43 +10,31 @@ import { EditorStateProvider } from '@/components/editor/editor-state';
 import { EditorPlaybackControls } from '@/components/editor/playback-controls';
 import { Preview, type PreviewHandle } from '@/components/editor/preview';
 import { PreviewZoomControls, PreviewZoomProvider, PreviewViewport } from '@/components/editor/preview-zoom';
-import { TimelinePanel } from '@/components/editor/timeline';
 import { createEditorStore } from '@/lib/editor/store';
 import { DEMO_ASSETS, DEMO_TIMELINE } from '@/lib/editor/demo';
-import { addTextClip, patchClip, placeOnFreeLayer, splitClip, frameSeekTime } from '@/lib/editor/operations';
-import { isTimelineGestureRejection } from '@/lib/editor/timeline-edit-errors';
-import { dimensions, timelineDuration, normalizeTimeline, type MediaAsset, type Timeline } from '@/lib/editor/types';
+import { frameSeekTime } from '@/lib/editor/operations';
+import { dimensions, timelineDuration, normalizeTimeline, type MediaAsset } from '@/lib/editor/types';
 import '@/app/editor.css';
 
 export function ProductDemo() {
   const [store] = useState(() => {
     const timeline = normalizeTimeline({ ...DEMO_TIMELINE, clips: DEMO_TIMELINE.clips.map(clip => ({ ...clip, track: clip.kind === 'caption' ? 2 : 1 })) });
     const instance = createEditorStore(timeline);
-    instance.setState({ playhead: 4.2, compactTracks: true, zoom: .75 });
+    instance.setState({ playhead: 4.2 });
     return instance;
   });
-  const timeline = useStore(store, state => state.timeline);
-  const selected = useStore(store, state => state.selectedId);
+  const timeline = store.getState().timeline;
   const playing = useStore(store, state => state.playing);
-  const muted = useStore(store, state => state.muted);
-  const collapsed = useStore(store, state => state.timelineCollapsed);
   const [assets, setAssets] = useState<MediaAsset[]>(DEMO_ASSETS);
   const [error, setError] = useState('');
   const preview = useRef<PreviewHandle>(null);
   const duration = timelineDuration(timeline);
   const canvas = dimensions(timeline.aspectRatio);
-  const clip = timeline.clips.find(item => item.id === selected);
   const time = store.getState().playhead;
   const setTime = useCallback((playhead: number) => store.setState({ playhead }), [store]);
   const setPlaying = useCallback((playing: boolean) => store.setState({ playing }), [store]);
   const readTime = useCallback(() => preview.current?.currentTime() ?? store.getState().playhead, [store]);
-  const select = (id: string | null) => store.setState({ selectedId: id, selectedIds: id ? [id] : [] });
-  const change = (next: Timeline) => { store.getState().edit(next); setError(''); };
   const report = (message: string) => setError(message);
-  const runEdit = (edit: () => Timeline) => {
-    try { change(edit()); }
-    catch (error) { if (!isTimelineGestureRejection(error)) report(error instanceof Error ? error.message : 'This edit could not be completed.'); }
-  };
   const seek = (next: number) => {
     const value = frameSeekTime(next, timeline.fps, duration);
     preview.current?.pause(); preview.current?.seek(value); setTime(value);
@@ -59,18 +47,6 @@ export function ProductDemo() {
     const current = readTime();
     const cuts = [...new Set([0, duration, ...timeline.clips.filter(item => item.kind === 'video' || item.kind === 'image').flatMap(item => [item.start, item.start + item.duration])])].sort((a, b) => a - b);
     seek(direction < 0 ? cuts.filter(cut => cut < current - 1 / timeline.fps).at(-1) ?? 0 : cuts.find(cut => cut > current + 1 / timeline.fps) ?? duration);
-  };
-  const split = () => { if (selected) runEdit(() => splitClip(timeline, selected, readTime(), crypto.randomUUID())); };
-  const remove = () => {
-    const ids = new Set(store.getState().selectedIds);
-    if (ids.size) change({ ...timeline, clips: timeline.clips.filter(item => !ids.has(item.id)) });
-  };
-  const duplicate = () => {
-    const ids = new Set(store.getState().selectedIds);
-    const originals = timeline.clips.filter(item => ids.has(item.id));
-    if (!originals.length) return;
-    const offset = Math.max(...originals.map(item => item.start + item.duration)) - Math.min(...originals.map(item => item.start));
-    runEdit(() => originals.reduce((next, item) => placeOnFreeLayer(next, { ...item, id: crypto.randomUUID(), start: item.start + offset }), timeline));
   };
 
   useEffect(() => {
@@ -85,16 +61,15 @@ export function ProductDemo() {
   }, []);
 
   return <EditorStateProvider store={store}>
-    <figure className="landing-product-demo editor-app conversation-editor" aria-label="Interactive Revline editor demo" tabIndex={-1} onKeyDown={event => {
+    <figure className="landing-product-demo editor-app conversation-editor" aria-label="Revline sample edit" tabIndex={-1} onKeyDown={event => {
       if ((event.target as HTMLElement).closest('input,textarea,select,button,a,[role=button],[role=menuitem]')) return;
       if (event.code === 'Space') { event.preventDefault(); togglePlay(); }
-      else if (event.key === 'Escape') select(null);
     }}>
       <nav className="landing-demo-nav" aria-label="Demo editor navigation">
         <Link href="/" className="landing-demo-brand" aria-label="Revline home"><Brand /></Link>
         <span className="landing-demo-project">Weekend in motion</span>
         <span className="landing-demo-saved"><Check size={12} aria-hidden="true" />Saved</span>
-        <PrimaryButton asChild size="compact"><Link href="/editor/demo?export=1">Export <Download size={14} aria-hidden="true" /></Link></PrimaryButton>
+        <PrimaryButton asChild size="compact"><Link href="/sign-in">Export <Download size={14} aria-hidden="true" /></Link></PrimaryButton>
       </nav>
       <div className="landing-demo-layout">
         <aside className="landing-demo-chat" aria-label="Sample editing conversation">
@@ -105,21 +80,18 @@ export function ProductDemo() {
             <div className="landing-demo-tools">{['9 shots arranged', 'Opening and end card placed', '5 editable captions added'].map(label => <span key={label}><Check size={12} aria-hidden="true" />{label}</span>)}</div>
           </div>
           <div className="landing-demo-chat-footer">
-            <p>{error || 'This is a live sample. Press play, move a clip, or explore the timeline.'}</p>
-            <Link href="/editor/demo">Open full editor<ArrowUpRight size={13} aria-hidden="true" /></Link>
+            <p>{error || 'Press play to watch the sample edit.'}</p>
+            <Link href="/sign-in">Start editing<ArrowUpRight size={13} aria-hidden="true" /></Link>
           </div>
         </aside>
         <div className="landing-demo-workspace">
           <PreviewZoomProvider canvas={canvas}>
-            <section className="landing-demo-preview" aria-label="Live video preview">
+            <section className="landing-demo-preview" aria-label="Sample video preview">
               <div className="landing-demo-preview-toolbar canvas-toolbar"><span>9:16</span><PreviewZoomControls /></div>
-              <div className="landing-demo-preview-stage stage-center"><PreviewViewport><Preview ref={preview} timeline={timeline} assets={assets} time={time} onTime={setTime} onPlaying={setPlaying} onError={report} muted={muted} selectedClip={clip} onSelectClip={select} onClipChange={(id, patch) => change(patchClip(timeline, id, patch))} onVisualChange={patch => { if (clip) change(patchClip(timeline, clip.id, patch)); }} /></PreviewViewport></div>
+              <div className="landing-demo-preview-stage stage-center"><PreviewViewport><Preview ref={preview} timeline={timeline} assets={assets} time={time} onTime={setTime} onPlaying={setPlaying} onError={report} muted={false} /></PreviewViewport></div>
               <EditorPlaybackControls playing={playing} time={time} duration={duration} fps={timeline.fps} readTime={readTime} onTogglePlay={togglePlay} onPrevious={() => jump(-1)} onNext={() => jump(1)} />
             </section>
           </PreviewZoomProvider>
-          <div className={`landing-demo-timeline ${collapsed ? 'is-collapsed' : ''}`}>
-            <TimelinePanel timeline={timeline} assets={assets} selected={selected} onSelect={select} time={time} playing={playing} readPlaybackTime={readTime} onSeek={seek} onChange={change} onSplit={split} onDelete={remove} onDuplicate={duplicate} onAddText={kind => runEdit(() => addTextClip(timeline, crypto.randomUUID(), kind, readTime()))} muted={muted} onToggleMute={() => store.setState({ muted: !muted })} onError={report} collapsed={collapsed} onToggleCollapse={() => store.setState({ timelineCollapsed: !collapsed })} />
-          </div>
         </div>
       </div>
     </figure>

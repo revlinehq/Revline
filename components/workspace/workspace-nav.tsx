@@ -100,7 +100,9 @@ export function WorkspaceNav({ title = 'New chat', editorHref, active = 'chat', 
       {saving !== undefined && <span className="workspace-nav-save" role="status">{saving ? <LoaderCircle size={13} className="animate-spin" /> : <Check size={13} />}{saving ? 'Saving…' : 'Saved'}</span>}
       {(onUndo || onRedo) && <div className="workspace-nav-history"><button className="workspace-nav-icon" aria-label="Undo" title="Undo" disabled={!canUndo} onClick={onUndo}><Undo2 size={15} /></button><button className="workspace-nav-icon" aria-label="Redo" title="Redo" disabled={!canRedo} onClick={onRedo}><Redo2 size={15} /></button></div>}
       {onFootage && <button className="workspace-nav-secondary" aria-label="Footage" onClick={onFootage}><Film size={14} /><span>Footage</span></button>}
-      {onExport && <PrimaryButton size="compact" onClick={onExport} disabled={exportDisabled}>Export<Download size={13} /></PrimaryButton>}
+      {onExport && (demo
+        ? <PrimaryButton asChild size="compact"><Link href="/sign-in">Export<Download size={13} /></Link></PrimaryButton>
+        : <PrimaryButton size="compact" onClick={onExport} disabled={exportDisabled}>Export<Download size={13} /></PrimaryButton>)}
       {editorHref && <Link href={editorHref} className="workspace-nav-secondary workspace-editor-link" aria-label="Editor"><PanelsTopLeft size={14} /><span>Editor</span></Link>}
       <DropdownMenu><DropdownMenuTrigger asChild><button className="workspace-account-trigger" aria-label="Open account menu" disabled={!isLoaded}>{user?.imageUrl ? <img src={user.imageUrl} alt="" /> : initial}</button></DropdownMenuTrigger>
         <DropdownMenuContent align="end" sideOffset={12} className="workspace-menu workspace-account-menu">

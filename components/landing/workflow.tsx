@@ -22,7 +22,7 @@ export function Workflow({ heading = 'How it works.' }: { heading?: string } = {
       </WorkflowCard>
       <WorkflowCard title="Finish your version." description="Adjust the details, check the preview, and export.">
         <div className="landing-workflow-film"><img src={LANDING_DEMO_ASSETS.portrait} alt="A finished portrait video with an opening title" width={108} height={192} loading="lazy" /><strong>MAKE ROOM<br />FOR OUTSIDE.</strong></div>
-        <div className="landing-workflow-export"><span>Your edit, ready.</span><PrimaryButton asChild size="compact" className="landing-workflow-export-button"><Link href="/editor/demo?export=1">Export video<Download size={12} aria-hidden="true" /></Link></PrimaryButton></div>
+        <div className="landing-workflow-export"><span>Your edit, ready.</span><PrimaryButton asChild size="compact" className="landing-workflow-export-button"><Link href="/sign-in">Export video<Download size={12} aria-hidden="true" /></Link></PrimaryButton></div>
       </WorkflowCard>
     </div>
   </section>;
