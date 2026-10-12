@@ -6,7 +6,7 @@ const examples: { title: string; src?: string; poster?: string }[] = [
 
 export function LandingShowcase() {
   return <section className="landing-showcase landing-section" aria-labelledby="landing-showcase-heading">
-    <h2 id="landing-showcase-heading">made with revline</h2>
+    <h2 id="landing-showcase-heading">Edited with revline</h2>
     <div className="landing-showcase-grid">
       {examples.map(example => <figure className="landing-showcase-example" key={example.title}>
         <figcaption>{example.title}</figcaption>
