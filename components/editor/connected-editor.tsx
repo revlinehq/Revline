@@ -11,6 +11,7 @@ import { LoaderCircle } from 'lucide-react';
 import { api } from '@/convex/_generated/api';
 import type { Id, Doc } from '@/convex/_generated/dataModel';
 import { EditorShell } from './editor-shell';
+import { EditorAccessGate } from '@/components/workspace/editor-access-gate';
 import { acknowledgeDraftFiles, takeFiles } from '@/components/workspace/project-draft';
 import type { ChatMessage, ChatTool } from './assistant-panel';
 import type { ExportSettings } from './export-dialog';
@@ -23,7 +24,7 @@ export function ConnectedEditor({projectId}: {projectId:string}) {
   const {isAuthenticated}=useConvexAuth();
   const project=useQuery(api.projects.get,isAuthenticated?{projectId:projectId as Id<'projects'>}:'skip');
   if(!project)return <div className="editor-boot"><LoaderCircle className="animate-spin"/><p>Opening your story…</p><Link href="/projects">Your projects</Link></div>;
-  return <ProjectEditor key={projectId} project={project}/>;
+  return <EditorAccessGate><ProjectEditor key={projectId} project={project}/></EditorAccessGate>;
 }
 function ProjectEditor({project}: {project:Doc<'projects'>}) {
   const projectId=project._id;const convex=useConvex();const media=useQuery(api.assets.list,{projectId,limit:200});const ai=useQuery(api.assistant.status,{projectId});

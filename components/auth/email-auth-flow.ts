@@ -37,10 +37,10 @@ export async function verifyEmailCode(signIn: EmailSignIn, signUp: EmailSignUp, 
 }
 
 export function safeAuthRedirect(value: string | null | undefined, origin: string): string {
-  if (!value) return '/chat';
+  if (!value) return '/dashboard/chat';
   try {
     const url = new URL(value, origin);
-    if (url.origin !== origin || url.username || url.password || /^\/(?:sign-in|sign-up|sso-callback)(?:\/|$)/.test(url.pathname)) return '/chat';
+    if (url.origin !== origin || url.username || url.password || /^\/(?:sign-in|sign-up|sso-callback)(?:\/|$)/.test(url.pathname)) return '/dashboard/chat';
     return `${url.pathname}${url.search}${url.hash}`;
-  } catch { return '/chat'; }
+  } catch { return '/dashboard/chat'; }
 }

@@ -20,7 +20,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" data-scroll-behavior="smooth" suppressHydrationWarning className={`${spaceGrotesk.variable} ${inter.variable}`}>
       <body className="antialiased" suppressHydrationWarning>
         <script dangerouslySetInnerHTML={{ __html: `try{if(['chat','chats','profile','editor','projects','billing'].includes(location.pathname.split('/')[1])){var t=localStorage.getItem('revline:workspace-theme')==='dark'?'dark':'light';document.documentElement.dataset.workspaceTheme=t;document.documentElement.classList.toggle('dark',t==='dark');document.documentElement.style.colorScheme=t}}catch(e){}` }} />
-        <ClerkProvider signInUrl="/sign-in" signUpUrl="/sign-up" signInFallbackRedirectUrl="/chat" signUpFallbackRedirectUrl="/chat" appearance={{ theme: shadcn }}>
+        <ClerkProvider signInUrl="/sign-in" signUpUrl="/sign-up" signInFallbackRedirectUrl="/dashboard/chat" signUpFallbackRedirectUrl="/dashboard/chat" appearance={{ theme: shadcn }}>
           <Providers>{children}</Providers>
         </ClerkProvider>
       </body>

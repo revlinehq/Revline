@@ -84,11 +84,11 @@ export function WorkspaceNav({ title = 'New chat', editorHref, active = 'chat', 
     finally { setRenameBusy(false); }
   }
   return <><header className="workspace-nav">
-    <Link href="/chat" className="workspace-nav-brand" aria-label="Revline home"><Brand /></Link>
+    <Link href="/dashboard/chat" className="workspace-nav-brand" aria-label="Revline home"><Brand /></Link>
     <span className="workspace-nav-divider" aria-hidden="true" />
     <DropdownMenu><DropdownMenuTrigger asChild><button ref={historyTrigger} className="workspace-chat-trigger" aria-label="Open chat history"><span>{title}</span><ChevronDown size={13} /></button></DropdownMenuTrigger>
       <DropdownMenuContent align="start" sideOffset={10} className="workspace-menu workspace-history-menu" onCloseAutoFocus={event => { if (renameOpen) event.preventDefault(); }}>
-        <DropdownMenuItem asChild className="workspace-menu-item"><Link href="/chat"><Plus size={16} />New chat</Link></DropdownMenuItem>
+        <DropdownMenuItem asChild className="workspace-menu-item"><Link href="/dashboard/chat"><Plus size={16} />New chat</Link></DropdownMenuItem>
         {onRename && <DropdownMenuItem className="workspace-menu-item" onSelect={() => { setNewTitle(title); setRenameError(''); setRenameOpen(true); }}><Pencil size={15} />Rename chat</DropdownMenuItem>}
         <DropdownMenuSeparator className="workspace-menu-divider" />
         <DropdownMenuLabel className="workspace-menu-label">Recent chats</DropdownMenuLabel>

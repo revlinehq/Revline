@@ -136,6 +136,6 @@ describe('auth return URL', () => {
     expect(safeAuthRedirect(target, origin)).toBe(target.replace(origin, ''));
   });
   it.each([null, '', 'https://example.com/chat', '//example.com/chat', 'javascript:alert(1)', 'https://user@tryrevline.com/chat', '/sign-in', '/sign-up/verify', '/sso-callback?redirect_url=/chat'])('rejects an unsafe destination or auth loop: %s', target => {
-    expect(safeAuthRedirect(target, origin)).toBe('/chat');
+    expect(safeAuthRedirect(target, origin)).toBe('/dashboard/chat');
   });
 });

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, type DragEvent } from 'react';
 import { useRouter } from 'next/navigation';
-import { useAuth, useClerk } from '@clerk/nextjs';
+import { useAuth, useClerk, useUser } from '@clerk/nextjs';
 import { useAction, useConvex, useConvexAuth, useMutation, useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
@@ -25,6 +25,8 @@ type Processing = Omit<ProjectImportProgress, 'phase'> & { phase: FootageProcess
 export function NewConversation() {
   const router = useRouter();
   const clerk = useClerk();
+  const { user } = useUser();
+  const firstName = user?.firstName?.trim() || user?.fullName?.trim().split(/\s+/)[0];
   const convex = useConvex();
   const { isLoaded, isSignedIn, userId } = useAuth();
   const { isAuthenticated, isLoading: authLoading } = useConvexAuth();
@@ -112,7 +114,7 @@ export function NewConversation() {
     if (!isSignedIn) {
       setError('Sign in to upload your footage. Your files will stay here.');
       setProcessing({ phase: 'error', index: 1, total: files.length + cloudIds.length, percent: 0 });
-      clerk.openSignIn({ fallbackRedirectUrl: '/chat', signUpFallbackRedirectUrl: '/chat' });
+      clerk.openSignIn({ fallbackRedirectUrl: '/dashboard/chat', signUpFallbackRedirectUrl: '/dashboard/chat' });
       return;
     }
     if (!isAuthenticated || !userId) return;
@@ -222,7 +224,7 @@ export function NewConversation() {
     <WorkspaceNav title="New chat" />
     <main className="new-conversation-main" aria-labelledby="new-conversation-title">
       <div className="new-conversation-start">
-        <div className="new-conversation-intro"><h1 id="new-conversation-title">AI VIDEO EDITING</h1><p>Add your clips, then tell Revline what to make.</p></div>
+        <div className="new-conversation-intro"><h1 id="new-conversation-title">Welcome{firstName ? `, ${firstName}` : ''}.</h1><p>Start your edit. Add your clips, then tell Revline what to make.</p></div>
         <div className="new-conversation-entry" data-dragging={dragging || undefined} aria-busy={busy}>
           {status ? <FootageProcessingCard files={processingFiles} {...status} error={error} onRetry={() => void processFootage()} onReset={reset} onOpen={session.current.projectId ? () => void openPartialProject() : undefined} /> : <FootageStartCard onAttach={() => input.current?.click()} disabled={!draftReady} dragging={dragging} />}
           {error && status?.phase !== 'error' && <p className="new-conversation-error" role="alert">{error}</p>}

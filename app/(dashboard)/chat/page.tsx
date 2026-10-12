@@ -1,6 +1,9 @@
-import type { Metadata } from 'next';
-import { NewConversation } from '@/components/workspace/new-conversation';
+import { redirect } from 'next/navigation';
 
-export const metadata: Metadata = { title: 'New chat — Revline' };
-
-export default function NewChatPage() { return <NewConversation />; }
+export default async function LegacyChatPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(await searchParams)) {
+    for (const item of Array.isArray(value) ? value : value === undefined ? [] : [value]) params.append(key, item);
+  }
+  redirect(`/dashboard/chat${params.size ? `?${params}` : ''}`);
+}

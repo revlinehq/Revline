@@ -31,7 +31,7 @@ export function BillingSection({ checkoutReturn }: { checkoutReturn?: CheckoutRe
     if (!active || inFlight.current) return;
     inFlight.current = true; setBusy(true); setError('');
     try {
-      const result = status?.subscribed ? await portal({}) : await checkout({ plan: 'pro' });
+      const result = status?.subscribed || status?.needsPayment ? await portal({}) : await checkout({ plan: 'pro' });
       if (!result.url) throw new Error('The billing link could not be opened.');
       window.location.assign(result.url);
     } catch (cause) {
@@ -46,11 +46,11 @@ export function BillingSection({ checkoutReturn }: { checkoutReturn?: CheckoutRe
       {!isAuthenticated && !isLoading ? <><p className="workspace-membership-description">Sign in to view your membership and billing.</p><div><Link className="workspace-outline-button" href="/sign-in">Sign in</Link></div></> : !status ? <div className="workspace-billing-loading" role="status"><LoaderCircle size={15} className="animate-spin" />Loading your plan…</div> : <>
         <div className="workspace-membership-line"><strong>{EDITOR_PLAN.name}</strong><span>${EDITOR_PLAN.monthlyPrice} / month · {EDITOR_PLAN.currency}</span></div>
         <p className="workspace-billing-status">{status.subscribed ? 'Your current plan' : 'No active plan'}</p>
-        {checkoutReturn && <p className="workspace-billing-notice" role="status">{checkoutReturn === 'success' ? 'Checkout completed. Your membership will update when payment is confirmed.' : 'Checkout was canceled. Your membership has not changed.'}</p>}
+        {checkoutReturn && <p className="workspace-billing-notice" role="status">{checkoutReturn === 'success' ? status.subscribed ? 'Your membership is ready. You can start editing.' : 'Checkout completed. Waiting for Stripe to confirm your membership…' : 'Checkout was canceled. Your membership has not changed.'}</p>}
         {!active && <p className="workspace-billing-notice">Membership is coming soon. No payment is required.</p>}
         <p className="workspace-membership-description">{status.subscribed ? 'Manage your subscription, payment method, and invoices securely through Stripe.' : status.trialEligible ? `Try it free for ${EDITOR_PLAN.trialDays} days, then $${EDITOR_PLAN.monthlyPrice}/month. Cancel anytime.` : `$${EDITOR_PLAN.monthlyPrice}/month. Cancel anytime. Your free trial has already been used.`}</p>
         <ul className="workspace-billing-features">{features.map(feature => <li key={feature}><Check size={13} />{feature}</li>)}</ul>
-        <div><PrimaryButton size="compact" disabled={!active || busy} onClick={() => void openBilling()}>{busy && <LoaderCircle size={14} className="animate-spin" />}{!active ? 'Coming soon' : status.subscribed ? 'Manage subscription' : status.trialEligible ? `Start ${EDITOR_PLAN.trialDays}-day free trial` : 'Subscribe'}</PrimaryButton></div>
+        <div><PrimaryButton size="compact" disabled={!active || busy} onClick={() => void openBilling()}>{busy && <LoaderCircle size={14} className="animate-spin" />}{!active ? 'Coming soon' : status.subscribed || status.needsPayment ? 'Manage subscription' : status.trialEligible ? `Start ${EDITOR_PLAN.trialDays}-day free trial` : 'Subscribe'}</PrimaryButton>{status.subscribed && <Link className="workspace-outline-button" href="/dashboard/chat">Start editing</Link>}</div>
         {active && !status.subscribed && status.trialEligible && <p className="workspace-billing-trial-note">A payment method is required. Your first charge follows the trial unless you cancel.</p>}
         {error && <p className="workspace-inline-error" role="alert">{error}</p>}
       </>}

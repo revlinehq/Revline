@@ -28,7 +28,7 @@ export function AuthForm() {
   const router = useRouter();
   const params = useSearchParams();
   const redirectParam = params.get('redirect_url') ?? params.get('redirectUrl') ?? params.get('returnTo');
-  const [target, setTarget] = useState('/chat');
+  const [target, setTarget] = useState('/dashboard/chat');
   const [step, setStep] = useState<'email' | 'code'>('email');
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
