@@ -129,18 +129,17 @@ export function TimelinePanel(p:Props){
     gestureCleanup.current?.();
     const target=e.currentTarget;target.setPointerCapture(e.pointerId);pointerX.current=e.clientX;
     const originalTime=frameSeekTime(p.readPlaybackTime?.()??time,timeline.fps,end);
-    scrubRef.current=true;setScrubbing(true);let frame=0;let last=-1;let bypassSnap=e.altKey;
-    const marks=[0,end,...timeline.clips.flatMap(clip=>[clip.start,clip.start+clip.duration])];
+    scrubRef.current=true;setScrubbing(true);let frame=0;let last=-1;
     function update(){
       const el=scroll.current;if(!el)return;
-      const at=timelineTimeAtPointer(pointerX.current,{left:el.getBoundingClientRect().left,scrollLeft:el.scrollLeft,origin,px,end,fps:timeline.fps,marks:snap&&!bypassSnap?marks:undefined});
+      const at=timelineTimeAtPointer(pointerX.current,{left:el.getBoundingClientRect().left,scrollLeft:el.scrollLeft,origin,px,end,fps:timeline.fps});
       paint(at);if(at!==last){last=at;onSeek(at);}
     }
     function tick(){update();frame=requestAnimationFrame(tick);}
-    const move=(event:PointerEvent)=>{pointerX.current=event.clientX;bypassSnap=event.altKey;};
+    const move=(event:PointerEvent)=>{pointerX.current=event.clientX;};
     let unwatch=()=>{};
     const cleanup=()=>{unwatch();cancelAnimationFrame(frame);scrubRef.current=false;setScrubbing(false);target.removeEventListener('pointermove',move);target.removeEventListener('pointerup',finish);target.removeEventListener('pointercancel',cancel);target.removeEventListener('lostpointercapture',cancel);gestureCleanup.current=null;if(target.hasPointerCapture(e.pointerId))target.releasePointerCapture(e.pointerId);};
-    const finish=(event:PointerEvent)=>{pointerX.current=event.clientX;bypassSnap=event.altKey;update();cleanup();};
+    const finish=(event:PointerEvent)=>{pointerX.current=event.clientX;update();cleanup();};
     const cancel=()=>{cleanup();onSeek(originalTime);paint(originalTime);};
     gestureCleanup.current=cancel;unwatch=watchCancellation(cancel);
     target.addEventListener('pointermove',move);target.addEventListener('pointerup',finish);target.addEventListener('pointercancel',cancel);target.addEventListener('lostpointercapture',cancel);tick();

@@ -3,10 +3,9 @@
 import { layerGroup,trackOf,deriveTrackCounts,normalizeTimeline,maxTrackCount,type Timeline,type LayerGroup,type MediaAsset,type Clip } from './types';
 import { frameSeekTime, linkedClipIds } from './operations';
 import { TimelineGestureRejection } from './timeline-edit-errors';
-export function timelineTimeAtPointer(x:number,geometry:{left:number;scrollLeft:number;origin:number;px:number;end:number;fps:number;marks?:number[]}){
+export function timelineTimeAtPointer(x:number,geometry:{left:number;scrollLeft:number;origin:number;px:number;end:number;fps:number}){
   const raw=Math.max(0,Math.min(geometry.end,(x-geometry.left+geometry.scrollLeft-geometry.origin)/geometry.px));
-  const at=geometry.marks?closestSnap(raw,geometry.marks,7/geometry.px):raw;
-  return frameSeekTime(at,geometry.fps,geometry.end);
+  return frameSeekTime(raw,geometry.fps,geometry.end);
 }
 export function closestSnap(value:number,marks:number[],threshold:number){
   let best=value;let distance=threshold;

@@ -10,7 +10,6 @@ describe('frame-aware seeking', () => {
         expect(frameSeekTime(duration, fps, duration)).toBe(expected);
         expect(frameSeekTime(100, fps, duration)).toBe(expected);
         expect(timelineTimeAtPointer(1000, { left: 0, scrollLeft: 0, origin: 0, px: 100, end: duration, fps })).toBe(expected);
-        expect(timelineTimeAtPointer(1000, { left: 0, scrollLeft: 0, origin: 0, px: 100, end: duration, fps, marks: [duration] })).toBe(expected);
         expect(expected).toBeLessThanOrEqual(duration);
       });
     }
@@ -39,9 +38,9 @@ describe('frame-aware seeking', () => {
     }
     expect(frameSeekTime(1, Number.MAX_VALUE, Number.MAX_VALUE)).toBe(0);
   });
-  it('quantizes a nearby off-frame clip edge instead of moving the marker between frames', () => {
-    const geometry = { left: 0, scrollLeft: 0, origin: 0, px: 100, end: 5, fps: 30, marks: [2.15] };
-    expect(timelineTimeAtPointer(214, geometry)).toBe(65 / 30);
+  it('quantizes the pointer position instead of moving the marker between frames', () => {
+    const geometry = { left: 0, scrollLeft: 0, origin: 0, px: 100, end: 5, fps: 30 };
+    expect(timelineTimeAtPointer(214, geometry)).toBe(64 / 30);
     expect(timelineTimeAtPointer(-100, geometry)).toBe(0);
   });
 });
