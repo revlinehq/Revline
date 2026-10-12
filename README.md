@@ -35,6 +35,7 @@ REVLINE_DIST_DIR=.next-build npm run start -- --port 3002
 - Each project opens directly in the full editor, with resizable conversation, preview, and timeline panels, shared composers, and reusable navigation. Project revisions and chat messages are saved in Convex.
 - Shared visual layers for video, images, and text with V labels, plus separate A audio layers; add, reorder, compact, collapse, and delete empty layers.
 - Revline’s custom timeline provides clip and marquee selection, floating drag previews, multi-clip movement, trimming, its ruler, zoom, and scrolling. Shift-click adds clips to the selection; Ctrl/Cmd+A selects all. Delete and duplicate work on the selection, with application undo.
+- Ctrl/Cmd+C copies selected clips, including linked audio; Ctrl/Cmd+V pastes at the playhead with fresh IDs. Right-click offers Copy and Paste here. The clipboard stays within the current project and preserves source trims, effects, and relative timing.
 - Frame-snapped splits and playhead scrubbing, keyboard trimming, timeline zoom, nearby clip-edge snapping, and smooth playhead playback. Moving a selection snaps its clip starts and ends; dropping above or below a group can create a layer.
 - On-canvas visual move/resize plus source cropping, fit/fill, position, scale, rotation, opacity, and reset. Canvas presets: 9:16, 4:5, 1:1, 4:3, and 16:9.
 - Streaming replies reuse ViralShark’s incremental text fade. Reading earlier messages preserves your scroll position; Stop cancels the current run without discarding saved edits.
@@ -53,6 +54,16 @@ Beat detection decodes audio and measures onset peaks in the background worker. 
 Media preparation, AI-requested analysis, and exports use `@convex-dev/workflow`. Convex queues owned tasks, retries transient failures up to three times, and replaces expired worker leases. Scoped attempt tokens protect result writes and R2 uploads; completed audio/MP4 uploads are reused on retry. The worker subscribes to queued work instead of polling while idle. Closing the editor leaves queued/running work intact, and reopening reads its saved state. An AI reply can still reach its existing action timeout while a long analysis continues; a subsequent edit can use the saved results.
 
 `npm run worker` starts the development daemon on this computer. Production requires the same daemon on an always-running Node host with FFmpeg, Python/PySceneDetect, Chromium, and the configured environment. Convex Workflow does not supply those executables or host that process. The worker connects outbound to Convex and private R2 media; it needs no inbound public endpoint. Uploading a local file still needs the browser until its R2 upload has finished.
+
+## Production deployment
+
+The hosted app is https://editor.tryrevline.com, in Vercel project `techson1cs-projects/revline-editor`. The connected GitHub repository is `zuraHQ/revline-editor`; pushes to `codex/mvp` trigger production builds. Production uses Clerk's live instance for `tryrevline.com` and Convex `different-gnu-398`. Localhost continues to use the development instance and Convex `majestic-alpaca-541` through `.env.local`.
+
+Vercel holds the production Clerk secret and public Convex/Clerk settings. The Anthropic key and media-worker credentials belong in production Convex. Gemini and TwelveLabs keys belong only in the processing worker's environment. Environment files, generated build output, and private fixtures are excluded from Git and Vercel uploads.
+
+The production R2 gateway uses `cloudflare/media/wrangler.production.jsonc`, allows the hosted origin, and has its own signing secret. Deploy it with `npx wrangler deploy --config cloudflare/media/wrangler.production.jsonc`. Deploy Convex changes to the announced production target with `npx convex deploy --yes --typecheck enable`; verify the selected deployment before running this command.
+
+`npm run worker:production` starts the production processing daemon with the private `.env.production.local` settings. It currently runs on this computer; an always-running worker host is still required to process media and exports while this computer is off. Queued jobs remain saved in Convex until a worker can claim them.
 
 The public demo explicitly shows a sample conversation. Its local editing, preview, selection, and transform controls work without model credentials. No live Claude, Gemini, or TwelveLabs inference is claimed without configuring and testing those providers.
 

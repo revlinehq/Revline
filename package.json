@@ -11,6 +11,7 @@
     "postinstall": "node scripts/copy-vendor.mjs",
     "convex:dev": "convex dev",
     "worker": "node --env-file=.env.local --import tsx scripts/media-worker.ts",
+    "worker:production": "node --env-file=.env.production.local --import tsx scripts/media-worker.ts",
     "check": "npm run typecheck && npm test && npm run build"
   },
   "dependencies": {
