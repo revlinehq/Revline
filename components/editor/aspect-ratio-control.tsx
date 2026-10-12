@@ -7,32 +7,35 @@ import type { AspectRatio } from '@/lib/editor/types';
 import './aspect-ratio-control.css';
 
 const FORMATS: { value: AspectRatio; ratio: string; label: string }[] = [
-  { value: 'vertical', ratio: '9:16', label: 'Portrait' },
-  { value: 'portrait-feed', ratio: '4:5', label: 'Portrait feed' },
+  { value: 'vertical', ratio: '9:16', label: 'Reels/Shorts' },
   { value: 'square', ratio: '1:1', label: 'Square' },
-  { value: 'classic', ratio: '4:3', label: 'Classic' },
   { value: 'landscape', ratio: '16:9', label: 'Landscape' },
 ];
 
+const RATIOS: Record<AspectRatio, string> = {
+  vertical: '9:16', 'portrait-feed': '4:5', square: '1:1', classic: '4:3', landscape: '16:9',
+};
+
 export function AspectRatioControl({ value, onChange }: { value: AspectRatio; onChange: (value: AspectRatio) => void }) {
-  const format = FORMATS.find(format => format.value === value)!;
+  const ratio = RATIOS[value];
 
   return <DropdownMenu>
     <DropdownMenuTrigger asChild>
-      <Button variant="ghost" className="aspect-ratio-trigger" aria-label={`Aspect ratio: ${format.ratio}`}>
+      <Button variant="ghost" className="aspect-ratio-trigger" aria-label={`Aspect ratio: ${ratio}`}>
         <span className="aspect-ratio-label">Aspect ratio</span>
-        <span className="aspect-ratio-value">{format.ratio}</span>
+        <span className="aspect-ratio-value">{ratio}</span>
         <ChevronDown size={12} aria-hidden="true" />
       </Button>
     </DropdownMenuTrigger>
-    <DropdownMenuContent className="aspect-ratio-menu" align="start">
-      <DropdownMenuRadioGroup value={value} onValueChange={next => {
+    <DropdownMenuContent className="aspect-ratio-menu" align="start" collisionPadding={8}>
+      <DropdownMenuRadioGroup className="aspect-ratio-options" value={value} onValueChange={next => {
         const format = FORMATS.find(format => format.value === next);
         if (format && format.value !== value) onChange(format.value);
       }}>
-        {FORMATS.map(format => <DropdownMenuRadioItem key={format.value} value={format.value}>
-          <span className="aspect-ratio-option">{format.ratio}</span>
-          <span>{format.label}</span>
+        {FORMATS.map(format => <DropdownMenuRadioItem className="aspect-ratio-card" key={format.value} value={format.value}>
+          <span className="aspect-ratio-preview" aria-hidden="true"><span className="aspect-ratio-shape" data-ratio={format.value} /></span>
+          <span className="aspect-ratio-value">{format.ratio}</span>
+          <span className="aspect-ratio-name">{format.label}</span>
         </DropdownMenuRadioItem>)}
       </DropdownMenuRadioGroup>
     </DropdownMenuContent>
