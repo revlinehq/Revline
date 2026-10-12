@@ -100,6 +100,7 @@ export function ProductDemo() {
         <Link href="/" className="landing-demo-brand" aria-label="Revline home"><Brand /></Link>
         <span className="landing-demo-project">Weekend in motion</span>
         <span className="landing-demo-saved"><Check size={12} aria-hidden="true" />Saved</span>
+        <AspectRatioControl value={timeline.aspectRatio} onChange={aspectRatio => { preview.current?.pause(); change({ ...timeline, aspectRatio }); }} />
         <PrimaryButton asChild size="compact"><Link href="/sign-in">Export <Download size={14} aria-hidden="true" /></Link></PrimaryButton>
       </nav>
       <div className="landing-demo-layout">
@@ -118,7 +119,7 @@ export function ProductDemo() {
         <div className="landing-demo-workspace">
           <PreviewZoomProvider canvas={canvas}>
             <section className="landing-demo-preview" aria-label="Sample video preview">
-              <div className="landing-demo-preview-toolbar canvas-toolbar"><AspectRatioControl value={timeline.aspectRatio} onChange={aspectRatio => { preview.current?.pause(); change({ ...timeline, aspectRatio }); }} /><PreviewZoomControls /></div>
+              <div className="landing-demo-preview-toolbar canvas-toolbar"><PreviewZoomControls /></div>
               <div className="landing-demo-preview-stage stage-center"><PreviewViewport><Preview ref={preview} timeline={timeline} assets={assets} time={time} onTime={setTime} onPlaying={setPlaying} onError={report} muted={muted} selectedClip={clip} onSelectClip={select} onEditText={editText} onClipChange={(id, patch) => change(patchClip(timeline, id, patch))} onVisualChange={patch => { if (clip) change(patchClip(timeline, clip.id, patch)); }} /></PreviewViewport></div>
             </section>
           </PreviewZoomProvider>
