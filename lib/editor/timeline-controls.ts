@@ -175,7 +175,7 @@ export function clipLayerDropTarget(pointerY:number,rows:{top:number;bottom:numb
   if(pointerY<members[0].top&&rows.some(row=>row.group!==group&&row.top<members[0].top))return null;
   if(pointerY>=members[members.length-1].bottom&&rows.some(row=>row.group!==group&&row.bottom>members[members.length-1].bottom))return null;
   // Slightly missing a row should keep that row, not grow the stack.
-  if(pointerY<members[0].top&&pointerY>members[0].top-12)return {track:members[0].track,direction:'above'};
+  if(pointerY<members[0].top&&pointerY>members[0].top-6)return {track:members[0].track,direction:'above'};
   const last=members[members.length-1];
   if(pointerY>=last.bottom&&pointerY<last.bottom+12)return {track:last.track,direction:'below'};
   return layerDropTarget(pointerY,members);

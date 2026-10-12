@@ -1,7 +1,7 @@
 import { deriveTracks, normalizeTimeline, type Timeline } from './types';
 // OpenCut Classic timeline/components/layout.ts and track-layout.ts.
 // MIT notice: third-party/OpenCut-LICENSE.
-export const TIMELINE_RULER_HEIGHT=22;
+export const TIMELINE_RULER_HEIGHT=28;
 // Time zero starts flush against the timeline lane's left edge.
 export const TIMELINE_ORIGIN=0;
 export const TIMELINE_TRACK_GAP=6;

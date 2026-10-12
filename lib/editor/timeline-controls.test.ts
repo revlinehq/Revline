@@ -110,6 +110,7 @@ it('rejects clips crossing into or beyond the other stack while preserving outer
  expect(clipLayerDropTarget(190,rows,'audio')).toEqual({track:1,direction:'above'});
  expect(clipLayerDropTarget(190,rows.slice(0,1),'visual')).toEqual({edge:'below'});
  expect(clipLayerDropTarget(95,rows,'visual')).toEqual({track:1,direction:'above'});
+ expect(clipLayerDropTarget(93,rows,'visual')).toEqual({edge:'above'});
  expect(clipLayerDropTarget(245,rows,'audio')).toEqual({track:1,direction:'below'});
 });
 it('keeps the twenty-four visual-layer limit instead of silently losing an extra track',()=>{
