@@ -10,7 +10,7 @@ export const TIMELINE_BOTTOM_SPACE=72;
 export function timelineLayout(timeline:Timeline,compact=false){
   timeline=normalizeTimeline(timeline);
   let top=TIMELINE_RULER_HEIGHT+TIMELINE_TOP_SPACE;
-  const clipHeight=compact?22:52;
+  const clipHeight=compact?32:52;
   const tracks=deriveTracks(timeline).map(track=>{
     const height=clipHeight+TIMELINE_TRACK_GAP;
     const row={...track,top,height,clipHeight};top+=height;return row;

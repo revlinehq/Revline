@@ -48,10 +48,10 @@ describe('mixed visual track layout', () => {
   it('keeps compact rows consistently sized and computes contiguous geometry', () => {
     const layout = timelineLayout(timeline, true);
     layout.tracks.forEach((row, index) => {
-      expect(row.clipHeight).toBe(22);
-      expect(row.top).toBe(TIMELINE_RULER_HEIGHT + TIMELINE_TOP_SPACE + index * (22 + TIMELINE_TRACK_GAP));
+      expect(row.clipHeight).toBe(32);
+      expect(row.top).toBe(TIMELINE_RULER_HEIGHT + TIMELINE_TOP_SPACE + index * (32 + TIMELINE_TRACK_GAP));
     });
-    expect(layout.height).toBe(TIMELINE_RULER_HEIGHT + TIMELINE_TOP_SPACE + layout.tracks.length * (22 + TIMELINE_TRACK_GAP));
+    expect(layout.height).toBe(TIMELINE_RULER_HEIGHT + TIMELINE_TOP_SPACE + layout.tracks.length * (32 + TIMELINE_TRACK_GAP));
   });
   it('leaves space above the first lane for an explicit new visual track drop', () => {
     const rows = timelineLayout(timeline).tracks.map(row => ({ ...row, track: row.number, bottom: row.top + row.height }));

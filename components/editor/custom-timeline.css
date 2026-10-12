@@ -72,17 +72,16 @@ html[data-workspace-theme=dark] .editor-app:not(.landing-product-demo) .custom-t
 
 .custom-timeline .audio-waveform{position:absolute;inset:20px 0 3px;pointer-events:none;overflow:hidden;background:none}
 .custom-timeline .audio-waveform canvas{position:absolute;top:0}
-.custom-timeline .audio-waveform[data-waveform-ready=true]::before{content:'';position:absolute;top:50%;left:0;right:0;height:1px;background:#ffffff26;pointer-events:none}
 .custom-timeline .audio-waveform.is-muted canvas{opacity:.35}
-.custom-timeline .audio-waveform.is-muted::before{opacity:.6}
 .custom-timeline .audio-muted-icon{position:absolute;top:5px;left:7px;color:#ffffffb3;pointer-events:none}
 .custom-timeline .timeline-clip.clip-audio:has(.audio-waveform.is-muted)>span{padding-left:24px;color:#ffffff99}
-.custom-timeline.tracks-compact .audio-waveform{inset:3px 0}
+.custom-timeline.tracks-compact .audio-waveform{inset:16px 0 3px}
+.custom-timeline.tracks-compact .timeline-clip.clip-audio>span{height:15px;padding-top:3px;font-size:10px;line-height:12px}
 .custom-timeline .audio-clip-volume{position:absolute;inset:25px 0 8px;z-index:2;pointer-events:none}
 .custom-timeline .audio-volume-line{position:absolute;top:calc((1 - var(--clip-volume))*100%);left:0;right:0;height:14px;transform:translateY(-50%);cursor:ns-resize;touch-action:none;pointer-events:auto;outline:none}
 .custom-timeline .audio-volume-line::before{content:'';position:absolute;top:6px;left:0;right:0;height:1px;background:#ffffff73;box-shadow:0 1px #0002}
 .custom-timeline .audio-volume-line:hover::before,.custom-timeline .audio-volume-line:focus-visible::before,.custom-timeline .audio-clip-volume[data-adjusting] .audio-volume-line::before{background:#fff;height:2px}
 .custom-timeline .audio-volume-line output{position:absolute;right:6px;bottom:12px;padding:2px 5px;border-radius:3px;background:#23192fe6;color:#fff;font-size:10px;line-height:14px;white-space:nowrap;opacity:0;pointer-events:none}
 .custom-timeline .audio-volume-line:hover output,.custom-timeline .audio-volume-line:focus-visible output,.custom-timeline .audio-clip-volume[data-adjusting] output{opacity:1}
-.custom-timeline.tracks-compact .audio-clip-volume{inset:7px 0}
+.custom-timeline.tracks-compact .audio-clip-volume{inset:19px 0 5px}
 @media(max-width:600px){.custom-timeline .track-label[data-group=audio] .layer-options{width:14px}}
