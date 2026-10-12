@@ -13,8 +13,6 @@ export default function Home() {
   return <main className="landing">
     <nav className="landing-nav landing-container" aria-label="Main navigation">
       <Link className="landing-brand" href="/" aria-label="Revline home"><Brand /></Link>
-      <div className="landing-nav-links"><a href="#workflow">Workflow</a><a href="#features">AI tools</a><a href="#questions">Questions</a></div>
-      <Link className="landing-sign-in" href="/sign-in">Sign in</Link>
       <LandingStartButton compact play={false} className="landing-nav-start" />
     </nav>
     <LandingHero />
