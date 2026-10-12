@@ -1,0 +1,43 @@
+import { fork } from 'node:child_process';
+import { join } from 'node:path';
+
+type Settings = { fps: number; quality: 'draft' | 'standard' | 'high' };
+
+/** A dedicated process owns renderer globals and ends with its task signal. */
+export function runRenderWorker(directory: string, output: string, settings: Settings, onProgress: (render: { progress: number }) => void, signal: AbortSignal): Promise<{ warnings: number }> {
+  signal.throwIfAborted();
+  return new Promise((resolve, reject) => {
+    // This Node entry runs outside the bundle; outputFileTracingIncludes packages it.
+    const worker = fork(/* turbopackIgnore: true */ join(process.cwd(), 'scripts/render-worker.mjs'), [directory, output, JSON.stringify(settings)], { execArgv: [], silent: true });
+    let completed: { warnings: number } | undefined;
+    let failure: Error | undefined;
+    let stderr = '';
+    let forceStop: ReturnType<typeof setTimeout> | undefined;
+    // Drain diagnostics without buffering large compiler/browser logs into Next.
+    worker.stdout?.resume();
+    worker.stderr?.on('data', (chunk: Buffer) => { stderr = (stderr + chunk.toString()).slice(-2000); });
+    const cancel = () => {
+      worker.kill('SIGTERM');
+      forceStop = setTimeout(() => worker.kill('SIGKILL'), 10_000);
+      forceStop.unref();
+    };
+    signal.addEventListener('abort', cancel, { once: true });
+    if (signal.aborted) cancel();
+    worker.on('message', (raw: unknown) => {
+      if (!raw || typeof raw !== 'object' || !('type' in raw)) return;
+      const message = raw as { type: string; progress?: number; warnings?: number; message?: string };
+      if (message.type === 'progress' && typeof message.progress === 'number' && Number.isFinite(message.progress)) onProgress({ progress: message.progress });
+      if (message.type === 'complete' && typeof message.warnings === 'number') completed = { warnings: message.warnings };
+      if (message.type === 'error') failure = new Error(message.message || 'The render worker failed.');
+    });
+    worker.on('error', error => { failure = error; });
+    worker.on('close', code => {
+      signal.removeEventListener('abort', cancel);
+      if (forceStop) clearTimeout(forceStop);
+      if (signal.aborted) { reject(new Error('The render was cancelled.')); return; }
+      if (code === 0 && completed) { resolve(completed); return; }
+      if (stderr) console.error('Render worker exited:', stderr);
+      reject(failure ?? new Error('The video render worker stopped before completing.'));
+    });
+  });
+}

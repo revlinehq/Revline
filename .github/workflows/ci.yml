@@ -2,17 +2,27 @@ name: Validate
 on:
   push:
   pull_request:
+permissions:
+  contents: read
 jobs:
   checks:
     runs-on: ubuntu-latest
+    env:
+      PUPPETEER_SKIP_DOWNLOAD: 'true'
+      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_test_Y2kuY2xlcmsuYWNjb3VudHMuZGV2JA==
+      NEXT_PUBLIC_CONVEX_URL: https://ci.convex.cloud
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - run: python -m venv .data/scene-detection && .data/scene-detection/bin/pip install -r scripts/scene-detection-requirements.txt
       - run: npm ci
-      - run: npm run lint
       - run: npm test
       - run: npm run typecheck
       - run: npm run build

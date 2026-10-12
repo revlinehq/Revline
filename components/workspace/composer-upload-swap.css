@@ -1,0 +1,19 @@
+/* Keep the real fields mounted and their layout intact during the uploader swap. */
+.edit-composer .composer-edit-fields{display:contents}
+.composer-height-transition .composer-edit-fields{display:flex;flex-direction:column;gap:inherit;min-width:0;flex-shrink:0}
+.edit-composer.composer-height-transition{overflow:clip;transition:height 180ms cubic-bezier(.2,0,0,1)}
+.edit-composer.composer-upload-enabled{position:relative}
+.composer-upload-enabled[data-upload-view=true] .composer-edit-fields{visibility:hidden;pointer-events:none}
+.edit-composer .composer-upload-swap{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;border-radius:inherit;background:inherit;box-shadow:inherit;opacity:0;visibility:hidden;pointer-events:none;transition:opacity 120ms cubic-bezier(.2,0,0,1),visibility 0s 120ms}
+.edit-composer[data-upload-view=true] .composer-upload-swap{opacity:1;visibility:visible;pointer-events:auto;transition-delay:0s}
+.composer-new-video{width:100%;height:100%;border:0;border-radius:inherit;background:linear-gradient(120deg,#6e8bff 0%,#4c6def 52%,#3b54d7 100%);color:#fff;cursor:pointer;font:600 21px/1.4 var(--font-inter),Inter,sans-serif;transition:filter 120ms cubic-bezier(.2,0,0,1)}
+.composer-new-video:hover{filter:brightness(1.06)}
+.composer-new-video:focus-visible{outline:2px solid #4768ef;outline-offset:4px}
+.edit-composer[data-upload-view=true]:focus-within{outline:2px solid #4768ef;outline-offset:4px}
+.composer-new-video:disabled{cursor:wait}
+.composer-new-video>span{display:flex;align-items:center;justify-content:center;gap:12px}
+.composer-video-badge{margin-left:4px;padding:3px 8px;border-radius:7px;background:#ffffff24;font-size:10px;font-weight:600;line-height:1.4}
+@media(prefers-reduced-motion:reduce){.edit-composer .composer-upload-swap,.edit-composer.composer-height-transition{transition:none}}
+
+/* Landing stays light even when the account last used the dark workspace theme. */
+.landing .composer-upload-enabled{--ws-composer-bg:#fff;--ws-text:#292929;--ws-muted:#777;--ws-hover:#f2f2f2}

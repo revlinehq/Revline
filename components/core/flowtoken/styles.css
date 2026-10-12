@@ -1,0 +1,9 @@
+/* FlowToken fadeIn, copied from Ephibbs/flowtoken src/styles.css. */
+@keyframes ft-fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-flow-token] { animation: none !important; }
+}

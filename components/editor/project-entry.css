@@ -1,0 +1,7 @@
+.editor-app .project-import-stage { background:var(--ws-bg,var(--background)); color:var(--ws-text,var(--foreground)); }
+.editor-app .import-drop-card,.editor-app .import-progress-card { background:var(--ws-input,var(--card)); border-color:var(--ws-border,var(--border)); }
+.editor-app .import-drop-icon,.editor-app .import-file-icon { background:var(--ws-hover,var(--secondary)); color:var(--ws-muted,var(--muted-foreground)); }
+.editor-app .import-heading p,.editor-app .import-drop-card p,.editor-app .import-file-types,.editor-app .import-file>div>span,.editor-app .import-file>svg,.editor-app .import-progress-label,.editor-app .import-progress-card>p { color:var(--ws-muted,var(--muted-foreground)); }
+.editor-app .import-dragging .import-drop-card { border-color:var(--ws-text,var(--foreground)); background:var(--ws-hover,var(--secondary)); }
+.editor-app .import-progress-card progress,.editor-app .import-progress-card progress::-webkit-progress-bar { background:var(--ws-border,var(--border)); accent-color:var(--primary); }
+.editor-app .import-progress-card progress::-webkit-progress-value { background:var(--primary); }

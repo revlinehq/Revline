@@ -1,0 +1,119 @@
+'use client';
+
+import { useRef, useState } from 'react';
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
+import { useClerk, useUser } from '@clerk/nextjs';
+import { useConvexAuth, useQuery } from 'convex/react';
+import { Check, ChevronDown, CreditCard, Download, Film, History, LoaderCircle, LogOut, Moon, PanelsTopLeft, Pencil, Plus, Redo2, UserRound, Undo2 } from 'lucide-react';
+import { api } from '@/convex/_generated/api';
+import type { Id } from '@/convex/_generated/dataModel';
+import { Brand } from './brand';
+import { PrimaryButton } from './primary-button';
+import { useWorkspaceTheme } from './theme-provider';
+import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
+import './workspace-pages.css';
+
+export type WorkspaceChat = {
+  id: Id<'projects'> | 'demo'; title: string; updatedAt: number; clipCount: number;
+  coverUrl: string | null; coverKind: 'video' | 'image' | null; running: boolean;
+};
+
+export function useWorkspaceChats(demo = false) {
+  const { isLoaded, isSignedIn } = useUser();
+  const { isAuthenticated, isLoading } = useConvexAuth();
+  const connected = !!isSignedIn && isAuthenticated && !demo;
+  const projects = useQuery(api.projects.list, connected ? { limit: 100 } : 'skip');
+  const chats: WorkspaceChat[] = connected ? (projects ?? []).map(project => ({
+    id: project._id, title: project.title, updatedAt: project.updatedAt,
+    clipCount: project.timeline?.clips.length ?? 0, coverUrl: project.coverUrl,
+    coverKind: project.coverKind, running: !!project.aiRunning,
+  })) : [];
+  return { chats, loading: !isLoaded || (!demo && !!isSignedIn && (isLoading || (isAuthenticated && projects === undefined))), connected };
+}
+
+export function chatRecency(timestamp: number) {
+  const date = new Date(timestamp);
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const yesterday = new Date(today); yesterday.setDate(yesterday.getDate() - 1);
+  return timestamp >= today.getTime() ? 'Today' : timestamp >= yesterday.getTime() ? 'Yesterday' : date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+
+export interface WorkspaceNavProps {
+  title?: string;
+  editorHref?: string;
+  active?: 'chat' | 'chats' | 'profile';
+  demo?: boolean;
+  saving?: boolean;
+  canUndo?: boolean;
+  canRedo?: boolean;
+  onUndo?: () => void;
+  onRedo?: () => void;
+  onFootage?: () => void;
+  onExport?: () => void;
+  exportDisabled?: boolean;
+  onRename?: (title: string) => void | Promise<void>;
+}
+
+export function WorkspaceNav({ title = 'New chat', editorHref, active = 'chat', demo = false, saving, canUndo, canRedo, onUndo, onRedo, onFootage, onExport, exportDisabled, onRename }: WorkspaceNavProps) {
+  const pathname = usePathname();
+  const { chats, loading } = useWorkspaceChats(demo);
+  const { user, isSignedIn, isLoaded } = useUser();
+  const clerk = useClerk();
+  const { theme, setTheme } = useWorkspaceTheme();
+  const [accountError, setAccountError] = useState('');
+  const [signingOut, setSigningOut] = useState(false);
+  const [renameOpen, setRenameOpen] = useState(false);
+  const [newTitle, setNewTitle] = useState(title);
+  const [renameBusy, setRenameBusy] = useState(false);
+  const [renameError, setRenameError] = useState('');
+  const historyTrigger = useRef<HTMLButtonElement>(null);
+  const initial = (user?.firstName ?? user?.primaryEmailAddress?.emailAddress ?? 'D').slice(0, 1).toUpperCase();
+  async function signOut() {
+    setSigningOut(true); setAccountError('');
+    try { await clerk.signOut({ redirectUrl: '/' }); }
+    catch { setAccountError('Could not sign out. Please try again.'); setSigningOut(false); }
+  }
+  async function rename() {
+    if (!onRename || !newTitle.trim() || newTitle.trim().length > 120 || renameBusy) return;
+    setRenameBusy(true); setRenameError('');
+    try { await onRename(newTitle.trim()); setRenameOpen(false); }
+    catch (reason) { setRenameError(reason instanceof Error ? reason.message : 'Could not rename this chat.'); }
+    finally { setRenameBusy(false); }
+  }
+  return <><header className="workspace-nav">
+    <Link href="/chat" className="workspace-nav-brand" aria-label="Revline home"><Brand /></Link>
+    <span className="workspace-nav-divider" aria-hidden="true" />
+    <DropdownMenu><DropdownMenuTrigger asChild><button ref={historyTrigger} className="workspace-chat-trigger" aria-label="Open chat history"><span>{title}</span><ChevronDown size={13} /></button></DropdownMenuTrigger>
+      <DropdownMenuContent align="start" sideOffset={10} className="workspace-menu workspace-history-menu" onCloseAutoFocus={event => { if (renameOpen) event.preventDefault(); }}>
+        <DropdownMenuItem asChild className="workspace-menu-item"><Link href="/chat"><Plus size={16} />New chat</Link></DropdownMenuItem>
+        {onRename && <DropdownMenuItem className="workspace-menu-item" onSelect={() => { setNewTitle(title); setRenameError(''); setRenameOpen(true); }}><Pencil size={15} />Rename chat</DropdownMenuItem>}
+        <DropdownMenuSeparator className="workspace-menu-divider" />
+        <DropdownMenuLabel className="workspace-menu-label">Recent chats</DropdownMenuLabel>
+        {loading ? <div className="workspace-menu-empty"><LoaderCircle size={14} className="animate-spin" />Loading chats…</div> : chats.length ? chats.slice(0, 4).map(chat => <DropdownMenuItem key={chat.id} asChild className="workspace-menu-chat"><Link href={`/editor/${chat.id}`}><span><strong>{chat.title}</strong><small>{chatRecency(chat.updatedAt)}</small></span>{pathname === `/editor/${chat.id}` && <Check size={14} />}</Link></DropdownMenuItem>) : <div className="workspace-menu-empty">Your chats will appear here.</div>}
+        <DropdownMenuSeparator className="workspace-menu-divider" />
+        <DropdownMenuItem asChild className="workspace-menu-item"><Link href="/chats" aria-current={active === 'chats' ? 'page' : undefined}><History size={15} />See all chats</Link></DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+    <div className="workspace-nav-actions">
+      {saving !== undefined && <span className="workspace-nav-save" role="status">{saving ? <LoaderCircle size={13} className="animate-spin" /> : <Check size={13} />}{saving ? 'Saving…' : 'Saved'}</span>}
+      {(onUndo || onRedo) && <div className="workspace-nav-history"><button className="workspace-nav-icon" aria-label="Undo" title="Undo" disabled={!canUndo} onClick={onUndo}><Undo2 size={15} /></button><button className="workspace-nav-icon" aria-label="Redo" title="Redo" disabled={!canRedo} onClick={onRedo}><Redo2 size={15} /></button></div>}
+      {onFootage && <button className="workspace-nav-secondary" aria-label="Footage" onClick={onFootage}><Film size={14} /><span>Footage</span></button>}
+      {onExport && <PrimaryButton size="compact" onClick={onExport} disabled={exportDisabled}>Export<Download size={13} /></PrimaryButton>}
+      {editorHref && <Link href={editorHref} className="workspace-nav-secondary workspace-editor-link" aria-label="Editor"><PanelsTopLeft size={14} /><span>Editor</span></Link>}
+      <DropdownMenu><DropdownMenuTrigger asChild><button className="workspace-account-trigger" aria-label="Open account menu" disabled={!isLoaded}>{user?.imageUrl ? <img src={user.imageUrl} alt="" /> : initial}</button></DropdownMenuTrigger>
+        <DropdownMenuContent align="end" sideOffset={12} className="workspace-menu workspace-account-menu">
+          <div className="workspace-account-identity"><span className="workspace-account-avatar">{user?.imageUrl ? <img src={user.imageUrl} alt="" /> : initial}</span><div><strong>{user?.fullName ?? (isSignedIn ? 'Your account' : 'Demo workspace')}</strong><span>{user?.primaryEmailAddress?.emailAddress ?? 'Sign in to save your work'}</span></div></div>
+          <DropdownMenuSeparator className="workspace-menu-divider" />
+          <DropdownMenuItem asChild className="workspace-menu-item"><Link href="/profile" aria-current={active === 'profile' ? 'page' : undefined}><UserRound size={16} />Profile</Link></DropdownMenuItem>
+          <DropdownMenuItem asChild className="workspace-menu-item"><Link href="/profile#billing"><CreditCard size={16} />Membership & billing</Link></DropdownMenuItem>
+          <DropdownMenuCheckboxItem className="workspace-menu-item" checked={theme === 'dark'} onCheckedChange={checked => setTheme(checked ? 'dark' : 'light')}><Moon size={16} />Dark mode</DropdownMenuCheckboxItem>
+          <DropdownMenuSeparator className="workspace-menu-divider" />
+          {isSignedIn ? <DropdownMenuItem className="workspace-menu-item" disabled={signingOut} onSelect={event => { event.preventDefault(); void signOut(); }}>{signingOut ? <LoaderCircle size={16} className="animate-spin" /> : <LogOut size={16} />}Sign out</DropdownMenuItem> : <DropdownMenuItem asChild className="workspace-menu-item"><Link href="/sign-in"><LogOut size={16} />Sign in</Link></DropdownMenuItem>}
+          {accountError && <p className="workspace-inline-error" role="alert">{accountError}</p>}
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
+  </header><Dialog open={renameOpen} onOpenChange={open => { if (!renameBusy) setRenameOpen(open); }}><DialogContent className="workspace-dialog" onCloseAutoFocus={event => { event.preventDefault(); historyTrigger.current?.focus(); }}><DialogTitle>Rename chat</DialogTitle><DialogDescription>Give this conversation a name you can find later.</DialogDescription><form onSubmit={event => { event.preventDefault(); void rename(); }}><label className="workspace-form-field">Chat name<input autoFocus value={newTitle} maxLength={120} onChange={event => setNewTitle(event.target.value)} /></label>{renameError && <p className="workspace-inline-error" role="alert">{renameError}</p>}<div className="workspace-dialog-actions"><button type="button" className="workspace-outline-button" onClick={() => setRenameOpen(false)} disabled={renameBusy}>Cancel</button><PrimaryButton type="submit" disabled={renameBusy || !newTitle.trim()}>{renameBusy && <LoaderCircle size={14} className="animate-spin" />}Save name</PrimaryButton></div></form></DialogContent></Dialog></>;
+}

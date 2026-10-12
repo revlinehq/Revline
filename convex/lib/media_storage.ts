@@ -1,0 +1,22 @@
+import { signMediaToken } from '../../lib/storage/media-tokens';
+import type { QueryCtx, MutationCtx } from '../_generated/server';
+import type { Id } from '../_generated/dataModel';
+
+export function mediaConfig() {
+  const url = process.env.MEDIA_WORKER_URL, secret = process.env.MEDIA_SIGNING_SECRET;
+  if (!url || !secret) throw new Error('Cloudflare media storage is not configured');
+  return { url: url.replace(/\/$/, ''), secret };
+}
+export async function mediaUrl(ctx: QueryCtx | MutationCtx, source: { storageId?: Id<'_storage'>; r2Key?: string }) {
+  if (!source.r2Key) return source.storageId ? ctx.storage.getUrl(source.storageId) : null;
+  const { url, secret } = mediaConfig();
+  const token = await signMediaToken(secret, { operation: 'read', key: source.r2Key, expires: Date.now() + 7 * 86400_000 });
+  return `${url}/read?token=${token}`;
+}
+export async function storageControl(body: Record<string, unknown>): Promise<{ uploadId?: string; size?: number; contentType?: string }> {
+  const { url, secret } = mediaConfig();
+  const token = await signMediaToken(secret, { operation: 'control', expires: Date.now() + 60_000 });
+  const response = await fetch(`${url}/control`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify(body) });
+  if (!response.ok) throw new Error('Cloudflare media request failed. Please retry.');
+  return response.json();
+}

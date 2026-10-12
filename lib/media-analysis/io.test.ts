@@ -1,0 +1,21 @@
+import { afterAll, beforeAll, expect, test } from 'vitest';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { prepareVideo } from './io';
+const run = promisify(execFile);
+let directory: string;
+beforeAll(async () => { directory = await mkdtemp(join(tmpdir(), 'revline-proxy-test-')); });
+afterAll(async () => { await rm(directory, { force: true, recursive: true }); });
+test.each(['180x320', '600x100', '100x600'])('pads %s sources to valid Pegasus geometry while preserving duration', async size => {
+  const source = join(directory, `source-${size}.mp4`), proxy = join(directory, `proxy-${size}.mp4`);
+  await run('ffmpeg', ['-v', 'error', '-f', 'lavfi', '-i', `color=c=red:s=${size}:r=30:d=1`, '-c:v', 'libx264', '-y', source]);
+  await prepareVideo(source, proxy, AbortSignal.timeout(5000));
+  const { stdout } = await run('ffprobe', ['-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=width,height,duration,start_time', '-of', 'json', proxy]);
+  const stream = JSON.parse(stdout).streams[0];
+  expect(stream.width).toBeGreaterThanOrEqual(360); expect(stream.height).toBeGreaterThanOrEqual(360);
+  expect(Math.max(stream.width / stream.height, stream.height / stream.width)).toBeLessThanOrEqual(2.4);
+  expect(Number(stream.duration)).toBeCloseTo(1, 2); expect(Number(stream.start_time)).toBe(0);
+});
