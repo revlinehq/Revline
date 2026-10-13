@@ -1,0 +1,10 @@
+{
+  "name": "revline-media-processor-edge",
+  "private": true,
+  "scripts": {
+    "prepare-context": "node ../prepare-context.mjs",
+    "types": "wrangler types worker-configuration.d.ts --env-interface ProcessorEnv",
+    "typecheck": "tsc --project tsconfig.json",
+    "dry-run": "wrangler deploy --dry-run --outdir .wrangler/dry-run"
+  }
+}

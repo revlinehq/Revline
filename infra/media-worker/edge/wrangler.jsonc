@@ -1,0 +1,24 @@
+{
+  "$schema": "../../../node_modules/wrangler/config-schema.json",
+  "name": "revline-media-processor-production",
+  "main": "cloudflare.ts",
+  "account_id": "701645e913477e567db69b11343f59d8",
+  "compatibility_date": "2026-10-13",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "preview_urls": false,
+  "triggers": { "crons": ["* * * * *"] },
+  "containers": [{
+    "class_name": "MediaProcessor",
+    "scheduling_policy": "durable_object",
+    "images": { "processor": { "dockerfile": "../Dockerfile", "build_context": "../../../.wrangler/media-processor-build" } }
+  }],
+  "durable_objects": { "bindings": [{ "name": "PROCESSOR", "class_name": "MediaProcessor" }] },
+  "exports": { "MediaProcessor": { "type": "durable-object", "storage": "sqlite" } },
+  "vars": {
+    "NEXT_PUBLIC_CONVEX_URL": "https://different-gnu-398.convex.cloud",
+    "MEDIA_WORKER_URL": "https://revline-editor-media-production.makaradze98-s.workers.dev",
+    "GEMINI_VIDEO_MODEL": "gemini-3.7-flash"
+  },
+  "observability": { "enabled": true, "head_sampling_rate": 1 }
+}

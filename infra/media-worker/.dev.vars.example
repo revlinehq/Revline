@@ -1,0 +1,3 @@
+# Real values go in an ignored .dev.vars for local checks only, or Worker secrets.
+RENDER_WORKER_SECRET=
+GOOGLE_GENERATIVE_AI_API_KEY=

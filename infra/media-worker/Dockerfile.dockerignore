@@ -1,0 +1,21 @@
+# Allow-list the build inputs. Credentials, Git history, local uploads and .data
+# never enter the Docker build context, even when present in the repository.
+**
+!package.json
+!package-lock.json
+!tsconfig.json
+!lib/
+!lib/**
+!convex/
+!convex/**
+!scripts/
+!scripts/**
+!public/
+!public/**
+!infra/
+!infra/media-worker/
+!infra/media-worker/**
+public/uploads/**
+**/.env*
+**/.dev.vars*
+**/.wrangler/**

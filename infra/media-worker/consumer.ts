@@ -1,0 +1,118 @@
+import { createServer } from 'node:http';
+import { timingSafeEqual } from 'node:crypto';
+import { ConvexClient, ConvexHttpClient } from 'convex/browser';
+import { api } from '../../convex/_generated/api';
+import { processMediaTask } from '../../lib/server/media-task-runner';
+import { AnalysisError } from '../../lib/media-analysis/errors';
+
+const convexUrl = process.env.NEXT_PUBLIC_CONVEX_URL;
+const workerSecret = process.env.RENDER_WORKER_SECRET;
+if (!convexUrl || !workerSecret) throw new Error('Configure the production Convex URL and media worker secret.');
+const concurrency = Number(process.env.MEDIA_WORKER_CONCURRENCY ?? 1);
+const idleMs = Number(process.env.MEDIA_WORKER_IDLE_MS ?? 90_000);
+const port = Number(process.env.PORT ?? 8080);
+if (!Number.isInteger(concurrency) || concurrency < 1 || concurrency > 4) throw new Error('Worker concurrency must be 1–4.');
+if (!Number.isFinite(idleMs) || idleMs < 1000 || idleMs > 300_000) throw new Error('Idle timeout must be 1–300 seconds.');
+if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('Invalid health port.');
+
+const shutdown = new AbortController();
+const client = new ConvexHttpClient(convexUrl, { fetch: (input, init) => fetch(input, { ...init, signal: AbortSignal.any([shutdown.signal, AbortSignal.timeout(25_000), ...(init?.signal ? [init.signal] : [])]) }) });
+const subscriptions = new ConvexClient(convexUrl);
+let revision = 0, ready = false, activeTasks = 0, draining = false, lastWorkAt = Date.now();
+const waiters = new Set<() => void>();
+const wake = () => { for (const resolve of waiters) resolve(); };
+const unsubscribe = subscriptions.onUpdate(api.mediaTasks.ready, { workerSecret }, value => {
+  revision++; ready = !!value;
+  if (ready) { lastWorkAt = Date.now(); wake(); }
+});
+const server = createServer((request, response) => {
+  if (request.method === 'GET' && request.url === '/health') {
+    response.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' });
+    response.end(JSON.stringify({ healthy: true, activeTasks, draining })); return;
+  }
+  if (request.method === 'POST' && request.url === '/drain') {
+    const actual = Buffer.from(request.headers.authorization ?? ''), expected = Buffer.from(`Bearer ${workerSecret}`);
+    if (actual.length !== expected.length || !timingSafeEqual(actual, expected)) { response.writeHead(401).end(); return; }
+    draining = true; wake();
+    response.writeHead(202).end(); return;
+  }
+  response.writeHead(404).end();
+});
+
+function waitForWork(observed: number) {
+  if (shutdown.signal.aborted || draining || (revision !== observed && ready)) return Promise.resolve();
+  return new Promise<void>(resolve => {
+    const done = () => { waiters.delete(done); shutdown.signal.removeEventListener('abort', done); resolve(); };
+    waiters.add(done); shutdown.signal.addEventListener('abort', done, { once: true });
+  });
+}
+function pause() {
+  return new Promise<void>(resolve => {
+    const done = () => { clearTimeout(timer); shutdown.signal.removeEventListener('abort', done); resolve(); };
+    const timer = setTimeout(done, 5000);
+    shutdown.signal.addEventListener('abort', done, { once: true });
+  });
+}
+async function runSlot() {
+  while (!shutdown.signal.aborted && !draining) {
+    try {
+      const observed = revision;
+      const task = await client.mutation(api.mediaTasks.claim, { workerSecret: workerSecret! });
+      if (!task) { await waitForWork(observed); continue; }
+      activeTasks++; lastWorkAt = Date.now();
+      const controller = new AbortController();
+      const signal = AbortSignal.any([controller.signal, shutdown.signal, AbortSignal.timeout(15 * 60_000)]);
+      const credentials = { taskId: task.taskId, leaseToken: task.leaseToken };
+      let progress = 0, reported = -1, heartbeats = Promise.resolve();
+      const heartbeat = () => {
+        heartbeats = heartbeats.then(async () => {
+          if (signal.aborted) return;
+          const next = progress;
+          await client.mutation(api.mediaTasks.heartbeat, { ...credentials, progress: next }); reported = next;
+        }).catch(() => controller.abort());
+      };
+      const timer = setInterval(heartbeat, 20_000);
+      console.log(JSON.stringify({ event: 'media-started', kind: task.kind, taskId: task.taskId }));
+      try {
+        const result = await processMediaTask(task, client, convexUrl!, signal, percent => {
+          progress = Math.max(progress, Math.min(99, percent));
+          if (progress - reported >= 10) heartbeat();
+        });
+        clearInterval(timer); await heartbeats; signal.throwIfAborted();
+        await client.mutation(api.mediaTasks.complete, { ...credentials, result });
+        console.log(JSON.stringify({ event: 'media-completed', taskId: task.taskId }));
+      } catch (error) {
+        clearInterval(timer); await heartbeats;
+        if (!shutdown.signal.aborted && !controller.signal.aborted) {
+          await client.mutation(api.mediaTasks.fail, { ...credentials, retryable: !(error instanceof AnalysisError && error.status < 500), error: error instanceof Error ? error.message.slice(0, 1000) : 'Media processing failed.' }).catch(() => {});
+        }
+        console.log(JSON.stringify({ event: 'media-interrupted', taskId: task.taskId }));
+      } finally { activeTasks--; lastWorkAt = Date.now(); }
+    } catch {
+      if (!shutdown.signal.aborted && !draining) { ready = false; console.error(JSON.stringify({ event: 'queue-reconnecting' })); await pause(); }
+    }
+  }
+}
+process.on('SIGINT', () => shutdown.abort());
+process.on('SIGTERM', () => shutdown.abort());
+const idleTimer = setInterval(() => {
+  if (activeTasks === 0 && (draining || (!ready && Date.now() - lastWorkAt >= idleMs))) shutdown.abort();
+}, Math.min(10_000, idleMs));
+
+async function main() {
+  try {
+    await new Promise<void>((resolve, reject) => { server.once('error', reject); server.listen(port, '0.0.0.0', resolve); });
+    console.log(JSON.stringify({ event: 'media-ready', slots: concurrency }));
+    await Promise.all(Array.from({ length: concurrency }, runSlot));
+  } finally {
+    clearInterval(idleTimer); unsubscribe();
+    // The SDK can await a WebSocket handshake indefinitely while closing.
+    // Task slots have settled here, so bound transport cleanup before exiting.
+    let closeTimer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await Promise.race([subscriptions.close(), new Promise<void>(resolve => { closeTimer = setTimeout(resolve, 5000); })]);
+    } finally { clearTimeout(closeTimer); }
+    server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve()));
+  }
+}
+void main().then(() => process.exit(0)).catch(() => { shutdown.abort(); console.error(JSON.stringify({ event: 'media-stopped' })); process.exit(1); });
