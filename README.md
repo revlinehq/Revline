@@ -41,9 +41,16 @@ REVLINE_DIST_DIR=.next-build npm run start -- --port 3002
 - Streaming replies reuse ViralShark’s incremental text fade. Reading earlier messages preserves your scroll position; Stop cancels the current run without discarding saved edits.
 - Structured Claude tools edit saved timeline state and update the preview after each completed edit. Selected clips and the playhead are supplied as context. `inspectTimeline` reads the latest saved revision, visual gaps, same-layer overlaps, and missing source references.
 - Word-timed subtitle generation, beat-aligned cuts, strongest-scene selection, and face following use saved analysis results.
+- Visual clips support fade, punch zoom, impact shake, flash, and pop motion presets, custom motion keyframes, and Normal, Screen, Multiply, Overlay, and Add light blending. The preview and MP4 renderer use the same composition; splits and trims retain motion timing.
 - MP4 export runs from a frozen timeline snapshot in a background Node worker; progress and completion persist in Convex.
 
-The editor currently limits each project to 200 clips and five minutes, with at most 24 visual layers and 12 audio layers. Uploads and exported MP4s stream into a private Cloudflare R2 bucket in 32 MB parts. There is no 100 MB upload cap; transport limits, available render-server disk, and processing time still apply. Convex stores ownership and project metadata. Playback and seeking use signed URLs from the media Worker.
+Arranging and saving clips has no fixed duration or clip-count cap. Timelines retain a 150 KB serialized payload limit, with at most 24 visual layers and 12 audio layers. MP4 export currently supports final edits up to five minutes; the export dialog reports this before a render is queued. Uploads and exported MP4s stream into a private Cloudflare R2 bucket in 32 MB parts. There is no 100 MB upload cap; transport limits, available render-server disk, and processing time still apply. Convex stores ownership and project metadata. Playback and seeking use signed URLs from the media Worker.
+
+## Error monitoring
+
+`node scripts/convex-error-monitor.mjs --start` starts read-only Convex log streams for development and production. `--summary` returns new failures plus capture health; `--ack <event-ids...>` acknowledges only reviewed events. The watcher removes validator payloads, signed URLs, and credential patterns before saving bounded, deduplicated summaries in `~/.local/state/revline-monitor` (outside the repository). It never stores raw console payloads or credentials.
+
+The local watcher reconnects interrupted streams. A Codex heartbeat can check its summary every five minutes, triage new failures, and restart it after a computer restart with `--start`. Check `healthy` and `warnings`, not only `running`: the capture parent can remain alive while one deployment stream needs attention. Run these commands with host process visibility; sandbox PID isolation can otherwise report a running host process as absent. Monitoring pauses while this computer is off; Convex log retention limits what can be recovered afterward. This is separate from Sentry's hosted exception integration and is not an instantaneous webhook into Codex.
 
 ## Provider configuration
 
