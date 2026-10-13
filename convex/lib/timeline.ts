@@ -66,10 +66,13 @@ export async function validateTimeline(ctx: MutationCtx | QueryCtx, project: Doc
     if (track > maxTrackCount(group)) throw new ConvexError("Clip track exceeds its group limit");
     const declaredCount = timeline.tracks?.[group];
     if (declaredCount !== undefined && track > declaredCount) throw new ConvexError("Clip layer exceeds the declared layer count");
-    if ((clip.transform || clip.crop || clip.fit) && clip.kind !== "video" && clip.kind !== "image") throw new ConvexError("Transforms, cropping, and fit apply to visual media only");
+    const textClip = clip.kind === 'caption' || clip.kind === 'graphic';
+    const visualMedia = clip.kind === 'video' || clip.kind === 'image';
+    if ((clip.crop || clip.fit || (clip.transform && !textClip)) && !visualMedia) throw new ConvexError("Transforms, cropping, and fit apply to visual media only");
     if (clip.transform) {
       const transform = clip.transform;
       if (!Object.values(transform).every(Number.isFinite) || transform.x < 0 || transform.x > 1 || transform.y < 0 || transform.y > 1 || transform.scale < 0.1 || transform.scale > 5 || transform.rotation < -360 || transform.rotation > 360 || transform.opacity < 0 || transform.opacity > 1) throw new ConvexError("Invalid visual transform");
+      if (textClip && (transform.x !== .5 || transform.y !== .5 || transform.scale !== 1 || transform.opacity !== 1)) throw new ConvexError('Text transforms support rotation only; use text position and size controls');
     }
     if (clip.crop && (Object.values(clip.crop).some(edge => !Number.isFinite(edge) || edge < 0 || edge > 0.95) || clip.crop.left + clip.crop.right >= 0.95 || clip.crop.top + clip.crop.bottom >= 0.95)) throw new ConvexError("Crop must leave at least five percent of each source axis visible");
     if (clip.fontSize !== undefined && (!Number.isFinite(clip.fontSize) || clip.fontSize < 8 || clip.fontSize > 300)) throw new ConvexError("Font size must be between 8 and 300");

@@ -9,7 +9,7 @@ import { api, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import schema from "./schema";
 import { boundedHistory, serializedBytes } from "./lib/timeline";
-import { normalizeTimeline, type Timeline } from "../lib/editor/types";
+import { DEFAULT_TRANSFORM, normalizeTimeline, type Timeline } from "../lib/editor/types";
 import { focusForClip } from "../lib/editor/operations";
 import { summarizeTimeline } from "./lib/inspectTimeline";
 const modules = import.meta.glob("./**/*.ts");
@@ -75,6 +75,20 @@ describe("project and media ownership", () => {
   });
 });
 describe("timeline persistence", () => {
+  test.each(['caption', 'graphic'] as const)('saves %s rotation into export snapshots and restores it with undo', async kind => {
+    const t = makeTest(), projectId = await project(t), owner = t.withIdentity(identity('owner'));
+    const timeline: Timeline = { ...textTimeline, clips: [{ ...textTimeline.clips[0], kind, transform: { ...DEFAULT_TRANSFORM, rotation: -25 } }] };
+    await owner.mutation(api.projects.saveTimeline, { projectId, timeline, expectedRevision: 0 });
+    expect((await owner.query(api.projects.get, { projectId })).timeline?.clips[0].transform?.rotation).toBe(-25);
+    const jobId = await owner.mutation(api.renders.start, { projectId, resolution: 720, fps: 30, quality: 'draft' });
+    expect((await owner.mutation(api.renders.claim, { jobId, workerSecret: 'test-worker-secret' })).timeline.clips[0].transform?.rotation).toBe(-25);
+    for (const transform of [{ ...DEFAULT_TRANSFORM, rotation: 361 }, { ...DEFAULT_TRANSFORM, scale: 2 }, { ...DEFAULT_TRANSFORM, x: .7 }]) {
+      await expect(owner.mutation(api.projects.saveTimeline, { projectId, expectedRevision: 1, timeline: { ...timeline, clips: [{ ...timeline.clips[0], transform }] } })).rejects.toThrow();
+    }
+    await expect(owner.mutation(api.projects.saveTimeline, { projectId, expectedRevision: 1, timeline: { ...timeline, clips: [{ ...timeline.clips[0], crop: { top: .1, left: 0, right: 0, bottom: 0 } }] } })).rejects.toThrow('visual media only');
+    await owner.mutation(api.projects.undo, { projectId });
+    expect((await owner.query(api.projects.get, { projectId })).timeline?.clips).toEqual([]);
+  });
   test("project lists send summaries without timeline or undo-history payloads", async () => {
     const t = makeTest(); const projectId = await project(t); const owner = t.withIdentity(identity("owner"));
     await owner.mutation(api.projects.saveTimeline, { projectId, timeline: textTimeline, expectedRevision: 0 });
