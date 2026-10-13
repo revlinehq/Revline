@@ -1,5 +1,6 @@
 import { NEUTRAL_MOTION, validateClipEffects, visibleMotion, type MotionKeyframe } from './clip-effects';
 import { MAX_CLIP_VOLUME } from './clip-volume';
+import { serializeTextAnimation, textAnimationSteps } from './text-animation';
 import { dimensions, timelineDuration, deriveTrackCounts, normalizeTimeline, trackOf, DEFAULT_CROP, DEFAULT_TRANSFORM, type Clip, type MediaAsset, type Timeline, type SourceCrop } from './types';
 
 export type CompositionOptions = {
@@ -108,7 +109,7 @@ export function generateComposition(timeline: Timeline, assets: MediaAsset[], op
     const motionVars = (key: MotionKeyframe) => ({ x: key.x * width, y: key.y * height, scale: key.scale, rotation: key.rotation, opacity: key.opacity, filter: `brightness(${key.brightness})` });
     if (clip.kind === 'effect' && clip.effectPreset === 'cinematic-bars') {
       for (const side of ['top', 'bottom'] as const) animateKeys(`#${id}-bar-${side}`, clip, motion, key => ({ y: 0, yPercent: (side === 'top' ? -100 : 100) * (1 - key.opacity) }), { time: 0, ...NEUTRAL_MOTION, opacity: 0 }, 'power2.inOut');
-    } else animateKeys(`#${id}-motion`, clip, motion, motionVars, { time: 0, ...NEUTRAL_MOTION });
+    } else if (clip.kind !== 'caption' && clip.kind !== 'graphic') animateKeys(`#${id}-motion`, clip, motion, motionVars, { time: 0, ...NEUTRAL_MOTION });
     // Adjustment wrappers are always mounted. A timed HyperFrames root would
     // hide all the footage it contains before and after the effect range.
     if (clip.kind === 'effect') return '';
@@ -121,10 +122,7 @@ export function generateComposition(timeline: Timeline, assets: MediaAsset[], op
       const fontSize = bounded(clip.fontSize, clip.kind === 'caption' ? 52 : 92, 8, 300) * scale;
       const x = bounded(clip.x, 0.5, 0, 1) * 100;
       const y = bounded(clip.y, clip.kind === 'caption' ? 0.82 : 0.5, 0, 1) * 100;
-      if (clip.animation === 'fade' || clip.animation === 'rise') {
-        const tween = Math.min(0.3, clip.duration / 3);
-        animation.push(`timeline.fromTo('#${id} .text-content',{opacity:0${clip.animation === 'rise' ? `,y:${32 * scale}` : ''}},{opacity:1,y:0,duration:${tween},ease:'power2.out'},${start});timeline.to('#${id} .text-content',{opacity:0,duration:${tween}},${end - tween});`);
-      }
+      animation.push(`{const textTimeline=gsap.timeline();timeline.add(textTimeline,0);window.__revlineTextTimelines['${id}']=textTimeline;${textAnimationSteps(clip, index, width, height, resolution).map(step => serializeTextAnimation(step, 'textTimeline')).join('')}}`);
       const style = `left:${x}%;top:${y}%;font-size:${fontSize}px;color:${color(clip.color, '#F4F4F0')};z-index:${zIndex};mix-blend-mode:${clip.blendMode ?? 'normal'}`;
       const background = color(clip.background, 'transparent');
       return `<div ${timing} class="overlay ${clip.kind}" style="${style}"><span id="${id}-motion" class="text-motion"><span class="text-content" style="background:${background}">${escapeHtml((clip.text ?? '').slice(0, 2000))}</span></span></div>`;
@@ -196,6 +194,7 @@ html,body{margin:0;width:${width}px;height:${height}px;overflow:hidden;backgroun
 .cinematic-bars{position:absolute;inset:0;overflow:hidden;z-index:2147483647;pointer-events:none}.cinematic-bar{position:absolute;left:0;right:0;height:12%;background:#000}.cinematic-bar.top{top:0;transform:translateY(-100%)}.cinematic-bar.bottom{bottom:0;transform:translateY(100%)}
 </style><script src="${gsapUrl}"></script></head><body><div id="composition" data-composition-id="revline" data-duration="${safeDuration}" data-width="${width}" data-height="${height}" data-fps="${fps}">${compositionNodes}</div><script>
 const timeline=gsap.timeline({paused:true});
+window.__revlineTextTimelines={};
 ${animation.join('\n')}
 timeline.to({},{duration:${safeDuration}},0);
 window.__timelines=window.__timelines||{};window.__timelines.revline=timeline;

@@ -5,7 +5,10 @@ export function previewContentKey(timeline: Timeline, assets: MediaAsset[]): str
   const used = new Set(timeline.clips.flatMap(clip => clip.assetId ? [clip.assetId] : []));
   const effects = timeline.clips.some(clip => clip.kind === 'effect');
   return JSON.stringify({
-    timeline: { ...timeline, tracks: undefined, markers: undefined, clips: timeline.clips.map(({ track, volume, ...clip }) => effects ? { ...clip, track } : clip) },
+    timeline: { ...timeline, tracks: undefined, markers: undefined, clips: timeline.clips.map(({ track, volume, ...clip }) => {
+      const rendered = clip.kind === 'caption' || clip.kind === 'graphic' ? { ...clip, animation: undefined, motion: undefined, motionOffset: undefined } : clip;
+      return effects ? { ...rendered, track } : rendered;
+    }) },
     assets: assets.filter(asset => used.has(asset._id)).map(({ _id, kind, width, height, url }) => ({ _id, kind, width, height, url: url?.split('?token=')[0] ?? null })),
   });
 }

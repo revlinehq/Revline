@@ -25,7 +25,7 @@ describe('clip motion',()=>{
   });
   it('generates deterministic child motion and compositing without arbitrary script',()=>{
     const html=generateComposition({...timeline,clips:[{...clip,...motionPreset(clip,'pop'),blendMode:'screen'}]},[]);
-    expect(html).toContain('mix-blend-mode:screen');expect(html).toContain("timeline.fromTo('#clip-0-motion'");
+    expect(html).toContain('mix-blend-mode:screen');expect(html).toContain("textTimeline.fromTo('#clip-0-motion'");
     expect(html).toContain('immediateRender');expect(html).toContain('class="text-motion"');
     expect(()=>generateComposition({...timeline,clips:[{...clip,blendMode:'bad;}</style><script>' as never}]},[])).toThrow('blend mode');
   });

@@ -24,3 +24,13 @@ test('moving footage above or below an effect rebuilds the composition hierarchy
   expect(previewContentKey({ ...adjusted, clips: adjusted.clips.map(clip => clip.id === 'v' ? { ...clip, track: 3 } : clip) }, [asset])).not.toBe(key);
   expect(previewContentKey({ ...adjusted, markers: [{ id: 'drop', time: 1 }] }, [asset])).toBe(key);
 });
+
+test('text animation edits keep decoded media while structural text changes still rebuild', () => {
+  const caption = { id: 'caption', kind: 'caption' as const, start: 0, duration: 2, sourceStart: 0, text: 'Hello' };
+  const original = { ...timeline, clips: [...timeline.clips, caption] };
+  const key = previewContentKey(original, [asset]);
+  expect(previewContentKey({ ...original, clips: [timeline.clips[0], { ...caption, animation: 'rise' }] }, [asset])).toBe(key);
+  expect(previewContentKey({ ...original, clips: [timeline.clips[0], { ...caption, motion: [{ time: 0, x: 0, y: 0, scale: 1.2, rotation: 0, opacity: 1, brightness: 1 }], motionOffset: .5 }] }, [asset])).toBe(key);
+  expect(previewContentKey({ ...original, clips: [timeline.clips[0], { ...caption, text: 'New words' }] }, [asset])).not.toBe(key);
+  expect(previewContentKey({ ...original, clips: [timeline.clips[0], { ...caption, start: 1 }] }, [asset])).not.toBe(key);
+});

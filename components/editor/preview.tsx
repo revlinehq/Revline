@@ -13,6 +13,7 @@ import { previewClipAtPoint, type PreviewTextBounds } from '@/lib/editor/preview
 import { projectPreviewBounds } from '@/lib/editor/preview-zoom';
 import type { SourceCrop } from '@/lib/editor/types';
 import { previewContentKey } from '@/lib/editor/preview-content-key';
+import { updateLiveTextEffects } from '@/lib/editor/live-preview-effects';
 function LiveTextControls(props: Omit<React.ComponentProps<typeof TextControls>, 'time'>) {
   const time=useEditorState(state=>state.playhead);
   return <TextControls {...props} time={time}/>;
@@ -27,8 +28,10 @@ export const Preview = forwardRef<PreviewHandle,{timeline:Timeline;assets:MediaA
   const container=useRef<HTMLDivElement>(null); const player=useRef<HyperframesPlayer|null>(null); const callbacks=useRef({onTime,onPlaying,onError});callbacks.current={onTime,onPlaying,onError};
   const mutedRef=useRef(muted);mutedRef.current=muted;
   useEffect(()=>{if(player.current)player.current.muted=muted;},[muted]);
-  const [ready,setReady]=useState(false);const [revision,setRevision]=useState(0);const seekPosition=useRef(time);
+  const [ready,setReady]=useState(false);const [revision,setRevision]=useState(0);const [reloadRevision,setReloadRevision]=useState(0);const seekPosition=useRef(time);
   const latestTimeline=useRef(timeline);latestTimeline.current=timeline;
+  const renderedTimeline=useRef<Timeline|null>(null);
+  const renderedContentKey=useRef<string|null>(null);
   const clipIndex=useRef(new Map<string,{clip:Clip;index:number}>());
   clipIndex.current=useMemo(()=>new Map(timeline.clips.map((clip,index)=>[clip.id,{clip,index}])),[timeline.clips]);
   const previewVolumes=useRef(new Map<string,number>());
@@ -54,7 +57,14 @@ export const Preview = forwardRef<PreviewHandle,{timeline:Timeline;assets:MediaA
   function updateLayers(p:HyperframesPlayer,current:Timeline){
     current.clips.forEach((clip,index)=>updateClip(p,clip,index));
   }
-  useEffect(()=>{previewVolumes.current.clear();if(player.current)updateLayers(player.current,latestTimeline.current);},[committedTimeline]);
+  useEffect(()=>{
+    previewVolumes.current.clear();
+    const active=player.current,current=latestTimeline.current,previous=renderedTimeline.current;
+    if(active){updateLayers(active,current);if(previous&&renderedContentKey.current===contentKey&&active.iframeElement?.contentDocument){
+      if(updateLiveTextEffects(active.iframeElement.contentDocument,previous,current))renderedTimeline.current=current;
+      else setReloadRevision(value=>value+1);
+    }}
+  },[committedTimeline,contentKey]);
   useEffect(()=>()=>{player.current?.pause();player.current?.remove();player.current=null;callbacks.current.onPlaying(false);},[]);
   const [transformId,setTransformId]=useState<string|null>(null);
   useEffect(()=>{setTransformId(current=>cropping||current!==selectedClip?.id?null:current);},[selectedClip?.id,cropping]);
@@ -91,7 +101,10 @@ export const Preview = forwardRef<PreviewHandle,{timeline:Timeline;assets:MediaA
         swapFrame=requestAnimationFrame(()=>{swapFrame=requestAnimationFrame(()=>{
           if(cancelled||!p||swapped)return;
           swapped=true;const previous=player.current;const resume=previous&&!previous.paused;
+          if(p.iframeElement?.contentDocument)updateLiveTextEffects(p.iframeElement.contentDocument,timeline,latestTimeline.current);
           previous?.pause();player.current=p;p.muted=mutedRef.current;p.style.zIndex='1';previous?.remove();
+          renderedTimeline.current=latestTimeline.current;
+          renderedContentKey.current=contentKey;
           setSelectionVisible(selectionAt(seekPosition.current));callbacks.current.onTime(seekPosition.current);setReady(true);setRevision(value=>value+1);if(resume)p.play();
         });});
       };
@@ -105,7 +118,7 @@ export const Preview = forwardRef<PreviewHandle,{timeline:Timeline;assets:MediaA
     }).catch(e=>callbacks.current.onError(String(e)));
     // Leave the displayed player mounted until its replacement has a painted frame.
     return ()=>{cancelled=true;cancelAnimationFrame(swapFrame);if(p&&player.current!==p){p.pause();p.remove();}};
-  },[contentKey]);
+  },[contentKey,reloadRevision]);
   const canvas=dimensions(timeline.aspectRatio);
   const asset=assets.find(asset=>asset._id===selectedClip?.assetId);
   const contentRect=selectedClip&&asset?.width&&asset?.height
