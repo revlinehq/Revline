@@ -15,6 +15,7 @@ async function main() {
       await writeFile(join(directory, `${name}.svg`), `<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720"><rect width="1280" height="720" fill="${color}"/></svg>`);
     }
     await copyFile(join(process.cwd(), 'public/vendor/gsap.min.js'), join(directory, 'gsap.min.js'));
+    await copyFile(join(process.cwd(), 'public/vendor/visual-effects.js'), join(directory, 'visual-effects.js'));
     await copyFile(join(process.cwd(), 'public/fonts/space-grotesk-latin.woff2'), join(directory, 'space-grotesk-latin.woff2'));
     const bars: Clip = { id: 'bars', kind: 'effect', track: 2, sourceStart: 0, start: 2, duration: 1 };
     const timeline: Timeline = { fps: 24, aspectRatio: 'landscape', clips: [
@@ -23,7 +24,7 @@ async function main() {
       { id: 'light', kind: 'effect', track: 2, sourceStart: 0, start: 1, duration: .5, motion: [0, .5].map(time => ({ time, ...NEUTRAL_MOTION, brightness: 2 })) },
       { ...bars, ...motionPreset(bars, 'cinematic-bars') },
     ] };
-    const html = generateComposition(timeline, ['matte', 'badge'].map(id => ({ _id: id, fileName: `${id}.svg`, kind: 'image' as const, url: `./${id}.svg`, width: 1280, height: 720 })), { resolution: 720, fps: 24, gsapUrl: './gsap.min.js', fontUrl: './space-grotesk-latin.woff2' });
+    const html = generateComposition(timeline, ['matte', 'badge'].map(id => ({ _id: id, fileName: `${id}.svg`, kind: 'image' as const, url: `./${id}.svg`, width: 1280, height: 720 })), { resolution: 720, fps: 24, visualEffectsUrl: './visual-effects.js', gsapUrl: './gsap.min.js', fontUrl: './space-grotesk-latin.woff2' });
     await writeFile(join(directory, 'index.html'), html);
     const output = join(directory, 'output.mp4');
     const result = await runRenderWorker(directory, output, { fps: 24, quality: 'draft' }, () => {}, AbortSignal.timeout(90_000));

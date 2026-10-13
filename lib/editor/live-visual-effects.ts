@@ -1,0 +1,25 @@
+import type { Clip, Timeline } from './types';
+import { validateVisualEffects, type VisualEffects } from './visual-effects';
+import type { VisualEffectsController } from './visual-effects-runtime';
+
+function effects(clip: Clip): VisualEffects { return { colorGrade: clip.colorGrade, zoomBlur: clip.zoomBlur, glitch: clip.glitch, invert: clip.invert }; }
+
+export function previewVisualEffects(document: Document, clip: Clip, index: number, patch: Partial<Clip> | null): boolean {
+  const controller = (document.defaultView as (Window & { __revlineEffects?: VisualEffectsController }) | null)?.__revlineEffects;
+  if (!controller) return false;
+  const next = { ...clip, ...patch };
+  validateVisualEffects(next);
+  controller.set(`clip-${index}`, effects(next));
+  return true;
+}
+
+export function updateLiveVisualEffects(document: Document, previous: Timeline, next: Timeline): boolean {
+  const old = new Map(previous.clips.map(clip => [clip.id, clip]));
+  for (const [index, clip] of next.clips.entries()) {
+    if (clip.kind !== 'video' && clip.kind !== 'image') continue;
+    const before = old.get(clip.id);
+    if (JSON.stringify(before && effects(before)) === JSON.stringify(effects(clip))) continue;
+    if (!previewVisualEffects(document, clip, index, null)) return false;
+  }
+  return true;
+}

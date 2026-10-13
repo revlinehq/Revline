@@ -17,6 +17,14 @@ describe('trusted composition generation', () => {
     expect(html).toContain('data-start="1" data-duration="2"');
     expect(html).toContain('data-media-start="3" data-volume="0.25"');
   });
+  test('carries per-clip playback speed into native preview and pitch-preserving export', () => {
+    const asset = { _id: 'asset', fileName: 'clip.mp4', kind: 'video' as const, url: '/clip.mp4' };
+    const clip = { id: 'video', kind: 'video' as const, assetId: 'asset', start: 1, duration: 2, sourceStart: 3, playbackRate: 2 };
+    const html = generateComposition({ ...timeline, clips: [clip] }, [asset]);
+    expect(html).toContain('data-playback-rate="2"');
+    expect(html).toContain('media.preservesPitch=true');
+    expect(() => generateComposition({ ...timeline, clips: [{ ...clip, playbackRate: Infinity }] }, [asset])).toThrow('playback speed');
+  });
   test('preserves above-unity gain for playback and export without violating native media limits', () => {
     const html = generateComposition({ ...timeline, clips: [{ id: 'audio', kind: 'audio', assetId: 'asset', start: 0, duration: 2, sourceStart: 0, volume: 2 }] }, [{ _id: 'asset', fileName: 'tone.wav', kind: 'audio', url: '/tone.wav' }]);
     expect(html).toContain('data-volume="2"');
@@ -42,6 +50,14 @@ describe('trusted composition generation', () => {
     expect(html).toContain("timeline.set('#clip-0',{left:-1166.6666666666665,top:0},5)");
     expect(html).toContain("left:-2333.333333333333,top:0,duration:2,ease:'none'},5)");
     expect(html).not.toContain('duration:4');
+  });
+  test('maps source-space tracking samples through slowed or accelerated clip time', () => {
+    const asset = { _id: 'asset', kind: 'video' as const, fileName: 'source.mp4', url: '/source.mp4', width: 1920, height: 1080 };
+    const clip = { id: 'track', kind: 'video' as const, assetId: 'asset', start: 5, duration: 1, sourceStart: 2, playbackRate: 2, focus: [{ time: 0, x: 0, y: .5 }, { time: 4, x: 1, y: .5 }] };
+    const fast = generateComposition({ ...timeline, clips: [clip] }, [asset]);
+    expect(fast).toContain("left:-2333.333333333333,top:0,duration:1,ease:'none'},5)");
+    const slow = generateComposition({ ...timeline, clips: [{ ...clip, duration: 4, playbackRate: .5 }] }, [asset]);
+    expect(slow).toContain("left:-2333.333333333333,top:0,duration:4,ease:'none'},5)");
   });
   test('uses the actual export font from the preview origin', () => {
     expect(generateComposition(timeline, [], { gsapUrl: 'https://editor.example/vendor/gsap.min.js' })).toContain("src:url('https://editor.example/fonts/space-grotesk-latin.woff2')");

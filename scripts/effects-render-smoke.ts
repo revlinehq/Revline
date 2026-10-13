@@ -22,6 +22,8 @@ async function main() {
     execFileSync('ffmpeg', ['-v', 'error', '-f', 'lavfi', '-i', 'color=c=red:s=180x320:r=24:d=1', '-f', 'lavfi', '-i', 'color=c=blue:s=180x320:r=24:d=2', '-filter_complex', '[0:v][1:v]concat=n=2:v=1:a=0[v]', '-map', '[v]', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-y', source]);
     execFileSync('ffmpeg', ['-v', 'error', '-f', 'lavfi', '-i', 'sine=frequency=880:duration=3', '-af', "volume='if(lt(t,1),0,1)':eval=frame", '-y', audio]);
     await copyFile(join(process.cwd(), 'public/vendor/gsap.min.js'), join(directory, 'gsap.min.js'));
+    await copyFile(join(process.cwd(), 'public/vendor/visual-effects.js'), join(directory, 'visual-effects.js'));
+    await copyFile(join(process.cwd(), 'public/vendor/remotion-text.js'), join(directory, 'remotion-text.js'));
     await copyFile(join(process.cwd(), 'public/fonts/space-grotesk-latin.woff2'), join(directory, 'space-grotesk-latin.woff2'));
     const timeline: Timeline = { fps: 24, aspectRatio: 'vertical', clips: [
       { id: 'cut', kind: 'video', assetId: 'source', start: 0, duration: 1, sourceStart: 1, volume: 0 },
@@ -37,7 +39,7 @@ async function main() {
       { _id: 'source', fileName: 'source.mp4', kind: 'video', url: './source.mp4' },
       { _id: 'overlay', fileName:'overlay.svg', kind:'image', url:'./overlay.svg', width:180, height:320 },
       { _id: 'tone', fileName: 'tone.wav', kind: 'audio', url: './tone.wav' },
-    ], { resolution, fps, gsapUrl: './gsap.min.js', fontUrl: './space-grotesk-latin.woff2' });
+    ], { resolution, fps, visualEffectsUrl: './visual-effects.js', remotionTextUrl: './remotion-text.js', gsapUrl: './gsap.min.js', fontUrl: './space-grotesk-latin.woff2' });
     await writeFile(join(directory, 'index.html'), html);
     const progress: number[] = [];
     const started = Date.now();

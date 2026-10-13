@@ -14,12 +14,13 @@ import { projectPreviewBounds } from '@/lib/editor/preview-zoom';
 import type { SourceCrop } from '@/lib/editor/types';
 import { previewContentKey } from '@/lib/editor/preview-content-key';
 import { updateLiveTextEffects } from '@/lib/editor/live-preview-effects';
+import { previewVisualEffects, updateLiveVisualEffects } from '@/lib/editor/live-visual-effects';
 function LiveTextControls(props: Omit<React.ComponentProps<typeof TextControls>, 'time'>) {
   const time=useEditorState(state=>state.playhead);
   return <TextControls {...props} time={time}/>;
 }
 function frameTime(player:HyperframesPlayer|null,fallback:number){const frame=player?.iframeElement?.contentWindow as (Window&{__timelines?:{revline?:{time():number}}})|null;return frame?.__timelines?.revline?.time()??player?.currentTime??fallback;}
-export type PreviewHandle = { play():void; pause():void; seek(time:number):void; currentTime():number; mute(value:boolean):void; clipVolume(id:string,volume:number|null):void; resetCrop():void; finishCrop(cancel?:boolean):void };
+export type PreviewHandle = { play():void; pause():void; seek(time:number):void; currentTime():number; mute(value:boolean):void; clipVolume(id:string,volume:number|null):void; clipEffects(id:string,patch:Partial<Clip>|null):void; resetCrop():void; finishCrop(cancel?:boolean):void };
 export const Preview = forwardRef<PreviewHandle,{timeline:Timeline;assets:MediaAsset[];time:number;onTime:(time:number)=>void;onPlaying:(playing:boolean)=>void;onError:(error:string)=>void;muted:boolean;selectedClip?:Clip;onVisualChange?:(patch:Partial<Clip>)=>void;onSelectClip?:(id:string|null)=>void;onClipChange?:(id:string,patch:Partial<Clip>)=>void;onEditText?:(id:string)=>void;cropping?:boolean;onCropCommit?:(id:string,crop:SourceCrop)=>void;onCropCancel?:()=>void}>(function Preview({timeline,assets,time,onTime,onPlaying,onError,muted,selectedClip:inputSelectedClip,onVisualChange,onSelectClip,onClipChange,onEditText,cropping=false,onCropCommit,onCropCancel},ref) {
   const committedTimeline=timeline;
   timeline=normalizeTimeline(timeline);
@@ -61,7 +62,7 @@ export const Preview = forwardRef<PreviewHandle,{timeline:Timeline;assets:MediaA
     previewVolumes.current.clear();
     const active=player.current,current=latestTimeline.current,previous=renderedTimeline.current;
     if(active){updateLayers(active,current);if(previous&&renderedContentKey.current===contentKey&&active.iframeElement?.contentDocument){
-      if(updateLiveTextEffects(active.iframeElement.contentDocument,previous,current))renderedTimeline.current=current;
+      if(updateLiveTextEffects(active.iframeElement.contentDocument,previous,current)&&updateLiveVisualEffects(active.iframeElement.contentDocument,previous,current))renderedTimeline.current=current;
       else setReloadRevision(value=>value+1);
     }}
   },[committedTimeline,contentKey]);
@@ -86,6 +87,9 @@ export const Preview = forwardRef<PreviewHandle,{timeline:Timeline;assets:MediaA
   },currentTime:()=>frameTime(player.current,seekPosition.current),mute:(v)=>{if(player.current)player.current.muted=v;},clipVolume:(id,volume)=>{
     if(volume===null)previewVolumes.current.delete(id);else previewVolumes.current.set(id,volume);
     const entry=clipIndex.current.get(id);if(player.current&&entry)updateClip(player.current,entry.clip,entry.index);
+  },clipEffects:(id,patch)=>{
+    const entry=clipIndex.current.get(id),doc=player.current?.iframeElement?.contentDocument;
+    if(entry&&doc)try{previewVisualEffects(doc,entry.clip,entry.index,patch);}catch(error){callbacks.current.onError(error instanceof Error?error.message:'Could not preview this effect.');}
   },resetCrop:()=>cropControls.current?.reset(),finishCrop:(cancel=false)=>{if(cancel)cropControls.current?.cancel();else cropControls.current?.done();}}),[]);
   useEffect(()=>{
     let cancelled=false,loaded=false,swapped=false;let p:HyperframesPlayer|null=null;let swapFrame=0;
@@ -101,14 +105,18 @@ export const Preview = forwardRef<PreviewHandle,{timeline:Timeline;assets:MediaA
         swapFrame=requestAnimationFrame(()=>{swapFrame=requestAnimationFrame(()=>{
           if(cancelled||!p||swapped)return;
           swapped=true;const previous=player.current;const resume=previous&&!previous.paused;
-          if(p.iframeElement?.contentDocument)updateLiveTextEffects(p.iframeElement.contentDocument,timeline,latestTimeline.current);
+          if(p.iframeElement?.contentDocument){updateLiveTextEffects(p.iframeElement.contentDocument,timeline,latestTimeline.current);updateLiveVisualEffects(p.iframeElement.contentDocument,timeline,latestTimeline.current);}
           previous?.pause();player.current=p;p.muted=mutedRef.current;p.style.zIndex='1';previous?.remove();
           renderedTimeline.current=latestTimeline.current;
           renderedContentKey.current=contentKey;
           setSelectionVisible(selectionAt(seekPosition.current));callbacks.current.onTime(seekPosition.current);setReady(true);setRevision(value=>value+1);if(resume)p.play();
         });});
       };
-      p.addEventListener('ready',()=>{if(cancelled||!p)return;loaded=true;p.seek(seekPosition.current);updateLayers(p,latestTimeline.current);if(p.painted)swap();});
+      p.addEventListener('ready',()=>{if(cancelled||!p)return;
+        const doc=p.iframeElement?.contentDocument;
+        doc?.defaultView?.addEventListener('revline-effects-error',event=>{if(!cancelled)callbacks.current.onError((event as CustomEvent<string>).detail);});
+        if(doc?.documentElement.dataset.visualEffectsError)callbacks.current.onError(doc.documentElement.dataset.visualEffectsError);
+        loaded=true;p.seek(seekPosition.current);updateLayers(p,latestTimeline.current);if(p.painted)swap();});
       p.addEventListener('painted',swap);
       p.addEventListener('timeupdate',(e)=>{if(!loaded||player.current!==p)return;const detail=(e as CustomEvent<{currentTime:number}>).detail;const t=frameTime(p,detail?.currentTime??seekPosition.current);seekPosition.current=t;setSelectionVisible(selectionAt(t));callbacks.current.onTime(t);});
       const stopped=()=>{if(!loaded||player.current!==p)return;const t=frameTime(p,seekPosition.current);seekPosition.current=t;callbacks.current.onTime(t);callbacks.current.onPlaying(false);};

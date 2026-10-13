@@ -13,8 +13,9 @@ async function main() {
     const output = join(directory, 'focus.mp4');
     execFileSync('ffmpeg', ['-v', 'error', '-f', 'lavfi', '-i', 'color=c=red:s=640x1080:r=24:d=1', '-f', 'lavfi', '-i', 'color=c=green:s=640x1080:r=24:d=1', '-f', 'lavfi', '-i', 'color=c=blue:s=640x1080:r=24:d=1', '-filter_complex', '[0:v][1:v][2:v]hstack=inputs=3[v]', '-map', '[v]', '-frames:v', '1', '-y', source]);
     await copyFile(join(process.cwd(), 'public/vendor/gsap.min.js'), join(directory, 'gsap.min.js'));
+    await copyFile(join(process.cwd(), 'public/vendor/visual-effects.js'), join(directory, 'visual-effects.js'));
     await copyFile(join(process.cwd(), 'public/fonts/space-grotesk-latin.woff2'), join(directory, 'space-grotesk-latin.woff2'));
-    const html = generateComposition({ fps: 24, aspectRatio: 'vertical', clips: [{ id: 'focus', kind: 'image', assetId: 'source', start: 0, sourceStart: 1, duration: 1, focus: [{ time: 0, x: 0, y: 0.5 }, { time: 1.2, x: 0, y: 0.5 }, { time: 1.8, x: 1, y: 0.5 }, { time: 2, x: 1, y: 0.5 }] }] }, [{ _id: 'source', kind: 'image', fileName: 'source.png', width: 1920, height: 1080, url: './source.png' }], { resolution: 720, gsapUrl: './gsap.min.js', fontUrl: './space-grotesk-latin.woff2' });
+    const html = generateComposition({ fps: 24, aspectRatio: 'vertical', clips: [{ id: 'focus', kind: 'image', assetId: 'source', start: 0, sourceStart: 1, duration: 1, focus: [{ time: 0, x: 0, y: 0.5 }, { time: 1.2, x: 0, y: 0.5 }, { time: 1.8, x: 1, y: 0.5 }, { time: 2, x: 1, y: 0.5 }] }] }, [{ _id: 'source', kind: 'image', fileName: 'source.png', width: 1920, height: 1080, url: './source.png' }], { resolution: 720, visualEffectsUrl: './visual-effects.js', gsapUrl: './gsap.min.js', fontUrl: './space-grotesk-latin.woff2' });
     await writeFile(join(directory, 'index.html'), html);
     const result = await runRenderWorker(directory, output, {fps:24,quality:'draft'}, () => {}, AbortSignal.timeout(60000));
     assert.equal(result.warnings, 0);

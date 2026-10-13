@@ -46,8 +46,10 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
         assetUrls[asset._id] = `./${name}`;
       }
       await copyFile(join(process.cwd(), 'public/vendor/gsap.min.js'), join(directory, 'gsap.min.js'));
+      await copyFile(join(process.cwd(), 'public/vendor/visual-effects.js'), join(directory, 'visual-effects.js'));
+      if (snapshot.timeline.clips.some(clip => clip.kind === 'caption' || clip.kind === 'graphic')) await copyFile(join(process.cwd(), 'public/vendor/remotion-text.js'), join(directory, 'remotion-text.js'));
       await copyFile(join(process.cwd(), 'public/fonts/space-grotesk-latin.woff2'), join(directory, 'space-grotesk-latin.woff2'));
-      await writeFile(join(directory, 'index.html'), generateComposition(snapshot.timeline, snapshot.assets as MediaAsset[], { resolution: snapshot.resolution as 720 | 1080, fps: snapshot.fps as 24 | 30 | 60, gsapUrl: './gsap.min.js', fontUrl: './space-grotesk-latin.woff2', assetUrls }));
+      await writeFile(join(directory, 'index.html'), generateComposition(snapshot.timeline, snapshot.assets as MediaAsset[], { resolution: snapshot.resolution as 720 | 1080, fps: snapshot.fps as 24 | 30 | 60, gsapUrl: './gsap.min.js', visualEffectsUrl: './visual-effects.js', remotionTextUrl: './remotion-text.js', fontUrl: './space-grotesk-latin.woff2', assetUrls }));
       const output = join(directory, 'video.mp4');
       await runRenderWorker(directory, output, { fps: snapshot.fps, quality: snapshot.quality as 'draft' | 'standard' | 'high' }, progress => onProgress(Math.round(progress.progress * .95)), signal);
       onProgress(97);
@@ -94,12 +96,20 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
       return { analysis: { beats: detectBeats(await extractPcm(source, signal), 16_000) } };
     }
     if (task.kind === 'track') return { analysis: { focus: await trackSourceFace(source, media.duration, onProgress, signal) } };
-    const shots = asset.analysis?.shots ?? await detectShots(source, media.duration, signal);
-    if (task.kind === 'shots') return { analysis: { shots } };
+    if (task.kind === 'shots') return { analysis: { shots: await detectShots(source, media.duration, signal) } };
     const key = process.env.TWELVELABS_API_KEY;
     if (!key) throw new AnalysisError('TwelveLabs footage understanding is not configured on the media worker.', 503);
+    let shots = asset.analysis?.shots;
+    if (!shots) {
+      try { shots = await detectShots(source, media.duration, signal); }
+      catch (error) {
+        if (signal.aborted) throw error;
+        // A failed optional detector must neither block semantic analysis nor mark shots ready.
+        console.warn('Shot boundaries unavailable; continuing footage understanding.', error instanceof AnalysisError ? error.message : 'Video shot detection failed.');
+      }
+    }
     const video = join(directory, 'analysis.mp4');
     await prepareVideo(source, video, signal); onProgress(30);
-    return { analysis: { shots, understanding: await understandVideo(video, media.duration, key, signal) } };
+    return { analysis: { ...(shots ? { shots } : {}), understanding: await understandVideo(video, media.duration, key, signal) } };
   } finally { await rm(directory, { recursive: true, force: true }); }
 }
