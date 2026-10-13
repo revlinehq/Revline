@@ -15,6 +15,7 @@ import type * as billing from "../billing.js";
 import type * as http from "../http.js";
 import type * as lib_auth from "../lib/auth.js";
 import type * as lib_billing_access from "../lib/billing_access.js";
+import type * as lib_editSession from "../lib/editSession.js";
 import type * as lib_inspectTimeline from "../lib/inspectTimeline.js";
 import type * as lib_media_storage from "../lib/media_storage.js";
 import type * as lib_media_task_auth from "../lib/media_task_auth.js";
@@ -42,6 +43,7 @@ declare const fullApi: ApiFromModules<{
   http: typeof http;
   "lib/auth": typeof lib_auth;
   "lib/billing_access": typeof lib_billing_access;
+  "lib/editSession": typeof lib_editSession;
   "lib/inspectTimeline": typeof lib_inspectTimeline;
   "lib/media_storage": typeof lib_media_storage;
   "lib/media_task_auth": typeof lib_media_task_auth;

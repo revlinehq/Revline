@@ -18,3 +18,10 @@ it('follows gain without changing time and limits work to the visible zoomed reg
   expect(zoomed).toHaveLength(100);
   expect(zoomed[0]).toEqual({ left: 60_000, amplitude: 1 });
 });
+it('maps waveform peaks to timeline positions at fast and slow playback rates', () => {
+  const fast = waveformBars(data, 0, 1.5, 900, 0, 900, 1, 2);
+  expect(fast.find(bar => bar.left === 300)?.amplitude).toBeCloseTo(64 / 191);
+  expect(fast.find(bar => bar.left === 600)?.amplitude).toBe(1);
+  const slow = waveformBars(data, 0, 6, 900, 0, 900, 1, .5);
+  expect(slow).toEqual(fast);
+});

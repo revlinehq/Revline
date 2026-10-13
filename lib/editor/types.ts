@@ -1,5 +1,5 @@
 import type { BlendMode, EffectPreset, MotionKeyframe } from './clip-effects';
-import type { ColorGrade, ZoomBlur, Glitch } from './visual-effects';
+import type { ColorGrade, ZoomBlur, Glitch, InvertColors } from './visual-effects';
 import type { RemotionTextTemplate } from './remotion-text';
 export type AspectRatio = 'vertical' | 'portrait-feed' | 'square' | 'classic' | 'landscape';
 export type ClipKind = 'video' | 'image' | 'audio' | 'caption' | 'graphic' | 'effect';
@@ -17,6 +17,7 @@ export type Clip = {
   start: number;
   duration: number;
   sourceStart: number;
+  playbackRate?: number;
   text?: string;
   fontSize?: number;
   color?: string;
@@ -33,6 +34,7 @@ export type Clip = {
   colorGrade?: ColorGrade;
   zoomBlur?: ZoomBlur;
   glitch?: Glitch;
+  invert?: InvertColors;
   textTemplate?: RemotionTextTemplate;
   animation?: 'none' | 'fade' | 'rise';
   focus?: {time:number;x:number;y:number}[];

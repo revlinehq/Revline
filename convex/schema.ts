@@ -8,11 +8,13 @@ export const focusValidator = v.array(v.object({ time: v.number(), x: v.number()
 export const motionKeyframeValidator = v.object({ time: v.number(), x: v.number(), y: v.number(), scale: v.number(), rotation: v.number(), opacity: v.number(), brightness: v.number() });
 export const colorGradeValidator = v.object({ enabled: v.boolean(), exposure: v.number(), contrast: v.number(), saturation: v.number(), temperature: v.number(), tint: v.number(), vibrance: v.number() });
 export const zoomBlurValidator = v.object({ enabled: v.boolean(), amount: v.number(), centerX: v.number(), centerY: v.number() });
+export const invertValidator = v.object({ enabled: v.boolean(), amount: v.number() });
 export const glitchValidator = v.object({ enabled: v.boolean(), intensity: v.number(), blockSize: v.number(), rgbSplit: v.number() });
 export const textTemplateValidator = v.object({ preset: v.union(v.literal('word-reveal'), v.literal('word-pop'), v.literal('slide-title'), v.literal('karaoke')), highlightColor: v.optional(v.string()), duration: v.optional(v.number()), offset: v.optional(v.number()) });
 export const clipValidator = v.object({
   id: v.string(), kind: v.union(assetKind, v.literal("caption"), v.literal("graphic"), v.literal("effect")),
   assetId: v.optional(v.string()), focus: v.optional(focusValidator), track: v.optional(v.number()), start: v.number(), duration: v.number(), sourceStart: v.number(),
+  playbackRate: v.optional(v.number()),
   transform: v.optional(v.object({ x: v.number(), y: v.number(), scale: v.number(), rotation: v.number(), opacity: v.number() })),
   crop: v.optional(v.object({ top: v.number(), right: v.number(), bottom: v.number(), left: v.number() })),
   fit: v.optional(v.union(v.literal("cover"), v.literal("contain"))),
@@ -21,9 +23,9 @@ export const clipValidator = v.object({
   linkedClipId: v.optional(v.string()), audioSeparated: v.optional(v.boolean()),
   blendMode: v.optional(v.union(v.literal("normal"), v.literal("screen"), v.literal("multiply"), v.literal("overlay"), v.literal("plus-lighter"))),
   motion: v.optional(v.array(motionKeyframeValidator)), motionOffset: v.optional(v.number()),
-  colorGrade: v.optional(colorGradeValidator), zoomBlur: v.optional(zoomBlurValidator), glitch: v.optional(glitchValidator),
+  colorGrade: v.optional(colorGradeValidator), zoomBlur: v.optional(zoomBlurValidator), glitch: v.optional(glitchValidator), invert: v.optional(invertValidator),
   textTemplate: v.optional(textTemplateValidator),
-  effectPreset: v.optional(v.union(v.literal('none'), v.literal('fade'), v.literal('punch'), v.literal('shake'), v.literal('flash'), v.literal('pop'), v.literal('cinematic-bars'))),
+  effectPreset: v.optional(v.union(v.literal('none'), v.literal('fade'), v.literal('punch'), v.literal('shake'), v.literal('flash'), v.literal('pop'), v.literal('cinematic-bars'), v.literal('quick-zoom-in'), v.literal('quick-zoom-out'))),
   animation: v.optional(v.union(v.literal("none"), v.literal("fade"), v.literal("rise"))),
 });
 export const timelineMarkerValidator = v.object({ id: v.string(), time: v.number(), label: v.optional(v.string()) });

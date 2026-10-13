@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { motionPreset, motionAt, visibleMotion, validateClipEffects, MOTION_PRESETS } from './clip-effects';
+import { motionPreset, motionAt, visibleMotion, validateClipEffects, MOTION_PRESETS, EFFECT_PRESETS } from './clip-effects';
 import { splitClip } from './operations';
 import { resizeSelectedClips } from './timeline-controls';
 import { generateComposition } from './composition';
@@ -9,6 +9,18 @@ const timeline: Timeline = { fps:30, aspectRatio:'vertical', tracks:{visual:1,ov
 describe('clip motion',()=>{
   it('all presets have bounded increasing keyframes, including one-frame clips',()=>{
     for (const duration of [1/60,1/30,2,60]) for (const preset of MOTION_PRESETS) expect(()=>validateClipEffects({...clip,duration,...motionPreset({...clip,duration},preset)})).not.toThrow();
+    for (const duration of [1/60, .5, 2, 60]) for (const preset of EFFECT_PRESETS) {
+      const effect: Clip = { id: 'effect', kind: 'effect', start: 0, duration, sourceStart: 0 };
+      expect(() => validateClipEffects({ ...effect, ...motionPreset(effect, preset) })).not.toThrow();
+    }
+  });
+  it('quick zoom presets zoom in and out in opposite directions', () => {
+    const effect: Clip = { id: 'effect', kind: 'effect', start: 0, duration: .5, sourceStart: 0 };
+    const zoomIn = motionPreset(effect, 'quick-zoom-in').motion!;
+    const zoomOut = motionPreset(effect, 'quick-zoom-out').motion!;
+    expect([zoomIn[0].scale, zoomIn.at(-1)!.scale]).toEqual([1, 1.2]);
+    expect([zoomOut[0].scale, zoomOut.at(-1)!.scale]).toEqual([1.2, 1]);
+    expect(motionAt(zoomIn, .25).scale).toBeCloseTo(motionAt(zoomOut, .25).scale);
   });
   it('splits and left trims retain the original animation phase',()=>{
     const animated={...clip,...motionPreset(clip,'fade')};

@@ -1,4 +1,5 @@
 import { validateClipEffects } from '../../lib/editor/clip-effects';
+import { playbackRateOf, sourceEndOf } from '../../lib/editor/playback-rate';
 import { ConvexError } from "convex/values";
 import { layerGroup, maxTrackCount, normalizeTimeline, trackOf, type Timeline } from "../../lib/editor/types";
 import type { Doc } from "../_generated/dataModel";
@@ -57,6 +58,7 @@ export async function validateTimeline(ctx: MutationCtx | QueryCtx, project: Doc
       const video = clip.kind === 'video' ? clip : pair;
       if (!video.audioSeparated || video.volume !== 0) throw new ConvexError('Linked video must use its separate audio clip');
       if (['start', 'duration', 'sourceStart'].some(key => Math.abs(clip[key as 'start'] - pair[key as 'start']) > 1e-7)) throw new ConvexError('Linked video and audio must stay synchronized');
+      if (Math.abs(playbackRateOf(clip) - playbackRateOf(pair)) > 1e-7) throw new ConvexError('Linked video and audio must stay synchronized');
     }
     const track = trackOf(clip);
     const group = layerGroup(clip.kind);
@@ -82,7 +84,7 @@ export async function validateTimeline(ctx: MutationCtx | QueryCtx, project: Doc
     if (!asset || asset.ownerId !== project.ownerId || asset.projectId !== project._id || asset.kind !== clip.kind) throw new ConvexError("Clip media must belong to this project and match its kind");
     if (clip.kind === 'video' && clip.linkedClipId && asset.audioAssetId !== clipsById.get(clip.linkedClipId)?.assetId) throw new ConvexError('Linked audio must come from this video');
     if (clip.focus) { if (clip.kind !== "video") throw new ConvexError("Subject tracking applies to video clips only"); validateFocus(clip.focus, asset.duration); }
-    if (asset.kind !== "image" && asset.duration !== undefined && clip.sourceStart + clip.duration > asset.duration + 1 / timeline.fps) throw new ConvexError("Source trim extends beyond the media duration");
+    if (asset.kind !== "image" && asset.duration !== undefined && sourceEndOf(clip) > asset.duration + 1 / timeline.fps) throw new ConvexError("Source trim extends beyond the media duration");
   }
   return timeline;
 }

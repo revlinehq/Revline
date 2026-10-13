@@ -1,6 +1,7 @@
 import { EFFECT_CATALOG, motionPreset, offsetClipMotion, type EffectPreset } from './clip-effects';
 import { TimelineGestureRejection } from './timeline-edit-errors';
 import { textTemplateTimingPatch } from './remotion-text';
+import { playbackRateOf, sourceDurationOf, sourceEndOf, validatePlaybackRate } from './playback-rate';
 import { Clip, Timeline, timelineDuration, layerGroup, trackOf, deriveTrackCounts, normalizeTimeline, maxTrackCount } from './types';
 export function snapTime(time: number, fps: number) { return Math.round(Math.max(0, time) * fps) / fps; }
 export function linkedClipIds(timeline: Timeline, ids: string[]): string[] {
@@ -39,7 +40,7 @@ export function splitClip(timeline: Timeline, clipId: string, time: number, newI
   const pairId = `${newId}-audio`;
   return { ...timeline, clips: timeline.clips.flatMap(c => c.id !== clipId && c.id !== pair?.id ? [c] : [
     { ...c, ...textTemplateTimingPatch(c), duration: offset },
-    { ...c, ...offsetClipMotion(c, offset), id: c.id === clipId ? newId : pairId, linkedClipId: pair ? c.id === clipId ? pairId : newId : undefined, start: c.start + offset, sourceStart: c.kind === 'effect' ? 0 : c.sourceStart + offset, duration: tail },
+    { ...c, ...offsetClipMotion(c, offset), id: c.id === clipId ? newId : pairId, linkedClipId: pair ? c.id === clipId ? pairId : newId : undefined, start: c.start + offset, sourceStart: c.kind === 'effect' ? 0 : c.sourceStart + offset * playbackRateOf(c), duration: tail },
   ]) };
 }
 export function patchClip(timeline: Timeline, id: string, patch: Partial<Clip>): Timeline {
@@ -47,7 +48,7 @@ export function patchClip(timeline: Timeline, id: string, patch: Partial<Clip>):
   const clip = timeline.clips.find(c => c.id === id);
   if (!clip) return timeline;
   const timing: Partial<Clip> = {};
-  for (const key of ['start', 'duration', 'sourceStart'] as const) if (patch[key] !== undefined) timing[key] = patch[key];
+  for (const key of ['start', 'duration', 'sourceStart', 'playbackRate'] as const) if (patch[key] !== undefined || (key === 'playbackRate' && key in patch)) timing[key] = patch[key];
   const volumeTarget = clip.kind === 'video' && clip.linkedClipId ? clip.linkedClipId : id;
   return { ...timeline, clips: timeline.clips.map(c => {
     let next = c.id === id ? { ...c, ...(patch.duration !== undefined && !('textTemplate' in patch) ? textTemplateTimingPatch(c) : {}), ...patch, id: c.id } : c.id === clip.linkedClipId ? { ...c, ...timing } : c;
@@ -55,6 +56,27 @@ export function patchClip(timeline: Timeline, id: string, patch: Partial<Clip>):
     if (next.kind === 'video' && next.audioSeparated) next = { ...next, volume: 0 };
     return next;
   }) };
+}
+/** Keep the retained source range and linked sound while changing playback speed. */
+export function setClipPlaybackRate(timeline: Timeline, id: string, playbackRate: number): Timeline {
+  timeline = normalizeTimeline(timeline);
+  const clip = timeline.clips.find(c => c.id === id);
+  if (!clip) throw new Error('Choose a video or audio clip to change its speed.');
+  validatePlaybackRate({ kind: clip.kind, playbackRate });
+  if (playbackRateOf(clip) === playbackRate) return timeline;
+  const duration = sourceDurationOf(clip) / playbackRate;
+  if (!Number.isFinite(duration) || duration < 1 / timeline.fps) throw new Error('This speed would make the clip shorter than one frame.');
+  const ids = new Set(linkedClipIds(timeline, [id]));
+  if (duration > clip.duration && timeline.clips.some(member => ids.has(member.id) && timeline.clips.some(other => !ids.has(other.id)
+    && layerGroup(member.kind) === layerGroup(other.kind) && trackOf(member) === trackOf(other)
+    && other.start < member.start + duration - 1e-6 && member.start < other.start + other.duration - 1e-6))) {
+    throw new Error('The slower clip would overlap another clip. Move it or make room before changing speed.');
+  }
+  const ratio = duration / clip.duration;
+  const next = patchClip(timeline, id, { playbackRate, duration });
+  return { ...next, clips: next.clips.map(member => ids.has(member.id) && member.motion?.length ? { ...member,
+    motion: member.motion.map(key => ({ ...key, time: key.time * ratio })), motionOffset: (member.motionOffset ?? 0) * ratio,
+  } : member) };
 }
 export function deleteClip(timeline: Timeline, id: string): Timeline { timeline = normalizeTimeline(timeline); const ids = new Set(linkedClipIds(timeline, [id])); return { ...timeline, clips: timeline.clips.filter(c => !ids.has(c.id)) }; }
 export function duplicateClip(timeline: Timeline, id: string, newId: string): Timeline {
@@ -85,7 +107,7 @@ export function separateVideoClips(timeline: Timeline, asset: { _id: string; aud
   for (const clip of timeline.clips) {
     if (clip.kind !== 'video' || clip.assetId !== asset._id || clip.audioSeparated) continue;
     const audioId = `${clip.id}-audio`;
-    next = placeOnFreeLayer(next, { id: audioId, kind: 'audio', assetId: asset.audioAssetId, track: 1, start: clip.start, duration: clip.duration, sourceStart: clip.sourceStart, volume: clip.volume ?? 1, linkedClipId: clip.id });
+    next = placeOnFreeLayer(next, { id: audioId, kind: 'audio', assetId: asset.audioAssetId, track: 1, start: clip.start, duration: clip.duration, sourceStart: clip.sourceStart, playbackRate: clip.playbackRate, volume: clip.volume ?? 1, linkedClipId: clip.id });
     next = { ...next, clips: next.clips.map(c => c.id === clip.id ? { ...c, volume: 0, audioSeparated: true, linkedClipId: audioId } : c) };
   }
   return next;
@@ -113,7 +135,7 @@ export function addEffectClip(timeline: Timeline, id: string, preset: EffectPres
 export function placeOnFreeLayer(timeline: Timeline, clip: Clip): Timeline {
   timeline = normalizeTimeline(timeline);
   const previous = timeline.clips.find(current => current.id === clip.id);
-  if (previous?.linkedClipId) timeline = patchClip(timeline, clip.id, { start: clip.start, duration: clip.duration, sourceStart: clip.sourceStart });
+  if (previous?.linkedClipId) timeline = patchClip(timeline, clip.id, { start: clip.start, duration: clip.duration, sourceStart: clip.sourceStart, playbackRate: clip.playbackRate });
   if (clip.kind === 'video' && clip.audioSeparated) clip = { ...clip, volume: 0 };
   const group = layerGroup(clip.kind);
   let track = trackOf(clip);
@@ -133,6 +155,6 @@ export function placeOnFreeLayer(timeline: Timeline, clip: Clip): Timeline {
 }
 /** Keep only source samples needed to interpolate this trimmed clip's crop. */
 export function focusForClip(focus:NonNullable<Clip['focus']>,clip:Clip):NonNullable<Clip['focus']> {
-  const start=clip.sourceStart;const end=start+clip.duration;const before=focus.filter(s=>s.time<start).at(-1);const after=focus.find(s=>s.time>end);
+  const start=clip.sourceStart;const end=sourceEndOf(clip);const before=focus.filter(s=>s.time<start).at(-1);const after=focus.find(s=>s.time>end);
   return [...(before?[before]:[]),...focus.filter(s=>s.time>=start&&s.time<=end),...(after?[after]:[])];
 }

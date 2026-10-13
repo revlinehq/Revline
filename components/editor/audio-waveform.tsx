@@ -5,8 +5,8 @@ import { decodeWaveform, waveformBars } from '@/lib/editor/audio-waveform';
 import { observeTimelineViewport } from '@/lib/editor/timeline-viewport';
 import type { AudioWaveform as Waveform } from '@/lib/editor/types';
 
-export const AudioWaveform = memo(function AudioWaveform({ waveform, sourceStart, duration, volume = 1, timelineStart, viewport }: {
-  waveform?: Waveform; sourceStart: number; duration: number; volume?: number; timelineStart: number; viewport: RefObject<HTMLDivElement | null>;
+export const AudioWaveform = memo(function AudioWaveform({ waveform, sourceStart, duration, playbackRate = 1, volume = 1, timelineStart, viewport }: {
+  waveform?: Waveform; sourceStart: number; duration: number; playbackRate?: number; volume?: number; timelineStart: number; viewport: RefObject<HTMLDivElement | null>;
 }) {
   const root = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
@@ -30,7 +30,7 @@ export const AudioWaveform = memo(function AudioWaveform({ waveform, sourceStart
       if (!context || width <= 0 || height <= 0) return;
       context.scale(ratio, ratio); context.strokeStyle = '#ffffffb3'; context.lineWidth = 1;
       context.beginPath();
-      for (const bar of waveformBars(data, timing.sourceStart, timing.duration, clip.width, from, to, gain === 0 ? 1 : gain)) {
+      for (const bar of waveformBars(data, timing.sourceStart, timing.duration, clip.width, from, to, gain === 0 ? 1 : gain, playbackRate)) {
         const half = bar.amplitude * (height / 2 - 1);
         if (half < .5) continue;
         const x = bar.left - from + .5;
@@ -43,7 +43,7 @@ export const AudioWaveform = memo(function AudioWaveform({ waveform, sourceStart
     node.parentElement?.addEventListener('revline:clip-trim-preview', trim);
     node.parentElement?.addEventListener('revline:clip-volume-preview', adjustVolume);
     return () => { observer.unsubscribe(); node.parentElement?.removeEventListener('revline:clip-trim-preview', trim); node.parentElement?.removeEventListener('revline:clip-volume-preview', adjustVolume); };
-  }, [data, sourceStart, duration, volume, muted, timelineStart, viewport]);
+  }, [data, sourceStart, duration, playbackRate, volume, muted, timelineStart, viewport]);
   return <>
     <div ref={root} className={`audio-waveform${muted ? ' is-muted' : ''}`} aria-hidden="true" data-waveform-ready={!!data}><canvas ref={canvas}/></div>
     {muted && <VolumeX className="audio-muted-icon" size={12} role="img" aria-label="Muted clip"><title>Muted clip</title></VolumeX>}

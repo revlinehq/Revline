@@ -1,0 +1,143 @@
+'use client';
+
+import { useEffect, useId, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { ChevronDown, Contrast, Palette, Plus, RotateCcw, ScanLine, Trash2, Waves, Gauge, PanelsTopBottom, ZoomIn, ZoomOut } from 'lucide-react';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { DEFAULT_COLOR_GRADE, DEFAULT_INVERT, DEFAULT_GLITCH, DEFAULT_ZOOM_BLUR, VISUAL_EFFECT_LIMITS, type VisualEffects } from '@/lib/editor/visual-effects';
+import type { Clip } from '@/lib/editor/types';
+import { EFFECT_CATALOG, type EffectPreset } from '@/lib/editor/clip-effects';
+import { PLAYBACK_RATES, playbackRateOf } from '@/lib/editor/playback-rate';
+import './visual-effects-controls.css';
+
+type Props = { clip: Clip; onChange: (patch: Partial<Clip>) => void; onPreview?: (patch: Partial<Clip> | null) => void; onPlaybackRateChange?: (rate: number) => void; onAddEffect?: (preset: EffectPreset) => void };
+type EffectKey = keyof VisualEffects;
+const rangeKeys = new Set(['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End', 'PageUp', 'PageDown']);
+
+function EffectSlider({ label, value, bounds, step = .01, format, disabled, onPreview, onCommit }: {
+  label: string; value: number; bounds: readonly [number, number]; step?: number; format: (value: number) => string; disabled: boolean;
+  onPreview: (value: number | null) => void; onCommit: (value: number) => void;
+}) {
+  const [draft, setDraft] = useState(value);
+  const gesture = useRef<{ initial: number; value: number } | null>(null);
+  const frame = useRef(0);
+  const callbacks = useRef({ onPreview, onCommit }); callbacks.current = { onPreview, onCommit };
+  const id = useId();
+  function cancel() {
+    if (!gesture.current) return;
+    cancelAnimationFrame(frame.current); frame.current = 0;
+    setDraft(gesture.current.initial); gesture.current = null;
+    callbacks.current.onPreview(null);
+  }
+  function commit() {
+    const current = gesture.current;
+    if (!current) return;
+    cancelAnimationFrame(frame.current); frame.current = 0; gesture.current = null;
+    if (current.value === current.initial) callbacks.current.onPreview(null);
+    else { callbacks.current.onPreview(current.value); callbacks.current.onCommit(current.value); }
+  }
+  useEffect(() => {
+    if (gesture.current && (disabled || gesture.current.initial !== value)) cancel();
+    if (!gesture.current) setDraft(value);
+  }, [value, disabled]);
+  useEffect(() => () => {
+    cancelAnimationFrame(frame.current);
+    if (gesture.current) callbacks.current.onPreview(null);
+  }, []);
+  const progress = (draft - bounds[0]) / (bounds[1] - bounds[0]) * 100;
+  return <div className="effect-slider" data-disabled={disabled || undefined} style={{ '--effect-progress': `${progress}%` } as CSSProperties}>
+    <div className="effect-slider-readout" aria-hidden="true"><span>{label}</span><output htmlFor={id}>{format(draft)}</output></div>
+    <input id={id} type="range" aria-label={label} aria-valuetext={format(draft)} min={bounds[0]} max={bounds[1]} step={step} value={draft} disabled={disabled}
+      onPointerDown={event => { if (event.button === 0) { gesture.current = { initial: value, value: draft }; event.currentTarget.setPointerCapture(event.pointerId); } }}
+      onPointerUp={commit} onPointerCancel={cancel} onLostPointerCapture={commit} onBlur={commit}
+      onKeyDown={event => {
+        if (event.key === 'Escape' && gesture.current) { event.preventDefault(); event.stopPropagation(); cancel(); }
+        else if (rangeKeys.has(event.key)) { event.stopPropagation(); gesture.current ??= { initial: value, value: draft }; }
+      }}
+      onKeyUp={event => { if (rangeKeys.has(event.key)) { event.stopPropagation(); commit(); } }}
+      onChange={event => {
+        const next = Number(event.currentTarget.value); setDraft(next);
+        if (!gesture.current) { callbacks.current.onCommit(next); return; }
+        gesture.current.value = next;
+        if (!frame.current) frame.current = requestAnimationFrame(() => { frame.current = 0; if (gesture.current) callbacks.current.onPreview(gesture.current.value); });
+      }}/>
+  </div>;
+}
+
+function EffectCard({ name, effectKey, enabled, onToggle, onReset, onRemove, children }: {
+  name: string; effectKey: EffectKey; enabled: boolean; onToggle: () => void; onReset: () => void; onRemove: () => void; children: ReactNode;
+}) {
+  const [open, setOpen] = useState(true);
+  const id = useId();
+  return <section className="visual-effect-card" data-effect={effectKey} data-enabled={enabled} aria-label={`${name} effect`}>
+    <div className="visual-effect-heading">
+      <button type="button" className="effect-enabled" role="switch" aria-checked={enabled} aria-label={`Enable ${name}`} onClick={onToggle}><span/></button>
+      <button type="button" className="effect-collapse" aria-expanded={open} aria-controls={id} onClick={() => setOpen(!open)}><span>{name}</span><ChevronDown size={12}/></button>
+      <button type="button" className="effect-icon-button" aria-label={`Reset ${name}`} title={`Reset ${name}`} onClick={onReset}><RotateCcw size={12}/></button>
+      <button type="button" className="effect-icon-button" aria-label={`Remove ${name}`} title={`Remove ${name}`} onClick={onRemove}><Trash2 size={12}/></button>
+    </div>
+    <div id={id} className="visual-effect-fields" hidden={!open}>{children}</div>
+  </section>;
+}
+
+const decimal = (value: number) => value.toFixed(2);
+const integer = (value: number) => String(Math.round(value));
+const percent = (value: number) => `${Math.round(value * 100)}%`;
+const pixels = (value: number) => `${Math.round(value)} px`;
+const effectNames = { colorGrade: 'Color', zoomBlur: 'Zoom blur', glitch: 'Glitch', invert: 'Invert colors' } as const;
+const effectDefaults = { colorGrade: DEFAULT_COLOR_GRADE, zoomBlur: DEFAULT_ZOOM_BLUR, glitch: DEFAULT_GLITCH, invert: DEFAULT_INVERT };
+const effectIcons = { colorGrade: Palette, zoomBlur: Waves, glitch: ScanLine, invert: Contrast };
+
+export function PlaybackSpeedControls({ clip, onChange }: { clip: Clip; onChange: (rate: number) => void }) {
+  const rate = playbackRateOf(clip);
+  return <section className="playback-speed-controls" aria-label="Playback speed">
+    <label><span><Gauge size={13}/>Speed</span><select aria-label="Playback speed" value={rate} onChange={event => onChange(Number(event.currentTarget.value))}>
+      {!PLAYBACK_RATES.some(value => value === rate) && <option value={rate}>{rate}×</option>}
+      {PLAYBACK_RATES.map(value => <option key={value} value={value}>{value}×{value === 1 ? ' · Normal' : ''}</option>)}
+    </select></label>
+    <p>Changes this clip’s duration. Linked sound stays in sync.</p>
+  </section>;
+}
+
+export function TimedEffectPresets({ onAdd }: { onAdd: (preset: EffectPreset) => void }) {
+  return <section className="timed-effect-presets" aria-label="Timed effect presets"><p>Add at playhead</p>
+    {([['cinematic-bars', PanelsTopBottom], ['quick-zoom-in', ZoomIn], ['quick-zoom-out', ZoomOut]] as const).map(([preset, Icon]) => <button key={preset} type="button" onClick={() => onAdd(preset)}><Icon size={13}/><span>{EFFECT_CATALOG[preset].label}</span><Plus size={12}/></button>)}
+    <small>Move or trim the effect on the timeline.</small>
+  </section>;
+}
+
+export function VisualEffectsControls({ clip, onChange, onPreview, onPlaybackRateChange, onAddEffect }: Props) {
+  const color = clip.colorGrade;
+  const blur = clip.zoomBlur;
+  const glitch = clip.glitch;
+  const invert = clip.invert;
+  const missing = (Object.keys(effectNames) as EffectKey[]).filter(key => !clip[key]);
+  function cardProps(key: EffectKey) {
+    return {
+      name: effectNames[key], effectKey: key, enabled: !!clip[key]?.enabled,
+      onToggle: () => onChange({ [key]: { ...clip[key], enabled: !clip[key]?.enabled } }),
+      onReset: () => onChange({ [key]: { ...effectDefaults[key], enabled: !!clip[key]?.enabled } }),
+      onRemove: () => onChange({ [key]: undefined }),
+    };
+  }
+  function preview(patch: Partial<Clip> | null) { onPreview?.(patch); }
+  return <div className="visual-effects-controls">
+    {clip.kind === 'video' && onPlaybackRateChange && <PlaybackSpeedControls clip={clip} onChange={onPlaybackRateChange}/>}
+    {onAddEffect && <TimedEffectPresets onAdd={onAddEffect}/>}
+    {color && <EffectCard {...cardProps('colorGrade')}>{([
+      ['exposure', 'Exposure', .01, decimal], ['contrast', 'Contrast', .01, decimal], ['saturation', 'Saturation', .01, decimal],
+      ['temperature', 'Temperature', 1, integer], ['tint', 'Tint', 1, integer], ['vibrance', 'Vibrance', 1, integer],
+    ] as const).map(([key, label, step, format]) => <EffectSlider key={key} label={label} value={color[key]} bounds={VISUAL_EFFECT_LIMITS.colorGrade[key]} step={step} format={format} disabled={!color.enabled} onPreview={value => preview(value === null ? null : { colorGrade: { ...color, [key]: value } })} onCommit={value => onChange({ colorGrade: { ...color, [key]: value } })}/>)}</EffectCard>}
+    {blur && <EffectCard {...cardProps('zoomBlur')}>{([
+      ['amount', 'Amount'], ['centerX', 'Center X'], ['centerY', 'Center Y'],
+    ] as const).map(([key, label]) => <EffectSlider key={key} label={label} value={blur[key]} bounds={VISUAL_EFFECT_LIMITS.zoomBlur[key]} format={percent} disabled={!blur.enabled} onPreview={value => preview(value === null ? null : { zoomBlur: { ...blur, [key]: value } })} onCommit={value => onChange({ zoomBlur: { ...blur, [key]: value } })}/>)}</EffectCard>}
+    {glitch && <EffectCard {...cardProps('glitch')}>{([
+      ['intensity', 'Intensity', .01, percent], ['blockSize', 'Block size', 1, pixels], ['rgbSplit', 'RGB split', 1, pixels],
+    ] as const).map(([key, label, step, format]) => <EffectSlider key={key} label={label} value={glitch[key]} bounds={VISUAL_EFFECT_LIMITS.glitch[key]} step={step} format={format} disabled={!glitch.enabled} onPreview={value => preview(value === null ? null : { glitch: { ...glitch, [key]: value } })} onCommit={value => onChange({ glitch: { ...glitch, [key]: value } })}/>)}</EffectCard>}
+    {invert && <EffectCard {...cardProps('invert')}><EffectSlider label="Amount" value={invert.amount} bounds={VISUAL_EFFECT_LIMITS.invert.amount} format={percent} disabled={!invert.enabled} onPreview={value => preview(value === null ? null : { invert: { ...invert, amount: value } })} onCommit={value => onChange({ invert: { ...invert, amount: value } })}/></EffectCard>}
+    {!color && !blur && !glitch && !invert && <p className="visual-effects-empty">Add an effect to this clip.</p>}
+    <DropdownMenu><DropdownMenuTrigger asChild><button type="button" className="visual-effects-add" disabled={!missing.length}><Plus size={13}/>Add effect</button></DropdownMenuTrigger><DropdownMenuContent className="visual-effects-menu" align="start">{missing.map(key => {
+      const Icon = effectIcons[key];
+      return <DropdownMenuItem key={key} onSelect={() => onChange({ [key]: { ...effectDefaults[key], enabled: true } })}><Icon size={14}/>{effectNames[key]}</DropdownMenuItem>;
+    })}</DropdownMenuContent></DropdownMenu>
+  </div>;
+}

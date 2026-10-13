@@ -30,9 +30,11 @@ export function applyTimelineEdit(base: Timeline, next: Timeline, current: Timel
       } else if (edited[key] === undefined) delete merged[key];
       else Object.assign(merged, { [key]: edited[key] });
     }
-    // Source offset and duration describe one trim; keep that pair consistent.
-    if (old.duration !== edited.duration || old.sourceStart !== edited.sourceStart) {
+    // Source offset, speed and duration describe one retained range.
+    if (old.duration !== edited.duration || old.sourceStart !== edited.sourceStart || old.playbackRate !== edited.playbackRate) {
       merged.duration = edited.duration; merged.sourceStart = edited.sourceStart;
+      if (edited.playbackRate === undefined) delete merged.playbackRate;
+      else merged.playbackRate = edited.playbackRate;
     }
     return [merged];
   });

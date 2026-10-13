@@ -3,3 +3,15 @@
 .text-effect-presets [data-slot=button]{min-width:0;height:34px;font-size:11px;color:var(--ws-text);border-color:var(--ws-input);background:transparent}
 .text-effect-presets [data-slot=button]:hover,.text-effect-presets [data-slot=button][aria-pressed=true]{background:var(--ws-hover)}
 .text-effect-presets [data-slot=button][aria-pressed=true]{border-color:var(--ws-muted)}
+
+.text-template-presets{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 10px}
+.text-template-presets button{display:flex;flex-direction:column;gap:7px;padding:0;border:0;background:transparent;text-align:left;color:var(--ws-text);font-size:11px;cursor:pointer;min-width:0}
+.text-template-preview{display:flex;flex-direction:column;justify-content:center;gap:2px;width:100%;height:70px;padding:12px;border-radius:8px;background:var(--ws-hover);box-shadow:inset 0 0 0 1px var(--ws-line);overflow:hidden}
+.text-template-preview b{font-size:17px;line-height:1.2;white-space:nowrap}
+.text-template-preview small{font-size:11px;line-height:1.2;color:var(--ws-muted);white-space:nowrap}
+.text-template-word-pop b{font-size:26px}
+.text-template-word-reveal small{opacity:.35}
+.text-template-karaoke mark{color:#E3C961;background:transparent}
+.text-template-presets button[aria-pressed=true] .text-template-preview{box-shadow:inset 0 0 0 1px var(--ws-muted)}
+.text-template-presets button:focus-visible{outline:2px solid var(--ws-text);outline-offset:4px;border-radius:6px}
+@media(hover:hover){.text-template-presets button:hover .text-template-preview{box-shadow:inset 0 0 0 1px var(--ws-muted)}}

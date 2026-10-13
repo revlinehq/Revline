@@ -6,9 +6,9 @@ import { cachedVideoThumbnail, videoThumbnails } from '@/lib/editor/video-thumbn
 import { observeTimelineViewport } from '@/lib/editor/timeline-viewport';
 import type { MediaAsset } from '@/lib/editor/types';
 
-type Props = { asset: MediaAsset; width: number; height: number; sourceStart: number; duration: number; timelineStart: number; px: number; fps: number; viewport: RefObject<HTMLDivElement | null>; paused?: boolean };
+type Props = { asset: MediaAsset; width: number; height: number; sourceStart: number; duration: number; playbackRate?: number; timelineStart: number; px: number; fps: number; viewport: RefObject<HTMLDivElement | null>; paused?: boolean };
 
-export const MediaFilmstrip = memo(function MediaFilmstrip({ asset, width, height, sourceStart, duration, timelineStart, px, fps, viewport, paused = false }: Props) {
+export const MediaFilmstrip = memo(function MediaFilmstrip({ asset, width, height, sourceStart, duration, playbackRate = 1, timelineStart, px, fps, viewport, paused = false }: Props) {
   const root = useRef<HTMLDivElement>(null);
   const [imageAspect, setImageAspect] = useState<number | null>(null);
   const [range, setRange] = useState({ start: 0, end: 0 });
@@ -26,7 +26,7 @@ export const MediaFilmstrip = memo(function MediaFilmstrip({ asset, width, heigh
     });
     return observer.unsubscribe;
   }, [frameWidth, width, timelineStart, viewport]);
-  const samples = useMemo(() => filmstripFrames({ clipWidth: width, frameWidth, visibleStart: range.start, visibleEnd: range.end, pxPerSecond: px, sourceStart, duration, fps, sourceDuration: asset.duration }), [width, frameWidth, range, px, sourceStart, duration, fps, asset.duration]);
+  const samples = useMemo(() => filmstripFrames({ clipWidth: width, frameWidth, visibleStart: range.start, visibleEnd: range.end, pxPerSecond: px, sourceStart, duration, fps, sourceDuration: asset.duration, playbackRate }), [width, frameWidth, range, px, sourceStart, duration, fps, asset.duration, playbackRate]);
   useEffect(() => {
     if (paused || asset.kind !== 'video' || !asset.url || !samples.length) return;
     let cancelled = false;

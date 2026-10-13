@@ -14,7 +14,7 @@ try {
   window.testFootage=JSON.stringify(clip);window.testFootageId=clip.id;window.testStore.setState({selectedId:clip.id,selectedIds:[clip.id]});
  });
  await page.click('#inspector-effects-tab');await pause();
- assert.match(await page.$eval('.inspector-content',el=>el.textContent),/Select a text clip/);
+ assert.ok(await page.$('.visual-effects-add'),'Footage exposes compact visual effects');
  assert.equal(await page.$('select[aria-label="Blend mode"]'),null);
  assert.equal(await page.$('.clip-motion-presets'),null);
  await page.evaluate(()=>{const state=window.testStore.getState(),clip=state.timeline.clips.find(c=>c.kind==='graphic');window.testStore.setState({selectedId:clip.id,selectedIds:[clip.id]});});
@@ -35,9 +35,9 @@ try {
  await page.screenshot({path:'/tmp/revline-text-effects.png'});
  await page.evaluate(()=>{const state=window.testStore.getState();state.edit({...state.timeline,clips:[...state.timeline.clips,{id:'saved-effect',kind:'effect',effectPreset:'flash',track:4,start:1,duration:1,sourceStart:0}]});window.testStore.setState({selectedId:'saved-effect',selectedIds:['saved-effect']});});await pause();await ready();
  assert.ok(await page.$('[data-clip-id="saved-effect"]'),'Existing saved effect still appears');
- assert.match(await page.$eval('.inspector-content',el=>el.textContent),/Select a text clip/);
+ assert.match(await page.$eval('.inspector-content',el=>el.textContent),/Select a visual clip/);
  await page.click('#inspector-edit-tab');await pause();assert.match(await page.$eval('.inspector-content',el=>el.textContent),/Saved effect/);
  await page.focus('[data-clip-id="saved-effect"]');await page.keyboard.press('Delete');await pause();
  assert.equal(await page.$('[data-clip-id="saved-effect"]'),null,'Saved effect remains deletable');
- console.log('PASS: Effects UI is text-only; None/Fade/Rise/Pop update selected text, preserve footage, and keep existing saved visual effects removable.');
+ console.log('PASS: None/Fade/Rise/Pop update selected text, preserve footage, and keep existing saved visual effects removable.');
 }finally{await browser.close();}

@@ -1,13 +1,14 @@
 import type { Clip } from './types';
 import { validateVisualEffects } from './visual-effects';
 import { textTemplateTimingPatch, validateRemotionTextTemplate } from './remotion-text';
+import { validatePlaybackRate } from './playback-rate';
 
 export const BLEND_MODES = ['normal', 'screen', 'multiply', 'overlay', 'plus-lighter'] as const;
 export type BlendMode = typeof BLEND_MODES[number];
 export type MotionKeyframe = { time: number; x: number; y: number; scale: number; rotation: number; opacity: number; brightness: number };
 export const MOTION_PRESETS = ['none', 'fade', 'punch', 'shake', 'flash', 'pop'] as const;
 export type MotionPreset = typeof MOTION_PRESETS[number];
-export const EFFECT_PRESETS = ['fade', 'punch', 'shake', 'flash', 'pop', 'cinematic-bars'] as const;
+export const EFFECT_PRESETS = ['fade', 'punch', 'shake', 'flash', 'pop', 'cinematic-bars', 'quick-zoom-in', 'quick-zoom-out'] as const;
 export type EffectPreset = typeof EFFECT_PRESETS[number];
 export const NEUTRAL_MOTION = { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, brightness: 1 };
 const key = (time: number, changes: Partial<MotionKeyframe> = {}): MotionKeyframe => ({ time, ...NEUTRAL_MOTION, ...changes });
@@ -18,11 +19,14 @@ export const EFFECT_CATALOG: Record<EffectPreset, { label: string; duration: num
   flash: { label: 'Flash', duration: .5, keyframes: d => { const hit = Math.min(.35, d / 2); return [key(0), key(hit * .2, { brightness: 3 }), key(hit), key(d)]; } },
   pop: { label: 'Pop in', duration: .5, keyframes: d => { const hit = Math.min(.35, d / 2); return [key(0, { scale: .7, opacity: 0 }), key(hit * .65, { scale: 1.08 }), key(hit), key(d)]; } },
   'cinematic-bars': { label: 'Cinematic bars', duration: 2, keyframes: d => [key(0, { opacity: 0 }), key(d * .2), key(d * .8), key(d, { opacity: 0 })] },
+  'quick-zoom-in': { label: 'Quick zoom in', duration: .5, keyframes: d => [key(0), key(d, { scale: 1.2 })] },
+  'quick-zoom-out': { label: 'Quick zoom out', duration: .5, keyframes: d => [key(0, { scale: 1.2 }), key(d)] },
 };
 export function effectClipLabel(clip: Pick<Clip, 'effectPreset'>) { return clip.effectPreset && clip.effectPreset !== 'none' ? EFFECT_CATALOG[clip.effectPreset].label : 'Custom effect'; }
 const bounds = { x: [-1, 1], y: [-1, 1], scale: [0.1, 5], rotation: [-360, 360], opacity: [0, 1], brightness: [0, 4] } as const;
 
 export function validateClipEffects(clip: Clip) {
+  validatePlaybackRate(clip);
   validateVisualEffects(clip);
   validateRemotionTextTemplate(clip);
   if (clip.effectPreset !== undefined && (clip.kind !== 'effect' || (clip.effectPreset !== 'none' && !EFFECT_PRESETS.includes(clip.effectPreset)))) throw new Error('Effect presets belong to effect clips.');

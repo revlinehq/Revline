@@ -1,5 +1,6 @@
 import type { BeatMap } from '../media-analysis/beats';
 import type { Timeline, TimelineMarker } from './types';
+import { sourceEndOf, timelineTimeAtSource, validatePlaybackRate } from './playback-rate';
 
 export type BeatMarkerRange = { start?: number; end?: number };
 export type BeatMarkerResult = {
@@ -22,7 +23,8 @@ export function addBeatMarkers(timeline: Timeline, clipId: string, analysis: Bea
   const clip = timeline.clips.find(candidate => candidate.id === clipId);
   if (!clip || clip.kind !== 'audio') throw new Error('Choose an audio clip on this timeline to mark its beats.');
   if (![24, 30, 60].includes(timeline.fps)) throw new Error('Beat markers require a timeline at 24, 30, or 60 fps.');
-  if (![clip.start, clip.duration, clip.sourceStart, clip.start + clip.duration, clip.sourceStart + clip.duration].every(Number.isFinite) || clip.start < 0 || clip.duration <= 0 || clip.sourceStart < 0) throw new Error('The audio clip has invalid timing.');
+  validatePlaybackRate(clip);
+  if (![clip.start, clip.duration, clip.sourceStart, clip.start + clip.duration, sourceEndOf(clip)].every(Number.isFinite) || clip.start < 0 || clip.duration <= 0 || clip.sourceStart < 0) throw new Error('The audio clip has invalid timing.');
   if ([range.start, range.end].some(value => value !== undefined && (!Number.isFinite(value) || value < 0)) || (range.start !== undefined && range.end !== undefined && range.end <= range.start)) throw new Error('Choose a finite, nonnegative timeline range with end after start.');
 
   const unchanged = (status: BeatMarkerResult['status'], message: string): BeatMarkerResult => ({ timeline, added: 0, skipped: 0, confidence: analysis?.confidence ?? null, status, message });
@@ -36,8 +38,8 @@ export function addBeatMarkers(timeline: Timeline, clipId: string, analysis: Bea
   const end = Math.min(clip.start + clip.duration, range.end ?? clip.start + clip.duration);
   const frames: number[] = [];
   for (const beat of analysis.beats) {
-    if (beat < clip.sourceStart || beat >= clip.sourceStart + clip.duration) continue;
-    const time = clip.start + (beat - clip.sourceStart);
+    if (beat < clip.sourceStart || beat >= sourceEndOf(clip)) continue;
+    const time = timelineTimeAtSource(clip, beat);
     if (time < start || time >= end) continue;
     const frame = Math.round(time * timeline.fps);
     if (!Number.isSafeInteger(frame)) throw new Error('The audio timing is too large to represent as timeline frames.');

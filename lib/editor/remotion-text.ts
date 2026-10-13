@@ -9,6 +9,7 @@ export type RemotionTextProps = {
   preset: RemotionTextPreset; text: string; frame: number; fps: number; durationInFrames: number;
   color: string; fontSize: number; highlightColor: string;
 };
+export type RemotionTextSource = { id: string; start: number; offset: number; props: Omit<RemotionTextProps, 'frame'> };
 type TextTemplateClip = {
   kind: string; start: number; duration: number; text?: string; color?: string; fontSize?: number; textTemplate?: RemotionTextTemplate;
 };
@@ -41,4 +42,13 @@ export function remotionTextProps(clip: TextTemplateClip, time: number, fps: num
     color: clip.color ?? '#F4F4F0', fontSize: (clip.fontSize ?? (clip.kind === 'caption' ? 52 : 92)) * resolution / 1080,
     highlightColor: template.highlightColor ?? DEFAULT_TEXT_HIGHLIGHT,
   };
+}
+
+export function remotionTextSources(clips: TextTemplateClip[], fps: number, resolution = 1080): RemotionTextSource[] {
+  return clips.flatMap((clip, index) => {
+    const input = remotionTextProps(clip, clip.start, fps, resolution);
+    if (!input) return [];
+    const { frame: _frame, ...props } = input;
+    return [{ id: `clip-${index}`, start: clip.start, offset: clip.textTemplate?.offset ?? 0, props }];
+  });
 }

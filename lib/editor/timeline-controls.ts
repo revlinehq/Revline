@@ -5,6 +5,7 @@ import { textTemplateTimingPatch } from './remotion-text';
 import { layerGroup,trackOf,deriveTrackCounts,normalizeTimeline,maxTrackCount,type Timeline,type LayerGroup,type MediaAsset,type Clip } from './types';
 import { frameSeekTime, linkedClipIds } from './operations';
 import { TimelineGestureRejection } from './timeline-edit-errors';
+import { playbackRateOf } from './playback-rate';
 export function timelineTimeAtPointer(x:number,geometry:{left:number;scrollLeft:number;origin:number;px:number;end:number;fps:number}){
   const raw=Math.max(0,Math.min(geometry.end,(x-geometry.left+geometry.scrollLeft-geometry.origin)/geometry.px));
   return frameSeekTime(raw,geometry.fps,geometry.end);
@@ -192,11 +193,11 @@ export function resizeSelectedClips(timeline:Timeline,assets:MediaAsset[],ids:st
     const right=Math.min(Infinity,...neighbors.filter(other=>other.start>=end-1e-6).map(other=>other.start));
     const asset=sources.get(clip.assetId??'');const timedSource=clip.kind==='video'||clip.kind==='audio';
     if(side==='left'){
-      minimum=Math.max(minimum,left-clip.start,timedSource?-clip.sourceStart:-Infinity);
+      minimum=Math.max(minimum,left-clip.start,timedSource?-clip.sourceStart/playbackRateOf(clip):-Infinity);
       maximum=Math.min(maximum,clip.duration-frame);
     }else{
       minimum=Math.max(minimum,frame-clip.duration);
-      maximum=Math.min(maximum,right-end,timedSource&&asset?.duration!==undefined?asset.duration-clip.sourceStart-clip.duration:Infinity);
+      maximum=Math.min(maximum,right-end,timedSource&&asset?.duration!==undefined?(asset.duration-clip.sourceStart)/playbackRateOf(clip)-clip.duration:Infinity);
     }
   }
   // Imported timings/source limits can fall between project frames. Once the
@@ -215,6 +216,6 @@ export function resizeSelectedClips(timeline:Timeline,assets:MediaAsset[],ids:st
     const tolerance=Number.EPSILON*Math.max(1,clip.duration,Math.abs(dt))*8;
     const duration=Math.abs(rawDuration-frame)<=tolerance?frame:rawDuration;
     if(clip.kind==='effect')return {...clip,...resizeEffectMotion(clip,duration),start:side==='left'?clip.start+dt:clip.start,duration};
-    return side==='right'?{...clip,...textTemplateTimingPatch(clip),duration}:{...clip,...offsetClipMotion(clip,dt),start:clip.start+dt,duration,sourceStart:clip.kind==='video'||clip.kind==='audio'?clip.sourceStart+dt:clip.sourceStart};
+    return side==='right'?{...clip,...textTemplateTimingPatch(clip),duration}:{...clip,...offsetClipMotion(clip,dt),start:clip.start+dt,duration,sourceStart:clip.kind==='video'||clip.kind==='audio'?clip.sourceStart+dt*playbackRateOf(clip):clip.sourceStart};
   })};
 }

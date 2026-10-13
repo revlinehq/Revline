@@ -29,3 +29,10 @@ test('never requests a frame beyond the available source duration', () => {
 test('invisible clips do not request decoding', () => {
   expect(filmstripFrames({ ...input, visibleStart: 0, visibleEnd: 0 })).toEqual([]);
 });
+test('samples the complete retained source range at changed playback speeds', () => {
+  const fast = filmstripFrames({ ...input, sourceStart: 2, playbackRate: 2 });
+  const normal = filmstripFrames({ ...input, sourceStart: 2 });
+  expect(fast[1].time - 2).toBeCloseTo((normal[1].time - 2) * 2, 1);
+  const slow = filmstripFrames({ ...input, sourceStart: 2, playbackRate: .5 });
+  expect(slow[1].time - 2).toBeCloseTo((normal[1].time - 2) * .5, 1);
+});
