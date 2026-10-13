@@ -26,7 +26,7 @@ describe('trusted composition generation', () => {
     const clip = { id: 'video', kind: 'video' as const, assetId: 'asset', start: 0, duration: 2, sourceStart: 0 };
     expect(() => generateComposition({ ...timeline, clips: [clip] }, [])).toThrow('unavailable');
     expect(() => generateComposition({ ...timeline, clips: [clip] }, [{ _id: 'asset', kind: 'video', fileName: 'clip', url: 'javascript:alert(1)' }])).toThrow('URLs');
-    expect(() => generateComposition({ ...timeline, clips: [{ ...timeline.clips[0], duration: 301 }] }, [])).toThrow('five minutes');
+    expect(() => generateComposition({ ...timeline, clips: [{ ...timeline.clips[0], duration: Infinity }] }, [])).toThrow('finite');
   });
   test('converts source focus coordinates into each frame crop', () => {
     const middle=calculateVisualRect(1920,1080,1080,1920,undefined,{x:.5,y:.9});

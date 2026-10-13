@@ -1,3 +1,4 @@
+import { offsetClipMotion } from './clip-effects';
 import { TimelineGestureRejection } from './timeline-edit-errors';
 import { Clip, Timeline, timelineDuration, layerGroup, trackOf, deriveTrackCounts, normalizeTimeline, maxTrackCount } from './types';
 export function snapTime(time: number, fps: number) { return Math.round(Math.max(0, time) * fps) / fps; }
@@ -37,7 +38,7 @@ export function splitClip(timeline: Timeline, clipId: string, time: number, newI
   const pairId = `${newId}-audio`;
   return { ...timeline, clips: timeline.clips.flatMap(c => c.id !== clipId && c.id !== pair?.id ? [c] : [
     { ...c, duration: offset },
-    { ...c, id: c.id === clipId ? newId : pairId, linkedClipId: pair ? c.id === clipId ? pairId : newId : undefined, start: c.start + offset, sourceStart: c.sourceStart + offset, duration: tail },
+    { ...c, ...offsetClipMotion(c, offset), id: c.id === clipId ? newId : pairId, linkedClipId: pair ? c.id === clipId ? pairId : newId : undefined, start: c.start + offset, sourceStart: c.sourceStart + offset, duration: tail },
   ]) };
 }
 export function patchClip(timeline: Timeline, id: string, patch: Partial<Clip>): Timeline {
@@ -70,8 +71,8 @@ export function addMediaClip(timeline: Timeline, asset: { _id: string; kind: Cli
   const group = layerGroup(asset.kind);
   const trackEnd = Math.max(0, ...timeline.clips.filter(c => layerGroup(c.kind) === group && trackOf(c) === track).map(c => c.start + c.duration));
   const start = at ?? trackEnd;
-  if (!Number.isFinite(start) || start < 0 || start > 300 - 1 / timeline.fps) throw new Error('This edit is at its five-minute limit. Trim a clip or drop the source earlier on the timeline.');
-  const duration = Math.min(asset.kind === 'image' ? 5 : asset.duration ?? 5, 300 - start);
+  if (!Number.isFinite(start) || start < 0) throw new Error('Choose a valid timeline position.');
+  const duration = asset.kind === 'image' ? 5 : asset.duration ?? 5;
   if (!Number.isFinite(duration) || duration < 1 / timeline.fps) throw new Error('This source is shorter than one frame. Choose another source.');
   const next = placeOnFreeLayer(timeline, { id, kind: asset.kind, assetId: asset._id, track, start, duration, sourceStart: 0, volume: 1 });
   return separateVideoClips(next, asset);

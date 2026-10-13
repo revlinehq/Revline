@@ -7,7 +7,8 @@ import { listLimit, requireOwner, requireProject } from "./lib/auth";
 import { currentTimeline, validateTimeline } from "./lib/timeline";
 import { assetWithUrl, renderDocument, timelineValidator } from "./schema";
 import { consumeUpload, issueUpload } from "./uploads";
-import { normalizeTimeline } from '../lib/editor/types';
+import { MAX_EXPORT_SECONDS } from '../lib/editor/limits';
+import { normalizeTimeline, timelineDuration } from '../lib/editor/types';
 import { enqueueMediaTask } from './mediaTasks';
 const workerArgs = { jobId: v.id("renderJobs"), workerSecret: v.string() };
 async function requireJob(ctx: MutationCtx, jobId: Id<"renderJobs">, workerSecret: string) {
@@ -21,6 +22,7 @@ export const start = mutation({ args: { projectId: v.id("projects"), resolution:
   const ownerId = await requireOwner(ctx); await requireEditorAccess(ctx, ownerId); const project = await requireProject(ctx, args.projectId, ownerId);
   if (![720, 1080].includes(args.resolution) || ![24, 30, 60].includes(args.fps) || !["draft", "standard", "high"].includes(args.quality)) throw new ConvexError("Invalid export settings");
   const timeline = await validateTimeline(ctx, project, currentTimeline(project)); if (!timeline.clips.length) throw new ConvexError("Add a clip before exporting");
+  if (timelineDuration(timeline) > MAX_EXPORT_SECONDS) throw new ConvexError("Exports currently support up to five minutes. Shorten the final edit before exporting; your full arrangement remains saved.");
   const active = await ctx.db.query("renderJobs").withIndex("by_ownerId_projectId", q => q.eq("ownerId", ownerId).eq("projectId", project._id)).order("desc").take(501);
   if (active.length > 500) throw new ConvexError("Render history is full");
   if (active.some(job => job.status === "queued" || job.status === "rendering")) throw new ConvexError("A render is already in progress");

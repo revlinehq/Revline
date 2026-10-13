@@ -53,19 +53,19 @@ describe('cloud upload reuse', () => {
     expect(await t.run(async ctx => (await ctx.storage.get(storageId)) !== null)).toBe(false);
   });
 
-  test('missing footage aborts project creation and long sources fit the initial timeline', async () => {
+  test('missing footage aborts project creation and long sources remain full length', async () => {
     const t = convexTest(schema, modules);
     const owner = t.withIdentity(identity('owner'));
     const original = await owner.mutation(api.projects.create, { title: 'Original', aspectRatio: 'vertical' });
     const assetId = await t.run(ctx => ctx.db.insert('assets', { ownerId: 'owner', projectId: original, r2Key: 'long', fileName: 'long.mp4', contentType: 'video/mp4', size: 100, kind: 'video', duration: 600, createdAt: 1 }));
     const reused = await owner.mutation(api.projects.create, { title: 'Long cut', aspectRatio: 'vertical', assetIds: [assetId] });
-    expect((await owner.query(api.projects.get, { projectId: reused })).timeline?.clips[0].duration).toBe(300);
+    expect((await owner.query(api.projects.get, { projectId: reused })).timeline?.clips[0].duration).toBe(600);
     const [video, image] = await t.run(async ctx => [
       await ctx.db.insert('assets', { ownerId: 'owner', projectId: original, r2Key: 'shorter', fileName: 'short.mp4', contentType: 'video/mp4', size: 100, kind: 'video', duration: 297, createdAt: 1 }),
       await ctx.db.insert('assets', { ownerId: 'owner', projectId: original, r2Key: 'image', fileName: 'image.png', contentType: 'image/png', size: 100, kind: 'image', createdAt: 1 }),
     ]);
     const mixed = await owner.mutation(api.projects.create, { title: 'Mixed sources', aspectRatio: 'vertical', assetIds: [video, image] });
-    expect((await owner.query(api.projects.get, { projectId: mixed })).timeline?.clips[1]).toMatchObject({ start: 297, duration: 3 });
+    expect((await owner.query(api.projects.get, { projectId: mixed })).timeline?.clips[1]).toMatchObject({ start: 297, duration: 5 });
     await t.run(ctx => ctx.db.delete(assetId));
     await expect(owner.mutation(api.projects.create, { title: 'Missing', aspectRatio: 'vertical', assetIds: [assetId] })).rejects.toThrow('unavailable');
     expect((await owner.query(api.projects.list, {})).map(project => project.title)).not.toContain('Missing');

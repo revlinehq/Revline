@@ -5,6 +5,7 @@ export const aspectRatio = v.union(v.literal("vertical"), v.literal("square"), v
 export const assetKind = v.union(v.literal("video"), v.literal("audio"), v.literal("image"));
 export const waveformValidator = v.object({ peaks: v.string(), samplesPerSecond: v.number() });
 export const focusValidator = v.array(v.object({ time: v.number(), x: v.number(), y: v.number() }));
+export const motionKeyframeValidator = v.object({ time: v.number(), x: v.number(), y: v.number(), scale: v.number(), rotation: v.number(), opacity: v.number(), brightness: v.number() });
 export const clipValidator = v.object({
   id: v.string(), kind: v.union(assetKind, v.literal("caption"), v.literal("graphic")),
   assetId: v.optional(v.string()), focus: v.optional(focusValidator), track: v.optional(v.number()), start: v.number(), duration: v.number(), sourceStart: v.number(),
@@ -14,9 +15,12 @@ export const clipValidator = v.object({
   text: v.optional(v.string()), fontSize: v.optional(v.number()), color: v.optional(v.string()),
   background: v.optional(v.string()), x: v.optional(v.number()), y: v.optional(v.number()), volume: v.optional(v.number()),
   linkedClipId: v.optional(v.string()), audioSeparated: v.optional(v.boolean()),
+  blendMode: v.optional(v.union(v.literal("normal"), v.literal("screen"), v.literal("multiply"), v.literal("overlay"), v.literal("plus-lighter"))),
+  motion: v.optional(v.array(motionKeyframeValidator)), motionOffset: v.optional(v.number()),
   animation: v.optional(v.union(v.literal("none"), v.literal("fade"), v.literal("rise"))),
 });
-export const timelineValidator = v.object({ clips: v.array(clipValidator), fps: v.number(), aspectRatio, tracks: v.optional(v.object({ visual: v.number(), overlay: v.number(), audio: v.number() })) });
+export const timelineMarkerValidator = v.object({ id: v.string(), time: v.number(), label: v.optional(v.string()) });
+export const timelineValidator = v.object({ clips: v.array(clipValidator), fps: v.number(), aspectRatio, tracks: v.optional(v.object({ visual: v.number(), overlay: v.number(), audio: v.number() })), markers: v.optional(v.array(timelineMarkerValidator)) });
 export const projectFields = {
   title: v.string(), ownerId: v.string(), aspectRatio, createdAt: v.number(), updatedAt: v.number(),
   timeline: v.optional(timelineValidator), revision: v.optional(v.number()), history: v.optional(v.array(timelineValidator)),

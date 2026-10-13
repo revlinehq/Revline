@@ -20,13 +20,13 @@ it.each([30,60])('keeps the shortest left/right trim at a strictly valid exact f
   }
 });
 
-it('stops a text or image extension at the project boundary instead of producing a rejected edit',()=>{
+it('extends text and image clips beyond the former five-minute wall',()=>{
   const input:Timeline={fps:30,aspectRatio:'vertical',clips:[
     {id:'last-image',kind:'image',start:298,duration:1,sourceStart:0},
     {id:'last-caption',kind:'caption',start:297,duration:2,sourceStart:0},
   ]};
   const next=resizeSelectedClips(input,[],input.clips.map(clip=>clip.id),'right',20);
-  expect(next.clips.map(clip=>clip.start+clip.duration)).toEqual([300,300]);
+  expect(next.clips.map(clip=>clip.start+clip.duration)).toEqual([319,319]);
 });
 
 it('commits the clamped left trim when the pointer projects past time zero',()=>{

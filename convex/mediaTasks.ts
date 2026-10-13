@@ -199,8 +199,8 @@ export const complete = mutation({ args: { ...mediaTaskCredentials, result: task
     if (!output || output.ownerId !== task.ownerId || output.projectId !== task.projectId || output.kind !== 'video' || !output.duration) throw new ConvexError('The imported video has not been stored yet.');
     const project = await requireProject(ctx, task.projectId, task.ownerId);
     const timeline = currentTimeline(project);
-    const at = timelineDuration(timeline), duration = Math.min(output.duration, 300 - at);
-    if (duration < 1 / timeline.fps) throw new ConvexError('Your timeline is full. The imported video is saved in Sources.');
+    const at = timelineDuration(timeline), duration = output.duration;
+    if (duration < 1 / timeline.fps) throw new ConvexError('The imported video is shorter than one timeline frame. It remains saved in Sources.');
     const next = addMediaClip(timeline, { ...output, duration }, `import-${task._id}`, at);
     await commitTimeline(ctx, project, next, project.revision ?? 0);
     await enqueueMediaTask(ctx, { ownerId: task.ownerId, projectId: task.projectId, assetId: output._id, kind: 'extract' });

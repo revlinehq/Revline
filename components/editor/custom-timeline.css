@@ -86,3 +86,5 @@ html[data-workspace-theme=dark] .editor-app:not(.landing-product-demo) .custom-t
 .custom-timeline .audio-volume-line:hover output,.custom-timeline .audio-volume-line:focus-visible output,.custom-timeline .audio-clip-volume[data-adjusting] output{opacity:1}
 .custom-timeline.tracks-compact .audio-clip-volume{inset:19px 0 5px}
 @media(max-width:600px){.custom-timeline .track-label[data-group=audio] .layer-options{width:14px}}
+/* The timeline is a keyboard shortcut scope, not a focus-ring control. */
+.custom-timeline:focus{outline:none}

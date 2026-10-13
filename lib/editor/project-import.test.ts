@@ -81,10 +81,10 @@ describe('automatic project import', () => {
     expect(h.dependencies.upload).not.toHaveBeenCalled();
   });
 
-  test('keeps full source duration while fitting the initial clip into the composition limit', async () => {
+  test('keeps the full source and initial clip beyond five minutes', async () => {
     const h = harness(900);
     await importProjectSources(createProjectImportSession(), { title: 'Long footage', files: [source()], assetIds: [] }, h.dependencies, () => {});
-    expect(h.timeline().clips[0].duration).toBe(300);
+    expect(h.timeline().clips[0].duration).toBe(900);
     expect((await h.dependencies.asset(projectId, assetId)).duration).toBe(900);
     expect(h.dependencies.acknowledge).toHaveBeenCalledTimes(1);
   });

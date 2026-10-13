@@ -1,0 +1,90 @@
+/// <reference types="vite/client" />
+import { convexTest } from 'convex-test';
+import workflowTest from '@convex-dev/workflow/test';
+import { afterEach, beforeEach, expect, test, vi } from 'vitest';
+import schema from './schema';
+import { api } from './_generated/api';
+import { BLEND_MODES, MOTION_PRESETS, motionPreset } from '../lib/editor/clip-effects';
+import { addMediaClip, patchClip } from '../lib/editor/operations';
+import { EMPTY_TIMELINE } from '../lib/editor/types';
+
+const modules = import.meta.glob('./**/*.ts');
+beforeEach(() => {
+  vi.useFakeTimers();
+  vi.stubEnv('BILLING_ENABLED', 'false');
+  vi.stubEnv('RENDER_WORKER_SECRET', 'effects-test-worker');
+});
+afterEach(() => { vi.useRealTimers(); vi.unstubAllEnvs(); });
+
+async function fixture() {
+  const t = convexTest(schema, modules);
+  workflowTest.register(t);
+  const owner = t.withIdentity({ subject: 'owner' });
+  const projectId = await owner.mutation(api.projects.create, { title: 'Effects regression', aspectRatio: 'vertical' });
+  const asset = await t.run(async ctx => {
+    const fields = { ownerId: 'owner', projectId, size: 1, duration: 200, createdAt: Date.now() };
+    const audioAssetId = await ctx.db.insert('assets', { ...fields, kind: 'audio', fileName: 'source.m4a', contentType: 'audio/mp4' });
+    const _id = await ctx.db.insert('assets', { ...fields, kind: 'video', fileName: 'source.mp4', contentType: 'video/mp4', audioAssetId, audioExtracted: true });
+    return { _id, kind: 'video' as const, duration: 200, audioAssetId };
+  });
+  return { t, owner, projectId, asset, drain: () => t.finishAllScheduledFunctions(vi.runAllTimers) };
+}
+
+test.each(MOTION_PRESETS)('saves and reloads %s with every blend mode after five minutes, keeping linked audio synchronized', async preset => {
+  const f = await fixture();
+  const base = patchClip(addMediaClip(EMPTY_TIMELINE, f.asset, 'video', 600), 'video', { sourceStart: 33.733333333333334, duration: 158.89999999999998 });
+  let revision = 0;
+  for (const blendMode of BLEND_MODES) {
+    const timeline = patchClip(base, 'video', { ...motionPreset(base.clips[0], preset), blendMode });
+    await f.owner.mutation(api.projects.saveTimeline, { projectId: f.projectId, timeline, expectedRevision: revision++ });
+    const saved = (await f.owner.query(api.projects.get, { projectId: f.projectId })).timeline!;
+    expect(saved.clips.find(clip => clip.id === 'video')).toMatchObject(timeline.clips[0]);
+    expect(saved.clips.find(clip => clip.id === 'video-audio')).toMatchObject({ start: 600, sourceStart: 33.733333333333334, duration: 158.89999999999998, linkedClipId: 'video' });
+    expect(saved.clips.find(clip => clip.id === 'video-audio')).not.toHaveProperty('motion');
+  }
+});
+
+test('effect saves still reject another owner and invalid motion values', async () => {
+  const f = await fixture();
+  const base = addMediaClip(EMPTY_TIMELINE, f.asset, 'video', 600);
+  const timeline = patchClip(base, 'video', { ...motionPreset(base.clips[0], 'punch'), blendMode: 'screen' });
+  await expect(f.t.withIdentity({ subject: 'stranger' }).mutation(api.projects.saveTimeline, { projectId: f.projectId, timeline, expectedRevision: 0 })).rejects.toThrow('Project not found');
+  timeline.clips[0].motion![1].scale = 100;
+  await expect(f.owner.mutation(api.projects.saveTimeline, { projectId: f.projectId, timeline, expectedRevision: 0 })).rejects.toThrow('Motion scale is out of range');
+});
+
+test('a stored video import appends after five minutes once, without discarding the current effects', async () => {
+  const f = await fixture();
+  const { taskId } = await f.owner.mutation(api.mediaTasks.importVideo, { projectId: f.projectId, url: 'https://cdn.example.com/video.mp4' });
+  await f.drain();
+  const work = (await f.t.mutation(api.mediaTasks.claim, { workerSecret: 'effects-test-worker' }))!;
+  await f.t.run(ctx => ctx.db.patch(taskId, { outputAssetId: f.asset._id }));
+  const base = patchClip(addMediaClip(EMPTY_TIMELINE, f.asset, 'existing', 600), 'existing', { duration: 12 });
+  const timeline = patchClip(base, 'existing', { ...motionPreset(base.clips[0], 'fade'), blendMode: 'screen' });
+  await f.owner.mutation(api.projects.saveTimeline, { projectId: f.projectId, timeline, expectedRevision: 0 });
+  const completion = { taskId, leaseToken: work.leaseToken, result: {} };
+  await f.t.mutation(api.mediaTasks.complete, completion);
+  await f.t.mutation(api.mediaTasks.complete, completion);
+  await f.drain();
+  const saved = (await f.owner.query(api.projects.get, { projectId: f.projectId })).timeline!;
+  expect(saved.clips.find(clip => clip.id === 'existing')).toMatchObject(timeline.clips[0]);
+  expect(saved.clips.filter(clip => clip.id === `import-${taskId}`)).toHaveLength(1);
+  expect(saved.clips.find(clip => clip.id === `import-${taskId}`)).toMatchObject({ start: 612, duration: 200 });
+  expect(saved.clips.find(clip => clip.id === `import-${taskId}-audio`)).toMatchObject({ start: 612, duration: 200 });
+  expect(await f.owner.query(api.mediaTasks.get, { taskId })).toMatchObject({ status: 'completed', progress: 100 });
+});
+
+test('a subframe import reports its source problem instead of claiming the timeline is full', async () => {
+  const f = await fixture();
+  const { taskId } = await f.owner.mutation(api.mediaTasks.importVideo, { projectId: f.projectId, url: 'https://cdn.example.com/short.mp4' });
+  await f.drain();
+  const work = (await f.t.mutation(api.mediaTasks.claim, { workerSecret: 'effects-test-worker' }))!;
+  await f.t.run(async ctx => {
+    await ctx.db.patch(f.asset._id, { duration: .01 });
+    await ctx.db.patch(taskId, { outputAssetId: f.asset._id });
+  });
+  await expect(f.t.mutation(api.mediaTasks.complete, { taskId, leaseToken: work.leaseToken, result: {} })).rejects.toThrow('shorter than one timeline frame');
+  expect(await f.t.run(ctx => ctx.db.get(f.asset._id))).not.toBeNull();
+  await f.t.mutation(api.mediaTasks.fail, { taskId, leaseToken: work.leaseToken, error: 'Source is shorter than one frame', retryable: false });
+  await f.drain();
+});

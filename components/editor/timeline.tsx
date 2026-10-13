@@ -63,7 +63,7 @@ export function TimelinePanel(p:Props){
   useEffect(()=>()=>gestureCleanup.current?.(),[]);
   useEffect(()=>{gestureCleanup.current?.();},[timeline]);
   const area=useRef<HTMLDivElement>(null);const scrubRef=useRef(false);const pointerX=useRef(0);const pointerY=useRef(0);const zoomAnchor=useRef<number|null>(null);
-  const minimumZoom=minimumTimelineZoom(viewportWidth);
+  const minimumZoom=minimumTimelineZoom(viewportWidth,timelineDuration(timeline));
   const px=TIMELINE_BASE_PX*zoom;const end=timelineDuration(timeline);const duration=Math.max(15,end+1);const width=Math.max(720,viewportWidth,duration*px);
   const layout=useMemo(()=>timelineLayout(timeline,dense),[timeline,dense]);const tracks=layout.tracks;const assetMap=useMemo(()=>new Map(assets.map(a=>[a._id,a])),[assets]);
   useLayoutEffect(()=>{
@@ -127,10 +127,14 @@ export function TimelinePanel(p:Props){
     const counts=deriveTrackCounts(timeline);const limit=maxTrackCount(group);if(counts[group]>=limit){report(new Error(`This project already has ${limit} layers of that type.`));return;}
     onChange({...timeline,tracks:{...counts,[group]:counts[group]+1}});
   }
+  function focusTimeline(target: Element) {
+    target.closest<HTMLElement>('.custom-timeline')?.focus({ preventScroll: true });
+  }
   function paint(t:number){paintPlayhead(head.current,origin+t*px,scroll.current,cap.current);}
   function startScrub(e:React.PointerEvent<HTMLElement>){
     if(e.button!==0)return;e.preventDefault();e.stopPropagation();
     gestureCleanup.current?.();
+    focusTimeline(e.currentTarget);
     const target=e.currentTarget;target.setPointerCapture(e.pointerId);pointerX.current=e.clientX;
     const originalTime=frameSeekTime(p.readPlaybackTime?.()??time,timeline.fps,end);
     scrubRef.current=true;setScrubbing(true);let frame=0;let last=-1;
@@ -181,7 +185,7 @@ export function TimelinePanel(p:Props){
     window.addEventListener('pointermove',move);window.addEventListener('pointerup',finish);window.addEventListener('pointercancel',cancel);
   }
   function startDrag(e:React.PointerEvent,clip:Clip,mode:'move'|'left'|'right'){
-    if(e.button!==0)return;e.preventDefault();e.stopPropagation();gestureCleanup.current?.();
+    if(e.button!==0)return;e.preventDefault();e.stopPropagation();gestureCleanup.current?.();focusTimeline(e.currentTarget);
     const current=store.getState().selectedIds;
     if(mode==='move'&&(e.shiftKey||e.ctrlKey||e.metaKey)){const ids=current.includes(clip.id)?current.filter(id=>id!==clip.id):[...current,clip.id];store.setState({selectedIds:ids,selectedId:ids.at(-1)??null});return;}
     const members=current.includes(clip.id)?current:[clip.id];
@@ -197,7 +201,7 @@ export function TimelinePanel(p:Props){
       const rect=node?.getBoundingClientRect();return {track:row.number,group:row.group,top:rect?.top??0,bottom:rect?.bottom??0};
     });
     const trackMap=new Map(tracks.map(row=>[`${row.group}-${row.number}`,row]));
-    const minimumTime=-Math.min(...selectedClips.map(c=>c.start)),maximumTime=300-Math.max(...selectedClips.map(c=>c.start+c.duration));
+    const minimumTime=-Math.min(...selectedClips.map(c=>c.start)),maximumTime=Infinity;
     let placedClips=new Map(timeline.clips.map(c=>[c.id,c])),targetTrackMap=trackMap,targetTrackKey='';
     const sourceRow=rows.find(row=>row.group===group&&row.track===trackOf(clip))!;
     const grabOffsetY=startY-sourceRow.top-3;
@@ -325,7 +329,7 @@ export function TimelinePanel(p:Props){
 
   function selectBox(e:React.PointerEvent<HTMLDivElement>){
     if(e.button!==0||(e.target as HTMLElement).closest('.timeline-clip,.playhead,.time-ruler'))return;
-    e.preventDefault();gestureCleanup.current?.();const el=area.current;if(!el)return;
+    e.preventDefault();gestureCleanup.current?.();focusTimeline(e.currentTarget);const el=area.current;if(!el)return;
     const rect=el.getBoundingClientRect();const start={x:e.clientX-rect.left,y:e.clientY-rect.top};
     const initial=e.shiftKey||e.ctrlKey||e.metaKey?store.getState().selectedIds:[];
     const previousSelection=store.getState().selectedIds;
@@ -444,10 +448,10 @@ export function TimelinePanel(p:Props){
   const contextTime=context?.time??time;
   const runContext=(action:()=>void)=>{try{action();}catch(error){report(error);}};
 
-  return <ContextMenu onOpenChange={open=>{if(!open)setContext(null);}}><ContextMenuTrigger asChild><section onContextMenu={openContext} className={`timeline-panel custom-timeline ${p.playbackControls?'timeline-with-playback':''} ${p.collapsed?'timeline-collapsed':''} ${dense?'tracks-compact':''}`} aria-label="Video timeline">
+  return <ContextMenu onOpenChange={open=>{if(!open)setContext(null);}}><ContextMenuTrigger asChild><section tabIndex={-1} onContextMenu={openContext} className={`timeline-panel custom-timeline ${p.playbackControls?'timeline-with-playback':''} ${p.collapsed?'timeline-collapsed':''} ${dense?'tracks-compact':''}`} aria-label="Video timeline">
     <TimelinePlayheadClock playing={p.playing} readTime={p.readPlaybackTime} px={px} duration={end} origin={origin} viewport={scroll} head={head} cap={cap} scrubbing={scrubRef}/>
     <div className="timeline-toolbar"><div className="timeline-edit-actions">{!p.playbackControls&&<EditorPlaybackTime className="timeline-playback-time" time={time} duration={end} fps={timeline.fps} playing={p.playing} readTime={p.readPlaybackTime}/>}
-      <button aria-label="Split selected clip" title="Split" onClick={p.onSplit} disabled={!selected}><Scissors size={14}/><span>Split</span></button>
+      <button aria-label="Split selected clip" title="Split" onClick={p.onSplit} disabled={!timeline.clips.length}><Scissors size={14}/><span>Split</span></button>
       <button aria-label="Delete selected clips" title="Delete" onClick={p.onDelete} disabled={!selected}><Trash2 size={14}/><span>Delete</span></button>
       <button aria-label="Duplicate selected clips" title="Duplicate" onClick={p.onDuplicate} disabled={!selected}><Copy size={14}/><span>Duplicate</span></button>
       <button onClick={()=>p.onAddText('caption')} aria-label="Add caption" title="Add caption"><Type size={14}/><span>Caption</span></button>

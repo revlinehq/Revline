@@ -53,7 +53,7 @@ export const create = mutation({ args: { title: v.string(), aspectRatio, assetId
     const assetId = copies.get(source._id)!;
     const group = layerGroup(source.kind);
     const end = timelineDuration({ ...timeline, clips: timeline.clips.filter(clip => layerGroup(clip.kind) === group) });
-    const duration = Math.min(source.kind === 'image' ? 5 : source.duration ?? 5, 300 - end);
+    const duration = source.kind === 'image' ? 5 : source.duration ?? 5;
     if (duration >= 1 / timeline.fps) {
       const clipId = crypto.randomUUID();
       timeline = patchClip(addMediaClip(timeline, { _id: assetId, kind: source.kind, duration, ...(source.audioAssetId ? { audioAssetId: copies.get(source.audioAssetId) } : {}) }, clipId), clipId, { duration });

@@ -43,6 +43,23 @@ export function applyTimelineEdit(base: Timeline, next: Timeline, current: Timel
     fps: base.fps === next.fps ? current.fps : next.fps,
     aspectRatio: base.aspectRatio === next.aspectRatio ? current.aspectRatio : next.aspectRatio,
   };
+  if (!equal(base.markers, next.markers)) {
+    const beforeMarkers = new Map((base.markers ?? []).map(marker => [marker.id, marker]));
+    const afterMarkers = new Map((next.markers ?? []).map(marker => [marker.id, marker]));
+    const currentIds = new Set((current.markers ?? []).map(marker => marker.id));
+    merged.markers = (current.markers ?? []).flatMap(marker => {
+      const old = beforeMarkers.get(marker.id), edited = afterMarkers.get(marker.id);
+      if (!old) return [marker];
+      if (!edited) return [];
+      const updated = { ...marker, time: old.time === edited.time ? marker.time : edited.time };
+      if (old.label !== edited.label) {
+        if (edited.label === undefined) delete updated.label;
+        else updated.label = edited.label;
+      }
+      return [updated];
+    });
+    merged.markers.push(...(next.markers ?? []).filter(marker => !beforeMarkers.has(marker.id) && !currentIds.has(marker.id)));
+  }
   const baseCounts = deriveTrackCounts(base), nextCounts = deriveTrackCounts(next), counts = deriveTrackCounts(current);
   for (const group of ['visual', 'audio'] as const) {
     if (nextCounts[group] !== baseCounts[group]) counts[group] = nextCounts[group] > baseCounts[group] ? Math.max(counts[group], nextCounts[group]) : nextCounts[group];

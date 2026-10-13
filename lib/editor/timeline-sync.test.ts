@@ -10,6 +10,12 @@ const patch = (value: Partial<Timeline['clips'][number]>): Timeline => ({ ...bas
 const deferred = <T>() => { let resolve!: (value: T) => void; const promise = new Promise<T>(done => { resolve = done; }); return { promise, resolve }; };
 
 describe('manual edit intent', () => {
+  it('merges marker additions, movement and deletion without reviving remotely deleted markers', () => {
+    const before: Timeline = { ...base, markers: [{ id: 'a', time: 1 }, { id: 'b', time: 2 }] };
+    const local: Timeline = { ...before, markers: [{ id: 'a', time: 3 }, { id: 'local', time: 4 }] };
+    const remote: Timeline = { ...before, markers: [{ id: 'b', time: 2 }, { id: 'remote', time: 5 }] };
+    expect(applyTimelineEdit(before, local, remote).markers).toEqual([{ id: 'remote', time: 5 }, { id: 'local', time: 4 }]);
+  });
   it('preserves live added clips and styling while moving an existing clip', () => {
     const current: Timeline = { ...patch({ fontSize: 48 }), tracks: { visual: 3, overlay: 0, audio: 1 }, clips: [...patch({ fontSize: 48 }).clips, { ...base.clips[0], id: 'ai-title', kind: 'graphic', track: 3 }] };
     const next = applyTimelineEdit(base, patch({ start: 2 }), current);

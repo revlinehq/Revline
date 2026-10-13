@@ -285,7 +285,7 @@ test("worker analysis requires an active exact run and scoped media, then reject
 test("chat selection and playhead cannot reference another timeline or invalid time", async () => {
   const t = makeTest(); const projectId = await project(t); const owner = t.withIdentity(identity("owner"));
   await expect(owner.mutation(api.assistant.send, { projectId, prompt: "Style this", selectedClipId: "foreign-clip" })).rejects.toThrow("Selected clip does not belong");
-  await expect(owner.mutation(api.assistant.send, { projectId, prompt: "Cut here", playhead: 301 })).rejects.toThrow("Playhead must be between");
+  await expect(owner.mutation(api.assistant.send, { projectId, prompt: "Cut here", playhead: -1 })).rejects.toThrow("Playhead must be a finite");
   expect((await owner.query(api.projects.get, { projectId })).threadId).toBeUndefined();
 });
 

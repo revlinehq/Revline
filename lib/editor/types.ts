@@ -1,3 +1,4 @@
+import type { BlendMode, MotionKeyframe } from './clip-effects';
 export type AspectRatio = 'vertical' | 'portrait-feed' | 'square' | 'classic' | 'landscape';
 export type ClipKind = 'video' | 'image' | 'audio' | 'caption' | 'graphic';
 export type LayerGroup = 'visual' | 'overlay' | 'audio';
@@ -23,13 +24,17 @@ export type Clip = {
   volume?: number;
   linkedClipId?: string;
   audioSeparated?: boolean;
+  blendMode?: BlendMode;
+  motion?: MotionKeyframe[];
+  motionOffset?: number;
   animation?: 'none' | 'fade' | 'rise';
   focus?: {time:number;x:number;y:number}[];
   transform?: VisualTransform;
   crop?: SourceCrop;
   fit?: 'cover' | 'contain';
 };
-export type Timeline = { clips: Clip[]; fps: number; aspectRatio: AspectRatio; tracks?: TrackCounts };
+export type TimelineMarker = { id: string; time: number; label?: string };
+export type Timeline = { clips: Clip[]; fps: number; aspectRatio: AspectRatio; tracks?: TrackCounts; markers?: TimelineMarker[] };
 export type AudioWaveform = { peaks: string; samplesPerSecond: number };
 export type MediaAsset = {
   _id: string; fileName: string; kind: 'video' | 'image' | 'audio';

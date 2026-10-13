@@ -1,5 +1,5 @@
 'use client';
-import { isTimelineGestureRejection } from '@/lib/editor/timeline-edit-errors';
+import { splitAtPlayhead } from '@/lib/editor/split-at-playhead';
 
 import { useRef, useState, useEffect, useCallback } from 'react';
 import { useSearchParams } from 'next/navigation';
@@ -26,7 +26,7 @@ import { AssistantPanel, type ChatMessage } from './assistant-panel';
 import { ExportDialog, type ExportSettings, type ExportState } from './export-dialog';
 import { EditorErrorNotice } from './error-notice';
 import { type Timeline, type MediaAsset, type AspectRatio, type Clip, timelineDuration, dimensions } from '@/lib/editor/types';
-import { addMediaClip, addTextClip, splitClip, patchClip, frameSeekTime, linkedClipIds } from '@/lib/editor/operations';
+import { addMediaClip, addTextClip, patchClip, frameSeekTime, linkedClipIds } from '@/lib/editor/operations';
 import { copyTimelineClips, pasteTimelineClips } from '@/lib/editor/clipboard';
 
 const NO_SELECTED_CLIPS:string[]=[];
@@ -108,10 +108,11 @@ export function EditorShell(p: EditorShellProps) {
     seek(direction < 0 ? cuts.filter(t => t < current - 1 / timeline.fps).at(-1) ?? 0 : cuts.find(t => t > current + 1 / timeline.fps) ?? duration);
   };
   const doSplit = useCallback(() => {
-    if (!selected) return;
-    try { onChange(splitClip(timeline, selected, readPlaybackTime(), crypto.randomUUID())); }
-    catch (e) { if (!isTimelineGestureRejection(e)) onError((e as Error).message); }
-  }, [onChange, onError, selected, timeline, readPlaybackTime]);
+    const current = store.getState();
+    const at = current.playing ? readPlaybackTime() : current.playhead;
+    try { onChange(splitAtPlayhead(timeline, current.selectedIds.length ? current.selectedIds : current.selectedId ? [current.selectedId] : [], at)); }
+    catch (error) { onError(error instanceof Error ? error.message : 'Could not split this clip.'); }
+  }, [onChange, onError, timeline, readPlaybackTime, store]);
   const doDelete = useCallback(() => {
     const ids=new Set(linkedClipIds(timeline,selectedIds.length?selectedIds:selected?[selected]:[]));
     if(!ids.size)return;onChange({...timeline,clips:timeline.clips.filter(c=>!ids.has(c.id))});setSelected(null);setCroppingClip(null);setEditingText(null);
@@ -146,7 +147,7 @@ export function EditorShell(p: EditorShellProps) {
       // Space locally, so selecting one never toggles preview playback.
       if (e.code === 'Space' && target.closest('button,a,[role="button"],[role="menuitem"],[role="tab"],[role="checkbox"],[role="switch"]')) return;
       if (e.code === 'Space') { e.preventDefault(); togglePlay(); }
-      else if (e.key.toLowerCase() === 's' && !e.metaKey && !e.ctrlKey) doSplit();
+      else if (e.key.toLowerCase() === 's' && !e.metaKey && !e.ctrlKey && !e.altKey) { e.preventDefault(); if (!e.repeat) doSplit(); }
       else if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); doDelete(); }
       else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'a') { e.preventDefault(); store.setState({selectedIds:timeline.clips.map(c=>c.id),selectedId:selected??timeline.clips[0]?.id??null}); }
       else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'c' && (selectedIds.length || selected)) { e.preventDefault(); doCopy(); }

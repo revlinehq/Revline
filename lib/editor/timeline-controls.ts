@@ -1,3 +1,4 @@
+import { offsetClipMotion } from './clip-effects';
 // Adapted from OpenCut Classic's playhead, zoom, and edge-scroll controllers.
 // Copyright 2025–2026 OpenCut. MIT: third-party/OpenCut-LICENSE.
 import { layerGroup,trackOf,deriveTrackCounts,normalizeTimeline,maxTrackCount,type Timeline,type LayerGroup,type MediaAsset,type Clip } from './types';
@@ -107,7 +108,7 @@ export function shouldCommitClipGesture(mode:'move'|'left'|'right',pointer:{x:nu
 }
 function selectedMoveDelta(timeline: Timeline, members: import('./types').Clip[], requested: number, anchorId?: string, magnet?: TimelineMagnet) {
   const minimum = -Math.min(...members.map(clip => clip.start));
-  const maximum = 300 - Math.max(...members.map(clip => clip.start + clip.duration));
+  const maximum = Infinity;
   const delta = Math.max(minimum, Math.min(maximum, requested));
   if (delta === 0) return 0;
   const anchor = members.find(clip => clip.id === anchorId) ?? members[0];
@@ -194,7 +195,7 @@ export function resizeSelectedClips(timeline:Timeline,assets:MediaAsset[],ids:st
       maximum=Math.min(maximum,clip.duration-frame);
     }else{
       minimum=Math.max(minimum,frame-clip.duration);
-      maximum=Math.min(maximum,300-end,right-end,timedSource&&asset?.duration!==undefined?asset.duration-clip.sourceStart-clip.duration:Infinity);
+      maximum=Math.min(maximum,right-end,timedSource&&asset?.duration!==undefined?asset.duration-clip.sourceStart-clip.duration:Infinity);
     }
   }
   // Imported timings/source limits can fall between project frames. Once the
@@ -212,6 +213,6 @@ export function resizeSelectedClips(timeline:Timeline,assets:MediaAsset[],ids:st
     // Subtracting the edge delta can round a valid one-frame clip below its minimum.
     const tolerance=Number.EPSILON*Math.max(1,clip.duration,Math.abs(dt))*8;
     const duration=Math.abs(rawDuration-frame)<=tolerance?frame:rawDuration;
-    return side==='right'?{...clip,duration}:{...clip,start:clip.start+dt,duration,sourceStart:clip.kind==='video'||clip.kind==='audio'?clip.sourceStart+dt:clip.sourceStart};
+    return side==='right'?{...clip,duration}:{...clip,...offsetClipMotion(clip,dt),start:clip.start+dt,duration,sourceStart:clip.kind==='video'||clip.kind==='audio'?clip.sourceStart+dt:clip.sourceStart};
   })};
 }

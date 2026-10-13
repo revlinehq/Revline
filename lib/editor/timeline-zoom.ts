@@ -2,8 +2,8 @@ export const TIMELINE_BASE_PX = 54;
 export const TIMELINE_MAX_ZOOM = 4;
 export const TIMELINE_OVERVIEW_SECONDS = 4 * 60 * 60;
 
-export function minimumTimelineZoom(viewportWidth: number) {
-  return Math.max(720, viewportWidth) / (TIMELINE_BASE_PX * TIMELINE_OVERVIEW_SECONDS);
+export function minimumTimelineZoom(viewportWidth: number, duration = 0) {
+  return Math.max(720, viewportWidth) / (TIMELINE_BASE_PX * Math.max(TIMELINE_OVERVIEW_SECONDS, duration));
 }
 
 // A logarithmic slider gives detailed cuts and hour-long overviews usable room.

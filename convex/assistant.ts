@@ -24,7 +24,7 @@ export const send = mutation({ args: { projectId: v.id("projects"), prompt: v.st
     if (new Set(args.selectedClipIds).size !== args.selectedClipIds.length) throw new ConvexError("Selected clips must be unique");
     if (args.selectedClipIds.some(id => !clipIds.has(id))) throw new ConvexError("Selected clips must belong to this project");
   }
-  if (args.playhead !== undefined && (!Number.isFinite(args.playhead) || args.playhead < 0 || args.playhead > 300)) throw new ConvexError("Playhead must be between 0 and 300 seconds");
+  if (args.playhead !== undefined && (!Number.isFinite(args.playhead) || args.playhead < 0)) throw new ConvexError("Playhead must be a finite, nonnegative time");
   if (!configured()) throw new ConvexError(providerReason);
   const prompt = args.prompt.trim(); if (!prompt || prompt.length > 8000) throw new ConvexError("Write a prompt between 1 and 8000 characters");
   if (project.aiRunning) throw new ConvexError("Wait for the current AI edit to finish");

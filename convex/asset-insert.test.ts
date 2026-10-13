@@ -9,7 +9,7 @@ const modules = import.meta.glob('./**/*.ts');
 beforeEach(() => vi.stubEnv('BILLING_ENABLED', 'false'));
 afterEach(() => vi.unstubAllEnvs());
 
-test('Assets + appending a YouTube source fits the remaining edit and saves linked audio', async () => {
+test('Assets + appending a YouTube source extends the edit and saves linked audio', async () => {
   const t = convexTest(schema, modules), owner = t.withIdentity({ subject:'owner' });
   const projectId = await owner.mutation(api.projects.create, { title:'Imported video', aspectRatio:'vertical' });
   const asset = await t.run(async ctx => {
@@ -22,9 +22,10 @@ test('Assets + appending a YouTube source fits the remaining edit and saves link
   await owner.mutation(api.projects.saveTimeline, { projectId, timeline:initial, expectedRevision:0 });
   const plus = addMediaClip(initial, asset, 'second');
   await owner.mutation(api.projects.saveTimeline, { projectId, timeline:plus, expectedRevision:1 });
-  expect(plus.clips.find(c=>c.id==='second')).toMatchObject({start:180,duration:120});
-  expect(plus.clips.find(c=>c.id==='second-audio')).toMatchObject({start:180,duration:120});
-  expect(()=>addMediaClip(plus,asset,'full')).toThrow('five-minute');
+  expect(plus.clips.find(c=>c.id==='second')).toMatchObject({start:180,duration:180});
+  expect(plus.clips.find(c=>c.id==='second-audio')).toMatchObject({start:180,duration:180});
+  expect(addMediaClip(plus,asset,'third').clips.find(c=>c.id==='third')?.start).toBe(360);
+  await expect(owner.mutation(api.renders.start,{projectId,resolution:1080,fps:30,quality:'standard'})).rejects.toThrow('Exports currently support');
   const dropped = addMediaClip(initial,asset,'drop',30);
   await owner.mutation(api.projects.saveTimeline,{projectId,timeline:dropped,expectedRevision:2});
 });

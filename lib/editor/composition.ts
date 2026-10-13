@@ -1,3 +1,4 @@
+import { validateClipEffects, visibleMotion, type MotionKeyframe } from './clip-effects';
 import { MAX_CLIP_VOLUME } from './clip-volume';
 import { dimensions, timelineDuration, deriveTrackCounts, normalizeTimeline, trackOf, DEFAULT_CROP, DEFAULT_TRANSFORM, type Clip, type MediaAsset, type Timeline, type SourceCrop } from './types';
 
@@ -80,9 +81,8 @@ function trimmedFocus(clip: Clip) {
 /** One trusted template drives both the player and MP4 renderer. User text stays text. */
 export function generateComposition(timeline: Timeline, assets: MediaAsset[], options: CompositionOptions = {}) {
   timeline = normalizeTimeline(timeline);
-  if (timeline.clips.length > 200) throw new Error('A project can contain at most 200 clips.');
   const duration = timelineDuration(timeline);
-  if (!Number.isFinite(duration) || duration > 300) throw new Error('Reels must be five minutes or shorter.');
+  if (!Number.isFinite(duration)) throw new Error('Timeline duration must be finite.');
   const resolution = options.resolution ?? 1080;
   const { width, height } = dimensions(timeline.aspectRatio, resolution);
   const fps = options.fps ?? timeline.fps;
@@ -93,9 +93,16 @@ export function generateComposition(timeline: Timeline, assets: MediaAsset[], op
   const animation: string[] = [];
   const nodes = timeline.clips.map((clip, index) => {
     validateClip(clip);
+    validateClipEffects(clip);
     const id = `clip-${index}`;
     const start = clip.start;
     const end = start + clip.duration;
+    const motion = visibleMotion(clip);
+    const motionVars = (key: MotionKeyframe) => ({ x: key.x * width, y: key.y * height, scale: key.scale, rotation: key.rotation, opacity: key.opacity, filter: `brightness(${key.brightness})` });
+    if (motion.length) {
+      animation.push(`timeline.set('#${id}-motion',${JSON.stringify(motionVars(motion[0]))},0);`);
+      for (let k = 1; k < motion.length; k++) animation.push(`timeline.fromTo('#${id}-motion',${JSON.stringify(motionVars(motion[k - 1]))},${JSON.stringify({ ...motionVars(motion[k]), duration: motion[k].time - motion[k - 1].time, ease: 'none', immediateRender: false })},${start + motion[k - 1].time});`);
+    }
     const trackIndex = compositionTrackIndex(clip);
     const zIndex = layerZIndex(clip, index);
     // HyperFrames activates data-start/data-duration clip roots. Animations target
@@ -109,9 +116,9 @@ export function generateComposition(timeline: Timeline, assets: MediaAsset[], op
         const tween = Math.min(0.3, clip.duration / 3);
         animation.push(`timeline.fromTo('#${id} .text-content',{opacity:0${clip.animation === 'rise' ? `,y:${32 * scale}` : ''}},{opacity:1,y:0,duration:${tween},ease:'power2.out'},${start});timeline.to('#${id} .text-content',{opacity:0,duration:${tween}},${end - tween});`);
       }
-      const style = `left:${x}%;top:${y}%;font-size:${fontSize}px;color:${color(clip.color, '#F4F4F0')};z-index:${zIndex}`;
+      const style = `left:${x}%;top:${y}%;font-size:${fontSize}px;color:${color(clip.color, '#F4F4F0')};z-index:${zIndex};mix-blend-mode:${clip.blendMode ?? 'normal'}`;
       const background = color(clip.background, 'transparent');
-      return `<div ${timing} class="overlay ${clip.kind}" style="${style}"><span class="text-content" style="background:${background}">${escapeHtml((clip.text ?? '').slice(0, 2000))}</span></div>`;
+      return `<div ${timing} class="overlay ${clip.kind}" style="${style}"><span id="${id}-motion" class="text-motion"><span class="text-content" style="background:${background}">${escapeHtml((clip.text ?? '').slice(0, 2000))}</span></span></div>`;
     }
     const asset = clip.assetId ? assetMap.get(clip.assetId) : undefined;
     const source = clip.assetId ? options.assetUrls?.[clip.assetId] ?? asset?.url : undefined;
@@ -125,7 +132,7 @@ export function generateComposition(timeline: Timeline, assets: MediaAsset[], op
       const focus = trimmedFocus(clip);
       const transform = { ...DEFAULT_TRANSFORM, ...clip.transform };
       if (![transform.x, transform.y, transform.scale, transform.rotation, transform.opacity].every(Number.isFinite) || transform.x < 0 || transform.x > 1 || transform.y < 0 || transform.y > 1 || transform.scale < 0.1 || transform.scale > 5 || transform.rotation < -360 || transform.rotation > 360 || transform.opacity < 0 || transform.opacity > 1) throw new Error('The visual transform is out of range.');
-      frameStyle = `left:${(transform.x - 0.5) * width}px;top:${(transform.y - 0.5) * height}px;transform:rotate(${transform.rotation}deg) scale(${transform.scale});opacity:${transform.opacity};z-index:${zIndex}`;
+      frameStyle = `mix-blend-mode:${clip.blendMode ?? 'normal'};left:${(transform.x - 0.5) * width}px;top:${(transform.y - 0.5) * height}px;transform:rotate(${transform.rotation}deg) scale(${transform.scale});opacity:${transform.opacity};z-index:${zIndex}`;
       const hasDimensions = !!asset.width && !!asset.height;
       if (clip.crop && !hasDimensions) throw new Error('Crop needs the source dimensions. Re-import this media.');
       if (hasDimensions) {
@@ -147,7 +154,7 @@ export function generateComposition(timeline: Timeline, assets: MediaAsset[], op
     }
     const volume = bounded(clip.volume, 1, 0, MAX_CLIP_VOLUME);
     const attrs = `${timing} data-media-start="${clip.sourceStart}" data-volume="${volume}"`;
-    const frame = (media: string) => `<div id="${id}-frame" data-visual-clip="${escapeHtml(clip.id)}" class="visual-frame" style="${frameStyle}"><div class="source-window" style="${windowStyle}">${media}</div></div>`;
+    const frame = (media: string) => `<div id="${id}-frame" data-visual-clip="${escapeHtml(clip.id)}" class="visual-frame" style="${frameStyle}"><div id="${id}-motion" class="motion-frame"><div class="source-window" style="${windowStyle}">${media}</div></div></div>`;
     if (clip.kind === 'image') return frame(`<img ${attrs} src="${src}" class="visual" style="${sourceStyle}" alt="" />`);
     if (clip.kind === 'audio') return `<audio ${attrs} crossorigin="anonymous" src="${src}" preload="auto"></audio>`;
     return frame(`<video ${attrs} crossorigin="anonymous" src="${src}" class="visual" style="${sourceStyle}" playsinline preload="auto"${volume === 0 ? ' muted' : ''}></video>`);
@@ -158,7 +165,7 @@ export function generateComposition(timeline: Timeline, assets: MediaAsset[], op
   const fontUrl = mediaUrl(options.fontUrl ?? defaultFontUrl);
   return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>
 @font-face{font-family:'Space Grotesk';font-style:normal;font-weight:300 700;font-display:block;src:url('${fontUrl}') format('woff2')}
-html,body{margin:0;width:${width}px;height:${height}px;overflow:hidden;background:#0B0C0E;font-family:'Space Grotesk',Arial,Helvetica,sans-serif}*{box-sizing:border-box}#composition{position:relative;width:${width}px;height:${height}px;overflow:hidden;background:#0B0C0E}.visual-frame{position:absolute;width:${width}px;height:${height}px;overflow:hidden;transform-origin:center}.source-window{position:absolute;overflow:hidden}.visual{position:absolute}.overlay{position:absolute;max-width:90%;width:max-content;transform:translate(-50%,-50%);font-weight:700;line-height:1.12;text-align:center;white-space:pre-wrap;overflow-wrap:anywhere}.text-content{display:inline-block;padding:${10 * scale}px ${18 * scale}px;border-radius:${8 * scale}px}.caption{text-shadow:0 2px 12px #0009}audio{position:absolute}
+html,body{margin:0;width:${width}px;height:${height}px;overflow:hidden;background:#0B0C0E;font-family:'Space Grotesk',Arial,Helvetica,sans-serif}*{box-sizing:border-box}#composition{isolation:isolate;position:relative;width:${width}px;height:${height}px;overflow:hidden;background:#0B0C0E}.visual-frame{position:absolute;width:${width}px;height:${height}px;overflow:hidden;transform-origin:center}.motion-frame{width:100%;height:100%;transform-origin:center}.text-motion{display:inline-block}.source-window{position:absolute;overflow:hidden}.visual{position:absolute}.overlay{position:absolute;max-width:90%;width:max-content;transform:translate(-50%,-50%);font-weight:700;line-height:1.12;text-align:center;white-space:pre-wrap;overflow-wrap:anywhere}.text-content{display:inline-block;padding:${10 * scale}px ${18 * scale}px;border-radius:${8 * scale}px}.caption{text-shadow:0 2px 12px #0009}audio{position:absolute}
 </style><script src="${gsapUrl}"></script></head><body><div id="composition" data-composition-id="revline" data-duration="${safeDuration}" data-width="${width}" data-height="${height}" data-fps="${fps}">${nodes}</div><script>
 const timeline=gsap.timeline({paused:true});
 ${animation.join('\n')}

@@ -45,8 +45,8 @@ export async function importProjectSources(
     if (!timeline.clips.some(clip => clip.assetId === assetId)) {
       const group = layerGroup(asset.kind);
       const end = timelineDuration({ ...timeline, clips: timeline.clips.filter(clip => layerGroup(clip.kind) === group) });
-      const duration = Math.min(asset.kind === 'image' ? 5 : asset.duration ?? 5, 300 - end);
-      // Full originals remain in Sources when the current composition is full.
+      const duration = asset.kind === 'image' ? 5 : asset.duration ?? 5;
+      // Ignore sources shorter than a project frame.
       if (duration >= 1 / timeline.fps) {
         const id = crypto.randomUUID();
         const next = patchClip(addMediaClip(timeline, asset, id, end), id, { duration });

@@ -1,3 +1,4 @@
+import { validateClipEffects } from '../../lib/editor/clip-effects';
 import { ConvexError } from "convex/values";
 import { layerGroup, maxTrackCount, normalizeTimeline, trackOf, type Timeline } from "../../lib/editor/types";
 import type { Doc } from "../_generated/dataModel";
@@ -18,6 +19,13 @@ export function validateFocus(focus: { time: number; x: number; y: number }[], d
 export async function validateTimeline(ctx: MutationCtx | QueryCtx, project: Doc<"projects">, timeline: Timeline) {
   if (serializedBytes(timeline) > 150_000) throw new ConvexError("Timeline is too large. Shorten text or reduce subject tracking samples.");
   if (![24, 30, 60].includes(timeline.fps)) throw new ConvexError("Choose 24, 30, or 60 fps");
+  const markerIds = new Set<string>();
+  for (const marker of timeline.markers ?? []) {
+    if (!marker.id || marker.id.length > 100 || markerIds.has(marker.id)) throw new ConvexError('Marker IDs must be unique and nonempty');
+    if (!Number.isFinite(marker.time) || marker.time < 0) throw new ConvexError('Marker time must be finite and nonnegative');
+    if ((marker.label?.length ?? 0) > 120) throw new ConvexError('Marker labels support up to 120 characters');
+    markerIds.add(marker.id);
+  }
   // Validate the input before conversion so inferred counts cannot repair an
   // out-of-range clip or a clip outside its declared legacy group.
   const canonical = timeline.tracks?.overlay === 0;
@@ -33,13 +41,13 @@ export async function validateTimeline(ctx: MutationCtx | QueryCtx, project: Doc
     if (timeline.tracks && track > timeline.tracks[group]) throw new ConvexError("Clip layer exceeds the declared layer count");
   }
   timeline = normalizeTimeline(timeline);
-  if (timeline.clips.length > 200) throw new ConvexError("A project supports up to 200 clips");
   const ids = new Set<string>();
   const clipsById = new Map(timeline.clips.map(clip => [clip.id, clip]));
   for (const clip of timeline.clips) {
     if (!clip.id || clip.id.length > 100 || ids.has(clip.id)) throw new ConvexError("Clip IDs must be unique and nonempty");
     ids.add(clip.id);
-    if (![clip.start, clip.duration, clip.sourceStart].every(Number.isFinite) || clip.start < 0 || clip.sourceStart < 0 || clip.duration < 1 / timeline.fps || clip.start + clip.duration > 300) throw new ConvexError("Clip timing must fit within five minutes and have a positive duration");
+    try { validateClipEffects(clip); } catch (error) { throw new ConvexError((error as Error).message); }
+    if (![clip.start, clip.duration, clip.sourceStart, clip.start + clip.duration].every(Number.isFinite) || clip.start < 0 || clip.sourceStart < 0 || clip.duration < 1 / timeline.fps) throw new ConvexError("Clip timing must be finite, nonnegative, and at least one frame long");
     for (const key of ["x", "y"] as const) if (clip[key] !== undefined && (!Number.isFinite(clip[key]) || clip[key] < 0 || clip[key] > 1)) throw new ConvexError("Position must be between 0 and 1");
     if (clip.volume !== undefined && (!Number.isFinite(clip.volume) || clip.volume < 0 || clip.volume > 2)) throw new ConvexError("Volume must be between 0 and 2");
     if (clip.audioSeparated && (clip.kind !== 'video' || clip.volume !== 0)) throw new ConvexError('Separated video audio must remain muted');
