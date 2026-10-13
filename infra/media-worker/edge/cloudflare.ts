@@ -13,6 +13,12 @@ export class MediaProcessor extends DurableObject<Bindings> {
     super(ctx, env);
     if (ctx.container?.running) void ctx.blockConcurrencyWhile(() => ctx.container!.setInactivityTimeout(TIMEOUT_MS));
   }
+  async wake(): Promise<void> {
+    await this.ctx.storage.setAlarm(Date.now());
+  }
+  alarm(): Promise<void> {
+    return this.tick();
+  }
   tick(): Promise<void> {
     this.pending ??= this.ensureWorker().finally(() => { this.pending = undefined; });
     return this.pending;
@@ -53,11 +59,11 @@ export class MediaProcessor extends DurableObject<Bindings> {
 }
 
 export default {
-  fetch(request: Request, env: Bindings, ctx: ExecutionContext): Response {
+  async fetch(request: Request, env: Bindings): Promise<Response> {
     if (request.method !== 'POST' || new URL(request.url).pathname !== '/wake') return new Response('Not found', { status: 404 });
     const encoder = new TextEncoder(), provided = encoder.encode(request.headers.get('authorization') ?? ''), expected = encoder.encode(`Bearer ${env.RENDER_WORKER_SECRET}`);
     if (!env.RENDER_WORKER_SECRET || provided.length !== expected.length || !crypto.subtle.timingSafeEqual(provided, expected)) return new Response('Unauthorized', { status: 401 });
-    ctx.waitUntil(env.PROCESSOR.getByName('production').tick().catch(() => { console.error(JSON.stringify({ event: 'media-processor-wake-failed' })); }));
+    await env.PROCESSOR.getByName('production').wake();
     return Response.json({ accepted: true }, { status: 202 });
   },
   async scheduled(_controller: ScheduledController, env: Bindings): Promise<void> {
