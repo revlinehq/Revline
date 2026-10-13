@@ -38,13 +38,12 @@ function parseBlocks(text: string): ProseBlock[] {
     }
 
     const markdownHeading = line.match(/^#{1,3}\s+(.+)$/);
-    const boldHeading = line.match(/^\*\*(.+?)\*\*\s*$/);
-    if (markdownHeading || boldHeading) {
+    if (markdownHeading) {
       flushParagraph();
       flushList();
       blocks.push({
         type: "heading",
-        text: (markdownHeading?.[1] ?? boldHeading?.[1] ?? line).trim(),
+        text: markdownHeading[1].trim(),
       });
       continue;
     }

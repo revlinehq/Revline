@@ -13,7 +13,8 @@ import type { Id, Doc } from '@/convex/_generated/dataModel';
 import { EditorShell } from './editor-shell';
 import { EditorAccessGate } from '@/components/workspace/editor-access-gate';
 import { acknowledgeDraftFiles, takeFiles } from '@/components/workspace/project-draft';
-import type { ChatMessage, ChatTool } from './assistant-panel';
+import type { ChatMessage } from './assistant-panel';
+import { chatMessageKey, chatToolFromPart } from './assistant-results';
 import type { ExportSettings } from './export-dialog';
 import { EMPTY_TIMELINE, type Timeline, type MediaAsset } from '@/lib/editor/types';
 import { addMediaClip, separateVideoClips } from '@/lib/editor/operations';
@@ -75,14 +76,7 @@ function ProjectEditor({project}: {project:Doc<'projects'>}) {
   },[media,assets,timeline,ai?.running,upload,audioBusy,convex,projectId,change,saves]);
   const titleChange=async(value:string)=>{await update({projectId,title:value});setTitle(value);};
   const waitForSave=()=>saves.wait();
-  const messages:ChatMessage[]=results.map(m=>({id:m.id,role:m.role,status:m.status,text:m.parts.filter(part=>part.type==='text').map(part=>'text'in part?String(part.text):'').join(''),steps:m.parts.flatMap(part=>{
-    if(!part.type.startsWith('tool-')||!('state'in part))return [];
-    const state:ChatTool['state']=part.state==='output-available'?'done':part.state==='output-error'?'error':'running';
-    const output='output'in part&&typeof part.output==='object'&&part.output?part.output as Record<string,unknown>:null;
-    const changed=Array.isArray(output?.changedClips)?output.changedClips.length:0;
-    const staged = output?.staged === true;
-    return [{name:part.type.replace(/^tool-/,''),state,staged,detail:staged?'Not saved by this step':changed?`${changed} ${changed===1?'clip':'clips'} updated`:undefined}];
-  })}));
+  const messages:ChatMessage[]=results.map(m=>({id:chatMessageKey(m),role:m.role,status:m.status,text:m.parts.filter(part=>part.type==='text').map(part=>'text'in part?String(part.text):'').join('\n\n'),steps:m.parts.flatMap(part=>{const step=chatToolFromPart(part);return step?[step]:[];})}));
   const uploading=useRef(false);
   async function handleUpload(files:File[],requireAll=false){
     if(uploading.current||!files.length)return;uploading.current=true;setError('');

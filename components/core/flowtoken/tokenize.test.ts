@@ -6,10 +6,9 @@ describe("FlowToken received chunks", () => {
     const first = appendFlowTokens({ input: "", tokens: [] }, "The hook");
     const second = appendFlowTokens(first, "The hook works.");
     expect(second.tokens[0]).toBe(first.tokens[0]);
-    expect(second.tokens).toEqual([
-      { text: "The hook", source: 0 },
-      { text: " works.", source: 1 },
-    ]);
+    expect(second.tokens.map(token => token.text).join('')).toBe('The hook works.');
+    expect(second.tokens.slice(0, first.tokens.length)).toEqual(first.tokens);
+    expect(new Set(second.tokens.map(token => token.source)).size).toBe(second.tokens.length);
     expect(appendFlowTokens(second, second.input)).toBe(second);
   });
 
@@ -23,6 +22,29 @@ describe("FlowToken received chunks", () => {
     const first = appendFlowTokens({ input: "", tokens: [] }, "🦔 视频\n  **ho");
     const second = appendFlowTokens(first, "🦔 视频\n  **hook**");
     expect(second.tokens.map((token) => token.text).join("")).toBe(second.input);
-    expect(second.tokens[1].text).toBe("ok**");
+    expect(second.tokens.at(-1)?.text).toBe("ok**");
+  });
+  it('staggered arrival batches never queue more than 180ms of hidden text', () => {
+    const text = 'A burst of many words arrived together from the server but must become visible promptly.';
+    const result = appendFlowTokens({ input: '', tokens: [] }, text);
+    expect(result.tokens.length).toBeGreaterThan(1);
+    expect(Math.max(...result.tokens.map(token => token.delay ?? 0))).toBe(180);
+    expect(result.tokens[1].delay).toBeCloseTo(1000 / 30);
+  });
+  it('keeps the unchanged prefix mounted when persisted text is normalized', () => {
+    const before = appendFlowTokens({ input: '', tokens: [] }, 'Your edit ready');
+    const after = appendFlowTokens(before, 'Your edit is ready.');
+    expect(after.tokens[0]).toBe(before.tokens[0]);
+    expect(after.tokens[1]).toBe(before.tokens[1]);
+    expect(after.tokens.map(token => token.text).join('')).toBe('Your edit is ready.');
+    expect(after.tokens.at(-1)?.source).toBeGreaterThan(before.tokens.at(-1)!.source);
+  });
+  it('does not reuse a rewritten token key when streaming continues', () => {
+    const before = appendFlowTokens({ input: '', tokens: [] }, 'Your edit is nearly ready');
+    const rewritten = appendFlowTokens(before, 'Your edit is ready.');
+    const after = appendFlowTokens(rewritten, 'Your edit is ready. Play it now.');
+    expect(after.tokens.slice(0, rewritten.tokens.length)).toEqual(rewritten.tokens);
+    expect(new Set(after.tokens.map(token => token.source)).size).toBe(after.tokens.length);
+    expect(after.tokens.map(token => token.text).join('')).toBe(after.input);
   });
 });
