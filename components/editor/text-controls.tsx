@@ -9,6 +9,7 @@ import type { VisualCorner, VisualSnapLine } from '@/lib/editor/visual-transform
 import { isPreviewTextOccluded, visualClipAtPoint } from '@/lib/editor/preview-viewport';
 import { RotateCw } from 'lucide-react';
 import { DEFAULT_TRANSFORM } from '@/lib/editor/types';
+import { compositionNode } from '@/lib/editor/composition-node';
 import './visual-controls.css';
 
 type Bounds={id:string;left:number;top:number;width:number;height:number;z:number};
@@ -34,7 +35,7 @@ export function TextControls({timeline,assets,time,revision,selected,activeId,on
     const canvas=composition.getBoundingClientRect(),layout={width:host.clientWidth,height:host.clientHeight};if(!canvas.width||!canvas.height||!layout.width||!layout.height)return;
     const next=latest.current.timeline.clips.flatMap((clip,index)=>{
       if(!['caption','graphic'].includes(clip.kind)||latest.current.time<clip.start||latest.current.time>=clip.start+clip.duration)return [];
-      const node=doc.getElementById(`clip-${index}`);if(!node)return [];
+      const node=compositionNode(doc,clip,index);if(!node)return [];
       const rect=node.getBoundingClientRect();
       const sourceRect=projectPreviewBounds(rect,canvas,dimensions(latest.current.timeline.aspectRatio));
       if(isPreviewTextOccluded(latest.current.timeline,latest.current.assets,latest.current.time,clip.id,sourceRect))return [];
@@ -45,11 +46,11 @@ export function TextControls({timeline,assets,time,revision,selected,activeId,on
   useLayoutEffect(()=>{if(!gesture.current)measure();},[timeline,assets,time,revision,selected]);
   useEffect(()=>{const observer=new ResizeObserver(measure);if(root.current)observer.observe(root.current);const doc=getDocument();void doc?.fonts.ready.then(measure);return()=>observer.disconnect();},[revision]);
   function paint(clip:Clip,placement:TextPlacement){
-    const index=latest.current.timeline.clips.findIndex(c=>c.id===clip.id),node=latest.current.getDocument()?.getElementById(`clip-${index}`);if(!node)return;
+    const index=latest.current.timeline.clips.findIndex(c=>c.id===clip.id),doc=latest.current.getDocument(),node=doc?compositionNode(doc,clip,index):null;if(!node)return;
     node.style.left=`${placement.x*100}%`;node.style.top=`${placement.y*100}%`;node.style.fontSize=`${placement.fontSize}px`;measure();
   }
   function paintRotation(clip:Clip,rotation:number){
-    const index=latest.current.timeline.clips.findIndex(c=>c.id===clip.id),node=latest.current.getDocument()?.getElementById(`clip-${index}`);
+    const index=latest.current.timeline.clips.findIndex(c=>c.id===clip.id),doc=latest.current.getDocument(),node=doc?compositionNode(doc,clip,index):null;
     if(node)node.style.transform=`translate(-50%,-50%) rotate(${rotation}deg)`;
     measure();
   }
