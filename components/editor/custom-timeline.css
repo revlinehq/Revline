@@ -93,7 +93,7 @@ html[data-workspace-theme=dark] .editor-app:not(.landing-product-demo) .custom-t
 .custom-timeline .timeline-beat-marker path{fill:currentColor;stroke:currentColor;stroke-width:1.5;stroke-linejoin:round}
 .custom-timeline .timeline-beat-marker:hover,.custom-timeline .timeline-beat-marker:focus-visible{color:#f4a344;filter:drop-shadow(0 0 2px #e68a2833)}
 .custom-timeline .timeline-beat-marker:focus-visible{outline:1px solid currentColor;border-radius:3px}
-.custom-timeline .timeline-clip.clip-effect>span{gap:5px;font-size:10px;font-weight:500;color:#291708}
+.custom-timeline .timeline-clip.clip-effect>span{gap:5px;font-size:10px;font-weight:500;color:#fff;text-shadow:0 1px 2px #0004}
 .custom-timeline .timeline-clip.clip-effect>span svg{flex-shrink:0}
 .custom-timeline .track-label[data-group=effects] .track-label-name{color:#a95c0f}
 html[data-workspace-theme=dark] .custom-timeline .track-label[data-group=effects] .track-label-name{color:#ff9b36}
