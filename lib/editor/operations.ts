@@ -69,7 +69,11 @@ export function addMediaClip(timeline: Timeline, asset: { _id: string; kind: Cli
   timeline = normalizeTimeline(timeline);
   const group = layerGroup(asset.kind);
   const trackEnd = Math.max(0, ...timeline.clips.filter(c => layerGroup(c.kind) === group && trackOf(c) === track).map(c => c.start + c.duration));
-  const next = placeOnFreeLayer(timeline, { id, kind: asset.kind, assetId: asset._id, track, start: at ?? trackEnd, duration: asset.kind === 'image' ? 5 : asset.duration || 5, sourceStart: 0, volume: 1 });
+  const start = at ?? trackEnd;
+  if (!Number.isFinite(start) || start < 0 || start > 300 - 1 / timeline.fps) throw new Error('This edit is at its five-minute limit. Trim a clip or drop the source earlier on the timeline.');
+  const duration = Math.min(asset.kind === 'image' ? 5 : asset.duration ?? 5, 300 - start);
+  if (!Number.isFinite(duration) || duration < 1 / timeline.fps) throw new Error('This source is shorter than one frame. Choose another source.');
+  const next = placeOnFreeLayer(timeline, { id, kind: asset.kind, assetId: asset._id, track, start, duration, sourceStart: 0, volume: 1 });
   return separateVideoClips(next, asset);
 }
 /** Preserve existing cuts and levels when giving a video's sound its own clip. */

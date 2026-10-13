@@ -159,7 +159,8 @@ export function EditorShell(p: EditorShellProps) {
   }, [doSplit, doDelete, doCopy, doPaste, clipboard.length, selectedIds.length, togglePlay, p.onUndo, p.onRedo, timeline.clips, selected, store, cropping]);
 
   function addAsset(asset: MediaAsset) {
-    const id = crypto.randomUUID(); onChange(addMediaClip(timeline, asset, id)); setSelected(id);
+    try { const id = crypto.randomUUID(); onChange(addMediaClip(timeline, asset, id)); setSelected(id); }
+    catch (error) { onError(error instanceof Error ? error.message : 'Could not add this source.'); }
   }
   function editText(id: string) {
     const item = timeline.clips.find(c => c.id === id);
