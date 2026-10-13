@@ -82,6 +82,17 @@ test('a workflow queues once, accepts a scoped result, and completion is idempot
   expect(await f.owner.query(api.mediaTasks.get, { taskId })).toMatchObject({ status: 'completed', attempt: 1, progress: 100 });
   expect((await f.owner.query(api.assets.get, { projectId: f.projectId, assetId: f.assetId })).analysis?.transcript).toEqual(transcript);
 });
+test('shot completion preserves verified video PTS coverage inside a longer audio/container duration', async () => {
+  const f = await fixture(), taskId = await f.start('shots'); await f.drain();
+  const work = (await f.claim())!;
+  const shots = { fps: 30, sourceTiming: { basis: 'pts' as const, videoStart: 0, videoEnd: 2, frameCount: 60 }, shots: [{ start: 0, end: 1, startFrame: 0, endFrame: 30 }, { start: 1, end: 2, startFrame: 30, endFrame: 60 }] };
+  await expect(f.t.mutation(api.mediaTasks.complete, { taskId, leaseToken: work.leaseToken, result: { analysis: { shots: { ...shots, sourceTiming: { ...shots.sourceTiming, frameCount: 61 } } } } })).rejects.toThrow('Invalid shot boundaries');
+  await f.t.mutation(api.mediaTasks.complete, { taskId, leaseToken: work.leaseToken, result: { analysis: { shots } } }); await f.drain();
+  const saved = await f.owner.query(api.assets.get, { projectId: f.projectId, assetId: f.assetId });
+  expect(saved.duration).toBe(3);
+  expect(saved.analysis?.shots).toEqual(shots);
+  expect(saved.analysisCompletedAt?.shots).toBeTypeOf('number');
+});
 
 test('an expired worker lease retries and rejects the former worker', async () => {
   const f = await fixture(), taskId = await f.start('transcribe'); await f.drain();

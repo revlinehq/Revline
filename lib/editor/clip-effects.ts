@@ -1,5 +1,6 @@
 import type { Clip } from './types';
 import { validateVisualEffects } from './visual-effects';
+import { textTemplateTimingPatch, validateRemotionTextTemplate } from './remotion-text';
 
 export const BLEND_MODES = ['normal', 'screen', 'multiply', 'overlay', 'plus-lighter'] as const;
 export type BlendMode = typeof BLEND_MODES[number];
@@ -23,6 +24,7 @@ const bounds = { x: [-1, 1], y: [-1, 1], scale: [0.1, 5], rotation: [-360, 360],
 
 export function validateClipEffects(clip: Clip) {
   validateVisualEffects(clip);
+  validateRemotionTextTemplate(clip);
   if (clip.effectPreset !== undefined && (clip.kind !== 'effect' || (clip.effectPreset !== 'none' && !EFFECT_PRESETS.includes(clip.effectPreset)))) throw new Error('Effect presets belong to effect clips.');
   if (clip.kind === 'effect') {
     if (clip.assetId !== undefined || clip.linkedClipId !== undefined || clip.audioSeparated !== undefined || clip.volume !== undefined || clip.sourceStart !== 0) throw new Error('Effect clips cannot reference media or audio.');
@@ -65,7 +67,7 @@ export function motionPreset(clip: Clip, preset: MotionPreset | EffectPreset): P
 }
 
 export function offsetClipMotion(clip: Clip, delta: number): Partial<Clip> {
-  return clip.motion?.length ? { motionOffset: (clip.motionOffset ?? 0) + delta } : {};
+  return { ...(clip.motion?.length ? { motionOffset: (clip.motionOffset ?? 0) + delta } : {}), ...textTemplateTimingPatch(clip, delta) };
 }
 
 /** Effect handles stretch the currently visible pulse, including a previously split segment. */

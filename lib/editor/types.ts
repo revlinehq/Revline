@@ -1,5 +1,6 @@
 import type { BlendMode, EffectPreset, MotionKeyframe } from './clip-effects';
 import type { ColorGrade, ZoomBlur, Glitch } from './visual-effects';
+import type { RemotionTextTemplate } from './remotion-text';
 export type AspectRatio = 'vertical' | 'portrait-feed' | 'square' | 'classic' | 'landscape';
 export type ClipKind = 'video' | 'image' | 'audio' | 'caption' | 'graphic' | 'effect';
 export type LayerGroup = 'visual' | 'overlay' | 'audio';
@@ -32,6 +33,7 @@ export type Clip = {
   colorGrade?: ColorGrade;
   zoomBlur?: ZoomBlur;
   glitch?: Glitch;
+  textTemplate?: RemotionTextTemplate;
   animation?: 'none' | 'fade' | 'rise';
   focus?: {time:number;x:number;y:number}[];
   transform?: VisualTransform;
@@ -49,7 +51,7 @@ export type MediaAsset = {
   analysis?: {
     transcript?: {segments:{start:number;end:number;text:string}[];words:{start:number;end:number;text:string}[]};
     understanding?: {summary:string;scenes:{start:number;end:number;description:string;score:number}[]};
-    shots?: {fps:number;shots:{start:number;end:number;startFrame:number;endFrame:number}[]};
+    shots?: {fps:number;sourceTiming?:{basis:'pts';videoStart:number;videoEnd:number;frameCount:number};shots:{start:number;end:number;startFrame:number;endFrame:number}[]};
     beats?: {beats:number[];bpm:number;confidence:number};
     focus?: {time:number;x:number;y:number}[];
   };

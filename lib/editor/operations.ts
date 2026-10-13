@@ -1,5 +1,6 @@
 import { EFFECT_CATALOG, motionPreset, offsetClipMotion, type EffectPreset } from './clip-effects';
 import { TimelineGestureRejection } from './timeline-edit-errors';
+import { textTemplateTimingPatch } from './remotion-text';
 import { Clip, Timeline, timelineDuration, layerGroup, trackOf, deriveTrackCounts, normalizeTimeline, maxTrackCount } from './types';
 export function snapTime(time: number, fps: number) { return Math.round(Math.max(0, time) * fps) / fps; }
 export function linkedClipIds(timeline: Timeline, ids: string[]): string[] {
@@ -37,7 +38,7 @@ export function splitClip(timeline: Timeline, clipId: string, time: number, newI
   const pair = timeline.clips.find(c => c.id === clip.linkedClipId && c.linkedClipId === clip.id);
   const pairId = `${newId}-audio`;
   return { ...timeline, clips: timeline.clips.flatMap(c => c.id !== clipId && c.id !== pair?.id ? [c] : [
-    { ...c, duration: offset },
+    { ...c, ...textTemplateTimingPatch(c), duration: offset },
     { ...c, ...offsetClipMotion(c, offset), id: c.id === clipId ? newId : pairId, linkedClipId: pair ? c.id === clipId ? pairId : newId : undefined, start: c.start + offset, sourceStart: c.kind === 'effect' ? 0 : c.sourceStart + offset, duration: tail },
   ]) };
 }
@@ -49,7 +50,7 @@ export function patchClip(timeline: Timeline, id: string, patch: Partial<Clip>):
   for (const key of ['start', 'duration', 'sourceStart'] as const) if (patch[key] !== undefined) timing[key] = patch[key];
   const volumeTarget = clip.kind === 'video' && clip.linkedClipId ? clip.linkedClipId : id;
   return { ...timeline, clips: timeline.clips.map(c => {
-    let next = c.id === id ? { ...c, ...patch, id: c.id } : c.id === clip.linkedClipId ? { ...c, ...timing } : c;
+    let next = c.id === id ? { ...c, ...(patch.duration !== undefined && !('textTemplate' in patch) ? textTemplateTimingPatch(c) : {}), ...patch, id: c.id } : c.id === clip.linkedClipId ? { ...c, ...timing } : c;
     if (patch.volume !== undefined && c.id === volumeTarget) next = { ...next, volume: patch.volume };
     if (next.kind === 'video' && next.audioSeparated) next = { ...next, volume: 0 };
     return next;
