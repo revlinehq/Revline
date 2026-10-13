@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest';
-import { addTimelineMarker, moveTimelineMarker, removeTimelineMarker } from './timeline-markers';
-import { EMPTY_TIMELINE, timelineDuration } from './types';
+import { addTimelineMarker, moveTimelineMarker, removeTimelineMarker, removeTimelineMarkers } from './timeline-markers';
+import { EMPTY_TIMELINE, timelineDuration, type Timeline } from './types';
 import { createEditorStore } from './store';
 
 test('markers align to frames, avoid duplicate marks, and remain independent of clip duration', () => {
@@ -20,4 +20,39 @@ test('marker edits participate in undo and redo without touching the clips', () 
   expect(store.getState().undo()?.markers?.[0].time).toBe(1);
   expect(store.getState().redo()?.markers?.[0].time).toBe(2);
   expect(store.getState().timeline.clips).toEqual([]);
+});
+
+const withMarkers: Timeline = {
+  ...EMPTY_TIMELINE,
+  clips: [{ id: 'caption', kind: 'caption', track: 1, start: 0, duration: 5, sourceStart: 0, text: 'Keep this' }],
+  markers: [{ id: 'beat-1', time: 1 }, { id: 'manual', time: 2, label: 'My cue' }, { id: 'beat-2', time: 3, label: 'Beat 1' }],
+};
+
+test('marker removal uses IDs even without labels, preserves other cues and never changes clips', () => {
+  const one = removeTimelineMarker(withMarkers, 'beat-1');
+  expect(one.markers).toEqual(withMarkers.markers!.slice(1));
+  expect(one.clips).toBe(withMarkers.clips);
+  const selected = removeTimelineMarkers(withMarkers, ['beat-1', 'beat-1', 'beat-2', 'missing']);
+  expect(selected.markers).toEqual([withMarkers.markers![1]]);
+  expect(selected.clips).toBe(withMarkers.clips);
+  expect(removeTimelineMarker(withMarkers, 'My cue')).toBe(withMarkers);
+  expect(removeTimelineMarkers(withMarkers, [])).toBe(withMarkers);
+});
+
+test('clearing markers removes all cues, and repeat clears are identity-preserving no-ops', () => {
+  const cleared = removeTimelineMarkers(withMarkers);
+  expect(cleared.markers).toEqual([]);
+  expect(cleared.clips).toBe(withMarkers.clips);
+  expect(removeTimelineMarkers(cleared)).toBe(cleared);
+  expect(removeTimelineMarkers(EMPTY_TIMELINE)).toBe(EMPTY_TIMELINE);
+});
+
+test('clearing all markers has one undo and redo restores the cleared state', () => {
+  const store = createEditorStore(withMarkers);
+  const original = store.getState().timeline;
+  store.getState().edit(removeTimelineMarkers(original));
+  expect(store.getState().timeline.markers).toEqual([]);
+  expect(store.getState().undo()).toEqual(original);
+  expect(store.getState().redo()?.markers).toEqual([]);
+  expect(store.getState().timeline.clips).toEqual(original.clips);
 });

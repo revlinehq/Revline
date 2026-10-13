@@ -17,5 +17,13 @@ export function moveTimelineMarker(timeline: Timeline, id: string, time: number)
 }
 
 export function removeTimelineMarker(timeline: Timeline, id: string): Timeline {
-  return { ...timeline, markers: (timeline.markers ?? []).filter(marker => marker.id !== id) };
+  return removeTimelineMarkers(timeline, [id]);
+}
+
+/** Omit IDs to clear all markers. Labels are optional and never identify a marker. */
+export function removeTimelineMarkers(timeline: Timeline, ids?: readonly string[]): Timeline {
+  const selected = ids === undefined ? undefined : new Set(ids);
+  const markers = (timeline.markers ?? []).filter(marker => selected !== undefined && !selected.has(marker.id));
+  if (markers.length === (timeline.markers?.length ?? 0)) return timeline;
+  return { ...timeline, markers };
 }

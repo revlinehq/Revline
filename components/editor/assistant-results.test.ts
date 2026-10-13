@@ -46,3 +46,16 @@ test('each failed tool remains visible and structured error messages are retaine
   const second = chatToolFromPart({ type: 'tool-analyzeMedia', toolCallId: 'second', state: 'output-error', errorText: 'Shot detection failed' })!;
   expect(summarizeTools([first, second]).map(card => card.detail)).toEqual(['Transcription failed', 'Shot detection failed']);
 });
+
+test('marker removal reports unique removed IDs rather than requested counts or labels', () => {
+  const one: ChatTool = { id: 'one', name: 'removeMarker', state: 'done', output: { saved: true, removed: 100, removedMarkerIds: ['unlabelled'] } };
+  const some: ChatTool = { name: 'removeMarkers', state: 'done', output: { saved: true, removedMarkerIds: ['beat-1', 'beat-1', 'beat-2'] } };
+  expect(summarizeTools([one, one, some]).map(card => card.title)).toEqual(['Removed 1 marker', 'Removed 2 markers']);
+  expect(summarizeTools([{ ...some, output: { saved: true } }])[0].title).toBe('Removed markers');
+});
+
+test('marker removal no-ops and unconfirmed or staged deletions are reported honestly', () => {
+  expect(summarizeTools([{ name: 'removeMarkers', state: 'done', output: { unchanged: true, saved: false, removed: 0, removedMarkerIds: [] } }])[0].title).toBe('No markers removed');
+  expect(summarizeTools([{ name: 'removeMarkers', state: 'done', output: { saved: false, removedMarkerIds: ['beat'] } }])[0]).toMatchObject({ title: 'Save not confirmed', state: 'error' });
+  expect(summarizeTools([{ name: 'removeMarker', state: 'done', output: { staged: true, saved: false, removedMarkerIds: ['beat'] } }])[0]).toMatchObject({ title: 'Prepared: Removed 1 marker', detail: 'Awaiting save', staged: true });
+});

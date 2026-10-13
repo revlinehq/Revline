@@ -25,7 +25,7 @@ export function chatToolFromPart(value: unknown): ChatTool | null {
 }
 
 const labels: Record<string, [string, string]> = {
-  markMusicBeats: ['Marking beats', 'Marked beats'], delete: ['Removing clips', 'Removed clips'], addSubtitlesFromTranscript: ['Adding subtitles', 'Added subtitles'],
+  markMusicBeats: ['Marking beats', 'Marked beats'], removeMarker: ['Removing marker', 'Removed marker'], removeMarkers: ['Removing markers', 'Removed markers'], delete: ['Removing clips', 'Removed clips'], addSubtitlesFromTranscript: ['Adding subtitles', 'Added subtitles'],
   split: ['Splitting clips', 'Split clips'], trim: ['Trimming footage', 'Trimmed footage'], move: ['Arranging clips', 'Arranged clips'], addMedia: ['Adding footage', 'Added footage'],
   addCaption: ['Adding captions', 'Added captions'], addGraphic: ['Adding titles', 'Added titles'], editText: ['Updating text', 'Updated text'], styleCaptions: ['Styling captions', 'Styled captions'], styleTextClip: ['Styling text', 'Styled text'],
   transformClip: ['Adjusting framing', 'Adjusted framing'], cropClip: ['Cropping footage', 'Cropped footage'], resetVisual: ['Resetting framing', 'Reset framing'], fitClip: ['Fitting footage', 'Fitted footage'],
@@ -64,6 +64,9 @@ export function summarizeTools(steps: ChatTool[]): ResultCard[] {
     if (step.name === 'markMusicBeats' && outputs.every(output => count(output.added) !== undefined)) {
       const added = outputs.reduce((total, output) => total + count(output.added)!, 0);
       title = added ? `Marked ${noun(added, 'beat')}` : 'No new beat markers';
+    } else if ((step.name === 'removeMarker' || step.name === 'removeMarkers') && outputs.every(output => Array.isArray(output.removedMarkerIds))) {
+      const markerIds = new Set(outputs.flatMap(output => (output.removedMarkerIds as unknown[]).filter(isId)));
+      title = markerIds.size ? `Removed ${noun(markerIds.size, 'marker')}` : 'No markers removed';
     } else if (step.name === 'delete' && outputs.every(output => Array.isArray(output.removedClipIds))) title = removedIds.size ? `Removed ${noun(removedIds.size, 'clip')}` : 'No clips removed';
     else if ((step.name === 'addSubtitlesFromTranscript' || step.name === 'addCaption') && outputs.every(output => Array.isArray(output.changedClips))) {
       const ids = new Set(changed.filter(clip => clip.kind === 'caption').map(clip => clip.id).filter(isId));
@@ -71,7 +74,7 @@ export function summarizeTools(steps: ChatTool[]): ResultCard[] {
     } else if (step.name === 'trim' && changedIds.size) title = `Trimmed ${noun(changedIds.size, 'clip')}`;
     else if (step.name === 'move' && changedIds.size) title = `Arranged ${noun(changedIds.size, 'clip')}`;
     const unchanged = outputs.every(output => output.unchanged === true);
-    if (unchanged && step.name !== 'markMusicBeats') title = 'No changes needed';
+    if (unchanged && !['markMusicBeats', 'removeMarker', 'removeMarkers'].includes(step.name)) title = 'No changes needed';
     const lowConfidence = outputs.some(output => output.status === 'low-confidence');
     const detail = [step.staged ? 'Awaiting save' : undefined, lowConfidence ? 'Beat detection has low confidence' : undefined].filter(Boolean).join(' · ') || undefined;
     return { key, title: step.staged && !unchanged ? `Prepared: ${title}` : title, detail, state: step.state, staged: step.staged };

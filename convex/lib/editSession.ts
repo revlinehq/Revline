@@ -31,8 +31,10 @@ export class EditSession {
     return this.enqueue(async () => {
       const previous = this.timeline;
       const next = normalizeTimeline(edit(previous));
-      if (next === previous) return { applied: false, saved: false, staged: this.staged, unchanged: true, revision: this.revision, changedClips: [], removedClipIds: [], aspectRatio: previous.aspectRatio };
+      if (next === previous) return { applied: false, saved: false, staged: this.staged, unchanged: true, revision: this.revision, changedClips: [], removedClipIds: [], removedMarkerIds: [], aspectRatio: previous.aspectRatio };
       const removedClipIds = previous.clips.filter(clip => !next.clips.some(current => current.id === clip.id)).map(clip => clip.id);
+      const remainingMarkerIds = new Set(next.markers?.map(marker => marker.id));
+      const removedMarkerIds = (previous.markers ?? []).filter(marker => !remainingMarkerIds.has(marker.id)).map(marker => marker.id);
       this.staged ||= removedClipIds.length > 0;
       if (this.staged) await this.storage.validate(next, this.revision);
       else {
@@ -41,7 +43,7 @@ export class EditSession {
       }
       this.timeline = next;
       const changedClips = next.clips.filter(clip => JSON.stringify(clip) !== JSON.stringify(previous.clips.find(current => current.id === clip.id))).map(({ id, kind, track, start, duration, sourceStart, text, transform, crop, fit }) => ({ id, kind, ...(transform ? { transform } : {}), ...(crop ? { crop } : {}), ...(fit ? { fit } : {}), ...(track ? { track } : {}), start, duration, sourceStart, ...(text ? { text: text.slice(0, 120) } : {}) }));
-      return { applied: !this.staged, saved: !this.staged, staged: this.staged, revision: this.revision, changedClips, removedClipIds, aspectRatio: next.aspectRatio };
+      return { applied: !this.staged, saved: !this.staged, staged: this.staged, revision: this.revision, changedClips, removedClipIds, removedMarkerIds, aspectRatio: next.aspectRatio };
     });
   }
 
