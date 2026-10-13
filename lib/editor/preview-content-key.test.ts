@@ -8,6 +8,7 @@ test('analysis, waveforms, upload metadata and unused sources never invalidate t
   const key = previewContentKey(timeline, [asset]);
   expect(previewContentKey(timeline, [{ ...asset, fileName: 'Renamed.mp4', url: 'https://media.example/read?token=fresh', analysis: { transcript: { segments: [{ start: 0, end: 1, text: 'Transcribed' }], words: [] } } }, { ...asset, _id: 'unused', url: '/other.mp4' }])).toBe(key);
   expect(previewContentKey({ ...timeline, tracks: { visual: 5, audio: 2, overlay: 0 }, clips: [{ ...timeline.clips[0], volume: 0.5, track: 2 }] }, [asset])).toBe(key);
+  expect(previewContentKey({ ...timeline, markers: [{ id: 'drop', time: 1, label: 'Beat drop' }] }, [asset])).toBe(key);
 });
 test('cuts, transforms, source dimensions and actual media URLs invalidate rendered content', () => {
   const key = previewContentKey(timeline, [asset]);

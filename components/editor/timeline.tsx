@@ -1,6 +1,6 @@
 'use client';
 import { useState, useRef, useCallback, useLayoutEffect, useEffect, useMemo } from 'react';
-import { Scissors, Copy, ClipboardPaste, Trash2, Magnet, Minus, Plus, Type, Layers, Volume2, VolumeX, ChevronDown, ChevronUp, MoreHorizontal, Rows3, ListMinus, Unlink } from 'lucide-react';
+import { Scissors, Copy, ClipboardPaste, Trash2, Magnet, Minus, Plus, Type, Layers, Volume2, VolumeX, ChevronDown, ChevronUp, MoreHorizontal, Rows3, ListMinus, Unlink, Flag, Pencil } from 'lucide-react';
 import { IconButton } from './primitives';
 import { TimelineRulerTicks } from './timeline-ruler';
 import { EditorPlaybackTime } from './playback-time';
@@ -8,7 +8,8 @@ import { MediaFilmstrip } from './media-filmstrip';
 import { AudioWaveform } from './audio-waveform';
 import { useEditorState, useEditorStore, usePausedPlaybackTime } from './editor-state';
 import { paintPlayhead, useTimelinePlayhead, useEdgeAutoScroll } from './use-timeline-playhead';
-import { deriveTrackCounts, layerGroup, trackOf, clipColor, timelineDuration, formatTime, maxTrackCount, type Timeline, type MediaAsset, type Clip, type LayerGroup } from '@/lib/editor/types';
+import { deriveTrackCounts, layerGroup, trackOf, clipColor, timelineDuration, formatTime, maxTrackCount, type Timeline, type MediaAsset, type Clip, type LayerGroup, type TimelineMarker } from '@/lib/editor/types';
+import { moveTimelineMarker, removeTimelineMarker } from '@/lib/editor/timeline-markers';
 import { snapTime, addMediaClip, addTextClip, splitClip, frameSeekTime, linkedClipIds, unlinkClips, patchClip } from '@/lib/editor/operations';
 import { timelineLayout, TIMELINE_RULER_HEIGHT, TIMELINE_ORIGIN, TIMELINE_TOP_SPACE, TIMELINE_BOTTOM_SPACE } from '@/lib/editor/timeline-layout';
 import { clipVolumeAtPointer, clipVolumeAtFraction, MAX_CLIP_VOLUME } from '@/lib/editor/clip-volume';
@@ -19,11 +20,15 @@ import { minimumTimelineZoom, timelineZoomPosition, timelineZoomAtPosition, TIME
 import './custom-timeline.css';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger, DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import { ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem, ContextMenuLabel, ContextMenuSeparator } from '@/components/ui/context-menu';
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 
 type Props={
   timeline:Timeline;assets:MediaAsset[];selected:string|null;onSelect:(id:string|null)=>void;
   time:number;playing:boolean;readPlaybackTime?:()=>number;onSeek:(time:number)=>void;onChange:(timeline:Timeline)=>void;
   onSplit:()=>void;onDelete:()=>void;onDuplicate:()=>void;onAddText:(kind:'caption'|'graphic')=>void;
+  onAddMarker?:()=>void;
   onCopy?:()=>void;onPaste?:(time?:number)=>void;canPaste?:boolean;
   onTogglePlay?:()=>void;muted?:boolean;onToggleMute?:()=>void;
   playbackControls?:React.ReactNode;
@@ -54,7 +59,9 @@ export function TimelinePanel(p:Props){
   const linkedSelection=useMemo(()=>new Set(linkedClipIds(timeline,selectedIds.length?selectedIds:selected?[selected]:[])),[timeline,selectedIds,selected]);
   const [drag,setDrag]=useState<Clip|null>(null);const [layerDrop,setLayerDrop]=useState<string|null>(null);const [movingLayer,setMovingLayer]=useState<string|null>(null);const [scrubbing,setScrubbing]=useState(false);
   const [viewportHeight,setViewportHeight]=useState(0);const [viewportWidth,setViewportWidth]=useState(0);const [scrollbarHeight,setScrollbarHeight]=useState(0);
-  const [context,setContext]=useState<{clipId?:string;group?:LayerGroup;track?:number;time:number}|null>(null);
+  const [context,setContext]=useState<{clipId?:string;markerId?:string;group?:LayerGroup;track?:number;time:number}|null>(null);
+  const [editingMarker,setEditingMarker]=useState<{id:string;label:string}|null>(null);
+  const [draggingMarker,setDraggingMarker]=useState(false);
   const scroll=useRef<HTMLDivElement>(null);const labels=useRef<HTMLDivElement>(null);const head=useRef<HTMLDivElement>(null);const cap=useRef<HTMLDivElement>(null);
   const previews=useRef<HTMLDivElement>(null);const activeMode=useRef<'move'|'left'|'right'>('move');
   const gestureCleanup=useRef<(()=>void)|null>(null);
@@ -95,7 +102,7 @@ export function TimelinePanel(p:Props){
     onChange(targets.reduce((next,clip)=>patchClip(next,clip.id,{volume:muted?volumesBeforeMute.current.get(clip.id)??1:0}),timeline));
   }
 
-  useEdgeAutoScroll(scrubbing||selecting||!!drag||!!movingLayer,scroll,pointerX,drag||movingLayer||selecting?pointerY:undefined,gestureUpdate,!movingLayer);
+  useEdgeAutoScroll(scrubbing||selecting||!!drag||!!movingLayer||draggingMarker,scroll,pointerX,drag||movingLayer||selecting?pointerY:undefined,gestureUpdate,!movingLayer);
   useLayoutEffect(()=>{if(zoomAnchor.current!==null&&scroll.current){scroll.current.scrollLeft=zoomAnchor.current;zoomAnchor.current=null;}},[zoom]);
 
   const changeZoom=useCallback((next:number,anchor?:number)=>{
@@ -131,6 +138,34 @@ export function TimelinePanel(p:Props){
     target.closest<HTMLElement>('.custom-timeline')?.focus({ preventScroll: true });
   }
   function paint(t:number){paintPlayhead(head.current,origin+t*px,scroll.current,cap.current);}
+  function startMarkerDrag(e:React.PointerEvent<HTMLButtonElement>,marker:TimelineMarker){
+    if(e.button!==0)return;e.preventDefault();e.stopPropagation();gestureCleanup.current?.();
+    const target=e.currentTarget;target.focus({preventScroll:true});target.setPointerCapture(e.pointerId);
+    const startX=e.clientX,startScroll=scroll.current?.scrollLeft??0;let moved=false,at=marker.time;
+    pointerX.current=e.clientX;setDraggingMarker(true);
+    const update=()=>{
+      const delta=pointerX.current-startX+(scroll.current?.scrollLeft??0)-startScroll;
+      if(!moved&&Math.abs(delta)<3)return;moved=true;
+      at=frameSeekTime(marker.time+delta/px,timeline.fps,end);
+      target.style.left=`${origin+at*px}px`;target.title=`${marker.label||'Beat marker'} · ${formatTime(at,true,timeline.fps)}`;
+    };
+    const frame=timelineGestureFrame(update);let unwatch=()=>{};
+    const move=(event:PointerEvent)=>{pointerX.current=event.clientX;frame.request();};
+    const cleanup=()=>{unwatch();frame.cancel();gestureUpdate.current=null;setDraggingMarker(false);target.removeEventListener('pointermove',move);target.removeEventListener('pointerup',finish);target.removeEventListener('pointercancel',cancel);target.removeEventListener('lostpointercapture',cancel);gestureCleanup.current=null;if(target.hasPointerCapture(e.pointerId))target.releasePointerCapture(e.pointerId);};
+    const cancel=()=>{cleanup();target.style.left=`${origin+marker.time*px}px`;};
+    const finish=(event:PointerEvent)=>{pointerX.current=event.clientX;frame.flush();cleanup();if(moved){const next=moveTimelineMarker(timeline,marker.id,at);if(next!==timeline)onChange(next);}onSeek(at);};
+    gestureCleanup.current=cancel;gestureUpdate.current=()=>frame.request();unwatch=watchCancellation(cancel);
+    target.addEventListener('pointermove',move);target.addEventListener('pointerup',finish);target.addEventListener('pointercancel',cancel);target.addEventListener('lostpointercapture',cancel);
+  }
+  function markerKeyboard(e:React.KeyboardEvent,marker:TimelineMarker){
+    if(e.key==='Enter'||e.key===' '){e.preventDefault();e.stopPropagation();onSeek(marker.time);}
+    else if(e.key==='Delete'||e.key==='Backspace'){e.preventDefault();e.stopPropagation();onChange(removeTimelineMarker(timeline,marker.id));}
+    else if(e.key==='ArrowLeft'||e.key==='ArrowRight'){
+      e.preventDefault();e.stopPropagation();
+      const at=frameSeekTime(marker.time+(e.key==='ArrowLeft'?-1:1)*(e.shiftKey?10:1)/timeline.fps,timeline.fps,end);
+      const next=moveTimelineMarker(timeline,marker.id,at);if(next!==timeline)onChange(next);onSeek(at);
+    }
+  }
   function startScrub(e:React.PointerEvent<HTMLElement>){
     if(e.button!==0)return;e.preventDefault();e.stopPropagation();
     gestureCleanup.current?.();
@@ -214,7 +249,7 @@ export function TimelinePanel(p:Props){
     const previousCursor=document.body.style.cursor;let unwatch=()=>{};
     const gestureCursor=mode==='move'?'default':'ew-resize';document.body.style.cursor=gestureCursor;
     const cursorStyle=document.createElement('style');cursorStyle.textContent=`.editor-app *{cursor:${gestureCursor}!important}`;document.head.appendChild(cursorStyle);
-    const marks=[0,p.readPlaybackTime?.()??store.getState().playhead,...timeline.clips.filter(c=>!gestureIds.has(c.id)).flatMap(c=>[c.start,c.start+c.duration])];
+    const marks=[0,p.readPlaybackTime?.()??store.getState().playhead,...(timeline.markers??[]).map(marker=>marker.time),...timeline.clips.filter(c=>!gestureIds.has(c.id)).flatMap(c=>[c.start,c.start+c.duration])];
     const verticalMarks=[...marks,clip.start,clip.start+clip.duration];
     const beginPreview=()=>{
       setDrag(clip);host.replaceChildren();
@@ -440,9 +475,10 @@ export function TimelinePanel(p:Props){
     const clipId=target.closest<HTMLElement>('.timeline-clip')?.dataset.clipId,row=target.closest<HTMLElement>('.timeline-track,.track-label'),viewport=scroll.current;
     if(clipId){if(store.getState().selectedIds.includes(clipId))store.setState({selectedId:clipId});else onSelect(clipId);}
     const at=viewport?timelineTimeAtPointer(e.clientX,{left:viewport.getBoundingClientRect().left,scrollLeft:viewport.scrollLeft,origin,px,end,fps:timeline.fps}):time;
-    setContext({clipId,group:row?.dataset.group as LayerGroup|undefined,track:row?.dataset.layer?Number(row.dataset.layer):undefined,time:at});
+    setContext({clipId,markerId:target.closest<HTMLElement>('[data-marker-id]')?.dataset.markerId,group:row?.dataset.group as LayerGroup|undefined,track:row?.dataset.layer?Number(row.dataset.layer):undefined,time:at});
   }
   const contextClip=timeline.clips.find(clip=>clip.id===context?.clipId);
+  const contextMarker=timeline.markers?.find(marker=>marker.id===context?.markerId);
   const contextAudio=contextClip?.kind==='audio'?contextClip:timeline.clips.find(clip=>clip.id===contextClip?.linkedClipId);
   const contextClips=context?.group&&context.track?timeline.clips.filter(clip=>layerGroup(clip.kind)===context.group&&trackOf(clip)===context.track):[];
   const contextTime=context?.time??time;
@@ -456,6 +492,7 @@ export function TimelinePanel(p:Props){
       <button aria-label="Duplicate selected clips" title="Duplicate" onClick={p.onDuplicate} disabled={!selected}><Copy size={14}/><span>Duplicate</span></button>
       <button onClick={()=>p.onAddText('caption')} aria-label="Add caption" title="Add caption"><Type size={14}/><span>Caption</span></button>
       <button onClick={()=>p.onAddText('graphic')} aria-label="Add graphic" title="Add graphic"><Layers size={14}/><span>Graphic</span></button>
+      {p.onAddMarker&&<button onClick={p.onAddMarker} aria-label="Add beat marker" title="Add beat marker (M)"><Flag size={14}/><span>Marker</span></button>}
     </div>{p.playbackControls&&<div className="timeline-playback-controls">{p.playbackControls}</div>}<div className="timeline-view-actions">
       <IconButton label="Unlink video and audio" disabled={!timeline.clips.find(c=>c.id===selected)?.linkedClipId} onClick={()=>{if(selected)onChange(unlinkClips(timeline,selected));}}><Unlink size={14}/></IconButton>
       <IconButton label={p.muted?"Unmute preview":"Mute preview"} onClick={p.onToggleMute}>{p.muted?<VolumeX size={14}/>:<Volume2 size={14}/>}</IconButton>
@@ -485,7 +522,7 @@ export function TimelinePanel(p:Props){
       </div>;
     })}<div aria-hidden="true" style={{height:Math.max(TIMELINE_BOTTOM_SPACE,viewportHeight-layout.height)}}/></div>
       <div className="timeline-scroll" ref={scroll} onScroll={e=>{if(labels.current)labels.current.scrollTop=e.currentTarget.scrollTop;gestureUpdate.current?.();}}>
-        <div ref={area} className="timeline-track-area" style={{width:width+origin*2,height:Math.max(layout.height+TIMELINE_BOTTOM_SPACE,viewportHeight)}} onPointerDown={selectBox}><div className="time-ruler" style={{'--ruler-unit':`${px}px`} as React.CSSProperties} onPointerDown={startScrub}><TimelineRulerTicks px={px} duration={Math.max(duration,width/px)} fps={timeline.fps} origin={origin}/></div>
+        <div ref={area} className="timeline-track-area" style={{width:width+origin*2,height:Math.max(layout.height+TIMELINE_BOTTOM_SPACE,viewportHeight)}} onPointerDown={selectBox}><div className="time-ruler" style={{'--ruler-unit':`${px}px`} as React.CSSProperties} onPointerDown={startScrub}><TimelineRulerTicks px={px} duration={Math.max(duration,width/px)} fps={timeline.fps} origin={origin}/>{timeline.markers?.map(marker=><button key={marker.id} type="button" className="timeline-beat-marker" data-marker-id={marker.id} aria-label={`${marker.label||'Beat marker'}, ${formatTime(marker.time,true,timeline.fps)}`} title={`${marker.label||'Beat marker'} · ${formatTime(marker.time,true,timeline.fps)} · Drag to move, right-click to edit`} style={{left:origin+marker.time*px}} onPointerDown={e=>startMarkerDrag(e,marker)} onKeyDown={e=>markerKeyboard(e,marker)} onClick={e=>{e.stopPropagation();if(e.detail===0)onSeek(marker.time);}} onDoubleClick={()=>setEditingMarker({id:marker.id,label:marker.label??''})}><svg width="16" height="22" viewBox="0 0 16 22" aria-hidden="true"><path d="M1 1v20M1 2h13l-3 4 3 4H1"/></svg></button>)}</div>
           <div className="timeline-top-space" aria-hidden="true" style={{height:TIMELINE_TOP_SPACE}}/>
           {tracks.map(track=><div key={track.id} data-group={track.group} data-layer={track.number} className="timeline-track" style={{height:track.height}} onDragOver={e=>e.preventDefault()} onDrop={e=>{e.preventDefault();const id=e.dataTransfer.getData('revline/asset');const asset=assetMap.get(id);if(!asset)return;if(layerGroup(asset.kind)!==track.group){report(new Error('Drop video or images on a visual layer, and audio on an audio layer.'));return;}try{onChange(addMediaClip(timeline,asset,crypto.randomUUID(),Math.max(0,snapTime((e.clientX-e.currentTarget.getBoundingClientRect().left-origin)/px,timeline.fps)),track.number));}catch(error){report(error);}}}>
             {timeline.clips.filter(c=>layerGroup(c.kind)===track.group&&trackOf(c)===track.number).map(clip=>{
@@ -506,7 +543,7 @@ export function TimelinePanel(p:Props){
       <div ref={cap} className="timeline-playhead-cap" onPointerDown={startScrub} aria-label="Drag timeline playhead"/>
     </div>
   </section></ContextMenuTrigger><ContextMenuContent aria-label="Timeline actions">
-    <ContextMenuLabel>{contextClip?'Clip':context?.track?`${context.group==='audio'?'A':'V'}${context.track}`:'Timeline'}</ContextMenuLabel>
+    {contextMarker?<><ContextMenuLabel>{contextMarker.label||'Beat marker'}</ContextMenuLabel><ContextMenuItem onSelect={()=>onSeek(contextMarker.time)}><Flag/>Go to marker</ContextMenuItem><ContextMenuItem onSelect={()=>setEditingMarker({id:contextMarker.id,label:contextMarker.label??''})}><Pencil/>Rename marker</ContextMenuItem><ContextMenuItem onSelect={()=>onChange(removeTimelineMarker(timeline,contextMarker.id))}><Trash2/>Delete marker</ContextMenuItem></>:<><ContextMenuLabel>{contextClip?'Clip':context?.track?`${context.group==='audio'?'A':'V'}${context.track}`:'Timeline'}</ContextMenuLabel>
     {contextClip&&p.onCopy&&<ContextMenuItem onSelect={p.onCopy}><Copy/>Copy</ContextMenuItem>}
     {p.onPaste&&<ContextMenuItem disabled={!p.canPaste} onSelect={()=>p.onPaste?.(contextTime)}><ClipboardPaste/>Paste here</ContextMenuItem>}
     {contextClip?<>
@@ -524,5 +561,5 @@ export function TimelinePanel(p:Props){
     <ContextMenuItem disabled={deriveTrackCounts(timeline).visual>=maxTrackCount('visual')} onSelect={()=>addLayer('visual')}><Plus/>Add visual track</ContextMenuItem>
     <ContextMenuItem disabled={deriveTrackCounts(timeline).audio>=maxTrackCount('audio')} onSelect={()=>addLayer('audio')}><Plus/>Add audio track</ContextMenuItem>
     <ContextMenuItem disabled={cleanedTimeline===timeline} onSelect={()=>onChange(cleanedTimeline)}><ListMinus/>Remove empty tracks</ContextMenuItem>
-  </ContextMenuContent></ContextMenu>;
+  </>}</ContextMenuContent><Dialog open={!!editingMarker} onOpenChange={open=>{if(!open)setEditingMarker(null);}}><DialogContent><DialogTitle>Rename marker</DialogTitle><DialogDescription>Label this beat or moment in your edit.</DialogDescription><form className="flex flex-col gap-4" onSubmit={event=>{event.preventDefault();if(!editingMarker)return;onChange({...timeline,markers:timeline.markers?.map(marker=>marker.id===editingMarker.id?{...marker,label:editingMarker.label.trim()}:marker)});setEditingMarker(null);}}><Input aria-label="Marker name" autoFocus maxLength={120} value={editingMarker?.label??''} onChange={event=>setEditingMarker(current=>current?{...current,label:event.target.value}:null)}/><Button type="submit">Save marker</Button></form></DialogContent></Dialog></ContextMenu>;
 }

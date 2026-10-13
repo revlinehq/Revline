@@ -1,5 +1,6 @@
 'use client';
 import { splitAtPlayhead } from '@/lib/editor/split-at-playhead';
+import { addTimelineMarker } from '@/lib/editor/timeline-markers';
 
 import { useRef, useState, useEffect, useCallback } from 'react';
 import { useSearchParams } from 'next/navigation';
@@ -117,6 +118,11 @@ export function EditorShell(p: EditorShellProps) {
     const ids=new Set(linkedClipIds(timeline,selectedIds.length?selectedIds:selected?[selected]:[]));
     if(!ids.size)return;onChange({...timeline,clips:timeline.clips.filter(c=>!ids.has(c.id))});setSelected(null);setCroppingClip(null);setEditingText(null);
   }, [selected, selectedIds, timeline, onChange]);
+  const addMarker = useCallback(() => {
+    const current = store.getState();
+    const next = addTimelineMarker(timeline, current.playing ? readPlaybackTime() : current.playhead, crypto.randomUUID());
+    if (next !== timeline) onChange(next);
+  }, [timeline, onChange, readPlaybackTime, store]);
   const doCopy = useCallback(() => {
     const clips = copyTimelineClips(timeline, selectedIds.length ? selectedIds : selected ? [selected] : []);
     if (clips.length) setClipboard(clips);
@@ -148,6 +154,7 @@ export function EditorShell(p: EditorShellProps) {
       if (e.code === 'Space' && target.closest('button,a,[role="button"],[role="menuitem"],[role="tab"],[role="checkbox"],[role="switch"]')) return;
       if (e.code === 'Space') { e.preventDefault(); togglePlay(); }
       else if (e.key.toLowerCase() === 's' && !e.metaKey && !e.ctrlKey && !e.altKey) { e.preventDefault(); if (!e.repeat) doSplit(); }
+      else if (e.key.toLowerCase() === 'm' && !e.metaKey && !e.ctrlKey && !e.altKey) { e.preventDefault(); if (!e.repeat) addMarker(); }
       else if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); doDelete(); }
       else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'a') { e.preventDefault(); store.setState({selectedIds:timeline.clips.map(c=>c.id),selectedId:selected??timeline.clips[0]?.id??null}); }
       else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'c' && (selectedIds.length || selected)) { e.preventDefault(); doCopy(); }
@@ -157,7 +164,7 @@ export function EditorShell(p: EditorShellProps) {
     }
     window.addEventListener('keydown', keyboard);
     return () => window.removeEventListener('keydown', keyboard);
-  }, [doSplit, doDelete, doCopy, doPaste, clipboard.length, selectedIds.length, togglePlay, p.onUndo, p.onRedo, timeline.clips, selected, store, cropping]);
+  }, [doSplit, doDelete, doCopy, doPaste, addMarker, clipboard.length, selectedIds.length, togglePlay, p.onUndo, p.onRedo, timeline.clips, selected, store, cropping]);
 
   function addAsset(asset: MediaAsset) {
     try { const id = crypto.randomUUID(); onChange(addMediaClip(timeline, asset, id)); setSelected(id); }
@@ -205,7 +212,7 @@ export function EditorShell(p: EditorShellProps) {
           <div className="preview-player"><div className="stage-center" style={{'--preview-ratio': dimensions(timeline.aspectRatio).width / dimensions(timeline.aspectRatio).height} as React.CSSProperties}>{timeline.clips.length ? <PreviewViewport><Preview ref={preview} timeline={timeline} assets={assets} time={time} onTime={setTime} onPlaying={setPlaying} onError={onError} muted={muted} selectedClip={clip} cropping={cropping} onCropCancel={() => setCroppingClip(null)} onCropCommit={(id,crop) => { if (id === croppingClip && id === selected) { onChange(patchClip(timeline,id,{crop})); setCroppingClip(null); } }} onSelectClip={selectClip} onEditText={editText} onClipChange={(id,patch)=>onChange(patchClip(timeline,id,patch))} onVisualChange={patch=>{if(clip)onChange(patchClip(timeline,clip.id,patch));}} /></PreviewViewport> : <div className="empty-upload" role="button" tabIndex={0} onClick={browse} onKeyDown={e => { if (e.key === 'Enter') browse(); }}><div className="upload-circle"><Upload size={25} /></div><h2>Start with a moment.</h2><p>Drop your footage here,<br />then tell Revline what you have in mind.</p><Button onClick={e => { e.stopPropagation(); browse(); }} disabled={!!p.upload}>{p.upload && <LoaderCircle size={14} className="animate-spin" />}Choose files</Button><small>MP4 · MOV · WebM · JPG · PNG · Audio</small>{p.upload && <progress max="100" value={p.upload.percent} />}</div>}</div>{cropping ? <div className="preview-playback source-crop-actions" role="group" aria-label="Crop controls"><span className="source-crop-label">Crop</span><Button type="button" variant="ghost" size="sm" onClick={() => preview.current?.resetCrop()}><RotateCcw size={12}/>Reset</Button><Button type="button" variant="ghost" size="sm" onClick={() => { preview.current?.finishCrop(true); setCroppingClip(null); }}>Cancel</Button><Button type="button" size="sm" onClick={() => preview.current?.finishCrop()}>Done</Button></div> : null}</div>
 
         </div></div></PreviewZoomProvider></ResizablePanel>{!compact && inspectorOpen && <><ResizableHandle aria-label="Resize editing panel" className="inspector-resize-handle"/><ResizablePanel id="inspector" defaultSize={320} minSize={280} maxSize={480}><PreviewInspector videoImports={p.videoImports} assets={assets} upload={p.upload} onUpload={()=>setImportOpen(true)} onAdd={addAsset} clip={clip} audioClip={clip?.kind==='video'?timeline.clips.find(c=>c.id===clip.linkedClipId):undefined} asset={assets.find(a => a._id === clip?.assetId)} onChange={patch => { if (clip) onChange(patchClip(timeline, clip.id, patch)); }} onCrop={cropVisual} cropping={cropping} onClose={() => setInspectorOpen(false)}/></ResizablePanel></>}</ResizablePanelGroup>
-        </ResizablePanel><ResizableHandle aria-label="Resize preview and timeline" className="timeline-resize-handle"/><ResizablePanel id="timeline" panelRef={timelinePanel} collapsible collapsedSize={56} defaultSize={p.embedded ? 266 : 360} minSize={160} maxSize="65%" onResize={size=>store.setState({timelineCollapsed:size.inPixels<100})}><TimelinePanel playbackControls={<EditorPlaybackControls playing={playing} time={time} duration={duration} fps={timeline.fps} readTime={readPlaybackTime} onTogglePlay={togglePlay} onPrevious={() => jumpCut(-1)} onNext={() => jumpCut(1)}/>} onPreviewVolume={(id,volume)=>preview.current?.clipVolume(id,volume)} onTogglePlay={togglePlay} muted={muted} onToggleMute={()=>{setMuted(!muted);preview.current?.mute(!muted);}} collapsed={collapsed} onToggleCollapse={toggleTimeline} timeline={timeline} assets={assets} selected={selected} onSelect={selectClip} onEditText={editText} time={time} playing={playing} readPlaybackTime={readPlaybackTime} onSeek={seek} onChange={onChange} onSplit={doSplit} onDelete={doDelete} onDuplicate={doDuplicate} onCopy={doCopy} onPaste={doPaste} canPaste={clipboard.length>0} onAddText={addText} onError={onError} />
+        </ResizablePanel><ResizableHandle aria-label="Resize preview and timeline" className="timeline-resize-handle"/><ResizablePanel id="timeline" panelRef={timelinePanel} collapsible collapsedSize={56} defaultSize={p.embedded ? 266 : 360} minSize={160} maxSize="65%" onResize={size=>store.setState({timelineCollapsed:size.inPixels<100})}><TimelinePanel playbackControls={<EditorPlaybackControls playing={playing} time={time} duration={duration} fps={timeline.fps} readTime={readPlaybackTime} onTogglePlay={togglePlay} onPrevious={() => jumpCut(-1)} onNext={() => jumpCut(1)}/>} onPreviewVolume={(id,volume)=>preview.current?.clipVolume(id,volume)} onTogglePlay={togglePlay} muted={muted} onToggleMute={()=>{setMuted(!muted);preview.current?.mute(!muted);}} collapsed={collapsed} onToggleCollapse={toggleTimeline} timeline={timeline} assets={assets} selected={selected} onSelect={selectClip} onEditText={editText} time={time} playing={playing} readPlaybackTime={readPlaybackTime} onSeek={seek} onChange={onChange} onSplit={doSplit} onDelete={doDelete} onDuplicate={doDuplicate} onCopy={doCopy} onPaste={doPaste} canPaste={clipboard.length>0} onAddText={addText} onAddMarker={addMarker} onError={onError} />
 
         </ResizablePanel></ResizablePanelGroup></div></ResizablePanel></ResizablePanelGroup>
     </section></>}

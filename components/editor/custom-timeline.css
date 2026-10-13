@@ -66,7 +66,7 @@ html[data-workspace-theme=dark] .editor-app:not(.landing-product-demo) .custom-t
 html[data-workspace-theme=dark] .editor-app:not(.landing-product-demo) .custom-timeline .timeline-insert-indicator:before{background:var(--timeline-marquee-border)}
 .custom-timeline .playhead{width:1px;background:#009DFF;pointer-events:none}
 .custom-timeline .playhead::before{height:28px;bottom:auto;left:-21px;width:44px;pointer-events:auto}
-.custom-timeline .time-ruler{position:sticky;top:0;z-index:5;touch-action:none}
+.custom-timeline .time-ruler{position:sticky;top:0;z-index:11;touch-action:none}
 .custom-timeline.timeline-collapsed{height:56px!important;padding:8px 12px}
 .custom-timeline.timeline-collapsed .timeline-body{display:none}
 @media(prefers-reduced-motion:reduce){.custom-timeline *{transition:none!important}}
@@ -88,3 +88,8 @@ html[data-workspace-theme=dark] .editor-app:not(.landing-product-demo) .custom-t
 @media(max-width:600px){.custom-timeline .track-label[data-group=audio] .layer-options{width:14px}}
 /* The timeline is a keyboard shortcut scope, not a focus-ring control. */
 .custom-timeline:focus{outline:none}
+.custom-timeline .timeline-beat-marker{position:absolute;top:0;width:26px;height:27px;padding:2px 0 3px;border:0;background:transparent;color:#e68a28;cursor:ew-resize;touch-action:none;z-index:1;outline-offset:-2px}
+.custom-timeline .timeline-beat-marker svg{display:block;overflow:visible;pointer-events:none}
+.custom-timeline .timeline-beat-marker path{fill:currentColor;stroke:currentColor;stroke-width:1.5;stroke-linejoin:round}
+.custom-timeline .timeline-beat-marker:hover,.custom-timeline .timeline-beat-marker:focus-visible{color:#f4a344;filter:drop-shadow(0 0 2px #e68a2833)}
+.custom-timeline .timeline-beat-marker:focus-visible{outline:1px solid currentColor;border-radius:3px}
