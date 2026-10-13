@@ -1,0 +1,10 @@
+.assistant-reply{padding:0 2px}
+.conversation-editor .assistant-reply .chat-assistant{padding:0}
+.assistant-editing{display:flex;align-items:center;min-height:24px;padding:2px 0;color:var(--muted-foreground);font-size:12px;line-height:20px}
+.assistant-editing-text{display:inline-block;color:var(--ws-muted,var(--muted-foreground))}
+@media(prefers-reduced-motion:no-preference){
+  @supports(background-clip:text){
+    .assistant-editing-text{background-image:linear-gradient(100deg,var(--ws-muted,var(--muted-foreground)) 25%,var(--ws-text,var(--foreground)) 45%,var(--ws-muted,var(--muted-foreground)) 65%);background-size:220% 100%;background-clip:text;color:transparent;animation:revline-editing-shimmer 1.8s linear infinite}
+  }
+}
+@keyframes revline-editing-shimmer{from{background-position:100% 0}to{background-position:-100% 0}}

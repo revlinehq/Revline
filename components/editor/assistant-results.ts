@@ -32,9 +32,9 @@ const labels: Record<string, [string, string]> = {
   setVolume: ['Adjusting sound', 'Adjusted sound'], setAspectRatio: ['Resizing canvas', 'Resized canvas'], followSubject: ['Following subject', 'Applied subject tracking'], alignCutsToBeat: ['Matching cuts to beats', 'Matched cuts to beats'],
   addLayer: ['Adding track', 'Added track'], deleteEmptyLayer: ['Removing empty track', 'Removed empty track'], removeEmptyLayers: ['Removing empty tracks', 'Removed empty tracks'],
   useStrongestMoment: ['Choosing a moment', 'Added selected moment'], applyMotionPreset: ['Animating text', 'Animated text'], animateClip: ['Animating text', 'Animated text'], setVisualEffects: ['Adjusting visual effects', 'Adjusted visual effects'],
-  inspectTimeline: ['Checking timeline', 'Checked timeline'], inspectAssetAnalysis: ['Reading footage notes', 'Read footage notes'], analyzeMedia: ['Analyzing footage', 'Analyzed footage'], inspectVideoFrames: ['Inspecting frames', 'Inspected frames'],
+  inspectTimeline: ['Checking timeline', 'Checked timeline'], inspectAssetAnalysis: ['Reading footage notes', 'Read footage notes'], analyzeMedia: ['Analyzing footage', 'Analyzed footage'], inspectVideo: ['Finding moments', 'Reviewed footage'], inspectVideoFrames: ['Inspecting frames', 'Inspected frames'],
 };
-const inspections = new Set(['inspectTimeline', 'inspectAssetAnalysis', 'analyzeMedia', 'inspectVideoFrames']);
+const inspections = new Set(['inspectTimeline', 'inspectAssetAnalysis', 'analyzeMedia', 'inspectVideo', 'inspectVideoFrames']);
 const count = (value: unknown) => typeof value === 'number' && Number.isInteger(value) && value >= 0 ? value : undefined;
 const isId = (value: unknown): value is string => typeof value === 'string' && value.length > 0;
 const noun = (n: number, singular: string, plural = `${singular}s`) => `${n} ${n === 1 ? singular : plural}`;
@@ -48,7 +48,8 @@ export function summarizeTools(steps: ChatTool[]): ResultCard[] {
     if (step.state === 'done' && inspections.has(step.name)) continue;
     const staged = step.staged === true || step.output?.staged === true;
     const evidence = staged ? 'prepared' : step.output?.saved === true || step.output?.unchanged === true ? 'saved' : 'unconfirmed';
-    const key = step.state === 'error' ? `${step.name}-error-${id}` : `${step.name}-${step.state}-${evidence}`;
+    const kind = step.name === 'markMusicBeats' ? `-${step.output?.kind ?? 'beats'}` : '';
+    const key = step.state === 'error' ? `${step.name}-error-${id}` : `${step.name}${kind}-${step.state}-${evidence}`;
     groups.set(key, [...groups.get(key) ?? [], { ...step, staged }]);
   }
   return [...groups].map(([key, group]) => {
@@ -63,7 +64,8 @@ export function summarizeTools(steps: ChatTool[]): ResultCard[] {
     let title = name[1];
     if (step.name === 'markMusicBeats' && outputs.every(output => count(output.added) !== undefined)) {
       const added = outputs.reduce((total, output) => total + count(output.added)!, 0);
-      title = added ? `Marked ${noun(added, 'beat')}` : 'No new beat markers';
+      const event = step.output?.kind === 'accents' ? 'hit' : step.output?.kind === 'downbeats' ? 'bar start' : step.output?.kind === 'dropCandidates' ? 'possible drop' : 'beat';
+      title = added ? `Marked ${noun(added, event)}` : `No new ${event} markers`;
     } else if ((step.name === 'removeMarker' || step.name === 'removeMarkers') && outputs.every(output => Array.isArray(output.removedMarkerIds))) {
       const markerIds = new Set(outputs.flatMap(output => (output.removedMarkerIds as unknown[]).filter(isId)));
       title = markerIds.size ? `Removed ${noun(markerIds.size, 'marker')}` : 'No markers removed';

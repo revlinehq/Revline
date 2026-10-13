@@ -9,6 +9,7 @@ import { useConversationScroll } from '@/components/workspace/use-conversation-s
 import { summarizeTools, type ChatTool } from './assistant-results';
 import './assistant-results.css';
 import './assistant-text-preference.css';
+import './assistant-editing.css';
 export type { ChatTool } from './assistant-results';
 
 export type ChatMessage = { id: string; role: string; text: string; status?: string; tools?: string[]; steps?: ChatTool[] };
@@ -23,6 +24,10 @@ function AssistantResponseText({ text, streaming, appearance }: { text: string; 
   return <ChatProse text={text} animate={receivedLive || streaming} appearance={appearance} />;
 }
 
+function EditingStatus({ activity }: { activity?: string | null }) {
+  return <div className="assistant-editing" role="status"><span className="assistant-editing-text">{activity || 'Editing…'}</span></div>;
+}
+
 export function AssistantPanel({ messages, running, configured, error, onSend, onStop, hasClips, demo, onLoadMore, canLoadMore, onAttach, activity, draftKey }: {
   messages: ChatMessage[]; running: boolean; configured: boolean; error?: string | null;
   onSend: (text: string) => Promise<void>; hasClips: boolean; demo: boolean;
@@ -33,6 +38,7 @@ export function AssistantPanel({ messages, running, configured, error, onSend, o
   const [prompt, setPrompt] = useState('');
   const [sending, setSending] = useState(false);
   const [localError, setLocalError] = useState('');
+  const waiting = running || sending || !!activity;
   // Reply fades are the editor default; Follow system and Instant remain opt-outs.
   const [textAppearance, setTextAppearance] = useState<ReplyTextAppearance>('fade');
   const turnId = messages.findLast(message => message.role === 'user')?.id ?? 'imported';
@@ -71,26 +77,33 @@ export function AssistantPanel({ messages, running, configured, error, onSend, o
   }
 
   return <div className="assistant-content">
-    <div ref={scroll.viewport} className={`assistant-history ${!messages.length ? 'assistant-history-empty' : ''}`}>
+    <div ref={scroll.viewport} className={`assistant-history ${!messages.length && !waiting ? 'assistant-history-empty' : ''}`}>
       <div className="assistant-turns" ref={scroll.content}>
       {canLoadMore && <button className="load-more" onClick={() => { scroll.preserveHistory(); onLoadMore?.(); }}>Earlier messages</button>}
-      {!messages.length && <div className="assistant-welcome"><h3>What are we making?</h3><p>{hasClips ? 'A tighter cut, a stronger opening, subtitles. Tell me what you have in mind.' : 'Bring your footage, and tell me the story you want to make.'}</p>{!demo&&!configured&&<div className="assistant-demo-note">Connect Claude to edit in conversation. Your footage, preview, and timeline are ready.</div>}</div>}
-      {groups.map(group => <div className={`assistant-turn ${group.id === turnId ? 'is-latest-turn' : ''}`} data-turn-id={group.id} key={group.id}>{group.indices.map(index => {
-        const m = messages[index];
-        return <article key={m.id} data-message-id={m.id} data-message-status={m.status} className={`chat-message ${m.role === 'user' ? 'chat-user' : 'chat-assistant'}`}>
-        {m.role !== 'user' && messages[index-1]?.role !== m.role && <div className="chat-author"><Brand markOnly /><span>Revline</span></div>}
-        {m.text && (m.role === 'user' ? <p>{m.text}</p> : <AssistantResponseText key={textAppearance} text={m.text} streaming={m.status === 'streaming'} appearance={textAppearance} />)}
-        {m.tools?.map((tool, i) => <div className="tool-result" key={`${tool}-${i}`}><Check size={12} />{tool}</div>)}
-        {m.id === demoNoteMessageId && <div className="assistant-demo-note">Sample conversation. Explore the timeline, or <a href="/projects">start your own project</a>.</div>}
-      </article>;
-      })}{(() => {
-        const cards = summarizeTools(group.indices.flatMap(index => messages[index].steps ?? []));
-        return cards.length ? <div className="assistant-result-cards" aria-label="Edit results">{cards.map(card => <div key={card.key} className={`assistant-result-card result-${card.state}${card.staged ? ' result-prepared' : ''}`}>
-          {card.state === 'running' ? <LoaderCircle size={14} className="animate-spin" /> : card.state === 'error' ? <CircleAlert size={14} /> : <Check size={14} />}
-          <div><span>{card.title}</span>{card.detail && <small>{card.detail}</small>}</div>
-        </div>)}</div> : null;
-      })()}{group.id === turnId && (running || activity) && <div className="assistant-thinking"><LoaderCircle size={13} className="animate-spin" />{activity || 'Shaping your edit…'}</div>}</div>)}
-      {!messages.length && (running || activity) && <div className="assistant-thinking"><LoaderCircle size={13} className="animate-spin" />{activity || 'Shaping your edit…'}</div>}
+      {!messages.length && !waiting && <div className="assistant-welcome"><h3>What are we making?</h3><p>{hasClips ? 'A tighter cut, a stronger opening, subtitles. Tell me what you have in mind.' : 'Bring your footage, and tell me the story you want to make.'}</p>{!demo&&!configured&&<div className="assistant-demo-note">Connect Claude to edit in conversation. Your footage, preview, and timeline are ready.</div>}</div>}
+      {groups.map(group => {
+        const groupMessages = group.indices.map(index => messages[index]);
+        const replies = groupMessages.filter(message => message.role !== 'user');
+        const editing = group.id === turnId && waiting;
+        const cards = summarizeTools(groupMessages.flatMap(message => message.steps ?? []));
+        return <div className={`assistant-turn ${group.id === turnId ? 'is-latest-turn' : ''}`} data-turn-id={group.id} key={group.id}>
+          {groupMessages.filter(message => message.role === 'user').map(message => <article key={message.id} data-message-id={message.id} data-message-status={message.status} className="chat-message chat-user"><p>{message.text}</p></article>)}
+          {(replies.length > 0 || editing || cards.length > 0) && <div className="assistant-reply">
+            <div className="chat-author"><Brand markOnly /><span>Revline</span></div>
+            {replies.map(message => !message.text && !message.tools?.length && message.id !== demoNoteMessageId ? null : <article key={message.id} data-message-id={message.id} data-message-status={message.status} className="chat-message chat-assistant">
+              {message.text && <AssistantResponseText key={textAppearance} text={message.text} streaming={message.status === 'streaming'} appearance={textAppearance} />}
+              {message.tools?.map((tool, i) => <div className="tool-result" key={`${tool}-${i}`}><Check size={12} />{tool}</div>)}
+              {message.id === demoNoteMessageId && <div className="assistant-demo-note">Sample conversation. Explore the timeline, or <a href="/projects">start your own project</a>.</div>}
+            </article>)}
+            {cards.length > 0 && <div className="assistant-result-cards" aria-label="Edit results">{cards.map(card => <div key={card.key} className={`assistant-result-card result-${card.state}${card.staged ? ' result-prepared' : ''}`}>
+              {card.state === 'running' ? <LoaderCircle size={14} className="animate-spin" /> : card.state === 'error' ? <CircleAlert size={14} /> : <Check size={14} />}
+              <div><span>{card.title}</span>{card.detail && <small>{card.detail}</small>}</div>
+            </div>)}</div>}
+            {editing && <EditingStatus activity={activity} />}
+          </div>}
+        </div>;
+      })}
+      {!messages.length && waiting && <div className="assistant-reply"><div className="chat-author"><Brand markOnly /><span>Revline</span></div><EditingStatus activity={activity} /></div>}
       {(error || localError) && <p className="chat-error" role="alert">{localError || error}</p>}
       {!!messages.length && !demo && !configured && <div className="assistant-demo-note">Connect Claude to edit in conversation. Your footage, preview, and timeline are ready.</div>}
       </div>
