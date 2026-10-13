@@ -13,7 +13,7 @@ type Props = { clip: Clip; onChange: (patch: Partial<Clip>) => void; onPreview?:
 type EffectKey = keyof VisualEffects;
 const rangeKeys = new Set(['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End', 'PageUp', 'PageDown']);
 
-function EffectSlider({ label, value, bounds, step = .01, format, disabled, onPreview, onCommit }: {
+export function EffectSlider({ label, value, bounds, step = .01, format, disabled, onPreview, onCommit }: {
   label: string; value: number; bounds: readonly [number, number]; step?: number; format: (value: number) => string; disabled: boolean;
   onPreview: (value: number | null) => void; onCommit: (value: number) => void;
 }) {

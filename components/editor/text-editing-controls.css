@@ -1,3 +1,4 @@
 .text-editing-controls{display:flex;flex-direction:column;gap:14px;min-width:0}
 .preview-inspector .text-editing-controls .inspector-field,.preview-inspector .text-editing-controls .visual-number{margin:0}
 .text-editing-controls textarea{min-height:72px}
+.text-size-controls{display:grid;grid-template-columns:minmax(0,1fr) 82px;align-items:end;gap:8px}.text-size-controls .visual-number>span{font-size:9px}

@@ -46,8 +46,10 @@ try {
   assert.equal(await page.$('[placeholder="Find a look"]'),null,'No look search field');
   await page.click('[aria-label="Move text: Keep these words"]');await page.waitForSelector('[aria-label="Selected text"]');
   assert.equal(await page.$eval('[aria-label="Selected text"]', element => element.value), 'Keep these words', 'Single preview click opens the actual words');
-  for (const label of ['Text color', 'Text size', 'Text rotation']) assert.ok(await page.$(`[aria-label="${label}"]`), `Full settings contain ${label}`);
+  for (const label of ['Text color', 'Text size', 'Custom text size']) assert.ok(await page.$(`[aria-label="${label}"]`), `Full settings contain ${label}`);
   assert.equal(await page.$('.quick-text-dialog'), null, 'No words-only modal');
+  assert.ok(await page.$('[aria-label="Rotate text in preview"]'),'Rotation is on the preview');
+  assert.equal(await page.$('[aria-label="Text rotation"]'),null,'Rotation numeric control is removed');
   await page.waitForSelector('.text-preset-card');
   assert.equal(await page.$$eval('.subtitle-style-card', cards => cards.length), 4, 'Caption settings offer all four subtitle styles');
   const original = await caption();

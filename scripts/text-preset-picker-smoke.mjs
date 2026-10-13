@@ -61,7 +61,8 @@ try {
   assert.equal(await page.evaluate(() => window.fixture.clip.text), 'Changed words', 'Actual text remains editable');
   assert.deepEqual(await page.$$eval('.text-preset-card', cards => cards.map(card => card.getAttribute('aria-label'))), labels, 'Both surfaces share the picker');
   assert.equal(await page.$eval(selector('Neon echo'), element => element.getAttribute('aria-pressed')), 'true');
-  assert.ok(await page.$('[aria-label="Text rotation"]'), 'Rotation control remains');
+  assert.ok(await page.$('[aria-label="Custom text size"]'), 'Custom text size remains');
+  assert.equal(await page.$('[aria-label="Text rotation"]'), null, 'Rotation numeric control is removed');
   await page.evaluate(() => { document.documentElement.dataset.workspaceTheme = 'light'; });
   await page.screenshot({ path: '/tmp/revline-text-preset-previews-light.png' });
   assert.deepEqual(errors, []);
