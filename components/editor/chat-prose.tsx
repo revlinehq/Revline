@@ -4,7 +4,6 @@ import type { ReactNode } from "react";
 import { FlowTokenText } from "@/components/core/flowtoken";
 
 type ListType = "bullets" | "steps";
-export type ReplyTextAppearance = "system" | "fade" | "instant";
 type ProseBlock =
   | { type: "paragraph"; text: string }
   | { type: "heading"; text: string }
@@ -72,7 +71,7 @@ function parseBlocks(text: string): ProseBlock[] {
   return blocks;
 }
 
-function InlineMarkup({ text, animate, appearance }: { text: string; animate: boolean; appearance: ReplyTextAppearance }) {
+function InlineMarkup({ text, animate }: { text: string; animate: boolean }) {
   let bold = false;
   const words: ReactNode[] = [];
 
@@ -83,8 +82,8 @@ function InlineMarkup({ text, animate, appearance }: { text: string; animate: bo
       continue;
     }
     if (word === "*" && match.index === text.length - 1) continue;
-    const content = <FlowTokenText input={word} animation={animate && appearance !== "instant" ? "fadeIn" : null}
-      respectReducedMotion={appearance !== "fade"}
+    const content = <FlowTokenText input={word} animation={animate ? "fadeIn" : null}
+      respectReducedMotion={false}
       animationDuration="0.6s" animationTimingFunction="ease-in-out" />;
     words.push(
       bold ? (
@@ -107,11 +106,9 @@ function InlineMarkup({ text, animate, appearance }: { text: string; animate: bo
 export function ChatProse({
   text,
   animate = false,
-  appearance = "system",
 }: {
   text: string;
   animate?: boolean;
-  appearance?: ReplyTextAppearance;
 }) {
   const blocks = parseBlocks(text.replace(/\\([_@])/g, "$1"));
 
@@ -121,14 +118,14 @@ export function ChatProse({
         if (block.type === "heading") {
           return (
             <h3 key={blockIndex} className="pt-0.5 font-semibold leading-snug">
-              <InlineMarkup text={block.text} animate={animate} appearance={appearance} />
+              <InlineMarkup text={block.text} animate={animate} />
             </h3>
           );
         }
         if (block.type === "paragraph") {
           return (
             <p key={blockIndex}>
-              <InlineMarkup text={block.text} animate={animate} appearance={appearance} />
+              <InlineMarkup text={block.text} animate={animate} />
             </p>
           );
         }
@@ -141,7 +138,7 @@ export function ChatProse({
           >
             {block.items.map((item, itemIndex) => (
               <li key={itemIndex} className="pl-0.5">
-                <InlineMarkup text={item} animate={animate} appearance={appearance} />
+                <InlineMarkup text={item} animate={animate} />
               </li>
             ))}
           </List>

@@ -1,4 +1,0 @@
-.assistant-text-preference{display:flex;align-items:center;justify-content:flex-end;gap:6px;min-height:28px;margin-bottom:4px;font-size:11px;color:var(--muted-foreground)}
-.assistant-text-preference select{max-width:130px;min-height:28px;background:transparent;border:0;border-radius:4px;color:inherit;font:inherit;padding:0 4px;cursor:pointer;color-scheme:light dark}
-.assistant-text-preference select:hover{color:var(--foreground);background:var(--secondary)}
-.assistant-text-preference select:focus-visible{outline:2px solid var(--ring);outline-offset:2px}

@@ -4,25 +4,22 @@ import { useState, useEffect } from 'react';
 import { LoaderCircle, Check, CircleAlert, ArrowUpRight } from 'lucide-react';
 import { Brand } from '@/components/workspace/brand';
 import { EditComposer } from '@/components/workspace/edit-composer';
-import { ChatProse, type ReplyTextAppearance } from './chat-prose';
+import { ChatProse } from './chat-prose';
 import { useConversationScroll } from '@/components/workspace/use-conversation-scroll';
 import { summarizeTools, type ChatTool } from './assistant-results';
 import './assistant-results.css';
-import './assistant-text-preference.css';
 import './assistant-editing.css';
 import type { SourceEditSuggestion } from '@/lib/editor/types';
 export type { ChatTool } from './assistant-results';
 
 export type ChatMessage = { id: string; role: string; text: string; status?: string; tools?: string[]; steps?: ChatTool[] };
 
-const TEXT_APPEARANCE_STORAGE_KEY = 'revline:reply-text-appearance:v1';
-
-function AssistantResponseText({ text, streaming, appearance }: { text: string; streaming: boolean; appearance: ReplyTextAppearance }) {
+function AssistantResponseText({ text, streaming }: { text: string; streaming: boolean }) {
   const [receivedLive, setReceivedLive] = useState(streaming);
   if (streaming && !receivedLive) setReceivedLive(true);
   // Keep the last received chunks fading after Convex marks the message complete.
   // A historical message mounts with this off, so opening a chat never replays it.
-  return <ChatProse text={text} animate={receivedLive || streaming} appearance={appearance} />;
+  return <ChatProse text={text} animate={receivedLive || streaming} />;
 }
 
 function EditingStatus({ activity }: { activity?: string | null }) {
@@ -43,8 +40,6 @@ export function AssistantPanel({ messages, running, configured, error, onSend, o
   const [localError, setLocalError] = useState('');
   const [pendingReply, setPendingReply] = useState<{ previousMessageId?:string;previousError?:string|null } | null>(null);
   const waiting = running || sending || !!pendingReply || !!activity;
-  // Reply fades are the editor default; Follow system and Instant remain opt-outs.
-  const [textAppearance, setTextAppearance] = useState<ReplyTextAppearance>('fade');
   const turnId = messages.findLast(message => message.role === 'user')?.id ?? 'imported';
   const demoNoteMessageId = demo ? messages.findLast(message => message.role === 'assistant')?.id : undefined;
   const scroll = useConversationScroll(turnId, true, false);
@@ -60,16 +55,6 @@ export function AssistantPanel({ messages, running, configured, error, onSend, o
     const replied = last && last.role !== 'user' && last.id !== pendingReply.previousMessageId && (last.text || last.steps?.length || last.tools?.length);
     if (running || replied || (error && error !== pendingReply.previousError)) setPendingReply(null);
   }, [messages, running, error, pendingReply]);
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem(TEXT_APPEARANCE_STORAGE_KEY);
-      setTextAppearance(saved === 'fade' || saved === 'instant' || saved === 'system' ? saved : 'fade');
-    } catch { /* Keep the editor default when local storage is unavailable. */ }
-  }, []);
-  function changeTextAppearance(value: ReplyTextAppearance) {
-    setTextAppearance(value);
-    try { localStorage.setItem(TEXT_APPEARANCE_STORAGE_KEY, value); } catch { /* Keep the chosen appearance for this session. */ }
-  }
   function changePrompt(value: string) { setPrompt(value); try { if (draftKey) sessionStorage.setItem(draftKey, value); } catch { /* Keep the live draft when storage is unavailable. */ } }
 
   async function stop() {
@@ -110,7 +95,7 @@ export function AssistantPanel({ messages, running, configured, error, onSend, o
           {(replies.length > 0 || editing || cards.length > 0) && <div className="assistant-reply">
             <div className="chat-author"><Brand markOnly /><span>Revline</span></div>
             {replies.map(message => !message.text && !message.tools?.length && message.id !== demoNoteMessageId ? null : <article key={message.id} data-message-id={message.id} data-message-status={message.status} className="chat-message chat-assistant">
-              {message.text && <AssistantResponseText key={textAppearance} text={message.text} streaming={message.status === 'streaming'} appearance={textAppearance} />}
+              {message.text && <AssistantResponseText text={message.text} streaming={message.status === 'streaming'} />}
               {message.tools?.map((tool, i) => <div className="tool-result" key={`${tool}-${i}`}><Check size={12} />{tool}</div>)}
               {message.id === demoNoteMessageId && <div className="assistant-demo-note">Sample conversation. Explore the timeline, or <a href="/projects">start your own project</a>.</div>}
             </article>)}
@@ -130,7 +115,6 @@ export function AssistantPanel({ messages, running, configured, error, onSend, o
     </div>
     <div ref={scroll.composer} className="manual-composer-dock">
     {scroll.latestHidden && <button className="chat-jump-latest" onClick={scroll.resume}>Latest response</button>}
-    <label className="assistant-text-preference">Reply text<select aria-label="Reply text appearance" value={textAppearance} onChange={event => changeTextAppearance(event.target.value as ReplyTextAppearance)}><option value="system">Follow system</option><option value="fade">Fade in</option><option value="instant">Instant</option></select></label>
     <EditComposer className="manual-editor-composer" value={prompt} onChange={changePrompt} onSubmit={submit} onAttach={onAttach} placeholder="Tell me what to make." disabled={sending || !!pendingReply} running={running} onStop={onStop ? stop : undefined} />
     </div>
   </div>;
