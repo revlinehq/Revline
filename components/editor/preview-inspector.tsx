@@ -54,7 +54,7 @@ export function PreviewInspector({ clip, audioClip, asset, assets, upload, onUpl
       event.currentTarget.querySelector<HTMLButtonElement>(`#inspector-${next}-tab`)?.focus();
       if (next === 'sources') requestAnimationFrame(() => panel.current?.querySelector<HTMLButtonElement>('.library-tabs [aria-selected="true"]')?.focus());
     }}>
-      <button role="tab" id="inspector-sources-tab" aria-controls="inspector-sources" aria-selected={tab === 'sources'} tabIndex={tab === 'sources' ? 0 : -1} onClick={() => { setMediaOpen(false); setTab('sources'); }}><ArrowLeft size={12}/>Library</button>
+      <button role="tab" id="inspector-sources-tab" aria-controls="inspector-sources" aria-selected={false} tabIndex={-1} onClick={() => { setMediaOpen(false); setTab('sources'); }}><ArrowLeft size={12}/>Library</button>
       <button role="tab" id="inspector-edit-tab" aria-controls="inspector-edit" aria-selected={tab === 'edit'} tabIndex={tab === 'edit' ? 0 : -1} onClick={() => setTab('edit')}><SlidersHorizontal size={14}/>Edit</button>
       <button role="tab" id="inspector-effects-tab" aria-controls="inspector-effects" aria-selected={tab === 'effects'} tabIndex={tab === 'effects' ? 0 : -1} onClick={() => setTab('effects')}><Layers size={14}/>{text ? 'Text effects' : 'Effects'}</button>
       <button className="inspector-close" aria-label="Close editing panel" onClick={onClose}><X size={14}/></button>
