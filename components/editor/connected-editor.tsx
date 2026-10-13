@@ -94,7 +94,7 @@ function ProjectEditor({project}: {project:Doc<'projects'>}) {
   const waitForSave=()=>saves.wait();
   const messages:ChatMessage[]=results.map(m=>({id:chatMessageKey(m),role:m.role,status:m.status,text:m.parts.filter(part=>part.type==='text').map(part=>'text'in part?String(part.text):'').join('\n\n'),steps:m.parts.flatMap(part=>{const step=chatToolFromPart(part);return step?[step]:[];})}));
   const uploading=useRef(false);
-  async function handleUpload(files:File[],requireAll=false){
+  async function handleUpload(files:File[],{requireAll=false,addToTimeline=true}:{requireAll?:boolean;addToTimeline?:boolean}={}){
     if(uploading.current||!files.length)return;uploading.current=true;setError('');
     let incomplete=false;
     const queue = files.map(file => ({id:crypto.randomUUID(),name:file.name,percent:0,kind:(file.type.startsWith('audio/')?'audio':file.type.startsWith('image/')?'image':'video') as 'video'|'image'|'audio',error:undefined as string|undefined}));
@@ -112,9 +112,12 @@ function ProjectEditor({project}: {project:Doc<'projects'>}) {
         if(asset.kind==='video'&&!asset.audioExtracted){await prepareVideoAudio(convex,projectId,assetId);asset=await convex.query(api.assets.get,{projectId,assetId});}
         if(asset.kind==='audio'&&!asset.waveform){await prepareAudioWaveform(convex,projectId,assetId);asset=await convex.query(api.assets.get,{projectId,assetId});}
         const audio=asset.audioAssetId?await convex.query(api.assets.get,{projectId,assetId:asset.audioAssetId}):null;
-        setOptimisticAssets(previous=>[...previous,asset,...(audio?[audio]:[])]);change(addMediaClip(timelineRef.current,asset,crypto.randomUUID()));
-        await waitForSave();
-        if(!timelineRef.current.clips.some(clip=>clip.assetId===assetId))throw new Error('Your footage uploaded, but its clip could not be saved. Please retry the import.');
+        setOptimisticAssets(previous=>[...previous,asset,...(audio?[audio]:[])]);
+        if(addToTimeline){
+          change(addMediaClip(timelineRef.current,asset,crypto.randomUUID()));
+          await waitForSave();
+          if(!timelineRef.current.clips.some(clip=>clip.assetId===assetId))throw new Error('Your footage uploaded, but its clip could not be saved. Please retry the import.');
+        }
         await acknowledgeDraftFiles([file]);
       }catch(e){incomplete=true;setError(e instanceof Error?e.message:'Could not import this file.');}
     }}finally{uploading.current=false;setUpload(null);}
@@ -131,12 +134,12 @@ function ProjectEditor({project}: {project:Doc<'projects'>}) {
     handoffStarted.current=true;
     void(async()=>{
       const files=await takeFiles();
-      if(files.length)await handleUpload(files,true);
+      if(files.length)await handleUpload(files,{requireAll:true});
       await waitForSave();
       const prompt=sessionStorage.getItem('revline:brief:'+projectId);
       if(prompt&&timelineRef.current.clips.length&&!saves.busy){await send({projectId,prompt});sessionStorage.removeItem('revline:brief:'+projectId);}
     })().catch(e=>setError(e instanceof Error?e.message:'Could not start this edit.'));
   },[media,projectId,send]);
   if(media===undefined)return <div className="editor-boot"><LoaderCircle className="animate-spin"/><p>Loading your footage…</p></div>;
-  return <EditorStateProvider store={store}><EditorShell projectId={projectId} draftKey={`revline:editor-draft:${projectId}`} title={title} onTitle={titleChange} timeline={timeline} assets={assets} onRefreshMedia={handleRefreshMedia} onChange={change} saving={saving} upload={upload} error={error} onError={setError} onUndo={undo} onRedo={redo} canUndo={!!history.length||!!project.history?.length} canRedo={!!future.length} assistantEditSnapshot={assistantEditSnapshot} onAssistantUndo={undoAssistantEdit} messages={messages} aiRunning={ai?.running??false} aiConfigured={ai?.configured??false} aiError={ai?.error} onStop={async()=>{await stop({projectId});}} onSend={async(prompt,context)=>{await preparingAudio.current;await waitForSave();await send({projectId,prompt,...context});}} onExport={exportVideo} exportState={exportState} onUpload={handleUpload} onImportVideo={async url=>{await waitForSave();await importVideo({projectId,url});}} videoImports={mediaTasks?.filter(task=>task.kind==='import')} analysisBusy={analysisBusy??(audioBusy?'Preparing audio…':null)} canLoadMore={status==='CanLoadMore'} onLoadMore={()=>loadMore(20)}/></EditorStateProvider>;
+  return <EditorStateProvider store={store}><EditorShell projectId={projectId} draftKey={`revline:editor-draft:${projectId}`} title={title} onTitle={titleChange} timeline={timeline} assets={assets} onRefreshMedia={handleRefreshMedia} onChange={change} saving={saving} upload={upload} error={error} onError={setError} onUndo={undo} onRedo={redo} canUndo={!!history.length||!!project.history?.length} canRedo={!!future.length} assistantEditSnapshot={assistantEditSnapshot} onAssistantUndo={undoAssistantEdit} messages={messages} aiRunning={ai?.running??false} aiConfigured={ai?.configured??false} aiError={ai?.error} onStop={async()=>{await stop({projectId});}} onSend={async(prompt,context)=>{await preparingAudio.current;await waitForSave();await send({projectId,prompt,...context});}} onExport={exportVideo} exportState={exportState} onUpload={handleUpload} onDropUpload={files=>handleUpload(files,{addToTimeline:false})} onImportVideo={async url=>{await waitForSave();await importVideo({projectId,url});}} videoImports={mediaTasks?.filter(task=>task.kind==='import')} analysisBusy={analysisBusy??(audioBusy?'Preparing audio…':null)} canLoadMore={status==='CanLoadMore'} onLoadMore={()=>loadMore(20)}/></EditorStateProvider>;
 }
