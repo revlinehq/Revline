@@ -25,6 +25,7 @@ import type * as lib_workflows from "../lib/workflows.js";
 import type * as mediaProcessor from "../mediaProcessor.js";
 import type * as mediaTasks from "../mediaTasks.js";
 import type * as playback from "../playback.js";
+import type * as processorDiagnostics from "../processorDiagnostics.js";
 import type * as projects from "../projects.js";
 import type * as r2 from "../r2.js";
 import type * as renders from "../renders.js";
@@ -55,6 +56,7 @@ declare const fullApi: ApiFromModules<{
   mediaProcessor: typeof mediaProcessor;
   mediaTasks: typeof mediaTasks;
   playback: typeof playback;
+  processorDiagnostics: typeof processorDiagnostics;
   projects: typeof projects;
   r2: typeof r2;
   renders: typeof renders;
