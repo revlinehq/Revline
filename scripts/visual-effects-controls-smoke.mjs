@@ -21,6 +21,7 @@ try {
   await page.addStyleTag({ content: bundled.outputFiles.find(file => file.path.endsWith('.css')).text });
   await page.addStyleTag({ content: '*{box-sizing:border-box}body{margin:0;background:var(--ws-bg);font-family:Arial,sans-serif}#root{width:320px;height:800px;margin:10px auto}button{border:0;font-family:inherit}.visual-effects-menu [role=menuitem]{display:flex;align-items:center;padding:6px}.visual-effects-menu{padding:4px;border:1px solid var(--ws-artifact-border);border-radius:6px}' });
   await page.addScriptTag({ content: bundled.outputFiles.find(file => file.path.endsWith('.js')).text });
+  await page.waitForSelector('.effect-library'); await page.click('.inspector-library-heading button');
   await page.waitForSelector('#inspector-effects-tab'); await page.click('#inspector-effects-tab');
   assert.equal(await page.$eval('#inspector-effects-tab', el => el.textContent), 'Effects');
   await page.select('select[aria-label="Playback speed"]', '2'); await flush();
