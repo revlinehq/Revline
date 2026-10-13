@@ -52,5 +52,5 @@ test('schema and save validation reject unknown templates, invalid settings and 
   for (const template of [{ preset: 'unknown' }, { preset: 'word-pop', duration: 0 }, { preset: 'karaoke', highlightColor: 'red' }, { preset: 'karaoke', offset: Infinity }]) {
     await expect(owner.mutation(api.projects.saveTimeline, { projectId, timeline: { ...timeline, clips: [{ ...text, textTemplate: template as RemotionTextTemplate }] }, expectedRevision: 0 })).rejects.toThrow();
   }
-  for (const kind of ['audio', 'video', 'image', 'effect'] as const) await expect(owner.mutation(api.projects.saveTimeline, { projectId, timeline: { ...timeline, clips: [{ ...text, kind }] }, expectedRevision: 0 })).rejects.toThrow('captions and text graphics');
+  for (const kind of ['audio', 'video', 'image', 'effect'] as const) await expect(owner.mutation(api.projects.saveTimeline, { projectId, timeline: { ...timeline, tracks: { ...timeline.tracks!, effects: 1 }, clips: [{ ...text, kind }] }, expectedRevision: 0 })).rejects.toThrow('captions and text graphics');
 });

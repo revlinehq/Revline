@@ -74,6 +74,16 @@ export const CropControls = forwardRef<CropControlsHandle, {
     if (event.button !== 0 || !painted) return;
     const rect = bounds.current?.getBoundingClientRect();
     if (!rect?.width || !rect.height) return;
+    // Large hit areas can overlap on a narrow crop. Use the closest visible
+    // handle center instead of whichever later sibling wins hit testing.
+    if (handle !== 'move') {
+      let distance = Infinity;
+      for (const candidate of bounds.current!.querySelectorAll<HTMLElement>('[data-crop-handle]')) {
+        const hit = candidate.getBoundingClientRect();
+        const next = Math.hypot(event.clientX-hit.left-hit.width/2,event.clientY-hit.top-hit.height/2);
+        if (next < distance) { distance = next; handle = candidate.dataset.cropHandle as CropHandle; }
+      }
+    }
     event.preventDefault(); event.stopPropagation(); event.currentTarget.setPointerCapture(event.pointerId);
     gesture.current = { pointer: event.pointerId, target: event.currentTarget, handle, x: event.clientX, y: event.clientY, width: rect.width, height: rect.height, initial: draftRef.current };
   }
@@ -101,7 +111,7 @@ export const CropControls = forwardRef<CropControlsHandle, {
       <canvas ref={image} className="source-crop-frame" aria-hidden="true"/>
       {painted && <><div className="source-crop-mask" aria-hidden="true"><div className="source-crop-shade" style={selectionStyle}/></div>
         <div className="source-crop-selection" role="button" tabIndex={0} aria-label="Move crop area. Use arrow keys to adjust." style={selectionStyle} onKeyDown={event => keyboard(event, 'move')} onPointerDown={event => start(event, 'move')} onPointerMove={move} onPointerUp={event => end(event)} onPointerCancel={event => end(event, true)} onLostPointerCapture={event => end(event, true)}/>
-        {handles.map(([handle, label, cursor]) => <button key={handle} type="button" className={`source-crop-handle ${handle.length === 1 ? 'source-crop-edge' : ''}`} aria-label={`Crop ${label}. Use arrow keys to adjust.`} style={{ left: `${(handle.includes('w') ? draft.left : handle.includes('e') ? 1 - draft.right : draft.left + selection.width / 2) * 100}%`, top: `${(handle.includes('n') ? draft.top : handle.includes('s') ? 1 - draft.bottom : draft.top + selection.height / 2) * 100}%`, cursor }} onKeyDown={event => keyboard(event, handle)} onPointerDown={event => start(event, handle)} onPointerMove={move} onPointerUp={event => end(event)} onPointerCancel={event => end(event, true)} onLostPointerCapture={event => end(event, true)}><span/></button>)}
+        {handles.map(([handle, label, cursor]) => <button key={handle} data-crop-handle={handle} type="button" className={`source-crop-handle ${handle.length === 1 ? 'source-crop-edge' : ''}`} aria-label={`Crop ${label}. Use arrow keys to adjust.`} style={{ left: `${(handle.includes('w') ? draft.left : handle.includes('e') ? 1 - draft.right : draft.left + selection.width / 2) * 100}%`, top: `${(handle.includes('n') ? draft.top : handle.includes('s') ? 1 - draft.bottom : draft.top + selection.height / 2) * 100}%`, cursor }} onKeyDown={event => keyboard(event, handle)} onPointerDown={event => start(event, handle)} onPointerMove={move} onPointerUp={event => end(event)} onPointerCancel={event => end(event, true)} onLostPointerCapture={event => end(event, true)}><span/></button>)}
       </>}
     </div>
     {!painted && <span className="source-crop-loading" role="status">Preparing source frame…</span>}

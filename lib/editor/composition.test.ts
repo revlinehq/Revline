@@ -5,6 +5,14 @@ import type { Timeline } from './types';
 const timeline: Timeline = { fps: 30, aspectRatio: 'vertical', clips: [{ id: 'caption', kind: 'caption', start: 0, duration: 2, sourceStart: 0, text: '</script><img src=x onerror=alert(1)>', animation: 'rise' }] };
 
 describe('trusted composition generation', () => {
+  test('export renders configured bar height with movement speed independent of its hold', () => {
+    const html = generateComposition({ ...timeline, clips: [...timeline.clips, { id: 'bars', kind: 'effect', effectPreset: 'cinematic-bars', cinematicBars: { size: .2, speed: 2 }, start: 1, duration: 4, sourceStart: 0, track: 3 }] }, []);
+    expect(html).toContain('class="cinematic-bar top" style="height:20%"');
+    expect(html).toContain('class="cinematic-bar bottom" style="height:20%"');
+    expect(html).toContain('"duration":0.2,"ease":"power2.inOut"');
+    expect(html).toContain('window.__revlineAdjustmentTimelines');
+    expect(html).toContain('},4.8);');
+  });
   test('escapes user text and preserves deterministic timing', () => {
     const html = generateComposition(timeline, []);
     expect(html).toContain('&lt;/script&gt;&lt;img src=x onerror=alert(1)&gt;');

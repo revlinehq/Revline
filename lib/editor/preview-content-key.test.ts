@@ -11,18 +11,32 @@ test('analysis, waveforms, upload metadata and unused sources never invalidate t
   expect(previewContentKey({ ...timeline, tracks: { visual: 5, audio: 2, overlay: 0 }, clips: [{ ...timeline.clips[0], volume: 0.5, track: 2 }] }, [asset])).toBe(key);
   expect(previewContentKey({ ...timeline, markers: [{ id: 'drop', time: 1, label: 'Beat drop' }] }, [asset])).toBe(key);
 });
-test('cuts, transforms, source dimensions and actual media URLs invalidate rendered content', () => {
+test('cuts, source dimensions and actual media URLs invalidate rendered content', () => {
   const key = previewContentKey(timeline, [asset]);
   expect(previewContentKey({ ...timeline, clips: [{ ...timeline.clips[0], sourceStart: 1 }] }, [asset])).not.toBe(key);
-  expect(previewContentKey({ ...timeline, clips: [{ ...timeline.clips[0], transform: { x: .5, y: .5, scale: 2, rotation: 0, opacity: 1 } }] }, [asset])).not.toBe(key);
   expect(previewContentKey(timeline, [{ ...asset, width: 1080 }])).not.toBe(key);
   expect(previewContentKey(timeline, [{ ...asset, url: '/new.mp4' }])).not.toBe(key);
 });
 
-test('moving footage above or below an effect rebuilds the composition hierarchy', () => {
+test('crop, fit and transform commits retain the same decoded content', () => {
+  const key = previewContentKey(timeline,[asset]);
+  expect(previewContentKey({...timeline,clips:[{...timeline.clips[0],crop:{left:.2,top:.1,right:0,bottom:0},fit:'contain',transform:{x:.5,y:.5,scale:1.2,rotation:10,opacity:.8},blendMode:'screen'}]},[asset])).toBe(key);
+});
+
+test('bar settings and timing retain media unless total duration or hierarchy changes', () => {
+  const footage={...timeline.clips[0],duration:10};
+  const bars={id:'bars',kind:'effect' as const,effectPreset:'cinematic-bars' as const,start:1,duration:2,sourceStart:0,track:2};
+  const edit={...timeline,clips:[footage,bars]},key=previewContentKey(edit,[asset]);
+  expect(previewContentKey({...edit,clips:[footage,{...bars,start:2,duration:4,cinematicBars:{size:.2,speed:2},motionOffset:0,motion:[]}]},[asset])).toBe(key);
+  expect(previewContentKey({...edit,clips:[footage,{...bars,duration:12}]},[asset])).not.toBe(key);
+  expect(previewContentKey({...edit,clips:[footage,{...bars,track:3}]},[asset])).not.toBe(key);
+});
+
+test('FX order rebuilds the hierarchy while visual layer order stays inside the shared composite', () => {
   const adjusted = { ...timeline, clips: [...timeline.clips, { id: 'flash', kind: 'effect' as const, track: 2, start: 1, duration: .5, sourceStart: 0, effectPreset: 'flash' as const }] };
   const key = previewContentKey(adjusted, [asset]);
-  expect(previewContentKey({ ...adjusted, clips: adjusted.clips.map(clip => clip.id === 'v' ? { ...clip, track: 3 } : clip) }, [asset])).not.toBe(key);
+  expect(previewContentKey({ ...adjusted, clips: adjusted.clips.map(clip => clip.id === 'v' ? { ...clip, track: 3 } : clip) }, [asset])).toBe(key);
+  expect(previewContentKey({ ...adjusted, clips: adjusted.clips.map(clip => clip.id === 'flash' ? { ...clip, track: 3 } : clip) }, [asset])).not.toBe(key);
   expect(previewContentKey({ ...adjusted, markers: [{ id: 'drop', time: 1 }] }, [asset])).toBe(key);
 });
 

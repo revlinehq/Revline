@@ -5,7 +5,7 @@ import { ChevronDown, Contrast, Palette, Plus, RotateCcw, ScanLine, Trash2, Wave
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { DEFAULT_COLOR_GRADE, DEFAULT_INVERT, DEFAULT_GLITCH, DEFAULT_ZOOM_BLUR, VISUAL_EFFECT_LIMITS, type VisualEffects } from '@/lib/editor/visual-effects';
 import type { Clip } from '@/lib/editor/types';
-import { EFFECT_CATALOG, type EffectPreset } from '@/lib/editor/clip-effects';
+import { CINEMATIC_BAR_LIMITS, EFFECT_CATALOG, cinematicBarSettings, type CinematicBarSettings, type EffectPreset } from '@/lib/editor/clip-effects';
 import { PLAYBACK_RATES, playbackRateOf } from '@/lib/editor/playback-rate';
 import './visual-effects-controls.css';
 
@@ -86,6 +86,17 @@ const pixels = (value: number) => `${Math.round(value)} px`;
 const effectNames = { colorGrade: 'Color', zoomBlur: 'Zoom blur', glitch: 'Glitch', invert: 'Invert colors' } as const;
 const effectDefaults = { colorGrade: DEFAULT_COLOR_GRADE, zoomBlur: DEFAULT_ZOOM_BLUR, glitch: DEFAULT_GLITCH, invert: DEFAULT_INVERT };
 const effectIcons = { colorGrade: Palette, zoomBlur: Waves, glitch: ScanLine, invert: Contrast };
+
+export function CinematicBarsControls({ clip, onChange, onPreview }: Pick<Props, 'clip' | 'onChange' | 'onPreview'>) {
+  const settings = cinematicBarSettings(clip);
+  const patch = (key: keyof CinematicBarSettings, value: number): Partial<Clip> => ({ cinematicBars: { ...settings, [key]: value } });
+  return <div className="visual-effects-controls" aria-label="Cinematic bars settings">
+    <div className="inspector-selection"><small>Effect</small><p>Cinematic bars</p></div>
+    <EffectSlider label="Size" value={settings.size} bounds={CINEMATIC_BAR_LIMITS.size} format={percent} disabled={false} onPreview={value => onPreview?.(value === null ? null : patch('size', value))} onCommit={value => onChange(patch('size', value))}/>
+    <EffectSlider label="Speed" value={settings.speed} bounds={CINEMATIC_BAR_LIMITS.speed} step={.25} format={value => `${value}×`} disabled={false} onPreview={value => onPreview?.(value === null ? null : patch('speed', value))} onCommit={value => onChange(patch('speed', value))}/>
+    <p className="visual-control-note">Move this effect to choose its start. Stretch it to hold longer. Speed changes the entrance and exit.</p>
+  </div>;
+}
 
 export function PlaybackSpeedControls({ clip, onChange }: { clip: Clip; onChange: (rate: number) => void }) {
   const rate = playbackRateOf(clip);

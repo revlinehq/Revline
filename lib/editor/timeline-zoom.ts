@@ -1,5 +1,5 @@
 export const TIMELINE_BASE_PX = 54;
-export const TIMELINE_MAX_ZOOM = 4;
+export const TIMELINE_MAX_ZOOM = 16;
 export const TIMELINE_OVERVIEW_SECONDS = 4 * 60 * 60;
 
 export function minimumTimelineZoom(viewportWidth: number, duration = 0) {

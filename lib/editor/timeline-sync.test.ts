@@ -1,15 +1,28 @@
 import { describe, expect, it, vi } from 'vitest';
 import { applyTimelineEdit, createTimelineSaveQueue, type TimelineSnapshot } from './timeline-sync';
 import type { Timeline } from './types';
+import { deleteEmptyLayer, moveSelectedClips } from './timeline-controls';
 
 const base: Timeline = {
-  fps: 30, aspectRatio: 'landscape', tracks: { visual: 2, overlay: 0, audio: 1 },
+  fps: 30, aspectRatio: 'landscape', tracks: { visual: 2, overlay: 0, audio: 1, effects:0 },
   clips: [{ id: 'caption', kind: 'caption', track: 2, start: 0, duration: 3, sourceStart: 0, text: 'Original', fontSize: 32 }],
 };
 const patch = (value: Partial<Timeline['clips'][number]>): Timeline => ({ ...base, clips: [{ ...base.clips[0], ...value }] });
 const deferred = <T>() => { let resolve!: (value: T) => void; const promise = new Promise<T>(done => { resolve = done; }); return { promise, resolve }; };
 
 describe('manual edit intent', () => {
+  it('rebases FX movement and row deletion without losing concurrent video edits or new effects', () => {
+    const before:Timeline={...base,tracks:{visual:2,overlay:0,audio:1,effects:3},clips:[...base.clips,
+      {id:'flash',kind:'effect',track:1,start:1,duration:.5,sourceStart:0,effectPreset:'flash'},
+      {id:'bars',kind:'effect',track:3,start:2,duration:2,sourceStart:0,effectPreset:'cinematic-bars'},
+    ]};
+    const local=moveSelectedClips(deleteEmptyLayer(before,'effects',2),['bars'],1,0);
+    const remote:Timeline={...before,clips:[{...before.clips[0],text:'Concurrent text'},...before.clips.slice(1),{id:'new',kind:'effect',track:4,start:6,duration:1,sourceStart:0,effectPreset:'punch'}]};
+    const merged=applyTimelineEdit(before,local,remote);
+    expect(merged.clips[0]).toMatchObject({text:'Concurrent text',track:2});
+    expect(merged.clips[1]).toEqual(before.clips[1]);expect(merged.clips[2]).toMatchObject({track:2,start:3,duration:2,effectPreset:'cinematic-bars'});
+    expect(merged.clips[3]).toEqual(remote.clips[3]);expect(merged.tracks).toEqual({visual:2,overlay:0,audio:1,effects:4});
+  });
   it('merges marker additions, movement and deletion without reviving remotely deleted markers', () => {
     const before: Timeline = { ...base, markers: [{ id: 'a', time: 1 }, { id: 'b', time: 2 }] };
     const local: Timeline = { ...before, markers: [{ id: 'a', time: 3 }, { id: 'local', time: 4 }] };

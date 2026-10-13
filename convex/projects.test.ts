@@ -30,6 +30,16 @@ async function uploadedFile(t: Test, ownerId: string, projectId: Id<"projects">,
 async function project(t: Test, ownerId = "owner") { return await t.withIdentity(identity(ownerId)).mutation(api.projects.create, { title: "My reel", aspectRatio: "vertical" }); }
 beforeEach(() => { vi.stubEnv("RENDER_WORKER_SECRET", "test-worker-secret"); vi.stubEnv("CONVEX_SITE_URL", "https://test.convex.site"); vi.stubEnv("BILLING_ENABLED", "false"); vi.stubEnv("ANTHROPIC_API_KEY", ""); vi.stubEnv("AI_GATEWAY_ENABLED", "false"); });
 afterEach(() => { vi.unstubAllEnvs(); vi.restoreAllMocks(); });
+test('cinematic bar size and speed survive saving and export with bounded bar-only settings', async () => {
+  const t = makeTest(), projectId = await project(t), owner = t.withIdentity(identity('owner'));
+  const timeline: Timeline = { ...textTimeline, tracks: { ...textTimeline.tracks!, effects: 3 }, clips: [...textTimeline.clips, { id: 'bars', kind: 'effect', effectPreset: 'cinematic-bars', start: 0, duration: 2, sourceStart: 0, track: 3, cinematicBars: { size: .2, speed: 2 } }] };
+  await owner.mutation(api.projects.saveTimeline, { projectId, expectedRevision: 0, timeline });
+  expect((await owner.query(api.projects.get, { projectId })).timeline?.clips[1].cinematicBars).toEqual({ size: .2, speed: 2 });
+  const jobId = await owner.mutation(api.renders.start, { projectId, resolution: 720, fps: 30, quality: 'draft' });
+  expect((await owner.mutation(api.renders.claim, { jobId, workerSecret: 'test-worker-secret' })).timeline.clips[1].cinematicBars).toEqual({ size: .2, speed: 2 });
+  for (const settings of [{ size: .51, speed: 1 }, { size: .2, speed: 0 }]) await expect(owner.mutation(api.projects.saveTimeline, { projectId, expectedRevision: 1, timeline: { ...timeline, clips: [timeline.clips[0], { ...timeline.clips[1], cinematicBars: settings }] } })).rejects.toThrow('Cinematic bar');
+  await expect(owner.mutation(api.projects.saveTimeline, { projectId, expectedRevision: 1, timeline: { ...textTimeline, clips: [{ ...textTimeline.clips[0], cinematicBars: { size: .2, speed: 2 } }] } })).rejects.toThrow('Cinematic bar');
+});
 describe("project and media ownership", () => {
   test("rejects unauthenticated project access and upload generation", async () => {
     const t = makeTest();

@@ -1,4 +1,4 @@
-import { deriveTrackCounts, normalizeTimeline, type Clip, type Timeline } from './types';
+import { deriveTrackCounts, normalizeTimeline, TIMELINE_LAYER_GROUPS, type Clip, type Timeline } from './types';
 
 function equal(a: unknown, b: unknown): boolean {
   if (a === b) return true;
@@ -63,7 +63,7 @@ export function applyTimelineEdit(base: Timeline, next: Timeline, current: Timel
     merged.markers.push(...(next.markers ?? []).filter(marker => !beforeMarkers.has(marker.id) && !currentIds.has(marker.id)));
   }
   const baseCounts = deriveTrackCounts(base), nextCounts = deriveTrackCounts(next), counts = deriveTrackCounts(current);
-  for (const group of ['visual', 'audio'] as const) {
+  for (const group of TIMELINE_LAYER_GROUPS) {
     if (nextCounts[group] !== baseCounts[group]) counts[group] = nextCounts[group] > baseCounts[group] ? Math.max(counts[group], nextCounts[group]) : nextCounts[group];
   }
   merged.tracks = counts;

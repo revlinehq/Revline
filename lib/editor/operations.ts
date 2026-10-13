@@ -116,7 +116,7 @@ export function addTextClip(timeline: Timeline, id: string, kind: 'caption' | 'g
   timeline = normalizeTimeline(timeline);
   return placeOnFreeLayer(timeline, { id, kind, start: at, duration: Math.min(3, Math.max(1, timelineDuration(timeline) - at)), sourceStart: 0, text: kind === 'caption' ? 'Your words here.' : 'MAKE ROOM FOR YOUR NEXT IDEA.', fontSize: kind === 'caption' ? 52 : 92, color: '#F4F4F0', background: kind === 'caption' ? '#0B0C0E' : 'transparent', x: 0.5, y: kind === 'caption' ? 0.82 : 0.55, animation: 'none' });
 }
-/** An adjustment clip affects the composited V tracks below it only during its own range. */
+/** An FX clip affects the visual composition only during its own range. */
 export function addEffectClip(timeline: Timeline, id: string, preset: EffectPreset, at: number, options: { duration?: number; aboveClipId?: string; track?: number } = {}): Timeline {
   timeline = normalizeTimeline(timeline);
   if (!Number.isFinite(at) || at < 0) throw new Error('Choose a valid effect position.');
@@ -125,9 +125,8 @@ export function addEffectClip(timeline: Timeline, id: string, preset: EffectPres
   const start = snapTime(at, timeline.fps), duration = Math.max(1 / timeline.fps, snapTime(requestedDuration, timeline.fps));
   const target = options.aboveClipId ? timeline.clips.find(clip => clip.id === options.aboveClipId) : undefined;
   if (options.aboveClipId && (!target || target.kind === 'audio')) throw new Error('Choose a visual clip beneath the effect.');
-  const beneath = timeline.clips.filter(clip => clip.kind !== 'audio' && clip.start < start + duration && clip.start + clip.duration > start);
-  const track = options.track ?? (target ? trackOf(target) + 1 : Math.max(0, ...beneath.map(trackOf)) + 1);
-  if (!Number.isInteger(track) || track < 1 || track > maxTrackCount('visual')) throw new Error('Make room for a visual track above the footage.');
+  const track = options.track ?? (target?.kind === 'effect' ? trackOf(target) + 1 : 1);
+  if (!Number.isInteger(track) || track < 1 || track > maxTrackCount('effects')) throw new Error('Choose an FX track between 1 and 24.');
   const clip: Clip = { id, kind: 'effect', track, start, duration, sourceStart: 0 };
   return placeOnFreeLayer(timeline, { ...clip, ...motionPreset(clip, preset) });
 }

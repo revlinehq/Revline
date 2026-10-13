@@ -35,7 +35,7 @@ test('invalid controls and wrong clip kinds cannot be saved', async () => {
   }
   for (const kind of ['audio', 'caption', 'graphic', 'effect'] as const) {
     const bad: Clip = { ...f.timeline.clips[0], kind };
-    await expect(f.owner.mutation(api.projects.saveTimeline, { projectId: f.projectId, timeline: { ...f.timeline, clips: [bad] }, expectedRevision: 0 })).rejects.toThrow('video or image');
+    await expect(f.owner.mutation(api.projects.saveTimeline, { projectId: f.projectId, timeline: { ...f.timeline, tracks: { ...f.timeline.tracks!, effects: 1 }, clips: [bad] }, expectedRevision: 0 })).rejects.toThrow('video or image');
   }
 });
 test('visual controls cannot bypass project or asset ownership', async () => {
@@ -56,6 +56,6 @@ test('AI empty-track cleanup saves one/all empty rows without deleting graded fo
   const all = removeEmptyLayers(one);
   await f.t.mutation(internal.assistant.apply, { projectId: f.projectId, ownerId: 'owner', runId: 'run', expectedRevision: 2, timeline: all });
   const saved = (await f.owner.query(api.projects.get, { projectId: f.projectId })).timeline!;
-  expect(saved.tracks).toEqual({ visual: 1, overlay: 0, audio: 0 });
+  expect(saved.tracks).toEqual({ visual: 1, overlay: 0, audio: 0, effects: 0 });
   expect(saved.clips).toEqual(before.clips.map(clip => ({ ...clip, track: 1 })));
 });

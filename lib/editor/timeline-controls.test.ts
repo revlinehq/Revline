@@ -121,7 +121,7 @@ it('creates an audio layer below the audio stack without shifting linked video v
   {id:'other',kind:'audio',track:1,start:3,duration:2,sourceStart:0},
  ]};
  const next=moveSelectionToNewLayers(timeline,['audio'],0,'below','audio');
- expect(next.tracks).toEqual({visual:1,overlay:0,audio:2});
+ expect(next.tracks).toEqual({visual:1,overlay:0,audio:2,effects:0});
  expect(next.clips).toEqual([timeline.clips[0],timeline.clips[1],{...timeline.clips[2],track:2}]);
 });
 it('keeps the twenty-four visual-layer limit instead of silently losing an extra track',()=>{
@@ -138,7 +138,7 @@ describe('remove all empty layers', () => {
    { id: 'text', kind: 'caption', track: 3, start: .2, duration: 2, sourceStart: 0, text: 'Caption' },
   ] };
   const next = removeEmptyLayers(project);
-  expect(next.tracks).toEqual({ visual: 3, overlay: 0, audio: 0 });
+  expect(next.tracks).toEqual({ visual: 3, overlay: 0, audio: 0, effects:0 });
   expect(next.clips).toEqual(project.clips.map(clip => ({ ...clip, track: clip.id === 'text' ? 3 : clip.id === 'top' ? 2 : 1 })));
   expect(removeEmptyLayers(next)).toBe(next);
   const store = createEditorStore(project); store.getState().edit(next);
@@ -146,7 +146,7 @@ describe('remove all empty layers', () => {
   expect(store.getState().undo()).toEqual(normalizeTimeline(project));
  });
  it('removes every row in a completely empty project', () => {
-  expect(removeEmptyLayers({ fps: 30, aspectRatio: 'square', clips: [] }).tracks).toEqual({ visual: 0, overlay: 0, audio: 0 });
+  expect(removeEmptyLayers({ fps: 30, aspectRatio: 'square', clips: [] }).tracks).toEqual({ visual: 0, overlay: 0, audio: 0, effects:0 });
  });
 });
 
@@ -159,4 +159,37 @@ it('moves imported mixed-group selections by one shared delta without changing r
   expect(next.clips[0].start-next.clips[1].start).toBeCloseTo(.14, 12);
   expect(next.clips.map(clip => clip.sourceStart)).toEqual([0,4]);
  }
+});
+
+it('isolates FX collisions, trims, reordering, new rows and empty-row removal from video, text and sound', () => {
+ const project:Timeline={fps:30,aspectRatio:'landscape',tracks:{visual:2,overlay:0,audio:1,effects:3},clips:[
+  {id:'video',kind:'video',track:2,start:0,duration:20,sourceStart:10},
+  {id:'title',kind:'caption',track:1,start:0,duration:20,sourceStart:0,text:'Keep this'},
+  {id:'sound',kind:'audio',track:1,start:0,duration:20,sourceStart:5,volume:.7},
+  {id:'flash',kind:'effect',track:1,start:2,duration:1,sourceStart:0,effectPreset:'flash'},
+  {id:'bars',kind:'effect',track:3,start:4,duration:2,sourceStart:0,effectPreset:'cinematic-bars'},
+ ]};
+ const unchanged=project.clips.slice(0,3);
+ expect(()=>moveSelectedClips(project,['bars'],-2,-2)).toThrow('Overlaps a clip');
+ const moved=moveSelectedClips(project,['flash'],.5,0);
+ expect(moved.clips.slice(0,3)).toEqual(unchanged);expect(moved.clips[3].start).toBe(2.5);
+ const reordered=reorderLayer(project,'effects',3,1);
+ expect(reordered.clips.slice(0,3)).toEqual(unchanged);expect(reordered.clips.slice(3).map(clip=>clip.track)).toEqual([2,1]);
+ const removed=deleteEmptyLayer(project,'effects',2);
+ expect(removed.tracks?.effects).toBe(2);expect(removed.clips.slice(0,3)).toEqual(unchanged);expect(removed.clips[4].track).toBe(2);
+ expect(()=>deleteEmptyLayer(project,'effects',1)).toThrow('Remove the clips');
+ expect(removeEmptyLayers(project)).toEqual(removed);
+ const newRows=moveSelectionToNewLayers(project,['bars'],0,'below','bars');
+ expect(newRows.tracks?.effects).toBe(4);expect(newRows.clips.slice(0,3)).toEqual(unchanged);expect(newRows.clips.slice(3).map(clip=>clip.track)).toEqual([2,1]);
+ const trimmed=resizeSelectedClips({...project,clips:[...project.clips,{id:'next',kind:'effect',track:1,start:6,duration:1,sourceStart:0,effectPreset:'flash'}]},[],['flash'],'right',20);
+ expect(trimmed.clips[3].duration).toBe(4);expect(trimmed.clips.slice(0,3)).toEqual(unchanged);
+ const store=createEditorStore(project);store.getState().edit(newRows);expect(store.getState().undo()).toEqual(project);expect(store.getState().redo()).toEqual(newRows);
+});
+
+it('rejects cross-group FX drops and allows only the outer FX creation zone', () => {
+ const rows=[{top:52,bottom:86,track:2,group:'effects' as const},{top:86,bottom:120,track:1,group:'effects' as const},{top:120,bottom:178,track:1,group:'visual' as const},{top:178,bottom:236,track:1,group:'audio' as const}];
+ expect(clipLayerDropTarget(40,rows,'effects')).toEqual({edge:'above'});
+ expect(clipLayerDropTarget(70,rows,'effects')).toEqual({track:2,direction:'below'});
+ expect(clipLayerDropTarget(140,rows,'effects')).toBeNull();expect(clipLayerDropTarget(250,rows,'effects')).toBeNull();
+ expect(clipLayerDropTarget(70,rows,'visual')).toBeNull();expect(clipLayerDropTarget(70,rows,'audio')).toBeNull();
 });

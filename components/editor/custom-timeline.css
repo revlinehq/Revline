@@ -1,6 +1,6 @@
 /* The recovered custom timeline owns pointer gestures and canonical edits. */
 .custom-timeline{--timeline-selection-border:#262626;--timeline-selection-width:2px;--timeline-selection-halo:inset 0 0 0 1px #ffffff8c;--timeline-marquee-border:#4768ef;--timeline-marquee-fill:#4768ef14;--timeline-divider:color-mix(in srgb,var(--ws-text) 10%,var(--ws-bg));height:100%;min-width:0;min-height:0;overflow:hidden;padding:0;gap:0;background:var(--ws-bg);color:var(--ws-muted);container-type:inline-size;container-name:timeline}
-html[data-workspace-theme=dark] .editor-app:not(.landing-product-demo) .custom-timeline{--timeline-selection-border:#fff;--timeline-selection-width:1px;--timeline-selection-halo:none;--timeline-marquee-border:#526b94;--timeline-marquee-fill:#7892c710}
+html[data-workspace-theme=dark] .editor-app:not(.landing-product-demo) .custom-timeline{--timeline-selection-border:#fff;--timeline-selection-width:1px;--timeline-selection-halo:none;--timeline-marquee-border:#526b94;--timeline-marquee-fill:#7892c710;--timeline-divider:color-mix(in srgb,var(--ws-text) 5%,var(--ws-bg))}
 .custom-timeline .timeline-body{position:relative;flex:1;min-height:0;overflow:hidden}
 .custom-timeline .timeline-scroll{--timeline-scrollbar-thumb:color-mix(in srgb,var(--ws-text) 16%,var(--ws-bg));min-width:0;overflow:auto;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:var(--timeline-scrollbar-thumb) transparent}
 .custom-timeline .timeline-scroll::-webkit-scrollbar{width:6px;height:6px;background:transparent}
@@ -93,5 +93,10 @@ html[data-workspace-theme=dark] .editor-app:not(.landing-product-demo) .custom-t
 .custom-timeline .timeline-beat-marker path{fill:currentColor;stroke:currentColor;stroke-width:1.5;stroke-linejoin:round}
 .custom-timeline .timeline-beat-marker:hover,.custom-timeline .timeline-beat-marker:focus-visible{color:#f4a344;filter:drop-shadow(0 0 2px #e68a2833)}
 .custom-timeline .timeline-beat-marker:focus-visible{outline:1px solid currentColor;border-radius:3px}
-.custom-timeline .timeline-clip.clip-effect>span{gap:5px;font-size:10px;font-weight:500;color:#2d1d05}
+.custom-timeline .timeline-clip.clip-effect>span{gap:5px;font-size:10px;font-weight:500;color:#291708}
 .custom-timeline .timeline-clip.clip-effect>span svg{flex-shrink:0}
+.custom-timeline .track-label[data-group=effects] .track-label-name{color:#a95c0f}
+html[data-workspace-theme=dark] .custom-timeline .track-label[data-group=effects] .track-label-name{color:#ff9b36}
+.custom-timeline .track-label[data-group=visual] .track-label-name{color:#248a55}
+html[data-workspace-theme=dark] .custom-timeline .track-label[data-group=visual] .track-label-name{color:#32c878}
+.custom-timeline .timeline-clip.clip-video>span{background:#32c878;color:#092d1a;height:16px;padding-top:3px;font-size:9px}

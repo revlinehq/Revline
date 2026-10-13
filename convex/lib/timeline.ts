@@ -31,15 +31,16 @@ export async function validateTimeline(ctx: MutationCtx | QueryCtx, project: Doc
   // out-of-range clip or a clip outside its declared legacy group.
   const canonical = timeline.tracks?.overlay === 0;
   if (timeline.tracks) {
-    const { visual, overlay, audio } = timeline.tracks;
-    if (![visual, overlay, audio].every(Number.isInteger) || audio < 0 || audio > 12 || (canonical ? visual < 0 || visual > 24 : visual < 0 || visual > 12 || overlay < 0 || overlay > 12)) throw new ConvexError("Use 0–24 visual tracks and 0–12 audio tracks");
+    const { visual, overlay, audio, effects } = timeline.tracks;
+    if (![visual, overlay, audio].every(Number.isInteger) || audio < 0 || audio > 12 || (canonical ? visual < 0 || visual > 24 : visual < 0 || visual > 12 || overlay < 0 || overlay > 12) || (effects !== undefined && (!Number.isInteger(effects) || effects < 0 || effects > 24))) throw new ConvexError("Use 0–24 visual/effects tracks and 0–12 audio tracks");
   }
   for (const clip of timeline.clips) {
     const track = clip.track ?? (clip.kind === "caption" ? 2 : 1);
-    const group = canonical ? layerGroup(clip.kind) : clip.kind === "caption" || clip.kind === "graphic" ? "overlay" : clip.kind === "audio" ? "audio" : "visual";
-    const limit = canonical ? maxTrackCount(group) : 12;
+    const group = clip.kind === 'effect' ? 'effects' : canonical ? layerGroup(clip.kind) : clip.kind === "caption" || clip.kind === "graphic" ? "overlay" : clip.kind === "audio" ? "audio" : "visual";
+    const limit = group === 'effects' || canonical ? maxTrackCount(group) : 12;
     if (!Number.isInteger(track) || track < 1 || track > limit) throw new ConvexError(`Clip tracks must be integers between 1 and ${limit}`);
-    if (timeline.tracks && track > timeline.tracks[group]) throw new ConvexError("Clip layer exceeds the declared layer count");
+    const declaredCount = timeline.tracks?.[group];
+    if (declaredCount !== undefined && track > declaredCount) throw new ConvexError("Clip layer exceeds the declared layer count");
   }
   timeline = normalizeTimeline(timeline);
   const ids = new Set<string>();
@@ -63,7 +64,8 @@ export async function validateTimeline(ctx: MutationCtx | QueryCtx, project: Doc
     const track = trackOf(clip);
     const group = layerGroup(clip.kind);
     if (track > maxTrackCount(group)) throw new ConvexError("Clip track exceeds its group limit");
-    if (timeline.tracks && track > timeline.tracks[group]) throw new ConvexError("Clip layer exceeds the declared layer count");
+    const declaredCount = timeline.tracks?.[group];
+    if (declaredCount !== undefined && track > declaredCount) throw new ConvexError("Clip layer exceeds the declared layer count");
     if ((clip.transform || clip.crop || clip.fit) && clip.kind !== "video" && clip.kind !== "image") throw new ConvexError("Transforms, cropping, and fit apply to visual media only");
     if (clip.transform) {
       const transform = clip.transform;

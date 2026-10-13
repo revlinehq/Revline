@@ -4,6 +4,9 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import puppeteer from 'puppeteer';
+import { tsImport } from 'tsx/esm/api';
+const compositionModule = await tsImport('../lib/editor/composition.ts', import.meta.url);
+const generateComposition = compositionModule.generateComposition ?? compositionModule.default.generateComposition;
 
 const directory = mkdtempSync(join(tmpdir(), 'revline-live-effects-'));
 const fixture = join(directory, 'footage.mp4');
@@ -210,6 +213,75 @@ try {
     await page.waitForFunction(sourceTime => { const v = document.querySelector('hyperframes-player')?.iframeElement?.contentDocument?.querySelector('video'); return v && !v.seeking && Math.abs(v.currentTime - sourceTime) < .05; }, {}, sourceTime);
     assert.equal(await page.evaluate(() => document.querySelector('hyperframes-player').iframeElement.contentDocument.querySelector('video').playbackRate), rate, 'Native preview uses the clip speed');
   }
+  await page.evaluate(() => [...document.querySelectorAll('.timed-effect-presets button')].find(button => button.textContent.includes('Cinematic bars')).click());
+  await page.waitForFunction(() => document.querySelector('hyperframes-player')?.iframeElement?.contentDocument?.querySelector('.cinematic-bar'));
+  await page.waitForSelector('input[aria-label="Size"]');
+  await page.waitForSelector('input[aria-label="Speed"]');
+  await settle();
+  const barClip = await page.evaluate(() => {
+    const p = document.querySelector('hyperframes-player'), video = p.iframeElement.contentDocument.querySelector('video');
+    window.previewBefore = { p, doc: p.iframeElement.contentDocument, video }; window.previewReloads = 0;
+    video.addEventListener('loadstart', () => window.previewReloads++);
+    return window.testStore.getState().timeline.clips.find(clip => clip.effectPreset === 'cinematic-bars');
+  });
+  assert.equal(barClip.duration, 2, 'Bars have a usable default duration');
+  const barAt = async time => page.evaluate(time => {
+    const p = document.querySelector('hyperframes-player'); p.pause(); p.seek(time);
+    const doc = p.iframeElement.contentDocument, bar = doc.querySelector('.cinematic-bar.top'), style = doc.defaultView.getComputedStyle(bar);
+    const height = Number.parseFloat(style.height);
+    return { time: doc.defaultView.__timelines.revline.time(), size: height / Number(doc.querySelector('#composition').dataset.height), coverage: 1 - Math.abs(new DOMMatrix(style.transform).m42) / height };
+  }, time);
+  assert.ok(Math.abs((await barAt(barClip.start + .2)).coverage - .5) < .01, 'Normal bars are halfway in after 0.2 seconds');
+  assert.ok(Math.abs((await barAt(barClip.start + .4)).coverage - 1) < .01, 'Normal bars enter in 0.4 seconds');
+  // Drag the actual effect end by two seconds; longer hold must preserve entrance speed.
+  const handle = await page.$(`[data-clip-id="${barClip.id}"] .clip-trim.right`), handleBox = await handle.boundingBox();
+  const px = await page.evaluate(() => Number.parseFloat(document.querySelector('.time-ruler').style.getPropertyValue('--ruler-unit')));
+  await page.mouse.move(handleBox.x + handleBox.width / 2, handleBox.y + handleBox.height / 2); await page.mouse.down();
+  await page.mouse.move(handleBox.x + handleBox.width / 2 + 2 * px, handleBox.y + handleBox.height / 2, { steps: 8 }); await page.mouse.up(); await settle();
+  const stretched = await page.evaluate(() => window.testStore.getState().timeline.clips.find(clip => clip.effectPreset === 'cinematic-bars'));
+  assert.ok(Math.abs(stretched.duration - 4) < .04, 'Stretching changes the bar end/hold time');
+  await check('stretch bars within the existing edit');
+  assert.ok(Math.abs((await barAt(stretched.start + .2)).coverage - .5) < .01, 'Stretching does not slow entrance movement');
+  assert.ok(Math.abs((await barAt(stretched.start + stretched.duration - .2)).coverage - .5) < .01, 'Stretching preserves a 0.4-second exit');
+  await page.focus('input[aria-label="Size"]'); await page.keyboard.press('End'); await settle();
+  await check('change bar size');
+  assert.ok(Math.abs((await barAt(stretched.start + 1)).size - .5) < .001, 'The selected Size control changes each bar height');
+  await page.focus('input[aria-label="Speed"]'); await page.keyboard.press('End'); await settle();
+  await check('change bar movement speed');
+  const rapidFirstFrame = await barAt(stretched.start + 1 / 30);
+  const savedSpeed = await page.evaluate(() => window.testStore.getState().timeline.clips.find(clip => clip.effectPreset === 'cinematic-bars').cinematicBars.speed);
+  assert.equal(savedSpeed, 4, 'The selected Speed control saves its multiplier');
+  assert.ok(Math.abs(rapidFirstFrame.coverage - .148148) < .01, '4× speed renders the first 30-fps frame at its correct eased position');
+  assert.ok(Math.abs((await barAt(stretched.start + .1)).coverage - 1) < .01, '4× speed enters in 0.1 seconds');
+  await page.evaluate(() => [...document.querySelectorAll('.timed-effect-presets button')].find(button => button.textContent.includes('Quick zoom in')).click());
+  await page.waitForFunction(() => window.testStore.getState().timeline.clips.some(clip => clip.effectPreset === 'quick-zoom-in'));
+  await page.evaluate(() => {
+    const state = window.testStore.getState();
+    state.edit({ ...state.timeline, clips: state.timeline.clips.map(clip => clip.id === 'test-caption' ? { ...clip, track: 24 } : clip.effectPreset === 'cinematic-bars' ? { ...clip, track: 1 } : clip.effectPreset === 'quick-zoom-in' ? { ...clip, track: 2 } : clip) });
+  });
+  await page.waitForFunction(() => {
+    const doc = document.querySelector('hyperframes-player')?.iframeElement?.contentDocument;
+    return doc?.querySelectorAll('[data-effect-clip]').length === 2 && doc.querySelector('.overlay')?.dataset.trackIndex === '23';
+  });
+  await settle();
+  const snapshot = await page.evaluate(() => {
+    const timeline = window.testStore.getState().timeline, doc = document.querySelector('hyperframes-player').iframeElement.contentDocument;
+    const videoClip = timeline.clips.find(clip => clip.kind === 'video'), video = doc.querySelector('video');
+    return { timeline, assets: [{ _id: videoClip.assetId, fileName: 'generated.mp4', kind: 'video', width: 320, height: 180, duration: 12, url: video.src }],
+      barsId: timeline.clips.find(clip => clip.effectPreset === 'cinematic-bars').id,
+      zoomId: timeline.clips.find(clip => clip.effectPreset === 'quick-zoom-in').id };
+  });
+  const exported = generateComposition(snapshot.timeline, snapshot.assets);
+  const sharedStack = await page.evaluate(({ exported, barsId, zoomId }) => {
+    const preview = document.querySelector('hyperframes-player').iframeElement.contentDocument;
+    const output = new DOMParser().parseFromString(exported, 'text/html');
+    const inspect = doc => {
+      const bars = doc.querySelector(`[data-effect-clip="${barsId}"]`), zoom = doc.querySelector(`[data-effect-clip="${zoomId}"]`);
+      return !!bars && !!zoom && zoom.contains(bars) && bars.contains(doc.querySelector('video')) && bars.contains(doc.querySelector('.overlay'));
+    };
+    return { preview: inspect(preview), export: inspect(output) };
+  }, { exported, barsId: snapshot.barsId, zoomId: snapshot.zoomId });
+  assert.deepEqual(sharedStack, { preview: true, export: true }, 'FX2 wraps FX1; both apply to the entire footage/text composite in preview and export');
   assert.deepEqual(browserErrors, [], 'The editor effect runtime has no browser errors');
-  console.log('PASS: text and visual effects preserve player, iframe, decoded media and playback; visual slider previews immediately and commits once; faster/slower footage seeks source time at its clip speed.');
+  console.log('PASS: text and visual effects preserve player/media/clock; saved text keeps its animation; sliders preview and commit once; footage speed maps source time; bar controls update size/speed and stretching extends hold without slowing movement or replacing the player; FX preview/export share the complete video/text composite.');
 } finally { await browser.close(); rmSync(directory, { recursive: true, force: true }); }

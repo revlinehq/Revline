@@ -1,4 +1,5 @@
-import { NEUTRAL_MOTION, validateClipEffects, visibleMotion, type MotionKeyframe } from './clip-effects';
+import { NEUTRAL_MOTION, cinematicBarSettings, validateClipEffects, visibleMotion, type MotionKeyframe } from './clip-effects';
+import { cinematicBarsAnimationSteps } from './adjustment-animation';
 import { MAX_CLIP_VOLUME } from './clip-volume';
 import { serializeTextAnimation, textAnimationSteps } from './text-animation';
 import { validateVisualEffects } from './visual-effects';
@@ -113,7 +114,7 @@ export function generateComposition(timeline: Timeline, assets: MediaAsset[], op
     const motion = visibleMotion(clip);
     const motionVars = (key: MotionKeyframe) => ({ x: key.x * width, y: key.y * height, scale: key.scale, rotation: key.rotation, opacity: key.opacity, filter: `brightness(${key.brightness})` });
     if (clip.kind === 'effect' && clip.effectPreset === 'cinematic-bars') {
-      for (const side of ['top', 'bottom'] as const) animateKeys(`#${id}-bar-${side}`, clip, motion, key => ({ y: 0, yPercent: (side === 'top' ? -100 : 100) * (1 - key.opacity) }), { time: 0, ...NEUTRAL_MOTION, opacity: 0 }, 'power2.inOut');
+      animation.push(`{const adjustmentTimeline=gsap.timeline();timeline.add(adjustmentTimeline,0);window.__revlineAdjustmentTimelines['${id}']=adjustmentTimeline;${cinematicBarsAnimationSteps(clip, index).map(step => serializeTextAnimation(step, 'adjustmentTimeline')).join('')}}`);
     } else if (clip.kind !== 'caption' && clip.kind !== 'graphic') animateKeys(`#${id}-motion`, clip, motion, motionVars, { time: 0, ...NEUTRAL_MOTION });
     // Adjustment wrappers are always mounted. A timed HyperFrames root would
     // hide all the footage it contains before and after the effect range.
@@ -170,18 +171,14 @@ export function generateComposition(timeline: Timeline, assets: MediaAsset[], op
   });
   let compositionNodes = nodes.join('\n');
   if (timeline.clips.some(clip => clip.kind === 'effect')) {
-    let visualStack = '';
-    for (let track = 1; track <= 24; track++) {
-      // Wrap the accumulated lower tracks before adding visuals on this track.
-      // A title above an effect stays crisp; audio stays outside every wrapper.
-      timeline.clips.forEach((clip, index) => {
-        if (clip.kind !== 'effect' || trackOf(clip) !== track) return;
-        const bars = clip.effectPreset === 'cinematic-bars' ? `<div class="cinematic-bars"><div id="clip-${index}-bar-top" class="cinematic-bar top"></div><div id="clip-${index}-bar-bottom" class="cinematic-bar bottom"></div></div>` : '';
-        visualStack = `<div id="clip-${index}-motion" data-effect-clip="${escapeHtml(clip.id)}" class="adjustment-layer" style="z-index:${track * 256 - 1}">${visualStack}${bars}</div>`;
-      });
-      timeline.clips.forEach((clip, index) => {
-        if (clip.kind !== 'audio' && clip.kind !== 'effect' && trackOf(clip) === track) visualStack += nodes[index];
-      });
+    // FX tracks operate on the completed footage/text composite, independently
+    // of V-track numbers. Higher FX rows wrap the accumulated lower FX layers.
+    let visualStack = timeline.clips.map((clip, index) => clip.kind !== 'audio' && clip.kind !== 'effect' ? nodes[index] : '').join('');
+    const adjustments = timeline.clips.map((clip, index) => ({ clip, index })).filter(({ clip }) => clip.kind === 'effect').sort((a, b) => trackOf(a.clip) - trackOf(b.clip) || a.index - b.index);
+    for (const { clip, index } of adjustments) {
+      const size = cinematicBarSettings(clip).size * 100;
+      const bars = clip.effectPreset === 'cinematic-bars' ? `<div class="cinematic-bars"><div id="clip-${index}-bar-top" class="cinematic-bar top" style="height:${size}%"></div><div id="clip-${index}-bar-bottom" class="cinematic-bar bottom" style="height:${size}%"></div></div>` : '';
+      visualStack = `<div id="clip-${index}-motion" data-effect-clip="${escapeHtml(clip.id)}" class="adjustment-layer" style="z-index:${trackOf(clip) * 256 - 1}">${visualStack}${bars}</div>`;
     }
     compositionNodes = visualStack + timeline.clips.map((clip, index) => clip.kind === 'audio' ? nodes[index] : '').join('');
   }
@@ -198,10 +195,10 @@ export function generateComposition(timeline: Timeline, assets: MediaAsset[], op
 html,body{margin:0;width:${width}px;height:${height}px;overflow:hidden;background:#0B0C0E;font-family:'Space Grotesk',Arial,Helvetica,sans-serif}*{box-sizing:border-box}#composition{isolation:isolate;position:relative;width:${width}px;height:${height}px;overflow:hidden;background:#0B0C0E}.visual-frame{position:absolute;width:${width}px;height:${height}px;overflow:hidden;transform-origin:center}.motion-frame{width:100%;height:100%;transform-origin:center}.text-motion{display:inline-block}.source-window{position:absolute;overflow:hidden}.visual{position:absolute}.overlay{position:absolute;max-width:90%;width:max-content;transform:translate(-50%,-50%);font-weight:700;line-height:1.12;text-align:center;white-space:pre-wrap;overflow-wrap:anywhere}.text-content{display:inline-block;padding:${10 * scale}px ${18 * scale}px;border-radius:${8 * scale}px}.caption{text-shadow:0 2px 12px #0009}audio{position:absolute}
 .adjustment-layer{position:absolute;inset:0;transform-origin:center;pointer-events:none}
 [data-revline-effects]{opacity:0!important}.visual-effect-output{position:absolute;pointer-events:none}
-.cinematic-bars{position:absolute;inset:0;overflow:hidden;z-index:2147483647;pointer-events:none}.cinematic-bar{position:absolute;left:0;right:0;height:12%;background:#000}.cinematic-bar.top{top:0;transform:translateY(-100%)}.cinematic-bar.bottom{bottom:0;transform:translateY(100%)}
+.cinematic-bars{position:absolute;inset:0;overflow:hidden;z-index:2147483647;pointer-events:none}.cinematic-bar{position:absolute;left:0;right:0;background:#000}.cinematic-bar.top{top:0;transform:translateY(-100%)}.cinematic-bar.bottom{bottom:0;transform:translateY(100%)}
 </style><script src="${gsapUrl}"></script><script src="${visualEffectsUrl}"></script>${hasText ? `<script src="${remotionTextUrl}"></script>` : ''}</head><body><div id="composition" data-composition-id="revline" data-duration="${safeDuration}" data-width="${width}" data-height="${height}" data-fps="${fps}">${compositionNodes}</div><script>
 const timeline=gsap.timeline({paused:true});
-window.__revlineTextTimelines={};
+window.__revlineTextTimelines={};window.__revlineAdjustmentTimelines={};
 ${animation.join('\n')}
 timeline.to({},{duration:${safeDuration}},0);
 window.__timelines=window.__timelines||{};window.__timelines.revline=timeline;

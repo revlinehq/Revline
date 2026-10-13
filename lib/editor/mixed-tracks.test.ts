@@ -14,7 +14,7 @@ it('preserves old text-above-footage stacking once, including saved empty rows',
   const legacy: Timeline = { ...mixed, tracks: { visual: 3, overlay: 2, audio: 1 } };
   const migrated = normalizeTimeline(legacy);
   expect(migrated.clips.map(clip => clip.track)).toEqual([4, 1, 5]);
-  expect(migrated.tracks).toEqual({ visual: 5, overlay: 0, audio: 1 });
+  expect(migrated.tracks).toEqual({ visual: 5, overlay: 0, audio: 1, effects:0 });
   expect(deriveTracks(migrated).map(row => row.label)).toEqual(['V5', 'V4', 'V3', 'V2', 'V1', 'A1']);
   expect(normalizeTimeline(migrated)).toBe(migrated);
   expect(legacy.clips.map(clip => clip.track)).toEqual([1, 1, 2]);

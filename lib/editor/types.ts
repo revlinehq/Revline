@@ -1,10 +1,12 @@
-import type { BlendMode, EffectPreset, MotionKeyframe } from './clip-effects';
+import type { BlendMode, CinematicBarSettings, EffectPreset, MotionKeyframe } from './clip-effects';
 import type { ColorGrade, ZoomBlur, Glitch, InvertColors } from './visual-effects';
 import type { RemotionTextTemplate } from './remotion-text';
 export type AspectRatio = 'vertical' | 'portrait-feed' | 'square' | 'classic' | 'landscape';
 export type ClipKind = 'video' | 'image' | 'audio' | 'caption' | 'graphic' | 'effect';
-export type LayerGroup = 'visual' | 'overlay' | 'audio';
-export type TrackCounts = Record<LayerGroup, number>;
+export type LayerGroup = 'visual' | 'overlay' | 'audio' | 'effects';
+export type TrackCounts = Record<Exclude<LayerGroup, 'effects'>, number> & { effects?:number };
+export type ResolvedTrackCounts = Required<TrackCounts>;
+export const TIMELINE_LAYER_GROUPS = ['effects', 'visual', 'audio'] as const;
 export type VisualTransform = { x: number; y: number; scale: number; rotation: number; opacity: number };
 export type SourceCrop = { left: number; top: number; right: number; bottom: number };
 export const DEFAULT_TRANSFORM: VisualTransform = { x: 0.5, y: 0.5, scale: 1, rotation: 0, opacity: 1 };
@@ -31,6 +33,7 @@ export type Clip = {
   motion?: MotionKeyframe[];
   motionOffset?: number;
   effectPreset?: EffectPreset | 'none';
+  cinematicBars?: CinematicBarSettings;
   colorGrade?: ColorGrade;
   zoomBlur?: ZoomBlur;
   glitch?: Glitch;
@@ -59,10 +62,10 @@ export type MediaAsset = {
   };
 };
 export type SourceEditSuggestion = { label:string;prompt:string;start:number;end:number };
-export const EMPTY_TIMELINE: Timeline = { clips: [], fps: 30, aspectRatio: 'vertical', tracks: { visual: 1, overlay: 0, audio: 1 } };
-export function maxTrackCount(group: LayerGroup) { return group === 'visual' ? 24 : 12; }
-export function layerGroup(kind: ClipKind): LayerGroup {
-  return kind === 'audio' ? 'audio' : 'visual';
+export const EMPTY_TIMELINE: Timeline = { clips: [], fps: 30, aspectRatio: 'vertical', tracks: { visual: 1, overlay: 0, audio: 1, effects:0 } };
+export function maxTrackCount(group: LayerGroup) { return group === 'visual' || group === 'effects' ? 24 : 12; }
+export function layerGroup(kind: ClipKind): Exclude<LayerGroup,'overlay'> {
+  return kind === 'effect' ? 'effects' : kind === 'audio' ? 'audio' : 'visual';
 }
 function validCount(value: number, maximum = 12) {
   if (!Number.isInteger(value) || value < 0 || value > maximum) throw new Error(`A group can have between 0 and ${maximum} layers.`);
@@ -76,24 +79,28 @@ export function trackOf(clip: Pick<Clip, 'kind' | 'track'>) { return validTrack(
 /** Zero legacy overlay rows marks the shared V-track model, without a schema migration. */
 export function normalizeTimeline(timeline: Timeline): Timeline {
   if (timeline.tracks?.overlay === 0) return timeline;
-  const visuals = timeline.clips.filter(clip => clip.kind === 'video' || clip.kind === 'image' || clip.kind === 'effect');
+  const visuals = timeline.clips.filter(clip => clip.kind === 'video' || clip.kind === 'image');
+  // Old separated-overlay projects counted effects as V rows. Preserve that
+  // historical text offset; explicit FX counts and FX13–24 never belonged to it.
+  const legacyEffects = timeline.tracks?.effects === undefined ? timeline.clips.filter(clip=>clip.kind==='effect'&&(clip.track??1)<=12) : [];
   const text = timeline.clips.filter(clip => clip.kind === 'caption' || clip.kind === 'graphic');
   const audio = timeline.clips.filter(clip => clip.kind === 'audio');
-  const visualCount = Math.max(validCount(timeline.tracks?.visual ?? 1), ...visuals.map(clip => validTrack(clip.track ?? 1, 12)));
+  const visualCount = Math.max(validCount(timeline.tracks?.visual ?? 1), ...[...visuals,...legacyEffects].map(clip => validTrack(clip.track ?? 1, 12)));
   const overlayCount = Math.max(validCount(timeline.tracks?.overlay ?? (text.length ? 1 : 0)), ...text.map(clip => validTrack(clip.track ?? (clip.kind === 'caption' ? 2 : 1), 12)));
   const audioCount = Math.max(validCount(timeline.tracks?.audio ?? 1), ...audio.map(clip => trackOf(clip)));
   return {
     ...timeline,
-    tracks: { visual: visualCount + overlayCount, overlay: 0, audio: audioCount },
+    tracks: { visual: visualCount + overlayCount, overlay: 0, audio: audioCount, effects:Math.max(validCount(timeline.tracks?.effects??0,24), ...timeline.clips.filter(clip=>clip.kind==='effect').map(trackOf)) },
     clips: timeline.clips.map(clip => clip.kind === 'caption' || clip.kind === 'graphic' ? { ...clip, track: visualCount + (clip.track ?? (clip.kind === 'caption' ? 2 : 1)) } : clip),
   };
 }
-export function deriveTrackCounts(timeline: Timeline): TrackCounts {
+export function deriveTrackCounts(timeline: Timeline): ResolvedTrackCounts {
   timeline = normalizeTimeline(timeline);
-  const counts: TrackCounts = {
+  const counts: ResolvedTrackCounts = {
     visual: validCount(timeline.tracks?.visual ?? 1, 24),
     overlay: 0,
     audio: validCount(timeline.tracks?.audio ?? 1),
+    effects: validCount(timeline.tracks?.effects ?? 0,24),
   };
   for (const clip of timeline.clips) {
     const group = layerGroup(clip.kind);
@@ -102,13 +109,13 @@ export function deriveTrackCounts(timeline: Timeline): TrackCounts {
   return counts;
 }
 export function clipColor(kind: ClipKind) {
-  return kind === 'effect' ? '#AB7A32' : kind === 'caption' ? '#5DBAA0' : kind === 'graphic' ? '#BA5D7A' : kind === 'audio' ? '#8F5DBA' : '#303030';
+  return kind === 'effect' ? '#FF9B36' : kind === 'caption' ? '#5DBAA0' : kind === 'graphic' ? '#BA5D7A' : kind === 'audio' ? '#8F5DBA' : '#32C878';
 }
 export function deriveTracks(timeline: Timeline) {
   const counts = deriveTrackCounts(timeline);
-  return (['visual', 'audio'] as const).flatMap(group => Array.from({ length: counts[group] }, (_, index) => {
+  return TIMELINE_LAYER_GROUPS.flatMap(group => Array.from({ length: counts[group] }, (_, index) => {
     const number = counts[group] - index;
-    return { id: `${group}-${number}`, group, number, label: `${group === 'visual' ? 'V' : 'A'}${number}`, color: clipColor(group === 'visual' ? 'video' : 'audio') };
+    return { id: `${group}-${number}`, group, number, label: `${group === 'effects' ? 'FX' : group === 'visual' ? 'V' : 'A'}${number}`, color: clipColor(group === 'effects' ? 'effect' : group === 'visual' ? 'video' : 'audio') };
   }));
 }
 export function timelineDuration(timeline: Timeline) {

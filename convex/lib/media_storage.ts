@@ -1,5 +1,5 @@
 import { signMediaToken } from '../../lib/storage/media-tokens';
-import type { QueryCtx, MutationCtx } from '../_generated/server';
+import type { QueryCtx, MutationCtx, ActionCtx } from '../_generated/server';
 import type { Id } from '../_generated/dataModel';
 
 export function mediaConfig() {
@@ -7,7 +7,7 @@ export function mediaConfig() {
   if (!url || !secret) throw new Error('Cloudflare media storage is not configured');
   return { url: url.replace(/\/$/, ''), secret };
 }
-export async function mediaUrl(ctx: QueryCtx | MutationCtx, source: { storageId?: Id<'_storage'>; r2Key?: string }) {
+export async function mediaUrl(ctx: QueryCtx | MutationCtx | ActionCtx, source: { storageId?: Id<'_storage'>; r2Key?: string }) {
   if (!source.r2Key) return source.storageId ? ctx.storage.getUrl(source.storageId) : null;
   const { url, secret } = mediaConfig();
   const token = await signMediaToken(secret, { operation: 'read', key: source.r2Key, expires: Date.now() + 7 * 86400_000 });

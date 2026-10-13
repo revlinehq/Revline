@@ -1,4 +1,4 @@
-import { layerGroup, normalizeTimeline, timelineDuration, trackOf, type Timeline } from "../../lib/editor/types";
+import { layerGroup, normalizeTimeline, timelineDuration, trackOf, type LayerGroup, type Timeline } from "../../lib/editor/types";
 
 /** Visual coverage gaps and same-layer collisions; stacked layers are intentional. */
 export function summarizeTimeline(timeline: Timeline, assets: { _id: string; kind: string }[]) {
@@ -12,7 +12,7 @@ export function summarizeTimeline(timeline: Timeline, assets: { _id: string; kin
   }
   if (duration > coveredUntil + 0.000001) gaps.push({ start: coveredUntil, end: duration });
 
-  const overlaps: { group: "visual" | "overlay" | "audio"; track: number; clipIds: string[]; start: number; end: number }[] = [];
+  const overlaps: { group: LayerGroup; track: number; clipIds: string[]; start: number; end: number }[] = [];
   let overlapCount = 0;
   for (let first = 0; first < timeline.clips.length; first++) {
     const a = timeline.clips[first];

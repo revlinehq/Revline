@@ -36,7 +36,7 @@ test('legacy read, save, list and undo preserve text above video without repeate
   const { t, owner, projectId, legacy } = await setup();
   await t.run(ctx => ctx.db.patch(projectId, { timeline: legacy, history: [legacy], revision: 7 }));
   const canonical = normalizeTimeline(legacy);
-  expect(canonical.tracks).toEqual({ visual: 4, overlay: 0, audio: 0 });
+  expect(canonical.tracks).toEqual({ visual: 4, overlay: 0, audio: 0, effects: 0 });
   expect(canonical.clips.map(clip => clip.track)).toEqual([2, 3, 4]);
   expect((await owner.query(api.projects.get, { projectId })).timeline).toEqual(canonical);
   expect((await owner.query(api.projects.get, { projectId })).history).toEqual([canonical]);

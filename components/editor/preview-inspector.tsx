@@ -1,8 +1,8 @@
 'use client';
 
 import { TextEffectsControls } from './text-effects-controls';
-import { PlaybackSpeedControls, TimedEffectPresets, VisualEffectsControls } from './visual-effects-controls';
-import { useState } from 'react';
+import { CinematicBarsControls, PlaybackSpeedControls, TimedEffectPresets, VisualEffectsControls } from './visual-effects-controls';
+import { useEffect, useState } from 'react';
 import { SlidersHorizontal, Layers, Crop, X, FolderOpen } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { NumberControl } from './visual-controls';
@@ -15,6 +15,10 @@ export function PreviewInspector({ clip, audioClip, asset, assets, upload, onUpl
   const [tab, setTab] = useState<'edit' | 'sources' | 'effects'>('edit');
   const text = clip?.kind === 'caption' || clip?.kind === 'graphic';
   const visual = clip?.kind === 'video' || clip?.kind === 'image';
+  useEffect(() => {
+    if (clip?.kind === 'effect' && clip.effectPreset === 'cinematic-bars') setTab(current => current === 'sources' ? 'effects' : current);
+  }, [clip?.id, clip?.kind, clip?.effectPreset]);
+  const barControls = clip?.kind === 'effect' && clip.effectPreset === 'cinematic-bars' ? <CinematicBarsControls key={clip.id} clip={clip} onChange={onChange} onPreview={onPreviewEffects}/> : null;
   return <aside className="preview-inspector" aria-label="Clip settings">
     <div className="inspector-tabs" role="tablist" aria-label="Editing tools" onKeyDown={event => {
       if (!(event.target as HTMLElement).matches('[role="tab"]')) return;
@@ -31,12 +35,12 @@ export function PreviewInspector({ clip, audioClip, asset, assets, upload, onUpl
       <button className="inspector-close" aria-label="Close editing panel" onClick={onClose}><X size={14}/></button>
     </div>
     <div className="inspector-content" role="tabpanel" id={`inspector-${tab}`} aria-labelledby={`inspector-${tab}-tab`}>
-      {tab === 'sources' ? <FootagePanel variant="inspector" videoImports={videoImports} assets={assets} upload={upload} onUpload={onUpload} onAdd={onAdd}/> : tab === 'edit' ? clip?.kind === 'effect' ? <div className="inspector-empty"><Layers size={22} strokeWidth={1.2}/><p>{effectClipLabel(clip)}</p><span>Move, trim, or delete this clip on the timeline.</span></div> : clip ? <>
+      {tab === 'sources' ? <FootagePanel variant="inspector" videoImports={videoImports} assets={assets} upload={upload} onUpload={onUpload} onAdd={onAdd}/> : tab === 'edit' ? clip?.kind === 'effect' ? barControls ?? <div className="inspector-empty"><Layers size={22} strokeWidth={1.2}/><p>{effectClipLabel(clip)}</p><span>Move, trim, or delete this clip on the timeline.</span></div> : clip ? <>
         <div className="inspector-selection"><small>{text ? 'Text' : clip.kind === 'audio' ? 'Audio' : 'Footage'}</small><p>{clip.text || asset?.fileName || 'Selected clip'}</p></div>
         {text && <><label className="inspector-field">Words<textarea aria-label="Selected text" value={clip.text ?? ''} maxLength={500} onChange={e => onChange({ text: e.target.value })}/></label><div className="inspector-field-row"><NumberControl label="Text size" min={8} max={300} value={clip.fontSize ?? (clip.kind === 'graphic' ? 92 : 52)} onCommit={fontSize => onChange({ fontSize })}/><label className="inspector-field">Color<input aria-label="Text color" type="color" value={clip.color ?? '#ffffff'} onChange={e => onChange({ color: e.target.value })}/></label></div></>}
         {visual && <><div className="inspector-fit"><Button variant="outline" disabled={cropping} aria-pressed={clip.fit !== 'contain'} onClick={() => onChange({ fit: 'cover' })}>Fill</Button><Button variant="outline" disabled={cropping} aria-pressed={clip.fit === 'contain'} onClick={() => onChange({ fit: 'contain' })}>Fit</Button></div><Button variant="outline" className="inspector-transform" aria-pressed={cropping} disabled={!asset?.width || !asset?.height || !asset.url} onClick={onCrop}><Crop size={14}/>{cropping?'Done cropping':'Crop'}</Button><p className="visual-control-note">{cropping?'Drag the edges in the preview. Escape cancels.':'Double-click the footage in the preview to move or resize it.'}</p></>}
         {(clip.kind === 'audio' || (clip.kind === 'video' && (!clip.audioSeparated || audioClip))) && <NumberControl label="Clip volume" min={0} max={200} value={Math.round(((audioClip ?? clip).volume ?? 1) * 100)} unit="%" onCommit={volume => onChange({ volume: volume / 100 })}/>}
-      </> : <div className="inspector-empty"><SlidersHorizontal size={22} strokeWidth={1.2}/><p>Select a clip</p><span>Its editing controls appear here.</span></div> : text && clip ? <TextEffectsControls clip={clip} onChange={onChange}/> : visual && clip ? <VisualEffectsControls key={clip.id} clip={clip} onChange={onChange} onPreview={onPreviewEffects} onPlaybackRateChange={onPlaybackRateChange} onAddEffect={onAddEffect}/> : clip?.kind === 'audio' && onPlaybackRateChange ? <PlaybackSpeedControls clip={clip} onChange={onPlaybackRateChange}/> : onAddEffect ? <TimedEffectPresets onAdd={onAddEffect}/> : <div className="inspector-empty"><Layers size={22} strokeWidth={1.2}/><p>Select a visual clip</p><span>Choose footage for effects or a text clip to animate it.</span></div>}
+      </> : <div className="inspector-empty"><SlidersHorizontal size={22} strokeWidth={1.2}/><p>Select a clip</p><span>Its editing controls appear here.</span></div> : text && clip ? <TextEffectsControls clip={clip} onChange={onChange}/> : visual && clip ? <VisualEffectsControls key={clip.id} clip={clip} onChange={onChange} onPreview={onPreviewEffects} onPlaybackRateChange={onPlaybackRateChange} onAddEffect={onAddEffect}/> : barControls ? <>{barControls}{onAddEffect && <TimedEffectPresets onAdd={onAddEffect}/>}</> : clip?.kind === 'audio' && onPlaybackRateChange ? <PlaybackSpeedControls clip={clip} onChange={onPlaybackRateChange}/> : onAddEffect ? <TimedEffectPresets onAdd={onAddEffect}/> : <div className="inspector-empty"><Layers size={22} strokeWidth={1.2}/><p>Select a visual clip</p><span>Choose footage for effects or a text clip to animate it.</span></div>}
     </div>
   </aside>;
 }

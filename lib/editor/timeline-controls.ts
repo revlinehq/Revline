@@ -2,7 +2,7 @@ import { offsetClipMotion, resizeEffectMotion } from './clip-effects';
 import { textTemplateTimingPatch } from './remotion-text';
 // Adapted from OpenCut Classic's playhead, zoom, and edge-scroll controllers.
 // Copyright 2025–2026 OpenCut. MIT: third-party/OpenCut-LICENSE.
-import { layerGroup,trackOf,deriveTrackCounts,normalizeTimeline,maxTrackCount,type Timeline,type LayerGroup,type MediaAsset,type Clip } from './types';
+import { layerGroup,trackOf,deriveTrackCounts,normalizeTimeline,maxTrackCount,TIMELINE_LAYER_GROUPS,type Timeline,type LayerGroup,type MediaAsset,type Clip } from './types';
 import { frameSeekTime, linkedClipIds } from './operations';
 import { TimelineGestureRejection } from './timeline-edit-errors';
 import { playbackRateOf } from './playback-rate';
@@ -61,14 +61,14 @@ export function deleteEmptyLayer(timeline:Timeline,group:LayerGroup,number:numbe
 export function removeEmptyLayers(timeline: Timeline): Timeline {
   timeline=normalizeTimeline(timeline);
   const counts = deriveTrackCounts(timeline);
-  const occupied = { visual: new Set<number>(), overlay: new Set<number>(), audio: new Set<number>() };
+  const occupied = { visual: new Set<number>(), overlay: new Set<number>(), audio: new Set<number>(), effects: new Set<number>() };
   for (const clip of timeline.clips) occupied[layerGroup(clip.kind)].add(trackOf(clip));
-  const groups = ['visual', 'audio'] as const;
+  const groups = TIMELINE_LAYER_GROUPS;
   if (groups.every(group => occupied[group].size === counts[group])) return timeline;
-  const mappings = Object.fromEntries(groups.map(group => [group, new Map([...occupied[group]].sort((a, b) => a - b).map((number, index) => [number, index + 1]))])) as Record<LayerGroup, Map<number, number>>;
+  const mappings = Object.fromEntries(groups.map(group => [group, new Map([...occupied[group]].sort((a, b) => a - b).map((number, index) => [number, index + 1]))])) as Record<Exclude<LayerGroup,'overlay'>, Map<number, number>>;
   return {
     ...timeline,
-    tracks: { visual: occupied.visual.size, overlay: occupied.overlay.size, audio: occupied.audio.size },
+    tracks: { visual: occupied.visual.size, overlay: occupied.overlay.size, audio: occupied.audio.size, effects: occupied.effects.size },
     clips: timeline.clips.map(clip => {
       const track = mappings[layerGroup(clip.kind)].get(trackOf(clip))!;
       return track === trackOf(clip) ? clip : { ...clip, track };
@@ -81,7 +81,7 @@ function placeMovedClips(timeline:Timeline,moved:import('./types').Clip[],direct
   const movingIds=new Set(moved.map(clip=>clip.id));
   let rest=timeline.clips.filter(clip=>!movingIds.has(clip.id));
   const counts=deriveTrackCounts(timeline);
-  for(const group of ['visual','audio'] as const){
+  for(const group of TIMELINE_LAYER_GROUPS){
     const members=moved.filter(clip=>layerGroup(clip.kind)===group);if(!members.length)continue;
     const collides=members.some(clip=>rest.some(other=>layerGroup(other.kind)===group&&trackOf(other)===trackOf(clip)&&other.start<clip.start+clip.duration-1e-6&&clip.start<other.start+other.duration-1e-6));
     if(!collides)continue;
@@ -142,7 +142,7 @@ export function moveSelectionToNewLayers(timeline:Timeline,ids:string[],timeDelt
   const counts=deriveTrackCounts(timeline);
   const dt=selectedMoveDelta(timeline,members,timeDelta,anchorId,magnet);
   let clips=timeline.clips.map(clip=>selected.has(clip.id)?{...clip,start:dt===0?clip.start:clip.start+dt}:clip);
-  for(const group of ['visual','audio'] as const){
+  for(const group of TIMELINE_LAYER_GROUPS){
     const groupMembers=members.filter(clip=>explicit.has(clip.id)&&layerGroup(clip.kind)===group&&(!clip.linkedClipId||group===anchorGroup));if(!groupMembers.length)continue;
     const first=Math.min(...groupMembers.map(trackOf));const last=Math.max(...groupMembers.map(trackOf));const span=last-first+1;
     if(counts[group]+span>maxTrackCount(group))throw new Error(`This group already has ${maxTrackCount(group)} layers. Remove an empty layer before adding another.`);
