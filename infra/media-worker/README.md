@@ -2,9 +2,9 @@
 
 This package runs Revline's existing `processMediaTask` pipeline in a Linux container. It includes FFmpeg, Chromium, Python 3.13, the pinned CPU-only Beat This runtime/model, PySceneDetect and yt-dlp. Convex still owns the queue, leases, workflow retries and saved results; R2 still owns the media. No new database or queue is introduced.
 
-## Deployment prepared, not deployed
+## Deployment authorized, awaiting Containers access
 
-The intended Cloudflare account is `701645e913477e567db69b11343f59d8`, and the intended backend is production `different-gnu-398`. The account is reachable with the existing OAuth login, but that login lacks `containers:write`. An account subscription lookup also returned 403 because it lacks Billing Read. **Workers Paid eligibility is unconfirmed**, and no paid plan or container application has been created.
+The intended Cloudflare account is `701645e913477e567db69b11343f59d8`, and the intended backend is production `different-gnu-398`. The user confirmed that this account already has Workers Paid and authorized the hosted deployment without a plan change. The account is reachable with the existing OAuth login, but that login lacks `containers:write`. A subscription API lookup returned 403 because it lacks Billing Read; no extra billing permission or plan change is needed based on the user's confirmation. No container application has been deployed yet.
 
 The existing `cloudflare/media` Worker signs and serves R2 media. This separate processor is needed because FFmpeg, Python/Torch and Chromium require a container rather than a plain Worker.
 
@@ -64,9 +64,9 @@ Only two secret values are required in the new Worker:
 
 Non-secret backend/media URLs and the Gemini video model are declared in the edge Wrangler configuration. There is no Clerk secret, Anthropic secret, Convex deploy key or Cloudflare token inside the image. Workers secrets are passed into the process at container startup; no secret is passed as a Docker build argument or baked into a layer.
 
-After account eligibility and costs are approved:
+The user has approved hosting on the existing paid account. To complete rollout:
 
-1. Refresh Cloudflare authorization with Containers access, and confirm the Workers Paid subscription without purchasing or upgrading it implicitly.
+1. Refresh Cloudflare authorization with explicit permission for Containers management and read-only runtime logs. Preserve existing scopes. Do not purchase or upgrade a plan.
 2. Verify the local build and dry-run, then provision/deploy this separate processor application in the existing account.
 3. Install its two runtime secrets using Wrangler's encrypted secret commands or the dashboard. Transfer existing values through a secure pipe or prompt; never print them or include them in CLI argument strings.
 4. Set `MEDIA_PROCESSOR_WAKE_URL` on Convex production, then trigger a harmless owned test task and confirm its saved result through normal task/source APIs.
