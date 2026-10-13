@@ -46,7 +46,7 @@ export function EditorAccessGate({ children }: { children: ReactNode }) {
         {!status.configured && <p role="status">Billing is temporarily unavailable. Please try again shortly.</p>}
         <PrimaryButton disabled={busy || !status.configured} onClick={() => void openCheckout()}>
           {busy && <LoaderCircle size={14} className="animate-spin" />}
-          {status.needsPayment ? 'Update payment method' : status.trialEligible ? 'Start free trial' : 'Subscribe'}
+          {status.needsPayment ? 'Update payment method' : status.trialEligible ? `Start ${EDITOR_PLAN.trialDays}-day free trial` : 'Subscribe'}
         </PrimaryButton>
         <small>{status.trialEligible ? 'A payment method is required. Cancel before your trial ends to avoid a charge.' : 'Cancel anytime in billing.'}</small>
         {error && <p className="editor-access-error" role="alert">{error}</p>}

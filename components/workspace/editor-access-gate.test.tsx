@@ -12,7 +12,7 @@ test('a new user sees the trial and cannot mount the upload/editor workflow', ()
   const Child = child;
   const html = renderToStaticMarkup(<EditorAccessGate><Child /></EditorAccessGate>);
   expect(html).toContain('Try Revline free for 3 days');
-  expect(html).toContain('Start free trial');
+  expect(html).toContain('Start 3-day free trial');
   expect(html).toContain('$39');
   expect(child).not.toHaveBeenCalled();
 });
@@ -25,7 +25,7 @@ test('payment failure directs users to their existing billing account', () => {
   Object.assign(fixture.status!, { needsPayment: true, trialEligible: false });
   const html = renderToStaticMarkup(<EditorAccessGate><div>Editing workflow</div></EditorAccessGate>);
   expect(html).toContain('Update payment method');
-  expect(html).not.toContain('Start free trial');
+  expect(html).not.toContain('Start 3-day free trial');
 });
 test('loading and missing configuration do not mount the editor', () => {
   fixture.status = undefined;
