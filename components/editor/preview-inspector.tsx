@@ -1,7 +1,6 @@
 'use client';
 
 import { TextEffectsControls } from './text-effects-controls';
-import { TextEditingControls } from './text-editing-controls';
 import { CinematicBarsControls, PlaybackSpeedControls, TimedEffectPresets, VisualEffectsControls } from './visual-effects-controls';
 import { useEffect, useRef, useState } from 'react';
 import { SlidersHorizontal, Layers, Crop, X, ArrowLeft } from 'lucide-react';
@@ -15,8 +14,9 @@ import { EffectLibrary, type LibraryVisualEffect } from './effect-library';
 import { DEFAULT_COLOR_GRADE, DEFAULT_GLITCH, DEFAULT_INVERT, DEFAULT_ZOOM_BLUR } from '@/lib/editor/visual-effects';
 import { textTemplatePatch } from '@/lib/editor/text-effects';
 import type { RemotionTextPreset } from '@/lib/editor/remotion-text';
+import { subtitleStylePatch, type SubtitleStyleId } from '@/lib/editor/subtitle-styles';
 
-export function PreviewInspector({ clip, audioClip, asset, assets, upload, onUpload, onAdd, onChange, onPreviewEffects, onPlaybackRateChange, onAddEffect, onCrop, cropping=false, onClose, videoImports, onAddTextTemplate, onAddOverlay, onFadeThroughBlack, sourceRequest = 0 }: { sourceRequest?: number; onAddTextTemplate?: (preset: RemotionTextPreset) => void; onAddOverlay?: (asset: MediaAsset) => void; onFadeThroughBlack?: () => void; clip?: Clip; audioClip?: Clip; asset?: MediaAsset; assets: MediaAsset[]; upload: UploadProgress; onUpload: () => void; onAdd: (asset: MediaAsset) => void; onChange: (patch: Partial<Clip>) => void; onPreviewEffects?: (patch: Partial<Clip> | null) => void; onPlaybackRateChange?: (rate: number) => void; onAddEffect?: (preset: EffectPreset) => void; onCrop: () => void; cropping?:boolean; onClose: () => void; videoImports?:VideoImportState[] }) {
+export function PreviewInspector({ clip, audioClip, asset, assets, upload, onUpload, onAdd, onChange, onPreviewEffects, onPlaybackRateChange, onAddEffect, onCrop, cropping=false, onClose, videoImports, onAddTextTemplate, onAddSubtitleStyle, onAddOverlay, onFadeThroughBlack, sourceRequest = 0, editRequest = 0 }: { sourceRequest?: number; editRequest?: number; onAddTextTemplate?: (preset: RemotionTextPreset) => void; onAddSubtitleStyle?: (style: SubtitleStyleId) => void; onAddOverlay?: (asset: MediaAsset) => void; onFadeThroughBlack?: () => void; clip?: Clip; audioClip?: Clip; asset?: MediaAsset; assets: MediaAsset[]; upload: UploadProgress; onUpload: () => void; onAdd: (asset: MediaAsset) => void; onChange: (patch: Partial<Clip>) => void; onPreviewEffects?: (patch: Partial<Clip> | null) => void; onPlaybackRateChange?: (rate: number) => void; onAddEffect?: (preset: EffectPreset) => void; onCrop: () => void; cropping?:boolean; onClose: () => void; videoImports?:VideoImportState[] }) {
   const [tab, setTab] = useState<'edit' | 'sources' | 'effects'>('sources');
   const [mediaOpen, setMediaOpen] = useState(false);
   const panel = useRef<HTMLElement>(null);
@@ -26,9 +26,10 @@ export function PreviewInspector({ clip, audioClip, asset, assets, upload, onUpl
     if (clip?.kind === 'effect' && clip.effectPreset === 'cinematic-bars') setTab(current => current === 'sources' ? 'effects' : current);
   }, [clip?.id, clip?.kind, clip?.effectPreset]);
   useEffect(() => {
-    if (!sourceRequest) return;
-    setTab('sources'); setMediaOpen(true);
-  }, [sourceRequest]);
+    if (!sourceRequest && !editRequest) return;
+    if (sourceRequest > editRequest) { setTab('sources'); setMediaOpen(true); }
+    else { setTab('edit'); setMediaOpen(false); }
+  }, [sourceRequest, editRequest]);
   const barControls = clip?.kind === 'effect' && clip.effectPreset === 'cinematic-bars' ? <CinematicBarsControls key={clip.id} clip={clip} onChange={onChange} onPreview={onPreviewEffects}/> : null;
   function addVisualEffect(effect: LibraryVisualEffect) {
     if (!visual || !clip) return;
@@ -40,6 +41,11 @@ export function PreviewInspector({ clip, audioClip, asset, assets, upload, onUpl
     if (text && clip) onChange(textTemplatePatch(clip, preset));
     else onAddTextTemplate?.(preset);
     setTab('effects');
+  }
+  function applySubtitleStyle(style: SubtitleStyleId) {
+    if (clip?.kind === 'caption') onChange(subtitleStylePatch(style));
+    else onAddSubtitleStyle?.(style);
+    setMediaOpen(false); setTab('edit');
   }
   const library = tab === 'sources' && !mediaOpen;
   const sources = tab === 'sources';
@@ -60,9 +66,9 @@ export function PreviewInspector({ clip, audioClip, asset, assets, upload, onUpl
       <button className="inspector-close" aria-label="Close editing panel" onClick={onClose}><X size={14}/></button>
     </div>}
     <div className={`inspector-content ${library ? 'inspector-library-content' : ''}`} role={sources ? 'region' : 'tabpanel'} id={`inspector-${tab}`} aria-labelledby={sources ? 'inspector-library-title' : `inspector-${tab}-tab`}>
-      {library ? <EffectLibrary clip={clip} assets={assets} onMedia={() => setMediaOpen(true)} onVisualEffect={addVisualEffect} onAddEffect={onAddEffect ? preset => { onAddEffect(preset); setTab('effects'); } : undefined} onTextTemplate={text || onAddTextTemplate ? applyTextTemplate : undefined} onUploadOverlay={onUpload} onAddOverlay={onAddOverlay} onFadeThroughBlack={onFadeThroughBlack} onSpeed={onPlaybackRateChange ? () => setTab('effects') : undefined}/> : tab === 'sources' ? <FootagePanel key={sourceRequest} variant="inspector" videoImports={videoImports} assets={assets} upload={upload} onUpload={onUpload} onAdd={onAdd}/> : tab === 'edit' ? clip?.kind === 'effect' ? barControls ?? <div className="inspector-empty"><Layers size={22} strokeWidth={1.2}/><p>{effectClipLabel(clip)}</p><span>Move, trim, or delete this clip on the timeline.</span></div> : clip ? <>
+      {library ? <EffectLibrary clip={clip} assets={assets} onMedia={() => setMediaOpen(true)} onVisualEffect={addVisualEffect} onAddEffect={onAddEffect ? preset => { onAddEffect(preset); setTab('effects'); } : undefined} onTextTemplate={text || onAddTextTemplate ? applyTextTemplate : undefined} onSubtitleStyle={clip?.kind === 'caption' || onAddSubtitleStyle ? applySubtitleStyle : undefined} onUploadOverlay={onUpload} onAddOverlay={onAddOverlay} onFadeThroughBlack={onFadeThroughBlack} onSpeed={onPlaybackRateChange ? () => setTab('effects') : undefined}/> : tab === 'sources' ? <FootagePanel key={sourceRequest} variant="inspector" videoImports={videoImports} assets={assets} upload={upload} onUpload={onUpload} onAdd={onAdd}/> : tab === 'edit' ? clip?.kind === 'effect' ? barControls ?? <div className="inspector-empty"><Layers size={22} strokeWidth={1.2}/><p>{effectClipLabel(clip)}</p><span>Move, trim, or delete this clip on the timeline.</span></div> : clip ? <>
         <div className="inspector-selection"><small>{text ? 'Text' : clip.kind === 'audio' ? 'Audio' : 'Footage'}</small><p>{clip.text || asset?.fileName || 'Selected clip'}</p></div>
-        {text && <TextEditingControls clip={clip} onChange={onChange}/>}
+        {text && <TextEffectsControls clip={clip} onChange={onChange}/>}
         {visual && <><label className="inspector-field">Blend mode<select className="inspector-blend-mode" aria-label="Blend mode" value={clip.blendMode ?? 'normal'} onChange={event => onChange({ blendMode: event.currentTarget.value as Clip['blendMode'] })}>{BLEND_MODES.map(mode => <option key={mode} value={mode}>{mode === 'plus-lighter' ? 'Add / lighten' : mode[0].toUpperCase() + mode.slice(1)}</option>)}</select></label><div className="inspector-fit"><Button variant="outline" disabled={cropping} aria-pressed={clip.fit !== 'contain'} onClick={() => onChange({ fit: 'cover' })}>Fill</Button><Button variant="outline" disabled={cropping} aria-pressed={clip.fit === 'contain'} onClick={() => onChange({ fit: 'contain' })}>Fit</Button></div><Button variant="outline" className="inspector-transform" aria-pressed={cropping} disabled={!asset?.width || !asset?.height || !asset.url} onClick={onCrop}><Crop size={14}/>{cropping?'Done cropping':'Crop'}</Button><p className="visual-control-note">{cropping?'Drag the edges in the preview. Escape cancels.':'Double-click the footage in the preview to move or resize it.'}</p></>}
         {(clip.kind === 'audio' || (clip.kind === 'video' && (!clip.audioSeparated || audioClip))) && <NumberControl label="Clip volume" min={0} max={200} value={Math.round(((audioClip ?? clip).volume ?? 1) * 100)} unit="%" onCommit={volume => onChange({ volume: volume / 100 })}/>}
       </> : <div className="inspector-empty"><SlidersHorizontal size={22} strokeWidth={1.2}/><p>Select a clip</p><span>Its editing controls appear here.</span></div> : text && clip ? <TextEffectsControls clip={clip} onChange={onChange}/> : visual && clip ? <VisualEffectsControls key={clip.id} clip={clip} onChange={onChange} onPreview={onPreviewEffects} onPlaybackRateChange={onPlaybackRateChange} onAddEffect={onAddEffect}/> : barControls ? <>{barControls}{onAddEffect && <TimedEffectPresets onAdd={onAddEffect}/>}</> : clip?.kind === 'audio' && onPlaybackRateChange ? <PlaybackSpeedControls clip={clip} onChange={onPlaybackRateChange}/> : onAddEffect ? <TimedEffectPresets onAdd={onAddEffect}/> : <div className="inspector-empty"><Layers size={22} strokeWidth={1.2}/><p>Select a visual clip</p><span>Choose footage for effects or a text clip to animate it.</span></div>}

@@ -226,7 +226,7 @@ export function TimelinePanel(p:Props){
     const current=store.getState().selectedIds;
     if(mode==='move'&&(e.shiftKey||e.ctrlKey||e.metaKey)){const ids=current.includes(clip.id)?current.filter(id=>id!==clip.id):[...current,clip.id];store.setState({selectedIds:ids,selectedId:ids.at(-1)??null});return;}
     const members=current.includes(clip.id)?current:[clip.id];
-    if(!current.includes(clip.id))onSelect(clip.id);
+    if(!current.includes(clip.id)||(current.length===1&&(clip.kind==='caption'||clip.kind==='graphic')))onSelect(clip.id);
     const gestureMembers=linkedClipIds(timeline,members),gestureIds=new Set(gestureMembers);const selectedClips=timeline.clips.filter(c=>gestureIds.has(c.id));
     const viewport=scroll.current;const host=previews.current;if(!viewport||!host)return;
     const startX=e.clientX,startY=e.clientY,startScrollX=viewport.scrollLeft,startScrollY=viewport.scrollTop;

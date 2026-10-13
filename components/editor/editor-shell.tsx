@@ -10,7 +10,6 @@ import { usePanelRef } from 'react-resizable-panels';
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable';
 import { Button } from '@/components/ui/button';
 import { Sheet,SheetContent,SheetTitle,SheetDescription } from '@/components/ui/sheet';
-import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { WorkspaceNav } from '@/components/workspace/workspace-nav';
 import { ProjectImportStage } from './project-entry';
 import { Preview, type PreviewHandle } from './preview';
@@ -30,8 +29,10 @@ import { EditorErrorNotice } from './error-notice';
 import { type Timeline, type MediaAsset, type AspectRatio, type Clip, timelineDuration, dimensions } from '@/lib/editor/types';
 import { addMediaClip, addTextClip, addEffectClip, setClipPlaybackRate, patchClip, frameSeekTime, linkedClipIds } from '@/lib/editor/operations';
 import type { EffectPreset } from '@/lib/editor/clip-effects';
-import { addFadeThroughBlack, addOverlayClip, addTextTemplateClip } from '@/lib/editor/library-actions';
+import { addFadeThroughBlack, addOverlayClip } from '@/lib/editor/library-actions';
 import type { RemotionTextPreset } from '@/lib/editor/remotion-text';
+import { textTemplatePatch } from '@/lib/editor/text-effects';
+import { subtitleStylePatch, type SubtitleStyleId } from '@/lib/editor/subtitle-styles';
 import { copyTimelineClips, pasteTimelineClips } from '@/lib/editor/clipboard';
 import type { RefreshPlaybackMedia } from '@/lib/editor/media-source-recovery';
 import { MediaFileDropOverlay, useMediaFileDrop } from './media-file-drop';
@@ -62,7 +63,6 @@ export function EditorShell(p: EditorShellProps) {
   const [importOpen,setImportOpen]=useState(false);
   const [footageOpen, setFootageOpen] = useState(params.get('panel') === 'footage');
   const store=useEditorStore();const selected=useEditorState(s=>s.selectedId);const selectedIds=useEditorState(s=>s.selectedIds??NO_SELECTED_CLIPS);const setSelected=(id:string|null)=>store.setState({selectedId:id,selectedIds:id?[id]:[]});
-  const [editingText, setEditingText] = useState<string | null>(null);
   const [clipboard, setClipboard] = useState<Clip[]>([]);
   useEffect(() => { setClipboard([]); }, [p.projectId]);
   const [croppingClip, setCroppingClip] = useState<string | null>(null);
@@ -74,8 +74,10 @@ export function EditorShell(p: EditorShellProps) {
   const [exportOpen, setExportOpen] = useState(params.get('export') === '1');
   const [mobileChat, setMobileChat] = useState(false);
   const [inspectorOpen, setInspectorOpen] = useState(!p.embedded);
+  const inspectorRequest = useRef(0);
   const [sourceRequest, setSourceRequest] = useState(0);
-  const fileDrop = useMediaFileDrop({ busy: !!p.upload, onUpload: files => { setSourceRequest(value => value + 1); setInspectorOpen(true); return p.onDropUpload(files); }, onError });
+  const [editRequest, setEditRequest] = useState(0);
+  const fileDrop = useMediaFileDrop({ busy: !!p.upload, onUpload: files => { setSourceRequest(++inspectorRequest.current); setInspectorOpen(true); return p.onDropUpload(files); }, onError });
   useEffect(() => { if (compact) setInspectorOpen(false); }, [compact]);
   const editorRoot = useRef<HTMLElement>(null);
   const timelinePanel=usePanelRef();const collapsed=useEditorState(s=>s.timelineCollapsed);const toggleTimeline=()=>{if(collapsed)timelinePanel.current?.expand();else timelinePanel.current?.collapse();store.setState({timelineCollapsed:!collapsed});};
@@ -94,7 +96,6 @@ export function EditorShell(p: EditorShellProps) {
     : assets.find(asset => asset.kind === 'video' && asset.analysis?.understanding?.suggestions?.length && timeline.clips.some(item => item.kind === 'video' && item.assetId === asset._id));
   const suggestionClip = suggestionAsset ? (clip?.kind === 'video' && clip.assetId === suggestionAsset._id ? clip : timeline.clips.find(item => item.kind === 'video' && item.assetId === suggestionAsset._id)) : undefined;
   const sourceSuggestions = suggestionAsset && suggestionClip && suggestionAsset.analysis?.understanding?.suggestions?.length ? { sourceName: suggestionAsset.fileName, clipId: suggestionClip.id, items: suggestionAsset.analysis.understanding.suggestions } : undefined;
-  const textClip = timeline.clips.find(c => c.id === editingText);
   const cropping = !!clip && clip.id === croppingClip;
   useEffect(() => { if (croppingClip && (!clip || clip.id !== croppingClip)) setCroppingClip(null); }, [clip?.id, croppingClip]);
   const seek = useCallback((n: number) => {
@@ -134,7 +135,7 @@ export function EditorShell(p: EditorShellProps) {
   }, [onChange, onError, timeline, readPlaybackTime, store]);
   const doDelete = useCallback(() => {
     const ids=new Set(linkedClipIds(timeline,selectedIds.length?selectedIds:selected?[selected]:[]));
-    if(!ids.size)return;onChange({...timeline,clips:timeline.clips.filter(c=>!ids.has(c.id))});setSelected(null);setCroppingClip(null);setEditingText(null);
+    if(!ids.size)return;onChange({...timeline,clips:timeline.clips.filter(c=>!ids.has(c.id))});setSelected(null);setCroppingClip(null);
   }, [selected, selectedIds, timeline, onChange]);
   const addMarker = useCallback(() => {
     const current = store.getState();
@@ -195,13 +196,8 @@ export function EditorShell(p: EditorShellProps) {
       setSelected(id);
     } catch (error) { onError(error instanceof Error ? error.message : 'Could not add this effect.'); }
   }
-  function addLibraryText(preset: RemotionTextPreset) {
-    try {
-      const id = crypto.randomUUID();
-      onChange(addTextTemplateClip(timeline, id, preset, readPlaybackTime()));
-      setSelected(id);
-    } catch (error) { onError(error instanceof Error ? error.message : 'Could not add this text.'); }
-  }
+  function addLibraryText(preset: RemotionTextPreset) { addText('graphic', { preset }); }
+  function addSubtitleStyle(style: SubtitleStyleId) { addText('caption', { style }); }
   function addOverlay(asset: MediaAsset) {
     try {
       const id = crypto.randomUUID();
@@ -222,13 +218,18 @@ export function EditorShell(p: EditorShellProps) {
     try { onChange(setClipPlaybackRate(timeline, clip.id, rate)); }
     catch (error) { onError(error instanceof Error ? error.message : 'Could not change playback speed.'); }
   }
+  function openTextSettings(id: string) {
+    setSelected(id); setInspectorOpen(true); setEditRequest(++inspectorRequest.current);
+  }
   function editText(id: string) {
     const item = timeline.clips.find(c => c.id === id);
-    if (item?.kind === 'caption' || item?.kind === 'graphic') setEditingText(id);
+    if (item?.kind === 'caption' || item?.kind === 'graphic') openTextSettings(id);
   }
   function selectClip(id:string|null){
     if (id !== selected) setCroppingClip(null);
-    setSelected(id);
+    const item = timeline.clips.find(c => c.id === id);
+    if (item?.kind === 'caption' || item?.kind === 'graphic') openTextSettings(item.id);
+    else setSelected(id);
   }
   function cropVisual() {
     if (cropping) { preview.current?.finishCrop(); return; }
@@ -240,8 +241,14 @@ export function EditorShell(p: EditorShellProps) {
     setCroppingClip(clip.id);
     if (compact) setInspectorOpen(false);
   }
-  function addText(kind: 'caption' | 'graphic') {
-    const id = crypto.randomUUID(); onChange(addTextClip(timeline, id, kind, readPlaybackTime())); setSelected(id); setEditingText(id);
+  function addText(kind: 'caption' | 'graphic', options: { preset?: RemotionTextPreset; style?: SubtitleStyleId } = {}) {
+    try {
+      const id = crypto.randomUUID();
+      let next = addTextClip(timeline, id, kind, readPlaybackTime());
+      if (options.preset) next = patchClip(next, id, textTemplatePatch(next.clips.find(item => item.id === id)!, options.preset));
+      if (options.style) next = patchClip(next, id, subtitleStylePatch(options.style));
+      onChange(next); openTextSettings(id);
+    } catch (error) { onError(error instanceof Error ? error.message : 'Could not add this text.'); }
   }
   const browse = () => setImportOpen(true);
 
@@ -264,15 +271,14 @@ export function EditorShell(p: EditorShellProps) {
 
           <div className="preview-player"><div className="stage-center" style={{'--preview-ratio': dimensions(timeline.aspectRatio).width / dimensions(timeline.aspectRatio).height} as React.CSSProperties}>{timeline.clips.length ? <PreviewViewport><Preview ref={preview} timeline={timeline} assets={assets} time={time} onTime={setTime} onPlaying={setPlaying} onError={onError} onRefreshMedia={p.onRefreshMedia} muted={muted} selectedClip={clip} cropping={cropping} onCropCancel={() => setCroppingClip(null)} onCropCommit={(id,crop) => { if (id === croppingClip && id === selected) { onChange(patchClip(timeline,id,{crop})); setCroppingClip(null); } }} onSelectClip={selectClip} onEditText={editText} onClipChange={(id,patch)=>onChange(patchClip(timeline,id,patch))} onVisualChange={patch=>{if(clip)onChange(patchClip(timeline,clip.id,patch));}} /></PreviewViewport> : p.aiRunning ? <div className="empty-upload" role="status"><LoaderCircle size={22} className="animate-spin"/><p>Updating your edit…</p></div> : <div className="empty-upload" role="button" tabIndex={0} onClick={browse} onKeyDown={e => { if (e.key === 'Enter') browse(); }}><div className="upload-circle"><Upload size={25} /></div><h2>Start with a moment.</h2><p>Drop your footage here,<br />then tell Revline what you have in mind.</p><Button onClick={e => { e.stopPropagation(); browse(); }} disabled={!!p.upload}>{p.upload && <LoaderCircle size={14} className="animate-spin" />}Choose files</Button><small>MP4 · MOV · WebM · JPG · PNG · Audio</small>{p.upload && <progress max="100" value={p.upload.percent} />}</div>}</div>{cropping ? <div className="preview-playback source-crop-actions" role="group" aria-label="Crop controls"><span className="source-crop-label">Crop</span><Button type="button" variant="ghost" size="sm" onClick={() => preview.current?.resetCrop()}><RotateCcw size={12}/>Reset</Button><Button type="button" variant="ghost" size="sm" onClick={() => { preview.current?.finishCrop(true); setCroppingClip(null); }}>Cancel</Button><Button type="button" size="sm" onClick={() => preview.current?.finishCrop()}>Done</Button></div> : null}</div>
 
-        </div></div></PreviewZoomProvider></ResizablePanel>{!compact && inspectorOpen && <><ResizableHandle aria-label="Resize editing panel" className="inspector-resize-handle"/><ResizablePanel id="inspector" defaultSize={320} minSize={280} maxSize={480}><PreviewInspector sourceRequest={sourceRequest} onAddTextTemplate={addLibraryText} onAddOverlay={addOverlay} onFadeThroughBlack={fadeThroughBlack} videoImports={p.videoImports} assets={assets} upload={p.upload} onUpload={()=>setImportOpen(true)} onAdd={addAsset} clip={clip} audioClip={clip?.kind==='video'?timeline.clips.find(c=>c.id===clip.linkedClipId):undefined} asset={assets.find(a => a._id === clip?.assetId)} onChange={patch => { if (clip) onChange(patchClip(timeline, clip.id, patch)); }} onPreviewEffects={patch => { if (clip) preview.current?.clipEffects(clip.id, patch); }} onAddEffect={addEffect} onPlaybackRateChange={changeSpeed} onCrop={cropVisual} cropping={cropping} onClose={() => setInspectorOpen(false)}/></ResizablePanel></>}</ResizablePanelGroup>
+        </div></div></PreviewZoomProvider></ResizablePanel>{!compact && inspectorOpen && <><ResizableHandle aria-label="Resize editing panel" className="inspector-resize-handle"/><ResizablePanel id="inspector" defaultSize={380} minSize={280} maxSize={480}><PreviewInspector sourceRequest={sourceRequest} editRequest={editRequest} onAddSubtitleStyle={addSubtitleStyle} onAddTextTemplate={addLibraryText} onAddOverlay={addOverlay} onFadeThroughBlack={fadeThroughBlack} videoImports={p.videoImports} assets={assets} upload={p.upload} onUpload={()=>setImportOpen(true)} onAdd={addAsset} clip={clip} audioClip={clip?.kind==='video'?timeline.clips.find(c=>c.id===clip.linkedClipId):undefined} asset={assets.find(a => a._id === clip?.assetId)} onChange={patch => { if (clip) onChange(patchClip(timeline, clip.id, patch)); }} onPreviewEffects={patch => { if (clip) preview.current?.clipEffects(clip.id, patch); }} onAddEffect={addEffect} onPlaybackRateChange={changeSpeed} onCrop={cropVisual} cropping={cropping} onClose={() => setInspectorOpen(false)}/></ResizablePanel></>}</ResizablePanelGroup>
         </ResizablePanel><ResizableHandle aria-label="Resize preview and timeline" className="timeline-resize-handle"/><ResizablePanel id="timeline" panelRef={timelinePanel} collapsible collapsedSize={56} defaultSize={p.embedded ? 266 : 360} minSize={160} maxSize="65%" onResize={size=>store.setState({timelineCollapsed:size.inPixels<100})}><TimelinePanel playbackControls={<EditorPlaybackControls playing={playing} time={time} duration={duration} fps={timeline.fps} readTime={readPlaybackTime} onTogglePlay={togglePlay} onPrevious={() => jumpCut(-1)} onNext={() => jumpCut(1)}/>} onPreviewVolume={(id,volume)=>preview.current?.clipVolume(id,volume)} onTogglePlay={togglePlay} muted={muted} onToggleMute={()=>{setMuted(!muted);preview.current?.mute(!muted);}} collapsed={collapsed} onToggleCollapse={toggleTimeline} timeline={timeline} assets={assets} selected={selected} onSelect={selectClip} onEditText={editText} time={time} playing={playing} readPlaybackTime={readPlaybackTime} onSeek={seek} onChange={onChange} onSplit={doSplit} onDelete={doDelete} onDuplicate={doDuplicate} onCopy={doCopy} onPaste={doPaste} canPaste={clipboard.length>0} onAddText={addText} onAddMarker={addMarker} onError={onError} />
 
         </ResizablePanel></ResizablePanelGroup></div></ResizablePanel></ResizablePanelGroup>
     </section></>}
     {preparing&&<ProjectImportStage importTask={p.videoImports?.find(task=>!['completed','cancelled'].includes(task.status))} upload={p.upload} onBrowse={()=>setImportOpen(true)} onUpload={p.onUpload}/>}
-    {compact && inspectorOpen && <Sheet open={inspectorOpen} onOpenChange={setInspectorOpen}><SheetContent className="preview-inspector-sheet"><SheetTitle>Edit your clip</SheetTitle><SheetDescription>Select a layer to adjust it.</SheetDescription><PreviewInspector sourceRequest={sourceRequest} onAddTextTemplate={addLibraryText} onAddOverlay={addOverlay} onFadeThroughBlack={fadeThroughBlack} videoImports={p.videoImports} assets={assets} upload={p.upload} onUpload={()=>setImportOpen(true)} onAdd={addAsset} clip={clip} audioClip={clip?.kind==='video'?timeline.clips.find(c=>c.id===clip.linkedClipId):undefined} asset={assets.find(a => a._id === clip?.assetId)} onChange={patch => { if (clip) onChange(patchClip(timeline, clip.id, patch)); }} onPreviewEffects={patch => { if (clip) preview.current?.clipEffects(clip.id, patch); }} onAddEffect={addEffect} onPlaybackRateChange={changeSpeed} onCrop={cropVisual} cropping={cropping} onClose={() => setInspectorOpen(false)}/></SheetContent></Sheet>}
+    {compact && inspectorOpen && <Sheet open={inspectorOpen} onOpenChange={setInspectorOpen}><SheetContent className="preview-inspector-sheet"><SheetTitle>Edit your clip</SheetTitle><SheetDescription>Select a layer to adjust it.</SheetDescription><PreviewInspector sourceRequest={sourceRequest} editRequest={editRequest} onAddSubtitleStyle={addSubtitleStyle} onAddTextTemplate={addLibraryText} onAddOverlay={addOverlay} onFadeThroughBlack={fadeThroughBlack} videoImports={p.videoImports} assets={assets} upload={p.upload} onUpload={()=>setImportOpen(true)} onAdd={addAsset} clip={clip} audioClip={clip?.kind==='video'?timeline.clips.find(c=>c.id===clip.linkedClipId):undefined} asset={assets.find(a => a._id === clip?.assetId)} onChange={patch => { if (clip) onChange(patchClip(timeline, clip.id, patch)); }} onPreviewEffects={patch => { if (clip) preview.current?.clipEffects(clip.id, patch); }} onAddEffect={addEffect} onPlaybackRateChange={changeSpeed} onCrop={cropVisual} cropping={cropping} onClose={() => setInspectorOpen(false)}/></SheetContent></Sheet>}
     <Sheet open={footageOpen} onOpenChange={setFootageOpen}><SheetContent className="footage-sheet"><SheetTitle>Footage</SheetTitle><SheetDescription>Add to this edit, or bring in something new.</SheetDescription><FootagePanel videoImports={p.videoImports} assets={assets} onUpload={()=>setImportOpen(true)} onAdd={asset=>{addAsset(asset);setFootageOpen(false);}} upload={p.upload}/></SheetContent></Sheet>
-    <Dialog open={!!textClip} onOpenChange={open => { if (!open) setEditingText(null); }}><DialogContent className="quick-text-dialog"><DialogTitle>Edit the words</DialogTitle><DialogDescription>For a different style, ask Revline in the conversation.</DialogDescription><textarea aria-label="Text content" value={textClip?.text ?? ''} maxLength={500} onChange={e => { if (textClip) onChange(patchClip(timeline, textClip.id, { text: e.target.value })); }} rows={4} /><Button onClick={() => setEditingText(null)}>Done</Button></DialogContent></Dialog>
     <MediaImportDialog open={importOpen} onOpenChange={setImportOpen} onUpload={files=>{void p.onUpload(files);}} onImportVideo={p.onImportVideo} disabled={!!p.upload}/>
     <ExportDialog open={exportOpen} onOpenChange={setExportOpen} title={p.title} timeline={timeline} coverUrl={assets.find(a => a.kind === 'image')?.url} onExport={p.onExport} state={p.exportState} demo={!!p.demo} />
   </main>;
