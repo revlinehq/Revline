@@ -15,7 +15,7 @@ export function timelineLayout(timeline:Timeline,compact=false){
   const tracks=deriveTracks(timeline).map(track=>{
     const gapBefore=previousGroup&&previousGroup!==track.group?TIMELINE_GROUP_GAP:0;
     top+=gapBefore;previousGroup=track.group;
-    const clipHeight=compact?24:track.group==='effects'?28:52;
+    const clipHeight=compact?24:52;
     const height=clipHeight+TIMELINE_TRACK_GAP;
     const row={...track,top,height,clipHeight,gapBefore};top+=height;return row;
   });
