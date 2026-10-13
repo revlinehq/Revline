@@ -1,3 +1,5 @@
+import { textStyle } from './text-style';
+
 export const REMOTION_TEXT_PRESETS = ['word-reveal', 'word-pop', 'slide-title', 'karaoke'] as const;
 export type RemotionTextPreset = typeof REMOTION_TEXT_PRESETS[number];
 export type RemotionTextTemplate = { preset: RemotionTextPreset; highlightColor?: string; duration?: number; offset?: number };
@@ -35,11 +37,12 @@ export function remotionTextProps(clip: TextTemplateClip, time: number, fps: num
   validateRemotionTextTemplate(clip);
   if (![time, fps, resolution, clip.start, clip.duration].every(Number.isFinite) || fps <= 0 || resolution <= 0 || clip.duration <= 0) throw new Error('Text template rendering needs valid timing and dimensions.');
   const template = clip.textTemplate;
+  const style = textStyle(clip, resolution);
   return {
-    preset: template.preset, text: (clip.text ?? '').slice(0, 2000),
+    preset: template.preset, text: style.text,
     frame: Math.floor((time - clip.start + (template.offset ?? 0) + 1e-7) * fps),
     fps, durationInFrames: Math.max(1, Math.ceil(((template.duration ?? clip.duration) - 1e-7) * fps)),
-    color: clip.color ?? '#F4F4F0', fontSize: (clip.fontSize ?? (clip.kind === 'caption' ? 52 : 92)) * resolution / 1080,
+    color: style.color, fontSize: style.fontSize,
     highlightColor: template.highlightColor ?? DEFAULT_TEXT_HIGHLIGHT,
   };
 }

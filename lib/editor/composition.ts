@@ -4,6 +4,7 @@ import { serializeTextAnimation, textAnimationSteps } from './text-animation';
 import { validateVisualEffects } from './visual-effects';
 import { visualEffectsRuntimeScript } from './visual-effects-runtime';
 import { remotionTextSources } from './remotion-text';
+import { textStyle } from './text-style';
 import { playbackRateOf, sourceEndOf, timelineTimeAtSource, validatePlaybackRate } from './playback-rate';
 import { dimensions, timelineDuration, deriveTrackCounts, normalizeTimeline, trackOf, DEFAULT_CROP, DEFAULT_TRANSFORM, type Clip, type MediaAsset, type Timeline, type SourceCrop } from './types';
 
@@ -28,10 +29,6 @@ function mediaUrl(value: string) {
 
 function bounded(value: number | undefined, fallback: number, min: number, max: number) {
   return Number.isFinite(value) ? Math.min(max, Math.max(min, value!)) : fallback;
-}
-
-function color(value: string | undefined, fallback: string) {
-  return value && /^(#(?:[\da-f]{3}|[\da-f]{4}|[\da-f]{6}|[\da-f]{8})|transparent)$/i.test(value) ? value : fallback;
 }
 
 export function layerZIndex(clip: Pick<Clip, 'kind' | 'track'>, index = 0) {
@@ -67,7 +64,7 @@ function validateClip(clip: Clip) {
   }
 }
 
-function trimmedFocus(clip: Clip) {
+export function trimmedFocus(clip: Clip) {
   const samples = clip.focus ?? [];
   if (samples.length > 1500) throw new Error('A clip can contain at most 1500 focus samples.');
   for (const [index, sample] of samples.entries()) {
@@ -127,13 +124,10 @@ export function generateComposition(timeline: Timeline, assets: MediaAsset[], op
     // children or crop properties so exact-zero seeks never fight its visibility.
     const timing = `id="${id}" data-start="${start}" data-duration="${clip.duration}" data-end="${end}" data-track-index="${trackIndex}"`;
     if (clip.kind === 'caption' || clip.kind === 'graphic') {
-      const fontSize = bounded(clip.fontSize, clip.kind === 'caption' ? 52 : 92, 8, 300) * scale;
-      const x = bounded(clip.x, 0.5, 0, 1) * 100;
-      const y = bounded(clip.y, clip.kind === 'caption' ? 0.82 : 0.5, 0, 1) * 100;
+      const style = textStyle(clip, resolution);
       animation.push(`{const textTimeline=gsap.timeline();timeline.add(textTimeline,0);window.__revlineTextTimelines['${id}']=textTimeline;${clip.textTemplate ? '' : textAnimationSteps(clip, index, width, height, resolution).map(step => serializeTextAnimation(step, 'textTimeline')).join('')}}`);
-      const style = `left:${x}%;top:${y}%;font-size:${fontSize}px;color:${color(clip.color, '#F4F4F0')};z-index:${zIndex};mix-blend-mode:${clip.blendMode ?? 'normal'}`;
-      const background = color(clip.background, 'transparent');
-      return `<div ${timing} class="overlay ${clip.kind}" style="${style}"><span id="${id}-motion" class="text-motion"><span class="text-content" style="background:${background}">${escapeHtml((clip.text ?? '').slice(0, 2000))}</span></span></div>`;
+      const attributes = `left:${style.x * 100}%;top:${style.y * 100}%;font-size:${style.fontSize}px;color:${style.color};z-index:${zIndex};mix-blend-mode:${style.blendMode}`;
+      return `<div ${timing} class="overlay ${clip.kind}" style="${attributes}"><span id="${id}-motion" class="text-motion"><span class="text-content" style="background:${style.background}">${escapeHtml(style.text)}</span></span></div>`;
     }
     const asset = clip.assetId ? assetMap.get(clip.assetId) : undefined;
     const source = clip.assetId ? options.assetUrls?.[clip.assetId] ?? asset?.url : undefined;

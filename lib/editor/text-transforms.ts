@@ -1,10 +1,12 @@
 import type { Clip } from './types';
 import type { VisualCorner, VisualSnapLine } from './visual-transforms';
+import { textStyle } from './text-style';
 
 export type TextPlacement = { x: number; y: number; fontSize: number };
 const clamp=(value:number,min:number,max:number)=>Math.max(min,Math.min(max,value));
 export function textPlacement(clip:Clip):TextPlacement {
-  return {x:clip.x??.5,y:clip.y??(clip.kind==='caption'?.82:.5),fontSize:clip.fontSize??(clip.kind==='caption'?52:92)};
+  const { x, y, fontSize } = textStyle(clip);
+  return { x, y, fontSize };
 }
 export function moveText(initial:TextPlacement,dx:number,dy:number,width:number,height:number,snap=true):TextPlacement {
   let x=clamp(initial.x+dx/width,0,1),y=clamp(initial.y+dy/height,0,1);
