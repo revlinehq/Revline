@@ -1,0 +1,138 @@
+import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import { createServer } from 'node:http';
+import { build } from 'esbuild';
+import puppeteer from 'puppeteer';
+
+// This fixture has no Clerk, Convex, project connection, or external media.
+// Real chat components receive synthetic saved snapshots and SDK tool events.
+const bundle = await build({
+  stdin: { resolveDir: process.cwd(), loader: 'tsx', contents: `
+    import React from 'react';
+    import { createRoot } from 'react-dom/client';
+    import { flushSync } from 'react-dom';
+    import { AssistantPanel } from './components/editor/assistant-panel';
+    import { matchesUndoSnapshot } from './components/editor/assistant-results';
+    import { createEditorStore } from './lib/editor/store';
+    import { normalizeTimeline } from './lib/editor/types';
+    const before = normalizeTimeline({fps:30,aspectRatio:'landscape',clips:[{id:'original',assetId:'fixture-video',kind:'video',track:1,start:0,duration:12,sourceStart:0}],tracks:{visual:1,overlay:0,audio:0,effects:0}});
+    const after = normalizeTimeline({...before,tracks:{visual:2,overlay:0,audio:0,effects:0},clips:[{id:'opening',assetId:'fixture-video',kind:'video',track:1,start:0,duration:4,sourceStart:0},{id:'ending',assetId:'fixture-video',kind:'video',track:1,start:4,duration:6,sourceStart:6},{id:'subtitle',kind:'caption',track:2,start:0,duration:10,sourceStart:0,text:'A saved caption',animation:'rise'}]});
+    const request = {id:'request',role:'user',text:'Remove this section and add animated captions.'};
+    const tools = [{id:'trim',name:'trim',state:'done',staged:true,output:{saved:false,staged:true,revision:10,changedClips:after.clips.slice(0,2)}},{id:'captions',name:'addCaption',state:'done',staged:true,output:{saved:false,staged:true,revision:10,changedClips:[after.clips[2]]}}];
+    const response = {id:'answer',role:'assistant',text:'Removed the section and added animated captions.',status:'success',steps:tools};
+    const root = createRoot(document.getElementById('root'));
+    let store, state, resolveSend;
+    window.requests = []; window.attachCount = 0; window.undoCount = 0;
+    const render = () => flushSync(() => root.render(<AssistantPanel {...state} configured hasClips demo={false} onAttach={() => window.attachCount++} onSend={async text => {window.requests.push(text);state={...state,messages:[...state.messages,{id:'new-request',role:'user',text}],editSnapshot:undefined};render();await new Promise(resolve => resolveSend=resolve);} } onUndo={async () => {const current=store.getState();if(!matchesUndoSnapshot(state.editSnapshot,current.timeline,current.history.at(-1)))throw new Error('This edit is no longer the latest change.');if(window.rejectUndo)throw new Error('Undo could not be saved.');store.getState().undo();window.undoCount++;state={...state,editSnapshot:undefined};render();}}/>));
+    window.resetFixture = () => {store=createEditorStore(before);store.getState().replace(after,true);state={messages:[request,response],running:false,error:null,editSnapshot:{before,after,revision:11,publishedDraft:true,canUndo:true}};render();};
+    window.updateFixture = patch => {state={...state,...patch};render();};
+    window.finishSend = () => resolveSend?.();
+    window.fixtureState = () => ({timeline:store.getState().timeline,before,after,snapshot:state.editSnapshot,messages:state.messages,tools});
+    window.manualEdit = () => {store.getState().edit({...after,clips:after.clips.map(clip=>clip.id==='opening'?{...clip,volume:.4}:clip)});state={...state,editSnapshot:{...state.editSnapshot,canUndo:matchesUndoSnapshot(state.editSnapshot,store.getState().timeline,store.getState().history.at(-1))}};render();};
+    window.resetFixture();
+  ` },
+  bundle: true, format: 'iife', platform: 'browser', jsx: 'automatic', write: false,
+  outdir: '/tmp/revline-assistant-edit-smoke', define: { 'process.env.NODE_ENV': '"production"' },
+});
+const script = bundle.outputFiles.find(file => file.path.endsWith('.js')).text;
+const css = bundle.outputFiles.find(file => file.path.endsWith('.css')).text;
+const [editorCss, sharedCss] = await Promise.all([
+  readFile(new URL('../app/editor.css', import.meta.url), 'utf8'),
+  readFile(new URL('../components/workspace/shared.css', import.meta.url), 'utf8'),
+]);
+const styles = `${editorCss}\n${sharedCss}\n${css}\n
+  :root{--background:#111;--foreground:#f0f0ee;--card:#111;--border:#35353b;--ring:#5474f8;--muted-foreground:#97979f;--primary:#f0f0ee;--secondary:#242426;--ws-bg:#111;--ws-text:#f0f0ee;--ws-muted:#97979f;--ws-surface:#242426;--ws-hover:#303234}
+  :root.light{--background:#fafafa;--foreground:#202124;--card:#fafafa;--border:#dedfe3;--muted-foreground:#71757b;--primary:#202124;--secondary:#eeeef1;--ws-bg:#fafafa;--ws-text:#202124;--ws-muted:#71757b;--ws-surface:#eeeef1;--ws-hover:#e5e5eb}
+  *{box-sizing:border-box}body{margin:0;background:#29292c;color:var(--foreground);font-family:Arial,sans-serif}main{width:400px;height:544px;margin:24px auto;background:var(--background);display:flex}.conversation-editor .editor-sidebar{width:400px;height:100%;display:flex;flex-direction:column;padding:16px 16px 12px}#root{display:flex;flex:1;min-width:0;min-height:0}button,textarea{font:inherit;color:inherit}button{cursor:pointer}p{margin:0}.font-semibold{font-weight:600}.space-y-3\\.5>*+*{margin-top:14px}
+`;
+const shell = '<!doctype html><title>Isolated edit summary verification</title><link rel="stylesheet" href="/fixture.css"><main class="conversation-editor"><section class="editor-sidebar"><div id="root"></div></section></main><script src="/fixture.js"></script>';
+const server = createServer((request, response) => {
+  const path = new URL(request.url, 'http://127.0.0.1').pathname;
+  const asset = path === '/fixture.js' ? ['text/javascript', script] : path === '/fixture.css' ? ['text/css', styles] : path === '/fixture' ? ['text/html', shell] : null;
+  response.writeHead(asset ? 200 : 404, { 'Content-Type': asset?.[0] ?? 'text/plain' });
+  response.end(asset?.[1] ?? 'Not found');
+});
+await new Promise((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); });
+let browser;
+try {
+  browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox', '--disable-dev-shm-usage'] });
+  const page = await browser.newPage(), errors = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await page.setViewport({ width: 1200, height: 620 });
+  await page.goto(`http://127.0.0.1:${server.address().port}/fixture`, { waitUntil: 'networkidle0' });
+  assert.equal(await page.$eval('a[aria-label="View chat history"]', element => element.getAttribute('href')), '/chats');
+  assert.equal(await page.$eval('a[aria-label="New conversation"]', element => element.getAttribute('href')), '/dashboard/chat');
+  assert.deepEqual(await page.$$eval('.assistant-result-card', nodes => nodes.map(node => node.textContent)), ['Trimmed 2 clips', 'Added 1 subtitle']);
+  assert.equal(await page.$eval('.mini-removed title', element => element.textContent), '00:04–00:06 removed', 'Removed source windows stay on their original position after a ripple');
+  assert.equal(await page.$eval('.assistant-mini-caption > span', element => element.textContent), 'Animated captions');
+  assert.equal(await page.$eval('.assistant-edit-comparison figcaption', element => element.textContent), '00:12 → 00:10');
+  assert.equal(await page.$eval('textarea', element => element.placeholder), 'What would you change next?');
+  assert.equal(await page.$eval('.assistant-undo-edit', element => element.disabled), false);
+  assert.equal(await page.evaluate(() => document.body.textContent.includes('Review changes') || document.body.textContent.includes('Pause') || document.body.textContent.includes('2 changes applied')), false, 'No mock edits or obsolete review action');
+  const bounds = await page.evaluate(() => {
+    const shell = document.querySelector('main').getBoundingClientRect(), composer = document.querySelector('.edit-composer').getBoundingClientRect();
+    return { height: composer.height, bottom: shell.bottom - composer.bottom, overflows: [...document.querySelectorAll('.assistant-panel-header,.chat-user,.assistant-result-card,.assistant-edit-comparison,.edit-composer')].some(element => element.scrollWidth > element.clientWidth) };
+  });
+  assert.ok(bounds.height >= 80 && bounds.height <= 88, `Compact composer is ${bounds.height}px`);
+  assert.equal(bounds.bottom, 12, 'Composer stays at the bottom of the full-height chat');
+  assert.equal(bounds.overflows, false);
+  await page.screenshot({ path: '/tmp/revline-assistant-edit-dark.png' });
+  await page.evaluate(() => document.documentElement.classList.add('light'));
+  await page.screenshot({ path: '/tmp/revline-assistant-edit-light.png' });
+  await page.evaluate(() => document.documentElement.classList.remove('light'));
+
+  await page.click('.assistant-undo-edit');
+  assert.equal(await page.evaluate(() => JSON.stringify(window.fixtureState().timeline) === JSON.stringify(window.fixtureState().before)), true, 'Undo restores the actual previous timeline');
+  assert.equal(await page.evaluate(() => window.undoCount), 1);
+  assert.equal(await page.$('.assistant-edit-comparison'), null);
+  await page.evaluate(() => { window.resetFixture(); window.manualEdit(); });
+  assert.equal(await page.$eval('.assistant-undo-edit', element => element.disabled), true, 'A newer manual change prevents stale chat Undo');
+  await page.click('.assistant-undo-edit');
+  assert.equal(await page.evaluate(() => window.undoCount), 1);
+
+  await page.evaluate(() => { window.resetFixture(); window.rejectUndo=true; });
+  await page.click('.assistant-undo-edit');
+  await page.waitForFunction(() => document.querySelector('.chat-error')?.textContent === 'Undo could not be saved.');
+  assert.equal(await page.evaluate(() => window.undoCount), 1, 'A rejected Undo does not report or apply a completed change');
+  assert.equal(await page.$eval('.assistant-undo-edit', element => element.disabled), false, 'A failed Undo remains retryable');
+  await page.evaluate(() => window.rejectUndo=false);
+
+  await page.evaluate(() => { window.resetFixture(); window.updateFixture({editSnapshot:undefined}); });
+  assert.equal(await page.$('.assistant-edit-comparison'), null, 'Unpublished tools cannot claim a saved comparison');
+  assert.match(await page.$eval('.assistant-result-card', element => element.textContent), /Prepared:.*Awaiting save/);
+  await page.evaluate(() => window.updateFixture({error:'Replacement failed'}));
+  assert.equal(await page.$('.assistant-undo-edit'), null);
+  assert.match(await page.$eval('.assistant-result-card', element => element.textContent), /Not saved:.*was not saved/);
+
+  await page.evaluate(() => { window.resetFixture(); window.updateFixture({messages:[],editSnapshot:undefined}); });
+  await page.click('[aria-label="Add footage"]');
+  assert.equal(await page.evaluate(() => window.attachCount), 1);
+  await page.type('textarea', 'Tighten this opening');
+  await page.click('[aria-label="Start edit"]');
+  await page.waitForSelector('.assistant-editing');
+  assert.equal(await page.$eval('.chat-author', element => element.textContent), 'Revline', 'Brand appears before the first assistant event');
+  assert.equal(await page.$eval('.assistant-editing', element => element.textContent), 'Editing…');
+  await page.evaluate(() => { window.brand = document.querySelector('.chat-author'); window.finishSend(); });
+  await new Promise(resolve => setTimeout(resolve, 80));
+  assert.equal(await page.evaluate(() => document.querySelector('.chat-author') === window.brand), true, 'The send/SDK handoff retains the pending header');
+  assert.equal(await page.$eval('.assistant-editing', element => element.textContent), 'Editing…');
+  await page.evaluate(() => window.updateFixture({running:true,messages:[window.fixtureState().messages[0],{id:'live-answer',role:'assistant',text:'Tightened the',status:'streaming'}]}));
+  assert.equal(await page.evaluate(() => document.querySelector('.chat-author') === window.brand), true);
+  await page.evaluate(() => window.token = document.querySelector('[data-flow-token]'));
+  await page.evaluate(() => window.updateFixture({messages:[window.fixtureState().messages[0],{id:'live-answer',role:'assistant',text:'Tightened the opening.',status:'streaming'}]}));
+  assert.equal(await page.evaluate(() => window.token === document.querySelector('[data-flow-token]')), true);
+  await page.evaluate(() => window.updateFixture({running:false,messages:[window.fixtureState().messages[0],{id:'live-answer',role:'assistant',text:'Tightened the opening.',status:'success'}]}));
+  assert.equal(await page.evaluate(() => window.token === document.querySelector('[data-flow-token]')), true);
+  assert.equal(await page.$$eval('.chat-author', elements => elements.length), 1, 'No duplicate brand after streaming completes');
+  assert.equal(await page.evaluate(() => window.requests[0]), 'Tighten this opening');
+
+  await page.setViewport({ width: 1200, height: 960 });
+  await page.evaluate(() => { document.querySelector('main').style.height='900px';window.resetFixture(); });
+  assert.equal(await page.evaluate(() => document.querySelector('main').getBoundingClientRect().bottom-document.querySelector('.edit-composer').getBoundingClientRect().bottom), 12, 'Long chat retains a bottom composer');
+  await page.screenshot({ path: '/tmp/revline-assistant-edit-tall.png' });
+  assert.deepEqual(errors, []);
+  console.log('PASS: real saved/source-window comparison, compact dark/light layout, actual caption lane, real history routes, matching Undo restores the timeline, stale Undo disabled, staged/error results truthful, immediate brand and stable pending/streaming handoff. Screenshots: /tmp/revline-assistant-edit-{dark,light,tall}.png');
+} finally {
+  await browser?.close();
+  await new Promise(resolve => server.close(resolve));
+}

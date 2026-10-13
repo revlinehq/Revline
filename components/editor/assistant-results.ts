@@ -1,6 +1,26 @@
+import { normalizeTimeline, type Timeline } from '@/lib/editor/types';
+
 export type ChatTool = { id?: string; name: string; state: 'running' | 'done' | 'error'; detail?: string; staged?: boolean; output?: Record<string, unknown> };
 export type ResultCard = { key: string; title: string; detail?: string; state: ChatTool['state']; staged?: boolean };
 export const chatMessageKey = (message: { id: string; key?: string }) => message.key ?? message.id;
+export type AssistantEditSnapshot = { before:Timeline;after:Timeline;revision:number;canUndo:boolean;publishedDraft:boolean };
+export type SavedEditComparison = { before:Timeline;after:Timeline;revision:number;canUndo:boolean;publishedRevision?:number };
+export function matchesUndoSnapshot(snapshot:Pick<AssistantEditSnapshot,'before'|'after'>,current:Timeline,previous?:Timeline){
+  return !!previous&&JSON.stringify(normalizeTimeline(current))===JSON.stringify(normalizeTimeline(snapshot.after))&&JSON.stringify(normalizeTimeline(previous))===JSON.stringify(normalizeTimeline(snapshot.before));
+}
+
+/** A tool revision must match the saved snapshot before a turn can claim its difference. */
+export function savedEditComparison(steps:ChatTool[],snapshot?:AssistantEditSnapshot):SavedEditComparison|null {
+  if(!snapshot)return null;
+  const done=steps.filter(step=>step.state==='done'&&!inspections.has(step.name));
+  const saved=done.flatMap(step=>step.output?.saved===true&&typeof step.output.revision==='number'?[step.output.revision]:[]);
+  const staged=done.flatMap(step=>(step.staged||step.output?.staged===true)&&typeof step.output?.revision==='number'?[step.output.revision]:[]);
+  const published=snapshot.publishedDraft&&staged.length>0&&Math.max(...staged)+1===snapshot.revision;
+  if(!published&&(!saved.length||Math.max(...saved)!==snapshot.revision))return null;
+  const before=normalizeTimeline(snapshot.before),after=normalizeTimeline(snapshot.after);
+  if(JSON.stringify(before)===JSON.stringify(after))return null;
+  return {before,after,revision:snapshot.revision,canUndo:snapshot.canUndo,...(published?{publishedRevision:snapshot.revision}:{})};
+}
 
 const record = (value: unknown): Record<string, unknown> | undefined => value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : undefined;
 const errorMessage = (value: unknown) => typeof value === 'string' ? value : typeof record(value)?.message === 'string' ? String(record(value)!.message) : 'This step could not finish.';
@@ -32,6 +52,7 @@ const labels: Record<string, [string, string]> = {
   setVolume: ['Adjusting sound', 'Adjusted sound'], setAspectRatio: ['Resizing canvas', 'Resized canvas'], followSubject: ['Following subject', 'Applied subject tracking'], alignCutsToBeat: ['Matching cuts to beats', 'Matched cuts to beats'],
   addLayer: ['Adding track', 'Added track'], deleteEmptyLayer: ['Removing empty track', 'Removed empty track'], removeEmptyLayers: ['Removing empty tracks', 'Removed empty tracks'],
   useStrongestMoment: ['Choosing a moment', 'Added selected moment'], applyMotionPreset: ['Animating text', 'Animated text'], animateClip: ['Animating text', 'Animated text'], setVisualEffects: ['Adjusting visual effects', 'Adjusted visual effects'],
+  setPlaybackRate: ['Changing speed', 'Changed speed'], applyTextTemplate: ['Animating text', 'Animated text'], addTimedEffect: ['Adding an effect', 'Added an effect'],
   inspectTimeline: ['Checking timeline', 'Checked timeline'], inspectAssetAnalysis: ['Reading footage notes', 'Read footage notes'], analyzeMedia: ['Analyzing footage', 'Analyzed footage'], inspectVideo: ['Finding moments', 'Reviewed footage'], inspectVideoFrames: ['Inspecting frames', 'Inspected frames'],
 };
 const inspections = new Set(['inspectTimeline', 'inspectAssetAnalysis', 'analyzeMedia', 'inspectVideo', 'inspectVideoFrames']);
@@ -40,16 +61,17 @@ const isId = (value: unknown): value is string => typeof value === 'string' && v
 const noun = (n: number, singular: string, plural = `${singular}s`) => `${n} ${n === 1 ? singular : plural}`;
 
 /** Aggregate only successful tool evidence, with pending replacements kept distinct. */
-export function summarizeTools(steps: ChatTool[]): ResultCard[] {
+export function summarizeTools(steps: ChatTool[], evidence:{publishedRevision?:number;draftFailed?:boolean}={}): ResultCard[] {
+  const published=(output?:Record<string,unknown>)=>output?.staged===true&&typeof output.revision==='number'&&output.revision+1===evidence.publishedRevision;
   const unique = new Map<string, ChatTool>();
   steps.forEach((step, index) => unique.set(step.id ?? `${step.name}-${index}`, step));
   const groups = new Map<string, ChatTool[]>();
   for (const [id, step] of unique) {
     if (step.state === 'done' && inspections.has(step.name)) continue;
-    const staged = step.staged === true || step.output?.staged === true;
-    const evidence = staged ? 'prepared' : step.output?.saved === true || step.output?.unchanged === true ? 'saved' : 'unconfirmed';
+    const staged = (step.staged === true || step.output?.staged === true)&&!published(step.output);
+    const savedEvidence = staged ? 'prepared' : step.output?.saved === true || step.output?.unchanged === true || published(step.output) ? 'saved' : 'unconfirmed';
     const kind = step.name === 'markMusicBeats' ? `-${step.output?.kind ?? 'beats'}` : '';
-    const key = step.state === 'error' ? `${step.name}-error-${id}` : `${step.name}${kind}-${step.state}-${evidence}`;
+    const key = step.state === 'error' ? `${step.name}-error-${id}` : `${step.name}${kind}-${step.state}-${savedEvidence}`;
     groups.set(key, [...groups.get(key) ?? [], { ...step, staged }]);
   }
   return [...groups].map(([key, group]) => {
@@ -57,7 +79,7 @@ export function summarizeTools(steps: ChatTool[]): ResultCard[] {
     if (step.state === 'error') return { key, title: 'Could not finish this step', detail: step.detail, state: step.state };
     if (step.state === 'running') return { key, title: name[0], state: step.state };
     const outputs = group.map(item => item.output ?? {});
-    if (!step.staged && outputs.some(output => output.saved !== true && output.unchanged !== true)) return { key, title: 'Save not confirmed', detail: 'This step did not confirm a saved change.', state: 'error' };
+    if (!step.staged && outputs.some(output => output.saved !== true && output.unchanged !== true&&!published(output))) return { key, title: 'Save not confirmed', detail: 'This step did not confirm a saved change.', state: 'error' };
     const changed = outputs.flatMap(output => Array.isArray(output.changedClips) ? output.changedClips.map(record).filter(Boolean) as Record<string, unknown>[] : []);
     const changedIds = new Set(changed.map(clip => clip.id).filter(isId));
     const removedIds = new Set(outputs.flatMap(output => Array.isArray(output.removedClipIds) ? output.removedClipIds.filter(isId) : []));
@@ -78,6 +100,7 @@ export function summarizeTools(steps: ChatTool[]): ResultCard[] {
     const unchanged = outputs.every(output => output.unchanged === true);
     if (unchanged && !['markMusicBeats', 'removeMarker', 'removeMarkers'].includes(step.name)) title = 'No changes needed';
     const lowConfidence = outputs.some(output => output.status === 'low-confidence');
+    if(step.staged&&evidence.draftFailed)return {key,title:`Not saved: ${title}`,detail:'The replacement edit was not saved.',state:'error',staged:true};
     const detail = [step.staged ? 'Awaiting save' : undefined, lowConfidence ? 'Beat detection has low confidence' : undefined].filter(Boolean).join(' · ') || undefined;
     return { key, title: step.staged && !unchanged ? `Prepared: ${title}` : title, detail, state: step.state, staged: step.staged };
   });

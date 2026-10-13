@@ -1,5 +1,7 @@
 import { expect, test } from 'vitest';
-import { chatMessageKey, chatToolFromPart, summarizeTools, type ChatTool } from './assistant-results';
+import { chatMessageKey, chatToolFromPart, summarizeTools, savedEditComparison, matchesUndoSnapshot, type ChatTool } from './assistant-results';
+import { createEditorStore } from '@/lib/editor/store';
+import type { Timeline } from '@/lib/editor/types';
 
 test('stream and persisted SDK records retain the same React identity', () => {
   expect(chatMessageKey({ id: 'stream-123', key: 'thread-1-0' })).toBe(chatMessageKey({ id: 'stored-456', key: 'thread-1-0' }));
@@ -58,4 +60,33 @@ test('marker removal no-ops and unconfirmed or staged deletions are reported hon
   expect(summarizeTools([{ name: 'removeMarkers', state: 'done', output: { unchanged: true, saved: false, removed: 0, removedMarkerIds: [] } }])[0].title).toBe('No markers removed');
   expect(summarizeTools([{ name: 'removeMarkers', state: 'done', output: { saved: false, removedMarkerIds: ['beat'] } }])[0]).toMatchObject({ title: 'Save not confirmed', state: 'error' });
   expect(summarizeTools([{ name: 'removeMarker', state: 'done', output: { staged: true, saved: false, removedMarkerIds: ['beat'] } }])[0]).toMatchObject({ title: 'Prepared: Removed 1 marker', detail: 'Awaiting save', staged: true });
+});
+
+test('a real saved revision publishes a staged report without changing stored tool evidence',()=>{
+  const before:Timeline={fps:30,aspectRatio:'landscape',tracks:{visual:1,overlay:0,audio:0},clips:[{id:'v',kind:'video',assetId:'source',start:0,duration:12,sourceStart:0}]};
+  const after={...before,clips:[{...before.clips[0],duration:10}]};
+  const steps:ChatTool[]=[{name:'delete',state:'done',staged:true,output:{staged:true,saved:false,revision:10,removedClipIds:['pause']}}];
+  const snapshot={before,after,revision:11,canUndo:true,publishedDraft:true};
+  const comparison=savedEditComparison(steps,snapshot)!;
+  expect(comparison).toMatchObject({before,after,publishedRevision:11});
+  expect(summarizeTools(steps,{publishedRevision:comparison.publishedRevision})[0]).toMatchObject({title:'Removed 1 clip',state:'done',staged:false});
+  expect(summarizeTools(steps,{publishedRevision:comparison.publishedRevision,draftFailed:true})[0]).toMatchObject({title:'Removed 1 clip',state:'done',staged:false});
+  expect(steps[0].output).toMatchObject({staged:true,saved:false});
+  expect(savedEditComparison(steps,{...snapshot,publishedDraft:false})).toBeNull();
+  expect(savedEditComparison(steps,{...snapshot,revision:12})).toBeNull();
+  expect(summarizeTools(steps,{draftFailed:true})[0]).toMatchObject({title:'Not saved: Removed 1 clip',state:'error'});
+});
+
+test('comparison and Undo require the saved revision and the actual latest undo snapshot',()=>{
+  const before:Timeline={fps:30,aspectRatio:'landscape',clips:[{id:'caption',kind:'caption',start:0,duration:3,sourceStart:0,text:'Before'}],tracks:{visual:1,overlay:0,audio:0}};
+  const after={...before,clips:[{...before.clips[0],text:'After'}]};
+  const snapshot={before,after,revision:4,canUndo:true,publishedDraft:false};
+  expect(savedEditComparison([{name:'editText',state:'done',output:{saved:true,revision:3}}],snapshot)).toBeNull();
+  expect(savedEditComparison([{name:'editText',state:'done',output:{saved:true,revision:4}}],snapshot)?.after).toEqual(after);
+  const store=createEditorStore(before);store.getState().edit(after);
+  expect(matchesUndoSnapshot(snapshot,store.getState().timeline,store.getState().history.at(-1))).toBe(true);
+  store.getState().edit({...after,clips:[{...after.clips[0],fontSize:84}]});
+  expect(matchesUndoSnapshot(snapshot,store.getState().timeline,store.getState().history.at(-1))).toBe(false);
+  store.getState().undo();expect(matchesUndoSnapshot(snapshot,store.getState().timeline,store.getState().history.at(-1))).toBe(true);
+  expect(store.getState().undo()).toEqual(before);
 });

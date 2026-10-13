@@ -1,14 +1,16 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { LoaderCircle, Check, CircleAlert, ArrowUpRight } from 'lucide-react';
+import { useState, useEffect, useMemo } from 'react';
+import { LoaderCircle, Check, CircleAlert, ArrowUpRight, History, SquarePen, Undo2 } from 'lucide-react';
 import { Brand } from '@/components/workspace/brand';
 import { EditComposer } from '@/components/workspace/edit-composer';
 import { ChatProse } from './chat-prose';
 import { useConversationScroll } from '@/components/workspace/use-conversation-scroll';
-import { summarizeTools, type ChatTool } from './assistant-results';
+import { savedEditComparison, summarizeTools, type AssistantEditSnapshot, type ChatTool } from './assistant-results';
+import { AssistantEditSummary } from './assistant-edit-summary';
 import './assistant-results.css';
 import './assistant-editing.css';
+import './assistant-panel.css';
 import type { SourceEditSuggestion } from '@/lib/editor/types';
 export type { ChatTool } from './assistant-results';
 
@@ -26,7 +28,7 @@ function EditingStatus({ activity }: { activity?: string | null }) {
   return <div className="assistant-editing" role="status"><span className="assistant-editing-text">{activity || 'Editing…'}</span></div>;
 }
 
-export function AssistantPanel({ messages, running, configured, error, onSend, onStop, hasClips, demo, onLoadMore, canLoadMore, onAttach, activity, draftKey, suggestions, onSuggestion }: {
+export function AssistantPanel({ messages, running, configured, error, onSend, onStop, hasClips, demo, onLoadMore, canLoadMore, onAttach, activity, draftKey, suggestions, onSuggestion, editSnapshot, onUndo }: {
   messages: ChatMessage[]; running: boolean; configured: boolean; error?: string | null;
   onSend: (text: string) => Promise<void>; hasClips: boolean; demo: boolean;
   onLoadMore?: () => void; canLoadMore?: boolean; onAttach?: () => void;
@@ -34,20 +36,27 @@ export function AssistantPanel({ messages, running, configured, error, onSend, o
   onStop?: () => Promise<void>;
   suggestions?: { sourceName:string;clipId:string;items:SourceEditSuggestion[] };
   onSuggestion?: (prompt:string,clipId:string) => Promise<void>;
+  editSnapshot?:AssistantEditSnapshot;onUndo?:()=>void|Promise<void>;
 }) {
   const [prompt, setPrompt] = useState('');
   const [sending, setSending] = useState(false);
   const [localError, setLocalError] = useState('');
+  const [undoing,setUndoing]=useState(false);
   const [pendingReply, setPendingReply] = useState<{ previousMessageId?:string;previousError?:string|null } | null>(null);
   const waiting = running || sending || !!pendingReply || !!activity;
   const turnId = messages.findLast(message => message.role === 'user')?.id ?? 'imported';
   const demoNoteMessageId = demo ? messages.findLast(message => message.role === 'assistant')?.id : undefined;
   const scroll = useConversationScroll(turnId, true, false);
-  const groups: { id: string; indices: number[] }[] = [];
-  for (const [index, message] of messages.entries()) {
-    if (message.role === 'user' || !groups.length) groups.push({ id: message.id, indices: [] });
-    groups.at(-1)!.indices.push(index);
-  }
+  const groups=useMemo(()=>{
+    const turns:{id:string;messages:ChatMessage[]}[]=[];
+    for(const message of messages){if(message.role==='user'||!turns.length)turns.push({id:message.id,messages:[]});turns.at(-1)!.messages.push(message);}
+    return turns.map(group=>{
+      const replies=group.messages.filter(message=>message.role!=='user'),steps=group.messages.flatMap(message=>message.steps??[]);
+      const comparison=group.id===turnId?savedEditComparison(steps,editSnapshot):null;
+      const draftFailed=!running&&group.id===turnId&&(!!error||replies.some(message=>message.status==='failed'||message.status==='aborted'));
+      return {...group,replies,comparison,cards:summarizeTools(steps,{publishedRevision:comparison?.publishedRevision,draftFailed})};
+    });
+  },[messages,turnId,editSnapshot,running,error]);
   useEffect(() => { try { setPrompt(draftKey ? sessionStorage.getItem(draftKey) ?? '' : ''); } catch { setPrompt(''); } }, [draftKey]);
   useEffect(() => {
     if (!pendingReply) return;
@@ -80,16 +89,23 @@ export function AssistantPanel({ messages, running, configured, error, onSend, o
     finally { setSending(false); }
   }
 
+  async function undoEdit(){
+    if(undoing||waiting||!groups.at(-1)?.comparison?.canUndo||!onUndo)return;
+    setUndoing(true);setLocalError('');
+    try{await onUndo();}catch(reason){setLocalError(reason instanceof Error?reason.message:'Could not undo this edit.');}finally{setUndoing(false);}
+  }
+
   return <div className="assistant-content">
+    <header className="assistant-panel-header"><span>Edit history</span><nav aria-label="Conversation navigation"><a href="/chats" aria-label="View chat history" title="View chat history"><History size={16}/></a><a href="/dashboard/chat" aria-label="New conversation" title="New conversation"><SquarePen size={16}/></a></nav></header>
     <div ref={scroll.viewport} className={`assistant-history ${!messages.length && !waiting ? 'assistant-history-empty' : ''}`}>
       <div className="assistant-turns" ref={scroll.content}>
       {canLoadMore && <button className="load-more" onClick={() => { scroll.preserveHistory(); onLoadMore?.(); }}>Earlier messages</button>}
       {!messages.length && !waiting && !suggestions?.items.length && <div className="assistant-welcome"><h3>What are we making?</h3><p>{hasClips ? 'A tighter cut, a stronger opening, subtitles. Tell me what you have in mind.' : 'Bring your footage, and tell me the story you want to make.'}</p>{!demo&&!configured&&<div className="assistant-demo-note">Connect Claude to edit in conversation. Your footage, preview, and timeline are ready.</div>}</div>}
       {groups.map(group => {
-        const groupMessages = group.indices.map(index => messages[index]);
-        const replies = groupMessages.filter(message => message.role !== 'user');
+        const groupMessages = group.messages;
+        const replies = group.replies;
         const editing = group.id === turnId && waiting;
-        const cards = summarizeTools(groupMessages.flatMap(message => message.steps ?? []));
+        const cards = group.cards;
         return <div className={`assistant-turn ${group.id === turnId ? 'is-latest-turn' : ''}`} data-turn-id={group.id} key={group.id}>
           {groupMessages.filter(message => message.role === 'user').map(message => <article key={message.id} data-message-id={message.id} data-message-status={message.status} className="chat-message chat-user"><p>{message.text}</p></article>)}
           {(replies.length > 0 || editing || cards.length > 0) && <div className="assistant-reply">
@@ -103,6 +119,7 @@ export function AssistantPanel({ messages, running, configured, error, onSend, o
               {card.state === 'running' ? <LoaderCircle size={14} className="animate-spin" /> : card.state === 'error' ? <CircleAlert size={14} /> : <Check size={14} />}
               <div><span>{card.title}</span>{card.detail && <small>{card.detail}</small>}</div>
             </div>)}</div>}
+            {group.comparison&&<><AssistantEditSummary comparison={group.comparison}/>{onUndo&&<button type="button" className="assistant-undo-edit" disabled={!group.comparison.canUndo||waiting||undoing} title={group.comparison.canUndo?'Undo the latest edit':'This saved edit is no longer the latest undoable change'} onClick={()=>void undoEdit()}><Undo2 size={14}/>{undoing?'Undoing…':'Undo'}</button>}</>}
             {editing && <EditingStatus activity={activity} />}
           </div>}
         </div>;
@@ -115,7 +132,7 @@ export function AssistantPanel({ messages, running, configured, error, onSend, o
     </div>
     <div ref={scroll.composer} className="manual-composer-dock">
     {scroll.latestHidden && <button className="chat-jump-latest" onClick={scroll.resume}>Latest response</button>}
-    <EditComposer className="manual-editor-composer" value={prompt} onChange={changePrompt} onSubmit={submit} onAttach={onAttach} placeholder="Tell me what to make." disabled={sending || !!pendingReply} running={running} onStop={onStop ? stop : undefined} />
+    <EditComposer variant="compact" className="manual-editor-composer" value={prompt} onChange={changePrompt} onSubmit={submit} onAttach={onAttach} placeholder="What would you change next?" disabled={sending || !!pendingReply} running={running} onStop={onStop ? stop : undefined} />
     </div>
   </div>;
 }

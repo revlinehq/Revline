@@ -24,6 +24,7 @@ import { TimelinePanel } from './timeline';
 import type { VideoImportState } from './video-link-import';
 import { FootagePanel, type UploadProgress } from './footage-panel';
 import { AssistantPanel, type ChatMessage } from './assistant-panel';
+import type { AssistantEditSnapshot } from './assistant-results';
 import { ExportDialog, type ExportSettings, type ExportState } from './export-dialog';
 import { EditorErrorNotice } from './error-notice';
 import { type Timeline, type MediaAsset, type AspectRatio, type Clip, timelineDuration, dimensions } from '@/lib/editor/types';
@@ -44,6 +45,7 @@ export type EditorShellProps = {
   messages: ChatMessage[]; aiRunning: boolean; aiConfigured: boolean; aiError?: string | null; draftKey?:string;
   onSend: (text: string, context?: EditContext) => Promise<void>;
   onStop?: () => Promise<void>;
+  assistantEditSnapshot?:AssistantEditSnapshot;onAssistantUndo?:()=>void|Promise<void>;
   onExport: (settings: ExportSettings) => Promise<void>; exportState: ExportState; demo?: boolean; embedded?: boolean;
   analysisBusy?: string | null; onLoadMore?: () => void; canLoadMore?: boolean;
   projectId?: string; workspaceOnly?: boolean; onImportVideo?: (url:string)=>Promise<void>; videoImports?: VideoImportState[];
@@ -241,7 +243,7 @@ export function EditorShell(p: EditorShellProps) {
   const browse = () => setImportOpen(true);
 
   const chat=(<aside className={`editor-sidebar ${mobileChat ? 'mobile-open' : ''}`} aria-label="Editing conversation">
-        <AssistantPanel messages={p.messages} running={p.aiRunning} configured={p.aiConfigured} error={p.aiError} onSend={text => p.onSend(text, { selectedClipId: clip?.id, selectedClipIds:selectedIds, playhead: readPlaybackTime() })} onStop={p.onStop} hasClips={!!timeline.clips.length} demo={!!p.demo} onLoadMore={p.onLoadMore} canLoadMore={p.canLoadMore} onAttach={() => setImportOpen(true)} activity={p.analysisBusy} draftKey={p.draftKey} suggestions={sourceSuggestions} onSuggestion={async (text, clipId) => { const target = timeline.clips.find(item => item.id === clipId && item.kind === 'video'); if (!target) throw new Error('This clip is no longer on the timeline.'); setSelected(clipId); await p.onSend(text, { selectedClipId: clipId, selectedClipIds: [clipId], playhead: target.start }); }} />
+        <AssistantPanel editSnapshot={p.assistantEditSnapshot} onUndo={p.onAssistantUndo} messages={p.messages} running={p.aiRunning} configured={p.aiConfigured} error={p.aiError} onSend={text => p.onSend(text, { selectedClipId: clip?.id, selectedClipIds:selectedIds, playhead: readPlaybackTime() })} onStop={p.onStop} hasClips={!!timeline.clips.length} demo={!!p.demo} onLoadMore={p.onLoadMore} canLoadMore={p.canLoadMore} onAttach={() => setImportOpen(true)} activity={p.analysisBusy} draftKey={p.draftKey} suggestions={sourceSuggestions} onSuggestion={async (text, clipId) => { const target = timeline.clips.find(item => item.id === clipId && item.kind === 'video'); if (!target) throw new Error('This clip is no longer on the timeline.'); setSelected(clipId); await p.onSend(text, { selectedClipId: clipId, selectedClipIds: [clipId], playhead: target.start }); }} />
       </aside>);
   return <main ref={editorRoot} tabIndex={-1} onPointerDownCapture={e => { const interactive = (e.target as HTMLElement).closest('input,textarea,button,a,select,[tabindex]'); if (p.embedded) { if (!interactive || interactive === e.currentTarget || !e.currentTarget.contains(interactive)) editorRoot.current?.focus({ preventScroll: true }); else if (interactive.matches('[tabindex]') && !interactive.matches('input,textarea,button,a,select')) (interactive as HTMLElement).focus({ preventScroll: true }); } }} className={`editor-app conversation-editor ${p.embedded ? 'embedded-editor' : ''}`}>
     {!p.workspaceOnly && <WorkspaceNav title={p.title} onRename={p.onTitle} onFootage={() => setFootageOpen(true)} onExport={() => setExportOpen(true)} exportDisabled={!timeline.clips.length} onUndo={p.onUndo} onRedo={p.onRedo} canUndo={p.canUndo} canRedo={p.canRedo} saving={p.saving} demo={p.demo}/>}

@@ -14,9 +14,9 @@ import { EditorShell } from './editor-shell';
 import { EditorAccessGate } from '@/components/workspace/editor-access-gate';
 import { acknowledgeDraftFiles, takeFiles } from '@/components/workspace/project-draft';
 import type { ChatMessage } from './assistant-panel';
-import { chatMessageKey, chatToolFromPart } from './assistant-results';
+import { chatMessageKey, chatToolFromPart, matchesUndoSnapshot, type AssistantEditSnapshot } from './assistant-results';
 import type { ExportSettings } from './export-dialog';
-import { EMPTY_TIMELINE, type Timeline, type MediaAsset } from '@/lib/editor/types';
+import { EMPTY_TIMELINE, normalizeTimeline, type Timeline, type MediaAsset } from '@/lib/editor/types';
 import { addMediaClip, separateVideoClips } from '@/lib/editor/operations';
 import { prepareVideoAudio, prepareAudioWaveform } from '@/lib/editor/prepare-video-audio';
 import { uploadSourceFile } from '@/lib/editor/upload-source';
@@ -51,6 +51,20 @@ function ProjectEditor({project}: {project:Doc<'projects'>}) {
   const change=useCallback((next:Timeline)=>{store.getState().edit(next);setError('');commit(next);},[commit]);
   const undo=useCallback(()=>{const prev=store.getState().undo();if(prev){commit(prev);}else{void backendUndo({projectId}).catch(e=>setError(String(e)));}},[history,commit,backendUndo,projectId]);
   const redo=useCallback(()=>{const next=store.getState().redo();if(next){commit(next);}},[future,commit]);
+  const assistantEditSnapshot=useMemo<AssistantEditSnapshot|undefined>(()=>{
+    const before=project.history?.at(-1);if(!before)return undefined;
+    const after=normalizeTimeline(project.timeline??{...EMPTY_TIMELINE,aspectRatio:project.aspectRatio});
+    const snapshot={before:normalizeTimeline(before),after,revision:project.revision??0};
+    return {...snapshot,canUndo:!saving&&!ai?.running&&matchesUndoSnapshot(snapshot,timeline,history.at(-1)??before),publishedDraft:!ai?.running&&project.aiUndoRecorded===true&&project.aiCheckpointRevision===snapshot.revision};
+  },[project.history,project.timeline,project.aspectRatio,project.revision,project.aiUndoRecorded,project.aiCheckpointRevision,timeline,history,saving,ai?.running]);
+  const undoAssistantEdit=useCallback(async()=>{
+    const state=store.getState(),before=state.history.at(-1)??project.history?.at(-1);
+    if(!assistantEditSnapshot?.canUndo||!matchesUndoSnapshot(assistantEditSnapshot,state.timeline,before))throw new Error('This edit is no longer the latest change. Use the timeline Undo control.');
+    if(state.history.length){undo();await saves.wait();return;}
+    await backendUndo({projectId});
+    const fresh=await convex.query(api.projects.get,{projectId});
+    saves.receive({timeline:fresh.timeline??{...EMPTY_TIMELINE,aspectRatio:fresh.aspectRatio},revision:fresh.revision??0});
+  },[assistantEditSnapshot,project.history,store,undo,saves,backendUndo,projectId,convex]);
   const preparingAudio=useRef<Promise<void>|null>(null);const failedAudio=useRef(new Set<string>());const [audioBusy,setAudioBusy]=useState(false);
   useEffect(()=>{
     if(media===undefined||ai===undefined||preparingAudio.current||audioBusy||ai.running||upload||uploading.current)return;
@@ -124,5 +138,5 @@ function ProjectEditor({project}: {project:Doc<'projects'>}) {
     })().catch(e=>setError(e instanceof Error?e.message:'Could not start this edit.'));
   },[media,projectId,send]);
   if(media===undefined)return <div className="editor-boot"><LoaderCircle className="animate-spin"/><p>Loading your footage…</p></div>;
-  return <EditorStateProvider store={store}><EditorShell projectId={projectId} draftKey={`revline:editor-draft:${projectId}`} title={title} onTitle={titleChange} timeline={timeline} assets={assets} onRefreshMedia={handleRefreshMedia} onChange={change} saving={saving} upload={upload} error={error} onError={setError} onUndo={undo} onRedo={redo} canUndo={!!history.length||!!project.history?.length} canRedo={!!future.length} messages={messages} aiRunning={ai?.running??false} aiConfigured={ai?.configured??false} aiError={ai?.error} onStop={async()=>{await stop({projectId});}} onSend={async(prompt,context)=>{await preparingAudio.current;await waitForSave();await send({projectId,prompt,...context});}} onExport={exportVideo} exportState={exportState} onUpload={handleUpload} onImportVideo={async url=>{await waitForSave();await importVideo({projectId,url});}} videoImports={mediaTasks?.filter(task=>task.kind==='import')} analysisBusy={analysisBusy??(audioBusy?'Preparing audio…':null)} canLoadMore={status==='CanLoadMore'} onLoadMore={()=>loadMore(20)}/></EditorStateProvider>;
+  return <EditorStateProvider store={store}><EditorShell projectId={projectId} draftKey={`revline:editor-draft:${projectId}`} title={title} onTitle={titleChange} timeline={timeline} assets={assets} onRefreshMedia={handleRefreshMedia} onChange={change} saving={saving} upload={upload} error={error} onError={setError} onUndo={undo} onRedo={redo} canUndo={!!history.length||!!project.history?.length} canRedo={!!future.length} assistantEditSnapshot={assistantEditSnapshot} onAssistantUndo={undoAssistantEdit} messages={messages} aiRunning={ai?.running??false} aiConfigured={ai?.configured??false} aiError={ai?.error} onStop={async()=>{await stop({projectId});}} onSend={async(prompt,context)=>{await preparingAudio.current;await waitForSave();await send({projectId,prompt,...context});}} onExport={exportVideo} exportState={exportState} onUpload={handleUpload} onImportVideo={async url=>{await waitForSave();await importVideo({projectId,url});}} videoImports={mediaTasks?.filter(task=>task.kind==='import')} analysisBusy={analysisBusy??(audioBusy?'Preparing audio…':null)} canLoadMore={status==='CanLoadMore'} onLoadMore={()=>loadMore(20)}/></EditorStateProvider>;
 }
