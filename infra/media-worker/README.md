@@ -63,6 +63,8 @@ Verification recorded on 2026-10-13:
 
 ## Runtime secrets and rollout
 
+The 2026-10-13 text update is deployed as controller version `4b832ecc-17b5-4b72-be5e-382d32771961`, using processor image digest `sha256:ea8c8836619f475bf849bdf7740efbb5b4c8fba3c43591be367c5bf7dbfa89fc`. It includes editable text rotation and the Neon echo, Lyric slam and Kinetic stack presets. The frozen image rendered all three presets and rotated text roots in an isolated, network-disabled check. A synthetic MP4 render separately verified entrance/hold/exit frames, split timing and preview/export agreement. Image comparisons use bounded pixel statistics instead of large Buffer assertion diffs, which exhausted local RAM on failures; local verification runs use a capped Node heap.
+
 Only two secret values are required in the new Worker:
 
 - `RENDER_WORKER_SECRET`: the existing production media worker credential, matching Convex production.
