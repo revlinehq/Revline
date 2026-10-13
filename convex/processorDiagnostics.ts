@@ -9,7 +9,7 @@ export const createExportFixture = internalMutation({
   args: {},
   returns: v.object({ ownerId: v.string(), projectId: v.id('projects'), jobId: v.id('renderJobs'), taskId: v.id('mediaTasks') }),
   handler: async ctx => {
-    const ownerId = `revline-hosting-smoke:${crypto.randomUUID()}`, now = Date.now();
+    const ownerId = `revline-hosting-smoke-${crypto.randomUUID()}`, now = Date.now();
     const projectId = await ctx.db.insert('projects', { ownerId, title: 'Hosted processor smoke test', aspectRatio: 'landscape', createdAt: now, updatedAt: now, revision: 0, history: [] });
     const source: Timeline = { fps: 24, aspectRatio: 'landscape', tracks: { visual: 1, overlay: 0, audio: 0, effects: 0 }, clips: [
       { id: 'hosting-check-title', kind: 'graphic', track: 1, start: 0, duration: 1, sourceStart: 0, text: 'Hosted export check', fontSize: 72, color: '#FFFFFF', background: '#0B0C0E', x: .5, y: .5, animation: 'none' },
