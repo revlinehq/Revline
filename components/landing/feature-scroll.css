@@ -6,4 +6,4 @@
 .landing-features .landing-features-panel[data-phase=active]{opacity:1;visibility:visible;pointer-events:auto;transform:translateY(0);transition-delay:0s;z-index:1}
 .landing-features[data-keyboard-transition=true] .landing-features-panel[data-slot=tabs-content]{transition:none}
 @media(max-width:900px){.landing-feature-scroll-stage{position:static!important}.landing-feature-scroll-rail{height:auto!important}}
-@media(prefers-reduced-motion:reduce){.landing-feature-scroll-stage{position:static!important}.landing-feature-scroll-rail{height:auto!important}.landing-features .landing-features-panel[data-slot=tabs-content]{transition:none;transform:none}}
+@media(prefers-reduced-motion:reduce){.landing-features .landing-features-panel[data-slot=tabs-content]{transition:none;transform:none}}

@@ -42,7 +42,8 @@ export function LandingFeatures() {
   useEffect(() => {
     const track = rail.current, content = stage.current;
     if (!track || !content) return;
-    const eligible = window.matchMedia('(min-width: 901px) and (prefers-reduced-motion: no-preference)');
+    // Reduced motion removes the preview transition, not the scroll interaction.
+    const eligible = window.matchMedia('(min-width: 901px)');
     let frame = 0;
     const update = () => {
       frame = 0;
@@ -110,7 +111,7 @@ export function LandingFeatures() {
   return <section id="features" className="landing-features landing-section" aria-labelledby="landing-features-heading" data-scroll-driven={scrollDriven} data-keyboard-transition={keyboard}>
     <div className="landing-feature-scroll-rail" ref={rail}>
       <div className="landing-feature-scroll-stage" ref={stage}>
-        <header className="landing-features-heading"><h2 id="landing-features-heading">Give your edit more.</h2><p>Cuts, captions, and motion, shaped in chat.</p></header>
+        <header className="landing-features-heading"><h2 id="landing-features-heading">Features</h2></header>
         <Tabs value={active} onValueChange={selectFeature} orientation="vertical" className="landing-features-tabs">
           <TabsList variant="line" className="landing-features-list" aria-label="Explore editing features" onPointerDownCapture={() => { keyboardInput.current = false; }} onKeyDownCapture={() => { keyboardInput.current = true; }}>{features.map(feature => <TabsTrigger value={feature.id} className="landing-features-trigger" key={feature.id}>{feature.label}</TabsTrigger>)}</TabsList>
           <div className="landing-features-panels">{features.map((feature, index) => <TabsContent forceMount value={feature.id} className="landing-features-panel" key={feature.id} data-phase={index < activeIndex ? 'before' : index > activeIndex ? 'after' : 'active'} aria-hidden={feature.id !== active} inert={feature.id !== active} tabIndex={feature.id === active ? 0 : -1}><FeaturePreview kind={feature.id} /><p>{feature.description}</p></TabsContent>)}</div>
