@@ -48,7 +48,6 @@ export async function enqueueMediaTask(ctx: MutationCtx, input: Pick<Doc<'mediaT
   const taskId = await ctx.db.insert('mediaTasks', { ...input, status: 'queued', attempt: 0, progress: 0, createdAt: now, updatedAt: now });
   const workflowId = await mediaWorkflow.start(ctx, internal.mediaTasks.process, { taskId }, { startAsync: true, onComplete: internal.mediaTasks.settle, context: { taskId } });
   await ctx.db.patch(taskId, { workflowId });
-  if (globalThis.process.env.MEDIA_PROCESSOR_WAKE_URL) await ctx.scheduler.runAfter(0, internal.mediaProcessor.wake, {});
   return taskId;
 }
 
@@ -73,6 +72,8 @@ export const prepareAttempt = internalMutation({ args: { taskId: v.id('mediaTask
   const task = await ctx.db.get(args.taskId);
   if (!task || ['completed', 'cancelled', 'failed'].includes(task.status)) return false;
   await ctx.db.patch(task._id, { status: 'queued', attempt: args.attempt, leaseToken: undefined, leaseExpiresAt: undefined, attemptStartedAt: undefined, updatedAt: Date.now() });
+  // Wake only after this attempt is claimable, including retries after backoff.
+  if (globalThis.process.env.MEDIA_PROCESSOR_WAKE_URL) await ctx.scheduler.runAfter(0, internal.mediaProcessor.wake, {});
   return true;
 }});
 async function signalResult(ctx: MutationCtx, task: Doc<'mediaTasks'>, value: Infer<typeof eventResult>) {

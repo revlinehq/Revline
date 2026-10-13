@@ -9,7 +9,7 @@ import { api, internal } from './_generated/api';
 const modules = import.meta.glob('./**/*.ts');
 const identity = (subject: string) => ({ subject, issuer: 'https://test.clerk.accounts.dev', tokenIdentifier: `https://test.clerk.accounts.dev|${subject}` });
 beforeEach(() => { vi.useFakeTimers(); vi.stubEnv('RENDER_WORKER_SECRET', 'task-test-secret'); vi.stubEnv('MEDIA_WORKER_URL', 'https://media.example.com'); vi.stubEnv('MEDIA_SIGNING_SECRET', 'media-test-secret'); });
-afterEach(() => { vi.useRealTimers(); vi.unstubAllEnvs(); });
+afterEach(() => { vi.useRealTimers(); vi.unstubAllEnvs(); vi.restoreAllMocks(); });
 async function fixture() {
   const t = convexTest(schema, modules); workflowTest.register(t); stripeTest.register(t);
   const owner = t.withIdentity(identity('owner')), stranger = t.withIdentity(identity('stranger'));
@@ -24,6 +24,32 @@ async function fixture() {
   return { t, owner, stranger, projectId, assetId, start, drain, claim };
 }
 const transcript = { segments: [{ start: 0, end: 1, text: 'Actual words' }], words: [] };
+
+test('hosted processor wakes with claimable work on initial and retry attempts', async () => {
+  const f = await fixture();
+  vi.stubEnv('MEDIA_PROCESSOR_WAKE_URL', 'https://processor.example.com/wake');
+  const readyAtWake: string[] = [];
+  vi.spyOn(globalThis, 'fetch').mockImplementation(async () => {
+    readyAtWake.push(await f.t.query(api.mediaTasks.ready, { workerSecret: 'task-test-secret' }));
+    return new Response(null, { status: 202 });
+  });
+
+  const taskId = await f.start('transcribe');
+  await f.drain();
+  expect(readyAtWake).toEqual([`${taskId}:1`]);
+  const first = (await f.claim())!;
+  expect(first.taskId).toBe(taskId);
+
+  await f.t.mutation(api.mediaTasks.fail, { taskId, leaseToken: first.leaseToken, error: 'Transient disconnect', retryable: true });
+  await f.drain();
+  expect(readyAtWake).toEqual([`${taskId}:1`, `${taskId}:2`]);
+  const retry = (await f.claim())!;
+  expect(retry.taskId).toBe(taskId);
+
+  await f.t.mutation(api.mediaTasks.complete, { taskId, leaseToken: retry.leaseToken, result: { analysis: { transcript } } });
+  await f.drain();
+  expect(await f.owner.query(api.mediaTasks.get, { taskId })).toMatchObject({ status: 'completed', attempt: 2 });
+});
 
 test('video imports enforce ownership and billing, dedupe active URLs and create projects atomically', async () => {
   const f = await fixture();
