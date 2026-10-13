@@ -27,10 +27,12 @@
 .assistant-undo-edit{display:inline-flex;align-items:center;gap:6px;min-height:28px;margin:5px 0 8px;padding:0;color:var(--muted-foreground);font-size:12px;background:transparent;border:0}
 .assistant-undo-edit:hover:enabled{color:var(--foreground)}
 .assistant-undo-edit:disabled{opacity:.4;cursor:default}
-.conversation-editor .assistant-content .manual-editor-composer{padding:10px 14px;border-radius:10px;gap:8px;background:var(--secondary);box-shadow:inset 0 0 0 1px var(--border)}
+.conversation-editor .assistant-content .manual-editor-composer{padding:10px;border-radius:10px;gap:8px;background:var(--secondary);box-shadow:inset 0 0 0 1px var(--border)}
 .conversation-editor .assistant-content .manual-editor-composer textarea{min-height:24px;font-size:13px;line-height:20px;letter-spacing:0}
 .conversation-editor .assistant-content .manual-editor-composer .edit-composer-actions{height:32px}
-.conversation-editor .assistant-content .manual-editor-composer .revline-primary{height:32px;width:32px;min-width:32px;padding:0;border-radius:7px;background:#5474F8;color:#fff}
+.conversation-editor .assistant-content .manual-editor-composer .revline-primary{height:32px;width:32px;min-width:32px;padding:0;border-radius:7px;box-shadow:none;background:#5474F8;color:#fff}
 .assistant-content .manual-composer-dock{flex:none}
 
 .assistant-panel-header nav{margin-left:auto}
+
+.assistant-panel-header button{width:28px;height:28px;padding:0;border:0;display:grid;place-items:center;background:transparent;color:var(--muted-foreground);border-radius:5px;cursor:pointer}.assistant-panel-header button:hover{color:var(--foreground);background:var(--secondary)}.assistant-panel-header button:focus-visible{outline:2px solid var(--ring);outline-offset:2px}

@@ -1,7 +1,10 @@
 import type { VisualEffects } from './visual-effects';
+import type { Clip } from './types';
+import { adjustmentFrame } from './adjustment-layers';
+export { installAdjustmentLayers } from './adjustment-layers';
 
 export type VisualEffectSource = VisualEffects & { id: string };
-export type VisualEffectsController = { set(id: string, effects: VisualEffects): void; redraw(): void; dispose(): void };
+export type VisualEffectsController = { set(id: string, effects: VisualEffects): void; setTimedEffects(clips:Clip[]):void; redraw(): void; dispose(): void };
 
 /** One browser bundle runs the same kernel in preview and exported compositions. */
 export function installVisualEffects(sources: VisualEffectSource[], fps: number, resolution: number) {
@@ -11,10 +14,23 @@ export function installVisualEffects(sources: VisualEffectSource[], fps: number,
   const clock = host.__timelines.revline.__hfReal ?? host.__timelines.revline;
   const entries = new Map<string, { source: HTMLVideoElement | HTMLImageElement; effects: VisualEffects; canvas?: HTMLCanvasElement; gl?: WebGLRenderingContext; program?: WebGLProgram; texture?: WebGLTexture; buffer?: WebGLBuffer; uniforms?: Record<string, WebGLUniformLocation | null>; lastFrame?: number; lastSource?: string | number; dirty: boolean; injected?: HTMLImageElement; failed?: boolean; videoCallback?: number; decodedFrame?: number; decodedListener?: () => void }>();
   let frameRequest = 0, disposed = false;
+  const baseEffects=new Map<string,VisualEffects>();
+  let timedEffects:Clip[]=[];
+  function effectiveEffects(base:VisualEffects,time:number):VisualEffects {
+    let zoom=base.zoomBlur;
+    for(const clip of timedEffects){
+      if(!clip.zoomBlur?.enabled||time<clip.start||time>=clip.start+clip.duration)continue;
+      const amount=clip.zoomBlur.amount*adjustmentFrame(clip,time).opacity;
+      if(amount>(zoom?.enabled?zoom.amount:0))zoom={...clip.zoomBlur,amount};
+    }
+    return {...base,zoomBlur:zoom};
+  }
   const vertex = `attribute vec2 position;varying vec2 uv;void main(){uv=(position+1.0)*0.5;gl_Position=vec4(position,0.0,1.0);}`;
   const fragment = `precision highp float;
 varying vec2 uv;uniform sampler2D source;uniform vec2 size;uniform float frame;
-uniform float invert;uniform vec4 grade;uniform vec3 balance;uniform vec3 zoom;uniform vec3 glitch;
+uniform float invert;uniform vec4 grade;uniform vec3 balance;uniform vec3 zoom;uniform vec3 glitch;uniform vec3 dither;uniform float ditherPalette;uniform vec3 ditherShadow;uniform vec3 ditherHighlight;
+float bayer2(vec2 p){return p.y<1.0?(p.x<1.0?0.0:2.0):(p.x<1.0?3.0:1.0);}
+float bayer4(vec2 p){p=mod(floor(p),4.0);return (4.0*bayer2(mod(p,2.0))+bayer2(floor(p/2.0))+0.5)/16.0;}
 float hash(vec2 p){float n=mod(p.x*73.0+p.y*151.0+19.0,251.0);n=mod(n*n*17.0+n*13.0,65521.0);return mod(n*37.0,1021.0)/1021.0;}
 vec4 sampleSource(vec2 p){return texture2D(source,clamp(p,vec2(0.0),vec2(1.0)));}
 vec4 radial(vec2 p){
@@ -41,12 +57,23 @@ void main(){
   float chroma=max(rgb.r,max(rgb.g,rgb.b))-min(rgb.r,min(rgb.g,rgb.b));
   float saturation=grade.z*(1.0+balance.z*(1.0-clamp(chroma,0.0,1.0)));
   rgb=clamp(mix(vec3(luma),rgb,saturation),0.0,1.0);
-  gl_FragColor=vec4(mix(rgb,1.0-rgb,invert),c.a);
+  rgb=mix(rgb,1.0-rgb,invert);
+  if(dither.x>0.0){
+    float steps=dither.y-1.0;
+    float threshold=bayer4(gl_FragCoord.xy/max(0.1,dither.z))-0.5;
+    vec3 ordered=clamp(floor(rgb*steps+threshold+0.5)/steps,0.0,1.0);
+    if(ditherPalette>0.5){
+      float tone=clamp(floor(dot(rgb,vec3(0.2126,0.7152,0.0722))*steps+threshold+0.5)/steps,0.0,1.0);
+      ordered=mix(ditherShadow,ditherHighlight,tone);
+    }
+    rgb=mix(rgb,ordered,dither.x);
+  }
+  gl_FragColor=vec4(rgb,c.a);
 }`;
 
   function enabled(effects: VisualEffects) {
     const c = effects.colorGrade, z = effects.zoomBlur, g = effects.glitch;
-    return !!(c?.enabled && (c.exposure || c.contrast !== 1 || c.saturation !== 1 || c.temperature || c.tint || c.vibrance) || z?.enabled && z.amount > 0 || g?.enabled && g.intensity > 0 || effects.invert?.enabled && effects.invert.amount > 0);
+    return !!(c?.enabled && (c.exposure || c.contrast !== 1 || c.saturation !== 1 || c.temperature || c.tint || c.vibrance) || z?.enabled && z.amount > 0 || g?.enabled && g.intensity > 0 || effects.invert?.enabled && effects.invert.amount > 0 || effects.dither?.enabled && effects.dither.amount > 0);
   }
   function release(entry: typeof entries extends Map<string, infer T> ? T : never) {
     entry.source.removeAttribute('data-revline-effects');
@@ -89,14 +116,15 @@ void main(){
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
-    const uniforms = Object.fromEntries(['source','size','frame','invert','grade','balance','zoom','glitch'].map(name => [name, gl.getUniformLocation(program, name)]));
+    const uniforms = Object.fromEntries(['source','size','frame','invert','grade','balance','zoom','glitch','dither','ditherPalette','ditherShadow','ditherHighlight'].map(name => [name, gl.getUniformLocation(program, name)]));
     Object.assign(entry, { canvas, gl, program, texture, buffer, uniforms });
     entry.source.parentElement!.appendChild(canvas);
   }
   function draw(entry: typeof entries extends Map<string, infer T> ? T : never, force = false) {
     if (disposed || entry.failed) return;
     const time = clock.time(), start = Number(entry.source.dataset.start), end = start + Number(entry.source.dataset.duration);
-    if (!enabled(entry.effects) || time < start - 1e-6 || time >= end - 1e-6) { if (entry.canvas) release(entry); return; }
+    const effects=effectiveEffects(entry.effects,time);
+    if (!enabled(effects) || time < start - 1e-6 || time >= end - 1e-6) { if (entry.canvas) release(entry); return; }
     const renderId = entry.source.getAttribute('data-hf-render-id') || entry.source.id;
     const injected = document.getElementById(`__render_frame_${renderId}__`) as HTMLImageElement | null;
     const source = injected || entry.source;
@@ -116,15 +144,22 @@ void main(){
       canvas.style.position = 'absolute'; canvas.style.pointerEvents = 'none';
       gl.viewport(0, 0, canvas.width, canvas.height); gl.useProgram(entry.program!); gl.bindTexture(gl.TEXTURE_2D, entry.texture!);
       if (force || entry.lastSource !== sourceKey) gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source);
-      const c = entry.effects.colorGrade, z = entry.effects.zoomBlur, g = entry.effects.glitch;
+      const c = effects.colorGrade, z = effects.zoomBlur, g = effects.glitch;
       const sourceDisplayWidth = parseFloat(entry.source.style.width) || width;
       const pixelScale = resolution / 1080 * width / sourceDisplayWidth;
       gl.uniform1i(u.source, 0); gl.uniform2f(u.size, width, height); gl.uniform1f(u.frame, frame);
-      gl.uniform1f(u.invert, entry.effects.invert?.enabled ? entry.effects.invert.amount : 0);
+      gl.uniform1f(u.invert, effects.invert?.enabled ? effects.invert.amount : 0);
       gl.uniform4f(u.grade, c?.enabled ? c.exposure : 0, c?.enabled ? c.contrast : 1, c?.enabled ? c.saturation : 1, 0);
       gl.uniform3f(u.balance, c?.enabled ? c.temperature / 100 : 0, c?.enabled ? c.tint / 100 : 0, c?.enabled ? c.vibrance / 100 : 0);
       gl.uniform3f(u.zoom, z?.enabled ? z.amount : 0, z?.centerX ?? .5, 1 - (z?.centerY ?? .5));
       gl.uniform3f(u.glitch, g?.enabled ? g.intensity : 0, (g?.blockSize ?? 32) * pixelScale, (g?.rgbSplit ?? 8) * pixelScale);
+      const d = effects.dither;
+      gl.uniform3f(u.dither, d?.enabled ? d.amount : 0, d?.levels ?? 4, (d?.size ?? 2) * resolution / 1080 * canvas.width / sourceDisplayWidth);
+      const color = (hex: string) => [1, 3, 5].map(index => parseInt(hex.slice(index, index + 2), 16) / 255);
+      const shadow = color(d?.shadowColor ?? '#000000'), highlight = color(d?.highlightColor ?? '#ffffff');
+      gl.uniform1f(u.ditherPalette, d?.shadowColor || d?.highlightColor ? 1 : 0);
+      gl.uniform3f(u.ditherShadow, shadow[0], shadow[1], shadow[2]);
+      gl.uniform3f(u.ditherHighlight, highlight[0], highlight[1], highlight[2]);
       gl.drawArrays(gl.TRIANGLES, 0, 6);
       entry.source.setAttribute('data-revline-effects', '');
       if (injected) { entry.injected = injected; injected.setAttribute('data-revline-effects', ''); }
@@ -156,8 +191,9 @@ void main(){
     }
   }
   function set(id: string, effects: VisualEffects) {
+    baseEffects.set(id,effects);
     const previous = entries.get(id);
-    if (!enabled(effects)) { remove(id); if (!entries.size) { cancelAnimationFrame(frameRequest); frameRequest = 0; } return; }
+    if (!enabled(effects)&&!timedEffects.some(clip=>clip.zoomBlur?.enabled&&clip.zoomBlur.amount>0)) { remove(id); if (!entries.size) { cancelAnimationFrame(frameRequest); frameRequest = 0; } return; }
     const source = document.getElementById(id);
     if (!(source instanceof HTMLVideoElement || source instanceof HTMLImageElement)) return;
     const entry = previous ?? { source, effects, dirty: true };
@@ -178,6 +214,7 @@ void main(){
   bindExportBridge(); document.addEventListener('DOMContentLoaded', bindExportBridge, { once: true });
   const controller: VisualEffectsController = {
     set,
+    setTimedEffects:clips=>{timedEffects=clips.filter(clip=>clip.effectPreset==='zoom-blur');for(const [id,effects] of baseEffects)set(id,effects);redraw(true);},
     redraw: () => { bindExportBridge(); redraw(true); },
     dispose: () => { disposed = true; cancelAnimationFrame(frameRequest); for (const id of entries.keys()) remove(id); clock.render = originalRender; if (bridge) bridge.redraw = originalRedraw; },
   };

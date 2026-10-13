@@ -1,14 +1,14 @@
 import type { Clip } from './types';
-import { validateVisualEffects } from './visual-effects';
+import { DEFAULT_ZOOM_BLUR, validateVisualEffects } from './visual-effects';
 import { textTemplateTimingPatch, validateRemotionTextTemplate } from './remotion-text';
 import { validatePlaybackRate } from './playback-rate';
 
-export const BLEND_MODES = ['normal', 'screen', 'multiply', 'overlay', 'plus-lighter'] as const;
+export const BLEND_MODES = ['normal', 'screen', 'multiply', 'overlay', 'plus-lighter', 'difference'] as const;
 export type BlendMode = typeof BLEND_MODES[number];
 export type MotionKeyframe = { time: number; x: number; y: number; scale: number; rotation: number; opacity: number; brightness: number };
 export const MOTION_PRESETS = ['none', 'fade', 'punch', 'shake', 'flash', 'pop'] as const;
 export type MotionPreset = typeof MOTION_PRESETS[number];
-export const EFFECT_PRESETS = ['fade', 'punch', 'shake', 'flash', 'pop', 'cinematic-bars', 'quick-zoom-in', 'quick-zoom-out'] as const;
+export const EFFECT_PRESETS = ['fade', 'punch', 'shake', 'flash', 'pop', 'cinematic-bars', 'quick-zoom-in', 'quick-zoom-out', 'zoom-blur'] as const;
 export type EffectPreset = typeof EFFECT_PRESETS[number];
 export type CinematicBarSettings = { size: number; speed: number };
 export const DEFAULT_CINEMATIC_BARS: CinematicBarSettings = { size: .12, speed: 1 };
@@ -29,6 +29,7 @@ export const EFFECT_CATALOG: Record<EffectPreset, { label: string; duration: num
   pop: { label: 'Pop in', duration: .5, keyframes: d => { const hit = Math.min(.35, d / 2); return [key(0, { scale: .7, opacity: 0 }), key(hit * .65, { scale: 1.08 }), key(hit), key(d)]; } },
   'cinematic-bars': { label: 'Cinematic bars', duration: 2, keyframes: d => cinematicBarKeyframes(d) },
   'quick-zoom-in': { label: 'Quick zoom in', duration: .5, keyframes: d => [key(0), key(d, { scale: 1.2 })] },
+  'zoom-blur': { label: 'Zoom blur', duration: .6, keyframes: d => { const fade = Math.min(.18, d / 2); return [key(0, {opacity:0}), key(fade), ...(d-fade > fade ? [key(d-fade)] : []), key(d, {opacity:0})]; } },
   'quick-zoom-out': { label: 'Quick zoom out', duration: .5, keyframes: d => [key(0, { scale: 1.2 }), key(d)] },
 };
 export function effectClipLabel(clip: Pick<Clip, 'effectPreset'>) { return clip.effectPreset && clip.effectPreset !== 'none' ? EFFECT_CATALOG[clip.effectPreset].label : 'Custom effect'; }
@@ -84,9 +85,9 @@ export function visibleMotion(clip: Clip): MotionKeyframe[] {
 }
 
 export function motionPreset(clip: Clip, preset: MotionPreset | EffectPreset): Partial<Clip> {
-  if (preset === 'cinematic-bars' && clip.kind !== 'effect') throw new Error('Add cinematic bars as an effect clip.');
+  if ((preset === 'cinematic-bars' || preset === 'zoom-blur') && clip.kind !== 'effect') throw new Error('Add this preset as an effect clip.');
   const motion = preset === 'none' ? [] : preset === 'cinematic-bars' ? cinematicBarKeyframes(clip.duration, cinematicBarSettings(clip).speed) : EFFECT_CATALOG[preset].keyframes(clip.duration);
-  return { motion, motionOffset: 0, ...(clip.kind === 'effect' ? { effectPreset: preset, cinematicBars: preset === 'cinematic-bars' ? { ...cinematicBarSettings(clip) } : undefined } : {}), ...(clip.kind === 'caption' || clip.kind === 'graphic' ? { animation: 'none' as const } : {}) };
+  return { motion, motionOffset: 0, ...(clip.kind === 'effect' ? { effectPreset: preset, cinematicBars: preset === 'cinematic-bars' ? { ...cinematicBarSettings(clip) } : undefined, zoomBlur: preset === 'zoom-blur' ? {...DEFAULT_ZOOM_BLUR,...clip.zoomBlur,enabled:true} : undefined } : {}), ...(clip.kind === 'caption' || clip.kind === 'graphic' ? { animation: 'none' as const } : {}) };
 }
 
 export function offsetClipMotion(clip: Clip, delta: number): Partial<Clip> {

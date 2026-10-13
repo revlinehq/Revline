@@ -1,15 +1,15 @@
 import { NEUTRAL_MOTION, cinematicBarSettings, validateClipEffects, visibleMotion, type MotionKeyframe } from './clip-effects';
-import { cinematicBarsAnimationSteps } from './adjustment-animation';
+import { adjustmentSources } from './adjustment-layers';
 import { MAX_CLIP_VOLUME } from './clip-volume';
-import { serializeTextAnimation, textAnimationSteps } from './text-animation';
 import { validateVisualEffects } from './visual-effects';
 import { visualEffectsRuntimeScript } from './visual-effects-runtime';
-import { remotionTextSources } from './remotion-text';
+import { textLayerSources } from './text-layers';
 import { textStyle } from './text-style';
 import { playbackRateOf, sourceEndOf, timelineTimeAtSource, validatePlaybackRate } from './playback-rate';
 import { dimensions, timelineDuration, deriveTrackCounts, normalizeTimeline, trackOf, DEFAULT_CROP, DEFAULT_TRANSFORM, type Clip, type MediaAsset, type Timeline, type SourceCrop } from './types';
 
 export type CompositionOptions = {
+  preview?: boolean;
   resolution?: 720 | 1080;
   fps?: 24 | 30 | 60;
   gsapUrl?: string;
@@ -41,22 +41,17 @@ export function compositionTrackIndex(clip: Pick<Clip, 'kind' | 'track'>) {
   return (clip.kind === 'audio' ? 24 : 0) + trackOf(clip) - 1;
 }
 
-/** Scale the retained source region, and mask removed pixels before transforming. */
+/** Crop masks the source without changing its existing scale or placement. */
 export function calculateVisualRect(sourceWidth: number, sourceHeight: number, frameWidth: number, frameHeight: number, crop: SourceCrop = DEFAULT_CROP, focus?: { x: number; y: number }, fit: 'cover' | 'contain' = 'cover') {
   if (![sourceWidth, sourceHeight, frameWidth, frameHeight].every(value => Number.isFinite(value) && value > 0)) throw new Error('Crop needs the source dimensions. Re-import this media.');
   if (![crop.left, crop.top, crop.right, crop.bottom].every(value => Number.isFinite(value) && value >= 0 && value <= 0.95) || crop.left + crop.right >= 0.95 || crop.top + crop.bottom >= 0.95) throw new Error('Crop edges must leave at least 5% of the source visible.');
-  const croppedWidth = sourceWidth * (1 - crop.left - crop.right), croppedHeight = sourceHeight * (1 - crop.top - crop.bottom);
-  const scale = (fit === 'contain' ? Math.min : Math.max)(frameWidth / croppedWidth, frameHeight / croppedHeight);
+  const scale = (fit === 'contain' ? Math.min : Math.max)(frameWidth / sourceWidth, frameHeight / sourceHeight);
   const width = sourceWidth * scale, height = sourceHeight * scale;
-  const window = fit === 'contain' ? { left: (frameWidth - croppedWidth * scale) / 2, top: (frameHeight - croppedHeight * scale) / 2, width: croppedWidth * scale, height: croppedHeight * scale } : { left: 0, top: 0, width: frameWidth, height: frameHeight };
-  if (fit === 'contain') return { left: window.left - crop.left * width, top: window.top - crop.top * height, width, height, window };
-  const x = bounded(focus?.x, (crop.left + 1 - crop.right) / 2, 0, 1);
-  const y = bounded(focus?.y, (crop.top + 1 - crop.bottom) / 2, 0, 1);
-  return {
-    left: Math.min(-crop.left * width, Math.max(frameWidth - (1 - crop.right) * width, frameWidth / 2 - x * width)),
-    top: Math.min(-crop.top * height, Math.max(frameHeight - (1 - crop.bottom) * height, frameHeight / 2 - y * height)),
-    width, height, window,
-  };
+  const left = fit === 'contain' ? (frameWidth-width)/2 : Math.min(0,Math.max(frameWidth-width,frameWidth/2-bounded(focus?.x,.5,0,1)*width));
+  const top = fit === 'contain' ? (frameHeight-height)/2 : Math.min(0,Math.max(frameHeight-height,frameHeight/2-bounded(focus?.y,.5,0,1)*height));
+  const windowLeft = Math.max(0,left+crop.left*width), windowTop = Math.max(0,top+crop.top*height);
+  const windowRight = Math.min(frameWidth,left+(1-crop.right)*width), windowBottom = Math.min(frameHeight,top+(1-crop.bottom)*height);
+  return { left,top,width,height,window:{left:windowLeft,top:windowTop,width:Math.max(0,windowRight-windowLeft),height:Math.max(0,windowBottom-windowTop)} };
 }
 
 function validateClip(clip: Clip) {
@@ -113,9 +108,7 @@ export function generateComposition(timeline: Timeline, assets: MediaAsset[], op
     const end = start + clip.duration;
     const motion = visibleMotion(clip);
     const motionVars = (key: MotionKeyframe) => ({ x: key.x * width, y: key.y * height, scale: key.scale, rotation: key.rotation, opacity: key.opacity, filter: `brightness(${key.brightness})` });
-    if (clip.kind === 'effect' && clip.effectPreset === 'cinematic-bars') {
-      animation.push(`{const adjustmentTimeline=gsap.timeline();timeline.add(adjustmentTimeline,0);window.__revlineAdjustmentTimelines['${id}']=adjustmentTimeline;${cinematicBarsAnimationSteps(clip, index).map(step => serializeTextAnimation(step, 'adjustmentTimeline')).join('')}}`);
-    } else if (clip.kind !== 'caption' && clip.kind !== 'graphic') animateKeys(`#${id}-motion`, clip, motion, motionVars, { time: 0, ...NEUTRAL_MOTION });
+    if (clip.kind !== 'effect' && clip.kind !== 'caption' && clip.kind !== 'graphic') animateKeys(`#${id}-motion`, clip, motion, motionVars, { time: 0, ...NEUTRAL_MOTION });
     // Adjustment wrappers are always mounted. A timed HyperFrames root would
     // hide all the footage it contains before and after the effect range.
     if (clip.kind === 'effect') return '';
@@ -123,12 +116,11 @@ export function generateComposition(timeline: Timeline, assets: MediaAsset[], op
     const zIndex = layerZIndex(clip, index);
     // HyperFrames activates data-start/data-duration clip roots. Animations target
     // children or crop properties so exact-zero seeks never fight its visibility.
-    const timing = `id="${id}" data-start="${start}" data-duration="${clip.duration}" data-end="${end}" data-track-index="${trackIndex}"`;
+    const timing = `id="${id}" data-source-clip="${escapeHtml(clip.id)}" data-start="${start}" data-duration="${clip.duration}" data-end="${end}" data-track-index="${trackIndex}"`;
     if (clip.kind === 'caption' || clip.kind === 'graphic') {
       const style = textStyle(clip, resolution);
-      animation.push(`{const textTimeline=gsap.timeline();timeline.add(textTimeline,0);window.__revlineTextTimelines['${id}']=textTimeline;${clip.textTemplate ? '' : textAnimationSteps(clip, index, width, height, resolution).map(step => serializeTextAnimation(step, 'textTimeline')).join('')}}`);
       const attributes = `left:${style.x * 100}%;top:${style.y * 100}%;font-size:${style.fontSize}px;color:${style.color};z-index:${zIndex};mix-blend-mode:${style.blendMode};transform:${style.transform}`;
-      return `<div ${timing} class="overlay ${clip.kind}" style="${attributes}"><span id="${id}-motion" class="text-motion"><span class="text-content" style="background:${style.background}">${escapeHtml(style.text)}</span></span></div>`;
+      return `<div id="${id}" data-text-clip="${escapeHtml(clip.id)}" class="overlay ${clip.kind}" style="${attributes}"><span id="${id}-motion" class="text-motion"><span class="text-content" style="background:${style.background}">${escapeHtml(style.text)}</span></span></div>`;
     }
     const asset = clip.assetId ? assetMap.get(clip.assetId) : undefined;
     const source = clip.assetId ? options.assetUrls?.[clip.assetId] ?? asset?.url : undefined;
@@ -166,8 +158,8 @@ export function generateComposition(timeline: Timeline, assets: MediaAsset[], op
     const attrs = `${timing} data-media-start="${clip.sourceStart}" data-volume="${volume}"${clip.kind === 'video' || clip.kind === 'audio' ? ` data-playback-rate="${playbackRateOf(clip)}"` : ''}`;
     const frame = (media: string) => `<div id="${id}-frame" data-visual-clip="${escapeHtml(clip.id)}" class="visual-frame" style="${frameStyle}"><div id="${id}-motion" class="motion-frame"><div class="source-window" style="${windowStyle}">${media}</div></div></div>`;
     if (clip.kind === 'image') return frame(`<img ${attrs} crossorigin="anonymous" src="${src}" class="visual" style="${sourceStyle}" alt="" />`);
-    if (clip.kind === 'audio') return `<audio ${attrs} crossorigin="anonymous" src="${src}" preload="auto"></audio>`;
-    return frame(`<video ${attrs} crossorigin="anonymous" src="${src}" class="visual" style="${sourceStyle}" playsinline preload="auto"${volume === 0 ? ' muted' : ''}></video>`);
+    if (clip.kind === 'audio') return `<audio ${attrs} crossorigin="anonymous" src="${src}" preload="${options.preview?'metadata':'auto'}"></audio>`;
+    return frame(`<video ${attrs} crossorigin="anonymous" src="${src}" class="visual" style="${sourceStyle}" playsinline preload="${options.preview?'metadata':'auto'}"${volume === 0 ? ' muted' : ''}></video>`);
   });
   let compositionNodes = nodes.join('\n');
   if (timeline.clips.some(clip => clip.kind === 'effect')) {
@@ -185,25 +177,29 @@ export function generateComposition(timeline: Timeline, assets: MediaAsset[], op
   const safeDuration = Math.max(duration, 1 / fps);
   const gsapUrl = mediaUrl(options.gsapUrl ?? '/vendor/gsap.min.js');
   const visualEffectsUrl = mediaUrl(options.visualEffectsUrl ?? (/^https?:/i.test(options.gsapUrl ?? '') ? new URL('/vendor/visual-effects.js', options.gsapUrl).href : '/vendor/visual-effects.js'));
-  const hasText = timeline.clips.some(clip => clip.kind === 'caption' || clip.kind === 'graphic');
   const remotionTextUrl = mediaUrl(options.remotionTextUrl ?? (/^https?:/i.test(options.gsapUrl ?? '') ? new URL('/vendor/remotion-text.js', options.gsapUrl).href : '/vendor/remotion-text.js'));
-  const textSources = JSON.stringify(remotionTextSources(timeline.clips, fps, resolution)).replace(/</g, '\\u003c');
+  const textSources = JSON.stringify(textLayerSources(timeline.clips, fps, resolution)).replace(/</g, '\\u003c');
   const defaultFontUrl = /^https?:/i.test(options.gsapUrl ?? '') ? new URL('/fonts/space-grotesk-latin.woff2', options.gsapUrl).href : '/fonts/space-grotesk-latin.woff2';
   const fontUrl = mediaUrl(options.fontUrl ?? defaultFontUrl);
-  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>
+  return `<!doctype html><html><head><meta charset="utf-8">${options.preview?`<meta name="hyperframes-studio-preview" content="true"><script>
+function reportPreviewError(error,label){const message=String(error&&error.message||error).replace(/([?&]token=)[^\\s'"<>]+/g,'$1[redacted]');parent.postMessage({source:'revline-preview-error',message,label},parent.location.origin);}
+window.addEventListener('error',event=>{if(event.error)reportPreviewError(event.error,'uncaught');});
+window.addEventListener('unhandledrejection',event=>reportPreviewError(event.reason,'unhandled promise'));
+window.__hf=window.__hf||{};window.__hf.onSwallowed=event=>reportPreviewError(event.error,event.label);
+</script>`:''}<meta name="viewport" content="width=device-width,initial-scale=1"><style>
 @font-face{font-family:'Space Grotesk';font-style:normal;font-weight:300 700;font-display:block;src:url('${fontUrl}') format('woff2')}
 html,body{margin:0;width:${width}px;height:${height}px;overflow:hidden;background:#0B0C0E;font-family:'Space Grotesk',Arial,Helvetica,sans-serif}*{box-sizing:border-box}#composition{isolation:isolate;position:relative;width:${width}px;height:${height}px;overflow:hidden;background:#0B0C0E}.visual-frame{position:absolute;width:${width}px;height:${height}px;overflow:hidden;transform-origin:center}.motion-frame{width:100%;height:100%;transform-origin:center}.text-motion{display:inline-block}.source-window{position:absolute;overflow:hidden}.visual{position:absolute}.overlay{position:absolute;max-width:90%;width:max-content;transform:translate(-50%,-50%);font-weight:700;line-height:1.12;text-align:center;white-space:pre-wrap;overflow-wrap:anywhere}.text-content{display:inline-block;padding:${10 * scale}px ${18 * scale}px;border-radius:${8 * scale}px}.caption{text-shadow:0 2px 12px #0009}audio{position:absolute}
 .adjustment-layer{position:absolute;inset:0;transform-origin:center;pointer-events:none}
 [data-revline-effects]{opacity:0!important}.visual-effect-output{position:absolute;pointer-events:none}
 .cinematic-bars{position:absolute;inset:0;overflow:hidden;z-index:2147483647;pointer-events:none}.cinematic-bar{position:absolute;left:0;right:0;background:#000}.cinematic-bar.top{top:0;transform:translateY(-100%)}.cinematic-bar.bottom{bottom:0;transform:translateY(100%)}
-</style><script src="${gsapUrl}"></script><script src="${visualEffectsUrl}"></script>${hasText ? `<script src="${remotionTextUrl}"></script>` : ''}</head><body><div id="composition" data-composition-id="revline" data-duration="${safeDuration}" data-width="${width}" data-height="${height}" data-fps="${fps}">${compositionNodes}</div><script>
+</style><script src="${gsapUrl}"></script><script src="${visualEffectsUrl}"></script><script src="${remotionTextUrl}"></script></head><body><div id="composition" data-composition-id="revline" data-duration="${safeDuration}" data-width="${width}" data-height="${height}" data-fps="${fps}">${compositionNodes}</div><script>
 const timeline=gsap.timeline({paused:true});
-window.__revlineTextTimelines={};window.__revlineAdjustmentTimelines={};
 ${animation.join('\n')}
-timeline.to({},{duration:${safeDuration}},0);
+window.__revlineDurationTween=gsap.to({},{duration:${safeDuration},paused:true});timeline.add(window.__revlineDurationTween,0);window.__revlineDurationTween.paused(false);
 window.__timelines=window.__timelines||{};window.__timelines.revline=timeline;
-${visualEffectsRuntimeScript(timeline.clips.flatMap((clip, index) => clip.kind === 'video' || clip.kind === 'image' ? [{ id: `clip-${index}`, colorGrade: clip.colorGrade, zoomBlur: clip.zoomBlur, glitch: clip.glitch, invert: clip.invert }] : []), fps, resolution)}
-${hasText ? `if(window.__revlineRemotionText)window.__revlineRemotionController=window.__revlineRemotionText.install(${textSources});else if(${textSources}.length)throw new Error('Text template renderer failed to load.');` : ''}
+${visualEffectsRuntimeScript(timeline.clips.flatMap((clip, index) => clip.kind === 'video' || clip.kind === 'image' ? [{ id: `clip-${index}`, colorGrade: clip.colorGrade, zoomBlur: clip.zoomBlur, glitch: clip.glitch, invert: clip.invert, dither: clip.dither }] : []), fps, resolution)}
+window.__revlineVisualEffects.installAdjustmentLayers(${JSON.stringify(adjustmentSources(timeline.clips)).replace(/</g, '\\u003c')});
+if(window.__revlineRemotionText)window.__revlineTextLayerController=window.__revlineRemotionText.installTextLayers(${textSources});else throw new Error('Text renderer failed to load.');
 document.querySelectorAll('video,audio').forEach(media=>{media.volume=Math.min(1,Number(media.dataset.volume));media.preservesPitch=true;});
 </script></body></html>`;
 }

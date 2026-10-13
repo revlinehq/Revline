@@ -3,15 +3,18 @@ import { convexTest } from 'convex-test';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import schema from './schema';
 import { api, internal } from './_generated/api';
-import { addMediaClip, patchClip } from '../lib/editor/operations';
+import { addEffectClip, addMediaClip, patchClip } from '../lib/editor/operations';
 import { EMPTY_TIMELINE, type Clip } from '../lib/editor/types';
-import { DEFAULT_COLOR_GRADE, DEFAULT_INVERT, DEFAULT_GLITCH, DEFAULT_ZOOM_BLUR } from '../lib/editor/visual-effects';
+import { DEFAULT_COLOR_GRADE, DEFAULT_DITHER, DEFAULT_INVERT, DEFAULT_GLITCH, DEFAULT_ZOOM_BLUR } from '../lib/editor/visual-effects';
+import { subtitleStylePatch } from '../lib/editor/subtitle-styles';
+import { visualEffectsPatch } from '../lib/editor/visual-effects';
+import { splitClip } from '../lib/editor/operations';
 import { deleteEmptyLayer, removeEmptyLayers } from '../lib/editor/timeline-controls';
 
 const modules = import.meta.glob('./**/*.ts');
 beforeEach(() => vi.stubEnv('BILLING_ENABLED', 'false'));
 afterEach(() => vi.unstubAllEnvs());
-const effects = { invert: { ...DEFAULT_INVERT, enabled: true }, colorGrade: { ...DEFAULT_COLOR_GRADE, enabled: true, exposure: .5, temperature: -30 }, zoomBlur: { ...DEFAULT_ZOOM_BLUR, enabled: true, centerY: .3 }, glitch: { ...DEFAULT_GLITCH, enabled: true, intensity: .8 } };
+const effects = { dither: { ...DEFAULT_DITHER, enabled: true, amount: .7, levels: 3, size: 4, shadowColor: '#101080', highlightColor: '#FFFF00' }, invert: { ...DEFAULT_INVERT, enabled: true }, colorGrade: { ...DEFAULT_COLOR_GRADE, enabled: true, exposure: .5, temperature: -30 }, zoomBlur: { ...DEFAULT_ZOOM_BLUR, enabled: true, centerY: .3 }, glitch: { ...DEFAULT_GLITCH, enabled: true, intensity: .8 } };
 async function fixture(kind: 'video' | 'image' = 'video') {
   const t = convexTest(schema, modules), owner = t.withIdentity({ subject: 'owner' });
   const projectId = await owner.mutation(api.projects.create, { title: 'Visual controls', aspectRatio: 'vertical' });
@@ -24,14 +27,22 @@ test.each(['video', 'image'] as const)('all visual controls round-trip on %s thr
   await f.owner.mutation(api.projects.saveTimeline, { projectId: f.projectId, timeline: f.timeline, expectedRevision: 0 });
   expect((await f.owner.query(api.projects.get, { projectId: f.projectId })).timeline?.clips[0]).toMatchObject(effects);
   await f.t.run(ctx => ctx.db.patch(f.projectId, { aiRunning: true, aiRunId: 'run' }));
-  const next = patchClip(f.timeline, 'visual', { glitch: { ...effects.glitch, enabled: false } });
+  const next = patchClip(f.timeline, 'visual', { glitch: { ...effects.glitch, enabled: false }, dither: { ...effects.dither, enabled: false } });
   await f.t.mutation(internal.assistant.apply, { projectId: f.projectId, ownerId: 'owner', runId: 'run', expectedRevision: 1, timeline: next });
-  expect((await f.owner.query(api.projects.get, { projectId: f.projectId })).timeline?.clips[0].glitch).toEqual({ ...effects.glitch, enabled: false });
+  const saved=(await f.owner.query(api.projects.get, { projectId: f.projectId })).timeline!.clips[0];
+  expect(saved.glitch).toEqual({ ...effects.glitch, enabled: false });
+  expect(saved.dither).toEqual({ ...effects.dither, enabled: false });
 });
 test('invalid controls and wrong clip kinds cannot be saved', async () => {
   const f = await fixture();
-  for (const patch of [{ invert: { enabled: true, amount: -1 } }, { colorGrade: { ...effects.colorGrade, exposure: 3 } }, { zoomBlur: { ...effects.zoomBlur, amount: -1 } }, { glitch: { ...effects.glitch, rgbSplit: 51 } }]) {
+  for (const patch of [{ dither: {...effects.dither, levels:17} }, { dither: {...effects.dither, size:0} }, { dither: {...effects.dither, amount:1.1} }, { invert: { enabled: true, amount: -1 } }, { colorGrade: { ...effects.colorGrade, exposure: 3 } }, { zoomBlur: { ...effects.zoomBlur, amount: -1 } }, { glitch: { ...effects.glitch, rgbSplit: 51 } }]) {
     await expect(f.owner.mutation(api.projects.saveTimeline, { projectId: f.projectId, timeline: patchClip(f.timeline, 'visual', patch), expectedRevision: 0 })).rejects.toThrow('must be between');
+  }
+  for (const dither of [{...effects.dither,levels:2.5},{...effects.dither,size:1.5}]) {
+    await expect(f.owner.mutation(api.projects.saveTimeline, {projectId:f.projectId,timeline:patchClip(f.timeline,'visual',{dither}),expectedRevision:0})).rejects.toThrow('whole number');
+  }
+  for (const color of ['red', '#xyzxyz', '#12345678', '#123']) {
+    await expect(f.owner.mutation(api.projects.saveTimeline, {projectId:f.projectId,timeline:patchClip(f.timeline,'visual',{dither:{...effects.dither,shadowColor:color}}),expectedRevision:0})).rejects.toThrow('six-digit hex');
   }
   for (const kind of ['audio', 'caption', 'graphic', 'effect'] as const) {
     const bad: Clip = { ...f.timeline.clips[0], kind };
@@ -58,4 +69,34 @@ test('AI empty-track cleanup saves one/all empty rows without deleting graded fo
   const saved = (await f.owner.query(api.projects.get, { projectId: f.projectId })).timeline!;
   expect(saved.tracks).toEqual({ visual: 1, overlay: 0, audio: 0, effects: 0 });
   expect(saved.clips).toEqual(before.clips.map(clip => ({ ...clip, track: 1 })));
+});
+
+test('timed zoom blur saves on its own FX track and preserves media and split settings',async()=>{
+ const f=await fixture();
+ const withEffect=addEffectClip(f.timeline,'blur','zoom-blur',2,{duration:1});
+ const blur=withEffect.clips.find(clip=>clip.id==='blur')!;
+ expect(blur.kind).toBe('effect');expect(blur.zoomBlur).toMatchObject({enabled:true,amount:.15,centerX:.5,centerY:.5});
+ expect(withEffect.clips[0]).toEqual(f.timeline.clips[0]);
+ const changed=patchClip(withEffect,'blur',visualEffectsPatch(blur,{zoomBlur:{amount:.6,centerY:.3}}));
+ await f.owner.mutation(api.projects.saveTimeline,{projectId:f.projectId,timeline:changed,expectedRevision:0});
+ const saved=(await f.owner.query(api.projects.get,{projectId:f.projectId})).timeline!;
+ expect(saved.clips.find(clip=>clip.id==='blur')!.zoomBlur).toMatchObject({amount:.6,centerY:.3});
+ await f.t.run(ctx=>ctx.db.patch(f.projectId,{aiRunning:true,aiRunId:'blur-run'}));
+ const split=splitClip(saved,'blur',2.5,'blur-tail');
+ await f.t.mutation(internal.assistant.apply,{projectId:f.projectId,ownerId:'owner',runId:'blur-run',expectedRevision:1,timeline:split});
+ const published=(await f.owner.query(api.projects.get,{projectId:f.projectId})).timeline!;
+ expect(published.clips.find(clip=>clip.id==='blur-tail')!.zoomBlur).toEqual(saved.clips.find(clip=>clip.id==='blur')!.zoomBlur);
+ expect(()=>visualEffectsPatch(blur,{dither:{enabled:true}})).toThrow('video or image');
+ expect(()=>visualEffectsPatch({...blur,effectPreset:'quick-zoom-in'},{zoomBlur:{amount:.6}})).toThrow('video or image');
+});
+
+test('Difference caption blending persists and switching looks restores normal blending',async()=>{
+ const f=await fixture();
+ const caption:Clip={id:'caption',kind:'caption',track:2,text:'Real words',start:1,duration:2,sourceStart:0,animation:'fade',transform:{x:.5,y:.5,scale:1,rotation:8,opacity:1},...subtitleStylePatch('difference')};
+ await f.owner.mutation(api.projects.saveTimeline,{projectId:f.projectId,timeline:{...f.timeline,tracks:{...f.timeline.tracks!,visual:2},clips:[...f.timeline.clips,caption]},expectedRevision:0});
+ const saved=(await f.owner.query(api.projects.get,{projectId:f.projectId})).timeline!;
+ expect(saved.clips.find(clip=>clip.id==='caption')).toEqual(caption);
+ const clean=patchClip(saved,'caption',subtitleStylePatch('clean'));
+ await f.owner.mutation(api.projects.saveTimeline,{projectId:f.projectId,timeline:clean,expectedRevision:1});
+ expect((await f.owner.query(api.projects.get,{projectId:f.projectId})).timeline!.clips.find(clip=>clip.id==='caption')).toMatchObject({text:'Real words',start:1,duration:2,blendMode:'normal',animation:'fade',transform:{rotation:8}});
 });

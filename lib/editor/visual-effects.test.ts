@@ -1,12 +1,12 @@
 import { expect, test } from 'vitest';
-import { DEFAULT_COLOR_GRADE, DEFAULT_INVERT, DEFAULT_GLITCH, DEFAULT_ZOOM_BLUR, validateVisualEffects, visualEffectsPatch, type VisualEffects } from './visual-effects';
+import { DEFAULT_COLOR_GRADE, DEFAULT_DITHER, DEFAULT_INVERT, DEFAULT_GLITCH, DEFAULT_ZOOM_BLUR, validateVisualEffects, visualEffectsPatch, type VisualEffects } from './visual-effects';
 import { addMediaClip, duplicateClip, patchClip, splitClip } from './operations';
 import { copyTimelineClips, pasteTimelineClips } from './clipboard';
 import { EMPTY_TIMELINE } from './types';
 
-const effects: VisualEffects = { invert: { ...DEFAULT_INVERT, enabled: true }, colorGrade: { ...DEFAULT_COLOR_GRADE, enabled: true, exposure: .5 }, zoomBlur: { ...DEFAULT_ZOOM_BLUR, enabled: true }, glitch: { ...DEFAULT_GLITCH, enabled: true } };
+const effects: VisualEffects = { dither: { ...DEFAULT_DITHER, enabled: true }, invert: { ...DEFAULT_INVERT, enabled: true }, colorGrade: { ...DEFAULT_COLOR_GRADE, enabled: true, exposure: .5 }, zoomBlur: { ...DEFAULT_ZOOM_BLUR, enabled: true }, glitch: { ...DEFAULT_GLITCH, enabled: true } };
 test('defaults are bypassed and requested controls merge without resetting existing controls', () => {
-  expect(DEFAULT_COLOR_GRADE.enabled || DEFAULT_ZOOM_BLUR.enabled || DEFAULT_GLITCH.enabled).toBe(false);
+  expect(DEFAULT_COLOR_GRADE.enabled || DEFAULT_ZOOM_BLUR.enabled || DEFAULT_GLITCH.enabled || DEFAULT_DITHER.enabled).toBe(false);
   expect(visualEffectsPatch({ kind: 'video', ...effects }, { colorGrade: { contrast: 1.3 } })).toEqual({ colorGrade: { ...effects.colorGrade, contrast: 1.3 } });
   expect(visualEffectsPatch({ kind: 'image' }, { zoomBlur: { enabled: true } })).toEqual({ zoomBlur: { ...DEFAULT_ZOOM_BLUR, enabled: true } });
   expect(() => visualEffectsPatch({ kind: 'video' }, {})).toThrow('at least one');
@@ -30,6 +30,6 @@ test('split, duplicate and clipboard preserve grading and effects without copyin
   const pasted = pasteTimelineClips(duplicated, copied, 30, () => `copy-${++id}`).timeline;
   expect(pasted.clips.find(clip => clip.id === 'copy-1')).toMatchObject(effects);
   for (const clip of pasted.clips.filter(clip => clip.kind === 'audio')) {
-    expect(clip.colorGrade).toBeUndefined(); expect(clip.zoomBlur).toBeUndefined(); expect(clip.glitch).toBeUndefined(); expect(clip.invert).toBeUndefined();
+    expect(clip.colorGrade).toBeUndefined(); expect(clip.zoomBlur).toBeUndefined(); expect(clip.glitch).toBeUndefined(); expect(clip.invert).toBeUndefined(); expect(clip.dither).toBeUndefined();
   }
 });

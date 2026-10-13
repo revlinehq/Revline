@@ -30,20 +30,21 @@ test('template saves survive split, trim, duplicate and AI save with their origi
   await owner.mutation(api.projects.saveTimeline, { projectId, timeline: duplicated, expectedRevision: 0 });
   expect((await owner.query(api.projects.get, { projectId })).timeline).toEqual(duplicated);
   await t.run(ctx => ctx.db.patch(projectId, { aiRunning: true, aiRunId: 'run' }));
-  const updated = patchClip(duplicated, 'title', textTemplatePatch(duplicated.clips[0], 'word-pop'));
+  const templated = patchClip(duplicated, 'title', textTemplatePatch(duplicated.clips[0], 'word-pop'));
+  const updated = patchClip(templated, 'title', textEffectPatch(templated.clips[0], 'fade'));
   await t.mutation(internal.assistant.apply, { projectId, ownerId: 'owner', runId: 'run', timeline: updated, expectedRevision: 1 });
-  expect((await owner.query(api.projects.get, { projectId })).timeline?.clips[0].textTemplate?.preset).toBe('word-pop');
+  expect((await owner.query(api.projects.get, { projectId })).timeline?.clips[0]).toMatchObject({ textTemplate:{preset:'word-pop'}, animation:'fade' });
   await expect(t.withIdentity({ subject: 'other' }).mutation(api.projects.saveTimeline, { projectId, timeline: updated, expectedRevision: 2 })).rejects.toThrow('Project not found');
 });
 
-test('right trims freeze missing template duration; left extension preserves entrance; legacy effects clear templates', () => {
+test('right trims freeze missing template duration; left extension preserves entrance; entrances preserve templates', () => {
   expect(resizeSelectedClips(timeline, [], ['title'], 'right', -1).clips[0].textTemplate?.duration).toBe(4);
   expect(patchClip(timeline, 'title', { duration: 2 }).clips[0].textTemplate?.duration).toBe(4);
   const extended = resizeSelectedClips(timeline, [], ['title'], 'left', -1).clips[0];
   expect(extended.textTemplate?.offset).toBe(-1);
   expect(remotionTextProps(extended, 3, 30)).toEqual(remotionTextProps(text, 3, 30));
   const legacy = patchClip(timeline, 'title', textEffectPatch(text, 'fade')).clips[0];
-  expect(legacy.textTemplate).toBeUndefined(); expect(legacy.animation).toBe('fade');
+  expect(legacy.textTemplate).toEqual(text.textTemplate); expect(legacy.animation).toBe('fade');
 });
 
 test('schema and save validation reject unknown templates, invalid settings and nontext kinds', async () => {

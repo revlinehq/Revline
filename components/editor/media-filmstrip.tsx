@@ -13,6 +13,8 @@ export const MediaFilmstrip = memo(function MediaFilmstrip({ asset, width, heigh
   const [imageAspect, setImageAspect] = useState<number | null>(null);
   const [range, setRange] = useState({ start: 0, end: 0 });
   const [decoded, setDecoded] = useState<{ sourceId: string; images: Record<number, string> }>({ sourceId: '', images: {} });
+  const hasDecodedFrame = useRef(false);
+  hasDecodedFrame.current = decoded.sourceId === asset._id && Object.keys(decoded.images).length > 0;
   const previousFrames = useMemo(() => decoded.sourceId === asset._id ? Object.entries(decoded.images).map(([time, image]) => ({ time: Number(time), image })) : [], [decoded, asset._id]);
   const frameWidth = imageAspect ? Math.max(16, height * imageAspect) : filmstripFrameWidth(height, asset.width, asset.height);
   useEffect(() => {
@@ -30,20 +32,21 @@ export const MediaFilmstrip = memo(function MediaFilmstrip({ asset, width, heigh
   useEffect(() => {
     if (paused || asset.kind !== 'video' || !asset.url || !samples.length) return;
     let cancelled = false;
+    const controller = new AbortController();
     const url = asset.url;
-    // Wait for a settled zoom/scroll position before starting more decoder work.
+    // First appearance starts immediately; settled zoom refreshes keep their previous stills.
     const timer = setTimeout(() => {
       void videoThumbnails(url, samples.map(frame => frame.time), asset._id, (time, image) => {
         if (cancelled || !image) return;
         setDecoded(old => ({ sourceId: asset._id, images: { ...(old.sourceId === asset._id ? old.images : {}), [time]: image } }));
-      }).then(images => {
+      }, controller.signal).then(images => {
         if (cancelled) return;
         const next: Record<number, string> = {};
         images.forEach((image, index) => { if (image) next[samples[index].time] = image; });
         setDecoded({ sourceId: asset._id, images: next });
       });
-    }, 100);
-    return () => { cancelled = true; clearTimeout(timer); };
+    }, hasDecodedFrame.current ? 100 : 0);
+    return () => { cancelled = true; clearTimeout(timer); controller.abort(); };
   }, [asset.kind, asset.url, asset._id, samples, paused]);
   if (!asset.url) return null;
   return <div ref={root} className="filmstrip media-filmstrip" aria-hidden="true">{samples.map(frame => {

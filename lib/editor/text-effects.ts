@@ -8,18 +8,17 @@ export const TEXT_EFFECT_LABELS: Record<TextEffectPreset, string> = { none: 'Non
 
 export function textEffectPatch(clip: Clip, preset: TextEffectPreset): Partial<Clip> {
   if (clip.kind !== 'caption' && clip.kind !== 'graphic') throw new Error('Select a text clip to apply a text effect.');
-  return { ...(preset === 'pop' ? motionPreset(clip, 'pop') : { animation: preset, motion: [], motionOffset: 0 }), textTemplate: undefined };
+  return preset === 'pop' ? motionPreset(clip, 'pop') : { animation: preset, motion: [], motionOffset: 0 };
 }
 
 export function textTemplatePatch(clip: Clip, preset: RemotionTextPreset): Partial<Clip> {
   if (clip.kind !== 'caption' && clip.kind !== 'graphic') throw new Error('Select a text clip to apply a text template.');
   const appearance=VFX_TEXT_APPEARANCE[preset],reselect=clip.textTemplate?.preset===preset;
   const highlightColor=reselect?clip.textTemplate?.highlightColor??appearance?.highlightColor:appearance?.highlightColor??clip.textTemplate?.highlightColor;
-  return { ...(appearance?{color:reselect?clip.color??appearance.color:appearance.color}:{}),textTemplate: { preset, duration: clip.duration, offset: 0, ...(highlightColor?{highlightColor}:{}) }, animation: 'none', motion: [], motionOffset: 0 };
+  return { ...(appearance?{color:reselect?clip.color??appearance.color:appearance.color}:{}),textTemplate: { preset, duration: clip.duration, offset: 0, ...(highlightColor?{highlightColor}:{}) } };
 }
 
 export function selectedTextEffect(clip: Clip): TextEffectPreset | null {
-  if (clip.textTemplate) return null;
   if (!clip.motion?.length) return clip.animation ?? 'none';
   return !clip.motionOffset && JSON.stringify(clip.motion) === JSON.stringify(motionPreset(clip, 'pop').motion) ? 'pop' : null;
 }

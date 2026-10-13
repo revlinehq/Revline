@@ -13,7 +13,7 @@ const stubs = {
   './export-dialog': `export const ExportDialog=()=>null;`,
   './media-import-dialog': `export const MediaImportDialog=()=>null;`,
   './preview': `import React,{forwardRef,useState,useImperativeHandle} from 'react';import {TextControls} from './components/editor/text-controls';
-  export const Preview=forwardRef(function Preview(p,ref){const[active,setActive]=useState();useImperativeHandle(ref,()=>({currentTime:()=>1,seek:()=>{},pause:()=>{},play:()=>{},mute:()=>{},clipVolume:()=>{}}),[]);return <div className="fixture-preview" style={{position:'relative',width:'100%',height:200}}><div id="composition" style={{position:'absolute',inset:0}}>{p.timeline.clips.map((clip,index)=>['graphic','caption'].includes(clip.kind)?<div key={clip.id} id={'clip-'+index} style={{position:'absolute',left:'50%',top:clip.kind==='caption'?'70%':'35%',transform:'translate(-50%,-50%)',fontSize:24,width:'max-content'}}>{clip.text}</div>:null)}</div><TextControls timeline={p.timeline} assets={p.assets} time={1} revision={0} selected={p.selectedClip?.id} activeId={active} onActivate={setActive} getDocument={()=>document} onSelect={p.onSelectClip} onEdit={p.onEditText} onCommit={p.onClipChange}/></div>});`,
+  export const Preview=forwardRef(function Preview(p,ref){const[active,setActive]=useState();useImperativeHandle(ref,()=>({currentTime:()=>1,seek:()=>{},pause:()=>{},play:()=>{},mute:()=>{},clipVolume:()=>{},clipEffects:()=>{}}),[]);return <div className="fixture-preview" style={{position:'relative',width:'100%',height:200}}><div id="composition" style={{position:'absolute',inset:0}}>{p.timeline.clips.map((clip,index)=>['graphic','caption'].includes(clip.kind)?<div key={clip.id} id={'clip-'+index} style={{position:'absolute',left:'50%',top:clip.kind==='caption'?'70%':'35%',transform:'translate(-50%,-50%)',fontSize:24,width:'max-content'}}>{clip.text}</div>:null)}</div><TextControls timeline={p.timeline} assets={p.assets} time={1} revision={0} selected={p.selectedClip?.id} activeId={active} onActivate={setActive} getDocument={()=>document} onSelect={p.onSelectClip} onEdit={p.onEditText} onCommit={p.onClipChange}/></div>});`,
 };
 const bundle = await build({ stdin: { resolveDir: process.cwd(), loader: 'tsx', contents: `
 import React from 'react';import {createRoot} from 'react-dom/client';import {useStore} from 'zustand';
@@ -51,13 +51,13 @@ try {
   assert.ok(await page.$('[aria-label="Rotate text in preview"]'),'Rotation is on the preview');
   assert.equal(await page.$('[aria-label="Text rotation"]'),null,'Rotation numeric control is removed');
   await page.waitForSelector('.text-preset-card');
-  assert.equal(await page.$$eval('.subtitle-style-card', cards => cards.length), 4, 'Caption settings offer all four subtitle styles');
+  assert.equal(await page.$$eval('.subtitle-style-card', cards => cards.length), 5, 'Caption settings offer all five subtitle styles');
   const original = await caption();
-  for (const [label, expected] of [['Clean', {color:'#FFFFFF',background:'transparent',fontSize:52}],['Bold',{color:'#F5CF45',background:'transparent',fontSize:64}],['Boxed',{color:'#FFFFFF',background:'#0B0C0EE6',fontSize:52}],['Highlight',{color:'#0B0C0E',background:'#F5CF45',fontSize:52}]]) {
+  for (const [label, expected] of [['Clean', {color:'#FFFFFF',background:'transparent',fontSize:52}],['Bold',{color:'#F5CF45',background:'transparent',fontSize:64}],['Boxed',{color:'#FFFFFF',background:'#0B0C0EE6',fontSize:52}],['Difference',{color:'#FFFFFF',background:'transparent',fontSize:52}],['Highlight',{color:'#0B0C0E',background:'#F5CF45',fontSize:52}]]) {
     const before = await page.evaluate(() => window.commits);
     await page.click(`[aria-label="${label} subtitles"]`);await flush();const current = await caption();
     assert.deepEqual({color:current.color,background:current.background,fontSize:current.fontSize}, expected);
-    assert.deepEqual({...current,color:original.color,background:original.background,fontSize:original.fontSize},original,'Style preserves words, timing, motion, template, position and rotation');
+    const {blendMode:currentBlend,...currentFields}=current;const {blendMode:originalBlend,...originalFields}=original;assert.equal(currentBlend,label==='Difference'?'difference':'normal');assert.deepEqual({...currentFields,color:original.color,background:original.background,fontSize:original.fontSize},originalFields,'Style preserves words, timing, motion, template, position and rotation');
     assert.equal(await page.evaluate(() => window.commits), before + 1, 'A style click edits once');
   }
   await library();await page.click('.timeline-clip[data-clip-id="caption"]');await page.waitForSelector('[aria-label="Selected text"]');
@@ -65,6 +65,20 @@ try {
   await library();await page.click('.timeline-clip[data-clip-id="title"]');await page.waitForSelector('[aria-label="Selected text"]');
   assert.equal(await page.$eval('[aria-label="Selected text"]', element => element.value), 'Actual title', 'Timeline graphic single click opens its own settings');
   await library();await page.click('.timeline-clip[data-clip-id="footage"]');await flush();assert.ok(await page.$('.effect-library'), 'Footage selection does not force the text editor');
+  await page.click('[aria-label="Zoom in"]');await flush();
+  assert.ok(await page.$('.effect-library'),'Adding an FX look keeps its library open');
+  let effectId=await page.evaluate(()=>window.fixture.store.getState().selectedId);
+  await page.click('.timeline-clip[data-clip-id="'+effectId+'"]');await page.waitForSelector('#inspector-effects');
+  assert.equal(await page.$('#inspector-edit-tab'),null,'Selected FX has no old Edit tab');
+  assert.equal(await page.$('[aria-label="Timed effect presets"]'),null,'Selected FX has no duplicate Add at playhead list');
+  await library();await page.click('[aria-label="Cinema bars"]');await flush();assert.ok(await page.$('.effect-library'),'Adding cinema bars also keeps library open');
+  effectId=await page.evaluate(()=>window.fixture.store.getState().selectedId);
+  await page.click('.timeline-clip[data-clip-id="'+effectId+'"]');await page.waitForSelector('[aria-label="Cinematic bars settings"]');
+  assert.equal(await page.$('[aria-label="Timed effect presets"]'),null,'Cinema controls contain only the selected effect');
+  await library();await page.click('[aria-label="Zoom blur"]');await flush();assert.ok(await page.$('.effect-library'),'Adding Zoom blur keeps library open');
+  effectId=await page.evaluate(()=>window.fixture.store.getState().selectedId);const blur=await page.evaluate(()=>window.fixture.store.getState().timeline.clips.find(clip=>clip.id===window.fixture.store.getState().selectedId));assert.equal(blur.kind,'effect');assert.equal(blur.effectPreset,'zoom-blur');assert.equal(blur.zoomBlur.enabled,true);
+  await page.click('.timeline-clip[data-clip-id="'+effectId+'"]');await page.waitForSelector('[data-effect="zoomBlur"]');assert.equal(await page.$('[aria-label="Blend mode"]'),null);assert.equal(await page.$('[aria-label="Timed effect presets"]'),null);await page.focus('[aria-label="Amount"]');await page.keyboard.press('ArrowRight');await flush();assert.equal(await page.evaluate(()=>window.fixture.store.getState().timeline.clips.find(clip=>clip.id===window.fixture.store.getState().selectedId).zoomBlur.amount),.16);
+  await library();
   await page.click('[data-library-tab="text"]');await page.waitForSelector('[aria-label="Boxed subtitles"]');
   assert.equal(await page.$eval('.effect-library', element=>element.textContent.includes('Add ready-to-edit text')),false,'No redundant playhead note');
   await page.click('[aria-label="Boxed subtitles"]');await page.waitForSelector('[aria-label="Selected text"]');
@@ -72,13 +86,14 @@ try {
   assert.equal(created.kind,'caption');assert.equal(created.start,1);assert.equal(created.background,'#0B0C0EE6','No caption selected creates styled subtitle at playhead');
   await page.screenshot({ path: '/tmp/revline-subtitle-settings-dark.png' });
   await library();await page.click('[data-library-tab="overlays"]');
-  await page.waitForFunction(()=>document.querySelector('.library-overlay-thumbnail img')?.naturalWidth>0);
-  await page.waitForFunction(()=>document.querySelector('.library-overlay-thumbnail video')?.readyState>=2);
-  assert.equal(await page.$eval('.library-overlay-thumbnail video',element=>element.muted && element.preload==='metadata' && !element.autoplay),true,'Overlay video stays a muted static preview');
-  assert.ok(await page.$eval('.library-overlay-look', element=>element.getBoundingClientRect().height<=46),'Overlay previews stay compact');
-  await page.click('.library-overlay-look');await flush();
-  assert.equal(await page.evaluate(()=>window.fixture.store.getState().timeline.clips.at(-1).assetId),'overlay-image','Thumbnail row applies the actual overlay');
-  await page.screenshot({path:'/tmp/revline-overlay-library-dark.png'});
+  assert.equal(await page.$$eval('.library-overlay-look', rows=>rows.length),0,'Ordinary project media is not listed as overlays');
+  assert.ok(await page.$eval('.effect-library', element=>element.textContent.includes('No overlays yet')));
+  await page.click('.library-media-access');await page.waitForSelector('.source-media-row');
+  await page.waitForFunction(()=>document.querySelector('.media-thumbnail img')?.naturalWidth>0);
+  await page.waitForFunction(()=>document.querySelector('.media-thumbnail video')?.readyState>=2);
+  assert.equal(await page.$eval('.media-thumbnail video',element=>element.muted && element.preload==='metadata' && !element.autoplay),true,'Video thumbnail stays muted/static');
+  assert.ok(await page.$eval('.source-media-row',element=>element.getBoundingClientRect().height<=48),'Media thumbnails stay compact');
+  await page.screenshot({path:'/tmp/revline-media-library-dark.png'});
   // Latest Sources action must win even after earlier text requests, and a later selection reverses it.
   await page.evaluate(() => {const dt=new DataTransfer();dt.items.add(new File(['data'],'image.png',{type:'image/png'}));document.querySelector('.editor-app').dispatchEvent(new DragEvent('drop',{bubbles:true,cancelable:true,dataTransfer:dt}))});
   await page.waitForSelector('[aria-label="Search sources"]');
@@ -89,5 +104,5 @@ try {
   await page.click('.timeline-clip[data-clip-id="caption"]');await page.waitForSelector('.preview-inspector-sheet [aria-label="Selected text"]');
   assert.equal(await page.$eval('[aria-label="Selected text"]',element=>element.value),'Keep these words','Narrow editor opens its existing sheet for a text click');
   assert.deepEqual(await page.evaluate(() => window.errors), []);assert.deepEqual(errors, []);
-  console.log('PASS: real Shell/Timeline/TextControls single selection, full text settings, four subtitle styles, preserved caption properties, one apply, new playhead caption, video selection, Sources request ordering, compact actual overlay thumbnails and narrow sheet. Synthetic fixture.');
+  console.log('PASS: real Shell/Timeline/TextControls single selection, full text settings, five subtitle styles, preserved caption properties, one apply, new playhead caption, video selection, Sources request ordering, compact actual media thumbnails and narrow sheet. Synthetic fixture.');
 } catch (error) { console.error(JSON.stringify({errors,appErrors:await page.evaluate(()=>window.errors),dom:await page.evaluate(()=>document.body.innerText.slice(0,1000))})); throw error; } finally { await browser.close(); }

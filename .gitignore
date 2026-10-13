@@ -4,6 +4,7 @@ node_modules/
 .data/
 public/uploads/
 public/vendor/gsap.min.js
+public/vendor/hyperframe.runtime.iife.js
 public/vendor/remotion-text.js
 public/vendor/remotion-text.js.LEGAL.txt
 public/vendor/remotion-LICENSE.md

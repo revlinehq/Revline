@@ -9,9 +9,8 @@ describe('trusted composition generation', () => {
     const html = generateComposition({ ...timeline, clips: [...timeline.clips, { id: 'bars', kind: 'effect', effectPreset: 'cinematic-bars', cinematicBars: { size: .2, speed: 2 }, start: 1, duration: 4, sourceStart: 0, track: 3 }] }, []);
     expect(html).toContain('class="cinematic-bar top" style="height:20%"');
     expect(html).toContain('class="cinematic-bar bottom" style="height:20%"');
-    expect(html).toContain('"duration":0.2,"ease":"power2.inOut"');
-    expect(html).toContain('window.__revlineAdjustmentTimelines');
-    expect(html).toContain('},4.8);');
+    expect(html).toContain('installAdjustmentLayers(');
+    expect(html).toContain('\"cinematicBars\":{\"size\":0.2,\"speed\":2}');
   });
   test('escapes user text and preserves deterministic timing', () => {
     const html = generateComposition(timeline, []);
@@ -70,11 +69,12 @@ describe('trusted composition generation', () => {
   test('uses the actual export font from the preview origin', () => {
     expect(generateComposition(timeline, [], { gsapUrl: 'https://editor.example/vendor/gsap.min.js' })).toContain("src:url('https://editor.example/fonts/space-grotesk-latin.woff2')");
   });
-  test('leaves clip visibility to HyperFrames at exact-zero seeks', () => {
+  test('loads the shared live text renderer with safely serialized entrances', () => {
     const html = generateComposition(timeline, []);
     expect(html).not.toContain('autoAlpha');
     expect(html).not.toContain('visibility:hidden');
-    expect(html).toContain("'#clip-0 .text-content'");
+    expect(html).toContain('installTextLayers(');
+    expect(html).toContain('"animation":"rise"');
   });
 });
 
@@ -92,7 +92,7 @@ describe('stacked visual geometry', () => {
     ] };
     const html = generateComposition(legacy,[{_id:'a',kind:'video',fileName:'a.mp4',url:'/a.mp4'}]);
     expect(html).toContain('data-track-index="1"');
-    expect(html).toContain('data-track-index="2" class="overlay graphic"');
+    expect(html).toContain('data-text-clip="words" class="overlay graphic"');
     expect(html).toContain(`z-index:${layerZIndex({kind:'graphic',track:3},1)}`);
     expect(html).toContain('data-start="1" data-duration="2"');
     expect(html).toContain('data-media-start="3"');
@@ -115,25 +115,25 @@ describe('stacked visual geometry', () => {
     expect(compositionTrackIndex({kind:'audio',track:1})).toBe(24);
     expect(compositionTrackIndex({kind:'audio',track:12})).toBe(35);
   });
-  test('actually resizes the retained crop and pans only within retained source bounds', () => {
+  test('source focus and scale remain unchanged when crop edges are masked', () => {
     const crop = {left:2/3,top:0,right:0,bottom:0};
-    const rect = calculateVisualRect(1920,1080,720,1280,crop,{x:0,y:.5});
-    expect(rect.width).toBeCloseTo(1920*1280/1080);
-    expect(rect.left).toBeCloseTo(-2/3*rect.width);
-    expect(rect.window).toEqual({left:0,top:0,width:720,height:1280});
+    const before=calculateVisualRect(1920,1080,720,1280,undefined,{x:0,y:.5});
+    const rect=calculateVisualRect(1920,1080,720,1280,crop,{x:0,y:.5});
+    expect(rect.left).toBe(before.left); expect(rect.width).toBe(before.width);
+    expect(rect.window.width).toBe(0); // The retained region is outside the existing viewport.
     expect(() => calculateVisualRect(1920,1080,720,1280,{left:.5,right:.45,top:0,bottom:0})).toThrow('5%');
   });
   test('contains the true cropped region and masks removed pixels in the letterbox', () => {
     const rect = calculateVisualRect(1920,1080,720,1280,{left:2/3,top:0,right:0,bottom:0},undefined,'contain');
-    expect(rect.width).toBeCloseTo(2160);
-    expect(rect.height).toBeCloseTo(1215);
-    expect(rect.left).toBeCloseTo(-1440);
-    expect(rect.top).toBeCloseTo(32.5);
-    expect(rect.window.top).toBeCloseTo(32.5);
-    expect(rect.window.height).toBeCloseTo(1215);
-    expect(rect.window.width).toBe(720);
+    expect(rect.width).toBeCloseTo(720);
+    expect(rect.height).toBeCloseTo(405);
+    expect(rect.left).toBeCloseTo(0);
+    expect(rect.top).toBeCloseTo(437.5);
+    expect(rect.window.top).toBeCloseTo(437.5);
+    expect(rect.window.height).toBeCloseTo(405);
+    expect(rect.window.width).toBe(240);
     const html = generateComposition({...timeline,clips:[{id:'crop',kind:'image',assetId:'a',start:0,duration:1,sourceStart:0,crop:{left:2/3,top:0,right:0,bottom:0},fit:'contain',transform:{x:.75,y:.25,scale:.3,rotation:15,opacity:.5}}]},[{_id:'a',kind:'image',fileName:'a',url:'/a.png',width:1920,height:1080}],{resolution:720});
-    expect(html).toContain('class="source-window" style="left:0px;top:32.500000000000114px;width:720px;height:1214.9999999999998px"');
+    expect(html).toContain('class="source-window" style="left:480px;top:437.5px;width:240px;height:405px"');
     expect(html).toContain('transform:rotate(15deg) scale(0.3);opacity:0.5');
     expect(html).not.toContain('clip-path');
   });

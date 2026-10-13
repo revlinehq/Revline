@@ -1,15 +1,17 @@
 'use client';
 
 import { useEffect, useId, useRef, useState, type CSSProperties, type ReactNode } from 'react';
-import { ChevronDown, Contrast, Palette, Plus, RotateCcw, ScanLine, Trash2, Waves, Gauge, PanelsTopBottom, ZoomIn, ZoomOut } from 'lucide-react';
+import { ChevronDown, Plus, RotateCcw, Trash2 } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { DEFAULT_COLOR_GRADE, DEFAULT_INVERT, DEFAULT_GLITCH, DEFAULT_ZOOM_BLUR, VISUAL_EFFECT_LIMITS, type VisualEffects } from '@/lib/editor/visual-effects';
+import { DEFAULT_COLOR_GRADE, DEFAULT_DITHER, DEFAULT_INVERT, DEFAULT_GLITCH, DEFAULT_ZOOM_BLUR, VISUAL_EFFECT_LIMITS, type VisualEffects } from '@/lib/editor/visual-effects';
 import type { Clip } from '@/lib/editor/types';
 import { CINEMATIC_BAR_LIMITS, EFFECT_CATALOG, cinematicBarSettings, type CinematicBarSettings, type EffectPreset } from '@/lib/editor/clip-effects';
 import { PLAYBACK_RATES, playbackRateOf } from '@/lib/editor/playback-rate';
+import { ColorControl } from './color-control';
+import { EffectIcon } from './effect-icon';
 import './visual-effects-controls.css';
 
-type Props = { clip: Clip; onChange: (patch: Partial<Clip>) => void; onPreview?: (patch: Partial<Clip> | null) => void; onPlaybackRateChange?: (rate: number) => void; onAddEffect?: (preset: EffectPreset) => void };
+type Props = { onlyEffect?: keyof VisualEffects; clip: Clip; onChange: (patch: Partial<Clip>) => void; onPreview?: (patch: Partial<Clip> | null) => void; onPlaybackRateChange?: (rate: number) => void; onAddEffect?: (preset: EffectPreset) => void };
 type EffectKey = keyof VisualEffects;
 const rangeKeys = new Set(['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End', 'PageUp', 'PageDown']);
 
@@ -71,7 +73,7 @@ function EffectCard({ name, effectKey, enabled, onToggle, onReset, onRemove, chi
   return <section className="visual-effect-card" data-effect={effectKey} data-enabled={enabled} aria-label={`${name} effect`}>
     <div className="visual-effect-heading">
       <button type="button" className="effect-enabled" role="switch" aria-checked={enabled} aria-label={`Enable ${name}`} onClick={onToggle}><span/></button>
-      <button type="button" className="effect-collapse" aria-expanded={open} aria-controls={id} onClick={() => setOpen(!open)}><span>{name}</span><ChevronDown size={12}/></button>
+      <button type="button" className="effect-collapse" aria-expanded={open} aria-controls={id} onClick={() => setOpen(!open)}><span><EffectIcon name={effectKey} size={16}/>{name}</span><ChevronDown size={12}/></button>
       <button type="button" className="effect-icon-button" aria-label={`Reset ${name}`} title={`Reset ${name}`} onClick={onReset}><RotateCcw size={12}/></button>
       <button type="button" className="effect-icon-button" aria-label={`Remove ${name}`} title={`Remove ${name}`} onClick={onRemove}><Trash2 size={12}/></button>
     </div>
@@ -83,9 +85,9 @@ const decimal = (value: number) => value.toFixed(2);
 const integer = (value: number) => String(Math.round(value));
 const percent = (value: number) => `${Math.round(value * 100)}%`;
 const pixels = (value: number) => `${Math.round(value)} px`;
-const effectNames = { colorGrade: 'Color', zoomBlur: 'Zoom blur', glitch: 'Glitch', invert: 'Invert colors' } as const;
-const effectDefaults = { colorGrade: DEFAULT_COLOR_GRADE, zoomBlur: DEFAULT_ZOOM_BLUR, glitch: DEFAULT_GLITCH, invert: DEFAULT_INVERT };
-const effectIcons = { colorGrade: Palette, zoomBlur: Waves, glitch: ScanLine, invert: Contrast };
+const effectNames = { colorGrade: 'Color', zoomBlur: 'Zoom blur', glitch: 'Glitch', invert: 'Invert colors', dither: 'Dither' } as const;
+const effectDefaults = { colorGrade: DEFAULT_COLOR_GRADE, zoomBlur: DEFAULT_ZOOM_BLUR, glitch: DEFAULT_GLITCH, invert: DEFAULT_INVERT, dither: DEFAULT_DITHER };
+
 
 export function CinematicBarsControls({ clip, onChange, onPreview }: Pick<Props, 'clip' | 'onChange' | 'onPreview'>) {
   const settings = cinematicBarSettings(clip);
@@ -101,7 +103,7 @@ export function CinematicBarsControls({ clip, onChange, onPreview }: Pick<Props,
 export function PlaybackSpeedControls({ clip, onChange }: { clip: Clip; onChange: (rate: number) => void }) {
   const rate = playbackRateOf(clip);
   return <section className="playback-speed-controls" aria-label="Playback speed">
-    <label><span><Gauge size={13}/>Speed</span><select aria-label="Playback speed" value={rate} onChange={event => onChange(Number(event.currentTarget.value))}>
+    <label><span><EffectIcon name="speed-up" size={16}/>Speed</span><select aria-label="Playback speed" value={rate} onChange={event => onChange(Number(event.currentTarget.value))}>
       {!PLAYBACK_RATES.some(value => value === rate) && <option value={rate}>{rate}×</option>}
       {PLAYBACK_RATES.map(value => <option key={value} value={value}>{value}×{value === 1 ? ' · Normal' : ''}</option>)}
     </select></label>
@@ -111,16 +113,17 @@ export function PlaybackSpeedControls({ clip, onChange }: { clip: Clip; onChange
 
 export function TimedEffectPresets({ onAdd }: { onAdd: (preset: EffectPreset) => void }) {
   return <section className="timed-effect-presets" aria-label="Timed effect presets"><p>Add at playhead</p>
-    {([['cinematic-bars', PanelsTopBottom], ['quick-zoom-in', ZoomIn], ['quick-zoom-out', ZoomOut]] as const).map(([preset, Icon]) => <button key={preset} type="button" onClick={() => onAdd(preset)}><Icon size={13}/><span>{EFFECT_CATALOG[preset].label}</span><Plus size={12}/></button>)}
+    {(['cinematic-bars', 'quick-zoom-in', 'quick-zoom-out'] as const).map(preset => <button key={preset} type="button" onClick={() => onAdd(preset)}><EffectIcon name={preset} size={16}/><span>{EFFECT_CATALOG[preset].label}</span><Plus size={12}/></button>)}
     <small>Move or trim the effect on the timeline.</small>
   </section>;
 }
 
-export function VisualEffectsControls({ clip, onChange, onPreview, onPlaybackRateChange, onAddEffect }: Props) {
-  const color = clip.colorGrade;
-  const blur = clip.zoomBlur;
-  const glitch = clip.glitch;
-  const invert = clip.invert;
+export function VisualEffectsControls({ clip, onChange, onPreview, onPlaybackRateChange, onAddEffect, onlyEffect }: Props) {
+  const color = !onlyEffect || onlyEffect === 'colorGrade' ? clip.colorGrade : undefined;
+  const blur = !onlyEffect || onlyEffect === 'zoomBlur' ? clip.zoomBlur : undefined;
+  const glitch = !onlyEffect || onlyEffect === 'glitch' ? clip.glitch : undefined;
+  const invert = !onlyEffect || onlyEffect === 'invert' ? clip.invert : undefined;
+  const dither = !onlyEffect || onlyEffect === 'dither' ? clip.dither : undefined;
   const missing = (Object.keys(effectNames) as EffectKey[]).filter(key => !clip[key]);
   function cardProps(key: EffectKey) {
     return {
@@ -132,8 +135,8 @@ export function VisualEffectsControls({ clip, onChange, onPreview, onPlaybackRat
   }
   function preview(patch: Partial<Clip> | null) { onPreview?.(patch); }
   return <div className="visual-effects-controls">
-    {clip.kind === 'video' && onPlaybackRateChange && <PlaybackSpeedControls clip={clip} onChange={onPlaybackRateChange}/>}
-    {onAddEffect && <TimedEffectPresets onAdd={onAddEffect}/>}
+    {!onlyEffect && clip.kind === 'video' && onPlaybackRateChange && <PlaybackSpeedControls clip={clip} onChange={onPlaybackRateChange}/>}
+    {!onlyEffect && onAddEffect && <TimedEffectPresets onAdd={onAddEffect}/>}
     {color && <EffectCard {...cardProps('colorGrade')}>{([
       ['exposure', 'Exposure', .01, decimal], ['contrast', 'Contrast', .01, decimal], ['saturation', 'Saturation', .01, decimal],
       ['temperature', 'Temperature', 1, integer], ['tint', 'Tint', 1, integer], ['vibrance', 'Vibrance', 1, integer],
@@ -145,10 +148,12 @@ export function VisualEffectsControls({ clip, onChange, onPreview, onPlaybackRat
       ['intensity', 'Intensity', .01, percent], ['blockSize', 'Block size', 1, pixels], ['rgbSplit', 'RGB split', 1, pixels],
     ] as const).map(([key, label, step, format]) => <EffectSlider key={key} label={label} value={glitch[key]} bounds={VISUAL_EFFECT_LIMITS.glitch[key]} step={step} format={format} disabled={!glitch.enabled} onPreview={value => preview(value === null ? null : { glitch: { ...glitch, [key]: value } })} onCommit={value => onChange({ glitch: { ...glitch, [key]: value } })}/>)}</EffectCard>}
     {invert && <EffectCard {...cardProps('invert')}><EffectSlider label="Amount" value={invert.amount} bounds={VISUAL_EFFECT_LIMITS.invert.amount} format={percent} disabled={!invert.enabled} onPreview={value => preview(value === null ? null : { invert: { ...invert, amount: value } })} onCommit={value => onChange({ invert: { ...invert, amount: value } })}/></EffectCard>}
-    {!color && !blur && !glitch && !invert && <p className="visual-effects-empty">Add an effect to this clip.</p>}
-    <DropdownMenu><DropdownMenuTrigger asChild><button type="button" className="visual-effects-add" disabled={!missing.length}><Plus size={13}/>Add effect</button></DropdownMenuTrigger><DropdownMenuContent className="visual-effects-menu" align="start">{missing.map(key => {
-      const Icon = effectIcons[key];
-      return <DropdownMenuItem key={key} onSelect={() => onChange({ [key]: { ...effectDefaults[key], enabled: true } })}><Icon size={14}/>{effectNames[key]}</DropdownMenuItem>;
-    })}</DropdownMenuContent></DropdownMenu>
+    {dither && <EffectCard {...cardProps('dither')}>{([
+      ['amount','Strength',.01,percent],['levels','Color levels',1,integer],['size','Pattern size',1,pixels],
+    ] as const).map(([key,label,step,format])=><EffectSlider key={key} label={label} value={dither[key]} bounds={VISUAL_EFFECT_LIMITS.dither[key]} step={step} format={format} disabled={!dither.enabled} onPreview={value=>preview(value===null?null:{dither:{...dither,[key]:value}})} onCommit={value=>onChange({dither:{...dither,[key]:value}})}/>)}<fieldset className="dither-colors" disabled={!dither.enabled}><label>Dark color<ColorControl label="Dither dark color" value={dither.shadowColor ?? '#000000'} onCommit={shadowColor=>onChange({dither:{...dither,shadowColor}})}/></label><label>Light color<ColorControl label="Dither light color" value={dither.highlightColor ?? '#ffffff'} onCommit={highlightColor=>onChange({dither:{...dither,highlightColor}})}/></label>{(dither.shadowColor || dither.highlightColor) && <button type="button" className="effect-color-reset" onClick={()=>onChange({dither:{...dither,shadowColor:undefined,highlightColor:undefined}})}>Original colors</button>}</fieldset></EffectCard>}
+    {!color && !blur && !glitch && !invert && !dither && <p className="visual-effects-empty">Add an effect to this clip.</p>}
+    {!onlyEffect && <DropdownMenu><DropdownMenuTrigger asChild><button type="button" className="visual-effects-add" disabled={!missing.length}><Plus size={13}/>Add effect</button></DropdownMenuTrigger><DropdownMenuContent className="visual-effects-menu" align="start">{missing.map(key => {
+      return <DropdownMenuItem key={key} onSelect={() => onChange({ [key]: { ...effectDefaults[key], enabled: true } })}><EffectIcon name={key} size={16}/>{effectNames[key]}</DropdownMenuItem>;
+    })}</DropdownMenuContent></DropdownMenu>}
   </div>;
 }

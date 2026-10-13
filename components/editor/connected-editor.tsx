@@ -47,8 +47,8 @@ function ProjectEditor({project}: {project:Doc<'projects'>}) {
   const [upload,setUpload]=useState<UploadProgress>(null);const [optimisticAssets,setOptimisticAssets]=useState<MediaAsset[]>([]);
   useEffect(()=>{saves.receive({timeline:project.timeline??{...EMPTY_TIMELINE,aspectRatio:project.aspectRatio},revision:project.revision??0});},[project,saves]);
   const assets=useMemo<MediaAsset[]>(()=>[...(media??[]),...optimisticAssets.filter(asset=>!media?.some(a=>a._id===asset._id))],[media,optimisticAssets]);
-  const commit=useCallback((next:Timeline)=>{timelineRef.current=next;store.getState().replace(next);saves.edit(next);},[saves]);
-  const change=useCallback((next:Timeline)=>{store.getState().edit(next);setError('');commit(next);},[commit]);
+  const commit=useCallback((next:Timeline)=>{timelineRef.current=next;if(store.getState().timeline!==next)store.getState().replace(next);saves.edit(next);},[saves]);
+  const change=useCallback((next:Timeline)=>{store.getState().edit(next);setError('');commit(store.getState().timeline);},[commit]);
   const undoInFlight=useRef(false);
   const [undoBusy,setUndoBusy]=useState(false);
   const remoteUndo=useRef({revision:project.revision??0,remaining:project.history?.length??0});

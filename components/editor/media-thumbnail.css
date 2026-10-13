@@ -1,0 +1,3 @@
+.media-thumbnail{display:flex;align-items:center;justify-content:center;width:100%;height:100%;overflow:hidden;background:#111016;color:var(--ws-muted);pointer-events:none}
+.media-thumbnail img,.media-thumbnail video{display:block;width:100%;height:100%;object-fit:cover;pointer-events:none}
+.source-media-row .media-thumbnail svg,.library-overlay-thumbnail svg{width:16px;height:16px}

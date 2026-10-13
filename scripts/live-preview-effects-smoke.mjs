@@ -106,8 +106,8 @@ try {
   await page.evaluate(() => {
     const p = document.querySelector('hyperframes-player'), doc = p.iframeElement.contentDocument;
     const index = window.testStore.getState().timeline.clips.findIndex(clip => clip.id === 'test-caption');
-    const animation = doc.defaultView.__revlineTextTimelines[`clip-${index}`];
-    window.acknowledgementBefore = { node: doc.querySelector('.text-motion'), animation, tweens: animation.getChildren() };
+    const animation = doc.defaultView.__revlineTextLayerController;
+    window.acknowledgementBefore = { node: doc.querySelector('.text-motion'), animation };
     const state = window.testStore.getState();
     // A server acknowledgement has equal values with fresh nested arrays and objects.
     state.replace(JSON.parse(JSON.stringify(state.timeline)));
@@ -116,9 +116,9 @@ try {
   await check('equal save acknowledgement');
   const unchangedAnimation = await page.evaluate(() => {
     const doc = document.querySelector('hyperframes-player').iframeElement.contentDocument;
-    const before = window.acknowledgementBefore, tweens = before.animation.getChildren();
+    const before = window.acknowledgementBefore;
     return { sameNode: doc.querySelector('.text-motion') === before.node,
-      sameTweens: tweens.length === before.tweens.length && tweens.every((tween, index) => tween === before.tweens[index]),
+      sameTweens: doc.defaultView.__revlineTextLayerController === before.animation,
       scale: new DOMMatrix(doc.defaultView.getComputedStyle(doc.querySelector('.text-motion')).transform).a };
   });
   assert.equal(unchangedAnimation.sameNode, true, 'A save acknowledgement retains the text layer');

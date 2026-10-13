@@ -4,6 +4,15 @@ import { cropSelectionRect, dragSourceCrop } from './source-crop';
 import { DEFAULT_CROP } from './types';
 
 describe('direct source cropping', () => {
+  test('cutting a side masks pixels without recentering or enlarging the retained picture', () => {
+    for (const fit of ['cover', 'contain'] as const) {
+      const before = calculateVisualRect(1920,1080,1920,1080,DEFAULT_CROP,undefined,fit);
+      const after = calculateVisualRect(1920,1080,1920,1080,{left:.5,top:0,right:0,bottom:0},undefined,fit);
+      expect(after.left).toBe(before.left); expect(after.top).toBe(before.top);
+      expect(after.width).toBe(before.width); expect(after.height).toBe(before.height);
+      expect(after.window).toEqual({left:960,top:0,width:960,height:1080});
+    }
+  });
   test('uses full-source bounds when a landscape source fills a portrait canvas', () => {
     const source = calculateVisualRect(1920, 1080, 1080, 1920, DEFAULT_CROP, undefined, 'contain').window;
     const next = dragSourceCrop(DEFAULT_CROP, 'nw', source.width * .2, source.height * .1, source.width, source.height);

@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
-import { LoaderCircle, Check, CircleAlert, ArrowUpRight, History, SquarePen, Undo2 } from 'lucide-react';
+import { useState, useEffect, useMemo, useRef } from 'react';
+import { LoaderCircle, Check, CircleAlert, ArrowUpRight, History, SquarePen, Undo2, Copy } from 'lucide-react';
 import { Brand } from '@/components/workspace/brand';
 import { EditComposer } from '@/components/workspace/edit-composer';
 import { ChatProse } from './chat-prose';
@@ -28,7 +28,7 @@ function EditingStatus({ activity }: { activity?: string | null }) {
   return <div className="assistant-editing" role="status"><span className="assistant-editing-text">{activity || 'Editing…'}</span></div>;
 }
 
-export function AssistantPanel({ messages, running, configured, error, onSend, onStop, hasClips, demo, onLoadMore, canLoadMore, onAttach, activity, draftKey, suggestions, onSuggestion, editSnapshot, onUndo }: {
+export function AssistantPanel({ messages, running, configured, error, onSend, onStop, hasClips, demo, onLoadMore, canLoadMore, onAttach, activity, draftKey, suggestions, onSuggestion, editSnapshot, onUndo, chatId }: {
   messages: ChatMessage[]; running: boolean; configured: boolean; error?: string | null;
   onSend: (text: string) => Promise<void>; hasClips: boolean; demo: boolean;
   onLoadMore?: () => void; canLoadMore?: boolean; onAttach?: () => void;
@@ -37,10 +37,14 @@ export function AssistantPanel({ messages, running, configured, error, onSend, o
   suggestions?: { sourceName:string;clipId:string;items:SourceEditSuggestion[] };
   onSuggestion?: (prompt:string,clipId:string) => Promise<void>;
   editSnapshot?:AssistantEditSnapshot;onUndo?:()=>void|Promise<void>;
+  chatId?:string;
 }) {
   const [prompt, setPrompt] = useState('');
   const [sending, setSending] = useState(false);
   const [localError, setLocalError] = useState('');
+  const [copiedId,setCopiedId]=useState(false),copyTimer=useRef<ReturnType<typeof setTimeout>|null>(null);
+  useEffect(()=>()=>{if(copyTimer.current)clearTimeout(copyTimer.current);},[]);
+  async function copyChatId(){if(!chatId)return;try{await navigator.clipboard.writeText(chatId);setCopiedId(true);if(copyTimer.current)clearTimeout(copyTimer.current);copyTimer.current=setTimeout(()=>setCopiedId(false),2000);}catch{setLocalError('Could not copy the chat ID.');}}
   const [undoing,setUndoing]=useState(false);
   const [pendingReply, setPendingReply] = useState<{ previousMessageId?:string;previousError?:string|null } | null>(null);
   const waiting = running || sending || !!pendingReply || !!activity;
@@ -96,7 +100,7 @@ export function AssistantPanel({ messages, running, configured, error, onSend, o
   }
 
   return <div className="assistant-content">
-    <header className="assistant-panel-header"><nav aria-label="Conversation navigation"><a href="/chats" aria-label="View chat history" title="View chat history"><History size={16}/></a><a href="/dashboard/chat" aria-label="New conversation" title="New conversation"><SquarePen size={16}/></a></nav></header>
+    <header className="assistant-panel-header"><nav aria-label="Conversation navigation">{chatId&&<button type="button" aria-label={copiedId?'Chat ID copied':'Copy chat ID'} title={copiedId?'Chat ID copied':'Copy chat ID'} onClick={()=>void copyChatId()}>{copiedId?<Check size={16}/>:<Copy size={16}/>}</button>}<a href="/chats" aria-label="View chat history" title="View chat history"><History size={16}/></a><a href="/dashboard/chat" aria-label="New conversation" title="New conversation"><SquarePen size={16}/></a></nav></header>
     <div ref={scroll.viewport} className={`assistant-history ${!messages.length && !waiting ? 'assistant-history-empty' : ''}`}>
       <div className="assistant-turns" ref={scroll.content}>
       {canLoadMore && <button className="load-more" onClick={() => { scroll.preserveHistory(); onLoadMore?.(); }}>Earlier messages</button>}

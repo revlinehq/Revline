@@ -1,8 +1,9 @@
+import { compositionIndex } from './composition-node';
 import type { Clip, Timeline } from './types';
 import { validateVisualEffects, type VisualEffects } from './visual-effects';
 import type { VisualEffectsController } from './visual-effects-runtime';
 
-function effects(clip: Clip): VisualEffects { return { colorGrade: clip.colorGrade, zoomBlur: clip.zoomBlur, glitch: clip.glitch, invert: clip.invert }; }
+function effects(clip: Clip): VisualEffects { return { colorGrade: clip.colorGrade, zoomBlur: clip.zoomBlur, glitch: clip.glitch, invert: clip.invert, dither: clip.dither }; }
 
 export function previewVisualEffects(document: Document, clip: Clip, index: number, patch: Partial<Clip> | null): boolean {
   const controller = (document.defaultView as (Window & { __revlineEffects?: VisualEffectsController }) | null)?.__revlineEffects;
@@ -15,7 +16,8 @@ export function previewVisualEffects(document: Document, clip: Clip, index: numb
 
 export function updateLiveVisualEffects(document: Document, previous: Timeline, next: Timeline): boolean {
   const old = new Map(previous.clips.map(clip => [clip.id, clip]));
-  for (const [index, clip] of next.clips.entries()) {
+  for (const [position, clip] of next.clips.entries()) {
+    const index = compositionIndex(document, clip, position);
     if (clip.kind !== 'video' && clip.kind !== 'image') continue;
     const before = old.get(clip.id);
     if (JSON.stringify(before && effects(before)) === JSON.stringify(effects(clip))) continue;

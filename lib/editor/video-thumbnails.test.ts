@@ -52,3 +52,24 @@ test('publishes the first frame before waiting for every sample', async () => {
   await videoThumbnails('fixture.mp4', [0, 2, 4], 'source', time => updates.push(time));
   expect(updates).toEqual([0, 2, 4]);
 });
+
+test('split ranges share one source decoder and each range receives its first frame first',async()=>{
+ const fixture=decoderFixture();
+ const{videoThumbnails}=await import('./video-thumbnails');
+ const updates:number[]=[];
+ await Promise.all([videoThumbnails('same.mp4',[0,1,2],'asset',time=>updates.push(time)),videoThumbnails('same.mp4',[3,4,5],'asset',time=>updates.push(time)),videoThumbnails('same.mp4',[6,7,8],'asset',time=>updates.push(time))]);
+ expect(fixture.videos).toHaveLength(1);
+ expect(updates.slice(0,3)).toEqual([0,3,6]);
+ expect(new Set(updates).size).toBe(9);expect(fixture.draws()).toBe(9);
+});
+
+test('discards stale queued frames without canceling another clip sharing its first frame',async()=>{
+ const fixture=decoderFixture();
+ const{videoThumbnails}=await import('./video-thumbnails');
+ const obsolete=new AbortController(),stale:number[]=[],shared:number[]=[];
+ const first=videoThumbnails('same.mp4',[0,1,2],'asset',time=>stale.push(time),obsolete.signal);
+ const second=videoThumbnails('same.mp4',[0,3],'asset',time=>shared.push(time));
+ obsolete.abort();
+ expect(await first).toEqual([null,null,null]);expect((await second).every(Boolean)).toBe(true);
+ expect(stale).toEqual([]);expect(shared).toEqual([0,3]);expect(fixture.draws()).toBe(2);expect(fixture.videos).toHaveLength(1);
+});

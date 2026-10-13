@@ -1,0 +1,24 @@
+import { EFFECT_PRESETS, type EffectPreset } from './clip-effects';
+import { addEffectClip, patchClip } from './operations';
+import { visualEffectsPatch, type VisualEffects } from './visual-effects';
+import { layerGroup, trackOf, type Timeline, type LayerGroup } from './types';
+
+export const EFFECT_DRAG_TYPE = 'application/x-revline-effect';
+export type EffectDrag = { preset: EffectPreset } | { visual: keyof VisualEffects };
+const visualKeys = ['dither', 'glitch', 'zoomBlur', 'colorGrade', 'invert'] as const;
+export function readEffectDrag(value: string): EffectDrag | null {
+  try {
+    const input = JSON.parse(value);
+    if (EFFECT_PRESETS.includes(input?.preset)) return { preset: input.preset };
+    if (visualKeys.includes(input?.visual)) return { visual: input.visual };
+  } catch { /* Another drag type or malformed payload. */ }
+  return null;
+}
+
+/** Timed effects land on FX; footage controls apply only to the dropped-on clip. */
+export function dropLibraryEffect(timeline: Timeline, effect: EffectDrag, at: number, group: LayerGroup, track: number, targetId?: string, id = crypto.randomUUID()): Timeline {
+  if ('preset' in effect) return addEffectClip(timeline, id, effect.preset, at, { track: group === 'effects' ? track : undefined });
+  const clip = timeline.clips.find(clip => clip.id === targetId) ?? timeline.clips.find(clip => layerGroup(clip.kind) === group && trackOf(clip) === track && at >= clip.start && at < clip.start + clip.duration);
+  if (!clip || (clip.kind !== 'video' && clip.kind !== 'image')) throw new Error('Drop this effect onto a video or image clip.');
+  return patchClip(timeline, clip.id, visualEffectsPatch(clip, { [effect.visual]: { enabled: true } }));
+}
