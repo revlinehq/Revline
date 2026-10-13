@@ -1,12 +1,14 @@
 'use client';
 
-import { useId, useMemo, useState } from 'react';
-import { ChevronDown, ChevronRight, FolderOpen, Plus, Search, Upload, Sparkles, Type, Film, Image as ImageIcon } from 'lucide-react';
+import { lazy, Suspense, useId, useMemo, useState } from 'react';
+import { ChevronDown, ChevronRight, FolderOpen, Plus, Search, Upload, Sparkles, Film, Image as ImageIcon } from 'lucide-react';
 import { EFFECT_CATALOG, type EffectPreset } from '@/lib/editor/clip-effects';
 import { REMOTION_TEXT_LABELS, REMOTION_TEXT_PRESETS, type RemotionTextPreset } from '@/lib/editor/remotion-text';
 import type { VisualEffects } from '@/lib/editor/visual-effects';
 import type { Clip, MediaAsset } from '@/lib/editor/types';
 import './effect-library.css';
+
+const TextPresetPicker = lazy(() => import('./text-preset-picker'));
 
 export type LibraryVisualEffect = keyof VisualEffects;
 type LibraryLook = { id: string; label: string; description: string; visual?: LibraryVisualEffect; preset?: EffectPreset };
@@ -67,7 +69,7 @@ export function EffectLibrary({ clip, assets, onMedia, onVisualEffect, onAddEffe
         {!query && <><button type="button" className="library-more" aria-expanded={expanded} onClick={() => setExpanded(value => !value)}><span>{expanded ? 'Fewer effects' : 'More effects'}</span><ChevronDown size={13}/></button>{expanded && onSpeed && <button type="button" className="library-simple-action" disabled={clip?.kind !== 'video' && clip?.kind !== 'audio'} onClick={onSpeed}>Change speed<ChevronRight size={13}/></button>}</>}
       </> : tab === 'text' ? <>
         <p className="library-selection-note">{text ? 'Apply an animation to your selected text.' : 'Add ready-to-edit text at the playhead.'}</p>
-        <div className="library-look-grid">{templates.map(preset => <button key={preset} type="button" className="library-look" disabled={!onTextTemplate} onClick={() => onTextTemplate?.(preset)}><Type size={13} aria-hidden="true"/><span>{REMOTION_TEXT_LABELS[preset]}</span><Plus size={12} aria-hidden="true"/></button>)}</div>
+        <Suspense fallback={<p className="library-selection-note">Loading text templates…</p>}><TextPresetPicker presets={templates} selected={text ? clip?.textTemplate?.preset : undefined} onSelect={onTextTemplate}/></Suspense>
         {!templates.length && <p className="library-empty">No matching text templates.</p>}
       </> : <>
         <button type="button" className="library-upload-overlay" onClick={onUploadOverlay}><Upload size={14}/>Upload an overlay<Plus size={13}/></button>

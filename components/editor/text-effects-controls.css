@@ -4,10 +4,4 @@
 .text-effect-presets [data-slot=button]:hover,.text-effect-presets [data-slot=button][aria-pressed=true]{background:var(--ws-hover)}
 .text-effect-presets [data-slot=button][aria-pressed=true]{border-color:var(--ws-muted)}
 
-.text-template-presets{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
-.text-template-presets button{display:flex;align-items:center;gap:7px;min-height:34px;padding:0 8px;border:1px solid var(--ws-artifact-border);border-radius:6px;background:transparent;text-align:left;color:var(--ws-text);font-size:11px;cursor:pointer;min-width:0}
-.text-template-presets button>span{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.text-template-presets button>svg{flex:none;color:var(--ws-muted)}
-.text-template-presets button[aria-pressed=true]{border-color:#6684ef;background:var(--ws-hover)}.text-template-presets button .text-template-selected{color:#6684ef}
-.text-template-presets button:focus-visible{outline:2px solid var(--ws-text);outline-offset:4px;border-radius:6px}
 .text-template-accent{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:11px;color:var(--ws-muted)}.text-template-accent input{width:32px;height:24px;padding:2px;border:1px solid var(--ws-artifact-border);border-radius:4px;background:var(--ws-input)}
-@media(hover:hover){.text-template-presets button:hover{background:var(--ws-hover)}}
