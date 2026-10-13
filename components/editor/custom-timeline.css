@@ -97,6 +97,3 @@ html[data-workspace-theme=dark] .editor-app:not(.landing-product-demo) .custom-t
 .custom-timeline .timeline-clip.clip-effect>span svg{flex-shrink:0}
 .custom-timeline .track-label[data-group=effects] .track-label-name{color:#a95c0f}
 html[data-workspace-theme=dark] .custom-timeline .track-label[data-group=effects] .track-label-name{color:#ff9b36}
-.custom-timeline .track-label[data-group=visual] .track-label-name{color:#248a55}
-html[data-workspace-theme=dark] .custom-timeline .track-label[data-group=visual] .track-label-name{color:#32c878}
-.custom-timeline .timeline-clip.clip-video>span{background:#32c878;color:#092d1a;height:16px;padding-top:3px;font-size:9px}

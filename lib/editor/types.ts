@@ -109,13 +109,13 @@ export function deriveTrackCounts(timeline: Timeline): ResolvedTrackCounts {
   return counts;
 }
 export function clipColor(kind: ClipKind) {
-  return kind === 'effect' ? '#FF9B36' : kind === 'caption' ? '#5DBAA0' : kind === 'graphic' ? '#BA5D7A' : kind === 'audio' ? '#8F5DBA' : '#32C878';
+  return kind === 'effect' ? '#FF9B36' : kind === 'caption' ? '#5DBAA0' : kind === 'graphic' ? '#BA5D7A' : kind === 'audio' ? '#8F5DBA' : '#303030';
 }
 export function deriveTracks(timeline: Timeline) {
   const counts = deriveTrackCounts(timeline);
   return TIMELINE_LAYER_GROUPS.flatMap(group => Array.from({ length: counts[group] }, (_, index) => {
     const number = counts[group] - index;
-    return { id: `${group}-${number}`, group, number, label: `${group === 'effects' ? 'FX' : group === 'visual' ? 'V' : 'A'}${number}`, color: clipColor(group === 'effects' ? 'effect' : group === 'visual' ? 'video' : 'audio') };
+    return { id: `${group}-${number}`, group, number, label: `${group === 'effects' ? 'FX' : group === 'visual' ? 'V' : 'A'}${number}`, color: group === 'visual' ? '#32C878' : clipColor(group === 'effects' ? 'effect' : 'audio') };
   }));
 }
 export function timelineDuration(timeline: Timeline) {
