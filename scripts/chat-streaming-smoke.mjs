@@ -1,0 +1,32 @@
+import assert from 'node:assert/strict';
+import { build } from 'esbuild';
+import puppeteer from 'puppeteer';
+const bundled=await build({stdin:{contents:`import React from 'react';import {createRoot} from 'react-dom/client';import {flushSync} from 'react-dom';import {AssistantPanel} from './components/editor/assistant-panel';const root=createRoot(document.getElementById('root'));window.renderMessages=messages=>flushSync(()=>root.render(<AssistantPanel messages={messages} running={messages.some(m=>m.status==='streaming')} configured={true} onSend={async()=>{}} hasClips={true} demo={false}/>));`,resolveDir:process.cwd(),loader:'tsx'},bundle:true,format:'iife',platform:'browser',jsx:'automatic',write:false,outdir:'/tmp/revline-chat-stream-smoke',define:{'process.env.NODE_ENV':'"production"'}});
+const script=bundled.outputFiles.find(file=>file.path.endsWith('.js')).text,css=bundled.outputFiles.find(file=>file.path.endsWith('.css')).text;
+const browser=await puppeteer.launch({headless:true,args:['--no-sandbox','--disable-dev-shm-usage']});
+const page=await browser.newPage();
+const messages=(text,status)=>[{id:'question',role:'user',text:'Cut this clip'},{id:'answer',role:'assistant',text,status}];
+try{
+ await page.emulateMediaFeatures([{name:'prefers-reduced-motion',value:'no-preference'}]);
+ await page.setContent('<div id="root"></div>');await page.addStyleTag({content:css});await page.addScriptTag({content:script});
+ await page.evaluate(messages=>window.renderMessages(messages),messages('Your edit','streaming'));
+ assert.equal(await page.$eval('[data-message-id="answer"] [data-flow-token]',el=>getComputedStyle(el).animationName),'ft-fadeIn');
+ await page.evaluate(()=>{window.firstToken=document.querySelector('[data-message-id="answer"] [data-flow-token]');window.firstAnimation=window.firstToken.getAnimations()[0];});
+ await page.evaluate(messages=>window.renderMessages(messages),messages('Your edit is','streaming'));
+ assert.equal(await page.evaluate(()=>window.firstToken===document.querySelector('[data-message-id="answer"] [data-flow-token]')),true,'Appending text preserves token identity');
+ assert.equal(await page.evaluate(()=>window.firstAnimation===window.firstToken.getAnimations()[0]),true,'Existing token fade is not restarted');
+ await page.evaluate(messages=>window.renderMessages(messages),messages('Your edit is ready.','success'));
+ assert.equal(await page.$eval('[data-message-id="answer"] [data-flow-token]:last-child',el=>getComputedStyle(el).animationName),'ft-fadeIn','Incoming chunk must finish its fade when the stream settles');
+ await page.waitForFunction(()=>[...document.querySelectorAll('[data-flow-token]')].every(el=>getComputedStyle(el).opacity==='1'));
+ await page.evaluate(()=>window.renderMessages([{id:'history',role:'assistant',text:'Previously saved response',status:'success'}]));
+ assert.equal(await page.$eval('[data-message-id="history"] [data-flow-token]',el=>getComputedStyle(el).animationName),'none','Historical messages must not replay');
+ await page.evaluate(()=>{window.historyToken=document.querySelector('[data-message-id="history"] [data-flow-token]');window.renderMessages([{id:'history',role:'assistant',text:'Previously saved response continues.',status:'streaming'}]);});
+ assert.equal(await page.evaluate(()=>window.historyToken===document.querySelector('[data-message-id="history"] [data-flow-token]')),true);
+ assert.equal(await page.$eval('[data-message-id="history"] [data-flow-token]',el=>getComputedStyle(el).animationName),'none','Existing snapshot stays still when a live stream resumes');
+ assert.equal(await page.$eval('[data-message-id="history"] [data-flow-token]:last-child',el=>getComputedStyle(el).animationName),'ft-fadeIn','Only the newly received tail fades');
+ await page.emulateMediaFeatures([{name:'prefers-reduced-motion',value:'reduce'}]);
+ await page.evaluate(()=>window.renderMessages([{id:'reduced',role:'assistant',text:'New response',status:'streaming'}]));
+ assert.equal(await page.$eval('[data-flow-token]',el=>getComputedStyle(el).animationName),'none');
+ assert.equal(await page.$eval('[data-flow-token]',el=>getComputedStyle(el).opacity),'1');
+ console.log('PASS: received chunks fade, DOM/animation identity stays stable, final chunks finish, history stays immediate, reduced motion respected.');
+}finally{await browser.close();}

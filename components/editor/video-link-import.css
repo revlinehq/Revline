@@ -10,6 +10,9 @@
 .video-link-error{margin:0;font-size:12px;line-height:1.5;color:var(--ws-text);overflow-wrap:anywhere}
 .video-import-progress{display:flex;flex-direction:column;gap:10px;padding:16px;border:1px solid var(--ws-artifact-border,var(--ws-border));border-radius:10px;margin:12px 0;color:var(--ws-text);text-align:left}
 .video-import-progress>span{display:flex;align-items:center;gap:8px;font-size:13px}
+.video-import-progress .dismiss-import-notice{display:grid;place-items:center;flex-shrink:0;width:28px;height:28px;margin:-6px -6px -6px auto;border:0;border-radius:5px;background:transparent;color:var(--ws-muted);cursor:pointer}
+.video-import-progress .dismiss-import-notice:hover{background:var(--ws-hover);color:var(--ws-text)}
+.video-import-progress .dismiss-import-notice:focus-visible{outline:1px solid var(--ws-text);outline-offset:2px}
 .video-import-progress progress{width:100%;height:4px;accent-color:var(--ws-text)}
 .new-conversation-entry>.video-link-import{max-width:400px;margin:24px auto 0}
 .project-import-stage>.video-link-import,.project-import-stage>.video-import-progress{width:100%;max-width:440px}

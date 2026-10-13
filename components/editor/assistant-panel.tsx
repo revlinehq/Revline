@@ -27,6 +27,14 @@ const COMPLETED_LABELS: Record<string,string> = {
   alignCutsToBeat: 'Cuts matched to the beat', useStrongestMoment: 'Moment added', inspectAssetAnalysis: 'Footage notes read',
 };
 
+function AssistantResponseText({ text, streaming }: { text: string; streaming: boolean }) {
+  const [receivedLive, setReceivedLive] = useState(streaming);
+  if (streaming && !receivedLive) setReceivedLive(true);
+  // Keep the last received chunks fading after Convex marks the message complete.
+  // A historical message mounts with this off, so opening a chat never replays it.
+  return <ChatProse text={text} animate={receivedLive || streaming} />;
+}
+
 export function AssistantPanel({ messages, running, configured, error, onSend, onStop, hasClips, demo, onLoadMore, canLoadMore, onAttach, activity, draftKey }: {
   messages: ChatMessage[]; running: boolean; configured: boolean; error?: string | null;
   onSend: (text: string) => Promise<void>; hasClips: boolean; demo: boolean;
@@ -71,7 +79,7 @@ export function AssistantPanel({ messages, running, configured, error, onSend, o
         const m = messages[index];
         return <article key={m.id} data-message-id={m.id} className={`chat-message ${m.role === 'user' ? 'chat-user' : 'chat-assistant'}`}>
         {m.role !== 'user' && messages[index-1]?.role !== m.role && <div className="chat-author"><Brand markOnly /><span>Revline</span></div>}
-        {m.text && (m.role === 'user' ? <p>{m.text}</p> : <ChatProse text={m.text} animate={m.status === 'streaming'} />)}
+        {m.text && (m.role === 'user' ? <p>{m.text}</p> : <AssistantResponseText text={m.text} streaming={m.status === 'streaming'} />)}
         {m.tools?.map((tool, i) => <div className="tool-result" key={`${tool}-${i}`}><Check size={12} />{tool}</div>)}
         {m.steps?.map((step, i) => <div className={`tool-result tool-${step.state}`} key={`${step.name}-${i}`}>
           {step.state === 'running' ? <LoaderCircle size={12} className="animate-spin" /> : step.state === 'error' ? <CircleAlert size={12} /> : <Check size={12} />}
