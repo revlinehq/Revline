@@ -1,4 +1,5 @@
 import type { BlendMode, EffectPreset, MotionKeyframe } from './clip-effects';
+import type { ColorGrade, ZoomBlur, Glitch } from './visual-effects';
 export type AspectRatio = 'vertical' | 'portrait-feed' | 'square' | 'classic' | 'landscape';
 export type ClipKind = 'video' | 'image' | 'audio' | 'caption' | 'graphic' | 'effect';
 export type LayerGroup = 'visual' | 'overlay' | 'audio';
@@ -28,6 +29,9 @@ export type Clip = {
   motion?: MotionKeyframe[];
   motionOffset?: number;
   effectPreset?: EffectPreset | 'none';
+  colorGrade?: ColorGrade;
+  zoomBlur?: ZoomBlur;
+  glitch?: Glitch;
   animation?: 'none' | 'fade' | 'rise';
   focus?: {time:number;x:number;y:number}[];
   transform?: VisualTransform;

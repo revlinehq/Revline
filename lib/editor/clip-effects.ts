@@ -1,4 +1,5 @@
 import type { Clip } from './types';
+import { validateVisualEffects } from './visual-effects';
 
 export const BLEND_MODES = ['normal', 'screen', 'multiply', 'overlay', 'plus-lighter'] as const;
 export type BlendMode = typeof BLEND_MODES[number];
@@ -21,6 +22,7 @@ export function effectClipLabel(clip: Pick<Clip, 'effectPreset'>) { return clip.
 const bounds = { x: [-1, 1], y: [-1, 1], scale: [0.1, 5], rotation: [-360, 360], opacity: [0, 1], brightness: [0, 4] } as const;
 
 export function validateClipEffects(clip: Clip) {
+  validateVisualEffects(clip);
   if (clip.effectPreset !== undefined && (clip.kind !== 'effect' || (clip.effectPreset !== 'none' && !EFFECT_PRESETS.includes(clip.effectPreset)))) throw new Error('Effect presets belong to effect clips.');
   if (clip.kind === 'effect') {
     if (clip.assetId !== undefined || clip.linkedClipId !== undefined || clip.audioSeparated !== undefined || clip.volume !== undefined || clip.sourceStart !== 0) throw new Error('Effect clips cannot reference media or audio.');

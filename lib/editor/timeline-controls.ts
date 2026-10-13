@@ -51,7 +51,7 @@ export function reorderLayer(timeline:Timeline,group:LayerGroup,from:number,to:n
 export function deleteEmptyLayer(timeline:Timeline,group:LayerGroup,number:number):Timeline {
   timeline=normalizeTimeline(timeline);
   const counts=deriveTrackCounts(timeline);
-  if(number<1||number>counts[group])throw new Error('Choose an existing layer.');
+  if(!Number.isInteger(number)||number<1||number>counts[group])throw new Error('Choose an existing layer.');
   if(timeline.clips.some(clip=>layerGroup(clip.kind)===group&&trackOf(clip)===number))throw new Error('Remove the clips before deleting this layer.');
   return {...timeline,tracks:{...counts,[group]:counts[group]-1},clips:timeline.clips.map(clip=>layerGroup(clip.kind)===group&&trackOf(clip)>number?{...clip,track:trackOf(clip)-1}:clip)};
 }
