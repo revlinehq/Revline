@@ -38,8 +38,8 @@ function LookPreview({ look }: { look: string }) {
   </span>;
 }
 
-export function EffectLibrary({ clips, clip, assets, onMedia, onVisualEffect, onAddEffect, onTextTemplate, onUploadOverlay, onAddOverlay, onFadeThroughBlack, onSpeed }: {
-  clips: readonly Clip[]; clip?: Clip; assets: readonly MediaAsset[];
+export function EffectLibrary({ clip, assets, onMedia, onVisualEffect, onAddEffect, onTextTemplate, onUploadOverlay, onAddOverlay, onFadeThroughBlack, onSpeed }: {
+  clip?: Clip; assets: readonly MediaAsset[];
   onMedia: () => void; onVisualEffect: (effect: LibraryVisualEffect) => void;
   onAddEffect?: (preset: EffectPreset) => void; onTextTemplate?: (preset: RemotionTextPreset) => void;
   onUploadOverlay: () => void; onAddOverlay?: (asset: MediaAsset) => void;
@@ -52,16 +52,6 @@ export function EffectLibrary({ clips, clip, assets, onMedia, onVisualEffect, on
   const visual = clip?.kind === 'video' || clip?.kind === 'image';
   const text = clip?.kind === 'caption' || clip?.kind === 'graphic';
   const query = search.trim().toLowerCase();
-  const counts = useMemo(() => {
-    const result = new Map<string, number>();
-    const increment = (key: string) => result.set(key, (result.get(key) ?? 0) + 1);
-    for (const item of clips) {
-      if (item.kind === 'video' || item.kind === 'image') for (const key of ['glitch', 'zoomBlur', 'colorGrade', 'invert'] as const) if (item[key]?.enabled) increment(key);
-      if (item.kind === 'effect' && item.effectPreset) increment(item.effectPreset);
-      if ((item.kind === 'caption' || item.kind === 'graphic') && item.textTemplate) increment(item.textTemplate.preset);
-    }
-    return result;
-  }, [clips]);
   const matches = (label: string) => label.toLowerCase().includes(query);
   const visible = (expanded || query ? [...featured, ...more] : featured).filter(look => matches(look.label));
   const templates = REMOTION_TEXT_PRESETS.filter(preset => matches(REMOTION_TEXT_LABELS[preset]));
@@ -82,15 +72,15 @@ export function EffectLibrary({ clips, clip, assets, onMedia, onVisualEffect, on
     <div role="tabpanel" id={`${id}-${tab}`} aria-labelledby={`${id}-${tab}-tab`}>
       {tab === 'effects' ? <>
         {!visual && <p className="library-selection-note">Select footage to apply glitch, blur, or color. Timed looks go at the playhead.</p>}
-        <div className="library-look-grid">{visible.map(look => <button key={look.id} type="button" className="library-look" disabled={disabled(look)} aria-label={`${look.label}${counts.get(look.id) ? ` · On ${counts.get(look.id)} ${counts.get(look.id) === 1 ? 'clip' : 'clips'}` : ''}`} title={look.visual && !visual ? 'Select a video or image clip first' : look.description} onClick={() => apply(look)}>
-          <span className="library-preview-wrap"><LookPreview look={look.id}/>{!!counts.get(look.id) && <span className="library-use-count">On {counts.get(look.id)} {counts.get(look.id) === 1 ? 'clip' : 'clips'}</span>}</span><span>{look.label}</span>
+        <div className="library-look-grid">{visible.map(look => <button key={look.id} type="button" className="library-look" disabled={disabled(look)} aria-label={look.label} title={look.visual && !visual ? 'Select a video or image clip first' : look.description} onClick={() => apply(look)}>
+          <span className="library-preview-wrap"><LookPreview look={look.id}/></span><span>{look.label}</span>
         </button>)}</div>
         {!visible.length && <p className="library-empty">No matching looks.</p>}
         {matches('Fade through black') && onFadeThroughBlack && <section className="library-transitions" aria-label="Between clips"><p>Between clips</p><div className="library-look-grid"><button type="button" className="library-look" disabled={!visual} title={visual ? 'Fade through black at the end of this clip' : 'Select footage at the cut first'} onClick={onFadeThroughBlack}><LookPreview look="fade-through-black"/><span>Fade through black</span></button></div></section>}
         {!query && <><button type="button" className="library-more" aria-expanded={expanded} onClick={() => setExpanded(value => !value)}><span>{expanded ? 'Fewer effects' : 'More effects'}</span><ChevronDown size={13}/></button>{expanded && onSpeed && <button type="button" className="library-simple-action" disabled={clip?.kind !== 'video' && clip?.kind !== 'audio'} onClick={onSpeed}>Change speed<ChevronRight size={13}/></button>}</>}
       </> : tab === 'text' ? <>
         <p className="library-selection-note">{text ? 'Apply an animation to your selected text.' : 'Add ready-to-edit text at the playhead.'}</p>
-        <div className="library-look-grid">{templates.map(preset => <button key={preset} type="button" className="library-look" disabled={!onTextTemplate} onClick={() => onTextTemplate?.(preset)}><span className="library-preview-wrap"><TextTemplatePreview preset={preset}/>{!!counts.get(preset) && <span className="library-use-count">On {counts.get(preset)} {counts.get(preset) === 1 ? 'clip' : 'clips'}</span>}</span><span>{REMOTION_TEXT_LABELS[preset]}</span></button>)}</div>
+        <div className="library-look-grid">{templates.map(preset => <button key={preset} type="button" className="library-look" disabled={!onTextTemplate} onClick={() => onTextTemplate?.(preset)}><span className="library-preview-wrap"><TextTemplatePreview preset={preset}/></span><span>{REMOTION_TEXT_LABELS[preset]}</span></button>)}</div>
         {!templates.length && <p className="library-empty">No matching text templates.</p>}
       </> : <>
         <button type="button" className="library-upload-overlay" onClick={onUploadOverlay}><Upload size={14}/>Upload an overlay<Plus size={13}/></button>

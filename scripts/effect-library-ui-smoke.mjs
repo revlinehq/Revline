@@ -18,7 +18,7 @@ const initial={fps:30,aspectRatio:'landscape',tracks:{visual:2,overlay:0,audio:1
 {id:'sound',kind:'audio',start:0,sourceStart:0,duration:6,track:1,volume:.8}]};
 function Fixture(){const [timeline,setTimeline]=useState(initial); const [selected,setSelected]=useState('v1');const clip=timeline.clips.find(item=>item.id===selected);window.fixture={timeline,select:setSelected};
 const add=(next,id)=>{setTimeline(next);setSelected(id)};
-return <PreviewInspector clips={timeline.clips} clip={clip} assets={assets} upload={null} onUpload={()=>window.uploads++} onAdd={()=>window.sourceAdds++} onCrop={()=>{}} onClose={()=>{}} onChange={patch=>{window.commits++;setTimeline(previous=>patchClip(previous,selected,patch))}} onPlaybackRateChange={()=>{}} onAddEffect={preset=>{const id='fx-'+(++window.nextId);add(addEffectClip(timeline,id,preset,1),id)}} onAddTextTemplate={preset=>{const id='text-'+(++window.nextId);add(addTextTemplateClip(timeline,id,preset,1),id)}} onAddOverlay={asset=>{const id='overlay-'+(++window.nextId);add(addOverlayClip(timeline,asset,id,1),id)}} onFadeThroughBlack={()=>{const id='transition-'+(++window.nextId);add(addFadeThroughBlack(timeline,selected,id),id)}}/>}
+return <PreviewInspector clip={clip} assets={assets} upload={null} onUpload={()=>window.uploads++} onAdd={()=>window.sourceAdds++} onCrop={()=>{}} onClose={()=>{}} onChange={patch=>{window.commits++;setTimeline(previous=>patchClip(previous,selected,patch))}} onPlaybackRateChange={()=>{}} onAddEffect={preset=>{const id='fx-'+(++window.nextId);add(addEffectClip(timeline,id,preset,1),id)}} onAddTextTemplate={preset=>{const id='text-'+(++window.nextId);add(addTextTemplateClip(timeline,id,preset,1),id)}} onAddOverlay={asset=>{const id='overlay-'+(++window.nextId);add(addOverlayClip(timeline,asset,id,1),id)}} onFadeThroughBlack={()=>{const id='transition-'+(++window.nextId);add(addFadeThroughBlack(timeline,selected,id),id)}}/>}
 window.commits=0;window.nextId=0;window.uploads=0;window.sourceAdds=0;createRoot(document.getElementById('root')).render(<Fixture/>);
 ` }, bundle: true, platform: 'browser', format: 'iife', jsx: 'automatic', write: false, outdir: '/tmp/revline-library-fixture', define: { 'process.env.NODE_ENV': '"production"' } });
 const browser = await puppeteer.launch({headless:true,args:['--no-sandbox','--disable-dev-shm-usage']});
@@ -35,19 +35,19 @@ try{
  await page.addScriptTag({content:bundle.outputFiles.find(file=>file.path.endsWith('.js')).text});
  await page.waitForSelector('.effect-library');
  assert.equal(await page.$$eval('.library-look-grid:first-child .library-look',elements=>elements.length),4);
- assert.equal(await page.$eval('[aria-label="Digital glitch · On 1 clip"] .library-use-count',el=>el.textContent),'On 1 clip','Disabled effects are excluded from counts');
- assert.equal(await page.$eval('[aria-label="Zoom blur · On 1 clip"] .library-use-count',el=>el.textContent),'On 1 clip');
+ assert.equal(await page.$('.library-use-count'),null,'Effect previews have no usage badges');
+ assert.equal(await page.$$eval('.library-look',tiles=>tiles.some(tile=>/On \d+ clips?/.test(tile.textContent+' '+tile.getAttribute('aria-label')))),false,'No usage count remains in visible or accessible names');
  assert.equal(await page.$$eval('button',buttons=>buttons.some(button=>button.textContent==='Dissolve')),false,'Unsupported dissolve has no pretend action');
  assert.ok(await page.$eval('.preview-inspector',el=>el.scrollWidth<=el.clientWidth),'Library fits the unchanged 320px side panel');
  assert.ok(await page.$eval('.library-look-preview',el=>Math.abs(el.getBoundingClientRect().height-68)<1),'Preview matches the 134x68 design geometry');
  await page.waitForFunction(()=>Array.from(document.querySelectorAll('.library-look-preview img')).every(img=>img.complete&&img.naturalWidth>0),{timeout:15000});
  await page.screenshot({path:'/tmp/revline-effect-library-dark.png'});
- await button('Digital glitch · On 1 clip').click();await flush();
+ await button('Digital glitch').click();await flush();
  assert.equal(await page.evaluate(()=>window.commits),1,'One apply action commits once');assert.ok(await page.$('[data-effect="glitch"]'));
  await library();await page.type('[aria-label="Search effect library"]','blur');
  assert.equal(await page.$$eval('.library-look',tiles=>tiles.length),1,'Search filters previews');
- await button('Zoom blur · On 1 clip').click();await flush();assert.ok(await page.$('[data-effect="zoomBlur"]'));
- await library();assert.equal(await page.$eval('[aria-label="Zoom blur · On 2 clips"] .library-use-count',el=>el.textContent),'On 2 clips','Counts update from real timeline changes');
+ await button('Zoom blur').click();await flush();assert.ok(await page.$('[data-effect="zoomBlur"]'));
+ await library();assert.equal(await page.$('.library-use-count'),null,'Applying a look does not add a count badge');assert.ok(await page.$('[aria-label="Zoom blur"]'),'Effect names remain unchanged');
  await button('Cinema bars').click();await flush();assert.ok(await page.$('[aria-label="Cinematic bars settings"]'),'Bar tile opens existing size/speed controls');
  assert.equal(await page.evaluate(()=>window.fixture.timeline.clips.at(-1).effectPreset),'cinematic-bars');
  await library();await page.click('.library-more');await button('Zoom out').click();await flush();assert.equal(await page.evaluate(()=>window.fixture.timeline.clips.at(-1).effectPreset),'quick-zoom-out');
@@ -70,5 +70,5 @@ try{
  await page.evaluate(()=>{document.activeElement?.blur();document.documentElement.dataset.workspaceTheme='light'});assert.ok(await page.$eval('.preview-inspector',el=>el.scrollWidth<=el.clientWidth));await page.screenshot({path:'/tmp/revline-effect-library-light.png'});
  await page.setViewport({width:320,height:660});await page.addStyleTag({content:'#root{width:320px;margin:0;height:660px}'});assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'Library does not overflow a narrow viewport');
  assert.deepEqual(errors,[]);
- console.log('PASS: RyGlj library geometry, enabled-use counts, search, real visual/timed/text/overlay/transition actions, one apply save, existing source access, audio guards, keyboard tabs, light/dark, and narrow viewport. Isolated fixture only; no project mutations.');
+ console.log('PASS: RyGlj library geometry, no usage badges, search, real visual/timed/text/overlay/transition actions, one apply save, existing source access, audio guards, keyboard tabs, light/dark, and narrow viewport. Isolated fixture only; no project mutations.');
 }finally{await browser.close()}
