@@ -7,10 +7,10 @@ import { EditComposer } from '@/components/workspace/edit-composer';
 import { ChatProse } from './chat-prose';
 import { useConversationScroll } from '@/components/workspace/use-conversation-scroll';
 
-export type ChatTool = { name: string; state: 'running' | 'done' | 'error'; detail?: string };
+export type ChatTool = { name: string; state: 'running' | 'done' | 'error'; detail?: string; staged?: boolean };
 export type ChatMessage = { id: string; role: string; text: string; status?: string; tools?: string[]; steps?: ChatTool[] };
 const TOOL_LABELS: Record<string, string> = {
-  inspectTimeline:'Checking your edit', transformClip:'Adjusting the frame', cropClip:'Cropping the footage', resetVisual:'Resetting the frame', fitClip:'Fitting the footage', styleTextClip:'Styling the text', setVolume:'Adjusting sound', addLayer:'Adding a layer',
+  inspectVideoFrames:'Inspecting video frames', markMusicBeats:'Marking the beats', inspectTimeline:'Checking your edit', transformClip:'Adjusting the frame', cropClip:'Cropping the footage', resetVisual:'Resetting the frame', fitClip:'Fitting the footage', styleTextClip:'Styling the text', setVolume:'Adjusting sound', addLayer:'Adding a layer',
   split: 'Splitting the clip', trim: 'Trimming footage', move: 'Arranging the timeline', delete: 'Removing a clip',
   addCaption: 'Adding a caption', addGraphic: 'Adding a title', addMedia: 'Adding footage',
   setAspectRatio: 'Resizing the canvas', followSubject: 'Following the face', editText: 'Updating the words',
@@ -19,7 +19,7 @@ const TOOL_LABELS: Record<string, string> = {
   useStrongestMoment: 'Bringing in the strongest moment', inspectAssetAnalysis: 'Reading footage notes',
 };
 const COMPLETED_LABELS: Record<string,string> = {
-  inspectTimeline:'Edit checked', transformClip:'Frame adjusted', cropClip:'Footage cropped', resetVisual:'Frame reset', fitClip:'Footage fitted', styleTextClip:'Text styled', setVolume:'Sound adjusted', addLayer:'Layer added',
+  inspectVideoFrames:'Frames inspected', markMusicBeats:'Beat markers checked', inspectTimeline:'Edit checked', transformClip:'Frame adjusted', cropClip:'Footage cropped', resetVisual:'Frame reset', fitClip:'Footage fitted', styleTextClip:'Text styled', setVolume:'Sound adjusted', addLayer:'Layer added',
   split: 'Clip split', trim: 'Footage trimmed', move: 'Timeline arranged', delete: 'Clip removed',
   addCaption: 'Caption added', addGraphic: 'Title added', addMedia: 'Footage added',
   setAspectRatio: 'Canvas resized', followSubject: 'Face following applied', editText: 'Words updated',
@@ -83,7 +83,7 @@ export function AssistantPanel({ messages, running, configured, error, onSend, o
         {m.tools?.map((tool, i) => <div className="tool-result" key={`${tool}-${i}`}><Check size={12} />{tool}</div>)}
         {m.steps?.map((step, i) => <div className={`tool-result tool-${step.state}`} key={`${step.name}-${i}`}>
           {step.state === 'running' ? <LoaderCircle size={12} className="animate-spin" /> : step.state === 'error' ? <CircleAlert size={12} /> : <Check size={12} />}
-          <span>{(step.state==='done'?COMPLETED_LABELS[step.name]:TOOL_LABELS[step.name]) ?? step.name.replace(/([A-Z])/g, ' $1')}{(step.state==='error'||step.detail)&&<small>{step.state === 'error' ? 'Could not finish this step' : step.detail}</small>}</span>
+          <span>{step.staged && step.state === 'done' ? 'Prepared change' : (step.state==='done'?COMPLETED_LABELS[step.name]:TOOL_LABELS[step.name]) ?? step.name.replace(/([A-Z])/g, ' $1')}{(step.state==='error'||step.detail)&&<small>{step.state === 'error' ? 'Could not finish this step' : step.detail}</small>}</span>
         </div>)}
         {m.id === demoNoteMessageId && <div className="assistant-demo-note">Sample conversation. Explore the timeline, or <a href="/projects">start your own project</a>.</div>}
       </article>;

@@ -7,7 +7,8 @@ import { components, internal } from "./_generated/api";
 import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { requireOwner, requireProject } from "./lib/auth";
 import { commitTimeline, currentTimeline, validateTimeline } from "./lib/timeline";
-import { analysisMode, analysisRequestDocument, assetDocument, projectDocument, timelineValidator } from "./schema";
+import { analysisMode, analysisRequestDocument, assetDocument, frameRequestValidator, projectDocument, timelineValidator } from "./schema";
+import { validateFrameInspectionInput } from '../lib/media-analysis/frame-inspection';
 import { normalizeTimeline } from '../lib/editor/types';
 import { enqueueMediaTask, cancelMediaTask } from './mediaTasks';
 const providerReason = "Claude editing requires ANTHROPIC_API_KEY in Convex, or AI_GATEWAY_ENABLED=true on an eligible paid Convex team.";
@@ -86,6 +87,15 @@ export const apply = internalMutation({ args: { ...runArgs, expectedRevision: v.
   const revision = await commitTimeline(ctx, project, args.timeline, args.expectedRevision);
   await ctx.db.patch(project._id, { aiUndoRecorded: true, aiCheckpointRevision: revision }); return revision;
 }});
+// Destructive turns validate each private draft without exposing intermediate deletions.
+// The final apply repeats these checks atomically before publishing the replacement.
+export const validateDraft = internalQuery({ args: { ...runArgs, expectedRevision: v.number(), timeline: timelineValidator }, returns: v.null(), handler: async (ctx, args) => {
+  const project = await requireProject(ctx, args.projectId, args.ownerId);
+  if (project.aiRunId !== args.runId || !project.aiRunning) throw new ConvexError('AI run is no longer active');
+  if ((project.revision ?? 0) !== args.expectedRevision) throw new ConvexError('The timeline changed elsewhere. Your replacement was not saved.');
+  await validateTimeline(ctx, project, args.timeline);
+  return null;
+}});
 export const finish = internalMutation({ args: { ...runArgs, error: v.optional(v.string()) }, returns: v.null(), handler: async (ctx, args) => {
   const project = await ctx.db.get(args.projectId);
   if (project?.ownerId === args.ownerId && project.aiRunId === args.runId) {
@@ -96,15 +106,19 @@ export const finish = internalMutation({ args: { ...runArgs, error: v.optional(v
   return null;
 }});
 
-export const requestAnalysis = internalMutation({ args: { ...runArgs, assetId: v.string(), mode: analysisMode }, returns: v.id("analysisRequests"), handler: async (ctx, args) => {
+export const requestAnalysis = internalMutation({ args: { ...runArgs, assetId: v.string(), mode: analysisMode, frameRequest: v.optional(frameRequestValidator) }, returns: v.id("analysisRequests"), handler: async (ctx, args) => {
   const project = await requireProject(ctx, args.projectId, args.ownerId);
   if (!project.aiRunning || project.aiRunId !== args.runId) throw new ConvexError("AI run is no longer active");
   const assetId = ctx.db.normalizeId("assets", args.assetId); const asset = assetId ? await ctx.db.get(assetId) : null;
-  if (!asset || asset.ownerId !== args.ownerId || asset.projectId !== args.projectId || asset.kind === "image" || ((args.mode === "understand" || args.mode === "shots" || args.mode === "track") && asset.kind !== "video")) throw new ConvexError("Choose suitable media from this project");
+  if (!asset || asset.ownerId !== args.ownerId || asset.projectId !== args.projectId || asset.kind === "image" || ((args.mode === "understand" || args.mode === "shots" || args.mode === "track" || args.mode === 'frames') && asset.kind !== "video")) throw new ConvexError("Choose suitable media from this project");
+  if (args.mode === 'frames') {
+    if (!args.frameRequest || !asset.duration) throw new ConvexError('Choose a video window and a focused visual question.');
+    try { validateFrameInspectionInput(args.frameRequest, asset.duration); } catch (error) { throw new ConvexError((error as Error).message); }
+  } else if (args.frameRequest) throw new ConvexError('Frame questions require a frame inspection.');
   const requests = await ctx.db.query("analysisRequests").withIndex("by_projectId_runId", q => q.eq("projectId", project._id).eq("aiRunId", args.runId)).take(16);
   if (requests.length >= 15) throw new ConvexError("Too many analysis requests in one AI run");
-  const requestId = await ctx.db.insert("analysisRequests", { ownerId: args.ownerId, projectId: project._id, assetId: asset._id, aiRunId: args.runId, mode: args.mode, status: "pending", createdAt: Date.now(), expiresAt: Date.now() + 240_000 });
-  const taskId = await enqueueMediaTask(ctx, { ownerId: args.ownerId, projectId: project._id, assetId: asset._id, kind: args.mode, analysisRequestId: requestId });
+  const requestId = await ctx.db.insert("analysisRequests", { ownerId: args.ownerId, projectId: project._id, assetId: asset._id, aiRunId: args.runId, mode: args.mode, ...(args.frameRequest ? { frameRequest: args.frameRequest } : {}), status: "pending", createdAt: Date.now(), expiresAt: Date.now() + 240_000 });
+  const taskId = await enqueueMediaTask(ctx, { ownerId: args.ownerId, projectId: project._id, assetId: asset._id, kind: args.mode, analysisRequestId: requestId, ...(args.frameRequest ? { frameRequest: args.frameRequest } : {}) });
   await ctx.db.patch(requestId, { taskId });
   return requestId;
 }});

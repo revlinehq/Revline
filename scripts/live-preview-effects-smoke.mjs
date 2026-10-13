@@ -8,12 +8,17 @@ import puppeteer from 'puppeteer';
 const directory = mkdtempSync(join(tmpdir(), 'revline-live-effects-'));
 const fixture = join(directory, 'footage.mp4');
 execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-f', 'lavfi', '-i', 'testsrc2=size=320x180:rate=30', '-t', '12', '-c:v', 'libx264', '-preset', 'ultrafast', '-pix_fmt', 'yuv420p', '-movflags', '+faststart', fixture]);
+const demoUrl = new URL(process.env.BASE_URL ?? 'http://localhost:3001/editor/demo');
+assert.ok(['localhost', '127.0.0.1'].includes(demoUrl.hostname) && demoUrl.pathname === '/editor/demo', 'Run only the isolated local in-memory demo');
 const browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox', '--disable-dev-shm-usage', '--ignore-certificate-errors'] });
-const page = await browser.newPage();
+const context = await browser.createBrowserContext();
+const page = await context.newPage();
+await page.setRequestInterception(true);
+page.on('request', request => ['GET', 'HEAD', 'OPTIONS'].includes(request.method()) ? request.continue() : request.abort());
 await page.setViewport({ width: 1600, height: 1000 });
 const settle = () => new Promise(resolve => setTimeout(resolve, 250));
 try {
-  await page.goto(process.env.BASE_URL ?? 'http://localhost:3001/editor/demo', { waitUntil: 'networkidle2' });
+  await page.goto(demoUrl.href, { waitUntil: 'networkidle2' });
   await page.evaluate(() => {
     const element = document.querySelector('.timeline-scroll');
     let fiber = element[Object.keys(element).find(key => key.startsWith('__reactFiber$'))];
@@ -26,7 +31,7 @@ try {
     state.edit({ ...state.timeline, clips: [], markers: [] });
   });
   await settle();
-  await page.click('.project-import-stage button');
+  await page.click('.empty-upload button');
   await page.waitForSelector('input[type="file"]');
   await (await page.$('input[type="file"]')).uploadFile(fixture);
   await page.waitForFunction(() => window.testStore.getState().timeline.clips.some(clip => clip.kind === 'video'));

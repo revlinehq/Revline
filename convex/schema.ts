@@ -34,8 +34,10 @@ export const understandingValidator = v.object({ summary: v.string(), scenes: v.
 export const shotsValidator = v.object({ fps: v.number(), shots: v.array(v.object({ start: v.number(), end: v.number(), startFrame: v.number(), endFrame: v.number() })) });
 export const beatsValidator = v.object({ beats: v.array(v.number()), bpm: v.number(), confidence: v.number() });
 export const analysisValidator = v.object({ transcript: v.optional(transcriptValidator), understanding: v.optional(understandingValidator), shots: v.optional(shotsValidator), beats: v.optional(beatsValidator), focus: v.optional(focusValidator) });
-export const analysisMode = v.union(v.literal("transcribe"), v.literal("understand"), v.literal("shots"), v.literal("beats"), v.literal("track"));
-const analysisRequestFields = { ownerId: v.string(), projectId: v.id("projects"), assetId: v.id("assets"), aiRunId: v.string(), mode: analysisMode, taskId: v.optional(v.id('mediaTasks')), status: v.union(v.literal("pending"), v.literal("running"), v.literal("completed"), v.literal("failed")), error: v.optional(v.string()), createdAt: v.number(), expiresAt: v.number() };
+export const frameRequestValidator = v.object({ start: v.number(), end: v.number(), question: v.string() });
+export const frameInspectionValidator = v.object({ ...frameRequestValidator.fields, sourceFps: v.number(), sampleInterval: v.number(), consecutive: v.boolean(), summary: v.string(), uncertainty: v.string(), frames: v.array(v.object({ frameIndex: v.number(), time: v.number(), observation: v.string() })), events: v.array(v.object({ frameIndex: v.number(), time: v.number(), description: v.string(), confidence: v.union(v.literal('low'), v.literal('medium'), v.literal('high')) })) });
+export const analysisMode = v.union(v.literal("transcribe"), v.literal("understand"), v.literal("shots"), v.literal("beats"), v.literal("track"), v.literal('frames'));
+const analysisRequestFields = { ownerId: v.string(), projectId: v.id("projects"), assetId: v.id("assets"), aiRunId: v.string(), mode: analysisMode, frameRequest: v.optional(frameRequestValidator), frameInspection: v.optional(frameInspectionValidator), taskId: v.optional(v.id('mediaTasks')), status: v.union(v.literal("pending"), v.literal("running"), v.literal("completed"), v.literal("failed")), error: v.optional(v.string()), createdAt: v.number(), expiresAt: v.number() };
 export const analysisRequestDocument = v.object({ _id: v.id("analysisRequests"), _creationTime: v.number(), ...analysisRequestFields });
 export const assetFields = {
   ownerId: v.string(), projectId: v.id("projects"), storageId: v.optional(v.id("_storage")), r2Key: v.optional(v.string()), fileName: v.string(),
@@ -75,6 +77,7 @@ export const mediaTaskFields = {
   status: mediaTaskStatus, workflowId: v.optional(v.string()), attempt: v.number(), progress: v.number(),
   outputAssetId: v.optional(v.id('assets')),
   sourceUrl: v.optional(v.string()),
+  frameRequest: v.optional(frameRequestValidator), frameInspection: v.optional(frameInspectionValidator),
   leaseToken: v.optional(v.string()), leaseExpiresAt: v.optional(v.number()), attemptStartedAt: v.optional(v.number()),
   error: v.optional(v.string()), createdAt: v.number(), updatedAt: v.number(),
 };

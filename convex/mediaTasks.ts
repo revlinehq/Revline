@@ -4,7 +4,8 @@ import { vResultValidator, vWorkflowId, type WorkflowId } from '@convex-dev/work
 import { internal } from './_generated/api';
 import { internalMutation, mutation, query, type MutationCtx } from './_generated/server';
 import type { Doc, Id } from './_generated/dataModel';
-import { analysisValidator, assetWithUrl, mediaTaskKind, mediaTaskStatus, timelineValidator, waveformValidator } from './schema';
+import { analysisValidator, assetWithUrl, frameInspectionValidator, frameRequestValidator, mediaTaskKind, mediaTaskStatus, timelineValidator, waveformValidator } from './schema';
+import { validateFrameInspectionResult } from '../lib/media-analysis/frame-inspection';
 import { requireOwner, requireProject } from './lib/auth';
 import { mediaTaskCredentials, requireMediaTask, requireMediaWorker } from './lib/media_task_auth';
 import { mediaWorkflow } from './lib/workflows';
@@ -20,13 +21,13 @@ const MAX_ATTEMPTS = 3;
 const eventResult = v.object({ success: v.boolean(), retryable: v.boolean(), error: v.optional(v.string()) });
 const taskState = v.object({ _id: v.id('mediaTasks'), kind: mediaTaskKind, status: mediaTaskStatus, progress: v.number(), attempt: v.number(), error: v.optional(v.string()), assetId: v.optional(v.id('assets')) });
 const renderSnapshot = v.object({ timeline: timelineValidator, assets: v.array(assetWithUrl), resolution: v.number(), fps: v.number(), quality: v.string() });
-const workItem = v.object({ ...mediaTaskCredentials, projectId: v.id('projects'), kind: mediaTaskKind, sourceUrl: v.optional(v.string()), asset: v.optional(assetWithUrl), outputAssetId: v.optional(v.id('assets')), outputStored: v.optional(v.boolean()), render: v.optional(renderSnapshot), renderJobId: v.optional(v.id('renderJobs')) });
+const workItem = v.object({ ...mediaTaskCredentials, projectId: v.id('projects'), kind: mediaTaskKind, sourceUrl: v.optional(v.string()), frameRequest: v.optional(frameRequestValidator), asset: v.optional(assetWithUrl), outputAssetId: v.optional(v.id('assets')), outputStored: v.optional(v.boolean()), render: v.optional(renderSnapshot), renderJobId: v.optional(v.id('renderJobs')) });
 export type MediaWorkItem = Infer<typeof workItem>;
-export const taskResult = v.object({ analysis: v.optional(analysisValidator), audioAssetId: v.optional(v.id('assets')), waveform: v.optional(waveformValidator) });
+export const taskResult = v.object({ analysis: v.optional(analysisValidator), frameInspection: v.optional(frameInspectionValidator), audioAssetId: v.optional(v.id('assets')), waveform: v.optional(waveformValidator) });
 export type MediaTaskResult = Infer<typeof taskResult>;
 
-export async function enqueueMediaTask(ctx: MutationCtx, input: Pick<Doc<'mediaTasks'>, 'ownerId' | 'projectId' | 'kind'> & Partial<Pick<Doc<'mediaTasks'>, 'assetId' | 'renderJobId' | 'analysisRequestId' | 'sourceUrl'>>): Promise<Id<'mediaTasks'>> {
-  if (input.assetId) {
+export async function enqueueMediaTask(ctx: MutationCtx, input: Pick<Doc<'mediaTasks'>, 'ownerId' | 'projectId' | 'kind'> & Partial<Pick<Doc<'mediaTasks'>, 'assetId' | 'renderJobId' | 'analysisRequestId' | 'sourceUrl' | 'frameRequest'>>): Promise<Id<'mediaTasks'>> {
+  if (input.assetId && input.kind !== 'frames') {
     const existing = await ctx.db.query('mediaTasks').withIndex('by_asset_kind', q => q.eq('assetId', input.assetId).eq('kind', input.kind)).order('desc').take(10);
     const active = existing.find(task => task.status === 'queued' || task.status === 'running' || task.status === 'retrying');
     if (active) { if (input.analysisRequestId) await ctx.db.patch(active._id, { analysisRequestId: input.analysisRequestId }); return active._id; }
@@ -93,6 +94,7 @@ export const start = mutation({ args: { projectId: v.id('projects'), assetId: v.
   const ownerId = await requireOwner(ctx); await requireEditorAccess(ctx, ownerId); await requireProject(ctx, args.projectId, ownerId);
   const asset = await ctx.db.get(args.assetId);
   if (!asset || asset.ownerId !== ownerId || asset.projectId !== args.projectId || asset.kind === 'image' || args.kind === 'render' || args.kind === 'import') throw new ConvexError('Choose media from this project.');
+  if (args.kind === 'frames') throw new ConvexError('Frame inspection requires a scoped AI question and source window.');
   if (['extract', 'shots', 'understand', 'track'].includes(args.kind) && asset.kind !== 'video') throw new ConvexError('This operation requires a video.');
   if (args.kind === 'waveform' && asset.kind !== 'audio') throw new ConvexError('Waveforms require an audio source.');
   return enqueueMediaTask(ctx, { ...args, ownerId });
@@ -163,7 +165,7 @@ export const claim = mutation({ args: { workerSecret: v.string() }, returns: v.u
   await ctx.db.patch(task._id, { status: 'running', leaseToken, leaseExpiresAt: now + LEASE_MS, attemptStartedAt: now, updatedAt: now });
   if (task.analysisRequestId && await ctx.db.get(task.analysisRequestId)) await ctx.db.patch(task.analysisRequestId, { status: 'running' });
   await ctx.scheduler.runAfter(LEASE_MS, internal.mediaTasks.expire, { taskId: task._id, leaseToken });
-  return { taskId: task._id, leaseToken, projectId: task.projectId, kind: task.kind, ...(task.sourceUrl ? { sourceUrl: task.sourceUrl } : {}), ...(asset ? { asset: { ...asset, url: await mediaUrl(ctx, asset) } } : {}), ...(render ? { render, outputStored } : {}), ...(task.renderJobId ? { renderJobId: task.renderJobId } : {}), ...(task.outputAssetId ? { outputAssetId: task.outputAssetId } : {}) };
+  return { taskId: task._id, leaseToken, projectId: task.projectId, kind: task.kind, ...(task.sourceUrl ? { sourceUrl: task.sourceUrl } : {}), ...(task.frameRequest ? { frameRequest: task.frameRequest } : {}), ...(asset ? { asset: { ...asset, url: await mediaUrl(ctx, asset) } } : {}), ...(render ? { render, outputStored } : {}), ...(task.renderJobId ? { renderJobId: task.renderJobId } : {}), ...(task.outputAssetId ? { outputAssetId: task.outputAssetId } : {}) };
 }});
 export const heartbeat = mutation({ args: { ...mediaTaskCredentials, progress: v.optional(v.number()) }, returns: v.null(), handler: async (ctx, args) => {
   const task = await requireMediaTask(ctx, args.taskId, args.leaseToken);
@@ -190,6 +192,7 @@ export const complete = mutation({ args: { ...mediaTaskCredentials, result: task
   if (saved?.status === 'completed' && saved.leaseToken === args.leaseToken) return null;
   const task = await requireMediaTask(ctx, args.taskId, args.leaseToken);
   const asset = task.assetId ? await ctx.db.get(task.assetId) : null;
+  if (args.result.frameInspection && task.kind !== 'frames') throw new ConvexError('Frame evidence belongs to a frame inspection task.');
   if (task.kind === 'render') {
     const job = task.renderJobId ? await ctx.db.get(task.renderJobId) : null;
     if (!job?.outputR2Key) throw new ConvexError('Export has not stored its MP4 yet.');
@@ -206,7 +209,13 @@ export const complete = mutation({ args: { ...mediaTaskCredentials, result: task
     await enqueueMediaTask(ctx, { ownerId: task.ownerId, projectId: task.projectId, assetId: output._id, kind: 'extract' });
   } else {
     if (!asset || asset.ownerId !== task.ownerId || asset.projectId !== task.projectId) throw new ConvexError('Source media was removed.');
-    if (task.kind === 'extract') {
+    if (task.kind === 'frames') {
+      if (!task.frameRequest || !args.result.frameInspection || asset.kind !== 'video') throw new ConvexError('Frame inspection evidence is missing.');
+      if (args.result.analysis || args.result.audioAssetId || args.result.waveform) throw new ConvexError('Frame inspections return visual evidence only.');
+      try { validateFrameInspectionResult(args.result.frameInspection, task.frameRequest); } catch (error) { throw new ConvexError((error as Error).message); }
+      await ctx.db.patch(task._id, { frameInspection: args.result.frameInspection });
+      if (task.analysisRequestId && await ctx.db.get(task.analysisRequestId)) await ctx.db.patch(task.analysisRequestId, { frameInspection: args.result.frameInspection });
+    } else if (task.kind === 'extract') {
       if (asset.audioExtracted) {
         if (args.result.audioAssetId !== asset.audioAssetId) throw new ConvexError('Audio output does not match the prepared source.');
       } else if (args.result.audioAssetId !== task.outputAssetId) throw new ConvexError('Extracted audio must be the output of this task.');

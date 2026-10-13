@@ -6,7 +6,7 @@ import type { MediaWorkItem, MediaTaskResult } from '@/convex/mediaTasks';
 import { generateComposition } from '@/lib/editor/composition';
 import { dimensions, timelineDuration, type MediaAsset } from '@/lib/editor/types';
 import { downloadOwnedMedia, extractPcm, extractSpeechAudio, prepareVideo, probeMedia } from '@/lib/media-analysis/io';
-import { transcribeAudio } from '@/lib/media-analysis/gemini';
+import { inspectVideoFrames, transcribeAudio } from '@/lib/media-analysis/gemini';
 import { understandVideo } from '@/lib/media-analysis/twelvelabs';
 import { detectShots } from '@/lib/media-analysis/detect-shots';
 import { detectBeats } from '@/lib/media-analysis/beats';
@@ -17,6 +17,7 @@ import { measureAudioWaveform } from './audio-waveform';
 import { uploadMediaFile } from './upload-media-file';
 import { runRenderWorker } from './render-worker';
 import { importVideoLink } from './import-video-link';
+import { extractInspectionFrames } from './inspect-video-frames';
 
 export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpClient, convexUrl: string, signal: AbortSignal, onProgress: (percent: number) => void): Promise<MediaTaskResult> {
   const directory = await mkdtemp(join(tmpdir(), 'revline-task-'));
@@ -72,6 +73,14 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
     }
     if (task.kind === 'waveform') return { waveform: await measureAudioWaveform(source, signal) };
     const media = await probeMedia(source, signal);
+    if (task.kind === 'frames') {
+      if (!media.hasVideo || !task.frameRequest) throw new AnalysisError('Frame inspection needs a video window and a question.', 400);
+      const key = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+      if (!key) throw new AnalysisError('Gemini frame inspection is not configured on the media worker.', 503);
+      const { sourceFps, images } = await extractInspectionFrames(source, directory, task.frameRequest, media.duration, signal);
+      onProgress(60);
+      return { frameInspection: await inspectVideoFrames(images, sourceFps, task.frameRequest, key, signal) };
+    }
     if (task.kind === 'transcribe') {
       if (!media.hasAudio) throw new AnalysisError('This source has no audio to transcribe.', 400);
       const key = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
