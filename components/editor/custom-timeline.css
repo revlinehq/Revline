@@ -64,8 +64,8 @@ html[data-workspace-theme=dark] .editor-app:not(.landing-product-demo) .custom-t
 html[data-workspace-theme=dark] .editor-app:not(.landing-product-demo) .custom-timeline .timeline-insert-indicator{border-top-color:var(--timeline-marquee-border)}
 html[data-workspace-theme=dark] .editor-app:not(.landing-product-demo) .custom-timeline .timeline-insert-indicator>span{background:#303d56;color:#d8e0ef}
 html[data-workspace-theme=dark] .editor-app:not(.landing-product-demo) .custom-timeline .timeline-insert-indicator:before{background:var(--timeline-marquee-border)}
-.custom-timeline .playhead{width:1px;background:#009DFF;pointer-events:none}
-.custom-timeline .playhead::before{height:28px;bottom:auto;left:-21px;width:44px;pointer-events:auto}
+.custom-timeline .playhead{width:1px;background:#009DFF;pointer-events:none;z-index:12}
+.custom-timeline .playhead::before{content:none}
 .custom-timeline .time-ruler{position:sticky;top:0;z-index:11;touch-action:none}
 .custom-timeline.timeline-collapsed{height:56px!important;padding:8px 12px}
 .custom-timeline.timeline-collapsed .timeline-body{display:none}
