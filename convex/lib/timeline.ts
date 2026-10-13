@@ -72,6 +72,7 @@ export async function validateTimeline(ctx: MutationCtx | QueryCtx, project: Doc
     for (const value of [clip.color, clip.background]) if (value !== undefined && !/^(#(?:[\da-f]{3,4}|[\da-f]{6}|[\da-f]{8})|transparent)$/i.test(value)) throw new ConvexError("Colors must use a hex value or transparent");
     if ((clip.text?.length ?? 0) > 2000) throw new ConvexError("Text clips support up to 2000 characters");
     if (clip.focus && clip.kind !== "video") throw new ConvexError("Subject tracking applies to video clips only");
+    if (clip.kind === 'effect') continue;
     if (clip.kind === "caption" || clip.kind === "graphic") {
       if (clip.text === undefined || clip.assetId) throw new ConvexError("Text clips need text and cannot reference media");
       continue;

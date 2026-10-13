@@ -1,4 +1,4 @@
-import { offsetClipMotion } from './clip-effects';
+import { EFFECT_CATALOG, motionPreset, offsetClipMotion, type EffectPreset } from './clip-effects';
 import { TimelineGestureRejection } from './timeline-edit-errors';
 import { Clip, Timeline, timelineDuration, layerGroup, trackOf, deriveTrackCounts, normalizeTimeline, maxTrackCount } from './types';
 export function snapTime(time: number, fps: number) { return Math.round(Math.max(0, time) * fps) / fps; }
@@ -38,7 +38,7 @@ export function splitClip(timeline: Timeline, clipId: string, time: number, newI
   const pairId = `${newId}-audio`;
   return { ...timeline, clips: timeline.clips.flatMap(c => c.id !== clipId && c.id !== pair?.id ? [c] : [
     { ...c, duration: offset },
-    { ...c, ...offsetClipMotion(c, offset), id: c.id === clipId ? newId : pairId, linkedClipId: pair ? c.id === clipId ? pairId : newId : undefined, start: c.start + offset, sourceStart: c.sourceStart + offset, duration: tail },
+    { ...c, ...offsetClipMotion(c, offset), id: c.id === clipId ? newId : pairId, linkedClipId: pair ? c.id === clipId ? pairId : newId : undefined, start: c.start + offset, sourceStart: c.kind === 'effect' ? 0 : c.sourceStart + offset, duration: tail },
   ]) };
 }
 export function patchClip(timeline: Timeline, id: string, patch: Partial<Clip>): Timeline {
@@ -92,6 +92,21 @@ export function separateVideoClips(timeline: Timeline, asset: { _id: string; aud
 export function addTextClip(timeline: Timeline, id: string, kind: 'caption' | 'graphic', at: number): Timeline {
   timeline = normalizeTimeline(timeline);
   return placeOnFreeLayer(timeline, { id, kind, start: at, duration: Math.min(3, Math.max(1, timelineDuration(timeline) - at)), sourceStart: 0, text: kind === 'caption' ? 'Your words here.' : 'MAKE ROOM FOR YOUR NEXT IDEA.', fontSize: kind === 'caption' ? 52 : 92, color: '#F4F4F0', background: kind === 'caption' ? '#0B0C0E' : 'transparent', x: 0.5, y: kind === 'caption' ? 0.82 : 0.55, animation: 'none' });
+}
+/** An adjustment clip affects the composited V tracks below it only during its own range. */
+export function addEffectClip(timeline: Timeline, id: string, preset: EffectPreset, at: number, options: { duration?: number; aboveClipId?: string; track?: number } = {}): Timeline {
+  timeline = normalizeTimeline(timeline);
+  if (!Number.isFinite(at) || at < 0) throw new Error('Choose a valid effect position.');
+  const requestedDuration = options.duration ?? EFFECT_CATALOG[preset].duration;
+  if (!Number.isFinite(requestedDuration) || requestedDuration < 1 / timeline.fps) throw new Error('An effect must last at least one frame.');
+  const start = snapTime(at, timeline.fps), duration = Math.max(1 / timeline.fps, snapTime(requestedDuration, timeline.fps));
+  const target = options.aboveClipId ? timeline.clips.find(clip => clip.id === options.aboveClipId) : undefined;
+  if (options.aboveClipId && (!target || target.kind === 'audio')) throw new Error('Choose a visual clip beneath the effect.');
+  const beneath = timeline.clips.filter(clip => clip.kind !== 'audio' && clip.start < start + duration && clip.start + clip.duration > start);
+  const track = options.track ?? (target ? trackOf(target) + 1 : Math.max(0, ...beneath.map(trackOf)) + 1);
+  if (!Number.isInteger(track) || track < 1 || track > maxTrackCount('visual')) throw new Error('Make room for a visual track above the footage.');
+  const clip: Clip = { id, kind: 'effect', track, start, duration, sourceStart: 0 };
+  return placeOnFreeLayer(timeline, { ...clip, ...motionPreset(clip, preset) });
 }
 /** Keep overlapping clips separate; an existing ID moves rather than duplicates. */
 export function placeOnFreeLayer(timeline: Timeline, clip: Clip): Timeline {

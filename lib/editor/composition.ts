@@ -1,4 +1,4 @@
-import { validateClipEffects, visibleMotion, type MotionKeyframe } from './clip-effects';
+import { NEUTRAL_MOTION, validateClipEffects, visibleMotion, type MotionKeyframe } from './clip-effects';
 import { MAX_CLIP_VOLUME } from './clip-volume';
 import { dimensions, timelineDuration, deriveTrackCounts, normalizeTimeline, trackOf, DEFAULT_CROP, DEFAULT_TRANSFORM, type Clip, type MediaAsset, type Timeline, type SourceCrop } from './types';
 
@@ -91,6 +91,13 @@ export function generateComposition(timeline: Timeline, assets: MediaAsset[], op
   deriveTrackCounts(timeline);
   const scale = resolution / 1080;
   const animation: string[] = [];
+  function animateKeys(selector: string, clip: Clip, motion: MotionKeyframe[], vars: (key: MotionKeyframe) => Record<string, string | number>, neutral: MotionKeyframe, ease = 'none') {
+    if (!motion.length) return;
+    if (clip.kind === 'effect') animation.push(`timeline.set('${selector}',${JSON.stringify(vars(neutral))},0);`);
+    animation.push(`timeline.set('${selector}',${JSON.stringify(vars(motion[0]))},${clip.kind === 'effect' ? clip.start : 0});`);
+    for (let k = 1; k < motion.length; k++) animation.push(`timeline.fromTo('${selector}',${JSON.stringify(vars(motion[k - 1]))},${JSON.stringify({ ...vars(motion[k]), duration: motion[k].time - motion[k - 1].time, ease, immediateRender: false })},${clip.start + motion[k - 1].time});`);
+    if (clip.kind === 'effect') animation.push(`timeline.set('${selector}',${JSON.stringify(vars(neutral))},${clip.start + clip.duration});`);
+  }
   const nodes = timeline.clips.map((clip, index) => {
     validateClip(clip);
     validateClipEffects(clip);
@@ -99,10 +106,12 @@ export function generateComposition(timeline: Timeline, assets: MediaAsset[], op
     const end = start + clip.duration;
     const motion = visibleMotion(clip);
     const motionVars = (key: MotionKeyframe) => ({ x: key.x * width, y: key.y * height, scale: key.scale, rotation: key.rotation, opacity: key.opacity, filter: `brightness(${key.brightness})` });
-    if (motion.length) {
-      animation.push(`timeline.set('#${id}-motion',${JSON.stringify(motionVars(motion[0]))},0);`);
-      for (let k = 1; k < motion.length; k++) animation.push(`timeline.fromTo('#${id}-motion',${JSON.stringify(motionVars(motion[k - 1]))},${JSON.stringify({ ...motionVars(motion[k]), duration: motion[k].time - motion[k - 1].time, ease: 'none', immediateRender: false })},${start + motion[k - 1].time});`);
-    }
+    if (clip.kind === 'effect' && clip.effectPreset === 'cinematic-bars') {
+      for (const side of ['top', 'bottom'] as const) animateKeys(`#${id}-bar-${side}`, clip, motion, key => ({ y: 0, yPercent: (side === 'top' ? -100 : 100) * (1 - key.opacity) }), { time: 0, ...NEUTRAL_MOTION, opacity: 0 }, 'power2.inOut');
+    } else animateKeys(`#${id}-motion`, clip, motion, motionVars, { time: 0, ...NEUTRAL_MOTION });
+    // Adjustment wrappers are always mounted. A timed HyperFrames root would
+    // hide all the footage it contains before and after the effect range.
+    if (clip.kind === 'effect') return '';
     const trackIndex = compositionTrackIndex(clip);
     const zIndex = layerZIndex(clip, index);
     // HyperFrames activates data-start/data-duration clip roots. Animations target
@@ -158,7 +167,24 @@ export function generateComposition(timeline: Timeline, assets: MediaAsset[], op
     if (clip.kind === 'image') return frame(`<img ${attrs} src="${src}" class="visual" style="${sourceStyle}" alt="" />`);
     if (clip.kind === 'audio') return `<audio ${attrs} crossorigin="anonymous" src="${src}" preload="auto"></audio>`;
     return frame(`<video ${attrs} crossorigin="anonymous" src="${src}" class="visual" style="${sourceStyle}" playsinline preload="auto"${volume === 0 ? ' muted' : ''}></video>`);
-  }).join('\n');
+  });
+  let compositionNodes = nodes.join('\n');
+  if (timeline.clips.some(clip => clip.kind === 'effect')) {
+    let visualStack = '';
+    for (let track = 1; track <= 24; track++) {
+      // Wrap the accumulated lower tracks before adding visuals on this track.
+      // A title above an effect stays crisp; audio stays outside every wrapper.
+      timeline.clips.forEach((clip, index) => {
+        if (clip.kind !== 'effect' || trackOf(clip) !== track) return;
+        const bars = clip.effectPreset === 'cinematic-bars' ? `<div class="cinematic-bars"><div id="clip-${index}-bar-top" class="cinematic-bar top"></div><div id="clip-${index}-bar-bottom" class="cinematic-bar bottom"></div></div>` : '';
+        visualStack = `<div id="clip-${index}-motion" data-effect-clip="${escapeHtml(clip.id)}" class="adjustment-layer" style="z-index:${track * 256 - 1}">${visualStack}${bars}</div>`;
+      });
+      timeline.clips.forEach((clip, index) => {
+        if (clip.kind !== 'audio' && clip.kind !== 'effect' && trackOf(clip) === track) visualStack += nodes[index];
+      });
+    }
+    compositionNodes = visualStack + timeline.clips.map((clip, index) => clip.kind === 'audio' ? nodes[index] : '').join('');
+  }
   const safeDuration = Math.max(duration, 1 / fps);
   const gsapUrl = mediaUrl(options.gsapUrl ?? '/vendor/gsap.min.js');
   const defaultFontUrl = /^https?:/i.test(options.gsapUrl ?? '') ? new URL('/fonts/space-grotesk-latin.woff2', options.gsapUrl).href : '/fonts/space-grotesk-latin.woff2';
@@ -166,7 +192,9 @@ export function generateComposition(timeline: Timeline, assets: MediaAsset[], op
   return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>
 @font-face{font-family:'Space Grotesk';font-style:normal;font-weight:300 700;font-display:block;src:url('${fontUrl}') format('woff2')}
 html,body{margin:0;width:${width}px;height:${height}px;overflow:hidden;background:#0B0C0E;font-family:'Space Grotesk',Arial,Helvetica,sans-serif}*{box-sizing:border-box}#composition{isolation:isolate;position:relative;width:${width}px;height:${height}px;overflow:hidden;background:#0B0C0E}.visual-frame{position:absolute;width:${width}px;height:${height}px;overflow:hidden;transform-origin:center}.motion-frame{width:100%;height:100%;transform-origin:center}.text-motion{display:inline-block}.source-window{position:absolute;overflow:hidden}.visual{position:absolute}.overlay{position:absolute;max-width:90%;width:max-content;transform:translate(-50%,-50%);font-weight:700;line-height:1.12;text-align:center;white-space:pre-wrap;overflow-wrap:anywhere}.text-content{display:inline-block;padding:${10 * scale}px ${18 * scale}px;border-radius:${8 * scale}px}.caption{text-shadow:0 2px 12px #0009}audio{position:absolute}
-</style><script src="${gsapUrl}"></script></head><body><div id="composition" data-composition-id="revline" data-duration="${safeDuration}" data-width="${width}" data-height="${height}" data-fps="${fps}">${nodes}</div><script>
+.adjustment-layer{position:absolute;inset:0;transform-origin:center;pointer-events:none}
+.cinematic-bars{position:absolute;inset:0;overflow:hidden;z-index:2147483647;pointer-events:none}.cinematic-bar{position:absolute;left:0;right:0;height:12%;background:#000}.cinematic-bar.top{top:0;transform:translateY(-100%)}.cinematic-bar.bottom{bottom:0;transform:translateY(100%)}
+</style><script src="${gsapUrl}"></script></head><body><div id="composition" data-composition-id="revline" data-duration="${safeDuration}" data-width="${width}" data-height="${height}" data-fps="${fps}">${compositionNodes}</div><script>
 const timeline=gsap.timeline({paused:true});
 ${animation.join('\n')}
 timeline.to({},{duration:${safeDuration}},0);

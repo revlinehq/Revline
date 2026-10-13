@@ -7,7 +7,7 @@ export const waveformValidator = v.object({ peaks: v.string(), samplesPerSecond:
 export const focusValidator = v.array(v.object({ time: v.number(), x: v.number(), y: v.number() }));
 export const motionKeyframeValidator = v.object({ time: v.number(), x: v.number(), y: v.number(), scale: v.number(), rotation: v.number(), opacity: v.number(), brightness: v.number() });
 export const clipValidator = v.object({
-  id: v.string(), kind: v.union(assetKind, v.literal("caption"), v.literal("graphic")),
+  id: v.string(), kind: v.union(assetKind, v.literal("caption"), v.literal("graphic"), v.literal("effect")),
   assetId: v.optional(v.string()), focus: v.optional(focusValidator), track: v.optional(v.number()), start: v.number(), duration: v.number(), sourceStart: v.number(),
   transform: v.optional(v.object({ x: v.number(), y: v.number(), scale: v.number(), rotation: v.number(), opacity: v.number() })),
   crop: v.optional(v.object({ top: v.number(), right: v.number(), bottom: v.number(), left: v.number() })),
@@ -17,6 +17,7 @@ export const clipValidator = v.object({
   linkedClipId: v.optional(v.string()), audioSeparated: v.optional(v.boolean()),
   blendMode: v.optional(v.union(v.literal("normal"), v.literal("screen"), v.literal("multiply"), v.literal("overlay"), v.literal("plus-lighter"))),
   motion: v.optional(v.array(motionKeyframeValidator)), motionOffset: v.optional(v.number()),
+  effectPreset: v.optional(v.union(v.literal('none'), v.literal('fade'), v.literal('punch'), v.literal('shake'), v.literal('flash'), v.literal('pop'), v.literal('cinematic-bars'))),
   animation: v.optional(v.union(v.literal("none"), v.literal("fade"), v.literal("rise"))),
 });
 export const timelineMarkerValidator = v.object({ id: v.string(), time: v.number(), label: v.optional(v.string()) });

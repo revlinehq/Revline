@@ -17,3 +17,10 @@ test('cuts, transforms, source dimensions and actual media URLs invalidate rende
   expect(previewContentKey(timeline, [{ ...asset, width: 1080 }])).not.toBe(key);
   expect(previewContentKey(timeline, [{ ...asset, url: '/new.mp4' }])).not.toBe(key);
 });
+
+test('moving footage above or below an effect rebuilds the composition hierarchy', () => {
+  const adjusted = { ...timeline, clips: [...timeline.clips, { id: 'flash', kind: 'effect' as const, track: 2, start: 1, duration: .5, sourceStart: 0, effectPreset: 'flash' as const }] };
+  const key = previewContentKey(adjusted, [asset]);
+  expect(previewContentKey({ ...adjusted, clips: adjusted.clips.map(clip => clip.id === 'v' ? { ...clip, track: 3 } : clip) }, [asset])).not.toBe(key);
+  expect(previewContentKey({ ...adjusted, markers: [{ id: 'drop', time: 1 }] }, [asset])).toBe(key);
+});

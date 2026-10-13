@@ -1,6 +1,6 @@
-import type { BlendMode, MotionKeyframe } from './clip-effects';
+import type { BlendMode, EffectPreset, MotionKeyframe } from './clip-effects';
 export type AspectRatio = 'vertical' | 'portrait-feed' | 'square' | 'classic' | 'landscape';
-export type ClipKind = 'video' | 'image' | 'audio' | 'caption' | 'graphic';
+export type ClipKind = 'video' | 'image' | 'audio' | 'caption' | 'graphic' | 'effect';
 export type LayerGroup = 'visual' | 'overlay' | 'audio';
 export type TrackCounts = Record<LayerGroup, number>;
 export type VisualTransform = { x: number; y: number; scale: number; rotation: number; opacity: number };
@@ -27,6 +27,7 @@ export type Clip = {
   blendMode?: BlendMode;
   motion?: MotionKeyframe[];
   motionOffset?: number;
+  effectPreset?: EffectPreset | 'none';
   animation?: 'none' | 'fade' | 'rise';
   focus?: {time:number;x:number;y:number}[];
   transform?: VisualTransform;
@@ -66,7 +67,7 @@ export function trackOf(clip: Pick<Clip, 'kind' | 'track'>) { return validTrack(
 /** Zero legacy overlay rows marks the shared V-track model, without a schema migration. */
 export function normalizeTimeline(timeline: Timeline): Timeline {
   if (timeline.tracks?.overlay === 0) return timeline;
-  const visuals = timeline.clips.filter(clip => clip.kind === 'video' || clip.kind === 'image');
+  const visuals = timeline.clips.filter(clip => clip.kind === 'video' || clip.kind === 'image' || clip.kind === 'effect');
   const text = timeline.clips.filter(clip => clip.kind === 'caption' || clip.kind === 'graphic');
   const audio = timeline.clips.filter(clip => clip.kind === 'audio');
   const visualCount = Math.max(validCount(timeline.tracks?.visual ?? 1), ...visuals.map(clip => validTrack(clip.track ?? 1, 12)));
@@ -92,7 +93,7 @@ export function deriveTrackCounts(timeline: Timeline): TrackCounts {
   return counts;
 }
 export function clipColor(kind: ClipKind) {
-  return kind === 'caption' ? '#5DBAA0' : kind === 'graphic' ? '#BA5D7A' : kind === 'audio' ? '#8F5DBA' : '#303030';
+  return kind === 'effect' ? '#AB7A32' : kind === 'caption' ? '#5DBAA0' : kind === 'graphic' ? '#BA5D7A' : kind === 'audio' ? '#8F5DBA' : '#303030';
 }
 export function deriveTracks(timeline: Timeline) {
   const counts = deriveTrackCounts(timeline);

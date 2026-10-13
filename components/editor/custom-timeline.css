@@ -93,3 +93,5 @@ html[data-workspace-theme=dark] .editor-app:not(.landing-product-demo) .custom-t
 .custom-timeline .timeline-beat-marker path{fill:currentColor;stroke:currentColor;stroke-width:1.5;stroke-linejoin:round}
 .custom-timeline .timeline-beat-marker:hover,.custom-timeline .timeline-beat-marker:focus-visible{color:#f4a344;filter:drop-shadow(0 0 2px #e68a2833)}
 .custom-timeline .timeline-beat-marker:focus-visible{outline:1px solid currentColor;border-radius:3px}
+.custom-timeline .timeline-clip.clip-effect>span{gap:5px;font-size:10px;font-weight:500;color:#2d1d05}
+.custom-timeline .timeline-clip.clip-effect>span svg{flex-shrink:0}

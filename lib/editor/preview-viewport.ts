@@ -70,7 +70,7 @@ export function previewClipAtPoint(timeline: Timeline, assets: MediaAsset[], tim
   const assetMap = new Map(assets.map(asset => [asset._id, asset]));
   const textMap = new Map(textBounds.map(value => [value.id, value.rect]));
   const active = timeline.clips.map((clip, index) => ({clip, z: layerZIndex(clip, index)}))
-    .filter(({clip}) => clip.kind !== 'audio' && time >= clip.start && time < clip.start + clip.duration && (clip.kind === 'caption' || clip.kind === 'graphic' || (clip.transform?.opacity ?? 1) > 0))
+    .filter(({clip}) => clip.kind !== 'audio' && clip.kind !== 'effect' && time >= clip.start && time < clip.start + clip.duration && (clip.kind === 'caption' || clip.kind === 'graphic' || (clip.transform?.opacity ?? 1) > 0))
     .sort((a, b) => b.z - a.z);
   for (const {clip} of active) {
     if (clip.kind === 'caption' || clip.kind === 'graphic') {

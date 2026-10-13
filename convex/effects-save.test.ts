@@ -4,8 +4,8 @@ import workflowTest from '@convex-dev/workflow/test';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import schema from './schema';
 import { api } from './_generated/api';
-import { BLEND_MODES, MOTION_PRESETS, motionPreset } from '../lib/editor/clip-effects';
-import { addMediaClip, patchClip } from '../lib/editor/operations';
+import { BLEND_MODES, EFFECT_PRESETS, MOTION_PRESETS, motionPreset } from '../lib/editor/clip-effects';
+import { addEffectClip, addMediaClip, patchClip, splitClip } from '../lib/editor/operations';
 import { EMPTY_TIMELINE } from '../lib/editor/types';
 
 const modules = import.meta.glob('./**/*.ts');
@@ -51,6 +51,20 @@ test('effect saves still reject another owner and invalid motion values', async 
   await expect(f.t.withIdentity({ subject: 'stranger' }).mutation(api.projects.saveTimeline, { projectId: f.projectId, timeline, expectedRevision: 0 })).rejects.toThrow('Project not found');
   timeline.clips[0].motion![1].scale = 100;
   await expect(f.owner.mutation(api.projects.saveTimeline, { projectId: f.projectId, timeline, expectedRevision: 0 })).rejects.toThrow('Motion scale is out of range');
+});
+
+test.each(EFFECT_PRESETS)('independent %s effect clips persist without media and survive splitting', async preset => {
+  const f = await fixture();
+  const base = addMediaClip(EMPTY_TIMELINE, f.asset, 'video', 600);
+  const next = addEffectClip(base, 'effect', preset, 610, { aboveClipId: 'video', duration: 2 });
+  await f.owner.mutation(api.projects.saveTimeline, { projectId: f.projectId, timeline: next, expectedRevision: 0 });
+  const split = splitClip(next, 'effect', 611, 'tail');
+  await f.owner.mutation(api.projects.saveTimeline, { projectId: f.projectId, timeline: split, expectedRevision: 1 });
+  const saved = (await f.owner.query(api.projects.get, { projectId: f.projectId })).timeline!;
+  expect(saved.clips.find(clip => clip.id === 'video')).toEqual(base.clips[0]);
+  expect(saved.clips.find(clip => clip.id === 'tail')).toMatchObject({ kind: 'effect', effectPreset: preset, start: 611, duration: 1, motionOffset: 1, sourceStart: 0 });
+  const invalid = patchClip(split, 'tail', { assetId: f.asset._id });
+  await expect(f.owner.mutation(api.projects.saveTimeline, { projectId: f.projectId, timeline: invalid, expectedRevision: 2 })).rejects.toThrow('cannot reference media');
 });
 
 test('a stored video import appends after five minutes once, without discarding the current effects', async () => {
