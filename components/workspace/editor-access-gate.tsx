@@ -1,9 +1,8 @@
 'use client';
 
 import { useRef, useState, type ReactNode } from 'react';
-import Link from 'next/link';
 import { useAction, useConvexAuth, useQuery } from 'convex/react';
-import { LoaderCircle } from 'lucide-react';
+import { Check, LoaderCircle } from 'lucide-react';
 import { api } from '@/convex/_generated/api';
 import { EDITOR_PLAN } from '@/lib/billing/plan';
 import { PrimaryButton } from './primary-button';
@@ -43,15 +42,20 @@ export function EditorAccessGate({ children }: { children: ReactNode }) {
         <h1 id="editor-access-title">{status.needsPayment ? 'Update your payment method' : status.trialEligible ? `Try Revline free for ${EDITOR_PLAN.trialDays} days` : 'Subscribe to Revline'}</h1>
         {status.needsPayment && <p>Update your payment method to restore editor access.</p>}
         <div className="editor-access-price"><strong>${EDITOR_PLAN.monthlyPrice}</strong><span>/ month{status.trialEligible ? ' after your trial' : ''} · {EDITOR_PLAN.currency}</span></div>
+        <ul className="editor-access-features" aria-label="Included features">
+          <li><Check size={16} strokeWidth={1.5} aria-hidden="true" />AI editing in chat</li>
+          <li><Check size={16} strokeWidth={1.5} aria-hidden="true" />Automatic captions</li>
+          <li><Check size={16} strokeWidth={1.5} aria-hidden="true" />Private uploads</li>
+          <li><Check size={16} strokeWidth={1.5} aria-hidden="true" />MP4 exports</li>
+        </ul>
         {!status.configured && <p role="status">Billing is temporarily unavailable. Please try again shortly.</p>}
-        <PrimaryButton disabled={busy || !status.configured} onClick={() => void openCheckout()}>
+        <PrimaryButton className="editor-access-start" disabled={busy || !status.configured} onClick={() => void openCheckout()}>
           {busy && <LoaderCircle size={14} className="animate-spin" />}
           {status.needsPayment ? 'Update payment method' : status.trialEligible ? `Start ${EDITOR_PLAN.trialDays}-day free trial` : 'Subscribe'}
         </PrimaryButton>
         <small>{status.trialEligible ? 'A payment method is required. Cancel before your trial ends to avoid a charge.' : 'Cancel anytime in billing.'}</small>
         {error && <p className="editor-access-error" role="alert">{error}</p>}
       </section>
-      <nav aria-label="Account"><Link href="/chats">Your projects</Link><Link href="/profile#billing">Manage billing</Link></nav>
     </main>
   </div>;
 }
