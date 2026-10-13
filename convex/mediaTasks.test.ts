@@ -5,7 +5,6 @@ import stripeTest from '@convex-dev/stripe/test';
 import { beforeEach, afterEach, expect, test, vi } from 'vitest';
 import schema from './schema';
 import { api, internal } from './_generated/api';
-import type { Id } from './_generated/dataModel';
 
 const modules = import.meta.glob('./**/*.ts');
 const identity = (subject: string) => ({ subject, issuer: 'https://test.clerk.accounts.dev', tokenIdentifier: `https://test.clerk.accounts.dev|${subject}` });

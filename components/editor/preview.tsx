@@ -12,6 +12,7 @@ import { useEditorState } from './editor-state';
 import { previewClipAtPoint, type PreviewTextBounds } from '@/lib/editor/preview-viewport';
 import { projectPreviewBounds } from '@/lib/editor/preview-zoom';
 import type { SourceCrop } from '@/lib/editor/types';
+import { previewContentKey } from '@/lib/editor/preview-content-key';
 function LiveTextControls(props: Omit<React.ComponentProps<typeof TextControls>, 'time'>) {
   const time=useEditorState(state=>state.playhead);
   return <TextControls {...props} time={time}/>;
@@ -32,7 +33,7 @@ export const Preview = forwardRef<PreviewHandle,{timeline:Timeline;assets:MediaA
   clipIndex.current=useMemo(()=>new Map(timeline.clips.map((clip,index)=>[clip.id,{clip,index}])),[timeline.clips]);
   const previewVolumes=useRef(new Map<string,number>());
   // Layer order and gain update in place without rebuilding or decoding footage.
-  const contentKey=useMemo(()=>JSON.stringify({timeline:{...timeline,tracks:undefined,clips:timeline.clips.map(({track,volume,...clip})=>clip)},assets:assets.map(asset=>({...asset,url:asset.url?.split('?token=')[0]??null}))}),[timeline,assets]);
+  const contentKey=useMemo(()=>previewContentKey(timeline,assets),[timeline,assets]);
   function updateClip(p:HyperframesPlayer,clip:Clip,index:number){
     const doc=p.iframeElement?.contentDocument;if(!doc)return;
     const node=doc.getElementById(`clip-${index}`);if(!node)return;
@@ -55,12 +56,13 @@ export const Preview = forwardRef<PreviewHandle,{timeline:Timeline;assets:MediaA
   }
   useEffect(()=>{previewVolumes.current.clear();if(player.current)updateLayers(player.current,latestTimeline.current);},[committedTimeline]);
   useEffect(()=>()=>{player.current?.pause();player.current?.remove();player.current=null;callbacks.current.onPlaying(false);},[]);
+  const [transformId,setTransformId]=useState<string|null>(null);
+  useEffect(()=>{setTransformId(current=>cropping||current!==selectedClip?.id?null:current);},[selectedClip?.id,cropping]);
   const [selectionVisible,setSelectionVisible]=useState(false);const selection=useRef(selectedClip);selection.current=selectedClip;
   const selectionAt=(time:number)=>{const clip=selection.current;return !!clip&&(clip.kind==='video'||clip.kind==='image')&&time>=clip.start&&time<clip.start+clip.duration;};
   useEffect(()=>setSelectionVisible(selectionAt(seekPosition.current)),[selectedClip]);
   function previewTransform(transform:VisualTransform){
     const p=player.current;const document=p?.iframeElement?.contentDocument;if(!p||!document||!selectedClip)return;
-    p.pause();
     const composition=document.getElementById('composition');
     const frame=Array.from(document.querySelectorAll<HTMLElement>('[data-visual-clip]')).find(node=>node.dataset.visualClip===selectedClip.id);
     if(!composition||!frame)return;
@@ -110,7 +112,7 @@ export const Preview = forwardRef<PreviewHandle,{timeline:Timeline;assets:MediaA
     ? calculateVisualRect(asset.width,asset.height,canvas.width,canvas.height,selectedClip.crop,undefined,selectedClip.fit).window
     : {left:0,top:0,width:canvas.width,height:canvas.height};
   const cropActive=cropping&&ready&&selectedClip&&(selectedClip.kind==='image'||selectedClip.kind==='video')&&asset?.width&&asset?.height&&onCropCommit&&onCropCancel;
-  return <div className={`preview-canvas aspect-${timeline.aspectRatio}`} data-testid="preview"><div ref={container} className="hyperframes-host"/>{ready&&!cropActive&&onSelectClip&&<button type="button" className="preview-hit-surface" aria-label="Select footage in preview" onClick={event=>{
+  return <div className={`preview-canvas aspect-${timeline.aspectRatio}`} data-testid="preview"><div ref={container} className="hyperframes-host"/>{ready&&!cropActive&&onSelectClip&&<button type="button" className="preview-hit-surface" aria-label="Select footage in preview" title="Double-click to transform" onClick={event=>{
     event.stopPropagation();const rect=event.currentTarget.getBoundingClientRect();
     const point=event.detail===0?{x:canvas.width/2,y:canvas.height/2}:{x:(event.clientX-rect.left)/rect.width*canvas.width,y:(event.clientY-rect.top)/rect.height*canvas.height};
     const doc=player.current?.iframeElement?.contentDocument,composition=doc?.getElementById('composition')?.getBoundingClientRect();
@@ -119,8 +121,10 @@ export const Preview = forwardRef<PreviewHandle,{timeline:Timeline;assets:MediaA
       const node=doc?.getElementById(`clip-${index}`);return node?[{id:clip.id,rect:projectPreviewBounds(node.getBoundingClientRect(),composition,canvas)}]:[];
     }):[];
     const hit=previewClipAtPoint(timeline,assets,frameTime(player.current,seekPosition.current),point,textBounds);
-    player.current?.pause();onSelectClip(hit?.id??null);
-  }} onKeyDown={event=>{if(event.key===' '||event.key==='Enter')event.stopPropagation();}}/>}{ready&&!cropActive&&selectionVisible&&selectedClip&&onVisualChange&&<div style={{position:'absolute',inset:0,pointerEvents:'none',zIndex:layerZIndex(selectedClip,timeline.clips.findIndex(clip=>clip.id===selectedClip.id))}}><VisualHandles key={selectedClip.id} clip={selectedClip} canvas={canvas} contentRect={contentRect} onPreview={previewTransform} onCommit={transform=>onVisualChange({transform})}/></div>} {ready&&!cropActive&&onSelectClip&&onClipChange&&<LiveTextControls timeline={timeline} assets={assets} revision={revision} selected={selectedClip?.id} getDocument={()=>player.current?.iframeElement?.contentDocument??null} onSelect={onSelectClip} onCommit={onClipChange} onEdit={onEditText} onPause={()=>player.current?.pause()}/>}
+    if(event.detail===2||event.detail===0)setTransformId(hit?.id??null);
+    else if(hit?.id!==selectedClip?.id)setTransformId(null);
+    onSelectClip(hit?.id??null);
+  }} onKeyDown={event=>{if(event.key===' '||event.key==='Enter')event.stopPropagation();}}/>}{ready&&!cropActive&&selectionVisible&&selectedClip&&transformId===selectedClip.id&&onVisualChange&&<div style={{position:'absolute',inset:0,pointerEvents:'none',zIndex:layerZIndex(selectedClip,timeline.clips.findIndex(clip=>clip.id===selectedClip.id))}}><VisualHandles key={selectedClip.id} clip={selectedClip} canvas={canvas} contentRect={contentRect} onPreview={previewTransform} onCommit={transform=>onVisualChange({transform})}/></div>} {ready&&!cropActive&&onSelectClip&&onClipChange&&<LiveTextControls timeline={timeline} assets={assets} revision={revision} selected={selectedClip?.id} activeId={transformId??undefined} onActivate={setTransformId} getDocument={()=>player.current?.iframeElement?.contentDocument??null} onSelect={onSelectClip} onCommit={onClipChange} onEdit={onEditText}/>}
     {cropActive&&<CropControls key={selectedClip.id} ref={cropControls} initial={selectedClip.crop} sourceSize={{width:asset.width!,height:asset.height!}} canvas={canvas} revision={revision} getSource={()=>{
       const doc=player.current?.iframeElement?.contentDocument;
       const frame=Array.from(doc?.querySelectorAll<HTMLElement>('[data-visual-clip]')??[]).find(node=>node.dataset.visualClip===selectedClip.id);

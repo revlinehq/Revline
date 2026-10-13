@@ -19,7 +19,7 @@ import { EMPTY_TIMELINE, type Timeline, type MediaAsset } from '@/lib/editor/typ
 import { addMediaClip, separateVideoClips } from '@/lib/editor/operations';
 import { prepareVideoAudio, prepareAudioWaveform } from '@/lib/editor/prepare-video-audio';
 import { uploadSourceFile } from '@/lib/editor/upload-source';
-import type { QueuedUpload, UploadProgress } from './footage-panel';
+import type { UploadProgress } from './footage-panel';
 export function ConnectedEditor({projectId}: {projectId:string}) {
   const {isAuthenticated}=useConvexAuth();
   const project=useQuery(api.projects.get,isAuthenticated?{projectId:projectId as Id<'projects'>}:'skip');

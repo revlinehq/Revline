@@ -8,4 +8,6 @@ it('labels seconds, subsecond positions, and minute boundaries with explicit uni
  expect(formatRulerLabel(60)).toBe('1m 00s');
  expect(formatRulerLabel(125)).toBe('2m 05s');
  expect(formatRulerLabel(61.5)).toBe('1m 01.5s');
+ expect(formatRulerLabel(3600)).toBe('1h 00m');
+ expect(formatRulerLabel(14400)).toBe('4h 00m');
 });

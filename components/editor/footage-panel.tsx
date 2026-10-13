@@ -4,15 +4,14 @@ import { Plus, Upload, Music2, Check, LoaderCircle, Search } from 'lucide-react'
 import { Button } from '@/components/ui/button';
 import { MediaAsset, formatTime } from '@/lib/editor/types';
 import './footage-panel.css';
-import { VideoLinkImport, VideoImportProgress, type VideoImportState } from './video-link-import';
+import { VideoImportProgress, type VideoImportState } from './video-link-import';
 export type QueuedUpload = {id:string;name:string;percent:number;kind:'video'|'image'|'audio';error?:string};
 export type UploadProgress = {name:string;percent:number;size?:number;index?:number;total?:number;queue?:QueuedUpload[];phase?:'reading'|'uploading'|'saving'}|null;
-export function FootagePanel({assets,onUpload,onAdd,upload,variant='sheet',onImportVideo,videoImports=[]}: {assets:MediaAsset[];onUpload:()=>void;onAdd:(a:MediaAsset)=>void;upload:UploadProgress;variant?:'sheet'|'inspector';onImportVideo?:(url:string)=>Promise<void>;videoImports?:VideoImportState[]}) {
+export function FootagePanel({assets,onUpload,onAdd,upload,variant='sheet',videoImports=[]}: {assets:MediaAsset[];onUpload:()=>void;onAdd:(a:MediaAsset)=>void;upload:UploadProgress;variant?:'sheet'|'inspector';videoImports?:VideoImportState[]}) {
   const [search,setSearch]=useState('');
   const [kind,setKind]=useState<'all'|MediaAsset['kind']>('all');
   const sources=assets.filter(asset=>(kind==='all'||asset.kind===kind)&&asset.fileName.toLowerCase().includes(search.trim().toLowerCase()));
   return <div className={`footage-content footage-content-${variant}`}><div className="footage-heading"><div><p>{assets.length} {assets.length===1?'asset':'assets'} in this project</p></div><Button variant="secondary" size="icon" disabled={!!upload} onClick={onUpload} aria-label="Import footage"><Plus size={16}/></Button></div>
-  {onImportVideo&&<VideoLinkImport onImport={onImportVideo} disabled={!!upload}/>}
   {videoImports.filter(task=>!['completed','cancelled'].includes(task.status)).slice(0,3).map(task=><VideoImportProgress key={task._id} task={task}/>)}
   {variant==='inspector'&&<div className="source-filters"><label className="source-search"><Search size={13}/><input aria-label="Search sources" placeholder="Search sources" value={search} onChange={event=>setSearch(event.target.value)}/></label><select aria-label="Source type" value={kind} onChange={event=>setKind(event.target.value as typeof kind)}><option value="all">All media</option><option value="video">Video</option><option value="audio">Audio</option><option value="image">Images</option></select></div>}
   {upload&&<div className="upload-status"><span><LoaderCircle size={13} className="animate-spin"/>{upload.name}</span><progress max="100" value={upload.percent}/><small>{upload.phase==='reading'?'Reading media…':upload.phase==='saving'?'Adding to your project…':`${upload.percent}% uploaded`}</small></div>}

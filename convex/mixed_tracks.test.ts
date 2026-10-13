@@ -39,7 +39,8 @@ test('legacy read, save, list and undo preserve text above video without repeate
   expect(canonical.tracks).toEqual({ visual: 4, overlay: 0, audio: 0 });
   expect(canonical.clips.map(clip => clip.track)).toEqual([2, 3, 4]);
   expect((await owner.query(api.projects.get, { projectId })).timeline).toEqual(canonical);
-  expect((await owner.query(api.projects.list, {}))[0].history).toEqual([canonical]);
+  expect((await owner.query(api.projects.get, { projectId })).history).toEqual([canonical]);
+  expect((await owner.query(api.projects.list, {}))[0].clipCount).toBe(canonical.clips.length);
   await owner.mutation(api.projects.saveTimeline, { projectId, expectedRevision: 7, timeline: legacy });
   expect((await t.run(ctx => ctx.db.get(projectId)))!.timeline).toEqual(canonical);
   await owner.mutation(api.projects.saveTimeline, { projectId, expectedRevision: 8, timeline: { ...canonical, aspectRatio: 'square' } });

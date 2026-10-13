@@ -7,7 +7,7 @@ try{
  await page.goto('http://localhost:3001/editor/demo',{waitUntil:'networkidle2'});
  await page.waitForFunction(()=>document.querySelector('hyperframes-player')?.ready&&!document.querySelector('.preview-loading'));
  await page.focus('[aria-label="Timeline zoom"]');await page.keyboard.press('End');
- await page.waitForFunction(()=>Number(document.querySelector('[aria-label="Timeline zoom"]').value)===4);
+ await page.waitForFunction(()=>Number(document.querySelector('[aria-label="Timeline zoom"]').value)===100);
  const source=await page.evaluate(()=>{
   const ruler=document.querySelector('.time-ruler').getBoundingClientRect();
   const px=parseFloat(document.querySelector('.time-ruler').style.getPropertyValue('--ruler-unit'));
@@ -15,7 +15,7 @@ try{
   const origin=parseFloat(firstVideo.style.left);
   return {left:ruler.left,top:ruler.top,origin,px,edge:(parseFloat(firstVideo.style.left)-origin+parseFloat(firstVideo.style.width))/px};
  });
- const undoInitiallyDisabled=await page.$eval('[aria-label="Undo (Ctrl+Z)"]',el=>el.disabled);
+ const undoInitiallyDisabled=await page.$eval('[aria-label="Undo"]',el=>el.disabled);
  const read=()=>page.evaluate(({origin,px})=>{
   const x=new DOMMatrix(getComputedStyle(document.querySelector('.playhead')).transform).m41;
   const counter=document.querySelector('.preview-time').textContent;
@@ -49,7 +49,7 @@ try{
  verify(await read(),beforeCancel.previewTime,'Escape restores the previous position');
  await begin(1.417,0);await page.mouse.up();await wait(100);
  verify(await read(),Math.round(1.417*30)/30,'Pointer release commits its final position');
- assert.equal(await page.$eval('[aria-label="Undo (Ctrl+Z)"]',el=>el.disabled),undoInitiallyDisabled,'Scrubbing must not add edit history');
+ assert.equal(await page.$eval('[aria-label="Undo"]',el=>el.disabled),undoInitiallyDisabled,'Scrubbing must not add edit history');
  await page.click('[aria-label="Play (Space)"]');await wait(100);
  await begin(1.017);await page.mouse.up();await wait(100);
  assert.equal(await page.$eval('hyperframes-player',el=>el.paused),true,'A scrub seek lands on a paused frame');

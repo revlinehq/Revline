@@ -66,10 +66,10 @@ async function measureGesture(kind, scale) {
   let point = { x: rect.x + (side ? rect.width / 2 : Math.min(30, rect.width / 2)), y: rect.y + rect.height / 2 }, delta = { x: 44, y: 0 };
   if (kind === 'head-trim') delta.x = 25;
   if (kind === 'tail-trim') delta.x = -35;
-  if (kind === 'vertical-row') delta = { x: 0, y: before.rows.find(row => row.group === 'overlay' && row.layer === 1).y + 15 - point.y };
-  if (kind === 'new-row-above') delta = { x: 0, y: before.rows.find(row => row.group === 'overlay' && row.layer === 2).y - 9 - point.y };
-  if (kind === 'new-row-below') { const row = before.rows.find(row => row.group === 'visual'); delta = { x: 0, y: row.y + row.height + 12 - point.y }; }
-  if (kind === 'header-reorder') { const row = before.labels.find(row => row.group === 'overlay' && row.layer === 1), target = before.labels.find(row => row.group === 'overlay' && row.layer === 2); point = { x: row.x + 25, y: row.y + row.height / 2 }; delta = { x: 0, y: target.y - 8 - point.y }; }
+  if (kind === 'vertical-row') delta = { x: 0, y: before.rows.find(row => row.group === 'visual' && row.layer === 1).y + 15 - point.y };
+  if (kind === 'new-row-above') delta = { x: 0, y: before.rows.find(row => row.group === 'visual' && row.layer === 3).y - 9 - point.y };
+  if (kind === 'new-row-below') { const row = before.rows.find(row => row.group === 'visual' && row.layer === 1); delta = { x: 0, y: row.y + row.height + 12 - point.y }; }
+  if (kind === 'header-reorder') { const row = before.labels.find(row => row.group === 'visual' && row.layer === 1), target = before.labels.find(row => row.group === 'visual' && row.layer === 2); point = { x: row.x + 25, y: row.y + row.height / 2 }; delta = { x: 0, y: target.y - 8 - point.y }; }
   await page.mouse.move(point.x, point.y); await wait(100);
   const metricsBefore = await page.metrics(); await recordStart(id, side ?? 'move', point); await page.mouse.down();
   const dispatch = [], start = performance.now();
@@ -126,21 +126,21 @@ async function functionalGestures() {
   }
 
   await reset();
-  const headerBefore = await state(), header = headerBefore.labels.find(row => row.group === 'overlay' && row.layer === 1);
+  const headerBefore = await state(), header = headerBefore.labels.find(row => row.group === 'visual' && row.layer === 1);
   await page.mouse.move(header.x + 25, header.y + header.height / 2); await page.mouse.down();
   await page.mouse.move(header.x + 25, headerBefore.viewport.y - 90, { steps: 12 }); await page.mouse.up(); await wait(100);
   const headerAfter = await state();
   check(JSON.stringify(headerAfter.timeline) === JSON.stringify(headerBefore.timeline) && headerAfter.history === headerBefore.history, 'Dropping a track header outside the timeline cancels reordering');
 
   await reset();
-  const original = await state(), start = clipPoint(original), top = original.rows.find(row => row.group === 'overlay' && row.layer === 2);
+  const original = await state(), start = clipPoint(original), top = original.rows.find(row => row.group === 'visual' && row.layer === 3);
   await hold(original, { x: start.x, y: top.y - 8 });
-  check(!!await page.$('[aria-label="Create overlay layer above"]'), 'Dragging above previews a new overlay row');
+  check(await page.$$eval('.timeline-insert-indicator',nodes=>nodes.some(node=>getComputedStyle(node).display!=='none')), 'Dragging above previews a new visual row', {top, insertion:await page.$$eval('.timeline-insert-indicator',nodes=>nodes.map(n=>n.getAttribute('aria-label')))});
   await page.mouse.move(start.x + 14, start.y, { steps: 8 }); await wait(80);
-  check(!await page.$('.timeline-insert-indicator'), 'Returning to an existing row clears the insertion preview');
+  check(await page.$$eval('.timeline-insert-indicator',nodes=>nodes.every(node=>getComputedStyle(node).display==='none')), 'Returning to an existing row clears the insertion preview', await page.$$eval('.timeline-insert-indicator',nodes=>nodes.map(n=>({label:n.getAttribute('aria-label'),height:n.getBoundingClientRect().height}))));
   await page.mouse.up(); await wait(100);
   const returned = await state();
-  check(returned.rows.length === original.rows.length && returned.history === original.history + 1 && returned.rows.filter(row => row.group === 'overlay').length === original.rows.filter(row => row.group === 'overlay').length, 'Hovering a new row then returning does not leave an empty track', { beforeRows: original.rows.length, afterRows: returned.rows.length, edits: returned.history - original.history });
+  check(returned.rows.length === original.rows.length && returned.history === original.history + 1 && returned.rows.filter(row => row.group === 'visual').length === original.rows.filter(row => row.group === 'visual').length, 'Hovering a new row then returning does not leave an empty track', { beforeRows: original.rows.length, afterRows: returned.rows.length, edits: returned.history - original.history });
 
   await reset();
   // Imported timelines may carry valid sub-frame offsets. A grouped drag must
@@ -149,7 +149,7 @@ async function functionalGestures() {
     const panel = document.querySelector('.timeline-panel'); let fiber = panel[Object.keys(panel).find(key => key.startsWith('__reactFiber$'))], store;
     while (fiber) { if (fiber.memoizedProps?.store?.getState?.().timeline) store ??= fiber.memoizedProps.store; fiber = fiber.return; }
     const timeline = store.getState().timeline;
-    store.setState({ timeline: { ...timeline, clips: timeline.clips.map(clip => clip.id === 'caption-0' ? { ...clip, start: .15 } : clip.id === 'shot-3' ? { ...clip, start: 5.01 } : clip) } });
+    store.getState().replace({ ...timeline, tracks:{visual:2,overlay:0,audio:0}, clips: timeline.clips.filter(clip=>['caption-0','shot-3'].includes(clip.id)).map(clip => clip.id === 'caption-0' ? { ...clip, track:2,start: .15 } : { ...clip,track:1, start: 5.01 }) });
   });
   await wait(120);
   const caption = await state('caption-0'), footage = await state('shot-3');
@@ -159,7 +159,7 @@ async function functionalGestures() {
   check(mixed.selected.includes('caption-0') && mixed.selected.includes('shot-3'), 'Shift selection includes text and footage together');
   await hold(mixed, { x: mixedStart.x + 42, y: mixedStart.y }); await page.mouse.up(); await wait(180);
   const moved = await state(), oldCaption = mixed.timeline.clips.find(clip => clip.id === 'caption-0'), oldFootage = mixed.timeline.clips.find(clip => clip.id === 'shot-3'), newCaption = moved.timeline.clips.find(clip => clip.id === 'caption-0'), newFootage = moved.timeline.clips.find(clip => clip.id === 'shot-3');
-  check(moved.history === mixed.history + 1 && Math.abs((newCaption.start - oldCaption.start) - (newFootage.start - oldFootage.start)) < 1e-8 && newFootage.assetId === oldFootage.assetId && newCaption.text === oldCaption.text, 'Mixed text/footage drag preserves source metadata and the exact relative offset');
+  check(moved.history === mixed.history + 1 && Math.abs((newCaption.start - oldCaption.start) - (newFootage.start - oldFootage.start)) < 1e-8 && newFootage.assetId === oldFootage.assetId && newCaption.text === oldCaption.text, 'Mixed text/footage drag preserves source metadata and the exact relative offset', {oldCaption,oldFootage,newCaption,newFootage,beforeHistory:mixed.history,afterHistory:moved.history});
   await page.click('[aria-label="Undo"]'); await wait(80);
   check(JSON.stringify((await state()).timeline) === JSON.stringify(mixed.timeline), 'One undo restores mixed selection including imported offsets');
 
@@ -179,6 +179,8 @@ async function functionalGestures() {
   check(Math.abs(afterZoom.playhead - paused.playhead) < 1e-6 && Math.abs(marker - afterZoom.playhead * afterZoom.zoom) < 1, 'Paused scrub followed by zoom preserves time and marker alignment');
 
   await reset();
+  await page.evaluate(()=>{const element=document.querySelector('.timeline-scroll');let fiber=element[Object.keys(element).find(key=>key.startsWith('__reactFiber$'))],store;while(fiber){if(fiber.memoizedProps?.store?.getState?.().timeline){store=fiber.memoizedProps.store;break;}fiber=fiber.return;}const timeline=store.getState().timeline;store.getState().replace({...timeline,tracks:{visual:2,overlay:0,audio:0},clips:timeline.clips.filter(clip=>['caption-0','shot-8'].includes(clip.id)).map(clip=>({...clip,track:clip.id==='caption-0'?2:1}))});});
+  await wait(100);
   const clockInitial = await state();
   await page.keyboard.down('Alt'); await page.mouse.click(clockInitial.viewport.x + 4.466666667 * clockInitial.zoom, clockInitial.viewport.y + 8); await page.keyboard.up('Alt'); await wait(100);
   const live = await state(), liveStart = clipPoint(live);
@@ -192,7 +194,7 @@ try {
   await reset(); await wait(750);
   const cdp = await page.createCDPSession();
   if (!functionalOnly) for (const scale of scales) { await cdp.send('Emulation.setCPUThrottlingRate', { rate: scale }); for (const kind of ['horizontal-title', 'horizontal-footage', 'vertical-row', 'new-row-above', 'new-row-below', 'head-trim', 'tail-trim', 'header-reorder']) await measureGesture(kind, scale); }
-  await cdp.send('Emulation.setCPUThrottlingRate', { rate: 1 }); await functionalGestures();
+  await cdp.send('Emulation.setCPUThrottlingRate', { rate: 1 }); if(process.env.PERF_ONLY!=='1')await functionalGestures();
   check(errors.length === 0, 'No browser runtime errors', errors);
   console.log(JSON.stringify({ baseUrl, passed: checks.every(value => value.passed), checks, measurements, errors }, null, 2));
   assert.ok(checks.every(value => value.passed), 'Custom timeline drag regression contains failing checks');

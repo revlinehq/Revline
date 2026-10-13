@@ -16,13 +16,13 @@ const corners=[['nw','top left'],['ne','top right'],['sw','bottom left'],['se','
 // OpenCut Classic's preview interaction pattern: select on pointer down,
 // update the rendered node while dragging, commit once, and discard on cancel.
 // MIT notice: third-party/OpenCut-LICENSE.
-export function TextControls({timeline,assets,time,revision,selected,getDocument,onSelect,onCommit,onEdit,onPause}:{
-  timeline:Timeline;assets:MediaAsset[];time:number;revision:number;selected?:string;getDocument:()=>Document|null;
-  onSelect:(id:string)=>void;onCommit:(id:string,patch:Partial<Clip>)=>void;onEdit?:(id:string)=>void;onPause:()=>void;
+export function TextControls({timeline,assets,time,revision,selected,activeId,onActivate,getDocument,onSelect,onCommit,onEdit}:{
+  timeline:Timeline;assets:MediaAsset[];time:number;revision:number;selected?:string;activeId?:string;onActivate:(id:string)=>void;getDocument:()=>Document|null;
+  onSelect:(id:string)=>void;onCommit:(id:string,patch:Partial<Clip>)=>void;onEdit?:(id:string)=>void;
 }) {
   const root=useRef<HTMLDivElement>(null),gesture=useRef<Gesture|null>(null);
   const [bounds,setBounds]=useState<Bounds[]>([]),[guides,setGuides]=useState<VisualSnapLine[]>([]);
-  const latest=useRef({timeline,assets,time,getDocument,onSelect,onCommit,onEdit,onPause});latest.current={timeline,assets,time,getDocument,onSelect,onCommit,onEdit,onPause};
+  const latest=useRef({timeline,assets,time,getDocument,onSelect,onCommit,onEdit,activeId,onActivate});latest.current={timeline,assets,time,getDocument,onSelect,onCommit,onEdit,activeId,onActivate};
   function measure(){
     const doc=latest.current.getDocument(),composition=doc?.getElementById('composition'),host=root.current;
     if(!doc||!composition||!host)return;
@@ -62,9 +62,9 @@ export function TextControls({timeline,assets,time,revision,selected,getDocument
   }
   function start(event:PointerEvent<HTMLElement>,clip:Clip,bounds:Bounds,corner?:VisualCorner){
     if(event.button!==0)return;const host=root.current,canvas=host?.getBoundingClientRect();if(!host||!canvas?.width||!canvas.height||!host.clientWidth||!host.clientHeight)return;
-    event.preventDefault();event.stopPropagation();latest.current.onPause();
+    event.preventDefault();event.stopPropagation();
     const front=corner?undefined:footageAbove(clip,event);
-    latest.current.onSelect(front?.id??clip.id);if(front)return;
+    latest.current.onSelect(front?.id??clip.id);if(front||latest.current.activeId!==clip.id)return;
     const screenBounds={...bounds,...projectPreviewBounds(bounds,{left:0,top:0,width:host.clientWidth,height:host.clientHeight},canvas)};
     const initial=textPlacement(clip);gesture.current={pointer:event.pointerId,target:event.currentTarget,clip,initial,current:initial,x:event.clientX,y:event.clientY,width:canvas.width,height:canvas.height,bounds:screenBounds,corner};event.currentTarget.setPointerCapture(event.pointerId);
   }
@@ -77,11 +77,11 @@ export function TextControls({timeline,assets,time,revision,selected,getDocument
     g.current=result.placement;paint(g.clip,g.current);setGuides(result.lines.map(line=>({...line,position:line.position/(line.axis==='x'?g.width:g.height)})));
   }
   return <div ref={root} className="text-controls" data-testid="text-controls" style={{zIndex:'auto'}}>
-    {bounds.map(box=>{const clip=timeline.clips.find(c=>c.id===box.id);if(!clip)return null;return <div key={box.id} role="button" tabIndex={0} aria-label={`Move text: ${clip.text||'Text'}`} aria-pressed={selected===clip.id} className={`text-selection-box ${selected===clip.id?'is-selected':''}`} style={{left:box.left,top:box.top,width:box.width,height:box.height,zIndex:box.z}} onPointerDown={e=>start(e,clip,box)} onPointerMove={move} onPointerUp={()=>finish()} onPointerCancel={()=>finish(true)} onLostPointerCapture={()=>finish(true)} onDoubleClick={event=>{const front=footageAbove(clip,event);if(front)latest.current.onSelect(front.id);else latest.current.onEdit?.(clip.id);}} onKeyDown={event=>{
-      if(event.key==='Enter'){event.preventDefault();event.stopPropagation();latest.current.onSelect(clip.id);latest.current.onEdit?.(clip.id);return;}
-      const dx=event.key==='ArrowLeft'?-1:event.key==='ArrowRight'?1:0,dy=event.key==='ArrowUp'?-1:event.key==='ArrowDown'?1:0;if(!dx&&!dy)return;
-      event.preventDefault();event.stopPropagation();const canvas=root.current!.getBoundingClientRect(),step=event.shiftKey?10:1;const next=moveText(textPlacement(clip),dx*step,dy*step,canvas.width,canvas.height,false);latest.current.onPause();latest.current.onSelect(clip.id);paint(clip,next);latest.current.onCommit(clip.id,next);
-    }}>{selected===clip.id&&corners.map(([corner,label])=><button key={corner} type="button" className={`visual-corner visual-corner-${corner}`} aria-label={`Resize text ${label}`} onPointerDown={e=>start(e,clip,box,corner)} onPointerMove={move} onPointerUp={()=>finish()} onPointerCancel={()=>finish(true)} onLostPointerCapture={()=>finish(true)}><span/></button>)}</div>;})}
+    {bounds.map(box=>{const clip=timeline.clips.find(c=>c.id===box.id);if(!clip)return null;return <div key={box.id} role="button" tabIndex={0} aria-label={`Move text: ${clip.text||'Text'}`} aria-pressed={selected===clip.id} className={`text-selection-box ${activeId===clip.id?'is-selected':''}`} style={{left:box.left,top:box.top,width:box.width,height:box.height,zIndex:box.z}} onPointerDown={e=>start(e,clip,box)} onPointerMove={move} onPointerUp={()=>finish()} onPointerCancel={()=>finish(true)} onLostPointerCapture={()=>finish(true)} onDoubleClick={event=>{const front=footageAbove(clip,event);const target=front?.id??clip.id;latest.current.onSelect(target);latest.current.onActivate(target);}} onKeyDown={event=>{
+      if(event.key==='Enter'){event.preventDefault();event.stopPropagation();latest.current.onSelect(clip.id);if(activeId===clip.id)latest.current.onEdit?.(clip.id);else latest.current.onActivate(clip.id);return;}
+      const dx=event.key==='ArrowLeft'?-1:event.key==='ArrowRight'?1:0,dy=event.key==='ArrowUp'?-1:event.key==='ArrowDown'?1:0;if((!dx&&!dy)||activeId!==clip.id)return;
+      event.preventDefault();event.stopPropagation();const canvas=root.current!.getBoundingClientRect(),step=event.shiftKey?10:1;const next=moveText(textPlacement(clip),dx*step,dy*step,canvas.width,canvas.height,false);latest.current.onSelect(clip.id);paint(clip,next);latest.current.onCommit(clip.id,next);
+    }}>{activeId===clip.id&&corners.map(([corner,label])=><button key={corner} type="button" className={`visual-corner visual-corner-${corner}`} aria-label={`Resize text ${label}`} onPointerDown={e=>start(e,clip,box,corner)} onPointerMove={move} onPointerUp={()=>finish()} onPointerCancel={()=>finish(true)} onLostPointerCapture={()=>finish(true)}><span/></button>)}</div>;})}
     {guides.map(line=><div key={`${line.axis}-${line.position}`} className={`text-snap-guide ${line.axis==='x'?'vertical':'horizontal'}`} style={line.axis==='x'?{left:line.position===1?'calc(100% - 1px)':`${line.position*100}%`}:{top:line.position===1?'calc(100% - 1px)':`${line.position*100}%`}}/>)}
   </div>;
 }

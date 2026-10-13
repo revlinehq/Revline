@@ -31,10 +31,9 @@ test('rejects cross-user and malformed source-frame results', async () => {
   await expect(owner.mutation(api.assets.saveAnalysis, { projectId, assetId, workerSecret: 'test-secret', shots: { ...shots, shots: [{ start: 0, end: 9, startFrame: 0, endFrame: 216 }] } })).rejects.toThrow('Invalid shot boundaries');
 });
 test('shot-only requests complete only after fresh results are saved', async () => {
-  const { t, owner, projectId, assetId } = await fixture();
+  const { t, projectId, assetId } = await fixture();
   await t.run(ctx => ctx.db.patch(projectId, { aiRunning: true, aiRunId: 'test-run' }));
   const requestId = await t.mutation(internal.assistant.requestAnalysis, { projectId, ownerId: 'owner', runId: 'test-run', assetId, mode: 'shots' });
-  expect(await owner.mutation(api.assistant.claimAnalysis, { requestId })).toBe(false);
   await t.finishAllScheduledFunctions(vi.runAllTimers);
   const work = (await t.mutation(api.mediaTasks.claim, { workerSecret: 'test-secret' }))!;
   await expect(t.mutation(api.mediaTasks.complete, { taskId: work.taskId, leaseToken: work.leaseToken, result: {} })).rejects.toThrow('result is missing');

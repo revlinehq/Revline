@@ -96,32 +96,6 @@ export const finish = internalMutation({ args: { ...runArgs, error: v.optional(v
   return null;
 }});
 
-export const pendingAnalysis = query({ args: { projectId: v.id("projects") }, returns: v.union(analysisRequestDocument, v.null()), handler: async (ctx, args) => {
-  const project = await requireProject(ctx, args.projectId, await requireOwner(ctx));
-  if (!project.aiRunning || !project.aiRunId) return null;
-  const requests = await ctx.db.query("analysisRequests").withIndex("by_projectId_runId", q => q.eq("projectId", project._id).eq("aiRunId", project.aiRunId!)).take(16);
-  return requests.find(request => (request.status === "pending" || request.status === "running") && request.expiresAt > Date.now()) ?? null;
-}});
-export const claimAnalysis = mutation({ args: { requestId: v.id("analysisRequests") }, returns: v.boolean(), handler: async (ctx, args) => {
-  const ownerId = await requireOwner(ctx); const request = await ctx.db.get(args.requestId);
-  if (!request || request.ownerId !== ownerId) throw new ConvexError("Analysis request not found");
-  const project = await requireProject(ctx, request.projectId, ownerId);
-  if (request.status !== "pending" || request.expiresAt <= Date.now() || !project.aiRunning || project.aiRunId !== request.aiRunId) return false;
-  if (request.taskId) return false;
-  await ctx.db.patch(request._id, { status: "running" }); return true;
-}});
-export const completeAnalysis = mutation({ args: { requestId: v.id("analysisRequests"), error: v.optional(v.string()) }, returns: v.null(), handler: async (ctx, args) => {
-  const ownerId = await requireOwner(ctx); const request = await ctx.db.get(args.requestId);
-  if (!request || request.ownerId !== ownerId) throw new ConvexError("Analysis request not found");
-  const project = await requireProject(ctx, request.projectId, ownerId);
-  if (!project.aiRunning || project.aiRunId !== request.aiRunId || request.expiresAt <= Date.now()) throw new ConvexError("AI run is no longer active");
-  if (request.status !== "running") throw new ConvexError("Analysis request is not running");
-  if (args.error) { await ctx.db.patch(request._id, { status: "failed", error: args.error.slice(0, 1500) }); return null; }
-  const asset = await ctx.db.get(request.assetId);
-  const result = request.mode === "transcribe" ? asset?.analysis?.transcript : request.mode === "understand" ? asset?.analysis?.understanding : request.mode === "shots" ? asset?.analysis?.shots : request.mode === "beats" ? asset?.analysis?.beats : asset?.analysis?.focus;
-  if (!asset || asset.ownerId !== ownerId || asset.projectId !== project._id || !result || (asset.analysisCompletedAt?.[request.mode] ?? 0) < request.createdAt) throw new ConvexError("Analysis has not saved fresh results yet");
-  await ctx.db.patch(request._id, { status: "completed" }); return null;
-}});
 export const requestAnalysis = internalMutation({ args: { ...runArgs, assetId: v.string(), mode: analysisMode }, returns: v.id("analysisRequests"), handler: async (ctx, args) => {
   const project = await requireProject(ctx, args.projectId, args.ownerId);
   if (!project.aiRunning || project.aiRunId !== args.runId) throw new ConvexError("AI run is no longer active");

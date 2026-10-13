@@ -65,6 +65,15 @@ describe("project and media ownership", () => {
   });
 });
 describe("timeline persistence", () => {
+  test("project lists send summaries without timeline or undo-history payloads", async () => {
+    const t = makeTest(); const projectId = await project(t); const owner = t.withIdentity(identity("owner"));
+    await owner.mutation(api.projects.saveTimeline, { projectId, timeline: textTimeline, expectedRevision: 0 });
+    const summaries = await owner.query(api.projects.list, {});
+    expect(summaries[0]).toMatchObject({ _id: projectId, clipCount: 1 });
+    expect(summaries[0]).not.toHaveProperty('timeline');
+    expect(summaries[0]).not.toHaveProperty('history');
+    expect((await owner.query(api.projects.get, { projectId })).history).toHaveLength(1);
+  });
   test("uses compare-and-swap and records one undo snapshot per save", async () => {
     const t = makeTest(); const projectId = await project(t); const owner = t.withIdentity(identity("owner"));
     expect(await owner.mutation(api.projects.saveTimeline, { projectId, timeline: textTimeline, expectedRevision: 0 })).toEqual({ revision: 1, timeline: textTimeline });
@@ -244,7 +253,6 @@ test("analysis is owned and background workers save fresh results without a brow
   const request = await t.query(internal.assistant.analysisRequest, { ...run, requestId });
   expect(request.taskId).toBeDefined();
   await expect(stranger.query(api.mediaTasks.get, { taskId: request.taskId! })).rejects.toThrow("not found");
-  expect(await owner.mutation(api.assistant.claimAnalysis, { requestId })).toBe(false);
   await t.mutation(internal.mediaTasks.prepareAttempt, { taskId: request.taskId!, attempt: 1 });
   const task = await t.mutation(api.mediaTasks.claim, { workerSecret: "test-worker-secret" });
   expect(task?.taskId).toBe(request.taskId);
@@ -256,7 +264,7 @@ test("analysis is owned and background workers save fresh results without a brow
   expect((await owner.query(api.assets.get, { projectId, assetId })).analysis?.transcript).toEqual(transcript);
 });
 
-test("worker analysis requires an active exact run and scoped media, then stale relays cannot complete", async () => {
+test("worker analysis requires an active exact run and scoped media, then rejects stale results", async () => {
   const t = makeTest(); const projectId = await project(t); const otherProjectId = await project(t, "stranger"); const owner = t.withIdentity(identity("owner"));
   const storageId = await uploadedFile(t, "owner", projectId);
   const assetId = await owner.mutation(api.assets.create, { projectId, storageId, fileName: "clip.mp4", kind: "video", duration: 5 });
@@ -269,10 +277,8 @@ test("worker analysis requires an active exact run and scoped media, then stale 
   expect(await t.query(api.assets.getForAssistant, bridge)).toMatchObject({ ownerId: "owner", url: expect.any(String) });
   await t.mutation(api.assets.saveAnalysis, { ...bridge, beats: { beats: [0, 1, 2], bpm: 120, confidence: 0.9 } });
   const run = { projectId, ownerId: "owner", runId: "worker-run" };
-  const requestId = await t.mutation(internal.assistant.requestAnalysis, { ...run, assetId, mode: "beats" });
-  await owner.mutation(api.assistant.claimAnalysis, { requestId });
+  await t.mutation(internal.assistant.requestAnalysis, { ...run, assetId, mode: "beats" });
   await t.run(ctx => ctx.db.patch(projectId, { aiRunId: "new-run" }));
-  await expect(owner.mutation(api.assistant.completeAnalysis, { requestId })).rejects.toThrow("AI run is no longer active");
   await expect(t.mutation(api.assets.saveAnalysis, { ...bridge, beats: { beats: [0, 1], bpm: 120, confidence: 0.9 } })).rejects.toThrow("AI run is no longer active");
 });
 

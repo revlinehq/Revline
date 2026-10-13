@@ -33,6 +33,7 @@ async function selectFixture(rotation = 0, crop = undefined, fit = 'contain') {
     const players = [...document.querySelectorAll('hyperframes-player')];
     return players.some(p => p !== window.__previousFixturePlayer && p.style.zIndex === '1' && p.ready && p.iframeElement?.contentDocument?.querySelector('[data-visual-clip="preview-fixture"]')?.style.transform.includes(`rotate(${rotation}deg)`));
   }, {}, rotation);
+  await page.click('.preview-hit-surface', {count:2});
   await page.waitForSelector('.visual-selection-box');
   await wait(100);
 }

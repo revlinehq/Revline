@@ -3,6 +3,7 @@ import { memo } from 'react';
 export function formatRulerLabel(time:number){
   const value=Math.round(Math.max(0,time)*1000)/1000;
   if(value<60)return `${value}s`;
+  if(value>=3600){const hours=Math.floor(value/3600),minutes=Math.floor(value%3600/60);return `${hours}h ${String(minutes).padStart(2,'0')}m`;}
   const minutes=Math.floor(value/60);
   const seconds=Math.round((value-minutes*60)*1000)/1000;
   return `${minutes}m ${seconds<10?'0':''}${seconds}s`;
@@ -12,9 +13,9 @@ export function formatRulerLabel(time:number){
 // keeping both frame aligned and ticks divisors of labeled intervals.
 // MIT notice: third-party/OpenCut-LICENSE.
 export const TimelineRulerTicks = memo(function TimelineRulerTicks({px,duration,fps,origin=0}:{px:number;duration:number;fps:number;origin?:number}){
-  const intervals=[2,3,5,10,15].map(frames=>frames/fps).concat([1,2,3,5,10,15,30,60,120,300,600]);
-  const label=intervals.find(seconds=>seconds*px>=90)??600;
-  const tick=[1,2,3,5,10,15].map(frames=>frames/fps).concat([1,2,3,5,10,15,30,60,120,300,600]).find(seconds=>seconds*px>=12&&Math.abs(label/seconds-Math.round(label/seconds))<.0001)??label;
+  const intervals=[1,2,3,5,10,15].map(frames=>frames/fps).concat([1,2,3,5,10,15,30,60,120,300,600,900,1800,3600,7200,14400]);
+  const label=intervals.find(seconds=>seconds*px>=90)??14400;
+  const tick=intervals.find(seconds=>seconds*px>=12&&Math.abs(label/seconds-Math.round(label/seconds))<.0001)??label;
   const labels:React.ReactNode[]=[];
   let path='';
   for(let index=0;index<=Math.ceil(duration/tick);index++){

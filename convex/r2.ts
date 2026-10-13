@@ -1,5 +1,5 @@
 import { requireEditorAccess } from './lib/billing_access';
-import type { Id, Doc } from './_generated/dataModel';
+import type { Id } from './_generated/dataModel';
 import { ConvexError, v } from 'convex/values';
 import { action, internalAction, internalMutation, internalQuery } from './_generated/server';
 import { internal } from './_generated/api';

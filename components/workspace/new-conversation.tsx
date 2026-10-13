@@ -10,7 +10,7 @@ import { createProjectImportSession, type ImportFile, type ProjectImportProgress
 import { clearProjectImportJob, getOrCreateProjectImportJob, getProjectImportJob } from '@/lib/editor/project-import-job';
 import { uploadSourceFile } from '@/lib/editor/upload-source';
 import { prepareVideoAudio, prepareAudioWaveform } from '@/lib/editor/prepare-video-audio';
-import { VideoLinkImport } from '@/components/editor/video-link-import';
+import { MediaImportDialog } from '@/components/editor/media-import-dialog';
 import { FootageStartCard } from './footage-start-card';
 import { FootageProcessingCard, type FootageProcessingFile, type FootageProcessingPhase } from './footage-processing-card';
 import { RecentProjects } from './recent-projects';
@@ -32,6 +32,7 @@ export function NewConversation() {
   const { isLoaded, isSignedIn, userId } = useAuth();
   const { isAuthenticated, isLoading: authLoading } = useConvexAuth();
   const importVideo = useMutation(api.mediaTasks.importVideo);
+  const [importOpen,setImportOpen]=useState(false);
   const [linkStarting, setLinkStarting] = useState(false);
   const createProject = useMutation(api.projects.create);
   const saveTimeline = useMutation(api.projects.saveTimeline);
@@ -39,7 +40,6 @@ export function NewConversation() {
   const partUrl = useAction(api.r2.partUrl);
   const finishUpload = useAction(api.r2.complete);
   const abortUpload = useAction(api.r2.abort);
-  const input = useRef<HTMLInputElement>(null);
   const submitting = useRef(false);
   const mounted = useRef(false);
   const unsubscribe = useRef<(() => void) | null>(null);
@@ -229,18 +229,17 @@ export function NewConversation() {
       <div className="new-conversation-start">
         <div className="new-conversation-intro"><h1 id="new-conversation-title">Welcome{firstName ? `, ${firstName}` : ''}.</h1><p>Start your edit. Add your clips, then tell Revline what to make.</p></div>
         <div className="new-conversation-entry" data-dragging={dragging || undefined} aria-busy={busy}>
-          {status ? <FootageProcessingCard files={processingFiles} {...status} error={error} onRetry={() => void processFootage()} onReset={reset} onOpen={session.current.projectId ? () => void openPartialProject() : undefined} /> : <FootageStartCard onAttach={() => input.current?.click()} disabled={!draftReady || linkStarting} dragging={dragging} />}
-          {!status&&<VideoLinkImport disabled={!draftReady || authLoading || !isAuthenticated || linkStarting} onImport={async url=>{
-            if(submitting.current)return;submitting.current=true;setLinkStarting(true);
-            try { const result=await importVideo({url});router.push('/editor/'+result.projectId); }
-            finally { submitting.current=false;setLinkStarting(false); }
-          }}/>}
+          {status ? <FootageProcessingCard files={processingFiles} {...status} error={error} onRetry={() => void processFootage()} onReset={reset} onOpen={session.current.projectId ? () => void openPartialProject() : undefined} /> : <FootageStartCard onAttach={() => setImportOpen(true)} disabled={!draftReady || linkStarting} dragging={dragging} />}
           {error && status?.phase !== 'error' && <p className="new-conversation-error" role="alert">{error}</p>}
         </div>
       </div>
       {!status && <RecentProjects />}
-      <input ref={input} type="file" accept="video/*,audio/*,image/*" multiple className="sr-only" tabIndex={-1} aria-label="Choose footage" onChange={event => { attach(Array.from(event.target.files ?? [])); event.target.value = ''; }} />
     </main>
+    <MediaImportDialog open={importOpen} onOpenChange={setImportOpen} onUpload={attach} disabled={!draftReady || authLoading || !isAuthenticated || linkStarting} onImportVideo={async url=>{
+      if(submitting.current)return;submitting.current=true;setLinkStarting(true);
+      try{const result=await importVideo({url});router.push('/editor/'+result.projectId);}
+      finally{submitting.current=false;setLinkStarting(false);}
+    }}/>
     {dragging && <div className="new-conversation-drop-note" role="status">{busy ? 'Your footage is processing…' : 'Drop your footage to start editing'}</div>}
   </div>;
 }

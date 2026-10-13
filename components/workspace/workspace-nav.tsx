@@ -27,7 +27,7 @@ export function useWorkspaceChats(demo = false) {
   const projects = useQuery(api.projects.list, connected ? { limit: 100 } : 'skip');
   const chats: WorkspaceChat[] = connected ? (projects ?? []).map(project => ({
     id: project._id, title: project.title, updatedAt: project.updatedAt,
-    clipCount: project.timeline?.clips.length ?? 0, coverUrl: project.coverUrl,
+    clipCount: project.clipCount, coverUrl: project.coverUrl,
     coverKind: project.coverKind, running: !!project.aiRunning,
   })) : [];
   return { chats, loading: !isLoaded || (!demo && !!isSignedIn && (isLoading || (isAuthenticated && projects === undefined))), connected };

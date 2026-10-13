@@ -27,11 +27,11 @@ const COMPLETED_LABELS: Record<string,string> = {
   alignCutsToBeat: 'Cuts matched to the beat', useStrongestMoment: 'Moment added', inspectAssetAnalysis: 'Footage notes read',
 };
 
-export function AssistantPanel({ messages, running, configured, error, onSend, onUndo, onStop, hasClips, demo, onLoadMore, canLoadMore, onAttach, activity, draftKey }: {
+export function AssistantPanel({ messages, running, configured, error, onSend, onStop, hasClips, demo, onLoadMore, canLoadMore, onAttach, activity, draftKey }: {
   messages: ChatMessage[]; running: boolean; configured: boolean; error?: string | null;
-  onSend: (text: string) => Promise<void>; onUndo: () => void; hasClips: boolean; demo: boolean;
+  onSend: (text: string) => Promise<void>; hasClips: boolean; demo: boolean;
   onLoadMore?: () => void; canLoadMore?: boolean; onAttach?: () => void;
-  selection?: { label: string; onClear: () => void }; activity?: string | null; draftKey?:string;
+  activity?: string | null; draftKey?:string;
   onStop?: () => Promise<void>;
 }) {
   const [prompt, setPrompt] = useState('');
