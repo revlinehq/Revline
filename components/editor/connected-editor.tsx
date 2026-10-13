@@ -106,7 +106,7 @@ function ProjectEditor({project}: {project:Doc<'projects'>}) {
   }
   async function exportVideo(settings:ExportSettings){if(saves.busy)throw new Error('Wait for your changes to finish saving.');const id=await renderStart({projectId,...settings});setJobId(id);}
   const activeTask=mediaTasks?.find(task=>task.kind!=='render'&&['queued','running','retrying'].includes(task.status));
-  const taskLabels={import:'Importing your video…',extract:'Preparing audio…',waveform:'Preparing waveform…',track:'Following face…',transcribe:'Listening to your footage…',beats:'Finding the rhythm…',shots:'Finding shot changes…',understand:'Watching your footage…',frames:'Inspecting video frames…',render:'Exporting video…'};
+  const taskLabels={import:'Importing your video…',extract:'Preparing audio…',waveform:'Preparing waveform…',track:'Following face…',transcribe:'Listening to your footage…',beats:'Finding the rhythm…',shots:'Finding shot changes…',understand:'Watching your footage…',frames:'Inspecting video frames…',video:'Reviewing footage…',render:'Exporting video…'};
   const analysisBusy=activeTask?taskLabels[activeTask.kind]:null;
   const exportState=job??jobs?.[0]??null;
   const handoffStarted=useRef(false);

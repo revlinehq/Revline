@@ -5,11 +5,10 @@ import type { ConvexHttpClient } from 'convex/browser';
 import type { MediaWorkItem, MediaTaskResult } from '@/convex/mediaTasks';
 import { generateComposition } from '@/lib/editor/composition';
 import { dimensions, timelineDuration, type MediaAsset } from '@/lib/editor/types';
-import { downloadOwnedMedia, extractPcm, extractSpeechAudio, prepareVideo, probeMedia } from '@/lib/media-analysis/io';
-import { inspectVideoFrames, transcribeAudio } from '@/lib/media-analysis/gemini';
-import { understandVideo } from '@/lib/media-analysis/twelvelabs';
+import { downloadOwnedMedia, extractSpeechAudio, prepareVideo, probeMedia } from '@/lib/media-analysis/io';
+import { inspectVideo, inspectVideoFrames, transcribeAudio, understandVideo } from '@/lib/media-analysis/gemini';
 import { detectShots } from '@/lib/media-analysis/detect-shots';
-import { detectBeats } from '@/lib/media-analysis/beats';
+import { detectMusicBeats } from '@/lib/media-analysis/music-beats';
 import { AnalysisError } from '@/lib/media-analysis/errors';
 import { trackSourceFace } from './track-source-face';
 import { extractSourceAudio } from './extract-audio';
@@ -93,23 +92,25 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
     }
     if (task.kind === 'beats') {
       if (!media.hasAudio) throw new AnalysisError('This source has no audio to measure.', 400);
-      return { analysis: { beats: detectBeats(await extractPcm(source, signal), 16_000) } };
+      return { analysis: { beats: await detectMusicBeats(source, media.duration, signal) } };
     }
     if (task.kind === 'track') return { analysis: { focus: await trackSourceFace(source, media.duration, onProgress, signal) } };
     if (task.kind === 'shots') return { analysis: { shots: await detectShots(source, media.duration, signal) } };
-    const key = process.env.TWELVELABS_API_KEY;
-    if (!key) throw new AnalysisError('TwelveLabs footage understanding is not configured on the media worker.', 503);
-    let shots = asset.analysis?.shots;
-    if (!shots) {
-      try { shots = await detectShots(source, media.duration, signal); }
-      catch (error) {
-        if (signal.aborted) throw error;
-        // A failed optional detector must neither block semantic analysis nor mark shots ready.
-        console.warn('Shot boundaries unavailable; continuing footage understanding.', error instanceof AnalysisError ? error.message : 'Video shot detection failed.');
-      }
+    if (!media.hasVideo) throw new AnalysisError('Footage understanding needs a video source.', 400);
+    const key = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+    if (!key) throw new AnalysisError('Gemini agentic footage understanding is not configured on the media worker.', 503);
+    const contentType = asset.contentType?.split(';')[0].trim().toLowerCase() ?? '';
+    const mimeType = contentType === 'video/quicktime' ? 'video/mov' : contentType === 'video/x-msvideo' ? 'video/avi' : contentType;
+    const nativeType = ['video/mp4', 'video/mpeg', 'video/mov', 'video/avi', 'video/x-flv', 'video/mpg', 'video/webm', 'video/wmv', 'video/3gpp'].includes(mimeType);
+    // Pass supported source files intact so fast action retains its recorded frames.
+    // Unknown containers get a playable MP4 without imposing a sampling rate.
+    const video = nativeType ? source : join(directory, 'analysis.mp4');
+    if (!nativeType) await prepareVideo(source, video, signal);
+    onProgress(30);
+    if (task.kind === 'video') {
+      if (!task.videoRequest) throw new AnalysisError('Native video inspection needs a question and source window.', 400);
+      return { videoInspection: await inspectVideo(video, media.duration, task.videoRequest, key, signal, nativeType ? mimeType : 'video/mp4') };
     }
-    const video = join(directory, 'analysis.mp4');
-    await prepareVideo(source, video, signal); onProgress(30);
-    return { analysis: { ...(shots ? { shots } : {}), understanding: await understandVideo(video, media.duration, key, signal) } };
+    return { analysis: { understanding: await understandVideo(video, media.duration, key, signal, nativeType ? mimeType : 'video/mp4') } };
   } finally { await rm(directory, { recursive: true, force: true }); }
 }

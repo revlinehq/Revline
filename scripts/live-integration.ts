@@ -203,7 +203,7 @@ async function main() {
       const analyzed = await (await client(ownerSession)).query(api.assets.get, { projectId, assetId: speechId });
       assert.ok(analyzed.analysis?.transcript?.words.length && analyzed.analysis?.understanding?.scenes.length && analyzed.analysis?.shots?.shots.length);
       assert.ok(analyzed.analysis?.beats);
-      console.log('Background AAC extraction, measured waveforms, Gemini word timestamps, TwelveLabs descriptions, shot boundaries and beat detection passed without an editor.');
+      console.log('Background AAC extraction, measured waveforms, Gemini word timestamps, Gemini agentic descriptions, shot boundaries and beat detection passed without an editor.');
     }
     console.log('Live integration passed: Clerk→owned R2 upload→saved two-layer timeline with source trims/transform/crop→queued Workflow/worker export→R2 stored/downloaded 720×1280 H.264 MP4. Pixel checks verified the red background and positioned blue upper layer.');
     console.log('Repeated authenticated export passed; landing page, protected redirects, signed-out API rejection, and disabled Stripe webhook remain healthy after rendering.');

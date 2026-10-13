@@ -80,6 +80,11 @@ export function EditorShell(p: EditorShellProps) {
   const readPlaybackTime=useCallback(()=>preview.current?.currentTime()??store.getState().playhead,[store]);
   const duration = timelineDuration(timeline);
   const clip = timeline.clips.find(c => c.id === selected);
+  const suggestionAsset = clip?.kind === 'video'
+    ? assets.find(asset => asset._id === clip.assetId)
+    : assets.find(asset => asset.kind === 'video' && asset.analysis?.understanding?.suggestions?.length && timeline.clips.some(item => item.kind === 'video' && item.assetId === asset._id));
+  const suggestionClip = suggestionAsset ? (clip?.kind === 'video' && clip.assetId === suggestionAsset._id ? clip : timeline.clips.find(item => item.kind === 'video' && item.assetId === suggestionAsset._id)) : undefined;
+  const sourceSuggestions = suggestionAsset && suggestionClip && suggestionAsset.analysis?.understanding?.suggestions?.length ? { sourceName: suggestionAsset.fileName, clipId: suggestionClip.id, items: suggestionAsset.analysis.understanding.suggestions } : undefined;
   const textClip = timeline.clips.find(c => c.id === editingText);
   const cropping = !!clip && clip.id === croppingClip;
   useEffect(() => { if (croppingClip && (!clip || clip.id !== croppingClip)) setCroppingClip(null); }, [clip?.id, croppingClip]);
@@ -210,7 +215,7 @@ export function EditorShell(p: EditorShellProps) {
   const browse = () => setImportOpen(true);
 
   const chat=(<aside className={`editor-sidebar ${mobileChat ? 'mobile-open' : ''}`} aria-label="Editing conversation">
-        <AssistantPanel messages={p.messages} running={p.aiRunning} configured={p.aiConfigured} error={p.aiError} onSend={text => p.onSend(text, { selectedClipId: clip?.id, selectedClipIds:selectedIds, playhead: readPlaybackTime() })} onStop={p.onStop} hasClips={!!timeline.clips.length} demo={!!p.demo} onLoadMore={p.onLoadMore} canLoadMore={p.canLoadMore} onAttach={() => setImportOpen(true)} activity={p.analysisBusy} draftKey={p.draftKey} />
+        <AssistantPanel messages={p.messages} running={p.aiRunning} configured={p.aiConfigured} error={p.aiError} onSend={text => p.onSend(text, { selectedClipId: clip?.id, selectedClipIds:selectedIds, playhead: readPlaybackTime() })} onStop={p.onStop} hasClips={!!timeline.clips.length} demo={!!p.demo} onLoadMore={p.onLoadMore} canLoadMore={p.canLoadMore} onAttach={() => setImportOpen(true)} activity={p.analysisBusy} draftKey={p.draftKey} suggestions={sourceSuggestions} onSuggestion={async (text, clipId) => { const target = timeline.clips.find(item => item.id === clipId && item.kind === 'video'); if (!target) throw new Error('This clip is no longer on the timeline.'); setSelected(clipId); await p.onSend(text, { selectedClipId: clipId, selectedClipIds: [clipId], playhead: target.start }); }} />
       </aside>);
   return <main ref={editorRoot} tabIndex={-1} onPointerDownCapture={e => { const interactive = (e.target as HTMLElement).closest('input,textarea,button,a,select,[tabindex]'); if (p.embedded) { if (!interactive || interactive === e.currentTarget || !e.currentTarget.contains(interactive)) editorRoot.current?.focus({ preventScroll: true }); else if (interactive.matches('[tabindex]') && !interactive.matches('input,textarea,button,a,select')) (interactive as HTMLElement).focus({ preventScroll: true }); } }} className={`editor-app conversation-editor ${p.embedded ? 'embedded-editor' : ''}`}>
     {!p.workspaceOnly && <WorkspaceNav title={p.title} onRename={p.onTitle} onFootage={() => setFootageOpen(true)} onExport={() => setExportOpen(true)} exportDisabled={!timeline.clips.length} onUndo={p.onUndo} onRedo={p.onRedo} canUndo={p.canUndo} canRedo={p.canRedo} saving={p.saving} demo={p.demo}/>}

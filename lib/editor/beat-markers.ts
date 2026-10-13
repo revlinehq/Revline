@@ -1,8 +1,9 @@
-import type { BeatMap } from '../media-analysis/beats';
+import type { BeatMap } from '../media-analysis/beat-map';
 import type { Timeline, TimelineMarker } from './types';
 import { sourceEndOf, timelineTimeAtSource, validatePlaybackRate } from './playback-rate';
 
-export type BeatMarkerRange = { start?: number; end?: number };
+export type BeatMarkerKind = 'beats' | 'downbeats' | 'accents' | 'dropCandidates';
+export type BeatMarkerRange = { start?: number; end?: number; kind?: BeatMarkerKind };
 export type BeatMarkerResult = {
   timeline: Timeline;
   added: number;
@@ -18,7 +19,7 @@ function clipKey(id: string) {
   return (hash >>> 0).toString(36);
 }
 
-/** Map measured source onsets to one audio clip. Range endpoints are timeline seconds, [start, end). */
+/** Map measured source events to one audio clip. Range endpoints are timeline seconds, [start, end). */
 export function addBeatMarkers(timeline: Timeline, clipId: string, analysis: BeatMap | undefined, range: BeatMarkerRange = {}): BeatMarkerResult {
   const clip = timeline.clips.find(candidate => candidate.id === clipId);
   if (!clip || clip.kind !== 'audio') throw new Error('Choose an audio clip on this timeline to mark its beats.');
@@ -29,15 +30,21 @@ export function addBeatMarkers(timeline: Timeline, clipId: string, analysis: Bea
 
   const unchanged = (status: BeatMarkerResult['status'], message: string): BeatMarkerResult => ({ timeline, added: 0, skipped: 0, confidence: analysis?.confidence ?? null, status, message });
   if (!analysis) return unchanged('unavailable', 'No measured beat analysis is available for this audio source. Analyze its beats first.');
-  if (!Number.isFinite(analysis.confidence) || analysis.confidence < 0 || analysis.confidence > 1 || analysis.beats.some(beat => !Number.isFinite(beat) || beat < 0)) throw new Error('The saved beat analysis is invalid. Analyze this audio source again.');
-  if (!analysis.beats.length) return unchanged('no-beats', 'No beats were detected in this audio source; no markers were added.');
-  // The detector withholds tempo at this confidence; do not present uncertain onsets as established beats.
-  if (analysis.confidence <= .15) return unchanged('low-confidence', 'Beat detection confidence is too low to mark reliably; no markers were added.');
+  const kind = range.kind ?? 'beats';
+  const names = { beats: { label: 'Beat', description: 'musical beats' }, downbeats: { label: 'Bar', description: 'bar starts' }, accents: { label: 'Hit', description: 'prominent audio hits' }, dropCandidates: { label: 'Possible drop', description: 'energy-rise candidates' } };
+  if (!(kind in names)) throw new Error('Choose beats, downbeats, accents, or dropCandidates.');
+  const eventName = names[kind];
+  const events = kind === 'accents' || kind === 'dropCandidates' ? analysis[kind]?.map(hit => hit.time) : analysis[kind];
+  if (!events) return unchanged('unavailable', `No measured ${eventName.description} are available. Analyze this audio source again.`);
+  if (!Number.isFinite(analysis.confidence) || analysis.confidence < 0 || analysis.confidence > 1 || events.some(time => !Number.isFinite(time) || time < 0)) throw new Error('The saved beat analysis is invalid. Analyze this audio source again.');
+  if (!events.length) return unchanged('no-beats', `No ${eventName.description} were detected; no markers were added.`);
+  // Hit strength and energy rises are measured independently of musical pulse confidence.
+  if ((kind === 'beats' || kind === 'downbeats') && analysis.confidence <= .15) return unchanged('low-confidence', 'Beat detection confidence is too low to mark reliably; no markers were added.');
 
   const start = Math.max(clip.start, range.start ?? clip.start);
   const end = Math.min(clip.start + clip.duration, range.end ?? clip.start + clip.duration);
   const frames: number[] = [];
-  for (const beat of analysis.beats) {
+  for (const beat of events) {
     if (beat < clip.sourceStart || beat >= sourceEndOf(clip)) continue;
     const time = timelineTimeAtSource(clip, beat);
     if (time < start || time >= end) continue;
@@ -47,7 +54,7 @@ export function addBeatMarkers(timeline: Timeline, clipId: string, analysis: Bea
     const snappedTime = frame / timeline.fps;
     if (snappedTime >= start && snappedTime < end) frames.push(frame);
   }
-  if (!frames.length) return unchanged('no-beats-in-range', 'No measured beats fall on frames inside this audio clip and timeline range.');
+  if (!frames.length) return unchanged('no-beats-in-range', `No measured ${eventName.description} fall inside this audio clip and timeline range.`);
   frames.sort((a, b) => a - b);
 
   const existing = timeline.markers ?? [];
@@ -57,15 +64,15 @@ export function addBeatMarkers(timeline: Timeline, clipId: string, analysis: Bea
   const added: TimelineMarker[] = [];
   let number = 1;
   let skipped = 0;
-  const prefix = `beat:${clipKey(clip.id)}:${timeline.fps}:`;
+  const prefix = `${kind}:${clipKey(clip.id)}:${timeline.fps}:`;
   for (const frame of frames) {
     if (occupied.has(frame - 1) || occupied.has(frame) || occupied.has(frame + 1)) { skipped++; continue; }
     const baseId = prefix + frame.toString(36);
     let id = baseId;
     let suffix = 1;
     while (ids.has(id)) id = `${baseId}:${suffix++}`;
-    while (labels.has(`Beat ${number}`)) number++;
-    const label = `Beat ${number++}`;
+    while (labels.has(`${eventName.label} ${number}`)) number++;
+    const label = `${eventName.label} ${number++}`;
     added.push({ id, time: frame / timeline.fps, label });
     occupied.add(frame);
     ids.add(id);
@@ -77,6 +84,6 @@ export function addBeatMarkers(timeline: Timeline, clipId: string, analysis: Bea
     skipped,
     confidence: analysis.confidence,
     status: added.length ? 'added' : 'already-marked',
-    message: added.length ? `Added ${added.length} markers at measured beats. These are beat onsets, not detected musical drops.` : 'The measured beats already have nearby markers; no markers were added.',
+    message: added.length ? `Added ${added.length} markers at measured ${eventName.description}. ${kind === 'dropCandidates' ? 'These are candidates to check by ear, not verified musical drops.' : 'These do not identify musical drops.'}` : `The measured ${eventName.description} already have nearby markers; no markers were added.`,
   };
 }

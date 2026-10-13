@@ -4,8 +4,9 @@ import { vResultValidator, vWorkflowId, type WorkflowId } from '@convex-dev/work
 import { internal } from './_generated/api';
 import { internalMutation, mutation, query, type MutationCtx } from './_generated/server';
 import type { Doc, Id } from './_generated/dataModel';
-import { analysisValidator, assetWithUrl, frameInspectionValidator, frameRequestValidator, mediaTaskKind, mediaTaskStatus, timelineValidator, waveformValidator } from './schema';
+import { analysisValidator, assetWithUrl, frameInspectionValidator, frameRequestValidator, videoInspectionValidator, videoRequestValidator, mediaTaskKind, mediaTaskStatus, timelineValidator, waveformValidator } from './schema';
 import { validateFrameInspectionResult } from '../lib/media-analysis/frame-inspection';
+import { validateVideoInspectionResult } from '../lib/media-analysis/video-inspection';
 import { requireOwner, requireProject } from './lib/auth';
 import { mediaTaskCredentials, requireMediaTask, requireMediaWorker } from './lib/media_task_auth';
 import { mediaWorkflow } from './lib/workflows';
@@ -15,19 +16,30 @@ import { parseVideoLink } from '../lib/editor/video-link';
 import { addMediaClip } from '../lib/editor/operations';
 import { timelineDuration } from '../lib/editor/types';
 import { commitTimeline, currentTimeline } from './lib/timeline';
+import { BEAT_ANALYSIS_ENGINE } from '../lib/media-analysis/beat-map';
 
 const LEASE_MS = 60_000;
 const MAX_ATTEMPTS = 3;
 const eventResult = v.object({ success: v.boolean(), retryable: v.boolean(), error: v.optional(v.string()) });
 const taskState = v.object({ _id: v.id('mediaTasks'), kind: mediaTaskKind, status: mediaTaskStatus, progress: v.number(), attempt: v.number(), error: v.optional(v.string()), assetId: v.optional(v.id('assets')) });
 const renderSnapshot = v.object({ timeline: timelineValidator, assets: v.array(assetWithUrl), resolution: v.number(), fps: v.number(), quality: v.string() });
-const workItem = v.object({ ...mediaTaskCredentials, projectId: v.id('projects'), kind: mediaTaskKind, sourceUrl: v.optional(v.string()), frameRequest: v.optional(frameRequestValidator), asset: v.optional(assetWithUrl), outputAssetId: v.optional(v.id('assets')), outputStored: v.optional(v.boolean()), render: v.optional(renderSnapshot), renderJobId: v.optional(v.id('renderJobs')) });
+const workItem = v.object({ ...mediaTaskCredentials, projectId: v.id('projects'), kind: mediaTaskKind, sourceUrl: v.optional(v.string()), frameRequest: v.optional(frameRequestValidator), videoRequest: v.optional(videoRequestValidator), asset: v.optional(assetWithUrl), outputAssetId: v.optional(v.id('assets')), outputStored: v.optional(v.boolean()), render: v.optional(renderSnapshot), renderJobId: v.optional(v.id('renderJobs')) });
 export type MediaWorkItem = Infer<typeof workItem>;
-export const taskResult = v.object({ analysis: v.optional(analysisValidator), frameInspection: v.optional(frameInspectionValidator), audioAssetId: v.optional(v.id('assets')), waveform: v.optional(waveformValidator) });
+export const taskResult = v.object({ analysis: v.optional(analysisValidator), frameInspection: v.optional(frameInspectionValidator), videoInspection: v.optional(videoInspectionValidator), audioAssetId: v.optional(v.id('assets')), waveform: v.optional(waveformValidator) });
 export type MediaTaskResult = Infer<typeof taskResult>;
 
-export async function enqueueMediaTask(ctx: MutationCtx, input: Pick<Doc<'mediaTasks'>, 'ownerId' | 'projectId' | 'kind'> & Partial<Pick<Doc<'mediaTasks'>, 'assetId' | 'renderJobId' | 'analysisRequestId' | 'sourceUrl' | 'frameRequest'>>): Promise<Id<'mediaTasks'>> {
-  if (input.assetId && input.kind !== 'frames') {
+export async function enqueueMediaTask(ctx: MutationCtx, input: Pick<Doc<'mediaTasks'>, 'ownerId' | 'projectId' | 'kind'> & Partial<Pick<Doc<'mediaTasks'>, 'assetId' | 'renderJobId' | 'analysisRequestId' | 'sourceUrl' | 'frameRequest' | 'videoRequest'>>): Promise<Id<'mediaTasks'>> {
+  if (input.assetId && input.kind === 'beats') {
+    const asset = await ctx.db.get(input.assetId);
+    const beats = asset?.analysis?.beats;
+    if (asset?.ownerId === input.ownerId && asset.projectId === input.projectId && beats?.engine === BEAT_ANALYSIS_ENGINE && beats.downbeats !== undefined && beats.accents !== undefined && beats.dropCandidates !== undefined) {
+      const now = Date.now();
+      const taskId = await ctx.db.insert('mediaTasks', { ...input, status: 'completed', attempt: 0, progress: 100, createdAt: now, updatedAt: now });
+      if (input.analysisRequestId) await ctx.db.patch(input.analysisRequestId, { status: 'completed', error: undefined });
+      return taskId;
+    }
+  }
+  if (input.assetId && input.kind !== 'frames' && input.kind !== 'video') {
     const existing = await ctx.db.query('mediaTasks').withIndex('by_asset_kind', q => q.eq('assetId', input.assetId).eq('kind', input.kind)).order('desc').take(10);
     const active = existing.find(task => task.status === 'queued' || task.status === 'running' || task.status === 'retrying');
     if (active) { if (input.analysisRequestId) await ctx.db.patch(active._id, { analysisRequestId: input.analysisRequestId }); return active._id; }
@@ -36,6 +48,7 @@ export async function enqueueMediaTask(ctx: MutationCtx, input: Pick<Doc<'mediaT
   const taskId = await ctx.db.insert('mediaTasks', { ...input, status: 'queued', attempt: 0, progress: 0, createdAt: now, updatedAt: now });
   const workflowId = await mediaWorkflow.start(ctx, internal.mediaTasks.process, { taskId }, { startAsync: true, onComplete: internal.mediaTasks.settle, context: { taskId } });
   await ctx.db.patch(taskId, { workflowId });
+  if (globalThis.process.env.MEDIA_PROCESSOR_WAKE_URL) await ctx.scheduler.runAfter(0, internal.mediaProcessor.wake, {});
   return taskId;
 }
 
@@ -95,6 +108,7 @@ export const start = mutation({ args: { projectId: v.id('projects'), assetId: v.
   const asset = await ctx.db.get(args.assetId);
   if (!asset || asset.ownerId !== ownerId || asset.projectId !== args.projectId || asset.kind === 'image' || args.kind === 'render' || args.kind === 'import') throw new ConvexError('Choose media from this project.');
   if (args.kind === 'frames') throw new ConvexError('Frame inspection requires a scoped AI question and source window.');
+  if (args.kind === 'video') throw new ConvexError('Native video inspection requires a scoped AI question and source window.');
   if (['extract', 'shots', 'understand', 'track'].includes(args.kind) && asset.kind !== 'video') throw new ConvexError('This operation requires a video.');
   if (args.kind === 'waveform' && asset.kind !== 'audio') throw new ConvexError('Waveforms require an audio source.');
   return enqueueMediaTask(ctx, { ...args, ownerId });
@@ -165,7 +179,7 @@ export const claim = mutation({ args: { workerSecret: v.string() }, returns: v.u
   await ctx.db.patch(task._id, { status: 'running', leaseToken, leaseExpiresAt: now + LEASE_MS, attemptStartedAt: now, updatedAt: now });
   if (task.analysisRequestId && await ctx.db.get(task.analysisRequestId)) await ctx.db.patch(task.analysisRequestId, { status: 'running' });
   await ctx.scheduler.runAfter(LEASE_MS, internal.mediaTasks.expire, { taskId: task._id, leaseToken });
-  return { taskId: task._id, leaseToken, projectId: task.projectId, kind: task.kind, ...(task.sourceUrl ? { sourceUrl: task.sourceUrl } : {}), ...(task.frameRequest ? { frameRequest: task.frameRequest } : {}), ...(asset ? { asset: { ...asset, url: await mediaUrl(ctx, asset) } } : {}), ...(render ? { render, outputStored } : {}), ...(task.renderJobId ? { renderJobId: task.renderJobId } : {}), ...(task.outputAssetId ? { outputAssetId: task.outputAssetId } : {}) };
+  return { taskId: task._id, leaseToken, projectId: task.projectId, kind: task.kind, ...(task.sourceUrl ? { sourceUrl: task.sourceUrl } : {}), ...(task.frameRequest ? { frameRequest: task.frameRequest } : {}), ...(task.videoRequest ? { videoRequest: task.videoRequest } : {}), ...(asset ? { asset: { ...asset, url: await mediaUrl(ctx, asset) } } : {}), ...(render ? { render, outputStored } : {}), ...(task.renderJobId ? { renderJobId: task.renderJobId } : {}), ...(task.outputAssetId ? { outputAssetId: task.outputAssetId } : {}) };
 }});
 export const heartbeat = mutation({ args: { ...mediaTaskCredentials, progress: v.optional(v.number()) }, returns: v.null(), handler: async (ctx, args) => {
   const task = await requireMediaTask(ctx, args.taskId, args.leaseToken);
@@ -193,6 +207,7 @@ export const complete = mutation({ args: { ...mediaTaskCredentials, result: task
   const task = await requireMediaTask(ctx, args.taskId, args.leaseToken);
   const asset = task.assetId ? await ctx.db.get(task.assetId) : null;
   if (args.result.frameInspection && task.kind !== 'frames') throw new ConvexError('Frame evidence belongs to a frame inspection task.');
+  if (args.result.videoInspection && task.kind !== 'video') throw new ConvexError('Native video evidence belongs to its question task.');
   if (task.kind === 'render') {
     const job = task.renderJobId ? await ctx.db.get(task.renderJobId) : null;
     if (!job?.outputR2Key) throw new ConvexError('Export has not stored its MP4 yet.');
@@ -207,9 +222,19 @@ export const complete = mutation({ args: { ...mediaTaskCredentials, result: task
     const next = addMediaClip(timeline, { ...output, duration }, `import-${task._id}`, at);
     await commitTimeline(ctx, project, next, project.revision ?? 0);
     await enqueueMediaTask(ctx, { ownerId: task.ownerId, projectId: task.projectId, assetId: output._id, kind: 'extract' });
+    await enqueueMediaTask(ctx, { ownerId: task.ownerId, projectId: task.projectId, assetId: output._id, kind: 'understand' });
   } else {
     if (!asset || asset.ownerId !== task.ownerId || asset.projectId !== task.projectId) throw new ConvexError('Source media was removed.');
-    if (task.kind === 'frames') {
+    if (task.kind === 'video') {
+      if (!task.videoRequest || !args.result.videoInspection || asset.kind !== 'video' || !asset.duration) throw new ConvexError('Native video evidence is missing.');
+      if (args.result.analysis || args.result.frameInspection || args.result.audioAssetId || args.result.waveform) throw new ConvexError('Video question tasks return video evidence only.');
+      const request = task.analysisRequestId ? await ctx.db.get(task.analysisRequestId) : null;
+      const project = await ctx.db.get(task.projectId);
+      if (!request || request.ownerId !== task.ownerId || request.projectId !== task.projectId || request.assetId !== asset._id || request.mode !== 'video' || !project?.aiRunning || project.aiRunId !== request.aiRunId) throw new ConvexError('AI video request is no longer active.');
+      try { validateVideoInspectionResult(args.result.videoInspection, task.videoRequest, asset.duration); } catch (error) { throw new ConvexError((error as Error).message); }
+      await ctx.db.patch(task._id, { videoInspection: args.result.videoInspection });
+      await ctx.db.patch(request._id, { videoInspection: args.result.videoInspection });
+    } else if (task.kind === 'frames') {
       if (!task.frameRequest || !args.result.frameInspection || asset.kind !== 'video') throw new ConvexError('Frame inspection evidence is missing.');
       if (args.result.analysis || args.result.audioAssetId || args.result.waveform) throw new ConvexError('Frame inspections return visual evidence only.');
       try { validateFrameInspectionResult(args.result.frameInspection, task.frameRequest); } catch (error) { throw new ConvexError((error as Error).message); }
@@ -229,6 +254,7 @@ export const complete = mutation({ args: { ...mediaTaskCredentials, result: task
     } else {
       const key = task.kind === 'transcribe' ? 'transcript' : task.kind === 'understand' ? 'understanding' : task.kind === 'track' ? 'focus' : task.kind;
       if (!args.result.analysis?.[key]) throw new ConvexError('The requested analysis result is missing.');
+      if (task.kind === 'beats' && args.result.analysis.beats?.engine !== BEAT_ANALYSIS_ENGINE) throw new ConvexError('The requested result must use dedicated beat tracking. Analyze this source again with the updated media worker.');
       await saveAssetAnalysis(ctx, asset, args.result.analysis);
     }
   }

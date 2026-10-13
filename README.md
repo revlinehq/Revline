@@ -55,19 +55,23 @@ The local watcher reconnects interrupted streams. A Codex heartbeat can check it
 
 ## Provider configuration
 
-Claude editing requires `ANTHROPIC_API_KEY` in the Convex deployment. The optional Convex AI Gateway path remains disabled by default. Gemini word-timed transcription requires `GOOGLE_GENERATIVE_AI_API_KEY` in the media-worker environment. TwelveLabs Pegasus scene descriptions require the worker-only `TWELVELABS_API_KEY`. Video understanding also runs PySceneDetect against the original source frames and saves its measured shot boundaries separately from approximate semantic scene timestamps. Claude can request local-only shot detection with `analyzeMedia` mode `shots`. Strongest-moment selection snaps scene edges to saved shot boundaries. Model settings are listed in `.env.example`.
+Claude editing requires `ANTHROPIC_API_KEY` in the Convex deployment. Gemini native video understanding and word-timed transcription require the worker-only `GOOGLE_GENERATIVE_AI_API_KEY`. Video inputs explicitly use `processing: "agentic"`; Gemini chooses its own video/audio inspection passes. Revline requests `gemini-3.7-flash`, which Google currently routes to `gemini-3.8-flash`. The overview and focused video questions return validated source timestamps; model timestamps are evidence for editing tools, not a guarantee of exact decoded impact frames. No local scene detector or manually extracted JPEG pass runs with the overview. TwelveLabs is removed. Legacy queued shot/frame tasks remain compatible with their saved schema. Model settings are listed in `.env.example`.
+
+Music tracking uses the pinned CPU [Beat This](https://github.com/CPJKU/beat_this) model for musical beats and bar starts. Separate measured spectral changes identify prominent hits, and sustained energy rises produce possible-drop candidates. These are distinct event types; candidates require listening and do not prove a musical drop. Legacy onset-only caches are refreshed before marking or aligning cuts. The AI asks which audio to use when the target is ambiguous.
+
+New video uploads queue an overview in the background without waiting to edit. Saved overviews can provide up to three source-grounded suggestion buttons; clicking one submits an ordinary request with the matching clip context. Focused requests use `inspectVideo` to send the actual question and source window to Gemini's native agentic video processing. Answers, including zero matches and uncertainty, are saved per request without replacing the general overview or editing the timeline. The separate frame/shot tools are no longer exposed to the editing assistant.
 
 Beat detection decodes audio and measures onset peaks in the background worker. Face following uses the bundled MediaPipe detector in worker-side Chromium; it is not arbitrary-object tracking. The public demo can still run local tracking in its browser. Analysis results persist on the owned asset and notify the active AI run without a browser relay.
 
 Media preparation, AI-requested analysis, and exports use `@convex-dev/workflow`. Convex queues owned tasks, retries transient failures up to three times, and replaces expired worker leases. Scoped attempt tokens protect result writes and R2 uploads; completed audio/MP4 uploads are reused on retry. The worker subscribes to queued work instead of polling while idle. Closing the editor leaves queued/running work intact, and reopening reads its saved state. An AI reply can still reach its existing action timeout while a long analysis continues; a subsequent edit can use the saved results.
 
-`npm run worker` starts the development daemon on this computer. Production requires the same daemon on an always-running Node host with FFmpeg, Python/PySceneDetect, Chromium, and the configured environment. Convex Workflow does not supply those executables or host that process. The worker connects outbound to Convex and private R2 media; it needs no inbound public endpoint. Uploading a local file still needs the browser until its R2 upload has finished.
+`npm run worker` starts the development daemon on this computer. Production requires the same daemon on an always-running Node host with FFmpeg, the pinned CPU beat-tracking runtime/model, Chromium, and the configured environment. Convex Workflow does not supply those executables or host that process. The worker connects outbound to Convex and private R2 media; it needs no inbound public endpoint. Uploading a local file still needs the browser until its R2 upload has finished.
 
 ## Production deployment
 
 The hosted app is https://tryrevline.com, in Vercel project `techson1cs-projects/revline-editor`; https://editor.tryrevline.com remains an alias. Cloudflare continues to manage DNS and email records. The connected GitHub repository is `zuraHQ/revline-editor`; pushes to `codex/mvp` trigger production builds. Production uses Clerk's live instance for `tryrevline.com` and Convex `different-gnu-398`, with `APP_ORIGIN=https://tryrevline.com`. Localhost continues to use the development instance and Convex `majestic-alpaca-541` through `.env.local`.
 
-Vercel holds the production Clerk secret and public Convex/Clerk settings. The Anthropic key and media-worker credentials belong in production Convex. Gemini and TwelveLabs keys belong only in the processing worker's environment. Environment files, generated build output, and private fixtures are excluded from Git and Vercel uploads.
+Vercel holds the production Clerk secret and public Convex/Clerk settings. The Anthropic key and media-worker credentials belong in production Convex. Gemini keys belong only in the processing worker's environment. Environment files, generated build output, and private fixtures are excluded from Git and Vercel uploads.
 
 The production R2 gateway uses `cloudflare/media/wrangler.production.jsonc`, allows both hosted origins, and has its own signing secret. Deploy it with `npx wrangler deploy --config cloudflare/media/wrangler.production.jsonc`. Deploy Convex changes to the announced production target with `npx convex deploy --yes --typecheck enable`; verify the selected deployment before running this command.
 
@@ -84,7 +88,7 @@ uv pip sync --python .data/video-import/bin/python scripts/video-import-requirem
 
 The worker uses `.data/video-import/bin/yt-dlp`; `YT_DLP_PATH` can point to another installed executable. The pinned requirements include yt-dlp’s JavaScript challenge support. YouTube can restrict downloads or require sign-in; no browser cookies, account credentials, or access-control bypasses are used. Restricted videos return an import error and can be added as local files instead.
 
-The public demo explicitly shows a sample conversation. Its local editing, preview, selection, and transform controls work without model credentials. No live Claude, Gemini, or TwelveLabs inference is claimed without configuring and testing those providers.
+The public demo explicitly shows a sample conversation. Its local editing, preview, selection, and transform controls work without model credentials. No live Claude or Gemini inference is claimed without configuring and testing those providers.
 
 Stripe billing is scaffolded and gated by `BILLING_ENABLED=false`. The single Revline Editor Pro plan is USD $39/month, with a 3-day free trial on the first subscription. Its live catalog product and price remain inactive; no checkout, webhook processing, or charges are enabled. Trial checkout collects a payment method and renews monthly unless canceled. Returning subscribers do not receive another trial. Activation requires the matching price, server secret, signed lifecycle webhook, and an intentional billing enablement. Tax collection is not configured.
 
@@ -104,13 +108,15 @@ Unit tests cover timeline operations, selection/movement geometry, source crop/t
 
 `scripts/live-integration.ts` exercises a local application against development Clerk and Convex, creates temporary fixtures, and removes them afterward. It refuses non-local origins, production deployments, and live Clerk keys. Start the media worker first. Set `REVLINE_SPEECH_FIXTURE` to a local public-domain video to include real transcription, understanding, extracted audio and waveform checks. `scripts/worker-tracking-smoke.ts` verifies background face detection with an official MediaPipe fixture.
 
-PySceneDetect worker setup (Python 3.10+):
+Music worker setup (Python 3.13 and FFmpeg):
 
 ```sh
-uv venv .data/scene-detection
-uv pip sync --python .data/scene-detection/bin/python scripts/scene-detection-requirements.txt
+uv venv --python 3.13 .data/beat-tracking
+uv pip sync --python .data/beat-tracking/bin/python --index-strategy unsafe-best-match scripts/beat-tracking-requirements.txt
+node scripts/install-beat-model.mjs
+node --import tsx scripts/music-beats-smoke.ts
 ```
 
-The pinned dependencies must be installed on the media-worker host. `SCENE_DETECT_PYTHON` can override the interpreter path. Detection uses AdaptiveDetector and checks every source frame; it identifies existing hard cuts, while dissolves, flashes, and variable-rate sources may require review. It does not split the timeline until Claude applies editing tools.
+The installation script verifies the pinned model checksum; processing jobs do not download model weights. `BEAT_TRACK_PYTHON` and `BEAT_TRACK_MODEL_PATH` override the local paths on a hosted worker. Inference uses two CPU threads and no CUDA runtime. The annotated music smoke checks separate pulse/hit timestamps, a known energy rise, trimmed/speed-adjusted timeline mapping, and silence; it is not a general music-accuracy benchmark.
 
-`scripts/compare-video-understanding.ts <local-video> [output.json]` compares TwelveLabs and the previous Gemini visual adapter using the same proxy, prompt, and validation. Gemini visual analysis is retained for this explicit comparison only. Revline does not silently switch providers.
+`node --env-file=.env.local --import tsx scripts/agentic-video-smoke.ts` sends a generated 4-second red/blue video to the actual Gemini API, verifies native agentic processing steps and timestamped scene evidence, and deletes the uploaded fixture without modifying a project.

@@ -2,7 +2,7 @@ import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { transcribeAudio, understandVideo } from './gemini';
+import { inspectVideo, transcribeAudio, understandVideo } from './gemini';
 
 let directory: string;
 let source: string;
@@ -13,8 +13,9 @@ beforeEach(async () => {
   source = join(directory, 'source.wav');
   await writeFile(source, Buffer.from('fixture source'));
   calls.length = 0;
+  vi.stubEnv('GEMINI_VIDEO_MODEL', '');
 });
-afterEach(async () => { vi.unstubAllGlobals(); await rm(directory, { recursive: true, force: true }); });
+afterEach(async () => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); await rm(directory, { recursive: true, force: true }); });
 
 function mockProvider(result: unknown, status = 200) {
   vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request, options: RequestInit & { duplex?: string } = {}) => {
@@ -29,7 +30,13 @@ function mockProvider(result: unknown, status = 200) {
       expect(Buffer.concat(chunks).toString()).toBe('fixture source');
       return Response.json({ file: { name: 'files/fixture', uri: 'https://generativelanguage.googleapis.com/v1beta/files/fixture', state: 'ACTIVE' } });
     }
-    if (url.endsWith('/interactions')) return Response.json(result, { status });
+    if (url.endsWith('/interactions')) {
+      // The real Interactions API rejects unsupported Zod schema constraints with HTTP 400.
+      const request = JSON.parse(options.body as string);
+      const schema = JSON.stringify(request.response_format?.schema ?? {});
+      if (/"(?:\$schema|minLength|maxLength|exclusiveMinimum)":/.test(schema)) return Response.json({ error: { message: 'Request contains an invalid argument.' } }, { status: 400 });
+      return Response.json(result, { status });
+    }
     if (options.method === 'DELETE') return Response.json({});
     throw new Error(`Unexpected request ${url}`);
   }));
@@ -57,11 +64,13 @@ test('requires timed words rather than inventing subtitles from plain text', asy
   expect(calls.at(-1)?.options.method).toBe('DELETE');
 });
 
-test('requests structured video understanding with bounded source scene timestamps', async () => {
+test('uses Gemini3.7 native agentic video and returns bounded source scene timestamps', async () => {
   mockProvider({ outputs: [{ text: JSON.stringify({ summary: 'A person waves.', scenes: [{ start: 0, end: 1, description: 'A hand wave.', score: 0.8 }] }) }] });
   expect(await understandVideo(source, 1, 'test-key', AbortSignal.timeout(5000))).toMatchObject({ summary: 'A person waves.', scenes: [{ start: 0, end: 1 }] });
   const request = JSON.parse(calls.find(call => call.url.endsWith('/interactions'))!.options.body as string);
-  expect(request).toMatchObject({ model: 'gemini-3.8-flash', store: false, input: [{ type: 'video', processing: { type: 'static', fps: 1 } }, { type: 'text' }], response_format: { type: 'text', mime_type: 'application/json' } });
+  expect(request).toMatchObject({ model: 'gemini-3.7-flash', store: false, input: [{ type: 'video', processing: 'agentic' }, { type: 'text' }], response_format: { type: 'text', mime_type: 'application/json' } });
+  expect(request.input[0]).not.toHaveProperty('fps');
+  expect(calls.at(-1)?.options.method).toBe('DELETE');
 });
 
 test('reads scene JSON from current Gemini model_output steps and ignores input text', async () => {
@@ -83,4 +92,30 @@ test('never sends the API key or media to an untrusted upload URL', async () => 
   vi.stubGlobal('fetch', fetch);
   await expect(transcribeAudio(source, 1, 'test-key', AbortSignal.timeout(5000))).rejects.toMatchObject({ status: 502 });
   expect(fetch).toHaveBeenCalledTimes(1);
+});
+
+test('the actual video question and source window are sent to native agentic input without static offsets', async () => {
+  const question = { start: 0.2, end: 0.8, question: 'Where does the person wave?' };
+  mockProvider({ outputs: [{ text: JSON.stringify({ summary: 'A visible hand wave.', uncertainty: 'The exact start is approximate.', matches: [{ start: 0.3, end: 0.6, description: 'The person waves their hand.' }] }) }] });
+  const result = await inspectVideo(source, 1, question, 'test-key', AbortSignal.timeout(5000));
+  expect(result).toEqual({ ...question, summary: 'A visible hand wave.', uncertainty: 'The exact start is approximate.', matches: [{ start: 0.3, end: 0.6, description: 'The person waves their hand.' }] });
+  const request = JSON.parse(calls.find(call => call.url.endsWith('/interactions'))!.options.body as string);
+  expect(request).toMatchObject({ model: 'gemini-3.7-flash', store: false, input: [{ type: 'video', processing: 'agentic' }, { type: 'text' }] });
+  expect(request.input[1].text).toContain(question.question); expect(request.input[1].text).toContain('0.2–0.8');
+  expect(request.input[0]).not.toHaveProperty('start_offset'); expect(request.input[0]).not.toHaveProperty('fps');
+  expect(calls.at(-1)?.options.method).toBe('DELETE');
+});
+
+test('native video questions return zero matches honestly and clean up malformed or invented evidence', async () => {
+  const input = { start: 0, end: 1, question: 'Is an elephant visible?' };
+  mockProvider({ outputs: [{ text: JSON.stringify({ summary: 'No elephant is visible.', uncertainty: '', matches: [] }) }] });
+  await expect(inspectVideo(source, 1, input, 'test-key', AbortSignal.timeout(5000))).resolves.toMatchObject({ matches: [], summary: 'No elephant is visible.' });
+  for (const payload of [
+    { summary: 'Invalid bounds.', uncertainty: '', matches: [{ start: 0.9, end: 1.1, description: 'Beyond this source.' }] },
+    { summary: 'Invented frames.', uncertainty: '', matches: [], frameCount: 300 },
+  ]) {
+    calls.length = 0; mockProvider({ outputs: [{ text: JSON.stringify(payload) }] });
+    await expect(inspectVideo(source, 1, input, 'test-key', AbortSignal.timeout(5000))).rejects.toMatchObject({ status: 502 });
+    expect(calls.at(-1)?.options.method).toBe('DELETE');
+  }
 });

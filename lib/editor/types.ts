@@ -52,12 +52,13 @@ export type MediaAsset = {
   waveform?: AudioWaveform;
   analysis?: {
     transcript?: {segments:{start:number;end:number;text:string}[];words:{start:number;end:number;text:string}[]};
-    understanding?: {summary:string;scenes:{start:number;end:number;description:string;score:number}[]};
+    understanding?: {summary:string;scenes:{start:number;end:number;description:string;score:number}[];suggestions?:SourceEditSuggestion[]};
     shots?: {fps:number;sourceTiming?:{basis:'pts';videoStart:number;videoEnd:number;frameCount:number};shots:{start:number;end:number;startFrame:number;endFrame:number}[]};
-    beats?: {beats:number[];bpm:number;confidence:number};
+    beats?: import('../media-analysis/beat-map').BeatMap;
     focus?: {time:number;x:number;y:number}[];
   };
 };
+export type SourceEditSuggestion = { label:string;prompt:string;start:number;end:number };
 export const EMPTY_TIMELINE: Timeline = { clips: [], fps: 30, aspectRatio: 'vertical', tracks: { visual: 1, overlay: 0, audio: 1 } };
 export function maxTrackCount(group: LayerGroup) { return group === 'visual' ? 24 : 12; }
 export function layerGroup(kind: ClipKind): LayerGroup {

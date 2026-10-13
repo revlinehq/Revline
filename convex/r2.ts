@@ -92,7 +92,10 @@ export const finish = internalMutation({ args: { uploadId: v.id('r2Uploads'), si
   const assetId = await ctx.db.insert('assets', { ownerId: lease.ownerId, projectId: lease.projectId, r2Key: lease.key, fileName: lease.fileName, contentType: lease.contentType, kind: lease.kind, size: lease.size, createdAt: Date.now(), ...(lease.duration !== undefined ? { duration: lease.duration } : {}), ...(lease.width !== undefined ? { width: lease.width } : {}), ...(lease.height !== undefined ? { height: lease.height } : {}) });
   await ctx.db.patch(lease._id, { completed: true, assetId });
   if (lease.taskId) await ctx.db.patch(lease.taskId, { outputAssetId: assetId });
-  else if (lease.kind !== 'image') await enqueueMediaTask(ctx, { ownerId: lease.ownerId, projectId: lease.projectId, assetId, kind: lease.kind === 'video' ? 'extract' : 'waveform' });
+  else if (lease.kind !== 'image') {
+    await enqueueMediaTask(ctx, { ownerId: lease.ownerId, projectId: lease.projectId, assetId, kind: lease.kind === 'video' ? 'extract' : 'waveform' });
+    if (lease.kind === 'video') await enqueueMediaTask(ctx, { ownerId: lease.ownerId, projectId: lease.projectId, assetId, kind: 'understand' });
+  }
   return assetId;
 }});
 export const complete = action({ args: { uploadId: v.id('r2Uploads'), parts: partsValidator, ...taskAuth }, returns: v.union(v.id('assets'), v.null()), handler: async (ctx, args): Promise<Id<'assets'> | null> => {

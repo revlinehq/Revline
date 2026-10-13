@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest';
 import { addBeatMarkers } from './beat-markers';
-import { detectBeats, type BeatMap } from '../media-analysis/beats';
+import type { BeatMap } from '../media-analysis/beat-map';
 import { EMPTY_TIMELINE, type Timeline } from './types';
 
 const timeline: Timeline = { ...EMPTY_TIMELINE, clips: [
@@ -76,7 +76,7 @@ test('uses deterministic bounded unique IDs without overwriting an existing ID c
 
 test('reports absent, empty, low-confidence, and out-of-range analysis without manufacturing beats', () => {
   expect(addBeatMarkers(timeline, 'music', undefined)).toMatchObject({ status: 'unavailable', confidence: null, added: 0, timeline });
-  const silence = detectBeats(new Float32Array(16_000));
+  const silence = measured([], 0);
   expect(addBeatMarkers(timeline, 'music', silence)).toMatchObject({ status: 'no-beats', added: 0, timeline });
   expect(addBeatMarkers(timeline, 'music', measured([8, 9], .15))).toMatchObject({ status: 'low-confidence', confidence: .15, added: 0, timeline });
   expect(addBeatMarkers(timeline, 'music', measured([0, 1, 2]))).toMatchObject({ status: 'no-beats-in-range', added: 0, timeline });
@@ -88,4 +88,15 @@ test('rejects a missing or nonaudio clip, invalid ranges, and nonfinite beat ana
   expect(() => addBeatMarkers(video, 'music', measured([8]))).toThrow('Choose an audio clip');
   for (const range of [{ start: NaN }, { end: Infinity }, { start: -1 }, { start: 21, end: 21 }, { start: 22, end: 21 }]) expect(() => addBeatMarkers(timeline, 'music', measured([8]), range)).toThrow('timeline range');
   for (const analysis of [measured([NaN]), measured([Infinity]), measured([-1]), measured([8], NaN), measured([8], 1.1)]) expect(() => addBeatMarkers(timeline, 'music', analysis)).toThrow('saved beat analysis');
+});
+
+test('marks requested audible hits and candidate drops without substituting underlying beats', () => {
+  const analysis: BeatMap = { ...measured([8, 9, 10, 11], .1), downbeats: [8], accents: [{ time: 9.5, strength: .95 }], dropCandidates: [{ time: 10.5, strength: .7 }] };
+  const hits = addBeatMarkers(timeline, 'music', analysis, { kind: 'accents' });
+  expect(hits.timeline.markers).toMatchObject([{ time: 21.5, label: 'Hit 1' }]);
+  expect(hits.timeline.clips).toBe(timeline.clips);
+  const drops = addBeatMarkers(hits.timeline, 'music', analysis, { kind: 'dropCandidates' });
+  expect(drops.timeline.markers).toMatchObject([{ time: 21.5, label: 'Hit 1' }, { time: 22.5, label: 'Possible drop 1' }]);
+  expect(drops.message).toContain('not verified musical drops');
+  expect(addBeatMarkers(timeline, 'music', measured([8]), { kind: 'accents' })).toMatchObject({ status: 'unavailable', added: 0 });
 });

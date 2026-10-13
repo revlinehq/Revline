@@ -11,6 +11,7 @@ import { assetWithUrl, assetKind, transcriptValidator, understandingValidator, s
 import { parseShots } from '../lib/media-analysis/shots';
 import { serializedBytes, validateFocus } from "./lib/timeline";
 import { consumeUpload, issueUpload } from "./uploads";
+import { enqueueMediaTask } from './mediaTasks';
 export const generateUploadUrl = mutation({ args: { projectId: v.id("projects") }, returns: v.string(), handler: async (ctx, args) => {
   const ownerId = await requireOwner(ctx); await requireEditorAccess(ctx, ownerId); await requireProject(ctx, args.projectId, ownerId); return await issueUpload(ctx, ownerId, args.projectId);
 }});
@@ -27,7 +28,9 @@ export const create = mutation({ args: { projectId: v.id("projects"), storageId:
   const count = await ctx.db.query("assets").withIndex("by_ownerId_projectId", q => q.eq("ownerId", ownerId).eq("projectId", args.projectId)).take(200);
   if (count.length >= 200) throw new ConvexError("A project supports up to 200 media files");
   await consumeUpload(ctx, args.storageId, ownerId, args.projectId);
-  return await ctx.db.insert("assets", { ownerId, projectId: args.projectId, storageId: args.storageId, fileName, contentType: metadata.contentType, size: metadata.size, kind: args.kind, createdAt: Date.now(), ...(args.duration !== undefined ? { duration: args.duration } : {}), ...(args.width !== undefined ? { width: args.width } : {}), ...(args.height !== undefined ? { height: args.height } : {}) });
+  const assetId = await ctx.db.insert("assets", { ownerId, projectId: args.projectId, storageId: args.storageId, fileName, contentType: metadata.contentType, size: metadata.size, kind: args.kind, createdAt: Date.now(), ...(args.duration !== undefined ? { duration: args.duration } : {}), ...(args.width !== undefined ? { width: args.width } : {}), ...(args.height !== undefined ? { height: args.height } : {}) });
+  if (args.kind === 'video') await enqueueMediaTask(ctx, { ownerId, projectId: args.projectId, assetId, kind: 'understand' });
+  return assetId;
 }});
 export const list = query({ args: { projectId: v.id("projects"), limit: v.optional(v.number()) }, returns: v.array(assetWithUrl), handler: async (ctx, args) => {
   const ownerId = await requireOwner(ctx); await requireProject(ctx, args.projectId, ownerId);
@@ -149,8 +152,17 @@ export async function saveAssetAnalysis(ctx: MutationCtx, asset: Doc<"assets">, 
   if (changes.understanding) {
     if (changes.understanding.summary.length > 8000 || changes.understanding.scenes.length > 100) throw new ConvexError("Scene analysis is too large");
     for (const scene of changes.understanding.scenes) if (!validRange(scene.start, scene.end) || !Number.isFinite(scene.score) || scene.score < 0 || scene.score > 1 || scene.description.length > 4000) throw new ConvexError("Invalid scene timing or score");
+    const suggestions = changes.understanding.suggestions ?? [];
+    if (suggestions.length > 3 || suggestions.some(item => !validRange(item.start, item.end) || item.end > duration || !item.label.trim() || item.label.length > 60 || !item.prompt.trim() || item.prompt.length > 1000)) throw new ConvexError('Invalid source edit suggestions');
   }
   if (changes.beats && (changes.beats.beats.length > 1000 || !Number.isFinite(changes.beats.bpm) || changes.beats.bpm < 0 || changes.beats.bpm > 400 || !Number.isFinite(changes.beats.confidence) || changes.beats.confidence < 0 || changes.beats.confidence > 1 || changes.beats.beats.some((beat, i, beats) => !Number.isFinite(beat) || beat < 0 || beat > duration + 0.5 || (i > 0 && beat <= beats[i - 1])))) throw new ConvexError("Invalid beat analysis");
+  if (changes.beats?.downbeats) {
+    const beats = new Set(changes.beats.beats);
+    if (changes.beats.downbeats.length > changes.beats.beats.length || changes.beats.downbeats.some((beat, i, downbeats) => !Number.isFinite(beat) || !beats.has(beat) || (i > 0 && beat <= downbeats[i - 1]))) throw new ConvexError('Invalid beat analysis');
+  }
+  for (const hits of [changes.beats?.accents, changes.beats?.dropCandidates]) {
+    if (hits && (hits.length > 1000 || hits.some((hit, i) => !Number.isFinite(hit.time) || hit.time < 0 || hit.time > duration + 0.5 || !Number.isFinite(hit.strength) || hit.strength < 0 || hit.strength > 1 || (i > 0 && hit.time <= hits[i - 1].time)))) throw new ConvexError('Invalid beat analysis');
+  }
   const analysis = { ...asset.analysis, ...(changes.transcript ? { transcript: changes.transcript } : {}), ...(changes.understanding ? { understanding: changes.understanding } : {}), ...(changes.shots ? { shots: changes.shots } : {}), ...(changes.beats ? { beats: changes.beats } : {}), ...(changes.focus ? { focus: changes.focus } : {}) };
   if (serializedBytes(analysis) > 500_000) throw new ConvexError("Media analysis is too large to save");
   const now = Date.now();

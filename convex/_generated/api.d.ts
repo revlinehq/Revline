@@ -22,6 +22,7 @@ import type * as lib_media_task_auth from "../lib/media_task_auth.js";
 import type * as lib_shared_media from "../lib/shared_media.js";
 import type * as lib_timeline from "../lib/timeline.js";
 import type * as lib_workflows from "../lib/workflows.js";
+import type * as mediaProcessor from "../mediaProcessor.js";
 import type * as mediaTasks from "../mediaTasks.js";
 import type * as projects from "../projects.js";
 import type * as r2 from "../r2.js";
@@ -50,6 +51,7 @@ declare const fullApi: ApiFromModules<{
   "lib/shared_media": typeof lib_shared_media;
   "lib/timeline": typeof lib_timeline;
   "lib/workflows": typeof lib_workflows;
+  mediaProcessor: typeof mediaProcessor;
   mediaTasks: typeof mediaTasks;
   projects: typeof projects;
   r2: typeof r2;
