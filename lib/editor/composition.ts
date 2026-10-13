@@ -127,7 +127,7 @@ export function generateComposition(timeline: Timeline, assets: MediaAsset[], op
     if (clip.kind === 'caption' || clip.kind === 'graphic') {
       const style = textStyle(clip, resolution);
       animation.push(`{const textTimeline=gsap.timeline();timeline.add(textTimeline,0);window.__revlineTextTimelines['${id}']=textTimeline;${clip.textTemplate ? '' : textAnimationSteps(clip, index, width, height, resolution).map(step => serializeTextAnimation(step, 'textTimeline')).join('')}}`);
-      const attributes = `left:${style.x * 100}%;top:${style.y * 100}%;font-size:${style.fontSize}px;color:${style.color};z-index:${zIndex};mix-blend-mode:${style.blendMode}`;
+      const attributes = `left:${style.x * 100}%;top:${style.y * 100}%;font-size:${style.fontSize}px;color:${style.color};z-index:${zIndex};mix-blend-mode:${style.blendMode};transform:${style.transform}`;
       return `<div ${timing} class="overlay ${clip.kind}" style="${attributes}"><span id="${id}-motion" class="text-motion"><span class="text-content" style="background:${style.background}">${escapeHtml(style.text)}</span></span></div>`;
     }
     const asset = clip.assetId ? assetMap.get(clip.assetId) : undefined;

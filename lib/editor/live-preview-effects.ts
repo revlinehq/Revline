@@ -37,6 +37,7 @@ export function updateLiveTextEffects(document: Document, previous: Timeline, ne
       node.style.left = `${style.x * 100}%`; node.style.top = `${style.y * 100}%`;
       node.style.fontSize = `${style.fontSize}px`; node.style.color = style.color;
       node.style.mixBlendMode = style.blendMode; content.style.background = style.background;
+      node.style.transform = style.transform;
     }
     if (plainTextChanged) content.textContent = style.text;
     if (!animationChanged) continue;

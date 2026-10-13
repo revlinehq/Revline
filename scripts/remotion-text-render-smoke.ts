@@ -6,7 +6,8 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import puppeteer from 'puppeteer';
 import { generateComposition } from '../lib/editor/composition';
-import { REMOTION_TEXT_PRESETS } from '../lib/editor/remotion-text';
+import type { RemotionTextPreset } from '../lib/editor/remotion-text';
+const legacyPresets: RemotionTextPreset[] = ['word-reveal','word-pop','slide-title','karaoke'];
 import type { Timeline } from '../lib/editor/types';
 import { runRenderWorker } from '../lib/server/render-worker';
 
@@ -26,7 +27,7 @@ async function main() {
   try {
     for (const name of ['remotion-text.js', 'visual-effects.js', 'gsap.min.js']) await copyFile(`public/vendor/${name}`, join(directory, name));
     await copyFile('public/fonts/space-grotesk-latin.woff2', join(directory, 'space-grotesk-latin.woff2'));
-    const timeline: Timeline = { fps: 24, aspectRatio: 'landscape', clips: REMOTION_TEXT_PRESETS.map((preset, index) => ({
+    const timeline: Timeline = { fps: 24, aspectRatio: 'landscape', clips: legacyPresets.map((preset, index) => ({
       id: preset, kind: 'graphic', start: 0, duration: 1, sourceStart: 0, text: 'Make your next idea', fontSize: 54,
       x: index % 2 === 0 ? .25 : .75, y: index < 2 ? .3 : .7,
       textTemplate: { preset, duration: 1, offset: 0 },
@@ -45,10 +46,10 @@ async function main() {
       const first = Buffer.from(await page.screenshot());
       await writeFile(`/tmp/revline-remotion-preview-${time}.png`, first);
       await page.evaluate(time => { const clock = (window as any).__timelines.revline; clock.seek(.9, false); clock.seek(0, false); clock.seek(time, false); }, time);
-      assert.deepEqual(Buffer.from(await page.screenshot()), first, 'The integrated composition clock must render identical text after backward seeking');
+      assert.ok(Buffer.from(await page.screenshot()).equals(first), 'The integrated composition clock must render identical text after backward seeking');
       frames.set(time, execFileSync('ffmpeg', ['-v', 'error', '-i', 'pipe:0', '-f', 'rawvideo', '-pix_fmt', 'rgb24', '-'], { input: first, maxBuffer: 4 * 1024 * 1024 }));
     }
-    assert.notDeepEqual(frames.get(.25), frames.get(.75), 'Template motion must advance with the composition clock');
+    assert.ok(!frames.get(.25)!.equals(frames.get(.75)!), 'Template motion must advance with the composition clock');
     assert.deepEqual(errors, []);
     const output = join(directory, 'output.mp4');
     const result = await runRenderWorker(directory, output, { fps: 24, quality: 'high' }, () => {}, AbortSignal.timeout(90_000));
@@ -69,7 +70,7 @@ async function main() {
       }
       const error = difference / preview.length;
       assert.ok(error < 3, `Preview/export text pixels diverged at ${time}s: mean error ${error.toFixed(3)}`);
-      for (const [index, difference] of templateErrors.entries()) assert.ok(difference / (640 * 360 * 3) < .4, `${REMOTION_TEXT_PRESETS[index]} export differs from the requested frame`);
+      for (const [index, difference] of templateErrors.entries()) assert.ok(difference / (640 * 360 * 3) < .4, `${legacyPresets[index]} export differs from the requested frame`);
       assert.ok(painted > 2000, 'Export must paint the template text');
       errorsByFrame.push(`${time}s: ${error.toFixed(3)}`);
     }

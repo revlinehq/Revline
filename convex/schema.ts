@@ -11,7 +11,7 @@ export const colorGradeValidator = v.object({ enabled: v.boolean(), exposure: v.
 export const zoomBlurValidator = v.object({ enabled: v.boolean(), amount: v.number(), centerX: v.number(), centerY: v.number() });
 export const invertValidator = v.object({ enabled: v.boolean(), amount: v.number() });
 export const glitchValidator = v.object({ enabled: v.boolean(), intensity: v.number(), blockSize: v.number(), rgbSplit: v.number() });
-export const textTemplateValidator = v.object({ preset: v.union(v.literal('word-reveal'), v.literal('word-pop'), v.literal('slide-title'), v.literal('karaoke')), highlightColor: v.optional(v.string()), duration: v.optional(v.number()), offset: v.optional(v.number()) });
+export const textTemplateValidator = v.object({ preset: v.union(v.literal('word-reveal'), v.literal('word-pop'), v.literal('slide-title'), v.literal('karaoke'), v.literal('neon-echo'), v.literal('lyric-slam'), v.literal('kinetic-stack')), highlightColor: v.optional(v.string()), duration: v.optional(v.number()), offset: v.optional(v.number()) });
 export const clipValidator = v.object({
   id: v.string(), kind: v.union(assetKind, v.literal("caption"), v.literal("graphic"), v.literal("effect")),
   assetId: v.optional(v.string()), focus: v.optional(focusValidator), track: v.optional(v.number()), start: v.number(), duration: v.number(), sourceStart: v.number(),

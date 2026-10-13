@@ -39,8 +39,8 @@ try{
  assert.equal(await page.$$eval('.library-look',tiles=>tiles.some(tile=>/On \d+ clips?/.test(tile.textContent+' '+tile.getAttribute('aria-label')))),false,'No usage count remains in visible or accessible names');
  assert.equal(await page.$$eval('button',buttons=>buttons.some(button=>button.textContent==='Dissolve')),false,'Unsupported dissolve has no pretend action');
  assert.ok(await page.$eval('.preview-inspector',el=>el.scrollWidth<=el.clientWidth),'Library fits the unchanged 320px side panel');
- assert.ok(await page.$eval('.library-look-preview',el=>Math.abs(el.getBoundingClientRect().height-68)<1),'Preview matches the 134x68 design geometry');
- await page.waitForFunction(()=>Array.from(document.querySelectorAll('.library-look-preview img')).every(img=>img.complete&&img.naturalWidth>0),{timeout:15000});
+ assert.equal(await page.$('.library-look-preview'),null,'Large effect previews are removed');
+ assert.ok(await page.$eval('.library-look',el=>el.getBoundingClientRect().height<=34),'Named effect rows stay compact');
  await page.screenshot({path:'/tmp/revline-effect-library-dark.png'});
  await button('Digital glitch').click();await flush();
  assert.equal(await page.evaluate(()=>window.commits),1,'One apply action commits once');assert.ok(await page.$('[data-effect="glitch"]'));
@@ -60,6 +60,8 @@ try{
  await choose('v1');await library();await page.click('[data-library-tab="text"]');await button('Pop-in words').click();await flush();
  assert.equal(await page.evaluate(()=>window.fixture.timeline.clips.at(-1).textTemplate.preset),'word-pop','Text tile creates a supported template');
  assert.ok(await page.$('[aria-label="Text templates"]'),'Text editing controls are available after adding');
+ assert.ok(await page.$('[aria-label="Selected text"]'),'New text is immediately editable after choosing a template');
+ assert.ok(await page.$('[aria-label="Text rotation"]'),'Text rotation is available beside the words');
  await choose('v1');await library();await page.click('[data-library-tab="overlays"]');await button('Upload an overlay').click();assert.equal(await page.evaluate(()=>window.uploads),1);
  await button('Light leak.jpg').click();await flush();const overlay=await page.evaluate(()=>window.fixture.timeline.clips.at(-1));assert.equal(overlay.start,1);assert.ok(overlay.track>2,'Overlay is above footage and existing text at the playhead');
  await button('Edit selected clip').click();await page.select('[aria-label="Blend mode"]','screen');await flush();assert.equal(await page.evaluate(()=>window.fixture.timeline.clips.at(-1).blendMode),'screen','An overlay exposes the real supported Screen blend');

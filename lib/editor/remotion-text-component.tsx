@@ -1,10 +1,13 @@
 import { Fragment, type CSSProperties } from 'react';
 import { Easing, interpolate, spring } from 'remotion';
 import type { RemotionTextProps } from './remotion-text';
+import { VFX_TEXT_PRESETS } from './remotion-text';
+import { RemotionLyricText } from './remotion-lyric-text';
 
 const clamp = { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' } as const;
 /** No wall clock, effects, or CSS animation: the same frame always produces the same pixels. */
 export function RemotionText({ preset, text, frame, fps, durationInFrames, color, fontSize, highlightColor }: RemotionTextProps) {
+  if(VFX_TEXT_PRESETS.some(value=>value===preset))return <RemotionLyricText {...{preset,text,frame,fps,durationInFrames,color,fontSize,highlightColor}}/>;
   const tokens = text.split(/(\s+)/);
   const words = tokens.filter(token => token && !/^\s+$/.test(token));
   const lastFrame = Math.max(0, durationInFrames - 1);

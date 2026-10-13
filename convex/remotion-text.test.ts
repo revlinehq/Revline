@@ -6,7 +6,7 @@ import { api, internal } from './_generated/api';
 import { duplicateClip, patchClip, splitClip } from '../lib/editor/operations';
 import { resizeSelectedClips } from '../lib/editor/timeline-controls';
 import { EMPTY_TIMELINE, type Clip, type Timeline } from '../lib/editor/types';
-import { remotionTextProps, type RemotionTextTemplate } from '../lib/editor/remotion-text';
+import { VFX_TEXT_PRESETS, remotionTextProps, type RemotionTextTemplate } from '../lib/editor/remotion-text';
 import { textEffectPatch, textTemplatePatch } from '../lib/editor/text-effects';
 
 const modules = import.meta.glob('./**/*.ts');
@@ -53,4 +53,19 @@ test('schema and save validation reject unknown templates, invalid settings and 
     await expect(owner.mutation(api.projects.saveTimeline, { projectId, timeline: { ...timeline, clips: [{ ...text, textTemplate: template as RemotionTextTemplate }] }, expectedRevision: 0 })).rejects.toThrow();
   }
   for (const kind of ['audio', 'video', 'image', 'effect'] as const) await expect(owner.mutation(api.projects.saveTimeline, { projectId, timeline: { ...timeline, tracks: { ...timeline.tracks!, effects: 1 }, clips: [{ ...text, kind }] }, expectedRevision: 0 })).rejects.toThrow('captions and text graphics');
+});
+
+test.each(VFX_TEXT_PRESETS)('%s persists through public save, split/trim and Undo without restarting motion',async preset=>{
+  const t=convexTest(schema,modules),owner=t.withIdentity({subject:'owner'});
+  const projectId=await owner.mutation(api.projects.create,{title:'Animated lyric',aspectRatio:'vertical'});
+  const original=patchClip(timeline,'title',textTemplatePatch(text,preset));
+  await owner.mutation(api.projects.saveTimeline,{projectId,timeline:original,expectedRevision:0});
+  const divided=splitClip(original,'title',4,'ending');
+  const trimmed=resizeSelectedClips(divided,[],['ending'],'left',.2);
+  await owner.mutation(api.projects.saveTimeline,{projectId,timeline:trimmed,expectedRevision:1});
+  const saved=(await owner.query(api.projects.get,{projectId})).timeline!;
+  expect(saved).toEqual(trimmed);
+  expect(remotionTextProps(saved.clips.find(clip=>clip.id==='ending')!,5.8,30)).toEqual(remotionTextProps(original.clips[0],5.8,30));
+  await owner.mutation(api.projects.undo,{projectId});
+  expect((await owner.query(api.projects.get,{projectId})).timeline).toEqual(original);
 });

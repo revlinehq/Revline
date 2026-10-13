@@ -32,3 +32,5 @@
 .conversation-editor .assistant-content .manual-editor-composer .edit-composer-actions{height:32px}
 .conversation-editor .assistant-content .manual-editor-composer .revline-primary{height:32px;width:32px;min-width:32px;padding:0;border-radius:7px;background:#5474F8;color:#fff}
 .assistant-content .manual-composer-dock{flex:none}
+
+.assistant-panel-header nav{margin-left:auto}

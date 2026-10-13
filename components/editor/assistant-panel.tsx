@@ -96,7 +96,7 @@ export function AssistantPanel({ messages, running, configured, error, onSend, o
   }
 
   return <div className="assistant-content">
-    <header className="assistant-panel-header"><span>Edit history</span><nav aria-label="Conversation navigation"><a href="/chats" aria-label="View chat history" title="View chat history"><History size={16}/></a><a href="/dashboard/chat" aria-label="New conversation" title="New conversation"><SquarePen size={16}/></a></nav></header>
+    <header className="assistant-panel-header"><nav aria-label="Conversation navigation"><a href="/chats" aria-label="View chat history" title="View chat history"><History size={16}/></a><a href="/dashboard/chat" aria-label="New conversation" title="New conversation"><SquarePen size={16}/></a></nav></header>
     <div ref={scroll.viewport} className={`assistant-history ${!messages.length && !waiting ? 'assistant-history-empty' : ''}`}>
       <div className="assistant-turns" ref={scroll.content}>
       {canLoadMore && <button className="load-more" onClick={() => { scroll.preserveHistory(); onLoadMore?.(); }}>Earlier messages</button>}

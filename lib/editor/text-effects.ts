@@ -1,6 +1,6 @@
 import { motionPreset } from './clip-effects';
 import type { Clip } from './types';
-import type { RemotionTextPreset } from './remotion-text';
+import { VFX_TEXT_APPEARANCE, type RemotionTextPreset } from './remotion-text';
 
 export const TEXT_EFFECT_PRESETS = ['none', 'fade', 'rise', 'pop'] as const;
 export type TextEffectPreset = typeof TEXT_EFFECT_PRESETS[number];
@@ -13,7 +13,9 @@ export function textEffectPatch(clip: Clip, preset: TextEffectPreset): Partial<C
 
 export function textTemplatePatch(clip: Clip, preset: RemotionTextPreset): Partial<Clip> {
   if (clip.kind !== 'caption' && clip.kind !== 'graphic') throw new Error('Select a text clip to apply a text template.');
-  return { textTemplate: { preset, duration: clip.duration, offset: 0, ...(clip.textTemplate?.highlightColor ? { highlightColor: clip.textTemplate.highlightColor } : {}) }, animation: 'none', motion: [], motionOffset: 0 };
+  const appearance=VFX_TEXT_APPEARANCE[preset],reselect=clip.textTemplate?.preset===preset;
+  const highlightColor=reselect?clip.textTemplate?.highlightColor??appearance?.highlightColor:appearance?.highlightColor??clip.textTemplate?.highlightColor;
+  return { ...(appearance?{color:reselect?clip.color??appearance.color:appearance.color}:{}),textTemplate: { preset, duration: clip.duration, offset: 0, ...(highlightColor?{highlightColor}:{}) }, animation: 'none', motion: [], motionOffset: 0 };
 }
 
 export function selectedTextEffect(clip: Clip): TextEffectPreset | null {

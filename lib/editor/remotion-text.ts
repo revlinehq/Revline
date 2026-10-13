@@ -1,10 +1,17 @@
 import { textStyle } from './text-style';
 
-export const REMOTION_TEXT_PRESETS = ['word-reveal', 'word-pop', 'slide-title', 'karaoke'] as const;
+export const VFX_TEXT_PRESETS = ['neon-echo', 'lyric-slam', 'kinetic-stack'] as const;
+export const REMOTION_TEXT_PRESETS = ['word-reveal', 'word-pop', 'slide-title', 'karaoke', ...VFX_TEXT_PRESETS] as const;
 export type RemotionTextPreset = typeof REMOTION_TEXT_PRESETS[number];
 export type RemotionTextTemplate = { preset: RemotionTextPreset; highlightColor?: string; duration?: number; offset?: number };
 export const REMOTION_TEXT_LABELS: Record<RemotionTextPreset, string> = {
   'word-reveal': 'Word reveal', 'word-pop': 'Pop-in words', 'slide-title': 'Sliding title', karaoke: 'Karaoke',
+  'neon-echo': 'Neon echo', 'lyric-slam': 'Lyric slam', 'kinetic-stack': 'Kinetic stack',
+};
+export const VFX_TEXT_APPEARANCE: Partial<Record<RemotionTextPreset, { color: string; highlightColor: string }>> = {
+  'neon-echo': { color: '#B72CFF', highlightColor: '#FF962E' },
+  'lyric-slam': { color: '#FFF3E1', highlightColor: '#FF6E36' },
+  'kinetic-stack': { color: '#F8F2FF', highlightColor: '#BA83FF' },
 };
 export const DEFAULT_TEXT_HIGHLIGHT = '#F5CF45';
 export type RemotionTextProps = {
@@ -42,8 +49,8 @@ export function remotionTextProps(clip: TextTemplateClip, time: number, fps: num
     preset: template.preset, text: style.text,
     frame: Math.floor((time - clip.start + (template.offset ?? 0) + 1e-7) * fps),
     fps, durationInFrames: Math.max(1, Math.ceil(((template.duration ?? clip.duration) - 1e-7) * fps)),
-    color: style.color, fontSize: style.fontSize,
-    highlightColor: template.highlightColor ?? DEFAULT_TEXT_HIGHLIGHT,
+    color: clip.color ? style.color : VFX_TEXT_APPEARANCE[template.preset]?.color ?? style.color, fontSize: style.fontSize,
+    highlightColor: template.highlightColor ?? VFX_TEXT_APPEARANCE[template.preset]?.highlightColor ?? DEFAULT_TEXT_HIGHLIGHT,
   };
 }
 
