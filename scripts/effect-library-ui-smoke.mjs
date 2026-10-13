@@ -25,7 +25,7 @@ const browser = await puppeteer.launch({headless:true,args:['--no-sandbox','--di
 const page = await browser.newPage();
 const errors=[];page.on('pageerror',error=>errors.push(error.message));
 const flush=()=>page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
-const library=async()=>{if(!await page.$('.effect-library'))await page.click('#inspector-sources-tab');await flush()};
+const library=async()=>{if(!await page.$('.effect-library')){const back=await page.$('[aria-label="Back to library"]');await page.click(back?'[aria-label="Back to library"]':'#inspector-sources-tab')}await flush()};
 const choose=async id=>{await page.evaluate(id=>window.fixture.select(id),id);await flush()};
 const button=name=>page.locator('::-p-aria([name="'+name+'"][role="button"])');
 try{
@@ -59,13 +59,13 @@ try{
  const transition=after.clips.at(-1);assert.equal(transition.start+transition.motion[1].time,3,'Black peak sits exactly on the cut');assert.deepEqual(transition.motion.map(key=>key.opacity),[1,0,1]);
  await choose('v1');await library();await page.click('[data-library-tab="text"]');await button('Pop-in words').click();await flush();
  assert.equal(await page.evaluate(()=>window.fixture.timeline.clips.at(-1).textTemplate.preset),'word-pop','Text tile creates a supported template');
- assert.ok(await page.$('[aria-label="Text templates"]'),'Text editing controls are available after adding');
+ await page.waitForSelector('[aria-label="Text templates"]');assert.ok(await page.$('[aria-label="Text templates"]'),'Text editing controls are available after adding');
  assert.ok(await page.$('[aria-label="Selected text"]'),'New text is immediately editable after choosing a template');
  assert.ok(await page.$('[aria-label="Text rotation"]'),'Text rotation is available beside the words');
  await choose('v1');await library();await page.click('[data-library-tab="overlays"]');await button('Upload an overlay').click();assert.equal(await page.evaluate(()=>window.uploads),1);
  await button('Light leak.jpg').click();await flush();const overlay=await page.evaluate(()=>window.fixture.timeline.clips.at(-1));assert.equal(overlay.start,1);assert.ok(overlay.track>2,'Overlay is above footage and existing text at the playhead');
  await button('Edit selected clip').click();await page.select('[aria-label="Blend mode"]','screen');await flush();assert.equal(await page.evaluate(()=>window.fixture.timeline.clips.at(-1).blendMode),'screen','An overlay exposes the real supported Screen blend');
- await library();await button('Your media').click();assert.ok(await page.$('.footage-content-inspector'),'Your media opens existing sources');
+ await library();await button('Your media').click();assert.ok(await page.$('.footage-content-inspector'),'Your media opens existing sources');assert.equal(await page.$('.inspector-tabs'),null,'Media view has no misleading Edit/Effects segments');assert.equal(await page.$eval('#inspector-library-title',node=>node.textContent),'Your media');assert.ok(await page.$('[aria-label="Back to library"]'),'Media keeps an explicit library return');
  await library();await choose('sound');assert.equal(await page.$eval('[aria-label^="Digital glitch"]',el=>el.disabled),true,'Audio cannot receive visual effects');
  await page.focus('[data-library-tab="effects"]');await page.keyboard.press('End');assert.equal(await page.$eval('[data-library-tab="overlays"]',el=>document.activeElement===el&&el.getAttribute('aria-selected')==='true'),true,'Library tabs support keyboard navigation');
  await page.keyboard.press('Home');await choose('v1');

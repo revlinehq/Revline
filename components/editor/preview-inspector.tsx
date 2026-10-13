@@ -42,23 +42,24 @@ export function PreviewInspector({ clip, audioClip, asset, assets, upload, onUpl
     setTab('effects');
   }
   const library = tab === 'sources' && !mediaOpen;
+  const sources = tab === 'sources';
   return <aside ref={panel} className="preview-inspector" aria-label="Clip settings">
-    {library ? <div className="inspector-library-heading"><span id="inspector-library-title">Sources</span>{clip && <button type="button" onClick={() => setTab('edit')}><SlidersHorizontal size={12}/>Edit selected clip</button>}<button type="button" aria-label="Close editing panel" onClick={onClose}><X size={14}/></button></div> : <div className="inspector-tabs" role="tablist" aria-label="Editing tools" onKeyDown={event => {
+    {sources ? <div className="inspector-library-heading">{mediaOpen && <button type="button" aria-label="Back to library" onClick={() => setMediaOpen(false)}><ArrowLeft size={12}/>Library</button>}<span id="inspector-library-title">{mediaOpen ? 'Your media' : 'Sources'}</span>{library && clip && <button type="button" onClick={() => setTab('edit')}><SlidersHorizontal size={12}/>Edit selected clip</button>}<button type="button" aria-label="Close editing panel" onClick={onClose}><X size={14}/></button></div> : <div className="inspector-tabs" role="tablist" aria-label="Editing tools" onKeyDown={event => {
       if (!(event.target as HTMLElement).matches('[role="tab"]')) return;
       const tabs = ['sources','edit','effects'] as const;
       const index = tabs.indexOf(tab);
       const next = event.key === 'ArrowRight' ? tabs[(index + 1) % tabs.length] : event.key === 'ArrowLeft' ? tabs[(index + tabs.length - 1) % tabs.length] : event.key === 'Home' ? tabs[0] : event.key === 'End' ? tabs.at(-1) : undefined;
       if (!next) return;
-      event.preventDefault(); setTab(next);
+      event.preventDefault(); if (next === 'sources') setMediaOpen(false); setTab(next);
       event.currentTarget.querySelector<HTMLButtonElement>(`#inspector-${next}-tab`)?.focus();
-      if (next === 'sources' && !mediaOpen) requestAnimationFrame(() => panel.current?.querySelector<HTMLButtonElement>('.library-tabs [aria-selected="true"]')?.focus());
+      if (next === 'sources') requestAnimationFrame(() => panel.current?.querySelector<HTMLButtonElement>('.library-tabs [aria-selected="true"]')?.focus());
     }}>
       <button role="tab" id="inspector-sources-tab" aria-controls="inspector-sources" aria-selected={tab === 'sources'} tabIndex={tab === 'sources' ? 0 : -1} onClick={() => { setMediaOpen(false); setTab('sources'); }}><ArrowLeft size={12}/>Library</button>
       <button role="tab" id="inspector-edit-tab" aria-controls="inspector-edit" aria-selected={tab === 'edit'} tabIndex={tab === 'edit' ? 0 : -1} onClick={() => setTab('edit')}><SlidersHorizontal size={14}/>Edit</button>
       <button role="tab" id="inspector-effects-tab" aria-controls="inspector-effects" aria-selected={tab === 'effects'} tabIndex={tab === 'effects' ? 0 : -1} onClick={() => setTab('effects')}><Layers size={14}/>{text ? 'Text effects' : 'Effects'}</button>
       <button className="inspector-close" aria-label="Close editing panel" onClick={onClose}><X size={14}/></button>
     </div>}
-    <div className={`inspector-content ${library ? 'inspector-library-content' : ''}`} role={library ? 'region' : 'tabpanel'} id={`inspector-${tab}`} aria-labelledby={library ? 'inspector-library-title' : `inspector-${tab}-tab`}>
+    <div className={`inspector-content ${library ? 'inspector-library-content' : ''}`} role={sources ? 'region' : 'tabpanel'} id={`inspector-${tab}`} aria-labelledby={sources ? 'inspector-library-title' : `inspector-${tab}-tab`}>
       {library ? <EffectLibrary clip={clip} assets={assets} onMedia={() => setMediaOpen(true)} onVisualEffect={addVisualEffect} onAddEffect={onAddEffect ? preset => { onAddEffect(preset); setTab('effects'); } : undefined} onTextTemplate={text || onAddTextTemplate ? applyTextTemplate : undefined} onUploadOverlay={onUpload} onAddOverlay={onAddOverlay} onFadeThroughBlack={onFadeThroughBlack} onSpeed={onPlaybackRateChange ? () => setTab('effects') : undefined}/> : tab === 'sources' ? <FootagePanel key={sourceRequest} variant="inspector" videoImports={videoImports} assets={assets} upload={upload} onUpload={onUpload} onAdd={onAdd}/> : tab === 'edit' ? clip?.kind === 'effect' ? barControls ?? <div className="inspector-empty"><Layers size={22} strokeWidth={1.2}/><p>{effectClipLabel(clip)}</p><span>Move, trim, or delete this clip on the timeline.</span></div> : clip ? <>
         <div className="inspector-selection"><small>{text ? 'Text' : clip.kind === 'audio' ? 'Audio' : 'Footage'}</small><p>{clip.text || asset?.fileName || 'Selected clip'}</p></div>
         {text && <TextEditingControls clip={clip} onChange={onChange}/>}
