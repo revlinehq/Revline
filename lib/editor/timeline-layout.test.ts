@@ -45,13 +45,13 @@ describe('mixed visual track layout', () => {
     expect(after.tracks.map(row => row.top)).toEqual(before.tracks.map(row => row.top));
     expect(after.height).toBe(before.height);
   });
-  it('keeps compact rows consistently sized and computes contiguous geometry', () => {
+  it('keeps compact rows consistently sized with space before the audio stack', () => {
     const layout = timelineLayout(timeline, true);
     layout.tracks.forEach((row, index) => {
-      expect(row.clipHeight).toBe(32);
-      expect(row.top).toBe(TIMELINE_RULER_HEIGHT + TIMELINE_TOP_SPACE + index * (32 + TIMELINE_TRACK_GAP));
+      expect(row.clipHeight).toBe(24);
+      expect(row.top).toBe([52,82,112,142,188][index]);
     });
-    expect(layout.height).toBe(TIMELINE_RULER_HEIGHT + TIMELINE_TOP_SPACE + layout.tracks.length * (32 + TIMELINE_TRACK_GAP));
+    expect(layout.height).toBe(218);
   });
   it('leaves space above the first lane for an explicit new visual track drop', () => {
     const rows = timelineLayout(timeline).tracks.map(row => ({ ...row, track: row.number, bottom: row.top + row.height }));

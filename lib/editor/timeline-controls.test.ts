@@ -1,6 +1,7 @@
 import { normalizeTimeline, type Timeline } from './types';
 import { removeEmptyLayers } from './timeline-controls';
 import { createEditorStore } from './store';
+import { timelineLayout } from './timeline-layout';
 import { describe,expect,it } from 'vitest';
 import { closestSnap,snapMoveDelta,edgeScrollSpeed,zoomAtAnchor,reorderLayer,deleteEmptyLayer,moveClipToLayer,moveSelectedClips,intersectsSelection,moveSelectionToNewLayers,layerDropTarget,clipLayerDropTarget,resizeSelectedClips } from './timeline-controls';
 it('snaps to the nearest edge independent of clip order',()=>{expect(closestSnap(4.1,[4.18,4.08],.2)).toBe(4.08);expect(closestSnap(4,[2,8],.1)).toBe(4);});
@@ -192,4 +193,60 @@ it('rejects cross-group FX drops and allows only the outer FX creation zone', ()
  expect(clipLayerDropTarget(70,rows,'effects')).toEqual({track:2,direction:'below'});
  expect(clipLayerDropTarget(140,rows,'effects')).toBeNull();expect(clipLayerDropTarget(250,rows,'effects')).toBeNull();
  expect(clipLayerDropTarget(70,rows,'visual')).toBeNull();expect(clipLayerDropTarget(70,rows,'audio')).toBeNull();
+});
+
+it('creates V rows from the actual gaps between FX/video/audio without shifting FX or linked sound tracks', () => {
+ const project:Timeline={fps:30,aspectRatio:'landscape',tracks:{visual:1,overlay:0,audio:1,effects:1},clips:[
+  {id:'effect',kind:'effect',track:1,start:1,duration:1,sourceStart:0,effectPreset:'flash'},
+  {id:'video',kind:'video',track:1,start:2,duration:3,sourceStart:4,audioSeparated:true,linkedClipId:'sound',volume:0},
+  {id:'sound',kind:'audio',track:1,start:2,duration:3,sourceStart:4,linkedClipId:'video',volume:.8},
+ ]};
+ for(const compact of [false,true]) {
+  const rows=timelineLayout(project,compact).tracks.map(row=>({...row,track:row.number,bottom:row.top+row.height}));
+  const [fx,video,audio]=rows;
+  const above=(fx.bottom+video.top)/2,below=(video.bottom+audio.top)/2;
+  expect(clipLayerDropTarget(above,rows,'visual')).toEqual({edge:'above'});
+  expect(clipLayerDropTarget(below,rows,'visual')).toEqual({edge:'below'});
+  expect(clipLayerDropTarget(video.top-3,rows,'visual')).toEqual({track:1,direction:'above'});
+  expect(clipLayerDropTarget(video.bottom+3,rows,'visual')).toEqual({track:1,direction:'below'});
+  expect(clipLayerDropTarget((fx.top+fx.bottom)/2,rows,'visual')).toBeNull();
+  expect(clipLayerDropTarget((audio.top+audio.bottom)/2,rows,'visual')).toBeNull();
+  expect(clipLayerDropTarget(fx.top-20,rows,'visual')).toBeNull();expect(clipLayerDropTarget(audio.bottom+20,rows,'visual')).toBeNull();
+  for(const edge of ['above','below'] as const) {
+   const next=moveSelectionToNewLayers(project,['video'],.5,edge,'video');
+   expect(next.tracks).toEqual({visual:2,overlay:0,audio:1,effects:1});expect(next.clips[0]).toEqual(project.clips[0]);
+   expect(next.clips[1]).toMatchObject({track:edge==='above'?2:1,start:2.5,duration:3,sourceStart:4,linkedClipId:'sound'});
+   expect(next.clips[2]).toEqual({...project.clips[2],start:2.5});
+  }
+ }
+});
+
+it('inserts a new V row between existing V rows while preserving FX, linked audio and normal row drops', () => {
+ const project:Timeline={fps:30,aspectRatio:'landscape',tracks:{visual:3,overlay:0,audio:1,effects:1},clips:[
+  {id:'effect',kind:'effect',track:1,start:1,duration:1,sourceStart:0,effectPreset:'flash'},
+  {id:'video',kind:'video',track:1,start:2,duration:3,sourceStart:4,audioSeparated:true,linkedClipId:'sound',volume:0},
+  {id:'sound',kind:'audio',track:1,start:2,duration:3,sourceStart:4,linkedClipId:'video',volume:.8},
+  {id:'title',kind:'caption',track:3,start:0,duration:20,sourceStart:0,text:'Keep this'},
+  {id:'other',kind:'video',track:2,start:0,duration:10,sourceStart:1},
+ ]};
+ for(const compact of [false,true]) {
+  const rows=timelineLayout(project,compact).tracks.map(row=>({...row,track:row.number,bottom:row.top+row.height}));
+  const visual=rows.filter(row=>row.group==='visual');
+  expect(clipLayerDropTarget(visual[0].top+visual[0].height/2,rows,'visual')).toEqual({track:3,direction:'below'});
+  for(let index=0;index<visual.length-1;index++)for(const offset of [-2,2]) {
+   const upper=visual[index],lower=visual[index+1],boundary=(upper.bottom+lower.top)/2;
+   const target=clipLayerDropTarget(boundary+offset,rows,'visual');
+   expect(target).toEqual(offset<0?{track:upper.track,direction:'below',insert:true}:{track:lower.track,direction:'above',insert:true});
+   if(!target||'edge' in target)throw new Error('Expected an internal insertion target');
+   const next=moveSelectionToNewLayers(project,['video'],.5,target.direction,'video',undefined,target.track);
+   const insertion=upper.track;
+   expect(next.tracks).toEqual({visual:4,overlay:0,audio:1,effects:1});expect(next.clips[0]).toEqual(project.clips[0]);
+   expect(next.clips[1]).toEqual({...project.clips[1],track:insertion,start:2.5});
+   expect(next.clips[2]).toEqual({...project.clips[2],start:2.5});
+   expect(next.clips[3]).toEqual({...project.clips[3],track:4});
+   expect(next.clips[4]).toEqual({...project.clips[4],track:2>=insertion?3:2});
+   const store=createEditorStore(project);store.getState().edit(next);expect(store.getState().undo()).toEqual(project);
+  }
+ }
+ expect(()=>moveSelectionToNewLayers(project,['video'],0,'above','video',undefined,99)).toThrow('existing layer');
 });

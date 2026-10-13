@@ -133,8 +133,8 @@ export function moveSelectedClips(timeline:Timeline,ids:string[],timeDelta:numbe
   return placeMovedClips(timeline,moved,direction,false);
 }
 
-/** Dropping outside a group's stack creates rows on that side in one undoable edit. */
-export function moveSelectionToNewLayers(timeline:Timeline,ids:string[],timeDelta:number,edge:'above'|'below',anchorId?:string,magnet?:TimelineMagnet):Timeline {
+/** Insert rows at an outer edge or beside atTrack in the anchor group, as one undoable edit. */
+export function moveSelectionToNewLayers(timeline:Timeline,ids:string[],timeDelta:number,edge:'above'|'below',anchorId?:string,magnet?:TimelineMagnet,atTrack?:number):Timeline {
   timeline=normalizeTimeline(timeline);
   const selected=new Set(linkedClipIds(timeline,ids));const explicit=new Set(ids);
   const members=timeline.clips.filter(clip=>selected.has(clip.id));if(!members.length)return timeline;
@@ -146,35 +146,44 @@ export function moveSelectionToNewLayers(timeline:Timeline,ids:string[],timeDelt
     const groupMembers=members.filter(clip=>explicit.has(clip.id)&&layerGroup(clip.kind)===group&&(!clip.linkedClipId||group===anchorGroup));if(!groupMembers.length)continue;
     const first=Math.min(...groupMembers.map(trackOf));const last=Math.max(...groupMembers.map(trackOf));const span=last-first+1;
     if(counts[group]+span>maxTrackCount(group))throw new Error(`This group already has ${maxTrackCount(group)} layers. Remove an empty layer before adding another.`);
-    const originalCount=counts[group];counts[group]+=span;
+    const originalCount=counts[group],insertion=group===anchorGroup?atTrack:undefined;
+    if(insertion!==undefined&&(!Number.isInteger(insertion)||insertion<1||insertion>originalCount))throw new Error('Choose an existing layer in this group.');
+    const base=insertion===undefined?(edge==='above'?originalCount+1:1):insertion+(edge==='above'?1:0);
+    counts[group]+=span;
     clips=clips.map(clip=>{
       if(layerGroup(clip.kind)!==group)return clip;
-      if(groupMembers.some(member=>member.id===clip.id))return {...clip,track:(edge==='above'?originalCount+1:1)+trackOf(clip)-first};
-      return edge==='below'?{...clip,track:trackOf(clip)+span}:clip;
+      if(groupMembers.some(member=>member.id===clip.id))return {...clip,track:base+trackOf(clip)-first};
+      return trackOf(clip)>=base?{...clip,track:trackOf(clip)+span}:clip;
     });
   }
   return {...timeline,tracks:counts,clips};
 }
 
-export type LayerDropTarget={edge:'above'|'below'}|{track:number;direction:'above'|'below'};
+export type LayerDropTarget={edge:'above'|'below'}|{track:number;direction:'above'|'below';insert?:true};
 export function layerDropTarget(pointerY:number,rows:{top:number;bottom:number;track:number}[]):LayerDropTarget|null {
   if(!rows.length)return null;
   if(pointerY<rows[0].top)return {edge:'above'};
   if(pointerY>=rows[rows.length-1].bottom)return {edge:'below'};
+  for(let index=0;index<rows.length-1;index++){
+    const upper=rows[index],lower=rows[index+1],boundary=(upper.bottom+lower.top)/2;
+    if(Math.abs(pointerY-boundary)<=6)return pointerY<boundary?{track:upper.track,direction:'below',insert:true}:{track:lower.track,direction:'above',insert:true};
+  }
   const row=rows.find(row=>pointerY>=row.top&&pointerY<row.bottom);
   return row?{track:row.track,direction:pointerY<(row.top+row.bottom)/2?'above':'below'}:null;
 }
-/** Crossing the other stack is an invalid drop, not a new row in this group. */
+/** Create rows in the adjacent group gaps, never inside or beyond another stack. */
 export function clipLayerDropTarget(pointerY:number,rows:{top:number;bottom:number;track:number;group:LayerGroup}[],group:LayerGroup):LayerDropTarget|null {
   const target=rows.find(row=>pointerY>=row.top&&pointerY<row.bottom);
   if(target&&target.group!==group)return null;
   const members=rows.filter(row=>row.group===group);
   if(!members.length)return null;
-  if(pointerY<members[0].top&&rows.some(row=>row.group!==group&&row.top<members[0].top))return null;
-  if(pointerY>=members[members.length-1].bottom&&rows.some(row=>row.group!==group&&row.bottom>members[members.length-1].bottom))return null;
+  const first=members[0],last=members[members.length-1];
+  const previousBottom=Math.max(-Infinity,...rows.filter(row=>row.group!==group&&row.bottom<=first.top).map(row=>row.bottom));
+  const nextTop=Math.min(Infinity,...rows.filter(row=>row.group!==group&&row.top>=last.bottom).map(row=>row.top));
+  if(pointerY<first.top&&pointerY<previousBottom)return null;
+  if(pointerY>=last.bottom&&pointerY>=nextTop)return null;
   // Slightly missing a row should keep that row, not grow the stack.
   if(pointerY<members[0].top&&pointerY>members[0].top-6)return {track:members[0].track,direction:'above'};
-  const last=members[members.length-1];
   if(pointerY>=last.bottom&&pointerY<last.bottom+6)return {track:last.track,direction:'below'};
   return layerDropTarget(pointerY,members);
 }

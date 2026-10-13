@@ -109,7 +109,7 @@ export function deriveTrackCounts(timeline: Timeline): ResolvedTrackCounts {
   return counts;
 }
 export function clipColor(kind: ClipKind) {
-  return kind === 'effect' ? '#FF9B36' : kind === 'caption' ? '#5DBAA0' : kind === 'graphic' ? '#BA5D7A' : kind === 'audio' ? '#8F5DBA' : '#303030';
+  return kind === 'effect' ? '#F53F46' : kind === 'caption' ? '#5DBAA0' : kind === 'graphic' ? '#BA5D7A' : kind === 'audio' ? '#8F5DBA' : '#303030';
 }
 export function deriveTracks(timeline: Timeline) {
   const counts = deriveTrackCounts(timeline);
