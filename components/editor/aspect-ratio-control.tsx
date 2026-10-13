@@ -3,7 +3,7 @@
 import { ChevronDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import type { AspectRatio } from '@/lib/editor/types';
+import { dimensions, type AspectRatio } from '@/lib/editor/types';
 import './aspect-ratio-control.css';
 
 const FORMATS: { value: AspectRatio; ratio: string; label: string }[] = [
@@ -32,11 +32,16 @@ export function AspectRatioControl({ value, onChange }: { value: AspectRatio; on
         const format = FORMATS.find(format => format.value === next);
         if (format && format.value !== value) onChange(format.value);
       }}>
-        {FORMATS.map(format => <DropdownMenuRadioItem className="aspect-ratio-card" key={format.value} value={format.value}>
-          <span className="aspect-ratio-preview" aria-hidden="true"><span className="aspect-ratio-shape" data-ratio={format.value} /></span>
-          <span className="aspect-ratio-value">{format.ratio}</span>
-          <span className="aspect-ratio-name">{format.label}</span>
-        </DropdownMenuRadioItem>)}
+        {FORMATS.map(format => {
+          const { width, height } = dimensions(format.value);
+          return <DropdownMenuRadioItem className="aspect-ratio-card" key={format.value} value={format.value} aria-label={`${format.label}, ${format.ratio}, ${width} by ${height} pixels`}>
+            <span className="aspect-ratio-preview" aria-hidden="true"><span className="aspect-ratio-shape" data-ratio={format.value}>
+              <span className="aspect-ratio-dimensions"><span>{width}</span><span>×</span><span>{height}</span></span>
+            </span></span>
+            <span className="aspect-ratio-value">{format.ratio}</span>
+            <span className="aspect-ratio-name">{format.label}</span>
+          </DropdownMenuRadioItem>;
+        })}
       </DropdownMenuRadioGroup>
     </DropdownMenuContent>
   </DropdownMenu>;
