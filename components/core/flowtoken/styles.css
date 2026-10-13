@@ -5,5 +5,5 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  [data-flow-token] { animation: none !important; }
+  [data-flow-token]:not([data-flow-motion="allow"]) { animation: none !important; }
 }

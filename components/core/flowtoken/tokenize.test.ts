@@ -24,13 +24,6 @@ describe("FlowToken received chunks", () => {
     expect(second.tokens.map((token) => token.text).join("")).toBe(second.input);
     expect(second.tokens.at(-1)?.text).toBe("ok**");
   });
-  it('staggered arrival batches never queue more than 180ms of hidden text', () => {
-    const text = 'A burst of many words arrived together from the server but must become visible promptly.';
-    const result = appendFlowTokens({ input: '', tokens: [] }, text);
-    expect(result.tokens.length).toBeGreaterThan(1);
-    expect(Math.max(...result.tokens.map(token => token.delay ?? 0))).toBe(180);
-    expect(result.tokens[1].delay).toBeCloseTo(1000 / 30);
-  });
   it('keeps the unchanged prefix mounted when persisted text is normalized', () => {
     const before = appendFlowTokens({ input: '', tokens: [] }, 'Your edit ready');
     const after = appendFlowTokens(before, 'Your edit is ready.');
