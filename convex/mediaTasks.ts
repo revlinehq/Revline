@@ -10,18 +10,22 @@ import { mediaTaskCredentials, requireMediaTask, requireMediaWorker } from './li
 import { mediaWorkflow } from './lib/workflows';
 import { mediaUrl } from './lib/media_storage';
 import { saveAssetAnalysis, validateWaveform } from './assets';
+import { parseVideoLink } from '../lib/editor/video-link';
+import { addMediaClip } from '../lib/editor/operations';
+import { timelineDuration } from '../lib/editor/types';
+import { commitTimeline, currentTimeline } from './lib/timeline';
 
 const LEASE_MS = 60_000;
 const MAX_ATTEMPTS = 3;
 const eventResult = v.object({ success: v.boolean(), retryable: v.boolean(), error: v.optional(v.string()) });
 const taskState = v.object({ _id: v.id('mediaTasks'), kind: mediaTaskKind, status: mediaTaskStatus, progress: v.number(), attempt: v.number(), error: v.optional(v.string()), assetId: v.optional(v.id('assets')) });
 const renderSnapshot = v.object({ timeline: timelineValidator, assets: v.array(assetWithUrl), resolution: v.number(), fps: v.number(), quality: v.string() });
-const workItem = v.object({ ...mediaTaskCredentials, projectId: v.id('projects'), kind: mediaTaskKind, asset: v.optional(assetWithUrl), outputAssetId: v.optional(v.id('assets')), outputStored: v.optional(v.boolean()), render: v.optional(renderSnapshot), renderJobId: v.optional(v.id('renderJobs')) });
+const workItem = v.object({ ...mediaTaskCredentials, projectId: v.id('projects'), kind: mediaTaskKind, sourceUrl: v.optional(v.string()), asset: v.optional(assetWithUrl), outputAssetId: v.optional(v.id('assets')), outputStored: v.optional(v.boolean()), render: v.optional(renderSnapshot), renderJobId: v.optional(v.id('renderJobs')) });
 export type MediaWorkItem = Infer<typeof workItem>;
 export const taskResult = v.object({ analysis: v.optional(analysisValidator), audioAssetId: v.optional(v.id('assets')), waveform: v.optional(waveformValidator) });
 export type MediaTaskResult = Infer<typeof taskResult>;
 
-export async function enqueueMediaTask(ctx: MutationCtx, input: Pick<Doc<'mediaTasks'>, 'ownerId' | 'projectId' | 'kind'> & Partial<Pick<Doc<'mediaTasks'>, 'assetId' | 'renderJobId' | 'analysisRequestId'>>): Promise<Id<'mediaTasks'>> {
+export async function enqueueMediaTask(ctx: MutationCtx, input: Pick<Doc<'mediaTasks'>, 'ownerId' | 'projectId' | 'kind'> & Partial<Pick<Doc<'mediaTasks'>, 'assetId' | 'renderJobId' | 'analysisRequestId' | 'sourceUrl'>>): Promise<Id<'mediaTasks'>> {
   if (input.assetId) {
     const existing = await ctx.db.query('mediaTasks').withIndex('by_asset_kind', q => q.eq('assetId', input.assetId).eq('kind', input.kind)).order('desc').take(10);
     const active = existing.find(task => task.status === 'queued' || task.status === 'running' || task.status === 'retrying');
@@ -88,10 +92,26 @@ export const cleanup = internalMutation({ args: { workflowId: vWorkflowId }, ret
 export const start = mutation({ args: { projectId: v.id('projects'), assetId: v.id('assets'), kind: mediaTaskKind }, returns: v.id('mediaTasks'), handler: async (ctx, args): Promise<Id<'mediaTasks'>> => {
   const ownerId = await requireOwner(ctx); await requireEditorAccess(ctx, ownerId); await requireProject(ctx, args.projectId, ownerId);
   const asset = await ctx.db.get(args.assetId);
-  if (!asset || asset.ownerId !== ownerId || asset.projectId !== args.projectId || asset.kind === 'image' || args.kind === 'render') throw new ConvexError('Choose media from this project.');
+  if (!asset || asset.ownerId !== ownerId || asset.projectId !== args.projectId || asset.kind === 'image' || args.kind === 'render' || args.kind === 'import') throw new ConvexError('Choose media from this project.');
   if (['extract', 'shots', 'understand', 'track'].includes(args.kind) && asset.kind !== 'video') throw new ConvexError('This operation requires a video.');
   if (args.kind === 'waveform' && asset.kind !== 'audio') throw new ConvexError('Waveforms require an audio source.');
   return enqueueMediaTask(ctx, { ...args, ownerId });
+}});
+export const importVideo = mutation({ args: { projectId: v.optional(v.id('projects')), url: v.string() }, returns: v.object({ projectId: v.id('projects'), taskId: v.id('mediaTasks') }), handler: async (ctx, args) => {
+  const ownerId = await requireOwner(ctx); await requireEditorAccess(ctx, ownerId);
+  let sourceUrl: string;
+  try { sourceUrl = parseVideoLink(args.url).url; } catch (error) { throw new ConvexError((error as Error).message); }
+  // A new edit and its durable import are created atomically.
+  const now = Date.now();
+  const projectId = args.projectId ?? await ctx.db.insert('projects', { ownerId, title: 'Video import', aspectRatio: 'vertical', timeline: { fps: 30, aspectRatio: 'vertical', clips: [], tracks: { visual: 1, overlay: 0, audio: 1 } }, revision: 0, history: [], createdAt: now, updatedAt: now });
+  await requireProject(ctx, projectId, ownerId);
+  const recent = await ctx.db.query('mediaTasks').withIndex('by_project_createdAt', q => q.eq('projectId', projectId)).order('desc').take(40);
+  const pending = recent.filter(task => ['queued', 'running', 'retrying'].includes(task.status) && task.kind === 'import');
+  const existing = pending.find(task => task.sourceUrl === sourceUrl);
+  if (existing) return { projectId, taskId: existing._id };
+  if (pending.length >= 3) throw new ConvexError('Wait for the current video imports to finish.');
+  const taskId = await enqueueMediaTask(ctx, { ownerId, projectId, kind: 'import', sourceUrl });
+  return { projectId, taskId };
 }});
 export const get = query({ args: { taskId: v.id('mediaTasks') }, returns: taskState, handler: async (ctx, args) => {
   const ownerId = await requireOwner(ctx), task = await ctx.db.get(args.taskId);
@@ -143,7 +163,7 @@ export const claim = mutation({ args: { workerSecret: v.string() }, returns: v.u
   await ctx.db.patch(task._id, { status: 'running', leaseToken, leaseExpiresAt: now + LEASE_MS, attemptStartedAt: now, updatedAt: now });
   if (task.analysisRequestId && await ctx.db.get(task.analysisRequestId)) await ctx.db.patch(task.analysisRequestId, { status: 'running' });
   await ctx.scheduler.runAfter(LEASE_MS, internal.mediaTasks.expire, { taskId: task._id, leaseToken });
-  return { taskId: task._id, leaseToken, projectId: task.projectId, kind: task.kind, ...(asset ? { asset: { ...asset, url: await mediaUrl(ctx, asset) } } : {}), ...(render ? { render, outputStored } : {}), ...(task.renderJobId ? { renderJobId: task.renderJobId } : {}), ...(task.outputAssetId ? { outputAssetId: task.outputAssetId } : {}) };
+  return { taskId: task._id, leaseToken, projectId: task.projectId, kind: task.kind, ...(task.sourceUrl ? { sourceUrl: task.sourceUrl } : {}), ...(asset ? { asset: { ...asset, url: await mediaUrl(ctx, asset) } } : {}), ...(render ? { render, outputStored } : {}), ...(task.renderJobId ? { renderJobId: task.renderJobId } : {}), ...(task.outputAssetId ? { outputAssetId: task.outputAssetId } : {}) };
 }});
 export const heartbeat = mutation({ args: { ...mediaTaskCredentials, progress: v.optional(v.number()) }, returns: v.null(), handler: async (ctx, args) => {
   const task = await requireMediaTask(ctx, args.taskId, args.leaseToken);
@@ -174,6 +194,16 @@ export const complete = mutation({ args: { ...mediaTaskCredentials, result: task
     const job = task.renderJobId ? await ctx.db.get(task.renderJobId) : null;
     if (!job?.outputR2Key) throw new ConvexError('Export has not stored its MP4 yet.');
     await ctx.db.patch(job._id, { status: 'completed', progress: 100, error: undefined, updatedAt: Date.now() });
+  } else if (task.kind === 'import') {
+    const output = task.outputAssetId ? await ctx.db.get(task.outputAssetId) : null;
+    if (!output || output.ownerId !== task.ownerId || output.projectId !== task.projectId || output.kind !== 'video' || !output.duration) throw new ConvexError('The imported video has not been stored yet.');
+    const project = await requireProject(ctx, task.projectId, task.ownerId);
+    const timeline = currentTimeline(project);
+    const at = timelineDuration(timeline), duration = Math.min(output.duration, 300 - at);
+    if (duration < 1 / timeline.fps) throw new ConvexError('Your timeline is full. The imported video is saved in Sources.');
+    const next = addMediaClip(timeline, { ...output, duration }, `import-${task._id}`, at);
+    await commitTimeline(ctx, project, next, project.revision ?? 0);
+    await enqueueMediaTask(ctx, { ownerId: task.ownerId, projectId: task.projectId, assetId: output._id, kind: 'extract' });
   } else {
     if (!asset || asset.ownerId !== task.ownerId || asset.projectId !== task.projectId) throw new ConvexError('Source media was removed.');
     if (task.kind === 'extract') {

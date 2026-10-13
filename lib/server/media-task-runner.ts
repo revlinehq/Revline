@@ -16,12 +16,21 @@ import { extractSourceAudio } from './extract-audio';
 import { measureAudioWaveform } from './audio-waveform';
 import { uploadMediaFile } from './upload-media-file';
 import { runRenderWorker } from './render-worker';
+import { importVideoLink } from './import-video-link';
 
 export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpClient, convexUrl: string, signal: AbortSignal, onProgress: (percent: number) => void): Promise<MediaTaskResult> {
   const directory = await mkdtemp(join(tmpdir(), 'revline-task-'));
   const credentials = { taskId: task.taskId, leaseToken: task.leaseToken };
   const uploadContext = { convex, refreshAuth: async () => { signal.throwIfAborted(); } };
   try {
+    if (task.kind === 'import') {
+      if (task.outputAssetId) return {};
+      if (!task.sourceUrl) throw new AnalysisError('The video link is missing.', 400);
+      const { path, ...metadata } = await importVideoLink(task.sourceUrl, directory, signal, onProgress);
+      await uploadMediaFile(path, { ...credentials, projectId: task.projectId, ...metadata, kind: 'video', contentType: 'video/mp4' }, uploadContext, signal);
+      onProgress(98);
+      return {};
+    }
     if (task.kind === 'render') {
       if (!task.render || !task.renderJobId) throw new AnalysisError('Export snapshot is missing.', 400);
       if (task.outputStored) return {};

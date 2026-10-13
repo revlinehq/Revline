@@ -65,6 +65,17 @@ The production R2 gateway uses `cloudflare/media/wrangler.production.jsonc`, all
 
 `npm run worker:production` starts the production processing daemon with the private `.env.production.local` settings. It currently runs on this computer; an always-running worker host is still required to process media and exports while this computer is off. Queued jobs remain saved in Convex until a worker can claim them.
 
+Video-link imports are available on the new-edit page and in the editor’s Sources panel. Public YouTube links and direct HTTPS MP4 downloads are queued through the same workflow, saved privately to R2, and appended to the current timeline without replacing concurrent edits. Limits: five-minute sources and 500 MB. Downloads check public DNS addresses, pin the connection to the checked IP, revalidate redirects, and reject webpages. Imported streams are remuxed or converted to H.264/AAC for browser playback; audio preparation runs afterward. A full timeline leaves the imported source in Sources and reports the limit.
+
+YouTube worker setup (FFmpeg and Node 22+ are also required):
+
+```bash
+uv venv .data/video-import
+uv pip sync --python .data/video-import/bin/python scripts/video-import-requirements.txt
+```
+
+The worker uses `.data/video-import/bin/yt-dlp`; `YT_DLP_PATH` can point to another installed executable. The pinned requirements include yt-dlp’s JavaScript challenge support. YouTube can restrict downloads or require sign-in; no browser cookies, account credentials, or access-control bypasses are used. Restricted videos return an import error and can be added as local files instead.
+
 The public demo explicitly shows a sample conversation. Its local editing, preview, selection, and transform controls work without model credentials. No live Claude, Gemini, or TwelveLabs inference is claimed without configuring and testing those providers.
 
 Stripe billing is scaffolded and gated by `BILLING_ENABLED=false`. The single Revline Editor Pro plan is USD $39/month, with a 3-day free trial on the first subscription. Its live catalog product and price remain inactive; no checkout, webhook processing, or charges are enabled. Trial checkout collects a payment method and renews monthly unless canceled. Returning subscribers do not receive another trial. Activation requires the matching price, server secret, signed lifecycle webhook, and an intentional billing enablement. Tax collection is not configured.

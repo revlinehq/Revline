@@ -5,9 +5,10 @@ import { SlidersHorizontal, Layers, Crop, X, FolderOpen } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { NumberControl } from './visual-controls';
 import { FootagePanel, type UploadProgress } from './footage-panel';
+import type { VideoImportState } from './video-link-import';
 import { type Clip, type MediaAsset } from '@/lib/editor/types';
 
-export function PreviewInspector({ clip, audioClip, asset, assets, upload, onUpload, onAdd, onChange, onCrop, cropping=false, onClose }: { clip?: Clip; audioClip?: Clip; asset?: MediaAsset; assets: MediaAsset[]; upload: UploadProgress; onUpload: () => void; onAdd: (asset: MediaAsset) => void; onChange: (patch: Partial<Clip>) => void; onCrop: () => void; cropping?:boolean; onClose: () => void }) {
+export function PreviewInspector({ clip, audioClip, asset, assets, upload, onUpload, onAdd, onChange, onCrop, cropping=false, onClose, onImportVideo, videoImports }: { clip?: Clip; audioClip?: Clip; asset?: MediaAsset; assets: MediaAsset[]; upload: UploadProgress; onUpload: () => void; onAdd: (asset: MediaAsset) => void; onChange: (patch: Partial<Clip>) => void; onCrop: () => void; cropping?:boolean; onClose: () => void; onImportVideo?: (url:string)=>Promise<void>; videoImports?:VideoImportState[] }) {
   const [tab, setTab] = useState<'edit' | 'sources' | 'effects'>('edit');
   const text = clip?.kind === 'caption' || clip?.kind === 'graphic';
   const visual = clip?.kind === 'video' || clip?.kind === 'image';
@@ -27,7 +28,7 @@ export function PreviewInspector({ clip, audioClip, asset, assets, upload, onUpl
       <button className="inspector-close" aria-label="Close editing panel" onClick={onClose}><X size={14}/></button>
     </div>
     <div className="inspector-content" role="tabpanel" id={`inspector-${tab}`} aria-labelledby={`inspector-${tab}-tab`}>
-      {tab === 'sources' ? <FootagePanel variant="inspector" assets={assets} upload={upload} onUpload={onUpload} onAdd={onAdd}/> : tab === 'edit' ? clip ? <>
+      {tab === 'sources' ? <FootagePanel variant="inspector" onImportVideo={onImportVideo} videoImports={videoImports} assets={assets} upload={upload} onUpload={onUpload} onAdd={onAdd}/> : tab === 'edit' ? clip ? <>
         <div className="inspector-selection"><small>{text ? 'Text' : clip.kind === 'audio' ? 'Audio' : 'Footage'}</small><p>{clip.text || asset?.fileName || 'Selected clip'}</p></div>
         {text && <><label className="inspector-field">Words<textarea aria-label="Selected text" value={clip.text ?? ''} maxLength={500} onChange={e => onChange({ text: e.target.value })}/></label><div className="inspector-field-row"><NumberControl label="Text size" min={8} max={300} value={clip.fontSize ?? (clip.kind === 'graphic' ? 92 : 52)} onCommit={fontSize => onChange({ fontSize })}/><label className="inspector-field">Color<input aria-label="Text color" type="color" value={clip.color ?? '#ffffff'} onChange={e => onChange({ color: e.target.value })}/></label></div></>}
         {visual && <><div className="inspector-fit"><Button variant="outline" disabled={cropping} aria-pressed={clip.fit !== 'contain'} onClick={() => onChange({ fit: 'cover' })}>Fill</Button><Button variant="outline" disabled={cropping} aria-pressed={clip.fit === 'contain'} onClick={() => onChange({ fit: 'contain' })}>Fit</Button></div><Button variant="outline" className="inspector-transform" aria-pressed={cropping} disabled={!asset?.width || !asset?.height || !asset.url} onClick={onCrop}><Crop size={14}/>{cropping?'Done cropping':'Crop'}</Button><p className="visual-control-note">{cropping?'Drag the edges in the preview. Escape cancels.':'Move and resize using the handles in the preview.'}</p></>}

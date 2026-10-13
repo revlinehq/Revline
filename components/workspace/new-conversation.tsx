@@ -10,6 +10,7 @@ import { createProjectImportSession, type ImportFile, type ProjectImportProgress
 import { clearProjectImportJob, getOrCreateProjectImportJob, getProjectImportJob } from '@/lib/editor/project-import-job';
 import { uploadSourceFile } from '@/lib/editor/upload-source';
 import { prepareVideoAudio, prepareAudioWaveform } from '@/lib/editor/prepare-video-audio';
+import { VideoLinkImport } from '@/components/editor/video-link-import';
 import { FootageStartCard } from './footage-start-card';
 import { FootageProcessingCard, type FootageProcessingFile, type FootageProcessingPhase } from './footage-processing-card';
 import { RecentProjects } from './recent-projects';
@@ -30,6 +31,8 @@ export function NewConversation() {
   const convex = useConvex();
   const { isLoaded, isSignedIn, userId } = useAuth();
   const { isAuthenticated, isLoading: authLoading } = useConvexAuth();
+  const importVideo = useMutation(api.mediaTasks.importVideo);
+  const [linkStarting, setLinkStarting] = useState(false);
   const createProject = useMutation(api.projects.create);
   const saveTimeline = useMutation(api.projects.saveTimeline);
   const startUpload = useAction(api.r2.start);
@@ -53,7 +56,7 @@ export function NewConversation() {
   const [dragging, setDragging] = useState(false);
   const [error, setError] = useState('');
   const hasMedia = files.length + cloudIds.length > 0;
-  const busy = processing?.phase !== 'error' && (processing !== null || hasMedia);
+  const busy = linkStarting || (processing?.phase !== 'error' && (processing !== null || hasMedia));
 
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; unsubscribe.current?.(); }; }, []);
 
@@ -226,7 +229,12 @@ export function NewConversation() {
       <div className="new-conversation-start">
         <div className="new-conversation-intro"><h1 id="new-conversation-title">Welcome{firstName ? `, ${firstName}` : ''}.</h1><p>Start your edit. Add your clips, then tell Revline what to make.</p></div>
         <div className="new-conversation-entry" data-dragging={dragging || undefined} aria-busy={busy}>
-          {status ? <FootageProcessingCard files={processingFiles} {...status} error={error} onRetry={() => void processFootage()} onReset={reset} onOpen={session.current.projectId ? () => void openPartialProject() : undefined} /> : <FootageStartCard onAttach={() => input.current?.click()} disabled={!draftReady} dragging={dragging} />}
+          {status ? <FootageProcessingCard files={processingFiles} {...status} error={error} onRetry={() => void processFootage()} onReset={reset} onOpen={session.current.projectId ? () => void openPartialProject() : undefined} /> : <FootageStartCard onAttach={() => input.current?.click()} disabled={!draftReady || linkStarting} dragging={dragging} />}
+          {!status&&<VideoLinkImport disabled={!draftReady || authLoading || !isAuthenticated || linkStarting} onImport={async url=>{
+            if(submitting.current)return;submitting.current=true;setLinkStarting(true);
+            try { const result=await importVideo({url});router.push('/editor/'+result.projectId); }
+            finally { submitting.current=false;setLinkStarting(false); }
+          }}/>}
           {error && status?.phase !== 'error' && <p className="new-conversation-error" role="alert">{error}</p>}
         </div>
       </div>

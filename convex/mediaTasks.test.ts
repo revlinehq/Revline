@@ -1,6 +1,7 @@
 /// <reference types="vite/client" />
 import { convexTest } from 'convex-test';
 import workflowTest from '@convex-dev/workflow/test';
+import stripeTest from '@convex-dev/stripe/test';
 import { beforeEach, afterEach, expect, test, vi } from 'vitest';
 import schema from './schema';
 import { api, internal } from './_generated/api';
@@ -11,7 +12,7 @@ const identity = (subject: string) => ({ subject, issuer: 'https://test.clerk.ac
 beforeEach(() => { vi.useFakeTimers(); vi.stubEnv('RENDER_WORKER_SECRET', 'task-test-secret'); vi.stubEnv('MEDIA_WORKER_URL', 'https://media.example.com'); vi.stubEnv('MEDIA_SIGNING_SECRET', 'media-test-secret'); });
 afterEach(() => { vi.useRealTimers(); vi.unstubAllEnvs(); });
 async function fixture() {
-  const t = convexTest(schema, modules); workflowTest.register(t);
+  const t = convexTest(schema, modules); workflowTest.register(t); stripeTest.register(t);
   const owner = t.withIdentity(identity('owner')), stranger = t.withIdentity(identity('stranger'));
   const projectId = await owner.mutation(api.projects.create, { title: 'Task fixture', aspectRatio: 'vertical' });
   const assetId = await t.run(async ctx => {
@@ -24,6 +25,51 @@ async function fixture() {
   return { t, owner, stranger, projectId, assetId, start, drain, claim };
 }
 const transcript = { segments: [{ start: 0, end: 1, text: 'Actual words' }], words: [] };
+
+test('video imports enforce ownership and billing, dedupe active URLs and create projects atomically', async () => {
+  const f = await fixture();
+  await expect(f.stranger.mutation(api.mediaTasks.importVideo, { projectId: f.projectId, url: 'https://cdn.example.com/video.mp4' })).rejects.toThrow('Project not found');
+  await expect(f.owner.mutation(api.mediaTasks.importVideo, { url: 'https://localhost/video.mp4' })).rejects.toThrow('public');
+  expect(await f.owner.query(api.projects.list, {})).toHaveLength(1);
+  const first = await f.owner.mutation(api.mediaTasks.importVideo, { projectId: f.projectId, url: 'https://youtu.be/BaW_jenozKc' });
+  expect(await f.owner.mutation(api.mediaTasks.importVideo, { projectId: f.projectId, url: 'https://youtube.com/watch?v=BaW_jenozKc' })).toEqual(first);
+  vi.stubEnv('BILLING_ENABLED', 'true');
+  vi.stubEnv('STRIPE_SECRET_KEY', 'sk_test_fixture'); vi.stubEnv('STRIPE_WEBHOOK_SECRET', 'whsec_fixture'); vi.stubEnv('STRIPE_PRO_PRICE_ID', 'price_fixture'); vi.stubEnv('APP_ORIGIN', 'http://localhost:3001');
+  await expect(f.owner.mutation(api.mediaTasks.importVideo, { url: 'https://cdn.example.com/video.mp4' })).rejects.toThrow('SUBSCRIPTION_REQUIRED');
+  vi.stubEnv('BILLING_ENABLED', 'false');
+  await f.drain();
+});
+
+test('stored imports survive retries, append to the latest timeline once, and prepare audio in the background', async () => {
+  const f = await fixture();
+  const { taskId } = await f.owner.mutation(api.mediaTasks.importVideo, { projectId: f.projectId, url: 'https://cdn.example.com/video.mp4' });
+  await f.drain(); const first = (await f.claim())!;
+  expect(first.sourceUrl).toBe('https://cdn.example.com/video.mp4');
+  await expect(f.t.query(internal.r2.authorize, { projectId: f.projectId, taskId, leaseToken: first.leaseToken, kind: 'audio', contentType: 'audio/mp4' })).rejects.toThrow('cannot upload');
+  expect(await f.t.query(internal.r2.authorize, { projectId: f.projectId, taskId, leaseToken: first.leaseToken, kind: 'video', contentType: 'video/mp4' })).toBe('owner');
+  await f.t.run(ctx => ctx.db.patch(taskId, { outputAssetId: f.assetId }));
+  await f.t.mutation(api.mediaTasks.fail, { taskId, leaseToken: first.leaseToken, error: 'Disconnected after storing output', retryable: true }); await f.drain();
+  const retry = (await f.claim())!; expect(retry.outputAssetId).toBe(f.assetId);
+  // This edit happens after the worker started; import completion must retain it.
+  await f.owner.mutation(api.projects.saveTimeline, { projectId: f.projectId, expectedRevision: 0, timeline: { fps: 30, aspectRatio: 'square', clips: [{ id: 'human-title', kind: 'graphic', text: 'Keep this edit', start: 0, duration: 1, sourceStart: 0 }] } });
+  const complete = { taskId, leaseToken: retry.leaseToken, result: {} };
+  await f.t.mutation(api.mediaTasks.complete, complete); await f.t.mutation(api.mediaTasks.complete, complete); await f.drain();
+  const project = await f.owner.query(api.projects.get, { projectId: f.projectId });
+  expect(project.timeline?.aspectRatio).toBe('square');
+  expect(project.timeline?.clips).toHaveLength(2);
+  expect(project.timeline?.clips.find(clip=>clip.assetId===f.assetId)).toMatchObject({ start: 1, duration: 3 });
+  expect((await f.claim())?.kind).toBe('extract');
+});
+
+test('imports cannot complete with another user’s asset and stale leases cannot write', async () => {
+  const f = await fixture();
+  const { taskId } = await f.owner.mutation(api.mediaTasks.importVideo, { projectId: f.projectId, url: 'https://cdn.example.com/video.mp4' });
+  await f.drain(); const work = (await f.claim())!;
+  await f.t.run(async ctx => { await ctx.db.patch(f.assetId, { ownerId: 'stranger' }); await ctx.db.patch(taskId, { outputAssetId: f.assetId }); });
+  await expect(f.t.mutation(api.mediaTasks.complete, { taskId, leaseToken: work.leaseToken, result: {} })).rejects.toThrow('not been stored');
+  await expect(f.t.mutation(api.mediaTasks.complete, { taskId, leaseToken: 'wrong', result: {} })).rejects.toThrow('lease');
+  await f.t.mutation(api.mediaTasks.fail, { taskId, leaseToken: work.leaseToken, error: 'Invalid output', retryable: false }); await f.drain();
+});
 
 test('a workflow queues once, accepts a scoped result, and completion is idempotent', async () => {
   const f = await fixture(), taskId = await f.start('transcribe');
