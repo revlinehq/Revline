@@ -6,7 +6,7 @@
 
 .text-template-presets{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 10px}
 .text-template-presets button{display:flex;flex-direction:column;gap:7px;padding:0;border:0;background:transparent;text-align:left;color:var(--ws-text);font-size:11px;cursor:pointer;min-width:0}
-.text-template-preview{display:flex;flex-direction:column;justify-content:center;gap:2px;width:100%;height:70px;padding:12px;border-radius:8px;background:var(--ws-hover);box-shadow:inset 0 0 0 1px var(--ws-line);overflow:hidden}
+.text-template-preview{display:flex;flex-direction:column;justify-content:center;gap:2px;width:100%;height:70px;padding:12px;border-radius:8px;background:var(--ws-hover);box-shadow:inset 0 0 0 1px var(--ws-border);overflow:hidden}
 .text-template-preview b{font-size:17px;line-height:1.2;white-space:nowrap}
 .text-template-preview small{font-size:11px;line-height:1.2;color:var(--ws-muted);white-space:nowrap}
 .text-template-word-pop b{font-size:26px}
