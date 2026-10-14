@@ -48,6 +48,7 @@ export function EffectSlider({ label, value, bounds, step = .01, format, disable
   const progress = Math.min(100, Math.max(0, (draft - bounds[0]) / (bounds[1] - bounds[0]) * 100));
   return <div className="effect-slider" data-disabled={disabled || undefined}>
     <span className="effect-slider-fill" aria-hidden="true" style={{ width: `${progress}%` }}/>
+    <span className="effect-slider-handle" aria-hidden="true" style={{ left: `clamp(0px, calc(${progress}% - 1.5px), calc(100% - 3px))` }}/>
     <div className="effect-slider-readout" aria-hidden="true"><span>{label}</span><output htmlFor={id}>{format(draft)}</output></div>
     <input id={id} type="range" aria-label={label} aria-valuetext={format(draft)} min={bounds[0]} max={bounds[1]} step={step} value={draft} disabled={disabled}
       onPointerDown={event => { if (event.button === 0) { gesture.current = { initial: value, value: draft }; event.currentTarget.setPointerCapture(event.pointerId); } }}

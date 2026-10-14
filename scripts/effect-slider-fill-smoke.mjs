@@ -24,6 +24,22 @@ const errors = []; page.on('pageerror', error => errors.push(error.message));
 const flush = () => page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
 const input = label => `input[aria-label="${label}"]`;
 const counters = () => page.evaluate(() => ({ commits: window.commits.length, previews: window.previews.length }));
+async function verifyHandles() {
+  const handles = await page.$$eval('.effect-slider', sliders => sliders.map(slider => {
+    const handle = slider.querySelector('.effect-slider-handle'), bounds = slider.getBoundingClientRect(), rect = handle?.getBoundingClientRect(), style = handle && getComputedStyle(handle);
+    const fillWidth = slider.querySelector('.effect-slider-fill')?.getBoundingClientRect().width ?? 0;
+    return { count: slider.querySelectorAll('.effect-slider-handle').length, width: rect?.width, height: rect?.height, left: rect ? rect.left - bounds.left : -1, right: rect ? bounds.right - rect.right : -1, expectedLeft: Math.min(bounds.width - 3, Math.max(0, fillWidth - 1.5)), radius: style?.borderRadius, color: style?.backgroundColor, pointerEvents: style?.pointerEvents, hiddenFromAccessibility: handle?.getAttribute('aria-hidden') };
+  }));
+  assert.equal(handles.length, 19);
+  for (const handle of handles) {
+    assert.equal(handle.count, 1, 'Each slider has a single undivided pill');
+    assert.equal(handle.width, 3); assert.equal(handle.height, 16); assert.equal(handle.radius, '2px');
+    assert.equal(handle.color, 'rgb(255, 255, 255)'); assert.equal(handle.pointerEvents, 'none');
+    assert.equal(handle.hiddenFromAccessibility, 'true');
+    assert.ok(handle.left >= -.01 && handle.right >= -.01, 'Pills stay inside their sliders at every value');
+    assert.ok(Math.abs(handle.left - handle.expectedLeft) < .05, 'The pill tracks the measured fill boundary');
+  }
+}
 async function verifyFills(theme) {
   await page.evaluate(theme => { document.documentElement.dataset.workspaceTheme = theme; }, theme);
   const fills = await page.$$eval('.effect-slider', sliders => sliders.map(slider => {
@@ -42,6 +58,7 @@ async function verifyFills(theme) {
     assert.equal(fill.pointerEvents, 'none', `${theme} ${fill.label} fill cannot intercept gestures`);
   }
   assert.equal(new Set(fills.map(fill => fill.color)).size, 1, `${theme} uses the same blue for every effect slider`);
+  await verifyHandles();
   return fills;
 }
 try {
@@ -85,6 +102,8 @@ try {
   await page.focus(input('Size')); await page.keyboard.press('Home'); await flush();
   assert.equal(await page.$eval('[aria-label="Size"]', input => input.value), '0');
   assert.equal(await page.$eval('[aria-label="Size"]', input => input.parentElement.querySelector('.effect-slider-fill').getBoundingClientRect().width), 0, 'The range minimum has zero fill');
+  await verifyHandles();
+  await page.screenshot({ path: '/tmp/revline-effect-slider-pill-dark.png', clip: { x: 40, y: 0, width: 340, height: 930 } });
   assert.deepEqual(errors, []);
-  console.log('PASS: 19 shared sliders show the same blue fill at measured range widths in light/dark; cinematic bars keyboard/pointer previews, single commit, cancel; disabled values retained; standalone text size and minimum/maximum bounds. Synthetic only.');
+  console.log('PASS: 19 shared sliders show the same blue fill at measured range widths and one white rounded pill contained at min/max in light/dark; cinematic bars keyboard/pointer previews, single commit, cancel; disabled values retained; standalone text size. Synthetic only.');
 } finally { await browser.close(); }
