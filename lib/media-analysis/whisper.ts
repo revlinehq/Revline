@@ -51,8 +51,11 @@ async function transcribeChunk(path: string, duration: number, key: string, sign
   }
   const result = resultSchema.safeParse(await response.json().catch(() => null));
   if (!result.success) throw new AnalysisError('OpenAI Whisper returned an unreadable transcription.', 502);
-  if (result.data.text.trim() && !result.data.words?.length) throw new AnalysisError('Whisper returned speech without measured word timestamps. Please retry transcription.', 502);
-  return buildTranscript((result.data.words ?? []).map(word => ({ text: word.word, start: word.start, end: word.end })), duration);
+  // Whisper can emit empty alignment placeholders inside otherwise valid
+  // speech. They contain no spoken text and must not become caption words.
+  const words = (result.data.words ?? []).filter(word => word.word.trim());
+  if (result.data.text.trim() && !words.length) throw new AnalysisError('Whisper returned speech without measured word timestamps. Please retry transcription.', 502);
+  return buildTranscript(words.map(word => ({ text: word.word, start: word.start, end: word.end })), duration);
 }
 
 function buildTranscript(words: TranscriptWord[], duration: number) {

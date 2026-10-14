@@ -42,9 +42,15 @@ test('accepts silent audio and preserves instantaneous word alignments', async (
   expect((await transcribeWithWhisper(source, 2, 'fixture-key', signal())).words[0]).toEqual({ text: 'A', start: .1, end: .1 });
 });
 
+test('ignores empty native alignment placeholders while preserving all spoken words and their times', async () => {
+  response({ text: 'Hello there.', words: [{ word: 'Hello', start: .1, end: .5 }, { word: '', start: .5, end: .54 }, { word: ' ', start: .54, end: .54 }, { word: 'there.', start: .55, end: 1 }] });
+  expect(await transcribeWithWhisper(source, 2, 'fixture-key', signal())).toEqual({ words: [{ text: 'Hello', start: .1, end: .5 }, { text: 'there.', start: .55, end: 1 }], segments: [{ text: 'Hello there.', start: .1, end: 1 }] });
+});
+
 test.each([
   { text: 'Untimed speech.' },
   { text: 'Untimed speech.', words: [] },
+  { text: 'Untimed speech.', words: [{ word: '', start: .1, end: .2 }] },
   { text: 'Invalid', words: [{ word: 'Invalid', start: -.1, end: .2 }] },
   { text: 'Invalid', words: [{ word: 'Invalid', start: .3, end: .2 }] },
   { text: 'Invalid', words: [{ word: 'Invalid', start: .3, end: 4 }] },
