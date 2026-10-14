@@ -5,6 +5,15 @@ import type { Timeline } from './types';
 const timeline: Timeline = { fps: 30, aspectRatio: 'vertical', clips: [{ id: 'caption', kind: 'caption', start: 0, duration: 2, sourceStart: 0, text: '</script><img src=x onerror=alert(1)>', animation: 'rise' }] };
 
 describe('trusted composition generation', () => {
+  test('text and transitions share one optional scene renderer while legacy explicit URLs remain supported',()=>{
+    const html=generateComposition(timeline,[]);
+    expect(html).toContain('src="/vendor/remotion-runtime.js"');
+    expect(html).not.toContain('src="/vendor/remotion-text.js"');
+    expect(html).not.toContain('src="/vendor/remotion-transitions.js"');
+    const legacy=generateComposition(timeline,[],{remotionTextUrl:'./remotion-text.js'});
+    expect(legacy).toContain('src="./remotion-text.js"');
+    expect(legacy).not.toContain('src="/vendor/remotion-runtime.js"');
+  });
   test('export renders configured bar height with movement speed independent of its hold', () => {
     const html = generateComposition({ ...timeline, clips: [...timeline.clips, { id: 'bars', kind: 'effect', effectPreset: 'cinematic-bars', cinematicBars: { size: .2, speed: 2 }, start: 1, duration: 4, sourceStart: 0, track: 3 }] }, []);
     expect(html).toContain('class="cinematic-bar top" style="height:20%"');

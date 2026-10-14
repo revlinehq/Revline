@@ -54,10 +54,9 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
       }
       await copyFile(join(process.cwd(), 'public/vendor/gsap.min.js'), join(directory, 'gsap.min.js'));
       await copyFile(join(process.cwd(), 'public/vendor/visual-effects.js'), join(directory, 'visual-effects.js'));
-      await copyFile(join(process.cwd(), 'public/vendor/remotion-text.js'), join(directory, 'remotion-text.js'));
-      if(snapshot.timeline.clips.some(isTransitionClip)) await copyFile(join(process.cwd(), 'public/vendor/remotion-transitions.js'), join(directory, 'remotion-transitions.js'));
+      if(snapshot.timeline.clips.some(clip=>clip.kind==='graphic'||clip.kind==='caption'||isTransitionClip(clip)))await copyFile(join(process.cwd(), 'public/vendor/remotion-runtime.js'), join(directory, 'remotion-runtime.js'));
       for(const font of TEXT_FONTS) await copyFile(join(process.cwd(), 'public/fonts',font.fileName), join(directory,font.fileName));
-      await writeFile(join(directory, 'index.html'), generateComposition(snapshot.timeline, snapshot.assets as MediaAsset[], { resolution: snapshot.resolution as 720 | 1080, fps: snapshot.fps as 24 | 30 | 60, gsapUrl: './gsap.min.js', visualEffectsUrl: './visual-effects.js', remotionTextUrl: './remotion-text.js', remotionTransitionsUrl: './remotion-transitions.js', fontUrl: './space-grotesk-latin.woff2', fontUrls:Object.fromEntries(TEXT_FONTS.map(font=>[font.id,'./'+font.fileName])), assetUrls }));
+      await writeFile(join(directory, 'index.html'), generateComposition(snapshot.timeline, snapshot.assets as MediaAsset[], { resolution: snapshot.resolution as 720 | 1080, fps: snapshot.fps as 24 | 30 | 60, gsapUrl: './gsap.min.js', visualEffectsUrl: './visual-effects.js', remotionRuntimeUrl: './remotion-runtime.js', fontUrl: './space-grotesk-latin.woff2', fontUrls:Object.fromEntries(TEXT_FONTS.map(font=>[font.id,'./'+font.fileName])), assetUrls }));
       const output = join(directory, 'video.mp4');
       await runRenderWorker(directory, output, { fps: snapshot.fps, quality: snapshot.quality as 'draft' | 'standard' | 'high' }, progress => onProgress(Math.round(progress.progress * .95)), signal);
       onProgress(97);

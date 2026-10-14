@@ -12,7 +12,7 @@ import { dimensions,normalizeTimeline,type Timeline,type MediaAsset,type Clip,ty
 import { VisualHandles } from './visual-controls';
 import { CropControls, type CropControlsHandle } from './crop-controls';
 import { TextControls } from './text-controls';
-import { useEditorState } from './editor-state';
+import { useEditorState, usePausedPlaybackTime } from './editor-state';
 import { previewClipAtPoint, previewMediaOpacities, type PreviewTextBounds } from '@/lib/editor/preview-viewport';
 import { projectPreviewBounds } from '@/lib/editor/preview-zoom';
 import type { SourceCrop } from '@/lib/editor/types';
@@ -26,8 +26,10 @@ import { updateLiveVisualGeometry } from '@/lib/editor/live-visual-geometry';
 import { recoverMediaSource, type RefreshPlaybackMedia } from '@/lib/editor/media-source-recovery';
 import { sourceTimeAt } from '@/lib/editor/playback-rate';
 import { previewAdjustmentEffect, updateLiveAdjustmentEffects } from '@/lib/editor/live-adjustment-effects';
+import { loadPreviewRemotion } from '@/lib/editor/preview-remotion-runtime';
 function LiveTextControls(props: Omit<React.ComponentProps<typeof TextControls>, 'time'>) {
-  const time=useEditorState(state=>state.playhead);
+  const time=usePausedPlaybackTime(),playing=useEditorState(state=>state.playing);
+  if(playing)return null;
   return <TextControls {...props} time={time}/>;
 }
 function frameTime(player:HyperframesPlayer|null,fallback:number){const frame=player?.iframeElement?.contentWindow as (Window&{__timelines?:{revline?:{time():number}}})|null;return frame?.__timelines?.revline?.time()??player?.currentTime??fallback;}
@@ -80,7 +82,8 @@ export const Preview = forwardRef<PreviewHandle,{timeline:Timeline;assets:MediaA
     const doc=active?.iframeElement?.contentDocument;
     if(!active||!doc||!previous)return;
     if(renderedContentKey.current!==contentKey)return;
-    try{
+    let cancelled=false;
+    const apply=()=>{if(cancelled||player.current!==active||active.iframeElement?.contentDocument!==doc)return;try{
       const retained=updateLiveMediaContent(doc,previous,current,assets)&&updateLiveAdjustmentEffects(doc,previous,current)&&updateLiveTextEffects(doc,previous,current)&&updateLiveVisualEffects(doc,previous,current)&&updateLiveVisualGeometry(doc,previous,current,assets);
       if(retained){
         updateLayers(active,current);
@@ -92,7 +95,10 @@ export const Preview = forwardRef<PreviewHandle,{timeline:Timeline;assets:MediaA
         renderedTimeline.current=current;setRevision(value=>value+1);
       }
       else setReloadRevision(value=>value+1);
-    }catch(error){callbacks.current.onError(error instanceof Error?error.message:'Could not apply this preview edit.');}
+    }catch(error){callbacks.current.onError(error instanceof Error?error.message:'Could not apply this preview edit.');}};
+    const optional=loadPreviewRemotion(doc,current);
+    if(optional)void optional.then(apply,error=>{if(!cancelled)callbacks.current.onError(error instanceof Error?error.message:'Could not load the preview renderer.');});else apply();
+    return()=>{cancelled=true;};
   },[committedTimeline,assets,contentKey]);
   useEffect(()=>()=>{player.current?.pause();player.current?.remove();player.current=null;callbacks.current.onPlaying(false);},[]);
   const [transformId,setTransformId]=useState<string|null>(null);
@@ -155,7 +161,7 @@ export const Preview = forwardRef<PreviewHandle,{timeline:Timeline;assets:MediaA
       p=document.createElement('hyperframes-player') as HyperframesPlayer;
       p.muted=true;p.style.cssText='position:absolute;inset:0;width:100%;height:100%;z-index:0';p.setAttribute('assets-loading-ui','none');p.setAttribute('runtime-src',`${window.location.origin}/vendor/hyperframe.runtime.iife.js`);p.setAttribute('disable-click-to-play','');p.removeAttribute('controls');
       const recoveredUrls=Object.fromEntries(assets.flatMap(asset=>{const refreshed=refreshedSources.current.get(asset._id);return refreshed&&refreshed.original===asset.url?[[asset._id,refreshed.url]]:[];}));
-      p.setAttribute('srcdoc',generateComposition(timeline,assets,{preview:true,assetUrls:recoveredUrls,gsapUrl:`${window.location.origin}/vendor/gsap.min.js`,visualEffectsUrl:`${window.location.origin}/vendor/visual-effects.js?v=clip-fades-neon-8`,remotionTextUrl:`${window.location.origin}/vendor/remotion-text.js?v=retained-text-2`}));
+      p.setAttribute('srcdoc',generateComposition(timeline,assets,{preview:true,assetUrls:recoveredUrls,gsapUrl:`${window.location.origin}/vendor/gsap.min.js`,visualEffectsUrl:`${window.location.origin}/vendor/visual-effects.js?v=event-driven-9`,remotionRuntimeUrl:`${window.location.origin}/vendor/remotion-runtime.js?v=shared-scenes-1`}));
       const swap=()=>{
         if(cancelled||!p||swapped||!loaded||waitingForMedia)return;
         waitingForMedia=true;

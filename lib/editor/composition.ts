@@ -20,6 +20,7 @@ export type CompositionOptions = {
   visualEffectsUrl?: string;
   remotionTextUrl?: string;
   remotionTransitionsUrl?: string;
+  remotionRuntimeUrl?: string;
   fontUrl?: string;
   fontUrls?: Partial<Record<TextFontId, string>>;
   assetUrls?: Record<string, string>;
@@ -194,6 +195,9 @@ export function generateComposition(timeline: Timeline, assets: MediaAsset[], op
   const remotionTextUrl = mediaUrl(options.remotionTextUrl ?? (/^https?:/i.test(options.gsapUrl ?? '') ? new URL('/vendor/remotion-text.js', options.gsapUrl).href : '/vendor/remotion-text.js'));
   const remotionTransitionsUrl = mediaUrl(options.remotionTransitionsUrl ?? (/^https?:/i.test(options.gsapUrl ?? '') ? new URL('/vendor/remotion-transitions.js', options.gsapUrl).href : '/vendor/remotion-transitions.js'));
   const textSources = JSON.stringify(textLayerSources(timeline.clips, fps, resolution)).replace(/</g, '\\u003c');
+  const hasText=timeline.clips.some(clip=>clip.kind==='caption'||clip.kind==='graphic');
+  const sharedRuntimeUrl=options.remotionRuntimeUrl||!options.remotionTextUrl&&!options.remotionTransitionsUrl?mediaUrl(options.remotionRuntimeUrl??(/^https?:/i.test(options.gsapUrl??'')?new URL('/vendor/remotion-runtime.js',options.gsapUrl).href:'/vendor/remotion-runtime.js')):undefined;
+  const sceneScripts=sharedRuntimeUrl?(hasText||transitions.length?`<script src="${sharedRuntimeUrl}"></script>`:''):`${hasText?`<script src="${remotionTextUrl}"></script>`:''}${transitions.length?`<script src="${remotionTransitionsUrl}"></script>`:''}`;
   const defaultFontUrl = /^https?:/i.test(options.gsapUrl ?? '') ? new URL('/fonts/space-grotesk-latin.woff2', options.gsapUrl).href : '/fonts/space-grotesk-latin.woff2';
   const fontUrl = mediaUrl(options.fontUrl ?? defaultFontUrl);
   const fontUrls = Object.fromEntries(TEXT_FONTS.map(font => [font.id, mediaUrl(options.fontUrls?.[font.id] ?? (font.id === 'space-grotesk' ? fontUrl : /^https?:/i.test(options.gsapUrl ?? '') ? new URL(`/fonts/${font.fileName}`,options.gsapUrl).href : `/fonts/${font.fileName}`))]));
@@ -210,7 +214,7 @@ html,body{margin:0;width:${width}px;height:${height}px;overflow:hidden;backgroun
 .adjustment-layer{position:absolute;inset:0;transform-origin:center;pointer-events:none}
 [data-revline-effects]{opacity:0!important}${options.preview?'video[data-revline-effects]{opacity:0.001!important}':''}.visual-effect-output{position:absolute;pointer-events:none}.solid-color-rectangle{position:absolute;z-index:2147483647;pointer-events:none;transform-origin:center}
 .cinematic-bars{position:absolute;inset:0;overflow:hidden;z-index:2147483647;pointer-events:none}.cinematic-bar{position:absolute;left:0;right:0;background:#000}.cinematic-bar.top{top:0;transform:translateY(-100%)}.cinematic-bar.bottom{bottom:0;transform:translateY(100%)}
-</style><script src="${gsapUrl}"></script><script src="${visualEffectsUrl}"></script><script src="${remotionTextUrl}"></script>${options.preview || transitions.length ? `<script src="${remotionTransitionsUrl}"></script>` : ''}</head><body><div id="composition" data-composition-id="revline" data-duration="${safeDuration}" data-width="${width}" data-height="${height}" data-fps="${fps}">${compositionNodes}</div><script>
+</style>${sharedRuntimeUrl?`<meta name="revline-remotion-runtime" content="${sharedRuntimeUrl}">`:''}<script src="${gsapUrl}"></script><script src="${visualEffectsUrl}"></script>${sceneScripts}</head><body><div id="composition" data-composition-id="revline" data-duration="${safeDuration}" data-width="${width}" data-height="${height}" data-fps="${fps}">${compositionNodes}</div><script>
 const timeline=gsap.timeline({paused:true});
 ${animation.join('\n')}
 window.__revlineDurationTween=gsap.to({},{duration:${safeDuration},paused:true});timeline.add(window.__revlineDurationTween,0);window.__revlineDurationTween.paused(false);
@@ -218,7 +222,7 @@ window.__timelines=window.__timelines||{};window.__timelines.revline=timeline;
 ${visualEffectsRuntimeScript(timeline.clips.flatMap((clip, index) => clip.kind === 'video' || clip.kind === 'image' ? [{ id: `clip-${index}`, colorGrade: clip.colorGrade, zoomBlur: clip.zoomBlur, glitch: clip.glitch, invert: clip.invert, dither: clip.dither, neonEdges: clip.neonEdges }] : []), fps, resolution)}
 window.__revlineVisualEffects.installAdjustmentLayers(${JSON.stringify(adjustmentSources(timeline.clips)).replace(/</g, '\\u003c')});
 if(window.__revlineVisualEffects.installVisualFades)window.__revlineVisualEffects.installVisualFades(${JSON.stringify(timeline.clips.filter(clip=>clip.kind==='video'||clip.kind==='image').map(({id,kind,start,duration,visualFade,visualFadeTiming})=>({id,kind,start,duration,sourceStart:0,visualFade,visualFadeTiming}))).replace(/</g, '\\u003c')},${timeline.fps});${timeline.clips.some(clip=>(clip.visualFade?.fadeIn??0)>0||(clip.visualFade?.fadeOut??0)>0)?"else throw new Error('Visual fade renderer failed to load.');":''}
-if(window.__revlineRemotionText)window.__revlineTextLayerController=window.__revlineRemotionText.installTextLayers(${textSources});else throw new Error('Text renderer failed to load.');
+if(window.__revlineRemotionText)window.__revlineTextLayerController=window.__revlineRemotionText.installTextLayers(${textSources});${hasText?"else throw new Error('Text renderer failed to load.');":''}
 ${transitions.length ? `if(window.__revlineRemotionTransitions)window.__revlineRemotionTransitions.installTransitions(${JSON.stringify(transitions).replace(/</g, '\\u003c')},${timeline.fps});else throw new Error('Transition renderer failed to load.');` : ''}
 document.querySelectorAll('video,audio').forEach(media=>{media.volume=Math.min(1,Number(media.dataset.volume));media.preservesPitch=true;});
 </script></body></html>`;

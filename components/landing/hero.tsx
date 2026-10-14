@@ -1,4 +1,4 @@
-import { ProductDemo } from './editor-demo';
+import { ProductDemoPreview } from './editor-demo-preview';
 import { LandingStartButton } from './start-button';
 
 export function LandingHero() {
@@ -8,6 +8,6 @@ export function LandingHero() {
       <p>Turn your footage into finished edits.<br />Just tell Revline what you have in mind.</p>
       <LandingStartButton label="Get started" className="landing-hero-start" />
     </div>
-    <ProductDemo />
+    <ProductDemoPreview />
   </section>;
 }

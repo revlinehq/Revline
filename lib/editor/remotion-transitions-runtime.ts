@@ -33,7 +33,7 @@ export function installTransitions(initial: TransitionSource[], projectFps: numb
   const mediaFrame = host.__HF_VIRTUAL_TIME__?.originalRequestAnimationFrame ?? window.requestAnimationFrame.bind(window), cancelMediaFrame = host.__HF_VIRTUAL_TIME__?.originalCancelAnimationFrame ?? window.cancelAnimationFrame.bind(window);
   const entries = new Map<string, Entry>(), drafts = new Map<string, Partial<Clip>>();
   const seeks = new Map<HTMLVideoElement, { target: number; promise: Promise<void>; cancel(): void }>();
-  let disposed = false, signature = '', frameRequest = 0, unregister: (() => void) | undefined;
+  let disposed = false, signature = '', unregister: (() => void) | undefined;
   const anchor = document.createElement('span'); anchor.dataset.transitionFrameSource = '';
   anchor.style.cssText = 'position:absolute;width:0;height:0;pointer-events:none'; composition.appendChild(anchor);
   const inner = () => Array.from(composition.querySelectorAll<HTMLElement>('.adjustment-layer')).find(node => !node.querySelector('.adjustment-layer')) ?? composition;
@@ -158,14 +158,13 @@ export function installTransitions(initial: TransitionSource[], projectFps: numb
     if (!unregister && host.__hyperframes) unregister = host.__hyperframes.registerFrameSource({ element: anchor, render: whenReady });
   }
   const report = (error: unknown) => { if (!disposed) window.dispatchEvent(new ErrorEvent('error', { error, message: String(error instanceof Error ? error.message : error) })); };
-  const tick = () => { frameRequest = 0; if (disposed) return; bindExport(); for (const pending of paint()) pending.catch(report); if(entries.size)frameRequest = requestAnimationFrame(tick); };
   const seek = (event: Event) => {
     const detail = (event as CustomEvent<{ time: number; waitUntil(promise: Promise<void>): void }>).detail;
     detail.waitUntil(whenReady(detail.time));
   };
   const previousRender = clock.render, previousUpdate = clock.eventCallback('onUpdate') as (() => void) | undefined;
-  const update = () => { previousUpdate?.call(clock); for (const pending of paint()) pending.catch(report); };
-  const wrapped: Clock['render'] = function (...args) { const result = previousRender.apply(clock, args); for (const pending of paint()) pending.catch(report); return result; };
+  const update = () => { previousUpdate?.call(clock); bindExport();for (const pending of paint()) pending.catch(report); };
+  const wrapped: Clock['render'] = function (...args) { const result = previousRender.apply(clock, args);bindExport(); for (const pending of paint()) pending.catch(report); return result; };
   clock.render = wrapped; clock.eventCallback('onUpdate', update); window.addEventListener('hf-seek', seek);
   const controller: TransitionController = {
     setSources(sources) {
@@ -180,12 +179,11 @@ export function installTransitions(initial: TransitionSource[], projectFps: numb
         entry.source = source; drafts.delete(source.clip.id);
       }
       bindExport(); for (const pending of paint()) pending.catch(report); host.__revlineEffects?.redraw();
-      if(entries.size&&!frameRequest)frameRequest=requestAnimationFrame(tick);else if(!entries.size){cancelAnimationFrame(frameRequest);frameRequest=0;}
     },
     preview(id, patch) { if (!entries.has(id)) return false; if (patch) drafts.set(id, patch); else drafts.delete(id); for (const pending of paint()) pending.catch(report); host.__revlineEffects?.redraw(); return true; },
     whenReady,
     dispose() {
-      if (disposed) return; disposed = true; cancelAnimationFrame(frameRequest); unregister?.(); window.removeEventListener('hf-seek', seek);
+      if (disposed) return; disposed = true; unregister?.(); window.removeEventListener('hf-seek', seek);
       for (const request of seeks.values()) request.cancel(); seeks.clear();
       for (const entry of entries.values()) { restore(entry, clock.time()); entry.presentation.dispose(); entry.node.remove(); } entries.clear(); anchor.remove();
       if (clock.render === wrapped) clock.render = previousRender; if (clock.eventCallback('onUpdate') === update) clock.eventCallback('onUpdate', previousUpdate ?? null);

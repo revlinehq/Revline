@@ -16,8 +16,8 @@ test('transition compiler preserves authored media/audio ranges and does not mak
 test('two project-frame transition remains legal when output frame rate is lower',()=>{
  expect(()=>generateComposition(timeline([...media,{...effect,start:2-1/60,duration:2/60}],60),assets,{fps:24})).not.toThrow();
 });
-test('ordinary preview does not initialize missing transitions, but loads the bridge for a retained first FX add',()=>{
+test('ordinary preview defers scene renderers until a retained first text or transition add',()=>{
  const html=generateComposition(timeline(media),assets,{preview:true});
- expect(html).toContain('src="/vendor/remotion-transitions.js"');expect(html).not.toContain('Transition renderer failed to load');
+ expect(html).not.toContain('src="/vendor/remotion-transitions.js"');expect(html).not.toContain('src="/vendor/remotion-runtime.js"');expect(html).toContain('name="revline-remotion-runtime"');expect(html).not.toContain('Transition renderer failed to load');
  const exported=generateComposition(timeline(media),assets);expect(exported).not.toContain('src="/vendor/remotion-transitions.js"');
 });

@@ -11,7 +11,7 @@ export type VisualEffectsController = { set(id: string, effects: VisualEffects):
 
 /** One browser bundle runs the same kernel in preview and exported compositions. */
 export function installVisualEffects(sources: VisualEffectSource[], fps: number, resolution: number) {
-  type Clock = { time(): number; render: (...args: unknown[]) => unknown };
+  type Clock = { time(): number; render: (...args: unknown[]) => unknown; eventCallback?(name:string,callback?:(()=>void)|null):unknown };
   type RuntimeWindow = Window & { __timelines: { revline: Clock & { __hfReal?: Clock } }; __revlineEffects?: VisualEffectsController; __hf?: { colorGrading?: { redraw?: () => void } } };
   const host = window as unknown as RuntimeWindow;
   const preview = !!document.querySelector('meta[name="hyperframes-studio-preview"]');
@@ -20,7 +20,7 @@ export function installVisualEffects(sources: VisualEffectSource[], fps: number,
   type Resources = Pick<Entry, 'canvas' | 'gl' | 'program' | 'texture' | 'buffer' | 'uniforms' | 'passTextures' | 'framebuffer' | 'passWidth' | 'passHeight'>;
   const entries = new Map<string, Entry>();
   const available: Resources[] = [];
-  let frameRequest = 0, disposed = false;
+  let disposed = false;
   const baseEffects=new Map<string,VisualEffects>();
   const defaultNeonColor=Number.parseInt(DEFAULT_NEON_EDGES.color.slice(1),16);
   let timedEffects:Clip[]=[];
@@ -279,7 +279,6 @@ void main(){
     }
     for (const entry of entries.values()) draw(entry, force);
   }
-  function tick() { frameRequest = 0; if (disposed) return; bindExportBridge(); redraw(); if (entries.size) frameRequest = requestAnimationFrame(tick); }
   function decoded(entry: Entry) {
     if (!(entry.source instanceof HTMLVideoElement)) return;
     const video = entry.source;
@@ -305,15 +304,21 @@ void main(){
   function set(id: string, effects: VisualEffects) {
     baseEffects.set(id,effects);
     const previous = entries.get(id);
-    if (!enabled(effects)&&!timedEffects.some(clip=>clip.zoomBlur?.enabled&&clip.zoomBlur.amount>0)) { remove(id); if (!entries.size) { cancelAnimationFrame(frameRequest); frameRequest = 0; } return; }
+    if (!enabled(effects)&&!timedEffects.some(clip=>clip.zoomBlur?.enabled&&clip.zoomBlur.amount>0)) { remove(id); return; }
     const source = document.getElementById(id);
     if (!(source instanceof HTMLVideoElement || source instanceof HTMLImageElement)) return;
     const entry = previous ?? { source, effects, dirty: true };
-    entry.effects = effects; entry.neonColor = effects.neonEdges ? Number.parseInt(effects.neonEdges.color.slice(1),16) : defaultNeonColor; entry.dirty = true; entry.failed = false; entries.set(id, entry); if (!previous) decoded(entry); draw(entry);
-    if (!frameRequest) frameRequest = requestAnimationFrame(tick);
+    entry.effects = effects; entry.neonColor = effects.neonEdges ? Number.parseInt(effects.neonEdges.color.slice(1),16) : defaultNeonColor; entry.dirty = true; entry.failed = false; entries.set(id, entry);
+    if (!previous) {
+      decoded(entry);
+      if(source instanceof HTMLImageElement)source.addEventListener('load',()=>{if(!disposed&&entries.get(id)===entry){entry.dirty=true;draw(entry,true);}},{once:true});
+    }
+    draw(entry);
   }
-  const originalRender = clock.render;
-  clock.render = function(...args) { const result = originalRender.apply(clock, args); bindExportBridge(); redraw(); return result; };
+  const originalRender = clock.render,originalUpdate=clock.eventCallback?.('onUpdate') as (()=>void)|undefined;
+  const update=()=>{originalUpdate?.call(clock);bindExportBridge();redraw();};
+  const wrapped:Clock['render']=function(...args) { const result = originalRender.apply(clock, args); bindExportBridge(); redraw(); return result; };
+  clock.render=wrapped;clock.eventCallback?.('onUpdate',update);
   // Export injects FFmpeg-decoded image siblings, then calls this existing runtime bridge.
   // Chain its draw hook so capture waits for the same kernel after the injected image decodes.
   let bridge: { redraw?: () => void } | undefined, originalRedraw: (() => void) | undefined;
@@ -328,7 +333,7 @@ void main(){
     set,
     setTimedEffects:clips=>{timedEffects=clips.filter(clip=>clip.effectPreset==='zoom-blur').sort((a,b)=>trackOf(a)-trackOf(b));for(const [id,effects] of baseEffects)set(id,effects);redraw(true);},
     redraw: () => { bindExportBridge(); redraw(true); },
-    dispose: () => { disposed = true; cancelAnimationFrame(frameRequest); for (const id of entries.keys()) remove(id); for (const resources of available) destroy(resources); available.length = 0; clock.render = originalRender; if (bridge) bridge.redraw = originalRedraw; },
+    dispose: () => { disposed = true; for (const id of entries.keys()) remove(id); for (const resources of available) destroy(resources); available.length = 0; if(clock.render===wrapped)clock.render = originalRender;if(clock.eventCallback?.('onUpdate')===update)clock.eventCallback?.('onUpdate',originalUpdate??null); if (bridge) bridge.redraw = originalRedraw; },
   };
   host.__revlineEffects = controller;
   for (const source of sources) set(source.id, source);
