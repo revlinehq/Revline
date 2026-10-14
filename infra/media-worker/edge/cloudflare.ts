@@ -5,7 +5,7 @@ import { makeFunctionReference } from 'convex/server';
 type ProcessorSecrets = { RENDER_WORKER_SECRET: string; GOOGLE_GENERATIVE_AI_API_KEY: string; OPENAI_API_KEY?: string };
 type Bindings = ProcessorEnv & ProcessorSecrets;
 const TIMEOUT_MS = 5 * 60_000;
-const readyQuery = makeFunctionReference<'query', { workerSecret: string }, string>('mediaTasks:ready');
+const readyQuery = makeFunctionReference<'query', { workerSecret: string;processorVersion:number }, string>('mediaTasks:ready');
 
 export class MediaProcessor extends DurableObject<Bindings> {
   private pending: Promise<void> | undefined;
@@ -35,7 +35,7 @@ export class MediaProcessor extends DurableObject<Bindings> {
       }
     } else {
       const client = new ConvexHttpClient(this.env.NEXT_PUBLIC_CONVEX_URL);
-      const ready = await client.query(readyQuery, { workerSecret: this.env.RENDER_WORKER_SECRET });
+      const ready = await client.query(readyQuery, { workerSecret: this.env.RENDER_WORKER_SECRET,processorVersion:2 });
       if (!ready) return;
       container.start({ image: container.images.processor, instance: 'standard-2', enableInternet: true, env: {
         NEXT_PUBLIC_CONVEX_URL: this.env.NEXT_PUBLIC_CONVEX_URL,
