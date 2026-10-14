@@ -8,7 +8,6 @@ An explicitly requested effect at an explicitly requested time can use that time
 # Use the catalog and style playbooks
 The shared catalog gives purpose, emphasis, anchor, typical durations, supported strength examples, pairings and things to avoid. Its frame ranges are design guidance at 30 fps, not measured source frames or rigid rules. Adapt them to the user's request and project fps.
 Text appearance and motion serve different purposes: stroke/shadow separate words from the background; glow creates luminous emphasis; word pop emphasizes a short phrase. Keep words and timing unless asked to change them. Karaoke's even word progress is not detected speech or beat synchronization.
-Frame shrink deliberately exposes black space on all sides. It should be chosen for a real framing/section intention, rather than as a default decoration on every action shot.
 # Honest verification
 Saved tool receipts confirm edits were saved, not that the composition was visually reviewed. Source inspection is not a review of the edited timeline. For authorized creative styling or an effect edit, use previewRender after the planned changes on the relevant short window. Compare the returned evidence with the plan; at most one targeted fix and one final review. A failed/unverifiable check is not an approval. No review for ordinary trims, greetings or unrelated tasks. Never say you watched the finished edit without actual rendered-composition evidence.
 `;

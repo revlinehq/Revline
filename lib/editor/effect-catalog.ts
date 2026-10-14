@@ -12,7 +12,6 @@ export const EFFECT_LIBRARY_CATALOG: readonly EffectLibraryEntry[] = [
   { id: 'zoomBlur', label: 'Zoom blur', description: 'A timed blur pulse above your footage', category: 'motion', preset: 'zoom-blur' },
   ...(['punch', 'shake', 'pop', 'flash'] as const).map(preset => ({ id: preset, label: EFFECT_CATALOG[preset].label, description: EFFECT_CATALOG[preset].description, category: 'motion' as const, preset })),
   { id: 'cinematic-bars', label: 'Cinema bars', description: 'Black bars slide in and out', category: 'motion', preset: 'cinematic-bars' },
-  { id: 'frame-shrink', label: EFFECT_CATALOG['frame-shrink'].label, description: EFFECT_CATALOG['frame-shrink'].description, category: 'motion', preset: 'frame-shrink' },
   { id: 'speed-up', label: 'Change speed', description: 'Adjust video or audio playback', category: 'motion', action: 'speed' },
   { id: 'solid-color', label: 'Solid color', description: 'A color frame or adjustable rectangle', category: 'color', preset: 'solid-color' },
   { id: 'colorGrade', label: 'Color & light', description: 'Adjust the selected footage', category: 'color', visual: 'colorGrade' },

@@ -62,7 +62,8 @@ export function compactEditorPrompt(prompt: LanguageModelV4Prompt, selectedClipI
   const latestClipState = new Map<string, string>();
   const latestRead = new Map<string, string>();
   const toolInputs = new Map<string, unknown>();
-  const lastUser = prompt.findLastIndex(message => message.role === 'user');
+  let lastUser = -1;
+  for (let index = prompt.length - 1; index >= 0; index--) if (prompt[index].role === 'user') { lastUser = index; break; }
   for (const message of prompt) if (message.role !== 'system') for (const part of message.content) if (part.type === 'tool-call') toolInputs.set(part.toolCallId, part.input);
   const readKey = (tool: string, id: string, value: unknown) => tool + JSON.stringify(toolInputs.get(id)) + JSON.stringify(value);
   for (const [index, message] of prompt.entries()) {

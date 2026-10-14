@@ -13,10 +13,10 @@ export type BlendMode = typeof BLEND_MODES[number];
 export type MotionKeyframe = { time: number; x: number; y: number; scale: number; rotation: number; opacity: number; brightness: number };
 export const MOTION_PRESETS = ['none', 'fade', 'punch', 'shake', 'flash', 'pop'] as const;
 export type MotionPreset = typeof MOTION_PRESETS[number];
-export const TIMED_EFFECT_PRESETS = ['punch', 'shake', 'flash', 'pop', 'cinematic-bars', 'frame-shrink', 'quick-zoom-in', 'quick-zoom-out', 'zoom-blur', 'solid-color'] as const;
+export const TIMED_EFFECT_PRESETS = ['punch', 'shake', 'flash', 'pop', 'cinematic-bars', 'quick-zoom-in', 'quick-zoom-out', 'zoom-blur', 'solid-color'] as const;
 export type TimedEffectPreset=typeof TIMED_EFFECT_PRESETS[number];
-/** Saved legacy fade FX remains renderable; new fades belong to footage/audio settings. */
-export const EFFECT_PRESETS = ['fade', ...TIMED_EFFECT_PRESETS, ...TRANSITION_PRESETS] as const;
+/** Retired presets remain valid for saved projects; new choices use the active catalog. */
+export const EFFECT_PRESETS = ['fade', 'frame-shrink', ...TIMED_EFFECT_PRESETS, ...TRANSITION_PRESETS] as const;
 export type EffectPreset = typeof EFFECT_PRESETS[number];
 export type SolidColorSettings = { color: string; width: number; height: number; x: number; y: number; opacity: number };
 export const DEFAULT_SOLID_COLOR: SolidColorSettings = { color: '#2563eb', width: 1, height: 1, x: .5, y: .5, opacity: 1 };

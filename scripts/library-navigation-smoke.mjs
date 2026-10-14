@@ -30,6 +30,7 @@ try {
   assert.equal(await page.$eval('.inspector-section-tabs', node => node.dataset.slot), 'tabs-list', 'Top navigation uses shadcn TabsList');
   assert.deepEqual(await page.$$eval('.inspector-section-tabs [role="tab"]', nodes => nodes.map(node => node.textContent)), ['Tools', 'My media']);
   assert.deepEqual(await page.$$eval('.library-category-rail [role="tab"]', nodes => nodes.map(node => node.textContent)), ['Motion', 'Color', 'Texture', 'Transitions', 'Text']);
+  assert.equal(await page.$('[aria-label="Frame shrink"]'), null, 'Retired Frame shrink is absent from new choices');
   assert.equal(await page.$('.library-tabs'), null, 'There is no separate Effects / Text segment');
   assert.ok(await page.$eval('.inspector-section-tabs [aria-selected=true]', node => getComputedStyle(node).backgroundColor !== 'rgba(0, 0, 0, 0)'), 'The active top segment has a visible surface');
   assert.ok(await page.evaluate(() => document.querySelector('.library-category-results').getBoundingClientRect().right <= document.querySelector('.library-category-rail').getBoundingClientRect().left), 'Cards are left of the category rail');
@@ -64,7 +65,7 @@ try {
   assert.deepEqual(await navigationGeometry(), textGeometry320, 'Switching Text to Motion also keeps the same geometry at 320px');
   await page.type('[aria-label="Search effects"]', 'invert'); assert.ok(await page.$('[aria-label="Invert colors"]')); assert.equal(await page.$('[aria-label="Dither"]'), null);
   await page.click('[data-category="motion"]'); await flush(); assert.equal(await page.$eval('[aria-label="Search effects"]', node => node.value), '', 'Changing category clears search');
-  const motionFixed = await fixed(); await page.$eval('.library-category-results', node => node.scrollTop = node.scrollHeight); await flush(); assert.deepEqual(await fixed(), motionFixed); assert.ok(await page.$eval('.library-category-results', node => node.scrollTop > 0));
+  const motionFixed = await fixed(); await page.$eval('.library-category-results', node => node.scrollTop = node.scrollHeight); await flush(); assert.deepEqual(await fixed(), motionFixed); assert.ok(await page.$eval('.library-category-results', node => node.scrollHeight<=node.clientHeight||node.scrollTop>0), 'Overflowing effect cards scroll; short lists need no scrollbar');
   await page.$eval('.library-category-results', node => node.scrollTop = 0); await flush(); await page.screenshot({ path: '/tmp/revline-library-motion-right-320.png' });
   await page.focus('#inspector-tools-tab'); await page.keyboard.press('End'); await page.waitForSelector('#inspector-media'); assert.equal(await page.$('.effect-library'), null); assert.ok(await page.$eval('#inspector-media-tab', node => document.activeElement === node && node.getAttribute('aria-selected') === 'true'), 'Shadcn segment supports keyboard selection');
   await page.keyboard.press('Home'); await page.waitForSelector('.effect-library'); await page.click('[data-category="text"]'); await page.waitForSelector('[aria-label="Default text"]');
