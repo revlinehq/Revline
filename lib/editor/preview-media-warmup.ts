@@ -1,9 +1,9 @@
 /** Decode the next cut before it becomes visible, with a small bounded lookahead. */
 export function warmPreviewMedia(document: Document, readTime: () => number): () => void {
-  let media: HTMLMediaElement[] = [], stopped = false, lastTime = -Infinity;
+  let media: HTMLMediaElement[] = [], stopped = false;
   const primed = new WeakMap<HTMLMediaElement, string>();
   const pending = new Map<HTMLMediaElement, () => void>();
-  const refresh = () => { media = Array.from(document.querySelectorAll<HTMLMediaElement>('video[data-start],audio[data-start]')); lastTime = -Infinity; };
+  const refresh = () => { media = Array.from(document.querySelectorAll<HTMLMediaElement>('video[data-start],audio[data-start]')); };
   refresh();
   const Observer = document.defaultView!.MutationObserver;
   const observer = new Observer(refresh);
@@ -11,8 +11,8 @@ export function warmPreviewMedia(document: Document, readTime: () => number): ()
   function tick() {
     if (stopped) return;
     const time = readTime();
-    if (Math.abs(time - lastTime) < .15) return;
-    lastTime = time;
+    // A paused clock must still retry a source whose metadata/play state settled
+    // after the first tick. The per-source key below skips already primed media.
     // Do not preload the whole project: at most four imminent sources.
     const upcoming = media.filter(node => {
       const due = Number(node.dataset.start) - time;

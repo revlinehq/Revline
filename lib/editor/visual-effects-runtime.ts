@@ -1,5 +1,5 @@
 import type { VisualEffects } from './visual-effects';
-import type { Clip } from './types';
+import { trackOf, type Clip } from './types';
 import { adjustmentFrame } from './adjustment-layers';
 export { installAdjustmentLayers } from './adjustment-layers';
 
@@ -13,21 +13,21 @@ export function installVisualEffects(sources: VisualEffectSource[], fps: number,
   const host = window as unknown as RuntimeWindow;
   const preview = !!document.querySelector('meta[name="hyperframes-studio-preview"]');
   const clock = host.__timelines.revline.__hfReal ?? host.__timelines.revline;
-  type Entry = { source: HTMLVideoElement | HTMLImageElement; effects: VisualEffects; canvas?: HTMLCanvasElement; gl?: WebGLRenderingContext; program?: WebGLProgram; texture?: WebGLTexture; buffer?: WebGLBuffer; uniforms?: Record<string, WebGLUniformLocation | null>; lastFrame?: number; lastSource?: string | number; lastTransform?: string; dirty: boolean; injected?: HTMLImageElement; failed?: boolean; videoCallback?: number; decodedFrame?: number; decodedListener?: () => void; uploadCanvas?: HTMLCanvasElement };
-  type Resources = Pick<Entry, 'canvas' | 'gl' | 'program' | 'texture' | 'buffer' | 'uniforms'>;
+  type Entry = { source: HTMLVideoElement | HTMLImageElement; effects: VisualEffects; canvas?: HTMLCanvasElement; gl?: WebGLRenderingContext; program?: WebGLProgram; texture?: WebGLTexture; buffer?: WebGLBuffer; uniforms?: Record<string, WebGLUniformLocation | null>; passTextures?: WebGLTexture[]; framebuffer?: WebGLFramebuffer; passWidth?: number; passHeight?: number; nominalWidth?: number; nominalHeight?: number; lastPassKey?: string; lastPassCount?: number; lastFrame?: number; lastSource?: string | number; lastTransform?: string; dirty: boolean; injected?: HTMLImageElement; failed?: boolean; videoCallback?: number; decodedFrame?: number; decodedListener?: () => void; uploadCanvas?: HTMLCanvasElement };
+  type Resources = Pick<Entry, 'canvas' | 'gl' | 'program' | 'texture' | 'buffer' | 'uniforms' | 'passTextures' | 'framebuffer' | 'passWidth' | 'passHeight'>;
   const entries = new Map<string, Entry>();
   const available: Resources[] = [];
   let frameRequest = 0, disposed = false;
   const baseEffects=new Map<string,VisualEffects>();
   let timedEffects:Clip[]=[];
-  function effectiveEffects(base:VisualEffects,time:number):VisualEffects {
-    let zoom=base.zoomBlur;
+  function effectPasses(base:VisualEffects,time:number):VisualEffects[] {
+    const passes = enabled(base) ? [base] : [];
     for(const clip of timedEffects){
       if(!clip.zoomBlur?.enabled||time<clip.start||time>=clip.start+clip.duration)continue;
       const amount=clip.zoomBlur.amount*adjustmentFrame(clip,time).opacity;
-      if(amount>(zoom?.enabled?zoom.amount:0))zoom={...clip.zoomBlur,amount};
+      if(amount>0)passes.push({zoomBlur:{...clip.zoomBlur,amount}});
     }
-    return {...base,zoomBlur:zoom};
+    return passes;
   }
   const vertex = `attribute vec2 position;varying vec2 uv;void main(){uv=(position+1.0)*0.5;gl_Position=vec4(position,0.0,1.0);}`;
   const fragment = `precision highp float;
@@ -100,15 +100,17 @@ void main(){
     entry.injected?.removeAttribute('data-revline-effects');
     entry.canvas?.remove();
     if (preview && !disposed && entry.canvas && entry.gl) {
-      const { canvas, gl, program, texture, buffer, uniforms } = entry;
-      available.push({ canvas, gl, program, texture, buffer, uniforms });
+      const { canvas, gl, program, texture, buffer, uniforms, passTextures, framebuffer, passWidth, passHeight } = entry;
+      available.push({ canvas, gl, program, texture, buffer, uniforms, passTextures, framebuffer, passWidth, passHeight });
       if (available.length > 1) destroy(available.shift()!);
     } else destroy(entry);
-    entry.gl = undefined; entry.canvas = undefined; entry.program = undefined; entry.uploadCanvas = undefined; entry.lastSource = undefined; entry.lastFrame = undefined;
+    entry.gl = undefined; entry.canvas = undefined; entry.program = undefined; entry.uploadCanvas = undefined; entry.passTextures = undefined; entry.framebuffer = undefined; entry.passWidth = undefined; entry.passHeight = undefined; entry.lastSource = undefined; entry.lastFrame = undefined;
   }
   function destroy(resources: Resources) {
     const gl = resources.gl; if (!gl) return;
     gl.deleteTexture(resources.texture ?? null); gl.deleteBuffer(resources.buffer ?? null); gl.deleteProgram(resources.program ?? null);
+    for(const texture of resources.passTextures??[])gl.deleteTexture(texture);
+    gl.deleteFramebuffer(resources.framebuffer??null);
     gl.getExtension('WEBGL_lose_context')?.loseContext();
   }
   function report(error: unknown) {
@@ -117,7 +119,14 @@ void main(){
     console.error('Revline visual effects:', message);
     window.dispatchEvent(new CustomEvent('revline-effects-error', { detail: message }));
   }
-  function initialize(entry: Entry, width: number, height: number) {
+  function sizeOutput(entry:Entry,passes:number) {
+    // Keep preview pixel work bounded when each FX layer adds a shader pass.
+    // Export retains full composition density; block sizes remain screen-scaled.
+    const budget=preview?Math.sqrt(passes):1,canvas=entry.canvas!;
+    const width=Math.max(1,Math.round(entry.nominalWidth!/budget)),height=Math.max(1,Math.round(entry.nominalHeight!/budget));
+    if(canvas.width!==width||canvas.height!==height){canvas.width=width;canvas.height=height;entry.lastSource=undefined;}
+  }
+  function initialize(entry: Entry, width: number, height: number, passes:number) {
     const reusable = preview ? available.pop() : undefined;
     const canvas = reusable?.canvas ?? document.createElement('canvas');
     canvas.className = 'visual-effect-output'; canvas.dataset.effectSource = entry.source.id;
@@ -129,9 +138,8 @@ void main(){
     const viewport = window.frameElement?.getBoundingClientRect();
     const previewScale = preview ? Math.min(1, (viewport?.width || window.innerWidth) / Number(document.getElementById('composition')?.dataset.width || window.innerWidth), (viewport?.height || window.innerHeight) / Number(document.getElementById('composition')?.dataset.height || window.innerHeight)) * Math.min(2, window.devicePixelRatio || 1) : 1;
     const ratio = Math.min(previewScale, Math.max(1920, resolution * 16 / 9) / Math.max(displayWidth, displayHeight));
-    const outputWidth = Math.max(1, Math.round(displayWidth * ratio)), outputHeight = Math.max(1, Math.round(displayHeight * ratio));
-    if (canvas.width !== outputWidth) canvas.width = outputWidth;
-    if (canvas.height !== outputHeight) canvas.height = outputHeight;
+    entry.nominalWidth=Math.max(1,Math.round(displayWidth*ratio));entry.nominalHeight=Math.max(1,Math.round(displayHeight*ratio));
+    entry.canvas=canvas;sizeOutput(entry,passes);
     if (reusable) {
       Object.assign(entry, reusable); entry.source.parentElement!.appendChild(canvas); return;
     }
@@ -156,11 +164,25 @@ void main(){
     Object.assign(entry, { canvas, gl, program, texture, buffer, uniforms });
     entry.source.parentElement!.appendChild(canvas);
   }
+  /** Reuse GPU-only intermediate pixels; no readback or extra WebGL context. */
+  function preparePassTargets(entry:Entry) {
+    const gl=entry.gl!,canvas=entry.canvas!;
+    entry.framebuffer??=gl.createFramebuffer()!;
+    entry.passTextures??=[gl.createTexture()!,gl.createTexture()!];
+    if(entry.passWidth===canvas.width&&entry.passHeight===canvas.height)return;
+    for(const texture of entry.passTextures){
+      gl.bindTexture(gl.TEXTURE_2D,texture);
+      gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+      gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,canvas.width,canvas.height,0,gl.RGBA,gl.UNSIGNED_BYTE,null);
+    }
+    entry.passWidth=canvas.width;entry.passHeight=canvas.height;
+  }
   function draw(entry: Entry, force = false) {
     if (disposed || entry.failed) return;
     const time = clock.time(), start = Number(entry.source.dataset.start), end = start + Number(entry.source.dataset.duration);
-    const effects=effectiveEffects(entry.effects,time);
-    if (!enabled(effects) || time < start - 1e-6 || time >= end - 1e-6) { if (entry.canvas) release(entry); return; }
+    const passes=effectPasses(entry.effects,time);
+    if (!passes.length || time < start - 1e-6 || time >= end - 1e-6) { if (entry.canvas) release(entry); return; }
     const renderId = entry.source.getAttribute('data-hf-render-id') || entry.source.id;
     const injected = document.getElementById(`__render_frame_${renderId}__`) as HTMLImageElement | null;
     const source = injected || entry.source;
@@ -177,19 +199,22 @@ void main(){
       if (node.style.transform && node.style.transform !== 'none') transforms.push(node.style.transform);
     }
     const transformKey = transforms.join('|');
-    const animated = !!effects.glitch?.enabled || timedEffects.some(clip=>clip.zoomBlur?.enabled&&time>=clip.start&&time<clip.start+clip.duration);
+    const passKey=passes.map(pass=>pass.zoomBlur?.enabled?`${pass.zoomBlur.amount}:${pass.zoomBlur.centerX}:${pass.zoomBlur.centerY}`:'base').join('|');
     // CSS motion can run between decoded frames. Wait for the next video
     // frame before redrawing its bitmap; paused transforms still redraw now.
     const playingVideo = source instanceof HTMLVideoElement && !source.paused && !!source.requestVideoFrameCallback;
-    if (!force && !entry.dirty && (!animated || entry.lastFrame === frame) && entry.lastSource === sourceKey && (playingVideo || entry.lastTransform === transformKey)) return;
+    const stableFrame=!entry.effects.glitch?.enabled||playingVideo||entry.lastFrame===frame;
+    const stablePasses=playingVideo?entry.lastPassCount===passes.length:entry.lastPassKey===passKey;
+    if (!force && !entry.dirty && stableFrame && stablePasses && entry.lastSource === sourceKey && (playingVideo || entry.lastTransform === transformKey)) return;
     try {
-      if (!entry.canvas) initialize(entry, width, height);
+      if (!entry.canvas) initialize(entry, width, height,passes.length);
+      else sizeOutput(entry,passes.length);
       const { canvas, gl, uniforms: u } = entry;
       if (!canvas || !gl || !u) return;
       // Native media stays mounted and decoded; the replacement uses the exact same crop geometry.
       for (const key of ['left','top','width','height','objectFit','objectPosition','transform'] as const) canvas.style[key] = entry.source.style[key];
       canvas.style.position = 'absolute'; canvas.style.pointerEvents = 'none';
-      gl.viewport(0, 0, canvas.width, canvas.height); gl.useProgram(entry.program!); gl.bindTexture(gl.TEXTURE_2D, entry.texture!);
+      gl.viewport(0, 0, canvas.width, canvas.height); gl.useProgram(entry.program!); gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, entry.texture!);
       if (entry.lastSource !== sourceKey || force && injected) {
         let textureSource: TexImageSource = source;
         if (preview && source instanceof HTMLVideoElement && canvas.width < width) {
@@ -201,28 +226,36 @@ void main(){
         }
         gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, textureSource);
       }
-      const c = effects.colorGrade, z = effects.zoomBlur, g = effects.glitch;
       const sourceDisplayWidth = parseFloat(entry.source.style.width) || width;
       const pixelScale = resolution / 1080 * width / sourceDisplayWidth;
       gl.uniform1i(u.source, 0); gl.uniform2f(u.size, width, height); gl.uniform1f(u.frame, frame);
-      gl.uniform1f(u.invert, effects.invert?.enabled ? effects.invert.amount : 0);
-      gl.uniform4f(u.grade, c?.enabled ? c.exposure : 0, c?.enabled ? c.contrast : 1, c?.enabled ? c.saturation : 1, 0);
-      gl.uniform3f(u.balance, c?.enabled ? c.temperature / 100 : 0, c?.enabled ? c.tint / 100 : 0, c?.enabled ? c.vibrance / 100 : 0);
-      gl.uniform3f(u.zoom, z?.enabled ? z.amount : 0, z?.centerX ?? .5, 1 - (z?.centerY ?? .5));
-      gl.uniform3f(u.glitch, g?.enabled ? g.intensity : 0, (g?.blockSize ?? 32) * pixelScale, (g?.rgbSplit ?? 8) * pixelScale);
-      const d = effects.dither;
       const transform = transforms.reduce((matrix, value) => matrix.multiply(new DOMMatrix(value)), new DOMMatrix());
       const clipScale = Math.max(.01, Math.hypot(transform.a, transform.b));
-      gl.uniform3f(u.dither, d?.enabled ? d.amount : 0, d?.levels ?? 4, (d?.size ?? 2) * resolution / 1080 * canvas.width / sourceDisplayWidth / clipScale);
       const color = (hex: string) => [1, 3, 5].map(index => parseInt(hex.slice(index, index + 2), 16) / 255);
-      const shadow = color(d?.shadowColor ?? '#000000'), highlight = color(d?.highlightColor ?? '#ffffff');
-      gl.uniform1f(u.ditherPalette, d?.shadowColor || d?.highlightColor ? 1 : 0);
-      gl.uniform3f(u.ditherShadow, shadow[0], shadow[1], shadow[2]);
-      gl.uniform3f(u.ditherHighlight, highlight[0], highlight[1], highlight[2]);
-      gl.drawArrays(gl.TRIANGLES, 0, 6);
+      if(passes.length>1)preparePassTargets(entry);
+      for(const [index,effects] of passes.entries()){
+        const c=effects.colorGrade,z=effects.zoomBlur,g=effects.glitch,d=effects.dither;
+        gl.bindTexture(gl.TEXTURE_2D,index===0?entry.texture!:entry.passTextures![(index-1)%2]);
+        if(index===passes.length-1)gl.bindFramebuffer(gl.FRAMEBUFFER,null);
+        else{
+          gl.bindFramebuffer(gl.FRAMEBUFFER,entry.framebuffer!);
+          gl.framebufferTexture2D(gl.FRAMEBUFFER,gl.COLOR_ATTACHMENT0,gl.TEXTURE_2D,entry.passTextures![index%2],0);
+          if(gl.checkFramebufferStatus(gl.FRAMEBUFFER)!==gl.FRAMEBUFFER_COMPLETE)throw new Error('Visual effect intermediate target is unavailable.');
+        }
+        gl.uniform1f(u.invert,effects.invert?.enabled?effects.invert.amount:0);
+        gl.uniform4f(u.grade,c?.enabled?c.exposure:0,c?.enabled?c.contrast:1,c?.enabled?c.saturation:1,0);
+        gl.uniform3f(u.balance,c?.enabled?c.temperature/100:0,c?.enabled?c.tint/100:0,c?.enabled?c.vibrance/100:0);
+        gl.uniform3f(u.zoom,z?.enabled?z.amount:0,z?.centerX??.5,1-(z?.centerY??.5));
+        gl.uniform3f(u.glitch,g?.enabled?g.intensity:0,(g?.blockSize??32)*pixelScale,(g?.rgbSplit??8)*pixelScale);
+        gl.uniform3f(u.dither,d?.enabled?d.amount:0,d?.levels??4,(d?.size??2)*resolution/1080*canvas.width/sourceDisplayWidth/clipScale);
+        const shadow=color(d?.shadowColor??'#000000'),highlight=color(d?.highlightColor??'#ffffff');
+        gl.uniform1f(u.ditherPalette,d?.shadowColor||d?.highlightColor?1:0);
+        gl.uniform3f(u.ditherShadow,shadow[0],shadow[1],shadow[2]);gl.uniform3f(u.ditherHighlight,highlight[0],highlight[1],highlight[2]);
+        gl.drawArrays(gl.TRIANGLES,0,6);
+      }
       entry.source.setAttribute('data-revline-effects', '');
       if (injected) { entry.injected = injected; injected.setAttribute('data-revline-effects', ''); }
-      entry.lastFrame = frame; entry.lastSource = sourceKey; entry.lastTransform = transformKey; entry.dirty = false;
+      entry.lastFrame = frame; entry.lastSource = sourceKey; entry.lastTransform = transformKey; entry.lastPassKey=passKey; entry.lastPassCount=passes.length; entry.dirty = false;
     } catch (error) { release(entry); entry.failed = true; report(error); }
   }
   function redraw(force = false) {
@@ -282,7 +315,7 @@ void main(){
   bindExportBridge(); document.addEventListener('DOMContentLoaded', bindExportBridge, { once: true });
   const controller: VisualEffectsController = {
     set,
-    setTimedEffects:clips=>{timedEffects=clips.filter(clip=>clip.effectPreset==='zoom-blur');for(const [id,effects] of baseEffects)set(id,effects);redraw(true);},
+    setTimedEffects:clips=>{timedEffects=clips.filter(clip=>clip.effectPreset==='zoom-blur').sort((a,b)=>trackOf(a)-trackOf(b));for(const [id,effects] of baseEffects)set(id,effects);redraw(true);},
     redraw: () => { bindExportBridge(); redraw(true); },
     dispose: () => { disposed = true; cancelAnimationFrame(frameRequest); for (const id of entries.keys()) remove(id); for (const resources of available) destroy(resources); available.length = 0; clock.render = originalRender; if (bridge) bridge.redraw = originalRedraw; },
   };

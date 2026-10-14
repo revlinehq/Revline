@@ -43,6 +43,10 @@ const bundle = await build({
             const clip={id:'fx-'+index,kind:'effect',start:0,duration:6,sourceStart:0,track:index+1};
             next={...next,clips:[...next.clips,{...clip,...motionPreset(clip,preset)}]};
           }
+          if(${!!process.env.REVLINE_STACKED_BLUR}&&!${!!process.env.REVLINE_NO_FX})for(let index=0;index<2;index++){
+            const clip={id:'blur-'+index,kind:'effect',start:0,duration:6,sourceStart:0,track:index+3};
+            next={...next,clips:[...next.clips,{...clip,...motionPreset(clip,'zoom-blur'),zoomBlur:{...DEFAULT_ZOOM_BLUR,enabled:true,amount:.15}}]};
+          }
           window.apply(next);
         };
         return <EditorStateProvider store={store}>
@@ -98,6 +102,10 @@ try {
     window.baseline = { p, doc, video: doc.querySelector('video'), audio: doc.querySelector('audio') };
     window.sourceLoads = 0;
     for (const node of doc.querySelectorAll('video,audio')) node.addEventListener('loadstart', () => window.sourceLoads++);
+    window.shaderCalls=[];window.framebufferAllocations=0;
+    const proto=doc.defaultView.WebGLRenderingContext.prototype,draw=proto.drawArrays,create=proto.createFramebuffer;
+    proto.drawArrays=function(...args){const started=performance.now(),result=draw.apply(this,args);window.shaderCalls.push(performance.now()-started);return result;};
+    proto.createFramebuffer=function(...args){window.framebufferAllocations++;return create.apply(this,args);};
     window.splitAndAddFX();
   });
   await page.waitForFunction(() => {
@@ -139,15 +147,19 @@ try {
   const drift = samples.filter(frame => frame.audioTime != null).map(frame => Math.abs(frame.mediaTime - frame.audioTime));
   const metrics = { decodedFrames: samples.length, fps: Number((samples.length / 5.3).toFixed(1)), p95GapMs: Math.round(p95), maxGapMs: Math.round(Math.max(...gaps)), maxAudioVideoOffsetMs: Math.round(Math.max(...drift) * 1000) };
   console.log('Decoded presentation with dither, zoom blur and stacked motion FX', metrics);
+  const shader = await page.evaluate(() => { const sorted=[...window.shaderCalls].sort((a,b)=>a-b);return {passes:sorted.length,p95SubmissionMs:sorted[Math.floor(sorted.length*.95)],framebufferAllocations:window.framebufferAllocations,activeCanvas:Array.from(window.baseline.doc.querySelectorAll('.visual-effect-output'),node=>[node.width,node.height])}; });
+  console.log('GPU pass submission cost (CPU only), retained intermediate allocation', shader);
+  if(process.env.REVLINE_STACKED_BLUR)assert.ok(shader.framebufferAllocations<=2,'Intermediate GPU targets are reused across clip handoffs');
   assert.ok(metrics.fps >= 20 && p95 < 120, 'Decoded video continues presenting during the 1080p FX review');
   assert.ok(Math.max(...drift) < .18, 'Paired source audio and decoded video stay aligned');
   const cuts = [{ time: 1, before: 'video-0', after: 'video-tail' }, { time: 2, before: 'video-tail', after: 'video-1' }, { time: 4, before: 'video-1', after: 'video-2' }];
+  const handoffs=[];
   for (const cut of cuts) {
     const left = frames.filter(frame => frame.id === cut.before && frame.clock < cut.time).at(-1), right = frames.find(frame => frame.id === cut.after && frame.clock >= cut.time);
     assert.ok(left && right, 'Both sides of the cut produce decoded frames');
     const gap = right.now - left.now;
     console.log('Decoded cut handoff', { timelineTime: cut.time, sourceTime: right.mediaTime, gapMs: Math.round(gap) });
-    assert.ok(gap < 160, 'Split/source-jump handoff avoids the transparent-video decoder stall');
+    handoffs.push(gap);
     assert.ok(Math.abs(right.mediaTime - right.expected) < .18, 'Cut activation does not skip forward to catch up with a clock that advanced while loading');
   }
   await page.evaluate(() => { window.pausePreview(); window.seekPreview(4.2); });
@@ -170,6 +182,7 @@ try {
   console.log('Repeated pause/resume to first decoded frame (ms)', resumes);
   console.log('Pause native seek settlement, including 80ms idle (ms)', pausedSeekSettlement);
   assert.ok(resumes.every(ms => ms < 200), 'Pause/resume does not stall or reload effected footage');
+  assert.ok(handoffs.every(gap=>gap<160),'Split/source-jump handoff avoids the transparent-video decoder stall');
   assert.equal(await page.evaluate(() => window.sourceLoads), 0, 'Live split and FX edits never reload surviving sources');
   assert.deepEqual(errors, []); assert.deepEqual(await page.evaluate(() => window.errors ?? []), []);
   console.log('PASS: owned real 1080p decoded media, live paired split + FX insertion, continuous and discontinuous source cuts, AV alignment, retained decoders and repeated resume. Software WebGL fixture; real-project network/GPU behavior still needs verification.');
