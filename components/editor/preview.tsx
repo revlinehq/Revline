@@ -1,4 +1,5 @@
 'use client';
+import { userError } from '@/lib/user-error';
 // @refresh reset
 import { previewVisualFade } from '@/lib/editor/visual-fades-runtime';
 import { warmPreviewMedia } from '@/lib/editor/preview-media-warmup';
@@ -95,9 +96,9 @@ export const Preview = forwardRef<PreviewHandle,{timeline:Timeline;assets:MediaA
         renderedTimeline.current=current;setRevision(value=>value+1);
       }
       else setReloadRevision(value=>value+1);
-    }catch(error){callbacks.current.onError(error instanceof Error?error.message:'Could not apply this preview edit.');}};
+    }catch(error){callbacks.current.onError(userError(error, 'Could not apply this preview edit.'));}};
     const optional=loadPreviewRemotion(doc,current);
-    if(optional)void optional.then(apply,error=>{if(!cancelled)callbacks.current.onError(error instanceof Error?error.message:'Could not load the preview renderer.');});else apply();
+    if(optional)void optional.then(apply,error=>{if(!cancelled)callbacks.current.onError(userError(error, 'Could not load the preview renderer.'));});else apply();
     return()=>{cancelled=true;};
   },[committedTimeline,assets,contentKey]);
   useEffect(()=>()=>{player.current?.pause();player.current?.remove();player.current=null;callbacks.current.onPlaying(false);},[]);
@@ -141,7 +142,7 @@ export const Preview = forwardRef<PreviewHandle,{timeline:Timeline;assets:MediaA
           if(frame)frame.style.opacity=String(transform.opacity);
         }
       }
-    }catch(error){callbacks.current.onError(error instanceof Error?error.message:'Could not preview this effect.');}
+    }catch(error){callbacks.current.onError(userError(error, 'Could not preview this effect.'));}
   },resetCrop:()=>cropControls.current?.reset(),finishCrop:(cancel=false)=>{if(cancel)cropControls.current?.cancel();else cropControls.current?.done();}}),[]);
   useEffect(()=>{
     let cancelled=false,loaded=false,swapped=false,waitingForMedia=false;let p:HyperframesPlayer|null=null;let swapFrame=0;
@@ -177,7 +178,7 @@ export const Preview = forwardRef<PreviewHandle,{timeline:Timeline;assets:MediaA
           renderedTimeline.current=latestTimeline.current;
           renderedContentKey.current=contentKey;
           setSelectionVisible(selectionAt(seekPosition.current));callbacks.current.onTime(seekPosition.current);setReady(true);callbacks.current.onReady?.();setRevision(value=>value+1);if(resume)p.play();
-        });});}).catch(error=>{if(!cancelled&&!recovery.signal.aborted)callbacks.current.onError(error instanceof Error?error.message:'The footage could not load.');});
+        });});}).catch(error=>{if(!cancelled&&!recovery.signal.aborted)callbacks.current.onError(userError(error, 'The footage could not load.'));});
       };
       p.addEventListener('ready',()=>{if(cancelled||!p)return;
         const doc=p.iframeElement?.contentDocument;

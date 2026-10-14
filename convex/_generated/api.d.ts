@@ -14,6 +14,7 @@ import type * as assistantActions from "../assistantActions.js";
 import type * as billing from "../billing.js";
 import type * as editorAccess from "../editorAccess.js";
 import type * as http from "../http.js";
+import type * as lib_assistant_recovery from "../lib/assistant_recovery.js";
 import type * as lib_auth from "../lib/auth.js";
 import type * as lib_billing_access from "../lib/billing_access.js";
 import type * as lib_claude_model from "../lib/claude_model.js";
@@ -53,6 +54,7 @@ declare const fullApi: ApiFromModules<{
   billing: typeof billing;
   editorAccess: typeof editorAccess;
   http: typeof http;
+  "lib/assistant_recovery": typeof lib_assistant_recovery;
   "lib/auth": typeof lib_auth;
   "lib/billing_access": typeof lib_billing_access;
   "lib/claude_model": typeof lib_claude_model;

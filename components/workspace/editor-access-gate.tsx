@@ -1,4 +1,5 @@
 'use client';
+import { userError } from '@/lib/user-error';
 
 import { NEW_WORKSPACE_LABEL } from '@/lib/editor/workspace-labels';
 import { useRef, useState, type ReactNode } from 'react';
@@ -31,7 +32,7 @@ export function EditorAccessGate({ children, loading }: { children: ReactNode; l
       if (!result.url) throw new Error('Could not open checkout. Please try again.');
       window.location.assign(result.url);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Could not open billing. Please try again.');
+      setError(userError(cause, 'Could not open billing. Please try again.'));
       inFlight.current = false; setBusy(false);
     }
   }

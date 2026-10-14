@@ -1,4 +1,5 @@
 'use client';
+import { userError } from '@/lib/user-error';
 
 import { NEW_WORKSPACE_LABEL } from '@/lib/editor/workspace-labels';
 import { useEffect, useRef, useState } from 'react';
@@ -204,7 +205,7 @@ export function NewConversation() {
       router.push('/editor/' + projectId);
     } catch (cause) {
       if (mounted.current) {
-        setError(cause instanceof Error ? cause.message : 'Could not prepare your footage. Retry to continue from where it stopped.');
+        setError(userError(cause, 'Could not prepare your footage. Retry to continue from where it stopped.'));
         setProcessing(previous => ({ ...(previous ?? { index: 1, total: files.length + cloudIds.length, percent: 0 }), phase: 'error' }));
       }
       submitting.current = false;

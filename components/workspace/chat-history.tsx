@@ -1,4 +1,5 @@
 'use client';
+import { userError } from '@/lib/user-error';
 
 import { NEW_WORKSPACE_LABEL } from '@/lib/editor/workspace-labels';
 import { useRef, useState } from 'react';
@@ -33,14 +34,14 @@ export function ChatHistory() {
     if (!renaming || renaming.id === 'demo' || !name.trim() || busy) return;
     setBusy(true); setError('');
     try { await update({ projectId: renaming.id, title: name.trim() }); setRenaming(null); }
-    catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not rename this chat.'); }
+    catch (reason) { setError(userError(reason, 'Could not rename this chat.')); }
     finally { setBusy(false); }
   }
   async function deleteChat() {
     if (!deleting || deleting.id === 'demo' || busy) return;
     setBusy(true); setError('');
     try { await remove({ projectId: deleting.id }); setDeleting(null); }
-    catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not delete this chat.'); }
+    catch (reason) { setError(userError(reason, 'Could not delete this chat.')); }
     finally { setBusy(false); }
   }
   return <div className="workspace-page workspace-history-page">

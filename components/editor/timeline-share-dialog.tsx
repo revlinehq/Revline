@@ -1,4 +1,5 @@
 'use client';
+import { userError } from '@/lib/user-error';
 
 import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery } from 'convex/react';
@@ -45,14 +46,14 @@ export function TimelineShareDialog({ open, onOpenChange, title, timeline, asset
     if (inFlight.current || publishDisabled || status === undefined) return;
     inFlight.current = true; setBusy('publish'); setError(''); setCopied(false);
     try { setLocalId(await onPublish()); }
-    catch (error) { setError(error instanceof Error ? error.message : 'Could not share this timeline.'); }
+    catch (error) { setError(userError(error, 'Could not share this timeline.')); }
     finally { inFlight.current = false; setBusy(null); }
   }
   async function revoke() {
     if (inFlight.current) return;
     inFlight.current = true; setBusy('revoke'); setError(''); setCopied(false);
     try { await onRevoke(); setLocalId(null); }
-    catch (error) { setError(error instanceof Error ? error.message : 'Could not turn off sharing.'); }
+    catch (error) { setError(userError(error, 'Could not turn off sharing.')); }
     finally { inFlight.current = false; setBusy(null); }
   }
   async function copy() {

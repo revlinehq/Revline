@@ -1,4 +1,5 @@
 'use client';
+import { userError } from '@/lib/user-error';
 
 import { useRef, useState } from 'react';
 import Link from 'next/link';
@@ -66,7 +67,7 @@ function ShowcaseContent({ share, signedIn, useDisabled, onUse }: Parameters<typ
     inFlight.current = true; setError('');
     if (signedIn) { preview.current?.pause(); store.setState({ playing: false }); setReady(false); setCopying(true); }
     try { await onUse(); }
-    catch (error) { setError(error instanceof Error ? error.message : 'Could not create your copy. Please try again.'); setCopying(false); }
+    catch (error) { setError(userError(error, 'Could not create your copy. Please try again.')); setCopying(false); }
     finally { inFlight.current = false; }
   }
   return <main className="timeline-showcase conversation-editor editor-app" tabIndex={-1} onKeyDown={event => {

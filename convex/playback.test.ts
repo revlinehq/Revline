@@ -26,13 +26,13 @@ test('an owner can refresh expired playback URLs', async () => {
   const f = await fixture();
   const first = await f.owner.action(refresh, { projectId: f.projectId, assetIds: [f.assetId] });
   const firstToken = new URL(first[0].url!).searchParams.get('token')!;
-  expect(await verifyMediaToken(signingSecret, firstToken)).toEqual({ operation: 'read', key: 'media/owner/clip', expires: new Date('2026-10-20T12:00:00Z').getTime() });
+  expect(await verifyMediaToken(signingSecret, firstToken)).toEqual({ operation: 'read', key: 'media/owner/clip', expires: new Date('2026-10-20T00:00:00Z').getTime() });
   vi.setSystemTime(new Date('2026-10-21T12:00:00Z'));
   expect(await verifyMediaToken(signingSecret, firstToken)).toBeNull();
   const current = await f.owner.action(refresh, { projectId: f.projectId, assetIds: [f.assetId] });
   expect(current[0]._id).toBe(f.assetId);
   expect(current[0].url).not.toBe(first[0].url);
-  expect(await verifyMediaToken(signingSecret, new URL(current[0].url!).searchParams.get('token')!)).toEqual({ operation: 'read', key: 'media/owner/clip', expires: new Date('2026-10-28T12:00:00Z').getTime() });
+  expect(await verifyMediaToken(signingSecret, new URL(current[0].url!).searchParams.get('token')!)).toEqual({ operation: 'read', key: 'media/owner/clip', expires: new Date('2026-10-28T00:00:00Z').getTime() });
 });
 
 test('playback refresh refuses another user and anonymous callers', async () => {

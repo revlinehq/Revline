@@ -1,4 +1,5 @@
 'use client';
+import { userError } from '@/lib/user-error';
 
 import { NEW_WORKSPACE_LABEL } from '@/lib/editor/workspace-labels';
 import { useRef, useState, type ReactNode } from 'react';
@@ -87,7 +88,7 @@ export function WorkspaceNav({ title = NEW_WORKSPACE_LABEL, editorHref, active =
     if (!onRename || !newTitle.trim() || newTitle.trim().length > 120 || renameBusy) return;
     setRenameBusy(true); setRenameError('');
     try { await onRename(newTitle.trim()); setRenameOpen(false); }
-    catch (reason) { setRenameError(reason instanceof Error ? reason.message : 'Could not rename this chat.'); }
+    catch (reason) { setRenameError(userError(reason, 'Could not rename this chat.')); }
     finally { setRenameBusy(false); }
   }
   async function copyChatId() {

@@ -1,4 +1,5 @@
 'use client';
+import { userError } from '@/lib/user-error';
 import { useEffect, useId, useRef, useState } from 'react';
 import { Link2, LoaderCircle, X } from 'lucide-react';
 import { ProcessingStatus } from './processing-status';
@@ -18,7 +19,7 @@ export function VideoLinkImport({ onImport, disabled = false }: { onImport: (url
     if (disabled || submitting.current) return;
     submitting.current = true; setBusy(true); setError('');
     try { await onImport(parseVideoLink(url).url); setUrl(''); }
-    catch (error) { setError(error instanceof Error ? error.message : 'Could not import this video.'); }
+    catch (error) { setError(userError(error, 'Could not import this video.')); }
     finally { submitting.current = false; setBusy(false); }
   }}>
     <label htmlFor={id}><Link2 size={13}/>Import a video link</label>

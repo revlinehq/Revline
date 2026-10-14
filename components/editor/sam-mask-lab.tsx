@@ -1,4 +1,5 @@
 'use client';
+import { userError } from '@/lib/user-error';
 
 import { useEffect, useRef, useState } from 'react';
 import { Video, type VideoRef } from '@meta-sam/react';
@@ -44,7 +45,7 @@ export function SamMaskLab() {
       if (controller.signal.aborted || request.current !== controller) return;
       if (!finished || finished.outcome.status !== 'completed') throw new Error('Segmentation ended early. Try again with a shorter clip.');
       setResult(finished); setComplete(true);
-    } catch (failure) { if (!controller.signal.aborted) setError(failure instanceof Error ? failure.message : 'Could not segment this video.'); }
+    } catch (failure) { if (!controller.signal.aborted) setError(userError(failure, 'Could not segment this video.')); }
     finally { if (request.current === controller) { request.current = null; setWorking(false); } }
   }
   function selectFile(selected: File | null) {

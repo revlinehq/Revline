@@ -1,12 +1,17 @@
 'use client';
+import { userError } from '@/lib/user-error';
 
 import { PRODUCTION_CLAUDE_MODEL_CHOICES } from '@/lib/ai/claude-model-policy';
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, type ComponentProps } from 'react';
 import { Check, ArrowUpRight } from 'lucide-react';
 import { Brand } from '@/components/workspace/brand';
 import { AssistantModelPicker } from './assistant-model-picker';
 import type { ClaudeModelChoice } from '@/lib/ai/claude-model';
 import { EditComposer } from '@/components/workspace/edit-composer';
+import { useUIMessages } from '@convex-dev/agent/react';
+import { api } from '@/convex/_generated/api';
+import type { Id } from '@/convex/_generated/dataModel';
+import { chatMessageFromUI } from './assistant-results';
 import { ChatProse } from './chat-prose';
 import { useConversationScroll } from '@/components/workspace/use-conversation-scroll';
 import { savedEditComparison, summarizeTools, turnPublicationReceipt, type AssistantEditSnapshot, type ChatMessage } from './assistant-results';
@@ -16,6 +21,18 @@ import './assistant-panel.css';
 import type { SourceEditSuggestion } from '@/lib/editor/types';
 import { ProcessingStatus, processingDetail } from './processing-status';
 export type { ChatTool, ChatMessage } from './assistant-results';
+
+type Conversation = {projectId:Id<'projects'>;threadId:string};
+type PanelProps = ComponentProps<typeof AssistantPanelBody> & {conversation?:Conversation};
+function ConnectedConversation({conversation,...props}:PanelProps & {conversation:Conversation}) {
+  const {results,status,loadMore}=useUIMessages(api.assistant.messages,conversation,{initialNumItems:20,stream:true});
+  const messages=useMemo(()=>results.map(chatMessageFromUI),[results]);
+  return <AssistantPanelBody {...props} messages={messages} canLoadMore={status==='CanLoadMore'} onLoadMore={()=>loadMore(20)}/>;
+}
+/** Stream subscriptions live inside the conversation, away from preview/timeline. */
+export function AssistantPanel(props:PanelProps) {
+  return props.conversation?<ConnectedConversation {...props} conversation={props.conversation}/>:<AssistantPanelBody {...props}/>;
+}
 
 type PendingReply = { id: string; text: string; previousUserId?: string; previousError?: string | null };
 
@@ -34,7 +51,7 @@ function AssistantResponseText({ text, streaming }: { text: string; streaming: b
   return <ChatProse text={text} animate={receivedLive || streaming} />;
 }
 
-export function AssistantPanel({ messages, running, configured, error, onSend, onStop, hasClips, demo, onLoadMore, canLoadMore, onAttach, activity, activitySource, activityProgress, draftKey, suggestions, onSuggestion, editSnapshot, modelSwitcher = false, allowedModels = PRODUCTION_CLAUDE_MODEL_CHOICES }: {
+function AssistantPanelBody({ messages, running, configured, error, onSend, onStop, hasClips, demo, onLoadMore, canLoadMore, onAttach, activity, activitySource, activityProgress, draftKey, suggestions, onSuggestion, editSnapshot, modelSwitcher = false, allowedModels = PRODUCTION_CLAUDE_MODEL_CHOICES }: {
   messages: ChatMessage[]; running: boolean; configured: boolean; error?: string | null;
   modelSwitcher?: boolean;
   allowedModels?: readonly ClaudeModelChoice[];
@@ -89,7 +106,7 @@ export function AssistantPanel({ messages, running, configured, error, onSend, o
     setLocalError('');
     setStopState('stopping');
     try { await onStop?.(); setStopState('stopped'); }
-    catch (e) { setStopState(null); setLocalError(e instanceof Error ? e.message : 'Could not stop this edit.'); }
+    catch (e) { setStopState(null); setLocalError(userError(e, 'Could not stop this edit.')); }
   }
 
   async function submit() {
@@ -98,7 +115,7 @@ export function AssistantPanel({ messages, running, configured, error, onSend, o
     changePrompt('');
     setStopState(null); setSending(true); setPendingReply({ id: `pending-${crypto.randomUUID()}`, text: draft.trim(), previousUserId: latestUser?.id, previousError: error }); setLocalError(''); scroll.resume();
     try { await onSend(draft.trim(), modelSwitcher ? effectiveModelChoice : undefined); }
-    catch (e) { if(currentDraftKey.current===key){changePrompt(draft);setPendingReply(null);setLocalError(e instanceof Error ? e.message : 'Could not send message');} }
+    catch (e) { if(currentDraftKey.current===key){changePrompt(draft);setPendingReply(null);setLocalError(userError(e, 'Could not send message'));} }
     finally { sendInFlight.current=false;setSending(false); }
   }
 
@@ -107,7 +124,7 @@ export function AssistantPanel({ messages, running, configured, error, onSend, o
     const request = `${suggestion.prompt}\n\nUse the selected clip from “${suggestions.sourceName}”, source ${suggestion.start.toFixed(2)}–${suggestion.end.toFixed(2)} seconds.`;
     sendInFlight.current=true;setStopState(null); setSending(true); setPendingReply({ id: `pending-${crypto.randomUUID()}`, text: request, previousUserId: latestUser?.id, previousError: error }); setLocalError(''); scroll.resume();
     try { await onSuggestion(request, suggestions.clipId, modelSwitcher ? effectiveModelChoice : undefined); }
-    catch (e) { setPendingReply(null); setLocalError(e instanceof Error ? e.message : 'Could not start this edit.'); }
+    catch (e) { setPendingReply(null); setLocalError(userError(e, 'Could not start this edit.')); }
     finally { sendInFlight.current=false;setSending(false); }
   }
 

@@ -1,4 +1,5 @@
 'use client';
+import { userError } from '@/lib/user-error';
 
 import { useCallback, useEffect, useRef, useState, type DragEvent } from 'react';
 import { Upload } from 'lucide-react';
@@ -59,7 +60,7 @@ export function useMediaFileDrop({ busy, onUpload, onError }: {
           return;
         }
         uploading.current = true;
-        void onUpload(files).catch(error => onError(error instanceof Error ? error.message : 'Could not import these files.')).finally(() => { uploading.current = false; });
+        void onUpload(files).catch(error => onError(userError(error, 'Could not import these files.'))).finally(() => { uploading.current = false; });
       },
     },
   };

@@ -1,4 +1,5 @@
 'use client';
+import { userError } from '@/lib/user-error';
 
 import { useRef, useState } from 'react';
 import Link from 'next/link';
@@ -35,7 +36,7 @@ export function BillingSection({ checkoutReturn }: { checkoutReturn?: CheckoutRe
       if (!result.url) throw new Error('The billing link could not be opened.');
       window.location.assign(result.url);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Could not open billing. Please try again.');
+      setError(userError(cause, 'Could not open billing. Please try again.'));
       inFlight.current = false; setBusy(false);
     }
   }

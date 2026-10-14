@@ -1,4 +1,5 @@
 'use client';
+import { userError } from '@/lib/user-error';
 
 import { useRef, useState } from 'react';
 import Link from 'next/link';
@@ -27,7 +28,7 @@ export function ProfilePage({ checkoutReturn }: { checkoutReturn?: CheckoutRetur
     if (!file.type.startsWith('image/') || file.size > 10 * 1024 * 1024) { setPhotoError('Choose an image smaller than 10 MB.'); return; }
     setPhotoBusy(true);
     try { await user.setProfileImage({ file }); }
-    catch (reason) { setPhotoError(reason instanceof Error ? reason.message : 'Could not update your photo.'); }
+    catch (reason) { setPhotoError(userError(reason, 'Could not update your photo.')); }
     finally { setPhotoBusy(false); }
   }
   async function signOut() {

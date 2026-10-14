@@ -1,4 +1,5 @@
 'use client';
+import { userError } from '@/lib/user-error';
 
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { ArrowUp, Film, LoaderCircle, Music2, Plus, Square, X } from 'lucide-react';
@@ -78,18 +79,18 @@ export function EditComposer({ value, onChange, onSubmit, onAttach, attachments 
     observer.observe(content);
     return () => { observer.disconnect(); form.style.removeProperty('height'); };
   }, [uploadOnHover]);
-  async function stop() { setError(''); try { await onStop?.(); } catch (e) { setError(e instanceof Error ? e.message : 'Could not stop this edit.'); } }
+  async function stop() { setError(''); try { await onStop?.(); } catch (e) { setError(userError(e, 'Could not stop this edit.')); } }
   async function submit() {
     if (sendInFlight.current || busy || running || mediaMissing || mediaInvalid || (variant !== 'landing' && !value.trim() && !attachments.length)) return;
     sendInFlight.current=true;setSending(true); setError('');
-    try { await onSubmit(); } catch (e) { setError(e instanceof Error ? e.message : 'Could not send your edit.'); } finally { sendInFlight.current=false;setSending(false); }
+    try { await onSubmit(); } catch (e) { setError(userError(e, 'Could not send your edit.')); } finally { sendInFlight.current=false;setSending(false); }
   }
   function chip(attachment: ComposerAttachment) {
     return <div className="composer-attachment" key={attachment.id} data-error={!!attachment.error || undefined}>{attachment.url && attachment.kind !== 'audio' ? attachment.kind === 'video' ? <video src={attachment.url} muted preload="metadata" aria-hidden="true" /> : <img src={attachment.url} alt="" /> : attachment.kind === 'audio' ? <Music2 size={17} /> : <Film size={17} />}<span title={attachment.name}>{attachment.name}</span>{attachment.progress !== undefined && <progress aria-label={`Uploading ${attachment.name}`} max={100} value={attachment.progress} />}{onRemoveAttachment && <button type="button" onClick={() => onRemoveAttachment(attachment.id)} aria-label={`Remove ${attachment.name}`} disabled={busy || running}><X size={11} /></button>}</div>;
   }
   const editFields = <>
     {!!attachments.length && <div className="composer-attachments">{attachments.slice(0, attachmentLimit).map(chip)}{attachments.length > attachmentLimit && <button className="composer-more" type="button" onClick={() => setSheetOpen(true)}>+{attachments.length - attachmentLimit} clips</button>}</div>}
-    <textarea ref={textarea} aria-label="Describe your next edit" placeholder={mediaMissing ? 'Drop in media to start chatting' : placeholder} value={value} maxLength={2000} rows={variant==='compact'?1:2} disabled={busy} readOnly={mediaMissing} onPointerDown={e => { if (mediaMissing) { e.preventDefault(); onAttach?.(); } }} onChange={e => { if (!mediaMissing) onChange(e.target.value); }} onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); if (mediaMissing) onAttach?.(); else void submit(); } }} />
+    <textarea ref={textarea} aria-label="Describe your next edit" placeholder={mediaMissing ? 'Drop in media to start chatting' : placeholder} value={value} maxLength={2000} rows={variant==='compact'?1:2} aria-disabled={busy || undefined} readOnly={mediaMissing || busy} onPointerDown={e => { if (mediaMissing) { e.preventDefault(); onAttach?.(); } }} onChange={e => { if (!mediaMissing && !busy) onChange(e.target.value); }} onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); if (mediaMissing) onAttach?.(); else void submit(); } }} />
     <div className="edit-composer-actions">{statusLabel ? <span className="composer-status">{statusLabel}</span> : emptyHint && !attachments.length ? <button type="button" className="composer-empty-hint" onClick={onAttach}>{emptyHint}</button> : <button type="button" className="composer-add" aria-label="Add footage" title="Add footage" onClick={onAttach} disabled={!onAttach || busy}><Plus size={16} /></button>}{actions}<span className="composer-action-space" />{running && onStop ? <PrimaryButton type="button" size="icon" onClick={() => void stop()} aria-label="Stop editing"><Square size={12} /></PrimaryButton> : <PrimaryButton className="composer-submit" type="submit" size={submitLabel ? 'default' : 'icon'} disabled={busy || running || mediaMissing || mediaInvalid || (variant !== 'landing' && !value.trim() && !attachments.length)} aria-label={submitLabel ?? 'Start edit'}>{submitLabel}{sending ? <LoaderCircle size={14} className="animate-spin" /> : variant==='compact'?<ArrowUp size={14}/>:<FilledPlayIcon />}</PrimaryButton>}</div>
     {(error || attachmentError) && <p className="composer-error" role="alert">{error || `${attachmentError!.name}: ${attachmentError!.error}`}</p>}
   </>;

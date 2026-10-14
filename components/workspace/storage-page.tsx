@@ -1,4 +1,5 @@
 'use client';
+import { userError } from '@/lib/user-error';
 
 import { useDeferredValue,useState } from 'react';
 import Link from 'next/link';
@@ -36,7 +37,7 @@ export function StorageBrowser({summary,files,filters,onFilters,loading,loadingM
   const available=summary?Math.max(0,summary.limitBytes-summary.usedBytes-summary.reservedBytes):0;
   const ready=summary?.ready;
   function changeFilters(patch:Partial<Filters>){setSelected(new Set());onFilters({...filters,...patch});}
-  async function deleteFiles(){if(busy||!chosen.length)return;setBusy(true);setError('');try{await onDelete(chosen);setSelected(new Set());setConfirm(false);}catch(reason){setError(reason instanceof Error?reason.message:'Could not delete these files. Please retry.');}finally{setBusy(false);}}
+  async function deleteFiles(){if(busy||!chosen.length)return;setBusy(true);setError('');try{await onDelete(chosen);setSelected(new Set());setConfirm(false);}catch(reason){setError(userError(reason, 'Could not delete these files. Please retry.'));}finally{setBusy(false);}}
   return <main className="storage-content">
     <div className="storage-heading"><div><h1>Cloud storage</h1><p>Keep your media organized. Make room for your next edit.</p></div><PrimaryButton asChild><Link href="/dashboard/chat">Upload media<Upload size={14}/></Link></PrimaryButton></div>
     <section className="storage-usage" aria-label="Cloud storage usage" aria-busy={!ready}>

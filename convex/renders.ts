@@ -25,13 +25,12 @@ export const start = mutation({ args: { projectId: v.id("projects"), resolution:
   if (![720, 1080].includes(args.resolution) || ![24, 30, 60].includes(args.fps) || !["draft", "standard", "high"].includes(args.quality)) throw new ConvexError("Invalid export settings");
   const timeline = await validateTimeline(ctx, project, currentTimeline(project)); if (!timeline.clips.length) throw new ConvexError("Add a clip before exporting");
   if (timelineDuration(timeline) > MAX_EXPORT_SECONDS) throw new ConvexError("Exports currently support up to five minutes. Shorten the final edit before exporting; your full arrangement remains saved.");
-  const active = await ctx.db.query("renderJobs").withIndex("by_ownerId_projectId", q => q.eq("ownerId", ownerId).eq("projectId", project._id)).order("desc").take(501);
-  if (active.length > 500) throw new ConvexError("Render history is full");
-  if (active.some(job => job.status === "queued" || job.status === "rendering")) throw new ConvexError("A render is already in progress");
+  const active=await Promise.all((['queued','rendering'] as const).map(status=>ctx.db.query('renderJobs').withIndex('by_owner_project_status',q=>q.eq('ownerId',ownerId).eq('projectId',project._id).eq('status',status)).first()));
+  if(active.some(Boolean))throw new ConvexError('A render is already in progress');
   const assetIds: Id<"assets">[] = [];
   for (const clip of timeline.clips) if (clip.assetId) { const id = ctx.db.normalizeId("assets", clip.assetId)!; if (!assetIds.includes(id)) assetIds.push(id); }
   const now = Date.now();
-  const jobId = await ctx.db.insert("renderJobs", { ownerId, projectId: project._id, timeline, assetIds, resolution: args.resolution, fps: args.fps, quality: args.quality, status: "queued", progress: 0, createdAt: now, updatedAt: now });
+  const jobId = await ctx.db.insert("renderJobs", { ownerId, projectId: project._id, sourceRevision:project.revision??0, timeline, assetIds, resolution: args.resolution, fps: args.fps, quality: args.quality, status: "queued", progress: 0, createdAt: now, updatedAt: now });
   const taskId = await enqueueMediaTask(ctx, { ownerId, projectId: project._id, kind: 'render', renderJobId: jobId });
   await ctx.db.patch(jobId, { taskId });
   return jobId;

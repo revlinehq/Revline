@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { memo, type ReactNode } from "react";
 import { FlowTokenText } from "@/components/core/flowtoken";
 
 type ListType = "bullets" | "steps";
@@ -103,7 +103,7 @@ function InlineMarkup({ text, animate }: { text: string; animate: boolean }) {
 }
 
 /** Markdown structure for text already revealed by the response renderer. */
-export function ChatProse({
+export const ChatProse = memo(function ChatProse({
   text,
   animate = false,
 }: {
@@ -146,4 +146,4 @@ export function ChatProse({
       })}
     </div>
   );
-}
+});

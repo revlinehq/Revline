@@ -10,7 +10,7 @@ export function mediaConfig() {
 export async function mediaUrl(ctx: QueryCtx | MutationCtx | ActionCtx, source: { storageId?: Id<'_storage'>; r2Key?: string }) {
   if (!source.r2Key) return source.storageId ? ctx.storage.getUrl(source.storageId) : null;
   const { url, secret } = mediaConfig();
-  const token = await signMediaToken(secret, { operation: 'read', key: source.r2Key, expires: Date.now() + 7 * 86400_000 });
+  const token = await signMediaToken(secret, { operation: 'read', key: source.r2Key, expires: Math.floor(Date.now() / 86400_000) * 86400_000 + 7 * 86400_000 });
   return `${url}/read?token=${token}`;
 }
 export async function storageControl(body: Record<string, unknown>): Promise<{ uploadId?: string; size?: number; contentType?: string }> {
