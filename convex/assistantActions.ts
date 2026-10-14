@@ -1,6 +1,7 @@
 "use node";
 import { EDITOR_STYLE_RULES } from "../lib/ai/editor-style";
 import { wrapLanguageModel } from "ai";
+import { anthropicTokenCounter } from "../lib/ai/anthropic-token-count";
 import { AssistantTokenBudget, AssistantTokenBudgetError, EDITOR_TOKEN_LIMITS } from "../lib/ai/token-budget";
 import { modelTimeline, modelAssetAnalysis, EDITOR_CONTEXT_NOTICE, EDITOR_CONTEXT_BOUNDARY } from "../lib/ai/editor-context";
 import { assistantFailureReason } from "../lib/ai/assistant-error";
@@ -327,7 +328,7 @@ export const respond = internalAction({
       const { provider, modelId } = validatePinnedClaudeModel(args.pinnedModel ?? resolveClaudeModel());
       const gateway = provider === 'gateway';
       const tokenBudget = new AssistantTokenBudget();
-      const model = wrapLanguageModel({ model: gateway ? convexGateway(modelId) : anthropic(modelId), middleware: tokenBudget.middleware(args.selectedClipIds ?? (args.selectedClipId ? [args.selectedClipId] : []), editSession.revision) });
+      const model = wrapLanguageModel({ model: gateway ? convexGateway(modelId) : anthropic(modelId), middleware: tokenBudget.middleware(args.selectedClipIds ?? (args.selectedClipId ? [args.selectedClipId] : []), editSession.revision,!gateway&&process.env.ANTHROPIC_API_KEY?anthropicTokenCounter(modelId,process.env.ANTHROPIC_API_KEY):undefined) });
       const providerOptions = claudeProviderOptions(modelId);
       const agent = new Agent(components.agent, { name: "Revline", languageModel: model, tools, contextOptions: { recentMessages: 100, excludeToolMessages: false }, stopWhen: stepCountIs(15), instructions: `${EDITOR_STYLE_RULES}
 # Editing rules

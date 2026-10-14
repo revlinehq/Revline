@@ -26,7 +26,7 @@ export class AssistantTokenBudget {
   constructor(private limits: TokenLimits = EDITOR_TOKEN_LIMITS) {}
   get usage() { return { inputTokens: this.input, outputTokens: this.output }; }
 
-  reserve(params: LanguageModelV4CallOptions) {
+  private estimateInput(params:LanguageModelV4CallOptions) {
     if (this.blocked) throw new AssistantTokenBudgetError('usage');
     const payload = { prompt: params.prompt, tools: params.tools, responseFormat: params.responseFormat };
     const encodedBytes = (value: unknown) => new TextEncoder().encode(JSON.stringify(value)).length;
@@ -47,7 +47,13 @@ export class AssistantTokenBudget {
     }) });
     const bytes = encodedBytes({ ...payload, prompt: estimatedPrompt });
     if (bytes > this.limits.requestBytes) throw new AssistantTokenBudgetError('context');
-    const reservedInput = bytes + 4096 + images * 8192;
+    return bytes+4096+images*8192;
+  }
+
+  reserve(params: LanguageModelV4CallOptions,countedInput?:number) {
+    const estimate=this.estimateInput(params);
+    const reservedInput=countedInput??estimate;
+    if(!Number.isSafeInteger(reservedInput)||reservedInput<0)throw new AssistantTokenBudgetError('usage');
     const reservedOutput = Math.min(params.maxOutputTokens ?? this.limits.outputPerCall, this.limits.outputPerCall);
     if (this.input + reservedInput > this.limits.inputTokens || this.output + reservedOutput > this.limits.outputTokens) throw new AssistantTokenBudgetError('tokens');
     this.input += reservedInput; this.output += reservedOutput;
@@ -63,7 +69,7 @@ export class AssistantTokenBudget {
     };
   }
 
-  middleware(selectedClipIds: readonly string[] = [], initialRevision?: number): LanguageModelMiddleware {
+  middleware(selectedClipIds: readonly string[] = [], initialRevision?: number, countInput?:(params:LanguageModelV4CallOptions)=>Promise<number>): LanguageModelMiddleware {
     const exposedResults = new Map<string, LanguageModelV4ToolResultPart>();
     return {
       transformParams: async ({ params }) => {
@@ -79,11 +85,15 @@ export class AssistantTokenBudget {
         return { ...params, prompt, maxOutputTokens: Math.min(params.maxOutputTokens ?? this.limits.outputPerCall, this.limits.outputPerCall) };
       },
       wrapGenerate: async ({ params, doGenerate }) => {
-        const settle = this.reserve(params);
+        this.estimateInput(params);
+        const counted=countInput?await countInput(params):undefined;
+        const settle = this.reserve(params,counted);
         const result = await doGenerate(); settle(result.usage); return result;
       },
       wrapStream: async ({ params, doStream }) => {
-        const settle = this.reserve(params);
+        this.estimateInput(params);
+        const counted=countInput?await countInput(params):undefined;
+        const settle = this.reserve(params,counted);
         const result = await doStream();
         return { ...result, stream: result.stream.pipeThrough(new TransformStream({ transform(part, controller) {
           if (part.type === 'finish') settle(part.usage);
