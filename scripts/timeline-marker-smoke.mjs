@@ -11,7 +11,7 @@ const geometry = () => page.evaluate(() => {
  const viewport = document.querySelector('.timeline-scroll');
  const capRect=rect(cap);
  const cornerHit=x=>document.elementFromPoint(x,capRect.top+5)?.closest('.timeline-playhead-cap')===cap;
- return { line:rect(line), cap:capRect, viewport:rect(viewport), body:rect(document.querySelector('.timeline-body')), firstClip:rect(document.querySelector('.clip-video')), zeroTick:rect(document.querySelector('.time-ruler span')), scroll:viewport.scrollLeft, visibility:getComputedStyle(cap).visibility, cornersVisible:cornerHit(capRect.left+2)&&cornerHit(capRect.right-2), clipPath:getComputedStyle(cap).clipPath };
+ return { ruler:rect(document.querySelector('.time-ruler')), lineZ:Number(getComputedStyle(line).zIndex), rulerZ:Number(getComputedStyle(document.querySelector('.time-ruler')).zIndex), line:rect(line), cap:capRect, viewport:rect(viewport), body:rect(document.querySelector('.timeline-body')), firstClip:rect(document.querySelector('.clip-video')), zeroTick:rect(document.querySelector('.time-ruler span')), scroll:viewport.scrollLeft, visibility:getComputedStyle(cap).visibility, cornersVisible:cornerHit(capRect.left+2)&&cornerHit(capRect.right-2), clipPath:getComputedStyle(cap).clipPath };
 });
 function assertMarker(value, label) {
  const lineCenter = value.line.left + value.line.width / 2;
@@ -19,10 +19,13 @@ function assertMarker(value, label) {
  assert.ok(Math.abs(headTip - lineCenter) <= 0.6, `${label}: marker tip must remain attached to line (${headTip} vs ${lineCenter})`);
  assert.ok(value.cap.left >= value.body.left - 0.6, `${label}: marker head left side must be visible outside the scroll lane`);
  assert.ok(value.cap.right <= value.viewport.right + 0.6, `${label}: marker head right side must be visible`);
- assert.ok(value.cap.height >= 20, `${label}: preserve tall marker head`);
+ assert.equal(value.cap.height,12,`${label}: preserve the compact rounded marker head`);
+ assert.equal(value.line.width,1,`${label}: the old two-pixel line must not override the new marker`);
+ assert.ok(value.lineZ < value.rulerZ,`${label}: line must stay below the opaque ruler, without peeking above its head`);
+ assert.ok(Math.abs(value.cap.bottom-value.ruler.bottom)<=0.6,`${label}: marker head must sit at the ruler baseline`);
  assert.equal(value.visibility,'visible',`${label}: marker head should be visible`);
  assert.ok(value.cornersVisible,`${label}: both sides of the marker head must be visible and draggable`);
- assert.match(value.clipPath, /polygon/, `${label}: preserve pointed marker head`);
+ assert.equal(value.clipPath,'none',`${label}: preserve the rounded rectangular marker head`);
 }
 try {
  await page.goto('http://localhost:3001/editor/demo', { waitUntil:'domcontentloaded' });
@@ -35,6 +38,7 @@ try {
  const ruler = await page.$eval('.time-ruler', el => {const r=el.getBoundingClientRect();return {x:r.x,y:r.y};});
  await page.mouse.click(ruler.x + 140, ruler.y + 6);
  await wait(100);
+ await page.$eval('.timeline-scroll',el=>{el.scrollTop=el.scrollHeight;});await wait(100);
  const middle = await geometry();
  assertMarker(middle, 'Interior time');
  await page.focus('[aria-label="Timeline zoom"]');await page.keyboard.press('End');await wait(100);
@@ -52,7 +56,9 @@ try {
  assert.equal(await page.$eval('.timeline-playhead-cap',el=>el.getClientRects().length),0,'Collapsed timeline must hide the cap');
  await page.click('[aria-label="Expand timeline"]');await wait(100);assertMarker(await geometry(),'After collapse and expansion');
  await page.setViewport({width:390,height:844});await wait(150);
+ await page.click('#editor-tracks-tab');await wait(150);
  const mobile=await geometry();assertMarker(mobile,'Mobile time zero');
+ await page.screenshot({path:'/tmp/revline-marker-mobile.png'});
  assert.ok(Math.abs(mobile.firstClip.left-mobile.viewport.left)<=0.6,'Mobile footage must also be flush at time zero');
  console.log(JSON.stringify({passed:true,zeroInset:initial.firstClip.left-initial.viewport.left,fullHeadVisible:true,tipAttached:true,scrollAndResize:true,offscreenHeadHidden:true,physicalEdgeClippingHandled:true,collapseAndMobile:true}));
 } finally { await browser.close(); }
