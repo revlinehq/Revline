@@ -59,7 +59,7 @@ export function effectDisabledReference(timeline: Timeline, plans: EffectPlan[],
     if (plan.kind==='text' && [...TEXT_ANIMATION_PRESETS,'motion'].includes(plan.effect as typeof TEXT_ANIMATION_PRESETS[number])) { clips=clips.map(clip=>clip.id===id?{...clip,animation:'none',textTemplate:undefined,textAnimationTiming:undefined,motion:undefined}:clip);continue; }
     if(plan.kind==='visual'&&plan.effect!=='motion'){clips=clips.map(clip=>{if(clip.id!==id)return clip;const group=clip[plan.effect as keyof Clip];return {...clip,[plan.effect]:group&&typeof group==='object'?{...group,enabled:false}:undefined};});continue;}
     if (!original) throw new Error('The planned clip has no effect-disabled reference.');
-    const keys = plan.kind === 'visual' ? [plan.effect] : plan.kind === 'text' ? ['textTemplate', 'textStyle', 'animation', 'textAnimationTiming', 'color', 'background', 'fontSize', 'fontFamily'] : ['effectPreset', 'motion', 'zoom', 'frameShrink', 'cinematicBars', 'zoomBlur', 'solidColor', 'transition'];
+    const keys = plan.kind === 'visual' ? [plan.effect] : plan.kind === 'text' ? ['textTemplate', 'textStyle', 'animation', 'textAnimationTiming', 'color', 'background', 'fontSize', 'fontFamily'] : ['effectPreset', 'motion', 'zoom', 'flash', 'punch', 'shake', 'pop', 'frameShrink', 'cinematicBars', 'zoomBlur', 'solidColor', 'transition'];
     clips = clips.map(clip => clip.id === id ? { ...clip, ...Object.fromEntries(keys.map(key => [key, original[key as keyof Clip]])) } : clip);
   }
   return { ...timeline, clips };

@@ -1,3 +1,4 @@
+import { flashSettings, punchSettings, shakeSettings, popSettings, flashKeyframes, punchKeyframes, shakeKeyframes, popKeyframes, isPropertyEffectPreset, propertyEffectMotion, motionEffectPatch, validateMotionEffectSettings, type MotionEffectChanges } from './motion-effect-settings';
 import type { Clip } from './types';
 import { DEFAULT_ZOOM_BLUR, validateVisualEffects } from './visual-effects';
 import { textTemplateTimingPatch, validateRemotionTextTemplate } from './remotion-text';
@@ -69,10 +70,10 @@ export const EFFECT_CATALOG: Record<EffectPreset, { label: string; description: 
   'spin-zoom': { label: 'Spin zoom', description: "Dissolve while the outgoing frame rotates and zooms away and the incoming frame settles from an opposite tilt/zoom. Clockwise or counter-clockwise; rotation of 18 degrees and zoom up to 1.55.", duration: .6, keyframes: () => [] },
   'blur-dissolve': { label: 'Blur dissolve', description: "Dissolve as outgoing footage blurs and incoming footage comes into focus. Blur reaches 20 reference pixels and scales with output resolution.", duration: .6, keyframes: () => [] },
   fade: { label: 'Fade in / out', description: "Fade the underlying footage in and out with a held middle section; does not fade audio.", duration: 1, keyframes: d => { const fade = Math.min(.3, d / 3); return [key(0, { opacity: 0 }), key(fade), key(d - fade), key(d, { opacity: 0 })]; } },
-  punch: { label: 'Punch zoom', description: "A quick 1.2\u00d7 visual punch toward the center, followed by a return to the original framing.", duration: .5, keyframes: d => { const hit = Math.min(.35, d / 2); return [key(0), key(hit * .3, { scale: 1.2 }), key(hit), key(d)]; } },
-  shake: { label: 'Impact shake', description: "Brief horizontal/vertical offsets and small rotation jitter with a slight inset zoom; preserves the original cut and audio timing.", duration: .5, keyframes: d => { const hit = Math.min(.35, d / 2); return [key(0, { scale: 1.08 }), key(hit * .15, { x: .018, y: -.01, rotation: 1.2, scale: 1.08 }), key(hit * .35, { x: -.014, y: .008, rotation: -.9, scale: 1.08 }), key(hit * .6, { x: .008, y: -.004, rotation: .4, scale: 1.08 }), key(hit, { scale: 1.08 }), key(d, { scale: 1.08 })]; } },
-  flash: { label: 'Flash', description: "A brief brightness pulse over the footage that settles back to normal; does not add a new media source.", duration: .5, keyframes: d => { const hit = Math.min(.35, d / 2); return [key(0), key(hit * .2, { brightness: 3 }), key(hit), key(d)]; } },
-  pop: { label: 'Pop in', description: "Scale footage from 0.7\u00d7 through a small overshoot while fading in, then settle to normal size.", duration: .5, keyframes: d => { const hit = Math.min(.35, d / 2); return [key(0, { scale: .7, opacity: 0 }), key(hit * .65, { scale: 1.08 }), key(hit), key(d)]; } },
+  punch: { label: 'Punch zoom', description: "A quick 1.2\u00d7 visual punch toward the center, followed by a return to the original framing.", duration: .5, keyframes: d => punchKeyframes(d) },
+  shake: { label: 'Impact shake', description: "Brief horizontal/vertical offsets and small rotation jitter with a slight inset zoom; preserves the original cut and audio timing.", duration: .5, keyframes: d => shakeKeyframes(d) },
+  flash: { label: 'Flash', description: "A brief brightness pulse over the footage that settles back to normal; does not add a new media source.", duration: .5, keyframes: d => flashKeyframes(d) },
+  pop: { label: 'Pop in', description: "Scale footage from 0.7\u00d7 through a small overshoot while fading in, then settle to normal size.", duration: .5, keyframes: d => popKeyframes(d) },
   'solid-color': { label: 'Solid color', description: "A solid color frame or normalized adjustable rectangle with editable width, height, center and opacity.", duration: 2, keyframes: d => [key(0), key(d)] },
   'cinematic-bars': { label: 'Cinematic bars', description: "Black top/bottom bars slide in, hold and slide out; size controls their fraction of frame height and speed controls entry/exit.", duration: 2, keyframes: d => cinematicBarKeyframes(d) },
   'frame-shrink': { label: 'Frame shrink', description: "Shrink the visual composition smoothly toward canvas center, hold with black space on all four sides, then return to its original framing. Size is the inset fraction per side; speed controls entrance/exit. Moves the footage itself without adding a rectangle or masking it; preserves audio and source timing.", duration: 2, keyframes: d => frameShrinkKeyframes(d) },
@@ -92,6 +93,7 @@ export function validateClipEffects(clip: Clip) {
   validateTextAnimationTiming(clip);
   validateVisualFade(clip);
   validateTransitionSettings(clip);
+  validateMotionEffectSettings(clip);
   if (clip.zoom !== undefined) {
     if (clip.kind !== 'effect' || !isZoomPreset(clip.effectPreset)) throw new Error('Zoom controls belong to Zoom effect clips.');
     if (!['in', 'out'].includes(clip.zoom.direction) || clip.effectPreset !== `quick-zoom-${clip.zoom.direction}`) throw new Error('Choose a matching Zoom direction.');
@@ -164,8 +166,9 @@ export function motionPreset(clip: Clip, preset: MotionPreset | EffectPreset): P
   if ((preset === 'cinematic-bars' || preset === 'frame-shrink' || preset === 'zoom-blur' || preset === 'solid-color' || isTransitionPreset(preset)) && clip.kind !== 'effect') throw new Error('Add this preset as an effect clip.');
   if (isTransitionPreset(preset) && !clip.transition) throw new Error('Choose the two neighboring clips for this transition.');
   const zoom = isZoomPreset(preset) ? { ...zoomSettings(clip), direction: preset === 'quick-zoom-in' ? 'in' as const : 'out' as const } : undefined;
-  const motion = preset === 'none' ? [] : zoom ? zoomKeyframes(clip.duration, zoom) : preset === 'cinematic-bars' ? cinematicBarKeyframes(clip.duration, cinematicBarSettings(clip).speed) : preset==='frame-shrink'?frameShrinkKeyframes(clip.duration,frameShrinkSettings(clip)):EFFECT_CATALOG[preset].keyframes(clip.duration);
-  return { motion, motionOffset: 0, ...(clip.kind === 'effect' ? { effectPreset: preset, zoom, transition: isTransitionPreset(preset) ? clip.transition : undefined, solidColor: preset === 'solid-color' ? { ...solidColorSettings(clip) } : undefined, cinematicBars: preset === 'cinematic-bars' ? { ...cinematicBarSettings(clip) } : undefined, frameShrink:preset==='frame-shrink'?{...frameShrinkSettings(clip)}:undefined, zoomBlur: preset === 'zoom-blur' ? {...DEFAULT_ZOOM_BLUR,...clip.zoomBlur,enabled:true} : undefined } : {}), ...(clip.kind === 'caption' || clip.kind === 'graphic' ? { animation: 'none' as const,textAnimationTiming:undefined } : {}) };
+  const propertyClip = { ...clip, effectPreset: preset, ...(clip.effectPreset !== preset ? { motion: undefined, motionOffset: 0 } : {}) };
+  const motion = preset === 'none' ? [] : isPropertyEffectPreset(preset) ? propertyEffectMotion(propertyClip)! : zoom ? zoomKeyframes(clip.duration, zoom) : preset === 'cinematic-bars' ? cinematicBarKeyframes(clip.duration, cinematicBarSettings(clip).speed) : preset==='frame-shrink'?frameShrinkKeyframes(clip.duration,frameShrinkSettings(clip)):EFFECT_CATALOG[preset].keyframes(clip.duration);
+  return { motion, motionOffset: 0, ...(clip.kind === 'effect' ? { effectPreset: preset, zoom, flash: preset === 'flash' ? { ...flashSettings(propertyClip) } : undefined, punch: preset === 'punch' ? { ...punchSettings(clip) } : undefined, shake: preset === 'shake' ? { ...shakeSettings(clip) } : undefined, pop: preset === 'pop' ? { ...popSettings(clip) } : undefined, transition: isTransitionPreset(preset) ? clip.transition : undefined, solidColor: preset === 'solid-color' ? { ...solidColorSettings(clip) } : undefined, cinematicBars: preset === 'cinematic-bars' ? { ...cinematicBarSettings(clip) } : undefined, frameShrink:preset==='frame-shrink'?{...frameShrinkSettings(clip)}:undefined, zoomBlur: preset === 'zoom-blur' ? {...DEFAULT_ZOOM_BLUR,...clip.zoomBlur,enabled:true} : undefined } : {}), ...(clip.kind === 'caption' || clip.kind === 'graphic' ? { animation: 'none' as const,textAnimationTiming:undefined } : {}) };
 }
 
 export function offsetClipMotion(clip: Clip, delta: number): Partial<Clip> {
@@ -176,12 +179,13 @@ export function offsetClipMotion(clip: Clip, delta: number): Partial<Clip> {
 export function resizeEffectMotion(clip: Clip, duration: number): Partial<Clip> {
   if (isZoomPreset(clip.effectPreset) && clip.zoom) return { motion: zoomKeyframes(duration, clip.zoom), motionOffset: 0 };
   if (clip.effectPreset === 'cinematic-bars') return { motion: cinematicBarKeyframes(duration, cinematicBarSettings(clip).speed), motionOffset: 0 };
+  if (isPropertyEffectPreset(clip.effectPreset) && clip[clip.effectPreset]) return { motion: propertyEffectMotion(clip, duration), motionOffset: 0 };
   if(clip.effectPreset==='frame-shrink')return {motion:frameShrinkKeyframes(duration,frameShrinkSettings(clip)),motionOffset:0};
   return { motion: visibleMotion(clip).map(key => ({ ...key, time: key.time / clip.duration * duration })), motionOffset: 0 };
 }
 
 /** Presets are editable starting points; requested controls never change footage or neighboring FX. */
-export function configureTimedEffectPatch(clip:Clip,changes:{preset?:TimedEffectPreset;duration?:number;cinematicBars?:Partial<CinematicBarSettings>;frameShrink?:Partial<FrameShrinkSettings>;zoom?:Partial<ZoomSettings>}):Partial<Clip>{
+export function configureTimedEffectPatch(clip:Clip,changes:{preset?:TimedEffectPreset;duration?:number;cinematicBars?:Partial<CinematicBarSettings>;frameShrink?:Partial<FrameShrinkSettings>;zoom?:Partial<ZoomSettings>}&MotionEffectChanges):Partial<Clip>{
   if(clip.kind!=='effect'||isTransitionPreset(clip.effectPreset))throw new Error('Choose a timed FX clip; pair transitions have separate controls.');
   if(!Object.values(changes).some(value=>value!==undefined))throw new Error('Specify a timed effect control.');
   const duration=changes.duration??clip.duration;if(!Number.isFinite(duration)||duration<=0)throw new Error('Choose a positive timed effect duration.');
@@ -203,5 +207,6 @@ export function configureTimedEffectPatch(clip:Clip,changes:{preset?:TimedEffect
     const zoom = { ...zoomSettings(candidate), ...changes.zoom };
     patch = { ...patch, effectPreset: zoom.direction === 'in' ? 'quick-zoom-in' : 'quick-zoom-out', zoom, motion: zoomKeyframes(duration, zoom), motionOffset: 0 };
   }
+  if (changes.flash || changes.punch || changes.shake || changes.pop) patch = { ...patch, ...motionEffectPatch({ ...clip, ...patch, duration }, changes) };
   validateClipEffects({...clip,...patch});return patch;
 }

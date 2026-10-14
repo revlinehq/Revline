@@ -6,6 +6,7 @@ import type { AudioSettings } from './audio-settings';
 import type { VisualFadeSettings } from './visual-fades';
 import type { TextAppearance } from './text-style';
 import type { TextFontId } from './text-fonts';
+import type { FlashSettings, PunchSettings, ShakeSettings, PopSettings } from './motion-effect-settings';
 export type AspectRatio = 'vertical' | 'portrait-feed' | 'square' | 'classic' | 'landscape';
 export type ClipKind = 'video' | 'image' | 'audio' | 'caption' | 'graphic' | 'effect';
 export type LayerGroup = 'visual' | 'overlay' | 'audio' | 'effects';
@@ -37,6 +38,10 @@ export type Clip = {
   visualFade?: VisualFadeSettings;
   visualFadeTiming?: {duration:number;offset:number};
   frameShrink?: FrameShrinkSettings;
+  flash?: FlashSettings;
+  punch?: PunchSettings;
+  shake?: ShakeSettings;
+  pop?: PopSettings;
   zoom?: ZoomSettings;
   linkedClipId?: string;
   audioSeparated?: boolean;

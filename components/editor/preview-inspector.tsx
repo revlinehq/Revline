@@ -1,7 +1,8 @@
 'use client';
 
 import { SolidColorControls } from './solid-color-controls';
-import {FrameShrinkControls, ZoomControls} from './effect-clip-controls';
+import {FrameShrinkControls, ZoomControls, MotionEffectControls} from './effect-clip-controls';
+import {isPropertyEffectPreset} from '@/lib/editor/motion-effect-settings';
 import { TextEffectsControls } from './text-effects-controls';
 import { AudioControls } from './audio-controls';
 import type { CaptionActions } from './caption-controls';
@@ -43,10 +44,11 @@ export function PreviewInspector({ clip, timeline, time = 0, audioClip, asset, a
   const barControls = clip?.kind === 'effect' && clip.effectPreset === 'cinematic-bars' ? <CinematicBarsControls key={clip.id} clip={clip} onChange={onChange} onPreview={onPreviewEffects}/> : null;
   const frameControls=clip?.kind==='effect'&&clip.effectPreset==='frame-shrink'?<FrameShrinkControls key={clip.id} clip={clip} onChange={onChange} onPreview={onPreviewEffects}/>:null;
   const zoomControls = clip?.kind === 'effect' && isZoomPreset(clip.effectPreset) ? <ZoomControls key={clip.id} clip={clip} onChange={onChange} onPreview={onPreviewEffects}/> : null;
+  const motionControls=clip?.kind==='effect'&&isPropertyEffectPreset(clip.effectPreset)?<MotionEffectControls key={clip.id} clip={clip} fps={timeline?.fps} onChange={onChange} onPreview={onPreviewEffects}/>:null;
   const solidControls = clip?.kind === 'effect' && clip.effectPreset === 'solid-color' ? <SolidColorControls key={clip.id} clip={clip} onChange={onChange} onPreview={onPreviewEffects}/> : null;
   function addTimedEffect(preset: EffectPreset) {
     onAddEffect?.(preset);
-    if (preset === 'solid-color'||preset==='frame-shrink'||isZoomPreset(preset)) { setEffectSelection(null); setTab('effects'); }
+    if (preset === 'solid-color'||preset==='frame-shrink'||isZoomPreset(preset)||isPropertyEffectPreset(preset)) { setEffectSelection(null); setTab('effects'); }
   }
   function addTransition(preset: TransitionPreset) {
     onAddTransition?.(preset); setEffectSelection(null); setTab('effects');
@@ -81,7 +83,7 @@ export function PreviewInspector({ clip, timeline, time = 0, audioClip, asset, a
       {!text && <button role="tab" id="inspector-effects-tab" aria-controls="inspector-effects" aria-selected={activeTab === 'effects'} tabIndex={activeTab === 'effects' ? 0 : -1} onClick={() => { if (visual) setEffectSelection(null); setTab('effects'); }}>{visual ? <SlidersHorizontal size={14}/> : <Layers size={14}/>}{visual ? 'Clip settings' : 'Effects'}</button>}
     </div>}
     {library ? <div className="inspector-content inspector-library-content" id="inspector-sources"><EffectLibrary clip={clip} timeline={timeline} time={time} onAddTransition={onAddTransition ? addTransition : undefined} assets={assets} onAddSound={onAdd} onUploadSound={onUpload} uploading={!!upload} onVisualEffect={addVisualEffect} onAddEffect={onAddEffect ? addTimedEffect : undefined} onTextLook={text || onAddTextLook ? applyTextLook : undefined} onAddOverlay={onAddOverlay} onFadeThroughBlack={onFadeThroughBlack} onSpeed={onPlaybackRateChange ? () => { setEffectSelection(null); setTab('effects'); } : undefined}/></div> : <div className={`inspector-content${text && activeTab === 'edit' ? ' inspector-text-content' : ''}`} role="tabpanel" id={`inspector-${activeTab}`} aria-label={text ? 'Text settings' : visual || effect ? effect ? 'Effect settings' : 'Clip settings' : undefined} aria-labelledby={text || visual || effect ? undefined : `inspector-${activeTab}-tab`}>
-      {activeTab === 'edit' ? clip?.kind === 'effect' ? transitionControls ?? solidControls ?? barControls ?? frameControls ?? zoomControls ?? <div className="inspector-empty"><Layers size={22} strokeWidth={1.2}/><p>{effectClipLabel(clip)}</p><span>Move, trim, or delete this clip on the timeline.</span></div> : clip ? <>
+      {activeTab === 'edit' ? clip?.kind === 'effect' ? transitionControls ?? solidControls ?? barControls ?? frameControls ?? zoomControls ?? motionControls ?? <div className="inspector-empty"><Layers size={22} strokeWidth={1.2}/><p>{effectClipLabel(clip)}</p><span>Move, trim, or delete this clip on the timeline.</span></div> : clip ? <>
         {!text && <div className="inspector-selection"><small>{text ? 'Text' : clip.kind === 'audio' ? 'Audio' : 'Footage'}</small><p>{clip.text || asset?.fileName || 'Selected clip'}</p></div>}
         {text && <TextEffectsControls clip={clip} onChange={onChange} onPreview={onPreviewEffects} captionActions={captionActions}/>}
 
@@ -93,7 +95,7 @@ export function PreviewInspector({ clip, timeline, time = 0, audioClip, asset, a
       </div> : <div className="inspector-clip-settings">
         <FootageSettings key={clip.id} fps={timeline?.fps} clip={clip} audioClip={audioClip} asset={asset} onChange={onChange} onPreview={onPreviewEffects} onPlaybackRateChange={onPlaybackRateChange} onCrop={onCrop} cropping={cropping}/>
         <AppliedVisualEffects clip={clip} onSelect={key => setEffectSelection({ clipId: clip.id, key })} onAdd={() => setTab('sources')}/>
-      </div> : transitionControls ? transitionControls : solidControls ? solidControls : zoomBlurControls ? zoomBlurControls : barControls ? barControls : frameControls ? frameControls : zoomControls ? zoomControls : clip?.kind === 'audio' && onPlaybackRateChange ? <PlaybackSpeedControls clip={clip} onChange={onPlaybackRateChange}/> : effect && clip ? <div className="inspector-empty"><Layers size={22} strokeWidth={1.2}/><p>{effectClipLabel(clip)}</p><span>Move, trim, or delete this effect on the timeline.</span></div> : <div className="inspector-empty"><Layers size={22} strokeWidth={1.2}/><p>Select a visual clip</p><span>Choose footage for effects or a text clip to animate it.</span></div>}
+      </div> : transitionControls ? transitionControls : solidControls ? solidControls : zoomBlurControls ? zoomBlurControls : barControls ? barControls : frameControls ? frameControls : zoomControls ? zoomControls : motionControls ? motionControls : clip?.kind === 'audio' && onPlaybackRateChange ? <PlaybackSpeedControls clip={clip} onChange={onPlaybackRateChange}/> : effect && clip ? <div className="inspector-empty"><Layers size={22} strokeWidth={1.2}/><p>{effectClipLabel(clip)}</p><span>Move, trim, or delete this effect on the timeline.</span></div> : <div className="inspector-empty"><Layers size={22} strokeWidth={1.2}/><p>Select a visual clip</p><span>Choose footage for effects or a text clip to animate it.</span></div>}
     </div>}
     </TabsContent>}
   </aside></Tabs>;

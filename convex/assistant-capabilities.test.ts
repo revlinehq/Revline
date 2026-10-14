@@ -289,6 +289,27 @@ test('Zoom agent controls share the manual recipe, preserve omitted controls and
   await assertUndo(result);
 });
 
+test.each([
+  {preset:'flash' as const,settings:{strength:.3,attack:.2,release:.6},change:{strength:.6}},
+  {preset:'punch' as const,settings:{amount:1.6,speed:.5,centerX:.3,centerY:.7},change:{speed:2}},
+  {preset:'shake' as const,settings:{strength:.7,speed:.5,direction:'horizontal'},change:{direction:'vertical'}},
+  {preset:'pop' as const,settings:{startScale:.4,bounce:.1,speed:.5},change:{speed:2}},
+])('$preset properties are available through actual agent tools and persist/undo without changing footage',async({preset,settings,change})=>{
+  const result=await run(async tools=>{
+    expect(()=>tools.addTimedEffect.inputSchema.parse({preset:'quick-zoom-in',zoom:{amount:2},flash:{strength:.3}})).toThrow('match');
+    await execute(tools,'addTimedEffect',{preset,start:1,duration:2,[preset]:settings});
+    const inspected=await execute(tools,'inspectTimeline',{}) as {timeline:Timeline};
+    const effect=inspected.timeline.clips.find(clip=>clip.effectPreset===preset)!;
+    await execute(tools,'configureTimedEffect',{clipId:effect.id,[preset]:change});
+    await expect(execute(tools,'configureTimedEffect',{clipId:'from',[preset]:change})).rejects.toThrow('timed FX');
+    expect(()=>tools.configureTimedEffect.inputSchema.parse({clipId:effect.id,[preset]:{unsupported:1}})).toThrow();
+  },initial,true);
+  expect(result.timeline.clips.slice(0,initial.clips.length)).toEqual(result.backend!.seed.clips);
+  expect(result.timeline.clips.at(-1)).toMatchObject({effectPreset:preset,start:1,duration:2,[preset]:{...settings,...change}});
+  expect(result.timeline.clips.at(-1)!.motion!.length).toBeLessThanOrEqual(120);
+  await assertUndo(result);
+});
+
 test('retired frame shrink is unavailable to the agent; clip visual fades preserve linked audio and share one undo',async()=>{
   const seed:Timeline={...initial,clips:initial.clips.map(c=>c.id==='from'?{...c,visualFade:{fadeIn:.2,fadeOut:.4},visualFadeTiming:{duration:5,offset:1}}:c)};
   const result=await run(async tools=>{

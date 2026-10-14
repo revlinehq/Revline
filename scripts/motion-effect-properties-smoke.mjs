@@ -1,0 +1,28 @@
+import assert from 'node:assert/strict';
+import { build } from 'esbuild';
+import puppeteer from 'puppeteer';
+
+const bundle=await build({stdin:{resolveDir:process.cwd(),loader:'tsx',contents:`
+import React from 'react';import {createRoot} from 'react-dom/client';import {PreviewInspector} from './components/editor/preview-inspector';import {TooltipProvider} from './components/ui/tooltip';import {EditorStateProvider,useEditorState} from './components/editor/editor-state';import {createEditorStore} from './lib/editor/store';import {addEffectClip,patchClip} from './lib/editor/operations';import './components/workspace/shared.css';import './components/workspace/workspace-pages.css';import './app/editor.css';
+const base={fps:30,aspectRatio:'landscape',clips:[{id:'source',kind:'image',track:1,start:0,duration:20,sourceStart:0}]},store=createEditorStore(base);window.drafts=[];let sequence=0;function Fixture(){const timeline=useEditorState(s=>s.timeline),selected=useEditorState(s=>s.selectedId);window.fixture={state:()=>store.getState()};return <PreviewInspector clip={timeline.clips.find(c=>c.id===selected)} timeline={timeline} time={2} assets={[]} upload={null} onUpload={()=>{}} onAdd={()=>{}} onCrop={()=>{}} onChange={patch=>store.getState().edit(patchClip(timeline,selected,patch))} onPreviewEffects={patch=>window.drafts.push(patch)} onAddEffect={preset=>{const id="effect-"+(++sequence);store.getState().edit(addEffectClip(timeline,id,preset,2,{duration:2}));store.setState({selectedId:id,selectedIds:[id]})}}/>};createRoot(document.getElementById('root')).render(<TooltipProvider><EditorStateProvider store={store}><Fixture/></EditorStateProvider></TooltipProvider>);
+`},bundle:true,platform:'browser',format:'iife',jsx:'automatic',write:false,outdir:'/tmp/revline-pulse-controls',define:{'process.env.NODE_ENV':'"production"'}});
+const browser=await puppeteer.launch({headless:true,args:['--no-sandbox','--disable-dev-shm-usage']});
+try{
+ const page=await browser.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));page.setDefaultTimeout(6000);await page.setViewport({width:560,height:900});await page.setContent('<html data-workspace-theme="dark"><body><div id="root" class="editor-app conversation-editor"></div></body></html>');await page.addStyleTag({content:bundle.outputFiles.find(f=>f.path.endsWith('.css')).text});await page.addStyleTag({content:'body{margin:0;font:12px Arial;background:#171717;--foreground:#fff;--font-inter:Arial}*{box-sizing:border-box}#root{width:480px;height:880px}.preview-inspector{width:480px;height:880px}button{font:inherit}'});await page.addScriptTag({content:bundle.outputFiles.find(f=>f.path.endsWith('.js')).text});
+ const flush=()=>page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+ const selected=()=>page.evaluate(()=>{const s=window.fixture.state();return s.timeline.clips.find(c=>c.id===s.selectedId)});
+ const history=()=>page.evaluate(()=>window.fixture.state().history.length);
+ for(const [name,preset,control,field] of [['Flash','flash','Strength','strength'],['Punch zoom','punch','Amount','amount'],['Impact shake','shake','Strength','strength'],['Pop in','pop','Bounce','bounce']]){
+  await page.click('#inspector-tools-tab');await page.waitForSelector('[aria-label="'+name+'"]');await page.click('[aria-label="'+name+'"]');await page.waitForSelector('[aria-label="'+preset+' settings"]');
+  const before=await selected(),count=await history();await page.focus('[aria-label="'+control+'"]');await page.keyboard.down('ArrowRight');await flush();assert.equal(await history(),count,'Live preview must not save intermediate changes');await page.keyboard.press('Escape');await page.keyboard.up('ArrowRight');await flush();assert.deepEqual(await selected(),before,'Escape restores the authored effect');assert.equal(await history(),count);assert.equal(await page.evaluate(()=>window.drafts.at(-1)),null);
+  await page.focus('[aria-label="'+control+'"]');await page.keyboard.press('End');await flush();const after=await selected();assert.equal(await history(),count+1);assert.ok(after[preset][field]>before[preset][field]);assert.notDeepEqual(after.motion,before.motion,'Property changes alter the renderer motion');
+  if(preset==='flash'){
+   await page.focus('[aria-label="Attack"]');await page.keyboard.press('End');await flush();const flash=(await selected()).flash;assert.ok(flash.attack+flash.release<=1+1e-6,'Attack/release controls fit the authored range');await page.screenshot({path:'/tmp/revline-flash-properties.png'});
+  }
+  if(preset==='shake'){
+   await page.focus('[role="tablist"][aria-label="Shake direction"] [data-segment="both"]');await page.keyboard.press('End');await flush();const shake=await selected();assert.equal(shake.shake.direction,'vertical');assert.ok(shake.motion.every(key=>key.x===0&&key.rotation===0));await page.screenshot({path:'/tmp/revline-shake-properties.png'});
+  }
+  const duration=(await selected()).duration,prior=await history();await page.focus('[aria-label="Duration"]');await page.keyboard.press('ArrowRight');await flush();assert.ok((await selected()).duration>duration);assert.equal(await history(),prior+1);
+ }
+ assert.deepEqual(errors,[]);console.log('PASS: actual inspector library opens all four property panels; settings affect motion, preview/cancel never save, accepted gestures commit once, Flash timing fits, and three-way Shake keyboard controls isolate the axis.');
+}finally{await browser.close()}
