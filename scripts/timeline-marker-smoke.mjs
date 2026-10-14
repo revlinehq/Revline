@@ -19,13 +19,14 @@ function assertMarker(value, label) {
  assert.ok(Math.abs(headTip - lineCenter) <= 0.6, `${label}: marker tip must remain attached to line (${headTip} vs ${lineCenter})`);
  assert.ok(value.cap.left >= value.body.left - 0.6, `${label}: marker head left side must be visible outside the scroll lane`);
  assert.ok(value.cap.right <= value.viewport.right + 0.6, `${label}: marker head right side must be visible`);
- assert.equal(value.cap.height,12,`${label}: preserve the compact rounded marker head`);
+ assert.equal(value.cap.height,20,`${label}: preserve the standard pointed marker head`);
+ assert.equal(value.cap.width,14,`${label}: preserve the standard marker width`);
  assert.equal(value.line.width,1,`${label}: the old two-pixel line must not override the new marker`);
  assert.ok(value.lineZ < value.rulerZ,`${label}: line must stay below the opaque ruler, without peeking above its head`);
  assert.ok(Math.abs(value.cap.bottom-value.ruler.bottom)<=0.6,`${label}: marker head must sit at the ruler baseline`);
  assert.equal(value.visibility,'visible',`${label}: marker head should be visible`);
  assert.ok(value.cornersVisible,`${label}: both sides of the marker head must be visible and draggable`);
- assert.equal(value.clipPath,'none',`${label}: preserve the rounded rectangular marker head`);
+ assert.equal(value.clipPath,'none',`${label}: the SVG supplies rounded shoulders and a downward point`);
 }
 try {
  await page.goto('http://localhost:3001/editor/demo', { waitUntil:'domcontentloaded' });
