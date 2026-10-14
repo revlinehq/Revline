@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { timelineLayout, TIMELINE_RULER_HEIGHT, TIMELINE_TRACK_GAP } from './timeline-layout';
+import { timelineLayout, TIMELINE_RULER_HEIGHT, TIMELINE_TRACK_GAP, TIMELINE_TOP_SPACE } from './timeline-layout';
 import { clipLayerDropTarget, moveSelectionToNewLayers } from './timeline-controls';
 import type { Timeline } from './types';
 
@@ -49,9 +49,9 @@ describe('mixed visual track layout', () => {
     const layout = timelineLayout(timeline, true);
     layout.tracks.forEach((row, index) => {
       expect(row.clipHeight).toBe(24);
-      expect(row.top).toBe([28,58,88,118,148][index]);
+      expect(row.top).toBe(TIMELINE_RULER_HEIGHT+TIMELINE_TOP_SPACE+index*30);
     });
-    expect(layout.height).toBe(178);
+    expect(layout.height).toBe(TIMELINE_RULER_HEIGHT+TIMELINE_TOP_SPACE+150);
   });
   it.each([false,true])('keeps primary and additional FX, visual, and audio rows contiguous (compact %s)', compact => {
     const project: Timeline = { fps: 30, aspectRatio: 'vertical', tracks: { visual: 2, overlay: 0, audio: 2, effects: 2 }, clips: [
@@ -66,13 +66,13 @@ describe('mixed visual track layout', () => {
       expect(row.height-row.clipHeight).toBe(6);
     });
   });
-  it('creates a new visual track at the top row edge without reserving blank space', () => {
+  it('uses the visible top drop space to create a new visual track', () => {
     const rows = timelineLayout(timeline).tracks.map(row => ({ ...row, track: row.number, bottom: row.top + row.height }));
     const target = clipLayerDropTarget(TIMELINE_RULER_HEIGHT + 1, rows, 'visual');
-    expect(target).toEqual({ track: 4, direction: 'above' });
+    expect(target).toEqual({ edge: 'above' });
     expect(clipLayerDropTarget(TIMELINE_RULER_HEIGHT + 1, rows, 'audio')).toBeNull();
-    if (!target || !('track' in target)) throw new Error('Expected a track insertion target.');
-    const next = moveSelectionToNewLayers(timeline, ['video'], 0, target.direction, 'video', undefined, target.track);
+    if (!target || !('edge' in target)) throw new Error('Expected a track insertion target.');
+    const next = moveSelectionToNewLayers(timeline, ['video'], 0, target.edge, 'video');
     expect(next.clips.find(clip => clip.id === 'video')?.track).toBe(5);
     expect(next.clips.find(clip => clip.id === 'sound')?.track).toBe(1);
   });

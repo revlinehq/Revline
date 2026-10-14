@@ -6,8 +6,9 @@ export const TIMELINE_RULER_HEIGHT=28;
 export const TIMELINE_ORIGIN=0;
 // Every lane has 3px above and below its clip, including track group boundaries.
 export const TIMELINE_TRACK_GAP=6;
-// Track creation uses row edges; the first row starts directly under the ruler.
-export const TIMELINE_TOP_SPACE=0;
+// A visible landing area makes adding a track above the stack easy to reach.
+// Drag auto-scroll is measured at the ruler boundary, independently of this space.
+export const TIMELINE_TOP_SPACE=24;
 export const TIMELINE_BOTTOM_SPACE=72;
 export function timelineLayout(timeline:Timeline,compact=false){
   timeline=normalizeTimeline(timeline);
