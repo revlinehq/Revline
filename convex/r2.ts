@@ -32,19 +32,23 @@ export const authorize = internalQuery({ args: { projectId: v.id('projects'), jo
 }});
 export const createLease = internalMutation({ args: { ...metadata, ownerId: v.string(), projectId: v.id('projects'), jobId: v.optional(v.id('renderJobs')), ...taskAuth, key: v.string(), uploadId: v.string(), partSize: v.number() }, returns: v.id('r2Uploads'), handler: async (ctx, args) => {
   await requireProject(ctx, args.projectId, args.ownerId);
+  if (!args.taskId && !args.jobId) await requireEditorAccess(ctx, args.ownerId);
   if (args.taskId) await requireMediaTask(ctx, args.taskId, args.leaseToken ?? '');
   const { leaseToken, ...fields } = args;
   const id = await ctx.db.insert('r2Uploads', { ...fields, ...(leaseToken ? { taskLeaseToken: leaseToken } : {}), completed: false, expiresAt: Date.now() + 24 * 3600_000 });
   await ctx.scheduler.runAfter(24 * 3600_000, internal.r2.cleanupLease, { uploadId: id });
   return id;
 }});
-export const getLease = internalQuery({ args: { uploadId: v.id('r2Uploads'), ...taskAuth }, returns: r2UploadDocument, handler: async (ctx, args) => {
+export const getLease = internalQuery({ args: { uploadId: v.id('r2Uploads'), ...taskAuth, forCleanup: v.optional(v.boolean()) }, returns: r2UploadDocument, handler: async (ctx, args) => {
   const lease = await ctx.db.get(args.uploadId);
   const task = args.taskId && args.leaseToken ? await requireMediaTask(ctx, args.taskId, args.leaseToken) : null;
-  if (task && (!lease || lease.taskId !== task._id || lease.taskLeaseToken !== args.leaseToken)) throw new ConvexError('Upload belongs to another task attempt');
+  if ((task || lease?.taskId) && (!task || !lease || lease.taskId !== task._id || lease.taskLeaseToken !== args.leaseToken)) throw new ConvexError('Upload belongs to another task attempt');
   const ownerId = task?.ownerId ?? await requireOwner(ctx);
   if (!lease || lease.ownerId !== ownerId || lease.expiresAt < Date.now()) throw new ConvexError('Upload expired or belongs to another user');
-  await requireProject(ctx, lease.projectId, ownerId); return lease;
+  await requireProject(ctx, lease.projectId, ownerId);
+  // Renewal and completion are paid writes; cleanup remains available after expiry.
+  if (!args.forCleanup && !lease.taskId && !lease.jobId) await requireEditorAccess(ctx, ownerId);
+  return lease;
 }});
 
 export const start = action({ args: { projectId: v.id('projects'), jobId: v.optional(v.id('renderJobs')), workerSecret: v.optional(v.string()), ...taskAuth, ...metadata }, returns: uploadInfo, handler: async (ctx, args): Promise<{ uploadId: Id<'r2Uploads'>; partSize: number; partCount: number }> => {
@@ -80,6 +84,8 @@ export const finish = internalMutation({ args: { uploadId: v.id('r2Uploads'), si
   if (lease.completed) return lease.assetId ?? null;
   if (lease.size !== args.size || lease.contentType !== args.contentType) throw new ConvexError('Uploaded media does not match the requested file');
   const project = await requireProject(ctx, lease.projectId, lease.ownerId);
+  // The action performed external IO; access may have expired since authorization.
+  if (!lease.taskId && !lease.jobId) await requireEditorAccess(ctx, lease.ownerId);
   if (lease.taskId) await requireMediaTask(ctx, lease.taskId, lease.taskLeaseToken ?? '');
   if (lease.jobId) {
     const job = await ctx.db.get(lease.jobId);
@@ -107,7 +113,7 @@ export const complete = action({ args: { uploadId: v.id('r2Uploads'), parts: par
   return ctx.runMutation(internal.r2.finish, { uploadId: args.uploadId, size: file.size, contentType: file.contentType });
 }});
 export const abort = action({ args: { uploadId: v.id('r2Uploads'), ...taskAuth }, returns: v.null(), handler: async (ctx, args): Promise<null> => {
-  const lease = await ctx.runQuery(internal.r2.getLease, args);
+  const lease = await ctx.runQuery(internal.r2.getLease, { ...args, forCleanup: true });
   if (!lease.completed) { await storageControl({ action: 'abort', key: lease.key, uploadId: lease.uploadId }); await ctx.runMutation(internal.r2.removeLease, { uploadId: args.uploadId }); }
   return null;
 }});

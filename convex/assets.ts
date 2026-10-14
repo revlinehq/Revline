@@ -188,7 +188,7 @@ export async function saveAssetAnalysis(ctx: MutationCtx, asset: Doc<"assets">, 
 }
 
 export const saveFocus = mutation({ args: { projectId: v.id("projects"), assetId: v.id("assets"), focus: focusValidator }, returns: v.null(), handler: async (ctx, args) => {
-  const ownerId = await requireOwner(ctx); await requireProject(ctx, args.projectId, ownerId); const asset = await ctx.db.get(args.assetId);
+  const ownerId = await requireOwner(ctx); await requireEditorAccess(ctx, ownerId); await requireProject(ctx, args.projectId, ownerId); const asset = await ctx.db.get(args.assetId);
   if (!asset || asset.ownerId !== ownerId || asset.projectId !== args.projectId || asset.kind !== "video") throw new ConvexError("Video not found");
   validateFocus(args.focus, asset.duration); const analysis = { ...asset.analysis, focus: args.focus };
   if (serializedBytes(analysis) > 500_000) throw new ConvexError("Media analysis is too large to save");
