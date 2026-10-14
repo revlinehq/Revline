@@ -132,8 +132,20 @@ export function PreviewZoomControls() {
 type PanSession = { pointer: number; start: PreviewPoint; view: PreviewView };
 type PinchSession = { distance: number; midpoint: PreviewPoint; view: PreviewView };
 
+function aspectUnit(canvas: PreviewSize) {
+  let a = canvas.width, b = canvas.height;
+  while (b) { const remainder = a % b; a = b; b = remainder; }
+  return { width: canvas.width / a, height: canvas.height / a };
+}
+
 export function PreviewViewport({ children }: { children: ReactNode }) {
   const { canvas, viewport, viewportRef, attachViewport, geometry, handMode, setHandMode, getView, commit, fit, zoom } = usePreviewZoom();
+  // HyperFrames fits against integer offsetWidth/offsetHeight. An integer layout
+  // with the exact project ratio prevents a fractional letterbox before zooming.
+  const unit = aspectUnit(canvas);
+  const multiples = Math.max(1, Math.floor(Math.min(geometry.layoutWidth / unit.width, geometry.layoutHeight / unit.height)));
+  const layoutWidth = unit.width * multiples, layoutHeight = unit.height * multiples;
+  const sceneScale = geometry.width / layoutWidth;
   const pan = useRef<PanSession | null>(null);
   const pinch = useRef<PinchSession | null>(null);
   const touches = useRef(new Map<number, PreviewPoint>());
@@ -206,7 +218,7 @@ export function PreviewViewport({ children }: { children: ReactNode }) {
     }
   }}>
     <div className="preview-viewport-frame" style={{ width: geometry.width, height: geometry.height, left: geometry.left, top: geometry.top, visibility: viewport.width && viewport.height ? 'visible' : 'hidden' }}>
-      <div className="preview-viewport-scene" style={{ width: geometry.layoutWidth, height: geometry.layoutHeight, transform: `scale(${geometry.sceneScale})`, '--preview-view-scale': geometry.sceneScale } as CSSProperties}>{children}</div>
+      <div className="preview-viewport-scene" style={{ width: layoutWidth, height: layoutHeight, transform: `scale(${sceneScale})`, '--preview-view-scale': sceneScale } as CSSProperties}>{children}</div>
     </div>
   </div>;
 }
