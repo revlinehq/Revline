@@ -1,9 +1,11 @@
 .custom-timeline .timeline-cut-transition{position:absolute;top:3px;height:calc(100% - 6px);width:0;z-index:4;color:#bdd0ff;pointer-events:none}
 .custom-timeline .timeline-transition-badge{position:absolute;top:50%;left:0;transform:translate(-50%,-50%);display:grid;place-items:center;width:24px;height:24px;padding:0;border:1px solid var(--ws-artifact-border);border-radius:5px;background:var(--ws-bg);color:var(--ws-muted);pointer-events:auto;cursor:pointer}
 .custom-timeline .timeline-cut-transition .timeline-transition-badge{opacity:0}
-.custom-timeline .timeline-track:hover .timeline-cut-transition .timeline-transition-badge,.custom-timeline .timeline-transition-badge:focus-visible,.custom-timeline .timeline-transition-badge[data-state=open]{opacity:1}
+.custom-timeline .timeline-track:hover .has-transition .timeline-transition-badge,.custom-timeline .timeline-transition-badge:is(:hover,:focus-visible,[data-state=open]){opacity:1}
 .custom-timeline .has-transition .timeline-transition-badge{background:#263a60;border-color:#718ab3;color:#d9e6ff}
 .custom-timeline .timeline-transition-badge:hover,.custom-timeline .selected .timeline-transition-badge{border-color:#a6c4ff;background:#345080}
+.custom-timeline .timeline-cut-transition:not(.has-transition) .timeline-transition-badge{border:0;background:transparent;box-shadow:none}
+.custom-timeline .timeline-cut-transition:not(.has-transition) .timeline-transition-badge:hover{color:var(--ws-text)}
 .custom-timeline .timeline-transition-range{position:absolute;top:50%;height:22px;transform:translateY(-50%);border:1px solid #8badde88;border-radius:4px;background:#5078b52e;pointer-events:none;opacity:0}
 .custom-timeline .timeline-track:hover .timeline-transition-range,.custom-timeline .timeline-cut-transition:is(:has(:focus-visible),.resizing,:has([data-state=open])) .timeline-transition-range{opacity:1}
 .custom-timeline .timeline-cut-transition:is(:has(:focus-visible),.resizing,:has([data-state=open])) .timeline-transition-badge{opacity:1}
