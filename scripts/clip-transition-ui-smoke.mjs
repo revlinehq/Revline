@@ -34,16 +34,16 @@ try{
  const library=async()=>{await page.click('#inspector-tools-tab');await page.click('[data-category="transitions"]');await flush()};
  const addAt3='[aria-label="Add transition at 3.00s"]',addAt6='[aria-label="Add transition at 6.00s"]';
  await page.hover('.timeline-track[data-group=visual][data-layer="1"]');await flush();
- assert.equal(await page.$eval(addAt3,node=>getComputedStyle(node).opacity),'0','Hovering a track does not reveal all pluses');
+ assert.equal(await page.$eval(addAt3,node=>getComputedStyle(node).opacity),'0.75','Bare plus stays visible without hovering the cut');
  await page.hover(addAt3);await flush();
- assert.equal(await page.$eval(addAt3,node=>getComputedStyle(node).opacity),'1','Only the nearby cut plus appears');
- assert.equal(await page.$eval(addAt6,node=>getComputedStyle(node).opacity),'0','Other cut pluses stay hidden');
+ assert.equal(await page.$eval(addAt3,node=>getComputedStyle(node).opacity),'1','Nearby cut plus brightens');
+ assert.equal(await page.$eval(addAt6,node=>getComputedStyle(node).opacity),'0.75','Other cut pluses stay subdued');
  for(const theme of ['dark','light']){await page.evaluate(theme=>document.documentElement.dataset.workspaceTheme=theme,theme);await flush();
   const style=await page.$eval(addAt3,node=>{const s=getComputedStyle(node);return {background:s.backgroundColor,border:s.borderTopWidth,shadow:s.boxShadow,stroke:node.querySelector('svg').getAttribute('stroke-width'),width:s.width}});
   assert.equal(style.background,'rgba(0, 0, 0, 0)');assert.equal(style.border,'0px');assert.equal(style.shadow,'none');assert.equal(style.stroke,'3');assert.equal(style.width,'24px','Bare plus keeps its click target');
  }
  await page.evaluate(()=>document.documentElement.dataset.workspaceTheme='dark');await page.mouse.move(5,5);await flush();
- assert.equal(await page.$eval(addAt3,node=>getComputedStyle(node).opacity),'0','Plus hides again after leaving the cut');
+ assert.equal(await page.$eval(addAt3,node=>getComputedStyle(node).opacity),'0.75','Plus stays discoverable after leaving the cut');
  await page.keyboard.press('Tab');await page.focus(addAt3);await flush();
  assert.equal(await page.$eval(addAt3,node=>getComputedStyle(node).opacity),'1','Keyboard focus reveals the plus');
  const sourceClips=await page.evaluate(()=>window.fixture.timeline.clips.filter(clip=>clip.kind!=='effect'));
