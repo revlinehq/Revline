@@ -1,5 +1,6 @@
 import { createStore } from 'zustand/vanilla';
 import { normalizeTimeline, type Timeline } from './types';
+import { reconcileTransitionEdits } from './clip-transitions';
 
 export type EditorState = {
   timeline: Timeline; history: Timeline[]; future: Timeline[];
@@ -22,7 +23,7 @@ export function createEditorStore(timeline: Timeline) {
   };
   return createStore<EditorState>()((set, get) => ({
     timeline, history: [], future: [], selectedId: null, selectedIds:[], playhead: 0, playing: false, muted: false, zoom: 1, snapping: true, compactTracks:false,timelineCollapsed:false,
-    edit: input => { const next=normalizeTimeline(input); set(s => ({ timeline: next, history: [...s.history.slice(-39), s.timeline], future: [],...selectionFor(next,s) })); },
+    edit: input => { const next=reconcileTransitionEdits(get().timeline,normalizeTimeline(input)); set(s => ({ timeline: next, history: [...s.history.slice(-39), s.timeline], future: [],...selectionFor(next,s) })); },
     replace: (input, remember = false) => { const next=normalizeTimeline(input); set(s => ({ timeline: next,...selectionFor(next,s), ...(remember ? { history: [...s.history.slice(-39), s.timeline], future: [] } : {}) })); },
     recover: input => { const next=normalizeTimeline(input); set({ timeline: next, history: [], future: [], selectedId: null, selectedIds:[] }); },
     undo: () => {

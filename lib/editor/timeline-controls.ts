@@ -1,4 +1,5 @@
 import { offsetClipMotion, resizeEffectMotion } from './clip-effects';
+import { textAnimationTimingPatch } from './text-animation-timing';
 import { textTemplateTimingPatch } from './remotion-text';
 // Adapted from OpenCut Classic's playhead, zoom, and edge-scroll controllers.
 // Copyright 2025–2026 OpenCut. MIT: third-party/OpenCut-LICENSE.
@@ -6,6 +7,7 @@ import { layerGroup,trackOf,deriveTrackCounts,normalizeTimeline,maxTrackCount,TI
 import { frameSeekTime, linkedClipIds } from './operations';
 import { TimelineGestureRejection } from './timeline-edit-errors';
 import { playbackRateOf } from './playback-rate';
+import { isTransitionClip, reconcileTransitionEdits, transitionPair } from './clip-transitions';
 export function timelineTimeAtPointer(x:number,geometry:{left:number;scrollLeft:number;origin:number;px:number;end:number;fps:number}){
   const raw=Math.max(0,Math.min(geometry.end,(x-geometry.left+geometry.scrollLeft-geometry.origin)/geometry.px));
   return frameSeekTime(raw,geometry.fps,geometry.end);
@@ -94,7 +96,7 @@ function placeMovedClips(timeline:Timeline,moved:import('./types').Clip[],direct
   }
   const placed=new Map([...rest,...moved].map(clip=>[clip.id,clip]));
   const next={...timeline,tracks:counts,clips:timeline.clips.map(clip=>placed.get(clip.id)??clip)};
-  return {...next,tracks:deriveTrackCounts(next)};
+  return reconcileTransitionEdits(timeline,{...next,tracks:deriveTrackCounts(next)});
 }
 export function moveClipToLayer(timeline:Timeline,clip:import('./types').Clip):Timeline {
   timeline=normalizeTimeline(timeline);
@@ -156,7 +158,7 @@ export function moveSelectionToNewLayers(timeline:Timeline,ids:string[],timeDelt
       return trackOf(clip)>=base?{...clip,track:trackOf(clip)+span}:clip;
     });
   }
-  return {...timeline,tracks:counts,clips};
+  return reconcileTransitionEdits(timeline,{...timeline,tracks:counts,clips});
 }
 
 export type LayerDropTarget={edge:'above'|'below'}|{track:number;direction:'above'|'below';insert?:true};
@@ -201,6 +203,16 @@ export function resizeSelectedClips(timeline:Timeline,assets:MediaAsset[],ids:st
     const left=Math.max(0,...neighbors.filter(other=>other.start+other.duration<=clip.start+1e-6).map(other=>other.start+other.duration));
     const right=Math.min(Infinity,...neighbors.filter(other=>other.start>=end-1e-6).map(other=>other.start));
     const asset=sources.get(clip.assetId??'');const timedSource=clip.kind==='video'||clip.kind==='audio';
+    if(isTransitionClip(clip)){
+      const pair=transitionPair(timeline.clips,clip.transition!);
+      if(side==='left'){
+        minimum=Math.max(minimum,pair.from.start-clip.start);
+        maximum=Math.min(maximum,pair.cut-frame-clip.start);
+      }else{
+        minimum=Math.max(minimum,pair.cut+frame-end);
+        maximum=Math.min(maximum,pair.to.start+pair.to.duration-end);
+      }
+    }
     if(side==='left'){
       minimum=Math.max(minimum,left-clip.start,timedSource?-clip.sourceStart/playbackRateOf(clip):-Infinity);
       maximum=Math.min(maximum,clip.duration-frame);
@@ -218,13 +230,13 @@ export function resizeSelectedClips(timeline:Timeline,assets:MediaAsset[],ids:st
     const edge=anchor.start+(side==='right'?anchor.duration:0)+dt;
     dt=Math.max(minimum,Math.min(maximum,dt+closestSnap(edge,magnet.marks,magnet.threshold)-edge));
   }
-  return {...timeline,clips:timeline.clips.map(clip=>{
+  return reconcileTransitionEdits(timeline,{...timeline,clips:timeline.clips.map(clip=>{
     if(!selected.has(clip.id))return clip;
     const rawDuration=clip.duration+(side==='right'?dt:-dt);
     // Subtracting the edge delta can round a valid one-frame clip below its minimum.
     const tolerance=Number.EPSILON*Math.max(1,clip.duration,Math.abs(dt))*8;
     const duration=Math.abs(rawDuration-frame)<=tolerance?frame:rawDuration;
     if(clip.kind==='effect')return {...clip,...resizeEffectMotion(clip,duration),start:side==='left'?clip.start+dt:clip.start,duration};
-    return side==='right'?{...clip,...textTemplateTimingPatch(clip),duration}:{...clip,...offsetClipMotion(clip,dt),start:clip.start+dt,duration,sourceStart:clip.kind==='video'||clip.kind==='audio'?clip.sourceStart+dt*playbackRateOf(clip):clip.sourceStart};
-  })};
+    return side==='right'?{...clip,...textTemplateTimingPatch(clip),...textAnimationTimingPatch(clip),duration}:{...clip,...offsetClipMotion(clip,dt),start:clip.start+dt,duration,sourceStart:clip.kind==='video'||clip.kind==='audio'?clip.sourceStart+dt*playbackRateOf(clip):clip.sourceStart};
+  })});
 }

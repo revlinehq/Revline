@@ -1,6 +1,10 @@
 import type { BlendMode, CinematicBarSettings, EffectPreset, SolidColorSettings, MotionKeyframe } from './clip-effects';
 import type { ColorGrade, ZoomBlur, Glitch, InvertColors, Dither } from './visual-effects';
 import type { RemotionTextTemplate } from './remotion-text';
+import type { ClipTransition } from './clip-transitions';
+import type { AudioSettings } from './audio-settings';
+import type { TextAppearance } from './text-style';
+import type { TextFontId } from './text-fonts';
 export type AspectRatio = 'vertical' | 'portrait-feed' | 'square' | 'classic' | 'landscape';
 export type ClipKind = 'video' | 'image' | 'audio' | 'caption' | 'graphic' | 'effect';
 export type LayerGroup = 'visual' | 'overlay' | 'audio' | 'effects';
@@ -27,6 +31,7 @@ export type Clip = {
   x?: number;
   y?: number;
   volume?: number;
+  audio?: AudioSettings;
   linkedClipId?: string;
   audioSeparated?: boolean;
   blendMode?: BlendMode;
@@ -35,13 +40,17 @@ export type Clip = {
   effectPreset?: EffectPreset | 'none';
   cinematicBars?: CinematicBarSettings;
   solidColor?: SolidColorSettings;
+  transition?: ClipTransition;
   colorGrade?: ColorGrade;
   zoomBlur?: ZoomBlur;
   glitch?: Glitch;
   invert?: InvertColors;
   dither?: Dither;
   textTemplate?: RemotionTextTemplate;
+  textStyle?: TextAppearance;
+  fontFamily?: TextFontId;
   animation?: 'none' | 'fade' | 'rise';
+  textAnimationTiming?: {duration:number;offset:number};
   focus?: {time:number;x:number;y:number}[];
   transform?: VisualTransform;
   crop?: SourceCrop;

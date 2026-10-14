@@ -2,18 +2,28 @@ import type { Clip } from './types';
 import { DEFAULT_ZOOM_BLUR, validateVisualEffects } from './visual-effects';
 import { textTemplateTimingPatch, validateRemotionTextTemplate } from './remotion-text';
 import { validatePlaybackRate } from './playback-rate';
+import { isTransitionPreset, TRANSITION_PRESETS, validateTransitionSettings } from './clip-transitions';
+import { validateTextStyle } from './text-style';
+import { validateAudioSettings } from './audio-settings';
+import { textAnimationTimingPatch,validateTextAnimationTiming } from './text-animation-timing';
 
 export const BLEND_MODES = ['normal', 'screen', 'multiply', 'overlay', 'plus-lighter', 'difference'] as const;
 export type BlendMode = typeof BLEND_MODES[number];
 export type MotionKeyframe = { time: number; x: number; y: number; scale: number; rotation: number; opacity: number; brightness: number };
 export const MOTION_PRESETS = ['none', 'fade', 'punch', 'shake', 'flash', 'pop'] as const;
 export type MotionPreset = typeof MOTION_PRESETS[number];
-export const EFFECT_PRESETS = ['fade', 'punch', 'shake', 'flash', 'pop', 'cinematic-bars', 'quick-zoom-in', 'quick-zoom-out', 'zoom-blur', 'solid-color'] as const;
+export const TIMED_EFFECT_PRESETS = ['fade', 'punch', 'shake', 'flash', 'pop', 'cinematic-bars', 'quick-zoom-in', 'quick-zoom-out', 'zoom-blur', 'solid-color'] as const;
+export const EFFECT_PRESETS = [...TIMED_EFFECT_PRESETS, ...TRANSITION_PRESETS] as const;
 export type EffectPreset = typeof EFFECT_PRESETS[number];
 export type SolidColorSettings = { color: string; width: number; height: number; x: number; y: number; opacity: number };
 export const DEFAULT_SOLID_COLOR: SolidColorSettings = { color: '#2563eb', width: 1, height: 1, x: .5, y: .5, opacity: 1 };
 export const SOLID_COLOR_LIMITS = { width: [.01, 2], height: [.01, 2], x: [0, 1], y: [0, 1], opacity: [0, 1] } as const;
 export function solidColorSettings(clip: Pick<Clip, 'solidColor'>): SolidColorSettings { return clip.solidColor ?? DEFAULT_SOLID_COLOR; }
+export function solidColorPatch(clip:Clip,changes:Partial<SolidColorSettings>):Pick<Clip,'solidColor'>{
+  const solidColor={...solidColorSettings(clip),...changes};
+  validateClipEffects({...clip,solidColor});
+  return {solidColor};
+}
 export type CinematicBarSettings = { size: number; speed: number };
 export const DEFAULT_CINEMATIC_BARS: CinematicBarSettings = { size: .12, speed: 1 };
 export const CINEMATIC_BAR_LIMITS = { size: [0, .5], speed: [.25, 4] } as const;
@@ -26,6 +36,9 @@ export function cinematicBarKeyframes(duration: number, speed = 1): MotionKeyfra
   return [key(0, { opacity: 0 }), key(movement), key(duration - movement), key(duration, { opacity: 0 })].filter((frame, index, frames) => index === 0 || frame.time > frames[index - 1].time);
 }
 export const EFFECT_CATALOG: Record<EffectPreset, { label: string; duration: number; keyframes: (duration: number) => MotionKeyframe[] }> = {
+  crossfade: { label: 'Crossfade', duration: .6, keyframes: () => [] },
+  'spin-zoom': { label: 'Spin zoom', duration: .6, keyframes: () => [] },
+  'blur-dissolve': { label: 'Blur dissolve', duration: .6, keyframes: () => [] },
   fade: { label: 'Fade in / out', duration: 1, keyframes: d => { const fade = Math.min(.3, d / 3); return [key(0, { opacity: 0 }), key(fade), key(d - fade), key(d, { opacity: 0 })]; } },
   punch: { label: 'Punch zoom', duration: .5, keyframes: d => { const hit = Math.min(.35, d / 2); return [key(0), key(hit * .3, { scale: 1.2 }), key(hit), key(d)]; } },
   shake: { label: 'Impact shake', duration: .5, keyframes: d => { const hit = Math.min(.35, d / 2); return [key(0, { scale: 1.08 }), key(hit * .15, { x: .018, y: -.01, rotation: 1.2, scale: 1.08 }), key(hit * .35, { x: -.014, y: .008, rotation: -.9, scale: 1.08 }), key(hit * .6, { x: .008, y: -.004, rotation: .4, scale: 1.08 }), key(hit, { scale: 1.08 }), key(d, { scale: 1.08 })]; } },
@@ -44,6 +57,10 @@ export function validateClipEffects(clip: Clip) {
   validatePlaybackRate(clip);
   validateVisualEffects(clip);
   validateRemotionTextTemplate(clip);
+  validateTextStyle(clip);
+  validateAudioSettings(clip);
+  validateTextAnimationTiming(clip);
+  validateTransitionSettings(clip);
   if (clip.solidColor !== undefined) {
     if (clip.kind !== 'effect' || clip.effectPreset !== 'solid-color') throw new Error('Solid color settings belong to solid color effect clips.');
     if (!/^#[\da-f]{6}$/i.test(clip.solidColor.color)) throw new Error('Choose a valid solid color.');
@@ -98,13 +115,14 @@ export function visibleMotion(clip: Clip): MotionKeyframe[] {
 }
 
 export function motionPreset(clip: Clip, preset: MotionPreset | EffectPreset): Partial<Clip> {
-  if ((preset === 'cinematic-bars' || preset === 'zoom-blur' || preset === 'solid-color') && clip.kind !== 'effect') throw new Error('Add this preset as an effect clip.');
+  if ((preset === 'cinematic-bars' || preset === 'zoom-blur' || preset === 'solid-color' || isTransitionPreset(preset)) && clip.kind !== 'effect') throw new Error('Add this preset as an effect clip.');
+  if (isTransitionPreset(preset) && !clip.transition) throw new Error('Choose the two neighboring clips for this transition.');
   const motion = preset === 'none' ? [] : preset === 'cinematic-bars' ? cinematicBarKeyframes(clip.duration, cinematicBarSettings(clip).speed) : EFFECT_CATALOG[preset].keyframes(clip.duration);
-  return { motion, motionOffset: 0, ...(clip.kind === 'effect' ? { effectPreset: preset, solidColor: preset === 'solid-color' ? { ...solidColorSettings(clip) } : undefined, cinematicBars: preset === 'cinematic-bars' ? { ...cinematicBarSettings(clip) } : undefined, zoomBlur: preset === 'zoom-blur' ? {...DEFAULT_ZOOM_BLUR,...clip.zoomBlur,enabled:true} : undefined } : {}), ...(clip.kind === 'caption' || clip.kind === 'graphic' ? { animation: 'none' as const } : {}) };
+  return { motion, motionOffset: 0, ...(clip.kind === 'effect' ? { effectPreset: preset, transition: isTransitionPreset(preset) ? clip.transition : undefined, solidColor: preset === 'solid-color' ? { ...solidColorSettings(clip) } : undefined, cinematicBars: preset === 'cinematic-bars' ? { ...cinematicBarSettings(clip) } : undefined, zoomBlur: preset === 'zoom-blur' ? {...DEFAULT_ZOOM_BLUR,...clip.zoomBlur,enabled:true} : undefined } : {}), ...(clip.kind === 'caption' || clip.kind === 'graphic' ? { animation: 'none' as const,textAnimationTiming:undefined } : {}) };
 }
 
 export function offsetClipMotion(clip: Clip, delta: number): Partial<Clip> {
-  return { ...(clip.motion?.length ? { motionOffset: (clip.motionOffset ?? 0) + delta } : {}), ...textTemplateTimingPatch(clip, delta) };
+  return { ...(clip.motion?.length ? { motionOffset: (clip.motionOffset ?? 0) + delta } : {}), ...textTemplateTimingPatch(clip, delta),...textAnimationTimingPatch(clip,delta) };
 }
 
 /** Effect handles stretch the currently visible pulse, including a previously split segment. */

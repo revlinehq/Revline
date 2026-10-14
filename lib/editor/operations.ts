@@ -1,7 +1,9 @@
 import { EFFECT_CATALOG, motionPreset, offsetClipMotion, type EffectPreset } from './clip-effects';
 import { TimelineGestureRejection } from './timeline-edit-errors';
 import { textTemplateTimingPatch } from './remotion-text';
+import { textAnimationTimingPatch } from './text-animation-timing';
 import { playbackRateOf, sourceDurationOf, sourceEndOf, validatePlaybackRate } from './playback-rate';
+import { boundedTransitionRange, DEFAULT_TRANSITION_DIRECTION, findTransitionPlacement, isTransitionClip, isTransitionPreset, reconcileTransitionEdits, transitionPair, transitionSources, type TransitionDirection, type TransitionPreset } from './clip-transitions';
 import { Clip, Timeline, timelineDuration, layerGroup, trackOf, deriveTrackCounts, normalizeTimeline, maxTrackCount } from './types';
 export function snapTime(time: number, fps: number) { return Math.round(Math.max(0, time) * fps) / fps; }
 export function linkedClipIds(timeline: Timeline, ids: string[]): string[] {
@@ -25,6 +27,7 @@ export function frameSeekTime(time: number, fps: number, duration: number) {
 export function splitClip(timeline: Timeline, clipId: string, time: number, newId: string): Timeline {
   timeline = normalizeTimeline(timeline);
   const clip = timeline.clips.find(c => c.id === clipId);
+  if (clip && isTransitionClip(clip)) throw new TimelineGestureRejection('Transitions connect two clips and cannot be split.');
   const reject = () => { throw new TimelineGestureRejection('Place the playhead inside the selected clip to split it.'); };
   if (!clip || ![time, timeline.fps, clip.start, clip.duration, clip.sourceStart, clip.start + clip.duration].every(Number.isFinite)
     || timeline.fps <= 0 || clip.start < 0 || clip.sourceStart < 0 || time <= clip.start || time >= clip.start + clip.duration) return reject();
@@ -38,24 +41,38 @@ export function splitClip(timeline: Timeline, clipId: string, time: number, newI
   if (Math.abs(offset - frame) <= roundoff) offset = frame;
   const pair = timeline.clips.find(c => c.id === clip.linkedClipId && c.linkedClipId === clip.id);
   const pairId = `${newId}-audio`;
-  return { ...timeline, clips: timeline.clips.flatMap(c => c.id !== clipId && c.id !== pair?.id ? [c] : [
-    { ...c, ...textTemplateTimingPatch(c), duration: offset },
+  const next = { ...timeline, clips: timeline.clips.flatMap(c => c.id !== clipId && c.id !== pair?.id ? [c] : [
+    { ...c, ...textTemplateTimingPatch(c),...textAnimationTimingPatch(c), duration: offset },
     { ...c, ...offsetClipMotion(c, offset), id: c.id === clipId ? newId : pairId, linkedClipId: pair ? c.id === clipId ? pairId : newId : undefined, start: c.start + offset, sourceStart: c.kind === 'effect' ? 0 : c.sourceStart + offset * playbackRateOf(c), duration: tail },
   ]) };
+  // Only the outgoing piece touching the original cut inherits that transition.
+  next.clips = next.clips.flatMap(c => {
+    if (!c.transition || (c.transition.fromClipId !== clipId && c.transition.fromClipId !== pair?.id)) return [c];
+    const fromClipId=c.transition.fromClipId===clipId?newId:pairId;
+    const transition = { ...c.transition, fromClipId }, from = next.clips.find(member => member.id === fromClipId)!;
+    const start = Math.max(c.start, from.start), end = c.start + c.duration;
+    if (from.start + from.duration - start < frame - 1e-6) return [];
+    return [{ ...c, transition, start, duration: end - start }];
+  });
+  return reconcileTransitionEdits(timeline, next);
 }
 export function patchClip(timeline: Timeline, id: string, patch: Partial<Clip>): Timeline {
   timeline = normalizeTimeline(timeline);
   const clip = timeline.clips.find(c => c.id === id);
   if (!clip) return timeline;
+  if (isTransitionClip(clip) && patch.duration !== undefined && patch.start === undefined) {
+    const pair = transitionPair(timeline.clips, clip.transition!);
+    patch = { ...patch, ...boundedTransitionRange(timeline, pair.from, pair.to, patch.duration,clip.id) };
+  }
   const timing: Partial<Clip> = {};
   for (const key of ['start', 'duration', 'sourceStart', 'playbackRate'] as const) if (patch[key] !== undefined || (key === 'playbackRate' && key in patch)) timing[key] = patch[key];
   const volumeTarget = clip.kind === 'video' && clip.linkedClipId ? clip.linkedClipId : id;
-  return { ...timeline, clips: timeline.clips.map(c => {
-    let next = c.id === id ? { ...c, ...(patch.duration !== undefined && !('textTemplate' in patch) ? textTemplateTimingPatch(c) : {}), ...patch, id: c.id } : c.id === clip.linkedClipId ? { ...c, ...timing } : c;
+  return reconcileTransitionEdits(timeline, { ...timeline, clips: timeline.clips.map(c => {
+    let next = c.id === id ? { ...c, ...(patch.duration !== undefined && !('textTemplate' in patch) ? textTemplateTimingPatch(c) : {}),...(patch.duration!==undefined&&!('textAnimationTiming' in patch)?textAnimationTimingPatch(c):{}), ...patch, id: c.id } : c.id === clip.linkedClipId ? { ...c, ...timing } : c;
     if (patch.volume !== undefined && c.id === volumeTarget) next = { ...next, volume: patch.volume };
     if (next.kind === 'video' && next.audioSeparated) next = { ...next, volume: 0 };
     return next;
-  }) };
+  }) });
 }
 /** Keep the retained source range and linked sound while changing playback speed. */
 export function setClipPlaybackRate(timeline: Timeline, id: string, playbackRate: number): Timeline {
@@ -78,11 +95,12 @@ export function setClipPlaybackRate(timeline: Timeline, id: string, playbackRate
     motion: member.motion.map(key => ({ ...key, time: key.time * ratio })), motionOffset: (member.motionOffset ?? 0) * ratio,
   } : member) };
 }
-export function deleteClip(timeline: Timeline, id: string): Timeline { timeline = normalizeTimeline(timeline); const ids = new Set(linkedClipIds(timeline, [id])); return { ...timeline, clips: timeline.clips.filter(c => !ids.has(c.id)) }; }
+export function deleteClip(timeline: Timeline, id: string): Timeline { timeline = normalizeTimeline(timeline); const ids = new Set(linkedClipIds(timeline, [id])); return reconcileTransitionEdits(timeline, { ...timeline, clips: timeline.clips.filter(c => !ids.has(c.id)) }); }
 export function duplicateClip(timeline: Timeline, id: string, newId: string): Timeline {
   timeline = normalizeTimeline(timeline);
   const clip = timeline.clips.find(c => c.id === id);
   if (!clip) return timeline;
+  if (isTransitionClip(clip)) throw new Error('Copy both connected clips with their transition to duplicate it.');
   const pair = timeline.clips.find(c => c.id === clip.linkedClipId && c.linkedClipId === clip.id);
   const pairId = `${newId}-audio`;
   let next = placeOnFreeLayer(timeline, { ...clip, id: newId, linkedClipId: pair ? pairId : undefined, start: clip.start + clip.duration });
@@ -117,9 +135,13 @@ export function addTextClip(timeline: Timeline, id: string, kind: 'caption' | 'g
   return placeOnFreeLayer(timeline, { id, kind, start: at, duration: Math.min(3, Math.max(1, timelineDuration(timeline) - at)), sourceStart: 0, text: kind === 'caption' ? 'Your words here.' : 'MAKE ROOM FOR YOUR NEXT IDEA.', fontSize: kind === 'caption' ? 52 : 92, color: '#F4F4F0', background: kind === 'caption' ? '#0B0C0E' : 'transparent', x: 0.5, y: kind === 'caption' ? 0.82 : 0.55, animation: 'none' });
 }
 /** An FX clip affects the visual composition only during its own range. */
-export function addEffectClip(timeline: Timeline, id: string, preset: EffectPreset, at: number, options: { duration?: number; aboveClipId?: string; track?: number } = {}): Timeline {
+export function addEffectClip(timeline: Timeline, id: string, preset: EffectPreset, at: number, options: { duration?: number; aboveClipId?: string; track?: number; direction?: TransitionDirection; visualTrack?: number } = {}): Timeline {
   timeline = normalizeTimeline(timeline);
   if (!Number.isFinite(at) || at < 0) throw new Error('Choose a valid effect position.');
+  if (isTransitionPreset(preset)) {
+    const pair = findTransitionPlacement(timeline, at, { aboveClipId: options.aboveClipId, duration:options.duration, visualTrack:options.visualTrack });
+    return addTransitionClip(timeline, id, preset, pair.from.id, pair.to.id, options);
+  }
   const requestedDuration = options.duration ?? EFFECT_CATALOG[preset].duration;
   if (!Number.isFinite(requestedDuration) || requestedDuration < 1 / timeline.fps) throw new Error('An effect must last at least one frame.');
   const start = snapTime(at, timeline.fps), duration = Math.max(1 / timeline.fps, snapTime(requestedDuration, timeline.fps));
@@ -129,6 +151,18 @@ export function addEffectClip(timeline: Timeline, id: string, preset: EffectPres
   if (!Number.isInteger(track) || track < 1 || track > maxTrackCount('effects')) throw new Error('Choose an FX track between 1 and 24.');
   const clip: Clip = { id, kind: 'effect', track, start, duration, sourceStart: 0 };
   return placeOnFreeLayer(timeline, { ...clip, ...motionPreset(clip, preset) });
+}
+/** Visual-only transition: the joined footage and linked audio keep every timing field. */
+export function addTransitionClip(timeline: Timeline, id: string, preset: TransitionPreset, fromClipId: string, toClipId: string, options: { duration?: number; direction?: TransitionDirection; track?: number } = {}): Timeline {
+  timeline = normalizeTimeline(timeline);
+  const pair = transitionPair(timeline.clips, { fromClipId, toClipId });
+  const clip: Clip = { id, kind: 'effect', sourceStart: 0, track: options.track ?? 1, effectPreset: preset,
+    ...boundedTransitionRange(timeline, pair.from, pair.to, options.duration,id),
+    transition: { fromClipId, toClipId, direction: options.direction ?? DEFAULT_TRANSITION_DIRECTION },
+  };
+  const next = placeOnFreeLayer(timeline, clip);
+  transitionSources(next.clips, next.fps);
+  return next;
 }
 /** Keep overlapping clips separate; an existing ID moves rather than duplicates. */
 export function placeOnFreeLayer(timeline: Timeline, clip: Clip): Timeline {
@@ -150,7 +184,7 @@ export function placeOnFreeLayer(timeline: Timeline, clip: Clip): Timeline {
   const placed = { ...clip, track };
   const clips = timeline.clips.some(current => current.id === clip.id) ? timeline.clips.map(current => current.id === clip.id ? placed : current) : [...timeline.clips, placed];
   const next = { ...timeline, clips };
-  return { ...next, tracks: deriveTrackCounts(next) };
+  return reconcileTransitionEdits(timeline, { ...next, tracks: deriveTrackCounts(next) });
 }
 /** Keep only source samples needed to interpolate this trimmed clip's crop. */
 export function focusForClip(focus:NonNullable<Clip['focus']>,clip:Clip):NonNullable<Clip['focus']> {

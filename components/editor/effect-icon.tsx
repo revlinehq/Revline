@@ -5,6 +5,8 @@ const glyphs = {
   crossfade: [{ d: 'M3 5h11v14H3z M10 5h11v14H10z', stroke: true, opacity: 1 }, { d: 'M10 5h4v14h-4z', stroke: false, opacity: .28 }],
   wipe: [{ d: 'M3 5h18v14H3z M13 5v14 M6 12h4 M8 10l2 2-2 2', stroke: true, opacity: 1 }, { d: 'M3 5h10v14H3z', stroke: false, opacity: .18 }],
   slide: [{ d: 'M3 5h6v14H3z M15 5h6v14h-6z M6 12h12 M15 9l3 3-3 3', stroke: true, opacity: 1 }],
+  'spin-zoom': [{ d: 'M7 7h10v10H7z M4 9a9 9 0 0 1 15-4 M19 2v3h-3 M20 15a9 9 0 0 1-15 4 M5 22v-3h3', stroke: true, opacity: 1 }],
+  'blur-dissolve': [{ d: 'M3 6h6v12H3z M15 6h6v12h-6z M11 7h2 M11 10h2 M11 14h2 M11 17h2', stroke: true, opacity: 1 }, { d: 'M4 7h4v10H4z M16 7h4v10h-4z', stroke: false, opacity: .18 }],
   'solid-color': [{ d: 'M4 5h16v14H4z', stroke: true, opacity: 1 }, { d: 'M7 8h10v8H7z', stroke: false, opacity: .28 }],
   'glitch': [{"d":"M4 5h14v4h3v3h-15v3h-3v3h16m-16-9h9m0 6h10","stroke":true,"opacity":1}],
   'zoomBlur': [{"d":"M7 7h10v10h-10z m-4-4l3 3m12 0l3-3m-18 18l3-3m12 0l3 3","stroke":true,"opacity":1},{"d":"M9 9h6v6h-6z","stroke":false,"opacity":0.28}],

@@ -7,6 +7,7 @@ import { api } from './_generated/api';
 import { BLEND_MODES, EFFECT_PRESETS, MOTION_PRESETS, motionPreset } from '../lib/editor/clip-effects';
 import { addEffectClip, addMediaClip, patchClip, splitClip } from '../lib/editor/operations';
 import { EMPTY_TIMELINE } from '../lib/editor/types';
+import { isTransitionPreset } from '../lib/editor/clip-transitions';
 
 const modules = import.meta.glob('./**/*.ts');
 beforeEach(() => {
@@ -53,7 +54,7 @@ test('effect saves still reject another owner and invalid motion values', async 
   await expect(f.owner.mutation(api.projects.saveTimeline, { projectId: f.projectId, timeline, expectedRevision: 0 })).rejects.toThrow('Motion scale is out of range');
 });
 
-test.each(EFFECT_PRESETS)('independent %s effect clips persist without media and survive splitting', async preset => {
+test.each(EFFECT_PRESETS.filter(preset=>!isTransitionPreset(preset)))('independent %s effect clips persist without media and survive splitting', async preset => {
   const f = await fixture();
   const base = addMediaClip(EMPTY_TIMELINE, f.asset, 'video', 600);
   const next = addEffectClip(base, 'effect', preset, 610, { aboveClipId: 'video', duration: 2 });

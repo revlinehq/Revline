@@ -1,5 +1,7 @@
 import { validateClipEffects } from '../../lib/editor/clip-effects';
 import { playbackRateOf, sourceEndOf } from '../../lib/editor/playback-rate';
+import { transitionSources } from '../../lib/editor/clip-transitions';
+import { validateAudioTimeline } from '../../lib/editor/audio-settings';
 import { ConvexError } from "convex/values";
 import { layerGroup, maxTrackCount, normalizeTimeline, trackOf, type Timeline } from "../../lib/editor/types";
 import type { Doc } from "../_generated/dataModel";
@@ -91,6 +93,8 @@ export async function validateTimeline(ctx: MutationCtx | QueryCtx, project: Doc
     if (clip.focus) { if (clip.kind !== "video") throw new ConvexError("Subject tracking applies to video clips only"); validateFocus(clip.focus, asset.duration); }
     if (asset.kind !== "image" && asset.duration !== undefined && sourceEndOf(clip) > asset.duration + 1 / timeline.fps) throw new ConvexError("Source trim extends beyond the media duration");
   }
+  try { transitionSources(timeline.clips,timeline.fps); } catch(error) { throw new ConvexError((error as Error).message); }
+  try { validateAudioTimeline(timeline); } catch(error) { throw new ConvexError((error as Error).message); }
   return timeline;
 }
 export async function commitTimeline(ctx: MutationCtx, project: Doc<"projects">, timeline: Timeline, expectedRevision: number) {

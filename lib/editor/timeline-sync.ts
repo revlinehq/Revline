@@ -1,4 +1,5 @@
 import { deriveTrackCounts, normalizeTimeline, TIMELINE_LAYER_GROUPS, type Clip, type Timeline } from './types';
+import { reconcileTransitionEdits } from './clip-transitions';
 
 function equal(a: unknown, b: unknown): boolean {
   if (a === b) return true;
@@ -68,7 +69,7 @@ export function applyTimelineEdit(base: Timeline, next: Timeline, current: Timel
   }
   merged.tracks = counts;
   merged.tracks = deriveTrackCounts(merged);
-  return merged;
+  return reconcileTransitionEdits(current, merged);
 }
 
 export type TimelineSnapshot = { timeline: Timeline; revision: number };

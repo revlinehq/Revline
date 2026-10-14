@@ -1,0 +1,49 @@
+import { validateClipEffects,offsetClipMotion } from './clip-effects';
+import { DEFAULT_TRANSFORM,normalizeTimeline,trackOf,type Clip,type Timeline } from './types';
+import { resolvedTextAppearance,textStyle,type TextAppearance } from './text-style';
+import { remotionTextProps } from './remotion-text';
+
+export type CaptionStyleChanges=Partial<Pick<Clip,'fontSize'|'fontFamily'|'color'|'background'|'x'|'y'|'blendMode'>>&{rotation?:number;textStyle?:Partial<TextAppearance>};
+function caption(timeline:Timeline,id:string){const clip=timeline.clips.find(item=>item.id===id);if(!clip||clip.kind!=='caption')throw new Error('Choose an existing caption clip.');return clip}
+function targets(timeline:Timeline,ids?:string[]){
+  if(ids){if(!ids.length)throw new Error('Choose at least one caption.');for(const id of ids)caption(timeline,id);return new Set(ids)}
+  const selected=new Set(timeline.clips.filter(clip=>clip.kind==='caption').map(clip=>clip.id));
+  if(!selected.size)throw new Error('This timeline has no saved captions.');return selected;
+}
+function validateAppearance(clip:Clip){
+  validateClipEffects(clip);
+  if(clip.fontSize!==undefined&&(!Number.isFinite(clip.fontSize)||clip.fontSize<8||clip.fontSize>300))throw new Error('Caption font size must be between 8 and 300.');
+  for(const key of ['x','y'] as const)if(clip[key]!==undefined&&(!Number.isFinite(clip[key])||clip[key]!<0||clip[key]!>1))throw new Error('Caption position must be between 0 and 1.');
+  for(const value of [clip.color,clip.background])if(value!==undefined&&!/^(#(?:[\da-f]{3,4}|[\da-f]{6}|[\da-f]{8})|transparent)$/i.test(value))throw new Error('Caption colors must use hex or transparent.');
+  if(clip.transform&&(!Number.isFinite(clip.transform.rotation)||Math.abs(clip.transform.rotation)>360))throw new Error('Caption rotation must be between -360 and 360.');
+}
+/** Copy appearance only. Each target keeps its own words, timing and animation. */
+export function applyCaptionStyle(timeline:Timeline,sourceClipId:string,targetIds?:string[]):Timeline{
+  const source=caption(timeline,sourceClipId),selected=targets(timeline,targetIds);
+  validateAppearance(source);
+  const style=textStyle(source),patch={fontFamily:source.fontFamily??'space-grotesk' as const,fontSize:style.fontSize,color:remotionTextProps(source,source.start,timeline.fps)?.color??style.color,background:style.background,x:style.x,y:style.y,blendMode:source.blendMode??'normal' as const,textStyle:resolvedTextAppearance(source),transform:{...DEFAULT_TRANSFORM,...source.transform}};
+  return {...timeline,clips:timeline.clips.map(clip=>selected.has(clip.id)?{...clip,...patch}:clip)};
+}
+/** Patch requested appearance fields only; animation changes are a separate explicit action. */
+export function patchCaptionStyles(timeline:Timeline,changes:CaptionStyleChanges,targetIds?:string[]):Timeline{
+  const selected=targets(timeline,targetIds);
+  if(!Object.values(changes).some(value=>value!==undefined))throw new Error('Specify a caption style control.');
+  const {rotation,textStyle,...appearance}=changes;
+  return {...timeline,clips:timeline.clips.map(clip=>{
+    if(!selected.has(clip.id))return clip;
+    const patch={...appearance,...(rotation!==undefined?{transform:{...DEFAULT_TRANSFORM,...clip.transform,rotation}}:{}),...(textStyle?{textStyle:{...resolvedTextAppearance(clip),...textStyle}}:{})};
+    const next={...clip,...patch};validateAppearance(next);return next;
+  })};
+}
+/** Edit a caption's absolute range on project frames, preserving its original animation phase. */
+export function updateCaptionTiming(timeline:Timeline,clipId:string,changes:{start?:number;end?:number}):Timeline{
+  timeline=normalizeTimeline(timeline);const clip=caption(timeline,clipId);
+  if(changes.start===undefined&&changes.end===undefined)throw new Error('Specify a caption start or end.');
+  const requestedStart=changes.start??clip.start,requestedEnd=changes.end??clip.start+clip.duration;
+  if(![requestedStart,requestedEnd].every(Number.isFinite)||requestedStart<0||requestedEnd<0)throw new Error('Caption times must be finite and nonnegative.');
+  const start=Math.round(requestedStart*timeline.fps)/timeline.fps,end=Math.round(requestedEnd*timeline.fps)/timeline.fps,duration=end-start;
+  if(duration<1/timeline.fps-1e-7)throw new Error('A caption must last at least one frame.');
+  if(timeline.clips.some(other=>other.id!==clip.id&&other.kind!=='audio'&&other.kind!=='effect'&&trackOf(other)===trackOf(clip)&&other.start<end-1e-7&&start<other.start+other.duration-1e-7))throw new Error('The caption range overlaps another clip on its V track.');
+  const next={...clip,...offsetClipMotion(clip,start-clip.start),start,duration};validateClipEffects(next);
+  return {...timeline,clips:timeline.clips.map(item=>item.id===clipId?next:item)};
+}

@@ -13,10 +13,13 @@ export const invertValidator = v.object({ enabled: v.boolean(), amount: v.number
 export const ditherValidator = v.object({ enabled: v.boolean(), amount: v.number(), levels: v.number(), size: v.number(), shadowColor: v.optional(v.string()), highlightColor: v.optional(v.string()) });
 export const glitchValidator = v.object({ enabled: v.boolean(), intensity: v.number(), blockSize: v.number(), rgbSplit: v.number() });
 export const textTemplateValidator = v.object({ preset: v.union(v.literal('word-reveal'), v.literal('word-pop'), v.literal('slide-title'), v.literal('karaoke'), v.literal('neon-echo'), v.literal('lyric-slam'), v.literal('kinetic-stack')), highlightColor: v.optional(v.string()), duration: v.optional(v.number()), offset: v.optional(v.number()) });
+export const textStyleValidator = v.object({strokeWidth:v.number(),strokeColor:v.string(),shadowBlur:v.number(),shadowX:v.number(),shadowY:v.number(),shadowColor:v.string(),glowBlur:v.number(),glowColor:v.string()});
+export const audioSettingsValidator=v.object({role:v.union(v.literal('original'),v.literal('voice'),v.literal('music')),fadeIn:v.number(),fadeOut:v.number(),ducking:v.object({enabled:v.boolean(),amount:v.number(),attack:v.number(),release:v.number()})});
 export const clipValidator = v.object({
   id: v.string(), kind: v.union(assetKind, v.literal("caption"), v.literal("graphic"), v.literal("effect")),
   assetId: v.optional(v.string()), focus: v.optional(focusValidator), track: v.optional(v.number()), start: v.number(), duration: v.number(), sourceStart: v.number(),
   playbackRate: v.optional(v.number()),
+  audio:v.optional(audioSettingsValidator),
   transform: v.optional(v.object({ x: v.number(), y: v.number(), scale: v.number(), rotation: v.number(), opacity: v.number() })),
   crop: v.optional(v.object({ top: v.number(), right: v.number(), bottom: v.number(), left: v.number() })),
   fit: v.optional(v.union(v.literal("cover"), v.literal("contain"))),
@@ -27,10 +30,14 @@ export const clipValidator = v.object({
   motion: v.optional(v.array(motionKeyframeValidator)), motionOffset: v.optional(v.number()),
   colorGrade: v.optional(colorGradeValidator), zoomBlur: v.optional(zoomBlurValidator), glitch: v.optional(glitchValidator), invert: v.optional(invertValidator), dither: v.optional(ditherValidator),
   textTemplate: v.optional(textTemplateValidator),
-  effectPreset: v.optional(v.union(v.literal('none'), v.literal('fade'), v.literal('punch'), v.literal('shake'), v.literal('flash'), v.literal('pop'), v.literal('cinematic-bars'), v.literal('quick-zoom-in'), v.literal('quick-zoom-out'), v.literal('zoom-blur'), v.literal('solid-color'))),
+  textStyle:v.optional(textStyleValidator),
+  fontFamily:v.optional(v.union(v.literal('space-grotesk'),v.literal('anton'),v.literal('dm-serif'),v.literal('geist-mono'))),
+  effectPreset: v.optional(v.union(v.literal('none'), v.literal('fade'), v.literal('punch'), v.literal('shake'), v.literal('flash'), v.literal('pop'), v.literal('cinematic-bars'), v.literal('quick-zoom-in'), v.literal('quick-zoom-out'), v.literal('zoom-blur'), v.literal('solid-color'),v.literal('crossfade'),v.literal('spin-zoom'),v.literal('blur-dissolve'))),
   cinematicBars: v.optional(v.object({ size: v.number(), speed: v.number() })),
   solidColor:v.optional(v.object({color:v.string(),width:v.number(),height:v.number(),x:v.number(),y:v.number(),opacity:v.number()})),
+  transition:v.optional(v.object({fromClipId:v.string(),toClipId:v.string(),direction:v.union(v.literal('clockwise'),v.literal('counter-clockwise'))})),
   animation: v.optional(v.union(v.literal("none"), v.literal("fade"), v.literal("rise"))),
+  textAnimationTiming:v.optional(v.object({duration:v.number(),offset:v.number()})),
 });
 export const timelineMarkerValidator = v.object({ id: v.string(), time: v.number(), label: v.optional(v.string()) });
 export const timelineValidator = v.object({ clips: v.array(clipValidator), fps: v.number(), aspectRatio, tracks: v.optional(v.object({ visual: v.number(), overlay: v.number(), audio: v.number(), effects: v.optional(v.number()) })), markers: v.optional(v.array(timelineMarkerValidator)) });

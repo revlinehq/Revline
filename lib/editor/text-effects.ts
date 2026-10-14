@@ -8,7 +8,7 @@ export const TEXT_EFFECT_LABELS: Record<TextEffectPreset, string> = { none: 'Non
 
 export function textEffectPatch(clip: Clip, preset: TextEffectPreset): Partial<Clip> {
   if (clip.kind !== 'caption' && clip.kind !== 'graphic') throw new Error('Select a text clip to apply a text effect.');
-  return preset === 'pop' ? motionPreset(clip, 'pop') : { animation: preset, motion: [], motionOffset: 0 };
+  return preset === 'pop' ? motionPreset(clip, 'pop') : { animation: preset, motion: [], motionOffset: 0, textAnimationTiming: undefined };
 }
 
 export function textTemplatePatch(clip: Clip, preset: RemotionTextPreset): Partial<Clip> {

@@ -6,10 +6,11 @@ import { clipColor, deriveTrackCounts, deriveTracks, normalizeTimeline, type Tim
 import { createEditorStore } from './store';
 import { copyTimelineClips, pasteTimelineClips } from './clipboard';
 import { generateComposition } from './composition';
+import { isTransitionPreset } from './clip-transitions';
 
 const timeline: Timeline = { fps: 30, aspectRatio: 'landscape', tracks: { visual: 1, overlay: 0, audio: 0 }, clips: [{ id: 'footage', kind: 'graphic', text: 'Footage placeholder', start: 0, duration: 20, sourceStart: 0, track: 1 }] };
 
-test.each(EFFECT_PRESETS)('%s is an independent effect at the playhead on an FX track', preset => {
+test.each(EFFECT_PRESETS.filter(preset=>!isTransitionPreset(preset)))('%s is an independent effect at the playhead on an FX track', preset => {
   const next = addEffectClip(timeline, 'effect', preset, 10, { aboveClipId: 'footage' });
   expect(next.clips[0]).toEqual(timeline.clips[0]);
   expect(next.clips[1]).toMatchObject({ kind: 'effect', start: 10, track: 1, effectPreset: preset, sourceStart: 0 });
@@ -91,6 +92,6 @@ test('effect wrappers never become timed roots that hide underlying footage', ()
   const html = generateComposition(next, []);
   expect(html).toContain('data-effect-clip="effect" class="adjustment-layer"');
   expect(html).not.toContain('id="clip-1" data-start=');
-  expect(html).toContain("timeline.set('#clip-1-motion',");
-  expect(html).toContain('"filter":"brightness(1)"},11)');
+  expect(html).toContain('window.__revlineVisualEffects.installAdjustmentLayers(');
+  expect(html).toContain('"effectPreset":"flash"');
 });
