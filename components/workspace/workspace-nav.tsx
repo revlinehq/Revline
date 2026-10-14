@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useClerk, useUser } from '@clerk/nextjs';
 import { useConvexAuth, useQuery } from 'convex/react';
-import { Check, ChevronDown, Copy, CreditCard, Database, Download, Film, History, LoaderCircle, LogOut, Moon, PanelsTopLeft, Pencil, Plus, Redo2, Share2, UserRound, Undo2 } from 'lucide-react';
+import { Check, ChevronDown, Cloud, Copy, CreditCard, Database, Download, Film, History, LoaderCircle, LogOut, Moon, PanelsTopLeft, Pencil, Plus, Redo2, Share2, UserRound, Undo2 } from 'lucide-react';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
 import { Brand } from './brand';
@@ -21,17 +21,17 @@ export type WorkspaceChat = {
   coverUrl: string | null; coverKind: 'video' | 'image' | null; running: boolean;
 };
 
-export function useWorkspaceChats(demo = false) {
+export function useWorkspaceChats(demo = false, enabled = true, limit = 100) {
   const { isLoaded, isSignedIn } = useUser();
   const { isAuthenticated, isLoading } = useConvexAuth();
   const connected = !!isSignedIn && isAuthenticated && !demo;
-  const projects = useQuery(api.projects.list, connected ? { limit: 100 } : 'skip');
+  const projects = useQuery(api.projects.list, connected && enabled ? { limit } : 'skip');
   const chats: WorkspaceChat[] = connected ? (projects ?? []).map(project => ({
     id: project._id, title: project.title, updatedAt: project.updatedAt,
     clipCount: project.clipCount, coverUrl: project.coverUrl,
     coverKind: project.coverKind, running: !!project.aiRunning,
   })) : [];
-  return { chats, loading: !isLoaded || (!demo && !!isSignedIn && (isLoading || (isAuthenticated && projects === undefined))), connected };
+  return { chats, loading: enabled && (!isLoaded || (!demo && !!isSignedIn && (isLoading || (isAuthenticated && projects === undefined)))), connected };
 }
 
 export function chatRecency(timestamp: number) {
@@ -63,7 +63,8 @@ export interface WorkspaceNavProps {
 
 export function WorkspaceNav({ title = NEW_WORKSPACE_LABEL, editorHref, active = 'chat', demo = false, saving, canUndo, canRedo, onUndo, onRedo, onFootage, onExport, onShare, shareDisabled, exportDisabled, onRename, chatId, editorControls }: WorkspaceNavProps) {
   const pathname = usePathname();
-  const { chats, loading } = useWorkspaceChats(demo);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const { chats, loading } = useWorkspaceChats(demo, historyOpen, 4);
   const { user, isSignedIn, isLoaded } = useUser();
   const clerk = useClerk();
   const { theme, setTheme } = useWorkspaceTheme();
@@ -97,7 +98,7 @@ export function WorkspaceNav({ title = NEW_WORKSPACE_LABEL, editorHref, active =
   return <><header className="workspace-nav">
     <Link href="/dashboard/chat" className="workspace-nav-brand" aria-label="Revline home"><Brand /></Link>
     <span className="workspace-nav-divider" aria-hidden="true" />
-    <DropdownMenu onOpenChange={open => { if (open) { setCopiedId(false); setCopyError(''); } }}><DropdownMenuTrigger asChild><button ref={historyTrigger} className="workspace-chat-trigger" aria-label="Open chat menu"><span>{title}</span><ChevronDown size={13} /></button></DropdownMenuTrigger>
+    <DropdownMenu onOpenChange={open => { setHistoryOpen(open); if (open) { setCopiedId(false); setCopyError(''); } }}><DropdownMenuTrigger asChild><button ref={historyTrigger} className="workspace-chat-trigger" aria-label="Open chat menu"><span>{title}</span><ChevronDown size={13} /></button></DropdownMenuTrigger>
       <DropdownMenuContent align="start" sideOffset={10} className="workspace-menu workspace-history-menu" onCloseAutoFocus={event => { if (renameOpen) event.preventDefault(); }}>
         <DropdownMenuItem asChild className="workspace-menu-item"><Link href="/dashboard/chat"><Plus size={16} />{NEW_WORKSPACE_LABEL}</Link></DropdownMenuItem>
         {onRename && <DropdownMenuItem className="workspace-menu-item" onSelect={() => { setNewTitle(title); setRenameError(''); setRenameOpen(true); }}><Pencil size={15} />Rename chat</DropdownMenuItem>}
@@ -112,6 +113,7 @@ export function WorkspaceNav({ title = NEW_WORKSPACE_LABEL, editorHref, active =
     </DropdownMenu>
     {editorControls}
     <div className="workspace-nav-actions">
+      {!demo && !onExport && !editorControls && <Link href="/storage" className="workspace-nav-secondary" aria-label="Cloud storage" aria-current={active==='storage'?'page':undefined}><Cloud size={15}/><span>Cloud storage</span></Link>}
       {saving !== undefined && <span className="workspace-nav-save" role="status">{saving ? <LoaderCircle size={13} className="animate-spin" /> : <Check size={13} />}{saving ? 'Saving…' : 'Saved'}</span>}
       {(onUndo || onRedo) && <div className="workspace-nav-history"><button className="workspace-nav-icon" aria-label="Undo" title="Undo" disabled={!canUndo} onClick={onUndo}><Undo2 size={15} /></button><button className="workspace-nav-icon" aria-label="Redo" title="Redo" disabled={!canRedo} onClick={onRedo}><Redo2 size={15} /></button></div>}
       {onFootage && <button className="workspace-nav-secondary" aria-label="Footage" onClick={onFootage}><Film size={14} /><span>Footage</span></button>}

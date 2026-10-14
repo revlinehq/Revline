@@ -3,7 +3,8 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useConvexAuth, useQuery } from 'convex/react';
-import { ChevronRight, Film, FolderOpen, LoaderCircle } from 'lucide-react';
+import { ChevronRight, Film, FolderOpen } from 'lucide-react';
+import { Skeleton } from '@/components/ui/skeleton';
 import { api } from '@/convex/_generated/api';
 import { chatRecency } from './workspace-nav';
 import './workspace-pages.css';
@@ -28,7 +29,7 @@ export function RecentProjects() {
 
   return <section className="recent-projects" aria-labelledby="recent-projects-heading">
     <header><h2 id="recent-projects-heading"><FolderOpen size={16} strokeWidth={1.5} aria-hidden="true" />Your projects</h2><Link className="recent-projects-see-all" href="/chats">See all<ChevronRight size={12} strokeWidth={1.5} aria-hidden="true" /></Link></header>
-    {loading ? <div className="recent-projects-empty" role="status"><LoaderCircle size={16} className="recent-projects-spinner animate-spin" aria-hidden="true" />Loading your projects…</div>
+    {loading ? <ul className="recent-projects-list" aria-label="Loading your projects" aria-busy="true">{Array.from({length:4},(_,index)=><li key={index}><div className="workspace-chat-row-link recent-project-link"><Skeleton className="workspace-chat-cover"/><span className="workspace-chat-description"><Skeleton style={{height:13,width:'62%'}}/><Skeleton style={{height:10,width:'38%'}}/></span><Skeleton style={{height:11,width:42}}/></div></li>)}</ul>
       : projects.length ? <ul className="recent-projects-list">{projects.map(project => <li key={project._id}>
         <Link className="workspace-chat-row-link recent-project-link" href={`/editor/${project._id}`}>
           <ProjectCover url={project.coverUrl} kind={project.coverKind} />
