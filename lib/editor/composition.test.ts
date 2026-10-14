@@ -104,7 +104,7 @@ describe('stacked visual geometry', () => {
       {id:'footage',kind:'video',track:3,assetId:'a',start:0,duration:2,sourceStart:0},
     ]};
     const html=generateComposition(mixed,[{_id:'a',kind:'video',fileName:'a.mp4',url:'/a.mp4'}]);
-    expect(html).toContain(`class="overlay caption" style="left:50%;top:82%;font-size:52px;color:#F4F4F0;z-index:${layerZIndex(mixed.clips[0],0)}`);
+    expect(html).toMatch(new RegExp(`class="overlay caption" style="[^"]*z-index:${layerZIndex(mixed.clips[0],0)};`));
     expect(html).toContain(`opacity:1;z-index:${layerZIndex(mixed.clips[1],1)}`);
     expect(layerZIndex(mixed.clips[1],1)).toBeGreaterThan(layerZIndex(mixed.clips[0],0));
   });

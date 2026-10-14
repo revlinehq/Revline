@@ -4,6 +4,7 @@ import { VERSION } from 'remotion';
 import { RemotionText } from './remotion-text-component';
 import { remotionTextProps, type RemotionTextProps, type RemotionTextSource } from './remotion-text';
 import { textLayerFrame, type TextLayerSource } from './text-layers';
+import { textAppearance } from './text-style';
 
 const roots = new WeakMap<HTMLElement, { root: Root; props?: RemotionTextProps }>();
 export const version = VERSION;
@@ -101,12 +102,13 @@ export function installTextLayers(initial: TextLayerSource[]): TextLayerControll
       const frame = textLayerFrame(source, time, width, height), style = frame.style;
       if (applied.get(node) !== source) {
         node.className = `overlay ${clip.kind}`;
-        Object.assign(node.style, { left: `${style.x * 100}%`, top: `${style.y * 100}%`, fontSize: `${style.fontSize}px`, color: style.color, transform: style.transform, mixBlendMode: style.blendMode, zIndex: String((clip.track ?? 1) * 256 + source.index) });
+        Object.assign(node.style, { left: `${style.x * 100}%`, top: `${style.y * 100}%`, fontSize: `${style.fontSize}px`, fontFamily: style.fontFamily, fontWeight: String(style.fontWeight), color: style.color, transform: style.transform, mixBlendMode: style.blendMode, zIndex: String((clip.track ?? 1) * 256 + source.index) });
         applied.set(node, source);
       }
       const motion = node.querySelector<HTMLElement>('.text-motion')!, content = node.querySelector<HTMLElement>('.text-content')!;
       Object.assign(motion.style, { transform: frame.transform, opacity: String(frame.opacity), filter: frame.brightness === 1 ? '' : `brightness(${frame.brightness})` });
-      Object.assign(content.style, { background: style.background, transform: `translateY(${frame.lift}px)` });
+      const appearance = clip.textStyle ? textAppearance(clip, source.resolution) : {WebkitTextStroke:'',paintOrder:'',textShadow:''};
+      Object.assign(content.style, { ...appearance, background: style.background, transform: `translateY(${frame.lift}px)` });
       const props = remotionTextProps(clip, clock.time(), source.fps, source.resolution);
       if (props) render(content, props);
       else { dispose(content); if (content.textContent !== style.text) content.textContent = style.text; }

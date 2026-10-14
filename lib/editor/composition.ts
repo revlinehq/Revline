@@ -1,10 +1,12 @@
 import { NEUTRAL_MOTION, cinematicBarSettings, validateClipEffects, visibleMotion, type MotionKeyframe } from './clip-effects';
 import { adjustmentSources } from './adjustment-layers';
+import { isTransitionClip, transitionSources } from './clip-transitions';
 import { MAX_CLIP_VOLUME } from './clip-volume';
 import { validateVisualEffects } from './visual-effects';
 import { visualEffectsRuntimeScript } from './visual-effects-runtime';
 import { textLayerSources } from './text-layers';
-import { textStyle } from './text-style';
+import { textStyle, textAppearance } from './text-style';
+import { TEXT_FONTS, textFontFaceCss, type TextFontId } from './text-fonts';
 import { playbackRateOf, sourceEndOf, timelineTimeAtSource, validatePlaybackRate } from './playback-rate';
 import { dimensions, timelineDuration, deriveTrackCounts, normalizeTimeline, trackOf, DEFAULT_CROP, DEFAULT_TRANSFORM, type Clip, type MediaAsset, type Timeline, type SourceCrop } from './types';
 
@@ -15,7 +17,9 @@ export type CompositionOptions = {
   gsapUrl?: string;
   visualEffectsUrl?: string;
   remotionTextUrl?: string;
+  remotionTransitionsUrl?: string;
   fontUrl?: string;
+  fontUrls?: Partial<Record<TextFontId, string>>;
   assetUrls?: Record<string, string>;
 };
 
@@ -89,6 +93,7 @@ export function generateComposition(timeline: Timeline, assets: MediaAsset[], op
   if (![24, 30, 60].includes(fps)) throw new Error('Frame rate must be 24, 30, or 60 fps.');
   const assetMap = new Map(assets.map(asset => [asset._id, asset]));
   deriveTrackCounts(timeline);
+  const transitions = transitionSources(timeline.clips, timeline.fps);
   const scale = resolution / 1080;
   const animation: string[] = [];
   function animateKeys(selector: string, clip: Clip, motion: MotionKeyframe[], vars: (key: MotionKeyframe) => Record<string, string | number>, neutral: MotionKeyframe, ease = 'none') {
@@ -119,8 +124,10 @@ export function generateComposition(timeline: Timeline, assets: MediaAsset[], op
     const timing = `id="${id}" data-source-clip="${escapeHtml(clip.id)}" data-start="${start}" data-duration="${clip.duration}" data-end="${end}" data-track-index="${trackIndex}"`;
     if (clip.kind === 'caption' || clip.kind === 'graphic') {
       const style = textStyle(clip, resolution);
-      const attributes = `left:${style.x * 100}%;top:${style.y * 100}%;font-size:${style.fontSize}px;color:${style.color};z-index:${zIndex};mix-blend-mode:${style.blendMode};transform:${style.transform}`;
-      return `<div id="${id}" data-text-clip="${escapeHtml(clip.id)}" class="overlay ${clip.kind}" style="${attributes}"><span id="${id}-motion" class="text-motion"><span class="text-content" style="background:${style.background}">${escapeHtml(style.text)}</span></span></div>`;
+      const attributes = `left:${style.x * 100}%;top:${style.y * 100}%;font-size:${style.fontSize}px;font-family:'${style.fontFamily}';font-weight:${style.fontWeight};color:${style.color};z-index:${zIndex};mix-blend-mode:${style.blendMode};transform:${style.transform}`;
+      const appearance = clip.textStyle ? textAppearance(clip,resolution) : null;
+      const decoration = appearance ? `;-webkit-text-stroke:${appearance.WebkitTextStroke};paint-order:stroke fill;text-shadow:${appearance.textShadow}` : '';
+      return `<div id="${id}" data-text-clip="${escapeHtml(clip.id)}" class="overlay ${clip.kind}" style="${attributes}"><span id="${id}-motion" class="text-motion"><span class="text-content" style="background:${style.background}${decoration}">${escapeHtml(style.text)}</span></span></div>`;
     }
     const asset = clip.assetId ? assetMap.get(clip.assetId) : undefined;
     const source = clip.assetId ? options.assetUrls?.[clip.assetId] ?? asset?.url : undefined;
@@ -166,7 +173,7 @@ export function generateComposition(timeline: Timeline, assets: MediaAsset[], op
     // FX tracks operate on the completed footage/text composite, independently
     // of V-track numbers. Higher FX rows wrap the accumulated lower FX layers.
     let visualStack = timeline.clips.map((clip, index) => clip.kind !== 'audio' && clip.kind !== 'effect' ? nodes[index] : '').join('');
-    const adjustments = timeline.clips.map((clip, index) => ({ clip, index })).filter(({ clip }) => clip.kind === 'effect').sort((a, b) => trackOf(a.clip) - trackOf(b.clip) || a.index - b.index);
+    const adjustments = timeline.clips.map((clip, index) => ({ clip, index })).filter(({ clip }) => clip.kind === 'effect' && !isTransitionClip(clip)).sort((a, b) => trackOf(a.clip) - trackOf(b.clip) || a.index - b.index);
     for (const { clip, index } of adjustments) {
       const size = cinematicBarSettings(clip).size * 100;
       const bars = clip.effectPreset === 'cinematic-bars' ? `<div class="cinematic-bars"><div id="clip-${index}-bar-top" class="cinematic-bar top" style="height:${size}%"></div><div id="clip-${index}-bar-bottom" class="cinematic-bar bottom" style="height:${size}%"></div></div>` : '';
@@ -179,9 +186,11 @@ export function generateComposition(timeline: Timeline, assets: MediaAsset[], op
   const gsapUrl = mediaUrl(options.gsapUrl ?? '/vendor/gsap.min.js');
   const visualEffectsUrl = mediaUrl(options.visualEffectsUrl ?? (/^https?:/i.test(options.gsapUrl ?? '') ? new URL('/vendor/visual-effects.js', options.gsapUrl).href : '/vendor/visual-effects.js'));
   const remotionTextUrl = mediaUrl(options.remotionTextUrl ?? (/^https?:/i.test(options.gsapUrl ?? '') ? new URL('/vendor/remotion-text.js', options.gsapUrl).href : '/vendor/remotion-text.js'));
+  const remotionTransitionsUrl = mediaUrl(options.remotionTransitionsUrl ?? (/^https?:/i.test(options.gsapUrl ?? '') ? new URL('/vendor/remotion-transitions.js', options.gsapUrl).href : '/vendor/remotion-transitions.js'));
   const textSources = JSON.stringify(textLayerSources(timeline.clips, fps, resolution)).replace(/</g, '\\u003c');
   const defaultFontUrl = /^https?:/i.test(options.gsapUrl ?? '') ? new URL('/fonts/space-grotesk-latin.woff2', options.gsapUrl).href : '/fonts/space-grotesk-latin.woff2';
   const fontUrl = mediaUrl(options.fontUrl ?? defaultFontUrl);
+  const fontUrls = Object.fromEntries(TEXT_FONTS.map(font => [font.id, mediaUrl(options.fontUrls?.[font.id] ?? (font.id === 'space-grotesk' ? fontUrl : /^https?:/i.test(options.gsapUrl ?? '') ? new URL(`/fonts/${font.fileName}`,options.gsapUrl).href : `/fonts/${font.fileName}`))]));
   // Fully transparent video is throttled by Chromium at clip activation. A
   // small nonzero opacity keeps preview decoding active under its effect canvas.
   return `<!doctype html><html><head><meta charset="utf-8">${options.preview?`<meta name="hyperframes-studio-preview" content="true"><script>
@@ -190,12 +199,12 @@ window.addEventListener('error',event=>{if(event.error)reportPreviewError(event.
 window.addEventListener('unhandledrejection',event=>reportPreviewError(event.reason,'unhandled promise'));
 window.__hf=window.__hf||{};window.__hf.onSwallowed=event=>reportPreviewError(event.error,event.label);
 </script>`:''}<meta name="viewport" content="width=device-width,initial-scale=1"><style>
-@font-face{font-family:'Space Grotesk';font-style:normal;font-weight:300 700;font-display:block;src:url('${fontUrl}') format('woff2')}
+${textFontFaceCss(fontUrls)}
 html,body{margin:0;width:${width}px;height:${height}px;overflow:hidden;background:#000;font-family:'Space Grotesk',Arial,Helvetica,sans-serif}*{box-sizing:border-box}#composition{isolation:isolate;position:relative;width:${width}px;height:${height}px;overflow:hidden;background:#000}.visual-frame{position:absolute;width:${width}px;height:${height}px;overflow:hidden;transform-origin:center}.motion-frame{width:100%;height:100%;transform-origin:center}.text-motion{display:inline-block}.source-window{position:absolute;overflow:hidden}.visual{position:absolute}.overlay{position:absolute;max-width:90%;width:max-content;transform:translate(-50%,-50%);font-weight:700;line-height:1.12;text-align:center;white-space:pre-wrap;overflow-wrap:anywhere}.text-content{display:inline-block;padding:${10 * scale}px ${18 * scale}px;border-radius:${8 * scale}px}.caption{text-shadow:0 2px 12px #0009}audio{position:absolute}
 .adjustment-layer{position:absolute;inset:0;transform-origin:center;pointer-events:none}
 [data-revline-effects]{opacity:0!important}${options.preview?'video[data-revline-effects]{opacity:0.001!important}':''}.visual-effect-output{position:absolute;pointer-events:none}.solid-color-rectangle{position:absolute;z-index:2147483647;pointer-events:none;transform-origin:center}
 .cinematic-bars{position:absolute;inset:0;overflow:hidden;z-index:2147483647;pointer-events:none}.cinematic-bar{position:absolute;left:0;right:0;background:#000}.cinematic-bar.top{top:0;transform:translateY(-100%)}.cinematic-bar.bottom{bottom:0;transform:translateY(100%)}
-</style><script src="${gsapUrl}"></script><script src="${visualEffectsUrl}"></script><script src="${remotionTextUrl}"></script></head><body><div id="composition" data-composition-id="revline" data-duration="${safeDuration}" data-width="${width}" data-height="${height}" data-fps="${fps}">${compositionNodes}</div><script>
+</style><script src="${gsapUrl}"></script><script src="${visualEffectsUrl}"></script><script src="${remotionTextUrl}"></script>${options.preview || transitions.length ? `<script src="${remotionTransitionsUrl}"></script>` : ''}</head><body><div id="composition" data-composition-id="revline" data-duration="${safeDuration}" data-width="${width}" data-height="${height}" data-fps="${fps}">${compositionNodes}</div><script>
 const timeline=gsap.timeline({paused:true});
 ${animation.join('\n')}
 window.__revlineDurationTween=gsap.to({},{duration:${safeDuration},paused:true});timeline.add(window.__revlineDurationTween,0);window.__revlineDurationTween.paused(false);
@@ -203,6 +212,7 @@ window.__timelines=window.__timelines||{};window.__timelines.revline=timeline;
 ${visualEffectsRuntimeScript(timeline.clips.flatMap((clip, index) => clip.kind === 'video' || clip.kind === 'image' ? [{ id: `clip-${index}`, colorGrade: clip.colorGrade, zoomBlur: clip.zoomBlur, glitch: clip.glitch, invert: clip.invert, dither: clip.dither }] : []), fps, resolution)}
 window.__revlineVisualEffects.installAdjustmentLayers(${JSON.stringify(adjustmentSources(timeline.clips)).replace(/</g, '\\u003c')});
 if(window.__revlineRemotionText)window.__revlineTextLayerController=window.__revlineRemotionText.installTextLayers(${textSources});else throw new Error('Text renderer failed to load.');
+${transitions.length ? `if(window.__revlineRemotionTransitions)window.__revlineRemotionTransitions.installTransitions(${JSON.stringify(transitions).replace(/</g, '\\u003c')},${timeline.fps});else throw new Error('Transition renderer failed to load.');` : ''}
 document.querySelectorAll('video,audio').forEach(media=>{media.volume=Math.min(1,Number(media.dataset.volume));media.preservesPitch=true;});
 </script></body></html>`;
 }

@@ -1,4 +1,5 @@
-import { textStyle } from './text-style';
+import { textStyle, type TextAppearance } from './text-style';
+import type { TextFontId } from './text-fonts';
 
 export const VFX_TEXT_PRESETS = ['neon-echo', 'lyric-slam', 'kinetic-stack'] as const;
 export const REMOTION_TEXT_PRESETS = ['word-reveal', 'word-pop', 'slide-title', 'karaoke', ...VFX_TEXT_PRESETS] as const;
@@ -17,10 +18,12 @@ export const DEFAULT_TEXT_HIGHLIGHT = '#F5CF45';
 export type RemotionTextProps = {
   preset: RemotionTextPreset; text: string; frame: number; fps: number; durationInFrames: number;
   color: string; fontSize: number; highlightColor: string;
+  textStyle?: TextAppearance; fontFamily?: string; fontWeight?: number; resolution?: number;
 };
 export type RemotionTextSource = { id: string; start: number; offset: number; props: Omit<RemotionTextProps, 'frame'> };
 type TextTemplateClip = {
   kind: string; start: number; duration: number; text?: string; color?: string; fontSize?: number; textTemplate?: RemotionTextTemplate;
+  textStyle?: TextAppearance; fontFamily?: TextFontId;
 };
 
 export function validateRemotionTextTemplate(clip: Pick<TextTemplateClip, 'kind' | 'textTemplate'>) {
@@ -49,7 +52,8 @@ export function remotionTextProps(clip: TextTemplateClip, time: number, fps: num
     preset: template.preset, text: style.text,
     frame: Math.floor((time - clip.start + (template.offset ?? 0) + 1e-7) * fps),
     fps, durationInFrames: Math.max(1, Math.ceil(((template.duration ?? clip.duration) - 1e-7) * fps)),
-    color: clip.color ? style.color : VFX_TEXT_APPEARANCE[template.preset]?.color ?? style.color, fontSize: style.fontSize,
+    color: style.color, fontSize: style.fontSize,
+    textStyle: clip.textStyle, fontFamily: style.fontFamily, fontWeight: style.fontWeight, resolution,
     highlightColor: template.highlightColor ?? VFX_TEXT_APPEARANCE[template.preset]?.highlightColor ?? DEFAULT_TEXT_HIGHLIGHT,
   };
 }

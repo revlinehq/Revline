@@ -1,8 +1,9 @@
 import { cinematicBarSettings, motionAt, NEUTRAL_MOTION, solidColorSettings, visibleMotion } from './clip-effects';
 import { trackOf, type Clip } from './types';
+import { isTransitionClip } from './clip-transitions';
 
 export type AdjustmentSource = { clip: Clip; index: number };
-export const adjustmentSources = (clips: Clip[]): AdjustmentSource[] => clips.flatMap((clip,index) => clip.kind === 'effect' ? [{clip,index}] : []);
+export const adjustmentSources = (clips: Clip[]): AdjustmentSource[] => clips.flatMap((clip,index) => clip.kind === 'effect' && !isTransitionClip(clip) ? [{clip,index}] : []);
 
 /** The same sampled motion drives a retained preview and fresh export. */
 export function adjustmentFrame(clip: Clip, time: number) {
@@ -82,9 +83,9 @@ export function installAdjustmentLayers(initial: AdjustmentSource[]): Adjustment
     const nextHierarchy=ordered.map(entry=>entry.clip.id).join('|');
     if(nextHierarchy!==hierarchy){
       hierarchy=nextHierarchy;
-      const base=Array.from(composition.querySelectorAll<HTMLElement>('.visual-frame,.overlay'));
+      const base=Array.from(composition.querySelectorAll<HTMLElement>('.visual-frame,.overlay,.transition-pair')).filter(node=>!node.closest('.transition-pair')||node.classList.contains('transition-pair'));
       const inner=ordered[0]?.node??composition;
-      for(const node of base)if(node.parentElement!==inner)inner.insertBefore(node,inner.firstChild);
+      for(const node of base)if(node.parentElement!==inner){const retained=inner as HTMLElement&{moveBefore?(node:Node,before:Node|null):void};if(retained.moveBefore&&node.isConnected)retained.moveBefore(node,inner.firstChild);else inner.insertBefore(node,inner.firstChild);}
       for(let index=0;index<ordered.length;index++){const parent=ordered[index+1]?.node??composition;if(ordered[index].node.parentElement!==parent)parent.insertBefore(ordered[index].node,parent.firstChild);}
     }
     syncTimed();paint();

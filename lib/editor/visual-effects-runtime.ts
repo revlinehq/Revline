@@ -182,9 +182,10 @@ void main(){
     if (disposed || entry.failed) return;
     const time = clock.time(), start = Number(entry.source.dataset.start), end = start + Number(entry.source.dataset.duration);
     const passes=effectPasses(entry.effects,time);
-    if (!passes.length || time < start - 1e-6 || time >= end - 1e-6) { if (entry.canvas) release(entry); return; }
+    if (!passes.length || !entry.source.hasAttribute('data-revline-transition-visible') && (time < start - 1e-6 || time >= end - 1e-6)) { if (entry.canvas) release(entry); return; }
     const renderId = entry.source.getAttribute('data-hf-render-id') || entry.source.id;
-    const injected = document.getElementById(`__render_frame_${renderId}__`) as HTMLImageElement | null;
+    const held = entry.source.hasAttribute('data-revline-transition-hold');
+    const injected = held ? null : document.getElementById(`__render_frame_${renderId}__`) as HTMLImageElement | null;
     const source = injected || entry.source;
     if (source instanceof HTMLVideoElement ? source.readyState < 2 || source.seeking : !source.complete || !source.naturalWidth) return;
     const width = source instanceof HTMLVideoElement ? source.videoWidth : source.naturalWidth;
@@ -196,7 +197,7 @@ void main(){
     // Stop at the composition so viewing zoom remains a view of the same pixels.
     const transforms: string[] = [];
     for (let node: HTMLElement | null = entry.source; node && node.id !== 'composition'; node = node.parentElement) {
-      if (node.style.transform && node.style.transform !== 'none') transforms.push(node.style.transform);
+      if (node.style.transform && node.style.transform !== 'none') transforms.push(node.style.transform.includes('%') ? getComputedStyle(node).transform : node.style.transform);
     }
     const transformKey = transforms.join('|');
     const passKey=passes.map(pass=>pass.zoomBlur?.enabled?`${pass.zoomBlur.amount}:${pass.zoomBlur.centerX}:${pass.zoomBlur.centerY}`:'base').join('|');
@@ -217,7 +218,7 @@ void main(){
       gl.viewport(0, 0, canvas.width, canvas.height); gl.useProgram(entry.program!); gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, entry.texture!);
       if (entry.lastSource !== sourceKey || force && injected) {
         let textureSource: TexImageSource = source;
-        if (preview && source instanceof HTMLVideoElement && canvas.width < width) {
+        if (source instanceof HTMLVideoElement && (held || preview && canvas.width < width)) {
           const upload = entry.uploadCanvas ??= document.createElement('canvas');
           if (upload.width !== canvas.width) upload.width = canvas.width;
           if (upload.height !== canvas.height) upload.height = canvas.height;
@@ -264,7 +265,7 @@ void main(){
     const time = clock.time();
     for (const entry of entries.values()) {
       const start = Number(entry.source.dataset.start), end = start + Number(entry.source.dataset.duration);
-      if (entry.canvas && (time < start - 1e-6 || time >= end - 1e-6)) release(entry);
+      if (entry.canvas && !entry.source.hasAttribute('data-revline-transition-visible') && (time < start - 1e-6 || time >= end - 1e-6)) release(entry);
     }
     for (const entry of entries.values()) draw(entry, force);
   }

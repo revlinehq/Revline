@@ -9,7 +9,7 @@ execFileSync(process.env.SCENE_DETECT_PYTHON, ['-c', 'import scenedetect, cv2'],
 execFileSync(process.env.YT_DLP_PATH, ['--version'], { stdio: 'ignore' });
 if (!existsSync(process.env.BEAT_TRACK_MODEL_PATH)) throw new Error('Pinned beat model is missing.');
 if (!existsSync(await puppeteer.executablePath())) throw new Error('Chromium is missing.');
-for (const path of ['public/vendor/remotion-text.js', 'public/vendor/visual-effects.js', 'public/vendor/blaze-face.tflite', 'public/vendor/mediapipe/vision_wasm_internal.wasm']) {
+for (const path of ['public/vendor/remotion-text.js', 'public/vendor/remotion-transitions.js', 'public/vendor/visual-effects.js', 'public/vendor/blaze-face.tflite', 'public/vendor/mediapipe/vision_wasm_internal.wasm']) {
   if (!existsSync(path)) throw new Error(`Required preview/export asset is missing: ${path}`);
 }
 const browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox', '--disable-dev-shm-usage'] });

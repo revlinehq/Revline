@@ -8,7 +8,8 @@ const effects=await tsImport('../lib/editor/text-effects.ts',import.meta.url);co
 const generateComposition=module.generateComposition??module.default.generateComposition;
 const before={fps:30,aspectRatio:'square',tracks:{visual:3,overlay:0,audio:0,effects:0},clips:[{id:'plain',kind:'caption',track:2,start:0,sourceStart:0,duration:3,text:'Plain words',x:.5,y:.7},{id:'animated',kind:'graphic',track:3,start:0,sourceStart:0,duration:3,text:'Animated words',x:.5,y:.3,textTemplate:{preset:'word-pop',duration:3,offset:0}}]};
 const transform=rotation=>({x:.5,y:.5,scale:1,opacity:1,rotation});
-const after={...before,clips:before.clips.map((clip,index)=>({...clip,text:index?'Edited animated words':'Edited plain words',transform:transform(index?-30:25),...(index?textEffectPatch(clip,'pop'):{})}))};
+const decoration={strokeWidth:4,strokeColor:'#FF0044',shadowX:3,shadowY:5,shadowBlur:8,shadowColor:'#112233',glowBlur:10,glowColor:'#66DDFF'};
+const after={...before,clips:before.clips.map((clip,index)=>({...clip,text:index?'Edited animated words':'Edited plain words',fontFamily:index?'dm-serif':'anton',textStyle:decoration,transform:transform(index?-30:25),...(index?textEffectPatch(clip,'pop'):{})}))};
 const html=generateComposition(before,[]),exportHtml=generateComposition(after,[]);
 const bundle=await build({stdin:{resolveDir:process.cwd(),loader:'ts',contents:"import {updateLiveTextEffects} from './lib/editor/live-preview-effects';window.applyTextTimeline=(previous,next)=>updateLiveTextEffects(document,previous,next);"},bundle:true,platform:'browser',format:'iife',write:false,define:{'process.env.NODE_ENV':'"production"'}});
 const browser=await puppeteer.launch({headless:true,protocolTimeout:30000,args:['--no-sandbox','--disable-dev-shm-usage']});
@@ -18,7 +19,7 @@ page.on('request',async request=>{const url=new URL(request.url());try{
  if(url.hostname!=='text-fixture.revline.test')return request.abort();
  if(url.pathname==='/'||url.pathname==='/export')return request.respond({status:200,contentType:'text/html',body:url.pathname==='/export'?exportHtml:html});
  if(!/^\/(vendor|fonts)\/[\w./-]+$/.test(url.pathname))return request.abort();
- const contentType=url.pathname.endsWith('.woff2')?'font/woff2':'application/javascript';
+ const contentType=url.pathname.endsWith('.woff2')?'font/woff2':url.pathname.endsWith('.ttf')?'font/ttf':'application/javascript';
  await request.respond({status:200,contentType,body:await readFile('public'+url.pathname)});
  }catch(error){errors.push(error.message);await request.abort()}});
 const read=()=>page.evaluate(()=>[0,1].map(index=>{const node=document.getElementById('clip-'+index),matrix=new DOMMatrix(getComputedStyle(node).transform);return{text:node.querySelector('.text-content').textContent,rotation:Math.atan2(matrix.b,matrix.a)*180/Math.PI}}));
@@ -27,11 +28,15 @@ try{
  await page.addScriptTag({content:bundle.outputFiles[0].text});
  await page.evaluate(()=>{window.__timelines.revline.seek(1);window.textBefore={plain:document.getElementById('clip-0'),animated:document.getElementById('clip-1'),clock:window.__timelines.revline,controller:window.__revlineTextLayerController}});
  assert.equal(await page.evaluate(({before,after})=>window.applyTextTimeline(before,after),{before,after}),true,'Text edits update the current composition in place');
+ await page.evaluate(()=>document.fonts.ready);
+ const decorationRead=()=>page.evaluate(()=>[0,1].map(index=>{const node=document.getElementById('clip-'+index),content=node.querySelector('.text-content'),style=getComputedStyle(content);return{font:getComputedStyle(node).fontFamily,weight:getComputedStyle(node).fontWeight,stroke:style.webkitTextStrokeWidth,shadow:style.textShadow}}));
+ const liveDecoration=await decorationRead();assert.ok(liveDecoration[0].font.includes('Anton')&&liveDecoration[1].font.includes('DM Serif Display'),'Each text clip uses its chosen bundled font');assert.ok(liveDecoration.every(style=>style.stroke==='4px'&&style.shadow.includes('102, 221, 255')),'Plain and animated text use the same custom stroke, shadow and glow');
  const live=await read();assert.deepEqual(live.map(value=>value.text),['Edited plain words','Edited animated words']);assert.ok(Math.abs(live[0].rotation-25)<.001&&Math.abs(live[1].rotation+30)<.001,'Plain and Remotion parent layers rotate');
  assert.equal(await page.evaluate(()=>document.getElementById('clip-0')===window.textBefore.plain&&document.getElementById('clip-1')===window.textBefore.animated&&window.__timelines.revline===window.textBefore.clock&&window.__timelines.revline.time()===1),true,'Words and rotation keep the nodes and clock');
  assert.equal(await page.evaluate(({after})=>window.applyTextTimeline(after,JSON.parse(JSON.stringify(after))),{after}),true,'A saved acknowledgement is accepted without replaying text');
  assert.equal(await page.evaluate(()=>window.__revlineTextLayerController===window.textBefore.controller),true,'Saved echoes retain the text renderer');
  await page.goto('http://text-fixture.revline.test/export',{waitUntil:'load'});await page.waitForSelector('[data-remotion-text]',{timeout:10000});await page.evaluate(()=>{window.__timelines.revline.seek(1)});
+ await page.evaluate(()=>document.fonts.ready);assert.deepEqual(await decorationRead(),liveDecoration,'Bundled fonts and decoration match the fresh export composition');
  assert.deepEqual(await read(),live,'Fresh export renders the same edited words and rotation as live preview');
  const popState=()=>page.evaluate(()=>{const motion=document.getElementById('clip-1-motion'),matrix=new DOMMatrix(getComputedStyle(motion).transform);return{scale:matrix.a,opacity:Number(getComputedStyle(motion).opacity),template:document.querySelector('#clip-1 [data-remotion-text]').getAttribute('data-remotion-text')}});
  await page.evaluate(()=>{window.__timelines.revline.seek(.05)});const entrance=await popState();

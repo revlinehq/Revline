@@ -7,3 +7,5 @@ if(existsSync('node_modules/@mediapipe/tasks-vision/wasm'))cpSync('node_modules/
 await build({ entryPoints: ['lib/editor/remotion-text-runtime.tsx'], outfile: 'public/vendor/remotion-text.js', bundle: true, minify: true, platform: 'browser', target: 'es2020', format: 'iife', globalName: '__revlineRemotionText', jsx: 'automatic', define: { 'process.env.NODE_ENV': '"production"' }, legalComments: 'linked' });
 copyFileSync('node_modules/remotion/LICENSE.md', 'public/vendor/remotion-LICENSE.md');
 await build({ entryPoints: ['lib/editor/visual-effects-runtime.ts'], outfile: 'public/vendor/visual-effects.js', bundle: true, minify: true, platform: 'browser', target: 'es2020', format: 'iife', globalName: '__revlineVisualEffects', legalComments: 'none' });
+
+await build({ entryPoints: ['lib/editor/remotion-transitions-runtime.ts'], outfile: 'public/vendor/remotion-transitions.js', bundle: true, minify: true, platform: 'browser', target: 'es2020', format: 'iife', globalName: '__revlineRemotionTransitions', jsx: 'automatic', define: { 'process.env.NODE_ENV': '"production"' }, legalComments: 'linked' });
