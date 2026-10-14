@@ -2,7 +2,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, expect, test, vi } from 'vitest';
 import { EditorAccessGate } from './editor-access-gate';
 
-const fixture = vi.hoisted(() => ({ status: undefined as undefined | { enabled: boolean; configured: boolean; subscribed: boolean; trialEligible: boolean; needsPayment: boolean } }));
+const fixture = vi.hoisted(() => ({ status: undefined as undefined | { enabled: boolean; configured: boolean; subscribed: boolean; complimentary?: boolean; trialEligible: boolean; needsPayment: boolean } }));
 vi.mock('convex/react', () => ({ useConvexAuth: () => ({ isAuthenticated: true }), useQuery: () => fixture.status, useAction: () => vi.fn() }));
 vi.mock('./workspace-nav', () => ({ WorkspaceNav: () => <nav>Revline</nav> }));
 beforeEach(() => { fixture.status = { enabled: true, configured: true, subscribed: false, trialEligible: true, needsPayment: false }; });
@@ -20,6 +20,12 @@ test.each(['subscribed', 'local'])('%s access mounts the editor', mode => {
   fixture.status!.subscribed = mode === 'subscribed';
   fixture.status!.enabled = mode !== 'local';
   expect(renderToStaticMarkup(<EditorAccessGate><div>Editing workflow</div></EditorAccessGate>)).toContain('Editing workflow');
+});
+test('complimentary membership mounts the editor without a Stripe subscription or configuration', () => {
+  Object.assign(fixture.status!, { complimentary: true, configured: false });
+  const html = renderToStaticMarkup(<EditorAccessGate><div>Editing workflow</div></EditorAccessGate>);
+  expect(html).toContain('Editing workflow');
+  expect(html).not.toContain('Start 3-day free trial');
 });
 test('payment failure directs users to their existing billing account', () => {
   Object.assign(fixture.status!, { needsPayment: true, trialEligible: false });

@@ -20,7 +20,7 @@ export function EditorAccessGate({ children, loading }: { children: ReactNode; l
   const inFlight = useRef(false);
 
   if (!status) return loading ?? <div className="editor-access-loading" role="status"><LoaderCircle size={18} className="animate-spin" />Checking your plan…</div>;
-  if (!status.enabled || status.subscribed) return children;
+  if (!status.enabled || status.subscribed || status.complimentary) return children;
 
   async function openCheckout() {
     if (!status?.configured || inFlight.current) return;

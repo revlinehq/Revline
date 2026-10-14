@@ -12,6 +12,7 @@ import type * as assets from "../assets.js";
 import type * as assistant from "../assistant.js";
 import type * as assistantActions from "../assistantActions.js";
 import type * as billing from "../billing.js";
+import type * as editorAccess from "../editorAccess.js";
 import type * as http from "../http.js";
 import type * as lib_auth from "../lib/auth.js";
 import type * as lib_billing_access from "../lib/billing_access.js";
@@ -45,6 +46,7 @@ declare const fullApi: ApiFromModules<{
   assistant: typeof assistant;
   assistantActions: typeof assistantActions;
   billing: typeof billing;
+  editorAccess: typeof editorAccess;
   http: typeof http;
   "lib/auth": typeof lib_auth;
   "lib/billing_access": typeof lib_billing_access;

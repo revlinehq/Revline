@@ -1,10 +1,12 @@
 /// <reference types="vite/client" />
 import { StripeSubscriptions } from '@convex-dev/stripe';
 import stripeTest from '@convex-dev/stripe/test';
+import workflowTest from '@convex-dev/workflow/test';
 import { convexTest } from 'convex-test';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { api, components, internal } from './_generated/api';
 import schema from './schema';
+import * as editorAccessAdmin from './editorAccess';
 
 const modules = import.meta.glob('./**/*.ts');
 const stripeMock = vi.hoisted(() => ({ create: vi.fn(), retrieve: vi.fn(), price: vi.fn(), subscriptions: vi.fn() }));
@@ -152,4 +154,68 @@ test('an expired trial cannot retain access while a webhook is delayed', async (
   await t.mutation(components.stripe.private.handleSubscriptionUpdated, { stripeSubscriptionId: 'sub_owner_trialing', status: 'trialing', currentPeriodEnd: Math.floor(Date.now() / 1000) - 1, cancelAtPeriodEnd: false });
   expect(await owner.query(api.billing.isSubscribed, {})).toBe(false);
   await expect(owner.mutation(api.projects.create, { title: 'Expired', aspectRatio: 'vertical' })).rejects.toThrow('SUBSCRIPTION_REQUIRED');
+});
+
+const complimentaryIdentity = { ...identity, subject: 'user_complimentary', tokenIdentifier: `${identity.issuer}|user_complimentary` };
+async function complimentaryFixture(expiresAt?: number) {
+  const { t } = fixture();
+  await t.mutation(internal.editorAccess.grantComplimentary, { ownerId: complimentaryIdentity.subject, reason: 'Operator-approved complimentary membership', ...(expiresAt !== undefined ? { expiresAt } : {}) });
+  return { t, owner: t.withIdentity(complimentaryIdentity) };
+}
+
+test('complimentary administration is internal and refuses emails as authority', async () => {
+  expect(editorAccessAdmin.grantComplimentary.isInternal).toBe(true);
+  expect(editorAccessAdmin.revokeComplimentary.isInternal).toBe(true);
+  expect(editorAccessAdmin.complimentaryStatus.isInternal).toBe(true);
+  const { t } = fixture();
+  await expect(t.mutation(internal.editorAccess.grantComplimentary, { ownerId: 'person@example.com', reason: 'Invalid' })).rejects.toThrow('Clerk user ID');
+  await expect(t.mutation(internal.editorAccess.grantComplimentary, { ownerId: 'user_fixture', reason: ' ' })).rejects.toThrow('reason');
+});
+
+test('lifetime complimentary access authorizes editing and export without pretending to be a Stripe subscription', async () => {
+  const { t, owner } = await complimentaryFixture();
+  workflowTest.register(t);
+  vi.stubEnv('STRIPE_SECRET_KEY', '');
+  expect(await owner.query(api.billing.status, {})).toMatchObject({ complimentary: true, subscribed: false, trialEligible: false, needsPayment: false, plan: 'pro', configured: false });
+  expect(await owner.query(api.billing.isSubscribed, {})).toBe(false);
+  const projectId = await owner.mutation(api.projects.create, { title: 'Complimentary edit', aspectRatio: 'vertical' });
+  await owner.mutation(api.projects.saveTimeline, { projectId, timeline: { clips: [{ id: 'title', kind: 'caption', text: 'Hello', start: 0, duration: 2, sourceStart: 0 }], fps: 30, aspectRatio: 'vertical' }, expectedRevision: 0 });
+  const jobId = await owner.mutation(api.renders.start, { projectId, resolution: 1080, fps: 30, quality: 'high' });
+  expect(await t.run(ctx => ctx.db.get(jobId))).toMatchObject({ ownerId: complimentaryIdentity.subject, status: 'queued' });
+  expect(await t.query(internal.editorAccess.complimentaryStatus, { ownerId: complimentaryIdentity.subject })).toMatchObject({ active: true });
+  expect(await t.query(internal.editorAccess.complimentaryStatus, { ownerId: complimentaryIdentity.subject })).not.toHaveProperty('expiresAt');
+});
+
+test('complimentary access cannot create Stripe checkout or portal sessions', async () => {
+  const { owner } = await complimentaryFixture();
+  await expect(owner.action(api.billing.createCheckout, { plan: 'pro' })).rejects.toThrow('No payment is required');
+  await expect(owner.action(api.billing.createPortal, {})).rejects.toThrow('does not require a billing portal');
+  expect(StripeSubscriptions.prototype.getOrCreateCustomer).not.toHaveBeenCalled();
+  expect(stripeMock.create).not.toHaveBeenCalled();
+});
+
+test('complimentary entitlement belongs only to its Clerk subject and does not weaken project ownership', async () => {
+  const { t, owner } = await complimentaryFixture();
+  const projectId = await owner.mutation(api.projects.create, { title: 'Private', aspectRatio: 'vertical' });
+  const stranger = t.withIdentity({ ...identity, subject: 'user_stranger', tokenIdentifier: `${identity.issuer}|user_stranger`, email: 'same-address@example.com' });
+  expect(await stranger.query(api.billing.status, {})).not.toHaveProperty('complimentary');
+  expect(await t.query(api.billing.status, {})).not.toHaveProperty('complimentary');
+  await expect(t.mutation(api.projects.create, { title: 'Anonymous', aspectRatio: 'vertical' })).rejects.toThrow('Authentication required');
+  await expect(stranger.mutation(api.projects.create, { title: 'Blocked', aspectRatio: 'vertical' })).rejects.toThrow('SUBSCRIPTION_REQUIRED');
+  await t.mutation(internal.editorAccess.grantComplimentary, { ownerId: 'user_stranger', reason: 'Independent grant' });
+  await expect(stranger.mutation(api.projects.update, { projectId, title: 'Stolen' })).rejects.toThrow('Project not found');
+});
+
+test('expiration and revocation remove complimentary write access', async () => {
+  const { t, owner } = await complimentaryFixture(Date.now() + 3600000);
+  const entitlement = await t.run(ctx => ctx.db.query('editorEntitlements').withIndex('by_owner', q => q.eq('ownerId', complimentaryIdentity.subject)).unique());
+  await t.run(ctx => ctx.db.patch(entitlement!._id, { expiresAt: Date.now() - 1 }));
+  expect(await owner.query(api.billing.status, {})).not.toHaveProperty('complimentary');
+  await expect(owner.mutation(api.projects.create, { title: 'Expired', aspectRatio: 'vertical' })).rejects.toThrow('SUBSCRIPTION_REQUIRED');
+  const id = await t.mutation(internal.editorAccess.grantComplimentary, { ownerId: complimentaryIdentity.subject, reason: 'Lifetime renewal' });
+  expect(id).toBe(entitlement!._id);
+  expect(await t.query(internal.editorAccess.complimentaryStatus, { ownerId: complimentaryIdentity.subject })).not.toHaveProperty('expiresAt');
+  await t.mutation(internal.editorAccess.revokeComplimentary, { ownerId: complimentaryIdentity.subject });
+  expect(await t.query(internal.editorAccess.hasComplimentary, { ownerId: complimentaryIdentity.subject })).toBe(false);
+  await expect(owner.mutation(api.projects.create, { title: 'Revoked', aspectRatio: 'vertical' })).rejects.toThrow('SUBSCRIPTION_REQUIRED');
 });

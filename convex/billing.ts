@@ -4,7 +4,7 @@ import { ConvexError, v } from "convex/values";
 import { components, internal } from "./_generated/api";
 import { action, internalMutation, query } from "./_generated/server";
 import { EDITOR_PLAN } from "../lib/billing/plan";
-import { billingConfigured, billingEnabled, editorSubscriptions, hasEditorAccess, isEditorSubscription } from './lib/billing_access';
+import { billingConfigured, billingEnabled, editorSubscriptions, hasComplimentaryEditorAccess, hasEditorAccess, isEditorSubscription } from './lib/billing_access';
 
 const hasAccess = hasEditorAccess;
 function ready() { return billingEnabled() && billingConfigured(); }
@@ -19,10 +19,12 @@ export const isSubscribed = query({ args: {}, returns: v.boolean(), handler: asy
   const identity = await ctx.auth.getUserIdentity(); if (!identity || !ready()) return false;
   return (await editorSubscriptions(ctx, identity.subject)).some(hasAccess);
 }});
-export const status = query({ args: {}, returns: v.object({ enabled: v.boolean(), configured: v.boolean(), subscribed: v.boolean(), trialEligible: v.boolean(), needsPayment: v.boolean(), plan: v.union(v.literal("free"), v.literal("pro")) }), handler: async (ctx) => {
+export const status = query({ args: {}, returns: v.object({ enabled: v.boolean(), configured: v.boolean(), subscribed: v.boolean(), complimentary: v.optional(v.boolean()), complimentaryExpiresAt: v.optional(v.number()), trialEligible: v.boolean(), needsPayment: v.boolean(), plan: v.union(v.literal("free"), v.literal("pro")) }), handler: async (ctx) => {
   const identity = await ctx.auth.getUserIdentity(); let subscribed = false; let trialEligible = true; let needsPayment = false;
+  const complimentary = !!identity && await hasComplimentaryEditorAccess(ctx, identity.subject);
   if (identity && ready()) { const subs = await editorSubscriptions(ctx, identity.subject); subscribed = subs.some(hasAccess); trialEligible = subs.length === 0; needsPayment = subs.some(sub => ['past_due', 'unpaid', 'paused', 'incomplete'].includes(sub.status)); }
-  return { enabled: billingEnabled(), configured: ready(), subscribed, trialEligible, needsPayment, plan: subscribed ? "pro" as const : "free" as const };
+  const entitlement = complimentary ? await ctx.db.query('editorEntitlements').withIndex('by_owner', q => q.eq('ownerId', identity!.subject)).unique() : null;
+  return { enabled: billingEnabled(), configured: ready(), subscribed, ...(complimentary ? { complimentary: true, ...(entitlement?.expiresAt !== undefined ? { complimentaryExpiresAt: entitlement.expiresAt } : {}) } : {}), trialEligible: complimentary ? false : trialEligible, needsPayment: complimentary ? false : needsPayment, plan: subscribed || complimentary ? "pro" as const : "free" as const };
 }});
 export const reserveCheckout = internalMutation({
   args: { ownerId: v.string(), priceId: v.string(), origin: v.string(), trialEligible: v.boolean(), expiredRequestId: v.optional(v.string()) },
@@ -47,6 +49,7 @@ export const saveCheckout = internalMutation({
 });
 export const createCheckout = action({ args: { plan: v.literal("pro") }, returns: v.object({ sessionId: v.string(), url: v.union(v.string(), v.null()) }), handler: async (ctx): Promise<{sessionId: string; url: string | null}> => {
   const identity = await ctx.auth.getUserIdentity(); if (!identity) throw new ConvexError("Authentication required");
+  if (await ctx.runQuery(internal.editorAccess.hasComplimentary, { ownerId: identity.subject })) throw new ConvexError('Your complimentary membership already includes editor access. No payment is required.');
   const origin = requireBilling(); const stripe = new StripeSubscriptions(components.stripe, {});
   const subscriptions = await editorSubscriptions(ctx, identity.subject);
   if (subscriptions.some(hasAccess)) throw new ConvexError("You already have a subscription. Manage it in billing.");
@@ -88,6 +91,7 @@ export const createCheckout = action({ args: { plan: v.literal("pro") }, returns
 }});
 export const createPortal = action({ args: {}, returns: v.object({ url: v.string() }), handler: async (ctx) => {
   const identity = await ctx.auth.getUserIdentity(); if (!identity) throw new ConvexError("Authentication required");
+  if (await ctx.runQuery(internal.editorAccess.hasComplimentary, { ownerId: identity.subject })) throw new ConvexError('Your complimentary membership does not require a billing portal.');
   const origin = requireBilling();
   const customer = await ctx.runQuery(components.stripe.public.getCustomerByUserId, { userId: identity.subject });
   if (!customer) throw new ConvexError("No billing account exists");

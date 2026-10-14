@@ -11,8 +11,14 @@ export async function editorSubscriptions(ctx: QueryCtx | MutationCtx | ActionCt
   return (await ctx.runQuery(components.stripe.public.listSubscriptionsByUserId, { userId })).filter(isEditorSubscription);
 }
 
+export async function hasComplimentaryEditorAccess(ctx: QueryCtx | MutationCtx, ownerId: string) {
+  const entitlement = await ctx.db.query('editorEntitlements').withIndex('by_owner', q => q.eq('ownerId', ownerId)).unique();
+  return !!entitlement && entitlement.revokedAt === undefined && (entitlement.expiresAt === undefined || entitlement.expiresAt > Date.now());
+}
+
 export async function requireEditorAccess(ctx: QueryCtx | MutationCtx, ownerId: string) {
   if (!billingEnabled()) return;
+  if (await hasComplimentaryEditorAccess(ctx, ownerId)) return;
   if (!billingConfigured()) throw new ConvexError({ code: 'BILLING_UNAVAILABLE', message: 'Billing is temporarily unavailable. Please try again.' });
   if (!(await editorSubscriptions(ctx, ownerId)).some(hasEditorAccess)) {
     throw new ConvexError({ code: 'SUBSCRIPTION_REQUIRED', message: 'Start your free trial or renew your subscription to edit and export.' });
