@@ -10,7 +10,7 @@ import { WorkspaceNav } from './workspace-nav';
 import './shared.css';
 import './editor-access-gate.css';
 
-export function EditorAccessGate({ children }: { children: ReactNode }) {
+export function EditorAccessGate({ children, loading }: { children: ReactNode; loading?: ReactNode }) {
   const { isAuthenticated } = useConvexAuth();
   const status = useQuery(api.billing.status, isAuthenticated ? {} : 'skip');
   const checkout = useAction(api.billing.createCheckout);
@@ -19,7 +19,7 @@ export function EditorAccessGate({ children }: { children: ReactNode }) {
   const [error, setError] = useState('');
   const inFlight = useRef(false);
 
-  if (!status) return <div className="editor-access-loading" role="status"><LoaderCircle size={18} className="animate-spin" />Checking your plan…</div>;
+  if (!status) return loading ?? <div className="editor-access-loading" role="status"><LoaderCircle size={18} className="animate-spin" />Checking your plan…</div>;
   if (!status.enabled || status.subscribed) return children;
 
   async function openCheckout() {
