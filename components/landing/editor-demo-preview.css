@@ -1,5 +1,2 @@
-.landing-demo-poster-button{display:block;width:100%;padding:0;border:0;background:transparent;border-radius:16px;text-align:left;overflow:hidden}
 .landing-demo-poster{display:block;position:relative;width:100%;aspect-ratio:1100/726;border-radius:16px;overflow:hidden}
 .landing-demo-poster>img{display:block;width:100%;height:auto}
-.landing-demo-poster-action{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);display:flex;align-items:center;gap:9px;padding:13px 18px;border-radius:10px;background:#4768ef;color:#fff;font:500 14px var(--font-space-grotesk),sans-serif;box-shadow:0 3px 0 #1c2e82;white-space:nowrap}
-.landing-demo-poster-action>.filled-play-icon{width:16px;height:16px}
