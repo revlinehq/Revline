@@ -212,7 +212,7 @@ async function main() {
     if (projectId && ownerSession) {
       const owner = await client(ownerSession);
       const jobs = await owner.query(api.renders.list, { projectId });
-      for (const job of jobs) if (job.status === 'queued' || job.status === 'rendering') await owner.mutation(api.renders.fail, { jobId: job._id, workerSecret: process.env.RENDER_WORKER_SECRET!, error: 'Disposable integration fixture cleanup' });
+      for (const job of jobs) if ((job.status === 'queued' || job.status === 'rendering') && job.taskId) await owner.mutation(api.mediaTasks.cancel, {taskId:job.taskId});
       await owner.mutation(api.projects.remove, { projectId });
     }
     for (const userId of users) clerk(`/users/${userId}`, 'DELETE');

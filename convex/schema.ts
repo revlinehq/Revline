@@ -49,7 +49,7 @@ export const timelineMarkerValidator = v.object({ id: v.string(), time: v.number
 export const timelineValidator = v.object({ clips: v.array(clipValidator), fps: v.number(), aspectRatio, tracks: v.optional(v.object({ visual: v.number(), overlay: v.number(), audio: v.number(), effects: v.optional(v.number()) })), markers: v.optional(v.array(timelineMarkerValidator)) });
 export const assistantRecoveryValidator = v.object({requests:v.array(v.string()),runId:v.string(),revision:v.number(),savedEdits:v.optional(v.number()),reason:v.string(),status:v.union(v.literal('failed'),v.literal('stopped')),updatedAt:v.number()});
 export const projectFields = {
-  title: v.string(), ownerId: v.string(), aspectRatio, createdAt: v.number(), updatedAt: v.number(),
+  deleting:v.optional(v.boolean()), title: v.string(), ownerId: v.string(), aspectRatio, createdAt: v.number(), updatedAt: v.number(),
   timeline: v.optional(timelineValidator), revision: v.optional(v.number()), history: v.optional(v.array(timelineValidator)),
   threadId: v.optional(v.string()), aiRunning: v.optional(v.boolean()), aiError: v.optional(v.string()), aiRunId: v.optional(v.string()), aiUndoRecorded: v.optional(v.boolean()), aiCheckpointRevision: v.optional(v.number()),
   aiRequest:v.optional(v.object({prompt:v.string(),messageId:v.string(),startedRevision:v.number()})),aiRecovery:v.optional(assistantRecoveryValidator),
@@ -88,11 +88,13 @@ export const renderFields = {
   progress: v.optional(v.number()), assetIds: v.optional(v.array(v.id("assets"))), taskId: v.optional(v.id('mediaTasks')),
 };
 export const renderDocument = v.object({ _id: v.id("renderJobs"), _creationTime: v.number(), ...renderFields, url: v.union(v.string(), v.null()) });
+const {timeline:_snapshot,...renderSummaryFields}=renderFields;
+export const renderSummaryDocument=v.object({_id:v.id('renderJobs'),_creationTime:v.number(),...renderSummaryFields,url:v.union(v.string(),v.null())});
 export const r2UploadFields = {
     ownerId: v.string(), projectId: v.id("projects"), jobId: v.optional(v.id("renderJobs")), taskId: v.optional(v.id('mediaTasks')), taskLeaseToken: v.optional(v.string()),
     key: v.string(), uploadId: v.string(), fileName: v.string(), contentType: v.string(), kind: assetKind,
     size: v.number(), partSize: v.number(), duration: v.optional(v.number()), width: v.optional(v.number()), height: v.optional(v.number()),
-    expiresAt: v.number(), assetId: v.optional(v.id("assets")), completed: v.optional(v.boolean()),
+    cleanupScheduled:v.optional(v.boolean()), expiresAt: v.number(), assetId: v.optional(v.id("assets")), completed: v.optional(v.boolean()),
 };
 export const r2UploadDocument = v.object({ _id: v.id("r2Uploads"), _creationTime: v.number(), ...r2UploadFields });
 export const userFields = {
@@ -105,7 +107,7 @@ export const mediaTaskStatus = v.union(v.literal('queued'), v.literal('running')
 export const mediaTaskFields = {
   ownerId: v.string(), projectId: v.id('projects'), kind: mediaTaskKind,
   assetId: v.optional(v.id('assets')), renderJobId: v.optional(v.id('renderJobs')), analysisRequestId: v.optional(v.id('analysisRequests')),
-  status: mediaTaskStatus, workflowId: v.optional(v.string()), attempt: v.number(), progress: v.number(),
+  status: mediaTaskStatus, claimable:v.optional(v.boolean()), workflowId: v.optional(v.string()), attempt: v.number(), progress: v.number(),
   outputAssetId: v.optional(v.id('assets')),
   sourceUrl: v.optional(v.string()),
   frameRequest: v.optional(frameRequestValidator), frameInspection: v.optional(frameInspectionValidator),
@@ -138,7 +140,7 @@ export default defineSchema({
   timelineShares:defineTable({projectId:v.id('projects'),ownerId:v.string(),title:v.string(),timeline:timelineValidator,published:v.boolean(),createdAt:v.number(),updatedAt:v.number()}).index('by_project',['projectId']),
   shareAssets:defineTable({shareId:v.id('timelineShares'),...sharedAssetFields}).index('by_share',['shareId']).index('by_storageId',['storageId']).index('by_r2Key',['r2Key']).index('by_thumbnailStorageId',['thumbnailStorageId']).index('by_owner_r2Key',['ownerId','r2Key']).index('by_owner_storageId',['ownerId','storageId']).index('by_owner_thumbnail',['ownerId','thumbnailStorageId']),
   billingCheckouts: defineTable({ ownerId: v.string(), priceId: v.string(), origin: v.string(), trialEligible: v.boolean(), requestId: v.string(), createdAt: v.number(), sessionId: v.optional(v.string()), url: v.optional(v.string()), expiresAt: v.optional(v.number()) }).index('by_owner', ['ownerId']),
-  mediaTasks: defineTable(mediaTaskFields).index('by_status_createdAt', ['status', 'createdAt']).index('by_asset_kind', ['assetId', 'kind']).index('by_project_createdAt', ['projectId', 'createdAt']),
+  mediaTasks: defineTable(mediaTaskFields).index('by_status_createdAt', ['status', 'createdAt']).index('by_status_claimable_created',['status','claimable','createdAt']).index('by_status_updated',['status','updatedAt']).index('by_asset_kind', ['assetId', 'kind']).index('by_project_createdAt', ['projectId', 'createdAt']),
   users: defineTable(userFields).index("by_clerk_id", ["clerkId"]),
   projects: defineTable(projectFields).index("by_ownerId_updatedAt", ["ownerId", "updatedAt"]),
   assets: defineTable(assetFields).index("by_ownerId_projectId", ["ownerId", "projectId"]).index("by_ownerId_createdAt", ["ownerId", "createdAt"]).index("by_storageId", ["storageId"]).index("by_r2Key", ["r2Key"]).index('by_thumbnailStorageId',['thumbnailStorageId']).index('by_owner_r2Key',['ownerId','r2Key']).index('by_owner_storageId',['ownerId','storageId']).index('by_owner_thumbnail',['ownerId','thumbnailStorageId']).index('by_owner_audio',['ownerId','audioAssetId']),

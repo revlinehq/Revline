@@ -1,7 +1,7 @@
 /// <reference types="vite/client" />
 import { convexTest } from 'convex-test';
 import { afterEach, expect, test, vi } from 'vitest';
-import { api } from './_generated/api';
+import { api, internal } from './_generated/api';
 import schema from './schema';
 
 const modules = import.meta.glob('./**/*.ts');
@@ -22,7 +22,7 @@ async function fixture() {
 test('stores native instantaneous words while retaining positive caption segments', async () => {
   const { owner, projectId, assetId } = await fixture();
   const transcript = { words: [{ text: 'A', start: .1, end: .1 }, { text: 'word.', start: .1, end: .8 }], segments: [{ text: 'A word.', start: .1, end: .8 }] };
-  await owner.mutation(api.assets.saveAnalysis, { projectId, assetId, workerSecret: 'fixture-secret', transcript });
+  await owner.mutation(internal.assets.saveAnalysis, { projectId, assetId, workerSecret: 'fixture-secret', transcript });
   expect((await owner.query(api.assets.get, { projectId, assetId })).analysis?.transcript).toEqual(transcript);
 });
 
@@ -33,5 +33,5 @@ test.each([
   { words: [{ text: 'Negative', start: -.1, end: .1 }], segments: [] },
 ])('refuses invalid ranges without relaxing segment or source bounds', async transcript => {
   const { owner, projectId, assetId } = await fixture();
-  await expect(owner.mutation(api.assets.saveAnalysis, { projectId, assetId, workerSecret: 'fixture-secret', transcript })).rejects.toThrow('Invalid transcript timing');
+  await expect(owner.mutation(internal.assets.saveAnalysis, { projectId, assetId, workerSecret: 'fixture-secret', transcript })).rejects.toThrow('Invalid transcript timing');
 });

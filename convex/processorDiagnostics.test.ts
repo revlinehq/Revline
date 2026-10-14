@@ -1,3 +1,4 @@
+import { completeDeletion } from '../lib/test-support/convex-deletion';
 /// <reference types="vite/client" />
 import { convexTest } from 'convex-test';
 import workflowTest from '@convex-dev/workflow/test';
@@ -65,7 +66,7 @@ test('the stacked shader fixture stores generated media, preserves both timed pa
   expect(task).toMatchObject({ taskId: created.taskId, render: { assets: [{ _id: assets[0]._id, kind: 'image' }], timeline: project.timeline } });
   await expect(t.withIdentity({ subject: 'customer' }).query(api.projects.get, { projectId: created.projectId })).rejects.toThrow('Project not found');
   await t.run(async ctx => { await ctx.db.patch(created.jobId, { status: 'failed' }); });
-  await owner.mutation(api.projects.remove, { projectId: created.projectId });
+  await owner.mutation(api.projects.remove, { projectId: created.projectId });await completeDeletion(t, created.projectId);
   expect(await t.run(ctx => ctx.storage.get(storageId))).toBeNull();
   expect(await t.run(ctx => ctx.db.get(created.projectId))).toBeNull();
   expect(await t.run(ctx => ctx.db.get(created.taskId))).toBeNull();

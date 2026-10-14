@@ -19,7 +19,7 @@ async function fixture() {
 }
 test('persists both semantic descriptions and measured shots and records fresh completion', async () => {
   const { t, owner, projectId, assetId } = await fixture();
-  await owner.mutation(api.assets.saveAnalysis, { projectId, assetId, workerSecret: 'test-secret', shots, understanding: { summary: 'A launch.', scenes: [{ start: 0.8, end: 3, description: 'A launch.', score: 0.9 }] } });
+  await owner.mutation(internal.assets.saveAnalysis, { projectId, assetId, workerSecret: 'test-secret', shots, understanding: { summary: 'A launch.', scenes: [{ start: 0.8, end: 3, description: 'A launch.', score: 0.9 }] } });
   const asset = await t.run(ctx => ctx.db.get(assetId));
   expect(asset?.analysis?.shots).toEqual(shots);
   expect(asset?.analysisCompletedAt?.shots).toBeGreaterThan(0);
@@ -27,8 +27,8 @@ test('persists both semantic descriptions and measured shots and records fresh c
 });
 test('rejects cross-user and malformed source-frame results', async () => {
   const { t, owner, projectId, assetId } = await fixture();
-  await expect(t.withIdentity(identity('stranger')).mutation(api.assets.saveAnalysis, { projectId, assetId, workerSecret: 'test-secret', shots })).rejects.toThrow('Project not found');
-  await expect(owner.mutation(api.assets.saveAnalysis, { projectId, assetId, workerSecret: 'test-secret', shots: { ...shots, shots: [{ start: 0, end: 9, startFrame: 0, endFrame: 216 }] } })).rejects.toThrow('Invalid shot boundaries');
+  await expect(t.withIdentity(identity('stranger')).mutation(internal.assets.saveAnalysis, { projectId, assetId, workerSecret: 'test-secret', shots })).rejects.toThrow('Project not found');
+  await expect(owner.mutation(internal.assets.saveAnalysis, { projectId, assetId, workerSecret: 'test-secret', shots: { ...shots, shots: [{ start: 0, end: 9, startFrame: 0, endFrame: 216 }] } })).rejects.toThrow('Invalid shot boundaries');
 });
 test('shot-only requests complete only after fresh results are saved', async () => {
   const { t, projectId, assetId } = await fixture();

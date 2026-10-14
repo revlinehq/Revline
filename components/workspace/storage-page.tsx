@@ -1,7 +1,7 @@
 'use client';
 import { userError } from '@/lib/user-error';
 
-import { useDeferredValue,useState } from 'react';
+import { useDeferredValue,useState,useEffect } from 'react';
 import Link from 'next/link';
 import { useConvexAuth,useMutation,usePaginatedQuery,useQuery } from 'convex/react';
 import type { FunctionReturnType } from 'convex/server';
@@ -27,8 +27,10 @@ export function StoragePage(){
   const [filters,setFilters]=useState(defaultFilters),search=useDeferredValue(filters.search);
   const summary=useQuery(api.storage.summary,isAuthenticated?{}:'skip');
   const {results,status,loadMore}=usePaginatedQuery(api.storage.files,isAuthenticated?{search,sort:filters.sort,unused:filters.unused,...(filters.kind==='all'?{}:{kind:filters.kind})}:'skip',{initialNumItems:20});
+  const scanning=filters.unused&&results.length===0&&status==='CanLoadMore';
+  useEffect(()=>{if(scanning)loadMore(20);},[scanning,loadMore,results.length]);
   const remove=useMutation(api.storage.remove);
-  return <div className="workspace-page storage-page"><WorkspaceNav title="Cloud storage" active="storage"/><StorageBrowser summary={summary} files={results} filters={filters} onFilters={setFilters} loading={!isAuthenticated||status==='LoadingFirstPage'} loadingMore={status==='LoadingMore'} hasMore={status==='CanLoadMore'} onLoadMore={()=>loadMore(20)} onDelete={async files=>{await remove({fileIds:files.map(file=>file.id)});}}/></div>;
+  return <div className="workspace-page storage-page"><WorkspaceNav title="Cloud storage" active="storage"/><StorageBrowser summary={summary} files={results} filters={filters} onFilters={setFilters} loading={!isAuthenticated||status==='LoadingFirstPage'||scanning||(filters.unused&&results.length===0&&status==='LoadingMore')} loadingMore={status==='LoadingMore'} hasMore={status==='CanLoadMore'} onLoadMore={()=>loadMore(20)} onDelete={async files=>{await remove({fileIds:files.map(file=>file.id)});}}/></div>;
 }
 
 export function StorageBrowser({summary,files,filters,onFilters,loading,loadingMore,hasMore,onLoadMore,onDelete}:{summary?:Summary;files:StorageFile[];filters:Filters;onFilters:(value:Filters)=>void;loading:boolean;loadingMore:boolean;hasMore:boolean;onLoadMore:()=>void;onDelete:(files:StorageFile[])=>Promise<void>}){

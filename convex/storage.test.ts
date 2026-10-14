@@ -1,3 +1,4 @@
+import { completeDeletion } from '../lib/test-support/convex-deletion';
 /// <reference types="vite/client" />
 import { convexTest } from 'convex-test';
 import workflowTest from '@convex-dev/workflow/test';
@@ -35,8 +36,8 @@ test('reused objects count once and cannot be deleted while any workspace uses t
   const file=(await owner.query(api.storage.files,listing)).page[0];expect(file).toMatchObject({canDelete:false,protectedReason:'Used in an edit',workspaces:[{id:copy,title:'Reused'}]});
   await expect(owner.mutation(api.storage.remove,{fileIds:[file.id]})).rejects.toThrow('Used in an edit');
   await owner.mutation(api.assets.remove,{assetId:id});expect((await owner.query(api.storage.summary,{})).usedBytes).toBe(300);
-  await owner.mutation(api.projects.remove,{projectId:copy});expect((await owner.query(api.storage.summary,{})).usedBytes).toBe(0);
-  expect(await t.run(ctx=>ctx.db.system.query('_scheduled_functions').collect())).toHaveLength(1);
+  await owner.mutation(api.projects.remove,{projectId:copy});await completeDeletion(t, copy);expect((await owner.query(api.storage.summary,{})).usedBytes).toBe(0);
+  expect(await t.run(ctx=>ctx.db.system.query('_scheduled_functions').filter(q=>q.eq(q.field('name'),'r2:deleteObject')).collect())).toHaveLength(1);
 });
 test('deletion rechecks the current timeline and a bulk rejection leaves every file intact',async()=>{
   const t=make(),p=await project(t),a=await asset(t,p,200),b=await asset(t,p,300,'media/owner/project/second'),owner=t.withIdentity(identity('owner'));
@@ -55,7 +56,7 @@ test('shared snapshots protect the last attachment and cross-account copies keep
   const file=(await owner.query(api.storage.files,listing)).page[0];expect(file.protectedReason).toBe('Used by a shared timeline');
   await expect(owner.mutation(api.storage.remove,{fileIds:[file.id]})).rejects.toThrow('shared timeline');
   await owner.mutation(api.timelineShares.revoke,{projectId:p});await owner.mutation(api.storage.remove,{fileIds:[file.id]});
-  expect((await owner.query(api.storage.summary,{})).usedBytes).toBe(0);expect((await other.query(api.storage.summary,{})).usedBytes).toBe(300);expect(await t.run(ctx=>ctx.db.system.query('_scheduled_functions').collect())).toEqual([]);
+  expect((await owner.query(api.storage.summary,{})).usedBytes).toBe(0);expect((await other.query(api.storage.summary,{})).usedBytes).toBe(300);expect(await t.run(ctx=>ctx.db.system.query('_scheduled_functions').filter(q=>q.eq(q.field('name'),'r2:deleteObject')).collect())).toEqual([]);
 });
 test('multipart quota reserves concurrent uploads, converts completion once, and refunds aborts',async()=>{
   const t=make(),p=await project(t),owner=t.withIdentity(identity('owner'));await t.mutation(internal.storageMigration.ready,{});await asset(t,p,700);

@@ -45,7 +45,7 @@ export async function enqueueMediaTask(ctx: MutationCtx, input: Pick<Doc<'mediaT
     if (active) { if (input.analysisRequestId) await ctx.db.patch(active._id, { analysisRequestId: input.analysisRequestId }); return active._id; }
   }
   const now = Date.now();
-  const taskId = await ctx.db.insert('mediaTasks', { ...input, status: 'queued', attempt: 0, progress: 0, createdAt: now, updatedAt: now });
+  const taskId = await ctx.db.insert('mediaTasks', { ...input, status: 'queued', claimable:false, attempt: 0, progress: 0, createdAt: now, updatedAt: now });
   const workflowId = await mediaWorkflow.start(ctx, internal.mediaTasks.process, { taskId }, { startAsync: true, onComplete: internal.mediaTasks.settle, context: { taskId } });
   await ctx.db.patch(taskId, { workflowId });
   return taskId;
@@ -71,7 +71,7 @@ export const process = mediaWorkflow.define({
 export const prepareAttempt = internalMutation({ args: { taskId: v.id('mediaTasks'), attempt: v.number() }, returns: v.boolean(), handler: async (ctx, args) => {
   const task = await ctx.db.get(args.taskId);
   if (!task || ['completed', 'cancelled', 'failed'].includes(task.status)) return false;
-  await ctx.db.patch(task._id, { status: 'queued', attempt: args.attempt, leaseToken: undefined, leaseExpiresAt: undefined, attemptStartedAt: undefined, updatedAt: Date.now() });
+  await ctx.db.patch(task._id, { status: 'queued', claimable:true, attempt: args.attempt, leaseToken: undefined, leaseExpiresAt: undefined, attemptStartedAt: undefined, updatedAt: Date.now() });
   // Wake only after this attempt is claimable, including retries after backoff.
   if (globalThis.process.env.MEDIA_PROCESSOR_WAKE_URL) await ctx.scheduler.runAfter(0, internal.mediaProcessor.wake, {});
   return true;
@@ -148,19 +148,35 @@ export async function cancelMediaTask(ctx: MutationCtx, taskId: Id<'mediaTasks'>
   await markTerminal(ctx, taskId, 'cancelled', 'Processing cancelled.');
   if (task.workflowId) await mediaWorkflow.cancel(ctx, task.workflowId as WorkflowId);
 }
+async function firstClaimable(ctx:MutationCtx|import('./_generated/server').QueryCtx) {
+  const indexed=await ctx.db.query('mediaTasks').withIndex('by_status_claimable_created',q=>q.eq('status','queued').eq('claimable',true)).first();
+  // Legacy prepared tasks remain claimable during rollout, without a ten-row cap.
+  return indexed??await ctx.db.query('mediaTasks').withIndex('by_status_createdAt',q=>q.eq('status','queued')).filter(q=>q.and(q.eq(q.field('claimable'),undefined),q.gt(q.field('attempt'),0),q.neq(q.field('workflowId'),undefined))).first();
+}
+export const cancel=mutation({args:{taskId:v.id('mediaTasks')},returns:v.null(),handler:async(ctx,args)=>{
+  const task=await ctx.db.get(args.taskId);if(!task||task.ownerId!==await requireOwner(ctx))throw new ConvexError('Media task not found.');
+  await cancelMediaTask(ctx,task._id);return null;
+}});
+export const pruneFinished=internalMutation({args:{},returns:v.null(),handler:async ctx=>{
+  const cutoff=Date.now()-7*86400_000;
+  for(const status of ['completed','failed','cancelled'] as const){
+    const rows=await ctx.db.query('mediaTasks').withIndex('by_status_updated',q=>q.eq('status',status).lt('updatedAt',cutoff)).take(100);
+    for(const task of rows){if(task.workflowId)await mediaWorkflow.cleanup(ctx,task.workflowId as WorkflowId);await ctx.db.delete(task._id);}
+    if(rows.length===100)await ctx.scheduler.runAfter(0,internal.mediaTasks.pruneFinished,{});
+  }
+  return null;
+}});
 export const ready = query({ args: { workerSecret: v.string() }, returns: v.string(), handler: async (ctx, args) => {
   requireMediaWorker(args.workerSecret);
-  const tasks = await ctx.db.query('mediaTasks').withIndex('by_status_createdAt', q => q.eq('status', 'queued')).take(10);
-  return tasks.filter(task => task.attempt > 0 && task.workflowId).map(task => `${task._id}:${task.attempt}`).join(',');
+  const task=await firstClaimable(ctx);return task?`${task._id}:${task.attempt}`:'';
 }});
 
 export const claim = mutation({ args: { workerSecret: v.string() }, returns: v.union(workItem, v.null()), handler: async (ctx, args): Promise<MediaWorkItem | null> => {
   requireMediaWorker(args.workerSecret);
-  const tasks = await ctx.db.query('mediaTasks').withIndex('by_status_createdAt', q => q.eq('status', 'queued')).take(10);
-  const task = tasks.find(task => task.workflowId && task.attempt > 0);
+  const task=await firstClaimable(ctx);
   if (!task) return null;
   const project = await ctx.db.get(task.projectId), asset = task.assetId ? await ctx.db.get(task.assetId) : null;
-  if (!project || project.ownerId !== task.ownerId || (task.assetId && (!asset || asset.ownerId !== task.ownerId || asset.projectId !== project._id))) {
+  if (!project || project.deleting || project.ownerId !== task.ownerId || (task.assetId && (!asset || asset.ownerId !== task.ownerId || asset.projectId !== project._id))) {
     await failTask(ctx, task, 'The project or source media was removed.', false); return null;
   }
   let render: Infer<typeof renderSnapshot> | undefined, outputStored = false;
@@ -177,7 +193,7 @@ export const claim = mutation({ args: { workerSecret: v.string() }, returns: v.u
     await ctx.db.patch(job._id, { status: 'rendering', error: undefined, updatedAt: Date.now() });
   }
   const leaseToken = crypto.randomUUID(), now = Date.now();
-  await ctx.db.patch(task._id, { status: 'running', leaseToken, leaseExpiresAt: now + LEASE_MS, attemptStartedAt: now, updatedAt: now });
+  await ctx.db.patch(task._id, { status: 'running', claimable:false, leaseToken, leaseExpiresAt: now + LEASE_MS, attemptStartedAt: now, updatedAt: now });
   if (task.analysisRequestId && await ctx.db.get(task.analysisRequestId)) await ctx.db.patch(task.analysisRequestId, { status: 'running' });
   await ctx.scheduler.runAfter(LEASE_MS, internal.mediaTasks.expire, { taskId: task._id, leaseToken });
   return { taskId: task._id, leaseToken, projectId: task.projectId, kind: task.kind, ...(task.sourceUrl ? { sourceUrl: task.sourceUrl } : {}), ...(task.frameRequest ? { frameRequest: task.frameRequest } : {}), ...(task.videoRequest ? { videoRequest: task.videoRequest } : {}), ...(asset ? { asset: { ...asset, url: await mediaUrl(ctx, asset) } } : {}), ...(render ? { render, outputStored } : {}), ...(task.renderJobId ? { renderJobId: task.renderJobId } : {}), ...(task.outputAssetId ? { outputAssetId: task.outputAssetId } : {}) };

@@ -1,3 +1,4 @@
+import { completeDeletion } from '../lib/test-support/convex-deletion';
 /// <reference types="vite/client" />
 import { convexTest } from 'convex-test';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
@@ -28,11 +29,11 @@ describe('cloud upload reuse', () => {
     expect(media[0]).toMatchObject({ r2Key: 'media/owner/original', duration: 8 });
     const project = await owner.query(api.projects.get, { projectId: reused });
     expect(project.timeline?.clips).toEqual([expect.objectContaining({ assetId: media[0]._id, duration: 8, start: 0 })]);
-    await owner.mutation(api.projects.remove, { projectId: original });
+    await owner.mutation(api.projects.remove, { projectId: original });await completeDeletion(t, original);
     expect((await owner.query(api.assets.list, { projectId: reused }))[0].url).toContain('https://media.example.com/read?token=');
-    expect(await t.run(ctx => ctx.db.system.query('_scheduled_functions').collect())).toEqual([]);
-    await owner.mutation(api.projects.remove, { projectId: reused });
-    expect(await t.run(ctx => ctx.db.system.query('_scheduled_functions').collect())).toHaveLength(1);
+    expect(await t.run(ctx => ctx.db.system.query('_scheduled_functions').filter(q=>q.eq(q.field('name'),'r2:deleteObject')).collect())).toEqual([]);
+    await owner.mutation(api.projects.remove, { projectId: reused });await completeDeletion(t, reused);
+    expect(await t.run(ctx => ctx.db.system.query('_scheduled_functions').filter(q=>q.eq(q.field('name'),'r2:deleteObject')).collect())).toHaveLength(1);
     await t.finishAllScheduledFunctions(vi.runAllTimers);
     expect(fetch).toHaveBeenCalledOnce();
   });
@@ -49,7 +50,7 @@ describe('cloud upload reuse', () => {
     const reused = await owner.mutation(api.projects.create, { title: 'Reused', aspectRatio: 'vertical', assetIds: [assetId] });
     await owner.mutation(api.assets.remove, { assetId });
     expect(await t.run(async ctx => (await ctx.storage.get(storageId)) !== null)).toBe(true);
-    await owner.mutation(api.projects.remove, { projectId: reused });
+    await owner.mutation(api.projects.remove, { projectId: reused });await completeDeletion(t, reused);
     expect(await t.run(async ctx => (await ctx.storage.get(storageId)) !== null)).toBe(false);
   });
 

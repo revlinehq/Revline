@@ -1,3 +1,4 @@
+import { completeDeletion } from '../lib/test-support/convex-deletion';
 /// <reference types="vite/client" />
 import { convexTest } from 'convex-test';
 import stripeTest from '@convex-dev/stripe/test';
@@ -144,7 +145,7 @@ test('expired accounts retain owned read, share revocation and media cleanup', a
   await f.owner.mutation(api.timelineShares.revoke, { projectId: f.projectId });
   expect(await f.t.query(api.timelineShares.get, { shareId })).toBeNull();
   await f.owner.mutation(api.assets.remove, { assetId: f.assetId });
-  await f.owner.mutation(api.projects.remove, { projectId: f.projectId });
+  await f.owner.mutation(api.projects.remove, { projectId: f.projectId });await completeDeletion(f.t, f.projectId);
   expect(await f.t.run(ctx => ctx.db.get(f.projectId))).toBeNull();
 });
 

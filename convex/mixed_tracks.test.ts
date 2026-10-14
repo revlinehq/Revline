@@ -88,7 +88,7 @@ test('AI checkpoints and legacy queued render snapshots stay canonical and immut
   vi.stubEnv('RENDER_WORKER_SECRET', 'mixed-test-secret');
   const jobId = await t.run(ctx => ctx.db.insert('renderJobs', { ownerId: 'owner', projectId, timeline: { ...legacy, clips: legacy.clips.filter(clip => clip.kind !== 'video') }, assetIds: [] as Id<'assets'>[], status: 'queued', createdAt: Date.now(), updatedAt: Date.now() }));
   const snapshot = normalizeTimeline({ ...legacy, clips: legacy.clips.filter(clip => clip.kind !== 'video') });
-  const claimed = await owner.mutation(api.renders.claim, { jobId, workerSecret: 'mixed-test-secret' });
+  const claimed = await owner.mutation(internal.renders.claim, { jobId, workerSecret: 'mixed-test-secret' });
   expect(claimed.timeline).toEqual(snapshot);
   expect((await t.run(ctx => ctx.db.get(jobId)))!.timeline).toEqual(snapshot);
 });

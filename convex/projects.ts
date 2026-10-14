@@ -72,7 +72,7 @@ export const get = query({ args: { projectId: v.id("projects") }, returns: proje
   const project = await requireProject(ctx, args.projectId, await requireOwner(ctx)); return { ...project, timeline: currentTimeline(project), ...(project.history ? { history: project.history.map(normalizeTimeline) } : {}), revision: project.revision ?? 0 };
 }});
 export const list = query({ args: { limit: v.optional(v.number()) }, returns: v.array(v.object({ _id: v.id('projects'), title: v.string(), createdAt: v.number(), updatedAt: v.number(), aspectRatio, clipCount: v.number(), aiRunning: v.boolean(), coverUrl: v.union(v.string(), v.null()), coverKind: v.union(v.literal("video"), v.literal("image"), v.null()) })), handler: async (ctx, args) => {
-  const ownerId = await requireOwner(ctx); const projects = await ctx.db.query("projects").withIndex("by_ownerId_updatedAt", q => q.eq("ownerId", ownerId)).order("desc").take(listLimit(args.limit));
+  const ownerId = await requireOwner(ctx); const projects = await ctx.db.query("projects").withIndex("by_ownerId_updatedAt", q => q.eq("ownerId", ownerId)).filter(q=>q.neq(q.field("deleting"),true)).order("desc").take(listLimit(args.limit));
   return await Promise.all(projects.map(async project => {
     const media = await ctx.db.query("assets").withIndex("by_ownerId_projectId", q => q.eq("ownerId", ownerId).eq("projectId", project._id)).order("desc").take(5);
     const cover = media.find(asset => asset.kind === "video" || asset.kind === "image");
@@ -103,23 +103,13 @@ export const undo = mutation({ args: { projectId: v.id("projects") }, returns: v
   if (!previous) throw new ConvexError("No edits to undo"); const revision = (project.revision ?? 0) + 1;
   await ctx.db.patch(project._id, { timeline: previous, aspectRatio: previous.aspectRatio, history, revision, updatedAt: Date.now() }); return revision;
 }});
-export const remove = mutation({ args: { projectId: v.id("projects") }, returns: v.null(), handler: async (ctx, args) => {
-  const ownerId = await requireOwner(ctx); const project = await requireProject(ctx, args.projectId, ownerId);
-  const assets = await ctx.db.query("assets").withIndex("by_ownerId_projectId", q => q.eq("ownerId", ownerId).eq("projectId", project._id)).take(201);
-  const jobs = await ctx.db.query("renderJobs").withIndex("by_ownerId_projectId", q => q.eq("ownerId", ownerId).eq("projectId", project._id)).take(501);
-  const tickets = await ctx.db.query("uploadTickets").withIndex("by_projectId", q => q.eq("projectId", project._id)).take(1001);
-  const analysisRequests = await ctx.db.query("analysisRequests").withIndex("by_projectId", q => q.eq("projectId", project._id)).take(201);
-  const pendingUploads = await ctx.db.query("r2Uploads").withIndex("by_projectId_completed", q => q.eq("projectId", project._id).eq("completed", false)).take(201);
-  const mediaTasks = await ctx.db.query('mediaTasks').withIndex('by_project_createdAt', q => q.eq('projectId', project._id)).take(1001);
-  if (assets.length > 200 || jobs.length > 500 || tickets.length > 1000 || analysisRequests.length > 200 || pendingUploads.length > 200 || mediaTasks.length > 1000) throw new ConvexError("Project has too many records to delete at once");
-  if (jobs.some(job => job.status === "rendering") || project.aiRunning) throw new ConvexError("Wait for the active render or AI edit before deleting the project");
-  for (const task of mediaTasks) { await cancelMediaTask(ctx, task._id); await ctx.db.delete(task._id); }
-  await removeProjectShares(ctx,project._id);
-  for (const asset of assets) await removeMediaAttachment(ctx, asset);
-  for (const job of jobs) { await forgetStorageObject(ctx,ownerId,{r2Key:job.outputR2Key,storageId:job.outputStorageId}); if (job.outputStorageId) await ctx.storage.delete(job.outputStorageId); if (job.outputR2Key) await ctx.scheduler.runAfter(0, internal.r2.deleteObject, { key: job.outputR2Key }); await ctx.db.delete(job._id); }
-  for (const ticket of tickets) { if (ticket.storageId && !ticket.consumed) {await ctx.storage.delete(ticket.storageId);await forgetStorageObject(ctx,ownerId,{storageId:ticket.storageId});} await ctx.db.delete(ticket._id); }
-  for (const request of analysisRequests) await ctx.db.delete(request._id);
-  for (const upload of pendingUploads) await ctx.scheduler.runAfter(0, internal.r2.cleanupLease, { uploadId: upload._id });
-  if (project.threadId) await ctx.runMutation(components.agent.threads.deleteAllForThreadIdAsync, { threadId: project.threadId });
-  await ctx.db.delete(project._id); return null;
+export const remove = mutation({ args: { projectId: v.id('projects') }, returns: v.null(), handler: async (ctx, args) => {
+  const ownerId=await requireOwner(ctx),project=await requireProject(ctx,args.projectId,ownerId);
+  const rendering=await ctx.db.query('renderJobs').withIndex('by_owner_project_status',q=>q.eq('ownerId',ownerId).eq('projectId',project._id).eq('status','rendering')).first();
+  if(rendering||project.aiRunning)throw new ConvexError('Wait for the active render or AI edit before deleting the project');
+  await ctx.db.patch(project._id,{deleting:true});
+  const shares=await ctx.db.query('timelineShares').withIndex('by_project',q=>q.eq('projectId',project._id)).take(2);
+  for(const share of shares)await ctx.db.patch(share._id,{published:false});
+  await ctx.scheduler.runAfter(0,internal.projectDeletion.batch,{projectId:project._id,ownerId});
+  return null;
 }});

@@ -16,7 +16,7 @@ export async function requireProject(
   ownerId: string,
 ) {
   const project = await ctx.db.get(projectId);
-  if (!project || project.ownerId !== ownerId) {
+  if (!project || project.deleting || project.ownerId !== ownerId) {
     throw new ConvexError("Project not found");
   }
   return project;

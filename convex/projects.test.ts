@@ -41,7 +41,7 @@ test('Zoom controls survive saving and render jobs, with invalid controls reject
   const saved = (await owner.query(api.projects.get, { projectId })).timeline!.clips.find(clip => clip.id === 'zoom')!;
   expect(saved.zoom).toEqual(timeline.clips.find(clip => clip.id === 'zoom')!.zoom);
   const jobId = await owner.mutation(api.renders.start, { projectId, resolution: 720, fps: 30, quality: 'draft' });
-  const render = await owner.mutation(api.renders.claim, { jobId, workerSecret: 'test-worker-secret' });
+  const render = await owner.mutation(internal.renders.claim, { jobId, workerSecret: 'test-worker-secret' });
   expect(render.timeline.clips.find(clip => clip.id === 'zoom')!.motion).toEqual(saved.motion);
   expect(render.timeline.clips.find(clip => clip.id === 'zoom')!.zoom).toEqual(saved.zoom);
   await expect(owner.mutation(api.projects.saveTimeline, { projectId, expectedRevision: 1, timeline: { ...timeline, clips: timeline.clips.map(clip => clip.id === 'zoom' ? { ...clip, zoom: { ...saved.zoom!, speed: 0 } } : clip) } })).rejects.toThrow('Zoom');
@@ -54,7 +54,7 @@ test('cinematic bar size and speed survive saving and export with bounded bar-on
   await owner.mutation(api.projects.saveTimeline, { projectId, expectedRevision: 0, timeline });
   expect((await owner.query(api.projects.get, { projectId })).timeline?.clips[1].cinematicBars).toEqual({ size: .2, speed: 2 });
   const jobId = await owner.mutation(api.renders.start, { projectId, resolution: 720, fps: 30, quality: 'draft' });
-  expect((await owner.mutation(api.renders.claim, { jobId, workerSecret: 'test-worker-secret' })).timeline.clips[1].cinematicBars).toEqual({ size: .2, speed: 2 });
+  expect((await owner.mutation(internal.renders.claim, { jobId, workerSecret: 'test-worker-secret' })).timeline.clips[1].cinematicBars).toEqual({ size: .2, speed: 2 });
   for (const settings of [{ size: .51, speed: 1 }, { size: .2, speed: 0 }]) await expect(owner.mutation(api.projects.saveTimeline, { projectId, expectedRevision: 1, timeline: { ...timeline, clips: [timeline.clips[0], { ...timeline.clips[1], cinematicBars: settings }] } })).rejects.toThrow('Cinematic bar');
   await expect(owner.mutation(api.projects.saveTimeline, { projectId, expectedRevision: 1, timeline: { ...textTimeline, clips: [{ ...textTimeline.clips[0], cinematicBars: { size: .2, speed: 2 } }] } })).rejects.toThrow('Cinematic bar');
 });
@@ -99,7 +99,7 @@ describe("timeline persistence", () => {
     await owner.mutation(api.projects.saveTimeline, { projectId, timeline, expectedRevision: 0 });
     expect((await owner.query(api.projects.get, { projectId })).timeline?.clips[0].transform?.rotation).toBe(-25);
     const jobId = await owner.mutation(api.renders.start, { projectId, resolution: 720, fps: 30, quality: 'draft' });
-    expect((await owner.mutation(api.renders.claim, { jobId, workerSecret: 'test-worker-secret' })).timeline.clips[0].transform?.rotation).toBe(-25);
+    expect((await owner.mutation(internal.renders.claim, { jobId, workerSecret: 'test-worker-secret' })).timeline.clips[0].transform?.rotation).toBe(-25);
     for (const transform of [{ ...DEFAULT_TRANSFORM, rotation: 361 }, { ...DEFAULT_TRANSFORM, scale: 2 }, { ...DEFAULT_TRANSFORM, x: .7 }]) {
       await expect(owner.mutation(api.projects.saveTimeline, { projectId, expectedRevision: 1, timeline: { ...timeline, clips: [{ ...timeline.clips[0], transform }] } })).rejects.toThrow();
     }
@@ -148,27 +148,27 @@ describe("render lifecycle", () => {
     const t = makeTest(); const projectId = await project(t); const owner = t.withIdentity(identity("owner"));
     await owner.mutation(api.projects.saveTimeline, { projectId, timeline: textTimeline, expectedRevision: 0 });
     const jobId = await owner.mutation(api.renders.start, { projectId, resolution: 1080, fps: 30, quality: "standard" });
-    await expect(owner.mutation(api.renders.claim, { jobId, workerSecret: "wrong" })).rejects.toThrow("worker authentication");
-    await expect(t.withIdentity(identity("stranger")).mutation(api.renders.claim, { jobId, workerSecret: "test-worker-secret" })).rejects.toThrow("Render not found");
+    await expect(owner.mutation(internal.renders.claim, { jobId, workerSecret: "wrong" })).rejects.toThrow("worker authentication");
+    await expect(t.withIdentity(identity("stranger")).mutation(internal.renders.claim, { jobId, workerSecret: "test-worker-secret" })).rejects.toThrow("Render not found");
     const worker = { jobId, workerSecret: "test-worker-secret" };
-    expect((await owner.mutation(api.renders.claim, worker)).timeline).toEqual(textTimeline);
-    await expect(owner.mutation(api.renders.claim, worker)).rejects.toThrow("cannot be claimed");
-    await owner.mutation(api.renders.progress, { ...worker, progress: 30 });
-    await expect(owner.mutation(api.renders.progress, { ...worker, progress: 20 })).rejects.toThrow("must increase");
+    expect((await owner.mutation(internal.renders.claim, worker)).timeline).toEqual(textTimeline);
+    await expect(owner.mutation(internal.renders.claim, worker)).rejects.toThrow("cannot be claimed");
+    await owner.mutation(internal.renders.progress, { ...worker, progress: 30 });
+    await expect(owner.mutation(internal.renders.progress, { ...worker, progress: 20 })).rejects.toThrow("must increase");
     const unboundId = await uploadedFile(t, "owner", projectId);
-    await expect(owner.mutation(api.renders.complete, { ...worker, storageId: unboundId })).rejects.toThrow("Uploaded file does not belong");
+    await expect(owner.mutation(internal.renders.complete, { ...worker, storageId: unboundId })).rejects.toThrow("Uploaded file does not belong");
     const outputId = await uploadedFile(t, "owner", projectId, "video/mp4", jobId);
-    await owner.mutation(api.renders.complete, { ...worker, storageId: outputId });
+    await owner.mutation(internal.renders.complete, { ...worker, storageId: outputId });
     expect(await owner.query(api.renders.get, { jobId })).toMatchObject({ status: "completed", progress: 100, url: expect.any(String) });
-    await expect(owner.mutation(api.renders.fail, { ...worker, error: "late" })).rejects.toThrow("already finished");
-    await expect(owner.mutation(api.renders.progress, { ...worker, progress: 99 })).rejects.toThrow("not running");
+    await expect(owner.mutation(internal.renders.fail, { ...worker, error: "late" })).rejects.toThrow("already finished");
+    await expect(owner.mutation(internal.renders.progress, { ...worker, progress: 99 })).rejects.toThrow("not running");
   });
   test("keeps render snapshots immutable when the project is edited later", async () => {
     const t = makeTest(); const projectId = await project(t); const owner = t.withIdentity(identity("owner"));
     await owner.mutation(api.projects.saveTimeline, { projectId, timeline: textTimeline, expectedRevision: 0 });
     const jobId = await owner.mutation(api.renders.start, { projectId, resolution: 720, fps: 24, quality: "draft" });
     await owner.mutation(api.projects.saveTimeline, { projectId, timeline: { ...textTimeline, aspectRatio: "square" }, expectedRevision: 1 });
-    expect((await owner.mutation(api.renders.claim, { jobId, workerSecret: "test-worker-secret" })).timeline.aspectRatio).toBe("vertical");
+    expect((await owner.mutation(internal.renders.claim, { jobId, workerSecret: "test-worker-secret" })).timeline.aspectRatio).toBe("vertical");
   });
 });
 describe("inactive providers", () => {
@@ -239,10 +239,10 @@ describe("live AI checkpoints and media analysis", () => {
     const t = makeTest(); const projectId = await project(t); const owner = t.withIdentity(identity("owner")); const storageId = await uploadedFile(t, "owner", projectId);
     const assetId = await owner.mutation(api.assets.create, { projectId, storageId, fileName: "clip.mp4", kind: "video", duration: 5 });
     const transcript = { segments: [{ start: 0, end: 2, text: "Hello there" }], words: [{ start: 0, end: 0.8, text: "Hello" }, { start: 0.8, end: 2, text: "there" }] };
-    await expect(owner.mutation(api.assets.saveAnalysis, { projectId, assetId, workerSecret: "wrong", transcript })).rejects.toThrow("worker authentication");
-    await owner.mutation(api.assets.saveAnalysis, { projectId, assetId, workerSecret: "test-worker-secret", transcript });
+    await expect(owner.mutation(internal.assets.saveAnalysis, { projectId, assetId, workerSecret: "wrong", transcript })).rejects.toThrow("worker authentication");
+    await owner.mutation(internal.assets.saveAnalysis, { projectId, assetId, workerSecret: "test-worker-secret", transcript });
     expect((await owner.query(api.assets.get, { projectId, assetId })).analysis?.transcript).toEqual(transcript);
-    await expect(owner.mutation(api.assets.saveAnalysis, { projectId, assetId, workerSecret: "test-worker-secret", transcript: { segments: [{ start: 3, end: 2, text: "Invalid" }], words: [] } })).rejects.toThrow("Invalid transcript timing");
+    await expect(owner.mutation(internal.assets.saveAnalysis, { projectId, assetId, workerSecret: "test-worker-secret", transcript: { segments: [{ start: 3, end: 2, text: "Invalid" }], words: [] } })).rejects.toThrow("Invalid transcript timing");
   });
 });
 
@@ -311,17 +311,17 @@ test("worker analysis requires an active exact run and scoped media, then reject
   const storageId = await uploadedFile(t, "owner", projectId);
   const assetId = await owner.mutation(api.assets.create, { projectId, storageId, fileName: "clip.mp4", kind: "video", duration: 5 });
   const bridge = { projectId, assetId, aiRunId: "worker-run", workerSecret: "test-worker-secret" };
-  await expect(t.query(api.assets.getForAssistant, bridge)).rejects.toThrow("AI run is no longer active");
+  await expect(t.query(internal.assets.getForAssistant, bridge)).rejects.toThrow("AI run is no longer active");
   await t.run(ctx => ctx.db.patch(projectId, { aiRunning: true, aiRunId: "worker-run" }));
   await t.run(ctx => ctx.db.patch(otherProjectId, { aiRunning: true, aiRunId: "other-run" }));
-  await expect(t.query(api.assets.getForAssistant, { ...bridge, workerSecret: "wrong" })).rejects.toThrow("worker authentication");
-  await expect(t.query(api.assets.getForAssistant, { ...bridge, projectId: otherProjectId, aiRunId: "other-run" })).rejects.toThrow("Media not found");
-  expect(await t.query(api.assets.getForAssistant, bridge)).toMatchObject({ ownerId: "owner", url: expect.any(String) });
-  await t.mutation(api.assets.saveAnalysis, { ...bridge, beats: { beats: [0, 1, 2], bpm: 120, confidence: 0.9 } });
+  await expect(t.query(internal.assets.getForAssistant, { ...bridge, workerSecret: "wrong" })).rejects.toThrow("worker authentication");
+  await expect(t.query(internal.assets.getForAssistant, { ...bridge, projectId: otherProjectId, aiRunId: "other-run" })).rejects.toThrow("Media not found");
+  expect(await t.query(internal.assets.getForAssistant, bridge)).toMatchObject({ ownerId: "owner", url: expect.any(String) });
+  await t.mutation(internal.assets.saveAnalysis, { ...bridge, beats: { beats: [0, 1, 2], bpm: 120, confidence: 0.9 } });
   const run = { projectId, ownerId: "owner", runId: "worker-run" };
   await t.mutation(internal.assistant.requestAnalysis, { ...run, assetId, mode: "beats" });
   await t.run(ctx => ctx.db.patch(projectId, { aiRunId: "new-run" }));
-  await expect(t.mutation(api.assets.saveAnalysis, { ...bridge, beats: { beats: [0, 1], bpm: 120, confidence: 0.9 } })).rejects.toThrow("AI run is no longer active");
+  await expect(t.mutation(internal.assets.saveAnalysis, { ...bridge, beats: { beats: [0, 1], bpm: 120, confidence: 0.9 } })).rejects.toThrow("AI run is no longer active");
 });
 
 test("chat selection and playhead cannot reference another timeline or invalid time", async () => {
@@ -363,7 +363,7 @@ test("new aspect presets save and undo while render snapshots retain their chose
   expect((await owner.query(api.projects.get, { projectId })).aspectRatio).toBe("classic");
   await owner.mutation(api.projects.undo, { projectId });
   expect((await owner.query(api.projects.get, { projectId })).aspectRatio).toBe("portrait-feed");
-  expect((await owner.mutation(api.renders.claim, { jobId, workerSecret: "test-worker-secret" })).timeline.aspectRatio).toBe("portrait-feed");
+  expect((await owner.mutation(internal.renders.claim, { jobId, workerSecret: "test-worker-secret" })).timeline.aspectRatio).toBe("portrait-feed");
 });
 
 test("new upload tickets clean expired unclaimed media without touching attached assets", async () => {
@@ -483,7 +483,7 @@ test("AI edits after inspecting a manual revision start a new undo group preserv
   await owner.mutation(api.projects.saveTimeline,{projectId,expectedRevision:1,timeline:{...timeline,clips:[{...timeline.clips[0],volume:2}]}});
   expect((await owner.query(api.projects.get,{projectId})).timeline?.clips[0].volume).toBe(2);
   const jobId=await owner.mutation(api.renders.start,{projectId,resolution:720,fps:30,quality:"draft"});
-  expect((await owner.mutation(api.renders.claim,{jobId,workerSecret:"test-worker-secret"})).timeline.clips[0].volume).toBe(2);
+  expect((await owner.mutation(internal.renders.claim,{jobId,workerSecret:"test-worker-secret"})).timeline.clips[0].volume).toBe(2);
   await owner.mutation(api.projects.undo,{projectId});
   expect((await owner.query(api.projects.get,{projectId})).timeline?.clips[0].volume).toBe(1);
 });

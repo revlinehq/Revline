@@ -1,3 +1,4 @@
+import { completeDeletion } from '../lib/test-support/convex-deletion';
 /// <reference types="vite/client" />
 import {convexTest}from'convex-test';
 import {afterEach,expect,test,vi}from'vitest';
@@ -40,5 +41,5 @@ test('published edits are snapshots and source removal cannot break them',async(
 });
 test('deleting an original project turns off its link while retained copies keep their media',async()=>{
  const {t,owner,other,projectId,storageId}=await fixture(),shareId=await owner.mutation(api.timelineShares.publish,{projectId}),copyId=await other.mutation(api.timelineShares.useTimeline,{shareId});
- await owner.mutation(api.projects.remove,{projectId});expect(await t.query(api.timelineShares.get,{shareId})).toBeNull();expect(await t.run(async ctx=>!!await ctx.storage.get(storageId))).toBe(true);expect((await other.query(api.assets.list,{projectId:copyId}))).toHaveLength(2);
+ await owner.mutation(api.projects.remove,{projectId});await completeDeletion(t,projectId);expect(await t.query(api.timelineShares.get,{shareId})).toBeNull();expect(await t.run(async ctx=>!!await ctx.storage.get(storageId))).toBe(true);expect((await other.query(api.assets.list,{projectId:copyId}))).toHaveLength(2);
 });

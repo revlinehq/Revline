@@ -2,7 +2,7 @@
 import { convexTest } from 'convex-test';
 import workflowTest from '@convex-dev/workflow/test';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
-import { api } from './_generated/api';
+import { api, internal } from './_generated/api';
 import schema from './schema';
 
 const modules = import.meta.glob('./**/*.ts');
@@ -34,7 +34,7 @@ test('background beat analysis persists engine and downbeats through the source 
 
 test('invalid downbeat timing cannot replace a saved source analysis', async () => {
   const f = await fixture();
-  const save = (downbeats: number[]) => f.owner.mutation(api.assets.saveAnalysis, { projectId: f.projectId, assetId: f.assetId, workerSecret, beats: { ...measured, downbeats } });
+  const save = (downbeats: number[]) => f.owner.mutation(internal.assets.saveAnalysis, { projectId: f.projectId, assetId: f.assetId, workerSecret, beats: { ...measured, downbeats } });
   await save(measured.downbeats);
   for (const downbeats of [[-1], [4], [NaN], [0.5, 0.5], [2.5, 0.5], [1]]) {
     await expect(save(downbeats)).rejects.toThrow('Invalid beat analysis');
@@ -44,7 +44,7 @@ test('invalid downbeat timing cannot replace a saved source analysis', async () 
 
 test('a current dedicated beat map is available immediately without queuing another worker', async () => {
   const f = await fixture();
-  await f.owner.mutation(api.assets.saveAnalysis, { projectId: f.projectId, assetId: f.assetId, workerSecret, beats: measured });
+  await f.owner.mutation(internal.assets.saveAnalysis, { projectId: f.projectId, assetId: f.assetId, workerSecret, beats: measured });
   const taskId = await f.start();
   expect(await f.owner.query(api.mediaTasks.get, { taskId })).toMatchObject({ status: 'completed', progress: 100 });
   expect(await f.claim()).toBeNull();
@@ -54,7 +54,7 @@ test('a current dedicated beat map is available immediately without queuing anot
 test('legacy onset results stay readable but a new beat request waits for dedicated tracking', async () => {
   const f = await fixture();
   const legacy = { beats: [0, 0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.25, 2.5, 2.75], bpm: 240, confidence: 0.9 };
-  await f.owner.mutation(api.assets.saveAnalysis, { projectId: f.projectId, assetId: f.assetId, workerSecret, beats: legacy });
+  await f.owner.mutation(internal.assets.saveAnalysis, { projectId: f.projectId, assetId: f.assetId, workerSecret, beats: legacy });
   const taskId = await f.start();
   expect(await f.owner.query(api.mediaTasks.get, { taskId })).toMatchObject({ status: 'queued' });
   await f.drain(); const work = (await f.claim())!;
@@ -77,7 +77,7 @@ test('background audio analysis saves audible accents and uncertain drop candida
 
 test.each(['accents', 'dropCandidates'] as const)('invalid %s cannot replace saved source analysis', async kind => {
   const f = await fixture();
-  const save = (hits: { time: number; strength: number }[]) => f.owner.mutation(api.assets.saveAnalysis, { projectId: f.projectId, assetId: f.assetId, workerSecret, beats: { ...measured, [kind]: hits } });
+  const save = (hits: { time: number; strength: number }[]) => f.owner.mutation(internal.assets.saveAnalysis, { projectId: f.projectId, assetId: f.assetId, workerSecret, beats: { ...measured, [kind]: hits } });
   const valid = [{ time: 1, strength: 0 }, { time: 2, strength: 1 }];
   await save(valid);
   for (const hits of [
@@ -92,7 +92,7 @@ test.each(['accents', 'dropCandidates'] as const)('invalid %s cannot replace sav
 test('an older tagged beat map is refreshed when audible-hit metadata is missing', async () => {
   const f = await fixture();
   const older = { engine: 'beat-this-final0-v1' as const, beats: [0.5, 1.5, 2.5], downbeats: [0.5, 2.5], bpm: 60, confidence: 0.5 };
-  await f.owner.mutation(api.assets.saveAnalysis, { projectId: f.projectId, assetId: f.assetId, workerSecret, beats: older });
+  await f.owner.mutation(internal.assets.saveAnalysis, { projectId: f.projectId, assetId: f.assetId, workerSecret, beats: older });
   const taskId = await f.start();
   expect(await f.owner.query(api.mediaTasks.get, { taskId })).toMatchObject({ status: 'queued' });
   await f.drain(); const work = (await f.claim())!;

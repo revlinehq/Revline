@@ -1,0 +1,29 @@
+import { v } from 'convex/values';
+import { internalMutation } from './_generated/server';
+import { components,internal } from './_generated/api';
+import { cancelMediaTask } from './mediaTasks';
+import { forgetStorageObject } from './lib/storage_accounting';
+import { removeMediaAttachment,removeProjectShares } from './lib/shared_media';
+
+/** Hiding the project blocks new work; each transaction reclaims a bounded page. */
+export const batch=internalMutation({args:{projectId:v.id('projects'),ownerId:v.string()},returns:v.null(),handler:async(ctx,args)=>{
+  const project=await ctx.db.get(args.projectId);
+  if(!project||project.ownerId!==args.ownerId||!project.deleting)return null;
+  const again=()=>ctx.scheduler.runAfter(0,internal.projectDeletion.batch,args);
+  const tasks=await ctx.db.query('mediaTasks').withIndex('by_project_createdAt',q=>q.eq('projectId',project._id)).take(50);
+  if(tasks.length){for(const task of tasks){await cancelMediaTask(ctx,task._id);await ctx.db.delete(task._id);}await again();return null;}
+  const shares=await ctx.db.query('timelineShares').withIndex('by_project',q=>q.eq('projectId',project._id)).take(1);
+  if(shares.length){await removeProjectShares(ctx,project._id);await again();return null;}
+  const assets=await ctx.db.query('assets').withIndex('by_ownerId_projectId',q=>q.eq('ownerId',args.ownerId).eq('projectId',project._id)).take(20);
+  if(assets.length){for(const asset of assets)await removeMediaAttachment(ctx,asset);await again();return null;}
+  const jobs=await ctx.db.query('renderJobs').withIndex('by_ownerId_projectId',q=>q.eq('ownerId',args.ownerId).eq('projectId',project._id)).take(20);
+  if(jobs.length){for(const job of jobs){await forgetStorageObject(ctx,args.ownerId,{r2Key:job.outputR2Key,storageId:job.outputStorageId});if(job.outputStorageId)await ctx.storage.delete(job.outputStorageId);if(job.outputR2Key)await ctx.scheduler.runAfter(0,internal.r2.deleteObject,{key:job.outputR2Key});await ctx.db.delete(job._id);}await again();return null;}
+  const tickets=await ctx.db.query('uploadTickets').withIndex('by_projectId',q=>q.eq('projectId',project._id)).take(50);
+  if(tickets.length){for(const ticket of tickets){if(ticket.storageId&&!ticket.consumed){await ctx.storage.delete(ticket.storageId);await forgetStorageObject(ctx,args.ownerId,{storageId:ticket.storageId});}await ctx.db.delete(ticket._id);}await again();return null;}
+  const requests=await ctx.db.query('analysisRequests').withIndex('by_projectId',q=>q.eq('projectId',project._id)).take(50);
+  if(requests.length){for(const request of requests)await ctx.db.delete(request._id);await again();return null;}
+  const uploads=await ctx.db.query('r2Uploads').withIndex('by_projectId_completed',q=>q.eq('projectId',project._id).eq('completed',false)).filter(q=>q.neq(q.field('cleanupScheduled'),true)).take(20);
+  if(uploads.length){for(const upload of uploads){await ctx.db.patch(upload._id,{cleanupScheduled:true});await ctx.scheduler.runAfter(0,internal.r2.cleanupLease,{uploadId:upload._id});}await again();return null;}
+  if(project.threadId)await ctx.runMutation(components.agent.threads.deleteAllForThreadIdAsync,{threadId:project.threadId});
+  await ctx.db.delete(project._id);return null;
+}});
