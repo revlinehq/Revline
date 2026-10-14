@@ -209,7 +209,8 @@ test('all actual look/animation/font schemas exist; caption tools copy only appe
     expect(()=>tools.styleTextClip.inputSchema.parse({clipId:'title',fontFamily:'arbitrary-css'})).toThrow();
     await execute(tools,'applyTextLook',{clipId:'title',look:'neon-echo'});
     await execute(tools,'styleTextClip',{clipId:'title',fontFamily:'anton',fontSize:80,color:'#AABBCC',rotation:18});
-    await execute(tools,'setTextAnimation',{clipId:'title',animation:'word-reveal'});
+    const saved=await execute(tools,'setTextAnimation',{clipId:'title',animation:'word-reveal'});
+    expect(saved).toMatchObject({saved:true,effectiveAnimation:'Word reveal'});
     await execute(tools,'applyCaptionStyle',{sourceClipId:'title',targetClipIds:['second']});
     await execute(tools,'styleCaptions',{clipIds:['second'],textStyle:{glowBlur:0}});
     await execute(tools,'setCaptionTiming',{clipId:'second',start:4.19,end:5.81});
