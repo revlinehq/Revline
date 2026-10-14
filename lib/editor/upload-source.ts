@@ -39,7 +39,9 @@ export async function uploadSourceFile(
     const assetId = await transport.complete(upload.uploadId, parts);
     completed = true;
     if (!assetId) throw new Error('The upload did not return media.');
-    if(thumbnail&&transport.saveThumbnail)await transport.saveThumbnail(assetId,thumbnail);
+    // The source is already durable. A slow or blocked optional image request must
+    // not turn a completed upload into an import error or delay opening its clip.
+    if(thumbnail&&transport.saveThumbnail)void Promise.resolve(thumbnail).then(image=>transport.saveThumbnail!(assetId,image)).catch(()=>undefined);
     return assetId;
   } catch (error) {
     if (uploadId && !completed) await transport.abort(uploadId).catch(() => undefined);

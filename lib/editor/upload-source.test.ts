@@ -70,3 +70,21 @@ test('captures a decoded frame before starting upload and attaches it to the sav
   vi.mocked(inspectMedia).mockImplementation(async(_file,capture)=>{capture?.(thumbnail);expect(cloud.start).not.toHaveBeenCalled();return metadata;});
   expect(await uploadSourceFile(file,cloud,vi.fn())).toBe(assetId);expect(cloud.saveThumbnail).toHaveBeenCalledExactlyOnceWith(assetId,thumbnail);
 });
+
+test('keeps successfully uploaded footage usable when the optional thumbnail request is blocked',async()=>{
+  const cloud=transport(),thumbnail=new Blob(['jpeg'],{type:'image/jpeg'});
+  cloud.saveThumbnail=vi.fn().mockRejectedValue(new TypeError('Failed to fetch'));
+  vi.mocked(inspectMedia).mockImplementation(async(_file,capture)=>{capture?.(thumbnail);return metadata;});
+  await expect(uploadSourceFile(file,cloud,vi.fn())).resolves.toBe(assetId);
+  expect(cloud.complete).toHaveBeenCalledExactlyOnceWith(uploadId,parts);
+  expect(cloud.abort).not.toHaveBeenCalled();
+});
+
+test('does not hold a completed source while its optional thumbnail is still saving',async()=>{
+  const cloud=transport(),thumbnail=new Blob(['jpeg'],{type:'image/jpeg'});
+  cloud.saveThumbnail=vi.fn().mockReturnValue(new Promise<void>(()=>{}));
+  vi.mocked(inspectMedia).mockImplementation(async(_file,capture)=>{capture?.(thumbnail);return metadata;});
+  expect(await uploadSourceFile(file,cloud,vi.fn())).toBe(assetId);
+  expect(cloud.saveThumbnail).toHaveBeenCalledExactlyOnceWith(assetId,thumbnail);
+  expect(cloud.abort).not.toHaveBeenCalled();
+});
