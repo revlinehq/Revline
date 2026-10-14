@@ -2,8 +2,8 @@
 
 import { lazy, Suspense, useId, useState } from 'react';
 import { ChevronRight, FolderOpen, Plus, Search } from 'lucide-react';
-import { EffectIcon, type EffectIconName } from './effect-icon';
-import { EFFECT_CATALOG, type EffectPreset } from '@/lib/editor/clip-effects';
+import { EffectIcon } from './effect-icon';
+import type { EffectPreset } from '@/lib/editor/clip-effects';
 import { REMOTION_TEXT_PRESETS, type RemotionTextPreset } from '@/lib/editor/remotion-text';
 import type { VisualEffects } from '@/lib/editor/visual-effects';
 import type { Clip, MediaAsset } from '@/lib/editor/types';
@@ -12,27 +12,20 @@ import { SubtitleStylePicker } from './subtitle-style-picker';
 import type { OverlayCatalogItem } from '@/lib/editor/overlay-catalog';
 import { EFFECT_DRAG_TYPE } from '@/lib/editor/effect-drag';
 import { SegmentedTabs } from './segmented-tabs';
+import { EFFECT_LIBRARY_CATALOG, EFFECT_LIBRARY_CATEGORIES, type EffectLibraryCategory, type EffectLibraryEntry as LibraryEntryData } from './effect-library-catalog';
 import './effect-library.css';
 
 const TextPresetPicker = lazy(() => import('./text-preset-picker'));
-
 export type LibraryVisualEffect = keyof VisualEffects;
-type LibraryLook = { id: EffectIconName; label: string; description: string; visual?: LibraryVisualEffect; preset?: EffectPreset };
-const featured: LibraryLook[] = [
-  { id: 'solid-color', label: 'Solid color', description: 'A color frame or adjustable rectangle', preset: 'solid-color' },
-  { id: 'dither', label: 'Dither', description: 'Ordered dots and a reduced color palette', visual: 'dither' },
-  { id: 'glitch', label: 'Digital glitch', description: 'Distort the selected footage', visual: 'glitch' },
-  { id: 'zoomBlur', label: 'Zoom blur', description: 'A timed blur pulse above your footage', preset: 'zoom-blur' },
-  { id: 'cinematic-bars', label: 'Cinema bars', description: 'Black bars slide in and out', preset: 'cinematic-bars' },
-  { id: 'quick-zoom-in', label: 'Zoom in', description: 'Push toward your subject', preset: 'quick-zoom-in' },
-  { id: 'quick-zoom-out', label: 'Zoom out', description: 'Pull back to reveal the scene', preset: 'quick-zoom-out' },
-];
-const more: LibraryLook[] = [
-  { id: 'colorGrade', label: 'Color & light', description: 'Adjust the selected footage', visual: 'colorGrade' },
-  { id: 'invert', label: 'Invert colors', description: 'Turn colors into a negative', visual: 'invert' },
-  ...(['flash', 'punch', 'shake', 'pop', 'fade'] as const).map(preset => ({ id: preset, label: EFFECT_CATALOG[preset].label, description: 'Add at the playhead', preset })),
-];
 type LibraryTab = 'effects' | 'text';
+
+function LibraryEntry({ entry, disabled, reason, draggable, onApply }: { entry: LibraryEntryData; disabled: boolean; reason?: string; draggable: boolean; onApply: () => void }) {
+  return <button type="button" className="library-look" aria-disabled={disabled} draggable={draggable} aria-label={entry.label} title={reason || entry.description} onClick={() => { if (!disabled) onApply(); }} onDragStart={event => {
+    if (!draggable || (!entry.visual && !entry.preset)) { event.preventDefault(); return; }
+    event.dataTransfer.setData(EFFECT_DRAG_TYPE, JSON.stringify(entry.visual ? { visual: entry.visual } : { preset: entry.preset }));
+    event.dataTransfer.effectAllowed = 'copy';
+  }}><EffectIcon name={entry.id} size={18}/><span>{entry.label}</span>{entry.action ? <ChevronRight size={12} aria-hidden="true"/> : <Plus size={12} aria-hidden="true"/>}</button>;
+}
 
 export function EffectLibrary({ clip, onMedia, onVisualEffect, onAddEffect, onTextTemplate, onSubtitleStyle, onSpeed }: {
   clip?: Clip; assets: readonly MediaAsset[];
@@ -43,32 +36,52 @@ export function EffectLibrary({ clip, onMedia, onVisualEffect, onAddEffect, onTe
   onFadeThroughBlack?: () => void; onSpeed?: () => void;
 }) {
   const [tab, setTab] = useState<LibraryTab>('effects');
+  const [category, setCategory] = useState<EffectLibraryCategory>('motion');
   const [search, setSearch] = useState('');
   const id = useId();
   const visual = clip?.kind === 'video' || clip?.kind === 'image';
   const text = clip?.kind === 'caption' || clip?.kind === 'graphic';
   const query = search.trim().toLowerCase();
-  const visible = [...featured, ...more].filter(look=>`${look.label} ${look.description}`.toLowerCase().includes(query));
-  const templates = REMOTION_TEXT_PRESETS;
-  const disabled = (look: LibraryLook) => look.visual ? !visual : !onAddEffect;
-  const apply = (look: LibraryLook) => { if (look.visual) onVisualEffect(look.visual); else if (look.preset) onAddEffect?.(look.preset); };
+  const categories = EFFECT_LIBRARY_CATEGORIES.filter(item => EFFECT_LIBRARY_CATALOG.some(entry => entry.category === item.id));
+  const visible = EFFECT_LIBRARY_CATALOG.filter(entry => (!entry.action || onSpeed) && (query ? `${entry.label} ${entry.description}`.toLowerCase().includes(query) : entry.category === category));
+  function reason(entry: LibraryEntryData) {
+    if (entry.visual && !visual) return 'Select a video or image clip first.';
+    if (entry.action && clip?.kind !== 'video' && clip?.kind !== 'audio') return 'Select a video or audio clip first.';
+    if (entry.preset && !onAddEffect) return 'Effect editing is unavailable.';
+  }
+  function apply(entry: LibraryEntryData) {
+    if (entry.visual) onVisualEffect(entry.visual);
+    else if (entry.preset) onAddEffect?.(entry.preset);
+    else onSpeed?.();
+  }
+  function selectCategory(next: EffectLibraryCategory) { setCategory(next); setSearch(''); }
   return <div className="effect-library" aria-label="Effect library">
     {onMedia && <button type="button" className="library-media-access" onClick={onMedia}><FolderOpen size={14}/><span>Your media</span><ChevronRight size={14}/></button>}
     <SegmentedTabs className="library-tabs" label="Effect library" value={tab} onChange={setTab} options={[{ value: 'effects', label: 'Effects', id: `${id}-effects-tab`, panelId: `${id}-effects` }, { value: 'text', label: 'Text', id: `${id}-text-tab`, panelId: `${id}-text` }]}/>
-    {tab==='effects'&&<label className="library-search"><Search size={13}/><input aria-label="Search effects" placeholder="Search effects" value={search} onChange={event=>setSearch(event.target.value)}/></label>}
-    <div role="tabpanel" id={`${id}-${tab}`} aria-labelledby={`${id}-${tab}-tab`}>
-      {tab === 'effects' ? <>
-        <div className="library-look-grid">{visible.map(look => <button key={look.id} type="button" className="library-look" aria-disabled={disabled(look)} draggable={!!look.visual || !!onAddEffect} onDragStart={event => { event.dataTransfer.setData(EFFECT_DRAG_TYPE, JSON.stringify(look.visual ? {visual:look.visual} : {preset:look.preset})); event.dataTransfer.effectAllowed = 'copy'; }} aria-label={look.label} title={look.visual && !visual ? 'Select a video or image clip first' : look.description} onClick={() => { if (!disabled(look)) apply(look); }}>
-          <EffectIcon name={look.id} size={18}/><span>{look.label}</span><Plus size={12} aria-hidden="true"/>
-        </button>)}</div>
-        {!visible.length && <p className="library-empty">No matching looks.</p>}
-        {onSpeed && 'change speed'.includes(query) && <button type="button" className="library-simple-action" disabled={clip?.kind !== 'video' && clip?.kind !== 'audio'} onClick={onSpeed}>Change speed<ChevronRight size={13}/></button>}
-      </> : <>
+    {tab === 'effects' && <label className="library-search"><Search size={13}/><input aria-label="Search effects" placeholder="Search effects" value={search} onChange={event => setSearch(event.target.value)}/></label>}
+    <div className="library-tab-content" role="tabpanel" id={`${id}-${tab}`} aria-labelledby={`${id}-${tab}-tab`}>
+      {tab === 'effects' ? <div className="library-category-layout">
+        <div className="library-category-rail" role="tablist" aria-label="Effect categories" aria-orientation="vertical" onKeyDown={event => {
+          if (!(event.target as HTMLElement).matches('[role="tab"]')) return;
+          const current = categories.findIndex(item => item.id === category);
+          const next = event.key === 'ArrowDown' ? (current + 1) % categories.length : event.key === 'ArrowUp' ? (current + categories.length - 1) % categories.length : event.key === 'Home' ? 0 : event.key === 'End' ? categories.length - 1 : undefined;
+          if (next === undefined) return;
+          event.preventDefault(); selectCategory(categories[next].id);
+          event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="tab"]')[next]?.focus();
+        }}>{categories.map(item => <button key={item.id} type="button" role="tab" id={`${id}-category-${item.id}`} data-category={item.id} aria-controls={`${id}-category-results`} aria-selected={category === item.id} tabIndex={category === item.id ? 0 : -1} onClick={() => selectCategory(item.id)}>{item.label}</button>)}</div>
+        <div className="library-category-results" id={`${id}-category-results`} role={query ? 'region' : 'tabpanel'} aria-label={query ? 'Effect search results' : undefined} aria-labelledby={query ? undefined : `${id}-category-${category}`}>
+          <div className="library-look-grid">{visible.map(entry => {
+            const unavailable = reason(entry);
+            const draggable = !!entry.visual || (!!entry.preset && !!onAddEffect);
+            return <LibraryEntry key={entry.id} entry={entry} disabled={!!unavailable} reason={unavailable} draggable={draggable} onApply={() => apply(entry)}/>;
+          })}</div>
+          {!visible.length && <p className="library-empty">No matching looks.</p>}
+        </div>
+      </div> : <div className="library-text-results">
         {text && <p className="library-selection-note">Apply an animation to your selected text.</p>}
-        <Suspense fallback={<p className="library-selection-note">Loading text templates…</p>}><TextPresetPicker presets={templates} selected={text ? clip?.textTemplate?.preset : undefined} onSelect={onTextTemplate}/></Suspense>
-        {!templates.length && <p className="library-empty">No matching text templates.</p>}
+        <Suspense fallback={<p className="library-selection-note">Loading text templates…</p>}><TextPresetPicker presets={REMOTION_TEXT_PRESETS} selected={text ? clip?.textTemplate?.preset : undefined} onSelect={onTextTemplate}/></Suspense>
         <SubtitleStylePicker selected={selectedSubtitleStyle(clip)} onSelect={onSubtitleStyle}/>
-      </>}
+      </div>}
     </div>
   </div>;
 }

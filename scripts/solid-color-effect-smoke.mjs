@@ -56,7 +56,7 @@ try {
   await page.setViewport({ width: 1000, height: 900 }); await page.goto(origin, { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => document.querySelector('hyperframes-player')?.style.zIndex === '1');
   await page.evaluate(() => { const p = document.querySelector('hyperframes-player'); window.original = { player: p, doc: p.iframeElement.contentDocument, source: p.iframeElement.contentDocument.querySelector('[data-source-clip="base"]') }; });
-  await page.click('button[aria-label="Solid color"]'); await page.waitForSelector('[aria-label="Solid color rectangle settings"]');
+  await page.click('[data-category="color"]');await page.click('button[aria-label="Solid color"]'); await page.waitForSelector('[aria-label="Solid color rectangle settings"]');
   await page.evaluate(() => window.fixture.seek(1.5)); await flush();
   await rgb('.stage', .5, .5, [37, 99, 235], 'New solid effect fills the preview frame');
   await page.$eval('[aria-label="Rectangle color"]', node => { node.value = '#ff0000'; node.dispatchEvent(new Event('change', { bubbles: true })); }); await flush();

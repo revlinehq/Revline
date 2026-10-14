@@ -66,3 +66,8 @@
 .footage-content-library .footage-tip{margin:0;padding-top:0;text-align:left;font-size:10px}
 .footage-content-library .footage-empty{padding:18px 0}
 .footage-content-library .footage-empty p{margin:0;line-height:1.6;font-size:11px}
+
+.preview-inspector .inspector-media-content{display:flex;flex-direction:column;overflow:hidden;scrollbar-gutter:auto}
+.inspector-media-content>.footage-content-library{height:100%;min-height:0}
+.footage-content-library>.source-media-list{flex:1;min-height:0;overflow-y:auto;scrollbar-gutter:stable;scrollbar-width:thin;scrollbar-color:color-mix(in srgb,var(--ws-text) 30%,var(--ws-bg)) transparent}
+.footage-content-library>.source-filters,.footage-content-library>.upload-status,.footage-content-library>.footage-tip{flex-shrink:0}

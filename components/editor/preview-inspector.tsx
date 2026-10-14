@@ -5,7 +5,7 @@ import { TextEffectsControls } from './text-effects-controls';
 import { AppliedVisualEffects, CinematicBarsControls, PlaybackSpeedControls, VisualEffectsControls } from './visual-effects-controls';
 import { FootageSelection, FootageSettings } from './footage-settings';
 import { useEffect, useRef, useState } from 'react';
-import { SlidersHorizontal, Layers, ArrowLeft } from 'lucide-react';
+import { SlidersHorizontal, Layers, ArrowLeft, Film } from 'lucide-react';
 import { NumberControl } from './visual-controls';
 import { FootagePanel, type UploadProgress } from './footage-panel';
 import type { VideoImportState } from './video-link-import';
@@ -19,7 +19,7 @@ import { SegmentedTabs } from './segmented-tabs';
 import './preview-inspector.css';
 import { subtitleStylePatch, type SubtitleStyleId } from '@/lib/editor/subtitle-styles';
 
-const sections = [{ value: 'tools', label: 'Tools', id: 'inspector-tools-tab', panelId: 'inspector-tools' }, { value: 'media', label: 'My media', id: 'inspector-media-tab', panelId: 'inspector-media' }] as const;
+const sections = [{ value: 'tools', label: 'Tools', id: 'inspector-tools-tab', panelId: 'inspector-tools', icon: <SlidersHorizontal size={14} strokeWidth={1.5}/> }, { value: 'media', label: 'My media', id: 'inspector-media-tab', panelId: 'inspector-media', icon: <Film size={14} strokeWidth={1.5}/> }] as const;
 
 export function PreviewInspector({ clip, audioClip, asset, assets, onRemoveAsset, usedAssetIds, upload, onUpload, onAdd, onChange, onPreviewEffects, onPlaybackRateChange, onAddEffect, onCrop, cropping=false, videoImports, onAddTextTemplate, onAddSubtitleStyle, onAddOverlay, onFadeThroughBlack, sourceRequest = 0, editRequest = 0 }: { onRemoveAsset?: (asset:MediaAsset)=>Promise<void>; usedAssetIds?:readonly string[]; sourceRequest?: number; editRequest?: number; onAddTextTemplate?: (preset: RemotionTextPreset) => void; onAddSubtitleStyle?: (style: SubtitleStyleId) => void; onAddOverlay?: (asset: MediaAsset) => void; onFadeThroughBlack?: () => void; clip?: Clip; audioClip?: Clip; asset?: MediaAsset; assets: MediaAsset[]; upload: UploadProgress; onUpload: () => void; onAdd: (asset: MediaAsset) => void; onChange: (patch: Partial<Clip>) => void; onPreviewEffects?: (patch: Partial<Clip> | null) => void; onPlaybackRateChange?: (rate: number) => void; onAddEffect?: (preset: EffectPreset) => void; onCrop: () => void; cropping?:boolean; videoImports?:VideoImportState[] }) {
   const [section, setSection] = useState<'tools' | 'media'>('tools');
@@ -63,7 +63,7 @@ export function PreviewInspector({ clip, audioClip, asset, assets, onRemoveAsset
   const activeTab = text && tab === 'effects' ? 'edit' : (visual || effect) && tab === 'edit' ? 'effects' : tab;
   const library = activeTab === 'sources';
   return <aside ref={panel} className="preview-inspector" aria-label="Clip settings">
-    <SegmentedTabs className="inspector-section-tabs" label="Tools and media" options={sections} value={section} onChange={setSection}/>
+    <SegmentedTabs className="inspector-section-tabs" appearance="navigation" label="Tools and media" options={sections} value={section} onChange={setSection}/>
     {section === 'media' ? <div className="inspector-content inspector-media-content" id="inspector-media" role="tabpanel" aria-labelledby="inspector-media-tab"><FootagePanel onRemove={onRemoveAsset} usedAssetIds={usedAssetIds} key={sourceRequest} variant="library" videoImports={videoImports} assets={assets} upload={upload} onUpload={onUpload} onAdd={onAdd}/></div> : <div className="inspector-tools" id="inspector-tools" role="tabpanel" aria-labelledby="inspector-tools-tab">
     {library ? clip && <div className="inspector-library-heading"><span>{asset?.fileName || clip.text || 'Selected clip'}</span><button type="button" onClick={() => { setEffectSelection(null); setTab(visual || effect ? 'effects' : 'edit'); }}><SlidersHorizontal size={12}/>{visual || effect ? 'Clip settings' : 'Edit selected clip'}</button></div> : <div className="inspector-tabs" role="tablist" aria-label="Editing tools" onKeyDown={event => {
       if (!(event.target as HTMLElement).matches('[role="tab"]')) return;

@@ -2,6 +2,9 @@ import type { SVGProps } from 'react';
 
 // Original vector drawings from Pen: Revline / custom effect icons (mzzBL).
 const glyphs = {
+  crossfade: [{ d: 'M3 5h11v14H3z M10 5h11v14H10z', stroke: true, opacity: 1 }, { d: 'M10 5h4v14h-4z', stroke: false, opacity: .28 }],
+  wipe: [{ d: 'M3 5h18v14H3z M13 5v14 M6 12h4 M8 10l2 2-2 2', stroke: true, opacity: 1 }, { d: 'M3 5h10v14H3z', stroke: false, opacity: .18 }],
+  slide: [{ d: 'M3 5h6v14H3z M15 5h6v14h-6z M6 12h12 M15 9l3 3-3 3', stroke: true, opacity: 1 }],
   'solid-color': [{ d: 'M4 5h16v14H4z', stroke: true, opacity: 1 }, { d: 'M7 8h10v8H7z', stroke: false, opacity: .28 }],
   'glitch': [{"d":"M4 5h14v4h3v3h-15v3h-3v3h16m-16-9h9m0 6h10","stroke":true,"opacity":1}],
   'zoomBlur': [{"d":"M7 7h10v10h-10z m-4-4l3 3m12 0l3-3m-18 18l3-3m12 0l3 3","stroke":true,"opacity":1},{"d":"M9 9h6v6h-6z","stroke":false,"opacity":0.28}],
@@ -31,4 +34,3 @@ export type EffectIconName = keyof typeof glyphs;
 export function EffectIcon({ name, size = 16, ...props }: SVGProps<SVGSVGElement> & { name: EffectIconName; size?: number }) {
   return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true" {...props}>{glyphs[name].map((path,index) => <path key={index} d={path.d} fill={path.stroke ? 'none' : 'currentColor'} stroke={path.stroke ? 'currentColor' : 'none'} strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" opacity={path.opacity}/>)}</svg>;
 }
-
