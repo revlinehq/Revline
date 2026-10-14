@@ -41,23 +41,24 @@ const initial:Timeline={fps:30,aspectRatio:'landscape',tracks:{visual:2,overlay:
 ]};
 beforeEach(()=>{sdk.options=null;sdk.plan=async()=>{};sdk.messages=[];vi.stubEnv('BILLING_ENABLED','false')});
 afterEach(()=>vi.unstubAllEnvs());
-async function memoryBackend(seed:Timeline){
+async function memoryBackend(seed:Timeline,priorHistory:Timeline[]=[]){
   const t=convexTest(schema,import.meta.glob('./**/*.ts')),owner=t.withIdentity({subject:'owner'});
   const projectId=await owner.mutation(api.projects.create,{title:'Synthetic tool harness',aspectRatio:seed.aspectRatio});
   const mapping=await t.run(async ctx=>{
     const fields={ownerId:'owner',projectId,size:1,duration:30,createdAt:Date.now()};
     const sound=await ctx.db.insert('assets',{...fields,kind:'audio',fileName:'Synthetic voice.wav',contentType:'audio/wav'});
-    const video=await ctx.db.insert('assets',{...fields,kind:'video',fileName:'Synthetic video.mp4',contentType:'video/mp4',audioAssetId:sound,audioExtracted:true});
+    const video=await ctx.db.insert('assets',{...fields,kind:'video',fileName:'CAD sample.mp4',contentType:'video/mp4',audioAssetId:sound,audioExtracted:true});
     const image=await ctx.db.insert('assets',{...fields,kind:'image',fileName:'Synthetic still.png',contentType:'image/png'});
     return{sound,video,image};
   });
-  const timeline={...seed,clips:seed.clips.map(clip=>({...clip,...(clip.assetId?{assetId:mapping[clip.assetId as keyof typeof mapping]}:{})}))};
-  await t.run(ctx=>ctx.db.patch(projectId,{timeline,aiRunning:true,aiRunId:'run',aiUndoRecorded:false}));
-  return{t,owner,projectId,seed:timeline,runArgs:{projectId,ownerId:'owner',runId:'run'}};
+  const map=(input:Timeline)=>({...input,clips:input.clips.map(clip=>({...clip,...(clip.assetId?{assetId:mapping[clip.assetId as keyof typeof mapping]}:{})}))});
+  const timeline=map(seed),history=priorHistory.map(map),revision=history.length;
+  await t.run(ctx=>ctx.db.patch(projectId,{timeline,history,revision,aiRunning:true,aiRunId:'run',aiUndoRecorded:false}));
+  return{t,owner,projectId,seed:timeline,priorHistory:history,revision,runArgs:{projectId,ownerId:'owner',runId:'run'}};
 }
-async function run(plan?:(tools:Record<string,Tool>)=>Promise<void>,seed:Timeline=initial,realBackend=false){
-  const backend=realBackend?await memoryBackend(seed):undefined;
-  let timeline=structuredClone(backend?.seed??seed),revision=0,error:string|undefined;
+async function run(plan?:(tools:Record<string,Tool>)=>Promise<void>,seed:Timeline=initial,realBackend=false,priorHistory:Timeline[]=[]){
+  const backend=realBackend?await memoryBackend(seed,priorHistory):undefined;
+  let timeline=structuredClone(backend?.seed??seed),revision=backend?.revision??0,error:string|undefined;
   const calls:string[]=[];
   const project=()=>({_id:'project',timeline,revision,aspectRatio:'landscape'});
   const ctx={
@@ -75,6 +76,10 @@ async function run(plan?:(tools:Record<string,Tool>)=>Promise<void>,seed:Timelin
     },
     runMutation:async(reference:Parameters<typeof getFunctionName>[0],args:{timeline?:Timeline;expectedRevision?:number;error?:string})=>{
       const name=getFunctionName(reference);calls.push(name);
+      if(name==='assistant:undoLatestEdit'){
+        if(!backend)throw new Error('Undo requires the in-memory saved backend.');
+        const result=await backend.t.mutation(internal.assistant.undoLatestEdit,{...backend.runArgs,expectedRevision:args.expectedRevision!});timeline=structuredClone(result.timeline);revision=result.revision;return result;
+      }
       if(name==='assistant:apply'){expect(args.expectedRevision).toBe(revision);timeline=structuredClone(args.timeline!);revision=backend?await backend.t.mutation(internal.assistant.apply,{...backend.runArgs,timeline,expectedRevision:revision}):revision+1;return revision}
       if(name==='assistant:finish'){error=args.error;return backend?backend.t.mutation(internal.assistant.finish,{...backend.runArgs,...(error?{error}:{})}):null}
       throw new Error('Unexpected mutation '+name);
@@ -87,6 +92,68 @@ async function run(plan?:(tools:Record<string,Tool>)=>Promise<void>,seed:Timelin
   return{timeline,revision,calls,history,error,backend};
 }
 const execute=(tools:Record<string,Tool>,name:string,input:unknown)=>tools[name].execute({},tools[name].inputSchema.parse(input));
+const trimmed:Timeline={...initial,clips:initial.clips.map(c=>c.id==='from'||c.id==='audio'?{...c,duration:1.5}:c)};
+
+test('actual undo→unlink→delete tools restore saved source ranges and preserve original audio in a new undo group',async()=>{
+  const result=await run(async tools=>{
+    const undone=await execute(tools,'undoLatestEdit',{});
+    expect(undone).toMatchObject({undone:true,saved:true,revision:2});
+    const restored=await execute(tools,'inspectTimeline',{}) as{timeline:Timeline};
+    expect(restored.timeline.clips.find(c=>c.id==='audio')).toMatchObject({duration:3,sourceStart:2,volume:.6,linkedClipId:'from'});
+    expect(await execute(tools,'unlink',{clipId:'from'})).toMatchObject({unlinked:true,clipIds:['from','audio'],saved:true});
+    const removed=await execute(tools,'delete',{clipId:'from'});
+    expect(removed).toMatchObject({staged:true,saved:false,removedClipIds:['from']});
+  },trimmed,true,[initial]);
+  expect(result.timeline.clips.some(c=>c.id==='from')).toBe(false);
+  expect(result.timeline.clips.find(c=>c.id==='audio')).toEqual({...result.backend!.priorHistory[0].clips[1],linkedClipId:undefined});
+  expect(result.timeline.clips.filter(c=>c.id!=='audio')).toEqual(result.backend!.priorHistory[0].clips.slice(2));
+  await assertUndo(result,result.backend!.priorHistory[0]);
+});
+
+test('undo returns a truthful empty result and refuses both saved and private staged current-turn mutations',async()=>{
+  const empty=await run(async tools=>expect(await execute(tools,'undoLatestEdit',{})).toMatchObject({undone:false,saved:false,message:'No saved edits to undo.'}),initial,true);
+  expect(empty.revision).toBe(0);expect(empty.history).toEqual([]);
+  const saved=await run(async tools=>{
+    await execute(tools,'styleTextClip',{clipId:'title',fontSize:80});
+    await expect(execute(tools,'undoLatestEdit',{})).rejects.toThrow('before making changes');
+  },initial,true);
+  expect(saved.calls).not.toContain('assistant:undoLatestEdit');await assertUndo(saved);
+  const staged=await run(async tools=>{
+    await execute(tools,'delete',{clipId:'to'});
+    await expect(execute(tools,'undoLatestEdit',{})).rejects.toThrow('before making changes');
+  },initial,true);
+  expect(staged.calls).not.toContain('assistant:undoLatestEdit');
+  expect(staged.error).toContain('pending replacement was not saved');
+  expect((await staged.backend!.owner.query(api.projects.get,{projectId:staged.backend!.projectId})).timeline).toEqual(staged.backend!.seed);
+  expect(staged.history).toEqual([]);
+});
+
+test('group copy/move/trim, layer reorder and common blend use actual editor operations while preserving source identity',async()=>{
+  const result=await run(async tools=>{
+    await execute(tools,'addClipTransition',{preset:'crossfade',fromClipId:'from',toClipId:'to'});
+    const current=await execute(tools,'inspectTimeline',{}) as{timeline:Timeline};
+    const oldTransition=current.timeline.clips.find(c=>c.transition)!;
+    const copied=await execute(tools,'duplicateClips',{clipIds:['from','to',oldTransition.id],at:6}) as{newClipIds:string[]};
+    await execute(tools,'moveClips',{clipIds:copied.newClipIds,timeDelta:2,layerDelta:1});
+    const moved=await execute(tools,'inspectTimeline',{}) as{timeline:Timeline};
+    const pair=moved.timeline.clips.find(c=>copied.newClipIds.includes(c.id)&&c.transition)!;
+    expect(pair.transition!.fromClipId).not.toBe('from');expect(pair.transition!.toClipId).not.toBe('to');
+    await expect(execute(tools,'duplicateClips',{clipIds:[oldTransition.id],at:20})).rejects.toThrow('both connected clips');
+    await expect(execute(tools,'setBlendMode',{clipIds:[pair.transition!.fromClipId],blendMode:'screen'})).rejects.toThrow('same blend');
+    await execute(tools,'setBlendMode',{clipIds:[pair.transition!.fromClipId,pair.transition!.toClipId],blendMode:'screen'});
+    await execute(tools,'resizeClips',{clipIds:[pair.transition!.fromClipId],side:'left',delta:.2});
+    await execute(tools,'reorderLayer',{group:'visual',from:2,to:3});
+    await execute(tools,'followSubject',{clipId:'from',enabled:false});
+  },initial,true);
+  const copies=result.timeline.clips.filter(c=>c.kind==='video'&&c.id!=='from');expect(copies).toHaveLength(1);
+  const copy=copies[0],audio=result.timeline.clips.find(c=>c.id===copy.linkedClipId)!;
+  expect(copy).toMatchObject({track:3,start:8.2,duration:2.8,sourceStart:2.2,blendMode:'screen',assetId:result.backend!.seed.clips[0].assetId});
+  expect(audio).toMatchObject({start:8.2,duration:2.8,sourceStart:2.2,volume:.6,linkedClipId:copy.id});
+  expect(result.timeline.clips.find(c=>c.id==='title')).toEqual({...result.backend!.seed.clips[3],track:3});
+  expect(result.timeline.clips.find(c=>c.id==='to')).toEqual(result.backend!.seed.clips[2]);
+  expect(result.timeline.clips.filter(c=>c.transition)).toHaveLength(2);
+  await assertUndo(result);
+});
 
 test('a plain greeting completion creates no edits or analysis requests and preserves concise abilities policy',async()=>{
   const result=await run();
@@ -193,12 +260,12 @@ const audioSeed:Timeline={fps:30,aspectRatio:'landscape',tracks:{visual:1,overla
   {id:'voice',kind:'audio',assetId:'sound',track:1,start:3,duration:2,sourceStart:2,volume:.3},
   {id:'untouched',kind:'caption',track:1,start:0,duration:2,sourceStart:0,text:'Untouched saved caption',color:'#abcdef'},
 ]};
-async function assertUndo(result:Awaited<ReturnType<typeof run>>){
+async function assertUndo(result:Awaited<ReturnType<typeof run>>,before=result.backend!.seed){
   expect(result.error).toBeUndefined();expect(result.calls).not.toContain('assistant:requestAnalysis');
-  expect(result.history).toEqual([result.backend!.seed]);
-  const store=createEditorStore(result.backend!.seed);store.getState().edit(result.timeline);expect(store.getState().undo()).toEqual(result.backend!.seed);expect(store.getState().redo()).toEqual(result.timeline);
+  expect(result.history).toEqual([before]);
+  const store=createEditorStore(before);store.getState().edit(result.timeline);expect(store.getState().undo()).toEqual(before);expect(store.getState().redo()).toEqual(result.timeline);
   const revision=await result.backend!.owner.mutation(api.projects.undo,{projectId:result.backend!.projectId});
-  expect((await result.backend!.owner.query(api.projects.get,{projectId:result.backend!.projectId})).timeline).toEqual(result.backend!.seed);
+  expect((await result.backend!.owner.query(api.projects.get,{projectId:result.backend!.projectId})).timeline).toEqual(before);
   await result.backend!.owner.mutation(api.projects.saveTimeline,{projectId:result.backend!.projectId,timeline:result.timeline,expectedRevision:revision});
   expect((await result.backend!.owner.query(api.projects.get,{projectId:result.backend!.projectId})).timeline).toEqual(result.timeline);
 }
@@ -300,16 +367,26 @@ function configuredModel(){
   expect(key.startsWith('sk-ant-')).toBe(true);
   return createAnthropic({apiKey:key})(CLAUDE_MODEL);
 }
-async function nativeIntent(prompt:string,seed:Timeline){
+async function nativeIntent(prompt:string,seed:Timeline,priorHistory:Timeline[]=[]){
   const called:string[]=[];const model=configuredModel();
   const result=await run(async available=>{
     const tools=Object.fromEntries(Object.entries(available).map(([name,value])=>[name,tool({description:value.description,inputSchema:value.inputSchema,execute:async input=>{called.push(name);return execute(available,name,input)}})]));
     try{await generateText({model,providerOptions:claudeProviderOptions(CLAUDE_MODEL),system:sdk.options!.instructions,prompt,tools,stopWhen:stepCountIs(8),maxOutputTokens:1800,abortSignal:AbortSignal.timeout(45000)})}
     catch(error){const cause=error as{statusCode?:number;name?:string};throw new Error(`Live Claude intent failed (${cause.name??'Error'}, status ${cause.statusCode??'unknown'}).`)}
-  },seed,true);
+  },seed,true,priorHistory);
   expect(result.error).toBeUndefined();expect(called).not.toContain('analyzeMedia');expect(called).not.toContain('inspectVideo');expect(called.length).toBeGreaterThan(1);
   return{...result,called};
 }
+test.skipIf(process.env.REVLINE_LIVE_AGENT_SMOKE!=='1')('live configured Claude undoes, unlinks and removes CAD footage while preserving original audio',async()=>{
+  const result=await nativeIntent('can u undo, unlink, leave audio, and delete footage of cad',trimmed,[initial]);
+  expect(result.called).toContain('undoLatestEdit');expect(result.called).toContain('unlink');expect(result.called).toContain('delete');
+  expect(result.called.indexOf('undoLatestEdit')).toBeLessThan(result.called.indexOf('unlink'));expect(result.called.indexOf('unlink')).toBeLessThan(result.called.indexOf('delete'));
+  expect(result.timeline.clips.some(c=>c.id==='from')).toBe(false);
+  expect(result.timeline.clips.find(c=>c.id==='audio')).toEqual({...result.backend!.priorHistory[0].clips[1],linkedClipId:undefined});
+  expect(result.timeline.clips.filter(c=>c.id!=='audio')).toEqual(result.backend!.priorHistory[0].clips.slice(2));
+  await assertUndo(result,result.backend!.priorHistory[0]);
+  console.log(JSON.stringify({model:CLAUDE_MODEL,intent:'undo-unlink-keep-audio-delete-CAD-footage',actualToolCalls:result.called,originalAudioPreserved:true,oneNewUndo:true,syntheticOnly:true}));
+},60_000);
 test.skipIf(process.env.REVLINE_LIVE_AGENT_SMOKE!=='1')('live configured Claude applies look plus custom text and separate animation through stateful actual saves',async()=>{
   const result=await nativeIntent('For caption title only, first apply the Neon Echo look. Then customize it to Anton font, font size80, solid fill#AABBCC, rotation18degrees, stroke width3 with stroke color#102030, glow blur21 with glow color#2200AA, and Word reveal animation. Keep its exact existing words, start/duration and transparent background. Preserve every other clip and source. Do not analyze any media; this is an explicit text edit.',initial);
   const clip=result.timeline.clips[3];expect(clip).toMatchObject({text:initial.clips[3].text,start:0,duration:2,fontFamily:'anton',fontSize:80,color:'#AABBCC',background:'transparent',transform:{rotation:18},textStyle:{strokeWidth:3,strokeColor:'#102030',glowBlur:21,glowColor:'#2200AA'},textTemplate:{preset:'word-reveal'}});

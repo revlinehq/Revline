@@ -94,6 +94,18 @@ export const apply = internalMutation({ args: { ...runArgs, expectedRevision: v.
   const revision = await commitTimeline(ctx, project, args.timeline, args.expectedRevision);
   await ctx.db.patch(project._id, { aiUndoRecorded: true, aiCheckpointRevision: revision }); return revision;
 }});
+/** Undo only stored history before this model turn publishes its own checkpoints. */
+export const undoLatestEdit=internalMutation({args:{...runArgs,expectedRevision:v.number()},returns:v.object({undone:v.boolean(),revision:v.number(),timeline:timelineValidator}),handler:async(ctx,args)=>{
+  const project=await requireProject(ctx,args.projectId,args.ownerId);
+  if(project.aiRunId!==args.runId||!project.aiRunning)throw new ConvexError('AI run is no longer active');
+  if(project.aiUndoRecorded)throw new ConvexError('Undo the latest saved edit before making changes in this turn.');
+  if((project.revision??0)!==args.expectedRevision)throw new ConvexError('The timeline changed elsewhere. Inspect it before undoing.');
+  const history=(project.history??[]).map(normalizeTimeline),previous=history.pop();
+  if(!previous)return {undone:false,revision:project.revision??0,timeline:currentTimeline(project)};
+  const timeline=await validateTimeline(ctx,project,previous),revision=args.expectedRevision+1;
+  await ctx.db.patch(project._id,{timeline,aspectRatio:timeline.aspectRatio,history,revision,aiCheckpointRevision:undefined,updatedAt:Date.now()});
+  return {undone:true,revision,timeline};
+}});
 // Destructive turns validate each private draft without exposing intermediate deletions.
 // The final apply repeats these checks atomically before publishing the replacement.
 export const validateDraft = internalQuery({ args: { ...runArgs, expectedRevision: v.number(), timeline: timelineValidator }, returns: v.null(), handler: async (ctx, args) => {

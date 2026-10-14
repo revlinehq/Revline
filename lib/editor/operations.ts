@@ -1,4 +1,4 @@
-import { EFFECT_CATALOG, motionPreset, offsetClipMotion, type EffectPreset } from './clip-effects';
+import { EFFECT_CATALOG, motionPreset, offsetClipMotion,validateClipEffects, type BlendMode,type EffectPreset } from './clip-effects';
 import { TimelineGestureRejection } from './timeline-edit-errors';
 import { textTemplateTimingPatch } from './remotion-text';
 import { textAnimationTimingPatch } from './text-animation-timing';
@@ -15,6 +15,17 @@ export function linkedClipIds(timeline: Timeline, ids: string[]): string[] {
 export function unlinkClips(timeline: Timeline, id: string): Timeline {
   const ids = new Set(linkedClipIds(timeline, [id]));
   return { ...timeline, clips: timeline.clips.map(clip => ids.has(clip.id) ? { ...clip, linkedClipId: undefined } : clip) };
+}
+/** Apply a shared blend atomically so both sides of a transition can stay compatible. */
+export function setClipBlendMode(timeline:Timeline,ids:string[],blendMode:BlendMode):Timeline{
+  const selected=new Set(ids);
+  if(!selected.size||ids.some(id=>!timeline.clips.some(clip=>clip.id===id)))throw new Error('Choose existing visual clip IDs.');
+  const next={...timeline,clips:timeline.clips.map(clip=>{
+    if(!selected.has(clip.id))return clip;
+    if(clip.kind==='audio'||clip.kind==='effect')throw new Error('Blend modes apply to footage or text clips.');
+    const changed={...clip,blendMode};validateClipEffects(changed);return changed;
+  })};
+  return reconcileTransitionEdits(timeline,next);
 }
 /** Seek to a frame without clamping back to an imported, fractional endpoint. */
 export function frameSeekTime(time: number, fps: number, duration: number) {
