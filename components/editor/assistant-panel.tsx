@@ -3,6 +3,8 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { Check, ArrowUpRight } from 'lucide-react';
 import { Brand } from '@/components/workspace/brand';
+import { AssistantModelPicker } from './assistant-model-picker';
+import type { ClaudeModelChoice } from '@/lib/ai/claude-model';
 import { EditComposer } from '@/components/workspace/edit-composer';
 import { ChatProse } from './chat-prose';
 import { useConversationScroll } from '@/components/workspace/use-conversation-scroll';
@@ -31,17 +33,19 @@ function AssistantResponseText({ text, streaming }: { text: string; streaming: b
   return <ChatProse text={text} animate={receivedLive || streaming} />;
 }
 
-export function AssistantPanel({ messages, running, configured, error, onSend, onStop, hasClips, demo, onLoadMore, canLoadMore, onAttach, activity, activitySource, activityProgress, draftKey, suggestions, onSuggestion, editSnapshot }: {
+export function AssistantPanel({ messages, running, configured, error, onSend, onStop, hasClips, demo, onLoadMore, canLoadMore, onAttach, activity, activitySource, activityProgress, draftKey, suggestions, onSuggestion, editSnapshot, modelSwitcher = false }: {
   messages: ChatMessage[]; running: boolean; configured: boolean; error?: string | null;
-  onSend: (text: string) => Promise<void>; hasClips: boolean; demo: boolean;
+  modelSwitcher?: boolean;
+  onSend: (text: string, modelChoice?: ClaudeModelChoice) => Promise<void>; hasClips: boolean; demo: boolean;
   onLoadMore?: () => void; canLoadMore?: boolean; onAttach?: () => void;
   activity?: string | null; activitySource?: string | null; activityProgress?:number|null; draftKey?:string;
   onStop?: () => Promise<void>;
   suggestions?: { sourceName:string;clipId:string;items:SourceEditSuggestion[] };
-  onSuggestion?: (prompt:string,clipId:string) => Promise<void>;
+  onSuggestion?: (prompt:string,clipId:string,modelChoice?:ClaudeModelChoice) => Promise<void>;
   editSnapshot?:AssistantEditSnapshot;
 }) {
   const [prompt, setPrompt] = useState('');
+  const [modelChoice, setModelChoice] = useState<ClaudeModelChoice>('sonnet');
   const [sending, setSending] = useState(false);
   const [localError, setLocalError] = useState('');
   const [stopState,setStopState]=useState<'stopping'|'stopped'|null>(null);
@@ -86,7 +90,7 @@ export function AssistantPanel({ messages, running, configured, error, onSend, o
   async function submit() {
     if (!prompt.trim() || sending || running || pendingReply) return;
     setStopState(null); setSending(true); setPendingReply({ id: `pending-${crypto.randomUUID()}`, text: prompt.trim(), previousUserId: latestUser?.id, previousError: error }); setLocalError(''); scroll.resume();
-    try { await onSend(prompt.trim()); setPrompt(''); try { if (draftKey) sessionStorage.removeItem(draftKey); } catch { /* The message was sent successfully. */ } }
+    try { await onSend(prompt.trim(), modelSwitcher ? modelChoice : undefined); setPrompt(''); try { if (draftKey) sessionStorage.removeItem(draftKey); } catch { /* The message was sent successfully. */ } }
     catch (e) { setPendingReply(null); setLocalError(e instanceof Error ? e.message : 'Could not send message'); }
     finally { setSending(false); }
   }
@@ -95,7 +99,7 @@ export function AssistantPanel({ messages, running, configured, error, onSend, o
     if (!suggestions || !onSuggestion || sending || running || pendingReply || !configured) return;
     const request = `${suggestion.prompt}\n\nUse the selected clip from “${suggestions.sourceName}”, source ${suggestion.start.toFixed(2)}–${suggestion.end.toFixed(2)} seconds.`;
     setStopState(null); setSending(true); setPendingReply({ id: `pending-${crypto.randomUUID()}`, text: request, previousUserId: latestUser?.id, previousError: error }); setLocalError(''); scroll.resume();
-    try { await onSuggestion(request, suggestions.clipId); }
+    try { await onSuggestion(request, suggestions.clipId, modelSwitcher ? modelChoice : undefined); }
     catch (e) { setPendingReply(null); setLocalError(e instanceof Error ? e.message : 'Could not start this edit.'); }
     finally { setSending(false); }
   }
@@ -138,7 +142,7 @@ export function AssistantPanel({ messages, running, configured, error, onSend, o
     </div>
     <div ref={scroll.composer} className="manual-composer-dock">
     {scroll.latestHidden && <button className="chat-jump-latest" onClick={scroll.resume}>Latest response</button>}
-    <EditComposer variant="compact" className="manual-editor-composer" value={prompt} onChange={changePrompt} onSubmit={submit} onAttach={onAttach} placeholder="What would you change next?" disabled={sending || !!pendingReply} running={running} onStop={onStop ? stop : undefined} />
+    <EditComposer actions={modelSwitcher ? <AssistantModelPicker value={modelChoice} onChange={setModelChoice} disabled={answering}/> : undefined} variant="compact" className="manual-editor-composer" value={prompt} onChange={changePrompt} onSubmit={submit} onAttach={onAttach} placeholder="What would you change next?" disabled={sending || !!pendingReply} running={running} onStop={onStop ? stop : undefined} />
     </div>
   </div>;
 }

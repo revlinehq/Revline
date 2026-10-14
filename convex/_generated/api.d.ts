@@ -16,6 +16,7 @@ import type * as editorAccess from "../editorAccess.js";
 import type * as http from "../http.js";
 import type * as lib_auth from "../lib/auth.js";
 import type * as lib_billing_access from "../lib/billing_access.js";
+import type * as lib_claude_model from "../lib/claude_model.js";
 import type * as lib_editSession from "../lib/editSession.js";
 import type * as lib_inspectTimeline from "../lib/inspectTimeline.js";
 import type * as lib_media_storage from "../lib/media_storage.js";
@@ -50,6 +51,7 @@ declare const fullApi: ApiFromModules<{
   http: typeof http;
   "lib/auth": typeof lib_auth;
   "lib/billing_access": typeof lib_billing_access;
+  "lib/claude_model": typeof lib_claude_model;
   "lib/editSession": typeof lib_editSession;
   "lib/inspectTimeline": typeof lib_inspectTimeline;
   "lib/media_storage": typeof lib_media_storage;

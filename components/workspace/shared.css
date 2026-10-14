@@ -28,3 +28,5 @@
 .composer-media-sheet{overflow-y:auto;overscroll-behavior:contain}
 .composer-media-sheet>.edit-composer{flex-shrink:0}
 .composer-sheet-attachments{flex-shrink:0;align-content:flex-start}
+
+.edit-composer-compact .revline-primary-icon[data-slot=button]{width:28px;height:28px;min-width:28px;padding:0;border-radius:6px}

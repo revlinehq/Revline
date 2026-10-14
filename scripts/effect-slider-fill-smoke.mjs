@@ -7,7 +7,7 @@ import React,{useState} from 'react';import {createRoot} from 'react-dom/client'
 import {CinematicBarsControls,VisualEffectsControls} from './components/editor/visual-effects-controls';
 import {EffectSlider} from './components/editor/effect-slider';
 import {VISUAL_EFFECT_LIMITS} from './lib/editor/visual-effects';
-import './components/workspace/workspace-pages.css';import './app/editor.css';
+import './components/workspace/workspace-pages.css';import './app/editor.css';import './components/editor/footage-panel.css';
 const effects=Object.fromEntries(Object.entries(VISUAL_EFFECT_LIMITS).map(([key,limits])=>[key,{enabled:true,...Object.fromEntries(Object.entries(limits).map(([parameter,[min,max]])=>[parameter,Number.isInteger(min)&&Number.isInteger(max)&&max-min>2?Math.round((min+max)/2):(min+max)/2]))}]));
 function Fixture(){
  const[bars,setBars]=useState({id:'bars',kind:'effect',effectPreset:'cinematic-bars',start:0,sourceStart:0,duration:4});
@@ -48,10 +48,11 @@ async function verifyFills(theme) {
     const expected = (Number(input.value) - Number(input.min)) / (Number(input.max) - Number(input.min));
     const style = fill && getComputedStyle(fill);
     const channels = style?.backgroundColor.match(/[\d.]+/g)?.map(Number) ?? [];
-    return { label: input.getAttribute('aria-label'), expected, sliderWidth: slider.getBoundingClientRect().width, fillWidth: fill?.getBoundingClientRect().width ?? 0, color: style?.backgroundColor ?? 'missing', blue: channels[2] > channels[0] && channels[2] > channels[1], pointerEvents: style?.pointerEvents };
+    return { label: input.getAttribute('aria-label'), expected, sliderWidth: slider.getBoundingClientRect().width, fillWidth: fill?.getBoundingClientRect().width ?? 0, color: style?.backgroundColor ?? 'missing', blue: channels[2] > channels[0] && channels[2] > channels[1], pointerEvents: style?.pointerEvents, inputBackground:getComputedStyle(input).backgroundColor };
   }));
   assert.equal(fills.length, 23, 'Bars, all visual effect parameters including Neon edges, and standalone text size are covered');
   for (const fill of fills) {
+    assert.equal(fill.inputBackground,'rgba(0, 0, 0, 0)',`${theme} ${fill.label} input must not cover its label/value/fill`);
     assert.ok(fill.fillWidth > 0, `${theme} ${fill.label} has a rendered progress fill`);
     assert.ok(Math.abs(fill.fillWidth / fill.sliderWidth - fill.expected) < .005, `${theme} ${fill.label} reflects its actual range value`);
     assert.notEqual(fill.color, 'rgba(0, 0, 0, 0)', `${theme} ${fill.label} fill is visible`);
@@ -64,7 +65,7 @@ async function verifyFills(theme) {
 }
 try {
   await page.setViewport({ width: 420, height: 1000 });
-  await page.setContent('<html data-workspace-theme="dark"><body><div id="root" class="conversation-editor preview-inspector"></div></body></html>');
+  await page.setContent('<html data-workspace-theme="dark"><body><div class="preview-inspector-sheet"><div id="root" class="conversation-editor preview-inspector"></div></div></body></html>');
   await page.addStyleTag({ content: bundle.outputFiles.find(file => file.path.endsWith('.css')).text });
   await page.addStyleTag({ content: '*{box-sizing:border-box}body{margin:0;background:var(--ws-bg);font:12px Arial}#root{width:340px;min-height:100vh;padding:16px;margin:0 auto;display:block}.visual-effects-controls{margin-bottom:18px}' });
   await page.addScriptTag({ content: bundle.outputFiles.find(file => file.path.endsWith('.js')).text });

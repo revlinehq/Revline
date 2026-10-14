@@ -1,0 +1,4 @@
+.assistant-model-picker{min-width:0;max-width:150px}
+.assistant-model-picker .inspector-select-trigger{height:26px;padding:0 7px;gap:6px;border:0;background:transparent;color:var(--ws-muted);font-size:11px}
+.assistant-model-picker .inspector-select-trigger:hover,.assistant-model-picker .inspector-select-trigger[data-state=open]{background:var(--ws-hover);color:var(--ws-text)}
+.assistant-model-picker .inspector-select-trigger:disabled{opacity:.5;cursor:default}

@@ -23,6 +23,7 @@ import { EditorPlaybackControls } from './playback-controls';
 import { TimelinePanel } from './timeline';
 import type { VideoImportState } from './video-link-import';
 import type { UploadProgress } from './footage-panel';
+import type { ClaudeModelChoice } from '@/lib/ai/claude-model';
 import { AssistantPanel, type ChatMessage } from './assistant-panel';
 import type { AssistantEditSnapshot } from './assistant-results';
 import { ExportDialog, type ExportSettings, type ExportState } from './export-dialog';
@@ -47,14 +48,14 @@ function ClockedPreviewInspector(props: React.ComponentProps<typeof PreviewInspe
   const time = usePausedPlaybackTime();
   return <PreviewInspector {...props} time={time}/>;
 }
-export type EditContext = { selectedClipId?: string; selectedClipIds?:string[]; playhead: number };
+export type EditContext = { selectedClipId?: string; selectedClipIds?:string[]; playhead: number; modelChoice?: ClaudeModelChoice };
 export type EditorShellProps = {
   title: string; timeline: Timeline; assets: MediaAsset[]; onChange: (t: Timeline) => void;
   onTitle: (title: string) => void; onUpload: (files: File[]) => Promise<void>;
   onDropUpload: (files: File[]) => Promise<void>;
   saving: boolean; upload: UploadProgress; error: string; onError: (message: string) => void;
   onUndo: () => void; onRedo: () => void; canUndo: boolean; canRedo: boolean;
-  messages: ChatMessage[]; aiRunning: boolean; aiConfigured: boolean; aiError?: string | null; draftKey?:string;
+  messages: ChatMessage[]; aiRunning: boolean; aiConfigured: boolean; modelSwitcher?: boolean; aiError?: string | null; draftKey?:string;
   onSend: (text: string, context?: EditContext) => Promise<void>;
   onStop?: () => Promise<void>;
   assistantEditSnapshot?:AssistantEditSnapshot;
@@ -306,7 +307,7 @@ export function EditorShell(p: EditorShellProps) {
   const browse = () => setImportOpen(true);
 
   const chat=(<aside className={`editor-sidebar ${mobileChat ? 'mobile-open' : ''}`} aria-label="Editing conversation" hidden={!conversationVisible}>
-        <AssistantPanel editSnapshot={p.assistantEditSnapshot} messages={p.messages} running={p.aiRunning} configured={p.aiConfigured} error={p.aiError} onSend={text => p.onSend(text, { selectedClipId: clip?.id, selectedClipIds:selectedIds, playhead: readPlaybackTime() })} onStop={p.onStop} hasClips={!!timeline.clips.length} demo={!!p.demo} onLoadMore={p.onLoadMore} canLoadMore={p.canLoadMore} onAttach={() => setImportOpen(true)} activity={p.analysisBusy} activitySource={p.analysisSource} activityProgress={p.analysisProgress} draftKey={p.draftKey} suggestions={sourceSuggestions} onSuggestion={async (text, clipId) => { const target = timeline.clips.find(item => item.id === clipId && item.kind === 'video'); if (!target) throw new Error('This clip is no longer on the timeline.'); setSelected(clipId); await p.onSend(text, { selectedClipId: clipId, selectedClipIds: [clipId], playhead: target.start }); }} />
+        <AssistantPanel editSnapshot={p.assistantEditSnapshot} messages={p.messages} running={p.aiRunning} configured={p.aiConfigured} modelSwitcher={p.modelSwitcher} error={p.aiError} onSend={(text, modelChoice) => p.onSend(text, { modelChoice, selectedClipId: clip?.id, selectedClipIds:selectedIds, playhead: readPlaybackTime() })} onStop={p.onStop} hasClips={!!timeline.clips.length} demo={!!p.demo} onLoadMore={p.onLoadMore} canLoadMore={p.canLoadMore} onAttach={() => setImportOpen(true)} activity={p.analysisBusy} activitySource={p.analysisSource} activityProgress={p.analysisProgress} draftKey={p.draftKey} suggestions={sourceSuggestions} onSuggestion={async (text, clipId, modelChoice) => { const target = timeline.clips.find(item => item.id === clipId && item.kind === 'video'); if (!target) throw new Error('This clip is no longer on the timeline.'); setSelected(clipId); await p.onSend(text, { modelChoice, selectedClipId: clipId, selectedClipIds: [clipId], playhead: target.start }); }} />
       </aside>);
   return <main ref={editorRoot} data-playback-opening={opening} tabIndex={-1} {...fileDrop.handlers} onPointerDownCapture={e => { const interactive = (e.target as HTMLElement).closest('input,textarea,button,a,select,[tabindex]'); if (p.embedded) { if (!interactive || interactive === e.currentTarget || !e.currentTarget.contains(interactive)) editorRoot.current?.focus({ preventScroll: true }); else if (interactive.matches('[tabindex]') && !interactive.matches('input,textarea,button,a,select')) (interactive as HTMLElement).focus({ preventScroll: true }); } }} className={`editor-app conversation-editor ${p.embedded ? 'embedded-editor' : ''}`}>
     <MediaFileDropOverlay active={fileDrop.active} busy={!!p.upload}/>

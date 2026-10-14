@@ -69,7 +69,7 @@ try{
   {type:'tool-analyzeMedia',toolCallId:'failed-transcript',state:'output-available',output:{type:'error-json',value:{message:'Transcription failed'}}},
   {type:'tool-analyzeMedia',toolCallId:'failed-shots',state:'output-error',errorText:'Shot detection failed'}
  ]}]));
- assert.deepEqual(await page.$$eval('.assistant-result-card',cards=>cards.map(card=>card.textContent)),['Marked 23 beats','Prepared: Removed 2 clipsAwaiting save','Prepared: Added 2 subtitlesAwaiting save','Save not confirmedThis step did not confirm a saved change.','Could not finish this stepTranscription failed','Could not finish this stepShot detection failed']);
+ assert.deepEqual(await page.$$eval('.assistant-result-card',cards=>cards.map(card=>card.textContent)),['Marked 23 beats','Save not confirmedNo saved confirmation is available for this edit.','Save not confirmedNo saved confirmation is available for this edit.','Save not confirmedThis step did not confirm a saved change.','Could not finish this stepTranscription failed','Could not finish this stepShot detection failed']);
  assert.ok(await page.$$eval('.assistant-result-card',cards=>cards.every(card=>card.scrollWidth<=card.clientWidth)),'Result cards fit the chat column');
  const screenshot=process.env.REVLINE_CHAT_SCREENSHOT??'/tmp/revline-chat-streaming.png';
  await page.screenshot({path:screenshot});

@@ -13,19 +13,23 @@ import { validateVideoInspectionInput } from '../lib/media-analysis/video-inspec
 import { normalizeTimeline } from '../lib/editor/types';
 import {savePublicationReceipt} from './lib/publicationReceipt';
 import { enqueueMediaTask, cancelMediaTask } from './mediaTasks';
+import { claudeModelSwitcherEnabled, resolveClaudeModel } from '../lib/ai/claude-model';
+import { claudeModelChoiceValidator } from './lib/claude_model';
 const providerReason = "Claude editing requires ANTHROPIC_API_KEY in Convex, or AI_GATEWAY_ENABLED=true on an eligible paid Convex team.";
 function configured() { return !!process.env.ANTHROPIC_API_KEY || process.env.AI_GATEWAY_ENABLED === "true"; }
-export const status = query({ args: { projectId: v.id("projects") }, returns: v.object({ configured: v.boolean(), running: v.boolean(), error: v.union(v.string(), v.null()), reason: v.union(v.string(), v.null()), activity: v.union(v.string(), v.null()), activitySource: v.union(v.string(), v.null()), activityProgress: v.union(v.number(), v.null()) }), handler: async (ctx, args) => {
+export const status = query({ args: { projectId: v.id("projects") }, returns: v.object({ configured: v.boolean(), modelSwitcher: v.optional(v.boolean()), running: v.boolean(), error: v.union(v.string(), v.null()), reason: v.union(v.string(), v.null()), activity: v.union(v.string(), v.null()), activitySource: v.union(v.string(), v.null()), activityProgress: v.union(v.number(), v.null()) }), handler: async (ctx, args) => {
   const project = await requireProject(ctx, args.projectId, await requireOwner(ctx));
   const requests = project.aiRunning && project.aiRunId ? await ctx.db.query('analysisRequests').withIndex('by_projectId_runId', q => q.eq('projectId', project._id).eq('aiRunId', project.aiRunId!)).take(16) : [];
   const active = requests.find(request => request.status === 'pending' || request.status === 'running');
   const task = active?.taskId ? await ctx.db.get(active.taskId) : null;
   const source = active ? await ctx.db.get(active.assetId) : null;
   const labels = { transcribe: 'Listening to your footage…', understand: 'Analyzing footage…', shots: 'Finding shot changes…', beats: 'Finding the rhythm…', track: 'Following the subject…', frames: 'Inspecting the moment…', video: 'Analyzing footage…' };
-  return { configured: configured(), running: project.aiRunning ?? false, error: project.aiError ?? null, reason: configured() ? null : providerReason, activity: active ? task?.status === 'queued' ? 'Queued for analysis…' : task?.status === 'retrying' ? 'Retrying analysis…' : labels[active.mode] : null, activityProgress: active && task && task.progress > 0 && task.progress < 100 ? task.progress : null, activitySource: source?.ownerId === project.ownerId && source.projectId === project._id ? source.fileName : null };
+  return { configured: configured(), ...(claudeModelSwitcherEnabled() ? { modelSwitcher: true } : {}), running: project.aiRunning ?? false, error: project.aiError ?? null, reason: configured() ? null : providerReason, activity: active ? task?.status === 'queued' ? 'Queued for analysis…' : task?.status === 'retrying' ? 'Retrying analysis…' : labels[active.mode] : null, activityProgress: active && task && task.progress > 0 && task.progress < 100 ? task.progress : null, activitySource: source?.ownerId === project.ownerId && source.projectId === project._id ? source.fileName : null };
 }});
-export const send = mutation({ args: { projectId: v.id("projects"), prompt: v.string(), selectedClipId: v.optional(v.string()), selectedClipIds: v.optional(v.array(v.string())), playhead: v.optional(v.number()) }, returns: v.null(), handler: async (ctx, args) => {
+export const send = mutation({ args: { projectId: v.id("projects"), prompt: v.string(), modelChoice: v.optional(claudeModelChoiceValidator), selectedClipId: v.optional(v.string()), selectedClipIds: v.optional(v.array(v.string())), playhead: v.optional(v.number()) }, returns: v.null(), handler: async (ctx, args) => {
   const ownerId = await requireOwner(ctx); await requireEditorAccess(ctx, ownerId); const project = await requireProject(ctx, args.projectId, ownerId);
+  let pinnedModel;
+  try { pinnedModel = resolveClaudeModel(args.modelChoice); } catch (error) { throw new ConvexError((error as Error).message); }
   const clipIds = new Set(currentTimeline(project).clips.map(clip => clip.id));
   if (args.selectedClipId !== undefined && !clipIds.has(args.selectedClipId)) throw new ConvexError("Selected clip does not belong to this project");
   if (args.selectedClipIds) {
@@ -41,7 +45,7 @@ export const send = mutation({ args: { projectId: v.id("projects"), prompt: v.st
   const { messageId } = await saveMessage(ctx, components.agent, { threadId, userId: ownerId, prompt });
   const runId = `${Date.now()}-${Math.random()}`;
   await ctx.db.patch(project._id, { threadId, aiRunning: true, aiError: undefined, aiRunId: runId, aiUndoRecorded: false, aiCheckpointRevision: undefined });
-  await ctx.scheduler.runAfter(0, internal.assistantActions.respond, { projectId: project._id, ownerId, runId, threadId, promptMessageId: messageId, ...(args.selectedClipId ? { selectedClipId: args.selectedClipId } : {}), ...(args.selectedClipIds ? { selectedClipIds: args.selectedClipIds } : {}), ...(args.playhead !== undefined ? { playhead: args.playhead } : {}) }); return null;
+  await ctx.scheduler.runAfter(0, internal.assistantActions.respond, { projectId: project._id, ownerId, runId, threadId, promptMessageId: messageId, pinnedModel, ...(args.selectedClipId ? { selectedClipId: args.selectedClipId } : {}), ...(args.selectedClipIds ? { selectedClipIds: args.selectedClipIds } : {}), ...(args.playhead !== undefined ? { playhead: args.playhead } : {}) }); return null;
 }});
 export const messages = query({
   args: { projectId: v.id("projects"), threadId: v.string(), paginationOpts: paginationOptsValidator, streamArgs: vStreamArgs },
