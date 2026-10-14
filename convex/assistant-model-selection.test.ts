@@ -16,6 +16,7 @@ async function fixture() {
   return { t, owner, projectId };
 }
 beforeEach(() => {
+  vi.stubEnv('EDITOR_ALLOW_OPUS', 'true');
   vi.stubEnv('BILLING_ENABLED', 'false');
   vi.stubEnv('ANTHROPIC_API_KEY', 'fixture-only');
   vi.stubEnv('AI_GATEWAY_ENABLED', 'false');
@@ -24,6 +25,22 @@ beforeEach(() => {
   vi.stubEnv('CLAUDE_GATEWAY_MODEL', 'anthropic/claude-sonnet-5.5');
 });
 afterEach(() => vi.unstubAllEnvs());
+
+test('production rejects stale Opus selections before creating messages or starting paid work', async () => {
+  vi.stubEnv('MODEL_SWITCHER_ENABLED', 'true');
+  vi.stubEnv('EDITOR_ALLOW_OPUS', 'false');
+  const { t, owner, projectId } = await fixture();
+  expect(await owner.query(api.assistant.status, { projectId })).toMatchObject({ modelSwitcher: true, allowedModels: ['haiku', 'sonnet'] });
+  await expect(owner.mutation(api.assistant.send, { projectId, prompt: 'Synthetic edit', modelChoice: 'opus' })).rejects.toThrow('development');
+  vi.stubEnv('CLAUDE_MODEL', 'claude-opus-5-5');
+  await expect(owner.mutation(api.assistant.send, { projectId, prompt: 'Synthetic edit' })).rejects.toThrow('development');
+  expect((await t.run(ctx => ctx.db.get(projectId)))?.threadId).toBeUndefined();
+  expect(await t.run(ctx => ctx.db.system.query('_scheduled_functions').take(10))).toHaveLength(0);
+  vi.stubEnv('CLAUDE_MODEL', 'claude-sonnet-5-5');
+  await owner.mutation(api.assistant.send, { projectId, prompt: 'Synthetic edit' });
+  const [scheduled] = await t.run(ctx => ctx.db.system.query('_scheduled_functions').take(10));
+  expect(scheduled.args[0].pinnedModel).toEqual({ provider: 'anthropic', modelId: 'claude-sonnet-5-5' });
+});
 
 test('disabled manual selection fails before creating a thread, history, messages, or scheduling', async () => {
   const { t, owner, projectId } = await fixture();

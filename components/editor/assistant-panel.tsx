@@ -1,5 +1,6 @@
 'use client';
 
+import { PRODUCTION_CLAUDE_MODEL_CHOICES } from '@/lib/ai/claude-model-policy';
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { Check, ArrowUpRight } from 'lucide-react';
 import { Brand } from '@/components/workspace/brand';
@@ -33,9 +34,10 @@ function AssistantResponseText({ text, streaming }: { text: string; streaming: b
   return <ChatProse text={text} animate={receivedLive || streaming} />;
 }
 
-export function AssistantPanel({ messages, running, configured, error, onSend, onStop, hasClips, demo, onLoadMore, canLoadMore, onAttach, activity, activitySource, activityProgress, draftKey, suggestions, onSuggestion, editSnapshot, modelSwitcher = false }: {
+export function AssistantPanel({ messages, running, configured, error, onSend, onStop, hasClips, demo, onLoadMore, canLoadMore, onAttach, activity, activitySource, activityProgress, draftKey, suggestions, onSuggestion, editSnapshot, modelSwitcher = false, allowedModels = PRODUCTION_CLAUDE_MODEL_CHOICES }: {
   messages: ChatMessage[]; running: boolean; configured: boolean; error?: string | null;
   modelSwitcher?: boolean;
+  allowedModels?: readonly ClaudeModelChoice[];
   onSend: (text: string, modelChoice?: ClaudeModelChoice) => Promise<void>; hasClips: boolean; demo: boolean;
   onLoadMore?: () => void; canLoadMore?: boolean; onAttach?: () => void;
   activity?: string | null; activitySource?: string | null; activityProgress?:number|null; draftKey?:string;
@@ -48,6 +50,7 @@ export function AssistantPanel({ messages, running, configured, error, onSend, o
   const sendInFlight=useRef(false);
   const currentDraftKey=useRef(draftKey);currentDraftKey.current=draftKey;
   const [modelChoice, setModelChoice] = useState<ClaudeModelChoice>('sonnet');
+  const effectiveModelChoice = allowedModels.includes(modelChoice) ? modelChoice : 'sonnet';
   const [sending, setSending] = useState(false);
   const [localError, setLocalError] = useState('');
   const [stopState,setStopState]=useState<'stopping'|'stopped'|null>(null);
@@ -94,7 +97,7 @@ export function AssistantPanel({ messages, running, configured, error, onSend, o
     const draft=prompt,key=draftKey;sendInFlight.current=true;
     changePrompt('');
     setStopState(null); setSending(true); setPendingReply({ id: `pending-${crypto.randomUUID()}`, text: draft.trim(), previousUserId: latestUser?.id, previousError: error }); setLocalError(''); scroll.resume();
-    try { await onSend(draft.trim(), modelSwitcher ? modelChoice : undefined); }
+    try { await onSend(draft.trim(), modelSwitcher ? effectiveModelChoice : undefined); }
     catch (e) { if(currentDraftKey.current===key){changePrompt(draft);setPendingReply(null);setLocalError(e instanceof Error ? e.message : 'Could not send message');} }
     finally { sendInFlight.current=false;setSending(false); }
   }
@@ -103,7 +106,7 @@ export function AssistantPanel({ messages, running, configured, error, onSend, o
     if (!suggestions || !onSuggestion || sendInFlight.current || sending || running || pendingReply || !configured) return;
     const request = `${suggestion.prompt}\n\nUse the selected clip from “${suggestions.sourceName}”, source ${suggestion.start.toFixed(2)}–${suggestion.end.toFixed(2)} seconds.`;
     sendInFlight.current=true;setStopState(null); setSending(true); setPendingReply({ id: `pending-${crypto.randomUUID()}`, text: request, previousUserId: latestUser?.id, previousError: error }); setLocalError(''); scroll.resume();
-    try { await onSuggestion(request, suggestions.clipId, modelSwitcher ? modelChoice : undefined); }
+    try { await onSuggestion(request, suggestions.clipId, modelSwitcher ? effectiveModelChoice : undefined); }
     catch (e) { setPendingReply(null); setLocalError(e instanceof Error ? e.message : 'Could not start this edit.'); }
     finally { sendInFlight.current=false;setSending(false); }
   }
@@ -146,7 +149,7 @@ export function AssistantPanel({ messages, running, configured, error, onSend, o
     </div>
     <div ref={scroll.composer} className="manual-composer-dock">
     {scroll.latestHidden && <button className="chat-jump-latest" onClick={scroll.resume}>Latest response</button>}
-    <EditComposer actions={modelSwitcher ? <AssistantModelPicker value={modelChoice} onChange={setModelChoice} disabled={answering}/> : undefined} variant="compact" className="manual-editor-composer" value={prompt} onChange={changePrompt} onSubmit={submit} onAttach={onAttach} placeholder="What would you change next?" disabled={sending || !!pendingReply} running={running} onStop={onStop ? stop : undefined} />
+    <EditComposer actions={modelSwitcher ? <AssistantModelPicker allowedModels={allowedModels} value={effectiveModelChoice} onChange={setModelChoice} disabled={answering}/> : undefined} variant="compact" className="manual-editor-composer" value={prompt} onChange={changePrompt} onSubmit={submit} onAttach={onAttach} placeholder="What would you change next?" disabled={sending || !!pendingReply} running={running} onStop={onStop ? stop : undefined} />
     </div>
   </div>;
 }

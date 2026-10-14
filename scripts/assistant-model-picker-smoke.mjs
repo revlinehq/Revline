@@ -7,7 +7,7 @@ const bundle = await build({ stdin: { resolveDir: process.cwd(), loader: 'tsx', 
 import React from 'react';import {createRoot} from 'react-dom/client';import {flushSync} from 'react-dom';
 import './components/workspace/workspace-pages.css';import './app/editor.css';import './components/workspace/shared.css';
 import {AssistantPanel} from './components/editor/assistant-panel';import {EditComposer} from './components/workspace/edit-composer';
-const root=createRoot(document.getElementById('root'));window.calls=[];window.state={modelSwitcher:true,running:false,messages:[]};
+const root=createRoot(document.getElementById('root'));window.calls=[];window.state={modelSwitcher:true,allowedModels:['haiku','sonnet','opus'],running:false,messages:[]};
 window.renderFixture=patch=>{Object.assign(window.state,patch);flushSync(()=>root.render(<>
  <AssistantPanel key={window.state.fixtureKey??0} {...window.state} configured hasClips demo={false} onSend={async(text,model)=>{window.calls.push({text,model});throw new Error('Fixture request recorded');}} onStop={async()=>{}}/>
  <div className="studio-fixture"><EditComposer value="Studio" onChange={()=>{}} onSubmit={()=>{}}/></div>
@@ -43,6 +43,13 @@ try {
   await page.waitForFunction(()=>!document.querySelector('.assistant-content textarea').disabled);
   await page.focus('.assistant-content textarea');await page.keyboard.down('Control');await page.keyboard.press('KeyA');await page.keyboard.up('Control');await page.keyboard.press('Backspace');
  }
+ // A production allowlist must hide Opus and immediately reset a stale local selection.
+ await page.evaluate(()=>window.renderFixture({allowedModels:['haiku','sonnet']}));
+ assert.equal(await page.$eval('[aria-label="AI editing model"]',el=>el.textContent),'Sonnet 5.5');
+ await page.click('[aria-label="AI editing model"]');
+ await page.waitForSelector('[role="menuitemradio"][data-value="sonnet"]');
+ assert.equal(await page.$('[role="menuitemradio"][data-value="opus"]'),null);
+ await page.click('[role="menuitemradio"][data-value="sonnet"]');
  await page.evaluate(()=>window.renderFixture({running:true}));
  assert.equal(await page.$eval('[aria-label="AI editing model"]',el=>el.disabled),true,'The model stays fixed while editing');
  assert.equal(await page.$eval('[aria-label="Stop editing"]',el=>el.getBoundingClientRect().width),28);
@@ -58,5 +65,5 @@ try {
  await page.type('.assistant-content textarea','Make this tighter');
  await page.screenshot({path:'/tmp/revline-composer-model-picker.png'});
  assert.deepEqual(errors,[]);
- console.log('PASS: production picker sends all three choices, locks during a run, disappears when disabled; compact send/stop 28px with inner shadow, studio unchanged. Synthetic fixture only.');
+ console.log('PASS: development picker sends all three choices; production allowlist hides Opus and resets stale selections, locks during a run, disappears when disabled; compact send/stop 28px with inner shadow, studio unchanged. Synthetic fixture only.');
 } finally { await browser.close(); await new Promise(resolve=>server.close(resolve)); }
