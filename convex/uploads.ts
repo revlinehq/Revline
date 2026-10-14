@@ -2,13 +2,15 @@ import { ConvexError, v } from "convex/values";
 import { internalMutation, type MutationCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { requireEditorAccess } from './lib/billing_access';
+import { recordStorageObject,forgetStorageObject } from './lib/storage_accounting';
+import { internal } from './_generated/api';
 
 export async function issueUpload(ctx: MutationCtx, ownerId: string, projectId: Id<"projects">, jobId?: Id<"renderJobs">) {
   const pending = await ctx.db.query("uploadTickets").withIndex("by_projectId", q => q.eq("projectId", projectId)).take(101);
   let active = 0;
   for (const ticket of pending) {
     if (ticket.expiresAt <= Date.now()) {
-      if (ticket.storageId && !ticket.consumed) await ctx.storage.delete(ticket.storageId);
+      if (ticket.storageId && !ticket.consumed) {await ctx.storage.delete(ticket.storageId);await forgetStorageObject(ctx,ticket.ownerId,{storageId:ticket.storageId});}
       await ctx.db.delete(ticket._id);
     } else active++;
   }
@@ -16,7 +18,8 @@ export async function issueUpload(ctx: MutationCtx, ownerId: string, projectId: 
   // Convex supplies a cryptographically unguessable upload URL as the bearer token.
   // Files pass through our HTTP action so the resulting storage ID is bound to its owner.
   const token = await ctx.storage.generateUploadUrl();
-  await ctx.db.insert("uploadTickets", { token, ownerId, projectId, ...(jobId ? { jobId } : {}), expiresAt: Date.now() + 15 * 60 * 1000, consumed: false });
+  const ticketId=await ctx.db.insert("uploadTickets", { token, ownerId, projectId, ...(jobId ? { jobId } : {}), expiresAt: Date.now() + 15 * 60 * 1000, consumed: false });
+  await ctx.scheduler.runAfter(15*60*1000,internal.uploads.cleanup,{ticketId});
   const site = process.env.CONVEX_SITE_URL;
   if (!site) throw new ConvexError("Upload endpoint is not configured");
   return `${site}/uploads?ticket=${encodeURIComponent(token)}`;
@@ -35,7 +38,15 @@ export const finish = internalMutation({ args: { ticketId: v.id("uploadTickets")
   const ticket = await ctx.db.get(args.ticketId);
   if (!ticket || !ticket.receiving || ticket.consumed || ticket.storageId) throw new ConvexError("Upload ticket already used");
   if (!ticket.jobId) await requireEditorAccess(ctx, ticket.ownerId);
+  const file=await ctx.db.system.get(args.storageId);if(!file)throw new ConvexError('Uploaded file not found');
+  const kind=ticket.jobId?'export':file.contentType?.startsWith('video/')?'video':file.contentType?.startsWith('audio/')?'audio':'image';
+  await recordStorageObject(ctx,{ownerId:ticket.ownerId,storageId:args.storageId,fileName:'Upload',size:file.size,kind,createdAt:Date.now(),pending:true,...(ticket.jobId?{jobId:ticket.jobId}:{})});
   await ctx.db.patch(ticket._id, { storageId: args.storageId, receiving: false }); return null;
+}});
+export const cleanup=internalMutation({args:{ticketId:v.id('uploadTickets')},returns:v.null(),handler:async(ctx,args)=>{
+  const ticket=await ctx.db.get(args.ticketId);if(!ticket||ticket.expiresAt>Date.now())return null;
+  if(ticket.storageId&&!ticket.consumed){await ctx.storage.delete(ticket.storageId);await forgetStorageObject(ctx,ticket.ownerId,{storageId:ticket.storageId});}
+  await ctx.db.delete(ticket._id);return null;
 }});
 export async function consumeUpload(ctx: MutationCtx, storageId: Id<"_storage">, ownerId: string, projectId: Id<"projects">, jobId?: Id<"renderJobs">) {
   const ticket = await ctx.db.query("uploadTickets").withIndex("by_storageId", q => q.eq("storageId", storageId)).unique();

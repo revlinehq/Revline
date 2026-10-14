@@ -1,3 +1,4 @@
+import { recordAssetStorage } from './lib/storage_accounting';
 import { v } from 'convex/values';
 import { internalAction, internalMutation } from './_generated/server';
 import { internal } from './_generated/api';
@@ -50,6 +51,7 @@ export const createStackedEffectsProject = internalMutation({
     const ownerId = `revline-hosting-smoke-${crypto.randomUUID()}`, now = Date.now();
     const projectId = await ctx.db.insert('projects', { ownerId, title: 'Hosted processor stacked effects check', aspectRatio: 'landscape', createdAt: now, updatedAt: now, revision: 0, history: [] });
     const assetId = await ctx.db.insert('assets', { ownerId, projectId, storageId, fileName: 'generated-shader-check.png', contentType: 'image/png', size, kind: 'image', width: 640, height: 360, createdAt: now });
+    await recordAssetStorage(ctx,(await ctx.db.get(assetId))!);
     const source: Timeline = { fps: 24, aspectRatio: 'landscape', tracks: { visual: 1, overlay: 0, audio: 0, effects: 2 }, clips: [
       { id: 'shader-source', kind: 'image', assetId, track: 1, start: 0, duration: 1, sourceStart: 0, dither: { enabled: true, amount: 1, levels: 2, size: 8 } },
       ...[1, 2].map(track => ({ id: `shader-blur-${track}`, kind: 'effect' as const, effectPreset: 'zoom-blur' as const, track, start: 0, duration: 1, sourceStart: 0, zoomBlur: { enabled: true, amount: .15, centerX: .5, centerY: .5 } })),

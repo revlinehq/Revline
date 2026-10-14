@@ -1,3 +1,4 @@
+import { recordAssetStorage } from './lib/storage_accounting';
 import { ConvexError,v } from 'convex/values';
 import { mutation,query } from './_generated/server';
 import type { Id,Doc } from './_generated/dataModel';
@@ -32,7 +33,7 @@ export const publish=mutation({args:{projectId:v.id('projects')},returns:v.id('t
   if(existing){await removeShareAssets(ctx,shareId);await ctx.db.patch(shareId,{title:project.title,timeline,published:true,updatedAt:now});}
   for(const asset of assets.values()){
     const {_id,storageId,r2Key,fileName,contentType,size,kind,duration,width,height,audioAssetId,audioExtracted,waveform,thumbnailStorageId}=asset;
-    await ctx.db.insert('shareAssets',{shareId,sourceId:_id,fileName,contentType,size,kind,...(storageId?{storageId}:{}),...(r2Key?{r2Key}:{}),...(duration!==undefined?{duration}:{}),...(width!==undefined?{width}:{}),...(height!==undefined?{height}:{}),...(audioAssetId?{audioAssetId}:{}),...(audioExtracted!==undefined?{audioExtracted}:{}),...(waveform?{waveform}:{}),...(thumbnailStorageId?{thumbnailStorageId}:{})});
+    await ctx.db.insert('shareAssets',{shareId,ownerId,sourceId:_id,fileName,contentType,size,kind,...(storageId?{storageId}:{}),...(r2Key?{r2Key}:{}),...(duration!==undefined?{duration}:{}),...(width!==undefined?{width}:{}),...(height!==undefined?{height}:{}),...(audioAssetId?{audioAssetId}:{}),...(audioExtracted!==undefined?{audioExtracted}:{}),...(waveform?{waveform}:{}),...(thumbnailStorageId?{thumbnailStorageId}:{})});
   }
   return shareId;
 }});
@@ -51,7 +52,7 @@ export const useTimeline=mutation({args:{shareId:v.id('timelineShares')},returns
   const ownerId=await requireOwner(ctx);await requireEditorAccess(ctx,ownerId);const share=await ctx.db.get(shareId);if(!share?.published)throw new ConvexError('This timeline is no longer shared.');
   const pins=await ctx.db.query('shareAssets').withIndex('by_share',q=>q.eq('shareId',shareId)).take(200),now=Date.now();
   const projectId=await ctx.db.insert('projects',{ownerId,title:share.title,aspectRatio:share.timeline.aspectRatio,createdAt:now,updatedAt:now,revision:0,history:[]}),ids=new Map<string,Id<'assets'>>();
-  for(const pin of pins){const {_id,_creationTime,shareId:_,sourceId,audioAssetId,...media}=pin;const id=await ctx.db.insert('assets',{...media,projectId,ownerId,createdAt:now});ids.set(sourceId,id);}
+  for(const pin of pins){const {_id,_creationTime,shareId:_,sourceId,audioAssetId,...media}=pin;const id=await ctx.db.insert('assets',{...media,projectId,ownerId,createdAt:now});await recordAssetStorage(ctx,(await ctx.db.get(id))!);ids.set(sourceId,id);}
   for(const pin of pins)if(pin.audioAssetId&&ids.has(pin.audioAssetId))await ctx.db.patch(ids.get(pin.sourceId)!,{audioAssetId:ids.get(pin.audioAssetId)!});
   const timeline=normalizeTimeline({...share.timeline,clips:share.timeline.clips.map(clip=>({...clip,...(clip.assetId?{assetId:ids.get(clip.assetId)!}:{})}))});
   await ctx.db.patch(projectId,{timeline});return projectId;

@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useClerk, useUser } from '@clerk/nextjs';
 import { useConvexAuth, useQuery } from 'convex/react';
-import { Check, ChevronDown, Copy, CreditCard, Download, Film, History, LoaderCircle, LogOut, Moon, PanelsTopLeft, Pencil, Plus, Redo2, Share2, UserRound, Undo2 } from 'lucide-react';
+import { Check, ChevronDown, Copy, CreditCard, Database, Download, Film, History, LoaderCircle, LogOut, Moon, PanelsTopLeft, Pencil, Plus, Redo2, Share2, UserRound, Undo2 } from 'lucide-react';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
 import { Brand } from './brand';
@@ -44,7 +44,7 @@ export function chatRecency(timestamp: number) {
 export interface WorkspaceNavProps {
   title?: string;
   editorHref?: string;
-  active?: 'chat' | 'chats' | 'profile';
+  active?: 'chat' | 'chats' | 'profile' | 'storage';
   demo?: boolean;
   saving?: boolean;
   canUndo?: boolean;
@@ -125,6 +125,7 @@ export function WorkspaceNav({ title = NEW_WORKSPACE_LABEL, editorHref, active =
           <div className="workspace-account-identity"><span className="workspace-account-avatar">{user?.imageUrl ? <img src={user.imageUrl} alt="" /> : initial}</span><div><strong>{user?.fullName ?? (isSignedIn ? 'Your account' : 'Demo workspace')}</strong><span>{user?.primaryEmailAddress?.emailAddress ?? 'Sign in to save your work'}</span></div></div>
           <DropdownMenuSeparator className="workspace-menu-divider" />
           <DropdownMenuItem asChild className="workspace-menu-item"><Link href="/profile" aria-current={active === 'profile' ? 'page' : undefined}><UserRound size={16} />Profile</Link></DropdownMenuItem>
+          <DropdownMenuItem asChild className="workspace-menu-item"><Link href="/storage" aria-current={active === 'storage' ? 'page' : undefined}><Database size={16} />Cloud storage</Link></DropdownMenuItem>
           <DropdownMenuItem asChild className="workspace-menu-item"><Link href="/profile#billing"><CreditCard size={16} />Membership & billing</Link></DropdownMenuItem>
           <DropdownMenuCheckboxItem className="workspace-menu-item" checked={theme === 'dark'} onCheckedChange={checked => setTheme(checked ? 'dark' : 'light')}><Moon size={16} />Dark mode</DropdownMenuCheckboxItem>
           <DropdownMenuSeparator className="workspace-menu-divider" />

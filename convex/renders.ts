@@ -1,3 +1,5 @@
+import { recordStorageObject, forgetStorageObject } from './lib/storage_accounting';
+import { internal } from './_generated/api';
 import { requireEditorAccess } from './lib/billing_access';
 import { mediaUrl } from './lib/media_storage';
 import { ConvexError, v } from "convex/values";
@@ -57,7 +59,8 @@ export const complete = mutation({ args: { ...workerArgs, storageId: v.id("_stor
   const job = await requireJob(ctx, args.jobId, args.workerSecret); if (job.status !== "rendering") throw new ConvexError("Render is not running");
   const file = await ctx.db.system.get(args.storageId); if (!file || file.contentType !== "video/mp4") throw new ConvexError("Render output must be an uploaded MP4");
   await consumeUpload(ctx, args.storageId, job.ownerId, job.projectId, job._id);
-  await ctx.db.patch(job._id, { status: "completed", outputStorageId: args.storageId, progress: 100, updatedAt: Date.now() }); return null;
+  await recordStorageObject(ctx,{ownerId:job.ownerId,storageId:args.storageId,fileName:"Export.mp4",kind:"export",size:file.size,createdAt:job.createdAt,jobId:job._id});
+  await ctx.db.patch(job._id, { outputSize:file.size,status: "completed", outputStorageId: args.storageId, progress: 100, updatedAt: Date.now() }); return null;
 }});
 export const fail = mutation({ args: { ...workerArgs, error: v.string() }, returns: v.null(), handler: async (ctx, args) => {
   const job = await requireJob(ctx, args.jobId, args.workerSecret); if (job.status !== "queued" && job.status !== "rendering") throw new ConvexError("Render is already finished");
@@ -72,3 +75,13 @@ export const list = query({ args: { projectId: v.id("projects"), limit: v.option
   const jobs = await ctx.db.query("renderJobs").withIndex("by_ownerId_projectId", q => q.eq("ownerId", ownerId).eq("projectId", args.projectId)).order("desc").take(listLimit(args.limit));
   return await Promise.all(jobs.map(async job => ({ ...job, ...(job.timeline ? { timeline: normalizeTimeline(job.timeline) } : {}), url: await mediaUrl(ctx, { storageId: job.outputStorageId, r2Key: job.outputR2Key }) })));
 }});
+
+export async function removeOwnedExport(ctx:MutationCtx,ownerId:string,jobId:Id<'renderJobs'>) {
+  const job=await ctx.db.get(jobId);
+  if(!job||job.ownerId!==ownerId)throw new ConvexError('Export not found');
+  if(job.status==='queued'||job.status==='rendering')throw new ConvexError('Wait for this export to finish');
+  if(job.outputStorageId)await ctx.storage.delete(job.outputStorageId);
+  if(job.outputR2Key)await ctx.scheduler.runAfter(0,internal.r2.deleteObject,{key:job.outputR2Key});
+  await forgetStorageObject(ctx,ownerId,{storageId:job.outputStorageId,r2Key:job.outputR2Key});
+  await ctx.db.delete(job._id);return null;
+}

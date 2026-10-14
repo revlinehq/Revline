@@ -1,3 +1,4 @@
+import { recordAssetStorage,usedByActiveExport,forgetStorageObject } from './lib/storage_accounting';
 import { requireEditorAccess } from './lib/billing_access';
 import { mediaUrl } from './lib/media_storage';
 import { removeMediaAttachment } from './lib/shared_media';
@@ -22,8 +23,8 @@ export const attachThumbnail=mutation({args:{assetId:v.id('assets'),storageId:v.
   const metadata=await ctx.db.system.get(args.storageId);
   if(!metadata||metadata.contentType!=='image/jpeg'||metadata.size>128*1024)throw new ConvexError('Use a JPEG thumbnail under 128 KB');
   await consumeUpload(ctx,args.storageId,ownerId,asset.projectId);
-  if(asset.thumbnailStorageId){await ctx.storage.delete(args.storageId);return null;}
-  await ctx.db.patch(asset._id,{thumbnailStorageId:args.storageId});return null;
+  if(asset.thumbnailStorageId){await ctx.storage.delete(args.storageId);await forgetStorageObject(ctx,ownerId,{storageId:args.storageId});return null;}
+  await ctx.db.patch(asset._id,{thumbnailStorageId:args.storageId});await recordAssetStorage(ctx,{...asset,thumbnailStorageId:args.storageId});return null;
 }});
 
 async function thumbnailUrl(ctx:QueryCtx,asset:{thumbnailStorageId?:Id<'_storage'>}) {
@@ -43,6 +44,7 @@ export const create = mutation({ args: { projectId: v.id("projects"), storageId:
   if (count.length >= 200) throw new ConvexError("A project supports up to 200 media files");
   await consumeUpload(ctx, args.storageId, ownerId, args.projectId);
   const assetId = await ctx.db.insert("assets", { ownerId, projectId: args.projectId, storageId: args.storageId, fileName, contentType: metadata.contentType, size: metadata.size, kind: args.kind, createdAt: Date.now(), ...(args.duration !== undefined ? { duration: args.duration } : {}), ...(args.width !== undefined ? { width: args.width } : {}), ...(args.height !== undefined ? { height: args.height } : {}) });
+  await recordAssetStorage(ctx,(await ctx.db.get(assetId))!);
   if (args.kind === 'video') await enqueueMediaTask(ctx, { ownerId, projectId: args.projectId, assetId, kind: 'understand' });
   return assetId;
 }});
@@ -73,16 +75,17 @@ export const selected = query({
     return await Promise.all(assets.filter(asset => asset?.ownerId === ownerId).map(async asset => ({ ...asset!, url: await mediaUrl(ctx, asset!),...await thumbnailUrl(ctx,asset!) })));
   },
 });
-export const remove = mutation({ args: { assetId: v.id("assets") }, returns: v.null(), handler: async (ctx, args) => {
-  const ownerId = await requireOwner(ctx); const asset = await ctx.db.get(args.assetId);
+export async function removeOwnedAsset(ctx:MutationCtx,ownerId:string,assetId:Id<'assets'>) {
+  const asset = await ctx.db.get(assetId);
   if (!asset || asset.ownerId !== ownerId) throw new ConvexError("Media not found");
   const project = await requireProject(ctx, asset.projectId, ownerId);
+  if (project.aiRunning) throw new ConvexError("Wait for the current AI edit before deleting media");
   if (project.timeline?.clips.some(clip => clip.assetId === asset._id)) throw new ConvexError("Remove this media from the timeline first");
-  const jobs = await ctx.db.query("renderJobs").withIndex("by_ownerId_projectId", q => q.eq("ownerId", ownerId).eq("projectId", asset.projectId)).take(501);
-  if (jobs.length > 500 || jobs.some(job => (job.status === "queued" || job.status === "rendering") && job.assetIds?.includes(asset._id))) throw new ConvexError("This media is part of an active render");
+  if(await usedByActiveExport(ctx,ownerId,asset.projectId,new Set([String(asset._id)])))throw new ConvexError('This media is part of an active render');
   await ctx.db.patch(project._id, { history: project.history?.filter(t => !t.clips.some(clip => clip.assetId === asset._id)), updatedAt: Date.now() });
   await removeMediaAttachment(ctx, asset); return null;
-}});
+}
+export const remove = mutation({ args: { assetId: v.id('assets') }, returns: v.null(), handler: async (ctx, args) => removeOwnedAsset(ctx,await requireOwner(ctx),args.assetId) });
 
 export const get = query({ args: { projectId: v.id("projects"), assetId: v.id("assets") }, returns: assetWithUrl, handler: async (ctx, args) => {
   const ownerId = await requireOwner(ctx); await requireProject(ctx, args.projectId, ownerId); const asset = await ctx.db.get(args.assetId);

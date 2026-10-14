@@ -1,3 +1,4 @@
+import { recordStorageObject, recordAssetStorage, forgetStorageObject } from './lib/storage_accounting';
 import { requireEditorAccess } from './lib/billing_access';
 import type { Id } from './_generated/dataModel';
 import { ConvexError, v } from 'convex/values';
@@ -35,6 +36,7 @@ export const createLease = internalMutation({ args: { ...metadata, ownerId: v.st
   if (!args.taskId && !args.jobId) await requireEditorAccess(ctx, args.ownerId);
   if (args.taskId) await requireMediaTask(ctx, args.taskId, args.leaseToken ?? '');
   const { leaseToken, ...fields } = args;
+  await recordStorageObject(ctx,{...args,r2Key:args.key,createdAt:Date.now(),kind:args.jobId?'export':args.kind,pending:true});
   const id = await ctx.db.insert('r2Uploads', { ...fields, ...(leaseToken ? { taskLeaseToken: leaseToken } : {}), completed: false, expiresAt: Date.now() + 24 * 3600_000 });
   await ctx.scheduler.runAfter(24 * 3600_000, internal.r2.cleanupLease, { uploadId: id });
   return id;
@@ -90,12 +92,14 @@ export const finish = internalMutation({ args: { uploadId: v.id('r2Uploads'), si
   if (lease.jobId) {
     const job = await ctx.db.get(lease.jobId);
     if (!job || job.ownerId !== lease.ownerId || job.status !== 'rendering' || lease.contentType !== 'video/mp4') throw new ConvexError('Render cannot accept this output');
-    await ctx.db.patch(job._id, { outputR2Key: lease.key, status: lease.taskId ? 'rendering' : 'completed', progress: lease.taskId ? 99 : 100, updatedAt: Date.now() });
+    await recordStorageObject(ctx,{ownerId:lease.ownerId,r2Key:lease.key,fileName:lease.fileName,size:lease.size,kind:'export',jobId:job._id,createdAt:job.createdAt});
+    await ctx.db.patch(job._id, { outputSize:lease.size, outputR2Key: lease.key, status: lease.taskId ? 'rendering' : 'completed', progress: lease.taskId ? 99 : 100, updatedAt: Date.now() });
     await ctx.db.patch(lease._id, { completed: true }); return null;
   }
   const count = await ctx.db.query('assets').withIndex('by_ownerId_projectId', q => q.eq('ownerId', lease.ownerId).eq('projectId', project._id)).take(200);
   if (count.length >= 200) throw new ConvexError('A project supports up to 200 media files');
   const assetId = await ctx.db.insert('assets', { ownerId: lease.ownerId, projectId: lease.projectId, r2Key: lease.key, fileName: lease.fileName, contentType: lease.contentType, kind: lease.kind, size: lease.size, createdAt: Date.now(), ...(lease.duration !== undefined ? { duration: lease.duration } : {}), ...(lease.width !== undefined ? { width: lease.width } : {}), ...(lease.height !== undefined ? { height: lease.height } : {}) });
+  await recordAssetStorage(ctx,(await ctx.db.get(assetId))!);
   await ctx.db.patch(lease._id, { completed: true, assetId });
   if (lease.taskId) await ctx.db.patch(lease.taskId, { outputAssetId: assetId });
   else if (lease.kind !== 'image') {
@@ -117,10 +121,14 @@ export const abort = action({ args: { uploadId: v.id('r2Uploads'), ...taskAuth }
   if (!lease.completed) { await storageControl({ action: 'abort', key: lease.key, uploadId: lease.uploadId }); await ctx.runMutation(internal.r2.removeLease, { uploadId: args.uploadId }); }
   return null;
 }});
-export const deleteObject = internalAction({ args: { key: v.string() }, returns: v.null(), handler: async (_ctx, args) => { await storageControl({ action: 'delete', key: args.key }); return null; } });
+export const deleteObject = internalAction({ args: { key: v.string(),attempt:v.optional(v.number()) }, returns: v.null(), handler: async (ctx, args) => {
+  try{await storageControl({ action: 'delete', key: args.key });}
+  catch(error){const attempt=args.attempt??0;if(attempt>=8)throw error;await ctx.scheduler.runAfter(Math.min(3600_000,60_000*2**attempt),internal.r2.deleteObject,{key:args.key,attempt:attempt+1});}
+  return null;
+} });
 
 export const leaseForCleanup = internalQuery({ args: { uploadId: v.id('r2Uploads') }, returns: v.union(r2UploadDocument, v.null()), handler: (ctx, args) => ctx.db.get(args.uploadId) });
-export const removeLease = internalMutation({ args: { uploadId: v.id('r2Uploads') }, returns: v.null(), handler: async (ctx, args) => { await ctx.db.delete(args.uploadId); return null; } });
+export const removeLease = internalMutation({ args: { uploadId: v.id('r2Uploads') }, returns: v.null(), handler: async (ctx, args) => { const lease=await ctx.db.get(args.uploadId);if(lease&&!lease.completed)await forgetStorageObject(ctx,lease.ownerId,{r2Key:lease.key});await ctx.db.delete(args.uploadId); return null; } });
 export const cleanupLease = internalAction({ args: { uploadId: v.id('r2Uploads') }, returns: v.null(), handler: async (ctx, args): Promise<null> => {
   const lease = await ctx.runQuery(internal.r2.leaseForCleanup, args);
   if (!lease) return null;

@@ -1,3 +1,4 @@
+import { recordAssetStorage, forgetStorageObject } from './lib/storage_accounting';
 import { requireEditorAccess } from './lib/billing_access';
 import { mediaUrl } from './lib/media_storage';
 import { ConvexError, v } from "convex/values";
@@ -59,6 +60,7 @@ export const create = mutation({ args: { title: v.string(), aspectRatio, assetId
       timeline = patchClip(addMediaClip(timeline, { _id: assetId, kind: source.kind, duration, ...(source.audioAssetId ? { audioAssetId: copies.get(source.audioAssetId) } : {}) }, clipId), clipId, { duration });
     }
   }
+  for(const assetId of stored.values())await recordAssetStorage(ctx,(await ctx.db.get(assetId))!);
   if (timeline.clips.length) {
     const project = (await ctx.db.get(projectId))!;
     timeline = await validateTimeline(ctx, project, timeline);
@@ -114,8 +116,8 @@ export const remove = mutation({ args: { projectId: v.id("projects") }, returns:
   for (const task of mediaTasks) { await cancelMediaTask(ctx, task._id); await ctx.db.delete(task._id); }
   await removeProjectShares(ctx,project._id);
   for (const asset of assets) await removeMediaAttachment(ctx, asset);
-  for (const job of jobs) { if (job.outputStorageId) await ctx.storage.delete(job.outputStorageId); if (job.outputR2Key) await ctx.scheduler.runAfter(0, internal.r2.deleteObject, { key: job.outputR2Key }); await ctx.db.delete(job._id); }
-  for (const ticket of tickets) { if (ticket.storageId && !ticket.consumed) await ctx.storage.delete(ticket.storageId); await ctx.db.delete(ticket._id); }
+  for (const job of jobs) { await forgetStorageObject(ctx,ownerId,{r2Key:job.outputR2Key,storageId:job.outputStorageId}); if (job.outputStorageId) await ctx.storage.delete(job.outputStorageId); if (job.outputR2Key) await ctx.scheduler.runAfter(0, internal.r2.deleteObject, { key: job.outputR2Key }); await ctx.db.delete(job._id); }
+  for (const ticket of tickets) { if (ticket.storageId && !ticket.consumed) {await ctx.storage.delete(ticket.storageId);await forgetStorageObject(ctx,ownerId,{storageId:ticket.storageId});} await ctx.db.delete(ticket._id); }
   for (const request of analysisRequests) await ctx.db.delete(request._id);
   for (const upload of pendingUploads) await ctx.scheduler.runAfter(0, internal.r2.cleanupLease, { uploadId: upload._id });
   if (project.threadId) await ctx.runMutation(components.agent.threads.deleteAllForThreadIdAsync, { threadId: project.threadId });

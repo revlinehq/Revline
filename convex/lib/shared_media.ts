@@ -1,3 +1,4 @@
+import { releaseAccountStorage } from './storage_accounting';
 import { internal } from '../_generated/api';
 import type { Doc,Id } from '../_generated/dataModel';
 import type { MutationCtx } from '../_generated/server';
@@ -25,12 +26,13 @@ export async function releaseMediaObjects(ctx:MutationCtx,asset:StoredMedia){
   }
 }
 export async function removeMediaAttachment(ctx:MutationCtx,asset:Doc<'assets'>){
-  await ctx.db.delete(asset._id);await releaseMediaObjects(ctx,asset);
+  await ctx.db.delete(asset._id);await releaseMediaObjects(ctx,asset);await releaseAccountStorage(ctx,asset.ownerId,asset);if(asset.thumbnailStorageId)await releaseAccountStorage(ctx,asset.ownerId,{storageId:asset.thumbnailStorageId},true);
 }
 export async function removeShareAssets(ctx:MutationCtx,shareId:Id<'timelineShares'>){
+  const share=await ctx.db.get(shareId);
   const pins=await ctx.db.query('shareAssets').withIndex('by_share',q=>q.eq('shareId',shareId)).take(201);
   for(const pin of pins)await ctx.db.delete(pin._id);
-  for(const pin of pins)await releaseMediaObjects(ctx,pin);
+  for(const pin of pins){await releaseMediaObjects(ctx,pin);if(share){await releaseAccountStorage(ctx,share.ownerId,pin);if(pin.thumbnailStorageId)await releaseAccountStorage(ctx,share.ownerId,{storageId:pin.thumbnailStorageId},true);}}
 }
 export async function removeProjectShares(ctx:MutationCtx,projectId:Id<'projects'>){
   const shares=await ctx.db.query('timelineShares').withIndex('by_project',q=>q.eq('projectId',projectId)).take(2);

@@ -81,7 +81,7 @@ export const assetWithUrl = v.object({ _id: v.id("assets"), _creationTime: v.num
 export const renderFields = {
   ownerId: v.string(), projectId: v.id("projects"),
   status: v.union(v.literal("queued"), v.literal("rendering"), v.literal("completed"), v.literal("failed")),
-  outputStorageId: v.optional(v.id("_storage")), outputR2Key: v.optional(v.string()), error: v.optional(v.string()), createdAt: v.number(), updatedAt: v.number(),
+  outputStorageId: v.optional(v.id("_storage")), outputR2Key: v.optional(v.string()), outputSize: v.optional(v.number()), error: v.optional(v.string()), createdAt: v.number(), updatedAt: v.number(),
   timeline: v.optional(timelineValidator), resolution: v.optional(v.number()), fps: v.optional(v.number()), quality: v.optional(v.string()),
   progress: v.optional(v.number()), assetIds: v.optional(v.array(v.id("assets"))), taskId: v.optional(v.id('mediaTasks')),
 };
@@ -113,6 +113,7 @@ export const mediaTaskFields = {
 };
 export const mediaTaskDocument = v.object({ _id: v.id('mediaTasks'), _creationTime: v.number(), ...mediaTaskFields });
 export const sharedAssetFields = {
+  ownerId:v.optional(v.string()),
   sourceId:v.id('assets'), storageId:v.optional(v.id('_storage')), r2Key:v.optional(v.string()),
   fileName:v.string(),contentType:v.string(),size:v.number(),kind:assetKind,
   duration:v.optional(v.number()),width:v.optional(v.number()),height:v.optional(v.number()),
@@ -125,15 +126,21 @@ export const publicMediaAsset = v.object({
   audioAssetId:v.optional(v.string()),audioExtracted:v.optional(v.boolean()),waveform:v.optional(waveformValidator),thumbnailUrl:v.optional(v.union(v.string(),v.null())),
 });
 export default defineSchema({
+  storageAccounts: defineTable({ ownerId:v.string(), usedBytes:v.number(), reservedBytes:v.number(), videoBytes:v.number(), audioBytes:v.number(), imageBytes:v.number(), exportBytes:v.number(), fileCount:v.number() }).index('by_owner',['ownerId']),
+  storageObjects: defineTable({ ownerId:v.string(), objectKey:v.string(), r2Key:v.optional(v.string()), storageId:v.optional(v.id('_storage')), fileName:v.string(), kind:v.union(assetKind,v.literal('export')), size:v.number(), createdAt:v.number(), auxiliary:v.boolean(), pending:v.boolean(), jobId:v.optional(v.id('renderJobs')) })
+    .index('by_owner_key',['ownerId','objectKey']).index('by_owner_visible_size',['ownerId','auxiliary','pending','size']).index('by_owner_visible_created',['ownerId','auxiliary','pending','createdAt'])
+    .index('by_owner_kind_size',['ownerId','auxiliary','pending','kind','size']).index('by_owner_kind_created',['ownerId','auxiliary','pending','kind','createdAt'])
+    .searchIndex('search_name',{searchField:'fileName',filterFields:['ownerId','auxiliary','pending','kind']}),
+  storageAccounting: defineTable({ name:v.string(), ready:v.boolean() }).index('by_name',['name']),
   editorEntitlements: defineTable({ ownerId: v.string(), reason: v.string(), grantedAt: v.number(), updatedAt: v.number(), expiresAt: v.optional(v.number()), revokedAt: v.optional(v.number()) }).index('by_owner', ['ownerId']),
   timelineShares:defineTable({projectId:v.id('projects'),ownerId:v.string(),title:v.string(),timeline:timelineValidator,published:v.boolean(),createdAt:v.number(),updatedAt:v.number()}).index('by_project',['projectId']),
-  shareAssets:defineTable({shareId:v.id('timelineShares'),...sharedAssetFields}).index('by_share',['shareId']).index('by_storageId',['storageId']).index('by_r2Key',['r2Key']).index('by_thumbnailStorageId',['thumbnailStorageId']),
+  shareAssets:defineTable({shareId:v.id('timelineShares'),...sharedAssetFields}).index('by_share',['shareId']).index('by_storageId',['storageId']).index('by_r2Key',['r2Key']).index('by_thumbnailStorageId',['thumbnailStorageId']).index('by_owner_r2Key',['ownerId','r2Key']).index('by_owner_storageId',['ownerId','storageId']).index('by_owner_thumbnail',['ownerId','thumbnailStorageId']),
   billingCheckouts: defineTable({ ownerId: v.string(), priceId: v.string(), origin: v.string(), trialEligible: v.boolean(), requestId: v.string(), createdAt: v.number(), sessionId: v.optional(v.string()), url: v.optional(v.string()), expiresAt: v.optional(v.number()) }).index('by_owner', ['ownerId']),
   mediaTasks: defineTable(mediaTaskFields).index('by_status_createdAt', ['status', 'createdAt']).index('by_asset_kind', ['assetId', 'kind']).index('by_project_createdAt', ['projectId', 'createdAt']),
   users: defineTable(userFields).index("by_clerk_id", ["clerkId"]),
   projects: defineTable(projectFields).index("by_ownerId_updatedAt", ["ownerId", "updatedAt"]),
-  assets: defineTable(assetFields).index("by_ownerId_projectId", ["ownerId", "projectId"]).index("by_ownerId_createdAt", ["ownerId", "createdAt"]).index("by_storageId", ["storageId"]).index("by_r2Key", ["r2Key"]).index('by_thumbnailStorageId',['thumbnailStorageId']),
-  renderJobs: defineTable(renderFields).index("by_ownerId_projectId", ["ownerId", "projectId"]).index("by_status_createdAt", ["status", "createdAt"]),
+  assets: defineTable(assetFields).index("by_ownerId_projectId", ["ownerId", "projectId"]).index("by_ownerId_createdAt", ["ownerId", "createdAt"]).index("by_storageId", ["storageId"]).index("by_r2Key", ["r2Key"]).index('by_thumbnailStorageId',['thumbnailStorageId']).index('by_owner_r2Key',['ownerId','r2Key']).index('by_owner_storageId',['ownerId','storageId']).index('by_owner_thumbnail',['ownerId','thumbnailStorageId']).index('by_owner_audio',['ownerId','audioAssetId']),
+  renderJobs: defineTable(renderFields).index("by_ownerId_projectId", ["ownerId", "projectId"]).index("by_status_createdAt", ["status", "createdAt"]).index("by_owner_project_status",["ownerId","projectId","status"]),
   analysisRequests: defineTable(analysisRequestFields).index("by_projectId_runId", ["projectId", "aiRunId"]).index("by_projectId", ["projectId"]),
   r2Uploads: defineTable(r2UploadFields).index("by_projectId", ["projectId"]).index("by_projectId_completed", ["projectId", "completed"]),
   uploadTickets: defineTable({
