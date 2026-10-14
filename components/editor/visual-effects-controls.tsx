@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useId, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { ChevronDown, ChevronRight, Plus, RotateCcw, Trash2 } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { DEFAULT_COLOR_GRADE, DEFAULT_DITHER, DEFAULT_INVERT, DEFAULT_GLITCH, DEFAULT_ZOOM_BLUR, VISUAL_EFFECT_LIMITS, type VisualEffects } from '@/lib/editor/visual-effects';
@@ -45,8 +45,9 @@ export function EffectSlider({ label, value, bounds, step = .01, format, disable
     cancelAnimationFrame(frame.current);
     if (gesture.current) callbacks.current.onPreview(null);
   }, []);
-  const progress = (draft - bounds[0]) / (bounds[1] - bounds[0]) * 100;
-  return <div className="effect-slider" data-disabled={disabled || undefined} style={{ '--effect-progress': `${progress}%` } as CSSProperties}>
+  const progress = Math.min(100, Math.max(0, (draft - bounds[0]) / (bounds[1] - bounds[0]) * 100));
+  return <div className="effect-slider" data-disabled={disabled || undefined}>
+    <span className="effect-slider-fill" aria-hidden="true" style={{ width: `${progress}%` }}/>
     <div className="effect-slider-readout" aria-hidden="true"><span>{label}</span><output htmlFor={id}>{format(draft)}</output></div>
     <input id={id} type="range" aria-label={label} aria-valuetext={format(draft)} min={bounds[0]} max={bounds[1]} step={step} value={draft} disabled={disabled}
       onPointerDown={event => { if (event.button === 0) { gesture.current = { initial: value, value: draft }; event.currentTarget.setPointerCapture(event.pointerId); } }}
