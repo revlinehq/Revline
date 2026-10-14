@@ -3,7 +3,7 @@ import type { Clip, Timeline } from './types';
 import { validateVisualEffects, type VisualEffects } from './visual-effects';
 import type { VisualEffectsController } from './visual-effects-runtime';
 
-function effects(clip: Clip): VisualEffects { return { colorGrade: clip.colorGrade, zoomBlur: clip.zoomBlur, glitch: clip.glitch, invert: clip.invert, dither: clip.dither }; }
+function effects(clip: Clip): VisualEffects { return { colorGrade: clip.colorGrade, zoomBlur: clip.zoomBlur, glitch: clip.glitch, invert: clip.invert, dither: clip.dither, neonEdges: clip.neonEdges }; }
 
 export function previewVisualEffects(document: Document, clip: Clip, index: number, patch: Partial<Clip> | null): boolean {
   const controller = (document.defaultView as (Window & { __revlineEffects?: VisualEffectsController }) | null)?.__revlineEffects;

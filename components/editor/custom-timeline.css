@@ -28,10 +28,12 @@ html[data-workspace-theme=dark] .editor-app:not(.landing-product-demo) .custom-t
 .conversation-editor .custom-timeline .track-label,.custom-timeline .timeline-track{background:var(--ws-bg);border-bottom:1px solid var(--timeline-divider);color:var(--ws-muted)}
 .custom-timeline .timeline-top-space{box-sizing:border-box;flex-shrink:0;border:0;border-bottom:1px solid var(--timeline-divider)}
 .custom-timeline .time-ruler,.custom-timeline .track-ruler-label{height:28px;background:var(--ws-bg);border-bottom-color:var(--ws-artifact-border);color:var(--ws-muted)}
-.custom-timeline .time-ruler span{top:4px;padding-left:0;transform:translateX(-50%);font-size:11px;line-height:14px;white-space:nowrap;color:var(--ws-muted);pointer-events:none}
+.custom-timeline .time-ruler span{top:3px;padding-left:0;transform:translateX(-50%);font-size:9px;line-height:12px;white-space:nowrap;color:var(--ws-muted);pointer-events:none}
 .custom-timeline .time-ruler .ruler-origin-label{padding-left:3px;transform:none}
 .custom-timeline .ruler-ticks{position:absolute;inset:0;overflow:visible;pointer-events:none}
-.custom-timeline .ruler-ticks path{fill:none;stroke:color-mix(in srgb,var(--ws-text) 24%,var(--ws-bg));stroke-width:1}
+.custom-timeline .ruler-ticks path{fill:none;stroke:color-mix(in srgb,var(--ws-text) 18%,var(--ws-bg));stroke-width:1}
+.custom-timeline .timeline-playhead-cap{width:8px;height:12px;margin-top:16px;clip-path:none;border-radius:2px;background:#29B6F6}
+.custom-timeline .timeline-playhead-cap:before{content:'';position:absolute;inset:-6px -5px}
 .conversation-editor .custom-timeline .track-label.layer-drop-target{background:color-mix(in srgb,var(--ws-text) 6%,var(--ws-bg));box-shadow:inset 0 2px #009DFF,inset 0 -2px #009DFF}
 .custom-timeline .timeline-toolbar{flex-shrink:0;min-width:0;max-width:100%;overflow-x:auto;scrollbar-width:none;background:var(--ws-bg);border-bottom-color:var(--ws-artifact-border)}
 .custom-timeline .timeline-toolbar::-webkit-scrollbar{display:none}

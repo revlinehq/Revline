@@ -1,17 +1,29 @@
+import type { VisualFadeController } from './visual-fades-runtime';
 import { generateComposition } from './composition';
 import { audioFadeAttributes, audioVolumeEnvelope } from './audio-settings';
 import { playbackRateOf, sourceTimeAt } from './playback-rate';
 import { timelineDuration, type Clip, type MediaAsset, type Timeline } from './types';
 import type { gsap } from 'gsap';
 
-type MediaWindow=Window&{gsap?:typeof gsap;__timelines?:{revline?:gsap.core.Timeline&{__hfReal?:gsap.core.Timeline}};__revlineDurationTween?:gsap.core.Tween;__revlineNextMediaIndex?:number;__revlineEffects?:{set(id:string,effects:Partial<Clip>):void}};
+type MediaWindow=Window&{gsap?:typeof gsap;__timelines?:{revline?:gsap.core.Timeline&{__hfReal?:gsap.core.Timeline}};__revlineDurationTween?:gsap.core.Tween;__revlineNextMediaIndex?:number;__revlineVisualFadeController?:VisualFadeController;__revlineEffects?:{set(id:string,effects:Partial<Clip>):void}};
 const mediaClip=(clip:Clip)=>clip.kind==='video'||clip.kind==='image'||clip.kind==='audio';
 const activeAt=(clip:Clip,time:number)=>time>=clip.start&&time<clip.start+clip.duration;
+
+/** Refresh native activation after timing/identity edits, without seeking for effect drafts. */
+export function needsLiveMediaSync(previous:Timeline,next:Timeline):boolean {
+  const before=new Map(previous.clips.filter(mediaClip).map(clip=>[clip.id,clip]));
+  const sources=next.clips.filter(mediaClip);
+  return before.size!==sources.length||sources.some(clip=>{
+    const old=before.get(clip.id);
+    return !old||old.kind!==clip.kind||old.assetId!==clip.assetId||old.start!==clip.start||old.duration!==clip.duration||old.sourceStart!==clip.sourceStart||playbackRateOf(old)!==playbackRateOf(clip);
+  });
+}
 
 /** Reconcile trusted media nodes while retaining every surviving decoder and transport. */
 export function updateLiveMediaContent(document:Document,previous:Timeline,next:Timeline,assets:MediaAsset[]):boolean {
   const host=document.defaultView as MediaWindow|null,clock=host?.__timelines?.revline?.__hfReal??host?.__timelines?.revline;
   const composition=document.getElementById('composition');if(!host?.gsap||!clock||!composition)return false;
+  if(!host.__revlineVisualFadeController&&next.clips.some(clip=>(clip.visualFade?.fadeIn??0)>0||(clip.visualFade?.fadeOut??0)>0))return false;
   if(previous.aspectRatio!==next.aspectRatio||previous.fps!==next.fps)return false;
   const nodes=new Map(Array.from(document.querySelectorAll<HTMLElement>('[data-source-clip]'),node=>[node.dataset.sourceClip!,node]));
   const old=new Map(previous.clips.map(clip=>[clip.id,clip])),assetMap=new Map(assets.map(asset=>[asset._id,asset]));
@@ -39,8 +51,12 @@ export function updateLiveMediaContent(document:Document,previous:Timeline,next:
     const index=host.__revlineNextMediaIndex??Math.max(-1,...Array.from(document.querySelectorAll('[id]'),node=>Number(/^clip-(\d+)/.exec(node.id)?.[1]??-1)))+1;
     host.__revlineNextMediaIndex=index+1;
     for(const node of [imported,...Array.from(imported.querySelectorAll<HTMLElement>('[id]'))])if(node.id.startsWith(previousPrefix))node.id=node.id.replace(previousPrefix,`clip-${index}`);
-    (clip.kind==='audio'?composition:parent).appendChild(imported);
     const media=imported.matches('[data-source-clip]')?imported:imported.querySelector<HTMLElement>('[data-source-clip]')!;
+    // The native runtime activates clips on its next transport sync. Until
+    // then a newly inserted inactive video's first frame must not cover the
+    // already decoded clip underneath it.
+    media.style.visibility=activeAt(clip,time)?'visible':'hidden';
+    (clip.kind==='audio'?composition:parent).appendChild(imported);
     nodes.set(clip.id,media);
   }
   for(const [id,node] of nodes)if(!wanted.has(id)){
@@ -62,6 +78,7 @@ export function updateLiveMediaContent(document:Document,previous:Timeline,next:
       if(node.dataset.automation!==envelope)node.dataset.automation=envelope;
     }
   }
+  host.__revlineVisualFadeController?.setSources(next.clips);
   const duration=Math.max(timelineDuration(next),1/next.fps);
   if(composition.dataset.duration!==String(duration)){
     composition.dataset.duration=String(duration);host.__revlineDurationTween?.kill();

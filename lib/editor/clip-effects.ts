@@ -6,15 +6,17 @@ import { isTransitionPreset, TRANSITION_PRESETS, validateTransitionSettings } fr
 import { validateTextStyle } from './text-style';
 import { audioFadeTimingPatch,validateAudioSettings } from './audio-settings';
 import { textAnimationTimingPatch,validateTextAnimationTiming } from './text-animation-timing';
+import {validateVisualFade,visualFadeTimingPatch} from './visual-fades';
 
 export const BLEND_MODES = ['normal', 'screen', 'multiply', 'overlay', 'plus-lighter', 'difference'] as const;
 export type BlendMode = typeof BLEND_MODES[number];
 export type MotionKeyframe = { time: number; x: number; y: number; scale: number; rotation: number; opacity: number; brightness: number };
 export const MOTION_PRESETS = ['none', 'fade', 'punch', 'shake', 'flash', 'pop'] as const;
 export type MotionPreset = typeof MOTION_PRESETS[number];
-export const TIMED_EFFECT_PRESETS = ['fade', 'punch', 'shake', 'flash', 'pop', 'cinematic-bars', 'quick-zoom-in', 'quick-zoom-out', 'zoom-blur', 'solid-color'] as const;
+export const TIMED_EFFECT_PRESETS = ['punch', 'shake', 'flash', 'pop', 'cinematic-bars', 'frame-shrink', 'quick-zoom-in', 'quick-zoom-out', 'zoom-blur', 'solid-color'] as const;
 export type TimedEffectPreset=typeof TIMED_EFFECT_PRESETS[number];
-export const EFFECT_PRESETS = [...TIMED_EFFECT_PRESETS, ...TRANSITION_PRESETS] as const;
+/** Saved legacy fade FX remains renderable; new fades belong to footage/audio settings. */
+export const EFFECT_PRESETS = ['fade', ...TIMED_EFFECT_PRESETS, ...TRANSITION_PRESETS] as const;
 export type EffectPreset = typeof EFFECT_PRESETS[number];
 export type SolidColorSettings = { color: string; width: number; height: number; x: number; y: number; opacity: number };
 export const DEFAULT_SOLID_COLOR: SolidColorSettings = { color: '#2563eb', width: 1, height: 1, x: .5, y: .5, opacity: 1 };
@@ -28,6 +30,9 @@ export function solidColorPatch(clip:Clip,changes:Partial<SolidColorSettings>):P
 export type CinematicBarSettings = { size: number; speed: number };
 export const DEFAULT_CINEMATIC_BARS: CinematicBarSettings = { size: .12, speed: 1 };
 export const CINEMATIC_BAR_LIMITS = { size: [0, .5], speed: [.25, 4] } as const;
+export type FrameShrinkSettings = { size: number; speed: number };
+export const DEFAULT_FRAME_SHRINK: FrameShrinkSettings = { size: .12, speed: 1 };
+export const FRAME_SHRINK_LIMITS = { size: [0, .45], speed: [.25, 4] } as const;
 export const NEUTRAL_MOTION = { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, brightness: 1 };
 const key = (time: number, changes: Partial<MotionKeyframe> = {}): MotionKeyframe => ({ time, ...NEUTRAL_MOTION, ...changes });
 export function cinematicBarSettings(clip: Pick<Clip, 'cinematicBars'>): CinematicBarSettings { return clip.cinematicBars ?? DEFAULT_CINEMATIC_BARS; }
@@ -35,6 +40,14 @@ export function cinematicBarSettings(clip: Pick<Clip, 'cinematicBars'>): Cinemat
 export function cinematicBarKeyframes(duration: number, speed = 1): MotionKeyframe[] {
   const movement = Math.min(.4 / speed, duration / 2);
   return [key(0, { opacity: 0 }), key(movement), key(duration - movement), key(duration, { opacity: 0 })].filter((frame, index, frames) => index === 0 || frame.time > frames[index - 1].time);
+}
+export function frameShrinkSettings(clip: Pick<Clip, 'frameShrink'>): FrameShrinkSettings { return clip.frameShrink ?? DEFAULT_FRAME_SHRINK; }
+/** Insets every side by size; sampled smoothstep uses the existing motion clock. */
+export function frameShrinkKeyframes(duration:number,settings:FrameShrinkSettings=DEFAULT_FRAME_SHRINK):MotionKeyframe[]{
+  const movement=Math.min(.4/settings.speed,duration/2),scale=Math.max(.1,1-2*settings.size),steps=8;
+  const smooth=(p:number)=>p*p*(3-2*p),bounded=(value:number)=>Math.max(scale,Math.min(1,value));
+  return [...Array.from({length:steps+1},(_,index)=>key(movement*index/steps,{scale:bounded(1+(scale-1)*smooth(index/steps))})),key(duration-movement,{scale}),...Array.from({length:steps},(_,index)=>key(duration-movement+movement*(index+1)/steps,{scale:bounded(scale+(1-scale)*smooth((index+1)/steps))}))]
+    .filter((frame,index,frames)=>index===0||frame.time>frames[index-1].time);
 }
 export const EFFECT_CATALOG: Record<EffectPreset, { label: string; description: string; duration: number; keyframes: (duration: number) => MotionKeyframe[] }> = {
   crossfade: { label: 'Crossfade', description: "Dissolve between two neighboring clips with complementary opacity weights, retaining transparent/cropped content and original audio timing.", duration: .6, keyframes: () => [] },
@@ -47,6 +60,7 @@ export const EFFECT_CATALOG: Record<EffectPreset, { label: string; description: 
   pop: { label: 'Pop in', description: "Scale footage from 0.7\u00d7 through a small overshoot while fading in, then settle to normal size.", duration: .5, keyframes: d => { const hit = Math.min(.35, d / 2); return [key(0, { scale: .7, opacity: 0 }), key(hit * .65, { scale: 1.08 }), key(hit), key(d)]; } },
   'solid-color': { label: 'Solid color', description: "A solid color frame or normalized adjustable rectangle with editable width, height, center and opacity.", duration: 2, keyframes: d => [key(0), key(d)] },
   'cinematic-bars': { label: 'Cinematic bars', description: "Black top/bottom bars slide in, hold and slide out; size controls their fraction of frame height and speed controls entry/exit.", duration: 2, keyframes: d => cinematicBarKeyframes(d) },
+  'frame-shrink': { label: 'Frame shrink', description: "Shrink the visual composition smoothly toward canvas center, hold with black space on all four sides, then return to its original framing. Size is the inset fraction per side; speed controls entrance/exit. Moves the footage itself without adding a rectangle or masking it; preserves audio and source timing.", duration: 2, keyframes: d => frameShrinkKeyframes(d) },
   'quick-zoom-in': { label: 'Quick zoom in', description: "A smooth visual push from normal framing to 1.2\u00d7 over the chosen interval.", duration: .5, keyframes: d => [key(0), key(d, { scale: 1.2 })] },
   'zoom-blur': { label: 'Zoom blur', description: "A timed radial blur pulse with editable strength and normalized blur center, fading in and out over underlying footage.", duration: .6, keyframes: d => { const fade = Math.min(.18, d / 2); return [key(0, {opacity:0}), key(fade), ...(d-fade > fade ? [key(d-fade)] : []), key(d, {opacity:0})]; } },
   'quick-zoom-out': { label: 'Quick zoom out', description: "A smooth visual pull from 1.2\u00d7 to normal framing over the chosen interval.", duration: .5, keyframes: d => [key(0, { scale: 1.2 }), key(d)] },
@@ -61,6 +75,7 @@ export function validateClipEffects(clip: Clip) {
   validateTextStyle(clip);
   validateAudioSettings(clip);
   validateTextAnimationTiming(clip);
+  validateVisualFade(clip);
   validateTransitionSettings(clip);
   if (clip.solidColor !== undefined) {
     if (clip.kind !== 'effect' || clip.effectPreset !== 'solid-color') throw new Error('Solid color settings belong to solid color effect clips.');
@@ -75,6 +90,13 @@ export function validateClipEffects(clip: Clip) {
     for (const property of ['size', 'speed'] as const) {
       const [min, max] = CINEMATIC_BAR_LIMITS[property], value = clip.cinematicBars[property];
       if (!Number.isFinite(value) || value < min || value > max) throw new Error(`Cinematic bar ${property} must be between ${min} and ${max}.`);
+    }
+  }
+  if(clip.frameShrink!==undefined){
+    if(clip.kind!=='effect'||clip.effectPreset!=='frame-shrink')throw new Error('Frame shrink settings belong to frame shrink effect clips.');
+    for(const property of ['size','speed'] as const){
+      const [min,max]=FRAME_SHRINK_LIMITS[property],value=clip.frameShrink[property];
+      if(!Number.isFinite(value)||value<min||value>max)throw new Error(`Frame shrink ${property} must be between ${min} and ${max}.`);
     }
   }
   if (clip.effectPreset !== undefined && (clip.kind !== 'effect' || (clip.effectPreset !== 'none' && !EFFECT_PRESETS.includes(clip.effectPreset)))) throw new Error('Effect presets belong to effect clips.');
@@ -116,24 +138,25 @@ export function visibleMotion(clip: Clip): MotionKeyframe[] {
 }
 
 export function motionPreset(clip: Clip, preset: MotionPreset | EffectPreset): Partial<Clip> {
-  if ((preset === 'cinematic-bars' || preset === 'zoom-blur' || preset === 'solid-color' || isTransitionPreset(preset)) && clip.kind !== 'effect') throw new Error('Add this preset as an effect clip.');
+  if ((preset === 'cinematic-bars' || preset === 'frame-shrink' || preset === 'zoom-blur' || preset === 'solid-color' || isTransitionPreset(preset)) && clip.kind !== 'effect') throw new Error('Add this preset as an effect clip.');
   if (isTransitionPreset(preset) && !clip.transition) throw new Error('Choose the two neighboring clips for this transition.');
-  const motion = preset === 'none' ? [] : preset === 'cinematic-bars' ? cinematicBarKeyframes(clip.duration, cinematicBarSettings(clip).speed) : EFFECT_CATALOG[preset].keyframes(clip.duration);
-  return { motion, motionOffset: 0, ...(clip.kind === 'effect' ? { effectPreset: preset, transition: isTransitionPreset(preset) ? clip.transition : undefined, solidColor: preset === 'solid-color' ? { ...solidColorSettings(clip) } : undefined, cinematicBars: preset === 'cinematic-bars' ? { ...cinematicBarSettings(clip) } : undefined, zoomBlur: preset === 'zoom-blur' ? {...DEFAULT_ZOOM_BLUR,...clip.zoomBlur,enabled:true} : undefined } : {}), ...(clip.kind === 'caption' || clip.kind === 'graphic' ? { animation: 'none' as const,textAnimationTiming:undefined } : {}) };
+  const motion = preset === 'none' ? [] : preset === 'cinematic-bars' ? cinematicBarKeyframes(clip.duration, cinematicBarSettings(clip).speed) : preset==='frame-shrink'?frameShrinkKeyframes(clip.duration,frameShrinkSettings(clip)):EFFECT_CATALOG[preset].keyframes(clip.duration);
+  return { motion, motionOffset: 0, ...(clip.kind === 'effect' ? { effectPreset: preset, transition: isTransitionPreset(preset) ? clip.transition : undefined, solidColor: preset === 'solid-color' ? { ...solidColorSettings(clip) } : undefined, cinematicBars: preset === 'cinematic-bars' ? { ...cinematicBarSettings(clip) } : undefined, frameShrink:preset==='frame-shrink'?{...frameShrinkSettings(clip)}:undefined, zoomBlur: preset === 'zoom-blur' ? {...DEFAULT_ZOOM_BLUR,...clip.zoomBlur,enabled:true} : undefined } : {}), ...(clip.kind === 'caption' || clip.kind === 'graphic' ? { animation: 'none' as const,textAnimationTiming:undefined } : {}) };
 }
 
 export function offsetClipMotion(clip: Clip, delta: number): Partial<Clip> {
-  return { ...(clip.motion?.length ? { motionOffset: (clip.motionOffset ?? 0) + delta } : {}), ...textTemplateTimingPatch(clip, delta),...textAnimationTimingPatch(clip,delta),...audioFadeTimingPatch(clip,delta) };
+  return { ...(clip.motion?.length ? { motionOffset: (clip.motionOffset ?? 0) + delta } : {}), ...textTemplateTimingPatch(clip, delta),...textAnimationTimingPatch(clip,delta),...audioFadeTimingPatch(clip,delta),...visualFadeTimingPatch(clip,delta) };
 }
 
 /** Effect handles stretch the currently visible pulse, including a previously split segment. */
 export function resizeEffectMotion(clip: Clip, duration: number): Partial<Clip> {
   if (clip.effectPreset === 'cinematic-bars') return { motion: cinematicBarKeyframes(duration, cinematicBarSettings(clip).speed), motionOffset: 0 };
+  if(clip.effectPreset==='frame-shrink')return {motion:frameShrinkKeyframes(duration,frameShrinkSettings(clip)),motionOffset:0};
   return { motion: visibleMotion(clip).map(key => ({ ...key, time: key.time / clip.duration * duration })), motionOffset: 0 };
 }
 
 /** Presets are editable starting points; requested controls never change footage or neighboring FX. */
-export function configureTimedEffectPatch(clip:Clip,changes:{preset?:TimedEffectPreset;duration?:number;cinematicBars?:Partial<CinematicBarSettings>}):Partial<Clip>{
+export function configureTimedEffectPatch(clip:Clip,changes:{preset?:TimedEffectPreset;duration?:number;cinematicBars?:Partial<CinematicBarSettings>;frameShrink?:Partial<FrameShrinkSettings>}):Partial<Clip>{
   if(clip.kind!=='effect'||isTransitionPreset(clip.effectPreset))throw new Error('Choose a timed FX clip; pair transitions have separate controls.');
   if(!Object.values(changes).some(value=>value!==undefined))throw new Error('Specify a timed effect control.');
   const duration=changes.duration??clip.duration;if(!Number.isFinite(duration)||duration<=0)throw new Error('Choose a positive timed effect duration.');
@@ -142,6 +165,11 @@ export function configureTimedEffectPatch(clip:Clip,changes:{preset?:TimedEffect
     if((changes.preset??clip.effectPreset)!=='cinematic-bars')throw new Error('Size/speed controls belong to cinematic bars.');
     if(!Object.values(changes.cinematicBars).some(value=>value!==undefined))throw new Error('Specify a cinematic bars control.');
     const cinematicBars={...cinematicBarSettings(clip),...changes.cinematicBars};patch={...patch,cinematicBars,motion:cinematicBarKeyframes(duration,cinematicBars.speed),motionOffset:0};
+  }
+  if(changes.frameShrink){
+    if((changes.preset??clip.effectPreset)!=='frame-shrink')throw new Error('Frame shrink size/speed controls belong to frame shrink.');
+    if(!Object.values(changes.frameShrink).some(value=>value!==undefined))throw new Error('Specify a frame shrink control.');
+    const frameShrink={...frameShrinkSettings(clip),...changes.frameShrink};patch={...patch,frameShrink,motion:frameShrinkKeyframes(duration,frameShrink),motionOffset:0};
   }
   validateClipEffects({...clip,...patch});return patch;
 }

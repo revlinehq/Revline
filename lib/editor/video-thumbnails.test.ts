@@ -38,6 +38,19 @@ test('keeps decoded stills when a signed source URL is refreshed', async () => {
   expect(await videoThumbnails('fixture.mp4?lease=new', [0, 3], 'stable-asset-id')).toEqual(original);
   expect(fixture.videos).toHaveLength(1);
 });
+
+test('new split and trim requests can retain same-source stills without decoding or relabeling their sample time', async () => {
+  const fixture = decoderFixture();
+  const { videoThumbnails, cachedNearestVideoThumbnail, cachedVideoThumbnail } = await import('./video-thumbnails');
+  await videoThumbnails('same.mp4', [0, 3, 6], 'asset');
+  expect(cachedVideoThumbnail('asset', 3.1)).toBeUndefined();
+  expect(cachedNearestVideoThumbnail('asset', 3.1)).toEqual({ time: 3, image: 'data:image/jpeg;base64,frame-3' });
+  expect(cachedNearestVideoThumbnail('asset', 3.1, [4, 8])).toEqual({ time: 6, image: 'data:image/jpeg;base64,frame-6' });
+  expect(cachedNearestVideoThumbnail('asset', 3.1, [7, 10])).toBeUndefined();
+  expect(cachedNearestVideoThumbnail('other-asset', 3.1)).toBeUndefined();
+  expect(cachedNearestVideoThumbnail('asset', NaN)).toBeUndefined();
+  expect(fixture.videos).toHaveLength(1); expect(fixture.draws()).toBe(3);
+});
 test('limits concurrent video decoders while processing multiple assets', async () => {
   const fixture = decoderFixture();
   const { videoThumbnails } = await import('./video-thumbnails');

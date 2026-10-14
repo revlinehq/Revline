@@ -13,6 +13,22 @@ export function cachedVideoThumbnail(sourceId: string, time: number) {
   return frames.get(keyFor(sourceId, time));
 }
 
+/** A new split can retain a representative still while its exact source sample decodes. */
+export function cachedNearestVideoThumbnail(sourceId: string, time: number, bounds: readonly [number, number] = [0, Infinity]): { time: number; image: string } | undefined {
+  if (!Number.isFinite(time) || bounds[1] < bounds[0]) return undefined;
+  const prefix = sourceId + '\n';
+  let nearest: { key: string; time: number; image: string } | undefined;
+  for (const [key, image] of frames) {
+    if (!key.startsWith(prefix)) continue;
+    const sample = Number(key.slice(prefix.length));
+    if (!Number.isFinite(sample) || sample < bounds[0] || sample > bounds[1]) continue;
+    if (!nearest || Math.abs(sample - time) < Math.abs(nearest.time - time) || (Math.abs(sample - time) === Math.abs(nearest.time - time) && sample < nearest.time)) nearest = { key, time: sample, image };
+  }
+  if (!nearest) return undefined;
+  frames.delete(nearest.key); frames.set(nearest.key, nearest.image);
+  return { time: nearest.time, image: nearest.image };
+}
+
 function drain() {
   while (active < 2 && jobs.length) {
     active++;

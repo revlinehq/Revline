@@ -16,6 +16,8 @@
 .revline-primary[data-slot=button]{box-shadow:0 4px 0 #1c2e82}
 .revline-primary-icon[data-slot=button]{box-shadow:0 3px 0 #1c2e82}
 .revline-primary[data-slot=button]:active{transform:translateY(3px);box-shadow:0 1px 0 #1c2e82}
+.edit-composer .composer-submit[data-slot=button]{box-shadow:0 3px 0 #1c2e82,inset 0 0 7px #FFFFFF66}
+.edit-composer .composer-submit[data-slot=button]:active{box-shadow:0 1px 0 #1c2e82,inset 0 0 7px #FFFFFF66}
 
 :root{--ws-bubble:#f2f2f2;--ws-chip:#f2f2f2;--ws-chip-text:#555}html[data-workspace-theme="dark"]{--ws-bubble:#222;--ws-chip:#222;--ws-chip-text:#b6b6b6}
 

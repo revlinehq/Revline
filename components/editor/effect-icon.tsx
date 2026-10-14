@@ -13,6 +13,8 @@ const glyphs = {
   'colorGrade': [{"d":"M5 3v6m0 4v8m7-18v11m0 4v3m7-18v3m0 4v11m-16-10h4m3 5h4m3-8h4","stroke":true,"opacity":1}],
   'invert': [{"d":"M12 3a9 9 0 0 1 0 18 9 9 0 0 1 0-18z m0 0v18","stroke":true,"opacity":1},{"d":"M12 3a9 9 0 0 1 0 18z","stroke":false,"opacity":0.28}],
   'cinematic-bars': [{"d":"M3 7h18m-18 10h18m-12-14l3 2 3-2m-6 18l3-2 3 2","stroke":true,"opacity":1},{"d":"M3 5h18v2h-18z m0 12h18v2h-18z","stroke":false,"opacity":0.28}],
+  'frame-shrink': [{d:'M6 3h12a3 3 0 0 1 3 3v12a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3V6a3 3 0 0 1 3-3Z M9 8h6a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1Z M5 5l3 3 M6 8h2V6 M19 19l-3-3 M16 18v-2h2',stroke:true,opacity:1}],
+  neonEdges: [{d:'M12 5l6 4v6l-6 4-6-4V9l6-4Z M12 8l3 2v4l-3 2 M3 9v6 M21 9v6 M9 2h6 M9 22h6',stroke:true,opacity:1},{d:'M12 5l6 4v6l-6 4-6-4V9l6-4Z',stroke:false,opacity:.14}],
   'quick-zoom-in': [{"d":"M3 8v-5h5m8 0h5v5m0 8v5h-5m-8 0h-5v-5m5-8l3 3m-3 0h3v-3m5 8l-3-3m0 3v-3h3","stroke":true,"opacity":1}],
   'quick-zoom-out': [{"d":"M8 8h8v8h-8z m-2-2l-3-3m0 3v-3h3m12 15l3 3m-3 0h3v-3","stroke":true,"opacity":1}],
   'punch': [{"d":"M8 8h8v8h-8z m-5 4h2m14 0h2m-9-9v2m0 14v2m-7-16l2 2m10 10l2 2","stroke":true,"opacity":1}],

@@ -1,7 +1,10 @@
 import type { VisualEffects } from './visual-effects';
 import { trackOf, type Clip } from './types';
 import { adjustmentFrame } from './adjustment-layers';
+import { NEON_EDGES_GLSL } from './neon-edges-shader';
+import { DEFAULT_NEON_EDGES } from './neon-edges';
 export { installAdjustmentLayers } from './adjustment-layers';
+export { installVisualFades } from './visual-fades-runtime';
 
 export type VisualEffectSource = VisualEffects & { id: string };
 export type VisualEffectsController = { set(id: string, effects: VisualEffects): void; setTimedEffects(clips:Clip[]):void; redraw(): void; dispose(): void };
@@ -13,12 +16,13 @@ export function installVisualEffects(sources: VisualEffectSource[], fps: number,
   const host = window as unknown as RuntimeWindow;
   const preview = !!document.querySelector('meta[name="hyperframes-studio-preview"]');
   const clock = host.__timelines.revline.__hfReal ?? host.__timelines.revline;
-  type Entry = { source: HTMLVideoElement | HTMLImageElement; effects: VisualEffects; canvas?: HTMLCanvasElement; gl?: WebGLRenderingContext; program?: WebGLProgram; texture?: WebGLTexture; buffer?: WebGLBuffer; uniforms?: Record<string, WebGLUniformLocation | null>; passTextures?: WebGLTexture[]; framebuffer?: WebGLFramebuffer; passWidth?: number; passHeight?: number; nominalWidth?: number; nominalHeight?: number; lastPassKey?: string; lastPassCount?: number; lastFrame?: number; lastSource?: string | number; lastTransform?: string; dirty: boolean; injected?: HTMLImageElement; failed?: boolean; videoCallback?: number; decodedFrame?: number; decodedListener?: () => void; uploadCanvas?: HTMLCanvasElement };
+  type Entry = { source: HTMLVideoElement | HTMLImageElement; effects: VisualEffects; neonColor?: number; canvas?: HTMLCanvasElement; gl?: WebGLRenderingContext; program?: WebGLProgram; texture?: WebGLTexture; buffer?: WebGLBuffer; uniforms?: Record<string, WebGLUniformLocation | null>; passTextures?: WebGLTexture[]; framebuffer?: WebGLFramebuffer; passWidth?: number; passHeight?: number; nominalWidth?: number; nominalHeight?: number; lastPassKey?: string; lastPassCount?: number; lastFrame?: number; lastSource?: string | number; lastTransform?: string; dirty: boolean; injected?: HTMLImageElement; failed?: boolean; videoCallback?: number; decodedFrame?: number; decodedListener?: () => void; uploadCanvas?: HTMLCanvasElement };
   type Resources = Pick<Entry, 'canvas' | 'gl' | 'program' | 'texture' | 'buffer' | 'uniforms' | 'passTextures' | 'framebuffer' | 'passWidth' | 'passHeight'>;
   const entries = new Map<string, Entry>();
   const available: Resources[] = [];
   let frameRequest = 0, disposed = false;
   const baseEffects=new Map<string,VisualEffects>();
+  const defaultNeonColor=Number.parseInt(DEFAULT_NEON_EDGES.color.slice(1),16);
   let timedEffects:Clip[]=[];
   function effectPasses(base:VisualEffects,time:number):VisualEffects[] {
     const passes = enabled(base) ? [base] : [];
@@ -37,6 +41,7 @@ float bayer2(vec2 p){return p.y<1.0?(p.x<1.0?0.0:2.0):(p.x<1.0?3.0:1.0);}
 float bayer4(vec2 p){p=mod(floor(p),4.0);return (4.0*bayer2(mod(p,2.0))+bayer2(floor(p/2.0))+0.5)/16.0;}
 float hash(vec2 p){float n=mod(p.x*73.0+p.y*151.0+19.0,251.0);n=mod(n*n*17.0+n*13.0,65521.0);return mod(n*37.0,1021.0)/1021.0;}
 vec4 sampleSource(vec2 p){return texture2D(source,clamp(p,vec2(0.0),vec2(1.0)));}
+${NEON_EDGES_GLSL}
 vec3 orderedColor(vec3 rgb,float steps,float threshold){
   if(ditherPalette>0.5){
     float tone=clamp(floor(dot(rgb,vec3(0.2126,0.7152,0.0722))*steps+threshold)/steps,0.0,1.0);
@@ -69,6 +74,7 @@ void main(){
   float saturation=grade.z*(1.0+balance.z*(1.0-clamp(chroma,0.0,1.0)));
   rgb=clamp(mix(vec3(luma),rgb,saturation),0.0,1.0);
   rgb=mix(rgb,1.0-rgb,invert);
+  rgb=neonEdges(p,rgb);
   if(dither.x>0.0){
     float steps=dither.y-1.0;
     float cell=max(0.01,dither.z);vec3 ordered;
@@ -93,7 +99,7 @@ void main(){
 
   function enabled(effects: VisualEffects) {
     const c = effects.colorGrade, z = effects.zoomBlur, g = effects.glitch;
-    return !!(c?.enabled && (c.exposure || c.contrast !== 1 || c.saturation !== 1 || c.temperature || c.tint || c.vibrance) || z?.enabled && z.amount > 0 || g?.enabled && g.intensity > 0 || effects.invert?.enabled && effects.invert.amount > 0 || effects.dither?.enabled && effects.dither.amount > 0);
+    return !!(c?.enabled && (c.exposure || c.contrast !== 1 || c.saturation !== 1 || c.temperature || c.tint || c.vibrance) || z?.enabled && z.amount > 0 || g?.enabled && g.intensity > 0 || effects.invert?.enabled && effects.invert.amount > 0 || effects.dither?.enabled && effects.dither.amount > 0 || effects.neonEdges?.enabled && effects.neonEdges.amount > 0);
   }
   function release(entry: Entry) {
     entry.source.removeAttribute('data-revline-effects');
@@ -160,7 +166,7 @@ void main(){
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
-    const uniforms = Object.fromEntries(['source','size','frame','invert','grade','balance','zoom','glitch','dither','ditherPalette','ditherShadow','ditherHighlight'].map(name => [name, gl.getUniformLocation(program, name)]));
+    const uniforms = Object.fromEntries(['source','size','frame','invert','grade','balance','zoom','glitch','dither','ditherPalette','ditherShadow','ditherHighlight','neon','neonColor','neonPixel'].map(name => [name, gl.getUniformLocation(program, name)]));
     Object.assign(entry, { canvas, gl, program, texture, buffer, uniforms });
     entry.source.parentElement!.appendChild(canvas);
   }
@@ -235,7 +241,7 @@ void main(){
       const color = (hex: string) => [1, 3, 5].map(index => parseInt(hex.slice(index, index + 2), 16) / 255);
       if(passes.length>1)preparePassTargets(entry);
       for(const [index,effects] of passes.entries()){
-        const c=effects.colorGrade,z=effects.zoomBlur,g=effects.glitch,d=effects.dither;
+        const c=effects.colorGrade,z=effects.zoomBlur,g=effects.glitch,d=effects.dither,n=effects.neonEdges;
         gl.bindTexture(gl.TEXTURE_2D,index===0?entry.texture!:entry.passTextures![(index-1)%2]);
         if(index===passes.length-1)gl.bindFramebuffer(gl.FRAMEBUFFER,null);
         else{
@@ -248,6 +254,10 @@ void main(){
         gl.uniform3f(u.balance,c?.enabled?c.temperature/100:0,c?.enabled?c.tint/100:0,c?.enabled?c.vibrance/100:0);
         gl.uniform3f(u.zoom,z?.enabled?z.amount:0,z?.centerX??.5,1-(z?.centerY??.5));
         gl.uniform3f(u.glitch,g?.enabled?g.intensity:0,(g?.blockSize??32)*pixelScale,(g?.rgbSplit??8)*pixelScale);
+        gl.uniform4f(u.neon,n?.enabled?n.amount:0,n?.detail??DEFAULT_NEON_EDGES.detail,n?.threshold??DEFAULT_NEON_EDGES.threshold,n?.glow??DEFAULT_NEON_EDGES.glow);
+        gl.uniform1f(u.neonPixel,pixelScale/clipScale);
+        const neonColor=entry.neonColor??defaultNeonColor;
+        gl.uniform3f(u.neonColor,(neonColor>>>16&255)/255,(neonColor>>>8&255)/255,(neonColor&255)/255);
         gl.uniform3f(u.dither,d?.enabled?d.amount:0,d?.levels??4,(d?.size??2)*resolution/1080*canvas.width/sourceDisplayWidth/clipScale);
         const shadow=color(d?.shadowColor??'#000000'),highlight=color(d?.highlightColor??'#ffffff');
         gl.uniform1f(u.ditherPalette,d?.shadowColor||d?.highlightColor?1:0);
@@ -299,7 +309,7 @@ void main(){
     const source = document.getElementById(id);
     if (!(source instanceof HTMLVideoElement || source instanceof HTMLImageElement)) return;
     const entry = previous ?? { source, effects, dirty: true };
-    entry.effects = effects; entry.dirty = true; entry.failed = false; entries.set(id, entry); if (!previous) decoded(entry); draw(entry);
+    entry.effects = effects; entry.neonColor = effects.neonEdges ? Number.parseInt(effects.neonEdges.color.slice(1),16) : defaultNeonColor; entry.dirty = true; entry.failed = false; entries.set(id, entry); if (!previous) decoded(entry); draw(entry);
     if (!frameRequest) frameRequest = requestAnimationFrame(tick);
   }
   const originalRender = clock.render;

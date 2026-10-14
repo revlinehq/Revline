@@ -1,5 +1,6 @@
 'use client';
 // @refresh reset
+import { previewVisualFade } from '@/lib/editor/visual-fades-runtime';
 import { warmPreviewMedia } from '@/lib/editor/preview-media-warmup';
 import { waitForPreviewMedia } from '@/lib/editor/preview-readiness';
 import { useEffect, useLayoutEffect, useRef, useState, useMemo, forwardRef, useImperativeHandle } from 'react';
@@ -18,7 +19,7 @@ import type { SourceCrop } from '@/lib/editor/types';
 import { previewContentKey } from '@/lib/editor/preview-content-key';
 import { compositionNode, compositionIndex } from '@/lib/editor/composition-node';
 import { textLayerSources } from '@/lib/editor/text-layers';
-import { updateLiveMediaContent } from '@/lib/editor/live-media-content';
+import { needsLiveMediaSync, updateLiveMediaContent } from '@/lib/editor/live-media-content';
 import { updateLiveTextEffects } from '@/lib/editor/live-preview-effects';
 import { previewVisualEffects, updateLiveVisualEffects } from '@/lib/editor/live-visual-effects';
 import { updateLiveVisualGeometry } from '@/lib/editor/live-visual-geometry';
@@ -81,7 +82,15 @@ export const Preview = forwardRef<PreviewHandle,{timeline:Timeline;assets:MediaA
     if(renderedContentKey.current!==contentKey)return;
     try{
       const retained=updateLiveMediaContent(doc,previous,current,assets)&&updateLiveAdjustmentEffects(doc,previous,current)&&updateLiveTextEffects(doc,previous,current)&&updateLiveVisualEffects(doc,previous,current)&&updateLiveVisualGeometry(doc,previous,current,assets);
-      if(retained){updateLayers(active,current);renderedTimeline.current=current;setRevision(value=>value+1);}
+      if(retained){
+        updateLayers(active,current);
+        if(needsLiveMediaSync(previous,current)){
+          const wasPlaying=!active.paused;
+          active.seek(frameTime(active,seekPosition.current));
+          if(wasPlaying)active.play();
+        }
+        renderedTimeline.current=current;setRevision(value=>value+1);
+      }
       else setReloadRevision(value=>value+1);
     }catch(error){callbacks.current.onError(error instanceof Error?error.message:'Could not apply this preview edit.');}
   },[committedTimeline,assets,contentKey]);
@@ -119,6 +128,7 @@ export const Preview = forwardRef<PreviewHandle,{timeline:Timeline;assets:MediaA
         if(player.current)updateLayers(player.current,{...before,clips:before.clips.map(clip=>clip.id===id?{...clip,...patch}:clip)});
       }else{
         previewVisualEffects(doc,entry.clip,compositionIndex(doc,entry.clip,entry.index),patch);
+        previewVisualFade(doc,entry.clip,patch);
         if(entry.clip.kind==='video'||entry.clip.kind==='image'){
           const transform={x:.5,y:.5,scale:1,rotation:0,opacity:1,...entry.clip.transform,...patch?.transform};
           const frame=Array.from(doc.querySelectorAll<HTMLElement>('[data-visual-clip]')).find(node=>node.dataset.visualClip===id);
@@ -145,7 +155,7 @@ export const Preview = forwardRef<PreviewHandle,{timeline:Timeline;assets:MediaA
       p=document.createElement('hyperframes-player') as HyperframesPlayer;
       p.muted=true;p.style.cssText='position:absolute;inset:0;width:100%;height:100%;z-index:0';p.setAttribute('assets-loading-ui','none');p.setAttribute('runtime-src',`${window.location.origin}/vendor/hyperframe.runtime.iife.js`);p.setAttribute('disable-click-to-play','');p.removeAttribute('controls');
       const recoveredUrls=Object.fromEntries(assets.flatMap(asset=>{const refreshed=refreshedSources.current.get(asset._id);return refreshed&&refreshed.original===asset.url?[[asset._id,refreshed.url]]:[];}));
-      p.setAttribute('srcdoc',generateComposition(timeline,assets,{preview:true,assetUrls:recoveredUrls,gsapUrl:`${window.location.origin}/vendor/gsap.min.js`,visualEffectsUrl:`${window.location.origin}/vendor/visual-effects.js?v=ordered-stack-6`,remotionTextUrl:`${window.location.origin}/vendor/remotion-text.js?v=retained-text-2`}));
+      p.setAttribute('srcdoc',generateComposition(timeline,assets,{preview:true,assetUrls:recoveredUrls,gsapUrl:`${window.location.origin}/vendor/gsap.min.js`,visualEffectsUrl:`${window.location.origin}/vendor/visual-effects.js?v=clip-fades-neon-8`,remotionTextUrl:`${window.location.origin}/vendor/remotion-text.js?v=retained-text-2`}));
       const swap=()=>{
         if(cancelled||!p||swapped||!loaded||waitingForMedia)return;
         waitingForMedia=true;

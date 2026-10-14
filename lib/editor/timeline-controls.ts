@@ -1,6 +1,7 @@
 import { offsetClipMotion, resizeEffectMotion } from './clip-effects';
 import { textAnimationTimingPatch } from './text-animation-timing';
 import { audioFadeTimingPatch } from './audio-settings';
+import { visualFadeTimingPatch } from './visual-fades';
 import { textTemplateTimingPatch } from './remotion-text';
 // Adapted from OpenCut Classic's playhead, zoom, and edge-scroll controllers.
 // Copyright 2025–2026 OpenCut. MIT: third-party/OpenCut-LICENSE.
@@ -9,6 +10,7 @@ import { frameSeekTime, linkedClipIds } from './operations';
 import { TimelineGestureRejection } from './timeline-edit-errors';
 import { playbackRateOf } from './playback-rate';
 import { isTransitionClip, reconcileTransitionEdits, transitionPair } from './clip-transitions';
+import { moveTransitionAt } from './transition-placement';
 export function timelineTimeAtPointer(x:number,geometry:{left:number;scrollLeft:number;origin:number;px:number;end:number;fps:number}){
   const raw=Math.max(0,Math.min(geometry.end,(x-geometry.left+geometry.scrollLeft-geometry.origin)/geometry.px));
   return frameSeekTime(raw,geometry.fps,geometry.end);
@@ -111,12 +113,21 @@ export function shouldCommitClipGesture(mode:'move'|'left'|'right',pointer:{x:nu
   // zero must keep that preview; only moving a clip needs an inside drop target.
   return mode!=='move'||pointer.x>=viewport.left&&pointer.x<viewport.left+viewport.width&&pointer.y>=viewport.top&&pointer.y<viewport.top+viewport.height;
 }
+export function minimumClipMoveDelta(members: Clip[], fps: number) {
+  const clip = members[0];
+  return members.length === 1 && isTransitionClip(clip) ? 1 / fps - (clip.start + clip.duration / 2) : -Math.min(...members.map(clip => clip.start));
+}
 function selectedMoveDelta(timeline: Timeline, members: import('./types').Clip[], requested: number, anchorId?: string, magnet?: TimelineMagnet) {
-  const minimum = -Math.min(...members.map(clip => clip.start));
+  const minimum = minimumClipMoveDelta(members, timeline.fps);
   const maximum = Infinity;
   const delta = Math.max(minimum, Math.min(maximum, requested));
   if (delta === 0) return 0;
   const anchor = members.find(clip => clip.id === anchorId) ?? members[0];
+  if(members.length===1&&isTransitionClip(anchor)){
+    const center=anchor.start+anchor.duration/2;
+    const rounded=Math.round((center+delta)*timeline.fps)/timeline.fps;
+    return Math.max(minimum,(magnet?closestSnap(rounded,magnet.marks,magnet.threshold):rounded)-center);
+  }
   const frameDelta = Math.round((anchor.start + delta) * timeline.fps) / timeline.fps - anchor.start;
   // Imported clip endpoints can fall between frames. Magnetize after rounding
   // so an exact join cannot become a tiny overlap and create another track.
@@ -132,6 +143,9 @@ export function moveSelectedClips(timeline:Timeline,ids:string[],timeDelta:numbe
   const layers=members.filter(c=>explicit.has(c.id)&&(!c.linkedClipId||layerGroup(c.kind)===anchorGroup));
   const dt=selectedMoveDelta(timeline,members,timeDelta,anchorId,magnet);
   const dl=Math.max(1-Math.min(...layers.map(trackOf)),Math.min(Math.min(...layers.map(clip=>maxTrackCount(layerGroup(clip.kind))-trackOf(clip))),layerDelta));
+  if(members.length===1&&isTransitionClip(members[0])&&Math.abs(dt)>1e-9){
+    const clip=members[0];return moveTransitionAt(timeline,clip.id,clip.start+clip.duration/2+dt,trackOf(clip)+dl);
+  }
   const moved=members.map(c=>({...c,start:dt===0?c.start:c.start+dt,track:trackOf(c)+(layers.some(member=>member.id===c.id)?dl:0)}));
   return placeMovedClips(timeline,moved,direction,false);
 }
@@ -144,6 +158,11 @@ export function moveSelectionToNewLayers(timeline:Timeline,ids:string[],timeDelt
   const anchorGroup=layerGroup(members.find(c=>c.id===anchorId)?.kind??members[0].kind);
   const counts=deriveTrackCounts(timeline);
   const dt=selectedMoveDelta(timeline,members,timeDelta,anchorId,magnet);
+  if(members.length===1&&isTransitionClip(members[0])&&Math.abs(dt)>1e-9){
+    const layered=moveSelectionToNewLayers(timeline,ids,0,edge,anchorId,undefined,atTrack);
+    const clip=layered.clips.find(member=>member.id===members[0].id)!;
+    return moveTransitionAt(layered,clip.id,members[0].start+members[0].duration/2+dt,trackOf(clip));
+  }
   let clips=timeline.clips.map(clip=>selected.has(clip.id)?{...clip,start:dt===0?clip.start:clip.start+dt}:clip);
   for(const group of TIMELINE_LAYER_GROUPS){
     const groupMembers=members.filter(clip=>explicit.has(clip.id)&&layerGroup(clip.kind)===group&&(!clip.linkedClipId||group===anchorGroup));if(!groupMembers.length)continue;
@@ -238,6 +257,6 @@ export function resizeSelectedClips(timeline:Timeline,assets:MediaAsset[],ids:st
     const tolerance=Number.EPSILON*Math.max(1,clip.duration,Math.abs(dt))*8;
     const duration=Math.abs(rawDuration-frame)<=tolerance?frame:rawDuration;
     if(clip.kind==='effect')return {...clip,...resizeEffectMotion(clip,duration),start:side==='left'?clip.start+dt:clip.start,duration};
-    return side==='right'?{...clip,...textTemplateTimingPatch(clip),...textAnimationTimingPatch(clip),...audioFadeTimingPatch(clip),duration}:{...clip,...offsetClipMotion(clip,dt),start:clip.start+dt,duration,sourceStart:clip.kind==='video'||clip.kind==='audio'?clip.sourceStart+dt*playbackRateOf(clip):clip.sourceStart};
+    return side==='right'?{...clip,...textTemplateTimingPatch(clip),...textAnimationTimingPatch(clip),...audioFadeTimingPatch(clip),...visualFadeTimingPatch(clip),duration}:{...clip,...offsetClipMotion(clip,dt),start:clip.start+dt,duration,sourceStart:clip.kind==='video'||clip.kind==='audio'?clip.sourceStart+dt*playbackRateOf(clip):clip.sourceStart};
   })});
 }

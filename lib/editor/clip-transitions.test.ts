@@ -116,8 +116,8 @@ test('pair blend modes must match; availability skips incompatible cuts and acce
 test('transition drops respect the actual V lane/target while FX drops may use a global cut',()=>{
   const isolated={id:'isolated',kind:'image' as const,assetId:'still',track:2,start:10,duration:2,sourceStart:0};
   const timeline={...base,clips:[...base.clips,isolated]};
-  expect(()=>dropLibraryEffect(timeline,{preset:'crossfade'},10,'visual',2,'isolated','fx')).toThrow('neighboring');
-  expect(()=>dropLibraryEffect(timeline,{preset:'spin-zoom'},10,'visual',2,undefined,'fx')).toThrow('neighboring');
+  expect(()=>dropLibraryEffect(timeline,{preset:'crossfade'},10,'visual',2,'isolated','fx')).toThrow('inside footage');
+  expect(()=>dropLibraryEffect(timeline,{preset:'spin-zoom'},10,'visual',2,undefined,'fx')).toThrow('inside footage');
   expect(()=>dropLibraryEffect(timeline,{preset:'blur-dissolve'},5,'audio',1,undefined,'fx')).toThrow('video/image cut');
   expect(fx(dropLibraryEffect(timeline,{preset:'crossfade'},5,'visual',1,'from','fx')).transition).toMatchObject({fromClipId:'from',toClipId:'to'});
   expect(fx(dropLibraryEffect(timeline,{preset:'spin-zoom'},5,'effects',3,undefined,'fx'))).toMatchObject({track:3,transition:{fromClipId:'from',toClipId:'to'}});

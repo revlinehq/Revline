@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { motionPreset, motionAt, visibleMotion, validateClipEffects, MOTION_PRESETS, EFFECT_PRESETS } from './clip-effects';
+import { motionPreset, motionAt, visibleMotion, validateClipEffects, MOTION_PRESETS, TIMED_EFFECT_PRESETS } from './clip-effects';
 import { splitClip } from './operations';
 import { resizeSelectedClips } from './timeline-controls';
 import { generateComposition } from './composition';
@@ -7,9 +7,9 @@ import type { Clip, Timeline } from './types';
 const clip: Clip = { id:'word', kind:'graphic', text:'IMPACT', start:2, duration:2, sourceStart:0 };
 const timeline: Timeline = { fps:30, aspectRatio:'vertical', tracks:{visual:1,overlay:0,audio:0}, clips:[clip] };
 describe('clip motion',()=>{
-  it('all presets have bounded increasing keyframes, including one-frame clips',()=>{
+  it('all independent presets have bounded increasing keyframes, including one-frame clips',()=>{
     for (const duration of [1/60,1/30,2,60]) for (const preset of MOTION_PRESETS) expect(()=>validateClipEffects({...clip,duration,...motionPreset({...clip,duration},preset)})).not.toThrow();
-    for (const duration of [1/60, .5, 2, 60]) for (const preset of EFFECT_PRESETS) {
+    for (const duration of [1/60, .5, 2, 60]) for (const preset of TIMED_EFFECT_PRESETS) {
       const effect: Clip = { id: 'effect', kind: 'effect', start: 0, duration, sourceStart: 0 };
       expect(() => validateClipEffects({ ...effect, ...motionPreset(effect, preset) })).not.toThrow();
     }

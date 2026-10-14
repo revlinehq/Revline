@@ -16,7 +16,7 @@ import { effectClipLabel } from '@/lib/editor/clip-effects';
 import { snapTime, addMediaClip, addTextClip, splitClip, frameSeekTime, linkedClipIds, unlinkClips, patchClip } from '@/lib/editor/operations';
 import { timelineLayout, TIMELINE_RULER_HEIGHT, TIMELINE_ORIGIN, TIMELINE_TOP_SPACE, TIMELINE_BOTTOM_SPACE } from '@/lib/editor/timeline-layout';
 import { clipVolumeAtPointer, clipVolumeAtFraction, MAX_CLIP_VOLUME } from '@/lib/editor/clip-volume';
-import { zoomAtAnchor, reorderLayer, deleteEmptyLayer, removeEmptyLayers, resizeSelectedClips,moveSelectedClips,moveSelectionToNewLayers,layerDropTarget,clipLayerDropTarget,intersectsSelection,shouldCommitClipGesture,timelineTimeAtPointer } from '@/lib/editor/timeline-controls';
+import { zoomAtAnchor, reorderLayer, deleteEmptyLayer, removeEmptyLayers, resizeSelectedClips,moveSelectedClips,moveSelectionToNewLayers,layerDropTarget,clipLayerDropTarget,intersectsSelection,shouldCommitClipGesture,timelineTimeAtPointer,minimumClipMoveDelta } from '@/lib/editor/timeline-controls';
 import { isTimelineGestureRejection, TimelineGestureRejection } from '@/lib/editor/timeline-edit-errors';
 import { timelineGestureFrame } from '@/lib/editor/timeline-gesture-frame';
 import { minimumTimelineZoom, timelineZoomPosition, timelineZoomAtPosition, TIMELINE_BASE_PX, TIMELINE_MAX_ZOOM } from '@/lib/editor/timeline-zoom';
@@ -26,8 +26,6 @@ import { ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem, C
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { AudioFadeHandles } from './audio-fade-handles';
-import { configureAudio, type AudioSettings } from '@/lib/editor/audio-settings';
 
 type Props={
   timeline:Timeline;assets:MediaAsset[];selected:string|null;onSelect:(id:string|null)=>void;
@@ -38,7 +36,6 @@ type Props={
   onTogglePlay?:()=>void;muted?:boolean;onToggleMute?:()=>void;
   playbackControls?:React.ReactNode;
   onPreviewVolume?:(id:string,volume:number|null)=>void;
-  onPreviewAudio?:(id:string,audio:AudioSettings|null)=>void;
   onEditText?:(id:string)=>void;onEditClip?:(id:string)=>void;onError?:(message:string)=>void;collapsed?:boolean;onToggleCollapse?:()=>void;
   readOnly?:boolean;
 };
@@ -250,7 +247,7 @@ export function TimelinePanel(p:Props){
       const rect=node?.getBoundingClientRect();return {track:row.number,group:row.group,top:rect?.top??0,bottom:rect?.bottom??0};
     });
     const trackMap=new Map(tracks.map(row=>[`${row.group}-${row.number}`,row]));
-    const minimumTime=-Math.min(...selectedClips.map(c=>c.start)),maximumTime=Infinity;
+    const minimumTime=minimumClipMoveDelta(selectedClips,timeline.fps),maximumTime=Infinity;
     let placedClips=new Map(timeline.clips.map(c=>[c.id,c])),targetTrackMap=trackMap,targetTrackKey='';
         const sourceNodes=new Map(Array.from(area.current?.querySelectorAll<HTMLElement>('.timeline-clip[data-clip-id]')??[]).map(node=>[node.dataset.clipId!,node]));
     const elements=new Map<string,{floating:HTMLElement;placement:HTMLElement}>();
@@ -371,7 +368,7 @@ export function TimelinePanel(p:Props){
       if(commit)frame.flush();cleanup();
       if(!moved)return;
       if(!commit)return;if(dropError){report(dropError);return;}
-      if(placed.clips.some((candidate,index)=>{const original=timeline.clips[index];return candidate.start!==original.start||candidate.duration!==original.duration||candidate.sourceStart!==original.sourceStart||trackOf(candidate)!==trackOf(original);})||JSON.stringify(deriveTrackCounts(placed))!==JSON.stringify(deriveTrackCounts(timeline))){try{onChange(placed);}catch(error){report(error);}}
+      if(placed.clips.length!==timeline.clips.length||placed.clips.some((candidate,index)=>{const original=timeline.clips[index];return candidate.id!==original.id||candidate.start!==original.start||candidate.duration!==original.duration||candidate.sourceStart!==original.sourceStart||trackOf(candidate)!==trackOf(original);})||JSON.stringify(deriveTrackCounts(placed))!==JSON.stringify(deriveTrackCounts(timeline))){try{onChange(placed);}catch(error){report(error);}}
     };
     const cancel=()=>{cleanup();};gestureCleanup.current=cancel;unwatch=watchCancellation(cancel);gestureUpdate.current=frame.request;
     window.addEventListener('pointermove',move);window.addEventListener('pointerup',finish);window.addEventListener('pointercancel',cancel);
@@ -550,7 +547,6 @@ export function TimelinePanel(p:Props){
               const position=clip;const asset=assetMap.get(clip.assetId??'');const isMedia=clip.kind==='video'||clip.kind==='image';const label=clip.kind==='effect'?effectClipLabel(clip):clip.text||asset?.fileName||clip.kind;
               return <div key={clip.id} data-clip-id={clip.id} role="button" tabIndex={0} aria-label={`${label}, ${track.label}, ${formatTime(clip.start)}, ${clip.duration.toFixed(1)} seconds`} aria-pressed={linkedSelection.has(clip.id)} onDragStart={e=>e.preventDefault()} onDoubleClick={e=>{if(p.readOnly)return;e.preventDefault();e.stopPropagation();p.onEditClip?.(clip.id);}} onKeyDown={e=>{if(e.target!==e.currentTarget)return;if(e.key==='Enter'||e.code==='Space'){e.preventDefault();e.stopPropagation();onSelect(clip.id);if(p.readOnly)onSeek(clip.start);if(!p.readOnly&&e.key==='Enter')(p.onEditClip??((clip.kind==='caption'||clip.kind==='graphic')?p.onEditText:undefined))?.(clip.id);} }} onPointerDown={e=>startDrag(e,clip,'move')} className={`timeline-clip ${(linkedSelection.has(clip.id))?'selected':''} clip-${isMedia?'video':clip.kind}`} style={{'--clip-height':`${track.clipHeight}px`,height:track.clipHeight,left:origin+position.start*px,width:Math.max(6,position.duration*px),background:clipColor(clip.kind),...(drag&&activeMode.current==='move'&&(linkedSelection.has(clip.id)||drag.id===clip.id)?{visibility:'hidden'}: {})} as React.CSSProperties}>
                 {asset?.url&&isMedia&&<MediaFilmstrip asset={asset} width={Math.max(6,position.duration*px)} height={track.clipHeight} sourceStart={clip.sourceStart} duration={clip.duration} playbackRate={clip.playbackRate} timelineStart={clip.start} px={px} fps={timeline.fps} viewport={scroll} paused={!!drag||scrubbing||!!movingLayer}/>} {clip.kind==='audio'&&<AudioWaveform waveform={asset?.waveform} sourceStart={clip.sourceStart} duration={clip.duration} playbackRate={clip.playbackRate} volume={clip.volume} timelineStart={clip.start} viewport={scroll}/>}<span>{clip.kind==='effect'&&<EffectIcon name={clip.effectPreset==='zoom-blur'?'zoomBlur':clip.effectPreset&&clip.effectPreset!=='none'?clip.effectPreset:'flash'} size={13}/>}{label}</span>
-                {clip.kind==='audio'&&<AudioFadeHandles clip={clip} fps={timeline.fps} readOnly={p.readOnly} onSelect={()=>onSelect(clip.id)} onPreview={audio=>p.onPreviewAudio?.(clip.id,audio)} onCommit={audio=>{try{onChange(configureAudio(timeline,clip.id,audio));}catch(error){report(error);}}}/>}
                 {!p.readOnly&&clip.kind==='audio'&&<div className="audio-clip-volume" style={{'--clip-volume':clip.volume??1} as React.CSSProperties}><div className="audio-volume-line" role="slider" tabIndex={0} aria-label={`Volume for ${asset?.fileName||'audio clip'}`} aria-orientation="vertical" aria-valuemin={0} aria-valuemax={MAX_CLIP_VOLUME*100} aria-valuenow={Math.round((clip.volume??1)*100)} aria-valuetext={clip.volume===0?'Muted':`${Math.round((clip.volume??1)*100)}%`} onPointerDown={e=>startVolume(e,clip)} onKeyDown={e=>volumeWithKeyboard(e,clip)}><output aria-hidden="true">{clip.volume===0?'Muted':`${Math.round((clip.volume??1)*100)}%`}</output></div></div>}
                 {!p.readOnly&&<><button className="clip-trim left" aria-label="Trim clip start" title="Drag or use arrow keys to trim; Shift moves ten frames" onKeyDown={e=>trimWithKeyboard(e,clip,'left')} onPointerDown={e=>startDrag(e,clip,'left')}/><button className="clip-trim right" aria-label="Trim clip end" title="Drag or use arrow keys to trim; Shift moves ten frames" onKeyDown={e=>trimWithKeyboard(e,clip,'right')} onPointerDown={e=>startDrag(e,clip,'right')}/></>}
               </div>;
@@ -559,7 +555,7 @@ export function TimelinePanel(p:Props){
           <div ref={selectionBox} className="timeline-selection-box" style={{display:'none',left:0,top:0}} aria-hidden="true"/>
           <div ref={previews} className="timeline-drag-previews" aria-hidden="true"/>
           {!timeline.clips.length&&<div className="timeline-empty">Your clips will land here.</div>}
-          <div ref={head} className="playhead" style={{left:0,height:"100%"}} onPointerDown={startScrub} aria-label="Timeline playhead"/>
+          <div ref={head} className="playhead" style={{left:0,height:"100%",pointerEvents:'none'}} aria-label="Timeline playhead"/>
         </div>
       </div>
       <div ref={cap} className="timeline-playhead-cap" onPointerDown={startScrub} aria-label="Drag timeline playhead"/>

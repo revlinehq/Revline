@@ -3,10 +3,11 @@ import { addEffectClip, patchClip } from './operations';
 import { visualEffectsPatch, type VisualEffects } from './visual-effects';
 import { layerGroup, trackOf, type Timeline, type LayerGroup } from './types';
 import { isTransitionPreset } from './clip-transitions';
+import { placeTransitionAt } from './transition-placement';
 
 export const EFFECT_DRAG_TYPE = 'application/x-revline-effect';
 export type EffectDrag = { preset: EffectPreset } | { visual: keyof VisualEffects };
-const visualKeys = ['dither', 'glitch', 'zoomBlur', 'colorGrade', 'invert'] as const;
+const visualKeys = ['dither', 'glitch', 'zoomBlur', 'colorGrade', 'invert', 'neonEdges'] as const;
 export function readEffectDrag(value: string): EffectDrag | null {
   try {
     const input = JSON.parse(value);
@@ -21,6 +22,7 @@ export function dropLibraryEffect(timeline: Timeline, effect: EffectDrag, at: nu
   if ('preset' in effect) {
     const transition=isTransitionPreset(effect.preset);
     if(transition&&group!=='visual'&&group!=='effects')throw new Error('Drop a transition onto a video/image cut or an FX track.');
+    if(transition)return placeTransitionAt(timeline,id,effect.preset as import('./clip-transitions').TransitionPreset,at,{track:group==='effects'?track:undefined,...(group==='visual'?{aboveClipId:targetId,visualTrack:track}:{})});
     return addEffectClip(timeline, id, effect.preset, at, { track: group === 'effects' ? track : undefined,
       ...(transition&&group==='visual'?{aboveClipId:targetId,visualTrack:track}:{}),
     });

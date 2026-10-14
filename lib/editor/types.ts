@@ -1,8 +1,9 @@
-import type { BlendMode, CinematicBarSettings, EffectPreset, SolidColorSettings, MotionKeyframe } from './clip-effects';
-import type { ColorGrade, ZoomBlur, Glitch, InvertColors, Dither } from './visual-effects';
+import type { BlendMode, CinematicBarSettings, EffectPreset, SolidColorSettings, MotionKeyframe, FrameShrinkSettings } from './clip-effects';
+import type { ColorGrade, ZoomBlur, Glitch, InvertColors, Dither, NeonEdges } from './visual-effects';
 import type { RemotionTextTemplate } from './remotion-text';
 import type { ClipTransition } from './clip-transitions';
 import type { AudioSettings } from './audio-settings';
+import type { VisualFadeSettings } from './visual-fades';
 import type { TextAppearance } from './text-style';
 import type { TextFontId } from './text-fonts';
 export type AspectRatio = 'vertical' | 'portrait-feed' | 'square' | 'classic' | 'landscape';
@@ -33,6 +34,9 @@ export type Clip = {
   volume?: number;
   audio?: AudioSettings;
   audioFadeTiming?: {duration:number;offset:number};
+  visualFade?: VisualFadeSettings;
+  visualFadeTiming?: {duration:number;offset:number};
+  frameShrink?: FrameShrinkSettings;
   linkedClipId?: string;
   audioSeparated?: boolean;
   blendMode?: BlendMode;
@@ -47,6 +51,7 @@ export type Clip = {
   glitch?: Glitch;
   invert?: InvertColors;
   dither?: Dither;
+  neonEdges?: NeonEdges;
   textTemplate?: RemotionTextTemplate;
   textStyle?: TextAppearance;
   fontFamily?: TextFontId;

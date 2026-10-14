@@ -80,7 +80,7 @@ try {
   await page.evaluate(()=>document.documentElement.dataset.workspaceTheme='light');await page.screenshot({path:'/tmp/revline-text-editable-style-light.png'});
   await page.setViewport({width:320,height:900});await page.addStyleTag({content:'#root{width:320px;margin:0;height:900px}'});
   assert.ok(await page.$eval('.preview-inspector',node=>node.scrollWidth<=node.clientWidth),'Text controls fit 320px');
-  await page.click('#inspector-sources-tab');await page.click('[data-segment="text"]');await page.waitForSelector('[aria-label="Default text"]');assert.equal(await page.$('[aria-label="Text animations"]'),null,'Library stays looks-only with selected text');
+  await page.click('#inspector-tools-tab');await page.click('[data-segment="text"]');await page.waitForSelector('[aria-label="Default text"]');assert.equal(await page.$('[aria-label="Text animations"]'),null,'Library stays looks-only with selected text');
   assert.deepEqual(errors,[]);
   console.log('PASS: Default text, unified looks, independent animations preserve all appearance and words, real frame previews, reduced motion, no gradient stages, editable stroke/shadow/glow, and 320px fit.');
 } finally {await browser.close();await fonts.close();}

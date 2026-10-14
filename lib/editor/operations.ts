@@ -3,6 +3,7 @@ import { TimelineGestureRejection } from './timeline-edit-errors';
 import { textTemplateTimingPatch } from './remotion-text';
 import { textAnimationTimingPatch } from './text-animation-timing';
 import { audioFadeTimingPatch } from './audio-settings';
+import { visualFadeTimingPatch } from './visual-fades';
 import { playbackRateOf, sourceDurationOf, sourceEndOf, validatePlaybackRate } from './playback-rate';
 import { boundedTransitionRange, DEFAULT_TRANSITION_DIRECTION, findTransitionPlacement, isTransitionClip, isTransitionPreset, reconcileTransitionEdits, transitionPair, transitionSources, type TransitionDirection, type TransitionPreset } from './clip-transitions';
 import { Clip, Timeline, timelineDuration, layerGroup, trackOf, deriveTrackCounts, normalizeTimeline, maxTrackCount } from './types';
@@ -54,7 +55,7 @@ export function splitClip(timeline: Timeline, clipId: string, time: number, newI
   const pair = timeline.clips.find(c => c.id === clip.linkedClipId && c.linkedClipId === clip.id);
   const pairId = `${newId}-audio`;
   const next = { ...timeline, clips: timeline.clips.flatMap(c => c.id !== clipId && c.id !== pair?.id ? [c] : [
-    { ...c, ...textTemplateTimingPatch(c),...textAnimationTimingPatch(c),...audioFadeTimingPatch(c), duration: offset },
+    { ...c, ...textTemplateTimingPatch(c),...textAnimationTimingPatch(c),...audioFadeTimingPatch(c),...visualFadeTimingPatch(c), duration: offset },
     { ...c, ...offsetClipMotion(c, offset), id: c.id === clipId ? newId : pairId, linkedClipId: pair ? c.id === clipId ? pairId : newId : undefined, start: c.start + offset, sourceStart: c.kind === 'effect' ? 0 : c.sourceStart + offset * playbackRateOf(c), duration: tail },
   ]) };
   // Only the outgoing piece touching the original cut inherits that transition.
@@ -80,7 +81,7 @@ export function patchClip(timeline: Timeline, id: string, patch: Partial<Clip>):
   for (const key of ['start', 'duration', 'sourceStart', 'playbackRate'] as const) if (patch[key] !== undefined || (key === 'playbackRate' && key in patch)) timing[key] = patch[key];
   const volumeTarget = clip.kind === 'video' && clip.linkedClipId ? clip.linkedClipId : id;
   return reconcileTransitionEdits(timeline, { ...timeline, clips: timeline.clips.map(c => {
-    let next = c.id === id ? { ...c, ...(patch.duration !== undefined && !('textTemplate' in patch) ? textTemplateTimingPatch(c) : {}),...(patch.duration!==undefined&&!('textAnimationTiming' in patch)?textAnimationTimingPatch(c):{}),...(patch.duration!==undefined&&!('audioFadeTiming' in patch)?audioFadeTimingPatch(c):{}), ...patch, id: c.id } : c.id === clip.linkedClipId ? { ...c, ...timing,...(patch.duration!==undefined?audioFadeTimingPatch(c):{}) } : c;
+    let next = c.id === id ? { ...c, ...(patch.duration !== undefined && !('textTemplate' in patch) ? textTemplateTimingPatch(c) : {}),...(patch.duration!==undefined&&!('textAnimationTiming' in patch)?textAnimationTimingPatch(c):{}),...(patch.duration!==undefined&&!('audioFadeTiming' in patch)?audioFadeTimingPatch(c):{}),...(patch.duration!==undefined&&!('visualFadeTiming' in patch)?visualFadeTimingPatch(c):{}), ...patch, id: c.id } : c.id === clip.linkedClipId ? { ...c, ...timing,...(patch.duration!==undefined?audioFadeTimingPatch(c):{}) } : c;
     if (patch.volume !== undefined && c.id === volumeTarget) next = { ...next, volume: patch.volume };
     if (next.kind === 'video' && next.audioSeparated) next = { ...next, volume: 0 };
     return next;
@@ -107,6 +108,7 @@ export function setClipPlaybackRate(timeline: Timeline, id: string, playbackRate
     if(!ids.has(member.id))return member;
     let changed=member.motion?.length?{...member,motion:member.motion.map(key=>({...key,time:key.time*ratio})),motionOffset:(member.motionOffset??0)*ratio}:member;
     if(member.kind==='audio'&&member.audioFadeTiming)changed={...changed,audio:member.audio?{...member.audio,fadeIn:member.audio.fadeIn*ratio,fadeOut:member.audio.fadeOut*ratio}:undefined,audioFadeTiming:{duration:member.audioFadeTiming.duration*ratio,offset:member.audioFadeTiming.offset*ratio}};
+    if((member.kind==='video'||member.kind==='image')&&member.visualFadeTiming)changed={...changed,visualFade:member.visualFade?{fadeIn:member.visualFade.fadeIn*ratio,fadeOut:member.visualFade.fadeOut*ratio}:undefined,visualFadeTiming:{duration:member.visualFadeTiming.duration*ratio,offset:member.visualFadeTiming.offset*ratio}};
     return changed;
   }) };
 }

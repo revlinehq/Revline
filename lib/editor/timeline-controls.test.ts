@@ -195,7 +195,7 @@ it('rejects cross-group FX drops and allows only the outer FX creation zone', ()
  expect(clipLayerDropTarget(70,rows,'visual')).toBeNull();expect(clipLayerDropTarget(70,rows,'audio')).toBeNull();
 });
 
-it('creates V rows from the actual gaps between FX/video/audio without shifting FX or linked sound tracks', () => {
+it('keeps contiguous FX/video/audio boundaries separate when creating V rows', () => {
  const project:Timeline={fps:30,aspectRatio:'landscape',tracks:{visual:1,overlay:0,audio:1,effects:1},clips:[
   {id:'effect',kind:'effect',track:1,start:1,duration:1,sourceStart:0,effectPreset:'flash'},
   {id:'video',kind:'video',track:1,start:2,duration:3,sourceStart:4,audioSeparated:true,linkedClipId:'sound',volume:0},
@@ -205,10 +205,12 @@ it('creates V rows from the actual gaps between FX/video/audio without shifting 
   const rows=timelineLayout(project,compact).tracks.map(row=>({...row,track:row.number,bottom:row.top+row.height}));
   const [fx,video,audio]=rows;
   const above=(fx.bottom+video.top)/2,below=(video.bottom+audio.top)/2;
-  expect(clipLayerDropTarget(above,rows,'visual')).toEqual({edge:'above'});
-  expect(clipLayerDropTarget(below,rows,'visual')).toEqual({edge:'below'});
-  expect(clipLayerDropTarget(video.top-3,rows,'visual')).toEqual({track:1,direction:'above'});
-  expect(clipLayerDropTarget(video.bottom+3,rows,'visual')).toEqual({track:1,direction:'below'});
+  expect(clipLayerDropTarget(above,rows,'visual')).toEqual({track:1,direction:'above'});
+  expect(clipLayerDropTarget(below,rows,'visual')).toBeNull();
+  expect(clipLayerDropTarget(video.top+3,rows,'visual')).toEqual({track:1,direction:'above'});
+  expect(clipLayerDropTarget(video.bottom-3,rows,'visual')).toEqual({track:1,direction:'below'});
+  expect(clipLayerDropTarget(video.top-3,rows,'visual')).toBeNull();
+  expect(clipLayerDropTarget(video.bottom+3,rows,'visual')).toBeNull();
   expect(clipLayerDropTarget((fx.top+fx.bottom)/2,rows,'visual')).toBeNull();
   expect(clipLayerDropTarget((audio.top+audio.bottom)/2,rows,'visual')).toBeNull();
   expect(clipLayerDropTarget(fx.top-20,rows,'visual')).toBeNull();expect(clipLayerDropTarget(audio.bottom+20,rows,'visual')).toBeNull();

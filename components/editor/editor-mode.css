@@ -2,6 +2,16 @@
 .conversation-editor .editor-sidebar[hidden]{display:none!important}
 .conversation-editor .editor-body{position:relative}
 .conversation-editor .editor-chat-panel{overflow:hidden!important}
+.conversation-editor .editor-timeline-content{height:100%;min-width:0}
+@media(min-width:901px){
+  .conversation-editor .editor-preview-row{overflow:visible!important}
+  .conversation-editor .editor-body[data-mode=agentic] .editor-chat-panel{overflow:visible!important}
+  .conversation-editor .editor-body[data-mode=agentic] .editor-horizontal-panels{overflow:visible!important}
+  .conversation-editor .editor-body[data-mode=agentic] .editor-sidebar{height:var(--editor-body-height,100%);position:relative;z-index:5}
+  .conversation-editor .editor-body[data-mode=agentic] .chat-resize-handle{height:var(--editor-body-height,100%);z-index:6}
+  .conversation-editor .editor-body[data-mode=agentic] .editor-timeline-content{margin-left:calc(var(--editor-chat-width,0px) + var(--editor-chat-divider,0px))}
+  .conversation-editor .editor-body[data-mode=agentic] .timeline-resize-handle{margin-left:calc(var(--editor-chat-width,0px) + var(--editor-chat-divider,0px));width:calc(100% - var(--editor-chat-width,0px) - var(--editor-chat-divider,0px))!important}
+}
 @media(max-width:900px){
   .conversation-editor .editor-chat-panel{overflow:visible!important}
   .conversation-editor .editor-sidebar.mobile-open{width:min(100%,390px)}

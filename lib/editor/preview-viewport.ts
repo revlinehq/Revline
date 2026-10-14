@@ -51,7 +51,7 @@ export function previewMediaOpacities(document: Document) {
   if (!view) return result;
   for (const frame of document.querySelectorAll<HTMLElement>('[data-visual-clip]')) {
     let opacity = 1;
-    for (let node: HTMLElement | null = frame.querySelector('.motion-frame') ?? frame; node; node = node.parentElement) {
+    for (let node: HTMLElement | null = frame.querySelector('[data-visual-fade]') ?? frame.querySelector('.motion-frame') ?? frame; node; node = node.parentElement) {
       const style = view.getComputedStyle(node);
       if (style.display === 'none' || style.visibility === 'hidden') { opacity = 0; break; }
       opacity *= Number(style.opacity);

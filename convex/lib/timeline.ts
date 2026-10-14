@@ -1,6 +1,7 @@
 import { validateClipEffects } from '../../lib/editor/clip-effects';
 import { playbackRateOf, sourceEndOf } from '../../lib/editor/playback-rate';
 import { transitionSources } from '../../lib/editor/clip-transitions';
+import { validateVisualFade } from '../../lib/editor/visual-fades';
 import { validateAudioTimeline } from '../../lib/editor/audio-settings';
 import { ConvexError } from "convex/values";
 import { layerGroup, maxTrackCount, normalizeTimeline, trackOf, type Timeline } from "../../lib/editor/types";
@@ -50,7 +51,7 @@ export async function validateTimeline(ctx: MutationCtx | QueryCtx, project: Doc
   for (const clip of timeline.clips) {
     if (!clip.id || clip.id.length > 100 || ids.has(clip.id)) throw new ConvexError("Clip IDs must be unique and nonempty");
     ids.add(clip.id);
-    try { validateClipEffects(clip); } catch (error) { throw new ConvexError((error as Error).message); }
+    try { validateClipEffects(clip); validateVisualFade(clip); } catch (error) { throw new ConvexError((error as Error).message); }
     if (![clip.start, clip.duration, clip.sourceStart, clip.start + clip.duration].every(Number.isFinite) || clip.start < 0 || clip.sourceStart < 0 || clip.duration < 1 / timeline.fps) throw new ConvexError("Clip timing must be finite, nonnegative, and at least one frame long");
     for (const key of ["x", "y"] as const) if (clip[key] !== undefined && (!Number.isFinite(clip[key]) || clip[key] < 0 || clip[key] > 1)) throw new ConvexError("Position must be between 0 and 1");
     if (clip.volume !== undefined && (!Number.isFinite(clip.volume) || clip.volume < 0 || clip.volume > 2)) throw new ConvexError("Volume must be between 0 and 2");

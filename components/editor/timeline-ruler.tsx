@@ -9,20 +9,18 @@ export function formatRulerLabel(time:number){
   return `${minutes}m ${seconds<10?'0':''}${seconds}s`;
 }
 
-// OpenCut Classic ruler-utils.ts: choose label and tick spacing independently,
-// keeping both frame aligned and ticks divisors of labeled intervals.
+// OpenCut Classic ruler-utils.ts: choose frame-aligned label spacing.
 // MIT notice: third-party/OpenCut-LICENSE.
 export const TimelineRulerTicks = memo(function TimelineRulerTicks({px,duration,fps,origin=0}:{px:number;duration:number;fps:number;origin?:number}){
   const intervals=[1,2,3,5,10,15].map(frames=>frames/fps).concat([1,2,3,5,10,15,30,60,120,300,600,900,1800,3600,7200,14400]);
-  const label=intervals.find(seconds=>seconds*px>=90)??14400;
-  const tick=intervals.find(seconds=>seconds*px>=12&&Math.abs(label/seconds-Math.round(label/seconds))<.0001)??label;
+  const label=intervals.find(seconds=>seconds*px>=60)??14400;
   const labels:React.ReactNode[]=[];
   let path='';
-  for(let index=0;index<=Math.ceil(duration/tick);index++){
-    const time=index*tick,major=Math.abs(time/label-Math.round(time/label))<.0001;
+  for(let index=0;index<=Math.ceil(duration/label);index++){
+    const time=index*label;
     const x=Math.round(origin+time*px)+.5;
-    path+=`M${x} ${major?19:23}V27`;
-    if(major)labels.push(<span key={index} className={index===0?'ruler-origin-label':undefined} style={{left:x}}>{formatRulerLabel(time)}</span>);
+    path+=`M${x} 19V24`;
+    labels.push(<span key={index} className={index===0?'ruler-origin-label':undefined} style={{left:x}}>{formatRulerLabel(time)}</span>);
   }
   return <><svg className="ruler-ticks" width={Math.ceil(origin+duration*px)+2} height={28} aria-hidden="true"><path d={path}/></svg>{labels}</>;
 });

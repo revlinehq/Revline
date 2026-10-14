@@ -4,6 +4,7 @@ import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { ChevronDown, ChevronRight, Plus, RotateCcw, Trash2 } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { DEFAULT_COLOR_GRADE, DEFAULT_DITHER, DEFAULT_INVERT, DEFAULT_GLITCH, DEFAULT_ZOOM_BLUR, VISUAL_EFFECT_LIMITS, type VisualEffects } from '@/lib/editor/visual-effects';
+import { DEFAULT_NEON_EDGES, NEON_EDGE_LIMITS } from '@/lib/editor/neon-edges';
 import type { Clip } from '@/lib/editor/types';
 import { CINEMATIC_BAR_LIMITS, EFFECT_CATALOG, cinematicBarSettings, type CinematicBarSettings, type EffectPreset } from '@/lib/editor/clip-effects';
 import { PLAYBACK_RATES, playbackRateOf } from '@/lib/editor/playback-rate';
@@ -87,8 +88,8 @@ const decimal = (value: number) => value.toFixed(2);
 const integer = (value: number) => String(Math.round(value));
 const percent = (value: number) => `${Math.round(value * 100)}%`;
 const pixels = (value: number) => `${Math.round(value)} px`;
-const effectNames = { colorGrade: 'Color', zoomBlur: 'Zoom blur', glitch: 'Glitch', invert: 'Invert colors', dither: 'Dither' } as const;
-const effectDefaults = { colorGrade: DEFAULT_COLOR_GRADE, zoomBlur: DEFAULT_ZOOM_BLUR, glitch: DEFAULT_GLITCH, invert: DEFAULT_INVERT, dither: DEFAULT_DITHER };
+const effectNames = { colorGrade: 'Color', zoomBlur: 'Zoom blur', glitch: 'Glitch', invert: 'Invert colors', dither: 'Dither', neonEdges: 'Neon edges' } as const;
+const effectDefaults = { colorGrade: DEFAULT_COLOR_GRADE, zoomBlur: DEFAULT_ZOOM_BLUR, glitch: DEFAULT_GLITCH, invert: DEFAULT_INVERT, dither: DEFAULT_DITHER, neonEdges: DEFAULT_NEON_EDGES };
 
 export function AppliedVisualEffects({ clip, onSelect, onAdd }: { clip: Clip; onSelect: (effect: EffectKey) => void; onAdd: () => void }) {
   const applied = (Object.keys(effectNames) as EffectKey[]).filter(key => clip[key]);
@@ -132,6 +133,7 @@ export function VisualEffectsControls({ clip, onChange, onPreview, onPlaybackRat
   const glitch = !onlyEffect || onlyEffect === 'glitch' ? clip.glitch : undefined;
   const invert = !onlyEffect || onlyEffect === 'invert' ? clip.invert : undefined;
   const dither = !onlyEffect || onlyEffect === 'dither' ? clip.dither : undefined;
+  const neon = !onlyEffect || onlyEffect === 'neonEdges' ? clip.neonEdges : undefined;
   const missing = (Object.keys(effectNames) as EffectKey[]).filter(key => !clip[key]);
   function cardProps(key: EffectKey) {
     return {
@@ -159,7 +161,10 @@ export function VisualEffectsControls({ clip, onChange, onPreview, onPlaybackRat
     {dither && <EffectCard {...cardProps('dither')}>{([
       ['amount','Strength',.01,percent],['levels','Color levels',1,integer],['size','Pattern size',1,pixels],
     ] as const).map(([key,label,step,format])=><EffectSlider key={key} label={label} value={dither[key]} bounds={VISUAL_EFFECT_LIMITS.dither[key]} step={step} format={format} disabled={!dither.enabled} onPreview={value=>preview(value===null?null:{dither:{...dither,[key]:value}})} onCommit={value=>onChange({dither:{...dither,[key]:value}})}/>)}<fieldset className="dither-colors" disabled={!dither.enabled}><label>Dark color<ColorControl label="Dither dark color" value={dither.shadowColor ?? '#000000'} onCommit={shadowColor=>onChange({dither:{...dither,shadowColor}})}/></label><label>Light color<ColorControl label="Dither light color" value={dither.highlightColor ?? '#ffffff'} onCommit={highlightColor=>onChange({dither:{...dither,highlightColor}})}/></label>{(dither.shadowColor || dither.highlightColor) && <button type="button" className="effect-color-reset" onClick={()=>onChange({dither:{...dither,shadowColor:undefined,highlightColor:undefined}})}>Original colors</button>}</fieldset></EffectCard>}
-    {!color && !blur && !glitch && !invert && !dither && <p className="visual-effects-empty">Add an effect to this clip.</p>}
+    {neon && <EffectCard {...cardProps('neonEdges')}><fieldset className="effect-colors" disabled={!neon.enabled}><label>Edge color<ColorControl label="Neon edge color" value={neon.color} onCommit={color => onChange({ neonEdges: { ...neon, color } })}/></label></fieldset>{([
+      ['amount', 'Strength'], ['detail', 'Edge detail'], ['threshold', 'Threshold'], ['glow', 'Glow'],
+    ] as const).map(([key, label]) => <EffectSlider key={key} label={label} value={neon[key]} bounds={NEON_EDGE_LIMITS[key]} format={percent} disabled={!neon.enabled} onPreview={value => preview(value === null ? null : { neonEdges: { ...neon, [key]: value } })} onCommit={value => onChange({ neonEdges: { ...neon, [key]: value } })}/>)}</EffectCard>}
+    {!color && !blur && !glitch && !invert && !dither && !neon && <p className="visual-effects-empty">Add an effect to this clip.</p>}
     {!onlyEffect && <DropdownMenu><DropdownMenuTrigger asChild><button type="button" className="visual-effects-add" disabled={!missing.length}><Plus size={13}/>Add effect</button></DropdownMenuTrigger><DropdownMenuContent className="visual-effects-menu" align="start">{missing.map(key => {
       return <DropdownMenuItem key={key} onSelect={() => onChange({ [key]: { ...effectDefaults[key], enabled: true } })}><EffectIcon name={key} size={16}/>{effectNames[key]}</DropdownMenuItem>;
     })}</DropdownMenuContent></DropdownMenu>}

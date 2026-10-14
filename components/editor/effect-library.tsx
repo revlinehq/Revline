@@ -8,7 +8,8 @@ import { selectedTextLook, type TextLookId } from '@/lib/editor/text-looks';
 import { TextFontStyles } from './text-font-styles';
 import type { VisualEffects } from '@/lib/editor/visual-effects';
 import type { Clip, MediaAsset, Timeline } from '@/lib/editor/types';
-import { isTransitionPreset, transitionAvailability, type TransitionPreset } from '@/lib/editor/clip-transitions';
+import { isTransitionPreset, type TransitionPreset } from '@/lib/editor/clip-transitions';
+import { transitionAvailabilityAt } from '@/lib/editor/transition-placement';
 import type { OverlayCatalogItem } from '@/lib/editor/overlay-catalog';
 import { EFFECT_DRAG_TYPE } from '@/lib/editor/effect-drag';
 import { SegmentedTabs } from './segmented-tabs';
@@ -46,8 +47,8 @@ export function EffectLibrary({ clip, timeline, time = 0, onMedia, onVisualEffec
   const catalog = EFFECT_LIBRARY_CATALOG.filter(entry => !isTransitionPreset(entry.preset) || onAddTransition);
   const categories = EFFECT_LIBRARY_CATEGORIES.filter(item => catalog.some(entry => entry.category === item.id));
   const visible = catalog.filter(entry => (!entry.action || onSpeed) && (query ? `${entry.label} ${entry.description}`.toLowerCase().includes(query) : entry.category === category));
-  const transitions = onAddTransition && timeline ? transitionAvailability(timeline, time, { aboveClipId: visual ? clip.id : undefined }) : { available: false as const, reason: 'Add neighboring video or image clips on one V track before adding a transition.' };
-  const canDragTransition = onAddTransition && timeline ? transitionAvailability(timeline, time).available : false;
+  const transitions = onAddTransition && timeline ? transitionAvailabilityAt(timeline, time, { aboveClipId: visual ? clip.id : undefined }) : { available: false as const, reason: 'Add video or image footage before adding a transition.' };
+  const canDragTransition = !!onAddTransition && !!timeline?.clips.some(item => (item.kind === 'video' || item.kind === 'image') && item.duration >= 2 / timeline.fps);
   function reason(entry: LibraryEntryData) {
     if (isTransitionPreset(entry.preset) && !transitions.available) return transitions.reason;
     if (entry.visual && !visual) return 'Select a video or image clip first.';

@@ -16,6 +16,7 @@ import { TEXT_ANIMATION_PRESETS } from '../lib/editor/text-effects';
 import { TEXT_LOOKS } from '../lib/editor/text-looks';
 import { createEditorStore } from '../lib/editor/store';
 import { textLayerFrame } from '../lib/editor/text-layers';
+import {DEFAULT_NEON_EDGES} from '../lib/editor/neon-edges';
 import { parseAutomation,sampleAutomationLane } from '@hyperframes/core/audio-automation';
 import { fadeGain } from '@hyperframes/core/audio-fade';
 import type { ZodType } from 'zod';
@@ -201,6 +202,7 @@ test('pixel transform/crop tools use known canvas/source axes, preserve omitted 
 test('every current timed FX has a tool schema, while transitions require explicit distinct clip targets',async()=>{
   await run(async tools=>{
     for(const preset of TIMED_EFFECT_PRESETS)expect(()=>tools.addTimedEffect.inputSchema.parse({preset})).not.toThrow();
+    expect(()=>tools.addTimedEffect.inputSchema.parse({preset:'fade'})).toThrow();
     expect(()=>tools.addTimedEffect.inputSchema.parse({preset:'crossfade'})).toThrow();
     expect(()=>tools.addClipTransition.inputSchema.parse({preset:'crossfade',fromClipId:'from'})).toThrow();
     expect(()=>tools.addClipTransition.inputSchema.parse({preset:'spin-zoom',fromClipId:'from',toClipId:'to',direction:'diagonal'})).toThrow();
@@ -258,6 +260,52 @@ test('cinematic bars size/speed and dither original-palette reset are independen
   expect(result.timeline.clips[0].dither).toMatchObject({enabled:true,levels:5});expect(result.timeline.clips[0].dither?.shadowColor).toBeUndefined();expect(result.timeline.clips[0].dither?.highlightColor).toBeUndefined();expect(result.timeline.clips[0].invert).toBeUndefined();
   expect(result.timeline.clips.slice(1,4)).toEqual(result.backend!.seed.clips.slice(1,4));
   await assertUndo(result);
+});
+
+test('Frame shrink controls and clip visual fades use actual saved tools, preserve linked audio and share one undo',async()=>{
+  const seed:Timeline={...initial,clips:initial.clips.map(c=>c.id==='from'?{...c,visualFade:{fadeIn:.2,fadeOut:.4},visualFadeTiming:{duration:5,offset:1}}:c)};
+  const result=await run(async tools=>{
+    expect(()=>tools.addTimedEffect.inputSchema.parse({preset:'flash',frameShrink:{size:.2}})).toThrow('Frame shrink');
+    expect(()=>tools.configureVisualFade.inputSchema.parse({clipId:'from'})).toThrow('Specify');
+    expect(()=>tools.configureVisualFade.inputSchema.parse({clipId:'from',fadeIn:-1})).toThrow();
+    await execute(tools,'configureVisualFade',{clipId:'from',fadeIn:.5});
+    await execute(tools,'configureVisualFade',{clipId:'from',fadeOut:.75});
+    await expect(execute(tools,'configureVisualFade',{clipId:'audio',fadeIn:.2})).rejects.toThrow('video or image');
+    await expect(execute(tools,'configureVisualFade',{clipId:'from',fadeOut:3})).rejects.toThrow('cannot exceed');
+    await execute(tools,'addTimedEffect',{preset:'frame-shrink',start:1,duration:2,frameShrink:{size:.2}});
+    const inspected=await execute(tools,'inspectTimeline',{}) as {timeline:Timeline};
+    const effect=inspected.timeline.clips.find(c=>c.effectPreset==='frame-shrink')!;
+    await execute(tools,'configureTimedEffect',{clipId:effect.id,frameShrink:{speed:2}});
+    await execute(tools,'configureTimedEffect',{clipId:effect.id,duration:3});
+  },seed,true);
+  expect(result.timeline.clips[0]).toEqual({...result.backend!.seed.clips[0],visualFade:{fadeIn:.5,fadeOut:.75},visualFadeTiming:undefined});
+  expect(result.timeline.clips.slice(1,4)).toEqual(result.backend!.seed.clips.slice(1,4));
+  expect(result.timeline.clips.at(-1)).toMatchObject({effectPreset:'frame-shrink',start:1,duration:3,frameShrink:{size:.2,speed:2},motionOffset:0});
+  expect(editorCapabilities().timedFX.find(item=>item.preset==='frame-shrink')).toMatchObject({controls:['duration','size','entrance/exit speed']});
+  expect(editorCapabilities().visual.fades.description).toContain('independently');
+  expect(result.calls).not.toContain('assistant:requestAnalysis');await assertUndo(result);
+});
+
+test('Neon edges agent controls merge, bypass, reset and remove only the requested clip effect',async()=>{
+  const result=await run(async tools=>{
+    expect(()=>tools.setVisualEffects.inputSchema.parse({clipId:'from',neonEdges:{color:'url(bad)'}})).toThrow();
+    expect(()=>tools.setVisualEffects.inputSchema.parse({clipId:'from',neonEdges:{glow:1.01}})).toThrow();
+    await execute(tools,'setVisualEffects',{clipId:'from',neonEdges:{enabled:true,color:'#ff00cc',amount:.7}});
+    await execute(tools,'setVisualEffects',{clipId:'from',neonEdges:{detail:.8,threshold:.4,glow:.5}});
+    let current=await execute(tools,'inspectTimeline',{}) as{timeline:Timeline};
+    expect(current.timeline.clips[0].neonEdges).toEqual({enabled:true,color:'#ff00cc',amount:.7,detail:.8,threshold:.4,glow:.5});
+    await execute(tools,'setVisualEffects',{clipId:'from',neonEdges:{enabled:false}});
+    current=await execute(tools,'inspectTimeline',{}) as{timeline:Timeline};
+    expect(current.timeline.clips[0].neonEdges).toEqual({enabled:false,color:'#ff00cc',amount:.7,detail:.8,threshold:.4,glow:.5});
+    await execute(tools,'resetVisualEffect',{clipId:'from',effect:'neonEdges',action:'reset'});
+    current=await execute(tools,'inspectTimeline',{}) as{timeline:Timeline};expect(current.timeline.clips[0].neonEdges).toEqual(DEFAULT_NEON_EDGES);
+    await execute(tools,'setVisualEffects',{clipId:'from',neonEdges:{enabled:true,color:'#112233'}});
+    await execute(tools,'resetVisualEffect',{clipId:'from',effect:'neonEdges',action:'remove'});
+    await expect(execute(tools,'setVisualEffects',{clipId:'audio',neonEdges:{enabled:true}})).rejects.toThrow('video or image');
+  },initial,true);
+  expect(result.timeline.clips[0]).toEqual({...result.backend!.seed.clips[0],neonEdges:undefined});
+  expect(result.timeline.clips.slice(1)).toEqual(result.backend!.seed.clips.slice(1));
+  expect(editorCapabilities().neonEdges.description).toContain('Luminous');expect(result.calls).not.toContain('assistant:requestAnalysis');await assertUndo(result);
 });
 
 test('dither palette and text template/color/rotation controls combine without changing words, source or timing',async()=>{
@@ -436,6 +484,15 @@ test.skipIf(process.env.REVLINE_LIVE_AGENT_SMOKE!=='1')('live configured Claude 
   expect(page.page.flatMap(m=>m.parts).filter(p=>p.type==='text').map(p=>p.providerMetadata?.revline?.publicationReceipt).filter(Boolean)).toEqual([{version:1,kind:'timeline-publication',status:'saved',runId:'run',threadId:result.backend!.threadId,promptMessageId:result.backend!.promptMessageId,stagedRevision:0,revision:1}]);
   await assertUndo(result);
   console.log(JSON.stringify({model:CLAUDE_MODEL,intent:'delete-caption-neutral-terminal-prose',actualToolCalls:result.called,finalText:result.finalText,atomicReceipt:true,otherClipsPreserved:true,oneUndo:true,syntheticOnly:true}));
+},60_000);
+test.skipIf(process.env.REVLINE_LIVE_AGENT_SMOKE!=='1')('live configured Claude combines Frame shrink, clip fades and Neon edges without analysis or audio changes',async()=>{
+  const result=await nativeIntent('For video clip from only: set visual fade in0.4seconds and fade out0.6seconds, leaving its static opacity and audio untouched. Enable Neon edges with strength0.7, color#22AAFF, detail0.8, threshold0.2 and glow0.4. Add the Frame shrink Motion FX from1to3seconds: smoothly scale the footage itself toward canvas center, hold with20percent space on each side, then return, with entrance/exit speed2x. Do not use a rectangle or mask. Preserve existing source ranges, cuts, linked sound/gain, text and all other clips. Do not analyze or transcribe.',initial);
+  expect(result.called).toContain('configureVisualFade');expect(result.called).toContain('setVisualEffects');expect(result.called).toContain('addTimedEffect');
+  expect(result.timeline.clips[0]).toMatchObject({...result.backend!.seed.clips[0],visualFade:{fadeIn:.4,fadeOut:.6},neonEdges:{enabled:true,amount:.7,color:'#22AAFF',detail:.8,threshold:.2,glow:.4}});
+  expect(result.timeline.clips.slice(1,4)).toEqual(result.backend!.seed.clips.slice(1));
+  expect(result.timeline.clips.at(-1)).toMatchObject({effectPreset:'frame-shrink',start:1,duration:2,frameShrink:{size:.2,speed:2}});
+  expect(result.timeline.clips.some(c=>c.effectPreset==='solid-color')).toBe(false);await assertUndo(result);
+  console.log(JSON.stringify({model:CLAUDE_MODEL,intent:'frame-shrink-neon-visual-fade',actualToolCalls:result.called,originalAudioPreserved:true,oneUndo:true,syntheticOnly:true}));
 },60_000);
 test.skipIf(process.env.REVLINE_LIVE_AGENT_SMOKE!=='1')('live configured Claude applies look plus custom text and separate animation through stateful actual saves',async()=>{
   const result=await nativeIntent('For caption title only, first apply the Neon Echo look. Then customize it to Anton font, font size80, solid fill#AABBCC, rotation18degrees, stroke width3 with stroke color#102030, glow blur21 with glow color#2200AA, and Word reveal animation. Keep its exact existing words, start/duration and transparent background. Preserve every other clip and source. Do not analyze any media; this is an explicit text edit.',initial);
