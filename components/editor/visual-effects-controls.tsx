@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useId, useRef, useState, type CSSProperties, type ReactNode } from 'react';
-import { ChevronDown, Plus, RotateCcw, Trash2 } from 'lucide-react';
+import { ChevronDown, ChevronRight, Plus, RotateCcw, Trash2 } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { DEFAULT_COLOR_GRADE, DEFAULT_DITHER, DEFAULT_INVERT, DEFAULT_GLITCH, DEFAULT_ZOOM_BLUR, VISUAL_EFFECT_LIMITS, type VisualEffects } from '@/lib/editor/visual-effects';
 import type { Clip } from '@/lib/editor/types';
@@ -88,6 +88,14 @@ const pixels = (value: number) => `${Math.round(value)} px`;
 const effectNames = { colorGrade: 'Color', zoomBlur: 'Zoom blur', glitch: 'Glitch', invert: 'Invert colors', dither: 'Dither' } as const;
 const effectDefaults = { colorGrade: DEFAULT_COLOR_GRADE, zoomBlur: DEFAULT_ZOOM_BLUR, glitch: DEFAULT_GLITCH, invert: DEFAULT_INVERT, dither: DEFAULT_DITHER };
 
+export function AppliedVisualEffects({ clip, onSelect, onAdd }: { clip: Clip; onSelect: (effect: EffectKey) => void; onAdd: () => void }) {
+  const applied = (Object.keys(effectNames) as EffectKey[]).filter(key => clip[key]);
+  return <section className="applied-visual-effects" aria-label="Applied effects">
+    <div className="applied-effects-heading"><h3>Applied effects</h3><button type="button" aria-label="Add effect" onClick={onAdd}><Plus size={13}/>Add effect</button></div>
+    {applied.length ? <div className="applied-effects-list">{applied.map(key => <button key={key} type="button" className="applied-effect-row" aria-label={`Edit ${effectNames[key]}`} onClick={() => onSelect(key)}><EffectIcon name={key} size={15}/><span>{effectNames[key]}</span><small>{clip[key]?.enabled ? 'On' : 'Off'}</small><ChevronRight size={13}/></button>)}</div> : <p>No effects applied.</p>}
+  </section>;
+}
+
 
 export function CinematicBarsControls({ clip, onChange, onPreview }: Pick<Props, 'clip' | 'onChange' | 'onPreview'>) {
   const settings = cinematicBarSettings(clip);
@@ -107,7 +115,6 @@ export function PlaybackSpeedControls({ clip, onChange }: { clip: Clip; onChange
       {!PLAYBACK_RATES.some(value => value === rate) && <option value={rate}>{rate}×</option>}
       {PLAYBACK_RATES.map(value => <option key={value} value={value}>{value}×{value === 1 ? ' · Normal' : ''}</option>)}
     </select></label>
-    <p>Changes this clip’s duration. Linked sound stays in sync.</p>
   </section>;
 }
 
