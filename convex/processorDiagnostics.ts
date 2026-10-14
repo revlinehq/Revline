@@ -53,6 +53,8 @@ export const createStackedEffectsProject = internalMutation({
     const source: Timeline = { fps: 24, aspectRatio: 'landscape', tracks: { visual: 1, overlay: 0, audio: 0, effects: 2 }, clips: [
       { id: 'shader-source', kind: 'image', assetId, track: 1, start: 0, duration: 1, sourceStart: 0, dither: { enabled: true, amount: 1, levels: 2, size: 8 } },
       ...[1, 2].map(track => ({ id: `shader-blur-${track}`, kind: 'effect' as const, effectPreset: 'zoom-blur' as const, track, start: 0, duration: 1, sourceStart: 0, zoomBlur: { enabled: true, amount: .15, centerX: .5, centerY: .5 } })),
+      // Keep the old worker's conditional text bundle available while checking its GPU upgrade.
+      { id: 'shader-empty-text', kind: 'graphic', track: 1, start: 0, duration: 1, sourceStart: 0, text: '', background: 'transparent', animation: 'none' },
     ] };
     const timeline = await validateTimeline(ctx, (await ctx.db.get(projectId))!, source);
     await ctx.db.patch(projectId, { timeline });

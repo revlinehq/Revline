@@ -52,6 +52,7 @@ test('the stacked shader fixture stores generated media, preserves both timed pa
     { kind: 'image', dither: { enabled: true, amount: 1, levels: 2, size: 8 } },
     { kind: 'effect', track: 1, effectPreset: 'zoom-blur', zoomBlur: { amount: .15 } },
     { kind: 'effect', track: 2, effectPreset: 'zoom-blur', zoomBlur: { amount: .15 } },
+    { kind: 'graphic', text: '', background: 'transparent' },
   ]);
   const assets = await owner.query(api.assets.list, { projectId: created.projectId });
   expect(assets).toHaveLength(1);
