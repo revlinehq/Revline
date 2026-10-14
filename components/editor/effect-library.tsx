@@ -18,6 +18,7 @@ const TextPresetPicker = lazy(() => import('./text-preset-picker'));
 export type LibraryVisualEffect = keyof VisualEffects;
 type LibraryLook = { id: EffectIconName; label: string; description: string; visual?: LibraryVisualEffect; preset?: EffectPreset };
 const featured: LibraryLook[] = [
+  { id: 'solid-color', label: 'Solid color', description: 'A color frame or adjustable rectangle', preset: 'solid-color' },
   { id: 'dither', label: 'Dither', description: 'Ordered dots and a reduced color palette', visual: 'dither' },
   { id: 'glitch', label: 'Digital glitch', description: 'Distort the selected footage', visual: 'glitch' },
   { id: 'zoomBlur', label: 'Zoom blur', description: 'A timed blur pulse above your footage', preset: 'zoom-blur' },

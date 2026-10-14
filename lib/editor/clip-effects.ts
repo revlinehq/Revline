@@ -8,8 +8,12 @@ export type BlendMode = typeof BLEND_MODES[number];
 export type MotionKeyframe = { time: number; x: number; y: number; scale: number; rotation: number; opacity: number; brightness: number };
 export const MOTION_PRESETS = ['none', 'fade', 'punch', 'shake', 'flash', 'pop'] as const;
 export type MotionPreset = typeof MOTION_PRESETS[number];
-export const EFFECT_PRESETS = ['fade', 'punch', 'shake', 'flash', 'pop', 'cinematic-bars', 'quick-zoom-in', 'quick-zoom-out', 'zoom-blur'] as const;
+export const EFFECT_PRESETS = ['fade', 'punch', 'shake', 'flash', 'pop', 'cinematic-bars', 'quick-zoom-in', 'quick-zoom-out', 'zoom-blur', 'solid-color'] as const;
 export type EffectPreset = typeof EFFECT_PRESETS[number];
+export type SolidColorSettings = { color: string; width: number; height: number; x: number; y: number; opacity: number };
+export const DEFAULT_SOLID_COLOR: SolidColorSettings = { color: '#2563eb', width: 1, height: 1, x: .5, y: .5, opacity: 1 };
+export const SOLID_COLOR_LIMITS = { width: [.01, 2], height: [.01, 2], x: [0, 1], y: [0, 1], opacity: [0, 1] } as const;
+export function solidColorSettings(clip: Pick<Clip, 'solidColor'>): SolidColorSettings { return clip.solidColor ?? DEFAULT_SOLID_COLOR; }
 export type CinematicBarSettings = { size: number; speed: number };
 export const DEFAULT_CINEMATIC_BARS: CinematicBarSettings = { size: .12, speed: 1 };
 export const CINEMATIC_BAR_LIMITS = { size: [0, .5], speed: [.25, 4] } as const;
@@ -27,6 +31,7 @@ export const EFFECT_CATALOG: Record<EffectPreset, { label: string; duration: num
   shake: { label: 'Impact shake', duration: .5, keyframes: d => { const hit = Math.min(.35, d / 2); return [key(0, { scale: 1.08 }), key(hit * .15, { x: .018, y: -.01, rotation: 1.2, scale: 1.08 }), key(hit * .35, { x: -.014, y: .008, rotation: -.9, scale: 1.08 }), key(hit * .6, { x: .008, y: -.004, rotation: .4, scale: 1.08 }), key(hit, { scale: 1.08 }), key(d, { scale: 1.08 })]; } },
   flash: { label: 'Flash', duration: .5, keyframes: d => { const hit = Math.min(.35, d / 2); return [key(0), key(hit * .2, { brightness: 3 }), key(hit), key(d)]; } },
   pop: { label: 'Pop in', duration: .5, keyframes: d => { const hit = Math.min(.35, d / 2); return [key(0, { scale: .7, opacity: 0 }), key(hit * .65, { scale: 1.08 }), key(hit), key(d)]; } },
+  'solid-color': { label: 'Solid color', duration: 2, keyframes: d => [key(0), key(d)] },
   'cinematic-bars': { label: 'Cinematic bars', duration: 2, keyframes: d => cinematicBarKeyframes(d) },
   'quick-zoom-in': { label: 'Quick zoom in', duration: .5, keyframes: d => [key(0), key(d, { scale: 1.2 })] },
   'zoom-blur': { label: 'Zoom blur', duration: .6, keyframes: d => { const fade = Math.min(.18, d / 2); return [key(0, {opacity:0}), key(fade), ...(d-fade > fade ? [key(d-fade)] : []), key(d, {opacity:0})]; } },
@@ -39,6 +44,14 @@ export function validateClipEffects(clip: Clip) {
   validatePlaybackRate(clip);
   validateVisualEffects(clip);
   validateRemotionTextTemplate(clip);
+  if (clip.solidColor !== undefined) {
+    if (clip.kind !== 'effect' || clip.effectPreset !== 'solid-color') throw new Error('Solid color settings belong to solid color effect clips.');
+    if (!/^#[\da-f]{6}$/i.test(clip.solidColor.color)) throw new Error('Choose a valid solid color.');
+    for (const property of Object.keys(SOLID_COLOR_LIMITS) as (keyof typeof SOLID_COLOR_LIMITS)[]) {
+      const [min, max] = SOLID_COLOR_LIMITS[property], value = clip.solidColor[property];
+      if (!Number.isFinite(value) || value < min || value > max) throw new Error(`Solid color ${property} must be between ${min} and ${max}.`);
+    }
+  }
   if (clip.cinematicBars !== undefined) {
     if (clip.kind !== 'effect' || clip.effectPreset !== 'cinematic-bars') throw new Error('Cinematic bar settings belong to cinematic bar effect clips.');
     for (const property of ['size', 'speed'] as const) {
@@ -85,9 +98,9 @@ export function visibleMotion(clip: Clip): MotionKeyframe[] {
 }
 
 export function motionPreset(clip: Clip, preset: MotionPreset | EffectPreset): Partial<Clip> {
-  if ((preset === 'cinematic-bars' || preset === 'zoom-blur') && clip.kind !== 'effect') throw new Error('Add this preset as an effect clip.');
+  if ((preset === 'cinematic-bars' || preset === 'zoom-blur' || preset === 'solid-color') && clip.kind !== 'effect') throw new Error('Add this preset as an effect clip.');
   const motion = preset === 'none' ? [] : preset === 'cinematic-bars' ? cinematicBarKeyframes(clip.duration, cinematicBarSettings(clip).speed) : EFFECT_CATALOG[preset].keyframes(clip.duration);
-  return { motion, motionOffset: 0, ...(clip.kind === 'effect' ? { effectPreset: preset, cinematicBars: preset === 'cinematic-bars' ? { ...cinematicBarSettings(clip) } : undefined, zoomBlur: preset === 'zoom-blur' ? {...DEFAULT_ZOOM_BLUR,...clip.zoomBlur,enabled:true} : undefined } : {}), ...(clip.kind === 'caption' || clip.kind === 'graphic' ? { animation: 'none' as const } : {}) };
+  return { motion, motionOffset: 0, ...(clip.kind === 'effect' ? { effectPreset: preset, solidColor: preset === 'solid-color' ? { ...solidColorSettings(clip) } : undefined, cinematicBars: preset === 'cinematic-bars' ? { ...cinematicBarSettings(clip) } : undefined, zoomBlur: preset === 'zoom-blur' ? {...DEFAULT_ZOOM_BLUR,...clip.zoomBlur,enabled:true} : undefined } : {}), ...(clip.kind === 'caption' || clip.kind === 'graphic' ? { animation: 'none' as const } : {}) };
 }
 
 export function offsetClipMotion(clip: Clip, delta: number): Partial<Clip> {

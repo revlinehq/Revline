@@ -1,4 +1,4 @@
-import type { BlendMode, CinematicBarSettings, EffectPreset, MotionKeyframe } from './clip-effects';
+import type { BlendMode, CinematicBarSettings, EffectPreset, SolidColorSettings, MotionKeyframe } from './clip-effects';
 import type { ColorGrade, ZoomBlur, Glitch, InvertColors, Dither } from './visual-effects';
 import type { RemotionTextTemplate } from './remotion-text';
 export type AspectRatio = 'vertical' | 'portrait-feed' | 'square' | 'classic' | 'landscape';
@@ -34,6 +34,7 @@ export type Clip = {
   motionOffset?: number;
   effectPreset?: EffectPreset | 'none';
   cinematicBars?: CinematicBarSettings;
+  solidColor?: SolidColorSettings;
   colorGrade?: ColorGrade;
   zoomBlur?: ZoomBlur;
   glitch?: Glitch;

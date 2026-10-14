@@ -1,4 +1,4 @@
-import { cinematicBarSettings, motionAt, NEUTRAL_MOTION, visibleMotion } from './clip-effects';
+import { cinematicBarSettings, motionAt, NEUTRAL_MOTION, solidColorSettings, visibleMotion } from './clip-effects';
 import { trackOf, type Clip } from './types';
 
 export type AdjustmentSource = { clip: Clip; index: number };
@@ -30,10 +30,19 @@ export function installAdjustmentLayers(initial: AdjustmentSource[]): Adjustment
     const width=Number(composition.dataset.width),height=Number(composition.dataset.height),time=clock.time();
     for(const [id,entry] of entries){
       const clip={...entry.clip,...drafts.get(id)}, motion=adjustmentFrame(clip,time);
-      const bars=clip.effectPreset==='cinematic-bars';
-      entry.node.style.transform=bars||clip.effectPreset==='zoom-blur'?'none':`translate(${motion.x*width}px,${motion.y*height}px) rotate(${motion.rotation}deg) scale(${motion.scale})`;
-      entry.node.style.opacity=String(bars||clip.effectPreset==='zoom-blur'?1:motion.opacity);
-      entry.node.style.filter=bars||clip.effectPreset==='zoom-blur'?'none':`brightness(${motion.brightness})`;
+      const bars=clip.effectPreset==='cinematic-bars', solid=clip.effectPreset==='solid-color';
+      entry.node.style.transform=bars||solid||clip.effectPreset==='zoom-blur'?'none':`translate(${motion.x*width}px,${motion.y*height}px) rotate(${motion.rotation}deg) scale(${motion.scale})`;
+      entry.node.style.opacity=String(bars||solid||clip.effectPreset==='zoom-blur'?1:motion.opacity);
+      entry.node.style.filter=bars||solid||clip.effectPreset==='zoom-blur'?'none':`brightness(${motion.brightness})`;
+      if(solid){
+        const rectangle=entry.node.querySelector<HTMLElement>(':scope > .solid-color-rectangle')!,settings=solidColorSettings(clip);
+        rectangle.style.visibility=time>=clip.start&&time<clip.start+clip.duration?'visible':'hidden';
+        rectangle.style.backgroundColor=settings.color;
+        rectangle.style.left=`${settings.x*100}%`;rectangle.style.top=`${settings.y*100}%`;
+        rectangle.style.width=`${settings.width*100}%`;rectangle.style.height=`${settings.height*100}%`;
+        rectangle.style.opacity=String(settings.opacity*motion.opacity);
+        rectangle.style.transform=`translate(-50%,-50%) translate(${motion.x*width}px,${motion.y*height}px) rotate(${motion.rotation}deg) scale(${motion.scale})`;
+      }
       if(bars)for(const side of ['top','bottom']){
         const bar=entry.node.querySelector<HTMLElement>(`:scope > .cinematic-bars > .cinematic-bar.${side}`)!;
         const active=time>=clip.start&&time<clip.start+clip.duration;
@@ -48,7 +57,7 @@ export function installAdjustmentLayers(initial: AdjustmentSource[]): Adjustment
     const nextSignature=JSON.stringify(sources);if(nextSignature===signature)return;signature=nextSignature;
     const wanted=new Set(sources.map(source=>source.clip.id));
     for(const [id,entry] of entries)if(!wanted.has(id)){
-      for(const child of Array.from(entry.node.children))if(!child.classList.contains('cinematic-bars'))entry.node.parentNode!.insertBefore(child,entry.node);
+      for(const child of Array.from(entry.node.children))if(!child.classList.contains('cinematic-bars')&&!child.classList.contains('solid-color-rectangle'))entry.node.parentNode!.insertBefore(child,entry.node);
       entry.node.remove();entries.delete(id);drafts.delete(id);
     }
     for(const {clip} of sources){
@@ -64,6 +73,9 @@ export function installAdjustmentLayers(initial: AdjustmentSource[]): Adjustment
         const bars=document.createElement('div');bars.className='cinematic-bars';
         for(const side of ['top','bottom']){const bar=document.createElement('div');bar.className=`cinematic-bar ${side}`;bar.id=entry.node.id.replace(/-motion$/,'')+`-bar-${side}`;bars.appendChild(bar);}entry.node.appendChild(bars);
       }else if(clip.effectPreset!=='cinematic-bars')existing?.remove();
+      const rectangle=Array.from(entry.node.children).find(node=>node.classList.contains('solid-color-rectangle'));
+      if(clip.effectPreset==='solid-color'&&!rectangle){const node=document.createElement('div');node.className='solid-color-rectangle';entry.node.appendChild(node);}
+      else if(clip.effectPreset!=='solid-color')rectangle?.remove();
       entry.node.style.zIndex=String(trackOf(clip)*256-1);
     }
     const ordered=Array.from(entries.values()).sort((a,b)=>trackOf(a.clip)-trackOf(b.clip)||sources.findIndex(source=>source.clip.id===a.clip.id)-sources.findIndex(source=>source.clip.id===b.clip.id));

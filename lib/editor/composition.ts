@@ -170,7 +170,8 @@ export function generateComposition(timeline: Timeline, assets: MediaAsset[], op
     for (const { clip, index } of adjustments) {
       const size = cinematicBarSettings(clip).size * 100;
       const bars = clip.effectPreset === 'cinematic-bars' ? `<div class="cinematic-bars"><div id="clip-${index}-bar-top" class="cinematic-bar top" style="height:${size}%"></div><div id="clip-${index}-bar-bottom" class="cinematic-bar bottom" style="height:${size}%"></div></div>` : '';
-      visualStack = `<div id="clip-${index}-motion" data-effect-clip="${escapeHtml(clip.id)}" class="adjustment-layer" style="z-index:${trackOf(clip) * 256 - 1}">${visualStack}${bars}</div>`;
+      const solid = clip.effectPreset === 'solid-color' ? '<div class="solid-color-rectangle"></div>' : '';
+      visualStack = `<div id="clip-${index}-motion" data-effect-clip="${escapeHtml(clip.id)}" class="adjustment-layer" style="z-index:${trackOf(clip) * 256 - 1}">${visualStack}${bars}${solid}</div>`;
     }
     compositionNodes = visualStack + timeline.clips.map((clip, index) => clip.kind === 'audio' ? nodes[index] : '').join('');
   }
@@ -192,7 +193,7 @@ window.__hf=window.__hf||{};window.__hf.onSwallowed=event=>reportPreviewError(ev
 @font-face{font-family:'Space Grotesk';font-style:normal;font-weight:300 700;font-display:block;src:url('${fontUrl}') format('woff2')}
 html,body{margin:0;width:${width}px;height:${height}px;overflow:hidden;background:#000;font-family:'Space Grotesk',Arial,Helvetica,sans-serif}*{box-sizing:border-box}#composition{isolation:isolate;position:relative;width:${width}px;height:${height}px;overflow:hidden;background:#000}.visual-frame{position:absolute;width:${width}px;height:${height}px;overflow:hidden;transform-origin:center}.motion-frame{width:100%;height:100%;transform-origin:center}.text-motion{display:inline-block}.source-window{position:absolute;overflow:hidden}.visual{position:absolute}.overlay{position:absolute;max-width:90%;width:max-content;transform:translate(-50%,-50%);font-weight:700;line-height:1.12;text-align:center;white-space:pre-wrap;overflow-wrap:anywhere}.text-content{display:inline-block;padding:${10 * scale}px ${18 * scale}px;border-radius:${8 * scale}px}.caption{text-shadow:0 2px 12px #0009}audio{position:absolute}
 .adjustment-layer{position:absolute;inset:0;transform-origin:center;pointer-events:none}
-[data-revline-effects]{opacity:0!important}${options.preview?'video[data-revline-effects]{opacity:0.001!important}':''}.visual-effect-output{position:absolute;pointer-events:none}
+[data-revline-effects]{opacity:0!important}${options.preview?'video[data-revline-effects]{opacity:0.001!important}':''}.visual-effect-output{position:absolute;pointer-events:none}.solid-color-rectangle{position:absolute;z-index:2147483647;pointer-events:none;transform-origin:center}
 .cinematic-bars{position:absolute;inset:0;overflow:hidden;z-index:2147483647;pointer-events:none}.cinematic-bar{position:absolute;left:0;right:0;background:#000}.cinematic-bar.top{top:0;transform:translateY(-100%)}.cinematic-bar.bottom{bottom:0;transform:translateY(100%)}
 </style><script src="${gsapUrl}"></script><script src="${visualEffectsUrl}"></script><script src="${remotionTextUrl}"></script></head><body><div id="composition" data-composition-id="revline" data-duration="${safeDuration}" data-width="${width}" data-height="${height}" data-fps="${fps}">${compositionNodes}</div><script>
 const timeline=gsap.timeline({paused:true});

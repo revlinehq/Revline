@@ -2,6 +2,7 @@ import type { SVGProps } from 'react';
 
 // Original vector drawings from Pen: Revline / custom effect icons (mzzBL).
 const glyphs = {
+  'solid-color': [{ d: 'M4 5h16v14H4z', stroke: true, opacity: 1 }, { d: 'M7 8h10v8H7z', stroke: false, opacity: .28 }],
   'glitch': [{"d":"M4 5h14v4h3v3h-15v3h-3v3h16m-16-9h9m0 6h10","stroke":true,"opacity":1}],
   'zoomBlur': [{"d":"M7 7h10v10h-10z m-4-4l3 3m12 0l3-3m-18 18l3-3m12 0l3 3","stroke":true,"opacity":1},{"d":"M9 9h6v6h-6z","stroke":false,"opacity":0.28}],
   'colorGrade': [{"d":"M5 3v6m0 4v8m7-18v11m0 4v3m7-18v3m0 4v11m-16-10h4m3 5h4m3-8h4","stroke":true,"opacity":1}],
