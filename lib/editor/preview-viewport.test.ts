@@ -102,3 +102,35 @@ describe('selecting footage directly in the preview', () => {
     expect(isPreviewTextOccluded({...mixed,clips:[{...words,track:3},mixed.clips[1]],tracks:{visual:3,overlay:0,audio:1}},assets,1,'words',rect)).toBe(false);
   });
 });
+
+describe('selecting visibly contributing stacked footage', () => {
+  const assets:MediaAsset[]=[{_id:'gif',kind:'image',fileName:'generated.png',url:'/generated.png',width:356,height:200}];
+  const lower={id:'lower',kind:'image' as const,assetId:'gif',track:2,start:6.6,duration:4.763265,sourceStart:0,fit:'contain' as const,transform:{opacity:1,rotation:0,scale:2.0924407074563964,x:.6462951644673953,y:.5405556138071702}};
+  const upper={...lower,id:'upper',track:3,transform:{opacity:.12,rotation:0,scale:3.767347579629565,x:.7135288806841728,y:.5952620824555142}};
+  const timeline:Timeline={fps:30,aspectRatio:'vertical',tracks:{visual:3,overlay:0,audio:0,effects:0},clips:[lower,upper]};
+  const point={x:540,y:960};
+  it('selects the bright lower clip through its faint enlarged duplicate',()=>{
+    expect(previewClipAtPoint(timeline,assets,11,point)?.id).toBe('lower');
+  });
+  it('preserves opaque upper selection and uses upper z-order to break equal contributions',()=>{
+    for(const opacity of [1,.5])expect(previewClipAtPoint({...timeline,clips:[lower,{...upper,transform:{...upper.transform,opacity}}]},assets,11,point)?.id).toBe('upper');
+  });
+  it('weights lower contributions by every overlapping media layer above them',()=>{
+    const middle={...lower,id:'middle',track:3,transform:{...lower.transform,opacity:.4}};
+    const top={...upper,track:4,transform:{...upper.transform,opacity:.2}};
+    expect(previewClipAtPoint({...timeline,tracks:{visual:4,overlay:0,audio:0},clips:[{...lower,transform:{...lower.transform,opacity:.9}},middle,top]},assets,11,point)?.id).toBe('lower');
+  });
+  it('cycles through geometric overlaps without making faint upper media unselectable',()=>{
+    expect(previewClipAtPoint(timeline,assets,11,point,[],{cycleAfter:'lower'})?.id).toBe('upper');
+    expect(previewClipAtPoint(timeline,assets,11,point,[],{cycleAfter:'upper'})?.id).toBe('lower');
+    expect(previewClipAtPoint(timeline,assets,11,point,[],{cycleAfter:null})?.id).toBe('upper');
+  });
+  it('uses current rendered opacity for draft and animated layers, including backwards seeks',()=>{
+    const mediaOpacities=new Map([['lower',1],['upper',0]]);
+    expect(previewClipAtPoint(timeline,assets,11,point,[],{mediaOpacities})?.id).toBe('lower');
+    mediaOpacities.set('upper',.8);
+    expect(previewClipAtPoint(timeline,assets,11,point,[],{mediaOpacities})?.id).toBe('upper');
+    mediaOpacities.set('upper',0);
+    expect(previewClipAtPoint(timeline,assets,11,point,[],{cycleAfter:'lower',mediaOpacities})?.id).toBe('lower');
+  });
+});

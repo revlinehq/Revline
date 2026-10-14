@@ -12,7 +12,7 @@ import { VisualHandles } from './visual-controls';
 import { CropControls, type CropControlsHandle } from './crop-controls';
 import { TextControls } from './text-controls';
 import { useEditorState } from './editor-state';
-import { previewClipAtPoint, type PreviewTextBounds } from '@/lib/editor/preview-viewport';
+import { previewClipAtPoint, previewMediaOpacities, type PreviewTextBounds } from '@/lib/editor/preview-viewport';
 import { projectPreviewBounds } from '@/lib/editor/preview-zoom';
 import type { SourceCrop } from '@/lib/editor/types';
 import { previewContentKey } from '@/lib/editor/preview-content-key';
@@ -216,7 +216,7 @@ export const Preview = forwardRef<PreviewHandle,{timeline:Timeline;assets:MediaA
     ? calculateVisualRect(asset.width,asset.height,canvas.width,canvas.height,selectedClip.crop,undefined,selectedClip.fit).window
     : {left:0,top:0,width:canvas.width,height:canvas.height};
   const cropActive=cropping&&ready&&selectedClip&&(selectedClip.kind==='image'||selectedClip.kind==='video')&&asset?.width&&asset?.height&&onCropCommit&&onCropCancel;
-  return <div className={`preview-canvas aspect-${timeline.aspectRatio}`} data-testid="preview"><div ref={container} className="hyperframes-host"/>{ready&&!cropActive&&onSelectClip&&<button type="button" className="preview-hit-surface" aria-label="Select footage in preview" title="Double-click to transform" onClick={event=>{
+  return <div className={`preview-canvas aspect-${timeline.aspectRatio}`} data-testid="preview"><div ref={container} className="hyperframes-host"/>{ready&&!cropActive&&onSelectClip&&<button type="button" className="preview-hit-surface" aria-label="Select footage in preview" title="Double-click to transform · Alt-click to select overlapping layers" onClick={event=>{
     event.stopPropagation();const rect=event.currentTarget.getBoundingClientRect();
     const point=event.detail===0?{x:canvas.width/2,y:canvas.height/2}:{x:(event.clientX-rect.left)/rect.width*canvas.width,y:(event.clientY-rect.top)/rect.height*canvas.height};
     const doc=player.current?.iframeElement?.contentDocument,composition=doc?.getElementById('composition')?.getBoundingClientRect();
@@ -224,7 +224,7 @@ export const Preview = forwardRef<PreviewHandle,{timeline:Timeline;assets:MediaA
       if(clip.kind!=='caption'&&clip.kind!=='graphic')return [];
       const node=doc?compositionNode(doc,clip,index):null;return node?[{id:clip.id,rect:projectPreviewBounds(node.getBoundingClientRect(),composition,canvas)}]:[];
     }):[];
-    const hit=previewClipAtPoint(timeline,assets,frameTime(player.current,seekPosition.current),point,textBounds);
+    const hit=previewClipAtPoint(timeline,assets,frameTime(player.current,seekPosition.current),point,textBounds,{mediaOpacities:doc?previewMediaOpacities(doc):undefined,cycleAfter:event.altKey?selectedClip?.id??null:undefined});
     if(event.detail===2||event.detail===0)setTransformId(hit?.id??null);
     else if(hit?.id!==selectedClip?.id)setTransformId(null);
     onSelectClip(hit?.id??null);

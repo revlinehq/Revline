@@ -43,6 +43,25 @@ export function visibleVisualBounds(transform: VisualTransform, content: VisualR
 }
 
 export type PreviewTextBounds = { id: string; rect: VisualRect };
+export type PreviewHitOptions = { mediaOpacities?: ReadonlyMap<string, number>; cycleAfter?: string | null };
+
+/** Read scene opacity, including live motion, without sampling or reloading media. */
+export function previewMediaOpacities(document: Document) {
+  const result = new Map<string, number>(), view = document.defaultView;
+  if (!view) return result;
+  for (const frame of document.querySelectorAll<HTMLElement>('[data-visual-clip]')) {
+    let opacity = 1;
+    for (let node: HTMLElement | null = frame.querySelector('.motion-frame') ?? frame; node; node = node.parentElement) {
+      const style = view.getComputedStyle(node);
+      if (style.display === 'none' || style.visibility === 'hidden') { opacity = 0; break; }
+      opacity *= Number(style.opacity);
+      // A common adjustment wrapper fades the composite, not each layer independently.
+      if (node === frame) break;
+    }
+    result.set(frame.dataset.visualClip!, opacity);
+  }
+  return result;
+}
 
 function pointInPolygon(point: Point, points: Point[]) {
   let positive = false, negative = false;
@@ -64,26 +83,44 @@ function mediaBounds(clip: Clip, asset: MediaAsset | undefined, canvas: Size) {
 }
 
 /** Hit-test text and the retained media pixels in their shared visual-track order. */
-export function previewClipAtPoint(timeline: Timeline, assets: MediaAsset[], time: number, point: Point, textBounds: PreviewTextBounds[] = []) {
+export function previewClipAtPoint(timeline: Timeline, assets: MediaAsset[], time: number, point: Point, textBounds: PreviewTextBounds[] = [], options: PreviewHitOptions = {}) {
   timeline = normalizeTimeline(timeline);
   const canvas = dimensions(timeline.aspectRatio);
   const assetMap = new Map(assets.map(asset => [asset._id, asset]));
   const textMap = new Map(textBounds.map(value => [value.id, value.rect]));
-  const active = timeline.clips.map((clip, index) => ({clip, z: layerZIndex(clip, index)}))
-    .filter(({clip}) => clip.kind !== 'audio' && clip.kind !== 'effect' && time >= clip.start && time < clip.start + clip.duration && (clip.kind === 'caption' || clip.kind === 'graphic' || (clip.transform?.opacity ?? 1) > 0))
+  const active = timeline.clips.map((clip, index) => ({clip, z: layerZIndex(clip, index), opacity: options.mediaOpacities?.get(clip.id) ?? clip.transform?.opacity ?? 1}))
+    .filter(({clip, opacity}) => clip.kind !== 'audio' && clip.kind !== 'effect' && time >= clip.start && time < clip.start + clip.duration && (clip.kind === 'caption' || clip.kind === 'graphic' || opacity > 0))
     .sort((a, b) => b.z - a.z);
-  for (const {clip} of active) {
+  const hits: typeof active = [];
+  for (const hit of active) {
+    const {clip} = hit;
     if (clip.kind === 'caption' || clip.kind === 'graphic') {
       const rect = textMap.get(clip.id);
-      if (rect && point.x >= rect.left && point.y >= rect.top && point.x <= rect.left + rect.width && point.y <= rect.top + rect.height) return clip;
+      if (rect && point.x >= rect.left && point.y >= rect.top && point.x <= rect.left + rect.width && point.y <= rect.top + rect.height) {
+        // Keep text's existing top-hit behavior and prevent cycling through its ink.
+        if (!hits.length) return clip;
+        break;
+      }
       continue;
     }
     const asset = clip.assetId ? assetMap.get(clip.assetId) : undefined;
     const visible = mediaBounds(clip, asset, canvas);
     if (!visible) continue;
-    if (pointInPolygon(point, visible.points)) return clip;
+    if (pointInPolygon(point, visible.points)) hits.push(hit);
   }
-  return undefined;
+  if (!hits.length) return undefined;
+  if (options.cycleAfter !== undefined) {
+    const index = hits.findIndex(({clip}) => clip.id === options.cycleAfter);
+    return hits[(index + 1) % hits.length]?.clip;
+  }
+  let remaining = 1, contribution = -1, selected: Clip | undefined;
+  for (const {clip, opacity} of hits) {
+    const visible = remaining * opacity;
+    // Strictly greater preserves top z-order for equal contributions.
+    if (visible > contribution) { selected = clip; contribution = visible; }
+    remaining *= 1 - opacity;
+  }
+  return selected;
 }
 
 /** Media-only selection, using the same retained, transformed pixels as its outline. */
