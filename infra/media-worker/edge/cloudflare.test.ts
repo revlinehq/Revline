@@ -11,7 +11,7 @@ function fixture() {
   const healthyAt = Date.now() + 45_000;
   const container = { running: false, images: { processor: 'fixture-image' }, start: vi.fn(() => { container.running = true; }), setInactivityTimeout: vi.fn().mockResolvedValue(undefined), getTcpPort: () => ({ fetch: () => new Promise<Response>((resolve, reject) => setTimeout(() => Date.now() >= healthyAt ? resolve(new Response('{}')) : reject(new Error('Still starting')), 1000)) }) };
   const ctx = { storage, container };
-  const env = { RENDER_WORKER_SECRET: 'fixture-secret', GOOGLE_GENERATIVE_AI_API_KEY: 'fixture-key', NEXT_PUBLIC_CONVEX_URL: 'https://fixture.convex.cloud', MEDIA_WORKER_URL: 'https://media.example', GEMINI_VIDEO_MODEL: 'fixture-model', PROCESSOR: {} };
+  const env = { RENDER_WORKER_SECRET: 'fixture-secret', GOOGLE_GENERATIVE_AI_API_KEY: 'fixture-key', OPENAI_API_KEY: 'fixture-openai-key', NEXT_PUBLIC_CONVEX_URL: 'https://fixture.convex.cloud', MEDIA_WORKER_URL: 'https://media.example', GEMINI_VIDEO_MODEL: 'fixture-model', PROCESSOR: {} };
   const module = { exports: {} as { MediaProcessor: new (ctx: object, env: object) => { alarm(): Promise<void> }; default: { fetch(request: Request, env: object, ctx: object): Promise<Response> } } };
   const code = transformSync(readFileSync(new URL('./cloudflare.ts', import.meta.url), 'utf8'), { loader: 'ts', format: 'cjs' }).code;
   runInNewContext(code, { module, exports: module.exports, require: (id: string) => id === 'cloudflare:workers' ? { DurableObject: class { constructor(public ctx: object, public env: object) {} } } : id === 'convex/browser' ? { ConvexHttpClient: class { query() { return Promise.resolve('fixture-task'); } } } : require(id), Date, URL, TextEncoder, Response, AbortSignal, crypto: { subtle: { timingSafeEqual } }, console, scheduler: { wait: (ms: number) => new Promise(resolve => setTimeout(resolve, ms)) } });
@@ -33,6 +33,7 @@ test('wake durably acknowledges startup before a cold container exceeds the HTTP
   await vi.advanceTimersByTimeAsync(46_000);
   await startup;
   expect(f.container.start).toHaveBeenCalledOnce();
+  expect(f.container.start).toHaveBeenCalledWith(expect.objectContaining({ env: expect.objectContaining({ OPENAI_API_KEY: 'fixture-openai-key', GOOGLE_GENERATIVE_AI_API_KEY: 'fixture-key', GEMINI_VIDEO_MODEL: 'fixture-model' }) }));
 });
 
 test('an unauthorized wake cannot schedule container work', async () => {

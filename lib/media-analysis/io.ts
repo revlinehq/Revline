@@ -16,6 +16,12 @@ export async function extractSpeechAudio(input: string, output: string, signal: 
   await run('ffmpeg', ['-v', 'error', '-i', input, '-map', '0:a:0', '-vn', '-ac', '1', '-ar', '16000', '-c:a', 'pcm_s16le', '-y', output], { signal, timeout: 60_000, maxBuffer: 1024 * 1024 });
 }
 
+export async function extractTranscriptionAudio(input: string, output: string, signal: AbortSignal, window?: { start: number; end: number }) {
+  const seek = window ? ['-ss', String(window.start)] : [];
+  const length = window ? ['-t', String(window.end - window.start)] : [];
+  await run('ffmpeg', ['-v', 'error', ...seek, '-i', input, ...length, '-map', '0:a:0', '-vn', '-ac', '1', '-ar', '16000', '-c:a', 'libmp3lame', '-b:a', '32k', '-y', output], { signal, timeout: 120_000, maxBuffer: 1024 * 1024 });
+}
+
 export async function prepareVideo(input: string, output: string, signal: AbortSignal) {
   // Compatibility conversion for unsupported containers; preserve source motion and framing.
   const geometry = "scale=w='min(1280,iw)':h='min(1280,ih)':force_original_aspect_ratio=decrease:force_divisible_by=2,setpts=PTS-STARTPTS";

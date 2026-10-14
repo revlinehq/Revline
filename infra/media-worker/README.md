@@ -65,10 +65,11 @@ Verification recorded on 2026-10-13:
 
 The 2026-10-13 text update is deployed as controller version `4b832ecc-17b5-4b72-be5e-382d32771961`, using processor image digest `sha256:ea8c8836619f475bf849bdf7740efbb5b4c8fba3c43591be367c5bf7dbfa89fc`. It includes editable text rotation and the Neon echo, Lyric slam and Kinetic stack presets. The frozen image rendered all three presets and rotated text roots in an isolated, network-disabled check. A synthetic MP4 render separately verified entrance/hold/exit frames, split timing and preview/export agreement. Image comparisons use bounded pixel statistics instead of large Buffer assertion diffs, which exhausted local RAM on failures; local verification runs use a capped Node heap.
 
-Only two secret values are required in the new Worker:
+The processor uses three secret values:
 
 - `RENDER_WORKER_SECRET`: the existing production media worker credential, matching Convex production.
-- `GOOGLE_GENERATIVE_AI_API_KEY`: the production Gemini provider credential used for video understanding/transcription.
+- `GOOGLE_GENERATIVE_AI_API_KEY`: the production Gemini provider credential used for native video understanding and inspection.
+- `OPENAI_API_KEY`: the production OpenAI credential used by Whisper for word-timed speech transcription. Audio is compressed to 32 kbps mono MP3; uploads exceeding 24 MB are split into source windows and their measured word times are offset back into source time. The stored transcript supports up to 5,000 words and 500 overview segments; overview compaction preserves every measured word.
 
 Non-secret backend/media URLs and the Gemini video model are declared in the edge Wrangler configuration. There is no Clerk secret, Anthropic secret, Convex deploy key or Cloudflare token inside the image. Workers secrets are passed into the process at container startup; no secret is passed as a Docker build argument or baked into a layer.
 
@@ -76,7 +77,7 @@ For subsequent runtime rollouts:
 
 1. Verify Containers authorization remains available. Preserve existing scopes and the existing paid plan.
 2. Build and verify the new runtime, then deploy this separate processor application in the existing account. Rebuild when export code, bundled text presets, Python dependencies or the pinned model change; a frontend or Convex deployment does not update the running image.
-3. Install its two runtime secrets using Wrangler's encrypted secret commands or the dashboard. Transfer existing values through a secure pipe or prompt; never print them or include them in CLI argument strings.
+3. Install its runtime secrets using Wrangler's encrypted secret commands or the dashboard. Transfer existing values through a secure pipe or prompt; never print them or include them in CLI argument strings.
 4. Keep `MEDIA_PROCESSOR_WAKE_URL` on Convex production, then enqueue an isolated synthetic task and confirm its saved result through normal task/render APIs without manually waking the controller.
 5. Confirm the export reaches R2 and the container becomes inactive. Use an explicitly authorized synthetic fixture for an interruption/retry drill and cleanup. Keep the development consumer separate; avoid running a laptop production consumer alongside the hosted one during verification, since either consumer can claim the task.
 

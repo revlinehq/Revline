@@ -5,8 +5,9 @@ import type { ConvexHttpClient } from 'convex/browser';
 import type { MediaWorkItem, MediaTaskResult } from '@/convex/mediaTasks';
 import { generateComposition } from '@/lib/editor/composition';
 import { dimensions, timelineDuration, type MediaAsset } from '@/lib/editor/types';
-import { downloadOwnedMedia, extractSpeechAudio, prepareVideo, probeMedia } from '@/lib/media-analysis/io';
-import { inspectVideo, inspectVideoFrames, transcribeAudio, understandVideo } from '@/lib/media-analysis/gemini';
+import { downloadOwnedMedia, extractTranscriptionAudio, prepareVideo, probeMedia } from '@/lib/media-analysis/io';
+import { inspectVideo, inspectVideoFrames, understandVideo } from '@/lib/media-analysis/gemini';
+import { transcribeWithWhisper } from '@/lib/media-analysis/whisper';
 import { detectShots } from '@/lib/media-analysis/detect-shots';
 import { detectMusicBeats } from '@/lib/media-analysis/music-beats';
 import { AnalysisError } from '@/lib/media-analysis/errors';
@@ -59,6 +60,7 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
     if (!asset?.url) throw new AnalysisError('The source media is unavailable.', 400);
     if (task.kind === 'extract' && asset.audioExtracted) return asset.audioAssetId ? { audioAssetId: asset.audioAssetId } : {};
     if (task.kind === 'waveform' && asset.waveform) return { waveform: asset.waveform };
+    if (task.kind === 'transcribe' && asset.analysis?.transcript) return { analysis: { transcript: asset.analysis.transcript } };
     const source = join(directory, 'source');
     await downloadOwnedMedia(asset.url, source, new URL(convexUrl).origin, asset.size, signal);
     onProgress(10);
@@ -84,11 +86,12 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
     }
     if (task.kind === 'transcribe') {
       if (!media.hasAudio) throw new AnalysisError('This source has no audio to transcribe.', 400);
-      const key = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
-      if (!key) throw new AnalysisError('Gemini transcription is not configured on the media worker.', 503);
-      const audio = join(directory, 'speech.wav');
-      await extractSpeechAudio(source, audio, signal); onProgress(30);
-      return { analysis: { transcript: await transcribeAudio(audio, media.duration, key, signal) } };
+      const key = process.env.OPENAI_API_KEY;
+      if (!key) throw new AnalysisError('OpenAI Whisper transcription is not configured on the media worker.', 503);
+      const audio = join(directory, 'speech.mp3');
+      await extractTranscriptionAudio(source, audio, signal);
+      onProgress(30);
+      return { analysis: { transcript: await transcribeWithWhisper(audio, media.duration, key, signal) } };
     }
     if (task.kind === 'beats') {
       if (!media.hasAudio) throw new AnalysisError('This source has no audio to measure.', 400);

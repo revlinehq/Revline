@@ -2,7 +2,7 @@ import { DurableObject } from 'cloudflare:workers';
 import { ConvexHttpClient } from 'convex/browser';
 import { makeFunctionReference } from 'convex/server';
 
-type ProcessorSecrets = { RENDER_WORKER_SECRET: string; GOOGLE_GENERATIVE_AI_API_KEY: string };
+type ProcessorSecrets = { RENDER_WORKER_SECRET: string; GOOGLE_GENERATIVE_AI_API_KEY: string; OPENAI_API_KEY?: string };
 type Bindings = ProcessorEnv & ProcessorSecrets;
 const TIMEOUT_MS = 5 * 60_000;
 const readyQuery = makeFunctionReference<'query', { workerSecret: string }, string>('mediaTasks:ready');
@@ -42,6 +42,7 @@ export class MediaProcessor extends DurableObject<Bindings> {
         MEDIA_WORKER_URL: this.env.MEDIA_WORKER_URL,
         RENDER_WORKER_SECRET: this.env.RENDER_WORKER_SECRET,
         GOOGLE_GENERATIVE_AI_API_KEY: this.env.GOOGLE_GENERATIVE_AI_API_KEY,
+        ...(this.env.OPENAI_API_KEY ? { OPENAI_API_KEY: this.env.OPENAI_API_KEY } : {}),
         GEMINI_VIDEO_MODEL: this.env.GEMINI_VIDEO_MODEL,
       } });
     }
