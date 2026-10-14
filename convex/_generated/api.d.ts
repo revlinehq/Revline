@@ -23,6 +23,7 @@ import type * as lib_billing_access from "../lib/billing_access.js";
 import type * as lib_claude_model from "../lib/claude_model.js";
 import type * as lib_editSession from "../lib/editSession.js";
 import type * as lib_editSessionRebase from "../lib/editSessionRebase.js";
+import type * as lib_effect_plan from "../lib/effect_plan.js";
 import type * as lib_inspectTimeline from "../lib/inspectTimeline.js";
 import type * as lib_media_storage from "../lib/media_storage.js";
 import type * as lib_media_task_auth from "../lib/media_task_auth.js";
@@ -69,6 +70,7 @@ declare const fullApi: ApiFromModules<{
   "lib/claude_model": typeof lib_claude_model;
   "lib/editSession": typeof lib_editSession;
   "lib/editSessionRebase": typeof lib_editSessionRebase;
+  "lib/effect_plan": typeof lib_effect_plan;
   "lib/inspectTimeline": typeof lib_inspectTimeline;
   "lib/media_storage": typeof lib_media_storage;
   "lib/media_task_auth": typeof lib_media_task_auth;

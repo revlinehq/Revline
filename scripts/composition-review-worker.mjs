@@ -23,8 +23,9 @@ try{
     const injector=createVideoFrameInjector(createFrameLookupTable(videos,extracted.extracted,settings.fps));
     const server=await createFileServer({projectDir:dir,fps:{num:settings.fps,den:1}});
     const origin=server.url;
-    const session=await createCaptureSession(origin,dir,{width:settings.width,height:settings.height,fps:{num:settings.fps,den:1},format:'png',compositionDurationSeconds:settings.end},injector);
+    let session;
     try{
+      session=await createCaptureSession(origin,dir,{width:settings.width,height:settings.height,fps:{num:settings.fps,den:1},format:'png',compositionDurationSeconds:settings.end},injector);
       await session.page.setRequestInterception(true);
       session.page.on('request',request=>request.url().startsWith(origin+'/')||request.url().startsWith('data:')?request.continue():request.abort());
       await initializeSession(session);
@@ -42,8 +43,9 @@ try{
           });
         }));
       }
-    }finally{await closeCaptureSession(session);await server.close();}
+    }finally{try{if(session)await closeCaptureSession(session);}finally{server.close();}}
   }
   await writeFile(join(root,'text-safe.json'),JSON.stringify(safe));report({type:'complete',warnings:0});
 }catch(error){report({type:'error',message:error instanceof Error?error.message.slice(0,800):'Composition capture failed.'});process.exitCode=1;}
 finally{if(process.connected)process.disconnect();}
+process.exit(process.exitCode??0);
