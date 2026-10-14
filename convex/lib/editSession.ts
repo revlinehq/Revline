@@ -1,7 +1,7 @@
 import { normalizeTimeline, type Timeline } from '../../lib/editor/types';
 
 type EditStorage = {
-  apply: (timeline: Timeline, revision: number) => Promise<number>;
+  apply: (timeline: Timeline, revision: number, publication?:boolean) => Promise<number>;
   validate: (timeline: Timeline, revision: number) => Promise<unknown>;
 };
 
@@ -66,7 +66,7 @@ export class EditSession {
     if (finishReason !== 'stop') throw new Error('Claude stopped before finishing this request. The pending replacement was not saved.');
     if (!this.staged) return false;
     if (this.failed || toolFailed) throw new Error('A tool could not complete. The pending replacement was not saved.');
-    this.revision = await this.storage.apply(this.timeline, this.revision);
+    this.revision = await this.storage.apply(this.timeline, this.revision,true);
     this.savedEdits++;
     this.staged = false;
     return true;

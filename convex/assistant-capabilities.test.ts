@@ -1,8 +1,11 @@
 /// <reference types="vite/client" />
 import { beforeEach,afterEach,expect,test,vi } from 'vitest';
 import { convexTest } from 'convex-test';
+import agentTest from '@convex-dev/agent/test';
+import {createThread,saveMessages} from '@convex-dev/agent';
 import schema from './schema';
-import {api,internal} from './_generated/api';
+import {api,internal,components} from './_generated/api';
+import type {TimelinePublicationReceipt} from '../lib/ai/publication-receipt';
 import { getFunctionName } from 'convex/server';
 import type { Timeline } from '../lib/editor/types';
 import { TIMED_EFFECT_PRESETS } from '../lib/editor/clip-effects';
@@ -43,6 +46,9 @@ beforeEach(()=>{sdk.options=null;sdk.plan=async()=>{};sdk.messages=[];vi.stubEnv
 afterEach(()=>vi.unstubAllEnvs());
 async function memoryBackend(seed:Timeline,priorHistory:Timeline[]=[]){
   const t=convexTest(schema,import.meta.glob('./**/*.ts')),owner=t.withIdentity({subject:'owner'});
+  agentTest.register(t);
+  const threadId=await t.run(ctx=>createThread(ctx,components.agent,{userId:'owner'}));
+  const promptMessageId=await t.run(async ctx=>(await saveMessages(ctx,components.agent,{threadId,userId:'owner',messages:[{role:'user',content:'Synthetic editing request'}]})).messages[0]._id);
   const projectId=await owner.mutation(api.projects.create,{title:'Synthetic tool harness',aspectRatio:seed.aspectRatio});
   const mapping=await t.run(async ctx=>{
     const fields={ownerId:'owner',projectId,size:1,duration:30,createdAt:Date.now()};
@@ -53,8 +59,8 @@ async function memoryBackend(seed:Timeline,priorHistory:Timeline[]=[]){
   });
   const map=(input:Timeline)=>({...input,clips:input.clips.map(clip=>({...clip,...(clip.assetId?{assetId:mapping[clip.assetId as keyof typeof mapping]}:{})}))});
   const timeline=map(seed),history=priorHistory.map(map),revision=history.length;
-  await t.run(ctx=>ctx.db.patch(projectId,{timeline,history,revision,aiRunning:true,aiRunId:'run',aiUndoRecorded:false}));
-  return{t,owner,projectId,seed:timeline,priorHistory:history,revision,runArgs:{projectId,ownerId:'owner',runId:'run'}};
+  await t.run(ctx=>ctx.db.patch(projectId,{timeline,history,revision,threadId,aiRunning:true,aiRunId:'run',aiUndoRecorded:false}));
+  return{t,owner,projectId,threadId,promptMessageId,seed:timeline,priorHistory:history,revision,runArgs:{projectId,ownerId:'owner',runId:'run'}};
 }
 async function run(plan?:(tools:Record<string,Tool>)=>Promise<void>,seed:Timeline=initial,realBackend=false,priorHistory:Timeline[]=[]){
   const backend=realBackend?await memoryBackend(seed,priorHistory):undefined;
@@ -74,20 +80,20 @@ async function run(plan?:(tools:Record<string,Tool>)=>Promise<void>,seed:Timelin
       if(name==='assistant:validateDraft')return null;
       throw new Error('Unexpected query '+name);
     },
-    runMutation:async(reference:Parameters<typeof getFunctionName>[0],args:{timeline?:Timeline;expectedRevision?:number;error?:string})=>{
+    runMutation:async(reference:Parameters<typeof getFunctionName>[0],args:{timeline?:Timeline;expectedRevision?:number;error?:string;publication?:Pick<TimelinePublicationReceipt,'threadId'|'promptMessageId'>|Extract<TimelinePublicationReceipt,{status:'failed'|'aborted'}>})=>{
       const name=getFunctionName(reference);calls.push(name);
       if(name==='assistant:undoLatestEdit'){
         if(!backend)throw new Error('Undo requires the in-memory saved backend.');
         const result=await backend.t.mutation(internal.assistant.undoLatestEdit,{...backend.runArgs,expectedRevision:args.expectedRevision!});timeline=structuredClone(result.timeline);revision=result.revision;return result;
       }
-      if(name==='assistant:apply'){expect(args.expectedRevision).toBe(revision);timeline=structuredClone(args.timeline!);revision=backend?await backend.t.mutation(internal.assistant.apply,{...backend.runArgs,timeline,expectedRevision:revision}):revision+1;return revision}
-      if(name==='assistant:finish'){error=args.error;return backend?backend.t.mutation(internal.assistant.finish,{...backend.runArgs,...(error?{error}:{})}):null}
+      if(name==='assistant:apply'){expect(args.expectedRevision).toBe(revision);timeline=structuredClone(args.timeline!);revision=backend?await backend.t.mutation(internal.assistant.apply,{...backend.runArgs,timeline,expectedRevision:revision,...(args.publication?{publication:args.publication}:{})}):revision+1;return revision}
+      if(name==='assistant:finish'){error=args.error;return backend?backend.t.mutation(internal.assistant.finish,{...backend.runArgs,...(error?{error}:{}),...(args.publication?{publication:args.publication as Extract<TimelinePublicationReceipt,{status:'failed'|'aborted'}>}: {})}):null}
       throw new Error('Unexpected mutation '+name);
     },
   };
   sdk.plan=async()=>{if(plan)await plan(sdk.options!.tools)};
   const handler=(respond as unknown as {_handler:(ctx:unknown,args:unknown)=>Promise<unknown>})._handler;
-  await handler(ctx,{projectId:backend?.projectId??'project',ownerId:'owner',runId:'run',threadId:'thread',promptMessageId:'greeting-message',playhead:1});
+  await handler(ctx,{projectId:backend?.projectId??'project',ownerId:'owner',runId:'run',threadId:backend?.threadId??'thread',promptMessageId:backend?.promptMessageId??'greeting-message',playhead:1});
   const history=backend?(await backend.owner.query(api.projects.get,{projectId:backend.projectId})).history??[]:[];
   return{timeline,revision,calls,history,error,backend};
 }
@@ -107,6 +113,8 @@ test('actual undo→unlink→delete tools restore saved source ranges and preser
   expect(result.timeline.clips.some(c=>c.id==='from')).toBe(false);
   expect(result.timeline.clips.find(c=>c.id==='audio')).toEqual({...result.backend!.priorHistory[0].clips[1],linkedClipId:undefined});
   expect(result.timeline.clips.filter(c=>c.id!=='audio')).toEqual(result.backend!.priorHistory[0].clips.slice(2));
+  const messages=await result.backend!.owner.query(api.assistant.messages,{projectId:result.backend!.projectId,threadId:result.backend!.threadId,paginationOpts:{cursor:null,numItems:20}});
+  expect(messages.page.flatMap(m=>m.parts).map(p=>p.type==='text'?p.providerMetadata?.revline?.publicationReceipt:undefined).filter(Boolean)).toEqual([{version:1,kind:'timeline-publication',status:'saved',runId:'run',threadId:result.backend!.threadId,promptMessageId:result.backend!.promptMessageId,stagedRevision:3,revision:4}]);
   await assertUndo(result,result.backend!.priorHistory[0]);
 });
 
@@ -126,6 +134,8 @@ test('undo returns a truthful empty result and refuses both saved and private st
   expect(staged.error).toContain('pending replacement was not saved');
   expect((await staged.backend!.owner.query(api.projects.get,{projectId:staged.backend!.projectId})).timeline).toEqual(staged.backend!.seed);
   expect(staged.history).toEqual([]);
+  const messages=await staged.backend!.owner.query(api.assistant.messages,{projectId:staged.backend!.projectId,threadId:staged.backend!.threadId,paginationOpts:{cursor:null,numItems:20}});
+  expect(messages.page.flatMap(m=>m.parts).map(p=>p.type==='text'?p.providerMetadata?.revline?.publicationReceipt:undefined).filter(Boolean)).toEqual([{version:1,kind:'timeline-publication',status:'failed',runId:'run',threadId:staged.backend!.threadId,promptMessageId:staged.backend!.promptMessageId,stagedRevision:0}]);
 });
 
 test('group copy/move/trim, layer reorder and common blend use actual editor operations while preserving source identity',async()=>{

@@ -11,6 +11,7 @@ import { analysisMode, analysisRequestDocument, assetDocument, frameRequestValid
 import { validateFrameInspectionInput } from '../lib/media-analysis/frame-inspection';
 import { validateVideoInspectionInput } from '../lib/media-analysis/video-inspection';
 import { normalizeTimeline } from '../lib/editor/types';
+import {savePublicationReceipt} from './lib/publicationReceipt';
 import { enqueueMediaTask, cancelMediaTask } from './mediaTasks';
 const providerReason = "Claude editing requires ANTHROPIC_API_KEY in Convex, or AI_GATEWAY_ENABLED=true on an eligible paid Convex team.";
 function configured() { return !!process.env.ANTHROPIC_API_KEY || process.env.AI_GATEWAY_ENABLED === "true"; }
@@ -82,17 +83,22 @@ export const getRun = internalQuery({ args: runArgs, returns: v.object({ project
   const assets = await ctx.db.query("assets").withIndex("by_ownerId_projectId", q => q.eq("ownerId", args.ownerId).eq("projectId", project._id)).take(200);
   return { project: { ...project, timeline: currentTimeline(project), ...(project.history ? { history: project.history.map(normalizeTimeline) } : {}) }, assets };
 }});
-export const apply = internalMutation({ args: { ...runArgs, expectedRevision: v.number(), timeline: timelineValidator }, returns: v.number(), handler: async (ctx, args) => {
+export const apply = internalMutation({ args: { ...runArgs, expectedRevision: v.number(), timeline: timelineValidator,publication:v.optional(v.object({threadId:v.string(),promptMessageId:v.string()})) }, returns: v.number(), handler: async (ctx, args) => {
   const project = await requireProject(ctx, args.projectId, args.ownerId);
   if (project.aiRunId !== args.runId || !project.aiRunning) throw new ConvexError("AI run is no longer active");
+  if(args.publication&&project.threadId!==args.publication.threadId)throw new ConvexError('Publication conversation does not match this project.');
+  const receipt=async(revision:number)=>{
+    if(args.publication)await savePublicationReceipt(ctx,args.ownerId,{version:1,kind:'timeline-publication',status:'saved',...args.publication,runId:args.runId,stagedRevision:args.expectedRevision,revision});
+    return revision;
+  };
   if (project.aiUndoRecorded && project.aiCheckpointRevision === args.expectedRevision) {
     if ((project.revision ?? 0) !== args.expectedRevision) throw new ConvexError("The timeline changed elsewhere. Reload before saving.");
     const timeline = await validateTimeline(ctx, project, args.timeline);
     const revision = args.expectedRevision + 1;
-    await ctx.db.patch(project._id, { timeline, aspectRatio: timeline.aspectRatio, revision, aiCheckpointRevision: revision, updatedAt: Date.now() }); return revision;
+    await ctx.db.patch(project._id, { timeline, aspectRatio: timeline.aspectRatio, revision, aiCheckpointRevision: revision, updatedAt: Date.now() }); return receipt(revision);
   }
   const revision = await commitTimeline(ctx, project, args.timeline, args.expectedRevision);
-  await ctx.db.patch(project._id, { aiUndoRecorded: true, aiCheckpointRevision: revision }); return revision;
+  await ctx.db.patch(project._id, { aiUndoRecorded: true, aiCheckpointRevision: revision }); return receipt(revision);
 }});
 /** Undo only stored history before this model turn publishes its own checkpoints. */
 export const undoLatestEdit=internalMutation({args:{...runArgs,expectedRevision:v.number()},returns:v.object({undone:v.boolean(),revision:v.number(),timeline:timelineValidator}),handler:async(ctx,args)=>{
@@ -115,8 +121,11 @@ export const validateDraft = internalQuery({ args: { ...runArgs, expectedRevisio
   await validateTimeline(ctx, project, args.timeline);
   return null;
 }});
-export const finish = internalMutation({ args: { ...runArgs, error: v.optional(v.string()) }, returns: v.null(), handler: async (ctx, args) => {
+export const finish = internalMutation({ args: { ...runArgs, error: v.optional(v.string()),publication:v.optional(v.object({threadId:v.string(),promptMessageId:v.string(),stagedRevision:v.number(),status:v.union(v.literal('failed'),v.literal('aborted'))})) }, returns: v.null(), handler: async (ctx, args) => {
   const project = await ctx.db.get(args.projectId);
+  // A stopped action may finish after a new run starts. Its receipt belongs to
+  // the original prompt; it must never stop or overwrite the newer run.
+  if(args.publication&&project?.ownerId===args.ownerId&&project.threadId===args.publication.threadId)await savePublicationReceipt(ctx,args.ownerId,{version:1,kind:'timeline-publication',runId:args.runId,...args.publication});
   if (project?.ownerId === args.ownerId && project.aiRunId === args.runId) {
     const requests = await ctx.db.query("analysisRequests").withIndex("by_projectId_runId", q => q.eq("projectId", args.projectId).eq("aiRunId", args.runId)).take(16);
     for (const request of requests) await ctx.db.delete(request._id);

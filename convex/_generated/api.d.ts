@@ -19,6 +19,7 @@ import type * as lib_editSession from "../lib/editSession.js";
 import type * as lib_inspectTimeline from "../lib/inspectTimeline.js";
 import type * as lib_media_storage from "../lib/media_storage.js";
 import type * as lib_media_task_auth from "../lib/media_task_auth.js";
+import type * as lib_publicationReceipt from "../lib/publicationReceipt.js";
 import type * as lib_shared_media from "../lib/shared_media.js";
 import type * as lib_timeline from "../lib/timeline.js";
 import type * as lib_workflows from "../lib/workflows.js";
@@ -51,6 +52,7 @@ declare const fullApi: ApiFromModules<{
   "lib/inspectTimeline": typeof lib_inspectTimeline;
   "lib/media_storage": typeof lib_media_storage;
   "lib/media_task_auth": typeof lib_media_task_auth;
+  "lib/publicationReceipt": typeof lib_publicationReceipt;
   "lib/shared_media": typeof lib_shared_media;
   "lib/timeline": typeof lib_timeline;
   "lib/workflows": typeof lib_workflows;
