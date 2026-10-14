@@ -26,7 +26,7 @@ html[data-workspace-theme=dark] .editor-app:not(.landing-product-demo) .custom-t
 .custom-timeline.tracks-compact .track-audio-controls{width:auto;margin-top:0}
 .custom-timeline.tracks-compact .track-audio-controls input{display:none}
 .conversation-editor .custom-timeline .track-label,.custom-timeline .timeline-track{background:var(--ws-bg);border-bottom:1px solid var(--timeline-divider);color:var(--ws-muted)}
-.custom-timeline .timeline-top-space{border:0}
+.custom-timeline .timeline-top-space{box-sizing:border-box;flex-shrink:0;border:0;border-bottom:1px solid var(--timeline-divider)}
 .custom-timeline .time-ruler,.custom-timeline .track-ruler-label{height:28px;background:var(--ws-bg);border-bottom-color:var(--ws-artifact-border);color:var(--ws-muted)}
 .custom-timeline .time-ruler span{top:4px;padding-left:0;transform:translateX(-50%);font-size:11px;line-height:14px;white-space:nowrap;color:var(--ws-muted);pointer-events:none}
 .custom-timeline .time-ruler .ruler-origin-label{padding-left:3px;transform:none}
