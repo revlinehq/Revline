@@ -47,7 +47,7 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
       }
       await copyFile(join(process.cwd(), 'public/vendor/gsap.min.js'), join(directory, 'gsap.min.js'));
       await copyFile(join(process.cwd(), 'public/vendor/visual-effects.js'), join(directory, 'visual-effects.js'));
-      if (snapshot.timeline.clips.some(clip => clip.kind === 'caption' || clip.kind === 'graphic')) await copyFile(join(process.cwd(), 'public/vendor/remotion-text.js'), join(directory, 'remotion-text.js'));
+      await copyFile(join(process.cwd(), 'public/vendor/remotion-text.js'), join(directory, 'remotion-text.js'));
       await copyFile(join(process.cwd(), 'public/fonts/space-grotesk-latin.woff2'), join(directory, 'space-grotesk-latin.woff2'));
       await writeFile(join(directory, 'index.html'), generateComposition(snapshot.timeline, snapshot.assets as MediaAsset[], { resolution: snapshot.resolution as 720 | 1080, fps: snapshot.fps as 24 | 30 | 60, gsapUrl: './gsap.min.js', visualEffectsUrl: './visual-effects.js', remotionTextUrl: './remotion-text.js', fontUrl: './space-grotesk-latin.woff2', assetUrls }));
       const output = join(directory, 'video.mp4');
