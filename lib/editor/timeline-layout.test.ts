@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { timelineLayout, TIMELINE_RULER_HEIGHT, TIMELINE_TRACK_GAP, TIMELINE_TOP_SPACE } from './timeline-layout';
 import { clipLayerDropTarget, moveSelectionToNewLayers } from './timeline-controls';
 import type { Timeline } from './types';
+import { addTransitionClip } from './operations';
 
 const timeline: Timeline = {
   fps: 30, aspectRatio: 'vertical', tracks: { visual: 4, overlay: 0, audio: 1 },
@@ -15,6 +16,17 @@ const timeline: Timeline = {
 };
 
 describe('mixed visual track layout', () => {
+  it('shows transitions on their cuts without dedicating an FX row, keeping real effect rows', () => {
+    const footage:Timeline={fps:30,aspectRatio:'landscape',tracks:{visual:1,overlay:0,audio:0,effects:0},clips:[
+      {id:'a',kind:'image',track:1,start:0,duration:2,sourceStart:0},
+      {id:'b',kind:'image',track:1,start:2,duration:2,sourceStart:0},
+    ]};
+    const joined=addTransitionClip(footage,'fade','crossfade','a','b');
+    expect(timelineLayout(joined).tracks.map(row=>row.id)).toEqual(['visual-1']);
+    const withEffect:Timeline={...joined,clips:[...joined.clips,{id:'flash',kind:'effect',effectPreset:'flash',track:1,start:0,duration:.3,sourceStart:0}]};
+    expect(timelineLayout(withEffect).tracks.map(row=>row.id)).toEqual(['effects-1','visual-1']);
+    expect(joined.clips.find(clip=>clip.id==='fade')?.transition).toEqual({fromClipId:'a',toClipId:'b',direction:'clockwise'});
+  });
   it('shows one shared visual stack followed by audio with no overlay rows', () => {
     const rows = timelineLayout(timeline).tracks;
     expect(rows.map(row => row.id)).toEqual(['visual-4', 'visual-3', 'visual-2', 'visual-1', 'audio-1']);

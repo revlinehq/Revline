@@ -1,4 +1,5 @@
-import { deriveTracks, normalizeTimeline, type Timeline } from './types';
+import { deriveTracks, normalizeTimeline, trackOf, type Timeline } from './types';
+import { isTransitionClip } from './clip-transitions';
 // OpenCut Classic timeline/components/layout.ts and track-layout.ts.
 // MIT notice: third-party/OpenCut-LICENSE.
 export const TIMELINE_RULER_HEIGHT=28;
@@ -13,7 +14,9 @@ export const TIMELINE_BOTTOM_SPACE=72;
 export function timelineLayout(timeline:Timeline,compact=false){
   timeline=normalizeTimeline(timeline);
   let top=TIMELINE_RULER_HEIGHT+TIMELINE_TOP_SPACE;
-  const tracks=deriveTracks(timeline).map(track=>{
+  const transitionRows=new Set(timeline.clips.filter(isTransitionClip).map(trackOf));
+  const effectRows=new Set(timeline.clips.filter(clip=>clip.kind==='effect'&&!isTransitionClip(clip)).map(trackOf));
+  const tracks=deriveTracks(timeline).filter(track=>track.group!=='effects'||!transitionRows.has(track.number)||effectRows.has(track.number)).map(track=>{
     const clipHeight=compact?24:52;
     const height=clipHeight+TIMELINE_TRACK_GAP;
     const row={...track,top,height,clipHeight,gapBefore:0};top+=height;return row;

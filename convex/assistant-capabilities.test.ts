@@ -160,7 +160,7 @@ test('group copy/move/trim, layer reorder and common blend use actual editor ope
     const moved=await execute(tools,'inspectTimeline',{}) as{timeline:Timeline};
     const pair=moved.timeline.clips.find(c=>copied.newClipIds.includes(c.id)&&c.transition)!;
     expect(pair.transition!.fromClipId).not.toBe('from');expect(pair.transition!.toClipId).not.toBe('to');
-    await expect(execute(tools,'duplicateClips',{clipIds:[oldTransition.id],at:20})).rejects.toThrow('both connected clips');
+    await expect(execute(tools,'duplicateClips',{clipIds:[oldTransition.id],at:20})).rejects.toThrow(/inside footage|onto a cut/i);
     await expect(execute(tools,'setBlendMode',{clipIds:[pair.transition!.fromClipId],blendMode:'screen'})).rejects.toThrow('same blend');
     await execute(tools,'setBlendMode',{clipIds:[pair.transition!.fromClipId,pair.transition!.toClipId],blendMode:'screen'});
     await execute(tools,'resizeClips',{clipIds:[pair.transition!.fromClipId],side:'left',delta:.2});

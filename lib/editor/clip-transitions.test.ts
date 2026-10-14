@@ -189,6 +189,14 @@ test('pasting just a transition in a gap or on an occupied cut fails without cha
   expect(source).toEqual(snapshot);
 });
 
+test('pasting onto a specific cut honors its visual lane beneath other footage',()=>{
+  const copied=copyTimelineClips(add(),['fx']);
+  const target:Timeline={...base,clips:[...base.clips,{id:'upper',kind:'image',track:3,start:0,duration:10,sourceStart:0}]};
+  const result=pasteTimelineClips(target,copied,5,()=>'pasted-fx',{visualTrack:1});
+  expect(transitionSources(result.timeline.clips,30)[0]).toMatchObject({track:1,from:{id:'from'},to:{id:'to'}});
+  expect(result.timeline.clips.filter(clip=>clip.kind!=='effect')).toEqual(target.clips);
+});
+
 test('a concurrent source deletion cannot leave dangling transitions in a merged save',()=>{
   const next=add(),current=deleteClip(next,'to'),edited=patchClip(next,'caption',{text:'Updated overlay'});
   const merged=applyTimelineEdit(next,edited,current);

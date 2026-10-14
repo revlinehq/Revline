@@ -8,7 +8,7 @@ export function copyTimelineClips(timeline: Timeline, selectedIds: string[]): Cl
   return structuredClone(timeline.clips.filter(clip => ids.has(clip.id)));
 }
 
-export function pasteTimelineClips(timeline: Timeline, source: Clip[], time: number, newId: () => string = () => crypto.randomUUID()) {
+export function pasteTimelineClips(timeline: Timeline, source: Clip[], time: number, newId: () => string = () => crypto.randomUUID(), target: { visualTrack?: number } = {}) {
   if (!source.length) return { timeline, ids: [] as string[] };
   if (!Number.isFinite(time)) throw new Error('Choose a valid paste position.');
   const start = Math.max(0, Math.round(time * timeline.fps) / timeline.fps);
@@ -20,7 +20,7 @@ export function pasteTimelineClips(timeline: Timeline, source: Clip[], time: num
     let next = timeline;
     for (const clip of source) {
       const id = newId();
-      const placed = placeTransitionAt(next, id, clip.effectPreset as TransitionPreset, start + clip.start + clip.duration / 2 - firstCut, { duration: clip.duration, direction: clip.transition!.direction, track: clip.track });
+      const placed = placeTransitionAt(next, id, clip.effectPreset as TransitionPreset, start + clip.start + clip.duration / 2 - firstCut, { duration: clip.duration, direction: clip.transition!.direction, track: clip.track, visualTrack: target.visualTrack });
       next = { ...placed, clips: placed.clips.map(member => member.id === id ? { ...structuredClone(clip), ...member } : member) };
       ids.push(id);
     }

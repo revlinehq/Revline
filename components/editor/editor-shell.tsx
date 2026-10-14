@@ -183,15 +183,15 @@ export function EditorShell(p: EditorShellProps) {
     const clips = copyTimelineClips(timeline, selectedIds.length ? selectedIds : selected ? [selected] : []);
     if (clips.length) setClipboard(clips);
   }, [timeline, selectedIds, selected]);
-  const pasteCopies = useCallback((clips: Clip[], at: number) => {
+  const pasteCopies = useCallback((clips: Clip[], at: number, visualTrack?: number) => {
     try {
-      const pasted = pasteTimelineClips(timeline, clips, at);
+      const pasted = pasteTimelineClips(timeline, clips, at, undefined, { visualTrack });
       if (!pasted.ids.length) return;
       onChange(pasted.timeline);
       store.setState({ selectedId: pasted.ids[0], selectedIds: pasted.ids });
     } catch (error) { onError(userError(error, 'Could not paste these clips.')); }
   }, [timeline, onChange, onError, store]);
-  const doPaste = useCallback((at?: number) => pasteCopies(clipboard, at ?? readPlaybackTime()), [clipboard, pasteCopies, readPlaybackTime]);
+  const doPaste = useCallback((at?: number, visualTrack?: number) => pasteCopies(clipboard, at ?? readPlaybackTime(), visualTrack), [clipboard, pasteCopies, readPlaybackTime]);
   const doDuplicate = () => {
     const originals = copyTimelineClips(timeline, selectedIds.length ? selectedIds : selected ? [selected] : []);
     if (originals.length) pasteCopies(originals, Math.max(...originals.map(clip => clip.start + clip.duration)));

@@ -14,6 +14,8 @@ import { deriveTrackCounts, layerGroup, trackOf, clipColor, timelineDuration, fo
 import { moveTimelineMarker, removeTimelineMarker } from '@/lib/editor/timeline-markers';
 import { EFFECT_DRAG_TYPE, readEffectDrag, dropLibraryEffect } from '@/lib/editor/effect-drag';
 import { effectClipLabel } from '@/lib/editor/clip-effects';
+import { isTransitionClip, transitionPair, TRANSITION_PRESETS } from '@/lib/editor/clip-transitions';
+import { TimelineCutTransition } from './timeline-transitions';
 import { snapTime, addMediaClip, addTextClip, splitClip, frameSeekTime, linkedClipIds, unlinkClips, patchClip } from '@/lib/editor/operations';
 import { timelineLayout, TIMELINE_RULER_HEIGHT, TIMELINE_ORIGIN, TIMELINE_TOP_SPACE, TIMELINE_BOTTOM_SPACE } from '@/lib/editor/timeline-layout';
 import { clipVolumeAtPointer, clipVolumeAtFraction, MAX_CLIP_VOLUME } from '@/lib/editor/clip-volume';
@@ -34,7 +36,7 @@ type Props={
   time:number;playing:boolean;readPlaybackTime?:()=>number;onSeek:(time:number)=>void;onChange:(timeline:Timeline)=>void;
   onSplit:()=>void;onDelete:()=>void;onDuplicate:()=>void;onAddText:(kind:'caption'|'graphic')=>void;
   onAddMarker?:()=>void;
-  onCopy?:()=>void;onPaste?:(time?:number)=>void;canPaste?:boolean;
+  onCopy?:()=>void;onPaste?:(time?:number,visualTrack?:number)=>void;canPaste?:boolean;
   onTogglePlay?:()=>void;muted?:boolean;onToggleMute?:()=>void;
   playbackControls?:React.ReactNode;
   onPreviewVolume?:(id:string,volume:number|null)=>void;
@@ -97,13 +99,28 @@ export function TimelinePanel(p:Props){
     if(scroll.current&&labels.current)labels.current.scrollTop=scroll.current.scrollTop;
   },[layout,viewportHeight,scrollbarHeight]);
   const cleanedTimeline=useMemo(()=>removeEmptyLayers(timeline),[timeline]);
-  const clipsByTrack=useMemo(()=>{const rows=new Map<string,Clip[]>();for(const clip of timeline.clips){const key=`${layerGroup(clip.kind)}-${trackOf(clip)}`;const members=rows.get(key)??[];members.push(clip);rows.set(key,members);}return rows;},[timeline.clips]);
+  const clipsByTrack=useMemo(()=>{const rows=new Map<string,Clip[]>();for(const clip of timeline.clips){if(isTransitionClip(clip))continue;const key=`${layerGroup(clip.kind)}-${trackOf(clip)}`;const members=rows.get(key)??[];members.push(clip);rows.set(key,members);}return rows;},[timeline.clips]);
+  const cutsByTrack=useMemo(()=>{
+    const rows=new Map<number,{from:Clip;to:Clip;clip?:Clip}[]>();
+    const transitions=new Map(timeline.clips.filter(isTransitionClip).map(clip=>[clip.transition!.fromClipId,clip]));
+    for(const track of tracks.filter(track=>track.group==='visual')){
+      const media=(clipsByTrack.get(track.id)??[]).filter(clip=>clip.kind==='video'||clip.kind==='image').sort((a,b)=>a.start-b.start);
+      const cuts:{from:Clip;to:Clip;clip?:Clip}[]=[];
+      for(let i=1;i<media.length;i++){
+        const from=media[i-1],to=media[i];
+        try{transitionPair([from,to],{fromClipId:from.id,toClipId:to.id});cuts.push({from,to,clip:transitions.get(from.id)});}catch{/* Gaps, overlaps, and incompatible blends have no transition control. */}
+      }
+      rows.set(track.number,cuts);
+    }
+    return rows;
+  },[timeline.clips,clipsByTrack,tracks]);
   const rowContents=useMemo(()=>tracks.map(track=>`${track.id}:${(clipsByTrack.get(track.id)??[]).map(c=>c.id).join(',')}`).join('|'),[tracks,clipsByTrack]);
   useLayoutEffect(()=>{
     const el=scroll.current;if(!el||!el.clientHeight||gestureCleanup.current)return;
     const occupied=tracks.flatMap((track,index)=>clipsByTrack.has(track.id)?[index]:[]);
     const selectedClip=timeline.clips.find(c=>c.id===selected);
-    const selectedRow=selectedClip?tracks.findIndex(track=>track.group===layerGroup(selectedClip.kind)&&track.number===trackOf(selectedClip)):-1;
+    const selectedSource=selectedClip&&isTransitionClip(selectedClip)?timeline.clips.find(clip=>clip.id===selectedClip.transition?.fromClipId):selectedClip;
+    const selectedRow=selectedSource?tracks.findIndex(track=>track.group===layerGroup(selectedSource.kind)&&track.number===trackOf(selectedSource)):-1;
     const visible=(row:number)=>tracks[row].top+tracks[row].height>el.scrollTop+RULER_HEIGHT&&tracks[row].top<el.scrollTop+el.clientHeight;
     const target=selectedRow>=0&&!visible(selectedRow)?selectedRow:!occupied.some(visible)?occupied[0]:undefined;
     if(target!==undefined){el.scrollTop=Math.max(0,tracks[target].top-RULER_HEIGHT);if(labels.current)labels.current.scrollTop=el.scrollTop;}
@@ -396,13 +413,13 @@ export function TimelinePanel(p:Props){
   function selectBox(e:React.PointerEvent<HTMLDivElement>){
     if(p.readOnly)return;
     if(e.pointerType==='touch')return;
-    if(e.button!==0||(e.target as HTMLElement).closest('.timeline-clip,.playhead,.time-ruler'))return;
+    if(e.button!==0||(e.target as HTMLElement).closest('.timeline-clip,.timeline-cut-transition,.playhead,.time-ruler'))return;
     e.preventDefault();gestureCleanup.current?.();focusTimeline(e.currentTarget);const el=area.current;if(!el)return;
     const rect=el.getBoundingClientRect();const start={x:e.clientX-rect.left,y:e.clientY-rect.top};
     const initial=e.shiftKey||e.ctrlKey||e.metaKey?store.getState().selectedIds:[];
     const previousSelection=store.getState().selectedIds;
     const rowMap=new Map(tracks.map(row=>[`${row.group}-${row.number}`,row]));
-    const clipBounds=timeline.clips.map(clip=>{const row=rowMap.get(`${layerGroup(clip.kind)}-${trackOf(clip)}`)!;return {id:clip.id,left:origin+clip.start*px,top:row.top+3,width:clip.duration*px,height:row.clipHeight};});
+    const clipBounds=timeline.clips.filter(clip=>!isTransitionClip(clip)).map(clip=>{const row=rowMap.get(`${layerGroup(clip.kind)}-${trackOf(clip)}`)!;return {id:clip.id,left:origin+clip.start*px,top:row.top+3,width:clip.duration*px,height:row.clipHeight};});
     let unwatch=()=>{},active=false;
     pointerX.current=e.clientX;pointerY.current=e.clientY;
     const update=()=>{
@@ -512,10 +529,11 @@ export function TimelinePanel(p:Props){
     const target=e.target as HTMLElement;
     if(!target.closest('.timeline-body')){e.preventDefault();return;}
     gestureCleanup.current?.();
-    const clipId=target.closest<HTMLElement>('.timeline-clip')?.dataset.clipId,row=target.closest<HTMLElement>('.timeline-track,.track-label'),viewport=scroll.current;
+    const cut=target.closest<HTMLElement>('.timeline-cut-transition');
+    const clipId=target.closest<HTMLElement>('.timeline-clip,.timeline-cut-transition')?.dataset.clipId,row=target.closest<HTMLElement>('.timeline-track,.track-label'),viewport=scroll.current;
     if(clipId){if(store.getState().selectedIds.includes(clipId))store.setState({selectedId:clipId});else onSelect(clipId);}
     const at=viewport?timelineTimeAtPointer(e.clientX,{left:viewport.getBoundingClientRect().left,scrollLeft:viewport.scrollLeft,origin,px,end,fps:timeline.fps}):time;
-    setContext({clipId,markerId:target.closest<HTMLElement>('[data-marker-id]')?.dataset.markerId,group:row?.dataset.group as LayerGroup|undefined,track:row?.dataset.layer?Number(row.dataset.layer):undefined,time:at});
+    setContext({clipId,markerId:target.closest<HTMLElement>('[data-marker-id]')?.dataset.markerId,group:row?.dataset.group as LayerGroup|undefined,track:row?.dataset.layer?Number(row.dataset.layer):undefined,time:cut?Number(cut.dataset.transitionCut):at});
   }
   const contextClip=timeline.clips.find(clip=>clip.id===context?.clipId);
   const contextMarker=timeline.markers?.find(marker=>marker.id===context?.markerId);
@@ -573,6 +591,7 @@ export function TimelinePanel(p:Props){
                 {!p.readOnly&&<><button className="clip-trim left" aria-label="Trim clip start" title="Drag or use arrow keys to trim; Shift moves ten frames" onKeyDown={e=>trimWithKeyboard(e,clip,'left')} onPointerDown={e=>startDrag(e,clip,'left')}/><button className="clip-trim right" aria-label="Trim clip end" title="Drag or use arrow keys to trim; Shift moves ten frames" onKeyDown={e=>trimWithKeyboard(e,clip,'right')} onPointerDown={e=>startDrag(e,clip,'right')}/></>}
               </div>;
             })}
+            {track.group==='visual'&&!drag&&(cutsByTrack.get(track.number)??[]).map(cut=><TimelineCutTransition key={`${cut.from.id}:${cut.to.id}`} timeline={timeline} from={cut.from} to={cut.to} clip={cut.clip} px={px} origin={origin} selected={!!cut.clip&&linkedSelection.has(cut.clip.id)} readOnly={p.readOnly} onSelect={onSelect} onEdit={p.onEditClip} onChange={onChange} onError={report}/>)}
           </div>)}
           <div ref={selectionBox} className="timeline-selection-box" style={{display:'none',left:0,top:0}} aria-hidden="true"/>
           <div ref={previews} className="timeline-drag-previews" aria-hidden="true"/>
@@ -583,10 +602,14 @@ export function TimelinePanel(p:Props){
       <div ref={cap} className="timeline-playhead-cap" onPointerDown={startScrub} aria-label="Drag timeline playhead"><svg width="14" height="20" viewBox="0 0 14 20" aria-hidden="true"><path d="M3 0H11Q14 0 14 3V12Q14 13 13 14L8.5 18.5Q7 20 5.5 18.5L1 14Q0 13 0 12V3Q0 0 3 0Z"/></svg></div>
     </div>
   </section></ContextMenuTrigger>{!p.readOnly&&<><ContextMenuContent aria-label="Timeline actions">
-    {contextMarker?<><ContextMenuLabel>{contextMarker.label||'Beat marker'}</ContextMenuLabel><ContextMenuItem onSelect={()=>onSeek(contextMarker.time)}><Flag/>Go to marker</ContextMenuItem><ContextMenuItem onSelect={()=>setEditingMarker({id:contextMarker.id,label:contextMarker.label??''})}><Pencil/>Rename marker</ContextMenuItem><ContextMenuItem onSelect={()=>onChange(removeTimelineMarker(timeline,contextMarker.id))}><Trash2/>Delete marker</ContextMenuItem></>:<><ContextMenuLabel>{contextClip?'Clip':context?.track?`${context.group==='effects'?'FX':context.group==='audio'?'A':'V'}${context.track}`:'Timeline'}</ContextMenuLabel>
-    {contextClip&&p.onCopy&&<ContextMenuItem onSelect={p.onCopy}><Copy/>Copy</ContextMenuItem>}
-    {p.onPaste&&<ContextMenuItem disabled={!p.canPaste} onSelect={()=>p.onPaste?.(contextTime)}><ClipboardPaste/>Paste here</ContextMenuItem>}
-    {contextClip?<>
+    {contextMarker?<><ContextMenuLabel>{contextMarker.label||'Beat marker'}</ContextMenuLabel><ContextMenuItem onSelect={()=>onSeek(contextMarker.time)}><Flag/>Go to marker</ContextMenuItem><ContextMenuItem onSelect={()=>setEditingMarker({id:contextMarker.id,label:contextMarker.label??''})}><Pencil/>Rename marker</ContextMenuItem><ContextMenuItem onSelect={()=>onChange(removeTimelineMarker(timeline,contextMarker.id))}><Trash2/>Delete marker</ContextMenuItem></>:<><ContextMenuLabel>{contextClip?isTransitionClip(contextClip)?'Transition':'Clip':context?.track?`${context.group==='effects'?'FX':context.group==='audio'?'A':'V'}${context.track}`:'Timeline'}</ContextMenuLabel>
+    {contextClip&&p.onCopy&&<ContextMenuItem onSelect={p.onCopy}><Copy/>{isTransitionClip(contextClip)?'Copy transition':'Copy'}</ContextMenuItem>}
+    {p.onPaste&&<ContextMenuItem disabled={!p.canPaste} onSelect={()=>p.onPaste?.(contextTime,context?.group==='visual'?context.track:undefined)}><ClipboardPaste/>Paste here</ContextMenuItem>}
+    {contextClip&&isTransitionClip(contextClip)?<>
+      <ContextMenuItem onSelect={()=>{onSelect(contextClip.id);p.onEditClip?.(contextClip.id);}}><Pencil/>Transition settings</ContextMenuItem>
+      {TRANSITION_PRESETS.map(preset=><ContextMenuItem key={preset} disabled={preset===contextClip.effectPreset} onSelect={()=>runContext(()=>onChange(patchClip(timeline,contextClip.id,{effectPreset:preset})))}><EffectIcon name={preset}/>{effectClipLabel({...contextClip,effectPreset:preset})}</ContextMenuItem>)}
+      <ContextMenuItem onSelect={p.onDelete}><Trash2/>Remove transition</ContextMenuItem><ContextMenuSeparator/>
+    </>:contextClip?<>
       {(contextClip.kind==='caption'||contextClip.kind==='graphic')&&<ContextMenuItem onSelect={()=>p.onEditText?.(contextClip.id)}><Type/>Edit text</ContextMenuItem>}
       <ContextMenuItem disabled={contextTime<contextClip.start+1/timeline.fps||contextTime>contextClip.start+contextClip.duration-1/timeline.fps} onSelect={()=>runContext(()=>{onSeek(contextTime);onChange(splitClip(timeline,contextClip.id,contextTime,crypto.randomUUID()));})}><Scissors/>Split here</ContextMenuItem>
       <ContextMenuItem onSelect={p.onDuplicate}><Copy/>Duplicate</ContextMenuItem>
