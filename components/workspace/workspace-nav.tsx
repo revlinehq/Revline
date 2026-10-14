@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useClerk, useUser } from '@clerk/nextjs';
 import { useConvexAuth, useQuery } from 'convex/react';
-import { Check, ChevronDown, Copy, CreditCard, Download, Film, History, LoaderCircle, LogOut, Moon, PanelsTopLeft, Pencil, Plus, Redo2, UserRound, Undo2 } from 'lucide-react';
+import { Check, ChevronDown, Copy, CreditCard, Download, Film, History, LoaderCircle, LogOut, Moon, PanelsTopLeft, Pencil, Plus, Redo2, Share2, UserRound, Undo2 } from 'lucide-react';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
 import { Brand } from './brand';
@@ -52,12 +52,14 @@ export interface WorkspaceNavProps {
   onRedo?: () => void;
   onFootage?: () => void;
   onExport?: () => void;
+  onShare?: () => void;
+  shareDisabled?: boolean;
   exportDisabled?: boolean;
   onRename?: (title: string) => void | Promise<void>;
   chatId?: string;
 }
 
-export function WorkspaceNav({ title = 'New chat', editorHref, active = 'chat', demo = false, saving, canUndo, canRedo, onUndo, onRedo, onFootage, onExport, exportDisabled, onRename, chatId }: WorkspaceNavProps) {
+export function WorkspaceNav({ title = 'New chat', editorHref, active = 'chat', demo = false, saving, canUndo, canRedo, onUndo, onRedo, onFootage, onExport, onShare, shareDisabled, exportDisabled, onRename, chatId }: WorkspaceNavProps) {
   const pathname = usePathname();
   const { chats, loading } = useWorkspaceChats(demo);
   const { user, isSignedIn, isLoaded } = useUser();
@@ -110,6 +112,7 @@ export function WorkspaceNav({ title = 'New chat', editorHref, active = 'chat', 
       {saving !== undefined && <span className="workspace-nav-save" role="status">{saving ? <LoaderCircle size={13} className="animate-spin" /> : <Check size={13} />}{saving ? 'Saving…' : 'Saved'}</span>}
       {(onUndo || onRedo) && <div className="workspace-nav-history"><button className="workspace-nav-icon" aria-label="Undo" title="Undo" disabled={!canUndo} onClick={onUndo}><Undo2 size={15} /></button><button className="workspace-nav-icon" aria-label="Redo" title="Redo" disabled={!canRedo} onClick={onRedo}><Redo2 size={15} /></button></div>}
       {onFootage && <button className="workspace-nav-secondary" aria-label="Footage" onClick={onFootage}><Film size={14} /><span>Footage</span></button>}
+      {onShare && <button type="button" className="workspace-nav-secondary" aria-label="Share timeline" onClick={onShare} disabled={shareDisabled}><Share2 size={14}/><span>Share</span></button>}
       {onExport && (demo
         ? <PrimaryButton asChild size="compact"><Link href="/sign-in">Export<Download size={13} /></Link></PrimaryButton>
         : <PrimaryButton size="compact" onClick={onExport} disabled={exportDisabled}>Export<Download size={13} /></PrimaryButton>)}

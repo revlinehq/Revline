@@ -56,6 +56,7 @@ export type EditorShellProps = {
   onRefreshMedia?:RefreshPlaybackMedia;
   onRemoveAsset?: (asset:MediaAsset)=>Promise<void>;
   onSaveThumbnail?: (assetId:string,url:string)=>void;
+  onShare?: () => void;
 };
 
 export function EditorShell(p: EditorShellProps) {
@@ -269,7 +270,7 @@ export function EditorShell(p: EditorShellProps) {
       </aside>);
   return <main ref={editorRoot} data-playback-opening={opening} tabIndex={-1} {...fileDrop.handlers} onPointerDownCapture={e => { const interactive = (e.target as HTMLElement).closest('input,textarea,button,a,select,[tabindex]'); if (p.embedded) { if (!interactive || interactive === e.currentTarget || !e.currentTarget.contains(interactive)) editorRoot.current?.focus({ preventScroll: true }); else if (interactive.matches('[tabindex]') && !interactive.matches('input,textarea,button,a,select')) (interactive as HTMLElement).focus({ preventScroll: true }); } }} className={`editor-app conversation-editor ${p.embedded ? 'embedded-editor' : ''}`}>
     <MediaFileDropOverlay active={fileDrop.active} busy={!!p.upload}/>
-    {!p.workspaceOnly && <WorkspaceNav chatId={p.demo ? undefined : p.projectId} title={p.title} onRename={p.onTitle} onFootage={() => setFootageOpen(true)} onExport={() => setExportOpen(true)} exportDisabled={!timeline.clips.length} onUndo={p.onUndo} onRedo={p.onRedo} canUndo={p.canUndo} canRedo={p.canRedo} saving={p.saving} demo={p.demo}/>}
+    {!p.workspaceOnly && <WorkspaceNav chatId={p.demo ? undefined : p.projectId} title={p.title} onRename={p.onTitle} onFootage={() => setFootageOpen(true)} onShare={p.onShare} shareDisabled={!timeline.clips.length || p.aiRunning} onExport={() => setExportOpen(true)} exportDisabled={!timeline.clips.length} onUndo={p.onUndo} onRedo={p.onRedo} canUndo={p.canUndo} canRedo={p.canRedo} saving={p.saving} demo={p.demo}/>}
 
     <EditorErrorNotice message={p.error} onDismiss={dismissError} />
     {!preparing&&<>{!p.workspaceOnly && <div className="mobile-panel-controls"><button aria-expanded={mobileChat} onClick={() => setMobileChat(!mobileChat)}><MessageSquare size={14} />{mobileChat ? 'Back to preview' : 'Open conversation'}</button><button onClick={() => setFootageOpen(true)}><Film size={14} />Footage</button></div>}
