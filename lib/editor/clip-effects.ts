@@ -33,6 +33,21 @@ export const CINEMATIC_BAR_LIMITS = { size: [0, .5], speed: [.25, 4] } as const;
 export type FrameShrinkSettings = { size: number; speed: number };
 export const DEFAULT_FRAME_SHRINK: FrameShrinkSettings = { size: .12, speed: 1 };
 export const FRAME_SHRINK_LIMITS = { size: [0, .45], speed: [.25, 4] } as const;
+export type ZoomSettings = { direction: 'in' | 'out'; amount: number; speed: number; centerX: number; centerY: number };
+export const ZOOM_LIMITS = { amount: [1, 3], speed: [.25, 4], centerX: [0, 1], centerY: [0, 1] } as const;
+export function isZoomPreset(preset: unknown): preset is 'quick-zoom-in' | 'quick-zoom-out' { return preset === 'quick-zoom-in' || preset === 'quick-zoom-out'; }
+export function zoomSettings(clip: Pick<Clip, 'effectPreset' | 'zoom' | 'motion'>): ZoomSettings {
+  return clip.zoom ?? { direction: clip.effectPreset === 'quick-zoom-out' ? 'out' : 'in', amount: isZoomPreset(clip.effectPreset) && clip.motion?.length ? Math.max(1, ...clip.motion.map(frame => frame.scale)) : 1.2, speed: 1, centerX: .5, centerY: .5 };
+}
+/** One editable zoom recipe; speed adjusts its progression within the FX range. */
+export function zoomKeyframes(duration: number, settings: ZoomSettings): MotionKeyframe[] {
+  const steps = 16;
+  return Array.from({ length: steps + 1 }, (_, index) => {
+    const time = duration * index / steps, progress = Math.min(1, index / steps * settings.speed);
+    const scale = settings.direction === 'in' ? 1 + (settings.amount - 1) * progress : settings.amount + (1 - settings.amount) * progress;
+    return key(time, { scale, x: (.5 - settings.centerX) * (scale - 1), y: (.5 - settings.centerY) * (scale - 1) });
+  });
+}
 export const NEUTRAL_MOTION = { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, brightness: 1 };
 const key = (time: number, changes: Partial<MotionKeyframe> = {}): MotionKeyframe => ({ time, ...NEUTRAL_MOTION, ...changes });
 export function cinematicBarSettings(clip: Pick<Clip, 'cinematicBars'>): CinematicBarSettings { return clip.cinematicBars ?? DEFAULT_CINEMATIC_BARS; }
@@ -77,6 +92,14 @@ export function validateClipEffects(clip: Clip) {
   validateTextAnimationTiming(clip);
   validateVisualFade(clip);
   validateTransitionSettings(clip);
+  if (clip.zoom !== undefined) {
+    if (clip.kind !== 'effect' || !isZoomPreset(clip.effectPreset)) throw new Error('Zoom controls belong to Zoom effect clips.');
+    if (!['in', 'out'].includes(clip.zoom.direction) || clip.effectPreset !== `quick-zoom-${clip.zoom.direction}`) throw new Error('Choose a matching Zoom direction.');
+    for (const property of Object.keys(ZOOM_LIMITS) as (keyof typeof ZOOM_LIMITS)[]) {
+      const [min, max] = ZOOM_LIMITS[property], value = clip.zoom[property];
+      if (!Number.isFinite(value) || value < min || value > max) throw new Error(`Zoom ${property} must be between ${min} and ${max}.`);
+    }
+  }
   if (clip.solidColor !== undefined) {
     if (clip.kind !== 'effect' || clip.effectPreset !== 'solid-color') throw new Error('Solid color settings belong to solid color effect clips.');
     if (!/^#[\da-f]{6}$/i.test(clip.solidColor.color)) throw new Error('Choose a valid solid color.');
@@ -140,8 +163,9 @@ export function visibleMotion(clip: Clip): MotionKeyframe[] {
 export function motionPreset(clip: Clip, preset: MotionPreset | EffectPreset): Partial<Clip> {
   if ((preset === 'cinematic-bars' || preset === 'frame-shrink' || preset === 'zoom-blur' || preset === 'solid-color' || isTransitionPreset(preset)) && clip.kind !== 'effect') throw new Error('Add this preset as an effect clip.');
   if (isTransitionPreset(preset) && !clip.transition) throw new Error('Choose the two neighboring clips for this transition.');
-  const motion = preset === 'none' ? [] : preset === 'cinematic-bars' ? cinematicBarKeyframes(clip.duration, cinematicBarSettings(clip).speed) : preset==='frame-shrink'?frameShrinkKeyframes(clip.duration,frameShrinkSettings(clip)):EFFECT_CATALOG[preset].keyframes(clip.duration);
-  return { motion, motionOffset: 0, ...(clip.kind === 'effect' ? { effectPreset: preset, transition: isTransitionPreset(preset) ? clip.transition : undefined, solidColor: preset === 'solid-color' ? { ...solidColorSettings(clip) } : undefined, cinematicBars: preset === 'cinematic-bars' ? { ...cinematicBarSettings(clip) } : undefined, frameShrink:preset==='frame-shrink'?{...frameShrinkSettings(clip)}:undefined, zoomBlur: preset === 'zoom-blur' ? {...DEFAULT_ZOOM_BLUR,...clip.zoomBlur,enabled:true} : undefined } : {}), ...(clip.kind === 'caption' || clip.kind === 'graphic' ? { animation: 'none' as const,textAnimationTiming:undefined } : {}) };
+  const zoom = isZoomPreset(preset) ? { ...zoomSettings(clip), direction: preset === 'quick-zoom-in' ? 'in' as const : 'out' as const } : undefined;
+  const motion = preset === 'none' ? [] : zoom ? zoomKeyframes(clip.duration, zoom) : preset === 'cinematic-bars' ? cinematicBarKeyframes(clip.duration, cinematicBarSettings(clip).speed) : preset==='frame-shrink'?frameShrinkKeyframes(clip.duration,frameShrinkSettings(clip)):EFFECT_CATALOG[preset].keyframes(clip.duration);
+  return { motion, motionOffset: 0, ...(clip.kind === 'effect' ? { effectPreset: preset, zoom, transition: isTransitionPreset(preset) ? clip.transition : undefined, solidColor: preset === 'solid-color' ? { ...solidColorSettings(clip) } : undefined, cinematicBars: preset === 'cinematic-bars' ? { ...cinematicBarSettings(clip) } : undefined, frameShrink:preset==='frame-shrink'?{...frameShrinkSettings(clip)}:undefined, zoomBlur: preset === 'zoom-blur' ? {...DEFAULT_ZOOM_BLUR,...clip.zoomBlur,enabled:true} : undefined } : {}), ...(clip.kind === 'caption' || clip.kind === 'graphic' ? { animation: 'none' as const,textAnimationTiming:undefined } : {}) };
 }
 
 export function offsetClipMotion(clip: Clip, delta: number): Partial<Clip> {
@@ -150,13 +174,14 @@ export function offsetClipMotion(clip: Clip, delta: number): Partial<Clip> {
 
 /** Effect handles stretch the currently visible pulse, including a previously split segment. */
 export function resizeEffectMotion(clip: Clip, duration: number): Partial<Clip> {
+  if (isZoomPreset(clip.effectPreset) && clip.zoom) return { motion: zoomKeyframes(duration, clip.zoom), motionOffset: 0 };
   if (clip.effectPreset === 'cinematic-bars') return { motion: cinematicBarKeyframes(duration, cinematicBarSettings(clip).speed), motionOffset: 0 };
   if(clip.effectPreset==='frame-shrink')return {motion:frameShrinkKeyframes(duration,frameShrinkSettings(clip)),motionOffset:0};
   return { motion: visibleMotion(clip).map(key => ({ ...key, time: key.time / clip.duration * duration })), motionOffset: 0 };
 }
 
 /** Presets are editable starting points; requested controls never change footage or neighboring FX. */
-export function configureTimedEffectPatch(clip:Clip,changes:{preset?:TimedEffectPreset;duration?:number;cinematicBars?:Partial<CinematicBarSettings>;frameShrink?:Partial<FrameShrinkSettings>}):Partial<Clip>{
+export function configureTimedEffectPatch(clip:Clip,changes:{preset?:TimedEffectPreset;duration?:number;cinematicBars?:Partial<CinematicBarSettings>;frameShrink?:Partial<FrameShrinkSettings>;zoom?:Partial<ZoomSettings>}):Partial<Clip>{
   if(clip.kind!=='effect'||isTransitionPreset(clip.effectPreset))throw new Error('Choose a timed FX clip; pair transitions have separate controls.');
   if(!Object.values(changes).some(value=>value!==undefined))throw new Error('Specify a timed effect control.');
   const duration=changes.duration??clip.duration;if(!Number.isFinite(duration)||duration<=0)throw new Error('Choose a positive timed effect duration.');
@@ -170,6 +195,13 @@ export function configureTimedEffectPatch(clip:Clip,changes:{preset?:TimedEffect
     if((changes.preset??clip.effectPreset)!=='frame-shrink')throw new Error('Frame shrink size/speed controls belong to frame shrink.');
     if(!Object.values(changes.frameShrink).some(value=>value!==undefined))throw new Error('Specify a frame shrink control.');
     const frameShrink={...frameShrinkSettings(clip),...changes.frameShrink};patch={...patch,frameShrink,motion:frameShrinkKeyframes(duration,frameShrink),motionOffset:0};
+  }
+  if (changes.zoom) {
+    const candidate = { ...clip, ...patch };
+    if (!isZoomPreset(candidate.effectPreset)) throw new Error('Zoom controls belong to Zoom effect clips.');
+    if (!Object.values(changes.zoom).some(value => value !== undefined)) throw new Error('Specify a Zoom control.');
+    const zoom = { ...zoomSettings(candidate), ...changes.zoom };
+    patch = { ...patch, effectPreset: zoom.direction === 'in' ? 'quick-zoom-in' : 'quick-zoom-out', zoom, motion: zoomKeyframes(duration, zoom), motionOffset: 0 };
   }
   validateClipEffects({...clip,...patch});return patch;
 }

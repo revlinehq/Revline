@@ -1,4 +1,4 @@
-import type { BlendMode, CinematicBarSettings, EffectPreset, SolidColorSettings, MotionKeyframe, FrameShrinkSettings } from './clip-effects';
+import type { BlendMode, CinematicBarSettings, EffectPreset, SolidColorSettings, MotionKeyframe, FrameShrinkSettings, ZoomSettings } from './clip-effects';
 import type { ColorGrade, ZoomBlur, Glitch, InvertColors, Dither, NeonEdges } from './visual-effects';
 import type { RemotionTextTemplate } from './remotion-text';
 import type { ClipTransition } from './clip-transitions';
@@ -37,6 +37,7 @@ export type Clip = {
   visualFade?: VisualFadeSettings;
   visualFadeTiming?: {duration:number;offset:number};
   frameShrink?: FrameShrinkSettings;
+  zoom?: ZoomSettings;
   linkedClipId?: string;
   audioSeparated?: boolean;
   blendMode?: BlendMode;

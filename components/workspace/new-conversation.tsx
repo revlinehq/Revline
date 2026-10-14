@@ -1,5 +1,6 @@
 'use client';
 
+import { NEW_WORKSPACE_LABEL } from '@/lib/editor/workspace-labels';
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth, useClerk, useUser } from '@clerk/nextjs';
@@ -243,7 +244,7 @@ export function NewConversation() {
   }), ...previews];
 
   return <div className="workspace-page new-conversation" {...fileDrop.handlers}>
-    <WorkspaceNav title="New chat" />
+    <WorkspaceNav title={NEW_WORKSPACE_LABEL} />
     {status ? <FootageProcessingCard files={processingFiles} {...status} error={error} onRetry={() => void processFootage()} onReset={reset} onOpen={session.current.projectId ? () => void openPartialProject() : undefined}/> : <main className="new-conversation-main" aria-labelledby="new-conversation-title">
       <div className="new-conversation-start">
         <div className="new-conversation-intro"><h1 id="new-conversation-title">Welcome{firstName ? `, ${firstName}` : ''}.</h1><p>Start your edit. Add your clips, then tell Revline what to make.</p></div>

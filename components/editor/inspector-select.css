@@ -8,3 +8,4 @@
 .inspector-select-option[data-highlighted]{background:var(--ws-hover);color:var(--ws-text)}
 .inspector-select-option [data-slot=dropdown-menu-radio-item-indicator]{position:absolute;right:9px;display:grid;place-items:center;color:#8195e5}
 .inspector-select-option [data-slot=dropdown-menu-radio-item-indicator] svg{width:13px;height:13px}
+.inspector-select-option-copy{display:flex;flex-direction:column;gap:3px;min-width:0}.inspector-select-option-copy small{color:var(--ws-muted);font-size:10px;line-height:1.4}

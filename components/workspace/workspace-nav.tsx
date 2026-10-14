@@ -1,5 +1,6 @@
 'use client';
 
+import { NEW_WORKSPACE_LABEL } from '@/lib/editor/workspace-labels';
 import { useRef, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -60,7 +61,7 @@ export interface WorkspaceNavProps {
   editorControls?: ReactNode;
 }
 
-export function WorkspaceNav({ title = 'New chat', editorHref, active = 'chat', demo = false, saving, canUndo, canRedo, onUndo, onRedo, onFootage, onExport, onShare, shareDisabled, exportDisabled, onRename, chatId, editorControls }: WorkspaceNavProps) {
+export function WorkspaceNav({ title = NEW_WORKSPACE_LABEL, editorHref, active = 'chat', demo = false, saving, canUndo, canRedo, onUndo, onRedo, onFootage, onExport, onShare, shareDisabled, exportDisabled, onRename, chatId, editorControls }: WorkspaceNavProps) {
   const pathname = usePathname();
   const { chats, loading } = useWorkspaceChats(demo);
   const { user, isSignedIn, isLoaded } = useUser();
@@ -98,7 +99,7 @@ export function WorkspaceNav({ title = 'New chat', editorHref, active = 'chat', 
     <span className="workspace-nav-divider" aria-hidden="true" />
     <DropdownMenu onOpenChange={open => { if (open) { setCopiedId(false); setCopyError(''); } }}><DropdownMenuTrigger asChild><button ref={historyTrigger} className="workspace-chat-trigger" aria-label="Open chat menu"><span>{title}</span><ChevronDown size={13} /></button></DropdownMenuTrigger>
       <DropdownMenuContent align="start" sideOffset={10} className="workspace-menu workspace-history-menu" onCloseAutoFocus={event => { if (renameOpen) event.preventDefault(); }}>
-        <DropdownMenuItem asChild className="workspace-menu-item"><Link href="/dashboard/chat"><Plus size={16} />New chat</Link></DropdownMenuItem>
+        <DropdownMenuItem asChild className="workspace-menu-item"><Link href="/dashboard/chat"><Plus size={16} />{NEW_WORKSPACE_LABEL}</Link></DropdownMenuItem>
         {onRename && <DropdownMenuItem className="workspace-menu-item" onSelect={() => { setNewTitle(title); setRenameError(''); setRenameOpen(true); }}><Pencil size={15} />Rename chat</DropdownMenuItem>}
         {chatId && <DropdownMenuItem className="workspace-menu-item" onSelect={event => { event.preventDefault(); void copyChatId(); }}>{copiedId ? <Check size={15} /> : <Copy size={15} />}{copiedId ? 'Chat ID copied' : 'Copy chat ID'}</DropdownMenuItem>}
         {copyError && <p className="workspace-inline-error" role="alert">{copyError}</p>}

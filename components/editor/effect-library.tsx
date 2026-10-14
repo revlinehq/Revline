@@ -12,13 +12,12 @@ import { isTransitionPreset, type TransitionPreset } from '@/lib/editor/clip-tra
 import { transitionAvailabilityAt } from '@/lib/editor/transition-placement';
 import type { OverlayCatalogItem } from '@/lib/editor/overlay-catalog';
 import { EFFECT_DRAG_TYPE } from '@/lib/editor/effect-drag';
-import { SegmentedTabs } from './segmented-tabs';
 import { EFFECT_LIBRARY_CATALOG, EFFECT_LIBRARY_CATEGORIES, type EffectLibraryCategory, type EffectLibraryEntry as LibraryEntryData } from './effect-library-catalog';
 import './effect-library.css';
 
 const TextLookPicker = lazy(() => import('./text-look-picker').then(module => ({ default: module.TextLookPicker })));
 export type LibraryVisualEffect = keyof VisualEffects;
-type LibraryTab = 'effects' | 'text';
+type LibraryCategory = EffectLibraryCategory | 'text' | 'sam-dev';
 
 function LibraryEntry({ entry, disabled, reason, draggable, onApply }: { entry: LibraryEntryData; disabled: boolean; reason?: string; draggable: boolean; onApply: () => void }) {
   return <button type="button" className="library-look" aria-disabled={disabled} draggable={draggable} aria-label={entry.label} title={reason || entry.description} onClick={() => { if (!disabled) onApply(); }} onDragStart={event => {
@@ -37,15 +36,15 @@ export function EffectLibrary({ clip, timeline, time = 0, onMedia, onVisualEffec
   onUploadOverlay?: () => void; onAddOverlay?: (asset: MediaAsset) => void; overlayAssets?: readonly MediaAsset[]; onAddCatalogOverlay?: (overlay: OverlayCatalogItem) => void;
   onFadeThroughBlack?: () => void; onSpeed?: () => void;
 }) {
-  const [tab, setTab] = useState<LibraryTab>('effects');
-  const [category, setCategory] = useState<EffectLibraryCategory | 'sam-dev'>('motion');
+  const [category, setCategory] = useState<LibraryCategory>('motion');
   const [search, setSearch] = useState('');
   const id = useId();
   const visual = clip?.kind === 'video' || clip?.kind === 'image';
   const text = clip?.kind === 'caption' || clip?.kind === 'graphic';
   const query = search.trim().toLowerCase();
   const catalog = EFFECT_LIBRARY_CATALOG.filter(entry => !isTransitionPreset(entry.preset) || onAddTransition);
-  const categories: { id: EffectLibraryCategory | 'sam-dev'; label: string }[] = EFFECT_LIBRARY_CATEGORIES.filter(item => catalog.some(entry => entry.category === item.id));
+  const categories: { id: LibraryCategory; label: string }[] = EFFECT_LIBRARY_CATEGORIES.filter(item => catalog.some(entry => entry.category === item.id));
+  categories.push({ id: 'text', label: 'Text' });
   if (process.env.NODE_ENV === 'development') categories.push({ id: 'sam-dev', label: 'SAM 3 (dev)' });
   const visible = catalog.filter(entry => (!entry.action || onSpeed) && (query ? `${entry.label} ${entry.description}`.toLowerCase().includes(query) : entry.category === category));
   const transitions = onAddTransition && timeline ? transitionAvailabilityAt(timeline, time, { aboveClipId: visual ? clip.id : undefined }) : { available: false as const, reason: 'Add video or image footage before adding a transition.' };
@@ -62,13 +61,11 @@ export function EffectLibrary({ clip, timeline, time = 0, onMedia, onVisualEffec
     else if (entry.preset) onAddEffect?.(entry.preset);
     else onSpeed?.();
   }
-  function selectCategory(next: EffectLibraryCategory | 'sam-dev') { setCategory(next); setSearch(''); }
+  function selectCategory(next: LibraryCategory) { setCategory(next); setSearch(''); }
   return <div className="effect-library" aria-label="Effect library">
     {onMedia && <button type="button" className="library-media-access" onClick={onMedia}><FolderOpen size={14}/><span>Your media</span><ChevronRight size={14}/></button>}
-    <SegmentedTabs className="library-tabs" label="Effect library" value={tab} onChange={setTab} options={[{ value: 'effects', label: 'Effects', id: `${id}-effects-tab`, panelId: `${id}-effects` }, { value: 'text', label: 'Text', id: `${id}-text-tab`, panelId: `${id}-text` }]}/>
-    {tab === 'effects' && <label className="library-search"><Search size={13}/><input aria-label="Search effects" placeholder="Search effects" value={search} onChange={event => setSearch(event.target.value)}/></label>}
-    <div className="library-tab-content" role="tabpanel" id={`${id}-${tab}`} aria-labelledby={`${id}-${tab}-tab`}>
-      {tab === 'effects' ? <div className="library-category-layout">
+    <label className="library-search"><Search size={13}/><input aria-label="Search effects" placeholder="Search tools" value={search} onChange={event => setSearch(event.target.value)}/></label>
+    <div className="library-category-layout">
         <div className="library-category-rail" role="tablist" aria-label="Effect categories" aria-orientation="vertical" onKeyDown={event => {
           if (!(event.target as HTMLElement).matches('[role="tab"]')) return;
           const current = categories.findIndex(item => item.id === category);
@@ -77,19 +74,18 @@ export function EffectLibrary({ clip, timeline, time = 0, onMedia, onVisualEffec
           event.preventDefault(); selectCategory(categories[next].id);
           event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="tab"]')[next]?.focus();
         }}>{categories.map(item => <button key={item.id} type="button" role="tab" id={`${id}-category-${item.id}`} data-category={item.id} aria-controls={`${id}-category-results`} aria-selected={category === item.id} tabIndex={category === item.id ? 0 : -1} onClick={() => selectCategory(item.id)}>{item.label}</button>)}</div>
-        <div className="library-category-results" id={`${id}-category-results`} role={query ? 'region' : 'tabpanel'} aria-label={query ? 'Effect search results' : undefined} aria-labelledby={query ? undefined : `${id}-category-${category}`}>
-          {category === 'sam-dev' && !query ? <section className="library-sam-dev"><h3>Subject masks</h3><p>Test how SAM follows a person or object through a short clip.</p><a href="/dev/sam" target="_blank" rel="noopener noreferrer">Open mask lab <ChevronRight size={13}/></a><small>Development experiment</small></section> : <div className="library-look-grid">{visible.map(entry => {
+        <div className="library-category-results" id={`${id}-category-results`} role={query ? 'region' : 'tabpanel'} aria-label={query ? category === 'text' ? 'Text search results' : 'Effect search results' : undefined} aria-labelledby={query ? undefined : `${id}-category-${category}`}>
+          {category === 'text' ? <div className="library-text-results">
+            <TextFontStyles/>
+            <section className="library-text-section"><h3>{text ? 'Presets' : 'Add text'}</h3><Suspense fallback={<p className="library-selection-note">Loading presets…</p>}><TextLookPicker query={search} selected={text ? selectedTextLook(clip) : undefined} onSelect={onTextLook}/></Suspense></section>
+          </div> : category === 'sam-dev' && !query ? <section className="library-sam-dev"><h3>Subject masks</h3><p>Test how SAM follows a person or object through a short clip.</p><a href="/dev/sam" target="_blank" rel="noopener noreferrer">Open mask lab <ChevronRight size={13}/></a><small>Development experiment</small></section> : <div className="library-look-grid">{visible.map(entry => {
             const unavailable = reason(entry);
             const draggable = !!entry.visual || (isTransitionPreset(entry.preset) ? !!canDragTransition : !!entry.preset && !!onAddEffect);
             return <LibraryEntry key={entry.id} entry={entry} disabled={!!unavailable} reason={unavailable} draggable={draggable} onApply={() => apply(entry)}/>;
           })}</div>}
-          {!visible.length && (category !== 'sam-dev' || query) && <p className="library-empty">No matching looks.</p>}
-          {!transitions.available && visible.some(entry => isTransitionPreset(entry.preset)) && <p className="library-transition-availability" role="status">{transitions.reason}</p>}
+          {category !== 'text' && !visible.length && (category !== 'sam-dev' || query) && <p className="library-empty">No matching looks.</p>}
+          {category !== 'text' && !transitions.available && visible.some(entry => isTransitionPreset(entry.preset)) && <p className="library-transition-availability" role="status">{transitions.reason}</p>}
         </div>
-      </div> : <div className="library-text-results">
-        <TextFontStyles/>
-        <section className="library-text-section"><h3>{text ? 'Presets' : 'Add text'}</h3><Suspense fallback={<p className="library-selection-note">Loading presets…</p>}><TextLookPicker selected={text ? selectedTextLook(clip) : undefined} onSelect={onTextLook}/></Suspense></section>
-      </div>}
     </div>
   </div>;
 }

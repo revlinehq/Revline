@@ -33,7 +33,7 @@ try {
   await page.addStyleTag({content:bundle.outputFiles.find(file=>file.path.endsWith('.css')).text});
   await page.addStyleTag({content:'*{box-sizing:border-box}body{margin:0;background:var(--ws-bg);font:12px Arial}button{border:0;font-family:inherit}#root{width:480px;height:860px;margin:20px auto}'});
   await page.addScriptTag({content:bundle.outputFiles.find(file=>file.path.endsWith('.js')).text});
-  await page.click('[data-segment="text"]');
+  await page.click('[data-category="text"]');
   await page.waitForSelector('[aria-label="Default text"]');
   assert.equal(await page.$('[aria-label="Text animations"]'),null,'Text library offers looks before any text exists');
   assert.ok(await page.$('[aria-label="Default text"]'),'A plain Default text option must be available');
@@ -101,7 +101,7 @@ try {
   await page.focus('[aria-label="Caption end"]');await page.keyboard.down('Control');await page.keyboard.press('KeyA');await page.keyboard.up('Control');await page.keyboard.type('1');await page.keyboard.press('Enter');await flush();assert.ok(await page.$('[role="alert"]'),'Invalid caption timing reports the existing guard');assert.ok(await page.evaluate(()=>window.fixture.clip.duration>0));
   await page.focus('[aria-label="Caption end"]');await page.keyboard.down('Control');await page.keyboard.press('KeyA');await page.keyboard.up('Control');await page.keyboard.type('3');await page.keyboard.press('Enter');await flush();assert.equal(await page.evaluate(()=>window.fixture.clip.start+window.fixture.clip.duration),3);
   await page.evaluate(()=>window.fixture.setClip({color:'#12ab67',fontSize:101}));await flush();const targetBefore=await page.evaluate(()=>window.fixture.timeline.clips.find(clip=>clip.id==='caption-two'));await button('Apply style to all captions').click();await flush();const targetAfter=await page.evaluate(()=>window.fixture.timeline.clips.find(clip=>clip.id==='caption-two'));assert.equal(targetAfter.color,'#12ab67');assert.equal(targetAfter.fontSize,101);for(const key of ['text','start','duration','animation'])assert.deepEqual(targetAfter[key],targetBefore[key],'Applying caption style preserves '+key);await page.screenshot({path:'/tmp/revline-text-settings-caption-320.png'});
-  await page.click('#inspector-tools-tab');await page.click('[data-segment="text"]');await page.waitForSelector('[aria-label="Default text"]');assert.equal(await page.$('[aria-label="Text animations"]'),null,'Library stays looks-only with selected text');
+  await page.click('#inspector-tools-tab');await page.click('[data-category="text"]');await page.waitForSelector('[aria-label="Default text"]');assert.equal(await page.$('[aria-label="Text animations"]'),null,'Library stays looks-only with selected text');
   assert.deepEqual(errors,[]);
   console.log('PASS: Three text settings views, fixed tabs and animation-only scrolling, words/font/size/position/rotation edits, independent animations preserve appearance and clip entities, real frame previews, reduced motion, caption timing guards and style propagation, six visible blend modes, editable stroke/shadow/glow, and 320px fit.');
 } finally {await browser.close();await fonts.close();}

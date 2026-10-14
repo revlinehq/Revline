@@ -1,0 +1,75 @@
+import assert from 'node:assert/strict';
+import { build } from 'esbuild';
+import puppeteer from 'puppeteer';
+import { startFixtureFontServer } from './ui-fixture-fonts.mjs';
+
+const bundle = await build({ stdin: { resolveDir: process.cwd(), loader: 'tsx', contents: `
+import React,{useState} from 'react';import {createRoot} from 'react-dom/client';
+import {PreviewInspector} from './components/editor/preview-inspector';
+import {addTextClip,patchClip} from './lib/editor/operations';import {textLookPatch} from './lib/editor/text-looks';
+import './components/workspace/workspace-pages.css';import './app/editor.css';
+const initial={fps:30,aspectRatio:'vertical',tracks:{visual:1,overlay:0,audio:1,effects:0},clips:[{id:'video',kind:'video',start:0,duration:3,sourceStart:0,assetId:'source'},{id:'next',kind:'video',start:3,duration:3,sourceStart:0,assetId:'source'}]};
+const asset={_id:'source',fileName:'Synthetic footage',kind:'video',url:'data:video/mp4;base64,',duration:6,width:1080,height:1920};
+function Fixture(){const[timeline,setTimeline]=useState(initial),[selected,setSelected]=useState('video'),[editRequest,setEditRequest]=useState(0);const clip=timeline.clips.find(item=>item.id===selected);window.fixture={timeline,selected};
+function addLook(look){let next=addTextClip(timeline,'text','graphic',1);next=patchClip(next,'text',textLookPatch(next.clips.find(item=>item.id==='text'),look));setTimeline(next);setSelected('text');setEditRequest(value=>value+1)}
+return <PreviewInspector clip={clip} timeline={timeline} time={3} asset={asset} assets={[asset]} upload={null} editRequest={editRequest} onUpload={()=>{}} onAdd={()=>{}} onCrop={()=>{}} onAddTextLook={addLook} onAddEffect={preset=>window.effects.push(preset)} onAddTransition={preset=>window.transitions.push(preset)} onChange={patch=>{window.patches.push(patch);setTimeline(previous=>patchClip(previous,selected,patch))}}/>}
+window.patches=[];window.effects=[];window.transitions=[];createRoot(document.getElementById('root')).render(<Fixture/>);
+` }, bundle: true, platform: 'browser', format: 'iife', jsx: 'automatic', write: false, outdir: '/tmp/revline-library-navigation', define: { 'process.env.NODE_ENV': '"production"' } });
+const fonts = await startFixtureFontServer();
+const browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox', '--disable-dev-shm-usage'] });
+const page = await browser.newPage(); page.setDefaultTimeout(8000);
+const errors = []; page.on('pageerror', error => errors.push(error.message));
+const flush = () => page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+try {
+  await page.setViewport({ width: 520, height: 800 }); await page.goto(fonts.url);
+  await page.setContent('<html data-workspace-theme="dark"><body><div id="root" class="conversation-editor"></div></body></html>');
+  await page.addStyleTag({ content: bundle.outputFiles.find(file => file.path.endsWith('.css')).text });
+  await page.addStyleTag({ content: '*{box-sizing:border-box}body{margin:0;background:var(--ws-bg);font:12px Arial}button{border:0;font-family:inherit}#root{width:480px;height:760px;margin:20px auto}' });
+  await page.addScriptTag({ content: bundle.outputFiles.find(file => file.path.endsWith('.js')).text });
+  await page.waitForSelector('.library-category-rail');
+  assert.equal(await page.$eval('.inspector-section-tabs', node => node.dataset.slot), 'tabs-list', 'Top navigation uses shadcn TabsList');
+  assert.deepEqual(await page.$$eval('.inspector-section-tabs [role="tab"]', nodes => nodes.map(node => node.textContent)), ['Tools', 'My media']);
+  assert.deepEqual(await page.$$eval('.library-category-rail [role="tab"]', nodes => nodes.map(node => node.textContent)), ['Motion', 'Color', 'Texture', 'Transitions', 'Text']);
+  assert.equal(await page.$('.library-tabs'), null, 'There is no separate Effects / Text segment');
+  assert.ok(await page.$eval('.inspector-section-tabs [aria-selected=true]', node => getComputedStyle(node).backgroundColor !== 'rgba(0, 0, 0, 0)'), 'The active top segment has a visible surface');
+  assert.ok(await page.evaluate(() => document.querySelector('.library-category-results').getBoundingClientRect().right <= document.querySelector('.library-category-rail').getBoundingClientRect().left), 'Cards are left of the category rail');
+  const navigationGeometry = () => page.evaluate(() => ['.library-search', '.library-category-rail', '.library-category-results'].map(selector => {const rect=document.querySelector(selector).getBoundingClientRect();return {x:rect.x,y:rect.y,width:rect.width,height:rect.height}}));
+  const motionGeometry = await navigationGeometry();
+  await page.focus('[data-category="motion"]'); await page.keyboard.press('ArrowDown'); assert.ok(await page.$('[aria-label="Invert colors"]'));
+  await page.keyboard.press('ArrowDown'); assert.ok(await page.$('[aria-label="Dither"]'));
+  await page.keyboard.press('ArrowDown'); assert.ok(await page.$('[data-category="transitions"][aria-selected=true]'));
+  await page.keyboard.press('End'); await page.waitForSelector('[aria-label="Default text"]'); assert.ok(await page.$('[data-category="text"][aria-selected=true]'));
+  assert.equal(await page.$('[aria-label="Text animations"]'), null, 'Text category contains looks without standalone animation entities');
+  assert.ok(await page.$('[aria-label="Search effects"]'), 'Text keeps the same search bar');
+  assert.equal(await page.$eval('[aria-label="Search effects"]', node => node.placeholder), 'Search tools');
+  assert.deepEqual(await navigationGeometry(), motionGeometry, 'Search, category rail, and results retain their exact geometry when switching Motion to Text');
+  const enterSearch = async query => {await page.focus('[aria-label="Search effects"]');await page.keyboard.down('Control');await page.keyboard.press('KeyA');await page.keyboard.up('Control');await page.keyboard.press('Backspace');if(query)await page.keyboard.type(query);await flush()};
+  await enterSearch('BOXED');assert.deepEqual(await page.$$eval('.text-look-card',nodes=>nodes.map(node=>node.getAttribute('aria-label'))), ['Boxed'], 'Text searches look labels without showing effects');
+  await enterSearch('translucent');assert.deepEqual(await page.$$eval('.text-look-card',nodes=>nodes.map(node=>node.getAttribute('aria-label'))), ['Boxed'], 'Text search includes descriptions');
+  await enterSearch('no such text preset');assert.equal(await page.$('.text-look-card'),null);assert.equal(await page.$eval('.library-empty',node=>node.textContent),'No matching text presets.');assert.deepEqual(await navigationGeometry(), motionGeometry, 'Empty text search does not shift navigation');
+  await enterSearch(' ');assert.equal(await page.$$eval('.text-look-card',nodes=>nodes.length),6,'Whitespace search shows all looks');await enterSearch('');await page.evaluate(()=>document.activeElement.blur());
+  await page.evaluate(() => document.fonts.ready); await page.screenshot({ path: '/tmp/revline-library-text-right-dark.png' });
+  await page.evaluate(() => document.documentElement.dataset.workspaceTheme = 'light'); await page.screenshot({ path: '/tmp/revline-library-text-right-light.png' });
+  await page.evaluate(() => document.documentElement.dataset.workspaceTheme = 'dark');
+  await page.setViewport({ width: 320, height: 460 }); await page.addStyleTag({ content: '#root{width:320px;height:460px;margin:0}' });
+  await flush(); assert.ok(await page.$eval('.preview-inspector', node => node.scrollWidth <= node.clientWidth), 'Unified library fits 320px');
+  const fixed = () => page.evaluate(() => ['.inspector-section-tabs', '.library-search', '.library-category-rail'].map(selector => document.querySelector(selector).getBoundingClientRect().top));
+  const before = await fixed(); await page.$eval('.library-category-results', node => node.scrollTop = node.scrollHeight); await flush();
+  assert.deepEqual(await fixed(), before, 'Text cards scroll while the top segment and rail remain fixed');
+  assert.ok(await page.$eval('.library-category-results', node => node.scrollTop > 0), 'Text cards own a scroll viewport');
+  assert.equal(await page.$eval('.inspector-library-content', node => node.scrollTop), 0);
+  await page.$eval('.library-category-results', node => node.scrollTop = 0); await flush(); await page.screenshot({ path: '/tmp/revline-library-text-right-320.png' });
+  const textGeometry320 = await navigationGeometry();
+  await page.focus('[data-category="text"]'); await page.keyboard.press('Home'); await page.waitForSelector('[aria-label="Search effects"]');
+  assert.deepEqual(await navigationGeometry(), textGeometry320, 'Switching Text to Motion also keeps the same geometry at 320px');
+  await page.type('[aria-label="Search effects"]', 'invert'); assert.ok(await page.$('[aria-label="Invert colors"]')); assert.equal(await page.$('[aria-label="Dither"]'), null);
+  await page.click('[data-category="motion"]'); await flush(); assert.equal(await page.$eval('[aria-label="Search effects"]', node => node.value), '', 'Changing category clears search');
+  const motionFixed = await fixed(); await page.$eval('.library-category-results', node => node.scrollTop = node.scrollHeight); await flush(); assert.deepEqual(await fixed(), motionFixed); assert.ok(await page.$eval('.library-category-results', node => node.scrollTop > 0));
+  await page.$eval('.library-category-results', node => node.scrollTop = 0); await flush(); await page.screenshot({ path: '/tmp/revline-library-motion-right-320.png' });
+  await page.focus('#inspector-tools-tab'); await page.keyboard.press('End'); await page.waitForSelector('#inspector-media'); assert.equal(await page.$('.effect-library'), null); assert.ok(await page.$eval('#inspector-media-tab', node => document.activeElement === node && node.getAttribute('aria-selected') === 'true'), 'Shadcn segment supports keyboard selection');
+  await page.keyboard.press('Home'); await page.waitForSelector('.effect-library'); await page.click('[data-category="text"]'); await page.waitForSelector('[aria-label="Default text"]');
+  await enterSearch('default');assert.equal(await page.$$eval('.text-look-card',nodes=>nodes.length),1,'Default text search keeps the real creation action');
+  await page.click('[aria-label="Default text"]'); await page.waitForSelector('[aria-label="Selected text"]'); assert.equal(await page.evaluate(() => window.fixture.timeline.clips.length), 3); assert.equal(await page.evaluate(() => window.fixture.timeline.clips.find(clip => clip.id === 'text').kind), 'graphic'); assert.deepEqual(await page.evaluate(() => window.effects), [], 'Text look never creates an effect entity');
+  assert.deepEqual(await page.evaluate(() => window.patches), [], 'Browsing does not edit existing clips'); assert.deepEqual(errors, []);
+  console.log('PASS: shadcn Tools/My media keyboard segments; unified Motion/Color/Texture/Transitions/Text rail on the right; card-only scrolling and 320px fit; fixed search geometry across all categories, effect and text label/description search with empty results; text look applies through existing text operations without animation entities.');
+} finally { await browser.close(); await fonts.close(); }

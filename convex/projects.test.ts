@@ -30,6 +30,24 @@ async function uploadedFile(t: Test, ownerId: string, projectId: Id<"projects">,
 async function project(t: Test, ownerId = "owner") { return await t.withIdentity(identity(ownerId)).mutation(api.projects.create, { title: "My reel", aspectRatio: "vertical" }); }
 beforeEach(() => { vi.stubEnv("RENDER_WORKER_SECRET", "test-worker-secret"); vi.stubEnv("CONVEX_SITE_URL", "https://test.convex.site"); vi.stubEnv("BILLING_ENABLED", "false"); vi.stubEnv("ANTHROPIC_API_KEY", ""); vi.stubEnv("AI_GATEWAY_ENABLED", "false"); });
 afterEach(() => { vi.unstubAllEnvs(); vi.restoreAllMocks(); });
+test('Zoom controls survive saving and render jobs, with invalid controls rejected before saving', async () => {
+  const t = makeTest(), projectId = await project(t), owner = t.withIdentity(identity('owner'));
+  const { addEffectClip, patchClip } = await import('../lib/editor/operations');
+  const { configureTimedEffectPatch } = await import('../lib/editor/clip-effects');
+  const added = addEffectClip(textTimeline, 'zoom', 'quick-zoom-in', 1, { duration: 2 });
+  const clip = added.clips.find(clip => clip.id === 'zoom')!;
+  const timeline = patchClip(added, clip.id, configureTimedEffectPatch(clip, { zoom: { direction: 'out', amount: 2, speed: 1.5, centerX: .7 } }));
+  await owner.mutation(api.projects.saveTimeline, { projectId, expectedRevision: 0, timeline });
+  const saved = (await owner.query(api.projects.get, { projectId })).timeline!.clips.find(clip => clip.id === 'zoom')!;
+  expect(saved.zoom).toEqual(timeline.clips.find(clip => clip.id === 'zoom')!.zoom);
+  const jobId = await owner.mutation(api.renders.start, { projectId, resolution: 720, fps: 30, quality: 'draft' });
+  const render = await owner.mutation(api.renders.claim, { jobId, workerSecret: 'test-worker-secret' });
+  expect(render.timeline.clips.find(clip => clip.id === 'zoom')!.motion).toEqual(saved.motion);
+  expect(render.timeline.clips.find(clip => clip.id === 'zoom')!.zoom).toEqual(saved.zoom);
+  await expect(owner.mutation(api.projects.saveTimeline, { projectId, expectedRevision: 1, timeline: { ...timeline, clips: timeline.clips.map(clip => clip.id === 'zoom' ? { ...clip, zoom: { ...saved.zoom!, speed: 0 } } : clip) } })).rejects.toThrow('Zoom');
+  expect((await owner.query(api.projects.get, { projectId })).revision).toBe(1);
+});
+
 test('cinematic bar size and speed survive saving and export with bounded bar-only settings', async () => {
   const t = makeTest(), projectId = await project(t), owner = t.withIdentity(identity('owner'));
   const timeline: Timeline = { ...textTimeline, tracks: { ...textTimeline.tracks!, effects: 3 }, clips: [...textTimeline.clips, { id: 'bars', kind: 'effect', effectPreset: 'cinematic-bars', start: 0, duration: 2, sourceStart: 0, track: 3, cinematicBars: { size: .2, speed: 2 } }] };

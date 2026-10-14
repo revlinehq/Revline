@@ -262,6 +262,22 @@ test('cinematic bars size/speed and dither original-palette reset are independen
   await assertUndo(result);
 });
 
+test('Zoom agent controls share the manual recipe, preserve omitted controls and linked media, and undo together', async () => {
+  const result = await run(async tools => {
+    expect(() => tools.addTimedEffect.inputSchema.parse({ preset: 'flash', zoom: { amount: 2 } })).toThrow('Zoom');
+    await execute(tools, 'addTimedEffect', { preset: 'quick-zoom-in', start: 1, duration: 2, zoom: { amount: 2, centerX: .75 } });
+    const inspected = await execute(tools, 'inspectTimeline', {}) as { timeline: Timeline };
+    const effect = inspected.timeline.clips.find(clip => clip.effectPreset === 'quick-zoom-in')!;
+    await execute(tools, 'configureTimedEffect', { clipId: effect.id, zoom: { direction: 'out', speed: 2 } });
+    await expect(execute(tools, 'configureTimedEffect', { clipId: 'from', zoom: { amount: 2 } })).rejects.toThrow('timed FX');
+    expect(() => tools.configureTimedEffect.inputSchema.parse({ clipId: effect.id, zoom: { speed: 0 } })).toThrow();
+  }, initial, true);
+  expect(result.timeline.clips.slice(0, initial.clips.length)).toEqual(result.backend!.seed.clips);
+  expect(result.timeline.clips.at(-1)).toMatchObject({ effectPreset: 'quick-zoom-out', start: 1, duration: 2, zoom: { direction: 'out', amount: 2, speed: 2, centerX: .75, centerY: .5 } });
+  expect(editorCapabilities().timedFX.find(item => item.preset === 'quick-zoom-in')?.controls).toContain('direction');
+  await assertUndo(result);
+});
+
 test('Frame shrink controls and clip visual fades use actual saved tools, preserve linked audio and share one undo',async()=>{
   const seed:Timeline={...initial,clips:initial.clips.map(c=>c.id==='from'?{...c,visualFade:{fadeIn:.2,fadeOut:.4},visualFadeTiming:{duration:5,offset:1}}:c)};
   const result=await run(async tools=>{

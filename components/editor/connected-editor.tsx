@@ -1,4 +1,5 @@
 'use client';
+import { NEW_WORKSPACE_LABEL } from '@/lib/editor/workspace-labels';
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import { useStore } from 'zustand';
@@ -27,7 +28,7 @@ import { uploadSourceFile } from '@/lib/editor/upload-source';
 import type { UploadProgress } from './footage-panel';
 function editorLoading(projectId: string) {
   const hint = openingFootage(projectId);
-  return <div className="editor-app footage-preparation-boot"><WorkspaceNav title="New chat"/><FootagePreparation thumbnail={hint?.thumbnail} fileName={hint?.fileName}/></div>;
+  return <div className="editor-app footage-preparation-boot"><WorkspaceNav title={NEW_WORKSPACE_LABEL}/><FootagePreparation thumbnail={hint?.thumbnail} fileName={hint?.fileName}/></div>;
 }
 export function ConnectedEditor({projectId}: {projectId:string}) {
   const {isAuthenticated}=useConvexAuth();

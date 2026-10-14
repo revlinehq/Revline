@@ -8,8 +8,7 @@ export type EffectLibraryEntry = { id: EffectIconName; label: string; descriptio
 
 /** One catalog drives categories, search, icons, click actions, and drag payloads. */
 export const EFFECT_LIBRARY_CATALOG: readonly EffectLibraryEntry[] = [
-  { id: 'quick-zoom-in', label: 'Zoom in', description: 'Push toward your subject', category: 'motion', preset: 'quick-zoom-in' },
-  { id: 'quick-zoom-out', label: 'Zoom out', description: 'Pull back to reveal the scene', category: 'motion', preset: 'quick-zoom-out' },
+  { id: 'quick-zoom-in', label: 'Zoom', description: 'Zoom in or out with editable amount, speed and center', category: 'motion', preset: 'quick-zoom-in' },
   { id: 'zoomBlur', label: 'Zoom blur', description: 'A timed blur pulse above your footage', category: 'motion', preset: 'zoom-blur' },
   ...(['punch', 'shake', 'pop', 'flash'] as const).map(preset => ({ id: preset, label: EFFECT_CATALOG[preset].label, description: EFFECT_CATALOG[preset].description, category: 'motion' as const, preset })),
   { id: 'cinematic-bars', label: 'Cinema bars', description: 'Black bars slide in and out', category: 'motion', preset: 'cinematic-bars' },

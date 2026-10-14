@@ -4,7 +4,8 @@ import { CLAUDE_EDIT_MODELS, type ClaudeModelChoice } from '@/lib/ai/claude-mode
 import { InspectorSelect } from './inspector-select';
 import './assistant-model-picker.css';
 
-const options = CLAUDE_EDIT_MODELS.map(model => ({ value: model.id, label: model.label }));
+const descriptions = { haiku: 'Fast, simple edits', sonnet: 'Everyday editing', opus: 'Complex, coordinated edits' };
+const options = CLAUDE_EDIT_MODELS.map(model => ({ value: model.id, label: model.label, description: descriptions[model.id] }));
 
 export function AssistantModelPicker({ value, onChange, disabled }: {
   value: ClaudeModelChoice;

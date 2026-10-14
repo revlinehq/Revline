@@ -32,7 +32,7 @@ try {
  for(const [choice,label] of [['haiku','Haiku 5.5'],['sonnet','Sonnet 5.5'],['opus','Opus 5.5']]){
   await page.click('[aria-label="AI editing model"]');
   await page.waitForSelector(`[role="menuitemradio"][data-value="${choice}"]`);
-  assert.equal(await page.$eval(`[role="menuitemradio"][data-value="${choice}"]`,el=>el.textContent),label);
+  assert.equal(await page.$eval(`[role="menuitemradio"][data-value="${choice}"] .inspector-select-value`,el=>el.textContent),label);assert.equal(await page.$eval(`[role="menuitemradio"][data-value="${choice}"] small`,el=>el.textContent),{haiku:'Fast, simple edits',sonnet:'Everyday editing',opus:'Complex, coordinated edits'}[choice]);
   await page.click(`[role="menuitemradio"][data-value="${choice}"]`);
   await page.waitForFunction(()=>document.activeElement?.getAttribute('aria-label')==='AI editing model');
   await page.type('.assistant-content textarea',`Test ${choice}`);

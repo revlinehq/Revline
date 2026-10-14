@@ -24,6 +24,7 @@ export const clipValidator = v.object({
   visualFade:v.optional(v.object({fadeIn:v.number(),fadeOut:v.number()})),
   visualFadeTiming:v.optional(v.object({duration:v.number(),offset:v.number()})),
   frameShrink:v.optional(v.object({size:v.number(),speed:v.number()})),
+  zoom:v.optional(v.object({direction:v.union(v.literal('in'),v.literal('out')),amount:v.number(),speed:v.number(),centerX:v.number(),centerY:v.number()})),
   transform: v.optional(v.object({ x: v.number(), y: v.number(), scale: v.number(), rotation: v.number(), opacity: v.number() })),
   crop: v.optional(v.object({ top: v.number(), right: v.number(), bottom: v.number(), left: v.number() })),
   fit: v.optional(v.union(v.literal("cover"), v.literal("contain"))),

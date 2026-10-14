@@ -1,5 +1,6 @@
 'use client';
 
+import { NEW_WORKSPACE_LABEL } from '@/lib/editor/workspace-labels';
 import { useRef, useState, type ReactNode } from 'react';
 import { useAction, useConvexAuth, useQuery } from 'convex/react';
 import { Check, LoaderCircle } from 'lucide-react';
@@ -36,7 +37,7 @@ export function EditorAccessGate({ children, loading }: { children: ReactNode; l
   }
 
   return <div className="workspace-page editor-access-page">
-    <WorkspaceNav title="New chat" />
+    <WorkspaceNav title={NEW_WORKSPACE_LABEL} />
     <main className="editor-access-main">
       <section className="editor-access-card" aria-labelledby="editor-access-title">
         <h1 id="editor-access-title">{status.needsPayment ? 'Update your payment method' : status.trialEligible ? `Try Revline free for ${EDITOR_PLAN.trialDays} days` : 'Subscribe to Revline'}</h1>
