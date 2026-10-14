@@ -45,13 +45,26 @@ describe('mixed visual track layout', () => {
     expect(after.tracks.map(row => row.top)).toEqual(before.tracks.map(row => row.top));
     expect(after.height).toBe(before.height);
   });
-  it('keeps compact rows consistently sized with space before the audio stack', () => {
+  it('keeps compact rows consistently spaced across track groups', () => {
     const layout = timelineLayout(timeline, true);
     layout.tracks.forEach((row, index) => {
       expect(row.clipHeight).toBe(24);
-      expect(row.top).toBe([52,82,112,142,188][index]);
+      expect(row.top).toBe([52,82,112,142,172][index]);
     });
-    expect(layout.height).toBe(218);
+    expect(layout.height).toBe(202);
+  });
+  it.each([false,true])('keeps primary and additional FX, visual, and audio rows contiguous (compact %s)', compact => {
+    const project: Timeline = { fps: 30, aspectRatio: 'vertical', tracks: { visual: 2, overlay: 0, audio: 2, effects: 2 }, clips: [
+      { id: 'fx', kind: 'effect', track: 1, effectPreset: 'cinematic-bars', start: 0, duration: 2, sourceStart: 0 },
+      { id: 'video', kind: 'video', track: 1, start: 0, duration: 2, sourceStart: 0 },
+      { id: 'sound', kind: 'audio', track: 1, start: 0, duration: 2, sourceStart: 0 },
+    ] };
+    const rows = timelineLayout(project,compact).tracks;
+    rows.forEach((row,index) => {
+      expect(row.gapBefore).toBe(0);
+      if (index) expect(row.top).toBe(rows[index-1].top+rows[index-1].height);
+      expect(row.height-row.clipHeight).toBe(6);
+    });
   });
   it('leaves space above the first lane for an explicit new visual track drop', () => {
     const rows = timelineLayout(timeline).tracks.map(row => ({ ...row, track: row.number, bottom: row.top + row.height }));
