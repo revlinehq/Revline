@@ -42,3 +42,30 @@ test('the hosted export fixture can open a signed multipart upload through the s
   expect(responses).toEqual([200]);
   expect(result).toMatchObject({ uploadId: expect.any(String), partCount: 1, partSize: 33554432 });
 });
+
+test('the stacked shader fixture stores generated media, preserves both timed passes and cleans up normally', async () => {
+  const t = convexTest(schema, modules); workflowTest.register(t);
+  const created = await t.action(internal.processorDiagnostics.createStackedEffectsFixture, {});
+  const owner = t.withIdentity({ subject: created.ownerId });
+  const project = await owner.query(api.projects.get, { projectId: created.projectId });
+  expect(project.timeline?.clips).toMatchObject([
+    { kind: 'image', dither: { enabled: true, amount: 1, levels: 2, size: 8 } },
+    { kind: 'effect', track: 1, effectPreset: 'zoom-blur', zoomBlur: { amount: .15 } },
+    { kind: 'effect', track: 2, effectPreset: 'zoom-blur', zoomBlur: { amount: .15 } },
+  ]);
+  const assets = await owner.query(api.assets.list, { projectId: created.projectId });
+  expect(assets).toHaveLength(1);
+  expect(assets[0]).toMatchObject({ fileName: 'generated-shader-check.svg', kind: 'image', width: 640, height: 360, ownerId: created.ownerId });
+  const storageId = assets[0].storageId!;
+  const pixels = await t.run(async ctx => (await ctx.storage.get(storageId))?.text());
+  expect(pixels).toContain('<svg'); expect(pixels).not.toMatch(/(?:<script|(?:href|src)=)/);
+  await t.finishAllScheduledFunctions(vi.runAllTimers);
+  const task = (await t.mutation(api.mediaTasks.claim, { workerSecret: 'processor-check-secret' }))!;
+  expect(task).toMatchObject({ taskId: created.taskId, render: { assets: [{ _id: assets[0]._id, kind: 'image' }], timeline: project.timeline } });
+  await expect(t.withIdentity({ subject: 'customer' }).query(api.projects.get, { projectId: created.projectId })).rejects.toThrow('Project not found');
+  await t.run(async ctx => { await ctx.db.patch(created.jobId, { status: 'failed' }); });
+  await owner.mutation(api.projects.remove, { projectId: created.projectId });
+  expect(await t.run(ctx => ctx.storage.get(storageId))).toBeNull();
+  expect(await t.run(ctx => ctx.db.get(created.projectId))).toBeNull();
+  expect(await t.run(ctx => ctx.db.get(created.taskId))).toBeNull();
+});
