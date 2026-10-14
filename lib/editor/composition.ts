@@ -1,7 +1,7 @@
 import { NEUTRAL_MOTION, cinematicBarSettings, validateClipEffects, visibleMotion, type MotionKeyframe } from './clip-effects';
 import { adjustmentSources } from './adjustment-layers';
 import { isTransitionClip, transitionSources } from './clip-transitions';
-import { audioSettings, audioVolumeEnvelope, validateAudioTimeline } from './audio-settings';
+import { audioFadeAttributes, audioVolumeEnvelope, validateAudioTimeline } from './audio-settings';
 import { MAX_CLIP_VOLUME } from './clip-volume';
 import { validateVisualEffects } from './visual-effects';
 import { visualEffectsRuntimeScript } from './visual-effects-runtime';
@@ -164,7 +164,7 @@ export function generateComposition(timeline: Timeline, assets: MediaAsset[], op
       }
     }
     const volume = bounded(clip.volume, 1, 0, MAX_CLIP_VOLUME);
-    const sound=audioSettings(clip);
+    const sound=audioFadeAttributes(clip);
     const audioAttrs=clip.kind==='video'||clip.kind==='audio'?` data-fade-in="${sound.fadeIn}" data-fade-out="${sound.fadeOut}" data-automation="${escapeHtml(audioVolumeEnvelope(timeline,clip,volume))}"`:'';
     const attrs = `${timing} data-media-start="${clip.sourceStart}" data-volume="${volume}"${clip.kind === 'video' || clip.kind === 'audio' ? ` data-playback-rate="${playbackRateOf(clip)}"` : ''}${audioAttrs}`;
     const frame = (media: string) => `<div id="${id}-frame" data-visual-clip="${escapeHtml(clip.id)}" class="visual-frame" style="${frameStyle}"><div id="${id}-motion" class="motion-frame"><div class="source-window" style="${windowStyle}">${media}</div></div></div>`;
