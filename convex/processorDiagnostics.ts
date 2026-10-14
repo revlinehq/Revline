@@ -1,11 +1,13 @@
 import { v } from 'convex/values';
 import { internalAction, internalMutation } from './_generated/server';
 import { internal } from './_generated/api';
+import type { Id } from './_generated/dataModel';
 import { validateTimeline } from './lib/timeline';
 import { enqueueMediaTask } from './mediaTasks';
 import type { Timeline } from '../lib/editor/types';
 
 const fixtureResult = v.object({ ownerId: v.string(), projectId: v.id('projects'), jobId: v.id('renderJobs'), taskId: v.id('mediaTasks') });
+type FixtureResult = { ownerId: string; projectId: Id<'projects'>; jobId: Id<'renderJobs'>; taskId: Id<'mediaTasks'> };
 const stackedSource = '<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360"><rect width="640" height="360" fill="#808080"/><rect x="80" y="60" width="160" height="240" fill="#484848"/><circle cx="440" cy="180" r="105" fill="#b8b8b8"/></svg>';
 
 /** Admin CLI only: exercise hosting without reading a customer identity or media. */
@@ -30,7 +32,7 @@ export const createExportFixture = internalMutation({
 /** Generated pixels only: verify the deployed shader chain through the ordinary render queue. */
 export const createStackedEffectsFixture = internalAction({
   args: {}, returns: fixtureResult,
-  handler: async ctx => {
+  handler: async (ctx): Promise<FixtureResult> => {
     const source = new Blob([stackedSource], { type: 'image/svg+xml' });
     const storageId = await ctx.storage.store(source);
     try {
