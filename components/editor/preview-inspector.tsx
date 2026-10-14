@@ -15,7 +15,6 @@ import { type Clip, type MediaAsset, type Timeline } from '@/lib/editor/types';
 import { effectClipLabel, type EffectPreset } from '@/lib/editor/clip-effects';
 import { EffectLibrary, type LibraryVisualEffect } from './effect-library';
 import { DEFAULT_COLOR_GRADE, DEFAULT_DITHER, DEFAULT_GLITCH, DEFAULT_INVERT, DEFAULT_ZOOM_BLUR } from '@/lib/editor/visual-effects';
-import { textAnimationPatch, type TextAnimationPreset } from '@/lib/editor/text-effects';
 import { textLookPatch, type TextLookId } from '@/lib/editor/text-looks';
 import { SegmentedTabs } from './segmented-tabs';
 import { TransitionControls } from './transition-controls';
@@ -56,11 +55,6 @@ export function PreviewInspector({ clip, timeline, time = 0, audioClip, asset, a
     setEffectSelection({clipId:clip.id,key:effect});
     setTab('effects');
   }
-  function applyTextAnimation(preset: TextAnimationPreset) {
-    if (!text || !clip) return;
-    onChange(textAnimationPatch(clip, preset));
-    setTab('edit');
-  }
   function applyTextLook(look: TextLookId) {
     if (text && clip) onChange(textLookPatch(clip, look));
     else onAddTextLook?.(look);
@@ -86,7 +80,7 @@ export function PreviewInspector({ clip, timeline, time = 0, audioClip, asset, a
       {!visual && !effect && <button role="tab" id="inspector-edit-tab" aria-controls="inspector-edit" aria-selected={activeTab === 'edit'} tabIndex={activeTab === 'edit' ? 0 : -1} onClick={() => setTab('edit')}><SlidersHorizontal size={14}/>Edit</button>}
       {!text && <button role="tab" id="inspector-effects-tab" aria-controls="inspector-effects" aria-selected={activeTab === 'effects'} tabIndex={activeTab === 'effects' ? 0 : -1} onClick={() => { if (visual) setEffectSelection(null); setTab('effects'); }}>{visual ? <SlidersHorizontal size={14}/> : <Layers size={14}/>}{visual ? 'Clip settings' : 'Effects'}</button>}
     </div>}
-    {library ? <div className="inspector-content inspector-library-content" id="inspector-sources"><EffectLibrary clip={clip} timeline={timeline} time={time} onAddTransition={onAddTransition ? addTransition : undefined} assets={assets} onVisualEffect={addVisualEffect} onAddEffect={onAddEffect ? addTimedEffect : undefined} onTextAnimation={text ? applyTextAnimation : undefined} onTextLook={text || onAddTextLook ? applyTextLook : undefined} onAddOverlay={onAddOverlay} onFadeThroughBlack={onFadeThroughBlack} onSpeed={onPlaybackRateChange ? () => { setEffectSelection(null); setTab('effects'); } : undefined}/></div> : <div className="inspector-content" role="tabpanel" id={`inspector-${activeTab}`} aria-labelledby={`inspector-${activeTab}-tab`}>
+    {library ? <div className="inspector-content inspector-library-content" id="inspector-sources"><EffectLibrary clip={clip} timeline={timeline} time={time} onAddTransition={onAddTransition ? addTransition : undefined} assets={assets} onVisualEffect={addVisualEffect} onAddEffect={onAddEffect ? addTimedEffect : undefined} onTextLook={text || onAddTextLook ? applyTextLook : undefined} onAddOverlay={onAddOverlay} onFadeThroughBlack={onFadeThroughBlack} onSpeed={onPlaybackRateChange ? () => { setEffectSelection(null); setTab('effects'); } : undefined}/></div> : <div className="inspector-content" role="tabpanel" id={`inspector-${activeTab}`} aria-labelledby={`inspector-${activeTab}-tab`}>
       {activeTab === 'edit' ? clip?.kind === 'effect' ? transitionControls ?? solidControls ?? barControls ?? <div className="inspector-empty"><Layers size={22} strokeWidth={1.2}/><p>{effectClipLabel(clip)}</p><span>Move, trim, or delete this clip on the timeline.</span></div> : clip ? <>
         <div className="inspector-selection"><small>{text ? 'Text' : clip.kind === 'audio' ? 'Audio' : 'Footage'}</small><p>{clip.text || asset?.fileName || 'Selected clip'}</p></div>
         {text && <TextEffectsControls clip={clip} onChange={onChange} onPreview={onPreviewEffects} captionActions={captionActions}/>}

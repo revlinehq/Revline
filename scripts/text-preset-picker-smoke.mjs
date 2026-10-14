@@ -8,11 +8,10 @@ const bundle = await build({ stdin: { resolveDir: process.cwd(), loader: 'tsx', 
 import React,{useState} from 'react';import {createRoot} from 'react-dom/client';
 import {EffectLibrary} from './components/editor/effect-library';
 import {TextEffectsControls} from './components/editor/text-effects-controls';
-import {textAnimationPatch} from './lib/editor/text-effects';
 import './components/workspace/workspace-pages.css';import './app/editor.css';
 function Fixture(){const[mode,setMode]=useState('library'),[clip,setClip]=useState({id:'words',kind:'graphic',text:'My actual words',duration:3,start:0,sourceStart:0,track:1});
 window.fixture={clip};const change=patch=>{window.commits++;setClip(previous=>({...previous,...patch}))};
-return <><button id="switch" onClick={()=>setMode(mode==='library'?'controls':'library')}>Switch fixture</button>{mode==='library'?<EffectLibrary clip={clip} assets={[]} onMedia={()=>{}} onVisualEffect={()=>{}} onUploadOverlay={()=>{}} onTextAnimation={preset=>change(textAnimationPatch(clip,preset))}/>:<TextEffectsControls clip={clip} onChange={change}/>}</>}
+return <><button id="switch" onClick={()=>setMode(mode==='library'?'controls':'library')}>Switch fixture</button>{mode==='library'?<EffectLibrary clip={clip} assets={[]} onMedia={()=>{}} onVisualEffect={()=>{}} onUploadOverlay={()=>{}}/>:<TextEffectsControls clip={clip} onChange={change}/>}</>}
 window.commits=0;createRoot(document.getElementById('root')).render(<Fixture/>);
 ` }, bundle: true, platform: 'browser', format: 'iife', jsx: 'automatic', write: false, outdir: '/tmp/revline-text-picker-fixture', define: { 'process.env.NODE_ENV': '"production"' } });
 const fonts=await startFixtureFontServer();
@@ -32,7 +31,7 @@ try {
   await page.addScriptTag({ content: bundle.outputFiles.find(file => file.path.endsWith('.js')).text });
   assert.equal(await page.$('.text-preset-picker'), null, 'Effects do not mount the text renderer');
   assert.equal(await page.$$eval('.library-look', rows => rows.every(row => row.getBoundingClientRect().height <= 34)), true, 'VFX stay compact');
-  await page.click('[data-segment="text"]'); await page.waitForSelector('[aria-label="Word reveal"]');
+  await page.click('[data-segment="text"]'); await page.waitForSelector('[aria-label="Default text"]');assert.equal(await page.$('[aria-label="Text animations"]'),null,'Library does not offer standalone animations');await page.click('#switch');await page.waitForSelector('[aria-label="Text animations"]');
   assert.deepEqual(await page.$$eval('.text-preset-card:not(.text-look-card)', cards => cards.map(card => card.getAttribute('aria-label'))), labels);
   assert.equal(await page.$$eval('.text-preset-stage', stages => stages.every(stage => stage.getBoundingClientRect().height === 72)), true);
   assert.ok(await page.$eval('.text-preset-picker', element => element.scrollWidth <= element.clientWidth));
@@ -64,11 +63,11 @@ try {
   assert.equal(await page.evaluate(() => window.commits), 2, 'Pointer applies once');
   await page.mouse.move(0, 0);await page.evaluate(() => document.activeElement.blur());
   await page.evaluate(()=>document.fonts.ready);await page.screenshot({ path: '/tmp/revline-text-preset-previews-dark.png' });
-  await page.click('#switch'); await page.waitForSelector('[aria-label="Selected text"]');
+  await page.click('#switch');await page.click('[data-segment="text"]');await page.waitForSelector('[aria-label="Default text"]');assert.equal(await page.$('[aria-label="Text animations"]'),null);await page.click('#switch'); await page.waitForSelector('[aria-label="Selected text"]');
   assert.equal(await page.$eval('[aria-label="Selected text"]', element => element.value), 'My actual words');
   await page.focus('[aria-label="Selected text"]'); await page.keyboard.down('Control'); await page.keyboard.press('A'); await page.keyboard.up('Control'); await page.type('[aria-label="Selected text"]', 'Changed words');
   assert.equal(await page.evaluate(() => window.fixture.clip.text), 'Changed words', 'Actual text remains editable');
-  assert.deepEqual(await page.$$eval('.text-preset-card:not(.text-look-card)', cards => cards.map(card => card.getAttribute('aria-label'))), labels, 'Both surfaces share the picker');
+  assert.deepEqual(await page.$$eval('.text-preset-card:not(.text-look-card)', cards => cards.map(card => card.getAttribute('aria-label'))), labels, 'Selected text settings retain every animation');
   assert.equal(await page.$eval('[aria-label="Apply Neon echo"]', element => element.getAttribute('aria-pressed')), 'true');
   assert.ok(await page.$('[aria-label="Custom text size"]'), 'Custom text size remains');
   assert.equal(await page.$('[aria-label="Text rotation"]'), null, 'Rotation numeric control is removed');

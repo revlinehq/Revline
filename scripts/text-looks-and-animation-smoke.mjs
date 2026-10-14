@@ -32,13 +32,14 @@ try {
   await page.addStyleTag({content:'*{box-sizing:border-box}body{margin:0;background:var(--ws-bg);font:12px Arial}button{border:0;font-family:inherit}#root{width:480px;height:860px;margin:20px auto}'});
   await page.addScriptTag({content:bundle.outputFiles.find(file=>file.path.endsWith('.js')).text});
   await page.click('[data-segment="text"]');
-  await page.waitForSelector('[aria-label="Word reveal"]');
+  await page.waitForSelector('[aria-label="Default text"]');
+  assert.equal(await page.$('[aria-label="Text animations"]'),null,'Text library offers looks before any text exists');
   assert.ok(await page.$('[aria-label="Default text"]'),'A plain Default text option must be available');
   assert.equal(await page.evaluate(()=>document.body.textContent.includes('Subtitle styles')),false,'Text is not split into subtitle styles');
-  assert.ok(await page.$eval('[aria-label="Apply Word reveal"]',node=>node.disabled),'Animations require selected text');
-  await button('Default text').click();await page.waitForSelector('[aria-label="Selected text"]');
+  await button('Default text').click();await page.waitForSelector('[aria-label="Selected text"]');await page.waitForSelector('[aria-label="Text animations"]');
   assert.equal(await page.evaluate(()=>window.fixture.clip.textTemplate),undefined);
   assert.equal(await page.evaluate(()=>window.fixture.clip.animation),'none');
+  const entities=await page.evaluate(()=>({ids:window.fixture.timeline.clips.map(clip=>clip.id),tracks:window.fixture.timeline.tracks}));
   const custom={text:'Keep my exact words',color:'#12ab67',fontFamily:'dm-serif',fontSize:83,background:'#19273d',blendMode:'screen',x:.3,y:.7,transform:{x:0,y:0,scale:1,rotation:12},textStyle:{strokeWidth:3,strokeColor:'#e75425',shadowBlur:12,shadowX:4,shadowY:8,shadowColor:'#333333',glowBlur:18,glowColor:'#35b6eb'}};
   await page.evaluate(custom=>window.fixture.setClip(custom),custom);await flush();
   await button('Apply Word reveal').click();await flush();
@@ -49,7 +50,7 @@ try {
   assert.ok(await page.evaluate(()=>window.fixture.clip.motion.length>0));
   for(const key of Object.keys(custom)) assert.deepEqual(await page.evaluate(key=>window.fixture.clip[key],key),custom[key]);
   await button('Apply Neon echo').click();await flush();
-  assert.equal(await page.evaluate(()=>window.fixture.clip.textTemplate.preset),'neon-echo');
+  assert.equal(await page.evaluate(()=>window.fixture.clip.textTemplate.preset),'neon-echo');assert.deepEqual(await page.evaluate(()=>({ids:window.fixture.timeline.clips.map(clip=>clip.id),tracks:window.fixture.timeline.tracks})),entities,'Animations apply to the selected text without creating a clip or track');
   for(const key of Object.keys(custom)) assert.deepEqual(await page.evaluate(key=>window.fixture.clip[key],key),custom[key],'Neon animation preserves '+key);
   assert.equal(await page.$$eval('.text-preset-stage,.text-look-stage',nodes=>nodes.some(node=>getComputedStyle(node).backgroundImage!=='none')),false,'Card stages use solid backgrounds');
   await page.focus('[aria-label="Preview Word reveal"]');
@@ -79,6 +80,7 @@ try {
   await page.evaluate(()=>document.documentElement.dataset.workspaceTheme='light');await page.screenshot({path:'/tmp/revline-text-editable-style-light.png'});
   await page.setViewport({width:320,height:900});await page.addStyleTag({content:'#root{width:320px;margin:0;height:900px}'});
   assert.ok(await page.$eval('.preview-inspector',node=>node.scrollWidth<=node.clientWidth),'Text controls fit 320px');
+  await page.click('#inspector-sources-tab');await page.click('[data-segment="text"]');await page.waitForSelector('[aria-label="Default text"]');assert.equal(await page.$('[aria-label="Text animations"]'),null,'Library stays looks-only with selected text');
   assert.deepEqual(errors,[]);
   console.log('PASS: Default text, unified looks, independent animations preserve all appearance and words, real frame previews, reduced motion, no gradient stages, editable stroke/shadow/glow, and 320px fit.');
 } finally {await browser.close();await fonts.close();}

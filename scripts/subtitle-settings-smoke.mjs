@@ -60,8 +60,8 @@ try {
   assert.equal(await page.$eval('[aria-label="Selected text"]',node=>node.value),'Keep these words');
   await library();await page.click('.timeline-clip[data-clip-id="title"]');await page.waitForSelector('[aria-label="Selected text"]');assert.equal(await page.$eval('[aria-label="Selected text"]',node=>node.value),'Actual title');
   await library();await page.click('.timeline-clip[data-clip-id="footage"]');await flush();assert.ok(await page.$('.effect-library'));
-  await page.click('[data-segment="text"]');await page.waitForSelector('[aria-label="Word reveal"]');
-  assert.equal(await page.$eval('[aria-label="Apply Word reveal"]',node=>node.disabled),true);
+  await page.click('[data-segment="text"]');await page.waitForSelector('[aria-label="Default text"]');
+  assert.equal(await page.$('[aria-label="Text animations"]'),null,'Text library offers looks only before adding text');
   await page.click('[aria-label="Default text"]');await page.waitForSelector('[aria-label="Selected text"]');
   const created=await page.evaluate(()=>{const state=window.fixture.store.getState();return state.timeline.clips.find(clip=>clip.id===state.selectedId)});
   assert.equal(created.kind,'graphic');assert.equal(created.start,1);assert.equal(created.animation,'none');assert.equal(created.textTemplate,undefined);assert.equal(created.background,'transparent');

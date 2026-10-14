@@ -4,7 +4,6 @@ import { lazy, Suspense, useId, useState } from 'react';
 import { ChevronRight, FolderOpen, Plus, Search } from 'lucide-react';
 import { EffectIcon } from './effect-icon';
 import type { EffectPreset } from '@/lib/editor/clip-effects';
-import { TEXT_ANIMATION_PRESETS, selectedTextAnimation, type TextAnimationPreset } from '@/lib/editor/text-effects';
 import { selectedTextLook, type TextLookId } from '@/lib/editor/text-looks';
 import { TextFontStyles } from './text-font-styles';
 import type { VisualEffects } from '@/lib/editor/visual-effects';
@@ -16,7 +15,6 @@ import { SegmentedTabs } from './segmented-tabs';
 import { EFFECT_LIBRARY_CATALOG, EFFECT_LIBRARY_CATEGORIES, type EffectLibraryCategory, type EffectLibraryEntry as LibraryEntryData } from './effect-library-catalog';
 import './effect-library.css';
 
-const TextPresetPicker = lazy(() => import('./text-preset-picker'));
 const TextLookPicker = lazy(() => import('./text-look-picker').then(module => ({ default: module.TextLookPicker })));
 export type LibraryVisualEffect = keyof VisualEffects;
 type LibraryTab = 'effects' | 'text';
@@ -29,10 +27,10 @@ function LibraryEntry({ entry, disabled, reason, draggable, onApply }: { entry: 
   }}><EffectIcon name={entry.id} size={18}/><span>{entry.label}</span>{entry.action ? <ChevronRight size={12} aria-hidden="true"/> : <Plus size={12} aria-hidden="true"/>}</button>;
 }
 
-export function EffectLibrary({ clip, timeline, time = 0, onMedia, onVisualEffect, onAddEffect, onAddTransition, onTextAnimation, onTextLook, onSpeed }: {
+export function EffectLibrary({ clip, timeline, time = 0, onMedia, onVisualEffect, onAddEffect, onAddTransition, onTextLook, onSpeed }: {
   clip?: Clip; timeline?: Timeline; time?: number; assets: readonly MediaAsset[];
   onMedia?: () => void; onVisualEffect: (effect: LibraryVisualEffect) => void;
-  onAddEffect?: (preset: EffectPreset) => void; onTextAnimation?: (preset: TextAnimationPreset) => void;
+  onAddEffect?: (preset: EffectPreset) => void;
   onAddTransition?: (preset: TransitionPreset) => void;
   onTextLook?: (look: TextLookId) => void;
   onUploadOverlay?: () => void; onAddOverlay?: (asset: MediaAsset) => void; overlayAssets?: readonly MediaAsset[]; onAddCatalogOverlay?: (overlay: OverlayCatalogItem) => void;
@@ -89,7 +87,6 @@ export function EffectLibrary({ clip, timeline, time = 0, onMedia, onVisualEffec
       </div> : <div className="library-text-results">
         <TextFontStyles/>
         <section className="library-text-section"><h3>{text ? 'Presets' : 'Add text'}</h3><Suspense fallback={<p className="library-selection-note">Loading presets…</p>}><TextLookPicker selected={text ? selectedTextLook(clip) : undefined} onSelect={onTextLook}/></Suspense></section>
-        <section className="library-text-section"><h3>Animation</h3>{!text && <p className="library-selection-note">Select text to apply an animation.</p>}<Suspense fallback={<p className="library-selection-note">Loading animations…</p>}><TextPresetPicker presets={TEXT_ANIMATION_PRESETS} clip={text ? clip : undefined} selected={text ? selectedTextAnimation(clip) : undefined} onSelect={text ? onTextAnimation : undefined}/></Suspense></section>
       </div>}
     </div>
   </div>;
