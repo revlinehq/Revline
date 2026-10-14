@@ -2,6 +2,8 @@ import { describe, expect, it, vi } from 'vitest';
 import { applyTimelineEdit, createTimelineSaveQueue, type TimelineSnapshot } from './timeline-sync';
 import type { Timeline } from './types';
 import { deleteEmptyLayer, moveSelectedClips } from './timeline-controls';
+import { createEditorStore } from './store';
+import { matchesUndoSnapshot } from '../../components/editor/assistant-results';
 
 const base: Timeline = {
   fps: 30, aspectRatio: 'landscape', tracks: { visual: 2, overlay: 0, audio: 1, effects:0 },
@@ -52,6 +54,23 @@ describe('manual edit intent', () => {
 });
 
 describe('timeline save queue', () => {
+  it('keeps streamed AI checkpoints in the server undo group, including a later manual edit', () => {
+    const store=createEditorStore(base);
+    const queue=createTimelineSaveQueue({timeline:base,revision:1},{save:vi.fn(),load:vi.fn(),saving:vi.fn(),error:vi.fn(),update:(next,kind,history?:Timeline[])=>store.getState().replace(next,kind==='remote'?history??true:false)});
+    const intermediate=patch({color:'#FFFFFF'}),final=patch({color:'#FFFFFF',fontSize:80});
+    queue.receive({timeline:intermediate,revision:2,history:[base]});
+    queue.receive({timeline:final,revision:3,history:[base]});
+    expect(matchesUndoSnapshot({before:base,after:final},store.getState().timeline,store.getState().history.at(-1))).toBe(true);
+    expect(store.getState().undo()).toEqual(base);
+    expect(store.getState().redo()).toEqual(final);
+    const manual={...final,clips:final.clips.map(clip=>({...clip,text:'Manual correction'}))};
+    store.getState().edit(manual);
+    const nextAI={...manual,clips:manual.clips.map(clip=>({...clip,fontSize:100}))};
+    queue.receive({timeline:nextAI,revision:5,history:[base,final,manual]});
+    expect(store.getState().undo()).toEqual(manual);
+    expect(store.getState().undo()).toEqual(final);
+    expect(store.getState().undo()).toEqual(base);
+  });
   it('rebases queued rapid gestures onto the canonical acknowledgement including Claude edits', async () => {
     const first = deferred<TimelineSnapshot>();
     const update = vi.fn(), saving = vi.fn(), error = vi.fn();

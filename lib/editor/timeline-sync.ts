@@ -72,12 +72,12 @@ export function applyTimelineEdit(base: Timeline, next: Timeline, current: Timel
   return reconcileTransitionEdits(current, merged);
 }
 
-export type TimelineSnapshot = { timeline: Timeline; revision: number };
+export type TimelineSnapshot = { timeline: Timeline; revision: number; history?: Timeline[] };
 type PendingEdit = { baseTimeline: Timeline; timeline: Timeline };
 type SaveCallbacks = {
   save: (edit: PendingEdit & { expectedRevision: number }) => Promise<TimelineSnapshot>;
   load: () => Promise<TimelineSnapshot>;
-  update: (timeline: Timeline, kind: 'saved' | 'remote' | 'recovered') => void;
+  update: (timeline: Timeline, kind: 'saved' | 'remote' | 'recovered', history?: Timeline[]) => void;
   saving: (busy: boolean) => void;
   error: (error: unknown) => void;
 };
@@ -91,7 +91,8 @@ export function createTimelineSaveQueue(initial: TimelineSnapshot, callbacks: Sa
   function receive(snapshot: TimelineSnapshot) {
     if (snapshot.revision > remote.revision) remote = snapshot;
     if (busy || snapshot.revision <= saved.revision) return;
-    saved = snapshot; visible = snapshot.timeline; callbacks.update(visible, 'remote');
+    saved = snapshot; visible = snapshot.timeline;
+    if(snapshot.history===undefined)callbacks.update(visible,'remote');else callbacks.update(visible,'remote',snapshot.history);
   }
   async function flush() {
     if (busy) return;
