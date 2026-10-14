@@ -4,6 +4,7 @@ import { beforeEach,afterEach,expect,test,vi } from 'vitest';
 import schema from './schema';
 import {api,internal} from './_generated/api';
 import {DEFAULT_AUDIO_SETTINGS,configureAudio} from '../lib/editor/audio-settings';
+import {splitClip} from '../lib/editor/operations';
 import type {Timeline} from '../lib/editor/types';
 
 const modules=import.meta.glob('./**/*.ts');
@@ -36,4 +37,12 @@ test('raw saves reject invalid roles/fades/ducking settings and nonaudio setting
   }
   await expect(f.owner.mutation(api.projects.saveTimeline,{projectId:f.projectId,timeline:{...f.timeline,tracks:{visual:1,overlay:0,audio:0,effects:0},clips:[{...music,kind:'caption',assetId:undefined,text:'Actual saved words',track:1,audio:{...DEFAULT_AUDIO_SETTINGS}}]},expectedRevision:0})).rejects.toThrow('audio clips');
   expect((await f.owner.query(api.projects.get,{projectId:f.projectId})).revision).toBe(0);
+});
+
+test('frozen split fade phases persist through saves and shared copies, and malformed phases are rejected',async()=>{
+  const f=await fixture(),timeline=splitClip(configureAudio(f.timeline,'music',{fadeIn:1,fadeOut:2}),'music',5,'right');
+  await f.owner.mutation(api.projects.saveTimeline,{projectId:f.projectId,timeline,expectedRevision:0});
+  const shareId=await f.owner.mutation(api.timelineShares.publish,{projectId:f.projectId}),copier=f.t.withIdentity({subject:'audio-copy'}),copyId=await copier.mutation(api.timelineShares.useTimeline,{shareId});
+  expect((await copier.query(api.projects.get,{projectId:copyId})).timeline!.clips.map(clip=>clip.audioFadeTiming)).toEqual(timeline.clips.map(clip=>clip.audioFadeTiming));
+  for(const audioFadeTiming of [{duration:0,offset:0},{duration:1,offset:NaN}])await expect(f.owner.mutation(api.projects.saveTimeline,{projectId:f.projectId,timeline:{...timeline,clips:timeline.clips.map(clip=>clip.id==='right'?{...clip,audioFadeTiming}:clip)},expectedRevision:1})).rejects.toThrow('Audio fade timing');
 });

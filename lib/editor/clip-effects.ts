@@ -4,7 +4,7 @@ import { textTemplateTimingPatch, validateRemotionTextTemplate } from './remotio
 import { validatePlaybackRate } from './playback-rate';
 import { isTransitionPreset, TRANSITION_PRESETS, validateTransitionSettings } from './clip-transitions';
 import { validateTextStyle } from './text-style';
-import { validateAudioSettings } from './audio-settings';
+import { audioFadeTimingPatch,validateAudioSettings } from './audio-settings';
 import { textAnimationTimingPatch,validateTextAnimationTiming } from './text-animation-timing';
 
 export const BLEND_MODES = ['normal', 'screen', 'multiply', 'overlay', 'plus-lighter', 'difference'] as const;
@@ -122,7 +122,7 @@ export function motionPreset(clip: Clip, preset: MotionPreset | EffectPreset): P
 }
 
 export function offsetClipMotion(clip: Clip, delta: number): Partial<Clip> {
-  return { ...(clip.motion?.length ? { motionOffset: (clip.motionOffset ?? 0) + delta } : {}), ...textTemplateTimingPatch(clip, delta),...textAnimationTimingPatch(clip,delta) };
+  return { ...(clip.motion?.length ? { motionOffset: (clip.motionOffset ?? 0) + delta } : {}), ...textTemplateTimingPatch(clip, delta),...textAnimationTimingPatch(clip,delta),...audioFadeTimingPatch(clip,delta) };
 }
 
 /** Effect handles stretch the currently visible pulse, including a previously split segment. */

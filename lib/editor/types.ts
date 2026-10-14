@@ -32,6 +32,7 @@ export type Clip = {
   y?: number;
   volume?: number;
   audio?: AudioSettings;
+  audioFadeTiming?: {duration:number;offset:number};
   linkedClipId?: string;
   audioSeparated?: boolean;
   blendMode?: BlendMode;

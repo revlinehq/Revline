@@ -20,6 +20,7 @@ export const clipValidator = v.object({
   assetId: v.optional(v.string()), focus: v.optional(focusValidator), track: v.optional(v.number()), start: v.number(), duration: v.number(), sourceStart: v.number(),
   playbackRate: v.optional(v.number()),
   audio:v.optional(audioSettingsValidator),
+  audioFadeTiming:v.optional(v.object({duration:v.number(),offset:v.number()})),
   transform: v.optional(v.object({ x: v.number(), y: v.number(), scale: v.number(), rotation: v.number(), opacity: v.number() })),
   crop: v.optional(v.object({ top: v.number(), right: v.number(), bottom: v.number(), left: v.number() })),
   fit: v.optional(v.union(v.literal("cover"), v.literal("contain"))),
