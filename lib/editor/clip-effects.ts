@@ -13,6 +13,7 @@ export type MotionKeyframe = { time: number; x: number; y: number; scale: number
 export const MOTION_PRESETS = ['none', 'fade', 'punch', 'shake', 'flash', 'pop'] as const;
 export type MotionPreset = typeof MOTION_PRESETS[number];
 export const TIMED_EFFECT_PRESETS = ['fade', 'punch', 'shake', 'flash', 'pop', 'cinematic-bars', 'quick-zoom-in', 'quick-zoom-out', 'zoom-blur', 'solid-color'] as const;
+export type TimedEffectPreset=typeof TIMED_EFFECT_PRESETS[number];
 export const EFFECT_PRESETS = [...TIMED_EFFECT_PRESETS, ...TRANSITION_PRESETS] as const;
 export type EffectPreset = typeof EFFECT_PRESETS[number];
 export type SolidColorSettings = { color: string; width: number; height: number; x: number; y: number; opacity: number };
@@ -129,4 +130,18 @@ export function offsetClipMotion(clip: Clip, delta: number): Partial<Clip> {
 export function resizeEffectMotion(clip: Clip, duration: number): Partial<Clip> {
   if (clip.effectPreset === 'cinematic-bars') return { motion: cinematicBarKeyframes(duration, cinematicBarSettings(clip).speed), motionOffset: 0 };
   return { motion: visibleMotion(clip).map(key => ({ ...key, time: key.time / clip.duration * duration })), motionOffset: 0 };
+}
+
+/** Presets are editable starting points; requested controls never change footage or neighboring FX. */
+export function configureTimedEffectPatch(clip:Clip,changes:{preset?:TimedEffectPreset;duration?:number;cinematicBars?:Partial<CinematicBarSettings>}):Partial<Clip>{
+  if(clip.kind!=='effect'||isTransitionPreset(clip.effectPreset))throw new Error('Choose a timed FX clip; pair transitions have separate controls.');
+  if(!Object.values(changes).some(value=>value!==undefined))throw new Error('Specify a timed effect control.');
+  const duration=changes.duration??clip.duration;if(!Number.isFinite(duration)||duration<=0)throw new Error('Choose a positive timed effect duration.');
+  let patch:Partial<Clip>={...(changes.duration!==undefined?{duration}:{}),...(changes.preset?motionPreset({...clip,duration},changes.preset):changes.duration!==undefined?resizeEffectMotion(clip,duration):{})};
+  if(changes.cinematicBars){
+    if((changes.preset??clip.effectPreset)!=='cinematic-bars')throw new Error('Size/speed controls belong to cinematic bars.');
+    if(!Object.values(changes.cinematicBars).some(value=>value!==undefined))throw new Error('Specify a cinematic bars control.');
+    const cinematicBars={...cinematicBarSettings(clip),...changes.cinematicBars};patch={...patch,cinematicBars,motion:cinematicBarKeyframes(duration,cinematicBars.speed),motionOffset:0};
+  }
+  validateClipEffects({...clip,...patch});return patch;
 }
