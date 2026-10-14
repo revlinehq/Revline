@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import { LoaderCircle, Check, CircleAlert, ArrowUpRight, Undo2, AudioLines, ScanLine } from 'lucide-react';
+import { Check, ArrowUpRight, Undo2 } from 'lucide-react';
 import { Brand } from '@/components/workspace/brand';
 import { EditComposer } from '@/components/workspace/edit-composer';
 import { ChatProse } from './chat-prose';
@@ -11,9 +11,18 @@ import './assistant-results.css';
 import './assistant-editing.css';
 import './assistant-panel.css';
 import type { SourceEditSuggestion } from '@/lib/editor/types';
+import { ProcessingStatus, processingDetail } from './processing-status';
 export type { ChatTool } from './assistant-results';
 
 export type ChatMessage = { id: string; role: string; text: string; status?: string; tools?: string[]; steps?: ChatTool[] };
+type PendingReply = { id: string; text: string; previousUserId?: string; previousError?: string | null };
+
+function AssistantReplyHeader({ loading, label, detail }: { loading: boolean; label: string; detail?: string }) {
+  return <div className={`assistant-reply-header ${loading ? 'is-processing' : 'chat-author'}`}>
+    <Brand markOnly/>
+    {loading ? <ProcessingStatus label={label} detail={detail} brand={false}/> : <span>Revline</span>}
+  </div>;
+}
 
 function AssistantResponseText({ text, streaming }: { text: string; streaming: boolean }) {
   const [receivedLive, setReceivedLive] = useState(streaming);
@@ -21,14 +30,6 @@ function AssistantResponseText({ text, streaming }: { text: string; streaming: b
   // Keep the last received chunks fading after Convex marks the message complete.
   // A historical message mounts with this off, so opening a chat never replays it.
   return <ChatProse text={text} animate={receivedLive || streaming} />;
-}
-
-function EditingStatus({ activity, source, progress }: { activity?: string | null; source?: string | null; progress?:number|null }) {
-  const listening = activity?.startsWith('Listening');
-  return <div className={`assistant-editing${activity ? ' has-media-activity' : ''}`} role="status">
-    {activity && <span className="assistant-activity-icon" aria-hidden="true">{listening ? <AudioLines size={17} strokeWidth={1.5}/> : <ScanLine size={17} strokeWidth={1.5}/>}</span>}
-    <div className="assistant-activity-copy"><span className="assistant-editing-text">{activity || 'Editing…'}</span>{activity && source && <span className="assistant-activity-source" title={source}>{source}</span>}{activity && progress != null && <div className="assistant-activity-meter"><progress aria-label="Analysis progress" max={100} value={progress}/><span>{Math.round(progress)}%</span></div>}</div>
-  </div>;
 }
 
 export function AssistantPanel({ messages, running, configured, error, onSend, onStop, hasClips, demo, onLoadMore, canLoadMore, onAttach, activity, activitySource, activityProgress, draftKey, suggestions, onSuggestion, editSnapshot, onUndo }: {
@@ -45,39 +46,45 @@ export function AssistantPanel({ messages, running, configured, error, onSend, o
   const [sending, setSending] = useState(false);
   const [localError, setLocalError] = useState('');
   const [undoing,setUndoing]=useState(false);
-  const [pendingReply, setPendingReply] = useState<{ previousMessageId?:string;previousError?:string|null } | null>(null);
-  const waiting = running || sending || !!pendingReply || !!activity;
-  const turnId = messages.findLast(message => message.role === 'user')?.id ?? 'imported';
+  const [stopState,setStopState]=useState<'stopping'|'stopped'|null>(null);
+  const [pendingReply, setPendingReply] = useState<PendingReply | null>(null);
+  const answering = running || sending || !!pendingReply;
+  const waiting = answering || !!activity;
+  const latestUser = messages.findLast(message => message.role === 'user');
+  const optimisticRequest = pendingReply && latestUser?.id === pendingReply.previousUserId ? pendingReply : null;
+  const turnId = optimisticRequest?.id ?? latestUser?.id ?? 'imported';
   const demoNoteMessageId = demo ? messages.findLast(message => message.role === 'assistant')?.id : undefined;
   const scroll = useConversationScroll(turnId, true, false);
   const groups=useMemo(()=>{
     const turns:{id:string;messages:ChatMessage[]}[]=[];
     for(const message of messages){if(message.role==='user'||!turns.length)turns.push({id:message.id,messages:[]});turns.at(-1)!.messages.push(message);}
+    if (optimisticRequest) turns.push({id:optimisticRequest.id,messages:[{id:optimisticRequest.id,role:'user',text:optimisticRequest.text}]});
     return turns.map(group=>{
       const replies=group.messages.filter(message=>message.role!=='user'),steps=group.messages.flatMap(message=>message.steps??[]);
       const comparison=group.id===turnId?savedEditComparison(steps,editSnapshot):null;
       const draftFailed=!running&&group.id===turnId&&(!!error||replies.some(message=>message.status==='failed'||message.status==='aborted'));
       return {...group,replies,comparison,cards:summarizeTools(steps,{publishedRevision:comparison?.publishedRevision,draftFailed})};
     });
-  },[messages,turnId,editSnapshot,running,error]);
+  },[messages,turnId,editSnapshot,running,error,optimisticRequest]);
   useEffect(() => { try { setPrompt(draftKey ? sessionStorage.getItem(draftKey) ?? '' : ''); } catch { setPrompt(''); } }, [draftKey]);
   useEffect(() => {
     if (!pendingReply) return;
-    const last = messages.at(-1);
-    const replied = last && last.role !== 'user' && last.id !== pendingReply.previousMessageId && (last.text || last.steps?.length || last.tools?.length);
-    if (running || replied || (error && error !== pendingReply.previousError)) setPendingReply(null);
+    const newUser = latestUser && latestUser.id !== pendingReply.previousUserId;
+    const replied = newUser && messages.slice(messages.indexOf(latestUser) + 1).some(message => message.role !== 'user' && (message.text || message.steps?.length || message.tools?.length || message.status === 'success' || message.status === 'failed' || message.status === 'aborted'));
+    if ((newUser && (running || replied)) || (error && error !== pendingReply.previousError)) setPendingReply(null);
   }, [messages, running, error, pendingReply]);
   function changePrompt(value: string) { setPrompt(value); try { if (draftKey) sessionStorage.setItem(draftKey, value); } catch { /* Keep the live draft when storage is unavailable. */ } }
 
   async function stop() {
     setLocalError('');
-    try { await onStop?.(); }
-    catch (e) { setLocalError(e instanceof Error ? e.message : 'Could not stop this edit.'); }
+    setStopState('stopping');
+    try { await onStop?.(); setStopState('stopped'); }
+    catch (e) { setStopState(null); setLocalError(e instanceof Error ? e.message : 'Could not stop this edit.'); }
   }
 
   async function submit() {
     if (!prompt.trim() || sending || running || pendingReply) return;
-    setSending(true); setPendingReply({ previousMessageId: messages.at(-1)?.id, previousError: error }); setLocalError(''); scroll.resume();
+    setStopState(null); setSending(true); setPendingReply({ id: `pending-${crypto.randomUUID()}`, text: prompt.trim(), previousUserId: latestUser?.id, previousError: error }); setLocalError(''); scroll.resume();
     try { await onSend(prompt.trim()); setPrompt(''); try { if (draftKey) sessionStorage.removeItem(draftKey); } catch { /* The message was sent successfully. */ } }
     catch (e) { setPendingReply(null); setLocalError(e instanceof Error ? e.message : 'Could not send message'); }
     finally { setSending(false); }
@@ -85,8 +92,8 @@ export function AssistantPanel({ messages, running, configured, error, onSend, o
 
   async function chooseSuggestion(suggestion: SourceEditSuggestion) {
     if (!suggestions || !onSuggestion || sending || running || pendingReply || !configured) return;
-    setSending(true); setPendingReply({ previousMessageId: messages.at(-1)?.id, previousError: error }); setLocalError(''); scroll.resume();
     const request = `${suggestion.prompt}\n\nUse the selected clip from “${suggestions.sourceName}”, source ${suggestion.start.toFixed(2)}–${suggestion.end.toFixed(2)} seconds.`;
+    setStopState(null); setSending(true); setPendingReply({ id: `pending-${crypto.randomUUID()}`, text: request, previousUserId: latestUser?.id, previousError: error }); setLocalError(''); scroll.resume();
     try { await onSuggestion(request, suggestions.clipId); }
     catch (e) { setPendingReply(null); setLocalError(e instanceof Error ? e.message : 'Could not start this edit.'); }
     finally { setSending(false); }
@@ -107,28 +114,30 @@ export function AssistantPanel({ messages, running, configured, error, onSend, o
         const groupMessages = group.messages;
         const replies = group.replies;
         const editing = group.id === turnId && waiting;
+        const currentReply = replies.at(-1);
+        const showingReply = !!currentReply?.text.trim() && (currentReply.status === 'streaming' || (answering && !activity && !currentReply.steps?.some(step => step.state === 'running')));
+        const loading = editing && (!showingReply || stopState === 'stopping');
         const cards = group.cards;
         return <div className={`assistant-turn ${group.id === turnId ? 'is-latest-turn' : ''}`} data-turn-id={group.id} key={group.id}>
           {groupMessages.filter(message => message.role === 'user').map(message => <article key={message.id} data-message-id={message.id} data-message-status={message.status} className="chat-message chat-user"><p>{message.text}</p></article>)}
           {(replies.length > 0 || editing || cards.length > 0) && <div className="assistant-reply">
-            <div className="chat-author"><Brand markOnly /><span>Revline</span></div>
+            <AssistantReplyHeader loading={loading} label={stopState==='stopping'?'Stopping…':activity || 'Editing…'} detail={processingDetail(activity,activitySource)}/>
             {replies.map(message => !message.text && !message.tools?.length && message.id !== demoNoteMessageId ? null : <article key={message.id} data-message-id={message.id} data-message-status={message.status} className="chat-message chat-assistant">
               {message.text && <AssistantResponseText text={message.text} streaming={message.status === 'streaming'} />}
               {message.tools?.map((tool, i) => <div className="tool-result" key={`${tool}-${i}`}><Check size={12} />{tool}</div>)}
               {message.id === demoNoteMessageId && <div className="assistant-demo-note">Sample conversation. Explore the timeline, or <a href="/projects">start your own project</a>.</div>}
             </article>)}
-            {cards.length > 0 && <div className="assistant-result-cards" aria-label="Edit results">{cards.map(card => <div key={card.key} className={`assistant-result-card result-${card.state}${card.staged ? ' result-prepared' : ''}`}>
-              {card.state === 'running' ? <LoaderCircle size={14} className="animate-spin" /> : card.state === 'error' ? <CircleAlert size={14} /> : <Check size={14} />}
-              <div><span>{card.title}</span>{card.detail && <small>{card.detail}</small>}</div>
+            {cards.length > 0 && <div className="assistant-result-cards" aria-label="Edit results">{cards.filter(card=>!(editing&&card.state==='running')).map(card => <div key={card.key} className={`assistant-result-card result-${card.state}${card.staged ? ' result-prepared' : ''}`}>
+              <ProcessingStatus label={card.title} detail={card.detail} state={card.state==='running'?'working':card.state==='error'?'error':'ready'} brand={false}/>
             </div>)}</div>}
             {group.comparison&&<>{onUndo&&<button type="button" className="assistant-undo-edit" disabled={!group.comparison.canUndo||waiting||undoing} title={group.comparison.canUndo?'Undo the latest edit':'This saved edit is no longer the latest undoable change'} onClick={()=>void undoEdit()}><Undo2 size={14}/>{undoing?'Undoing…':'Undo'}</button>}</>}
-            {editing && <EditingStatus activity={activity} source={activitySource} progress={activityProgress} />}
           </div>}
         </div>;
       })}
-      {!messages.length && waiting && <div className="assistant-reply"><div className="chat-author"><Brand markOnly /><span>Revline</span></div><EditingStatus activity={activity} source={activitySource} progress={activityProgress} /></div>}
+      {!groups.length && waiting && <div className="assistant-reply"><AssistantReplyHeader loading label={stopState==='stopping'?'Stopping…':activity || 'Editing…'} detail={processingDetail(activity,activitySource)}/></div>}
+      {!waiting && stopState==='stopped' && <ProcessingStatus label="Stopped." detail="Your existing edit is still here." state="stopped"/>}
       {!running && suggestions?.items.length && onSuggestion && configured ? <div className="assistant-source-suggestions" aria-label="Suggested edits from this footage"><span title={suggestions.sourceName}>Ideas for {suggestions.sourceName}</span>{suggestions.items.map((suggestion, index) => <button key={`${suggestions.clipId}-${index}`} type="button" disabled={sending || !!pendingReply} onClick={() => void chooseSuggestion(suggestion)}><span>{suggestion.label}</span><ArrowUpRight size={14} aria-hidden="true" /></button>)}</div> : null}
-      {(error || localError) && <p className="chat-error" role="alert">{localError || error}</p>}
+      {(error || localError) && <ProcessingStatus className="chat-error" label="Couldn’t finish this step." detail={localError || error} state="error"/>}
       {!!messages.length && !demo && !configured && <div className="assistant-demo-note">Connect Claude to edit in conversation. Your footage, preview, and timeline are ready.</div>}
       </div>
     </div>
