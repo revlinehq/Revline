@@ -27,8 +27,9 @@ export const clipValidator = v.object({
   motion: v.optional(v.array(motionKeyframeValidator)), motionOffset: v.optional(v.number()),
   colorGrade: v.optional(colorGradeValidator), zoomBlur: v.optional(zoomBlurValidator), glitch: v.optional(glitchValidator), invert: v.optional(invertValidator), dither: v.optional(ditherValidator),
   textTemplate: v.optional(textTemplateValidator),
-  effectPreset: v.optional(v.union(v.literal('none'), v.literal('fade'), v.literal('punch'), v.literal('shake'), v.literal('flash'), v.literal('pop'), v.literal('cinematic-bars'), v.literal('quick-zoom-in'), v.literal('quick-zoom-out'), v.literal('zoom-blur'))),
+  effectPreset: v.optional(v.union(v.literal('none'), v.literal('fade'), v.literal('punch'), v.literal('shake'), v.literal('flash'), v.literal('pop'), v.literal('cinematic-bars'), v.literal('quick-zoom-in'), v.literal('quick-zoom-out'), v.literal('zoom-blur'), v.literal('solid-color'))),
   cinematicBars: v.optional(v.object({ size: v.number(), speed: v.number() })),
+  solidColor:v.optional(v.object({color:v.string(),width:v.number(),height:v.number(),x:v.number(),y:v.number(),opacity:v.number()})),
   animation: v.optional(v.union(v.literal("none"), v.literal("fade"), v.literal("rise"))),
 });
 export const timelineMarkerValidator = v.object({ id: v.string(), time: v.number(), label: v.optional(v.string()) });
@@ -98,7 +99,21 @@ export const mediaTaskFields = {
   error: v.optional(v.string()), createdAt: v.number(), updatedAt: v.number(),
 };
 export const mediaTaskDocument = v.object({ _id: v.id('mediaTasks'), _creationTime: v.number(), ...mediaTaskFields });
+export const sharedAssetFields = {
+  sourceId:v.id('assets'), storageId:v.optional(v.id('_storage')), r2Key:v.optional(v.string()),
+  fileName:v.string(),contentType:v.string(),size:v.number(),kind:assetKind,
+  duration:v.optional(v.number()),width:v.optional(v.number()),height:v.optional(v.number()),
+  audioAssetId:v.optional(v.id('assets')),audioExtracted:v.optional(v.boolean()),
+  waveform:v.optional(waveformValidator),thumbnailStorageId:v.optional(v.id('_storage')),
+};
+export const publicMediaAsset = v.object({
+  _id:v.string(),fileName:v.string(),kind:assetKind,url:v.union(v.string(),v.null()),
+  duration:v.optional(v.number()),width:v.optional(v.number()),height:v.optional(v.number()),
+  audioAssetId:v.optional(v.string()),audioExtracted:v.optional(v.boolean()),waveform:v.optional(waveformValidator),thumbnailUrl:v.optional(v.union(v.string(),v.null())),
+});
 export default defineSchema({
+  timelineShares:defineTable({projectId:v.id('projects'),ownerId:v.string(),title:v.string(),timeline:timelineValidator,published:v.boolean(),createdAt:v.number(),updatedAt:v.number()}).index('by_project',['projectId']),
+  shareAssets:defineTable({shareId:v.id('timelineShares'),...sharedAssetFields}).index('by_share',['shareId']).index('by_storageId',['storageId']).index('by_r2Key',['r2Key']).index('by_thumbnailStorageId',['thumbnailStorageId']),
   billingCheckouts: defineTable({ ownerId: v.string(), priceId: v.string(), origin: v.string(), trialEligible: v.boolean(), requestId: v.string(), createdAt: v.number(), sessionId: v.optional(v.string()), url: v.optional(v.string()), expiresAt: v.optional(v.number()) }).index('by_owner', ['ownerId']),
   mediaTasks: defineTable(mediaTaskFields).index('by_status_createdAt', ['status', 'createdAt']).index('by_asset_kind', ['assetId', 'kind']).index('by_project_createdAt', ['projectId', 'createdAt']),
   users: defineTable(userFields).index("by_clerk_id", ["clerkId"]),

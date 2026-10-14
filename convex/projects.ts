@@ -5,7 +5,7 @@ import { components, internal } from "./_generated/api";
 import { mutation, query } from "./_generated/server";
 import { listLimit, requireOwner, requireProject } from "./lib/auth";
 import { commitTimeline, currentTimeline, serializedBytes, validateTimeline } from "./lib/timeline";
-import { removeMediaAttachment } from './lib/shared_media';
+import { removeMediaAttachment, removeProjectShares } from './lib/shared_media';
 import { addMediaClip, patchClip } from '../lib/editor/operations';
 import { applyTimelineEdit } from '../lib/editor/timeline-sync';
 import { layerGroup, normalizeTimeline, timelineDuration, type Timeline } from '../lib/editor/types';
@@ -112,6 +112,7 @@ export const remove = mutation({ args: { projectId: v.id("projects") }, returns:
   if (assets.length > 200 || jobs.length > 500 || tickets.length > 1000 || analysisRequests.length > 200 || pendingUploads.length > 200 || mediaTasks.length > 1000) throw new ConvexError("Project has too many records to delete at once");
   if (jobs.some(job => job.status === "rendering") || project.aiRunning) throw new ConvexError("Wait for the active render or AI edit before deleting the project");
   for (const task of mediaTasks) { await cancelMediaTask(ctx, task._id); await ctx.db.delete(task._id); }
+  await removeProjectShares(ctx,project._id);
   for (const asset of assets) await removeMediaAttachment(ctx, asset);
   for (const job of jobs) { if (job.outputStorageId) await ctx.storage.delete(job.outputStorageId); if (job.outputR2Key) await ctx.scheduler.runAfter(0, internal.r2.deleteObject, { key: job.outputR2Key }); await ctx.db.delete(job._id); }
   for (const ticket of tickets) { if (ticket.storageId && !ticket.consumed) await ctx.storage.delete(ticket.storageId); await ctx.db.delete(ticket._id); }

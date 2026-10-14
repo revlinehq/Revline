@@ -29,6 +29,7 @@ import type * as processorDiagnostics from "../processorDiagnostics.js";
 import type * as projects from "../projects.js";
 import type * as r2 from "../r2.js";
 import type * as renders from "../renders.js";
+import type * as timelineShares from "../timelineShares.js";
 import type * as uploads from "../uploads.js";
 import type * as users from "../users.js";
 
@@ -60,6 +61,7 @@ declare const fullApi: ApiFromModules<{
   projects: typeof projects;
   r2: typeof r2;
   renders: typeof renders;
+  timelineShares: typeof timelineShares;
   uploads: typeof uploads;
   users: typeof users;
 }>;
