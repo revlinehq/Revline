@@ -1,4 +1,3 @@
-.assistant-undo-edit:focus-visible{outline:2px solid var(--ring);outline-offset:2px}
 .conversation-editor .assistant-content .chat-user{max-width:calc(100% - 46px);margin:0 0 22px auto;padding:10px 14px;border:0;border-radius:14px 14px 4px 14px;background:var(--secondary)}
 .conversation-editor .assistant-content .chat-message p{font-size:13px;line-height:1.55;letter-spacing:0}
 .conversation-editor .assistant-content .chat-author{gap:8px;font-size:12px;font-weight:600;color:var(--foreground);margin-bottom:10px}
@@ -21,9 +20,6 @@
 .assistant-mini-lane.mini-effects{height:9px;fill:#EC5355}
 .mini-empty{font-size:10px;line-height:20px;color:var(--muted-foreground)}
 .assistant-edit-comparison figcaption{margin:6px 0 0 52px;color:var(--muted-foreground);font-size:10px;font-variant-numeric:tabular-nums}
-.assistant-undo-edit{display:inline-flex;align-items:center;gap:6px;min-height:28px;margin:5px 0 8px;padding:0;color:var(--muted-foreground);font-size:12px;background:transparent;border:0}
-.assistant-undo-edit:hover:enabled{color:var(--foreground)}
-.assistant-undo-edit:disabled{opacity:.4;cursor:default}
 .conversation-editor .assistant-content .manual-editor-composer{padding:10px;border-radius:10px;gap:8px;background:var(--secondary);box-shadow:inset 0 0 0 1px var(--border)}
 .conversation-editor .assistant-content .manual-editor-composer textarea{min-height:24px;font-size:13px;line-height:20px;letter-spacing:0}
 .conversation-editor .assistant-content .manual-editor-composer .edit-composer-actions{height:32px}

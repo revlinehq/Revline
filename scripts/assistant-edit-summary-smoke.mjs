@@ -22,8 +22,8 @@ const bundle = await build({
     const response = {id:'answer',role:'assistant',text:'Removed the section and added animated captions.',status:'success',steps:tools};
     const root = createRoot(document.getElementById('root'));
     let store, state, resolveSend, resolveStop, mount=0;
-    window.requests = []; window.attachCount = 0; window.undoCount = 0;window.delayUser=false;window.pendingRequest=null;window.stopCount=0;window.rejectSend=false;
-    const render = () => flushSync(() => root.render(<AssistantPanel key={mount} {...state} configured hasClips demo={false} onAttach={() => window.attachCount++} onSend={async text => {if(window.rejectSend)throw new Error('The request could not be sent.');window.requests.push(text);window.pendingRequest={id:'new-request',role:'user',text};if(!window.delayUser){state={...state,messages:[...state.messages,window.pendingRequest],editSnapshot:undefined};render();}await new Promise(resolve => resolveSend=resolve);} } onStop={async()=>{window.stopCount++;await new Promise(resolve=>resolveStop=resolve);state={...state,running:false,activity:null,messages:state.messages.map(message=>message.id==='tool-pass'?{...message,status:'aborted',steps:message.steps.map(step=>({...step,state:'error',detail:'Stopped by you.'}))}:message)};render();}} onUndo={async () => {const current=store.getState();if(!matchesUndoSnapshot(state.editSnapshot,current.timeline,current.history.at(-1)))throw new Error('This edit is no longer the latest change.');if(window.rejectUndo)throw new Error('Undo could not be saved.');store.getState().undo();window.undoCount++;state={...state,editSnapshot:undefined};render();}}/>));
+    window.requests = []; window.attachCount = 0;window.delayUser=false;window.pendingRequest=null;window.stopCount=0;window.rejectSend=false;
+    const render = () => flushSync(() => root.render(<AssistantPanel key={mount} {...state} configured hasClips demo={false} onAttach={() => window.attachCount++} onSend={async text => {if(window.rejectSend)throw new Error('The request could not be sent.');window.requests.push(text);window.pendingRequest={id:'new-request',role:'user',text};if(!window.delayUser){state={...state,messages:[...state.messages,window.pendingRequest],editSnapshot:undefined};render();}await new Promise(resolve => resolveSend=resolve);} } onStop={async()=>{window.stopCount++;await new Promise(resolve=>resolveStop=resolve);state={...state,running:false,activity:null,messages:state.messages.map(message=>message.id==='tool-pass'?{...message,status:'aborted',steps:message.steps.map(step=>({...step,state:'error',detail:'Stopped by you.'}))}:message)};render();}}/>));
     window.resetFixture = () => {mount++;store=createEditorStore(before);store.getState().replace(after,true);state={messages:[request,response],running:false,error:null,editSnapshot:{before,after,revision:11,publishedDraft:true,canUndo:true}};render();};
     window.updateFixture = patch => {state={...state,...patch};render();};
     window.finishSend = () => resolveSend?.();window.finishStop=()=>resolveStop?.();window.acceptRequest=()=>{state={...state,messages:[...state.messages,window.pendingRequest],editSnapshot:undefined};render();};
@@ -109,7 +109,7 @@ try {
   assert.deepEqual(await page.$$eval('.assistant-result-card', nodes => nodes.map(node => node.textContent)), ['Trimmed 2 clips', 'Added 1 subtitle']);
   assert.equal(await page.$('.assistant-edit-comparison'),null,'Before/After comparison is removed');
   assert.equal(await page.$eval('textarea', element => element.placeholder), 'What would you change next?');
-  assert.equal(await page.$eval('.assistant-undo-edit', element => element.disabled), false);
+  assert.equal(await page.$('.assistant-undo-edit'), null, 'Undo is only in the editor toolbar');
   assert.equal(await page.evaluate(() => document.body.textContent.includes('Review changes') || document.body.textContent.includes('Pause') || document.body.textContent.includes('2 changes applied')), false, 'No mock edits or obsolete review action');
   const bounds = await page.evaluate(() => {
     const shell = document.querySelector('main').getBoundingClientRect(), composer = document.querySelector('.edit-composer').getBoundingClientRect();
@@ -123,21 +123,8 @@ try {
   await page.screenshot({ path: '/tmp/revline-assistant-edit-light.png' });
   await page.evaluate(() => document.documentElement.classList.remove('light'));
 
-  await page.click('.assistant-undo-edit');
-  assert.equal(await page.evaluate(() => JSON.stringify(window.fixtureState().timeline) === JSON.stringify(window.fixtureState().before)), true, 'Undo restores the actual previous timeline');
-  assert.equal(await page.evaluate(() => window.undoCount), 1);
-  assert.equal(await page.$('.assistant-edit-comparison'), null);
   await page.evaluate(() => { window.resetFixture(); window.manualEdit(); });
-  assert.equal(await page.$eval('.assistant-undo-edit', element => element.disabled), true, 'A newer manual change prevents stale chat Undo');
-  await page.click('.assistant-undo-edit');
-  assert.equal(await page.evaluate(() => window.undoCount), 1);
-
-  await page.evaluate(() => { window.resetFixture(); window.rejectUndo=true; });
-  await page.click('.assistant-undo-edit');
-  await page.waitForFunction(() => document.querySelector('.chat-error .processing-status-detail')?.textContent === 'Undo could not be saved.');
-  assert.equal(await page.evaluate(() => window.undoCount), 1, 'A rejected Undo does not report or apply a completed change');
-  assert.equal(await page.$eval('.assistant-undo-edit', element => element.disabled), false, 'A failed Undo remains retryable');
-  await page.evaluate(() => window.rejectUndo=false);
+  assert.equal(await page.$('.assistant-undo-edit'), null, 'Manual edits do not bring chat Undo back');
 
   await page.evaluate(() => { window.resetFixture(); window.updateFixture({editSnapshot:undefined}); });
   assert.equal(await page.$('.assistant-edit-comparison'), null, 'Unpublished tools cannot claim a saved comparison');
@@ -173,7 +160,7 @@ try {
   assert.equal(await page.evaluate(() => document.querySelector('main').getBoundingClientRect().bottom-document.querySelector('.edit-composer').getBoundingClientRect().bottom), 12, 'Long chat retains a bottom composer');
   await page.screenshot({ path: '/tmp/revline-assistant-edit-tall.png' });
   assert.deepEqual(errors, []);
-  console.log('PASS: truthful saved result summaries, compact dark/light layout without Before/After or extra chat navbar, matching Undo restores the timeline, stale Undo disabled, staged/error results truthful, immediate brand and stable pending/streaming handoff. Screenshots: /tmp/revline-assistant-edit-{dark,light,tall}.png');
+  console.log('PASS: truthful saved result summaries, compact dark/light layout without Before/After, chat Undo or extra navbar, staged/error results truthful, immediate brand and stable pending/streaming handoff. Screenshots: /tmp/revline-assistant-edit-{dark,light,tall}.png');
   }
 } finally {
   await browser?.close();

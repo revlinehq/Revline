@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import { Check, ArrowUpRight, Undo2 } from 'lucide-react';
+import { Check, ArrowUpRight } from 'lucide-react';
 import { Brand } from '@/components/workspace/brand';
 import { EditComposer } from '@/components/workspace/edit-composer';
 import { ChatProse } from './chat-prose';
@@ -32,7 +32,7 @@ function AssistantResponseText({ text, streaming }: { text: string; streaming: b
   return <ChatProse text={text} animate={receivedLive || streaming} />;
 }
 
-export function AssistantPanel({ messages, running, configured, error, onSend, onStop, hasClips, demo, onLoadMore, canLoadMore, onAttach, activity, activitySource, activityProgress, draftKey, suggestions, onSuggestion, editSnapshot, onUndo }: {
+export function AssistantPanel({ messages, running, configured, error, onSend, onStop, hasClips, demo, onLoadMore, canLoadMore, onAttach, activity, activitySource, activityProgress, draftKey, suggestions, onSuggestion, editSnapshot }: {
   messages: ChatMessage[]; running: boolean; configured: boolean; error?: string | null;
   onSend: (text: string) => Promise<void>; hasClips: boolean; demo: boolean;
   onLoadMore?: () => void; canLoadMore?: boolean; onAttach?: () => void;
@@ -40,12 +40,11 @@ export function AssistantPanel({ messages, running, configured, error, onSend, o
   onStop?: () => Promise<void>;
   suggestions?: { sourceName:string;clipId:string;items:SourceEditSuggestion[] };
   onSuggestion?: (prompt:string,clipId:string) => Promise<void>;
-  editSnapshot?:AssistantEditSnapshot;onUndo?:()=>void|Promise<void>;
+  editSnapshot?:AssistantEditSnapshot;
 }) {
   const [prompt, setPrompt] = useState('');
   const [sending, setSending] = useState(false);
   const [localError, setLocalError] = useState('');
-  const [undoing,setUndoing]=useState(false);
   const [stopState,setStopState]=useState<'stopping'|'stopped'|null>(null);
   const [pendingReply, setPendingReply] = useState<PendingReply | null>(null);
   const answering = running || sending || !!pendingReply;
@@ -99,12 +98,6 @@ export function AssistantPanel({ messages, running, configured, error, onSend, o
     finally { setSending(false); }
   }
 
-  async function undoEdit(){
-    if(undoing||waiting||!groups.at(-1)?.comparison?.canUndo||!onUndo)return;
-    setUndoing(true);setLocalError('');
-    try{await onUndo();}catch(reason){setLocalError(reason instanceof Error?reason.message:'Could not undo this edit.');}finally{setUndoing(false);}
-  }
-
   return <div className="assistant-content">
     <div ref={scroll.viewport} className={`assistant-history ${!messages.length && !waiting ? 'assistant-history-empty' : ''}`}>
       <div className="assistant-turns" ref={scroll.content}>
@@ -131,7 +124,6 @@ export function AssistantPanel({ messages, running, configured, error, onSend, o
             {cards.length > 0 && <div className="assistant-result-cards" aria-label="Edit results">{cards.filter(card=>!(card.state==='running'&&(editing||(group.id===turnId&&stopState==='stopped')))).map(card => <div key={card.key} className={`assistant-result-card result-${card.state}${card.staged ? ' result-prepared' : ''}`}>
               <ProcessingStatus label={card.title} detail={card.detail} state={card.state==='running'?'working':card.state==='error'?'error':'ready'} brand={false}/>
             </div>)}</div>}
-            {group.comparison&&<>{onUndo&&<button type="button" className="assistant-undo-edit" disabled={!group.comparison.canUndo||waiting||undoing} title={group.comparison.canUndo?'Undo the latest edit':'This saved edit is no longer the latest undoable change'} onClick={()=>void undoEdit()}><Undo2 size={14}/>{undoing?'Undoing…':'Undo'}</button>}</>}
           </div>}
         </div>;
       })}
