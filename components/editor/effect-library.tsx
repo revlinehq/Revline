@@ -4,11 +4,11 @@ import { lazy, Suspense, useId, useState } from 'react';
 import { ChevronRight, FolderOpen, Plus, Search } from 'lucide-react';
 import { EffectIcon } from './effect-icon';
 import type { EffectPreset } from '@/lib/editor/clip-effects';
-import { REMOTION_TEXT_PRESETS, type RemotionTextPreset } from '@/lib/editor/remotion-text';
+import { TEXT_ANIMATION_PRESETS, selectedTextAnimation, type TextAnimationPreset } from '@/lib/editor/text-effects';
+import { selectedTextLook, type TextLookId } from '@/lib/editor/text-looks';
+import { TextFontStyles } from './text-font-styles';
 import type { VisualEffects } from '@/lib/editor/visual-effects';
 import type { Clip, MediaAsset } from '@/lib/editor/types';
-import { selectedSubtitleStyle, type SubtitleStyleId } from '@/lib/editor/subtitle-styles';
-import { SubtitleStylePicker } from './subtitle-style-picker';
 import type { OverlayCatalogItem } from '@/lib/editor/overlay-catalog';
 import { EFFECT_DRAG_TYPE } from '@/lib/editor/effect-drag';
 import { SegmentedTabs } from './segmented-tabs';
@@ -16,6 +16,7 @@ import { EFFECT_LIBRARY_CATALOG, EFFECT_LIBRARY_CATEGORIES, type EffectLibraryCa
 import './effect-library.css';
 
 const TextPresetPicker = lazy(() => import('./text-preset-picker'));
+const TextLookPicker = lazy(() => import('./text-look-picker').then(module => ({ default: module.TextLookPicker })));
 export type LibraryVisualEffect = keyof VisualEffects;
 type LibraryTab = 'effects' | 'text';
 
@@ -27,11 +28,11 @@ function LibraryEntry({ entry, disabled, reason, draggable, onApply }: { entry: 
   }}><EffectIcon name={entry.id} size={18}/><span>{entry.label}</span>{entry.action ? <ChevronRight size={12} aria-hidden="true"/> : <Plus size={12} aria-hidden="true"/>}</button>;
 }
 
-export function EffectLibrary({ clip, onMedia, onVisualEffect, onAddEffect, onTextTemplate, onSubtitleStyle, onSpeed }: {
+export function EffectLibrary({ clip, onMedia, onVisualEffect, onAddEffect, onTextAnimation, onTextLook, onSpeed }: {
   clip?: Clip; assets: readonly MediaAsset[];
   onMedia?: () => void; onVisualEffect: (effect: LibraryVisualEffect) => void;
-  onAddEffect?: (preset: EffectPreset) => void; onTextTemplate?: (preset: RemotionTextPreset) => void;
-  onSubtitleStyle?: (style: SubtitleStyleId) => void;
+  onAddEffect?: (preset: EffectPreset) => void; onTextAnimation?: (preset: TextAnimationPreset) => void;
+  onTextLook?: (look: TextLookId) => void;
   onUploadOverlay?: () => void; onAddOverlay?: (asset: MediaAsset) => void; overlayAssets?: readonly MediaAsset[]; onAddCatalogOverlay?: (overlay: OverlayCatalogItem) => void;
   onFadeThroughBlack?: () => void; onSpeed?: () => void;
 }) {
@@ -78,9 +79,9 @@ export function EffectLibrary({ clip, onMedia, onVisualEffect, onAddEffect, onTe
           {!visible.length && <p className="library-empty">No matching looks.</p>}
         </div>
       </div> : <div className="library-text-results">
-        {text && <p className="library-selection-note">Apply an animation to your selected text.</p>}
-        <Suspense fallback={<p className="library-selection-note">Loading text templates…</p>}><TextPresetPicker presets={REMOTION_TEXT_PRESETS} selected={text ? clip?.textTemplate?.preset : undefined} onSelect={onTextTemplate}/></Suspense>
-        <SubtitleStylePicker selected={selectedSubtitleStyle(clip)} onSelect={onSubtitleStyle}/>
+        <TextFontStyles/>
+        <section className="library-text-section"><h3>{text ? 'Presets' : 'Add text'}</h3><Suspense fallback={<p className="library-selection-note">Loading presets…</p>}><TextLookPicker selected={text ? selectedTextLook(clip) : undefined} onSelect={onTextLook}/></Suspense></section>
+        <section className="library-text-section"><h3>Animation</h3>{!text && <p className="library-selection-note">Select text to apply an animation.</p>}<Suspense fallback={<p className="library-selection-note">Loading animations…</p>}><TextPresetPicker presets={TEXT_ANIMATION_PRESETS} clip={text ? clip : undefined} selected={text ? selectedTextAnimation(clip) : undefined} onSelect={text ? onTextAnimation : undefined}/></Suspense></section>
       </div>}
     </div>
   </div>;

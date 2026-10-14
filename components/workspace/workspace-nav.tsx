@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useClerk, useUser } from '@clerk/nextjs';
@@ -57,9 +57,10 @@ export interface WorkspaceNavProps {
   exportDisabled?: boolean;
   onRename?: (title: string) => void | Promise<void>;
   chatId?: string;
+  editorControls?: ReactNode;
 }
 
-export function WorkspaceNav({ title = 'New chat', editorHref, active = 'chat', demo = false, saving, canUndo, canRedo, onUndo, onRedo, onFootage, onExport, onShare, shareDisabled, exportDisabled, onRename, chatId }: WorkspaceNavProps) {
+export function WorkspaceNav({ title = 'New chat', editorHref, active = 'chat', demo = false, saving, canUndo, canRedo, onUndo, onRedo, onFootage, onExport, onShare, shareDisabled, exportDisabled, onRename, chatId, editorControls }: WorkspaceNavProps) {
   const pathname = usePathname();
   const { chats, loading } = useWorkspaceChats(demo);
   const { user, isSignedIn, isLoaded } = useUser();
@@ -108,6 +109,7 @@ export function WorkspaceNav({ title = 'New chat', editorHref, active = 'chat', 
         <DropdownMenuItem asChild className="workspace-menu-item"><Link href="/chats" aria-current={active === 'chats' ? 'page' : undefined}><History size={15} />See all chats</Link></DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
+    {editorControls}
     <div className="workspace-nav-actions">
       {saving !== undefined && <span className="workspace-nav-save" role="status">{saving ? <LoaderCircle size={13} className="animate-spin" /> : <Check size={13} />}{saving ? 'Saving…' : 'Saved'}</span>}
       {(onUndo || onRedo) && <div className="workspace-nav-history"><button className="workspace-nav-icon" aria-label="Undo" title="Undo" disabled={!canUndo} onClick={onUndo}><Undo2 size={15} /></button><button className="workspace-nav-icon" aria-label="Redo" title="Redo" disabled={!canRedo} onClick={onRedo}><Redo2 size={15} /></button></div>}

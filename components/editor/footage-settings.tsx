@@ -6,6 +6,7 @@ import type { Clip, MediaAsset } from '@/lib/editor/types';
 import { NumberControl } from './visual-controls';
 import { EffectSlider, PlaybackSpeedControls } from './visual-effects-controls';
 import { DEFAULT_TRANSFORM } from '@/lib/editor/types';
+import { InspectorSelect } from './inspector-select';
 import './footage-settings.css';
 
 function blendLabel(mode: NonNullable<Clip['blendMode']>) {
@@ -46,7 +47,7 @@ export function FootageSettings({ clip, audioClip, asset, onChange, onPreview, o
     <details className="footage-compositing">
       <summary><span>Compositing</span><small>{blendLabel(blendMode)}</small><ChevronDown size={13}/></summary>
       <EffectSlider label="Opacity" value={clip.transform?.opacity??1} bounds={[0,1]} step={.01} format={value=>`${Math.round(value*100)}%`} disabled={false} onPreview={value=>onPreview?.(value===null?null:{transform:{...DEFAULT_TRANSFORM,...clip.transform,opacity:value}})} onCommit={opacity=>onChange({transform:{...DEFAULT_TRANSFORM,...clip.transform,opacity}})}/>
-      <label className="footage-blend"><span>Blend mode</span><select aria-label="Blend mode" value={blendMode} onChange={event => onChange({ blendMode: event.currentTarget.value as Clip['blendMode'] })}>{BLEND_MODES.map(mode => <option key={mode} value={mode}>{blendLabel(mode)}</option>)}</select></label>
+      <div className="footage-blend"><span>Blend mode</span><InspectorSelect label="Blend mode" value={blendMode} onChange={blendMode => onChange({ blendMode })} options={BLEND_MODES.map(mode => ({ value: mode, label: blendLabel(mode) }))}/></div>
     </details>
   </div>;
 }

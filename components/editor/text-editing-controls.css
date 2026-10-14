@@ -2,3 +2,4 @@
 .preview-inspector .text-editing-controls .inspector-field,.preview-inspector .text-editing-controls .visual-number{margin:0}
 .text-editing-controls textarea{min-height:72px}
 .text-size-controls{display:grid;grid-template-columns:minmax(0,1fr) 82px;align-items:end;gap:8px}.text-size-controls .visual-number>span{font-size:9px}
+.text-color-control{display:flex;align-items:center;justify-content:space-between;gap:8px;color:var(--ws-muted);font-size:11px}.text-color-control input[type=color]{width:32px;height:24px;padding:2px;border:1px solid var(--ws-artifact-border);border-radius:4px;background:var(--ws-input)}

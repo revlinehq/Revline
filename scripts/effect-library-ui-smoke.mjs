@@ -6,8 +6,8 @@ import puppeteer from 'puppeteer';
 const bundle = await build({ stdin: { resolveDir: process.cwd(), loader: 'tsx', contents: `
 import React,{useState} from 'react'; import {createRoot} from 'react-dom/client';
 import {PreviewInspector} from './components/editor/preview-inspector';
-import {addEffectClip,patchClip} from './lib/editor/operations';
-import {addTextTemplateClip} from './lib/editor/library-actions';
+import {addEffectClip,addTextClip,patchClip} from './lib/editor/operations';
+import {textLookPatch} from './lib/editor/text-looks';
 
 import './components/workspace/workspace-pages.css'; import './app/editor.css';
 const assets=[{_id:'photo',fileName:'Light leak.jpg',kind:'image',url:'data:image/svg+xml,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="120" height="80"><rect width="120" height="80" fill="#558879"/></svg>'),duration:5}];
@@ -18,7 +18,7 @@ const initial={fps:30,aspectRatio:'landscape',tracks:{visual:2,overlay:0,audio:1
 {id:'sound',kind:'audio',start:0,sourceStart:0,duration:6,track:1,volume:.8}]};
 function Fixture(){const [timeline,setTimeline]=useState(initial); const [selected,setSelected]=useState('v1');const clip=timeline.clips.find(item=>item.id===selected);window.fixture={timeline,select:setSelected};
 const add=(next,id)=>{setTimeline(next);setSelected(id)};
-return <PreviewInspector clip={clip} assets={assets} upload={null} onUpload={()=>window.uploads++} onAdd={()=>window.sourceAdds++} onCrop={()=>{}} onChange={patch=>{window.commits++;setTimeline(previous=>patchClip(previous,selected,patch))}} onPlaybackRateChange={()=>{}} onAddEffect={preset=>{const id='fx-'+(++window.nextId);add(addEffectClip(timeline,id,preset,1),id)}} onAddTextTemplate={preset=>{const id='text-'+(++window.nextId);add(addTextTemplateClip(timeline,id,preset,1),id)}}/>}
+return <PreviewInspector clip={clip} assets={assets} upload={null} onUpload={()=>window.uploads++} onAdd={()=>window.sourceAdds++} onCrop={()=>{}} onChange={patch=>{window.commits++;setTimeline(previous=>patchClip(previous,selected,patch))}} onPlaybackRateChange={()=>{}} onAddEffect={preset=>{const id='fx-'+(++window.nextId);add(addEffectClip(timeline,id,preset,1),id)}} onAddTextLook={look=>{const id='text-'+(++window.nextId);const next=addTextClip(timeline,id,'graphic',1);add(patchClip(next,id,textLookPatch(next.clips.find(item=>item.id===id),look)),id)}}/>}
 window.commits=0;window.nextId=0;window.uploads=0;window.sourceAdds=0;createRoot(document.getElementById('root')).render(<Fixture/>);
 ` }, bundle: true, platform: 'browser', format: 'iife', jsx: 'automatic', write: false, outdir: '/tmp/revline-library-fixture', define: { 'process.env.NODE_ENV': '"production"' } });
 const browser = await puppeteer.launch({headless:true,args:['--no-sandbox','--disable-dev-shm-usage']});
@@ -52,9 +52,9 @@ try{
  assert.equal(await page.evaluate(()=>window.fixture.timeline.clips.at(-1).effectPreset),'cinematic-bars');
  await library();await button('Zoom out').click();await flush();assert.equal(await page.evaluate(()=>window.fixture.timeline.clips.at(-1).effectPreset),'quick-zoom-out');
  await choose('v1');await library();
- await choose('v1');await library();await page.click('[data-segment="text"]');await button('Pop-in words').click();await flush();
- assert.equal(await page.evaluate(()=>window.fixture.timeline.clips.at(-1).textTemplate.preset),'word-pop','Text tile creates a supported template');
- await page.waitForSelector('[aria-label="Text templates"]');assert.ok(await page.$('[aria-label="Text templates"]'),'Text editing controls are available after adding');
+ await choose('v1');await library();await page.click('[data-segment="text"]');await button('Default text').click();await page.waitForSelector('[aria-label="Text animations"]');await button('Apply Pop-in words').click();await flush();
+ assert.equal(await page.evaluate(()=>window.fixture.timeline.clips.at(-1).textTemplate.preset),'word-pop','An animation applies to newly added plain text');
+ await page.waitForSelector('[aria-label="Text animations"]');assert.ok(await page.$('[aria-label="Text animations"]'),'Text editing controls are available after adding');
  assert.ok(await page.$('[aria-label="Selected text"]'),'New text is immediately editable after choosing a template');
  assert.ok(await page.$('[aria-label="Custom text size"]'),'Text size remains available beside the words');
  await library();await page.click('#inspector-media-tab');assert.ok(await page.$('.footage-content-inspector'),'My media opens the reusable source list');assert.equal(await page.$('.effect-library'),null,'Only one pane is visible');await button('Add files').click();assert.equal(await page.evaluate(()=>window.uploads),1);await page.click('[data-asset-id="photo"]');assert.equal(await page.evaluate(()=>window.sourceAdds),1);assert.equal(await page.$('.library-media-access'),null,'There is no second media navigation route');

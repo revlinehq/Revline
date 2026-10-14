@@ -2,6 +2,8 @@
 
 import { SolidColorControls } from './solid-color-controls';
 import { TextEffectsControls } from './text-effects-controls';
+import { AudioControls } from './audio-controls';
+import type { CaptionActions } from './caption-controls';
 import { AppliedVisualEffects, CinematicBarsControls, PlaybackSpeedControls, VisualEffectsControls } from './visual-effects-controls';
 import { FootageSelection, FootageSettings } from './footage-settings';
 import { useEffect, useRef, useState } from 'react';
@@ -13,15 +15,14 @@ import { type Clip, type MediaAsset } from '@/lib/editor/types';
 import { effectClipLabel, type EffectPreset } from '@/lib/editor/clip-effects';
 import { EffectLibrary, type LibraryVisualEffect } from './effect-library';
 import { DEFAULT_COLOR_GRADE, DEFAULT_DITHER, DEFAULT_GLITCH, DEFAULT_INVERT, DEFAULT_ZOOM_BLUR } from '@/lib/editor/visual-effects';
-import { textTemplatePatch } from '@/lib/editor/text-effects';
-import type { RemotionTextPreset } from '@/lib/editor/remotion-text';
+import { textAnimationPatch, type TextAnimationPreset } from '@/lib/editor/text-effects';
+import { textLookPatch, type TextLookId } from '@/lib/editor/text-looks';
 import { SegmentedTabs } from './segmented-tabs';
 import './preview-inspector.css';
-import { subtitleStylePatch, type SubtitleStyleId } from '@/lib/editor/subtitle-styles';
 
 const sections = [{ value: 'tools', label: 'Tools', id: 'inspector-tools-tab', panelId: 'inspector-tools', icon: <SlidersHorizontal size={14} strokeWidth={1.5}/> }, { value: 'media', label: 'My media', id: 'inspector-media-tab', panelId: 'inspector-media', icon: <Film size={14} strokeWidth={1.5}/> }] as const;
 
-export function PreviewInspector({ clip, audioClip, asset, assets, onRemoveAsset, usedAssetIds, upload, onUpload, onAdd, onChange, onPreviewEffects, onPlaybackRateChange, onAddEffect, onCrop, cropping=false, videoImports, onAddTextTemplate, onAddSubtitleStyle, onAddOverlay, onFadeThroughBlack, sourceRequest = 0, editRequest = 0 }: { onRemoveAsset?: (asset:MediaAsset)=>Promise<void>; usedAssetIds?:readonly string[]; sourceRequest?: number; editRequest?: number; onAddTextTemplate?: (preset: RemotionTextPreset) => void; onAddSubtitleStyle?: (style: SubtitleStyleId) => void; onAddOverlay?: (asset: MediaAsset) => void; onFadeThroughBlack?: () => void; clip?: Clip; audioClip?: Clip; asset?: MediaAsset; assets: MediaAsset[]; upload: UploadProgress; onUpload: () => void; onAdd: (asset: MediaAsset) => void; onChange: (patch: Partial<Clip>) => void; onPreviewEffects?: (patch: Partial<Clip> | null) => void; onPlaybackRateChange?: (rate: number) => void; onAddEffect?: (preset: EffectPreset) => void; onCrop: () => void; cropping?:boolean; videoImports?:VideoImportState[] }) {
+export function PreviewInspector({ clip, audioClip, asset, assets, onRemoveAsset, usedAssetIds, upload, onUpload, onAdd, onChange, onPreviewEffects, onPlaybackRateChange, onAddEffect, onCrop, cropping=false, videoImports, onAddTextLook, captionActions, onAddOverlay, onFadeThroughBlack, sourceRequest = 0, editRequest = 0 }: { onRemoveAsset?: (asset:MediaAsset)=>Promise<void>; usedAssetIds?:readonly string[]; sourceRequest?: number; editRequest?: number; onAddTextLook?: (look: TextLookId) => void; captionActions?: CaptionActions; onAddOverlay?: (asset: MediaAsset) => void; onFadeThroughBlack?: () => void; clip?: Clip; audioClip?: Clip; asset?: MediaAsset; assets: MediaAsset[]; upload: UploadProgress; onUpload: () => void; onAdd: (asset: MediaAsset) => void; onChange: (patch: Partial<Clip>) => void; onPreviewEffects?: (patch: Partial<Clip> | null) => void; onPlaybackRateChange?: (rate: number) => void; onAddEffect?: (preset: EffectPreset) => void; onCrop: () => void; cropping?:boolean; videoImports?:VideoImportState[] }) {
   const [section, setSection] = useState<'tools' | 'media'>('tools');
   const [tab, setTab] = useState<'edit' | 'sources' | 'effects'>('sources');
   const [effectSelection, setEffectSelection] = useState<{clipId:string;key:LibraryVisualEffect} | null>(null);
@@ -49,14 +50,14 @@ export function PreviewInspector({ clip, audioClip, asset, assets, onRemoveAsset
     setEffectSelection({clipId:clip.id,key:effect});
     setTab('effects');
   }
-  function applyTextTemplate(preset: RemotionTextPreset) {
-    if (text && clip) onChange(textTemplatePatch(clip, preset));
-    else onAddTextTemplate?.(preset);
-    setTab('effects');
+  function applyTextAnimation(preset: TextAnimationPreset) {
+    if (!text || !clip) return;
+    onChange(textAnimationPatch(clip, preset));
+    setTab('edit');
   }
-  function applySubtitleStyle(style: SubtitleStyleId) {
-    if (clip?.kind === 'caption') onChange(subtitleStylePatch(style));
-    else onAddSubtitleStyle?.(style);
+  function applyTextLook(look: TextLookId) {
+    if (text && clip) onChange(textLookPatch(clip, look));
+    else onAddTextLook?.(look);
     setTab('edit');
   }
   const effect = clip?.kind === 'effect';
@@ -79,18 +80,18 @@ export function PreviewInspector({ clip, audioClip, asset, assets, onRemoveAsset
       {!visual && !effect && <button role="tab" id="inspector-edit-tab" aria-controls="inspector-edit" aria-selected={activeTab === 'edit'} tabIndex={activeTab === 'edit' ? 0 : -1} onClick={() => setTab('edit')}><SlidersHorizontal size={14}/>Edit</button>}
       {!text && <button role="tab" id="inspector-effects-tab" aria-controls="inspector-effects" aria-selected={activeTab === 'effects'} tabIndex={activeTab === 'effects' ? 0 : -1} onClick={() => { if (visual) setEffectSelection(null); setTab('effects'); }}>{visual ? <SlidersHorizontal size={14}/> : <Layers size={14}/>}{visual ? 'Clip settings' : 'Effects'}</button>}
     </div>}
-    {library ? <div className="inspector-content inspector-library-content" id="inspector-sources"><EffectLibrary clip={clip} assets={assets} onVisualEffect={addVisualEffect} onAddEffect={onAddEffect ? addTimedEffect : undefined} onTextTemplate={text || onAddTextTemplate ? applyTextTemplate : undefined} onSubtitleStyle={clip?.kind === 'caption' || onAddSubtitleStyle ? applySubtitleStyle : undefined} onAddOverlay={onAddOverlay} onFadeThroughBlack={onFadeThroughBlack} onSpeed={onPlaybackRateChange ? () => { setEffectSelection(null); setTab('effects'); } : undefined}/></div> : <div className="inspector-content" role="tabpanel" id={`inspector-${activeTab}`} aria-labelledby={`inspector-${activeTab}-tab`}>
+    {library ? <div className="inspector-content inspector-library-content" id="inspector-sources"><EffectLibrary clip={clip} assets={assets} onVisualEffect={addVisualEffect} onAddEffect={onAddEffect ? addTimedEffect : undefined} onTextAnimation={text ? applyTextAnimation : undefined} onTextLook={text || onAddTextLook ? applyTextLook : undefined} onAddOverlay={onAddOverlay} onFadeThroughBlack={onFadeThroughBlack} onSpeed={onPlaybackRateChange ? () => { setEffectSelection(null); setTab('effects'); } : undefined}/></div> : <div className="inspector-content" role="tabpanel" id={`inspector-${activeTab}`} aria-labelledby={`inspector-${activeTab}-tab`}>
       {activeTab === 'edit' ? clip?.kind === 'effect' ? solidControls ?? barControls ?? <div className="inspector-empty"><Layers size={22} strokeWidth={1.2}/><p>{effectClipLabel(clip)}</p><span>Move, trim, or delete this clip on the timeline.</span></div> : clip ? <>
         <div className="inspector-selection"><small>{text ? 'Text' : clip.kind === 'audio' ? 'Audio' : 'Footage'}</small><p>{clip.text || asset?.fileName || 'Selected clip'}</p></div>
-        {text && <TextEffectsControls clip={clip} onChange={onChange}/>}
+        {text && <TextEffectsControls clip={clip} onChange={onChange} onPreview={onPreviewEffects} captionActions={captionActions}/>}
 
-        {clip.kind === 'audio' && <NumberControl label="Clip volume" min={0} max={200} value={Math.round(((audioClip ?? clip).volume ?? 1) * 100)} unit="%" onCommit={volume => onChange({ volume: volume / 100 })}/>}
+        {clip.kind === 'audio' && <AudioControls key={clip.id} clip={clip} onChange={onChange} onPreview={onPreviewEffects}/>}
       </> : <div className="inspector-empty"><SlidersHorizontal size={22} strokeWidth={1.2}/><p>Select a clip</p><span>Its editing controls appear here.</span></div> : visual && clip ? onlyEffect ? <div className="inspector-effect-detail">
         <button type="button" className="inspector-effect-back" aria-label="Back to clip settings" onClick={() => setEffectSelection(null)}><ArrowLeft size={12}/>Clip settings</button>
         <FootageSelection clip={clip} asset={asset}/>
         <VisualEffectsControls key={`${clip.id}-${onlyEffect}`} onlyEffect={onlyEffect} clip={clip} onChange={onChange} onPreview={onPreviewEffects}/>
       </div> : <div className="inspector-clip-settings">
-        <FootageSettings key={clip.id} clip={clip} audioClip={audioClip} asset={asset} onChange={onChange} onPlaybackRateChange={onPlaybackRateChange} onCrop={onCrop} cropping={cropping}/>
+        <FootageSettings key={clip.id} clip={clip} audioClip={audioClip} asset={asset} onChange={onChange} onPreview={onPreviewEffects} onPlaybackRateChange={onPlaybackRateChange} onCrop={onCrop} cropping={cropping}/>
         <AppliedVisualEffects clip={clip} onSelect={key => setEffectSelection({ clipId: clip.id, key })} onAdd={() => setTab('sources')}/>
       </div> : solidControls ? solidControls : zoomBlurControls ? zoomBlurControls : barControls ? barControls : clip?.kind === 'audio' && onPlaybackRateChange ? <PlaybackSpeedControls clip={clip} onChange={onPlaybackRateChange}/> : effect && clip ? <div className="inspector-empty"><Layers size={22} strokeWidth={1.2}/><p>{effectClipLabel(clip)}</p><span>Move, trim, or delete this effect on the timeline.</span></div> : <div className="inspector-empty"><Layers size={22} strokeWidth={1.2}/><p>Select a visual clip</p><span>Choose footage for effects or a text clip to animate it.</span></div>}
     </div>}

@@ -1,29 +1,31 @@
 'use client';
 
-import { Button } from '@/components/ui/button';
 import { lazy, Suspense } from 'react';
-import { selectedTextEffect, textEffectPatch, textTemplatePatch, TEXT_EFFECT_LABELS, TEXT_EFFECT_PRESETS } from '@/lib/editor/text-effects';
-import { REMOTION_TEXT_PRESETS, VFX_TEXT_APPEARANCE } from '@/lib/editor/remotion-text';
+import { selectedTextAnimation, textAnimationPatch, TEXT_ANIMATION_PRESETS } from '@/lib/editor/text-effects';
+import { DEFAULT_TEXT_HIGHLIGHT } from '@/lib/editor/remotion-text';
+import { selectedTextLook, textLookPatch } from '@/lib/editor/text-looks';
 import type { Clip } from '@/lib/editor/types';
 import { TextEditingControls } from './text-editing-controls';
+import { TextStyleControls } from './text-style-controls';
+import { CaptionTimingControls, ApplyCaptionStyle, type CaptionActions } from './caption-controls';
 import { ColorControl } from './color-control';
-import { SubtitleStylePicker } from './subtitle-style-picker';
-import { selectedSubtitleStyle, subtitleStylePatch } from '@/lib/editor/subtitle-styles';
+import { TextFontStyles } from './text-font-styles';
 import './text-effects-controls.css';
 
 const TextPresetPicker = lazy(() => import('./text-preset-picker'));
+const TextLookPicker = lazy(() => import('./text-look-picker').then(module => ({ default: module.TextLookPicker })));
 
-export function TextEffectsControls({ clip, onChange }: { clip: Clip; onChange: (patch: Partial<Clip>) => void }) {
-  const selected = selectedTextEffect(clip);
-  const appearance=clip.textTemplate?VFX_TEXT_APPEARANCE[clip.textTemplate.preset]:undefined;
+export function TextEffectsControls({ clip, onChange, onPreview, captionActions }: { clip: Clip; onChange: (patch: Partial<Clip>) => void; onPreview?: (patch: Partial<Clip> | null) => void; captionActions?: CaptionActions }) {
   return <div className="text-effects-controls">
-    <TextEditingControls clip={clip} onChange={onChange}/>
-    {clip.kind === 'caption' && <SubtitleStylePicker selected={selectedSubtitleStyle(clip)} onSelect={style => onChange(subtitleStylePatch(style))}/>}
-    <Suspense fallback={<p className="visual-control-note">Loading text templates…</p>}><TextPresetPicker presets={REMOTION_TEXT_PRESETS} selected={clip.textTemplate?.preset} onSelect={preset => onChange(textTemplatePatch(clip, preset))}/></Suspense>
-    {appearance&&clip.textTemplate&&<label className="text-template-accent"><span>{clip.textTemplate.preset==='kinetic-stack'?'Accent':'Outline'}</span><ColorControl key={clip.id} label={clip.textTemplate.preset==='kinetic-stack'?'Text accent color':'Text outline color'} value={clip.textTemplate.highlightColor??appearance.highlightColor} onCommit={highlightColor=>onChange({textTemplate:{...clip.textTemplate!,highlightColor}})}/></label>}
-    {clip.textTemplate?.preset === 'karaoke' && <p className="visual-control-note">Highlights words across this clip’s duration.</p>}
-    {clip.textTemplate && <Button variant="outline" onClick={() => onChange({textTemplate:undefined})}>Remove text effect</Button>}
-    <fieldset className="text-entrance"><legend>Entrance &amp; exit</legend><div className="text-effect-presets" role="group" aria-label="Text animation">{TEXT_EFFECT_PRESETS.map(preset => <Button key={preset} variant="outline" aria-pressed={selected === preset} onClick={() => onChange(textEffectPatch(clip, preset))}>{TEXT_EFFECT_LABELS[preset]}</Button>)}</div></fieldset>
-    <p className="visual-control-note">Combine a text effect with an entrance. None removes only the entrance.</p>
+    <TextFontStyles/>
+    <TextEditingControls clip={clip} onChange={onChange} onPreview={onPreview}/>
+    {clip.kind === 'caption' && captionActions && <CaptionTimingControls clip={clip} actions={captionActions}/>}
+    <TextStyleControls clip={clip} onChange={onChange} onPreview={onPreview}/>
+    {clip.kind === 'caption' && captionActions && <ApplyCaptionStyle key={clip.id} actions={captionActions}/>}
+    <fieldset className="text-animation-controls"><legend>Animation</legend>
+      <Suspense fallback={<p className="visual-control-note">Loading animations…</p>}><TextPresetPicker presets={TEXT_ANIMATION_PRESETS} clip={clip} selected={selectedTextAnimation(clip)} onSelect={preset => onChange(textAnimationPatch(clip, preset))}/></Suspense>
+      {clip.textTemplate && <label className="text-template-accent"><span>Accent color</span><ColorControl key={clip.id} label="Text accent color" value={clip.textTemplate.highlightColor ?? DEFAULT_TEXT_HIGHLIGHT} onCommit={highlightColor => onChange({ textTemplate: { ...clip.textTemplate!, highlightColor } })}/></label>}
+    </fieldset>
+    <details className="text-style-group text-look-settings"><summary>Presets<span>Editable looks</span></summary><div className="text-style-body"><Suspense fallback={<p className="visual-control-note">Loading presets…</p>}><TextLookPicker selected={selectedTextLook(clip)} onSelect={look => onChange(textLookPatch(clip, look))}/></Suspense></div></details>
   </div>;
 }

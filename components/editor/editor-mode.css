@@ -1,0 +1,10 @@
+.editor-mode-switch{width:184px}
+.conversation-editor .editor-sidebar[hidden]{display:none!important}
+.conversation-editor .editor-body{position:relative}
+.conversation-editor .editor-chat-panel{overflow:hidden!important}
+@media(max-width:900px){
+  .conversation-editor .editor-chat-panel{overflow:visible!important}
+  .conversation-editor .editor-sidebar.mobile-open{width:min(100%,390px)}
+  .conversation-editor .mobile-panel-controls{height:46px;align-items:center;padding:5px 16px}
+  .conversation-editor .mobile-panel-controls .editor-mode-switch{width:184px}
+}
