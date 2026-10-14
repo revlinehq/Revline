@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button';
 import { Sheet,SheetContent,SheetTitle,SheetDescription } from '@/components/ui/sheet';
 import { WorkspaceNav } from '@/components/workspace/workspace-nav';
 import { ProjectImportStage } from './project-entry';
+import { openingFootage, releaseOpeningFootage } from '@/lib/editor/footage-opening';
 import { FootagePreparation } from './footage-preparation';
 import { Preview, type PreviewHandle } from './preview';
 import { PreviewZoomControls, PreviewZoomProvider, PreviewViewport } from './preview-zoom';
@@ -127,7 +128,7 @@ export function EditorShell(p: EditorShellProps) {
   const [playbackError,setPlaybackError]=useState('');
   const firstVisualAsset=assets.find(asset=>asset._id===timeline.clips.find(clip=>clip.kind==='video'||clip.kind==='image')?.assetId);
   const onLoadingThumbnail=useCallback((url:string)=>{setLoadingThumbnail(url);if(firstVisualAsset&&!firstVisualAsset.thumbnailUrl)p.onSaveThumbnail?.(firstVisualAsset._id,url);},[firstVisualAsset,p.onSaveThumbnail]);
-  const onPlaybackReady=useCallback(()=>{setPlaybackReady(true);setPlaybackError('');},[]);
+  const onPlaybackReady=useCallback(()=>{setPlaybackReady(true);setPlaybackError('');releaseOpeningFootage(p.projectId);},[p.projectId]);
   const opening=!p.demo&&!p.embedded&&!preparing&&timeline.clips.length>0&&!playbackReady;
   const previewError=useCallback((message:string)=>{if(!playbackReady)setPlaybackError(message);onError(message);},[playbackReady,onError]);
   const previousTimeline = useRef(timeline);
@@ -330,7 +331,7 @@ export function EditorShell(p: EditorShellProps) {
 
         </div></ResizablePanel></ResizablePanelGroup>
     </section></>}
-    {opening&&<FootagePreparation thumbnail={firstVisualAsset?.thumbnailUrl||(firstVisualAsset?.kind==='image'?firstVisualAsset.url:null)||loadingThumbnail} error={playbackError} onRetry={()=>{setPlaybackError('');preview.current?.retry();}}/>}
+    {opening&&<FootagePreparation thumbnail={firstVisualAsset?.thumbnailUrl||(firstVisualAsset?.kind==='image'?firstVisualAsset.url:null)||openingFootage(p.projectId)?.thumbnail||loadingThumbnail} fileName={openingFootage(p.projectId)?.fileName} error={playbackError} onRetry={()=>{setPlaybackError('');preview.current?.retry();}}/>}
     {preparing&&<ProjectImportStage importTask={p.videoImports?.find(task=>!['completed','cancelled'].includes(task.status))} upload={p.upload} onBrowse={()=>setImportOpen(true)} onUpload={p.onUpload}/>}
     {compact && inspectorOpen && <Sheet open={inspectorOpen} onOpenChange={setInspectorOpen}><SheetContent className="preview-inspector-sheet" showCloseButton={false}><SheetTitle>Tools and My media</SheetTitle><SheetDescription>Choose media or adjust your selected clip.</SheetDescription><ClockedPreviewInspector timeline={timeline} time={time} onAddTransition={addEffect} onRemoveAsset={p.onRemoveAsset} usedAssetIds={usedAssetIds} sourceRequest={sourceRequest} editRequest={editRequest} onAddTextLook={addLibraryText} captionActions={captionActions} onAddOverlay={addOverlay} onFadeThroughBlack={fadeThroughBlack} videoImports={p.videoImports} assets={assets} upload={p.upload} onUpload={()=>setImportOpen(true)} onAdd={addAsset} clip={clip} audioClip={clip?.kind==='video'?timeline.clips.find(c=>c.id===clip.linkedClipId):undefined} asset={assets.find(a => a._id === clip?.assetId)} onChange={patch => { if (clip) onChange(patchClip(timeline, clip.id, patch)); }} onPreviewEffects={patch => { if (clip) preview.current?.clipEffects(clip.id, patch); }} onAddEffect={addEffect} onPlaybackRateChange={changeSpeed} onCrop={cropVisual} cropping={cropping}/></SheetContent></Sheet>}
     <MediaImportDialog open={importOpen} onOpenChange={setImportOpen} onUpload={files=>{void p.onUpload(files);}} onImportVideo={p.onImportVideo} disabled={!!p.upload}/>

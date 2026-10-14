@@ -1,5 +1,8 @@
-.text-editing-controls{display:flex;flex-direction:column;gap:14px;min-width:0}
+.text-editing-controls{display:flex;flex-direction:column;gap:18px;min-width:0}
 .preview-inspector .text-editing-controls .inspector-field,.preview-inspector .text-editing-controls .visual-number{margin:0}
-.text-editing-controls textarea{min-height:72px}
-.text-size-controls{display:grid;grid-template-columns:minmax(0,1fr) 82px;align-items:end;gap:8px}.text-size-controls .visual-number>span{font-size:9px}
-.text-color-control{display:flex;align-items:center;justify-content:space-between;gap:8px;color:var(--ws-muted);font-size:11px}.text-color-control input[type=color]{width:32px;height:24px;padding:2px;border:1px solid var(--ws-artifact-border);border-radius:4px;background:var(--ws-input)}
+.preview-inspector .text-editing-controls .inspector-field{gap:7px}
+.preview-inspector .text-editing-controls textarea{min-height:80px;padding:12px;font-family:inherit;font-size:20px;line-height:1.35}
+.text-size-controls{display:grid;grid-template-columns:minmax(0,1fr) 70px;align-items:end;gap:8px}.text-size-controls .visual-number>span{font-size:9px}
+.text-color-control{display:flex;align-items:center;gap:9px;min-width:0;min-height:34px;padding:5px 9px;border-radius:6px;background:var(--ws-surface);color:var(--ws-text);font-size:11px}
+.preview-inspector .text-color-control input[type=color]{flex:0 0 22px;width:22px;height:22px;padding:0;border:0;border-radius:4px;background:transparent;cursor:pointer}.text-color-control input[type=color]::-webkit-color-swatch-wrapper{padding:0}.text-color-control input[type=color]::-webkit-color-swatch{border:0;border-radius:4px}.text-color-control>span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.text-position-controls{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px}.preview-inspector .text-position-controls button{display:grid;place-items:center;min-height:32px;padding:7px;border:0;border-radius:6px;background:var(--ws-surface);color:var(--ws-muted);cursor:pointer}.preview-inspector .text-position-controls button[aria-pressed=true]{background:color-mix(in srgb,#6684ef 22%,var(--ws-bg));color:#d6deff}.text-position-controls button:focus-visible{outline:2px solid #6684ef;outline-offset:2px}.text-transform-position{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}

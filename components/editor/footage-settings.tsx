@@ -1,19 +1,14 @@
 'use client';
 
-import { ChevronDown, Crop, Film, Image as ImageIcon } from 'lucide-react';
-import { BLEND_MODES } from '@/lib/editor/clip-effects';
+import { Crop, Film, Image as ImageIcon } from 'lucide-react';
 import type { Clip, MediaAsset } from '@/lib/editor/types';
 import { NumberControl } from './visual-controls';
 import { PlaybackSpeedControls } from './visual-effects-controls';
 import { EffectSlider } from './effect-slider';
 import { DEFAULT_TRANSFORM } from '@/lib/editor/types';
-import { InspectorSelect } from './inspector-select';
+import { BlendModeControls } from './blend-mode-controls';
 import { VisualFadeControls } from './visual-fade-controls';
 import './footage-settings.css';
-
-function blendLabel(mode: NonNullable<Clip['blendMode']>) {
-  return mode === 'plus-lighter' ? 'Add / lighten' : mode[0].toUpperCase() + mode.slice(1);
-}
 
 export function FootageSelection({ clip, asset }: { clip: Clip; asset?: MediaAsset }) {
   const Icon = clip.kind === 'image' ? ImageIcon : Film;
@@ -47,10 +42,10 @@ export function FootageSettings({ clip, audioClip, asset, fps = 30, onChange, on
       {hasVolume && <NumberControl label="Clip volume" min={0} max={200} value={Math.round(((audioClip ?? clip).volume ?? 1) * 100)} unit="%" onCommit={volume => onChange({ volume: volume / 100 })}/>}
     </section>}
     <VisualFadeControls clip={clip} fps={fps} onChange={onChange} onPreview={onPreview}/>
-    <details className="footage-compositing">
-      <summary><span>Compositing</span><small>{blendLabel(blendMode)}</small><ChevronDown size={13}/></summary>
+    <section className="footage-compositing footage-settings-section" aria-label="Compositing">
+      <div className="footage-section-heading"><h3>Compositing</h3></div>
       <EffectSlider label="Opacity" value={clip.transform?.opacity??1} bounds={[0,1]} step={.01} format={value=>`${Math.round(value*100)}%`} disabled={false} onPreview={value=>onPreview?.(value===null?null:{transform:{...DEFAULT_TRANSFORM,...clip.transform,opacity:value}})} onCommit={opacity=>onChange({transform:{...DEFAULT_TRANSFORM,...clip.transform,opacity}})}/>
-      <div className="footage-blend"><span>Blend mode</span><InspectorSelect label="Blend mode" value={blendMode} onChange={blendMode => onChange({ blendMode })} options={BLEND_MODES.map(mode => ({ value: mode, label: blendLabel(mode) }))}/></div>
-    </details>
+      <BlendModeControls value={blendMode} onChange={blendMode => onChange({ blendMode })}/>
+    </section>
   </div>;
 }

@@ -5,8 +5,8 @@ import './effect-slider.css';
 
 const rangeKeys = new Set(['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End', 'PageUp', 'PageDown']);
 
-export function EffectSlider({ label, value, bounds, step = .01, format, disabled, onPreview, onCommit }: {
-  label: string; value: number; bounds: readonly [number, number]; step?: number; format: (value: number) => string; disabled: boolean;
+export function EffectSlider({ label, ariaLabel, value, bounds, step = .01, format, disabled, onPreview, onCommit }: {
+  label: string; ariaLabel?: string; value: number; bounds: readonly [number, number]; step?: number; format: (value: number) => string; disabled: boolean;
   onPreview: (value: number | null) => void; onCommit: (value: number) => void;
 }) {
   const [draft, setDraft] = useState(value);
@@ -40,7 +40,7 @@ export function EffectSlider({ label, value, bounds, step = .01, format, disable
     <span className="effect-slider-fill" aria-hidden="true" style={{ width: `${progress}%` }}/>
     <span className="effect-slider-handle" aria-hidden="true" style={{ left: `clamp(0px, calc(${progress}% - 7px), calc(100% - 2px))` }}/>
     <div className="effect-slider-readout" aria-hidden="true"><span>{label}</span><output htmlFor={id}>{format(draft)}</output></div>
-    <input id={id} type="range" aria-label={label} aria-valuetext={format(draft)} min={bounds[0]} max={bounds[1]} step={step} value={draft} disabled={disabled}
+    <input id={id} type="range" aria-label={ariaLabel ?? label} aria-valuetext={format(draft)} min={bounds[0]} max={bounds[1]} step={step} value={draft} disabled={disabled}
       onPointerDown={event => { if (event.button === 0) { gesture.current = { initial: value, value: draft }; event.currentTarget.setPointerCapture(event.pointerId); } }}
       onPointerUp={commit} onPointerCancel={cancel} onLostPointerCapture={commit} onBlur={commit}
       onKeyDown={event => {
@@ -56,4 +56,3 @@ export function EffectSlider({ label, value, bounds, step = .01, format, disable
       }}/>
   </div>;
 }
-

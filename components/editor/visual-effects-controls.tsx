@@ -60,10 +60,7 @@ export function CinematicBarsControls({ clip, onChange, onPreview }: Pick<Props,
 export function PlaybackSpeedControls({ clip, onChange }: { clip: Clip; onChange: (rate: number) => void }) {
   const rate = playbackRateOf(clip);
   return <section className="playback-speed-controls" aria-label="Playback speed">
-    <label><span><EffectIcon name="speed-up" size={16}/>Speed</span><select aria-label="Playback speed" value={rate} onChange={event => onChange(Number(event.currentTarget.value))}>
-      {!PLAYBACK_RATES.some(value => value === rate) && <option value={rate}>{rate}×</option>}
-      {PLAYBACK_RATES.map(value => <option key={value} value={value}>{value}×{value === 1 ? ' · Normal' : ''}</option>)}
-    </select></label>
+    <EffectSlider label="Speed" ariaLabel="Playback speed" value={rate} bounds={[PLAYBACK_RATES[0], PLAYBACK_RATES[PLAYBACK_RATES.length - 1]]} step={.05} format={value => `${Number(value.toFixed(2))}×${value === 1 ? ' · Normal' : ''}`} disabled={false} onPreview={() => {}} onCommit={onChange}/>
   </section>;
 }
 

@@ -71,6 +71,19 @@ test('captures a decoded frame before starting upload and attaches it to the sav
   expect(await uploadSourceFile(file,cloud,vi.fn())).toBe(assetId);expect(cloud.saveThumbnail).toHaveBeenCalledExactlyOnceWith(assetId,thumbnail);
 });
 
+test('delivers the local poster before upload begins without needing cloud thumbnail persistence', async () => {
+  const cloud = transport(), thumbnail = new Blob(['poster'], { type: 'image/jpeg' });
+  cloud.onThumbnail = vi.fn();
+  vi.mocked(inspectMedia).mockImplementation(async (_file, capture) => {
+    capture?.(thumbnail);
+    expect(cloud.onThumbnail).toHaveBeenCalledExactlyOnceWith(thumbnail);
+    expect(cloud.start).not.toHaveBeenCalled();
+    return metadata;
+  });
+  expect(await uploadSourceFile(file, cloud, vi.fn())).toBe(assetId);
+  expect(inspectMedia).toHaveBeenCalledTimes(1);
+});
+
 test('keeps successfully uploaded footage usable when the optional thumbnail request is blocked',async()=>{
   const cloud=transport(),thumbnail=new Blob(['jpeg'],{type:'image/jpeg'});
   cloud.saveThumbnail=vi.fn().mockRejectedValue(new TypeError('Failed to fetch'));

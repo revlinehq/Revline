@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, type DragEvent } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth, useClerk, useUser } from '@clerk/nextjs';
 import { useAction, useConvex, useConvexAuth, useMutation, useQuery } from 'convex/react';
@@ -11,6 +11,9 @@ import { clearProjectImportJob, getOrCreateProjectImportJob, getProjectImportJob
 import { uploadSourceFile } from '@/lib/editor/upload-source';
 import { prepareVideoAudio, prepareAudioWaveform } from '@/lib/editor/prepare-video-audio';
 import { MediaImportDialog } from '@/components/editor/media-import-dialog';
+import { useMediaFileDrop } from '@/components/editor/media-file-drop';
+import { rememberOpeningFootage } from '@/lib/editor/footage-opening';
+import { normalizeMediaFile } from '@/lib/editor/media-file';
 import { FootageStartCard } from './footage-start-card';
 import { FootageProcessingCard, type FootageProcessingFile, type FootageProcessingPhase } from './footage-processing-card';
 import { RecentProjects } from './recent-projects';
@@ -43,17 +46,20 @@ export function NewConversation() {
   const submitting = useRef(false);
   const mounted = useRef(false);
   const unsubscribe = useRef<(() => void) | null>(null);
-  const dragDepth = useRef(0);
+  const draftEpoch = useRef(0);
   const restore = useRef<Promise<File[]> | null>(null);
   const session = useRef(createProjectImportSession());
   const brief = useRef('');
   const [draftReady, setDraftReady] = useState(false);
   const [files, setFiles] = useState<ImportFile[]>([]);
+  const posters = useRef(new Map<File, Blob>());
+  const posterUrls = useRef(new Set<string>());
+  const thumbnailUpload = useMutation(api.assets.generateUploadUrl);
+  const attachThumbnail = useMutation(api.assets.attachThumbnail);
   const [previews, setPreviews] = useState<FootageProcessingFile[]>([]);
   const [cloudIds, setCloudIds] = useState<Id<'assets'>[]>([]);
   const cloudMedia = useQuery(api.assets.selected, isAuthenticated && cloudIds.length ? { assetIds: cloudIds } : 'skip');
   const [processing, setProcessing] = useState<Processing | null>(null);
-  const [dragging, setDragging] = useState(false);
   const [error, setError] = useState('');
   const hasMedia = files.length + cloudIds.length > 0;
   const busy = linkStarting || (processing?.phase !== 'error' && (processing !== null || hasMedia));
@@ -78,38 +84,42 @@ export function NewConversation() {
       if (Array.isArray(saved) && saved.length <= 200 && saved.every(id => typeof id === 'string' && /^[a-z0-9]{32}$/.test(id))) setCloudIds(saved);
     } catch { /* Saved uploads can be chosen again. */ }
     let active = true;
+    const epoch = draftEpoch.current;
     restore.current ??= takeFiles();
     void restore.current.then(async pending => {
       if (!active) return;
+      if (draftEpoch.current !== epoch) { setDraftReady(true); return; }
       if (pending.length) {
         setFiles(pending.map(file => ({ id: crypto.randomUUID(), file })));
         await stashFiles(pending);
       }
       setDraftReady(true);
-    }).catch(() => { if (active) { setError('Could not restore your footage. Please add it again.'); setDraftReady(true); } });
+    }).catch(() => { if (active && draftEpoch.current === epoch) { setError('Could not restore your footage. Please add it again.'); setDraftReady(true); } });
     return () => { active = false; };
   }, [isLoaded, userId]);
 
   useEffect(() => {
     const items = files.map(({ id, file }): FootageProcessingFile => ({ id, name: file.name, kind: file.type.split('/')[0] as FootageProcessingFile['kind'], url: file.type.startsWith('image/') ? URL.createObjectURL(file) : undefined }));
     setPreviews(items);
-    return () => { for (const item of items) if (item.url) URL.revokeObjectURL(item.url); };
+    return () => { for (const item of items) if (item.url) URL.revokeObjectURL(item.url); for (const url of posterUrls.current) URL.revokeObjectURL(url); posterUrls.current.clear(); posters.current.clear(); };
   }, [files]);
 
   function attach(incoming: File[]) {
-    if (busy || !draftReady || submitting.current) return;
-    const accepted = incoming.filter(file => /^(video|audio|image)\//.test(file.type) && file.size > 0);
+    if (busy || submitting.current) return;
+    const accepted = incoming.map(normalizeMediaFile).filter((file): file is File => !!file);
     if (!accepted.length) { setError('Choose a nonempty video, audio, or image file.'); return; }
     const unique = accepted.filter((file, index) => accepted.findIndex(other => other.name === file.name && other.size === file.size && other.lastModified === file.lastModified) === index);
     if (unique.length > 200) { setError('Choose up to 200 media files for this edit.'); return; }
     const previousJob = getProjectImportJob(userId ?? undefined);
     if (previousJob) clearProjectImportJob(previousJob);
     session.current = createProjectImportSession();
+    draftEpoch.current++;
+    setDraftReady(true);
     setCloudIds([]);
     setFiles(unique.map(file => ({ id: crypto.randomUUID(), file })));
     setError(accepted.length !== incoming.length ? 'Unsupported or empty files were skipped.' : '');
     setProcessing({ phase: 'connecting', index: 1, total: unique.length, percent: 0 });
-    void stashFiles(unique);
+    void stashFiles(unique).catch(() => { /* The in-memory files can still upload in this page. */ });
   }
 
   async function processFootage() {
@@ -151,6 +161,20 @@ export function NewConversation() {
           partUrl: (uploadId, partNumber) => partUrl({ uploadId, partNumber }),
           complete: (uploadId, parts) => finishUpload({ uploadId, parts }),
           abort: uploadId => abortUpload({ uploadId }),
+          onThumbnail: image => {
+            posters.current.set(file, image);
+            if (!mounted.current) return;
+            const url = URL.createObjectURL(image); posterUrls.current.add(url);
+            const sourceId = activeJob.input.files.find(item => item.file === file)?.id;
+            setPreviews(previous => previous.map(item => item.id === sourceId ? {...item, thumbnail: url} : item));
+          },
+          saveThumbnail: async (assetId, image) => {
+            const url = await thumbnailUpload({ projectId });
+            const response = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'image/jpeg' }, body: image });
+            if (!response.ok) throw new Error('Could not save this thumbnail.');
+            const { storageId } = await response.json() as { storageId: Id<'_storage'> };
+            await attachThumbnail({ assetId, storageId });
+          },
         }, progress),
         asset: async (projectId, assetId) => {
           const asset = await convex.query(api.assets.get, { projectId, assetId });
@@ -173,6 +197,8 @@ export function NewConversation() {
         sessionStorage.removeItem(briefKey);
         sessionStorage.removeItem(cloudKey);
       } catch { if (prompt) throw new Error('Your footage is saved, but this browser could not preserve your request. Open the editor to continue.'); }
+      const first = activeJob.input.files[0]?.file;
+      rememberOpeningFootage(projectId, first ? posters.current.get(first) ?? (first.type.startsWith('image/') ? first : undefined) : cloudMedia?.[0]?.thumbnailUrl ?? undefined, first?.name ?? cloudMedia?.[0]?.fileName);
       clearProjectImportJob(activeJob);
       router.push('/editor/' + projectId);
     } catch (cause) {
@@ -194,6 +220,7 @@ export function NewConversation() {
     if (job) clearProjectImportJob(job);
     unsubscribe.current?.();
     session.current = createProjectImportSession();
+    draftEpoch.current++;
     setFiles([]); setCloudIds([]); setProcessing(null); setError('');
     brief.current = '';
     try { sessionStorage.removeItem(briefKey); sessionStorage.removeItem(cloudKey); } catch { /* The current selection is cleared in memory. */ }
@@ -207,34 +234,26 @@ export function NewConversation() {
     if (job) clearProjectImportJob(job);
     router.push('/editor/' + session.current.projectId);
   }
-  function fileDrag(event: DragEvent) { return event.dataTransfer.types.includes('Files'); }
+  const fileDrop = useMediaFileDrop({ busy, onUpload: async incoming => attach(incoming), onError: setError });
+  const dragging = fileDrop.active;
   const status = processing ?? (hasMedia ? { phase: 'connecting' as const, index: 1, total: files.length + cloudIds.length, percent: 0 } : null);
   const processingFiles = [...cloudIds.map((id): FootageProcessingFile => {
     const asset = cloudMedia?.find(item => item._id === id);
     return { id, name: asset?.fileName ?? 'Saved footage', kind: asset?.kind ?? 'video', url: asset?.url ?? undefined };
   }), ...previews];
 
-  return <div className="workspace-page new-conversation" onDragEnter={event => {
-    if (!fileDrag(event)) return;
-    event.preventDefault(); dragDepth.current++; setDragging(true);
-  }} onDragOver={event => { if (fileDrag(event)) { event.preventDefault(); event.dataTransfer.dropEffect = busy ? 'none' : 'copy'; } }} onDragLeave={event => {
-    if (!fileDrag(event)) return;
-    event.preventDefault(); dragDepth.current = Math.max(0, dragDepth.current - 1); if (!dragDepth.current) setDragging(false);
-  }} onDrop={event => {
-    if (!fileDrag(event)) return;
-    event.preventDefault(); dragDepth.current = 0; setDragging(false); attach(Array.from(event.dataTransfer.files));
-  }}>
+  return <div className="workspace-page new-conversation" {...fileDrop.handlers}>
     <WorkspaceNav title="New chat" />
-    <main className="new-conversation-main" aria-labelledby="new-conversation-title">
+    {status ? <FootageProcessingCard files={processingFiles} {...status} error={error} onRetry={() => void processFootage()} onReset={reset} onOpen={session.current.projectId ? () => void openPartialProject() : undefined}/> : <main className="new-conversation-main" aria-labelledby="new-conversation-title">
       <div className="new-conversation-start">
         <div className="new-conversation-intro"><h1 id="new-conversation-title">Welcome{firstName ? `, ${firstName}` : ''}.</h1><p>Start your edit. Add your clips, then tell Revline what to make.</p></div>
         <div className="new-conversation-entry" data-dragging={dragging || undefined} aria-busy={busy}>
-          {status ? <FootageProcessingCard files={processingFiles} {...status} error={error} onRetry={() => void processFootage()} onReset={reset} onOpen={session.current.projectId ? () => void openPartialProject() : undefined} /> : <FootageStartCard onAttach={() => setImportOpen(true)} disabled={!draftReady || linkStarting} dragging={dragging} />}
-          {error && status?.phase !== 'error' && <p className="new-conversation-error" role="alert">{error}</p>}
+          <FootageStartCard onAttach={() => setImportOpen(true)} disabled={!draftReady || linkStarting} dragging={dragging}/>
+          {error && <p className="new-conversation-error" role="alert">{error}</p>}
         </div>
       </div>
-      {!status && <RecentProjects />}
-    </main>
+      <RecentProjects/>
+    </main>}
     <MediaImportDialog open={importOpen} onOpenChange={setImportOpen} onUpload={attach} disabled={!draftReady || authLoading || !isAuthenticated || linkStarting} onImportVideo={async url=>{
       if(submitting.current)return;submitting.current=true;setLinkStarting(true);
       try{const result=await importVideo({url});router.push('/editor/'+result.projectId);}

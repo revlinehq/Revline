@@ -23,7 +23,7 @@ try{
  const flush=()=>page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
  await page.evaluate(()=>{const player=document.querySelector('hyperframes-player');window.original={player,doc:player.iframeElement.contentDocument,media:[...player.iframeElement.contentDocument.querySelectorAll('img.visual')]};});
  // Real settings must address the selected lower clip and leave the upper duplicate unchanged.
- await page.click('.footage-compositing summary');await page.click('[aria-label="Blend mode"]');await page.click('[role="menuitemradio"][data-value="screen"]');await flush();
+ await page.click('[data-blend-mode="screen"]');await flush();
  assert.deepEqual(await page.evaluate(()=>window.fixture.store.getState().timeline.clips.map(clip=>({id:clip.id,blendMode:clip.blendMode??'normal'}))),[{id:'lower',blendMode:'screen'},{id:'upper',blendMode:'normal'}]);
  assert.equal(await page.$eval('#selected',node=>node.textContent),'lower','Changing selected clip settings must not reset to the upper layer.');
  await page.screenshot({path:'/tmp/revline-stacked-selection-green.png'});

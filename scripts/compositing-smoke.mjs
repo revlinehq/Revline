@@ -19,7 +19,7 @@ if (video) {
 }
 const bundle = await build({ stdin: { resolveDir: process.cwd(), loader: 'tsx', contents: `
   import React,{useRef} from 'react';import{createRoot}from'react-dom/client';
-  import{Preview}from'./components/editor/preview';
+  import{Preview}from'./components/editor/preview';import{FootageSettings}from'./components/editor/footage-settings';import{patchClip,addEffectClip}from'./lib/editor/operations';
   import{EditorStateProvider,useEditorState}from'./components/editor/editor-state';
   import{createEditorStore}from'./lib/editor/store';
   const timeline={fps:30,aspectRatio:'landscape',tracks:{visual:2,overlay:0,audio:0,effects:0},clips:[
@@ -28,8 +28,8 @@ const bundle = await build({ stdin: { resolveDir: process.cwd(), loader: 'tsx', 
   ]},store=createEditorStore(timeline);
   const assets=['blue','red'].map(color=>({_id:color,kind:color==='red'?'${video ? 'video' : 'image'}':'image',fileName:'Owned '+color+' fixture',width:color==='red'?1920:32,height:color==='red'?1080:18,url:location.origin+'/'+color+(color==='red'&&${video}?'.mp4':'.svg')}));
   function Fixture(){const timeline=useEditorState(s=>s.timeline),ref=useRef(null);
-    window.fixture={seek:t=>ref.current.seek(t),timeline:()=>store.getState().timeline,patch:(id,patch)=>store.getState().edit({...store.getState().timeline,clips:store.getState().timeline.clips.map(clip=>clip.id===id?{...clip,...patch}:clip)}),reorder:()=>store.getState().edit({...store.getState().timeline,clips:store.getState().timeline.clips.map(clip=>({...clip,track:clip.track===1?2:1}))})};
-    return <div className="stage"><Preview ref={ref} timeline={timeline} assets={assets} time={0} muted onTime={()=>{}} onPlaying={()=>{}} onError={error=>(window.errors??=[]).push(error)}/></div>;
+    window.fixture={seek:t=>ref.current.seek(t),timeline:()=>store.getState().timeline,patch:(id,patch)=>store.getState().edit(patchClip(store.getState().timeline,id,patch)),addFx:()=>store.getState().edit(addEffectClip(store.getState().timeline,'owned-fx','frame-shrink',0,5)),reorder:()=>store.getState().edit({...store.getState().timeline,clips:store.getState().timeline.clips.map(clip=>({...clip,track:clip.track===1?2:1}))})};
+    return <><div className="stage"><Preview ref={ref} timeline={timeline} assets={assets} time={0} muted onTime={()=>{}} onPlaying={()=>{}} onError={error=>(window.errors??=[]).push(error)}/></div><div className="preview-inspector"><FootageSettings clip={timeline.clips.find(clip=>clip.id==='red')} asset={assets[1]} onChange={patch=>window.fixture.patch('red',patch)} onCrop={()=>{}}/></div></>;
   }createRoot(document.getElementById('root')).render(<EditorStateProvider store={store}><Fixture/></EditorStateProvider>);
 ` }, bundle: true, platform: 'browser', format: 'iife', jsx: 'automatic', write: false, outdir: '/tmp/revline-compositing-fixture', define: { 'process.env.NODE_ENV': '"production"' } });
 const runtime = await build({ entryPoints: ['lib/editor/visual-effects-runtime.ts'], bundle: true, platform: 'browser', format: 'iife', globalName: '__revlineVisualEffects', write: false });
@@ -66,7 +66,9 @@ try {
   await page.waitForFunction(() => document.querySelector('hyperframes-player')?.style.zIndex === '1');
   await page.evaluate(() => { const p = document.querySelector('hyperframes-player'); window.original = { player: p, document: p.iframeElement.contentDocument, source: p.iframeElement.contentDocument.querySelector('[data-source-clip="red"]') }; window.fixture.seek(1); });
   await check('Initial V2 overlays V1', [255, 0, 0]);
-  await page.evaluate(() => window.fixture.patch('red', { blendMode: 'screen' })); await check('Live Screen blends two layers', [255, 0, 255]);
+  await page.click('[data-blend-mode="screen"]'); await check('Clip settings Screen blends two layers', [255, 0, 255]);
+  for (const [mode,expected] of [['multiply',[0,0,0]],['overlay',[0,0,255]],['plus-lighter',[255,0,255]],['difference',[255,0,255]],['normal',[255,0,0]]]) {await page.click('[data-blend-mode="'+mode+'"]');await check('Clip settings '+mode,expected);}
+  await page.evaluate(()=>window.fixture.addFx());await page.click('[data-blend-mode="screen"]');await check('Clip settings Screen inside timed FX wrappers',[255,0,255]);
   await page.evaluate(() => window.fixture.patch('red', { blendMode: 'normal', invert: { enabled: true, amount: 1 } }));
   await page.waitForFunction(() => document.querySelector('hyperframes-player').iframeElement.contentDocument.querySelector('.visual-effect-output'));
   await check('GPU effect replaces the upper source', [0, 255, 255]);

@@ -10,6 +10,7 @@ export type SourceUploadTransport = {
   complete: (uploadId: Id<'r2Uploads'>, parts: MultipartParts) => Promise<Id<'assets'> | null>;
   abort: (uploadId: Id<'r2Uploads'>) => Promise<unknown>;
   saveThumbnail?: (assetId:Id<'assets'>,thumbnail:Blob)=>Promise<void>;
+  onThumbnail?: (thumbnail: Blob) => void;
 };
 
 export type SourceUploadPhase = 'reading' | 'uploading' | 'saving';
@@ -25,7 +26,7 @@ export async function uploadSourceFile(
 
   try {
     onProgress(0, 'reading');
-    const metadata = await inspectMedia(file,transport.saveThumbnail?image=>{thumbnail=image;}:undefined);
+    const metadata = await inspectMedia(file,transport.saveThumbnail || transport.onThumbnail ? image=>{thumbnail=image;transport.onThumbnail?.(image);} : undefined);
     const upload = await transport.start(metadata);
     uploadId = upload.uploadId;
     onProgress(0, 'uploading');
