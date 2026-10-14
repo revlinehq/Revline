@@ -72,7 +72,7 @@ describe('mixed visual track layout', () => {
     expect(target).toEqual({ track: 4, direction: 'above' });
     expect(clipLayerDropTarget(TIMELINE_RULER_HEIGHT + 1, rows, 'audio')).toBeNull();
     if (!target || !('track' in target)) throw new Error('Expected a track insertion target.');
-    const next = moveSelectionToNewLayers(timeline, ['video'], 0, target.direction, 'video', target.track);
+    const next = moveSelectionToNewLayers(timeline, ['video'], 0, target.direction, 'video', undefined, target.track);
     expect(next.clips.find(clip => clip.id === 'video')?.track).toBe(5);
     expect(next.clips.find(clip => clip.id === 'sound')?.track).toBe(1);
   });
