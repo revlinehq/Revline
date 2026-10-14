@@ -48,7 +48,7 @@ export function EffectSlider({ label, value, bounds, step = .01, format, disable
   const progress = Math.min(100, Math.max(0, (draft - bounds[0]) / (bounds[1] - bounds[0]) * 100));
   return <div className="effect-slider" data-disabled={disabled || undefined}>
     <span className="effect-slider-fill" aria-hidden="true" style={{ width: `${progress}%` }}/>
-    <span className="effect-slider-handle" aria-hidden="true" style={{ left: `clamp(0px, calc(${progress}% - 1.5px), calc(100% - 3px))` }}/>
+    <span className="effect-slider-handle" aria-hidden="true" style={{ left: `clamp(0px, calc(${progress}% - 7px), calc(100% - 2px))` }}/>
     <div className="effect-slider-readout" aria-hidden="true"><span>{label}</span><output htmlFor={id}>{format(draft)}</output></div>
     <input id={id} type="range" aria-label={label} aria-valuetext={format(draft)} min={bounds[0]} max={bounds[1]} step={step} value={draft} disabled={disabled}
       onPointerDown={event => { if (event.button === 0) { gesture.current = { initial: value, value: draft }; event.currentTarget.setPointerCapture(event.pointerId); } }}
@@ -106,7 +106,6 @@ export function CinematicBarsControls({ clip, onChange, onPreview }: Pick<Props,
     <div className="inspector-selection"><small>Effect</small><p>Cinematic bars</p></div>
     <EffectSlider label="Size" value={settings.size} bounds={CINEMATIC_BAR_LIMITS.size} format={percent} disabled={false} onPreview={value => onPreview?.(value === null ? null : patch('size', value))} onCommit={value => onChange(patch('size', value))}/>
     <EffectSlider label="Speed" value={settings.speed} bounds={CINEMATIC_BAR_LIMITS.speed} step={.25} format={value => `${value}×`} disabled={false} onPreview={value => onPreview?.(value === null ? null : patch('speed', value))} onCommit={value => onChange(patch('speed', value))}/>
-    <p className="visual-control-note">Move this effect to choose its start. Stretch it to hold longer. Speed changes the entrance and exit.</p>
   </div>;
 }
 

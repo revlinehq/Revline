@@ -17,8 +17,8 @@ export default function Home() {
       <LandingStartButton compact play={false} className="landing-nav-start" />
     </nav>
     <LandingHero />
-    <LandingShowcase />
     <Workflow heading="The simplest way to edit." />
+    <LandingShowcase />
     <LandingFeatures />
     <LandingPricing />
     <LandingFaq />

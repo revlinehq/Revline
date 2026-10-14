@@ -28,12 +28,12 @@ async function verifyHandles() {
   const handles = await page.$$eval('.effect-slider', sliders => sliders.map(slider => {
     const handle = slider.querySelector('.effect-slider-handle'), bounds = slider.getBoundingClientRect(), rect = handle?.getBoundingClientRect(), style = handle && getComputedStyle(handle);
     const fillWidth = slider.querySelector('.effect-slider-fill')?.getBoundingClientRect().width ?? 0;
-    return { count: slider.querySelectorAll('.effect-slider-handle').length, width: rect?.width, height: rect?.height, left: rect ? rect.left - bounds.left : -1, right: rect ? bounds.right - rect.right : -1, expectedLeft: Math.min(bounds.width - 3, Math.max(0, fillWidth - 1.5)), radius: style?.borderRadius, color: style?.backgroundColor, pointerEvents: style?.pointerEvents, hiddenFromAccessibility: handle?.getAttribute('aria-hidden') };
+    return { count: slider.querySelectorAll('.effect-slider-handle').length, width: rect?.width, height: rect?.height, left: rect ? rect.left - bounds.left : -1, right: rect ? bounds.right - rect.right : -1, expectedLeft: Math.min(bounds.width - 2, Math.max(0, fillWidth - 7)), radius: style?.borderRadius, color: style?.backgroundColor, pointerEvents: style?.pointerEvents, hiddenFromAccessibility: handle?.getAttribute('aria-hidden') };
   }));
   assert.equal(handles.length, 19);
   for (const handle of handles) {
     assert.equal(handle.count, 1, 'Each slider has a single undivided pill');
-    assert.equal(handle.width, 3); assert.equal(handle.height, 16); assert.equal(handle.radius, '2px');
+    assert.equal(handle.width, 2); assert.equal(handle.height, 16); assert.equal(handle.radius, '1px');
     assert.equal(handle.color, 'rgb(255, 255, 255)'); assert.equal(handle.pointerEvents, 'none');
     assert.equal(handle.hiddenFromAccessibility, 'true');
     assert.ok(handle.left >= -.01 && handle.right >= -.01, 'Pills stay inside their sliders at every value');
@@ -54,7 +54,7 @@ async function verifyFills(theme) {
     assert.ok(fill.fillWidth > 0, `${theme} ${fill.label} has a rendered progress fill`);
     assert.ok(Math.abs(fill.fillWidth / fill.sliderWidth - fill.expected) < .005, `${theme} ${fill.label} reflects its actual range value`);
     assert.notEqual(fill.color, 'rgba(0, 0, 0, 0)', `${theme} ${fill.label} fill is visible`);
-    assert.ok(fill.blue, `${theme} ${fill.label} fill is blue`);
+    assert.equal(fill.color,'rgb(71, 104, 239)', `${theme} ${fill.label} matches the approved Pen blue`);
     assert.equal(fill.pointerEvents, 'none', `${theme} ${fill.label} fill cannot intercept gestures`);
   }
   assert.equal(new Set(fills.map(fill => fill.color)).size, 1, `${theme} uses the same blue for every effect slider`);
