@@ -2,6 +2,8 @@
 
 An AI video editor built with Next.js, shadcn/ui, Clerk, Convex, Cloudflare R2, and HyperFrames. Describe an edit in chat, watch the preview update, and export your video. The landing uses Space Grotesk; the workspace uses Inter with light and dark themes.
 
+Planned product direction: [Future features](future-features.md), including motion design from scratch.
+
 ## Run locally
 
 ```bash
