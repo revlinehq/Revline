@@ -16,7 +16,7 @@ import { ConnectedTimelineShareDialog } from './timeline-share-dialog';
 import { EditorAccessGate } from '@/components/workspace/editor-access-gate';
 import { acknowledgeDraftFiles, takeFiles } from '@/components/workspace/project-draft';
 import type { ChatMessage } from './assistant-panel';
-import { chatMessageKey, chatToolFromPart, matchesUndoSnapshot, type AssistantEditSnapshot } from './assistant-results';
+import { chatMessageFromUI, matchesUndoSnapshot, type AssistantEditSnapshot } from './assistant-results';
 import type { ExportSettings } from './export-dialog';
 import { EMPTY_TIMELINE, normalizeTimeline, type Timeline, type MediaAsset } from '@/lib/editor/types';
 import { addMediaClip, separateVideoClips } from '@/lib/editor/operations';
@@ -118,7 +118,7 @@ function ProjectEditor({project}: {project:Doc<'projects'>}) {
   },[media,assets,timeline,ai?.running,upload,audioBusy,convex,projectId,change,saves]);
   const titleChange=async(value:string)=>{await update({projectId,title:value});setTitle(value);};
   const waitForSave=()=>saves.wait();
-  const messages:ChatMessage[]=results.map(m=>({id:chatMessageKey(m),role:m.role,status:m.status,text:m.parts.filter(part=>part.type==='text').map(part=>'text'in part?String(part.text):'').join('\n\n'),steps:m.parts.flatMap(part=>{const step=chatToolFromPart(part);return step?[step]:[];})}));
+  const messages:ChatMessage[]=results.map(chatMessageFromUI);
   const uploading=useRef(false);
   async function handleUpload(files:File[],{requireAll=false,addToTimeline=true}:{requireAll?:boolean;addToTimeline?:boolean}={}){
     if(uploading.current||!files.length)return;uploading.current=true;setError('');

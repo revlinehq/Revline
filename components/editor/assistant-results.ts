@@ -1,6 +1,9 @@
 import { normalizeTimeline, type Timeline } from '@/lib/editor/types';
+import type { TimelinePublicationReceipt } from '@/lib/ai/publication-receipt';
+export type { TimelinePublicationReceipt } from '@/lib/ai/publication-receipt';
 
 export type ChatTool = { id?: string; name: string; state: 'running' | 'done' | 'error'; detail?: string; staged?: boolean; output?: Record<string, unknown> };
+export type ChatMessage = { id:string;sourceId?:string;threadId?:string;role:string;text:string;status?:string;tools?:string[];steps?:ChatTool[];publicationReceipt?:TimelinePublicationReceipt };
 export type ResultCard = { key: string; title: string; detail?: string; state: ChatTool['state']; staged?: boolean };
 export const chatMessageKey = (message: { id: string; key?: string }) => message.key ?? message.id;
 export type AssistantEditSnapshot = { before:Timeline;after:Timeline;revision:number;canUndo:boolean;publishedDraft:boolean };
@@ -23,6 +26,30 @@ export function savedEditComparison(steps:ChatTool[],snapshot?:AssistantEditSnap
 }
 
 const record = (value: unknown): Record<string, unknown> | undefined => value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : undefined;
+/** Only the server's persisted provider metadata can confirm a replacement publication. */
+export function publicationReceiptFromPart(value:unknown):TimelinePublicationReceipt|undefined {
+  const part=record(value),receipt=record(record(record(part?.providerMetadata)?.revline)?.publicationReceipt);
+  if(part?.type!=='text'||!receipt||receipt.version!==1||receipt.kind!=='timeline-publication'||typeof receipt.status!=='string'||!['saved','failed','aborted'].includes(receipt.status))return;
+  if(!['runId','threadId','promptMessageId'].every(key=>typeof receipt[key]==='string'&&receipt[key].length>0)||typeof receipt.stagedRevision!=='number'||!Number.isSafeInteger(receipt.stagedRevision)||receipt.stagedRevision<0)return;
+  if(receipt.status==='saved'?(!Number.isSafeInteger(receipt.revision)||receipt.revision!==receipt.stagedRevision+1):receipt.revision!==undefined)return;
+  const identity={version:1 as const,kind:'timeline-publication' as const,runId:String(receipt.runId),threadId:String(receipt.threadId),promptMessageId:String(receipt.promptMessageId),stagedRevision:receipt.stagedRevision};
+  return receipt.status==='saved'?{...identity,status:'saved',revision:Number(receipt.revision)}:{...identity,status:receipt.status as 'failed'|'aborted'};
+}
+
+/** Preserve the SDK's raw prompt identity alongside its stable streamed React key. */
+export function chatMessageFromUI(message:{id:string;key?:string;threadId?:string;role:string;status?:string;parts:readonly unknown[]}):ChatMessage {
+  const publicationReceipt=message.parts.flatMap(part=>{const receipt=publicationReceiptFromPart(part);return receipt?[receipt]:[];}).at(-1);
+  return {id:chatMessageKey(message),sourceId:message.id,threadId:message.threadId,role:message.role,status:message.status,text:message.parts.filter(part=>record(part)?.type==='text').map(part=>String(record(part)?.text??'')).join('\n\n'),steps:message.parts.flatMap(part=>{const step=chatToolFromPart(part);return step?[step]:[];}),...(publicationReceipt?{publicationReceipt}:{})};
+}
+
+/** The receipt stays with its original request, including a paginated partial turn. */
+export function turnPublicationReceipt(messages:readonly ChatMessage[]):TimelinePublicationReceipt|undefined {
+  const request=messages.find(message=>message.role==='user');
+  return messages.filter(message=>message.role==='assistant').flatMap(message=>{
+    const receipt=message.publicationReceipt;
+    return receipt&&(!request||receipt.promptMessageId===(request.sourceId??request.id))&&(!message.threadId||receipt.threadId===message.threadId)&&(!request?.threadId||receipt.threadId===request.threadId)?[receipt]:[];
+  }).at(-1);
+}
 const errorMessage = (value: unknown) => typeof value === 'string' ? value : typeof record(value)?.message === 'string' ? String(record(value)!.message) : 'This step could not finish.';
 function unpack(value: unknown): { output?: Record<string, unknown>; error?: string } {
   const wrapped = record(value);
@@ -67,8 +94,9 @@ const isId = (value: unknown): value is string => typeof value === 'string' && v
 const noun = (n: number, singular: string, plural = `${singular}s`) => `${n} ${n === 1 ? singular : plural}`;
 
 /** Aggregate only successful tool evidence, with pending replacements kept distinct. */
-export function summarizeTools(steps: ChatTool[], evidence:{publishedRevision?:number;draftFailed?:boolean}={}): ResultCard[] {
-  const published=(output?:Record<string,unknown>)=>output?.staged===true&&typeof output.revision==='number'&&output.revision+1===evidence.publishedRevision;
+export function summarizeTools(steps: ChatTool[], evidence:{publishedRevision?:number;draftFailed?:boolean;draftPending?:boolean;publicationReceipt?:TimelinePublicationReceipt}={}): ResultCard[] {
+  const receipt=evidence.publicationReceipt;
+  const published=(output?:Record<string,unknown>)=>output?.staged===true&&typeof output.revision==='number'&&(receipt?receipt.status==='saved'&&output.revision===receipt.stagedRevision&&receipt.revision===receipt.stagedRevision+1:output.revision+1===evidence.publishedRevision);
   const unique = new Map<string, ChatTool>();
   steps.forEach((step, index) => unique.set(step.id ?? `${step.name}-${index}`, step));
   const groups = new Map<string, ChatTool[]>();
@@ -106,7 +134,9 @@ export function summarizeTools(steps: ChatTool[], evidence:{publishedRevision?:n
     const unchanged = outputs.every(output => output.unchanged === true);
     if (unchanged && !['markMusicBeats', 'removeMarker', 'removeMarkers'].includes(step.name)) title = 'No changes needed';
     const lowConfidence = outputs.some(output => output.status === 'low-confidence');
-    if(step.staged&&evidence.draftFailed)return {key,title:`Not saved: ${title}`,detail:'The replacement edit was not saved.',state:'error',staged:true};
+    const draftFailed=receipt?(receipt.status==='failed'||receipt.status==='aborted')&&outputs.some(output=>output.revision===receipt.stagedRevision):evidence.draftFailed;
+    if(step.staged&&draftFailed)return {key,title:`Not saved: ${title}`,detail:'The replacement edit was not saved.',state:'error',staged:true};
+    if(step.staged&&(evidence.draftPending===false||receipt))return {key,title:'Save not confirmed',detail:'No saved confirmation is available for this edit.',state:'error'};
     const detail = [step.staged ? 'Awaiting save' : undefined, lowConfidence ? 'Beat detection has low confidence' : undefined].filter(Boolean).join(' · ') || undefined;
     return { key, title: step.staged && !unchanged ? `Prepared: ${title}` : title, detail, state: step.state, staged: step.staged };
   });

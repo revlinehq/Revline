@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { chatMessageKey, chatToolFromPart, summarizeTools, savedEditComparison, matchesUndoSnapshot, type ChatTool } from './assistant-results';
+import { chatMessageKey, chatMessageFromUI, chatToolFromPart, publicationReceiptFromPart, turnPublicationReceipt, summarizeTools, savedEditComparison, matchesUndoSnapshot, type ChatTool, type TimelinePublicationReceipt } from './assistant-results';
 import { createEditorStore } from '@/lib/editor/store';
 import type { Timeline } from '@/lib/editor/types';
 
@@ -89,4 +89,32 @@ test('comparison and Undo require the saved revision and the actual latest undo 
   expect(matchesUndoSnapshot(snapshot,store.getState().timeline,store.getState().history.at(-1))).toBe(false);
   store.getState().undo();expect(matchesUndoSnapshot(snapshot,store.getState().timeline,store.getState().history.at(-1))).toBe(true);
   expect(store.getState().undo()).toEqual(before);
+});
+
+const receipt:TimelinePublicationReceipt={version:1,kind:'timeline-publication',status:'saved',runId:'run',threadId:'thread',promptMessageId:'raw-user',stagedRevision:10,revision:11};
+const receiptPart=(publicationReceipt:unknown)=>({type:'text',text:'Your replacement edit is saved.',providerMetadata:{revline:{publicationReceipt}}});
+test('SDK conversion preserves the durable receipt and raw prompt ID beside the streamed React key',()=>{
+  const request=chatMessageFromUI({id:'raw-user',key:'thread-1-0',threadId:'thread',role:'user',parts:[{type:'text',text:'Remove both'}]});
+  const reply=chatMessageFromUI({id:'raw-answer',key:'thread-1-1',threadId:'thread',role:'assistant',parts:[{type:'tool-delete',state:'output-available',output:{staged:true,saved:false,revision:10,removedClipIds:['a','b']}},receiptPart(receipt)]});
+  expect(request).toMatchObject({id:'thread-1-0',sourceId:'raw-user'});
+  expect(turnPublicationReceipt([request,reply])).toEqual(receipt);
+  expect(summarizeTools(reply.steps!,{publicationReceipt:turnPublicationReceipt([request,reply])})).toMatchObject([{title:'Removed 2 clips',state:'done',staged:false}]);
+  expect(turnPublicationReceipt([reply])).toEqual(receipt); // A page may begin after the user record.
+  expect(turnPublicationReceipt([{...request,sourceId:'another-user'},reply])).toBeUndefined();
+  expect(turnPublicationReceipt([request,{...reply,threadId:'another-thread'}])).toBeUndefined();
+});
+test('prose, success status, unsupported receipts and invalid revision proofs never imply publication',()=>{
+  expect(publicationReceiptFromPart({type:'text',text:JSON.stringify(receipt)})).toBeUndefined();
+  for(const patch of [{version:2},{kind:'other'},{status:'success'},{status:{}},{promptMessageId:''},{stagedRevision:-1},{stagedRevision:10.5},{revision:12},{revision:undefined}])expect(publicationReceiptFromPart(receiptPart({...receipt,...patch}))).toBeUndefined();
+  const steps:ChatTool[]=[{name:'delete',state:'done',staged:true,output:{staged:true,saved:false,revision:10,removedClipIds:['a','b']}}];
+  expect(summarizeTools(steps,{draftPending:false})).toMatchObject([{title:'Save not confirmed',state:'error'}]);
+  expect(summarizeTools(steps,{draftPending:true})).toMatchObject([{title:'Prepared: Removed 2 clips',detail:'Awaiting save'}]);
+  expect(summarizeTools(steps,{publicationReceipt:{...receipt,stagedRevision:9,revision:10},draftPending:false})).toMatchObject([{title:'Save not confirmed',state:'error'}]);
+});
+test.each(['failed','aborted'] as const)('%s receipt applies only to that staged revision and leaves immediate saves completed',status=>{
+  const failed:TimelinePublicationReceipt={version:1,kind:'timeline-publication',runId:receipt.runId,threadId:receipt.threadId,promptMessageId:receipt.promptMessageId,stagedRevision:receipt.stagedRevision,status};
+  expect(publicationReceiptFromPart(receiptPart(failed))).toEqual(failed);
+  const steps:ChatTool[]=[{name:'trim',state:'done',output:{saved:true,revision:9,changedClips:[{id:'kept'}]}},{name:'delete',state:'done',staged:true,output:{staged:true,saved:false,revision:10,removedClipIds:['a','b']}}];
+  expect(summarizeTools(steps,{publicationReceipt:failed,draftPending:false})).toMatchObject([{title:'Trimmed 1 clip',state:'done'},{title:'Not saved: Removed 2 clips',state:'error'}]);
+  expect(steps[1].output?.saved).toBe(false);
 });

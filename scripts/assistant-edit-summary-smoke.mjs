@@ -24,7 +24,7 @@ const bundle = await build({
     let store, state, resolveSend, resolveStop, mount=0;
     window.requests = []; window.attachCount = 0;window.delayUser=false;window.pendingRequest=null;window.stopCount=0;window.rejectSend=false;
     const render = () => flushSync(() => root.render(<AssistantPanel key={mount} {...state} configured hasClips demo={false} onAttach={() => window.attachCount++} onSend={async text => {if(window.rejectSend)throw new Error('The request could not be sent.');window.requests.push(text);window.pendingRequest={id:'new-request',role:'user',text};if(!window.delayUser){state={...state,messages:[...state.messages,window.pendingRequest],editSnapshot:undefined};render();}await new Promise(resolve => resolveSend=resolve);} } onStop={async()=>{window.stopCount++;await new Promise(resolve=>resolveStop=resolve);state={...state,running:false,activity:null,messages:state.messages.map(message=>message.id==='tool-pass'?{...message,status:'aborted',steps:message.steps.map(step=>({...step,state:'error',detail:'Stopped by you.'}))}:message)};render();}}/>));
-    window.resetFixture = () => {mount++;store=createEditorStore(before);store.getState().replace(after,true);state={messages:[request,response],running:false,error:null,editSnapshot:{before,after,revision:11,publishedDraft:true,canUndo:true}};render();};
+    window.resetFixture = (published=true) => {mount++;store=createEditorStore(before);store.getState().replace(after,true);state={messages:[request,response],running:false,error:null,editSnapshot:published?{before,after,revision:11,publishedDraft:true,canUndo:true}:undefined};render();};
     window.updateFixture = patch => {state={...state,...patch};render();};
     window.finishSend = () => resolveSend?.();window.finishStop=()=>resolveStop?.();window.acceptRequest=()=>{state={...state,messages:[...state.messages,window.pendingRequest],editSnapshot:undefined};render();};
     window.fixtureState = () => ({timeline:store.getState().timeline,before,after,snapshot:state.editSnapshot,messages:state.messages,tools});
@@ -126,9 +126,9 @@ try {
   await page.evaluate(() => { window.resetFixture(); window.manualEdit(); });
   assert.equal(await page.$('.assistant-undo-edit'), null, 'Manual edits do not bring chat Undo back');
 
-  await page.evaluate(() => { window.resetFixture(); window.updateFixture({editSnapshot:undefined}); });
+  await page.evaluate(() => { window.resetFixture(false); });
   assert.equal(await page.$('.assistant-edit-comparison'), null, 'Unpublished tools cannot claim a saved comparison');
-  assert.match(await page.$eval('.assistant-result-card', element => element.textContent), /Prepared:.*Awaiting save/);
+  assert.match(await page.$eval('.assistant-result-card', element => element.textContent), /Save not confirmed/);
   await page.evaluate(() => window.updateFixture({error:'Replacement failed'}));
   assert.equal(await page.$('.assistant-undo-edit'), null);
   assert.match(await page.$eval('.assistant-result-card', element => element.textContent), /Not saved:.*was not saved/);

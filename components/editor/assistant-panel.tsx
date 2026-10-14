@@ -1,20 +1,19 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { Check, ArrowUpRight } from 'lucide-react';
 import { Brand } from '@/components/workspace/brand';
 import { EditComposer } from '@/components/workspace/edit-composer';
 import { ChatProse } from './chat-prose';
 import { useConversationScroll } from '@/components/workspace/use-conversation-scroll';
-import { savedEditComparison, summarizeTools, type AssistantEditSnapshot, type ChatTool } from './assistant-results';
+import { savedEditComparison, summarizeTools, turnPublicationReceipt, type AssistantEditSnapshot, type ChatMessage } from './assistant-results';
 import './assistant-results.css';
 import './assistant-editing.css';
 import './assistant-panel.css';
 import type { SourceEditSuggestion } from '@/lib/editor/types';
 import { ProcessingStatus, processingDetail } from './processing-status';
-export type { ChatTool } from './assistant-results';
+export type { ChatTool, ChatMessage } from './assistant-results';
 
-export type ChatMessage = { id: string; role: string; text: string; status?: string; tools?: string[]; steps?: ChatTool[] };
 type PendingReply = { id: string; text: string; previousUserId?: string; previousError?: string | null };
 
 function AssistantReplyHeader({ loading, label, detail }: { loading: boolean; label: string; detail?: string }) {
@@ -54,6 +53,7 @@ export function AssistantPanel({ messages, running, configured, error, onSend, o
   const turnId = optimisticRequest?.id ?? latestUser?.id ?? 'imported';
   const demoNoteMessageId = demo ? messages.findLast(message => message.role === 'assistant')?.id : undefined;
   const scroll = useConversationScroll(turnId, true, false);
+  const legacyPublications=useRef(new Map<string,number>());
   const groups=useMemo(()=>{
     const turns:{id:string;messages:ChatMessage[]}[]=[];
     for(const message of messages){if(message.role==='user'||!turns.length)turns.push({id:message.id,messages:[]});turns.at(-1)!.messages.push(message);}
@@ -61,10 +61,12 @@ export function AssistantPanel({ messages, running, configured, error, onSend, o
     return turns.map(group=>{
       const replies=group.messages.filter(message=>message.role!=='user'),steps=group.messages.flatMap(message=>message.steps??[]);
       const comparison=group.id===turnId?savedEditComparison(steps,editSnapshot):null;
+      if(comparison?.publishedRevision!==undefined)legacyPublications.current.set(group.id,comparison.publishedRevision);
+      const publicationReceipt=turnPublicationReceipt(group.messages);
       const draftFailed=!running&&group.id===turnId&&(!!error||replies.some(message=>message.status==='failed'||message.status==='aborted'));
-      return {...group,replies,comparison,cards:summarizeTools(steps,{publishedRevision:comparison?.publishedRevision,draftFailed})};
+      return {...group,replies,comparison,cards:summarizeTools(steps,{publicationReceipt,publishedRevision:legacyPublications.current.get(group.id),draftFailed,draftPending:group.id===turnId&&answering})};
     });
-  },[messages,turnId,editSnapshot,running,error,optimisticRequest]);
+  },[messages,turnId,editSnapshot,running,error,optimisticRequest,answering]);
   useEffect(() => { try { setPrompt(draftKey ? sessionStorage.getItem(draftKey) ?? '' : ''); } catch { setPrompt(''); } }, [draftKey]);
   useEffect(() => {
     if (!pendingReply) return;
