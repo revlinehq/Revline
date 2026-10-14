@@ -149,13 +149,44 @@ test('source splits keep only the piece touching the original cut, including lin
   expect(()=>duplicateClip(add(),'fx','copy')).toThrow('both connected clips');
 });
 
-test('copying a pair and its transition remaps references; standalone paste cannot copy footage silently',()=>{
+test('copying a pair and its transition remaps references without changing originals',()=>{
   const next=add(),copied=copyTimelineClips(next,['from','to','fx']);let id=0;
   const pasted=pasteTimelineClips(next,copied,10,()=>`copy-${++id}`).timeline;
   const sources=transitionSources(pasted.clips,30);expect(sources).toHaveLength(2);
   expect(sources[1].from.id).not.toBe('from');expect(sources[1].to.id).not.toBe('to');expect(sources[1].cut).toBe(13);
   expect(pasted.clips.slice(0,next.clips.length)).toEqual(next.clips);
-  expect(()=>pasteTimelineClips(next,copyTimelineClips(next,['fx']),10)).toThrow('both connected clips');
+});
+
+test.each(TRANSITION_PRESETS)('pastes only the copied %s onto another cut, preserving its settings and all footage',preset=>{
+  const source=addTransitionClip(base,'fx',preset,'from','to',{duration:.8,direction:'counter-clockwise'});
+  const copied=copyTimelineClips(source,['fx']);
+  expect(copied.map(clip=>clip.id)).toEqual(['fx']);
+  const target:Timeline={...base,clips:[
+    {id:'left',kind:'image',assetId:'still',track:1,start:7,duration:3,sourceStart:0},
+    {id:'right',kind:'video',assetId:'other',track:1,start:10,duration:3,sourceStart:5},
+  ]};
+  const result=pasteTimelineClips(target,copied,10,()=>'pasted-fx');
+  expect(result.ids).toEqual(['pasted-fx']);
+  expect(result.timeline.clips).toHaveLength(target.clips.length+1);
+  expect(result.timeline.clips.slice(0,target.clips.length)).toEqual(target.clips);
+  expect(transitionSources(result.timeline.clips,30)[0]).toMatchObject({cut:10,clip:{id:'pasted-fx',start:9.6,duration:.8,effectPreset:preset,transition:{fromClipId:'left',toClipId:'right',direction:'counter-clockwise'}}});
+  expect(copied).toEqual(copyTimelineClips(source,['fx']));
+});
+
+test('pasting a transition inside footage uses the existing split placement and never duplicates its source footage',()=>{
+  const source=add(),copied=copyTimelineClips(source,['fx']);
+  const result=pasteTimelineClips(base,copied,3,()=>'pasted-fx');
+  expect(transitionSources(result.timeline.clips,30)[0]).toMatchObject({cut:3,from:{id:'from',start:2,duration:1},to:{start:3,duration:2,sourceStart:6}});
+  expect(result.timeline.clips.filter(clip=>clip.kind==='audio')).toHaveLength(3);
+  expect(timelineDuration(result.timeline)).toBe(timelineDuration(base));
+  expect(source).toEqual(add());
+});
+
+test('pasting just a transition in a gap or on an occupied cut fails without changing footage',()=>{
+  const source=add(),snapshot=structuredClone(source),copied=copyTimelineClips(source,['fx']);
+  expect(()=>pasteTimelineClips(source,copied,10,()=>'pasted-fx')).toThrow(/inside footage|onto a cut/i);
+  expect(()=>pasteTimelineClips(source,copied,5,()=>'pasted-fx')).toThrow(/overlap/i);
+  expect(source).toEqual(snapshot);
 });
 
 test('a concurrent source deletion cannot leave dangling transitions in a merged save',()=>{

@@ -1,6 +1,7 @@
 import { linkedClipIds, placeOnFreeLayer } from './operations';
 import { type Clip, type Timeline } from './types';
-import { isTransitionClip, transitionSources } from './clip-transitions';
+import { isTransitionClip, transitionSources, type TransitionPreset } from './clip-transitions';
+import { placeTransitionAt } from './transition-placement';
 
 export function copyTimelineClips(timeline: Timeline, selectedIds: string[]): Clip[] {
   const ids = new Set(linkedClipIds(timeline, selectedIds));
@@ -11,9 +12,23 @@ export function pasteTimelineClips(timeline: Timeline, source: Clip[], time: num
   if (!source.length) return { timeline, ids: [] as string[] };
   if (!Number.isFinite(time)) throw new Error('Choose a valid paste position.');
   const start = Math.max(0, Math.round(time * timeline.fps) / timeline.fps);
+  // A transition-only clipboard is a reusable effect, not a copy of its footage.
+  // Align the first cut to the playhead and resolve new source clips there.
+  if (source.every(isTransitionClip)) {
+    const firstCut = Math.min(...source.map(clip => clip.start + clip.duration / 2));
+    const ids: string[] = [];
+    let next = timeline;
+    for (const clip of source) {
+      const id = newId();
+      const placed = placeTransitionAt(next, id, clip.effectPreset as TransitionPreset, start + clip.start + clip.duration / 2 - firstCut, { duration: clip.duration, direction: clip.transition!.direction, track: clip.track });
+      next = { ...placed, clips: placed.clips.map(member => member.id === id ? { ...structuredClone(clip), ...member } : member) };
+      ids.push(id);
+    }
+    return { timeline: next, ids };
+  }
   const first = Math.min(...source.map(clip => clip.start));
   const ids = new Map(source.map(clip => [clip.id, newId()]));
-  for(const clip of source)if(isTransitionClip(clip)&&(!ids.has(clip.transition!.fromClipId)||!ids.has(clip.transition!.toClipId)))throw new Error('Copy both connected clips with their transition to paste it.');
+  for(const clip of source)if(isTransitionClip(clip)&&(!ids.has(clip.transition!.fromClipId)||!ids.has(clip.transition!.toClipId)))throw new Error('Copy the transition on its own, or select both connected clips to copy the whole sequence.');
   const copies = structuredClone(source).map(clip => ({
     ...clip,
     id: ids.get(clip.id)!,
