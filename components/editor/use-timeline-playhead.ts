@@ -1,6 +1,8 @@
 'use client';
 import { useEffect, type RefObject } from 'react';
 import { edgeScrollSpeed } from '@/lib/editor/timeline-controls';
+import { verticalEdgeScrollSpeed } from '@/lib/editor/timeline-autoscroll';
+import { TIMELINE_RULER_HEIGHT } from '@/lib/editor/timeline-layout';
 
 export function paintPlayhead(element: HTMLDivElement | null, x: number, viewport: HTMLDivElement | null, cap: HTMLDivElement | null) {
   if (!element) return;
@@ -48,7 +50,7 @@ export function useTimelinePlayhead({time,playing,readTime,px,duration,origin,vi
 export function useEdgeAutoScroll(active:boolean,viewport:RefObject<HTMLDivElement|null>,pointer:RefObject<number>,pointerY?:RefObject<number>,onScroll?:RefObject<(()=>void)|null>,horizontal=true){
   useEffect(()=>{
     if(!active)return;let frame=0;
-    function tick(){const el=viewport.current;if(el){const beforeX=el.scrollLeft,beforeY=el.scrollTop;const rect=el.getBoundingClientRect();const max=Math.max(0,el.scrollWidth-el.clientWidth);const speed=horizontal?edgeScrollSpeed(pointer.current,rect.left,rect.width,el.scrollLeft,max):0;if(speed)el.scrollLeft=Math.max(0,Math.min(max,el.scrollLeft+speed));if(pointerY){const maxY=Math.max(0,el.scrollHeight-el.clientHeight);const vertical=edgeScrollSpeed(pointerY.current,rect.top,rect.height,el.scrollTop,maxY);if(vertical)el.scrollTop=Math.max(0,Math.min(maxY,el.scrollTop+vertical));}if(el.scrollLeft!==beforeX||el.scrollTop!==beforeY)onScroll?.current?.();}frame=requestAnimationFrame(tick);}
+    function tick(){const el=viewport.current;if(el){const beforeX=el.scrollLeft,beforeY=el.scrollTop;const rect=el.getBoundingClientRect();const max=Math.max(0,el.scrollWidth-el.clientWidth);const speed=horizontal?edgeScrollSpeed(pointer.current,rect.left,rect.width,el.scrollLeft,max):0;if(speed)el.scrollLeft=Math.max(0,Math.min(max,el.scrollLeft+speed));if(pointerY){const maxY=Math.max(0,el.scrollHeight-el.clientHeight);const vertical=verticalEdgeScrollSpeed(pointerY.current,rect.top+TIMELINE_RULER_HEIGHT,rect.top+el.clientHeight,el.scrollTop,maxY);if(vertical)el.scrollTop=Math.max(0,Math.min(maxY,el.scrollTop+vertical));}if(el.scrollLeft!==beforeX||el.scrollTop!==beforeY)onScroll?.current?.();}frame=requestAnimationFrame(tick);}
     frame=requestAnimationFrame(tick);return()=>cancelAnimationFrame(frame);
   },[active,viewport,pointer,pointerY,onScroll,horizontal]);
 }
