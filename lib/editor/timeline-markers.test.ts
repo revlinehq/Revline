@@ -22,6 +22,15 @@ test('marker edits participate in undo and redo without touching the clips', () 
   expect(store.getState().timeline.clips).toEqual([]);
 });
 
+test('explicit free cues retain user labels or remain unlabeled without claiming measured beats',()=>{
+  const labeled=addTimelineMarker(EMPTY_TIMELINE,1.19,'cue','Start title');
+  const unlabelled=addTimelineMarker(labeled,2,'free',null);
+  expect(unlabelled.markers).toEqual([{id:'cue',time:1.2,label:'Start title'},{id:'free',time:2}]);
+  expect(moveTimelineMarker(unlabelled,'cue',3.19).markers?.[0]).toEqual({id:'cue',time:3.2,label:'Start title'});
+  expect(()=>addTimelineMarker(EMPTY_TIMELINE,1,'invalid','x'.repeat(121))).toThrow('1–120');
+  expect(()=>addTimelineMarker(EMPTY_TIMELINE,1,'invalid',' ')).toThrow('1–120');
+});
+
 const withMarkers: Timeline = {
   ...EMPTY_TIMELINE,
   clips: [{ id: 'caption', kind: 'caption', track: 1, start: 0, duration: 5, sourceStart: 0, text: 'Keep this' }],

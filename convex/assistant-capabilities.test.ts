@@ -123,6 +123,24 @@ test('solid color creation/configuration changes only the new FX rectangle and r
   expect(result.calls).not.toContain('assistant:requestAnalysis');
 });
 
+test('free marker tools accept requested seconds/labels, preserve clips and share one saved undo group without analysis',async()=>{
+  const result=await run(async tools=>{
+    expect(()=>tools.addMarker.inputSchema.parse({time:-1})).toThrow();
+    expect(()=>tools.addMarker.inputSchema.parse({time:1,label:'x'.repeat(121)})).toThrow();
+    await execute(tools,'addMarker',{time:1.19,label:'Start title'});
+    await execute(tools,'addMarker',{time:2});
+    await execute(tools,'addMarker',{time:2,label:'Duplicate'});
+    const inspected=await execute(tools,'inspectTimeline',{}) as{timeline:Timeline};
+    expect(inspected.timeline.markers).toHaveLength(2);
+    const cue=inspected.timeline.markers!.find(marker=>marker.label==='Start title')!;
+    await execute(tools,'moveMarker',{markerId:cue.id,time:3.19});
+    await expect(execute(tools,'moveMarker',{markerId:'Start title',time:4})).rejects.toThrow('marker ID');
+  },initial,true);
+  expect(result.timeline.markers).toEqual([{id:expect.any(String),time:3.2,label:'Start title'},{id:expect.any(String),time:2}]);
+  expect(result.timeline.clips).toEqual(result.backend!.seed.clips);
+  await assertUndo(result);
+});
+
 test('cinematic bars size/speed and dither original-palette reset are independently editable',async()=>{
   const result=await run(async tools=>{
     await execute(tools,'addTimedEffect',{preset:'cinematic-bars',start:2,duration:2});
