@@ -401,15 +401,15 @@ function configuredModel(){
   expect(key.startsWith('sk-ant-')).toBe(true);
   return createAnthropic({apiKey:key})(CLAUDE_MODEL);
 }
-async function nativeIntent(prompt:string,seed:Timeline,priorHistory:Timeline[]=[]){
-  const called:string[]=[],inputs:{name:string;input:unknown}[]=[];const model=configuredModel();
+async function nativeIntent(prompt:string,seed:Timeline,priorHistory:Timeline[]=[],minimumToolCalls=2){
+  const called:string[]=[],inputs:{name:string;input:unknown}[]=[];let finalText='';const model=configuredModel();
   const result=await run(async available=>{
     const tools=Object.fromEntries(Object.entries(available).map(([name,value])=>[name,tool({description:value.description,inputSchema:value.inputSchema,execute:async input=>{called.push(name);inputs.push({name,input});return execute(available,name,input)}})]));
-    try{await generateText({model,providerOptions:claudeProviderOptions(CLAUDE_MODEL),system:sdk.options!.instructions,prompt,tools,stopWhen:stepCountIs(8),maxOutputTokens:1800,abortSignal:AbortSignal.timeout(45000)})}
+    try{finalText=(await generateText({model,providerOptions:claudeProviderOptions(CLAUDE_MODEL),system:sdk.options!.instructions,prompt,tools,stopWhen:stepCountIs(8),maxOutputTokens:1800,abortSignal:AbortSignal.timeout(45000)})).text}
     catch(error){const cause=error as{statusCode?:number;name?:string};throw new Error(`Live Claude intent failed (${cause.name??'Error'}, status ${cause.statusCode??'unknown'}).`)}
   },seed,true,priorHistory);
-  expect(result.error).toBeUndefined();expect(called).not.toContain('analyzeMedia');expect(called).not.toContain('inspectVideo');expect(called.length).toBeGreaterThan(1);
-  return{...result,called,inputs};
+  expect(result.error).toBeUndefined();expect(called).not.toContain('analyzeMedia');expect(called).not.toContain('inspectVideo');expect(called.length).toBeGreaterThanOrEqual(minimumToolCalls);
+  return{...result,called,inputs,finalText};
 }
 test.skipIf(process.env.REVLINE_LIVE_AGENT_SMOKE!=='1')('live configured Claude uses actual pixel transform and crop inputs without moving media or audio timing',async()=>{
   const result=await nativeIntent('For video clip from only, use pixel units: center x960/y540 on the landscape1920x1080 reference canvas, scale1.25, rotation12degrees and opacity0.7. Crop intrinsic-source left96pixels, right192pixels and top54pixels using pixel units. Preserve all omitted controls, source ranges, linked audio and other clips. No analysis.',initial);
@@ -427,6 +427,15 @@ test.skipIf(process.env.REVLINE_LIVE_AGENT_SMOKE!=='1')('live configured Claude 
   expect(result.timeline.clips.filter(c=>c.id!=='audio')).toEqual(result.backend!.priorHistory[0].clips.slice(2));
   await assertUndo(result,result.backend!.priorHistory[0]);
   console.log(JSON.stringify({model:CLAUDE_MODEL,intent:'undo-unlink-keep-audio-delete-CAD-footage',actualToolCalls:result.called,originalAudioPreserved:true,oneNewUndo:true,syntheticOnly:true}));
+},60_000);
+test.skipIf(process.env.REVLINE_LIVE_AGENT_SMOKE!=='1')('live configured Claude finishes a staged deletion neutrally before the atomic server receipt',async()=>{
+  const result=await nativeIntent('Delete only caption title. Preserve every other clip, original footage, linked audio, timing and controls. Do not analyze footage.',initial,[],1);
+  expect(result.called).toContain('delete');expect(result.timeline.clips).toEqual(result.backend!.seed.clips.filter(c=>c.id!=='title'));
+  expect(result.finalText.trim().length).toBeGreaterThan(0);expect(result.finalText).not.toMatch(/\bsaved\b|awaiting save|\bpending\b|\bprepared\b/i);
+  const page=await result.backend!.owner.query(api.assistant.messages,{projectId:result.backend!.projectId,threadId:result.backend!.threadId,paginationOpts:{cursor:null,numItems:20}});
+  expect(page.page.flatMap(m=>m.parts).filter(p=>p.type==='text').map(p=>p.providerMetadata?.revline?.publicationReceipt).filter(Boolean)).toEqual([{version:1,kind:'timeline-publication',status:'saved',runId:'run',threadId:result.backend!.threadId,promptMessageId:result.backend!.promptMessageId,stagedRevision:0,revision:1}]);
+  await assertUndo(result);
+  console.log(JSON.stringify({model:CLAUDE_MODEL,intent:'delete-caption-neutral-terminal-prose',actualToolCalls:result.called,finalText:result.finalText,atomicReceipt:true,otherClipsPreserved:true,oneUndo:true,syntheticOnly:true}));
 },60_000);
 test.skipIf(process.env.REVLINE_LIVE_AGENT_SMOKE!=='1')('live configured Claude applies look plus custom text and separate animation through stateful actual saves',async()=>{
   const result=await nativeIntent('For caption title only, first apply the Neon Echo look. Then customize it to Anton font, font size80, solid fill#AABBCC, rotation18degrees, stroke width3 with stroke color#102030, glow blur21 with glow color#2200AA, and Word reveal animation. Keep its exact existing words, start/duration and transparent background. Preserve every other clip and source. Do not analyze any media; this is an explicit text edit.',initial);
