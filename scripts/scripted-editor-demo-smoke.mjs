@@ -9,7 +9,7 @@ import puppeteer from 'puppeteer';
 
 const directory = await mkdtemp(join(tmpdir(), 'revline-scripted-demo-'));
 const footagePath = join(directory, 'source.mp4');
-execFileSync('ffmpeg', ['-v','error','-f','lavfi','-i','testsrc2=size=640x360:rate=30','-t','12','-threads','1','-c:v','libx264','-preset','ultrafast','-pix_fmt','yuv420p','-movflags','+faststart',footagePath]);
+execFileSync('ffmpeg', ['-v','error','-f','lavfi','-i','testsrc2=size=640x360:rate=30','-f','lavfi','-i','sine=frequency=420:sample_rate=48000','-t','12','-threads','1','-c:v','libx264','-preset','ultrafast','-pix_fmt','yuv420p','-c:a','aac','-movflags','+faststart',footagePath]);
 const stubs = {
   'next/navigation': `const params=new URLSearchParams();export const useSearchParams=()=>params;`,
   '@/components/workspace/workspace-nav': `import React from 'react';export const WorkspaceNav=p=><header className="demo-fixture-nav"><span>revline</span>{p.editorControls}<button id="undo" disabled={!p.canUndo} onClick={p.onUndo}>Undo</button><button id="redo" disabled={!p.canRedo} onClick={p.onRedo}>Redo</button></header>;`,
@@ -40,18 +40,21 @@ try {
   await page.type('[aria-label="Describe your next edit"]','Make it hype, with "ONE GOOD MOMENT" as the caption');await page.keyboard.press('Enter');
   await page.waitForFunction(()=>document.querySelector('.scripted-editor-demo').dataset.building==='true');
   assert.equal(await page.$eval('[aria-label="Describe your next edit"]',node=>node.value),'','Sending clears the composer immediately');
-  await page.waitForFunction(()=>document.querySelectorAll('.timeline-clip').length>0);assert.ok(await page.$$eval('.timeline-clip',nodes=>nodes.length<12),'Timeline starts with a partial build');
+  await page.waitForFunction(()=>document.querySelectorAll('.timeline-clip').length>0);assert.ok(await page.$$eval('.timeline-clip',nodes=>nodes.length<48),'Timeline starts with a partial build');assert.equal(await page.$$eval('.clip-audio',nodes=>nodes.length),await page.$$eval('.clip-video',nodes=>nodes.length),'Audio and video spawn together in each shot batch');
   await page.screenshot({path:'/tmp/revline-demo-building.png'});
   await page.waitForFunction(()=>!document.querySelector('.scripted-editor-demo').dataset.building);
-  assert.equal(await page.$$eval('.timeline-clip.clip-video',nodes=>nodes.length),4);
-  assert.equal(await page.$$eval('.timeline-clip.clip-caption',nodes=>nodes.length),4);
-  assert.equal(await page.$$eval('.timeline-clip.clip-effect',nodes=>nodes.length),4);
+  assert.equal(await page.$$eval('.timeline-clip.clip-video',nodes=>nodes.length),12);
+  assert.equal(await page.$$eval('.timeline-clip.clip-caption',nodes=>nodes.length),12);
+  assert.equal(await page.$$eval('.timeline-clip.clip-effect',nodes=>nodes.length),12);
+  assert.equal(await page.$$eval('.clip-audio',nodes=>nodes.length),12);assert.equal(await page.$$eval('.timeline-cut-transition.has-transition',nodes=>nodes.length),3,'Selected joins get real crossfades');
   const observed=await page.evaluate(()=>({counts:[...new Set(window.counts)],arrivals:window.arrivals}));assert.ok(observed.counts.length>=6,'Clips build across multiple timed stages');assert.ok(observed.arrivals.every(item=>item.animation==='demo-block-arrive'),'Actual mounted blocks use the arrival animation');
   await page.waitForFunction(()=>document.querySelector('hyperframes-player')?.style.zIndex==='1');
-  assert.match(await page.$eval('.chat-assistant',node=>node.textContent),/4 shots/);
+  await page.evaluate(async()=>{const player=document.querySelector('hyperframes-player'),win=player.iframeElement.contentWindow;win.__timelines.revline.seek(3.4);await win.__revlineTransitionController.whenReady(3.4)});
+  assert.equal(await page.$('[role="alert"]'),null,'Playback produces no visible media errors');assert.equal(await page.evaluate(()=>Array.from(document.querySelector('hyperframes-player').iframeElement.contentDocument.querySelectorAll('audio')).every(media=>!media.error)),true,'Native audio sources decode without errors');
+  assert.match(await page.$eval('.chat-assistant',node=>node.textContent),/12 shots/);
   await page.screenshot({path:'/tmp/revline-demo-finished.png'});
-  await page.click('#undo');await page.waitForFunction(()=>document.querySelectorAll('.timeline-clip').length===0);await page.click('#redo');await page.waitForFunction(()=>document.querySelectorAll('.timeline-clip').length===12);
-  await page.click('[aria-label="Replay demo"]');await page.waitForFunction(()=>document.querySelector('.scripted-editor-demo').dataset.building==='true');await page.waitForFunction(()=>document.querySelectorAll('.timeline-clip').length>0);await page.click('[aria-label="Stop editing"]');await page.waitForFunction(()=>!document.querySelector('.scripted-editor-demo').dataset.building);const stopped=await page.$$eval('.timeline-clip',nodes=>nodes.length);await new Promise(resolve=>setTimeout(resolve,1200));assert.equal(await page.$$eval('.timeline-clip',nodes=>nodes.length),stopped,'Stopped run cannot keep appending clips');
+  await page.click('#undo');await page.waitForFunction(()=>document.querySelectorAll('.timeline-clip').length===0);await page.click('#redo');await page.waitForFunction(()=>document.querySelectorAll('.timeline-clip').length===48);
+  await page.emulateMediaFeatures([{name:'prefers-reduced-motion',value:'reduce'}]);await page.click('[aria-label="Replay demo"]');await page.waitForFunction(()=>document.querySelector('.scripted-editor-demo').dataset.building==='true');await page.waitForFunction(()=>document.querySelectorAll('.timeline-clip').length>0);assert.equal(await page.$eval('.timeline-clip',node=>getComputedStyle(node).animationName),'none','Reduced motion disables block animations');await page.click('[aria-label="Stop editing"]');await page.waitForFunction(()=>!document.querySelector('.scripted-editor-demo').dataset.building);const stopped=await page.$$eval('.timeline-clip',nodes=>nodes.length);await new Promise(resolve=>setTimeout(resolve,1200));assert.equal(await page.$$eval('.timeline-clip',nodes=>nodes.length),stopped,'Stopped run cannot keep appending clips');
   await page.click('[aria-label="Replay demo"]');await page.waitForFunction(()=>document.querySelector('.scripted-editor-demo').dataset.building==='true');await page.click('[aria-label="Reset demo"]');await page.waitForFunction(()=>!document.querySelector('.scripted-editor-demo').dataset.building);await new Promise(resolve=>setTimeout(resolve,900));assert.equal(await page.$('.timeline-clip'),null,'Reset cancels stale build callbacks');assert.equal(await page.$$eval('.composer-attachment',nodes=>nodes.length),1,'Reset keeps footage for the next take');
   await page.evaluate(()=>{window.demoObserver.disconnect();window.unmountDemo()});assert.equal(await page.evaluate(()=>window.liveURLs.size),0,'Local URLs are released on unmount');
   assert.deepEqual(errors,[]);assert.deepEqual(external,[],'The local demo makes no AI/provider or remote media requests');console.log('PASS: real editor demo uploads/drops, composer clearing, incremental animated cuts/captions/FX, native preview, grouped Undo/Redo, replay/stop/reset, URL cleanup and zero external requests.');

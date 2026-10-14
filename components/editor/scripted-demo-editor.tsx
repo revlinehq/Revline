@@ -1,11 +1,11 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useStore } from 'zustand';
 import { RotateCcw, Play } from 'lucide-react';
 import { createEditorStore } from '@/lib/editor/store';
 import { inspectMedia } from '@/lib/editor/media';
-import { EMPTY_SCRIPTED_DEMO, scriptedDemoPlan } from '@/lib/editor/scripted-demo';
+import { EMPTY_SCRIPTED_DEMO, scriptedDemoPlan, scriptedDemoMedia } from '@/lib/editor/scripted-demo';
 import type { MediaAsset, Timeline } from '@/lib/editor/types';
 import type { ComposerAttachment } from '@/components/workspace/edit-composer';
 import { userError } from '@/lib/user-error';
@@ -28,6 +28,7 @@ export function ScriptedDemoEditor({ demoId }: { demoId: string }) {
   const [store] = useState(() => createEditorStore(EMPTY_SCRIPTED_DEMO));
   const timeline = useStore(store, state => state.timeline), history = useStore(store, state => state.history), future = useStore(store, state => state.future);
   const [assets, setAssets] = useState<MediaAsset[]>([]), [pending, setPending] = useState<ComposerAttachment[]>([]);
+  const media = useMemo(() => scriptedDemoMedia(assets), [assets]);
   const [messages, setMessages] = useState<ChatMessage[]>([]), [running, setRunning] = useState(false), [importing, setImporting] = useState(false);
   const [error, setError] = useState(''), [title, setTitle] = useState('Your next edit'), [activity, setActivity] = useState<string | null>(null);
   const [pace, setPace] = useState(1), [lastPrompt, setLastPrompt] = useState('');
@@ -82,7 +83,7 @@ export function ScriptedDemoEditor({ demoId }: { demoId: string }) {
         current = { ...current, clips: [...current.clips, ...step.clips] };
         store.getState().edit(current); setActivity(step.label);
         setMessages(previous => previous.map(message => message.id === `${runId}-reply` ? { ...message, text: step.reply } : message));
-        await waitForStep(650 / pace, controller.signal);
+        await waitForStep(step.delayMs / pace, controller.signal);
       }
       setMessages(previous => previous.map(message => message.id === `${runId}-reply` ? { ...message, status: 'success', text: plan.summary } : message));
     } catch (error) {
@@ -108,7 +109,7 @@ export function ScriptedDemoEditor({ demoId }: { demoId: string }) {
   function change(next: Timeline) { if (!activeRun.current) { store.getState().edit(next); setError(''); } }
   return <div className="scripted-editor-demo" data-demo-id={demoId} data-building={running || undefined}>
     <input ref={input} data-demo-files type="file" hidden multiple accept="video/*,image/*,audio/*" onChange={event => { const files = Array.from(event.currentTarget.files ?? []); event.currentTarget.value = ''; void attach(files).catch(error => setError(userError(error))); }}/>
-    <EditorStateProvider store={store}><EditorShell title={title} onTitle={setTitle} timeline={timeline} assets={assets} onChange={change} saving={false} upload={null} error={error} onError={setError} demo assistantPanel={chat}
+    <EditorStateProvider store={store}><EditorShell title={title} onTitle={setTitle} timeline={timeline} assets={media.assets} onChange={change} saving={false} upload={null} error={error} onError={setError} demo assistantPanel={chat}
       onUndo={() => { if (!activeRun.current) store.getState().undo(); }} onRedo={() => { if (!activeRun.current) store.getState().redo(); }} canUndo={!running && !!history.length} canRedo={!running && !!future.length}
       onUpload={attach} onDropUpload={attach} messages={messages} aiRunning={running} aiConfigured={false} onSend={build} onStop={async () => { activeRun.current?.abort(); }} onExport={async () => {}} exportState={null}/></EditorStateProvider>
   </div>;

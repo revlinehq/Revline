@@ -11,8 +11,8 @@
 .scripted-demo-controls button:hover,.scripted-demo-controls button:focus-visible{background:var(--ws-hover);color:var(--ws-text)}
 .scripted-demo-controls button:disabled{opacity:.35;cursor:default}
 .scripted-demo-note{padding:0 14px 10px;color:var(--ws-muted);font-size:9px;text-align:center}
-.scripted-editor-demo[data-building] .timeline-clip{animation:demo-block-arrive .42s cubic-bezier(.2,0,0,1) both;transform-origin:left center}
+.scripted-editor-demo[data-building] .timeline-clip{animation:demo-block-arrive .55s cubic-bezier(.2,0,0,1) both}
 .scripted-editor-demo[data-building] .timeline-track{pointer-events:none}
 .scripted-editor-demo .composer-attachments{padding-top:8px}
-@keyframes demo-block-arrive{from{opacity:0;transform:translateY(8px) scaleX(.94);filter:blur(2px)}to{opacity:1;transform:none;filter:none}}
+@keyframes demo-block-arrive{from{opacity:0;transform:translateY(5px);filter:blur(1.5px)}to{opacity:1;transform:none;filter:none}}
 @media(prefers-reduced-motion:reduce){.scripted-editor-demo[data-building] .timeline-clip{animation:none}}
