@@ -9,6 +9,15 @@ export const REMOTION_TEXT_LABELS: Record<RemotionTextPreset, string> = {
   'word-reveal': 'Word reveal', 'word-pop': 'Pop-in words', 'slide-title': 'Sliding title', karaoke: 'Karaoke',
   'neon-echo': 'Neon echo', 'lyric-slam': 'Lyric slam', 'kinetic-stack': 'Kinetic stack',
 };
+export const REMOTION_TEXT_DESCRIPTIONS: Record<RemotionTextPreset,string> = {
+  "word-reveal": "Reveal words sequentially with a short fade and upward settle; appearance remains independently editable.",
+  "word-pop": "Bring words in one by one with a spring scale and fade, preserving their positions and chosen appearance.",
+  "slide-title": "Slide the entire title horizontally into place with a smooth fade; keeps the text layout intact.",
+  "karaoke": "Highlight one word at a time using even progress across the clip duration; this is not detected syllable or beat synchronization.",
+  "neon-echo": "Spring the text in with offset drifting outline echoes, a subtle hold pulse and an upward fading exit; colors/stroke/glow remain editable separately.",
+  "lyric-slam": "Punch the whole text in with a spring squash/stretch and slight rotation, then snap it upward on exit; does not generate lyrics.",
+  "kinetic-stack": "Stagger words with individual spring scale and vertical/rotational movement, hold the phrase, then lift and fade it out."
+};
 export const VFX_TEXT_APPEARANCE: Partial<Record<RemotionTextPreset, { color: string; highlightColor: string }>> = {
   'neon-echo': { color: '#B72CFF', highlightColor: '#FF962E' },
   'lyric-slam': { color: '#FFF3E1', highlightColor: '#FF6E36' },

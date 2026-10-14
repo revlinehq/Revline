@@ -36,20 +36,20 @@ export function cinematicBarKeyframes(duration: number, speed = 1): MotionKeyfra
   const movement = Math.min(.4 / speed, duration / 2);
   return [key(0, { opacity: 0 }), key(movement), key(duration - movement), key(duration, { opacity: 0 })].filter((frame, index, frames) => index === 0 || frame.time > frames[index - 1].time);
 }
-export const EFFECT_CATALOG: Record<EffectPreset, { label: string; duration: number; keyframes: (duration: number) => MotionKeyframe[] }> = {
-  crossfade: { label: 'Crossfade', duration: .6, keyframes: () => [] },
-  'spin-zoom': { label: 'Spin zoom', duration: .6, keyframes: () => [] },
-  'blur-dissolve': { label: 'Blur dissolve', duration: .6, keyframes: () => [] },
-  fade: { label: 'Fade in / out', duration: 1, keyframes: d => { const fade = Math.min(.3, d / 3); return [key(0, { opacity: 0 }), key(fade), key(d - fade), key(d, { opacity: 0 })]; } },
-  punch: { label: 'Punch zoom', duration: .5, keyframes: d => { const hit = Math.min(.35, d / 2); return [key(0), key(hit * .3, { scale: 1.2 }), key(hit), key(d)]; } },
-  shake: { label: 'Impact shake', duration: .5, keyframes: d => { const hit = Math.min(.35, d / 2); return [key(0, { scale: 1.08 }), key(hit * .15, { x: .018, y: -.01, rotation: 1.2, scale: 1.08 }), key(hit * .35, { x: -.014, y: .008, rotation: -.9, scale: 1.08 }), key(hit * .6, { x: .008, y: -.004, rotation: .4, scale: 1.08 }), key(hit, { scale: 1.08 }), key(d, { scale: 1.08 })]; } },
-  flash: { label: 'Flash', duration: .5, keyframes: d => { const hit = Math.min(.35, d / 2); return [key(0), key(hit * .2, { brightness: 3 }), key(hit), key(d)]; } },
-  pop: { label: 'Pop in', duration: .5, keyframes: d => { const hit = Math.min(.35, d / 2); return [key(0, { scale: .7, opacity: 0 }), key(hit * .65, { scale: 1.08 }), key(hit), key(d)]; } },
-  'solid-color': { label: 'Solid color', duration: 2, keyframes: d => [key(0), key(d)] },
-  'cinematic-bars': { label: 'Cinematic bars', duration: 2, keyframes: d => cinematicBarKeyframes(d) },
-  'quick-zoom-in': { label: 'Quick zoom in', duration: .5, keyframes: d => [key(0), key(d, { scale: 1.2 })] },
-  'zoom-blur': { label: 'Zoom blur', duration: .6, keyframes: d => { const fade = Math.min(.18, d / 2); return [key(0, {opacity:0}), key(fade), ...(d-fade > fade ? [key(d-fade)] : []), key(d, {opacity:0})]; } },
-  'quick-zoom-out': { label: 'Quick zoom out', duration: .5, keyframes: d => [key(0, { scale: 1.2 }), key(d)] },
+export const EFFECT_CATALOG: Record<EffectPreset, { label: string; description: string; duration: number; keyframes: (duration: number) => MotionKeyframe[] }> = {
+  crossfade: { label: 'Crossfade', description: "Dissolve between two neighboring clips with complementary opacity weights, retaining transparent/cropped content and original audio timing.", duration: .6, keyframes: () => [] },
+  'spin-zoom': { label: 'Spin zoom', description: "Dissolve while the outgoing frame rotates and zooms away and the incoming frame settles from an opposite tilt/zoom. Clockwise or counter-clockwise; rotation of 18 degrees and zoom up to 1.55.", duration: .6, keyframes: () => [] },
+  'blur-dissolve': { label: 'Blur dissolve', description: "Dissolve as outgoing footage blurs and incoming footage comes into focus. Blur reaches 20 reference pixels and scales with output resolution.", duration: .6, keyframes: () => [] },
+  fade: { label: 'Fade in / out', description: "Fade the underlying footage in and out with a held middle section; does not fade audio.", duration: 1, keyframes: d => { const fade = Math.min(.3, d / 3); return [key(0, { opacity: 0 }), key(fade), key(d - fade), key(d, { opacity: 0 })]; } },
+  punch: { label: 'Punch zoom', description: "A quick 1.2\u00d7 visual punch toward the center, followed by a return to the original framing.", duration: .5, keyframes: d => { const hit = Math.min(.35, d / 2); return [key(0), key(hit * .3, { scale: 1.2 }), key(hit), key(d)]; } },
+  shake: { label: 'Impact shake', description: "Brief horizontal/vertical offsets and small rotation jitter with a slight inset zoom; preserves the original cut and audio timing.", duration: .5, keyframes: d => { const hit = Math.min(.35, d / 2); return [key(0, { scale: 1.08 }), key(hit * .15, { x: .018, y: -.01, rotation: 1.2, scale: 1.08 }), key(hit * .35, { x: -.014, y: .008, rotation: -.9, scale: 1.08 }), key(hit * .6, { x: .008, y: -.004, rotation: .4, scale: 1.08 }), key(hit, { scale: 1.08 }), key(d, { scale: 1.08 })]; } },
+  flash: { label: 'Flash', description: "A brief brightness pulse over the footage that settles back to normal; does not add a new media source.", duration: .5, keyframes: d => { const hit = Math.min(.35, d / 2); return [key(0), key(hit * .2, { brightness: 3 }), key(hit), key(d)]; } },
+  pop: { label: 'Pop in', description: "Scale footage from 0.7\u00d7 through a small overshoot while fading in, then settle to normal size.", duration: .5, keyframes: d => { const hit = Math.min(.35, d / 2); return [key(0, { scale: .7, opacity: 0 }), key(hit * .65, { scale: 1.08 }), key(hit), key(d)]; } },
+  'solid-color': { label: 'Solid color', description: "A solid color frame or normalized adjustable rectangle with editable width, height, center and opacity.", duration: 2, keyframes: d => [key(0), key(d)] },
+  'cinematic-bars': { label: 'Cinematic bars', description: "Black top/bottom bars slide in, hold and slide out; size controls their fraction of frame height and speed controls entry/exit.", duration: 2, keyframes: d => cinematicBarKeyframes(d) },
+  'quick-zoom-in': { label: 'Quick zoom in', description: "A smooth visual push from normal framing to 1.2\u00d7 over the chosen interval.", duration: .5, keyframes: d => [key(0), key(d, { scale: 1.2 })] },
+  'zoom-blur': { label: 'Zoom blur', description: "A timed radial blur pulse with editable strength and normalized blur center, fading in and out over underlying footage.", duration: .6, keyframes: d => { const fade = Math.min(.18, d / 2); return [key(0, {opacity:0}), key(fade), ...(d-fade > fade ? [key(d-fade)] : []), key(d, {opacity:0})]; } },
+  'quick-zoom-out': { label: 'Quick zoom out', description: "A smooth visual pull from 1.2\u00d7 to normal framing over the chosen interval.", duration: .5, keyframes: d => [key(0, { scale: 1.2 }), key(d)] },
 };
 export function effectClipLabel(clip: Pick<Clip, 'effectPreset'>) { return clip.effectPreset && clip.effectPreset !== 'none' ? EFFECT_CATALOG[clip.effectPreset].label : 'Custom effect'; }
 const bounds = { x: [-1, 1], y: [-1, 1], scale: [0.1, 5], rotation: [-360, 360], opacity: [0, 1], brightness: [0, 4] } as const;

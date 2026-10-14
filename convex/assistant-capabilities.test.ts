@@ -47,7 +47,7 @@ async function memoryBackend(seed:Timeline,priorHistory:Timeline[]=[]){
   const mapping=await t.run(async ctx=>{
     const fields={ownerId:'owner',projectId,size:1,duration:30,createdAt:Date.now()};
     const sound=await ctx.db.insert('assets',{...fields,kind:'audio',fileName:'Synthetic voice.wav',contentType:'audio/wav'});
-    const video=await ctx.db.insert('assets',{...fields,kind:'video',fileName:'CAD sample.mp4',contentType:'video/mp4',audioAssetId:sound,audioExtracted:true});
+    const video=await ctx.db.insert('assets',{...fields,kind:'video',fileName:'CAD sample.mp4',contentType:'video/mp4',width:1920,height:1080,audioAssetId:sound,audioExtracted:true});
     const image=await ctx.db.insert('assets',{...fields,kind:'image',fileName:'Synthetic still.png',contentType:'image/png'});
     return{sound,video,image};
   });
@@ -162,6 +162,30 @@ test('a plain greeting completion creates no edits or analysis requests and pres
   expect(sdk.options!.instructions).toContain('Greetings, small talk, and questions about your abilities do not request footage analysis or editing');
   expect(sdk.options!.instructions).toContain('short Markdown bullet list with bold capability names');
   expect(sdk.options!.instructions).toContain(JSON.stringify(editorCapabilities()));
+});
+
+test('every implemented effect, text animation/look and transition has a concrete shared behavior description',()=>{
+  const catalog=editorCapabilities();
+  for(const entry of [...catalog.effects.flatMap(category=>category.items),...catalog.timedFX,...catalog.transitions.items,...catalog.text.animations,...catalog.text.looks]){
+    expect(entry.description.trim().length).toBeGreaterThan(20);expect(entry.description).not.toBe('Add at the playhead');
+  }
+  expect(catalog.text.animations).toHaveLength(TEXT_ANIMATION_PRESETS.length);expect(catalog.text.looks).toHaveLength(6);expect(catalog.transitions.items).toHaveLength(3);
+  expect(catalog.text.animations.find(item=>item.preset==='karaoke')?.description).toContain('not detected');
+  expect(catalog.visual.canvasReference.landscape).toEqual({width:1920,height:1080});expect(catalog.visual.canvasReference.vertical).toEqual({width:1080,height:1920});
+});
+
+test('pixel transform/crop tools use known canvas/source axes, preserve omitted fields and reject unknown/impossible geometry',async()=>{
+  await run(async tools=>await expect(execute(tools,'cropClip',{clipId:'from',units:'pixels',left:96})).rejects.toThrow('Known positive'));
+  const result=await run(async tools=>{
+    await execute(tools,'transformClip',{clipId:'from',units:'pixels',x:960,y:540,scale:1.25,rotation:12,opacity:.7});
+    await execute(tools,'cropClip',{clipId:'from',units:'pixels',left:96,right:192,top:54});
+    await execute(tools,'cropClip',{clipId:'from',bottom:.1});
+    await expect(execute(tools,'transformClip',{clipId:'from',units:'pixels',x:1921})).rejects.toThrow('supported range');
+    await expect(execute(tools,'cropClip',{clipId:'from',units:'pixels',left:1824})).rejects.toThrow('more than 5%');
+  },initial,true);
+  expect(result.timeline.clips[0]).toEqual({...result.backend!.seed.clips[0],transform:{x:.5,y:.5,scale:1.25,rotation:12,opacity:.7},crop:{left:.05,right:.1,top:.05,bottom:.1}});
+  expect(result.timeline.clips.slice(1)).toEqual(result.backend!.seed.clips.slice(1));
+  await assertUndo(result);
 });
 
 test('every current timed FX has a tool schema, while transitions require explicit distinct clip targets',async()=>{
@@ -368,15 +392,22 @@ function configuredModel(){
   return createAnthropic({apiKey:key})(CLAUDE_MODEL);
 }
 async function nativeIntent(prompt:string,seed:Timeline,priorHistory:Timeline[]=[]){
-  const called:string[]=[];const model=configuredModel();
+  const called:string[]=[],inputs:{name:string;input:unknown}[]=[];const model=configuredModel();
   const result=await run(async available=>{
-    const tools=Object.fromEntries(Object.entries(available).map(([name,value])=>[name,tool({description:value.description,inputSchema:value.inputSchema,execute:async input=>{called.push(name);return execute(available,name,input)}})]));
+    const tools=Object.fromEntries(Object.entries(available).map(([name,value])=>[name,tool({description:value.description,inputSchema:value.inputSchema,execute:async input=>{called.push(name);inputs.push({name,input});return execute(available,name,input)}})]));
     try{await generateText({model,providerOptions:claudeProviderOptions(CLAUDE_MODEL),system:sdk.options!.instructions,prompt,tools,stopWhen:stepCountIs(8),maxOutputTokens:1800,abortSignal:AbortSignal.timeout(45000)})}
     catch(error){const cause=error as{statusCode?:number;name?:string};throw new Error(`Live Claude intent failed (${cause.name??'Error'}, status ${cause.statusCode??'unknown'}).`)}
   },seed,true,priorHistory);
   expect(result.error).toBeUndefined();expect(called).not.toContain('analyzeMedia');expect(called).not.toContain('inspectVideo');expect(called.length).toBeGreaterThan(1);
-  return{...result,called};
+  return{...result,called,inputs};
 }
+test.skipIf(process.env.REVLINE_LIVE_AGENT_SMOKE!=='1')('live configured Claude uses actual pixel transform and crop inputs without moving media or audio timing',async()=>{
+  const result=await nativeIntent('For video clip from only, use pixel units: center x960/y540 on the landscape1920x1080 reference canvas, scale1.25, rotation12degrees and opacity0.7. Crop intrinsic-source left96pixels, right192pixels and top54pixels using pixel units. Preserve all omitted controls, source ranges, linked audio and other clips. No analysis.',initial);
+  expect(result.inputs.find(call=>call.name==='transformClip')?.input).toMatchObject({units:'pixels'});expect(result.inputs.find(call=>call.name==='cropClip')?.input).toMatchObject({units:'pixels'});
+  expect(result.timeline.clips[0]).toEqual({...result.backend!.seed.clips[0],transform:{x:.5,y:.5,scale:1.25,rotation:12,opacity:.7},crop:{left:.05,right:.1,top:.05,bottom:0}});
+  expect(result.timeline.clips.slice(1)).toEqual(result.backend!.seed.clips.slice(1));
+  await assertUndo(result);
+},60_000);
 test.skipIf(process.env.REVLINE_LIVE_AGENT_SMOKE!=='1')('live configured Claude undoes, unlinks and removes CAD footage while preserving original audio',async()=>{
   const result=await nativeIntent('can u undo, unlink, leave audio, and delete footage of cad',trimmed,[initial]);
   expect(result.called).toContain('undoLatestEdit');expect(result.called).toContain('unlink');expect(result.called).toContain('delete');
