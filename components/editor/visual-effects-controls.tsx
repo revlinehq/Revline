@@ -45,7 +45,7 @@ export function EffectSlider({ label, value, bounds, step = .01, format, disable
     cancelAnimationFrame(frame.current);
     if (gesture.current) callbacks.current.onPreview(null);
   }, []);
-  const progress = Math.min(100, Math.max(0, (draft - bounds[0]) / (bounds[1] - bounds[0]) * 100));
+  const progress = bounds[1] > bounds[0] ? Math.min(100, Math.max(0, (draft - bounds[0]) / (bounds[1] - bounds[0]) * 100)) : 0;
   return <div className="effect-slider" data-disabled={disabled || undefined}>
     <span className="effect-slider-fill" aria-hidden="true" style={{ width: `${progress}%` }}/>
     <span className="effect-slider-handle" aria-hidden="true" style={{ left: `clamp(0px, calc(${progress}% - 7px), calc(100% - 2px))` }}/>

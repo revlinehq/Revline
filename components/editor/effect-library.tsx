@@ -8,7 +8,8 @@ import { TEXT_ANIMATION_PRESETS, selectedTextAnimation, type TextAnimationPreset
 import { selectedTextLook, type TextLookId } from '@/lib/editor/text-looks';
 import { TextFontStyles } from './text-font-styles';
 import type { VisualEffects } from '@/lib/editor/visual-effects';
-import type { Clip, MediaAsset } from '@/lib/editor/types';
+import type { Clip, MediaAsset, Timeline } from '@/lib/editor/types';
+import { isTransitionPreset, transitionAvailability, type TransitionPreset } from '@/lib/editor/clip-transitions';
 import type { OverlayCatalogItem } from '@/lib/editor/overlay-catalog';
 import { EFFECT_DRAG_TYPE } from '@/lib/editor/effect-drag';
 import { SegmentedTabs } from './segmented-tabs';
@@ -28,10 +29,11 @@ function LibraryEntry({ entry, disabled, reason, draggable, onApply }: { entry: 
   }}><EffectIcon name={entry.id} size={18}/><span>{entry.label}</span>{entry.action ? <ChevronRight size={12} aria-hidden="true"/> : <Plus size={12} aria-hidden="true"/>}</button>;
 }
 
-export function EffectLibrary({ clip, onMedia, onVisualEffect, onAddEffect, onTextAnimation, onTextLook, onSpeed }: {
-  clip?: Clip; assets: readonly MediaAsset[];
+export function EffectLibrary({ clip, timeline, time = 0, onMedia, onVisualEffect, onAddEffect, onAddTransition, onTextAnimation, onTextLook, onSpeed }: {
+  clip?: Clip; timeline?: Timeline; time?: number; assets: readonly MediaAsset[];
   onMedia?: () => void; onVisualEffect: (effect: LibraryVisualEffect) => void;
   onAddEffect?: (preset: EffectPreset) => void; onTextAnimation?: (preset: TextAnimationPreset) => void;
+  onAddTransition?: (preset: TransitionPreset) => void;
   onTextLook?: (look: TextLookId) => void;
   onUploadOverlay?: () => void; onAddOverlay?: (asset: MediaAsset) => void; overlayAssets?: readonly MediaAsset[]; onAddCatalogOverlay?: (overlay: OverlayCatalogItem) => void;
   onFadeThroughBlack?: () => void; onSpeed?: () => void;
@@ -43,15 +45,20 @@ export function EffectLibrary({ clip, onMedia, onVisualEffect, onAddEffect, onTe
   const visual = clip?.kind === 'video' || clip?.kind === 'image';
   const text = clip?.kind === 'caption' || clip?.kind === 'graphic';
   const query = search.trim().toLowerCase();
-  const categories = EFFECT_LIBRARY_CATEGORIES.filter(item => EFFECT_LIBRARY_CATALOG.some(entry => entry.category === item.id));
-  const visible = EFFECT_LIBRARY_CATALOG.filter(entry => (!entry.action || onSpeed) && (query ? `${entry.label} ${entry.description}`.toLowerCase().includes(query) : entry.category === category));
+  const catalog = EFFECT_LIBRARY_CATALOG.filter(entry => !isTransitionPreset(entry.preset) || onAddTransition);
+  const categories = EFFECT_LIBRARY_CATEGORIES.filter(item => catalog.some(entry => entry.category === item.id));
+  const visible = catalog.filter(entry => (!entry.action || onSpeed) && (query ? `${entry.label} ${entry.description}`.toLowerCase().includes(query) : entry.category === category));
+  const transitions = onAddTransition && timeline ? transitionAvailability(timeline, time, { aboveClipId: visual ? clip.id : undefined }) : { available: false as const, reason: 'Add neighboring video or image clips on one V track before adding a transition.' };
+  const canDragTransition = onAddTransition && timeline ? transitionAvailability(timeline, time).available : false;
   function reason(entry: LibraryEntryData) {
+    if (isTransitionPreset(entry.preset) && !transitions.available) return transitions.reason;
     if (entry.visual && !visual) return 'Select a video or image clip first.';
     if (entry.action && clip?.kind !== 'video' && clip?.kind !== 'audio') return 'Select a video or audio clip first.';
-    if (entry.preset && !onAddEffect) return 'Effect editing is unavailable.';
+    if (entry.preset && !isTransitionPreset(entry.preset) && !onAddEffect) return 'Effect editing is unavailable.';
   }
   function apply(entry: LibraryEntryData) {
     if (entry.visual) onVisualEffect(entry.visual);
+    else if (isTransitionPreset(entry.preset)) onAddTransition?.(entry.preset);
     else if (entry.preset) onAddEffect?.(entry.preset);
     else onSpeed?.();
   }
@@ -73,10 +80,11 @@ export function EffectLibrary({ clip, onMedia, onVisualEffect, onAddEffect, onTe
         <div className="library-category-results" id={`${id}-category-results`} role={query ? 'region' : 'tabpanel'} aria-label={query ? 'Effect search results' : undefined} aria-labelledby={query ? undefined : `${id}-category-${category}`}>
           <div className="library-look-grid">{visible.map(entry => {
             const unavailable = reason(entry);
-            const draggable = !!entry.visual || (!!entry.preset && !!onAddEffect);
+            const draggable = !!entry.visual || (isTransitionPreset(entry.preset) ? !!canDragTransition : !!entry.preset && !!onAddEffect);
             return <LibraryEntry key={entry.id} entry={entry} disabled={!!unavailable} reason={unavailable} draggable={draggable} onApply={() => apply(entry)}/>;
           })}</div>
           {!visible.length && <p className="library-empty">No matching looks.</p>}
+          {!transitions.available && visible.some(entry => isTransitionPreset(entry.preset)) && <p className="library-transition-availability" role="status">{transitions.reason}</p>}
         </div>
       </div> : <div className="library-text-results">
         <TextFontStyles/>

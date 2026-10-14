@@ -19,4 +19,7 @@ export const EFFECT_LIBRARY_CATALOG: readonly EffectLibraryEntry[] = [
   { id: 'invert', label: 'Invert colors', description: 'Turn colors into a negative', category: 'color', visual: 'invert' },
   { id: 'dither', label: 'Dither', description: 'Ordered dots and a reduced color palette', category: 'texture', visual: 'dither' },
   { id: 'glitch', label: 'Digital glitch', description: 'Distort the selected footage', category: 'texture', visual: 'glitch' },
+  { id: 'crossfade', label: 'Crossfade', description: 'Blend two neighboring clips at their cut', category: 'transitions', preset: 'crossfade' },
+  { id: 'spin-zoom', label: 'Spin zoom', description: 'Rotate and zoom between neighboring clips', category: 'transitions', preset: 'spin-zoom' },
+  { id: 'blur-dissolve', label: 'Blur dissolve', description: 'Soften and dissolve between neighboring clips', category: 'transitions', preset: 'blur-dissolve' },
 ];
