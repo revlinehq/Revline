@@ -278,7 +278,7 @@ export function TimelinePanel(p:Props){
       }
     };
     const showSnapGuide=(enabled:boolean,scrollTop:number,viewportHeight:number)=>{
-      const candidates=mode==='move'?selectedClips.flatMap(c=>{const candidate=placedClips.get(c.id)!;return [candidate.start,candidate.start+candidate.duration];}):[next.start+(mode==='right'?next.duration:0)];
+      const candidates=mode==='move'?selectedClips.flatMap(c=>{const candidate=placedClips.get(c.id);return candidate?[candidate.start,candidate.start+candidate.duration]:[];}):[next.start+(mode==='right'?next.duration:0)];
       const mark=enabled&&!dropError?marks.find(mark=>candidates.some(edge=>Math.abs(edge-mark)<1e-7)):undefined;
       if(snapGuide){
         snapGuide.style.display=mark===undefined?'none':'block';
@@ -325,15 +325,19 @@ export function TimelinePanel(p:Props){
           }
         }
         const magnetized=showSnapGuide(!!magnet,scrollTop,viewportHeight);
-        const counts=deriveTrackCounts(placed),key=`${counts.visual}-${counts.audio}`;
+        const counts=deriveTrackCounts(placed),key=`${counts.effects}-${counts.visual}-${counts.audio}`;
         if(key!==targetTrackKey){targetTrackKey=key;targetTrackMap=new Map(timelineLayout(placed,dense).tracks.map(row=>[`${row.group}-${row.number}`,row]));}
         for(const member of selectedClips){
           const pair=elements.get(member.id);if(!pair)continue;
           const sourceRow=trackMap.get(`${layerGroup(member.kind)}-${trackOf(member)}`)!;
-          const candidate=placedClips.get(member.id)!;
+          const candidate=placedClips.get(member.id);
+          if(!candidate){pair.floating.style.display='none';pair.placement.style.display='none';continue;}
+          pair.floating.style.display='';
           // Lock to a magnetic join; otherwise keep the floating clip under the pointer.
           pair.floating.style.transform=`translate3d(${origin+(magnetized?candidate.start:member.start+rawDelta)*px}px,${sourceRow.top+3+(layerGroup(member.kind)===group?clientY-startY+scrollDelta:0)}px,0)`;
-          const row=targetTrackMap.get(`${layerGroup(candidate.kind)}-${trackOf(candidate)}`)!;
+          const row=targetTrackMap.get(`${layerGroup(candidate.kind)}-${trackOf(candidate)}`);
+          if(!row){pair.placement.style.display='none';continue;}
+          pair.placement.style.display='';
           pair.placement.style.transform=`translate3d(${origin+candidate.start*px}px,${row.top+3}px,0)`;
           pair.placement.style.width=`${Math.max(6,candidate.duration*px)}px`;pair.placement.style.height=`${row.clipHeight}px`;
         }
