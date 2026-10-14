@@ -3,7 +3,7 @@
 import { warmPreviewMedia } from '@/lib/editor/preview-media-warmup';
 import { waitForPreviewMedia } from '@/lib/editor/preview-readiness';
 import { useEffect, useLayoutEffect, useRef, useState, useMemo, forwardRef, useImperativeHandle } from 'react';
-import { audioSettings, audioVolumeEnvelope } from '@/lib/editor/audio-settings';
+import { audioFadeAttributes, audioVolumeEnvelope } from '@/lib/editor/audio-settings';
 import type { HyperframesPlayer } from '@hyperframes/player';
 import { LoaderCircle } from 'lucide-react';
 import { calculateVisualRect, compositionTrackIndex, generateComposition, layerZIndex } from '@/lib/editor/composition';
@@ -61,7 +61,7 @@ export const Preview = forwardRef<PreviewHandle,{timeline:Timeline;assets:MediaA
       const volume=previewVolumes.current.get(clip.id)??clip.volume??1;
       const media=node as HTMLMediaElement;if(media.dataset.volume!==String(volume))media.dataset.volume=String(volume);
       // Compare the complete lane: other voice clips can change music gain without changing this clip's volume.
-      const automation=audioVolumeEnvelope(current,clip,volume),fades=audioSettings(clip);
+      const automation=audioVolumeEnvelope(current,clip,volume),fades=audioFadeAttributes(clip);
       if(media.dataset.automation!==automation)media.dataset.automation=automation;
       if(media.dataset.fadeIn!==String(fades.fadeIn))media.dataset.fadeIn=String(fades.fadeIn);
       if(media.dataset.fadeOut!==String(fades.fadeOut))media.dataset.fadeOut=String(fades.fadeOut);
