@@ -17,12 +17,13 @@ function ShowcaseCard({ example, wide = false }: { example: ShowcaseExample; wid
 
 export function LandingShowcase() {
   return <section className="landing-showcase landing-section" aria-label="Edits made with Revline">
+    <h2 className="landing-showcase-heading">Edited with Revline</h2>
     <div className="landing-showcase-group" aria-labelledby="landing-short-form-heading">
-      <h2 id="landing-short-form-heading">Short-form content</h2>
+      <h3 id="landing-short-form-heading">Short-form content</h3>
       <div className="landing-showcase-grid">{shortForm.map(example => <ShowcaseCard key={example.title} example={example}/>)}</div>
     </div>
     <div className="landing-showcase-group" aria-labelledby="landing-visual-effects-heading">
-      <h2 id="landing-visual-effects-heading">Visual effects</h2>
+      <h3 id="landing-visual-effects-heading">Visual effects</h3>
       <ShowcaseCard example={visualEffects} wide/>
     </div>
   </section>;
