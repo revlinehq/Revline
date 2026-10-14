@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useId, useRef, useState } from 'react';
 import { Link2, LoaderCircle, X } from 'lucide-react';
+import { ProcessingStatus } from './processing-status';
 import { parseVideoLink } from '@/lib/editor/video-link';
 import './video-link-import.css';
 
@@ -39,9 +40,8 @@ export function VideoImportProgress({ task }: { task: VideoImportState }) {
   const message = task.error?.includes('Your timeline is full. The imported video is saved in Sources.')
     ? 'Your video is saved in Sources. Use + beside it to add it to your timeline.'
     : task.error?.replace(/^.*?(?:Uncaught ConvexError:|Server Error)\s*/s, '').split(/\n\s+at /)[0] || 'Try another public video link.';
-  return <div className="video-import-progress" role={failed ? 'alert' : 'status'}>
-    <span>{!failed && <LoaderCircle size={14} className="animate-spin"/>}{failed ? 'Video import needs attention' : task.status === 'retrying' ? 'Retrying video import…' : task.status === 'queued' ? 'Video import queued…' : 'Importing your video…'}{failed && <button type="button" className="dismiss-import-notice" aria-label="Dismiss import notice" onClick={() => { setDismissed(true); try { localStorage.setItem(storageKey, 'dismissed'); } catch { /* Dismiss still works when storage is unavailable. */ } }}><X size={14}/></button>}</span>
-    {!failed && <progress aria-label="Video import progress" max={100} {...(task.progress ? { value: task.progress } : {})}/>}
-    <small>{failed ? message : 'Downloading, preparing, and adding to your timeline. You can leave this page.'}</small>
+  return <div className="video-import-progress">
+    <ProcessingStatus state={failed?'error':'working'} label={failed ? 'Video import needs attention' : task.status === 'retrying' ? 'Retrying video import…' : task.status === 'queued' ? 'Video import queued…' : 'Importing your video…'} detail={failed ? message : 'Downloading and preparing your footage. You can leave this page.'} progress={task.status==='running'&&task.progress>0?task.progress:null}/>
+    {failed && <button type="button" className="dismiss-import-notice" aria-label="Dismiss import notice" onClick={() => { setDismissed(true); try { localStorage.setItem(storageKey, 'dismissed'); } catch { /* Dismiss still works when storage is unavailable. */ } }}><X size={14}/></button>}
   </div>;
 }

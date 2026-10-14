@@ -1,5 +1,5 @@
 .assistant-result-cards{display:grid;gap:6px;margin:10px 0 16px}
-.assistant-result-card{display:flex;align-items:center;gap:9px;min-height:40px;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:color-mix(in srgb,var(--card),var(--foreground) 2%);color:var(--foreground);font-size:12px;line-height:1.45}
+.assistant-result-card{display:flex;align-items:center;gap:9px;min-height:32px;padding:0;border:0;border-radius:0;background:transparent;color:var(--foreground);font-size:12px;line-height:1.45}
 .assistant-result-card>svg{flex:none;color:var(--muted-foreground)}
 .assistant-result-card>div{min-width:0}
 .assistant-result-card small{display:block;margin-top:3px;color:var(--muted-foreground);font-size:11px;overflow-wrap:anywhere}
