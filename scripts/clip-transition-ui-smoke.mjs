@@ -84,6 +84,11 @@ try{
  await page.click('#undo');await flush();assert.deepEqual(await page.evaluate(()=>window.fixture.timeline),unsplit,'Undo restores the original uncut footage');
  // Add, replace, copy, paste, and remove at the cut itself.
  await page.evaluate(()=>window.fixture.reset());await flush();
+ for(const theme of ['dark','light']){await page.evaluate(theme=>document.documentElement.dataset.workspaceTheme=theme,theme);await page.hover('[aria-label="Add transition at 3.00s"]');await flush();
+  const hover=await page.$eval('[aria-label="Add transition at 3.00s"]',node=>{const s=getComputedStyle(node);return {background:s.backgroundColor,border:s.borderTopColor,color:s.color,cursor:s.cursor}});
+  assert.equal(hover.background,theme==='dark'?'rgb(41, 41, 41)':'rgb(244, 244, 244)','Plus hover uses neutral surface');assert.equal(hover.color,theme==='dark'?'rgb(242, 242, 242)':'rgb(41, 41, 41)','Plus remains legible');assert.equal(hover.cursor,'pointer');
+ }
+ await page.evaluate(()=>document.documentElement.dataset.workspaceTheme='dark');
  await page.focus('[aria-label="Add transition at 3.00s"]');await page.keyboard.press('Enter');await page.waitForSelector('[aria-label="Choose transition"]');
  assert.ok(await page.$$eval('.timeline-transition-menu [role="menuitem"]',nodes=>nodes.every(node=>getComputedStyle(node).cursor==='pointer')),'All transition choices have a pointer cursor');
  await page.hover('.timeline-transition-menu [role="menuitem"]');await flush();
