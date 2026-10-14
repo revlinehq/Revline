@@ -1,3 +1,4 @@
+import { writeProject } from './lib/project_data';
 /// <reference types="vite/client" />
 import {afterEach,beforeEach,expect,test,vi} from 'vitest';
 import {convexTest} from 'convex-test';
@@ -20,7 +21,7 @@ async function setup(){
   const threadId=await t.run(ctx=>createThread(ctx,components.agent,{userId:'owner'}));
   const prompt=async(content:string,thread=threadId)=>t.run(async ctx=>(await saveMessages(ctx,components.agent,{threadId:thread,userId:'owner',messages:[{role:'user',content}]})).messages[0]._id);
   const promptMessageId=await prompt('Delete the caption');
-  await t.run(ctx=>ctx.db.patch(projectId,{threadId,timeline:original,revision:0,history:[],aiRunning:true,aiRunId:'run',aiUndoRecorded:false}));
+  await t.run(ctx=>writeProject(ctx,projectId,{threadId,timeline:original,revision:0,history:[],aiRunning:true,aiRunId:'run',aiUndoRecorded:false}));
   const run={projectId,ownerId:'owner',runId:'run'},publication={threadId,promptMessageId};
   const read=()=>owner.query(api.projects.get,{projectId});
   const page=()=>owner.query(api.assistant.messages,{projectId,threadId,paginationOpts:{cursor:null,numItems:50}});
@@ -51,7 +52,7 @@ test('final staged publication and SDK receipt commit together, survive a later 
   expect(await x.read()).toMatchObject({revision:1,history:[original],timeline:{clips:[]}});
   await x.t.mutation(internal.assistant.finish,x.run);
   await x.prompt('Thanks');
-  await x.t.run(ctx=>ctx.db.patch(x.projectId,{aiRunning:true,aiRunId:'new-run',aiCheckpointRevision:undefined,aiUndoRecorded:false}));
+  await x.t.run(ctx=>writeProject(ctx,x.projectId,{aiRunning:true,aiRunId:'new-run',aiCheckpointRevision:undefined,aiUndoRecorded:false}));
   expect((await x.receipts()).map(item=>item.receipt)).toEqual([receipt]);
   await x.owner.mutation(api.projects.undo,{projectId:x.projectId});
   expect((await x.read()).timeline).toEqual(original);
@@ -75,7 +76,7 @@ test('failure receipt marks only the discarded staged revision and keeps earlier
   expect(await x.read()).toMatchObject({revision:1,history:[original],timeline:immediatelySaved,aiRunning:false});
   expect((await x.receipts()).map(item=>item.receipt)).toEqual([{version:1,kind:'timeline-publication',status:'failed',runId:'run',...x.publication,stagedRevision:1}]);
   await x.prompt('A later message');
-  await x.t.run(ctx=>ctx.db.patch(x.projectId,{aiRunId:'later',aiError:undefined}));
+  await x.t.run(ctx=>writeProject(ctx,x.projectId,{aiRunId:'later',aiError:undefined}));
   expect((await x.receipts())[0].receipt.status).toBe('failed');
 });
 
@@ -83,7 +84,7 @@ test('an aborted old run retains its prompt receipt without stopping or overwrit
   const x=await setup();await x.session.checkpoint(t=>({...t,clips:[]}));
   await x.owner.mutation(api.assistant.stop,{projectId:x.projectId});
   const nextPrompt=await x.prompt('New request');
-  await x.t.run(ctx=>ctx.db.patch(x.projectId,{aiRunning:true,aiRunId:'new-run',aiError:'New run state'}));
+  await x.t.run(ctx=>writeProject(ctx,x.projectId,{aiRunning:true,aiRunId:'new-run',aiError:'New run state'}));
   await x.t.mutation(internal.assistant.finish,{...x.run,publication:{...x.publication,stagedRevision:0,status:'aborted'}});
   expect(await x.read()).toMatchObject({revision:0,history:[],timeline:original,aiRunning:true,aiRunId:'new-run',aiError:'New run state'});
   const [saved]=await x.receipts();expect(saved.receipt).toMatchObject({status:'aborted',promptMessageId:x.promptMessageId,runId:'run'});

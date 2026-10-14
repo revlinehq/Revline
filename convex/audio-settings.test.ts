@@ -1,3 +1,4 @@
+import { writeProject } from './lib/project_data';
 /// <reference types="vite/client" />
 import { convexTest } from 'convex-test';
 import { beforeEach,afterEach,expect,test,vi } from 'vitest';
@@ -19,10 +20,10 @@ async function fixture(){
 test('manual/AI audio controls persist through owned shared copies without changing source or timing',async()=>{
   const f=await fixture(),timeline=configureAudio(configureAudio(f.timeline,'voice',{role:'voice'}),'music',{role:'music',fadeIn:.5,fadeOut:1,ducking:{enabled:true,amount:.75,attack:.2,release:.4}});
   await f.owner.mutation(api.projects.saveTimeline,{projectId:f.projectId,timeline,expectedRevision:0});
-  await f.t.run(ctx=>ctx.db.patch(f.projectId,{aiRunning:true,aiRunId:'audio-run'}));
+  await f.t.run(ctx=>writeProject(ctx,f.projectId,{aiRunning:true,aiRunId:'audio-run'}));
   const changed=configureAudio(timeline,'music',{ducking:{amount:.5}});
   await f.t.mutation(internal.assistant.apply,{projectId:f.projectId,ownerId:'audio-owner',runId:'audio-run',timeline:changed,expectedRevision:1});
-  await f.t.run(ctx=>ctx.db.patch(f.projectId,{aiRunning:false}));
+  await f.t.run(ctx=>writeProject(ctx,f.projectId,{aiRunning:false}));
   const saved=(await f.owner.query(api.projects.get,{projectId:f.projectId})).timeline!;expect(saved).toEqual(changed);
   expect(saved.clips.map(({audio,...clip})=>clip)).toEqual(f.timeline.clips);
   const shareId=await f.owner.mutation(api.timelineShares.publish,{projectId:f.projectId}),copier=f.t.withIdentity({subject:'audio-copy'}),copyId=await copier.mutation(api.timelineShares.useTimeline,{shareId});

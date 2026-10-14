@@ -1,3 +1,4 @@
+import { writeProject,readProject } from './lib/project_data';
 import { completeDeletion } from '../lib/test-support/convex-deletion';
 /// <reference types="vite/client" />
 import { convexTest } from 'convex-test';
@@ -57,7 +58,7 @@ test.each(['revoked', 'expired'] as const)('%s complimentary access blocks direc
   await f.owner.mutation(api.assets.saveFocus, { projectId: f.projectId, assetId: f.assetId, focus });
   await revoke(f, mode);
   await expect(f.owner.mutation(api.assets.saveFocus, { projectId: f.projectId, assetId: f.assetId, focus: [{ time: 0, x: .8, y: .2 }] })).rejects.toThrow('SUBSCRIPTION_REQUIRED');
-  expect((await f.t.run(ctx => ctx.db.get(f.assetId)))?.analysis?.focus).toEqual(focus);
+  expect((await f.owner.query(api.assets.get,{projectId:f.projectId,assetId:f.assetId})).analysis?.focus).toEqual(focus);
 });
 
 test.each(['revoked', 'expired'] as const)('%s access blocks new multipart part URLs and attachment through an old lease', async mode => {
@@ -134,7 +135,7 @@ test('expired subscriptions block direct focus edits and multipart continuation'
 
 test('expired accounts retain owned read, share revocation and media cleanup', async () => {
   const f = await fixture();
-  await f.t.run(ctx => ctx.db.patch(f.projectId, { timeline: { fps: 30, aspectRatio: 'vertical', clips: [{ id: 'title', kind: 'graphic', text: 'Published title', start: 0, duration: 2, sourceStart: 0 }] } }));
+  await f.t.run(ctx => writeProject(ctx,f.projectId, { timeline: { fps: 30, aspectRatio: 'vertical', clips: [{ id: 'title', kind: 'graphic', text: 'Published title', start: 0, duration: 2, sourceStart: 0 }] } }));
   const shareId = await f.owner.mutation(api.timelineShares.publish, { projectId: f.projectId });
   expect(await f.t.query(api.timelineShares.get, { shareId })).toMatchObject({ title: 'Private audit edit' });
   await revoke(f, 'revoked');
@@ -146,7 +147,7 @@ test('expired accounts retain owned read, share revocation and media cleanup', a
   expect(await f.t.query(api.timelineShares.get, { shareId })).toBeNull();
   await f.owner.mutation(api.assets.remove, { assetId: f.assetId });
   await f.owner.mutation(api.projects.remove, { projectId: f.projectId });await completeDeletion(f.t, f.projectId);
-  expect(await f.t.run(ctx => ctx.db.get(f.projectId))).toBeNull();
+  expect(await f.t.run(ctx => readProject(ctx,f.projectId))).toBeNull();
 });
 
 test('a user cannot reuse a worker upload lease without the active task credentials', async () => {

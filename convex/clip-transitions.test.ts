@@ -1,3 +1,4 @@
+import { writeProject } from './lib/project_data';
 /// <reference types="vite/client" />
 import { convexTest } from 'convex-test';
 import { beforeEach, afterEach, expect, test, vi } from 'vitest';
@@ -29,10 +30,10 @@ test.each(TRANSITION_PRESETS)('%s persists through manual save, AI controls, sha
   const f=await fixture(),timeline=addTransitionClip(f.timeline,'transition',preset,'from','to',{direction:'clockwise'});
   await f.owner.mutation(api.projects.saveTimeline,{projectId:f.projectId,timeline,expectedRevision:0});
   expect((await f.owner.query(api.projects.get,{projectId:f.projectId})).timeline).toEqual(timeline);
-  await f.t.run(ctx=>ctx.db.patch(f.projectId,{aiRunning:true,aiRunId:'transition-run'}));
+  await f.t.run(ctx=>writeProject(ctx,f.projectId,{aiRunning:true,aiRunId:'transition-run'}));
   const changed=patchClip(timeline,'transition',{duration:1,transition:{...timeline.clips.at(-1)!.transition!,direction:'counter-clockwise'}});
   await f.t.mutation(internal.assistant.apply,{projectId:f.projectId,ownerId:'transition-owner',runId:'transition-run',expectedRevision:1,timeline:changed});
-  await f.t.run(ctx=>ctx.db.patch(f.projectId,{aiRunning:false}));
+  await f.t.run(ctx=>writeProject(ctx,f.projectId,{aiRunning:false}));
   const saved=(await f.owner.query(api.projects.get,{projectId:f.projectId})).timeline!;
   expect(saved.clips.slice(0,f.timeline.clips.length)).toEqual(f.timeline.clips);
   expect(saved.clips.at(-1)).toMatchObject({effectPreset:preset,start:4.5,duration:1,transition:{fromClipId:'from',toClipId:'to',direction:'counter-clockwise'}});
@@ -69,7 +70,7 @@ test('raw saves reject dangling pairs, nonadjacent layers, invalid bands and ove
 test('transition references cannot bypass project, media or AI run ownership',async()=>{
   const f=await fixture(),timeline=addTransitionClip(f.timeline,'transition','blur-dissolve','from','to');
   await expect(f.t.withIdentity({subject:'stranger'}).mutation(api.projects.saveTimeline,{projectId:f.projectId,timeline,expectedRevision:0})).rejects.toThrow('Project not found');
-  await f.t.run(ctx=>ctx.db.patch(f.projectId,{aiRunning:true,aiRunId:'owned-run'}));
+  await f.t.run(ctx=>writeProject(ctx,f.projectId,{aiRunning:true,aiRunId:'owned-run'}));
   await expect(f.t.mutation(internal.assistant.apply,{projectId:f.projectId,ownerId:'stranger',runId:'owned-run',expectedRevision:0,timeline})).rejects.toThrow();
   await f.t.run(ctx=>ctx.db.patch(f.media.videoId,{ownerId:'stranger'}));
   await expect(f.owner.mutation(api.projects.saveTimeline,{projectId:f.projectId,timeline,expectedRevision:0})).rejects.toThrow('must belong to this project');

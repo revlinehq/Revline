@@ -1,3 +1,4 @@
+import { readProject } from './lib/project_data';
 /// <reference types="vite/client" />
 import { convexTest } from 'convex-test';
 import { beforeEach,afterEach,expect,test,vi } from 'vitest';
@@ -28,7 +29,7 @@ test('projects with over a thousand task records hide immediately and delete thr
   expect(await owner.query(api.projects.list,{})).toEqual([]);
   await completeDeletion(t,projectId);
   expect(await t.run(ctx=>ctx.db.query('mediaTasks').collect())).toEqual([]);
-  expect(await t.run(ctx=>ctx.db.get(projectId))).toBeNull();
+  expect(await t.run(ctx=>readProject(ctx,projectId))).toBeNull();
 });
 test('history pruning retains fresh and active processing records',async()=>{
   const t=convexTest(schema,import.meta.glob('./**/*.ts')),owner=t.withIdentity({subject:'owner'});

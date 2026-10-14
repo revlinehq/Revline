@@ -1,3 +1,5 @@
+import { hydrateAsset,storeAnalysis } from './lib/asset_analysis';
+import { writeProject,createProject,readProject,projectIdentity,projectRun } from './lib/project_data';
 import { recordAssetStorage,usedByActiveExport,forgetStorageObject } from './lib/storage_accounting';
 import { requireEditorAccess } from './lib/billing_access';
 import { mediaUrl } from './lib/media_storage';
@@ -49,11 +51,11 @@ export const create = mutation({ args: { projectId: v.id("projects"), storageId:
   return assetId;
 }});
 export const list = query({ args: { projectId: v.id("projects"), limit: v.optional(v.number()) }, returns: v.array(assetWithUrl), handler: async (ctx, args) => {
-  const ownerId = await requireOwner(ctx); await requireProject(ctx, args.projectId, ownerId);
+  const ownerId = await requireOwner(ctx); await projectIdentity(ctx,args.projectId,ownerId);
   const limit = args.limit ?? 50;
   if (!Number.isInteger(limit) || limit < 1 || limit > 200) throw new ConvexError("Load between 1 and 200 project media files");
   const assets = await ctx.db.query("assets").withIndex("by_ownerId_projectId", q => q.eq("ownerId", ownerId).eq("projectId", args.projectId)).order("desc").take(limit);
-  return await Promise.all(assets.map(async ({analysis,...asset}) => ({ ...asset,...(analysis?.understanding?.suggestions?{analysis:{understanding:{summary:'',scenes:[],suggestions:analysis.understanding.suggestions}}}:{}), url: await mediaUrl(ctx, asset),...await thumbnailUrl(ctx,asset) })));
+  return await Promise.all(assets.map(async ({analysis,...asset}) => ({ ...asset,...((asset.editSuggestions??analysis?.understanding?.suggestions)?{analysis:{understanding:{summary:'',scenes:[],suggestions:asset.editSuggestions??analysis?.understanding?.suggestions}}}:{}), url: await mediaUrl(ctx, asset),...await thumbnailUrl(ctx,asset) })));
 }});
 export const library = query({
   args: { paginationOpts: paginationOptsValidator },
@@ -82,15 +84,15 @@ export async function removeOwnedAsset(ctx:MutationCtx,ownerId:string,assetId:Id
   if (project.aiRunning) throw new ConvexError("Wait for the current AI edit before deleting media");
   if (project.timeline?.clips.some(clip => clip.assetId === asset._id)) throw new ConvexError("Remove this media from the timeline first");
   if(await usedByActiveExport(ctx,ownerId,asset.projectId,new Set([String(asset._id)])))throw new ConvexError('This media is part of an active render');
-  await ctx.db.patch(project._id, { history: project.history?.filter(t => !t.clips.some(clip => clip.assetId === asset._id)), updatedAt: Date.now() });
+  await writeProject(ctx,project._id, { history: project.history?.filter(t => !t.clips.some(clip => clip.assetId === asset._id)), updatedAt: Date.now() });
   await removeMediaAttachment(ctx, asset); return null;
 }
 export const remove = mutation({ args: { assetId: v.id('assets') }, returns: v.null(), handler: async (ctx, args) => removeOwnedAsset(ctx,await requireOwner(ctx),args.assetId) });
 
 export const get = query({ args: { projectId: v.id("projects"), assetId: v.id("assets") }, returns: assetWithUrl, handler: async (ctx, args) => {
-  const ownerId = await requireOwner(ctx); await requireProject(ctx, args.projectId, ownerId); const asset = await ctx.db.get(args.assetId);
+  const ownerId = await requireOwner(ctx); await projectIdentity(ctx,args.projectId,ownerId); const asset = await ctx.db.get(args.assetId);
   if (!asset || asset.ownerId !== ownerId || asset.projectId !== args.projectId) throw new ConvexError("Media not found");
-  return { ...asset, url: await mediaUrl(ctx, asset),...await thumbnailUrl(ctx,asset) };
+  return { ...await hydrateAsset(ctx,asset), url: await mediaUrl(ctx, asset),...await thumbnailUrl(ctx,asset) };
 }});
 export const saveExtractedAudio = internalMutation({
   args: { projectId: v.id('projects'), assetId: v.id('assets'), audioAssetId: v.optional(v.id('assets')), waveform: v.optional(waveformValidator), workerSecret: v.string() },
@@ -135,7 +137,7 @@ export const saveWaveform = internalMutation({
 async function assistantWorkerOwner(ctx: QueryCtx | MutationCtx, projectId: Id<"projects">, aiRunId: string, workerSecret: string) {
   const secret = process.env.RENDER_WORKER_SECRET;
   if (!secret || secret !== workerSecret) throw new ConvexError("Media worker authentication required");
-  const project = await ctx.db.get(projectId);
+  const project = await projectRun(ctx,projectId);
   if (!project?.aiRunning || project.aiRunId !== aiRunId) throw new ConvexError("AI run is no longer active");
   return project.ownerId;
 }
@@ -145,7 +147,7 @@ export const getForAssistant = internalQuery({ args: { projectId: v.id("projects
   const ownerId = await assistantWorkerOwner(ctx, args.projectId, args.aiRunId, args.workerSecret);
   const asset = await ctx.db.get(args.assetId);
   if (!asset || asset.projectId !== args.projectId || asset.ownerId !== ownerId) throw new ConvexError("Media not found");
-  return { ...asset, url: await mediaUrl(ctx, asset) };
+  return { ...await hydrateAsset(ctx,asset), url: await mediaUrl(ctx, asset) };
 }});
 export const saveAnalysis = internalMutation({ args: { projectId: v.id("projects"), assetId: v.id("assets"), workerSecret: v.string(), aiRunId: v.optional(v.string()), transcript: v.optional(transcriptValidator), understanding: v.optional(understandingValidator), shots: v.optional(shotsValidator), beats: v.optional(beatsValidator), focus: v.optional(focusValidator) }, returns: v.null(), handler: async (ctx, args) => {
   const secret = process.env.RENDER_WORKER_SECRET; if (!secret || secret !== args.workerSecret) throw new ConvexError("Media worker authentication required");
@@ -155,6 +157,7 @@ export const saveAnalysis = internalMutation({ args: { projectId: v.id("projects
 }});
 
 export async function saveAssetAnalysis(ctx: MutationCtx, asset: Doc<"assets">, changes: Infer<typeof analysisValidator>) {
+  asset=await hydrateAsset(ctx,asset);
   const duration = asset.duration ?? 86400;
   if (changes.focus) validateFocus(changes.focus, duration);
   if (changes.shots) {
@@ -187,14 +190,11 @@ export async function saveAssetAnalysis(ctx: MutationCtx, asset: Doc<"assets">, 
   if (serializedBytes(analysis) > 500_000) throw new ConvexError("Media analysis is too large to save");
   const now = Date.now();
   const analysisCompletedAt = { ...asset.analysisCompletedAt, ...(changes.transcript ? { transcribe: now } : {}), ...(changes.understanding ? { understand: now } : {}), ...(changes.shots ? { shots: now } : {}), ...(changes.beats ? { beats: now } : {}), ...(changes.focus ? { track: now } : {}) };
-  await ctx.db.patch(asset._id, { analysis, analysisUpdatedAt: now, analysisCompletedAt }); return null;
+  await storeAnalysis(ctx,asset,analysis,now);await ctx.db.patch(asset._id,{analysisUpdatedAt:now,analysisCompletedAt}); return null;
 }
 
 export const saveFocus = mutation({ args: { projectId: v.id("projects"), assetId: v.id("assets"), focus: focusValidator }, returns: v.null(), handler: async (ctx, args) => {
   const ownerId = await requireOwner(ctx); await requireEditorAccess(ctx, ownerId); await requireProject(ctx, args.projectId, ownerId); const asset = await ctx.db.get(args.assetId);
   if (!asset || asset.ownerId !== ownerId || asset.projectId !== args.projectId || asset.kind !== "video") throw new ConvexError("Video not found");
-  validateFocus(args.focus, asset.duration); const analysis = { ...asset.analysis, focus: args.focus };
-  if (serializedBytes(analysis) > 500_000) throw new ConvexError("Media analysis is too large to save");
-  const now = Date.now();
-  await ctx.db.patch(asset._id, { analysis, analysisUpdatedAt: now, analysisCompletedAt: { ...asset.analysisCompletedAt, track: now } }); return null;
+  return saveAssetAnalysis(ctx,asset,{focus:args.focus});
 }});

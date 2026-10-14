@@ -1,3 +1,4 @@
+import { writeProject,createProject } from './lib/project_data';
 import { recordAssetStorage } from './lib/storage_accounting';
 import { ConvexError,v } from 'convex/values';
 import { mutation,query } from './_generated/server';
@@ -51,9 +52,9 @@ export const get=query({args:{shareId:v.string()},returns:v.union(v.object({_id:
 export const useTimeline=mutation({args:{shareId:v.id('timelineShares')},returns:v.id('projects'),handler:async(ctx,{shareId})=>{
   const ownerId=await requireOwner(ctx);await requireEditorAccess(ctx,ownerId);const share=await ctx.db.get(shareId);if(!share?.published)throw new ConvexError('This timeline is no longer shared.');
   const pins=await ctx.db.query('shareAssets').withIndex('by_share',q=>q.eq('shareId',shareId)).take(200),now=Date.now();
-  const projectId=await ctx.db.insert('projects',{ownerId,title:share.title,aspectRatio:share.timeline.aspectRatio,createdAt:now,updatedAt:now,revision:0,history:[]}),ids=new Map<string,Id<'assets'>>();
+  const projectId=await createProject(ctx,{ownerId,title:share.title,aspectRatio:share.timeline.aspectRatio,createdAt:now,updatedAt:now,revision:0,history:[]}),ids=new Map<string,Id<'assets'>>();
   for(const pin of pins){const {_id,_creationTime,shareId:_,sourceId,audioAssetId,...media}=pin;const id=await ctx.db.insert('assets',{...media,projectId,ownerId,createdAt:now});await recordAssetStorage(ctx,(await ctx.db.get(id))!);ids.set(sourceId,id);}
   for(const pin of pins)if(pin.audioAssetId&&ids.has(pin.audioAssetId))await ctx.db.patch(ids.get(pin.sourceId)!,{audioAssetId:ids.get(pin.audioAssetId)!});
   const timeline=normalizeTimeline({...share.timeline,clips:share.timeline.clips.map(clip=>({...clip,...(clip.assetId?{assetId:ids.get(clip.assetId)!}:{})}))});
-  await ctx.db.patch(projectId,{timeline});return projectId;
+  await writeProject(ctx,projectId,{timeline});return projectId;
 }});

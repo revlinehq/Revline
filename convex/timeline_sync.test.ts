@@ -1,3 +1,4 @@
+import { writeProject } from './lib/project_data';
 /// <reference types="vite/client" />
 import { convexTest } from 'convex-test';
 import { expect, test } from 'vitest';
@@ -16,7 +17,7 @@ test('manual timing saves after a live Claude styling update without losing eith
   const owner = t.withIdentity({ subject: 'owner' });
   const projectId = await owner.mutation(api.projects.create, { title: 'Live edits', aspectRatio: 'landscape' });
   await owner.mutation(api.projects.saveTimeline, { projectId, timeline: base, expectedRevision: 0 });
-  await t.run(ctx => ctx.db.patch(projectId, { aiRunning: true, aiRunId: 'live-run' }));
+  await t.run(ctx => writeProject(ctx,projectId, { aiRunning: true, aiRunId: 'live-run' }));
   await t.mutation(internal.assistant.apply, {
     projectId, ownerId: 'owner', runId: 'live-run', expectedRevision: 1,
     timeline: { ...base, clips: [{ ...base.clips[0], fontSize: 48 }] },

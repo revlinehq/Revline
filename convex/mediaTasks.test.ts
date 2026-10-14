@@ -1,3 +1,4 @@
+import { writeProject } from './lib/project_data';
 /// <reference types="vite/client" />
 import { convexTest } from 'convex-test';
 import workflowTest from '@convex-dev/workflow/test';
@@ -176,7 +177,7 @@ test('exports use their saved snapshot and reuse a previously stored MP4 on retr
 });
 
 test('stopping an AI request cancels its analysis and prevents later worker writes', async () => {
-  const f = await fixture(); await f.t.run(ctx => ctx.db.patch(f.projectId, { aiRunning: true, aiRunId: 'run' }));
+  const f = await fixture(); await f.t.run(ctx => writeProject(ctx,f.projectId, { aiRunning: true, aiRunId: 'run' }));
   const requestId = await f.t.mutation(internal.assistant.requestAnalysis, { projectId: f.projectId, ownerId: 'owner', runId: 'run', assetId: f.assetId, mode: 'transcribe' });
   await f.drain(); const work = (await f.claim())!;
   await f.owner.mutation(api.assistant.stop, { projectId: f.projectId });
@@ -188,7 +189,7 @@ test('stopping an AI request cancels its analysis and prevents later worker writ
 test('chat activity ignores background work and follows only pending analysis in the current turn', async () => {
   const f = await fixture();
   await f.t.run(async ctx => {
-    await ctx.db.patch(f.projectId, { aiRunning: true, aiRunId: 'greeting' });
+    await writeProject(ctx,f.projectId, { aiRunning: true, aiRunId: 'greeting' });
     await ctx.db.insert('mediaTasks', { ownerId: 'owner', projectId: f.projectId, assetId: f.assetId, kind: 'understand', status: 'running', attempt: 1, progress: 10, createdAt: Date.now(), updatedAt: Date.now() });
     await ctx.db.insert('analysisRequests', { ownerId: 'owner', projectId: f.projectId, assetId: f.assetId, aiRunId: 'previous-turn', mode: 'understand', status: 'running', createdAt: Date.now(), expiresAt: Date.now() + 240_000 });
   });

@@ -1,3 +1,4 @@
+import { writeProject } from './lib/project_data';
 /// <reference types="vite/client" />
 import { convexTest } from 'convex-test';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
@@ -44,7 +45,7 @@ async function markerSession() {
     markers: [{ id: 'beat-1', time: 1 }, { id: 'manual', time: 2, label: 'My cue' }, { id: 'beat-2', time: 3 }],
   };
   await owner.mutation(api.projects.saveTimeline, { projectId, timeline: original, expectedRevision: 0 });
-  await t.run(ctx => ctx.db.patch(projectId, { aiRunning: true, aiRunId: 'remove-markers' }));
+  await t.run(ctx => writeProject(ctx,projectId, { aiRunning: true, aiRunId: 'remove-markers' }));
   const run = { projectId, ownerId: 'owner', runId: 'remove-markers' };
   const storage = {
     apply: (timeline: Timeline, expectedRevision: number) => t.mutation(internal.assistant.apply, { ...run, timeline, expectedRevision }),

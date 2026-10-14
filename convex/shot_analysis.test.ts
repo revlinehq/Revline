@@ -1,3 +1,4 @@
+import { writeProject } from './lib/project_data';
 /// <reference types="vite/client" />
 import { convexTest } from 'convex-test';
 import workflowTest from '@convex-dev/workflow/test';
@@ -20,7 +21,7 @@ async function fixture() {
 test('persists both semantic descriptions and measured shots and records fresh completion', async () => {
   const { t, owner, projectId, assetId } = await fixture();
   await owner.mutation(internal.assets.saveAnalysis, { projectId, assetId, workerSecret: 'test-secret', shots, understanding: { summary: 'A launch.', scenes: [{ start: 0.8, end: 3, description: 'A launch.', score: 0.9 }] } });
-  const asset = await t.run(ctx => ctx.db.get(assetId));
+  const asset = await owner.query(api.assets.get,{projectId,assetId});
   expect(asset?.analysis?.shots).toEqual(shots);
   expect(asset?.analysisCompletedAt?.shots).toBeGreaterThan(0);
   expect(asset?.analysisCompletedAt?.understand).toBe(asset?.analysisCompletedAt?.shots);
@@ -32,7 +33,7 @@ test('rejects cross-user and malformed source-frame results', async () => {
 });
 test('shot-only requests complete only after fresh results are saved', async () => {
   const { t, projectId, assetId } = await fixture();
-  await t.run(ctx => ctx.db.patch(projectId, { aiRunning: true, aiRunId: 'test-run' }));
+  await t.run(ctx => writeProject(ctx,projectId, { aiRunning: true, aiRunId: 'test-run' }));
   const requestId = await t.mutation(internal.assistant.requestAnalysis, { projectId, ownerId: 'owner', runId: 'test-run', assetId, mode: 'shots' });
   await t.finishAllScheduledFunctions(vi.runAllTimers);
   const work = (await t.mutation(api.mediaTasks.claim, { workerSecret: 'test-secret' }))!;

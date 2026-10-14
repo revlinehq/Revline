@@ -1,3 +1,5 @@
+import { hydrateAsset } from './lib/asset_analysis';
+import { writeProject,createProject,readProject,projectIdentity,projectRun } from './lib/project_data';
 import { requireEditorAccess } from './lib/billing_access';
 import { abortStream, createThread, listStreams, listUIMessages, saveMessage, syncStreams, vPaginationResult, vStreamArgs } from "@convex-dev/agent";
 import { vStreamDelta, vStreamMessage } from "@convex-dev/agent/validators";
@@ -20,7 +22,7 @@ import { assistantRecovery } from './lib/assistant_recovery';
 const providerReason = "Claude editing requires ANTHROPIC_API_KEY in Convex, or AI_GATEWAY_ENABLED=true on an eligible paid Convex team.";
 function configured() { return !!process.env.ANTHROPIC_API_KEY || process.env.AI_GATEWAY_ENABLED === "true"; }
 export const status = query({ args: { projectId: v.id("projects") }, returns: v.object({ configured: v.boolean(), modelSwitcher: v.optional(v.boolean()), allowedModels: v.optional(v.array(claudeModelChoiceValidator)), running: v.boolean(), error: v.union(v.string(), v.null()), reason: v.union(v.string(), v.null()), activity: v.union(v.string(), v.null()), activitySource: v.union(v.string(), v.null()), activityProgress: v.union(v.number(), v.null()) }), handler: async (ctx, args) => {
-  const project = await requireProject(ctx, args.projectId, await requireOwner(ctx));
+  const project = await projectRun(ctx,args.projectId,await requireOwner(ctx));
   const requests = project.aiRunning && project.aiRunId ? await ctx.db.query('analysisRequests').withIndex('by_projectId_runId', q => q.eq('projectId', project._id).eq('aiRunId', project.aiRunId!)).take(16) : [];
   const active = requests.find(request => request.status === 'pending' || request.status === 'running');
   const task = active?.taskId ? await ctx.db.get(active.taskId) : null;
@@ -47,7 +49,7 @@ export const send = mutation({ args: { projectId: v.id("projects"), prompt: v.st
   const { messageId } = await saveMessage(ctx, components.agent, { threadId, userId: ownerId, prompt });
   const recovery = project.aiRecovery ?? (project.aiError ? assistantRecovery(project, 'failed', project.aiError) : undefined);
   const runId = `${Date.now()}-${Math.random()}`;
-  await ctx.db.patch(project._id, { threadId, aiRunning: true, aiError: undefined, aiRunId: runId, aiUndoRecorded: false, aiCheckpointRevision: undefined, aiRequest:{prompt,messageId,startedRevision:project.revision??0}, aiRecovery:recovery });
+  await writeProject(ctx,project._id, { threadId, aiRunning: true, aiError: undefined, aiRunId: runId, aiUndoRecorded: false, aiCheckpointRevision: undefined, aiRequest:{prompt,messageId,startedRevision:project.revision??0}, aiRecovery:recovery });
   await ctx.scheduler.runAfter(0, internal.assistantActions.respond, { projectId: project._id, ownerId, runId, threadId, promptMessageId: messageId, pinnedModel, ...(recovery?{recovery}:{}), ...(args.selectedClipId ? { selectedClipId: args.selectedClipId } : {}), ...(args.selectedClipIds ? { selectedClipIds: args.selectedClipIds } : {}), ...(args.playhead !== undefined ? { playhead: args.playhead } : {}) }); return null;
 }});
 export const messages = query({
@@ -55,7 +57,7 @@ export const messages = query({
   // AI SDK UI parts are polymorphic; agent validates and converts their stored representation.
   returns: v.object({ ...vPaginationResult(v.any()).fields, streams: v.union(v.object({ kind: v.literal("list"), messages: v.array(vStreamMessage) }), v.object({ kind: v.literal("deltas"), deltas: v.array(vStreamDelta) })) }),
   handler: async (ctx, args) => {
-    const project = await requireProject(ctx, args.projectId, await requireOwner(ctx));
+    const project = await projectIdentity(ctx,args.projectId,await requireOwner(ctx));
     if (args.paginationOpts.numItems < 0 || args.paginationOpts.numItems > 100 || (args.paginationOpts.numItems === 0 && !args.streamArgs)) throw new ConvexError("Message pages must contain between 1 and 100 messages");
     if (project.threadId && args.threadId !== project.threadId) throw new ConvexError("Conversation not found");
     if (!project.threadId) return { page: [], isDone: true, continueCursor: "", streams: args.streamArgs?.kind === "deltas" ? { kind: "deltas" as const, deltas: [] } : { kind: "list" as const, messages: [] } };
@@ -77,18 +79,27 @@ export const stop = mutation({ args: { projectId: v.id('projects') }, returns: v
     for (const request of requests) { if (request.taskId) await cancelMediaTask(ctx, request.taskId); await ctx.db.delete(request._id); }
   }
   // Already-saved edits remain undoable; invalidating the run blocks every later checkpoint.
-  await ctx.db.patch(project._id, { aiRunning: false, aiRunId: undefined, aiError: undefined, aiRecovery:assistantRecovery(project,'stopped','Stopped by the user. Saved edits remain.'),aiRequest:undefined });
+  await writeProject(ctx,project._id, { aiRunning: false, aiRunId: undefined, aiError: undefined, aiRecovery:assistantRecovery(project,'stopped','Stopped by the user. Saved edits remain.'),aiRequest:undefined });
   return null;
 }});
 export const isRunActive = internalQuery({ args: runArgs, returns: v.boolean(), handler: async (ctx, args) => {
-  const project = await ctx.db.get(args.projectId);
+  const project = await projectRun(ctx,args.projectId,args.ownerId).catch(()=>null);
   return !!project && project.ownerId === args.ownerId && project.aiRunId === args.runId && project.aiRunning === true;
 }});
-export const getRun = internalQuery({ args: runArgs, returns: v.object({ project: projectDocument, assets: v.array(assetDocument) }), handler: async (ctx, args) => {
-  const project = await requireProject(ctx, args.projectId, args.ownerId);
-  if (project.aiRunId !== args.runId || !project.aiRunning) throw new ConvexError("AI run is no longer active");
-  const assets = await ctx.db.query("assets").withIndex("by_ownerId_projectId", q => q.eq("ownerId", args.ownerId).eq("projectId", project._id)).take(200);
-  return { project: { ...project, timeline: currentTimeline(project), ...(project.history ? { history: project.history.map(normalizeTimeline) } : {}) }, assets };
+export const getRun = internalQuery({args:runArgs,returns:v.object({project:projectDocument,assets:v.array(assetDocument)}),handler:async(ctx,args)=>{
+  const run=await projectRun(ctx,args.projectId,args.ownerId);if(run.aiRunId!==args.runId||!run.aiRunning)throw new ConvexError('AI run is no longer active');
+  const project=(await ctx.db.get(args.projectId))!;
+  const assets=await ctx.db.query('assets').withIndex('by_ownerId_projectId',q=>q.eq('ownerId',args.ownerId).eq('projectId',args.projectId)).take(200);
+  return {project:{...project,...run,timeline:currentTimeline(project)},assets};
+}});
+export const getRunTimeline=internalQuery({args:runArgs,returns:v.object({timeline:timelineValidator,revision:v.number()}),handler:async(ctx,args)=>{
+  const run=await projectRun(ctx,args.projectId,args.ownerId);if(run.aiRunId!==args.runId||!run.aiRunning)throw new ConvexError('AI run is no longer active');
+  const project=(await ctx.db.get(args.projectId))!;return {timeline:currentTimeline(project),revision:project.revision??0};
+}});
+export const getRunAsset=internalQuery({args:{...runArgs,assetId:v.string()},returns:assetDocument,handler:async(ctx,args)=>{
+  const run=await projectRun(ctx,args.projectId,args.ownerId);if(run.aiRunId!==args.runId||!run.aiRunning)throw new ConvexError('AI run is no longer active');
+  const id=ctx.db.normalizeId('assets',args.assetId),asset=id?await ctx.db.get(id):null;
+  if(!asset||asset.ownerId!==args.ownerId||asset.projectId!==args.projectId)throw new ConvexError('Media not found');return hydrateAsset(ctx,asset);
 }});
 export const apply = internalMutation({ args: { ...runArgs, expectedRevision: v.number(), timeline: timelineValidator,publication:v.optional(v.object({threadId:v.string(),promptMessageId:v.string()})) }, returns: v.number(), handler: async (ctx, args) => {
   const project = await requireProject(ctx, args.projectId, args.ownerId);
@@ -102,10 +113,10 @@ export const apply = internalMutation({ args: { ...runArgs, expectedRevision: v.
     if ((project.revision ?? 0) !== args.expectedRevision) throw new ConvexError("The timeline changed elsewhere. Reload before saving.");
     const timeline = await validateTimeline(ctx, project, args.timeline);
     const revision = args.expectedRevision + 1;
-    await ctx.db.patch(project._id, { timeline, aspectRatio: timeline.aspectRatio, revision, aiCheckpointRevision: revision, updatedAt: Date.now() }); return receipt(revision);
+    await writeProject(ctx,project._id, { timeline, aspectRatio: timeline.aspectRatio, revision, aiCheckpointRevision: revision, updatedAt: Date.now() }); return receipt(revision);
   }
   const revision = await commitTimeline(ctx, project, args.timeline, args.expectedRevision);
-  await ctx.db.patch(project._id, { aiUndoRecorded: true, aiCheckpointRevision: revision }); return receipt(revision);
+  await writeProject(ctx,project._id, { aiUndoRecorded: true, aiCheckpointRevision: revision }); return receipt(revision);
 }});
 /** Undo only stored history before this model turn publishes its own checkpoints. */
 export const undoLatestEdit=internalMutation({args:{...runArgs,expectedRevision:v.number()},returns:v.object({undone:v.boolean(),revision:v.number(),timeline:timelineValidator}),handler:async(ctx,args)=>{
@@ -116,7 +127,7 @@ export const undoLatestEdit=internalMutation({args:{...runArgs,expectedRevision:
   const history=(project.history??[]).map(normalizeTimeline),previous=history.pop();
   if(!previous)return {undone:false,revision:project.revision??0,timeline:currentTimeline(project)};
   const timeline=await validateTimeline(ctx,project,previous),revision=args.expectedRevision+1;
-  await ctx.db.patch(project._id,{timeline,aspectRatio:timeline.aspectRatio,history,revision,aiCheckpointRevision:undefined,updatedAt:Date.now()});
+  await writeProject(ctx,project._id,{timeline,aspectRatio:timeline.aspectRatio,history,revision,aiCheckpointRevision:undefined,updatedAt:Date.now()});
   return {undone:true,revision,timeline};
 }});
 // Destructive turns validate each private draft without exposing intermediate deletions.
@@ -129,14 +140,14 @@ export const validateDraft = internalQuery({ args: { ...runArgs, expectedRevisio
   return null;
 }});
 export const finish = internalMutation({ args: { ...runArgs, error: v.optional(v.string()), savedEdits:v.optional(v.number()),publication:v.optional(v.object({threadId:v.string(),promptMessageId:v.string(),stagedRevision:v.number(),status:v.union(v.literal('failed'),v.literal('aborted'))})) }, returns: v.null(), handler: async (ctx, args) => {
-  const project = await ctx.db.get(args.projectId);
+  const project = await readProject(ctx,args.projectId);
   // A stopped action may finish after a new run starts. Its receipt belongs to
   // the original prompt; it must never stop or overwrite the newer run.
   if(args.publication&&project?.ownerId===args.ownerId&&project.threadId===args.publication.threadId)await savePublicationReceipt(ctx,args.ownerId,{version:1,kind:'timeline-publication',runId:args.runId,...args.publication});
   if (project?.ownerId === args.ownerId && project.aiRunId === args.runId) {
     const requests = await ctx.db.query("analysisRequests").withIndex("by_projectId_runId", q => q.eq("projectId", args.projectId).eq("aiRunId", args.runId)).take(16);
     for (const request of requests) await ctx.db.delete(request._id);
-    await ctx.db.patch(project._id, { aiRunning: false, aiError: args.error?.slice(0, 1000), aiRecovery:args.error?assistantRecovery(project,'failed',args.error,args.savedEdits):undefined,aiRequest:undefined });
+    await writeProject(ctx,project._id, { aiRunning: false, aiError: args.error?.slice(0, 1000), aiRecovery:args.error?assistantRecovery(project,'failed',args.error,args.savedEdits):undefined,aiRequest:undefined });
   }
   return null;
 }});
@@ -162,7 +173,7 @@ export const requestAnalysis = internalMutation({ args: { ...runArgs, assetId: v
   return requestId;
 }});
 export const analysisRequest = internalQuery({ args: { ...runArgs, requestId: v.id("analysisRequests") }, returns: analysisRequestDocument, handler: async (ctx, args) => {
-  const project = await requireProject(ctx, args.projectId, args.ownerId); const request = await ctx.db.get(args.requestId);
+  const project = await projectRun(ctx,args.projectId,args.ownerId); const request = await ctx.db.get(args.requestId);
   if (!project.aiRunning || project.aiRunId !== args.runId || !request || request.ownerId !== args.ownerId || request.projectId !== project._id || request.aiRunId !== args.runId) throw new ConvexError("AI analysis request is no longer active");
   return request;
 }});

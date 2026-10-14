@@ -1,3 +1,4 @@
+import { readProject } from './project_data';
 import { ConvexError } from "convex/values";
 import type { Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
@@ -15,7 +16,7 @@ export async function requireProject(
   projectId: Id<"projects">,
   ownerId: string,
 ) {
-  const project = await ctx.db.get(projectId);
+  const project = await readProject(ctx,projectId);
   if (!project || project.deleting || project.ownerId !== ownerId) {
     throw new ConvexError("Project not found");
   }

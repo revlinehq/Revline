@@ -1,3 +1,4 @@
+import { writeProject } from './lib/project_data';
 import { completeDeletion } from '../lib/test-support/convex-deletion';
 /// <reference types="vite/client" />
 import {convexTest}from'convex-test';
@@ -12,7 +13,7 @@ async function fixture(){
   const storageId=await ctx.storage.store(new Blob(['video'],{type:'video/mp4'})),thumbnailStorageId=await ctx.storage.store(new Blob(['thumbnail'],{type:'image/jpeg'}));
   const audioId=await ctx.db.insert('assets',{ownerId:'owner',projectId,kind:'audio',fileName:'audio.mp3',contentType:'audio/mpeg',size:10,duration:4,storageId:await ctx.storage.store(new Blob(['audio'])),createdAt:0});
   const videoId=await ctx.db.insert('assets',{ownerId:'owner',projectId,kind:'video',fileName:'video.mp4',contentType:'video/mp4',size:10,duration:4,width:1920,height:1080,storageId,thumbnailStorageId,audioAssetId:audioId,audioExtracted:true,createdAt:0,analysis:{understanding:{summary:'Private source analysis',scenes:[]}}});
-  await ctx.db.patch(projectId,{timeline:{fps:30,aspectRatio:'landscape',tracks:{visual:1,overlay:0,audio:1,effects:0},clips:[{id:'video',assetId:videoId,kind:'video',track:1,start:0,duration:2,sourceStart:1,volume:0,audioSeparated:true,linkedClipId:'audio'},{id:'audio',assetId:audioId,kind:'audio',track:1,start:0,duration:2,sourceStart:1,linkedClipId:'video'}]}});
+  await writeProject(ctx,projectId,{timeline:{fps:30,aspectRatio:'landscape',tracks:{visual:1,overlay:0,audio:1,effects:0},clips:[{id:'video',assetId:videoId,kind:'video',track:1,start:0,duration:2,sourceStart:1,volume:0,audioSeparated:true,linkedClipId:'audio'},{id:'audio',assetId:audioId,kind:'audio',track:1,start:0,duration:2,sourceStart:1,linkedClipId:'video'}]}});
   return{projectId,videoId,audioId,storageId,thumbnailStorageId};
  });return{t,owner,other,...data};
 }
@@ -34,7 +35,7 @@ test('a viewer gets an independent owned copy with original files and remapped v
 });
 test('published edits are snapshots and source removal cannot break them',async()=>{
  const {t,owner,projectId,videoId,audioId,storageId,thumbnailStorageId}=await fixture(),shareId=await owner.mutation(api.timelineShares.publish,{projectId});
- await t.run(ctx=>ctx.db.patch(projectId,{title:'Changed privately',timeline:{fps:30,aspectRatio:'landscape',clips:[]}}));
+ await t.run(ctx=>writeProject(ctx,projectId,{title:'Changed privately',timeline:{fps:30,aspectRatio:'landscape',clips:[]}}));
  await owner.mutation(api.assets.remove,{assetId:videoId});await owner.mutation(api.assets.remove,{assetId:audioId});
  const snapshot=await t.query(api.timelineShares.get,{shareId});expect(snapshot?.title).toBe('Shared edit');expect(snapshot?.timeline.clips).toHaveLength(2);expect(await t.run(async ctx=>!!await ctx.storage.get(storageId))).toBe(true);expect(await t.run(async ctx=>!!await ctx.storage.get(thumbnailStorageId))).toBe(true);
  await owner.mutation(api.timelineShares.revoke,{projectId});expect(await t.run(ctx=>ctx.storage.get(storageId))).toBeNull();expect(await t.run(ctx=>ctx.storage.get(thumbnailStorageId))).toBeNull();

@@ -1,3 +1,4 @@
+import { writeProject,createProject } from './lib/project_data';
 import { recordAssetStorage } from './lib/storage_accounting';
 import { v } from 'convex/values';
 import { internalAction, internalMutation } from './_generated/server';
@@ -17,12 +18,12 @@ export const createExportFixture = internalMutation({
   returns: fixtureResult,
   handler: async ctx => {
     const ownerId = `revline-hosting-smoke-${crypto.randomUUID()}`, now = Date.now();
-    const projectId = await ctx.db.insert('projects', { ownerId, title: 'Hosted processor smoke test', aspectRatio: 'landscape', createdAt: now, updatedAt: now, revision: 0, history: [] });
+    const projectId = await createProject(ctx, { ownerId, title: 'Hosted processor smoke test', aspectRatio: 'landscape', createdAt: now, updatedAt: now, revision: 0, history: [] });
     const source: Timeline = { fps: 24, aspectRatio: 'landscape', tracks: { visual: 1, overlay: 0, audio: 0, effects: 0 }, clips: [
       { id: 'hosting-check-title', kind: 'graphic', track: 1, start: 0, duration: 1, sourceStart: 0, text: 'Hosted export check', fontSize: 72, color: '#FFFFFF', background: '#0B0C0E', x: .5, y: .5, animation: 'none' },
     ] };
     const timeline = await validateTimeline(ctx, (await ctx.db.get(projectId))!, source);
-    await ctx.db.patch(projectId, { timeline });
+    await writeProject(ctx,projectId, { timeline });
     const jobId = await ctx.db.insert('renderJobs', { ownerId, projectId, timeline, assetIds: [], resolution: 720, fps: 24, quality: 'draft', status: 'queued', progress: 0, createdAt: now, updatedAt: now });
     const taskId = await enqueueMediaTask(ctx, { ownerId, projectId, kind: 'render', renderJobId: jobId });
     await ctx.db.patch(jobId, { taskId });
@@ -49,7 +50,7 @@ export const createStackedEffectsProject = internalMutation({
   args: { storageId: v.id('_storage'), size: v.number() }, returns: fixtureResult,
   handler: async (ctx, { storageId, size }) => {
     const ownerId = `revline-hosting-smoke-${crypto.randomUUID()}`, now = Date.now();
-    const projectId = await ctx.db.insert('projects', { ownerId, title: 'Hosted processor stacked effects check', aspectRatio: 'landscape', createdAt: now, updatedAt: now, revision: 0, history: [] });
+    const projectId = await createProject(ctx, { ownerId, title: 'Hosted processor stacked effects check', aspectRatio: 'landscape', createdAt: now, updatedAt: now, revision: 0, history: [] });
     const assetId = await ctx.db.insert('assets', { ownerId, projectId, storageId, fileName: 'generated-shader-check.png', contentType: 'image/png', size, kind: 'image', width: 640, height: 360, createdAt: now });
     await recordAssetStorage(ctx,(await ctx.db.get(assetId))!);
     const source: Timeline = { fps: 24, aspectRatio: 'landscape', tracks: { visual: 1, overlay: 0, audio: 0, effects: 2 }, clips: [
@@ -59,7 +60,7 @@ export const createStackedEffectsProject = internalMutation({
       { id: 'shader-empty-text', kind: 'graphic', track: 1, start: 0, duration: 1, sourceStart: 0, text: '', background: 'transparent', animation: 'none' },
     ] };
     const timeline = await validateTimeline(ctx, (await ctx.db.get(projectId))!, source);
-    await ctx.db.patch(projectId, { timeline });
+    await writeProject(ctx,projectId, { timeline });
     const jobId = await ctx.db.insert('renderJobs', { ownerId, projectId, timeline, assetIds: [assetId], resolution: 720, fps: 24, quality: 'draft', status: 'queued', progress: 0, createdAt: now, updatedAt: now });
     const taskId = await enqueueMediaTask(ctx, { ownerId, projectId, kind: 'render', renderJobId: jobId });
     await ctx.db.patch(jobId, { taskId });

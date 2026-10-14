@@ -1,3 +1,5 @@
+import { shareAnalysis } from './lib/asset_analysis';
+import { writeProject,createProject,readProject,projectIdentity,projectRun } from './lib/project_data';
 import { recordAssetStorage, forgetStorageObject } from './lib/storage_accounting';
 import { requireEditorAccess } from './lib/billing_access';
 import { mediaUrl } from './lib/media_storage';
@@ -19,13 +21,13 @@ export const create = mutation({ args: { title: v.string(), aspectRatio, assetId
   const sources = await Promise.all([...new Set(args.assetIds ?? [])].map(id => ctx.db.get(id)));
   if (sources.some(asset => !asset || asset.ownerId !== ownerId || (!asset.r2Key && !asset.storageId))) throw new ConvexError('Saved footage is unavailable or belongs to another account');
   let timeline: Timeline = normalizeTimeline({ clips: [], fps: 30, aspectRatio: args.aspectRatio });
-  const projectId = await ctx.db.insert("projects", { title: projectTitle(args.title), aspectRatio: args.aspectRatio, ownerId, createdAt: now, updatedAt: now, timeline, revision: 0, history: [] });
+  const projectId = await createProject(ctx, { title: projectTitle(args.title), aspectRatio: args.aspectRatio, ownerId, createdAt: now, updatedAt: now, timeline, revision: 0, history: [] });
   const used = new Set<string>();
   const copies = new Map<string, import('./_generated/dataModel').Id<'assets'>>();
   const stored = new Map<string, import('./_generated/dataModel').Id<'assets'>>();
   for (const source of sources) {
     if (!source) continue;
-    const { _id, _creationTime, audioAssetId, ...metadata } = source;
+    const { _id, _creationTime, audioAssetId, ...metadata } = await shareAnalysis(ctx,source);
     const key = source.r2Key ?? source.storageId!;
     const copy = stored.get(key) ?? await ctx.db.insert('assets', { ...metadata, projectId, createdAt: now });
     stored.set(key, copy); copies.set(_id, copy);
@@ -36,7 +38,7 @@ export const create = mutation({ args: { title: v.string(), aspectRatio, assetId
     if (!audioId) {
       const audio = await ctx.db.get(source.audioAssetId);
       if (!audio || audio.ownerId !== ownerId || audio.kind !== 'audio') throw new ConvexError('Saved audio is unavailable');
-      const { _id, _creationTime, ...metadata } = audio;
+      const { _id, _creationTime, ...metadata } = await shareAnalysis(ctx,audio);
       const key = audio.r2Key ?? audio.storageId!;
       audioId = stored.get(key) ?? await ctx.db.insert('assets', { ...metadata, projectId, createdAt: now });
       stored.set(key, audioId);
@@ -64,14 +66,24 @@ export const create = mutation({ args: { title: v.string(), aspectRatio, assetId
   if (timeline.clips.length) {
     const project = (await ctx.db.get(projectId))!;
     timeline = await validateTimeline(ctx, project, timeline);
-    await ctx.db.patch(projectId, { timeline });
+    await writeProject(ctx,projectId, { timeline });
   }
   return projectId;
 }});
-export const get = query({ args: { projectId: v.id("projects") }, returns: projectDocument, handler: async (ctx, args) => {
-  const project = await requireProject(ctx, args.projectId, await requireOwner(ctx)); return { ...project, timeline: currentTimeline(project), ...(project.history ? { history: project.history.map(normalizeTimeline) } : {}), revision: project.revision ?? 0 };
+export const get = query({ args: { projectId: v.id("projects"),includeHistory:v.optional(v.boolean()) }, returns: projectDocument, handler: async (ctx, args) => {
+  await projectIdentity(ctx,args.projectId,await requireOwner(ctx));const project=(await readProject(ctx,args.projectId,args.includeHistory!==false))!; return { ...project, timeline: currentTimeline(project), ...(project.history ? { history: project.history.map(normalizeTimeline) } : {}), revision: project.revision ?? 0 };
+}});
+export const history=query({args:{projectId:v.id('projects')},returns:v.array(timelineValidator),handler:async(ctx,args)=>{
+  await projectIdentity(ctx,args.projectId,await requireOwner(ctx));
+  const rows=await ctx.db.query('timelineRevisions').withIndex('by_project_sequence',q=>q.eq('projectId',args.projectId)).order('desc').take(10);
+  if(rows.length)return rows.reverse().map(row=>normalizeTimeline(row.timeline));
+  const access=await ctx.db.query('projectAccess').withIndex('by_project',q=>q.eq('projectId',args.projectId)).unique();if(access?.historyStored)return [];
+  // Old projects are readable before the bounded migration reaches them.
+  const legacy=await ctx.db.get(args.projectId);return legacy?.history?.map(normalizeTimeline)??[];
 }});
 export const list = query({ args: { limit: v.optional(v.number()) }, returns: v.array(v.object({ _id: v.id('projects'), title: v.string(), createdAt: v.number(), updatedAt: v.number(), aspectRatio, clipCount: v.number(), aiRunning: v.boolean(), coverUrl: v.union(v.string(), v.null()), coverKind: v.union(v.literal("video"), v.literal("image"), v.null()) })), handler: async (ctx, args) => {
+  const migration=await ctx.db.query('projectDataMigration').withIndex('by_key',q=>q.eq('key','project-data-v1')).unique();
+  if(migration?.completed){const ownerId=await requireOwner(ctx),rows=await ctx.db.query('projectCatalog').withIndex('by_owner_updated',q=>q.eq('ownerId',ownerId)).filter(q=>q.neq(q.field('deleting'),true)).order('desc').take(listLimit(args.limit));return Promise.all(rows.map(async row=>({_id:row.projectId,title:row.title,createdAt:row.createdAt,updatedAt:row.updatedAt,aspectRatio:row.aspectRatio,clipCount:row.clipCount,aiRunning:row.aiRunning,coverUrl:await mediaUrl(ctx,{storageId:row.coverStorageId,r2Key:row.coverR2Key}),coverKind:row.coverStorageId||row.coverR2Key?'image' as const:null})));}
   const ownerId = await requireOwner(ctx); const projects = await ctx.db.query("projects").withIndex("by_ownerId_updatedAt", q => q.eq("ownerId", ownerId)).filter(q=>q.neq(q.field("deleting"),true)).order("desc").take(listLimit(args.limit));
   return await Promise.all(projects.map(async project => {
     const media = await ctx.db.query("assets").withIndex("by_ownerId_projectId", q => q.eq("ownerId", ownerId).eq("projectId", project._id)).order("desc").take(5);
@@ -82,7 +94,7 @@ export const list = query({ args: { limit: v.optional(v.number()) }, returns: v.
 export const update = mutation({ args: { projectId: v.id("projects"), title: v.optional(v.string()), aspectRatio: v.optional(aspectRatio) }, returns: v.null(), handler: async (ctx, args) => {
   const project = await requireProject(ctx, args.projectId, await requireOwner(ctx)); await requireEditorAccess(ctx, project.ownerId);
   if (args.aspectRatio !== undefined) await commitTimeline(ctx, project, { ...currentTimeline(project), aspectRatio: args.aspectRatio }, project.revision ?? 0);
-  if (args.title !== undefined) await ctx.db.patch(project._id, { title: projectTitle(args.title), updatedAt: Date.now() });
+  if (args.title !== undefined) await writeProject(ctx,project._id, { title: projectTitle(args.title), updatedAt: Date.now() });
   return null;
 }});
 export const saveTimeline = mutation({ args: { projectId: v.id("projects"), timeline: timelineValidator, baseTimeline: v.optional(timelineValidator), expectedRevision: v.number() }, returns: v.object({ revision: v.number(), timeline: timelineValidator }), handler: async (ctx, args) => {
@@ -101,13 +113,13 @@ export const saveTimeline = mutation({ args: { projectId: v.id("projects"), time
 export const undo = mutation({ args: { projectId: v.id("projects") }, returns: v.number(), handler: async (ctx, args) => {
   const project = await requireProject(ctx, args.projectId, await requireOwner(ctx)); await requireEditorAccess(ctx, project.ownerId); const history = (project.history ?? []).map(normalizeTimeline); const previous = history.pop();
   if (!previous) throw new ConvexError("No edits to undo"); const revision = (project.revision ?? 0) + 1;
-  await ctx.db.patch(project._id, { timeline: previous, aspectRatio: previous.aspectRatio, history, revision, updatedAt: Date.now() }); return revision;
+  await writeProject(ctx,project._id, { timeline: previous, aspectRatio: previous.aspectRatio, history, revision, updatedAt: Date.now() }); return revision;
 }});
 export const remove = mutation({ args: { projectId: v.id('projects') }, returns: v.null(), handler: async (ctx, args) => {
   const ownerId=await requireOwner(ctx),project=await requireProject(ctx,args.projectId,ownerId);
   const rendering=await ctx.db.query('renderJobs').withIndex('by_owner_project_status',q=>q.eq('ownerId',ownerId).eq('projectId',project._id).eq('status','rendering')).first();
   if(rendering||project.aiRunning)throw new ConvexError('Wait for the active render or AI edit before deleting the project');
-  await ctx.db.patch(project._id,{deleting:true});
+  await writeProject(ctx,project._id,{deleting:true});
   const shares=await ctx.db.query('timelineShares').withIndex('by_project',q=>q.eq('projectId',project._id)).take(2);
   for(const share of shares)await ctx.db.patch(share._id,{published:false});
   await ctx.scheduler.runAfter(0,internal.projectDeletion.batch,{projectId:project._id,ownerId});

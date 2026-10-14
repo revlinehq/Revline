@@ -1,3 +1,4 @@
+import { writeProject } from './project_data';
 import { validateClipEffects } from '../../lib/editor/clip-effects';
 import { playbackRateOf, sourceEndOf } from '../../lib/editor/playback-rate';
 import { transitionSources } from '../../lib/editor/clip-transitions';
@@ -102,6 +103,6 @@ export async function commitTimeline(ctx: MutationCtx, project: Doc<"projects">,
   if ((project.revision ?? 0) !== expectedRevision) throw new ConvexError("The timeline changed elsewhere. Reload before saving.");
   timeline = await validateTimeline(ctx, project, timeline);
   const revision = expectedRevision + 1;
-  await ctx.db.patch(project._id, { timeline, aspectRatio: timeline.aspectRatio, revision, history: boundedHistory([...(project.history ?? []), currentTimeline(project)]), updatedAt: Date.now() });
+  await writeProject(ctx,project._id, { timeline, aspectRatio: timeline.aspectRatio, revision, history: boundedHistory([...(project.history ?? []), currentTimeline(project)]), updatedAt: Date.now() });
   return revision;
 }

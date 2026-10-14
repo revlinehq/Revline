@@ -1,3 +1,4 @@
+import { writeProject } from './lib/project_data';
 /// <reference types="vite/client" />
 import { convexTest } from 'convex-test';
 import workflowTest from '@convex-dev/workflow/test';
@@ -12,7 +13,7 @@ test('export start ignores large finished history, stamps the saved revision and
   const owner=t.withIdentity({subject:'owner'}),projectId=await owner.mutation(api.projects.create,{title:'Export history',aspectRatio:'landscape'});
   await t.run(async ctx=>{
     const timeline={fps:30,aspectRatio:'landscape' as const,clips:[{id:'text',kind:'caption' as const,start:0,duration:3,sourceStart:0,text:'Owned'}]};
-    await ctx.db.patch(projectId,{timeline,revision:9});
+    await writeProject(ctx,projectId,{timeline,revision:9});
     for(let i=0;i<520;i++)await ctx.db.insert('renderJobs',{projectId,ownerId:'owner',status:'completed',timeline,createdAt:i,updatedAt:i});
   });
   const jobId=await owner.mutation(api.renders.start,{projectId,resolution:720,fps:30,quality:'standard'});

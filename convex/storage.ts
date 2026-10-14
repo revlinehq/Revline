@@ -1,3 +1,4 @@
+import { projectRun } from './lib/project_data';
 import { ConvexError,v } from 'convex/values';
 import { paginationOptsValidator } from 'convex/server';
 import { query,mutation,type QueryCtx,type MutationCtx } from './_generated/server';
@@ -39,7 +40,7 @@ async function describe(ctx:QueryCtx|MutationCtx,row:Doc<'storageObjects'>) {
       used=project.timeline?.clips.some(clip=>clip.assetId&&videos.has(clip.assetId));
     }
     if(used) {result.workspaces.push({id:project._id,title:project.title});result.protectedReason='Used in an edit';}
-    if(project.aiRunning)result.protectedReason='AI editing in progress';
+    if((await projectRun(ctx,projectId,row.ownerId)).aiRunning)result.protectedReason='AI editing in progress';
     if(await usedByActiveExport(ctx,row.ownerId,projectId,ids))result.protectedReason='Used by an active export';
   }
   result.canDelete=refs.attachments.length>0&&!result.protectedReason;return result;

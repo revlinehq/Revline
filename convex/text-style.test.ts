@@ -1,3 +1,4 @@
+import { writeProject } from './lib/project_data';
 /// <reference types="vite/client" />
 import { convexTest } from 'convex-test';
 import { beforeEach,afterEach,expect,test,vi } from 'vitest';
@@ -20,10 +21,10 @@ test('manual and AI text appearance saves retain words, timing, animation and ed
   const f=await fixture();
   await f.owner.mutation(api.projects.saveTimeline,{projectId:f.projectId,timeline:f.timeline,expectedRevision:0});
   expect((await f.owner.query(api.projects.get,{projectId:f.projectId})).timeline).toEqual(f.timeline);
-  await f.t.run(ctx=>ctx.db.patch(f.projectId,{aiRunning:true,aiRunId:'text-run'}));
+  await f.t.run(ctx=>writeProject(ctx,f.projectId,{aiRunning:true,aiRunId:'text-run'}));
   const changed={...f.timeline,clips:f.timeline.clips.map(clip=>({...clip,textStyle:{...clip.textStyle!,glowBlur:0,shadowX:-20}}))};
   await f.t.mutation(internal.assistant.apply,{projectId:f.projectId,ownerId:'text-style-owner',runId:'text-run',expectedRevision:1,timeline:changed});
-  await f.t.run(ctx=>ctx.db.patch(f.projectId,{aiRunning:false}));
+  await f.t.run(ctx=>writeProject(ctx,f.projectId,{aiRunning:false}));
   const saved=(await f.owner.query(api.projects.get,{projectId:f.projectId})).timeline!;
   expect(saved).toEqual(changed);
   expect({...saved.clips[0],textStyle:undefined}).toEqual({...f.timeline.clips[0],textStyle:undefined});

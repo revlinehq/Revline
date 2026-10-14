@@ -34,6 +34,7 @@ import type * as mediaTasks from "../mediaTasks.js";
 import type * as playback from "../playback.js";
 import type * as processorDiagnostics from "../processorDiagnostics.js";
 import type * as projectDeletion from "../projectDeletion.js";
+import type * as projectDataMigration from "../projectDataMigration.js";
 import type * as projects from "../projects.js";
 import type * as r2 from "../r2.js";
 import type * as renders from "../renders.js";
@@ -76,6 +77,7 @@ declare const fullApi: ApiFromModules<{
   playback: typeof playback;
   processorDiagnostics: typeof processorDiagnostics;
   projectDeletion: typeof projectDeletion;
+  projectDataMigration: typeof projectDataMigration;
   projects: typeof projects;
   r2: typeof r2;
   renders: typeof renders;

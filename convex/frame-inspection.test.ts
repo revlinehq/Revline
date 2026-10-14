@@ -1,3 +1,4 @@
+import { writeProject } from './lib/project_data';
 /// <reference types="vite/client" />
 import { convexTest } from 'convex-test';
 import workflowTest from '@convex-dev/workflow/test';
@@ -17,7 +18,7 @@ async function fixture() {
   const owner = t.withIdentity(identity('owner')), stranger = t.withIdentity(identity('stranger'));
   const projectId = await owner.mutation(api.projects.create, { title: 'Frames', aspectRatio: 'vertical' });
   const assetId = await t.run(async ctx => { const storageId = await ctx.storage.store(new Blob(['video'])); return ctx.db.insert('assets', { ownerId: 'owner', projectId, storageId, fileName: 'frames.mp4', kind: 'video', contentType: 'video/mp4', size: 5, duration: 3, createdAt: Date.now() }); });
-  await t.run(ctx => ctx.db.patch(projectId, { aiRunning: true, aiRunId: 'run' }));
+  await t.run(ctx => writeProject(ctx,projectId, { aiRunning: true, aiRunId: 'run' }));
   const run = { projectId, ownerId: 'owner', runId: 'run' };
   const request = (question = frameRequest.question) => t.mutation(internal.assistant.requestAnalysis, { ...run, assetId, mode: 'frames', frameRequest: { ...frameRequest, question } });
   const drain = () => t.finishAllScheduledFunctions(vi.runAllTimers);

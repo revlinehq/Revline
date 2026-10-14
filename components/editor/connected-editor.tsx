@@ -33,9 +33,10 @@ function editorLoading(projectId: string) {
 }
 export function ConnectedEditor({projectId}: {projectId:string}) {
   const {isAuthenticated}=useConvexAuth();
-  const project=useQuery(api.projects.get,isAuthenticated?{projectId:projectId as Id<'projects'>}:'skip');
-  if(!project)return editorLoading(projectId);
-  return <EditorAccessGate loading={editorLoading(projectId)}><ProjectEditor key={projectId} project={project}/></EditorAccessGate>;
+  const project=useQuery(api.projects.get,isAuthenticated?{projectId:projectId as Id<'projects'>,includeHistory:false}:'skip');
+  const history=useQuery(api.projects.history,isAuthenticated?{projectId:projectId as Id<'projects'>}:'skip');
+  if(!project||history===undefined)return editorLoading(projectId);
+  return <EditorAccessGate loading={editorLoading(projectId)}><ProjectEditor key={projectId} project={{...project,history}}/></EditorAccessGate>;
 }
 function ProjectEditor({project}: {project:Doc<'projects'>}) {
   const [shareOpen,setShareOpen]=useState(false);

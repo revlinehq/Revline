@@ -1,3 +1,4 @@
+import { writeProject } from './lib/project_data';
 /// <reference types="vite/client" />
 import { convexTest } from 'convex-test';
 import { expect, test } from 'vitest';
@@ -15,7 +16,7 @@ async function setup(signal?: AbortSignal) {
   const owner = t.withIdentity({ subject: 'owner' });
   const projectId = await owner.mutation(api.projects.create, { title: 'Atomic replacement', aspectRatio: 'landscape' });
   await owner.mutation(api.projects.saveTimeline, { projectId, timeline: original, expectedRevision: 0 });
-  await t.run(ctx => ctx.db.patch(projectId, { aiRunning: true, aiRunId: 'run' }));
+  await t.run(ctx => writeProject(ctx,projectId, { aiRunning: true, aiRunId: 'run' }));
   const run = { projectId, ownerId: 'owner', runId: 'run' };
   const read = () => owner.query(api.projects.get, { projectId });
   const session = new EditSession(original, 1, {

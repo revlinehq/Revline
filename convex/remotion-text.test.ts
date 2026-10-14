@@ -1,3 +1,4 @@
+import { writeProject } from './lib/project_data';
 /// <reference types="vite/client" />
 import { convexTest } from 'convex-test';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
@@ -29,7 +30,7 @@ test('template saves survive split, trim, duplicate and AI save with their origi
   expect(duplicated.clips.find(clip => clip.id === 'copy')?.textTemplate).toEqual(trimmed.clips[1].textTemplate);
   await owner.mutation(api.projects.saveTimeline, { projectId, timeline: duplicated, expectedRevision: 0 });
   expect((await owner.query(api.projects.get, { projectId })).timeline).toEqual(duplicated);
-  await t.run(ctx => ctx.db.patch(projectId, { aiRunning: true, aiRunId: 'run' }));
+  await t.run(ctx => writeProject(ctx,projectId, { aiRunning: true, aiRunId: 'run' }));
   const templated = patchClip(duplicated, 'title', textTemplatePatch(duplicated.clips[0], 'word-pop'));
   const updated = patchClip(templated, 'title', textEffectPatch(templated.clips[0], 'fade'));
   await t.mutation(internal.assistant.apply, { projectId, ownerId: 'owner', runId: 'run', timeline: updated, expectedRevision: 1 });

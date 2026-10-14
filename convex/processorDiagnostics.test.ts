@@ -1,3 +1,4 @@
+import { readProject } from './lib/project_data';
 import { completeDeletion } from '../lib/test-support/convex-deletion';
 /// <reference types="vite/client" />
 import { convexTest } from 'convex-test';
@@ -68,6 +69,6 @@ test('the stacked shader fixture stores generated media, preserves both timed pa
   await t.run(async ctx => { await ctx.db.patch(created.jobId, { status: 'failed' }); });
   await owner.mutation(api.projects.remove, { projectId: created.projectId });await completeDeletion(t, created.projectId);
   expect(await t.run(ctx => ctx.storage.get(storageId))).toBeNull();
-  expect(await t.run(ctx => ctx.db.get(created.projectId))).toBeNull();
+  expect(await t.run(ctx => readProject(ctx,created.projectId))).toBeNull();
   expect(await t.run(ctx => ctx.db.get(created.taskId))).toBeNull();
 });

@@ -1,3 +1,4 @@
+import { projectIdentity } from './lib/project_data';
 import { recordStorageObject, forgetStorageObject } from './lib/storage_accounting';
 import { internal } from './_generated/api';
 import { requireEditorAccess } from './lib/billing_access';
@@ -70,7 +71,7 @@ export const get = query({ args: { jobId: v.id("renderJobs") }, returns: renderS
   const {timeline:_timeline,...summary}=job; return { ...summary, url: await mediaUrl(ctx, { storageId: job.outputStorageId, r2Key: job.outputR2Key }) };
 }});
 export const list = query({ args: { projectId: v.id("projects"), limit: v.optional(v.number()) }, returns: v.array(renderSummaryDocument), handler: async (ctx, args) => {
-  const ownerId = await requireOwner(ctx); await requireProject(ctx, args.projectId, ownerId);
+  const ownerId = await requireOwner(ctx); await projectIdentity(ctx,args.projectId,ownerId);
   const jobs = await ctx.db.query("renderJobs").withIndex("by_ownerId_projectId", q => q.eq("ownerId", ownerId).eq("projectId", args.projectId)).order("desc").take(listLimit(args.limit));
   return await Promise.all(jobs.map(async job => {const {timeline:_timeline,...summary}=job;return { ...summary, url: await mediaUrl(ctx, { storageId: job.outputStorageId, r2Key: job.outputR2Key }) };}));
 }});

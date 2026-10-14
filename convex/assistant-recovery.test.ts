@@ -1,3 +1,4 @@
+import { writeProject,readProject } from './lib/project_data';
 /// <reference types="vite/client" />
 import { convexTest } from 'convex-test';
 import agentTest from '@convex-dev/agent/test';
@@ -11,7 +12,7 @@ async function fixture() {
   const t=convexTest(schema,import.meta.glob('./**/*.ts')); agentTest.register(t);
   const owner=t.withIdentity({subject:'owner'});
   const projectId=await owner.mutation(api.projects.create,{title:'Recovery fixture',aspectRatio:'landscape'});
-  const read=()=>t.run(ctx=>ctx.db.get(projectId));
+  const read=()=>t.run(ctx=>readProject(ctx,projectId));
   const send=(prompt:string)=>owner.mutation(api.assistant.send,{projectId,prompt});
   return {t,owner,projectId,read,send};
 }
@@ -41,7 +42,7 @@ test('stopping retains facts, a late old callback cannot stop the new run, and s
 
 test('repeated failures bound follow-ups but retain the original goal; legacy errors do not invent one',async()=>{
   const f=await fixture();
-  await f.t.run(ctx=>ctx.db.patch(f.projectId,{aiError:'Old timeout'}));
+  await f.t.run(ctx=>writeProject(ctx,f.projectId,{aiError:'Old timeout'}));
   await f.send('Original goal'); expect((await f.read())?.aiRecovery?.requests).toEqual([]);
   for(const prompt of ['Original goal','follow-up one','follow-up two','follow-up three','follow-up four']) {
     const run=await f.read();

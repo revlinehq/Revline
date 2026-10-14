@@ -1,3 +1,4 @@
+import { updateProjectCover } from './project_data';
 import { ConvexError } from 'convex/values';
 import type { Doc, Id } from '../_generated/dataModel';
 import type { MutationCtx, QueryCtx } from '../_generated/server';
@@ -53,6 +54,7 @@ export async function forgetStorageObject(ctx:MutationCtx,ownerId:string,source:
 }
 export async function recordAssetStorage(ctx:MutationCtx,asset:Doc<'assets'>,backfill=false) {
   await recordStorageObject(ctx,asset,backfill);
+  await updateProjectCover(ctx,asset);
   if(asset.thumbnailStorageId){const metadata=await ctx.db.system.get(asset.thumbnailStorageId);if(metadata)await recordStorageObject(ctx,{ownerId:asset.ownerId,storageId:asset.thumbnailStorageId,fileName:`${asset.fileName} thumbnail`,size:metadata.size,kind:'image',createdAt:asset.createdAt,auxiliary:true},backfill);}
 }
 export async function ownedObjectReferences(ctx:Context,ownerId:string,source:StoredObject,thumbnail=false) {

@@ -1,3 +1,4 @@
+import { writeProject } from './lib/project_data';
 /// <reference types="vite/client" />
 import { convexTest } from 'convex-test';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
@@ -26,7 +27,7 @@ test.each(['video', 'image'] as const)('all visual controls round-trip on %s thr
   const f = await fixture(kind);
   await f.owner.mutation(api.projects.saveTimeline, { projectId: f.projectId, timeline: f.timeline, expectedRevision: 0 });
   expect((await f.owner.query(api.projects.get, { projectId: f.projectId })).timeline?.clips[0]).toMatchObject(effects);
-  await f.t.run(ctx => ctx.db.patch(f.projectId, { aiRunning: true, aiRunId: 'run' }));
+  await f.t.run(ctx => writeProject(ctx,f.projectId, { aiRunning: true, aiRunId: 'run' }));
   const next = patchClip(f.timeline, 'visual', { glitch: { ...effects.glitch, enabled: false }, dither: { ...effects.dither, enabled: false } });
   await f.t.mutation(internal.assistant.apply, { projectId: f.projectId, ownerId: 'owner', runId: 'run', expectedRevision: 1, timeline: next });
   const saved=(await f.owner.query(api.projects.get, { projectId: f.projectId })).timeline!.clips[0];
@@ -59,7 +60,7 @@ test('AI empty-track cleanup saves one/all empty rows without deleting graded fo
   const f = await fixture();
   const before = { ...f.timeline, tracks: { visual: 4, overlay: 0, audio: 3 }, clips: f.timeline.clips.map(clip => ({ ...clip, track: 3 })) };
   await f.owner.mutation(api.projects.saveTimeline, { projectId: f.projectId, timeline: before, expectedRevision: 0 });
-  await f.t.run(ctx => ctx.db.patch(f.projectId, { aiRunning: true, aiRunId: 'run' }));
+  await f.t.run(ctx => writeProject(ctx,f.projectId, { aiRunning: true, aiRunId: 'run' }));
   expect(() => deleteEmptyLayer(before, 'visual', 3)).toThrow('Remove the clips');
   for (const track of [NaN, 1.5, 0, 5]) expect(() => deleteEmptyLayer(before, 'visual', track)).toThrow('existing layer');
   const one = deleteEmptyLayer(before, 'visual', 2);
@@ -81,7 +82,7 @@ test('timed zoom blur saves on its own FX track and preserves media and split se
  await f.owner.mutation(api.projects.saveTimeline,{projectId:f.projectId,timeline:changed,expectedRevision:0});
  const saved=(await f.owner.query(api.projects.get,{projectId:f.projectId})).timeline!;
  expect(saved.clips.find(clip=>clip.id==='blur')!.zoomBlur).toMatchObject({amount:.6,centerY:.3});
- await f.t.run(ctx=>ctx.db.patch(f.projectId,{aiRunning:true,aiRunId:'blur-run'}));
+ await f.t.run(ctx=>writeProject(ctx,f.projectId,{aiRunning:true,aiRunId:'blur-run'}));
  const split=splitClip(saved,'blur',2.5,'blur-tail');
  await f.t.mutation(internal.assistant.apply,{projectId:f.projectId,ownerId:'owner',runId:'blur-run',expectedRevision:1,timeline:split});
  const published=(await f.owner.query(api.projects.get,{projectId:f.projectId})).timeline!;

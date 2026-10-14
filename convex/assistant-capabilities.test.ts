@@ -1,3 +1,4 @@
+import { writeProject } from './lib/project_data';
 /// <reference types="vite/client" />
 import { beforeEach,afterEach,expect,test,vi } from 'vitest';
 import { convexTest } from 'convex-test';
@@ -60,7 +61,7 @@ async function memoryBackend(seed:Timeline,priorHistory:Timeline[]=[]){
   });
   const map=(input:Timeline)=>({...input,clips:input.clips.map(clip=>({...clip,...(clip.assetId?{assetId:mapping[clip.assetId as keyof typeof mapping]}:{})}))});
   const timeline=map(seed),history=priorHistory.map(map),revision=history.length;
-  await t.run(ctx=>ctx.db.patch(projectId,{timeline,history,revision,threadId,aiRunning:true,aiRunId:'run',aiUndoRecorded:false}));
+  await t.run(ctx=>writeProject(ctx,projectId,{timeline,history,revision,threadId,aiRunning:true,aiRunId:'run',aiUndoRecorded:false}));
   return{t,owner,projectId,threadId,promptMessageId,seed:timeline,priorHistory:history,revision,runArgs:{projectId,ownerId:'owner',runId:'run'}};
 }
 async function run(plan?:(tools:Record<string,Tool>)=>Promise<void>,seed:Timeline=initial,realBackend=false,priorHistory:Timeline[]=[]){

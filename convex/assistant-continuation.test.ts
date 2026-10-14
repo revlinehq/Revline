@@ -1,3 +1,4 @@
+import { writeProject } from './lib/project_data';
 /// <reference types="vite/client" />
 import { convexTest } from 'convex-test';
 import agentTest from '@convex-dev/agent/test';
@@ -33,7 +34,7 @@ async function fixture(prompt = 'can u put bunch of effects here', scenes: { sta
   const assetId = await t.run(ctx => ctx.db.insert('assets', { ownerId: 'owner', projectId, kind: 'video', fileName: 'Untrusted fight filename.mp4', contentType: 'video/mp4', size: 10, duration: 60, createdAt: 0, ...(scenes.length ? { analysis: { understanding: { summary: 'Stored visual overview', scenes } } } : {}) }));
   const source = { id: 'source', assetId, kind: 'video' as const, track: 1, start: 1.69, sourceStart: 11.5, duration: 3 };
   const timeline = { fps: 30, aspectRatio: 'landscape' as const, tracks: { visual: 1, overlay: 0, audio: 0, effects: 0 }, clips: [source] };
-  await t.run(ctx => ctx.db.patch(projectId, { timeline, threadId, aiRunning: true, aiRunId: 'run', revision: 0, history: [], ...(recovery ? { aiRecovery: { requests: ['Add selected source and a flash'], runId: 'previous-run', revision: 0, savedEdits: 1, reason: 'Stopped', status: 'stopped' as const, updatedAt: 0 } } : {}) }));
+  await t.run(ctx => writeProject(ctx,projectId, { timeline, threadId, aiRunning: true, aiRunId: 'run', revision: 0, history: [], ...(recovery ? { aiRecovery: { requests: ['Add selected source and a flash'], runId: 'previous-run', revision: 0, savedEdits: 1, reason: 'Stopped', status: 'stopped' as const, updatedAt: 0 } } : {}) }));
   const run = { projectId, ownerId: 'owner', runId: 'run' };
   const analysisRequests: unknown[] = [];
   const ctx = {

@@ -1,3 +1,4 @@
+import { writeProject,readProject } from './lib/project_data';
 /// <reference types="vite/client" />
 import { convexTest } from 'convex-test';
 import { afterEach, expect, test, vi } from 'vitest';
@@ -34,7 +35,7 @@ test('new projects start canonical before attaching or adding source media', asy
 
 test('legacy read, save, list and undo preserve text above video without repeated offsets', async () => {
   const { t, owner, projectId, legacy } = await setup();
-  await t.run(ctx => ctx.db.patch(projectId, { timeline: legacy, history: [legacy], revision: 7 }));
+  await t.run(ctx => writeProject(ctx,projectId, { timeline: legacy, history: [legacy], revision: 7 }));
   const canonical = normalizeTimeline(legacy);
   expect(canonical.tracks).toEqual({ visual: 4, overlay: 0, audio: 0, effects: 0 });
   expect(canonical.clips.map(clip => clip.track)).toEqual([2, 3, 4]);
@@ -42,10 +43,10 @@ test('legacy read, save, list and undo preserve text above video without repeate
   expect((await owner.query(api.projects.get, { projectId })).history).toEqual([canonical]);
   expect((await owner.query(api.projects.list, {}))[0].clipCount).toBe(canonical.clips.length);
   await owner.mutation(api.projects.saveTimeline, { projectId, expectedRevision: 7, timeline: legacy });
-  expect((await t.run(ctx => ctx.db.get(projectId)))!.timeline).toEqual(canonical);
+  expect((await t.run(ctx => readProject(ctx,projectId)))!.timeline).toEqual(canonical);
   await owner.mutation(api.projects.saveTimeline, { projectId, expectedRevision: 8, timeline: { ...canonical, aspectRatio: 'square' } });
   await owner.mutation(api.projects.undo, { projectId });
-  const restored = (await t.run(ctx => ctx.db.get(projectId)))!;
+  const restored = (await t.run(ctx => readProject(ctx,projectId)))!;
   expect(restored.timeline).toEqual(canonical); expect(restored.history).toEqual([canonical, canonical]);
   await owner.mutation(api.projects.undo, { projectId });
   expect((await owner.query(api.projects.get, { projectId })).timeline).toEqual(canonical);
@@ -77,12 +78,12 @@ test('mixed visual kinds share a V track, with visual 24/audio 12 limits and dec
 
 test('AI checkpoints and legacy queued render snapshots stay canonical and immutable', async () => {
   const { t, owner, projectId, legacy } = await setup();
-  await t.run(ctx => ctx.db.patch(projectId, { timeline: legacy, aiRunning: true, aiRunId: 'mixed-run', aiUndoRecorded: false }));
+  await t.run(ctx => writeProject(ctx,projectId, { timeline: legacy, aiRunning: true, aiRunId: 'mixed-run', aiUndoRecorded: false }));
   const run = { projectId, ownerId: 'owner', runId: 'mixed-run' };
   expect((await t.query(internal.assistant.getRun, run)).project.timeline).toEqual(normalizeTimeline(legacy));
   await t.mutation(internal.assistant.apply, { ...run, expectedRevision: 0, timeline: legacy });
   await t.mutation(internal.assistant.apply, { ...run, expectedRevision: 1, timeline: { ...legacy, aspectRatio: 'square' } });
-  expect((await t.run(ctx => ctx.db.get(projectId)))!.timeline).toEqual(normalizeTimeline({ ...legacy, aspectRatio: 'square' }));
+  expect((await t.run(ctx => readProject(ctx,projectId)))!.timeline).toEqual(normalizeTimeline({ ...legacy, aspectRatio: 'square' }));
   await owner.mutation(api.projects.undo, { projectId });
   expect((await owner.query(api.projects.get, { projectId })).timeline).toEqual(normalizeTimeline(legacy));
   vi.stubEnv('RENDER_WORKER_SECRET', 'mixed-test-secret');

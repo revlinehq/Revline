@@ -1,3 +1,4 @@
+import { writeProject } from './lib/project_data';
 /// <reference types="vite/client" />
 import agentTest from "@convex-dev/agent/test";
 import workflowTest from "@convex-dev/workflow/test";
@@ -193,7 +194,7 @@ describe("inactive providers", () => {
 describe("live AI checkpoints and media analysis", () => {
   test("stopping an AI run preserves saved edits and refuses later checkpoints", async () => {
     const t = makeTest(); const projectId = await project(t); const owner = t.withIdentity(identity('owner'));
-    await t.run(ctx => ctx.db.patch(projectId, { aiRunning: true, aiRunId: 'run-stop', aiUndoRecorded: false }));
+    await t.run(ctx => writeProject(ctx,projectId, { aiRunning: true, aiRunId: 'run-stop', aiUndoRecorded: false }));
     const run = { projectId, ownerId: 'owner', runId: 'run-stop' };
     await t.mutation(internal.assistant.apply, { ...run, expectedRevision: 0, timeline: textTimeline });
     await expect(t.withIdentity(identity('stranger')).mutation(api.assistant.stop, { projectId })).rejects.toThrow('Project not found');
@@ -207,7 +208,7 @@ describe("live AI checkpoints and media analysis", () => {
   });
   test("saves every AI checkpoint live while grouping undo into one snapshot", async () => {
     const t = makeTest(); const projectId = await project(t); const owner = t.withIdentity(identity("owner"));
-    await t.run(ctx => ctx.db.patch(projectId, { aiRunning: true, aiRunId: "run-1", aiUndoRecorded: false }));
+    await t.run(ctx => writeProject(ctx,projectId, { aiRunning: true, aiRunId: "run-1", aiUndoRecorded: false }));
     const run = { projectId, ownerId: "owner", runId: "run-1" };
     expect(await t.mutation(internal.assistant.apply, { ...run, timeline: textTimeline, expectedRevision: 0 })).toBe(1);
     expect((await owner.query(api.projects.get, { projectId })).timeline).toEqual(textTimeline);
@@ -219,7 +220,7 @@ describe("live AI checkpoints and media analysis", () => {
   });
   test("AI checkpoints cannot overwrite a newer manual edit", async () => {
     const t = makeTest(); const projectId = await project(t); const owner = t.withIdentity(identity("owner"));
-    await t.run(ctx => ctx.db.patch(projectId, { aiRunning: true, aiRunId: "run-1", aiUndoRecorded: false }));
+    await t.run(ctx => writeProject(ctx,projectId, { aiRunning: true, aiRunId: "run-1", aiUndoRecorded: false }));
     await t.mutation(internal.assistant.apply, { projectId, ownerId: "owner", runId: "run-1", timeline: textTimeline, expectedRevision: 0 });
     await owner.mutation(api.projects.saveTimeline, { projectId, timeline: { ...textTimeline, aspectRatio: "landscape" }, expectedRevision: 1 });
     await expect(t.mutation(internal.assistant.apply, { projectId, ownerId: "owner", runId: "run-1", timeline: { ...textTimeline, aspectRatio: "square" }, expectedRevision: 1 })).rejects.toThrow("timeline changed elsewhere");
@@ -251,7 +252,7 @@ test("owned durable chat supports UI pagination and zero-item stream queries", a
   const threadId = await t.run(async ctx => {
     const id = await createThread(ctx, components.agent, { userId: "owner" });
     await saveMessage(ctx, components.agent, { threadId: id, userId: "owner", prompt: "Make the captions gold" });
-    await ctx.db.patch(projectId, { threadId: id }); return id;
+    await writeProject(ctx,projectId, { threadId: id }); return id;
   });
   const page = await owner.query(api.assistant.messages, { projectId, threadId, paginationOpts: { cursor: null, numItems: 20 } });
   expect(page.page).toHaveLength(1); expect(page.page[0]).toMatchObject({ role: "user", text: "Make the captions gold" });
@@ -289,7 +290,7 @@ test("analysis is owned and background workers save fresh results without a brow
   const t = makeTest(); const projectId = await project(t); const owner = t.withIdentity(identity("owner")); const stranger = t.withIdentity(identity("stranger"));
   const storageId = await uploadedFile(t, "owner", projectId);
   const assetId = await owner.mutation(api.assets.create, { projectId, storageId, fileName: "clip.mp4", kind: "video", duration: 5 });
-  await t.run(ctx => ctx.db.patch(projectId, { aiRunning: true, aiRunId: "workflow-run" }));
+  await t.run(ctx => writeProject(ctx,projectId, { aiRunning: true, aiRunId: "workflow-run" }));
   const run = { projectId, ownerId: "owner", runId: "workflow-run" };
   const requestId = await t.mutation(internal.assistant.requestAnalysis, { ...run, assetId, mode: "transcribe" });
   const request = await t.query(internal.assistant.analysisRequest, { ...run, requestId });
@@ -312,15 +313,15 @@ test("worker analysis requires an active exact run and scoped media, then reject
   const assetId = await owner.mutation(api.assets.create, { projectId, storageId, fileName: "clip.mp4", kind: "video", duration: 5 });
   const bridge = { projectId, assetId, aiRunId: "worker-run", workerSecret: "test-worker-secret" };
   await expect(t.query(internal.assets.getForAssistant, bridge)).rejects.toThrow("AI run is no longer active");
-  await t.run(ctx => ctx.db.patch(projectId, { aiRunning: true, aiRunId: "worker-run" }));
-  await t.run(ctx => ctx.db.patch(otherProjectId, { aiRunning: true, aiRunId: "other-run" }));
+  await t.run(ctx => writeProject(ctx,projectId, { aiRunning: true, aiRunId: "worker-run" }));
+  await t.run(ctx => writeProject(ctx,otherProjectId, { aiRunning: true, aiRunId: "other-run" }));
   await expect(t.query(internal.assets.getForAssistant, { ...bridge, workerSecret: "wrong" })).rejects.toThrow("worker authentication");
   await expect(t.query(internal.assets.getForAssistant, { ...bridge, projectId: otherProjectId, aiRunId: "other-run" })).rejects.toThrow("Media not found");
   expect(await t.query(internal.assets.getForAssistant, bridge)).toMatchObject({ ownerId: "owner", url: expect.any(String) });
   await t.mutation(internal.assets.saveAnalysis, { ...bridge, beats: { beats: [0, 1, 2], bpm: 120, confidence: 0.9 } });
   const run = { projectId, ownerId: "owner", runId: "worker-run" };
   await t.mutation(internal.assistant.requestAnalysis, { ...run, assetId, mode: "beats" });
-  await t.run(ctx => ctx.db.patch(projectId, { aiRunId: "new-run" }));
+  await t.run(ctx => writeProject(ctx,projectId, { aiRunId: "new-run" }));
   await expect(t.mutation(internal.assets.saveAnalysis, { ...bridge, beats: { beats: [0, 1], bpm: 120, confidence: 0.9 } })).rejects.toThrow("AI run is no longer active");
 });
 
@@ -445,7 +446,7 @@ test("timeline inspection distinguishes visual gaps and same-layer overlaps from
 
 test("inspection backing query reads the latest manual revision and does not mutate the project", async () => {
   const t = makeTest(); const projectId = await project(t); const owner = t.withIdentity(identity("owner"));
-  await t.run(ctx => ctx.db.patch(projectId, { aiRunning: true, aiRunId: "inspect-run" }));
+  await t.run(ctx => writeProject(ctx,projectId, { aiRunning: true, aiRunId: "inspect-run" }));
   const run = { projectId, ownerId: "owner", runId: "inspect-run" };
   await owner.mutation(api.projects.saveTimeline, { projectId, expectedRevision: 0, timeline: textTimeline });
   expect((await t.query(internal.assistant.getRun, run)).project.revision).toBe(1);
@@ -460,7 +461,7 @@ test("inspection backing query reads the latest manual revision and does not mut
 
 test("AI edits after inspecting a manual revision start a new undo group preserving manual work", async () => {
   const t = makeTest(); const projectId = await project(t); const owner = t.withIdentity(identity("owner"));
-  await t.run(ctx => ctx.db.patch(projectId, { aiRunning: true, aiRunId: "inspect-undo-run", aiUndoRecorded: false }));
+  await t.run(ctx => writeProject(ctx,projectId, { aiRunning: true, aiRunId: "inspect-undo-run", aiUndoRecorded: false }));
   const run = { projectId, ownerId: "owner", runId: "inspect-undo-run" };
   await t.mutation(internal.assistant.apply, { ...run, expectedRevision: 0, timeline: textTimeline });
   const manual: Timeline = { ...textTimeline, aspectRatio: "square", clips: [{ ...textTimeline.clips[0], text: "Human edit" }] };

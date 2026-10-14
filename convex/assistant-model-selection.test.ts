@@ -1,3 +1,4 @@
+import { readProject } from './lib/project_data';
 /// <reference types="vite/client" />
 import agentTest from '@convex-dev/agent/test';
 import { convexTest } from 'convex-test';
@@ -34,7 +35,7 @@ test('production rejects stale Opus selections before creating messages or start
   await expect(owner.mutation(api.assistant.send, { projectId, prompt: 'Synthetic edit', modelChoice: 'opus' })).rejects.toThrow('development');
   vi.stubEnv('CLAUDE_MODEL', 'claude-opus-5-5');
   await expect(owner.mutation(api.assistant.send, { projectId, prompt: 'Synthetic edit' })).rejects.toThrow('development');
-  expect((await t.run(ctx => ctx.db.get(projectId)))?.threadId).toBeUndefined();
+  expect((await t.run(ctx => readProject(ctx,projectId)))?.threadId).toBeUndefined();
   expect(await t.run(ctx => ctx.db.system.query('_scheduled_functions').take(10))).toHaveLength(0);
   vi.stubEnv('CLAUDE_MODEL', 'claude-sonnet-5-5');
   await owner.mutation(api.assistant.send, { projectId, prompt: 'Synthetic edit' });
@@ -46,7 +47,7 @@ test('disabled manual selection fails before creating a thread, history, message
   const { t, owner, projectId } = await fixture();
   await expect(owner.mutation(api.assistant.send, { projectId, prompt: 'Synthetic edit', modelChoice: 'opus' })).rejects.toThrow('disabled');
   expect(await owner.query(api.assistant.status, { projectId })).not.toHaveProperty('modelSwitcher');
-  const project = await t.run(ctx => ctx.db.get(projectId));
+  const project = await t.run(ctx => readProject(ctx,projectId));
   expect(project).toMatchObject({ revision: 0, history: [] });
   expect(project?.threadId).toBeUndefined();
   expect(project?.aiRunning).not.toBe(true);
@@ -97,5 +98,5 @@ test('unsupported choices and foreign projects cannot schedule a model request',
   await expect(t.withIdentity({ ...identity, subject: 'stranger' }).mutation(api.assistant.send, { projectId, prompt: 'Foreign', modelChoice: 'haiku' })).rejects.toThrow('Project not found');
   await expect(t.mutation(api.assistant.send, { projectId, prompt: 'Anonymous', modelChoice: 'haiku' })).rejects.toThrow('Authentication required');
   expect(await t.run(ctx => ctx.db.system.query('_scheduled_functions').take(10))).toHaveLength(0);
-  expect((await t.run(ctx => ctx.db.get(projectId)))?.threadId).toBeUndefined();
+  expect((await t.run(ctx => readProject(ctx,projectId)))?.threadId).toBeUndefined();
 });
