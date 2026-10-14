@@ -56,10 +56,10 @@ test('the stacked shader fixture stores generated media, preserves both timed pa
   ]);
   const assets = await owner.query(api.assets.list, { projectId: created.projectId });
   expect(assets).toHaveLength(1);
-  expect(assets[0]).toMatchObject({ fileName: 'generated-shader-check.svg', kind: 'image', width: 640, height: 360, ownerId: created.ownerId });
+  expect(assets[0]).toMatchObject({ fileName: 'generated-shader-check.png', kind: 'image', width: 640, height: 360, ownerId: created.ownerId });
   const storageId = assets[0].storageId!;
-  const pixels = await t.run(async ctx => (await ctx.storage.get(storageId))?.text());
-  expect(pixels).toContain('<svg'); expect(pixels).not.toMatch(/(?:<script|(?:href|src)=)/);
+  const pixels = await t.run(async ctx => Array.from(new Uint8Array((await ctx.storage.get(storageId)) ? await (await ctx.storage.get(storageId))!.arrayBuffer() : new ArrayBuffer(0))).slice(0,8));
+  expect(pixels).toEqual([137,80,78,71,13,10,26,10]);
   await t.finishAllScheduledFunctions(vi.runAllTimers);
   const task = (await t.mutation(api.mediaTasks.claim, { workerSecret: 'processor-check-secret' }))!;
   expect(task).toMatchObject({ taskId: created.taskId, render: { assets: [{ _id: assets[0]._id, kind: 'image' }], timeline: project.timeline } });
