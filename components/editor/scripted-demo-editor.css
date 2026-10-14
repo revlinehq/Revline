@@ -1,0 +1,18 @@
+.scripted-editor-demo{height:100dvh;min-height:0;display:flex;flex-direction:column;background:var(--ws-bg)}
+.scripted-editor-demo>.editor-app{flex:1;min-height:0}
+.scripted-demo-conversation{height:100%;min-height:0;display:flex;flex-direction:column}
+.scripted-demo-conversation>.assistant-content{flex:1;min-height:0}
+.scripted-demo-controls{display:flex;align-items:center;gap:8px;padding:10px 14px;color:var(--ws-muted);font-size:10px}
+.scripted-demo-controls>span{margin-right:auto;white-space:nowrap}
+.scripted-demo-controls label{display:flex;align-items:center;gap:6px}
+.scripted-demo-controls input{width:58px;accent-color:#4668ed}
+.scripted-demo-controls output{width:25px;text-align:right;font-variant-numeric:tabular-nums}
+.scripted-demo-controls button{display:grid;place-items:center;width:28px;height:28px;border:0;border-radius:5px;background:transparent;color:var(--ws-muted);cursor:pointer}
+.scripted-demo-controls button:hover,.scripted-demo-controls button:focus-visible{background:var(--ws-hover);color:var(--ws-text)}
+.scripted-demo-controls button:disabled{opacity:.35;cursor:default}
+.scripted-demo-note{padding:0 14px 10px;color:var(--ws-muted);font-size:9px;text-align:center}
+.scripted-editor-demo[data-building] .timeline-clip{animation:demo-block-arrive .42s cubic-bezier(.2,0,0,1) both;transform-origin:left center}
+.scripted-editor-demo[data-building] .timeline-track{pointer-events:none}
+.scripted-editor-demo .composer-attachments{padding-top:8px}
+@keyframes demo-block-arrive{from{opacity:0;transform:translateY(8px) scaleX(.94);filter:blur(2px)}to{opacity:1;transform:none;filter:none}}
+@media(prefers-reduced-motion:reduce){.scripted-editor-demo[data-building] .timeline-clip{animation:none}}

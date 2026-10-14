@@ -3,7 +3,7 @@ import { userError } from '@/lib/user-error';
 import { splitAtPlayhead } from '@/lib/editor/split-at-playhead';
 import { addTimelineMarker } from '@/lib/editor/timeline-markers';
 
-import { useRef, useState, useEffect, useLayoutEffect, useCallback, useMemo } from 'react';
+import { useRef, useState, useEffect, useLayoutEffect, useCallback, useMemo, type ReactNode } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Upload, MessageSquare, Film, LoaderCircle, RotateCcw } from 'lucide-react';
 import { useEditorStore, useEditorState, useInspectorPlaybackTime } from './editor-state';
@@ -61,6 +61,7 @@ export type EditorShellProps = {
   onSend: (text: string, context?: EditContext) => Promise<void>;
   onStop?: () => Promise<void>;
   assistantEditSnapshot?:AssistantEditSnapshot;
+  assistantPanel?: ReactNode;
   onExport: (settings: ExportSettings) => Promise<void>; exportState: ExportState; demo?: boolean; embedded?: boolean;
   analysisBusy?: string | null; analysisSource?: string | null; analysisProgress?: number | null; onLoadMore?: () => void; canLoadMore?: boolean;
   projectId?: string; workspaceOnly?: boolean; onImportVideo?: (url:string)=>Promise<void>; videoImports?: VideoImportState[];
@@ -111,7 +112,7 @@ export function EditorShell(p: EditorShellProps) {
   if (workspace.current.projectId !== p.projectId) workspace.current = { projectId: p.projectId, opened: false };
   if (!p.upload && (timeline.clips.length || assets.length || p.canUndo || p.aiRunning)) workspace.current.opened = true;
   // Empty edits are still projects: keep the conversation, stop button and timeline mounted.
-  const preparing = !workspace.current.opened && !p.aiRunning;
+  const preparing = !p.assistantPanel && !workspace.current.opened && !p.aiRunning;
   const modeAvailable = !p.workspaceOnly && !p.embedded;
   const mode = compact ? mobileConversation ? 'agentic' : 'tracks' : desktopMode;
   const conversationVisible = compact ? mobileChat : true;
@@ -307,7 +308,7 @@ export function EditorShell(p: EditorShellProps) {
   const browse = () => setImportOpen(true);
 
   const chat=(<aside className={`editor-sidebar ${mobileChat ? 'mobile-open' : ''}`} aria-label="Editing conversation" hidden={!conversationVisible}>
-        <AssistantPanel conversation={p.conversation} editSnapshot={p.assistantEditSnapshot} messages={p.messages} running={p.aiRunning} configured={p.aiConfigured} modelSwitcher={p.modelSwitcher} allowedModels={p.allowedModels} error={p.aiError} onSend={(text, modelChoice) => p.onSend(text, { modelChoice, selectedClipId: clip?.id, selectedClipIds:selectedIds, playhead: readPlaybackTime() })} onStop={p.onStop} hasClips={!!timeline.clips.length} demo={!!p.demo} onLoadMore={p.onLoadMore} canLoadMore={p.canLoadMore} onAttach={() => setImportOpen(true)} activity={p.analysisBusy} activitySource={p.analysisSource} activityProgress={p.analysisProgress} draftKey={p.draftKey} suggestions={sourceSuggestions} onSuggestion={async (text, clipId, modelChoice) => { const target = timeline.clips.find(item => item.id === clipId && item.kind === 'video'); if (!target) throw new Error('This clip is no longer on the timeline.'); setSelected(clipId); await p.onSend(text, { modelChoice, selectedClipId: clipId, selectedClipIds: [clipId], playhead: target.start }); }} />
+        {p.assistantPanel ?? <AssistantPanel conversation={p.conversation} editSnapshot={p.assistantEditSnapshot} messages={p.messages} running={p.aiRunning} configured={p.aiConfigured} modelSwitcher={p.modelSwitcher} allowedModels={p.allowedModels} error={p.aiError} onSend={(text, modelChoice) => p.onSend(text, { modelChoice, selectedClipId: clip?.id, selectedClipIds:selectedIds, playhead: readPlaybackTime() })} onStop={p.onStop} hasClips={!!timeline.clips.length} demo={!!p.demo} onLoadMore={p.onLoadMore} canLoadMore={p.canLoadMore} onAttach={() => setImportOpen(true)} activity={p.analysisBusy} activitySource={p.analysisSource} activityProgress={p.analysisProgress} draftKey={p.draftKey} suggestions={sourceSuggestions} onSuggestion={async (text, clipId, modelChoice) => { const target = timeline.clips.find(item => item.id === clipId && item.kind === 'video'); if (!target) throw new Error('This clip is no longer on the timeline.'); setSelected(clipId); await p.onSend(text, { modelChoice, selectedClipId: clipId, selectedClipIds: [clipId], playhead: target.start }); }} />}
       </aside>);
   return <main ref={editorRoot} data-playback-opening={opening} tabIndex={-1} {...fileDrop.handlers} onPointerDownCapture={e => { const interactive = (e.target as HTMLElement).closest('input,textarea,button,a,select,[tabindex]'); if (p.embedded) { if (!interactive || interactive === e.currentTarget || !e.currentTarget.contains(interactive)) editorRoot.current?.focus({ preventScroll: true }); else if (interactive.matches('[tabindex]') && !interactive.matches('input,textarea,button,a,select')) (interactive as HTMLElement).focus({ preventScroll: true }); } }} className={`editor-app conversation-editor ${p.embedded ? 'embedded-editor' : ''}`}>
     <MediaFileDropOverlay active={fileDrop.active} busy={!!p.upload}/>
