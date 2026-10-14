@@ -1,0 +1,8 @@
+.preview-inspector .inspector-section-tabs{margin:12px 16px 0}
+.inspector-tools{display:flex;flex-direction:column;flex:1;min-width:0;min-height:0}
+.preview-inspector .inspector-library-heading{margin:8px 0 0;padding:0 16px;border-bottom:0;min-height:30px}
+.inspector-library-heading>span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.inspector-library-heading>button{flex-shrink:0}
+.preview-inspector .inspector-library-content{padding:12px 16px 20px}
+.preview-inspector .inspector-media-content{padding:16px}
+.inspector-tools>.inspector-tabs{margin-top:8px}

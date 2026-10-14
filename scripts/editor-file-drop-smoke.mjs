@@ -66,13 +66,13 @@ try{
   assert.equal(await page.$('.editor-file-drop-overlay'),null);
   assert.equal(await page.evaluate(()=>JSON.stringify(window.editorProps.timeline)),original,'Dropping over chat preserves the complete timeline');
   assert.equal(await page.evaluate(()=>window.savedAssets.length),1);
-  assert.equal(await page.$eval('#inspector-sources .asset-card strong',el=>el.textContent),'new-image.png','A drop opens the actual Sources list');
+  assert.equal(await page.$eval('#inspector-media .asset-card strong',el=>el.textContent),'new-image.png','A drop opens the actual Sources list');
   await page.type('[aria-label="Search sources"]','hidden');
   await page.evaluate(()=>{window.drag('#timeline','dragenter');window.drag('#timeline','drop');});
   await page.waitForFunction(()=>window.editorProps.assets.length===2&&!window.editorProps.upload);
   assert.equal(await page.evaluate(()=>window.internalDrops),0,'External files bypass nested timeline drop handlers');
   assert.equal(await page.$eval('[aria-label="Search sources"]',el=>el.value),'','Dropping again clears stale source filters');
-  assert.equal(await page.$$eval('#inspector-sources .asset-card',els=>els.length),2);
+  assert.equal(await page.$$eval('#inspector-media .asset-card',els=>els.length),2);
   assert.equal(await page.evaluate(()=>window.savedTimelines.length),0,'Sources-only upload never saves or inserts a clip');
   await page.evaluate(()=>{window.drag('#timeline','dragenter',true);window.drag('#timeline','drop',true);});
   assert.equal(await page.evaluate(()=>window.internalDrops),1,'Internal media drags reach their existing handler');
