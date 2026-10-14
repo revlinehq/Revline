@@ -1,4 +1,5 @@
 import type { AnthropicProviderOptions } from '@ai-sdk/anthropic';
+import { enforceClaudeModelPolicy } from './claude-model-policy';
 
 export const CLAUDE_MODEL = 'claude-sonnet-5-5';
 export const CLAUDE_GATEWAY_MODEL = 'anthropic/claude-sonnet-5.5';
@@ -22,22 +23,23 @@ export function resolveClaudeModel(modelChoice?: ClaudeModelChoice, env: ClaudeM
     if (!claudeModelSwitcherEnabled(env)) throw new Error('Manual model selection is currently disabled.');
     const selected = CLAUDE_EDIT_MODELS.find(model => model.id === modelChoice);
     if (!selected) throw new Error('Choose a supported editor model.');
-    return { provider, modelId: provider === 'gateway' ? selected.gatewayModelId : selected.modelId, modelChoice };
+    return enforceClaudeModelPolicy({ provider, modelId: provider === 'gateway' ? selected.gatewayModelId : selected.modelId, modelChoice }, env);
   }
-  return { provider, modelId: provider === 'gateway' ? env.CLAUDE_GATEWAY_MODEL ?? CLAUDE_GATEWAY_MODEL : env.CLAUDE_MODEL ?? CLAUDE_MODEL };
+  return enforceClaudeModelPolicy({ provider, modelId: provider === 'gateway' ? env.CLAUDE_GATEWAY_MODEL ?? CLAUDE_GATEWAY_MODEL : env.CLAUDE_MODEL ?? CLAUDE_MODEL }, env);
 }
 
-export function validatePinnedClaudeModel(selection: ClaudeModelSelection): ClaudeModelSelection {
+export function validatePinnedClaudeModel(selection: ClaudeModelSelection, env: ClaudeModelEnvironment = process.env): ClaudeModelSelection {
   if (selection.modelChoice !== undefined) {
     const selected = CLAUDE_EDIT_MODELS.find(model => model.id === selection.modelChoice);
     if (!selected || selection.modelId !== (selection.provider === 'gateway' ? selected.gatewayModelId : selected.modelId)) throw new Error('Pinned editor model does not match its selection.');
   }
-  return selection;
+  return enforceClaudeModelPolicy(selection, env);
 }
 
 export function claudeProviderOptions(modelId: string) {
   if (!/^(?:anthropic\/)?claude-(?:haiku|sonnet|opus)-5[.-]5$/.test(modelId)) return undefined;
   const anthropic = {
+    cacheControl: { type: 'ephemeral', ttl: '5m' },
     effort: 'medium',
     thinking: { type: 'adaptive', blockBinding: { prefixMismatchBehavior: 'drop_block' } },
   } satisfies AnthropicProviderOptions;

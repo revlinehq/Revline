@@ -38,8 +38,17 @@ test.each(CLAUDE_EDIT_MODELS)('installed Anthropic SDK sends supported adaptive 
   } });
   const response = await generateText({ model: provider(model.modelId), prompt: 'Synthetic fixture', providerOptions: claudeProviderOptions(model.modelId), maxOutputTokens: 512 });
   expect(response.text).toBe('Fixture response');
-  expect(request).toMatchObject({ model: model.modelId, thinking: { type: 'adaptive', block_binding: { prefix_mismatch_behavior: 'drop_block' } }, output_config: { effort: 'medium' } });
+  expect(request).toMatchObject({ model: model.modelId, cache_control: { type: 'ephemeral', ttl: '5m' }, thinking: { type: 'adaptive', block_binding: { prefix_mismatch_behavior: 'drop_block' } }, output_config: { effort: 'medium' } });
   expect(claudeProviderOptions(model.gatewayModelId)).toEqual(claudeProviderOptions(model.modelId));
+});
+
+test('production policy also blocks environment overrides and previously queued Opus selections', () => {
+  const production = { EDITOR_ALLOW_OPUS: 'false', MODEL_SWITCHER_ENABLED: 'true' };
+  expect(() => resolveClaudeModel('opus', production)).toThrow('only in development');
+  expect(() => resolveClaudeModel(undefined, { ...production, CLAUDE_MODEL: 'claude-opus-5-5' })).toThrow('only in development');
+  expect(() => resolveClaudeModel(undefined, { ...production, AI_GATEWAY_ENABLED: 'true', CLAUDE_GATEWAY_MODEL: 'anthropic/claude-opus-5.5' })).toThrow('only in development');
+  expect(() => validatePinnedClaudeModel({ provider: 'anthropic', modelId: 'claude-opus-5-5', modelChoice: 'opus' }, production)).toThrow('only in development');
+  expect(validatePinnedClaudeModel({ provider: 'anthropic', modelId: CLAUDE_MODEL, modelChoice: 'sonnet' }, production).modelId).toBe(CLAUDE_MODEL);
 });
 
 test('older or unrelated configured models retain their prior provider options', () => {
