@@ -36,6 +36,7 @@ test('shot-only requests complete only after fresh results are saved', async () 
   await t.run(ctx => writeProject(ctx,projectId, { aiRunning: true, aiRunId: 'test-run' }));
   const requestId = await t.mutation(internal.assistant.requestAnalysis, { projectId, ownerId: 'owner', runId: 'test-run', assetId, mode: 'shots' });
   await t.finishAllScheduledFunctions(vi.runAllTimers);
+  await t.run(ctx=>ctx.db.patch(requestId,{expiresAt:Date.now()+240000}));
   const work = (await t.mutation(api.mediaTasks.claim, { workerSecret: 'test-secret' }))!;
   await expect(t.mutation(api.mediaTasks.complete, { taskId: work.taskId, leaseToken: work.leaseToken, result: {} })).rejects.toThrow('result is missing');
   expect((await t.run(ctx => ctx.db.get(requestId)))?.status).toBe('running');

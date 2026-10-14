@@ -20,7 +20,10 @@ vi.mock('@convex-dev/agent', async original => ({
 }));
 import { respond } from './assistantActions';
 import { AssistantTokenBudgetError } from '../lib/ai/token-budget';
-const execute = (tools: Record<string, Tool>, name: string, input: unknown) => tools[name].execute({}, tools[name].inputSchema.parse(input));
+const execute = async(tools: Record<string, Tool>, name: string, input: unknown) => {
+  if(name==='addTimedEffect')await tools.planEffects.execute({},{plans:[{id:'fixture-flash',kind:'timed',effect:'flash',start:1.69,duration:.5,purpose:'Explicitly requested flash',strength:'Fixed preset',expectation:'The flash accents this moment',anchor:{kind:'requested-time',time:1.69,description:'Explicit fixture time'}}]});
+  return tools[name].execute({}, tools[name].inputSchema.parse(input));
+};
 beforeEach(() => { sdk.options = null; sdk.plan = async () => {}; vi.stubEnv('BILLING_ENABLED', 'false'); });
 afterEach(() => vi.unstubAllEnvs());
 

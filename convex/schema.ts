@@ -1,3 +1,4 @@
+import { effectPlanValidator, compositionReviewResult } from './lib/effect_plan';
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 import { BEAT_ANALYSIS_ENGINE } from '../lib/media-analysis/beat-map';
@@ -105,7 +106,7 @@ export const userFields = {
   createdAt: v.number(), updatedAt: v.number(),
 };
 export const userDocument = v.object({ _id: v.id("users"), _creationTime: v.number(), ...userFields });
-export const mediaTaskKind = v.union(analysisMode, v.literal('extract'), v.literal('waveform'), v.literal('render'), v.literal('import'));
+export const mediaTaskKind = v.union(analysisMode, v.literal('extract'), v.literal('waveform'), v.literal('render'), v.literal('import'), v.literal('review'));
 export const mediaTaskStatus = v.union(v.literal('queued'), v.literal('running'), v.literal('retrying'), v.literal('completed'), v.literal('failed'), v.literal('cancelled'));
 export const mediaTaskFields = {
   ownerId: v.string(), projectId: v.id('projects'), kind: mediaTaskKind,
@@ -113,6 +114,7 @@ export const mediaTaskFields = {
   status: mediaTaskStatus, claimable:v.optional(v.boolean()), workflowId: v.optional(v.string()), attempt: v.number(), progress: v.number(),
   outputAssetId: v.optional(v.id('assets')),
   sourceUrl: v.optional(v.string()),
+  reviewId:v.optional(v.id('compositionReviews')),requiredProcessorVersion:v.optional(v.number()),
   frameRequest: v.optional(frameRequestValidator), frameInspection: v.optional(frameInspectionValidator),
   videoRequest: v.optional(videoRequestValidator), videoInspection: v.optional(videoInspectionValidator),
   leaseToken: v.optional(v.string()), leaseExpiresAt: v.optional(v.number()), attemptStartedAt: v.optional(v.number()),
@@ -133,6 +135,9 @@ export const publicMediaAsset = v.object({
   audioAssetId:v.optional(v.string()),audioExtracted:v.optional(v.boolean()),waveform:v.optional(waveformValidator),thumbnailUrl:v.optional(v.union(v.string(),v.null())),
 });
 export default defineSchema({
+  assistantPlans:defineTable({projectId:v.id('projects'),ownerId:v.string(),runId:v.string(),plans:v.array(effectPlanValidator),originals:v.array(clipValidator),reviews:v.number(),createdAt:v.number()}).index('by_project',['projectId']),
+  compositionReviews:defineTable({projectId:v.id('projects'),ownerId:v.string(),runId:v.string(),revision:v.number(),timeline:timelineValidator,reference:timelineValidator,plans:v.array(effectPlanValidator),assetIds:v.array(v.id('assets')),start:v.number(),end:v.number(),taskId:v.optional(v.id('mediaTasks')),status:v.union(v.literal('queued'),v.literal('completed'),v.literal('failed')),result:v.optional(compositionReviewResult),error:v.optional(v.string()),createdAt:v.number()}).index('by_project',['projectId']).index('by_created',['createdAt']),
+
   assetAnalyses:defineTable({ownerId:v.string(),sourceKey:v.string(),analysis:analysisValidator,updatedAt:v.number()}).index('by_owner_source',['ownerId','sourceKey']),
   projectAccess:defineTable({projectId:v.id('projects'),ownerId:v.string(),historyStored:v.optional(v.boolean()),threadId:v.optional(v.string()),deleting:v.optional(v.boolean())}).index('by_project',['projectId']),
   aiRuns:defineTable({projectId:v.id('projects'),ownerId:v.string(),...aiStateFields}).index('by_project',['projectId']),

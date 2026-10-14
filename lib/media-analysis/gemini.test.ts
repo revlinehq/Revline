@@ -2,7 +2,7 @@ import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { inspectVideo, transcribeAudio, understandVideo } from './gemini';
+import { inspectVideo, transcribeAudio, understandVideo,inspectCompositionFrames } from './gemini';
 
 let directory: string;
 let source: string;
@@ -118,4 +118,16 @@ test('native video questions return zero matches honestly and clean up malformed
     await expect(inspectVideo(source, 1, input, 'test-key', AbortSignal.timeout(5000))).rejects.toMatchObject({ status: 502 });
     expect(calls.at(-1)?.options.method).toBe('DELETE');
   }
+});
+
+import type { EffectPlan } from '../ai/edit-plan';
+const plan:EffectPlan={id:'impact',kind:'timed',effect:'punch',start:1,duration:.4,purpose:'Emphasize contact',strength:'Fixed 1.2×',expectation:'Push on the observed contact',anchor:{kind:'requested-time',time:1.1,description:'Requested timing'}};
+test('narrow review sends edited/reference timeline pixels and validates exact expectation IDs',async()=>{
+  const fetcher=vi.fn(async(_input:unknown,_init?:RequestInit)=>new Response(JSON.stringify({outputs:[{type:'text',text:JSON.stringify({observations:[{planId:'impact',verdict:'unverifiable',evidence:'No contact is shown in these stills.'}],uncertainty:'Sparse samples cannot confirm impact.'})}]})));
+  vi.stubGlobal('fetch',fetcher);
+  const result=await inspectCompositionFrames([{time:1.1,edited:'edited-pixels',reference:'reference-pixels'}],[plan],'test-key',new AbortController().signal);
+  expect(result.observations[0].verdict).toBe('unverifiable');
+  const body=JSON.parse(fetcher.mock.calls[0][1]!.body as string);
+  expect(body.store).toBe(false);expect(body.input[0].text).toContain('not source seconds');expect(body.input[0].text).toContain('untrusted');
+  expect(body.input.filter((part:{type:string})=>part.type==='image').map((part:{data:string})=>part.data)).toEqual(['edited-pixels','reference-pixels']);
 });

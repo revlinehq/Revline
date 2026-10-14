@@ -9,7 +9,7 @@ import {api,internal,components} from './_generated/api';
 import type {TimelinePublicationReceipt} from '../lib/ai/publication-receipt';
 import { getFunctionName } from 'convex/server';
 import type { Timeline } from '../lib/editor/types';
-import { TIMED_EFFECT_PRESETS } from '../lib/editor/clip-effects';
+import { EFFECT_CATALOG,TIMED_EFFECT_PRESETS } from '../lib/editor/clip-effects';
 import { editorCapabilities } from '../lib/ai/editor-capabilities';
 import { resolvedTextAppearance } from '../lib/editor/text-style';
 import { AUDIO_ROLES,audioSettings,audioVolumeEnvelope,audioFadeGain,audioFadeAttributes } from '../lib/editor/audio-settings';
@@ -86,6 +86,7 @@ async function run(plan?:(tools:Record<string,Tool>)=>Promise<void>,seed:Timelin
     },
     runMutation:async(reference:Parameters<typeof getFunctionName>[0],args:{timeline?:Timeline;expectedRevision?:number;error?:string;publication?:Pick<TimelinePublicationReceipt,'threadId'|'promptMessageId'>|Extract<TimelinePublicationReceipt,{status:'failed'|'aborted'}>})=>{
       const name=getFunctionName(reference);calls.push(name);
+      if(name==='compositionReview:savePlan')return null;
       if(name==='assistant:undoLatestEdit'){
         if(!backend)throw new Error('Undo requires the in-memory saved backend.');
         const result=await backend.t.mutation(internal.assistant.undoLatestEdit,{...backend.runArgs,expectedRevision:args.expectedRevision!});timeline=structuredClone(result.timeline);revision=result.revision;return result;
@@ -101,7 +102,14 @@ async function run(plan?:(tools:Record<string,Tool>)=>Promise<void>,seed:Timelin
   const history=backend?(await backend.owner.query(api.projects.get,{projectId:backend.projectId})).history??[]:[];
   return{timeline,revision,calls,history,error,backend};
 }
-const execute=(tools:Record<string,Tool>,name:string,input:unknown)=>tools[name].execute({},tools[name].inputSchema.parse(input));
+const execute=async(tools:Record<string,Tool>,name:string,input:unknown)=>{
+  if(name==='addTimedEffect'){
+    const effect=input as {preset:typeof TIMED_EFFECT_PRESETS[number];start?:number;duration?:number};
+    const start=effect.start??1,duration=effect.duration??EFFECT_CATALOG[effect.preset].duration;
+    await tools.planEffects.execute({},{plans:[{id:'test-effect',kind:'timed',effect:effect.preset,start,duration,purpose:'Requested synthetic effect',strength:'Requested controls',expectation:'The requested effect is visible',anchor:{kind:'requested-time',time:start,description:'Explicit fixture timing'}}]});
+  }
+  return tools[name].execute({},tools[name].inputSchema.parse(input));
+};
 const trimmed:Timeline={...initial,clips:initial.clips.map(c=>c.id==='from'||c.id==='audio'?{...c,duration:1.5}:c)};
 
 test('actual undo→unlink→delete tools restore saved source ranges and preserve original audio in a new undo group',async()=>{
@@ -548,3 +556,11 @@ test.skipIf(process.env.REVLINE_LIVE_AGENT_SMOKE!=='1')('live configured Claude 
     console.log(JSON.stringify({model:CLAUDE_MODEL,greetingTools:0,abilitiesTools:0,boldCapabilitiesList:true,syntheticOnly:true}));
   }catch(error){const cause=error as{statusCode?:number;name?:string};throw new Error(`Live Claude verification failed (${cause.name??'Error'}, status ${cause.statusCode??'unknown'}).`)}
 },60_000);
+
+test('timed effects require recorded expectations and refuse invented observed anchors',async()=>{
+  const result=await run(async tools=>{
+    await expect(tools.addTimedEffect.execute({},{preset:'flash',start:1,duration:.1})).rejects.toThrow('planEffects');
+    await expect(tools.planEffects.execute({},{plans:[{id:'fake',kind:'timed',effect:'flash',start:1,duration:.1,purpose:'Emphasize a hit',strength:'Fixed preset',expectation:'Flash on contact',anchor:{kind:'observed-event',time:1,clipId:'from',evidenceId:'invented',description:'Unobserved punch'}}]})).rejects.toThrow('Inspect');
+  });
+  expect(result.timeline).toEqual(initial);expect(result.revision).toBe(0);
+});

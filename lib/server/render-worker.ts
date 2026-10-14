@@ -2,13 +2,20 @@ import { fork } from 'node:child_process';
 import { join } from 'node:path';
 
 type Settings = { fps: number; quality: 'draft' | 'standard' | 'high' };
+export type ReviewCaptureSettings={width:number;height:number;fps:number;times:number[];start:number;end:number};
 
 /** A dedicated process owns renderer globals and ends with its task signal. */
 export function runRenderWorker(directory: string, output: string, settings: Settings, onProgress: (render: { progress: number }) => void, signal: AbortSignal): Promise<{ warnings: number }> {
+  return runRendererProcess('render-worker.mjs',[directory,output,JSON.stringify(settings)],onProgress,signal);
+}
+export function runCompositionCapture(directory:string,settings:ReviewCaptureSettings,signal:AbortSignal){
+  return runRendererProcess('composition-review-worker.mjs',[directory,JSON.stringify(settings)],()=>{},signal);
+}
+function runRendererProcess(script:string,args:string[],onProgress:(render:{progress:number})=>void,signal:AbortSignal):Promise<{warnings:number}>{
   signal.throwIfAborted();
   return new Promise((resolve, reject) => {
     // This Node entry runs outside the bundle; outputFileTracingIncludes packages it.
-    const worker = fork(/* turbopackIgnore: true */ join(process.cwd(), 'scripts/render-worker.mjs'), [directory, output, JSON.stringify(settings)], { execArgv: [], silent: true });
+    const worker = fork(/* turbopackIgnore: true */ join(process.cwd(), 'scripts',script),args, { execArgv: [], silent: true });
     let completed: { warnings: number } | undefined;
     let failure: Error | undefined;
     let stderr = '';

@@ -12,6 +12,7 @@ import type * as assets from "../assets.js";
 import type * as assistant from "../assistant.js";
 import type * as assistantActions from "../assistantActions.js";
 import type * as billing from "../billing.js";
+import type * as compositionReview from "../compositionReview.js";
 import type * as crons from "../crons.js";
 import type * as editorAccess from "../editorAccess.js";
 import type * as http from "../http.js";
@@ -57,6 +58,7 @@ declare const fullApi: ApiFromModules<{
   assistant: typeof assistant;
   assistantActions: typeof assistantActions;
   billing: typeof billing;
+  compositionReview: typeof compositionReview;
   crons: typeof crons;
   editorAccess: typeof editorAccess;
   http: typeof http;

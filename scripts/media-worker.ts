@@ -10,7 +10,7 @@ const client = new ConvexHttpClient(convexUrl);
 const subscriptions = new ConvexClient(convexUrl);
 let queueRevision = 0, queueReady = false;
 const queueWaiters = new Set<() => void>();
-const unsubscribe = subscriptions.onUpdate(api.mediaTasks.ready, { workerSecret }, ready => {
+const unsubscribe = subscriptions.onUpdate(api.mediaTasks.ready, { workerSecret,processorVersion:2 }, ready => {
   queueRevision++; queueReady = !!ready;
   if (queueReady) for (const wake of queueWaiters) wake();
 });
@@ -22,7 +22,7 @@ async function runSlot() {
   while (!shutdown.signal.aborted) {
     try {
       const observedRevision = queueRevision;
-      const task = await client.mutation(api.mediaTasks.claim, { workerSecret: workerSecret!, compact:true });
+      const task = await client.mutation(api.mediaTasks.claim, { workerSecret: workerSecret!, compact:true,processorVersion:2 });
       if (!task) { await waitForWork(observedRevision); continue; }
       console.log(`Media task ${task.taskId}: ${task.kind} started.`);
       const controller = new AbortController();
@@ -52,7 +52,7 @@ async function runSlot() {
       } catch (error) {
         clearInterval(timer); await heartbeats;
         if (!shutdown.signal.aborted && !controller.signal.aborted) {
-          const retryable = !(error instanceof AnalysisError && error.status < 500);
+          const retryable = task.kind!=='review'&&!(error instanceof AnalysisError && error.status < 500);
           await client.mutation(api.mediaTasks.fail, { ...credentials, error: error instanceof Error ? error.message.slice(0, 1000) : 'Media processing failed.', retryable }).catch(() => {});
         }
         console.log(`Media task ${task.taskId}: interrupted or failed; Convex owns recovery.`);

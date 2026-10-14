@@ -1,4 +1,5 @@
 "use node";
+import { effectPlanInput,validateEffectPlan,type EffectPlan,type EffectEvidence } from '../lib/ai/edit-plan';
 import { EDITOR_STYLE_RULES } from "../lib/ai/editor-style";
 import { wrapLanguageModel } from "ai";
 import { anthropicTokenCounter } from "../lib/ai/anthropic-token-count";
@@ -15,7 +16,7 @@ import { v } from "convex/values";
 import { z } from "zod";
 import { components, internal } from "./_generated/api";
 import { internalAction } from "./_generated/server";
-import type { Doc } from "./_generated/dataModel";
+import type { Doc,Id } from "./_generated/dataModel";
 import type { Timeline } from "../lib/editor/types";
 import { alignCutsToBeats } from "../lib/editor/beat-cuts";
 import { addBeatMarkers } from "../lib/editor/beat-markers";
@@ -75,6 +76,9 @@ export const respond = internalAction({
       const recovery = args.recovery ?? project.aiRecovery;
       const recovering = recovery !== undefined;
       let inspected = false;
+      let effectPlans:EffectPlan[]=[];
+      const visualEvidence=new Map<string,EffectEvidence>();
+      const planBindings=new Map<string,string>();
       const editSession = new EditSession(project.timeline ?? { clips: [], fps: 30, aspectRatio: project.aspectRatio }, project.revision ?? 0, {
         apply: (timeline, expectedRevision,publication) => ctx.runMutation(internal.assistant.apply, { ...run, timeline, expectedRevision,...(publication?{publication:{threadId:args.threadId,promptMessageId:args.promptMessageId}}:{}) }),
         validate: (timeline, expectedRevision) => ctx.runQuery(internal.assistant.validateDraft, { ...run, timeline, expectedRevision }),
@@ -122,6 +126,34 @@ export const respond = internalAction({
         return next;
       });
       const tools = {
+        planEffects:createTool({description:"Before an authorized effect or creative styling edit, record one to eight concrete expectations: purpose, actual supported strength, timeline window/peak and anchor. For observed action, use an evidenceId returned by this run's inspectVideo mapped match; never invent an impact. Markers and cuts must still exist. Requested-time anchors are for explicit requested timing. Include targetClipId for existing footage/text. No timeline edits, no approval question. Long looks can be reviewed in a short sample window. Keep the plan stable across the single allowed fix pass.",inputSchema:z.object({plans:z.array(effectPlanInput).min(1).max(8)}),execute:async(_ctx,{plans})=>{
+          await editSession.wait();validateEffectPlan(plans,editSession.timeline,visualEvidence);
+          const originals=editSession.timeline.clips.filter(clip=>plans.some(plan=>(plan.outputClipId??plan.targetClipId)===clip.id));
+          await ctx.runMutation(internal.compositionReview.savePlan,{...run,plans,originals});
+          effectPlans=plans;planBindings.clear();return {planned:true,plans,revision:editSession.revision,saved:false,staged:editSession.staged};
+        }}),
+        previewRender:createTool({description:"Review one or two planned effects using the actual composited timeline, the export frame-capture engine and an effect-disabled reference. Returns measured pixel differences, clip timing/text bounds and narrow Gemini observations about the recorded expectations, with uncertainty. At most a three-second sampled window, one initial review and one fix-pass review per run. Does not edit the timeline. Sparse stills cannot prove audio sync, continuous motion, exact between-sample contact, or the whole edit's taste. After a failed check, adjust only that expectation once and stop; never loop.",inputSchema:z.object({planIds:z.array(z.string()).min(1).max(2)}),execute:async(_ctx,{planIds})=>reportAnalysisFailure(async()=>{
+          await editSession.wait();
+          const selected=planIds.map(id=>effectPlans.find(plan=>plan.id===id));if(selected.some(plan=>!plan))throw new Error('Record the effect expectations with planEffects before review.');
+          const bindings=selected.flatMap(plan=>{
+            const bound=planBindings.get(plan!.id)??plan!.outputClipId??plan!.targetClipId;
+            if(bound)return [{planId:plan!.id,clipId:bound}];
+            const matches=editSession.timeline.clips.filter(clip=>clip.kind==='effect'&&clip.effectPreset===plan!.effect&&Math.abs(clip.start-plan!.start)<1/editSession.timeline.fps&&Math.abs(clip.duration-plan!.duration)<1/editSession.timeline.fps);
+            if(matches.length!==1)throw new Error('Identify the actual planned output clip before review.');return [{planId:plan!.id,clipId:matches[0].id}];
+          });
+          budget.pauseForAnalysis();
+          let reviewId:Id<'compositionReviews'>|undefined;
+          try{
+            reviewId=await ctx.runMutation(internal.compositionReview.request,{...run,expectedRevision:editSession.revision,timeline:editSession.timeline,planIds,bindings});
+            const deadline=Date.now()+180000;
+            while(true){abortSignal.throwIfAborted();const review=await ctx.runQuery(internal.compositionReview.get,{...run,reviewId});
+              if(review.status==='failed')throw new AnalysisStepError(review.error??'Rendered review failed.');
+              if(review.status==='completed')return {reviewed:true,scope:'Sampled composited timeline; no audio judgment',staged:editSession.staged,...review.result};
+              if(Date.now()>deadline)throw new AnalysisStepError('Rendered review exceeded its three-minute limit. Saved edits remain.');
+              await new Promise(resolve=>setTimeout(resolve,1000));
+            }
+          }finally{try{if(reviewId)await ctx.runMutation(internal.compositionReview.cancel,{...run,reviewId});}finally{budget.resumeAfterAnalysis();}}
+        })}),
         duplicateClips:createTool({description:"Copy explicitly identified existing clips to requested timeline seconds, or duplicate immediately after the latest selected end when at is omitted. Preserve source ranges, relative timing, appearance, audio settings and linked pairs. Copy both neighboring sources together with a selected transition to remap its pair correctly. Uses the same free-layer placement as the editor; never reads the browser clipboard or invents media.",inputSchema:z.object({clipIds:clipIdsInput,at:z.number().min(0).optional()}),execute:async(_ctx,{clipIds,at})=>{
           let newClipIds:string[]=[];
           const saved=await checkpoint(t=>{for(const id of clipIds)find(t,id);const copies=copyTimelineClips(t,clipIds);const result=pasteTimelineClips(t,copies,at??Math.max(...copies.map(c=>c.start+c.duration)));newClipIds=result.ids;return result.timeline});
@@ -175,7 +207,7 @@ export const respond = internalAction({
             if (!request.videoInspection) throw new Error('Native video inspection completed without saved evidence.');
             await editSession.wait();
             const evidence = request.videoInspection;
-            return { assetId: input.assetId, ...evidence, matchCount: evidence.matches.length, timelineOccurrences: editSession.timeline.clips.filter(clip => clip.kind === 'video' && clip.assetId === input.assetId).map(clip => ({ clipId: clip.id, sourceStart: clip.sourceStart, timelineStart: clip.start, duration: clip.duration, playbackRate: playbackRateOf(clip), matches: videoMatchesOnClip(evidence, clip) })) };
+            return { assetId: input.assetId, ...evidence, matchCount: evidence.matches.length, timelineOccurrences: editSession.timeline.clips.filter(clip => clip.kind === 'video' && clip.assetId === input.assetId).map(clip => ({ clipId: clip.id, sourceStart: clip.sourceStart, timelineStart: clip.start, duration: clip.duration, playbackRate: playbackRateOf(clip), matches: videoMatchesOnClip(evidence, clip).map(match=>{const evidenceId=crypto.randomUUID();visualEvidence.set(evidenceId,{clipIds:[clip.id],start:match.timelineStart,end:match.timelineEnd});return {...match,evidenceId};}) })) };
           }, videoRequest));
         } }),
         editText: createTool({ description: "Change an existing caption or graphic's text and save immediately. Preserve its timing and style.", inputSchema: z.object({ clipId: z.string(), text: z.string().max(2000) }), execute: async (_ctx, input) => checkpoint(t => {
@@ -266,7 +298,7 @@ export const respond = internalAction({
         move: createTool({ description: "Move a clip in seconds or within its own track group: effects use FX1–FX24, video/images/text use V1–V24, and audio uses A1–A12. The clip kind determines the group; effects cannot become footage or audio. Save immediately.", inputSchema: z.object({ clipId: z.string(), start: z.number().min(0).optional(), track: z.number().int().min(1).max(24).optional() }), execute: async (_ctx, input) => checkpoint(t => { const clip = find(t, input.clipId); if (input.start === undefined && input.track === undefined) throw new Error("Specify a timeline start or a layer"); return placeOnFreeLayer(t, { ...clip, ...(input.start !== undefined ? { start: input.start } : {}), ...(input.track !== undefined ? { track: input.track } : {}) }); }) }),
         delete: createTool({ description: "Stage removal of an existing clip; publish the replacement only after this request completes successfully.", inputSchema: z.object({ clipId: z.string() }), execute: async (_ctx, input) => checkpoint(t => { find(t, input.clipId); return deleteClip(t, input.clipId); }) }),
         addCaption: createTool({ description: "Add a timed caption with explicit text, styling and normalized position; save immediately.", inputSchema: textInput, execute: async (_ctx, input) => checkpoint(t => placeOnFreeLayer(t, { id: crypto.randomUUID(), kind: "caption", sourceStart: 0, fontSize: 52, color: "#F4F4F0", background: "#0B0C0E", x: 0.5, y: 0.82, animation: "none", ...input })) }),
-        addGraphic: createTool({ description: "Add a text motion graphic with explicit text, styling and normalized position; save immediately.", inputSchema: textInput, execute: async (_ctx, input) => checkpoint(t => placeOnFreeLayer(t, { id: crypto.randomUUID(), kind: "graphic", sourceStart: 0, fontSize: 92, color: "#F4F4F0", background: "transparent", x: 0.5, y: 0.5, animation: "rise", ...input })) }),
+        addGraphic: createTool({ description: "Add a text motion graphic with explicit text, styling and normalized position; save immediately.", inputSchema: textInput, execute: async (_ctx, input) => checkpoint(t => placeOnFreeLayer(t, { id: crypto.randomUUID(), kind: "graphic", sourceStart: 0, fontSize: 92, color: "#F4F4F0", background: "transparent", x: 0.5, y: 0.5, animation: "none", ...input })) }),
         addMedia: createTool({ description: "Add this project's uploaded video/image on a shared visual track (1–24), or audio on an audio track (1–12); save immediately.", inputSchema: z.object({ assetId: z.string(), track: z.number().int().min(1).max(24).optional(), start: z.number().min(0), duration: z.number().positive(), sourceStart: z.number().min(0) }), execute: async (_ctx, input) => checkpoint(t => { const asset = assets.find(a => a._id === input.assetId); if (!asset) throw new Error("Choose media from this project"); if (recovering && t.clips.some(clip => clip.assetId === input.assetId && Math.abs(clip.start-input.start) < 1/t.fps && Math.abs(clip.duration-input.duration) < 1/t.fps && Math.abs(clip.sourceStart-input.sourceStart) < 1/t.fps)) return t; const id = crypto.randomUUID(); const next = addMediaClip(t, { ...asset, duration: input.duration }, id, input.start, input.track ?? 1); return patchClip(next, id, { sourceStart: input.sourceStart, duration: input.duration }); }) }),
         addLayer: createTool({ description: "Add an empty effects-only FX track (up to 24), shared visual V track (up to 24), or audio A track (up to 12). Only effect clips belong to FX tracks. Video, images, captions and graphics share V tracks.", inputSchema: z.object({ group: z.enum(["effects", "visual", "audio"]) }), execute: async (_ctx, input) => checkpoint(t => { const tracks = deriveTrackCounts(t); const maximum = maxTrackCount(input.group); if (tracks[input.group] >= maximum) throw new Error(`This group already has ${maximum} tracks`); return { ...t, tracks: { ...tracks, [input.group]: tracks[input.group] + 1 } }; }) }),
         deleteEmptyLayer: createTool({ description: "Delete one EMPTY FX, V or A track without deleting clips. group effects means FX, visual means V, audio means A; track is its current number. Refuses occupied tracks. Higher tracks are renumbered while timing, stacking order, media and linked audio remain intact. Inspect current track numbers again after deletion if needed. Saves immediately.", inputSchema: z.object({ group: z.enum(['effects', 'visual', 'audio']), track: z.number().int().min(1).max(24) }), execute: async (_ctx, input) => checkpoint(t => deleteEmptyLayer(t, input.group, input.track)) }),
@@ -289,8 +321,11 @@ export const respond = internalAction({
           if(!template)throw new Error('Choose a text template before changing its highlight color.');
           return patchClip(t,clipId,{...patch,textTemplate:{...template,...(highlightColor?{highlightColor}:{})}});
         })}),
-        addTimedEffect: createTool({ description: `For explicit effects or authorized creative styling: add a supported independent FX clip—${TIMED_EFFECT_PRESETS.map(preset=>EFFECT_CATALOG[preset].label).join(', ')}. It affects the visual composition during its range; use explicit start or current playhead. Frame shrink scales the footage itself toward canvas center, holds with black space on all four sides, then returns; optional frameShrink size is inset fraction per side 0..0.45, speed 0.25..4. Quick zoom in/out are one configurable Zoom family: optional zoom direction in/out, amount 1..3 times normal framing, speed 0.25..4 and centerX/centerY 0..1. Speed is progression relative to the FX range: 1 completes across the range, faster reaches the target early and holds, slower ends partway. Optional solidColor controls configure a solid-color frame/rectangle only. This is independent of footage and sound timing. Footage fade in/out belongs to configureVisualFade, and sound fades to configureAudio; do not create a separate fade FX. Use addClipTransition for a real neighboring-pair transition.`, inputSchema: z.object({ preset:z.enum(TIMED_EFFECT_PRESETS),start:z.number().min(0).optional(),duration:z.number().positive().optional(),aboveClipId:z.string().optional(),solidColor:solidColorInput.optional(),frameShrink:frameShrinkInput.optional(),zoom:zoomInput.optional() }).refine(input=>!input.zoom||isZoomPreset(input.preset),{message:'Zoom controls belong to Zoom FX.'}).refine(input=>!input.solidColor||input.preset==='solid-color',{message:'Solid color controls belong to solid-color FX.'}).refine(input=>!input.frameShrink||input.preset==='frame-shrink',{message:'Frame shrink controls belong to frame shrink FX.'}), execute:async(_ctx,input)=>checkpoint(t=>{
-          const id=crypto.randomUUID(),next=addEffectClip(t,id,input.preset,input.start??args.playhead??0,{duration:input.duration,aboveClipId:input.aboveClipId});
+        addTimedEffect: createTool({ description: `For explicit effects or authorized creative styling: add a supported independent FX clip—${TIMED_EFFECT_PRESETS.map(preset=>EFFECT_CATALOG[preset].label).join(', ')}. It affects the visual composition during its range; use explicit start or current playhead. Frame shrink scales the footage itself toward canvas center, holds with black space on all four sides, then returns; optional frameShrink size is inset fraction per side 0..0.45, speed 0.25..4. Quick zoom in/out are one configurable Zoom family: optional zoom direction in/out, amount 1..3 times normal framing, speed 0.25..4 and centerX/centerY 0..1. Speed is progression relative to the FX range: 1 completes across the range, faster reaches the target early and holds, slower ends partway. Optional solidColor controls configure a solid-color frame/rectangle only. This is independent of footage and sound timing. Footage fade in/out belongs to configureVisualFade, and sound fades to configureAudio; do not create a separate fade FX. Use addClipTransition for a real neighboring-pair transition.`, inputSchema: z.object({ planId:z.string().optional(),preset:z.enum(TIMED_EFFECT_PRESETS),start:z.number().min(0).optional(),duration:z.number().positive().optional(),aboveClipId:z.string().optional(),solidColor:solidColorInput.optional(),frameShrink:frameShrinkInput.optional(),zoom:zoomInput.optional() }).refine(input=>!input.zoom||isZoomPreset(input.preset),{message:'Zoom controls belong to Zoom FX.'}).refine(input=>!input.solidColor||input.preset==='solid-color',{message:'Solid color controls belong to solid-color FX.'}).refine(input=>!input.frameShrink||input.preset==='frame-shrink',{message:'Frame shrink controls belong to frame shrink FX.'}), execute:async(_ctx,input)=>checkpoint(t=>{
+          const start=input.start??args.playhead??0,plan=effectPlans.find(plan=>(!input.planId||plan.id===input.planId)&&plan.kind==='timed'&&plan.effect===input.preset&&Math.abs(plan.start-start)<1/t.fps);
+          if(!plan)throw new Error('Record this effect with planEffects before adding it.');
+          const id=crypto.randomUUID();planBindings.set(plan.id,id);
+          const next=addEffectClip(t,id,input.preset,start,{duration:input.duration??plan.duration,aboveClipId:input.aboveClipId});
           if(input.zoom)return patchClip(next,id,configureTimedEffectPatch(find(next,id),{zoom:input.zoom}));
           if(input.solidColor)return patchClip(next,id,solidColorPatch(find(next,id),input.solidColor));
           return input.frameShrink?patchClip(next,id,configureTimedEffectPatch(find(next,id),{frameShrink:input.frameShrink})):next;

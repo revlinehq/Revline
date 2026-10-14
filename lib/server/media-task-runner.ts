@@ -1,11 +1,8 @@
-import { copyFile, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { extname, join } from 'node:path';
+import { join } from 'node:path';
 import type { ConvexHttpClient } from 'convex/browser';
 import type { MediaWorkItem, MediaTaskResult } from '@/convex/mediaTasks';
-import { TEXT_FONTS } from '@/lib/editor/text-fonts';
-import { isTransitionClip } from '@/lib/editor/clip-transitions';
-import { generateComposition } from '@/lib/editor/composition';
 import { dimensions, timelineDuration, type MediaAsset } from '@/lib/editor/types';
 import { downloadOwnedMedia, extractTranscriptionAudio, prepareVideo, probeMedia } from '@/lib/media-analysis/io';
 import { inspectVideo, inspectVideoFrames, understandVideo } from '@/lib/media-analysis/gemini';
@@ -15,11 +12,12 @@ import { detectMusicBeats } from '@/lib/media-analysis/music-beats';
 import { AnalysisError } from '@/lib/media-analysis/errors';
 import { trackSourceFace } from './track-source-face';
 import { extractSourceAudio } from './extract-audio';
-import { prepareRenderAudioSource } from './prepare-render-audio';
 import { measureAudioWaveform } from './audio-waveform';
 import { uploadMediaFile } from './upload-media-file';
 import { runRenderWorker } from './render-worker';
 import { importVideoLink } from './import-video-link';
+import { prepareComposition,writeComposition } from './prepare-composition';
+import { reviewComposition } from './review-composition';
 import { extractInspectionFrames } from './inspect-video-frames';
 
 export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpClient, convexUrl: string, signal: AbortSignal, onProgress: (percent: number) => void): Promise<MediaTaskResult> {
@@ -39,30 +37,15 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
       if (!task.render || !task.renderJobId) throw new AnalysisError('Export snapshot is missing.', 400);
       if (task.outputStored) return {};
       const snapshot = task.render;
-      const assetUrls: Record<string, string> = {};
-      const audibleAudioAssets = new Set(snapshot.timeline.clips.filter(clip=>clip.kind==='audio'&&(clip.volume??1)>0).map(clip=>clip.assetId));
-      for (const [index, asset] of snapshot.assets.entries()) {
-        if (!asset.url) throw new AnalysisError('Export source media is unavailable.', 400);
-        const sourceExtension = extname(asset.fileName).toLowerCase();
-        const extension = /^\.(mp4|mov|webm|m4v|mp3|wav|m4a|ogg|flac|aac|aiff|png|jpg|jpeg|webp|gif|avif)$/.test(sourceExtension) ? sourceExtension : asset.kind === 'video' ? '.mp4' : asset.kind === 'audio' ? '.audio' : '.image';
-        const name = `asset-${index}${extension}`;
-        await downloadOwnedMedia(asset.url, join(directory, name), new URL(convexUrl).origin, asset.size, signal);
-        const audio = asset.kind==='audio'&&audibleAudioAssets.has(asset._id)
-          ? await prepareRenderAudioSource(join(directory,name),join(directory,`asset-${index}-decoded.wav`),signal)
-          : null;
-        assetUrls[asset._id] = audio?.decoded ? `./asset-${index}-decoded.wav` : `./${name}`;
-      }
-      await copyFile(join(process.cwd(), 'public/vendor/gsap.min.js'), join(directory, 'gsap.min.js'));
-      await copyFile(join(process.cwd(), 'public/vendor/visual-effects.js'), join(directory, 'visual-effects.js'));
-      if(snapshot.timeline.clips.some(clip=>clip.kind==='graphic'||clip.kind==='caption'||isTransitionClip(clip)))await copyFile(join(process.cwd(), 'public/vendor/remotion-runtime.js'), join(directory, 'remotion-runtime.js'));
-      for(const font of TEXT_FONTS) await copyFile(join(process.cwd(), 'public/fonts',font.fileName), join(directory,font.fileName));
-      await writeFile(join(directory, 'index.html'), generateComposition(snapshot.timeline, snapshot.assets as MediaAsset[], { resolution: snapshot.resolution as 720 | 1080, fps: snapshot.fps as 24 | 30 | 60, gsapUrl: './gsap.min.js', visualEffectsUrl: './visual-effects.js', remotionRuntimeUrl: './remotion-runtime.js', fontUrl: './space-grotesk-latin.woff2', fontUrls:Object.fromEntries(TEXT_FONTS.map(font=>[font.id,'./'+font.fileName])), assetUrls }));
+      const assetUrls=await prepareComposition(directory,snapshot.timeline,snapshot.assets as (MediaAsset & {size:number})[],convexUrl,signal);
+      await writeComposition(directory,snapshot.timeline,snapshot.assets as (MediaAsset & {size:number})[],assetUrls,snapshot.resolution as 720|1080,snapshot.fps as 24|30|60);
       const output = join(directory, 'video.mp4');
       await runRenderWorker(directory, output, { fps: snapshot.fps, quality: snapshot.quality as 'draft' | 'standard' | 'high' }, progress => onProgress(Math.round(progress.progress * .95)), signal);
       onProgress(97);
       await uploadMediaFile(output, { ...credentials, jobId: task.renderJobId, projectId: task.projectId, fileName: 'video.mp4', contentType: 'video/mp4', kind: 'video', duration: timelineDuration(snapshot.timeline), ...dimensions(snapshot.timeline.aspectRatio, snapshot.resolution) }, uploadContext, signal);
       return {};
     }
+    if(task.kind==='review'){if(!task.review)throw new AnalysisError('Review snapshot is unavailable.',400);return {review:await reviewComposition(task.review,directory,convexUrl,signal,onProgress)};}
     const asset = task.asset;
     if (!asset?.url) throw new AnalysisError('The source media is unavailable.', 400);
     if (task.kind === 'extract' && asset.audioExtracted) return asset.audioAssetId ? { audioAssetId: asset.audioAssetId } : {};
