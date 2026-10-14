@@ -183,3 +183,19 @@ test('stopping an AI request cancels its analysis and prevents later worker writ
   await expect(f.t.mutation(api.mediaTasks.complete, { taskId: work.taskId, leaseToken: work.leaseToken, result: { analysis: { transcript } } })).rejects.toThrow('lease');
   expect(await f.t.run(ctx => ctx.db.get(requestId))).toBeNull(); await f.drain();
 });
+
+
+test('chat activity ignores background work and follows only pending analysis in the current turn', async () => {
+  const f = await fixture();
+  await f.t.run(async ctx => {
+    await ctx.db.patch(f.projectId, { aiRunning: true, aiRunId: 'greeting' });
+    await ctx.db.insert('mediaTasks', { ownerId: 'owner', projectId: f.projectId, assetId: f.assetId, kind: 'understand', status: 'running', attempt: 1, progress: 10, createdAt: Date.now(), updatedAt: Date.now() });
+    await ctx.db.insert('analysisRequests', { ownerId: 'owner', projectId: f.projectId, assetId: f.assetId, aiRunId: 'previous-turn', mode: 'understand', status: 'running', createdAt: Date.now(), expiresAt: Date.now() + 240_000 });
+  });
+  expect(await f.owner.query(api.assistant.status, { projectId: f.projectId })).toMatchObject({ running: true, activity: null });
+  const requestId = await f.t.run(ctx => ctx.db.insert('analysisRequests', { ownerId: 'owner', projectId: f.projectId, assetId: f.assetId, aiRunId: 'greeting', mode: 'understand', status: 'pending', createdAt: Date.now(), expiresAt: Date.now() + 240_000 }));
+  expect(await f.owner.query(api.assistant.status, { projectId: f.projectId })).toMatchObject({ activity: 'Analyzing footage…' });
+  await f.t.run(ctx => ctx.db.patch(requestId, { status: 'completed' }));
+  expect(await f.owner.query(api.assistant.status, { projectId: f.projectId })).toMatchObject({ activity: null });
+  await expect(f.stranger.query(api.assistant.status, { projectId: f.projectId })).rejects.toThrow();
+});

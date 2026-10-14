@@ -14,8 +14,14 @@ import { normalizeTimeline } from '../lib/editor/types';
 import { enqueueMediaTask, cancelMediaTask } from './mediaTasks';
 const providerReason = "Claude editing requires ANTHROPIC_API_KEY in Convex, or AI_GATEWAY_ENABLED=true on an eligible paid Convex team.";
 function configured() { return !!process.env.ANTHROPIC_API_KEY || process.env.AI_GATEWAY_ENABLED === "true"; }
-export const status = query({ args: { projectId: v.id("projects") }, returns: v.object({ configured: v.boolean(), running: v.boolean(), error: v.union(v.string(), v.null()), reason: v.union(v.string(), v.null()) }), handler: async (ctx, args) => {
-  const project = await requireProject(ctx, args.projectId, await requireOwner(ctx)); return { configured: configured(), running: project.aiRunning ?? false, error: project.aiError ?? null, reason: configured() ? null : providerReason };
+export const status = query({ args: { projectId: v.id("projects") }, returns: v.object({ configured: v.boolean(), running: v.boolean(), error: v.union(v.string(), v.null()), reason: v.union(v.string(), v.null()), activity: v.union(v.string(), v.null()), activitySource: v.union(v.string(), v.null()), activityProgress: v.union(v.number(), v.null()) }), handler: async (ctx, args) => {
+  const project = await requireProject(ctx, args.projectId, await requireOwner(ctx));
+  const requests = project.aiRunning && project.aiRunId ? await ctx.db.query('analysisRequests').withIndex('by_projectId_runId', q => q.eq('projectId', project._id).eq('aiRunId', project.aiRunId!)).take(16) : [];
+  const active = requests.find(request => request.status === 'pending' || request.status === 'running');
+  const task = active?.taskId ? await ctx.db.get(active.taskId) : null;
+  const source = active ? await ctx.db.get(active.assetId) : null;
+  const labels = { transcribe: 'Listening to your footage…', understand: 'Analyzing footage…', shots: 'Finding shot changes…', beats: 'Finding the rhythm…', track: 'Following the subject…', frames: 'Inspecting the moment…', video: 'Analyzing footage…' };
+  return { configured: configured(), running: project.aiRunning ?? false, error: project.aiError ?? null, reason: configured() ? null : providerReason, activity: active ? task?.status === 'queued' ? 'Queued for analysis…' : task?.status === 'retrying' ? 'Retrying analysis…' : labels[active.mode] : null, activityProgress: active && task && task.progress > 0 && task.progress < 100 ? task.progress : null, activitySource: source?.ownerId === project.ownerId && source.projectId === project._id ? source.fileName : null };
 }});
 export const send = mutation({ args: { projectId: v.id("projects"), prompt: v.string(), selectedClipId: v.optional(v.string()), selectedClipIds: v.optional(v.array(v.string())), playhead: v.optional(v.number()) }, returns: v.null(), handler: async (ctx, args) => {
   const ownerId = await requireOwner(ctx); await requireEditorAccess(ctx, ownerId); const project = await requireProject(ctx, args.projectId, ownerId);

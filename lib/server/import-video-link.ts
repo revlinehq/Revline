@@ -98,7 +98,7 @@ export async function importVideoLink(value: string, directory: string, signal: 
     await downloadMp4(link.url, source, signal, onProgress);
     try { title = decodeURIComponent(new URL(link.url).pathname.split('/').at(-1) || title).replace(/\.mp4$/i, ''); } catch { /* A safe default name works too. */ }
   }
-  if (!existsSync(source)) throw new AnalysisError('Use a video up to 5 minutes long and 500 MB; livestreams are not supported.', 400);
+  if (!existsSync(source)) throw new AnalysisError('This video-link import did not produce a file. Links must be public, up to 5 minutes and 500 MB, and not livestreams. Upload longer footage directly as a file.', 400);
   if ((await stat(source)).size > MAX_IMPORT_BYTES) throw new AnalysisError('Video-link imports support files up to 500 MB.', 400);
   onProgress(65);
   const { stdout } = await run('ffprobe', ['-v', 'error', '-show_entries', 'format=duration:stream=codec_type,codec_name,width,height,pix_fmt', '-of', 'json', source], { signal, timeout: 30_000, maxBuffer: 1024 * 1024 }).catch(() => { throw new AnalysisError('The link did not contain a readable MP4 video.', 400); });
@@ -106,7 +106,7 @@ export async function importVideoLink(value: string, directory: string, signal: 
   const video = metadata.streams?.find(stream => stream.codec_type === 'video');
   const audio = metadata.streams?.find(stream => stream.codec_type === 'audio');
   const duration = Number(metadata.format?.duration);
-  if (!video?.width || !video.height || video.width > 16384 || video.height > 16384 || !Number.isFinite(duration) || duration <= 0 || duration > 300) throw new AnalysisError('Choose a readable video up to 5 minutes long.', 400);
+  if (!video?.width || !video.height || video.width > 16384 || video.height > 16384 || !Number.isFinite(duration) || duration <= 0 || duration > 300) throw new AnalysisError('Video links must contain a readable video up to 5 minutes long. Upload longer footage directly as a file.', 400);
   const path = join(directory, 'video.mp4');
   const copyVideo = video.codec_name === 'h264' && video.pix_fmt === 'yuv420p';
   // Keep supported streams intact; convert other codecs for browser preview and export.

@@ -60,12 +60,11 @@ try {
   page.on('pageerror', error => errors.push(error.message));
   await page.setViewport({ width: 1200, height: 620 });
   await page.goto(`http://127.0.0.1:${server.address().port}/fixture`, { waitUntil: 'networkidle0' });
-  assert.equal(await page.$eval('a[aria-label="View chat history"]', element => element.getAttribute('href')), '/chats');
-  assert.equal(await page.$eval('a[aria-label="New conversation"]', element => element.getAttribute('href')), '/dashboard/chat');
+  assert.equal(await page.$('.assistant-panel-header'), null, 'Chat has no extra navbar');
+  assert.equal(await page.$('[aria-label="View chat history"]'),null);
+  assert.equal(await page.$('[aria-label="New conversation"]'),null);
   assert.deepEqual(await page.$$eval('.assistant-result-card', nodes => nodes.map(node => node.textContent)), ['Trimmed 2 clips', 'Added 1 subtitle']);
-  assert.equal(await page.$eval('.mini-removed title', element => element.textContent), '00:04–00:06 removed', 'Removed source windows stay on their original position after a ripple');
-  assert.equal(await page.$eval('.assistant-mini-caption > span', element => element.textContent), 'Animated captions');
-  assert.equal(await page.$eval('.assistant-edit-comparison figcaption', element => element.textContent), '00:12 → 00:10');
+  assert.equal(await page.$('.assistant-edit-comparison'),null,'Before/After comparison is removed');
   assert.equal(await page.$eval('textarea', element => element.placeholder), 'What would you change next?');
   assert.equal(await page.$eval('.assistant-undo-edit', element => element.disabled), false);
   assert.equal(await page.evaluate(() => document.body.textContent.includes('Review changes') || document.body.textContent.includes('Pause') || document.body.textContent.includes('2 changes applied')), false, 'No mock edits or obsolete review action');
@@ -131,7 +130,7 @@ try {
   assert.equal(await page.evaluate(() => document.querySelector('main').getBoundingClientRect().bottom-document.querySelector('.edit-composer').getBoundingClientRect().bottom), 12, 'Long chat retains a bottom composer');
   await page.screenshot({ path: '/tmp/revline-assistant-edit-tall.png' });
   assert.deepEqual(errors, []);
-  console.log('PASS: real saved/source-window comparison, compact dark/light layout, actual caption lane, real history routes, matching Undo restores the timeline, stale Undo disabled, staged/error results truthful, immediate brand and stable pending/streaming handoff. Screenshots: /tmp/revline-assistant-edit-{dark,light,tall}.png');
+  console.log('PASS: truthful saved result summaries, compact dark/light layout without Before/After or extra chat navbar, matching Undo restores the timeline, stale Undo disabled, staged/error results truthful, immediate brand and stable pending/streaming handoff. Screenshots: /tmp/revline-assistant-edit-{dark,light,tall}.png');
 } finally {
   await browser?.close();
   await new Promise(resolve => server.close(resolve));

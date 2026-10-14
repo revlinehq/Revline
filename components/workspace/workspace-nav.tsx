@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useClerk, useUser } from '@clerk/nextjs';
 import { useConvexAuth, useQuery } from 'convex/react';
-import { Check, ChevronDown, CreditCard, Download, Film, History, LoaderCircle, LogOut, Moon, PanelsTopLeft, Pencil, Plus, Redo2, UserRound, Undo2 } from 'lucide-react';
+import { Check, ChevronDown, Copy, CreditCard, Download, Film, History, LoaderCircle, LogOut, Moon, PanelsTopLeft, Pencil, Plus, Redo2, UserRound, Undo2 } from 'lucide-react';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
 import { Brand } from './brand';
@@ -54,9 +54,10 @@ export interface WorkspaceNavProps {
   onExport?: () => void;
   exportDisabled?: boolean;
   onRename?: (title: string) => void | Promise<void>;
+  chatId?: string;
 }
 
-export function WorkspaceNav({ title = 'New chat', editorHref, active = 'chat', demo = false, saving, canUndo, canRedo, onUndo, onRedo, onFootage, onExport, exportDisabled, onRename }: WorkspaceNavProps) {
+export function WorkspaceNav({ title = 'New chat', editorHref, active = 'chat', demo = false, saving, canUndo, canRedo, onUndo, onRedo, onFootage, onExport, exportDisabled, onRename, chatId }: WorkspaceNavProps) {
   const pathname = usePathname();
   const { chats, loading } = useWorkspaceChats(demo);
   const { user, isSignedIn, isLoaded } = useUser();
@@ -68,6 +69,8 @@ export function WorkspaceNav({ title = 'New chat', editorHref, active = 'chat', 
   const [newTitle, setNewTitle] = useState(title);
   const [renameBusy, setRenameBusy] = useState(false);
   const [renameError, setRenameError] = useState('');
+  const [copiedId, setCopiedId] = useState(false);
+  const [copyError, setCopyError] = useState('');
   const historyTrigger = useRef<HTMLButtonElement>(null);
   const initial = (user?.firstName ?? user?.primaryEmailAddress?.emailAddress ?? 'D').slice(0, 1).toUpperCase();
   async function signOut() {
@@ -82,13 +85,20 @@ export function WorkspaceNav({ title = 'New chat', editorHref, active = 'chat', 
     catch (reason) { setRenameError(reason instanceof Error ? reason.message : 'Could not rename this chat.'); }
     finally { setRenameBusy(false); }
   }
+  async function copyChatId() {
+    if (!chatId) return;
+    try { await navigator.clipboard.writeText(chatId); setCopiedId(true); setCopyError(''); }
+    catch { setCopyError('Could not copy the chat ID.'); }
+  }
   return <><header className="workspace-nav">
     <Link href="/dashboard/chat" className="workspace-nav-brand" aria-label="Revline home"><Brand /></Link>
     <span className="workspace-nav-divider" aria-hidden="true" />
-    <DropdownMenu><DropdownMenuTrigger asChild><button ref={historyTrigger} className="workspace-chat-trigger" aria-label="Open chat history"><span>{title}</span><ChevronDown size={13} /></button></DropdownMenuTrigger>
+    <DropdownMenu onOpenChange={open => { if (open) { setCopiedId(false); setCopyError(''); } }}><DropdownMenuTrigger asChild><button ref={historyTrigger} className="workspace-chat-trigger" aria-label="Open chat menu"><span>{title}</span><ChevronDown size={13} /></button></DropdownMenuTrigger>
       <DropdownMenuContent align="start" sideOffset={10} className="workspace-menu workspace-history-menu" onCloseAutoFocus={event => { if (renameOpen) event.preventDefault(); }}>
         <DropdownMenuItem asChild className="workspace-menu-item"><Link href="/dashboard/chat"><Plus size={16} />New chat</Link></DropdownMenuItem>
         {onRename && <DropdownMenuItem className="workspace-menu-item" onSelect={() => { setNewTitle(title); setRenameError(''); setRenameOpen(true); }}><Pencil size={15} />Rename chat</DropdownMenuItem>}
+        {chatId && <DropdownMenuItem className="workspace-menu-item" onSelect={event => { event.preventDefault(); void copyChatId(); }}>{copiedId ? <Check size={15} /> : <Copy size={15} />}{copiedId ? 'Chat ID copied' : 'Copy chat ID'}</DropdownMenuItem>}
+        {copyError && <p className="workspace-inline-error" role="alert">{copyError}</p>}
         <DropdownMenuSeparator className="workspace-menu-divider" />
         <DropdownMenuLabel className="workspace-menu-label">Recent chats</DropdownMenuLabel>
         {loading ? <div className="workspace-menu-empty"><LoaderCircle size={14} className="animate-spin" />Loading chats…</div> : chats.length ? chats.slice(0, 4).map(chat => <DropdownMenuItem key={chat.id} asChild className="workspace-menu-chat"><Link href={`/editor/${chat.id}`}><span><strong>{chat.title}</strong><small>{chatRecency(chat.updatedAt)}</small></span>{pathname === `/editor/${chat.id}` && <Check size={14} />}</Link></DropdownMenuItem>) : <div className="workspace-menu-empty">Your chats will appear here.</div>}

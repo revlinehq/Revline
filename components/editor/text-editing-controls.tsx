@@ -6,7 +6,7 @@ import { EffectSlider } from './visual-effects-controls';
 import { ColorControl } from './color-control';
 import './text-editing-controls.css';
 
-/** The same words and appearance controls stay available in Edit and Text effects. */
+/** Words and appearance share the text editor with templates and animation. */
 export function TextEditingControls({ clip, onChange }: { clip: Clip; onChange: (patch: Partial<Clip>) => void }) {
   return <div className="text-editing-controls">
     <label className="inspector-field">Words<textarea aria-label="Selected text" value={clip.text ?? ''} maxLength={2000} onChange={event => onChange({ text: event.currentTarget.value })}/></label>

@@ -1,8 +1,4 @@
-.assistant-panel-header{display:flex;align-items:center;justify-content:space-between;flex:none;height:28px;color:var(--muted-foreground);font-size:12px;font-weight:500;margin:0 2px 4px}
-.assistant-panel-header nav{display:flex;gap:10px}
-.assistant-panel-header a{width:28px;height:28px;display:grid;place-items:center;color:var(--muted-foreground);border-radius:5px}
-.assistant-panel-header a:hover{color:var(--foreground);background:var(--secondary)}
-.assistant-panel-header a:focus-visible,.assistant-undo-edit:focus-visible{outline:2px solid var(--ring);outline-offset:2px}
+.assistant-undo-edit:focus-visible{outline:2px solid var(--ring);outline-offset:2px}
 .conversation-editor .assistant-content .chat-user{max-width:calc(100% - 46px);margin:0 0 22px auto;padding:10px 14px;border:0;border-radius:14px 14px 4px 14px;background:var(--secondary)}
 .conversation-editor .assistant-content .chat-message p{font-size:13px;line-height:1.55;letter-spacing:0}
 .conversation-editor .assistant-content .chat-author{gap:8px;font-size:12px;font-weight:600;color:var(--foreground);margin-bottom:10px}
@@ -32,7 +28,3 @@
 .conversation-editor .assistant-content .manual-editor-composer .edit-composer-actions{height:32px}
 .conversation-editor .assistant-content .manual-editor-composer .revline-primary{height:32px;width:32px;min-width:32px;padding:0;border-radius:7px;box-shadow:none;background:#5474F8;color:#fff}
 .assistant-content .manual-composer-dock{flex:none}
-
-.assistant-panel-header nav{margin-left:auto}
-
-.assistant-panel-header button{width:28px;height:28px;padding:0;border:0;display:grid;place-items:center;background:transparent;color:var(--muted-foreground);border-radius:5px;cursor:pointer}.assistant-panel-header button:hover{color:var(--foreground);background:var(--secondary)}.assistant-panel-header button:focus-visible{outline:2px solid var(--ring);outline-offset:2px}

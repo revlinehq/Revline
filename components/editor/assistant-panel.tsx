@@ -1,13 +1,12 @@
 'use client';
 
-import { useState, useEffect, useMemo, useRef } from 'react';
-import { LoaderCircle, Check, CircleAlert, ArrowUpRight, History, SquarePen, Undo2, Copy } from 'lucide-react';
+import { useState, useEffect, useMemo } from 'react';
+import { LoaderCircle, Check, CircleAlert, ArrowUpRight, Undo2, AudioLines, ScanLine } from 'lucide-react';
 import { Brand } from '@/components/workspace/brand';
 import { EditComposer } from '@/components/workspace/edit-composer';
 import { ChatProse } from './chat-prose';
 import { useConversationScroll } from '@/components/workspace/use-conversation-scroll';
 import { savedEditComparison, summarizeTools, type AssistantEditSnapshot, type ChatTool } from './assistant-results';
-import { AssistantEditSummary } from './assistant-edit-summary';
 import './assistant-results.css';
 import './assistant-editing.css';
 import './assistant-panel.css';
@@ -24,27 +23,27 @@ function AssistantResponseText({ text, streaming }: { text: string; streaming: b
   return <ChatProse text={text} animate={receivedLive || streaming} />;
 }
 
-function EditingStatus({ activity }: { activity?: string | null }) {
-  return <div className="assistant-editing" role="status"><span className="assistant-editing-text">{activity || 'Editing…'}</span></div>;
+function EditingStatus({ activity, source, progress }: { activity?: string | null; source?: string | null; progress?:number|null }) {
+  const listening = activity?.startsWith('Listening');
+  return <div className={`assistant-editing${activity ? ' has-media-activity' : ''}`} role="status">
+    {activity && <span className="assistant-activity-icon" aria-hidden="true">{listening ? <AudioLines size={17} strokeWidth={1.5}/> : <ScanLine size={17} strokeWidth={1.5}/>}</span>}
+    <div className="assistant-activity-copy"><span className="assistant-editing-text">{activity || 'Editing…'}</span>{activity && source && <span className="assistant-activity-source" title={source}>{source}</span>}{activity && progress != null && <div className="assistant-activity-meter"><progress aria-label="Analysis progress" max={100} value={progress}/><span>{Math.round(progress)}%</span></div>}</div>
+  </div>;
 }
 
-export function AssistantPanel({ messages, running, configured, error, onSend, onStop, hasClips, demo, onLoadMore, canLoadMore, onAttach, activity, draftKey, suggestions, onSuggestion, editSnapshot, onUndo, chatId }: {
+export function AssistantPanel({ messages, running, configured, error, onSend, onStop, hasClips, demo, onLoadMore, canLoadMore, onAttach, activity, activitySource, activityProgress, draftKey, suggestions, onSuggestion, editSnapshot, onUndo }: {
   messages: ChatMessage[]; running: boolean; configured: boolean; error?: string | null;
   onSend: (text: string) => Promise<void>; hasClips: boolean; demo: boolean;
   onLoadMore?: () => void; canLoadMore?: boolean; onAttach?: () => void;
-  activity?: string | null; draftKey?:string;
+  activity?: string | null; activitySource?: string | null; activityProgress?:number|null; draftKey?:string;
   onStop?: () => Promise<void>;
   suggestions?: { sourceName:string;clipId:string;items:SourceEditSuggestion[] };
   onSuggestion?: (prompt:string,clipId:string) => Promise<void>;
   editSnapshot?:AssistantEditSnapshot;onUndo?:()=>void|Promise<void>;
-  chatId?:string;
 }) {
   const [prompt, setPrompt] = useState('');
   const [sending, setSending] = useState(false);
   const [localError, setLocalError] = useState('');
-  const [copiedId,setCopiedId]=useState(false),copyTimer=useRef<ReturnType<typeof setTimeout>|null>(null);
-  useEffect(()=>()=>{if(copyTimer.current)clearTimeout(copyTimer.current);},[]);
-  async function copyChatId(){if(!chatId)return;try{await navigator.clipboard.writeText(chatId);setCopiedId(true);if(copyTimer.current)clearTimeout(copyTimer.current);copyTimer.current=setTimeout(()=>setCopiedId(false),2000);}catch{setLocalError('Could not copy the chat ID.');}}
   const [undoing,setUndoing]=useState(false);
   const [pendingReply, setPendingReply] = useState<{ previousMessageId?:string;previousError?:string|null } | null>(null);
   const waiting = running || sending || !!pendingReply || !!activity;
@@ -100,7 +99,6 @@ export function AssistantPanel({ messages, running, configured, error, onSend, o
   }
 
   return <div className="assistant-content">
-    <header className="assistant-panel-header"><nav aria-label="Conversation navigation">{chatId&&<button type="button" aria-label={copiedId?'Chat ID copied':'Copy chat ID'} title={copiedId?'Chat ID copied':'Copy chat ID'} onClick={()=>void copyChatId()}>{copiedId?<Check size={16}/>:<Copy size={16}/>}</button>}<a href="/chats" aria-label="View chat history" title="View chat history"><History size={16}/></a><a href="/dashboard/chat" aria-label="New conversation" title="New conversation"><SquarePen size={16}/></a></nav></header>
     <div ref={scroll.viewport} className={`assistant-history ${!messages.length && !waiting ? 'assistant-history-empty' : ''}`}>
       <div className="assistant-turns" ref={scroll.content}>
       {canLoadMore && <button className="load-more" onClick={() => { scroll.preserveHistory(); onLoadMore?.(); }}>Earlier messages</button>}
@@ -123,12 +121,12 @@ export function AssistantPanel({ messages, running, configured, error, onSend, o
               {card.state === 'running' ? <LoaderCircle size={14} className="animate-spin" /> : card.state === 'error' ? <CircleAlert size={14} /> : <Check size={14} />}
               <div><span>{card.title}</span>{card.detail && <small>{card.detail}</small>}</div>
             </div>)}</div>}
-            {group.comparison&&<><AssistantEditSummary comparison={group.comparison}/>{onUndo&&<button type="button" className="assistant-undo-edit" disabled={!group.comparison.canUndo||waiting||undoing} title={group.comparison.canUndo?'Undo the latest edit':'This saved edit is no longer the latest undoable change'} onClick={()=>void undoEdit()}><Undo2 size={14}/>{undoing?'Undoing…':'Undo'}</button>}</>}
-            {editing && <EditingStatus activity={activity} />}
+            {group.comparison&&<>{onUndo&&<button type="button" className="assistant-undo-edit" disabled={!group.comparison.canUndo||waiting||undoing} title={group.comparison.canUndo?'Undo the latest edit':'This saved edit is no longer the latest undoable change'} onClick={()=>void undoEdit()}><Undo2 size={14}/>{undoing?'Undoing…':'Undo'}</button>}</>}
+            {editing && <EditingStatus activity={activity} source={activitySource} progress={activityProgress} />}
           </div>}
         </div>;
       })}
-      {!messages.length && waiting && <div className="assistant-reply"><div className="chat-author"><Brand markOnly /><span>Revline</span></div><EditingStatus activity={activity} /></div>}
+      {!messages.length && waiting && <div className="assistant-reply"><div className="chat-author"><Brand markOnly /><span>Revline</span></div><EditingStatus activity={activity} source={activitySource} progress={activityProgress} /></div>}
       {!running && suggestions?.items.length && onSuggestion && configured ? <div className="assistant-source-suggestions" aria-label="Suggested edits from this footage"><span title={suggestions.sourceName}>Ideas for {suggestions.sourceName}</span>{suggestions.items.map((suggestion, index) => <button key={`${suggestions.clipId}-${index}`} type="button" disabled={sending || !!pendingReply} onClick={() => void chooseSuggestion(suggestion)}><span>{suggestion.label}</span><ArrowUpRight size={14} aria-hidden="true" /></button>)}</div> : null}
       {(error || localError) && <p className="chat-error" role="alert">{localError || error}</p>}
       {!!messages.length && !demo && !configured && <div className="assistant-demo-note">Connect Claude to edit in conversation. Your footage, preview, and timeline are ready.</div>}
