@@ -79,13 +79,15 @@ try {
     await page.evaluate(()=>window.updateFixture({messages:[...window.fixtureState().messages,{id:'new-answer',role:'assistant',text:'I’m tightening that shot.',status:'streaming'}]}));
     await check('First streamed text hides the loading beam',async()=>assert.equal(await page.$('[data-turn-id="new-request"] .processing-status-sweep'),null));
     await page.evaluate(()=>window.updateFixture({activity:'Listening…',activitySource:'Synthetic footage',activityProgress:87}));
-    await check('Streaming text stays clear when background activity updates',async()=>assert.equal(await page.$('[data-turn-id="new-request"] .processing-status-sweep'),null));
+    await check('A transcription request resumes working feedback after its spoken preamble',async()=>assert.ok(await page.$('[data-turn-id="new-request"] .processing-status-sweep')));
     await new Promise(resolve=>setTimeout(resolve,700));await (await page.$('main')).screenshot({path:'/tmp/revline-assistant-follow-up-streaming.png'});
     await page.evaluate(()=>window.updateFixture({activity:null,activitySource:null,messages:window.fixtureState().messages.map(message=>message.id==='new-answer'?{...message,status:'success'}:message)}));
     await check('Final reply does not reflash the beam while running catches up',async()=>assert.equal(await page.$('[data-turn-id="new-request"] .processing-status-sweep'),null));
     await page.evaluate(()=>window.updateFixture({messages:window.fixtureState().messages.concat({id:'tool-pass',role:'assistant',text:'',status:'streaming',steps:[{id:'cut',name:'trim',state:'running'}]})}));
     await check('Tools retain activity feedback without active text',async()=>assert.ok(await page.$('[data-turn-id="new-request"] .processing-status-sweep')));
     await check('The prior completed answer remains historical',async()=>assert.equal(await page.evaluate(()=>document.querySelector('[data-message-id="answer"]')===window.oldAnswer),true));
+    await page.evaluate(()=>window.updateFixture({messages:window.fixtureState().messages.filter(message=>message.id!=='tool-pass').map(message=>message.id==='new-answer'?{...message,status:'streaming',steps:[{id:'transcribe',name:'analyzeMedia',state:'running'}]}:message)}));
+    await check('A tool in the same text message also resumes working feedback',async()=>assert.ok(await page.$('[data-turn-id="new-request"] .processing-status-sweep')));
     await check('Analysis activity has no invented percentage',async()=>assert.equal(await page.$('.processing-status-measured'),null));
     await new Promise(resolve=>setTimeout(resolve,700));await (await page.$('main')).screenshot({path:'/tmp/revline-assistant-turn-tool.png'});
     await page.click('[aria-label="Stop editing"]');await page.waitForFunction(()=>document.querySelector('.processing-status-label')?.textContent==='Stopping…');

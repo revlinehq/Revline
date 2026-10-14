@@ -44,8 +44,8 @@ async function transcribeChunk(path: string, duration: number, key: string, sign
     const payload = await response.json().catch(() => null) as { error?: { code?: string } } | null;
     if (response.status === 429 && payload?.error?.code === 'insufficient_quota') throw new AnalysisError('OpenAI transcription billing quota is exhausted. Check the OpenAI project’s credits or spending limit.', 429);
     if (response.status === 429) throw new AnalysisError('OpenAI transcription is rate limited. Please retry shortly.', 429);
-    if (response.status === 401) throw new AnalysisError('OpenAI rejected the transcription API key. Check the media worker’s OpenAI credentials.', 503);
-    if (response.status === 403) throw new AnalysisError('This OpenAI project or API key does not have access to Whisper transcription. Enable Audio transcription permissions and whisper-1 model access.', 503);
+    if (response.status === 401) throw new AnalysisError('OpenAI rejected the transcription API key. Check the media worker’s OpenAI credentials.', 401);
+    if (response.status === 403) throw new AnalysisError('This OpenAI project or API key does not have access to Whisper transcription. Enable Audio transcription permissions and whisper-1 model access.', 403);
     if (response.status === 400 || response.status === 413) throw new AnalysisError('OpenAI could not read this audio window. Check the source audio or transcribe a shorter source.', 400);
     throw new AnalysisError(`OpenAI could not transcribe this audio (HTTP ${response.status}).`, 502);
   }

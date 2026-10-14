@@ -115,7 +115,8 @@ export function AssistantPanel({ messages, running, configured, error, onSend, o
         const replies = group.replies;
         const editing = group.id === turnId && waiting;
         const currentReply = replies.at(-1);
-        const showingReply = !!currentReply?.text.trim() && (currentReply.status === 'streaming' || (answering && !activity && !currentReply.steps?.some(step => step.state === 'running')));
+        const hasRunningTool = replies.some(message=>message.steps?.some(step=>step.state==='running'));
+        const showingReply = !!currentReply?.text.trim() && !activity && !hasRunningTool && (currentReply.status === 'streaming' || answering);
         const loading = editing && (!showingReply || stopState === 'stopping');
         const cards = group.cards;
         return <div className={`assistant-turn ${group.id === turnId ? 'is-latest-turn' : ''}`} data-turn-id={group.id} key={group.id}>
@@ -127,7 +128,7 @@ export function AssistantPanel({ messages, running, configured, error, onSend, o
               {message.tools?.map((tool, i) => <div className="tool-result" key={`${tool}-${i}`}><Check size={12} />{tool}</div>)}
               {message.id === demoNoteMessageId && <div className="assistant-demo-note">Sample conversation. Explore the timeline, or <a href="/projects">start your own project</a>.</div>}
             </article>)}
-            {cards.length > 0 && <div className="assistant-result-cards" aria-label="Edit results">{cards.filter(card=>!(editing&&card.state==='running')).map(card => <div key={card.key} className={`assistant-result-card result-${card.state}${card.staged ? ' result-prepared' : ''}`}>
+            {cards.length > 0 && <div className="assistant-result-cards" aria-label="Edit results">{cards.filter(card=>!(card.state==='running'&&(editing||(group.id===turnId&&stopState==='stopped')))).map(card => <div key={card.key} className={`assistant-result-card result-${card.state}${card.staged ? ' result-prepared' : ''}`}>
               <ProcessingStatus label={card.title} detail={card.detail} state={card.state==='running'?'working':card.state==='error'?'error':'ready'} brand={false}/>
             </div>)}</div>}
             {group.comparison&&<>{onUndo&&<button type="button" className="assistant-undo-edit" disabled={!group.comparison.canUndo||waiting||undoing} title={group.comparison.canUndo?'Undo the latest edit':'This saved edit is no longer the latest undoable change'} onClick={()=>void undoEdit()}><Undo2 size={14}/>{undoing?'Undoing…':'Undo'}</button>}</>}
