@@ -1,7 +1,7 @@
 import { ConvexError, v } from 'convex/values';
 import type { MutationCtx, QueryCtx } from '../_generated/server';
 import type { Id } from '../_generated/dataModel';
-import { requireProject } from './auth';
+import { projectIdentity } from './project_data';
 
 export const mediaTaskCredentials = { taskId: v.id('mediaTasks'), leaseToken: v.string() };
 
@@ -12,6 +12,6 @@ export function requireMediaWorker(secret: string) {
 export async function requireMediaTask(ctx: QueryCtx | MutationCtx, taskId: Id<'mediaTasks'>, leaseToken: string) {
   const task = await ctx.db.get(taskId);
   if (!task || task.status !== 'running' || task.leaseToken !== leaseToken || (task.leaseExpiresAt ?? 0) <= Date.now()) throw new ConvexError('Media task lease is no longer active');
-  await requireProject(ctx, task.projectId, task.ownerId);
+  await projectIdentity(ctx, task.projectId, task.ownerId);
   return task;
 }

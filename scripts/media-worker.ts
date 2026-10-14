@@ -22,7 +22,7 @@ async function runSlot() {
   while (!shutdown.signal.aborted) {
     try {
       const observedRevision = queueRevision;
-      const task = await client.mutation(api.mediaTasks.claim, { workerSecret: workerSecret! });
+      const task = await client.mutation(api.mediaTasks.claim, { workerSecret: workerSecret!, compact:true });
       if (!task) { await waitForWork(observedRevision); continue; }
       console.log(`Media task ${task.taskId}: ${task.kind} started.`);
       const controller = new AbortController();
@@ -40,7 +40,9 @@ async function runSlot() {
       };
       const timer = setInterval(heartbeat, 20_000);
       try {
-        const result = await processMediaTask(task, client, convexUrl!, signal, percent => {
+        const snapshot=await client.query(api.mediaTasks.work,credentials);
+        signal.throwIfAborted();
+        const result = await processMediaTask(snapshot, client, convexUrl!, signal, percent => {
           progress = Math.max(progress, Math.min(99, percent));
           if (progress - reported >= 10) heartbeat();
         });

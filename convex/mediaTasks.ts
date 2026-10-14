@@ -173,32 +173,48 @@ export const ready = query({ args: { workerSecret: v.string() }, returns: v.stri
   const task=await firstClaimable(ctx);return task?`${task._id}:${task.attempt}`:'';
 }});
 
-export const claim = mutation({ args: { workerSecret: v.string() }, returns: v.union(workItem, v.null()), handler: async (ctx, args): Promise<MediaWorkItem | null> => {
-  requireMediaWorker(args.workerSecret);
-  const task=await firstClaimable(ctx);
-  if (!task) return null;
-  const project = await readProject(ctx,task.projectId), asset = task.assetId ? await ctx.db.get(task.assetId) : null;
-  if (!project || project.deleting || project.ownerId !== task.ownerId || (task.assetId && (!asset || asset.ownerId !== task.ownerId || asset.projectId !== project._id))) {
-    await failTask(ctx, task, 'The project or source media was removed.', false); return null;
-  }
+async function analysisStillActive(ctx:import('./_generated/server').QueryCtx|MutationCtx,task:Doc<'mediaTasks'>) {
+  if(!task.analysisRequestId)return true;
+  const request=await ctx.db.get(task.analysisRequestId);
+  if(!request||request.ownerId!==task.ownerId||request.projectId!==task.projectId||request.assetId!==task.assetId||request.expiresAt<=Date.now()||!['pending','running'].includes(request.status))return false;
+  const run=await projectRun(ctx,task.projectId,task.ownerId);
+  return !!run.aiRunning&&run.aiRunId===request.aiRunId;
+}
+async function loadWork(ctx:import('./_generated/server').QueryCtx|MutationCtx,task:Doc<'mediaTasks'>):Promise<MediaWorkItem> {
+  const asset=task.assetId?await ctx.db.get(task.assetId):null;
+  if(task.assetId&&(!asset||asset.ownerId!==task.ownerId||asset.projectId!==task.projectId))throw new ConvexError('The source media was removed.');
   let render: Infer<typeof renderSnapshot> | undefined, outputStored = false;
   if (task.renderJobId) {
     const job = await ctx.db.get(task.renderJobId);
-    if (!job?.timeline || job.ownerId !== task.ownerId || job.projectId !== task.projectId) { await failTask(ctx, task, 'The export snapshot is unavailable.', false); return null; }
+    if (!job?.timeline || job.ownerId !== task.ownerId || job.projectId !== task.projectId) { throw new ConvexError('The export snapshot is unavailable.'); }
     outputStored = !!job.outputR2Key;
     const assets = await Promise.all((job.assetIds ?? []).map(async id => {
       const item = await ctx.db.get(id);
       return item && item.ownerId === task.ownerId && item.projectId === task.projectId ? { ...item, url: await mediaUrl(ctx, item) } : null;
     }));
-    if (assets.some(item => !item?.url)) { await failTask(ctx, task, 'Export source media is unavailable.', false); return null; }
+    if (assets.some(item => !item?.url)) { throw new ConvexError('Export source media is unavailable.'); }
     render = { timeline: job.timeline, assets: assets as Infer<typeof assetWithUrl>[], resolution: job.resolution ?? 1080, fps: job.fps ?? job.timeline.fps, quality: job.quality ?? 'high' };
-    await ctx.db.patch(job._id, { status: 'rendering', error: undefined, updatedAt: Date.now() });
   }
-  const leaseToken = crypto.randomUUID(), now = Date.now();
-  await ctx.db.patch(task._id, { status: 'running', claimable:false, leaseToken, leaseExpiresAt: now + LEASE_MS, attemptStartedAt: now, updatedAt: now });
-  if (task.analysisRequestId && await ctx.db.get(task.analysisRequestId)) await ctx.db.patch(task.analysisRequestId, { status: 'running' });
-  await ctx.scheduler.runAfter(LEASE_MS, internal.mediaTasks.expire, { taskId: task._id, leaseToken });
-  return { taskId: task._id, leaseToken, projectId: task.projectId, kind: task.kind, ...(task.sourceUrl ? { sourceUrl: task.sourceUrl } : {}), ...(task.frameRequest ? { frameRequest: task.frameRequest } : {}), ...(task.videoRequest ? { videoRequest: task.videoRequest } : {}), ...(asset ? { asset: { ...await hydrateAsset(ctx,asset), url: await mediaUrl(ctx, asset) } } : {}), ...(render ? { render, outputStored } : {}), ...(task.renderJobId ? { renderJobId: task.renderJobId } : {}), ...(task.outputAssetId ? { outputAssetId: task.outputAssetId } : {}) };
+  return { taskId: task._id, leaseToken: task.leaseToken!, projectId: task.projectId, kind: task.kind, ...(task.sourceUrl ? { sourceUrl: task.sourceUrl } : {}), ...(task.frameRequest ? { frameRequest: task.frameRequest } : {}), ...(task.videoRequest ? { videoRequest: task.videoRequest } : {}), ...(asset ? { asset: { ...await hydrateAsset(ctx,asset), url: await mediaUrl(ctx, asset) } } : {}), ...(render ? { render, outputStored } : {}), ...(task.renderJobId ? { renderJobId: task.renderJobId } : {}), ...(task.outputAssetId ? { outputAssetId: task.outputAssetId } : {}) };
+}
+export const claim = mutation({ args: { workerSecret: v.string(),compact:v.optional(v.boolean()) }, returns: v.union(workItem, v.null()), handler: async (ctx, args): Promise<MediaWorkItem | null> => {
+  requireMediaWorker(args.workerSecret);
+  const task=await firstClaimable(ctx);if(!task)return null;
+  try {await projectIdentity(ctx,task.projectId,task.ownerId);}catch{await failTask(ctx,task,'The project was removed.',false);return null;}
+  if(!await analysisStillActive(ctx,task)){await markTerminal(ctx,task._id,'cancelled','The AI analysis request is no longer active.');await signalResult(ctx,task,{success:false,retryable:false,error:'The AI run stopped.'});return null;}
+  const leaseToken=crypto.randomUUID(),now=Date.now();
+  await ctx.db.patch(task._id,{status:'running',claimable:false,leaseToken,leaseExpiresAt:now+LEASE_MS,attemptStartedAt:now,updatedAt:now});
+  if(task.analysisRequestId)await ctx.db.patch(task.analysisRequestId,{status:'running'});
+  if(task.renderJobId){const job=await ctx.db.get(task.renderJobId);if(job)await ctx.db.patch(job._id,{status:'rendering',error:undefined,updatedAt:now});}
+  await ctx.scheduler.runAfter(LEASE_MS,internal.mediaTasks.expire,{taskId:task._id,leaseToken});
+  if(args.compact)return {taskId:task._id,leaseToken,projectId:task.projectId,kind:task.kind};
+  // Older consumers keep working while the new image rolls out.
+  try{return await loadWork(ctx,{...task,leaseToken});}catch{await failTask(ctx,task,'Source media or the export snapshot is unavailable.',false);return null;}
+}});
+export const work=query({args:mediaTaskCredentials,returns:workItem,handler:async(ctx,args)=>{
+  const task=await requireMediaTask(ctx,args.taskId,args.leaseToken);
+  if(!await analysisStillActive(ctx,task))throw new ConvexError('The AI analysis request is no longer active.');
+  return loadWork(ctx,task);
 }});
 export const heartbeat = mutation({ args: { ...mediaTaskCredentials, progress: v.optional(v.number()) }, returns: v.null(), handler: async (ctx, args) => {
   const task = await requireMediaTask(ctx, args.taskId, args.leaseToken);

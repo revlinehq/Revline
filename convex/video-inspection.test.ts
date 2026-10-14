@@ -25,7 +25,8 @@ async function fixture() {
   await t.run(ctx => writeProject(ctx,projectId, { aiRunning: true, aiRunId: 'run' }));
   const run = { projectId, ownerId: 'owner', runId: 'run' };
   const request = (question = videoRequest.question) => t.mutation(internal.assistant.requestAnalysis, { ...run, assetId, mode: 'video', videoRequest: { ...videoRequest, question } });
-  const drain = () => t.finishAllScheduledFunctions(vi.runAllTimers);
+  // Workpool's housekeeping timers advance virtual time while draining; keep pending fixture requests live.
+  const drain = async () => {await t.finishAllScheduledFunctions(vi.runAllTimers);await t.run(async ctx=>{for(const request of await ctx.db.query('analysisRequests').withIndex('by_projectId',q=>q.eq('projectId',projectId)).take(16))if(request.status==='pending'||request.status==='running')await ctx.db.patch(request._id,{expiresAt:Date.now()+240000});});};
   const claim = () => t.mutation(api.mediaTasks.claim, { workerSecret: 'video-query-test-secret' });
   return { t, owner, stranger, projectId, assetId, run, request, drain, claim };
 }

@@ -179,7 +179,7 @@ test('exports use their saved snapshot and reuse a previously stored MP4 on retr
 test('stopping an AI request cancels its analysis and prevents later worker writes', async () => {
   const f = await fixture(); await f.t.run(ctx => writeProject(ctx,f.projectId, { aiRunning: true, aiRunId: 'run' }));
   const requestId = await f.t.mutation(internal.assistant.requestAnalysis, { projectId: f.projectId, ownerId: 'owner', runId: 'run', assetId: f.assetId, mode: 'transcribe' });
-  await f.drain(); const work = (await f.claim())!;
+  await f.drain(); await f.t.run(ctx=>ctx.db.patch(requestId,{expiresAt:Date.now()+240000})); const work = (await f.claim())!;
   await f.owner.mutation(api.assistant.stop, { projectId: f.projectId });
   await expect(f.t.mutation(api.mediaTasks.complete, { taskId: work.taskId, leaseToken: work.leaseToken, result: { analysis: { transcript } } })).rejects.toThrow('lease');
   expect(await f.t.run(ctx => ctx.db.get(requestId))).toBeNull(); await f.drain();
@@ -199,4 +199,26 @@ test('chat activity ignores background work and follows only pending analysis in
   await f.t.run(ctx => ctx.db.patch(requestId, { status: 'completed' }));
   expect(await f.owner.query(api.assistant.status, { projectId: f.projectId })).toMatchObject({ activity: null });
   await expect(f.stranger.query(api.assistant.status, { projectId: f.projectId })).rejects.toThrow();
+});
+
+test('compact claims return a lease only; owned snapshots are read separately and revoked leases are refused',async()=>{
+  const f=await fixture(),taskId=await f.start('transcribe');await f.drain();
+  const lease=(await f.t.mutation(api.mediaTasks.claim,{workerSecret:'task-test-secret',compact:true}))!;
+  expect(Object.keys(lease).sort()).toEqual(['kind','leaseToken','projectId','taskId']);
+  const snapshot=await f.t.query(api.mediaTasks.work,{taskId,leaseToken:lease.leaseToken});
+  expect(snapshot.asset?._id).toBe(f.assetId);
+  await expect(f.t.query(api.mediaTasks.work,{taskId,leaseToken:'wrong'})).rejects.toThrow('lease');
+  await f.owner.mutation(api.mediaTasks.cancel,{taskId});
+  await expect(f.t.query(api.mediaTasks.work,{taskId,leaseToken:lease.leaseToken})).rejects.toThrow('lease');await f.drain();
+});
+test.each(['missing','expired','stopped','old-run'] as const)('rejects %s AI analysis before worker claim',async condition=>{
+  const f=await fixture();
+  await f.t.run(async ctx=>{
+    await writeProject(ctx,f.projectId,{aiRunning:condition!=='stopped',aiRunId:'current'});
+    const requestId=await ctx.db.insert('analysisRequests',{ownerId:'owner',projectId:f.projectId,assetId:f.assetId,aiRunId:condition==='old-run'?'old':'current',mode:'understand',status:'pending',createdAt:Date.now(),expiresAt:Date.now()+(condition==='expired'?-1:60000)});
+    await ctx.db.insert('mediaTasks',{ownerId:'owner',projectId:f.projectId,assetId:f.assetId,analysisRequestId:requestId,kind:'understand',status:'queued',claimable:true,attempt:1,progress:0,createdAt:Date.now(),updatedAt:Date.now()});
+    if(condition==='missing')await ctx.db.delete(requestId);
+  });
+  expect(await f.claim()).toBeNull();
+  expect((await f.owner.query(api.mediaTasks.list,{projectId:f.projectId}))[0].status).toBe('cancelled');
 });
