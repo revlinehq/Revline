@@ -102,3 +102,24 @@ These are calculations, not a spending cap or a bill forecast. They assume the i
 - [Environment variables and secrets](https://developers.cloudflare.com/containers/examples/env-vars-and-secrets/)
 - [Cron container example](https://developers.cloudflare.com/containers/examples/cron/)
 - [Subscription inspection permissions](https://developers.cloudflare.com/api/resources/accounts/subresources/subscriptions/methods/get/)
+
+### 2026-10-14 composition-review rollout
+
+Controller version `9edcb8ab-a683-4b34-9b2d-2e80317b52b3` uses image
+`registry.cloudflare.com/701645e913477e567db69b11343f59d8/revline-media-processor-release@sha256:6e1c976bfc8e1ac6d940cf54bfc1a2b703080e7650e9c981a161f81e616c5b21`.
+The frozen image includes compact queue claims, the shared Remotion runtime,
+composition preparation shared with export, and bounded edited/reference frame
+capture. The controller and consumer advertise processor version 2, so review
+work can wake an idle instance. Older consumers skip review jobs.
+
+The image passed runtime dependency checks, a network-disabled synthetic video
+review (six edited/reference samples with FFmpeg injection and text-safe-area
+checking), and a 36-frame MP4 export check. A disposable production queue export
+completed on attempt 1 and reached R2 as H.264, 1280×720, 24 fps, 24 frames,
+exactly 1 second, 12,212 bytes. Cold-start verification took 74.273 seconds,
+including CLI/polling overhead; this is not a normal export-speed benchmark.
+The container subsequently returned inactive. No paid model was invoked.
+
+Review provider responses are verified with mocks; live Gemini judging quality
+has not been benchmarked. The synthetic project was removed and its temporary
+access was revoked. Neither customer footage nor customer projects were edited.
