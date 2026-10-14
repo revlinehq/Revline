@@ -15,8 +15,7 @@ import type { VideoImportState } from './video-link-import';
 import { type Clip, type MediaAsset, type Timeline } from '@/lib/editor/types';
 import { effectClipLabel, type EffectPreset } from '@/lib/editor/clip-effects';
 import { EffectLibrary, type LibraryVisualEffect } from './effect-library';
-import { DEFAULT_COLOR_GRADE, DEFAULT_DITHER, DEFAULT_GLITCH, DEFAULT_INVERT, DEFAULT_ZOOM_BLUR } from '@/lib/editor/visual-effects';
-import { DEFAULT_NEON_EDGES } from '@/lib/editor/neon-edges';
+import { visualEffectsPatch } from '@/lib/editor/visual-effects';
 import { textLookPatch, type TextLookId } from '@/lib/editor/text-looks';
 import { SegmentedTabs } from './segmented-tabs';
 import { TransitionControls } from './transition-controls';
@@ -53,8 +52,7 @@ export function PreviewInspector({ clip, timeline, time = 0, audioClip, asset, a
   }
   function addVisualEffect(effect: LibraryVisualEffect) {
     if (!visual || !clip) return;
-    const defaults = { colorGrade: DEFAULT_COLOR_GRADE, glitch: DEFAULT_GLITCH, dither: DEFAULT_DITHER, invert: DEFAULT_INVERT, zoomBlur: DEFAULT_ZOOM_BLUR, neonEdges: DEFAULT_NEON_EDGES };
-    onChange({ [effect]: { ...defaults[effect], ...clip[effect], enabled: true } });
+    onChange(visualEffectsPatch(clip, { [effect]: { enabled: true } }));
     setEffectSelection({clipId:clip.id,key:effect});
     setTab('effects');
   }
@@ -86,7 +84,7 @@ export function PreviewInspector({ clip, timeline, time = 0, audioClip, asset, a
         <div className="inspector-selection"><small>{text ? 'Text' : clip.kind === 'audio' ? 'Audio' : 'Footage'}</small><p>{clip.text || asset?.fileName || 'Selected clip'}</p></div>
         {text && <TextEffectsControls clip={clip} onChange={onChange} onPreview={onPreviewEffects} captionActions={captionActions}/>}
 
-        {clip.kind === 'audio' && <AudioControls key={clip.id} clip={clip} onChange={onChange} onPreview={onPreviewEffects}/>}
+        {clip.kind === 'audio' && <AudioControls key={clip.id} clip={clip} fps={timeline?.fps} onChange={onChange} onPreview={onPreviewEffects}/>}
       </> : <div className="inspector-empty"><SlidersHorizontal size={22} strokeWidth={1.2}/><p>Select a clip</p><span>Its editing controls appear here.</span></div> : visual && clip ? onlyEffect ? <div className="inspector-effect-detail">
         <button type="button" className="inspector-effect-back" aria-label="Back to clip settings" onClick={() => setEffectSelection(null)}><ArrowLeft size={12}/>Clip settings</button>
         <FootageSelection clip={clip} asset={asset}/>

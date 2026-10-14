@@ -1,10 +1,12 @@
 'use client';
 
-import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
+import { useId, useState, type ReactNode } from 'react';
+import { EffectSlider } from './effect-slider';
 import { ChevronDown, ChevronRight, Plus, RotateCcw, Trash2 } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { DEFAULT_COLOR_GRADE, DEFAULT_DITHER, DEFAULT_INVERT, DEFAULT_GLITCH, DEFAULT_ZOOM_BLUR, VISUAL_EFFECT_LIMITS, type VisualEffects } from '@/lib/editor/visual-effects';
-import { DEFAULT_NEON_EDGES, NEON_EDGE_LIMITS } from '@/lib/editor/neon-edges';
+import { VISUAL_EFFECT_LIMITS, visualEffectsPatch, type VisualEffects } from '@/lib/editor/visual-effects';
+import { NEON_EDGE_LIMITS } from '@/lib/editor/neon-edges';
+import { visualEffectActionPatch } from '@/lib/editor/visual-effect-actions';
 import type { Clip } from '@/lib/editor/types';
 import { CINEMATIC_BAR_LIMITS, EFFECT_CATALOG, cinematicBarSettings, type CinematicBarSettings, type EffectPreset } from '@/lib/editor/clip-effects';
 import { PLAYBACK_RATES, playbackRateOf } from '@/lib/editor/playback-rate';
@@ -14,60 +16,6 @@ import './visual-effects-controls.css';
 
 type Props = { onlyEffect?: keyof VisualEffects; clip: Clip; onChange: (patch: Partial<Clip>) => void; onPreview?: (patch: Partial<Clip> | null) => void; onPlaybackRateChange?: (rate: number) => void; onAddEffect?: (preset: EffectPreset) => void };
 type EffectKey = keyof VisualEffects;
-const rangeKeys = new Set(['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End', 'PageUp', 'PageDown']);
-
-export function EffectSlider({ label, value, bounds, step = .01, format, disabled, onPreview, onCommit }: {
-  label: string; value: number; bounds: readonly [number, number]; step?: number; format: (value: number) => string; disabled: boolean;
-  onPreview: (value: number | null) => void; onCommit: (value: number) => void;
-}) {
-  const [draft, setDraft] = useState(value);
-  const gesture = useRef<{ initial: number; value: number } | null>(null);
-  const frame = useRef(0);
-  const callbacks = useRef({ onPreview, onCommit }); callbacks.current = { onPreview, onCommit };
-  const id = useId();
-  function cancel() {
-    if (!gesture.current) return;
-    cancelAnimationFrame(frame.current); frame.current = 0;
-    setDraft(gesture.current.initial); gesture.current = null;
-    callbacks.current.onPreview(null);
-  }
-  function commit() {
-    const current = gesture.current;
-    if (!current) return;
-    cancelAnimationFrame(frame.current); frame.current = 0; gesture.current = null;
-    if (current.value === current.initial) callbacks.current.onPreview(null);
-    else { callbacks.current.onPreview(current.value); callbacks.current.onCommit(current.value); }
-  }
-  useEffect(() => {
-    if (gesture.current && (disabled || gesture.current.initial !== value)) cancel();
-    if (!gesture.current) setDraft(value);
-  }, [value, disabled]);
-  useEffect(() => () => {
-    cancelAnimationFrame(frame.current);
-    if (gesture.current) callbacks.current.onPreview(null);
-  }, []);
-  const progress = bounds[1] > bounds[0] ? Math.min(100, Math.max(0, (draft - bounds[0]) / (bounds[1] - bounds[0]) * 100)) : 0;
-  return <div className="effect-slider" data-disabled={disabled || undefined}>
-    <span className="effect-slider-fill" aria-hidden="true" style={{ width: `${progress}%` }}/>
-    <span className="effect-slider-handle" aria-hidden="true" style={{ left: `clamp(0px, calc(${progress}% - 7px), calc(100% - 2px))` }}/>
-    <div className="effect-slider-readout" aria-hidden="true"><span>{label}</span><output htmlFor={id}>{format(draft)}</output></div>
-    <input id={id} type="range" aria-label={label} aria-valuetext={format(draft)} min={bounds[0]} max={bounds[1]} step={step} value={draft} disabled={disabled}
-      onPointerDown={event => { if (event.button === 0) { gesture.current = { initial: value, value: draft }; event.currentTarget.setPointerCapture(event.pointerId); } }}
-      onPointerUp={commit} onPointerCancel={cancel} onLostPointerCapture={commit} onBlur={commit}
-      onKeyDown={event => {
-        if (event.key === 'Escape' && gesture.current) { event.preventDefault(); event.stopPropagation(); cancel(); }
-        else if (rangeKeys.has(event.key)) { event.stopPropagation(); gesture.current ??= { initial: value, value: draft }; }
-      }}
-      onKeyUp={event => { if (rangeKeys.has(event.key)) { event.stopPropagation(); commit(); } }}
-      onChange={event => {
-        const next = Number(event.currentTarget.value); setDraft(next);
-        if (!gesture.current) { callbacks.current.onCommit(next); return; }
-        gesture.current.value = next;
-        if (!frame.current) frame.current = requestAnimationFrame(() => { frame.current = 0; if (gesture.current) callbacks.current.onPreview(gesture.current.value); });
-      }}/>
-  </div>;
-}
-
 function EffectCard({ name, effectKey, enabled, onToggle, onReset, onRemove, children }: {
   name: string; effectKey: EffectKey; enabled: boolean; onToggle: () => void; onReset: () => void; onRemove: () => void; children: ReactNode;
 }) {
@@ -89,7 +37,6 @@ const integer = (value: number) => String(Math.round(value));
 const percent = (value: number) => `${Math.round(value * 100)}%`;
 const pixels = (value: number) => `${Math.round(value)} px`;
 const effectNames = { colorGrade: 'Color', zoomBlur: 'Zoom blur', glitch: 'Glitch', invert: 'Invert colors', dither: 'Dither', neonEdges: 'Neon edges' } as const;
-const effectDefaults = { colorGrade: DEFAULT_COLOR_GRADE, zoomBlur: DEFAULT_ZOOM_BLUR, glitch: DEFAULT_GLITCH, invert: DEFAULT_INVERT, dither: DEFAULT_DITHER, neonEdges: DEFAULT_NEON_EDGES };
 
 export function AppliedVisualEffects({ clip, onSelect, onAdd }: { clip: Clip; onSelect: (effect: EffectKey) => void; onAdd: () => void }) {
   const applied = (Object.keys(effectNames) as EffectKey[]).filter(key => clip[key]);
@@ -138,9 +85,9 @@ export function VisualEffectsControls({ clip, onChange, onPreview, onPlaybackRat
   function cardProps(key: EffectKey) {
     return {
       name: effectNames[key], effectKey: key, enabled: !!clip[key]?.enabled,
-      onToggle: () => onChange({ [key]: { ...clip[key], enabled: !clip[key]?.enabled } }),
-      onReset: () => onChange({ [key]: { ...effectDefaults[key], enabled: !!clip[key]?.enabled } }),
-      onRemove: () => onChange({ [key]: undefined }),
+      onToggle: () => onChange(visualEffectsPatch(clip, { [key]: { enabled: !clip[key]?.enabled } })),
+      onReset: () => onChange(visualEffectActionPatch(clip, key, 'reset')),
+      onRemove: () => onChange(visualEffectActionPatch(clip, key, 'remove')),
     };
   }
   function preview(patch: Partial<Clip> | null) { onPreview?.(patch); }
@@ -160,13 +107,13 @@ export function VisualEffectsControls({ clip, onChange, onPreview, onPlaybackRat
     {invert && <EffectCard {...cardProps('invert')}><EffectSlider label="Amount" value={invert.amount} bounds={VISUAL_EFFECT_LIMITS.invert.amount} format={percent} disabled={!invert.enabled} onPreview={value => preview(value === null ? null : { invert: { ...invert, amount: value } })} onCommit={value => onChange({ invert: { ...invert, amount: value } })}/></EffectCard>}
     {dither && <EffectCard {...cardProps('dither')}>{([
       ['amount','Strength',.01,percent],['levels','Color levels',1,integer],['size','Pattern size',1,pixels],
-    ] as const).map(([key,label,step,format])=><EffectSlider key={key} label={label} value={dither[key]} bounds={VISUAL_EFFECT_LIMITS.dither[key]} step={step} format={format} disabled={!dither.enabled} onPreview={value=>preview(value===null?null:{dither:{...dither,[key]:value}})} onCommit={value=>onChange({dither:{...dither,[key]:value}})}/>)}<fieldset className="dither-colors" disabled={!dither.enabled}><label>Dark color<ColorControl label="Dither dark color" value={dither.shadowColor ?? '#000000'} onCommit={shadowColor=>onChange({dither:{...dither,shadowColor}})}/></label><label>Light color<ColorControl label="Dither light color" value={dither.highlightColor ?? '#ffffff'} onCommit={highlightColor=>onChange({dither:{...dither,highlightColor}})}/></label>{(dither.shadowColor || dither.highlightColor) && <button type="button" className="effect-color-reset" onClick={()=>onChange({dither:{...dither,shadowColor:undefined,highlightColor:undefined}})}>Original colors</button>}</fieldset></EffectCard>}
+    ] as const).map(([key,label,step,format])=><EffectSlider key={key} label={label} value={dither[key]} bounds={VISUAL_EFFECT_LIMITS.dither[key]} step={step} format={format} disabled={!dither.enabled} onPreview={value=>preview(value===null?null:{dither:{...dither,[key]:value}})} onCommit={value=>onChange({dither:{...dither,[key]:value}})}/>)}<fieldset className="dither-colors" disabled={!dither.enabled}><label>Dark color<ColorControl label="Dither dark color" value={dither.shadowColor ?? '#000000'} onCommit={shadowColor=>onChange({dither:{...dither,shadowColor}})}/></label><label>Light color<ColorControl label="Dither light color" value={dither.highlightColor ?? '#ffffff'} onCommit={highlightColor=>onChange({dither:{...dither,highlightColor}})}/></label>{(dither.shadowColor || dither.highlightColor) && <button type="button" className="effect-color-reset" onClick={()=>onChange(visualEffectActionPatch(clip, 'dither', 'original-colors'))}>Original colors</button>}</fieldset></EffectCard>}
     {neon && <EffectCard {...cardProps('neonEdges')}><fieldset className="effect-colors" disabled={!neon.enabled}><label>Edge color<ColorControl label="Neon edge color" value={neon.color} onCommit={color => onChange({ neonEdges: { ...neon, color } })}/></label></fieldset>{([
       ['amount', 'Strength'], ['detail', 'Edge detail'], ['threshold', 'Threshold'], ['glow', 'Glow'],
     ] as const).map(([key, label]) => <EffectSlider key={key} label={label} value={neon[key]} bounds={NEON_EDGE_LIMITS[key]} format={percent} disabled={!neon.enabled} onPreview={value => preview(value === null ? null : { neonEdges: { ...neon, [key]: value } })} onCommit={value => onChange({ neonEdges: { ...neon, [key]: value } })}/>)}</EffectCard>}
     {!color && !blur && !glitch && !invert && !dither && !neon && <p className="visual-effects-empty">Add an effect to this clip.</p>}
     {!onlyEffect && <DropdownMenu><DropdownMenuTrigger asChild><button type="button" className="visual-effects-add" disabled={!missing.length}><Plus size={13}/>Add effect</button></DropdownMenuTrigger><DropdownMenuContent className="visual-effects-menu" align="start">{missing.map(key => {
-      return <DropdownMenuItem key={key} onSelect={() => onChange({ [key]: { ...effectDefaults[key], enabled: true } })}><EffectIcon name={key} size={16}/>{effectNames[key]}</DropdownMenuItem>;
+      return <DropdownMenuItem key={key} onSelect={() => onChange(visualEffectsPatch(clip, { [key]: { enabled: true } }))}><EffectIcon name={key} size={16}/>{effectNames[key]}</DropdownMenuItem>;
     })}</DropdownMenuContent></DropdownMenu>}
   </div>;
 }

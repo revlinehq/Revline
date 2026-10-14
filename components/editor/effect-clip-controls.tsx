@@ -2,7 +2,7 @@
 
 import type {Clip} from '@/lib/editor/types';
 import {configureTimedEffectPatch,frameShrinkSettings,FRAME_SHRINK_LIMITS,type FrameShrinkSettings} from '@/lib/editor/clip-effects';
-import {EffectSlider} from './visual-effects-controls';
+import {EffectSlider} from './effect-slider';
 
 export function FrameShrinkControls({clip,onChange,onPreview}:{clip:Clip;onChange:(patch:Partial<Clip>)=>void;onPreview?:(patch:Partial<Clip>|null)=>void}){
   const settings=frameShrinkSettings(clip);

@@ -3,7 +3,7 @@
 import { resolvedTextAppearance, TEXT_APPEARANCE_LIMITS, type TextAppearance } from '@/lib/editor/text-style';
 import { BLEND_MODES } from '@/lib/editor/clip-effects';
 import type { Clip } from '@/lib/editor/types';
-import { EffectSlider } from './visual-effects-controls';
+import { EffectSlider } from './effect-slider';
 import { ColorControl } from './color-control';
 import { InspectorSelect } from './inspector-select';
 import './text-style-controls.css';

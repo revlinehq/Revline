@@ -1,18 +1,17 @@
 import { EFFECT_PRESETS, type EffectPreset } from './clip-effects';
 import { addEffectClip, patchClip } from './operations';
-import { visualEffectsPatch, type VisualEffects } from './visual-effects';
+import { visualEffectsPatch, VISUAL_EFFECT_KEYS, type VisualEffects } from './visual-effects';
 import { layerGroup, trackOf, type Timeline, type LayerGroup } from './types';
 import { isTransitionPreset } from './clip-transitions';
 import { placeTransitionAt } from './transition-placement';
 
 export const EFFECT_DRAG_TYPE = 'application/x-revline-effect';
 export type EffectDrag = { preset: EffectPreset } | { visual: keyof VisualEffects };
-const visualKeys = ['dither', 'glitch', 'zoomBlur', 'colorGrade', 'invert', 'neonEdges'] as const;
 export function readEffectDrag(value: string): EffectDrag | null {
   try {
     const input = JSON.parse(value);
     if (EFFECT_PRESETS.includes(input?.preset)) return { preset: input.preset };
-    if (visualKeys.includes(input?.visual)) return { visual: input.visual };
+    if (VISUAL_EFFECT_KEYS.includes(input?.visual)) return { visual: input.visual };
   } catch { /* Another drag type or malformed payload. */ }
   return null;
 }

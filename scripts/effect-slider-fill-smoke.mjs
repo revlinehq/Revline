@@ -4,7 +4,8 @@ import puppeteer from 'puppeteer';
 
 const bundle = await build({ stdin: { resolveDir: process.cwd(), loader: 'tsx', contents: `
 import React,{useState} from 'react';import {createRoot} from 'react-dom/client';
-import {CinematicBarsControls,EffectSlider,VisualEffectsControls} from './components/editor/visual-effects-controls';
+import {CinematicBarsControls,VisualEffectsControls} from './components/editor/visual-effects-controls';
+import {EffectSlider} from './components/editor/effect-slider';
 import {VISUAL_EFFECT_LIMITS} from './lib/editor/visual-effects';
 import './components/workspace/workspace-pages.css';import './app/editor.css';
 const effects=Object.fromEntries(Object.entries(VISUAL_EFFECT_LIMITS).map(([key,limits])=>[key,{enabled:true,...Object.fromEntries(Object.entries(limits).map(([parameter,[min,max]])=>[parameter,Number.isInteger(min)&&Number.isInteger(max)&&max-min>2?Math.round((min+max)/2):(min+max)/2]))}]));
@@ -30,7 +31,7 @@ async function verifyHandles() {
     const fillWidth = slider.querySelector('.effect-slider-fill')?.getBoundingClientRect().width ?? 0;
     return { count: slider.querySelectorAll('.effect-slider-handle').length, width: rect?.width, height: rect?.height, left: rect ? rect.left - bounds.left : -1, right: rect ? bounds.right - rect.right : -1, expectedLeft: Math.min(bounds.width - 2, Math.max(0, fillWidth - 7)), radius: style?.borderRadius, color: style?.backgroundColor, pointerEvents: style?.pointerEvents, hiddenFromAccessibility: handle?.getAttribute('aria-hidden') };
   }));
-  assert.equal(handles.length, 19);
+  assert.equal(handles.length, 23);
   for (const handle of handles) {
     assert.equal(handle.count, 1, 'Each slider has a single undivided pill');
     assert.equal(handle.width, 2); assert.equal(handle.height, 16); assert.equal(handle.radius, '1px');
@@ -49,7 +50,7 @@ async function verifyFills(theme) {
     const channels = style?.backgroundColor.match(/[\d.]+/g)?.map(Number) ?? [];
     return { label: input.getAttribute('aria-label'), expected, sliderWidth: slider.getBoundingClientRect().width, fillWidth: fill?.getBoundingClientRect().width ?? 0, color: style?.backgroundColor ?? 'missing', blue: channels[2] > channels[0] && channels[2] > channels[1], pointerEvents: style?.pointerEvents };
   }));
-  assert.equal(fills.length, 19, 'Bars, all visual effect parameters, and standalone text size are covered');
+  assert.equal(fills.length, 23, 'Bars, all visual effect parameters including Neon edges, and standalone text size are covered');
   for (const fill of fills) {
     assert.ok(fill.fillWidth > 0, `${theme} ${fill.label} has a rendered progress fill`);
     assert.ok(Math.abs(fill.fillWidth / fill.sliderWidth - fill.expected) < .005, `${theme} ${fill.label} reflects its actual range value`);
@@ -105,5 +106,5 @@ try {
   await verifyHandles();
   await page.screenshot({ path: '/tmp/revline-effect-slider-pill-dark.png', clip: { x: 40, y: 0, width: 340, height: 930 } });
   assert.deepEqual(errors, []);
-  console.log('PASS: 19 shared sliders show the same blue fill at measured range widths and one white rounded pill contained at min/max in light/dark; cinematic bars keyboard/pointer previews, single commit, cancel; disabled values retained; standalone text size. Synthetic only.');
+  console.log('PASS: 23 shared sliders show the same blue fill at measured range widths and one white rounded pill contained at min/max in light/dark; cinematic bars keyboard/pointer previews, single commit, cancel; disabled values retained; standalone text size. Synthetic only.');
 } finally { await browser.close(); }

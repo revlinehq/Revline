@@ -41,12 +41,19 @@ export function visualFadeTimingPatch(clip: FadeClip, delta = 0): Pick<Clip, 'vi
     ? { visualFadeTiming: { duration: clip.visualFadeTiming?.duration ?? clip.duration, offset: (clip.visualFadeTiming?.offset ?? 0) + delta } } : {};
 }
 
-export function configureVisualFade(timeline: Timeline, id: string, patch: Partial<VisualFadeSettings>): Timeline {
-  const clip = timeline.clips.find(member => member.id === id);
-  if (!clip || (clip.kind !== 'video' && clip.kind !== 'image')) throw new Error('Choose a video or image clip for a visual fade.');
+/** Shared manual/agent edit: retain the opposite edge and start one new fade clock. */
+export function visualFadePatch(clip: Clip, patch: Partial<VisualFadeSettings>): Partial<Clip> {
+  if (clip.kind !== 'video' && clip.kind !== 'image') throw new Error('Choose a video or image clip for a visual fade.');
   if (patch.fadeIn === undefined && patch.fadeOut === undefined) throw new Error('Specify a visual fade in or fade out.');
   const visualFade = { ...visualFadeSettings(clip), ...patch };
   validateVisualFade({ ...clip, visualFade });
   if (visualFade.fadeIn + visualFade.fadeOut > clip.duration + 1e-7) throw new Error('Visual fades together cannot exceed the retained clip duration.');
-  return { ...timeline, clips: timeline.clips.map(member => member.id === id ? { ...member, visualFade, visualFadeTiming: undefined } : member) };
+  return { visualFade, visualFadeTiming: undefined };
+}
+
+export function configureVisualFade(timeline: Timeline, id: string, patch: Partial<VisualFadeSettings>): Timeline {
+  const clip = timeline.clips.find(member => member.id === id);
+  if (!clip) throw new Error('Choose a video or image clip for a visual fade.');
+  const changes = visualFadePatch(clip, patch);
+  return { ...timeline, clips: timeline.clips.map(member => member.id === id ? { ...member, ...changes } : member) };
 }

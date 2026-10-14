@@ -28,17 +28,23 @@ export function validateAudioSettings(clip:Pick<Clip,'kind'|'audio'|'audioFadeTi
   for(const key of ['amount','attack','release'] as const)check(clip.audio.ducking[key],key);
 }
 
-/** A linked video targets its separate sound. This operation never touches footage or timing. */
-export function configureAudio(timeline:Timeline,clipId:string,changes:AudioSettingsPatch):Timeline{
-  const selected=timeline.clips.find(clip=>clip.id===clipId);
-  const target=selected?.kind==='video'&&selected.linkedClipId?timeline.clips.find(clip=>clip.id===selected.linkedClipId&&clip.linkedClipId===selected.id):selected;
-  if(!target||target.kind!=='audio')throw new Error('Choose an audio clip or a video with linked sound.');
+/** Shared manual/agent merge: preserve omitted ducking controls and reset only authored fade clocks. */
+export function audioSettingsPatch(target:Clip,changes:AudioSettingsPatch):Partial<Clip>{
+  if(target.kind!=='audio')throw new Error('Choose an audio clip or a video with linked sound.');
   if(!Object.values(changes).some(value=>value!==undefined))throw new Error('Specify an audio control.');
   const previous=target.audio??DEFAULT_AUDIO_SETTINGS;
   const audio={...previous,...changes,ducking:{...previous.ducking,...changes.ducking}};
   validateAudioSettings({...target,audio});
   for(const key of ['fadeIn','fadeOut'] as const)if(changes[key]!==undefined&&changes[key]!>target.duration)throw new Error('A requested audio fade cannot exceed the retained clip duration.');
-  return {...timeline,clips:timeline.clips.map(clip=>clip.id===target.id?{...clip,audio,...(changes.fadeIn!==undefined||changes.fadeOut!==undefined?{audioFadeTiming:undefined}:{})}:clip)};
+  return {audio,...(changes.fadeIn!==undefined||changes.fadeOut!==undefined?{audioFadeTiming:undefined}:{})};
+}
+/** A linked video targets its separate sound. This operation never touches footage or timing. */
+export function configureAudio(timeline:Timeline,clipId:string,changes:AudioSettingsPatch):Timeline{
+  const selected=timeline.clips.find(clip=>clip.id===clipId);
+  const target=selected?.kind==='video'&&selected.linkedClipId?timeline.clips.find(clip=>clip.id===selected.linkedClipId&&clip.linkedClipId===selected.id):selected;
+  if(!target)throw new Error('Choose an audio clip or a video with linked sound.');
+  const patch=audioSettingsPatch(target,changes);
+  return {...timeline,clips:timeline.clips.map(clip=>clip.id===target.id?{...clip,...patch}:clip)};
 }
 
 /** Freeze the original fade clock; new splits and trims retain the authored samples. */

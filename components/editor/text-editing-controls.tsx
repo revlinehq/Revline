@@ -2,7 +2,7 @@
 
 import type { Clip } from '@/lib/editor/types';
 import { NumberControl } from './visual-controls';
-import { EffectSlider } from './visual-effects-controls';
+import { EffectSlider } from './effect-slider';
 import { ColorControl } from './color-control';
 import { TEXT_FONTS } from '@/lib/editor/text-fonts';
 import { InspectorSelect } from './inspector-select';

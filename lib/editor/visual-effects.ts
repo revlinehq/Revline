@@ -16,6 +16,12 @@ export const DEFAULT_DITHER: Readonly<Dither> = Object.freeze({ enabled: false, 
 export const DEFAULT_ZOOM_BLUR: Readonly<ZoomBlur> = Object.freeze({ enabled: false, amount: .15, centerX: .5, centerY: .5 });
 /** Pixel values are measured at 1080 output height and scale with rendering resolution. */
 export const DEFAULT_GLITCH: Readonly<Glitch> = Object.freeze({ enabled: false, intensity: .25, blockSize: 32, rgbSplit: 8 });
+/** Manual controls, drag/drop and agent tools share these defaults. */
+export const VISUAL_EFFECT_DEFAULTS = Object.freeze({
+  colorGrade: DEFAULT_COLOR_GRADE, zoomBlur: DEFAULT_ZOOM_BLUR, glitch: DEFAULT_GLITCH,
+  invert: DEFAULT_INVERT, dither: DEFAULT_DITHER, neonEdges: DEFAULT_NEON_EDGES,
+});
+export const VISUAL_EFFECT_KEYS = Object.freeze(Object.keys(VISUAL_EFFECT_DEFAULTS) as (keyof VisualEffects)[]);
 export const VISUAL_EFFECT_LIMITS = {
   neonEdges: NEON_EDGE_LIMITS,
   colorGrade: { exposure: [-2, 2], contrast: [0, 2], saturation: [0, 2], temperature: [-100, 100], tint: [-100, 100], vibrance: [-100, 100] },
@@ -50,12 +56,10 @@ export function validateVisualEffects(clip: Pick<Clip, 'kind' | 'effectPreset'> 
 /** Merge only requested controls, preserving every other visual setting and all audio. */
 export function visualEffectsPatch(clip: Pick<Clip, 'kind' | 'effectPreset'> & VisualEffects, patch: VisualEffectsPatch): VisualEffects {
   const next: VisualEffects = {};
-  if (patch.neonEdges !== undefined) next.neonEdges = { ...DEFAULT_NEON_EDGES, ...clip.neonEdges, ...patch.neonEdges };
-  if (patch.colorGrade !== undefined) next.colorGrade = { ...DEFAULT_COLOR_GRADE, ...clip.colorGrade, ...patch.colorGrade };
-  if (patch.zoomBlur !== undefined) next.zoomBlur = { ...DEFAULT_ZOOM_BLUR, ...clip.zoomBlur, ...patch.zoomBlur };
-  if (patch.invert !== undefined) next.invert = { ...DEFAULT_INVERT, ...clip.invert, ...patch.invert };
-  if (patch.glitch !== undefined) next.glitch = { ...DEFAULT_GLITCH, ...clip.glitch, ...patch.glitch };
-  if (patch.dither !== undefined) next.dither = { ...DEFAULT_DITHER, ...clip.dither, ...patch.dither };
+  function merge<K extends keyof VisualEffects>(key: K) {
+    next[key] = { ...VISUAL_EFFECT_DEFAULTS[key], ...clip[key], ...patch[key] } as NonNullable<VisualEffects[K]>;
+  }
+  for (const key of VISUAL_EFFECT_KEYS) if (patch[key] !== undefined) merge(key);
   if (!Object.keys(next).length || Object.values(patch).every(value => !value || Object.keys(value).length === 0)) throw new Error('Specify at least one visual effect control.');
   validateVisualEffects({ kind: clip.kind, effectPreset:clip.effectPreset, ...next });
   return next;

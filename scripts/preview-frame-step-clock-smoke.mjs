@@ -42,6 +42,10 @@ try{
   await page.screenshot({path:'/tmp/revline-agentic-layout.png'});await page.click('#editor-tracks-tab');await flush();await page.screenshot({path:'/tmp/revline-tracks-layout.png'});
   assert.equal(await page.evaluate(()=>localStorage.getItem('revline-editor-mode')),'tracks');await page.goto('http://127.0.0.1:'+server.address().port+'?project=another');await page.waitForFunction(()=>document.querySelector('hyperframes-player')?.style.zIndex==='1');await flush();assert.equal(await page.$eval('#editor-tracks-tab',node=>node.getAttribute('aria-selected')),'true','A different project after reload restores the chosen mode');
   await page.evaluate(()=>{window.savedSetItem=Storage.prototype.setItem;Storage.prototype.setItem=function(){throw new DOMException('Blocked','SecurityError')}});await page.click('#editor-agentic-tab');await flush();assert.equal(await page.$eval('#editor-agentic-tab',node=>node.getAttribute('aria-selected')),'true','Switching still works when storage is blocked');await page.evaluate(()=>{Storage.prototype.setItem=window.savedSetItem;});
+  await page.setViewport({width:733,height:800});await flush();
+  assert.equal(await page.$eval('.timeline-playhead-cap',node=>{const r=node.getBoundingClientRect();return document.elementFromPoint(r.x+r.width/2,r.y+5)?.closest('.timeline-playhead-cap')===node}),true,'Narrow Agentic layout must not cover the playhead head with its conversation');
+  await page.screenshot({path:'/tmp/revline-agentic-marker-tablet.png'});
+  await page.setViewport({width:1280,height:800});await flush();
   console.log('PASS: mode preference persists across project reloads and remains usable without browser storage.');
   console.log('PASS: Tracks keeps AI beside footage, shortens it with the preview, and gives the timeline full width without rebuilding playback.');
  }

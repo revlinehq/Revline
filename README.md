@@ -100,6 +100,10 @@ Zustand holds per-project interaction state and local history. Convex persists o
 
 Revline’s custom timeline uses DOM clips, pointer gestures, and the same Zustand project model as the editing tools. Floating drag previews and frame-aligned destinations are transient; releasing a gesture creates one undoable edit. HyperFrames remains the sole playback clock for the preview, playhead, and time readouts.
 
+Shared editor controls live in `components/editor`: `effect-slider.tsx` owns slider appearance and gesture behavior, and `fade-controls.tsx` renders the audio/footage fade rows. Keep appearance changes in those controls and their own stylesheets. Callers supply values and callbacks rather than copying markup or styles.
+
+Editing rules live in `lib/editor` and are imported by both the frontend and Convex tools. `visual-effects.ts` owns effect defaults and validated merges; `visual-effect-actions.ts` owns group reset/removal. `audioSettingsPatch` and `visualFadePatch` own settings merges, validation and fade-clock resets. Manual controls, drag/drop and agent operations should call these functions instead of maintaining separate default maps or edit rules. New controls should reuse the shared control and the corresponding validated operation.
+
 OpenCut Classic preview and editing patterns are adapted with MIT attribution retained in `third-party/`. OpenChatCut was reviewed as an architectural reference; its AGPL source is not included.
 
 ## Verification

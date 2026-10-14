@@ -5,7 +5,7 @@ import type { Clip, MediaAsset, Timeline } from '@/lib/editor/types';
 import { EFFECT_CATALOG } from '@/lib/editor/clip-effects';
 import { boundedTransitionRange, isTransitionPreset, transitionDurationLimit, transitionPair, TRANSITION_DIRECTIONS } from '@/lib/editor/clip-transitions';
 import { EffectIcon } from './effect-icon';
-import { EffectSlider } from './visual-effects-controls';
+import { EffectSlider } from './effect-slider';
 import { InspectorSelect } from './inspector-select';
 import './transition-controls.css';
 

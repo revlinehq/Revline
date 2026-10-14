@@ -3,7 +3,7 @@
 import type { Clip } from '@/lib/editor/types';
 import { DEFAULT_SOLID_COLOR, SOLID_COLOR_LIMITS, solidColorSettings, type SolidColorSettings } from '@/lib/editor/clip-effects';
 import { ColorControl } from './color-control';
-import { EffectSlider } from './visual-effects-controls';
+import { EffectSlider } from './effect-slider';
 
 export function SolidColorControls({ clip, onChange, onPreview }: { clip: Clip; onChange: (patch: Partial<Clip>) => void; onPreview?: (patch: Partial<Clip> | null) => void }) {
   const settings = solidColorSettings(clip);

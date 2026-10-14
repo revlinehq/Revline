@@ -1,8 +1,8 @@
 'use client';
 
 import type { Clip } from '@/lib/editor/types';
-import { visualFadeSettings } from '@/lib/editor/visual-fades';
-import { EffectSlider } from './visual-effects-controls';
+import { visualFadeSettings, visualFadePatch } from '@/lib/editor/visual-fades';
+import { FadeControls } from './fade-controls';
 import './audio-controls.css';
 
 export function VisualFadeControls({ clip, fps = 30, onChange, onPreview }: {
@@ -11,14 +11,8 @@ export function VisualFadeControls({ clip, fps = 30, onChange, onPreview }: {
 }) {
   if (clip.kind !== 'video' && clip.kind !== 'image') return null;
   const settings = visualFadeSettings(clip);
-  const patch = (key: 'fadeIn' | 'fadeOut', value: number): Partial<Clip> => ({ visualFade: { ...settings, [key]: value }, visualFadeTiming: undefined });
-  return <div className="visual-fade-controls audio-controls" aria-label="Visual fades"><fieldset><legend>Fades</legend>
-    {(['fadeIn', 'fadeOut'] as const).map(key => {
-      const maximum = Math.max(0, clip.duration - settings[key === 'fadeIn' ? 'fadeOut' : 'fadeIn']);
-      return <EffectSlider key={key} label={key === 'fadeIn' ? 'Fade in' : 'Fade out'} value={settings[key]} bounds={[0, maximum]} step={1 / fps}
-        format={value => `${Number(value.toFixed(2))} s`} disabled={maximum <= 0}
-        onPreview={value => onPreview?.(value === null ? null : patch(key, value))}
-        onCommit={value => onChange(patch(key, value))}/>;
-    })}
-  </fieldset></div>;
+  const maximum = { fadeIn: Math.max(0, clip.duration - settings.fadeOut), fadeOut: Math.max(0, clip.duration - settings.fadeIn) };
+  return <div className="visual-fade-controls audio-controls" aria-label="Visual fades"><FadeControls settings={settings} maximum={maximum} fps={fps}
+    onChange={patch => onChange(visualFadePatch(clip, patch))}
+    onPreview={patch => onPreview?.(patch === null ? null : visualFadePatch(clip, patch))}/></div>;
 }
