@@ -18,11 +18,12 @@ vi.mock('@convex-dev/agent', async original => ({
   createTool: (options: unknown) => options,
 }));
 import { respond } from './assistantActions';
+import { AssistantTokenBudgetError } from '../lib/ai/token-budget';
 const execute = (tools: Record<string, Tool>, name: string, input: unknown) => tools[name].execute({}, tools[name].inputSchema.parse(input));
 beforeEach(() => { sdk.options = null; sdk.plan = async () => {}; vi.stubEnv('BILLING_ENABLED', 'false'); });
 afterEach(() => vi.unstubAllEnvs());
 
-async function fixture(prompt = 'can u put bunch of effects here', scenes: { start: number; end: number; description: string; score: number }[] = []) {
+async function fixture(prompt = 'can u put bunch of effects here', scenes: { start: number; end: number; description: string; score: number }[] = [], recovery = false) {
   const t = convexTest(schema, import.meta.glob('./**/*.ts')); agentTest.register(t); workflowTest.register(t);
   const owner = t.withIdentity({ subject: 'owner' });
   const projectId = await owner.mutation(api.projects.create, { title: 'Owned creative effects fixture', aspectRatio: 'landscape' });
@@ -32,7 +33,7 @@ async function fixture(prompt = 'can u put bunch of effects here', scenes: { sta
   const assetId = await t.run(ctx => ctx.db.insert('assets', { ownerId: 'owner', projectId, kind: 'video', fileName: 'Untrusted fight filename.mp4', contentType: 'video/mp4', size: 10, duration: 60, createdAt: 0, ...(scenes.length ? { analysis: { understanding: { summary: 'Stored visual overview', scenes } } } : {}) }));
   const source = { id: 'source', assetId, kind: 'video' as const, track: 1, start: 1.69, sourceStart: 11.5, duration: 3 };
   const timeline = { fps: 30, aspectRatio: 'landscape' as const, tracks: { visual: 1, overlay: 0, audio: 0, effects: 0 }, clips: [source] };
-  await t.run(ctx => ctx.db.patch(projectId, { timeline, threadId, aiRunning: true, aiRunId: 'run', revision: 0, history: [] }));
+  await t.run(ctx => ctx.db.patch(projectId, { timeline, threadId, aiRunning: true, aiRunId: 'run', revision: 0, history: [], ...(recovery ? { aiRecovery: { requests: ['Add selected source and a flash'], runId: 'previous-run', revision: 0, savedEdits: 1, reason: 'Stopped', status: 'stopped' as const, updatedAt: 0 } } : {}) }));
   const run = { projectId, ownerId: 'owner', runId: 'run' };
   const analysisRequests: unknown[] = [];
   const ctx = {
@@ -58,8 +59,8 @@ async function fixture(prompt = 'can u put bunch of effects here', scenes: { sta
   return { t, owner, projectId, threadId, promptMessageId, assetId, source, timeline, analysisRequests, runPlan, read, messages };
 }
 
-test('continue inspects fresh saved state and does not duplicate footage already published', async () => {
-  const f = await fixture('continue'); let attemptedWithoutInspection: unknown;
+test('durable recovery inspects fresh saved state regardless of wording and does not duplicate footage already published', async () => {
+  const f = await fixture('Make it a little softer', [], true); let attemptedWithoutInspection: unknown;
   await f.runPlan(async tools => {
     try { await execute(tools, 'addMedia', { assetId: f.assetId, start: 1.69, sourceStart: 11.5, duration: 3 }); } catch (error) { attemptedWithoutInspection = error; }
     await execute(tools, 'inspectTimeline', {});
@@ -80,4 +81,31 @@ test('an active-work timeout reports its actual cause and preserves the already-
     const texts = (await f.messages()).page.flatMap(message => message.parts).filter(part => part.type === 'text').map(part => part.text);
     expect(texts.some(text => text.includes('1 edits were saved'))).toBe(true);
   } finally { vi.useRealTimers(); }
+});
+
+
+test('a token safety stop preserves saved checkpoints and identifies the actual stop', async () => {
+  const f = await fixture('Add a flash at 1.69 seconds');
+  await f.runPlan(async tools => { await execute(tools, 'addTimedEffect', { preset: 'flash', start: 1.69, duration: .5 }); throw new AssistantTokenBudgetError('tokens'); });
+  const saved = await f.read();
+  expect(saved.revision).toBe(1); expect(saved.aiError).toContain('token budget');
+  const texts = (await f.messages()).page.flatMap(message => message.parts).filter(part => part.type === 'text').map(part => part.text);
+  expect(texts.some(text => text.includes('1 edits were saved') && text.includes('token budget'))).toBe(true);
+});
+
+test('credit exhaustion reports billing recovery without claiming a configuration failure or edit', async () => {
+  const f = await fixture('Add a flash at 1.69 seconds');
+  await f.runPlan(async () => { throw Object.assign(new Error('credit balance too low'), { statusCode: 400 }); });
+  const saved = await f.read();
+  expect(saved.revision).toBe(0); expect(saved.aiError).toContain('credits are exhausted');
+  expect(saved.aiError).not.toContain('model configuration');
+});
+
+
+test('the word continue without recovery state does not prohibit an explicitly requested copy', async () => {
+  const f = await fixture('Continue and copy the selected footage here');
+  await f.runPlan(async tools => { await execute(tools, 'duplicateClips', { clipIds: ['source'], at: 6 }); });
+  const saved = await f.read();
+  expect(saved.timeline?.clips.filter(clip => clip.kind === 'video')).toHaveLength(2);
+  expect(saved.revision).toBe(1);
 });
