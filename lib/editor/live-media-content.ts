@@ -1,5 +1,5 @@
 import { generateComposition } from './composition';
-import { clipVolumeEnvelope } from './clip-volume';
+import { audioSettings, audioVolumeEnvelope } from './audio-settings';
 import { playbackRateOf, sourceTimeAt } from './playback-rate';
 import { timelineDuration, type Clip, type MediaAsset, type Timeline } from './types';
 import type { gsap } from 'gsap';
@@ -56,7 +56,11 @@ export function updateLiveMediaContent(document:Document,previous:Timeline,next:
     if(before&&before.assetId!==clip.assetId)node.setAttribute('src',asset.url);
     const attrs={start:clip.start,duration:clip.duration,end:clip.start+clip.duration,mediaStart:clip.sourceStart,playbackRate:playbackRateOf(clip),volume:clip.volume??1};
     for(const [key,value] of Object.entries(attrs))if(node.dataset[key]!==String(value))node.dataset[key]=String(value);
-    const envelope=clipVolumeEnvelope(clip.volume??1);if(node.dataset.automation!==envelope)node.dataset.automation=envelope;
+    if(clip.kind==='video'||clip.kind==='audio'){
+      const sound=audioSettings(clip),envelope=audioVolumeEnvelope(next,clip);
+      for(const [key,value]of Object.entries({fadeIn:sound.fadeIn,fadeOut:sound.fadeOut}))if(node.dataset[key]!==String(value))node.dataset[key]=String(value);
+      if(node.dataset.automation!==envelope)node.dataset.automation=envelope;
+    }
   }
   const duration=Math.max(timelineDuration(next),1/next.fps);
   if(composition.dataset.duration!==String(duration)){

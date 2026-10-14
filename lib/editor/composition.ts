@@ -1,6 +1,7 @@
 import { NEUTRAL_MOTION, cinematicBarSettings, validateClipEffects, visibleMotion, type MotionKeyframe } from './clip-effects';
 import { adjustmentSources } from './adjustment-layers';
 import { isTransitionClip, transitionSources } from './clip-transitions';
+import { audioSettings, audioVolumeEnvelope, validateAudioTimeline } from './audio-settings';
 import { MAX_CLIP_VOLUME } from './clip-volume';
 import { validateVisualEffects } from './visual-effects';
 import { visualEffectsRuntimeScript } from './visual-effects-runtime';
@@ -93,6 +94,7 @@ export function generateComposition(timeline: Timeline, assets: MediaAsset[], op
   if (![24, 30, 60].includes(fps)) throw new Error('Frame rate must be 24, 30, or 60 fps.');
   const assetMap = new Map(assets.map(asset => [asset._id, asset]));
   deriveTrackCounts(timeline);
+  validateAudioTimeline(timeline);
   const transitions = transitionSources(timeline.clips, timeline.fps);
   const scale = resolution / 1080;
   const animation: string[] = [];
@@ -162,7 +164,9 @@ export function generateComposition(timeline: Timeline, assets: MediaAsset[], op
       }
     }
     const volume = bounded(clip.volume, 1, 0, MAX_CLIP_VOLUME);
-    const attrs = `${timing} data-media-start="${clip.sourceStart}" data-volume="${volume}"${clip.kind === 'video' || clip.kind === 'audio' ? ` data-playback-rate="${playbackRateOf(clip)}"` : ''}`;
+    const sound=audioSettings(clip);
+    const audioAttrs=clip.kind==='video'||clip.kind==='audio'?` data-fade-in="${sound.fadeIn}" data-fade-out="${sound.fadeOut}" data-automation="${escapeHtml(audioVolumeEnvelope(timeline,clip,volume))}"`:'';
+    const attrs = `${timing} data-media-start="${clip.sourceStart}" data-volume="${volume}"${clip.kind === 'video' || clip.kind === 'audio' ? ` data-playback-rate="${playbackRateOf(clip)}"` : ''}${audioAttrs}`;
     const frame = (media: string) => `<div id="${id}-frame" data-visual-clip="${escapeHtml(clip.id)}" class="visual-frame" style="${frameStyle}"><div id="${id}-motion" class="motion-frame"><div class="source-window" style="${windowStyle}">${media}</div></div></div>`;
     if (clip.kind === 'image') return frame(`<img ${attrs} crossorigin="anonymous" src="${src}" class="visual" style="${sourceStyle}" alt="" />`);
     if (clip.kind === 'audio') return `<audio ${attrs} crossorigin="anonymous" src="${src}" preload="${options.preview?'metadata':'auto'}"></audio>`;
