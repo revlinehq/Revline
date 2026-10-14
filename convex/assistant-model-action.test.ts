@@ -31,6 +31,7 @@ async function run(pinnedModel: ClaudeModelSelection) {
   const ctx = {
     runQuery: async (reference: Parameters<typeof getFunctionName>[0]) => {
       switch (getFunctionName(reference)) {
+        case 'assistant:currentPrompt': return 'Synthetic editing request';
         case 'assistant:getRun': return { project: { timeline: { clips: [], fps: 30, aspectRatio: 'vertical' }, revision: 0, aspectRatio: 'vertical' }, assets: [] };
         case 'assistant:isRunActive': return true;
         default: throw new Error('Unexpected fixture query');

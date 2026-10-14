@@ -18,10 +18,10 @@ export type { ChatTool, ChatMessage } from './assistant-results';
 
 type PendingReply = { id: string; text: string; previousUserId?: string; previousError?: string | null };
 
-function AssistantReplyHeader({ loading, label, detail }: { loading: boolean; label: string; detail?: string }) {
-  return <div className={`assistant-reply-header ${loading ? 'is-processing' : 'chat-author'}`}>
+function AssistantReplyHeader({ loading, active=loading, label, detail }: { loading: boolean; active?:boolean; label: string; detail?: string }) {
+  return <div className={`assistant-reply-header ${active ? 'is-processing' : 'chat-author'}`}>
     <Brand markOnly/>
-    {loading ? <ProcessingStatus label={label} detail={detail} brand={false}/> : <span>Revline</span>}
+    {active ? <ProcessingStatus label={loading?label:'Revline'} detail={loading?detail:undefined} brand={false}/> : <span>Revline</span>}
   </div>;
 }
 
@@ -125,7 +125,7 @@ export function AssistantPanel({ messages, running, configured, error, onSend, o
         return <div className={`assistant-turn ${group.id === turnId ? 'is-latest-turn' : ''}`} data-turn-id={group.id} key={group.id}>
           {groupMessages.filter(message => message.role === 'user').map(message => <article key={message.id} data-message-id={message.id} data-message-status={message.status} className="chat-message chat-user"><p>{message.text}</p></article>)}
           {(replies.length > 0 || editing || cards.length > 0) && <div className="assistant-reply">
-            <AssistantReplyHeader loading={loading} label={stopState==='stopping'?'Stopping…':activity || 'Editing…'} detail={processingDetail(activity,activitySource)}/>
+            <AssistantReplyHeader loading={loading} active={editing} label={stopState==='stopping'?'Stopping…':activity || 'Editing…'} detail={processingDetail(activity,activitySource)}/>
             {replies.map(message => !message.text && !message.tools?.length && message.id !== demoNoteMessageId ? null : <article key={message.id} data-message-id={message.id} data-message-status={message.status} className="chat-message chat-assistant">
               {message.text && <AssistantResponseText text={message.text} streaming={message.status === 'streaming'} />}
               {message.tools?.map((tool, i) => <div className="tool-result" key={`${tool}-${i}`}><Check size={12} />{tool}</div>)}

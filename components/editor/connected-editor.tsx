@@ -97,9 +97,10 @@ function ProjectEditor({project}: {project:Doc<'projects'>}) {
     const snapshot={before:normalizeTimeline(before),after,revision:project.revision??0};
     return {...snapshot,canUndo:!saving&&!undoBusy&&!ai?.running&&(history.length>0||remoteUndo.current.remaining>0)&&matchesUndoSnapshot(snapshot,timeline,history.at(-1)??before),publishedDraft:!ai?.running&&project.aiUndoRecorded===true&&project.aiCheckpointRevision===snapshot.revision};
   },[project.history,project.timeline,project.aspectRatio,project.revision,project.aiUndoRecorded,project.aiCheckpointRevision,timeline,history,saving,undoBusy,ai?.running]);
+  const aiStarting=useRef(false);
   const preparingAudio=useRef<Promise<void>|null>(null);const failedAudio=useRef(new Set<string>());const [audioBusy,setAudioBusy]=useState(false);
   useEffect(()=>{
-    if(media===undefined||ai===undefined||preparingAudio.current||audioBusy||ai.running||upload||uploading.current)return;
+    if(media===undefined||ai===undefined||aiStarting.current||preparingAudio.current||audioBusy||ai.running||upload||uploading.current)return;
     const source=assets.find(asset=>asset.kind==='video'&&!failedAudio.current.has(asset._id)&&timeline.clips.some(clip=>clip.assetId===asset._id&&!clip.audioSeparated))??assets.find(asset=>asset.kind==='audio'&&!asset.waveform&&!failedAudio.current.has(asset._id)&&timeline.clips.some(clip=>clip.assetId===asset._id));
     if(!source)return;
     setAudioBusy(true);
@@ -124,6 +125,11 @@ function ProjectEditor({project}: {project:Doc<'projects'>}) {
   },[media,assets,timeline,ai?.running,upload,audioBusy,convex,projectId,change,saves]);
   const titleChange=async(value:string)=>{await update({projectId,title:value});setTitle(value);};
   const waitForSave=()=>saves.wait();
+  const sendRequest=async(prompt:string,context:Omit<Parameters<typeof send>[0],'projectId'|'prompt'>={})=>{
+    aiStarting.current=true;
+    try{await preparingAudio.current;await waitForSave();await send({projectId,prompt,...context});}
+    finally{aiStarting.current=false;}
+  };
   const messages:ChatMessage[]=results.map(chatMessageFromUI);
   const uploading=useRef(false);
   async function handleUpload(files:File[],{requireAll=false,addToTimeline=true}:{requireAll?:boolean;addToTimeline?:boolean}={}){
@@ -167,9 +173,9 @@ function ProjectEditor({project}: {project:Doc<'projects'>}) {
       if(files.length)await handleUpload(files,{requireAll:true});
       await waitForSave();
       const prompt=sessionStorage.getItem('revline:brief:'+projectId);
-      if(prompt&&timelineRef.current.clips.length&&!saves.busy){await send({projectId,prompt});sessionStorage.removeItem('revline:brief:'+projectId);}
+      if(prompt&&timelineRef.current.clips.length&&!saves.busy){await sendRequest(prompt);sessionStorage.removeItem('revline:brief:'+projectId);}
     })().catch(e=>setError(e instanceof Error?e.message:'Could not start this edit.'));
   },[media,projectId,send]);
   if(media===undefined)return editorLoading(projectId);
-  return <EditorStateProvider store={store}><EditorShell onShare={()=>setShareOpen(true)} onSaveThumbnail={persistThumbnail} projectId={projectId} draftKey={`revline:editor-draft:${projectId}`} title={title} onTitle={titleChange} timeline={timeline} assets={assets} onRemoveAsset={async asset=>{await waitForSave();await removeAsset({assetId:asset._id as Id<'assets'>});store.setState(state=>({history:state.history.filter(edit=>!edit.clips.some(clip=>clip.assetId===asset._id)),future:state.future.filter(edit=>!edit.clips.some(clip=>clip.assetId===asset._id))}));setOptimisticAssets(previous=>previous.filter(item=>item._id!==asset._id));}} onRefreshMedia={handleRefreshMedia} onChange={change} saving={saving} upload={upload} error={error} onError={setError} onUndo={undo} onRedo={redo} canUndo={!undoBusy&&(!!history.length||remoteUndo.current.remaining>0)} canRedo={!!future.length} assistantEditSnapshot={assistantEditSnapshot} messages={messages} aiRunning={ai?.running??false} aiConfigured={ai?.configured??false} modelSwitcher={ai?.modelSwitcher??false} aiError={ai?.error} onStop={async()=>{await stop({projectId});}} onSend={async(prompt,context)=>{await waitForSave();await send({projectId,prompt,...context});}} onExport={exportVideo} exportState={exportState} onUpload={handleUpload} onDropUpload={files=>handleUpload(files,{addToTimeline:false})} onImportVideo={async url=>{await waitForSave();await importVideo({projectId,url});}} videoImports={mediaTasks?.filter(task=>task.kind==='import')} analysisBusy={ai?.activity} analysisSource={ai?.activitySource} analysisProgress={ai?.activityProgress} canLoadMore={status==='CanLoadMore'} onLoadMore={()=>loadMore(20)}/><ConnectedTimelineShareDialog projectId={projectId} open={shareOpen} onOpenChange={setShareOpen} title={title} timeline={timeline} assets={assets} onBeforePublish={waitForSave} publishDisabled={!!ai?.running || !timeline.clips.length}/></EditorStateProvider>;
+  return <EditorStateProvider store={store}><EditorShell onShare={()=>setShareOpen(true)} onSaveThumbnail={persistThumbnail} projectId={projectId} draftKey={`revline:editor-draft:${projectId}`} title={title} onTitle={titleChange} timeline={timeline} assets={assets} onRemoveAsset={async asset=>{await waitForSave();await removeAsset({assetId:asset._id as Id<'assets'>});store.setState(state=>({history:state.history.filter(edit=>!edit.clips.some(clip=>clip.assetId===asset._id)),future:state.future.filter(edit=>!edit.clips.some(clip=>clip.assetId===asset._id))}));setOptimisticAssets(previous=>previous.filter(item=>item._id!==asset._id));}} onRefreshMedia={handleRefreshMedia} onChange={change} saving={saving} upload={upload} error={error} onError={setError} onUndo={undo} onRedo={redo} canUndo={!undoBusy&&(!!history.length||remoteUndo.current.remaining>0)} canRedo={!!future.length} assistantEditSnapshot={assistantEditSnapshot} messages={messages} aiRunning={ai?.running??false} aiConfigured={ai?.configured??false} modelSwitcher={ai?.modelSwitcher??false} aiError={ai?.error} onStop={async()=>{await stop({projectId});}} onSend={sendRequest} onExport={exportVideo} exportState={exportState} onUpload={handleUpload} onDropUpload={files=>handleUpload(files,{addToTimeline:false})} onImportVideo={async url=>{await waitForSave();await importVideo({projectId,url});}} videoImports={mediaTasks?.filter(task=>task.kind==='import')} analysisBusy={ai?.activity} analysisSource={ai?.activitySource} analysisProgress={ai?.activityProgress} canLoadMore={status==='CanLoadMore'} onLoadMore={()=>loadMore(20)}/><ConnectedTimelineShareDialog projectId={projectId} open={shareOpen} onOpenChange={setShareOpen} title={title} timeline={timeline} assets={assets} onBeforePublish={waitForSave} publishDisabled={!!ai?.running || !timeline.clips.length}/></EditorStateProvider>;
 }

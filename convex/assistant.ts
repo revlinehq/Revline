@@ -168,3 +168,16 @@ export const clearAnalysis = internalMutation({ args: { ...runArgs, requestId: v
   if (request?.ownerId === args.ownerId && request.projectId === args.projectId && request.aiRunId === args.runId) await ctx.db.delete(request._id);
   return null;
 }});
+
+/** The current saved user message, never an older conversational timestamp. */
+export const currentPrompt = internalQuery({
+  args: { ...runArgs, threadId: v.string(), promptMessageId: v.string() }, returns: v.string(),
+  handler: async (ctx, args) => {
+    const project = await requireProject(ctx, args.projectId, args.ownerId);
+    if (!project.aiRunning || project.aiRunId !== args.runId || project.threadId !== args.threadId) throw new ConvexError('AI run is no longer active');
+    const [prompt] = await ctx.runQuery(components.agent.messages.getMessagesByIds, { messageIds: [args.promptMessageId] });
+    if (!prompt || prompt.threadId !== args.threadId || prompt.message?.role !== 'user') throw new ConvexError('The current editing prompt is unavailable');
+    const content = prompt.message.content;
+    return typeof content === 'string' ? content : content.filter(part => part.type === 'text').map(part => part.type === 'text' ? part.text : '').join('\n');
+  },
+});

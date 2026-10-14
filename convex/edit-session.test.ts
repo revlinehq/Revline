@@ -154,3 +154,63 @@ test('linked video/audio delete and replacement publish together with one undo',
   await owner.mutation(api.projects.undo, { projectId });
   expect((await read()).timeline?.clips).toEqual(initial.clips);
 });
+
+test('immediate conflicts refresh and rebase an unrelated manual field once', async () => {
+  const f = await setup();
+  const session = new EditSession(original, 1, {
+    apply: (timeline, expectedRevision) => f.t.mutation(internal.assistant.apply, { ...f.run, timeline, expectedRevision }),
+    validate: (timeline, expectedRevision) => f.t.query(internal.assistant.validateDraft, { ...f.run, timeline, expectedRevision }),
+    refresh: async () => { const project = await f.read(); return { timeline: project.timeline!, revision: project.revision! }; },
+  });
+  await f.owner.mutation(api.projects.saveTimeline, { projectId: f.projectId, expectedRevision: 1, timeline: { ...original, clips: original.clips.map(clip => ({ ...clip, fontSize: 72 })) } });
+  await expect(session.checkpoint(t => ({ ...t, clips: t.clips.map(clip => ({ ...clip, text: 'AI words' })) }))).resolves.toMatchObject({ saved: true, revision: 3 });
+  expect((await f.read()).timeline?.clips[0]).toMatchObject({ text: 'AI words', fontSize: 72 });
+});
+
+test('same-field conflicts require inspection and never submit repeated stale writes', async () => {
+  const f = await setup(); let attempts = 0;
+  const session = new EditSession(original, 1, {
+    apply: (timeline, expectedRevision) => { attempts++; return f.t.mutation(internal.assistant.apply, { ...f.run, timeline, expectedRevision }); },
+    validate: (timeline, expectedRevision) => f.t.query(internal.assistant.validateDraft, { ...f.run, timeline, expectedRevision }),
+    refresh: async () => { const project = await f.read(); return { timeline: project.timeline!, revision: project.revision! }; },
+  });
+  await f.owner.mutation(api.projects.saveTimeline, { projectId: f.projectId, expectedRevision: 1, timeline: { ...original, clips: original.clips.map(clip => ({ ...clip, text: 'Manual wins' })) } });
+  await expect(session.checkpoint(t => ({ ...t, clips: t.clips.map(clip => ({ ...clip, text: 'AI words' })) }))).rejects.toThrow('Inspect');
+  await expect(session.checkpoint(t => ({ ...t, clips: t.clips.map(clip => ({ ...clip, color: '#ffffff' })) }))).rejects.toThrow('Inspect');
+  expect(attempts).toBe(1); expect(session.revision).toBe(2);
+  await session.inspect(async () => { const project = await f.read(); return { timeline: project.timeline!, revision: project.revision! }; });
+  await session.checkpoint(t => ({ ...t, clips: t.clips.map(clip => ({ ...clip, color: '#ffffff' })) }));
+  expect((await f.read()).timeline?.clips[0]).toMatchObject({ text: 'Manual wins', color: '#ffffff' });
+});
+
+test('immediate tool failures are not reported as successful completion after prior saves', async () => {
+  const f = await setup();
+  await f.session.checkpoint(t => ({ ...t, clips: t.clips.map(clip => ({ ...clip, text: 'Already saved' })) }));
+  await expect(f.session.complete('stop', true)).rejects.toThrow('saved');
+  expect((await f.read()).timeline?.clips[0].text).toBe('Already saved');
+  expect(f.session.savedEdits).toBe(1);
+});
+
+test('a second concurrent writer is bounded to one retry and requires inspection afterward', async () => {
+  const f = await setup(); let attempts = 0;
+  const session = new EditSession(original, 1, {
+    apply: async (timeline, expectedRevision) => { attempts++; await f.owner.mutation(api.projects.saveTimeline, { projectId: f.projectId, expectedRevision, timeline: { ...original, clips: original.clips.map(clip => ({ ...clip, fontSize: 70 + attempts })) } }); return f.t.mutation(internal.assistant.apply, { ...f.run, timeline, expectedRevision }); },
+    validate: (timeline, expectedRevision) => f.t.query(internal.assistant.validateDraft, { ...f.run, timeline, expectedRevision }),
+    refresh: async () => { const project = await f.read(); return { timeline: project.timeline!, revision: project.revision! }; },
+  });
+  await expect(session.checkpoint(t => ({ ...t, clips: t.clips.map(clip => ({ ...clip, text: 'AI words' })) }))).rejects.toThrow('changed elsewhere');
+  await expect(session.checkpoint(t => ({ ...t, aspectRatio: 'square' }))).rejects.toThrow('Inspect');
+  expect(attempts).toBe(2); expect((await f.read()).timeline?.clips[0]).toMatchObject({ text: 'Original edit', fontSize: 72 });
+});
+
+test('retained source timing fields are one conflict group during an automatic rebase', async () => {
+  const f = await setup();
+  const session = new EditSession(original, 1, {
+    apply: (timeline, expectedRevision) => f.t.mutation(internal.assistant.apply, { ...f.run, timeline, expectedRevision }),
+    validate: (timeline, expectedRevision) => f.t.query(internal.assistant.validateDraft, { ...f.run, timeline, expectedRevision }),
+    refresh: async () => { const project = await f.read(); return { timeline: project.timeline!, revision: project.revision! }; },
+  });
+  await f.owner.mutation(api.projects.saveTimeline, { projectId: f.projectId, expectedRevision: 1, timeline: { ...original, clips: original.clips.map(clip => ({ ...clip, sourceStart: 1 })) } });
+  await expect(session.checkpoint(t => ({ ...t, clips: t.clips.map(clip => ({ ...clip, duration: 3 })) }))).rejects.toThrow('Inspect');
+  expect((await f.read()).timeline?.clips[0]).toMatchObject({ sourceStart: 1, duration: 5 });
+});

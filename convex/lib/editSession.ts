@@ -1,8 +1,12 @@
 import { normalizeTimeline, type Timeline } from '../../lib/editor/types';
+import { rebaseNonDestructiveEdit } from './editSessionRebase';
+
+export const isTimelineConflict = (error: unknown) => /timeline changed elsewhere/i.test(error instanceof Error ? error.message : String(error));
 
 type EditStorage = {
   apply: (timeline: Timeline, revision: number, publication?:boolean) => Promise<number>;
   validate: (timeline: Timeline, revision: number) => Promise<unknown>;
+  refresh?: () => Promise<{ timeline: Timeline; revision: number }>;
 };
 
 /** One serialized model turn. Clip replacements remain private until completion. */
@@ -13,6 +17,7 @@ export class EditSession {
   staged = false;
   private pending: Promise<unknown> = Promise.resolve();
   private failed = false;
+  private needsInspection = false;
 
   constructor(timeline: Timeline, revision: number, private storage: EditStorage, private signal?: AbortSignal) {
     this.timeline = normalizeTimeline(timeline);
@@ -21,7 +26,7 @@ export class EditSession {
 
   private enqueue<T>(operation: () => Promise<T>): Promise<T> {
     const result = this.pending.then(() => { this.signal?.throwIfAborted(); return operation(); });
-    this.pending = result.catch(() => { if (this.staged) this.failed = true; });
+    this.pending = result.catch(error => { if (this.staged) this.failed = true; if (isTimelineConflict(error)) this.needsInspection = true; });
     return result;
   }
 
@@ -29,16 +34,30 @@ export class EditSession {
 
   checkpoint(edit: (timeline: Timeline) => Timeline) {
     return this.enqueue(async () => {
-      const previous = this.timeline;
-      const next = normalizeTimeline(edit(previous));
-      if (next === previous) return { applied: false, saved: false, staged: this.staged, unchanged: true, revision: this.revision, changedClips: [], removedClipIds: [], removedMarkerIds: [], aspectRatio: previous.aspectRatio };
+      if (this.needsInspection) throw new Error('The timeline changed elsewhere. Inspect the refreshed timeline before continuing.');
+      let previous = this.timeline;
+      let next = normalizeTimeline(edit(previous));
+      if (next === previous || JSON.stringify(next) === JSON.stringify(previous)) return { applied: false, saved: false, staged: this.staged, unchanged: true, revision: this.revision, changedClips: [], removedClipIds: [], removedMarkerIds: [], aspectRatio: previous.aspectRatio };
       const removedClipIds = previous.clips.filter(clip => !next.clips.some(current => current.id === clip.id)).map(clip => clip.id);
       const remainingMarkerIds = new Set(next.markers?.map(marker => marker.id));
       const removedMarkerIds = (previous.markers ?? []).filter(marker => !remainingMarkerIds.has(marker.id)).map(marker => marker.id);
       this.staged ||= removedClipIds.length > 0;
       if (this.staged) await this.storage.validate(next, this.revision);
       else {
-        this.revision = await this.storage.apply(next, this.revision);
+        try { this.revision = await this.storage.apply(next, this.revision); }
+        catch (error) {
+          if (!isTimelineConflict(error) || !this.storage.refresh) throw error;
+          const fresh = await this.storage.refresh();
+          this.timeline = normalizeTimeline(fresh.timeline); this.revision = fresh.revision;
+          try {
+            next = rebaseNonDestructiveEdit(previous, next, this.timeline); previous = this.timeline;
+            if (JSON.stringify(next) === JSON.stringify(previous)) return { applied:false, saved:false, staged:false, unchanged:true, revision:this.revision, changedClips:[], removedClipIds:[], removedMarkerIds:[], aspectRatio:previous.aspectRatio };
+            this.revision = await this.storage.apply(next, this.revision);
+          } catch (retryError) {
+            if (isTimelineConflict(retryError)) this.needsInspection = true;
+            throw retryError;
+          }
+        }
         this.savedEdits++;
       }
       this.timeline = next;
@@ -55,6 +74,7 @@ export class EditSession {
       } else {
         this.timeline = normalizeTimeline(current.timeline);
         this.revision = current.revision;
+        this.needsInspection = false;
       }
       return { timeline: this.timeline, revision: this.revision, staged: this.staged };
     });
@@ -64,7 +84,10 @@ export class EditSession {
     await this.pending;
     this.signal?.throwIfAborted();
     if (finishReason !== 'stop') throw new Error('Claude stopped before finishing this request. The pending replacement was not saved.');
-    if (!this.staged) return false;
+    if (!this.staged) {
+      if (this.needsInspection || toolFailed) throw new Error('Some requested changes were not saved. Inspect the current timeline before continuing; previously saved edits remain.');
+      return false;
+    }
     if (this.failed || toolFailed) throw new Error('A tool could not complete. The pending replacement was not saved.');
     this.revision = await this.storage.apply(this.timeline, this.revision,true);
     this.savedEdits++;

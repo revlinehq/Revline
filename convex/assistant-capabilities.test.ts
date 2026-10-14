@@ -72,10 +72,12 @@ async function run(plan?:(tools:Record<string,Tool>)=>Promise<void>,seed:Timelin
     runQuery:async(reference:Parameters<typeof getFunctionName>[0],args:{timeline?:Timeline;expectedRevision?:number})=>{
       const name=getFunctionName(reference);calls.push(name);
       if(backend){
+        if(name==='assistant:currentPrompt')return 'Synthetic editing request';
         if(name==='assistant:getRun')return backend.t.query(internal.assistant.getRun,backend.runArgs);
         if(name==='assistant:isRunActive')return backend.t.query(internal.assistant.isRunActive,backend.runArgs);
         if(name==='assistant:validateDraft')return backend.t.query(internal.assistant.validateDraft,{...backend.runArgs,timeline:args.timeline!,expectedRevision:args.expectedRevision!});
       }
+      if(name==='assistant:currentPrompt')return 'Synthetic editing request';
       if(name==='assistant:getRun')return{project:project(),assets:[{_id:'video',kind:'video',fileName:'Own video',duration:30},{_id:'sound',kind:'audio',fileName:'Own audio',duration:30},{_id:'image',kind:'image',fileName:'Own image'}]};
       if(name==='assistant:isRunActive')return true;
       if(name==='assistant:validateDraft')return null;
@@ -169,7 +171,7 @@ test('group copy/move/trim, layer reorder and common blend use actual editor ope
 test('a plain greeting completion creates no edits or analysis requests and preserves concise abilities policy',async()=>{
   const result=await run();
   expect(result.timeline).toEqual(initial);expect(result.revision).toBe(0);
-  expect(result.calls).toEqual(['assistant:getRun','assistant:finish']);
+  expect(result.calls).toEqual(['assistant:getRun','assistant:currentPrompt','assistant:finish']);
   expect(sdk.options!.instructions).toContain('Greetings, small talk, and questions about your abilities do not request footage analysis or editing');
   expect(sdk.options!.instructions).toContain('short Markdown bullet list with bold capability names');
   expect(sdk.options!.instructions).toContain(JSON.stringify(editorCapabilities()));
