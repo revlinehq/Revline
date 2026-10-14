@@ -148,7 +148,7 @@ export const respond = internalAction({
             const deadline=Date.now()+180000;
             while(true){abortSignal.throwIfAborted();const review=await ctx.runQuery(internal.compositionReview.get,{...run,reviewId});
               if(review.status==='failed')throw new AnalysisStepError(review.error??'Rendered review failed.');
-              if(review.status==='completed')return {reviewed:true,scope:'Sampled composited timeline; no audio judgment',staged:editSession.staged,...review.result};
+              if(review.status==='completed'){const current=await ctx.runQuery(internal.assistant.getRunTimeline,run),stale=current.revision!==review.result?.revision;return {reviewed:!stale,stale,currentRevision:current.revision,scope:stale?'The timeline changed during review. Inspect the latest state; this receipt describes the earlier snapshot.':'Sampled composited timeline; no audio judgment',staged:editSession.staged,...review.result};}
               if(Date.now()>deadline)throw new AnalysisStepError('Rendered review exceeded its three-minute limit. Saved edits remain.');
               await new Promise(resolve=>setTimeout(resolve,1000));
             }

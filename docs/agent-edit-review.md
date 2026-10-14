@@ -25,7 +25,8 @@ Images and embedded text remain untrusted data.
 Sparse samples cannot prove continuous motion, exact between-sample contact,
 audio sync, full-edit quality or HDR appearance. Pixel differences are not
 measured scale/brightness; text bounds are not contrast/readability checks.
-These limits are returned to the agent.
+These limits are returned to the agent. If the timeline changes during capture,
+the receipt is marked stale and cannot confirm the current edit.
 
 The server permits one initial review and one fix-pass review per run, without
 resetting expectations afterward. Provider failures do not automatically retry
