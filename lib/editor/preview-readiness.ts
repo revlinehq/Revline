@@ -1,7 +1,8 @@
 /** A painted player shell is not proof that the current media frame has decoded. */
 export async function waitForPreviewMedia(document:Document,time:number,signal:AbortSignal,onThumbnail?:(url:string)=>void) {
+  const transitions=(document.defaultView as (Window & {__revlineTransitionController?:{whenReady(time:number,signal:AbortSignal):Promise<void>}})|null)?.__revlineTransitionController;
   const media=Array.from(document.querySelectorAll<HTMLMediaElement>('video[data-start],audio[data-start]')).filter(node=>time>=Number(node.dataset.start)&&time<Number(node.dataset.end??Number(node.dataset.start)+Number(node.dataset.duration)));
-  await Promise.all(media.map(node=>new Promise<void>((resolve,reject)=>{
+  await Promise.all([transitions?.whenReady(time,signal),...media.map(node=>new Promise<void>((resolve,reject)=>{
     const cleanup=()=>{clearTimeout(timer);for(const name of ['loadeddata','canplay','seeked','error'])node.removeEventListener(name,check);signal.removeEventListener('abort',abort);};
     const abort=()=>{cleanup();reject(signal.reason??new DOMException('Cancelled','AbortError'));};
     const check=()=>{
@@ -13,5 +14,5 @@ export async function waitForPreviewMedia(document:Document,time:number,signal:A
     const timer=setTimeout(()=>{cleanup();reject(new Error('The footage is taking too long to load. Please retry.'));},20_000);
     for(const name of ['loadeddata','canplay','seeked','error'])node.addEventListener(name,check);
     signal.addEventListener('abort',abort,{once:true});node.preload='auto';if(signal.aborted)abort();else check();
-  })));
+  }))]);
 }

@@ -1,7 +1,7 @@
 'use client';
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from 'react';
-import { ChevronDown, Hand, Minus, Plus } from 'lucide-react';
+import { ChevronDown, Hand, Minus, Plus, ScanLine } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { PREVIEW_ZOOM_PRESETS, PREVIEW_ZOOM_STEP, PREVIEW_ZOOM_MIN, PREVIEW_ZOOM_MAX, fitPreviewView, normalizePreviewWheel, panPreviewBy, previewViewGeometry, zoomPreviewAt, type PreviewPoint, type PreviewSize, type PreviewView, type PreviewViewportSize } from '@/lib/editor/preview-zoom';
@@ -16,6 +16,8 @@ type ZoomContext = {
   geometry: ReturnType<typeof previewViewGeometry>;
   handMode: boolean;
   setHandMode: (value: boolean) => void;
+  safeGuides: boolean;
+  setSafeGuides: (value: boolean) => void;
   getView: () => PreviewView;
   commit: (view: PreviewView) => void;
   fit: () => void;
@@ -40,6 +42,7 @@ export function PreviewZoomProvider({ canvas, children }: { canvas: PreviewSize;
   const [view, setView] = useState(() => fitPreviewView(canvas));
   const viewRef = useRef(view);
   const [handMode, setHandMode] = useState(false);
+  const [safeGuides, setSafeGuides] = useState(false);
   const commit = useCallback((next: PreviewView) => { viewRef.current = next; setView(next); }, []);
   const getView = useCallback(() => viewRef.current, []);
   const geometry = previewViewGeometry(view, canvas, viewport);
@@ -109,12 +112,12 @@ export function PreviewZoomProvider({ canvas, children }: { canvas: PreviewSize;
     return () => { element.removeEventListener('wheel', wheel, { capture: true }); if (frame) cancelAnimationFrame(frame); };
   }, [commit, viewportElement]);
 
-  const value = useMemo(() => ({ canvas, viewport, viewportRef, attachViewport, view, geometry, handMode: handMode && geometry.canPan, setHandMode, getView, commit, fit, zoom, preset }), [canvas.width, canvas.height, viewport, view, handMode, attachViewport, getView, commit, fit, zoom, preset]);
+  const value = useMemo(() => ({ canvas, viewport, viewportRef, attachViewport, view, geometry, handMode: handMode && geometry.canPan, setHandMode, safeGuides, setSafeGuides, getView, commit, fit, zoom, preset }), [canvas.width, canvas.height, viewport, view, handMode, safeGuides, attachViewport, getView, commit, fit, zoom, preset]);
   return <PreviewZoomContext.Provider value={value}>{children}</PreviewZoomContext.Provider>;
 }
 
 export function PreviewZoomControls() {
-  const { view, geometry, fit, zoom, preset, handMode, setHandMode } = usePreviewZoom();
+  const { canvas, view, geometry, fit, zoom, preset, handMode, setHandMode, safeGuides, setSafeGuides } = usePreviewZoom();
   const label = view.scale === null ? 'Fit' : `${Math.round(geometry.scale * 100)}%`;
   return <div className="preview-zoom-controls" role="group" aria-label="Preview view controls">
     <Button type="button" variant="ghost" size="icon-sm" aria-label="Zoom out preview" title="Zoom out preview" onClick={() => zoom(1 / PREVIEW_ZOOM_STEP)} disabled={geometry.scale <= PREVIEW_ZOOM_MIN + .000001}><Minus size={14}/></Button>
@@ -126,6 +129,7 @@ export function PreviewZoomControls() {
     </DropdownMenu>
     <Button type="button" variant="ghost" size="icon-sm" aria-label="Zoom in preview" title="Zoom in preview" onClick={() => zoom(PREVIEW_ZOOM_STEP)} disabled={geometry.scale >= PREVIEW_ZOOM_MAX - .000001}><Plus size={14}/></Button>
     <Button type="button" variant="ghost" size="icon-sm" aria-label="Pan preview" title="Pan preview · drag with the hand tool or middle mouse button" aria-pressed={handMode} disabled={!geometry.canPan} onClick={() => setHandMode(!handMode)}><Hand size={14}/></Button>
+    {canvas.height>canvas.width&&<Button type="button" variant="ghost" size="icon-sm" aria-label={safeGuides?'Hide safe guides':'Show safe guides'} title="Vertical safe guides · keep important text inside. Platform layouts vary." aria-pressed={safeGuides} onClick={()=>setSafeGuides(!safeGuides)}><ScanLine size={14}/></Button>}
   </div>;
 }
 
@@ -139,7 +143,7 @@ function aspectUnit(canvas: PreviewSize) {
 }
 
 export function PreviewViewport({ children }: { children: ReactNode }) {
-  const { canvas, viewport, viewportRef, attachViewport, geometry, handMode, setHandMode, getView, commit, fit, zoom } = usePreviewZoom();
+  const { canvas, viewport, viewportRef, attachViewport, geometry, handMode, setHandMode, safeGuides, getView, commit, fit, zoom } = usePreviewZoom();
   // HyperFrames fits against integer offsetWidth/offsetHeight. An integer layout
   // with the exact project ratio prevents a fractional letterbox before zooming.
   const unit = aspectUnit(canvas);
@@ -219,6 +223,7 @@ export function PreviewViewport({ children }: { children: ReactNode }) {
   }}>
     <div className="preview-viewport-frame" style={{ width: geometry.width, height: geometry.height, left: geometry.left, top: geometry.top, visibility: viewport.width && viewport.height ? 'visible' : 'hidden' }}>
       <div className="preview-viewport-scene" style={{ width: layoutWidth, height: layoutHeight, transform: `scale(${sceneScale})`, '--preview-view-scale': sceneScale } as CSSProperties}>{children}</div>
+      {safeGuides&&canvas.height>canvas.width&&<div className="preview-safe-guides" aria-hidden="true"><div className="preview-safe-area"><span>Keep important text inside</span></div></div>}
     </div>
   </div>;
 }

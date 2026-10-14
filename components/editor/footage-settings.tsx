@@ -4,7 +4,8 @@ import { ChevronDown, Crop, Film, Image as ImageIcon } from 'lucide-react';
 import { BLEND_MODES } from '@/lib/editor/clip-effects';
 import type { Clip, MediaAsset } from '@/lib/editor/types';
 import { NumberControl } from './visual-controls';
-import { PlaybackSpeedControls } from './visual-effects-controls';
+import { EffectSlider, PlaybackSpeedControls } from './visual-effects-controls';
+import { DEFAULT_TRANSFORM } from '@/lib/editor/types';
 import './footage-settings.css';
 
 function blendLabel(mode: NonNullable<Clip['blendMode']>) {
@@ -19,8 +20,9 @@ export function FootageSelection({ clip, asset }: { clip: Clip; asset?: MediaAss
   </div>;
 }
 
-export function FootageSettings({ clip, audioClip, asset, onChange, onPlaybackRateChange, onCrop, cropping }: {
+export function FootageSettings({ clip, audioClip, asset, onChange, onPreview, onPlaybackRateChange, onCrop, cropping }: {
   clip: Clip; audioClip?: Clip; asset?: MediaAsset; onChange: (patch: Partial<Clip>) => void;
+  onPreview?: (patch:Partial<Clip>|null)=>void;
   onPlaybackRateChange?: (rate: number) => void; onCrop: () => void; cropping: boolean;
 }) {
   const hasVolume = clip.kind === 'video' && (!clip.audioSeparated || !!audioClip);
@@ -43,6 +45,7 @@ export function FootageSettings({ clip, audioClip, asset, onChange, onPlaybackRa
     </section>}
     <details className="footage-compositing">
       <summary><span>Compositing</span><small>{blendLabel(blendMode)}</small><ChevronDown size={13}/></summary>
+      <EffectSlider label="Opacity" value={clip.transform?.opacity??1} bounds={[0,1]} step={.01} format={value=>`${Math.round(value*100)}%`} disabled={false} onPreview={value=>onPreview?.(value===null?null:{transform:{...DEFAULT_TRANSFORM,...clip.transform,opacity:value}})} onCommit={opacity=>onChange({transform:{...DEFAULT_TRANSFORM,...clip.transform,opacity}})}/>
       <label className="footage-blend"><span>Blend mode</span><select aria-label="Blend mode" value={blendMode} onChange={event => onChange({ blendMode: event.currentTarget.value as Clip['blendMode'] })}>{BLEND_MODES.map(mode => <option key={mode} value={mode}>{blendLabel(mode)}</option>)}</select></label>
     </details>
   </div>;

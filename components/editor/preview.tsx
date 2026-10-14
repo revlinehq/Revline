@@ -3,7 +3,7 @@
 import { warmPreviewMedia } from '@/lib/editor/preview-media-warmup';
 import { waitForPreviewMedia } from '@/lib/editor/preview-readiness';
 import { useEffect, useLayoutEffect, useRef, useState, useMemo, forwardRef, useImperativeHandle } from 'react';
-import { clipVolumeEnvelope } from '@/lib/editor/clip-volume';
+import { audioSettings, audioVolumeEnvelope } from '@/lib/editor/audio-settings';
 import type { HyperframesPlayer } from '@hyperframes/player';
 import { LoaderCircle } from 'lucide-react';
 import { calculateVisualRect, compositionTrackIndex, generateComposition, layerZIndex } from '@/lib/editor/composition';
@@ -51,7 +51,7 @@ export const Preview = forwardRef<PreviewHandle,{timeline:Timeline;assets:MediaA
   const previewVolumes=useRef(new Map<string,number>());
   // Layer order and gain update in place without rebuilding or decoding footage.
   const contentKey=useMemo(()=>previewContentKey(timeline,assets),[timeline,assets]);
-  function updateClip(p:HyperframesPlayer,clip:Clip,index:number){
+  function updateClip(p:HyperframesPlayer,clip:Clip,index:number,current:Timeline=latestTimeline.current){
     if(clip.kind==='effect')return;
     const doc=p.iframeElement?.contentDocument;if(!doc)return;
     const node=compositionNode(doc,clip,index);if(!node)return;index=compositionIndex(doc,clip,index);
@@ -59,18 +59,19 @@ export const Preview = forwardRef<PreviewHandle,{timeline:Timeline;assets:MediaA
     const frame=clip.kind==='video'||clip.kind==='image'?doc.getElementById(`clip-${index}-frame`):null,visual=frame??node,zIndex=String(layerZIndex(clip,index));if(visual.style.zIndex!==zIndex)visual.style.zIndex=zIndex;
     if(clip.kind==='video'||clip.kind==='audio'){
       const volume=previewVolumes.current.get(clip.id)??clip.volume??1;
-      const media=node as HTMLMediaElement;if(media.dataset.volume!==String(volume)){
-        media.dataset.volume=String(volume);
-        // HyperFrames watches automation changes and samples this lane live;
-        // native HTML volume cannot carry gain above unity.
-        media.dataset.automation=clipVolumeEnvelope(volume);
-      }
+      const media=node as HTMLMediaElement;if(media.dataset.volume!==String(volume))media.dataset.volume=String(volume);
+      // Compare the complete lane: other voice clips can change music gain without changing this clip's volume.
+      const automation=audioVolumeEnvelope(current,clip,volume),fades=audioSettings(clip);
+      if(media.dataset.automation!==automation)media.dataset.automation=automation;
+      if(media.dataset.fadeIn!==String(fades.fadeIn))media.dataset.fadeIn=String(fades.fadeIn);
+      if(media.dataset.fadeOut!==String(fades.fadeOut))media.dataset.fadeOut=String(fades.fadeOut);
       media.volume=Math.min(1,volume);
       if(clip.kind==='video'){media.toggleAttribute('muted',volume===0);media.muted=volume===0||p.muted;}
     }
   }
   function updateLayers(p:HyperframesPlayer,current:Timeline){
-    current.clips.forEach((clip,index)=>updateClip(p,clip,index));
+    const effective=previewVolumes.current.size?{...current,clips:current.clips.map(clip=>previewVolumes.current.has(clip.id)?{...clip,volume:previewVolumes.current.get(clip.id)}:clip)}:current;
+    effective.clips.forEach((clip,index)=>updateClip(p,clip,index,effective));
   }
   useLayoutEffect(()=>{
     previewVolumes.current.clear();
@@ -104,10 +105,27 @@ export const Preview = forwardRef<PreviewHandle,{timeline:Timeline;assets:MediaA
     callbacks.current.onPlaying(false);
   },currentTime:()=>frameTime(player.current,seekPosition.current),mute:(v)=>{if(player.current)player.current.muted=v;},clipVolume:(id,volume)=>{
     if(volume===null)previewVolumes.current.delete(id);else previewVolumes.current.set(id,volume);
-    const entry=clipIndex.current.get(id);if(player.current&&entry)updateClip(player.current,entry.clip,entry.index);
+    if(player.current)updateLayers(player.current,latestTimeline.current);
   },clipEffects:(id,patch)=>{
     const entry=clipIndex.current.get(id),doc=player.current?.iframeElement?.contentDocument;
-    if(entry&&doc)try{if(entry.clip.kind==='effect')previewAdjustmentEffect(doc,entry.clip,compositionIndex(doc,entry.clip,entry.index),patch);else previewVisualEffects(doc,entry.clip,compositionIndex(doc,entry.clip,entry.index),patch);}catch(error){callbacks.current.onError(error instanceof Error?error.message:'Could not preview this effect.');}
+    if(entry&&doc)try{
+      if(entry.clip.kind==='effect')previewAdjustmentEffect(doc,entry.clip,compositionIndex(doc,entry.clip,entry.index),patch);
+      else if(entry.clip.kind==='caption'||entry.clip.kind==='graphic'){
+        const before=latestTimeline.current;
+        updateLiveTextEffects(doc,before,{...before,clips:before.clips.map(clip=>clip.id===id?{...clip,...patch}:clip)});
+      }else if(entry.clip.kind==='audio'){
+        if(patch?.volume!==undefined)previewVolumes.current.set(id,patch.volume);else previewVolumes.current.delete(id);
+        const before=latestTimeline.current;
+        if(player.current)updateLayers(player.current,{...before,clips:before.clips.map(clip=>clip.id===id?{...clip,...patch}:clip)});
+      }else{
+        previewVisualEffects(doc,entry.clip,compositionIndex(doc,entry.clip,entry.index),patch);
+        if(entry.clip.kind==='video'||entry.clip.kind==='image'){
+          const transform={x:.5,y:.5,scale:1,rotation:0,opacity:1,...entry.clip.transform,...patch?.transform};
+          const frame=Array.from(doc.querySelectorAll<HTMLElement>('[data-visual-clip]')).find(node=>node.dataset.visualClip===id);
+          if(frame)frame.style.opacity=String(transform.opacity);
+        }
+      }
+    }catch(error){callbacks.current.onError(error instanceof Error?error.message:'Could not preview this effect.');}
   },resetCrop:()=>cropControls.current?.reset(),finishCrop:(cancel=false)=>{if(cancel)cropControls.current?.cancel();else cropControls.current?.done();}}),[]);
   useEffect(()=>{
     let cancelled=false,loaded=false,swapped=false,waitingForMedia=false;let p:HyperframesPlayer|null=null;let swapFrame=0;
@@ -119,7 +137,7 @@ export const Preview = forwardRef<PreviewHandle,{timeline:Timeline;assets:MediaA
       console.warn('[Revline playback]',JSON.stringify({chatId:debugId,reason,ready:p.ready,painted:p.painted,time:p.currentTime,paused:p.paused,renderReady:win?.__renderReady,hasRuntime:!!win?.__player,clock:frameTime(p,seekPosition.current),clockPaused:win?.__timelines?.revline?.paused(),duration:win?.__timelines?.revline?.duration(),tickerTime:win?.gsap?.ticker.time,runtimeSrc:p.getAttribute('runtime-src'),scripts:Array.from(doc?.scripts??[],node=>node.src).filter(Boolean).map(url=>url.split('?')[0]),mediaCount:media.length,readyCount:media.filter(node=>node.readyState>=2).length,active:media.filter(node=>seekPosition.current>=Number(node.dataset.start)&&seekPosition.current<Number(node.dataset.end)).map(node=>({id:node.dataset.sourceClip,readyState:node.readyState,error:node.error?.code??null,paused:node.paused,sourceTime:node.currentTime}))}));
     };
     diagnostic.current=diagnose;
-    const iframeError=(event:MessageEvent)=>{if(cancelled||event.source!==p?.iframeElement?.contentWindow||event.origin!==window.location.origin||event.data?.source!=='revline-preview-error')return;console.error('[Revline preview error]',{chatId:debugId,label:event.data.label,message:event.data.message});callbacks.current.onError(`Preview: ${event.data.message}`);};
+    const iframeError=(event:MessageEvent)=>{if(cancelled||event.source!==p?.iframeElement?.contentWindow||event.origin!==window.location.origin||event.data?.source!=='revline-preview-error')return;console.error(`[Revline preview error] ${event.data.label}: ${event.data.message}`,{chatId:debugId});callbacks.current.onError(`Preview: ${event.data.message}`);};
     window.addEventListener('message',iframeError);
     const recovery=new AbortController(),attempted=new WeakSet<HTMLMediaElement>(),refreshes=new Map<string,Promise<string|null>>();let removeMediaErrors:(()=>void)|undefined, stopWarmup:(()=>void)|undefined;
     void import('@hyperframes/player').then(()=>{
