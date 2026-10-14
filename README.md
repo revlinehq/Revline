@@ -110,6 +110,14 @@ OpenCut Classic preview and editing patterns are adapted with MIT attribution re
 
 ## Verification
 
+### Development SAM mask lab
+
+Run the normal development server and open `/dev/sam`, or choose **SAM 3 (dev)** in the effects library. Add `META_MODEL_API_KEY` to `.env.local`; the key stays in Next's server runtime. This experiment calls Meta's `sam-3.1` API, streams masks through the official parser, and previews them with Meta's frame-indexed video player. FFprobe must be installed. Use an MP4/MOV up to 10 seconds, 600 frames, 1080p and 20 MB; the server checks actual media metadata before a provider call.
+
+Both the page and API are disabled outside `NODE_ENV=development`. Files and masks remain temporary; the lab doesn't save timeline edits or implement masked exports. No Meta call runs before you press **Find masks**. A real key with SAM access is required to validate tracking quality. `node scripts/sam-mask-lab-smoke.mjs` exercises generated video and synthetic provider events without calling Meta.
+
+The Claude editing model picker is separate: `MODEL_SWITCHER_ENABLED=true` on Convex enables manual Haiku/Sonnet/Opus choices in either development or production. Each edit run pins its provider and model at submission; absent a choice, existing model environment defaults still apply.
+
 Unit tests cover timeline operations, selection/movement geometry, source crop/transform math, media analysis adapters, authorization, revision conflicts, and inactive billing. Browser checks live in `scripts/`: editor, timeline interactions, transform/crop, and face following. Render checks decode real exported MP4 frames and audio.
 
 `scripts/live-integration.ts` exercises a local application against development Clerk and Convex, creates temporary fixtures, and removes them afterward. It refuses non-local origins, production deployments, and live Clerk keys. Start the media worker first. Set `REVLINE_SPEECH_FIXTURE` to a local public-domain video to include real transcription, understanding, extracted audio and waveform checks. `scripts/worker-tracking-smoke.ts` verifies background face detection with an official MediaPipe fixture.

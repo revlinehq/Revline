@@ -38,14 +38,15 @@ export function EffectLibrary({ clip, timeline, time = 0, onMedia, onVisualEffec
   onFadeThroughBlack?: () => void; onSpeed?: () => void;
 }) {
   const [tab, setTab] = useState<LibraryTab>('effects');
-  const [category, setCategory] = useState<EffectLibraryCategory>('motion');
+  const [category, setCategory] = useState<EffectLibraryCategory | 'sam-dev'>('motion');
   const [search, setSearch] = useState('');
   const id = useId();
   const visual = clip?.kind === 'video' || clip?.kind === 'image';
   const text = clip?.kind === 'caption' || clip?.kind === 'graphic';
   const query = search.trim().toLowerCase();
   const catalog = EFFECT_LIBRARY_CATALOG.filter(entry => !isTransitionPreset(entry.preset) || onAddTransition);
-  const categories = EFFECT_LIBRARY_CATEGORIES.filter(item => catalog.some(entry => entry.category === item.id));
+  const categories: { id: EffectLibraryCategory | 'sam-dev'; label: string }[] = EFFECT_LIBRARY_CATEGORIES.filter(item => catalog.some(entry => entry.category === item.id));
+  if (process.env.NODE_ENV === 'development') categories.push({ id: 'sam-dev', label: 'SAM 3 (dev)' });
   const visible = catalog.filter(entry => (!entry.action || onSpeed) && (query ? `${entry.label} ${entry.description}`.toLowerCase().includes(query) : entry.category === category));
   const transitions = onAddTransition && timeline ? transitionAvailabilityAt(timeline, time, { aboveClipId: visual ? clip.id : undefined }) : { available: false as const, reason: 'Add video or image footage before adding a transition.' };
   const canDragTransition = !!onAddTransition && !!timeline?.clips.some(item => (item.kind === 'video' || item.kind === 'image') && item.duration >= 2 / timeline.fps);
@@ -61,7 +62,7 @@ export function EffectLibrary({ clip, timeline, time = 0, onMedia, onVisualEffec
     else if (entry.preset) onAddEffect?.(entry.preset);
     else onSpeed?.();
   }
-  function selectCategory(next: EffectLibraryCategory) { setCategory(next); setSearch(''); }
+  function selectCategory(next: EffectLibraryCategory | 'sam-dev') { setCategory(next); setSearch(''); }
   return <div className="effect-library" aria-label="Effect library">
     {onMedia && <button type="button" className="library-media-access" onClick={onMedia}><FolderOpen size={14}/><span>Your media</span><ChevronRight size={14}/></button>}
     <SegmentedTabs className="library-tabs" label="Effect library" value={tab} onChange={setTab} options={[{ value: 'effects', label: 'Effects', id: `${id}-effects-tab`, panelId: `${id}-effects` }, { value: 'text', label: 'Text', id: `${id}-text-tab`, panelId: `${id}-text` }]}/>
@@ -77,12 +78,12 @@ export function EffectLibrary({ clip, timeline, time = 0, onMedia, onVisualEffec
           event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="tab"]')[next]?.focus();
         }}>{categories.map(item => <button key={item.id} type="button" role="tab" id={`${id}-category-${item.id}`} data-category={item.id} aria-controls={`${id}-category-results`} aria-selected={category === item.id} tabIndex={category === item.id ? 0 : -1} onClick={() => selectCategory(item.id)}>{item.label}</button>)}</div>
         <div className="library-category-results" id={`${id}-category-results`} role={query ? 'region' : 'tabpanel'} aria-label={query ? 'Effect search results' : undefined} aria-labelledby={query ? undefined : `${id}-category-${category}`}>
-          <div className="library-look-grid">{visible.map(entry => {
+          {category === 'sam-dev' && !query ? <section className="library-sam-dev"><h3>Subject masks</h3><p>Test how SAM follows a person or object through a short clip.</p><a href="/dev/sam" target="_blank" rel="noopener noreferrer">Open mask lab <ChevronRight size={13}/></a><small>Development experiment</small></section> : <div className="library-look-grid">{visible.map(entry => {
             const unavailable = reason(entry);
             const draggable = !!entry.visual || (isTransitionPreset(entry.preset) ? !!canDragTransition : !!entry.preset && !!onAddEffect);
             return <LibraryEntry key={entry.id} entry={entry} disabled={!!unavailable} reason={unavailable} draggable={draggable} onApply={() => apply(entry)}/>;
-          })}</div>
-          {!visible.length && <p className="library-empty">No matching looks.</p>}
+          })}</div>}
+          {!visible.length && (category !== 'sam-dev' || query) && <p className="library-empty">No matching looks.</p>}
           {!transitions.available && visible.some(entry => isTransitionPreset(entry.preset)) && <p className="library-transition-availability" role="status">{transitions.reason}</p>}
         </div>
       </div> : <div className="library-text-results">

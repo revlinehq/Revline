@@ -43,3 +43,5 @@ html[data-workspace-theme=light] .library-category-rail>[role=tab][aria-selected
 .library-text-results{flex:1;padding-right:4px}
 .library-text-section{margin-bottom:18px}.library-text-section>h3{margin:0 0 10px;color:var(--ws-text);font-size:11px;font-weight:600}
 .library-transition-availability{margin:10px 0 0;color:var(--ws-muted);font-size:10px;line-height:1.6;overflow-wrap:anywhere}
+.library-sam-dev{padding:12px 8px;display:flex;flex-direction:column;gap:10px;align-items:flex-start}
+.library-sam-dev h3{font-size:13px;font-weight:500;margin:0}.library-sam-dev p{font-size:12px;line-height:1.5;color:var(--ws-muted);margin:0}.library-sam-dev a{display:inline-flex;align-items:center;gap:6px;color:#8195ff;text-decoration:none;font-size:12px;padding:7px 0}.library-sam-dev small{font-size:10px;color:var(--ws-faint)}

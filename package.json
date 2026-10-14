@@ -25,6 +25,8 @@
     "@hyperframes/player": "0.8.144",
     "@hyperframes/producer": "0.8.143",
     "@mediapipe/tasks-vision": "^1.1.0",
+    "@meta-sam/parser": "0.1.0",
+    "@meta-sam/react": "0.1.14",
     "@remotion/transitions": "4.0.535",
     "ai": "^7.0.137",
     "class-variance-authority": "^0.7.1",
