@@ -46,7 +46,7 @@ export function FootageProcessingCard({ files, phase, index, total, percent, err
   const failed = phase === 'error';
   const measurable = phase === 'uploading';
 
-  const activity = measurable ? `Uploading clip ${fileIndex} of ${fileTotal} · ${Math.round(progress)}%` : phase === 'opening' ? 'Getting video and audio ready' : `${phaseLabels[phase]}${fileTotal > 1 ? ` · ${fileIndex} of ${fileTotal}` : ''}`;
+  const activity = measurable ? `Uploading clip ${fileIndex} of ${fileTotal} · ${Math.round(progress)}%` : phase === 'opening' ? undefined : `${phaseLabels[phase]}${fileTotal > 1 ? ` · ${fileIndex} of ${fileTotal}` : ''}`;
   return <FootagePreparation thumbnail={file?.thumbnail || (file?.kind === 'image' ? file.url : undefined)} fileName={file?.name} activity={activity} error={failed ? error || 'Your footage could not be uploaded. Retry without choosing the files again.' : undefined}>
     {failed && <div className="footage-processing-actions">
       <PrimaryButton type="button" size="compact" onClick={onRetry}><RotateCcw size={13} aria-hidden="true"/>Retry</PrimaryButton>
