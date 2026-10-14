@@ -8,6 +8,7 @@ import { EditorStateProvider } from './editor-state';
 import { useConvex, useConvexAuth, useMutation, useQuery, useAction } from 'convex/react';
 import { useUIMessages } from '@convex-dev/agent/react';
 import { LoaderCircle } from 'lucide-react';
+import { FootagePreparation } from './footage-preparation';
 import { api } from '@/convex/_generated/api';
 import type { Id, Doc } from '@/convex/_generated/dataModel';
 import { EditorShell } from './editor-shell';
@@ -24,7 +25,7 @@ import type { UploadProgress } from './footage-panel';
 export function ConnectedEditor({projectId}: {projectId:string}) {
   const {isAuthenticated}=useConvexAuth();
   const project=useQuery(api.projects.get,isAuthenticated?{projectId:projectId as Id<'projects'>}:'skip');
-  if(!project)return <div className="editor-boot"><LoaderCircle className="animate-spin"/><p>Opening your story…</p><Link href="/projects">Your projects</Link></div>;
+  if(!project)return <div className="editor-app footage-preparation-boot"><FootagePreparation/></div>;
   return <EditorAccessGate><ProjectEditor key={projectId} project={project}/></EditorAccessGate>;
 }
 function ProjectEditor({project}: {project:Doc<'projects'>}) {
@@ -33,6 +34,17 @@ function ProjectEditor({project}: {project:Doc<'projects'>}) {
   const save=useMutation(api.projects.saveTimeline);const update=useMutation(api.projects.update);const backendUndo=useMutation(api.projects.undo);const startUpload=useAction(api.r2.start);const partUrl=useAction(api.r2.partUrl);const finishUpload=useAction(api.r2.complete);const abortUpload=useAction(api.r2.abort);const send=useMutation(api.assistant.send);const stop=useMutation(api.assistant.stop);const renderStart=useMutation(api.renders.start);
   const importVideo=useMutation(api.mediaTasks.importVideo);
   const removeAsset=useMutation(api.assets.remove);
+  const thumbnailUpload=useMutation(api.assets.generateUploadUrl);const attachThumbnail=useMutation(api.assets.attachThumbnail);
+  const saveThumbnail=useCallback(async(assetId:Id<'assets'>,image:Blob)=>{
+    const url=await thumbnailUpload({projectId});const response=await fetch(url,{method:'POST',headers:{'Content-Type':'image/jpeg'},body:image});
+    if(!response.ok)throw new Error('Could not save the footage thumbnail.');
+    const {storageId}=await response.json() as {storageId:Id<'_storage'>};await attachThumbnail({assetId,storageId});
+  },[thumbnailUpload,attachThumbnail,projectId]);
+  const capturedThumbnails=useRef(new Set<string>());
+  const persistThumbnail=useCallback((assetId:string,url:string)=>{
+    if(capturedThumbnails.current.has(assetId))return;capturedThumbnails.current.add(assetId);
+    void fetch(url).then(response=>response.blob()).then(image=>saveThumbnail(assetId as Id<'assets'>,image)).catch(()=>capturedThumbnails.current.delete(assetId));
+  },[saveThumbnail]);
   const refreshMedia=useAction(api.playback.refresh);
   const handleRefreshMedia=useCallback((assetIds:string[])=>refreshMedia({projectId,assetIds:assetIds as Id<'assets'>[]}),[refreshMedia,projectId]);
   const mediaTasks=useQuery(api.mediaTasks.list,{projectId});
@@ -126,6 +138,7 @@ function ProjectEditor({project}: {project:Doc<'projects'>}) {
           partUrl: (uploadId, partNumber) => partUrl({ uploadId, partNumber }),
           complete: (uploadId, parts) => finishUpload({ uploadId, parts }),
           abort: uploadId => abortUpload({ uploadId }),
+          saveThumbnail,
         }, report);
         let asset=await convex.query(api.assets.get,{projectId,assetId});
         if(asset.kind==='video'&&!asset.audioExtracted){await prepareVideoAudio(convex,projectId,assetId);asset=await convex.query(api.assets.get,{projectId,assetId});}
@@ -156,6 +169,6 @@ function ProjectEditor({project}: {project:Doc<'projects'>}) {
       if(prompt&&timelineRef.current.clips.length&&!saves.busy){await send({projectId,prompt});sessionStorage.removeItem('revline:brief:'+projectId);}
     })().catch(e=>setError(e instanceof Error?e.message:'Could not start this edit.'));
   },[media,projectId,send]);
-  if(media===undefined)return <div className="editor-boot"><LoaderCircle className="animate-spin"/><p>Loading your footage…</p></div>;
-  return <EditorStateProvider store={store}><EditorShell projectId={projectId} draftKey={`revline:editor-draft:${projectId}`} title={title} onTitle={titleChange} timeline={timeline} assets={assets} onRemoveAsset={async asset=>{await waitForSave();await removeAsset({assetId:asset._id as Id<'assets'>});store.setState(state=>({history:state.history.filter(edit=>!edit.clips.some(clip=>clip.assetId===asset._id)),future:state.future.filter(edit=>!edit.clips.some(clip=>clip.assetId===asset._id))}));setOptimisticAssets(previous=>previous.filter(item=>item._id!==asset._id));}} onRefreshMedia={handleRefreshMedia} onChange={change} saving={saving} upload={upload} error={error} onError={setError} onUndo={undo} onRedo={redo} canUndo={!undoBusy&&(!!history.length||remoteUndo.current.remaining>0)} canRedo={!!future.length} assistantEditSnapshot={assistantEditSnapshot} onAssistantUndo={undoAssistantEdit} messages={messages} aiRunning={ai?.running??false} aiConfigured={ai?.configured??false} aiError={ai?.error} onStop={async()=>{await stop({projectId});}} onSend={async(prompt,context)=>{await waitForSave();await send({projectId,prompt,...context});}} onExport={exportVideo} exportState={exportState} onUpload={handleUpload} onDropUpload={files=>handleUpload(files,{addToTimeline:false})} onImportVideo={async url=>{await waitForSave();await importVideo({projectId,url});}} videoImports={mediaTasks?.filter(task=>task.kind==='import')} analysisBusy={ai?.activity} analysisSource={ai?.activitySource} analysisProgress={ai?.activityProgress} canLoadMore={status==='CanLoadMore'} onLoadMore={()=>loadMore(20)}/></EditorStateProvider>;
+  if(media===undefined)return <div className="editor-app footage-preparation-boot"><FootagePreparation/></div>;
+  return <EditorStateProvider store={store}><EditorShell onSaveThumbnail={persistThumbnail} projectId={projectId} draftKey={`revline:editor-draft:${projectId}`} title={title} onTitle={titleChange} timeline={timeline} assets={assets} onRemoveAsset={async asset=>{await waitForSave();await removeAsset({assetId:asset._id as Id<'assets'>});store.setState(state=>({history:state.history.filter(edit=>!edit.clips.some(clip=>clip.assetId===asset._id)),future:state.future.filter(edit=>!edit.clips.some(clip=>clip.assetId===asset._id))}));setOptimisticAssets(previous=>previous.filter(item=>item._id!==asset._id));}} onRefreshMedia={handleRefreshMedia} onChange={change} saving={saving} upload={upload} error={error} onError={setError} onUndo={undo} onRedo={redo} canUndo={!undoBusy&&(!!history.length||remoteUndo.current.remaining>0)} canRedo={!!future.length} assistantEditSnapshot={assistantEditSnapshot} onAssistantUndo={undoAssistantEdit} messages={messages} aiRunning={ai?.running??false} aiConfigured={ai?.configured??false} aiError={ai?.error} onStop={async()=>{await stop({projectId});}} onSend={async(prompt,context)=>{await waitForSave();await send({projectId,prompt,...context});}} onExport={exportVideo} exportState={exportState} onUpload={handleUpload} onDropUpload={files=>handleUpload(files,{addToTimeline:false})} onImportVideo={async url=>{await waitForSave();await importVideo({projectId,url});}} videoImports={mediaTasks?.filter(task=>task.kind==='import')} analysisBusy={ai?.activity} analysisSource={ai?.activitySource} analysisProgress={ai?.activityProgress} canLoadMore={status==='CanLoadMore'} onLoadMore={()=>loadMore(20)}/></EditorStateProvider>;
 }

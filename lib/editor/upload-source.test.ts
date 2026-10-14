@@ -64,3 +64,9 @@ test('rejects a missing source without aborting an already completed upload', as
   await expect(uploadSourceFile(file, cloud, vi.fn())).rejects.toThrow('The upload did not return media.');
   expect(cloud.abort).not.toHaveBeenCalled();
 });
+
+test('captures a decoded frame before starting upload and attaches it to the saved source',async()=>{
+  const cloud=transport(),thumbnail=new Blob(['jpeg'],{type:'image/jpeg'});cloud.saveThumbnail=vi.fn().mockResolvedValue(undefined);
+  vi.mocked(inspectMedia).mockImplementation(async(_file,capture)=>{capture?.(thumbnail);expect(cloud.start).not.toHaveBeenCalled();return metadata;});
+  expect(await uploadSourceFile(file,cloud,vi.fn())).toBe(assetId);expect(cloud.saveThumbnail).toHaveBeenCalledExactlyOnceWith(assetId,thumbnail);
+});

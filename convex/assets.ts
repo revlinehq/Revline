@@ -15,6 +15,20 @@ import { enqueueMediaTask } from './mediaTasks';
 export const generateUploadUrl = mutation({ args: { projectId: v.id("projects") }, returns: v.string(), handler: async (ctx, args) => {
   const ownerId = await requireOwner(ctx); await requireEditorAccess(ctx, ownerId); await requireProject(ctx, args.projectId, ownerId); return await issueUpload(ctx, ownerId, args.projectId);
 }});
+export const attachThumbnail=mutation({args:{assetId:v.id('assets'),storageId:v.id('_storage')},returns:v.null(),handler:async(ctx,args)=>{
+  const ownerId=await requireOwner(ctx);const asset=await ctx.db.get(args.assetId);
+  if(!asset||asset.ownerId!==ownerId)throw new ConvexError('Media not found');
+  await requireEditorAccess(ctx,ownerId);await requireProject(ctx,asset.projectId,ownerId);
+  const metadata=await ctx.db.system.get(args.storageId);
+  if(!metadata||metadata.contentType!=='image/jpeg'||metadata.size>128*1024)throw new ConvexError('Use a JPEG thumbnail under 128 KB');
+  await consumeUpload(ctx,args.storageId,ownerId,asset.projectId);
+  if(asset.thumbnailStorageId){await ctx.storage.delete(args.storageId);return null;}
+  await ctx.db.patch(asset._id,{thumbnailStorageId:args.storageId});return null;
+}});
+
+async function thumbnailUrl(ctx:QueryCtx,asset:{thumbnailStorageId?:Id<'_storage'>}) {
+  return asset.thumbnailStorageId?{thumbnailUrl:await ctx.storage.getUrl(asset.thumbnailStorageId)}:{};
+}
 export const create = mutation({ args: { projectId: v.id("projects"), storageId: v.id("_storage"), fileName: v.string(), kind: assetKind, duration: v.optional(v.number()), width: v.optional(v.number()), height: v.optional(v.number()) }, returns: v.id("assets"), handler: async (ctx, args) => {
   const ownerId = await requireOwner(ctx); await requireEditorAccess(ctx, ownerId); await requireProject(ctx, args.projectId, ownerId);
   const fileName = args.fileName.trim(); if (!fileName || fileName.length > 255) throw new ConvexError("File name must contain between 1 and 255 characters");
@@ -37,7 +51,7 @@ export const list = query({ args: { projectId: v.id("projects"), limit: v.option
   const limit = args.limit ?? 50;
   if (!Number.isInteger(limit) || limit < 1 || limit > 200) throw new ConvexError("Load between 1 and 200 project media files");
   const assets = await ctx.db.query("assets").withIndex("by_ownerId_projectId", q => q.eq("ownerId", ownerId).eq("projectId", args.projectId)).order("desc").take(limit);
-  return await Promise.all(assets.map(async asset => ({ ...asset, url: await mediaUrl(ctx, asset) })));
+  return await Promise.all(assets.map(async asset => ({ ...asset, url: await mediaUrl(ctx, asset),...await thumbnailUrl(ctx,asset) })));
 }});
 export const library = query({
   args: { paginationOpts: paginationOptsValidator },
@@ -46,7 +60,7 @@ export const library = query({
     const ownerId = await requireOwner(ctx);
     if (args.paginationOpts.numItems > 60) throw new ConvexError('Load up to 60 uploads at a time');
     const result = await ctx.db.query('assets').withIndex('by_ownerId_createdAt', q => q.eq('ownerId', ownerId)).order('desc').paginate(args.paginationOpts);
-    const page = await Promise.all(result.page.map(async ({ analysis, analysisUpdatedAt, analysisCompletedAt, ...asset }) => ({ ...asset, url: await mediaUrl(ctx, asset) })));
+    const page = await Promise.all(result.page.map(async ({ analysis, analysisUpdatedAt, analysisCompletedAt, ...asset }) => ({ ...asset, url: await mediaUrl(ctx, asset),...await thumbnailUrl(ctx,asset) })));
     return { page, isDone: result.isDone, continueCursor: result.continueCursor };
   },
 });
@@ -56,7 +70,7 @@ export const selected = query({
     const ownerId = await requireOwner(ctx);
     if (args.assetIds.length > 200) throw new ConvexError('Choose up to 200 uploads');
     const assets = await Promise.all([...new Set(args.assetIds)].map(id => ctx.db.get(id)));
-    return await Promise.all(assets.filter(asset => asset?.ownerId === ownerId).map(async asset => ({ ...asset!, url: await mediaUrl(ctx, asset!) })));
+    return await Promise.all(assets.filter(asset => asset?.ownerId === ownerId).map(async asset => ({ ...asset!, url: await mediaUrl(ctx, asset!),...await thumbnailUrl(ctx,asset!) })));
   },
 });
 export const remove = mutation({ args: { assetId: v.id("assets") }, returns: v.null(), handler: async (ctx, args) => {
@@ -73,7 +87,7 @@ export const remove = mutation({ args: { assetId: v.id("assets") }, returns: v.n
 export const get = query({ args: { projectId: v.id("projects"), assetId: v.id("assets") }, returns: assetWithUrl, handler: async (ctx, args) => {
   const ownerId = await requireOwner(ctx); await requireProject(ctx, args.projectId, ownerId); const asset = await ctx.db.get(args.assetId);
   if (!asset || asset.ownerId !== ownerId || asset.projectId !== args.projectId) throw new ConvexError("Media not found");
-  return { ...asset, url: await mediaUrl(ctx, asset) };
+  return { ...asset, url: await mediaUrl(ctx, asset),...await thumbnailUrl(ctx,asset) };
 }});
 export const saveExtractedAudio = mutation({
   args: { projectId: v.id('projects'), assetId: v.id('assets'), audioAssetId: v.optional(v.id('assets')), waveform: v.optional(waveformValidator), workerSecret: v.string() },
@@ -147,7 +161,10 @@ export async function saveAssetAnalysis(ctx: MutationCtx, asset: Doc<"assets">, 
   const validRange = (start: number, end: number) => Number.isFinite(start) && Number.isFinite(end) && start >= 0 && end > start && end <= duration + 0.5;
   if (changes.transcript) {
     if (changes.transcript.segments.length > 500 || changes.transcript.words.length > 5000) throw new ConvexError("Transcript is too large");
-    for (const item of [...changes.transcript.segments, ...changes.transcript.words]) if (!validRange(item.start, item.end) || !item.text.trim() || item.text.length > 2000) throw new ConvexError("Invalid transcript timing or text");
+    for (const item of changes.transcript.segments) if (!validRange(item.start, item.end) || !item.text.trim() || item.text.length > 2000) throw new ConvexError("Invalid transcript timing or text");
+    // Whisper can measure an instantaneous word. Preserve its timing rather
+    // than assigning an invented duration; rendered segments remain positive.
+    for (const item of changes.transcript.words) if (!Number.isFinite(item.start) || !Number.isFinite(item.end) || item.start < 0 || item.start > duration || item.end < item.start || item.end > duration + 0.5 || !item.text.trim() || item.text.length > 2000) throw new ConvexError("Invalid transcript timing or text");
   }
   if (changes.understanding) {
     if (changes.understanding.summary.length > 8000 || changes.understanding.scenes.length > 100) throw new ConvexError("Scene analysis is too large");

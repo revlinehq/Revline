@@ -5,6 +5,10 @@ import type { MutationCtx } from '../_generated/server';
 /** Remove a project attachment; retain the object while another project uses it. */
 export async function removeMediaAttachment(ctx: MutationCtx, asset: Doc<'assets'>) {
   await ctx.db.delete(asset._id);
+  if(asset.thumbnailStorageId){
+    const remaining=await ctx.db.query('assets').withIndex('by_thumbnailStorageId',q=>q.eq('thumbnailStorageId',asset.thumbnailStorageId)).first();
+    if(!remaining)await ctx.storage.delete(asset.thumbnailStorageId);
+  }
   if (asset.storageId) {
     const remaining = await ctx.db.query('assets').withIndex('by_storageId', q => q.eq('storageId', asset.storageId)).first();
     if (!remaining) await ctx.storage.delete(asset.storageId);
