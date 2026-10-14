@@ -27,9 +27,27 @@ try{
  await update({...settings,size:2});const coarse=reds(await read());for(let y=0;y<32;y+=2)for(let x=0;x<32;x+=2){const value=coarse[y*32+x];assert.equal(coarse[y*32+x+1],value);assert.equal(coarse[(y+1)*32+x],value);assert.equal(coarse[(y+1)*32+x+1],value)}
  await update({...settings,shadowColor:'#0000ff',highlightColor:'#ffff00'});const palette=await read();const colors=new Set();for(let i=0;i<palette.length;i+=4)colors.add(palette.slice(i,i+3).join(','));assert.deepEqual([...colors].sort(),['0,0,255','255,255,0'],'Configured dark/light colors form the actual shader palette');
  await update({...settings,size:2});
+ const sourceCanvas=await page.evaluate(()=>document.querySelector('.visual-effect-output').width);
+ await page.evaluate(()=>{document.getElementById('clip-0').parentElement.style.transform='rotate(30deg) scale(2)';});
+ await page.waitForFunction(()=>{const c=document.querySelector('.visual-effect-output'),g=c.getContext('webgl'),v=new Uint8Array(c.width*c.height*4);g.readPixels(0,0,c.width,c.height,g.RGBA,g.UNSIGNED_BYTE,v);return v[0]!==v[4];});
+ assert.equal(await page.evaluate(()=>document.querySelector('.visual-effect-output').width),sourceCanvas,'Transform adjusts the shader without rebuilding its canvas');
+ const fine=reds(await read());assert.notEqual(fine[0],fine[1],'At 2× scale the pattern halves its local cell width, preserving composition block size');
+ await page.evaluate(()=>{document.getElementById('clip-0').parentElement.style.transform='none';window.__revlineEffects.redraw();});
  const hash=values=>values.reduce((sum,value,index)=>(sum+value*(index+1))%2147483647,0);const before=hash(await read());await page.evaluate(()=>{window.time=1;window.__revlineEffects.redraw();window.time=.5;window.__revlineEffects.redraw()});assert.equal(hash(await read()),before,'Ordered pattern is frame deterministic');
  // Exercise the same injected decoded-frame bridge that export uses, without an MP4 encoder job.
  await page.evaluate(async()=>{const image=new Image();image.id='__render_frame_clip-0__';image.src=window.nativeSource.src;document.body.appendChild(image);await image.decode();window.__hf.colorGrading.redraw()});assert.equal(hash(await read()),before,'Export decoded-frame bridge renders the same dither pixels');assert.equal(await page.evaluate(()=>window.bridgeDraws),1);
  await update({...settings,amount:0});assert.equal(await page.$('.visual-effect-output'),null,'Zero strength releases GPU resources');assert.equal(await page.evaluate(()=>document.getElementById('clip-0')===window.nativeSource),true,'Original source node stays mounted');assert.equal(await page.$eval('#clip-0',node=>node.hasAttribute('data-revline-effects')),false,'Bypass restores source visibility');
- assert.deepEqual(errors,[]);console.log('PASS: actual 32×32 Bayer shader RGB/custom color palette, strength, block size, alpha, deterministic frames, export decoded-frame bridge, no source rebuild and GPU cleanup. Synthetic only.');
+ // A full-resolution iframe CSS-scaled to its preview is the real player layout.
+ const previewPage=await browser.newPage();await previewPage.setViewport({width:640,height:360});
+ await previewPage.setContent('<iframe style="width:1920px;height:1080px;transform:scale(.3333333333);transform-origin:top left;border:0"></iframe>');
+ const previewFrame=previewPage.frames().find(frame=>frame.parentFrame());
+ await previewFrame.setContent('<meta name="hyperframes-studio-preview"><div id="composition" data-width="1920" data-height="1080"><div style="transform:scale(2)"><img id="clip-0" data-start="0" data-duration="3" style="position:absolute;width:1920px;height:1920px"></div></div>');
+ await previewFrame.evaluate(async source=>{const image=document.getElementById('clip-0');image.src=source;await image.decode();window.__timelines={revline:{time:()=>0,render:()=>{}}};},await page.evaluate(()=>window.nativeSource.src));
+ await previewFrame.addScriptTag({content:bundle.outputFiles[0].text});await previewFrame.evaluate(settings=>window.__revlineVisualEffects.installVisualEffects([{id:'clip-0',dither:settings}],30,1080),settings);
+ const tiny=await previewFrame.evaluate(()=>{const c=document.querySelector('.visual-effect-output'),gl=c.getContext('webgl'),bytes=new Uint8Array(c.width*c.height*4);gl.readPixels(0,0,c.width,c.height,gl.RGBA,gl.UNSIGNED_BYTE,bytes);let sum=0;for(let index=0;index<bytes.length;index+=4)sum+=bytes[index];return {width:c.width,meanRed:sum/(bytes.length/4)};});
+ assert.equal(tiny.width,640,'Preview density follows CSS-scaled iframe display size');
+ console.log('CSS-scaled subpixel dither tone',tiny);
+ assert.ok(tiny.meanRed>96&&tiny.meanRed<160,'Subpixel Bayer cells retain middle-gray tone instead of aliasing to a solid black/white frame');
+ await previewPage.close();
+ assert.deepEqual(errors,[]);console.log('PASS: actual 32×32 Bayer shader RGB/custom color palette, strength, block size, alpha, deterministic frames, export decoded-frame bridge, CSS-scaled preview density, subpixel tone filtering, no source rebuild and GPU cleanup. Synthetic only.');
 }finally{await browser.close()}

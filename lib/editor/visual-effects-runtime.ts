@@ -11,8 +11,12 @@ export function installVisualEffects(sources: VisualEffectSource[], fps: number,
   type Clock = { time(): number; render: (...args: unknown[]) => unknown };
   type RuntimeWindow = Window & { __timelines: { revline: Clock & { __hfReal?: Clock } }; __revlineEffects?: VisualEffectsController; __hf?: { colorGrading?: { redraw?: () => void } } };
   const host = window as unknown as RuntimeWindow;
+  const preview = !!document.querySelector('meta[name="hyperframes-studio-preview"]');
   const clock = host.__timelines.revline.__hfReal ?? host.__timelines.revline;
-  const entries = new Map<string, { source: HTMLVideoElement | HTMLImageElement; effects: VisualEffects; canvas?: HTMLCanvasElement; gl?: WebGLRenderingContext; program?: WebGLProgram; texture?: WebGLTexture; buffer?: WebGLBuffer; uniforms?: Record<string, WebGLUniformLocation | null>; lastFrame?: number; lastSource?: string | number; dirty: boolean; injected?: HTMLImageElement; failed?: boolean; videoCallback?: number; decodedFrame?: number; decodedListener?: () => void }>();
+  type Entry = { source: HTMLVideoElement | HTMLImageElement; effects: VisualEffects; canvas?: HTMLCanvasElement; gl?: WebGLRenderingContext; program?: WebGLProgram; texture?: WebGLTexture; buffer?: WebGLBuffer; uniforms?: Record<string, WebGLUniformLocation | null>; lastFrame?: number; lastSource?: string | number; lastTransform?: string; dirty: boolean; injected?: HTMLImageElement; failed?: boolean; videoCallback?: number; decodedFrame?: number; decodedListener?: () => void; uploadCanvas?: HTMLCanvasElement };
+  type Resources = Pick<Entry, 'canvas' | 'gl' | 'program' | 'texture' | 'buffer' | 'uniforms'>;
+  const entries = new Map<string, Entry>();
+  const available: Resources[] = [];
   let frameRequest = 0, disposed = false;
   const baseEffects=new Map<string,VisualEffects>();
   let timedEffects:Clip[]=[];
@@ -33,6 +37,13 @@ float bayer2(vec2 p){return p.y<1.0?(p.x<1.0?0.0:2.0):(p.x<1.0?3.0:1.0);}
 float bayer4(vec2 p){p=mod(floor(p),4.0);return (4.0*bayer2(mod(p,2.0))+bayer2(floor(p/2.0))+0.5)/16.0;}
 float hash(vec2 p){float n=mod(p.x*73.0+p.y*151.0+19.0,251.0);n=mod(n*n*17.0+n*13.0,65521.0);return mod(n*37.0,1021.0)/1021.0;}
 vec4 sampleSource(vec2 p){return texture2D(source,clamp(p,vec2(0.0),vec2(1.0)));}
+vec3 orderedColor(vec3 rgb,float steps,float threshold){
+  if(ditherPalette>0.5){
+    float tone=clamp(floor(dot(rgb,vec3(0.2126,0.7152,0.0722))*steps+threshold)/steps,0.0,1.0);
+    return mix(ditherShadow,ditherHighlight,tone);
+  }
+  return clamp(floor(rgb*steps+threshold)/steps,0.0,1.0);
+}
 vec4 radial(vec2 p){
   if(zoom.x<=0.0)return sampleSource(p);
   vec4 sum=vec4(0.0);float weight=0.0;
@@ -60,11 +71,20 @@ void main(){
   rgb=mix(rgb,1.0-rgb,invert);
   if(dither.x>0.0){
     float steps=dither.y-1.0;
-    float threshold=bayer4(gl_FragCoord.xy/max(0.1,dither.z))-0.5;
-    vec3 ordered=clamp(floor(rgb*steps+threshold+0.5)/steps,0.0,1.0);
-    if(ditherPalette>0.5){
-      float tone=clamp(floor(dot(rgb,vec3(0.2126,0.7152,0.0722))*steps+threshold+0.5)/steps,0.0,1.0);
-      ordered=mix(ditherShadow,ditherHighlight,tone);
+    float cell=max(0.01,dither.z);vec3 ordered;
+    if(cell>=1.0){ordered=orderedColor(rgb,steps,bayer4(gl_FragCoord.xy/cell));}
+    else if(cell<=0.25){
+      // A pixel spans a complete Bayer tile: use its average quantized tone.
+      ordered=clamp(floor(rgb*steps*16.0+0.5)/(steps*16.0),0.0,1.0);
+      if(ditherPalette>0.5){float tone=clamp(floor(dot(rgb,vec3(0.2126,0.7152,0.0722))*steps*16.0+0.5)/(steps*16.0),0.0,1.0);ordered=mix(ditherShadow,ditherHighlight,tone);}
+    }else{
+      // Filter cells smaller than a display pixel instead of point-sampling a
+      // repeating subset of the matrix, which can turn middle gray solid black.
+      ordered=vec3(0.0);
+      for(int y=0;y<4;y++)for(int x=0;x<4;x++){
+        vec2 offset=(vec2(float(x),float(y))+0.5)/4.0-0.5;
+        ordered+=orderedColor(rgb,steps,bayer4((gl_FragCoord.xy+offset)/cell))/16.0;
+      }
     }
     rgb=mix(rgb,ordered,dither.x);
   }
@@ -75,15 +95,21 @@ void main(){
     const c = effects.colorGrade, z = effects.zoomBlur, g = effects.glitch;
     return !!(c?.enabled && (c.exposure || c.contrast !== 1 || c.saturation !== 1 || c.temperature || c.tint || c.vibrance) || z?.enabled && z.amount > 0 || g?.enabled && g.intensity > 0 || effects.invert?.enabled && effects.invert.amount > 0 || effects.dither?.enabled && effects.dither.amount > 0);
   }
-  function release(entry: typeof entries extends Map<string, infer T> ? T : never) {
+  function release(entry: Entry) {
     entry.source.removeAttribute('data-revline-effects');
     entry.injected?.removeAttribute('data-revline-effects');
     entry.canvas?.remove();
-    if (entry.gl) {
-      entry.gl.deleteTexture(entry.texture ?? null); entry.gl.deleteBuffer(entry.buffer ?? null); entry.gl.deleteProgram(entry.program ?? null);
-      entry.gl.getExtension('WEBGL_lose_context')?.loseContext();
-    }
-    entry.gl = undefined; entry.canvas = undefined; entry.program = undefined; entry.lastSource = undefined; entry.lastFrame = undefined;
+    if (preview && !disposed && entry.canvas && entry.gl) {
+      const { canvas, gl, program, texture, buffer, uniforms } = entry;
+      available.push({ canvas, gl, program, texture, buffer, uniforms });
+      if (available.length > 1) destroy(available.shift()!);
+    } else destroy(entry);
+    entry.gl = undefined; entry.canvas = undefined; entry.program = undefined; entry.uploadCanvas = undefined; entry.lastSource = undefined; entry.lastFrame = undefined;
+  }
+  function destroy(resources: Resources) {
+    const gl = resources.gl; if (!gl) return;
+    gl.deleteTexture(resources.texture ?? null); gl.deleteBuffer(resources.buffer ?? null); gl.deleteProgram(resources.program ?? null);
+    gl.getExtension('WEBGL_lose_context')?.loseContext();
   }
   function report(error: unknown) {
     const message = error instanceof Error ? error.message : 'Visual effects could not render.';
@@ -91,14 +117,24 @@ void main(){
     console.error('Revline visual effects:', message);
     window.dispatchEvent(new CustomEvent('revline-effects-error', { detail: message }));
   }
-  function initialize(entry: typeof entries extends Map<string, infer T> ? T : never, width: number, height: number) {
-    const canvas = document.createElement('canvas');
+  function initialize(entry: Entry, width: number, height: number) {
+    const reusable = preview ? available.pop() : undefined;
+    const canvas = reusable?.canvas ?? document.createElement('canvas');
     canvas.className = 'visual-effect-output'; canvas.dataset.effectSource = entry.source.id;
     // Match the composition's pixel density while avoiding oversized source canvases.
     const displayWidth = entry.source.style.width.endsWith('px') ? parseFloat(entry.source.style.width) : width;
     const displayHeight = displayWidth * height / width;
-    const ratio = Math.min(1, Math.max(1920, resolution * 16 / 9) / Math.max(displayWidth, displayHeight));
-    canvas.width = Math.max(1, Math.round(displayWidth * ratio)); canvas.height = Math.max(1, Math.round(displayHeight * ratio));
+    // The player keeps a full-resolution iframe and scales it with CSS. Its
+    // innerWidth is therefore the composition width, not the visible preview.
+    const viewport = window.frameElement?.getBoundingClientRect();
+    const previewScale = preview ? Math.min(1, (viewport?.width || window.innerWidth) / Number(document.getElementById('composition')?.dataset.width || window.innerWidth), (viewport?.height || window.innerHeight) / Number(document.getElementById('composition')?.dataset.height || window.innerHeight)) * Math.min(2, window.devicePixelRatio || 1) : 1;
+    const ratio = Math.min(previewScale, Math.max(1920, resolution * 16 / 9) / Math.max(displayWidth, displayHeight));
+    const outputWidth = Math.max(1, Math.round(displayWidth * ratio)), outputHeight = Math.max(1, Math.round(displayHeight * ratio));
+    if (canvas.width !== outputWidth) canvas.width = outputWidth;
+    if (canvas.height !== outputHeight) canvas.height = outputHeight;
+    if (reusable) {
+      Object.assign(entry, reusable); entry.source.parentElement!.appendChild(canvas); return;
+    }
     const gl = canvas.getContext('webgl', { alpha: true, premultipliedAlpha: false, antialias: false, preserveDrawingBuffer: true });
     if (!gl) throw new Error('WebGL is unavailable. Enable hardware acceleration to preview these effects.');
     const compile = (type: number, code: string) => {
@@ -120,7 +156,7 @@ void main(){
     Object.assign(entry, { canvas, gl, program, texture, buffer, uniforms });
     entry.source.parentElement!.appendChild(canvas);
   }
-  function draw(entry: typeof entries extends Map<string, infer T> ? T : never, force = false) {
+  function draw(entry: Entry, force = false) {
     if (disposed || entry.failed) return;
     const time = clock.time(), start = Number(entry.source.dataset.start), end = start + Number(entry.source.dataset.duration);
     const effects=effectiveEffects(entry.effects,time);
@@ -134,7 +170,18 @@ void main(){
     if (!width || !height) return;
     const sourceKey = source instanceof HTMLVideoElement ? entry.decodedFrame ?? source.currentTime : source.currentSrc || source.src;
     const frame = Math.floor(time * fps + 1e-5);
-    if (!force && !entry.dirty && entry.lastFrame === frame && entry.lastSource === sourceKey) return;
+    // Clip and timed-effect transforms change without changing the paused media frame.
+    // Stop at the composition so viewing zoom remains a view of the same pixels.
+    const transforms: string[] = [];
+    for (let node: HTMLElement | null = entry.source; node && node.id !== 'composition'; node = node.parentElement) {
+      if (node.style.transform && node.style.transform !== 'none') transforms.push(node.style.transform);
+    }
+    const transformKey = transforms.join('|');
+    const animated = !!effects.glitch?.enabled || timedEffects.some(clip=>clip.zoomBlur?.enabled&&time>=clip.start&&time<clip.start+clip.duration);
+    // CSS motion can run between decoded frames. Wait for the next video
+    // frame before redrawing its bitmap; paused transforms still redraw now.
+    const playingVideo = source instanceof HTMLVideoElement && !source.paused && !!source.requestVideoFrameCallback;
+    if (!force && !entry.dirty && (!animated || entry.lastFrame === frame) && entry.lastSource === sourceKey && (playingVideo || entry.lastTransform === transformKey)) return;
     try {
       if (!entry.canvas) initialize(entry, width, height);
       const { canvas, gl, uniforms: u } = entry;
@@ -143,7 +190,17 @@ void main(){
       for (const key of ['left','top','width','height','objectFit','objectPosition','transform'] as const) canvas.style[key] = entry.source.style[key];
       canvas.style.position = 'absolute'; canvas.style.pointerEvents = 'none';
       gl.viewport(0, 0, canvas.width, canvas.height); gl.useProgram(entry.program!); gl.bindTexture(gl.TEXTURE_2D, entry.texture!);
-      if (force || entry.lastSource !== sourceKey) gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source);
+      if (entry.lastSource !== sourceKey || force && injected) {
+        let textureSource: TexImageSource = source;
+        if (preview && source instanceof HTMLVideoElement && canvas.width < width) {
+          const upload = entry.uploadCanvas ??= document.createElement('canvas');
+          if (upload.width !== canvas.width) upload.width = canvas.width;
+          if (upload.height !== canvas.height) upload.height = canvas.height;
+          upload.getContext('2d')!.drawImage(source, 0, 0, upload.width, upload.height);
+          textureSource = upload;
+        }
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, textureSource);
+      }
       const c = effects.colorGrade, z = effects.zoomBlur, g = effects.glitch;
       const sourceDisplayWidth = parseFloat(entry.source.style.width) || width;
       const pixelScale = resolution / 1080 * width / sourceDisplayWidth;
@@ -154,7 +211,9 @@ void main(){
       gl.uniform3f(u.zoom, z?.enabled ? z.amount : 0, z?.centerX ?? .5, 1 - (z?.centerY ?? .5));
       gl.uniform3f(u.glitch, g?.enabled ? g.intensity : 0, (g?.blockSize ?? 32) * pixelScale, (g?.rgbSplit ?? 8) * pixelScale);
       const d = effects.dither;
-      gl.uniform3f(u.dither, d?.enabled ? d.amount : 0, d?.levels ?? 4, (d?.size ?? 2) * resolution / 1080 * canvas.width / sourceDisplayWidth);
+      const transform = transforms.reduce((matrix, value) => matrix.multiply(new DOMMatrix(value)), new DOMMatrix());
+      const clipScale = Math.max(.01, Math.hypot(transform.a, transform.b));
+      gl.uniform3f(u.dither, d?.enabled ? d.amount : 0, d?.levels ?? 4, (d?.size ?? 2) * resolution / 1080 * canvas.width / sourceDisplayWidth / clipScale);
       const color = (hex: string) => [1, 3, 5].map(index => parseInt(hex.slice(index, index + 2), 16) / 255);
       const shadow = color(d?.shadowColor ?? '#000000'), highlight = color(d?.highlightColor ?? '#ffffff');
       gl.uniform1f(u.ditherPalette, d?.shadowColor || d?.highlightColor ? 1 : 0);
@@ -163,16 +222,25 @@ void main(){
       gl.drawArrays(gl.TRIANGLES, 0, 6);
       entry.source.setAttribute('data-revline-effects', '');
       if (injected) { entry.injected = injected; injected.setAttribute('data-revline-effects', ''); }
-      entry.lastFrame = frame; entry.lastSource = sourceKey; entry.dirty = false;
+      entry.lastFrame = frame; entry.lastSource = sourceKey; entry.lastTransform = transformKey; entry.dirty = false;
     } catch (error) { release(entry); entry.failed = true; report(error); }
   }
-  function redraw(force = false) { for (const entry of entries.values()) draw(entry, force); }
+  function redraw(force = false) {
+    // Retire the outgoing clip first even when live splits appended it after
+    // the incoming clip. Reuse its shader/context rather than compile at cuts.
+    const time = clock.time();
+    for (const entry of entries.values()) {
+      const start = Number(entry.source.dataset.start), end = start + Number(entry.source.dataset.duration);
+      if (entry.canvas && (time < start - 1e-6 || time >= end - 1e-6)) release(entry);
+    }
+    for (const entry of entries.values()) draw(entry, force);
+  }
   function tick() { frameRequest = 0; if (disposed) return; bindExportBridge(); redraw(); if (entries.size) frameRequest = requestAnimationFrame(tick); }
-  function decoded(entry: typeof entries extends Map<string, infer T> ? T : never) {
+  function decoded(entry: Entry) {
     if (!(entry.source instanceof HTMLVideoElement)) return;
     const video = entry.source;
     if (!entry.decodedListener) {
-      entry.decodedListener = () => { entry.dirty = true; draw(entry, true); };
+      entry.decodedListener = () => { entry.decodedFrame = undefined; entry.dirty = true; draw(entry, true); };
       video.addEventListener('seeked', entry.decodedListener);
       video.addEventListener('loadeddata', entry.decodedListener);
     }
@@ -216,7 +284,7 @@ void main(){
     set,
     setTimedEffects:clips=>{timedEffects=clips.filter(clip=>clip.effectPreset==='zoom-blur');for(const [id,effects] of baseEffects)set(id,effects);redraw(true);},
     redraw: () => { bindExportBridge(); redraw(true); },
-    dispose: () => { disposed = true; cancelAnimationFrame(frameRequest); for (const id of entries.keys()) remove(id); clock.render = originalRender; if (bridge) bridge.redraw = originalRedraw; },
+    dispose: () => { disposed = true; cancelAnimationFrame(frameRequest); for (const id of entries.keys()) remove(id); for (const resources of available) destroy(resources); available.length = 0; clock.render = originalRender; if (bridge) bridge.redraw = originalRedraw; },
   };
   host.__revlineEffects = controller;
   for (const source of sources) set(source.id, source);

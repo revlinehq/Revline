@@ -6,7 +6,7 @@ import { EMPTY_TIMELINE, type Clip } from './types';
 const clip: Clip = { id: 'footage', kind: 'video', assetId: 'source', start: 0, sourceStart: 0, duration: 2 };
 function documentWithRuntime() {
   const set = vi.fn();
-  const document = { defaultView: { __revlineEffects: { set } } } as unknown as Document;
+  const document = { defaultView: { __revlineEffects: { set } }, querySelectorAll: () => [], getElementById: () => null } as unknown as Document;
   return { document, set };
 }
 
@@ -36,7 +36,7 @@ test('invalid shader parameters are rejected and old players reload only for cha
   const { document, set } = documentWithRuntime();
   expect(() => previewVisualEffects(document, clip, 0, { colorGrade: { ...DEFAULT_COLOR_GRADE, exposure: Infinity } })).toThrow();
   expect(set).not.toHaveBeenCalled();
-  const oldDocument = { defaultView: {} } as Document;
+  const oldDocument = { defaultView: {}, querySelectorAll: () => [], getElementById: () => null } as unknown as Document;
   const previous = { ...EMPTY_TIMELINE, clips: [clip] };
   expect(updateLiveVisualEffects(oldDocument, previous, previous)).toBe(true);
   expect(updateLiveVisualEffects(oldDocument, previous, { ...previous, clips: [{ ...clip, colorGrade: DEFAULT_COLOR_GRADE }] })).toBe(false);

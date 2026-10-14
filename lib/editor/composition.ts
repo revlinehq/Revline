@@ -181,6 +181,8 @@ export function generateComposition(timeline: Timeline, assets: MediaAsset[], op
   const textSources = JSON.stringify(textLayerSources(timeline.clips, fps, resolution)).replace(/</g, '\\u003c');
   const defaultFontUrl = /^https?:/i.test(options.gsapUrl ?? '') ? new URL('/fonts/space-grotesk-latin.woff2', options.gsapUrl).href : '/fonts/space-grotesk-latin.woff2';
   const fontUrl = mediaUrl(options.fontUrl ?? defaultFontUrl);
+  // Fully transparent video is throttled by Chromium at clip activation. A
+  // small nonzero opacity keeps preview decoding active under its effect canvas.
   return `<!doctype html><html><head><meta charset="utf-8">${options.preview?`<meta name="hyperframes-studio-preview" content="true"><script>
 function reportPreviewError(error,label){const message=String(error&&error.message||error).replace(/([?&]token=)[^\\s'"<>]+/g,'$1[redacted]');parent.postMessage({source:'revline-preview-error',message,label},parent.location.origin);}
 window.addEventListener('error',event=>{if(event.error)reportPreviewError(event.error,'uncaught');});
@@ -190,7 +192,7 @@ window.__hf=window.__hf||{};window.__hf.onSwallowed=event=>reportPreviewError(ev
 @font-face{font-family:'Space Grotesk';font-style:normal;font-weight:300 700;font-display:block;src:url('${fontUrl}') format('woff2')}
 html,body{margin:0;width:${width}px;height:${height}px;overflow:hidden;background:#000;font-family:'Space Grotesk',Arial,Helvetica,sans-serif}*{box-sizing:border-box}#composition{isolation:isolate;position:relative;width:${width}px;height:${height}px;overflow:hidden;background:#000}.visual-frame{position:absolute;width:${width}px;height:${height}px;overflow:hidden;transform-origin:center}.motion-frame{width:100%;height:100%;transform-origin:center}.text-motion{display:inline-block}.source-window{position:absolute;overflow:hidden}.visual{position:absolute}.overlay{position:absolute;max-width:90%;width:max-content;transform:translate(-50%,-50%);font-weight:700;line-height:1.12;text-align:center;white-space:pre-wrap;overflow-wrap:anywhere}.text-content{display:inline-block;padding:${10 * scale}px ${18 * scale}px;border-radius:${8 * scale}px}.caption{text-shadow:0 2px 12px #0009}audio{position:absolute}
 .adjustment-layer{position:absolute;inset:0;transform-origin:center;pointer-events:none}
-[data-revline-effects]{opacity:0!important}.visual-effect-output{position:absolute;pointer-events:none}
+[data-revline-effects]{opacity:0!important}${options.preview?'video[data-revline-effects]{opacity:0.001!important}':''}.visual-effect-output{position:absolute;pointer-events:none}
 .cinematic-bars{position:absolute;inset:0;overflow:hidden;z-index:2147483647;pointer-events:none}.cinematic-bar{position:absolute;left:0;right:0;background:#000}.cinematic-bar.top{top:0;transform:translateY(-100%)}.cinematic-bar.bottom{bottom:0;transform:translateY(100%)}
 </style><script src="${gsapUrl}"></script><script src="${visualEffectsUrl}"></script><script src="${remotionTextUrl}"></script></head><body><div id="composition" data-composition-id="revline" data-duration="${safeDuration}" data-width="${width}" data-height="${height}" data-fps="${fps}">${compositionNodes}</div><script>
 const timeline=gsap.timeline({paused:true});
