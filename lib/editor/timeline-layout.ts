@@ -17,7 +17,7 @@ export function timelineLayout(timeline:Timeline,compact=false){
   const transitionRows=new Set(timeline.clips.filter(isTransitionClip).map(trackOf));
   const effectRows=new Set(timeline.clips.filter(clip=>clip.kind==='effect'&&!isTransitionClip(clip)).map(trackOf));
   const tracks=deriveTracks(timeline).filter(track=>track.group!=='effects'||!transitionRows.has(track.number)||effectRows.has(track.number)).map(track=>{
-    const clipHeight=compact?24:52;
+    const clipHeight=track.group==='effects'?28:compact?36:52;
     const height=clipHeight+TIMELINE_TRACK_GAP;
     const row={...track,top,height,clipHeight,gapBefore:0};top+=height;return row;
   });

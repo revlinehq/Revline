@@ -60,10 +60,10 @@ describe('mixed visual track layout', () => {
   it('keeps compact rows consistently spaced across track groups', () => {
     const layout = timelineLayout(timeline, true);
     layout.tracks.forEach((row, index) => {
-      expect(row.clipHeight).toBe(24);
-      expect(row.top).toBe(TIMELINE_RULER_HEIGHT+TIMELINE_TOP_SPACE+index*30);
+      expect(row.clipHeight).toBe(36);
+      expect(row.top).toBe(TIMELINE_RULER_HEIGHT+TIMELINE_TOP_SPACE+index*42);
     });
-    expect(layout.height).toBe(TIMELINE_RULER_HEIGHT+TIMELINE_TOP_SPACE+150);
+    expect(layout.height).toBe(TIMELINE_RULER_HEIGHT+TIMELINE_TOP_SPACE+210);
   });
   it.each([false,true])('keeps primary and additional FX, visual, and audio rows contiguous (compact %s)', compact => {
     const project: Timeline = { fps: 30, aspectRatio: 'vertical', tracks: { visual: 2, overlay: 0, audio: 2, effects: 2 }, clips: [
