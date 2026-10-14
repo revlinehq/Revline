@@ -7,6 +7,8 @@ type PreviewWindow = Window & { __revlineTextLayerController?: TextLayerControll
 export function updateLiveTextEffects(document: Document, _previous: Timeline, next: Timeline): boolean {
   const controller = (document.defaultView as PreviewWindow | null)?.__revlineTextLayerController;
   if (!controller) return false;
-  controller.setSources(textLayerSources(next.clips, next.fps));
+  const composition=document.getElementById('composition'),width=Number(composition?.dataset.width),height=Number(composition?.dataset.height);
+  const resolution=Number.isFinite(width)&&width>0&&Number.isFinite(height)&&height>0?Math.min(width,height):1080;
+  controller.setSources(textLayerSources(next.clips, next.fps,resolution));
   return true;
 }
