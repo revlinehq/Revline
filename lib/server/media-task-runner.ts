@@ -15,6 +15,7 @@ import { detectMusicBeats } from '@/lib/media-analysis/music-beats';
 import { AnalysisError } from '@/lib/media-analysis/errors';
 import { trackSourceFace } from './track-source-face';
 import { extractSourceAudio } from './extract-audio';
+import { prepareRenderAudioSource } from './prepare-render-audio';
 import { measureAudioWaveform } from './audio-waveform';
 import { uploadMediaFile } from './upload-media-file';
 import { runRenderWorker } from './render-worker';
@@ -39,13 +40,17 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
       if (task.outputStored) return {};
       const snapshot = task.render;
       const assetUrls: Record<string, string> = {};
+      const audibleAudioAssets = new Set(snapshot.timeline.clips.filter(clip=>clip.kind==='audio'&&(clip.volume??1)>0).map(clip=>clip.assetId));
       for (const [index, asset] of snapshot.assets.entries()) {
         if (!asset.url) throw new AnalysisError('Export source media is unavailable.', 400);
         const sourceExtension = extname(asset.fileName).toLowerCase();
         const extension = /^\.(mp4|mov|webm|m4v|mp3|wav|m4a|ogg|flac|aac|aiff|png|jpg|jpeg|webp|gif|avif)$/.test(sourceExtension) ? sourceExtension : asset.kind === 'video' ? '.mp4' : asset.kind === 'audio' ? '.audio' : '.image';
         const name = `asset-${index}${extension}`;
         await downloadOwnedMedia(asset.url, join(directory, name), new URL(convexUrl).origin, asset.size, signal);
-        assetUrls[asset._id] = `./${name}`;
+        const audio = asset.kind==='audio'&&audibleAudioAssets.has(asset._id)
+          ? await prepareRenderAudioSource(join(directory,name),join(directory,`asset-${index}-decoded.wav`),signal)
+          : null;
+        assetUrls[asset._id] = audio?.decoded ? `./asset-${index}-decoded.wav` : `./${name}`;
       }
       await copyFile(join(process.cwd(), 'public/vendor/gsap.min.js'), join(directory, 'gsap.min.js'));
       await copyFile(join(process.cwd(), 'public/vendor/visual-effects.js'), join(directory, 'visual-effects.js'));
