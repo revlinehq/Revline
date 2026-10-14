@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useLayoutEffect, useRef } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import './color-control.css';
 
 function pickerColor(value: string): string {
   if (/^#[\da-f]{3,4}$/i.test(value)) return `#${value.slice(1, 4).split('').map(char => char + char).join('')}`.toLowerCase();
@@ -11,10 +12,12 @@ function pickerColor(value: string): string {
 export function ColorControl({ label, value, onCommit }: { label: string; value: string; onCommit: (color: string) => void }) {
   const input = useRef<HTMLInputElement>(null);
   const accepted = useRef(pickerColor(value));
+  const [display, setDisplay] = useState(accepted.current);
   const latest = useRef(onCommit);
   useLayoutEffect(() => { latest.current = onCommit; });
   useEffect(() => {
     accepted.current = pickerColor(value);
+    setDisplay(accepted.current);
     if (input.current && document.activeElement !== input.current) input.current.value = accepted.current;
   }, [value]);
   useEffect(() => {
@@ -23,11 +26,12 @@ export function ColorControl({ label, value, onCommit }: { label: string; value:
       const color = node.value;
       if (color === accepted.current) return;
       accepted.current = color;
+      setDisplay(color);
       latest.current(color);
     };
     // React onChange also receives every native input event while dragging the wheel.
     node.addEventListener('change', commit);
     return () => node.removeEventListener('change', commit);
   }, []);
-  return <input ref={input} aria-label={label} type="color" defaultValue={accepted.current} onBlur={event => { event.currentTarget.value = accepted.current; }}/>;
+  return <span className="editor-color-control"><span className="editor-color-swatch" aria-hidden="true" style={{ backgroundColor: display }}/><span className="editor-color-value" aria-hidden="true">{display.toUpperCase()}</span><input ref={input} aria-label={label} type="color" defaultValue={accepted.current} onBlur={event => { event.currentTarget.value = accepted.current; }}/></span>;
 }

@@ -14,7 +14,7 @@ export function TextStyleControls({ clip, onChange, onPreview }: { clip: Clip; o
     return <EffectSlider label={label} value={style[property]} bounds={TEXT_APPEARANCE_LIMITS[property]} step={1} format={value => `${Math.round(value)} px`} disabled={false} onPreview={value => onPreview?.(value === null ? null : { textStyle: { ...style, [property]: value } })} onCommit={value => change({ [property]: value })}/>;
   }
   function color(property: 'strokeColor' | 'shadowColor' | 'glowColor', label: string) {
-    return <label className="text-style-color"><ColorControl label={label} value={style[property]} onCommit={value => change({ [property]: value })}/><span>{style[property].toUpperCase()}</span></label>;
+    return <ColorControl label={label} value={style[property]} onCommit={value => change({ [property]: value })}/>;
   }
   return <fieldset className="text-style-controls" aria-label="Text style">
     <details className="text-style-group" open={style.strokeWidth > 0 || undefined}><summary>Stroke<span>{style.strokeWidth ? `${style.strokeWidth} px` : 'Off'}</span></summary><div className="text-style-body">{slider('strokeWidth', 'Stroke width')}{color('strokeColor', 'Stroke color')}</div></details>
