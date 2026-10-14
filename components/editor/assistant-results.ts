@@ -52,6 +52,8 @@ const labels: Record<string, [string, string]> = {
   setCaptionTiming: ['Adjusting subtitle timing', 'Adjusted subtitle timing'], applyCaptionStyle: ['Styling captions', 'Styled captions'], configureAudio: ['Adjusting sound', 'Adjusted sound'],
   addClipTransition: ['Adding transition', 'Added transition'], configureClipTransition: ['Adjusting transition', 'Adjusted transition'], configureTimedEffect: ['Adjusting effect', 'Adjusted effect'], setSolidColor: ['Adjusting color rectangle', 'Adjusted color rectangle'], resetVisualEffect: ['Resetting effect', 'Reset effect'],
   addMarker: ['Adding marker', 'Added marker'], moveMarker: ['Moving marker', 'Moved marker'],
+  undoLatestEdit: ['Reverting latest edit', 'Reverted latest edit'], unlink: ['Unlinking video and audio', 'Unlinked video and audio'], duplicateClips: ['Duplicating clips', 'Duplicated clips'],
+  reorderLayer: ['Reordering track', 'Reordered track'], moveClips: ['Arranging clips', 'Arranged clips'], resizeClips: ['Trimming clips', 'Trimmed clips'], setBlendMode: ['Adjusting compositing', 'Adjusted compositing'],
   transformClip: ['Adjusting framing', 'Adjusted framing'], cropClip: ['Cropping footage', 'Cropped footage'], resetVisual: ['Resetting framing', 'Reset framing'], fitClip: ['Fitting footage', 'Fitted footage'],
   setVolume: ['Adjusting sound', 'Adjusted sound'], setAspectRatio: ['Resizing canvas', 'Resized canvas'], followSubject: ['Following subject', 'Applied subject tracking'], alignCutsToBeat: ['Matching cuts to beats', 'Matched cuts to beats'],
   addLayer: ['Adding track', 'Added track'], deleteEmptyLayer: ['Removing empty track', 'Removed empty track'], removeEmptyLayers: ['Removing empty tracks', 'Removed empty tracks'],
