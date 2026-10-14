@@ -19,6 +19,7 @@ export type EditComposerProps = {
 export function EditComposer({ value, onChange, onSubmit, onAttach, attachments = [], onRemoveAttachment, placeholder = 'Describe your next edit…', disabled = false, running = false, onStop, className, variant = 'studio', attachmentLimit = 2, emptyHint, actions, submitLabel, statusLabel, uploadOnHover = false, uploadState, requireMedia = false }: EditComposerProps) {
   const [sheetOpen, setSheetOpen] = useState(false);
   const [sending, setSending] = useState(false);
+  const sendInFlight=useRef(false);
   const [error, setError] = useState('');
   const [hovered, setHovered] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -79,9 +80,9 @@ export function EditComposer({ value, onChange, onSubmit, onAttach, attachments 
   }, [uploadOnHover]);
   async function stop() { setError(''); try { await onStop?.(); } catch (e) { setError(e instanceof Error ? e.message : 'Could not stop this edit.'); } }
   async function submit() {
-    if (busy || running || mediaMissing || mediaInvalid || (variant !== 'landing' && !value.trim() && !attachments.length)) return;
-    setSending(true); setError('');
-    try { await onSubmit(); } catch (e) { setError(e instanceof Error ? e.message : 'Could not send your edit.'); } finally { setSending(false); }
+    if (sendInFlight.current || busy || running || mediaMissing || mediaInvalid || (variant !== 'landing' && !value.trim() && !attachments.length)) return;
+    sendInFlight.current=true;setSending(true); setError('');
+    try { await onSubmit(); } catch (e) { setError(e instanceof Error ? e.message : 'Could not send your edit.'); } finally { sendInFlight.current=false;setSending(false); }
   }
   function chip(attachment: ComposerAttachment) {
     return <div className="composer-attachment" key={attachment.id} data-error={!!attachment.error || undefined}>{attachment.url && attachment.kind !== 'audio' ? attachment.kind === 'video' ? <video src={attachment.url} muted preload="metadata" aria-hidden="true" /> : <img src={attachment.url} alt="" /> : attachment.kind === 'audio' ? <Music2 size={17} /> : <Film size={17} />}<span title={attachment.name}>{attachment.name}</span>{attachment.progress !== undefined && <progress aria-label={`Uploading ${attachment.name}`} max={100} value={attachment.progress} />}{onRemoveAttachment && <button type="button" onClick={() => onRemoveAttachment(attachment.id)} aria-label={`Remove ${attachment.name}`} disabled={busy || running}><X size={11} /></button>}</div>;

@@ -45,6 +45,8 @@ export function AssistantPanel({ messages, running, configured, error, onSend, o
   editSnapshot?:AssistantEditSnapshot;
 }) {
   const [prompt, setPrompt] = useState('');
+  const sendInFlight=useRef(false);
+  const currentDraftKey=useRef(draftKey);currentDraftKey.current=draftKey;
   const [modelChoice, setModelChoice] = useState<ClaudeModelChoice>('sonnet');
   const [sending, setSending] = useState(false);
   const [localError, setLocalError] = useState('');
@@ -88,20 +90,22 @@ export function AssistantPanel({ messages, running, configured, error, onSend, o
   }
 
   async function submit() {
-    if (!prompt.trim() || sending || running || pendingReply) return;
-    setStopState(null); setSending(true); setPendingReply({ id: `pending-${crypto.randomUUID()}`, text: prompt.trim(), previousUserId: latestUser?.id, previousError: error }); setLocalError(''); scroll.resume();
-    try { await onSend(prompt.trim(), modelSwitcher ? modelChoice : undefined); setPrompt(''); try { if (draftKey) sessionStorage.removeItem(draftKey); } catch { /* The message was sent successfully. */ } }
-    catch (e) { setPendingReply(null); setLocalError(e instanceof Error ? e.message : 'Could not send message'); }
-    finally { setSending(false); }
+    if (!prompt.trim() || sendInFlight.current || sending || running || pendingReply) return;
+    const draft=prompt,key=draftKey;sendInFlight.current=true;
+    changePrompt('');
+    setStopState(null); setSending(true); setPendingReply({ id: `pending-${crypto.randomUUID()}`, text: draft.trim(), previousUserId: latestUser?.id, previousError: error }); setLocalError(''); scroll.resume();
+    try { await onSend(draft.trim(), modelSwitcher ? modelChoice : undefined); }
+    catch (e) { if(currentDraftKey.current===key){changePrompt(draft);setPendingReply(null);setLocalError(e instanceof Error ? e.message : 'Could not send message');} }
+    finally { sendInFlight.current=false;setSending(false); }
   }
 
   async function chooseSuggestion(suggestion: SourceEditSuggestion) {
-    if (!suggestions || !onSuggestion || sending || running || pendingReply || !configured) return;
+    if (!suggestions || !onSuggestion || sendInFlight.current || sending || running || pendingReply || !configured) return;
     const request = `${suggestion.prompt}\n\nUse the selected clip from “${suggestions.sourceName}”, source ${suggestion.start.toFixed(2)}–${suggestion.end.toFixed(2)} seconds.`;
-    setStopState(null); setSending(true); setPendingReply({ id: `pending-${crypto.randomUUID()}`, text: request, previousUserId: latestUser?.id, previousError: error }); setLocalError(''); scroll.resume();
+    sendInFlight.current=true;setStopState(null); setSending(true); setPendingReply({ id: `pending-${crypto.randomUUID()}`, text: request, previousUserId: latestUser?.id, previousError: error }); setLocalError(''); scroll.resume();
     try { await onSuggestion(request, suggestions.clipId, modelSwitcher ? modelChoice : undefined); }
     catch (e) { setPendingReply(null); setLocalError(e instanceof Error ? e.message : 'Could not start this edit.'); }
-    finally { setSending(false); }
+    finally { sendInFlight.current=false;setSending(false); }
   }
 
   return <div className="assistant-content">
