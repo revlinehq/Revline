@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { RemotionText } from './remotion-text-component';
 import { REMOTION_TEXT_PRESETS, VFX_TEXT_PRESETS, remotionTextProps, validateRemotionTextTemplate, type RemotionTextProps } from './remotion-text';
 import { textTemplatePatch } from './text-effects';
+import { textLookPatch } from './text-looks';
 import type { Clip } from './types';
 
 const clip = { kind: 'graphic', start: 5, duration: 4, text: 'Make your next idea', color: '#ffffff', fontSize: 80, textTemplate: { preset: 'word-reveal' as const, duration: 4, offset: 0 } };
@@ -34,7 +35,8 @@ test('karaoke uses supplied colors and duration-based highlighting without inven
   const first = render({ ...props(0), preset: 'karaoke', highlightColor: '#ffcc00' });
   const final = render({ ...props(119), preset: 'karaoke', highlightColor: '#ffcc00' });
   expect(first).toContain('#ffcc00'); expect(first).toContain('#ffffff');
-  expect(final).toContain('0% 100%');
+  expect(final).not.toContain('gradient');
+  expect(first).toContain('color:#ffcc00');
   expect(first).not.toBe(final);
 });
 
@@ -71,7 +73,7 @@ test.each(VFX_TEXT_PRESETS)('%s has distinct entrance/hold/exit and preserves fr
 
 test('new VFX palettes are editable and reselecting preserves custom words/colors/rotation',()=>{
   const original={...clip,kind:'graphic' as const,id:'lyric',sourceStart:0,transform:{x:.5,y:.5,scale:1,rotation:17,opacity:1}};
-  const first: Clip={...original,...textTemplatePatch(original,'neon-echo')};
+  const first: Clip={...original,...textLookPatch(original,'neon-echo')};
   expect(first.color).toBe('#B72CFF');expect(first.textTemplate?.highlightColor).toBe('#FF962E');
   const customized={...first,text:'My own lyric',color:'#00ffcc',textTemplate:{...first.textTemplate!,highlightColor:'#ff0044'}};
   const reselected={...customized,...textTemplatePatch(customized,'neon-echo')};
