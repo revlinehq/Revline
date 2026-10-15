@@ -6,7 +6,7 @@
 .composer-upload-enabled[data-upload-view=true] .composer-edit-fields{visibility:hidden;pointer-events:none}
 .edit-composer .composer-upload-swap{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;border-radius:inherit;background:inherit;box-shadow:inherit;opacity:0;visibility:hidden;pointer-events:none;transition:opacity 120ms cubic-bezier(.2,0,0,1),visibility 0s 120ms}
 .edit-composer[data-upload-view=true] .composer-upload-swap{opacity:1;visibility:visible;pointer-events:auto;transition-delay:0s}
-.composer-new-video{width:100%;height:100%;border:0;border-radius:inherit;background:var(--revline-primary-gradient);color:#fff;cursor:pointer;font:600 21px/1.4 var(--font-inter),Inter,sans-serif;transition:filter 120ms cubic-bezier(.2,0,0,1)}
+.composer-new-video{width:100%;height:100%;border:0;border-radius:inherit;background:var(--revline-primary-background);color:#fff;cursor:pointer;font:600 21px/1.4 var(--font-inter),Inter,sans-serif;transition:filter 120ms cubic-bezier(.2,0,0,1)}
 .composer-new-video:hover{filter:brightness(1.06)}
 .composer-new-video:focus-visible{outline:2px solid #4768ef;outline-offset:4px}
 .edit-composer[data-upload-view=true]:focus-within{outline:2px solid #4768ef;outline-offset:4px}

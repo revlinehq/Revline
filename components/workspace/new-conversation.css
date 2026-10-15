@@ -8,7 +8,7 @@
 .footage-start-card{width:100%;height:168px;border:0;border-radius:12px;background:#f7f8fb;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;gap:8px;text-align:center;cursor:pointer;transition:background-color 120ms,box-shadow 120ms}
 .footage-start-card strong{color:#394557;font-size:14px;line-height:1.6;font-weight:500}
 .footage-start-helper{color:#657080;font-size:13px;line-height:1.6}
-.footage-start-icon{display:grid;place-items:center;width:36px;height:36px;margin-bottom:4px;border-radius:9px;background:var(--revline-primary-gradient);color:#fff;transition:transform 120ms}
+.footage-start-icon{display:grid;place-items:center;width:36px;height:36px;margin-bottom:4px;border-radius:var(--revline-button-radius);background:var(--revline-primary-background);color:#fff;transition:transform 120ms}
 .footage-start-card:focus-visible{outline:2px solid #4768ef;outline-offset:4px}
 .footage-start-card:active .footage-start-icon{transform:scale(.96)}
 .footage-start-card:disabled{cursor:wait;opacity:.6}

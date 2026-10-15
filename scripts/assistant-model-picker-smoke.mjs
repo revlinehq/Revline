@@ -65,5 +65,5 @@ try {
  await page.type('.assistant-content textarea','Make this tighter');
  await page.screenshot({path:'/tmp/revline-composer-model-picker.png'});
  assert.deepEqual(errors,[]);
- console.log('PASS: development picker sends all three choices; production allowlist hides Opus and resets stale selections, locks during a run, disappears when disabled; compact send/stop 28px with shared gradient and no shadow, studio unchanged. Synthetic fixture only.');
+ console.log('PASS: development picker sends all three choices; production allowlist hides Opus and resets stale selections, locks during a run, disappears when disabled; compact send/stop 28px with shared solid color and no shadow, studio unchanged. Synthetic fixture only.');
 } finally { await browser.close(); await new Promise(resolve=>server.close(resolve)); }
