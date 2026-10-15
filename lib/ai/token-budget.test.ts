@@ -133,7 +133,7 @@ test('cached usage cannot evade the separate raw-token ceiling',()=>{
   expect(()=>budget.reserve(cachedParams,300000,nativeSonnet)).toThrow('token budget');
 });
 test.each([
-  {speed:'fast'},{inferenceGeo:'us'},{serviceTier:'auto'},{fallbacks:'default'},{cacheControl:{type:'ephemeral',ttl:'1h'}},{compaction:{enabled:true}},
+  {speed:'fast'},{speed:'standard'},{inferenceGeo:'us'},{serviceTier:'auto'},{fallbacks:'default'},{cacheControl:{type:'ephemeral',ttl:'1h'}},{compaction:{enabled:true}},
 ])('unreviewed Anthropic tariff %j is refused before generation',async override=>{
   const f=fixture(),model=wrapLanguageModel({model:f.provider(CLAUDE_MODEL),middleware:new AssistantTokenBudget().middleware([],0,async()=>60000)});
   await expect(model.doGenerate({...cachedParams,providerOptions:{anthropic:{...cachedParams.providerOptions!.anthropic,...override}}})).rejects.toThrow('reliable token usage');

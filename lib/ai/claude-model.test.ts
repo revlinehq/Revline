@@ -34,13 +34,15 @@ test.each(CLAUDE_EDIT_MODELS)('installed Anthropic SDK sends supported adaptive 
   let request: Record<string, unknown> | undefined;
   const provider = createAnthropic({ apiKey: 'fixture-only', fetch: async (_url, init) => {
     request = JSON.parse(String(init?.body));
+    if(model.id==='sonnet'&&request?.speed!==undefined)return new Response(JSON.stringify({error:{type:'invalid_request_error',message:"'claude-sonnet-5-5' does not support the `speed` parameter."}}),{status:400,headers:{'content-type':'application/json'}});
     return new Response(JSON.stringify({ id: 'msg_fixture', type: 'message', role: 'assistant', model: model.modelId, content: [{ type: 'text', text: 'Fixture response' }], stop_reason: 'end_turn', stop_sequence: null, usage: { input_tokens: 1, output_tokens: 1 } }), { headers: { 'content-type': 'application/json' } });
   } });
   const response = await generateText({ model: provider(model.modelId), prompt: 'Synthetic fixture', providerOptions: claudeProviderOptions(model.modelId), maxOutputTokens: 512 });
   expect(response.text).toBe('Fixture response');
   expect(request).toMatchObject({ model: model.modelId, cache_control: { type: 'ephemeral', ttl: '5m' }, thinking: { type: 'adaptive', block_binding: { prefix_mismatch_behavior: 'drop_block' } }, output_config: { effort: 'medium' } });
   if(model.id==='sonnet'){
-    expect(request).toMatchObject({speed:'standard',service_tier:'standard_only',inference_geo:'global'});
+    expect(request).toMatchObject({service_tier:'standard_only',inference_geo:'global'});
+    expect(request).not.toHaveProperty('speed');
     expect(claudeProviderOptions(model.gatewayModelId)?.anthropic).not.toHaveProperty('serviceTier');
   }else expect(claudeProviderOptions(model.gatewayModelId)).toEqual(claudeProviderOptions(model.modelId));
 });

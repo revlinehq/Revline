@@ -60,7 +60,7 @@ export function claudeProviderOptions(modelId: string) {
     cacheControl: { type: 'ephemeral', ttl: '5m' },
     effort: 'medium',
     thinking: { type: 'adaptive', blockBinding: { prefixMismatchBehavior: 'drop_block' } },
-    ...(modelId==='claude-sonnet-5-5'?{speed:'standard',serviceTier:'standard_only',inferenceGeo:'global'} as const:{}),
+    ...(modelId==='claude-sonnet-5-5'?{serviceTier:'standard_only',inferenceGeo:'global'} as const:{}),
   } satisfies AnthropicProviderOptions;
   return { anthropic };
 }

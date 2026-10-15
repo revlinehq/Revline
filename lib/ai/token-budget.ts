@@ -22,8 +22,10 @@ function nativeCacheModel(params:LanguageModelV4CallOptions,model?:Pick<Language
       if(part.type==='tool-result'){points.push(part.output);if(part.output.type==='content')points.push(...part.output.value);}
     }
     const longCache=points.some(point=>{const control=record(record(record(record(point).providerOptions).anthropic).cacheControl);return control.ttl!==undefined&&control.ttl!=='5m';});
-    if(longCache||(options.speed!==undefined&&options.speed!=='standard')||(options.serviceTier!==undefined&&options.serviceTier!=='standard_only')||(options.inferenceGeo!==undefined&&options.inferenceGeo!=='global')||options.fallbacks!==undefined||options.contextManagement!==undefined||options.compaction!==undefined)throw new AssistantTokenBudgetError('usage');
-    if(options.speed!=='standard'||options.serviceTier!=='standard_only'||options.inferenceGeo!=='global'||record(options.cacheControl).ttl!=='5m')return;
+    // Sonnet rejects the speed parameter, including "standard". Its omitted
+    // default is Standard; usage must still explicitly confirm that tariff.
+    if(longCache||options.speed!==undefined||(options.serviceTier!==undefined&&options.serviceTier!=='standard_only')||(options.inferenceGeo!==undefined&&options.inferenceGeo!=='global')||options.fallbacks!==undefined||options.contextManagement!==undefined||options.compaction!==undefined)throw new AssistantTokenBudgetError('usage');
+    if(options.serviceTier!=='standard_only'||options.inferenceGeo!=='global'||record(options.cacheControl).ttl!=='5m')return;
   }else{
     if((options.serviceTier!==undefined&&options.serviceTier!=='default')||(options.reasoningMode!==undefined&&options.reasoningMode!=='standard')||(record(options.promptCacheOptions).ttl!==undefined&&record(options.promptCacheOptions).ttl!=='30m')||['previousResponseId','conversation','instructions','contextManagement','compactionTrigger'].some(key=>options[key]!==undefined))throw new AssistantTokenBudgetError('usage');
     if(options.serviceTier!=='default'||options.reasoningMode!=='standard'||record(options.promptCacheOptions).ttl!=='30m')return;
