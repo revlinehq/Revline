@@ -356,7 +356,7 @@ test.each(['from','to'])('frame distortion agent controls merge, bypass, reset a
   const result=await run(async tools=>{
     expect(tools.setVisualEffects.description).toContain('horizontal shear');
     expect(tools.setVisualEffects.description).toContain('unused corners transparent');
-    for(const control of ['horizontal','vertical','skew'])for(const value of [-1.01,1.01,NaN,Infinity]){
+    for(const control of ['horizontal','vertical','skew','bend'])for(const value of [-1.01,1.01,NaN,Infinity]){
       expect(()=>tools.setVisualEffects.inputSchema.parse({clipId,frameDistortion:{[control]:value}})).toThrow();
     }
     await execute(tools,'setVisualEffects',{clipId,frameDistortion:{enabled:true,horizontal:.4}});
@@ -365,7 +365,7 @@ test.each(['from','to'])('frame distortion agent controls merge, bypass, reset a
     await execute(tools,'setVisualEffects',{clipId,frameDistortion:{vertical:-.3,skew:.2}});
     await execute(tools,'setVisualEffects',{clipId,frameDistortion:{enabled:false}});
     current=await execute(tools,'inspectTimeline',{}) as{timeline:Timeline};
-    expect(current.timeline.clips.find(clip=>clip.id===clipId)!.frameDistortion).toEqual({enabled:false,horizontal:.4,vertical:-.3,skew:.2});
+    expect(current.timeline.clips.find(clip=>clip.id===clipId)!.frameDistortion).toEqual({...DEFAULT_FRAME_DISTORTION,enabled:false,horizontal:.4,vertical:-.3,skew:.2});
     await execute(tools,'resetVisualEffect',{clipId,effect:'frameDistortion',action:'reset'});
     current=await execute(tools,'inspectTimeline',{}) as{timeline:Timeline};
     expect(current.timeline.clips.find(clip=>clip.id===clipId)!.frameDistortion).toEqual(DEFAULT_FRAME_DISTORTION);
@@ -637,4 +637,23 @@ test('timed effects require recorded expectations and refuse invented observed a
     await expect(tools.planEffects.execute({},{plans:[{id:'fake',kind:'timed',effect:'flash',start:1,duration:.1,purpose:'Emphasize a hit',strength:'Fixed preset',expectation:'Flash on contact',anchor:{kind:'observed-event',time:1,clipId:'from',evidenceId:'invented',description:'Unobserved punch'}}]})).rejects.toThrow('Inspect');
   });
   expect(result.timeline).toEqual(initial);expect(result.revision).toBe(0);
+});
+
+
+test('corner rounding is an independent clip setting and preserves distortion, footage and audio',async()=>{
+  const seed:Timeline={...initial,clips:initial.clips.map(clip=>clip.id==='from'?{...clip,frameDistortion:{enabled:false,horizontal:.2,vertical:0,skew:0}}:clip)};
+  const result=await run(async tools=>{
+    for(const amount of [-.01,1.01,NaN,Infinity])expect(()=>tools.setVisualEffects.inputSchema.parse({clipId:'from',frameCorners:{amount}})).toThrow();
+    await execute(tools,'setVisualEffects',{clipId:'from',frameCorners:{enabled:true,amount:.4}});
+    let current=await execute(tools,'inspectTimeline',{}) as{timeline:Timeline};
+    expect(current.timeline.clips[0].frameCorners).toEqual({enabled:true,amount:.4});
+    expect(current.timeline.clips[0].frameDistortion).toEqual(seed.clips[0].frameDistortion);
+    await execute(tools,'setVisualEffects',{clipId:'from',frameCorners:{enabled:false}});
+    current=await execute(tools,'inspectTimeline',{}) as{timeline:Timeline};
+    expect(current.timeline.clips[0].frameCorners).toEqual({enabled:false,amount:.4});
+    await expect(execute(tools,'setVisualEffects',{clipId:'audio',frameCorners:{enabled:true,amount:.4}})).rejects.toThrow('video or image');
+    await execute(tools,'resetVisualEffect',{clipId:'from',effect:'frameCorners',action:'remove'});
+  },seed,true);
+  expect(result.timeline.clips).toEqual(result.backend!.seed.clips.map(clip=>clip.id==='from'?{...clip,frameCorners:undefined}:clip));
+  expect(result.calls).not.toContain('assistant:requestAnalysis');await assertUndo(result);
 });

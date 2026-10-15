@@ -15,7 +15,7 @@ import { EffectIcon } from './effect-icon';
 import './visual-effects-controls.css';
 
 type Props = { onlyEffect?: keyof VisualEffects; clip: Clip; onChange: (patch: Partial<Clip>) => void; onPreview?: (patch: Partial<Clip> | null) => void; onPlaybackRateChange?: (rate: number) => void; onAddEffect?: (preset: EffectPreset) => void };
-type EffectKey = Exclude<keyof VisualEffects, 'softBlur'>;
+type EffectKey = Exclude<keyof VisualEffects, 'softBlur' | 'frameCorners'>;
 function EffectCard({ name, effectKey, enabled, onToggle, onReset, onRemove, children }: {
   name: string; effectKey: EffectKey; enabled: boolean; onToggle: () => void; onReset: () => void; onRemove: () => void; children: ReactNode;
 }) {
@@ -111,9 +111,9 @@ export function VisualEffectsControls({ clip, onChange, onPreview, onPlaybackRat
     {neon && <EffectCard {...cardProps('neonEdges')}><fieldset className="effect-colors" disabled={!neon.enabled}><label>Edge color<ColorControl label="Neon edge color" value={neon.color} onCommit={color => onChange({ neonEdges: { ...neon, color } })}/></label></fieldset>{([
       ['amount', 'Strength'], ['detail', 'Edge detail'], ['threshold', 'Threshold'], ['glow', 'Glow'],
     ] as const).map(([key, label]) => <EffectSlider key={key} label={label} value={neon[key]} bounds={NEON_EDGE_LIMITS[key]} format={percent} disabled={!neon.enabled} onPreview={value => preview(value === null ? null : { neonEdges: { ...neon, [key]: value } })} onCommit={value => onChange({ neonEdges: { ...neon, [key]: value } })}/>)}</EffectCard>}
-    {frame && <EffectCard {...cardProps('frameDistortion')}>{([
+    {frame && <EffectCard {...cardProps('frameDistortion')}><EffectSlider label="Bend" value={frame.bend??0} bounds={VISUAL_EFFECT_LIMITS.frameDistortion.bend} format={percent} disabled={!frame.enabled} onPreview={value=>preview(value===null?null:{frameDistortion:{...frame,bend:value}})} onCommit={bend=>onChange({frameDistortion:{...frame,bend}})}/><details className="frame-distortion-advanced"><summary>Perspective &amp; skew</summary>{([
       ['horizontal','Horizontal tilt'],['vertical','Vertical tilt'],['skew','Skew'],
-    ] as const).map(([key,label])=><EffectSlider key={key} label={label} value={frame[key]} bounds={VISUAL_EFFECT_LIMITS.frameDistortion[key]} format={percent} disabled={!frame.enabled} onPreview={value=>preview(value===null?null:{frameDistortion:{...frame,[key]:value}})} onCommit={value=>onChange({frameDistortion:{...frame,[key]:value}})}/>)}</EffectCard>}
+    ] as const).map(([key,label])=><EffectSlider key={key} label={label} value={frame[key]} bounds={VISUAL_EFFECT_LIMITS.frameDistortion[key]} format={percent} disabled={!frame.enabled} onPreview={value=>preview(value===null?null:{frameDistortion:{...frame,[key]:value}})} onCommit={value=>onChange({frameDistortion:{...frame,[key]:value}})}/>)}</details></EffectCard>}
     {lens && <EffectCard {...cardProps('lensDistortion')}>{([
       ['amount','Bend',.01,percent],['centerX','Center X',.01,percent],['centerY','Center Y',.01,percent],['fringing','Color fringing',.1,pixels],
     ] as const).map(([key,label,step,format])=><EffectSlider key={key} label={label} value={lens[key]} bounds={VISUAL_EFFECT_LIMITS.lensDistortion[key]} step={step} format={format} disabled={!lens.enabled} onPreview={value=>preview(value===null?null:{lensDistortion:{...lens,[key]:value}})} onCommit={value=>onChange({lensDistortion:{...lens,[key]:value}})}/>)}</EffectCard>}

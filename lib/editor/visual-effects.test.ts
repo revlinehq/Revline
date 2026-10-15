@@ -1,15 +1,31 @@
 import { expect, test } from 'vitest';
-import { DEFAULT_COLOR_GRADE, DEFAULT_DITHER, DEFAULT_INVERT, DEFAULT_GLITCH, DEFAULT_ZOOM_BLUR, DEFAULT_LENS_DISTORTION, DEFAULT_FILM_OVERLAY, DEFAULT_SOFT_BLUR, validateVisualEffects, visualEffectsPatch, type VisualEffects } from './visual-effects';
+import { DEFAULT_COLOR_GRADE, DEFAULT_DITHER, DEFAULT_INVERT, DEFAULT_GLITCH, DEFAULT_ZOOM_BLUR, DEFAULT_LENS_DISTORTION, DEFAULT_FILM_OVERLAY, DEFAULT_SOFT_BLUR, DEFAULT_FRAME_DISTORTION, DEFAULT_FRAME_CORNERS, validateVisualEffects, visualEffectsPatch, type VisualEffects } from './visual-effects';
 import { addMediaClip, duplicateClip, patchClip, splitClip } from './operations';
 import { copyTimelineClips, pasteTimelineClips } from './clipboard';
-import { EMPTY_TIMELINE } from './types';
+import { EMPTY_TIMELINE, normalizeTimeline } from './types';
+import { visualEffectActionPatch } from './visual-effect-actions';
+import { EFFECT_LIBRARY_CATALOG } from './effect-catalog';
 
-const effects: VisualEffects = { softBlur:{...DEFAULT_SOFT_BLUR,enabled:true,amount:8}, lensDistortion:{...DEFAULT_LENS_DISTORTION,enabled:true},filmOverlay:{...DEFAULT_FILM_OVERLAY,enabled:true}, dither: { ...DEFAULT_DITHER, enabled: true }, invert: { ...DEFAULT_INVERT, enabled: true }, colorGrade: { ...DEFAULT_COLOR_GRADE, enabled: true, exposure: .5 }, zoomBlur: { ...DEFAULT_ZOOM_BLUR, enabled: true }, glitch: { ...DEFAULT_GLITCH, enabled: true } };
+const effects: VisualEffects = { frameCorners:{...DEFAULT_FRAME_CORNERS,enabled:true,amount:.6},frameDistortion:{...DEFAULT_FRAME_DISTORTION,enabled:true,bend:-.4},softBlur:{...DEFAULT_SOFT_BLUR,enabled:true,amount:8}, lensDistortion:{...DEFAULT_LENS_DISTORTION,enabled:true},filmOverlay:{...DEFAULT_FILM_OVERLAY,enabled:true}, dither: { ...DEFAULT_DITHER, enabled: true }, invert: { ...DEFAULT_INVERT, enabled: true }, colorGrade: { ...DEFAULT_COLOR_GRADE, enabled: true, exposure: .5 }, zoomBlur: { ...DEFAULT_ZOOM_BLUR, enabled: true }, glitch: { ...DEFAULT_GLITCH, enabled: true } };
 test('defaults are bypassed and requested controls merge without resetting existing controls', () => {
   expect(DEFAULT_COLOR_GRADE.enabled || DEFAULT_ZOOM_BLUR.enabled || DEFAULT_GLITCH.enabled || DEFAULT_DITHER.enabled).toBe(false);
   expect(visualEffectsPatch({ kind: 'video', ...effects }, { colorGrade: { contrast: 1.3 } })).toEqual({ colorGrade: { ...effects.colorGrade, contrast: 1.3 } });
   expect(visualEffectsPatch({ kind: 'image' }, { zoomBlur: { enabled: true } })).toEqual({ zoomBlur: { ...DEFAULT_ZOOM_BLUR, enabled: true } });
   expect(() => visualEffectsPatch({ kind: 'video' }, {})).toThrow('at least one');
+});
+
+test('frame bending remains backward compatible and clip corners are independently validated and normalized',()=>{
+  const legacy={enabled:true,horizontal:.3,vertical:-.2,skew:.1};
+  expect(()=>validateVisualEffects({kind:'video',frameDistortion:legacy})).not.toThrow();
+  expect(visualEffectsPatch({kind:'video',frameDistortion:legacy},{frameDistortion:{horizontal:.4}})).toEqual({frameDistortion:{...legacy,horizontal:.4,bend:0}});
+  expect(visualEffectsPatch({kind:'image'},{frameDistortion:{enabled:true}})).toEqual({frameDistortion:{...DEFAULT_FRAME_DISTORTION,enabled:true}});
+  for(const value of [-1.01,1.01,NaN,Infinity])expect(()=>validateVisualEffects({kind:'video',frameDistortion:{...legacy,bend:value}})).toThrow('bend');
+  for(const amount of [-.01,1.01,NaN,Infinity])expect(()=>validateVisualEffects({kind:'image',frameCorners:{enabled:false,amount}})).toThrow('frameCorners.amount');
+  const clip={id:'corners',kind:'video' as const,start:0,sourceStart:0,duration:3,...effects};
+  expect(visualEffectActionPatch(clip,'frameCorners','remove')).toEqual({frameCorners:undefined});
+  expect(visualEffectActionPatch(clip,'frameCorners','reset')).toEqual({frameCorners:{...DEFAULT_FRAME_CORNERS,enabled:true}});
+  expect(normalizeTimeline({fps:30,aspectRatio:'landscape',clips:[clip]}).clips[0]).toMatchObject(effects);
+  expect(EFFECT_LIBRARY_CATALOG.some(entry=>entry.visual==='frameCorners')).toBe(false);
 });
 test('non-media kinds, nonfinite controls and out-of-range values are rejected even when bypassed', () => {
   for (const kind of ['audio', 'caption', 'graphic', 'effect'] as const) expect(() => validateVisualEffects({ kind, ...effects })).toThrow('video or image');

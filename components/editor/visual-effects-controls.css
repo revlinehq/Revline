@@ -27,3 +27,4 @@
 
 .visual-effects-controls>.inspector-selection{margin-bottom:0;padding-bottom:0}
 .visual-effects-controls button:focus-visible{outline:2px solid color-mix(in srgb,var(--effect-color,var(--revline-accent)) 80%,var(--ws-text));outline-offset:1px}
+.frame-distortion-advanced{display:flex;flex-direction:column;gap:12px}.frame-distortion-advanced summary{color:var(--ws-muted);font-size:11px;cursor:pointer;padding:2px 0}.frame-distortion-advanced[open] summary{margin-bottom:12px}.frame-distortion-advanced summary:focus-visible{outline:2px solid var(--revline-accent);outline-offset:2px}

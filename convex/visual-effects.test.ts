@@ -15,7 +15,7 @@ import { deleteEmptyLayer, removeEmptyLayers } from '../lib/editor/timeline-cont
 const modules = import.meta.glob('./**/*.ts');
 beforeEach(() => vi.stubEnv('BILLING_ENABLED', 'false'));
 afterEach(() => vi.unstubAllEnvs());
-const effects = { softBlur:{...DEFAULT_SOFT_BLUR,enabled:true,amount:8}, lensDistortion:{...DEFAULT_LENS_DISTORTION,enabled:true},frameDistortion:{...DEFAULT_FRAME_DISTORTION,enabled:true,horizontal:.4,vertical:-.3,skew:.2},filmOverlay:{...DEFAULT_FILM_OVERLAY,enabled:true}, dither: { ...DEFAULT_DITHER, enabled: true, amount: .7, levels: 3, size: 4, shadowColor: '#101080', highlightColor: '#FFFF00' }, invert: { ...DEFAULT_INVERT, enabled: true }, colorGrade: { ...DEFAULT_COLOR_GRADE, enabled: true, exposure: .5, temperature: -30 }, zoomBlur: { ...DEFAULT_ZOOM_BLUR, enabled: true, centerY: .3 }, glitch: { ...DEFAULT_GLITCH, enabled: true, intensity: .8 } };
+const effects = { frameCorners:{enabled:true,amount:.25}, softBlur:{...DEFAULT_SOFT_BLUR,enabled:true,amount:8}, lensDistortion:{...DEFAULT_LENS_DISTORTION,enabled:true},frameDistortion:{...DEFAULT_FRAME_DISTORTION,enabled:true,horizontal:.4,vertical:-.3,skew:.2},filmOverlay:{...DEFAULT_FILM_OVERLAY,enabled:true}, dither: { ...DEFAULT_DITHER, enabled: true, amount: .7, levels: 3, size: 4, shadowColor: '#101080', highlightColor: '#FFFF00' }, invert: { ...DEFAULT_INVERT, enabled: true }, colorGrade: { ...DEFAULT_COLOR_GRADE, enabled: true, exposure: .5, temperature: -30 }, zoomBlur: { ...DEFAULT_ZOOM_BLUR, enabled: true, centerY: .3 }, glitch: { ...DEFAULT_GLITCH, enabled: true, intensity: .8 } };
 async function fixture(kind: 'video' | 'image' = 'video') {
   const t = convexTest(schema, modules), owner = t.withIdentity({ subject: 'owner' });
   const projectId = await owner.mutation(api.projects.create, { title: 'Visual controls', aspectRatio: 'vertical' });
@@ -37,7 +37,7 @@ test.each(['video', 'image'] as const)('all visual controls round-trip on %s thr
 });
 test('invalid controls and wrong clip kinds cannot be saved', async () => {
   const f = await fixture();
-  for (const patch of [{frameDistortion:{...effects.frameDistortion,horizontal:1.01}},{frameDistortion:{...effects.frameDistortion,vertical:-1.01}},{frameDistortion:{...effects.frameDistortion,skew:1.01}},{lensDistortion:{...effects.lensDistortion,amount:1}},{filmOverlay:{...effects.filmOverlay,grain:-1}},{ dither: {...effects.dither, levels:17} }, { dither: {...effects.dither, size:0} }, { dither: {...effects.dither, amount:1.1} }, { invert: { enabled: true, amount: -1 } }, { colorGrade: { ...effects.colorGrade, exposure: 3 } }, { zoomBlur: { ...effects.zoomBlur, amount: -1 } }, { glitch: { ...effects.glitch, rgbSplit: 51 } }]) {
+  for (const patch of [{frameCorners:{enabled:true,amount:-.01}},{frameCorners:{enabled:true,amount:1.01}},{frameDistortion:{...effects.frameDistortion,bend:1.01}},{frameDistortion:{...effects.frameDistortion,horizontal:1.01}},{frameDistortion:{...effects.frameDistortion,vertical:-1.01}},{frameDistortion:{...effects.frameDistortion,skew:1.01}},{lensDistortion:{...effects.lensDistortion,amount:1}},{filmOverlay:{...effects.filmOverlay,grain:-1}},{ dither: {...effects.dither, levels:17} }, { dither: {...effects.dither, size:0} }, { dither: {...effects.dither, amount:1.1} }, { invert: { enabled: true, amount: -1 } }, { colorGrade: { ...effects.colorGrade, exposure: 3 } }, { zoomBlur: { ...effects.zoomBlur, amount: -1 } }, { glitch: { ...effects.glitch, rgbSplit: 51 } }]) {
     await expect(f.owner.mutation(api.projects.saveTimeline, { projectId: f.projectId, timeline: patchClip(f.timeline, 'visual', patch), expectedRevision: 0 })).rejects.toThrow('must be between');
   }
   for (const dither of [{...effects.dither,levels:2.5},{...effects.dither,size:1.5}]) {
@@ -101,4 +101,15 @@ test('Difference caption blending persists and switching looks restores normal b
  const clean=patchClip(saved,'caption',subtitleStylePatch('clean'));
  await f.owner.mutation(api.projects.saveTimeline,{projectId:f.projectId,timeline:clean,expectedRevision:1});
  expect((await f.owner.query(api.projects.get,{projectId:f.projectId})).timeline!.clips.find(clip=>clip.id==='caption')).toMatchObject({text:'Real words',start:1,duration:2,blendMode:'normal',animation:'fade',transform:{rotation:8}});
+});
+
+
+test('legacy frame perspective saves without silently adding a bend or corner setting',async()=>{
+  const f=await fixture();
+  const legacy={enabled:true,horizontal:.4,vertical:0,skew:0};
+  const timeline=patchClip(f.timeline,'visual',{frameDistortion:legacy,frameCorners:{enabled:true,amount:.35}});
+  await f.owner.mutation(api.projects.saveTimeline,{projectId:f.projectId,timeline,expectedRevision:0});
+  const saved=(await f.owner.query(api.projects.get,{projectId:f.projectId})).timeline!.clips[0];
+  expect(saved.frameDistortion).toEqual(legacy);
+  expect(saved.frameCorners).toEqual({enabled:true,amount:.35});
 });

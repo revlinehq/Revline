@@ -15,7 +15,7 @@ const glyphs = {
   'cinematic-bars': [{"d":"M3 7h18m-18 10h18m-12-14l3 2 3-2m-6 18l3-2 3 2","stroke":true,"opacity":1},{"d":"M3 5h18v2h-18z m0 12h18v2h-18z","stroke":false,"opacity":0.28}],
   'frame-shrink': [{d:'M6 3h12a3 3 0 0 1 3 3v12a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3V6a3 3 0 0 1 3-3Z M9 8h6a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1Z M5 5l3 3 M6 8h2V6 M19 19l-3-3 M16 18v-2h2',stroke:true,opacity:1}],
   softBlur: [{d:'M8 6a7 7 0 1 0 8 12 M12 5a7 7 0 0 1 7 7 M17 4l1 1 M20 8l1 1 M20 16l1 1 M16 20l1 1',stroke:true,opacity:1}],
-  frameDistortion: [{d:'M3 7l17-4v18L3 17V7Z M3 12h17 M11 5v14',stroke:true,opacity:1}],
+  frameDistortion: [{d:'M5 5Q12 2 19 5Q22 12 19 19Q12 22 5 19Q2 12 5 5Z M4 12h16 M12 4v16',stroke:true,opacity:1}],
   lensDistortion: [{d:'M4 4Q12 1 20 4Q23 12 20 20Q12 23 4 20Q1 12 4 4Z M4 12h16 M12 3v18 M7 4Q3 12 7 20 M17 4Q21 12 17 20',stroke:true,opacity:1}],
   filmOverlay: [{d:'M3 3h18v18H3Z M7 3v18 M17 3v18 M3 7h4 M3 12h4 M3 17h4 M17 7h4 M17 12h4 M17 17h4 M11 8v5 M14 15v2',stroke:true,opacity:1}],
   neonEdges: [{d:'M12 5l6 4v6l-6 4-6-4V9l6-4Z M12 8l3 2v4l-3 2 M3 9v6 M21 9v6 M9 2h6 M9 22h6',stroke:true,opacity:1},{d:'M12 5l6 4v6l-6 4-6-4V9l6-4Z',stroke:false,opacity:.14}],
