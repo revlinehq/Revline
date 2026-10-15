@@ -10,7 +10,7 @@ const InteractiveDemo = dynamic(() => import('./editor-demo').then(module => mod
 
 function DemoPoster() {
   return <span className="landing-demo-poster">
-    <img src="/images/editor-demo-poster.webp" width={1100} height={726} alt="Revline sample edit with footage, captions and timeline" fetchPriority="high"/>
+    <img src="/images/editor-demo-poster.webp" width={1240} height={742} alt="Revline editor with its current conversation, preview and timeline" fetchPriority="high"/>
   </span>;
 }
 

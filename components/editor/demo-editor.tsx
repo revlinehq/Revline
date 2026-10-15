@@ -9,7 +9,7 @@ import { MediaAsset, Timeline } from '@/lib/editor/types';
 import { addMediaClip } from '@/lib/editor/operations';
 import { inspectMedia } from '@/lib/editor/media';
 export function DemoEditor({ embedded = false }: { embedded?: boolean } = {}) {
-  const [store]=useState(()=>createEditorStore(DEMO_TIMELINE));const timeline=useStore(store,s=>s.timeline);const history=useStore(store,s=>s.history);const future=useStore(store,s=>s.future);const [assets,setAssets]=useState<MediaAsset[]>(DEMO_ASSETS);const [title,setTitle]=useState('Weekend in motion');const [error,setError]=useState('');
+  const [store]=useState(()=>{const instance=createEditorStore(DEMO_TIMELINE);if(embedded)instance.setState({playhead:4.2,compactTracks:true,zoom:.75});return instance;});const timeline=useStore(store,s=>s.timeline);const history=useStore(store,s=>s.history);const future=useStore(store,s=>s.future);const [assets,setAssets]=useState<MediaAsset[]>(DEMO_ASSETS);const [title,setTitle]=useState('Weekend in motion');const [error,setError]=useState('');
   const urls=useRef<string[]>([]);
   useEffect(()=>{
     let cancelled=false;
