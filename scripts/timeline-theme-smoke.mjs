@@ -58,7 +58,7 @@ try {
       const reachable = await page.evaluate(() => {
         const toolbar = document.querySelector('.timeline-toolbar');
         const targetVisible = selector => { const target = toolbar.querySelector(selector), rect = target.getBoundingClientRect(), box = toolbar.getBoundingClientRect(); return rect.x >= box.x - .6 && rect.right <= box.right + .6; };
-        toolbar.scrollLeft = 0; const first = targetVisible('[aria-label="Split selected clip"]');
+        toolbar.scrollLeft = 0; const first = targetVisible('[aria-label="Unlink video and audio"]');
         toolbar.scrollLeft = toolbar.scrollWidth - toolbar.clientWidth; const last = targetVisible('[aria-label="Collapse timeline"]');
         let node = toolbar.parentElement, ancestorPan = false; while (node) { ancestorPan ||= node.scrollLeft !== 0; node = node.parentElement; }
         return { first, last, ancestorPan, overflow: toolbar.scrollWidth > toolbar.clientWidth, toolbarPan: toolbar.scrollLeft };

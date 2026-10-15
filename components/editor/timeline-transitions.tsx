@@ -19,6 +19,7 @@ export function TimelineCutTransition({ timeline, from, to, clip, px, origin, se
   const cancelGesture = useRef<(() => void) | null>(null);
   useEffect(() => () => cancelGesture.current?.(), [clip, from, to]);
   const cut = to.start;
+  const compact = Math.min(from.duration, to.duration) * px < 48;
   const range = draft ?? clip;
   const label = clip ? EFFECT_CATALOG[clip.effectPreset as TransitionPreset].label : 'Add transition';
   function apply(preset: TransitionPreset) {
@@ -61,7 +62,7 @@ export function TimelineCutTransition({ timeline, from, to, clip, px, origin, se
     const delta = (event.key === 'ArrowRight' ? 1 : -1) * (side === 'left' ? -1 : 1) * 2 * (event.shiftKey ? 10 : 1) / timeline.fps;
     try { onChange(patchClip(timeline, clip.id, { duration: Math.min(transitionDurationLimit(timeline, clip), Math.max(2 / timeline.fps, clip.duration + delta)) })); } catch (error) { onError(error); }
   }
-  return <div className={`timeline-cut-transition${clip ? ' has-transition' : ''}${selected ? ' selected' : ''}${draft ? ' resizing' : ''}`} data-clip-id={clip?.id} data-transition-cut={cut} style={{ left: origin + cut * px }} onPointerDown={event => { event.stopPropagation(); if (clip && event.button === 0) onSelect(clip.id); }} onDragOver={event => { if (!readOnly && event.dataTransfer.types.includes(EFFECT_DRAG_TYPE)) { event.preventDefault(); event.stopPropagation(); event.dataTransfer.dropEffect = 'copy'; } }} onDrop={event => {
+  return <div className={`timeline-cut-transition${compact ? ' is-compact' : ''}${clip ? ' has-transition' : ''}${selected ? ' selected' : ''}${draft ? ' resizing' : ''}`} data-clip-id={clip?.id} data-transition-cut={cut} style={{ left: origin + cut * px }} onPointerDown={event => { event.stopPropagation(); if (clip && event.button === 0) onSelect(clip.id); }} onDragOver={event => { if (!readOnly && event.dataTransfer.types.includes(EFFECT_DRAG_TYPE)) { event.preventDefault(); event.stopPropagation(); event.dataTransfer.dropEffect = 'copy'; } }} onDrop={event => {
     if (readOnly) return;
     const effect = readEffectDrag(event.dataTransfer.getData(EFFECT_DRAG_TYPE));
     if (effect && 'preset' in effect && isTransitionPreset(effect.preset)) { event.preventDefault(); event.stopPropagation(); apply(effect.preset); }
