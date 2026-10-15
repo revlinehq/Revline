@@ -9,10 +9,20 @@ test('the prepared take keeps the actual speech, continuous footage, and linked 
   for(const step of plan.steps){clips=[...clips,...step.clips];expect(()=>generateComposition({...plan.initial,clips},plan.assets)).not.toThrow();}
   expect(clips).toEqual(plan.timeline.clips);
   expect(timelineDuration(plan.timeline)).toBe(45);
-  expect(clips.filter(c=>c.kind==='video')).toEqual([expect.objectContaining({assetId:HORMOZI_DEMO_ASSET._id,start:0,sourceStart:0,duration:45,volume:0,audioSeparated:true})]);
-  expect(clips.filter(c=>c.kind==='audio')).toEqual([expect.objectContaining({start:0,sourceStart:0,duration:45,volume:1})]);
+  const shots=clips.filter(c=>c.kind==='video'),sound=clips.filter(c=>c.kind==='audio');
+  expect(shots).toHaveLength(10);expect(sound).toHaveLength(10);
+  expect(plan.assets.find(a=>a.kind==='audio')?.waveform).toEqual(HORMOZI_DEMO_ASSET.waveform);
+  expect(Buffer.from(HORMOZI_DEMO_ASSET.waveform!.peaks,'base64').some(peak=>peak>0)).toBe(true);
+  expect(shots.reduce((total,c)=>total+c.duration,0)).toBeCloseTo(45);
+  for(const [i,shot] of shots.entries()){
+    expect(shot).toMatchObject({assetId:HORMOZI_DEMO_ASSET._id,sourceStart:shot.start,volume:0,audioSeparated:true});
+    expect(sound.find(c=>c.id===shot.linkedClipId)).toMatchObject({start:shot.start,sourceStart:shot.sourceStart,duration:shot.duration,volume:1,linkedClipId:shot.id});
+    if(i)expect(shot.start).toBeCloseTo(shots[i-1].start+shots[i-1].duration);
+  }
   const captions=clips.filter(c=>c.kind==='caption');
   expect(captions).toHaveLength(39);
+  expect(captions.every(c=>c.textTemplate?.preset==='word-reveal')).toBe(true);
+  expect(plan.steps.filter(step=>step.clips.some(c=>c.kind==='video'))).toHaveLength(10);
   expect(captions.map(c=>c.text).join(' ')).toContain('businesses die of indigestion, not starvation.');
   for(let i=0;i<captions.length;i++){
     expect(captions[i].start+captions[i].duration).toBeLessThanOrEqual(45);
