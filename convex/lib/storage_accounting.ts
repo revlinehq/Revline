@@ -70,7 +70,10 @@ export async function releaseAccountStorage(ctx:MutationCtx,ownerId:string,sourc
   const refs=await ownedObjectReferences(ctx,ownerId,source,thumbnail);
   if(!refs.attachments.length&&!refs.shares.length)await forgetStorageObject(ctx,ownerId,source);
 }
-export async function usedByActiveExport(ctx:Context,ownerId:string,projectId:Id<'projects'>,assetIds:Set<string>) {
-  const jobs=await Promise.all((['queued','rendering'] as const).map(status=>ctx.db.query('renderJobs').withIndex('by_owner_project_status',q=>q.eq('ownerId',ownerId).eq('projectId',projectId).eq('status',status)).take(2)));
+export async function activeExportGroups(ctx:Context,ownerId:string,projectId:Id<'projects'>) {
+  return Promise.all((['queued','rendering'] as const).map(status=>ctx.db.query('renderJobs').withIndex('by_owner_project_status',q=>q.eq('ownerId',ownerId).eq('projectId',projectId).eq('status',status)).take(2)));
+}
+export async function usedByActiveExport(ctx:Context,ownerId:string,projectId:Id<'projects'>,assetIds:Set<string>,groups?:Awaited<ReturnType<typeof activeExportGroups>>) {
+  const jobs=groups??await activeExportGroups(ctx,ownerId,projectId);
   return jobs.some(group=>group.length>=2||group.some(job=>job.assetIds?.some(id=>assetIds.has(String(id)))));
 }

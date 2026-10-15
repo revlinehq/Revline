@@ -2,9 +2,9 @@ import { projectRun } from './lib/project_data';
 import { ConvexError,v } from 'convex/values';
 import { paginationOptsValidator } from 'convex/server';
 import { query,mutation,type QueryCtx,type MutationCtx } from './_generated/server';
-import type { Doc } from './_generated/dataModel';
+import type { Doc,Id } from './_generated/dataModel';
 import { requireOwner } from './lib/auth';
-import { accountingReady,emptyStorage,ownedObjectReferences,storageAccount,storageLimit,usedByActiveExport } from './lib/storage_accounting';
+import { accountingReady,activeExportGroups,emptyStorage,ownedObjectReferences,storageAccount,storageLimit,usedByActiveExport } from './lib/storage_accounting';
 import { removeOwnedAsset } from './assets';
 import { removeOwnedExport } from './renders';
 
@@ -16,12 +16,32 @@ export const summary=query({args:{},returns:v.object({usedBytes:v.number(),reser
   const values=Object.fromEntries(Object.keys(emptyStorage).map(key=>[key,account?.[key as keyof typeof emptyStorage]??0])) as typeof emptyStorage;
   return {...values,limitBytes:storageLimit(),ready};
 }});
-async function describe(ctx:QueryCtx|MutationCtx,row:Doc<'storageObjects'>) {
+type DescriptionReads={
+  project:(id:Id<'projects'>)=>Promise<Doc<'projects'>|null>;
+  run:(id:Id<'projects'>,ownerId:string)=>ReturnType<typeof projectRun>;
+  activeExport:(ownerId:string,id:Id<'projects'>,assetIds:Set<string>)=>Promise<boolean>;
+};
+function cached<K,V>(cache:Map<K,Promise<V>>,key:K,load:()=>Promise<V>) {
+  let pending=cache.get(key);if(!pending){pending=load();cache.set(key,pending);}return pending;
+}
+/** Reuse promises across concurrent rows in this query's immutable snapshot only. */
+function listingReads(ctx:QueryCtx):DescriptionReads {
+  const projects=new Map<Id<'projects'>,Promise<Doc<'projects'>|null>>();
+  const runs=new Map<string,ReturnType<typeof projectRun>>();
+  const exports=new Map<string,ReturnType<typeof activeExportGroups>>();
+  const key=(ownerId:string,id:Id<'projects'>)=>JSON.stringify([ownerId,id]);
+  return {
+    project:id=>cached(projects,id,()=>ctx.db.get(id)),
+    run:(id,ownerId)=>cached(runs,key(ownerId,id),()=>projectRun(ctx,id,ownerId)),
+    activeExport:async(ownerId,id,assetIds)=>usedByActiveExport(ctx,ownerId,id,assetIds,await cached(exports,key(ownerId,id),()=>activeExportGroups(ctx,ownerId,id))),
+  };
+}
+async function describe(ctx:QueryCtx|MutationCtx,row:Doc<'storageObjects'>,reads?:DescriptionReads) {
   const result={id:row._id,fileName:row.fileName,kind:row.kind,size:row.size,createdAt:row.createdAt,workspaces:[] as {id:Doc<'projects'>['_id'];title:string}[],canDelete:false,protectedReason:null as string|null};
   if(row.kind==='export') {
     const job=row.jobId?await ctx.db.get(row.jobId):null;
     if(!job||job.ownerId!==row.ownerId){result.protectedReason='This export is unavailable';return result;}
-    const project=await ctx.db.get(job.projectId);if(project?.ownerId===row.ownerId)result.workspaces.push({id:project._id,title:project.title});
+    const project=await(reads?reads.project(job.projectId):ctx.db.get(job.projectId));if(project?.ownerId===row.ownerId)result.workspaces.push({id:project._id,title:project.title});
     result.canDelete=job.status==='completed'||job.status==='failed';result.protectedReason=result.canDelete?null:'Export in progress';return result;
   }
   const refs=await ownedObjectReferences(ctx,row.ownerId,row);
@@ -29,7 +49,7 @@ async function describe(ctx:QueryCtx|MutationCtx,row:Doc<'storageObjects'>) {
   if(refs.shares.length)result.protectedReason='Used by a shared timeline';
   const projectIds=[...new Set(refs.attachments.map(asset=>asset.projectId))];
   for(const projectId of projectIds) {
-    const project=await ctx.db.get(projectId);if(!project||project.ownerId!==row.ownerId)continue;
+    const project=await(reads?reads.project(projectId):ctx.db.get(projectId));if(!project||project.ownerId!==row.ownerId)continue;
     const sources=refs.attachments.filter(asset=>asset.projectId===projectId);
     const ids=new Set(sources.map(asset=>String(asset._id)));
     let used=project.timeline?.clips.some(clip=>clip.assetId&&ids.has(clip.assetId));
@@ -40,8 +60,8 @@ async function describe(ctx:QueryCtx|MutationCtx,row:Doc<'storageObjects'>) {
       used=project.timeline?.clips.some(clip=>clip.assetId&&videos.has(clip.assetId));
     }
     if(used) {result.workspaces.push({id:project._id,title:project.title});result.protectedReason='Used in an edit';}
-    if((await projectRun(ctx,projectId,row.ownerId)).aiRunning)result.protectedReason='AI editing in progress';
-    if(await usedByActiveExport(ctx,row.ownerId,projectId,ids))result.protectedReason='Used by an active export';
+    if((await(reads?reads.run(projectId,row.ownerId):projectRun(ctx,projectId,row.ownerId))).aiRunning)result.protectedReason='AI editing in progress';
+    if(await(reads?reads.activeExport(row.ownerId,projectId,ids):usedByActiveExport(ctx,row.ownerId,projectId,ids)))result.protectedReason='Used by an active export';
   }
   result.canDelete=refs.attachments.length>0&&!result.protectedReason;return result;
 }
@@ -53,7 +73,7 @@ export const files=query({args:{paginationOpts:paginationOptsValidator,kind:v.op
     : args.kind ? base.withIndex(args.sort==='largest'?'by_owner_kind_size':'by_owner_kind_created',q=>q.eq('ownerId',ownerId).eq('auxiliary',false).eq('pending',false).eq('kind',args.kind!)).order('desc')
     : base.withIndex(args.sort==='largest'?'by_owner_visible_size':'by_owner_visible_created',q=>q.eq('ownerId',ownerId).eq('auxiliary',false).eq('pending',false)).order('desc');
   const page=await listing.paginate(args.paginationOpts);
-  const rows=await Promise.all(page.page.map(row=>describe(ctx,row)));
+  const reads=listingReads(ctx),rows=await Promise.all(page.page.map(row=>describe(ctx,row,reads)));
   return {...page,page:args.unused?rows.filter(row=>row.canDelete):rows};
 }});
 export const remove=mutation({args:{fileIds:v.array(v.id('storageObjects'))},returns:v.null(),handler:async(ctx,{fileIds})=>{

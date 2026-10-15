@@ -17,6 +17,54 @@ async function project(t:Fixture,ownerId='owner'){return t.withIdentity(identity
 async function asset(t:Fixture,projectId:Id<'projects'>,size=300,key='media/owner/project/object',ownerId='owner',indexed=true){return t.run(async ctx=>{const id=await ctx.db.insert('assets',{ownerId,projectId,r2Key:key,size,fileName:`${key.split('/').at(-1)}.png`,contentType:'image/png',kind:'image',createdAt:1});if(indexed)await recordAssetStorage(ctx,(await ctx.db.get(id))!);return id;});}
 const listing={paginationOpts:{cursor:null,numItems:20},sort:'largest' as const};
 
+test('file listings reuse project protection reads without sharing per-file decisions or later snapshots',async()=>{
+  const t=make(),p=await project(t),second=await project(t),owner=t.withIdentity(identity('owner'));
+  const ids=await Promise.all(Array.from({length:4},(_,index)=>asset(t,p,100,`media/owner/project/object-${index}`)));
+  const secondId=await asset(t,second,100,'media/owner/second/object');
+  await t.run(async ctx=>{
+    for(const [projectId,ownerId,status,assetIds] of [[p,'owner','queued',[ids[0]]],[p,'owner','rendering',[ids[1]]],[p,'owner','completed',[ids[2]]],[p,'other','queued',[ids[3]]],[second,'owner','queued',[secondId]]] as const)
+      await ctx.db.insert('renderJobs',{projectId,ownerId,status,assetIds:[...assetIds],createdAt:0,updatedAt:0});
+  });
+  const {files}=await import('./storage');
+  async function trace(){return t.run(async ctx=>{
+    const tables:string[]=[],reads:string[]=[];
+    const db=new Proxy(ctx.db,{get(target,property,receiver){
+      if(property==='query')return(...args:unknown[])=>{tables.push(String(args[0]));return Reflect.apply(target.query,target,args);};
+      if(property==='get')return(...args:unknown[])=>{reads.push(String(args.at(-1)));return Reflect.apply(target.get,target,args);};
+      return Reflect.get(target,property,receiver);
+    }});
+    const result=await (files as unknown as {_handler:(ctx:unknown,args:unknown)=>Promise<{page:{id:Id<'storageObjects'>;fileName:string;canDelete:boolean;protectedReason:string|null}[]}>})._handler({...ctx,db,auth:{getUserIdentity:async()=>identity('owner')}},listing);
+    return {result,tables,reads};
+  });}
+  const first=await trace(),items=new Map(first.result.page.map(row=>[row.fileName,row]));
+  expect(items.get('object-0.png')).toMatchObject({canDelete:false,protectedReason:'Used by an active export'});
+  expect(items.get('object-1.png')).toMatchObject({canDelete:false,protectedReason:'Used by an active export'});
+  expect(items.get('object-2.png')?.canDelete).toBe(true);expect(items.get('object-3.png')?.canDelete).toBe(true);
+  expect(items.get('object.png')).toMatchObject({canDelete:false,protectedReason:'Used by an active export'});
+  expect(first.reads.filter(id=>id===p)).toHaveLength(1);expect(first.reads.filter(id=>id===second)).toHaveLength(1);
+  expect(first.tables.filter(table=>table==='projectAccess')).toHaveLength(2);
+  expect(first.tables.filter(table=>table==='aiRuns')).toHaveLength(2);
+  expect(first.tables.filter(table=>table==='renderJobs')).toHaveLength(4);
+  expect(first.tables.filter(table=>table==='assets')).toHaveLength(5);expect(first.tables.filter(table=>table==='shareAssets')).toHaveLength(5);
+  for(const status of ['queued','rendering'] as const){
+    const saturated=await t.run(ctx=>ctx.db.insert('renderJobs',{projectId:p,ownerId:'owner',status,assetIds:[ids[0]],createdAt:0,updatedAt:0}));
+    expect((await owner.query(api.storage.files,listing)).page.find(row=>row.fileName==='object-2.png')).toMatchObject({canDelete:false,protectedReason:'Used by an active export'});
+    await expect(owner.mutation(api.storage.remove,{fileIds:[items.get('object-2.png')!.id]})).rejects.toThrow('Used by an active export');
+    await t.run(ctx=>ctx.db.patch(saturated,{status:'completed'}));
+    expect((await owner.query(api.storage.files,listing)).page.find(row=>row.fileName==='object-2.png')?.canDelete).toBe(true);
+  }
+  await t.run(async ctx=>{const run=await ctx.db.query('aiRuns').withIndex('by_project',q=>q.eq('projectId',p)).unique();await ctx.db.patch(run!._id,{aiRunning:true});});
+  expect((await owner.query(api.storage.files,listing)).page.find(row=>row.fileName==='object-2.png')).toMatchObject({canDelete:false,protectedReason:'AI editing in progress'});
+  await t.run(async ctx=>{
+    const run=await ctx.db.query('aiRuns').withIndex('by_project',q=>q.eq('projectId',p)).unique(),access=await ctx.db.query('projectAccess').withIndex('by_project',q=>q.eq('projectId',p)).unique();
+    await ctx.db.delete(run!._id);await ctx.db.delete(access!._id);await ctx.db.patch(p,{aiRunning:true});
+  });
+  expect((await owner.query(api.storage.files,listing)).page.find(row=>row.fileName==='object-2.png')).toMatchObject({canDelete:false,protectedReason:'AI editing in progress'});
+  await t.run(ctx=>ctx.db.patch(p,{deleting:true}));
+  await expect(owner.query(api.storage.files,listing)).rejects.toThrow('Project not found');
+  await expect(owner.mutation(api.storage.remove,{fileIds:[items.get('object-2.png')!.id]})).rejects.toThrow('Project not found');
+});
+
 test('storage reads and deletions are owned, cleanup works without paid access',async()=>{
   const t=make(),p=await project(t),id=await asset(t,p),owner=t.withIdentity(identity('owner')),other=t.withIdentity(identity('other'));
   const file=(await owner.query(api.storage.files,listing)).page[0];
