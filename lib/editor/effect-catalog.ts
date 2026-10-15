@@ -1,10 +1,10 @@
 import { EFFECT_CATALOG, type EffectPreset } from './clip-effects';
 import type { VisualEffects } from './visual-effects';
-type EffectIconName = Exclude<keyof VisualEffects, 'frameCorners'> | Exclude<EffectPreset, 'none' | 'zoom-blur'> | 'speed-up';
+type EffectIconName = Exclude<keyof VisualEffects, 'frameCorners' | 'lightSweep'> | Exclude<EffectPreset, 'none' | 'zoom-blur'> | 'speed-up';
 
 export const EFFECT_LIBRARY_CATEGORIES = [{ id: 'motion', label: 'Motion' }, { id: 'color', label: 'Color' }, { id: 'texture', label: 'Texture' }, { id: 'transitions', label: 'Transitions' }] as const;
 export type EffectLibraryCategory = typeof EFFECT_LIBRARY_CATEGORIES[number]['id'];
-export type EffectLibraryEntry = { id: EffectIconName; label: string; description: string; category: EffectLibraryCategory; visual?: keyof VisualEffects; preset?: EffectPreset; action?: 'speed' };
+export type EffectLibraryEntry = { id: EffectIconName; label: string; description: string; category: EffectLibraryCategory; visual?: Exclude<keyof VisualEffects, 'lightSweep'>; preset?: EffectPreset; action?: 'speed' };
 
 /** One catalog drives categories, search, icons, click actions, and drag payloads. */
 export const EFFECT_LIBRARY_CATALOG: readonly EffectLibraryEntry[] = [
@@ -22,7 +22,6 @@ export const EFFECT_LIBRARY_CATALOG: readonly EffectLibraryEntry[] = [
   { id: 'lensDistortion', label: 'Lens distortion', description: 'A curved wide-angle lens bend with adjustable strength, optical center and color fringing. Fills the frame without adding a border.', category: 'motion', visual: 'lensDistortion' },
   { id: 'directionalBlur', label: 'Directional blur', description: 'A smooth streak blur along an editable angle, with adjustable strength. Keeps the original source and timing.', category: 'motion', visual: 'directionalBlur' },
   { id: 'turbulentDisplace', label: 'Turbulent displacement', description: 'Organic flowing distortion with adjustable strength, scale and speed. Procedural and deterministic at every timeline frame.', category: 'motion', visual: 'turbulentDisplace' },
-  { id: 'lightSweep', label: 'Light sweep', description: 'A colored highlight beam moves across footage or a logo image. Adjust strength, angle, position, width and speed.', category: 'color', visual: 'lightSweep' },
   { id: 'filmOverlay', label: 'Film overlay', description: 'Animated film grain, dust and scratches, with adjustable vignette, flicker and warmth. Procedural, with no overlay download required.', category: 'texture', visual: 'filmOverlay' },
   { id: 'vhs', label: 'VHS overlay', description: 'Analog scanlines, tape noise, subtle RGB bleed and rolling tracking distortion. Adjustable strength, components and speed; no overlay download.', category: 'texture', visual: 'vhs' },
   { id: 'lightLeak', label: 'Light leak', description: 'A soft colored exposure glow at the frame edge. Adjust color, edge position, spread, strength and motion speed.', category: 'texture', visual: 'lightLeak' },

@@ -9,11 +9,12 @@ import { EMPTY_TIMELINE, normalizeTimeline } from './types';
 
 const defaults = { directionalBlur: DEFAULT_DIRECTIONAL_BLUR, turbulentDisplace: DEFAULT_TURBULENT_DISPLACE, lightSweep: DEFAULT_LIGHT_SWEEP };
 const effects = { directionalBlur: { ...DEFAULT_DIRECTIONAL_BLUR, enabled: true, angle: 34 }, turbulentDisplace: { ...DEFAULT_TURBULENT_DISPLACE, enabled: true, speed: 0 }, lightSweep: { ...DEFAULT_LIGHT_SWEEP, enabled: true, color: '#1a92cc', position: .7 } };
-test('the three footage controls default to bypass, merge only requested settings and are available in the production inventory', () => {
+test('active footage controls are discoverable while saved Light sweep stays compatible', () => {
   for (const key of Object.keys(defaults) as (keyof typeof defaults)[]) {
     expect(defaults[key].enabled).toBe(false);
     expect(visualEffectsPatch({ kind: 'image' }, { [key]: { enabled: true } })).toEqual({ [key]: { ...defaults[key], enabled: true } });
-    expect(EFFECT_LIBRARY_CATALOG.find(entry => entry.id === key)?.visual).toBe(key);
+    if(key === 'lightSweep')expect(EFFECT_LIBRARY_CATALOG.some(entry => String(entry.id) === key)).toBe(false);
+    else expect(EFFECT_LIBRARY_CATALOG.find(entry => entry.id === key)?.visual).toBe(key);
   }
   expect(visualEffectsPatch({ kind: 'video', ...effects }, { lightSweep: { speed: 0 }, directionalBlur: { amount: 3 } })).toEqual({ lightSweep: { ...effects.lightSweep, speed: 0 }, directionalBlur: { ...effects.directionalBlur, amount: 3 } });
   const clip = { id: 'test', kind: 'video' as const, start: 0, duration: 5, sourceStart: 0, ...effects };

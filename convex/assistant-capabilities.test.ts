@@ -747,17 +747,28 @@ test.each(['gradient-wipe','iris-wipe'] as const)('%s AI controls preserve omitt
 });
 
 
+test('retired footage Light sweep cannot be enabled by the agent; saved settings and other sweep/leak features remain',async()=>{
+  const saved={...DEFAULT_LIGHT_SWEEP,enabled:true,color:'#12ABCF',speed:0};
+  const seed={...initial,clips:initial.clips.map(clip=>clip.id==='from'?{...clip,lightSweep:saved}:clip)};
+  const result=await run(async tools=>{
+    expect(()=>tools.setVisualEffects.inputSchema.parse({clipId:'from',lightSweep:{enabled:true}})).toThrow();
+    expect(()=>tools.setVisualEffects.inputSchema.parse({clipId:'from',lightLeak:{enabled:true}})).not.toThrow();
+    expect(()=>tools.applyTextTemplate.inputSchema.parse({clipId:'title',preset:'spotlight-sweep'})).not.toThrow();
+    await execute(tools,'setVisualEffects',{clipId:'from',lightLeak:{enabled:true}});
+  },seed,true);
+  expect(result.error).toBeUndefined();expect(result.timeline.clips.find(clip=>clip.id==='from')?.lightSweep).toEqual(saved);
+  await assertUndo(result);
+});
+
 const aeVisualCases=[
   {effect:'directionalBlur',defaults:DEFAULT_DIRECTIONAL_BLUR,first:{enabled:true,amount:24},second:{angle:45},expected:{...DEFAULT_DIRECTIONAL_BLUR,enabled:true,amount:24,angle:45}},
   {effect:'turbulentDisplace',defaults:DEFAULT_TURBULENT_DISPLACE,first:{enabled:true,amount:40},second:{scale:220,speed:0},expected:{...DEFAULT_TURBULENT_DISPLACE,enabled:true,amount:40,scale:220,speed:0}},
-  {effect:'lightSweep',defaults:DEFAULT_LIGHT_SWEEP,first:{enabled:true,color:'#12ABCF',amount:.8},second:{angle:90,position:.7,width:.2,speed:0},expected:{...DEFAULT_LIGHT_SWEEP,enabled:true,color:'#12ABCF',amount:.8,angle:90,position:.7,width:.2,speed:0}},
 ] as const;
 test.each(aeVisualCases)('$effect AI control boundaries, partial edits, bypass/reset/remove and undo preserve video/image/audio',async({effect,defaults,first,second,expected})=>{
   for(const clipId of ['from','to']){
     const seed=addEffectClip(initial,'fx-blur','zoom-blur',1,{duration:1});
     const result=await run(async tools=>{
       for(const [control,[min,max]] of Object.entries(VISUAL_EFFECT_LIMITS[effect]))for(const value of [min-.01,max+.01,NaN,Infinity])expect(()=>tools.setVisualEffects.inputSchema.parse({clipId,[effect]:{[control]:value}})).toThrow();
-      if(effect==='lightSweep')for(const color of ['red','#123','#12345678','transparent','url(example)'])expect(()=>tools.setVisualEffects.inputSchema.parse({clipId,lightSweep:{color}})).toThrow();
       await expect(execute(tools,'setVisualEffects',{clipId,[effect]:{}})).rejects.toThrow('Specify');
       for(const bad of ['audio','title','fx-blur']){
         await expect(execute(tools,'setVisualEffects',{clipId:bad,[effect]:{enabled:true}})).rejects.toThrow('video or image');
