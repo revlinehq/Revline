@@ -3,6 +3,7 @@
 import * as React from 'react';
 import { ContextMenu as Primitive } from 'radix-ui';
 import { cn } from 'cn';
+import './context-menu.css';
 
 export const ContextMenu=Primitive.Root;
 export const ContextMenuTrigger=Primitive.Trigger;

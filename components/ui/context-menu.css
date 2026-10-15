@@ -1,0 +1,2 @@
+[data-slot=context-menu-content]{background:var(--ws-bg,var(--popover));color:var(--ws-text,var(--popover-foreground))}
+[data-slot=context-menu-item]:not([data-disabled]):is(:hover,:focus-visible,[data-highlighted]){background:var(--ws-hover,var(--accent));color:var(--ws-text,var(--accent-foreground))}

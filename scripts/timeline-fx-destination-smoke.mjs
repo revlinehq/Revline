@@ -25,5 +25,13 @@ try{
   assert.ok(await page.$eval('.timeline-insert-indicator',n=>getComputedStyle(n).display!=='none'),'FX/V seam shows new-video-track insertion');await page.mouse.up();await frames();
   assert.equal(await page.evaluate(()=>window.fixture.getState().timeline.tracks.visual),4,'Dragging above V3 creates V4 without an empty track');assert.equal(await page.evaluate(()=>window.fixture.getState().timeline.clips.find(c=>c.id==='image').track),4);assert.equal(await page.evaluate(()=>window.fixture.getState().timeline.clips.find(c=>c.id==='fx').track),1,'FX stays on its own track');await page.evaluate(()=>window.fixture.getState().undo());await frames();
  }
- console.log('PASS: video drags create V4 at the FX/V seam in normal and compact rows; FX destination rows refresh while entering/leaving a newly created row; drag commits once and undo restores the original track.');
+ for(const theme of ['dark','light']){
+  await page.evaluate(theme=>document.documentElement.dataset.workspaceTheme=theme,theme);const clip=await page.$('[data-clip-id="image"]'),box=await clip.boundingBox();await page.mouse.click(box.x+1,box.y+box.height/2,{button:'right'});await page.waitForSelector('[data-slot="context-menu-content"]');
+  const enabled='[data-slot="context-menu-item"]:not([data-disabled])';await page.hover(enabled);await frames();
+  const highlight=await page.$eval(enabled,node=>({color:getComputedStyle(node).backgroundColor,highlighted:node.hasAttribute('data-highlighted')}));assert.equal(highlight.color,theme==='dark'?'rgb(41, 41, 41)':'rgb(244, 244, 244)','Right-click hover uses the visible shared workspace highlight');assert.equal(highlight.highlighted,true);
+  await page.keyboard.press('ArrowDown');await frames();assert.equal(await page.$eval('[data-slot="context-menu-item"][data-highlighted]',node=>getComputedStyle(node).backgroundColor),highlight.color,'Keyboard focus has the same highlight');
+  await page.keyboard.press('Escape');await page.mouse.click(box.x+box.width+40,box.y+box.height/2,{button:'right'});await page.waitForSelector('[data-slot="context-menu-content"]');
+  const disabled=await page.$('[data-slot="context-menu-item"][data-disabled]');assert.ok(disabled);await disabled.hover();await frames();assert.equal(await disabled.evaluate(node=>node.hasAttribute('data-highlighted')),false,'Disabled menu entries cannot highlight');await page.keyboard.press('Escape');
+ }
+ console.log('PASS: right-click menu hover/keyboard highlights in dark/light themes, disabled entries stay inactive; video drags create V4 at the FX/V seam in normal and compact rows; FX destination rows refresh while entering/leaving a newly created row; drag commits once and undo restores the original track.');
 }finally{await browser.close();}
