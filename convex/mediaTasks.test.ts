@@ -66,6 +66,27 @@ test('video imports enforce ownership and billing, dedupe active URLs and create
   await f.drain();
 });
 
+test('active imports outside the recent task window still enforce the three-import limit', async () => {
+  const f = await fixture();
+  await f.t.run(async ctx => {
+    for (const [index,status] of (['queued','running','retrying'] as const).entries()) await ctx.db.insert('mediaTasks', { ownerId:'owner',projectId:f.projectId,kind:'import',sourceUrl:`https://cdn.example.com/old-${index}.mp4`,status,attempt:1,progress:0,createdAt:Date.now()-1000,updatedAt:Date.now() });
+    for (let index=0;index<40;index++) await ctx.db.insert('mediaTasks', { ownerId:'owner',projectId:f.projectId,assetId:f.assetId,kind:'transcribe',status:'completed',attempt:1,progress:100,createdAt:Date.now(),updatedAt:Date.now() });
+  });
+  await expect(f.owner.mutation(api.mediaTasks.importVideo,{projectId:f.projectId,url:'https://cdn.example.com/fourth.mp4'})).rejects.toThrow('Wait for the current video imports');
+});
+
+test('active imports outside the recent task window still deduplicate URLs in every active status', async () => {
+  const f=await fixture();
+  const imports=await f.t.run(async ctx=>{
+    const ids=[];
+    for(const [index,status] of (['queued','running','retrying'] as const).entries())ids.push(await ctx.db.insert('mediaTasks',{ownerId:'owner',projectId:f.projectId,kind:'import',sourceUrl:`https://cdn.example.com/old-${index}.mp4`,status,attempt:1,progress:0,createdAt:Date.now()-1000,updatedAt:Date.now()}));
+    for(let index=0;index<40;index++)await ctx.db.insert('mediaTasks',{ownerId:'owner',projectId:f.projectId,assetId:f.assetId,kind:'waveform',status:'completed',attempt:1,progress:100,createdAt:Date.now(),updatedAt:Date.now()});
+    return ids;
+  });
+  for(const [index,taskId] of imports.entries())expect(await f.owner.mutation(api.mediaTasks.importVideo,{projectId:f.projectId,url:`https://cdn.example.com/old-${index}.mp4`})).toEqual({projectId:f.projectId,taskId});
+  expect(await f.t.run(ctx=>ctx.db.query('mediaTasks').withIndex('by_project_createdAt',q=>q.eq('projectId',f.projectId)).collect())).toHaveLength(43);
+});
+
 test('stored imports survive retries, append to the latest timeline once, and prepare audio in the background', async () => {
   const f = await fixture();
   const { taskId } = await f.owner.mutation(api.mediaTasks.importVideo, { projectId: f.projectId, url: 'https://cdn.example.com/video.mp4' });

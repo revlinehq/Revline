@@ -53,6 +53,24 @@ async function revoke(f: Awaited<ReturnType<typeof fixture>>, mode: 'revoked' | 
 }
 const upload = (f: Awaited<ReturnType<typeof fixture>>) => f.owner.action(api.r2.start, { projectId: f.projectId, kind: 'video', fileName: 'New.mp4', contentType: 'video/mp4', size: 10, duration: 3, width: 1080, height: 1920 });
 
+test('multipart lease authorization reads identity without hydrating project history', async () => {
+  const f=await fixture();
+  await f.t.run(ctx=>writeProject(ctx,f.projectId,{history:Array.from({length:10},(_,index)=>({fps:30,aspectRatio:'vertical' as const,clips:[{id:'caption',kind:'caption' as const,start:0,duration:1,sourceStart:0,text:`Revision ${index}`}]}))}));
+  const {uploadId}=await upload(f),{getLease}=await import('./r2');
+  const trace=await f.t.run(async ctx=>{
+    const tables:string[]=[],reads:string[]=[];
+    const db=new Proxy(ctx.db,{get(target,property,receiver){
+      if(property==='query')return (...args:unknown[])=>{tables.push(String(args[0]));return Reflect.apply(target.query,target,args);};
+      if(property==='get')return (...args:unknown[])=>{reads.push(String(args.at(-1)));return Reflect.apply(target.get,target,args);};
+      return Reflect.get(target,property,receiver);
+    }});
+    const lease=await (getLease as unknown as {_handler:(ctx:unknown,args:unknown)=>Promise<{_id:string}>})._handler({...ctx,db,auth:{getUserIdentity:async()=>identity(ownerId)}},{uploadId});
+    return {tables,reads,id:lease._id};
+  });
+  expect(trace.id).toBe(uploadId);expect(trace.tables).toContain('projectAccess');
+  expect(trace.tables).not.toContain('timelineRevisions');expect(trace.tables).not.toContain('aiRuns');expect(trace.reads).not.toContain(f.projectId);
+});
+
 test.each(['revoked', 'expired'] as const)('%s complimentary access blocks direct focus writes', async mode => {
   const f = await fixture();
   await f.owner.mutation(api.assets.saveFocus, { projectId: f.projectId, assetId: f.assetId, focus });

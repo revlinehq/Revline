@@ -10,6 +10,7 @@ import { EMPTY_SCRIPTED_DEMO, scriptedDemoPlan, scriptedDemoMedia } from '@/lib/
 import { HORMOZI_DEMO_ASSET, hormoziDemoPlan } from '@/lib/editor/hormozi-demo';
 import type { MediaAsset, Timeline } from '@/lib/editor/types';
 import type { ComposerAttachment } from '@/components/workspace/edit-composer';
+import { stockAudioAsset } from '@/lib/editor/stock-audio';
 import { userError } from '@/lib/user-error';
 import { AssistantPanel, type ChatMessage } from './assistant-panel';
 import { EditorStateProvider } from './editor-state';
@@ -31,8 +32,9 @@ export function ScriptedDemoEditor({ demoId }: { demoId: string }) {
   const [store] = useState(() => createEditorStore(EMPTY_SCRIPTED_DEMO));
   const timeline = useStore(store, state => state.timeline), history = useStore(store, state => state.history), future = useStore(store, state => state.future);
   const [assets, setAssets] = useState<MediaAsset[]>([]), [pending, setPending] = useState<ComposerAttachment[]>([]);
+  const [stockAssets, setStockAssets] = useState<MediaAsset[]>([]);
   const [submittedAssetIds, setSubmittedAssetIds] = useState<string[]>([]);
-  const media = useMemo(() => scriptedDemoMedia(preparedTake?[HORMOZI_DEMO_ASSET]:assets), [assets,preparedTake]);
+  const media = useMemo(() => scriptedDemoMedia([...(preparedTake?[HORMOZI_DEMO_ASSET]:assets),...stockAssets]), [assets,preparedTake,stockAssets]);
   const [messages, setMessages] = useState<ChatMessage[]>([]), [running, setRunning] = useState(false), [importing, setImporting] = useState(false);
   const [error, setError] = useState(''), [title, setTitle] = useState('Your next edit'), [activity, setActivity] = useState<string | null>(null);
   const [lastPrompt, setLastPrompt] = useState('');
@@ -119,7 +121,7 @@ export function ScriptedDemoEditor({ demoId }: { demoId: string }) {
   function change(next: Timeline) { if (!activeRun.current) { store.getState().edit(next); setError(''); } }
   return <div className="scripted-editor-demo" data-demo-id={demoId} data-building={running || undefined}>
     <input ref={input} data-demo-files type="file" hidden multiple accept="video/*,image/*,audio/*" onChange={event => { const files = Array.from(event.currentTarget.files ?? []); event.currentTarget.value = ''; void attach(files).catch(error => setError(userError(error))); }}/>
-    <EditorStateProvider store={store}><EditorShell title={title} onTitle={setTitle} timeline={timeline} assets={media.assets} onChange={change} saving={false} upload={null} error={error} onError={setError} demo assistantPanel={chat}
+    <EditorStateProvider store={store}><EditorShell onRegisterStockAudio={async catalogId=>{if(activeRun.current)throw new Error('Finish or stop the edit before adding a sound.');const asset=stockAudioAsset(catalogId);setStockAssets(previous=>previous.some(item=>item._id===asset._id)?previous:[...previous,asset]);return asset;}} title={title} onTitle={setTitle} timeline={timeline} assets={media.assets} onChange={change} saving={false} upload={null} error={error} onError={setError} demo assistantPanel={chat}
       onUndo={() => { if (!activeRun.current) store.getState().undo(); }} onRedo={() => { if (!activeRun.current) store.getState().redo(); }} canUndo={!running && !!history.length} canRedo={!running && !!future.length}
       onUpload={attach} onDropUpload={attach} messages={messages} aiRunning={running} aiConfigured={false} onSend={build} onStop={async () => { activeRun.current?.abort(); }} onExport={async () => {}} exportState={null}/></EditorStateProvider>
   </div>;

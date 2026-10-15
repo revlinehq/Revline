@@ -2,6 +2,7 @@ import { updateProjectCover } from './project_data';
 import { ConvexError } from 'convex/values';
 import type { Doc, Id } from '../_generated/dataModel';
 import type { MutationCtx, QueryCtx } from '../_generated/server';
+import { isStockAudioKey } from '../../lib/editor/stock-audio';
 
 type StoredObject = { r2Key?:string; storageId?:Id<'_storage'> };
 type ObjectDetails = StoredObject & { ownerId:string; fileName:string; kind:'video'|'audio'|'image'|'export'; size:number; createdAt:number; auxiliary?:boolean; pending?:boolean; jobId?:Id<'renderJobs'> };
@@ -32,6 +33,7 @@ async function adjust(ctx:MutationCtx,ownerId:string,source:Pick<Doc<'storageObj
 }
 /** One record per physical object per account, even when several projects reuse it. */
 export async function recordStorageObject(ctx:MutationCtx,source:ObjectDetails,backfill=false) {
+  if(isStockAudioKey(source.r2Key))return;
   const key=objectKey(source); if(!key)return;
   if (!Number.isSafeInteger(source.size)||source.size<0) throw new ConvexError('Invalid stored file size');
   const existing=await ctx.db.query('storageObjects').withIndex('by_owner_key',q=>q.eq('ownerId',source.ownerId).eq('objectKey',key)).unique();

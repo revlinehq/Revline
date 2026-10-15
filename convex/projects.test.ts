@@ -326,6 +326,7 @@ test("worker analysis requires an active exact run and scoped media, then reject
 });
 
 test("chat selection and playhead cannot reference another timeline or invalid time", async () => {
+  vi.stubEnv("ANTHROPIC_API_KEY", "fixture-only");
   const t = makeTest(); const projectId = await project(t); const owner = t.withIdentity(identity("owner"));
   await expect(owner.mutation(api.assistant.send, { projectId, prompt: "Style this", selectedClipId: "foreign-clip" })).rejects.toThrow("Selected clip does not belong");
   await expect(owner.mutation(api.assistant.send, { projectId, prompt: "Cut here", playhead: -1 })).rejects.toThrow("Playhead must be a finite");
@@ -398,6 +399,7 @@ test("empty groups can have zero tracks, persist through undo, and cannot contai
 });
 
 test("chat multi-selection validates ownership, duplicates, and limits before scheduling", async () => {
+  vi.stubEnv("ANTHROPIC_API_KEY", "fixture-only");
   const t = makeTest(); const projectId = await project(t); const owner = t.withIdentity(identity("owner"));
   const clips = Array.from({ length: 200 }, (_, index) => ({ ...textTimeline.clips[0], id: `selected-${index}` }));
   await owner.mutation(api.projects.saveTimeline, { projectId, expectedRevision: 0, timeline: { ...textTimeline, clips } });
@@ -407,6 +409,7 @@ test("chat multi-selection validates ownership, duplicates, and limits before sc
     [Array.from({ length: 201 }, (_, index) => `selected-${index}`), "at most 200"],
   ] as const) await expect(owner.mutation(api.assistant.send, { projectId, prompt: "Style the selection", selectedClipIds: [...selectedClipIds] })).rejects.toThrow(reason);
   await expect(t.withIdentity(identity("stranger")).mutation(api.assistant.send, { projectId, prompt: "Style the selection", selectedClipIds: ["selected-0"] })).rejects.toThrow("Project not found");
+  vi.stubEnv("ANTHROPIC_API_KEY", "");
   await expect(owner.mutation(api.assistant.send, { projectId, prompt: "Style the selection", selectedClipIds: clips.map(clip => clip.id) })).rejects.toThrow("ANTHROPIC_API_KEY");
   expect((await owner.query(api.projects.get, { projectId })).threadId).toBeUndefined();
 });

@@ -1,19 +1,17 @@
 import { shareAnalysis } from './lib/asset_analysis';
-import { writeProject,createProject,readProject,projectIdentity,projectRun } from './lib/project_data';
-import { recordAssetStorage, forgetStorageObject } from './lib/storage_accounting';
+import { writeProject,createProject,readProject,projectIdentity } from './lib/project_data';
+import { recordAssetStorage } from './lib/storage_accounting';
 import { requireEditorAccess } from './lib/billing_access';
 import { mediaUrl } from './lib/media_storage';
 import { ConvexError, v } from "convex/values";
-import { components, internal } from "./_generated/api";
+import { internal } from "./_generated/api";
 import { mutation, query } from "./_generated/server";
 import { listLimit, requireOwner, requireProject } from "./lib/auth";
 import { commitTimeline, currentTimeline, serializedBytes, validateTimeline } from "./lib/timeline";
-import { removeMediaAttachment, removeProjectShares } from './lib/shared_media';
 import { addMediaClip, patchClip } from '../lib/editor/operations';
 import { applyTimelineEdit } from '../lib/editor/timeline-sync';
-import { layerGroup, normalizeTimeline, timelineDuration, type Timeline } from '../lib/editor/types';
+import { normalizeTimeline, type Timeline } from '../lib/editor/types';
 import { aspectRatio, projectDocument, timelineValidator } from "./schema";
-import { cancelMediaTask } from './mediaTasks';
 function projectTitle(value: string) { const title = value.trim(); if (!title || title.length > 120) throw new ConvexError("Title must contain between 1 and 120 characters"); return title; }
 export const create = mutation({ args: { title: v.string(), aspectRatio, assetIds: v.optional(v.array(v.id('assets'))) }, returns: v.id("projects"), handler: async (ctx, args) => {
   const ownerId = await requireOwner(ctx); await requireEditorAccess(ctx, ownerId); const now = Date.now();
@@ -54,8 +52,6 @@ export const create = mutation({ args: { title: v.string(), aspectRatio, assetId
     used.add(key);
     if (sources.some(video => video?.kind === 'video' && video.audioAssetId === source._id)) continue;
     const assetId = copies.get(source._id)!;
-    const group = layerGroup(source.kind);
-    const end = timelineDuration({ ...timeline, clips: timeline.clips.filter(clip => layerGroup(clip.kind) === group) });
     const duration = source.kind === 'image' ? 5 : source.duration ?? 5;
     if (duration >= 1 / timeline.fps) {
       const clipId = crypto.randomUUID();
@@ -99,9 +95,10 @@ export const update = mutation({ args: { projectId: v.id("projects"), title: v.o
 }});
 export const saveTimeline = mutation({ args: { projectId: v.id("projects"), timeline: timelineValidator, baseTimeline: v.optional(timelineValidator), expectedRevision: v.number() }, returns: v.object({ revision: v.number(), timeline: timelineValidator }), handler: async (ctx, args) => {
   const project = await requireProject(ctx, args.projectId, await requireOwner(ctx)); await requireEditorAccess(ctx, project.ownerId);
-  let timeline = await validateTimeline(ctx, project, args.timeline);
+  let timeline = args.timeline;
   let expectedRevision = args.expectedRevision;
   if (args.baseTimeline) {
+    timeline = await validateTimeline(ctx, project, timeline);
     if (serializedBytes(args.baseTimeline) > 150_000) throw new ConvexError('Timeline is too large');
     if (!Number.isInteger(expectedRevision) || expectedRevision < 0 || expectedRevision > (project.revision ?? 0)) throw new ConvexError('Invalid timeline revision');
     timeline = applyTimelineEdit(args.baseTimeline, timeline, currentTimeline(project));

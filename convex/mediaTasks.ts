@@ -1,6 +1,6 @@
 import { compositionReviewResult,effectPlanValidator } from './lib/effect_plan';
 import { hydrateAsset } from './lib/asset_analysis';
-import { writeProject,createProject,readProject,projectIdentity,projectRun } from './lib/project_data';
+import { createProject,readProject,projectIdentity,projectRun } from './lib/project_data';
 import { requireEditorAccess } from './lib/billing_access';
 import { ConvexError, v, type Infer } from 'convex/values';
 import { vResultValidator, vWorkflowId, type WorkflowId } from '@convex-dev/workflow';
@@ -127,8 +127,7 @@ export const importVideo = mutation({ args: { projectId: v.optional(v.id('projec
   const now = Date.now();
   const projectId = args.projectId ?? await createProject(ctx, { ownerId, title: 'Video import', aspectRatio: 'vertical', timeline: { fps: 30, aspectRatio: 'vertical', clips: [], tracks: { visual: 1, overlay: 0, audio: 1 } }, revision: 0, history: [], createdAt: now, updatedAt: now });
   await requireProject(ctx, projectId, ownerId);
-  const recent = await ctx.db.query('mediaTasks').withIndex('by_project_createdAt', q => q.eq('projectId', projectId)).order('desc').take(40);
-  const pending = recent.filter(task => ['queued', 'running', 'retrying'].includes(task.status) && task.kind === 'import');
+  const pending = (await Promise.all((['queued', 'running', 'retrying'] as const).map(status => ctx.db.query('mediaTasks').withIndex('by_project_kind_status', q => q.eq('projectId', projectId).eq('kind', 'import').eq('status', status)).take(3)))).flat();
   const existing = pending.find(task => task.sourceUrl === sourceUrl);
   if (existing) return { projectId, taskId: existing._id };
   if (pending.length >= 3) throw new ConvexError('Wait for the current video imports to finish.');

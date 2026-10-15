@@ -50,3 +50,37 @@ test('two open editors preserve independent changes and reject foreign or invali
   await expect(owner.mutation(api.projects.saveTimeline, { projectId, baseTimeline: base, timeline: { ...next, clips: [{ ...next.clips[0], duration: -1 }] }, expectedRevision: 1 })).rejects.toThrow('Clip timing');
   expect((await owner.query(api.projects.get, { projectId })).revision).toBe(3);
 });
+
+test('ordinary saves read each media source once while merged saves validate input and final result', async () => {
+  const t=convexTest(schema,modules),owner=t.withIdentity({subject:'owner'});
+  const projectId=await owner.mutation(api.projects.create,{title:'Validation reads',aspectRatio:'landscape'});
+  const assetId=await t.run(ctx=>ctx.db.insert('assets',{ownerId:'owner',projectId,kind:'image',fileName:'image.png',contentType:'image/png',size:1,createdAt:0}));
+  const timeline:Timeline={fps:30,aspectRatio:'landscape',clips:[{id:'image',kind:'image',assetId,start:0,duration:1,sourceStart:0}]};
+  const {saveTimeline}=await import('./projects');
+  async function tracedSave(input:typeof timeline,expectedRevision:number,baseTimeline?:Timeline){
+    return t.run(async ctx=>{
+      let assetReads=0;
+      const db=new Proxy(ctx.db,{get(target,property,receiver){
+        if(property==='get')return(...args:unknown[])=>{if(args.at(-1)===assetId)assetReads++;return Reflect.apply(target.get,target,args);};
+        return Reflect.get(target,property,receiver);
+      }});
+      const result=await (saveTimeline as unknown as {_handler:(ctx:unknown,args:unknown)=>Promise<{revision:number;timeline:Timeline}>})._handler({...ctx,db,auth:{getUserIdentity:async()=>({subject:'owner'})}},{projectId,timeline:input,expectedRevision,...(baseTimeline?{baseTimeline}:{})});
+      return {assetReads,...result};
+    });
+  }
+  expect(await tracedSave(timeline,0)).toMatchObject({assetReads:1,revision:1});
+  const changed={...timeline,clips:[{...timeline.clips[0],duration:2}]};
+  expect(await tracedSave(changed,0,timeline)).toMatchObject({assetReads:2,revision:2,timeline:{clips:[{duration:2}]}});
+});
+
+test('conflict merging validates retained fades against a concurrently shortened clip', async () => {
+  const t=convexTest(schema,modules),owner=t.withIdentity({subject:'owner'});
+  const projectId=await owner.mutation(api.projects.create,{title:'Trim merge',aspectRatio:'landscape'});
+  const assetId=await t.run(ctx=>ctx.db.insert('assets',{ownerId:'owner',projectId,kind:'video',fileName:'video.mp4',contentType:'video/mp4',size:1,duration:3,createdAt:0}));
+  const original:Timeline={fps:30,aspectRatio:'landscape',clips:[{id:'video',kind:'video',assetId,start:0,duration:2,sourceStart:0}]};
+  await owner.mutation(api.projects.saveTimeline,{projectId,timeline:original,expectedRevision:0});
+  const current={...original,clips:[{...original.clips[0],visualFade:{fadeIn:1.8,fadeOut:0}}]};
+  await owner.mutation(api.projects.saveTimeline,{projectId,timeline:current,expectedRevision:1});
+  await expect(owner.mutation(api.projects.saveTimeline,{projectId,timeline:{...original,clips:[{...original.clips[0],duration:1}]},baseTimeline:original,expectedRevision:1})).rejects.toThrow('Visual fades together cannot exceed');
+  expect(await owner.query(api.projects.get,{projectId})).toMatchObject({revision:2,timeline:{clips:[{duration:2,visualFade:{fadeIn:1.8,fadeOut:0}}]}});
+});

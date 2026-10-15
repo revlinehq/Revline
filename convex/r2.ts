@@ -4,12 +4,14 @@ import type { Id } from './_generated/dataModel';
 import { ConvexError, v } from 'convex/values';
 import { action, internalAction, internalMutation, internalQuery } from './_generated/server';
 import { internal } from './_generated/api';
-import { requireOwner, requireProject } from './lib/auth';
+import { requireOwner } from './lib/auth';
+import { projectIdentity } from './lib/project_data';
 import { assetKind, r2UploadDocument } from './schema';
 import { mediaConfig, storageControl } from './lib/media_storage';
 import { signMediaToken } from '../lib/storage/media-tokens';
 import { requireMediaTask } from './lib/media_task_auth';
 import { enqueueMediaTask } from './mediaTasks';
+import { isStockAudioKey } from '../lib/editor/stock-audio';
 
 const metadata = { fileName: v.string(), contentType: v.string(), kind: assetKind, size: v.number(), duration: v.optional(v.number()), width: v.optional(v.number()), height: v.optional(v.number()) };
 const partsValidator = v.array(v.object({ partNumber: v.number(), etag: v.string() }));
@@ -19,7 +21,7 @@ const taskAuth = { taskId: v.optional(v.id('mediaTasks')), leaseToken: v.optiona
 export const authorize = internalQuery({ args: { projectId: v.id('projects'), jobId: v.optional(v.id('renderJobs')), workerSecret: v.optional(v.string()), ...taskAuth, kind: assetKind, contentType: v.string() }, returns: v.string(), handler: async (ctx, args) => {
   const task = args.taskId && args.leaseToken ? await requireMediaTask(ctx, args.taskId, args.leaseToken) : null;
   if (args.taskId && !task) throw new ConvexError('Media task credentials are required');
-  const ownerId = task?.ownerId ?? await requireOwner(ctx); await requireProject(ctx, args.projectId, ownerId);
+  const ownerId = task?.ownerId ?? await requireOwner(ctx); await projectIdentity(ctx, args.projectId, ownerId);
   if (!task && !args.jobId) await requireEditorAccess(ctx, ownerId);
   if (task && (task.projectId !== args.projectId || !['extract', 'render', 'import'].includes(task.kind) || (task.kind === 'import' && (args.jobId || args.kind !== 'video' || args.contentType !== 'video/mp4')) || (task.kind === 'extract' && (args.jobId || args.kind !== 'audio' || args.contentType !== 'audio/mp4')) || (task.kind === 'render' && (args.jobId !== task.renderJobId || args.kind !== 'video' || args.contentType !== 'video/mp4')))) throw new ConvexError('This task cannot upload that media');
   if (args.jobId && !task) {
@@ -32,7 +34,7 @@ export const authorize = internalQuery({ args: { projectId: v.id('projects'), jo
   return ownerId;
 }});
 export const createLease = internalMutation({ args: { ...metadata, ownerId: v.string(), projectId: v.id('projects'), jobId: v.optional(v.id('renderJobs')), ...taskAuth, key: v.string(), uploadId: v.string(), partSize: v.number() }, returns: v.id('r2Uploads'), handler: async (ctx, args) => {
-  await requireProject(ctx, args.projectId, args.ownerId);
+  await projectIdentity(ctx, args.projectId, args.ownerId);
   if (!args.taskId && !args.jobId) await requireEditorAccess(ctx, args.ownerId);
   if (args.taskId) await requireMediaTask(ctx, args.taskId, args.leaseToken ?? '');
   const { leaseToken, ...fields } = args;
@@ -47,7 +49,7 @@ export const getLease = internalQuery({ args: { uploadId: v.id('r2Uploads'), ...
   if ((task || lease?.taskId) && (!task || !lease || lease.taskId !== task._id || lease.taskLeaseToken !== args.leaseToken)) throw new ConvexError('Upload belongs to another task attempt');
   const ownerId = task?.ownerId ?? await requireOwner(ctx);
   if (!lease || lease.ownerId !== ownerId || lease.expiresAt < Date.now()) throw new ConvexError('Upload expired or belongs to another user');
-  await requireProject(ctx, lease.projectId, ownerId);
+  await projectIdentity(ctx, lease.projectId, ownerId);
   // Renewal and completion are paid writes; cleanup remains available after expiry.
   if (!args.forCleanup && !lease.taskId && !lease.jobId) await requireEditorAccess(ctx, ownerId);
   return lease;
@@ -85,7 +87,7 @@ export const finish = internalMutation({ args: { uploadId: v.id('r2Uploads'), si
   if (!lease || lease.expiresAt < Date.now()) throw new ConvexError('Upload expired');
   if (lease.completed) return lease.assetId ?? null;
   if (lease.size !== args.size || lease.contentType !== args.contentType) throw new ConvexError('Uploaded media does not match the requested file');
-  const project = await requireProject(ctx, lease.projectId, lease.ownerId);
+  const project = await projectIdentity(ctx, lease.projectId, lease.ownerId);
   // The action performed external IO; access may have expired since authorization.
   if (!lease.taskId && !lease.jobId) await requireEditorAccess(ctx, lease.ownerId);
   if (lease.taskId) await requireMediaTask(ctx, lease.taskId, lease.taskLeaseToken ?? '');
@@ -122,6 +124,7 @@ export const abort = action({ args: { uploadId: v.id('r2Uploads'), ...taskAuth }
   return null;
 }});
 export const deleteObject = internalAction({ args: { key: v.string(),attempt:v.optional(v.number()) }, returns: v.null(), handler: async (ctx, args) => {
+  if(isStockAudioKey(args.key))return null;
   try{await storageControl({ action: 'delete', key: args.key });}
   catch(error){const attempt=args.attempt??0;if(attempt>=8)throw error;await ctx.scheduler.runAfter(Math.min(3600_000,60_000*2**attempt),internal.r2.deleteObject,{key:args.key,attempt:attempt+1});}
   return null;
@@ -132,6 +135,6 @@ export const removeLease = internalMutation({ args: { uploadId: v.id('r2Uploads'
 export const cleanupLease = internalAction({ args: { uploadId: v.id('r2Uploads') }, returns: v.null(), handler: async (ctx, args): Promise<null> => {
   const lease = await ctx.runQuery(internal.r2.leaseForCleanup, args);
   if (!lease) return null;
-  if (!lease.completed) { await storageControl({ action: 'abort', key: lease.key, uploadId: lease.uploadId }); await storageControl({ action: 'delete', key: lease.key }); }
+  if (!lease.completed && !isStockAudioKey(lease.key)) { await storageControl({ action: 'abort', key: lease.key, uploadId: lease.uploadId }); await storageControl({ action: 'delete', key: lease.key }); }
   await ctx.runMutation(internal.r2.removeLease, args); return null;
 } });

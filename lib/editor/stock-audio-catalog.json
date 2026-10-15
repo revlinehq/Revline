@@ -1,0 +1,746 @@
+[
+  {
+    "id": "ui-click",
+    "name": "Click",
+    "category": "Clicks",
+    "tags": [
+      "clicks",
+      "click"
+    ],
+    "pack": "interface",
+    "sourceFile": "Audio/click_001.ogg",
+    "sourceUrl": "https://kenney.nl/assets/interface-sounds",
+    "license": "CC0-1.0",
+    "r2Key": "media/stock/audio-fx-v1/ccfb7fa0cccdd9faec0eb16033c732b1e308d139d80f799161495d58f7adcdb9",
+    "sha256": "ccfb7fa0cccdd9faec0eb16033c732b1e308d139d80f799161495d58f7adcdb9",
+    "file": "assets/audio-fx/ui-click.ogg",
+    "contentType": "audio/ogg",
+    "duration": 0.100023,
+    "size": 4876,
+    "waveform": {
+      "peaks": "2AsBAQEBAQEBAQ==",
+      "samplesPerSecond": 100
+    }
+  },
+  {
+    "id": "ui-back",
+    "name": "Back click",
+    "category": "Clicks",
+    "tags": [
+      "clicks",
+      "back"
+    ],
+    "pack": "interface",
+    "sourceFile": "Audio/back_003.ogg",
+    "sourceUrl": "https://kenney.nl/assets/interface-sounds",
+    "license": "CC0-1.0",
+    "r2Key": "media/stock/audio-fx-v1/ff5e87de1230b1a5f1fa83e5a4ba9d7eb1c07154267ac34b510a17d4caa03cef",
+    "sha256": "ff5e87de1230b1a5f1fa83e5a4ba9d7eb1c07154267ac34b510a17d4caa03cef",
+    "file": "assets/audio-fx/ui-back.ogg",
+    "contentType": "audio/ogg",
+    "duration": 0.09288,
+    "size": 7208,
+    "waveform": {
+      "peaks": "67WMYUcgAAEB",
+      "samplesPerSecond": 100
+    }
+  },
+  {
+    "id": "ui-toggle-1",
+    "name": "Toggle click 1",
+    "category": "Clicks",
+    "tags": [
+      "clicks",
+      "toggle"
+    ],
+    "pack": "interface",
+    "sourceFile": "Audio/toggle_001.ogg",
+    "sourceUrl": "https://kenney.nl/assets/interface-sounds",
+    "license": "CC0-1.0",
+    "r2Key": "media/stock/audio-fx-v1/ca1d2dde5f0b286abac4f070e23edab8f30927c8a533665cdf2ac6492a415e49",
+    "sha256": "ca1d2dde5f0b286abac4f070e23edab8f30927c8a533665cdf2ac6492a415e49",
+    "file": "assets/audio-fx/ui-toggle-1.ogg",
+    "contentType": "audio/ogg",
+    "duration": 0.13932,
+    "size": 7369,
+    "waveform": {
+      "peaks": "5d/EnXFVQS8WCAEAAAA=",
+      "samplesPerSecond": 100
+    }
+  },
+  {
+    "id": "ui-toggle-2",
+    "name": "Toggle click 2",
+    "category": "Clicks",
+    "tags": [
+      "clicks",
+      "toggle"
+    ],
+    "pack": "interface",
+    "sourceFile": "Audio/toggle_002.ogg",
+    "sourceUrl": "https://kenney.nl/assets/interface-sounds",
+    "license": "CC0-1.0",
+    "r2Key": "media/stock/audio-fx-v1/1f564f5520cfa0764028ce245ad97599d3ece8f0ab504554c403af92ac72b900",
+    "sha256": "1f564f5520cfa0764028ce245ad97599d3ece8f0ab504554c403af92ac72b900",
+    "file": "assets/audio-fx/ui-toggle-2.ogg",
+    "contentType": "audio/ogg",
+    "duration": 0.13932,
+    "size": 8056,
+    "waveform": {
+      "peaks": "5OPbrn1fNiQSBgEAAAA=",
+      "samplesPerSecond": 100
+    }
+  },
+  {
+    "id": "ui-select",
+    "name": "Select tone",
+    "category": "Clicks",
+    "tags": [
+      "clicks",
+      "select"
+    ],
+    "pack": "interface",
+    "sourceFile": "Audio/select_003.ogg",
+    "sourceUrl": "https://kenney.nl/assets/interface-sounds",
+    "license": "CC0-1.0",
+    "r2Key": "media/stock/audio-fx-v1/9a612fd2f513d52a296906b41071c990f75defe56be3bee60d2d4e2423b51b8b",
+    "sha256": "9a612fd2f513d52a296906b41071c990f75defe56be3bee60d2d4e2423b51b8b",
+    "file": "assets/audio-fx/ui-select.ogg",
+    "contentType": "audio/ogg",
+    "duration": 0.382766,
+    "size": 6901,
+    "waveform": {
+      "peaks": "AIvow2wniIgzCggHCgsFBQUIBQMCAgEBAAAAAAAAAAAAAAAAAAA=",
+      "samplesPerSecond": 100
+    }
+  },
+  {
+    "id": "ui-switch",
+    "name": "Switch",
+    "category": "Clicks",
+    "tags": [
+      "clicks",
+      "switch"
+    ],
+    "pack": "interface",
+    "sourceFile": "Audio/switch_003.ogg",
+    "sourceUrl": "https://kenney.nl/assets/interface-sounds",
+    "license": "CC0-1.0",
+    "r2Key": "media/stock/audio-fx-v1/ca12dd32103f401481d5aff56d5e9831174e99bb577139c09b07d046eb8b837e",
+    "sha256": "ca12dd32103f401481d5aff56d5e9831174e99bb577139c09b07d046eb8b837e",
+    "file": "assets/audio-fx/ui-switch.ogg",
+    "contentType": "audio/ogg",
+    "duration": 0.5,
+    "size": 9653,
+    "waveform": {
+      "peaks": "/+nvy4uNRFhIOLb/zNuufn9JTUopAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+      "samplesPerSecond": 100
+    }
+  },
+  {
+    "id": "ui-drop-1",
+    "name": "Drop pop 1",
+    "category": "Pops & tones",
+    "tags": [
+      "pops & tones",
+      "drop"
+    ],
+    "pack": "interface",
+    "sourceFile": "Audio/drop_001.ogg",
+    "sourceUrl": "https://kenney.nl/assets/interface-sounds",
+    "license": "CC0-1.0",
+    "r2Key": "media/stock/audio-fx-v1/692ee3a6f1821402ca649ff735bee9591dc4846c8098fc7d6a90fd15fa57c1af",
+    "sha256": "692ee3a6f1821402ca649ff735bee9591dc4846c8098fc7d6a90fd15fa57c1af",
+    "file": "assets/audio-fx/ui-drop-1.ogg",
+    "contentType": "audio/ogg",
+    "duration": 0.109819,
+    "size": 5859,
+    "waveform": {
+      "peaks": "/0cvEwYDAgICAgIBAAA=",
+      "samplesPerSecond": 100
+    }
+  },
+  {
+    "id": "ui-drop-2",
+    "name": "Drop pop 2",
+    "category": "Pops & tones",
+    "tags": [
+      "pops & tones",
+      "drop"
+    ],
+    "pack": "interface",
+    "sourceFile": "Audio/drop_004.ogg",
+    "sourceUrl": "https://kenney.nl/assets/interface-sounds",
+    "license": "CC0-1.0",
+    "r2Key": "media/stock/audio-fx-v1/10738707f9300f9b963ceba46d5da2ed4a221faf7d39484a643c2d3bc151c5f2",
+    "sha256": "10738707f9300f9b963ceba46d5da2ed4a221faf7d39484a643c2d3bc151c5f2",
+    "file": "assets/audio-fx/ui-drop-2.ogg",
+    "contentType": "audio/ogg",
+    "duration": 0.286689,
+    "size": 7230,
+    "waveform": {
+      "peaks": "/41TNygZEQwIBgUDAgICAQEBAQEBAQEBAQEBAQE=",
+      "samplesPerSecond": 100
+    }
+  },
+  {
+    "id": "ui-pluck",
+    "name": "Pluck",
+    "category": "Pops & tones",
+    "tags": [
+      "pops & tones",
+      "pluck"
+    ],
+    "pack": "interface",
+    "sourceFile": "Audio/pluck_001.ogg",
+    "sourceUrl": "https://kenney.nl/assets/interface-sounds",
+    "license": "CC0-1.0",
+    "r2Key": "media/stock/audio-fx-v1/be97ec4893a02d6eccfb678daa76c83e34cb2583b834ec2593d2641def739fa4",
+    "sha256": "be97ec4893a02d6eccfb678daa76c83e34cb2583b834ec2593d2641def739fa4",
+    "file": "assets/audio-fx/ui-pluck.ogg",
+    "contentType": "audio/ogg",
+    "duration": 0.102426,
+    "size": 6317,
+    "waveform": {
+      "peaks": "/5FLJRgMBwQCAg==",
+      "samplesPerSecond": 100
+    }
+  },
+  {
+    "id": "ui-confirm",
+    "name": "Confirm tone",
+    "category": "Pops & tones",
+    "tags": [
+      "pops & tones",
+      "confirmation"
+    ],
+    "pack": "interface",
+    "sourceFile": "Audio/confirmation_001.ogg",
+    "sourceUrl": "https://kenney.nl/assets/interface-sounds",
+    "license": "CC0-1.0",
+    "r2Key": "media/stock/audio-fx-v1/063564703b6094d70718a3e787a55cc9141611e4ecd6b6637f8828f79b4a8c3a",
+    "sha256": "063564703b6094d70718a3e787a55cc9141611e4ecd6b6637f8828f79b4a8c3a",
+    "file": "assets/audio-fx/ui-confirm.ogg",
+    "contentType": "audio/ogg",
+    "duration": 0.289841,
+    "size": 8968,
+    "waveform": {
+      "peaks": "5c20noZ0dHRwa2ZhW1VQS0ZAOjQvKiUgGhUPCgQ=",
+      "samplesPerSecond": 100
+    }
+  },
+  {
+    "id": "ui-glass",
+    "name": "Glass ping",
+    "category": "Pops & tones",
+    "tags": [
+      "pops & tones",
+      "glass"
+    ],
+    "pack": "interface",
+    "sourceFile": "Audio/glass_002.ogg",
+    "sourceUrl": "https://kenney.nl/assets/interface-sounds",
+    "license": "CC0-1.0",
+    "r2Key": "media/stock/audio-fx-v1/08e972c73e53c91d6d310e107e80db60edce78ae47225889a028e628a6f3da49",
+    "sha256": "08e972c73e53c91d6d310e107e80db60edce78ae47225889a028e628a6f3da49",
+    "file": "assets/audio-fx/ui-glass.ogg",
+    "contentType": "audio/ogg",
+    "duration": 0.125306,
+    "size": 4917,
+    "waveform": {
+      "peaks": "40gZFgcHBQMDAgEBAQ==",
+      "samplesPerSecond": 100
+    }
+  },
+  {
+    "id": "ui-open",
+    "name": "Open",
+    "category": "Transitions",
+    "tags": [
+      "transitions",
+      "open"
+    ],
+    "pack": "interface",
+    "sourceFile": "Audio/open_001.ogg",
+    "sourceUrl": "https://kenney.nl/assets/interface-sounds",
+    "license": "CC0-1.0",
+    "r2Key": "media/stock/audio-fx-v1/a27c6bb0df7da1e6af5dd5937593c98bc58b6e513f42fe6a3254cd6a6949c648",
+    "sha256": "a27c6bb0df7da1e6af5dd5937593c98bc58b6e513f42fe6a3254cd6a6949c648",
+    "file": "assets/audio-fx/ui-open.ogg",
+    "contentType": "audio/ogg",
+    "duration": 0.147778,
+    "size": 9834,
+    "waveform": {
+      "peaks": "ECEyP1BgZnB+k5aSgofr",
+      "samplesPerSecond": 100
+    }
+  },
+  {
+    "id": "ui-close",
+    "name": "Close",
+    "category": "Transitions",
+    "tags": [
+      "transitions",
+      "close"
+    ],
+    "pack": "interface",
+    "sourceFile": "Audio/close_001.ogg",
+    "sourceUrl": "https://kenney.nl/assets/interface-sounds",
+    "license": "CC0-1.0",
+    "r2Key": "media/stock/audio-fx-v1/44af8249b933e0fd35ec957a638bb1a0b01f85b53fbe9674bf77bd3ca3168ef4",
+    "sha256": "44af8249b933e0fd35ec957a638bb1a0b01f85b53fbe9674bf77bd3ca3168ef4",
+    "file": "assets/audio-fx/ui-close.ogg",
+    "contentType": "audio/ogg",
+    "duration": 0.147778,
+    "size": 9915,
+    "waveform": {
+      "peaks": "5oWBlZSMem5lXE9ALx4L",
+      "samplesPerSecond": 100
+    }
+  },
+  {
+    "id": "ui-expand",
+    "name": "Expand",
+    "category": "Transitions",
+    "tags": [
+      "transitions",
+      "maximize"
+    ],
+    "pack": "interface",
+    "sourceFile": "Audio/maximize_004.ogg",
+    "sourceUrl": "https://kenney.nl/assets/interface-sounds",
+    "license": "CC0-1.0",
+    "r2Key": "media/stock/audio-fx-v1/59c7a24b204be24d2a44a86d1e4d18c2cf51fa0446967a14b2590e8fb3afaf34",
+    "sha256": "59c7a24b204be24d2a44a86d1e4d18c2cf51fa0446967a14b2590e8fb3afaf34",
+    "file": "assets/audio-fx/ui-expand.ogg",
+    "contentType": "audio/ogg",
+    "duration": 0.417959,
+    "size": 17723,
+    "waveform": {
+      "peaks": "AAEHERskKEFPVEQmFAsIDBUhMD1FRkM5moJBHw8HBgkOGU+m5tGgWC0M",
+      "samplesPerSecond": 100
+    }
+  },
+  {
+    "id": "ui-contract",
+    "name": "Contract",
+    "category": "Transitions",
+    "tags": [
+      "transitions",
+      "minimize"
+    ],
+    "pack": "interface",
+    "sourceFile": "Audio/minimize_004.ogg",
+    "sourceUrl": "https://kenney.nl/assets/interface-sounds",
+    "license": "CC0-1.0",
+    "r2Key": "media/stock/audio-fx-v1/fcfe6fbb03a728e90b907f34d2ec7bf3ea1857397c3e47ee01990c1be059e4f6",
+    "sha256": "fcfe6fbb03a728e90b907f34d2ec7bf3ea1857397c3e47ee01990c1be059e4f6",
+    "file": "assets/audio-fx/ui-contract.ogg",
+    "contentType": "audio/ogg",
+    "duration": 0.417959,
+    "size": 17099,
+    "waveform": {
+      "peaks": "EjtsquXalEUVDQgGCBEkS46ZO0RGRTotHxMLCAwWK0tVSEEnIhkOBgEA",
+      "samplesPerSecond": 100
+    }
+  },
+  {
+    "id": "hit-light",
+    "name": "Light hit",
+    "category": "Hits",
+    "tags": [
+      "hits",
+      "impactGeneric"
+    ],
+    "pack": "impact",
+    "sourceFile": "Audio/impactGeneric_light_000.ogg",
+    "sourceUrl": "https://kenney.nl/assets/impact-sounds",
+    "license": "CC0-1.0",
+    "r2Key": "media/stock/audio-fx-v1/f0e982611e97512fee5f777986b67e8b435434b601f94992ec044f7e89fb5acb",
+    "sha256": "f0e982611e97512fee5f777986b67e8b435434b601f94992ec044f7e89fb5acb",
+    "file": "assets/audio-fx/hit-light.ogg",
+    "contentType": "audio/ogg",
+    "duration": 0.138685,
+    "size": 5827,
+    "waveform": {
+      "peaks": "/2Y8HhUKBwUEAwMDAgIBAAA=",
+      "samplesPerSecond": 100
+    }
+  },
+  {
+    "id": "hit-metal",
+    "name": "Metal hit",
+    "category": "Hits",
+    "tags": [
+      "hits",
+      "impactMetal"
+    ],
+    "pack": "impact",
+    "sourceFile": "Audio/impactMetal_medium_000.ogg",
+    "sourceUrl": "https://kenney.nl/assets/impact-sounds",
+    "license": "CC0-1.0",
+    "r2Key": "media/stock/audio-fx-v1/a96f879fec0864a8938e0c745b6996a6c5679c16a234ce31a01cc995e8401003",
+    "sha256": "a96f879fec0864a8938e0c745b6996a6c5679c16a234ce31a01cc995e8401003",
+    "file": "assets/audio-fx/hit-metal.ogg",
+    "contentType": "audio/ogg",
+    "duration": 0.271769,
+    "size": 7117,
+    "waveform": {
+      "peaks": "/6hzWTozHhoQDgoIBgQEAwMCAgICAQEBAQEB",
+      "samplesPerSecond": 100
+    }
+  },
+  {
+    "id": "hit-wood-light",
+    "name": "Wood tap",
+    "category": "Hits",
+    "tags": [
+      "hits",
+      "impactWood"
+    ],
+    "pack": "impact",
+    "sourceFile": "Audio/impactWood_light_000.ogg",
+    "sourceUrl": "https://kenney.nl/assets/impact-sounds",
+    "license": "CC0-1.0",
+    "r2Key": "media/stock/audio-fx-v1/eb45e35b4bed784d3f120de4afec4b0d6ac09d9e143cce8cfcb7d739e1b1f3c3",
+    "sha256": "eb45e35b4bed784d3f120de4afec4b0d6ac09d9e143cce8cfcb7d739e1b1f3c3",
+    "file": "assets/audio-fx/hit-wood-light.ogg",
+    "contentType": "audio/ogg",
+    "duration": 0.265601,
+    "size": 6343,
+    "waveform": {
+      "peaks": "/0U1KxwSCQUDAwIBAQEBAQAAAAAAAAAAAAAA",
+      "samplesPerSecond": 100
+    }
+  },
+  {
+    "id": "hit-wood-heavy",
+    "name": "Wood knock",
+    "category": "Hits",
+    "tags": [
+      "hits",
+      "impactWood"
+    ],
+    "pack": "impact",
+    "sourceFile": "Audio/impactWood_heavy_000.ogg",
+    "sourceUrl": "https://kenney.nl/assets/impact-sounds",
+    "license": "CC0-1.0",
+    "r2Key": "media/stock/audio-fx-v1/15ff82332f342c30e469215539e1cc57e11b221aa2cf7e11e811d313a9927f3d",
+    "sha256": "15ff82332f342c30e469215539e1cc57e11b221aa2cf7e11e811d313a9927f3d",
+    "file": "assets/audio-fx/hit-wood-heavy.ogg",
+    "contentType": "audio/ogg",
+    "duration": 0.313039,
+    "size": 6233,
+    "waveform": {
+      "peaks": "/29iGyoqDQkLCQkKCQYHCAQDAwMEAwMDAwMDAwMDAwM=",
+      "samplesPerSecond": 100
+    }
+  },
+  {
+    "id": "hit-punch-medium",
+    "name": "Punch hit",
+    "category": "Hits",
+    "tags": [
+      "hits",
+      "impactPunch"
+    ],
+    "pack": "impact",
+    "sourceFile": "Audio/impactPunch_medium_000.ogg",
+    "sourceUrl": "https://kenney.nl/assets/impact-sounds",
+    "license": "CC0-1.0",
+    "r2Key": "media/stock/audio-fx-v1/486988aa2d6440ffc4c62a0e8ccf3c23673ba84424bd4723378d451b7255eb5c",
+    "sha256": "486988aa2d6440ffc4c62a0e8ccf3c23673ba84424bd4723378d451b7255eb5c",
+    "file": "assets/audio-fx/hit-punch-medium.ogg",
+    "contentType": "audio/ogg",
+    "duration": 0.430544,
+    "size": 8800,
+    "waveform": {
+      "peaks": "Ktf///bwxGKKTEouJhoZDQ4HCAkFBgMCAQEBAwIAAAAAAAAAAAAAAAAAAAA=",
+      "samplesPerSecond": 100
+    }
+  },
+  {
+    "id": "hit-punch-heavy",
+    "name": "Heavy punch",
+    "category": "Hits",
+    "tags": [
+      "hits",
+      "impactPunch"
+    ],
+    "pack": "impact",
+    "sourceFile": "Audio/impactPunch_heavy_000.ogg",
+    "sourceUrl": "https://kenney.nl/assets/impact-sounds",
+    "license": "CC0-1.0",
+    "r2Key": "media/stock/audio-fx-v1/b33a8f14068aec24ec69ba85e5e87fdc41228975f6a1a3e44a6e7d6fc3d9f8d8",
+    "sha256": "b33a8f14068aec24ec69ba85e5e87fdc41228975f6a1a3e44a6e7d6fc3d9f8d8",
+    "file": "assets/audio-fx/hit-punch-heavy.ogg",
+    "contentType": "audio/ogg",
+    "duration": 0.649025,
+    "size": 11617,
+    "waveform": {
+      "peaks": "CQ7/////juygeoBdT0FENyYqLx4WGBMREBIMDgwLBgcHBwYEBAQDAwMCAgICAQEBAQEBAQEBAQEAAAAAAAAAAAA=",
+      "samplesPerSecond": 100
+    }
+  },
+  {
+    "id": "hit-soft",
+    "name": "Soft impact",
+    "category": "Hits",
+    "tags": [
+      "hits",
+      "impactSoft"
+    ],
+    "pack": "impact",
+    "sourceFile": "Audio/impactSoft_medium_000.ogg",
+    "sourceUrl": "https://kenney.nl/assets/impact-sounds",
+    "license": "CC0-1.0",
+    "r2Key": "media/stock/audio-fx-v1/7d3ba0bb5e60a11b5d3e558c141303dcf494256675fbf753c0d252d2cf0481e3",
+    "sha256": "7d3ba0bb5e60a11b5d3e558c141303dcf494256675fbf753c0d252d2cf0481e3",
+    "file": "assets/audio-fx/hit-soft.ogg",
+    "contentType": "audio/ogg",
+    "duration": 0.118005,
+    "size": 5351,
+    "waveform": {
+      "peaks": "/51oMBQSDAgKCQgI",
+      "samplesPerSecond": 100
+    }
+  },
+  {
+    "id": "hit-glass",
+    "name": "Glass tap",
+    "category": "Hits",
+    "tags": [
+      "hits",
+      "impactGlass"
+    ],
+    "pack": "impact",
+    "sourceFile": "Audio/impactGlass_light_000.ogg",
+    "sourceUrl": "https://kenney.nl/assets/impact-sounds",
+    "license": "CC0-1.0",
+    "r2Key": "media/stock/audio-fx-v1/d750cf88097d0c3e69920e6e14496e1444e1a9da01aa4cca8f5ec8cb44c57b4f",
+    "sha256": "d750cf88097d0c3e69920e6e14496e1444e1a9da01aa4cca8f5ec8cb44c57b4f",
+    "file": "assets/audio-fx/hit-glass.ogg",
+    "contentType": "audio/ogg",
+    "duration": 0.209592,
+    "size": 6526,
+    "waveform": {
+      "peaks": "/76AUjokGBAJBgQDAgEBAQEBAQEAAAAA",
+      "samplesPerSecond": 100
+    }
+  },
+  {
+    "id": "hit-bell",
+    "name": "Bell hit",
+    "category": "Hits",
+    "tags": [
+      "hits",
+      "impactBell"
+    ],
+    "pack": "impact",
+    "sourceFile": "Audio/impactBell_heavy_000.ogg",
+    "sourceUrl": "https://kenney.nl/assets/impact-sounds",
+    "license": "CC0-1.0",
+    "r2Key": "media/stock/audio-fx-v1/94b8bb5f2d43ab65e4bcc32b28562416e9bc2c51d9fd4be1e333660ee52f977f",
+    "sha256": "94b8bb5f2d43ab65e4bcc32b28562416e9bc2c51d9fd4be1e333660ee52f977f",
+    "file": "assets/audio-fx/hit-bell.ogg",
+    "contentType": "audio/ogg",
+    "duration": 1.480181,
+    "size": 13915,
+    "waveform": {
+      "peaks": "/51acVRVd11CRj8uNzdARUEtKi82MTIuKCofMSchLCQfHCEkJyMhHBYYIBcbHBYYFxkYFRccFBESDhUXEhMTDxAVERAVEA0NDRASDg4NCQwQCwkLCQkIBwkIBwgFBQQFBQUEAwMDBAQDAwMDAgICAwICAgEBAgIBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQAAAAA=",
+      "samplesPerSecond": 100
+    }
+  },
+  {
+    "id": "whoosh-light",
+    "name": "Light whoosh",
+    "category": "Whooshes",
+    "tags": [
+      "swoosh",
+      "transition",
+      "original"
+    ],
+    "pack": "Revline originals",
+    "sourceFile": "scripts/author-stock-audio.mjs#whoosh-light",
+    "sourceUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "license": "CC0-1.0",
+    "r2Key": "media/stock/audio-fx-v1/4c7d4cc61503067685438ea6efedf8e1ea73bf234433990d2bd980a20c996b47",
+    "sha256": "4c7d4cc61503067685438ea6efedf8e1ea73bf234433990d2bd980a20c996b47",
+    "file": "assets/audio-fx/whoosh-light.ogg",
+    "contentType": "audio/ogg",
+    "duration": 0.48,
+    "size": 13932,
+    "waveform": {
+      "peaks": "AQMFCBASHiQzMkRQTmFoZ4eLw5i2o8jJ07+zt9i0w7KdrY+Jf1xXTkAwJxoXDAYC",
+      "samplesPerSecond": 100
+    }
+  },
+  {
+    "id": "whoosh-fast",
+    "name": "Fast whoosh",
+    "category": "Whooshes",
+    "tags": [
+      "swoosh",
+      "transition",
+      "original"
+    ],
+    "pack": "Revline originals",
+    "sourceFile": "scripts/author-stock-audio.mjs#whoosh-fast",
+    "sourceUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "license": "CC0-1.0",
+    "r2Key": "media/stock/audio-fx-v1/2f69e09479ec8d4bf8036b97ced7cca1a641ec480b75cbd1e554f8b613b17483",
+    "sha256": "2f69e09479ec8d4bf8036b97ced7cca1a641ec480b75cbd1e554f8b613b17483",
+    "file": "assets/audio-fx/whoosh-fast.ogg",
+    "contentType": "audio/ogg",
+    "duration": 0.32,
+    "size": 10739,
+    "waveform": {
+      "peaks": "AgMLGx04NjhTc4p9nKCbssDCw62znp+Hd2FKPyocDgM=",
+      "samplesPerSecond": 100
+    }
+  },
+  {
+    "id": "whoosh-air",
+    "name": "Air whoosh",
+    "category": "Whooshes",
+    "tags": [
+      "swoosh",
+      "transition",
+      "original"
+    ],
+    "pack": "Revline originals",
+    "sourceFile": "scripts/author-stock-audio.mjs#whoosh-air",
+    "sourceUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "license": "CC0-1.0",
+    "r2Key": "media/stock/audio-fx-v1/e9103394e48d6a06e6b646cd43e7689e68b311efebe9d71c83206e6a24c31c9a",
+    "sha256": "e9103394e48d6a06e6b646cd43e7689e68b311efebe9d71c83206e6a24c31c9a",
+    "file": "assets/audio-fx/whoosh-air.ogg",
+    "contentType": "audio/ogg",
+    "duration": 0.95,
+    "size": 23156,
+    "waveform": {
+      "peaks": "AAECAgUHCA0MDhIXGB4iIiotPjY/QktPW1FlbmR1inh2eKCSkaymraeqo7jGva+uqKe/y8qmtamitqjJq6KopZCMjpBzcYtzZmBsXFVLSzw7Mi8pIhwZFA8MCQcEAgE=",
+      "samplesPerSecond": 100
+    }
+  },
+  {
+    "id": "whoosh-deep",
+    "name": "Deep whoosh",
+    "category": "Whooshes",
+    "tags": [
+      "swoosh",
+      "transition",
+      "original"
+    ],
+    "pack": "Revline originals",
+    "sourceFile": "scripts/author-stock-audio.mjs#whoosh-deep",
+    "sourceUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "license": "CC0-1.0",
+    "r2Key": "media/stock/audio-fx-v1/73252600bc36116a262b7c7829d2e350eb35e345ac5b6ebaa2a9dec534f05204",
+    "sha256": "73252600bc36116a262b7c7829d2e350eb35e345ac5b6ebaa2a9dec534f05204",
+    "file": "assets/audio-fx/whoosh-deep.ogg",
+    "contentType": "audio/ogg",
+    "duration": 1.15,
+    "size": 26335,
+    "waveform": {
+      "peaks": "AAABAQICAwUHBQYIDA4LDhMXIh0XGSooQCUuNTE+QTxWUEJNZHJsdJVslnmJfqOil6C2dpOYk6/ExYrNv7zB2+O6vePo1urS2cytpJmjoaKgkqaNoYeIoYVze3h/WV9VSU8/MTU1LyUlGRoRDwwIBwMCAA==",
+      "samplesPerSecond": 100
+    }
+  },
+  {
+    "id": "riser-short",
+    "name": "Short riser",
+    "category": "Risers",
+    "tags": [
+      "build",
+      "transition",
+      "original"
+    ],
+    "pack": "Revline originals",
+    "sourceFile": "scripts/author-stock-audio.mjs#riser-short",
+    "sourceUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "license": "CC0-1.0",
+    "r2Key": "media/stock/audio-fx-v1/8872a17cfdd0b39df75812e2a976ac74e55e81a95d39c7aeedbee0605c7ce987",
+    "sha256": "8872a17cfdd0b39df75812e2a976ac74e55e81a95d39c7aeedbee0605c7ce987",
+    "file": "assets/audio-fx/riser-short.ogg",
+    "contentType": "audio/ogg",
+    "duration": 2,
+    "size": 43750,
+    "waveform": {
+      "peaks": "AAECAgMEBAQFBgYHCAcJCAoICwsJCQsMDg8KDAwNDw8SEREUDQ8UFhQWGBsbIB0dHSIeIBokHiMiGiAcHx0fJy4uIi0kKzEsLCopLzE7MDAyLy0oODBAPC82OUBDRkRIRl46QEpJS0BTTE1VT1FSXVZhbWlnaWFpUVxybmReWlp1c3N2f4dsqGiAY2N1cHSIe5SYnZGijZCKmn2Dm5aLmaOkxr2hqa26oJydtLGjvcCsvMq91LjSxs3I4bzM7Nr1993j2c7QyWs=",
+      "samplesPerSecond": 100
+    }
+  },
+  {
+    "id": "riser-air",
+    "name": "Air riser",
+    "category": "Risers",
+    "tags": [
+      "build",
+      "transition",
+      "original"
+    ],
+    "pack": "Revline originals",
+    "sourceFile": "scripts/author-stock-audio.mjs#riser-air",
+    "sourceUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "license": "CC0-1.0",
+    "r2Key": "media/stock/audio-fx-v1/830aad9ea0e76fd3390233ca6dcd515c1a6d426e67b59bb0156c49b5606ce514",
+    "sha256": "830aad9ea0e76fd3390233ca6dcd515c1a6d426e67b59bb0156c49b5606ce514",
+    "file": "assets/audio-fx/riser-air.ogg",
+    "contentType": "audio/ogg",
+    "duration": 2.5,
+    "size": 54973,
+    "waveform": {
+      "peaks": "AQICBAQFBgcHCAkLCQwLDgwMDBAPEQ4QEhAPDhAUERMSFxUXFhgWHRcfGyQeIR4gHiIsIB0fIx8hIiIfHyQoKyYmKysxLDAyMzQxPjE4MDMoOTYwLC8zODs6Pz09R0BJWUhMQ1JcUDo/QE06UEhET1laUVlkUUlNTkxLUFNFUHRXXnFha2FXgWFcV2BSZGJoaWZwgYhsb3Vua2JpY3dzen2HfpF+iHVueHl2fIB3iJmii5yIjYyJj42YppSmlKu3mpOTlqOCiLuutrW1vqWTm6aTu7qzx8DErMi0z6S3qraw07+51MHEur6qvbLf2+PjzcK+wePZ0u3Kaw==",
+      "samplesPerSecond": 100
+    }
+  },
+  {
+    "id": "riser-tonal",
+    "name": "Tonal riser",
+    "category": "Risers",
+    "tags": [
+      "build",
+      "transition",
+      "original"
+    ],
+    "pack": "Revline originals",
+    "sourceFile": "scripts/author-stock-audio.mjs#riser-tonal",
+    "sourceUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "license": "CC0-1.0",
+    "r2Key": "media/stock/audio-fx-v1/5f94c9b67d07968ce4c1b9d46d1d6ed0fb3af41ca683f43fff2b4e06354e7434",
+    "sha256": "5f94c9b67d07968ce4c1b9d46d1d6ed0fb3af41ca683f43fff2b4e06354e7434",
+    "file": "assets/audio-fx/riser-tonal.ogg",
+    "contentType": "audio/ogg",
+    "duration": 3,
+    "size": 63252,
+    "waveform": {
+      "peaks": "AAEBAgICAwMEBQQFBwcGBgYHBgcKBgkHCgkLDAoKCAsLDQ8NDQ4NDwwQExEQFBYQEhEUEg8SERMSEBQUExQTGxIYFRobHRwgHCMmHyUWGx4dGxQhISEdHisoJCQrLiMqJyEjJyMoJCMuKiojJysxLS8wPysrMzkoNSorKTEqMDQ2MU07PjlCNTUxQTw3ND1DPDtLWEk6UEE8RklVQz1FRUpaXlNaUUtKUkRLRT5ORHBeWl5eVUheTlJhUmJaYWpuZVtlW11mVGNkbnNvYHFwWGd2Y3p4eIB+j3x4ZG54a5B9l5hzeo97g2p0en6JiLKTs4l3gpaYnqynmKCjjIyeqJCjwKKmm4qajqCspZ+0yKuVlKSdyrjSyMymprq1sMjFxdvGqL69x6ritOxc",
+      "samplesPerSecond": 100
+    }
+  },
+  {
+    "id": "riser-deep",
+    "name": "Deep riser",
+    "category": "Risers",
+    "tags": [
+      "build",
+      "transition",
+      "original"
+    ],
+    "pack": "Revline originals",
+    "sourceFile": "scripts/author-stock-audio.mjs#riser-deep",
+    "sourceUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "license": "CC0-1.0",
+    "r2Key": "media/stock/audio-fx-v1/ae3ec929c5a88f9c9d6ea7396ecc8a21893d14fb9e4476bf9294e0f29eb01ccb",
+    "sha256": "ae3ec929c5a88f9c9d6ea7396ecc8a21893d14fb9e4476bf9294e0f29eb01ccb",
+    "file": "assets/audio-fx/riser-deep.ogg",
+    "contentType": "audio/ogg",
+    "duration": 4,
+    "size": 81390,
+    "waveform": {
+      "peaks": "AAABAQECAgICAgICAgQCAgIDAwQDBAMGBQQFBAUFBAUGBgcGBQUHCAgIBQcGCwcKCQkICQwLDAgJCgkKCwkJCw0QCwsPCwoPDQoLDw0QEA0ODAsODQsMDwwVDA8ZFBAQEg8RFBISEhQRFRIREhMXFBoaEx0TGxUZFxYZGRoYFR4YHyMdIBwbGh8iHhgYFxscJB8hHSogJCEfGiIgHCggIyksHigkJyUmJyAmMyUwKyAlLCYsKR0mJh8dLyoxKThAOzkyNSwtQCsoSTE4PDwxMTQ0Ki47SkM/Rz88PzgpOz5DN1BEOzM8OlE+OkVCQUNFU05BSUtFRVBaUUhlSE1UTU9oemtbUU9RUVpSVVZbY1tZSlhRb2+UXXNRa1xpXlqHZHh4d2RXbZF2ZIFoY2pxcXR2g5x4bXd5d2x8iIiSc3hkb4aEt4WJenV4hZm8iZR+hISNn6uZgJKXjYeNnKajl3+ToZuhoJ+lnouZvLC9u8KZyKvArq/LsqGlwbnPt7Cnu7HYos7Lzqm82O7zzKqpTg==",
+      "samplesPerSecond": 100
+    }
+  }
+]

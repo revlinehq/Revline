@@ -2,6 +2,7 @@ import { releaseAccountStorage } from './storage_accounting';
 import { internal } from '../_generated/api';
 import type { Doc,Id } from '../_generated/dataModel';
 import type { MutationCtx } from '../_generated/server';
+import { isStockAudioKey } from '../../lib/editor/stock-audio';
 type StoredMedia={storageId?:Id<'_storage'>;r2Key?:string;thumbnailStorageId?:Id<'_storage'>};
 
 /** Project copies and published snapshots share objects without re-uploading media. */
@@ -18,7 +19,7 @@ export async function releaseMediaObjects(ctx:MutationCtx,asset:StoredMedia){
       ctx.db.query('shareAssets').withIndex('by_storageId',q=>q.eq('storageId',asset.storageId)).first(),
     ]);if(!attachment&&!pin)await ctx.storage.delete(asset.storageId);
   }
-  if(asset.r2Key){
+  if(asset.r2Key&&!isStockAudioKey(asset.r2Key)){
     const [attachment,pin]=await Promise.all([
       ctx.db.query('assets').withIndex('by_r2Key',q=>q.eq('r2Key',asset.r2Key)).first(),
       ctx.db.query('shareAssets').withIndex('by_r2Key',q=>q.eq('r2Key',asset.r2Key)).first(),

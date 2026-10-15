@@ -8,7 +8,7 @@ import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { getFunctionName, type FunctionReference } from 'convex/server';
 import type { Id } from './_generated/dataModel';
 import type { ZodType } from 'zod';
-import { api, components, internal } from './_generated/api';
+import { api, components } from './_generated/api';
 import schema from './schema';
 
 type Tool = { inputSchema: ZodType; execute: (ctx: unknown, input: unknown) => Promise<unknown> };
@@ -24,7 +24,7 @@ const execute = async(tools: Record<string, Tool>, name: string, input: unknown)
   if(name==='addTimedEffect')await tools.planEffects.execute({},{plans:[{id:'fixture-flash',kind:'timed',effect:'flash',start:1.69,duration:.5,purpose:'Explicitly requested flash',strength:'Fixed preset',expectation:'The flash accents this moment',anchor:{kind:'requested-time',time:1.69,description:'Explicit fixture time'}}]});
   return tools[name].execute({}, tools[name].inputSchema.parse(input));
 };
-beforeEach(() => { sdk.options = null; sdk.plan = async () => {}; vi.stubEnv('BILLING_ENABLED', 'false'); });
+beforeEach(() => { sdk.options = null; sdk.plan = async () => {}; vi.stubEnv('BILLING_ENABLED', 'false'); vi.stubEnv('ANTHROPIC_API_KEY', 'fixture-only'); vi.stubEnv('AI_GATEWAY_ENABLED', 'false'); });
 afterEach(() => vi.unstubAllEnvs());
 
 async function fixture(prompt = 'can u put bunch of effects here', scenes: { start: number; end: number; description: string; score: number }[] = [], recovery = false) {

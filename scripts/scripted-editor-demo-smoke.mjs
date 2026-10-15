@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import puppeteer from 'puppeteer';
 
+const stockCatalog=JSON.parse(await readFile('lib/editor/stock-audio-catalog.json','utf8'));
 const directory = await mkdtemp(join(tmpdir(), 'revline-scripted-demo-'));
 const footagePath = join(directory, 'source.mp4');
 execFileSync('ffmpeg', ['-v','error','-f','lavfi','-i','testsrc2=size=640x360:rate=30','-f','lavfi','-i','sine=frequency=420:sample_rate=48000','-t','12','-threads','1','-c:v','libx264','-preset','ultrafast','-pix_fmt','yuv420p','-c:a','aac','-movflags','+faststart',footagePath]);
@@ -21,7 +22,8 @@ const make=URL.createObjectURL.bind(URL),revoke=URL.revokeObjectURL.bind(URL);wi
 const js=bundle.outputFiles.find(file=>file.path.endsWith('.js')).text,css=bundle.outputFiles.find(file=>file.path.endsWith('.css')).text;
 const server=createServer(async(req,res)=>{
   const path=new URL(req.url,'http://local').pathname;let body,mime='text/html';
-  if(path==='/fixture.js'){body=js;mime='text/javascript';}
+  if(path.startsWith('/api/audio-fx/')){const sound=stockCatalog.find(item=>item.id===path.split('/').at(-1));body=sound?await readFile(sound.file):null;mime='audio/ogg';}
+  else if(path==='/fixture.js'){body=js;mime='text/javascript';}
   else if(path.startsWith('/vendor/')||path.startsWith('/fonts/')){body=await readFile('public'+path).catch(()=>null);mime=path.endsWith('.js')?'text/javascript':path.endsWith('.woff2')?'font/woff2':'application/octet-stream';}
   else body='<html data-workspace-theme="dark"><style>'+css+'body{margin:0;font:12px Arial;background:#171717;--foreground:#f4f4f0;--font-inter:Arial}*{box-sizing:border-box}.demo-fixture-nav{height:54px;display:flex;align-items:center;gap:15px;padding:0 20px;flex-shrink:0}.editor-app{height:900px}</style><div id="root"></div><script src="/fixture.js"></script></html>';
   res.writeHead(body?200:404,{'Content-Type':mime});res.end(body??'missing');
@@ -56,10 +58,16 @@ try {
   await page.type('[aria-label="Describe your next edit"]','Keep editing this footage');assert.equal(await page.$eval('[aria-label="Start edit"]',node=>node.disabled),false,'Follow-up edits can use already submitted footage without reattaching');
   await page.screenshot({path:'/tmp/revline-demo-finished.png'});
   await page.click('#undo');await page.waitForFunction(()=>document.querySelectorAll('.timeline-clip').length===0);await page.click('#redo');await page.waitForFunction(()=>document.querySelectorAll('.timeline-clip').length===48);
+  // The real scripted-demo owner retains catalog assets independently from upload attachments.
+  await page.click('#inspector-tools-tab');await page.waitForSelector('[data-category="audio-fx"]');await page.click('[data-category="audio-fx"]');await page.waitForSelector('[aria-label="Add Short riser at playhead"]');
+  await page.click('[aria-label="Add Short riser at playhead"]');await page.waitForFunction(()=>document.querySelectorAll('.clip-audio').length===13);await page.waitForSelector('.clip-audio[aria-label^="Short riser"] .audio-waveform[data-waveform-ready="true"]');
+  await page.waitForFunction(()=>document.querySelector('hyperframes-player')?.style.zIndex==='1');
+  assert.equal(await page.evaluate(()=>[...document.querySelector('hyperframes-player').iframeElement.contentDocument.querySelectorAll('audio')].filter(node=>node.getAttribute('src').includes('/api/audio-fx/riser-short')).length),1,'Actual scripted preview retains the catalog audio source');
+  await page.click('#undo');await page.waitForFunction(()=>document.querySelectorAll('.timeline-clip').length===48);
   await page.emulateMediaFeatures([{name:'prefers-reduced-motion',value:'reduce'}]);await page.click('[aria-label="Replay edit"]');await page.waitForFunction(()=>document.querySelector('.scripted-editor-demo').dataset.building==='true');await page.waitForFunction(()=>document.querySelectorAll('.timeline-clip').length>0);assert.equal(await page.$eval('.timeline-clip',node=>getComputedStyle(node).animationName),'none','Reduced motion disables block animations');await page.click('[aria-label="Stop editing"]');await page.waitForFunction(()=>!document.querySelector('.scripted-editor-demo').dataset.building);const stopped=await page.$$eval('.timeline-clip',nodes=>nodes.length);await new Promise(resolve=>setTimeout(resolve,1200));assert.equal(await page.$$eval('.timeline-clip',nodes=>nodes.length),stopped,'Stopped run cannot keep appending clips');
   await page.click('[aria-label="Replay edit"]');await page.waitForFunction(()=>document.querySelector('.scripted-editor-demo').dataset.building==='true');await page.click('[aria-label="Reset edit"]');await page.waitForFunction(()=>!document.querySelector('.scripted-editor-demo').dataset.building);await new Promise(resolve=>setTimeout(resolve,900));assert.equal(await page.$('.timeline-clip'),null,'Reset cancels stale build callbacks');assert.equal(await page.$$eval('.composer-attachment',nodes=>nodes.length),1,'Reset keeps footage for the next take');
   await page.evaluate(()=>{const transfer=new DataTransfer();transfer.items.add(new File(['invalid mp4 bytes'],'Broken.mp4'));document.querySelector('.manual-editor-composer').dispatchEvent(new DragEvent('drop',{bubbles:true,dataTransfer:transfer}));});
   await page.waitForSelector('.composer-attachment[data-error=true]');assert.equal(await page.$$eval('.composer-attachment',nodes=>nodes.length),2,'Unreadable footage stays visible next to existing footage');assert.ok(await page.$eval('[aria-label="Start edit"]',node=>node.disabled),'Unreadable attachment blocks sending');await page.waitForFunction(()=>!document.querySelector('[aria-label="Remove Broken.mp4"]').disabled);await page.click('[aria-label="Remove Broken.mp4"]');await page.waitForFunction(()=>document.querySelectorAll('.composer-attachment').length===1);assert.equal(await page.$('.composer-attachment[data-error=true]'),null);
   await page.evaluate(()=>{window.demoObserver.disconnect();window.unmountDemo()});assert.equal(await page.evaluate(()=>window.liveURLs.size),0,'Local URLs are released on unmount');
-  assert.deepEqual(errors,[]);assert.deepEqual(external,[],'The local demo makes no AI/provider or remote media requests');console.log('PASS: real editor demo uploads/drops, composer clearing, incremental animated cuts/captions/FX, native preview, grouped Undo/Redo, replay/stop/reset, URL cleanup and zero external requests.');
+  assert.deepEqual(errors,[]);assert.deepEqual(external,[],'The local demo makes no AI/provider or remote media requests');console.log('PASS: real editor demo uploads/drops, composer clearing, incremental animated cuts/captions/FX, native preview/catalog Audio FX insertion and waveform, grouped Undo/Redo, replay/stop/reset, URL cleanup and zero external requests.');
 } finally {await browser.close();await new Promise(resolve=>server.close(resolve));await rm(directory,{recursive:true,force:true})}

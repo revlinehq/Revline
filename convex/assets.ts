@@ -1,13 +1,13 @@
 import { hydrateAsset,storeAnalysis } from './lib/asset_analysis';
-import { writeProject,createProject,readProject,projectIdentity,projectRun } from './lib/project_data';
+import { writeProject,projectIdentity,projectRun } from './lib/project_data';
 import { recordAssetStorage,usedByActiveExport,forgetStorageObject } from './lib/storage_accounting';
 import { requireEditorAccess } from './lib/billing_access';
-import { mediaUrl } from './lib/media_storage';
+import { mediaConfig, mediaUrl } from './lib/media_storage';
 import { removeMediaAttachment } from './lib/shared_media';
 import { paginationOptsValidator } from 'convex/server';
 import { ConvexError, v, type Infer } from "convex/values";
 import type { Doc } from "./_generated/dataModel";
-import { mutation, internalMutation, internalQuery, query, type MutationCtx, type QueryCtx } from "./_generated/server";
+import { action, mutation, internalMutation, internalQuery, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { requireOwner, requireProject } from "./lib/auth";
 import { assetWithUrl, assetKind, transcriptValidator, understandingValidator, shotsValidator, beatsValidator, focusValidator, waveformValidator, analysisValidator } from "./schema";
@@ -15,6 +15,16 @@ import { parseShots } from '../lib/media-analysis/shots';
 import { serializedBytes, validateFocus } from "./lib/timeline";
 import { consumeUpload, issueUpload } from "./uploads";
 import { enqueueMediaTask } from './mediaTasks';
+import { stockAudio } from '../lib/editor/stock-audio';
+import { signMediaToken } from '../lib/storage/media-tokens';
+/** Public playback is restricted to immutable CC0 catalog IDs, never arbitrary stored keys. */
+export const catalogAudioUrl = action({ args: { catalogId: v.string() }, returns: v.string(), handler: async (_ctx, args) => {
+  const entry = stockAudio(args.catalogId);
+  if (!entry) throw new ConvexError('Audio FX not found');
+  const { url, secret } = mediaConfig();
+  const token = await signMediaToken(secret, { operation: 'read', key: entry.r2Key, expires: Date.now() + 3600_000 });
+  return `${url}/read?token=${token}`;
+}});
 export const generateUploadUrl = mutation({ args: { projectId: v.id("projects") }, returns: v.string(), handler: async (ctx, args) => {
   const ownerId = await requireOwner(ctx); await requireEditorAccess(ctx, ownerId); await requireProject(ctx, args.projectId, ownerId); return await issueUpload(ctx, ownerId, args.projectId);
 }});
@@ -49,6 +59,23 @@ export const create = mutation({ args: { projectId: v.id("projects"), storageId:
   await recordAssetStorage(ctx,(await ctx.db.get(assetId))!);
   if (args.kind === 'video') await enqueueMediaTask(ctx, { ownerId, projectId: args.projectId, assetId, kind: 'understand' });
   return assetId;
+}});
+/** Catalog metadata and immutable media keys are server-owned; no upload or analysis is needed. */
+export const registerStockAudio = mutation({ args: { projectId: v.id('projects'), catalogId: v.string() }, returns: assetWithUrl, handler: async (ctx, args) => {
+  const ownerId = await requireOwner(ctx);
+  await requireEditorAccess(ctx, ownerId);
+  await requireProject(ctx, args.projectId, ownerId);
+  const entry = stockAudio(args.catalogId);
+  if (!entry) throw new ConvexError('Audio FX not found');
+  const existing = await ctx.db.query('assets').withIndex('by_owner_project_r2Key', q => q.eq('ownerId', ownerId).eq('projectId', args.projectId).eq('r2Key', entry.r2Key)).unique();
+  if (existing) return { ...existing, url: await mediaUrl(ctx, existing) };
+  const count = await ctx.db.query('assets').withIndex('by_ownerId_projectId', q => q.eq('ownerId', ownerId).eq('projectId', args.projectId)).take(200);
+  if (count.length >= 200) throw new ConvexError('A project supports up to 200 media files');
+  validateWaveform(entry.waveform);
+  const id = await ctx.db.insert('assets', { ownerId, projectId: args.projectId, kind: 'audio', fileName: `${entry.name}.ogg`, r2Key: entry.r2Key, contentType: entry.contentType, size: entry.size, duration: entry.duration, waveform: entry.waveform, createdAt: Date.now() });
+  const asset = (await ctx.db.get(id))!;
+  await recordAssetStorage(ctx, asset);
+  return { ...asset, url: await mediaUrl(ctx, asset) };
 }});
 export const list = query({ args: { projectId: v.id("projects"), limit: v.optional(v.number()) }, returns: v.array(assetWithUrl), handler: async (ctx, args) => {
   const ownerId = await requireOwner(ctx); await projectIdentity(ctx,args.projectId,ownerId);
