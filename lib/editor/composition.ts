@@ -1,3 +1,4 @@
+import { validateVisualTransform } from './visual-inputs';
 import { NEUTRAL_MOTION, cinematicBarSettings, validateClipEffects, visibleMotion, type MotionKeyframe } from './clip-effects';
 import { adjustmentSources } from './adjustment-layers';
 import { isTransitionClip, transitionSources } from './clip-transitions';
@@ -145,7 +146,7 @@ export function generateComposition(timeline: Timeline, assets: MediaAsset[], op
     if (clip.kind !== 'audio') {
       const focus = trimmedFocus(clip);
       const transform = { ...DEFAULT_TRANSFORM, ...clip.transform };
-      if (![transform.x, transform.y, transform.scale, transform.rotation, transform.opacity].every(Number.isFinite) || transform.x < 0 || transform.x > 1 || transform.y < 0 || transform.y > 1 || transform.scale < 0.1 || transform.scale > 5 || transform.rotation < -360 || transform.rotation > 360 || transform.opacity < 0 || transform.opacity > 1) throw new Error('The visual transform is out of range.');
+      try{validateVisualTransform(transform);}catch{throw new Error('The visual transform is out of range.');}
       frameStyle = `mix-blend-mode:${clip.blendMode ?? 'normal'};left:${(transform.x - 0.5) * width}px;top:${(transform.y - 0.5) * height}px;transform:rotate(${transform.rotation}deg) scale(${transform.scale});opacity:${transform.opacity};z-index:${zIndex}`;
       const hasDimensions = !!asset.width && !!asset.height;
       if (clip.crop && !hasDimensions) throw new Error('Crop needs the source dimensions. Re-import this media.');

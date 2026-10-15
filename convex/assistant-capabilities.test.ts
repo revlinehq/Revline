@@ -202,7 +202,7 @@ test('pixel transform/crop tools use known canvas/source axes, preserve omitted 
     await execute(tools,'transformClip',{clipId:'from',units:'pixels',x:960,y:540,scale:1.25,rotation:12,opacity:.7});
     await execute(tools,'cropClip',{clipId:'from',units:'pixels',left:96,right:192,top:54});
     await execute(tools,'cropClip',{clipId:'from',bottom:.1});
-    await expect(execute(tools,'transformClip',{clipId:'from',units:'pixels',x:1921})).rejects.toThrow('supported range');
+    await expect(execute(tools,'transformClip',{clipId:'from',units:'pixels',x:11520})).rejects.toThrow('supported range');
     await expect(execute(tools,'cropClip',{clipId:'from',units:'pixels',left:1824})).rejects.toThrow('more than 5%');
   },initial,true);
   expect(result.timeline.clips[0]).toEqual({...result.backend!.seed.clips[0],transform:{x:.5,y:.5,scale:1.25,rotation:12,opacity:.7},crop:{left:.05,right:.1,top:.05,bottom:.1}});

@@ -3,7 +3,7 @@ import {DEFAULT_CROP,DEFAULT_TRANSFORM,type Clip,type SourceCrop,type VisualTran
 export const VISUAL_INPUT_UNITS=['normalized','pixels'] as const;
 export type VisualInputUnits=typeof VISUAL_INPUT_UNITS[number];
 export const VISUAL_CANVAS_REFERENCE=1080;
-export const VISUAL_TRANSFORM_LIMITS={x:[0,1],y:[0,1],scale:[.1,5],rotation:[-360,360],opacity:[0,1]} as const;
+export const VISUAL_TRANSFORM_LIMITS={x:[-5,5],y:[-5,5],scale:[.1,5],rotation:[-360,360],opacity:[0,1]} as const;
 export const MAX_SOURCE_CROP=.95;
 type Size={width?:number;height?:number};
 const defined=<T extends object>(input:T)=>Object.fromEntries(Object.entries(input).filter(([,value])=>value!==undefined)) as T;
@@ -12,6 +12,11 @@ function dimensionsKnown(size:Size){
   return {width:size.width!,height:size.height!};
 }
 function mediaOnly(clip:Clip){if(clip.kind!=='video'&&clip.kind!=='image')throw new Error('Choose a video or image.');}
+
+export function validateVisualTransform(transform:VisualTransform){
+  const bounds=VISUAL_TRANSFORM_LIMITS;
+  for(const key of Object.keys(bounds) as (keyof VisualTransform)[]){const[min,max]=bounds[key];if(!Number.isFinite(transform[key])||transform[key]<min||transform[key]>max)throw new Error(`Transform ${key} is outside its supported range.`);}
+}
 
 /** Pixel centers use the editor's canvas reference; scale/degrees/opacity retain their usual units. */
 export function transformInputPatch(clip:Clip,changes:Partial<VisualTransform>,canvas:Size,units:VisualInputUnits='normalized'):Pick<Clip,'transform'>{
@@ -24,8 +29,7 @@ export function transformInputPatch(clip:Clip,changes:Partial<VisualTransform>,c
     if(patch.y!==undefined)patch.y/=height;
   }
   const transform={...DEFAULT_TRANSFORM,...clip.transform,...patch};
-  const bounds=VISUAL_TRANSFORM_LIMITS;
-  for(const key of Object.keys(bounds) as (keyof VisualTransform)[]){const[min,max]=bounds[key];if(!Number.isFinite(transform[key])||transform[key]<min||transform[key]>max)throw new Error(`Transform ${key} is outside its supported range.`);}
+  validateVisualTransform(transform);
   return {transform};
 }
 

@@ -35,17 +35,17 @@ describe('canvas manipulation geometry',()=>{
     expect(opposite(next).x).toBeCloseTo(opposite(initial).x);
     expect(opposite(next).y).toBeCloseTo(opposite(initial).y);
   });
-  test('keeps portrait aspect and clamps supported size and position ranges',()=>{
+  test('keeps portrait aspect and allows off-frame positioning within supported limits',()=>{
     const next=resizeVisualTransform({...DEFAULT_TRANSFORM,scale:.4},'se',36,64,360,640);
     expect(next.scale).toBeCloseTo(.5);expect(next.x).toBeCloseTo(.55);expect(next.y).toBeCloseTo(.55);
     const tiny=resizeVisualTransform(DEFAULT_TRANSFORM,'se',-10000,-10000,360,640);expect(tiny.scale).toBe(.1);
-    const moved=moveVisualTransform(DEFAULT_TRANSFORM,1000,-1000,360,640);expect(moved.x).toBe(1);expect(moved.y).toBe(0);
+    const moved=moveVisualTransform(DEFAULT_TRANSFORM,1000,-1000,360,640);expect(moved.x).toBeCloseTo(.5+1000/360);expect(moved.y).toBeCloseTo(.5-1000/640);
   });
   test('recognizes unchanged gestures and clamped movement without hiding real edits',()=>{
     const initial=visualTransform();
     expect(sameVisualTransform(initial,visualTransform())).toBe(true);
     expect(sameVisualTransform(initial,moveVisualTransform(initial,0,0,360,640))).toBe(true);
-    const clamped={...initial,x:0,y:0,scale:.1};
+    const clamped={...initial,x:-5,y:-5,scale:.1};
     expect(sameVisualTransform(clamped,moveVisualTransform(clamped,-20,-40,360,640))).toBe(true);
     expect(sameVisualTransform(clamped,resizeVisualTransform(clamped,'se',-100,-100,360,640))).toBe(true);
     expect(sameVisualTransform(initial,moveVisualTransform(initial,1,0,360,640))).toBe(false);
@@ -119,4 +119,12 @@ describe('preview alignment magnets',()=>{
     expect(result.transform.x).toBeGreaterThanOrEqual(0);expect(result.transform.x).toBeLessThanOrEqual(1);
     expect(result.transform.y).toBeGreaterThanOrEqual(0);expect(result.transform.y).toBeLessThanOrEqual(1);
   });
+});
+
+test('a framing drag can carry the layer center past every canvas edge',()=>{
+ const moved=moveVisualTransform(DEFAULT_TRANSFORM,-360,640,360,640);
+ expect(moved.x).toBeCloseTo(-.5);expect(moved.y).toBeCloseTo(1.5);
+ const initial={...DEFAULT_TRANSFORM,x:1,y:1};
+ const resized=resizeVisualTransform(initial,'se',180,320,360,640);
+ expect(resized.x).toBeGreaterThan(1);expect(resized.y).toBeGreaterThan(1);
 });

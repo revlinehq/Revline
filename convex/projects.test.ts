@@ -488,3 +488,17 @@ test("AI edits after inspecting a manual revision start a new undo group preserv
   await owner.mutation(api.projects.undo,{projectId});
   expect((await owner.query(api.projects.get,{projectId})).timeline?.clips[0].volume).toBe(1);
 });
+
+test('off-frame footage positions persist and survive export without changing source timing',async()=>{
+ const t=makeTest(),projectId=await project(t),owner=t.withIdentity(identity('owner'));
+ const storageId=await uploadedFile(t,'owner',projectId);
+ const assetId=await owner.mutation(api.assets.create,{projectId,storageId,fileName:'framing.mp4',kind:'video',duration:5});
+ const clip={id:'off-frame',kind:'video' as const,assetId,start:0,duration:2,sourceStart:1,transform:{...DEFAULT_TRANSFORM,x:-.2,y:1.2}};
+ const timeline:Timeline={...textTimeline,clips:[clip]};
+ await owner.mutation(api.projects.saveTimeline,{projectId,expectedRevision:0,timeline});
+ expect((await owner.query(api.projects.get,{projectId})).timeline!.clips[0]).toEqual(clip);
+ const jobId=await owner.mutation(api.renders.start,{projectId,resolution:720,fps:30,quality:'draft'});
+ const render=await owner.mutation(internal.renders.claim,{jobId,workerSecret:'test-worker-secret'});
+ expect(render.timeline.clips[0]).toEqual(clip);
+ await expect(owner.mutation(api.projects.saveTimeline,{projectId,expectedRevision:1,timeline:{...timeline,clips:[{...clip,transform:{...clip.transform,x:100}}]}})).rejects.toThrow('Invalid visual transform');
+});

@@ -8,7 +8,8 @@ test('canvas pixels normalize centers in landscape and vertical without resettin
   expect(transformInputPatch(clip,{x:960,y:540},dimensions('landscape'),'pixels')).toEqual({transform:{...clip.transform,x:.5,y:.5}});
   expect(transformInputPatch(clip,{x:540,y:960},dimensions('vertical'),'pixels')).toEqual({transform:{...clip.transform,x:.5,y:.5}});
   expect(transformInputPatch(clip,{x:.2},{})).toEqual({transform:{...clip.transform,x:.2}});
-  expect(()=>transformInputPatch(clip,{x:1921},dimensions('landscape'),'pixels')).toThrow('supported range');
+  expect(transformInputPatch(clip,{x:-192,y:1296},dimensions('landscape'),'pixels')).toEqual({transform:{...clip.transform,x:-.1,y:1.2}});
+  expect(()=>transformInputPatch(clip,{x:11520},dimensions('landscape'),'pixels')).toThrow('supported range');
   expect(()=>transformInputPatch(clip,{x:10},{width:0,height:1080},'pixels')).toThrow('Known positive');
   expect(()=>transformInputPatch(clip,{x:Infinity},dimensions('landscape'),'pixels')).toThrow('supported range');
 });

@@ -1,3 +1,4 @@
+import { VISUAL_TRANSFORM_LIMITS } from './visual-inputs';
 import { DEFAULT_TRANSFORM, type SourceCrop, type VisualTransform } from './types';
 
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
@@ -42,7 +43,7 @@ export function cropToAspect(width: number, height: number, aspect: number): Sou
 }
 
 export function moveVisualTransform(initial: VisualTransform, dx: number, dy: number, width: number, height: number): VisualTransform {
-  return {...initial,x:clamp(initial.x+dx/width,0,1),y:clamp(initial.y+dy/height,0,1)};
+  return {...initial,x:clamp(initial.x+dx/width,...VISUAL_TRANSFORM_LIMITS.x),y:clamp(initial.y+dy/height,...VISUAL_TRANSFORM_LIMITS.y)};
 }
 
 function axisPositions(bounds: VisualBounds) {
@@ -62,7 +63,7 @@ export function snapVisualMove(proposed: VisualTransform, rect: VisualRect, canv
     let best:{delta:number;distance:number;position:number}|undefined;
     for(const target of [size/2,0,size])for(const value of positions[axis]){
       const delta=target-value,distance=Math.abs(delta)*screen/size,next=proposed[axis]+delta/size;
-      if(distance<=threshold&&next>=0&&next<=1&&(!best||distance<best.distance))best={delta,distance,position:target};
+      if(distance<=threshold&&next>=VISUAL_TRANSFORM_LIMITS[axis][0]&&next<=VISUAL_TRANSFORM_LIMITS[axis][1]&&(!best||distance<best.distance))best={delta,distance,position:target};
     }
     if(best){transform[axis]+=best.delta/size;lines.push({axis,position:best.position});}
   }
@@ -86,7 +87,7 @@ export function resizeVisualTransform(initial: VisualTransform, corner: VisualCo
   const delta=(dx*vx+dy*vy)/(rect.width*rect.width+rect.height*rect.height);
   const scale=clamp(initial.scale+delta,.1,5);
   const next=anchoredScale(initial,corner,scale,width,height,rect);
-  return {...next,x:clamp(next.x,0,1),y:clamp(next.y,0,1)};
+  return {...next,x:clamp(next.x,...VISUAL_TRANSFORM_LIMITS.x),y:clamp(next.y,...VISUAL_TRANSFORM_LIMITS.y)};
 }
 
 /** Scale magnets keep the opposite content corner fixed and the aspect ratio intact. */
@@ -106,7 +107,7 @@ export function snapVisualResize(initial:VisualTransform,proposed:VisualTransfor
       const scale=(target-zero[axis][index])/slope;
       if(scale<.1||scale>5)continue;
       const transform=atScale(scale);
-      if(transform.x<0||transform.x>1||transform.y<0||transform.y>1)continue;
+      if(transform.x<VISUAL_TRANSFORM_LIMITS.x[0]||transform.x>VISUAL_TRANSFORM_LIMITS.x[1]||transform.y<VISUAL_TRANSFORM_LIMITS.y[0]||transform.y>VISUAL_TRANSFORM_LIMITS.y[1])continue;
       const cornerPoint=visualCornerPosition(visualBounds(transform,rect,canvas.width,canvas.height),corner);
       const distance=Math.hypot((cornerPoint.x-currentCorner.x)*viewport.width/canvas.width,(cornerPoint.y-currentCorner.y)*viewport.height/canvas.height);
       if(distance<=threshold&&(!best||distance<best.distance))best={transform,distance};

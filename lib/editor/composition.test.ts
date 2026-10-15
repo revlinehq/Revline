@@ -147,3 +147,13 @@ describe('stacked visual geometry', () => {
     expect(html).not.toContain('clip-path');
   });
 });
+
+test('preview and export compositions retain off-frame footage positions',()=>{
+ const media={_id:'asset',kind:'video' as const,fileName:'off-frame.mp4',url:'https://example.com/off-frame.mp4',width:1920,height:1080,duration:5};
+ const clip={id:'source',kind:'video' as const,assetId:'asset',start:0,duration:2,sourceStart:1,transform:{x:-.25,y:1.25,scale:1,rotation:0,opacity:1}};
+ for(const preview of [true,false]){
+  const html=generateComposition({fps:30,aspectRatio:'landscape',clips:[clip]},[media],{preview});
+  expect(html).toContain('left:-1440px;top:810px');
+  expect(()=>generateComposition({fps:30,aspectRatio:'landscape',clips:[{...clip,transform:{...clip.transform,x:100}}]},[media],{preview})).toThrow('out of range');
+ }
+});

@@ -1,3 +1,4 @@
+import { validateVisualTransform } from '../../lib/editor/visual-inputs';
 import { writeProject } from './project_data';
 import { validateClipEffects } from '../../lib/editor/clip-effects';
 import { playbackRateOf, sourceEndOf } from '../../lib/editor/playback-rate';
@@ -75,7 +76,7 @@ export async function validateTimeline(ctx: MutationCtx | QueryCtx, project: Doc
     if ((clip.crop || clip.fit || (clip.transform && !textClip)) && !visualMedia) throw new ConvexError("Transforms, cropping, and fit apply to visual media only");
     if (clip.transform) {
       const transform = clip.transform;
-      if (!Object.values(transform).every(Number.isFinite) || transform.x < 0 || transform.x > 1 || transform.y < 0 || transform.y > 1 || transform.scale < 0.1 || transform.scale > 5 || transform.rotation < -360 || transform.rotation > 360 || transform.opacity < 0 || transform.opacity > 1) throw new ConvexError("Invalid visual transform");
+      try{validateVisualTransform(transform);}catch{throw new ConvexError('Invalid visual transform');}
       if (textClip && (transform.x !== .5 || transform.y !== .5 || transform.scale !== 1 || transform.opacity !== 1)) throw new ConvexError('Text transforms support rotation only; use text position and size controls');
     }
     if (clip.crop && (Object.values(clip.crop).some(edge => !Number.isFinite(edge) || edge < 0 || edge > 0.95) || clip.crop.left + clip.crop.right >= 0.95 || clip.crop.top + clip.crop.bottom >= 0.95)) throw new ConvexError("Crop must leave at least five percent of each source axis visible");
