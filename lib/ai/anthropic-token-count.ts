@@ -4,15 +4,19 @@ import { AssistantTokenBudgetError } from './token-budget';
 import { assistantFailureReason } from './assistant-error';
 
 /** Use the installed SDK's own encoder without issuing a generation request. */
-export async function encodeAnthropicCount(params:LanguageModelV4CallOptions,modelId:string) {
+export async function encodeAnthropicCount(params:LanguageModelV4CallOptions,modelId:string):Promise<{body:Record<string,unknown>;beta:string|null}> {
   let body:Record<string,unknown>|undefined;
+  let beta:string|null=null;
   const serializer=createAnthropic({apiKey:'local-serialization-only',fetch:async(_url,init)=>{
     body=JSON.parse(String(init?.body));
+    beta=new Headers(init?.headers).get('anthropic-beta');
     return new Response(JSON.stringify({id:'serialization-only',type:'message',role:'assistant',model:modelId,content:[{type:'text',text:'encoded'}],stop_reason:'end_turn',stop_sequence:null,usage:{input_tokens:1,output_tokens:1}}),{status:200,headers:{'Content-Type':'application/json'}});
   }})(modelId);
   await serializer.doGenerate(params);
   if(!body)throw new AssistantTokenBudgetError('usage');
-  return Object.fromEntries(['model','system','messages','tools','thinking','tool_choice'].filter(key=>body![key]!==undefined).map(key=>[key,body![key]]));
+  // Thinking controls can require a beta header. Forward that header alone;
+  // the serializer's placeholder credentials and caller headers stay local.
+  return {body:Object.fromEntries(['model','system','messages','tools','thinking','tool_choice'].filter(key=>body![key]!==undefined).map(key=>[key,body![key]])),beta};
 }
 /** Token counting is free; generation remains guarded by the run's token budget.
  * The endpoint returns an estimate, so reserve a margin before each paid call.
@@ -20,8 +24,8 @@ export async function encodeAnthropicCount(params:LanguageModelV4CallOptions,mod
  */
 export function anthropicTokenCounter(modelId:string,key:string) {
   return async(params:LanguageModelV4CallOptions)=>{
-    const body=await encodeAnthropicCount(params,modelId);
-    const response=await fetch('https://api.anthropic.com/v1/messages/count_tokens',{method:'POST',headers:{'Content-Type':'application/json','anthropic-version':'2023-06-01','x-api-key':key},body:JSON.stringify(body),signal:params.abortSignal});
+    const {body,beta}=await encodeAnthropicCount(params,modelId);
+    const response=await fetch('https://api.anthropic.com/v1/messages/count_tokens',{method:'POST',headers:{'Content-Type':'application/json','anthropic-version':'2023-06-01','x-api-key':key,...(beta?{'anthropic-beta':beta}:{})},body:JSON.stringify(body),signal:params.abortSignal});
     const result=await response.json().catch(()=>null) as {input_tokens?:unknown;error?:{message?:unknown}}|null;
     if(!response.ok){
       const failure=new AssistantTokenBudgetError('usage');

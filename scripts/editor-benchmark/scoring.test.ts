@@ -46,6 +46,11 @@ test('usage fails closed on missing or inconsistent counts and a different actua
   expect(() => summarizeUsage([message({ model: 'gpt-6-astra' })], 'gpt-6.1-sol')).toThrow(/pinned/);
   expect(() => summarizeUsage([message(), message()], 'gpt-6.1-sol')).toThrow(/Duplicate/);
 });
+test('failed assistant rows without model, provider or usage report missing usage and cannot be skipped', () => {
+  const failed: StoredMessage = { _id: 'failed-local-assistant', status: 'failed', message: { role: 'assistant' } };
+  expect(() => summarizeUsage([failed], 'claude-sonnet-5-5')).toThrow('Missing provider usage. Further runs are blocked.');
+  expect(() => summarizeUsage([message({ model: 'claude-sonnet-5-5' }), failed], 'claude-sonnet-5-5')).toThrow('Missing provider usage. Further runs are blocked.');
+});
 test('usage permits the pinned Sonnet gateway identity and ignores server publication receipts', () => {
   const result = summarizeUsage([message({ model: 'anthropic/claude-sonnet-5.5' }), { _id: 'receipt', message: { role: 'assistant' }, providerMetadata: { revline: { publicationReceipt: {} } } }], 'claude-sonnet-5-5');
   expect(result.calls).toHaveLength(1);

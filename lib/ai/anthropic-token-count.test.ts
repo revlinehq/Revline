@@ -4,11 +4,12 @@ import type { LanguageModelV4CallOptions } from '@ai-sdk/provider';
 import { createAnthropic } from '@ai-sdk/anthropic';
 import { wrapLanguageModel } from 'ai';
 import { AssistantTokenBudget,EDITOR_TOKEN_LIMITS } from './token-budget';
+import { claudeProviderOptions } from './claude-model';
 const params:LanguageModelV4CallOptions={prompt:[{role:'system',content:'Stable rules'},{role:'user',content:[{type:'text',text:'Add a flash'}]}],maxOutputTokens:4096,tools:[{type:'function',name:'apply',description:'Save an edit',inputSchema:{type:'object',properties:{}}}],providerOptions:{anthropic:{thinking:{type:'adaptive'},effort:'medium',cacheControl:{type:'ephemeral',ttl:'5m'}}}};
 afterEach(()=>vi.unstubAllGlobals());
 test('the installed SDK encodes counting inputs without making a generation request',async()=>{
   const fetch=vi.fn();vi.stubGlobal('fetch',fetch);
-  const encoded=await encodeAnthropicCount(params,'claude-sonnet-5-5');
+  const {body:encoded}=await encodeAnthropicCount(params,'claude-sonnet-5-5');
   expect(fetch).not.toHaveBeenCalled();expect(encoded).toMatchObject({model:'claude-sonnet-5-5',thinking:{type:'adaptive'},messages:[{role:'user',content:[{type:'text',text:'Add a flash'}]}]});
   expect(encoded).not.toHaveProperty('max_tokens');expect(encoded).not.toHaveProperty('stream');
 });
@@ -24,6 +25,29 @@ test('free counted reservations allow multiple steps while stopping before the p
   await expect(model.doGenerate({...params,maxOutputTokens:64})).rejects.toThrow('token budget');
   expect(requests).toEqual(['count','generate','count','generate','count','generate','count']);
   expect(budget.usage).toEqual({inputTokens:3600,outputTokens:30});
+});
+test('free counting preserves the SDK beta header required by the real editor thinking options',async()=>{
+  const request={...params,providerOptions:claudeProviderOptions('claude-sonnet-5-5'),headers:{Authorization:'caller-private',unrelated:'caller-private'}};
+  const originalOptions=structuredClone(request.providerOptions);
+  const requests:{counting:boolean;headers:Headers;body:Record<string,unknown>}[]=[];
+  const fetch=vi.fn(async(url:RequestInfo|URL,init?:RequestInit)=>{
+    const counting=String(url).endsWith('/count_tokens'),headers=new Headers(init?.headers),body=JSON.parse(String(init?.body));
+    requests.push({counting,headers,body});
+    if(counting&&!headers.get('anthropic-beta')?.split(',').includes('thinking-binding-controls-2026-08-01'))return new Response(JSON.stringify({error:{message:'thinking.adaptive.block_binding: Extra inputs are not permitted'}}),{status:400});
+    return new Response(JSON.stringify(counting?{input_tokens:1000}:{id:'fixture',type:'message',role:'assistant',model:'claude-sonnet-5-5',content:[{type:'text',text:'Saved'}],stop_reason:'end_turn',stop_sequence:null,usage:{input_tokens:1200,output_tokens:10}}),{status:200,headers:{'Content-Type':'application/json'}});
+  });vi.stubGlobal('fetch',fetch);
+  const model=wrapLanguageModel({model:createAnthropic({apiKey:'real-request-key',fetch})('claude-sonnet-5-5'),middleware:new AssistantTokenBudget().middleware([],0,anthropicTokenCounter('claude-sonnet-5-5','real-request-key'))});
+  await model.doGenerate(request);
+  expect(requests.map(item=>item.counting)).toEqual([true,false]);
+  const [count,generation]=requests;
+  expect(count.body.thinking).toEqual({type:'adaptive',block_binding:{prefix_mismatch_behavior:'drop_block'}});
+  for(const field of ['model','system','messages','tools','thinking','tool_choice'])expect(count.body[field]).toEqual(generation.body[field]);
+  expect(count.headers.get('anthropic-beta')).toEqual(generation.headers.get('anthropic-beta'));
+  expect(count.headers.get('x-api-key')).toBe('real-request-key');
+  expect(count.headers.get('anthropic-version')).toBe('2023-06-01');
+  expect(count.headers.get('authorization')).toBeNull();expect(count.headers.get('unrelated')).toBeNull();
+  expect([...count.headers.values()]).not.toContain('local-serialization-only');
+  expect(request.providerOptions).toEqual(originalOptions);
 });
 test('free preflight reserves a margin and refuses missing or unavailable counts',async()=>{
   const fetch=vi.fn(async(_url:RequestInfo|URL,_init?:RequestInit)=>new Response(JSON.stringify({input_tokens:50_000}),{status:200}));vi.stubGlobal('fetch',fetch);

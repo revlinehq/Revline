@@ -91,12 +91,12 @@ export function summarizeUsage(messages: StoredMessage[], expectedModel: Benchma
   const callUsage = calls.map(message => {
     if (ids.has(message._id)) throw new BenchmarkGuardError('Duplicate usage message. Further runs are blocked.');
     ids.add(message._id);
+    const usage = message.usage;
+    if (!usage) throw new BenchmarkGuardError('Missing provider usage. Further runs are blocked.');
     // Gateway Sonnet has an explicit namespaced model ID in Agent storage.
     if (message.model !== expectedModel && !(expectedModel === 'claude-sonnet-5-5' && message.model === 'anthropic/claude-sonnet-5.5')) throw new BenchmarkGuardError('Stored provider model does not match the pinned benchmark model.');
     const anthropic = message.providerMetadata?.anthropic as { iterations?: { type?: string; model?: string }[] } | undefined;
     if (anthropic?.iterations?.some(iteration => iteration.type === 'advisor_message' || (iteration.model && iteration.model !== expectedModel))) throw new BenchmarkGuardError('Additional provider sub-inference or a fallback model prevents reliable benchmark cost attribution.');
-    const usage = message.usage;
-    if (!usage) throw new BenchmarkGuardError('Missing provider usage. Further runs are blocked.');
     const inputTokens = count(usage.promptTokens), outputTokens = count(usage.completionTokens);
     const cacheReadTokens = count(usage.cachedInputTokens ?? 0), cacheWriteTokens = count(usage.cacheWriteInputTokens ?? 0);
     const uncachedInputTokens = usage.nonCachedInputTokens === undefined ? inputTokens - cacheReadTokens - cacheWriteTokens : count(usage.nonCachedInputTokens);
