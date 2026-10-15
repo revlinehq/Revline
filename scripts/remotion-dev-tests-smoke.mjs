@@ -46,7 +46,7 @@ try {
   const seek = async value => { await page.$eval('[aria-label="Preview frame"]', (input, value) => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, value); input.dispatchEvent(new Event('input', { bubbles: true })); }, value); await flush(); };
 
   await page.waitForSelector('.rmlab-scene');
-  assert.equal(await page.$$eval('.rmlab-categories>button', nodes => nodes.length), 5);
+  assert.equal(await page.$$eval('.rmlab-categories>button', nodes => nodes.length), 6);
   assert.equal(await frame(), 60);
   await page.click('[aria-label="Play preview"]');
   await page.waitForFunction(() => Number(document.querySelector('.rmlab-scene').dataset.frame) > 65);
@@ -132,7 +132,7 @@ try {
   await page.click('.rmlab-speech-controls .rmlab-button-row>button:first-child');
   await seek(62);
   await tab(0);
-  assert.equal(await page.$eval('.rmlab-field input[max="8"]',node=>Number(node.value)),2.05);
+  assert.equal(await page.$eval('[aria-label="Composition controls"] .rmlab-field input[max="8"]',node=>Number(node.value)),2.05);
 
   await category(1);
   await field('Title / animated text','An editable explainer');
@@ -197,7 +197,7 @@ try {
   assert.equal(await page.$$eval('.rmlab-categories>button', nodes => nodes.some(node=>node.textContent.includes('Motion polish'))),false);
   await tab(0);
 
-  await category(4);
+  await category(5);
   assert.equal(await page.$$eval('.rmlab-template-card', nodes => nodes.length), 7);
   await page.type('[aria-label="Template name"]', ' saved');
   await page.click('.rmlab-save-row button');
@@ -211,20 +211,20 @@ try {
   await page.waitForFunction(() => document.querySelector('.rmlab-notice')?.textContent.includes('version 1'));
   await templateUpload.uploadFile('/tmp/revline-remotion-lab/template.json');
   await page.waitForFunction(() => document.querySelector('.rmlab-block-card h3')?.textContent === 'Imported motion design');
-  await category(4);
+  await category(5);
   await page.click('.rmlab-template-card:nth-child(3)');
   assert.equal(await page.$eval('.rmlab-scene', node => node.dataset.scene), 'block-chart');
-  await category(4);
+  await category(5);
   await page.click('.rmlab-saved-list>div>button:first-child');
   assert.equal(await page.$eval('.rmlab-block-card h3', node => node.textContent), 'An editable explainer');
 
-  await category(2); assert.ok(await page.$('[aria-label="Subject tracking experiment"]'));
-  await category(3); assert.ok(await page.$('.subject-lab')); assert.equal(await page.$('video[src]'), null);
+  await category(3); assert.ok(await page.$('[aria-label="Subject tracking experiment"]'));
+  await category(4); assert.ok(await page.$('.subject-lab')); assert.equal(await page.$('video[src]'), null);
   assert.equal(requests.filter(url => /api\/sam|segment-video/.test(url)).length, 0, 'Opening subject tools never starts a paid request');
   await category(0);
   await page.evaluate(() => window.labFixture.setEmbedded(true)); await flush();
   await page.setViewport({ width: 360, height: 1000 }); await flush();
-  for (let index = 0; index < 5; index++) {
+  for (let index = 0; index < 6; index++) {
     await category(index);
     const bounds = await page.$eval('.rmlab', node => ({ width: node.clientWidth, scroll: node.scrollWidth }));
     assert.ok(bounds.scroll <= bounds.width + 1, `Category ${index + 1} fits the 320px inspector: ${JSON.stringify(bounds)}`);
@@ -238,5 +238,5 @@ try {
   assert.equal(await page.$$eval('.rmlab-categories>button', nodes => nodes.length), 1);
   assert.ok(await page.$('[aria-label="Subject tracking experiment"]'));
   assert.deepEqual(errors, []);
-  console.log('PASS: all five areas; exact-frame playback/seek; fifteen editable independent graphics on white; curved arrow/head + anchored label controls; fourteen production plus ten experimental text treatments; deterministic pixels and data/strength/timing edits; speech cues; motion blur; template validation; portrait + 320px embedded layouts; zero paid SAM requests.');
+  console.log('PASS: all six areas; exact-frame playback/seek; fifteen editable independent graphics on white; curved arrow/head + anchored label controls; fourteen production plus ten experimental text treatments; deterministic pixels and data/strength/timing edits; speech cues; motion blur; template validation; portrait + 320px embedded layouts; zero paid SAM requests.');
 } finally { await browser.close(); await fonts.close(); }

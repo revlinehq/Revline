@@ -1,0 +1,86 @@
+import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
+import { execFileSync } from 'node:child_process';
+import { readFile, mkdir, writeFile } from 'node:fs/promises';
+import { build } from 'esbuild';
+import puppeteer from 'puppeteer';
+import { startFixtureFontServer } from './ui-fixture-fonts.mjs';
+
+const directory = '/tmp/revline-clip-motion'; await mkdir(directory, { recursive: true });
+execFileSync('ffmpeg', ['-v', 'error', '-f', 'lavfi', '-i', 'color=c=red:size=320x240', '-frames:v', '1', '-threads', '1', '-y', `${directory}/red.png`]);
+execFileSync('ffmpeg', ['-v', 'error', '-f', 'lavfi', '-i', 'color=c=blue:size=240x320', '-frames:v', '1', '-threads', '1', '-y', `${directory}/blue.png`]);
+execFileSync('ffmpeg', ['-v', 'error', '-f', 'lavfi', '-i', 'testsrc2=size=320x180:rate=30:duration=2', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-y', `${directory}/background.mp4`]);
+await writeFile(`${directory}/invalid.txt`, 'Not an image');
+const poster = await readFile('public/images/editor-demo-poster.webp');
+const bundle = await build({ stdin: { resolveDir: process.cwd(), loader: 'tsx', contents: `
+import React,{useState}from'react';import{createRoot}from'react-dom/client';import{RemotionDevTests}from'./components/dev/remotion-dev-tests';import'./components/workspace/shared.css';import'./components/workspace/workspace-pages.css';
+const nativeRevoke=URL.revokeObjectURL.bind(URL);window.revoked=[];URL.revokeObjectURL=url=>{window.revoked.push(url);nativeRevoke(url)};
+function Fixture(){const[embedded,setEmbedded]=useState(false),[query,setQuery]=useState('');window.fixture={setEmbedded,setQuery};return <div style={{width:embedded?320:'100%',margin:'auto'}}><RemotionDevTests embedded={embedded} query={query}/></div>}createRoot(document.getElementById('root')).render(<Fixture/>);
+` }, bundle: true, platform: 'browser', format: 'iife', jsx: 'automatic', write: false, outdir: `${directory}/fixture`, define: { 'process.env.NODE_ENV': '"production"' } });
+const fonts = await startFixtureFontServer();
+const browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox', '--disable-dev-shm-usage'] });
+try {
+  const page = await browser.newPage(), errors = [], requests = [];
+  page.on('pageerror', error => errors.push(String(error))); page.on('request', request => requests.push(request.url()));
+  await page.setRequestInterception(true); page.on('request', request => request.url().endsWith('/images/editor-demo-poster.webp') ? request.respond({ status: 200, contentType: 'image/webp', body: poster }) : request.continue());
+  await page.setViewport({ width: 1380, height: 1050 }); await page.goto(fonts.url + '/#clip-motion');
+  await page.setContent('<html data-workspace-theme="dark"><body><div id="root"></div></body></html>');
+  await page.addStyleTag({ content: bundle.outputFiles.find(file => file.path.endsWith('.css')).text });
+  await page.addStyleTag({ content: '*{box-sizing:border-box}body{margin:0;background:#111210;--font-inter:Arial;--font-space-grotesk:Arial;font:12px Arial}button{font-family:inherit}' });
+  await page.addScriptTag({ content: bundle.outputFiles.find(file => file.path.endsWith('.js')).text });
+  const flush = () => page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  const field = async (label, value) => { await page.$eval(`[aria-label="${label}"]`, (element, value) => { Object.getOwnPropertyDescriptor(element.tagName === 'SELECT' ? HTMLSelectElement.prototype : HTMLInputElement.prototype, 'value').set.call(element, value); element.dispatchEvent(new Event(element.tagName === 'SELECT' ? 'change' : 'input', { bubbles: true })); }, value); await flush(); };
+  const seek = frame => field('Photo preview frame', frame);
+  const photo = id => `[data-photo-layer="photo-${id}"]`;
+  const state = id => page.$eval(photo(id), element => { const node = element.firstElementChild; return { phase: element.dataset.phase, opacity: Number(node.style.opacity), transform: node.style.transform, left: element.style.left, width: element.style.width, source: node.querySelector('img').src }; });
+  await page.waitForSelector('[aria-label="Photo animation controls"]');
+  assert.equal(await page.$eval('.rmlab-categories button[aria-pressed=true]', node => node.textContent.includes('Clip animations')), true, 'The #clip-motion deep link selects the prototype after hydration');
+  await page.waitForFunction(() => [...document.querySelectorAll('.clip-motion-photo img')].every(image => image.complete && image.naturalWidth));
+  assert.equal(await page.$$eval('[data-timing-layer]', nodes => nodes.length), 2);
+  assert.equal(await page.$eval('.clip-motion-artboard', node => getComputedStyle(node).backgroundColor), 'rgb(255, 255, 255)');
+  await seek(20); assert.equal((await state(1)).phase, 'enter'); assert.equal((await state(2)).phase, 'hidden');
+  await seek(45); assert.equal((await state(2)).phase, 'enter');
+  const stage = await page.$('.clip-motion-stage'); const original = await stage.screenshot();
+  await seek(220); await seek(0); await seek(45); assert.equal(createHash('sha256').update(await stage.screenshot()).digest('hex'), createHash('sha256').update(original).digest('hex'), 'Backward seek restores exact photo pixels');
+  await page.click('[aria-label="Play photo animations"]'); await page.waitForFunction(() => Number(document.querySelector('[data-clip-motion-frame]').dataset.clipMotionFrame) > 50); await page.click('[aria-label="Pause photo animations"]');
+  const paused = await page.$eval('[data-clip-motion-frame]', node => node.dataset.clipMotionFrame); await page.evaluate(() => new Promise(resolve => setTimeout(resolve, 90))); assert.equal(await page.$eval('[data-clip-motion-frame]', node => node.dataset.clipMotionFrame), paused);
+  await page.click('[aria-label="Next photo frame"]'); assert.equal(await page.$eval('[data-clip-motion-frame]', node => Number(node.dataset.clipMotionFrame)), Number(paused) + 1); await page.click('[aria-label="Previous photo frame"]');
+  await page.$eval('[aria-label="Show Photo 1"]', node => node.click()); await flush(); assert.equal((await state(1)).opacity, 0); await page.$eval('[aria-label="Show Photo 1"]', node => node.click());
+  await field('Photo delay', 0); await field('Photo end', 4); await field('Entrance duration', .8); await field('Exit duration', .8); await field('Photo easing', 'linear');
+  for (const preset of ['none', 'fade', 'slide-up', 'slide-down', 'slide-left', 'slide-right', 'pop']) {
+    await field('Photo entrance', preset); await field('Photo exit', preset); await seek(6); const entering = await state(1); await seek(110); const exiting = await state(1);
+    assert.equal(entering.phase, preset === 'none' ? 'hold' : 'enter'); assert.equal(exiting.phase, preset === 'none' ? 'hold' : 'exit');
+    if (preset !== 'none') { assert.ok(entering.opacity > 0 && entering.opacity < 1); assert.ok(exiting.opacity > 0 && exiting.opacity < 1); }
+    if (preset.startsWith('slide')) assert.notEqual(entering.transform, exiting.transform, `${preset} entrance and exit travel in their intended directions`);
+    if (preset === 'pop') assert.match(entering.transform, /scale\(0\./);
+    await seek(120); assert.equal((await state(1)).opacity, 0, 'Layer is hidden exactly at its end frame');
+  }
+  await field('Photo entrance', 'slide-left'); await seek(6); const linear = (await state(1)).transform; await field('Photo easing', 'ease-out'); assert.notEqual((await state(1)).transform, linear);
+  const short = (await state(1)).transform; await field('Travel distance', 300); assert.notEqual((await state(1)).transform, short);
+  await page.$eval('[aria-label="Local photo file"]', node => node.value = ''); const upload = await page.$('[aria-label="Local photo file"]'); await upload.uploadFile(`${directory}/red.png`);
+  await page.waitForFunction(() => document.querySelector('[data-photo-layer="photo-1"] img').src.startsWith('blob:') && document.querySelector('[data-photo-layer="photo-1"] img').complete); const red = (await state(1)).source;
+  await page.click('.clip-motion-layer-picker>button:nth-child(2)'); await upload.uploadFile(`${directory}/blue.png`); await page.waitForFunction(() => document.querySelector('[data-photo-layer="photo-2"] img').src.startsWith('blob:') && document.querySelector('[data-photo-layer="photo-2"] img').complete);
+  assert.notEqual((await state(2)).source, red, 'Two local photo files remain independent');
+  await field('Photo delay', 1.5); await field('Photo position X', 78); await field('Photo width', 31); assert.equal((await state(2)).left, '78%'); assert.equal((await state(2)).width, '31%');
+  assert.equal(await page.$eval('[data-timing-layer="photo-2"] .clip-motion-timing-bar', node => node.style.left), '18.75%');
+  await page.click('.rmlab-categories>button:first-child'); await page.click('.rmlab-categories>button:nth-child(3)'); await flush(); assert.equal((await state(1)).source, red, 'Switching experiments retains local photo state');
+  await upload.uploadFile(`${directory}/invalid.txt`); await page.waitForFunction(() => document.querySelector('.clip-motion-notice')?.textContent.includes('Choose a PNG')); assert.ok((await state(2)).source.startsWith('blob:'));
+  await seek(60); await page.screenshot({ path: `${directory}/two-photos.png`, fullPage: true });
+  await (await page.$('[aria-label="Local background video file"]')).uploadFile(`${directory}/background.mp4`); await page.waitForFunction(() => document.querySelector('.clip-motion-background')?.readyState >= 2);
+  await seek(15); await page.waitForFunction(() => Math.abs(document.querySelector('.clip-motion-background').currentTime - .5) < .015);
+  await seek(45); await page.waitForFunction(() => Math.abs(document.querySelector('.clip-motion-background').currentTime - 1.5) < .015);
+  await seek(15); await page.waitForFunction(() => Math.abs(document.querySelector('.clip-motion-background').currentTime - .5) < .015);
+  await seek(180); await page.waitForFunction(() => document.querySelector('.clip-motion-background').currentTime > 1.95); assert.ok(await page.$eval('.clip-motion-background', node => node.paused), 'Local video has no independent playback clock');
+  const backgroundUrl = await page.$eval('.clip-motion-background', node => node.src); await page.click('[aria-label="Remove local background video"]'); await flush(); assert.ok(await page.evaluate(url => window.revoked.includes(url), backgroundUrl));
+  await page.click('[aria-label="Reset photo animations"]'); await flush(); assert.equal(await page.$eval('[aria-label="Photo delay"]', node => Number(node.value)), 1.2); assert.equal((await state(1)).source, red);
+  await field('Photo preview duration', 3); await field('Photo frame rate', 60); await seek(179); assert.equal((await state(2)).phase, 'exit');
+  await field('Photo canvas format', 'portrait'); assert.equal(await page.$eval('.clip-motion-artboard', node => node.style.height), '960px');
+  await page.evaluate(() => window.fixture.setEmbedded(true)); await page.setViewport({ width: 320, height: 1000 }); await flush();
+  assert.ok(await page.$eval('.rmlab', node => node.scrollWidth <= node.clientWidth + 1), 'All photo controls fit the 320px inspector');
+  await page.screenshot({ path: `${directory}/embedded.png`, fullPage: true });
+  assert.ok(await page.evaluate(() => !JSON.stringify({ ...localStorage }).includes('blob:')), 'Blob URLs never enter template storage');
+  await page.evaluate(() => window.fixture.setQuery('photo')); await flush(); assert.equal(await page.$$eval('.rmlab-categories>button', nodes => nodes.length), 1);
+  assert.equal(requests.filter(url => /api\/sam|segment-video|convex|anthropic/.test(url)).length, 0);
+  assert.deepEqual(errors, []);
+  console.log('PASS: six-area integration + deep link; two independent local photo layers; every entrance/exit preset; timing/easing/distance/placement; exact backwards pixels; play/pause/step; local video exact seek and end hold; URL cleanup; no template blobs; portrait and 320px controls; zero provider calls.');
+} finally { await browser.close(); await fonts.close(); }

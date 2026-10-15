@@ -6,6 +6,7 @@ import { ColorControl } from '@/components/editor/color-control';
 import { PrimaryButton } from '@/components/workspace/primary-button';
 import { EXPRESSIVE_TEXT_PRESETS, REMOTION_TEXT_DESCRIPTIONS, REMOTION_TEXT_PRESETS } from '@/lib/editor/remotion-text';
 import { SubjectToolsLab } from './subject-tools-lab';
+import { ClipMotionLab } from './clip-motion-lab';
 import { RemotionLabScene } from './remotion-lab-scenes';
 import { isLabExtraTextPreset, LAB_EXTRA_TEXT_PRESETS, LAB_TEXT_DESCRIPTIONS, LAB_TEXT_LABELS, type LabTextPreset } from './remotion-lab-text-presets';
 import { alignLabItems, DEFAULT_LAB_CONFIG, LAB_CATEGORIES, LAB_SCENES, LAB_TEMPLATES, labTemplateFile, parseLabConfig, parseLabFile, retimeWords, type LabCategory, type LabConfig, type LabItem, type LabTemplate, type LabWord } from './remotion-lab-model';
@@ -166,6 +167,7 @@ function Templates({ saved, onApply, onDelete, onSave, onImport, onExport }: { s
 export function RemotionDevTests({ embedded = false, query = '' }: { embedded?: boolean; query?: string }) {
   const id = useId();
   const [category, setCategory] = useState<LabCategory>('explainer');
+  const [clipMotionVisited, setClipMotionVisited] = useState(false);
   const [config, setConfig] = useState<LabConfig>(() => cloneConfig(DEFAULT_LAB_CONFIG));
   const [frame, setFrame] = useState(60);
   const frameRef = useRef(frame);
@@ -183,6 +185,7 @@ export function RemotionDevTests({ embedded = false, query = '' }: { embedded?: 
   const categories = LAB_CATEGORIES.filter(item => !search || `${item.label} ${item.description} ${item.id === 'explainer' ? 'cards diagrams arrows charts counters speech' : ''}`.toLocaleLowerCase().includes(search));
   const visibleCategory = categories.some(item => item.id === category) ? category : categories[0]?.id;
   const activeCategory = LAB_CATEGORIES.find(item => item.id === visibleCategory) ?? currentCategory;
+  useEffect(() => { if (visibleCategory === 'clip-motion') setClipMotionVisited(true); }, [visibleCategory]);
   const visualConfig = visibleCategory === 'typography' ? { ...config, scene: 'typography' as const } : config;
   const totalFrames = Math.round(config.duration * config.fps);
 
@@ -254,16 +257,18 @@ export function RemotionDevTests({ embedded = false, query = '' }: { embedded?: 
     setPlaying(false); setAudio({ name: file.name, url: URL.createObjectURL(file) });
     setNotice('Local voiceover added. Edit the sample word times to match your audio; the preview uses the audio clock.');
   }
+  useEffect(() => { if (window.location.hash === '#clip-motion') setCategory('clip-motion'); }, []);
   const tabs = [{ id: 'content', label: 'Content' }, { id: 'speech', label: 'Speech cues' }, { id: 'style', label: 'Style' }, { id: 'motion', label: 'Motion' }] as const;
 
   return <section className={`rmlab ${embedded ? 'rmlab-embedded' : 'rmlab-workspace'}`} aria-label="Remotion development lab">
     {!embedded ? <header className="rmlab-app-header"><a href="/editor/demo" className="rmlab-back"><ArrowLeft size={15}/>Back to editor</a><a href="/editor/demo" className="rmlab-wordmark">revline<span>®</span></a><span className="rmlab-dev-badge"><FlaskConical size={12}/>DEVELOPMENT</span></header> : null}
     <div className="rmlab-shell">
-      <header className="rmlab-heading"><div><span className="rmlab-kicker"><span className="rmlab-live-dot"/>REMOTION / DEV TESTS</span><h1>Ideas, in motion<span>.</span></h1>{!embedded ? <p>Five ways to make the story easier to see. Play, edit, and find your style.</p> : <p>Try five motion tools. Every preview is editable.</p>}</div>{embedded ? <a className="rmlab-expand" href="/remotion-dev-tests" target="_blank" rel="noopener noreferrer" title="Open full Remotion playground"><ExternalLink size={15}/><span>Full lab</span></a> : <span className="rmlab-heading-note">AN EXPLORATION SPACE<br/>FOR YOUR NEXT GREAT EDIT</span>}</header>
+      <header className="rmlab-heading"><div><span className="rmlab-kicker"><span className="rmlab-live-dot"/>REMOTION / DEV TESTS</span><h1>Ideas, in motion<span>.</span></h1>{!embedded ? <p>Six ways to make the story easier to see. Play, edit, and find your style.</p> : <p>Try six motion tools. Every preview is editable.</p>}</div>{embedded ? <a className="rmlab-expand" href="/remotion-dev-tests" target="_blank" rel="noopener noreferrer" title="Open full Remotion playground"><ExternalLink size={15}/><span>Full lab</span></a> : <span className="rmlab-heading-note">AN EXPLORATION SPACE<br/>FOR YOUR NEXT GREAT EDIT</span>}</header>
       <nav className="rmlab-categories" aria-label="Motion experiments">{categories.map((item, index) => <button type="button" key={item.id} aria-pressed={visibleCategory === item.id} onClick={() => selectCategory(item.id)}><span>{String(LAB_CATEGORIES.findIndex(value => value.id === item.id) + 1).padStart(2, '0')}</span>{item.label}{!embedded && index === 0 ? <i>START HERE</i> : null}</button>)}</nav>
       {!visibleCategory ? <p className="rmlab-no-results">No motion experiments match “{query}”. Try cards, tracking, typography or templates.</p> : <>
-        <div className="rmlab-section-heading"><div><h2>{activeCategory.label}{visibleCategory === 'explainer' ? <span>RECOMMENDED</span> : null}</h2><p>{activeCategory.description}</p></div>{!embedded ? <span className="rmlab-section-count">EXPERIMENT {String(LAB_CATEGORIES.findIndex(value => value.id === visibleCategory) + 1).padStart(2, '0')} / 05</span> : null}</div>
-        {visibleCategory === 'tracking' || visibleCategory === 'masking' ? <SubjectToolsLab mode={visibleCategory}/> : <div className="rmlab-editor-grid">
+        <div className="rmlab-section-heading"><div><h2>{activeCategory.label}{visibleCategory === 'explainer' ? <span>RECOMMENDED</span> : null}</h2><p>{activeCategory.description}</p></div>{!embedded ? <span className="rmlab-section-count">EXPERIMENT {String(LAB_CATEGORIES.findIndex(value => value.id === visibleCategory) + 1).padStart(2, '0')} / 06</span> : null}</div>
+        {clipMotionVisited || visibleCategory === 'clip-motion' ? <div hidden={visibleCategory !== 'clip-motion'}><ClipMotionLab active={visibleCategory === 'clip-motion'}/></div> : null}
+        {visibleCategory === 'clip-motion' ? null : visibleCategory === 'tracking' || visibleCategory === 'masking' ? <SubjectToolsLab mode={visibleCategory}/> : <div className="rmlab-editor-grid">
           <div className="rmlab-preview-column">
             <div className="rmlab-preview-toolbar"><span><i/>{visualConfig.scene === 'typography' ? LAB_TEXT_LABELS[config.textPreset] : LAB_SCENES.find(scene => scene.id === config.scene)?.label ?? 'Composition'}</span><span>{config.aspect === 'portrait' ? '540 × 960' : '960 × 540'} · {config.fps} fps</span></div>
             <div className={`rmlab-stage-wrap ${config.aspect === 'portrait' ? 'rmlab-stage-portrait' : ''}`}><Preview config={visualConfig} frame={frame}/></div>
