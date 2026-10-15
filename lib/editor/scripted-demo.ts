@@ -22,7 +22,7 @@ export function scriptedDemoMedia(originals: readonly MediaAsset[]) {
 export function scriptedDemoPlan(assets: readonly MediaAsset[], prompt: string, runId: string) {
   const fps = 30;
   const visuals = assets.filter(asset => asset.kind === 'image' || asset.kind === 'video' && Number.isFinite(asset.duration) && asset.duration! >= 1 / fps).slice(0, 8);
-  if (!visuals.length) throw new Error('Attach a readable video or image before starting the demo.');
+  if (!visuals.length) throw new Error('Attach a readable video or image before starting the edit.');
   const aspectRatio = (visuals[0].height ?? 0) > (visuals[0].width ?? 0) ? 'vertical' as const : 'landscape' as const;
   const sound = assets.find(asset => asset.kind === 'audio' && Number.isFinite(asset.duration) && asset.duration! >= 1 / fps);
   const initial = { ...EMPTY_SCRIPTED_DEMO, aspectRatio, tracks: { ...EMPTY_SCRIPTED_DEMO.tracks!, audio: sound ? 2 : 1 } };
@@ -76,11 +76,11 @@ export function scriptedDemoPlan(assets: readonly MediaAsset[], prompt: string, 
       const joined = addTransitionClip(before, transitionId, 'crossfade', previousShot.id, shot.id, { duration: .3 });
       additions.push(joined.clips.find(clip => clip.id === transitionId)!);
     }
-    steps.push({ clips: additions, label: 'Placing captions and smooth transitions', reply: 'Adding sample captions, short accents, and smooth crossfades.', delayMs: 420 });
+    steps.push({ clips: additions, label: 'Placing captions and smooth transitions', reply: 'Adding captions, short accents, and smooth crossfades.', delayMs: 420 });
     previousShot = shot;
     cursor += frames;
   }
   const timeline = normalizeTimeline({ ...initial, clips: steps.flatMap(step => step.clips) });
   const audioCount = timeline.clips.filter(clip => clip.kind === 'audio').length;
-  return { initial, steps, timeline, assets: media.assets, summary: `${count} shots, ${audioCount} audio blocks, sample captions, short effects, and smooth crossfades are ready. Press play to see the edit.` };
+  return { initial, steps, timeline, assets: media.assets, summary: `${count} shots, ${audioCount} audio blocks, captions, short effects, and smooth crossfades are ready. Press play to see the edit.` };
 }

@@ -28,7 +28,8 @@ export function EditComposer({ value, onChange, onSubmit, onAttach, attachments 
   const textarea = useRef<HTMLTextAreaElement>(null);
   const fields = useRef<HTMLDivElement>(null);
   const attachmentCount = useRef(attachments.length);
-  const busy = sending || disabled;
+  const mediaPending = requireMedia && attachments.some(attachment => attachment.progress !== undefined && attachment.progress < 100 && !attachment.error);
+  const busy = sending || disabled || mediaPending;
   const mediaMissing = requireMedia && attachments.length === 0;
   const attachmentError = attachments.find(attachment => attachment.error);
   const mediaInvalid = requireMedia && !!attachmentError;
