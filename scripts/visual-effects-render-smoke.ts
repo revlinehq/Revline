@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import puppeteer from 'puppeteer';
 import { generateComposition } from '../lib/editor/composition';
-import { DEFAULT_COLOR_GRADE, DEFAULT_INVERT, DEFAULT_GLITCH, DEFAULT_ZOOM_BLUR, DEFAULT_LENS_DISTORTION, DEFAULT_FILM_OVERLAY, DEFAULT_SOFT_BLUR } from '../lib/editor/visual-effects';
+import { DEFAULT_COLOR_GRADE, DEFAULT_INVERT, DEFAULT_GLITCH, DEFAULT_ZOOM_BLUR, DEFAULT_LENS_DISTORTION, DEFAULT_FILM_OVERLAY, DEFAULT_SOFT_BLUR, DEFAULT_FRAME_DISTORTION } from '../lib/editor/visual-effects';
 import type { Timeline } from '../lib/editor/types';
 import { runRenderWorker } from '../lib/server/render-worker';
 
@@ -28,7 +28,7 @@ async function main() {
     await copyFile('public/vendor/visual-effects.js', join(directory,'visual-effects.js'));
     await copyFile('public/vendor/gsap.min.js', join(directory,'gsap.min.js'));
     await copyFile('public/fonts/space-grotesk-latin.woff2', join(directory,'space-grotesk-latin.woff2'));
-    const settings = { softBlur:{...DEFAULT_SOFT_BLUR,enabled:true,amount:35}, lensDistortion:{...DEFAULT_LENS_DISTORTION,enabled:true,amount:.45,fringing:5},filmOverlay:{...DEFAULT_FILM_OVERLAY,enabled:true,amount:1,grain:.8,dust:.8,vignette:.7,warmth:.5},invert: { ...DEFAULT_INVERT, enabled: true }, colorGrade: { ...DEFAULT_COLOR_GRADE, enabled: true, exposure: -.5, saturation: .55, temperature: 40 }, zoomBlur: { ...DEFAULT_ZOOM_BLUR, enabled: true, amount: .45 }, glitch: { ...DEFAULT_GLITCH, enabled: true, intensity: .85, blockSize: 65, rgbSplit: 35 } };
+    const settings = { frameDistortion:{...DEFAULT_FRAME_DISTORTION,enabled:true,horizontal:.5,vertical:.25,skew:.2}, softBlur:{...DEFAULT_SOFT_BLUR,enabled:true,amount:35}, lensDistortion:{...DEFAULT_LENS_DISTORTION,enabled:true,amount:.45,fringing:5},filmOverlay:{...DEFAULT_FILM_OVERLAY,enabled:true,amount:1,grain:.8,dust:.8,vignette:.7,warmth:.5},invert: { ...DEFAULT_INVERT, enabled: true }, colorGrade: { ...DEFAULT_COLOR_GRADE, enabled: true, exposure: -.5, saturation: .55, temperature: 40 }, zoomBlur: { ...DEFAULT_ZOOM_BLUR, enabled: true, amount: .45 }, glitch: { ...DEFAULT_GLITCH, enabled: true, intensity: .85, blockSize: 65, rgbSplit: 35 } };
     const renderSettings = settings;
     const timeline: Timeline = { fps: 24, aspectRatio: 'landscape', tracks: { visual: 1, overlay: 0, audio: 0 }, clips: [{ id: 'video', kind: 'video', assetId: 'source', start: 0, sourceStart: 0, duration: 1, track: 1, volume: 0, ...renderSettings }] };
     await writeFile(join(directory,'index.html'), generateComposition(timeline, [{ _id: 'source', kind: 'video', fileName: 'source.mp4', url: './source.mp4', width: 320, height: 180 }], { resolution: 720, visualEffectsUrl: './visual-effects.js', gsapUrl: './gsap.min.js', fontUrl: './space-grotesk-latin.woff2' }));
@@ -42,7 +42,7 @@ async function main() {
     const readPixels = () => page.evaluate(() => {
       const canvas = document.querySelector<HTMLCanvasElement>('.visual-effect-output')!;
       const scaled = document.createElement('canvas'); scaled.width = 32; scaled.height = 18;
-      const ctx = scaled.getContext('2d')!; ctx.imageSmoothingQuality = 'high'; ctx.drawImage(canvas, 0, 0, 32, 18);
+      const ctx = scaled.getContext('2d')!; ctx.fillStyle='#000';ctx.fillRect(0,0,32,18); ctx.imageSmoothingQuality = 'high'; ctx.drawImage(canvas, 0, 0, 32, 18);
       return Array.from(ctx.getImageData(0, 0, 32, 18).data).filter((_, i) => i % 4 !== 3);
     });
     const update = async (effects: object) => { await page.evaluate(effects => { (window as any).__revlineEffects.set('clip-0', effects); }, effects); };
@@ -50,11 +50,13 @@ async function main() {
     await update(neutral);
     const baseline = await readPixels();
     const distance = (a: number[], b: number[]) => a.reduce((sum, value, i) => sum + Math.abs(value - b[i]), 0) / a.length;
-    for (const key of ['colorGrade','zoomBlur','glitch','invert','lensDistortion','filmOverlay','softBlur'] as const) {
+    for (const key of ['colorGrade','zoomBlur','glitch','invert','lensDistortion','filmOverlay','softBlur','frameDistortion'] as const) {
       await update({ [key]: settings[key] });
       const difference=distance(baseline, await readPixels());
       assert.ok(difference > (key==='softBlur'? .5 : 5), `${key} must actually change pixels (difference ${difference.toFixed(2)})`);
     }
+    await update({frameDistortion:settings.frameDistortion});
+    assert.equal(await page.evaluate(()=>{const source=document.querySelector<HTMLCanvasElement>('.visual-effect-output')!,c=document.createElement('canvas');c.width=source.width;c.height=source.height;const ctx=c.getContext('2d')!;ctx.drawImage(source,0,0);return ctx.getImageData(0,0,1,1).data[3];}),0,'Perspective leaves unused corners transparent for lower layers');
     await update({ invert: settings.invert });
     const negative = await readPixels();
     assert.ok(distance(negative, baseline.map(value => 255 - value)) < 2, 'Full inversion must produce actual negative RGB colors');
@@ -82,7 +84,7 @@ async function main() {
     const error = distance(preview, exported);
     assert.ok(error < 12, `Preview/export pixel mismatch: mean error ${error.toFixed(2)}`);
     assert.ok(distance(baseline, exported) > 5, 'Export must include effects');
-    console.log(`PASS: real MP4 lens distortion, film overlay, color, radial zoom blur, deterministic RGB/block glitch and negative inversion; preview/export mean pixel error ${error.toFixed(2)}, one decoder and disabled canvas cleanup.`);
+    console.log(`PASS: real MP4 perspective/skew, lens distortion, film overlay, color, radial zoom blur, deterministic RGB/block glitch and negative inversion; preview/export mean pixel error ${error.toFixed(2)}, one decoder and disabled canvas cleanup.`);
   } finally { await browser.close(); server.close(); await rm(directory, { recursive:true,force:true }); }
 }
 main().catch(error => { console.error(error); process.exitCode=1; });

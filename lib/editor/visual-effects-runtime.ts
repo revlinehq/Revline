@@ -1,6 +1,7 @@
 import type { VisualEffects } from './visual-effects';
 import { trackOf, type Clip } from './types';
 import { adjustmentFrame } from './adjustment-layers';
+import { FRAME_DISTORTION_GLSL, frameDistortionFit } from './frame-distortion';
 import { LENS_FILM_GLSL } from './lens-film-shader';
 import { NEON_EDGES_GLSL } from './neon-edges-shader';
 import { DEFAULT_NEON_EDGES } from './neon-edges';
@@ -48,6 +49,7 @@ float hash(vec2 p){float n=mod(p.x*73.0+p.y*151.0+19.0,251.0);n=mod(n*n*17.0+n*1
 vec4 sampleSource(vec2 p){return texture2D(source,clamp(p,vec2(0.0),vec2(1.0)));}
 ${NEON_EDGES_GLSL}
 ${LENS_FILM_GLSL}
+${FRAME_DISTORTION_GLSL}
 vec3 orderedColor(vec3 rgb,float steps,float threshold){
   if(ditherPalette>0.5){
     float tone=clamp(floor(dot(rgb,vec3(0.2126,0.7152,0.0722))*steps+threshold)/steps,0.0,1.0);
@@ -62,7 +64,7 @@ vec4 radial(vec2 p){
   return sum/weight;
 }
 void main(){
-  vec2 p=lensPosition(uv);float split=0.0;
+  vec2 plane=perspectivePosition(uv),p=lensPosition(plane);float split=0.0;
   if(glitch.x>0.0){
     float band=floor((1.0-p.y)*size.y/max(1.0,glitch.y));
     float seed=floor(frame/2.0);float gate=step(1.0-glitch.x*0.8,hash(vec2(band,seed)));
@@ -109,12 +111,12 @@ void main(){
     rgb=mix(rgb,ordered,dither.x);
   }
   rgb=filmOverlay(uv,rgb);
-  gl_FragColor=vec4(rgb,c.a);
+  gl_FragColor=vec4(rgb,c.a*perspectiveAlpha(plane));
 }`;
 
   function enabled(effects: VisualEffects) {
     const c = effects.colorGrade, z = effects.zoomBlur, g = effects.glitch;
-    return !!(c?.enabled && (c.exposure || c.contrast !== 1 || c.saturation !== 1 || c.temperature || c.tint || c.vibrance) || z?.enabled && z.amount > 0 || g?.enabled && g.intensity > 0 || effects.invert?.enabled && effects.invert.amount > 0 || effects.dither?.enabled && effects.dither.amount > 0 || effects.neonEdges?.enabled && effects.neonEdges.amount > 0 || effects.lensDistortion?.enabled && (effects.lensDistortion.amount !== 0 || effects.lensDistortion.fringing > 0) || effects.filmOverlay?.enabled && effects.filmOverlay.amount > 0 || effects.softBlur?.enabled && effects.softBlur.amount > 0);
+    return !!(c?.enabled && (c.exposure || c.contrast !== 1 || c.saturation !== 1 || c.temperature || c.tint || c.vibrance) || z?.enabled && z.amount > 0 || g?.enabled && g.intensity > 0 || effects.invert?.enabled && effects.invert.amount > 0 || effects.dither?.enabled && effects.dither.amount > 0 || effects.neonEdges?.enabled && effects.neonEdges.amount > 0 || effects.lensDistortion?.enabled && (effects.lensDistortion.amount !== 0 || effects.lensDistortion.fringing > 0) || effects.filmOverlay?.enabled && effects.filmOverlay.amount > 0 || effects.softBlur?.enabled && effects.softBlur.amount > 0 || effects.frameDistortion?.enabled && (effects.frameDistortion.horizontal !== 0 || effects.frameDistortion.vertical !== 0 || effects.frameDistortion.skew !== 0));
   }
   function release(entry: Entry) {
     entry.source.removeAttribute('data-revline-effects');
@@ -181,7 +183,7 @@ void main(){
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
-    const uniforms = Object.fromEntries(['source','size','frame','softBlur','invert','grade','balance','zoom','glitch','dither','ditherPalette','ditherShadow','ditherHighlight','neon','neonColor','neonPixel','lens','lensFringing','film','filmTone','filmPixel'].map(name => [name, gl.getUniformLocation(program, name)]));
+    const uniforms = Object.fromEntries(['source','size','frame','softBlur','invert','grade','balance','zoom','glitch','dither','ditherPalette','ditherShadow','ditherHighlight','neon','neonColor','neonPixel','lens','lensFringing','film','filmTone','filmPixel','perspective','perspectiveFit'].map(name => [name, gl.getUniformLocation(program, name)]));
     Object.assign(entry, { canvas, gl, program, texture, buffer, uniforms });
     entry.source.parentElement!.appendChild(canvas);
   }
@@ -256,7 +258,7 @@ void main(){
       const color = (hex: string) => [1, 3, 5].map(index => parseInt(hex.slice(index, index + 2), 16) / 255);
       if(passes.length>1)preparePassTargets(entry);
       for(const [index,effects] of passes.entries()){
-        const c=effects.colorGrade,z=effects.zoomBlur,g=effects.glitch,d=effects.dither,n=effects.neonEdges,l=effects.lensDistortion,f=effects.filmOverlay,b=effects.softBlur;
+        const c=effects.colorGrade,z=effects.zoomBlur,g=effects.glitch,d=effects.dither,n=effects.neonEdges,l=effects.lensDistortion,f=effects.filmOverlay,b=effects.softBlur,p=effects.frameDistortion;
         gl.bindTexture(gl.TEXTURE_2D,index===0?entry.texture!:entry.passTextures![(index-1)%2]);
         if(index===passes.length-1)gl.bindFramebuffer(gl.FRAMEBUFFER,null);
         else{
@@ -264,6 +266,8 @@ void main(){
           gl.framebufferTexture2D(gl.FRAMEBUFFER,gl.COLOR_ATTACHMENT0,gl.TEXTURE_2D,entry.passTextures![index%2],0);
           if(gl.checkFramebufferStatus(gl.FRAMEBUFFER)!==gl.FRAMEBUFFER_COMPLETE)throw new Error('Visual effect intermediate target is unavailable.');
         }
+        gl.uniform4f(u.perspective,p?.horizontal??0,p?.vertical??0,p?.skew??0,p?.enabled?1:0);
+        gl.uniform1f(u.perspectiveFit,p?.enabled?frameDistortionFit(p):1);
         gl.uniform4f(u.lens,l?.enabled?l.amount:0,l?.centerX??.5,1-(l?.centerY??.5),0);
         gl.uniform1f(u.lensFringing,l?.enabled?l.fringing*pixelScale:0);
         gl.uniform4f(u.film,f?.enabled?f.amount:0,f?.grain??0,f?.dust??0,f?.scratches??0);

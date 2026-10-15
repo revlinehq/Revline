@@ -18,6 +18,7 @@ import { TEXT_LOOKS } from '../lib/editor/text-looks';
 import { createEditorStore } from '../lib/editor/store';
 import { textLayerFrame } from '../lib/editor/text-layers';
 import {DEFAULT_NEON_EDGES} from '../lib/editor/neon-edges';
+import { DEFAULT_FRAME_DISTORTION, DEFAULT_LENS_DISTORTION } from '../lib/editor/visual-effects';
 import { parseAutomation,sampleAutomationLane } from '@hyperframes/core/audio-automation';
 import { fadeGain } from '@hyperframes/core/audio-fade';
 import type { ZodType } from 'zod';
@@ -330,6 +331,35 @@ test('retired frame shrink is unavailable to the agent; clip visual fades preser
   expect(editorCapabilities().timedFX.some(item=>String(item.preset)==='frame-shrink')).toBe(false);
   expect(editorCapabilities().effects.flatMap(group=>group.items).some(item=>item.name==='Frame shrink')).toBe(false);
   expect(editorCapabilities().visual.fades.description).toContain('independently');
+  expect(result.calls).not.toContain('assistant:requestAnalysis');await assertUndo(result);
+});
+
+test.each(['from','to'])('frame distortion agent controls merge, bypass, reset and remove on %s without changing other settings',async clipId=>{
+  const seed:Timeline={...initial,clips:initial.clips.map(clip=>clip.id===clipId?{...clip,lensDistortion:{...DEFAULT_LENS_DISTORTION,enabled:true}}:clip)};
+  const result=await run(async tools=>{
+    expect(tools.setVisualEffects.description).toContain('horizontal shear');
+    expect(tools.setVisualEffects.description).toContain('unused corners transparent');
+    for(const control of ['horizontal','vertical','skew'])for(const value of [-1.01,1.01,NaN,Infinity]){
+      expect(()=>tools.setVisualEffects.inputSchema.parse({clipId,frameDistortion:{[control]:value}})).toThrow();
+    }
+    await execute(tools,'setVisualEffects',{clipId,frameDistortion:{enabled:true,horizontal:.4}});
+    let current=await execute(tools,'inspectTimeline',{}) as{timeline:Timeline};
+    expect(current.timeline.clips.find(clip=>clip.id===clipId)!.frameDistortion).toEqual({...DEFAULT_FRAME_DISTORTION,enabled:true,horizontal:.4});
+    await execute(tools,'setVisualEffects',{clipId,frameDistortion:{vertical:-.3,skew:.2}});
+    await execute(tools,'setVisualEffects',{clipId,frameDistortion:{enabled:false}});
+    current=await execute(tools,'inspectTimeline',{}) as{timeline:Timeline};
+    expect(current.timeline.clips.find(clip=>clip.id===clipId)!.frameDistortion).toEqual({enabled:false,horizontal:.4,vertical:-.3,skew:.2});
+    await execute(tools,'resetVisualEffect',{clipId,effect:'frameDistortion',action:'reset'});
+    current=await execute(tools,'inspectTimeline',{}) as{timeline:Timeline};
+    expect(current.timeline.clips.find(clip=>clip.id===clipId)!.frameDistortion).toEqual(DEFAULT_FRAME_DISTORTION);
+    await execute(tools,'setVisualEffects',{clipId,frameDistortion:{enabled:true,skew:-.5}});
+    await execute(tools,'resetVisualEffect',{clipId,effect:'frameDistortion',action:'reset'});
+    current=await execute(tools,'inspectTimeline',{}) as{timeline:Timeline};
+    expect(current.timeline.clips.find(clip=>clip.id===clipId)!.frameDistortion).toEqual({...DEFAULT_FRAME_DISTORTION,enabled:true});
+    await execute(tools,'resetVisualEffect',{clipId,effect:'frameDistortion',action:'remove'});
+    for(const unsupported of ['audio','title'])await expect(execute(tools,'setVisualEffects',{clipId:unsupported,frameDistortion:{enabled:true}})).rejects.toThrow('video or image');
+  },seed,true);
+  expect(result.timeline.clips).toEqual(result.backend!.seed.clips.map(clip=>clip.id===clipId?{...clip,frameDistortion:undefined}:clip));
   expect(result.calls).not.toContain('assistant:requestAnalysis');await assertUndo(result);
 });
 

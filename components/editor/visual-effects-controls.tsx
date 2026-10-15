@@ -36,7 +36,7 @@ const decimal = (value: number) => value.toFixed(2);
 const integer = (value: number) => String(Math.round(value));
 const percent = (value: number) => `${Math.round(value * 100)}%`;
 const pixels = (value: number) => `${Math.round(value)} px`;
-const effectNames = { colorGrade: 'Color', zoomBlur: 'Zoom blur', glitch: 'Glitch', invert: 'Invert colors', dither: 'Dither', neonEdges: 'Neon edges', lensDistortion: 'Lens distortion', filmOverlay: 'Film overlay' } as const;
+const effectNames = { colorGrade: 'Color', zoomBlur: 'Zoom blur', glitch: 'Glitch', invert: 'Invert colors', dither: 'Dither', neonEdges: 'Neon edges', lensDistortion: 'Lens distortion', filmOverlay: 'Film overlay', frameDistortion: 'Frame distortion' } as const;
 
 export function AppliedVisualEffects({ clip, onSelect, onAdd }: { clip: Clip; onSelect: (effect: EffectKey) => void; onAdd: () => void }) {
   const applied = (Object.keys(effectNames) as EffectKey[]).filter(key => clip[key]);
@@ -80,6 +80,7 @@ export function VisualEffectsControls({ clip, onChange, onPreview, onPlaybackRat
   const neon = !onlyEffect || onlyEffect === 'neonEdges' ? clip.neonEdges : undefined;
   const lens = !onlyEffect || onlyEffect === 'lensDistortion' ? clip.lensDistortion : undefined;
   const film = !onlyEffect || onlyEffect === 'filmOverlay' ? clip.filmOverlay : undefined;
+  const frame = !onlyEffect || onlyEffect === 'frameDistortion' ? clip.frameDistortion : undefined;
   const missing = (Object.keys(effectNames) as EffectKey[]).filter(key => !clip[key]);
   function cardProps(key: EffectKey) {
     return {
@@ -110,13 +111,16 @@ export function VisualEffectsControls({ clip, onChange, onPreview, onPlaybackRat
     {neon && <EffectCard {...cardProps('neonEdges')}><fieldset className="effect-colors" disabled={!neon.enabled}><label>Edge color<ColorControl label="Neon edge color" value={neon.color} onCommit={color => onChange({ neonEdges: { ...neon, color } })}/></label></fieldset>{([
       ['amount', 'Strength'], ['detail', 'Edge detail'], ['threshold', 'Threshold'], ['glow', 'Glow'],
     ] as const).map(([key, label]) => <EffectSlider key={key} label={label} value={neon[key]} bounds={NEON_EDGE_LIMITS[key]} format={percent} disabled={!neon.enabled} onPreview={value => preview(value === null ? null : { neonEdges: { ...neon, [key]: value } })} onCommit={value => onChange({ neonEdges: { ...neon, [key]: value } })}/>)}</EffectCard>}
+    {frame && <EffectCard {...cardProps('frameDistortion')}>{([
+      ['horizontal','Horizontal tilt'],['vertical','Vertical tilt'],['skew','Skew'],
+    ] as const).map(([key,label])=><EffectSlider key={key} label={label} value={frame[key]} bounds={VISUAL_EFFECT_LIMITS.frameDistortion[key]} format={percent} disabled={!frame.enabled} onPreview={value=>preview(value===null?null:{frameDistortion:{...frame,[key]:value}})} onCommit={value=>onChange({frameDistortion:{...frame,[key]:value}})}/>)}</EffectCard>}
     {lens && <EffectCard {...cardProps('lensDistortion')}>{([
       ['amount','Bend',.01,percent],['centerX','Center X',.01,percent],['centerY','Center Y',.01,percent],['fringing','Color fringing',.1,pixels],
     ] as const).map(([key,label,step,format])=><EffectSlider key={key} label={label} value={lens[key]} bounds={VISUAL_EFFECT_LIMITS.lensDistortion[key]} step={step} format={format} disabled={!lens.enabled} onPreview={value=>preview(value===null?null:{lensDistortion:{...lens,[key]:value}})} onCommit={value=>onChange({lensDistortion:{...lens,[key]:value}})}/>)}</EffectCard>}
     {film && <EffectCard {...cardProps('filmOverlay')}>{([
       ['amount','Strength'],['grain','Grain'],['dust','Dust'],['scratches','Scratches'],['vignette','Vignette'],['flicker','Flicker'],['warmth','Warmth'],
     ] as const).map(([key,label])=><EffectSlider key={key} label={label} value={film[key]} bounds={VISUAL_EFFECT_LIMITS.filmOverlay[key]} format={percent} disabled={!film.enabled} onPreview={value=>preview(value===null?null:{filmOverlay:{...film,[key]:value}})} onCommit={value=>onChange({filmOverlay:{...film,[key]:value}})}/>)}</EffectCard>}
-    {!color && !blur && !glitch && !invert && !dither && !neon && !lens && !film && <p className="visual-effects-empty">Add an effect to this clip.</p>}
+    {!color && !blur && !glitch && !invert && !dither && !neon && !lens && !film && !frame && <p className="visual-effects-empty">Add an effect to this clip.</p>}
     {!onlyEffect && <DropdownMenu><DropdownMenuTrigger asChild><button type="button" className="visual-effects-add" disabled={!missing.length}><Plus size={13}/>Add effect</button></DropdownMenuTrigger><DropdownMenuContent className="visual-effects-menu" align="start">{missing.map(key => {
       return <DropdownMenuItem key={key} onSelect={() => onChange(visualEffectsPatch(clip, { [key]: { enabled: true } }))}><EffectIcon name={key} size={16}/>{effectNames[key]}</DropdownMenuItem>;
     })}</DropdownMenuContent></DropdownMenu>}

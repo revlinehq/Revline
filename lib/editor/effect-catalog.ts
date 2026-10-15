@@ -18,6 +18,7 @@ export const EFFECT_LIBRARY_CATALOG: readonly EffectLibraryEntry[] = [
   { id: 'invert', label: 'Invert colors', description: 'Turn colors into a negative', category: 'color', visual: 'invert' },
   { id: 'dither', label: 'Dither', description: 'Ordered dots and a reduced color palette', category: 'texture', visual: 'dither' },
   { id: 'neonEdges', label: 'Neon edges', description: 'Luminous colored outlines over darkened footage, with adjustable strength, detail, edge threshold and glow. Keeps the original source, timing and sound.', category: 'texture', visual: 'neonEdges' },
+  { id: 'frameDistortion', label: 'Frame distortion', description: 'Tilt the picture into perspective or skew it into a parallelogram. Keeps edges straight and unused corners transparent for layering.', category: 'motion', visual: 'frameDistortion' },
   { id: 'lensDistortion', label: 'Lens distortion', description: 'A curved wide-angle lens bend with adjustable strength, optical center and color fringing. Fills the frame without adding a border.', category: 'motion', visual: 'lensDistortion' },
   { id: 'filmOverlay', label: 'Film overlay', description: 'Animated film grain, dust and scratches, with adjustable vignette, flicker and warmth. Procedural, with no overlay download required.', category: 'texture', visual: 'filmOverlay' },
   { id: 'glitch', label: 'Digital glitch', description: 'Distort the selected footage', category: 'texture', visual: 'glitch' },

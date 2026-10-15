@@ -42,6 +42,7 @@ export const clipValidator = v.object({
   neonEdges:v.optional(v.object({enabled:v.boolean(),amount:v.number(),color:v.string(),detail:v.number(),threshold:v.number(),glow:v.number()})),
   softBlur:v.optional(v.object({enabled:v.boolean(),amount:v.number()})),
   lensDistortion:v.optional(v.object({enabled:v.boolean(),amount:v.number(),centerX:v.number(),centerY:v.number(),fringing:v.number()})),
+  frameDistortion:v.optional(v.object({enabled:v.boolean(),horizontal:v.number(),vertical:v.number(),skew:v.number()})),
   filmOverlay:v.optional(v.object({enabled:v.boolean(),amount:v.number(),grain:v.number(),dust:v.number(),scratches:v.number(),vignette:v.number(),flicker:v.number(),warmth:v.number()})),
   textTemplate: v.optional(textTemplateValidator),
   textStyle:v.optional(textStyleValidator),

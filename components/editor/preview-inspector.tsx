@@ -30,10 +30,19 @@ export function PreviewInspector({ clip, timeline, time = 0, audioClip, asset, a
   const [tab, setTab] = useState<'edit' | 'sources' | 'effects'>('sources');
   const [effectSelection, setEffectSelection] = useState<{clipId:string;key:LibraryVisualEffect} | null>(null);
   const onlyEffect = effectSelection && effectSelection.clipId === clip?.id && clip?.[effectSelection.key] ? effectSelection.key : undefined;
+  const removedEffect = !!effectSelection && effectSelection.clipId === clip?.id && !onlyEffect;
   const panel = useRef<HTMLElement>(null);
   const text = clip?.kind === 'caption' || clip?.kind === 'graphic';
   const visual = clip?.kind === 'video' || clip?.kind === 'image';
-  useEffect(() => setEffectSelection(null), [clip?.id]);
+  useEffect(() => {
+    setEffectSelection(null);
+    if (!clip) setTab('sources');
+  }, [clip?.id]);
+  useEffect(() => {
+    if (!removedEffect) return;
+    setEffectSelection(null);
+    setTab('sources');
+  }, [removedEffect]);
   useEffect(() => {
     if (!sourceRequest && !editRequest) return;
     if (sourceRequest > editRequest) setSection('media');
@@ -65,7 +74,7 @@ export function PreviewInspector({ clip, timeline, time = 0, audioClip, asset, a
     setTab('edit');
   }
   const effect = clip?.kind === 'effect';
-  const activeTab = text && tab === 'effects' ? 'edit' : (visual || effect) && tab === 'edit' ? 'effects' : tab;
+  const activeTab = !clip || removedEffect ? 'sources' : text && tab === 'effects' ? 'edit' : (visual || effect) && tab === 'edit' ? 'effects' : tab;
   const library = activeTab === 'sources';
   return <Tabs value={section} onValueChange={next => { setSection(next as 'tools' | 'media'); if (next === 'tools') { setTab('sources'); setEffectSelection(null); } }} asChild><aside ref={panel} className="preview-inspector" aria-label="Clip settings">
     <TabsList className="inspector-section-tabs" aria-label="Tools and media" onKeyDown={event => { if (event.key === 'Home') { setTab('sources'); setEffectSelection(null); } }}>{sections.map(item => <TabsTrigger key={item.value} id={item.id} aria-controls={item.panelId} value={item.value} onClick={() => { if (item.value === 'tools') { setTab('sources'); setEffectSelection(null); } }}>{item.icon}{item.label}</TabsTrigger>)}</TabsList>

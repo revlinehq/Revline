@@ -30,6 +30,7 @@ try{
   const add=async name=>{await page.click('.visual-effects-add');await page.locator('::-p-aria([name="'+name+'"][role="menuitem"])').click();await flush();};
   await add('Lens distortion');assert.ok(await page.$('[aria-label="Bend"]'));assert.ok(distance(baseline,await pixels())>3,'Lens bends the actual grid');
   await page.focus('input[aria-label="Bend"]');await page.keyboard.press('ArrowRight');await flush();assert.ok(await page.evaluate(()=>window.fixture.clip.lensDistortion.amount>.28));
+  await add('Frame distortion');assert.ok(await page.$('input[aria-label="Horizontal tilt"]'));assert.ok(await page.$('input[aria-label="Skew"]'));
   await add('Film overlay');assert.ok(await page.$('input[aria-label="Grain"]'));
   await page.evaluate(()=>{window.fixture.seek(.3);});await flush();const first=await pixels();
   await page.evaluate(()=>{window.fixture.seek(.8);});await flush();assert.ok(distance(first,await pixels())>.1,'Film texture animates even on a still image');
