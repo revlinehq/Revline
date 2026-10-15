@@ -193,15 +193,19 @@ export function layerDropTarget(pointerY:number,rows:{top:number;bottom:number;t
   const row=rows.find(row=>pointerY>=row.top&&pointerY<row.bottom);
   return row?{track:row.track,direction:pointerY<(row.top+row.bottom)/2?'above':'below'}:null;
 }
-/** Create rows in the adjacent group gaps, never inside or beyond another stack. */
+/** Group seams have a small insertion target even when the rows touch. */
 export function clipLayerDropTarget(pointerY:number,rows:{top:number;bottom:number;track:number;group:LayerGroup}[],group:LayerGroup):LayerDropTarget|null {
-  const target=rows.find(row=>pointerY>=row.top&&pointerY<row.bottom);
-  if(target&&target.group!==group)return null;
   const members=rows.filter(row=>row.group===group);
   if(!members.length)return null;
   const first=members[0],last=members[members.length-1];
   const previousBottom=Math.max(-Infinity,...rows.filter(row=>row.group!==group&&row.bottom<=first.top).map(row=>row.bottom));
   const nextTop=Math.min(Infinity,...rows.filter(row=>row.group!==group&&row.top>=last.bottom).map(row=>row.top));
+  // Compact rows leave no physical gap between FX, V and A stacks. Reserve
+  // the seam for a new row in the dragged clip's own group.
+  if(Number.isFinite(previousBottom)&&first.top-previousBottom<=12&&Math.abs(pointerY-first.top)<=6)return {edge:'above'};
+  if(Number.isFinite(nextTop)&&nextTop-last.bottom<=12&&Math.abs(pointerY-last.bottom)<=6)return {edge:'below'};
+  const target=rows.find(row=>pointerY>=row.top&&pointerY<row.bottom);
+  if(target&&target.group!==group)return null;
   if(pointerY<first.top&&pointerY<previousBottom)return null;
   if(pointerY>=last.bottom&&pointerY>=nextTop)return null;
   // Slightly missing a row should keep that row, not grow the stack.
