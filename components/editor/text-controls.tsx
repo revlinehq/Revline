@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type PointerEvent } from 'react';
 import { dimensions, type Clip, type MediaAsset, type Timeline } from '@/lib/editor/types';
 import { layerZIndex } from '@/lib/editor/composition';
 import { moveText, resizeText, snapTextMove, textPlacement, type TextPlacement } from '@/lib/editor/text-transforms';
@@ -10,9 +10,10 @@ import { isPreviewTextOccluded, visualClipAtPoint } from '@/lib/editor/preview-v
 import { RotateCw } from 'lucide-react';
 import { DEFAULT_TRANSFORM } from '@/lib/editor/types';
 import { compositionNode } from '@/lib/editor/composition-node';
+import { textFontFaceCss } from '@/lib/editor/text-fonts';
 import './visual-controls.css';
 
-type Bounds={id:string;left:number;top:number;width:number;height:number;z:number};
+type Bounds={id:string;left:number;top:number;width:number;height:number;z:number;editor:CSSProperties};
 type Gesture={pointer:number;target:HTMLElement;clip:Clip;initial:TextPlacement;current:TextPlacement;x:number;y:number;width:number;height:number;bounds:Bounds;corner?:VisualCorner;rotation?:{initial:number;current:number;angle:number;cx:number;cy:number}};
 type InlineEdit={id:string;original:string;draft:string};
 const corners=[['nw','top left'],['ne','top right'],['sw','bottom left'],['se','bottom right']] as const;
@@ -24,7 +25,7 @@ export function TextControls({timeline,assets,time,revision,selected,activeId,on
   timeline:Timeline;assets:MediaAsset[];time:number;revision:number;selected?:string;activeId?:string;onActivate:(id:string)=>void;getDocument:()=>Document|null;
   onSelect:(id:string)=>void;onCommit:(id:string,patch:Partial<Clip>)=>void;onEdit?:(id:string)=>void;
 }) {
-  const root=useRef<HTMLDivElement>(null),gesture=useRef<Gesture|null>(null);
+  const root=useRef<HTMLDivElement>(null),field=useRef<HTMLTextAreaElement>(null),gesture=useRef<Gesture|null>(null);
   const [bounds,setBounds]=useState<Bounds[]>([]),[guides,setGuides]=useState<VisualSnapLine[]>([]);
   const [editing,setEditing]=useState<InlineEdit|null>(null);
   const inlineEdit=useRef<InlineEdit|null>(null);
@@ -39,12 +40,19 @@ export function TextControls({timeline,assets,time,revision,selected,activeId,on
       const rect=node.getBoundingClientRect();
       const sourceRect=projectPreviewBounds(rect,canvas,dimensions(latest.current.timeline.aspectRatio));
       if(isPreviewTextOccluded(latest.current.timeline,latest.current.assets,latest.current.time,clip.id,sourceRect))return [];
-      return [{id:clip.id,...projectPreviewBounds(rect,canvas,layout),z:layerZIndex(clip,index)}];
+      const content=node.querySelector<HTMLElement>('.text-content')??node,contentRect=projectPreviewBounds(content.getBoundingClientRect(),canvas,layout),style=doc.defaultView!.getComputedStyle(content),scale=layout.width/composition.offsetWidth;
+      let matrix=new DOMMatrix();
+      for(let element:HTMLElement|null=content;element&&element!==composition;element=element.parentElement){const transform=doc.defaultView!.getComputedStyle(element).transform;if(transform!=='none')matrix=new DOMMatrix(transform).multiply(matrix);}
+      // The selection uses a painted bounding box. Editing needs the unrotated
+      // text layout and its real font size, projected into fitted preview pixels.
+      const editor:CSSProperties={left:contentRect.left+contentRect.width/2,top:contentRect.top+contentRect.height/2,width:(parseFloat(style.width)||content.offsetWidth)*scale,height:(parseFloat(style.height)||content.offsetHeight)*scale,transform:`translate(-50%,-50%) matrix(${matrix.a},${matrix.b},${matrix.c},${matrix.d},0,0)`,fontSize:parseFloat(style.fontSize)*scale,fontFamily:style.fontFamily,fontWeight:style.fontWeight,lineHeight:style.lineHeight==='normal'?'normal':`${parseFloat(style.lineHeight)*scale}px`,letterSpacing:style.letterSpacing==='normal'?'normal':`${parseFloat(style.letterSpacing)*scale}px`,textAlign:style.textAlign as CSSProperties['textAlign'],color:style.color,padding:[style.paddingTop,style.paddingRight,style.paddingBottom,style.paddingLeft].map(value=>`${parseFloat(value)*scale}px`).join(' ')};
+      return [{id:clip.id,...projectPreviewBounds(rect,canvas,layout),z:layerZIndex(clip,index),editor}];
     });
     setBounds(previous=>JSON.stringify(previous)===JSON.stringify(next)?previous:next);
   }
   useLayoutEffect(()=>{if(!gesture.current)measure();},[timeline,assets,time,revision,selected]);
   useEffect(()=>{const observer=new ResizeObserver(measure);if(root.current)observer.observe(root.current);const doc=getDocument();void doc?.fonts.ready.then(measure);return()=>observer.disconnect();},[revision]);
+  useLayoutEffect(()=>{const input=field.current,box=bounds.find(box=>box.id===editing?.id);if(!input||!box)return;input.style.height=`${box.editor.height}px`;if(editing?.draft!==editing?.original){input.style.height='0px';input.style.height=`${Math.max(Number(box.editor.height),input.scrollHeight)}px`;}},[editing,bounds]);
   function paint(clip:Clip,placement:TextPlacement){
     const index=latest.current.timeline.clips.findIndex(c=>c.id===clip.id),doc=latest.current.getDocument(),node=doc?compositionNode(doc,clip,index):null;if(!node)return;
     node.style.left=`${placement.x*100}%`;node.style.top=`${placement.y*100}%`;node.style.fontSize=`${placement.fontSize}px`;measure();
@@ -69,7 +77,9 @@ export function TextControls({timeline,assets,time,revision,selected,activeId,on
   function beginInline(clip:Clip){
     finish(true);finishInline();
     latest.current.onSelect(clip.id);latest.current.onActivate(clip.id);
-    const edit={id:clip.id,original:clip.text??'',draft:clip.text??''};inlineEdit.current=edit;setEditing(edit);
+    const edit={id:clip.id,original:clip.text??'',draft:clip.text??''};inlineEdit.current=edit;
+    const box=bounds.find(box=>box.id===clip.id),doc=root.current?.ownerDocument,show=()=>{if(inlineEdit.current===edit)setEditing(edit);};
+    if(doc&&box)void doc.fonts.load(`${box.editor.fontWeight} ${box.editor.fontSize}px ${box.editor.fontFamily}`).then(show,show);else show();
   }
   useEffect(()=>{
     const edit=inlineEdit.current;if(!edit)return;
@@ -113,9 +123,9 @@ export function TextControls({timeline,assets,time,revision,selected,activeId,on
     const result=!g.corner&&!event.shiftKey?snapTextMove(proposed,g.bounds,{width:g.width,height:g.height}):{placement:proposed,lines:[]};
     g.current=result.placement;paint(g.clip,g.current);setGuides(result.lines.map(line=>({...line,position:line.position/(line.axis==='x'?g.width:g.height)})));
   }
-  return <div ref={root} className="text-controls" data-testid="text-controls" style={{zIndex:'auto'}}>
+  return <div ref={root} className="text-controls" data-testid="text-controls" style={{zIndex:'auto'}}><style>{textFontFaceCss()}</style>
     {bounds.map(box=>{const clip=timeline.clips.find(c=>c.id===box.id);if(!clip)return null;
-      if(editing?.id===clip.id){const width=Math.min(root.current?.clientWidth??box.width,Math.max(120,box.width)),height=Math.min(root.current?.clientHeight??box.height,Math.max(44,box.height));return <textarea key={box.id} autoFocus aria-label="Edit text in preview" title="Enter to save · Shift+Enter for a new line · Escape to cancel" className="preview-inline-text" maxLength={2000} value={editing.draft} style={{left:Math.max(0,Math.min(box.left,(root.current?.clientWidth??box.width)-width)),top:Math.max(0,Math.min(box.top,(root.current?.clientHeight??box.height)-height)),width,height,zIndex:box.z,fontSize:clip.fontSize??(clip.kind==='caption'?52:92)}} onFocus={event=>event.currentTarget.select()} onPointerDown={event=>event.stopPropagation()} onDoubleClick={event=>event.stopPropagation()} onChange={event=>{const edit={...editing,draft:event.currentTarget.value};inlineEdit.current=edit;setEditing(edit);}} onBlur={()=>finishInline()} onKeyDown={event=>{
+      if(editing?.id===clip.id){return <textarea key={box.id} ref={field} autoFocus aria-label="Edit text in preview" title="Enter to save · Shift+Enter for a new line · Escape to cancel" className="preview-inline-text" maxLength={2000} value={editing.draft} style={{...box.editor,zIndex:box.z}} onFocus={event=>event.currentTarget.select()} onPointerDown={event=>event.stopPropagation()} onDoubleClick={event=>event.stopPropagation()} onChange={event=>{const edit={...editing,draft:event.currentTarget.value};inlineEdit.current=edit;setEditing(edit);}} onBlur={()=>finishInline()} onKeyDown={event=>{
         event.stopPropagation();if(event.nativeEvent.isComposing)return;
         if(event.key==='Escape'){event.preventDefault();finishInline(true);}else if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();finishInline();}
       }}/>;}
