@@ -7,7 +7,6 @@ import { remotionTextProps } from '@/lib/editor/remotion-text';
 import type { Clip } from '@/lib/editor/types';
 import cues from '@/lib/editor/hormozi-demo-captions.json';
 import { FEATURE_BEAT_SECONDS, FEATURE_MEDIA, FEATURE_MOMENTS, type FeatureMediaKind } from './features-media-config';
-import { AdditionalFeatureDemo } from './feature-effects-demos';
 
 const fps = 30, compositionWidth = 960;
 // A pulse per edit boundary illustrates the prepared grid; it is not measured audio.
@@ -21,10 +20,6 @@ const captionClips: Clip[] = cues.filter(cue => cue.start >= 2.5 && cue.start < 
 
 /** Only the visible tab mounts this player. Its media clock also drives product text. */
 export function FeatureMedia({ kind }: { kind: FeatureMediaKind }) {
-  return kind === 'transitions' || kind === 'effects' ? <AdditionalFeatureDemo key={kind} kind={kind}/> : <NativeFeatureMedia key={kind} kind={kind}/>;
-}
-
-function NativeFeatureMedia({ kind }: { kind: Exclude<FeatureMediaKind, 'transitions' | 'effects'> }) {
   const media = FEATURE_MEDIA[kind], video = useRef<HTMLVideoElement>(null), portrait = useRef<HTMLVideoElement>(null), surface = useRef<HTMLDivElement>(null);
   const [playing, setPlaying] = useState(true), [time, setTime] = useState(media.start), [scale, setScale] = useState(0);
   const playbackRate = kind === 'moments' ? 2 : 1;

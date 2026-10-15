@@ -31,26 +31,6 @@ async function autoplay(id,motion){
  assert.equal(await page.$$eval('.feature-demo',nodes=>nodes.length),1,`${motion}: only selected ${id} mounts its renderer`);
  assert.equal(await page.$$eval('.landing-features video',nodes=>nodes.length),id==='subject'?2:1,`${motion}: only selected ${id} decodes video`);
 }
-async function loopProof(id){
- await select(id);await autoplay(id,'repeat playback');
- await page.evaluate(()=>{
-  const root=document.querySelector('[data-feature-media]'),video=root.querySelector('video');let previous=video.currentTime;
-  window.featureLoopProof={loops:0,presets:[],progress:[],scales:[]};
-  const update=()=>{if(video.currentTime<previous-.5)window.featureLoopProof.loops++;previous=video.currentTime;};video.addEventListener('timeupdate',update);
-  const observer=new MutationObserver(()=>{const presentation=root.querySelector('[data-remotion-transition]');if(presentation){window.featureLoopProof.presets.push(presentation.dataset.remotionTransition);window.featureLoopProof.progress.push(Number(presentation.dataset.progress));}const punch=root.querySelector('[data-effect-preset="punch"]'),match=punch?.style.transform.match(/scale\(([^)]+)\)/);if(match)window.featureLoopProof.scales.push(Number(match[1]));});
-  observer.observe(root,{subtree:true,attributes:true,childList:true});window.removeFeatureLoopProof=()=>{observer.disconnect();video.removeEventListener('timeupdate',update);};
- });
- await page.waitForFunction(()=>window.featureLoopProof.loops>=2,{timeout:(feature(id).end-feature(id).start)*2000+3000});
- const proof=await page.evaluate(()=>{window.removeFeatureLoopProof();return window.featureLoopProof;});
- if(id==='transitions'){
-  assert.ok(new Set(proof.presets).size>=2,'Looping presents multiple actual product transitions');assert.ok(new Set(proof.progress.map(value=>Math.round(value*20))).size>=6,'Actual transition progress keeps animating');
-  await page.waitForFunction(()=>{const frame=document.querySelector('[data-remotion-transition]');return frame&&Number(frame.dataset.progress)>.2&&Number(frame.dataset.progress)<.8;});
- }else{
-  assert.ok(proof.scales.some(value=>value>1.05),'Product punch curve visibly scales the footage');assert.ok(proof.scales.some(value=>value===1),'Footage returns to neutral outside the effect window');
-  await page.waitForFunction(()=>{const layer=document.querySelector('[data-effect-preset="punch"]'),match=layer?.style.transform.match(/scale\(([^)]+)\)/);return match&&Number(match[1])>1.05;});
- }
- await page.screenshot({path:`/tmp/revline-landing-features-${id}.png`});
-}
 async function mount(motion,width=1440,height=1000){
  await page.evaluate(()=>window.featureFixtureRoot?.unmount());
  await page.setViewport({width,height});await page.emulateMediaFeatures([{name:'prefers-reduced-motion',value:motion}]);
@@ -81,7 +61,7 @@ async function segments(motion){
 }
 try{
  await segments('no-preference');
- assert.equal(features.length,7,'All seven editing features are present');await select('titles');
+ assert.equal(features.length,5,'All five editing features are present');await select('titles');
  await page.waitForFunction(()=>document.querySelector('.feature-demo-titles video')?.currentTime>.5);
  assert.equal(await page.$$eval('.feature-demo',nodes=>nodes.length),1,'Only the active feature mounts its media renderer');
  assert.equal(await page.$$eval('.landing-features video',nodes=>nodes.length),1,'Other force-mounted panels do not download/decode videos');
@@ -102,7 +82,6 @@ try{
  const before=await page.$eval('.feature-demo-moments video',node=>({time:node.currentTime,wall:performance.now()}));await new Promise(resolve=>setTimeout(resolve,300));const after=await page.$eval('.feature-demo-moments video',node=>({time:node.currentTime,wall:performance.now()}));
  assert.ok((after.time-before.time)/((after.wall-before.wall)/1000)>1.5,'Native moments clock advances at the faster pace');
  await page.screenshot({path:'/tmp/revline-landing-features-moments-video.png'});
- await loopProof('transitions');await loopProof('effects');
  await select('captions');
  await page.waitForFunction(()=>document.querySelector('.feature-demo-captions video')?.currentTime>3);
  assert.ok(await page.$('[data-remotion-text="karaoke"] [data-word-index]'),'Caption preview uses the shared word-timed renderer');
@@ -138,5 +117,5 @@ try{
  await page.$eval('.landing-features-panels',node=>node.scrollIntoView({block:'center'}));await page.waitForFunction(()=>document.querySelector('.feature-demo-captions video')?.currentTime>3);
  await page.screenshot({path:'/tmp/revline-landing-features-mobile.png'});
  await mount('no-preference',1440,420);assert.equal(await page.$eval('#features',el=>el.dataset.scrollDriven),'false','Short viewport uses normal tabs rather than clipping a pinned preview');await select('moments');assert.equal(await active(),feature('moments').label);
- assert.deepEqual(errors,[]);assert.deepEqual(external,[]);console.log(`PASS: All seven features autoplay under both motion preferences; moments2x, real beat filmstrip/pulse clock, two full transition/effect loops, product text clocks, persistent manual pause, offscreen unmount, native hidden-tab pause (${nativeHidden?'verified':'unavailable'}), scroll/tab behavior, mobile and short viewport. Local footage only; no backend or provider calls.`);
+ assert.deepEqual(errors,[]);assert.deepEqual(external,[]);console.log(`PASS: All five features autoplay under both motion preferences; moments at 2×, real beat filmstrip/pulse clock, product text clocks, persistent manual pause, offscreen unmount, native hidden-tab pause (${nativeHidden?'verified':'unavailable'}), scroll/tab behavior, mobile and short viewport. Local footage only; no backend or provider calls.`);
 }finally{server.closeAllConnections();await browser.close();await new Promise(resolve=>server.close(resolve));}
