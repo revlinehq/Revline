@@ -1,10 +1,13 @@
 'use client';
 
 import Image from 'next/image';
-import { useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { LANDING_DEMO_ASSETS } from './assets';
+import { FEATURE_MEDIA } from './features-media-config';
 import './feature-scroll.css';
+import './features-media.css';
+
+const FeatureMedia = lazy(() => import('./features-media').then(module => ({ default: module.FeatureMedia })));
 
 const features = [
   { id: 'titles', label: 'Titles in motion', description: 'Give your opening a little presence. Add a title, choose how it moves, and shape the timing until it feels like you.' },
@@ -15,17 +18,10 @@ const features = [
 ] as const;
 
 type FeatureId = typeof features[number]['id'];
-const waveform = [16, 27, 19, 36, 48, 30, 18, 42, 57, 38, 22, 31, 46, 60, 40, 25, 18, 34, 52, 42, 24, 35, 57, 44, 27, 18, 32, 48, 38, 20, 28, 15];
-
-function FeaturePreview({ kind }: { kind: FeatureId }) {
+function FeaturePreview({ kind, visible }: { kind: FeatureId; visible: boolean }) {
+  const poster = <Image src={FEATURE_MEDIA[kind].poster} alt="" fill sizes="(max-width: 760px) calc(100vw - 40px), (max-width: 1100px) 65vw, 780px" unoptimized loading="lazy" className="feature-demo-cover"/>;
   return <figure className={`landing-features-preview landing-features-preview-${kind}`} aria-label={`Illustrative preview: ${features.find(feature => feature.id === kind)!.label}`}>
-    <Image src={LANDING_DEMO_ASSETS.portrait} alt="A skater with a yellow skateboard outside" fill sizes="(max-width: 760px) calc(100vw - 40px), (max-width: 1100px) 65vw, 780px" unoptimized loading="lazy" className="landing-features-image" />
-    <div className="landing-features-shade" aria-hidden="true" />
-    {kind === 'titles' ? <div className="landing-features-motion" aria-hidden="true"><span>A little outside.</span><strong>SMALL PLANS.<br /><em>BIG WEEKENDS.</em></strong></div> : null}
-    {kind === 'moments' ? <div className="landing-features-moments" aria-hidden="true"><span className="landing-features-moments-title">The moments worth keeping.</span><div className="landing-features-shot-cards">{[LANDING_DEMO_ASSETS.coffee, LANDING_DEMO_ASSETS.portrait, LANDING_DEMO_ASSETS.coffee].map((src, index) => <div className={`landing-features-shot ${index === 1 ? 'landing-features-shot-selected' : ''}`} key={index}><Image src={src} alt="" fill sizes="220px" unoptimized loading="lazy" /><span>{['01 · The slow start', '02 · Step outside', '03 · Stay a while'][index]}</span>{index === 1 ? <small>Opening</small> : null}</div>)}</div></div> : null}
-    {kind === 'beats' ? <div className="landing-features-beats" aria-hidden="true"><strong>Find your rhythm.</strong><div className="landing-features-beat-strip"><div className="landing-features-waveform">{waveform.map((height, index) => <span key={index} style={{ height: `${height}%` }} />)}</div>{[18, 38, 61, 82].map(left => <i key={left} style={{ left: `${left}%` }} />)}<span className="landing-features-beat-label">Every cut, in time.</span></div></div> : null}
-    {kind === 'subject' ? <div className="landing-features-reframe" aria-hidden="true"><span className="landing-features-portrait-frame"><span>9:16</span></span><span className="landing-features-subject-box" /><span className="landing-features-reframe-label">Same story. A closer frame.</span></div> : null}
-    {kind === 'captions' ? <div className="landing-features-captions" aria-hidden="true"><span>A little more <strong>outside.</strong></span><span>A little less on your phone.</span></div> : null}
+    {visible ? <Suspense fallback={poster}><FeatureMedia kind={kind}/></Suspense> : poster}
   </figure>;
 }
 
@@ -33,11 +29,20 @@ export function LandingFeatures() {
   const [active, setActive] = useState<FeatureId>('titles');
   const [scrollDriven, setScrollDriven] = useState(false);
   const [keyboard, setKeyboard] = useState(false);
+  const [mediaVisible, setMediaVisible] = useState(false);
   const rail = useRef<HTMLDivElement>(null);
   const stage = useRef<HTMLDivElement>(null);
   const activeRef = useRef<FeatureId>('titles');
   const geometry = useRef<{ top: number; range: number } | null>(null);
   const keyboardInput = useRef(false);
+
+  useEffect(() => {
+    const content = stage.current?.querySelector('.landing-features-panels');
+    if (!content) return;
+    const observer = new IntersectionObserver(([entry]) => setMediaVisible(entry.isIntersecting));
+    observer.observe(content);
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     const track = rail.current, content = stage.current;
@@ -114,7 +119,7 @@ export function LandingFeatures() {
         <header className="landing-features-heading"><h2 id="landing-features-heading">Features</h2></header>
         <Tabs value={active} onValueChange={selectFeature} orientation="vertical" className="landing-features-tabs">
           <TabsList variant="line" className="landing-features-list" aria-label="Explore editing features" onPointerDownCapture={() => { keyboardInput.current = false; }} onKeyDownCapture={() => { keyboardInput.current = true; }}>{features.map(feature => <TabsTrigger value={feature.id} className="landing-features-trigger" key={feature.id}>{feature.label}</TabsTrigger>)}</TabsList>
-          <div className="landing-features-panels">{features.map((feature, index) => <TabsContent forceMount value={feature.id} className="landing-features-panel" key={feature.id} data-phase={index < activeIndex ? 'before' : index > activeIndex ? 'after' : 'active'} aria-hidden={feature.id !== active} inert={feature.id !== active} tabIndex={feature.id === active ? 0 : -1}><FeaturePreview kind={feature.id} /><p>{feature.description}</p></TabsContent>)}</div>
+          <div className="landing-features-panels">{features.map((feature, index) => <TabsContent forceMount value={feature.id} className="landing-features-panel" key={feature.id} data-phase={index < activeIndex ? 'before' : index > activeIndex ? 'after' : 'active'} aria-hidden={feature.id !== active} inert={feature.id !== active} tabIndex={feature.id === active ? 0 : -1}><FeaturePreview kind={feature.id} visible={mediaVisible && feature.id === active}/><p>{feature.description}</p></TabsContent>)}</div>
         </Tabs>
       </div>
     </div>

@@ -3,7 +3,7 @@
 import dynamic from 'next/dynamic';
 import './editor-demo-preview.css';
 
-const InteractiveDemo = dynamic(() => import('./editor-demo').then(module => module.ProductDemo), {
+const PassiveDemo = dynamic(() => import('./editor-demo').then(module => module.ProductDemo), {
   ssr: false,
   loading: () => <DemoPoster/>,
 });
@@ -14,7 +14,7 @@ function DemoPoster() {
   </span>;
 }
 
-/** Keep the still visible while the interactive editor loads. */
+/** Keep the editor poster visible while the local playback components load. */
 export function ProductDemoPreview() {
-  return <InteractiveDemo/>;
+  return <PassiveDemo/>;
 }

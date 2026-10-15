@@ -70,6 +70,7 @@ export type EditorShellProps = {
   onRefreshMedia?:RefreshPlaybackMedia;
   onRemoveAsset?: (asset:MediaAsset)=>Promise<void>;
   onSaveThumbnail?: (assetId:string,url:string)=>void;
+  onPreviewReady?: (controller:PreviewHandle)=>void;
   onRegisterStockAudio?: (catalogId:string)=>Promise<MediaAsset>;
   onShare?: () => void;
 };
@@ -145,7 +146,7 @@ export function EditorShell(p: EditorShellProps) {
   const [playbackError,setPlaybackError]=useState('');
   const firstVisualAsset=assets.find(asset=>asset._id===timeline.clips.find(clip=>clip.kind==='video'||clip.kind==='image')?.assetId);
   const onLoadingThumbnail=useCallback((url:string)=>{setLoadingThumbnail(url);if(firstVisualAsset&&!firstVisualAsset.thumbnailUrl)p.onSaveThumbnail?.(firstVisualAsset._id,url);},[firstVisualAsset,p.onSaveThumbnail]);
-  const onPlaybackReady=useCallback(()=>{setPlaybackReady(true);setPlaybackError('');releaseOpeningFootage(p.projectId);},[p.projectId]);
+  const onPlaybackReady=useCallback(()=>{setPlaybackReady(true);setPlaybackError('');releaseOpeningFootage(p.projectId);if(preview.current)p.onPreviewReady?.(preview.current);},[p.projectId,p.onPreviewReady]);
   const opening=!p.demo&&!p.embedded&&!preparing&&timeline.clips.length>0&&!playbackReady;
   const previewError=useCallback((message:string)=>{if(!playbackReady)setPlaybackError(message);onError(message);},[playbackReady,onError]);
   const preview = useRef<PreviewHandle>(null);
