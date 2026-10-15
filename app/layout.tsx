@@ -11,7 +11,7 @@ const spaceGrotesk = Space_Grotesk({ subsets: ["latin"], variable: "--font-space
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 
 export const metadata: Metadata = {
-  title: "Revline — AI video editor",
+  title: "Revline AI video editor",
   description: "Edit your videos in conversation. Make every cut your own.",
 };
 
