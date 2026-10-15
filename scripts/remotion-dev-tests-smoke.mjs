@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import { writeFile, mkdir, readFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import { writeFile, mkdir } from 'node:fs/promises';
 import { build } from 'esbuild';
 import puppeteer from 'puppeteer';
 import { startFixtureFontServer } from './ui-fixture-fonts.mjs';
@@ -15,6 +16,7 @@ createRoot(document.getElementById('root')).render(<Fixture/>);
 await mkdir('/tmp/revline-remotion-lab', { recursive: true });
 const fonts = await startFixtureFontServer();
 const browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox', '--disable-dev-shm-usage'] });
+const digest = bytes => createHash('sha256').update(bytes).digest('hex');
 try {
   const page = await browser.newPage();
   const errors = [], requests = [];
@@ -56,7 +58,7 @@ try {
   const scene = await page.$('.rmlab-preview');
   const pixels = await scene.screenshot();
   await seek(190); await seek(0); await seek(112);
-  assert.deepEqual(await scene.screenshot(), pixels, 'Backward seeking restores the exact same pixels');
+  assert.equal(digest(await scene.screenshot()), digest(pixels), 'Backward seeking restores the exact same pixels');
   await page.click('[aria-label="Next frame"]'); assert.equal(await frame(), 113);
   await page.click('[aria-label="Previous frame"]'); assert.equal(await frame(), 112);
   await field('Headline', 'An editable explainer');
@@ -82,6 +84,28 @@ try {
   for (const preset of ['word-reveal', 'word-pop', 'slide-title', 'karaoke', 'neon-echo', 'lyric-slam', 'kinetic-stack']) {
     await field('Type treatment', preset); await seek(65);
     assert.ok(await page.$('[data-remotion-text]') || await page.$('.rmlab-scene-typography'), `${preset} renders`);
+  }
+  assert.equal(await page.$$eval('.rmlab-field select optgroup option', nodes => nodes.length), 17, 'Original seven and ten new treatments are available');
+  assert.equal(await page.$$eval('.rmlab-new-type-grid>button', nodes => nodes.length), 10);
+  const extras = ['flip-words', 'line-wipe', 'elastic-wave', 'rgb-split', 'type-trails', 'liquid-stretch', 'blur-focus', 'stamp-impact', 'diagonal-stagger', 'character-scramble'];
+  for (const preset of extras) {
+    await field('Type treatment', preset);
+    await page.waitForSelector(`[data-lab-text="${preset}"]`);
+    await page.waitForFunction(() => Number(document.querySelector('.rmlab-scene').dataset.frame) >= 2);
+    await seek(7);
+    const entrance = await scene.screenshot();
+    await seek(150); const settled = await scene.screenshot();
+    assert.notEqual(digest(entrance), digest(settled), `${preset} has an actual visible entrance`);
+    await seek(0); await seek(7);
+    assert.equal(digest(await scene.screenshot()), digest(entrance), `${preset} restores the same pixels after backward seek`);
+    const setRange = async (label, value) => { await page.$eval(`[aria-label="${label}"]`, (input, value) => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, value); input.dispatchEvent(new Event('input', { bubbles: true })); }, value); await flush(); };
+    await setRange('Effect strength', .2); const subtle = await scene.screenshot();
+    await setRange('Effect strength', 2); assert.notEqual(digest(await scene.screenshot()), digest(subtle), `${preset} strength edits change pixels`);
+    await setRange('Effect strength', 1);
+    await setRange('Reveal duration', 1.2); const slow = await scene.screenshot();
+    await setRange('Reveal duration', .4); assert.notEqual(digest(await scene.screenshot()), digest(slow), `${preset} duration edits change pixels`);
+    await setRange('Reveal duration', .65);
+    await page.screenshot({ path: `/tmp/revline-remotion-lab/type-${preset}.png`, fullPage: true });
   }
   await category(0);
   assert.equal(await page.$eval('.rmlab-scene', node => node.dataset.scene), 'cards', 'Returning to Explainers restores a graphic scene');
@@ -134,5 +158,5 @@ try {
   assert.equal(await page.$$eval('.rmlab-categories>button', nodes => nodes.length), 1);
   assert.ok(await page.$('[aria-label="Subject tracking experiment"]'));
   assert.deepEqual(errors, []);
-  console.log('PASS: all six experiments; exact-frame playback/seek; five graphic scenes; all seven text treatments; edited speech cues; motion blur; template save/load/import validation; portrait + 320px embedded layouts; query filtering; no paid SAM requests.');
+  console.log('PASS: all six experiments; exact-frame playback/seek; five graphic scenes; all seventeen text treatments; ten new effects with deterministic pixels and strength/timing edits; edited speech cues; motion blur; template save/load/import validation; portrait + 320px embedded layouts; query filtering; no paid SAM requests.');
 } finally { await browser.close(); await fonts.close(); }

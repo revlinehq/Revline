@@ -1,5 +1,5 @@
 import { Easing, interpolate, spring } from 'remotion';
-import { REMOTION_TEXT_PRESETS, type RemotionTextPreset } from '@/lib/editor/remotion-text';
+import { LAB_TEXT_PRESETS, type LabTextPreset } from './remotion-lab-text-presets';
 
 export type LabCategory = 'explainer' | 'typography' | 'tracking' | 'masking' | 'polish' | 'templates';
 export type LabScene = 'cards' | 'diagram' | 'arrows' | 'chart' | 'counter' | 'typography' | 'polish';
@@ -10,7 +10,7 @@ export type LabConfig = {
   accent: string; background: string; foreground: string; aspect: 'landscape' | 'portrait';
   fps: number; duration: number; motion: 'spring' | 'ease' | 'linear'; damping: number; stiffness: number;
   entrance: number; distance: number; blur: number; showTranscript: boolean; showGuides: boolean;
-  textPreset: RemotionTextPreset; textSize: number; counterPrefix: string; counterSuffix: string;
+  textPreset: LabTextPreset; textSize: number; textStrength: number; textStagger: number; counterPrefix: string; counterSuffix: string;
 };
 export const LAB_CATEGORIES: { id: LabCategory; label: string; description: string }[] = [
   { id: 'explainer', label: 'Explainers', description: 'Turn a spoken idea into cards, diagrams, arrows, charts and counters.' },
@@ -39,7 +39,7 @@ export const DEFAULT_LAB_CONFIG: LabConfig = {
   ],
   accent: '#d6f484', background: '#111513', foreground: '#f6f8f2', aspect: 'landscape',
   fps: 30, duration: 8, motion: 'spring', damping: 15, stiffness: 150, entrance: .65, distance: 56,
-  blur: 0, showTranscript: true, showGuides: false, textPreset: 'karaoke', textSize: 70,
+  blur: 0, showTranscript: true, showGuides: false, textPreset: 'karaoke', textSize: 70, textStrength: 1, textStagger: .07,
   counterPrefix: '$', counterSuffix: 'k',
 };
 export type LabTemplate = { id: string; name: string; description: string; config: LabConfig };
@@ -96,7 +96,7 @@ function hex(value: unknown): value is string { return typeof value === 'string'
 /** Validate all imported and persisted values before a configuration reaches the render clock. */
 export function parseLabConfig(input: unknown): LabConfig {
   if (!record(input)) throw new Error('Choose a Revline Remotion template JSON file.');
-  const c = input;
+  const c: Record<string, unknown> = { ...input, textStrength: input.textStrength ?? 1, textStagger: input.textStagger ?? .07 };
   const scenes = [...LAB_SCENES.map(scene => scene.id), 'typography', 'polish'];
   if (!scenes.includes(c.scene as LabScene) || !text(c.title, 200) || !text(c.subtitle, 150)
     || !hex(c.accent) || !hex(c.background) || !hex(c.foreground)
@@ -104,7 +104,8 @@ export function parseLabConfig(input: unknown): LabConfig {
     || !number(c.duration, 2, 60) || !['spring', 'ease', 'linear'].includes(String(c.motion))
     || !number(c.damping, 3, 40) || !number(c.stiffness, 40, 400) || !number(c.entrance, .15, 3)
     || !number(c.distance, 0, 200) || !number(c.blur, 0, 12) || typeof c.showTranscript !== 'boolean' || typeof c.showGuides !== 'boolean'
-    || !REMOTION_TEXT_PRESETS.includes(c.textPreset as RemotionTextPreset) || !number(c.textSize, 24, 110)
+    || !LAB_TEXT_PRESETS.includes(c.textPreset as LabTextPreset) || !number(c.textSize, 24, 110)
+    || !number(c.textStrength, .2, 2) || !number(c.textStagger, 0, .18)
     || !text(c.counterPrefix, 12) || !text(c.counterSuffix, 12)) throw new Error('The template contains unsupported settings.');
   if (!Array.isArray(c.items) || c.items.length !== 3 || c.items.some(item => !record(item)
     || !text(item.label, 60) || !text(item.detail, 120) || !text(item.trigger, 60)

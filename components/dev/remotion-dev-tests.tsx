@@ -4,9 +4,10 @@ import { useEffect, useId, useRef, useState, type CSSProperties, type ReactNode 
 import { ArrowLeft, ArrowUpRight, AudioLines, Check, Download, ExternalLink, FileJson, FlaskConical, Layers3, Pause, Play, RotateCcw, Save, Settings2, Sparkles, Upload, X } from 'lucide-react';
 import { ColorControl } from '@/components/editor/color-control';
 import { PrimaryButton } from '@/components/workspace/primary-button';
-import { REMOTION_TEXT_LABELS, REMOTION_TEXT_PRESETS } from '@/lib/editor/remotion-text';
+import { REMOTION_TEXT_PRESETS } from '@/lib/editor/remotion-text';
 import { SubjectToolsLab } from './subject-tools-lab';
 import { RemotionLabScene } from './remotion-lab-scenes';
+import { isLabExtraTextPreset, LAB_EXTRA_TEXT_PRESETS, LAB_TEXT_DESCRIPTIONS, LAB_TEXT_LABELS, type LabTextPreset } from './remotion-lab-text-presets';
 import { alignLabItems, DEFAULT_LAB_CONFIG, LAB_CATEGORIES, LAB_SCENES, LAB_TEMPLATES, labTemplateFile, parseLabConfig, parseLabFile, retimeWords, type LabCategory, type LabConfig, type LabItem, type LabTemplate, type LabWord } from './remotion-lab-model';
 import './remotion-dev-tests.css';
 
@@ -157,6 +158,7 @@ export function RemotionDevTests({ embedded = false, query = '' }: { embedded?: 
   const [playing, setPlaying] = useState(false);
   const [loop, setLoop] = useState(true);
   const [rate, setRate] = useState(1);
+  const [playbackRevision, setPlaybackRevision] = useState(0);
   const [notice, setNotice] = useState('');
   const [audio, setAudio] = useState<LocalAudio | null>(null);
   const mediaRef = useRef<HTMLAudioElement>(null);
@@ -214,7 +216,7 @@ export function RemotionDevTests({ embedded = false, query = '' }: { embedded?: 
     };
     raf = requestAnimationFrame(tick);
     return () => { cancelled = true; cancelAnimationFrame(raf); media?.pause(); };
-  }, [playing, audio, config.fps, totalFrames, loop, rate]);
+  }, [playing, audio, config.fps, totalFrames, loop, rate, playbackRevision]);
 
   function seek(next: number) {
     const bounded = Math.max(0, Math.min(totalFrames - 1, next));
@@ -222,6 +224,8 @@ export function RemotionDevTests({ embedded = false, query = '' }: { embedded?: 
     if (mediaRef.current && audio) mediaRef.current.currentTime = bounded / config.fps;
   }
   function change(patch: Partial<LabConfig>) { setConfig(current => ({ ...current, ...patch })); if (patch.duration || patch.fps) { setPlaying(false); const next = Math.min(frame, Math.round((patch.duration ?? config.duration) * (patch.fps ?? config.fps)) - 1); frameRef.current = next; setFrame(next); } }
+  function replay() { frameRef.current = 0; setFrame(0); if (mediaRef.current) mediaRef.current.currentTime = 0; setPlaybackRevision(value => value + 1); setPlaying(true); }
+  function chooseTextPreset(textPreset: LabTextPreset) { change({ textPreset }); replay(); }
   function selectCategory(next: LabCategory) {
     setCategory(next); setPlaying(false);
     if (next === 'typography') { change({ scene: 'typography' }); setControlTab('content'); }
@@ -248,10 +252,10 @@ export function RemotionDevTests({ embedded = false, query = '' }: { embedded?: 
         <div className="rmlab-section-heading"><div><h2>{activeCategory.label}{visibleCategory === 'explainer' ? <span>RECOMMENDED</span> : null}</h2><p>{activeCategory.description}</p></div>{!embedded ? <span className="rmlab-section-count">EXPERIMENT {String(LAB_CATEGORIES.findIndex(value => value.id === visibleCategory) + 1).padStart(2, '0')} / 06</span> : null}</div>
         {visibleCategory === 'tracking' || visibleCategory === 'masking' ? <SubjectToolsLab mode={visibleCategory}/> : <div className="rmlab-editor-grid">
           <div className="rmlab-preview-column">
-            <div className="rmlab-preview-toolbar"><span><i/>{visualConfig.scene === 'typography' ? REMOTION_TEXT_LABELS[config.textPreset] : visualConfig.scene === 'polish' ? 'Easing comparison' : LAB_SCENES.find(scene => scene.id === config.scene)?.label ?? 'Composition'}</span><span>{config.aspect === 'portrait' ? '540 × 960' : '960 × 540'} · {config.fps} fps</span></div>
+            <div className="rmlab-preview-toolbar"><span><i/>{visualConfig.scene === 'typography' ? LAB_TEXT_LABELS[config.textPreset] : visualConfig.scene === 'polish' ? 'Easing comparison' : LAB_SCENES.find(scene => scene.id === config.scene)?.label ?? 'Composition'}</span><span>{config.aspect === 'portrait' ? '540 × 960' : '960 × 540'} · {config.fps} fps</span></div>
             <div className={`rmlab-stage-wrap ${config.aspect === 'portrait' ? 'rmlab-stage-portrait' : ''}`}><Preview config={visualConfig} frame={frame}/></div>
             <div className="rmlab-player">
-              <div className="rmlab-transport"><div className="rmlab-button-row"><button type="button" className="rmlab-icon-button" aria-label="Replay preview" onClick={() => { setPlaying(false); frameRef.current = 0; setFrame(0); if (mediaRef.current) mediaRef.current.currentTime = 0; requestAnimationFrame(() => setPlaying(true)); }}><RotateCcw size={15}/></button><PrimaryButton type="button" size="icon" className="rmlab-play-button" aria-label={playing ? 'Pause preview' : 'Play preview'} onClick={() => { if (!playing && frame >= totalFrames - 1) { frameRef.current = 0; setFrame(0); } setPlaying(current => !current); }}>{playing ? <Pause size={16} fill="currentColor"/> : <Play size={16} fill="currentColor"/>}</PrimaryButton><button type="button" className="rmlab-frame-step" aria-label="Previous frame" onClick={() => seek(frame - 1)}>−1</button><button type="button" className="rmlab-frame-step" aria-label="Next frame" onClick={() => seek(frame + 1)}>+1</button><output className="rmlab-time">{(frame / config.fps).toFixed(2)}<span> / {config.duration.toFixed(2)}s</span></output></div><div className="rmlab-player-options"><select aria-label="Playback speed" value={rate} onChange={event => setRate(Number(event.target.value))}><option value={.1}>0.1×</option><option value={.25}>0.25×</option><option value={.5}>0.5×</option><option value={1}>1×</option><option value={1.5}>1.5×</option></select><label title="Loop preview"><input type="checkbox" checked={loop} onChange={event => setLoop(event.target.checked)}/>Loop</label></div></div>
+              <div className="rmlab-transport"><div className="rmlab-button-row"><button type="button" className="rmlab-icon-button" aria-label="Replay preview" onClick={replay}><RotateCcw size={15}/></button><PrimaryButton type="button" size="icon" className="rmlab-play-button" aria-label={playing ? 'Pause preview' : 'Play preview'} onClick={() => { if (!playing && frame >= totalFrames - 1) { frameRef.current = 0; setFrame(0); } setPlaying(current => !current); }}>{playing ? <Pause size={16} fill="currentColor"/> : <Play size={16} fill="currentColor"/>}</PrimaryButton><button type="button" className="rmlab-frame-step" aria-label="Previous frame" onClick={() => seek(frame - 1)}>−1</button><button type="button" className="rmlab-frame-step" aria-label="Next frame" onClick={() => seek(frame + 1)}>+1</button><output className="rmlab-time">{(frame / config.fps).toFixed(2)}<span> / {config.duration.toFixed(2)}s</span></output></div><div className="rmlab-player-options"><select aria-label="Playback speed" value={rate} onChange={event => setRate(Number(event.target.value))}><option value={.1}>0.1×</option><option value={.25}>0.25×</option><option value={.5}>0.5×</option><option value={1}>1×</option><option value={1.5}>1.5×</option></select><label title="Loop preview"><input type="checkbox" checked={loop} onChange={event => setLoop(event.target.checked)}/>Loop</label></div></div>
               <Timeline config={config} frame={frame} onSeek={seek}/>
               <div className="rmlab-preview-footnote"><span>{audio ? <><AudioLines size={12}/>Local voiceover</> : 'Sample timings · add your own audio in Speech cues'}</span><span>FRAME {frame}</span></div>
             </div>
@@ -268,7 +272,14 @@ export function RemotionDevTests({ embedded = false, query = '' }: { embedded?: 
             <div className="rmlab-controls" id={`${id}-controls`} role="tabpanel" aria-labelledby={`${id}-${controlTab}`}>
               {controlTab === 'content' ? <div className="rmlab-control-stack">
                 {visibleCategory !== 'typography' && visibleCategory !== 'polish' ? <Field label="Graphic type"><select value={config.scene === 'typography' || config.scene === 'polish' ? 'cards' : config.scene} onChange={event => change({ scene: event.target.value as LabConfig['scene'] })}>{LAB_SCENES.map(scene => <option key={scene.id} value={scene.id}>{scene.label}</option>)}</select></Field> : null}
-                {visibleCategory === 'typography' ? <><Field label="Type treatment"><select value={config.textPreset} onChange={event => change({ textPreset: event.target.value as LabConfig['textPreset'] })}>{REMOTION_TEXT_PRESETS.map(preset => <option key={preset} value={preset}>{REMOTION_TEXT_LABELS[preset]}</option>)}</select></Field><RangeField label="Type size" value={config.textSize} min={24} max={110} unit="px" onChange={textSize => change({ textSize })}/></> : null}
+                {visibleCategory === 'typography' ? <>
+                  <Field label="Type treatment"><select value={config.textPreset} onChange={event => chooseTextPreset(event.target.value as LabTextPreset)}><optgroup label="Original treatments">{REMOTION_TEXT_PRESETS.map(preset => <option key={preset} value={preset}>{LAB_TEXT_LABELS[preset]}</option>)}</optgroup><optgroup label="10 new experiments">{LAB_EXTRA_TEXT_PRESETS.map(preset => <option key={preset} value={preset}>{LAB_TEXT_LABELS[preset]} · new</option>)}</optgroup></select></Field>
+                  <div className="rmlab-control-divider"><span>10 NEW TEXT EXPERIMENTS</span></div>
+                  <div className="rmlab-new-type-grid" aria-label="New typography experiments">{LAB_EXTRA_TEXT_PRESETS.map((preset, index) => <button key={preset} type="button" aria-pressed={config.textPreset === preset} onClick={() => chooseTextPreset(preset)}><span>{String(index + 1).padStart(2, '0')}</span>{LAB_TEXT_LABELS[preset]}</button>)}</div>
+                  {isLabExtraTextPreset(config.textPreset) ? <div className="rmlab-text-description"><strong>{LAB_TEXT_LABELS[config.textPreset]}</strong><p>{LAB_TEXT_DESCRIPTIONS[config.textPreset]}</p></div> : null}
+                  <RangeField label="Type size" value={config.textSize} min={24} max={110} unit="px" onChange={textSize => change({ textSize })}/>
+                  {isLabExtraTextPreset(config.textPreset) ? <><RangeField label="Effect strength" value={config.textStrength} min={.2} max={2} step={.1} unit="×" onChange={textStrength => change({ textStrength })}/><RangeField label="Reveal duration" value={config.entrance} min={.15} max={3} step={.05} unit="s" onChange={entrance => change({ entrance })}/><RangeField label="Text stagger" value={config.textStagger} min={0} max={.18} step={.01} unit="s" onChange={textStagger => change({ textStagger })}/><p className="rmlab-type-controls-note">Selecting a treatment replays it. Pause, scrub, or try 0.1× speed to compare the motion. Colors live in Style.</p></> : null}
+                </> : null}
                 <Field label={visibleCategory === 'typography' ? 'Title / animated text' : 'Headline'}><textarea rows={2} maxLength={200} value={config.title} onChange={event => change({ title: event.target.value })}/></Field>
                 <Field label="Eyebrow"><input maxLength={150} value={config.subtitle} onChange={event => change({ subtitle: event.target.value })}/></Field>
                 {visibleCategory === 'typography' && config.textPreset === 'karaoke' ? <p className="rmlab-help">Karaoke uses the words in Speech cues. Other treatments animate the title above.</p> : null}

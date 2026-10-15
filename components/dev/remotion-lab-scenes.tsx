@@ -2,6 +2,8 @@ import type { CSSProperties, ReactNode } from 'react';
 import { Easing, interpolate } from 'remotion';
 import { RemotionText } from '@/lib/editor/remotion-text-component';
 import { labProgress, type LabConfig } from './remotion-lab-model';
+import { isLabExtraTextPreset } from './remotion-lab-text-presets';
+import { RemotionLabTypography } from './remotion-lab-typography';
 
 const clamp = { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' } as const;
 const bounded = (value: number) => Math.min(1, Math.max(0, value));
@@ -106,11 +108,11 @@ function Counter({ config, frame }: { config: LabConfig; frame: number }) {
 
 function Typography({ config, frame }: { config: LabConfig; frame: number }) {
   const text = config.textPreset === 'karaoke' ? config.words.map(word => word.word).join(' ') : config.title;
-  return <div className="rmlab-scene-typography"><span className="rmlab-type-rule"/><RemotionText
+  return <div className="rmlab-scene-typography"><span className="rmlab-type-rule"/>{isLabExtraTextPreset(config.textPreset) ? <RemotionLabTypography config={config} frame={frame} preset={config.textPreset}/> : <RemotionText
     preset={config.textPreset} text={text} frame={frame} fps={config.fps} durationInFrames={Math.round(config.duration * config.fps)}
     color={config.foreground} highlightColor={config.accent} fontSize={config.textSize} fontFamily="var(--font-space-grotesk), sans-serif" fontWeight={700}
     {...(config.textPreset === 'karaoke' ? { wordTimings: config.words.map(({ start, end }) => ({ start, end })) } : {})}
-  /><span className="rmlab-type-footer">WORDS THAT MOVE PEOPLE.</span></div>;
+  />}<span className="rmlab-type-footer">WORDS THAT MOVE PEOPLE.</span></div>;
 }
 
 function Polish({ config, frame }: { config: LabConfig; frame: number }) {
