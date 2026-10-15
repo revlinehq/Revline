@@ -2,15 +2,15 @@
 body:has(>.landing),body:has(main.landing){background:#fff}
 .landing *, .landing *::before, .landing *::after{box-sizing:border-box}
 .landing h1,.landing h2,.landing h3,.landing p,.landing figure,.landing ul{margin:0}
-.landing a{text-decoration:none}.landing button{cursor:pointer}.landing button:disabled{cursor:default}.landing a:focus-visible,.landing summary:focus-visible,.landing button:focus-visible{outline:2px solid #4c6def;outline-offset:4px}
+.landing a{text-decoration:none}.landing button{cursor:pointer}.landing button:disabled{cursor:default}.landing a:focus-visible,.landing summary:focus-visible,.landing button:focus-visible{outline:2px solid var(--revline-accent);outline-offset:4px}
 .landing-container{width:calc(100% - 200px);margin-inline:auto}.landing-section{padding-inline:100px}
 .landing h2{font-size:38px;line-height:1.2;font-weight:500;letter-spacing:-1.2px}.landing p{color:#737373}
 .landing-nav{position:sticky;top:0;z-index:40;height:76px;display:flex;align-items:center;gap:40px;background:#fff;font-size:14px}
 .landing-section[id]{scroll-margin-top:92px}
 .landing-nav .revline-brand,.landing-footer .revline-brand{gap:8px;font:650 24px var(--font-space-grotesk),sans-serif;letter-spacing:-.7px;color:#1c1c1c}.landing-nav .revline-mark,.landing-footer .revline-mark{width:20px;height:20px}
-.landing-footer a:hover,.landing-footer-link:hover{color:#3b54d7}
+.landing-footer a:hover,.landing-footer-link:hover{color:var(--revline-accent)}
 .landing .landing-start-button[data-slot=button]{height:36px;padding-inline:16px;gap:10px;font-family:var(--font-space-grotesk),sans-serif;font-size:14px;color:#fff}
-.landing .landing-nav-start[data-slot=button]{margin-left:auto;background:#1c1c1c}
+.landing .landing-nav-start[data-slot=button]{margin-left:auto}
 .landing .landing-start-button-large[data-slot=button]{height:44px}.landing .revline-primary[data-slot=button]:hover{color:#fff}
 .landing-hero{display:flex;flex-direction:column;align-items:center;text-align:center;padding:72px 100px 48px}
 .landing-hero-copy{display:flex;flex-direction:column;align-items:center;gap:14px;margin-bottom:40px;width:100%}

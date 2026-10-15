@@ -11,7 +11,7 @@
 .assistant-edit-comparison>div{display:grid;grid-template-columns:44px minmax(0,1fr);align-items:start;gap:8px;margin-top:9px}
 .assistant-edit-comparison>div>span{color:var(--muted-foreground);font-size:11px;line-height:20px}
 .assistant-mini-snapshot{display:grid;gap:3px;min-width:0}
-.assistant-mini-lane{display:block;width:100%;height:20px;border-radius:3px;overflow:hidden;fill:#5165A4}
+.assistant-mini-lane{display:block;width:100%;height:20px;border-radius:3px;overflow:hidden;fill:var(--revline-accent)}
 .assistant-mini-snapshot.is-before .mini-footage{fill:color-mix(in srgb,var(--muted-foreground),transparent 60%)}
 .assistant-mini-lane .mini-removed{fill:#98534B}
 .assistant-mini-caption{position:relative;min-height:14px;overflow:hidden;border-radius:3px}

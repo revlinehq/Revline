@@ -34,6 +34,7 @@ try {
   assert.equal(await page.$('.library-tabs'), null, 'There is no separate Effects / Text segment');
   assert.ok(await page.$eval('.inspector-section-tabs [aria-selected=true]', node => getComputedStyle(node).backgroundColor !== 'rgba(0, 0, 0, 0)'), 'The active top segment has a visible surface');
   assert.ok(await page.evaluate(() => document.querySelector('.library-category-results').getBoundingClientRect().right <= document.querySelector('.library-category-rail').getBoundingClientRect().left), 'Cards are left of the category rail');
+  const categorySpacing = await page.evaluate(() => {const results=document.querySelector('.library-category-results').getBoundingClientRect(),rail=document.querySelector('.library-category-rail').getBoundingClientRect();return {gap:rail.left-results.right,rail:rail.width}});assert.ok(categorySpacing.gap<=6,'Effect list stays close to categories');assert.equal(categorySpacing.rail,80,'Compact category rail leaves more room for effects');
   const navigationGeometry = () => page.evaluate(() => ['.library-search', '.library-category-rail', '.library-category-results'].map(selector => {const rect=document.querySelector(selector).getBoundingClientRect();return {x:rect.x,y:rect.y,width:rect.width,height:rect.height}}));
   const motionGeometry = await navigationGeometry();
   await page.focus('[data-category="motion"]'); await page.keyboard.press('ArrowDown'); assert.ok(await page.$('[aria-label="Invert colors"]'));

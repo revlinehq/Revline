@@ -3,7 +3,7 @@
 .processing-status-copy{display:flex;flex-direction:column;gap:5px;min-width:0;flex:1}
 .processing-status-label{font-size:13px;font-weight:500;line-height:19px}
 .processing-status-detail{font-size:11px;line-height:17px;color:var(--ws-muted,var(--muted-foreground));overflow-wrap:anywhere}
-:root{--revline-loading-color:#4768ef}
+:root{--revline-loading-color:var(--revline-accent)}
 .processing-status-sweep{display:block;position:relative;overflow:hidden;width:240px;max-width:100%;height:2px;margin-top:4px;border-radius:1px;background:color-mix(in srgb,var(--revline-loading-color),transparent 90%)}
 .processing-status-sweep::after{content:'';position:absolute;inset:0;width:40%;background:linear-gradient(90deg,transparent,var(--revline-loading-color),transparent);animation:revline-status-sweep 1.2s ease-in-out infinite alternate}
 .processing-status[data-state=working] .processing-status-label{background:linear-gradient(100deg,var(--ws-muted,var(--muted-foreground)) 20%,var(--ws-text,var(--foreground)) 45%,var(--ws-muted,var(--muted-foreground)) 70%);background-size:220% 100%;background-clip:text;color:transparent;animation:revline-status-shimmer 1.8s linear infinite}

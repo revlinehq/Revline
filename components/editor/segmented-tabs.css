@@ -3,7 +3,7 @@
 .segmented-tabs>[role=tab][aria-selected=true]{background:var(--ws-hover);color:var(--ws-text);box-shadow:0 0 0 1px var(--ws-artifact-border,var(--ws-border))}
 .segmented-tabs>[role=tab]>svg{flex-shrink:0;color:currentColor}
 .segmented-tabs>[role=tab]:hover{color:var(--ws-text)}
-.segmented-tabs>[role=tab]:focus-visible{outline:2px solid #6684ef;outline-offset:2px}
+.segmented-tabs>[role=tab]:focus-visible{outline:2px solid var(--revline-accent);outline-offset:2px}
 .segmented-tabs[data-appearance=navigation]{gap:12px;padding:0;border:0;border-radius:0;background:transparent}
 .segmented-tabs[data-appearance=navigation]>[role=tab]{min-height:32px;border-radius:4px;font-size:12px}
 .segmented-tabs[data-appearance=navigation]>[role=tab][aria-selected=true]{background:transparent;box-shadow:none;font-weight:500}

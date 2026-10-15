@@ -2,22 +2,22 @@
 .custom-timeline .timeline-transition-badge{position:absolute;top:50%;left:0;transform:translate(-50%,-50%);display:grid;place-items:center;width:24px;height:24px;padding:0;border:1px solid var(--ws-artifact-border);border-radius:5px;background:var(--ws-bg);color:var(--ws-muted);pointer-events:auto;cursor:pointer}
 .custom-timeline .timeline-cut-transition .timeline-transition-badge{opacity:0}
 .custom-timeline .timeline-track:hover .timeline-cut-transition .timeline-transition-badge,.custom-timeline .timeline-transition-badge:focus-visible,.custom-timeline .timeline-transition-badge[data-state=open]{opacity:1}
-.custom-timeline .has-transition .timeline-transition-badge{background:#263a60;border-color:#718ab3;color:#d9e6ff}
-.custom-timeline .timeline-transition-badge:hover,.custom-timeline .selected .timeline-transition-badge{border-color:#a6c4ff;background:#345080}
+.custom-timeline .has-transition .timeline-transition-badge{background:color-mix(in srgb,var(--revline-accent) 25%,var(--ws-bg));border-color:var(--revline-accent);color:var(--revline-accent-light)}
+.custom-timeline .timeline-transition-badge:hover,.custom-timeline .selected .timeline-transition-badge{border-color:var(--revline-accent-light);background:color-mix(in srgb,var(--revline-accent) 40%,var(--ws-bg))}
 .custom-timeline .timeline-cut-transition:not(.has-transition) .timeline-transition-badge:is(:hover,:focus-visible,[data-state=open]){background:var(--ws-hover);border-color:var(--ws-muted);color:var(--ws-text)}
-.custom-timeline .timeline-transition-range{position:absolute;top:50%;height:22px;transform:translateY(-50%);border:1px solid #8badde88;border-radius:4px;background:#5078b52e;pointer-events:none;opacity:0}
+.custom-timeline .timeline-transition-range{position:absolute;top:50%;height:22px;transform:translateY(-50%);border:1px solid color-mix(in srgb,var(--revline-accent) 53%,transparent);border-radius:4px;background:color-mix(in srgb,var(--revline-accent) 18%,transparent);pointer-events:none;opacity:0}
 .custom-timeline .timeline-track:hover .timeline-transition-range,.custom-timeline .timeline-cut-transition:is(:has(:focus-visible),.resizing,:has([data-state=open])) .timeline-transition-range{opacity:1}
 .custom-timeline .timeline-cut-transition:is(:has(:focus-visible),.resizing,:has([data-state=open])) .timeline-transition-badge{opacity:1}
 .custom-timeline .timeline-transition-handle{position:absolute;top:-4px;bottom:-4px;width:9px;padding:0;border:0;border-radius:2px;background:transparent;cursor:ew-resize;touch-action:none;pointer-events:none;opacity:0}
-.custom-timeline .timeline-transition-handle:after{content:'';position:absolute;top:9px;bottom:9px;left:3px;width:2px;border-radius:1px;background:#c5daff}
+.custom-timeline .timeline-transition-handle:after{content:'';position:absolute;top:9px;bottom:9px;left:3px;width:2px;border-radius:1px;background:var(--revline-accent-light)}
 .custom-timeline .timeline-transition-handle.left{left:-5px}.custom-timeline .timeline-transition-handle.right{right:-5px}
 .custom-timeline .timeline-track:hover .timeline-transition-handle,.custom-timeline .timeline-cut-transition:is(:has(:focus-visible),.resizing) .timeline-transition-handle{opacity:1;pointer-events:auto}
 .custom-timeline .timeline-transition-duration{position:absolute;left:50%;bottom:28px;transform:translateX(-50%);padding:3px 5px;border-radius:4px;background:var(--ws-bg);color:var(--ws-text);font-size:10px;white-space:nowrap;opacity:0}
 .custom-timeline .timeline-cut-transition:is(:hover,:has(:focus-visible),.resizing) .timeline-transition-duration{opacity:1}
-.custom-timeline .timeline-cut-transition button:focus-visible{outline:2px solid #819fff;outline-offset:2px}
-html[data-workspace-theme=light] .custom-timeline .has-transition .timeline-transition-badge{background:#edf2ff;border-color:#8ba2d0;color:#365993}
-html[data-workspace-theme=light] .custom-timeline .timeline-transition-range{border-color:#6486b988;background:#5078b51c}
-html[data-workspace-theme=light] .custom-timeline .timeline-transition-handle:after{background:#365993}
+.custom-timeline .timeline-cut-transition button:focus-visible{outline:2px solid var(--revline-accent-light);outline-offset:2px}
+html[data-workspace-theme=light] .custom-timeline .has-transition .timeline-transition-badge{background:color-mix(in srgb,var(--revline-accent) 10%,#fff);border-color:var(--revline-accent);color:var(--revline-accent)}
+html[data-workspace-theme=light] .custom-timeline .timeline-transition-range{border-color:color-mix(in srgb,var(--revline-accent) 53%,transparent);background:color-mix(in srgb,var(--revline-accent) 11%,transparent)}
+html[data-workspace-theme=light] .custom-timeline .timeline-transition-handle:after{background:var(--revline-accent)}
 .timeline-transition-menu{min-width:176px;padding:5px;border-radius:8px;background:var(--ws-bg,var(--popover));color:var(--ws-text,var(--popover-foreground))}
 .timeline-transition-menu [role=menuitem]{display:flex;align-items:center;gap:8px;min-height:32px;padding:7px 9px;border-radius:5px;font-size:11px;cursor:pointer}
 .timeline-transition-menu [role=menuitem]:is(:hover,:focus,[data-highlighted]){background:var(--ws-hover,#232a43);color:var(--ws-text,var(--popover-foreground));outline:none}

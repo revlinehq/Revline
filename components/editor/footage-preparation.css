@@ -13,4 +13,4 @@
 .footage-preparation-boot{min-height:100dvh}
 .footage-preparation-filename{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;color:var(--ws-muted,var(--muted-foreground))}
 .footage-preparation-activity{display:flex;align-items:center;justify-content:center;gap:7px}
-.footage-preparation-activity i{width:5px;height:5px;border-radius:50%;background:var(--revline-loading-color,#4768ef);flex:none}
+.footage-preparation-activity i{width:5px;height:5px;border-radius:50%;background:var(--revline-loading-color,var(--revline-accent));flex:none}

@@ -56,7 +56,7 @@ async function verifyFills(theme) {
     assert.ok(fill.fillWidth > 0, `${theme} ${fill.label} has a rendered progress fill`);
     assert.ok(Math.abs(fill.fillWidth / fill.sliderWidth - fill.expected) < .005, `${theme} ${fill.label} reflects its actual range value`);
     assert.notEqual(fill.color, 'rgba(0, 0, 0, 0)', `${theme} ${fill.label} fill is visible`);
-    assert.equal(fill.color,'rgb(71, 104, 239)', `${theme} ${fill.label} matches the approved Pen blue`);
+    assert.equal(fill.color,'rgb(98, 84, 213)', `${theme} ${fill.label} matches the approved violet accent`);
     assert.equal(fill.pointerEvents, 'none', `${theme} ${fill.label} fill cannot intercept gestures`);
   }
   assert.equal(new Set(fills.map(fill => fill.color)).size, 1, `${theme} uses the same blue for every effect slider`);
@@ -107,5 +107,5 @@ try {
   await verifyHandles();
   await page.screenshot({ path: '/tmp/revline-effect-slider-pill-dark.png', clip: { x: 40, y: 0, width: 340, height: 930 } });
   assert.deepEqual(errors, []);
-  console.log('PASS: 23 shared sliders show the same blue fill at measured range widths and one white rounded pill contained at min/max in light/dark; cinematic bars keyboard/pointer previews, single commit, cancel; disabled values retained; standalone text size. Synthetic only.');
+  console.log('PASS: 23 shared sliders show the same violet fill at measured range widths and one white rounded pill contained at min/max in light/dark; cinematic bars keyboard/pointer previews, single commit, cancel; disabled values retained; standalone text size. Synthetic only.');
 } finally { await browser.close(); }

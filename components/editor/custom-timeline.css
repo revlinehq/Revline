@@ -1,5 +1,5 @@
 /* The recovered custom timeline owns pointer gestures and canonical edits. */
-.custom-timeline{--timeline-selection-border:#262626;--timeline-selection-width:2px;--timeline-selection-halo:inset 0 0 0 1px #ffffff8c;--timeline-marquee-border:#4768ef;--timeline-marquee-fill:#4768ef14;--timeline-divider:color-mix(in srgb,var(--ws-text) 10%,var(--ws-bg));height:100%;min-width:0;min-height:0;overflow:hidden;padding:0;gap:0;background:var(--ws-bg);color:var(--ws-muted);container-type:inline-size;container-name:timeline}
+.custom-timeline{--timeline-selection-border:#262626;--timeline-selection-width:2px;--timeline-selection-halo:inset 0 0 0 1px #ffffff8c;--timeline-marquee-border:var(--revline-accent);--timeline-marquee-fill:color-mix(in srgb,var(--revline-accent) 7.84%,transparent);--timeline-divider:color-mix(in srgb,var(--ws-text) 10%,var(--ws-bg));height:100%;min-width:0;min-height:0;overflow:hidden;padding:0;gap:0;background:var(--ws-bg);color:var(--ws-muted);container-type:inline-size;container-name:timeline}
 html[data-workspace-theme=dark] .editor-app:not(.landing-product-demo) .custom-timeline{--timeline-selection-border:#fff;--timeline-selection-width:1px;--timeline-selection-halo:none;--timeline-marquee-border:#526b94;--timeline-marquee-fill:#7892c710;--timeline-divider:color-mix(in srgb,var(--ws-text) 5%,var(--ws-bg))}
 .custom-timeline .timeline-body{position:relative;flex:1;min-height:0;overflow:hidden}
 .custom-timeline .timeline-scroll{--timeline-scrollbar-thumb:color-mix(in srgb,var(--ws-text) 16%,var(--ws-bg));min-width:0;overflow:auto;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:var(--timeline-scrollbar-thumb) transparent}
@@ -100,13 +100,13 @@ html[data-workspace-theme=dark] .editor-app:not(.landing-product-demo) .custom-t
 .custom-timeline .timeline-clip.clip-effect>span{gap:5px;font-size:10px;font-weight:500;color:#fff;text-shadow:0 1px 2px #0004}
 .custom-timeline .timeline-clip.clip-effect>span svg{flex-shrink:0}
 .custom-timeline .timeline-clip.clip-effect{border:0;background:#222a39;color:#dde3ed;border-radius:4px;box-shadow:none}
-.custom-timeline .timeline-clip.clip-effect.selected{background:#4668ed}
+.custom-timeline .timeline-clip.clip-effect.selected{background:var(--revline-accent)}
 .custom-timeline .timeline-clip.clip-effect>span{color:#dde3ed;text-shadow:none}
 .custom-timeline .timeline-clip.clip-effect.selected>span{color:#fff}
 .custom-timeline .track-label[data-group=effects] .track-dot{background:#657daf!important}
 html[data-workspace-theme=light] .custom-timeline .timeline-clip.clip-effect{background:#e8edf7}
 html[data-workspace-theme=light] .custom-timeline .timeline-clip.clip-effect>span{color:#354051}
-html[data-workspace-theme=light] .custom-timeline .timeline-clip.clip-effect.selected{background:#4668ed}
+html[data-workspace-theme=light] .custom-timeline .timeline-clip.clip-effect.selected{background:var(--revline-accent)}
 html[data-workspace-theme=light] .custom-timeline .timeline-clip.clip-effect.selected>span{color:#fff}
 
-.timeline-track.library-effect-drop{box-shadow:inset 0 0 0 1px var(--ws-accent,#6684ef);background:color-mix(in srgb,var(--ws-accent,#6684ef) 8%,transparent)}
+.timeline-track.library-effect-drop{box-shadow:inset 0 0 0 1px var(--ws-accent,var(--revline-accent));background:color-mix(in srgb,var(--ws-accent,var(--revline-accent)) 8%,transparent)}
