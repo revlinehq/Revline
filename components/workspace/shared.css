@@ -1,4 +1,4 @@
-:root{--revline-primary-background:#6254d5;--revline-button-radius:5px}
+:root{--revline-primary-background:#6254d5;--revline-button-radius:10px}
 .revline-brand{display:inline-flex;align-items:center;gap:9px;font-family:var(--font-inter),Inter,sans-serif;font-size:17px;font-weight:600;line-height:1.4;color:var(--ws-text,#292929)}
 .revline-mark{width:26px;height:26px;flex-shrink:0;color:var(--ws-logo,#0c1424)}
 .revline-primary[data-slot=button]{height:36px;padding:0 18px;gap:8px;border:0;border-radius:var(--revline-button-radius);background:var(--revline-primary-background);color:#fff;box-shadow:none;transition:filter 120ms,transform 120ms;font-size:13px;font-weight:500;font-family:inherit}
