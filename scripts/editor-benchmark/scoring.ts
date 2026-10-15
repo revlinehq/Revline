@@ -78,6 +78,8 @@ function count(value: unknown): number {
   if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0) throw new BenchmarkGuardError('Missing or invalid provider usage. Further runs are blocked.');
   return value;
 }
+const record = (value: unknown): Record<string, unknown> => value !== null && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
+const noIterations = (value: unknown) => value == null || (Array.isArray(value) && value.length === 0);
 
 /** Uses stored per-call totals, including reasoning output and cache writes.
  * Prices are supplied by this benchmark's reviewed 2026-10-15 plan, USD / 1M.
@@ -93,16 +95,26 @@ export function summarizeUsage(messages: StoredMessage[], expectedModel: Benchma
     ids.add(message._id);
     const usage = message.usage;
     if (!usage) throw new BenchmarkGuardError('Missing provider usage. Further runs are blocked.');
-    // Gateway Sonnet has an explicit namespaced model ID in Agent storage.
-    if (message.model !== expectedModel && !(expectedModel === 'claude-sonnet-5-5' && message.model === 'anthropic/claude-sonnet-5.5')) throw new BenchmarkGuardError('Stored provider model does not match the pinned benchmark model.');
-    const anthropic = message.providerMetadata?.anthropic as { iterations?: { type?: string; model?: string }[] } | undefined;
-    if (anthropic?.iterations?.some(iteration => iteration.type === 'advisor_message' || (iteration.model && iteration.model !== expectedModel))) throw new BenchmarkGuardError('Additional provider sub-inference or a fallback model prevents reliable benchmark cost attribution.');
+    if (message.model !== expectedModel) throw new BenchmarkGuardError('Stored provider model does not match the pinned benchmark model.');
+    const nativeAnthropic = expectedModel === 'claude-sonnet-5-5';
+    if (message.provider !== (nativeAnthropic ? 'anthropic.messages' : 'openai.responses')) throw new BenchmarkGuardError('Stored provider does not match the reviewed native benchmark tariff.');
     const inputTokens = count(usage.promptTokens), outputTokens = count(usage.completionTokens);
-    const cacheReadTokens = count(usage.cachedInputTokens ?? 0), cacheWriteTokens = count(usage.cacheWriteInputTokens ?? 0);
-    const uncachedInputTokens = usage.nonCachedInputTokens === undefined ? inputTokens - cacheReadTokens - cacheWriteTokens : count(usage.nonCachedInputTokens);
+    const cacheReadTokens = count(usage.cachedInputTokens), cacheWriteTokens = count(usage.cacheWriteInputTokens);
+    const uncachedInputTokens = count(usage.nonCachedInputTokens);
     if (uncachedInputTokens < 0 || uncachedInputTokens + cacheReadTokens + cacheWriteTokens !== inputTokens) throw new BenchmarkGuardError('Provider input token categories do not reconcile. Further runs are blocked.');
-    const reasoningTokens = count(usage.reasoningTokens ?? 0);
-    if (reasoningTokens > outputTokens) throw new BenchmarkGuardError('Provider reasoning tokens exceed output usage.');
+    const reasoningTokens = count(usage.reasoningTokens), textOutputTokens = count(usage.textOutputTokens);
+    if (reasoningTokens + textOutputTokens !== outputTokens || (usage.totalTokens !== undefined && usage.totalTokens !== inputTokens + outputTokens)) throw new BenchmarkGuardError('Provider output token categories do not reconcile. Further runs are blocked.');
+    const raw = record(usage.raw), metadata = record(message.providerMetadata?.[nativeAnthropic ? 'anthropic' : 'openai']);
+    if (!noIterations(raw.iterations) || !noIterations(metadata.iterations)) throw new BenchmarkGuardError('Additional provider sub-inference or a fallback model prevents reliable benchmark cost attribution.');
+    let reliable = raw.output_tokens === outputTokens;
+    if (nativeAnthropic) {
+      const creation = record(raw.cache_creation), details = record(raw.output_tokens_details);
+      reliable &&= raw.input_tokens === uncachedInputTokens && raw.cache_read_input_tokens === cacheReadTokens && raw.cache_creation_input_tokens === cacheWriteTokens && creation.ephemeral_5m_input_tokens === cacheWriteTokens && creation.ephemeral_1h_input_tokens === 0 && details.thinking_tokens === reasoningTokens && raw.service_tier === 'standard' && raw.speed === 'standard' && raw.inference_geo === 'global';
+    } else {
+      const details = record(raw.input_tokens_details), output = record(raw.output_tokens_details);
+      reliable &&= raw.input_tokens === inputTokens && details.cached_tokens === cacheReadTokens && details.cache_write_tokens === cacheWriteTokens && output.reasoning_tokens === reasoningTokens && metadata.serviceTier === 'default' && (raw.total_tokens === undefined || raw.total_tokens === inputTokens + outputTokens) && [details.orchestration_input_tokens, details.orchestration_input_cached_tokens, output.orchestration_output_tokens].every(value => value === undefined || value === 0);
+    }
+    if (!reliable) throw new BenchmarkGuardError('Incomplete or unsupported native tariff usage. Further runs are blocked.');
     const longContext = expectedModel === 'gpt-6.1-sol' && inputTokens > 272_000;
     const inputMultiplier = longContext ? 2 : 1, outputMultiplier = longContext ? 1.5 : 1;
     const usd = (uncachedInputTokens * 2 * inputMultiplier + cacheReadTokens * 0.1 * inputMultiplier + cacheWriteTokens * 2.5 * inputMultiplier + outputTokens * 10 * outputMultiplier) / 1_000_000;
@@ -114,12 +126,15 @@ export function summarizeUsage(messages: StoredMessage[], expectedModel: Benchma
 }
 
 export class CostLedger {
-  spentUsd = 0;
+  spentUsd: number;
   reservedUsd = 0;
   blocked = false;
-  constructor(readonly ceilingUsd: number, readonly perRunReserveUsd: number) {
+  constructor(readonly ceilingUsd: number, readonly perRunReserveUsd: number, readonly priorKnownCostUsd = 0) {
     if (!Number.isFinite(ceilingUsd) || ceilingUsd <= 0 || perRunReserveUsd !== 1.68) throw new BenchmarkGuardError('Use a positive cost ceiling and the conservative $1.68 per-run reservation.');
+    if (!Number.isFinite(priorKnownCostUsd) || priorKnownCostUsd < 0 || priorKnownCostUsd > ceilingUsd) throw new BenchmarkGuardError('Prior known model cost must be finite, nonnegative and within the combined ceiling.');
+    this.spentUsd = priorKnownCostUsd;
   }
+  get currentRunSpentUsd() { return this.spentUsd - this.priorKnownCostUsd; }
   reserve() {
     if (this.blocked || this.reservedUsd || this.spentUsd + this.perRunReserveUsd > this.ceilingUsd + 1e-9) throw new BenchmarkGuardError('Cost ceiling or missing usage blocks the next run.');
     this.reservedUsd = this.perRunReserveUsd;

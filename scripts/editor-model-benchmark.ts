@@ -21,6 +21,14 @@ type Fixture = {
   analysisPreparation: { usd: number | null; note: string };
 };
 type Asset = Doc<'assets'> & { url: string | null };
+type EvidenceFile = { path: string; sha256: string };
+type HistoricalCostReceipt = {
+  version: 1; kind: 'benchmark-local-preflight-reconciliation'; target: Fixture['target']; convexUrl: string; ownerId: string;
+  sources: Fixture['sources']; knownModelCostUsd: number; unresolvedProviderCostUsd: number;
+  files: { fixture: EvidenceFile; manifest: EvidenceFile; messages: EvidenceFile; sources: EvidenceFile; plan: EvidenceFile; deployedTokenBudget: EvidenceFile; deployedAssistantActions: EvidenceFile };
+  attempt: { case: CaseName; model: BenchmarkModel; inputSha256: string; completedProviderMessageIds: string[]; localOnlyMessageIds: string[] };
+  proof: { classification: 'local-preflight-before-provider-generation'; deployedCommit: string; localFailureMessageId: string; localFailureError: string; localPreflightProven: boolean };
+};
 const cases: CaseName[] = ['precise-cuts', 'subtitles', 'styled-edit'];
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 const digest = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
@@ -45,7 +53,7 @@ async function privateJson<T>(path: string): Promise<T> {
   return JSON.parse(await readFile(path, 'utf8')) as T;
 }
 async function main() {
-  const { values } = parseArgs({ options: { target: { type: 'string' }, fixture: { type: 'string' }, output: { type: 'string' }, run: { type: 'boolean', default: false } }, strict: true });
+  const { values } = parseArgs({ options: { target: { type: 'string' }, fixture: { type: 'string' }, output: { type: 'string' }, run: { type: 'boolean', default: false }, 'prior-known-model-cost-usd': { type: 'string' }, 'reconciliation-receipt': { type: 'string' } }, strict: true });
   requireValue(values.target === 'production' || values.target === 'development', 'Pass --target production or --target development explicitly.');
   requireValue(values.fixture && values.output, 'Pass --fixture and --output explicitly.');
   const fixture = await privateJson<Fixture>(resolve(values.fixture));
@@ -59,7 +67,35 @@ async function main() {
   requireValue(isAbsolute(fixture.usageEnvFile), 'An explicit absolute usage environment file is required.');
   requireValue(fixture.deadlineSeconds >= 30 && fixture.deadlineSeconds <= 600 && fixture.renderDeadlineSeconds >= 30 && fixture.renderDeadlineSeconds <= 1200, 'Editing and render deadlines must be bounded (30–600 and 30–1200 seconds).');
   requireValue(fixture.analysisPreparation && (fixture.analysisPreparation.usd === null || fixture.analysisPreparation.usd >= 0), 'Record shared analysis preparation costs separately, using null when unmetered.');
-  const ledger = new CostLedger(fixture.maxModelCostUsd, fixture.perRunReserveUsd);
+  const priorCostInput = values['prior-known-model-cost-usd'], receiptInput = values['reconciliation-receipt'];
+  requireValue(Boolean(priorCostInput) === Boolean(receiptInput), 'Prior known model cost and its reviewed reconciliation receipt must be supplied together.');
+  requireValue(priorCostInput === undefined || /^(?:0|[1-9]\d*)(?:\.\d{1,10})?$/.test(priorCostInput), 'Prior known model cost must be an explicit nonnegative decimal USD amount.');
+  const priorKnownCostUsd = priorCostInput === undefined ? 0 : Number(priorCostInput);
+  let history: HistoricalCostReceipt | undefined;
+  if (receiptInput) {
+    history = await privateJson<HistoricalCostReceipt>(resolve(receiptInput));
+    requireValue(history.version === 1 && history.kind === 'benchmark-local-preflight-reconciliation' && history.proof?.classification === 'local-preflight-before-provider-generation' && history.proof.localPreflightProven === true && /^[a-f0-9]{40}$/.test(history.proof.deployedCommit), 'Historical cost requires a reviewed, source-bound local-preflight receipt.');
+    requireValue(history.target === fixture.target && history.convexUrl === fixture.convexUrl && history.ownerId === fixture.ownerId && digest(history.sources) === digest(fixture.sources), 'Historical receipt target, owner and sources must match the unchanged fixture.');
+    requireValue(history.unresolvedProviderCostUsd === 0 && Number.isFinite(history.knownModelCostUsd) && Math.abs(history.knownModelCostUsd - priorKnownCostUsd) < 1e-10, 'Historical cost must match its receipt and contain no unresolved provider charge.');
+    for (const file of Object.values(history.files)) {
+      requireValue(isAbsolute(file.path) && /^[a-f0-9]{64}$/.test(file.sha256), 'Historical evidence requires absolute paths and SHA-256 hashes.');
+      requireValue(createHash('sha256').update(await readFile(file.path)).digest('hex') === file.sha256, 'Historical evidence changed after reconciliation. Keep the original manifest and reservation intact.');
+    }
+    requireValue(createHash('sha256').update(await readFile(resolve(values.fixture))).digest('hex') === history.files.fixture.sha256, 'A controlled rerun must use the unchanged original fixture.');
+    const captured = await privateJson<{ isDone: boolean; page: StoredMessage[] }>(history.files.messages.path);
+    requireValue(captured.isDone === true && Array.isArray(captured.page), 'Historical messages must be a complete captured page.');
+    const providerIds = new Set(history.attempt.completedProviderMessageIds), localIds = new Set(history.attempt.localOnlyMessageIds);
+    requireValue(providerIds.size > 0 && providerIds.size === history.attempt.completedProviderMessageIds.length && localIds.size === history.attempt.localOnlyMessageIds.length && [...providerIds].every(id => !localIds.has(id)), 'Historical provider and local row IDs must be explicit and distinct.');
+    const assistantRows = captured.page.filter(message => message.message?.role === 'assistant');
+    requireValue(assistantRows.every(message => providerIds.has(message._id) || localIds.has(message._id)) && assistantRows.length === providerIds.size + localIds.size, 'Every historical assistant row must be accounted for by the reviewed receipt.');
+    const completed = assistantRows.filter(message => providerIds.has(message._id));
+    requireValue(completed.every(message => message.status === 'success'), 'Historical provider calls must have completed successfully.');
+    requireValue(Math.abs(summarizeUsage(completed, history.attempt.model).usd - priorKnownCostUsd) < 1e-10, 'Historical cost does not match complete preceding provider usage.');
+    requireValue(assistantRows.filter(message => localIds.has(message._id)).every(message => !message.model && !message.provider && !message.usage), 'Only specifically reviewed local preflight rows may be reconciled outside provider usage.');
+    const failed = captured.page.find(message => message._id === history!.proof.localFailureMessageId) as (StoredMessage & { error?: string }) | undefined;
+    requireValue(failed?.status === 'failed' && localIds.has(failed._id) && failed.error === history.proof.localFailureError, 'The historical local failure must match its exact persisted source error.');
+  }
+  const ledger = new CostLedger(fixture.maxModelCostUsd, fixture.perRunReserveUsd, priorKnownCostUsd);
   const output = resolve(values.output);
   await mkdir(output, { recursive: true, mode: 0o700 }); await chmod(output, 0o700);
   if (values.run) {
@@ -69,9 +105,13 @@ async function main() {
     catch { throw new BenchmarkError('This output already has a benchmark run lock. Inspect the prior run and usage ledger before restarting.'); }
   }
   const save = (name: string, value: unknown) => writeFile(join(output, name), JSON.stringify(value, null, 2) + '\n', { mode: 0o600 });
-  const plan = { version: 1, target: fixture.target, deploymentName: fixture.deploymentName, models: fixture.models, serial: true, cases: cases.map(name => ({ name, prompt: casePrompt(name, 12) })), cost: { maxModelCostUsd: fixture.maxModelCostUsd, perRunReserveUsd: fixture.perRunReserveUsd, inputTokensPerRun: 300_000, outputTokensPerRun: 12_000, usdPerMillion: { input: 2, cacheRead: 0.1, cacheWrite: 2.5, output: 10 }, pricingReviewedOn: '2026-10-15', pricingSources: ['https://platform.claude.com/docs/en/about-claude/pricing', 'https://developers.openai.com/api/docs/models/gpt-6.1-sol'], note: 'Model cost estimates from persisted provider usage; preparation/analysis and hosted render costs are separate. The per-run reservation is a spending guard, not a provider billing cap.' }, analysisPreparation: fixture.analysisPreparation };
+  const plan = { version: 1, target: fixture.target, deploymentName: fixture.deploymentName, models: fixture.models, serial: true, cases: cases.map(name => ({ name, prompt: casePrompt(name, 12) })), cost: { maxModelCostUsd: fixture.maxModelCostUsd, perRunReserveUsd: fixture.perRunReserveUsd, priorKnownCostUsd, reconciliationReceiptSha256: history ? createHash('sha256').update(await readFile(resolve(receiptInput!))).digest('hex') : null, conservativeInputUnitsPerRun: 300_000, rawInputTokensPerRun: 1_000_000, inputUnitWeights: { uncached: 1, cacheWrite: 1.25, nativeCacheRead: 0.25 }, nativePromptCacheTtl: { 'claude-sonnet-5-5': '5m', 'gpt-6.1-sol': '30m' }, outputTokensPerRun: 12_000, usdPerMillion: { input: 2, cacheRead: 0.1, cacheWrite: 2.5, output: 10 }, pricingReviewedOn: '2026-10-15', pricingSources: ['https://platform.claude.com/docs/en/about-claude/pricing', 'https://developers.openai.com/api/docs/models/gpt-6.1-sol'], note: 'Model cost estimates from persisted provider usage; preparation/analysis and hosted render costs are separate. The per-run reservation is a spending guard, not a provider billing cap.' }, analysisPreparation: fixture.analysisPreparation };
+  if (history) {
+    const originalPlan = await privateJson<{ cases: typeof plan.cases; models: BenchmarkModel[] }>(history.files.plan.path);
+    requireValue(digest(originalPlan.cases) === digest(plan.cases) && digest(originalPlan.models) === digest(plan.models), 'Controlled rerun prompts, cases and model order must match the original inputs.');
+  }
   await save('plan.json', plan);
-  console.log(JSON.stringify({ mode: values.run ? 'run' : 'dry-run', target: fixture.target, models: fixture.models, cases, maxModelCostUsd: ledger.ceilingUsd, perRunReserveUsd: ledger.perRunReserveUsd, output }));
+  console.log(JSON.stringify({ mode: values.run ? 'run' : 'dry-run', target: fixture.target, models: fixture.models, cases, maxModelCostUsd: ledger.ceilingUsd, priorKnownCostUsd: ledger.priorKnownCostUsd, perRunReserveUsd: ledger.perRunReserveUsd, output }));
   if (!values.run) return;
   requireValue(!process.env.CONVEX_DEPLOYMENT || process.env.CONVEX_DEPLOYMENT === `${fixture.target === 'production' ? 'prod' : 'dev'}:${fixture.deploymentName}`, 'Current Convex environment conflicts with the fixture target.');
   requireValue(!process.env.NEXT_PUBLIC_CONVEX_URL || process.env.NEXT_PUBLIC_CONVEX_URL === fixture.convexUrl, 'Current public Convex URL conflicts with the fixture target.');
@@ -131,8 +171,9 @@ async function main() {
   const status = await (await client()).query(api.assistant.status, { projectId: sourceAssets.cuts.projectId });
   requireValue(status.configured && status.modelSwitcher && status.allowedModels?.includes('sonnet') && status.allowedModels.includes('gpt-6.1-sol'), 'Both pinned models must be enabled before creating benchmark projects.');
   await save('sources.json', { cuts: { duration: sourceAssets.cuts.duration, metadataSha256: digest({ size: sourceAssets.cuts.size, duration: sourceAssets.cuts.duration, width: sourceAssets.cuts.width, height: sourceAssets.cuts.height }) }, speech: { duration: speechDuration, transcriptSha256: digest(transcript), transcriptSegments: relevantSegments }, analysisPreparation: fixture.analysisPreparation });
+  if (history) requireValue(createHash('sha256').update(await readFile(join(output, 'sources.json'))).digest('hex') === history.files.sources.sha256, 'A controlled rerun must retain the original shared media/transcript inputs.');
   const runs: Record<string, unknown>[] = [];
-  const summary = () => save('results.json', { version: 1, target: fixture.target, models: fixture.models, runs, ledger: { spentUsd: ledger.spentUsd, reservedUsd: ledger.reservedUsd, ceilingUsd: ledger.ceilingUsd, blocked: ledger.blocked }, analysisPreparation: fixture.analysisPreparation, completedAt: new Date().toISOString() });
+  const summary = () => save('results.json', { version: 1, target: fixture.target, models: fixture.models, runs, ledger: { spentUsd: ledger.spentUsd, priorKnownCostUsd: ledger.priorKnownCostUsd, currentRunSpentUsd: ledger.currentRunSpentUsd, reservedUsd: ledger.reservedUsd, ceilingUsd: ledger.ceilingUsd, blocked: ledger.blocked }, analysisPreparation: fixture.analysisPreparation, completedAt: new Date().toISOString() });
   try {
     for (const caseName of cases) {
       // Reverse the second case to reduce a fixed first-model order effect.
@@ -158,6 +199,7 @@ async function main() {
         const runDirectory = join(output, `${caseName}-${model}`); await mkdir(runDirectory, { mode: 0o700 });
         const prompt = casePrompt(caseName, speechDuration);
         Object.assign(result, { prompt, initialTimeline: initial, inputSha256: digest({ timeline: { ...initial, clips: initial.clips.map(clip => ({ ...clip, assetId: 'same-source' })) }, prompt, analysis: original.analysis ?? {} }) });
+        if (history && caseName === history.attempt.case) requireValue(result.inputSha256 === history.attempt.inputSha256, 'The controlled rerun must retain the original timeline, prompt and saved analysis.');
         await summary();
         stage = `${caseName}/${model}/send`;
         ledger.reserve(); await summary();
