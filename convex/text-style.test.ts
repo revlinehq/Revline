@@ -5,6 +5,7 @@ import { beforeEach,afterEach,expect,test,vi } from 'vitest';
 import schema from './schema';
 import { api,internal } from './_generated/api';
 import { DEFAULT_TEXT_APPEARANCE } from '../lib/editor/text-style';
+import { TEXT_FONTS } from '../lib/editor/text-fonts';
 import type { Timeline } from '../lib/editor/types';
 
 const modules=import.meta.glob('./**/*.ts');
@@ -44,4 +45,20 @@ test('raw text appearance rejects invalid colors, numeric bounds, missing fields
   await expect(f.owner.mutation(api.projects.saveTimeline,{projectId:f.projectId,timeline:{...f.timeline,clips:[{...clip,fontFamily:'arbitrary-font' as typeof clip.fontFamily}]},expectedRevision:0})).rejects.toThrow();
   await expect(f.owner.mutation(api.projects.saveTimeline,{projectId:f.projectId,timeline:{...f.timeline,tracks:{visual:0,overlay:0,audio:0,effects:1},clips:[{...clip,kind:'effect',effectPreset:'solid-color',text:undefined,textTemplate:undefined,transform:undefined,animation:undefined}]},expectedRevision:0})).rejects.toThrow(/text|caption/i);
   expect((await f.owner.query(api.projects.get,{projectId:f.projectId})).revision).toBe(0);
+});
+
+
+test('every bundled font survives manual and AI saves and editable share copies',async()=>{
+  const f=await fixture();
+  const timeline:Timeline={...f.timeline,clips:TEXT_FONTS.map((font,index)=>({...f.timeline.clips[0],id:`font-${font.id}`,start:index*3,fontFamily:font.id}))};
+  await f.owner.mutation(api.projects.saveTimeline,{projectId:f.projectId,timeline,expectedRevision:0});
+  expect((await f.owner.query(api.projects.get,{projectId:f.projectId})).timeline).toEqual(timeline);
+  await f.t.run(ctx=>writeProject(ctx,f.projectId,{aiRunning:true,aiRunId:'font-run'}));
+  const changed:Timeline={...timeline,clips:timeline.clips.map((clip,index)=>({...clip,fontFamily:TEXT_FONTS[(index+1)%TEXT_FONTS.length].id}))};
+  await f.t.mutation(internal.assistant.apply,{projectId:f.projectId,ownerId:'text-style-owner',runId:'font-run',expectedRevision:1,timeline:changed});
+  await f.t.run(ctx=>writeProject(ctx,f.projectId,{aiRunning:false}));
+  expect((await f.owner.query(api.projects.get,{projectId:f.projectId})).timeline).toEqual(changed);
+  const shareId=await f.owner.mutation(api.timelineShares.publish,{projectId:f.projectId});
+  const copier=f.t.withIdentity({subject:'font-copy-owner'}),copyId=await copier.mutation(api.timelineShares.useTimeline,{shareId});
+  expect((await copier.query(api.projects.get,{projectId:copyId})).timeline).toEqual(changed);
 });

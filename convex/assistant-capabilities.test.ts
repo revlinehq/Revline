@@ -14,6 +14,7 @@ import { editorCapabilities } from '../lib/ai/editor-capabilities';
 import { resolvedTextAppearance } from '../lib/editor/text-style';
 import { AUDIO_ROLES,audioSettings,audioVolumeEnvelope,audioFadeGain,audioFadeAttributes } from '../lib/editor/audio-settings';
 import { TEXT_ANIMATION_PRESETS } from '../lib/editor/text-effects';
+import { TEXT_FONTS } from '../lib/editor/text-fonts';
 import { TEXT_LOOKS } from '../lib/editor/text-looks';
 import { createEditorStore } from '../lib/editor/store';
 import { textLayerFrame } from '../lib/editor/text-layers';
@@ -487,6 +488,11 @@ test('all actual look/animation/font schemas exist; caption tools copy only appe
   const result=await run(async tools=>{
     for(const look of TEXT_LOOKS)expect(()=>tools.applyTextLook.inputSchema.parse({clipId:'title',look:look.id})).not.toThrow();
     for(const animation of TEXT_ANIMATION_PRESETS)expect(()=>tools.setTextAnimation.inputSchema.parse({clipId:'title',animation})).not.toThrow();
+    for(const font of TEXT_FONTS){
+      expect(()=>tools.styleTextClip.inputSchema.parse({clipId:'title',fontFamily:font.id})).not.toThrow();
+      expect(()=>tools.styleCaptions.inputSchema.parse({fontFamily:font.id})).not.toThrow();
+      expect(()=>tools.addCaption.inputSchema.parse({text:'Exact words',start:0,duration:2,fontFamily:font.id})).not.toThrow();
+    }
     expect(()=>tools.styleTextClip.inputSchema.parse({clipId:'title',fontFamily:'arbitrary-css'})).toThrow();
     await execute(tools,'applyTextLook',{clipId:'title',look:'neon-echo'});
     await execute(tools,'styleTextClip',{clipId:'title',fontFamily:'anton',fontSize:80,color:'#AABBCC',rotation:18});
