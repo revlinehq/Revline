@@ -45,6 +45,8 @@ export const clipValidator = v.object({
   lensDistortion:v.optional(v.object({enabled:v.boolean(),amount:v.number(),centerX:v.number(),centerY:v.number(),fringing:v.number()})),
   frameDistortion:v.optional(v.object({enabled:v.boolean(),horizontal:v.number(),vertical:v.number(),skew:v.number(),bend:v.optional(v.number())})),
   filmOverlay:v.optional(v.object({enabled:v.boolean(),amount:v.number(),grain:v.number(),dust:v.number(),scratches:v.number(),vignette:v.number(),flicker:v.number(),warmth:v.number()})),
+  vhs:v.optional(v.object({enabled:v.boolean(),amount:v.number(),scanlines:v.number(),noise:v.number(),bleed:v.number(),tracking:v.number(),speed:v.number()})),
+  lightLeak:v.optional(v.object({enabled:v.boolean(),amount:v.number(),color:v.string(),position:v.number(),spread:v.number(),speed:v.number()})),
   textTemplate: v.optional(textTemplateValidator),
   textStyle:v.optional(textStyleValidator),
   fontFamily:v.optional(v.union(v.literal('space-grotesk'),v.literal('anton'),v.literal('dm-serif'),v.literal('geist-mono'),v.literal('inter'),v.literal('dm-sans'),v.literal('montserrat'),v.literal('poppins'),v.literal('oswald'),v.literal('bebas-neue'),v.literal('playfair-display'),v.literal('caveat'))),

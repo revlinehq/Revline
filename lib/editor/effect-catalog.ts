@@ -21,6 +21,8 @@ export const EFFECT_LIBRARY_CATALOG: readonly EffectLibraryEntry[] = [
   { id: 'frameDistortion', label: 'Frame distortion', description: 'Curve the whole frame and its outer edges inward or outward, with transparent space around the bent silhouette. Advanced perspective and skew remain adjustable.', category: 'motion', visual: 'frameDistortion' },
   { id: 'lensDistortion', label: 'Lens distortion', description: 'A curved wide-angle lens bend with adjustable strength, optical center and color fringing. Fills the frame without adding a border.', category: 'motion', visual: 'lensDistortion' },
   { id: 'filmOverlay', label: 'Film overlay', description: 'Animated film grain, dust and scratches, with adjustable vignette, flicker and warmth. Procedural, with no overlay download required.', category: 'texture', visual: 'filmOverlay' },
+  { id: 'vhs', label: 'VHS overlay', description: 'Analog scanlines, tape noise, subtle RGB bleed and rolling tracking distortion. Adjustable strength, components and speed; no overlay download.', category: 'texture', visual: 'vhs' },
+  { id: 'lightLeak', label: 'Light leak', description: 'A soft colored exposure glow at the frame edge. Adjust color, edge position, spread, strength and motion speed.', category: 'texture', visual: 'lightLeak' },
   { id: 'glitch', label: 'Digital glitch', description: 'Distort the selected footage', category: 'texture', visual: 'glitch' },
   { id: 'crossfade', label: 'Crossfade', description: 'Blend two neighboring clips at their cut', category: 'transitions', preset: 'crossfade' },
   { id: 'spin-zoom', label: 'Spin zoom', description: 'Rotate and zoom between neighboring clips', category: 'transitions', preset: 'spin-zoom' },

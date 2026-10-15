@@ -9,6 +9,7 @@ import {api,internal,components} from './_generated/api';
 import type {TimelinePublicationReceipt} from '../lib/ai/publication-receipt';
 import { getFunctionName } from 'convex/server';
 import type { Timeline } from '../lib/editor/types';
+import { addEffectClip } from '../lib/editor/operations';
 import { EFFECT_CATALOG,TIMED_EFFECT_PRESETS } from '../lib/editor/clip-effects';
 import { editorCapabilities } from '../lib/ai/editor-capabilities';
 import { resolvedTextAppearance } from '../lib/editor/text-style';
@@ -19,7 +20,7 @@ import { TEXT_LOOKS } from '../lib/editor/text-looks';
 import { createEditorStore } from '../lib/editor/store';
 import { textLayerFrame } from '../lib/editor/text-layers';
 import {DEFAULT_NEON_EDGES} from '../lib/editor/neon-edges';
-import { DEFAULT_FRAME_DISTORTION, DEFAULT_LENS_DISTORTION } from '../lib/editor/visual-effects';
+import { DEFAULT_FRAME_DISTORTION, DEFAULT_LENS_DISTORTION, DEFAULT_VHS, DEFAULT_LIGHT_LEAK, VISUAL_EFFECT_LIMITS } from '../lib/editor/visual-effects';
 import { parseAutomation,sampleAutomationLane } from '@hyperframes/core/audio-automation';
 import { fadeGain } from '@hyperframes/core/audio-fade';
 import type { ZodType } from 'zod';
@@ -683,5 +684,39 @@ test('corner rounding is an independent clip setting and preserves distortion, f
     await execute(tools,'resetVisualEffect',{clipId:'from',effect:'frameCorners',action:'remove'});
   },seed,true);
   expect(result.timeline.clips).toEqual(result.backend!.seed.clips.map(clip=>clip.id==='from'?{...clip,frameCorners:undefined}:clip));
+  expect(result.calls).not.toContain('assistant:requestAnalysis');await assertUndo(result);
+});
+
+
+test.each(['from','to'])('VHS and Light leak tools merge, bypass, reset, remove and undo on %s while preserving footage and audio',async clipId=>{
+  const styled:Timeline={...initial,clips:initial.clips.map(clip=>clip.id===clipId?{...clip,lensDistortion:{...DEFAULT_LENS_DISTORTION,enabled:true}}:clip)};
+  const seed=addEffectClip(styled,'fx-blur','zoom-blur',1,{duration:1});
+  const result=await run(async tools=>{
+    expect(tools.setVisualEffects.description).toContain('VHS');expect(tools.setVisualEffects.description).toContain('0 left, .25 top, .5 right, .75 bottom');
+    for(const group of ['vhs','lightLeak'] as const){
+      for(const [control,[min,max]] of Object.entries(VISUAL_EFFECT_LIMITS[group]))for(const value of [min-.01,max+.01,NaN,Infinity])expect(()=>tools.setVisualEffects.inputSchema.parse({clipId,[group]:{[control]:value}})).toThrow();
+      for(const bad of ['audio','title','fx-blur']){
+        await expect(execute(tools,'setVisualEffects',{clipId:bad,[group]:{enabled:true}})).rejects.toThrow('video or image');
+        await expect(execute(tools,'resetVisualEffect',{clipId:bad,effect:group,action:'reset'})).rejects.toThrow('visual footage');
+      }
+      await expect(execute(tools,'setVisualEffects',{clipId,[group]:{}})).rejects.toThrow('Specify');
+      await expect(execute(tools,'resetVisualEffect',{clipId,effect:group,action:'original-colors'})).rejects.toThrow('dither only');
+    }
+    for(const color of ['red','#123','#12345678','transparent','url(example)'])expect(()=>tools.setVisualEffects.inputSchema.parse({clipId,lightLeak:{color}})).toThrow();
+    await execute(tools,'setVisualEffects',{clipId,vhs:{enabled:true,scanlines:.8},lightLeak:{enabled:true,color:'#12ABCF'}});
+    const read=async()=>((await execute(tools,'inspectTimeline',{})) as{timeline:Timeline}).timeline.clips.find(clip=>clip.id===clipId)!;
+    expect((await read()).vhs).toEqual({...DEFAULT_VHS,enabled:true,scanlines:.8});expect((await read()).lightLeak).toEqual({...DEFAULT_LIGHT_LEAK,enabled:true,color:'#12ABCF'});
+    await execute(tools,'setVisualEffects',{clipId,vhs:{noise:.6,tracking:.4,speed:0},lightLeak:{position:.75,spread:.9,speed:3}});
+    await execute(tools,'setVisualEffects',{clipId,vhs:{enabled:false},lightLeak:{enabled:false}});
+    expect((await read()).vhs).toEqual({...DEFAULT_VHS,scanlines:.8,noise:.6,tracking:.4,speed:0});expect((await read()).lightLeak).toEqual({...DEFAULT_LIGHT_LEAK,color:'#12ABCF',position:.75,spread:.9,speed:3});
+    for(const group of ['vhs','lightLeak'] as const)await execute(tools,'resetVisualEffect',{clipId,effect:group,action:'reset'});
+    expect((await read()).vhs).toEqual(DEFAULT_VHS);expect((await read()).lightLeak).toEqual(DEFAULT_LIGHT_LEAK);
+    await execute(tools,'setVisualEffects',{clipId,vhs:{enabled:true,amount:.9},lightLeak:{enabled:true,amount:.8}});
+    for(const group of ['vhs','lightLeak'] as const)await execute(tools,'resetVisualEffect',{clipId,effect:group,action:'reset'});
+    expect((await read()).vhs).toEqual({...DEFAULT_VHS,enabled:true});expect((await read()).lightLeak).toEqual({...DEFAULT_LIGHT_LEAK,enabled:true});
+    await execute(tools,'resetVisualEffect',{clipId,effect:'vhs',action:'remove'});expect((await read()).vhs).toBeUndefined();expect((await read()).lightLeak).toEqual({...DEFAULT_LIGHT_LEAK,enabled:true});
+    await execute(tools,'resetVisualEffect',{clipId,effect:'lightLeak',action:'remove'});
+  },seed,true);
+  expect(result.error).toBeUndefined();expect(result.timeline.clips).toEqual(result.backend!.seed.clips.map(clip=>clip.id===clipId?{...clip,vhs:undefined,lightLeak:undefined}:clip));
   expect(result.calls).not.toContain('assistant:requestAnalysis');await assertUndo(result);
 });

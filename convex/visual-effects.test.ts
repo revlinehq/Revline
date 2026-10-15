@@ -4,9 +4,9 @@ import { convexTest } from 'convex-test';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import schema from './schema';
 import { api, internal } from './_generated/api';
-import { addEffectClip, addMediaClip, patchClip } from '../lib/editor/operations';
+import { addEffectClip, addMediaClip, patchClip, duplicateClip } from '../lib/editor/operations';
 import { EMPTY_TIMELINE, type Clip } from '../lib/editor/types';
-import { DEFAULT_COLOR_GRADE, DEFAULT_DITHER, DEFAULT_INVERT, DEFAULT_GLITCH, DEFAULT_ZOOM_BLUR, DEFAULT_LENS_DISTORTION, DEFAULT_FRAME_DISTORTION, DEFAULT_FILM_OVERLAY, DEFAULT_SOFT_BLUR } from '../lib/editor/visual-effects';
+import { DEFAULT_COLOR_GRADE, DEFAULT_DITHER, DEFAULT_INVERT, DEFAULT_GLITCH, DEFAULT_ZOOM_BLUR, DEFAULT_LENS_DISTORTION, DEFAULT_FRAME_DISTORTION, DEFAULT_FILM_OVERLAY, DEFAULT_SOFT_BLUR, DEFAULT_VHS, DEFAULT_LIGHT_LEAK, VISUAL_EFFECT_LIMITS } from '../lib/editor/visual-effects';
 import { subtitleStylePatch } from '../lib/editor/subtitle-styles';
 import { visualEffectsPatch } from '../lib/editor/visual-effects';
 import { splitClip } from '../lib/editor/operations';
@@ -15,7 +15,7 @@ import { deleteEmptyLayer, removeEmptyLayers } from '../lib/editor/timeline-cont
 const modules = import.meta.glob('./**/*.ts');
 beforeEach(() => vi.stubEnv('BILLING_ENABLED', 'false'));
 afterEach(() => vi.unstubAllEnvs());
-const effects = { frameCorners:{enabled:true,amount:.25}, softBlur:{...DEFAULT_SOFT_BLUR,enabled:true,amount:8}, lensDistortion:{...DEFAULT_LENS_DISTORTION,enabled:true},frameDistortion:{...DEFAULT_FRAME_DISTORTION,enabled:true,horizontal:.4,vertical:-.3,skew:.2},filmOverlay:{...DEFAULT_FILM_OVERLAY,enabled:true}, dither: { ...DEFAULT_DITHER, enabled: true, amount: .7, levels: 3, size: 4, shadowColor: '#101080', highlightColor: '#FFFF00' }, invert: { ...DEFAULT_INVERT, enabled: true }, colorGrade: { ...DEFAULT_COLOR_GRADE, enabled: true, exposure: .5, temperature: -30 }, zoomBlur: { ...DEFAULT_ZOOM_BLUR, enabled: true, centerY: .3 }, glitch: { ...DEFAULT_GLITCH, enabled: true, intensity: .8 } };
+const effects = { vhs:{...DEFAULT_VHS,enabled:true,scanlines:.6,speed:1.4},lightLeak:{...DEFAULT_LIGHT_LEAK,enabled:true,color:'#FF8844',position:.75,speed:.8}, frameCorners:{enabled:true,amount:.25}, softBlur:{...DEFAULT_SOFT_BLUR,enabled:true,amount:8}, lensDistortion:{...DEFAULT_LENS_DISTORTION,enabled:true},frameDistortion:{...DEFAULT_FRAME_DISTORTION,enabled:true,horizontal:.4,vertical:-.3,skew:.2},filmOverlay:{...DEFAULT_FILM_OVERLAY,enabled:true}, dither: { ...DEFAULT_DITHER, enabled: true, amount: .7, levels: 3, size: 4, shadowColor: '#101080', highlightColor: '#FFFF00' }, invert: { ...DEFAULT_INVERT, enabled: true }, colorGrade: { ...DEFAULT_COLOR_GRADE, enabled: true, exposure: .5, temperature: -30 }, zoomBlur: { ...DEFAULT_ZOOM_BLUR, enabled: true, centerY: .3 }, glitch: { ...DEFAULT_GLITCH, enabled: true, intensity: .8 } };
 async function fixture(kind: 'video' | 'image' = 'video') {
   const t = convexTest(schema, modules), owner = t.withIdentity({ subject: 'owner' });
   const projectId = await owner.mutation(api.projects.create, { title: 'Visual controls', aspectRatio: 'vertical' });
@@ -28,9 +28,11 @@ test.each(['video', 'image'] as const)('all visual controls round-trip on %s thr
   await f.owner.mutation(api.projects.saveTimeline, { projectId: f.projectId, timeline: f.timeline, expectedRevision: 0 });
   expect((await f.owner.query(api.projects.get, { projectId: f.projectId })).timeline?.clips[0]).toMatchObject(effects);
   await f.t.run(ctx => writeProject(ctx,f.projectId, { aiRunning: true, aiRunId: 'run' }));
-  const next = patchClip(f.timeline, 'visual', { glitch: { ...effects.glitch, enabled: false }, dither: { ...effects.dither, enabled: false }, frameDistortion: { ...effects.frameDistortion, enabled: false } });
+  const next = patchClip(f.timeline, 'visual', { glitch: { ...effects.glitch, enabled: false }, dither: { ...effects.dither, enabled: false }, frameDistortion: { ...effects.frameDistortion, enabled: false },vhs:{...effects.vhs,enabled:false},lightLeak:{...effects.lightLeak,enabled:false} });
   await f.t.mutation(internal.assistant.apply, { projectId: f.projectId, ownerId: 'owner', runId: 'run', expectedRevision: 1, timeline: next });
   const saved=(await f.owner.query(api.projects.get, { projectId: f.projectId })).timeline!.clips[0];
+  expect(saved.vhs).toEqual({...effects.vhs,enabled:false});
+  expect(saved.lightLeak).toEqual({...effects.lightLeak,enabled:false});
   expect(saved.glitch).toEqual({ ...effects.glitch, enabled: false });
   expect(saved.dither).toEqual({ ...effects.dither, enabled: false });
   expect(saved.frameDistortion).toEqual({ ...effects.frameDistortion, enabled: false });
@@ -112,4 +114,52 @@ test('legacy frame perspective saves without silently adding a bend or corner se
   const saved=(await f.owner.query(api.projects.get,{projectId:f.projectId})).timeline!.clips[0];
   expect(saved.frameDistortion).toEqual(legacy);
   expect(saved.frameCorners).toEqual({enabled:true,amount:.35});
+});
+
+
+test.each(['video','image'] as const)('VHS and Light leak retain controls through split, duplicate and editable share of %s',async kind=>{
+  const f=await fixture(kind);
+  const divided=splitClip(f.timeline,'visual',f.timeline.clips[0].duration/2,'tail');
+  const copied=duplicateClip(divided,'tail','copy');
+  await f.owner.mutation(api.projects.saveTimeline,{projectId:f.projectId,timeline:copied,expectedRevision:0});
+  const saved=(await f.owner.query(api.projects.get,{projectId:f.projectId})).timeline!;
+  expect(saved).toEqual(copied);
+  for(const clip of saved.clips){expect(clip.vhs).toEqual(effects.vhs);expect(clip.lightLeak).toEqual(effects.lightLeak);}
+  const shareId=await f.owner.mutation(api.timelineShares.publish,{projectId:f.projectId});
+  const copier=f.t.withIdentity({subject:'texture-copy-owner'}),copyId=await copier.mutation(api.timelineShares.useTimeline,{shareId});
+  const copy=(await copier.query(api.projects.get,{projectId:copyId})).timeline!;
+  expect(copy.clips.map(({assetId,...clip})=>clip)).toEqual(saved.clips.map(({assetId,...clip})=>clip));
+  for(const clip of copy.clips)expect((await f.t.run(ctx=>ctx.db.get('assets',ctx.db.normalizeId('assets',clip.assetId!)!)))?.ownerId).toBe('texture-copy-owner');
+});
+
+test.each(['vhs','lightLeak'] as const)('%s rejects every invalid numeric boundary, incomplete data and non-footage kind',async group=>{
+  const f=await fixture(),settings=effects[group];
+  for(const [key,[minimum,maximum]] of Object.entries(VISUAL_EFFECT_LIMITS[group])){
+    for(const value of [minimum-.01,maximum+.01,NaN,Infinity])for(const enabled of [true,false]){
+      const timeline=patchClip(f.timeline,'visual',{[group]:{...settings,enabled,[key]:value}});
+      await expect(f.owner.mutation(api.projects.saveTimeline,{projectId:f.projectId,timeline,expectedRevision:0})).rejects.toThrow('must be between');
+    }
+  }
+  const incomplete={...settings} as Partial<typeof settings>;delete incomplete.amount;
+  await expect(f.owner.mutation(api.projects.saveTimeline,{projectId:f.projectId,timeline:patchClip(f.timeline,'visual',{[group]:incomplete}),expectedRevision:0})).rejects.toThrow();
+  for(const kind of ['audio','caption','graphic','solid','effect'] as const){
+    const clip:Clip={id:'wrong-kind',kind,track:1,start:0,duration:1,sourceStart:0,...(kind==='effect'?{effectPreset:'zoom-blur' as const}:{}),[group]:settings};
+    await expect(f.owner.mutation(api.projects.saveTimeline,{projectId:f.projectId,timeline:{...f.timeline,tracks:{visual:1,audio:1,overlay:0,effects:1},clips:[clip]},expectedRevision:0})).rejects.toThrow('video or image');
+  }
+  expect((await f.owner.query(api.projects.get,{projectId:f.projectId})).revision).toBe(0);
+});
+
+test('texture boundary values save without clamping, and Light leak requires a six-digit solid hex color',async()=>{
+  const f=await fixture();let revision=0;
+  for(const end of [0,1]){
+    const vhs={...effects.vhs,...Object.fromEntries(Object.entries(VISUAL_EFFECT_LIMITS.vhs).map(([key,range])=>[key,range[end]]))};
+    const lightLeak={...effects.lightLeak,...Object.fromEntries(Object.entries(VISUAL_EFFECT_LIMITS.lightLeak).map(([key,range])=>[key,range[end]])),color:end?'#ABCDEF':'#000000'};
+    const timeline=patchClip(f.timeline,'visual',{vhs,lightLeak});
+    await f.owner.mutation(api.projects.saveTimeline,{projectId:f.projectId,timeline,expectedRevision:revision});revision++;
+    expect((await f.owner.query(api.projects.get,{projectId:f.projectId})).timeline).toEqual(timeline);
+  }
+  for(const color of ['red','#xyzxyz','#12345678','#123','transparent','url(example)']){
+    const timeline=patchClip(f.timeline,'visual',{lightLeak:{...effects.lightLeak,color}});
+    await expect(f.owner.mutation(api.projects.saveTimeline,{projectId:f.projectId,timeline,expectedRevision:revision})).rejects.toThrow('six-digit hex');
+  }
 });

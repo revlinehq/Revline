@@ -12,7 +12,10 @@ export type FrameCorners = { enabled: boolean; amount: number };
 export type SoftBlur = { enabled: boolean; amount: number };
 export type LensDistortion = { enabled: boolean; amount: number; centerX: number; centerY: number; fringing: number };
 export type FilmOverlay = { enabled: boolean; amount: number; grain: number; dust: number; scratches: number; vignette: number; flicker: number; warmth: number };
-export type VisualEffects = { colorGrade?: ColorGrade; zoomBlur?: ZoomBlur; glitch?: Glitch; invert?: InvertColors; dither?: Dither; neonEdges?: NeonEdges; lensDistortion?: LensDistortion; filmOverlay?: FilmOverlay; softBlur?: SoftBlur; frameDistortion?: FrameDistortion; frameCorners?: FrameCorners };
+export type Vhs = { enabled: boolean; amount: number; scanlines: number; noise: number; bleed: number; tracking: number; speed: number };
+/** Position travels clockwise around the edge: left 0, top .25, right .5, bottom .75. */
+export type LightLeak = { enabled: boolean; amount: number; color: string; position: number; spread: number; speed: number };
+export type VisualEffects = { colorGrade?: ColorGrade; zoomBlur?: ZoomBlur; glitch?: Glitch; invert?: InvertColors; dither?: Dither; neonEdges?: NeonEdges; lensDistortion?: LensDistortion; filmOverlay?: FilmOverlay; vhs?: Vhs; lightLeak?: LightLeak; softBlur?: SoftBlur; frameDistortion?: FrameDistortion; frameCorners?: FrameCorners };
 export type VisualEffectsPatch = { [K in keyof VisualEffects]?: Partial<NonNullable<VisualEffects[K]>> };
 
 export const DEFAULT_COLOR_GRADE: Readonly<ColorGrade> = Object.freeze({ enabled: false, exposure: 0, contrast: 1, saturation: 1, temperature: 0, tint: 0, vibrance: 0 });
@@ -26,10 +29,12 @@ export const DEFAULT_FRAME_CORNERS: Readonly<FrameCorners> = Object.freeze({ ena
 export const DEFAULT_SOFT_BLUR: Readonly<SoftBlur> = Object.freeze({ enabled: false, amount: 0 });
 export const DEFAULT_LENS_DISTORTION: Readonly<LensDistortion> = Object.freeze({ enabled: false, amount: .28, centerX: .5, centerY: .5, fringing: 2 });
 export const DEFAULT_FILM_OVERLAY: Readonly<FilmOverlay> = Object.freeze({ enabled: false, amount: .65, grain: .35, dust: .18, scratches: .12, vignette: .25, flicker: .06, warmth: .15 });
+export const DEFAULT_VHS: Readonly<Vhs> = Object.freeze({ enabled: false, amount: .65, scanlines: .35, noise: .22, bleed: .3, tracking: .2, speed: 1 });
+export const DEFAULT_LIGHT_LEAK: Readonly<LightLeak> = Object.freeze({ enabled: false, amount: .55, color: '#ff934f', position: .1, spread: .45, speed: .5 });
 /** Manual controls, drag/drop and agent tools share these defaults. */
 export const VISUAL_EFFECT_DEFAULTS = Object.freeze({
   frameDistortion: DEFAULT_FRAME_DISTORTION, frameCorners: DEFAULT_FRAME_CORNERS, softBlur: DEFAULT_SOFT_BLUR, colorGrade: DEFAULT_COLOR_GRADE, zoomBlur: DEFAULT_ZOOM_BLUR, glitch: DEFAULT_GLITCH,
-  invert: DEFAULT_INVERT, dither: DEFAULT_DITHER, neonEdges: DEFAULT_NEON_EDGES, lensDistortion: DEFAULT_LENS_DISTORTION, filmOverlay: DEFAULT_FILM_OVERLAY,
+  invert: DEFAULT_INVERT, dither: DEFAULT_DITHER, neonEdges: DEFAULT_NEON_EDGES, lensDistortion: DEFAULT_LENS_DISTORTION, filmOverlay: DEFAULT_FILM_OVERLAY, vhs: DEFAULT_VHS, lightLeak: DEFAULT_LIGHT_LEAK,
 });
 export const VISUAL_EFFECT_KEYS = Object.freeze(Object.keys(VISUAL_EFFECT_DEFAULTS) as (keyof VisualEffects)[]);
 export const VISUAL_EFFECT_LIMITS = {
@@ -44,6 +49,8 @@ export const VISUAL_EFFECT_LIMITS = {
   glitch: { intensity: [0, 1], blockSize: [1, 100], rgbSplit: [0, 50] },
   lensDistortion: { amount: [-.8, .8], centerX: [0, 1], centerY: [0, 1], fringing: [0, 10] },
   filmOverlay: { amount: [0, 1], grain: [0, 1], dust: [0, 1], scratches: [0, 1], vignette: [0, 1], flicker: [0, 1], warmth: [0, 1] },
+  vhs: { amount: [0, 1], scanlines: [0, 1], noise: [0, 1], bleed: [0, 1], tracking: [0, 1], speed: [0, 3] },
+  lightLeak: { amount: [0, 1], position: [0, 1], spread: [0, 1], speed: [0, 3] },
 } as const;
 
 /** Preview, export and live updates use the same registered effect fields. */
@@ -59,11 +66,11 @@ export function validateVisualEffects(clip: Pick<Clip, 'kind' | 'effectPreset'> 
     if (!settings || typeof settings !== 'object' || typeof settings.enabled !== 'boolean') throw new Error(`Invalid ${property} settings.`);
     const limits = VISUAL_EFFECT_LIMITS[property] as Record<string, readonly [number, number]>;
     const values = settings as unknown as Record<string, unknown>;
-    const colorKeys = property === 'dither' ? ['shadowColor', 'highlightColor'] : property === 'neonEdges' ? ['color'] : [];
+    const colorKeys = property === 'dither' ? ['shadowColor', 'highlightColor'] : property === 'neonEdges' || property === 'lightLeak' ? ['color'] : [];
     if (property === 'neonEdges') validateNeonEdges(settings as NeonEdges);
     if (Object.keys(values).some(key => key !== 'enabled' && !colorKeys.includes(key) && !(key in limits))) throw new Error(`Unknown ${property} control.`);
     for (const key of colorKeys) {
-      if (values[key] !== undefined && (typeof values[key] !== 'string' || !/^#[\da-f]{6}$/i.test(values[key] as string))) throw new Error(`dither.${key} must be a six-digit hex color.`);
+      if ((property === 'lightLeak' || values[key] !== undefined) && (typeof values[key] !== 'string' || !/^#[\da-f]{6}$/i.test(values[key] as string))) throw new Error(`${property}.${key} must be a six-digit hex color.`);
     }
     for (const [key, [min, max]] of Object.entries(limits)) {
       const value = values[key];
