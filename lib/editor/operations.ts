@@ -124,7 +124,8 @@ export function duplicateClip(timeline: Timeline, id: string, newId: string): Ti
   if (pair) next = placeOnFreeLayer(next, { ...pair, id: pairId, linkedClipId: newId, start: pair.start + clip.duration });
   return next;
 }
-export function addMediaClip(timeline: Timeline, asset: { _id: string; kind: Clip['kind']; duration?: number; audioAssetId?: string }, id: string, at?: number, track = 1): Timeline {
+export function addMediaClip(timeline: Timeline, asset: { _id: string; kind: Clip['kind']; duration?: number; audioAssetId?: string; preparation?: {message:string} }, id: string, at?: number, track = 1): Timeline {
+  if(asset.preparation)throw new Error(asset.preparation.message);
   timeline = normalizeTimeline(timeline);
   const group = layerGroup(asset.kind);
   const trackEnd = Math.max(0, ...timeline.clips.filter(c => layerGroup(c.kind) === group && trackOf(c) === track).map(c => c.start + c.duration));

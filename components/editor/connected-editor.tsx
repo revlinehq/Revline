@@ -70,7 +70,12 @@ function ProjectEditor({project}: {project:Doc<'projects'>}) {
   }));
   const [upload,setUpload]=useState<UploadProgress>(null);const [optimisticAssets,setOptimisticAssets]=useState<MediaAsset[]>([]);
   useEffect(()=>{saves.receive({timeline:project.timeline??{...EMPTY_TIMELINE,aspectRatio:project.aspectRatio},revision:project.revision??0,history:project.history??[]});},[project,saves]);
-  const assets=useMemo<MediaAsset[]>(()=>[...(media??[]),...optimisticAssets.filter(asset=>!media?.some(a=>a._id===asset._id))],[media,optimisticAssets]);
+  const assets=useMemo<MediaAsset[]>(()=>[...(media??[]),...optimisticAssets.filter(asset=>!media?.some(a=>a._id===asset._id))].map(asset=>{
+    if(asset.kind!=='video'||asset.audioExtracted||asset.audioAssetId)return asset;
+    const task=mediaTasks?.find(task=>task.kind==='extract'&&task.assetId===asset._id);
+    const failed=task?.status==='failed'||task?.status==='cancelled';
+    return {...asset,preparation:{status:failed?'failed' as const:'processing' as const,message:failed?'Audio preparation failed.':'Preparing audio…'}};
+  }),[media,optimisticAssets,mediaTasks]);
   const commit=useCallback((next:Timeline)=>{timelineRef.current=next;if(store.getState().timeline!==next)store.getState().replace(next);saves.edit(next);},[saves]);
   const change=useCallback((next:Timeline)=>{store.getState().edit(next);setError('');commit(store.getState().timeline);},[commit]);
   const undoInFlight=useRef(false);
@@ -140,7 +145,7 @@ function ProjectEditor({project}: {project:Doc<'projects'>}) {
     const queue = files.map(file => ({id:crypto.randomUUID(),name:file.name,percent:0,kind:(file.type.startsWith('audio/')?'audio':file.type.startsWith('image/')?'image':'video') as 'video'|'image'|'audio',error:undefined as string|undefined}));
     try{for(const [index,file] of files.entries()){
       const progress={name:file.name,size:file.size,index:index+1,total:files.length};
-      const report = (percent:number,phase:'reading'|'uploading'|'saving') => { queue[index].percent=percent; setUpload({...progress,percent,phase,queue:queue.slice(index).map(item=>({...item}))}); };
+      const report = (percent:number,phase:NonNullable<UploadProgress>['phase']) => { queue[index].percent=percent; setUpload({...progress,percent,phase,queue:queue.slice(index).map(item=>({...item}))}); };
       try{
         const assetId = await uploadSourceFile(file, {
           start: meta => startUpload({ projectId, fileName: file.name, contentType: file.type, size: file.size, ...meta }),
@@ -149,9 +154,14 @@ function ProjectEditor({project}: {project:Doc<'projects'>}) {
           abort: uploadId => abortUpload({ uploadId }),
           saveThumbnail,
         }, report);
-        // Upload completion is independent of worker availability. Timeline media
-        // uses its original audio until the preparation effect separates it.
-        const asset=await convex.query(api.assets.get,{projectId,assetId});
+        // Sources can finish uploading while audio is prepared. Direct imports
+        // place the linked video and audio together once preparation is ready.
+        let asset=await convex.query(api.assets.get,{projectId,assetId});
+        if(addToTimeline&&asset.kind==='video'&&!asset.audioExtracted){
+          report(100,'preparing');
+          await prepareVideoAudio(convex,projectId,assetId);
+          asset=await convex.query(api.assets.get,{projectId,assetId});
+        }
         const audio=asset.audioAssetId?await convex.query(api.assets.get,{projectId,assetId:asset.audioAssetId}):null;
         setOptimisticAssets(previous=>[...previous,asset,...(audio?[audio]:[])]);
         if(addToTimeline){

@@ -69,3 +69,5 @@
 .inspector-media-content>.footage-content-library{height:100%;min-height:0}
 .footage-content-library>.source-media-list{flex:1;min-height:0;overflow-y:auto;scrollbar-gutter:stable;scrollbar-width:thin;scrollbar-color:color-mix(in srgb,var(--ws-text) 30%,var(--ws-bg)) transparent}
 .footage-content-library>.source-filters,.footage-content-library>.upload-status{flex-shrink:0}
+
+.source-media-row[data-preparing=true]{opacity:1;cursor:progress}.source-media-row[data-preparing=true] small{display:flex;align-items:center;gap:5px;color:var(--ws-muted)}.source-media-row[data-preparing=true] small svg{flex-shrink:0}

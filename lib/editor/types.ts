@@ -75,6 +75,7 @@ export type MediaAsset = {
   _id: string; fileName: string; kind: 'video' | 'image' | 'audio';
   duration?: number; width?: number; height?: number; url: string | null; thumbnailUrl?:string|null;
   audioAssetId?: string; audioExtracted?: boolean;
+  preparation?: {status:'processing'|'failed';message:string};
   waveform?: AudioWaveform;
   analysis?: {
     transcript?: {segments:{start:number;end:number;text:string}[];words:{start:number;end:number;text:string}[]};

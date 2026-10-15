@@ -84,3 +84,14 @@ describe('shared split frame boundaries', () => {
   expect(timeline.clips).toHaveLength(1);
  });
 });
+
+it('keeps preparing video out of the timeline and adds its prepared audio atomically',()=>{
+ const project:Timeline={aspectRatio:'landscape',fps:30,clips:[]};
+ const source={_id:'video',kind:'video' as const,duration:5};
+ expect(()=>addMediaClip(project,{...source,preparation:{message:'Preparing audio…'}},'clip')).toThrow('Preparing audio');
+ expect(project.clips).toEqual([]);
+ const ready=addMediaClip(project,{...source,audioAssetId:'audio'},'clip');
+ expect(ready.clips).toHaveLength(2);
+ expect(ready.clips.find(c=>c.kind==='video')).toMatchObject({audioSeparated:true,volume:0,linkedClipId:'clip-audio'});
+ expect(ready.clips.find(c=>c.kind==='audio')).toMatchObject({assetId:'audio',linkedClipId:'clip',start:0,duration:5});
+});

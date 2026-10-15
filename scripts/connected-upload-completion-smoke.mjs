@@ -7,7 +7,7 @@ import puppeteer from 'puppeteer';
 // Only network/provider boundaries and the editor's display shell are replaced.
 const stubs = {
   'next/link': `export default function Link(){return null}`,
-  './editor-shell': `import React from 'react';export function EditorShell(p){return <main><button id="upload" onClick={()=>void p.onUpload([new File(['video'],'footage.mp4',{type:'video/mp4'})]).then(()=>window.finished++)}>Upload</button><button id="image" onClick={()=>void p.onUpload([new File(['image'],'still.png',{type:'image/png'})]).then(()=>window.finished++)}>Image</button><button id="drop" onClick={()=>void p.onDropUpload([new File(['video'],'source.mp4',{type:'video/mp4'})]).then(()=>window.finished++)}>Drop</button><output id="upload-status">{p.upload?.phase??'idle'}</output><output id="assets">{p.assets.length}</output><output id="clips">{JSON.stringify(p.timeline.clips)}</output><output id="error">{p.error}</output></main>}`,
+  './editor-shell': `import React from 'react';export function EditorShell(p){return <main><button id="upload" onClick={()=>void p.onUpload([new File(['video'],'footage.mp4',{type:'video/mp4'})]).then(()=>window.finished++)}>Upload</button><button id="image" onClick={()=>void p.onUpload([new File(['image'],'still.png',{type:'image/png'})]).then(()=>window.finished++)}>Image</button><button id="drop" onClick={()=>void p.onDropUpload([new File(['video'],'source.mp4',{type:'video/mp4'})]).then(()=>window.finished++)}>Drop</button><output id="upload-status">{p.upload?.phase??'idle'}</output><output id="assets">{p.assets.length}</output><output id="preparing">{p.assets.filter(a=>a.preparation).length}</output><output id="clips">{JSON.stringify(p.timeline.clips)}</output><output id="error">{p.error}</output></main>}`,
   './timeline-share-dialog': `export function ConnectedTimelineShareDialog(){return null}`,
   '@/components/workspace/workspace-nav': `export function WorkspaceNav(){return null}`,
   '@/components/workspace/editor-access-gate': `export function EditorAccessGate(p){return p.children}`,
@@ -24,14 +24,14 @@ await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
 const browser=await puppeteer.launch({headless:true,args:['--no-sandbox']});
 try{
  const page=await browser.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));await page.goto('http://127.0.0.1:'+server.address().port);await page.click('#upload');
- await page.waitForFunction(()=>Object.keys(window.sources).length===1);
- await page.waitForFunction(()=>window.finished===1,{timeout:2000}).catch(()=>assert.fail('A stored video must finish importing even while audio extraction is queued'));
- assert.equal(await page.$eval('#upload-status',n=>n.textContent),'idle','Completed source has no stale saving status');
- assert.equal(await page.evaluate(()=>window.acknowledged),1,'Only the completed import is acknowledged');
- let clips=await page.$eval('#clips',n=>JSON.parse(n.textContent));assert.equal(clips.length,1);assert.equal(clips[0].volume,1,'Original video audio remains audible during extraction');
- await page.waitForFunction(()=>window.preparing===1);await page.click('#image');await page.waitForFunction(()=>window.finished===2,{timeout:2000});assert.equal(await page.$eval('#upload-status',n=>n.textContent),'idle','Another upload can finish during background audio preparation');
- await page.evaluate(()=>window.finishAudio());await page.waitForFunction(()=>JSON.parse(document.querySelector('#clips').textContent).some(c=>c.kind==='audio'));
- clips=await page.$eval('#clips',n=>JSON.parse(n.textContent));assert.equal(clips.find(c=>c.kind==='video').audioSeparated,true);assert.equal(clips.filter(c=>c.kind==='image').length,1,'Audio completion preserves intervening edits');
- await page.click('#drop');await page.waitForFunction(()=>window.finished===3,{timeout:2000});assert.equal(await page.$eval('#assets',n=>Number(n.textContent)),4);assert.equal(await page.$eval('#clips',n=>JSON.parse(n.textContent).length),3,'Composer uploads remain sources without adding clips');
- assert.deepEqual(errors,[]);console.log('PASS: connected imports complete while extraction is queued, retain native audio, accept another upload, separate audio later, and keep composer uploads off the timeline. No network/AI calls.');
+ await page.waitForFunction(()=>window.preparing===1);
+ assert.equal(await page.$eval('#upload-status',n=>n.textContent),'preparing','Worker preparation has its own accurate status');
+ assert.equal(await page.$eval('#clips',n=>JSON.parse(n.textContent).length),0,'Direct imports wait instead of inserting video alone');
+ assert.equal(await page.evaluate(()=>window.finished),0);
+ await page.evaluate(()=>window.finishAudio());await page.waitForFunction(()=>window.finished===1,{timeout:2000});
+ let clips=await page.$eval('#clips',n=>JSON.parse(n.textContent));assert.equal(clips.length,2,'Video and audio enter the timeline together');assert.equal(clips.find(c=>c.kind==='video').audioSeparated,true);
+ await page.waitForFunction(()=>document.querySelector('#upload-status').textContent==='idle');assert.equal(await page.evaluate(()=>window.acknowledged),1);
+ await page.click('#drop');await page.waitForFunction(()=>window.finished===2&&document.querySelector('#upload-status').textContent==='idle',{timeout:2000});assert.equal(await page.$eval('#preparing',n=>Number(n.textContent)),1,'My media keeps a new video in preparation until extraction finishes');assert.equal(await page.$eval('#clips',n=>JSON.parse(n.textContent).length),2,'Source uploads do not insert a video-only clip');assert.equal(await page.$eval('#upload-status',n=>n.textContent),'idle','Completed upload does not leave the saving banner');
+ await page.click('#image');await page.waitForFunction(()=>window.finished===3,{timeout:2000});assert.equal(await page.$eval('#clips',n=>JSON.parse(n.textContent).length),3,'An image remains immediately usable');
+ assert.deepEqual(errors,[]);console.log('PASS: direct imports place video and audio together, My media marks pending sources, uploads clear their saving state, and images stay immediate. No network/AI calls.');
 }finally{await browser.close();await new Promise(resolve=>server.close(resolve))}
