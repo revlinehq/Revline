@@ -38,7 +38,35 @@ try{
   await page.waitForFunction(()=>document.querySelector('.landing-product-demo')?.dataset.storyStage==='1'&&document.querySelector('.landing-product-demo textarea')?.value==='');
   assert.equal(await page.$eval('.landing-product-demo textarea',node=>node.value),'','Visual send clears the composer');
   assert.match(await page.$eval('.chat-user',node=>node.textContent),/launch cinematic/);
-  await page.waitForFunction(()=>document.querySelector('.landing-product-demo')?.dataset.storyStage==='6',{timeout:25000});
+  const splits=[];
+  for(const expected of [{stage:2,clips:2,at:4.8},{stage:3,clips:3,at:7.7},{stage:4,clips:4,at:2.4},{stage:5,clips:5,at:6.3}]){
+    await page.waitForFunction(({stage,clips,at})=>{
+      const root=document.querySelector('.landing-product-demo');
+      if(Number(root?.dataset.storyStage)!==stage)return false;
+      const blocks=[...root.querySelectorAll('.timeline-clip.clip-video')];
+      const player=[...root.querySelectorAll('hyperframes-player')].find(node=>node.style.zIndex==='1');
+      const clock=player?.iframeElement?.contentWindow?.__timelines?.revline?.time();
+      const head=root.querySelector('.playhead'),cap=root.querySelector('.timeline-playhead-cap');
+      if(blocks.length!==clips||clock===undefined||!head||!cap)return false;
+      const origin=Math.min(...blocks.map(node=>Number.parseFloat(node.style.left)));
+      const px=blocks.reduce((sum,node)=>sum+Number.parseFloat(node.style.width),0)/12;
+      const cut=origin+at*px,headX=new DOMMatrixReadOnly(head.style.transform).m41;
+      const headBounds=head.getBoundingClientRect(),capBounds=cap.getBoundingClientRect();
+      return player.paused&&Math.abs(clock-at)<1/30&&Math.abs(headX-cut)<1&&Math.abs((capBounds.x+capBounds.width/2)-(headBounds.x+headBounds.width/2))<1.5;
+    },{timeout:8000},expected);
+    splits.push(await page.evaluate(expected=>{
+      const root=document.querySelector('.landing-product-demo');
+      const blocks=[...root.querySelectorAll('.timeline-clip.clip-video')];
+      const player=[...root.querySelectorAll('hyperframes-player')].find(node=>node.style.zIndex==='1');
+      const head=root.querySelector('.playhead'),cap=root.querySelector('.timeline-playhead-cap');
+      const origin=Math.min(...blocks.map(node=>Number.parseFloat(node.style.left)));
+      const px=blocks.reduce((sum,node)=>sum+Number.parseFloat(node.style.width),0)/12;
+      const headBounds=head.getBoundingClientRect(),capBounds=cap.getBoundingClientRect();
+      return {...expected,time:player.iframeElement.contentWindow.__timelines.revline.time(),paused:player.paused,headX:new DOMMatrixReadOnly(head.style.transform).m41,cutX:origin+expected.at*px,capOffset:(capBounds.x+capBounds.width/2)-(headBounds.x+headBounds.width/2)};
+    },expected));
+    if(expected.stage===3)await page.screenshot({path:'/tmp/revline-landing-demo-split.png'});
+  }
+  await page.waitForFunction(()=>document.querySelector('.landing-product-demo')?.dataset.storyStage==='8',{timeout:30000});
   await page.waitForFunction(()=>{const player=[...document.querySelectorAll('hyperframes-player')].find(node=>node.style.zIndex==='1');return player&&!player.paused&&player.currentTime>.2;});
   const playback=()=>page.evaluate(()=>{const player=[...document.querySelectorAll('hyperframes-player')].find(node=>node.style.zIndex==='1');return {time:player.currentTime,paused:player.paused,muted:player.muted,media:[...player.iframeElement.contentDocument.querySelectorAll('video')].map(node=>({src:node.src,muted:node.muted,ready:node.readyState})),text:player.iframeElement.contentDocument.body.textContent};});
   const pause=await page.$eval('[aria-label="Pause (Space)"]',node=>{const r=node.getBoundingClientRect();return{x:r.x+r.width/2,y:r.y+r.height/2};});await page.mouse.click(pause.x,pause.y);const before=await playback();await new Promise(resolve=>setTimeout(resolve,650));const after=await playback();assert.equal(after.paused,false,'Pointer clicks cannot operate the visual controls');
@@ -58,8 +86,8 @@ try{
   await page.setViewport({width:390,height:900});await page.waitForFunction(()=>{const frame=document.querySelector('.preview-viewport-frame').getBoundingClientRect();return frame.width>100&&frame.right<=390;});
   assert.equal(await page.$eval('.editor-chat-panel',node=>getComputedStyle(node).display),'none','Mobile shows the footage rather than a blocking conversation panel');assert.ok(await page.$eval('.timeline-clip.clip-video',node=>{const r=node.getBoundingClientRect();return r.width>0&&r.x<390&&r.y<780;}),'Mobile timeline remains visible below the prompt strip');
   await page.screenshot({path:'/tmp/revline-landing-auto-edit-mobile.png'});
-  const story=await page.evaluate(()=>{window.storyObserver.disconnect();return window.story;});assert.ok(new Set(story.map(frame=>frame.clips)).size>=3,'Real clip blocks build in separate stages');
+  const story=await page.evaluate(()=>{window.storyObserver.disconnect();return window.story;});assert.deepEqual([...new Set(story.map(frame=>frame.clips))].sort((a,b)=>a-b),[1,2,3,4,5],'Each real split reveals one additional clip');
   assert.deepEqual(errors,[]);assert.deepEqual(external,[]);assert.ok(requests.every(request=>request.method==='GET'),'No uploads or AI/backend mutations');
-  const proof={playback:{before:before.time,after:after.time,muted:after.muted},clipStages:[...new Set(story.map(frame=>frame.clips))],requests:requests.map(request=>request.path),errors,external};
-  await writeFile('/tmp/revline-landing-demo-loading-proof.json',JSON.stringify(proof,null,2));console.log('PASS: typed composer → clear/send → staged real NASA clips/titles → muted autoplay; inert controls, hidden effects rail, offscreen pause, Reduced Motion removes decoration while requested autoplay continues, mobile preview, no external/backend calls.');console.log(JSON.stringify(proof));await page.evaluate(()=>window.unmountDemo());
+  const proof={splits,playback:{before:before.time,after:after.time,muted:after.muted},clipStages:[...new Set(story.map(frame=>frame.clips))],requests:requests.map(request=>request.path),errors,external};
+  await writeFile('/tmp/revline-landing-demo-loading-proof.json',JSON.stringify(proof,null,2));console.log('PASS: typed composer → clear/send → four real splits at the aligned playhead → titles → muted autoplay; inert controls, hidden effects rail, offscreen pause, Reduced Motion removes decoration while requested autoplay continues, mobile preview, no external/backend calls.');console.log(JSON.stringify(proof));await page.evaluate(()=>window.unmountDemo());
 }finally{server.closeAllConnections();await browser.close();await new Promise(resolve=>server.close(resolve));}

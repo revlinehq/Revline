@@ -11,7 +11,7 @@ import type { PreviewHandle } from '@/components/editor/preview';
 import { Brand } from '@/components/workspace/brand';
 import { EditComposer } from '@/components/workspace/edit-composer';
 import { createEditorStore } from '@/lib/editor/store';
-import { LANDING_DEMO_ASSETS, LANDING_DEMO_MESSAGES, LANDING_DEMO_PROMPT, LANDING_DEMO_STAGES, LANDING_DEMO_VIDEO } from './demo-story';
+import { LANDING_DEMO_ASSETS, LANDING_DEMO_MESSAGES, LANDING_DEMO_PROMPT, LANDING_DEMO_STEPS, LANDING_DEMO_VIDEO } from './demo-story';
 import '@/app/editor.css';
 import '@/components/editor/assistant-panel.css';
 import '@/components/editor/assistant-editing.css';
@@ -19,6 +19,7 @@ import '@/components/editor/assistant-editing.css';
 const noop = () => {};
 const noRequest = async () => {};
 const TYPE_INTERVAL = 32;
+const FINISHED_STAGE = LANDING_DEMO_STEPS.length + 1;
 
 /** Keep per-character updates inside the actual composer, away from the preview/timeline. */
 function DemoComposer({ typing, active, running }: { typing: boolean; active: boolean; running: boolean }) {
@@ -46,14 +47,13 @@ function DemoReply({ text, active, reducedMotion }: { text: string; active: bool
   return <ChatProse text={shown} animate={active && !reducedMotion}/>;
 }
 
-function DemoConversation({ stage, active, reducedMotion }: { stage: number; active: boolean; reducedMotion: boolean }) {
+function DemoConversation({ stage, index, active, reducedMotion }: { stage: number; index: number; active: boolean; reducedMotion: boolean }) {
   const sent = stage > 0;
-  const building = sent && stage < 6;
-  const index = Math.max(0, Math.min(stage - 1, 4));
+  const building = sent && stage < FINISHED_STAGE;
   return <div className="assistant-content">
     <div className="assistant-history"><div className="assistant-turns">{sent ? <div className="assistant-turn is-latest-turn">
       <article className="chat-message chat-user"><p>{LANDING_DEMO_PROMPT}</p></article>
-      <div className="assistant-reply"><div className={`assistant-reply-header ${building ? 'is-processing' : 'chat-author'}`}><Brand markOnly/>{building ? <ProcessingStatus label={['Finding the moments…', 'Placing the cuts…', 'Building the sequence…', 'Adding titles…', 'Polishing the motion…'][index]} brand={false}/> : <span>Revline</span>}</div>
+      <div className="assistant-reply"><div className={`assistant-reply-header ${building ? 'is-processing' : 'chat-author'}`}><Brand markOnly/>{building ? <ProcessingStatus label={['Finding the moments…', 'Placing the cuts…', 'Adding titles…', 'Polishing the motion…'][index]} brand={false}/> : <span>Revline</span>}</div>
         <article className="chat-message chat-assistant"><DemoReply text={LANDING_DEMO_MESSAGES[index]} active={active} reducedMotion={reducedMotion}/>{!building && ['Five clips arranged', 'Animated titles added', 'Subtle motion applied'].map(label => <div className="tool-result" key={label}><Check size={12}/>{label}</div>)}</article>
       </div>
     </div> : <div className="assistant-welcome"><h3>What are we making?</h3><p>Your footage is ready. Tell Revline the story you want to make.</p></div>}</div></div>
@@ -63,7 +63,7 @@ function DemoConversation({ stage, active, reducedMotion }: { stage: number; act
 
 function CompactPrompt({ stage, active }: { stage: number; active: boolean }) {
   return <div className="landing-compact-prompt">{stage === 0 ? <DemoComposer typing active={active} running={false}/> : <div className="landing-compact-sent">
-    <p>{LANDING_DEMO_PROMPT}</p><ProcessingStatus label={stage < 6 ? 'Building your cinematic edit…' : 'Your edit is ready.'} state={stage < 6 ? 'working' : 'ready'}/>
+    <p>{LANDING_DEMO_PROMPT}</p><ProcessingStatus label={stage < FINISHED_STAGE ? 'Building your cinematic edit…' : 'Your edit is ready.'} state={stage < FINISHED_STAGE ? 'working' : 'ready'}/>
   </div>}</div>;
 }
 
@@ -72,7 +72,7 @@ export function ProductDemo() {
   const root = useRef<HTMLElement>(null);
   const playback = useRef<PreviewHandle | null>(null);
   const [store] = useState(() => {
-    const instance = createEditorStore(LANDING_DEMO_STAGES[0]);
+    const instance = createEditorStore(LANDING_DEMO_STEPS[0].timeline);
     instance.setState({ muted: true, compactTracks: true, zoom: 1.1 });
     return instance;
   });
@@ -86,9 +86,10 @@ export function ProductDemo() {
   const [failed, setFailed] = useState(false);
   // The requested product story autoplays; Reduced Motion removes its decorative transitions.
   const active = visible && pageVisible && !failed;
-  const displayedStage = Math.max(0, Math.min(stage - 1, 4));
-  const latest = useRef({ active, stage });
-  latest.current = { active, stage };
+  const step = LANDING_DEMO_STEPS[Math.max(0, Math.min(stage - 1, LANDING_DEMO_STEPS.length - 1))];
+  const focus = stage === FINISHED_STAGE ? 0 : step.at;
+  const latest = useRef({ active, stage, focus });
+  latest.current = { active, stage, focus };
 
   useEffect(() => {
     const preference = matchMedia('(prefers-reduced-motion: reduce)');
@@ -108,32 +109,34 @@ export function ProductDemo() {
   const previewReady = useCallback((controller: PreviewHandle) => {
     playback.current = controller;
     controller.mute(true);
-    if (latest.current.active && (latest.current.stage === 0 || latest.current.stage === 6)) {
-      controller.seek(latest.current.stage === 0 ? 4.8 : 0); controller.play();
-    }
+    controller.pause(); controller.seek(latest.current.focus);
+    store.setState({ playhead: latest.current.focus, playing: false });
+    if (latest.current.active && (latest.current.stage === 0 || latest.current.stage === FINISHED_STAGE)) controller.play();
     setReady(true);
-  }, []);
+  }, [store]);
 
   useEffect(() => {
-    playback.current?.pause();
-    playback.current?.seek(0);
-    store.getState().replace(LANDING_DEMO_STAGES[displayedStage]);
-  }, [displayedStage, store]);
+    store.getState().replace(step.timeline);
+  }, [step, store]);
 
   useEffect(() => {
     const controller = playback.current;
     if (!active || !ready) { controller?.pause(); return; }
-    if (stage === 0 || stage === 6) { controller?.seek(stage === 0 ? 4.8 : 0); controller?.play(); }
-    const timer = window.setTimeout(() => setStage(value => value === 6 ? 0 : value + 1), stage === 6 ? (LANDING_DEMO_VIDEO.duration + .8) * 1000 : stage === 0 ? LANDING_DEMO_PROMPT.length * TYPE_INTERVAL + 800 : 1100);
+    controller?.pause(); controller?.seek(focus);
+    store.setState({ playhead: focus, playing: false });
+    if (stage === 0 || stage === FINISHED_STAGE) controller?.play();
+    const delay = stage === FINISHED_STAGE ? (LANDING_DEMO_VIDEO.duration + .8) * 1000 : stage === 0 ? LANDING_DEMO_PROMPT.length * TYPE_INTERVAL + 800 : step.message === 1 ? 800 : 1100;
+    const timer = window.setTimeout(() => setStage(value => value === FINISHED_STAGE ? 0 : value + 1), delay);
     return () => { clearTimeout(timer); controller?.pause(); };
-  }, [active, ready, stage]);
+  }, [active, ready, stage, focus, step, store]);
 
-  const building = stage > 0 && stage < 6;
+  const building = stage > 0 && stage < FINISHED_STAGE;
+  const message = stage === FINISHED_STAGE ? LANDING_DEMO_MESSAGES.length - 1 : step.message;
   return <><section ref={root} className="landing-product-demo" role="img" aria-label="A request types into Revline’s composer. Real NASA launch footage is cut into a sequence, animated titles and subtle motion appear, and the finished edit plays." data-story-stage={stage} data-story-active={active} data-building={building || undefined}>
     <div className="landing-passive-editor" inert aria-hidden="true">
       {compact && <CompactPrompt stage={stage} active={active && ready}/>}
       <EditorStateProvider store={store}><EditorShell embedded demo title="Artemis · A new chapter" timeline={timeline} assets={LANDING_DEMO_ASSETS} onChange={noop} onTitle={noop} saving={false} upload={null} error="" onError={() => setFailed(true)} onUndo={noop} onRedo={noop} canUndo={false} canRedo={false}
-        assistantPanel={compact ? <div/> : <DemoConversation stage={stage} active={active && ready} reducedMotion={reducedMotion}/>}
+        assistantPanel={compact ? <div/> : <DemoConversation stage={stage} index={message} active={active && ready} reducedMotion={reducedMotion}/>}
         onPreviewReady={previewReady} messages={[]} aiRunning={building} aiConfigured={false} onSend={noRequest} onUpload={noRequest} onDropUpload={noRequest} onExport={noRequest} exportState={null}/></EditorStateProvider>
     </div>
   </section><p className="landing-demo-credit">Footage: <a href="https://svs.gsfc.nasa.gov/31385/" target="_blank" rel="noreferrer">NASA</a></p></>;

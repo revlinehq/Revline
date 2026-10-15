@@ -42,12 +42,15 @@ const firstCuts = footage([0, 4.8, 7.7, 12]);
 // Source shots switch from the pad to liftoff at 4.8s, then tracking ascent at 7.7s.
 const cuts = footage([0, 2.4, 4.8, 6.3, 7.7, 12]);
 const timeline = (clips: Clip[]): Timeline => ({ fps: 30, aspectRatio: 'landscape', tracks: { visual: 2, overlay: 0, audio: 0, effects: 1 }, clips });
-export const LANDING_DEMO_STAGES = [
-  timeline(raw),
-  timeline(firstCuts),
-  timeline(cuts),
-  timeline([...cuts, titles[0]]),
-  timeline([...cuts, ...titles, effect]),
+// Each split lands at the playhead before the next cut is revealed.
+export const LANDING_DEMO_STEPS = [
+  { timeline: timeline(raw), at: 4.8, message: 0 },
+  { timeline: timeline(footage([0, 4.8, 12])), at: 4.8, message: 1 },
+  { timeline: timeline(firstCuts), at: 7.7, message: 1 },
+  { timeline: timeline(footage([0, 2.4, 4.8, 7.7, 12])), at: 2.4, message: 1 },
+  { timeline: timeline(cuts), at: 6.3, message: 1 },
+  { timeline: timeline([...cuts, titles[0]]), at: .8, message: 2 },
+  { timeline: timeline([...cuts, ...titles, effect]), at: 5.8, message: 3 },
 ];
 export const LANDING_DEMO_MESSAGES = [
   'I’ll build around the launch, then add clean titles and a gentle push-in.',
