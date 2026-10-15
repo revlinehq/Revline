@@ -18,7 +18,7 @@ export function TextPreviewCard({ label, selected, onSelect, render, className =
   const [replay, setReplay] = useState(0);
   const card = useRef<HTMLDivElement>(null);
   const [visible, setVisible] = useState(false);
-  const automatic = autoPlay ? visible : !reducedMotion && (hovered || focused);
+  const automatic = !reducedMotion && (autoPlay ? visible : hovered || focused);
   const active = automatic || previewing;
   useEffect(() => {
     if (!autoPlay || !card.current) return;

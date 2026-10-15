@@ -76,14 +76,18 @@ try {
     await page.evaluate(()=>window.acceptRequest());
     await check('Server request replaces optimistic request without duplication',async()=>assert.equal(await page.$$eval('.chat-user',nodes=>nodes.filter(node=>node.textContent==='Make the next shot shorter.').length),1));
     await check('A new empty reply retains activity feedback',async()=>assert.ok(await page.$('[data-turn-id="new-request"] .processing-status-sweep')));
+    await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+    await page.evaluate(()=>{window.turnBeam=document.querySelector('[data-turn-id="new-request"] .processing-status-sweep');window.beamStart=window.turnBeam.getAnimations({subtree:true})[0]?.startTime;});
     await page.evaluate(()=>window.updateFixture({messages:[...window.fixtureState().messages,{id:'new-answer',role:'assistant',text:'I’m tightening that shot.',status:'streaming'}]}));
-    await check('First streamed text hides the loading beam',async()=>assert.equal(await page.$('[data-turn-id="new-request"] .processing-status-sweep'),null));
+    await check('First streamed text retains the same continuous loading beam',async()=>assert.equal(await page.evaluate(()=>{const beam=document.querySelector('[data-turn-id="new-request"] .processing-status-sweep');return beam===window.turnBeam&&typeof window.beamStart==='number'&&beam.getAnimations({subtree:true})[0]?.startTime===window.beamStart;}),true));
     await page.evaluate(()=>window.updateFixture({activity:'Listening…',activitySource:'Synthetic footage',activityProgress:87}));
     await check('A transcription request resumes working feedback after its spoken preamble',async()=>assert.ok(await page.$('[data-turn-id="new-request"] .processing-status-sweep')));
     await new Promise(resolve=>setTimeout(resolve,700));await (await page.$('main')).screenshot({path:'/tmp/revline-assistant-follow-up-streaming.png'});
     await page.evaluate(()=>window.updateFixture({activity:null,activitySource:null,messages:window.fixtureState().messages.map(message=>message.id==='new-answer'?{...message,status:'success'}:message)}));
-    await check('Final reply does not reflash the beam while running catches up',async()=>assert.equal(await page.$('[data-turn-id="new-request"] .processing-status-sweep'),null));
-    await page.evaluate(()=>window.updateFixture({messages:window.fixtureState().messages.concat({id:'tool-pass',role:'assistant',text:'',status:'streaming',steps:[{id:'cut',name:'trim',state:'running'}]})}));
+    await check('Final reply retains the same beam while running catches up',async()=>assert.equal(await page.evaluate(()=>{const beam=document.querySelector('[data-turn-id="new-request"] .processing-status-sweep');return beam===window.turnBeam&&beam.getAnimations({subtree:true})[0]?.startTime===window.beamStart;}),true));
+    await page.evaluate(()=>window.updateFixture({running:false}));
+    await check('Terminal run state removes the loading beam',async()=>assert.equal(await page.$('[data-turn-id="new-request"] .processing-status-sweep'),null));
+    await page.evaluate(()=>window.updateFixture({running:true,messages:window.fixtureState().messages.concat({id:'tool-pass',role:'assistant',text:'',status:'streaming',steps:[{id:'cut',name:'trim',state:'running'}]})}));
     await check('Tools retain activity feedback without active text',async()=>assert.ok(await page.$('[data-turn-id="new-request"] .processing-status-sweep')));
     await check('The prior completed answer remains historical',async()=>assert.equal(await page.evaluate(()=>document.querySelector('[data-message-id="answer"]')===window.oldAnswer),true));
     await page.evaluate(()=>window.updateFixture({messages:window.fixtureState().messages.filter(message=>message.id!=='tool-pass').map(message=>message.id==='new-answer'?{...message,status:'streaming',steps:[{id:'transcribe',name:'analyzeMedia',state:'running'}]}:message)}));
@@ -99,7 +103,7 @@ try {
     await check('A rejected send clears its optimistic loading state',async()=>assert.equal(await page.$('.assistant-reply-header.is-processing'),null));
     await check('A rejected send keeps the prompt for retry',async()=>assert.equal(await page.$eval('textarea',node=>node.value),'Try this follow-up again.'));
     await page.evaluate(()=>window.rejectSend=false);
-    assert.deepEqual(failures,[]);assert.deepEqual(errors,[]);console.log('PASS: actual AssistantPanel delayed follow-up and SDK handoff preserve historical replies, replace the optimistic request once, hide the beam with streamed/final text, retain tool activity without invented percentages, and handle stopping and rejected sends.');
+    assert.deepEqual(failures,[]);assert.deepEqual(errors,[]);console.log('PASS: actual AssistantPanel delayed follow-up and SDK handoff preserve historical replies, replace the optimistic request once, keep one continuous CSS beam through streamed text and tools until the run completes, retain tool activity without invented percentages, and handle stopping and rejected sends.');
   }
   if (!process.argv.includes('--turn-regression')) {
   await page.evaluate(()=>{window.delayUser=false;window.requests=[];window.resetFixture();});

@@ -19,7 +19,7 @@ async function fixture() {
   return { t, owner, projectId, assetId };
 }
 test('persists both semantic descriptions and measured shots and records fresh completion', async () => {
-  const { t, owner, projectId, assetId } = await fixture();
+  const { owner, projectId, assetId } = await fixture();
   await owner.mutation(internal.assets.saveAnalysis, { projectId, assetId, workerSecret: 'test-secret', shots, understanding: { summary: 'A launch.', scenes: [{ start: 0.8, end: 3, description: 'A launch.', score: 0.9 }] } });
   const asset = await owner.query(api.assets.get,{projectId,assetId});
   expect(asset?.analysis?.shots).toEqual(shots);

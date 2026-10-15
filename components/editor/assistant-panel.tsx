@@ -51,7 +51,7 @@ function AssistantResponseText({ text, streaming }: { text: string; streaming: b
   return <ChatProse text={text} animate={receivedLive || streaming} />;
 }
 
-function AssistantPanelBody({ messages, running, configured, error, onSend, onStop, hasClips, demo, onLoadMore, canLoadMore, onAttach, activity, activitySource, activityProgress, draftKey, suggestions, onSuggestion, editSnapshot, modelSwitcher = false, allowedModels = PRODUCTION_CLAUDE_MODEL_CHOICES, attachments, onRemoveAttachment, requireMedia = false }: {
+function AssistantPanelBody({ messages, running, configured, error, onSend, onStop, hasClips, demo, onLoadMore, canLoadMore, onAttach, activity, activitySource, draftKey, suggestions, onSuggestion, editSnapshot, modelSwitcher = false, allowedModels = PRODUCTION_CLAUDE_MODEL_CHOICES, attachments, onRemoveAttachment, requireMedia = false }: {
   messages: ChatMessage[]; running: boolean; configured: boolean; error?: string | null;
   modelSwitcher?: boolean;
   allowedModels?: readonly ClaudeModelChoice[];

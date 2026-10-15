@@ -19,7 +19,6 @@ import { projectPreviewBounds } from '@/lib/editor/preview-zoom';
 import type { SourceCrop } from '@/lib/editor/types';
 import { previewContentKey } from '@/lib/editor/preview-content-key';
 import { compositionNode, compositionIndex } from '@/lib/editor/composition-node';
-import { textLayerSources } from '@/lib/editor/text-layers';
 import { needsLiveMediaSync, updateLiveMediaContent } from '@/lib/editor/live-media-content';
 import { updateLiveTextEffects } from '@/lib/editor/live-preview-effects';
 import { previewVisualEffects, updateLiveVisualEffects } from '@/lib/editor/live-visual-effects';

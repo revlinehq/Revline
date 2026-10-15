@@ -7,19 +7,6 @@
 .assistant-content .assistant-result-cards{gap:2px;margin:8px 0 10px}
 .assistant-content .assistant-result-card{min-height:25px;padding:3px 0;gap:8px;border:0;border-radius:0;background:transparent;font-size:12px}
 .assistant-content .assistant-result-card small{font-size:11px;margin-top:1px}
-.assistant-edit-comparison{margin:10px 0 4px;max-width:340px}
-.assistant-edit-comparison>div{display:grid;grid-template-columns:44px minmax(0,1fr);align-items:start;gap:8px;margin-top:9px}
-.assistant-edit-comparison>div>span{color:var(--muted-foreground);font-size:11px;line-height:20px}
-.assistant-mini-snapshot{display:grid;gap:3px;min-width:0}
-.assistant-mini-lane{display:block;width:100%;height:20px;border-radius:3px;overflow:hidden;fill:var(--revline-accent)}
-.assistant-mini-snapshot.is-before .mini-footage{fill:color-mix(in srgb,var(--muted-foreground),transparent 60%)}
-.assistant-mini-lane .mini-removed{fill:#98534B}
-.assistant-mini-caption{position:relative;min-height:14px;overflow:hidden;border-radius:3px}
-.assistant-mini-caption .mini-captions{height:14px;fill:#57436F}
-.assistant-mini-caption>span{position:absolute;left:7px;top:0;color:#E2D8EF;font-size:9px;line-height:14px;pointer-events:none;white-space:nowrap}
-.assistant-mini-lane.mini-effects{height:9px;fill:#EC5355}
-.mini-empty{font-size:10px;line-height:20px;color:var(--muted-foreground)}
-.assistant-edit-comparison figcaption{margin:6px 0 0 52px;color:var(--muted-foreground);font-size:10px;font-variant-numeric:tabular-nums}
 .conversation-editor .assistant-content .manual-editor-composer{padding:10px;border-radius:10px;gap:8px;background:var(--secondary);box-shadow:inset 0 0 0 1px var(--border)}
 .conversation-editor .assistant-content .manual-editor-composer textarea{min-height:24px;font-size:13px;line-height:20px;letter-spacing:0}
 .conversation-editor .assistant-content .manual-editor-composer .edit-composer-actions{height:32px}

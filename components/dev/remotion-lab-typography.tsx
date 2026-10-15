@@ -79,7 +79,7 @@ function DiagonalStagger({ config, frame }: TypeProps) {
 }
 
 function ShutterSlices({ config, frame }: TypeProps) {
-  return <Words text={config.title} render={(word,index,count)=> <span className="rmlab-slice-word"><span className="rmlab-slice-metric">{word}</span>{[0,1,2,3].map(slice=>{
+  return <Words text={config.title} render={(word,index)=> <span className="rmlab-slice-word"><span className="rmlab-slice-metric">{word}</span>{[0,1,2,3].map(slice=>{
     const t=timing(config,frame-index*config.textStagger*config.fps*2,slice,4);
     return <span key={slice} className="rmlab-slice-copy" style={{clipPath:`inset(${slice*25}% 0 ${75-slice*25}%)`,opacity:bounded(t.progress*4),transform:`translateX(${(1-t.progress)*(slice%2?1:-1)*100*config.textStrength}%)`}}>{word}</span>;
   })}</span>}/>;

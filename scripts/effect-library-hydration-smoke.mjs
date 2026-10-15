@@ -33,8 +33,8 @@ try{
   const categories=html=>[...html.matchAll(/data-category="([^"]+)"/g)].map(match=>match[1]);
   for(const current of ['development','production']){
     mode=current;const expected=categories(fixtures.get(current).html);
-    if(current==='development')assert.deepEqual(expected,['motion','color','texture','transitions','text','sam-dev','remotion-dev','sfx-dev']);
-    else assert.deepEqual(expected,['motion','color','texture','transitions','text']);
+    if(current==='development')assert.deepEqual(expected,['motion','color','texture','transitions','text','sam-dev','remotion-dev','audio-fx']);
+    else assert.deepEqual(expected,['motion','color','texture','transitions','text','audio-fx']);
     await page.goto(origin);await page.waitForFunction(()=>window.hydrated===true);
     assert.deepEqual(await page.$$eval('[data-category]',nodes=>nodes.map(node=>node.dataset.category)),expected);
     assert.deepEqual(await page.evaluate(()=>window.hydrationErrors),[],`${current} category rail hydrates identically`);

@@ -32,9 +32,9 @@ try{
  assert.equal(await page.evaluate(()=>window.calls.filter(call=>call.name==='projects:create').length),1,'One drop creates one project');
  await page.evaluate(()=>window.releaseCreate());await page.waitForFunction(()=>document.querySelector('.footage-preparation-activity')?.textContent.includes('42%'));
  await page.waitForFunction(()=>document.querySelector('.footage-preparation-thumbnail img')?.complete);
- const uploading=await page.evaluate(()=>({title:document.querySelector('.processing-status-label').textContent,rect:document.querySelector('.footage-preparation').getBoundingClientRect().toJSON(),blue:getComputedStyle(document.querySelector('.processing-status-sweep'),'::after').backgroundImage,poster:document.querySelector('.footage-preparation-thumbnail img').src}));
- assert.equal(uploading.rect.y,56);assert.equal(uploading.rect.height,744);assert.match(uploading.blue,/71, 104, 239/);assert.match(uploading.poster,/^blob:/);assert.equal(await page.$('.new-conversation-intro'),null);
- await page.screenshot({path:'/tmp/revline-dashboard-loading-blue.png'});
+ const uploading=await page.evaluate(()=>{const sweep=document.querySelector('.processing-status-sweep'),probe=document.createElement('span');probe.style.color='var(--revline-loading-color)';sweep.append(probe);const loadingColor=getComputedStyle(probe).color;probe.remove();return{title:document.querySelector('.processing-status-label').textContent,rect:document.querySelector('.footage-preparation').getBoundingClientRect().toJSON(),sweep:getComputedStyle(sweep,'::after').backgroundImage,loadingColor,poster:document.querySelector('.footage-preparation-thumbnail img').src}});
+ assert.equal(uploading.rect.y,56);assert.equal(uploading.rect.height,744);assert.ok(uploading.sweep.includes(uploading.loadingColor),'Loading sweep follows the shared brand color');assert.match(uploading.poster,/^blob:/);assert.equal(await page.$('.new-conversation-intro'),null);
+ await page.screenshot({path:'/tmp/revline-dashboard-loading.png'});
  await page.evaluate(()=>window.finishSource());await page.waitForFunction(()=>window.routes.length===1);
  assert.equal(await page.$eval('.processing-status-label',el=>el.textContent),uploading.title,'The preparation heading remains stable through upload, saving and opening');
  assert.deepEqual(await page.$eval('.footage-preparation',el=>el.getBoundingClientRect().toJSON()),uploading.rect);
