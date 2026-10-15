@@ -37,11 +37,13 @@ export function FootageSettings({ clip, audioClip, asset, fps = 30, onChange, on
       </div>
       {cropping && <p className="footage-crop-note">Drag the edges in the preview. Escape cancels.</p>}
     </section>
-    {(hasSpeed || hasVolume) && <section className="footage-settings-section footage-playback" aria-label="Playback">
-      <div className="footage-section-heading"><h3>Playback</h3></div>
+    {(hasSpeed || hasVolume) && <details className="footage-disclosure footage-playback" aria-label="Playback">
+      <summary><span>Playback</span><ChevronDown size={12}/></summary>
+      <div className="footage-settings-section">
       {hasSpeed && <PlaybackSpeedControls clip={clip} onChange={onPlaybackRateChange!}/>}
       {hasVolume && <NumberControl label="Clip volume" min={0} max={200} value={Math.round(((audioClip ?? clip).volume ?? 1) * 100)} unit="%" onCommit={volume => onChange({ volume: volume / 100 })}/>}
-    </section>}
+      </div>
+    </details>}
     <details className="footage-disclosure footage-fades">
       <summary><span>Fades</span><ChevronDown size={12}/></summary>
       <VisualFadeControls clip={clip} fps={fps} onChange={onChange} onPreview={onPreview}/>
