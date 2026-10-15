@@ -138,7 +138,7 @@ function ProjectEditor({project}: {project:Doc<'projects'>}) {
     if(uploading.current||!files.length)return;uploading.current=true;setError('');
     let incomplete=false;
     const queue = files.map(file => ({id:crypto.randomUUID(),name:file.name,percent:0,kind:(file.type.startsWith('audio/')?'audio':file.type.startsWith('image/')?'image':'video') as 'video'|'image'|'audio',error:undefined as string|undefined}));
-    try{await preparingAudio.current;for(const [index,file] of files.entries()){
+    try{for(const [index,file] of files.entries()){
       const progress={name:file.name,size:file.size,index:index+1,total:files.length};
       const report = (percent:number,phase:'reading'|'uploading'|'saving') => { queue[index].percent=percent; setUpload({...progress,percent,phase,queue:queue.slice(index).map(item=>({...item}))}); };
       try{
@@ -149,9 +149,9 @@ function ProjectEditor({project}: {project:Doc<'projects'>}) {
           abort: uploadId => abortUpload({ uploadId }),
           saveThumbnail,
         }, report);
-        let asset=await convex.query(api.assets.get,{projectId,assetId});
-        if(asset.kind==='video'&&!asset.audioExtracted){await prepareVideoAudio(convex,projectId,assetId);asset=await convex.query(api.assets.get,{projectId,assetId});}
-        if(asset.kind==='audio'&&!asset.waveform){await prepareAudioWaveform(convex,projectId,assetId);asset=await convex.query(api.assets.get,{projectId,assetId});}
+        // Upload completion is independent of worker availability. Timeline media
+        // uses its original audio until the preparation effect separates it.
+        const asset=await convex.query(api.assets.get,{projectId,assetId});
         const audio=asset.audioAssetId?await convex.query(api.assets.get,{projectId,assetId:asset.audioAssetId}):null;
         setOptimisticAssets(previous=>[...previous,asset,...(audio?[audio]:[])]);
         if(addToTimeline){
