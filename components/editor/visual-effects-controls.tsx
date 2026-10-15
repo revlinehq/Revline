@@ -1,8 +1,8 @@
 'use client';
 
-import { useId, useState, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { EffectSlider } from './effect-slider';
-import { ChevronDown, ChevronRight, Plus, RotateCcw, Trash2 } from 'lucide-react';
+import { ChevronDown, Plus, RotateCcw, Trash2 } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { VISUAL_EFFECT_LIMITS, visualEffectsPatch, type VisualEffects } from '@/lib/editor/visual-effects';
 import { NEON_EDGE_LIMITS } from '@/lib/editor/neon-edges';
@@ -14,17 +14,19 @@ import { ColorControl } from './color-control';
 import { EffectIcon } from './effect-icon';
 import './visual-effects-controls.css';
 
-type Props = { onlyEffect?: keyof VisualEffects; clip: Clip; onChange: (patch: Partial<Clip>) => void; onPreview?: (patch: Partial<Clip> | null) => void; onPlaybackRateChange?: (rate: number) => void; onAddEffect?: (preset: EffectPreset) => void };
+type EffectAccordion = { value: keyof VisualEffects | null; onValueChange: (effect: keyof VisualEffects | null) => void };
+type Props = { accordion?: EffectAccordion; onlyEffect?: keyof VisualEffects; clip: Clip; onChange: (patch: Partial<Clip>) => void; onPreview?: (patch: Partial<Clip> | null) => void; onPlaybackRateChange?: (rate: number) => void; onAddEffect?: (preset: EffectPreset) => void };
 type EffectKey = Exclude<keyof VisualEffects, 'softBlur' | 'frameCorners'>;
-function EffectCard({ name, effectKey, enabled, onToggle, onReset, onRemove, children }: {
-  name: string; effectKey: EffectKey; enabled: boolean; onToggle: () => void; onReset: () => void; onRemove: () => void; children: ReactNode;
+function EffectCard({ name, effectKey, enabled, onToggle, onReset, onRemove, expanded, onExpandedChange, children }: {
+  name: string; effectKey: EffectKey; enabled: boolean; onToggle: () => void; onReset: () => void; onRemove: () => void; expanded?: boolean; onExpandedChange?: (expanded: boolean) => void; children: ReactNode;
 }) {
-  const [open, setOpen] = useState(true);
+  const [uncontrolledOpen, setOpen] = useState(true);
+  const open = expanded ?? uncontrolledOpen;
   const id = useId();
   return <section className="visual-effect-card" data-effect={effectKey} data-enabled={enabled} aria-label={`${name} effect`}>
     <div className="visual-effect-heading">
       <button type="button" className="effect-enabled" role="switch" aria-checked={enabled} aria-label={`Enable ${name}`} onClick={onToggle}><span/></button>
-      <button type="button" className="effect-collapse" aria-expanded={open} aria-controls={id} onClick={() => setOpen(!open)}><span><EffectIcon name={effectKey} size={16}/>{name}</span><ChevronDown size={12}/></button>
+      <button type="button" className="effect-collapse" aria-expanded={open} aria-controls={id} aria-label={`Edit ${name}`} onClick={() => onExpandedChange ? onExpandedChange(!open) : setOpen(!open)}><span><EffectIcon name={effectKey} size={16}/>{name}</span><ChevronDown size={12}/></button>
       <button type="button" className="effect-icon-button" aria-label={`Reset ${name}`} title={`Reset ${name}`} onClick={onReset}><RotateCcw size={12}/></button>
       <button type="button" className="effect-icon-button" aria-label={`Remove ${name}`} title={`Remove ${name}`} onClick={onRemove}><Trash2 size={12}/></button>
     </div>
@@ -41,11 +43,20 @@ const edgePosition = (value: number) => `${Math.round(value * 360)}°`;
 const degrees = (value: number) => `${Math.round(value)}°`;
 const effectNames = { colorGrade: 'Color', zoomBlur: 'Zoom blur', glitch: 'Glitch', invert: 'Invert colors', dither: 'Dither', neonEdges: 'Neon edges', lensDistortion: 'Lens distortion', filmOverlay: 'Film overlay', vhs: 'VHS overlay', lightLeak: 'Light leak', directionalBlur: 'Directional blur', turbulentDisplace: 'Turbulent displacement', lightSweep: 'Light sweep', frameDistortion: 'Frame distortion' } as const;
 
-export function AppliedVisualEffects({ clip, onSelect, onAdd }: { clip: Clip; onSelect: (effect: EffectKey) => void; onAdd: () => void }) {
+export function AppliedVisualEffects({ clip, onSelect, onAdd, onChange, onPreview, expandedEffect }: Pick<Props, 'clip' | 'onChange' | 'onPreview'> & { expandedEffect?: keyof VisualEffects; onSelect: (effect: keyof VisualEffects | null) => void; onAdd: () => void }) {
+  const root=useRef<HTMLElement>(null);
   const applied = (Object.keys(effectNames) as EffectKey[]).filter(key => clip[key]);
-  return <section className="applied-visual-effects" aria-label="Applied effects">
+  useEffect(()=>{
+    if(!expandedEffect)return;
+    const container=root.current?.closest<HTMLElement>('.inspector-content'),card=root.current?.querySelector<HTMLElement>(`[data-effect="${expandedEffect}"]`),heading=card?.querySelector<HTMLElement>('.visual-effect-heading');
+    if(!container||!card||!heading)return;
+    const top=heading.getBoundingClientRect().top-container.getBoundingClientRect().top;
+    const reveal=heading.offsetHeight+Math.min(96,card.querySelector<HTMLElement>('.visual-effect-fields')?.offsetHeight??0);
+    if(top<8||top+reveal>container.clientHeight)container.scrollTop+=top-8;
+  },[expandedEffect,clip.id]);
+  return <section ref={root} className="applied-visual-effects" aria-label="Applied effects">
     <div className="applied-effects-heading"><h3>Applied effects</h3><button type="button" aria-label="Add effect" onClick={onAdd}><Plus size={13}/>Add effect</button></div>
-    {applied.length ? <div className="applied-effects-list">{applied.map(key => <button key={key} type="button" className="applied-effect-row" aria-label={`Edit ${effectNames[key]}`} onClick={() => onSelect(key)}><EffectIcon name={key} size={15}/><span>{effectNames[key]}</span><small>{clip[key]?.enabled ? 'On' : 'Off'}</small><ChevronRight size={13}/></button>)}</div> : <p>No effects applied.</p>}
+    {applied.length ? <VisualEffectsControls clip={clip} onChange={onChange} onPreview={onPreview} accordion={{value:expandedEffect??null,onValueChange:onSelect}}/> : <p>No effects applied.</p>}
   </section>;
 }
 
@@ -74,7 +85,7 @@ export function TimedEffectPresets({ onAdd }: { onAdd: (preset: EffectPreset) =>
   </section>;
 }
 
-export function VisualEffectsControls({ clip, onChange, onPreview, onPlaybackRateChange, onAddEffect, onlyEffect }: Props) {
+export function VisualEffectsControls({ clip, onChange, onPreview, onPlaybackRateChange, onAddEffect, onlyEffect, accordion }: Props) {
   const color = !onlyEffect || onlyEffect === 'colorGrade' ? clip.colorGrade : undefined;
   const blur = !onlyEffect || onlyEffect === 'zoomBlur' ? clip.zoomBlur : undefined;
   const glitch = !onlyEffect || onlyEffect === 'glitch' ? clip.glitch : undefined;
@@ -93,6 +104,8 @@ export function VisualEffectsControls({ clip, onChange, onPreview, onPlaybackRat
   function cardProps(key: EffectKey) {
     return {
       name: effectNames[key], effectKey: key, enabled: !!clip[key]?.enabled,
+      expanded: accordion ? accordion.value === key : undefined,
+      onExpandedChange: accordion ? (open:boolean) => accordion.onValueChange(open ? key : null) : undefined,
       onToggle: () => onChange(visualEffectsPatch(clip, { [key]: { enabled: !clip[key]?.enabled } })),
       onReset: () => onChange(visualEffectActionPatch(clip, key, 'reset')),
       onRemove: () => onChange(visualEffectActionPatch(clip, key, 'remove')),
@@ -144,7 +157,7 @@ export function VisualEffectsControls({ clip, onChange, onPreview, onPlaybackRat
       ['amount', 'Strength', .01, percent], ['angle', 'Angle', 1, degrees], ['position', 'Position', .01, percent], ['width', 'Width', .01, percent], ['speed', 'Speed', .01, speed],
     ] as const).map(([key, label, step, format]) => <EffectSlider key={key} label={label} value={sweep[key]} bounds={VISUAL_EFFECT_LIMITS.lightSweep[key]} step={step} format={format} disabled={!sweep.enabled} onPreview={value => preview(value === null ? null : { lightSweep: { ...sweep, [key]: value } })} onCommit={value => onChange({ lightSweep: { ...sweep, [key]: value } })}/>)}</EffectCard>}
     {!color && !blur && !glitch && !invert && !dither && !neon && !lens && !film && !vhs && !leak && !directional && !turbulence && !sweep && !frame && <p className="visual-effects-empty">Add an effect to this clip.</p>}
-    {!onlyEffect && <DropdownMenu><DropdownMenuTrigger asChild><button type="button" className="visual-effects-add" disabled={!missing.length}><Plus size={13}/>Add effect</button></DropdownMenuTrigger><DropdownMenuContent className="visual-effects-menu" align="start">{missing.map(key => {
+    {!onlyEffect && !accordion && <DropdownMenu><DropdownMenuTrigger asChild><button type="button" className="visual-effects-add" disabled={!missing.length}><Plus size={13}/>Add effect</button></DropdownMenuTrigger><DropdownMenuContent className="visual-effects-menu" align="start">{missing.map(key => {
       return <DropdownMenuItem key={key} onSelect={() => onChange(visualEffectsPatch(clip, { [key]: { enabled: true } }))}><EffectIcon name={key} size={16}/>{effectNames[key]}</DropdownMenuItem>;
     })}</DropdownMenuContent></DropdownMenu>}
   </div>;

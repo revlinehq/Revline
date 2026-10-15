@@ -7,9 +7,9 @@ import { TextEffectsControls } from './text-effects-controls';
 import { AudioControls } from './audio-controls';
 import type { CaptionActions } from './caption-controls';
 import { AppliedVisualEffects, CinematicBarsControls, PlaybackSpeedControls, VisualEffectsControls } from './visual-effects-controls';
-import { FootageSelection, FootageSettings } from './footage-settings';
+import { FootageSettings } from './footage-settings';
 import { useEffect, useRef, useState } from 'react';
-import { SlidersHorizontal, Layers, ArrowLeft, Film } from 'lucide-react';
+import { SlidersHorizontal, Layers, Film } from 'lucide-react';
 import { NumberControl } from './visual-controls';
 import { FootagePanel, type UploadProgress } from './footage-panel';
 import type { VideoImportState } from './video-link-import';
@@ -29,8 +29,8 @@ export function PreviewInspector({ clip, timeline, time = 0, audioClip, asset, a
   const [section, setSection] = useState<'tools' | 'media'>('tools');
   const [tab, setTab] = useState<'edit' | 'sources' | 'effects'>('sources');
   const [effectSelection, setEffectSelection] = useState<{clipId:string;key:LibraryVisualEffect} | null>(null);
-  const onlyEffect = effectSelection && effectSelection.clipId === clip?.id && clip?.[effectSelection.key] ? effectSelection.key : undefined;
-  const removedEffect = !!effectSelection && effectSelection.clipId === clip?.id && !onlyEffect;
+  const expandedEffect = effectSelection && effectSelection.clipId === clip?.id && clip?.[effectSelection.key] ? effectSelection.key : undefined;
+  const removedEffect = !!effectSelection && effectSelection.clipId === clip?.id && !expandedEffect;
   const panel = useRef<HTMLElement>(null);
   const text = clip?.kind === 'caption' || clip?.kind === 'graphic';
   const visual = clip?.kind === 'video' || clip?.kind === 'image';
@@ -41,7 +41,6 @@ export function PreviewInspector({ clip, timeline, time = 0, audioClip, asset, a
   useEffect(() => {
     if (!removedEffect) return;
     setEffectSelection(null);
-    setTab('sources');
   }, [removedEffect]);
   useEffect(() => {
     if (!sourceRequest && !editRequest && !libraryRequest) return;
@@ -75,7 +74,7 @@ export function PreviewInspector({ clip, timeline, time = 0, audioClip, asset, a
     setTab('edit');
   }
   const effect = clip?.kind === 'effect' || clip?.kind === 'solid';
-  const activeTab = !clip || removedEffect ? 'sources' : text && tab === 'effects' ? 'edit' : (visual || effect) && tab === 'edit' ? 'effects' : tab;
+  const activeTab = !clip ? 'sources' : text && tab === 'effects' ? 'edit' : (visual || effect) && tab === 'edit' ? 'effects' : tab;
   const library = activeTab === 'sources';
   return <Tabs value={section} onValueChange={next => { setSection(next as 'tools' | 'media'); if (next === 'tools') { setTab('sources'); setEffectSelection(null); } }} asChild><aside ref={panel} className="preview-inspector" aria-label="Clip settings">
     <TabsList className="inspector-section-tabs" aria-label="Tools and media" onKeyDown={event => { if (event.key === 'Home') { setTab('sources'); setEffectSelection(null); } }}>{sections.map(item => <TabsTrigger key={item.value} id={item.id} aria-controls={item.panelId} value={item.value} onClick={() => { if (item.value === 'tools') { setTab('sources'); setEffectSelection(null); } }}>{item.icon}{item.label}</TabsTrigger>)}</TabsList>
@@ -98,13 +97,9 @@ export function PreviewInspector({ clip, timeline, time = 0, audioClip, asset, a
         {text && <TextEffectsControls clip={clip} onChange={onChange} onPreview={onPreviewEffects} captionActions={captionActions}/>}
 
         {clip.kind === 'audio' && <AudioControls key={clip.id} clip={clip} fps={timeline?.fps} onChange={onChange} onPreview={onPreviewEffects}/>}
-      </> : <div className="inspector-empty"><SlidersHorizontal size={22} strokeWidth={1.2}/><p>Select a clip</p><span>Its editing controls appear here.</span></div> : visual && clip ? onlyEffect ? <div className="inspector-effect-detail">
-        <button type="button" className="inspector-effect-back" aria-label="Back to clip settings" onClick={() => setEffectSelection(null)}><ArrowLeft size={12}/>Clip settings</button>
-        <FootageSelection clip={clip} asset={asset}/>
-        <VisualEffectsControls key={`${clip.id}-${onlyEffect}`} onlyEffect={onlyEffect} clip={clip} onChange={onChange} onPreview={onPreviewEffects}/>
-      </div> : <div className="inspector-clip-settings">
-        <FootageSettings key={clip.id} fps={timeline?.fps} clip={clip} audioClip={audioClip} asset={asset} onChange={onChange} onPreview={onPreviewEffects} onPlaybackRateChange={onPlaybackRateChange} onCrop={onCrop} cropping={cropping}/>
-        <AppliedVisualEffects clip={clip} onSelect={key => setEffectSelection({ clipId: clip.id, key })} onAdd={() => setTab('sources')}/>
+      </> : <div className="inspector-empty"><SlidersHorizontal size={22} strokeWidth={1.2}/><p>Select a clip</p><span>Its editing controls appear here.</span></div> : visual && clip ? <div className="inspector-clip-settings">
+        <FootageSettings key={`footage-${clip.id}`} fps={timeline?.fps} clip={clip} audioClip={audioClip} asset={asset} onChange={onChange} onPreview={onPreviewEffects} onPlaybackRateChange={onPlaybackRateChange} onCrop={onCrop} cropping={cropping}/>
+        <AppliedVisualEffects key={`effects-${clip.id}`} clip={clip} expandedEffect={expandedEffect} onSelect={key => setEffectSelection(key ? { clipId: clip.id, key } : null)} onChange={onChange} onPreview={onPreviewEffects} onAdd={() => setTab('sources')}/>
       </div> : transitionControls ? transitionControls : solidControls ? solidControls : zoomBlurControls ? zoomBlurControls : barControls ? barControls : frameControls ? frameControls : zoomControls ? zoomControls : motionControls ? motionControls : clip?.kind === 'audio' && onPlaybackRateChange ? <PlaybackSpeedControls clip={clip} onChange={onPlaybackRateChange}/> : effect && clip ? <div className="inspector-empty"><Layers size={22} strokeWidth={1.2}/><p>{effectClipLabel(clip)}</p><span>Move, trim, or delete this effect on the timeline.</span></div> : <div className="inspector-empty"><Layers size={22} strokeWidth={1.2}/><p>Select a visual clip</p><span>Choose footage for effects or a text clip to animate it.</span></div>}
     </div>}
     </TabsContent>}
