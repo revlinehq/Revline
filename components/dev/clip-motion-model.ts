@@ -8,6 +8,9 @@ export const CLIP_MOTION_PRESETS = [
 ] as const;
 export type ClipMotionPreset = typeof CLIP_MOTION_PRESETS[number]['id'];
 export type ClipMotionEasing = 'linear' | 'ease-out' | 'ease-in-out' | 'spring';
+export type ClipMotionPoint = 'start' | 'arrive' | 'leave' | 'end';
+export type ClipMotionPose = { x: number; y: number; scale: number; rotation: number; opacity: number };
+type ClipMotionAnchors = Record<ClipMotionPoint, number>;
 export type ClipMotionLayer = {
   id: 'photo-1' | 'photo-2'; name: string; enabled: boolean;
   entrance: ClipMotionPreset; exit: ClipMotionPreset;
@@ -15,21 +18,37 @@ export type ClipMotionLayer = {
   distance: number; easing: ClipMotionEasing;
   x: number; y: number; width: number; aspect: 'landscape' | 'square' | 'portrait';
   rotation: number; radius: number;
+  poses?: { start?: Partial<ClipMotionPose>; hold?: Partial<ClipMotionPose>; end?: Partial<ClipMotionPose> };
 };
 export const DEFAULT_CLIP_MOTION_LAYERS: readonly ClipMotionLayer[] = [
   { id: 'photo-1', name: 'Photo 1', enabled: true, entrance: 'fade', exit: 'fade', start: .25, end: 6.8, enterDuration: .7, exitDuration: .55, distance: 90, easing: 'ease-out', x: .35, y: .47, width: .4, aspect: 'landscape', rotation: -4, radius: 8 },
   { id: 'photo-2', name: 'Photo 2', enabled: true, entrance: 'slide-up', exit: 'slide-right', start: 1.2, end: 7.5, enterDuration: .75, exitDuration: .6, distance: 110, easing: 'ease-out', x: .65, y: .57, width: .36, aspect: 'portrait', rotation: 5, radius: 8 },
 ];
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
-/** Keep entrances and exits disjoint, including after a shorter preview duration is chosen. */
-export function boundClipMotionLayer(layer: ClipMotionLayer, duration: number): ClipMotionLayer {
-  const start = clamp(layer.start, 0, duration - .2), end = clamp(layer.end, start + .2, duration);
-  const available = end - start;
-  const enterDuration = clamp(layer.enterDuration, .05, available / 2), exitDuration = clamp(layer.exitDuration, .05, available / 2);
-  return { ...layer, start, end, enterDuration, exitDuration };
+/** Durations retain their seconds representation; all editable anchors resolve to whole frames. */
+export function clipMotionAnchors(layer: ClipMotionLayer, fps: number): ClipMotionAnchors {
+  const start = Math.max(0, Math.round(layer.start * fps)), end = Math.max(start + 2, Math.round(layer.end * fps));
+  const entrance = clamp(Math.round(layer.enterDuration * fps), 1, end - start - 1);
+  const exit = clamp(Math.round(layer.exitDuration * fps), 1, end - start - entrance);
+  return { start, arrive: start + entrance, leave: end - exit, end };
 }
-function progress(frame: number, start: number, seconds: number, fps: number, easing: ClipMotionEasing) {
-  const elapsed = frame - Math.round(start * fps), frames = Math.max(1, Math.round(seconds * fps));
+function withAnchors(layer: ClipMotionLayer, anchors: ClipMotionAnchors, fps: number): ClipMotionLayer {
+  return { ...layer, start: anchors.start / fps, end: anchors.end / fps, enterDuration: (anchors.arrive - anchors.start) / fps, exitDuration: (anchors.end - anchors.leave) / fps };
+}
+/** Preserve entrance/exit durations when possible, with no half-span restriction. */
+export function boundClipMotionLayer(layer: ClipMotionLayer, duration: number, fps = 30): ClipMotionLayer {
+  const total = Math.max(2, Math.round(duration * fps)), start = clamp(Math.round(layer.start * fps), 0, total - 2), end = clamp(Math.round(layer.end * fps), start + 2, total);
+  return withAnchors(layer, clipMotionAnchors({ ...layer, start: start / fps, end: end / fps }, fps), fps);
+}
+/** A dragged anchor cannot push its neighbors; a zero-duration hold is valid. */
+export function moveClipMotionAnchor(layer: ClipMotionLayer, point: ClipMotionPoint, targetFrame: number, duration: number, fps: number): ClipMotionLayer {
+  const bounded = boundClipMotionLayer(layer, duration, fps), anchors = clipMotionAnchors(bounded, fps);
+  const limits = { start: [0, anchors.arrive - 1], arrive: [anchors.start + 1, anchors.leave], leave: [anchors.arrive, anchors.end - 1], end: [anchors.leave + 1, Math.max(2, Math.round(duration * fps))] };
+  const [min, max] = limits[point];
+  return withAnchors(bounded, { ...anchors, [point]: clamp(Math.round(targetFrame), min, max) }, fps);
+}
+function progress(frame: number, start: number, end: number, fps: number, easing: ClipMotionEasing) {
+  const elapsed = frame - start, frames = Math.max(1, end - start);
   if (elapsed <= 0) return 0;
   if (elapsed >= frames) return 1;
   if (easing === 'spring') return spring({ frame: elapsed, fps, durationInFrames: frames, config: { damping: 14, stiffness: 150, mass: 1 } });
@@ -38,15 +57,27 @@ function progress(frame: number, start: number, seconds: number, fps: number, ea
 function direction(preset: ClipMotionPreset) {
   return preset === 'slide-up' ? [0, -1] : preset === 'slide-down' ? [0, 1] : preset === 'slide-left' ? [-1, 0] : preset === 'slide-right' ? [1, 0] : [0, 0];
 }
-/** Pure frame state: entrance direction describes travel into place; exit describes travel out. */
-export function clipMotionAt(layer: ClipMotionLayer, frame: number, fps: number) {
-  const time = frame / fps, visible = layer.enabled && frame >= Math.round(layer.start * fps) && frame < Math.round(layer.end * fps);
-  const entrance = layer.entrance === 'none' ? 1 : progress(frame, layer.start, layer.enterDuration, fps, layer.easing);
-  const exit = layer.exit === 'none' ? 0 : progress(frame, layer.end - layer.exitDuration, layer.exitDuration, fps, layer.easing);
-  const incoming = direction(layer.entrance), outgoing = direction(layer.exit);
-  const x = (-incoming[0] * (1 - entrance) + outgoing[0] * exit) * layer.distance;
-  const y = (-incoming[1] * (1 - entrance) + outgoing[1] * exit) * layer.distance;
-  const scale = (layer.entrance === 'pop' ? .72 + .28 * entrance : 1) * (layer.exit === 'pop' ? 1 - .28 * clamp(exit, 0, 1) : 1);
-  const opacity = visible ? (layer.entrance === 'none' ? 1 : clamp(entrance, 0, 1)) * (layer.exit === 'none' ? 1 : 1 - clamp(exit, 0, 1)) : 0;
-  return { visible, x, y, scale, opacity, phase: !visible ? 'hidden' : time < layer.start + layer.enterDuration && layer.entrance !== 'none' ? 'enter' : time >= layer.end - layer.exitDuration && layer.exit !== 'none' ? 'exit' : 'hold' };
+export function clipMotionPoseAtPoint(layer: ClipMotionLayer, point: ClipMotionPoint, width: number, height: number): ClipMotionPose {
+  const hold: ClipMotionPose = { x: layer.x, y: layer.y, scale: 1, rotation: layer.rotation, opacity: 1, ...layer.poses?.hold };
+  if (point === 'arrive' || point === 'leave') return hold;
+  const preset = point === 'start' ? layer.entrance : layer.exit, vector = direction(preset), sign = point === 'start' ? -1 : 1;
+  const pose: ClipMotionPose = { ...hold, x: hold.x + sign * vector[0] * layer.distance / width, y: hold.y + sign * vector[1] * layer.distance / height, scale: hold.scale * (preset === 'pop' ? .72 : 1), opacity: preset === 'none' ? hold.opacity : 0 };
+  return { ...pose, ...layer.poses?.[point] };
+}
+/** Editing Arrive or Leave changes the same hold pose; untouched preset defaults stay derived. */
+export function updateClipMotionPose(layer: ClipMotionLayer, point: ClipMotionPoint, patch: Partial<ClipMotionPose>, width: number, height: number): ClipMotionLayer {
+  const key = point === 'arrive' || point === 'leave' ? 'hold' : point;
+  const current = clipMotionPoseAtPoint(layer, point, width, height);
+  const changed = Object.fromEntries(Object.entries(patch).map(([field, value]) => [field, value ?? current[field as keyof ClipMotionPose]]));
+  return { ...layer, poses: { ...layer.poses, [key]: { ...layer.poses?.[key], ...changed } } };
+}
+/** All rendered geometry is an absolute normalized pose; the frame is the only animation clock. */
+export function clipMotionAt(layer: ClipMotionLayer, frame: number, fps: number, width = 960, height = 540) {
+  const anchors = clipMotionAnchors(layer, fps), visible = layer.enabled && frame >= anchors.start && frame < anchors.end;
+  const phase = frame < anchors.arrive ? 'enter' : frame <= anchors.leave ? 'hold' : 'exit';
+  const start = clipMotionPoseAtPoint(layer, 'start', width, height), hold = clipMotionPoseAtPoint(layer, 'arrive', width, height), end = clipMotionPoseAtPoint(layer, 'end', width, height);
+  const from = phase === 'enter' ? start : hold, to = phase === 'enter' ? hold : phase === 'hold' ? hold : end;
+  const amount = phase === 'enter' ? progress(frame, anchors.start, anchors.arrive, fps, layer.easing) : phase === 'exit' ? progress(frame, anchors.leave, anchors.end, fps, layer.easing) : 1;
+  const mix = (key: keyof ClipMotionPose) => amount === 0 ? from[key] : amount === 1 ? to[key] : from[key] + (to[key] - from[key]) * amount;
+  return { visible, x: mix('x'), y: mix('y'), rotation: mix('rotation'), scale: Math.max(.001, mix('scale')), opacity: visible ? clamp(mix('opacity'), 0, 1) : 0, phase: visible ? phase : 'hidden' };
 }

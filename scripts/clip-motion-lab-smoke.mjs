@@ -29,10 +29,13 @@ try {
   await page.addStyleTag({ content: '*{box-sizing:border-box}body{margin:0;background:#111210;--font-inter:Arial;--font-space-grotesk:Arial;font:12px Arial}button{font-family:inherit}' });
   await page.addScriptTag({ content: bundle.outputFiles.find(file => file.path.endsWith('.js')).text });
   const flush = () => page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
-  const field = async (label, value) => { await page.$eval(`[aria-label="${label}"]`, (element, value) => { Object.getOwnPropertyDescriptor(element.tagName === 'SELECT' ? HTMLSelectElement.prototype : HTMLInputElement.prototype, 'value').set.call(element, value); element.dispatchEvent(new Event(element.tagName === 'SELECT' ? 'change' : 'input', { bubbles: true })); }, value); await flush(); };
+  const field = async (label, value) => { await page.focus(`[aria-label="${label}"]`); await page.$eval(`[aria-label="${label}"]`, (element, value) => { Object.getOwnPropertyDescriptor(element.tagName === 'SELECT' ? HTMLSelectElement.prototype : HTMLInputElement.prototype, 'value').set.call(element, value); element.dispatchEvent(new Event(element.tagName === 'SELECT' ? 'change' : 'input', { bubbles: true })); if(element.type==='number')element.blur(); }, value); await flush(); };
   const seek = frame => field('Photo preview frame', frame);
+  const point = name => page.click(`.clip-motion-point-tabs>button:nth-child(${['Start', 'Arrive', 'Leave', 'End'].indexOf(name) + 1})`);
+  const timing = async (name, value) => { await point(name); await field(`${name} time`, value); };
+  const anchor = name => page.$eval(`[data-motion-point="${name}"]`, node => Number(node.getAttribute('aria-valuenow')));
   const photo = id => `[data-photo-layer="photo-${id}"]`;
-  const state = id => page.$eval(photo(id), element => { const node = element.firstElementChild; return { phase: element.dataset.phase, opacity: Number(node.style.opacity), transform: node.style.transform, left: element.style.left, width: element.style.width, source: node.querySelector('img').src }; });
+  const state = id => page.$eval(photo(id), element => { const node = element.firstElementChild; return { phase: element.dataset.phase, opacity: Number(node.style.opacity), transform: `${element.style.left} ${element.style.top} ${element.style.transform}`, left: element.style.left, width: element.style.width, source: node.querySelector('img').src }; });
   await page.waitForSelector('[aria-label="Photo animation controls"]');
   assert.equal(await page.$eval('.rmlab-categories button[aria-pressed=true]', node => node.textContent.includes('Clip animations')), true, 'The #clip-motion deep link selects the prototype after hydration');
   await page.waitForFunction(() => [...document.querySelectorAll('.clip-motion-photo img')].every(image => image.complete && image.naturalWidth));
@@ -46,22 +49,38 @@ try {
   const paused = await page.$eval('[data-clip-motion-frame]', node => node.dataset.clipMotionFrame); await page.evaluate(() => new Promise(resolve => setTimeout(resolve, 90))); assert.equal(await page.$eval('[data-clip-motion-frame]', node => node.dataset.clipMotionFrame), paused);
   await page.click('[aria-label="Next photo frame"]'); assert.equal(await page.$eval('[data-clip-motion-frame]', node => Number(node.dataset.clipMotionFrame)), Number(paused) + 1); await page.click('[aria-label="Previous photo frame"]');
   await page.$eval('[aria-label="Show Photo 1"]', node => node.click()); await flush(); assert.equal((await state(1)).opacity, 0); await page.$eval('[aria-label="Show Photo 1"]', node => node.click());
-  await field('Photo delay', 0); await field('Photo end', 4); await field('Entrance duration', .8); await field('Exit duration', .8); await field('Photo easing', 'linear');
+  await timing('Start', 0); await timing('Leave', 3.2); await timing('Arrive', .8); await timing('End', 4); await field('Photo easing', 'linear');
   for (const preset of ['none', 'fade', 'slide-up', 'slide-down', 'slide-left', 'slide-right', 'pop']) {
     await field('Photo entrance', preset); await field('Photo exit', preset); await seek(6); const entering = await state(1); await seek(110); const exiting = await state(1);
-    assert.equal(entering.phase, preset === 'none' ? 'hold' : 'enter'); assert.equal(exiting.phase, preset === 'none' ? 'hold' : 'exit');
+    assert.equal(entering.phase, 'enter'); assert.equal(exiting.phase, 'exit');
     if (preset !== 'none') { assert.ok(entering.opacity > 0 && entering.opacity < 1); assert.ok(exiting.opacity > 0 && exiting.opacity < 1); }
     if (preset.startsWith('slide')) assert.notEqual(entering.transform, exiting.transform, `${preset} entrance and exit travel in their intended directions`);
     if (preset === 'pop') assert.match(entering.transform, /scale\(0\./);
     await seek(120); assert.equal((await state(1)).opacity, 0, 'Layer is hidden exactly at its end frame');
   }
   await field('Photo entrance', 'slide-left'); await seek(6); const linear = (await state(1)).transform; await field('Photo easing', 'ease-out'); assert.notEqual((await state(1)).transform, linear);
-  const short = (await state(1)).transform; await field('Travel distance', 300); assert.notEqual((await state(1)).transform, short);
+  const short = (await state(1)).transform; await point('Start'); await field('Position X', 5); await seek(6); assert.notEqual((await state(1)).transform, short);
+  await point('Start'); await seek(180); await field('Position X', 6); assert.equal(await page.$eval('[data-clip-motion-frame]', node => Number(node.dataset.clipMotionFrame)), 0, 'Editing a pose after scrubbing seeks back to its authored point'); assert.equal((await state(1)).opacity, 0, 'A hidden pose stays transparent while its outline is selectable'); assert.ok(await page.$('[data-photo-layer="photo-1"] .clip-motion-pose-outline'));
+  const startBefore = await page.$eval('[data-photo-layer="photo-1"]', node => node.getBoundingClientRect().toJSON());
+  await page.mouse.move(startBefore.x + startBefore.width / 2, startBefore.y + startBefore.height / 2); await page.mouse.down(); await page.mouse.move(startBefore.x + startBefore.width / 2 + 30, startBefore.y + startBefore.height / 2 + 20, { steps: 4 }); await page.mouse.up();
+  assert.notEqual(await page.$eval('[aria-label="Position X"]', node => Number(node.value)), 6, 'Transparent pose can be dragged by its outline');
+  await point('Arrive'); await field('Position X', 48); await field('Rotation', 12); await point('Leave'); assert.equal(await page.$eval('[aria-label="Position X"]', node => Number(node.value)), 48, 'Arrive and Leave share the hold pose');
+  await field('Photo entrance', 'pop'); assert.equal(await page.$eval('[aria-label="Position X"]', node => Number(node.value)), 48, 'Reapplying an entrance preserves hold placement');
+  const otherAnchors = await Promise.all(['start', 'leave', 'end'].map(anchor));
+  await page.focus('[data-motion-point="arrive"]'); await page.keyboard.press('ArrowRight'); assert.equal(await anchor('arrive'), 25);
+  await page.keyboard.down('Shift'); await page.keyboard.press('ArrowRight'); await page.keyboard.up('Shift'); assert.equal(await anchor('arrive'), 35); assert.deepEqual(await Promise.all(['start', 'leave', 'end'].map(anchor)), otherAnchors);
+  const leaveBefore = await anchor('leave'), marker = await page.$('[data-motion-point="leave"]'), bounds = await marker.boundingBox();
+  await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2); await page.mouse.down(); await page.mouse.move(bounds.x + bounds.width / 2 - 25, bounds.y + bounds.height / 2, { steps: 4 }); await page.mouse.up(); assert.ok(await anchor('leave') < leaveBefore, 'Timing markers drag to snapped frames'); const draggedLeave = await anchor('leave'); await page.keyboard.press('ArrowLeft'); assert.equal(await anchor('leave'), draggedLeave - 1, 'Dragged marker owns keyboard fine tuning');
+  await seek(60); assert.equal(await page.$('.clip-motion-pose-outline'), null, 'Scrubbing exits pose-edit mode');
+  await point('End'); await page.focus('[aria-label="End time"]'); await page.keyboard.down('Control'); await page.keyboard.press('a'); await page.keyboard.up('Control'); await page.keyboard.type('6.9'); await page.keyboard.press('Enter'); await flush(); assert.equal(await anchor('end'), 207, 'Decimal time accepts actual typing without clamping partial keystrokes');
+  await point('Arrive'); await page.focus('[aria-label="Arrive time"]'); await page.keyboard.down('Control'); await page.keyboard.press('a'); await page.keyboard.up('Control'); await page.keyboard.type('0.6'); await page.keyboard.press('Enter'); await flush(); assert.equal(await anchor('arrive'), 18);
+  await page.focus('[aria-label="Rotation"]'); await page.keyboard.down('Control'); await page.keyboard.press('a'); await page.keyboard.up('Control'); await page.keyboard.type('-15.5'); await page.keyboard.press('Enter'); await flush(); assert.equal(await page.$eval('[aria-label="Rotation"]', node => Number(node.value)), -15.5, 'Negative decimal pose values accept keyboard typing');
+  await page.focus('[aria-label="Position X"]'); await page.keyboard.down('Control'); await page.keyboard.press('a'); await page.keyboard.up('Control'); await page.keyboard.type('25'); await page.keyboard.press('Escape'); await flush(); assert.equal(await page.$eval('[aria-label="Position X"]', node => Number(node.value)), 48, 'Escape cancels a numeric draft');
   await page.$eval('[aria-label="Local photo file"]', node => node.value = ''); const upload = await page.$('[aria-label="Local photo file"]'); await upload.uploadFile(`${directory}/red.png`);
   await page.waitForFunction(() => document.querySelector('[data-photo-layer="photo-1"] img').src.startsWith('blob:') && document.querySelector('[data-photo-layer="photo-1"] img').complete); const red = (await state(1)).source;
   await page.click('.clip-motion-layer-picker>button:nth-child(2)'); await upload.uploadFile(`${directory}/blue.png`); await page.waitForFunction(() => document.querySelector('[data-photo-layer="photo-2"] img').src.startsWith('blob:') && document.querySelector('[data-photo-layer="photo-2"] img').complete);
   assert.notEqual((await state(2)).source, red, 'Two local photo files remain independent');
-  await field('Photo delay', 1.5); await field('Photo position X', 78); await field('Photo width', 31); assert.equal((await state(2)).left, '78%'); assert.equal((await state(2)).width, '31%');
+  await timing('Start', 1.5); await point('Arrive'); await field('Position X', 78); await page.$eval('.clip-motion-disclosure', node => node.open = true); await field('Photo width', 31); assert.equal((await state(2)).left, '78%'); assert.equal((await state(2)).width, '31%');
   assert.equal(await page.$eval('[data-timing-layer="photo-2"] .clip-motion-timing-bar', node => node.style.left), '18.75%');
   await page.click('.rmlab-categories>button:first-child'); await page.click('.rmlab-categories>button:nth-child(3)'); await flush(); assert.equal((await state(1)).source, red, 'Switching experiments retains local photo state');
   await upload.uploadFile(`${directory}/invalid.txt`); await page.waitForFunction(() => document.querySelector('.clip-motion-notice')?.textContent.includes('Choose a PNG')); assert.ok((await state(2)).source.startsWith('blob:'));
@@ -72,8 +91,8 @@ try {
   await seek(15); await page.waitForFunction(() => Math.abs(document.querySelector('.clip-motion-background').currentTime - .5) < .015);
   await seek(180); await page.waitForFunction(() => document.querySelector('.clip-motion-background').currentTime > 1.95); assert.ok(await page.$eval('.clip-motion-background', node => node.paused), 'Local video has no independent playback clock');
   const backgroundUrl = await page.$eval('.clip-motion-background', node => node.src); await page.click('[aria-label="Remove local background video"]'); await flush(); assert.ok(await page.evaluate(url => window.revoked.includes(url), backgroundUrl));
-  await page.click('[aria-label="Reset photo animations"]'); await flush(); assert.equal(await page.$eval('[aria-label="Photo delay"]', node => Number(node.value)), 1.2); assert.equal((await state(1)).source, red);
-  await field('Photo preview duration', 3); await field('Photo frame rate', 60); await seek(179); assert.equal((await state(2)).phase, 'exit');
+  await page.click('[aria-label="Reset photo animations"]'); await flush(); assert.equal(await anchor('start'), 36); assert.equal((await state(1)).source, red);
+  await page.$eval('.clip-motion-disclosure:nth-last-child(1)', node => node.open = true); await field('Photo preview duration', 3); await field('Photo frame rate', 60); await seek(179); assert.equal((await state(2)).phase, 'exit');
   await field('Photo canvas format', 'portrait'); assert.equal(await page.$eval('.clip-motion-artboard', node => node.style.height), '960px');
   await page.evaluate(() => window.fixture.setEmbedded(true)); await page.setViewport({ width: 320, height: 1000 }); await flush();
   assert.ok(await page.$eval('.rmlab', node => node.scrollWidth <= node.clientWidth + 1), 'All photo controls fit the 320px inspector');
@@ -82,5 +101,5 @@ try {
   await page.evaluate(() => window.fixture.setQuery('photo')); await flush(); assert.equal(await page.$$eval('.rmlab-categories>button', nodes => nodes.length), 1);
   assert.equal(requests.filter(url => /api\/sam|segment-video|convex|anthropic/.test(url)).length, 0);
   assert.deepEqual(errors, []);
-  console.log('PASS: six-area integration + deep link; two independent local photo layers; every entrance/exit preset; timing/easing/distance/placement; exact backwards pixels; play/pause/step; local video exact seek and end hold; URL cleanup; no template blobs; portrait and 320px controls; zero provider calls.');
+  console.log('PASS: six-area integration + deep link; two independent local photo layers; every entrance/exit preset; frame-snapped timing points, pointer and keyboard editing, shared hold pose, transparent pose dragging, easing/placement; exact backwards pixels; play/pause/step; local video exact seek and end hold; URL cleanup; no template blobs; portrait and 320px controls; zero provider calls.');
 } finally { await browser.close(); await fonts.close(); }
