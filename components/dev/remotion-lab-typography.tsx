@@ -55,35 +55,10 @@ function ElasticWave({ config, frame }: TypeProps) {
   }}/>;
 }
 
-function RgbSplit({ config, frame }: TypeProps) {
-  return <Words text={config.title} render={(word, index, count) => {
-    const t = timing(config, frame, index, count, true);
-    const split = (1 - t.progress) * 27 * config.textStrength;
-    const jitter = Math.sin(t.elapsed * 2.3) * split * .3;
-    return <span className="rmlab-extra-word rmlab-rgb-word" style={{ opacity: bounded(t.progress * 4), transform: `scale(${.9 + t.progress * .1})` }}><span className="rmlab-type-copy" style={{ color: config.accent, transform: `translate(${split + jitter}px,${-split * .15}px)`, opacity: (1 - t.progress) * .85 }}>{word}</span><span className="rmlab-type-copy" style={{ color: '#ff598b', transform: `translate(${-split + jitter}px,${split * .15}px)`, opacity: (1 - t.progress) * .85 }}>{word}</span><span style={{ position: 'relative', textShadow: `${split * .15}px 0 ${config.accent},${-split * .15}px 0 #ff598b` }}>{word}</span></span>;
-  }}/>;
-}
-
-function TypeTrails({ config, frame }: TypeProps) {
-  const t = timing(config, frame);
-  const styleAt = (sample: number): CSSProperties => {
-    const sampleTime = timing(config, sample);
-    return { transform: `translate(${(1 - sampleTime.progress) * -125 * config.textStrength}px,${(1 - sampleTime.progress) * 38 * config.textStrength}px) skewX(${(1 - sampleTime.progress) * 12}deg)`, opacity: bounded(sampleTime.progress * 4) };
-  };
-  return <span className="rmlab-trails-stack">{[5, 4, 3, 2, 1].map(index => <span className="rmlab-trail-copy" key={index} style={{ ...styleAt(frame - index * (2 + config.textStagger * config.fps)), color: 'transparent', WebkitTextStroke: `${Math.max(.5, 1.2 - index * .12)}px ${config.accent}`, opacity: bounded(t.progress * 4) * (1 - t.progress) * (1 - index * .1) }}>{config.title}</span>)}<span className="rmlab-trail-fill" style={styleAt(frame)}>{config.title}</span></span>;
-}
-
 function LiquidStretch({ config, frame }: TypeProps) {
   return <Words text={config.title} render={(word, index, count) => {
     const t = timing(config, frame, index, count, true), elastic = (1 - t.bounce) * config.textStrength;
     return <span className="rmlab-extra-word rmlab-liquid-word" style={{ opacity: bounded(t.progress * 3), transform: `translateY(${elastic * 18}px) scale(${Math.max(.2, 1 + elastic * .65)},${Math.max(.12, 1 - elastic * .8)}) skewX(${elastic * -15}deg)`, filter: `blur(${Math.max(0, 1 - t.progress) * 2}px)`, color: index % 2 ? config.accent : config.foreground }}>{word}</span>;
-  }}/>;
-}
-
-function BlurFocus({ config, frame }: TypeProps) {
-  return <Words text={config.title} render={(word, index, count) => {
-    const t = timing(config, frame, index, count, true);
-    return <span className="rmlab-extra-word rmlab-focus-word" style={{ opacity: t.progress, filter: `blur(${(1 - t.progress) * 22 * config.textStrength}px)`, transform: `translateY(${(1 - t.progress) * 12}px) scale(${1.16 - t.progress * .16})`, letterSpacing: `${(1 - t.progress) * .18 * config.textStrength}em` }}>{word}</span>;
   }}/>;
 }
 
@@ -103,15 +78,29 @@ function DiagonalStagger({ config, frame }: TypeProps) {
   }}/>;
 }
 
-function CharacterScramble({ config, frame }: TypeProps) {
-  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-  return <Letters text={config.title} render={({ character, index }, count) => {
-    const t = timing(config, frame, index, count);
-    const resolved = t.progress >= .995;
-    const tick = Math.floor(Math.max(0, t.elapsed) / Math.max(1, 3 - config.textStrength));
-    const glyph = /[\p{L}\p{N}]/u.test(character) && !resolved ? alphabet[(index * 17 + tick * 13 + 7) % alphabet.length] : character;
-    return <span className="rmlab-scramble-slot" style={{ opacity: bounded(t.progress * 4), color: resolved ? config.foreground : config.accent }}><span className="rmlab-scramble-width">{character}</span><span className="rmlab-scramble-glyph" style={{ transform: `translateY(${resolved ? 0 : Math.sin(tick * 2.4 + index) * 5 * config.textStrength}px)` }}>{glyph}</span></span>;
+function ShutterSlices({ config, frame }: TypeProps) {
+  return <Words text={config.title} render={(word,index,count)=> <span className="rmlab-slice-word"><span className="rmlab-slice-metric">{word}</span>{[0,1,2,3].map(slice=>{
+    const t=timing(config,frame-index*config.textStagger*config.fps*2,slice,4);
+    return <span key={slice} className="rmlab-slice-copy" style={{clipPath:`inset(${slice*25}% 0 ${75-slice*25}%)`,opacity:bounded(t.progress*4),transform:`translateX(${(1-t.progress)*(slice%2?1:-1)*100*config.textStrength}%)`}}>{word}</span>;
+  })}</span>}/>;
+}
+
+function OrbitAssembly({config,frame}:TypeProps){
+  return <Letters text={config.title} render={({character,index},count)=>{
+    const t=timing(config,frame,index,count),remaining=1-t.bounce,angle=index*.7+remaining*2.5,radius=remaining*58*config.textStrength;
+    return <span className="rmlab-extra-letter" style={{opacity:bounded(t.progress*4),transform:`translate(${Math.cos(angle)*radius}px,${Math.sin(angle)*radius}px) rotate(${remaining*(index%2?35:-35)}deg) scale(${.7+t.bounce*.3})`}}>{character}</span>;
   }}/>;
+}
+
+function IrisReveal({config,frame}:TypeProps){
+  return <Words text={config.title} render={(word,index,count)=>{
+    const t=timing(config,frame,index,count,true);
+    return <span className="rmlab-slice-word"><span className="rmlab-slice-metric">{word}</span><span className="rmlab-slice-copy" style={{clipPath:`circle(${t.progress*150}% at 50% 50%)`,transform:`scale(${1+(1-t.progress)*.1*config.textStrength})`,opacity:t.visible?1:0}}>{word}</span><i style={{position:'absolute',left:'50%',top:'50%',width:'1em',height:'1em',border:`${.012*config.textStrength}em solid ${config.accent}`,borderRadius:'50%',transform:`translate(-50%,-50%) scale(${.3+t.progress*2.2})`,opacity:Math.sin(t.progress*Math.PI)*.7,pointerEvents:'none'}}/></span>;
+  }}/>;
+}
+
+function SoftBloom({config,frame}:TypeProps){
+  return <Letters text={config.title} render={({character,index},count)=>{const t=timing(config,frame,index,count),spread=(1-t.progress)*config.textStrength;return <span className="rmlab-extra-letter" style={{opacity:t.progress,transform:`scale(${.6+t.bounce*.4})`,filter:`blur(${spread*7}px)`,textShadow:`0 0 ${spread*24}px ${config.accent}`,color:t.progress<.7?config.accent:config.foreground}}>{character}</span>;}}/>;
 }
 
 /** Lab-only treatments use the supplied composition frame; there is no second clock. */
@@ -119,6 +108,6 @@ export function RemotionLabTypography(props: TypeProps) {
   const { config, frame, preset } = props;
   const longest = Math.max(1, ...config.title.split(/\s+/).map(word => Array.from(word).length));
   const fontSize = Math.min(config.textSize, (config.aspect === 'portrait' ? 420 : 780) / (longest * .64));
-  const content = preset === 'flip-words' ? <FlipWords {...props}/> : preset === 'line-wipe' ? <LineWipe {...props}/> : preset === 'elastic-wave' ? <ElasticWave {...props}/> : preset === 'rgb-split' ? <RgbSplit {...props}/> : preset === 'type-trails' ? <TypeTrails {...props}/> : preset === 'liquid-stretch' ? <LiquidStretch {...props}/> : preset === 'blur-focus' ? <BlurFocus {...props}/> : preset === 'stamp-impact' ? <StampImpact {...props}/> : preset === 'diagonal-stagger' ? <DiagonalStagger {...props}/> : <CharacterScramble {...props}/>;
+  const content = preset === 'flip-words' ? <FlipWords {...props}/> : preset === 'line-wipe' ? <LineWipe {...props}/> : preset === 'elastic-wave' ? <ElasticWave {...props}/> : preset === 'shutter-slice' ? <ShutterSlices {...props}/> : preset === 'iris-reveal' ? <IrisReveal {...props}/> : preset === 'liquid-stretch' ? <LiquidStretch {...props}/> : preset === 'orbit-assembly' ? <OrbitAssembly {...props}/> : preset === 'stamp-impact' ? <StampImpact {...props}/> : preset === 'diagonal-stagger' ? <DiagonalStagger {...props}/> : <SoftBloom {...props}/>;
   return <span className="rmlab-extra-type" role="img" aria-label={config.title} data-lab-text={preset} data-frame={frame} style={{ color: config.foreground, fontSize, '--type-accent': config.accent } as CSSProperties}><span aria-hidden="true">{content}</span></span>;
 }

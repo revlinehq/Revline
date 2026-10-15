@@ -22,9 +22,9 @@ describe('lab-only typography treatments', () => {
   }
 
   it('preserves the original seven presets and upgrades older saved lab designs', () => {
-    expect(LAB_TEXT_PRESETS).toHaveLength(17);
-    expect(new Set(LAB_TEXT_PRESETS).size).toEqual(17);
-    const { textStrength: _strength, textStagger: _stagger, ...legacy } = DEFAULT_LAB_CONFIG;
+    expect(LAB_TEXT_PRESETS).toHaveLength(24);
+    expect(new Set(LAB_TEXT_PRESETS).size).toEqual(24);
+    const { textStrength: _strength, textStagger: _stagger, textDepthStyle: _depthStyle, textDepth: _depth, textTiltX: _tiltX, textTiltY: _tiltY, ...legacy } = DEFAULT_LAB_CONFIG;
     expect(parseLabFile({ type: 'revline-remotion-template', version: 1, config: legacy })).toEqual(DEFAULT_LAB_CONFIG);
   });
 
