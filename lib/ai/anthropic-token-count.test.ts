@@ -30,5 +30,32 @@ test('free preflight reserves a margin and refuses missing or unavailable counts
   expect(await anthropicTokenCounter('claude-sonnet-5-5','fixture-only')(params)).toBe(59_096);
   expect(fetch.mock.calls[0][0]).toBe('https://api.anthropic.com/v1/messages/count_tokens');
   fetch.mockImplementation(async()=>new Response('{}',{status:200}));await expect(anthropicTokenCounter('claude-sonnet-5-5','fixture-only')(params)).rejects.toThrow('reliable token usage');
-  fetch.mockImplementation(async()=>new Response('{}',{status:429}));await expect(anthropicTokenCounter('claude-sonnet-5-5','fixture-only')(params)).rejects.toThrow('reliable token usage');
+  fetch.mockImplementation(async()=>new Response('{}',{status:429}));await expect(anthropicTokenCounter('claude-sonnet-5-5','fixture-only')(params)).rejects.toThrow('rate or usage limit');
+});
+test.each(['generate','stream'] as const)('insufficient-credit preflight reports the real cause before any paid %s request',async method=>{
+  const requests:string[]=[];
+  const fetch=vi.fn(async(url:RequestInfo|URL)=>{
+    requests.push(String(url));
+    return new Response(JSON.stringify({error:{type:'invalid_request_error',message:'Your credit balance is too low to access the Anthropic API. Private provider detail sk_fixture_secret'}}),{status:400});
+  });vi.stubGlobal('fetch',fetch);
+  const budget=new AssistantTokenBudget();
+  const model=wrapLanguageModel({model:createAnthropic({apiKey:'fixture-only',fetch})('claude-sonnet-5-5'),middleware:budget.middleware([],0,anthropicTokenCounter('claude-sonnet-5-5','fixture-only'))});
+  const request=method==='generate'?model.doGenerate(params):model.doStream(params);
+  await expect(request).rejects.toMatchObject({name:'AssistantTokenBudgetError',statusCode:400,message:'Claude API credits are exhausted. Your saved edits remain. Restore credits in the Claude Console before continuing.'});
+  expect(requests).toEqual(['https://api.anthropic.com/v1/messages/count_tokens']);
+  expect(budget.usage).toEqual({inputTokens:0,outputTokens:0});
+});
+test.each([[401,'authentication failed'],[403,'selected model'],[503,'temporarily unavailable']] as const)('count rejection HTTP%i uses a safe recovery message',async(status,expected)=>{
+  vi.stubGlobal('fetch',vi.fn(async()=>new Response(JSON.stringify({error:{message:'Private provider detail sk_fixture_secret'}}),{status})));
+  let failure:unknown;try{await anthropicTokenCounter('claude-sonnet-5-5','fixture-only')(params);}catch(error){failure=error;}
+  expect(failure).toBeInstanceOf(Error);expect((failure as Error).message).toContain(expected);
+  expect(JSON.stringify(failure)).not.toContain('sk_fixture_secret');expect((failure as Error).message).not.toContain('Private provider detail');
+});
+test.each(['{}','null','{"input_tokens":-1}','{"input_tokens":1.5}','{"input_tokens":"50"}','malformed private provider body'])('invalid successful count %s remains blocked conservatively',async body=>{
+  vi.stubGlobal('fetch',vi.fn(async()=>new Response(body,{status:200})));
+  await expect(anthropicTokenCounter('claude-sonnet-5-5','fixture-only')(params)).rejects.toThrow('reliable token usage');
+});
+test('unrecognized count rejection remains fail-closed without retaining provider detail',async()=>{
+  vi.stubGlobal('fetch',vi.fn(async()=>new Response(JSON.stringify({error:{message:'Unknown provider failure sk_fixture_secret'}}),{status:500})));
+  await expect(anthropicTokenCounter('claude-sonnet-5-5','fixture-only')(params)).rejects.toMatchObject({name:'AssistantTokenBudgetError',statusCode:500,message:expect.stringContaining('reliable token usage')});
 });

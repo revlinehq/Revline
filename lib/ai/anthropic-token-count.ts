@@ -1,6 +1,7 @@
 import { createAnthropic } from '@ai-sdk/anthropic';
 import type { LanguageModelV4CallOptions } from '@ai-sdk/provider';
 import { AssistantTokenBudgetError } from './token-budget';
+import { assistantFailureReason } from './assistant-error';
 
 /** Use the installed SDK's own encoder without issuing a generation request. */
 export async function encodeAnthropicCount(params:LanguageModelV4CallOptions,modelId:string) {
@@ -21,9 +22,15 @@ export function anthropicTokenCounter(modelId:string,key:string) {
   return async(params:LanguageModelV4CallOptions)=>{
     const body=await encodeAnthropicCount(params,modelId);
     const response=await fetch('https://api.anthropic.com/v1/messages/count_tokens',{method:'POST',headers:{'Content-Type':'application/json','anthropic-version':'2023-06-01','x-api-key':key},body:JSON.stringify(body),signal:params.abortSignal});
-    if(!response.ok)throw Object.assign(new AssistantTokenBudgetError('usage'),{statusCode:response.status});
-    const result=await response.json() as {input_tokens?:unknown};
-    if(typeof result.input_tokens!=='number'||!Number.isSafeInteger(result.input_tokens)||result.input_tokens<0)throw new AssistantTokenBudgetError('usage');
+    const result=await response.json().catch(()=>null) as {input_tokens?:unknown;error?:{message?:unknown}}|null;
+    if(!response.ok){
+      const failure=new AssistantTokenBudgetError('usage');
+      const reason=assistantFailureReason({statusCode:response.status,message:result?.error?.message},'anthropic');
+      if(reason)failure.message=reason;
+      // Keep only the safe recovery text/status, never the provider body or key.
+      throw Object.assign(failure,{statusCode:response.status});
+    }
+    if(typeof result?.input_tokens!=='number'||!Number.isSafeInteger(result.input_tokens)||result.input_tokens<0)throw new AssistantTokenBudgetError('usage');
     return Math.ceil(result.input_tokens*11/10)+4096;
   };
 }
