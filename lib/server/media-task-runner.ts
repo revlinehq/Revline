@@ -38,7 +38,7 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
       if (task.outputStored) return {};
       const snapshot = task.render;
       const assetUrls=await prepareComposition(directory,snapshot.timeline,snapshot.assets as (MediaAsset & {size:number})[],convexUrl,signal);
-      await writeComposition(directory,snapshot.timeline,snapshot.assets as (MediaAsset & {size:number})[],assetUrls,snapshot.resolution as 720|1080,snapshot.fps as 24|30|60);
+      await writeComposition(directory,snapshot.timeline,snapshot.assets as (MediaAsset & {size:number})[],assetUrls,snapshot.resolution as 720|1080,snapshot.fps as 24|30|60,'./',signal);
       const output = join(directory, 'video.mp4');
       await runRenderWorker(directory, output, { fps: snapshot.fps, quality: snapshot.quality as 'draft' | 'standard' | 'high' }, progress => onProgress(Math.round(progress.progress * .95)), signal);
       onProgress(97);

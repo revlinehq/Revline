@@ -4,7 +4,7 @@ import type { MediaAsset, Timeline } from '../editor/types';
 import { TEXT_FONTS } from '../editor/text-fonts';
 import { isTransitionClip } from '../editor/clip-transitions';
 import { generateComposition } from '../editor/composition';
-import { downloadOwnedMedia } from '../media-analysis/io';
+import { downloadOwnedMedia,probeMedia } from '../media-analysis/io';
 import { AnalysisError } from '../media-analysis/errors';
 import { prepareRenderAudioSource } from './prepare-render-audio';
 
@@ -32,8 +32,18 @@ export async function linkCompositionResources(root:string,directory:string,asse
     await link(join(root,name),join(directory,name));
   }
 }
-export async function writeComposition(directory:string,timeline:Timeline,assets:MediaAsset[],assetUrls:Record<string,string>,resolution:720|1080,fps:24|30|60,prefix='./') {
-  await writeFile(join(directory,'index.html'),generateComposition(timeline,assets,{resolution,fps,gsapUrl:prefix+'gsap.min.js',visualEffectsUrl:prefix+'visual-effects.js',remotionRuntimeUrl:prefix+'remotion-runtime.js',fontUrl:prefix+'space-grotesk-latin.woff2',fontUrls:Object.fromEntries(TEXT_FONTS.map(font=>[font.id,prefix+font.fileName])),assetUrls:Object.fromEntries(Object.entries(assetUrls).map(([id,url])=>[id,prefix+url.slice(2)]))}));
+export async function writeComposition(directory:string,timeline:Timeline,assets:MediaAsset[],assetUrls:Record<string,string>,resolution:720|1080,fps:24|30|60,prefix='./',signal:AbortSignal=AbortSignal.timeout(30_000)) {
+  const audibleVideo=new Set(timeline.clips.filter(clip=>clip.kind==='video'&&clip.volume!==0).map(clip=>clip.assetId));
+  const silent=new Set<string>();
+  for(const asset of assets)if(asset.kind==='video'&&audibleVideo.has(asset._id)){
+    const source=assetUrls[asset._id];
+    if(!source?.startsWith('./'))throw new AnalysisError('Composition source media is unavailable.',400);
+    if(!(await probeMedia(join(directory,source.slice(2)),signal)).hasAudio)silent.add(asset._id);
+  }
+  // An unmuted video is also authored as sound by the native producer. Probe
+  // the downloaded source rather than assuming every video has an audio stream.
+  const rendered=silent.size?{...timeline,clips:timeline.clips.map(clip=>clip.kind==='video'&&clip.assetId&&silent.has(clip.assetId)?{...clip,volume:0}:clip)}:timeline;
+  await writeFile(join(directory,'index.html'),generateComposition(rendered,assets,{resolution,fps,gsapUrl:prefix+'gsap.min.js',visualEffectsUrl:prefix+'visual-effects.js',remotionRuntimeUrl:prefix+'remotion-runtime.js',fontUrl:prefix+'space-grotesk-latin.woff2',fontUrls:Object.fromEntries(TEXT_FONTS.map(font=>[font.id,prefix+font.fileName])),assetUrls:Object.fromEntries(Object.entries(assetUrls).map(([id,url])=>[id,prefix+url.slice(2)]))}));
 }
 /** Keep original times/animation phases and source holds for transitions in the window. */
 export function reviewWindowTimeline(timeline:Timeline,start:number,end:number):Timeline {
