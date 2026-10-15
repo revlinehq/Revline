@@ -16,6 +16,7 @@ body:has(>.landing),body:has(main.landing){background:#fff}
 .landing-hero-copy{display:flex;flex-direction:column;align-items:center;gap:14px;margin-bottom:40px;width:100%}
 .landing-hero-start[data-slot=button]{margin-top:12px}
 .landing-hero h1{font-size:66px;font-weight:700;letter-spacing:-2.7px;line-height:1.02;width:100%;color:#1c1c1c}.landing-hero-copy>p{width:min(750px,100%);font-size:18px;line-height:1.5;color:#696969}
+.landing-hero-copy>p.landing-social-proof{width:auto;font-size:13px;line-height:1.5;font-weight:500;color:#747474}
 /* The live sample shares the current editor shell and controls. */
 .landing-product-demo{width:100%;min-width:0;border:1px solid #dedfe4;border-radius:16px;overflow:hidden;text-align:left}
 .landing .landing-product-demo>.editor-app{--background:#fff;--foreground:#292929;--card:#fff;--card-foreground:#292929;--secondary:#f4f4f4;--secondary-foreground:#292929;--muted:#f4f4f4;--muted-foreground:#777;--accent:#f4f4f4;--accent-foreground:#292929;--border:#e9e9e9;--input:#f7f7f7;--ws-bg:#fff;--ws-text:#292929;--ws-muted:#777;--ws-surface:#fff;--ws-preview:#f7f7f7;--ws-hover:#f4f4f4;--ws-border:#e9e9e9;--ws-artifact-bg:#fff;--ws-artifact-border:#e9e9e9;--ws-input:#f7f7f7;--ws-composer-bg:#fff;--ws-composer-border:#cdd1d8;--ws-chip:#f2f2f2;--ws-chip-text:#555;--ws-bubble:#f2f2f2;height:740px;min-height:0;width:100%;background:#fff;font-family:var(--font-inter),Inter,sans-serif}

@@ -115,7 +115,7 @@ export function WorkspaceNav({ title = NEW_WORKSPACE_LABEL, editorHref, active =
     {editorControls}
     <div className="workspace-nav-actions">
       {!demo && !onExport && !editorControls && <Link href="/storage" className="workspace-nav-secondary" aria-label="Cloud storage" aria-current={active==='storage'?'page':undefined}><Cloud size={15}/><span>Cloud storage</span></Link>}
-      {saving !== undefined && <span className="workspace-nav-save" role="status">{saving ? <LoaderCircle size={13} className="animate-spin" /> : <Check size={13} />}{saving ? 'Saving…' : 'Saved'}</span>}
+      {saving && <span className="workspace-nav-save" role="status"><LoaderCircle size={13} className="animate-spin" />Saving…</span>}
       {(onUndo || onRedo) && <div className="workspace-nav-history"><button className="workspace-nav-icon" aria-label="Undo" title="Undo" disabled={!canUndo} onClick={onUndo}><Undo2 size={15} /></button><button className="workspace-nav-icon" aria-label="Redo" title="Redo" disabled={!canRedo} onClick={onRedo}><Redo2 size={15} /></button></div>}
       {onFootage && <button className="workspace-nav-secondary" aria-label="Footage" onClick={onFootage}><Film size={14} /><span>Footage</span></button>}
       {onShare && <button type="button" className="workspace-nav-secondary" aria-label="Share timeline" onClick={onShare} disabled={shareDisabled}><Share2 size={14}/><span>Share</span></button>}
