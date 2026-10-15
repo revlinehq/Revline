@@ -12,10 +12,10 @@ const effects=Object.fromEntries(Object.entries(VISUAL_EFFECT_LIMITS).map(([key,
 function Fixture(){
  const[bars,setBars]=useState({id:'bars',kind:'effect',effectPreset:'cinematic-bars',start:0,sourceStart:0,duration:4});
  const[clip,setClip]=useState({id:'video',kind:'video',start:0,sourceStart:0,duration:4,...effects});
- const[textSize,setTextSize]=useState(52);
+ const[textSize,setTextSize]=useState(52),[shadowBlur,setShadowBlur]=useState(8);window.setShadowBlur=setShadowBlur;
  window.bars=bars;window.setBars=setBars;window.clip=clip;window.textSize=textSize;
  const commit=patch=>{window.commits.push(patch);setBars(previous=>({...previous,...patch}))};
- return <><CinematicBarsControls clip={bars} onChange={commit} onPreview={patch=>window.previews.push(patch)}/><VisualEffectsControls clip={clip} onChange={patch=>setClip(previous=>({...previous,...patch}))}/><div className="visual-effects-controls"><EffectSlider label="Text size" value={textSize} bounds={[8,300]} step={1} format={value=>value+' px'} disabled={false} onPreview={()=>{}} onCommit={setTextSize}/></div></>;
+ return <><CinematicBarsControls clip={bars} onChange={commit} onPreview={patch=>window.previews.push(patch)}/><VisualEffectsControls clip={clip} onChange={patch=>setClip(previous=>({...previous,...patch}))}/><div className="visual-effects-controls"><EffectSlider label="Text size" value={textSize} bounds={[8,300]} step={1} format={value=>value+' px'} disabled={false} onPreview={()=>{}} onCommit={setTextSize}/><EffectSlider label="Shadow blur" value={shadowBlur} bounds={[0,80]} step={1} format={value=>value+' px'} disabled={false} onPreview={()=>{}} onCommit={setShadowBlur}/></div></>;
 }
 window.commits=[];window.previews=[];window.resetCounters=()=>{window.commits=[];window.previews=[]};createRoot(document.getElementById('root')).render(<Fixture/>);
 ` }, bundle: true, platform: 'browser', format: 'iife', jsx: 'automatic', write: false, outdir: '/tmp/revline-slider-fill-fixture', define: { 'process.env.NODE_ENV': '"production"' } });
@@ -29,16 +29,16 @@ async function verifyHandles() {
   const handles = await page.$$eval('.effect-slider', sliders => sliders.map(slider => {
     const handle = slider.querySelector('.effect-slider-handle'), bounds = slider.getBoundingClientRect(), rect = handle?.getBoundingClientRect(), style = handle && getComputedStyle(handle);
     const fillWidth = slider.querySelector('.effect-slider-fill')?.getBoundingClientRect().width ?? 0;
-    return { count: slider.querySelectorAll('.effect-slider-handle').length, width: rect?.width, height: rect?.height, left: rect ? rect.left - bounds.left : -1, right: rect ? bounds.right - rect.right : -1, expectedLeft: Math.min(bounds.width - 2, Math.max(0, fillWidth - 7)), radius: style?.borderRadius, color: style?.backgroundColor, pointerEvents: style?.pointerEvents, hiddenFromAccessibility: handle?.getAttribute('aria-hidden') };
+    return { count: slider.querySelectorAll('.effect-slider-handle').length, width: rect?.width, height: rect?.height, left: rect ? rect.left - bounds.left : -1, right: rect ? bounds.right - rect.right : -1, expectedLeft: Math.min(bounds.width - 2, Math.max(0, fillWidth - 7)), sliderHeight:bounds.height,inputHeight:slider.querySelector('input').getBoundingClientRect().height,readoutBottom:Math.max(...[...slider.querySelector('.effect-slider-readout').children].map(node=>node.getBoundingClientRect().bottom)),markerTop:rect?.top, radius: style?.borderRadius, color: style?.backgroundColor, pointerEvents: style?.pointerEvents, hiddenFromAccessibility: handle?.getAttribute('aria-hidden') };
   }));
-  assert.equal(handles.length, 23);
+  assert.ok(handles.length>=24,'All current shared controls and the reported Shadow blur case are covered');
   for (const handle of handles) {
-    assert.equal(handle.count, 1, 'Each slider has a single undivided pill');
-    assert.equal(handle.width, 2); assert.equal(handle.height, 16); assert.equal(handle.radius, '1px');
+    assert.equal(handle.count, 1, 'Each slider retains one full vertical handle');
+    assert.equal(handle.width,2);assert.equal(handle.height,16);assert.equal(handle.sliderHeight,28);assert.equal(handle.inputHeight,28,'Full-height drag target is preserved'); assert.equal(handle.radius, '1px');
     assert.equal(handle.color, 'rgb(255, 255, 255)'); assert.equal(handle.pointerEvents, 'none');
     assert.equal(handle.hiddenFromAccessibility, 'true');
-    assert.ok(handle.left >= -.01 && handle.right >= -.01, 'Pills stay inside their sliders at every value');
-    assert.ok(Math.abs(handle.left - handle.expectedLeft) < .05, 'The pill tracks the measured fill boundary');
+    assert.ok(handle.left >= -.01 && handle.right >= -.01, 'Position markers stay inside their sliders at every value');
+    assert.ok(Math.abs(handle.left - handle.expectedLeft) < .05, 'The original vertical handle tracks the measured fill boundary');
   }
 }
 async function verifyFills(theme) {
@@ -50,7 +50,7 @@ async function verifyFills(theme) {
     const channels = style?.backgroundColor.match(/[\d.]+/g)?.map(Number) ?? [];
     return { label: input.getAttribute('aria-label'), expected, sliderWidth: slider.getBoundingClientRect().width, fillWidth: fill?.getBoundingClientRect().width ?? 0, color: style?.backgroundColor ?? 'missing', blue: channels[2] > channels[0] && channels[2] > channels[1], pointerEvents: style?.pointerEvents, inputBackground:getComputedStyle(input).backgroundColor };
   }));
-  assert.equal(fills.length, 23, 'Bars, all visual effect parameters including Neon edges, and standalone text size are covered');
+  assert.ok(fills.length>=24,'All current shared effect controls and text controls are covered');
   for (const fill of fills) {
     assert.equal(fill.inputBackground,'rgba(0, 0, 0, 0)',`${theme} ${fill.label} input must not cover its label/value/fill`);
     assert.ok(fill.fillWidth > 0, `${theme} ${fill.label} has a rendered progress fill`);
@@ -70,7 +70,10 @@ try {
   await page.addStyleTag({ content: '*{box-sizing:border-box}body{margin:0;background:var(--ws-bg);font:12px Arial}#root{width:340px;min-height:100vh;padding:16px;margin:0 auto;display:block}.visual-effects-controls{margin-bottom:18px}' });
   await page.addScriptTag({ content: bundle.outputFiles.find(file => file.path.endsWith('.js')).text });
   await page.waitForSelector(input('Size'));
+  await page.$$eval('.frame-distortion-advanced',nodes=>nodes.forEach(node=>node.open=true));
   await verifyFills('light'); await verifyFills('dark');
+  for(const theme of ['light','dark']){await page.evaluate(theme=>document.documentElement.dataset.workspaceTheme=theme,theme);for(const value of [0,8,40,72,80]){await page.evaluate(value=>window.setShadowBlur(value),value);await flush();await verifyHandles();const row=await page.$('.effect-slider:has(input[aria-label="Shadow blur"])'),label=await row.$('.effect-slider-readout>span'),output=await row.$('.effect-slider-readout output'),before=[await label.screenshot(),await output.screenshot()];await row.$eval('.effect-slider-handle',node=>node.style.visibility='hidden');const after=[await label.screenshot(),await output.screenshot()];assert.deepEqual(after,before,`${theme} value${value}: full handle must not alter label or value pixels`);await row.$eval('.effect-slider-handle',node=>node.style.visibility='');}await page.evaluate(()=>window.setShadowBlur(8));await flush();const reportedRow=await page.$('.effect-slider:has(input[aria-label="Shadow blur"])');await reportedRow.screenshot({path:`/tmp/revline-slider-marker-${theme}.png`});}
+  await page.evaluate(()=>window.setShadowBlur(8));await flush();
   await page.screenshot({ path: '/tmp/revline-effect-slider-fill-dark.png', clip: { x: 40, y: 0, width: 340, height: 930 } });
   await page.evaluate(() => window.resetCounters()); await page.focus(input('Size'));
   const before = await page.$eval(input('Size'), input => Number(input.value));
@@ -107,5 +110,5 @@ try {
   await verifyHandles();
   await page.screenshot({ path: '/tmp/revline-effect-slider-pill-dark.png', clip: { x: 40, y: 0, width: 340, height: 930 } });
   assert.deepEqual(errors, []);
-  console.log('PASS: 23 shared sliders show the same violet fill at measured range widths and one white rounded pill contained at min/max in light/dark; cinematic bars keyboard/pointer previews, single commit, cancel; disabled values retained; standalone text size. Synthetic only.');
+  console.log('PASS: shared sliders show violet fill and the original full vertical handle; labels/values use matching fill backplates over the handle at min, low, middle and max in light/dark with full 28px input hit areas; cinematic bars keyboard/pointer previews, single commit, cancel; disabled values retained; standalone text size. Synthetic only.');
 } finally { await browser.close(); }

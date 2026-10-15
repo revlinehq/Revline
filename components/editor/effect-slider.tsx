@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useId, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState, type CSSProperties } from 'react';
 import './effect-slider.css';
 
 const rangeKeys = new Set(['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End', 'PageUp', 'PageDown']);
@@ -36,7 +36,7 @@ export function EffectSlider({ label, ariaLabel, value, bounds, step = .01, form
     if (gesture.current) callbacks.current.onPreview(null);
   }, []);
   const progress = bounds[1] > bounds[0] ? Math.min(100, Math.max(0, (draft - bounds[0]) / (bounds[1] - bounds[0]) * 100)) : 0;
-  return <div className="effect-slider" data-disabled={disabled || undefined}>
+  return <div className="effect-slider" data-disabled={disabled || undefined} style={{ '--slider-progress': `${progress}%` } as CSSProperties}>
     <span className="effect-slider-fill" aria-hidden="true" style={{ width: `${progress}%` }}/>
     <span className="effect-slider-handle" aria-hidden="true" style={{ left: `clamp(0px, calc(${progress}% - 7px), calc(100% - 2px))` }}/>
     <div className="effect-slider-readout" aria-hidden="true"><span>{label}</span><output htmlFor={id}>{format(draft)}</output></div>

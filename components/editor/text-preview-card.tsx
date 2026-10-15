@@ -16,7 +16,8 @@ export function TextPreviewCard({ label, selected, onSelect, render, className =
   const [frame, setFrame] = useState(TEXT_PREVIEW_HOLD_FRAME);
   const [previewing, setPreviewing] = useState(false);
   const [replay, setReplay] = useState(0);
-  const active = !reducedMotion && (hovered || focused || previewing);
+  const automatic = !reducedMotion && (hovered || focused);
+  const active = automatic || previewing;
   useEffect(() => {
     const preference = matchMedia('(prefers-reduced-motion: reduce)');
     const update = () => setReducedMotion(preference.matches);
@@ -30,12 +31,12 @@ export function TextPreviewCard({ label, selected, onSelect, render, className =
     setFrame(0);
     const tick = (now: number) => {
       const elapsed = Math.floor((now - started) / 1000 * TEXT_PREVIEW_FPS);
-      if (elapsed >= TEXT_PREVIEW_DURATION && !hovered && !focused) { setPreviewing(false); return; }
+      if (elapsed >= TEXT_PREVIEW_DURATION && !automatic) { setPreviewing(false); return; }
       setFrame(elapsed % TEXT_PREVIEW_DURATION); request = requestAnimationFrame(tick);
     };
     request = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(request);
-  }, [active, replay, hovered, focused]);
+  }, [active, replay, automatic]);
   const stage = render(active ? frame : TEXT_PREVIEW_HOLD_FRAME);
   if (previewFirst) return <div className={`text-preset-card text-animation-card ${className}`} role="group" aria-label={label} data-selected={selected} onPointerEnter={event => { if (event.pointerType !== 'touch') setHovered(true); }} onPointerLeave={() => setHovered(false)} onFocusCapture={() => setFocused(true)} onBlurCapture={event => { if (!event.currentTarget.contains(event.relatedTarget)) setFocused(false); }}>
     <button type="button" className="text-preset-stage text-animation-preview" aria-label={`Preview ${label}`} title="Play preview" onClick={() => { setPreviewing(true); setReplay(value => value + 1); }}><span aria-hidden="true">{stage}</span></button>

@@ -8,7 +8,11 @@ import { textFont } from '@/lib/editor/text-fonts';
 import { TEXT_PREVIEW_DURATION, TEXT_PREVIEW_FPS } from './text-preview-card';
 
 export function TextAnimationPreview({ preset, frame, clip }: { preset: TextAnimationPreset; frame: number; clip?: Clip }) {
-  const original: Clip = { id: 'preview', kind: 'graphic', text: 'Tell your story', sourceStart: 0, color: '#F4F4F0', ...clip, start: 0, duration: TEXT_PREVIEW_DURATION / TEXT_PREVIEW_FPS };
+  const duration = TEXT_PREVIEW_DURATION / TEXT_PREVIEW_FPS;
+  const original: Clip = { id: 'preview', kind: 'graphic', text: 'Tell your story', sourceStart: 0, color: '#F4F4F0', ...clip, start: 0, duration,
+    // Card previews replay an entrance; source offsets and speech timings belong to the timeline.
+    textTemplate: clip?.textTemplate ? { ...clip.textTemplate, duration, offset: 0, wordTimings: undefined } : undefined,
+  };
   const preview = { ...original, ...textAnimationPatch(original, preset), start: 0, duration: TEXT_PREVIEW_DURATION / TEXT_PREVIEW_FPS, fontSize: 92 };
   const resolution = 1080 * 18 / 92;
   const layer = textLayerFrame({ clip: preview, index: 0, fps: TEXT_PREVIEW_FPS, resolution }, frame / TEXT_PREVIEW_FPS, 180, 72);
