@@ -123,3 +123,22 @@ The container subsequently returned inactive. No paid model was invoked.
 Review provider responses are verified with mocks; live Gemini judging quality
 has not been benchmarked. The synthetic project was removed and its temporary
 access was revoked. Neither customer footage nor customer projects were edited.
+
+### 2026-10-15 renderer optimization rollout
+
+Controller version `f7819038-5c2f-4584-91ef-c1cb50750cd0`, tagged `f6df3bd`, uses image
+`registry.cloudflare.com/701645e913477e567db69b11343f59d8/revline-media-processor-production-mediaprocessor-processor@sha256:e11af52df207c25187ab77bdec217705bd44d4953171a9578c7b909e2b97f828`.
+The frozen source skips motion-key construction for inactive effects and validates
+intermediate GPU targets at allocation or resize, preserving rendered pixels.
+Failed or lost contexts are discarded instead of entering the reuse pool.
+
+The exact image passed dependency/runtime checks and a network-disabled H.264 MP4
+check: one second, 720p, 24 fps, Dither followed by two ordered zoom-blur passes,
+mean browser/export RGB error 1.16/255, zero warnings. Under a 1-CPU/6-GiB cap the
+entire fixture took about 108 seconds, including preparation; its original
+90-second test timeout was insufficient. This verifies output, not instantaneous
+exports. Complex software-GPU rendering remains a throughput limit.
+
+The production backend, worker secrets, instance size, concurrency and idle
+shutdown remain unchanged. No paid model call or customer editing job was used
+for release verification.

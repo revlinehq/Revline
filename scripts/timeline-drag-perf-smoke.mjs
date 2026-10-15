@@ -2,10 +2,16 @@ import assert from 'node:assert/strict';
 import puppeteer from 'puppeteer-core';
 
 const baseUrl = process.env.BASE_URL ?? 'http://localhost:3001';
+// For production measurements, point BASE_URL at a separately built `next start`
+// server and set REACT_RUNTIME=production. `next dev` adds development overhead.
+const declaredReactRuntime = process.env.REACT_RUNTIME ?? 'unspecified';
+assert.ok(['production', 'development', 'unspecified'].includes(declaredReactRuntime), 'REACT_RUNTIME must describe the target server');
 const scales = (process.env.CPU_SCALES ?? '1,4').split(',').map(Number);
 const functionalOnly = process.env.FUNCTIONAL_ONLY === '1';
 const browser = await puppeteer.launch({ executablePath: '/home/sonic/.cache/puppeteer/chrome/linux-155.0.8059.39/chrome-linux64/chrome', headless: true, args: ['--no-sandbox', '--disable-dev-shm-usage', '--ignore-certificate-errors'] });
 const page = await browser.newPage(), errors = [], checks = [], measurements = [];
+await page.setRequestInterception(true);
+page.on('request', request => ['GET', 'HEAD', 'OPTIONS'].includes(request.method()) ? request.continue() : request.abort());
 const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
 const check = (condition, name, detail) => checks.push({ name, passed: !!condition, ...(detail === undefined ? {} : { detail }) });
 const percentile = (values, fraction) => values.length ? [...values].sort((a, b) => a - b)[Math.min(values.length - 1, Math.floor(values.length * fraction))] : 0;
@@ -47,10 +53,11 @@ async function recordStart(id, mode, point) {
     data.observer = new PerformanceObserver(list => data.longTasks.push(...list.getEntries().map(entry => entry.duration))); data.observer.observe({ type: 'longtask' });
     data.mutationsObserver = new MutationObserver(records => data.mutations += records.length); data.mutationsObserver.observe(document.querySelector('.timeline-panel'), { subtree: true, attributes: true, attributeFilter: ['style', 'class'], childList: true });
     const tick = at => {
-      const pointer = data.pointers.at(-1), ghost = document.querySelector('.timeline-floating-clip') ?? document.querySelector('.timeline-drag-preview'), target = document.querySelector('.timeline-destination-preview'), clip = find();
-      const r = ghost?.getBoundingClientRect(), c = clip?.getBoundingClientRect();
+      const pointer = data.pointers.at(-1), ghost = [...document.querySelectorAll('.timeline-floating-clip')].find(node => node.dataset.clipId === id), target = [...document.querySelectorAll('.timeline-destination-preview')].find(node => node.dataset.clipId === id), clip = find();
+      const r = ghost?.getBoundingClientRect(), destination = target?.getBoundingClientRect(), c = clip?.getBoundingClientRect();
       const visible = node => !!node && getComputedStyle(node).display !== 'none' && node.getBoundingClientRect().width > 0;
-      data.samples.push({ at, pointerAt: pointer?.at, ghostX: r?.x, ghostY: r?.y, clipX: c?.x, clipWidth: c?.width, cursorError: pointer && r ? Math.hypot(r.x - pointer.x + offset.x, r.y - pointer.y + offset.y) : undefined, ghostVisible: visible(ghost), targetVisible: visible(target) });
+      const snapped = visible(document.querySelector('.timeline-snap-guide'));
+      data.samples.push({ at, pointerAt: pointer?.at, ghostX: r?.x, ghostY: r?.y, ghostTransform: ghost?.style.transform, clipX: c?.x, clipWidth: c?.width, cursorError: pointer && r ? Math.hypot(r.x - pointer.x + offset.x, r.y - pointer.y + offset.y) : undefined, verticalError: pointer && r ? Math.abs(r.y - pointer.y + offset.y) : undefined, snapped, snapAlignmentError: snapped && r && destination ? Math.abs(r.x - destination.x) : undefined, ghostVisible: visible(ghost), targetVisible: visible(target) });
       data.frame = requestAnimationFrame(tick);
     };
     data.frame = requestAnimationFrame(tick);
@@ -77,13 +84,23 @@ async function measureGesture(kind, scale) {
   await wait(100); const result = await recordEnd(), held = await state(id), metricsAfter = await page.metrics();
   // Performance trials cancel rather than mutating the user's saved timeline or clock.
   await page.keyboard.press('Escape'); await page.mouse.up(); await wait(200); const restored = await state(id);
-  const intervals = result.samples.slice(1).map((value, index) => value.at - result.samples[index].at), cursorErrors = result.samples.filter(value => value.pointerAt && value.cursorError !== undefined).map(value => value.cursorError);
-  const summary = { kind, scale, frames: result.samples.length, p95FrameMs: percentile(intervals, .95), maxFrameMs: Math.max(0, ...intervals), delayedFrames: intervals.filter(value => value > 34).length, longTasks: result.longTasks, pointerEvents: result.pointers.length, pointerCallbackCount: result.callbacks.length, p95PointerCallbackMs: percentile(result.callbacks, .95), p95DispatchMs: percentile(dispatch, .95), p95CursorErrorPx: percentile(cursorErrors, .95), ghostFrames: result.samples.filter(value => value.ghostVisible).length, targetFrames: result.samples.filter(value => value.targetVisible).length, domMutations: result.mutations, layouts: metricsAfter.LayoutCount - metricsBefore.LayoutCount, taskMs: (metricsAfter.TaskDuration - metricsBefore.TaskDuration) * 1000, heldHistory: held.history - before.history };
+  const intervals = result.samples.slice(1).map((value, index) => value.at - result.samples[index].at), ghosts = result.samples.filter(value => value.ghostVisible);
+  // The recorder's RAF can run before the app positions a newly appended clone
+  // later in that same pre-paint cycle. Track this setup delay separately.
+  const painted = ghosts.filter(value => !!value.ghostTransform && value.ghostTransform !== 'none');
+  const firstGhostPaintMs = painted.length && ghosts.length ? painted[0].at - ghosts[0].at : Infinity;
+  const tracked = painted.filter(value => value.pointerAt && value.cursorError !== undefined);
+  const free = tracked.filter(value => !value.snapped), snapped = tracked.filter(value => value.snapped);
+  const summary = { kind, scale, frames: result.samples.length, p95FrameMs: percentile(intervals, .95), maxFrameMs: Math.max(0, ...intervals), delayedFrames: intervals.filter(value => value > 34).length, longTasks: result.longTasks, pointerEvents: result.pointers.length, pointerCallbackCount: result.callbacks.length, p95PointerCallbackMs: percentile(result.callbacks, .95), p95DispatchMs: percentile(dispatch, .95), p95CursorErrorPx: percentile(ghosts.filter(value => value.cursorError !== undefined).map(value => value.cursorError), .95), prePaintGhostFrames: ghosts.length - painted.length, firstGhostPaintMs, paintedGhostFrames: painted.length, unsnappedFrames: free.length, p95UnsnappedCursorErrorPx: percentile(free.map(value => value.cursorError), .95), snappedFrames: snapped.length, maxSnapAlignmentErrorPx: Math.max(0, ...snapped.map(value => value.snapAlignmentError ?? Infinity)), p95VerticalErrorPx: percentile(tracked.map(value => value.verticalError), .95), ghostFrames: ghosts.length, targetFrames: result.samples.filter(value => value.targetVisible).length, domMutations: result.mutations, layouts: metricsAfter.LayoutCount - metricsBefore.LayoutCount, taskMs: (metricsAfter.TaskDuration - metricsBefore.TaskDuration) * 1000, heldHistory: held.history - before.history };
   measurements.push(summary); console.error(JSON.stringify(summary));
   check(result.pointers.length >= 50 && result.samples.length >= 15, `${scale}× ${kind}: samples actual held-pointer movement`, summary);
   check(summary.p95FrameMs < 50 && summary.p95PointerCallbackMs < 20, `${scale}× ${kind}: no repeated frame or pointer-handler stalls`, summary);
   check(JSON.stringify(restored.timeline) === JSON.stringify(before.timeline) && restored.history === before.history && Math.abs(restored.playhead - before.playhead) < 1e-6, `${scale}× ${kind}: cancel preserves document/history/playhead`);
-  if (!side && kind !== 'header-reorder') check(summary.ghostFrames > 10 && summary.targetFrames > 10 && summary.p95CursorErrorPx < 12, `${scale}× ${kind}: floating clip follows the cursor with a separate landing preview`, summary);
+  if (!side && kind !== 'header-reorder') {
+    // A magnetic join deliberately locks X to the landing preview. Outside a
+    // snap, both axes must still follow the cursor under the existing budget.
+    check(summary.paintedGhostFrames > 10 && summary.firstGhostPaintMs < 50 && summary.targetFrames > 10 && summary.p95UnsnappedCursorErrorPx < 12 && summary.p95VerticalErrorPx < 12 && summary.maxSnapAlignmentErrorPx < 1, `${scale}× ${kind}: free drag follows the cursor and magnetic drag matches the landing preview`, summary);
+  }
 }
 
 async function reset() {
@@ -196,6 +213,6 @@ try {
   if (!functionalOnly) for (const scale of scales) { await cdp.send('Emulation.setCPUThrottlingRate', { rate: scale }); for (const kind of ['horizontal-title', 'horizontal-footage', 'vertical-row', 'new-row-above', 'new-row-below', 'head-trim', 'tail-trim', 'header-reorder']) await measureGesture(kind, scale); }
   await cdp.send('Emulation.setCPUThrottlingRate', { rate: 1 }); if(process.env.PERF_ONLY!=='1')await functionalGestures();
   check(errors.length === 0, 'No browser runtime errors', errors);
-  console.log(JSON.stringify({ baseUrl, passed: checks.every(value => value.passed), checks, measurements, errors }, null, 2));
+  console.log(JSON.stringify({ target: { baseUrl, revision: process.env.TARGET_REVISION ?? null, declaredReactRuntime, cpuScales: scales, viewport: { width: 1440, height: 1000 }, fixture: 'Public in-memory sample editor; no AI calls or saved projects; non-read network methods blocked' }, passed: checks.every(value => value.passed), checks, measurements, errors }, null, 2));
   assert.ok(checks.every(value => value.passed), 'Custom timeline drag regression contains failing checks');
 } finally { await browser.close(); }
