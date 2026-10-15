@@ -39,7 +39,10 @@ test.each(CLAUDE_EDIT_MODELS)('installed Anthropic SDK sends supported adaptive 
   const response = await generateText({ model: provider(model.modelId), prompt: 'Synthetic fixture', providerOptions: claudeProviderOptions(model.modelId), maxOutputTokens: 512 });
   expect(response.text).toBe('Fixture response');
   expect(request).toMatchObject({ model: model.modelId, cache_control: { type: 'ephemeral', ttl: '5m' }, thinking: { type: 'adaptive', block_binding: { prefix_mismatch_behavior: 'drop_block' } }, output_config: { effort: 'medium' } });
-  expect(claudeProviderOptions(model.gatewayModelId)).toEqual(claudeProviderOptions(model.modelId));
+  if(model.id==='sonnet'){
+    expect(request).toMatchObject({speed:'standard',service_tier:'standard_only',inference_geo:'global'});
+    expect(claudeProviderOptions(model.gatewayModelId)?.anthropic).not.toHaveProperty('serviceTier');
+  }else expect(claudeProviderOptions(model.gatewayModelId)).toEqual(claudeProviderOptions(model.modelId));
 });
 
 test('production policy also blocks environment overrides and previously queued Opus selections', () => {

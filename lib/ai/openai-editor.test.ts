@@ -15,7 +15,7 @@ test.each(OPENAI_EDIT_MODELS)('$label executes the real Responses tool loop with
   const provider = createOpenAI({ apiKey: 'fixture-only', fetch: async (url, init) => {
     const body = JSON.parse(String(init?.body)); requests.push({ url: String(url), body });
     const output = requests.length === 1 ? [reasoning, { type: 'function_call', id: 'fc_fixture', call_id: 'call_fixture', name: 'edit', arguments: '{"value":7}' }] : [text];
-    return new Response(JSON.stringify({ id: `resp_${requests.length}`, created_at: 0, model: selected.modelId, status: 'completed', output, usage }), { headers: { 'content-type': 'application/json' } });
+    return new Response(JSON.stringify({ id: `resp_${requests.length}`, created_at: 0, model: selected.modelId, service_tier: 'default', status: 'completed', output, usage }), { headers: { 'content-type': 'application/json' } });
   } });
   const budget = new AssistantTokenBudget();
   let saved = 0;
@@ -49,7 +49,7 @@ test('OpenAI streaming includes reasoning in the shared budget and stops before 
       { type: 'response.content_part.added', item_id: text.id, output_index: 0, content_index: 0, part: { type: 'output_text', text: '', annotations: [] } },
       { type: 'response.output_text.delta', item_id: text.id, output_index: 0, content_index: 0, delta: 'Saved fixture edit.' },
       { type: 'response.output_item.done', output_index: 0, item: { ...text, status: 'completed' } },
-      { type: 'response.completed', response: { id: 'resp_stream', status: 'completed', usage } },
+      { type: 'response.completed', response: { id: 'resp_stream', status: 'completed', service_tier: 'default', usage } },
     ];
     return new Response(events.map(event => `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`).join(''), { headers: { 'content-type': 'text/event-stream' } });
   } });
