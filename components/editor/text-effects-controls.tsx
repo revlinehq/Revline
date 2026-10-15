@@ -27,13 +27,13 @@ export function TextEffectsControls({ clip, onChange, onPreview, captionActions 
     <TabsList className="text-settings-tabs" aria-label="Text settings views">{tabs.map(view => <TabsTrigger key={view} value={view} id={`text-settings-${view}-tab`} aria-controls={`text-settings-${view}`}>{view === 'text' ? 'Text' : view === 'style' ? 'Style' : 'Animation'}</TabsTrigger>)}</TabsList>
     <TabsContent value={tab} className="text-settings-view" data-text-view={tab} id={`text-settings-${tab}`} aria-labelledby={`text-settings-${tab}-tab`}>
     {tab === 'text' ? <>
-      <TextEditingControls key={clip.id} clip={clip} onChange={onChange} onPreview={onPreview}/>
+      <TextEditingControls key={`text-${clip.id}`} clip={clip} onChange={onChange} onPreview={onPreview}/>
       {clip.kind === 'caption' && captionActions && <CaptionTimingControls clip={clip} actions={captionActions}/>}
-      {clip.kind === 'caption' && captionActions && <ApplyCaptionStyle key={clip.id} actions={captionActions}/>}
+      {clip.kind === 'caption' && captionActions && <ApplyCaptionStyle key={`apply-text-${clip.id}`} actions={captionActions}/>}
     </> : tab === 'style' ? <>
-      <TextStyleControls key={clip.id} clip={clip} onChange={onChange} onPreview={onPreview}/>
+      <TextStyleControls key={`style-${clip.id}`} clip={clip} onChange={onChange} onPreview={onPreview}/>
       <details className="text-style-group text-look-settings"><summary>Presets<span>Editable looks</span></summary><div className="text-style-body"><Suspense fallback={<p className="visual-control-note">Loading presets…</p>}><TextLookPicker selected={selectedTextLook(clip)} onSelect={look => onChange(textLookPatch(clip, look))}/></Suspense></div></details>
-      {clip.kind === 'caption' && captionActions && <ApplyCaptionStyle key={clip.id} actions={captionActions}/>}
+      {clip.kind === 'caption' && captionActions && <ApplyCaptionStyle key={`apply-style-${clip.id}`} actions={captionActions}/>}
     </> : <>
       <div className="text-animation-current"><span>Applied</span><strong>{animation ? TEXT_ANIMATION_LABELS[animation] : 'Custom animation'}</strong></div>
       {clip.textTemplate && <label className="text-template-accent"><span>Accent color</span><ColorControl key={clip.id} label="Text accent color" value={clip.textTemplate.highlightColor ?? DEFAULT_TEXT_HIGHLIGHT} onCommit={highlightColor => onChange({ textTemplate: { ...clip.textTemplate!, highlightColor } })}/></label>}
