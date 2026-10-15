@@ -1,7 +1,6 @@
 import Link from 'next/link';
 import { Brand } from '@/components/workspace/brand';
 import { LandingHero } from '@/components/landing/hero';
-import { LandingShowcase } from '@/components/landing/showcase';
 import { Workflow } from '@/components/landing/workflow';
 import { LandingFeatures } from '@/components/landing/features';
 import { LandingPricing } from '@/components/landing/pricing';
@@ -18,7 +17,6 @@ export default function Home() {
     </nav>
     <LandingHero />
     <Workflow heading="The simplest way to edit." />
-    <LandingShowcase />
     <LandingFeatures />
     <LandingPricing />
     <LandingFaq />
