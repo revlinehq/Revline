@@ -12,10 +12,12 @@ import { api, components } from './_generated/api';
 import schema from './schema';
 
 type Tool = { inputSchema: ZodType; execute: (ctx: unknown, input: unknown) => Promise<unknown> };
-const sdk = vi.hoisted(() => ({ options: null as null | { instructions: string; tools: Record<string, Tool> }, plan: async () => {} }));
+type ToolStep = { content: unknown[] };
+type StopCondition = (options: { steps: ToolStep[] }) => boolean | PromiseLike<boolean>;
+const sdk = vi.hoisted(() => ({ options: null as null | { instructions: string; tools: Record<string, Tool>; stopWhen: StopCondition | StopCondition[] }, plan: async () => {}, steps: [] as ToolStep[], finishReason: 'stop' }));
 vi.mock('@convex-dev/agent', async original => ({
   ...await original<Record<string, unknown>>(),
-  Agent: class { constructor(_component: unknown, options: NonNullable<typeof sdk.options>) { sdk.options = options; } async streamText() { await sdk.plan(); return { finishReason: Promise.resolve('stop'), steps: Promise.resolve([]) }; } },
+  Agent: class { constructor(_component: unknown, options: NonNullable<typeof sdk.options>) { sdk.options = options; } async streamText() { await sdk.plan(); return { finishReason: Promise.resolve(sdk.finishReason), steps: Promise.resolve(sdk.steps) }; } },
   createTool: (options: unknown) => options,
 }));
 import { respond } from './assistantActions';
@@ -24,7 +26,7 @@ const execute = async(tools: Record<string, Tool>, name: string, input: unknown)
   if(name==='addTimedEffect')await tools.planEffects.execute({},{plans:[{id:'fixture-flash',kind:'timed',effect:'flash',start:1.69,duration:.5,purpose:'Explicitly requested flash',strength:'Fixed preset',expectation:'The flash accents this moment',anchor:{kind:'requested-time',time:1.69,description:'Explicit fixture time'}}]});
   return tools[name].execute({}, tools[name].inputSchema.parse(input));
 };
-beforeEach(() => { sdk.options = null; sdk.plan = async () => {}; vi.stubEnv('BILLING_ENABLED', 'false'); vi.stubEnv('ANTHROPIC_API_KEY', 'fixture-only'); vi.stubEnv('AI_GATEWAY_ENABLED', 'false'); });
+beforeEach(() => { sdk.options = null; sdk.plan = async () => {}; sdk.steps = []; sdk.finishReason = 'stop'; vi.stubEnv('BILLING_ENABLED', 'false'); vi.stubEnv('ANTHROPIC_API_KEY', 'fixture-only'); vi.stubEnv('AI_GATEWAY_ENABLED', 'false'); });
 afterEach(() => vi.unstubAllEnvs());
 
 async function fixture(prompt = 'can u put bunch of effects here', scenes: { start: number; end: number; description: string; score: number }[] = [], recovery = false) {
@@ -37,7 +39,7 @@ async function fixture(prompt = 'can u put bunch of effects here', scenes: { sta
   const assetId = await t.run(ctx => ctx.db.insert('assets', { ownerId: 'owner', projectId, kind: 'video', fileName: 'Untrusted fight filename.mp4', contentType: 'video/mp4', size: 10, duration: 60, createdAt: 0, ...(scenes.length ? { analysis: { understanding: { summary: 'Stored visual overview', scenes } } } : {}) }));
   const source = { id: 'source', assetId, kind: 'video' as const, track: 1, start: 1.69, sourceStart: 11.5, duration: 3 };
   const timeline = { fps: 30, aspectRatio: 'landscape' as const, tracks: { visual: 1, overlay: 0, audio: 0, effects: 0 }, clips: [source] };
-  await t.run(ctx => writeProject(ctx,projectId, { timeline, threadId, aiRunning: true, aiRunId: 'run', revision: 0, history: [], ...(recovery ? { aiRecovery: { requests: ['Add selected source and a flash'], runId: 'previous-run', revision: 0, savedEdits: 1, reason: 'Stopped', status: 'stopped' as const, updatedAt: 0 } } : {}) }));
+  await t.run(ctx => writeProject(ctx,projectId, { timeline, threadId, aiRunning: true, aiRunId: 'run', aiRequest: { prompt, messageId: promptMessageId, startedRevision: 0 }, revision: 0, history: [], ...(recovery ? { aiRecovery: { requests: ['Add selected source and a flash'], runId: 'previous-run', revision: 0, savedEdits: 1, reason: 'Stopped', status: 'stopped' as const, updatedAt: 0 } } : {}) }));
   const run = { projectId, ownerId: 'owner', runId: 'run' };
   const analysisRequests: unknown[] = [];
   const ctx = {
@@ -95,6 +97,35 @@ test('a token safety stop preserves saved checkpoints and identifies the actual 
   expect(saved.revision).toBe(1); expect(saved.aiError).toContain('token budget');
   const texts = (await f.messages()).page.flatMap(message => message.parts).filter(part => part.type === 'text').map(part => part.text);
   expect(texts.some(text => text.includes('1 edits were saved') && text.includes('token budget'))).toBe(true);
+});
+
+test('repeated failed commands stop early with saved progress and an unpublished replacement intact', async () => {
+  const f = await fixture('Add a flash, then replace the source footage');
+  let attempts = 0;
+  await f.runPlan(async tools => {
+    await execute(tools, 'addTimedEffect', { preset: 'flash', start: 1.69, duration: .5 });
+    await execute(tools, 'delete', { clipId: 'source' });
+    for (let index = 0; index < 8; index++) {
+      const input = { clipId: 'missing', volume: .5 }, toolCallId = `attempt-${index}`;
+      let error: unknown;
+      try { await execute(tools, 'setVolume', input); } catch (cause) { error = cause; }
+      expect(error).toBeInstanceOf(Error);
+      attempts++;
+      sdk.steps.push({ content: [{ type: 'tool-call', toolCallId, toolName: 'setVolume', input }, { type: 'tool-error', toolCallId, toolName: 'setVolume', input, error }] });
+      const conditions = Array.isArray(sdk.options!.stopWhen) ? sdk.options!.stopWhen : [sdk.options!.stopWhen];
+      if ((await Promise.all(conditions.map(condition => condition({ steps: sdk.steps })))).some(Boolean)) { sdk.finishReason = 'tool-calls'; break; }
+    }
+  });
+  expect(attempts).toBe(3);
+  const saved = await f.read();
+  expect(saved.revision).toBe(1);
+  expect(saved.timeline?.clips.find(clip => clip.id === 'source')).toEqual(f.source);
+  expect(saved.timeline?.clips.some(clip => clip.effectPreset === 'flash')).toBe(true);
+  expect(saved.aiError).toContain('same tool command failed three times');
+  expect(saved.aiError).not.toContain('model configuration');
+  expect(saved.aiRecovery).toMatchObject({ savedEdits: 1, revision: 1, status: 'failed', requests: ['Add a flash, then replace the source footage'] });
+  const texts = (await f.messages()).page.flatMap(message => message.parts).filter(part => part.type === 'text').map(part => part.text);
+  expect(texts.some(text => text.includes('1 edits were saved') && text.includes('same tool command failed three times'))).toBe(true);
 });
 
 test('credit exhaustion reports billing recovery without claiming a configuration failure or edit', async () => {
