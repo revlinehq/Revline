@@ -40,6 +40,7 @@ try {
   await page.type('[aria-label="Describe your next edit"]','Make it hype, with "ONE GOOD MOMENT" as the caption');await page.keyboard.press('Enter');
   await page.waitForFunction(()=>document.querySelector('.scripted-editor-demo').dataset.building==='true');
   assert.equal(await page.$eval('[aria-label="Describe your next edit"]',node=>node.value),'','Sending clears the composer immediately');
+  assert.equal(await page.$('.composer-attachment'),null,'Sending clears media chips immediately without removing project footage');
   await page.waitForFunction(()=>document.querySelectorAll('.timeline-clip').length>0);assert.ok(await page.$$eval('.timeline-clip',nodes=>nodes.length<48),'Timeline starts with a partial build');assert.equal(await page.$$eval('.clip-audio',nodes=>nodes.length),await page.$$eval('.clip-video',nodes=>nodes.length),'Audio and video spawn together in each shot batch');
   await page.screenshot({path:'/tmp/revline-demo-building.png'});
   await page.waitForFunction(()=>!document.querySelector('.scripted-editor-demo').dataset.building,{timeout:30000});
@@ -52,6 +53,7 @@ try {
   await page.evaluate(async()=>{const player=document.querySelector('hyperframes-player'),win=player.iframeElement.contentWindow;win.__timelines.revline.seek(3.4);await win.__revlineTransitionController.whenReady(3.4)});
   assert.equal(await page.$('[role="alert"]'),null,'Playback produces no visible media errors');assert.equal(await page.evaluate(()=>Array.from(document.querySelector('hyperframes-player').iframeElement.contentDocument.querySelectorAll('audio')).every(media=>!media.error)),true,'Native audio sources decode without errors');
   assert.match(await page.$eval('.chat-assistant',node=>node.textContent),/12 shots/);
+  await page.type('[aria-label="Describe your next edit"]','Keep editing this footage');assert.equal(await page.$eval('[aria-label="Start edit"]',node=>node.disabled),false,'Follow-up edits can use already submitted footage without reattaching');
   await page.screenshot({path:'/tmp/revline-demo-finished.png'});
   await page.click('#undo');await page.waitForFunction(()=>document.querySelectorAll('.timeline-clip').length===0);await page.click('#redo');await page.waitForFunction(()=>document.querySelectorAll('.timeline-clip').length===48);
   await page.emulateMediaFeatures([{name:'prefers-reduced-motion',value:'reduce'}]);await page.click('[aria-label="Replay edit"]');await page.waitForFunction(()=>document.querySelector('.scripted-editor-demo').dataset.building==='true');await page.waitForFunction(()=>document.querySelectorAll('.timeline-clip').length>0);assert.equal(await page.$eval('.timeline-clip',node=>getComputedStyle(node).animationName),'none','Reduced motion disables block animations');await page.click('[aria-label="Stop editing"]');await page.waitForFunction(()=>!document.querySelector('.scripted-editor-demo').dataset.building);const stopped=await page.$$eval('.timeline-clip',nodes=>nodes.length);await new Promise(resolve=>setTimeout(resolve,1200));assert.equal(await page.$$eval('.timeline-clip',nodes=>nodes.length),stopped,'Stopped run cannot keep appending clips');
