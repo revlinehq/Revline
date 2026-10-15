@@ -15,12 +15,12 @@ import { validateVideoInspectionInput } from '../lib/media-analysis/video-inspec
 import { normalizeTimeline } from '../lib/editor/types';
 import {savePublicationReceipt} from './lib/publicationReceipt';
 import { enqueueMediaTask, cancelMediaTask } from './mediaTasks';
-import { claudeModelSwitcherEnabled, resolveClaudeModel } from '../lib/ai/claude-model';
+import { assertEditorModelConfigured, claudeModelSwitcherEnabled, resolveClaudeModel } from '../lib/ai/claude-model';
 import { claudeModelChoiceValidator } from './lib/claude_model';
 import { allowedClaudeModelChoices, enforceClaudeModelPolicy } from '../lib/ai/claude-model-policy';
 import { assistantRecovery } from './lib/assistant_recovery';
-const providerReason = "Claude editing requires ANTHROPIC_API_KEY in Convex, or AI_GATEWAY_ENABLED=true on an eligible paid Convex team.";
-function configured() { return !!process.env.ANTHROPIC_API_KEY || process.env.AI_GATEWAY_ENABLED === "true"; }
+const providerReason = "Configure an editing provider in Convex: ANTHROPIC_API_KEY, an eligible AI Gateway, or OPENAI_API_KEY with the model switcher enabled.";
+function configured() { return !!process.env.ANTHROPIC_API_KEY || process.env.AI_GATEWAY_ENABLED === "true" || (claudeModelSwitcherEnabled() && !!process.env.OPENAI_API_KEY?.trim()); }
 export const status = query({ args: { projectId: v.id("projects") }, returns: v.object({ configured: v.boolean(), modelSwitcher: v.optional(v.boolean()), allowedModels: v.optional(v.array(claudeModelChoiceValidator)), running: v.boolean(), error: v.union(v.string(), v.null()), reason: v.union(v.string(), v.null()), activity: v.union(v.string(), v.null()), activitySource: v.union(v.string(), v.null()), activityProgress: v.union(v.number(), v.null()) }), handler: async (ctx, args) => {
   const project = await projectRun(ctx,args.projectId,await requireOwner(ctx));
   const requests = project.aiRunning && project.aiRunId ? await ctx.db.query('analysisRequests').withIndex('by_projectId_runId', q => q.eq('projectId', project._id).eq('aiRunId', project.aiRunId!)).take(16) : [];
@@ -33,7 +33,7 @@ export const status = query({ args: { projectId: v.id("projects") }, returns: v.
 export const send = mutation({ args: { projectId: v.id("projects"), prompt: v.string(), modelChoice: v.optional(claudeModelChoiceValidator), selectedClipId: v.optional(v.string()), selectedClipIds: v.optional(v.array(v.string())), playhead: v.optional(v.number()) }, returns: v.null(), handler: async (ctx, args) => {
   const ownerId = await requireOwner(ctx); await requireEditorAccess(ctx, ownerId); const project = await requireProject(ctx, args.projectId, ownerId);
   let pinnedModel;
-  try { pinnedModel = enforceClaudeModelPolicy(resolveClaudeModel(args.modelChoice)); } catch (error) { throw new ConvexError((error as Error).message); }
+  try { pinnedModel = enforceClaudeModelPolicy(resolveClaudeModel(args.modelChoice)); assertEditorModelConfigured(pinnedModel); } catch (error) { throw new ConvexError((error as Error).message); }
   const clipIds = new Set(currentTimeline(project).clips.map(clip => clip.id));
   if (args.selectedClipId !== undefined && !clipIds.has(args.selectedClipId)) throw new ConvexError("Selected clip does not belong to this project");
   if (args.selectedClipIds) {

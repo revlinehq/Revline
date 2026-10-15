@@ -7,7 +7,7 @@ const bundle = await build({ stdin: { resolveDir: process.cwd(), loader: 'tsx', 
 import React from 'react';import {createRoot} from 'react-dom/client';import {flushSync} from 'react-dom';
 import './components/workspace/workspace-pages.css';import './app/editor.css';import './components/workspace/shared.css';
 import {AssistantPanel} from './components/editor/assistant-panel';import {EditComposer} from './components/workspace/edit-composer';
-const root=createRoot(document.getElementById('root'));window.calls=[];window.state={modelSwitcher:true,allowedModels:['haiku','sonnet','opus'],running:false,messages:[]};
+const root=createRoot(document.getElementById('root'));window.calls=[];window.state={modelSwitcher:true,allowedModels:['haiku','sonnet','opus','gpt-6.1-sol','gpt-6-astra'],running:false,messages:[]};
 window.renderFixture=patch=>{Object.assign(window.state,patch);flushSync(()=>root.render(<>
  <AssistantPanel key={window.state.fixtureKey??0} {...window.state} configured hasClips demo={false} onSend={async(text,model)=>{window.calls.push({text,model});throw new Error('Fixture request recorded');}} onStop={async()=>{}}/>
  <div className="studio-fixture"><EditComposer value="Studio" onChange={()=>{}} onSubmit={()=>{}}/></div>
@@ -29,16 +29,18 @@ try {
  const geometry=await page.$$eval('.composer-submit',els=>els.map(el=>{const rect=el.getBoundingClientRect();return {width:rect.width,height:rect.height,shadow:getComputedStyle(el).boxShadow};}));
  assert.equal(geometry[0].width,28);assert.equal(geometry[0].height,28);assert.equal(geometry[0].shadow,'none');
  assert.equal(geometry[1].width,32);assert.equal(geometry[1].height,32,'Other composer variants keep their sizing');
- for(const [choice,label] of [['haiku','Haiku 5.5'],['sonnet','Sonnet 5.5'],['opus','Opus 5.5']]){
+ const choices=[['haiku','Haiku 5.5'],['sonnet','Sonnet 5.5'],['opus','Opus 5.5'],['gpt-6.1-sol','GPT-6.1 Sol'],['gpt-6-astra','GPT-6 Astra']];
+ for(const [index,[choice,label]] of choices.entries()){
   await page.click('[aria-label="AI editing model"]');
   await page.waitForSelector(`[role="menuitemradio"][data-value="${choice}"]`);
-  assert.equal(await page.$eval(`[role="menuitemradio"][data-value="${choice}"] .inspector-select-value`,el=>el.textContent),label);assert.equal(await page.$eval(`[role="menuitemradio"][data-value="${choice}"] small`,el=>el.textContent),{haiku:'Fast, simple edits',sonnet:'Everyday editing',opus:'Complex, coordinated edits'}[choice]);
+  assert.equal(await page.$eval(`[role="menuitemradio"][data-value="${choice}"] .inspector-select-value`,el=>el.scrollWidth<=el.clientWidth),true,'Every model name remains readable');
+  assert.equal(await page.$eval(`[role="menuitemradio"][data-value="${choice}"] .inspector-select-value`,el=>el.textContent),label);assert.equal(await page.$eval(`[role="menuitemradio"][data-value="${choice}"] small`,el=>el.textContent),{haiku:'Fast, simple edits',sonnet:'Everyday editing',opus:'Complex, coordinated edits','gpt-6.1-sol':'OpenAI · everyday editing','gpt-6-astra':'OpenAI · complex editing'}[choice]);
   await page.click(`[role="menuitemradio"][data-value="${choice}"]`);
   await page.waitForFunction(()=>document.activeElement?.getAttribute('aria-label')==='AI editing model');
   await page.type('.assistant-content textarea',`Test ${choice}`);
   await page.waitForFunction(()=>!document.querySelector('.assistant-content .composer-submit').disabled);
   await page.click('.assistant-content .composer-submit');
-  await page.waitForFunction(count=>window.calls.length===count,{},choice==='haiku'?1:choice==='sonnet'?2:3);
+  await page.waitForFunction(count=>window.calls.length===count,{},index+1);
   assert.deepEqual(await page.evaluate(()=>window.calls.at(-1)),{text:`Test ${choice}`,model:choice});
   await page.waitForFunction(()=>!document.querySelector('.assistant-content textarea').disabled);
   await page.focus('.assistant-content textarea');await page.keyboard.down('Control');await page.keyboard.press('KeyA');await page.keyboard.up('Control');await page.keyboard.press('Backspace');
@@ -49,6 +51,8 @@ try {
  await page.click('[aria-label="AI editing model"]');
  await page.waitForSelector('[role="menuitemradio"][data-value="sonnet"]');
  assert.equal(await page.$('[role="menuitemradio"][data-value="opus"]'),null);
+ assert.equal(await page.$('[role="menuitemradio"][data-value="gpt-6.1-sol"]'),null);
+ assert.equal(await page.$('[role="menuitemradio"][data-value="gpt-6-astra"]'),null);
  await page.click('[role="menuitemradio"][data-value="sonnet"]');
  await page.evaluate(()=>window.renderFixture({running:true}));
  assert.equal(await page.$eval('[aria-label="AI editing model"]',el=>el.disabled),true,'The model stays fixed while editing');
@@ -57,13 +61,22 @@ try {
  assert.equal(await page.$('[aria-label="AI editing model"]'),null);
  await page.type('.assistant-content textarea','Default run');await page.waitForFunction(()=>!document.querySelector('.assistant-content .composer-submit').disabled);
   await page.click('.assistant-content .composer-submit');
- await page.waitForFunction(()=>window.calls.length===4);
+ await page.waitForFunction(()=>window.calls.length===6);
  assert.equal(await page.evaluate(()=>window.calls.at(-1).model),undefined,'Hidden selector preserves the backend default');
  await page.waitForFunction(()=>!document.querySelector('.assistant-content textarea').disabled);
- await page.evaluate(()=>window.renderFixture({modelSwitcher:true,fixtureKey:1}));
+ await page.evaluate(()=>window.renderFixture({modelSwitcher:true,fixtureKey:1,allowedModels:['haiku','sonnet','gpt-6.1-sol','gpt-6-astra']}));
  await page.focus('.assistant-content textarea');await page.keyboard.down('Control');await page.keyboard.press('KeyA');await page.keyboard.up('Control');await page.keyboard.press('Backspace');
  await page.type('.assistant-content textarea','Make this tighter');
+ await page.click('[aria-label="AI editing model"]');
+ await page.waitForSelector('[role="menuitemradio"][data-value="gpt-6-astra"]');
  await page.screenshot({path:'/tmp/revline-composer-model-picker.png'});
+ await page.keyboard.press('Escape');
+ await page.setViewport({width:320,height:620});
+ await page.addStyleTag({content:'#root{width:280px;margin:20px}'});
+ await page.click('[aria-label="AI editing model"]');
+ await page.waitForSelector('[role="menuitemradio"][data-value="gpt-6-astra"]');
+ const rect=await page.$eval('[role="menu"]',el=>{const r=el.getBoundingClientRect();return {left:r.left,right:r.right};});
+ assert(rect.left>=0&&rect.right<=320,'Model menu remains within narrow panel');
  assert.deepEqual(errors,[]);
- console.log('PASS: development picker sends all three choices; production allowlist hides Opus and resets stale selections, locks during a run, disappears when disabled; compact send/stop 28px with shared solid color and no shadow, studio unchanged. Synthetic fixture only.');
+ console.log('PASS: picker sends all five native choices; environment allowlist hides unavailable OpenAI and production Opus and resets stale selections, locks during a run, disappears when disabled; compact send/stop 28px with shared solid color and no shadow, studio unchanged. Synthetic fixture only.');
 } finally { await browser.close(); await new Promise(resolve=>server.close(resolve)); }

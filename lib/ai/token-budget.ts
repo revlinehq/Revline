@@ -9,7 +9,7 @@ export class AssistantTokenBudgetError extends Error {
   constructor(reason: 'context' | 'tokens' | 'usage') {
     super(reason === 'context'
       ? 'The request context is too large to send safely. Visual evidence was preserved. Previously saved edits remain; use a narrower source window or request.'
-      : reason === 'usage' ? 'Claude did not report reliable token usage, so further paid requests were stopped. Previously saved edits remain.'
+      : reason === 'usage' ? 'The editing provider did not report reliable token usage, so further paid requests were stopped. Previously saved edits remain.'
       : 'This request reached its token budget. Previously saved edits remain; continue from the current timeline.');
     this.name = 'AssistantTokenBudgetError';
   }
@@ -33,8 +33,8 @@ export class AssistantTokenBudget {
     if (encodedBytes(payload) > this.limits.transportBytes) throw new AssistantTokenBudgetError('context');
     let images = 0;
     const fileForEstimate = <T extends { mediaType: string; data: unknown }>(file: T) => {
-      // Claude 4.7+ caps resized image tokens at 4,784/image. Reserve 8,192
-      // including metadata rather than charging base64/byte arrays as text.
+      // Claude caps resized image tokens; OpenAI requests force bounded high
+      // detail. Reserve 8,192 including metadata instead of base64 as text.
       // Unknown documents/audio/video cannot be bounded from a URL length.
       if (!/^image\/(?:png|jpeg|webp|gif)$/.test(file.mediaType)) throw new AssistantTokenBudgetError('context');
       images++;

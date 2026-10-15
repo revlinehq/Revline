@@ -3,7 +3,7 @@ import { readProject } from './lib/project_data';
 import agentTest from '@convex-dev/agent/test';
 import { convexTest } from 'convex-test';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
-import { CLAUDE_EDIT_MODELS, type ClaudeModelChoice } from '../lib/ai/claude-model';
+import { CLAUDE_EDIT_MODELS, OPENAI_EDIT_MODELS, type ClaudeModelChoice } from '../lib/ai/claude-model';
 import { api } from './_generated/api';
 import schema from './schema';
 
@@ -18,6 +18,7 @@ async function fixture() {
 }
 beforeEach(() => {
   vi.stubEnv('EDITOR_ALLOW_OPUS', 'true');
+  vi.stubEnv('OPENAI_API_KEY', '');
   vi.stubEnv('BILLING_ENABLED', 'false');
   vi.stubEnv('ANTHROPIC_API_KEY', 'fixture-only');
   vi.stubEnv('AI_GATEWAY_ENABLED', 'false');
@@ -99,4 +100,35 @@ test('unsupported choices and foreign projects cannot schedule a model request',
   await expect(t.mutation(api.assistant.send, { projectId, prompt: 'Anonymous', modelChoice: 'haiku' })).rejects.toThrow('Authentication required');
   expect(await t.run(ctx => ctx.db.system.query('_scheduled_functions').take(10))).toHaveLength(0);
   expect((await t.run(ctx => readProject(ctx,projectId)))?.threadId).toBeUndefined();
+});
+
+test.each(OPENAI_EDIT_MODELS)('$label availability requires this environment key and pins native OpenAI even with gateway enabled', async model => {
+  vi.stubEnv('MODEL_SWITCHER_ENABLED', 'true');
+  const { t, owner, projectId } = await fixture();
+  expect((await owner.query(api.assistant.status, { projectId })).allowedModels).not.toContain(model.id);
+  await expect(owner.mutation(api.assistant.send, { projectId, prompt: 'Synthetic edit', modelChoice: model.id })).rejects.toThrow('OPENAI_API_KEY');
+  expect((await t.run(ctx => readProject(ctx, projectId)))?.threadId).toBeUndefined();
+  expect(await t.run(ctx => ctx.db.system.query('_scheduled_functions').take(10))).toHaveLength(0);
+  vi.stubEnv('OPENAI_API_KEY', 'fixture-openai-only');
+  vi.stubEnv('AI_GATEWAY_ENABLED', 'true');
+  vi.stubEnv('EDITOR_ALLOW_OPUS', 'false');
+  const status = await owner.query(api.assistant.status, { projectId });
+  expect(status.allowedModels).toEqual(['haiku', 'sonnet', 'gpt-6.1-sol', 'gpt-6-astra']);
+  expect(JSON.stringify(status)).not.toContain('fixture-openai-only');
+  await owner.mutation(api.assistant.send, { projectId, prompt: 'Synthetic edit', modelChoice: model.id });
+  const [scheduled] = await t.run(ctx => ctx.db.system.query('_scheduled_functions').take(10));
+  expect(scheduled.args[0].pinnedModel).toEqual({ provider: 'openai', modelId: model.modelId, modelChoice: model.id });
+  vi.stubEnv('OPENAI_API_KEY', '');
+  vi.stubEnv('MODEL_SWITCHER_ENABLED', 'false');
+  expect(scheduled.args[0].pinnedModel.provider).toBe('openai');
+});
+
+test('OpenAI-only configuration does not silently replace the default Sonnet selection', async () => {
+  vi.stubEnv('MODEL_SWITCHER_ENABLED', 'true');
+  vi.stubEnv('ANTHROPIC_API_KEY', '');
+  vi.stubEnv('OPENAI_API_KEY', 'fixture-only');
+  const { t, owner, projectId } = await fixture();
+  expect((await owner.query(api.assistant.status, { projectId })).configured).toBe(true);
+  await expect(owner.mutation(api.assistant.send, { projectId, prompt: 'Synthetic edit' })).rejects.toThrow('ANTHROPIC_API_KEY');
+  expect(await t.run(ctx => ctx.db.system.query('_scheduled_functions').take(10))).toHaveLength(0);
 });

@@ -1,8 +1,9 @@
 import { getFunctionName } from 'convex/server';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
-import { CLAUDE_EDIT_MODELS, claudeProviderOptions, type ClaudeModelSelection } from '../lib/ai/claude-model';
+import { CLAUDE_EDIT_MODELS, OPENAI_EDIT_MODELS, editorProviderOptions, claudeProviderOptions, type ClaudeModelSelection } from '../lib/ai/claude-model';
 
-const fixture = vi.hoisted(() => ({ model: undefined as undefined | { modelId: string; provider: string }, options: undefined as unknown, finishError: undefined as undefined | string, generate: vi.fn() }));
+const fixture = vi.hoisted(() => ({ model: undefined as undefined | { modelId: string; provider: string }, options: undefined as unknown, finishError: undefined as undefined | string, generate: vi.fn(), tokenCounter: vi.fn(() => async () => 10) }));
+vi.mock('../lib/ai/anthropic-token-count', () => ({ anthropicTokenCounter: fixture.tokenCounter }));
 vi.mock('@convex-dev/agent', async importOriginal => ({
   ...await importOriginal<Record<string, unknown>>(),
   Agent: class {
@@ -19,8 +20,10 @@ vi.mock('@convex-dev/agent', async importOriginal => ({
 import { respond } from './assistantActions';
 
 beforeEach(() => {
-  fixture.model = undefined; fixture.options = undefined; fixture.finishError = undefined; fixture.generate.mockReset();
+  fixture.model = undefined; fixture.options = undefined; fixture.finishError = undefined; fixture.generate.mockReset(); fixture.tokenCounter.mockClear();
   vi.stubEnv('AI_GATEWAY_ENABLED', 'false');
+  vi.stubEnv('ANTHROPIC_API_KEY', 'fixture-only');
+  vi.stubEnv('OPENAI_API_KEY', 'fixture-only');
   vi.stubEnv('CLAUDE_MODEL', 'changed-after-send');
   vi.stubEnv('CLAUDE_GATEWAY_MODEL', 'changed-after-send');
   vi.stubEnv('MODEL_SWITCHER_ENABLED', 'false');
@@ -49,6 +52,7 @@ test.each(CLAUDE_EDIT_MODELS)('$label action uses the captured direct model afte
   expect(fixture.options).toMatchObject({ providerOptions: claudeProviderOptions(model.modelId) });
   expect(fixture.generate).toHaveBeenCalledOnce();
   expect(fixture.finishError).toBeUndefined();
+  expect(fixture.tokenCounter).toHaveBeenCalledOnce();
 });
 
 test.each(CLAUDE_EDIT_MODELS)('$label action keeps the gateway pinned even when its environment flag changes', async model => {
@@ -57,6 +61,7 @@ test.each(CLAUDE_EDIT_MODELS)('$label action keeps the gateway pinned even when 
   expect(fixture.options).toMatchObject({ providerOptions: claudeProviderOptions(model.gatewayModelId) });
   expect(fixture.generate).toHaveBeenCalledOnce();
   expect(fixture.finishError).toBeUndefined();
+  expect(fixture.tokenCounter).not.toHaveBeenCalled();
 });
 
 test('an inconsistent pinned selection fails without generating or silently falling back', async () => {
@@ -64,4 +69,22 @@ test('an inconsistent pinned selection fails without generating or silently fall
   expect(fixture.generate).not.toHaveBeenCalled();
   expect(fixture.model).toBeUndefined();
   expect(fixture.finishError).toContain('model configuration');
+});
+
+// The real SDK model is constructed, while Agent generation stays mocked.
+test.each(OPENAI_EDIT_MODELS)('$label action pins native Responses with bounded reasoning instead of a gateway or Claude counter', async model => {
+  vi.stubEnv('AI_GATEWAY_ENABLED', 'true');
+  await run({ provider: 'openai', modelId: model.modelId, modelChoice: model.id });
+  expect(fixture.model).toMatchObject({ modelId: model.modelId, provider: 'openai.responses' });
+  expect(fixture.options).toMatchObject({ providerOptions: editorProviderOptions({ provider: 'openai', modelId: model.modelId }) });
+  expect(fixture.generate).toHaveBeenCalledOnce();
+  expect(fixture.finishError).toBeUndefined();
+  expect(fixture.tokenCounter).not.toHaveBeenCalled();
+});
+
+test('a removed OpenAI key fails clearly without generating or silently falling back', async () => {
+  vi.stubEnv('OPENAI_API_KEY', '');
+  await run({ provider: 'openai', modelId: 'gpt-6.1-sol', modelChoice: 'gpt-6.1-sol' });
+  expect(fixture.generate).not.toHaveBeenCalled();
+  expect(fixture.finishError).toContain('OPENAI_API_KEY');
 });

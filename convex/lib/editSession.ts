@@ -83,7 +83,7 @@ export class EditSession {
   async complete(finishReason: string, toolFailed = false) {
     await this.pending;
     this.signal?.throwIfAborted();
-    if (finishReason !== 'stop') throw new Error('Claude stopped before finishing this request. The pending replacement was not saved.');
+    if (finishReason !== 'stop') throw new Error('The assistant stopped before finishing this request. The pending replacement was not saved.');
     if (!this.staged) {
       if (this.needsInspection || toolFailed) throw new Error('Some requested changes were not saved. Inspect the current timeline before continuing; previously saved edits remain.');
       return false;
