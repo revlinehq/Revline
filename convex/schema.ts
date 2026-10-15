@@ -26,7 +26,7 @@ export const clipValidator = v.object({
   visualFadeTiming:v.optional(v.object({duration:v.number(),offset:v.number()})),
   frameShrink:v.optional(v.object({size:v.number(),speed:v.number()})),
   flash:v.optional(v.object({strength:v.number(),attack:v.number(),release:v.number()})),
-  punch:v.optional(v.object({amount:v.number(),speed:v.number(),centerX:v.number(),centerY:v.number()})),
+  punch:v.optional(v.object({amount:v.number(),speed:v.number(),centerX:v.number(),centerY:v.number(),attack:v.optional(v.number()),release:v.optional(v.number())})),
   shake:v.optional(v.object({strength:v.number(),speed:v.number(),direction:v.union(v.literal('both'),v.literal('horizontal'),v.literal('vertical'))})),
   pop:v.optional(v.object({startScale:v.number(),bounce:v.number(),speed:v.number()})),
   zoom:v.optional(v.object({direction:v.union(v.literal('in'),v.literal('out')),amount:v.number(),speed:v.number(),centerX:v.number(),centerY:v.number()})),

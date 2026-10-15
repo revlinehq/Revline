@@ -12,8 +12,8 @@ try{
  const flush=()=>page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
  const selected=()=>page.evaluate(()=>{const s=window.fixture.state();return s.timeline.clips.find(c=>c.id===s.selectedId)});
  const history=()=>page.evaluate(()=>window.fixture.state().history.length);
- for(const [name,preset,control,field] of [['Flash','flash','Strength','strength'],['Punch zoom','punch','Amount','amount'],['Impact shake','shake','Strength','strength'],['Pop in','pop','Bounce','bounce']]){
-  await page.click('#inspector-tools-tab');await page.waitForSelector('[aria-label="'+name+'"]');await page.click('[aria-label="'+name+'"]');await page.waitForSelector('[aria-label="'+preset+' settings"]');
+ for(const [name,preset,control,field] of [['Flash','flash','Strength','strength'],['Zoom','punch','Strength','amount'],['Impact shake','shake','Strength','strength'],['Pop in','pop','Bounce','bounce']]){
+  await page.click('#inspector-tools-tab');await page.waitForSelector('[aria-label="'+name+'"]');await page.click('[aria-label="'+name+'"]');if(preset==='punch')await page.click('[aria-label="Zoom preset"] [data-segment="punch"]');await page.waitForSelector('[aria-label="'+(preset==='punch'?'Zoom':preset)+' settings"]');
   const before=await selected(),count=await history();await page.focus('[aria-label="'+control+'"]');await page.keyboard.down('ArrowRight');await flush();assert.equal(await history(),count,'Live preview must not save intermediate changes');await page.keyboard.press('Escape');await page.keyboard.up('ArrowRight');await flush();assert.deepEqual(await selected(),before,'Escape restores the authored effect');assert.equal(await history(),count);assert.equal(await page.evaluate(()=>window.drafts.at(-1)),null);
   await page.focus('[aria-label="'+control+'"]');await page.keyboard.press('End');await flush();const after=await selected();assert.equal(await history(),count+1);assert.ok(after[preset][field]>before[preset][field]);assert.notDeepEqual(after.motion,before.motion,'Property changes alter the renderer motion');
   if(preset==='flash'){

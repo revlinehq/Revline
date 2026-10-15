@@ -4,7 +4,7 @@ import workflowTest from '@convex-dev/workflow/test';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import schema from './schema';
 import { api } from './_generated/api';
-import { BLEND_MODES, EFFECT_PRESETS, MOTION_PRESETS, motionPreset } from '../lib/editor/clip-effects';
+import { BLEND_MODES, EFFECT_PRESETS, MOTION_PRESETS, configureTimedEffectPatch, motionPreset } from '../lib/editor/clip-effects';
 import { addEffectClip, addMediaClip, convertSolidColorToVisual, patchClip, splitClip } from '../lib/editor/operations';
 import { EMPTY_TIMELINE } from '../lib/editor/types';
 import { isTransitionPreset } from '../lib/editor/clip-transitions';
@@ -78,6 +78,28 @@ test('saved legacy FX color remains intact until an explicit V conversion and re
   expect((await f.owner.query(api.projects.get,{projectId:f.projectId})).timeline.clips[0]).toMatchObject({kind:'solid',solidColor:legacy.clips[0].solidColor});
   await expect(f.t.withIdentity({subject:'stranger'}).mutation(api.projects.saveTimeline,{projectId:f.projectId,timeline:next,expectedRevision:2})).rejects.toThrow('Project not found');
   await expect(f.owner.mutation(api.projects.saveTimeline,{projectId:f.projectId,timeline:patchClip(next,'legacy',{assetId:f.asset._id}),expectedRevision:2})).rejects.toThrow('cannot reference media');
+});
+
+test('Punch keeps absent legacy timing and optional seconds through save, split and bounded validation',async()=>{
+  const f=await fixture(),base=addMediaClip(EMPTY_TIMELINE,f.asset,'video',600);
+  const old={amount:1.6,speed:.5,centerX:.3,centerY:.7};
+  const legacy=patchClip(addEffectClip(base,'effect','punch',610,{duration:2}),'effect',{punch:old});
+  await f.owner.mutation(api.projects.saveTimeline,{projectId:f.projectId,timeline:legacy,expectedRevision:0});
+  let saved=(await f.owner.query(api.projects.get,{projectId:f.projectId})).timeline!;
+  expect(saved.clips.find(clip=>clip.id==='effect')).toEqual(legacy.clips.find(clip=>clip.id==='effect'));
+  expect(saved.clips.find(clip=>clip.id==='effect')!.punch).toEqual(old);
+  const effect=legacy.clips.find(clip=>clip.id==='effect')!;
+  const timed=patchClip(legacy,'effect',configureTimedEffectPatch(effect,{punch:{attack:5,release:9}}));
+  await f.owner.mutation(api.projects.saveTimeline,{projectId:f.projectId,timeline:timed,expectedRevision:1});
+  const split=splitClip(timed,'effect',611,'tail');
+  await f.owner.mutation(api.projects.saveTimeline,{projectId:f.projectId,timeline:split,expectedRevision:2});
+  saved=(await f.owner.query(api.projects.get,{projectId:f.projectId})).timeline!;
+  for(const id of ['effect','tail'])expect(saved.clips.find(clip=>clip.id===id)?.punch).toEqual({...old,attack:5,release:9});
+  expect(saved.clips.filter(clip=>clip.kind!=='effect')).toEqual(base.clips);
+  for(const field of ['attack','release'] as const)for(const value of [.009,30.01,NaN,Infinity]){
+    const invalid={...split,clips:split.clips.map(clip=>clip.id==='tail'?{...clip,punch:{...clip.punch!,[field]:value}}:clip)};
+    await expect(f.owner.mutation(api.projects.saveTimeline,{projectId:f.projectId,timeline:invalid,expectedRevision:3})).rejects.toThrow(/punch/);
+  }
 });
 
 test('a stored video import appends after five minutes once, without discarding the current effects', async () => {

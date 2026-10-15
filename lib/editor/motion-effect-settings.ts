@@ -2,7 +2,7 @@ import type { Clip } from './types';
 import type { MotionKeyframe } from './clip-effects';
 
 export type FlashSettings = { strength: number; attack: number; release: number };
-export type PunchSettings = { amount: number; speed: number; centerX: number; centerY: number };
+export type PunchSettings = { amount: number; speed: number; centerX: number; centerY: number; attack?: number; release?: number };
 export type ShakeSettings = { strength: number; speed: number; direction: 'both' | 'horizontal' | 'vertical' };
 export type PopSettings = { startScale: number; bounce: number; speed: number };
 export type MotionEffectChanges = { flash?: Partial<FlashSettings>; punch?: Partial<PunchSettings>; shake?: Partial<ShakeSettings>; pop?: Partial<PopSettings> };
@@ -14,7 +14,7 @@ export const DEFAULT_PUNCH: PunchSettings = { amount: 1.2, speed: 1, centerX: .5
 export const DEFAULT_SHAKE: ShakeSettings = { strength: .5, speed: 1, direction: 'both' };
 export const DEFAULT_POP: PopSettings = { startScale: .7, bounce: .08, speed: 1 };
 export const FLASH_LIMITS = { strength: [0, 1], attack: [.01, .99], release: [.01, .99] } as const;
-export const PUNCH_LIMITS = { amount: [1, 3], speed: [.25, 4], centerX: [0, 1], centerY: [0, 1] } as const;
+export const PUNCH_LIMITS = { amount: [1, 3], speed: [.25, 4], centerX: [0, 1], centerY: [0, 1], attack: [.01, 30], release: [.01, 30] } as const;
 export const SHAKE_LIMITS = { strength: [0, 1], speed: [.25, 4] } as const;
 export const POP_LIMITS = { startScale: [.1, 1], bounce: [0, .5], speed: [.25, 4] } as const;
 export function isPropertyEffectPreset(preset: unknown): preset is PropertyEffectPreset { return PROPERTY_EFFECT_PRESETS.includes(preset as PropertyEffectPreset); }
@@ -29,15 +29,33 @@ export function flashSettings(clip: Clip): FlashSettings {
   const attack = Math.min(.99, Math.max(.01, (peak.time - offset) / clip.duration));
   return { strength: Math.min(1, Math.max(0, (peak.brightness - 1) / 3)), attack, release: Math.min(1 - attack, Math.max(.01, ((end?.time ?? clip.duration + offset) - peak.time) / clip.duration)) };
 }
-export function punchSettings(clip: Clip): PunchSettings { return clip.punch ?? DEFAULT_PUNCH; }
+export function punchSettings(clip: Clip): PunchSettings {
+  if (clip.punch) return clip.punch;
+  if (clip.effectPreset !== 'punch' || !clip.motion?.length) return DEFAULT_PUNCH;
+  const peak = clip.motion.reduce((a, b) => a.scale >= b.scale ? a : b);
+  const end = clip.motion.find(frame => frame.time > peak.time && frame.scale <= 1);
+  const amount = Math.max(1, Math.min(3, peak.scale));
+  return { amount, speed: 1, centerX: amount > 1 ? Math.max(0, Math.min(1, .5 - peak.x / (amount - 1))) : .5, centerY: amount > 1 ? Math.max(0, Math.min(1, .5 - peak.y / (amount - 1))) : .5, attack: Math.max(.01, Math.min(30, peak.time)), release: Math.max(.01, Math.min(30, (end?.time ?? clip.motion.at(-1)!.time) - peak.time)) };
+}
+/** Optional seconds use the old speed multiplier; omitted timings preserve the legacy pulse exactly. */
+export function punchDurations(duration: number, settings: PunchSettings) {
+  const legacy = Math.min(.35, duration / 2);
+  if (settings.attack === undefined && settings.release === undefined) {
+    const end = Math.min(duration, legacy / settings.speed), attack = end * .3;
+    return { attack, release: end - attack, end };
+  }
+  const attack = (settings.attack ?? legacy * .3) / settings.speed, release = (settings.release ?? legacy * .7) / settings.speed;
+  const fit = Math.min(1, duration / (attack + release));
+  return { attack: attack * fit, release: release * fit, end: (attack + release) * fit };
+}
 export function shakeSettings(clip: Clip): ShakeSettings { return clip.shake ?? DEFAULT_SHAKE; }
 export function popSettings(clip: Clip): PopSettings { return clip.pop ?? DEFAULT_POP; }
 export function flashKeyframes(duration: number, settings: FlashSettings = DEFAULT_FLASH): MotionKeyframe[] {
   return unique([key(0), key(duration * settings.attack, { brightness: 1 + 3 * settings.strength }), key(duration * (settings.attack + settings.release)), key(duration)]);
 }
 export function punchKeyframes(duration: number, settings: PunchSettings = DEFAULT_PUNCH): MotionKeyframe[] {
-  const hit = Math.min(duration, Math.min(.35, duration / 2) / settings.speed);
-  return unique([key(0), key(hit * .3, { scale: settings.amount, x: (.5 - settings.centerX) * (settings.amount - 1), y: (.5 - settings.centerY) * (settings.amount - 1) }), key(hit), key(duration)]);
+  const timing = punchDurations(duration, settings);
+  return unique([key(0), key(timing.attack, { scale: settings.amount, x: (.5 - settings.centerX) * (settings.amount - 1), y: (.5 - settings.centerY) * (settings.amount - 1) }), key(timing.end), key(duration)]);
 }
 export function popKeyframes(duration: number, settings: PopSettings = DEFAULT_POP): MotionKeyframe[] {
   const hit = Math.min(duration, Math.min(.35, duration / 2) / settings.speed);
@@ -79,6 +97,7 @@ export function validateMotionEffectSettings(clip: Clip) {
     const limits = preset === 'flash' ? FLASH_LIMITS : preset === 'punch' ? PUNCH_LIMITS : preset === 'shake' ? SHAKE_LIMITS : POP_LIMITS;
     for (const [property, [min, max]] of Object.entries(limits)) {
       const value = (settings as unknown as Record<string, unknown>)[property];
+      if (preset === 'punch' && (property === 'attack' || property === 'release') && value === undefined) continue;
       if (typeof value !== 'number' || !Number.isFinite(value) || value < min || value > max) throw new Error(`${preset} ${property} must be between ${min} and ${max}.`);
     }
     if (preset === 'flash' && clip.flash!.attack + clip.flash!.release > 1 + 1e-6) throw new Error('Flash attack and release must fit within its duration.');

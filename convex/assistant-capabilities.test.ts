@@ -10,7 +10,7 @@ import type {TimelinePublicationReceipt} from '../lib/ai/publication-receipt';
 import { getFunctionName } from 'convex/server';
 import type { Timeline } from '../lib/editor/types';
 import { TRANSITION_PRESETS } from '../lib/editor/clip-transitions';
-import { addEffectClip } from '../lib/editor/operations';
+import { addEffectClip, patchClip } from '../lib/editor/operations';
 import { EFFECT_CATALOG,TIMED_EFFECT_PRESETS } from '../lib/editor/clip-effects';
 import { editorCapabilities } from '../lib/ai/editor-capabilities';
 import { resolvedTextAppearance } from '../lib/editor/text-style';
@@ -352,6 +352,29 @@ test('retired frame shrink is unavailable to the agent; clip visual fades preser
   expect(editorCapabilities().effects.flatMap(group=>group.items).some(item=>item.name==='Frame shrink')).toBe(false);
   expect(editorCapabilities().visual.fades.description).toContain('independently');
   expect(result.calls).not.toContain('assistant:requestAnalysis');await assertUndo(result);
+});
+
+test('Punch timing tools preserve legacy controls, merge partial seconds and save one undo group',async()=>{
+  const old={amount:1.6,speed:.5,centerX:.3,centerY:.7};
+  const seed=patchClip(addEffectClip(initial,'legacy-punch','punch',1,{duration:2}),'legacy-punch',{punch:old});
+  const result=await run(async tools=>{
+    for(const field of ['attack','release'])for(const value of [.009,30.01,NaN,Infinity]){
+      expect(()=>tools.addTimedEffect.inputSchema.parse({preset:'punch',punch:{[field]:value}})).toThrow();
+      expect(()=>tools.configureTimedEffect.inputSchema.parse({clipId:'legacy-punch',punch:{[field]:value}})).toThrow();
+    }
+    expect(()=>tools.addTimedEffect.inputSchema.parse({preset:'punch',duration:.5,punch:{attack:30,release:30}})).not.toThrow();
+    const read=async(id:string)=>((await execute(tools,'inspectTimeline',{})) as{timeline:Timeline}).timeline.clips.find(clip=>clip.id===id)!;
+    expect((await read('legacy-punch')).punch).toEqual(old);
+    await execute(tools,'configureTimedEffect',{clipId:'legacy-punch',punch:{attack:.25}});
+    expect((await read('legacy-punch')).punch).toEqual({...old,attack:.25});
+    await execute(tools,'configureTimedEffect',{clipId:'legacy-punch',punch:{release:.8}});
+    expect((await read('legacy-punch')).punch).toEqual({...old,attack:.25,release:.8});
+    await execute(tools,'addTimedEffect',{preset:'punch',start:4,duration:.5,punch:{amount:1.8,speed:2,centerX:.2,centerY:.6,attack:30,release:30}});
+    const timeline=(await execute(tools,'inspectTimeline',{}) as{timeline:Timeline}).timeline,newEffect=timeline.clips.find(clip=>clip.effectPreset==='punch'&&clip.id!=='legacy-punch')!;
+    await execute(tools,'configureTimedEffect',{clipId:newEffect.id,punch:{attack:.01}});
+    expect((await read(newEffect.id)).punch).toEqual({amount:1.8,speed:2,centerX:.2,centerY:.6,attack:.01,release:30});
+  },seed,true);
+  expect(result.error).toBeUndefined();expect(result.timeline.clips.slice(0,initial.clips.length)).toEqual(result.backend!.seed.clips.slice(0,initial.clips.length));await assertUndo(result);
 });
 
 test.each(['from','to'])('frame distortion agent controls merge, bypass, reset and remove on %s without changing other settings',async clipId=>{

@@ -39,6 +39,8 @@ export const FRAME_SHRINK_LIMITS = { size: [0, .45], speed: [.25, 4] } as const;
 export type ZoomSettings = { direction: 'in' | 'out'; amount: number; speed: number; centerX: number; centerY: number };
 export const ZOOM_LIMITS = { amount: [1, 3], speed: [.25, 4], centerX: [0, 1], centerY: [0, 1] } as const;
 export function isZoomPreset(preset: unknown): preset is 'quick-zoom-in' | 'quick-zoom-out' { return preset === 'quick-zoom-in' || preset === 'quick-zoom-out'; }
+/** Inspector family only: Punch keeps its original saved ID and pulse settings. */
+export function isZoomFamilyPreset(preset: unknown): preset is 'quick-zoom-in' | 'quick-zoom-out' | 'punch' { return isZoomPreset(preset) || preset === 'punch'; }
 export function zoomSettings(clip: Pick<Clip, 'effectPreset' | 'zoom' | 'motion'>): ZoomSettings {
   return clip.zoom ?? { direction: clip.effectPreset === 'quick-zoom-out' ? 'out' : 'in', amount: isZoomPreset(clip.effectPreset) && clip.motion?.length ? Math.max(1, ...clip.motion.map(frame => frame.scale)) : 1.2, speed: 1, centerX: .5, centerY: .5 };
 }
@@ -74,7 +76,7 @@ export const EFFECT_CATALOG: Record<EffectPreset, { label: string; description: 
   'gradient-wipe': { label: 'Gradient wipe', description: "Reveal the neighboring incoming clip with a moving gradient edge. Direction and softness are adjustable; complementary masks preserve cropped transparency and lower layers.", duration: .6, keyframes: () => [] },
   'iris-wipe': { label: 'Iris wipe', description: "Open a circular or elliptical iris into the neighboring incoming clip, with editable center and edge softness. Complementary masks preserve source transparency and lower layers.", duration: .6, keyframes: () => [] },
   fade: { label: 'Fade in / out', description: "Fade the underlying footage in and out with a held middle section; does not fade audio.", duration: 1, keyframes: d => { const fade = Math.min(.3, d / 3); return [key(0, { opacity: 0 }), key(fade), key(d - fade), key(d, { opacity: 0 })]; } },
-  punch: { label: 'Punch zoom', description: "A quick 1.2\u00d7 visual punch toward the center, followed by a return to the original framing.", duration: .5, keyframes: d => punchKeyframes(d) },
+  punch: { label: 'Zoom · Punch', description: 'The Punch preset in Zoom: a quick push in followed by a return to normal, with editable strength, attack, return time and center.', duration: .5, keyframes: d => punchKeyframes(d) },
   shake: { label: 'Impact shake', description: "Brief horizontal/vertical offsets and small rotation jitter with a slight inset zoom; preserves the original cut and audio timing.", duration: .5, keyframes: d => shakeKeyframes(d) },
   flash: { label: 'Flash', description: "A brief brightness pulse over the footage that settles back to normal; does not add a new media source.", duration: .5, keyframes: d => flashKeyframes(d) },
   pop: { label: 'Pop in', description: "Scale footage from 0.7\u00d7 through a small overshoot while fading in, then settle to normal size.", duration: .5, keyframes: d => popKeyframes(d) },

@@ -100,7 +100,7 @@ export function VisualEffectsControls({ clip, onChange, onPreview, onPlaybackRat
   const turbulence = !onlyEffect || onlyEffect === 'turbulentDisplace' ? clip.turbulentDisplace : undefined;
   const sweep = !onlyEffect || onlyEffect === 'lightSweep' ? clip.lightSweep : undefined;
   const frame = !onlyEffect || onlyEffect === 'frameDistortion' ? clip.frameDistortion : undefined;
-  const missing = (Object.keys(effectNames) as EffectKey[]).filter(key => !clip[key]);
+  const missing = (Object.keys(effectNames) as EffectKey[]).filter(key => key !== 'lightSweep' && !clip[key]);
   function cardProps(key: EffectKey) {
     return {
       name: effectNames[key], effectKey: key, enabled: !!clip[key]?.enabled,

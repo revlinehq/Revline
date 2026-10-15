@@ -1,6 +1,6 @@
 'use client';
 
-import { Crop, Film, Image as ImageIcon } from 'lucide-react';
+import { ChevronDown, Crop, Film, Image as ImageIcon } from 'lucide-react';
 import type { Clip, MediaAsset } from '@/lib/editor/types';
 import { NumberControl } from './visual-controls';
 import { PlaybackSpeedControls } from './visual-effects-controls';
@@ -42,13 +42,18 @@ export function FootageSettings({ clip, audioClip, asset, fps = 30, onChange, on
       {hasSpeed && <PlaybackSpeedControls clip={clip} onChange={onPlaybackRateChange!}/>}
       {hasVolume && <NumberControl label="Clip volume" min={0} max={200} value={Math.round(((audioClip ?? clip).volume ?? 1) * 100)} unit="%" onCommit={volume => onChange({ volume: volume / 100 })}/>}
     </section>}
-    <VisualFadeControls clip={clip} fps={fps} onChange={onChange} onPreview={onPreview}/>
-    <section className="footage-compositing footage-settings-section" aria-label="Compositing">
-      <div className="footage-section-heading"><h3>Compositing</h3></div>
+    <details className="footage-disclosure footage-fades">
+      <summary><span>Fades</span><ChevronDown size={12}/></summary>
+      <VisualFadeControls clip={clip} fps={fps} onChange={onChange} onPreview={onPreview}/>
+    </details>
+    <details className="footage-compositing footage-disclosure" aria-label="Compositing">
+      <summary><span>Compositing</span><ChevronDown size={12}/></summary>
+      <div className="footage-settings-section">
       <EffectSlider label="Opacity" value={clip.transform?.opacity??1} bounds={[0,1]} step={.01} format={value=>`${Math.round(value*100)}%`} disabled={false} onPreview={value=>onPreview?.(value===null?null:{transform:{...DEFAULT_TRANSFORM,...clip.transform,opacity:value}})} onCommit={opacity=>onChange({transform:{...DEFAULT_TRANSFORM,...clip.transform,opacity}})}/>
       <EffectSlider label="Blur" value={clip.softBlur?.enabled?clip.softBlur.amount:0} bounds={VISUAL_EFFECT_LIMITS.softBlur.amount} step={.5} format={value=>`${Number(value.toFixed(1))} px`} disabled={false} onPreview={value=>onPreview?.(value===null?null:{softBlur:{enabled:value>0,amount:value}})} onCommit={amount=>onChange({softBlur:{enabled:amount>0,amount}})}/>
       <EffectSlider label="Corner rounding" value={clip.frameCorners?.enabled?clip.frameCorners.amount:0} bounds={VISUAL_EFFECT_LIMITS.frameCorners.amount} step={.01} format={value=>`${Math.round(value*100)}%`} disabled={false} onPreview={value=>onPreview?.(value===null?null:{frameCorners:{enabled:value>0,amount:value}})} onCommit={amount=>onChange({frameCorners:{enabled:amount>0,amount}})}/>
       <BlendModeControls value={blendMode} onChange={blendMode => onChange({ blendMode })}/>
-    </section>
+      </div>
+    </details>
   </div>;
 }

@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest';
 import { configureTimedEffectPatch, motionAt, validateClipEffects } from './clip-effects';
-import { flashKeyframes, flashSettings, punchKeyframes, popKeyframes, shakeKeyframes } from './motion-effect-settings';
+import { flashKeyframes, flashSettings, punchKeyframes, punchDurations, popKeyframes, shakeKeyframes } from './motion-effect-settings';
 import { addEffectClip, patchClip, splitClip } from './operations';
 import type { Clip, Timeline } from './types';
 
@@ -22,6 +22,21 @@ test('Punch amount/center/speed and Pop starting size/bounce/speed change the ac
   expect(motionAt(punch, .175).scale).toBe(1);
   const pop = popKeyframes(1, { startScale: .4, bounce: .2, speed: 2 });
   expect(pop[0]).toMatchObject({ scale: .4, opacity: 0 });expect(pop[1].scale).toBe(1.2);expect(pop[2].time).toBeCloseTo(.175);
+});
+test('Punch optional attack/return edit actual peak and recovery while legacy timings and split phase remain intact', () => {
+  const old = { amount: 1.6, speed: 2, centerX: .8, centerY: .2 };
+  const legacy = punchKeyframes(1, old);
+  expect(legacy.map(frame => frame.time)).toEqual([0, .175 * .3, .175, 1]);
+  const explicit = { ...old, speed: 1, attack: .2, release: .3 };
+  const motion = punchKeyframes(1, explicit);
+  expect(motionAt(motion, .2).scale).toBe(1.6); expect(motionAt(motion, .5).scale).toBe(1);
+  expect(punchDurations(.25, explicit)).toEqual({ attack: .1, release: .15, end: .25 });
+  expect(punchDurations(1, { ...explicit, speed: 2 })).toEqual({ attack: .1, release: .15, end: .25 });
+  const added = addEffectClip({ fps: 30, aspectRatio: 'landscape', clips: [] }, 'punch', 'punch', 0, { duration: 1 });
+  const configured = patchClip(added, 'punch', configureTimedEffectPatch(added.clips[0], { punch: explicit }));
+  const split = splitClip(configured, 'punch', .3, 'tail');
+  expect(split.clips[1].punch).toEqual(explicit); expect(split.clips[1].motion).toEqual(motion); expect(split.clips[1].motionOffset).toBe(.3);
+  for (const value of [0, 30.01, NaN, Infinity]) expect(() => validateClipEffects({ ...configured.clips[0], punch: { ...explicit, attack: value } })).toThrow('attack');
 });
 test('Shake isolates the chosen axis, bypasses at zero strength and stays inside the save keyframe limit', () => {
   for (const direction of ['horizontal', 'vertical', 'both'] as const) {
