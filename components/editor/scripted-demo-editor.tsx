@@ -7,6 +7,7 @@ import { createEditorStore } from '@/lib/editor/store';
 import { inspectMedia } from '@/lib/editor/media';
 import { normalizeMediaFile } from '@/lib/editor/media-file';
 import { EMPTY_SCRIPTED_DEMO, scriptedDemoPlan, scriptedDemoMedia } from '@/lib/editor/scripted-demo';
+import { HORMOZI_DEMO_ASSET, hormoziDemoPlan } from '@/lib/editor/hormozi-demo';
 import type { MediaAsset, Timeline } from '@/lib/editor/types';
 import type { ComposerAttachment } from '@/components/workspace/edit-composer';
 import { userError } from '@/lib/user-error';
@@ -26,11 +27,12 @@ function waitForStep(ms: number, signal: AbortSignal) {
 
 /** Separate, local-only recording route. The production editor never uses this script. */
 export function ScriptedDemoEditor({ demoId }: { demoId: string }) {
+  const preparedTake=demoId==='hormozi-take-1';
   const [store] = useState(() => createEditorStore(EMPTY_SCRIPTED_DEMO));
   const timeline = useStore(store, state => state.timeline), history = useStore(store, state => state.history), future = useStore(store, state => state.future);
   const [assets, setAssets] = useState<MediaAsset[]>([]), [pending, setPending] = useState<ComposerAttachment[]>([]);
   const [submittedAssetIds, setSubmittedAssetIds] = useState<string[]>([]);
-  const media = useMemo(() => scriptedDemoMedia(assets), [assets]);
+  const media = useMemo(() => scriptedDemoMedia(preparedTake?[HORMOZI_DEMO_ASSET]:assets), [assets,preparedTake]);
   const [messages, setMessages] = useState<ChatMessage[]>([]), [running, setRunning] = useState(false), [importing, setImporting] = useState(false);
   const [error, setError] = useState(''), [title, setTitle] = useState('Your next edit'), [activity, setActivity] = useState<string | null>(null);
   const [lastPrompt, setLastPrompt] = useState('');
@@ -56,11 +58,11 @@ export function ScriptedDemoEditor({ demoId }: { demoId: string }) {
         const file = normalizeMediaFile(incoming);
         if (!file) { setPending(current => [...current, { id: crypto.randomUUID(), name: incoming.name, error: 'Use a non-empty video, image, or audio file.' }]); continue; }
         const id = crypto.randomUUID(), url = URL.createObjectURL(file); urls.current.push(url);
-        const kind = file.type.startsWith('audio/') ? 'audio' : file.type.startsWith('image/') ? 'image' : 'video';
+        const kind:MediaAsset['kind'] = file.type.startsWith('audio/') ? 'audio' : file.type.startsWith('image/') ? 'image' : 'video';
         setPending(current => [...current, { id, name: file.name, url, kind, progress: 25 }]);
         try {
           let thumbnailUrl: string | undefined;
-          const metadata = await inspectMedia(file, blob => { if (mounted.current) { thumbnailUrl = URL.createObjectURL(blob); urls.current.push(thumbnailUrl); } });
+          const metadata = preparedTake?{kind}:await inspectMedia(file, blob => { if (mounted.current) { thumbnailUrl = URL.createObjectURL(blob); urls.current.push(thumbnailUrl); } });
           if (!mounted.current) return;
           const asset: MediaAsset = { _id: id, fileName: file.name, url, thumbnailUrl, ...metadata };
           assetsRef.current = [...assetsRef.current, asset]; setAssets(assetsRef.current);
@@ -79,11 +81,12 @@ export function ScriptedDemoEditor({ demoId }: { demoId: string }) {
   }
   async function build(prompt: string) {
     if (activeRun.current || importingRef.current) return;
-    const runId = `demo-build-${crypto.randomUUID()}`, plan = scriptedDemoPlan(assetsRef.current, prompt, runId);
+    if(preparedTake&&!assetsRef.current.length)throw new Error('Attach media before starting the edit.');
+    const runId = `demo-build-${crypto.randomUUID()}`, plan = preparedTake?hormoziDemoPlan(runId):scriptedDemoPlan(assetsRef.current, prompt, runId);
     const controller = new AbortController(); activeRun.current = controller;
     setSubmittedAssetIds(assetsRef.current.map(asset => asset._id));
     setError(''); setLastPrompt(prompt); setRunning(true); setActivity('Building your edit…');
-    setMessages([{ id: `${runId}-request`, role: 'user', text: prompt }, { id: `${runId}-reply`, role: 'assistant', status: 'streaming', text: 'I’ll build a short sequence with cuts, captions, and subtle effects.' }]);
+    setMessages([{ id: `${runId}-request`, role: 'user', text: prompt }, { id: `${runId}-reply`, role: 'assistant', status: 'streaming', text: preparedTake?plan.steps[0].reply:'I’ll build a short sequence with cuts, captions, and subtle effects.' }]);
     store.getState().recover(plan.initial); store.setState({ playhead: 0, playing: false }); store.getState().beginUndoGroup(runId);
     let current = plan.initial;
     try {
