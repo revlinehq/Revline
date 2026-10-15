@@ -16,9 +16,10 @@ import { EFFECT_LIBRARY_CATALOG, EFFECT_LIBRARY_CATEGORIES, type EffectLibraryCa
 import './effect-library.css';
 
 const TextLookPicker = lazy(() => import('./text-look-picker').then(module => ({ default: module.TextLookPicker })));
+const DevRemotionTests = process.env.NODE_ENV === 'development' ? lazy(() => import('../dev/remotion-dev-tests').then(module => ({ default: module.RemotionDevTests }))) : null;
 const DevSfxLibrary = process.env.NODE_ENV === 'development' ? lazy(() => import('./sfx-library').then(module => ({ default: module.SfxLibrary }))) : null;
 export type LibraryVisualEffect = keyof VisualEffects;
-type LibraryCategory = EffectLibraryCategory | 'text' | 'sam-dev' | 'sfx-dev';
+type LibraryCategory = EffectLibraryCategory | 'text' | 'sam-dev' | 'remotion-dev' | 'sfx-dev';
 
 function LibraryEntry({ entry, disabled, reason, draggable, onApply }: { entry: LibraryEntryData; disabled: boolean; reason?: string; draggable: boolean; onApply: () => void }) {
   return <button type="button" className="library-look" aria-disabled={disabled} draggable={draggable} aria-label={entry.label} title={reason || entry.description} onClick={() => { if (!disabled) onApply(); }} onDragStart={event => {
@@ -47,7 +48,7 @@ export function EffectLibrary({ clip, timeline, time = 0, assets, onMedia, onVis
   const catalog = EFFECT_LIBRARY_CATALOG.filter(entry => !isTransitionPreset(entry.preset) || onAddTransition);
   const categories: { id: LibraryCategory; label: string }[] = EFFECT_LIBRARY_CATEGORIES.filter(item => catalog.some(entry => entry.category === item.id));
   categories.push({ id: 'text', label: 'Text' });
-  if (process.env.NODE_ENV === 'development') categories.push({ id: 'sam-dev', label: 'SAM 3 (dev)' }, { id: 'sfx-dev', label: 'SFX (dev)' });
+  if (process.env.NODE_ENV === 'development') categories.push({ id: 'sam-dev', label: 'SAM 3 (dev)' }, { id: 'remotion-dev', label: 'Remotion (dev)' }, { id: 'sfx-dev', label: 'SFX (dev)' });
   const visible = catalog.filter(entry => (!entry.action || onSpeed) && (query ? `${entry.label} ${entry.description}`.toLowerCase().includes(query) : entry.category === category));
   const transitions = onAddTransition && timeline ? transitionAvailabilityAt(timeline, time, { aboveClipId: visual ? clip.id : undefined }) : { available: false as const, reason: 'Add video or image footage before adding a transition.' };
   const canDragTransition = !!onAddTransition && !!timeline?.clips.some(item => (item.kind === 'video' || item.kind === 'image') && item.duration >= 2 / timeline.fps);
@@ -80,13 +81,13 @@ export function EffectLibrary({ clip, timeline, time = 0, assets, onMedia, onVis
           {category === 'text' ? <div className="library-text-results">
             <TextFontStyles/>
             <section className="library-text-section"><h3>{text ? 'Presets' : 'Add text'}</h3><Suspense fallback={<p className="library-selection-note">Loading presets…</p>}><TextLookPicker query={search} selected={text ? selectedTextLook(clip) : undefined} onSelect={onTextLook}/></Suspense></section>
-          </div> : category === 'sfx-dev' && DevSfxLibrary ? <Suspense fallback={<div className="library-look-grid" aria-label="Loading sounds" aria-busy="true">{[0, 1, 2].map(key => <div key={key} className="h-9 rounded-md bg-current/5 animate-pulse"/>)}</div>}><DevSfxLibrary assets={assets} query={search} onAdd={onAddSound} onUpload={onUploadSound} uploading={uploading}/></Suspense> : category === 'sam-dev' && !query ? <section className="library-sam-dev"><h3>Subject masks</h3><p>Test how SAM follows a person or object through a short clip.</p><a href="/dev/sam" target="_blank" rel="noopener noreferrer">Open mask lab <ChevronRight size={13}/></a><small>Development experiment</small></section> : <div className="library-look-grid">{visible.map(entry => {
+          </div> : category === 'remotion-dev' && DevRemotionTests ? <Suspense fallback={<div className="library-look-grid" aria-label="Loading motion experiments" aria-busy="true">{[0,1,2].map(key=><div key={key} className="h-20 rounded-md bg-current/5 animate-pulse"/>)}</div>}><DevRemotionTests embedded query={search}/></Suspense> : category === 'sfx-dev' && DevSfxLibrary ? <Suspense fallback={<div className="library-look-grid" aria-label="Loading sounds" aria-busy="true">{[0, 1, 2].map(key => <div key={key} className="h-9 rounded-md bg-current/5 animate-pulse"/>)}</div>}><DevSfxLibrary assets={assets} query={search} onAdd={onAddSound} onUpload={onUploadSound} uploading={uploading}/></Suspense> : category === 'sam-dev' && !query ? <section className="library-sam-dev"><h3>Subject masks</h3><p>Test how SAM follows a person or object through a short clip.</p><a href="/dev/sam" target="_blank" rel="noopener noreferrer">Open mask lab <ChevronRight size={13}/></a><small>Development experiment</small></section> : <div className="library-look-grid">{visible.map(entry => {
             const unavailable = reason(entry);
             const draggable = !!entry.visual || (isTransitionPreset(entry.preset) ? !!canDragTransition : !!entry.preset && !!onAddEffect);
             return <LibraryEntry key={entry.id} entry={entry} disabled={!!unavailable} reason={unavailable} draggable={draggable} onApply={() => apply(entry)}/>;
           })}</div>}
-          {category !== 'text' && category !== 'sfx-dev' && !visible.length && (category !== 'sam-dev' || query) && <p className="library-empty">No matching looks.</p>}
-          {category !== 'text' && category !== 'sfx-dev' && !transitions.available && visible.some(entry => isTransitionPreset(entry.preset)) && <p className="library-transition-availability" role="status">{transitions.reason}</p>}
+          {category !== 'text' && category !== 'remotion-dev' && category !== 'sfx-dev' && !visible.length && (category !== 'sam-dev' || query) && <p className="library-empty">No matching looks.</p>}
+          {category !== 'text' && category !== 'remotion-dev' && category !== 'sfx-dev' && !transitions.available && visible.some(entry => isTransitionPreset(entry.preset)) && <p className="library-transition-availability" role="status">{transitions.reason}</p>}
         </div>
     </div>
   </div>;
