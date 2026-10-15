@@ -3,19 +3,30 @@ import { createRoot } from 'react-dom/client';
 import { flushSync } from 'react-dom';
 import type { TransitionPresentation } from '@remotion/transitions';
 import { fade } from '@remotion/transitions/fade';
-import type { TransitionDirection, TransitionPreset } from './clip-transitions';
+import { transitionWipeSettings, type TransitionDirection, type TransitionPreset, type TransitionWipeSettings } from './clip-transitions';
 
 export type RemotionTransitionPresentationProps = {
   preset: TransitionPreset; direction: TransitionDirection; progress: number; durationInFrames: number; outputHeight?: number;
   from: ReactNode; to: ReactNode;
-};
+} & Partial<TransitionWipeSettings>;
 const fill: CSSProperties = { position:'absolute',inset:0,width:'100%',height:'100%' };
 const ignore = () => {};
 // Add weighted premultiplied scenes inside a transparent isolated group. Source-over
 // fades lose opacity at the midpoint and leave outgoing pixels behind transparent media.
-function presentation(preset:TransitionPreset,direction:TransitionDirection,progress:number,outputHeight:number){
+function presentation(preset:TransitionPreset,direction:TransitionDirection,progress:number,outputHeight:number,settings:TransitionWipeSettings){
   const enterStyle:CSSProperties={mixBlendMode:'plus-lighter'},exitStyle:CSSProperties={mixBlendMode:'plus-lighter'};
-  if(preset==='spin-zoom'){
+  if(preset==='gradient-wipe'||preset==='iris-wipe'){
+    // Matching complementary alpha ramps conserve the scenes' premultiplied colors.
+    // Override fade opacity: the mask alone determines this presentation's weights.
+    enterStyle.opacity=progress===0?0:1;exitStyle.opacity=progress===1?0:1;
+    if(progress>0&&progress<1){
+      const edge=progress*(1+settings.softness),inner=(edge-settings.softness)*100,outer=edge*100;
+      const geometry=preset==='gradient-wipe'?`linear-gradient(to ${settings.wipeDirection==='up'?'top':settings.wipeDirection==='down'?'bottom':settings.wipeDirection},`:`radial-gradient(${settings.shape} farthest-corner at ${settings.centerX*100}% ${settings.centerY*100}%,`;
+      enterStyle.maskImage=`${geometry}#000 ${inner}%,transparent ${outer}%)`;
+      exitStyle.maskImage=`${geometry}transparent ${inner}%,#000 ${outer}%)`;
+      enterStyle.maskRepeat=exitStyle.maskRepeat='no-repeat';
+    }
+  }else if(preset==='spin-zoom'){
     const sign=direction==='counter-clockwise'?-1:1;
     exitStyle.transform=`rotate(${sign*18*progress}deg) scale(${1+.55*progress})`;
     enterStyle.transform=`rotate(${-sign*18*(1-progress)}deg) scale(${1+.55*(1-progress)})`;
@@ -36,12 +47,12 @@ function Pair<P extends Record<string,unknown>>({ presentation, progress, durati
 }
 
 /** Genuine Remotion presentations; the existing editor/export clock supplies progress. */
-export function RemotionTransitionPresentation({preset,direction,progress,durationInFrames,outputHeight=1080,from,to}:RemotionTransitionPresentationProps){
+export function RemotionTransitionPresentation({preset,direction,progress,durationInFrames,outputHeight=1080,from,to,...settings}:RemotionTransitionPresentationProps){
   if(!Number.isFinite(progress)||!Number.isFinite(durationInFrames)||durationInFrames<1||!Number.isFinite(outputHeight)||outputHeight<=0)throw new Error('Transition presentation needs finite progress and positive frame duration/output height.');
   const bounded=Math.max(0,Math.min(1,progress));
   const pair={progress:bounded,durationInFrames,from,to};
   return <div data-remotion-transition={preset} data-progress={bounded} style={{...fill,overflow:'hidden',isolation:'isolate',pointerEvents:'none'}}>
-    <Pair {...pair} presentation={presentation(preset,direction,bounded,outputHeight)}/>
+    <Pair {...pair} presentation={presentation(preset,direction,bounded,outputHeight,transitionWipeSettings(settings))}/>
   </div>;
 }
 

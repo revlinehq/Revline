@@ -20,7 +20,7 @@ export function pasteTimelineClips(timeline: Timeline, source: Clip[], time: num
     let next = timeline;
     for (const clip of source) {
       const id = newId();
-      const placed = placeTransitionAt(next, id, clip.effectPreset as TransitionPreset, start + clip.start + clip.duration / 2 - firstCut, { duration: clip.duration, direction: clip.transition!.direction, track: clip.track, visualTrack: target.visualTrack });
+      const placed = placeTransitionAt(next, id, clip.effectPreset as TransitionPreset, start + clip.start + clip.duration / 2 - firstCut, { ...clip.transition!, duration: clip.duration, track: clip.track, visualTrack: target.visualTrack });
       next = { ...placed, clips: placed.clips.map(member => member.id === id ? { ...structuredClone(clip), ...member } : member) };
       ids.push(id);
     }

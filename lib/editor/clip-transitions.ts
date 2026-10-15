@@ -2,11 +2,18 @@ import type { Clip, Timeline } from './types';
 import { trackOf } from './types';
 import { playbackRateOf } from './playback-rate';
 
-export const TRANSITION_PRESETS = ['crossfade', 'spin-zoom', 'blur-dissolve'] as const;
+export const TRANSITION_PRESETS = ['crossfade', 'spin-zoom', 'blur-dissolve', 'gradient-wipe', 'iris-wipe'] as const;
 export type TransitionPreset = typeof TRANSITION_PRESETS[number];
 export const TRANSITION_DIRECTIONS = ['clockwise', 'counter-clockwise'] as const;
 export type TransitionDirection = typeof TRANSITION_DIRECTIONS[number];
-export type ClipTransition = { fromClipId: string; toClipId: string; direction: TransitionDirection };
+export const WIPE_DIRECTIONS = ['left', 'right', 'up', 'down'] as const;
+export const IRIS_SHAPES = ['circle', 'ellipse'] as const;
+export type TransitionWipeSettings = { wipeDirection: typeof WIPE_DIRECTIONS[number]; softness: number; centerX: number; centerY: number; shape: typeof IRIS_SHAPES[number] };
+export type ClipTransition = { fromClipId: string; toClipId: string; direction: TransitionDirection } & Partial<TransitionWipeSettings>;
+export const DEFAULT_TRANSITION_WIPE: TransitionWipeSettings = { wipeDirection: 'right', softness: .12, centerX: .5, centerY: .5, shape: 'circle' };
+export function transitionWipeSettings(settings: Partial<ClipTransition>): TransitionWipeSettings {
+  return { wipeDirection: settings.wipeDirection ?? DEFAULT_TRANSITION_WIPE.wipeDirection, softness: settings.softness ?? DEFAULT_TRANSITION_WIPE.softness, centerX: settings.centerX ?? DEFAULT_TRANSITION_WIPE.centerX, centerY: settings.centerY ?? DEFAULT_TRANSITION_WIPE.centerY, shape: settings.shape ?? DEFAULT_TRANSITION_WIPE.shape };
+}
 export const DEFAULT_TRANSITION_DURATION = .6;
 export const DEFAULT_TRANSITION_DIRECTION: TransitionDirection = 'clockwise';
 const tolerance = 1e-6;
@@ -22,6 +29,9 @@ export function validateTransitionSettings(clip: Clip) {
   }
   const settings = clip.transition;
   if (!settings || !settings.fromClipId || !settings.toClipId || settings.fromClipId === settings.toClipId || !TRANSITION_DIRECTIONS.includes(settings.direction)) throw new Error('Choose two distinct transition clips and a supported direction.');
+  for (const key of ['softness', 'centerX', 'centerY'] as const) if (settings[key] !== undefined && (!Number.isFinite(settings[key]) || settings[key]! < 0 || settings[key]! > 1)) throw new Error('Transition softness and center must be finite values between 0 and 1.');
+  if (settings.wipeDirection !== undefined && !WIPE_DIRECTIONS.includes(settings.wipeDirection)) throw new Error('Choose a supported wipe direction.');
+  if (settings.shape !== undefined && !IRIS_SHAPES.includes(settings.shape)) throw new Error('Choose a circle or ellipse iris.');
   if (clip.motion?.length || (clip.motionOffset !== undefined && clip.motionOffset !== 0)) throw new Error('Transitions use their own presentation, not motion keyframes.');
 }
 

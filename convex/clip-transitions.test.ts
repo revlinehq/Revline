@@ -6,6 +6,7 @@ import schema from './schema';
 import { api, internal } from './_generated/api';
 import { addMediaClip, addTransitionClip, patchClip } from '../lib/editor/operations';
 import { TRANSITION_PRESETS, transitionSources } from '../lib/editor/clip-transitions';
+import { copyTimelineClips,pasteTimelineClips } from '../lib/editor/clipboard';
 import { EMPTY_TIMELINE, type Clip } from '../lib/editor/types';
 
 const modules=import.meta.glob('./**/*.ts');
@@ -27,16 +28,17 @@ async function fixture(){
 }
 
 test.each(TRANSITION_PRESETS)('%s persists through manual save, AI controls, sharing and an owned editable copy',async preset=>{
-  const f=await fixture(),timeline=addTransitionClip(f.timeline,'transition',preset,'from','to',{direction:'clockwise'});
+  const f=await fixture(),wipe=preset==='gradient-wipe'||preset==='iris-wipe',controls={wipeDirection:'down' as const,softness:.3,centerX:.2,centerY:.8,shape:'ellipse' as const},timeline=addTransitionClip(f.timeline,'transition',preset,'from','to',{direction:'clockwise',...(wipe?controls:{})});
   await f.owner.mutation(api.projects.saveTimeline,{projectId:f.projectId,timeline,expectedRevision:0});
   expect((await f.owner.query(api.projects.get,{projectId:f.projectId})).timeline).toEqual(timeline);
   await f.t.run(ctx=>writeProject(ctx,f.projectId,{aiRunning:true,aiRunId:'transition-run'}));
-  const changed=patchClip(timeline,'transition',{duration:1,transition:{...timeline.clips.at(-1)!.transition!,direction:'counter-clockwise'}});
+  const changed=patchClip(timeline,'transition',{duration:1,transition:{...timeline.clips.at(-1)!.transition!,direction:'counter-clockwise',...(wipe?{softness:.45,centerX:.7}:{})}});
   await f.t.mutation(internal.assistant.apply,{projectId:f.projectId,ownerId:'transition-owner',runId:'transition-run',expectedRevision:1,timeline:changed});
   await f.t.run(ctx=>writeProject(ctx,f.projectId,{aiRunning:false}));
   const saved=(await f.owner.query(api.projects.get,{projectId:f.projectId})).timeline!;
   expect(saved.clips.slice(0,f.timeline.clips.length)).toEqual(f.timeline.clips);
   expect(saved.clips.at(-1)).toMatchObject({effectPreset:preset,start:4.5,duration:1,transition:{fromClipId:'from',toClipId:'to',direction:'counter-clockwise'}});
+  if(wipe)expect(saved.clips.at(-1)!.transition).toEqual({fromClipId:'from',toClipId:'to',direction:'counter-clockwise',...controls,softness:.45,centerX:.7});
   const shareId=await f.owner.mutation(api.timelineShares.publish,{projectId:f.projectId});
   const shared=(await f.t.query(api.timelineShares.get,{shareId}))!;
   expect(shared.timeline).toEqual(saved);
@@ -74,4 +76,23 @@ test('transition references cannot bypass project, media or AI run ownership',as
   await expect(f.t.mutation(internal.assistant.apply,{projectId:f.projectId,ownerId:'stranger',runId:'owned-run',expectedRevision:0,timeline})).rejects.toThrow();
   await f.t.run(ctx=>ctx.db.patch(f.media.videoId,{ownerId:'stranger'}));
   await expect(f.owner.mutation(api.projects.saveTimeline,{projectId:f.projectId,timeline,expectedRevision:0})).rejects.toThrow('must belong to this project');
+});
+
+
+test.each(['gradient-wipe','iris-wipe'] as const)('%s preserves custom masks through pair copy and rejects malformed wipe controls',async preset=>{
+  const f=await fixture(),settings={wipeDirection:'left' as const,softness:0,centerX:0,centerY:1,shape:'ellipse' as const};
+  const timeline=addTransitionClip(f.timeline,'transition',preset,'from','to',settings),transition=timeline.clips.at(-1)!;
+  for(const key of ['softness','centerX','centerY'] as const)for(const value of [-.01,1.01,NaN,Infinity]){
+    await expect(f.owner.mutation(api.projects.saveTimeline,{projectId:f.projectId,timeline:{...timeline,clips:timeline.clips.map(clip=>clip.id==='transition'?{...clip,transition:{...transition.transition!,[key]:value}}:clip)},expectedRevision:0})).rejects.toThrow();
+  }
+  for(const invalid of [{wipeDirection:'diagonal' as 'left'},{shape:'square' as 'circle'}])await expect(f.owner.mutation(api.projects.saveTimeline,{projectId:f.projectId,timeline:{...timeline,clips:timeline.clips.map(clip=>clip.id==='transition'?{...clip,transition:{...transition.transition!,...invalid}}:clip)},expectedRevision:0})).rejects.toThrow();
+  const pasted=pasteTimelineClips(timeline,copyTimelineClips(timeline,['from','to','transition']),12).timeline;
+  const copy=pasted.clips.find(clip=>clip.transition&&clip.id!=='transition')!;
+  expect(copy.transition).toMatchObject(settings);expect(copy.transition!.fromClipId).not.toBe('from');expect(copy.transition!.toClipId).not.toBe('to');
+  expect(transitionSources(pasted.clips,pasted.fps)).toHaveLength(2);
+  await f.owner.mutation(api.projects.saveTimeline,{projectId:f.projectId,timeline:pasted,expectedRevision:0});
+  expect((await f.owner.query(api.projects.get,{projectId:f.projectId})).timeline).toEqual(pasted);
+  const full=patchClip(pasted,'transition',{transition:{...transition.transition!,softness:1,centerX:1,centerY:0,wipeDirection:'up',shape:'circle'}});
+  await f.owner.mutation(api.projects.saveTimeline,{projectId:f.projectId,timeline:full,expectedRevision:1});
+  expect((await f.owner.query(api.projects.get,{projectId:f.projectId})).timeline).toEqual(full);
 });

@@ -6,6 +6,7 @@ import { LENS_FILM_GLSL } from './lens-film-shader';
 import { NEON_EDGES_GLSL } from './neon-edges-shader';
 import { DEFAULT_NEON_EDGES } from './neon-edges';
 import { TEXTURE_OVERLAYS_GLSL } from './texture-overlays-shader';
+import { MOTION_LIGHT_GLSL } from './motion-light-shader';
 export { installAdjustmentLayers } from './adjustment-layers';
 export { installSolidColorLayers } from './solid-color-layers';
 export { installVisualFades } from './visual-fades-runtime';
@@ -29,10 +30,11 @@ export function installVisualEffects(sources: VisualEffectSource[], fps: number,
   const defaultNeonColor=Number.parseInt(DEFAULT_NEON_EDGES.color.slice(1),16);
   let timedEffects:Clip[]=[];
   function effectPasses(base:VisualEffects,time:number):VisualEffects[] {
-    const {softBlur,frameCorners,...other}=base;
+    const {softBlur,directionalBlur,frameCorners,...other}=base;
     const passes:VisualEffects[]=[];
     // Blur has its own pass so combining it with radial blur never multiplies sample counts.
     if(softBlur?.enabled&&softBlur.amount>0)passes.push({softBlur});
+    if(directionalBlur?.enabled&&directionalBlur.amount>0)passes.push({directionalBlur});
     if(enabled(other))passes.push(other);
     for(const clip of timedEffects){
       if(!clip.zoomBlur?.enabled||time<clip.start||time>=clip.start+clip.duration)continue;
@@ -54,6 +56,7 @@ vec4 sampleSource(vec2 p){return texture2D(source,clamp(p,vec2(0.0),vec2(1.0)));
 ${NEON_EDGES_GLSL}
 ${LENS_FILM_GLSL}
 ${TEXTURE_OVERLAYS_GLSL}
+${MOTION_LIGHT_GLSL}
 ${FRAME_DISTORTION_GLSL}
 float cornerAlpha(vec2 p){
   if(frameCorners<=0.0)return 1.0;
@@ -78,7 +81,7 @@ vec4 radial(vec2 p){
   return sum/weight;
 }
 void main(){
-  vec2 plane=perspectivePosition(uv),p=tapePosition(lensPosition(plane));float split=0.0;
+  vec2 plane=perspectivePosition(uv),p=tapePosition(turbulentPosition(lensPosition(plane)));float split=0.0;
   if(glitch.x>0.0){
     float band=floor((1.0-p.y)*size.y/max(1.0,glitch.y));
     float seed=floor(frame/2.0);float gate=step(1.0-glitch.x*0.8,hash(vec2(band,seed)));
@@ -86,6 +89,7 @@ void main(){
     split=glitch.z/size.x*glitch.x;
   }
   vec4 c=radial(p);
+  if(directional.x>0.0)c=directionalSample(p);
   if(softBlur>0.0){
     c=vec4(0.0);
     for(int y=-2;y<=2;y++)for(int x=-2;x<=2;x++){
@@ -131,12 +135,13 @@ void main(){
   rgb=filmOverlay(uv,rgb);
   rgb=tapeOverlay(uv,rgb);
   rgb=lightLeakOverlay(uv,rgb);
+  rgb=lightSweepOverlay(uv,rgb);
   gl_FragColor=vec4(rgb,c.a*perspectiveAlpha(plane)*cornerAlpha(uv));
 }`;
 
   function enabled(effects: VisualEffects) {
     const c = effects.colorGrade, z = effects.zoomBlur, g = effects.glitch;
-    return !!(c?.enabled && (c.exposure || c.contrast !== 1 || c.saturation !== 1 || c.temperature || c.tint || c.vibrance) || z?.enabled && z.amount > 0 || g?.enabled && g.intensity > 0 || effects.invert?.enabled && effects.invert.amount > 0 || effects.dither?.enabled && effects.dither.amount > 0 || effects.neonEdges?.enabled && effects.neonEdges.amount > 0 || effects.lensDistortion?.enabled && (effects.lensDistortion.amount !== 0 || effects.lensDistortion.fringing > 0) || effects.filmOverlay?.enabled && effects.filmOverlay.amount > 0 || effects.vhs?.enabled && effects.vhs.amount > 0 || effects.lightLeak?.enabled && effects.lightLeak.amount > 0 || effects.softBlur?.enabled && effects.softBlur.amount > 0 || effects.frameCorners?.enabled && effects.frameCorners.amount>0 || effects.frameDistortion?.enabled && (effects.frameDistortion.horizontal !== 0 || effects.frameDistortion.vertical !== 0 || effects.frameDistortion.skew !== 0 || (effects.frameDistortion.bend??0)!==0));
+    return !!(c?.enabled && (c.exposure || c.contrast !== 1 || c.saturation !== 1 || c.temperature || c.tint || c.vibrance) || z?.enabled && z.amount > 0 || g?.enabled && g.intensity > 0 || effects.invert?.enabled && effects.invert.amount > 0 || effects.dither?.enabled && effects.dither.amount > 0 || effects.neonEdges?.enabled && effects.neonEdges.amount > 0 || effects.lensDistortion?.enabled && (effects.lensDistortion.amount !== 0 || effects.lensDistortion.fringing > 0) || effects.filmOverlay?.enabled && effects.filmOverlay.amount > 0 || effects.vhs?.enabled && effects.vhs.amount > 0 || effects.lightLeak?.enabled && effects.lightLeak.amount > 0 || effects.directionalBlur?.enabled && effects.directionalBlur.amount > 0 || effects.turbulentDisplace?.enabled && effects.turbulentDisplace.amount > 0 || effects.lightSweep?.enabled && effects.lightSweep.amount > 0 || effects.softBlur?.enabled && effects.softBlur.amount > 0 || effects.frameCorners?.enabled && effects.frameCorners.amount>0 || effects.frameDistortion?.enabled && (effects.frameDistortion.horizontal !== 0 || effects.frameDistortion.vertical !== 0 || effects.frameDistortion.skew !== 0 || (effects.frameDistortion.bend??0)!==0));
   }
   function release(entry: Entry) {
     entry.source.removeAttribute('data-revline-effects');
@@ -203,7 +208,7 @@ void main(){
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
-    const uniforms = Object.fromEntries(['source','size','frame','softBlur','frameCorners','cornerWindow','invert','grade','balance','zoom','glitch','dither','ditherPalette','ditherShadow','ditherHighlight','neon','neonColor','neonPixel','lens','lensFringing','film','filmTone','filmPixel','textureTime','textureOutput','vhs','vhsMotion','lightLeak','lightLeakColor','perspective','perspectiveFit','perspectiveBend'].map(name => [name, gl.getUniformLocation(program, name)]));
+    const uniforms = Object.fromEntries(['source','size','frame','softBlur','frameCorners','cornerWindow','invert','grade','balance','zoom','glitch','dither','ditherPalette','ditherShadow','ditherHighlight','neon','neonColor','neonPixel','lens','lensFringing','film','filmTone','filmPixel','textureTime','textureOutput','vhs','vhsMotion','lightLeak','lightLeakColor','directional','turbulence','sweep','sweepMotion','sweepColor','perspective','perspectiveFit','perspectiveBend'].map(name => [name, gl.getUniformLocation(program, name)]));
     Object.assign(entry, { canvas, gl, program, texture, buffer, uniforms });
     entry.source.parentElement!.appendChild(canvas);
   }
@@ -247,7 +252,7 @@ void main(){
     // CSS motion can run between decoded frames. Wait for the next video
     // frame before redrawing its bitmap; paused transforms still redraw now.
     const playingVideo = source instanceof HTMLVideoElement && !source.paused && !!source.requestVideoFrameCallback;
-    const stableFrame=!(entry.effects.glitch?.enabled||entry.effects.filmOverlay?.enabled||entry.effects.vhs?.enabled&&entry.effects.vhs.speed>0||entry.effects.lightLeak?.enabled&&entry.effects.lightLeak.speed>0)||playingVideo||entry.lastFrame===frame;
+    const stableFrame=!(entry.effects.glitch?.enabled||entry.effects.filmOverlay?.enabled||entry.effects.vhs?.enabled&&entry.effects.vhs.speed>0||entry.effects.lightLeak?.enabled&&entry.effects.lightLeak.speed>0||entry.effects.turbulentDisplace?.enabled&&entry.effects.turbulentDisplace.speed>0||entry.effects.lightSweep?.enabled&&entry.effects.lightSweep.speed>0)||playingVideo||entry.lastFrame===frame;
     const stablePasses=playingVideo?entry.lastPassCount===passes.length:entry.lastPassKey===passKey;
     if (!force && !entry.dirty && stableFrame && stablePasses && entry.lastSource === sourceKey && (playingVideo || entry.lastTransform === transformKey)) return;
     try {
@@ -278,7 +283,7 @@ void main(){
       const color = (hex: string) => [1, 3, 5].map(index => parseInt(hex.slice(index, index + 2), 16) / 255);
       if(passes.length>1)preparePassTargets(entry);
       for(const [index,effects] of passes.entries()){
-        const c=effects.colorGrade,z=effects.zoomBlur,g=effects.glitch,d=effects.dither,n=effects.neonEdges,l=effects.lensDistortion,f=effects.filmOverlay,v=effects.vhs,ll=effects.lightLeak,b=effects.softBlur,p=effects.frameDistortion;
+        const c=effects.colorGrade,z=effects.zoomBlur,g=effects.glitch,d=effects.dither,n=effects.neonEdges,l=effects.lensDistortion,f=effects.filmOverlay,v=effects.vhs,ll=effects.lightLeak,db=effects.directionalBlur,td=effects.turbulentDisplace,ls=effects.lightSweep,b=effects.softBlur,p=effects.frameDistortion;
         gl.bindTexture(gl.TEXTURE_2D,index===0?entry.texture!:entry.passTextures![(index-1)%2]);
         if(index===passes.length-1)gl.bindFramebuffer(gl.FRAMEBUFFER,null);
         else{
@@ -302,6 +307,12 @@ void main(){
         gl.uniform2f(u.vhsMotion,v?.tracking??0,v?.speed??0);
         gl.uniform4f(u.lightLeak,ll?.enabled?ll.amount:0,ll?.position??0,ll?.spread??0,ll?.speed??0);
         const leakColor=color(ll?.color??'#ff934f');gl.uniform3f(u.lightLeakColor,leakColor[0],leakColor[1],leakColor[2]);
+        const blurAngle=(db?.angle??0)*Math.PI/180;
+        gl.uniform3f(u.directional,db?.enabled?db.amount*pixelScale:0,Math.cos(blurAngle),-Math.sin(blurAngle));
+        gl.uniform3f(u.turbulence,td?.enabled?td.amount*pixelScale:0,(td?.scale??120)*pixelScale,td?.speed??0);
+        gl.uniform4f(u.sweep,ls?.enabled?ls.amount:0,(ls?.angle??0)*Math.PI/180,ls?.position??.5,ls?.width??.22);
+        gl.uniform2f(u.sweepMotion,ls?.speed??0,0);
+        const sweepColor=color(ls?.color??'#ffffff');gl.uniform3f(u.sweepColor,sweepColor[0],sweepColor[1],sweepColor[2]);
         gl.uniform1f(u.softBlur,b?.enabled?b.amount*pixelScale:0);
         gl.uniform1f(u.invert,effects.invert?.enabled?effects.invert.amount:0);
         gl.uniform4f(u.grade,c?.enabled?c.exposure:0,c?.enabled?c.contrast:1,c?.enabled?c.saturation:1,0);

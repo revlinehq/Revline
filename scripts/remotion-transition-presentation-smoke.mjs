@@ -20,10 +20,10 @@ const fill={position:'absolute',inset:'0',width:'100%',height:'100%'};
 Object.assign(from.style,fill,{background:'#ff0000'});Object.assign(to.style,fill,{background:'#0000ff'});
 bridge.fromSlot.append(from);bridge.toSlot.append(to);
 window.bridge=bridge;window.from=from;window.to=to;window.host=host;
-window.paint=(preset,progress,direction='clockwise',cropped=false)=>{
+window.paint=(preset,progress,direction='clockwise',cropped=false,settings={})=>{
  Object.assign(from.style,{width:cropped?'75%':'100%'});
  Object.assign(to.style,{left:cropped?'25%':'0',width:cropped?'75%':'100%',opacity:cropped?'0.5':'1'});
- bridge.render({preset,direction,progress,durationInFrames:18,outputHeight:64});
+ bridge.render({preset,direction,progress,durationInFrames:18,outputHeight:64,...settings});
 };
 window.paintAt=(start,duration,time)=>bridge.render({preset:'crossfade',direction:'clockwise',progress:(time-start)/duration,durationInFrames:Math.round(duration*30)});
 window.mediaEvents={loadstart:0,emptied:0};
@@ -67,6 +67,20 @@ try{
    await page.evaluate(({preset,direction})=>{window.paint(preset,1,direction);window.paint(preset,0,direction);window.paint(preset,.5,direction)},{preset,direction});assert.ok((await pixels()).equals(partial),preset+' '+direction+' backward seek is deterministic');
   }
  }
+ // Wipes reveal the actual scene with complementary masks, without an opaque plate.
+ for(const preset of ['gradient-wipe','iris-wipe']){
+  for(const progress of [0,1]){await page.evaluate(({preset,progress})=>window.paint(preset,progress),{preset,progress});close(color(await pixels(),32,32),progress?[0,0,255]:[255,0,0],preset+' exact endpoint');}
+  await page.evaluate(preset=>window.paint(preset,.4),preset);const sample=await pixels();
+  for(let offset=0;offset<sample.length;offset+=3){assert.ok(sample[offset+1]<=1,preset+' never leaks the green underlayer between opaque scenes');assert.ok(Math.abs(sample[offset]+sample[offset+2]-255)<=2,preset+' complementary mask weights sum to one');}
+  await page.evaluate(preset=>{window.paint(preset,1);window.paint(preset,0);window.paint(preset,.4)},preset);assert.ok((await pixels()).equals(sample),preset+' backward seek is deterministic');
+  await page.evaluate(preset=>window.paint(preset,1,'clockwise',true),preset);const endpoint=await pixels();close(color(endpoint,8,32),[0,255,0],preset+' removes outgoing pixels behind transparent incoming crop');close(color(endpoint,32,32),[0,128,128],preset+' retains incoming alpha at endpoint');
+ }
+ for(const [wipeDirection,a,b]of [['right',[8,32],[56,32]],['left',[56,32],[8,32]],['down',[32,8],[32,56]],['up',[32,56],[32,8]]]){
+  await page.evaluate(wipeDirection=>window.paint('gradient-wipe',.5,'clockwise',false,{softness:0,wipeDirection}),wipeDirection);const frame=await pixels();close(color(frame,...a),[0,0,255],wipeDirection+' reveals incoming on the correct side');close(color(frame,...b),[255,0,0],wipeDirection+' retains outgoing on the other side');
+ }
+ await page.evaluate(()=>window.paint('gradient-wipe',.5,'clockwise',false,{softness:.5}));const feather=color(await pixels(),32,32);assert.ok(feather[0]>30&&feather[2]>30&&feather[1]===0,'Softness actually feathers the reveal edge in rendered pixels');
+ await page.evaluate(()=>window.paint('iris-wipe',.35,'clockwise',false,{softness:0,centerX:.2,centerY:.7,shape:'circle'}));const circle=await pixels();close(color(circle,13,45),[0,0,255],'Iris center reveals the incoming clip');close(color(circle,60,2),[255,0,0],'Iris keeps outgoing footage outside its opening');
+ await page.evaluate(()=>window.paint('iris-wipe',.35,'clockwise',false,{softness:0,centerX:.2,centerY:.7,shape:'ellipse'}));assert.ok(!(await pixels()).equals(circle),'Circle and ellipse shapes produce different rendered openings');
  // Different cropped/alpha scenes must leave the correctly weighted original underlayer.
  await page.evaluate(()=>window.paint('crossfade',.5,'clockwise',true));const crop=await pixels();
  close(color(crop,8,32),[128,128,0],'Outgoing-only crop fades to its original underlayer');
@@ -105,7 +119,7 @@ try{
  // A real already-decoded native video survives every progress/direction/preset change.
  await page.waitForFunction(()=>window.video.readyState>=2);await page.evaluate(()=>{window.video.currentTime=.25});await page.waitForFunction(()=>!window.video.seeking&&window.video.readyState>=2&&Math.abs(window.video.currentTime-.25)<.01);
  await page.evaluate(()=>{window.adoptVideo();window.before={time:window.video.currentTime,src:window.video.currentSrc,events:{...window.mediaEvents},fromSlot:window.bridge.fromSlot,toSlot:window.bridge.toSlot}});
- for(const preset of ['crossfade','spin-zoom','blur-dissolve','crossfade'])for(const direction of directions)await page.evaluate(({preset,direction})=>window.bridge.render({preset,direction,progress:.5,durationInFrames:18}),{preset,direction});
+ for(const preset of ['crossfade','spin-zoom','blur-dissolve','gradient-wipe','iris-wipe','crossfade'])for(const direction of directions)await page.evaluate(({preset,direction})=>window.bridge.render({preset,direction,progress:.5,durationInFrames:18}),{preset,direction});
  await flush();
  assert.deepEqual(await page.evaluate(()=>({sameVideo:window.bridge.fromSlot.querySelector('video')===window.video,sameFrom:window.bridge.fromSlot===window.before.fromSlot,sameTo:window.bridge.toSlot===window.before.toSlot,connected:window.video.isConnected,time:window.video.currentTime,sourceUnchanged:window.video.currentSrc===window.before.src,eventsUnchanged:JSON.stringify(window.mediaEvents)===JSON.stringify(window.before.events),hasPlayer:!!document.querySelector('hyperframes-player,remotion-player')})),{sameVideo:true,sameFrom:true,sameTo:true,connected:true,time:.25,sourceUnchanged:true,eventsUnchanged:true,hasPlayer:false});
  await page.evaluate(()=>window.bridge.dispose());await flush();
@@ -113,6 +127,6 @@ try{
  await page.evaluate(()=>window.restoreVideo());await flush();
  assert.deepEqual(await page.evaluate(()=>({parentRestored:document.getElementById('retained-source').contains(window.video),time:window.video.currentTime,events:window.mediaEvents})),{parentRestored:true,time:.25,events:{loadstart:1,emptied:0}});
  assert.deepEqual(errors,[]);
- console.log('PASS: actual Remotion4.0.535 fade presentation with Crossfade, Spin zoom and Blur dissolve styles; two spin directions, exact endpoints and deterministic backward seeks; symmetric/asymmetric clocks and alpha/crop weights; native decoded video/slots retained without load/empty events or a new player.');
+ console.log('PASS: actual Remotion4.0.535 presentations include Gradient/Iris wipes, four wipe directions, feathered edge pixels, shifted circle/ellipse, exact endpoints, alpha/crop conservation and deterministic backward seeks; existing fades/spin/blur unchanged; native decoded video/slots retained without load/empty events or a new player.');
 }catch(error){console.error('Native source state',await page.evaluate(()=>({time:window.video?.currentTime,readyState:window.video?.readyState,seeking:window.video?.seeking,duration:window.video?.duration,seekable:window.video?.seekable.length,mediaError:window.video?.error?.code,events:window.mediaEvents,moveBefore:typeof window.bridge?.fromSlot.moveBefore})));throw error}
 finally{await browser.close();await new Promise(resolve=>server.close(resolve));await rm(directory,{recursive:true,force:true})}

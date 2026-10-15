@@ -5,7 +5,7 @@ import { textAnimationTimingPatch } from './text-animation-timing';
 import { audioFadeTimingPatch } from './audio-settings';
 import { visualFadeTimingPatch } from './visual-fades';
 import { playbackRateOf, sourceDurationOf, sourceEndOf, validatePlaybackRate } from './playback-rate';
-import { boundedTransitionRange, DEFAULT_TRANSITION_DIRECTION, findTransitionPlacement, isTransitionClip, isTransitionPreset, reconcileTransitionEdits, transitionPair, transitionSources, type TransitionDirection, type TransitionPreset } from './clip-transitions';
+import { boundedTransitionRange, DEFAULT_TRANSITION_DIRECTION, findTransitionPlacement, isTransitionClip, isTransitionPreset, reconcileTransitionEdits, transitionPair, transitionSources, type ClipTransition, type TransitionDirection, type TransitionPreset } from './clip-transitions';
 import { Clip, Timeline, timelineDuration, layerGroup, trackOf, deriveTrackCounts, normalizeTimeline, maxTrackCount } from './types';
 export function snapTime(time: number, fps: number) { return Math.round(Math.max(0, time) * fps) / fps; }
 export function linkedClipIds(timeline: Timeline, ids: string[]): string[] {
@@ -184,12 +184,13 @@ export function convertSolidColorToVisual(timeline:Timeline,id:string):Timeline 
   return placeOnFreeLayer(timeline,{...retained,kind:'solid',track:undefined});
 }
 /** Visual-only transition: the joined footage and linked audio keep every timing field. */
-export function addTransitionClip(timeline: Timeline, id: string, preset: TransitionPreset, fromClipId: string, toClipId: string, options: { duration?: number; direction?: TransitionDirection; track?: number } = {}): Timeline {
+export function addTransitionClip(timeline: Timeline, id: string, preset: TransitionPreset, fromClipId: string, toClipId: string, options: Partial<Omit<ClipTransition, 'fromClipId' | 'toClipId'>> & { duration?: number; track?: number } = {}): Timeline {
   timeline = normalizeTimeline(timeline);
   const pair = transitionPair(timeline.clips, { fromClipId, toClipId });
+  const settings = Object.fromEntries((['wipeDirection','softness','centerX','centerY','shape'] as const).filter(key => options[key] !== undefined).map(key => [key,options[key]]));
   const clip: Clip = { id, kind: 'effect', sourceStart: 0, track: options.track ?? 1, effectPreset: preset,
     ...boundedTransitionRange(timeline, pair.from, pair.to, options.duration,id),
-    transition: { fromClipId, toClipId, direction: options.direction ?? DEFAULT_TRANSITION_DIRECTION },
+    transition: { ...settings, fromClipId, toClipId, direction: options.direction ?? DEFAULT_TRANSITION_DIRECTION },
   };
   const next = placeOnFreeLayer(timeline, clip);
   transitionSources(next.clips, next.fps);

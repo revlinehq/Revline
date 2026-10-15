@@ -1,9 +1,9 @@
 import { addTransitionClip, snapTime, splitClip } from './operations';
-import { isTransitionClip, transitionPair, transitionSources, type TransitionDirection, type TransitionPreset } from './clip-transitions';
+import { isTransitionClip, transitionPair, transitionSources, type ClipTransition, type TransitionPreset } from './clip-transitions';
 import { TimelineGestureRejection } from './timeline-edit-errors';
 import { normalizeTimeline, trackOf, type Timeline } from './types';
 
-type PlacementOptions = { aboveClipId?: string; visualTrack?: number; track?: number; duration?: number; direction?: TransitionDirection };
+type PlacementOptions = { aboveClipId?: string; visualTrack?: number; track?: number; duration?: number } & Partial<Omit<ClipTransition,'fromClipId'|'toClipId'>>;
 const tolerance = 1e-6;
 const isFootage = (clip: Timeline['clips'][number]) => clip.kind === 'video' || clip.kind === 'image';
 

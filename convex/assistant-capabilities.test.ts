@@ -9,6 +9,7 @@ import {api,internal,components} from './_generated/api';
 import type {TimelinePublicationReceipt} from '../lib/ai/publication-receipt';
 import { getFunctionName } from 'convex/server';
 import type { Timeline } from '../lib/editor/types';
+import { TRANSITION_PRESETS } from '../lib/editor/clip-transitions';
 import { addEffectClip } from '../lib/editor/operations';
 import { EFFECT_CATALOG,TIMED_EFFECT_PRESETS } from '../lib/editor/clip-effects';
 import { editorCapabilities } from '../lib/ai/editor-capabilities';
@@ -20,7 +21,7 @@ import { TEXT_LOOKS } from '../lib/editor/text-looks';
 import { createEditorStore } from '../lib/editor/store';
 import { textLayerFrame } from '../lib/editor/text-layers';
 import {DEFAULT_NEON_EDGES} from '../lib/editor/neon-edges';
-import { DEFAULT_FRAME_DISTORTION, DEFAULT_LENS_DISTORTION, DEFAULT_VHS, DEFAULT_LIGHT_LEAK, VISUAL_EFFECT_LIMITS } from '../lib/editor/visual-effects';
+import { DEFAULT_FRAME_DISTORTION, DEFAULT_LENS_DISTORTION, DEFAULT_VHS, DEFAULT_LIGHT_LEAK, DEFAULT_DIRECTIONAL_BLUR, DEFAULT_TURBULENT_DISPLACE, DEFAULT_LIGHT_SWEEP, VISUAL_EFFECT_LIMITS } from '../lib/editor/visual-effects';
 import { parseAutomation,sampleAutomationLane } from '@hyperframes/core/audio-automation';
 import { fadeGain } from '@hyperframes/core/audio-fade';
 import type { ZodType } from 'zod';
@@ -194,7 +195,7 @@ test('every implemented effect, text animation/look and transition has a concret
   for(const entry of [...catalog.effects.flatMap(category=>category.items),...catalog.timedFX,...catalog.transitions.items,...catalog.text.animations,...catalog.text.looks]){
     expect(entry.description.trim().length).toBeGreaterThan(20);expect(entry.description).not.toBe('Add at the playhead');
   }
-  expect(catalog.text.animations).toHaveLength(TEXT_ANIMATION_PRESETS.length);expect(catalog.text.looks).toHaveLength(6);expect(catalog.transitions.items).toHaveLength(3);
+  expect(catalog.text.animations).toHaveLength(TEXT_ANIMATION_PRESETS.length);expect(catalog.text.looks).toHaveLength(6);expect(catalog.transitions.items).toHaveLength(TRANSITION_PRESETS.length);
   expect(catalog.text.animations.find(item=>item.preset==='karaoke')?.description).toContain('Supplied speech timings');
   expect(catalog.visual.canvasReference.landscape).toEqual({width:1920,height:1080});expect(catalog.visual.canvasReference.vertical).toEqual({width:1080,height:1920});
 });
@@ -719,4 +720,58 @@ test.each(['from','to'])('VHS and Light leak tools merge, bypass, reset, remove 
   },seed,true);
   expect(result.error).toBeUndefined();expect(result.timeline.clips).toEqual(result.backend!.seed.clips.map(clip=>clip.id===clipId?{...clip,vhs:undefined,lightLeak:undefined}:clip));
   expect(result.calls).not.toContain('assistant:requestAnalysis');await assertUndo(result);
+});
+
+
+test.each(['gradient-wipe','iris-wipe'] as const)('%s AI controls preserve omitted wipe settings, real pair copies, source/audio and grouped undo',async preset=>{
+  const settings={wipeDirection:'left',softness:.2,centerX:.3,centerY:.7,shape:'ellipse'};
+  const result=await run(async tools=>{
+    for(const key of ['softness','centerX','centerY'])for(const value of [-.01,1.01,NaN,Infinity])for(const name of ['addClipTransition','configureClipTransition'])expect(()=>tools[name].inputSchema.parse({preset,fromClipId:'from',toClipId:'to',clipId:'later',[key]:value})).toThrow();
+    for(const invalid of [{wipeDirection:'diagonal'},{shape:'square'}])expect(()=>tools.addClipTransition.inputSchema.parse({preset,fromClipId:'from',toClipId:'to',...invalid})).toThrow();
+    expect(()=>tools.configureClipTransition.inputSchema.parse({clipId:'later'})).toThrow('Specify');
+    await execute(tools,'addClipTransition',{preset,fromClipId:'from',toClipId:'to',...settings});
+    let current=await execute(tools,'inspectTimeline',{}) as{timeline:Timeline};const transition=current.timeline.clips.find(clip=>clip.transition)!;
+    expect(transition.transition).toMatchObject(settings);
+    await execute(tools,'configureClipTransition',{clipId:transition.id,softness:.8});
+    current=await execute(tools,'inspectTimeline',{}) as{timeline:Timeline};expect(current.timeline.clips.find(clip=>clip.id===transition.id)!.transition).toEqual({...transition.transition!,softness:.8});
+    await execute(tools,'configureClipTransition',{clipId:transition.id,preset:preset==='gradient-wipe'?'iris-wipe':'gradient-wipe',centerX:0,centerY:1});
+    await execute(tools,'duplicateClips',{clipIds:['from','to',transition.id],at:8});
+    current=await execute(tools,'inspectTimeline',{}) as{timeline:Timeline};const copies=current.timeline.clips.filter(clip=>clip.transition);
+    expect(copies).toHaveLength(2);
+    for(const clip of copies)expect(clip.transition).toMatchObject({...settings,softness:.8,centerX:0,centerY:1});
+    expect(copies[0].transition!.fromClipId).not.toBe(copies[1].transition!.fromClipId);expect(copies[0].transition!.toClipId).not.toBe(copies[1].transition!.toClipId);
+    await expect(execute(tools,'configureClipTransition',{clipId:'audio',softness:.4})).rejects.toThrow('clip-to-clip');
+    expect(current.timeline.clips.slice(0,initial.clips.length)).toEqual(initial.clips.map(clip=>({...clip,assetId:current.timeline.clips.find(item=>item.id===clip.id)?.assetId})));
+  },initial,true);
+  expect(result.error).toBeUndefined();expect(result.calls).not.toContain('assistant:requestAnalysis');await assertUndo(result);
+});
+
+
+const aeVisualCases=[
+  {effect:'directionalBlur',defaults:DEFAULT_DIRECTIONAL_BLUR,first:{enabled:true,amount:24},second:{angle:45},expected:{...DEFAULT_DIRECTIONAL_BLUR,enabled:true,amount:24,angle:45}},
+  {effect:'turbulentDisplace',defaults:DEFAULT_TURBULENT_DISPLACE,first:{enabled:true,amount:40},second:{scale:220,speed:0},expected:{...DEFAULT_TURBULENT_DISPLACE,enabled:true,amount:40,scale:220,speed:0}},
+  {effect:'lightSweep',defaults:DEFAULT_LIGHT_SWEEP,first:{enabled:true,color:'#12ABCF',amount:.8},second:{angle:90,position:.7,width:.2,speed:0},expected:{...DEFAULT_LIGHT_SWEEP,enabled:true,color:'#12ABCF',amount:.8,angle:90,position:.7,width:.2,speed:0}},
+] as const;
+test.each(aeVisualCases)('$effect AI control boundaries, partial edits, bypass/reset/remove and undo preserve video/image/audio',async({effect,defaults,first,second,expected})=>{
+  for(const clipId of ['from','to']){
+    const seed=addEffectClip(initial,'fx-blur','zoom-blur',1,{duration:1});
+    const result=await run(async tools=>{
+      for(const [control,[min,max]] of Object.entries(VISUAL_EFFECT_LIMITS[effect]))for(const value of [min-.01,max+.01,NaN,Infinity])expect(()=>tools.setVisualEffects.inputSchema.parse({clipId,[effect]:{[control]:value}})).toThrow();
+      if(effect==='lightSweep')for(const color of ['red','#123','#12345678','transparent','url(example)'])expect(()=>tools.setVisualEffects.inputSchema.parse({clipId,lightSweep:{color}})).toThrow();
+      await expect(execute(tools,'setVisualEffects',{clipId,[effect]:{}})).rejects.toThrow('Specify');
+      for(const bad of ['audio','title','fx-blur']){
+        await expect(execute(tools,'setVisualEffects',{clipId:bad,[effect]:{enabled:true}})).rejects.toThrow('video or image');
+        await expect(execute(tools,'resetVisualEffect',{clipId:bad,effect,action:'reset'})).rejects.toThrow('visual footage');
+      }
+      const read=async()=>((await execute(tools,'inspectTimeline',{})) as{timeline:Timeline}).timeline.clips.find(clip=>clip.id===clipId)!;
+      await execute(tools,'setVisualEffects',{clipId,[effect]:first});expect(await read()).toMatchObject({[effect]:{...defaults,...first}});
+      await execute(tools,'setVisualEffects',{clipId,[effect]:second});expect(await read()).toMatchObject({[effect]:expected});
+      await execute(tools,'setVisualEffects',{clipId,[effect]:{enabled:false}});expect(await read()).toMatchObject({[effect]:{...expected,enabled:false}});
+      await execute(tools,'resetVisualEffect',{clipId,effect,action:'reset'});expect(await read()).toMatchObject({[effect]:defaults});
+      await execute(tools,'setVisualEffects',{clipId,[effect]:{enabled:true}});await execute(tools,'resetVisualEffect',{clipId,effect,action:'reset'});expect(await read()).toMatchObject({[effect]:{...defaults,enabled:true}});
+      await execute(tools,'resetVisualEffect',{clipId,effect,action:'remove'});
+    },seed,true);
+    expect(result.error).toBeUndefined();expect(result.timeline.clips).toEqual(result.backend!.seed.clips.map(clip=>clip.id===clipId?{...clip,[effect]:undefined}:clip));
+    expect(result.calls).not.toContain('assistant:requestAnalysis');await assertUndo(result);
+  }
 });

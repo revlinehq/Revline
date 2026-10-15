@@ -20,6 +20,9 @@ export const EFFECT_LIBRARY_CATALOG: readonly EffectLibraryEntry[] = [
   { id: 'neonEdges', label: 'Neon edges', description: 'Luminous colored outlines over darkened footage, with adjustable strength, detail, edge threshold and glow. Keeps the original source, timing and sound.', category: 'texture', visual: 'neonEdges' },
   { id: 'frameDistortion', label: 'Frame distortion', description: 'Curve the whole frame and its outer edges inward or outward, with transparent space around the bent silhouette. Advanced perspective and skew remain adjustable.', category: 'motion', visual: 'frameDistortion' },
   { id: 'lensDistortion', label: 'Lens distortion', description: 'A curved wide-angle lens bend with adjustable strength, optical center and color fringing. Fills the frame without adding a border.', category: 'motion', visual: 'lensDistortion' },
+  { id: 'directionalBlur', label: 'Directional blur', description: 'A smooth streak blur along an editable angle, with adjustable strength. Keeps the original source and timing.', category: 'motion', visual: 'directionalBlur' },
+  { id: 'turbulentDisplace', label: 'Turbulent displacement', description: 'Organic flowing distortion with adjustable strength, scale and speed. Procedural and deterministic at every timeline frame.', category: 'motion', visual: 'turbulentDisplace' },
+  { id: 'lightSweep', label: 'Light sweep', description: 'A colored highlight beam moves across footage or a logo image. Adjust strength, angle, position, width and speed.', category: 'color', visual: 'lightSweep' },
   { id: 'filmOverlay', label: 'Film overlay', description: 'Animated film grain, dust and scratches, with adjustable vignette, flicker and warmth. Procedural, with no overlay download required.', category: 'texture', visual: 'filmOverlay' },
   { id: 'vhs', label: 'VHS overlay', description: 'Analog scanlines, tape noise, subtle RGB bleed and rolling tracking distortion. Adjustable strength, components and speed; no overlay download.', category: 'texture', visual: 'vhs' },
   { id: 'lightLeak', label: 'Light leak', description: 'A soft colored exposure glow at the frame edge. Adjust color, edge position, spread, strength and motion speed.', category: 'texture', visual: 'lightLeak' },
@@ -27,4 +30,6 @@ export const EFFECT_LIBRARY_CATALOG: readonly EffectLibraryEntry[] = [
   { id: 'crossfade', label: 'Crossfade', description: 'Blend two neighboring clips at their cut', category: 'transitions', preset: 'crossfade' },
   { id: 'spin-zoom', label: 'Spin zoom', description: 'Rotate and zoom between neighboring clips', category: 'transitions', preset: 'spin-zoom' },
   { id: 'blur-dissolve', label: 'Blur dissolve', description: 'Soften and dissolve between neighboring clips', category: 'transitions', preset: 'blur-dissolve' },
+  { id: 'gradient-wipe', label: 'Gradient wipe', description: 'Reveal the next clip across an editable soft directional edge', category: 'transitions', preset: 'gradient-wipe' },
+  { id: 'iris-wipe', label: 'Iris wipe', description: 'Open a soft circular or elliptical window into the next clip', category: 'transitions', preset: 'iris-wipe' },
 ];

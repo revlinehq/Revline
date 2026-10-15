@@ -38,7 +38,8 @@ const percent = (value: number) => `${Math.round(value * 100)}%`;
 const pixels = (value: number) => `${Math.round(value)} px`;
 const speed = (value: number) => `${value.toFixed(2)}×`;
 const edgePosition = (value: number) => `${Math.round(value * 360)}°`;
-const effectNames = { colorGrade: 'Color', zoomBlur: 'Zoom blur', glitch: 'Glitch', invert: 'Invert colors', dither: 'Dither', neonEdges: 'Neon edges', lensDistortion: 'Lens distortion', filmOverlay: 'Film overlay', vhs: 'VHS overlay', lightLeak: 'Light leak', frameDistortion: 'Frame distortion' } as const;
+const degrees = (value: number) => `${Math.round(value)}°`;
+const effectNames = { colorGrade: 'Color', zoomBlur: 'Zoom blur', glitch: 'Glitch', invert: 'Invert colors', dither: 'Dither', neonEdges: 'Neon edges', lensDistortion: 'Lens distortion', filmOverlay: 'Film overlay', vhs: 'VHS overlay', lightLeak: 'Light leak', directionalBlur: 'Directional blur', turbulentDisplace: 'Turbulent displacement', lightSweep: 'Light sweep', frameDistortion: 'Frame distortion' } as const;
 
 export function AppliedVisualEffects({ clip, onSelect, onAdd }: { clip: Clip; onSelect: (effect: EffectKey) => void; onAdd: () => void }) {
   const applied = (Object.keys(effectNames) as EffectKey[]).filter(key => clip[key]);
@@ -84,6 +85,9 @@ export function VisualEffectsControls({ clip, onChange, onPreview, onPlaybackRat
   const film = !onlyEffect || onlyEffect === 'filmOverlay' ? clip.filmOverlay : undefined;
   const vhs = !onlyEffect || onlyEffect === 'vhs' ? clip.vhs : undefined;
   const leak = !onlyEffect || onlyEffect === 'lightLeak' ? clip.lightLeak : undefined;
+  const directional = !onlyEffect || onlyEffect === 'directionalBlur' ? clip.directionalBlur : undefined;
+  const turbulence = !onlyEffect || onlyEffect === 'turbulentDisplace' ? clip.turbulentDisplace : undefined;
+  const sweep = !onlyEffect || onlyEffect === 'lightSweep' ? clip.lightSweep : undefined;
   const frame = !onlyEffect || onlyEffect === 'frameDistortion' ? clip.frameDistortion : undefined;
   const missing = (Object.keys(effectNames) as EffectKey[]).filter(key => !clip[key]);
   function cardProps(key: EffectKey) {
@@ -130,7 +134,16 @@ export function VisualEffectsControls({ clip, onChange, onPreview, onPlaybackRat
     {leak && <EffectCard {...cardProps('lightLeak')}><fieldset className="effect-colors" disabled={!leak.enabled}><label>Leak color<ColorControl label="Light leak color" value={leak.color} onCommit={color => onChange({ lightLeak: { ...leak, color } })}/></label></fieldset>{([
       ['amount', 'Strength', percent], ['position', 'Edge position', edgePosition], ['spread', 'Spread', percent], ['speed', 'Speed', speed],
     ] as const).map(([key, label, format]) => <EffectSlider key={key} label={label} value={leak[key]} bounds={VISUAL_EFFECT_LIMITS.lightLeak[key]} format={format} disabled={!leak.enabled} onPreview={value => preview(value === null ? null : { lightLeak: { ...leak, [key]: value } })} onCommit={value => onChange({ lightLeak: { ...leak, [key]: value } })}/>)}</EffectCard>}
-    {!color && !blur && !glitch && !invert && !dither && !neon && !lens && !film && !vhs && !leak && !frame && <p className="visual-effects-empty">Add an effect to this clip.</p>}
+    {directional && <EffectCard {...cardProps('directionalBlur')}>{([
+      ['amount', 'Strength', .1, pixels], ['angle', 'Angle', 1, degrees],
+    ] as const).map(([key, label, step, format]) => <EffectSlider key={key} label={label} value={directional[key]} bounds={VISUAL_EFFECT_LIMITS.directionalBlur[key]} step={step} format={format} disabled={!directional.enabled} onPreview={value => preview(value === null ? null : { directionalBlur: { ...directional, [key]: value } })} onCommit={value => onChange({ directionalBlur: { ...directional, [key]: value } })}/>)}</EffectCard>}
+    {turbulence && <EffectCard {...cardProps('turbulentDisplace')}>{([
+      ['amount', 'Strength', .1, pixels], ['scale', 'Scale', 1, pixels], ['speed', 'Speed', .01, speed],
+    ] as const).map(([key, label, step, format]) => <EffectSlider key={key} label={label} value={turbulence[key]} bounds={VISUAL_EFFECT_LIMITS.turbulentDisplace[key]} step={step} format={format} disabled={!turbulence.enabled} onPreview={value => preview(value === null ? null : { turbulentDisplace: { ...turbulence, [key]: value } })} onCommit={value => onChange({ turbulentDisplace: { ...turbulence, [key]: value } })}/>)}</EffectCard>}
+    {sweep && <EffectCard {...cardProps('lightSweep')}><fieldset className="effect-colors" disabled={!sweep.enabled}><label>Light color<ColorControl label="Light sweep color" value={sweep.color} onCommit={color => onChange({ lightSweep: { ...sweep, color } })}/></label></fieldset>{([
+      ['amount', 'Strength', .01, percent], ['angle', 'Angle', 1, degrees], ['position', 'Position', .01, percent], ['width', 'Width', .01, percent], ['speed', 'Speed', .01, speed],
+    ] as const).map(([key, label, step, format]) => <EffectSlider key={key} label={label} value={sweep[key]} bounds={VISUAL_EFFECT_LIMITS.lightSweep[key]} step={step} format={format} disabled={!sweep.enabled} onPreview={value => preview(value === null ? null : { lightSweep: { ...sweep, [key]: value } })} onCommit={value => onChange({ lightSweep: { ...sweep, [key]: value } })}/>)}</EffectCard>}
+    {!color && !blur && !glitch && !invert && !dither && !neon && !lens && !film && !vhs && !leak && !directional && !turbulence && !sweep && !frame && <p className="visual-effects-empty">Add an effect to this clip.</p>}
     {!onlyEffect && <DropdownMenu><DropdownMenuTrigger asChild><button type="button" className="visual-effects-add" disabled={!missing.length}><Plus size={13}/>Add effect</button></DropdownMenuTrigger><DropdownMenuContent className="visual-effects-menu" align="start">{missing.map(key => {
       return <DropdownMenuItem key={key} onSelect={() => onChange(visualEffectsPatch(clip, { [key]: { enabled: true } }))}><EffectIcon name={key} size={16}/>{effectNames[key]}</DropdownMenuItem>;
     })}</DropdownMenuContent></DropdownMenu>}

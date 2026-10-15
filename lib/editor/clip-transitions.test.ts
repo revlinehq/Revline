@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { TRANSITION_PRESETS, centeredTransitionRange, transitionAvailability, transitionDurationLimit, transitionSampleTime, transitionSources } from './clip-transitions';
+import { TRANSITION_PRESETS, DEFAULT_TRANSITION_WIPE, centeredTransitionRange, transitionAvailability, transitionDurationLimit, transitionSampleTime, transitionSources, transitionWipeSettings } from './clip-transitions';
 import { addEffectClip, addTransitionClip, deleteClip, duplicateClip, patchClip, splitClip } from './operations';
 import { moveSelectedClips, moveSelectionToNewLayers, resizeSelectedClips } from './timeline-controls';
 import { copyTimelineClips, pasteTimelineClips } from './clipboard';
@@ -17,6 +17,30 @@ const base: Timeline = { fps:30,aspectRatio:'landscape',tracks:{visual:2,overlay
 ] };
 const fx = (timeline:Timeline) => timeline.clips.find(clip=>clip.id==='fx')!;
 const add = () => addTransitionClip(base,'fx','crossfade','from','to');
+
+test.each(['gradient-wipe','iris-wipe'] as const)('%s keeps editable masks through pair edits, clipboard and Undo without changing source/audio clocks',preset=>{
+  const settings={softness:.35,wipeDirection:'up' as const,centerX:.2,centerY:.7,shape:'ellipse' as const};
+  const options={...settings,preset,aboveClipId:'from',visualTrack:1};
+  const next=addTransitionClip(base,'fx',preset,'from','to',options);
+  expect(fx(next).transition).toEqual({...settings,fromClipId:'from',toClipId:'to',direction:'clockwise'});
+  expect(next.clips.filter(clip=>clip.id!=='fx')).toEqual(base.clips);
+  const store=createEditorStore(next);store.getState().edit(patchClip(next,'fx',{transition:{...fx(next).transition!,softness:.1}}));store.getState().undo();expect(fx(store.getState().timeline).transition).toEqual(fx(next).transition);
+  const clipboard=copyTimelineClips(next,['from','to','fx']),pasted=pasteTimelineClips(next,clipboard,10).timeline;
+  expect(pasted.clips.filter(clip=>clip.kind==='effect'&&clip.id!=='fx')[0].transition).toMatchObject(settings);
+  expect(transitionSources(pasted.clips,pasted.fps)).toHaveLength(2);
+});
+
+test('wipe defaults preserve legacy transitions and validate every optional control',()=>{
+  expect(transitionWipeSettings(fx(add()).transition!)).toEqual(DEFAULT_TRANSITION_WIPE);
+  for(const preset of ['gradient-wipe','iris-wipe'] as const){
+    const next=addTransitionClip(base,'fx',preset,'from','to');
+    expect(transitionWipeSettings(fx(next).transition!)).toEqual(DEFAULT_TRANSITION_WIPE);
+    for(const key of ['softness','centerX','centerY'] as const)for(const value of [-.01,1.01,NaN,Infinity])expect(()=>patchClip(next,'fx',{transition:{...fx(next).transition!,[key]:value}})).toThrow(/finite/);
+    expect(()=>patchClip(next,'fx',{transition:{...fx(next).transition!,wipeDirection:'diagonal' as never}})).toThrow(/direction/);
+    expect(()=>patchClip(next,'fx',{transition:{...fx(next).transition!,shape:'triangle' as never}})).toThrow(/iris/);
+    expect(()=>patchClip(next,'fx',{transition:{...fx(next).transition!,softness:0,centerX:0,centerY:1}})).not.toThrow();
+  }
+});
 
 test('a joined pair keeps its transition when new video and audio rows are needed',()=>{
   const next=add();
@@ -168,7 +192,8 @@ test('copying a pair and its transition remaps references without changing origi
 });
 
 test.each(TRANSITION_PRESETS)('pastes only the copied %s onto another cut, preserving its settings and all footage',preset=>{
-  const source=addTransitionClip(base,'fx',preset,'from','to',{duration:.8,direction:'counter-clockwise'});
+  const settings={softness:.34,wipeDirection:'left' as const,centerX:.2,centerY:.7,shape:'ellipse' as const};
+  const source=addTransitionClip(base,'fx',preset,'from','to',{duration:.8,direction:'counter-clockwise',...settings});
   const copied=copyTimelineClips(source,['fx']);
   expect(copied.map(clip=>clip.id)).toEqual(['fx']);
   const target:Timeline={...base,clips:[
@@ -179,7 +204,7 @@ test.each(TRANSITION_PRESETS)('pastes only the copied %s onto another cut, prese
   expect(result.ids).toEqual(['pasted-fx']);
   expect(result.timeline.clips).toHaveLength(target.clips.length+1);
   expect(result.timeline.clips.slice(0,target.clips.length)).toEqual(target.clips);
-  expect(transitionSources(result.timeline.clips,30)[0]).toMatchObject({cut:10,clip:{id:'pasted-fx',start:9.6,duration:.8,effectPreset:preset,transition:{fromClipId:'left',toClipId:'right',direction:'counter-clockwise'}}});
+  expect(transitionSources(result.timeline.clips,30)[0]).toMatchObject({cut:10,clip:{id:'pasted-fx',start:9.6,duration:.8,effectPreset:preset,transition:{fromClipId:'left',toClipId:'right',direction:'counter-clockwise',...settings}}});
   expect(copied).toEqual(copyTimelineClips(source,['fx']));
 });
 
