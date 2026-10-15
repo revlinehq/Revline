@@ -1,6 +1,6 @@
 'use client';
 
-import { lazy, Suspense, useId, useState } from 'react';
+import { lazy, Suspense, useEffect, useId, useState } from 'react';
 import { ChevronRight, FolderOpen, Plus, Search } from 'lucide-react';
 import { EffectIcon } from './effect-icon';
 import type { EffectPreset } from '@/lib/editor/clip-effects';
@@ -19,7 +19,9 @@ const TextLookPicker = lazy(() => import('./text-look-picker').then(module => ({
 const DevRemotionTests = process.env.NODE_ENV === 'development' ? lazy(() => import('../dev/remotion-dev-tests').then(module => ({ default: module.RemotionDevTests }))) : null;
 const DevSfxLibrary = process.env.NODE_ENV === 'development' ? lazy(() => import('./sfx-library').then(module => ({ default: module.SfxLibrary }))) : null;
 export type LibraryVisualEffect = keyof VisualEffects;
-type LibraryCategory = EffectLibraryCategory | 'text' | 'sam-dev' | 'remotion-dev' | 'sfx-dev';
+export type LibraryShortcutCategory = EffectLibraryCategory | 'text';
+export type LibraryCategoryRequest = { category: LibraryShortcutCategory; requestId: number };
+type LibraryCategory = LibraryShortcutCategory | 'sam-dev' | 'remotion-dev' | 'sfx-dev';
 
 function LibraryEntry({ entry, disabled, reason, draggable, onApply }: { entry: LibraryEntryData; disabled: boolean; reason?: string; draggable: boolean; onApply: () => void }) {
   return <button type="button" className="library-look" aria-disabled={disabled} draggable={draggable} aria-label={entry.label} title={reason || entry.description} onClick={() => { if (!disabled) onApply(); }} onDragStart={event => {
@@ -29,8 +31,9 @@ function LibraryEntry({ entry, disabled, reason, draggable, onApply }: { entry: 
   }}><EffectIcon name={entry.id} size={18}/><span>{entry.label}</span>{entry.action ? <ChevronRight size={12} aria-hidden="true"/> : <Plus size={12} aria-hidden="true"/>}</button>;
 }
 
-export function EffectLibrary({ clip, timeline, time = 0, assets, onMedia, onVisualEffect, onAddEffect, onAddTransition, onTextLook, onSpeed, onAddSound, onUploadSound, uploading = false }: {
+export function EffectLibrary({ clip, timeline, time = 0, assets, onMedia, onVisualEffect, onAddEffect, onAddTransition, onTextLook, onSpeed, onAddSound, onUploadSound, uploading = false, categoryRequest, onCategoryChange }: {
   clip?: Clip; timeline?: Timeline; time?: number; assets: readonly MediaAsset[];
+  categoryRequest?: LibraryCategoryRequest; onCategoryChange?: (category: LibraryShortcutCategory) => void;
   onMedia?: () => void; onVisualEffect: (effect: LibraryVisualEffect) => void;
   onAddEffect?: (preset: EffectPreset) => void;
   onAddTransition?: (preset: TransitionPreset) => void;
@@ -39,9 +42,10 @@ export function EffectLibrary({ clip, timeline, time = 0, assets, onMedia, onVis
   onFadeThroughBlack?: () => void; onSpeed?: () => void;
   onAddSound?: (asset: MediaAsset) => void; onUploadSound?: () => void; uploading?: boolean;
 }) {
-  const [category, setCategory] = useState<LibraryCategory>('motion');
+  const [category, setCategory] = useState<LibraryCategory>(categoryRequest?.category ?? 'motion');
   const [search, setSearch] = useState('');
   const id = useId();
+  useEffect(() => { if (categoryRequest) { setCategory(categoryRequest.category); setSearch(''); } }, [categoryRequest]);
   const visual = clip?.kind === 'video' || clip?.kind === 'image';
   const text = clip?.kind === 'caption' || clip?.kind === 'graphic';
   const query = search.trim().toLowerCase();
@@ -64,7 +68,7 @@ export function EffectLibrary({ clip, timeline, time = 0, assets, onMedia, onVis
     else if (entry.preset) onAddEffect?.(entry.preset);
     else onSpeed?.();
   }
-  function selectCategory(next: LibraryCategory) { setCategory(next); setSearch(''); }
+  function selectCategory(next: LibraryCategory) { setCategory(next); setSearch(''); if (next === 'text' || EFFECT_LIBRARY_CATEGORIES.some(item => item.id === next)) onCategoryChange?.(next as LibraryShortcutCategory); }
   return <div className="effect-library" aria-label="Effect library">
     {onMedia && <button type="button" className="library-media-access" onClick={onMedia}><FolderOpen size={14}/><span>Your media</span><ChevronRight size={14}/></button>}
     <label className="library-search"><Search size={13}/><input aria-label="Search effects" placeholder="Search tools" value={search} onChange={event => setSearch(event.target.value)}/></label>
