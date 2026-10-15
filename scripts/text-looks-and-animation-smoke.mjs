@@ -39,6 +39,7 @@ try {
   assert.ok(await page.$('[aria-label="Default text"]'),'A plain Default text option must be available');
   assert.equal(await page.evaluate(()=>document.body.textContent.includes('Subtitle styles')),false,'Text is not split into subtitle styles');
   await button('Default text').click();await page.waitForSelector('[aria-label="Selected text"]');
+  assert.deepEqual(await page.$$eval('.text-settings-tabs [role="tab"]',nodes=>nodes.map(node=>node.textContent)),['Text','Animation'],'Text and appearance share one segment; Animation stays separate');
   assert.equal(await page.$('[aria-label="Caption start"]'),null,'Graphic settings do not show caption timing');
   assert.equal(await page.$('[aria-label="Apply style to all captions"]'),null,'Graphic settings do not show caption style propagation');
   assert.equal(await page.evaluate(()=>window.fixture.clip.textTemplate),undefined);
@@ -57,10 +58,33 @@ try {
   await button('Apply Neon echo').click();await flush();
   assert.equal(await page.evaluate(()=>window.fixture.clip.textTemplate.preset),'neon-echo');assert.deepEqual(await page.evaluate(()=>({ids:window.fixture.timeline.clips.map(clip=>clip.id),tracks:window.fixture.timeline.tracks})),entities,'Animations apply to the selected text without creating a clip or track');
   for(const key of Object.keys(custom)) assert.deepEqual(await page.evaluate(key=>window.fixture.clip[key],key),custom[key],'Neon animation preserves '+key);
+  const configuredAnimation={preset:'type-trails',duration:8,offset:2.4,highlightColor:'#12AB67',strength:.7,revealDuration:.65,stagger:.09,wordTimings:[{start:0,end:.3},{start:.3,end:.8},{start:.8,end:1.2}]};
+  await page.evaluate(textTemplate=>window.fixture.setClip({textTemplate}),configuredAnimation);await flush();await page.$eval('.text-settings-view',node=>node.scrollTop=0);await flush();
+  assert.ok(await page.$eval('.text-animation-controls',node=>{const controls=node.getBoundingClientRect(),cards=document.querySelector('.text-animation-cards').getBoundingClientRect();return controls.top<cards.top&&controls.top>document.querySelector('.text-settings-tabs').getBoundingClientRect().bottom;}),'Animation controls are visible above the card grid');
+  assert.equal(await page.$eval('.text-animation-current strong',node=>node.textContent),'Outline trails');
+  for(const label of ['Animation strength','Entrance duration','Text stagger'])assert.ok(await page.$eval(`[aria-label="${label}"]`,node=>{const slider=node.closest('.effect-slider'),handle=slider?.querySelector('.effect-slider-handle');return !!handle&&getComputedStyle(handle).height==='16px';}),'Animation tuning uses the shared slider and handle');
+  assert.equal(await page.$eval('[aria-label="Entrance duration"]',node=>node.parentElement.parentElement.title),'Shorter makes the entrance faster');
+  const beforeTuning=await page.evaluate(()=>window.patches.length);await page.focus('[aria-label="Animation strength"]');await page.keyboard.press('ArrowRight');await flush();
+  assert.equal(await page.evaluate(()=>window.fixture.clip.textTemplate.strength),.8);assert.equal(await page.evaluate(()=>window.patches.length),beforeTuning+1,'Shared animation slider commits one keyboard gesture');
+  assert.ok(await page.evaluate(()=>window.previews.some(patch=>patch?.textTemplate?.strength===.8)),'Animation tuning reaches the live preview');
+  const preservedAnimation=await page.evaluate(()=>({animation:window.fixture.clip.animation,motion:window.fixture.clip.motion,motionOffset:window.fixture.clip.motionOffset,textAnimationTiming:window.fixture.clip.textAnimationTiming,textTemplate:window.fixture.clip.textTemplate}));
+  for(const label of ['Default text','Neon Echo']){
+    await page.click('#text-settings-text-tab');await page.waitForSelector('[aria-label="Text styles"]');
+    assert.ok(await page.$('[aria-label="Selected text"]'),'Text combines content and appearance');
+    assert.ok(await page.$('[aria-label="Text font"]'));assert.ok(await page.$('[aria-label="Text color"]'));assert.ok(await page.$('[aria-label="Custom text size"]'));
+    await button(label).click();await flush();
+    assert.deepEqual(await page.evaluate(()=>({animation:window.fixture.clip.animation,motion:window.fixture.clip.motion,motionOffset:window.fixture.clip.motionOffset,textAnimationTiming:window.fixture.clip.textAnimationTiming,textTemplate:window.fixture.clip.textTemplate})),preservedAnimation,`${label} preserves the entire selected animation and its controls`);
+    assert.equal(await page.$eval(`[aria-label="${label}"]`,node=>node.getAttribute('aria-pressed')),'true','Style selection depends on appearance, independently of animation');
+    await page.click('#text-settings-animation-tab');await page.$eval('.text-settings-view',node=>node.scrollTop=0);await flush();
+    assert.equal(await page.$eval('.text-animation-current strong',node=>node.textContent),'Outline trails');
+  }
+  await button('Apply None').click();await flush();assert.equal(await page.$eval('.text-animation-current strong',node=>node.textContent),'None');assert.equal(await page.$('.text-animation-tuning'),null);assert.equal(await page.$('[aria-label="Text effect color"]'),null,'No animation does not expose unsupported controls');
+  await page.evaluate(patch=>window.fixture.setClip(patch),{...custom,...preservedAnimation});await flush();await page.$eval('.text-settings-view',node=>node.scrollTop=0);await flush();
+  await page.screenshot({path:'/tmp/revline-text-animation-controls-dark.png'});
   assert.equal(await page.$$eval('.text-preset-stage,.text-look-stage',nodes=>nodes.some(node=>getComputedStyle(node).backgroundImage!=='none')),false,'Card stages use solid backgrounds');
   const commits=await page.evaluate(()=>window.patches.length),beforePreview=await page.evaluate(()=>window.fixture.clip.textTemplate);
   await page.evaluate(()=>window.fixture.setClip({textTemplate:{preset:'word-reveal',duration:8,offset:3.6}}));await flush();
-  for(const preference of ['no-preference','reduce']){
+  for(const preference of ['no-preference']){
     await page.emulateMediaFeatures([{name:'prefers-reduced-motion',value:preference}]);
     await page.mouse.move(0,0);await page.focus('#text-settings-animation-tab');
     await page.$eval('.text-settings-view',node=>node.scrollTop=0);await flush();
@@ -78,9 +102,13 @@ try {
     await page.$eval('.text-settings-view',node=>node.scrollTop=0);await flush();
     await page.waitForFunction(()=>Number(document.querySelector('[aria-label="Word reveal"] [data-frame]').dataset.frame)<10);
   }
+  await page.emulateMediaFeatures([{name:'prefers-reduced-motion',value:'reduce'}]);
+  await page.waitForFunction(()=>document.querySelector('[aria-label="Word reveal"] [data-frame]').dataset.frame==='45');
+  await new Promise(resolve=>setTimeout(resolve,180));assert.equal(await page.$eval('[aria-label="Word reveal"] [data-frame]',node=>node.dataset.frame),'45','Reduced Motion holds automatic animation previews still');
   await button('Preview Word reveal').click();
   await page.waitForFunction(()=>Number(document.querySelector('[aria-label="Word reveal"] [data-frame]').dataset.frame)<5);
   assert.equal(await page.evaluate(()=>window.patches.length),commits,'Autoplay and replay never write text');
+  await page.emulateMediaFeatures([{name:'prefers-reduced-motion',value:'no-preference'}]);
   await page.evaluate(textTemplate=>window.fixture.setClip({textTemplate}),beforePreview);await flush();
   await page.click('#text-settings-text-tab');
   assert.equal(await page.$eval('[aria-label="Text font"]',node=>node.tagName),'BUTTON','Font uses the shared menu trigger');
@@ -93,7 +121,7 @@ try {
   await page.keyboard.press('Home');await flush();await page.keyboard.press('ArrowDown');await flush();await page.keyboard.press('Enter');await flush();assert.equal(await page.evaluate(()=>window.fixture.clip.fontFamily),'anton');assert.equal(await page.evaluate(()=>window.patches.length),beforeFont.writes+1);
   for(const key of Object.keys(beforeFont.clip).filter(key=>key!=='fontFamily'))assert.deepEqual(await page.evaluate(key=>window.fixture.clip[key],key),beforeFont.clip[key],'Font choice preserves '+key);
   await page.click('[aria-label="Text font"]');await page.keyboard.press('Escape');await flush();assert.equal(await page.evaluate(()=>window.patches.length),beforeFont.writes+1,'Canceling a menu does not edit');
-  await page.click('#text-settings-style-tab');
+  await page.click('#text-settings-text-tab');
   await page.click('[aria-label="Text blend mode"] [data-blend-mode="multiply"]');await flush();assert.equal(await page.evaluate(()=>window.fixture.clip.blendMode),'multiply');
   assert.equal(await page.$$eval('.text-editing-controls select,.text-style-controls select',nodes=>nodes.length),0,'Text settings do not expose raw native selects');
 
@@ -108,19 +136,20 @@ try {
   assert.ok(await page.$eval('.preview-inspector',node=>node.scrollWidth<=node.clientWidth),'Text controls fit 320px');
   await page.click('#text-settings-text-tab');await page.evaluate(()=>document.documentElement.dataset.workspaceTheme='dark');await page.screenshot({path:'/tmp/revline-text-settings-text-320.png'});
   const beforeTabs=await page.evaluate(()=>({clip:window.fixture.clip,writes:window.patches.length}));
-  await page.focus('#text-settings-text-tab');await page.keyboard.press('ArrowRight');await page.waitForFunction(()=>document.querySelector('#text-settings-style-tab').getAttribute('aria-selected')==='true');await page.keyboard.press('End');await page.waitForFunction(()=>document.querySelector('#text-settings-animation-tab').getAttribute('aria-selected')==='true');
+  await page.focus('#text-settings-text-tab');await page.keyboard.press('ArrowRight');await page.waitForFunction(()=>document.querySelector('#text-settings-animation-tab').getAttribute('aria-selected')==='true');
   assert.deepEqual(await page.evaluate(()=>window.fixture.clip),beforeTabs.clip,'Changing views preserves all selected text state');assert.equal(await page.evaluate(()=>window.patches.length),beforeTabs.writes,'Changing views does not write');
   const tabsTop=await page.$eval('.text-settings-tabs',node=>node.getBoundingClientRect().top);await page.$eval('.text-settings-view',node=>node.scrollTop=node.scrollHeight);await flush();assert.ok(await page.$eval('.text-settings-view',node=>node.scrollTop>0),'Animation settings really scroll');assert.equal(await page.$eval('.text-settings-tabs',node=>node.getBoundingClientRect().top),tabsTop,'Animation settings scroll keeps tabs fixed');assert.equal(await page.$eval('.text-effects-controls',node=>node.scrollHeight<=node.clientHeight),true,'Only the settings viewport scrolls');await page.$eval('.text-settings-view',node=>node.scrollTop=0);await flush();assert.equal(await page.$eval('.text-settings-view',node=>node.scrollTop),0);await page.screenshot({path:'/tmp/revline-text-settings-animation-320.png'});
   await page.click('#text-settings-text-tab');
   await page.focus('[aria-label="Selected text"]');await page.keyboard.press('Home');await page.keyboard.down('Control');await page.keyboard.press('KeyA');await page.keyboard.up('Control');await page.keyboard.type('Changed in Text view');await flush();assert.equal(await page.evaluate(()=>window.fixture.clip.text),'Changed in Text view');
-  await page.focus('[aria-label="Custom text size"]');await page.keyboard.down('Control');await page.keyboard.press('KeyA');await page.keyboard.up('Control');await page.keyboard.type('101');await page.click('#text-settings-style-tab');await flush();assert.equal(await page.evaluate(()=>window.fixture.clip.fontSize),101,'Switching views commits a pending numeric input');
+  assert.ok(await page.$('[aria-label="Text font"]'),'Text includes appearance fields');
+  await page.click('#text-settings-text-tab');await page.focus('[aria-label="Custom text size"]');await page.keyboard.down('Control');await page.keyboard.press('KeyA');await page.keyboard.up('Control');await page.keyboard.type('101');await page.click('#text-settings-animation-tab');await flush();assert.equal(await page.evaluate(()=>window.fixture.clip.fontSize),101,'Switching views commits a pending numeric input');
   await page.click('#text-settings-text-tab');await button('Position text left').click();await flush();assert.equal(await page.evaluate(()=>window.fixture.clip.x),.25);await page.click('.text-transform-controls summary');await page.focus('[aria-label="Text rotation"]');await page.keyboard.down('Control');await page.keyboard.press('KeyA');await page.keyboard.up('Control');await page.keyboard.type('24');await page.keyboard.press('Enter');await flush();assert.equal(await page.evaluate(()=>window.fixture.clip.transform.rotation),24);
-  await page.evaluate(()=>window.fixture.addCaptions());await flush();await page.waitForSelector('[aria-label="Caption start"]');assert.ok(await page.$eval('.text-settings-heading p',node=>node.textContent.startsWith('Caption')));
+  await page.evaluate(()=>window.fixture.addCaptions());await flush();await page.click('#text-settings-text-tab');await page.waitForSelector('[aria-label="Caption start"]');assert.ok(await page.$eval('.text-settings-heading p',node=>node.textContent.startsWith('Caption')));
   const captionBefore=await page.evaluate(()=>window.fixture.clip);await page.focus('[aria-label="Caption start"]');await page.keyboard.down('Control');await page.keyboard.press('KeyA');await page.keyboard.up('Control');await page.keyboard.type('1.5');await page.keyboard.press('Enter');await flush();assert.equal(await page.evaluate(()=>window.fixture.clip.start),1.5);assert.equal(await page.evaluate(()=>window.fixture.clip.start+window.fixture.clip.duration),captionBefore.start+captionBefore.duration,'Start edit preserves absolute end');
   await page.focus('[aria-label="Caption end"]');await page.keyboard.down('Control');await page.keyboard.press('KeyA');await page.keyboard.up('Control');await page.keyboard.type('1');await page.keyboard.press('Enter');await flush();assert.ok(await page.$('[role="alert"]'),'Invalid caption timing reports the existing guard');assert.ok(await page.evaluate(()=>window.fixture.clip.duration>0));
   await page.focus('[aria-label="Caption end"]');await page.keyboard.down('Control');await page.keyboard.press('KeyA');await page.keyboard.up('Control');await page.keyboard.type('3');await page.keyboard.press('Enter');await flush();assert.equal(await page.evaluate(()=>window.fixture.clip.start+window.fixture.clip.duration),3);
-  await page.evaluate(()=>window.fixture.setClip({color:'#12ab67',fontSize:101}));await flush();const targetBefore=await page.evaluate(()=>window.fixture.timeline.clips.find(clip=>clip.id==='caption-two'));await button('Apply style to all captions').click();await flush();const targetAfter=await page.evaluate(()=>window.fixture.timeline.clips.find(clip=>clip.id==='caption-two'));assert.equal(targetAfter.color,'#12ab67');assert.equal(targetAfter.fontSize,101);for(const key of ['text','start','duration','animation'])assert.deepEqual(targetAfter[key],targetBefore[key],'Applying caption style preserves '+key);await page.screenshot({path:'/tmp/revline-text-settings-caption-320.png'});
+  await page.evaluate(()=>window.fixture.setClip({color:'#12ab67',fontSize:101}));await flush();const targetBefore=await page.evaluate(()=>window.fixture.timeline.clips.find(clip=>clip.id==='caption-two'));await page.click('#text-settings-text-tab');assert.equal(await page.$$eval('[aria-label="Apply style to all captions"]',nodes=>nodes.length),1,'Caption style propagation appears once');await button('Apply style to all captions').click();await flush();const targetAfter=await page.evaluate(()=>window.fixture.timeline.clips.find(clip=>clip.id==='caption-two'));assert.equal(targetAfter.color,'#12ab67');assert.equal(targetAfter.fontSize,101);for(const key of ['text','start','duration','animation'])assert.deepEqual(targetAfter[key],targetBefore[key],'Applying caption style preserves '+key);await page.screenshot({path:'/tmp/revline-text-settings-caption-320.png'});
   await page.click('#inspector-tools-tab');await page.click('[data-category="text"]');await page.waitForSelector('[aria-label="Default text"]');assert.equal(await page.$('[aria-label="Text animations"]'),null,'Library stays looks-only with selected text');
   assert.deepEqual(errors,[]);
-  console.log('PASS: Three text settings views, fixed tabs and bounded animation scrolling, words/font/size/position/rotation edits, independent animations preserve appearance and clip entities, real pixel autoplay without input under both motion preferences, split clip preview clock, offscreen pause and visible restart, caption timing guards and style propagation, six visible blend modes, editable stroke/shadow/glow, and 320px fit.');
+  console.log('PASS: Combined Text content/timing/appearance and separate Animation controls; Default/Neon styles preserve animation, shared tuning sliders preview/commit, fixed tabs and bounded scrolling, real pixel autoplay with Reduced Motion hold and explicit replay, font/size/position/rotation edits, caption timing/style propagation, and 320px fit.');
 } finally {await browser.close();await fonts.close();}
