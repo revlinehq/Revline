@@ -147,7 +147,7 @@ void main(){
     entry.source.removeAttribute('data-revline-effects');
     entry.injected?.removeAttribute('data-revline-effects');
     entry.canvas?.remove();
-    if (preview && !disposed && entry.canvas && entry.gl) {
+    if (preview && !disposed && !entry.failed && entry.canvas && entry.gl && !entry.gl.isContextLost()) {
       const { canvas, gl, program, texture, buffer, uniforms, passTextures, framebuffer, passWidth, passHeight } = entry;
       available.push({ canvas, gl, program, texture, buffer, uniforms, passTextures, framebuffer, passWidth, passHeight });
       if (available.length > 1) destroy(available.shift()!);
@@ -175,7 +175,8 @@ void main(){
     if(canvas.width!==width||canvas.height!==height){canvas.width=width;canvas.height=height;entry.lastSource=undefined;}
   }
   function initialize(entry: Entry, width: number, height: number, passes:number) {
-    const reusable = preview ? available.pop() : undefined;
+    let reusable = preview ? available.pop() : undefined;
+    while(reusable?.gl?.isContextLost()){destroy(reusable);reusable=available.pop();}
     const canvas = reusable?.canvas ?? document.createElement('canvas');
     canvas.className = 'visual-effect-output'; canvas.dataset.effectSource = entry.source.id;
     // Match the composition's pixel density while avoiding oversized source canvases.
@@ -218,16 +219,22 @@ void main(){
     entry.framebuffer??=gl.createFramebuffer()!;
     entry.passTextures??=[gl.createTexture()!,gl.createTexture()!];
     if(entry.passWidth===canvas.width&&entry.passHeight===canvas.height)return;
+    gl.bindFramebuffer(gl.FRAMEBUFFER,entry.framebuffer);
     for(const texture of entry.passTextures){
       gl.bindTexture(gl.TEXTURE_2D,texture);
       gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
       gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
       gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,canvas.width,canvas.height,0,gl.RGBA,gl.UNSIGNED_BYTE,null);
+      gl.framebufferTexture2D(gl.FRAMEBUFFER,gl.COLOR_ATTACHMENT0,gl.TEXTURE_2D,texture,0);
+      if(gl.checkFramebufferStatus(gl.FRAMEBUFFER)!==gl.FRAMEBUFFER_COMPLETE)throw new Error('Visual effect intermediate target is unavailable.');
     }
     entry.passWidth=canvas.width;entry.passHeight=canvas.height;
   }
   function draw(entry: Entry, force = false) {
     if (disposed || entry.failed) return;
+    if(entry.gl?.isContextLost()){
+      entry.failed=true;release(entry);report(new Error('WebGL context was lost. Reload the preview to restore these effects.'));return;
+    }
     const time = clock.time(), start = Number(entry.source.dataset.start), end = start + Number(entry.source.dataset.duration);
     const passes=effectPasses(entry.effects,time);
     if (!passes.length || !entry.source.hasAttribute('data-revline-transition-visible') && (time < start - 1e-6 || time >= end - 1e-6)) { if (entry.canvas) release(entry); return; }
@@ -289,7 +296,6 @@ void main(){
         else{
           gl.bindFramebuffer(gl.FRAMEBUFFER,entry.framebuffer!);
           gl.framebufferTexture2D(gl.FRAMEBUFFER,gl.COLOR_ATTACHMENT0,gl.TEXTURE_2D,entry.passTextures![index%2],0);
-          if(gl.checkFramebufferStatus(gl.FRAMEBUFFER)!==gl.FRAMEBUFFER_COMPLETE)throw new Error('Visual effect intermediate target is unavailable.');
         }
         gl.uniform4f(u.perspective,p?.horizontal??0,p?.vertical??0,p?.skew??0,p?.enabled?1:0);
         gl.uniform1f(u.perspectiveFit,p?.enabled?frameDistortionFit(p):1);
@@ -332,7 +338,7 @@ void main(){
       entry.source.setAttribute('data-revline-effects', '');
       if (injected) { entry.injected = injected; injected.setAttribute('data-revline-effects', ''); }
       entry.lastFrame = frame; entry.lastSource = sourceKey; entry.lastTransform = transformKey; entry.lastPassKey=passKey; entry.lastPassCount=passes.length; entry.dirty = false;
-    } catch (error) { release(entry); entry.failed = true; report(error); }
+    } catch (error) { entry.failed = true; release(entry); report(error); }
   }
   function redraw(force = false) {
     // Retire the outgoing clip first even when live splits appended it after
