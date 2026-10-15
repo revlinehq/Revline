@@ -6,7 +6,7 @@ import schema from './schema';
 import { api, internal } from './_generated/api';
 import { addEffectClip, addMediaClip, patchClip } from '../lib/editor/operations';
 import { EMPTY_TIMELINE, type Clip } from '../lib/editor/types';
-import { DEFAULT_COLOR_GRADE, DEFAULT_DITHER, DEFAULT_INVERT, DEFAULT_GLITCH, DEFAULT_ZOOM_BLUR } from '../lib/editor/visual-effects';
+import { DEFAULT_COLOR_GRADE, DEFAULT_DITHER, DEFAULT_INVERT, DEFAULT_GLITCH, DEFAULT_ZOOM_BLUR, DEFAULT_LENS_DISTORTION, DEFAULT_FILM_OVERLAY, DEFAULT_SOFT_BLUR } from '../lib/editor/visual-effects';
 import { subtitleStylePatch } from '../lib/editor/subtitle-styles';
 import { visualEffectsPatch } from '../lib/editor/visual-effects';
 import { splitClip } from '../lib/editor/operations';
@@ -15,7 +15,7 @@ import { deleteEmptyLayer, removeEmptyLayers } from '../lib/editor/timeline-cont
 const modules = import.meta.glob('./**/*.ts');
 beforeEach(() => vi.stubEnv('BILLING_ENABLED', 'false'));
 afterEach(() => vi.unstubAllEnvs());
-const effects = { dither: { ...DEFAULT_DITHER, enabled: true, amount: .7, levels: 3, size: 4, shadowColor: '#101080', highlightColor: '#FFFF00' }, invert: { ...DEFAULT_INVERT, enabled: true }, colorGrade: { ...DEFAULT_COLOR_GRADE, enabled: true, exposure: .5, temperature: -30 }, zoomBlur: { ...DEFAULT_ZOOM_BLUR, enabled: true, centerY: .3 }, glitch: { ...DEFAULT_GLITCH, enabled: true, intensity: .8 } };
+const effects = { softBlur:{...DEFAULT_SOFT_BLUR,enabled:true,amount:8}, lensDistortion:{...DEFAULT_LENS_DISTORTION,enabled:true},filmOverlay:{...DEFAULT_FILM_OVERLAY,enabled:true}, dither: { ...DEFAULT_DITHER, enabled: true, amount: .7, levels: 3, size: 4, shadowColor: '#101080', highlightColor: '#FFFF00' }, invert: { ...DEFAULT_INVERT, enabled: true }, colorGrade: { ...DEFAULT_COLOR_GRADE, enabled: true, exposure: .5, temperature: -30 }, zoomBlur: { ...DEFAULT_ZOOM_BLUR, enabled: true, centerY: .3 }, glitch: { ...DEFAULT_GLITCH, enabled: true, intensity: .8 } };
 async function fixture(kind: 'video' | 'image' = 'video') {
   const t = convexTest(schema, modules), owner = t.withIdentity({ subject: 'owner' });
   const projectId = await owner.mutation(api.projects.create, { title: 'Visual controls', aspectRatio: 'vertical' });
@@ -36,7 +36,7 @@ test.each(['video', 'image'] as const)('all visual controls round-trip on %s thr
 });
 test('invalid controls and wrong clip kinds cannot be saved', async () => {
   const f = await fixture();
-  for (const patch of [{ dither: {...effects.dither, levels:17} }, { dither: {...effects.dither, size:0} }, { dither: {...effects.dither, amount:1.1} }, { invert: { enabled: true, amount: -1 } }, { colorGrade: { ...effects.colorGrade, exposure: 3 } }, { zoomBlur: { ...effects.zoomBlur, amount: -1 } }, { glitch: { ...effects.glitch, rgbSplit: 51 } }]) {
+  for (const patch of [{lensDistortion:{...effects.lensDistortion,amount:1}},{filmOverlay:{...effects.filmOverlay,grain:-1}},{ dither: {...effects.dither, levels:17} }, { dither: {...effects.dither, size:0} }, { dither: {...effects.dither, amount:1.1} }, { invert: { enabled: true, amount: -1 } }, { colorGrade: { ...effects.colorGrade, exposure: 3 } }, { zoomBlur: { ...effects.zoomBlur, amount: -1 } }, { glitch: { ...effects.glitch, rgbSplit: 51 } }]) {
     await expect(f.owner.mutation(api.projects.saveTimeline, { projectId: f.projectId, timeline: patchClip(f.timeline, 'visual', patch), expectedRevision: 0 })).rejects.toThrow('must be between');
   }
   for (const dither of [{...effects.dither,levels:2.5},{...effects.dither,size:1.5}]) {

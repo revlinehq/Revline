@@ -5,6 +5,7 @@ import type { Clip, MediaAsset } from '@/lib/editor/types';
 import { NumberControl } from './visual-controls';
 import { PlaybackSpeedControls } from './visual-effects-controls';
 import { EffectSlider } from './effect-slider';
+import { VISUAL_EFFECT_LIMITS } from '@/lib/editor/visual-effects';
 import { DEFAULT_TRANSFORM } from '@/lib/editor/types';
 import { BlendModeControls } from './blend-mode-controls';
 import { VisualFadeControls } from './visual-fade-controls';
@@ -45,6 +46,7 @@ export function FootageSettings({ clip, audioClip, asset, fps = 30, onChange, on
     <section className="footage-compositing footage-settings-section" aria-label="Compositing">
       <div className="footage-section-heading"><h3>Compositing</h3></div>
       <EffectSlider label="Opacity" value={clip.transform?.opacity??1} bounds={[0,1]} step={.01} format={value=>`${Math.round(value*100)}%`} disabled={false} onPreview={value=>onPreview?.(value===null?null:{transform:{...DEFAULT_TRANSFORM,...clip.transform,opacity:value}})} onCommit={opacity=>onChange({transform:{...DEFAULT_TRANSFORM,...clip.transform,opacity}})}/>
+      <EffectSlider label="Blur" value={clip.softBlur?.enabled?clip.softBlur.amount:0} bounds={VISUAL_EFFECT_LIMITS.softBlur.amount} step={.5} format={value=>`${Number(value.toFixed(1))} px`} disabled={false} onPreview={value=>onPreview?.(value===null?null:{softBlur:{enabled:value>0,amount:value}})} onCommit={amount=>onChange({softBlur:{enabled:amount>0,amount}})}/>
       <BlendModeControls value={blendMode} onChange={blendMode => onChange({ blendMode })}/>
     </section>
   </div>;

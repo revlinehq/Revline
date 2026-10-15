@@ -1,10 +1,10 @@
 import { expect, test } from 'vitest';
-import { DEFAULT_COLOR_GRADE, DEFAULT_DITHER, DEFAULT_INVERT, DEFAULT_GLITCH, DEFAULT_ZOOM_BLUR, validateVisualEffects, visualEffectsPatch, type VisualEffects } from './visual-effects';
+import { DEFAULT_COLOR_GRADE, DEFAULT_DITHER, DEFAULT_INVERT, DEFAULT_GLITCH, DEFAULT_ZOOM_BLUR, DEFAULT_LENS_DISTORTION, DEFAULT_FILM_OVERLAY, DEFAULT_SOFT_BLUR, validateVisualEffects, visualEffectsPatch, type VisualEffects } from './visual-effects';
 import { addMediaClip, duplicateClip, patchClip, splitClip } from './operations';
 import { copyTimelineClips, pasteTimelineClips } from './clipboard';
 import { EMPTY_TIMELINE } from './types';
 
-const effects: VisualEffects = { dither: { ...DEFAULT_DITHER, enabled: true }, invert: { ...DEFAULT_INVERT, enabled: true }, colorGrade: { ...DEFAULT_COLOR_GRADE, enabled: true, exposure: .5 }, zoomBlur: { ...DEFAULT_ZOOM_BLUR, enabled: true }, glitch: { ...DEFAULT_GLITCH, enabled: true } };
+const effects: VisualEffects = { softBlur:{...DEFAULT_SOFT_BLUR,enabled:true,amount:8}, lensDistortion:{...DEFAULT_LENS_DISTORTION,enabled:true},filmOverlay:{...DEFAULT_FILM_OVERLAY,enabled:true}, dither: { ...DEFAULT_DITHER, enabled: true }, invert: { ...DEFAULT_INVERT, enabled: true }, colorGrade: { ...DEFAULT_COLOR_GRADE, enabled: true, exposure: .5 }, zoomBlur: { ...DEFAULT_ZOOM_BLUR, enabled: true }, glitch: { ...DEFAULT_GLITCH, enabled: true } };
 test('defaults are bypassed and requested controls merge without resetting existing controls', () => {
   expect(DEFAULT_COLOR_GRADE.enabled || DEFAULT_ZOOM_BLUR.enabled || DEFAULT_GLITCH.enabled || DEFAULT_DITHER.enabled).toBe(false);
   expect(visualEffectsPatch({ kind: 'video', ...effects }, { colorGrade: { contrast: 1.3 } })).toEqual({ colorGrade: { ...effects.colorGrade, contrast: 1.3 } });
@@ -33,3 +33,9 @@ test('split, duplicate and clipboard preserve grading and effects without copyin
     expect(clip.colorGrade).toBeUndefined(); expect(clip.zoomBlur).toBeUndefined(); expect(clip.glitch).toBeUndefined(); expect(clip.invert).toBeUndefined(); expect(clip.dither).toBeUndefined();
   }
 });
+
+test('lens and film validate all controls and retain unrelated effects during reset/removal',()=>{
+  expect(()=>validateVisualEffects({kind:'image',...effects})).not.toThrow();
+  for(const patch of [{lensDistortion:{...DEFAULT_LENS_DISTORTION,amount:.81}},{lensDistortion:{...DEFAULT_LENS_DISTORTION,centerY:-.1}},{filmOverlay:{...DEFAULT_FILM_OVERLAY,grain:Infinity}},{filmOverlay:{...DEFAULT_FILM_OVERLAY,scratches:1.1}}])expect(()=>validateVisualEffects({kind:'video',...patch})).toThrow('must be between');
+  expect(visualEffectsPatch({kind:'video',...effects},{lensDistortion:{fringing:0}})).toEqual({lensDistortion:{...effects.lensDistortion,fringing:0}});
+ });

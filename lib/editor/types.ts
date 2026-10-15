@@ -1,5 +1,5 @@
 import type { BlendMode, CinematicBarSettings, EffectPreset, SolidColorSettings, MotionKeyframe, FrameShrinkSettings, ZoomSettings } from './clip-effects';
-import type { ColorGrade, ZoomBlur, Glitch, InvertColors, Dither, NeonEdges } from './visual-effects';
+import type { ColorGrade, ZoomBlur, Glitch, InvertColors, Dither, NeonEdges, LensDistortion, FilmOverlay, SoftBlur } from './visual-effects';
 import type { RemotionTextTemplate } from './remotion-text';
 import type { ClipTransition } from './clip-transitions';
 import type { AudioSettings } from './audio-settings';
@@ -58,6 +58,9 @@ export type Clip = {
   invert?: InvertColors;
   dither?: Dither;
   neonEdges?: NeonEdges;
+  lensDistortion?: LensDistortion;
+  filmOverlay?: FilmOverlay;
+  softBlur?: SoftBlur;
   textTemplate?: RemotionTextTemplate;
   textStyle?: TextAppearance;
   fontFamily?: TextFontId;

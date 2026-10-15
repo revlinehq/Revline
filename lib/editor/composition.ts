@@ -5,7 +5,7 @@ import { isTransitionClip, transitionSources } from './clip-transitions';
 import { validateVisualFade } from './visual-fades';
 import { audioFadeAttributes, audioVolumeEnvelope, validateAudioTimeline } from './audio-settings';
 import { MAX_CLIP_VOLUME } from './clip-volume';
-import { validateVisualEffects } from './visual-effects';
+import { validateVisualEffects, visualEffectsOf } from './visual-effects';
 import { visualEffectsRuntimeScript } from './visual-effects-runtime';
 import { textLayerSources } from './text-layers';
 import { textStyle, textAppearance } from './text-style';
@@ -220,7 +220,7 @@ const timeline=gsap.timeline({paused:true});
 ${animation.join('\n')}
 window.__revlineDurationTween=gsap.to({},{duration:${safeDuration},paused:true});timeline.add(window.__revlineDurationTween,0);window.__revlineDurationTween.paused(false);
 window.__timelines=window.__timelines||{};window.__timelines.revline=timeline;
-${visualEffectsRuntimeScript(timeline.clips.flatMap((clip, index) => clip.kind === 'video' || clip.kind === 'image' ? [{ id: `clip-${index}`, colorGrade: clip.colorGrade, zoomBlur: clip.zoomBlur, glitch: clip.glitch, invert: clip.invert, dither: clip.dither, neonEdges: clip.neonEdges }] : []), fps, resolution)}
+${visualEffectsRuntimeScript(timeline.clips.flatMap((clip, index) => clip.kind === 'video' || clip.kind === 'image' ? [{ id: `clip-${index}`, ...visualEffectsOf(clip) }] : []), fps, resolution)}
 window.__revlineVisualEffects.installAdjustmentLayers(${JSON.stringify(adjustmentSources(timeline.clips)).replace(/</g, '\\u003c')});
 if(window.__revlineVisualEffects.installVisualFades)window.__revlineVisualEffects.installVisualFades(${JSON.stringify(timeline.clips.filter(clip=>clip.kind==='video'||clip.kind==='image').map(({id,kind,start,duration,visualFade,visualFadeTiming})=>({id,kind,start,duration,sourceStart:0,visualFade,visualFadeTiming}))).replace(/</g, '\\u003c')},${timeline.fps});${timeline.clips.some(clip=>(clip.visualFade?.fadeIn??0)>0||(clip.visualFade?.fadeOut??0)>0)?"else throw new Error('Visual fade renderer failed to load.');":''}
 if(window.__revlineRemotionText)window.__revlineTextLayerController=window.__revlineRemotionText.installTextLayers(${textSources});${hasText?"else throw new Error('Text renderer failed to load.');":''}

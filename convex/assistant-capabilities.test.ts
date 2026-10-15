@@ -192,7 +192,7 @@ test('every implemented effect, text animation/look and transition has a concret
     expect(entry.description.trim().length).toBeGreaterThan(20);expect(entry.description).not.toBe('Add at the playhead');
   }
   expect(catalog.text.animations).toHaveLength(TEXT_ANIMATION_PRESETS.length);expect(catalog.text.looks).toHaveLength(6);expect(catalog.transitions.items).toHaveLength(3);
-  expect(catalog.text.animations.find(item=>item.preset==='karaoke')?.description).toContain('not detected');
+  expect(catalog.text.animations.find(item=>item.preset==='karaoke')?.description).toContain('Supplied speech timings');
   expect(catalog.visual.canvasReference.landscape).toEqual({width:1920,height:1080});expect(catalog.visual.canvasReference.vertical).toEqual({width:1080,height:1920});
 });
 
@@ -330,6 +330,22 @@ test('retired frame shrink is unavailable to the agent; clip visual fades preser
   expect(editorCapabilities().timedFX.some(item=>String(item.preset)==='frame-shrink')).toBe(false);
   expect(editorCapabilities().effects.flatMap(group=>group.items).some(item=>item.name==='Frame shrink')).toBe(false);
   expect(editorCapabilities().visual.fades.description).toContain('independently');
+  expect(result.calls).not.toContain('assistant:requestAnalysis');await assertUndo(result);
+});
+
+test('lens, film and whole-clip blur agent controls save and retain source/audio',async()=>{
+  const result=await run(async tools=>{
+    expect(()=>tools.setVisualEffects.inputSchema.parse({clipId:'from',lensDistortion:{amount:1}})).toThrow();
+    expect(()=>tools.setVisualEffects.inputSchema.parse({clipId:'from',filmOverlay:{grain:-1}})).toThrow();
+    await execute(tools,'setVisualEffects',{clipId:'from',lensDistortion:{enabled:true,amount:.2},filmOverlay:{enabled:true,grain:.4},softBlur:{enabled:true,amount:12}});
+    const current=await execute(tools,'inspectTimeline',{}) as{timeline:Timeline};
+    expect(current.timeline.clips[0]).toMatchObject({lensDistortion:{enabled:true,amount:.2,centerX:.5,centerY:.5},filmOverlay:{enabled:true,grain:.4},softBlur:{enabled:true,amount:12}});
+    await execute(tools,'setVisualEffects',{clipId:'from',lensDistortion:{enabled:false}});
+    await execute(tools,'resetVisualEffect',{clipId:'from',effect:'filmOverlay',action:'remove'});
+    await expect(execute(tools,'setVisualEffects',{clipId:'audio',softBlur:{enabled:true,amount:5}})).rejects.toThrow('video or image');
+  },initial,true);
+  expect(result.timeline.clips[0]).toMatchObject({...result.backend!.seed.clips[0],lensDistortion:{enabled:false,amount:.2},softBlur:{enabled:true,amount:12}});
+  expect(result.timeline.clips.slice(1)).toEqual(result.backend!.seed.clips.slice(1));
   expect(result.calls).not.toContain('assistant:requestAnalysis');await assertUndo(result);
 });
 
