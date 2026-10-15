@@ -22,6 +22,8 @@ export type EffectPreset = typeof EFFECT_PRESETS[number];
 export type SolidColorSettings = { color: string; width: number; height: number; x: number; y: number; opacity: number };
 export const DEFAULT_SOLID_COLOR: SolidColorSettings = { color: '#2563eb', width: 1, height: 1, x: .5, y: .5, opacity: 1 };
 export const SOLID_COLOR_LIMITS = { width: [.01, 2], height: [.01, 2], x: [0, 1], y: [0, 1], opacity: [0, 1] } as const;
+/** Saved FX rectangles retain their original compositing until explicitly moved to V. */
+export function isSolidColorClip(clip: Pick<Clip, 'kind' | 'effectPreset'>) { return clip.kind === 'solid' || clip.kind === 'effect' && clip.effectPreset === 'solid-color'; }
 export function solidColorSettings(clip: Pick<Clip, 'solidColor'>): SolidColorSettings { return clip.solidColor ?? DEFAULT_SOLID_COLOR; }
 export function solidColorPatch(clip:Clip,changes:Partial<SolidColorSettings>):Pick<Clip,'solidColor'>{
   const solidColor={...solidColorSettings(clip),...changes};
@@ -103,7 +105,7 @@ export function validateClipEffects(clip: Clip) {
     }
   }
   if (clip.solidColor !== undefined) {
-    if (clip.kind !== 'effect' || clip.effectPreset !== 'solid-color') throw new Error('Solid color settings belong to solid color effect clips.');
+    if (!isSolidColorClip(clip)) throw new Error('Solid color settings belong to solid color clips.');
     if (!/^#[\da-f]{6}$/i.test(clip.solidColor.color)) throw new Error('Choose a valid solid color.');
     for (const property of Object.keys(SOLID_COLOR_LIMITS) as (keyof typeof SOLID_COLOR_LIMITS)[]) {
       const [min, max] = SOLID_COLOR_LIMITS[property], value = clip.solidColor[property];
@@ -125,6 +127,10 @@ export function validateClipEffects(clip: Clip) {
     }
   }
   if (clip.effectPreset !== undefined && (clip.kind !== 'effect' || (clip.effectPreset !== 'none' && !EFFECT_PRESETS.includes(clip.effectPreset)))) throw new Error('Effect presets belong to effect clips.');
+  if (clip.kind === 'solid') {
+    if (clip.assetId !== undefined || clip.linkedClipId !== undefined || clip.audioSeparated !== undefined || clip.volume !== undefined || clip.sourceStart !== 0) throw new Error('Solid color clips cannot reference media or audio.');
+    if (clip.transform !== undefined || clip.crop !== undefined || clip.fit !== undefined || clip.focus !== undefined || clip.text !== undefined || clip.animation !== undefined) throw new Error('Use solid color position and size controls for color layers.');
+  }
   if (clip.kind === 'effect') {
     if (clip.assetId !== undefined || clip.linkedClipId !== undefined || clip.audioSeparated !== undefined || clip.volume !== undefined || clip.sourceStart !== 0) throw new Error('Effect clips cannot reference media or audio.');
     if (clip.blendMode !== undefined || clip.transform !== undefined || clip.crop !== undefined || clip.fit !== undefined || clip.focus !== undefined || clip.text !== undefined || clip.animation !== undefined) throw new Error('Use motion keyframes to animate an effect clip.');

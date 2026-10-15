@@ -10,7 +10,7 @@ import { isTransitionPreset } from './clip-transitions';
 
 const timeline: Timeline = { fps: 30, aspectRatio: 'landscape', tracks: { visual: 1, overlay: 0, audio: 0 }, clips: [{ id: 'footage', kind: 'graphic', text: 'Footage placeholder', start: 0, duration: 20, sourceStart: 0, track: 1 }] };
 
-test.each(EFFECT_PRESETS.filter(preset=>!isTransitionPreset(preset)))('%s is an independent effect at the playhead on an FX track', preset => {
+test.each(EFFECT_PRESETS.filter(preset=>!isTransitionPreset(preset)&&preset!=='solid-color'))('%s is an independent effect at the playhead on an FX track', preset => {
   const next = addEffectClip(timeline, 'effect', preset, 10, { aboveClipId: 'footage' });
   expect(next.clips[0]).toEqual(timeline.clips[0]);
   expect(next.clips[1]).toMatchObject({ kind: 'effect', start: 10, track: 1, effectPreset: preset, sourceStart: 0 });

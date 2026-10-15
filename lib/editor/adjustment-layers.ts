@@ -83,7 +83,7 @@ export function installAdjustmentLayers(initial: AdjustmentSource[]): Adjustment
     const nextHierarchy=ordered.map(entry=>entry.clip.id).join('|');
     if(nextHierarchy!==hierarchy){
       hierarchy=nextHierarchy;
-      const base=Array.from(composition.querySelectorAll<HTMLElement>('.visual-frame,.overlay,.transition-pair')).filter(node=>!node.closest('.transition-pair')||node.classList.contains('transition-pair'));
+      const base=Array.from(composition.querySelectorAll<HTMLElement>('.visual-frame,.overlay,.solid-color-layer,.transition-pair')).filter(node=>!node.closest('.transition-pair')||node.classList.contains('transition-pair'));
       const inner=ordered[0]?.node??composition;
       for(const node of base)if(node.parentElement!==inner){const retained=inner as HTMLElement&{moveBefore?(node:Node,before:Node|null):void};if(retained.moveBefore&&node.isConnected)retained.moveBefore(node,inner.firstChild);else inner.insertBefore(node,inner.firstChild);}
       for(let index=0;index<ordered.length;index++){const parent=ordered[index+1]?.node??composition;if(ordered[index].node.parentElement!==parent)parent.insertBefore(ordered[index].node,parent.firstChild);}

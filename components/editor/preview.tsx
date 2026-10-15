@@ -125,7 +125,7 @@ export const Preview = forwardRef<PreviewHandle,{timeline:Timeline;assets:MediaA
   },clipEffects:(id,patch)=>{
     const entry=clipIndex.current.get(id),doc=player.current?.iframeElement?.contentDocument;
     if(entry&&doc)try{
-      if(entry.clip.kind==='effect')previewAdjustmentEffect(doc,entry.clip,compositionIndex(doc,entry.clip,entry.index),patch);
+      if(entry.clip.kind==='effect'||entry.clip.kind==='solid')previewAdjustmentEffect(doc,entry.clip,compositionIndex(doc,entry.clip,entry.index),patch);
       else if(entry.clip.kind==='caption'||entry.clip.kind==='graphic'){
         const before=latestTimeline.current;
         updateLiveTextEffects(doc,before,{...before,clips:before.clips.map(clip=>clip.id===id?{...clip,...patch}:clip)});
@@ -162,7 +162,7 @@ export const Preview = forwardRef<PreviewHandle,{timeline:Timeline;assets:MediaA
       p=document.createElement('hyperframes-player') as HyperframesPlayer;
       p.muted=true;p.style.cssText='position:absolute;inset:0;width:100%;height:100%;z-index:0';p.setAttribute('assets-loading-ui','none');p.setAttribute('runtime-src',`${window.location.origin}/vendor/hyperframe.runtime.iife.js`);p.setAttribute('disable-click-to-play','');p.removeAttribute('controls');
       const recoveredUrls=Object.fromEntries(assets.flatMap(asset=>{const refreshed=refreshedSources.current.get(asset._id);return refreshed&&refreshed.original===asset.url?[[asset._id,refreshed.url]]:[];}));
-      p.setAttribute('srcdoc',generateComposition(timeline,assets,{preview:true,assetUrls:recoveredUrls,gsapUrl:`${window.location.origin}/vendor/gsap.min.js`,visualEffectsUrl:`${window.location.origin}/vendor/visual-effects.js?v=event-driven-9`,remotionRuntimeUrl:`${window.location.origin}/vendor/remotion-runtime.js?v=shared-scenes-1`}));
+      p.setAttribute('srcdoc',generateComposition(timeline,assets,{preview:true,assetUrls:recoveredUrls,gsapUrl:`${window.location.origin}/vendor/gsap.min.js`,visualEffectsUrl:`${window.location.origin}/vendor/visual-effects.js?v=solid-layers-10`,remotionRuntimeUrl:`${window.location.origin}/vendor/remotion-runtime.js?v=shared-scenes-1`}));
       const swap=()=>{
         if(cancelled||!p||swapped||!loaded||waitingForMedia)return;
         waitingForMedia=true;

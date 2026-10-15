@@ -1,6 +1,7 @@
 import { dimensions, normalizeTimeline, type Clip, type Timeline, type MediaAsset, type VisualTransform } from './types';
 import { calculateVisualRect, layerZIndex } from './composition';
 import { visualBounds, visualCornerPosition, visualTransform, type VisualCorner, type VisualRect } from './visual-transforms';
+import { motionAt, NEUTRAL_MOTION, solidColorSettings, visibleMotion } from './clip-effects';
 
 type Point = { x: number; y: number };
 type Size = { width: number; height: number };
@@ -60,6 +61,10 @@ export function previewMediaOpacities(document: Document) {
     }
     result.set(frame.dataset.visualClip!, opacity);
   }
+  for(const frame of document.querySelectorAll<HTMLElement>('[data-solid-color-clip]')){
+    const rectangle=frame.firstElementChild;
+    result.set(frame.dataset.solidColorClip!,view.getComputedStyle(frame).visibility==='hidden'?0:Number(rectangle?view.getComputedStyle(rectangle).opacity:1));
+  }
   return result;
 }
 
@@ -74,12 +79,20 @@ function pointInPolygon(point: Point, points: Point[]) {
   return !(positive && negative);
 }
 
-function mediaBounds(clip: Clip, asset: MediaAsset | undefined, canvas: Size) {
+function mediaBounds(clip: Clip, asset: MediaAsset | undefined, canvas: Size, time=clip.start) {
+  if(clip.kind==='solid'){
+    const settings=solidColorSettings(clip),keys=visibleMotion(clip),motion=keys.length?motionAt(keys,time-clip.start):NEUTRAL_MOTION;
+    return visibleVisualBounds({x:settings.x+motion.x,y:settings.y+motion.y,scale:motion.scale,rotation:motion.rotation,opacity:settings.opacity*motion.opacity},{left:(1-settings.width)*canvas.width/2,top:(1-settings.height)*canvas.height/2,width:settings.width*canvas.width,height:settings.height*canvas.height},canvas);
+  }
   if (!asset?.url) return null;
   const rect = asset.width && asset.height
     ? calculateVisualRect(asset.width, asset.height, canvas.width, canvas.height, clip.crop, undefined, clip.fit).window
     : {left:0,top:0,...canvas};
   return visibleVisualBounds(visualTransform(clip.transform), rect, canvas);
+}
+function solidOpacity(clip:Clip,time:number){
+  const keys=visibleMotion(clip);
+  return solidColorSettings(clip).opacity*(keys.length?motionAt(keys,time-clip.start).opacity:1);
 }
 
 /** Hit-test text and the retained media pixels in their shared visual-track order. */
@@ -88,7 +101,7 @@ export function previewClipAtPoint(timeline: Timeline, assets: MediaAsset[], tim
   const canvas = dimensions(timeline.aspectRatio);
   const assetMap = new Map(assets.map(asset => [asset._id, asset]));
   const textMap = new Map(textBounds.map(value => [value.id, value.rect]));
-  const active = timeline.clips.map((clip, index) => ({clip, z: layerZIndex(clip, index), opacity: options.mediaOpacities?.get(clip.id) ?? clip.transform?.opacity ?? 1}))
+  const active = timeline.clips.map((clip, index) => ({clip, z: layerZIndex(clip, index), opacity: options.mediaOpacities?.get(clip.id) ?? (clip.kind==='solid'?solidOpacity(clip,time):clip.transform?.opacity??1)}))
     .filter(({clip, opacity}) => clip.kind !== 'audio' && clip.kind !== 'effect' && time >= clip.start && time < clip.start + clip.duration && (clip.kind === 'caption' || clip.kind === 'graphic' || opacity > 0))
     .sort((a, b) => b.z - a.z);
   const hits: typeof active = [];
@@ -104,7 +117,7 @@ export function previewClipAtPoint(timeline: Timeline, assets: MediaAsset[], tim
       continue;
     }
     const asset = clip.assetId ? assetMap.get(clip.assetId) : undefined;
-    const visible = mediaBounds(clip, asset, canvas);
+    const visible = mediaBounds(clip, asset, canvas, time);
     if (!visible) continue;
     if (pointInPolygon(point, visible.points)) hits.push(hit);
   }
@@ -137,8 +150,8 @@ export function isPreviewTextOccluded(timeline: Timeline, assets: MediaAsset[], 
   const points = [{x:rect.left,y:rect.top},{x:rect.left+rect.width,y:rect.top},{x:rect.left,y:rect.top+rect.height},{x:rect.left+rect.width,y:rect.top+rect.height}];
   const assetMap = new Map(assets.map(asset => [asset._id, asset]));
   return timeline.clips.some((clip,index) => {
-    if ((clip.kind !== 'image' && clip.kind !== 'video') || time < clip.start || time >= clip.start+clip.duration || (clip.transform?.opacity ?? 1) < 1 || layerZIndex(clip,index) <= z) return false;
-    const visible = mediaBounds(clip, assetMap.get(clip.assetId ?? ''), canvas);
+    if ((clip.kind !== 'image' && clip.kind !== 'video' && clip.kind !== 'solid') || time < clip.start || time >= clip.start+clip.duration || (clip.kind==='solid'?solidOpacity(clip,time):clip.transform?.opacity??1) < 1 || layerZIndex(clip,index) <= z) return false;
+    const visible = mediaBounds(clip, assetMap.get(clip.assetId ?? ''), canvas,time);
     return !!visible && points.every(point => pointInPolygon(point, visible.points));
   });
 }

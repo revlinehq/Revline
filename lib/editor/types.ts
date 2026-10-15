@@ -8,7 +8,7 @@ import type { TextAppearance } from './text-style';
 import type { TextFontId } from './text-fonts';
 import type { FlashSettings, PunchSettings, ShakeSettings, PopSettings } from './motion-effect-settings';
 export type AspectRatio = 'vertical' | 'portrait-feed' | 'square' | 'classic' | 'landscape';
-export type ClipKind = 'video' | 'image' | 'audio' | 'caption' | 'graphic' | 'effect';
+export type ClipKind = 'video' | 'image' | 'audio' | 'caption' | 'graphic' | 'solid' | 'effect';
 export type LayerGroup = 'visual' | 'overlay' | 'audio' | 'effects';
 export type TrackCounts = Record<Exclude<LayerGroup, 'effects'>, number> & { effects?:number };
 export type ResolvedTrackCounts = Required<TrackCounts>;
@@ -107,7 +107,7 @@ export function trackOf(clip: Pick<Clip, 'kind' | 'track'>) { return validTrack(
 /** Zero legacy overlay rows marks the shared V-track model, without a schema migration. */
 export function normalizeTimeline(timeline: Timeline): Timeline {
   if (timeline.tracks?.overlay === 0) return timeline;
-  const visuals = timeline.clips.filter(clip => clip.kind === 'video' || clip.kind === 'image');
+  const visuals = timeline.clips.filter(clip => clip.kind === 'video' || clip.kind === 'image' || clip.kind === 'solid');
   // Old separated-overlay projects counted effects as V rows. Preserve that
   // historical text offset; explicit FX counts and FX13–24 never belonged to it.
   const legacyEffects = timeline.tracks?.effects === undefined ? timeline.clips.filter(clip=>clip.kind==='effect'&&(clip.track??1)<=12) : [];

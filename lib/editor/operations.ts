@@ -1,4 +1,4 @@
-import { EFFECT_CATALOG, motionPreset, offsetClipMotion,validateClipEffects, type BlendMode,type EffectPreset } from './clip-effects';
+import { DEFAULT_SOLID_COLOR, EFFECT_CATALOG, isSolidColorClip, motionPreset, offsetClipMotion,validateClipEffects, type BlendMode,type EffectPreset } from './clip-effects';
 import { TimelineGestureRejection } from './timeline-edit-errors';
 import { textTemplateTimingPatch } from './remotion-text';
 import { textAnimationTimingPatch } from './text-animation-timing';
@@ -56,7 +56,7 @@ export function splitClip(timeline: Timeline, clipId: string, time: number, newI
   const pairId = `${newId}-audio`;
   const next = { ...timeline, clips: timeline.clips.flatMap(c => c.id !== clipId && c.id !== pair?.id ? [c] : [
     { ...c, ...textTemplateTimingPatch(c),...textAnimationTimingPatch(c),...audioFadeTimingPatch(c),...visualFadeTimingPatch(c), duration: offset },
-    { ...c, ...offsetClipMotion(c, offset), id: c.id === clipId ? newId : pairId, linkedClipId: pair ? c.id === clipId ? pairId : newId : undefined, start: c.start + offset, sourceStart: c.kind === 'effect' ? 0 : c.sourceStart + offset * playbackRateOf(c), duration: tail },
+    { ...c, ...offsetClipMotion(c, offset), id: c.id === clipId ? newId : pairId, linkedClipId: pair ? c.id === clipId ? pairId : newId : undefined, start: c.start + offset, sourceStart: c.kind === 'effect' || c.kind === 'solid' ? 0 : c.sourceStart + offset * playbackRateOf(c), duration: tail },
   ]) };
   // Only the outgoing piece touching the original cut inherits that transition.
   next.clips = next.clips.flatMap(c => {
@@ -166,10 +166,22 @@ export function addEffectClip(timeline: Timeline, id: string, preset: EffectPres
   const start = snapTime(at, timeline.fps), duration = Math.max(1 / timeline.fps, snapTime(requestedDuration, timeline.fps));
   const target = options.aboveClipId ? timeline.clips.find(clip => clip.id === options.aboveClipId) : undefined;
   if (options.aboveClipId && (!target || target.kind === 'audio')) throw new Error('Choose a visual clip beneath the effect.');
+  if (preset === 'solid-color') {
+    const track = options.track ?? (target && layerGroup(target.kind) === 'visual' ? trackOf(target) + 1 : 1);
+    return placeOnFreeLayer(timeline, { id, kind:'solid', track, start, duration, sourceStart:0, solidColor:{...DEFAULT_SOLID_COLOR} });
+  }
   const track = options.track ?? (target?.kind === 'effect' ? trackOf(target) + 1 : 1);
   if (!Number.isInteger(track) || track < 1 || track > maxTrackCount('effects')) throw new Error('Choose an FX track between 1 and 24.');
   const clip: Clip = { id, kind: 'effect', track, start, duration, sourceStart: 0 };
   return placeOnFreeLayer(timeline, { ...clip, ...motionPreset(clip, preset) });
+}
+/** Explicit conversion preserves a saved FX rectangle's timing, settings and motion. */
+export function convertSolidColorToVisual(timeline:Timeline,id:string):Timeline {
+  const clip=timeline.clips.find(clip=>clip.id===id);
+  if(!clip||!isSolidColorClip(clip))throw new Error('Choose a solid color clip.');
+  if(clip.kind==='solid')return timeline;
+  const {effectPreset:_preset,...retained}=clip;
+  return placeOnFreeLayer(timeline,{...retained,kind:'solid',track:undefined});
 }
 /** Visual-only transition: the joined footage and linked audio keep every timing field. */
 export function addTransitionClip(timeline: Timeline, id: string, preset: TransitionPreset, fromClipId: string, toClipId: string, options: { duration?: number; direction?: TransitionDirection; track?: number } = {}): Timeline {

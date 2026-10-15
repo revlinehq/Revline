@@ -19,6 +19,10 @@ export function readEffectDrag(value: string): EffectDrag | null {
 /** Timed effects land on FX; footage controls apply only to the dropped-on clip. */
 export function dropLibraryEffect(timeline: Timeline, effect: EffectDrag, at: number, group: LayerGroup, track: number, targetId?: string, id = crypto.randomUUID()): Timeline {
   if ('preset' in effect) {
+    if(effect.preset==='solid-color'){
+      if(group!=='visual')throw new Error('Drop solid color onto a V track (visual layer).');
+      return addEffectClip(timeline,id,effect.preset,at,{track});
+    }
     const transition=isTransitionPreset(effect.preset);
     if(transition&&group!=='visual'&&group!=='effects')throw new Error('Drop a transition onto a video/image cut or an FX track.');
     if(transition)return placeTransitionAt(timeline,id,effect.preset as import('./clip-transitions').TransitionPreset,at,{track:group==='effects'?track:undefined,...(group==='visual'?{aboveClipId:targetId,visualTrack:track}:{})});

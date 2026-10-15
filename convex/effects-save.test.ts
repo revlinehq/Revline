@@ -5,7 +5,7 @@ import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import schema from './schema';
 import { api } from './_generated/api';
 import { BLEND_MODES, EFFECT_PRESETS, MOTION_PRESETS, motionPreset } from '../lib/editor/clip-effects';
-import { addEffectClip, addMediaClip, patchClip, splitClip } from '../lib/editor/operations';
+import { addEffectClip, addMediaClip, convertSolidColorToVisual, patchClip, splitClip } from '../lib/editor/operations';
 import { EMPTY_TIMELINE } from '../lib/editor/types';
 import { isTransitionPreset } from '../lib/editor/clip-transitions';
 
@@ -63,9 +63,21 @@ test.each(EFFECT_PRESETS.filter(preset=>!isTransitionPreset(preset)))('independe
   await f.owner.mutation(api.projects.saveTimeline, { projectId: f.projectId, timeline: split, expectedRevision: 1 });
   const saved = (await f.owner.query(api.projects.get, { projectId: f.projectId })).timeline!;
   expect(saved.clips.find(clip => clip.id === 'video')).toEqual(base.clips[0]);
-  expect(saved.clips.find(clip => clip.id === 'tail')).toMatchObject({ kind: 'effect', effectPreset: preset, start: 611, duration: 1, motionOffset: 1, sourceStart: 0 });
+  expect(saved.clips.find(clip => clip.id === 'tail')).toMatchObject({ ...(preset==='solid-color'?{kind:'solid',solidColor:next.clips.at(-1)!.solidColor}:{kind:'effect',effectPreset:preset,motionOffset:1}), start: 611, duration: 1, sourceStart: 0 });
   const invalid = patchClip(split, 'tail', { assetId: f.asset._id });
   await expect(f.owner.mutation(api.projects.saveTimeline, { projectId: f.projectId, timeline: invalid, expectedRevision: 2 })).rejects.toThrow('cannot reference media');
+});
+
+test('saved legacy FX color remains intact until an explicit V conversion and rejects media references',async()=>{
+  const f=await fixture();
+  const legacy={...EMPTY_TIMELINE,tracks:{visual:1,overlay:0,audio:0,effects:1},clips:[{id:'legacy',kind:'effect' as const,effectPreset:'solid-color' as const,track:1,start:0,duration:3,sourceStart:0,solidColor:{color:'#fedcba',width:1,height:1,x:.5,y:.5,opacity:1}}]};
+  await f.owner.mutation(api.projects.saveTimeline,{projectId:f.projectId,timeline:legacy,expectedRevision:0});
+  expect((await f.owner.query(api.projects.get,{projectId:f.projectId})).timeline.clips[0]).toEqual(legacy.clips[0]);
+  const next=convertSolidColorToVisual(legacy,'legacy');
+  await f.owner.mutation(api.projects.saveTimeline,{projectId:f.projectId,timeline:next,expectedRevision:1});
+  expect((await f.owner.query(api.projects.get,{projectId:f.projectId})).timeline.clips[0]).toMatchObject({kind:'solid',solidColor:legacy.clips[0].solidColor});
+  await expect(f.t.withIdentity({subject:'stranger'}).mutation(api.projects.saveTimeline,{projectId:f.projectId,timeline:next,expectedRevision:2})).rejects.toThrow('Project not found');
+  await expect(f.owner.mutation(api.projects.saveTimeline,{projectId:f.projectId,timeline:patchClip(next,'legacy',{assetId:f.asset._id}),expectedRevision:2})).rejects.toThrow('cannot reference media');
 });
 
 test('a stored video import appends after five minutes once, without discarding the current effects', async () => {

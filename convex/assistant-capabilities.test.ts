@@ -224,17 +224,34 @@ test('every current timed FX has a tool schema, while transitions require explic
   expect(sdk.messages).toHaveLength(0);
 });
 
-test('solid color creation/configuration changes only the new FX rectangle and retains omitted controls',async()=>{
+test('solid color creation/configuration changes only the new V rectangle and retains omitted controls',async()=>{
   const result=await run(async tools=>{
     await execute(tools,'addTimedEffect',{preset:'solid-color',start:1,duration:2,solidColor:{color:'#123456',width:.6,opacity:.8}});
     // Inspect exposes the actual saved ID; the tool never guesses or targets footage.
     const inspected=await execute(tools,'inspectTimeline',{}) as {timeline:Timeline};
-    const rectangle=inspected.timeline.clips.find(clip=>clip.effectPreset==='solid-color')!;
+    const rectangle=inspected.timeline.clips.find(clip=>clip.kind==='solid')!;
     await execute(tools,'setSolidColor',{clipId:rectangle.id,x:.2,height:.4});
-    await expect(execute(tools,'setSolidColor',{clipId:'from',color:'#abcdef'})).rejects.toThrow('solid color effect');
+    await expect(execute(tools,'setSolidColor',{clipId:'from',color:'#abcdef'})).rejects.toThrow('solid color clip');
   });
   expect(result.timeline.clips.slice(0,initial.clips.length)).toEqual(initial.clips);
   expect(result.timeline.clips.at(-1)?.solidColor).toEqual({color:'#123456',width:.6,height:.4,x:.2,y:.5,opacity:.8});
+  expect(result.calls).not.toContain('assistant:requestAnalysis');
+});
+
+test('the assistant explicitly converts a saved FX solid and places its V layer behind footage',async()=>{
+  const solid={id:'legacy-color',kind:'effect' as const,effectPreset:'solid-color' as const,track:1,start:0,duration:6,sourceStart:0,solidColor:{color:'#112233',width:1,height:1,x:.5,y:.5,opacity:1}};
+  const seed={...initial,tracks:{...initial.tracks!,effects:1},clips:[...initial.clips,solid]};
+  const result=await run(async tools=>{
+    await execute(tools,'convertSolidColorToVisual',{clipId:solid.id});
+    const inspected=await execute(tools,'inspectTimeline',{}) as {timeline:Timeline};
+    const color=inspected.timeline.clips.find(clip=>clip.id===solid.id)!;
+    expect(color.kind).toBe('solid');
+    await execute(tools,'reorderLayer',{group:'visual',from:color.track,to:1});
+  },seed,true);
+  expect(result.error).toBeUndefined();
+  expect(result.timeline.clips.at(-1)).toMatchObject({id:solid.id,kind:'solid',track:1,solidColor:solid.solidColor,start:0,duration:6,sourceStart:0});
+  expect(result.timeline.clips.at(-1)?.effectPreset).toBeUndefined();
+  expect(result.timeline.clips.find(clip=>clip.id==='from')?.track).toBe(2);
   expect(result.calls).not.toContain('assistant:requestAnalysis');
 });
 

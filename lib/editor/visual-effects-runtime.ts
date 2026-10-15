@@ -6,6 +6,7 @@ import { LENS_FILM_GLSL } from './lens-film-shader';
 import { NEON_EDGES_GLSL } from './neon-edges-shader';
 import { DEFAULT_NEON_EDGES } from './neon-edges';
 export { installAdjustmentLayers } from './adjustment-layers';
+export { installSolidColorLayers } from './solid-color-layers';
 export { installVisualFades } from './visual-fades-runtime';
 
 export type VisualEffectSource = VisualEffects & { id: string };
