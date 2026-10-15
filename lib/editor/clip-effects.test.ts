@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { motionPreset, motionAt, visibleMotion, validateClipEffects, MOTION_PRESETS, TIMED_EFFECT_PRESETS } from './clip-effects';
+import { motionPreset, motionAt, visibleMotion, validateClipEffects, MOTION_PRESETS, TIMED_EFFECT_PRESETS, NEUTRAL_MOTION } from './clip-effects';
+import { adjustmentFrame } from './adjustment-layers';
 import { splitClip } from './operations';
 import { resizeSelectedClips } from './timeline-controls';
 import { generateComposition } from './composition';
@@ -7,6 +8,21 @@ import type { Clip, Timeline } from './types';
 const clip: Clip = { id:'word', kind:'graphic', text:'IMPACT', start:2, duration:2, sourceStart:0 };
 const timeline: Timeline = { fps:30, aspectRatio:'vertical', tracks:{visual:1,overlay:0,audio:0}, clips:[clip] };
 describe('clip motion',()=>{
+  it('leaves inactive adjustment clips neutral without materializing their motion keys',()=>{
+    for (const preset of ['quick-zoom-in','cinematic-bars'] as const) {
+      const effect:Clip={id:'effect',kind:'effect',start:2,duration:2,sourceStart:0};
+      const authored={...effect,...motionPreset(effect,preset)};
+      const keys=authored.motion;let reads=0;
+      Object.defineProperty(authored,'motion',{get(){reads++;return keys;}});
+      for (const time of [0,2-1/30,4,10,0]) expect(adjustmentFrame(authored,time)).toBe(NEUTRAL_MOTION);
+      expect(reads).toBe(0);
+      const start=adjustmentFrame(authored,2),middle=adjustmentFrame(authored,3);
+      expect(reads).toBeGreaterThan(0);
+      expect(start.opacity).toBe(preset==='cinematic-bars'?0:1);
+      expect(middle.opacity).toBe(1);
+      expect(middle.scale).toBeCloseTo(preset==='quick-zoom-in'?1.1:1);
+    }
+  });
   it('all independent presets have bounded increasing keyframes, including one-frame clips',()=>{
     for (const duration of [1/60,1/30,2,60]) for (const preset of MOTION_PRESETS) expect(()=>validateClipEffects({...clip,duration,...motionPreset({...clip,duration},preset)})).not.toThrow();
     for (const duration of [1/60, .5, 2, 60]) for (const preset of TIMED_EFFECT_PRESETS) {

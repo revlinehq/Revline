@@ -7,8 +7,10 @@ export const adjustmentSources = (clips: Clip[]): AdjustmentSource[] => clips.fl
 
 /** The same sampled motion drives a retained preview and fresh export. */
 export function adjustmentFrame(clip: Clip, time: number) {
-  const local = time-clip.start, keys = visibleMotion(clip);
-  if (local < 0 || local >= clip.duration || !keys.length) return NEUTRAL_MOTION;
+  const local = time-clip.start;
+  if (local < 0 || local >= clip.duration) return NEUTRAL_MOTION;
+  const keys = visibleMotion(clip);
+  if (!keys.length) return NEUTRAL_MOTION;
   if (clip.effectPreset !== 'cinematic-bars') return motionAt(keys,local);
   const after = keys.findIndex(key=>key.time>=local);
   if (after <= 0) return keys[Math.max(0,after)];
