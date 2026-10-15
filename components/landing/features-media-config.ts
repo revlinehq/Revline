@@ -1,4 +1,4 @@
-export type FeatureMediaKind = 'titles' | 'moments' | 'beats' | 'subject' | 'captions';
+export type FeatureMediaKind = 'titles' | 'moments' | 'beats' | 'subject' | 'captions' | 'transitions' | 'effects';
 
 /** Short, local media keeps the gallery independent of accounts and editing services. */
 export const FEATURE_MEDIA: Record<FeatureMediaKind, { src: string; poster: string; start: number; end: number }> = {
@@ -7,6 +7,8 @@ export const FEATURE_MEDIA: Record<FeatureMediaKind, { src: string; poster: stri
   beats: { src: '/demo/landing/nasa-beats.mp4', poster: '/demo/landing/nasa-beats.webp', start: 0, end: 6 },
   subject: { src: '/demo/landing/nasa.mp4', poster: '/demo/landing/nasa-shot-3.webp', start: 7.7, end: 12 },
   captions: { src: '/demo/hormozi-distractions.mp4', poster: '/demo/landing/captions.webp', start: 2.5, end: 9.1 },
+  transitions: { src: '/demo/landing/nasa.mp4', poster: '/demo/landing/nasa-shot-2.webp', start: 3.7, end: 8.7 },
+  effects: { src: '/demo/landing/nasa.mp4', poster: '/demo/landing/nasa-shot-2.webp', start: 4.2, end: 7.7 },
 };
 
 export const FEATURE_MOMENTS = [

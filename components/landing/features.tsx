@@ -15,6 +15,8 @@ const features = [
   { id: 'beats', label: 'Cut to the beat', description: 'Bring your music into the edit. Match shot changes to its rhythm, then refine the pace without losing the story.' },
   { id: 'subject', label: 'Keep the subject in frame', description: 'Make a wide shot work in a smaller frame. Follow the visible subject and adjust the crop as the shot moves.' },
   { id: 'captions', label: 'Captions that follow', description: 'Turn speech into timed captions. Change the words, style, and placement in chat, with every line still yours to edit.' },
+  { id: 'transitions', label: 'Transitions that flow', description: 'Carry one shot into the next with a soft dissolve, a spin or a wipe. Choose the transition and shape its timing around your cut.' },
+  { id: 'effects', label: 'Effects with impact', description: 'Make the action drive the effect. Add a precise push-in, a brief shake or a flash, then tune the strength and timing.' },
 ] as const;
 
 type FeatureId = typeof features[number]['id'];

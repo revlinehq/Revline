@@ -33,6 +33,8 @@ WebP stills are extracted from the corresponding local derivative:
 - `nasa-shot-3.webp`: climb, 10 seconds, width 560.
 - `nasa-beats.webp`: rhythm example poster, 0.6 seconds, width 960.
 
+The transition example also uses four 960-pixel cut-edge stills: `transition-1-out.webp` at 4.766667 seconds, `transition-1-in.webp` at 4.8 seconds, `transition-2-out.webp` at 7.666667 seconds, and `transition-2-in.webp` at 7.7 seconds. They come from the same local NASA derivative. The shared product Remotion presentation blends these held edge frames during 0.6-second transition windows; native footage plays outside those windows. The impact example samples the product's existing push-in, shake, and flash preset curves against the video clock.
+
 One canonical launch file is shared across examples. There are no duplicate video files for title, moment, or subject aliases. Both videos omit audio, use yuv420p for browser compatibility, and place MP4 metadata before media data for progressive playback.
 
 ## Existing interview caption example

@@ -7,6 +7,7 @@
 .landing-product-demo{pointer-events:none}
 .landing-product-demo [data-slot=button],.landing-product-demo button,.landing-product-demo a{cursor:default}
 .landing-product-demo .floating-tools-rail{display:none}
+.landing-product-demo .preview-viewport-frame::after{content:none}
 .landing-product-demo[data-story-active=false] *{animation-play-state:paused!important}
 .landing-product-demo[data-building] .timeline-clip{animation:landing-clip-arrive 320ms cubic-bezier(.2,0,0,1) both}
 @keyframes landing-clip-arrive{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}

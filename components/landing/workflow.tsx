@@ -1,9 +1,9 @@
-import { Check, Download, Film } from 'lucide-react';
+import { Check, Download } from 'lucide-react';
 import { Brand } from '@/components/workspace/brand';
 import { WorkflowVideo } from './workflow-video';
+import './workflow.css';
 
 const shots = [
-  { src: '/demo/landing/nasa-shot-1.webp', name: 'Countdown', file: 'countdown.mp4' },
   { src: '/demo/landing/nasa-shot-2.webp', name: 'Liftoff', file: 'liftoff.mp4' },
   { src: '/demo/landing/nasa-shot-3.webp', name: 'The climb', file: 'the-climb.mp4' },
 ];
@@ -17,11 +17,11 @@ export function Workflow({ heading = 'How it works.' }: { heading?: string } = {
     <h2 id="landing-workflow-heading">{heading}</h2>
     <div className="landing-workflow-grid">
       <WorkflowCard title="Bring your clips." description="Video, audio and images. One place to start.">
-        <div className="landing-workflow-footage">{shots.map(shot => <figure key={shot.src}><img src={shot.src} alt={`NASA ${shot.name.toLowerCase()} footage`} width={100} height={150} loading="lazy" /><figcaption>{shot.file}</figcaption></figure>)}</div>
-        <div className="landing-workflow-files"><Film size={14} aria-hidden="true" /><span>Your footage. Ready for the timeline.</span></div>
+        <figure className="landing-workflow-source-film"><WorkflowVideo src="/demo/landing/nasa.mp4" poster="/demo/landing/nasa-shot-1.webp" /><figcaption>Artemis-launch.mp4</figcaption></figure>
+        <div className="landing-workflow-footage">{shots.map(shot => <figure key={shot.src}><img src={shot.src} alt={`NASA ${shot.name.toLowerCase()} footage`} width={280} height={158} loading="lazy" /><figcaption>{shot.file}</figcaption></figure>)}</div>
       </WorkflowCard>
       <WorkflowCard title="Describe your edit." description="Find the moments. Shape the cuts, text and motion.">
-        <div className="landing-workflow-request">Make a space short. Open on the launch and add a bold animated title.</div>
+        <div className="landing-workflow-request"><div className="landing-workflow-attachment"><img src="/demo/landing/nasa-shot-1.webp" alt="Attached NASA launch footage" width={96} height={54} loading="lazy" /><div><strong>Artemis-launch.mp4</strong><span>12 sec · Video</span></div></div><p>Make a space short. Open on the launch and add a bold animated title.</p></div>
         <div className="landing-workflow-answer"><div><Brand markOnly /><strong>Revline</strong></div><ul>{['Launch selected', 'Shots trimmed and arranged', 'Opening title animated'].map(step => <li key={step}><Check size={13} aria-hidden="true" />{step}</li>)}</ul></div>
       </WorkflowCard>
       <WorkflowCard title="Finish your version." description="Fine-tune the details. Preview, then export.">
