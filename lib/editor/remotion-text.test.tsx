@@ -1,7 +1,7 @@
 import { expect, test } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { RemotionText } from './remotion-text-component';
-import { REMOTION_TEXT_PRESETS, VFX_TEXT_PRESETS, remotionTextProps, validateRemotionTextTemplate, type RemotionTextProps } from './remotion-text';
+import { EXPRESSIVE_TEXT_PRESETS, REMOTION_TEXT_PRESETS, VFX_TEXT_PRESETS, remotionTextProps, validateRemotionTextTemplate, type RemotionTextProps } from './remotion-text';
 import { textTemplatePatch } from './text-effects';
 import { textLookPatch } from './text-looks';
 import type { Clip } from './types';
@@ -9,6 +9,29 @@ import type { Clip } from './types';
 const clip = { kind: 'graphic', start: 5, duration: 4, text: 'Make your next idea', color: '#ffffff', fontSize: 80, textTemplate: { preset: 'word-reveal' as const, duration: 4, offset: 0 } };
 const props = (frame: number): RemotionTextProps => ({ ...remotionTextProps(clip, 5, 30)!, frame });
 const render = (input: RemotionTextProps) => renderToStaticMarkup(<RemotionText {...input}/>);
+
+test.each(EXPRESSIVE_TEXT_PRESETS)('%s keeps the approved rendering frame-driven and customizable',preset=>{
+  const base={...props(5),preset,strength:1,revealDuration:.65,stagger:.07,text:'Make every word count.'};
+  const entrance=render(base);
+  expect(render({...base,frame:90})).not.toEqual(entrance);
+  render({...base,frame:150});render({...base,frame:0});
+  expect(render(base)).toEqual(entrance);
+  expect(render({...base,strength:.2})).not.toEqual(render({...base,strength:2}));
+  expect(entrance).toContain(`data-remotion-text="${preset}"`);
+  expect(entrance).toContain('aria-label="Make every word count."');
+  expect(entrance).not.toMatch(/animation:|transition:|NaN|Infinity/);
+  expect(render({...base,text:'<script>literal & safe</script>'})).not.toContain('<script>');
+});
+
+test('expressive optional controls validate and survive split timing and same-preset reselection',()=>{
+  const original={...clip,kind:'graphic' as const,id:'expressive',sourceStart:0,textTemplate:{preset:'blur-focus' as const,duration:4,offset:.8,strength:1.4,revealDuration:1.2,stagger:.11}};
+  const same={...original,...textTemplatePatch(original,'blur-focus')};
+  expect(same.textTemplate).toMatchObject(original.textTemplate);
+  expect(remotionTextProps(same,6,30)).toMatchObject({frame:54,strength:1.4,revealDuration:1.2,stagger:.11});
+  const changed={...original,...textTemplatePatch(original,'character-scramble')};
+  expect(changed.textTemplate).toMatchObject({strength:1.4,revealDuration:1.2,stagger:.11,offset:0});
+  for(const patch of [{strength:0},{strength:Infinity},{revealDuration:.01},{stagger:.3}])expect(()=>validateRemotionTextTemplate({...original,textTemplate:{...original.textTemplate,...patch}})).toThrow();
+});
 
 test.each(REMOTION_TEXT_PRESETS)('%s is deterministic across forward and backward frame seeks', preset => {
   const input = { ...props(8), preset };

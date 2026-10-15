@@ -24,7 +24,9 @@ export function textTemplatePatch(clip: Clip, preset: RemotionTextPreset): Parti
   if (clip.kind !== 'caption' && clip.kind !== 'graphic') throw new Error('Select a text clip to apply a text template.');
   const highlightColor = clip.textTemplate?.highlightColor ?? (clip.textTemplate ? VFX_TEXT_APPEARANCE[clip.textTemplate.preset]?.highlightColor : undefined) ?? DEFAULT_TEXT_HIGHLIGHT;
   const speech=preset==='karaoke'&&clip.textTemplate?.wordTimings?clip.textTemplate:undefined;
-  return { textStyle: resolvedTextAppearance(clip), textAnimationTiming: undefined, textTemplate: { preset, duration: speech?.duration??clip.duration, offset: speech?.offset??0, ...(speech?{wordTimings:speech.wordTimings}:{}), ...(highlightColor ? { highlightColor } : {}) } };
+  const clock=clip.textTemplate?.preset===preset?clip.textTemplate:speech;
+  const controls = clip.textTemplate ? Object.fromEntries((['strength','revealDuration','stagger'] as const).filter(key=>clip.textTemplate![key]!==undefined).map(key=>[key,clip.textTemplate![key]])) : {};
+  return { textStyle: resolvedTextAppearance(clip), textAnimationTiming: undefined, textTemplate: { preset, duration: clock?.duration??clip.duration, offset: clock?.offset??0, ...controls, ...(speech?{wordTimings:speech.wordTimings}:{}), ...(highlightColor ? { highlightColor } : {}) } };
 }
 
 /** One animation selection replaces motion, while words and appearance stay untouched. */

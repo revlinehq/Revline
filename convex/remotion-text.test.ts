@@ -15,6 +15,40 @@ beforeEach(() => vi.stubEnv('BILLING_ENABLED', 'false'));
 afterEach(() => vi.unstubAllEnvs());
 const text: Clip = { id: 'title', kind: 'graphic', text: 'Make your next idea', start: 2, duration: 4, sourceStart: 0, track: 1, textTemplate: { preset: 'karaoke', highlightColor: '#FFCC00' } };
 const timeline: Timeline = { ...EMPTY_TIMELINE, clips: [text] };
+const promotedPresets = ['rgb-split','type-trails','blur-focus','character-scramble','spotlight-sweep','ink-write','tunnel-zoom'] as const;
+
+test.each(promotedPresets)('%s settings and original clock survive save, split, trim, duplicate, AI save and Undo',async preset=>{
+  const t=convexTest(schema,modules),owner=t.withIdentity({subject:'owner'});
+  const projectId=await owner.mutation(api.projects.create,{title:'Promoted text animation',aspectRatio:'vertical'});
+  const original:Timeline={...timeline,clips:[{...text,textTemplate:{preset,strength:.75,revealDuration:.9,stagger:.08,highlightColor:'#AD90FF',duration:4,offset:0}}]};
+  await owner.mutation(api.projects.saveTimeline,{projectId,timeline:original,expectedRevision:0});
+  const divided=splitClip(original,'title',4,'ending'),trimmed=resizeSelectedClips(divided,[],['ending'],'left',.2),copied=duplicateClip(trimmed,'ending','copy');
+  const ending=copied.clips.find(clip=>clip.id==='ending')!,copy=copied.clips.find(clip=>clip.id==='copy')!;
+  expect(ending.textTemplate).toEqual({...original.clips[0].textTemplate,offset:2.2});
+  expect(copy.textTemplate).toEqual(ending.textTemplate);
+  expect(remotionTextProps(ending,5.3,30)).toEqual(remotionTextProps(original.clips[0],5.3,30));
+  await owner.mutation(api.projects.saveTimeline,{projectId,timeline:copied,expectedRevision:1});
+  expect((await owner.query(api.projects.get,{projectId})).timeline).toEqual(copied);
+  await t.run(ctx=>writeProject(ctx,projectId,{aiRunning:true,aiRunId:'promoted-text-run',aiUndoRecorded:false}));
+  const adjusted=patchClip(copied,'ending',{textTemplate:{...ending.textTemplate!,strength:1.4}});
+  await t.mutation(internal.assistant.apply,{projectId,ownerId:'owner',runId:'promoted-text-run',timeline:adjusted,expectedRevision:2});
+  expect((await owner.query(api.projects.get,{projectId})).timeline).toEqual(adjusted);
+  await owner.mutation(api.projects.undo,{projectId});
+  expect((await owner.query(api.projects.get,{projectId})).timeline).toEqual(copied);
+  await owner.mutation(api.projects.undo,{projectId});
+  expect((await owner.query(api.projects.get,{projectId})).timeline).toEqual(original);
+});
+
+test('new animation controls are optional for saved legacy text and reject nonfinite or out-of-range values',async()=>{
+  const t=convexTest(schema,modules),owner=t.withIdentity({subject:'owner'});
+  const projectId=await owner.mutation(api.projects.create,{title:'Text control validation',aspectRatio:'vertical'});
+  for(const [control,values]of Object.entries({strength:[.19,2.01,NaN,Infinity],revealDuration:[.14,3.01,NaN,Infinity],stagger:[-.01,.19,NaN,Infinity]}))for(const value of values){
+    const invalid={...timeline,clips:[{...text,textTemplate:{preset:'rgb-split' as const,[control]:value}}]};
+    await expect(owner.mutation(api.projects.saveTimeline,{projectId,timeline:invalid,expectedRevision:0})).rejects.toThrow();
+  }
+  await owner.mutation(api.projects.saveTimeline,{projectId,timeline,expectedRevision:0});
+  expect((await owner.query(api.projects.get,{projectId})).timeline).toEqual(timeline);
+});
 
 test('speech-timed captions save, retain their clock after splits, and discard stale timing on word edits',async()=>{
   const t=convexTest(schema,modules),owner=t.withIdentity({subject:'owner'});

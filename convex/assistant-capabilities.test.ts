@@ -418,6 +418,28 @@ test('Neon edges agent controls merge, bypass, reset and remove only the request
   expect(editorCapabilities().neonEdges.description).toContain('Luminous');expect(result.calls).not.toContain('assistant:requestAnalysis');await assertUndo(result);
 });
 
+test.each(['rgb-split','type-trails','blur-focus','character-scramble','spotlight-sweep','ink-write','tunnel-zoom'] as const)('%s animation tools preserve omitted controls, original clock, words and unrelated clips',async preset=>{
+  const seed:Timeline={...initial,clips:initial.clips.map(clip=>clip.id==='title'?{...clip,textTemplate:{preset,strength:.7,revealDuration:1,stagger:.1,highlightColor:'#C4B5FD',duration:4,offset:.4}}:clip)};
+  const result=await run(async tools=>{
+    expect(()=>tools.applyTextTemplate.inputSchema.parse({clipId:'title',preset})).not.toThrow();
+    expect(()=>tools.setTextAnimation.inputSchema.parse({clipId:'title',animation:preset})).not.toThrow();
+    expect(()=>tools.configureTextTemplate.inputSchema.parse({clipId:'title'})).toThrow();
+    for(const [control,values]of Object.entries({strength:[.19,2.01,NaN,Infinity],revealDuration:[.14,3.01,NaN,Infinity],stagger:[-.01,.19,NaN,Infinity]}))for(const value of values)expect(()=>tools.configureTextTemplate.inputSchema.parse({clipId:'title',[control]:value})).toThrow();
+    await execute(tools,'configureTextTemplate',{clipId:'title',strength:1.4,revealDuration:.8});
+    let current=await execute(tools,'inspectTimeline',{}) as{timeline:Timeline};
+    expect(current.timeline.clips.find(clip=>clip.id==='title')!.textTemplate).toEqual({preset,strength:1.4,revealDuration:.8,stagger:.1,highlightColor:'#C4B5FD',duration:4,offset:.4});
+    await execute(tools,'configureTextTemplate',{clipId:'title',preset,highlightColor:'#55CCFF',stagger:0});
+    current=await execute(tools,'inspectTimeline',{}) as{timeline:Timeline};
+    expect(current.timeline.clips.find(clip=>clip.id==='title')!.textTemplate).toEqual({preset,strength:1.4,revealDuration:.8,stagger:0,highlightColor:'#55CCFF',duration:4,offset:.4});
+    await execute(tools,'applyTextTemplate',{clipId:'title',preset});
+    await expect(execute(tools,'configureTextTemplate',{clipId:'from',strength:1})).rejects.toThrow('caption or text');
+  },seed,true);
+  expect(result.error).toBeUndefined();
+  expect(result.timeline.clips.find(clip=>clip.id==='title')).toMatchObject({...seed.clips[3],textTemplate:{preset,strength:1.4,revealDuration:.8,stagger:0,highlightColor:'#55CCFF',duration:4,offset:.4}});
+  expect(result.timeline.clips.filter(clip=>clip.id!=='title')).toEqual(result.backend!.seed.clips.filter(clip=>clip.id!=='title'));
+  expect(result.calls).not.toContain('assistant:requestAnalysis');await assertUndo(result);
+});
+
 test('dither palette and text template/color/rotation controls combine without changing words, source or timing',async()=>{
   const result=await run(async tools=>{
     await execute(tools,'setVisualEffects',{clipId:'from',dither:{enabled:true,shadowColor:'#101080',highlightColor:'#FFFF00',levels:3}});
