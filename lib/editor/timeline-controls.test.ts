@@ -252,3 +252,33 @@ it('inserts a new V row between existing V rows while preserving FX, linked audi
  }
  expect(()=>moveSelectionToNewLayers(project,['video'],0,'above','video',undefined,99)).toThrow('existing layer');
 });
+
+it.each(['video','audio'] as const)('settles a split %s clip into an exact gap when a closer unrelated snap would overlap',(kind)=>{
+ const timeline:Timeline={fps:30,aspectRatio:'landscape',tracks:{visual:2,audio:1,overlay:0},clips:[
+  {id:'left',kind,track:1,start:0,duration:4.01,sourceStart:0},
+  {id:'right',kind,track:1,start:6.01,duration:2,sourceStart:0},
+  {id:'moving',kind,track:1,start:9,duration:2,sourceStart:3},
+  {id:'other-row',kind:'image',track:2,start:3.97,duration:1,sourceStart:0},
+ ]};
+ const next=moveSelectedClips(timeline,['moving'],-5.03,0,'above','moving',{marks:[3.97,4.01,6.01],threshold:20/216});
+ expect(next.clips.find(c=>c.id==='moving')).toMatchObject({start:4.01,duration:2,sourceStart:3,track:1});
+ expect(next.tracks?.visual).toBe(2);
+ expect(()=>moveSelectedClips(timeline,['moving'],-5.03,0,'above','moving')).toThrow('Overlaps a clip');
+});
+
+it('creates an audio row when linked sound collides while video moves onto a free row',()=>{
+ const timeline:Timeline={fps:30,aspectRatio:'landscape',tracks:{visual:2,audio:1,overlay:0},clips:[
+  {id:'v',kind:'video',track:1,start:0,duration:2,sourceStart:4,linkedClipId:'a',audioSeparated:true,volume:0},
+  {id:'a',kind:'audio',track:1,start:0,duration:2,sourceStart:4,linkedClipId:'v'},
+  {id:'music',kind:'audio',track:1,start:3,duration:4,sourceStart:0},
+ ]};
+ for(const next of [moveSelectedClips(timeline,['v'],3,1,'above','v'),moveSelectedClips(timeline,['v','a'],3,1,'below','v'),moveSelectionToNewLayers(timeline,['v'],3,'above','v')]){
+  expect(next.clips.find(c=>c.id==='v')).toMatchObject({start:3,track:next.tracks?.visual,sourceStart:4,linkedClipId:'a'});
+  expect(next.clips.find(c=>c.id==='a')).toMatchObject({start:3,track:2,sourceStart:4,linkedClipId:'v'});
+  expect(next.clips.find(c=>c.id==='music')).toEqual(timeline.clips[2]);
+  expect(next.tracks?.audio).toBe(2);
+  const store=createEditorStore(timeline);store.getState().edit(next);expect(store.getState().undo()).toEqual(normalizeTimeline(timeline));
+ }
+ expect(()=>moveSelectedClips(timeline,['a'],3,0,'above','a')).toThrow('Overlaps a clip');
+ expect(()=>moveSelectedClips({...timeline,tracks:{visual:2,overlay:0,audio:12}},['v'],3,1,'above','v')).toThrow('12 layers');
+});

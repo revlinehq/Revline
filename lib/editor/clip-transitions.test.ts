@@ -1,7 +1,7 @@
 import { expect, test } from 'vitest';
 import { TRANSITION_PRESETS, centeredTransitionRange, transitionAvailability, transitionDurationLimit, transitionSampleTime, transitionSources } from './clip-transitions';
 import { addEffectClip, addTransitionClip, deleteClip, duplicateClip, patchClip, splitClip } from './operations';
-import { moveSelectedClips, resizeSelectedClips } from './timeline-controls';
+import { moveSelectedClips, moveSelectionToNewLayers, resizeSelectedClips } from './timeline-controls';
 import { copyTimelineClips, pasteTimelineClips } from './clipboard';
 import { createEditorStore } from './store';
 import { applyTimelineEdit } from './timeline-sync';
@@ -17,6 +17,16 @@ const base: Timeline = { fps:30,aspectRatio:'landscape',tracks:{visual:2,overlay
 ] };
 const fx = (timeline:Timeline) => timeline.clips.find(clip=>clip.id==='fx')!;
 const add = () => addTransitionClip(base,'fx','crossfade','from','to');
+
+test('a joined pair keeps its transition when new video and audio rows are needed',()=>{
+  const next=add();
+  next.clips.push({id:'music',kind:'audio',track:1,start:8,duration:5,sourceStart:0});
+  const moved=moveSelectionToNewLayers(next,['from','to'],2,'above','from');
+  expect(fx(moved).start).toBeCloseTo(6.7);
+  expect(transitionSources(moved.clips,30)[0]).toMatchObject({cut:7,track:3});
+  expect(moved.clips.find(clip=>clip.id==='from-audio')).toMatchObject({start:4,track:2,sourceStart:4});
+  expect(moved.clips.find(clip=>clip.id==='music')).toEqual(next.clips.at(-1));
+});
 
 test.each(TRANSITION_PRESETS)('%s connects the real cut on FX without moving footage, sound or overlays',preset=>{
   const next=addEffectClip(base,'fx',preset,4.8,{aboveClipId:'from',direction:'counter-clockwise'});

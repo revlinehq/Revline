@@ -82,7 +82,7 @@ export function removeEmptyLayers(timeline: Timeline): Timeline {
 }
 
 /** Resolve collisions by inserting layers, preserving the clips already there. */
-function placeMovedClips(timeline:Timeline,moved:import('./types').Clip[],direction:'above'|'below'='above',createLayers=true):Timeline {
+function placeMovedClips(timeline:Timeline,moved:import('./types').Clip[],direction:'above'|'below'='above',createLayers:boolean|'linked-audio'=true):Timeline {
   const movingIds=new Set(moved.map(clip=>clip.id));
   let rest=timeline.clips.filter(clip=>!movingIds.has(clip.id));
   const counts=deriveTrackCounts(timeline);
@@ -90,20 +90,24 @@ function placeMovedClips(timeline:Timeline,moved:import('./types').Clip[],direct
     const members=moved.filter(clip=>layerGroup(clip.kind)===group);if(!members.length)continue;
     const collides=members.some(clip=>rest.some(other=>layerGroup(other.kind)===group&&trackOf(other)===trackOf(clip)&&other.start<clip.start+clip.duration-1e-6&&clip.start<other.start+other.duration-1e-6));
     if(!collides)continue;
-    if(!createLayers)throw new TimelineGestureRejection('Overlaps a clip');
-    const first=Math.min(...members.map(trackOf));const last=Math.max(...members.map(trackOf));const span=last-first+1;const insert=first+(direction==='above'?1:0);
-    if(Math.max(counts[group]+span,last+(direction==='above'?1:0))>maxTrackCount(group))throw new Error(`This group already has ${maxTrackCount(group)} layers. Remove an empty layer before adding another.`);
+    const linkedAudio=group==='audio'&&members.every(clip=>moved.some(other=>other.kind==='video'&&other.id===clip.linkedClipId));
+    if(!createLayers||createLayers==='linked-audio'&&!linkedAudio)throw new TimelineGestureRejection('Overlaps a clip');
+    const first=Math.min(...members.map(trackOf));const last=Math.max(...members.map(trackOf));const span=last-first+1;
+    const autoAudio=createLayers==='linked-audio'&&linkedAudio;
+    const insert=autoAudio?counts[group]+1:first+(direction==='above'?1:0);
+    const offset=autoAudio?insert-first:direction==='above'?1:0;
+    if(Math.max(counts[group]+span,last+offset)>maxTrackCount(group))throw new Error(`This group already has ${maxTrackCount(group)} layers. Remove an empty layer before adding another.`);
     rest=rest.map(clip=>layerGroup(clip.kind)===group&&trackOf(clip)>=insert?{...clip,track:trackOf(clip)+span}:clip);
-    moved=moved.map(clip=>layerGroup(clip.kind)===group?{...clip,track:trackOf(clip)+(direction==='above'?1:0)}:clip);
+    moved=moved.map(clip=>layerGroup(clip.kind)===group?{...clip,track:trackOf(clip)+offset}:clip);
     counts[group]+=span;
   }
   const placed=new Map([...rest,...moved].map(clip=>[clip.id,clip]));
   const next={...timeline,tracks:counts,clips:timeline.clips.map(clip=>placed.get(clip.id)??clip)};
-  return reconcileTransitionEdits(timeline,{...next,tracks:deriveTrackCounts(next)});
+  return {...next,tracks:deriveTrackCounts(next)};
 }
 export function moveClipToLayer(timeline:Timeline,clip:import('./types').Clip):Timeline {
   timeline=normalizeTimeline(timeline);
-  return placeMovedClips(timeline,[clip]);
+  return reconcileTransitionEdits(timeline,placeMovedClips(timeline,[clip]));
 }
 
 export type SelectionBounds={left:number;top:number;width:number;height:number};
@@ -135,6 +139,24 @@ function selectedMoveDelta(timeline: Timeline, members: import('./types').Clip[]
   return Math.max(minimum, Math.min(maximum, snapped));
 }
 
+/** Prefer a nearby legal join over a magnetic edge on an unrelated row. */
+function settleMovedClips(timeline:Timeline,moved:Clip[],requestedOffset:number,magnet?:TimelineMagnet,allowLinkedAudio=false):Clip[] {
+  if(!magnet)return moved;
+  const movingIds=new Set(moved.map(clip=>clip.id));
+  const rest=timeline.clips.filter(clip=>!movingIds.has(clip.id));
+  const constrained=moved.filter(clip=>!allowLinkedAudio||clip.kind!=='audio'||!moved.some(other=>other.kind==='video'&&other.id===clip.linkedClipId));
+  const neighbors=constrained.map(clip=>({clip,others:rest.filter(other=>layerGroup(other.kind)===layerGroup(clip.kind)&&trackOf(other)===trackOf(clip))}));
+  const fits=(offset:number)=>moved.every(clip=>clip.start+offset>=-1e-9)&&neighbors.every(({clip,others})=>others.every(other=>other.start>=clip.start+offset+clip.duration-1e-6||clip.start+offset>=other.start+other.duration-1e-6));
+  if(fits(0))return moved;
+  const offsets=new Set<number>();
+  for(const {clip,others} of neighbors){
+    offsets.add(-clip.start);
+    for(const other of others){offsets.add(other.start-clip.duration-clip.start);offsets.add(other.start+other.duration-clip.start);}
+  }
+  const offset=[...offsets].filter(value=>Math.abs(value-requestedOffset)<=magnet.threshold).sort((a,b)=>Math.abs(a-requestedOffset)-Math.abs(b-requestedOffset)).find(fits);
+  return offset===undefined?moved:moved.map(clip=>({...clip,start:clip.start+offset}));
+}
+
 export function moveSelectedClips(timeline:Timeline,ids:string[],timeDelta:number,layerDelta:number,direction:'above'|'below'='above',anchorId?:string,magnet?:TimelineMagnet):Timeline {
   timeline=normalizeTimeline(timeline);
   const explicit=new Set(ids);const linked=new Set(linkedClipIds(timeline,ids));
@@ -147,7 +169,8 @@ export function moveSelectedClips(timeline:Timeline,ids:string[],timeDelta:numbe
     const clip=members[0];return moveTransitionAt(timeline,clip.id,clip.start+clip.duration/2+dt,trackOf(clip)+dl);
   }
   const moved=members.map(c=>({...c,start:dt===0?c.start:c.start+dt,track:trackOf(c)+(layers.some(member=>member.id===c.id)?dl:0)}));
-  return placeMovedClips(timeline,moved,direction,false);
+  const allowLinkedAudio=anchorGroup==='visual';
+  return reconcileTransitionEdits(timeline,placeMovedClips(timeline,settleMovedClips(timeline,moved,timeDelta-dt,magnet,allowLinkedAudio),direction,allowLinkedAudio?'linked-audio':false));
 }
 
 /** Insert rows at an outer edge or beside atTrack in the anchor group, as one undoable edit. */
@@ -178,7 +201,8 @@ export function moveSelectionToNewLayers(timeline:Timeline,ids:string[],timeDelt
       return trackOf(clip)>=base?{...clip,track:trackOf(clip)+span}:clip;
     });
   }
-  return reconcileTransitionEdits(timeline,{...timeline,tracks:counts,clips});
+  const next={...timeline,tracks:counts,clips};
+  return reconcileTransitionEdits(timeline,placeMovedClips(next,clips.filter(clip=>selected.has(clip.id)),edge,anchorGroup==='visual'?'linked-audio':false));
 }
 
 export type LayerDropTarget={edge:'above'|'below'}|{track:number;direction:'above'|'below';insert?:true};

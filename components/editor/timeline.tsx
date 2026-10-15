@@ -327,7 +327,7 @@ export function TimelinePanel(p:Props){
       // Read geometry before painting any preview nodes; avoid forced layout between writes.
       const geometry=viewport.getBoundingClientRect(),scrollLeft=viewport.scrollLeft,scrollTop=viewport.scrollTop,viewportHeight=viewport.clientHeight;
       const rawDelta=(clientX-startX+scrollLeft-startScrollX)/px;
-      const magnet=snap&&!bypassSnap&&(mode!=='move'||Math.abs(rawDelta)>1e-6)?{marks:mode==='move'&&Math.abs(clientY-startY)>Math.abs(clientX-startX)?verticalMarks:marks,threshold:12/px}:undefined;
+      const magnet=snap&&!bypassSnap&&(mode!=='move'||Math.abs(rawDelta)>1e-6)?{marks:mode==='move'&&Math.abs(clientY-startY)>Math.abs(clientX-startX)?verticalMarks:marks,threshold:(mode==='move'?20:12)/px}:undefined;
       if(mode==='move'){
         const scrollDelta=scrollTop-startScrollY;
         const target=clipLayerDropTarget(clientY+scrollDelta,rows,group);
