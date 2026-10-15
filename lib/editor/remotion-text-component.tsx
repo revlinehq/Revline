@@ -7,7 +7,7 @@ import { textAppearance } from './text-style';
 
 const clamp = { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' } as const;
 /** No wall clock, effects, or CSS animation: the same frame always produces the same pixels. */
-export function RemotionText({ preset, text, frame, fps, durationInFrames, color, fontSize, highlightColor, textStyle, fontFamily, fontWeight, resolution }: RemotionTextProps) {
+export function RemotionText({ preset, text, frame, fps, durationInFrames, color, fontSize, highlightColor, textStyle, fontFamily, fontWeight, resolution, wordTimings }: RemotionTextProps) {
   if(VFX_TEXT_PRESETS.some(value=>value===preset))return <RemotionLyricText {...{preset,text,frame,fps,durationInFrames,color,fontSize,highlightColor,textStyle,fontFamily,fontWeight,resolution}}/>;
   const tokens = text.split(/(\s+)/);
   const words = tokens.filter(token => token && !/^\s+$/.test(token));
@@ -35,11 +35,14 @@ export function RemotionText({ preset, text, frame, fps, durationInFrames, color
       wordStyle = { ...wordStyle, opacity: reveal, transform: `scale(${interpolate(progress, [0, 1], [.65, 1])})`, transformOrigin: 'center 70%' };
     }
     if (preset === 'karaoke') {
-      // This template distributes words across its duration; it does not claim speech alignment.
-      const from = position * durationInFrames / Math.max(1, words.length);
-      const to = (position + 1) * durationInFrames / Math.max(1, words.length);
+      const timing=wordTimings?.[position];
+      const from = timing ? timing.start*fps : position * durationInFrames / Math.max(1, words.length);
+      const to = timing ? timing.end*fps : (position + 1) * durationInFrames / Math.max(1, words.length);
       const highlighted = frame >= from && frame < to;
-      wordStyle = { ...wordStyle, color: highlighted ? highlightColor : color };
+      if(timing){
+        const elapsed=Math.max(0,frame-from),pop=highlighted?interpolate(elapsed,[0,Math.max(1,fps*.065),Math.max(2,fps*.17)],[.97,1.045,1],{...clamp,easing:Easing.out(Easing.cubic)}):1;
+        wordStyle={...wordStyle,padding:'.035em .12em',borderRadius:'.12em',backgroundColor:highlighted?highlightColor:'transparent',color:highlighted?'#17131F':color,opacity:frame<from ? .75 : 1,transform:`scale(${pop})`,transformOrigin:'center',...(highlighted?{WebkitTextStroke:'0 transparent',textShadow:'none'}:{})};
+      }else wordStyle = { ...wordStyle, color: highlighted ? highlightColor : color };
     }
     return <span key={index} data-word-index={position} style={wordStyle}>{token}</span>;
   })}</span>;

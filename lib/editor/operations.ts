@@ -82,6 +82,7 @@ export function patchClip(timeline: Timeline, id: string, patch: Partial<Clip>):
   const volumeTarget = clip.kind === 'video' && clip.linkedClipId ? clip.linkedClipId : id;
   return reconcileTransitionEdits(timeline, { ...timeline, clips: timeline.clips.map(c => {
     let next = c.id === id ? { ...c, ...(patch.duration !== undefined && !('textTemplate' in patch) ? textTemplateTimingPatch(c) : {}),...(patch.duration!==undefined&&!('textAnimationTiming' in patch)?textAnimationTimingPatch(c):{}),...(patch.duration!==undefined&&!('audioFadeTiming' in patch)?audioFadeTimingPatch(c):{}),...(patch.duration!==undefined&&!('visualFadeTiming' in patch)?visualFadeTimingPatch(c):{}), ...patch, id: c.id } : c.id === clip.linkedClipId ? { ...c, ...timing,...(patch.duration!==undefined?audioFadeTimingPatch(c):{}) } : c;
+    if(c.id===id&&patch.text!==undefined&&c.textTemplate?.wordTimings&&!('textTemplate' in patch)&&patch.text.toLowerCase()!==(c.text??'').toLowerCase())next={...next,textTemplate:{...next.textTemplate!,wordTimings:undefined}};
     if (patch.volume !== undefined && c.id === volumeTarget) next = { ...next, volume: patch.volume };
     if (next.kind === 'video' && next.audioSeparated) next = { ...next, volume: 0 };
     return next;

@@ -23,7 +23,8 @@ export function textEffectPatch(clip: Clip, preset: TextEffectPreset): Partial<C
 export function textTemplatePatch(clip: Clip, preset: RemotionTextPreset): Partial<Clip> {
   if (clip.kind !== 'caption' && clip.kind !== 'graphic') throw new Error('Select a text clip to apply a text template.');
   const highlightColor = clip.textTemplate?.highlightColor ?? (clip.textTemplate ? VFX_TEXT_APPEARANCE[clip.textTemplate.preset]?.highlightColor : undefined) ?? DEFAULT_TEXT_HIGHLIGHT;
-  return { textStyle: resolvedTextAppearance(clip), textAnimationTiming: undefined, textTemplate: { preset, duration: clip.duration, offset: 0, ...(highlightColor ? { highlightColor } : {}) } };
+  const speech=preset==='karaoke'&&clip.textTemplate?.wordTimings?clip.textTemplate:undefined;
+  return { textStyle: resolvedTextAppearance(clip), textAnimationTiming: undefined, textTemplate: { preset, duration: speech?.duration??clip.duration, offset: speech?.offset??0, ...(speech?{wordTimings:speech.wordTimings}:{}), ...(highlightColor ? { highlightColor } : {}) } };
 }
 
 /** One animation selection replaces motion, while words and appearance stay untouched. */

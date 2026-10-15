@@ -20,10 +20,11 @@ test('the prepared take keeps the actual speech, continuous footage, and linked 
     if(i)expect(shot.start).toBeCloseTo(shots[i-1].start+shots[i-1].duration);
   }
   const captions=clips.filter(c=>c.kind==='caption');
-  expect(captions).toHaveLength(39);
-  expect(captions.every(c=>c.textTemplate?.preset==='word-reveal')).toBe(true);
+  expect(captions).toHaveLength(30);
+  expect(captions.every(c=>c.textTemplate?.preset==='karaoke'&&c.textTemplate.wordTimings?.length===c.text!.split(/\s+/).length)).toBe(true);
+  expect(captions.every(c=>c.fontFamily==='anton'&&c.fontSize===78)).toBe(true);
   expect(plan.steps.filter(step=>step.clips.some(c=>c.kind==='video'))).toHaveLength(10);
-  expect(captions.map(c=>c.text).join(' ')).toContain('businesses die of indigestion, not starvation.');
+  expect(captions.map(c=>c.text).join(' ').toLowerCase()).toContain('businesses die of indigestion, not starvation.');
   for(let i=0;i<captions.length;i++){
     expect(captions[i].start+captions[i].duration).toBeLessThanOrEqual(45);
     if(i)expect(captions[i].start).toBeGreaterThanOrEqual(captions[i-1].start+captions[i-1].duration-1e-6);

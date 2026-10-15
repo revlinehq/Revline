@@ -32,7 +32,8 @@ export function hormoziDemoPlan(runId:string) {
   const steps:DemoBuildStep[]=[];
   const text:Clip[]=captions.map((cue,i)=>{
     const start=Math.round(cue.start*30)/30,end=Math.min(45,Math.round(cue.end*30)/30);
-    return {id:`${runId}-caption-${i}`,kind:'caption',track:2,start,duration:Math.max(1/30,end-start),sourceStart:0,text:cue.text,fontSize:62,fontFamily:'space-grotesk',color:'#FFFFFF',background:'transparent',x:.5,y:.83,animation:'none',textTemplate:{preset:'word-reveal'},textStyle:{...DEFAULT_TEXT_APPEARANCE,strokeWidth:2.5,shadowBlur:8,shadowY:2,shadowColor:'#000000CC'}};
+    const duration=Math.max(1/30,end-start),relative=(time:number)=>Math.max(0,Math.min(duration,time-start));
+    return {id:`${runId}-caption-${i}`,kind:'caption',track:2,start,duration,sourceStart:0,text:cue.text.toUpperCase(),fontSize:78,fontFamily:'anton',color:'#FFFFFF',background:'transparent',x:.5,y:.81,animation:'none',textTemplate:{preset:'karaoke',highlightColor:'#C4B5FD',wordTimings:cue.words.map(word=>({start:relative(word.start),end:relative(word.end)}))},textStyle:{...DEFAULT_TEXT_APPEARANCE,strokeWidth:1.5,shadowBlur:5,shadowY:3,shadowColor:'#000000B3'}};
   });
   const zooms=[
     // “Businesses die of indigestion” in the two-person shot; focus on Hormozi.
@@ -46,7 +47,7 @@ export function hormoziDemoPlan(runId:string) {
     steps.push({clips:[shot,sound],label:`Placing clip ${i+1} of ${shots.length}`,reply:'Building the sequence with the original footage and sound together.',delayMs:180});
     const end=shot.start+shot.duration;
     const additions=[...text.filter(clip=>clip.start>=shot.start-1e-7&&clip.start<end-1e-7),...zooms.filter(clip=>clip.start>=shot.start-1/30&&clip.start<end-1/30)];
-    if(additions.length)steps.push({clips:additions,label:'Adding word-by-word subtitles',reply:'Revealing the subtitles word by word and accenting the two key spoken points.',delayMs:320});
+    if(additions.length)steps.push({clips:additions,label:'Adding speech-timed subtitles',reply:'Highlighting each spoken word and accenting the two key spoken points.',delayMs:320});
   }
   const timeline=normalizeTimeline({...initial,clips:steps.flatMap(step=>step.clips)});
   return {initial,steps,timeline,assets:media.assets,summary:`${shots.length} clip blocks, ${text.length} animated subtitle phrases, and two subtle zooms are ready. The full conversation and original audio are preserved. Press play.`};

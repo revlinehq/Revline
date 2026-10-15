@@ -16,6 +16,23 @@ afterEach(() => vi.unstubAllEnvs());
 const text: Clip = { id: 'title', kind: 'graphic', text: 'Make your next idea', start: 2, duration: 4, sourceStart: 0, track: 1, textTemplate: { preset: 'karaoke', highlightColor: '#FFCC00' } };
 const timeline: Timeline = { ...EMPTY_TIMELINE, clips: [text] };
 
+test('speech-timed captions save, retain their clock after splits, and discard stale timing on word edits',async()=>{
+  const t=convexTest(schema,modules),owner=t.withIdentity({subject:'owner'});
+  const projectId=await owner.mutation(api.projects.create,{title:'Speech captions',aspectRatio:'vertical'});
+  const timed:Clip={...text,textTemplate:{preset:'karaoke',highlightColor:'#C4B5FD',wordTimings:[{start:0,end:.2},{start:.5,end:.9},{start:1.4,end:2},{start:2.8,end:3.9}]}};
+  const source={...timeline,clips:[timed]},divided=splitClip(source,'title',4,'tail');
+  expect(remotionTextProps(divided.clips[1],5,30)).toEqual(remotionTextProps(timed,5,30));
+  await owner.mutation(api.projects.saveTimeline,{projectId,timeline:divided,expectedRevision:0});
+  expect((await owner.query(api.projects.get,{projectId})).timeline).toEqual(divided);
+  const changed=patchClip(divided,'tail',{text:'Replacement words'});
+  expect(changed.clips.find(c=>c.id==='tail')?.textTemplate?.wordTimings).toBeUndefined();
+  await owner.mutation(api.projects.saveTimeline,{projectId,timeline:changed,expectedRevision:1});
+  const reselected=patchClip(divided,'tail',textTemplatePatch(divided.clips[1],'karaoke'));
+  const {textStyle: _style,...reselectedProps}=remotionTextProps(reselected.clips[1],5,30)!;
+  const {textStyle: _originalStyle,...originalProps}=remotionTextProps(timed,5,30)!;
+  expect(reselectedProps).toEqual(originalProps);
+});
+
 test('template saves survive split, trim, duplicate and AI save with their original word timing', async () => {
   const t = convexTest(schema, modules), owner = t.withIdentity({ subject: 'owner' });
   const projectId = await owner.mutation(api.projects.create, { title: 'Text templates', aspectRatio: 'vertical' });

@@ -36,18 +36,30 @@ try {
     await page.waitForFunction(()=>document.querySelectorAll('.composer-attachment').length===1&&!document.querySelector('[aria-label="Describe your next edit"]').disabled);
     await page.evaluate(()=>{window.clipCounts=new Set();window.buildObserver=new MutationObserver(()=>window.clipCounts.add(document.querySelectorAll('.timeline-clip.clip-video').length));window.buildObserver.observe(document.querySelector('.timeline-track-area'),{childList:true,subtree:true});});
     await page.type('[aria-label="Describe your next edit"]','Add subtitles and precise subtle zooms');await page.click('[aria-label="Start edit"]');
-    await page.waitForFunction(()=>!document.querySelector('.scripted-editor-demo').dataset.building&&document.querySelectorAll('.timeline-clip.clip-caption').length===39,{timeout:30000});
+    await page.waitForFunction(()=>!document.querySelector('.scripted-editor-demo').dataset.building&&document.querySelectorAll('.timeline-clip.clip-caption').length===30,{timeout:30000});
     assert.ok(await page.evaluate(()=>{window.buildObserver.disconnect();return window.clipCounts.size>=8;}),'Clip blocks must arrive across separate animated stages');
     assert.equal(await page.$$eval('.timeline-clip.clip-video',n=>n.length),10);assert.equal(await page.$$eval('.clip-audio',n=>n.length),10);assert.equal(await page.$$eval('.clip-effect',n=>n.length),2);assert.equal(await page.$('.composer-attachment'),null);
     await page.waitForFunction(()=>[...document.querySelectorAll('.audio-waveform[data-waveform-ready="true"] canvas')].some(c=>c.width>0&&c.height>0&&c.getContext('2d').getImageData(0,0,c.width,c.height).data.some((value,i)=>i%4===3&&value>0)));
     assert.equal(await page.$$eval('.timeline-cut-transition.has-transition',n=>n.length),0,'No decorative transitions are added');
-    assert.match(await page.$eval('.chat-assistant',n=>n.textContent),/39 animated/);
+    assert.match(await page.$eval('.chat-assistant',n=>n.textContent),/30 animated/);
     await page.waitForFunction(()=>[...document.querySelectorAll('hyperframes-player')].some(p=>p.style.zIndex==='1')).catch(async error=>{console.log(await page.evaluate(()=>({players:[...document.querySelectorAll('hyperframes-player')].map(p=>({style:p.getAttribute('style'),media:[...(p.iframeElement?.contentDocument?.querySelectorAll('video,audio')??[])].map(v=>({src:v.src,ready:v.readyState,error:v.error?.message}))})),alerts:[...document.querySelectorAll('[role=alert]')].map(n=>n.textContent)})));throw error;});
+    const wordStates=[];
+    for(const time of [2.7,3.6]){
+      await page.evaluate(time=>{[...document.querySelectorAll('hyperframes-player')].find(p=>p.style.zIndex==='1').iframeElement.contentWindow.__timelines.revline.seek(time);},time);
+      wordStates.push(await page.evaluate(()=>{
+        const d=[...document.querySelectorAll('hyperframes-player')].find(p=>p.style.zIndex==='1').iframeElement.contentDocument;
+        const phrase=[...d.querySelectorAll('[data-remotion-text="karaoke"]')].find(n=>n.textContent==='THIS IS INTERESTING BECAUSE AS'&&n.closest('.overlay').style.display!=='none');
+        return [...phrase.querySelectorAll('[data-word-index]')].map(n=>({background:n.style.backgroundColor,left:n.offsetLeft,width:n.offsetWidth,top:n.offsetTop}));
+      }));
+    }
+    assert.equal(wordStates[0][0].background,'rgb(196, 181, 253)');
+    assert.equal(wordStates[1][3].background,'rgb(196, 181, 253)','Speech highlighting follows the actual word rather than evenly spaced intervals');
+    assert.deepEqual(wordStates[0].map(({background,...layout})=>layout),wordStates[1].map(({background,...layout})=>layout),'Caption words never move when the spoken highlight changes');
     await page.evaluate(()=>{[...document.querySelectorAll('hyperframes-player')].find(p=>p.style.zIndex==='1').iframeElement.contentWindow.__timelines.revline.seek(26.74);});
     await new Promise(r=>setTimeout(r,500));
     const rendered=await page.evaluate(()=>{const d=[...document.querySelectorAll('hyperframes-player')].find(p=>p.style.zIndex==='1').iframeElement.contentDocument;return {source:d.querySelector('video')?.src,text:d.body.textContent};});
-    assert.ok(rendered.source.includes('/demo/hormozi-distractions.mp4'),'Any uploaded file renders the prepared Hormozi source');assert.ok(rendered.text.includes('die of indigestion,'));assert.ok(await page.evaluate(()=>!![...document.querySelectorAll('hyperframes-player')].find(p=>p.style.zIndex==='1').iframeElement.contentDocument.querySelector('[data-remotion-text="word-reveal"]')),'Captions use the actual word-reveal renderer');assert.equal(await page.$('[role="alert"]'),null);
+    assert.ok(rendered.source.includes('/demo/hormozi-distractions.mp4'),'Any uploaded file renders the prepared Hormozi source');assert.ok(rendered.text.toLowerCase().includes('of indigestion,'));assert.ok(await page.evaluate(()=>!![...document.querySelectorAll('hyperframes-player')].find(p=>p.style.zIndex==='1').iframeElement.contentDocument.querySelector('[data-remotion-text="karaoke"]')),'Captions use the actual speech-timed caption renderer');assert.equal(await page.$('[role="alert"]'),null);
   }
   await page.screenshot({path:'/tmp/revline-hormozi-subtitles-preview.png'});
-  await page.evaluate(()=>window.unmountDemo());assert.equal(await page.evaluate(()=>window.liveURLs.size),0);assert.deepEqual(errors,[]);assert.deepEqual(external,[]);console.log('PASS: arbitrary image and video trigger the same real 45-second source in ten contiguous pieces, 39 word-reveal captions, two precise zooms, original audio with real painted waveforms, no lost source frames, clean replay/reset and no external AI requests.');
+  await page.evaluate(()=>window.unmountDemo());assert.equal(await page.evaluate(()=>window.liveURLs.size),0);assert.deepEqual(errors,[]);assert.deepEqual(external,[]);console.log('PASS: arbitrary image and video trigger the same real 45-second source in ten contiguous pieces, 30 speech-timed captions, two precise zooms, original audio with real painted waveforms, no lost source frames, clean replay/reset and no external AI requests.');
 } catch(error){console.error(error);throw error;} finally {server.closeAllConnections();await browser.close();await new Promise(resolve=>server.close(resolve));await rm(directory,{recursive:true,force:true})}

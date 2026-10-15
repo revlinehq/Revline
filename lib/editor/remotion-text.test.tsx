@@ -40,6 +40,29 @@ test('karaoke uses supplied colors and duration-based highlighting without inven
   expect(first).not.toBe(final);
 });
 
+test('speech-timed captions keep every word in place and highlight actual nonuniform word intervals',()=>{
+  const wordTimings=[{start:0,end:.1},{start:.5,end:.9},{start:1.5,end:1.9},{start:3,end:3.8}];
+  const input={...props(18),preset:'karaoke' as const,wordTimings,highlightColor:'#C4B5FD'};
+  const wordStyle=(markup:string,i:number)=>markup.match(new RegExp(`data-word-index="${i}" style="([^"]+)"`))?.[1];
+  const active=render(input);
+  expect(wordStyle(active,1)).toContain('background-color:#C4B5FD');
+  expect(wordStyle(active,0)).toContain('background-color:transparent');
+  expect(wordStyle(active,2)).toContain('background-color:transparent');
+  expect(active.match(/background-color:#C4B5FD/g)).toHaveLength(1);
+  expect(wordStyle(render({...input,frame:30}),1)).toContain('background-color:transparent');
+  expect(wordStyle(render({...input,frame:95}),3)).toContain('background-color:#C4B5FD');
+  expect(wordStyle(render({...input,frame:0}),3)).toContain('padding:.035em .12em');
+  expect(wordStyle(active,1)).toContain('padding:.035em .12em');
+  expect(render(input)).toBe(active);
+});
+
+test('speech timings reject mismatched, reversed, overlapping and out-of-range word data',()=>{
+  const words=[{start:0,end:.2},{start:.5,end:.8},{start:1,end:1.4},{start:3,end:3.8}];
+  const timed={...clip,textTemplate:{preset:'karaoke' as const,wordTimings:words}};
+  expect(()=>validateRemotionTextTemplate(timed)).not.toThrow();
+  for(const wordTimings of [words.slice(1),[{start:-1,end:.2},...words.slice(1)],[words[0],{start:.1,end:.8},...words.slice(2)],[...words.slice(0,3),{start:3,end:5}]])expect(()=>validateRemotionTextTemplate({...timed,textTemplate:{...timed.textTemplate,wordTimings}})).toThrow('Speech timings');
+});
+
 test('source timing survives splits and left trims, with consistent preview/export scaling', () => {
   const before = remotionTextProps(clip, 7.4, 30)!;
   const split = remotionTextProps({ ...clip, start: 7, duration: 2, textTemplate: { ...clip.textTemplate, offset: 2 } }, 7.4, 30)!;
