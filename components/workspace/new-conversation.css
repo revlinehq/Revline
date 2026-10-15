@@ -8,9 +8,9 @@
 .footage-start-card{width:100%;height:168px;border:0;border-radius:12px;background:#f7f8fb;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;gap:8px;text-align:center;cursor:pointer;transition:background-color 120ms,box-shadow 120ms}
 .footage-start-card strong{color:#394557;font-size:14px;line-height:1.6;font-weight:500}
 .footage-start-helper{color:#657080;font-size:13px;line-height:1.6}
-.footage-start-icon{display:grid;place-items:center;width:36px;height:36px;margin-bottom:4px;border-radius:9px;background:linear-gradient(160deg,#4d6bee 0%,#4768ef 50%,#3b54d7 100%);color:#fff;box-shadow:0 3px 0 #1c2e82;transition:transform 120ms,box-shadow 120ms}
+.footage-start-icon{display:grid;place-items:center;width:36px;height:36px;margin-bottom:4px;border-radius:9px;background:var(--revline-primary-gradient);color:#fff;transition:transform 120ms}
 .footage-start-card:focus-visible{outline:2px solid #4768ef;outline-offset:4px}
-.footage-start-card:active .footage-start-icon{transform:translateY(2px);box-shadow:0 1px 0 #1c2e82}
+.footage-start-card:active .footage-start-icon{transform:scale(.96)}
 .footage-start-card:disabled{cursor:wait;opacity:.6}
 @media(hover:hover) and (pointer:fine){.footage-start-card:not(:disabled):hover{background:#f0f2f9;box-shadow:inset 0 0 0 1px #d6dcea}}
 .footage-start-card[data-dragging=true]{outline:2px solid #4768ef;outline-offset:4px}

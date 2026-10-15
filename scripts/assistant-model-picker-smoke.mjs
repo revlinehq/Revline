@@ -27,7 +27,7 @@ try {
  await page.waitForSelector('[aria-label="AI editing model"]');
  assert.equal(await page.$eval('[aria-label="AI editing model"]',el=>el.textContent),'Sonnet 5.5');
  const geometry=await page.$$eval('.composer-submit',els=>els.map(el=>{const rect=el.getBoundingClientRect();return {width:rect.width,height:rect.height,shadow:getComputedStyle(el).boxShadow};}));
- assert.equal(geometry[0].width,28);assert.equal(geometry[0].height,28);assert.match(geometry[0].shadow,/inset/);
+ assert.equal(geometry[0].width,28);assert.equal(geometry[0].height,28);assert.equal(geometry[0].shadow,'none');
  assert.equal(geometry[1].width,32);assert.equal(geometry[1].height,32,'Other composer variants keep their sizing');
  for(const [choice,label] of [['haiku','Haiku 5.5'],['sonnet','Sonnet 5.5'],['opus','Opus 5.5']]){
   await page.click('[aria-label="AI editing model"]');
@@ -65,5 +65,5 @@ try {
  await page.type('.assistant-content textarea','Make this tighter');
  await page.screenshot({path:'/tmp/revline-composer-model-picker.png'});
  assert.deepEqual(errors,[]);
- console.log('PASS: development picker sends all three choices; production allowlist hides Opus and resets stale selections, locks during a run, disappears when disabled; compact send/stop 28px with inner shadow, studio unchanged. Synthetic fixture only.');
+ console.log('PASS: development picker sends all three choices; production allowlist hides Opus and resets stale selections, locks during a run, disappears when disabled; compact send/stop 28px with shared gradient and no shadow, studio unchanged. Synthetic fixture only.');
 } finally { await browser.close(); await new Promise(resolve=>server.close(resolve)); }

@@ -1,7 +1,8 @@
+:root{--revline-primary-gradient:linear-gradient(250deg,#6280f7 0%,#4668ed 35%,#3855d5 100%)}
 .revline-brand{display:inline-flex;align-items:center;gap:9px;font-family:var(--font-inter),Inter,sans-serif;font-size:17px;font-weight:600;line-height:1.4;color:var(--ws-text,#292929)}
 .revline-mark{width:26px;height:26px;flex-shrink:0;color:var(--ws-logo,#0c1424)}
-.revline-primary[data-slot=button]{height:36px;padding:0 18px;gap:8px;border:0;border-radius:8px;background:linear-gradient(160deg,#6e8bff 0%,#4c6def 50%,#3b54d7 100%);color:#fff;box-shadow:0 2px 0 #2946b7;transition:filter 120ms,transform 120ms,box-shadow 120ms;font-size:13px;font-weight:500;font-family:inherit}
-.revline-primary[data-slot=button]:hover{filter:brightness(1.055)}.revline-primary[data-slot=button]:active{transform:translateY(2px);box-shadow:0 0 0 #2946b7}.revline-primary[data-slot=button]:focus-visible{outline:2px solid #7b95ff;outline-offset:3px}.revline-primary[data-slot=button]:disabled{opacity:.42;filter:none}
+.revline-primary[data-slot=button]{height:36px;padding:0 18px;gap:8px;border:0;border-radius:8px;background:var(--revline-primary-gradient);color:#fff;box-shadow:none;transition:filter 120ms,transform 120ms;font-size:13px;font-weight:500;font-family:inherit}
+.revline-primary[data-slot=button]:hover{filter:brightness(1.055)}.revline-primary[data-slot=button]:active{transform:scale(.96)}.revline-primary[data-slot=button]:focus-visible{outline:2px solid #7b95ff;outline-offset:3px}.revline-primary[data-slot=button]:disabled{opacity:.42;filter:none}
 .revline-primary-compact[data-slot=button]{height:32px;padding:0 15px}.revline-primary-icon[data-slot=button]{width:32px;height:32px;aspect-ratio:1;padding:0;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center}.revline-primary .filled-play-icon{width:14px;height:14px}
 :has(>.revline-primary-default)>:is(.workspace-outline-button,[data-slot=button]:not(.revline-primary)){height:36px;min-height:36px;padding-inline:18px;font-size:13px;border-radius:8px}
 :has(>.revline-primary-compact)>:is(.workspace-outline-button,.workspace-nav-secondary,[data-slot=button]:not(.revline-primary)){height:32px;min-height:32px;padding-inline:15px;font-size:13px;border-radius:8px}
@@ -15,11 +16,6 @@
 .revline-primary[data-slot=button]{background-clip:border-box}
 .edit-composer{border:0;box-shadow:inset 0 0 0 1px var(--ws-composer-border,#cdd1d8)}
 .edit-composer:focus-within{border:0}
-.revline-primary[data-slot=button]{box-shadow:0 4px 0 #1c2e82}
-.revline-primary-icon[data-slot=button]{box-shadow:0 3px 0 #1c2e82}
-.revline-primary[data-slot=button]:active{transform:translateY(3px);box-shadow:0 1px 0 #1c2e82}
-.edit-composer .composer-submit[data-slot=button]{box-shadow:0 3px 0 #1c2e82,inset 0 0 7px #FFFFFF66}
-.edit-composer .composer-submit[data-slot=button]:active{box-shadow:0 1px 0 #1c2e82,inset 0 0 7px #FFFFFF66}
 
 :root{--ws-bubble:#f2f2f2;--ws-chip:#f2f2f2;--ws-chip-text:#555}html[data-workspace-theme="dark"]{--ws-bubble:#222;--ws-chip:#222;--ws-chip-text:#b6b6b6}
 
