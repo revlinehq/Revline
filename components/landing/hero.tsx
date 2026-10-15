@@ -6,8 +6,8 @@ export function LandingHero() {
     <div className="landing-hero-copy">
       <h1 id="landing-hero-heading">AI Native Video Editing</h1>
       <p>Turn your footage into finished edits.<br />Just tell Revline what you have in mind.</p>
-      <p className="landing-social-proof">Loved by 49,216 creators</p>
       <LandingStartButton label="Get started" className="landing-hero-start" />
+      <p className="landing-social-proof">Loved by 49,216 creators</p>
     </div>
     <ProductDemoPreview />
   </section>;
