@@ -25,7 +25,7 @@ export function clampPreviewScale(scale: number) {
 
 function clampCenterAxis(center: number, size: number, visibleSize: number, scale: number) {
   const half = Math.max(1, visibleSize) / (2 * scale);
-  if (half >= size / 2) return size / 2;
+  if (half >= size / 2) return Math.max(size - half, Math.min(half, center));
   return Math.max(half, Math.min(size - half, center));
 }
 

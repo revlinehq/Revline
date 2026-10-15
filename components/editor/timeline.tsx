@@ -85,7 +85,7 @@ export function TimelinePanel(p:Props){
     window.addEventListener('keyup',finishKey);window.addEventListener('blur',blur);
     return()=>{window.removeEventListener('keyup',finishKey);window.removeEventListener('blur',blur);blur();};
   },[store]);
-  const area=useRef<HTMLDivElement>(null);const scrubRef=useRef(false);const pointerX=useRef(0);const pointerY=useRef(0);const zoomAnchor=useRef<number|null>(null);
+  const area=useRef<HTMLDivElement>(null);const scrubRef=useRef(false);const pointerX=useRef(0);const pointerY=useRef(0);const zoomAnchor=useRef<number|null>(null);const followPausedUntil=useRef(0);
   const minimumZoom=minimumTimelineZoom(viewportWidth,timelineDuration(timeline));
   const px=TIMELINE_BASE_PX*zoom;const end=timelineDuration(timeline);const duration=Math.max(15,end+1);const width=Math.max(720,viewportWidth,duration*px);
   const layout=useMemo(()=>timelineLayout(timeline,dense),[timeline,dense]);const tracks=layout.tracks;const assetMap=useMemo(()=>new Map(assets.map(a=>[a._id,a])),[assets]);
@@ -150,7 +150,7 @@ export function TimelinePanel(p:Props){
     const wheel=(event:WheelEvent)=>{
       const unit=event.deltaMode===1?16:event.deltaMode===2?viewport.clientHeight:1;
       if(event.ctrlKey||event.metaKey){
-        event.preventDefault();if(gestureCleanup.current)return;
+        event.preventDefault();if(gestureCleanup.current)return;followPausedUntil.current=performance.now()+600;
         const anchor=Math.max(0,Math.min(viewport.clientWidth,event.clientX-viewport.getBoundingClientRect().left));
         changeZoom(store.getState().zoom*Math.exp(-Math.sign(event.deltaY)*Math.min(30,Math.abs(event.deltaY*unit))/300),anchor);
       }else if(rail.contains(event.target as Node)){
@@ -543,7 +543,7 @@ export function TimelinePanel(p:Props){
   const runContext=(action:()=>void)=>{try{action();}catch(error){report(error);}};
 
   return <ContextMenu onOpenChange={open=>{if(!open)setContext(null);}}><ContextMenuTrigger asChild disabled={p.readOnly}><section tabIndex={-1} onContextMenu={openContext} data-read-only={p.readOnly||undefined} className={`timeline-panel custom-timeline ${p.playbackControls?'timeline-with-playback':''} ${p.collapsed?'timeline-collapsed':''} ${dense?'tracks-compact':''}`} aria-label={p.readOnly?'Shared video timeline':'Video timeline'}>
-    <TimelinePlayheadClock playing={p.playing} readTime={p.readPlaybackTime} px={px} duration={end} origin={origin} viewport={scroll} head={head} cap={cap} scrubbing={scrubRef}/>
+    <TimelinePlayheadClock playing={p.playing} readTime={p.readPlaybackTime} px={px} duration={end} origin={origin} viewport={scroll} head={head} cap={cap} scrubbing={scrubRef} followPausedUntil={followPausedUntil}/>
     <div className="timeline-toolbar"><div className="timeline-edit-actions">{!p.playbackControls&&<EditorPlaybackTime className="timeline-playback-time" time={time} duration={end} fps={timeline.fps} playing={p.playing} readTime={p.readPlaybackTime}/>}
       {p.readOnly?<span>Timeline</span>:<><button aria-label="Split selected clip" title="Split" onClick={p.onSplit} disabled={!timeline.clips.length}><Scissors size={14}/><span>Split</span></button>
       <button aria-label="Delete selected clips" title="Delete" onClick={p.onDelete} disabled={!selected}><Trash2 size={14}/><span>Delete</span></button>

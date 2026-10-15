@@ -21,9 +21,9 @@ export function paintPlayhead(element: HTMLDivElement | null, x: number, viewpor
 
 // OpenCut's imperative playhead pattern, adapted to HyperFrames' frame clock.
 // MIT attribution: third-party/OpenCut-LICENSE.
-export function useTimelinePlayhead({time,playing,readTime,px,duration,origin,viewport,head,cap,scrubbing}:{
+export function useTimelinePlayhead({time,playing,readTime,px,duration,origin,viewport,head,cap,scrubbing,followPausedUntil}:{
   time:number;playing:boolean;readTime?:()=>number;px:number;duration:number;origin:number;
-  viewport:RefObject<HTMLDivElement|null>;head:RefObject<HTMLDivElement|null>;cap:RefObject<HTMLDivElement|null>;scrubbing:RefObject<boolean>;
+  viewport:RefObject<HTMLDivElement|null>;head:RefObject<HTMLDivElement|null>;cap:RefObject<HTMLDivElement|null>;scrubbing:RefObject<boolean>;followPausedUntil?:RefObject<number>;
 }){
   useEffect(()=>{if(!playing&&!scrubbing.current)paintPlayhead(head.current, origin+Math.min(readTime?.()??time,duration)*px,viewport.current,cap.current);},[time,playing,readTime,px,duration,origin,head,cap,viewport,scrubbing]);
   useEffect(()=>{
@@ -38,13 +38,13 @@ export function useTimelinePlayhead({time,playing,readTime,px,duration,origin,vi
     let frame=0;
     function tick(){
       if(!scrubbing.current){const x=origin+Math.min(readTime!(),duration)*px;
-        const el=viewport.current;if(el&&(x>el.scrollLeft+el.clientWidth-20||x<el.scrollLeft))el.scrollLeft=Math.max(0,x-el.clientWidth*.6);
+        const el=viewport.current;if(el&&performance.now()>=(followPausedUntil?.current??0)&&(x>el.scrollLeft+el.clientWidth-20||x<el.scrollLeft))el.scrollLeft=Math.max(0,x-el.clientWidth*.6);
         paintPlayhead(head.current,x,el,cap.current);
       }
       frame=requestAnimationFrame(tick);
     }
     frame=requestAnimationFrame(tick);return()=>cancelAnimationFrame(frame);
-  },[playing,readTime,px,duration,origin,viewport,head,cap,scrubbing]);
+  },[playing,readTime,px,duration,origin,viewport,head,cap,scrubbing,followPausedUntil]);
 }
 
 export function useEdgeAutoScroll(active:boolean,viewport:RefObject<HTMLDivElement|null>,pointer:RefObject<number>,pointerY?:RefObject<number>,onScroll?:RefObject<(()=>void)|null>,horizontal=true){
