@@ -75,7 +75,11 @@ try {
     await button(label).click();await flush();
     assert.deepEqual(await page.evaluate(()=>({animation:window.fixture.clip.animation,motion:window.fixture.clip.motion,motionOffset:window.fixture.clip.motionOffset,textAnimationTiming:window.fixture.clip.textAnimationTiming,textTemplate:window.fixture.clip.textTemplate})),preservedAnimation,`${label} preserves the entire selected animation and its controls`);
     assert.equal(await page.$eval(`[aria-label="${label}"]`,node=>node.getAttribute('aria-pressed')),'true','Style selection depends on appearance, independently of animation');
-    await page.click('#text-settings-animation-tab');await page.$eval('.text-settings-view',node=>node.scrollTop=0);await flush();
+    await page.$eval('.text-settings-view',node=>node.scrollTop=node.scrollHeight);await flush();
+    assert.ok(await page.$eval('.text-settings-view',node=>node.scrollTop>0),`${label}: Text is scrolled before switching views`);
+    await page.click('#text-settings-animation-tab');await flush();
+    assert.equal(await page.$eval('.text-settings-view',node=>node.scrollTop),0,`${label}: switching from scrolled Text opens Animation at the top`);
+    assert.ok(await page.$eval('.text-animation-controls',node=>{const controls=node.getBoundingClientRect(),view=document.querySelector('.text-settings-view').getBoundingClientRect();return controls.top>=view.top&&controls.bottom<=view.bottom;}),`${label}: Animation controls are visible immediately after switching views`);
     assert.equal(await page.$eval('.text-animation-current strong',node=>node.textContent),'Outline trails');
   }
   await button('Apply None').click();await flush();assert.equal(await page.$eval('.text-animation-current strong',node=>node.textContent),'None');assert.equal(await page.$('.text-animation-tuning'),null);assert.equal(await page.$('[aria-label="Text effect color"]'),null,'No animation does not expose unsupported controls');

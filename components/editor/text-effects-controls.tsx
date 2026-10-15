@@ -26,7 +26,7 @@ export function TextEffectsControls({ clip, onChange, onPreview, captionActions 
     <TextFontStyles/>
     <header className="text-settings-heading"><h2>Text settings</h2><p title={clip.text}>{clip.kind === 'caption' ? 'Caption' : 'Graphic'} · {clip.text || 'Selected text'}</p></header>
     <TabsList className="text-settings-tabs" aria-label="Text settings views">{tabs.map(view => <TabsTrigger key={view} value={view} id={`text-settings-${view}-tab`} aria-controls={`text-settings-${view}`}>{view === 'text' ? 'Text' : 'Animation'}</TabsTrigger>)}</TabsList>
-    <TabsContent value={tab} className="text-settings-view" data-text-view={tab} id={`text-settings-${tab}`} aria-labelledby={`text-settings-${tab}-tab`}>
+    <TabsContent key={tab} value={tab} className="text-settings-view" data-text-view={tab} id={`text-settings-${tab}`} aria-labelledby={`text-settings-${tab}-tab`}>
     {tab === 'text' ? <>
       <TextEditingControls key={`text-${clip.id}`} clip={clip} onChange={onChange} onPreview={onPreview}/>
       {clip.kind === 'caption' && captionActions && <CaptionTimingControls clip={clip} actions={captionActions}/>}
