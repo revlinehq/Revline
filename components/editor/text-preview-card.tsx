@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Check, Plus } from 'lucide-react';
 import './text-preset-picker.css';
 
@@ -9,15 +9,23 @@ export const TEXT_PREVIEW_DURATION = 90;
 export const TEXT_PREVIEW_HOLD_FRAME = 45;
 
 /** A hovered/focused card owns a clock and always uses the production frame renderer. */
-export function TextPreviewCard({ label, selected, onSelect, render, className = '', previewFirst = false }: { label: string; selected?: boolean; onSelect?: () => void; render: (frame: number) => ReactNode; className?: string; previewFirst?: boolean }) {
+export function TextPreviewCard({ label, selected, onSelect, render, className = '', previewFirst = false, autoPlay = false }: { label: string; selected?: boolean; onSelect?: () => void; render: (frame: number) => ReactNode; className?: string; previewFirst?: boolean; autoPlay?: boolean }) {
   const [hovered, setHovered] = useState(false);
   const [focused, setFocused] = useState(false);
   const [reducedMotion, setReducedMotion] = useState(true);
   const [frame, setFrame] = useState(TEXT_PREVIEW_HOLD_FRAME);
   const [previewing, setPreviewing] = useState(false);
   const [replay, setReplay] = useState(0);
-  const automatic = !reducedMotion && (hovered || focused);
+  const card = useRef<HTMLDivElement>(null);
+  const [visible, setVisible] = useState(false);
+  const automatic = autoPlay ? visible : !reducedMotion && (hovered || focused);
   const active = automatic || previewing;
+  useEffect(() => {
+    if (!autoPlay || !card.current) return;
+    const observer = new IntersectionObserver(([entry]) => setVisible(entry.isIntersecting), { threshold: .1 });
+    observer.observe(card.current);
+    return () => observer.disconnect();
+  }, [autoPlay]);
   useEffect(() => {
     const preference = matchMedia('(prefers-reduced-motion: reduce)');
     const update = () => setReducedMotion(preference.matches);
@@ -38,7 +46,7 @@ export function TextPreviewCard({ label, selected, onSelect, render, className =
     return () => cancelAnimationFrame(request);
   }, [active, replay, automatic]);
   const stage = render(active ? frame : TEXT_PREVIEW_HOLD_FRAME);
-  if (previewFirst) return <div className={`text-preset-card text-animation-card ${className}`} role="group" aria-label={label} data-selected={selected} onPointerEnter={event => { if (event.pointerType !== 'touch') setHovered(true); }} onPointerLeave={() => setHovered(false)} onFocusCapture={() => setFocused(true)} onBlurCapture={event => { if (!event.currentTarget.contains(event.relatedTarget)) setFocused(false); }}>
+  if (previewFirst) return <div ref={card} className={`text-preset-card text-animation-card ${className}`} role="group" aria-label={label} data-selected={selected} onPointerEnter={event => { if (event.pointerType !== 'touch') setHovered(true); }} onPointerLeave={() => setHovered(false)} onFocusCapture={() => setFocused(true)} onBlurCapture={event => { if (!event.currentTarget.contains(event.relatedTarget)) setFocused(false); }}>
     <button type="button" className="text-preset-stage text-animation-preview" aria-label={`Preview ${label}`} title="Play preview" onClick={() => { setPreviewing(true); setReplay(value => value + 1); }}><span aria-hidden="true">{stage}</span></button>
     <span className="text-preset-label"><span>{label}</span><button type="button" className="text-animation-apply" aria-label={`Apply ${label}`} aria-pressed={!!selected} disabled={!onSelect} title={!onSelect ? 'Select a text clip to apply this animation.' : undefined} onClick={onSelect}>{selected ? <Check size={11} aria-hidden="true"/> : <Plus size={11} aria-hidden="true"/>}Apply</button></span>
   </div>;

@@ -58,16 +58,30 @@ try {
   assert.equal(await page.evaluate(()=>window.fixture.clip.textTemplate.preset),'neon-echo');assert.deepEqual(await page.evaluate(()=>({ids:window.fixture.timeline.clips.map(clip=>clip.id),tracks:window.fixture.timeline.tracks})),entities,'Animations apply to the selected text without creating a clip or track');
   for(const key of Object.keys(custom)) assert.deepEqual(await page.evaluate(key=>window.fixture.clip[key],key),custom[key],'Neon animation preserves '+key);
   assert.equal(await page.$$eval('.text-preset-stage,.text-look-stage',nodes=>nodes.some(node=>getComputedStyle(node).backgroundImage!=='none')),false,'Card stages use solid backgrounds');
-  await page.focus('[aria-label="Preview Word reveal"]');
-  await page.waitForFunction(()=>Number(document.querySelector('[aria-label="Word reveal"] [data-frame]').dataset.frame)<44);
-  const commits=await page.evaluate(()=>window.patches.length);await page.mouse.move(0,0);await page.evaluate(()=>document.activeElement.blur());
-  await page.emulateMediaFeatures([{name:'prefers-reduced-motion',value:'reduce'}]);await page.hover('[aria-label="Word reveal"]');
-  await page.waitForFunction(()=>document.querySelector('[aria-label="Word reveal"] [data-frame]').dataset.frame==='45');
-  const manualStart=await page.evaluate(()=>performance.now());
+  const commits=await page.evaluate(()=>window.patches.length),beforePreview=await page.evaluate(()=>window.fixture.clip.textTemplate);
+  await page.evaluate(()=>window.fixture.setClip({textTemplate:{preset:'word-reveal',duration:8,offset:3.6}}));await flush();
+  for(const preference of ['no-preference','reduce']){
+    await page.emulateMediaFeatures([{name:'prefers-reduced-motion',value:preference}]);
+    await page.mouse.move(0,0);await page.focus('#text-settings-animation-tab');
+    await page.$eval('.text-settings-view',node=>node.scrollTop=0);await flush();
+    await page.waitForFunction(()=>Number(document.querySelector('[aria-label="Word reveal"] [data-frame]').dataset.frame)<4);
+    const stage=await page.$('[aria-label="Word reveal"] .text-preset-stage');
+    const early=await stage.screenshot({path:`/tmp/revline-text-animation-autoplay-${preference}-early.png`});
+    await page.waitForFunction(()=>{const frame=Number(document.querySelector('[aria-label="Word reveal"] [data-frame]').dataset.frame);return frame>=18&&frame<=23;});
+    const later=await stage.screenshot({path:`/tmp/revline-text-animation-autoplay-${preference}-later.png`});
+    assert.equal(early.equals(later),false,`${preference}: visible Animation cards must change actual pixels without hover, focus or click, including a selected split clip`);
+    assert.equal(await page.$eval('[aria-label="Word reveal"]',node=>node.matches(':hover')||node.contains(document.activeElement)),false,'Autoplay needs no interaction with a card');
+    await page.$eval('.text-settings-view',node=>node.scrollTop=node.scrollHeight);await flush();
+    await page.waitForFunction(()=>{const card=document.querySelector('[aria-label="Word reveal"]'),view=document.querySelector('.text-settings-view');return card.getBoundingClientRect().bottom<view.getBoundingClientRect().top&&card.querySelector('[data-frame]').dataset.frame==='45';});
+    await new Promise(resolve=>setTimeout(resolve,200));
+    assert.equal(await page.$eval('[aria-label="Word reveal"] [data-frame]',node=>node.dataset.frame),'45',`${preference}: an offscreen Animation card stops at its resting frame`);
+    await page.$eval('.text-settings-view',node=>node.scrollTop=0);await flush();
+    await page.waitForFunction(()=>Number(document.querySelector('[aria-label="Word reveal"] [data-frame]').dataset.frame)<10);
+  }
   await button('Preview Word reveal').click();
-  await page.waitForFunction(()=>Number(document.querySelector('[aria-label="Word reveal"] [data-frame]').dataset.frame)<44);
-  await page.waitForFunction(start=>performance.now()-start>3200&&document.querySelector('[aria-label="Word reveal"] [data-frame]').dataset.frame==='45', {timeout:4500},manualStart);
-  assert.equal(await page.evaluate(()=>window.patches.length),commits,'Preview never writes text');
+  await page.waitForFunction(()=>Number(document.querySelector('[aria-label="Word reveal"] [data-frame]').dataset.frame)<5);
+  assert.equal(await page.evaluate(()=>window.patches.length),commits,'Autoplay and replay never write text');
+  await page.evaluate(textTemplate=>window.fixture.setClip({textTemplate}),beforePreview);await flush();
   await page.click('#text-settings-text-tab');
   assert.equal(await page.$eval('[aria-label="Text font"]',node=>node.tagName),'BUTTON','Font uses the shared menu trigger');
   const beforeFont=await page.evaluate(()=>({clip:window.fixture.clip,writes:window.patches.length}));
@@ -108,5 +122,5 @@ try {
   await page.evaluate(()=>window.fixture.setClip({color:'#12ab67',fontSize:101}));await flush();const targetBefore=await page.evaluate(()=>window.fixture.timeline.clips.find(clip=>clip.id==='caption-two'));await button('Apply style to all captions').click();await flush();const targetAfter=await page.evaluate(()=>window.fixture.timeline.clips.find(clip=>clip.id==='caption-two'));assert.equal(targetAfter.color,'#12ab67');assert.equal(targetAfter.fontSize,101);for(const key of ['text','start','duration','animation'])assert.deepEqual(targetAfter[key],targetBefore[key],'Applying caption style preserves '+key);await page.screenshot({path:'/tmp/revline-text-settings-caption-320.png'});
   await page.click('#inspector-tools-tab');await page.click('[data-category="text"]');await page.waitForSelector('[aria-label="Default text"]');assert.equal(await page.$('[aria-label="Text animations"]'),null,'Library stays looks-only with selected text');
   assert.deepEqual(errors,[]);
-  console.log('PASS: Three text settings views, fixed tabs and bounded animation scrolling, words/font/size/position/rotation edits, independent animations preserve appearance and clip entities, real frame previews, reduced motion, caption timing guards and style propagation, six visible blend modes, editable stroke/shadow/glow, and 320px fit.');
+  console.log('PASS: Three text settings views, fixed tabs and bounded animation scrolling, words/font/size/position/rotation edits, independent animations preserve appearance and clip entities, real pixel autoplay without input under both motion preferences, split clip preview clock, offscreen pause and visible restart, caption timing guards and style propagation, six visible blend modes, editable stroke/shadow/glow, and 320px fit.');
 } finally {await browser.close();await fonts.close();}
