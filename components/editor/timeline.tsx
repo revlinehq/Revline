@@ -137,7 +137,7 @@ export function TimelinePanel(p:Props){
     onChange(targets.reduce((next,clip)=>patchClip(next,clip.id,{volume:muted?volumesBeforeMute.current.get(clip.id)??1:0}),timeline));
   }
 
-  useEdgeAutoScroll(scrubbing||selecting||!!drag||!!movingLayer||draggingMarker,scroll,pointerX,drag||movingLayer||selecting?pointerY:undefined,gestureUpdate,!movingLayer);
+  useEdgeAutoScroll(scrubbing||selecting||!!drag||!!movingLayer||draggingMarker,scroll,pointerX,drag||movingLayer||selecting?pointerY:undefined,gestureUpdate,!movingLayer,scrubbing?pointerY:undefined);
   useLayoutEffect(()=>{if(zoomAnchor.current!==null&&scroll.current){scroll.current.scrollLeft=zoomAnchor.current;zoomAnchor.current=null;}},[zoom]);
 
   const changeZoom=useCallback((next:number,anchor?:number)=>{
@@ -208,7 +208,7 @@ export function TimelinePanel(p:Props){
     if(e.button!==0)return;e.preventDefault();e.stopPropagation();
     gestureCleanup.current?.();
     focusTimeline(e.currentTarget);
-    const target=e.currentTarget;target.setPointerCapture(e.pointerId);pointerX.current=e.clientX;
+    const target=e.currentTarget;target.setPointerCapture(e.pointerId);pointerX.current=e.clientX;pointerY.current=e.clientY;
     const originalTime=frameSeekTime(p.readPlaybackTime?.()??time,timeline.fps,end);
     scrubRef.current=true;store.setState({scrubbing:true});setScrubbing(true);let frame=0;let last=-1;
     function update(){
@@ -217,10 +217,10 @@ export function TimelinePanel(p:Props){
       paint(at);if(at!==last){last=at;onSeek(at);}
     }
     function tick(){update();frame=requestAnimationFrame(tick);}
-    const move=(event:PointerEvent)=>{pointerX.current=event.clientX;};
+    const move=(event:PointerEvent)=>{pointerX.current=event.clientX;pointerY.current=event.clientY;};
     let unwatch=()=>{};
     const cleanup=()=>{unwatch();cancelAnimationFrame(frame);scrubRef.current=false;store.setState({scrubbing:false});setScrubbing(false);target.removeEventListener('pointermove',move);target.removeEventListener('pointerup',finish);target.removeEventListener('pointercancel',cancel);target.removeEventListener('lostpointercapture',cancel);gestureCleanup.current=null;if(target.hasPointerCapture(e.pointerId))target.releasePointerCapture(e.pointerId);};
-    const finish=(event:PointerEvent)=>{pointerX.current=event.clientX;update();cleanup();};
+    const finish=(event:PointerEvent)=>{pointerX.current=event.clientX;pointerY.current=event.clientY;update();cleanup();};
     const cancel=()=>{cleanup();onSeek(originalTime);paint(originalTime);};
     gestureCleanup.current=cancel;unwatch=watchCancellation(cancel);
     target.addEventListener('pointermove',move);target.addEventListener('pointerup',finish);target.addEventListener('pointercancel',cancel);target.addEventListener('lostpointercapture',cancel);tick();

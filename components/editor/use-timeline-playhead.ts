@@ -47,10 +47,12 @@ export function useTimelinePlayhead({time,playing,readTime,px,duration,origin,vi
   },[playing,readTime,px,duration,origin,viewport,head,cap,scrubbing,followPausedUntil]);
 }
 
-export function useEdgeAutoScroll(active:boolean,viewport:RefObject<HTMLDivElement|null>,pointer:RefObject<number>,pointerY?:RefObject<number>,onScroll?:RefObject<(()=>void)|null>,horizontal=true){
+// Scrubbing keeps pointer capture across panels, but must not scroll their edges.
+// Its horizontal Y bound is separate from pointerY, which enables vertical scrolling.
+export function useEdgeAutoScroll(active:boolean,viewport:RefObject<HTMLDivElement|null>,pointer:RefObject<number>,pointerY?:RefObject<number>,onScroll?:RefObject<(()=>void)|null>,horizontal=true,horizontalPointerY?:RefObject<number>){
   useEffect(()=>{
     if(!active)return;let frame=0;
-    function tick(){const el=viewport.current;if(el){const beforeX=el.scrollLeft,beforeY=el.scrollTop;const rect=el.getBoundingClientRect();const max=Math.max(0,el.scrollWidth-el.clientWidth);const speed=horizontal?edgeScrollSpeed(pointer.current,rect.left,rect.width,el.scrollLeft,max):0;if(speed)el.scrollLeft=Math.max(0,Math.min(max,el.scrollLeft+speed));if(pointerY){const maxY=Math.max(0,el.scrollHeight-el.clientHeight);const vertical=verticalEdgeScrollSpeed(pointerY.current,rect.top+TIMELINE_RULER_HEIGHT,rect.top+el.clientHeight,el.scrollTop,maxY);if(vertical)el.scrollTop=Math.max(0,Math.min(maxY,el.scrollTop+vertical));}if(el.scrollLeft!==beforeX||el.scrollTop!==beforeY)onScroll?.current?.();}frame=requestAnimationFrame(tick);}
+    function tick(){const el=viewport.current;if(el){const beforeX=el.scrollLeft,beforeY=el.scrollTop;const rect=el.getBoundingClientRect();const max=Math.max(0,el.scrollWidth-el.clientWidth);const withinHorizontalRegion=!horizontalPointerY||(horizontalPointerY.current>=rect.top&&horizontalPointerY.current<=rect.bottom);const speed=horizontal&&withinHorizontalRegion?edgeScrollSpeed(pointer.current,rect.left,rect.width,el.scrollLeft,max):0;if(speed)el.scrollLeft=Math.max(0,Math.min(max,el.scrollLeft+speed));if(pointerY){const maxY=Math.max(0,el.scrollHeight-el.clientHeight);const vertical=verticalEdgeScrollSpeed(pointerY.current,rect.top+TIMELINE_RULER_HEIGHT,rect.top+el.clientHeight,el.scrollTop,maxY);if(vertical)el.scrollTop=Math.max(0,Math.min(maxY,el.scrollTop+vertical));}if(el.scrollLeft!==beforeX||el.scrollTop!==beforeY)onScroll?.current?.();}frame=requestAnimationFrame(tick);}
     frame=requestAnimationFrame(tick);return()=>cancelAnimationFrame(frame);
-  },[active,viewport,pointer,pointerY,onScroll,horizontal]);
+  },[active,viewport,pointer,pointerY,onScroll,horizontal,horizontalPointerY]);
 }
