@@ -11,7 +11,6 @@ test('a new user sees the trial and cannot mount the upload/editor workflow', ()
   const child = vi.fn(() => <div>Editing workflow</div>);
   const Child = child;
   const html = renderToStaticMarkup(<EditorAccessGate><Child /></EditorAccessGate>);
-  expect(html).toContain('Try Revline free for 3 days');
   expect(html).toContain('Start 3-day free trial');
   expect(html).toContain('$39');
   expect(child).not.toHaveBeenCalled();

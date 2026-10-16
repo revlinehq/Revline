@@ -23,6 +23,7 @@ export function EditorAccessGate({ children, loading }: { children: ReactNode; l
 
   if (!status) return loading ?? <div className="editor-access-loading" role="status"><LoaderCircle size={18} className="animate-spin" />Checking your plan…</div>;
   if (!status.enabled || status.subscribed || status.complimentary) return children;
+  const trial = status.trialEligible && !status.needsPayment;
 
   async function openCheckout() {
     if (!status?.configured || inFlight.current) return;
@@ -41,21 +42,30 @@ export function EditorAccessGate({ children, loading }: { children: ReactNode; l
     <WorkspaceNav title={NEW_WORKSPACE_LABEL} />
     <main className="editor-access-main">
       <section className="editor-access-card" aria-labelledby="editor-access-title">
-        <h1 id="editor-access-title">{status.needsPayment ? 'Update your payment method' : status.trialEligible ? `Try Revline free for ${EDITOR_PLAN.trialDays} days` : 'Subscribe to Revline'}</h1>
-        {status.needsPayment && <p>Update your payment method to restore editor access.</p>}
-        <div className="editor-access-price"><strong>${EDITOR_PLAN.monthlyPrice}</strong><span>/ month{status.trialEligible ? ' after your trial' : ''} · {EDITOR_PLAN.currency}</span></div>
+        <header className="editor-access-heading">
+          <h1 id="editor-access-title">{status.needsPayment ? 'Update your payment method' : trial ? `Start ${EDITOR_PLAN.trialDays}-day free trial` : 'Continue with Revline'}</h1>
+          {status.needsPayment && <p>Update your payment method to restore editor access.</p>}
+        </header>
+        <div className="editor-access-offer">
+          <div className="editor-access-price"><strong>${trial ? 0 : EDITOR_PLAN.monthlyPrice}</strong><span>{trial ? 'today' : `/ month · ${EDITOR_PLAN.currency}`}</span></div>
+          {trial && <p>Then ${EDITOR_PLAN.monthlyPrice}/month · {EDITOR_PLAN.currency}.</p>}
+        </div>
         <ul className="editor-access-features" aria-label="Included features">
           <li><Check size={16} strokeWidth={1.5} aria-hidden="true" />AI editing in chat</li>
-          <li><Check size={16} strokeWidth={1.5} aria-hidden="true" />Automatic captions</li>
-          <li><Check size={16} strokeWidth={1.5} aria-hidden="true" />Private uploads</li>
-          <li><Check size={16} strokeWidth={1.5} aria-hidden="true" />MP4 exports</li>
+          <li><Check size={16} strokeWidth={1.5} aria-hidden="true" />Automatic captions &amp; animated text</li>
+          <li><Check size={16} strokeWidth={1.5} aria-hidden="true" />Custom fonts, colors &amp; text styles</li>
+          <li><Check size={16} strokeWidth={1.5} aria-hidden="true" />Video effects &amp; smooth transitions</li>
+          <li><Check size={16} strokeWidth={1.5} aria-hidden="true" />Audio FX &amp; precise timeline controls</li>
+          <li><Check size={16} strokeWidth={1.5} aria-hidden="true" />Private uploads &amp; MP4 exports</li>
         </ul>
         {!status.configured && <p role="status">Billing is temporarily unavailable. Please try again shortly.</p>}
-        <PrimaryButton className="editor-access-start" disabled={busy || !status.configured} onClick={() => void openCheckout()}>
-          {busy && <LoaderCircle size={14} className="animate-spin" />}
-          {status.needsPayment ? 'Update payment method' : status.trialEligible ? `Start ${EDITOR_PLAN.trialDays}-day free trial` : 'Subscribe'}
-        </PrimaryButton>
-        <small>{status.trialEligible ? 'A payment method is required. Cancel before your trial ends to avoid a charge.' : 'Cancel anytime in billing.'}</small>
+        <div className="editor-access-action">
+          <PrimaryButton className="editor-access-start" disabled={busy || !status.configured} onClick={() => void openCheckout()}>
+            {busy && <LoaderCircle size={14} className="animate-spin" />}
+            {status.needsPayment ? 'Update payment method' : trial ? `Start ${EDITOR_PLAN.trialDays}-day free trial` : 'Start creating'}
+          </PrimaryButton>
+          <small>{trial ? 'Payment method required. Cancel before your trial ends to avoid a charge.' : 'Cancel anytime in billing.'}</small>
+        </div>
         {error && <p className="editor-access-error" role="alert">{error}</p>}
       </section>
     </main>

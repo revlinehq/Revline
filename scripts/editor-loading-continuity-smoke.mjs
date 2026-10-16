@@ -85,7 +85,7 @@ try {
 
   // Pending customization never bypasses the actual denial or payment controls.
   await setState({billing:{...subscribed,subscribed:false,trialEligible:true}});await page.waitForSelector('.editor-access-card');
-  assert.match(await page.$eval('#editor-access-title',node=>node.textContent),/Try Revline free/);
+  assert.match(await page.$eval('#editor-access-title',node=>node.textContent),/Start 3-day free trial/);
   assert.ok(await page.$('.editor-access-start:not(:disabled)'));
   assert.equal(await page.$('.footage-preparation,[data-testid="ready-editor"]'),null);
   await setState({billing:{...subscribed,subscribed:false,needsPayment:true}});
