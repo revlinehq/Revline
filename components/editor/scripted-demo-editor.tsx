@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ComponentProps } from 'react';
 import { useStore } from 'zustand';
+import { createStore, type StoreApi } from 'zustand/vanilla';
 import { RotateCcw, Play } from 'lucide-react';
 import { createEditorStore } from '@/lib/editor/store';
 import { inspectMedia } from '@/lib/editor/media';
@@ -18,6 +19,15 @@ import { EditorStateProvider } from './editor-state';
 import { EditorShell } from './editor-shell';
 import './scripted-demo-editor.css';
 
+type DemoConversationStore = StoreApi<{ messages: ChatMessage[] }>;
+const NO_MESSAGES: ChatMessage[] = [];
+
+/** Word updates belong to the chat leaf, independently of the preview and timeline. */
+function DemoConversation({ chatStore, ...props }: Omit<ComponentProps<typeof AssistantPanel>, 'messages' | 'conversation'> & { chatStore: DemoConversationStore }) {
+  const messages = useStore(chatStore, state => state.messages);
+  return <AssistantPanel {...props} messages={messages}/>;
+}
+
 /** Separate, local-only recording route. The production editor never uses this script. */
 export function ScriptedDemoEditor({ demoId }: { demoId: string }) {
   const preparedTake=demoId==='hormozi-take-1';
@@ -27,7 +37,8 @@ export function ScriptedDemoEditor({ demoId }: { demoId: string }) {
   const [stockAssets, setStockAssets] = useState<MediaAsset[]>([]);
   const [submittedAssetIds, setSubmittedAssetIds] = useState<string[]>([]);
   const media = useMemo(() => scriptedDemoMedia([...(preparedTake?[HORMOZI_DEMO_ASSET]:assets),...stockAssets]), [assets,preparedTake,stockAssets]);
-  const [messages, setMessages] = useState<ChatMessage[]>([]), [running, setRunning] = useState(false), [importing, setImporting] = useState(false);
+  const [conversation] = useState(() => createStore<{ messages: ChatMessage[] }>(() => ({ messages: [] })));
+  const [running, setRunning] = useState(false), [importing, setImporting] = useState(false);
   const [error, setError] = useState(''), [title, setTitle] = useState('Your next edit'), [activity, setActivity] = useState<string | null>(null);
   const [lastPrompt, setLastPrompt] = useState('');
   const input = useRef<HTMLInputElement>(null), assetsRef = useRef<MediaAsset[]>([]), urls = useRef<string[]>([]), activeRun = useRef<AbortController | null>(null);
@@ -37,6 +48,9 @@ export function ScriptedDemoEditor({ demoId }: { demoId: string }) {
     return () => { mounted.current = false; activeRun.current?.abort(); urls.current.forEach(url => URL.revokeObjectURL(url)); urls.current = []; };
   }, []);
 
+  function setMessages(next: ChatMessage[] | ((previous: ChatMessage[]) => ChatMessage[])) {
+    conversation.setState(state => ({ messages: typeof next === 'function' ? next(state.messages) : next }));
+  }
   function reset() {
     activeRun.current?.abort(); activeRun.current = null;
     store.getState().recover(EMPTY_SCRIPTED_DEMO); store.setState({ playhead: 0, playing: false });
@@ -127,13 +141,13 @@ export function ScriptedDemoEditor({ demoId }: { demoId: string }) {
       <button type="button" title="Replay edit" aria-label="Replay edit" disabled={running || importing || !lastPrompt || !assets.length} onClick={() => void build(lastPrompt).catch(error => setError(userError(error)))}><Play size={13}/></button>
       <button type="button" title="Reset the timeline, keep attached footage" aria-label="Reset edit" disabled={importing} onClick={reset}><RotateCcw size={13}/></button>
     </div>
-    <AssistantPanel messages={messages} running={running} configured demo={false} hasClips={!!assets.length} onSend={build} onStop={async () => { activeRun.current?.abort(); }} onAttach={() => input.current?.click()} attachments={attachments} onRemoveAttachment={removeAttachment} requireMedia={!assets.length || attachments.length > 0 || importing} activity={importing ? 'Reading local footage…' : activity}/>
+    <DemoConversation chatStore={conversation} running={running} configured demo={false} hasClips={!!assets.length} onSend={build} onStop={async () => { activeRun.current?.abort(); }} onAttach={() => input.current?.click()} attachments={attachments} onRemoveAttachment={removeAttachment} requireMedia={!assets.length || attachments.length > 0 || importing} activity={importing ? 'Reading local footage…' : activity}/>
   </div>;
   function change(next: Timeline) { if (!activeRun.current) { store.getState().edit(next); setError(''); } }
   return <div className="scripted-editor-demo" data-demo-id={demoId} data-building={running || undefined}>
     <input ref={input} data-demo-files type="file" hidden multiple accept="video/*,image/*,audio/*" onChange={event => { const files = Array.from(event.currentTarget.files ?? []); event.currentTarget.value = ''; void attach(files).catch(error => setError(userError(error))); }}/>
     <EditorStateProvider store={store}><EditorShell onRegisterStockAudio={async catalogId=>{if(activeRun.current)throw new Error('Finish or stop the edit before adding a sound.');const asset=stockAudioAsset(catalogId);setStockAssets(previous=>previous.some(item=>item._id===asset._id)?previous:[...previous,asset]);return asset;}} title={title} onTitle={setTitle} timeline={timeline} assets={media.assets} onChange={change} saving={false} upload={null} error={error} onError={setError} demo assistantPanel={chat}
       onUndo={() => { if (!activeRun.current) store.getState().undo(); }} onRedo={() => { if (!activeRun.current) store.getState().redo(); }} canUndo={!running && !!history.length} canRedo={!running && !!future.length}
-      onUpload={attach} onDropUpload={attach} messages={messages} aiRunning={running} aiConfigured={false} onSend={build} onStop={async () => { activeRun.current?.abort(); }} onExport={async () => {}} exportState={null}/></EditorStateProvider>
+      onUpload={attach} onDropUpload={attach} messages={NO_MESSAGES} aiRunning={running} aiConfigured={false} onSend={build} onStop={async () => { activeRun.current?.abort(); }} onExport={async () => {}} exportState={null}/></EditorStateProvider>
   </div>;
 }
