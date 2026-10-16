@@ -142,3 +142,31 @@ exports. Complex software-GPU rendering remains a throughput limit.
 The production backend, worker secrets, instance size, concurrency and idle
 shutdown remain unchanged. No paid model call or customer editing job was used
 for release verification.
+
+### 2026-10-15 silent-video export fix rollout
+
+Controller version `669990b4-a359-4ea1-b7ce-fd5377c192e7` uses image
+`registry.cloudflare.com/701645e913477e567db69b11343f59d8/revline-media-processor@sha256:7fed72083b3e316cb5397ab1dfd981bc864841fa60b86944f3fb1d159dd0306a`.
+The frozen image includes source fix `885230d`: composition preparation probes
+downloaded video sources and mutes sources that have no audio stream. Embedded
+audio in audible videos and separately extracted audio remain supported. This
+prevents silent video from being rejected as an incorrectly authored audio asset.
+
+The source-only Linux/amd64 build reused the retained renderer-optimization image
+and its installed dependencies. Its additional image layers total 93.8 MB; no
+dependency installation, download or broad Chromium ownership change was needed.
+The exact resulting image (`sha256:543f1242a65de1d82220f358886c96098c27c7fc83864eed02c1e9c7de3b7c20`)
+passed the runtime checks and a network-disabled export as the `node` user under
+a 1-CPU/6-GiB cap. The real silent NASA fixture exported as H.264, 1280×720,
+24 fps, 66 frames and 2.750 seconds, with no audio stream and zero warnings.
+The render plus output verification took 19.196 seconds. Four sampled frames,
+including both sides of the cut, matched their source times with mean RGB error
+1.96–2.18/255. This is a local image check; a hosted export retry is still needed.
+
+Wrangler deployed the digest-pinned image with `--keep-vars --strict` through a
+temporary non-secret configuration; the tracked configuration remains build-based.
+The latest version and its image binding were verified through Wrangler, and
+deployment `1ae40041-e9bf-4124-8f38-e44aac3bc448` routes 100% to that version.
+Existing backend, secrets, instance size, concurrency, cron and graceful drain
+behavior were preserved. No shared task was interrupted and no paid model was
+called during this rollout.
