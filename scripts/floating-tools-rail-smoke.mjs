@@ -20,13 +20,19 @@ const browser=await puppeteer.launch({headless:true,args:['--no-sandbox','--disa
 const flush=()=>page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
 const snapshot=()=>page.evaluate(()=>{const {timeline,selectedId,selectedIds,playhead}=window.fixture.store.getState();return {timeline,selectedId,selectedIds,playhead,commits:window.commits}});
 const hide=async()=>{await page.click('[aria-label="Hide editing panel"]');await page.waitForSelector('.floating-tools-rail');};
+async function themeAppearance(theme){
+  const colors=await page.evaluate(theme=>{document.documentElement.dataset.workspaceTheme=theme;const rail=document.querySelector('.floating-tools-rail-list'),button=rail.querySelector('button');return {surface:getComputedStyle(rail).backgroundColor,icon:getComputedStyle(button).color};},theme);
+  const channels=value=>value.match(/[\d.]+/g).slice(0,3).map(Number);
+  assert.ok(channels(colors.surface).every(value=>theme==='light'?value>230:value<80),`${theme} tools rail must follow the workspace surface, got ${colors.surface}`);
+  assert.ok(channels(colors.icon).every(value=>theme==='light'?value<180:value>100),`${theme} tools rail icons must contrast with its surface`);
+}
 async function geometry(){
   const value=await page.$eval('.floating-tools-rail',rail=>{const rect=rail.getBoundingClientRect(),stage=rail.closest('.editor-stage').getBoundingClientRect(),list=rail.querySelector('.floating-tools-rail-list').getBoundingClientRect(),buttons=[...rail.querySelectorAll('button')].map(button=>{const rect=button.getBoundingClientRect();return {width:rect.width,height:rect.height}}),hit=document.elementFromPoint(rect.left+2,(list.top+list.bottom)/2);return {width:rect.width,rightGap:stage.right-rect.right,inside:list.top>=stage.top&&list.bottom<=stage.bottom,buttons,passthrough:!hit?.closest('.floating-tools-rail')};});
   assert.equal(value.width,52);assert.ok(Math.abs(value.rightGap-12)<1);assert.ok(value.inside,'Rail stays inside preview after layout resize');assert.ok(value.passthrough,'Rail padding/background does not intercept preview gestures');assert.equal(value.buttons.length,6);for(const button of value.buttons){assert.equal(button.width,40);assert.equal(button.height,40);}
 }
 try{
   await page.setViewport({width:1280,height:900});await page.setContent('<html data-workspace-theme="dark"><body><div id="root"></div></body></html>');await page.addStyleTag({content:bundle.outputFiles.find(file=>file.path.endsWith('.css')).text});await page.addStyleTag({content:'*{box-sizing:border-box}body{margin:0;font:12px Arial;background:var(--ws-bg)}.editor-app{height:100dvh}button{font-family:inherit}'});await page.addScriptTag({content:bundle.outputFiles.find(file=>file.path.endsWith('.js')).text});await page.waitForSelector('.effect-library');const original=await snapshot();
-  await hide();await geometry();assert.equal(await page.$('.preview-inspector'),null);assert.equal(await page.$('.floating-tools-rail [aria-label*="Graphics"]'),null,'Rail contains only actual production categories');
+  await hide();await geometry();await themeAppearance('dark');await themeAppearance('light');await themeAppearance('dark');assert.equal(await page.$('.preview-inspector'),null);assert.equal(await page.$('.floating-tools-rail [aria-label*="Graphics"]'),null,'Rail contains only actual production categories');
   await page.hover('[aria-label="Open Color tools"]');await page.waitForSelector('[role="tooltip"]');assert.equal(await page.$eval('[role="tooltip"]',node=>node.textContent),'Color');await page.screenshot({path:'/tmp/revline-floating-tools-rail-dark.png'});await page.mouse.move(0,0);
   for(const [category,label] of [['motion','Motion'],['color','Color'],['texture','Texture'],['transitions','Transitions'],['text','Text']]){
     await page.click(`[aria-label="Open ${label} tools"]`);await page.waitForSelector(`[data-category="${category}"][aria-selected="true"]`);assert.equal(await page.$('.floating-tools-rail'),null);assert.deepEqual(await snapshot(),original,'Category navigation retains text, selection, project state and edit history');

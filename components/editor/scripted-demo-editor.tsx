@@ -7,6 +7,7 @@ import { createEditorStore } from '@/lib/editor/store';
 import { inspectMedia } from '@/lib/editor/media';
 import { normalizeMediaFile } from '@/lib/editor/media-file';
 import { EMPTY_SCRIPTED_DEMO, scriptedDemoPlan, scriptedDemoMedia } from '@/lib/editor/scripted-demo';
+import { streamDemoText, waitForDemoStep } from '@/lib/editor/scripted-demo-chat';
 import { HORMOZI_DEMO_ASSET, hormoziDemoPlan } from '@/lib/editor/hormozi-demo';
 import type { MediaAsset, Timeline } from '@/lib/editor/types';
 import type { ComposerAttachment } from '@/components/workspace/edit-composer';
@@ -16,15 +17,6 @@ import { AssistantPanel, type ChatMessage } from './assistant-panel';
 import { EditorStateProvider } from './editor-state';
 import { EditorShell } from './editor-shell';
 import './scripted-demo-editor.css';
-
-function waitForStep(ms: number, signal: AbortSignal) {
-  return new Promise<void>((resolve, reject) => {
-    const abort = () => { clearTimeout(timer); reject(signal.reason); };
-    const timer = setTimeout(() => { signal.removeEventListener('abort', abort); resolve(); }, ms);
-    if (signal.aborted) abort();
-    else signal.addEventListener('abort', abort, { once: true });
-  });
-}
 
 /** Separate, local-only recording route. The production editor never uses this script. */
 export function ScriptedDemoEditor({ demoId }: { demoId: string }) {
@@ -88,21 +80,40 @@ export function ScriptedDemoEditor({ demoId }: { demoId: string }) {
     const controller = new AbortController(); activeRun.current = controller;
     setSubmittedAssetIds(assetsRef.current.map(asset => asset._id));
     setError(''); setLastPrompt(prompt); setRunning(true); setActivity('Building your edit…');
-    setMessages([{ id: `${runId}-request`, role: 'user', text: prompt }, { id: `${runId}-reply`, role: 'assistant', status: 'streaming', text: preparedTake?plan.steps[0].reply:'I’ll build a short sequence with cuts, captions, and subtle effects.' }]);
+    setMessages([{ id: `${runId}-request`, role: 'user', text: prompt }, { id: `${runId}-reply`, role: 'assistant', status: 'streaming', text: '' }]);
     store.getState().recover(plan.initial); store.setState({ playhead: 0, playing: false }); store.getState().beginUndoGroup(runId);
     let current = plan.initial;
+    const opening = preparedTake ? plan.steps[0].reply : 'I’ll build a short sequence with cuts, captions, and subtle effects.';
+    const details = plan.steps.find(step => step.clips.some(clip => clip.kind === 'caption'))?.reply;
+    async function narrate(text: string, separator = '') {
+      let prefix = separator;
+      await streamDemoText(text, controller.signal, chunk => {
+        const addition = prefix + chunk; prefix = '';
+        if (mounted.current && activeRun.current === controller) setMessages(previous => previous.map(message => message.id === `${runId}-reply` ? { ...message, text: message.text + addition } : message));
+      });
+    }
     try {
-      await waitForStep(800, controller.signal);
-      for (const step of plan.steps) {
-        current = { ...current, clips: [...current.clips, ...step.clips] };
-        store.getState().edit(current); setActivity(step.label);
-        setMessages(previous => previous.map(message => message.id === `${runId}-reply` ? { ...message, text: step.reply } : message));
-        await waitForStep(step.delayMs, controller.signal);
-      }
-      setMessages(previous => previous.map(message => message.id === `${runId}-reply` ? { ...message, status: 'success', text: plan.summary } : message));
+      const buildTimeline = (async () => {
+        await waitForDemoStep(800, controller.signal);
+        for (const step of plan.steps) {
+          controller.signal.throwIfAborted();
+          current = { ...current, clips: [...current.clips, ...step.clips] };
+          store.getState().edit(current); setActivity(step.label);
+          await waitForDemoStep(step.delayMs, controller.signal);
+        }
+      })();
+      await Promise.all([buildTimeline, (async () => {
+        await narrate(opening);
+        if (details && details !== opening) { await waitForDemoStep(320, controller.signal); await narrate(details, '\n\n'); }
+        await buildTimeline;
+        await waitForDemoStep(350, controller.signal);
+        await narrate(plan.summary, '\n\n');
+      })()]);
+      setMessages(previous => previous.map(message => message.id === `${runId}-reply` ? { ...message, status: 'success' } : message));
     } catch (error) {
       if (!controller.signal.aborted && mounted.current) setError(userError(error, 'The edit stopped. Reset and try again.'));
-      if (mounted.current && activeRun.current === controller) setMessages(previous => previous.map(message => message.id === `${runId}-reply` ? { ...message, status: 'aborted', text: 'Stopped. The blocks already placed remain editable.' } : message));
+      controller.abort();
+      if (mounted.current && activeRun.current === controller) setMessages(previous => previous.map(message => message.id === `${runId}-reply` ? { ...message, status: 'aborted', text: `${message.text.trimEnd()}${message.text.trim() ? '\n\n' : ''}Stopped. The blocks already placed remain editable.` } : message));
     } finally {
       if (activeRun.current === controller) {
         activeRun.current = null; store.getState().endUndoGroup();
