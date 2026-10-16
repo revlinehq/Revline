@@ -51,9 +51,10 @@ function AssistantResponseText({ text, streaming }: { text: string; streaming: b
   return <ChatProse text={text} animate={receivedLive || streaming} />;
 }
 
-function AssistantPanelBody({ messages, running, configured, error, onSend, onStop, hasClips, demo, onLoadMore, canLoadMore, onAttach, activity, activitySource, draftKey, suggestions, onSuggestion, editSnapshot, modelSwitcher = false, allowedModels = PRODUCTION_CLAUDE_MODEL_CHOICES, attachments, onRemoveAttachment, requireMedia = false }: {
+function AssistantPanelBody({ messages, running, configured, error, onSend, onStop, hasClips, demo, onLoadMore, canLoadMore, onAttach, activity, activitySource, draftKey, suggestions, onSuggestion, editSnapshot, defaultModelChoice, modelSwitcher = false, allowedModels = PRODUCTION_CLAUDE_MODEL_CHOICES, attachments, onRemoveAttachment, requireMedia = false }: {
   messages: ChatMessage[]; running: boolean; configured: boolean; error?: string | null;
   modelSwitcher?: boolean;
+  defaultModelChoice?:ClaudeModelChoice;
   allowedModels?: readonly ClaudeModelChoice[];
   onSend: (text: string, modelChoice?: ClaudeModelChoice) => Promise<void>; hasClips: boolean; demo: boolean;
   onLoadMore?: () => void; canLoadMore?: boolean; onAttach?: () => void;
@@ -67,8 +68,9 @@ function AssistantPanelBody({ messages, running, configured, error, onSend, onSt
   const [prompt, setPrompt] = useState('');
   const sendInFlight=useRef(false);
   const currentDraftKey=useRef(draftKey);currentDraftKey.current=draftKey;
-  const [modelChoice, setModelChoice] = useState<ClaudeModelChoice>('sonnet');
-  const effectiveModelChoice = allowedModels.includes(modelChoice) ? modelChoice : 'sonnet';
+  const [modelChoice, setModelChoice] = useState<ClaudeModelChoice>();
+  const selectedModelChoice=modelChoice&&allowedModels.includes(modelChoice)?modelChoice:undefined;
+  const effectiveModelChoice=selectedModelChoice??(defaultModelChoice&&allowedModels.includes(defaultModelChoice)?defaultModelChoice:allowedModels.includes('sonnet')?'sonnet':allowedModels[0]??'sonnet');
   const [sending, setSending] = useState(false);
   const [localError, setLocalError] = useState('');
   const [stopState,setStopState]=useState<'stopping'|'stopped'|null>(null);
@@ -115,7 +117,7 @@ function AssistantPanelBody({ messages, running, configured, error, onSend, onSt
     const draft=prompt,key=draftKey;sendInFlight.current=true;
     changePrompt('');
     setStopState(null); setSending(true); setPendingReply({ id: `pending-${crypto.randomUUID()}`, text: draft.trim(), previousUserId: latestUser?.id, previousError: error }); setLocalError(''); scroll.resume();
-    try { await onSend(draft.trim(), modelSwitcher ? effectiveModelChoice : undefined); }
+    try { await onSend(draft.trim(), modelSwitcher ? selectedModelChoice : undefined); }
     catch (e) { if(currentDraftKey.current===key){changePrompt(draft);setPendingReply(null);setLocalError(userError(e, 'Could not send message'));} }
     finally { sendInFlight.current=false;setSending(false); }
   }
@@ -124,7 +126,7 @@ function AssistantPanelBody({ messages, running, configured, error, onSend, onSt
     if (!suggestions || !onSuggestion || sendInFlight.current || sending || running || pendingReply || !configured) return;
     const request = `${suggestion.prompt}\n\nUse the selected clip from “${suggestions.sourceName}”, source ${suggestion.start.toFixed(2)}–${suggestion.end.toFixed(2)} seconds.`;
     sendInFlight.current=true;setStopState(null); setSending(true); setPendingReply({ id: `pending-${crypto.randomUUID()}`, text: request, previousUserId: latestUser?.id, previousError: error }); setLocalError(''); scroll.resume();
-    try { await onSuggestion(request, suggestions.clipId, modelSwitcher ? effectiveModelChoice : undefined); }
+    try { await onSuggestion(request, suggestions.clipId, modelSwitcher ? selectedModelChoice : undefined); }
     catch (e) { setPendingReply(null); setLocalError(userError(e, 'Could not start this edit.')); }
     finally { sendInFlight.current=false;setSending(false); }
   }

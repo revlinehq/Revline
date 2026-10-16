@@ -10,6 +10,16 @@ test('unselected requests preserve configured provider and model overrides', () 
   expect(resolveClaudeModel(undefined, { AI_GATEWAY_ENABLED: 'true', CLAUDE_GATEWAY_MODEL: 'anthropic/configured-model' })).toEqual({ provider: 'gateway', modelId: 'anthropic/configured-model' });
 });
 
+test('an explicit environment default selects native Sol without changing development or manual Sonnet',()=>{
+  const production={EDITOR_DEFAULT_MODEL:'gpt-6.1-sol',OPENAI_API_KEY:'fixture-only',MODEL_SWITCHER_ENABLED:'true',AI_GATEWAY_ENABLED:'true'};
+  expect(resolveClaudeModel(undefined,production)).toEqual({provider:'openai',modelId:'gpt-6.1-sol',modelChoice:'gpt-6.1-sol'});
+  expect(resolveClaudeModel(undefined,{...production,MODEL_SWITCHER_ENABLED:'false'}).provider).toBe('openai');
+  expect(resolveClaudeModel('sonnet',production)).toEqual({provider:'gateway',modelId:CLAUDE_GATEWAY_MODEL,modelChoice:'sonnet'});
+  expect(resolveClaudeModel(undefined,{})).toEqual({provider:'anthropic',modelId:CLAUDE_MODEL});
+  expect(()=>resolveClaudeModel(undefined,{EDITOR_DEFAULT_MODEL:'unsupported'})).toThrow('default');
+  expect(()=>resolveClaudeModel(undefined,{EDITOR_DEFAULT_MODEL:'gpt-6.1-sol'})).toThrow('OPENAI_API_KEY');
+});
+
 test.each(CLAUDE_EDIT_MODELS)('$label only overrides the model when manual selection is enabled', model => {
   expect(() => resolveClaudeModel(model.id, {})).toThrow('disabled');
   expect(resolveClaudeModel(model.id, { MODEL_SWITCHER_ENABLED: 'true', CLAUDE_MODEL: 'other' })).toEqual({ provider: 'anthropic', modelId: model.modelId, modelChoice: model.id });
@@ -51,6 +61,7 @@ test('production policy also blocks environment overrides and previously queued 
   const production = { EDITOR_ALLOW_OPUS: 'false', MODEL_SWITCHER_ENABLED: 'true' };
   expect(() => resolveClaudeModel('opus', production)).toThrow('only in development');
   expect(() => resolveClaudeModel(undefined, { ...production, CLAUDE_MODEL: 'claude-opus-5-5' })).toThrow('only in development');
+  expect(() => resolveClaudeModel(undefined, { ...production, EDITOR_DEFAULT_MODEL: 'opus' })).toThrow('only in development');
   expect(() => resolveClaudeModel(undefined, { ...production, AI_GATEWAY_ENABLED: 'true', CLAUDE_GATEWAY_MODEL: 'anthropic/claude-opus-5.5' })).toThrow('only in development');
   expect(() => validatePinnedClaudeModel({ provider: 'anthropic', modelId: 'claude-opus-5-5', modelChoice: 'opus' }, production)).toThrow('only in development');
   expect(validatePinnedClaudeModel({ provider: 'anthropic', modelId: CLAUDE_MODEL, modelChoice: 'sonnet' }, production).modelId).toBe(CLAUDE_MODEL);

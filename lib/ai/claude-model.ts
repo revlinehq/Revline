@@ -29,15 +29,21 @@ export function claudeModelSwitcherEnabled(env: ClaudeModelEnvironment = process
 
 export function resolveClaudeModel(modelChoice?: ClaudeModelChoice, env: ClaudeModelEnvironment = process.env): ClaudeModelSelection {
   const provider = env.AI_GATEWAY_ENABLED === 'true' ? 'gateway' : 'anthropic';
-  if (modelChoice !== undefined) {
-    if (!claudeModelSwitcherEnabled(env)) throw new Error('Manual model selection is currently disabled.');
-    const openai = OPENAI_EDIT_MODELS.find(model => model.id === modelChoice);
-    if (openai) return enforceClaudeModelPolicy({ provider: 'openai', modelId: openai.modelId, modelChoice }, env);
-    const selected = CLAUDE_EDIT_MODELS.find(model => model.id === modelChoice);
-    if (!selected) throw new Error('Choose a supported editor model.');
-    return enforceClaudeModelPolicy({ provider, modelId: provider === 'gateway' ? selected.gatewayModelId : selected.modelId, modelChoice }, env);
+  const choice=modelChoice??(env.EDITOR_DEFAULT_MODEL?.trim()||undefined);
+  if (choice !== undefined) {
+    if (modelChoice!==undefined&&!claudeModelSwitcherEnabled(env)) throw new Error('Manual model selection is currently disabled.');
+    const openai = OPENAI_EDIT_MODELS.find(model => model.id === choice);
+    if (openai) return enforceClaudeModelPolicy({ provider: 'openai', modelId: openai.modelId, modelChoice:openai.id }, env);
+    const selected = CLAUDE_EDIT_MODELS.find(model => model.id === choice);
+    if (!selected) throw new Error(modelChoice===undefined?'Configure a supported EDITOR_DEFAULT_MODEL default.':'Choose a supported editor model.');
+    return enforceClaudeModelPolicy({ provider, modelId: provider === 'gateway' ? selected.gatewayModelId : selected.modelId, modelChoice:selected.id }, env);
   }
   return enforceClaudeModelPolicy({ provider, modelId: provider === 'gateway' ? env.CLAUDE_GATEWAY_MODEL ?? CLAUDE_GATEWAY_MODEL : env.CLAUDE_MODEL ?? CLAUDE_MODEL }, env);
+}
+
+export function defaultEditorModelChoice(env:ClaudeModelEnvironment=process.env):ClaudeModelChoice|undefined {
+  const selected=resolveClaudeModel(undefined,env);
+  return EDITOR_MODELS.find(model=>model.modelId===selected.modelId||('gatewayModelId' in model&&model.gatewayModelId===selected.modelId))?.id;
 }
 
 export function validatePinnedClaudeModel(selection: ClaudeModelSelection, env: ClaudeModelEnvironment = process.env): ClaudeModelSelection {

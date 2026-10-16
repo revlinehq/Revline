@@ -25,6 +25,7 @@ beforeEach(() => {
   vi.stubEnv('MODEL_SWITCHER_ENABLED', 'false');
   vi.stubEnv('CLAUDE_MODEL', 'claude-sonnet-5-5');
   vi.stubEnv('CLAUDE_GATEWAY_MODEL', 'anthropic/claude-sonnet-5.5');
+  vi.stubEnv('EDITOR_DEFAULT_MODEL','');
 });
 afterEach(() => vi.unstubAllEnvs());
 
@@ -131,4 +132,31 @@ test('OpenAI-only configuration does not silently replace the default Sonnet sel
   expect((await owner.query(api.assistant.status, { projectId })).configured).toBe(true);
   await expect(owner.mutation(api.assistant.send, { projectId, prompt: 'Synthetic edit' })).rejects.toThrow('ANTHROPIC_API_KEY');
   expect(await t.run(ctx => ctx.db.system.query('_scheduled_functions').take(10))).toHaveLength(0);
+});
+
+test('the configured Sol default is public as a choice and pinned for unselected new-chat requests',async()=>{
+  vi.stubEnv('EDITOR_DEFAULT_MODEL','gpt-6.1-sol');vi.stubEnv('OPENAI_API_KEY','fixture-openai-only');vi.stubEnv('ANTHROPIC_API_KEY','');
+  const {t,owner,projectId}=await fixture();
+  expect(await owner.query(api.assistant.status,{projectId})).toMatchObject({configured:true,defaultModelChoice:'gpt-6.1-sol'});
+  await owner.mutation(api.assistant.send,{projectId,prompt:'Synthetic default edit'});
+  const [scheduled]=await t.run(ctx=>ctx.db.system.query('_scheduled_functions').take(10));
+  expect(scheduled.args[0].pinnedModel).toEqual({provider:'openai',modelId:'gpt-6.1-sol',modelChoice:'gpt-6.1-sol'});
+});
+
+test('Sonnet remains selectable when the configured default is Sol',async()=>{
+  vi.stubEnv('EDITOR_DEFAULT_MODEL','gpt-6.1-sol');vi.stubEnv('OPENAI_API_KEY','fixture-openai-only');vi.stubEnv('MODEL_SWITCHER_ENABLED','true');
+  const {t,owner,projectId}=await fixture();
+  expect((await owner.query(api.assistant.status,{projectId})).allowedModels).toContain('sonnet');
+  await owner.mutation(api.assistant.send,{projectId,prompt:'Synthetic explicit edit',modelChoice:'sonnet'});
+  const [scheduled]=await t.run(ctx=>ctx.db.system.query('_scheduled_functions').take(10));
+  expect(scheduled.args[0].pinnedModel).toEqual({provider:'anthropic',modelId:'claude-sonnet-5-5',modelChoice:'sonnet'});
+});
+
+test('a missing configured default credential fails closed before creating a conversation',async()=>{
+  vi.stubEnv('EDITOR_DEFAULT_MODEL','gpt-6.1-sol');
+  const {t,owner,projectId}=await fixture();
+  expect((await owner.query(api.assistant.status,{projectId})).configured).toBe(false);
+  await expect(owner.mutation(api.assistant.send,{projectId,prompt:'Synthetic default edit'})).rejects.toThrow('OPENAI_API_KEY');
+  expect((await t.run(ctx=>readProject(ctx,projectId)))?.threadId).toBeUndefined();
+  expect(await t.run(ctx=>ctx.db.system.query('_scheduled_functions').take(10))).toHaveLength(0);
 });

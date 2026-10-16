@@ -77,6 +77,22 @@ try {
  await page.waitForSelector('[role="menuitemradio"][data-value="gpt-6-astra"]');
  const rect=await page.$eval('[role="menu"]',el=>{const r=el.getBoundingClientRect();return {left:r.left,right:r.right};});
  assert(rect.left>=0&&rect.right<=320,'Model menu remains within narrow panel');
+ await page.keyboard.press('Escape');
+ await page.evaluate(()=>window.renderFixture({fixtureKey:2,defaultModelChoice:undefined}));
+ assert.equal(await page.$eval('[aria-label="AI editing model"]',el=>el.textContent),'Sonnet 5.5');
+ await page.evaluate(()=>window.renderFixture({defaultModelChoice:'gpt-6.1-sol'}));
+ assert.equal(await page.$eval('[aria-label="AI editing model"]',el=>el.textContent),'GPT-6.1 Sol','The authoritative backend default arrives without requiring a remount');
+ await page.focus('.assistant-content textarea');await page.keyboard.down('Control');await page.keyboard.press('KeyA');await page.keyboard.up('Control');await page.keyboard.press('Backspace');
+ await page.type('.assistant-content textarea','Use the configured default');await page.click('.assistant-content .composer-submit');
+ await page.waitForFunction(()=>window.calls.length===7);
+ assert.equal(await page.evaluate(()=>window.calls.at(-1).model),undefined,'An untouched picker preserves the backend default instead of overriding it with Sonnet');
+ await page.waitForFunction(()=>!document.querySelector('.assistant-content textarea').disabled);
+ await page.click('[aria-label="AI editing model"]');await page.waitForSelector('[role="menuitemradio"][data-value="sonnet"]');await page.click('[role="menuitemradio"][data-value="sonnet"]');
+ await page.waitForFunction(()=>document.activeElement?.getAttribute('aria-label')==='AI editing model');
+ await page.focus('.assistant-content textarea');await page.keyboard.down('Control');await page.keyboard.press('KeyA');await page.keyboard.up('Control');await page.keyboard.press('Backspace');
+ await page.type('.assistant-content textarea','Choose Sonnet explicitly');await page.waitForFunction(()=>!document.querySelector('.assistant-content .composer-submit').disabled);await page.click('.assistant-content .composer-submit');
+ await page.waitForFunction(()=>window.calls.length===8);
+ assert.equal(await page.evaluate(()=>window.calls.at(-1).model),'sonnet','Sonnet remains explicitly selectable when Sol is the backend default');
  assert.deepEqual(errors,[]);
- console.log('PASS: picker sends all five native choices; environment allowlist hides unavailable OpenAI and production Opus and resets stale selections, locks during a run, disappears when disabled; compact send/stop 28px with shared solid color and no shadow, studio unchanged. Synthetic fixture only.');
+ console.log('PASS: picker follows the backend default without overriding untouched sends; Sonnet and all other native choices remain selectable; environment allowlist, run lock and compact geometry preserved. Synthetic fixture only.');
 } finally { await browser.close(); await new Promise(resolve=>server.close(resolve)); }

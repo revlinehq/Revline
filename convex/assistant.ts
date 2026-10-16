@@ -15,20 +15,25 @@ import { validateVideoInspectionInput } from '../lib/media-analysis/video-inspec
 import { normalizeTimeline } from '../lib/editor/types';
 import {savePublicationReceipt} from './lib/publicationReceipt';
 import { enqueueMediaTask, cancelMediaTask } from './mediaTasks';
-import { assertEditorModelConfigured, claudeModelSwitcherEnabled, resolveClaudeModel } from '../lib/ai/claude-model';
+import { assertEditorModelConfigured, claudeModelSwitcherEnabled, defaultEditorModelChoice, resolveClaudeModel } from '../lib/ai/claude-model';
 import { claudeModelChoiceValidator } from './lib/claude_model';
 import { allowedClaudeModelChoices, enforceClaudeModelPolicy } from '../lib/ai/claude-model-policy';
 import { assistantRecovery } from './lib/assistant_recovery';
 const providerReason = "Configure an editing provider in Convex: ANTHROPIC_API_KEY, an eligible AI Gateway, or OPENAI_API_KEY with the model switcher enabled.";
-function configured() { return !!process.env.ANTHROPIC_API_KEY || process.env.AI_GATEWAY_ENABLED === "true" || (claudeModelSwitcherEnabled() && !!process.env.OPENAI_API_KEY?.trim()); }
-export const status = query({ args: { projectId: v.id("projects") }, returns: v.object({ configured: v.boolean(), modelSwitcher: v.optional(v.boolean()), allowedModels: v.optional(v.array(claudeModelChoiceValidator)), running: v.boolean(), error: v.union(v.string(), v.null()), reason: v.union(v.string(), v.null()), activity: v.union(v.string(), v.null()), activitySource: v.union(v.string(), v.null()), activityProgress: v.union(v.number(), v.null()) }), handler: async (ctx, args) => {
+function configured() {
+  try{assertEditorModelConfigured(resolveClaudeModel());return true;}catch{}
+  return claudeModelSwitcherEnabled()&&allowedClaudeModelChoices().some(choice=>{try{assertEditorModelConfigured(resolveClaudeModel(choice));return true;}catch{return false;}});
+}
+export const status = query({ args: { projectId: v.id("projects") }, returns: v.object({ configured: v.boolean(), modelSwitcher: v.optional(v.boolean()), allowedModels: v.optional(v.array(claudeModelChoiceValidator)), defaultModelChoice:v.optional(claudeModelChoiceValidator), running: v.boolean(), error: v.union(v.string(), v.null()), reason: v.union(v.string(), v.null()), activity: v.union(v.string(), v.null()), activitySource: v.union(v.string(), v.null()), activityProgress: v.union(v.number(), v.null()) }), handler: async (ctx, args) => {
   const project = await projectRun(ctx,args.projectId,await requireOwner(ctx));
   const requests = project.aiRunning && project.aiRunId ? await ctx.db.query('analysisRequests').withIndex('by_projectId_runId', q => q.eq('projectId', project._id).eq('aiRunId', project.aiRunId!)).take(16) : [];
   const active = requests.find(request => request.status === 'pending' || request.status === 'running');
   const task = active?.taskId ? await ctx.db.get(active.taskId) : null;
   const source = active ? await ctx.db.get(active.assetId) : null;
   const labels = { transcribe: 'Listening to your footage…', understand: 'Analyzing footage…', shots: 'Finding shot changes…', beats: 'Finding the rhythm…', track: 'Following the subject…', frames: 'Inspecting the moment…', video: 'Analyzing footage…' };
-  return { configured: configured(), ...(claudeModelSwitcherEnabled() ? { modelSwitcher: true, allowedModels: [...allowedClaudeModelChoices()] } : {}), running: project.aiRunning ?? false, error: project.aiError ?? null, reason: configured() ? null : providerReason, activity: active ? task?.status === 'queued' ? 'Queued for analysis…' : task?.status === 'retrying' ? 'Retrying analysis…' : labels[active.mode] : null, activityProgress: active && task && task.progress > 0 && task.progress < 100 ? task.progress : null, activitySource: source?.ownerId === project.ownerId && source.projectId === project._id ? source.fileName : null };
+  let defaultModelChoice;try{defaultModelChoice=defaultEditorModelChoice();}catch{}
+  const ready=configured();
+  return { configured: ready, ...(defaultModelChoice?{defaultModelChoice}:{}), ...(claudeModelSwitcherEnabled() ? { modelSwitcher: true, allowedModels: [...allowedClaudeModelChoices()] } : {}), running: project.aiRunning ?? false, error: project.aiError ?? null, reason: ready ? null : providerReason, activity: active ? task?.status === 'queued' ? 'Queued for analysis…' : task?.status === 'retrying' ? 'Retrying analysis…' : labels[active.mode] : null, activityProgress: active && task && task.progress > 0 && task.progress < 100 ? task.progress : null, activitySource: source?.ownerId === project.ownerId && source.projectId === project._id ? source.fileName : null };
 }});
 export const send = mutation({ args: { projectId: v.id("projects"), prompt: v.string(), modelChoice: v.optional(claudeModelChoiceValidator), selectedClipId: v.optional(v.string()), selectedClipIds: v.optional(v.array(v.string())), playhead: v.optional(v.number()) }, returns: v.null(), handler: async (ctx, args) => {
   const ownerId = await requireOwner(ctx); await requireEditorAccess(ctx, ownerId); const project = await requireProject(ctx, args.projectId, ownerId);
