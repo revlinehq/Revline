@@ -46,6 +46,8 @@ test('first editor subscription receives three days free and requires a payment 
   await owner.action(api.billing.createCheckout, { plan: 'pro' });
   expect(stripeMock.create).toHaveBeenCalledWith(expect.objectContaining({
     line_items: [{ price: 'price_editor', quantity: 1 }], mode: 'subscription', customer: 'cus_owner',
+    success_url: 'http://localhost:3001/dashboard/new-project?checkout=success',
+    cancel_url: 'http://localhost:3001/billing?checkout=canceled',
     payment_method_collection: 'always',
     managed_payments: { enabled: false },
     subscription_data: { metadata: { userId: 'owner', app: 'revline-editor' }, trial_period_days: 3, trial_settings: { end_behavior: { missing_payment_method: 'cancel' } } },

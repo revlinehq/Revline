@@ -1,4 +1,5 @@
 'use client';
+import { NEW_PROJECT_PATH } from '@/lib/workspace-routes';
 import { userError } from '@/lib/user-error';
 
 import { NEW_WORKSPACE_LABEL } from '@/lib/editor/workspace-labels';
@@ -97,11 +98,11 @@ export function WorkspaceNav({ title = NEW_WORKSPACE_LABEL, editorHref, active =
     catch { setCopyError('Could not copy the chat ID.'); }
   }
   return <><header className="workspace-nav">
-    <Link href="/dashboard/chat" className="workspace-nav-brand" aria-label="Revline home"><Brand /></Link>
+    <Link href={NEW_PROJECT_PATH} className="workspace-nav-brand" aria-label="Revline home"><Brand /></Link>
     <span className="workspace-nav-divider" aria-hidden="true" />
     <DropdownMenu onOpenChange={open => { setHistoryOpen(open); if (open) { setCopiedId(false); setCopyError(''); } }}><DropdownMenuTrigger asChild><button ref={historyTrigger} className="workspace-chat-trigger" aria-label="Open chat menu"><span>{title}</span><ChevronDown size={13} /></button></DropdownMenuTrigger>
       <DropdownMenuContent align="start" sideOffset={10} className="workspace-menu workspace-history-menu" onCloseAutoFocus={event => { if (renameOpen) event.preventDefault(); }}>
-        <DropdownMenuItem asChild className="workspace-menu-item"><Link href="/dashboard/chat"><Plus size={16} />{NEW_WORKSPACE_LABEL}</Link></DropdownMenuItem>
+        <DropdownMenuItem asChild className="workspace-menu-item"><Link href={NEW_PROJECT_PATH}><Plus size={16} />{NEW_WORKSPACE_LABEL}</Link></DropdownMenuItem>
         {onRename && <DropdownMenuItem className="workspace-menu-item" onSelect={() => { setNewTitle(title); setRenameError(''); setRenameOpen(true); }}><Pencil size={15} />Rename chat</DropdownMenuItem>}
         {chatId && <DropdownMenuItem className="workspace-menu-item" onSelect={event => { event.preventDefault(); void copyChatId(); }}>{copiedId ? <Check size={15} /> : <Copy size={15} />}{copiedId ? 'Chat ID copied' : 'Copy chat ID'}</DropdownMenuItem>}
         {copyError && <p className="workspace-inline-error" role="alert">{copyError}</p>}

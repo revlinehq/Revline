@@ -4,6 +4,7 @@ import { ConvexError, v } from "convex/values";
 import { components, internal } from "./_generated/api";
 import { action, internalMutation, query } from "./_generated/server";
 import { EDITOR_PLAN } from "../lib/billing/plan";
+import { NEW_PROJECT_PATH } from '../lib/workspace-routes';
 import { billingConfigured, billingEnabled, editorSubscriptions, hasComplimentaryEditorAccess, hasEditorAccess, isEditorSubscription } from './lib/billing_access';
 
 const hasAccess = hasEditorAccess;
@@ -76,7 +77,7 @@ export const createCheckout = action({ args: { plan: v.literal("pro") }, returns
   const session = await client.checkout.sessions.create({
     mode: 'subscription', customer: customer.customerId,
     line_items: [{ price: priceId, quantity: 1 }],
-    success_url: `${origin}/billing?checkout=success`, cancel_url: `${origin}/billing?checkout=canceled`,
+    success_url: `${origin}${NEW_PROJECT_PATH}?checkout=success`, cancel_url: `${origin}/billing?checkout=canceled`,
     integration_identifier: 'revline-editor-xpkzqvna', payment_method_collection: 'always',
     managed_payments: { enabled: false },
     metadata: { userId: identity.subject, app: 'revline-editor' },

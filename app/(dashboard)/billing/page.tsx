@@ -1,7 +1,9 @@
 import { redirect } from 'next/navigation';
+import { NEW_PROJECT_PATH } from '@/lib/workspace-routes';
 
 export default async function BillingPage({ searchParams }: { searchParams: Promise<{ checkout?: string }> }) {
   const { checkout } = await searchParams;
-  const query = checkout === 'success' || checkout === 'canceled' ? `?checkout=${checkout}` : '';
+  if (checkout === 'success') redirect(`${NEW_PROJECT_PATH}?checkout=success`);
+  const query = checkout === 'canceled' ? '?checkout=canceled' : '';
   redirect(`/profile${query}#billing`);
 }

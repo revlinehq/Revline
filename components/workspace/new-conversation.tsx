@@ -1,4 +1,5 @@
 'use client';
+import { NEW_PROJECT_PATH } from '@/lib/workspace-routes';
 import { userError } from '@/lib/user-error';
 
 import { NEW_WORKSPACE_LABEL } from '@/lib/editor/workspace-labels';
@@ -129,7 +130,7 @@ export function NewConversation() {
     if (!isSignedIn) {
       setError('Sign in to upload your footage. Your files will stay here.');
       setProcessing({ phase: 'error', index: 1, total: files.length + cloudIds.length, percent: 0 });
-      clerk.openSignIn({ fallbackRedirectUrl: '/dashboard/chat', signUpFallbackRedirectUrl: '/dashboard/chat' });
+      clerk.openSignIn({ fallbackRedirectUrl: NEW_PROJECT_PATH, signUpFallbackRedirectUrl: NEW_PROJECT_PATH });
       return;
     }
     if (!isAuthenticated || !userId) return;

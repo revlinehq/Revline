@@ -1,6 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { BillingSection } from './billing-section';
+import { NEW_PROJECT_PATH } from '@/lib/workspace-routes';
 
 const connection = vi.hoisted(() => ({ isAuthenticated: false, isLoading: false }));
 const membership = vi.hoisted(() => ({ status: undefined as undefined | { enabled: boolean; configured: boolean; subscribed: boolean; complimentary?: boolean; complimentaryExpiresAt?: number; trialEligible: boolean; needsPayment: boolean } }));
@@ -29,7 +30,7 @@ describe('membership connection states', () => {
     membership.status = { enabled: true, configured: true, subscribed: false, complimentary: true, trialEligible: false, needsPayment: false };
     const html = renderToStaticMarkup(<BillingSection />);
     expect(html).toContain('Free access forever');
-    expect(html).toContain('href="/dashboard/chat"');
+    expect(html).toContain(`href="${NEW_PROJECT_PATH}"`);
     expect(html).not.toContain('Manage subscription');
     expect(html).not.toContain('Subscribe');
     expect(html).not.toContain('$39');

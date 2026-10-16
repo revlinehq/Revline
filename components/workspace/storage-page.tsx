@@ -1,4 +1,5 @@
 'use client';
+import { NEW_PROJECT_PATH } from '@/lib/workspace-routes';
 import { userError } from '@/lib/user-error';
 
 import { useDeferredValue,useState,useEffect } from 'react';
@@ -41,7 +42,7 @@ export function StorageBrowser({summary,files,filters,onFilters,loading,loadingM
   function changeFilters(patch:Partial<Filters>){setSelected(new Set());onFilters({...filters,...patch});}
   async function deleteFiles(){if(busy||!chosen.length)return;setBusy(true);setError('');try{await onDelete(chosen);setSelected(new Set());setConfirm(false);}catch(reason){setError(userError(reason, 'Could not delete these files. Please retry.'));}finally{setBusy(false);}}
   return <main className="storage-content">
-    <div className="storage-heading"><div><h1>Cloud storage</h1><p>Keep your media organized. Make room for your next edit.</p></div><PrimaryButton asChild><Link href="/dashboard/chat">Upload media<Upload size={14}/></Link></PrimaryButton></div>
+    <div className="storage-heading"><div><h1>Cloud storage</h1><p>Keep your media organized. Make room for your next edit.</p></div><PrimaryButton asChild><Link href={NEW_PROJECT_PATH}>Upload media<Upload size={14}/></Link></PrimaryButton></div>
     <section className="storage-usage" aria-label="Cloud storage usage" aria-busy={!ready}>
       <div className="storage-usage-top"><div><p>Storage used</p>{ready?<strong>{formatStorageBytes(summary.usedBytes)}<small>of {formatStorageBytes(summary.limitBytes)}</small></strong>:<Skeleton style={{height:28,width:185}}/>}</div>{ready?<span>{formatStorageBytes(available)} available</span>:<Skeleton style={{height:13,width:115}}/>}</div>
       <div className="storage-meter" role="meter" aria-label="Storage used" aria-valuemin={0} aria-valuemax={summary?.limitBytes??15_000_000_000} aria-valuenow={ready?summary.usedBytes:0}>

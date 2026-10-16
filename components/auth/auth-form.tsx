@@ -1,4 +1,5 @@
 'use client';
+import { NEW_PROJECT_PATH } from '@/lib/workspace-routes';
 
 import { useEffect, useRef, useState } from 'react';
 import { useAuth, useSignIn, useSignUp } from '@clerk/nextjs';
@@ -28,7 +29,7 @@ export function AuthForm() {
   const router = useRouter();
   const params = useSearchParams();
   const redirectParam = params.get('redirect_url') ?? params.get('redirectUrl') ?? params.get('returnTo');
-  const [target, setTarget] = useState('/dashboard/chat');
+  const [target, setTarget] = useState(NEW_PROJECT_PATH);
   const [step, setStep] = useState<'email' | 'code'>('email');
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');

@@ -1,4 +1,5 @@
 'use client';
+import { NEW_PROJECT_PATH } from '@/lib/workspace-routes';
 
 import { useRef, useState } from 'react';
 import { Upload, Link2 } from 'lucide-react';
@@ -38,7 +39,7 @@ export function MediaImportDialog({ open, onOpenChange, onUpload, onImportVideo,
       {onImportVideo?<VideoLinkImport disabled={busy} onImport={async url=>{
         setStarting(true);
         try{await onImportVideo(url);onOpenChange(false);}finally{setStarting(false);}
-      }}/>:<a className="media-import-link" href="/dashboard/chat"><Link2 size={16}/>Import from YouTube or MP4</a>}
+      }}/>:<a className="media-import-link" href={NEW_PROJECT_PATH}><Link2 size={16}/>Import from YouTube or MP4</a>}
     </DialogContent>
   </Dialog>;
 }

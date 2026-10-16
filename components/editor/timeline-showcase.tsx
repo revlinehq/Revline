@@ -1,4 +1,5 @@
 'use client';
+import { NEW_PROJECT_PATH } from '@/lib/workspace-routes';
 import { userError } from '@/lib/user-error';
 
 import { useRef, useState } from 'react';
@@ -31,7 +32,7 @@ export function TimelineShowcase({ shareId }: { shareId: string }) {
   const share = useQuery(api.timelineShares.get, { shareId });
   const copy = useMutation(api.timelineShares.useTimeline);
   if (share === undefined) return <div className="timeline-showcase"><ShowcaseHeader/><div className="timeline-showcase-loading" role="status"><LoaderCircle size={22} className="animate-spin"/><span>Loading timeline…</span></div></div>;
-  if (!share) return <div className="timeline-showcase"><ShowcaseHeader/><div className="timeline-showcase-unavailable"><h1>This timeline isn’t available</h1><p>The link may have been turned off or the original project removed.</p><PrimaryButton asChild><Link href="/dashboard/chat">Open Revline<ArrowUpRight size={14}/></Link></PrimaryButton></div></div>;
+  if (!share) return <div className="timeline-showcase"><ShowcaseHeader/><div className="timeline-showcase-unavailable"><h1>This timeline isn’t available</h1><p>The link may have been turned off or the original project removed.</p><PrimaryButton asChild><Link href={NEW_PROJECT_PATH}>Open Revline<ArrowUpRight size={14}/></Link></PrimaryButton></div></div>;
   return <TimelineShowcaseView key={`${share._id}:${share.updatedAt}`} share={share} signedIn={!!isSignedIn} useDisabled={!isLoaded || (!!isSignedIn && !isAuthenticated)} onUse={async () => {
     if (!isSignedIn) { router.push(timelineSignInPath(share._id)); return; }
     const projectId = await copy({ shareId: share._id });

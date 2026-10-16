@@ -1,6 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ConversationPage from './page';
 import DemoConversationPage from '@/app/chat/demo/page';
+import LegacyChatPage from '../page';
+import LegacyDashboardChatPage from '../../dashboard/chat/page';
+import BillingPage from '../../billing/page';
 
 const routing = vi.hoisted(() => ({
   protect: vi.fn(),
@@ -38,5 +41,19 @@ describe('legacy conversation routes', () => {
   it('opens the public sample in the full editor without requiring sign-in', () => {
     expect(() => DemoConversationPage()).toThrow('Redirect: /editor/demo');
     expect(routing.protect).not.toHaveBeenCalled();
+  });
+
+  it.each([LegacyChatPage, LegacyDashboardChatPage])('keeps checkout and repeated query parameters when opening the new-project route', async Page => {
+    await expect(Page({ searchParams: Promise.resolve({ checkout: 'success', attachment: ['one', 'two'] }) }))
+      .rejects.toThrow('Redirect: /dashboard/new-project?checkout=success&attachment=one&attachment=two');
+  });
+
+  it.each([
+    ['success', '/dashboard/new-project?checkout=success'],
+    ['canceled', '/profile?checkout=canceled#billing'],
+    [undefined, '/profile#billing'],
+  ])('routes the legacy billing return for %s', async (checkout, destination) => {
+    await expect(BillingPage({ searchParams: Promise.resolve({ checkout }) }))
+      .rejects.toThrow(`Redirect: ${destination}`);
   });
 });

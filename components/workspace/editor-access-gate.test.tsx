@@ -41,3 +41,14 @@ test('loading and missing configuration do not mount the editor', () => {
   expect(html).toContain('disabled');
   expect(html).not.toContain('Editing workflow');
 });
+test('a successful checkout return waits for confirmed access instead of offering another purchase', () => {
+  const child = vi.fn(() => <div>Editing workflow</div>);
+  const Child = child;
+  const html = renderToStaticMarkup(<EditorAccessGate checkoutPending><Child /></EditorAccessGate>);
+  expect(html).toContain('Waiting for payment confirmation');
+  expect(html).toContain('View billing');
+  expect(html).not.toContain('Start 3-day free trial');
+  expect(child).not.toHaveBeenCalled();
+  fixture.status!.subscribed = true;
+  expect(renderToStaticMarkup(<EditorAccessGate checkoutPending><Child /></EditorAccessGate>)).toContain('Editing workflow');
+});

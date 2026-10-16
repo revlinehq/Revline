@@ -1,4 +1,5 @@
 'use client';
+import { NEW_PROJECT_PATH } from '@/lib/workspace-routes';
 import { useState, useRef, useEffect } from 'react';
 import { useStore } from 'zustand';
 import { createEditorStore } from '@/lib/editor/store';
@@ -25,5 +26,5 @@ export function DemoEditor({ embedded = false }: { embedded?: boolean } = {}) {
   return <EditorStateProvider store={store}><EditorShell onRegisterStockAudio={async catalogId=>{const asset=stockAudioAsset(catalogId);setAssets(previous=>previous.some(item=>item._id===asset._id)?previous:[...previous,asset]);return asset;}} embedded={embedded} title={title} onTitle={setTitle} timeline={timeline} assets={assets} onChange={change} saving={false} upload={null} error={error} onError={setError} demo
     onUndo={()=>{store.getState().undo();}} onRedo={()=>{store.getState().redo();}} canUndo={!!history.length} canRedo={!!future.length}
     onUpload={files=>uploadFiles(files,true)} onDropUpload={files=>uploadFiles(files,false)}
-    messages={[{id:'sample-user',role:'user',text:'Make a weekend film from these clips. Keep it\npunchy, with a good opening and clean captions.'},{id:'sample-assistant',role:'assistant',text:'I found your opening, tightened the pacing, and gave the captions\nroom to breathe. Here’s your first cut.',tools:['9 shots arranged in a short sequence','Opening title and end card placed','5 editable captions on their own track']}]} aiRunning={false} aiConfigured={false} onSend={async text=>{sessionStorage.setItem('revline:next-brief',text);window.location.assign('/dashboard/chat');}} onExport={async()=>{}} exportState={null}/></EditorStateProvider>
+    messages={[{id:'sample-user',role:'user',text:'Make a weekend film from these clips. Keep it\npunchy, with a good opening and clean captions.'},{id:'sample-assistant',role:'assistant',text:'I found your opening, tightened the pacing, and gave the captions\nroom to breathe. Here’s your first cut.',tools:['9 shots arranged in a short sequence','Opening title and end card placed','5 editable captions on their own track']}]} aiRunning={false} aiConfigured={false} onSend={async text=>{sessionStorage.setItem('revline:next-brief',text);window.location.assign(NEW_PROJECT_PATH);}} onExport={async()=>{}} exportState={null}/></EditorStateProvider>
 }

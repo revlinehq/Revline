@@ -1,3 +1,4 @@
+import { NEW_PROJECT_PATH } from '@/lib/workspace-routes';
 import type { SignInFutureResource, SignUpFutureResource } from '@clerk/shared/types';
 
 type EmailSignIn = Pick<SignInFutureResource, 'create' | 'emailCode' | 'status'>;
@@ -37,10 +38,10 @@ export async function verifyEmailCode(signIn: EmailSignIn, signUp: EmailSignUp, 
 }
 
 export function safeAuthRedirect(value: string | null | undefined, origin: string): string {
-  if (!value) return '/dashboard/chat';
+  if (!value) return NEW_PROJECT_PATH;
   try {
     const url = new URL(value, origin);
-    if (url.origin !== origin || url.username || url.password || /^\/(?:sign-in|sign-up|sso-callback)(?:\/|$)/.test(url.pathname)) return '/dashboard/chat';
+    if (url.origin !== origin || url.username || url.password || /^\/(?:sign-in|sign-up|sso-callback)(?:\/|$)/.test(url.pathname)) return NEW_PROJECT_PATH;
     return `${url.pathname}${url.search}${url.hash}`;
-  } catch { return '/dashboard/chat'; }
+  } catch { return NEW_PROJECT_PATH; }
 }

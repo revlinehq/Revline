@@ -20,7 +20,7 @@ await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
 const browser=await puppeteer.launch({headless:true,args:['--no-sandbox','--disable-dev-shm-usage']});
 const page=await browser.newPage(),errors=[];page.on('pageerror',error=>errors.push(error.message));
 const flush=()=>page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
-const url=`http://127.0.0.1:${server.address().port}/dashboard/chat`;
+const url=`http://127.0.0.1:${server.address().port}/dashboard/new-project`;
 try{
  await page.setViewport({width:1100,height:800});await page.goto(url);await page.waitForSelector('.footage-start-card');
  assert.equal(await page.$eval('.footage-start-card',el=>el.disabled),true,'Begin while browser draft restoration is pending');

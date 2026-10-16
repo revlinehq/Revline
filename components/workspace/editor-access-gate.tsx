@@ -3,6 +3,7 @@ import { userError } from '@/lib/user-error';
 
 import { NEW_WORKSPACE_LABEL } from '@/lib/editor/workspace-labels';
 import { useRef, useState, type ReactNode } from 'react';
+import Link from 'next/link';
 import { useAction, useConvexAuth, useQuery } from 'convex/react';
 import { Check, LoaderCircle } from 'lucide-react';
 import { api } from '@/convex/_generated/api';
@@ -12,7 +13,7 @@ import { WorkspaceNav } from './workspace-nav';
 import './shared.css';
 import './editor-access-gate.css';
 
-export function EditorAccessGate({ children, loading }: { children: ReactNode; loading?: ReactNode }) {
+export function EditorAccessGate({ children, loading, checkoutPending = false }: { children: ReactNode; loading?: ReactNode; checkoutPending?: boolean }) {
   const { isAuthenticated } = useConvexAuth();
   const status = useQuery(api.billing.status, isAuthenticated ? {} : 'skip');
   const checkout = useAction(api.billing.createCheckout);
@@ -23,6 +24,14 @@ export function EditorAccessGate({ children, loading }: { children: ReactNode; l
 
   if (!status) return loading ?? <div className="editor-access-loading" role="status"><LoaderCircle size={18} className="animate-spin" />Checking your plan…</div>;
   if (!status.enabled || status.subscribed || status.complimentary) return children;
+  if (checkoutPending && !status.needsPayment) return <div className="workspace-page editor-access-page">
+    <WorkspaceNav title={NEW_WORKSPACE_LABEL} />
+    <main className="editor-access-main"><section className="editor-access-card" aria-labelledby="editor-access-title">
+      <h1 id="editor-access-title">Confirming your subscription…</h1>
+      <p role="status">Waiting for payment confirmation. Your new project will open automatically.</p>
+      <div><Link className="workspace-outline-button" href="/profile#billing">View billing</Link></div>
+    </section></main>
+  </div>;
   const trial = status.trialEligible && !status.needsPayment;
 
   async function openCheckout() {

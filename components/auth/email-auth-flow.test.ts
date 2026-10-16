@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { safeAuthRedirect, sendEmailCode, verifyEmailCode } from "./email-auth-flow";
+import { NEW_PROJECT_PATH } from '@/lib/workspace-routes';
 
 function attempts() {
   const signIn = {
@@ -132,10 +133,10 @@ describe("email sign-in or sign-up", () => {
 
 describe('auth return URL', () => {
   const origin = 'https://tryrevline.com';
-  it.each(['/chat?prompt=Keep%20it%20short', '/profile?source=auth#billing', 'https://tryrevline.com/editor/demo?source=auth'])('preserves an internal destination: %s', target => {
+  it.each([`${NEW_PROJECT_PATH}?prompt=Keep%20it%20short`, '/profile?source=auth#billing', 'https://tryrevline.com/editor/demo?source=auth'])('preserves an internal destination: %s', target => {
     expect(safeAuthRedirect(target, origin)).toBe(target.replace(origin, ''));
   });
   it.each([null, '', 'https://example.com/chat', '//example.com/chat', 'javascript:alert(1)', 'https://user@tryrevline.com/chat', '/sign-in', '/sign-up/verify', '/sso-callback?redirect_url=/chat'])('rejects an unsafe destination or auth loop: %s', target => {
-    expect(safeAuthRedirect(target, origin)).toBe('/dashboard/chat');
+    expect(safeAuthRedirect(target, origin)).toBe(NEW_PROJECT_PATH);
   });
 });
