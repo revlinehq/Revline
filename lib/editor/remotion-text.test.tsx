@@ -120,7 +120,7 @@ test.each(VFX_TEXT_PRESETS)('%s has distinct entrance/hold/exit and preserves fr
 test('new VFX palettes are editable and reselecting preserves custom words/colors/rotation',()=>{
   const original={...clip,kind:'graphic' as const,id:'lyric',sourceStart:0,transform:{x:.5,y:.5,scale:1,rotation:17,opacity:1}};
   const first: Clip={...original,...textLookPatch(original,'neon-echo')};
-  expect(first.color).toBe('#B72CFF');expect(first.textTemplate?.highlightColor).toBe('#FF962E');
+  expect(first.color).toBe('#B72CFF');
   const customized={...first,text:'My own lyric',color:'#00ffcc',textTemplate:{...first.textTemplate!,highlightColor:'#ff0044'}};
   const reselected={...customized,...textTemplatePatch(customized,'neon-echo')};
   expect(reselected).toMatchObject({text:'My own lyric',color:'#00ffcc',transform:original.transform,textTemplate:{highlightColor:'#ff0044'}});

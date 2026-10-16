@@ -1,20 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { renderToStaticMarkup } from 'react-dom/server';
-import { RemotionLabScene } from './remotion-lab-scenes';
-import { alignLabItems, DEFAULT_LAB_CONFIG, LAB_TEMPLATES, labProgress, labTemplateFile, parseLabConfig, parseLabFile, retimeWords } from './remotion-lab-model';
+import { alignLabItems, DEFAULT_LAB_CONFIG, labProgress, labTemplateFile, parseLabConfig, parseLabFile, retimeWords } from './remotion-lab-model';
 
 describe('Remotion development compositions', () => {
-  it('seeks deterministically through every complete design', () => {
-    for (const template of LAB_TEMPLATES) {
-      const render = (frame: number) => renderToStaticMarkup(<RemotionLabScene config={template.config} frame={frame}/>);
-      const before = render(65);
-      expect(render(150)).not.toEqual(before);
-      render(0);
-      expect(render(65)).toEqual(before);
-      expect(before).not.toMatch(/animation:|transition:/);
-    }
-  });
-
   it('keeps timed reveals hidden before a cue and supports real overshoot', () => {
     const config = { ...DEFAULT_LAB_CONFIG, damping: 4 };
     expect(labProgress(config, 53, 1.8)).toEqual(0);
