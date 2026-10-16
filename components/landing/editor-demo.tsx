@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useStore } from 'zustand';
 import { Check } from 'lucide-react';
 import { ChatProse } from '@/components/editor/chat-prose';
@@ -36,15 +36,24 @@ function DemoComposer({ typing, active, running }: { typing: boolean; active: bo
 
 function DemoReply({ text, active, reducedMotion }: { text: string; active: boolean; reducedMotion: boolean }) {
   const [shown, setShown] = useState(reducedMotion ? text : '');
+  const revealed = useRef(shown);
+  const prose = useRef<HTMLDivElement>(null);
+  revealed.current = shown;
   useEffect(() => {
     if (reducedMotion) { setShown(text); return; }
     if (!active) return;
-    const words = text.split(' '); let count = 0;
-    setShown('');
-    const timer = window.setInterval(() => { count++; setShown(words.slice(0, count).join(' ')); if (count >= words.length) clearInterval(timer); }, 55);
+    let current = text.startsWith(revealed.current) ? revealed.current : '';
+    const words = text.slice(current.length).match(/\s*\S+/g) ?? [];
+    if (!words.length) return;
+    let count = 0;
+    const timer = window.setInterval(() => { current += words[count++]; setShown(current); if (count >= words.length) clearInterval(timer); }, 55);
     return () => clearInterval(timer);
   }, [text, active, reducedMotion]);
-  return <ChatProse text={shown} animate={active && !reducedMotion}/>;
+  useLayoutEffect(() => {
+    const history = prose.current?.closest('.assistant-history');
+    if (history) history.scrollTop = history.scrollHeight;
+  }, [shown]);
+  return <div ref={prose} className="landing-demo-reply"><ChatProse text={shown} animate={active && !reducedMotion}/></div>;
 }
 
 function DemoConversation({ stage, index, active, reducedMotion }: { stage: number; index: number; active: boolean; reducedMotion: boolean }) {
@@ -54,7 +63,7 @@ function DemoConversation({ stage, index, active, reducedMotion }: { stage: numb
     <div className="assistant-history"><div className="assistant-turns">{sent ? <div className="assistant-turn is-latest-turn">
       <article className="chat-message chat-user"><p>{LANDING_DEMO_PROMPT}</p></article>
       <div className="assistant-reply"><div className={`assistant-reply-header ${building ? 'is-processing' : 'chat-author'}`}><Brand markOnly/>{building ? <ProcessingStatus label={['Finding the moments…', 'Placing the cuts…', 'Adding titles…', 'Polishing the motion…'][index]} brand={false}/> : <span>Revline</span>}</div>
-        <article className="chat-message chat-assistant"><DemoReply text={LANDING_DEMO_MESSAGES[index]} active={active} reducedMotion={reducedMotion}/>{!building && ['Five clips arranged', 'Animated titles added', 'Subtle motion applied'].map(label => <div className="tool-result" key={label}><Check size={12}/>{label}</div>)}</article>
+        <article className="chat-message chat-assistant"><DemoReply text={LANDING_DEMO_MESSAGES.slice(0, index + 1).join('\n\n')} active={active} reducedMotion={reducedMotion}/>{!building && ['Five clips arranged', 'Animated titles added', 'Subtle motion applied'].map(label => <div className="tool-result" key={label}><Check size={12}/>{label}</div>)}</article>
       </div>
     </div> : <div className="assistant-welcome"><h3>What are we making?</h3><p>Your footage is ready. Tell Revline the story you want to make.</p></div>}</div></div>
     <DemoComposer typing={!sent} active={active} running={building}/>

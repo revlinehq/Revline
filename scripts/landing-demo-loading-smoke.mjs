@@ -34,7 +34,13 @@ try{
   await page.waitForFunction(()=>document.querySelector('.landing-product-demo[data-story-stage="0"] textarea')?.value.length>3);
   const typed=await page.$eval('.landing-product-demo textarea',node=>node.value);
   await page.waitForFunction(previous=>document.querySelector('.landing-product-demo textarea')?.value.length>previous.length,{},typed);
-  await page.evaluate(()=>{window.story=[];window.storyObserver=new MutationObserver(()=>{const root=document.querySelector('.landing-product-demo');window.story.push({stage:root.dataset.storyStage,clips:root.querySelectorAll('.clip-video').length,titles:root.querySelectorAll('.clip-graphic').length,prompt:root.querySelector('textarea')?.value??''});});window.storyObserver.observe(document.querySelector('.landing-product-demo'),{subtree:true,childList:true,attributes:true,attributeFilter:['data-story-stage']});});
+  await page.evaluate(()=>{
+    window.story=[];
+    window.firstLandingPlayer=[...document.querySelectorAll('hyperframes-player')].find(node=>node.style.zIndex==='1');
+    window.firstLandingDocument=window.firstLandingPlayer.iframeElement.contentDocument;
+    window.storyObserver=new MutationObserver(()=>{const root=document.querySelector('.landing-product-demo');window.story.push({stage:root.dataset.storyStage,clips:root.querySelectorAll('.clip-video').length,titles:root.querySelectorAll('.clip-graphic').length,prompt:root.querySelector('textarea')?.value??'',reply:root.querySelector('.landing-demo-reply')?.textContent??null});});
+    window.storyObserver.observe(document.querySelector('.landing-product-demo'),{subtree:true,childList:true,characterData:true,attributes:true,attributeFilter:['data-story-stage']});
+  });
   await page.waitForFunction(()=>document.querySelector('.landing-product-demo')?.dataset.storyStage==='1'&&document.querySelector('.landing-product-demo textarea')?.value==='');
   assert.equal(await page.$eval('.landing-product-demo textarea',node=>node.value),'','Visual send clears the composer');
   assert.match(await page.$eval('.chat-user',node=>node.textContent),/launch cinematic/);
@@ -62,12 +68,16 @@ try{
       const origin=Math.min(...blocks.map(node=>Number.parseFloat(node.style.left)));
       const px=blocks.reduce((sum,node)=>sum+Number.parseFloat(node.style.width),0)/12;
       const headBounds=head.getBoundingClientRect(),capBounds=cap.getBoundingClientRect();
-      return {...expected,time:player.iframeElement.contentWindow.__timelines.revline.time(),paused:player.paused,headX:new DOMMatrixReadOnly(head.style.transform).m41,cutX:origin+expected.at*px,capOffset:(capBounds.x+capBounds.width/2)-(headBounds.x+headBounds.width/2)};
+      return {...expected,samePlayer:player===window.firstLandingPlayer,sameDocument:player.iframeElement.contentDocument===window.firstLandingDocument,time:player.iframeElement.contentWindow.__timelines.revline.time(),paused:player.paused,headX:new DOMMatrixReadOnly(head.style.transform).m41,cutX:origin+expected.at*px,capOffset:(capBounds.x+capBounds.width/2)-(headBounds.x+headBounds.width/2)};
     },expected));
+    assert.ok(splits.at(-1).samePlayer&&splits.at(-1).sameDocument,'A staged split keeps the live player and iframe document mounted');
     if(expected.stage===3)await page.screenshot({path:'/tmp/revline-landing-demo-split.png'});
   }
   await page.waitForFunction(()=>document.querySelector('.landing-product-demo')?.dataset.storyStage==='8',{timeout:30000});
   await page.waitForFunction(()=>{const player=[...document.querySelectorAll('hyperframes-player')].find(node=>node.style.zIndex==='1');return player&&!player.paused&&player.currentTime>.2;});
+  await page.waitForFunction(()=>document.querySelector('.landing-demo-reply')?.textContent.includes('Here’s the edit.'));
+  const narration=await page.evaluate(()=>window.story.flatMap(frame=>frame.reply===null?[]:[frame.reply]));
+  for(let index=1;index<narration.length;index++)assert.ok(narration[index].startsWith(narration[index-1]),'New narration preserves all previously visible words instead of flashing the reply empty');
   const playback=()=>page.evaluate(()=>{const player=[...document.querySelectorAll('hyperframes-player')].find(node=>node.style.zIndex==='1');return {time:player.currentTime,paused:player.paused,muted:player.muted,media:[...player.iframeElement.contentDocument.querySelectorAll('video')].map(node=>({src:node.src,muted:node.muted,ready:node.readyState})),text:player.iframeElement.contentDocument.body.textContent};});
   const pause=await page.$eval('[aria-label="Pause (Space)"]',node=>{const r=node.getBoundingClientRect();return{x:r.x+r.width/2,y:r.y+r.height/2};});await page.mouse.click(pause.x,pause.y);const before=await playback();await new Promise(resolve=>setTimeout(resolve,650));const after=await playback();assert.equal(after.paused,false,'Pointer clicks cannot operate the visual controls');
   assert.ok(after.time>before.time+.25,'Finished composition plays automatically');assert.equal(after.muted,true);assert.ok(after.media.every(node=>node.muted&&node.src.includes('/demo/landing/nasa.mp4')));assert.match(after.text,/ARTEMIS II/);
@@ -88,6 +98,6 @@ try{
   await page.screenshot({path:'/tmp/revline-landing-auto-edit-mobile.png'});
   const story=await page.evaluate(()=>{window.storyObserver.disconnect();return window.story;});assert.deepEqual([...new Set(story.map(frame=>frame.clips))].sort((a,b)=>a-b),[1,2,3,4,5],'Each real split reveals one additional clip');
   assert.deepEqual(errors,[]);assert.deepEqual(external,[]);assert.ok(requests.every(request=>request.method==='GET'),'No uploads or AI/backend mutations');
-  const proof={splits,playback:{before:before.time,after:after.time,muted:after.muted},clipStages:[...new Set(story.map(frame=>frame.clips))],requests:requests.map(request=>request.path),errors,external};
+  const proof={splits,narrationSamples:narration.length,replyClears:0,playback:{before:before.time,after:after.time,muted:after.muted},clipStages:[...new Set(story.map(frame=>frame.clips))],requests:requests.map(request=>request.path),errors,external};
   await writeFile('/tmp/revline-landing-demo-loading-proof.json',JSON.stringify(proof,null,2));console.log('PASS: typed composer → clear/send → four real splits at the aligned playhead → titles → muted autoplay; inert controls, hidden effects rail, offscreen pause, Reduced Motion removes decoration while requested autoplay continues, mobile preview, no external/backend calls.');console.log(JSON.stringify(proof));await page.evaluate(()=>window.unmountDemo());
 }finally{server.closeAllConnections();await browser.close();await new Promise(resolve=>server.close(resolve));}

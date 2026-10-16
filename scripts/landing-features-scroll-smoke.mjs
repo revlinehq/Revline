@@ -1,17 +1,25 @@
 import assert from 'node:assert/strict';
+import { createRequire } from 'node:module';
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { build } from 'esbuild';
 import puppeteer from 'puppeteer';
 
 const bundle = await build({stdin:{resolveDir:process.cwd(),loader:'tsx',contents:`
-import React from 'react';import {createRoot} from 'react-dom/client';import {LandingFeatures} from './components/landing/features';import {FEATURE_MEDIA} from './components/landing/features-media-config';import './app/landing.css';
+import React from 'react';import {createRoot,hydrateRoot} from 'react-dom/client';import {LandingFeatures} from './components/landing/features';import {FEATURE_MEDIA} from './components/landing/features-media-config';import './app/landing.css';
 window.featureFixtureMedia=FEATURE_MEDIA;
-window.featureFixtureRoot=createRoot(document.getElementById('root'));window.featureFixtureRoot.render(<main className="landing"><div style={{height:400}}/><LandingFeatures/><div style={{height:1400}}/></main>);
+const host=document.getElementById('root'),fixture=<main className="landing"><div style={{height:400}}/><LandingFeatures/><section id="pricing" className="landing-section" style={{height:1400}}>Pricing target</section></main>;window.featureFixtureRoot=host.hasChildNodes()?hydrateRoot(host,fixture):createRoot(host);if(!host.hasChildNodes())window.featureFixtureRoot.render(fixture);
 `},bundle:true,platform:'browser',format:'iife',jsx:'automatic',write:false,outdir:'/tmp/revline-feature-scroll-fixture',external:['/fonts/*'],define:{'process.env.NODE_ENV':'"production"','process.env':'{}'}});
+const serverBundle=await build({stdin:{resolveDir:process.cwd(),loader:'tsx',contents:`
+import React from 'react';import {renderToString} from 'react-dom/server';import {LandingFeatures} from './components/landing/features';
+export const html=renderToString(<main className="landing"><div style={{height:400}}/><LandingFeatures/><section id="pricing" className="landing-section" style={{height:1400}}>Pricing target</section></main>);
+`},bundle:true,platform:'node',format:'cjs',jsx:'automatic',write:false,define:{'process.env.NODE_ENV':'"production"'},plugins:[{name:'server-css',setup(builder){builder.onLoad({filter:/\.css$/},()=>({contents:'',loader:'js'}));}}]});
+const serverModule={exports:{}};new Function('require','module','exports',serverBundle.outputFiles[0].text)(createRequire(import.meta.url),serverModule,serverModule.exports);
+const fixtureStyle='*{box-sizing:border-box}body{margin:0;font-family:Arial,sans-serif;--font-space-grotesk:Arial;--font-inter:Arial}button{font-family:inherit}';
 const server=createServer(async(req,res)=>{try{
  const pathname=new URL(req.url,'http://fixture').pathname;
  if(pathname==='/'){res.writeHead(200,{'content-type':'text/html'}).end('<div id="root"></div>');return;}
+ if(pathname==='/anchor'){res.writeHead(200,{'content-type':'text/html'}).end(`<html><style>${bundle.outputFiles.find(file=>file.path.endsWith('.css')).text}${fixtureStyle}html{scroll-behavior:smooth}</style><div id="root">${serverModule.exports.html}</div><script>setTimeout(()=>{${bundle.outputFiles.find(file=>file.path.endsWith('.js')).text}},200)</script></html>`);return;}
  const bytes=await readFile('public'+pathname),mime=pathname.endsWith('.mp4')?'video/mp4':pathname.endsWith('.woff2')?'font/woff2':pathname.endsWith('.ttf')?'font/ttf':'image/webp';
  if(req.headers.range){const match=/bytes=(\d+)-(\d*)/.exec(req.headers.range),start=Number(match[1]),end=Math.min(bytes.length-1,match[2]?Number(match[2]):bytes.length-1);res.writeHead(206,{'content-type':mime,'accept-ranges':'bytes','content-range':`bytes ${start}-${end}/${bytes.length}`,'content-length':end-start+1}).end(bytes.subarray(start,end+1));return;}
  res.writeHead(200,{'content-type':mime,'content-length':bytes.length}).end(bytes);
@@ -60,6 +68,21 @@ async function segments(motion){
  return metrics;
 }
 try{
+ await page.setViewport({width:1440,height:1000});
+ await page.goto(origin+'/anchor#pricing');
+ await page.waitForFunction(()=>document.querySelector('#features')?.dataset.scrollDriven==='true');
+ await page.evaluate(()=>document.fonts.ready);await new Promise(resolve=>setTimeout(resolve,700));
+ const anchorTop=await page.$eval('#pricing',node=>node.getBoundingClientRect().top);
+ assert.ok(Math.abs(anchorTop-92)<2,`Initial pricing anchor survives the hydrated feature rail (top ${anchorTop})`);
+ await page.evaluateOnNewDocument(()=>{window.fontGate=new Promise(resolve=>{window.releaseFontGate=resolve;});Object.defineProperty(document.fonts,'ready',{get:()=>window.fontGate});});
+ await page.goto(origin+'/anchor?fonts-delayed=1#pricing');
+ await page.waitForFunction(()=>document.querySelector('#features')?.dataset.scrollDriven==='true');
+ await new Promise(resolve=>setTimeout(resolve,700));
+ await page.evaluate(()=>{window.dispatchEvent(new WheelEvent('wheel'));scrollTo({top:250,behavior:'instant'});});
+ await page.evaluate(()=>window.releaseFontGate());await new Promise(resolve=>setTimeout(resolve,120));
+ const userScrollY=await page.evaluate(()=>scrollY);
+ assert.ok(Math.abs(userScrollY-250)<2,`User input cancels delayed initial-fragment realignment (scroll ${userScrollY})`);
+ console.log(JSON.stringify({initialPricingAnchorTop:anchorTop,userInputCancelledRealignment:true}));
  await segments('no-preference');
  assert.equal(features.length,5,'All five editing features are present');await select('titles');
  await page.waitForFunction(()=>document.querySelector('.feature-demo-titles video')?.currentTime>.5);

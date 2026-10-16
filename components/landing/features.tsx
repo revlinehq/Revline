@@ -50,6 +50,10 @@ export function LandingFeatures() {
     // Reduced motion removes the preview transition, not the scroll interaction.
     const eligible = window.matchMedia('(min-width: 901px)');
     let frame = 0;
+    let anchorFrame = 0, disposed = false;
+    const initialHash = window.location.hash;
+    let anchorPending = !!initialHash;
+    const cancelAnchor = () => { anchorPending = false; };
     const update = () => {
       frame = 0;
       const metrics = geometry.current;
@@ -87,13 +91,31 @@ export function LandingFeatures() {
     window.addEventListener('scroll', schedule, { passive: true });
     window.addEventListener('resize', measure);
     eligible.addEventListener('change', measure);
+    const inputEvents = ['wheel', 'touchstart', 'pointerdown', 'keydown'] as const;
+    inputEvents.forEach(event => window.addEventListener(event, cancelAnchor, { passive: true }));
     measure();
+    // Initial fragment scrolling can start before hydration adds the scroll rail.
+    // Correct its destination once fonts and rail geometry settle, unless the user moved on.
+    void document.fonts.ready.then(() => {
+      if (disposed || !anchorPending || window.location.hash !== initialHash) return;
+      measure();
+      anchorFrame = requestAnimationFrame(() => {
+        if (disposed || !anchorPending || window.location.hash !== initialHash) return;
+        let target: HTMLElement | null = null;
+        try { target = document.getElementById(decodeURIComponent(initialHash.slice(1))); } catch { return; }
+        if (target && !track.contains(target) && (track.compareDocumentPosition(target) & Node.DOCUMENT_POSITION_FOLLOWING)) target.scrollIntoView({ block: 'start', behavior: 'instant' });
+        anchorPending = false;
+      });
+    });
     return () => {
+      disposed = true;
       cancelAnimationFrame(frame);
+      cancelAnimationFrame(anchorFrame);
       observer.disconnect();
       window.removeEventListener('scroll', schedule);
       window.removeEventListener('resize', measure);
       eligible.removeEventListener('change', measure);
+      inputEvents.forEach(event => window.removeEventListener(event, cancelAnchor));
     };
   }, []);
 
