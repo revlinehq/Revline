@@ -10,7 +10,8 @@ import { isPreviewTextOccluded, visualClipAtPoint } from '@/lib/editor/preview-v
 import { RotateCw } from 'lucide-react';
 import { DEFAULT_TRANSFORM } from '@/lib/editor/types';
 import { compositionNode } from '@/lib/editor/composition-node';
-import { textFontFaceCss } from '@/lib/editor/text-fonts';
+import { editorTextFont } from '@/lib/editor/text-fonts';
+import { TextFontStyles } from './text-font-styles';
 import './visual-controls.css';
 
 type Bounds={id:string;left:number;top:number;width:number;height:number;z:number;editor:CSSProperties};
@@ -45,7 +46,7 @@ export function TextControls({timeline,assets,time,revision,selected,activeId,on
       for(let element:HTMLElement|null=content;element&&element!==composition;element=element.parentElement){const transform=doc.defaultView!.getComputedStyle(element).transform;if(transform!=='none')matrix=new DOMMatrix(transform).multiply(matrix);}
       // The selection uses a painted bounding box. Editing needs the unrotated
       // text layout and its real font size, projected into fitted preview pixels.
-      const editor:CSSProperties={left:contentRect.left+contentRect.width/2,top:contentRect.top+contentRect.height/2,width:(parseFloat(style.width)||content.offsetWidth)*scale,height:(parseFloat(style.height)||content.offsetHeight)*scale,transform:`translate(-50%,-50%) matrix(${matrix.a},${matrix.b},${matrix.c},${matrix.d},0,0)`,fontSize:parseFloat(style.fontSize)*scale,fontFamily:style.fontFamily,fontWeight:style.fontWeight,lineHeight:style.lineHeight==='normal'?'normal':`${parseFloat(style.lineHeight)*scale}px`,letterSpacing:style.letterSpacing==='normal'?'normal':`${parseFloat(style.letterSpacing)*scale}px`,textAlign:style.textAlign as CSSProperties['textAlign'],color:style.color,padding:[style.paddingTop,style.paddingRight,style.paddingBottom,style.paddingLeft].map(value=>`${parseFloat(value)*scale}px`).join(' ')};
+      const editor:CSSProperties={left:contentRect.left+contentRect.width/2,top:contentRect.top+contentRect.height/2,width:(parseFloat(style.width)||content.offsetWidth)*scale,height:(parseFloat(style.height)||content.offsetHeight)*scale,transform:`translate(-50%,-50%) matrix(${matrix.a},${matrix.b},${matrix.c},${matrix.d},0,0)`,fontSize:parseFloat(style.fontSize)*scale,fontFamily:editorTextFont(clip.fontFamily).family,fontWeight:style.fontWeight,lineHeight:style.lineHeight==='normal'?'normal':`${parseFloat(style.lineHeight)*scale}px`,letterSpacing:style.letterSpacing==='normal'?'normal':`${parseFloat(style.letterSpacing)*scale}px`,textAlign:style.textAlign as CSSProperties['textAlign'],color:style.color,padding:[style.paddingTop,style.paddingRight,style.paddingBottom,style.paddingLeft].map(value=>`${parseFloat(value)*scale}px`).join(' ')};
       return [{id:clip.id,...projectPreviewBounds(rect,canvas,layout),z:layerZIndex(clip,index),editor}];
     });
     setBounds(previous=>JSON.stringify(previous)===JSON.stringify(next)?previous:next);
@@ -123,7 +124,7 @@ export function TextControls({timeline,assets,time,revision,selected,activeId,on
     const result=!g.corner&&!event.shiftKey?snapTextMove(proposed,g.bounds,{width:g.width,height:g.height}):{placement:proposed,lines:[]};
     g.current=result.placement;paint(g.clip,g.current);setGuides(result.lines.map(line=>({...line,position:line.position/(line.axis==='x'?g.width:g.height)})));
   }
-  return <div ref={root} className="text-controls" data-testid="text-controls" style={{zIndex:'auto'}}><style>{textFontFaceCss()}</style>
+  return <div ref={root} className="text-controls" data-testid="text-controls" style={{zIndex:'auto'}}><TextFontStyles/>
     {bounds.map(box=>{const clip=timeline.clips.find(c=>c.id===box.id);if(!clip)return null;
       if(editing?.id===clip.id){return <textarea key={box.id} ref={field} autoFocus aria-label="Edit text in preview" title="Enter to save · Shift+Enter for a new line · Escape to cancel" className="preview-inline-text" maxLength={2000} value={editing.draft} style={{...box.editor,zIndex:box.z}} onFocus={event=>event.currentTarget.select()} onPointerDown={event=>event.stopPropagation()} onDoubleClick={event=>event.stopPropagation()} onChange={event=>{const edit={...editing,draft:event.currentTarget.value};inlineEdit.current=edit;setEditing(edit);}} onBlur={()=>finishInline()} onKeyDown={event=>{
         event.stopPropagation();if(event.nativeEvent.isComposing)return;

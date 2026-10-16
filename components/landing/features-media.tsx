@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from 'react';
 import { Pause, Play } from 'lucide-react';
 import { RemotionText } from '@/lib/editor/remotion-text-component';
 import { remotionTextProps } from '@/lib/editor/remotion-text';
+import { editorTextFont } from '@/lib/editor/text-fonts';
+import { TextFontStyles } from '@/components/editor/text-font-styles';
 import type { Clip } from '@/lib/editor/types';
 import cues from '@/lib/editor/hormozi-demo-captions.json';
 import { FEATURE_BEAT_SECONDS, FEATURE_MEDIA, FEATURE_MOMENTS, type FeatureMediaKind } from './features-media-config';
@@ -82,11 +84,12 @@ export function FeatureMedia({ kind }: { kind: FeatureMediaKind }) {
   const beatPhase = elapsed / FEATURE_BEAT_SECONDS - beat, pulse = Math.max(0, 1 - beatPhase / .48);
 
   return <div className={`feature-demo feature-demo-${kind}`} ref={surface} data-feature-media={kind} data-playing={playing}>
+    <TextFontStyles/>
     <div className="feature-demo-footage">
       <video ref={video} src={media.src} poster={media.poster} autoPlay muted playsInline preload="metadata" width={960} height={540} aria-label={kind === 'captions' ? 'A conversation with speech-timed captions' : 'Editing feature video preview'} />
       {kind === 'subject' ? <div className="feature-demo-crop-guide" style={{ left: `${focus * 100}%` }}><span>9:16</span></div> : null}
     </div>
-    {kind === 'titles' || kind === 'captions' ? <div className="feature-demo-text-surface" style={{ transform: `scale(${scale})` }} aria-hidden="true"><div className={`feature-demo-product-text feature-demo-product-text-${kind}`}>{words ? <RemotionText {...words}/> : null}</div></div> : null}
+    {kind === 'titles' || kind === 'captions' ? <div className="feature-demo-text-surface" style={{ transform: `scale(${scale})` }} aria-hidden="true"><div className={`feature-demo-product-text feature-demo-product-text-${kind}`}>{words ? <RemotionText {...words} fontFamily={editorTextFont(kind === 'titles' ? title.fontFamily : subtitle?.fontFamily).family}/> : null}</div></div> : null}
     {kind === 'moments' ? <div className="feature-demo-selects" aria-hidden="true"><div className="feature-demo-selects-heading"><span>YOUR SELECTS</span><strong>Keep the good parts.</strong></div><div className="feature-demo-shot-list">{FEATURE_MOMENTS.map((moment, index) => <div key={moment.label} data-selected={shot === index}><img src={moment.poster} alt="" width={240} height={135} loading="lazy"/><span>{moment.label}</span><small>{`00:${Math.floor(moment.start).toString().padStart(2, '0')}`}</small></div>)}</div></div> : null}
     {kind === 'beats' ? <div className="feature-demo-rhythm" aria-hidden="true" data-beat-index={beat}>
       <div className="feature-demo-rhythm-heading"><span>CUTS ON THE BEAT</span><span><i className="feature-demo-beat-pulse" style={{ opacity: .5 + pulse * .5, transform: `scale(${.8 + pulse * .35})`, boxShadow: `0 0 0 ${pulse * 4}px #c4b5fd28` }}/>120 BPM</span></div>

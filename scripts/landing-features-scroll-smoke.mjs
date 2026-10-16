@@ -39,6 +39,13 @@ async function autoplay(id,motion){
  assert.equal(await page.$$eval('.feature-demo',nodes=>nodes.length),1,`${motion}: only selected ${id} mounts its renderer`);
  assert.equal(await page.$$eval('.landing-features video',nodes=>nodes.length),id==='subject'?2:1,`${motion}: only selected ${id} decodes video`);
 }
+async function textFont(preset,family){
+ const selector=`[data-remotion-text="${preset}"]`;
+ assert.match(await page.$eval(selector,node=>getComputedStyle(node).fontFamily),new RegExp(family),'Product text uses its isolated parent-document font');
+ await page.waitForFunction(family=>[...document.fonts].some(face=>face.family.replaceAll(/["']/g,'')===family&&face.status==='loaded'),{},family);
+ const faces=await page.evaluate(()=>[...document.fonts].map(face=>face.family.replaceAll(/["']/g,'')));
+ assert.ok(faces.every(face=>face.startsWith('Revline Text ')),'Feature font styles never override application font families');
+}
 async function mount(motion,width=1440,height=1000){
  await page.evaluate(()=>window.featureFixtureRoot?.unmount());
  await page.setViewport({width,height});await page.emulateMediaFeatures([{name:'prefers-reduced-motion',value:motion}]);
@@ -90,6 +97,7 @@ try{
  assert.equal(await page.$$eval('.landing-features video',nodes=>nodes.length),1,'Other force-mounted panels do not download/decode videos');
  const frame=await page.$eval('[data-remotion-text="type-trails"]',node=>node.dataset.frame);
  await page.waitForFunction(previous=>document.querySelector('[data-remotion-text="type-trails"]')?.dataset.frame!==previous,{},frame);
+ await textFont('type-trails','Revline Text space-grotesk');
  await page.screenshot({path:'/tmp/revline-landing-features-title-video.png'});
  await select('beats');
  await page.waitForFunction(()=>document.querySelector('.feature-demo-beats video')?.currentTime>.1);
@@ -108,6 +116,7 @@ try{
  await select('captions');
  await page.waitForFunction(()=>document.querySelector('.feature-demo-captions video')?.currentTime>3);
  assert.ok(await page.$('[data-remotion-text="karaoke"] [data-word-index]'),'Caption preview uses the shared word-timed renderer');
+ await textFont('karaoke','Revline Text anton');
  await page.screenshot({path:'/tmp/revline-landing-features-captions-video.png'});
  await page.locator('::-p-aria([name="Pause feature preview"])').click();
  const paused=await page.$eval('.feature-demo video',node=>node.currentTime);await new Promise(resolve=>setTimeout(resolve,220));

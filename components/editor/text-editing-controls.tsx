@@ -5,7 +5,7 @@ import { AlignHorizontalJustifyStart, AlignHorizontalJustifyCenter, AlignHorizon
 import { NumberControl } from './visual-controls';
 import { EffectSlider } from './effect-slider';
 import { ColorControl } from './color-control';
-import { TEXT_FONTS } from '@/lib/editor/text-fonts';
+import { TEXT_FONTS, editorTextFont } from '@/lib/editor/text-fonts';
 import { InspectorSelect } from './inspector-select';
 import './text-editing-controls.css';
 
@@ -14,7 +14,7 @@ export function TextEditingControls({ clip, onChange, onPreview }: { clip: Clip;
   const background = !!clip.background && clip.background !== 'transparent';
   return <div className="text-editing-controls">
     <label className="inspector-field">Words<textarea aria-label="Selected text" value={clip.text ?? ''} maxLength={2000} onChange={event => onChange({ text: event.currentTarget.value })}/></label>
-    <div className="inspector-field"><span>Font</span><InspectorSelect label="Text font" value={clip.fontFamily ?? 'space-grotesk'} onChange={fontFamily => onChange({ fontFamily })} options={TEXT_FONTS.map(font => ({ value: font.id, label: font.label, style: { fontFamily: font.family, fontWeight: font.weight } }))}/></div>
+    <div className="inspector-field"><span>Font</span><InspectorSelect label="Text font" value={clip.fontFamily ?? 'space-grotesk'} onChange={fontFamily => onChange({ fontFamily })} options={TEXT_FONTS.map(font => ({ value: font.id, label: font.label, style: { fontFamily: editorTextFont(font.id).family, fontWeight: font.weight } }))}/></div>
     <div className="text-size-controls">
       <EffectSlider label="Text size" value={clip.fontSize ?? (clip.kind === 'graphic' ? 92 : 52)} bounds={[8,300]} step={1} format={value=>`${Math.round(value)} px`} disabled={false} onPreview={value => onPreview?.(value === null ? null : { fontSize: value })} onCommit={fontSize=>onChange({fontSize})}/>
       <NumberControl label="Custom text size" min={8} max={300} value={clip.fontSize ?? (clip.kind === 'graphic' ? 92 : 52)} onCommit={fontSize=>onChange({fontSize})}/>

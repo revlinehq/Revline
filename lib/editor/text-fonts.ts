@@ -14,12 +14,17 @@ export const TEXT_FONTS = [
 ] as const;
 export type TextFontId = typeof TEXT_FONTS[number]['id'];
 export function textFont(id?: TextFontId) { return TEXT_FONTS.find(font => font.id === id) ?? TEXT_FONTS[0]; }
+/** Parent-document text faces must never override Next's application fonts. */
+export function editorTextFont(id?: TextFontId) {
+  const font = textFont(id);
+  return { ...font, family: `Revline Text ${font.id}` };
+}
 export function isTextFont(value: unknown): value is TextFontId { return TEXT_FONTS.some(font => font.id === value); }
-export function textFontFaceCss(urls: Partial<Record<TextFontId, string>> = {}) {
+export function textFontFaceCss(urls: Partial<Record<TextFontId, string>> = {}, scope: 'composition' | 'editor' = 'composition') {
   return TEXT_FONTS.map(font => {
     const url = urls[font.id] ?? `/fonts/${font.fileName}`;
     if (!/^(https?:|blob:|\.\/|\/[^/])/i.test(url)) throw new Error('Font URLs must use HTTP, a blob URL, or a local path.');
     const escaped = url.replace(/'/g, '%27').replace(/\n/g, '%0A').replace(/\r/g, '%0D').replace(/\\/g, '%5C');
-    return `@font-face{font-family:'${font.family}';font-style:normal;font-weight:${font.faceWeight};font-display:block;src:url('${escaped}') format('${font.fileName.endsWith('.ttf')?'truetype':'woff2'}')}`;
+    return `@font-face{font-family:'${scope === 'editor' ? editorTextFont(font.id).family : font.family}';font-style:normal;font-weight:${font.faceWeight};font-display:block;src:url('${escaped}') format('${font.fileName.endsWith('.ttf')?'truetype':'woff2'}')}`;
   }).join('\n');
 }

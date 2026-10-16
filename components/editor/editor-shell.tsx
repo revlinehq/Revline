@@ -45,6 +45,7 @@ import type { RefreshPlaybackMedia } from '@/lib/editor/media-source-recovery';
 import { MediaFileDropOverlay, useMediaFileDrop } from './media-file-drop';
 import { SegmentedTabs } from './segmented-tabs';
 import { useEditorModePreference } from './use-editor-mode-preference';
+import { TextFontStyles } from './text-font-styles';
 import './editor-mode.css';
 
 const NO_SELECTED_CLIPS:string[]=[];
@@ -331,6 +332,7 @@ export function EditorShell(p: EditorShellProps) {
         {p.assistantPanel ?? <AssistantPanel conversation={p.conversation} editSnapshot={p.assistantEditSnapshot} messages={p.messages} running={p.aiRunning} configured={p.aiConfigured} modelSwitcher={p.modelSwitcher} allowedModels={p.allowedModels} defaultModelChoice={p.defaultModelChoice} error={p.aiError} onSend={(text, modelChoice) => p.onSend(text, { modelChoice, selectedClipId: clip?.id, selectedClipIds:selectedIds, playhead: readPlaybackTime() })} onStop={p.onStop} hasClips={!!timeline.clips.length} demo={!!p.demo} onLoadMore={p.onLoadMore} canLoadMore={p.canLoadMore} onAttach={() => setImportOpen(true)} activity={p.analysisBusy} activitySource={p.analysisSource} activityProgress={p.analysisProgress} draftKey={p.draftKey} suggestions={sourceSuggestions} onSuggestion={async (text, clipId, modelChoice) => { const target = timeline.clips.find(item => item.id === clipId && item.kind === 'video'); if (!target) throw new Error('This clip is no longer on the timeline.'); setSelected(clipId); await p.onSend(text, { modelChoice, selectedClipId: clipId, selectedClipIds: [clipId], playhead: target.start }); }} />}
       </aside>);
   return <main ref={editorRoot} data-playback-opening={opening} tabIndex={-1} {...fileDrop.handlers} onPointerDownCapture={e => { const interactive = (e.target as HTMLElement).closest('input,textarea,button,a,select,[tabindex]'); if (p.embedded) { if (!interactive || interactive === e.currentTarget || !e.currentTarget.contains(interactive)) editorRoot.current?.focus({ preventScroll: true }); else if (interactive.matches('[tabindex]') && !interactive.matches('input,textarea,button,a,select')) (interactive as HTMLElement).focus({ preventScroll: true }); } }} className={`editor-app conversation-editor ${p.embedded ? 'embedded-editor' : ''}`}>
+    <TextFontStyles/>
     <MediaFileDropOverlay active={fileDrop.active} busy={!!p.upload}/>
     {!p.workspaceOnly && <WorkspaceNav chatId={p.demo ? undefined : p.projectId} title={p.title} onRename={p.onTitle} onShare={p.onShare} shareDisabled={!timeline.clips.length || p.aiRunning} onExport={() => setExportOpen(true)} exportDisabled={!timeline.clips.length} onUndo={p.onUndo} onRedo={p.onRedo} canUndo={p.canUndo} canRedo={p.canRedo} saving={p.saving} demo={p.demo} editorControls={compact ? undefined : modeSwitch}/>}
 

@@ -1,4 +1,4 @@
 import { textFontFaceCss } from '@/lib/editor/text-fonts';
 
-/** Library cards and editing controls use the exact bundled fonts used by the composition. */
-export function TextFontStyles() { return <style>{textFontFaceCss()}</style>; }
+/** One persistent, deduplicated parent stylesheet; composition faces remain iframe-local. */
+export function TextFontStyles() { return <style href="revline-editor-text-fonts" precedence="default">{textFontFaceCss({}, 'editor')}</style>; }
