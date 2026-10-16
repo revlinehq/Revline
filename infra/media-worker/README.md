@@ -161,7 +161,11 @@ a 1-CPU/6-GiB cap. The real silent NASA fixture exported as H.264, 1280×720,
 24 fps, 66 frames and 2.750 seconds, with no audio stream and zero warnings.
 The render plus output verification took 19.196 seconds. Four sampled frames,
 including both sides of the cut, matched their source times with mean RGB error
-1.96–2.18/255. This is a local image check; a hosted export retry is still needed.
+1.96–2.18/255. A subsequent isolated hosted retry through the normal queue
+completed in 150.058 seconds. Its downloaded result was independently verified
+as H.264, 1280×720, 24 fps, 66 frames and 2.750 seconds. This measured hosted
+latency is not a steady-state renderer benchmark: queue, container startup and
+controller polling were not separately timed.
 
 Wrangler deployed the digest-pinned image with `--keep-vars --strict` through a
 temporary non-secret configuration; the tracked configuration remains build-based.
