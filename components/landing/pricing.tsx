@@ -10,7 +10,7 @@ export function LandingPricing() {
       <p className="landing-price-disclosure">3 days free. Then $39/month.<br />Cancel anytime.</p>
       <hr />
       <ul>{['Editing in conversation', 'A preview you can refine', 'A timeline when you need it'].map(benefit => <li key={benefit}><Check size={14} aria-hidden="true" />{benefit}</li>)}</ul>
-      <LandingStartButton className="landing-pricing-button" />
+      <LandingStartButton className="landing-pricing-button" label="Start 3-day free trial" />
     </div>
   </section>;
 }
