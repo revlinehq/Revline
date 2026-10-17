@@ -29,6 +29,30 @@ try {
     assert.deepEqual(result.after, result.before, 'Breathing never moves or resizes the frame');
     assert.ok(result.geometryStable, 'The frame stays fixed throughout the full animation cycle');
     assert.ok(result.maximum - result.minimum >= .6, `${preference}: visible breathing needs opacity range ≥0.6; measured ${(result.maximum - result.minimum).toFixed(3)}`);
+    const lifecycle = await page.$eval('.timeline-ai-frame', async node => {
+      const geometry = () => { const box = node.getBoundingClientRect(); return [box.x, box.y, box.width, box.height]; };
+      const before = geometry(), childBefore = Number(getComputedStyle(node, '::before').opacity), positions = [];
+      const sample = async () => {
+        const values = [];
+        for (let i = 0; i <= 15; i++) {
+          const child = getComputedStyle(node, '::before');
+          values.push({ opacity: Number(getComputedStyle(node).opacity), child: Number(child.opacity), state: child.animationPlayState });
+          positions.push(geometry());
+          if (i < 15) await new Promise(resolve => setTimeout(resolve, 30));
+        }
+        return values;
+      };
+      node.parentElement.removeAttribute('data-editing-locked');
+      const out = await sample();
+      node.parentElement.setAttribute('data-editing-locked', 'true');
+      const into = await sample();
+      return { fadeOut: out.map(value => value.opacity), fadeIn: into.map(value => value.opacity), childBefore, childJump: Math.max(...out.map(value => Math.abs(value.child - childBefore))), paused: out.every(value => value.state === 'paused'), running: into.every(value => value.state === 'running'), geometryStable: positions.every(box => box.every((value, index) => value === before[index])) };
+    });
+    console.log(`${preference} lifecycle: ${JSON.stringify(lifecycle)}`);
+    assert.ok(lifecycle.fadeOut[0] >= .95 && lifecycle.fadeOut.at(-1) <= .01 && lifecycle.fadeOut.some(value => value > .05 && value < .95), 'Unlock visibly fades the frame to zero');
+    assert.ok(lifecycle.paused && lifecycle.childJump <= .04, 'Unlock pauses the current glow phase without exposing the bright fallback');
+    assert.ok(lifecycle.fadeIn[0] <= .05 && lifecycle.fadeIn.at(-1) >= .99 && lifecycle.fadeIn.some(value => value > .05 && value < .95), 'Relock visibly fades the frame back in');
+    assert.ok(lifecycle.running && lifecycle.geometryStable, 'Relock resumes breathing without moving the frame');
     if (process.argv.includes('--screenshots')) {
       await page.$eval('.timeline-ai-frame', node => { const animation = node.getAnimations({ subtree: true }).find(item => item.animationName?.startsWith('demo-ai-inner-glow')); animation.pause(); animation.currentTime = 0; });
       await (await page.$('.custom-timeline')).screenshot({ path: `/tmp/revline-glow-${preference}-low.png` });
@@ -36,5 +60,5 @@ try {
       await (await page.$('.custom-timeline')).screenshot({ path: `/tmp/revline-glow-${preference}-high.png` });
     }
   }
-  console.log('PASS: actual halo opacity visibly breathes across normal/reduced-motion cycles without moving the timeline frame.');
+  console.log('PASS: actual halo opacity breathes, fades on unlock/relock, and never moves the timeline frame.');
 } finally { await browser.close(); }
