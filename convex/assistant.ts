@@ -183,9 +183,12 @@ export const requestAnalysis = internalMutation({ args: { ...runArgs, assetId: v
     try { validateVideoInspectionInput(args.videoRequest, asset.duration); } catch (error) { throw new ConvexError((error as Error).message); }
   } else if (args.videoRequest) throw new ConvexError('Video questions require a native video inspection.');
   const requests = await ctx.db.query("analysisRequests").withIndex("by_projectId_runId", q => q.eq("projectId", project._id).eq("aiRunId", args.runId)).take(16);
-  if(args.mode==='video'&&args.videoRequest){
-    const requested=args.videoRequest;
-    const repeated=requests.find(request=>request.assetId===asset._id&&request.mode==='video'&&request.status!=='failed'&&request.videoRequest?.question===requested.question&&request.videoRequest.start===requested.start&&request.videoRequest.end===requested.end);
+  const requested = args.mode === 'video' ? args.videoRequest : args.mode === 'frames' ? args.frameRequest : undefined;
+  if(requested){
+    const repeated=requests.find(request=>{
+      const inspection = args.mode === 'video' ? request.videoRequest : request.frameRequest;
+      return request.assetId===asset._id&&request.mode===args.mode&&request.status!=='failed'&&inspection?.question===requested.question&&inspection.start===requested.start&&inspection.end===requested.end;
+    });
     if(repeated)return repeated._id;
   }
   if (requests.length >= 15) throw new ConvexError("Too many analysis requests in one AI run");

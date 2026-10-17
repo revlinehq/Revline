@@ -1,5 +1,5 @@
 import { afterEach, expect, test, vi } from 'vitest';
-import { parseFrameInspection, selectInspectionFrames, validateFrameInspectionInput, validateFrameInspectionResult } from './frame-inspection';
+import { frameEvidenceOnClip, parseFrameInspection, selectInspectionFrames, validateFrameInspectionInput, validateFrameInspectionResult } from './frame-inspection';
 import { inspectVideoFrames } from './gemini';
 
 const input = { start: 1, end: 1.1, question: 'When does the fist contact its target?' };
@@ -44,4 +44,12 @@ test('Gemini receives labeled inline frames and returns evidence without fabrica
   expect(body.input.filter((item: { type: string }) => item.type === 'image')).toHaveLength(3);
   expect(body.input.some((item: { text?: string }) => item.text?.includes('SOURCE FRAME 31; source timestamp 1.033333'))).toBe(true);
   expect(body.response_format.mime_type).toBe('application/json');
+});
+
+test('frame evidence maps through retained source trims and speed without filling unseen intervals', () => {
+  const result = parseFrameInspection(JSON.stringify(answer), input, samples, 30);
+  const mapped = frameEvidenceOnClip(result, { id: 'retained', kind: 'video', start: 8, sourceStart: 31 / 30, duration: 1 / 60, playbackRate: 2 });
+  expect(mapped.frames).toEqual([{ ...result.frames[1], timelineTime: 8 }]);
+  expect(mapped.events).toEqual([{ ...result.events[0], timelineTime: 8 }]);
+  expect(mapped.events[0]).not.toHaveProperty('end');
 });

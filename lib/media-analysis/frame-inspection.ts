@@ -1,4 +1,6 @@
 import { z } from 'zod';
+import type { Clip } from '../editor/types';
+import { sourceEndOf, timelineTimeAtSource } from '../editor/playback-rate';
 export const MAX_FRAME_WINDOW = 3;
 export const MAX_INSPECTION_FRAMES = 12;
 export type FrameInspectionInput = { start: number; end: number; question: string };
@@ -9,6 +11,16 @@ export type FrameInspection = FrameInspectionInput & {
   frames: (FrameSample & { observation: string })[];
   events: (FrameSample & { description: string; confidence: 'low' | 'medium' | 'high' })[];
 };
+
+/** Map only decoded evidence still present in this clip, without inventing an
+ * event duration between sampled frames or treating source time as edit time. */
+export function frameEvidenceOnClip(result: FrameInspection, clip: Clip) {
+  const retained = (sample: FrameSample) => sample.time >= clip.sourceStart - 1e-9 && sample.time < sourceEndOf(clip) - 1e-9;
+  return {
+    frames: result.frames.filter(retained).map(frame => ({ ...frame, timelineTime: timelineTimeAtSource(clip, frame.time) })),
+    events: result.events.filter(retained).map(event => ({ ...event, timelineTime: timelineTimeAtSource(clip, event.time) })),
+  };
+}
 
 export function validateFrameInspectionInput(input: FrameInspectionInput, duration: number) {
   if (![input.start, input.end, duration].every(Number.isFinite) || input.start < 0 || input.end <= input.start || input.end > duration + 1e-6 || input.end - input.start > MAX_FRAME_WINDOW + 1e-6) throw new Error('Inspect a source window of up to three seconds within this video.');

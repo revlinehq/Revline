@@ -23,6 +23,7 @@ vi.mock('@convex-dev/agent', async original => ({
 }));
 import { respond } from './assistantActions';
 import { AssistantTokenBudgetError } from '../lib/ai/token-budget';
+import { parseFrameInspection, type FrameInspectionInput } from '../lib/media-analysis/frame-inspection';
 const execute = async(tools: Record<string, Tool>, name: string, input: unknown) => {
   if(name==='addTimedEffect')await tools.planEffects.execute({},{plans:[{id:'fixture-flash',kind:'timed',effect:'flash',start:1.69,duration:.5,purpose:'Explicitly requested flash',strength:'Fixed preset',expectation:'The flash accents this moment',anchor:{kind:'requested-time',time:1.69,description:'Explicit fixture time'}}]});
   return tools[name].execute({}, tools[name].inputSchema.parse(input));
@@ -49,10 +50,16 @@ async function fixture(prompt = 'can u put bunch of effects here', scenes: { sta
       let name = ''; try { name = getFunctionName(reference as FunctionReference<'mutation'>); } catch { /* Agent component references use a component address. */ }
       const result = await t.mutation(reference as FunctionReference<'mutation'>, args as Record<string, unknown>);
       if (name === 'assistant:requestAnalysis') {
-        const input = args as { assetId: string; videoRequest?: { start: number; end: number; question: string } };
+        const input = args as { assetId: string; videoRequest?: { start: number; end: number; question: string }; frameRequest?: FrameInspectionInput };
         analysisRequests.push(input);
         const videoRequest = input.videoRequest;
         if (videoRequest) await t.run(db => db.db.patch(result as Id<'analysisRequests'>, { status: 'completed', videoInspection: { ...videoRequest, summary: 'A visible reaction and camera hold in this actual window', uncertainty: 'Semantic windows are approximate.', matches: [{ start: videoRequest.start, end: videoRequest.end, description: 'Visible reaction' }] } }));
+        if (input.frameRequest) {
+          const request = input.frameRequest;
+          const samples = [12.1, 12.4, 12.9].map(time => ({ time, frameIndex: Math.round(time * 30) }));
+          const frameInspection = parseFrameInspection(JSON.stringify({ summary: 'The middle sampled image shows an upward gaze.', uncertainty: 'Sparse samples cannot locate the exact beginning or end of the glance, or prove silence.', frames: samples.map((frame, index) => ({ frameIndex: frame.frameIndex, observation: index === 1 ? 'Eyes turned upward.' : 'Eyes toward camera.' })), events: [] }), request, samples, 30);
+          await t.run(db => db.db.patch(result as Id<'analysisRequests'>, { status: 'completed', frameInspection }));
+        }
       }
       return result;
     },
@@ -76,6 +83,44 @@ test('greetings, timeline inspection and unchanged tools never begin timeline ed
   });
   expect((await f.read()).aiError).toBeUndefined();
   expect((await f.read()).aiEditing).toBe(false);
+});
+
+test('focused frame evidence combines with cached speech and one atomic linked cut/subtitle publication', async () => {
+  const f = await fixture('Remove quiet script-checking glances and add subtitles, preserving my sentences.');
+  const transcript = { segments: [{ start: 11.5, end: 12.3, text: 'First sentence.' }, { start: 13, end: 14.4, text: 'Second sentence.' }], words: [{ start: 11.5, end: 11.8, text: 'First' }, { start: 11.8, end: 12.3, text: 'sentence.' }, { start: 13, end: 13.5, text: 'Second' }, { start: 13.5, end: 14.4, text: 'sentence.' }] };
+  await f.t.run(async ctx => {
+    const asset = (await ctx.db.get(f.assetId))!;
+    const audioId = await ctx.db.insert('assets', { ownerId: 'owner', projectId: f.projectId, kind: 'audio', fileName: 'voice.m4a', contentType: 'audio/mp4', size: 1, duration: 60, createdAt: 0 });
+    await ctx.db.patch(asset._id, { audioAssetId: audioId, audioExtracted: true });
+    await storeAnalysis(ctx, asset, { transcript, audioActivity: { version: 1, duration: 60, frameSeconds: .01, quiet: [{ start: 12.3, end: 13 }], reliable: true, level: { noiseFloorDb: -80, speechDb: -25, quietThresholdDb: -60, separationDb: 55 } } });
+    await writeProject(ctx, f.projectId, { timeline: { ...f.timeline, tracks: { visual: 1, overlay: 0, audio: 1, effects: 0 }, clips: [{ ...f.source, linkedClipId: 'voice', audioSeparated: true, volume: 0 }, { ...f.source, id: 'voice', kind: 'audio', assetId: audioId, linkedClipId: f.source.id, volume: .6 }] } });
+  });
+  const before = (await f.read()).timeline!;
+  let toolError: unknown;
+  await f.runPlan(async tools => { try {
+    await execute(tools, 'inspectAssetAnalysis', { assetId: f.assetId, start: 11.5, end: 14.5 });
+    const evidence = await execute(tools, 'inspectFrames', { assetId: f.assetId, start: 12, end: 13, question: 'Do the sampled images show an upward glance during the quiet gap?' }) as { inspectedFrameCount: number; timelineOccurrences: { frames: { time: number; timelineTime: number; observation: string }[]; events: unknown[] }[] };
+    expect(evidence.inspectedFrameCount).toBe(3);
+    expect(evidence.timelineOccurrences[0].events).toEqual([]);
+    expect(evidence.timelineOccurrences[0].frames[1]).toMatchObject({ time: 12.4, timelineTime: expect.closeTo(2.59), observation: 'Eyes turned upward.' });
+    expect((await f.read()).timeline).toEqual(before);
+    expect((await f.read()).aiEditing).not.toBe(true);
+    await expect(execute(tools, 'inspectFrames', { assetId: f.assetId, start: 10, end: 14, question: 'Unbounded window' })).rejects.toThrow('three seconds');
+    expect(await execute(tools, 'retainSourceRanges', { clipId: f.source.id, ranges: [{ start: 11.5, end: 12.4 }, { start: 13, end: 14.5 }], tightenSilence: true })).toMatchObject({ staged: true, saved: false });
+    await execute(tools, 'addSubtitlesFromTranscript', { assetId: f.assetId });
+    expect((await f.read()).timeline).toEqual(before);
+    expect(await execute(tools, 'inspectTimeline', {})).toMatchObject({ staged: true });
+  } catch (error) { toolError = error; throw error; } });
+  expect(toolError).toBeUndefined();
+  const saved = await f.read();
+  expect(saved.aiError).toBeUndefined(); expect(saved.revision).toBe(1); expect(saved.history).toEqual([before]);
+  expect(f.analysisRequests).toEqual([expect.objectContaining({ mode: 'frames', frameRequest: { start: 12, end: 13, question: expect.any(String) } })]);
+  const clips = saved.timeline!.clips;
+  for (const video of clips.filter(clip => clip.kind === 'video')) expect(clips.find(clip => clip.id === video.linkedClipId)).toMatchObject({ start: video.start, duration: video.duration, sourceStart: video.sourceStart, linkedClipId: video.id, volume: .6 });
+  expect(clips.filter(clip => clip.kind === 'caption').map(clip => clip.text).join(' ')).toContain('First sentence.');
+  expect(clips.filter(clip => clip.kind === 'caption').map(clip => clip.text).join(' ')).toContain('Second sentence.');
+  expect((await f.owner.query(api.assets.get, { projectId: f.projectId, assetId: f.assetId })).analysis?.transcript).toEqual(transcript);
+  await f.owner.mutation(api.projects.undo, { projectId: f.projectId }); expect((await f.read()).timeline).toEqual(before);
 });
 
 test('changed tools acquire one editing lock before publication and retain it through a private replacement', async () => {

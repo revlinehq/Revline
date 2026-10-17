@@ -49,13 +49,17 @@ export async function enqueueMediaTask(ctx: MutationCtx, input: Pick<Doc<'mediaT
     const active = existing.find(task => task.status === 'queued' || task.status === 'running' || task.status === 'retrying');
     if (active) { if (input.analysisRequestId) await ctx.db.patch(active._id, { analysisRequestId: input.analysisRequestId }); return active._id; }
   }
-  if(input.assetId&&input.kind==='video'&&input.videoRequest){
-    const requested=input.videoRequest;
-    const existing=await ctx.db.query('mediaTasks').withIndex('by_asset_kind',q=>q.eq('assetId',input.assetId).eq('kind','video')).order('desc').take(20);
-    const reusable=existing.find(task=>task.ownerId===input.ownerId&&task.projectId===input.projectId&&task.videoRequest?.question===requested.question&&task.videoRequest.start===requested.start&&task.videoRequest.end===requested.end&&((task.status==='completed'&&!!task.videoInspection)||['queued','running','retrying'].includes(task.status)));
+  const requested = input.kind === 'video' ? input.videoRequest : input.kind === 'frames' ? input.frameRequest : undefined;
+  if(input.assetId&&requested){
+    const existing=await ctx.db.query('mediaTasks').withIndex('by_asset_kind',q=>q.eq('assetId',input.assetId).eq('kind',input.kind)).order('desc').take(20);
+    const reusable=existing.find(task=>{
+      const inspection = input.kind === 'video' ? task.videoRequest : task.frameRequest;
+      const evidence = input.kind === 'video' ? task.videoInspection : task.frameInspection;
+      return task.ownerId===input.ownerId&&task.projectId===input.projectId&&inspection?.question===requested.question&&inspection.start===requested.start&&inspection.end===requested.end&&((task.status==='completed'&&!!evidence)||['queued','running','retrying'].includes(task.status));
+    });
     if(reusable){
       if(input.analysisRequestId){
-        if(reusable.status==='completed')await ctx.db.patch(input.analysisRequestId,{status:'completed',videoInspection:reusable.videoInspection,error:undefined});
+        if(reusable.status==='completed')await ctx.db.patch(input.analysisRequestId,{status:'completed',...(input.kind==='video'?{videoInspection:reusable.videoInspection}:{frameInspection:reusable.frameInspection}),error:undefined});
         else {
           await ctx.db.patch(reusable._id,{analysisRequestId:input.analysisRequestId});
           if(reusable.status==='running')await ctx.db.patch(input.analysisRequestId,{status:'running'});
@@ -317,9 +321,12 @@ export const complete = mutation({ args: { ...mediaTaskCredentials, result: task
     } else if (task.kind === 'frames') {
       if (!task.frameRequest || !args.result.frameInspection || asset.kind !== 'video') throw new ConvexError('Frame inspection evidence is missing.');
       if (args.result.analysis || args.result.audioAssetId || args.result.waveform) throw new ConvexError('Frame inspections return visual evidence only.');
+      const request = task.analysisRequestId ? await ctx.db.get(task.analysisRequestId) : null;
+      const project = request ? await readProject(ctx, task.projectId) : null;
+      if(request&&(request.ownerId !== task.ownerId || request.projectId !== task.projectId || request.assetId !== asset._id || request.mode !== 'frames' || !project?.aiRunning || project.aiRunId !== request.aiRunId)) throw new ConvexError('AI frame request is no longer active.');
       try { validateFrameInspectionResult(args.result.frameInspection, task.frameRequest); } catch (error) { throw new ConvexError((error as Error).message); }
       await ctx.db.patch(task._id, { frameInspection: args.result.frameInspection });
-      if (task.analysisRequestId && await ctx.db.get(task.analysisRequestId)) await ctx.db.patch(task.analysisRequestId, { frameInspection: args.result.frameInspection });
+      if(request)await ctx.db.patch(request._id, { frameInspection: args.result.frameInspection });
     } else if (task.kind === 'extract') {
       if (asset.audioExtracted) {
         if (args.result.audioAssetId !== asset.audioAssetId) throw new ConvexError('Audio output does not match the prepared source.');

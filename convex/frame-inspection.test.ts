@@ -64,3 +64,49 @@ test('different frame questions remain independent; invalid evidence and cancell
   await expect(f.t.mutation(api.mediaTasks.complete, { taskId: work.taskId, leaseToken: work.leaseToken, result: { frameInspection: evidence() } })).rejects.toThrow('lease');
   await f.drain();
 });
+
+test('identical frame questions reuse their request and completed background evidence across runs', async () => {
+  const f = await fixture(), first = await f.request();
+  expect(await f.request()).toBe(first);
+  await f.drain(); const work = (await f.claim())!;
+  await f.t.mutation(internal.assistant.clearAnalysis, { ...f.run, requestId: first });
+  await f.t.mutation(internal.assistant.finish, { ...f.run, error: 'Analysis wait ended.' });
+  await f.t.mutation(api.mediaTasks.complete, { taskId: work.taskId, leaseToken: work.leaseToken, result: { frameInspection: evidence() } });
+  await f.drain();
+  await f.t.run(ctx => writeProject(ctx, f.projectId, { aiRunning: true, aiRunId: 'next-run' }));
+  const nextRun = { ...f.run, runId: 'next-run' };
+  const cached = await f.t.mutation(internal.assistant.requestAnalysis, { ...nextRun, assetId: f.assetId, mode: 'frames', frameRequest });
+  expect(await f.t.query(internal.assistant.analysisRequest, { ...nextRun, requestId: cached })).toMatchObject({ status: 'completed', taskId: work.taskId, frameInspection: evidence() });
+  expect(await f.claim()).toBeNull();
+  expect(await f.t.run(ctx => ctx.db.query('mediaTasks').withIndex('by_asset_kind', q => q.eq('assetId', f.assetId).eq('kind', 'frames')).take(20))).toHaveLength(1);
+  expect((await f.owner.query(api.projects.get, { projectId: f.projectId })).timeline?.clips ?? []).toEqual([]);
+});
+
+test('a later identical frame question reattaches running work but a new window cannot reuse it', async () => {
+  const f = await fixture(), first = await f.request(); await f.drain(); const work = (await f.claim())!;
+  await f.t.mutation(internal.assistant.clearAnalysis, { ...f.run, requestId: first });
+  await f.t.mutation(internal.assistant.finish, { ...f.run, error: 'Analysis wait ended.' });
+  await f.t.run(ctx => writeProject(ctx, f.projectId, { aiRunning: true, aiRunId: 'next-run' }));
+  const nextRun = { ...f.run, runId: 'next-run' };
+  const repeated = await f.t.mutation(internal.assistant.requestAnalysis, { ...nextRun, assetId: f.assetId, mode: 'frames', frameRequest });
+  expect(await f.t.query(internal.assistant.analysisRequest, { ...nextRun, requestId: repeated })).toMatchObject({ taskId: work.taskId, status: 'running' });
+  const different = await f.t.mutation(internal.assistant.requestAnalysis, { ...nextRun, assetId: f.assetId, mode: 'frames', frameRequest: { ...frameRequest, end: 1.2 } });
+  expect((await f.t.query(internal.assistant.analysisRequest, { ...nextRun, requestId: different })).taskId).not.toBe(work.taskId);
+  await f.t.mutation(api.mediaTasks.complete, { taskId: work.taskId, leaseToken: work.leaseToken, result: { frameInspection: evidence() } });
+  expect(await f.t.query(internal.assistant.analysisRequest, { ...nextRun, requestId: repeated })).toMatchObject({ status: 'completed', frameInspection: evidence() });
+  await f.owner.mutation(api.assistant.stop, { projectId: f.projectId }); await f.drain();
+});
+
+test('frame cache does not reuse another owner, another project or cancelled work', async () => {
+  const f = await fixture();
+  const otherProject = await f.owner.mutation(api.projects.create, { title: 'Other', aspectRatio: 'vertical' });
+  const forbiddenTasks = await f.t.run(async ctx => Promise.all([
+    { ownerId: 'stranger', projectId: f.projectId, status: 'completed' as const },
+    { ownerId: 'owner', projectId: otherProject, status: 'completed' as const },
+    { ownerId: 'owner', projectId: f.projectId, status: 'cancelled' as const },
+  ].map(fields => ctx.db.insert('mediaTasks', { ...fields, assetId: f.assetId, kind: 'frames', frameRequest, frameInspection: evidence(), attempt: 1, progress: 100, createdAt: Date.now(), updatedAt: Date.now() }))));
+  const requestId = await f.request();
+  const request = await f.t.query(internal.assistant.analysisRequest, { ...f.run, requestId });
+  expect(request.status).toBe('pending'); expect(forbiddenTasks).not.toContain(request.taskId); expect(request.frameInspection).toBeUndefined();
+  await f.owner.mutation(api.assistant.stop, { projectId: f.projectId }); await f.drain();
+});
