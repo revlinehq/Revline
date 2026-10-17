@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Plus, SlidersHorizontal, Trash2 } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { addTransitionClip, deleteClip, patchClip } from '@/lib/editor/operations';
@@ -18,11 +18,13 @@ export function TimelineCutTransition({ timeline, from, to, clip, px, origin, se
   const [draft, setDraft] = useState<{ start: number; duration: number } | null>(null);
   const cancelGesture = useRef<(() => void) | null>(null);
   useEffect(() => () => cancelGesture.current?.(), [clip, from, to]);
+  useLayoutEffect(()=>{if(readOnly)cancelGesture.current?.();},[readOnly]);
   const cut = to.start;
   const compact = Math.min(from.duration, to.duration) * px < 48;
   const range = draft ?? clip;
   const label = clip ? EFFECT_CATALOG[clip.effectPreset as TransitionPreset].label : 'Add transition';
   function apply(preset: TransitionPreset) {
+    if(readOnly)return;
     try {
       const id = clip?.id ?? crypto.randomUUID();
       if (clip?.effectPreset !== preset) onChange(clip ? patchClip(timeline, id, { effectPreset: preset }) : addTransitionClip(timeline, id, preset, from.id, to.id));
@@ -74,8 +76,8 @@ export function TimelineCutTransition({ timeline, from, to, clip, px, origin, se
     <DropdownMenu><DropdownMenuTrigger className="timeline-transition-badge" disabled={readOnly} aria-label={clip ? `${label} at ${cut.toFixed(2)}s` : `Add transition at ${cut.toFixed(2)}s`} title={clip ? `${label} · ${clip.duration.toFixed(2)} s · Click to replace, right-click for actions` : 'Add a transition between these clips'} onClick={() => { if (clip) { onSelect(clip.id); onEdit?.(clip.id); } }}>
       {clip ? <EffectIcon name={clip.effectPreset as TransitionPreset} size={14}/> : <Plus size={12}/>}
     </DropdownMenuTrigger><DropdownMenuContent className="timeline-transition-menu" align="center" aria-label="Choose transition" onPointerDown={event => event.stopPropagation()}>
-      {TRANSITION_PRESETS.map(preset => <DropdownMenuItem key={preset} onSelect={() => apply(preset)}><EffectIcon name={preset} size={14}/>{EFFECT_CATALOG[preset].label}</DropdownMenuItem>)}
-      {clip && <><DropdownMenuItem onSelect={() => { onSelect(clip.id); onEdit?.(clip.id); }}><SlidersHorizontal size={14}/>Transition settings</DropdownMenuItem><DropdownMenuItem onSelect={() => { onChange(deleteClip(timeline, clip.id)); onSelect(null); }}><Trash2 size={14}/>Remove transition</DropdownMenuItem></>}
+      {TRANSITION_PRESETS.map(preset => <DropdownMenuItem key={preset} disabled={readOnly} onSelect={() => apply(preset)}><EffectIcon name={preset} size={14}/>{EFFECT_CATALOG[preset].label}</DropdownMenuItem>)}
+      {clip && <><DropdownMenuItem disabled={readOnly} onSelect={() => { onSelect(clip.id); onEdit?.(clip.id); }}><SlidersHorizontal size={14}/>Transition settings</DropdownMenuItem><DropdownMenuItem disabled={readOnly} onSelect={() => { onChange(deleteClip(timeline, clip.id)); onSelect(null); }}><Trash2 size={14}/>Remove transition</DropdownMenuItem></>}
     </DropdownMenuContent></DropdownMenu>
   </div>;
 }

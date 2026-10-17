@@ -67,7 +67,31 @@ try {
   assert.deepEqual(await page.$$eval('textarea,.composer-attachment>span,.composer-more,.composer-submit', nodes => [...new Set(nodes.map(node => getComputedStyle(node).fontSize))]), ['14px'], 'Input, attachment filenames and composer controls all share14px');
   assert.equal(await page.$eval('.manual-editor-composer', node => { const input = node.querySelector('textarea').getBoundingClientRect(), actions = node.querySelector('.edit-composer-actions').getBoundingClientRect(); return input.height >= 44 && actions.top - input.bottom >= 11; }), true, 'Composer keeps a dedicated input floor with breathing room above the controls');
  }
+ const source = { _id:'fixture-media',kind:'video',fileName:'Interview.mp4',url:null,thumbnailUrl:'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="92" height="64"><rect width="92" height="64" fill="%236552d9"/></svg>',waveform:{peaks:'ChQyUFo8Ch4yRlpGJgo=',samplesPerSecond:2} };
+ await page.evaluate(source=>window.fixture.update({messages:[{id:'analysis-request',role:'user',text:'Find the strongest moment.'}],attachments:undefined,running:true,error:null,activity:'Analyzing footage…',activitySource:source.fileName,activityAsset:source,activityStartedAt:Date.now()-7000}),source);
+ await page.waitForSelector('.assistant-activity[data-phase="watching"] img');
+ assert.equal(await page.$eval('.assistant-activity-filename',node=>node.textContent),source.fileName);
+ assert.equal(await page.$eval('.assistant-activity-elapsed',node=>node.textContent),'0:07');
+ assert.equal(await page.$('.assistant-history progress,.assistant-history .processing-status-sweep,.assistant-history .processing-status-measured'),null,'Chat analysis has no generic sweep or invented percentage');
+ await page.screenshot({path:'/tmp/revline-chat-watching.png'});
+ await page.evaluate(()=>window.fixture.update({activity:'Listening to your footage…'}));
+ await page.waitForSelector('.assistant-activity[data-phase="listening"] [data-waveform="source"]');
+ assert.ok(await page.$$eval('.assistant-listening-waveform i',nodes=>nodes.some(node=>node.getBoundingClientRect().height>2)),'Listening shows the supplied source waveform');
+ await page.screenshot({path:'/tmp/revline-chat-listening.png'});
+ await page.evaluate(source=>window.fixture.update({activityAsset:{...source,waveform:undefined}}),source);
+ await page.waitForSelector('.assistant-listening-waveform[data-waveform="indicator"]');
+ assert.equal(await page.$('.assistant-listening-waveform i'),null,'Missing peaks use a clearly non-measured icon, never fabricated waveform data');
+ await page.evaluate(()=>window.fixture.update({activity:'Queued for analysis…',activitySource:null}));
+ await page.waitForSelector('.assistant-activity[data-phase="queued"]');
+ assert.match(await page.$eval('.assistant-activity .processing-status-detail',node=>node.textContent),/available media worker/);
+ await page.evaluate(()=>window.fixture.update({activity:'Applying edits…',messages:[{id:'analysis-request',role:'user',text:'Find the strongest moment.'},{id:'applying',role:'assistant',text:'',steps:[{id:'trim',name:'trim',state:'running'}]}]}));
+ await page.waitForSelector('.assistant-activity[data-phase="applying"]');
+ assert.equal(await page.$eval('.assistant-activity .processing-status-detail',node=>node.textContent),'Trimming footage');
+ await page.emulateMediaFeatures([{name:'prefers-reduced-motion',value:'reduce'}]);
+ assert.equal(await page.$eval('.assistant-activity-symbol',node=>getComputedStyle(node).animationName),'none');
+ assert.equal(await page.$eval('.assistant-activity',node=>node.scrollWidth<=node.clientWidth),true,'Activity fits the narrow sidebar');
+ assert.equal(await page.$('.assistant-activity button'),null,'Status cards add no Preview, Undo, Continue or Retry actions');
  assert.deepEqual(errors, []);
  await page.screenshot({ path: '/tmp/revline-chat-first-message.png' });
- console.log('PASS: first-send subscription preserves chat/composer DOM and optimistic message; source suggestions stay before the first message, saved failures are not duplicated, and errors follow while historical reading stays put; composer14px desktop/mobile.');
+ console.log('PASS: stable first-send chat/composer, truthful errors, compact source thumbnail/listening waveform/queued/applying states, elapsed time, no chat progress bars or extra actions, reduced motion and narrow-sidebar layout.');
 } finally { await browser.close(); await new Promise(resolve => server.close(resolve)); }

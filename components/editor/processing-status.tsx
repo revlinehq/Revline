@@ -22,7 +22,7 @@ export function ProcessingStatus({ label, detail, progress, state = 'working', b
 
 export function processingDetail(activity?: string | null, source?: string | null) {
   if (source) return source;
-  if (activity?.startsWith('Queued')) return 'Your task is next in line.';
+  if (activity?.startsWith('Queued')) return 'Waiting for an available media worker.';
   if (activity?.startsWith('Retrying')) return 'Reconnecting to the media service.';
   if (activity?.startsWith('Listening')) return 'Preparing words and their timestamps.';
   if (activity?.startsWith('Analyzing')) return 'Looking for moments that match your request.';

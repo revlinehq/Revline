@@ -44,6 +44,7 @@ export function ScriptedDemoEditor({ demoId }: { demoId: string }) {
   const [conversation] = useState(() => createStore<{ messages: ChatMessage[] }>(() => ({ messages: [] })));
   const [running, setRunning] = useState(false), [importing, setImporting] = useState(false);
   const [error, setError] = useState(''), [title, setTitle] = useState('Your next edit'), [activity, setActivity] = useState<string | null>(null);
+  const [activityStartedAt, setActivityStartedAt] = useState<number | null>(null);
   const [lastPrompt, setLastPrompt] = useState('');
   const input = useRef<HTMLInputElement>(null), assetsRef = useRef<MediaAsset[]>([]), urls = useRef<string[]>([]), activeRun = useRef<AbortController | null>(null);
   const mounted = useRef(true), importingRef = useRef(false);
@@ -58,7 +59,7 @@ export function ScriptedDemoEditor({ demoId }: { demoId: string }) {
   function reset() {
     activeRun.current?.abort(); activeRun.current = null;
     store.getState().recover(EMPTY_SCRIPTED_DEMO); store.setState({ playhead: 0, playing: false });
-    setRunning(false); setActivity(null); setMessages([]); setError(''); setSubmittedAssetIds([]);
+    setRunning(false); setActivity(null); setActivityStartedAt(null); setMessages([]); setError(''); setSubmittedAssetIds([]);
   }
   async function attach(files: File[]) {
     if (activeRun.current || importingRef.current) throw new Error('Finish or stop the edit before adding more footage.');
@@ -97,7 +98,7 @@ export function ScriptedDemoEditor({ demoId }: { demoId: string }) {
     const runId = `demo-build-${crypto.randomUUID()}`, plan = f1Take?f1RecordingDemoPlan(runId):racingTake?racingDemoPlan(runId):preparedTake?hormoziDemoPlan(runId):scriptedDemoPlan(assetsRef.current, prompt, runId);
     const controller = new AbortController(); activeRun.current = controller;
     setSubmittedAssetIds(assetsRef.current.map(asset => asset._id));
-    setError(''); setLastPrompt(prompt); setRunning(true); setActivity('Building your edit…');
+    setError(''); setLastPrompt(prompt); setRunning(true); setActivity('Queued for analysis…'); setActivityStartedAt(Date.now());
     setMessages([{ id: `${runId}-request`, role: 'user', text: prompt }, { id: `${runId}-reply`, role: 'assistant', status: 'streaming', text: '' }]);
     store.getState().recover(plan.initial); store.setState({ playhead: 0, playing: false }); store.getState().beginUndoGroup(runId);
     let current = plan.initial;
@@ -111,6 +112,16 @@ export function ScriptedDemoEditor({ demoId }: { demoId: string }) {
       });
     }
     try {
+      await waitForDemoStep(450, controller.signal);
+      if (media.assets.some(asset => asset.kind === 'video' || asset.kind === 'image')) {
+        setActivity('Watching footage…'); setActivityStartedAt(Date.now());
+        await waitForDemoStep(1750, controller.signal);
+      }
+      if (media.assets.some(asset => asset.kind === 'audio' || asset.audioAssetId || asset.waveform)) {
+        setActivity('Listening to your footage…'); setActivityStartedAt(Date.now());
+        await waitForDemoStep(1450, controller.signal);
+      }
+      setActivity('Applying edits…'); setActivityStartedAt(Date.now());
       const buildTimeline = (async () => {
         await waitForDemoStep(800, controller.signal);
         for (const step of plan.steps) {
@@ -135,7 +146,7 @@ export function ScriptedDemoEditor({ demoId }: { demoId: string }) {
     } finally {
       if (activeRun.current === controller) {
         activeRun.current = null; store.getState().endUndoGroup();
-        if (mounted.current) { setRunning(false); setActivity(null); }
+        if (mounted.current) { setRunning(false); setActivity(null); setActivityStartedAt(null); }
       }
     }
   }
@@ -146,7 +157,7 @@ export function ScriptedDemoEditor({ demoId }: { demoId: string }) {
       <button type="button" title="Replay edit" aria-label="Replay edit" disabled={running || importing || !lastPrompt || !assets.length} onClick={() => void build(lastPrompt).catch(error => setError(userError(error)))}><Play size={13}/></button>
       <button type="button" title="Reset the timeline, keep attached footage" aria-label="Reset edit" disabled={importing} onClick={reset}><RotateCcw size={13}/></button>
     </div>
-    <DemoConversation chatStore={conversation} running={running} configured demo={false} hasClips={!!assets.length} onSend={build} onStop={async () => { activeRun.current?.abort(); }} onAttach={() => input.current?.click()} attachments={attachments} onRemoveAttachment={removeAttachment} requireMedia={!assets.length || attachments.length > 0 || importing} activity={importing ? 'Reading local footage…' : activity}/>
+    <DemoConversation chatStore={conversation} running={running} configured demo={false} hasClips={!!assets.length} onSend={build} onStop={async () => { activeRun.current?.abort(); }} onAttach={() => input.current?.click()} attachments={attachments} onRemoveAttachment={removeAttachment} requireMedia={!assets.length || attachments.length > 0 || importing} activity={importing ? 'Reading local footage…' : activity} activityStartedAt={activityStartedAt} activityAsset={media.assets.find(asset => asset.kind === 'video') ?? media.assets.find(asset => asset.kind === 'audio')} error={error}/>
   </div>;
   function change(next: Timeline) { if (!activeRun.current) { store.getState().edit(next); setError(''); } }
   return <div className="scripted-editor-demo" data-demo-id={demoId} data-building={running || undefined}>
