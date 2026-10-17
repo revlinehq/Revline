@@ -2,9 +2,9 @@
 
 ## Formula One racing hero
 
-The landing hero reuses the six prepared shots in `public/demo/racing/manifest.json`. Their original sources, author attribution and CC BY-SA 4.0 terms are documented in `public/demo/racing/credits.html`, linked below the hero.
+The landing hero features Prime Editx's **F1 × NO BATIDAO** edit using its creator-hosted YouTube upload, `https://www.youtube.com/watch?v=PWbO4NSObPo`. The embedded player uses youtube-nocookie.com, plays muted, loops, and pauses when the hero or document is hidden. The creator is linked below the preview. It uses footage from *F1: The Movie*. The official Formula 1 campaign candidate was rejected because its upload disables embedding (player error 150). The film is hosted by YouTube; it is not copied into the repository or represented as a Revline-generated edit. The surrounding timeline and conversation are a prepared interface illustration.
 
-`public/demo/racing/landing.mp4` concatenates those shots into one 13.2-second, muted, 1280 × 720, 30 fps H.264 source, encoded with CRF 25, yuv420p and fast-start metadata. Shot boundaries are 0, 2, 4.4, 6.2, 8.6, 10.2 and 13.2 seconds. The passive editor reveals those cuts, adds three race-day titles, and applies a subtle wheel-change push-in. It makes no AI or upload calls.
+The earlier `public/demo/racing/landing.mp4` concatenates the six prepared shots in `public/demo/racing/manifest.json` into a 13.2-second montage. Source attribution and CC BY-SA 4.0 terms remain in `public/demo/racing/credits.html`. That montage is no longer loaded by the landing hero, including its timeline filmstrips. The standalone racing demo retains its existing licensed assets.
 
 ## NASA launch
 

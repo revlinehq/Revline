@@ -1,17 +1,18 @@
+import { F1_POSTER } from './f1-preview';
 import { NEUTRAL_MOTION } from '@/lib/editor/clip-effects';
 import { DEFAULT_TEXT_APPEARANCE } from '@/lib/editor/text-style';
 import type { Clip, MediaAsset, Timeline } from '@/lib/editor/types';
 
-/** A prepared local example: no uploads, analysis or provider calls on the landing page. */
+/** Illustrative timeline; the featured film plays through its official YouTube embed. No AI calls. */
 export const LANDING_DEMO_VIDEO = {
-  src: '/demo/racing/landing.mp4',
-  name: 'Race-day.mp4',
-  poster: '/demo/racing/01-pit-entry.jpg',
-  duration: 13.2,
+  src: F1_POSTER,
+  name: 'F1 × NO BATIDAO',
+  poster: F1_POSTER,
+  duration: 90,
 };
 export const LANDING_DEMO_PROMPT = 'Make a race-day edit. Cut between the pit stops and track, add bold titles and a subtle push-in.';
 export const LANDING_DEMO_ASSETS: MediaAsset[] = [{
-  _id: 'landing-race-day', kind: 'video', fileName: LANDING_DEMO_VIDEO.name,
+  _id: 'landing-race-day', kind: 'image', fileName: LANDING_DEMO_VIDEO.name,
   url: LANDING_DEMO_VIDEO.src, thumbnailUrl: LANDING_DEMO_VIDEO.poster,
   duration: LANDING_DEMO_VIDEO.duration, width: 1280, height: 720, audioExtracted: true,
 }];
@@ -38,9 +39,9 @@ const effect: Clip = {
   ],
 };
 const raw = footage([0, 13.2]);
-// Match the six prepared source shots, including both wheel-change close-ups.
+// Preserve the six-step editor animation, scaled to the featured film's ninety seconds.
 const cuts = footage([0, 2, 4.4, 6.2, 8.6, 10.2, 13.2]);
-const timeline = (clips: Clip[]): Timeline => ({ fps: 30, aspectRatio: 'landscape', tracks: { visual: 2, overlay: 0, audio: 0, effects: 1 }, clips });
+const timeline = (clips: Clip[]): Timeline => ({ fps: 30, aspectRatio: 'landscape', tracks: { visual: 2, overlay: 0, audio: 0, effects: 1 }, clips: clips.map(clip => ({ ...clip, start: clip.start * LANDING_DEMO_VIDEO.duration / 13.2, duration: clip.duration * LANDING_DEMO_VIDEO.duration / 13.2, sourceStart: clip.sourceStart * LANDING_DEMO_VIDEO.duration / 13.2 })) });
 // Each split lands at the playhead before the next cut is revealed.
 export const LANDING_DEMO_STEPS = [
   { timeline: timeline(raw), at: 4.4, message: 0 },
@@ -51,7 +52,7 @@ export const LANDING_DEMO_STEPS = [
   { timeline: timeline(cuts), at: 8.6, message: 1 },
   { timeline: timeline([...cuts, titles[0]]), at: .8, message: 2 },
   { timeline: timeline([...cuts, ...titles, effect]), at: 5.3, message: 3 },
-];
+].map(step => ({ ...step, at: step.at * LANDING_DEMO_VIDEO.duration / 13.2 }));
 export const LANDING_DEMO_MESSAGES = [
   'I’ll cut between the pit stops and track, then add titles and a gentle push-in.',
   'Placing the racing shots into a tighter sequence.',
