@@ -8,4 +8,3 @@
 .assistant-activity[data-state=error] .assistant-activity-symbol{color:#c3853c}
 .assistant-activity>.processing-status-detail{padding-left:23px}
 .assistant-activity .processing-status-detail{font-size:11px;line-height:17px;color:var(--muted-foreground);overflow-wrap:anywhere}
-@media(prefers-reduced-motion:reduce){.assistant-activity.processing-status[data-state=working] .processing-status-label{animation:none;background:none;color:var(--foreground)}}

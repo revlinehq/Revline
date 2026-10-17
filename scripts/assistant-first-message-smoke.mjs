@@ -90,8 +90,8 @@ try {
  await page.waitForSelector('.assistant-activity[data-phase="applying"]');
  assert.equal(await page.$eval('.assistant-activity .processing-status-detail',node=>node.textContent),'Trimming footage');
  await page.emulateMediaFeatures([{name:'prefers-reduced-motion',value:'reduce'}]);
- assert.equal(await page.$eval('.assistant-activity .processing-status-label',node=>getComputedStyle(node).animationName),'none');
- assert.equal(await page.$eval('.assistant-activity .processing-status-label',node=>getComputedStyle(node).backgroundImage),'none','Reduced motion leaves a plainly visible static label');
+ assert.deepEqual(await page.$eval('.assistant-activity .processing-status-label',node=>{const style=getComputedStyle(node);return[style.animationName,style.animationDuration]}),['revline-status-shimmer','3s'],'Reduced motion keeps the shared slower text-only shimmer');
+ assert.equal(await page.$eval('.assistant-activity-symbol',node=>getComputedStyle(node).animationName),'none','The small phase icon stays static');
  assert.equal(await page.$eval('.assistant-activity',node=>node.scrollWidth<=node.clientWidth),true,'Activity fits the narrow sidebar');
  assert.equal(await page.$('.assistant-activity button'),null,'Status cards add no Preview, Undo, Continue or Retry actions');
  assert.deepEqual(errors, []);
