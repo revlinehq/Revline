@@ -15,7 +15,7 @@ beforeEach(async () => {
   calls.length = 0;
   vi.stubEnv('GEMINI_VIDEO_MODEL', '');
 });
-afterEach(async () => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); await rm(directory, { recursive: true, force: true }); });
+afterEach(async () => { vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.unstubAllEnvs(); await rm(directory, { recursive: true, force: true }); });
 
 function mockProvider(result: unknown, status = 200, processing = false, subsequent: unknown[] = []) {
   let interactions = 0;
@@ -66,6 +66,36 @@ test('deletes temporary uploads even when provider quota is exhausted', async ()
   mockProvider({ error: 'quota' }, 429);
   await expect(transcribeAudio(source, 1, 'test-key', AbortSignal.timeout(5000))).rejects.toMatchObject({ status: 429 });
   expect(calls.at(-1)?.options.method).toBe('DELETE');
+});
+
+test('a terminal provider400 fails once with a neutral public error and redacted developer diagnostics', async () => {
+  const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+  const secret = 'test-key';
+  mockProvider({ error: { code: 400, status: 'INVALID_ARGUMENT', message: `Unsupported request. key=${secret}; media=https://storage.example/private?token=private-token Bearer private-bearer ${'detail '.repeat(100)}` } }, 400);
+  let error: unknown;
+  try { await inspectVideo(source, 1, { start: 0, end: 1, question: 'Describe the visible action.' }, secret, AbortSignal.timeout(5000)); } catch (caught) { error = caught; }
+  expect(error).toMatchObject({ status: 400, retryable: false });
+  expect((error as Error).message).not.toMatch(/Gemini|Google|test-key|https?:|private-token|private-bearer/i);
+  expect(calls.filter(call => call.url.endsWith('/interactions'))).toHaveLength(1);
+  expect(calls.at(-1)?.options.method).toBe('DELETE');
+  expect(log).toHaveBeenCalledWith('[media-analysis] Provider request failed', expect.objectContaining({ provider: 'gemini', httpStatus: 400, providerCode: 400, providerStatus: 'INVALID_ARGUMENT' }));
+  const diagnostic = log.mock.calls[0][1] as { message: string };
+  expect(diagnostic.message.length).toBeLessThanOrEqual(320);
+  expect(diagnostic.message).not.toMatch(/test-key|https?:|private-token|private-bearer/);
+  expect(diagnostic.message).toContain('Unsupported request');
+});
+
+test.each([401, 403, 404, 413])('providerHTTP%s is terminal while upstream5xx remains retryable', async status => {
+  vi.spyOn(console, 'error').mockImplementation(() => {});
+  mockProvider({ error: { code: status, status: 'INVALID_ARGUMENT', message: 'Request rejected.' } }, status);
+  await expect(transcribeAudio(source, 1, 'test-key', AbortSignal.timeout(5000))).rejects.toMatchObject({ status, retryable: false });
+});
+
+test('retains upstream transient classification without reissuing generation inside the helper', async () => {
+  vi.spyOn(console, 'error').mockImplementation(() => {});
+  mockProvider({ error: { code: 503, status: 'UNAVAILABLE', message: 'Temporary outage.' } }, 503);
+  await expect(inspectVideo(source, 1, { start: 0, end: 1, question: 'Describe the action.' }, 'test-key', AbortSignal.timeout(5000))).rejects.toMatchObject({ status: 503, retryable: true });
+  expect(calls.filter(call => call.url.endsWith('/interactions'))).toHaveLength(1);
 });
 
 test('requires timed words rather than inventing subtitles from plain text', async () => {

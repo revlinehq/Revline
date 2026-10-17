@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
-import { access, writeFile } from 'node:fs/promises';
+import { access, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import type { ConvexHttpClient } from 'convex/browser';
 import type { MediaWorkItem } from '../../convex/mediaTasks';
 import { AnalysisError } from '../media-analysis/errors';
@@ -39,6 +41,24 @@ test('large native footage gets a smaller analysis copy while inspection retains
   expect(mocks.prepareVideo).toHaveBeenCalledWith(expect.stringMatching(/source$/), expect.stringMatching(/analysis\.mp4$/), signal, 'inspection');
   expect(mocks.inspectVideo).toHaveBeenCalledWith(expect.stringMatching(/analysis\.mp4$/), 175.690956, task.videoRequest, 'fixture-key', signal, 'video/mp4', expect.any(Function));
   expect(activity.mock.calls.map(([phase]) => phase)).toEqual(['downloading', 'preparing-analysis']);
+});
+
+test('a provider retry reuses its verified source and prepared analysis video', async () => {
+  vi.stubEnv('GOOGLE_GENERATIVE_AI_API_KEY', 'fixture-key');
+  const cache = await mkdtemp(join(tmpdir(), 'revline-worker-cache-test-'));
+  vi.stubEnv('MEDIA_ANALYSIS_CACHE_DIR', cache);
+  try {
+    const task = work('video'), signal = AbortSignal.timeout(5000);
+    Object.assign(task.asset!, { ownerId: 'fixture-owner', r2Key: 'media/fixture-owner/source.mp4', size: 20_000_000, width: 1440, height: 1440 });
+    task.videoRequest = { question: 'Find the turn.', start: 0, end: 2 };
+    mocks.downloadOwnedMedia.mockImplementation(async (_url, output) => writeFile(output, Buffer.alloc(20_000_000)));
+    mocks.inspectVideo.mockRejectedValueOnce(new AnalysisError('Gemini timed out.', 504)).mockResolvedValueOnce({ ...task.videoRequest, summary: 'The turn is visible.', uncertainty: '', matches: [] });
+    await expect(processMediaTask(task, {} as ConvexHttpClient, 'https://fixture.convex.cloud', signal, () => {})).rejects.toThrow('Gemini timed out');
+    await processMediaTask({ ...task, leaseToken: 'retry-lease' }, {} as ConvexHttpClient, 'https://fixture.convex.cloud', signal, () => {});
+    expect(mocks.downloadOwnedMedia).toHaveBeenCalledOnce();
+    expect(mocks.prepareVideo).toHaveBeenCalledOnce();
+    expect(mocks.inspectVideo).toHaveBeenCalledTimes(2);
+  } finally { await rm(cache, { recursive: true, force: true }); }
 });
 
 test('overview uses its compact profile, but an efficient original wins if encoding grows the file', async () => {

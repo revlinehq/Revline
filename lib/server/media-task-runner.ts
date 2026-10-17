@@ -14,6 +14,7 @@ import { trackSourceFace } from './track-source-face';
 import { extractSourceAudio } from './extract-audio';
 import { measureAudioWaveform } from './audio-waveform';
 import { measureAudioActivity } from './measure-audio-activity';
+import { mediaSourceCacheIdentity, reuseMediaFile } from './media-file-cache';
 import { uploadMediaFile } from './upload-media-file';
 import { runRenderWorker } from './render-worker';
 import { importVideoLink } from './import-video-link';
@@ -82,10 +83,11 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
     const sourceAsset = task.kind === 'transcribe' ? task.transcriptionAsset ?? asset : asset;
     if (!sourceAsset.url) throw new AnalysisError('The prepared source media is unavailable.', 400);
     const source = join(directory, 'source'), sourceUrl = sourceAsset.url;
+    const cacheIdentity = mediaSourceCacheIdentity(convexUrl, task.projectId, sourceAsset);
     onActivity?.('downloading');
     const downloadStartedAt = Date.now();
     let loggedPercent = 0, loggedAt = downloadStartedAt;
-    await runPhase('Downloading source', () => downloadOwnedMedia(sourceUrl, source, new URL(convexUrl).origin, sourceAsset.size, signal, {
+    const reusedSource = await reuseMediaFile({ identity: cacheIdentity, variant: 'source-v1', target: source, signal, expectedBytes: sourceAsset.size }, () => runPhase('Downloading source', () => downloadOwnedMedia(sourceUrl, source, new URL(convexUrl).origin, sourceAsset.size, signal, {
       concurrency: task.kind === 'extract' ? 3 : 1,
       onProgress: (bytes, total) => {
         const percent = Math.floor(bytes / total * 100), now = Date.now();
@@ -97,7 +99,8 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
         logPhase('Downloading source', `${percent}%`, downloadStartedAt, `${(bytes / 1048576).toFixed(1)}/${(total / 1048576).toFixed(1)} MiB${measured}`);
         loggedPercent = percent; loggedAt = now;
       },
-    }));
+    })));
+    if (reusedSource) logPhase('Source cache', 'reused', downloadStartedAt);
     onProgress(task.kind === 'extract' ? 45 : 10);
     if (task.kind === 'extract') {
       const audioPath = join(directory, 'audio.m4a');
@@ -158,7 +161,9 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
     if (!nativeType || needsAnalysisVideoProxy(asset, media.duration, purpose)) {
       const prepared = join(directory, 'analysis.mp4'), preparationStartedAt = Date.now();
       onActivity?.('preparing-analysis');
-      await runPhase('Preparing analysis video',()=>prepareVideo(source, prepared, signal, purpose));
+      // Increment this variant if the corresponding prepareVideo profile changes.
+      const reusedAnalysis = await reuseMediaFile({ identity: cacheIdentity, variant: `analysis-${purpose}-v1`, target: prepared, signal, ...(nativeType ? { maxBytes: asset.size - 1 } : {}) }, () => runPhase('Preparing analysis video',()=>prepareVideo(source, prepared, signal, purpose)));
+      if (reusedAnalysis) logPhase('Analysis video cache', 'reused', preparationStartedAt, purpose);
       const preparedBytes = (await stat(prepared)).size;
       // An unusually simple source can already be smaller than the new encode.
       // Keep its native upload in that case; unsupported containers still need MP4.
