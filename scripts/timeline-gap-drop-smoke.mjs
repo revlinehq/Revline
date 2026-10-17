@@ -2,8 +2,8 @@ import assert from 'node:assert/strict';
 import {build} from 'esbuild';
 import puppeteer from 'puppeteer';
 const bundle=await build({stdin:{resolveDir:process.cwd(),loader:'tsx',contents:`
-import React from 'react';import {createRoot} from 'react-dom/client';import {TimelinePanel} from './components/editor/timeline';import {TooltipProvider} from './components/ui/tooltip';import {EditorStateProvider,useEditorState} from './components/editor/editor-state';import {createEditorStore} from './lib/editor/store';import './components/workspace/workspace-pages.css';import './app/editor.css';
-const initial={fps:30,aspectRatio:'landscape',tracks:{visual:2,audio:0,effects:0,overlay:0},clips:[{id:'left',kind:'image',track:1,start:0,duration:4,sourceStart:0},{id:'right',kind:'image',track:1,start:6,duration:2,sourceStart:0},{id:'moving',kind:'image',track:1,start:9,duration:2,sourceStart:0}]};const store=createEditorStore(initial);window.fixture=store;window.initial=initial;window.fixtureEvents={seek:[],edit:[]};function Fixture(){const[locked,setLocked]=React.useState(false);window.setEditingLocked=setLocked;const t=useEditorState(s=>s.timeline),id=useEditorState(s=>s.selectedId);return <TimelinePanel editingLocked={locked} timeline={t} assets={[]} selected={id} onSelect={id=>store.setState({selectedId:id,selectedIds:[id]})} time={0} playing={false} onSeek={at=>{window.fixtureEvents.seek.push(at);store.setState({playhead:at});}} onEditClip={id=>window.fixtureEvents.edit.push(id)} onChange={t=>store.getState().edit(t)} onSplit={()=>{}} onDelete={()=>{}} onDuplicate={()=>{}} onAddText={()=>{}}/>}createRoot(document.getElementById('root')).render(<TooltipProvider><EditorStateProvider store={store}><Fixture/></EditorStateProvider></TooltipProvider>);
+import React from 'react';import {createRoot} from 'react-dom/client';import {TimelinePanel} from './components/editor/timeline';import {TooltipProvider} from './components/ui/tooltip';import {EditorStateProvider,useEditorState} from './components/editor/editor-state';import {createEditorStore} from './lib/editor/store';import {splitClip} from './lib/editor/operations';import './components/workspace/workspace-pages.css';import './app/editor.css';
+const initial={fps:30,aspectRatio:'landscape',tracks:{visual:2,audio:0,effects:0,overlay:0},clips:[{id:'left',kind:'image',track:1,start:0,duration:4,sourceStart:0},{id:'right',kind:'image',track:1,start:6,duration:2,sourceStart:0},{id:'moving',kind:'image',track:1,start:9,duration:2,sourceStart:0}]};const store=createEditorStore(initial);window.fixture=store;window.initial=initial;window.fixtureEvents={seek:[],edit:[],errors:[]};window.splitMergeFixture=t=>splitClip(t,'v',1,'tail');function Fixture(){const[locked,setLocked]=React.useState(false);window.setEditingLocked=setLocked;const t=useEditorState(s=>s.timeline),id=useEditorState(s=>s.selectedId);return <TimelinePanel editingLocked={locked} timeline={t} assets={[]} selected={id} onSelect={id=>store.setState({selectedId:id,selectedIds:[id]})} time={0} playing={false} onSeek={at=>{window.fixtureEvents.seek.push(at);store.setState({playhead:at});}} onEditClip={id=>window.fixtureEvents.edit.push(id)} onError={message=>window.fixtureEvents.errors.push(message)} onChange={t=>store.getState().edit(t)} onSplit={()=>{}} onDelete={()=>{}} onDuplicate={()=>{}} onAddText={()=>{}}/>}createRoot(document.getElementById('root')).render(<TooltipProvider><EditorStateProvider store={store}><Fixture/></EditorStateProvider></TooltipProvider>);
 `},bundle:true,platform:'browser',format:'iife',jsx:'automatic',write:false,outdir:'/tmp/revline-gap-drop-fixture',define:{'process.env.NODE_ENV':'"production"'}});
 const browser=await puppeteer.launch({headless:true,args:['--no-sandbox','--disable-dev-shm-usage']});
 const page=await browser.newPage(),errors=[];page.on('pageerror',error=>errors.push(error.message));
@@ -31,6 +31,17 @@ try{
  assert.deepEqual((await state()).timeline.clips.filter(c=>c.kind==='video').map(c=>c.start),[0,2]);
  assert.equal((await state()).history,1,'Close gaps is one undoable edit');
  await page.evaluate(()=>window.fixture.getState().undo());await frames();assert.deepEqual((await state()).timeline.clips,spaced.clips);
+ // Merge actually removes compatible split boundaries, rather than only closing gaps.
+ const mergeSource={...linked,clips:linked.clips.filter(c=>c.id!=='music').map(c=>({...c,assetId:c.kind==='video'?'video':'audio'}))};
+ const splitSource=await page.evaluate(t=>window.splitMergeFixture(t),mergeSource);
+ await reset(splitSource);await page.click('[aria-label="Merge clips"]');await frames();
+ assert.match(await page.evaluate(()=>window.fixtureEvents.errors.at(-1)),/Select adjacent split pieces/,'No selection gets an explicit instruction');
+ await page.evaluate(()=>window.fixture.setState({selectedId:'tail',selectedIds:['tail']}));await frames();
+ await page.click('[aria-label="Merge clips"]');await frames();
+ assert.deepEqual((await state()).timeline.clips,mergeSource.clips,'One selected split half merges video and linked sound into one pair');
+ assert.equal((await state()).history,1);await page.evaluate(()=>window.fixture.getState().undo());await frames();assert.deepEqual((await state()).timeline.clips,splitSource.clips);
+ await page.evaluate(()=>window.setEditingLocked(true));await frames();assert.equal(await page.$eval('[aria-label="Merge clips"]',b=>b.disabled),true);
+ await page.evaluate(()=>window.setEditingLocked(false));await frames();
  // Double-click video/audio at a point seeks there and still opens its settings.
  await reset(linked);await page.evaluate(()=>{window.fixtureEvents={seek:[],edit:[]};});
  for(const id of ['v','a']){
@@ -40,5 +51,5 @@ try{
   assert.equal(await page.evaluate(()=>window.fixtureEvents.edit.at(-1)),id,'Double-click still opens clip settings');
  }
  const seekCount=await page.evaluate(()=>window.fixtureEvents.seek.length);await drag('v',54);assert.equal(await page.evaluate(()=>window.fixtureEvents.seek.length),seekCount,'Dragging does not seek');
- assert.deepEqual(errors,[]);console.log('PASS: Close gaps toolbar packing, linked audio, undo and AI lock; double-click video/audio seeks at pointer and opens settings; near-gap drops from either side and different grab points, normal/compact tracks, Alt bypass, true overlap rejection, automatic linked-audio row on existing/new video rows, single-edit undo.');
+ assert.deepEqual(errors,[]);console.log('PASS: actual Merge clips, linked pair/single selection/clear missing-selection instruction/undo/AI lock; Close gaps toolbar packing, linked audio, undo and AI lock; double-click video/audio seeks at pointer and opens settings; near-gap drops from either side and different grab points, normal/compact tracks, Alt bypass, true overlap rejection, automatic linked-audio row on existing/new video rows, single-edit undo.');
 }finally{await browser.close();}

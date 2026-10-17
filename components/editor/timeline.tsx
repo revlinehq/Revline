@@ -3,7 +3,7 @@ import { userError } from '@/lib/user-error';
 import { STOCK_AUDIO_DRAG_TYPE } from '@/lib/editor/stock-audio-drag';
 import { useState, useRef, useCallback, useLayoutEffect, useEffect, useMemo } from 'react';
 import { EffectIcon } from './effect-icon';
-import { Scissors, Copy, ClipboardPaste, Trash2, Magnet, Minus, Plus, Type, Layers, Volume2, VolumeX, ChevronDown, ChevronUp, MoreHorizontal, Rows3, ListMinus, Unlink, Flag, Pencil, FoldHorizontal } from 'lucide-react';
+import { Scissors, Copy, ClipboardPaste, Trash2, Magnet, Minus, Plus, Type, Layers, Volume2, VolumeX, ChevronDown, ChevronUp, MoreHorizontal, Rows3, ListMinus, Unlink, Flag, Pencil, FoldHorizontal, Combine } from 'lucide-react';
 import { IconButton } from './primitives';
 import { TimelineRulerTicks } from './timeline-ruler';
 import { EditorPlaybackTime } from './playback-time';
@@ -14,6 +14,7 @@ import { paintPlayhead, useTimelinePlayhead, useEdgeAutoScroll } from './use-tim
 import { deriveTrackCounts, layerGroup, trackOf, clipColor, timelineDuration, formatTime, maxTrackCount, type Timeline, type MediaAsset, type Clip, type LayerGroup, type TimelineMarker } from '@/lib/editor/types';
 import { moveTimelineMarker, removeTimelineMarker } from '@/lib/editor/timeline-markers';
 import { closeFootageGaps } from '@/lib/editor/close-gaps';
+import { mergeSplitClips } from '@/lib/editor/merge-clips';
 import { EFFECT_DRAG_TYPE, readEffectDrag, dropLibraryEffect } from '@/lib/editor/effect-drag';
 import { effectClipLabel } from '@/lib/editor/clip-effects';
 import { isTransitionClip, transitionPair, TRANSITION_PRESETS } from '@/lib/editor/clip-transitions';
@@ -104,6 +105,7 @@ export function TimelinePanel(p:Props){
   },[layout,viewportHeight,scrollbarHeight]);
   const cleanedTimeline=useMemo(()=>removeEmptyLayers(timeline),[timeline]);
   const closeGaps=()=>{if(p.readOnly||p.editingLocked)return;try{const next=closeFootageGaps(timeline,selectedIds);if(next!==timeline)onChange(next);}catch(error){report(error);}};
+  const mergeClips=()=>{if(p.readOnly||p.editingLocked)return;try{const result=mergeSplitClips(timeline,selectedIds.length?selectedIds:selected?[selected]:[]);onChange(result.timeline);onSelect(result.mergedClipIds[0]);store.setState({selectedIds:result.mergedClipIds});}catch(error){report(error);}};
   const clipsByTrack=useMemo(()=>{const rows=new Map<string,Clip[]>();for(const clip of timeline.clips){if(isTransitionClip(clip))continue;const key=`${layerGroup(clip.kind)}-${trackOf(clip)}`;const members=rows.get(key)??[];members.push(clip);rows.set(key,members);}return rows;},[timeline.clips]);
   const cutsByTrack=useMemo(()=>{
     const rows=new Map<number,{from:Clip;to:Clip;clip?:Clip}[]>();
@@ -564,6 +566,7 @@ export function TimelinePanel(p:Props){
     </div>{p.playbackControls&&<div className="timeline-playback-controls">{p.playbackControls}</div>}<div className="timeline-view-actions">
       {!p.readOnly&&<IconButton label="Unlink video and audio" disabled={!timeline.clips.find(c=>c.id===selected)?.linkedClipId} onClick={()=>{if(selected)onChange(unlinkClips(timeline,selected));}}><Unlink size={14}/></IconButton>}
       {!p.readOnly&&<IconButton label="Close gaps" disabled={p.editingLocked||!timeline.clips.some(clip=>clip.kind==='video'||clip.kind==='image')} onClick={closeGaps}><FoldHorizontal size={14}/></IconButton>}
+      {!p.readOnly&&<button type="button" aria-label="Merge clips" title={p.editingLocked?'Wait for the AI edit to finish.':'Merge adjacent split pieces from the same source. Select two pieces, or one next to its split neighbor.'} disabled={p.editingLocked} onClick={mergeClips}><Combine size={14}/><span>Merge clips</span></button>}
       <IconButton label={p.muted?"Unmute preview":"Mute preview"} onClick={p.onToggleMute}>{p.muted?<VolumeX size={14}/>:<Volume2 size={14}/>}</IconButton>
       <IconButton label={dense?'Expand track rows':'Compact track rows'} onClick={()=>store.setState({compactTracks:!dense})}><Rows3 size={14}/></IconButton>
       {!p.readOnly&&<><DropdownMenu><DropdownMenuTrigger aria-label="Add timeline layer"><Plus size={14}/><span>Layer</span></DropdownMenuTrigger><DropdownMenuContent>{([['effects','Effect track'],['visual','Visual layer'],['audio','Audio layer']] as const).map(([group,label])=><DropdownMenuItem key={group} onSelect={()=>addLayer(group)}>{label}</DropdownMenuItem>)}</DropdownMenuContent></DropdownMenu>
