@@ -10,7 +10,9 @@ type EditStorage = {
   beforeChange?: () => Promise<unknown>;
 };
 
-/** One serialized model turn. Clip replacements remain private until completion. */
+const sourcePlacementFields = ['assetId', 'kind', 'start', 'duration', 'sourceStart', 'playbackRate', 'track'] as const;
+
+/** One serialized model turn. Source edits and clip replacements remain private until completion. */
 export class EditSession {
   timeline: Timeline;
   revision: number;
@@ -40,10 +42,18 @@ export class EditSession {
       let next = normalizeTimeline(edit(previous));
       if (next === previous || JSON.stringify(next) === JSON.stringify(previous)) return { applied: false, saved: false, staged: this.staged, unchanged: true, revision: this.revision, changedClips: [], removedClipIds: [], removedMarkerIds: [], aspectRatio: previous.aspectRatio };
       await this.storage.beforeChange?.();
-      const removedClipIds = previous.clips.filter(clip => !next.clips.some(current => current.id === clip.id)).map(clip => clip.id);
+      const nextById = new Map(next.clips.map(clip => [clip.id, clip]));
+      const removedClipIds = previous.clips.filter(clip => !nextById.has(clip.id)).map(clip => clip.id);
+      const sourceChanged = previous.clips.some(clip => {
+        if (clip.kind !== 'video' && clip.kind !== 'audio' && clip.kind !== 'image') return false;
+        const current = nextById.get(clip.id);
+        return current && sourcePlacementFields.some(field => clip[field] !== current[field]);
+      });
       const remainingMarkerIds = new Set(next.markers?.map(marker => marker.id));
       const removedMarkerIds = (previous.markers ?? []).filter(marker => !remainingMarkerIds.has(marker.id)).map(marker => marker.id);
-      this.staged ||= removedClipIds.length > 0;
+      // Splits preserve the original IDs, and trims/moves can temporarily leave gaps.
+      // Stage the first source change, not just its later deletion/replacement.
+      this.staged ||= removedClipIds.length > 0 || sourceChanged;
       if (this.staged) await this.storage.validate(next, this.revision);
       else {
         try { this.revision = await this.storage.apply(next, this.revision); }

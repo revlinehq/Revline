@@ -6,7 +6,7 @@ import { api, internal } from './_generated/api';
 import schema from './schema';
 import { EditSession } from './lib/editSession';
 import type { Timeline } from '../lib/editor/types';
-import { addMediaClip, deleteClip } from '../lib/editor/operations';
+import { addMediaClip, deleteClip, patchClip, placeOnFreeLayer, splitClip } from '../lib/editor/operations';
 
 const modules = import.meta.glob('./**/*.ts');
 const original: Timeline = { fps: 30, aspectRatio: 'landscape', tracks: { visual: 1, overlay: 0, audio: 0 }, clips: [{ id: 'original', kind: 'caption', text: 'Original edit', start: 0, sourceStart: 0, duration: 5, track: 1 }] };
@@ -24,6 +24,23 @@ async function setup(signal?: AbortSignal) {
     validate: (timeline, expectedRevision) => t.query(internal.assistant.validateDraft, { ...run, timeline, expectedRevision }),
   }, signal);
   return { t, owner, projectId, run, read, session };
+}
+
+async function setupMedia(signal?: AbortSignal) {
+  const state = await setup(signal);
+  const asset = await state.t.run(async ctx => {
+    const common = { ownerId: 'owner', projectId: state.projectId, size: 100, duration: 60, createdAt: 1 };
+    const audioAssetId = await ctx.db.insert('assets', { ...common, kind: 'audio', fileName: 'audio.m4a', contentType: 'audio/mp4' });
+    const _id = await ctx.db.insert('assets', { ...common, kind: 'video', fileName: 'video.mp4', contentType: 'video/mp4', audioAssetId, audioExtracted: true });
+    return { _id, kind: 'video' as const, audioAssetId, duration: 60 };
+  });
+  const initial = addMediaClip({ ...original, clips: [], tracks: { visual: 1, overlay: 0, audio: 1 } }, asset, 'old-video');
+  await state.owner.mutation(api.projects.saveTimeline, { projectId: state.projectId, expectedRevision: 1, timeline: initial });
+  const session = new EditSession(initial, 2, {
+    apply: (timeline, expectedRevision) => state.t.mutation(internal.assistant.apply, { ...state.run, timeline, expectedRevision }),
+    validate: (timeline, expectedRevision) => state.t.query(internal.assistant.validateDraft, { ...state.run, timeline, expectedRevision }),
+  }, signal);
+  return { ...state, asset, initial, session };
 }
 
 test('inspection and unchanged checkpoints do not begin a timeline edit', async () => {
@@ -162,19 +179,7 @@ test('staging validation rejects foreign ownership, stale runs, and foreign medi
 });
 
 test('linked video/audio delete and replacement publish together with one undo', async () => {
-  const { t, owner, projectId, run, read } = await setup();
-  const asset = await t.run(async ctx => {
-    const common = { ownerId: 'owner', projectId, size: 100, duration: 20, createdAt: 1 };
-    const audioAssetId = await ctx.db.insert('assets', { ...common, kind: 'audio', fileName: 'audio.m4a', contentType: 'audio/mp4' });
-    const id = await ctx.db.insert('assets', { ...common, kind: 'video', fileName: 'video.mp4', contentType: 'video/mp4', audioAssetId, audioExtracted: true });
-    return { _id: id, kind: 'video' as const, audioAssetId, duration: 20 };
-  });
-  const initial = addMediaClip({ ...original, clips: [], tracks: { visual: 1, overlay: 0, audio: 1 } }, asset, 'old-video');
-  await owner.mutation(api.projects.saveTimeline, { projectId, expectedRevision: 1, timeline: initial });
-  const session = new EditSession(initial, 2, {
-    apply: (timeline, expectedRevision) => t.mutation(internal.assistant.apply, { ...run, timeline, expectedRevision }),
-    validate: (timeline, expectedRevision) => t.query(internal.assistant.validateDraft, { ...run, timeline, expectedRevision }),
-  });
+  const { owner, projectId, read, asset, initial, session } = await setupMedia();
   await session.checkpoint(t => deleteClip(t, 'old-video'));
   expect(session.timeline.clips).toHaveLength(0);
   expect((await read()).timeline?.clips).toEqual(initial.clips);
@@ -184,6 +189,54 @@ test('linked video/audio delete and replacement publish together with one undo',
   expect((await read()).timeline?.clips.map(clip => clip.id)).toEqual(['new-video', 'new-video-audio']);
   await owner.mutation(api.projects.undo, { projectId });
   expect((await read()).timeline?.clips).toEqual(initial.clips);
+});
+
+test.each(['error', 'length', 'tool-calls'])('incomplete %s source edits never publish intermediate splits, trims or gaps', async finishReason => {
+  const { session, initial, read } = await setupMedia();
+  await session.checkpoint(t => splitClip(t, 'old-video', 20, 'tail'));
+  await session.checkpoint(t => patchClip(t, 'old-video', { duration: 10 }));
+  await session.checkpoint(t => patchClip(t, 'tail', { start: 10 }));
+  expect(session.staged).toBe(true);
+  expect(session.savedEdits).toBe(0);
+  await expect(session.complete(finishReason)).rejects.toThrow('replacement was not saved');
+  expect((await read()).timeline?.clips).toEqual(initial.clips);
+  expect((await read()).revision).toBe(2);
+});
+
+test('aborted and failed source edits preserve the original linked footage', async () => {
+  for (const failure of ['abort', 'tool'] as const) {
+    const controller = new AbortController();
+    const { session, initial, read } = await setupMedia(controller.signal);
+    await session.checkpoint(t => patchClip(t, 'old-video', { duration: 20, sourceStart: 10 }));
+    if (failure === 'abort') controller.abort();
+    await expect(session.complete('stop', failure === 'tool')).rejects.toThrow();
+    expect((await read()).timeline?.clips).toEqual(initial.clips);
+    expect(session.savedEdits).toBe(0);
+  }
+});
+
+test('completed source assembly and captions publish together with one undo', async () => {
+  const { session, initial, read, owner, projectId } = await setupMedia();
+  await session.checkpoint(t => splitClip(t, 'old-video', 20, 'tail'));
+  await session.checkpoint(t => patchClip(t, 'old-video', { duration: 10 }));
+  await session.checkpoint(t => patchClip(t, 'tail', { start: 10 }));
+  await session.checkpoint(t => placeOnFreeLayer(t, { id: 'caption', kind: 'caption', text: 'Complete sentence.', start: 0, sourceStart: 0, duration: 10, track: 2 }));
+  expect((await read()).timeline?.clips).toEqual(initial.clips);
+  const expected = session.timeline;
+  await session.complete('stop');
+  expect((await read()).timeline?.clips).toEqual(expected.clips);
+  expect((await read()).revision).toBe(3);
+  expect(session.savedEdits).toBe(1);
+  await owner.mutation(api.projects.undo, { projectId });
+  expect((await read()).timeline?.clips).toEqual(initial.clips);
+});
+
+test('source styling remains live until a retained source range or placement changes', async () => {
+  const { session, read } = await setupMedia();
+  expect(await session.checkpoint(t => patchClip(t, 'old-video', { invert: { enabled: true, amount: 0.8 } }))).toMatchObject({ saved: true, staged: false });
+  expect((await read()).timeline?.clips.find(clip => clip.id === 'old-video')?.invert?.amount).toBe(0.8);
+  expect(await session.checkpoint(t => placeOnFreeLayer(t, { ...t.clips.find(clip => clip.id === 'old-video')!, track: 2 }))).toMatchObject({ saved: false, staged: true });
+  expect((await read()).timeline?.clips.find(clip => clip.id === 'old-video')?.track).toBe(1);
 });
 
 test('immediate conflicts refresh and rebase an unrelated manual field once', async () => {

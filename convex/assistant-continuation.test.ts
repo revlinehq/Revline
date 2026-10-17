@@ -156,6 +156,107 @@ test('a speech edit can trim a false start from saved source word timings withou
   expect((await f.read()).aiError).toBeUndefined();
 });
 
+test('automatic captions exclude removed words and save measured word timing on a sped-up retained source', async () => {
+  const f = await fixture('Add readable word-synced subtitles to this retained shot');
+  const transcript = {
+    segments: [{ start: 10, end: 16, text: 'Discarded I built this today. Removed' }],
+    words: [
+      { start: 10, end: 10.5, text: 'Discarded' },
+      { start: 11.7, end: 11.9, text: 'I' },
+      { start: 12, end: 12.5, text: 'built' },
+      { start: 12.5, end: 12.5, text: 'this' },
+      { start: 13, end: 14.2, text: 'today.' },
+      { start: 15, end: 16, text: 'Removed' },
+    ],
+  };
+  await f.t.run(async ctx => {
+    await storeAnalysis(ctx, (await ctx.db.get(f.assetId))!, { transcript });
+    const audioAssetId = await ctx.db.insert('assets', { ownerId: 'owner', projectId: f.projectId, kind: 'audio', fileName: 'extracted.m4a', contentType: 'audio/mp4', size: 1, duration: 60, createdAt: 0 });
+    await ctx.db.patch(f.assetId, { audioAssetId, audioExtracted: true });
+    const video = { ...f.source, track: 3, duration: 1.5, playbackRate: 2, audioSeparated: true, volume: 0, linkedClipId: 'extracted' };
+    const audio = { id: 'extracted', kind: 'audio' as const, assetId: audioAssetId, track: 1, start: video.start, sourceStart: video.sourceStart, duration: video.duration, playbackRate: 2, linkedClipId: video.id };
+    await writeProject(ctx, f.projectId, { timeline: { ...f.timeline, tracks: { visual: 3, overlay: 0, audio: 1, effects: 0 }, clips: [video, audio] } });
+  });
+  await f.runPlan(async tools => { await execute(tools, 'addSubtitlesFromTranscript', { assetId: f.assetId }); });
+  const saved = await f.read(), captions = saved.timeline!.clips.filter(clip => clip.kind === 'caption');
+  expect(saved.aiError).toBeUndefined();
+  expect(f.analysisRequests).toEqual([]);
+  expect(captions).toHaveLength(1);
+  expect(captions[0].track).toBe(4);
+  expect(saved.timeline!.clips.filter(clip => clip.kind === 'video' || clip.kind === 'audio')).toHaveLength(2);
+  expect(saved.timeline!.clips.find(clip => clip.id === 'extracted')).toMatchObject({ start: 1.69, sourceStart: 11.5, duration: 1.5, playbackRate: 2, linkedClipId: f.source.id });
+  expect(captions[0].text).toBe('I built this today.');
+  expect(captions[0].start).toBeCloseTo(1.79, 10);
+  expect(captions[0].duration).toBeCloseTo(1.25, 10);
+  expect(captions[0].textTemplate?.preset).toBe('karaoke');
+  expect(captions[0].textTemplate?.wordTimings).toHaveLength(4);
+  const expected = [{ start: 0, end: .1 }, { start: .15, end: .4 }, { start: .4, end: .4 }, { start: .65, end: 1.25 }];
+  captions[0].textTemplate!.wordTimings!.forEach((word, index) => { expect(word.start).toBeCloseTo(expected[index].start, 10); expect(word.end).toBeCloseTo(expected[index].end, 10); });
+});
+
+test('retained-range assembly and word-synced subtitles publish once with linked audio and one undo', async () => {
+  const f = await fixture('Keep the two complete phrases together and add subtitles');
+  const words = [
+    { start: 11.5, end: 11.6, text: 'Um' },
+    { start: 11.7, end: 11.9, text: 'I' }, { start: 11.9, end: 12.3, text: 'built.' },
+    { start: 12.4, end: 13, text: 'Discarded' },
+    { start: 13.1, end: 13.5, text: 'This' }, { start: 13.5, end: 14.3, text: 'works.' },
+    { start: 14.35, end: 14.45, text: 'Removed' },
+  ];
+  const initial = await f.t.run(async ctx => {
+    await storeAnalysis(ctx, (await ctx.db.get(f.assetId))!, { transcript: { words, segments: [{ start: 11.5, end: 14.45, text: 'Um I built. Discarded This works. Removed' }] } });
+    const audioAssetId = await ctx.db.insert('assets', { ownerId: 'owner', projectId: f.projectId, kind: 'audio', fileName: 'linked.m4a', contentType: 'audio/mp4', size: 1, duration: 60, createdAt: 0 });
+    await ctx.db.patch(f.assetId, { audioAssetId, audioExtracted: true });
+    const video = { ...f.source, duration: 1.5, playbackRate: 2, audioSeparated: true, volume: 0, linkedClipId: 'linked' };
+    const audio = { id: 'linked', kind: 'audio' as const, assetId: audioAssetId, track: 1, start: video.start, sourceStart: video.sourceStart, duration: video.duration, playbackRate: 2, volume: .7, linkedClipId: video.id };
+    const timeline = { ...f.timeline, tracks: { ...f.timeline.tracks, audio: 1 }, clips: [video, audio] };
+    await writeProject(ctx, f.projectId, { timeline });
+    return timeline;
+  });
+  const mutate = f.ctx.runMutation;
+  let publications = 0;
+  f.ctx.runMutation = async (reference, args) => {
+    if (getFunctionName(reference as FunctionReference<'mutation'>) === 'assistant:apply') {
+      publications++;
+      expect(args).toMatchObject({ expectedRevision: 0, publication: { threadId: f.threadId, promptMessageId: f.promptMessageId } });
+      expect((await f.read()).timeline).toEqual(initial);
+    }
+    return mutate(reference, args);
+  };
+  await f.runPlan(async tools => {
+    const retained = await execute(tools, 'retainSourceRanges', { clipId: f.source.id, ranges: [{ start: 11.7, end: 12.3 }, { start: 13.1, end: 14.3 }] }) as { retainedRanges: { sourceStart: number; sourceEnd: number; start: number; duration: number }[] };
+    expect(retained).toMatchObject({ saved: false, staged: true, revision: 0 });
+    expect(retained.retainedRanges).toHaveLength(2);
+    for (const [index, expected] of [[11.7, 12.3, 1.69, .3], [13.1, 14.3, 1.99, .6]].entries()) {
+      const actual = retained.retainedRanges[index];
+      for (const [field, value] of Object.entries({ sourceStart: expected[0], sourceEnd: expected[1], start: expected[2], duration: expected[3] })) expect(actual[field as keyof typeof actual]).toBeCloseTo(value, 10);
+    }
+    expect(await execute(tools, 'addSubtitlesFromTranscript', { assetId: f.assetId })).toMatchObject({ saved: false, staged: true });
+    expect((await f.read()).timeline).toEqual(initial);
+    expect(publications).toBe(0);
+  });
+  const saved = await f.read(), videos = saved.timeline!.clips.filter(clip => clip.kind === 'video').sort((a, b) => a.start - b.start);
+  expect(saved.aiError).toBeUndefined(); expect(publications).toBe(1); expect(saved.revision).toBe(1); expect(f.analysisRequests).toEqual([]);
+  expect(videos).toHaveLength(2);
+  expect(videos[1].start).toBeCloseTo(videos[0].start + videos[0].duration, 10);
+  for (const video of videos) expect(saved.timeline!.clips.find(clip => clip.id === video.linkedClipId)).toMatchObject({ kind: 'audio', start: video.start, duration: video.duration, sourceStart: video.sourceStart, playbackRate: 2, linkedClipId: video.id, volume: .7 });
+  const captions = saved.timeline!.clips.filter(clip => clip.kind === 'caption').sort((a, b) => a.start - b.start);
+  expect(captions.map(clip => clip.text)).toEqual(['I built.', 'This works.']);
+  const timing = [[{ start: 0, end: .1 }, { start: .1, end: .3 }], [{ start: 0, end: .2 }, { start: .2, end: .6 }]];
+  captions.forEach((caption, index) => {
+    expect(caption.start).toBeCloseTo(videos[index].start, 10);
+    expect(caption.duration).toBeCloseTo(videos[index].duration, 10);
+    expect(caption.textTemplate?.preset).toBe('karaoke');
+    expect(caption.textTemplate?.wordTimings).toHaveLength(2);
+    caption.textTemplate!.wordTimings!.forEach((word, i) => { expect(word.start).toBeCloseTo(timing[index][i].start, 10); expect(word.end).toBeCloseTo(timing[index][i].end, 10); });
+  });
+  const receipts = (await f.messages()).page.flatMap(message => message.parts).map(part => part.type === 'text' ? part.providerMetadata?.revline?.publicationReceipt : undefined).filter(Boolean);
+  expect(receipts).toEqual([expect.objectContaining({ status: 'saved', stagedRevision: 0, revision: 1 })]);
+  expect(saved.history).toEqual([initial]);
+  await f.owner.mutation(api.projects.undo, { projectId: f.projectId });
+  expect((await f.read()).timeline).toEqual(initial);
+});
+
 test('durable recovery inspects fresh saved state regardless of wording and does not duplicate footage already published', async () => {
   const f = await fixture('Make it a little softer', [], true); let attemptedWithoutInspection: unknown;
   await f.runPlan(async tools => {

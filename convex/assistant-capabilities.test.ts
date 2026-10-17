@@ -161,12 +161,15 @@ test('group copy/move/trim, layer reorder and common blend use actual editor ope
     const current=await execute(tools,'inspectTimeline',{}) as{timeline:Timeline};
     const oldTransition=current.timeline.clips.find(c=>c.transition)!;
     const copied=await execute(tools,'duplicateClips',{clipIds:['from','to',oldTransition.id],at:6}) as{newClipIds:string[]};
+    const duplicated=await execute(tools,'inspectTimeline',{}) as{timeline:Timeline};
+    const copiedPair=duplicated.timeline.clips.find(c=>copied.newClipIds.includes(c.id)&&c.transition)!;
+    // Probe rejected operations before starting the private source assembly.
+    await expect(execute(tools,'duplicateClips',{clipIds:[oldTransition.id],at:20})).rejects.toThrow(/inside footage|onto a cut/i);
+    await expect(execute(tools,'setBlendMode',{clipIds:[copiedPair.transition!.fromClipId],blendMode:'screen'})).rejects.toThrow('same blend');
     await execute(tools,'moveClips',{clipIds:copied.newClipIds,timeDelta:2,layerDelta:1});
     const moved=await execute(tools,'inspectTimeline',{}) as{timeline:Timeline};
     const pair=moved.timeline.clips.find(c=>copied.newClipIds.includes(c.id)&&c.transition)!;
     expect(pair.transition!.fromClipId).not.toBe('from');expect(pair.transition!.toClipId).not.toBe('to');
-    await expect(execute(tools,'duplicateClips',{clipIds:[oldTransition.id],at:20})).rejects.toThrow(/inside footage|onto a cut/i);
-    await expect(execute(tools,'setBlendMode',{clipIds:[pair.transition!.fromClipId],blendMode:'screen'})).rejects.toThrow('same blend');
     await execute(tools,'setBlendMode',{clipIds:[pair.transition!.fromClipId,pair.transition!.toClipId],blendMode:'screen'});
     await execute(tools,'resizeClips',{clipIds:[pair.transition!.fromClipId],side:'left',delta:.2});
     await execute(tools,'reorderLayer',{group:'visual',from:2,to:3});
