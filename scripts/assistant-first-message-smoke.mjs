@@ -24,8 +24,12 @@ try {
  await page.addStyleTag({ content: bundle.outputFiles.find(file => file.path.endsWith('.css')).text });
  await page.addStyleTag({ content: '*{box-sizing:border-box}body{margin:0;font:13px Arial;background:var(--ws-bg);color:var(--ws-text)}#root{width:360px;height:650px;margin:24px auto;display:flex}p{margin:0}' });
  await page.addScriptTag({ content: bundle.outputFiles.find(file => file.path.endsWith('.js')).text });
- await page.waitForSelector('textarea'); await page.type('textarea', 'Make the opening tighter.'); await page.keyboard.press('Enter');
+ await page.waitForSelector('textarea');
+ await page.evaluate(()=>window.fixture.update({suggestions:{sourceName:'Initial footage',clipId:'clip',items:[{label:'Make a short',prompt:'Make a short',start:0,end:1}]}}));
+ await page.waitForSelector('.assistant-source-suggestions');
+ await page.type('textarea', 'Make the opening tighter.'); await page.keyboard.press('Enter');
  await page.waitForSelector('.chat-user');
+ await page.waitForFunction(()=>!document.querySelector('.assistant-source-suggestions'));
  await page.evaluate(() => { window.panel = document.querySelector('.assistant-content'); window.composer = document.querySelector('textarea'); window.fixture.update({ conversation: { projectId: 'project', threadId: 'first-thread' }, running: true }); });
  await page.waitForFunction(() => !!window.remoteChanged);
  assert.equal(await page.evaluate(() => window.panel === document.querySelector('.assistant-content')), true, 'Creating the first server conversation must keep the existing chat DOM');
@@ -41,10 +45,16 @@ try {
  await page.waitForSelector('[data-message-id="a4"]');
  await page.evaluate(() => window.fixture.update({ suggestions: { sourceName: 'Selected footage', clipId: 'clip', items: Array.from({ length: 3 }, (_, index) => ({ label: `Try suggestion ${index}`, prompt: 'Improve this moment', start: index, end: index + 1 })) } }));
  const visible = selector => page.waitForFunction(selector => { const target = document.querySelector(selector), viewport = document.querySelector('.assistant-history'); if (!target || !viewport) return false; const box = target.getBoundingClientRect(), bounds = viewport.getBoundingClientRect(); return box.top >= bounds.top - 1 && box.bottom <= bounds.bottom + 1; }, {}, selector);
- await visible('.assistant-source-suggestions button:last-child');
+ await page.waitForFunction(()=>!document.querySelector('.assistant-source-suggestions'));
  await visible('[data-message-id="u4"]');
  await visible('[data-message-id="a4"]');
  await page.evaluate(() => window.fixture.update({ error: 'The request could not finish. Your existing edit is still saved. Please try again.' }));
+ await visible('.chat-error');
+ const budgetError='This request reached its token budget. Previously saved edits remain; continue from the current timeline.';
+ await page.evaluate(({messages,budgetError})=>window.fixture.update({messages:[...messages.slice(0,-1),{...messages.at(-1),text:'No timeline changes were saved. '+budgetError}],error:budgetError}),{messages,budgetError});
+ await page.waitForFunction(()=>!document.querySelector('.chat-error'));
+ assert.equal(await page.$$eval('[data-message-id="a4"]',nodes=>nodes.length),1,'A persisted failure is shown once, without a duplicate error footer');
+ await page.evaluate(({messages})=>window.fixture.update({messages,error:'The request could not finish.'}),{messages});
  await visible('.chat-error');
  await page.$eval('.assistant-history', node => { node.dispatchEvent(new WheelEvent('wheel', { deltaY: -300 })); node.scrollTop = 0; });
  await page.evaluate(() => window.fixture.update({ error: 'The request could not finish. '.repeat(8) }));
@@ -59,5 +69,5 @@ try {
  }
  assert.deepEqual(errors, []);
  await page.screenshot({ path: '/tmp/revline-chat-first-message.png' });
- console.log('PASS: first-send subscription preserves chat/composer DOM and optimistic message; suggestions/errors follow into view while historical reading stays put; composer14px desktop/mobile.');
+ console.log('PASS: first-send subscription preserves chat/composer DOM and optimistic message; source suggestions stay before the first message, saved failures are not duplicated, and errors follow while historical reading stays put; composer14px desktop/mobile.');
 } finally { await browser.close(); await new Promise(resolve => server.close(resolve)); }

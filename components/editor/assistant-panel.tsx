@@ -43,7 +43,7 @@ export function AssistantPanel(props:PanelProps) {
   // optimistic message, composer DOM, or scroll position while history loads.
   return <>
     {props.conversation&&<ConnectedConversation conversation={props.conversation} onUpdate={setConversationState}/>}
-    <AssistantPanelBody {...props} messages={props.conversation?current?.messages??props.messages:props.messages} canLoadMore={props.conversation?current?.canLoadMore:props.canLoadMore} onLoadMore={props.conversation?current?.onLoadMore:props.onLoadMore}/>
+    <AssistantPanelBody {...props} conversationStarted={!!props.conversation} messages={props.conversation?current?.messages??props.messages:props.messages} canLoadMore={props.conversation?current?.canLoadMore:props.canLoadMore} onLoadMore={props.conversation?current?.onLoadMore:props.onLoadMore}/>
   </>;
 }
 
@@ -72,7 +72,7 @@ function AssistantResponseText({ text, streaming }: { text: string; streaming: b
   return <ChatProse text={text} animate={receivedLive || streaming} />;
 }
 
-function AssistantPanelBody({ messages, running, configured, error, onSend, onStop, hasClips, demo, onLoadMore, canLoadMore, onAttach, activity, activitySource, activityStartedAt, draftKey, suggestions, onSuggestion, editSnapshot, defaultModelChoice, modelSwitcher = false, allowedModels = PRODUCTION_CLAUDE_MODEL_CHOICES, attachments, onRemoveAttachment, requireMedia = false }: {
+function AssistantPanelBody({ messages, running, configured, error, onSend, onStop, hasClips, demo, onLoadMore, canLoadMore, onAttach, activity, activitySource, activityStartedAt, draftKey, suggestions, onSuggestion, editSnapshot, defaultModelChoice, modelSwitcher = false, allowedModels = PRODUCTION_CLAUDE_MODEL_CHOICES, attachments, onRemoveAttachment, requireMedia = false, conversationStarted = false }: {
   messages: ChatMessage[]; running: boolean; configured: boolean; error?: string | null;
   modelSwitcher?: boolean;
   defaultModelChoice?:ClaudeModelChoice;
@@ -80,6 +80,7 @@ function AssistantPanelBody({ messages, running, configured, error, onSend, onSt
   onSend: (text: string, modelChoice?: ClaudeModelChoice) => Promise<void>; hasClips: boolean; demo: boolean;
   onLoadMore?: () => void; canLoadMore?: boolean; onAttach?: () => void;
   attachments?: ComposerAttachment[]; onRemoveAttachment?: (id: string) => void; requireMedia?: boolean;
+  conversationStarted?: boolean;
   activity?: string | null; activitySource?: string | null; activityProgress?:number|null; activityStartedAt?:number|null; draftKey?:string;
   onStop?: () => Promise<void>;
   suggestions?: { sourceName:string;clipId:string;items:SourceEditSuggestion[] };
@@ -119,6 +120,9 @@ function AssistantPanelBody({ messages, running, configured, error, onSend, onSt
       return {...group,replies,comparison,cards:summarizeTools(steps,{publicationReceipt,publishedRevision:legacyPublications.current.get(group.id),draftFailed,draftPending:group.id===turnId&&answering})};
     });
   },[messages,turnId,editSnapshot,running,error,optimisticRequest,answering]);
+  const showSuggestions=!conversationStarted&&!latestUser&&!waiting;
+  const replyShowsError=!!error&&groups.at(-1)?.replies.some(message=>message.text.includes(error));
+  const visibleError=localError||(!waiting&&!replyShowsError?error:null);
   useEffect(() => { try { setPrompt(draftKey ? sessionStorage.getItem(draftKey) ?? '' : ''); } catch { setPrompt(''); } }, [draftKey]);
   useEffect(() => {
     if (!pendingReply) return;
@@ -185,8 +189,8 @@ function AssistantPanelBody({ messages, running, configured, error, onSend, onSt
       })}
       {!groups.length && waiting && <div className="assistant-reply"><AssistantReplyHeader loading label={stopState==='stopping'?'Stopping…':activity || replyLabel} detail={processingDetail(activity,activitySource)} startedAt={activityStartedAt}/></div>}
       {!waiting && stopState==='stopped' && <ProcessingStatus label="Stopped." detail="Your existing edit is still here." state="stopped"/>}
-      {!running && suggestions?.items.length && onSuggestion && configured ? <div data-chat-follow className="assistant-source-suggestions" aria-label="Suggested edits from this footage"><span title={suggestions.sourceName}>Ideas for {suggestions.sourceName}</span>{suggestions.items.map((suggestion, index) => <button key={`${suggestions.clipId}-${index}`} type="button" disabled={sending || !!pendingReply} onClick={() => void chooseSuggestion(suggestion)}><span>{suggestion.label}</span><ArrowUpRight size={14} aria-hidden="true" /></button>)}</div> : null}
-      {(error || localError) && <div data-chat-follow><ProcessingStatus className="chat-error" label="Couldn’t finish this step." detail={localError || error} state="error"/></div>}
+      {showSuggestions && suggestions?.items.length && onSuggestion && configured ? <div data-chat-follow className="assistant-source-suggestions" aria-label="Suggested edits from this footage"><span title={suggestions.sourceName}>Ideas for {suggestions.sourceName}</span>{suggestions.items.map((suggestion, index) => <button key={`${suggestions.clipId}-${index}`} type="button" disabled={sending || !!pendingReply} onClick={() => void chooseSuggestion(suggestion)}><span>{suggestion.label}</span><ArrowUpRight size={14} aria-hidden="true" /></button>)}</div> : null}
+      {visibleError && <div data-chat-follow><ProcessingStatus className="chat-error" label="Couldn’t finish this step." detail={visibleError} state="error"/></div>}
       {!!messages.length && !demo && !configured && <div className="assistant-demo-note">Connect Claude to edit in conversation. Your footage, preview, and timeline are ready.</div>}
       </div>
     </div>
