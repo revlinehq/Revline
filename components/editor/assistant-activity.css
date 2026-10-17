@@ -2,20 +2,10 @@
 .assistant-activity-heading{display:flex;align-items:center;gap:7px;min-width:0;min-height:20px}
 .assistant-activity-symbol{display:flex;align-items:center;justify-content:center;flex:none;width:16px;color:var(--muted-foreground)}
 .assistant-activity .processing-status-label{min-width:0;font-size:13px;line-height:20px;font-weight:500;overflow-wrap:anywhere}
-.assistant-activity.processing-status[data-state=working] .processing-status-label{background:none;color:var(--foreground);animation:none}
 .assistant-activity .assistant-activity-elapsed{margin:0 0 0 auto;white-space:nowrap;font-size:11px;line-height:18px;font-weight:400}
-.assistant-activity[data-state=working] .assistant-activity-symbol{color:var(--revline-accent);animation:assistant-activity-breathe 2.4s ease-in-out infinite}
+.assistant-activity[data-state=working] .assistant-activity-symbol{color:var(--revline-accent)}
 .assistant-activity[data-state=ready] .assistant-activity-symbol{color:var(--muted-foreground)}
 .assistant-activity[data-state=error] .assistant-activity-symbol{color:#c3853c}
 .assistant-activity>.processing-status-detail{padding-left:23px}
-.assistant-activity-media{display:flex;align-items:center;gap:11px;min-width:0;margin:4px 0 2px}
-.assistant-watching-thumbnail,.assistant-listening-waveform{display:flex;align-items:center;justify-content:center;flex:none;width:92px;height:64px;overflow:hidden;border-radius:6px;background:var(--secondary);color:var(--muted-foreground)}
-.assistant-watching-thumbnail img{display:block;width:100%;height:100%;object-fit:cover}
-.assistant-listening-waveform{gap:1px;padding:0 8px;color:var(--revline-accent);background:color-mix(in srgb,var(--revline-accent),transparent 94%)}
-.assistant-listening-waveform i{display:block;flex:1;min-width:1px;max-width:2px;border-radius:1px;background:currentColor;opacity:.75}
-.assistant-listening-waveform[data-waveform=indicator]>svg{animation:assistant-activity-breathe 2.4s ease-in-out infinite}
-.assistant-activity-media-copy{display:flex;flex-direction:column;gap:5px;min-width:0}
-.assistant-activity-filename{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;line-height:17px;color:var(--foreground)}
 .assistant-activity .processing-status-detail{font-size:11px;line-height:17px;color:var(--muted-foreground);overflow-wrap:anywhere}
-@keyframes assistant-activity-breathe{0%,100%{opacity:.55}50%{opacity:1}}
-@media(prefers-reduced-motion:reduce){.assistant-activity[data-state=working] .assistant-activity-symbol,.assistant-listening-waveform[data-waveform=indicator]>svg{animation:none}}
+@media(prefers-reduced-motion:reduce){.assistant-activity.processing-status[data-state=working] .processing-status-label{animation:none;background:none;color:var(--foreground)}}

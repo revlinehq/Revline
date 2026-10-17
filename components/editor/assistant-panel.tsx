@@ -19,7 +19,7 @@ import { savedEditComparison, summarizeTools, turnPublicationReceipt, type Assis
 import './assistant-results.css';
 import './assistant-editing.css';
 import './assistant-panel.css';
-import type { MediaAsset, SourceEditSuggestion } from '@/lib/editor/types';
+import type { SourceEditSuggestion } from '@/lib/editor/types';
 import { processingDetail } from './processing-status';
 import { AssistantActivity } from './assistant-activity';
 export type { ChatTool, ChatMessage } from './assistant-results';
@@ -50,10 +50,10 @@ export function AssistantPanel(props:PanelProps) {
 
 type PendingReply = { id: string; text: string; previousUserId?: string; previousError?: string | null };
 
-function AssistantReplyHeader({ loading, active=loading, label, detail, startedAt, asset }: { loading: boolean; active?:boolean; label: string; detail?: string; startedAt?:number|null; asset?:MediaAsset }) {
+function AssistantReplyHeader({ loading, active=loading, label, detail, startedAt }: { loading: boolean; active?:boolean; label: string; detail?: string; startedAt?:number|null }) {
   return <div className={`assistant-reply-header ${active ? 'is-processing' : 'chat-author'}`}>
     <Brand markOnly/>
-    {active ? <AssistantActivity label={loading?label:'Revline'} detail={loading?detail:undefined} startedAt={startedAt} asset={loading?asset:undefined}/> : <span>Revline</span>}
+    {active ? <AssistantActivity label={loading?label:'Revline'} detail={loading?detail:undefined} startedAt={startedAt}/> : <span>Revline</span>}
   </div>;
 }
 
@@ -65,7 +65,7 @@ function AssistantResponseText({ text, streaming }: { text: string; streaming: b
   return <ChatProse text={text} animate={receivedLive || streaming} />;
 }
 
-function AssistantPanelBody({ messages, running, configured, error, onSend, onStop, hasClips, demo, onLoadMore, canLoadMore, onAttach, activity, activitySource, activityStartedAt, activityAsset, draftKey, suggestions, onSuggestion, editSnapshot, defaultModelChoice, modelSwitcher = false, allowedModels = PRODUCTION_CLAUDE_MODEL_CHOICES, attachments, onRemoveAttachment, requireMedia = false, conversationStarted = false }: {
+function AssistantPanelBody({ messages, running, configured, error, onSend, onStop, hasClips, demo, onLoadMore, canLoadMore, onAttach, activity, activitySource, activityStartedAt, draftKey, suggestions, onSuggestion, editSnapshot, defaultModelChoice, modelSwitcher = false, allowedModels = PRODUCTION_CLAUDE_MODEL_CHOICES, attachments, onRemoveAttachment, requireMedia = false, conversationStarted = false }: {
   messages: ChatMessage[]; running: boolean; configured: boolean; error?: string | null;
   modelSwitcher?: boolean;
   defaultModelChoice?:ClaudeModelChoice;
@@ -74,7 +74,7 @@ function AssistantPanelBody({ messages, running, configured, error, onSend, onSt
   onLoadMore?: () => void; canLoadMore?: boolean; onAttach?: () => void;
   attachments?: ComposerAttachment[]; onRemoveAttachment?: (id: string) => void; requireMedia?: boolean;
   conversationStarted?: boolean;
-  activity?: string | null; activitySource?: string | null; activityProgress?:number|null; activityStartedAt?:number|null; activityAsset?:MediaAsset; draftKey?:string;
+  activity?: string | null; activitySource?: string | null; activityProgress?:number|null; activityStartedAt?:number|null; draftKey?:string;
   onStop?: () => Promise<void>;
   suggestions?: { sourceName:string;clipId:string;items:SourceEditSuggestion[] };
   onSuggestion?: (prompt:string,clipId:string,modelChoice?:ClaudeModelChoice) => Promise<void>;
@@ -168,7 +168,7 @@ function AssistantPanelBody({ messages, running, configured, error, onSend, onSt
         return <div className={`assistant-turn ${group.id === turnId ? 'is-latest-turn' : ''}`} data-turn-id={group.id} key={group.id}>
           {groupMessages.filter(message => message.role === 'user').map(message => <article key={message.id} data-message-id={message.id} data-message-status={message.status} className="chat-message chat-user"><p>{message.text}</p></article>)}
           {(replies.length > 0 || editing || cards.length > 0) && <div className="assistant-reply">
-            <AssistantReplyHeader loading={loading} active={editing} label={stopState==='stopping'?'Stopping…':activity || replyLabel} detail={processingDetail(activity,activitySource)||cards.find(card=>card.state==='running')?.title} startedAt={activityStartedAt} asset={activityAsset}/>
+            <AssistantReplyHeader loading={loading} active={editing} label={stopState==='stopping'?'Stopping…':activity || replyLabel} detail={processingDetail(activity,activitySource)||cards.find(card=>card.state==='running')?.title} startedAt={activityStartedAt}/>
             {replies.map(message => !message.text && !message.tools?.length && message.id !== demoNoteMessageId ? null : <article key={message.id} data-message-id={message.id} data-message-status={message.status} className="chat-message chat-assistant">
               {message.text && <AssistantResponseText text={message.text} streaming={message.status === 'streaming'} />}
               {message.tools?.map((tool, i) => <div className="tool-result" key={`${tool}-${i}`}><Check size={12} />{tool}</div>)}
@@ -180,7 +180,7 @@ function AssistantPanelBody({ messages, running, configured, error, onSend, onSt
           </div>}
         </div>;
       })}
-      {!groups.length && waiting && <div className="assistant-reply"><AssistantReplyHeader loading label={stopState==='stopping'?'Stopping…':activity || replyLabel} detail={processingDetail(activity,activitySource)} startedAt={activityStartedAt} asset={activityAsset}/></div>}
+      {!groups.length && waiting && <div className="assistant-reply"><AssistantReplyHeader loading label={stopState==='stopping'?'Stopping…':activity || replyLabel} detail={processingDetail(activity,activitySource)} startedAt={activityStartedAt}/></div>}
       {!waiting && stopState==='stopped' && <AssistantActivity label="Stopped." detail="Your existing edit is still here." state="stopped"/>}
       {showSuggestions && suggestions?.items.length && onSuggestion && configured ? <div data-chat-follow className="assistant-source-suggestions" aria-label="Suggested edits from this footage"><span title={suggestions.sourceName}>Ideas for {suggestions.sourceName}</span>{suggestions.items.map((suggestion, index) => <button key={`${suggestions.clipId}-${index}`} type="button" disabled={sending || !!pendingReply} onClick={() => void chooseSuggestion(suggestion)}><span>{suggestion.label}</span><ArrowUpRight size={14} aria-hidden="true" /></button>)}</div> : null}
       {visibleError && <div data-chat-follow><AssistantActivity className="chat-error" label="Needs attention" detail={visibleError} state="error"/></div>}
