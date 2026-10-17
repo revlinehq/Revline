@@ -11,12 +11,12 @@
 .scripted-editor-demo .composer-attachments{padding-top:8px}
 /* Pen A: wide inner light, composited above the rows without moving their content. */
 .scripted-editor-demo .custom-timeline .timeline-ai-frame{inset:0;border:0;border-radius:0;box-shadow:none}
-.scripted-editor-demo .custom-timeline .timeline-ai-frame::before{inset:0;width:auto;height:auto;border-radius:0;background:none;box-shadow:inset 0 0 44px #8c75f0b3,inset 0 0 14px #aa8bf56b;opacity:.9}
-.scripted-editor-demo .custom-timeline[data-editing-locked] .timeline-ai-frame::before{animation:demo-ai-inner-glow 4.8s cubic-bezier(.45,0,.55,1) infinite;will-change:opacity}
+.scripted-editor-demo .custom-timeline .timeline-ai-frame::before{inset:0;width:auto;height:auto;border-radius:0;background:none;box-shadow:inset 0 0 80px 8px #8c75f0b3,inset 0 0 24px 1px #aa8bf56b;opacity:.9}
+.scripted-editor-demo .custom-timeline[data-editing-locked] .timeline-ai-frame::before{animation:demo-ai-inner-glow 3.6s cubic-bezier(.45,0,.55,1) infinite;will-change:opacity}
 .scripted-editor-demo .custom-timeline .timeline-ai-frame::after,.scripted-editor-demo .custom-timeline[data-editing-locked] .timeline-ai-frame::after{content:none;animation:none}
 .scripted-editor-demo .custom-timeline .timeline-ai-notice{transition:opacity 240ms ease}
 @starting-style{.scripted-editor-demo .custom-timeline[data-editing-locked] .timeline-body:is(:hover,:focus-within) .timeline-ai-notice{opacity:0}}
-@keyframes demo-ai-inner-glow{0%,100%{opacity:.55}50%{opacity:1}}
-@keyframes demo-ai-inner-glow-soft{0%,100%{opacity:.72}50%{opacity:1}}
+@keyframes demo-ai-inner-glow{0%,100%{opacity:.18}50%{opacity:1}}
+@keyframes demo-ai-inner-glow-soft{0%,100%{opacity:.3}50%{opacity:1}}
 @keyframes demo-block-arrive{from{opacity:0;transform:translateY(5px);filter:blur(1.5px)}to{opacity:1;transform:none;filter:none}}
-@media(prefers-reduced-motion:reduce){.scripted-editor-demo[data-building] .timeline-clip{animation:none}.scripted-editor-demo .custom-timeline[data-editing-locked] .timeline-ai-frame::before{animation:demo-ai-inner-glow-soft 6.4s cubic-bezier(.45,0,.55,1) infinite!important}.scripted-editor-demo .custom-timeline .timeline-ai-notice{transition:opacity 240ms ease!important}}
+@media(prefers-reduced-motion:reduce){.scripted-editor-demo[data-building] .timeline-clip{animation:none}.scripted-editor-demo .custom-timeline[data-editing-locked] .timeline-ai-frame::before{animation:demo-ai-inner-glow-soft 4.4s cubic-bezier(.45,0,.55,1) infinite!important}.scripted-editor-demo .custom-timeline .timeline-ai-notice{transition:opacity 240ms ease!important}}
