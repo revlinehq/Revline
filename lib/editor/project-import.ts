@@ -25,9 +25,13 @@ export async function importProjectSources(
   dependencies: ImportDependencies,
   onProgress: (progress: ProjectImportProgress) => void,
 ) {
+  const started=Date.now();
+  const log=(stage:string)=>console.info(`[import] ${new Date().toISOString()} ${stage}; total ${((Date.now()-started)/1000).toFixed(1)}s.`);
   const total = input.files.length + input.assetIds.length;
+  log(`Starting ${total} source(s)`);
   onProgress({ phase: 'preparing', index: 1, total, percent: 0 });
   await dependencies.stage(input.files.filter(source => !session.completed.has(source.id)).map(source => source.file));
+  log('Local draft saved');
   session.projectId ??= await dependencies.create(input.title, input.assetIds);
   const projectId = session.projectId;
   let { timeline, revision } = await dependencies.project(projectId);
@@ -37,7 +41,9 @@ export async function importProjectSources(
     const report = (percent: number, phase: SourceUploadPhase) => onProgress({ phase, percent, index: input.assetIds.length + index + 1, total });
     let assetId = session.uploaded.get(source.id);
     if (!assetId) {
+      const uploadStarted=Date.now();
       assetId = await dependencies.upload(projectId, source.file, report);
+      log(`Source ${index+1}/${input.files.length}: upload and cloud save took ${((Date.now()-uploadStarted)/1000).toFixed(1)}s`);
       // Retain completed uploads when fetching or saving their clips needs a retry.
       session.uploaded.set(source.id, assetId);
     }
@@ -56,8 +62,11 @@ export async function importProjectSources(
       }
     }
     if (dependencies.prepare) {
+      const preparationStarted=Date.now();
+      log(`Source ${index+1}/${input.files.length}: preparing audio`);
       onProgress({ phase: 'processing', percent: 100, index: input.assetIds.length + index + 1, total });
       const prepared = await dependencies.prepare(projectId, asset);
+      log(`Source ${index+1}/${input.files.length}: audio ready in ${((Date.now()-preparationStarted)/1000).toFixed(1)}s`);
       // The editor may have been opened while processing continued. Preserve any
       // edits made there instead of saving the stale import snapshot over them.
       ({ timeline, revision } = await dependencies.project(projectId));
@@ -72,5 +81,6 @@ export async function importProjectSources(
     session.completed.add(source.id);
   }
   onProgress({ phase: 'opening', index: Math.max(1, total), total, percent: 100 });
+  log('Sources and audio ready; opening editor');
   return projectId;
 }

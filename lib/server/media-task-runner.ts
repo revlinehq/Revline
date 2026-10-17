@@ -21,6 +21,22 @@ import { reviewComposition } from './review-composition';
 import { extractInspectionFrames } from './inspect-video-frames';
 
 export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpClient, convexUrl: string, signal: AbortSignal, onProgress: (percent: number) => void): Promise<MediaTaskResult> {
+  const startedAt = Date.now();
+  const logPhase = (phase: string, state: string, phaseStartedAt: number, detail = '') => {
+    const now = Date.now();
+    console.log(`[${new Date(now).toISOString()}] Media task ${task.taskId} (${task.kind}): ${phase} ${state}${detail ? ` · ${detail}` : ''} · phase ${((now - phaseStartedAt) / 1000).toFixed(1)}s · total ${((now - startedAt) / 1000).toFixed(1)}s`);
+  };
+  const runPhase = async <T>(phase: string, work: () => Promise<T>): Promise<T> => {
+    const phaseStartedAt = Date.now();
+    logPhase(phase, 'started', phaseStartedAt);
+    const heartbeat=setInterval(()=>logPhase(phase,'still running',phaseStartedAt),15_000);
+    try {
+      const result = await work();
+      logPhase(phase, 'complete', phaseStartedAt);
+      return result;
+    } catch (error) { logPhase(phase, 'failed', phaseStartedAt); throw error; }
+    finally { clearInterval(heartbeat); }
+  };
   const directory = await mkdtemp(join(tmpdir(), 'revline-task-'));
   const credentials = { taskId: task.taskId, leaseToken: task.leaseToken };
   const uploadContext = { convex, refreshAuth: async () => { signal.throwIfAborted(); } };
@@ -51,19 +67,35 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
     if (task.kind === 'extract' && asset.audioExtracted) return asset.audioAssetId ? { audioAssetId: asset.audioAssetId } : {};
     if (task.kind === 'waveform' && asset.waveform) return { waveform: asset.waveform };
     if (task.kind === 'transcribe' && asset.analysis?.transcript) return { analysis: { transcript: asset.analysis.transcript } };
-    const source = join(directory, 'source');
-    await downloadOwnedMedia(asset.url, source, new URL(convexUrl).origin, asset.size, signal);
-    onProgress(10);
+    const source = join(directory, 'source'), sourceUrl = asset.url;
+    const downloadStartedAt = Date.now();
+    let loggedPercent = 0, loggedAt = downloadStartedAt;
+    await runPhase('Downloading source', () => downloadOwnedMedia(sourceUrl, source, new URL(convexUrl).origin, asset.size, signal, {
+      concurrency: task.kind === 'extract' ? 3 : 1,
+      onProgress: (bytes, total) => {
+        const percent = Math.floor(bytes / total * 100), now = Date.now();
+        onProgress(Math.round(bytes / total * (task.kind === 'extract' ? 45 : 10)));
+        if (percent - loggedPercent < 10 && now - loggedAt < 5000 && percent < 100) return;
+        const seconds = (now - downloadStartedAt) / 1000;
+        const rate = seconds >= 1 ? bytes / seconds : 0;
+        const measured = rate > 0 ? ` · ${(rate / 1048576).toFixed(1)} MiB/s · ~${Math.ceil((total - bytes) / rate)}s remaining` : '';
+        logPhase('Downloading source', `${percent}%`, downloadStartedAt, `${(bytes / 1048576).toFixed(1)}/${(total / 1048576).toFixed(1)} MiB${measured}`);
+        loggedPercent = percent; loggedAt = now;
+      },
+    }));
+    onProgress(task.kind === 'extract' ? 45 : 10);
     if (task.kind === 'extract') {
       const audioPath = join(directory, 'audio.m4a');
-      const hasAudio = await extractSourceAudio(source, audioPath, signal);
+      const hasAudio = await runPhase('Extracting audio', () => extractSourceAudio(source, audioPath, signal));
       if (!hasAudio) return {};
-      onProgress(50);
+      onProgress(60);
+      let completedOutputs = 0;
+      const outputReady = () => { onProgress(60 + ++completedOutputs * 19); };
       // Both operations only read the completed audio file. Wait for both on
       // failure as well so task cleanup cannot remove a file still uploading.
       const [waveformResult, uploadResult] = await Promise.allSettled([
-        measureAudioWaveform(audioPath, signal),
-        task.outputAssetId ? Promise.resolve(task.outputAssetId) : uploadMediaFile(audioPath, { ...credentials, projectId: task.projectId, kind: 'audio', contentType: 'audio/mp4', fileName: `${asset.fileName.replace(/\.[^.]+$/, '').slice(0, 245)}.m4a`, ...(asset.duration ? { duration: asset.duration } : {}) }, uploadContext, signal),
+        runPhase('Preparing waveform', () => measureAudioWaveform(audioPath, signal)).then(result => { outputReady(); return result; }),
+        runPhase('Saving audio', () => task.outputAssetId ? Promise.resolve(task.outputAssetId) : uploadMediaFile(audioPath, { ...credentials, projectId: task.projectId, kind: 'audio', contentType: 'audio/mp4', fileName: `${asset.fileName.replace(/\.[^.]+$/, '').slice(0, 245)}.m4a`, ...(asset.duration ? { duration: asset.duration } : {}) }, uploadContext, signal)).then(result => { outputReady(); return result; }),
       ]);
       if (waveformResult.status === 'rejected') throw waveformResult.reason;
       if (uploadResult.status === 'rejected') throw uploadResult.reason;
@@ -73,30 +105,30 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
       return { audioAssetId, waveform };
     }
     if (task.kind === 'waveform') return { waveform: await measureAudioWaveform(source, signal) };
-    const media = await probeMedia(source, signal);
+    const media = await runPhase('Reading media information',()=>probeMedia(source, signal));
     if (task.kind === 'frames') {
       if (!media.hasVideo || !task.frameRequest) throw new AnalysisError('Frame inspection needs a video window and a question.', 400);
       const key = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
       if (!key) throw new AnalysisError('Gemini frame inspection is not configured on the media worker.', 503);
       const { sourceFps, images } = await extractInspectionFrames(source, directory, task.frameRequest, media.duration, signal);
       onProgress(60);
-      return { frameInspection: await inspectVideoFrames(images, sourceFps, task.frameRequest, key, signal) };
+      return { frameInspection: await runPhase('Inspecting frames',()=>inspectVideoFrames(images, sourceFps, task.frameRequest!, key, signal)) };
     }
     if (task.kind === 'transcribe') {
       if (!media.hasAudio) throw new AnalysisError('This source has no audio to transcribe.', 400);
       const key = process.env.OPENAI_API_KEY;
       if (!key) throw new AnalysisError('OpenAI Whisper transcription is not configured on the media worker.', 503);
       const audio = join(directory, 'speech.mp3');
-      await extractTranscriptionAudio(source, audio, signal);
+      await runPhase('Preparing transcription audio',()=>extractTranscriptionAudio(source, audio, signal));
       onProgress(30);
-      return { analysis: { transcript: await transcribeWithWhisper(audio, media.duration, key, signal) } };
+      return { analysis: { transcript: await runPhase('Transcribing speech',()=>transcribeWithWhisper(audio, media.duration, key, signal)) } };
     }
     if (task.kind === 'beats') {
       if (!media.hasAudio) throw new AnalysisError('This source has no audio to measure.', 400);
-      return { analysis: { beats: await detectMusicBeats(source, media.duration, signal) } };
+      return { analysis: { beats: await runPhase('Detecting music beats',()=>detectMusicBeats(source, media.duration, signal)) } };
     }
-    if (task.kind === 'track') return { analysis: { focus: await trackSourceFace(source, media.duration, onProgress, signal) } };
-    if (task.kind === 'shots') return { analysis: { shots: await detectShots(source, media.duration, signal) } };
+    if (task.kind === 'track') return { analysis: { focus: await runPhase('Tracking subject',()=>trackSourceFace(source, media.duration, onProgress, signal)) } };
+    if (task.kind === 'shots') return { analysis: { shots: await runPhase('Detecting shots',()=>detectShots(source, media.duration, signal)) } };
     if (!media.hasVideo) throw new AnalysisError('Footage understanding needs a video source.', 400);
     const key = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
     if (!key) throw new AnalysisError('Gemini agentic footage understanding is not configured on the media worker.', 503);
@@ -106,12 +138,12 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
     // Pass supported source files intact so fast action retains its recorded frames.
     // Unknown containers get a playable MP4 without imposing a sampling rate.
     const video = nativeType ? source : join(directory, 'analysis.mp4');
-    if (!nativeType) await prepareVideo(source, video, signal);
+    if (!nativeType) await runPhase('Preparing analysis video',()=>prepareVideo(source, video, signal));
     onProgress(30);
     if (task.kind === 'video') {
       if (!task.videoRequest) throw new AnalysisError('Native video inspection needs a question and source window.', 400);
-      return { videoInspection: await inspectVideo(video, media.duration, task.videoRequest, key, signal, nativeType ? mimeType : 'video/mp4') };
+      return { videoInspection: await runPhase('Inspecting video',()=>inspectVideo(video, media.duration, task.videoRequest!, key, signal, nativeType ? mimeType : 'video/mp4')) };
     }
-    return { analysis: { understanding: await understandVideo(video, media.duration, key, signal, nativeType ? mimeType : 'video/mp4') } };
+    return { analysis: { understanding: await runPhase('Understanding footage',()=>understandVideo(video, media.duration, key, signal, nativeType ? mimeType : 'video/mp4')) } };
   } finally { await rm(directory, { recursive: true, force: true }); }
 }

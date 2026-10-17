@@ -26,6 +26,8 @@ try {
  await page.addScriptTag({content:bundle.outputFiles.find(file=>file.path.endsWith('.js')).text});
  await page.waitForSelector('[aria-label="AI editing model"]');
  assert.equal(await page.$eval('[aria-label="AI editing model"]',el=>el.textContent),'Sonnet 5.5');
+ assert.equal(await page.$eval('[aria-label="AI editing model"]',el=>getComputedStyle(el).fontSize),'14px','The model label matches the composer text');
+ assert.equal(await page.$eval('.manual-editor-composer',node=>{const input=node.querySelector('textarea').getBoundingClientRect(),actions=node.querySelector('.edit-composer-actions').getBoundingClientRect();return input.height>=44&&actions.top-input.bottom>=11}),true,'Text input sits above a separate model/action row');
  const geometry=await page.$$eval('.composer-submit',els=>els.map(el=>{const rect=el.getBoundingClientRect();return {width:rect.width,height:rect.height,shadow:getComputedStyle(el).boxShadow};}));
  assert.equal(geometry[0].width,28);assert.equal(geometry[0].height,28);assert.equal(geometry[0].shadow,'none');
  assert.equal(geometry[1].width,32);assert.equal(geometry[1].height,32,'Other composer variants keep their sizing');

@@ -23,7 +23,7 @@ function start(name, command) {
   children.add(child);
   for (const stream of [child.stdout, child.stderr]) {
     const lines = createInterface({ input: stream });
-    lines.on('line', line => console.log(`[${name}] ${line}`));
+    lines.on('line', line => console.log(`[${name}] ${new Date().toISOString()} ${line}`));
   }
   child.on('error', error => { console.error(`[${name}] ${error.message}`); stop(1); });
   child.on('exit', (code, signal) => {

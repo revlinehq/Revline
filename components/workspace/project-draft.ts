@@ -8,6 +8,7 @@ let pendingFiles: File[] | null = null;
 let retainedFiles: File[] = [];
 let writes: Promise<void> = Promise.resolve();
 let persistenceError: Error | null = null;
+let persistedDraft: Draft | null = null;
 
 function storageError() {
   return new Error('Your browser could not save the footage for sign-in. Enable browser storage or remove the footage before continuing with Google. Your prompt is still here.');
@@ -53,6 +54,7 @@ function serialize<T>(run: () => Promise<T>): Promise<T> {
 
 async function persist(files: File[]) {
   if (!files.length) {
+    persistedDraft = null;
     // Invalidate the session pointer even if an unavailable database cannot delete
     // its old record. Removed footage must never be restored after authentication.
     let id: string | null = null;
@@ -64,19 +66,24 @@ async function persist(files: File[]) {
   try {
     const id = draftId(true);
     if (id) {
+      // Attaching and staging the same File objects share one durable write.
+      // Compare references: matching names/sizes can still contain different bytes.
+      if (persistedDraft?.id === id && persistedDraft.expiresAt > Date.now() && persistedDraft.files.length === files.length && files.every((file, index) => file === persistedDraft!.files[index])) return;
+      const snapshot = { id, files: [...files], expiresAt: Date.now() + expiry } satisfies Draft;
       await transaction('readwrite', store => {
         const cursor = store.openCursor();
         cursor.onsuccess = () => {
           const entry = cursor.result;
           if (!entry) return;
-          if ((entry.value as Draft).expiresAt <= Date.now()) entry.delete();
+          if (entry.key !== id && (entry.value as Draft).expiresAt <= Date.now()) entry.delete();
           entry.continue();
         };
-        return store.put({ id, files, expiresAt: Date.now() + expiry } satisfies Draft);
+        return store.put(snapshot);
       });
+      persistedDraft = snapshot;
     }
     persistenceError = null;
-  } catch { persistenceError = storageError(); }
+  } catch { persistedDraft = null; persistenceError = storageError(); }
 }
 
 /** Await before navigation. A SPA draft remains usable if IndexedDB is unavailable. */
@@ -133,6 +140,8 @@ export function acknowledgeDraftFiles(imported: File[]): Promise<void> {
 /** Google leaves the page, so footage must have reached durable browser storage. */
 export async function prepareExternalAuthRedirect(): Promise<void> {
   await writes;
+  // Authentication leaves this page; renew expiry even for an unchanged draft.
+  persistedDraft = null;
   if (pendingFiles === null) await takeFiles().then(files => stashFiles(files));
   else if (retainedFiles.length) await stashFiles(retainedFiles);
   // Refresh the expiry immediately before leaving, including a long-lived SPA draft.

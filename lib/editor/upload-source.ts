@@ -23,10 +23,20 @@ export async function uploadSourceFile(
   let uploadId: Id<'r2Uploads'> | undefined;
   let completed = false;
   let thumbnail:Blob|undefined;
+  let savedAssetId:Id<'assets'>|undefined;
+  const started=Date.now();
+  const log=(stage:string)=>console.info(`[upload] ${new Date().toISOString()} ${stage} (${((Date.now()-started)/1000).toFixed(1)}s since start).`);
+  const saveThumbnail=()=>{
+    if(!thumbnail||!savedAssetId||!transport.saveThumbnail)return;
+    const image=thumbnail,id=savedAssetId;thumbnail=undefined;
+    void Promise.resolve().then(()=>transport.saveThumbnail!(id,image)).catch(()=>undefined);
+  };
 
   try {
+    log('Reading media metadata');
     onProgress(0, 'reading');
-    const metadata = await inspectMedia(file,transport.saveThumbnail || transport.onThumbnail ? image=>{thumbnail=image;transport.onThumbnail?.(image);} : undefined);
+    const metadata = await inspectMedia(file,transport.saveThumbnail || transport.onThumbnail ? image=>{thumbnail=image;transport.onThumbnail?.(image);saveThumbnail();} : undefined,false);
+    log('Metadata ready; opening cloud upload');
     const upload = await transport.start(metadata);
     uploadId = upload.uploadId;
     onProgress(0, 'uploading');
@@ -37,14 +47,17 @@ export async function uploadSourceFile(
       percent => onProgress(percent, 'uploading'),
     );
     onProgress(100, 'saving');
+    log('Transfer finished; finalizing cloud storage');
     const assetId = await transport.complete(upload.uploadId, parts);
     completed = true;
     if (!assetId) throw new Error('The upload did not return media.');
     // The source is already durable. A slow or blocked optional image request must
     // not turn a completed upload into an import error or delay opening its clip.
-    if(thumbnail&&transport.saveThumbnail)void Promise.resolve(thumbnail).then(image=>transport.saveThumbnail!(assetId,image)).catch(()=>undefined);
+    savedAssetId=assetId;saveThumbnail();
+    log('Source saved; upload complete');
     return assetId;
   } catch (error) {
+    log('Upload failed; releasing unfinished upload');
     if (uploadId && !completed) await transport.abort(uploadId).catch(() => undefined);
     throw error;
   }

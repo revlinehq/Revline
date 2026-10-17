@@ -3,7 +3,7 @@ import { isCasualChat } from '@/lib/editor/chat-request';
 import { userError } from '@/lib/user-error';
 
 import { PRODUCTION_CLAUDE_MODEL_CHOICES } from '@/lib/ai/claude-model-policy';
-import { useState, useEffect, useMemo, useRef, type ComponentProps } from 'react';
+import { memo, useCallback, useState, useEffect, useLayoutEffect, useMemo, useRef, type ComponentProps } from 'react';
 import { Check, ArrowUpRight } from 'lucide-react';
 import { Brand } from '@/components/workspace/brand';
 import { AssistantModelPicker } from './assistant-model-picker';
@@ -25,14 +25,26 @@ export type { ChatTool, ChatMessage } from './assistant-results';
 
 type Conversation = {projectId:Id<'projects'>;threadId:string};
 type PanelProps = ComponentProps<typeof AssistantPanelBody> & {conversation?:Conversation};
-function ConnectedConversation({conversation,...props}:PanelProps & {conversation:Conversation}) {
+type ConversationState = {threadId:string;messages:ChatMessage[];canLoadMore:boolean;onLoadMore:()=>void};
+const ConnectedConversation = memo(function ConnectedConversation({conversation,onUpdate}:{conversation:Conversation;onUpdate:(state:ConversationState)=>void}) {
   const {results,status,loadMore}=useUIMessages(api.assistant.messages,conversation,{initialNumItems:20,stream:true});
   const messages=useMemo(()=>results.map(chatMessageFromUI),[results]);
-  return <AssistantPanelBody {...props} messages={messages} canLoadMore={status==='CanLoadMore'} onLoadMore={()=>loadMore(20)}/>;
-}
+  const loadMoreRef=useRef(loadMore);loadMoreRef.current=loadMore;
+  const onLoadMore=useCallback(()=>loadMoreRef.current(20),[]);
+  const state=useMemo(()=>({threadId:conversation.threadId,messages,canLoadMore:status==='CanLoadMore',onLoadMore}),[conversation.threadId,messages,status,onLoadMore]);
+  useLayoutEffect(()=>onUpdate(state),[state,onUpdate]);
+  return null;
+});
 /** Stream subscriptions live inside the conversation, away from preview/timeline. */
 export function AssistantPanel(props:PanelProps) {
-  return props.conversation?<ConnectedConversation {...props} conversation={props.conversation}/>:<AssistantPanelBody {...props}/>;
+  const [conversationState,setConversationState]=useState<ConversationState>();
+  const current=props.conversation&&conversationState?.threadId===props.conversation.threadId?conversationState:undefined;
+  // Creating the first thread must not replace the chat body and lose its
+  // optimistic message, composer DOM, or scroll position while history loads.
+  return <>
+    {props.conversation&&<ConnectedConversation conversation={props.conversation} onUpdate={setConversationState}/>}
+    <AssistantPanelBody {...props} messages={props.conversation?current?.messages??props.messages:props.messages} canLoadMore={props.conversation?current?.canLoadMore:props.canLoadMore} onLoadMore={props.conversation?current?.onLoadMore:props.onLoadMore}/>
+  </>;
 }
 
 type PendingReply = { id: string; text: string; previousUserId?: string; previousError?: string | null };
@@ -165,8 +177,8 @@ function AssistantPanelBody({ messages, running, configured, error, onSend, onSt
       })}
       {!groups.length && waiting && <div className="assistant-reply"><AssistantReplyHeader loading label={stopState==='stopping'?'Stopping…':activity || replyLabel} detail={processingDetail(activity,activitySource)}/></div>}
       {!waiting && stopState==='stopped' && <ProcessingStatus label="Stopped." detail="Your existing edit is still here." state="stopped"/>}
-      {!running && suggestions?.items.length && onSuggestion && configured ? <div className="assistant-source-suggestions" aria-label="Suggested edits from this footage"><span title={suggestions.sourceName}>Ideas for {suggestions.sourceName}</span>{suggestions.items.map((suggestion, index) => <button key={`${suggestions.clipId}-${index}`} type="button" disabled={sending || !!pendingReply} onClick={() => void chooseSuggestion(suggestion)}><span>{suggestion.label}</span><ArrowUpRight size={14} aria-hidden="true" /></button>)}</div> : null}
-      {(error || localError) && <ProcessingStatus className="chat-error" label="Couldn’t finish this step." detail={localError || error} state="error"/>}
+      {!running && suggestions?.items.length && onSuggestion && configured ? <div data-chat-follow className="assistant-source-suggestions" aria-label="Suggested edits from this footage"><span title={suggestions.sourceName}>Ideas for {suggestions.sourceName}</span>{suggestions.items.map((suggestion, index) => <button key={`${suggestions.clipId}-${index}`} type="button" disabled={sending || !!pendingReply} onClick={() => void chooseSuggestion(suggestion)}><span>{suggestion.label}</span><ArrowUpRight size={14} aria-hidden="true" /></button>)}</div> : null}
+      {(error || localError) && <div data-chat-follow><ProcessingStatus className="chat-error" label="Couldn’t finish this step." detail={localError || error} state="error"/></div>}
       {!!messages.length && !demo && !configured && <div className="assistant-demo-note">Connect Claude to edit in conversation. Your footage, preview, and timeline are ready.</div>}
       </div>
     </div>

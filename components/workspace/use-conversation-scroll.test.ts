@@ -25,6 +25,7 @@ function openChat({ turnTop = 4, replyBottom = 280, scrollHeight = 662 } = {}) {
     clientHeight: 636, scrollHeight, offsetWidth: 320, clientWidth: 306,
     get scrollTop() { return scrollTop; }, set scrollTop(value: number) { scrollTop = value; },
     getBoundingClientRect: () => ({ top: 72 }), querySelector: () => turn,
+    querySelectorAll: () => [],
     style, parentElement: { style }, addEventListener() {}, removeEventListener() {},
   } as unknown as HTMLDivElement;
   hook.content.current = { querySelectorAll: () => [] } as unknown as HTMLDivElement;

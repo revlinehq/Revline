@@ -30,10 +30,12 @@ export function useConversationScroll(turnId: string, enabled: boolean, overlay 
     const bottom = Math.max(0, el.scrollHeight - el.clientHeight);
     const turn = el.querySelector<HTMLElement>('.is-latest-turn');
     const reply = turn?.querySelector<HTMLElement>('.conversation-response:last-of-type,.chat-assistant:last-of-type');
+    const tail = Array.from(el.querySelectorAll<HTMLElement>('[data-chat-follow]')).at(-1);
     const viewportTop = el.getBoundingClientRect().top;
     const replySpace = targetMode.current === 'reply' ? 160 : Math.max(80, el.clientHeight - (overlay ? composer.current?.offsetHeight ?? 0 : 0) - 24);
     const anchor = turn ? Math.max(turn.getBoundingClientRect().top - viewportTop + el.scrollTop - 24, reply ? reply.getBoundingClientRect().bottom - viewportTop + el.scrollTop - replySpace : 0) : bottom;
-    state.target = Math.max(0, Math.min(bottom, anchor));
+    const tailAnchor = tail ? tail.getBoundingClientRect().bottom - viewportTop + el.scrollTop - el.clientHeight + 16 : 0;
+    state.target = Math.max(0, Math.min(bottom, Math.max(anchor, tailAnchor)));
     if (!smooth.current || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
       stopAnimation(); el.scrollTop = state.target; return;
     }

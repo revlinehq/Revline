@@ -49,7 +49,9 @@ RUN node scripts/install-beat-model.mjs \
     && node scripts/copy-vendor.mjs \
     && node infra/media-worker/runtime-check.mjs
 
-RUN mkdir -p /tmp/revline && chown -R node:node /opt/chrome /tmp/revline
+# Installed Chromium is read-only at runtime. Re-owning it here would copy
+# another ~698 MB into every image after an application-code change.
+RUN mkdir -p /tmp/revline && chown node:node /tmp/revline
 USER node
 EXPOSE 8080
 STOPSIGNAL SIGTERM

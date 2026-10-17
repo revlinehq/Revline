@@ -21,6 +21,7 @@ test('native video understanding returns semantic evidence without reporting loc
   mocks.detectShots.mockRejectedValue(new AnalysisError('Shot detection did not inspect the complete video.', 502));
   mocks.understandVideo.mockResolvedValue(semantic);
   const result = await processMediaTask(work('understand'), {} as ConvexHttpClient, 'https://fixture.convex.cloud', AbortSignal.timeout(5000), () => {});
+  expect(mocks.downloadOwnedMedia.mock.calls[0][5].concurrency).toBe(1);
   expect(result.analysis).toEqual({ understanding: semantic });
   expect(result.analysis).not.toHaveProperty('shots');
 });
@@ -77,11 +78,20 @@ test('audio upload starts while waveform processing is pending and survives unti
   const finishWaveform = Promise.withResolvers<typeof waveform>();
   mocks.measureAudioWaveform.mockReturnValue(finishWaveform.promise);
   mocks.uploadMediaFile.mockImplementation(async () => { uploadStarted.resolve(); return 'audio-asset'; });
-  const result = processMediaTask(work('extract'), {} as ConvexHttpClient, 'https://fixture.convex.cloud', AbortSignal.timeout(5000), () => {});
+  mocks.downloadOwnedMedia.mockImplementation(async (_url, _path, _origin, _size, _signal, options) => { options.onProgress(1, 2); options.onProgress(2, 2); });
+  const progress: number[] = [], logs = vi.spyOn(console, 'log');
+  const result = processMediaTask(work('extract'), {} as ConvexHttpClient, 'https://fixture.convex.cloud', AbortSignal.timeout(5000), percent => progress.push(percent));
   await uploadStarted.promise;
   expect(mocks.measureAudioWaveform).toHaveBeenCalledOnce();
   finishWaveform.resolve(waveform);
   expect(await result).toEqual({ audioAssetId: 'audio-asset', waveform });
+  expect(mocks.downloadOwnedMedia.mock.calls[0][5].concurrency).toBe(3);
+  expect(progress).toContain(45);
+  expect(progress).toContain(60);
+  expect(progress.at(-1)).toBe(98);
+  expect(progress.every((value, index) => !index || value >= progress[index - 1])).toBe(true);
+  expect(logs.mock.calls.map(([message]) => message).join('\n')).toMatch(/\[\d{4}-\d{2}-\d{2}T[^\]]+\] Media task task \(extract\): Downloading source/);
+  expect(logs.mock.calls.map(([message]) => message).join('\n')).not.toContain('https://');
 });
 
 test('waveform failure waits for the active upload before cleaning its temporary directory', async () => {

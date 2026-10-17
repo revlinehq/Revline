@@ -154,6 +154,13 @@ export function EditorShell(p: EditorShellProps) {
   const audioPrepared=editorAudioPrepared(timeline,assets);
   const hasVisual=timeline.clips.some(clip=>clip.kind==='video'||clip.kind==='image');
   const opening=!p.demo&&!p.embedded&&!preparing&&timeline.clips.length>0&&(!playbackReady||!audioPrepared||(hasVisual&&!thumbnailsReady));
+  const openingLog=useRef<{phase:string;started:number}|null>(null);
+  useEffect(()=>{
+    if(p.demo||p.embedded)return;
+    const previous=openingLog.current;
+    if(opening){const phase=!audioPrepared?'Preparing audio':!playbackReady?'Loading playback':'Loading timeline thumbnails';if(previous?.phase!==phase){const started=previous?.started??Date.now();openingLog.current={phase,started};console.info(`[import] ${new Date().toISOString()} ${phase}; editor opening ${((Date.now()-started)/1000).toFixed(1)}s.`);}}
+    else if(previous){console.info(`[import] ${new Date().toISOString()} Editor ready with playback, audio and thumbnails; opening took ${((Date.now()-previous.started)/1000).toFixed(1)}s.`);openingLog.current=null;}
+  },[opening,audioPrepared,playbackReady,p.demo,p.embedded]);
   useEffect(()=>{
     if(!opening||!editorRoot.current)return;
     const root=editorRoot.current;
