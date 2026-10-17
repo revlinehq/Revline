@@ -34,6 +34,6 @@ export function timelineThumbnailsPrepared(root: HTMLElement) {
   });
   return frames.every(frame => {
     const image = frame.querySelector('img');
-    return !!image?.complete && image.naturalWidth > 0;
+    return image?.dataset.thumbnailExact === 'true' && image.complete && image.naturalWidth > 0;
   });
 }

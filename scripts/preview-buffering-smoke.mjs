@@ -16,7 +16,7 @@ import React,{useRef} from 'react';import {createRoot} from 'react-dom/client';i
 const timeline={fps:30,aspectRatio:'landscape',clips:[{id:'video',kind:'video',assetId:'video',start:0,duration:12,sourceStart:0,volume:0},{id:'audio',kind:'audio',assetId:'audio',start:0,duration:12,sourceStart:0,volume:.1}]};const store=createEditorStore(timeline);window.errors=[];
 function Fixture(){const ref=useRef(null);window.fixture={play:()=>ref.current.play(),pause:()=>ref.current.pause(),seek:t=>ref.current.seek(t),store};return <EditorStateProvider store={store}><Preview ref={ref} timeline={timeline} assets={[{_id:'video',kind:'video',fileName:'Generated video',width:1280,height:720,url:location.origin+'/video.mp4'},{_id:'audio',kind:'audio',fileName:'Generated tone',url:location.origin+'/audio.m4a'}]} time={0} muted={false} onTime={t=>store.setState({playhead:t})} onPlaying={playing=>store.setState({playing})} onError={e=>window.errors.push(e)}/></EditorStateProvider>};createRoot(document.getElementById('root')).render(<Fixture/>);
 ` }, bundle: true, platform: 'browser', format: 'iife', jsx: 'automatic', write: false, outdir: '/tmp/revline-buffering-bundle', define: { 'process.env.NODE_ENV': '"production"' } });
-let gate = Promise.withResolvers();
+let gate = Promise.withResolvers(), startup = false;
 const server = createServer(async (request, response) => {
  const path = new URL(request.url, 'http://127.0.0.1').pathname;
  if (path === '/bundle.js') { response.writeHead(200, { 'Content-Type': 'text/javascript' }); return response.end(bundle.outputFiles.find(file => file.path.endsWith('.js')).text); }
@@ -25,7 +25,7 @@ const server = createServer(async (request, response) => {
   const start = match ? Number(match[1]) : 0, end = match?.[2] ? Math.min(Number(match[2]), bytes.length - 1) : bytes.length - 1;
   response.writeHead(match ? 206 : 200, { 'Content-Type': path === '/video.mp4' ? 'video/mp4' : 'audio/mp4', 'Cache-Control': 'no-store', 'Accept-Ranges': 'bytes', 'Content-Length': end - start + 1, ...(match ? { 'Content-Range': `bytes ${start}-${end}/${bytes.length}` } : {}) });
   if (path === '/audio.m4a') return response.end(bytes.subarray(start, end + 1));
-  const boundary = Math.min(end + 1, 1024 * 1024);
+  const boundary = Math.min(end + 1, (startup ? 1 : 3) * 1024 * 1024);
   if (start < boundary) response.write(bytes.subarray(start, boundary));
   await gate.promise;
   if (!response.destroyed) response.end(bytes.subarray(Math.max(start, boundary), end + 1));
@@ -40,13 +40,29 @@ await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
 let browser;
 try {
  browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox', '--disable-dev-shm-usage'] });
- for (const action of ['resume', 'pause', 'seek']) {
- gate = Promise.withResolvers();
+ for (const action of ['startup', 'resume', 'pause', 'seek']) {
+ startup = action === 'startup';gate = Promise.withResolvers();
  const page = await browser.newPage(); page.setDefaultTimeout(12000);
  await page.setCacheEnabled(false);
  const errors = []; page.on('pageerror', error => errors.push(error.message));
  await page.goto(`http://127.0.0.1:${server.address().port}`, { waitUntil: 'domcontentloaded' });
+ if (startup) {
+  await page.waitForFunction(()=>document.querySelector('hyperframes-player')?.iframeElement?.contentDocument?.querySelector('video')?.readyState>=2);
+  await new Promise(resolve=>setTimeout(resolve,150));
+  const early=await page.evaluate(()=>{const player=document.querySelector('hyperframes-player'),video=player.iframeElement.contentDocument.querySelector('video');return{revealed:player.style.zIndex==='1',loading:!!document.querySelector('.preview-loading'),readyState:video.readyState,buffered:video.buffered.length?video.buffered.end(0)-video.currentTime:0};});
+  console.log('First decoded frame while initial video bytes are gated',early);
+  assert.equal(early.revealed,false,'One decoded frame with less than1.5s of runway must not mark the preview playable');assert.equal(early.loading,true);
+  gate.resolve();
+ }
  await page.waitForFunction(() => document.querySelector('hyperframes-player')?.style.zIndex === '1');
+ if (startup) {
+  const ready=await page.evaluate(()=>{const player=document.querySelector('hyperframes-player'),video=player.iframeElement.contentDocument.querySelector('video');window.startupFrames=[];window.startupWaits=[];const started=performance.now();video.addEventListener('waiting',()=>window.startupWaits.push({ms:performance.now()-started,time:video.currentTime}));video.requestVideoFrameCallback(function next(now,frame){window.startupFrames.push({ms:performance.now()-started,time:frame.mediaTime});video.requestVideoFrameCallback(next);});window.fixture.play();return{buffered:video.buffered.end(0)-video.currentTime,readyState:video.readyState};});
+  assert.ok(ready.buffered>=1.45,'Playback-ready has a bounded initial buffered runway');
+  await page.waitForFunction(()=>document.querySelector('hyperframes-player').currentTime>.8);
+  const presented=await page.evaluate(()=>({frames:window.startupFrames.filter(frame=>frame.time>.01),waiting:window.startupWaits}));const gaps=presented.frames.slice(1).map((frame,index)=>frame.ms-presented.frames[index].ms);
+  const startupMetrics={...ready,firstFrameMs:Math.round(presented.frames[0]?.ms??Infinity),maxFrameGapMs:Math.round(Math.max(0,...gaps)),waitingEvents:presented.waiting};
+  console.log('Actual initial decoded presentation',startupMetrics);assert.ok(startupMetrics.firstFrameMs<350&&startupMetrics.maxFrameGapMs<350,'The first second presents decoded frames without a visible startup freeze');assert.deepEqual(errors,[]);console.log('PASS: initial playback waits for a small buffered runway, not only the first frame.');await page.close();continue;
+ }
  await page.evaluate(() => {
   const player = document.querySelector('hyperframes-player'), doc = player.iframeElement.contentDocument, video = doc.querySelector('video'), audio = doc.querySelector('audio');
   window.media = { player, doc, video, audio }; window.clock = () => { const timeline = doc.defaultView.__timelines.revline; return (timeline.__hfReal ?? timeline).time(); };
