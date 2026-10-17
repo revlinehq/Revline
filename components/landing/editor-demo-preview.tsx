@@ -10,7 +10,7 @@ const PassiveDemo = dynamic(() => import('./editor-demo').then(module => module.
 
 function DemoPoster() {
   return <span className="landing-demo-poster">
-    <span className="landing-demo-loading" aria-label="Loading editor preview"/>
+    <img src="/images/editor-demo-poster.webp" width={1240} height={742} alt="Revline editor with its current conversation, preview and timeline" fetchPriority="high"/>
   </span>;
 }
 

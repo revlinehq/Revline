@@ -7,7 +7,7 @@ import { ChatProse } from '@/components/editor/chat-prose';
 import { ProcessingStatus } from '@/components/editor/processing-status';
 import { EditorShell } from '@/components/editor/editor-shell';
 import { EditorStateProvider } from '@/components/editor/editor-state';
-import { F1Preview, F1_VIDEO_URL } from './f1-preview';
+import type { PreviewHandle } from '@/components/editor/preview';
 import { Brand } from '@/components/workspace/brand';
 import { EditComposer } from '@/components/workspace/edit-composer';
 import { createEditorStore } from '@/lib/editor/store';
@@ -76,12 +76,13 @@ function CompactPrompt({ stage, active }: { stage: number; active: boolean }) {
   </div>}</div>;
 }
 
-/** The editor's conversation and timeline, with an attributed F1 film in the preview. */
+/** A passive, local sequence built with the same composition, conversation and timeline as the editor. */
 export function ProductDemo() {
   const root = useRef<HTMLElement>(null);
+  const playback = useRef<PreviewHandle | null>(null);
   const [store] = useState(() => {
     const instance = createEditorStore(LANDING_DEMO_STEPS[0].timeline);
-    instance.setState({ muted: true, compactTracks: true, zoom: .16 });
+    instance.setState({ muted: true, compactTracks: true, zoom: 1.1 });
     return instance;
   });
   const timeline = useStore(store, state => state.timeline);
@@ -91,9 +92,9 @@ export function ProductDemo() {
   const [pageVisible, setPageVisible] = useState(true);
   const [reducedMotion, setReducedMotion] = useState(false);
   const [compact, setCompact] = useState(false);
-
+  const [failed, setFailed] = useState(false);
   // The requested product story autoplays; Reduced Motion removes its decorative transitions.
-  const active = visible && pageVisible;
+  const active = visible && pageVisible && !failed;
   const step = LANDING_DEMO_STEPS[Math.max(0, Math.min(stage - 1, LANDING_DEMO_STEPS.length - 1))];
   const focus = stage === FINISHED_STAGE ? 0 : step.at;
   const latest = useRef({ active, stage, focus });
@@ -111,14 +112,16 @@ export function ProductDemo() {
     preference.addEventListener('change', motion);
     size.addEventListener('change', layout);
     document.addEventListener('visibilitychange', visibility);
-    return () => { observer.disconnect(); preference.removeEventListener('change', motion); size.removeEventListener('change', layout); document.removeEventListener('visibilitychange', visibility); };
+    return () => { observer.disconnect(); preference.removeEventListener('change', motion); size.removeEventListener('change', layout); document.removeEventListener('visibilitychange', visibility); playback.current?.pause(); };
   }, []);
 
-  const previewReady = useCallback(() => setReady(true), []);
-  const previewTime = useCallback((time: number) => {
-    if (latest.current.stage === 0 || latest.current.stage === FINISHED_STAGE) {
-      store.setState({ playhead: Math.min(time, LANDING_DEMO_VIDEO.duration), playing: true });
-    }
+  const previewReady = useCallback((controller: PreviewHandle) => {
+    playback.current = controller;
+    controller.mute(true);
+    controller.pause(); controller.seek(latest.current.focus);
+    store.setState({ playhead: latest.current.focus, playing: false });
+    if (latest.current.active && (latest.current.stage === 0 || latest.current.stage === FINISHED_STAGE)) controller.play();
+    setReady(true);
   }, [store]);
 
   useEffect(() => {
@@ -126,21 +129,24 @@ export function ProductDemo() {
   }, [step, store]);
 
   useEffect(() => {
-    if (!active || !ready) { store.setState({ playing: false }); return; }
+    const controller = playback.current;
+    if (!active || !ready) { controller?.pause(); return; }
+    controller?.pause(); controller?.seek(focus);
     store.setState({ playhead: focus, playing: false });
+    if (stage === 0 || stage === FINISHED_STAGE) controller?.play();
     const delay = stage === FINISHED_STAGE ? (LANDING_DEMO_VIDEO.duration + .8) * 1000 : stage === 0 ? LANDING_DEMO_PROMPT.length * TYPE_INTERVAL + 800 : step.message === 1 ? 800 : 1100;
     const timer = window.setTimeout(() => setStage(value => value === FINISHED_STAGE ? 0 : value + 1), delay);
-    return () => clearTimeout(timer);
+    return () => { clearTimeout(timer); controller?.pause(); };
   }, [active, ready, stage, focus, step, store]);
 
   const building = stage > 0 && stage < FINISHED_STAGE;
   const message = stage === FINISHED_STAGE ? LANDING_DEMO_MESSAGES.length - 1 : step.message;
-  return <><section ref={root} className="landing-product-demo" role="img" aria-label="Revline’s sample editor layout with Prime Editx’s F1 × NO BATIDAO edit playing in the preview." data-story-stage={stage} data-story-active={active} data-building={building || undefined}>
+  return <><section ref={root} className="landing-product-demo" role="img" aria-label="A request types into Revline’s composer. Formula One pit-stop and track footage is cut into a sequence, animated titles and subtle motion appear, and the finished edit plays." data-story-stage={stage} data-story-active={active} data-building={building || undefined}>
     <div className="landing-passive-editor" inert aria-hidden="true">
       {compact && <CompactPrompt stage={stage} active={active && ready}/>}
-      <EditorStateProvider store={store}><EditorShell embedded demo title="Race day" timeline={timeline} assets={LANDING_DEMO_ASSETS} onChange={noop} onTitle={noop} saving={false} upload={null} error="" onError={noop} onUndo={noop} onRedo={noop} canUndo={false} canRedo={false}
+      <EditorStateProvider store={store}><EditorShell embedded demo title="Race day" timeline={timeline} assets={LANDING_DEMO_ASSETS} onChange={noop} onTitle={noop} saving={false} upload={null} error="" onError={() => setFailed(true)} onUndo={noop} onRedo={noop} canUndo={false} canRedo={false}
         assistantPanel={compact ? <div/> : <DemoConversation stage={stage} index={message} active={active && ready} reducedMotion={reducedMotion}/>}
-        previewContent={<F1Preview active={active} onReady={previewReady} onTime={previewTime}/>} messages={[]} aiRunning={building} aiConfigured={false} onSend={noRequest} onUpload={noRequest} onDropUpload={noRequest} onExport={noRequest} exportState={null}/></EditorStateProvider>
+        onPreviewReady={previewReady} messages={[]} aiRunning={building} aiConfigured={false} onSend={noRequest} onUpload={noRequest} onDropUpload={noRequest} onExport={noRequest} exportState={null}/></EditorStateProvider>
     </div>
-  </section><p className="landing-demo-credit">Featured edit: <a href={F1_VIDEO_URL} target="_blank" rel="noreferrer">F1 × NO BATIDAO · Prime Editx</a></p></>;
+  </section><p className="landing-demo-credit">Featured edit: <a href="/demo/f1-edit/credits.html" target="_blank" rel="noreferrer">F1 × NO BATIDAO · Prime Editx</a></p></>;
 }
