@@ -2,9 +2,10 @@ import type { Id } from '@/convex/_generated/dataModel';
 import { addMediaClip, patchClip, separateVideoClips } from './operations';
 import { layerGroup, timelineDuration, type MediaAsset, type Timeline } from './types';
 import type { SourceUploadPhase } from './upload-source';
+import type { EditingPreparationActivity } from './prepare-media-for-editing';
 
 export type ImportFile = { id: string; file: File };
-export type ProjectImportProgress = { phase: 'preparing' | SourceUploadPhase | 'processing' | 'opening'; index: number; total: number; percent: number };
+export type ProjectImportProgress = { phase: 'preparing' | SourceUploadPhase | 'processing' | 'watching' | 'listening' | 'opening'; activity?: string; index: number; total: number; percent: number };
 export type ProjectImportSession = { projectId?: Id<'projects'>; uploaded: Map<string, Id<'assets'>>; completed: Set<string> };
 export const createProjectImportSession = (): ProjectImportSession => ({ uploaded: new Map(), completed: new Set() });
 
@@ -14,7 +15,7 @@ type ImportDependencies = {
   project: (projectId: Id<'projects'>) => Promise<{ timeline: Timeline; revision: number }>;
   upload: (projectId: Id<'projects'>, file: File, progress: (percent: number, phase: SourceUploadPhase) => void) => Promise<Id<'assets'>>;
   asset: (projectId: Id<'projects'>, assetId: Id<'assets'>) => Promise<MediaAsset>;
-  prepare?: (projectId: Id<'projects'>, asset: MediaAsset) => Promise<MediaAsset>;
+  prepare?: (projectId: Id<'projects'>, asset: MediaAsset, onActivity: (activity: EditingPreparationActivity) => void) => Promise<MediaAsset>;
   save: (projectId: Id<'projects'>, timeline: Timeline, revision: number) => Promise<number>;
   acknowledge: (file: File) => Promise<void>;
 };
@@ -35,6 +36,30 @@ export async function importProjectSources(
   session.projectId ??= await dependencies.create(input.title, input.assetIds);
   const projectId = session.projectId;
   let { timeline, revision } = await dependencies.project(projectId);
+  const prepare = async (asset: MediaAsset, index: number) => {
+    if (!dependencies.prepare) return;
+    const preparationStarted = Date.now();
+    log(`Source ${index}/${total}: preparing playback and editing context · chat ${projectId}`);
+    onProgress({ phase: 'processing', percent: 100, index, total });
+    const prepared = await dependencies.prepare(projectId, asset, activity => onProgress({ ...activity, percent: 100, index, total }));
+    log(`Source ${index}/${total}: playback and editing context ready in ${((Date.now()-preparationStarted)/1000).toFixed(1)}s · chat ${projectId}`);
+    // Preserve edits made while preparation continued in another view.
+    ({ timeline, revision } = await dependencies.project(projectId));
+    const linked = separateVideoClips(timeline, prepared);
+    if (linked !== timeline) {
+      onProgress({ phase: 'saving', percent: 100, index, total });
+      revision = await dependencies.save(projectId, linked, revision);
+      timeline = linked;
+    }
+  };
+
+  // Saved sources are copied into this project. Prepare the copied IDs, and
+  // avoid transcribing a linked audio track separately from its video source.
+  if (input.assetIds.length && dependencies.prepare) {
+    const sources = timeline.clips.filter(clip => clip.assetId && (clip.kind === 'video' || clip.kind === 'audio') && !(clip.kind === 'audio' && timeline.clips.some(video => video.kind === 'video' && video.linkedClipId === clip.id)));
+    const ids = [...new Set(sources.map(clip => clip.assetId!))];
+    for (const [index, id] of ids.entries()) await prepare(await dependencies.asset(projectId, id as Id<'assets'>), index + 1);
+  }
 
   for (const [index, source] of input.files.entries()) {
     if (session.completed.has(source.id)) continue;
@@ -61,26 +86,11 @@ export async function importProjectSources(
         timeline = next;
       }
     }
-    if (dependencies.prepare) {
-      const preparationStarted=Date.now();
-      log(`Source ${index+1}/${input.files.length}: preparing audio`);
-      onProgress({ phase: 'processing', percent: 100, index: input.assetIds.length + index + 1, total });
-      const prepared = await dependencies.prepare(projectId, asset);
-      log(`Source ${index+1}/${input.files.length}: audio ready in ${((Date.now()-preparationStarted)/1000).toFixed(1)}s`);
-      // The editor may have been opened while processing continued. Preserve any
-      // edits made there instead of saving the stale import snapshot over them.
-      ({ timeline, revision } = await dependencies.project(projectId));
-      const linked = separateVideoClips(timeline, prepared);
-      if (linked !== timeline) {
-        report(100, 'saving');
-        revision = await dependencies.save(projectId, linked, revision);
-        timeline = linked;
-      }
-    }
+    await prepare(asset, input.assetIds.length + index + 1);
     await dependencies.acknowledge(source.file);
     session.completed.add(source.id);
   }
   onProgress({ phase: 'opening', index: Math.max(1, total), total, percent: 100 });
-  log('Sources and audio ready; opening editor');
+  log(`Sources, audio and editing context ready; opening editor · chat ${projectId}`);
   return projectId;
 }

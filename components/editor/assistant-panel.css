@@ -13,3 +13,4 @@
 .conversation-editor .assistant-content .manual-editor-composer :is(.composer-attachment>span,.composer-add,.composer-empty-hint,.composer-more,.composer-error,.composer-status,.composer-submit,.inspector-select-trigger){font-size:14px}
 .conversation-editor .assistant-content .manual-editor-composer .edit-composer-actions{height:32px}
 .assistant-content .manual-composer-dock{flex:none}
+.assistant-activity-elapsed{flex:none;margin-top:2px;color:var(--muted-foreground);font-size:11px;font-variant-numeric:tabular-nums}

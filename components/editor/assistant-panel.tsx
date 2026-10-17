@@ -49,10 +49,18 @@ export function AssistantPanel(props:PanelProps) {
 
 type PendingReply = { id: string; text: string; previousUserId?: string; previousError?: string | null };
 
-function AssistantReplyHeader({ loading, active=loading, label, detail }: { loading: boolean; active?:boolean; label: string; detail?: string }) {
+function AnalysisElapsed({startedAt}:{startedAt:number}) {
+  const [now,setNow]=useState(()=>Date.now());
+  useEffect(()=>{setNow(Date.now());const timer=setInterval(()=>setNow(Date.now()),1000);return()=>clearInterval(timer);},[startedAt]);
+  const seconds=Math.max(0,Math.floor((now-startedAt)/1000));
+  return <small className="assistant-activity-elapsed" aria-hidden="true">{Math.floor(seconds/60)}:{String(seconds%60).padStart(2,'0')}</small>;
+}
+
+function AssistantReplyHeader({ loading, active=loading, label, detail, startedAt }: { loading: boolean; active?:boolean; label: string; detail?: string; startedAt?:number|null }) {
   return <div className={`assistant-reply-header ${active ? 'is-processing' : 'chat-author'}`}>
     <Brand markOnly/>
     {active ? <ProcessingStatus label={loading?label:'Revline'} detail={loading?detail:undefined} brand={false}/> : <span>Revline</span>}
+    {loading&&startedAt!=null&&<AnalysisElapsed startedAt={startedAt}/>}
   </div>;
 }
 
@@ -64,7 +72,7 @@ function AssistantResponseText({ text, streaming }: { text: string; streaming: b
   return <ChatProse text={text} animate={receivedLive || streaming} />;
 }
 
-function AssistantPanelBody({ messages, running, configured, error, onSend, onStop, hasClips, demo, onLoadMore, canLoadMore, onAttach, activity, activitySource, draftKey, suggestions, onSuggestion, editSnapshot, defaultModelChoice, modelSwitcher = false, allowedModels = PRODUCTION_CLAUDE_MODEL_CHOICES, attachments, onRemoveAttachment, requireMedia = false }: {
+function AssistantPanelBody({ messages, running, configured, error, onSend, onStop, hasClips, demo, onLoadMore, canLoadMore, onAttach, activity, activitySource, activityStartedAt, draftKey, suggestions, onSuggestion, editSnapshot, defaultModelChoice, modelSwitcher = false, allowedModels = PRODUCTION_CLAUDE_MODEL_CHOICES, attachments, onRemoveAttachment, requireMedia = false }: {
   messages: ChatMessage[]; running: boolean; configured: boolean; error?: string | null;
   modelSwitcher?: boolean;
   defaultModelChoice?:ClaudeModelChoice;
@@ -72,7 +80,7 @@ function AssistantPanelBody({ messages, running, configured, error, onSend, onSt
   onSend: (text: string, modelChoice?: ClaudeModelChoice) => Promise<void>; hasClips: boolean; demo: boolean;
   onLoadMore?: () => void; canLoadMore?: boolean; onAttach?: () => void;
   attachments?: ComposerAttachment[]; onRemoveAttachment?: (id: string) => void; requireMedia?: boolean;
-  activity?: string | null; activitySource?: string | null; activityProgress?:number|null; draftKey?:string;
+  activity?: string | null; activitySource?: string | null; activityProgress?:number|null; activityStartedAt?:number|null; draftKey?:string;
   onStop?: () => Promise<void>;
   suggestions?: { sourceName:string;clipId:string;items:SourceEditSuggestion[] };
   onSuggestion?: (prompt:string,clipId:string,modelChoice?:ClaudeModelChoice) => Promise<void>;
@@ -163,7 +171,7 @@ function AssistantPanelBody({ messages, running, configured, error, onSend, onSt
         return <div className={`assistant-turn ${group.id === turnId ? 'is-latest-turn' : ''}`} data-turn-id={group.id} key={group.id}>
           {groupMessages.filter(message => message.role === 'user').map(message => <article key={message.id} data-message-id={message.id} data-message-status={message.status} className="chat-message chat-user"><p>{message.text}</p></article>)}
           {(replies.length > 0 || editing || cards.length > 0) && <div className="assistant-reply">
-            <AssistantReplyHeader loading={loading} active={editing} label={stopState==='stopping'?'Stopping…':activity || replyLabel} detail={processingDetail(activity,activitySource)}/>
+            <AssistantReplyHeader loading={loading} active={editing} label={stopState==='stopping'?'Stopping…':activity || replyLabel} detail={processingDetail(activity,activitySource)} startedAt={activityStartedAt}/>
             {replies.map(message => !message.text && !message.tools?.length && message.id !== demoNoteMessageId ? null : <article key={message.id} data-message-id={message.id} data-message-status={message.status} className="chat-message chat-assistant">
               {message.text && <AssistantResponseText text={message.text} streaming={message.status === 'streaming'} />}
               {message.tools?.map((tool, i) => <div className="tool-result" key={`${tool}-${i}`}><Check size={12} />{tool}</div>)}
@@ -175,7 +183,7 @@ function AssistantPanelBody({ messages, running, configured, error, onSend, onSt
           </div>}
         </div>;
       })}
-      {!groups.length && waiting && <div className="assistant-reply"><AssistantReplyHeader loading label={stopState==='stopping'?'Stopping…':activity || replyLabel} detail={processingDetail(activity,activitySource)}/></div>}
+      {!groups.length && waiting && <div className="assistant-reply"><AssistantReplyHeader loading label={stopState==='stopping'?'Stopping…':activity || replyLabel} detail={processingDetail(activity,activitySource)} startedAt={activityStartedAt}/></div>}
       {!waiting && stopState==='stopped' && <ProcessingStatus label="Stopped." detail="Your existing edit is still here." state="stopped"/>}
       {!running && suggestions?.items.length && onSuggestion && configured ? <div data-chat-follow className="assistant-source-suggestions" aria-label="Suggested edits from this footage"><span title={suggestions.sourceName}>Ideas for {suggestions.sourceName}</span>{suggestions.items.map((suggestion, index) => <button key={`${suggestions.clipId}-${index}`} type="button" disabled={sending || !!pendingReply} onClick={() => void chooseSuggestion(suggestion)}><span>{suggestion.label}</span><ArrowUpRight size={14} aria-hidden="true" /></button>)}</div> : null}
       {(error || localError) && <div data-chat-follow><ProcessingStatus className="chat-error" label="Couldn’t finish this step." detail={localError || error} state="error"/></div>}

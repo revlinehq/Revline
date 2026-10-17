@@ -12,7 +12,7 @@ import type { Id } from '@/convex/_generated/dataModel';
 import { createProjectImportSession, type ImportFile, type ProjectImportProgress } from '@/lib/editor/project-import';
 import { clearProjectImportJob, getOrCreateProjectImportJob, getProjectImportJob } from '@/lib/editor/project-import-job';
 import { uploadSourceFile } from '@/lib/editor/upload-source';
-import { prepareVideoAudio, prepareAudioWaveform } from '@/lib/editor/prepare-video-audio';
+import { prepareMediaForEditing } from '@/lib/editor/prepare-media-for-editing';
 import { MediaImportDialog } from '@/components/editor/media-import-dialog';
 import { useMediaFileDrop } from '@/components/editor/media-file-drop';
 import { rememberOpeningFootage } from '@/lib/editor/footage-opening';
@@ -187,18 +187,7 @@ export function NewConversation() {
           },
         }, progress),
         asset: (projectId, assetId) => convex.query(api.assets.get, { projectId, assetId }),
-        prepare: async (projectId, asset) => {
-          const assetId = asset._id as Id<'assets'>;
-          if (asset.kind === 'video' && !asset.audioExtracted) {
-            await prepareVideoAudio(convex,projectId, assetId);
-            return convex.query(api.assets.get, { projectId, assetId });
-          }
-          if (asset.kind === 'audio' && !asset.waveform) {
-            await prepareAudioWaveform(convex,projectId, assetId);
-            return convex.query(api.assets.get, { projectId, assetId });
-          }
-          return asset;
-        },
+        prepare: (projectId, asset, onActivity) => prepareMediaForEditing(convex, projectId, asset._id as Id<'assets'>, onActivity),
         save: async (projectId, timeline, expectedRevision) => (await saveTimeline({ projectId, timeline, expectedRevision })).revision,
         acknowledge: file => acknowledgeDraftFiles([file]),
       });

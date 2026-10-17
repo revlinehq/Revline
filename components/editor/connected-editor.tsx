@@ -22,6 +22,8 @@ import type { ExportSettings } from './export-dialog';
 import { EMPTY_TIMELINE, normalizeTimeline, type Timeline, type MediaAsset } from '@/lib/editor/types';
 import { addMediaClip, separateVideoClips } from '@/lib/editor/operations';
 import { prepareVideoAudio, prepareAudioWaveform } from '@/lib/editor/prepare-video-audio';
+import { prepareMediaForEditing } from '@/lib/editor/prepare-media-for-editing';
+import { MEDIA_ACTIVITY_LABELS } from '@/lib/media-analysis/activity';
 import { isCasualChat } from '@/lib/editor/chat-request';
 import { uploadSourceFile } from '@/lib/editor/upload-source';
 import type { UploadProgress } from './footage-panel';
@@ -70,7 +72,12 @@ function ProjectEditor({project}: {project:Doc<'projects'>}) {
   }));
   const [upload,setUpload]=useState<UploadProgress>(null);const [optimisticAssets,setOptimisticAssets]=useState<MediaAsset[]>([]);
   useEffect(()=>{saves.receive({timeline:project.timeline??{...EMPTY_TIMELINE,aspectRatio:project.aspectRatio},revision:project.revision??0,history:project.history??[]});},[project,saves]);
-  const assets=useMemo<MediaAsset[]>(()=>[...(media??[]),...optimisticAssets.filter(asset=>!media?.some(a=>a._id===asset._id))].map(asset=>{
+  const assets=useMemo<MediaAsset[]>(()=>[...(media??[]),...optimisticAssets.filter(asset=>!media?.some(a=>a._id===asset._id))].map((asset:MediaAsset)=>{
+    const analysis=mediaTasks?.find(task=>task.assetId===asset._id&&(task.kind==='understand'&&!asset.analysisKinds?.includes('understand')&&!asset.analysis?.understanding||task.kind==='transcribe'&&!asset.analysisKinds?.includes('transcribe')&&!asset.analysis?.transcript));
+    if(analysis&&analysis.status!=='completed'){
+      const failed=analysis.status==='failed'||analysis.status==='cancelled';
+      return {...asset,preparation:{status:failed?'failed' as const:'processing' as const,message:failed?'Media analysis failed. Retry preparation.':analysis.activity?MEDIA_ACTIVITY_LABELS[analysis.activity]:analysis.kind==='transcribe'?'Listening to your footage…':'Watching your footage…'}};
+    }
     if(asset.kind!=='video'||asset.audioExtracted||asset.audioAssetId)return asset;
     const task=mediaTasks?.find(task=>task.kind==='extract'&&task.assetId===asset._id);
     const failed=task?.status==='failed'||task?.status==='cancelled';
@@ -156,13 +163,13 @@ function ProjectEditor({project}: {project:Doc<'projects'>}) {
         }, report);
         // Sources can finish uploading while audio is prepared. Direct imports
         // place the linked video and audio together once preparation is ready.
-        let asset=await convex.query(api.assets.get,{projectId,assetId});
-        if(addToTimeline&&asset.kind==='video'&&!asset.audioExtracted){
-          report(100,'preparing');
-          await prepareVideoAudio(convex,projectId,assetId);
-          asset=await convex.query(api.assets.get,{projectId,assetId});
-        }
-        const audio=asset.audioAssetId?await convex.query(api.assets.get,{projectId,assetId:asset.audioAssetId}):null;
+        let asset:MediaAsset=await convex.query(api.assets.get,{projectId,assetId});
+        if(asset.kind!=='image')asset=await prepareMediaForEditing(convex,projectId,assetId,status=>{
+          const phase=status.phase==='processing'?'preparing':status.phase;
+          report(100,phase);
+          setUpload(current=>current?{...current,activity:status.activity}:current);
+        });
+        const audio=asset.audioAssetId?await convex.query(api.assets.get,{projectId,assetId:asset.audioAssetId as Id<'assets'>}):null;
         setOptimisticAssets(previous=>[...previous,asset,...(audio?[audio]:[])]);
         if(addToTimeline){
           change(addMediaClip(timelineRef.current,asset,crypto.randomUUID()));
@@ -190,5 +197,5 @@ function ProjectEditor({project}: {project:Doc<'projects'>}) {
     })().catch(e=>setError(userError(e, 'Could not start this edit.')));
   },[media,projectId,send]);
   if(media===undefined)return editorLoading(projectId);
-  return <EditorStateProvider store={store}><EditorShell onRegisterStockAudio={async catalogId=>{await waitForSave();const asset=await registerStockAudio({projectId,catalogId});setOptimisticAssets(previous=>[...previous.filter(item=>item._id!==asset._id),asset]);return asset;}} onShare={()=>setShareOpen(true)} onSaveThumbnail={persistThumbnail} projectId={projectId} draftKey={`revline:editor-draft:${projectId}`} title={title} onTitle={titleChange} timeline={timeline} assets={assets} onRemoveAsset={async asset=>{await waitForSave();await removeAsset({assetId:asset._id as Id<'assets'>});store.setState(state=>({history:state.history.filter(edit=>!edit.clips.some(clip=>clip.assetId===asset._id)),future:state.future.filter(edit=>!edit.clips.some(clip=>clip.assetId===asset._id))}));setOptimisticAssets(previous=>previous.filter(item=>item._id!==asset._id));}} onRefreshMedia={handleRefreshMedia} onChange={change} saving={saving} upload={upload} error={error} onError={setError} onUndo={undo} onRedo={redo} canUndo={!undoBusy&&(!!history.length||remoteUndo.current.remaining>0)} canRedo={!!future.length} assistantEditSnapshot={assistantEditSnapshot} messages={EMPTY_MESSAGES} conversation={project.threadId?{projectId,threadId:project.threadId}:undefined} aiRunning={ai?.running??false} aiConfigured={ai?.configured??false} modelSwitcher={ai?.modelSwitcher??false} allowedModels={ai?.allowedModels} defaultModelChoice={ai?.defaultModelChoice} aiError={ai?.error} onStop={async()=>{await stop({projectId});}} onSend={sendRequest} onExport={exportVideo} exportState={exportState} onUpload={handleUpload} onDropUpload={files=>handleUpload(files,{addToTimeline:false})} onImportVideo={async url=>{await waitForSave();await importVideo({projectId,url});}} videoImports={mediaTasks?.filter(task=>task.kind==='import')} analysisBusy={ai?.activity} analysisSource={ai?.activitySource} analysisProgress={ai?.activityProgress}/><ConnectedTimelineShareDialog projectId={projectId} open={shareOpen} onOpenChange={setShareOpen} title={title} timeline={timeline} assets={assets} onBeforePublish={waitForSave} publishDisabled={!!ai?.running || !timeline.clips.length}/></EditorStateProvider>;
+  return <EditorStateProvider store={store}><EditorShell onRegisterStockAudio={async catalogId=>{await waitForSave();const asset=await registerStockAudio({projectId,catalogId});setOptimisticAssets(previous=>[...previous.filter(item=>item._id!==asset._id),asset]);return asset;}} onShare={()=>setShareOpen(true)} onSaveThumbnail={persistThumbnail} projectId={projectId} draftKey={`revline:editor-draft:${projectId}`} title={title} onTitle={titleChange} timeline={timeline} assets={assets} onRemoveAsset={async asset=>{await waitForSave();await removeAsset({assetId:asset._id as Id<'assets'>});store.setState(state=>({history:state.history.filter(edit=>!edit.clips.some(clip=>clip.assetId===asset._id)),future:state.future.filter(edit=>!edit.clips.some(clip=>clip.assetId===asset._id))}));setOptimisticAssets(previous=>previous.filter(item=>item._id!==asset._id));}} onRefreshMedia={handleRefreshMedia} onChange={change} saving={saving} upload={upload} error={error} onError={setError} onUndo={undo} onRedo={redo} canUndo={!undoBusy&&(!!history.length||remoteUndo.current.remaining>0)} canRedo={!!future.length} assistantEditSnapshot={assistantEditSnapshot} messages={EMPTY_MESSAGES} conversation={project.threadId?{projectId,threadId:project.threadId}:undefined} aiRunning={ai?.running??false} aiConfigured={ai?.configured??false} modelSwitcher={ai?.modelSwitcher??false} allowedModels={ai?.allowedModels} defaultModelChoice={ai?.defaultModelChoice} aiError={ai?.error} onStop={async()=>{await stop({projectId});}} onSend={sendRequest} onExport={exportVideo} exportState={exportState} onUpload={handleUpload} onDropUpload={files=>handleUpload(files,{addToTimeline:false})} onImportVideo={async url=>{await waitForSave();await importVideo({projectId,url});}} videoImports={mediaTasks?.filter(task=>task.kind==='import')} analysisBusy={ai?.activity} analysisSource={ai?.activitySource} analysisProgress={ai?.activityProgress} analysisStartedAt={ai?.activityStartedAt} preparationActivity={!ai?.running?assets.find(asset=>asset.preparation?.status==='processing'&&timeline.clips.some(clip=>clip.assetId===asset._id))?.preparation?.message:undefined}/><ConnectedTimelineShareDialog projectId={projectId} open={shareOpen} onOpenChange={setShareOpen} title={title} timeline={timeline} assets={assets} onBeforePublish={waitForSave} publishDisabled={!!ai?.running || !timeline.clips.length}/></EditorStateProvider>;
 }

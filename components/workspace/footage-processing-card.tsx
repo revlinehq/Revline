@@ -14,7 +14,7 @@ export type FootageProcessingFile = {
   thumbnail?: string;
 };
 
-export type FootageProcessingPhase = 'connecting' | 'preparing' | 'reading' | 'uploading' | 'saving' | 'processing' | 'opening' | 'error';
+export type FootageProcessingPhase = 'connecting' | 'preparing' | 'reading' | 'uploading' | 'saving' | 'processing' | 'watching' | 'listening' | 'opening' | 'error';
 
 type FootageProcessingCardProps = {
   files: FootageProcessingFile[];
@@ -22,6 +22,7 @@ type FootageProcessingCardProps = {
   index: number;
   total: number;
   percent: number;
+  activity?: string;
   error?: string;
   onRetry: () => void;
   onReset: () => void;
@@ -36,10 +37,12 @@ const phaseLabels: Record<FootageProcessingPhase, string> = {
   saving: 'Saving your project',
   opening: 'Opening your editor',
   processing: 'Upload complete · Preparing audio',
+  watching: 'Watching your footage',
+  listening: 'Listening to your footage',
   error: 'Your upload needs attention',
 };
 
-export function FootageProcessingCard({ files, phase, index, total, percent, error, onRetry, onReset, onOpen }: FootageProcessingCardProps) {
+export function FootageProcessingCard({ files, phase, index, total, percent, activity: stageActivity, error, onRetry, onReset, onOpen }: FootageProcessingCardProps) {
   const fileTotal = total > 0 ? total : files.length;
   const fileIndex = Math.min(Math.max(1, index), Math.max(1, fileTotal));
   const file = files[fileIndex - 1] ?? files[0];
@@ -48,8 +51,8 @@ export function FootageProcessingCard({ files, phase, index, total, percent, err
   const measurable = phase === 'uploading';
   const transferring = ['connecting', 'preparing', 'reading', 'uploading'].includes(phase);
 
-  const activity = measurable ? `Uploading clip ${fileIndex} of ${fileTotal} · ${Math.round(progress)}%` : phase === 'opening' ? undefined : `${phaseLabels[phase]}${fileTotal > 1 ? ` · ${fileIndex} of ${fileTotal}` : ''}`;
-  return <FootagePreparation thumbnail={file?.thumbnail || (file?.kind === 'image' ? file.url : undefined)} fileName={file?.name} activity={activity} label={transferring?'Uploading footage…':'Processing footage…'} detail={transferring?'Sending your files to your project.':undefined} error={failed ? error || 'Your footage could not be uploaded. Retry without choosing the files again.' : undefined}>
+  const activity = measurable ? `Uploading clip ${fileIndex} of ${fileTotal} · ${Math.round(progress)}%` : phase === 'opening' ? undefined : `${stageActivity || phaseLabels[phase]}${fileTotal > 1 ? ` · ${fileIndex} of ${fileTotal}` : ''}`;
+  return <FootagePreparation thumbnail={file?.thumbnail || (file?.kind === 'image' ? file.url : undefined)} fileName={file?.name} activity={activity} label={transferring?'Uploading footage…':phase==='watching'?'Watching your footage…':phase==='listening'?'Listening to your footage…':'Processing footage…'} detail={transferring?'Sending your files to your project.':undefined} error={failed ? error || 'Your footage could not be prepared. Retry without choosing the files again.' : undefined}>
     {failed && <div className="footage-processing-actions">
       <PrimaryButton type="button" size="compact" onClick={onRetry}><RotateCcw size={13} aria-hidden="true"/>Retry</PrimaryButton>
       {onOpen && <Button type="button" variant="outline" size="sm" onClick={onOpen}>Open editor</Button>}
