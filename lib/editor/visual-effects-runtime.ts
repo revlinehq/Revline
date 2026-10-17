@@ -21,7 +21,7 @@ export function installVisualEffects(sources: VisualEffectSource[], fps: number,
   const host = window as unknown as RuntimeWindow;
   const preview = !!document.querySelector('meta[name="hyperframes-studio-preview"]');
   const clock = host.__timelines.revline.__hfReal ?? host.__timelines.revline;
-  type Entry = { source: HTMLVideoElement | HTMLImageElement; effects: VisualEffects; neonColor?: number; canvas?: HTMLCanvasElement; gl?: WebGLRenderingContext; program?: WebGLProgram; texture?: WebGLTexture; buffer?: WebGLBuffer; uniforms?: Record<string, WebGLUniformLocation | null>; passTextures?: WebGLTexture[]; framebuffer?: WebGLFramebuffer; passWidth?: number; passHeight?: number; nominalWidth?: number; nominalHeight?: number; lastPassKey?: string; lastPassCount?: number; lastFrame?: number; lastSource?: string | number; lastTransform?: string; dirty: boolean; injected?: HTMLImageElement; failed?: boolean; videoCallback?: number; decodedFrame?: number; decodedListener?: () => void; uploadCanvas?: HTMLCanvasElement };
+  type Entry = { source: HTMLVideoElement | HTMLImageElement; effects: VisualEffects; neonColor?: number; canvas?: HTMLCanvasElement; gl?: WebGLRenderingContext; program?: WebGLProgram; texture?: WebGLTexture; buffer?: WebGLBuffer; uniforms?: Record<string, WebGLUniformLocation | null>; passTextures?: WebGLTexture[]; framebuffer?: WebGLFramebuffer; passWidth?: number; passHeight?: number; nominalWidth?: number; nominalHeight?: number; detailWidth?: number; detailHeight?: number; lastPassKey?: string; lastPassCount?: number; lastFrame?: number; lastSource?: string | number; lastTransform?: string; dirty: boolean; injected?: HTMLImageElement; failed?: boolean; videoCallback?: number; decodedFrame?: number; decodedListener?: () => void; uploadCanvas?: HTMLCanvasElement };
   type Resources = Pick<Entry, 'canvas' | 'gl' | 'program' | 'texture' | 'buffer' | 'uniforms' | 'passTextures' | 'framebuffer' | 'passWidth' | 'passHeight'>;
   const entries = new Map<string, Entry>();
   const available: Resources[] = [];
@@ -167,14 +167,18 @@ void main(){
     console.error('Revline visual effects:', message);
     window.dispatchEvent(new CustomEvent('revline-effects-error', { detail: message }));
   }
-  function sizeOutput(entry:Entry,passes:number) {
+  function sizeOutput(entry:Entry,passes:VisualEffects[]) {
     // Keep preview pixel work bounded when each FX layer adds a shader pass.
     // Export retains full composition density; block sizes remain screen-scaled.
-    const budget=preview?Math.sqrt(passes):1,canvas=entry.canvas!;
-    const width=Math.max(1,Math.round(entry.nominalWidth!/budget)),height=Math.max(1,Math.round(entry.nominalHeight!/budget));
+    // A grade is a single point-color pass. Preserve its source/project detail
+    // rather than magnifying the Fit-sized bitmap when the user zooms in.
+    const colorOnly=preview&&passes.length===1&&passes[0].colorGrade?.enabled&&!enabled({...passes[0],colorGrade:undefined});
+    const budget=preview?Math.sqrt(passes.length):1,canvas=entry.canvas!;
+    const width=colorOnly?entry.detailWidth!:Math.max(1,Math.round(entry.nominalWidth!/budget));
+    const height=colorOnly?entry.detailHeight!:Math.max(1,Math.round(entry.nominalHeight!/budget));
     if(canvas.width!==width||canvas.height!==height){canvas.width=width;canvas.height=height;entry.lastSource=undefined;}
   }
-  function initialize(entry: Entry, width: number, height: number, passes:number) {
+  function initialize(entry: Entry, width: number, height: number, passes:VisualEffects[]) {
     let reusable = preview ? available.pop() : undefined;
     while(reusable?.gl?.isContextLost()){destroy(reusable);reusable=available.pop();}
     const canvas = reusable?.canvas ?? document.createElement('canvas');
@@ -188,6 +192,8 @@ void main(){
     const previewScale = preview ? Math.min(1, (viewport?.width || window.innerWidth) / Number(document.getElementById('composition')?.dataset.width || window.innerWidth), (viewport?.height || window.innerHeight) / Number(document.getElementById('composition')?.dataset.height || window.innerHeight)) * Math.min(2, window.devicePixelRatio || 1) : 1;
     const ratio = Math.min(previewScale, Math.max(1920, resolution * 16 / 9) / Math.max(displayWidth, displayHeight));
     entry.nominalWidth=Math.max(1,Math.round(displayWidth*ratio));entry.nominalHeight=Math.max(1,Math.round(displayHeight*ratio));
+    const detailRatio=Math.min(1,width/displayWidth,Math.max(1920,resolution*16/9)/Math.max(displayWidth,displayHeight));
+    entry.detailWidth=Math.max(1,Math.round(displayWidth*detailRatio));entry.detailHeight=Math.max(1,Math.round(displayHeight*detailRatio));
     entry.canvas=canvas;sizeOutput(entry,passes);
     if (reusable) {
       Object.assign(entry, reusable); entry.source.parentElement!.appendChild(canvas); return;
@@ -263,8 +269,8 @@ void main(){
     const stablePasses=playingVideo?entry.lastPassCount===passes.length:entry.lastPassKey===passKey;
     if (!force && !entry.dirty && stableFrame && stablePasses && entry.lastSource === sourceKey && (playingVideo || entry.lastTransform === transformKey)) return;
     try {
-      if (!entry.canvas) initialize(entry, width, height,passes.length);
-      else sizeOutput(entry,passes.length);
+      if (!entry.canvas) initialize(entry, width, height,passes);
+      else sizeOutput(entry,passes);
       const { canvas, gl, uniforms: u } = entry;
       if (!canvas || !gl || !u) return;
       // Native media stays mounted and decoded; the replacement uses the exact same crop geometry.

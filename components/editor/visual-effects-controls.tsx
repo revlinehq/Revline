@@ -11,6 +11,7 @@ import type { Clip } from '@/lib/editor/types';
 import { CINEMATIC_BAR_LIMITS, EFFECT_CATALOG, cinematicBarSettings, type CinematicBarSettings, type EffectPreset } from '@/lib/editor/clip-effects';
 import { PLAYBACK_RATES, playbackRateOf } from '@/lib/editor/playback-rate';
 import { ColorControl } from './color-control';
+import { ColorLookControls } from './color-look-picker';
 import { EffectIcon } from './effect-icon';
 import './visual-effects-controls.css';
 
@@ -115,7 +116,7 @@ export function VisualEffectsControls({ clip, onChange, onPreview, onPlaybackRat
   return <div className="visual-effects-controls">
     {!onlyEffect && clip.kind === 'video' && onPlaybackRateChange && <PlaybackSpeedControls clip={clip} onChange={onPlaybackRateChange}/>}
     {!onlyEffect && onAddEffect && <TimedEffectPresets onAdd={onAddEffect}/>}
-    {color && <EffectCard {...cardProps('colorGrade')}>{([
+    {color && <EffectCard {...cardProps('colorGrade')}><ColorLookControls key={clip.id} grade={color} onChange={colorGrade => onChange({ colorGrade })} onPreview={colorGrade => preview(colorGrade === null ? null : { colorGrade })}/>{([
       ['exposure', 'Exposure', .01, decimal], ['contrast', 'Contrast', .01, decimal], ['saturation', 'Saturation', .01, decimal],
       ['temperature', 'Temperature', 1, integer], ['tint', 'Tint', 1, integer], ['vibrance', 'Vibrance', 1, integer],
     ] as const).map(([key, label, step, format]) => <EffectSlider key={key} label={label} value={color[key]} bounds={VISUAL_EFFECT_LIMITS.colorGrade[key]} step={step} format={format} disabled={!color.enabled} onPreview={value => preview(value === null ? null : { colorGrade: { ...color, [key]: value } })} onCommit={value => onChange({ colorGrade: { ...color, [key]: value } })}/>)}</EffectCard>}

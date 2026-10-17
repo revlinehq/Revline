@@ -16,6 +16,7 @@ import { type Clip, type MediaAsset, type Timeline } from '@/lib/editor/types';
 import { effectClipLabel, isSolidColorClip, isZoomPreset, isZoomFamilyPreset, type EffectPreset } from '@/lib/editor/clip-effects';
 import { EffectLibrary, type LibraryVisualEffect, type LibraryCategoryRequest, type LibraryShortcutCategory } from './effect-library';
 import { visualEffectsPatch } from '@/lib/editor/visual-effects';
+import { colorLookGrade, type ColorLookId } from '@/lib/editor/color-looks';
 import { textLookPatch, type TextLookId } from '@/lib/editor/text-looks';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { TransitionControls } from './transition-controls';
@@ -72,6 +73,12 @@ export function PreviewInspector({ clip, timeline, time = 0, audioClip, asset, a
     else onAddTextLook?.(look);
     setTab('edit');
   }
+  function applyColorLook(look: ColorLookId) {
+    if (!visual || !clip) return;
+    onChange({ colorGrade: colorLookGrade(look) });
+    setEffectSelection({ clipId: clip.id, key: 'colorGrade', view: 'page' });
+    setTab('effects');
+  }
   const effect = clip?.kind === 'effect' || clip?.kind === 'solid';
   const activeTab = !clip ? 'sources' : text && tab === 'effects' ? 'edit' : (visual || effect) && tab === 'edit' ? 'effects' : tab;
   const library = activeTab === 'sources';
@@ -91,7 +98,7 @@ export function PreviewInspector({ clip, timeline, time = 0, audioClip, asset, a
       {!visual && !effect && <button role="tab" id="inspector-edit-tab" aria-controls="inspector-edit" aria-selected={activeTab === 'edit'} tabIndex={activeTab === 'edit' ? 0 : -1} onClick={() => setTab('edit')}><SlidersHorizontal size={14}/>Edit</button>}
       {!text && <button role="tab" id="inspector-effects-tab" aria-controls="inspector-effects" aria-selected={activeTab === 'effects'} tabIndex={activeTab === 'effects' ? 0 : -1} onClick={() => { if (visual) setEffectSelection(null); setTab('effects'); }}>{visual ? <SlidersHorizontal size={14}/> : <Layers size={14}/>}{visual ? 'Clip settings' : 'Effects'}</button>}
     </div>}
-    {library ? <div className="inspector-content inspector-library-content" id="inspector-sources"><EffectLibrary categoryRequest={libraryRequest} onCategoryChange={onLibraryCategoryChange} clip={clip} timeline={timeline} time={time} onAddTransition={onAddTransition ? addTransition : undefined} assets={assets} onAddSound={onAddSound??onAdd} onAddStockAudio={onAddStockAudio} onUploadSound={onUpload} uploading={!!upload} onVisualEffect={addVisualEffect} onAddEffect={onAddEffect ? addTimedEffect : undefined} onTextLook={text || onAddTextLook ? applyTextLook : undefined} onAddOverlay={onAddOverlay} onFadeThroughBlack={onFadeThroughBlack} onSpeed={onPlaybackRateChange ? () => { setEffectSelection(null); setTab('effects'); } : undefined}/></div> : <div key={effectPage ? `effect-${clip?.id}-${effectPage}` : 'clip-settings'} className={`inspector-content${text && activeTab === 'edit' ? ' inspector-text-content' : ''}`} role="tabpanel" id={`inspector-${activeTab}`} aria-label={effectPage ? 'Effect settings' : text ? 'Text settings' : visual || effect ? effect ? 'Effect settings' : 'Clip settings' : undefined} aria-labelledby={text || visual || effect ? undefined : `inspector-${activeTab}-tab`}>
+    {library ? <div className="inspector-content inspector-library-content" id="inspector-sources"><EffectLibrary categoryRequest={libraryRequest} onCategoryChange={onLibraryCategoryChange} clip={clip} timeline={timeline} time={time} onAddTransition={onAddTransition ? addTransition : undefined} assets={assets} onAddSound={onAddSound??onAdd} onAddStockAudio={onAddStockAudio} onUploadSound={onUpload} uploading={!!upload} onVisualEffect={addVisualEffect} onColorLook={applyColorLook} onAddEffect={onAddEffect ? addTimedEffect : undefined} onTextLook={text || onAddTextLook ? applyTextLook : undefined} onAddOverlay={onAddOverlay} onFadeThroughBlack={onFadeThroughBlack} onSpeed={onPlaybackRateChange ? () => { setEffectSelection(null); setTab('effects'); } : undefined}/></div> : <div key={effectPage ? `effect-${clip?.id}-${effectPage}` : 'clip-settings'} className={`inspector-content${text && activeTab === 'edit' ? ' inspector-text-content' : ''}`} role="tabpanel" id={`inspector-${activeTab}`} aria-label={effectPage ? 'Effect settings' : text ? 'Text settings' : visual || effect ? effect ? 'Effect settings' : 'Clip settings' : undefined} aria-labelledby={text || visual || effect ? undefined : `inspector-${activeTab}-tab`}>
       {activeTab === 'edit' ? clip && (clip.kind === 'effect' || clip.kind === 'solid') ? transitionControls ?? solidControls ?? barControls ?? frameControls ?? zoomControls ?? motionControls ?? <div className="inspector-empty"><Layers size={22} strokeWidth={1.2}/><p>{effectClipLabel(clip)}</p><span>Move, trim, or delete this clip on the timeline.</span></div> : clip ? <>
         {!text && <div className="inspector-selection"><small>{text ? 'Text' : clip.kind === 'audio' ? 'Audio' : 'Footage'}</small><p>{clip.text || asset?.fileName || 'Selected clip'}</p></div>}
         {text && <TextEffectsControls clip={clip} onChange={onChange} onPreview={onPreviewEffects} captionActions={captionActions}/>}
