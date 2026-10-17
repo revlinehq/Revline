@@ -74,12 +74,14 @@ try {
  assert.equal(await page.$eval('.assistant-activity .processing-status-detail',node=>node.textContent),sourceName);
  assert.equal(await page.$eval('.assistant-activity .processing-status-label',node=>getComputedStyle(node).animationName),'revline-status-shimmer');
  assert.equal(await page.$('.assistant-activity img,.assistant-activity-media,.assistant-listening-waveform'),null,'Analysis stays a compact text row without thumbnail or waveform blocks');
+ assert.equal(await page.$('.assistant-activity-symbol'),null,'Watching uses shimmering text without a video icon');
  assert.equal(await page.$eval('.assistant-activity-elapsed',node=>node.textContent),'0:07');
  assert.equal(await page.$('.assistant-history progress,.assistant-history .processing-status-sweep,.assistant-history .processing-status-measured'),null,'Chat analysis has no generic sweep or invented percentage');
  await page.screenshot({path:'/tmp/revline-chat-watching.png'});
  await page.evaluate(()=>window.fixture.update({activity:'Listening to your footage…'}));
  await page.waitForSelector('.assistant-activity[data-phase="listening"]');
  assert.equal(await page.$eval('.assistant-activity .processing-status-label',node=>node.textContent),'Listening to audio');
+ assert.equal(await page.$('.assistant-activity-symbol'),null,'Listening uses shimmering text without an audio icon');
  assert.equal(await page.$eval('.assistant-activity .processing-status-label',node=>getComputedStyle(node).animationName),'revline-status-shimmer');
  assert.ok(await page.$eval('.assistant-activity',node=>node.getBoundingClientRect().height<55),'Listening does not expand into a media card');
  await page.screenshot({path:'/tmp/revline-chat-listening.png'});
@@ -89,9 +91,16 @@ try {
  await page.evaluate(()=>window.fixture.update({activity:'Applying edits…',messages:[{id:'analysis-request',role:'user',text:'Find the strongest moment.'},{id:'applying',role:'assistant',text:'',steps:[{id:'trim',name:'trim',state:'running'}]}]}));
  await page.waitForSelector('.assistant-activity[data-phase="applying"]');
  assert.equal(await page.$eval('.assistant-activity .processing-status-detail',node=>node.textContent),'Trimming footage');
+ const assertSpinning = async () => {
+  const initial = await page.$eval('.assistant-activity-symbol svg',node=>{const style=getComputedStyle(node);return{animation:style.animationName,transform:style.transform};});
+  assert.notEqual(initial.animation,'none','The working loader icon has a spin animation');
+  await page.waitForFunction(transform=>{const icon=document.querySelector('.assistant-activity-symbol svg');return icon&&getComputedStyle(icon).transform!==transform;},{},initial.transform);
+ };
+ await assertSpinning();
  await page.emulateMediaFeatures([{name:'prefers-reduced-motion',value:'reduce'}]);
  assert.deepEqual(await page.$eval('.assistant-activity .processing-status-label',node=>{const style=getComputedStyle(node);return[style.animationName,style.animationDuration]}),['revline-status-shimmer','3s'],'Reduced motion keeps the shared slower text-only shimmer');
- assert.equal(await page.$eval('.assistant-activity-symbol',node=>getComputedStyle(node).animationName),'none','The small phase icon stays static');
+ assert.equal(await page.$eval('.assistant-activity-symbol',node=>getComputedStyle(node).animationName),'none','The spinner wrapper stays fixed while its SVG rotates');
+ await assertSpinning();
  assert.equal(await page.$eval('.assistant-activity',node=>node.scrollWidth<=node.clientWidth),true,'Activity fits the narrow sidebar');
  assert.equal(await page.$('.assistant-activity button'),null,'Status cards add no Preview, Undo, Continue or Retry actions');
  assert.deepEqual(errors, []);

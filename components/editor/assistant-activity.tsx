@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { AudioLines, Check, CircleAlert, CircleStop, Clock3, Film, LoaderCircle } from 'lucide-react';
+import { Check, CircleAlert, CircleStop, Clock3, LoaderCircle } from 'lucide-react';
 import type { ProcessingState } from './processing-status';
 import './processing-status.css';
 import './assistant-activity.css';
@@ -27,10 +27,11 @@ export function AssistantActivity({ label, detail, state = 'working', startedAt,
     : /^(Watching|Analyzing footage|Inspecting the moment|Finding shot changes)/i.test(label) ? 'watching'
     : /^Applying edits/i.test(label) ? 'applying' : 'working';
   const title = phase === 'watching' ? 'Watching footage' : phase === 'listening' ? 'Listening to audio' : phase === 'queued' ? 'Queued' : label;
-  const Icon = phase === 'watching' ? Film : phase === 'listening' ? AudioLines : phase === 'queued' ? Clock3 : state === 'ready' ? Check : state === 'stopped' ? CircleStop : state === 'error' ? CircleAlert : LoaderCircle;
+  const Icon = phase === 'watching' || phase === 'listening' ? null : phase === 'queued' ? Clock3 : state === 'ready' ? Check : state === 'stopped' ? CircleStop : state === 'error' ? CircleAlert : LoaderCircle;
+  const spinning = state === 'working' && (phase === 'working' || phase === 'applying');
   return <div className={`assistant-activity processing-status ${className}`} data-state={state} data-phase={phase} role={state === 'error' ? 'alert' : 'status'}>
     <div className="assistant-activity-heading">
-      <span className="assistant-activity-symbol" aria-hidden="true"><Icon size={15} strokeWidth={1.6}/></span>
+      {Icon && <span className="assistant-activity-symbol" aria-hidden="true"><Icon size={15} strokeWidth={1.6} className={spinning ? 'assistant-activity-spinner' : undefined}/></span>}
       <span className="processing-status-label">{title}</span>
       {state === 'working' && <Elapsed key={phase} startedAt={startedAt}/>}
     </div>

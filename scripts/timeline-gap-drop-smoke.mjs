@@ -13,6 +13,24 @@ async function reset(timeline,compactTracks=false){await page.evaluate(({timelin
 async function drag(id,dx,targetY,grab=30,grabY){const box=await page.$eval('.timeline-clip[data-clip-id="'+id+'"]',el=>{const r=el.getBoundingClientRect();return{x:r.x,y:r.y,w:r.width,h:r.height};});const x=box.x+grab,y=box.y+(grabY??box.h/2);await page.mouse.move(x,y);await page.mouse.down();await page.mouse.move(x+dx,targetY??y,{steps:8});await frames();await page.mouse.up();await frames();}
 try{
  await page.setViewport({width:1400,height:650});await page.setContent('<html data-workspace-theme="dark"><body><div id="root" class="editor-app conversation-editor"></div></body></html>');await page.addStyleTag({content:bundle.outputFiles.find(f=>f.path.endsWith('.css')).text});await page.addStyleTag({content:'*{box-sizing:border-box}body{margin:0;font:12px Arial}#root{width:1300px;height:450px;margin:60px auto;display:flex;padding:0}button{border:0;background:transparent;color:inherit;font:inherit}'});await page.addScriptTag({content:bundle.outputFiles.find(f=>f.path.endsWith('.js')).text});await page.waitForSelector('[data-clip-id="moving"]');
+ // AI owns the playback position as well as edits while the timeline is locked.
+ await page.evaluate(()=>{window.fixture.setState({playhead:1});window.setEditingLocked(true);});await frames();
+ const lockedSeekCount=await page.evaluate(()=>window.fixtureEvents.seek.length);
+ for(const selector of ['.timeline-playhead-cap','.time-ruler']){
+  const point=await page.$eval(selector,el=>{const r=el.getBoundingClientRect();return{x:r.x+r.width/2,y:r.y+10};});
+  await page.mouse.move(point.x,point.y);await page.mouse.down();await page.mouse.move(point.x+80,point.y,{steps:4});await frames();await page.mouse.up();await frames();
+ }
+ assert.equal(await page.evaluate(()=>window.fixtureEvents.seek.length),lockedSeekCount,'Locked ruler and playhead drags cannot seek');
+ assert.equal(await page.evaluate(()=>window.fixture.getState().scrubbing),false,'Locked scrubs cannot start pointer capture or an animation loop');
+ await page.evaluate(()=>{window.setEditingLocked(false);window.fixture.setState({zoom:4});});await frames();await reset();
+ const rulerPoint=await page.$eval('.time-ruler',el=>{const r=el.getBoundingClientRect();return{x:r.left+100,y:r.top+10};});
+ await page.mouse.move(rulerPoint.x,rulerPoint.y);await page.mouse.down();const rightEdge=await page.$eval('.timeline-scroll',el=>el.getBoundingClientRect().right-1);await page.mouse.move(rightEdge,rulerPoint.y,{steps:4});await frames();assert.equal(await page.evaluate(()=>window.fixture.getState().scrubbing),true);assert.ok(await page.$eval('.timeline-scroll',el=>el.scrollLeft>0),'A held unlocked scrub really starts edge auto-scroll');
+ await page.evaluate(()=>window.setEditingLocked(true));await frames();
+ const frozenScrub=await page.evaluate(()=>({time:window.fixture.getState().playhead,seeks:window.fixtureEvents.seek.length,scroll:document.querySelector('.timeline-scroll').scrollLeft}));
+ await page.mouse.move(1398,rulerPoint.y);await frames();await page.mouse.up();await frames();
+ assert.deepEqual(await page.evaluate(()=>({time:window.fixture.getState().playhead,seeks:window.fixtureEvents.seek.length,scroll:document.querySelector('.timeline-scroll').scrollLeft})),frozenScrub,'AI start cancels a held scrub without seeking, rewinding, or edge-scroll drift');
+ assert.equal(await page.evaluate(()=>window.fixture.getState().scrubbing),false,'AI start releases scrub state and pointer capture');
+ await page.evaluate(()=>window.setEditingLocked(false));await frames();await page.mouse.click(rulerPoint.x+54,rulerPoint.y);await frames();assert.ok(await page.evaluate(before=>window.fixtureEvents.seek.length>before,frozenScrub.seeks),'Ruler seeking resumes after AI unlock');await page.evaluate(()=>{window.fixture.setState({zoom:1});document.querySelector('.timeline-scroll').scrollLeft=0;});await frames();
  for(const compact of [false,true])for(const miss of [-16,16])for(const grab of [12,80]){
   await reset(undefined,compact);const before=await state();await drag('moving',-5*54+miss,undefined,grab);const after=await state();assert.equal(after.timeline.clips.find(c=>c.id==='moving').start,4,'A drop 16px either side of the exact gap fits without overlap');assert.equal(after.history,before.history+1,'One drag is one edit');assert.equal(after.timeline.tracks.visual,2);await page.evaluate(()=>window.fixture.getState().undo());await frames();assert.equal((await state()).timeline.clips.find(c=>c.id==='moving').start,9);
  }
@@ -64,6 +82,8 @@ try{
  await drag('v',54);assert.deepEqual(await state(),lockedBefore,'AI-owned timelines reject clip movement before it changes persisted state');
  assert.equal(await page.$eval('.timeline-panel',el=>el.getAttribute('aria-busy')),'true');
  assert.equal(await page.$eval('.timeline-ai-notice',el=>el.closest('.timeline-body')!==null),true,'Lock notice belongs in the tracks, never the toolbar');
+ assert.equal(await page.$eval('.timeline-ai-notice',el=>el.textContent),'Revline is editing your timeline');
+ assert.deepEqual(await page.$eval('.timeline-ai-notice',el=>{const style=getComputedStyle(el);return[el.children.length,style.padding,style.borderWidth,style.backgroundColor,style.boxShadow,style.fontSize];}),[0,'0px','0px','rgba(0, 0, 0, 0)','none','13px'],'Hover notice is plain text with no icon, card, or extra copy');
  assert.equal(await page.$eval('.timeline-ai-frame',el=>el.getAttribute('aria-hidden')),'true');
  for(const label of ['Add timeline layer','Unlink video and audio','Mute A1','Volume for A1'])assert.equal(await page.$eval('[aria-label="'+label+'"]',el=>el.disabled),true,'Editing control disabled: '+label);
  assert.equal(await page.$$eval('.clip-trim',nodes=>nodes.every(node=>node.disabled)),true);
@@ -74,18 +94,20 @@ try{
  assert.equal(await page.evaluate(()=>window.fixtureEvents.stockAudio),0,'Locked audio drops cannot enqueue an import');
  assert.deepEqual(await state(),lockedBefore,'Locked pointer, volume keyboard, marker keyboard and drop leave timeline/history intact');
  const videoBox=await page.$eval('[data-clip-id="v"]',el=>{const r=el.getBoundingClientRect();return{x:r.x+30,y:r.y+r.height/2};});
- await page.mouse.click(videoBox.x,videoBox.y,{button:'right'});await page.waitForSelector('[role="menu"]');
- const menu=await page.$$eval('[role="menuitem"]',nodes=>nodes.map(el=>({text:el.textContent.trim(),disabled:el.getAttribute('aria-disabled')==='true'})));
- for(const label of ['Split here','Duplicate','Delete','Unlink video and audio'])assert.equal(menu.find(item=>item.text===label)?.disabled,true,'Locked context action disabled: '+label);
- assert.equal(menu.find(item=>item.text==='Copy')?.disabled,false,'Copy remains available during an AI edit');
- await page.$$eval('[role="menuitem"]',nodes=>nodes.find(el=>el.textContent.trim()==='Copy').click());await frames();assert.equal(await page.evaluate(()=>window.fixtureEvents.copy),1);
- const seeksBefore=await page.evaluate(()=>window.fixtureEvents.seek.length);await page.$eval('[data-marker-id="beat"]',el=>el.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true})));await frames();assert.equal(await page.evaluate(()=>window.fixtureEvents.seek.length),seeksBefore+1,'Marker seeking remains available');
+ const selectionBefore=await page.evaluate(()=>window.fixture.getState().selectedIds);
+ await page.mouse.click(videoBox.x,videoBox.y,{button:'right'});await frames();assert.equal(await page.$('[role="menu"]'),null,'Locked tracks cannot open a context menu');
+ assert.deepEqual(await page.evaluate(()=>window.fixture.getState().selectedIds),selectionBefore,'Right-clicking locked tracks cannot select another clip');
+ const seeksBefore=await page.evaluate(()=>window.fixtureEvents.seek.length);await page.$eval('[data-marker-id="beat"]',el=>{for(const key of ['Enter',' ','ArrowLeft','ArrowRight','Home','End'])el.dispatchEvent(new KeyboardEvent('keydown',{key,bubbles:true}));});await page.mouse.click(videoBox.x+24,videoBox.y,{count:2});await frames();assert.equal(await page.evaluate(()=>window.fixtureEvents.seek.length),seeksBefore,'Marker keyboard and clip double-click seeking are blocked while AI owns the timeline');
  const zoomBefore=await page.evaluate(()=>window.fixture.getState().zoom);await page.click('[aria-label="Zoom in"]');await frames();assert.ok(await page.evaluate(value=>window.fixture.getState().zoom>value,zoomBefore),'Zoom remains available');await page.evaluate(value=>window.fixture.setState({zoom:value}),zoomBefore);await frames();
  await page.evaluate(()=>window.setEditingLocked(false));await frames();await reset(linked);
  const liveBox=await page.$eval('[data-clip-id="v"]',el=>{const r=el.getBoundingClientRect();return{x:r.x+30,y:r.y+r.height/2};});
  await page.mouse.move(liveBox.x,liveBox.y);await page.mouse.down();await page.mouse.move(liveBox.x+54,liveBox.y,{steps:8});await frames();assert.ok(await page.$('.timeline-floating-clip'),'An unlocked clip starts a normal drag');
  await page.evaluate(()=>window.setEditingLocked(true));await frames();assert.equal(await page.$('.timeline-floating-clip'),null,'AI start cancels the in-flight clip gesture');await page.mouse.up();await frames();assert.deepEqual((await state()).timeline,linked,'A stale pointerup cannot commit after AI acquires the timeline');assert.equal((await state()).history,0);
  await page.evaluate(()=>window.setEditingLocked(false));await frames();assert.equal(await page.$('.timeline-ai-notice'),null);await drag('v',54);assert.equal((await state()).timeline.clips.find(clip=>clip.id==='v').start,1,'Manual edits work again when AI finishes');
+ const contextPoint=await page.$eval('[data-clip-id="v"]',el=>{const r=el.getBoundingClientRect();return{x:r.x+30,y:r.y+r.height/2};});
+ await page.mouse.click(contextPoint.x,contextPoint.y,{button:'right'});await page.waitForSelector('[role="menu"]');await page.evaluate(()=>window.setEditingLocked(true));await frames();assert.equal(await page.$('[role="menu"]'),null,'AI start dismisses an already-open timeline menu');assert.notEqual(await page.$eval('body',el=>getComputedStyle(el).pointerEvents),'none','Dismissing the menu releases its modal pointer lock');
+ await page.evaluate(()=>window.setEditingLocked(false));await frames();await page.mouse.click(contextPoint.x,contextPoint.y,{button:'right'});await page.waitForSelector('[role="menu"]');await page.keyboard.press('Escape');await frames();
+
  // Double-click video/audio at a point seeks there and still opens its settings.
  await reset(linked);await page.evaluate(()=>{window.fixtureEvents={seek:[],edit:[]};});
  for(const id of ['v','a']){
@@ -95,5 +117,5 @@ try{
   assert.equal(await page.evaluate(()=>window.fixtureEvents.edit.at(-1)),id,'Double-click still opens clip settings');
  }
  const seekCount=await page.evaluate(()=>window.fixtureEvents.seek.length);await drag('v',54);assert.equal(await page.evaluate(()=>window.fixtureEvents.seek.length),seekCount,'Dragging does not seek');
- assert.deepEqual(errors,[]);console.log('PASS: AI lock blocks drag/trim/layer/volume/marker/drop/context mutations, cancels in-flight gestures and keeps seek/copy/zoom; flat linked-audio preview without shadow/outline, lane-locked video/audio ghosts under +/-5/10px hand movement, top/bottom horizontal grabs, deliberate existing/new rows from center/top grabs; actual Merge clips, linked pair/single selection/clear missing-selection instruction/undo/AI lock; Close gaps toolbar packing, linked audio, undo and AI lock; double-click video/audio seeks at pointer and opens settings; near-gap drops from either side and different grab points, normal/compact tracks, Alt bypass, true overlap rejection, automatic linked-audio row on existing/new video rows, single-edit undo.');
+ assert.deepEqual(errors,[]);console.log('PASS: AI lock blocks drag/trim/layer/volume/marker/drop/context mutations, cancels held scrubs/edge-scroll and in-flight gestures, blocks timeline seek until unlock, and keeps zoom; flat linked-audio preview without shadow/outline, lane-locked video/audio ghosts under +/-5/10px hand movement, top/bottom horizontal grabs, deliberate existing/new rows from center/top grabs; actual Merge clips, linked pair/single selection/clear missing-selection instruction/undo/AI lock; Close gaps toolbar packing, linked audio, undo and AI lock; double-click video/audio seeks at pointer and opens settings; near-gap drops from either side and different grab points, normal/compact tracks, Alt bypass, true overlap rejection, automatic linked-audio row on existing/new video rows, single-edit undo.');
 }finally{await browser.close();}

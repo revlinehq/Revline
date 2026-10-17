@@ -132,7 +132,14 @@ export function EditorShell(p: EditorShellProps) {
   const editorRoot = useRef<HTMLElement>(null);
   const bodyRef = useRef<HTMLElement>(null);
   const chatPanel=usePanelRef();
-  const timelinePanel=usePanelRef();const collapsed=useEditorState(s=>s.timelineCollapsed);const toggleTimeline=()=>{if(collapsed)timelinePanel.current?.expand();else timelinePanel.current?.collapse();store.setState({timelineCollapsed:!collapsed});};
+  const timelinePanel=usePanelRef();const expandedTimelineHeight=useRef<number|null>(null);const collapsed=useEditorState(s=>s.timelineCollapsed);
+  const toggleTimeline=()=>{
+    const panel=timelinePanel.current;if(!panel)return;
+    if(collapsed){if(expandedTimelineHeight.current!==null)panel.resize(expandedTimelineHeight.current);else panel.expand();}
+    else{expandedTimelineHeight.current=panel.getSize().inPixels;panel.collapse();}
+    store.setState({timelineCollapsed:!collapsed});
+  };
+  const [collapsedTimelineHeight,setCollapsedTimelineHeight]=useState(36);
   const workspace = useRef({ projectId: p.projectId, opened: false });
   if (workspace.current.projectId !== p.projectId) workspace.current = { projectId: p.projectId, opened: false };
   if (!p.upload && (timeline.clips.length || assets.length || p.canUndo || p.aiRunning)) workspace.current.opened = true;
@@ -153,6 +160,19 @@ export function EditorShell(p: EditorShellProps) {
     measure(); observer.observe(body);
     return () => observer.disconnect();
   }, [preparing]);
+  useLayoutEffect(() => {
+    const toolbar=bodyRef.current?.querySelector<HTMLElement>('.timeline-toolbar');
+    if(!toolbar)return;
+    const measure=()=>setCollapsedTimelineHeight(Math.max(1,Math.ceil(toolbar.getBoundingClientRect().height)));
+    const observer=new ResizeObserver(measure);
+    measure();observer.observe(toolbar);
+    return()=>observer.disconnect();
+  },[preparing]);
+  useLayoutEffect(()=>{
+    const panel=timelinePanel.current;
+    // Keep a collapsed panel fitted when its toolbar wraps to another row.
+    if(collapsed&&!preparing&&panel&&Math.abs(panel.getSize().inPixels-collapsedTimelineHeight)>.5)panel.resize(collapsedTimelineHeight);
+  },[collapsed,collapsedTimelineHeight,preparing,timelinePanel]);
   const modeSwitch = modeAvailable && !preparing ? <SegmentedTabs label="Editor mode" className="editor-mode-switch" value={mode} onChange={value => compact ? setMobileChat(value === 'agentic') : setDesktopMode(value)} options={[
     { value: 'agentic', label: 'Agentic', id: 'editor-agentic-tab', panelId: 'editor-mode-view', icon: <MessageSquare size={13}/> },
     { value: 'tracks', label: 'Tracks', id: 'editor-tracks-tab', panelId: 'editor-mode-view', icon: <Film size={13}/> },
@@ -201,6 +221,7 @@ export function EditorShell(p: EditorShellProps) {
   const cropping = !!clip && clip.id === croppingClip;
   useEffect(() => { if (croppingClip && (!clip || clip.id !== croppingClip)) setCroppingClip(null); }, [clip?.id, croppingClip]);
   const seek = useCallback((n: number) => {
+    if (editLock.current) return;
     const t = frameSeekTime(n, timeline.fps, duration);
     setCroppingClip(null); setTime(t); preview.current?.seek(t);
   }, [duration, timeline.fps, setTime]);
@@ -217,6 +238,7 @@ export function EditorShell(p: EditorShellProps) {
     else { if (readPlaybackTime() >= duration) seek(0); preview.current?.play(); }
   }, [cropping, playing, readPlaybackTime, duration, seek]);
   const jumpCut = (direction: -1 | 1) => {
+    if (editLock.current) return;
     preview.current?.pause();
     const current = readPlaybackTime();
     const cuts = [...new Set([0, duration, ...timeline.clips.filter(c => c.kind === 'video' || c.kind === 'image').flatMap(c => [c.start, c.start + c.duration])])].sort((a, b) => a - b);
@@ -274,18 +296,19 @@ export function EditorShell(p: EditorShellProps) {
       if (e.code === 'Space' && target.closest('button,a,[role="button"],[role="menuitem"],[role="tab"],[role="checkbox"],[role="switch"]')) return;
       if (e.code === 'Space') { e.preventDefault(); togglePlay(); }
       else if (['<','>',',','.'].includes(e.key) && !e.metaKey && !e.ctrlKey && !e.altKey) {
-        e.preventDefault(); preview.current?.pause(); setPlaying(false);
+        e.preventDefault();if(editLock.current)return;
+        preview.current?.pause(); setPlaying(false);
         const direction = e.key === '<' || e.key === ',' ? -1 : 1;
         seek(frameSeekTime(readPlaybackTime(), timeline.fps, duration) + direction / timeline.fps);
       }
       else if (e.key.toLowerCase() === 's' && !e.metaKey && !e.ctrlKey && !e.altKey) { e.preventDefault(); if (!e.repeat) doSplit(); }
       else if (e.key.toLowerCase() === 'm' && !e.metaKey && !e.ctrlKey && !e.altKey) { e.preventDefault(); if (!e.repeat) addMarker(); }
       else if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); doDelete(); }
-      else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'a') { e.preventDefault(); store.setState({selectedIds:timeline.clips.map(c=>c.id),selectedId:selected??timeline.clips[0]?.id??null}); }
+      else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'a') { e.preventDefault(); if(editLock.current)return; store.setState({selectedIds:timeline.clips.map(c=>c.id),selectedId:selected??timeline.clips[0]?.id??null}); }
       else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'c' && (selectedIds.length || selected)) { e.preventDefault(); doCopy(); }
       else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'v' && clipboard.length) { e.preventDefault(); doPaste(); }
       else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); if (e.shiftKey) redo(); else undo(); }
-      else if (e.key === 'Escape') { setSelected(null); if (compact) setMobileChat(false); }
+      else if (e.key === 'Escape') { if(editLock.current)return; setSelected(null); if (compact) setMobileChat(false); }
     }
   });
   useEffect(() => {
@@ -403,7 +426,7 @@ export function EditorShell(p: EditorShellProps) {
           <div className="preview-player"><div className="stage-center" style={{'--preview-ratio': dimensions(timeline.aspectRatio).width / dimensions(timeline.aspectRatio).height} as React.CSSProperties}>{timeline.clips.length ? <PreviewViewport><Preview onReady={onPlaybackReady} onThumbnail={onLoadingThumbnail} debugId={p.projectId} ref={preview} timeline={timeline} assets={assets} time={time} onTime={setTime} onPlaying={setPlaying} onError={previewError} onRefreshMedia={p.onRefreshMedia} muted={muted} selectedClip={p.aiRunning ? undefined : clip} cropping={cropping && !p.aiRunning} onCropCancel={() => setCroppingClip(null)} onCropCommit={(id,crop) => { if (id === croppingClip && id === selected) { changeClip(id,{crop}); setCroppingClip(null); } }} onSelectClip={selectClip} onEditClip={openClipSettings} onEditText={editText} onClipChange={changeClip} onVisualChange={patch=>{if(clip)changeClip(clip.id,patch);}} /></PreviewViewport> : p.aiRunning ? <div className="empty-upload" role="status"><LoaderCircle size={22} className="animate-spin"/><p>Updating your edit…</p></div> : <div className="empty-upload"><div className="upload-circle"><Upload size={25} /></div><h2>Start with a moment.</h2><p>Drop your footage here,<br />then tell Revline what you have in mind.</p><Button onClick={e => { e.stopPropagation(); browse(); }} disabled={!!p.upload}>{p.upload && <LoaderCircle size={14} className="animate-spin" />}Choose files</Button><small>MP4 · MOV · WebM · JPG · PNG · Audio</small>{p.upload && <progress max="100" value={p.upload.percent} />}</div>}</div>{cropping ? <div className="preview-playback source-crop-actions" role="group" aria-label="Crop controls"><span className="source-crop-label">Crop</span><Button type="button" variant="ghost" size="sm" onClick={() => preview.current?.resetCrop()}><RotateCcw size={12}/>Reset</Button><Button type="button" variant="ghost" size="sm" onClick={() => { preview.current?.finishCrop(true); setCroppingClip(null); }}>Cancel</Button><Button type="button" size="sm" onClick={() => preview.current?.finishCrop()}>Done</Button></div> : null}</div>
 
         </div></div></PreviewZoomProvider></ResizablePanel>{!compact && inspectorOpen && <><ResizableHandle aria-label="Resize editing panel" className="inspector-resize-handle"/><ResizablePanel id="inspector" defaultSize={480} minSize={320} maxSize={680}><ClockedPreviewInspector timeline={timeline} time={time} onAddTransition={addEffect} onRemoveAsset={p.onRemoveAsset} usedAssetIds={usedAssetIds} sourceRequest={sourceRequest} editRequest={editRequest} libraryRequest={libraryRequest} onLibraryCategoryChange={setLibraryCategory} onAddTextLook={addLibraryText} captionActions={captionActions} onAddOverlay={addOverlay} onFadeThroughBlack={fadeThroughBlack} videoImports={p.videoImports} assets={assets} upload={p.upload} onUpload={browse} onAdd={addAsset} onAddSound={addSound} onAddStockAudio={p.onRegisterStockAudio ? catalogId=>addStockAudio(catalogId,readPlaybackTime()) : undefined} clip={clip} audioClip={clip?.kind==='video'?timeline.clips.find(c=>c.id===clip.linkedClipId):undefined} asset={assets.find(a => a._id === clip?.assetId)} onChange={patch => { if (clip) changeClip(clip.id, patch); }} onPreviewEffects={patch => { if (clip && !editLock.current) preview.current?.clipEffects(clip.id, patch); }} onAddEffect={addEffect} onConvertSolidColor={() => { if (clip) onChange(convertSolidColorToVisual(timeline,clip.id)); }} onPlaybackRateChange={changeSpeed} onCrop={cropVisual} cropping={cropping}/></ResizablePanel></>}</ResizablePanelGroup>
-        </div></ResizablePanel></ResizablePanelGroup></ResizablePanel><ResizableHandle aria-label="Resize preview and timeline" className="timeline-resize-handle"/><ResizablePanel id="timeline" panelRef={timelinePanel} collapsible collapsedSize={56} defaultSize={p.embedded ? 266 : 360} minSize={160} maxSize="65%" onResize={size=>store.setState({timelineCollapsed:size.inPixels<100})}><div className="editor-timeline-content"><TimelinePanel editingLocked={p.aiRunning} onAddStockAudio={p.onRegisterStockAudio ? addStockAudio : undefined} playbackControls={<EditorPlaybackControls playing={playing} time={time} duration={duration} fps={timeline.fps} readTime={readPlaybackTime} onTogglePlay={togglePlay} onPrevious={() => jumpCut(-1)} onNext={() => jumpCut(1)}/>} onPreviewVolume={(id,volume)=>preview.current?.clipVolume(id,volume)} onTogglePlay={togglePlay} muted={muted} onToggleMute={()=>{setMuted(!muted);preview.current?.mute(!muted);}} collapsed={collapsed} onToggleCollapse={toggleTimeline} timeline={timeline} assets={assets} selected={selected} onSelect={selectClip} onEditText={editText} onEditClip={openClipSettings} time={time} playing={playing} readPlaybackTime={readPlaybackTime} onSeek={seek} onChange={onChange} onSplit={doSplit} onDelete={doDelete} onDuplicate={doDuplicate} onCopy={doCopy} onPaste={doPaste} canPaste={clipboard.length>0} onAddText={addText} onAddMarker={addMarker} onError={onError} />
+        </div></ResizablePanel></ResizablePanelGroup></ResizablePanel><ResizableHandle aria-label="Resize preview and timeline" className="timeline-resize-handle"/><ResizablePanel id="timeline" panelRef={timelinePanel} collapsible collapsedSize={collapsedTimelineHeight} defaultSize={p.embedded ? 266 : 360} minSize={160} maxSize="65%" onResize={size=>{if(size.inPixels>=100)expandedTimelineHeight.current=size.inPixels;store.setState({timelineCollapsed:size.inPixels<100});}}><div className="editor-timeline-content"><TimelinePanel editingLocked={p.aiRunning} onAddStockAudio={p.onRegisterStockAudio ? addStockAudio : undefined} playbackControls={<EditorPlaybackControls playing={playing} time={time} duration={duration} fps={timeline.fps} readTime={readPlaybackTime} onTogglePlay={togglePlay} onPrevious={() => jumpCut(-1)} onNext={() => jumpCut(1)}/>} onPreviewVolume={(id,volume)=>preview.current?.clipVolume(id,volume)} onTogglePlay={togglePlay} muted={muted} onToggleMute={()=>{setMuted(!muted);preview.current?.mute(!muted);}} collapsed={collapsed} onToggleCollapse={toggleTimeline} timeline={timeline} assets={assets} selected={selected} onSelect={selectClip} onEditText={editText} onEditClip={openClipSettings} time={time} playing={playing} readPlaybackTime={readPlaybackTime} onSeek={seek} onChange={onChange} onSplit={doSplit} onDelete={doDelete} onDuplicate={doDuplicate} onCopy={doCopy} onPaste={doPaste} canPaste={clipboard.length>0} onAddText={addText} onAddMarker={addMarker} onError={onError} />
 
         </div></ResizablePanel></ResizablePanelGroup>
     </section></>}

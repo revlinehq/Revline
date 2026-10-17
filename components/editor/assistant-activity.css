@@ -4,7 +4,11 @@
 .assistant-activity .processing-status-label{min-width:0;font-size:13px;line-height:20px;font-weight:500;overflow-wrap:anywhere}
 .assistant-activity .assistant-activity-elapsed{margin:0 0 0 auto;white-space:nowrap;font-size:11px;line-height:18px;font-weight:400}
 .assistant-activity[data-state=working] .assistant-activity-symbol{color:var(--revline-accent)}
+.assistant-activity-spinner{animation:assistant-activity-spin .9s linear infinite;transform-origin:center}
 .assistant-activity[data-state=ready] .assistant-activity-symbol{color:var(--muted-foreground)}
 .assistant-activity[data-state=error] .assistant-activity-symbol{color:#c3853c}
 .assistant-activity>.processing-status-detail{padding-left:23px}
+.assistant-activity:is([data-phase=watching],[data-phase=listening])>.processing-status-detail{padding-left:0}
 .assistant-activity .processing-status-detail{font-size:11px;line-height:17px;color:var(--muted-foreground);overflow-wrap:anywhere}
+@keyframes assistant-activity-spin{to{transform:rotate(360deg)}}
+@media(prefers-reduced-motion:reduce){.assistant-activity-spinner{animation-duration:1.6s}}

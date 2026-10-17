@@ -11,8 +11,8 @@ import type { Clip, Timeline } from '@/lib/editor/types';
 import { EffectIcon } from './effect-icon';
 import './timeline-transitions.css';
 
-export function TimelineCutTransition({ timeline, from, to, clip, px, origin, selected, readOnly, onSelect, onEdit, onChange, onError }: {
-  timeline: Timeline; from: Clip; to: Clip; clip?: Clip; px: number; origin: number; selected: boolean; readOnly?: boolean;
+export function TimelineCutTransition({ timeline, from, to, clip, px, origin, selected, adjacentSelected = false, readOnly, onSelect, onEdit, onChange, onError }: {
+  timeline: Timeline; from: Clip; to: Clip; clip?: Clip; px: number; origin: number; selected: boolean; adjacentSelected?: boolean; readOnly?: boolean;
   onSelect: (id: string | null) => void; onEdit?: (id: string) => void; onChange: (timeline: Timeline) => void; onError: (error: unknown) => void;
 }) {
   const [draft, setDraft] = useState<{ start: number; duration: number } | null>(null);
@@ -73,11 +73,11 @@ export function TimelineCutTransition({ timeline, from, to, clip, px, origin, se
       {!readOnly && (['left', 'right'] as const).map(side => <button key={side} type="button" className={`timeline-transition-handle ${side}`} aria-label={`Resize ${label} ${side === 'left' ? 'start' : 'end'}`} title="Drag to change duration; arrow keys adjust by frame" onPointerDown={event => resize(event, side)} onKeyDown={event => resizeKey(event, side)}/>)}
       <output className="timeline-transition-duration">{range.duration.toFixed(2)} s</output>
     </div>}
-    <DropdownMenu><DropdownMenuTrigger className="timeline-transition-badge" disabled={readOnly} aria-label={clip ? `${label} at ${cut.toFixed(2)}s` : `Add transition at ${cut.toFixed(2)}s`} title={clip ? `${label} · ${clip.duration.toFixed(2)} s · Click to replace, right-click for actions` : 'Add a transition between these clips'} onClick={() => { if (clip) { onSelect(clip.id); onEdit?.(clip.id); } }}>
+    {(clip || (adjacentSelected && !readOnly)) && <DropdownMenu><DropdownMenuTrigger className="timeline-transition-badge" disabled={readOnly} aria-label={clip ? `${label} at ${cut.toFixed(2)}s` : `Add transition at ${cut.toFixed(2)}s`} title={clip ? `${label} · ${clip.duration.toFixed(2)} s · Click to replace, right-click for actions` : 'Add a transition between these clips'} onClick={() => { if (clip) { onSelect(clip.id); onEdit?.(clip.id); } }}>
       {clip ? <EffectIcon name={clip.effectPreset as TransitionPreset} size={14}/> : <Plus size={12}/>}
     </DropdownMenuTrigger><DropdownMenuContent className="timeline-transition-menu" align="center" aria-label="Choose transition" onPointerDown={event => event.stopPropagation()}>
       {TRANSITION_PRESETS.map(preset => <DropdownMenuItem key={preset} disabled={readOnly} onSelect={() => apply(preset)}><EffectIcon name={preset} size={14}/>{EFFECT_CATALOG[preset].label}</DropdownMenuItem>)}
       {clip && <><DropdownMenuItem disabled={readOnly} onSelect={() => { onSelect(clip.id); onEdit?.(clip.id); }}><SlidersHorizontal size={14}/>Transition settings</DropdownMenuItem><DropdownMenuItem disabled={readOnly} onSelect={() => { onChange(deleteClip(timeline, clip.id)); onSelect(null); }}><Trash2 size={14}/>Remove transition</DropdownMenuItem></>}
-    </DropdownMenuContent></DropdownMenu>
+    </DropdownMenuContent></DropdownMenu>}
   </div>;
 }
