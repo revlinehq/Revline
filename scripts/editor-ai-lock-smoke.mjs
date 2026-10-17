@@ -25,7 +25,8 @@ try{
  const initialMounts=await page.evaluate(()=>[window.playerMounts,window.chatMounts]);
  await page.evaluate(()=>window.fixture.respond(true));await flush();
  assert.equal(await page.$('.custom-timeline[data-editing-locked]'),null,'Answering a question leaves the timeline unlocked');
- assert.equal(await page.$eval('.timeline-ai-frame',node=>getComputedStyle(node).opacity),'0','Ordinary replies do not show the editing glow');
+ await page.waitForFunction(()=>{const timeline=document.querySelector('.custom-timeline[data-ai-working]');return timeline&&Number(getComputedStyle(timeline.querySelector('.timeline-ai-frame')).opacity)>.95});
+ assert.equal(await page.$eval('.timeline-ai-frame',node=>getComputedStyle(node,'::before').animationPlayState),'running','The working glow breathes throughout the AI run, independently of the edit lock');
  const questionBefore=await state();await page.focus('.custom-timeline');await page.keyboard.press('Period');await flush();
  assert.ok((await state()).calls>questionBefore.calls,'Manual seeking stays usable while an answer is running');
  await page.evaluate(()=>window.previewEdit('footage',{volume:.6}));await flush();

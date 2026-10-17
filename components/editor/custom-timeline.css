@@ -116,9 +116,9 @@ html[data-workspace-theme=light] .custom-timeline .timeline-clip.clip-effect.sel
 /* Pen A: one wide inner light signals the edit lock without moving clip content. */
 .custom-timeline{position:relative}
 .custom-timeline .timeline-ai-frame{position:absolute;inset:0;z-index:15;overflow:hidden;border:0;border-radius:0;box-shadow:none;opacity:0;pointer-events:none;transition:opacity 320ms ease}
-.custom-timeline[data-editing-locked] .timeline-ai-frame{opacity:1}
+.custom-timeline[data-ai-working] .timeline-ai-frame{opacity:1}
 .custom-timeline .timeline-ai-frame::before{content:'';position:absolute;inset:0;border-radius:0;background:none;box-shadow:inset 0 0 80px 8px #8c75f0b3,inset 0 0 24px 1px #aa8bf56b;opacity:.9;animation:demo-ai-inner-glow 3.6s cubic-bezier(.45,0,.55,1) infinite paused}
-.custom-timeline[data-editing-locked] .timeline-ai-frame::before{animation-play-state:running;will-change:opacity}
+.custom-timeline[data-ai-working] .timeline-ai-frame::before{animation-play-state:running;will-change:opacity}
 .custom-timeline .timeline-ai-frame::after{content:none;animation:none}
 @keyframes demo-ai-inner-glow{0%,100%{opacity:.18}50%{opacity:1}}
 @keyframes demo-ai-inner-glow-soft{0%,100%{opacity:.3}50%{opacity:1}}

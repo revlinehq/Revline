@@ -10,7 +10,7 @@ try {
   for (const scope of ['main', 'demo']) for (const preference of ['reduce', 'no-preference']) {
     const css = scope === 'demo' ? `${sharedCss}\n${demoCss}` : sharedCss;
     await page.emulateMediaFeatures([{ name: 'prefers-reduced-motion', value: preference }]);
-    await page.setContent(`<style>${css}</style><style>:root{--revline-accent:#6552d9;--revline-accent-light:#a692fa}body{margin:0;background:#111}.glow-fixture{height:auto;padding:40px}.custom-timeline{flex:none;width:1000px;height:360px;background:#171719}.fixture-track{height:60px;border-bottom:1px solid #ffffff0c}.fixture-clip{position:absolute;left:180px;top:90px;width:300px;height:48px;background:#433341;color:#c8b4c6;padding:8px;font:12px Arial}</style><main class="glow-fixture ${scope === 'demo' ? 'scripted-editor-demo' : ''}" data-building><div class="custom-timeline" data-editing-locked="true"><div class="fixture-track"></div><div class="fixture-track"></div><div class="fixture-track"></div><div class="fixture-clip">Footage · unchanged while AI edits</div><div class="timeline-ai-frame"></div></div></main>`);
+    await page.setContent(`<style>${css}</style><style>:root{--revline-accent:#6552d9;--revline-accent-light:#a692fa}body{margin:0;background:#111}.glow-fixture{height:auto;padding:40px}.custom-timeline{flex:none;width:1000px;height:360px;background:#171719}.fixture-track{height:60px;border-bottom:1px solid #ffffff0c}.fixture-clip{position:absolute;left:180px;top:90px;width:300px;height:48px;background:#433341;color:#c8b4c6;padding:8px;font:12px Arial}</style><main class="glow-fixture ${scope === 'demo' ? 'scripted-editor-demo' : ''}" data-building><div class="custom-timeline" data-ai-working="true"><div class="fixture-track"></div><div class="fixture-track"></div><div class="fixture-track"></div><div class="fixture-clip">Footage · unchanged while AI edits</div><div class="timeline-ai-frame"></div></div></main>`);
     const result = await page.$eval('.timeline-ai-frame', async node => {
       const geometry = () => { const box = node.getBoundingClientRect(); return [box.x, box.y, box.width, box.height]; };
       const initial = getComputedStyle(node, '::before'), duration = parseFloat(initial.animationDuration) * 1000;
@@ -43,9 +43,9 @@ try {
         }
         return values;
       };
-      node.parentElement.removeAttribute('data-editing-locked');
+      node.parentElement.removeAttribute('data-ai-working');
       const out = await sample();
-      node.parentElement.setAttribute('data-editing-locked', 'true');
+      node.parentElement.setAttribute('data-ai-working', 'true');
       const into = await sample();
       return { fadeOut: out.map(value => value.opacity), fadeIn: into.map(value => value.opacity), childBefore, childJump: Math.max(...out.map(value => Math.abs(value.child - childBefore))), paused: out.every(value => value.state === 'paused'), running: into.every(value => value.state === 'running'), geometryStable: positions.every(box => box.every((value, index) => value === before[index])) };
     });

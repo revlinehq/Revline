@@ -47,6 +47,7 @@ type Props={
   onEditText?:(id:string)=>void;onEditClip?:(id:string)=>void;onError?:(message:string)=>void;collapsed?:boolean;onToggleCollapse?:()=>void;
   readOnly?:boolean;
   editingLocked?:boolean;
+  aiWorking?:boolean;
 };
 
 function watchCancellation(cancel: () => void) {
@@ -586,7 +587,7 @@ export function TimelinePanel(p:Props){
     if(!editingLock.current)p.onEditClip?.(clip.id);
   };
 
-  return <ContextMenu onOpenChange={open=>{if(!open)setContext(null);}}><ContextMenuTrigger asChild disabled={editingDisabled}><section tabIndex={-1} onContextMenu={openContext} data-read-only={p.readOnly||undefined} data-editing-locked={p.editingLocked||undefined} aria-busy={p.editingLocked||undefined} className={`timeline-panel custom-timeline ${p.playbackControls?'timeline-with-playback':''} ${p.collapsed?'timeline-collapsed':''} ${dense?'tracks-compact':''}`} aria-label={p.readOnly?'Shared video timeline':'Video timeline'}>
+  return <ContextMenu onOpenChange={open=>{if(!open)setContext(null);}}><ContextMenuTrigger asChild disabled={editingDisabled}><section tabIndex={-1} onContextMenu={openContext} data-read-only={p.readOnly||undefined} data-editing-locked={p.editingLocked||undefined} data-ai-working={p.aiWorking||p.editingLocked||undefined} aria-busy={p.aiWorking||p.editingLocked||undefined} className={`timeline-panel custom-timeline ${p.playbackControls?'timeline-with-playback':''} ${p.collapsed?'timeline-collapsed':''} ${dense?'tracks-compact':''}`} aria-label={p.readOnly?'Shared video timeline':'Video timeline'}>
     <div className="timeline-ai-frame" aria-hidden="true"/>
     <TimelinePlayheadClock playing={p.playing} readTime={p.readPlaybackTime} px={px} duration={end} origin={origin} viewport={scroll} head={head} cap={cap} scrubbing={scrubRef} followPausedUntil={followPausedUntil}/>
     <div className="timeline-toolbar"><div className="timeline-edit-actions">{!p.playbackControls&&<EditorPlaybackTime className="timeline-playback-time" time={time} duration={end} fps={timeline.fps} playing={p.playing} readTime={p.readPlaybackTime}/>}
