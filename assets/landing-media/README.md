@@ -1,8 +1,14 @@
 # Landing demonstration footage
 
+## Formula One racing hero
+
+The landing hero reuses the six prepared shots in `public/demo/racing/manifest.json`. Their original sources, author attribution and CC BY-SA 4.0 terms are documented in `public/demo/racing/credits.html`, linked below the hero.
+
+`public/demo/racing/landing.mp4` concatenates those shots into one 13.2-second, muted, 1280 × 720, 30 fps H.264 source, encoded with CRF 25, yuv420p and fast-start metadata. Shot boundaries are 0, 2, 4.4, 6.2, 8.6, 10.2 and 13.2 seconds. The passive editor reveals those cuts, adds three race-day titles, and applies a subtle wheel-change push-in. It makes no AI or upload calls.
+
 ## NASA launch
 
-The landing hero, workflow cards, and space-footage feature examples use NASA's **Artemis II launch live**, released April 1, 2026 by NASA Goddard Space Flight Center.
+The workflow cards and space-footage feature examples use NASA's **Artemis II launch live**, released April 1, 2026 by NASA Goddard Space Flight Center.
 
 - Official source and credits: https://svs.gsfc.nasa.gov/31385/
 - Official metadata: https://svs.gsfc.nasa.gov/api/31385/
@@ -21,13 +27,13 @@ SVS describes its material as public domain unless separately marked. The select
 | 4.8–7.7 s | 22.05–24.95 s | Liftoff and exhaust |
 | 7.7–12 s | 45.12–49.42 s | Tracking view of the climb |
 
-The editor demo uses editorial titles, not an invented transcript. Source audio and spoken launch commentary are omitted. The source camera already follows the rocket during the climb; the portrait example uses a fixed central crop rather than pretending to run object tracking.
+The space examples use editorial titles, not an invented transcript. Source audio and spoken launch commentary are omitted. The source camera already follows the rocket during the climb; the portrait example uses a fixed central crop rather than pretending to run object tracking.
 
 `nasa-beats.mp4` is a separate 6-second montage with twelve genuine shot changes on a 0.5-second grid (120 BPM). Each segment takes 0.5 seconds from `nasa.mp4`, starting at 0.2, 4.9, 8.2, 1.2, 5.4, 8.8, 2.2, 5.9, 9.4, 3.2, 6.4, and 10 seconds. This is a prepared cut-rhythm example, without a soundtrack or a claim of live beat analysis.
 
 WebP stills are extracted from the corresponding local derivative:
 
-- `nasa.webp`: hero poster, 6 seconds, width 960.
+- `nasa.webp`: space-feature poster, 6 seconds, width 960.
 - `nasa-shot-1.webp`: pad, 1 second, width 560.
 - `nasa-shot-2.webp`: liftoff, 6 seconds, width 560.
 - `nasa-shot-3.webp`: climb, 10 seconds, width 560.

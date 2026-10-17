@@ -63,7 +63,7 @@ function DemoConversation({ stage, index, active, reducedMotion }: { stage: numb
     <div className="assistant-history"><div className="assistant-turns">{sent ? <div className="assistant-turn is-latest-turn">
       <article className="chat-message chat-user"><p>{LANDING_DEMO_PROMPT}</p></article>
       <div className="assistant-reply"><div className={`assistant-reply-header ${building ? 'is-processing' : 'chat-author'}`}><Brand markOnly/>{building ? <ProcessingStatus label={['Finding the moments…', 'Placing the cuts…', 'Adding titles…', 'Polishing the motion…'][index]} brand={false}/> : <span>Revline</span>}</div>
-        <article className="chat-message chat-assistant"><DemoReply text={LANDING_DEMO_MESSAGES.slice(0, index + 1).join('\n\n')} active={active} reducedMotion={reducedMotion}/>{!building && ['Five clips arranged', 'Animated titles added', 'Subtle motion applied'].map(label => <div className="tool-result" key={label}><Check size={12}/>{label}</div>)}</article>
+        <article className="chat-message chat-assistant"><DemoReply text={LANDING_DEMO_MESSAGES.slice(0, index + 1).join('\n\n')} active={active} reducedMotion={reducedMotion}/>{!building && ['Six clips arranged', 'Animated titles added', 'Subtle motion applied'].map(label => <div className="tool-result" key={label}><Check size={12}/>{label}</div>)}</article>
       </div>
     </div> : <div className="assistant-welcome"><h3>What are we making?</h3><p>Your footage is ready. Tell Revline the story you want to make.</p></div>}</div></div>
     <DemoComposer typing={!sent} active={active} running={building}/>
@@ -141,12 +141,12 @@ export function ProductDemo() {
 
   const building = stage > 0 && stage < FINISHED_STAGE;
   const message = stage === FINISHED_STAGE ? LANDING_DEMO_MESSAGES.length - 1 : step.message;
-  return <><section ref={root} className="landing-product-demo" role="img" aria-label="A request types into Revline’s composer. Real NASA launch footage is cut into a sequence, animated titles and subtle motion appear, and the finished edit plays." data-story-stage={stage} data-story-active={active} data-building={building || undefined}>
+  return <><section ref={root} className="landing-product-demo" role="img" aria-label="A request types into Revline’s composer. Formula One pit-stop and track footage is cut into a sequence, animated titles and subtle motion appear, and the finished edit plays." data-story-stage={stage} data-story-active={active} data-building={building || undefined}>
     <div className="landing-passive-editor" inert aria-hidden="true">
       {compact && <CompactPrompt stage={stage} active={active && ready}/>}
-      <EditorStateProvider store={store}><EditorShell embedded demo title="Artemis · A new chapter" timeline={timeline} assets={LANDING_DEMO_ASSETS} onChange={noop} onTitle={noop} saving={false} upload={null} error="" onError={() => setFailed(true)} onUndo={noop} onRedo={noop} canUndo={false} canRedo={false}
+      <EditorStateProvider store={store}><EditorShell embedded demo title="Race day" timeline={timeline} assets={LANDING_DEMO_ASSETS} onChange={noop} onTitle={noop} saving={false} upload={null} error="" onError={() => setFailed(true)} onUndo={noop} onRedo={noop} canUndo={false} canRedo={false}
         assistantPanel={compact ? <div/> : <DemoConversation stage={stage} index={message} active={active && ready} reducedMotion={reducedMotion}/>}
         onPreviewReady={previewReady} messages={[]} aiRunning={building} aiConfigured={false} onSend={noRequest} onUpload={noRequest} onDropUpload={noRequest} onExport={noRequest} exportState={null}/></EditorStateProvider>
     </div>
-  </section><p className="landing-demo-credit">Footage: <a href="https://svs.gsfc.nasa.gov/31385/" target="_blank" rel="noreferrer">NASA</a></p></>;
+  </section><p className="landing-demo-credit">Footage: <a href="/demo/racing/credits.html" target="_blank" rel="noreferrer">ProtoplasmaKid &amp; rubin16 · CC BY-SA 4.0</a></p></>;
 }
