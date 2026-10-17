@@ -35,6 +35,7 @@ import type * as lib_timeline from "../lib/timeline.js";
 import type * as lib_workflows from "../lib/workflows.js";
 import type * as mediaProcessor from "../mediaProcessor.js";
 import type * as mediaTasks from "../mediaTasks.js";
+import type * as modelDiagnostics from "../modelDiagnostics.js";
 import type * as playback from "../playback.js";
 import type * as processorDiagnostics from "../processorDiagnostics.js";
 import type * as projectDataMigration from "../projectDataMigration.js";
@@ -82,6 +83,7 @@ declare const fullApi: ApiFromModules<{
   "lib/workflows": typeof lib_workflows;
   mediaProcessor: typeof mediaProcessor;
   mediaTasks: typeof mediaTasks;
+  modelDiagnostics: typeof modelDiagnostics;
   playback: typeof playback;
   processorDiagnostics: typeof processorDiagnostics;
   projectDataMigration: typeof projectDataMigration;
