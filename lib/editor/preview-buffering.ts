@@ -1,8 +1,10 @@
 type Playback = EventTarget & { paused: boolean; play(): void; pause(): void };
 
 /** A decoded first frame does not prevent a later network/decode stall. */
-export function guardPreviewBuffering(document: Document, player: Playback, readTime: () => number) {
+export function guardPreviewBuffering(document: Document, player: Playback, readTime: () => number, onBuffering?: () => void) {
   let intended = !player.paused, held = false, disposed = false;
+  let diagnosticTimer:ReturnType<typeof setTimeout>|undefined;
+  const clearDiagnostic=()=>{if(diagnosticTimer!==undefined)clearTimeout(diagnosticTimer);diagnosticTimer=undefined;};
   const blocked = () => {
     const time = readTime();
     return Array.from(document.querySelectorAll<HTMLVideoElement>('video[data-start]')).some(node => {
@@ -14,7 +16,7 @@ export function guardPreviewBuffering(document: Document, player: Playback, read
   };
   const recover = () => {
     if (disposed || !held || !intended || blocked()) return;
-    held = false;
+    held = false;clearDiagnostic();
     player.play();
   };
   const waiting = (event: Event) => {
@@ -22,6 +24,7 @@ export function guardPreviewBuffering(document: Document, player: Playback, read
     const node = event.target as HTMLMediaElement;
     if (node?.tagName !== 'VIDEO' || !node.hasAttribute('data-start') || !blocked()) return;
     held = true;
+    if(onBuffering)diagnosticTimer=setTimeout(()=>{diagnosticTimer=undefined;if(!disposed&&held&&intended)try{onBuffering();}catch{/* Diagnostics must not interrupt media recovery. */}},2000);
     // Audio can already be fully buffered and driving the transport clock.
     // Pause the shared transport rather than allowing it to outrun the picture.
     player.pause();
@@ -33,12 +36,12 @@ export function guardPreviewBuffering(document: Document, player: Playback, read
   for (const name of ['canplay', 'seeked', 'loadeddata', 'playing', 'ended']) document.addEventListener(name, recover, true);
   return {
     play() { intended = true; if (held) recover(); else player.play(); },
-    pause() { intended = false; held = false; player.pause(); },
-    cancel() { intended = false; held = false; },
+    pause() { intended = false; held = false; clearDiagnostic();player.pause(); },
+    cancel() { intended = false; held = false; clearDiagnostic(); },
     isBuffering: () => held,
     isPlaying: () => !disposed && (held ? intended : !player.paused),
     dispose() {
-      disposed = true; intended = false; held = false;
+      disposed = true; intended = false; held = false;clearDiagnostic();
       player.removeEventListener('play', played); player.removeEventListener('pause', paused); player.removeEventListener('ended', paused);
       document.removeEventListener('waiting', waiting, true);
       for (const name of ['canplay', 'seeked', 'loadeddata', 'playing', 'ended']) document.removeEventListener(name, recover, true);
