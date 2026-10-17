@@ -33,6 +33,7 @@ export const taskResult = v.object({review:v.optional(compositionReviewResult), 
 export type MediaTaskResult = Infer<typeof taskResult>;
 
 export async function enqueueMediaTask(ctx: MutationCtx, input: Pick<Doc<'mediaTasks'>, 'ownerId' | 'projectId' | 'kind'> & Partial<Pick<Doc<'mediaTasks'>, 'assetId' | 'renderJobId' | 'analysisRequestId' | 'sourceUrl' | 'frameRequest' | 'videoRequest' | 'reviewId' | 'requiredProcessorVersion'>>): Promise<Id<'mediaTasks'>> {
+  if (input.kind === 'transcribe') input = { ...input, requiredProcessorVersion: Math.max(3, input.requiredProcessorVersion ?? 0) };
   if (input.assetId && input.kind === 'beats') {
     const asset = await ctx.db.get(input.assetId);
     const beats=asset?(await hydrateAsset(ctx,asset)).analysis?.beats:undefined;
@@ -337,6 +338,7 @@ export const complete = mutation({ args: { ...mediaTaskCredentials, result: task
     } else {
       const key = task.kind === 'transcribe' ? 'transcript' : task.kind === 'understand' ? 'understanding' : task.kind === 'track' ? 'focus' : task.kind;
       if (!args.result.analysis?.[key]) throw new ConvexError('The requested analysis result is missing.');
+      if (task.kind === 'transcribe' && (task.requiredProcessorVersion ?? 1) >= 3 && !args.result.analysis.audioActivity) throw new ConvexError('The requested audio activity measurements are missing.');
       if (task.kind === 'beats' && args.result.analysis.beats?.engine !== BEAT_ANALYSIS_ENGINE) throw new ConvexError('The requested result must use dedicated beat tracking. Analyze this source again with the updated media worker.');
       await saveAssetAnalysis(ctx, asset, args.result.analysis);
     }

@@ -90,6 +90,7 @@ export type MediaAsset = {
   waveform?: AudioWaveform;
   analysis?: {
     transcript?: {segments:{start:number;end:number;text:string}[];words:{start:number;end:number;text:string}[]};
+    audioActivity?: import('../media-analysis/audio-activity').AudioActivity;
     understanding?: {summary:string;scenes:{start:number;end:number;description:string;score:number}[];suggestions?:SourceEditSuggestion[]};
     shots?: {fps:number;sourceTiming?:{basis:'pts';videoStart:number;videoEnd:number;frameCount:number};shots:{start:number;end:number;startFrame:number;endFrame:number}[]};
     beats?: import('../media-analysis/beat-map').BeatMap;

@@ -13,6 +13,7 @@ import { AnalysisError } from '@/lib/media-analysis/errors';
 import { trackSourceFace } from './track-source-face';
 import { extractSourceAudio } from './extract-audio';
 import { measureAudioWaveform } from './audio-waveform';
+import { measureAudioActivity } from './measure-audio-activity';
 import { uploadMediaFile } from './upload-media-file';
 import { runRenderWorker } from './render-worker';
 import { importVideoLink } from './import-video-link';
@@ -76,7 +77,7 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
     if (!asset?.url) throw new AnalysisError('The source media is unavailable.', 400);
     if (task.kind === 'extract' && asset.audioExtracted) return asset.audioAssetId ? { audioAssetId: asset.audioAssetId } : {};
     if (task.kind === 'waveform' && asset.waveform) return { waveform: asset.waveform };
-    if (task.kind === 'transcribe' && asset.analysis?.transcript) return { analysis: { transcript: asset.analysis.transcript } };
+    if (task.kind === 'transcribe' && asset.analysis?.transcript && asset.analysis.audioActivity) return { analysis: { transcript: asset.analysis.transcript, audioActivity: asset.analysis.audioActivity } };
     if (task.kind === 'understand' && asset.analysis?.understanding) return { analysis: { understanding: asset.analysis.understanding } };
     const sourceAsset = task.kind === 'transcribe' ? task.transcriptionAsset ?? asset : asset;
     if (!sourceAsset.url) throw new AnalysisError('The prepared source media is unavailable.', 400);
@@ -130,12 +131,15 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
     }
     if (task.kind === 'transcribe') {
       if (!media.hasAudio) throw new AnalysisError('This source has no audio to transcribe.', 400);
+      const savedTranscript = asset.analysis?.transcript;
+      if (savedTranscript) return { analysis: { transcript: savedTranscript, audioActivity: await runPhase('Measuring quiet audio', () => measureAudioActivity(source, signal, savedTranscript)) } };
       const key = process.env.OPENAI_API_KEY;
       if (!key) throw new AnalysisError('OpenAI Whisper transcription is not configured on the media worker.', 503);
       const audio = join(directory, 'speech.mp3');
       await runPhase('Preparing transcription audio',()=>extractTranscriptionAudio(source, audio, signal));
       onProgress(30);
-      return { analysis: { transcript: await runPhase('Transcribing speech',()=>transcribeWithWhisper(audio, asset.duration ?? media.duration, key, signal)) } };
+      const transcript = await runPhase('Transcribing speech',()=>transcribeWithWhisper(audio, asset.duration ?? media.duration, key, signal));
+      return { analysis: { transcript, audioActivity: await runPhase('Measuring quiet audio', () => measureAudioActivity(source, signal, transcript)) } };
     }
     if (task.kind === 'beats') {
       if (!media.hasAudio) throw new AnalysisError('This source has no audio to measure.', 400);

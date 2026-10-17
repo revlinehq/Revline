@@ -2,6 +2,7 @@ import type { LanguageModelV4Prompt, LanguageModelV4ToolResultPart } from '@ai-s
 import { expect, test } from 'vitest';
 import { compactEditorPrompt, EDITOR_CONTEXT_BOUNDARY, modelAssetAnalysis, modelTimeline } from './editor-context';
 import type { Timeline } from '../editor/types';
+import type { AudioActivity } from '../media-analysis/audio-activity';
 
 const timeline: Timeline = { fps: 30, aspectRatio: 'landscape', clips: [{ id: 'source', kind: 'video', assetId: 'asset', track: 2, start: 1.69, sourceStart: 11.5, duration: 3, playbackRate: .75, linkedClipId: 'sound', transform: { x: .4, y: .5, scale: .7, opacity: .8, rotation: 5 }, motion: Array.from({ length: 1000 }, (_, i) => ({ time: i / 30, scale: 1, x: .5, y: .5, rotation: 0, opacity: 1, brightness: 1 })), focus: Array.from({ length: 1000 }, (_, i) => ({ time: i / 30, x: .5, y: .5 })) }] };
 const json = (value: unknown) => JSON.parse(JSON.stringify(value));
@@ -80,6 +81,20 @@ test('saved speech range reads expose exact overlapping word timings for false s
   expect(range.transcript).toMatchObject({ segments: transcript.segments, words: transcript.words.slice(1, 5), wordCount: 6 });
   expect(modelAssetAnalysis({ transcript }, { start: 20, end: 21 }).transcript).toMatchObject({ words: [] });
   expect(transcript).toEqual(original);
+});
+
+test('audio energy defaults to a bounded summary and ranged reads preserve measured source quiet intervals', () => {
+  const audioActivity: AudioActivity = { version: 1, duration: 1000, frameSeconds: .01, reliable: true,
+    level: { noiseFloorDb: -62, speechDb: -21, quietThresholdDb: -48, separationDb: 41 },
+    quiet: Array.from({ length: 1000 }, (_, index) => ({ start: index + .2, end: index + .5 })),
+  };
+  const before = structuredClone(audioActivity);
+  const summary = modelAssetAnalysis({ audioActivity });
+  expect(summary.audioActivity).not.toHaveProperty('quiet');
+  expect(summary.audioActivity).toMatchObject({ version: 1, reliable: true, level: audioActivity.level, quietSummary: { sampleCount: 1000, detailsOmitted: true } });
+  const ranged = modelAssetAnalysis({ audioActivity }, { start: 12, end: 13 });
+  expect(ranged.audioActivity).toMatchObject({ quiet: [{ start: 12.2, end: 12.5 }] });
+  expect(audioActivity).toEqual(before);
 });
 
 test('historical visual observations survive stale timeline mapping compaction and current mappings retain exact times', () => {

@@ -21,10 +21,22 @@ async function fixture() {
   });
   const start = (kind: 'extract' | 'transcribe' | 'shots' | 'beats') => owner.mutation(api.mediaTasks.start, { projectId, assetId, kind });
   const drain = () => t.finishAllScheduledFunctions(vi.runAllTimers);
-  const claim = () => t.mutation(api.mediaTasks.claim, { workerSecret: 'task-test-secret' });
+  const claim = () => t.mutation(api.mediaTasks.claim, { workerSecret: 'task-test-secret', processorVersion: 3 });
   return { t, owner, stranger, projectId, assetId, start, drain, claim };
 }
 const transcript = { segments: [{ start: 0, end: 1, text: 'Actual words' }], words: [] };
+const audioActivity = { version: 1 as const, duration: 3, frameSeconds: .01 as const, quiet: [{ start: 1, end: 3 }], level: { noiseFloorDb: -65, speechDb: -20, quietThresholdDb: -45, separationDb: 45 }, reliable: true };
+
+test('new transcription tasks wait for audio activity capable workers and require measured completion', async () => {
+  const f = await fixture(), taskId = await f.start('transcribe'); await f.drain();
+  expect(await f.t.query(api.mediaTasks.ready, { workerSecret: 'task-test-secret', processorVersion: 2 })).toBe('');
+  expect(await f.t.mutation(api.mediaTasks.claim, { workerSecret: 'task-test-secret', processorVersion: 2 })).toBeNull();
+  expect(await f.t.query(api.mediaTasks.ready, { workerSecret: 'task-test-secret', processorVersion: 3 })).toBe(`${taskId}:1`);
+  const work = (await f.claim())!;
+  await expect(f.t.mutation(api.mediaTasks.complete, { taskId, leaseToken: work.leaseToken, result: { analysis: { transcript } } })).rejects.toThrow('audio activity measurements are missing');
+  await f.t.mutation(api.mediaTasks.complete, { taskId, leaseToken: work.leaseToken, result: { analysis: { transcript, audioActivity } } }); await f.drain();
+  expect((await f.owner.query(api.assets.get, { projectId: f.projectId, assetId: f.assetId })).analysis).toEqual({ transcript, audioActivity });
+});
 
 test('extraction queues Listening on the video with owned small audio and persists its transcript on the original source',async()=>{
   const f=await fixture(),taskId=await f.start('extract');await f.drain();const work=(await f.claim())!;
@@ -37,7 +49,7 @@ test('extraction queues Listening on the video with owned small audio and persis
   const listening=(await f.claim())!;
   expect(listening).toMatchObject({kind:'transcribe',asset:{_id:f.assetId},transcriptionAsset:{_id:audioId,size:5}});
   expect(await f.start('transcribe')).toBe(listening.taskId);
-  await f.t.mutation(api.mediaTasks.complete,{taskId:listening.taskId,leaseToken:listening.leaseToken,result:{analysis:{transcript}}});await f.drain();
+  await f.t.mutation(api.mediaTasks.complete,{taskId:listening.taskId,leaseToken:listening.leaseToken,result:{analysis:{transcript,audioActivity}}});await f.drain();
   expect((await f.owner.query(api.assets.get,{projectId:f.projectId,assetId:f.assetId})).analysis?.transcript).toEqual(transcript);
   expect((await f.owner.query(api.assets.get,{projectId:f.projectId,assetId:audioId})).analysis?.transcript).toBeUndefined();
 });
@@ -63,7 +75,7 @@ test('hosted processor wakes with claimable work on initial and retry attempts',
   vi.stubEnv('MEDIA_PROCESSOR_WAKE_URL', 'https://processor.example.com/wake');
   const readyAtWake: string[] = [];
   vi.spyOn(globalThis, 'fetch').mockImplementation(async () => {
-    readyAtWake.push(await f.t.query(api.mediaTasks.ready, { workerSecret: 'task-test-secret' }));
+    readyAtWake.push(await f.t.query(api.mediaTasks.ready, { workerSecret: 'task-test-secret', processorVersion: 3 }));
     return new Response(null, { status: 202 });
   });
 
@@ -79,7 +91,7 @@ test('hosted processor wakes with claimable work on initial and retry attempts',
   const retry = (await f.claim())!;
   expect(retry.taskId).toBe(taskId);
 
-  await f.t.mutation(api.mediaTasks.complete, { taskId, leaseToken: retry.leaseToken, result: { analysis: { transcript } } });
+  await f.t.mutation(api.mediaTasks.complete, { taskId, leaseToken: retry.leaseToken, result: { analysis: { transcript, audioActivity } } });
   await f.drain();
   expect(await f.owner.query(api.mediaTasks.get, { taskId })).toMatchObject({ status: 'completed', attempt: 2 });
 });
@@ -156,7 +168,7 @@ test('a workflow queues once, accepts a scoped result, and completion is idempot
   await f.drain();
   const work = (await f.claim())!;
   expect(work.taskId).toBe(taskId); expect(await f.claim()).toBeNull();
-  const args = { taskId, leaseToken: work.leaseToken, result: { analysis: { transcript } } };
+  const args = { taskId, leaseToken: work.leaseToken, result: { analysis: { transcript, audioActivity } } };
   await f.t.mutation(api.mediaTasks.complete, args); await f.t.mutation(api.mediaTasks.complete, args);
   await f.drain();
   expect(await f.owner.query(api.mediaTasks.get, { taskId })).toMatchObject({ status: 'completed', attempt: 1, progress: 100 });
@@ -183,8 +195,8 @@ test('an expired worker lease retries and rejects the former worker', async () =
   const second = (await f.claim())!;
   expect(second.taskId).toBe(taskId); expect(second.leaseToken).not.toBe(first.leaseToken);
   expect(await f.owner.query(api.mediaTasks.get, { taskId })).toMatchObject({ attempt: 2, status: 'running' });
-  await expect(f.t.mutation(api.mediaTasks.complete, { taskId, leaseToken: first.leaseToken, result: { analysis: { transcript } } })).rejects.toThrow('lease');
-  await f.t.mutation(api.mediaTasks.complete, { taskId, leaseToken: second.leaseToken, result: { analysis: { transcript } } }); await f.drain();
+  await expect(f.t.mutation(api.mediaTasks.complete, { taskId, leaseToken: first.leaseToken, result: { analysis: { transcript, audioActivity } } })).rejects.toThrow('lease');
+  await f.t.mutation(api.mediaTasks.complete, { taskId, leaseToken: second.leaseToken, result: { analysis: { transcript, audioActivity } } }); await f.drain();
 });
 
 test('worker credentials, ownership and result validation are enforced', async () => {
@@ -194,7 +206,7 @@ test('worker credentials, ownership and result validation are enforced', async (
   await expect(f.t.mutation(api.mediaTasks.claim, { workerSecret: 'wrong' })).rejects.toThrow('authentication');
   const work = (await f.claim())!;
   expect(await f.owner.query(api.mediaTasks.get, { taskId })).not.toHaveProperty('leaseToken');
-  await expect(f.t.mutation(api.mediaTasks.complete, { taskId, leaseToken: work.leaseToken, result: { analysis: { transcript: { segments: [{ start: 2, end: 10, text: 'Out of range' }], words: [] } } } })).rejects.toThrow('timing');
+  await expect(f.t.mutation(api.mediaTasks.complete, { taskId, leaseToken: work.leaseToken, result: { analysis: { transcript: { segments: [{ start: 2, end: 10, text: 'Out of range' }], words: [] }, audioActivity } } })).rejects.toThrow('timing');
   await expect(f.t.query(internal.r2.authorize, { projectId: f.projectId, taskId, leaseToken: work.leaseToken, kind: 'video', contentType: 'video/mp4' })).rejects.toThrow('cannot upload');
   await f.t.mutation(api.mediaTasks.fail, { taskId, leaseToken: work.leaseToken, error: 'Invalid source', retryable: false }); await f.drain();
   expect(await f.owner.query(api.mediaTasks.get, { taskId })).toMatchObject({ status: 'failed', attempt: 1 });
@@ -234,7 +246,7 @@ test('stopping an AI request cancels its analysis and prevents later worker writ
   const requestId = await f.t.mutation(internal.assistant.requestAnalysis, { projectId: f.projectId, ownerId: 'owner', runId: 'run', assetId: f.assetId, mode: 'transcribe' });
   await f.drain(); await f.t.run(ctx=>ctx.db.patch(requestId,{expiresAt:Date.now()+240000})); const work = (await f.claim())!;
   await f.owner.mutation(api.assistant.stop, { projectId: f.projectId });
-  await expect(f.t.mutation(api.mediaTasks.complete, { taskId: work.taskId, leaseToken: work.leaseToken, result: { analysis: { transcript } } })).rejects.toThrow('lease');
+  await expect(f.t.mutation(api.mediaTasks.complete, { taskId: work.taskId, leaseToken: work.leaseToken, result: { analysis: { transcript, audioActivity } } })).rejects.toThrow('lease');
   expect(await f.t.run(ctx => ctx.db.get(requestId))).toBeNull(); await f.drain();
 });
 
@@ -275,7 +287,7 @@ test('worker phase heartbeats drive honest chat status and retries reset old pro
 
 test('compact claims return a lease only; owned snapshots are read separately and revoked leases are refused',async()=>{
   const f=await fixture(),taskId=await f.start('transcribe');await f.drain();
-  const lease=(await f.t.mutation(api.mediaTasks.claim,{workerSecret:'task-test-secret',compact:true}))!;
+  const lease=(await f.t.mutation(api.mediaTasks.claim,{workerSecret:'task-test-secret',compact:true,processorVersion:3}))!;
   expect(Object.keys(lease).sort()).toEqual(['kind','leaseToken','projectId','taskId']);
   const snapshot=await f.t.query(api.mediaTasks.work,{taskId,leaseToken:lease.leaseToken});
   expect(snapshot.asset?._id).toBe(f.assetId);

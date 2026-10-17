@@ -22,7 +22,7 @@ const subscriptions = new ConvexClient(convexUrl);
 let revision = 0, ready = false, activeTasks = 0, draining = false, lastWorkAt = Date.now();
 const waiters = new Set<() => void>();
 const wake = () => { for (const resolve of waiters) resolve(); };
-const unsubscribe = subscriptions.onUpdate(api.mediaTasks.ready, { workerSecret,processorVersion:2 }, value => {
+const unsubscribe = subscriptions.onUpdate(api.mediaTasks.ready, { workerSecret,processorVersion:3 }, value => {
   revision++; ready = !!value;
   if (ready) { lastWorkAt = Date.now(); wake(); }
 });
@@ -58,7 +58,7 @@ async function runSlot() {
   while (!shutdown.signal.aborted && !draining) {
     try {
       const observed = revision;
-      const task = await client.mutation(api.mediaTasks.claim, { workerSecret: workerSecret!, compact:true,processorVersion:2 });
+      const task = await client.mutation(api.mediaTasks.claim, { workerSecret: workerSecret!, compact:true,processorVersion:3 });
       if (!task) { await waitForWork(observed); continue; }
       activeTasks++; lastWorkAt = Date.now();
       const controller = new AbortController();

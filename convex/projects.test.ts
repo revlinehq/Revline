@@ -297,12 +297,12 @@ test("analysis is owned and background workers save fresh results without a brow
   expect(request.taskId).toBeDefined();
   await expect(stranger.query(api.mediaTasks.get, { taskId: request.taskId! })).rejects.toThrow("not found");
   await t.mutation(internal.mediaTasks.prepareAttempt, { taskId: request.taskId!, attempt: 1 });
-  const task = await t.mutation(api.mediaTasks.claim, { workerSecret: "test-worker-secret" });
+  const task = await t.mutation(api.mediaTasks.claim, { workerSecret: "test-worker-secret", processorVersion: 3 });
   expect(task?.taskId).toBe(request.taskId);
   await expect(t.mutation(api.mediaTasks.complete, { taskId: task!.taskId, leaseToken: "wrong", result: {} })).rejects.toThrow("lease");
   await expect(t.mutation(api.mediaTasks.complete, { taskId: task!.taskId, leaseToken: task!.leaseToken, result: {} })).rejects.toThrow("missing");
   const transcript = { segments: [{ start: 0, end: 1, text: "Real speech" }], words: [] };
-  await t.mutation(api.mediaTasks.complete, { taskId: task!.taskId, leaseToken: task!.leaseToken, result: { analysis: { transcript } } });
+  await t.mutation(api.mediaTasks.complete, { taskId: task!.taskId, leaseToken: task!.leaseToken, result: { analysis: { transcript, audioActivity: { version: 1, duration: 5, frameSeconds: .01, quiet: [{ start: 1, end: 5 }], level: { noiseFloorDb: -65, speechDb: -20, quietThresholdDb: -45, separationDb: 45 }, reliable: true } } } });
   expect((await t.query(internal.assistant.analysisRequest, { ...run, requestId })).status).toBe("completed");
   expect((await owner.query(api.assets.get, { projectId, assetId })).analysis?.transcript).toEqual(transcript);
 });

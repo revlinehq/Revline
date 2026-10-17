@@ -27,7 +27,7 @@ export function modelTimeline(timeline: Timeline, selectedClipIds: readonly stri
 
 /** Keep verbal/visual evidence. Dense numerical maps can be read by source range. */
 export function modelAssetAnalysis(analysis: NonNullable<MediaAsset['analysis']>, window?: { start: number; end: number }) {
-  const { focus, beats, transcript, shots, ...observations } = analysis;
+  const { focus, beats, transcript, audioActivity, shots, ...observations } = analysis;
   const inRange = (time: number) => !window || (time >= window.start && time <= window.end);
   const denseRead = (count: number) => ({ sampleCount: count, detailsOmitted: true, readTool: 'inspectAssetAnalysis with start/end SOURCE seconds' });
   return { ...observations,
@@ -37,6 +37,12 @@ export function modelAssetAnalysis(analysis: NonNullable<MediaAsset['analysis']>
       wordCount: transcript.words.length,
       ...(window ? { words: transcript.words.filter(word => word.end >= window.start && word.start <= window.end) }
         : { wordTimingSummary: { ...denseRead(transcript.words.length), suggestedMaxWindowSeconds: 30 } }),
+    } } : {}),
+    ...(audioActivity ? { audioActivity: {
+      version: audioActivity.version, reliable: audioActivity.reliable, level: audioActivity.level,
+      basis: 'Measured source audio energy; quiet intervals do not prove silence or spoken content. Provider word times remain unchanged.',
+      ...(window ? { quiet: audioActivity.quiet.filter(interval => interval.end >= window.start && interval.start <= window.end) }
+        : { quietSummary: denseRead(audioActivity.quiet.length) }),
     } } : {}),
     ...(shots ? { shots } : {}),
     ...(focus ? window ? { focus: focus.filter(sample => inRange(sample.time)) } : { focusSummary: denseRead(focus.length) } : {}),

@@ -257,6 +257,118 @@ test('retained-range assembly and word-synced subtitles publish once with linked
   expect((await f.read()).timeline).toEqual(initial);
 });
 
+test.each([
+  { tightenSilence: true, sourceEnd: 56 + 25 / 30, target: 'video' },
+  { tightenSilence: undefined, sourceEnd: 57 + 10 / 30, target: 'video' },
+  { tightenSilence: true, sourceEnd: 56 + 25 / 30, target: 'audio' },
+])('measured quiet-tail tightening=$tightenSilence on $target preserves the final word, manual audio and atomic undo', async ({ tightenSilence, sourceEnd, target }) => {
+  const f = await fixture('Keep this phrase, tighten its quiet tail and add subtitles');
+  const transcript = { segments: [{ start: 56.57, end: 57.19, text: 'you' }], words: [{ start: 56.57, end: 57.19, text: 'you' }] };
+  const rawTranscript = structuredClone(transcript);
+  const audioActivity = { version: 1 as const, duration: 60, frameSeconds: .01 as const, quiet: [{ start: 56.753, end: 57.5 }], level: { noiseFloorDb: -90, speechDb: -25, quietThresholdDb: -74, separationDb: 65 }, reliable: true };
+  const initial = await f.t.run(async ctx => {
+    await storeAnalysis(ctx, (await ctx.db.get(f.assetId))!, { transcript, audioActivity });
+    const audioAssetId = await ctx.db.insert('assets', { ownerId: 'owner', projectId: f.projectId, kind: 'audio', fileName: 'linked.m4a', contentType: 'audio/mp4', size: 1, duration: 60, createdAt: 0 });
+    await ctx.db.patch(f.assetId, { audioAssetId, audioExtracted: true });
+    const video = { ...f.source, duration: 46, audioSeparated: true, volume: 0, linkedClipId: 'linked' };
+    const audio = { id: 'linked', kind: 'audio' as const, assetId: audioAssetId, track: 1, start: video.start, sourceStart: video.sourceStart, duration: video.duration, volume: .06, linkedClipId: video.id };
+    const title = { id: 'manual-title', kind: 'graphic' as const, track: 2, start: 0, duration: 1, sourceStart: 0, text: 'Manual title' };
+    const timeline = { ...f.timeline, tracks: { visual: 2, overlay: 0, audio: 1, effects: 0 }, markers: [{ id: 'manual-cue', time: .5, label: 'Keep this cue' }], clips: [video, audio, title] };
+    await writeProject(ctx, f.projectId, { timeline });
+    return timeline;
+  });
+  const mutate = f.ctx.runMutation;
+  let publications = 0;
+  f.ctx.runMutation = async (reference, args) => {
+    if (getFunctionName(reference as FunctionReference<'mutation'>) === 'assistant:apply') {
+      publications++;
+      expect(args).toMatchObject({ expectedRevision: 0, publication: { threadId: f.threadId, promptMessageId: f.promptMessageId } });
+      expect((await f.read()).timeline).toEqual(initial);
+    }
+    return mutate(reference, args);
+  };
+  await f.runPlan(async tools => {
+    const retained = await execute(tools, 'retainSourceRanges', { clipId: target === 'audio' ? 'linked' : f.source.id, ranges: [{ start: 56.5, end: 57 + 10 / 30 }], ...(tightenSilence ? { tightenSilence } : {}) }) as { retainedRanges: { sourceStart: number; sourceEnd: number }[] };
+    expect(retained).toMatchObject({ saved: false, staged: true, revision: 0 });
+    expect(retained.retainedRanges).toHaveLength(1);
+    expect(retained.retainedRanges[0].sourceStart).toBeCloseTo(56.5, 10);
+    expect(retained.retainedRanges[0].sourceEnd).toBeCloseTo(sourceEnd, 10);
+    expect(await execute(tools, 'addSubtitlesFromTranscript', { assetId: f.assetId })).toMatchObject({ saved: false, staged: true });
+    expect((await f.read()).timeline).toEqual(initial);
+    expect(publications).toBe(0);
+  });
+  const saved = await f.read(), video = saved.timeline!.clips.find(clip => clip.id === f.source.id)!;
+  expect(saved.aiError).toBeUndefined(); expect(publications).toBe(1); expect(saved.revision).toBe(1); expect(f.analysisRequests).toEqual([]);
+  expect(video.sourceStart).toBeCloseTo(56.5, 10);
+  expect(video.duration).toBeCloseTo(sourceEnd - 56.5, 10);
+  expect(saved.timeline!.clips.find(clip => clip.id === 'linked')).toMatchObject({ start: video.start, sourceStart: video.sourceStart, duration: video.duration, linkedClipId: video.id, volume: .06 });
+  expect(saved.timeline!.clips.find(clip => clip.id === 'manual-title')).toEqual(initial.clips[2]);
+  expect(saved.timeline!.markers).toEqual(initial.markers);
+  const captions = saved.timeline!.clips.filter(clip => clip.kind === 'caption');
+  expect(captions.map(clip => clip.text)).toEqual(['you']);
+  expect(captions[0].start).toBeCloseTo(video.start + 56.57 - 56.5, 10);
+  expect(captions[0].start + captions[0].duration).toBeCloseTo(video.start + 56.833 - 56.5, 10);
+  expect(captions[0].textTemplate?.wordTimings).toHaveLength(1);
+  expect(captions[0].textTemplate!.wordTimings![0].end).toBeCloseTo(56.833 - 56.57, 10);
+  expect((await f.owner.query(api.assets.get, { projectId: f.projectId, assetId: f.assetId })).analysis?.transcript).toEqual(rawTranscript);
+  expect(transcript).toEqual(rawTranscript);
+  expect(saved.history).toEqual([initial]);
+  await f.owner.mutation(api.projects.undo, { projectId: f.projectId });
+  expect((await f.read()).timeline).toEqual(initial);
+});
+
+test.each([true, false])('legacy transcription gets at most one audio measurement backfill; available=%s', async backfill => {
+  vi.stubEnv('OPENAI_API_KEY', ''); vi.stubEnv('GOOGLE_GENERATIVE_AI_API_KEY', '');
+  const f = await fixture('Tighten the quiet tail from this saved transcription');
+  const transcript = { segments: [{ start: 13.57, end: 14.19, text: 'you' }], words: [{ start: 13.57, end: 14.19, text: 'you' }] };
+  const audioActivity = { version: 1 as const, duration: 60, frameSeconds: .01 as const, quiet: [{ start: 13.753, end: 14.5 }], level: { noiseFloorDb: -90, speechDb: -25, quietThresholdDb: -74, separationDb: 65 }, reliable: true };
+  const legacyTaskId = await f.t.run(async ctx => {
+    await storeAnalysis(ctx, (await ctx.db.get(f.assetId))!, { transcript });
+    return ctx.db.insert('mediaTasks', { ownerId: 'owner', projectId: f.projectId, assetId: f.assetId, kind: 'transcribe', status: 'running', attempt: 1, progress: 50, requiredProcessorVersion: 2, createdAt: 0, updatedAt: 0 });
+  });
+  const mutate = f.ctx.runMutation;
+  let requests = 0;
+  f.ctx.runMutation = async (reference, args) => {
+    const result = await mutate(reference, args);
+    if (getFunctionName(reference as FunctionReference<'mutation'>) === 'assistant:requestAnalysis') {
+      requests++;
+      expect(requests).toBeLessThanOrEqual(2);
+      await f.t.run(async ctx => {
+        const request = (await ctx.db.get(result as Id<'analysisRequests'>))!, task = (await ctx.db.get(request.taskId!))!;
+        if (requests === 1) expect(task._id).toBe(legacyTaskId);
+        else { expect(task._id).not.toBe(legacyTaskId); expect(task.requiredProcessorVersion).toBe(3); }
+        // Complete the old worker first, then the local measurement-only backfill.
+        await storeAnalysis(ctx, (await ctx.db.get(f.assetId))!, { transcript, ...(requests === 2 && backfill ? { audioActivity } : {}) });
+        await ctx.db.patch(task._id, { status: 'completed', progress: 100 });
+        await ctx.db.patch(request._id, { status: 'completed' });
+      });
+    }
+    return result;
+  };
+  let toolError: unknown;
+  await f.runPlan(async tools => {
+    try {
+      await execute(tools, 'retainSourceRanges', { clipId: f.source.id, ranges: [{ start: 13.5, end: 14 + 10 / 30 }], tightenSilence: true });
+      await execute(tools, 'addSubtitlesFromTranscript', { assetId: f.assetId });
+    } catch (error) { toolError = error; throw error; }
+  });
+  expect(requests).toBe(2);
+  expect(f.analysisRequests).toEqual([expect.objectContaining({ assetId: f.assetId, mode: 'transcribe' }), expect.objectContaining({ assetId: f.assetId, mode: 'transcribe' })]);
+  const saved = await f.read();
+  if (backfill) {
+    expect(toolError).toBeUndefined(); expect(saved.aiError).toBeUndefined(); expect(saved.revision).toBe(1);
+    const video = saved.timeline!.clips.find(clip => clip.id === f.source.id)!;
+    expect(video.sourceStart + video.duration).toBeCloseTo(13 + 25 / 30, 10);
+    expect(saved.timeline!.clips.filter(clip => clip.kind === 'caption').map(clip => clip.text)).toEqual(['you']);
+    expect(saved.history).toEqual([f.timeline]);
+  } else {
+    expect(String(toolError)).toContain('Audio boundary measurement is unavailable');
+    expect(saved.aiError).toBe('Audio boundary measurement is unavailable. No unverified speech trims were applied.');
+    expect(saved.timeline).toEqual(f.timeline); expect(saved.revision).toBe(0); expect(saved.history).toEqual([]);
+  }
+  expect((await f.owner.query(api.assets.get, { projectId: f.projectId, assetId: f.assetId })).analysis?.transcript).toEqual(transcript);
+});
+
 test('durable recovery inspects fresh saved state regardless of wording and does not duplicate footage already published', async () => {
   const f = await fixture('Make it a little softer', [], true); let attemptedWithoutInspection: unknown;
   await f.runPlan(async tools => {

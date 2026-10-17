@@ -10,7 +10,8 @@ import type { Doc } from "./_generated/dataModel";
 import { action, mutation, internalMutation, internalQuery, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { requireOwner, requireProject } from "./lib/auth";
-import { assetWithUrl, assetKind, transcriptValidator, understandingValidator, shotsValidator, beatsValidator, focusValidator, waveformValidator, analysisValidator } from "./schema";
+import { assetWithUrl, assetKind, transcriptValidator, audioActivityValidator, understandingValidator, shotsValidator, beatsValidator, focusValidator, waveformValidator, analysisValidator } from "./schema";
+import { MAX_AUDIO_ACTIVITY_QUIET_INTERVALS, MIN_AUDIO_QUIET_SECONDS } from '../lib/media-analysis/audio-activity';
 import { parseShots } from '../lib/media-analysis/shots';
 import { serializedBytes, validateFocus } from "./lib/timeline";
 import { consumeUpload, issueUpload } from "./uploads";
@@ -179,7 +180,7 @@ export const getForAssistant = internalQuery({ args: { projectId: v.id("projects
   if (!asset || asset.projectId !== args.projectId || asset.ownerId !== ownerId) throw new ConvexError("Media not found");
   return { ...await hydrateAsset(ctx,asset), url: await mediaUrl(ctx, asset) };
 }});
-export const saveAnalysis = internalMutation({ args: { projectId: v.id("projects"), assetId: v.id("assets"), workerSecret: v.string(), aiRunId: v.optional(v.string()), transcript: v.optional(transcriptValidator), understanding: v.optional(understandingValidator), shots: v.optional(shotsValidator), beats: v.optional(beatsValidator), focus: v.optional(focusValidator) }, returns: v.null(), handler: async (ctx, args) => {
+export const saveAnalysis = internalMutation({ args: { projectId: v.id("projects"), assetId: v.id("assets"), workerSecret: v.string(), aiRunId: v.optional(v.string()), transcript: v.optional(transcriptValidator), audioActivity: v.optional(audioActivityValidator), understanding: v.optional(understandingValidator), shots: v.optional(shotsValidator), beats: v.optional(beatsValidator), focus: v.optional(focusValidator) }, returns: v.null(), handler: async (ctx, args) => {
   const secret = process.env.RENDER_WORKER_SECRET; if (!secret || secret !== args.workerSecret) throw new ConvexError("Media worker authentication required");
   const ownerId = args.aiRunId ? await assistantWorkerOwner(ctx, args.projectId, args.aiRunId, args.workerSecret) : await requireOwner(ctx); await requireProject(ctx, args.projectId, ownerId); const asset = await ctx.db.get(args.assetId);
   if (!asset || asset.ownerId !== ownerId || asset.projectId !== args.projectId) throw new ConvexError("Media not found");
@@ -202,6 +203,10 @@ export async function saveAssetAnalysis(ctx: MutationCtx, asset: Doc<"assets">, 
     // than assigning an invented duration; rendered segments remain positive.
     for (const item of changes.transcript.words) if (!Number.isFinite(item.start) || !Number.isFinite(item.end) || item.start < 0 || item.start > duration || item.end < item.start || item.end > duration + 0.5 || !item.text.trim() || item.text.length > 2000) throw new ConvexError("Invalid transcript timing or text");
   }
+  if (changes.audioActivity) {
+    const activity = changes.audioActivity;
+    if (!Number.isFinite(activity.duration) || activity.duration <= 0 || activity.duration > 86400.5 || (asset.duration !== undefined && Math.abs(activity.duration - asset.duration) > .5) || activity.quiet.length > MAX_AUDIO_ACTIVITY_QUIET_INTERVALS || Object.values(activity.level).some(level => !Number.isFinite(level)) || activity.level.separationDb < 0 || activity.quiet.some((interval, index) => !Number.isFinite(interval.start) || !Number.isFinite(interval.end) || interval.start < 0 || interval.end - interval.start < MIN_AUDIO_QUIET_SECONDS - 1e-6 || interval.end > activity.duration + 1e-6 || (index > 0 && interval.start < activity.quiet[index - 1].end))) throw new ConvexError('Invalid audio activity measurements');
+  }
   if (changes.understanding) {
     if (changes.understanding.summary.length > 8000 || changes.understanding.scenes.length > 100) throw new ConvexError("Scene analysis is too large");
     for (const scene of changes.understanding.scenes) if (!validRange(scene.start, scene.end) || !Number.isFinite(scene.score) || scene.score < 0 || scene.score > 1 || scene.description.length > 4000) throw new ConvexError("Invalid scene timing or score");
@@ -216,7 +221,7 @@ export async function saveAssetAnalysis(ctx: MutationCtx, asset: Doc<"assets">, 
   for (const hits of [changes.beats?.accents, changes.beats?.dropCandidates]) {
     if (hits && (hits.length > 1000 || hits.some((hit, i) => !Number.isFinite(hit.time) || hit.time < 0 || hit.time > duration + 0.5 || !Number.isFinite(hit.strength) || hit.strength < 0 || hit.strength > 1 || (i > 0 && hit.time <= hits[i - 1].time)))) throw new ConvexError('Invalid beat analysis');
   }
-  const analysis = { ...asset.analysis, ...(changes.transcript ? { transcript: changes.transcript } : {}), ...(changes.understanding ? { understanding: changes.understanding } : {}), ...(changes.shots ? { shots: changes.shots } : {}), ...(changes.beats ? { beats: changes.beats } : {}), ...(changes.focus ? { focus: changes.focus } : {}) };
+  const analysis = { ...asset.analysis, ...(changes.transcript ? { transcript: changes.transcript } : {}), ...(changes.audioActivity ? { audioActivity: changes.audioActivity } : {}), ...(changes.understanding ? { understanding: changes.understanding } : {}), ...(changes.shots ? { shots: changes.shots } : {}), ...(changes.beats ? { beats: changes.beats } : {}), ...(changes.focus ? { focus: changes.focus } : {}) };
   if (serializedBytes(analysis) > 500_000) throw new ConvexError("Media analysis is too large to save");
   const now = Date.now();
   const analysisCompletedAt = { ...asset.analysisCompletedAt, ...(changes.transcript ? { transcribe: now } : {}), ...(changes.understanding ? { understand: now } : {}), ...(changes.shots ? { shots: now } : {}), ...(changes.beats ? { beats: now } : {}), ...(changes.focus ? { track: now } : {}) };
