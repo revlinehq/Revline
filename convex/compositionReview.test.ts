@@ -44,6 +44,25 @@ test('one initial review and one fix pass cannot be reset by changing the plan',
   f.timeline.clips[1].duration=.5;await f.request();await expect(f.request()).rejects.toThrow('one initial');
   await f.t.run(ctx=>writeProject(ctx,f.projectId,{revision:2}));await expect(f.request()).rejects.toThrow('changed elsewhere');
 });
+test.each(['second-effect','peak','anchor','return'] as const)('review refuses an uncaptured %s before queuing paid work',async point=>{
+  const f=await fixture();f.timeline.clips[0].duration=8;
+  const plans:EffectPlan[]=point==='second-effect'?[f.plan,{...f.plan,id:'later',start:5,peak:5.2,anchor:{...f.plan.anchor,time:5.2}}]
+    :[{...f.plan,...(point==='peak'?{duration:5,peak:5.2}:point==='anchor'?{anchor:{...f.plan.anchor,time:5.2}}:{checks:{returnBy:5.2}})}];
+  if(point==='second-effect')f.timeline.clips.push({...f.timeline.clips[1],id:'later-fx',start:5});
+  await f.t.run(ctx=>writeProject(ctx,f.projectId,{timeline:f.timeline}));
+  await f.t.mutation(internal.compositionReview.savePlan,{...f.run,plans,originals:[]});
+  await expect(f.t.mutation(internal.compositionReview.request,{...f.run,expectedRevision:1,timeline:f.timeline,planIds:plans.map(plan=>plan.id),bindings:plans.map(plan=>({planId:plan.id,clipId:plan.id==='later'?'later-fx':'fx'}))})).rejects.toThrow('outside the rendered review window');
+  expect(await f.t.run(ctx=>ctx.db.query('compositionReviews').withIndex('by_project',q=>q.eq('projectId',f.projectId)).take(1))).toEqual([]);
+  expect(await f.t.run(ctx=>ctx.db.query('assistantPlans').withIndex('by_project',q=>q.eq('projectId',f.projectId)).unique())).toMatchObject({reviews:0});
+});
+test('a long look can still be sampled when its declared peak and anchor are covered',async()=>{
+  const f=await fixture();f.timeline.clips[0].duration=8;
+  const plan:EffectPlan={...f.plan,kind:'text',effect:'appearance',targetClipId:'title',start:0,duration:8,peak:1,anchor:{...f.plan.anchor,time:1}};
+  await f.t.run(ctx=>writeProject(ctx,f.projectId,{timeline:f.timeline}));
+  await f.t.mutation(internal.compositionReview.savePlan,{...f.run,plans:[plan],originals:[f.timeline.clips[0]]});
+  const reviewId=await f.t.mutation(internal.compositionReview.request,{...f.run,expectedRevision:1,timeline:f.timeline,planIds:[plan.id],bindings:[{planId:plan.id,clipId:'title'}]});
+  expect(await f.t.run(ctx=>ctx.db.get(reviewId))).toMatchObject({start:0,end:3});
+});
 test('stopped or superseded runs never enter paid composition review processing',async()=>{
   const f=await fixture();await f.request();await f.t.finishAllScheduledFunctions(vi.runAllTimers);
   await f.t.run(ctx=>writeProject(ctx,f.projectId,{aiRunId:'new-run'}));

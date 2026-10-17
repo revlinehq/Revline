@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { copyTimelineClips, pasteTimelineClips } from './clipboard';
 import type { Timeline } from './types';
+import { addTransitionClip } from './operations';
+import { transitionSources } from './clip-transitions';
 
 const timeline: Timeline = { fps: 30, aspectRatio: 'vertical', tracks: { visual: 2, overlay: 0, audio: 1 }, clips: [
   { id: 'video', kind: 'video', track: 1, assetId: 'footage', start: 2, duration: 3, sourceStart: 4, audioSeparated: true, volume: 0, linkedClipId: 'audio', transform: { x: .5, y: .5, scale: 1.2, rotation: 0, opacity: 1 } },
@@ -36,5 +38,16 @@ describe('timeline clipboard', () => {
     expect(pasteTimelineClips(timeline, copyTimelineClips(timeline, ['video']), 299, newId).timeline.clips.at(-1)?.start).toBe(299);
     expect(timeline.clips).toHaveLength(3);
     expect(pasteTimelineClips(timeline, [], 1, newId)).toEqual({ timeline, ids: [] });
+  });
+  it('keeps a pasted sequence and its transition together when only one source clip collides', () => {
+    const source = addTransitionClip({ ...timeline, clips: [
+      { id: 'left', kind: 'image', track: 1, start: 0, duration: 3, sourceStart: 0 },
+      { id: 'right', kind: 'image', track: 1, start: 3, duration: 3, sourceStart: 0 },
+    ] }, 'transition', 'crossfade', 'left', 'right');
+    const target: Timeline = { ...timeline, clips: [{ id: 'existing', kind: 'image', track: 1, start: 10, duration: 2, sourceStart: 0 }] };
+    const result = pasteTimelineClips(target, copyTimelineClips(source, ['left', 'right', 'transition']), 10, newId);
+    expect(result.timeline.clips[0]).toEqual(target.clips[0]);
+    expect(result.timeline.clips.filter(clip => result.ids.includes(clip.id) && clip.kind === 'image').map(clip => clip.track)).toEqual([2, 2]);
+    expect(transitionSources(result.timeline.clips, 30)).toHaveLength(1);
   });
 });

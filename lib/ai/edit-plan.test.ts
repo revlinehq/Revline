@@ -20,8 +20,21 @@ test('reference disables only the planned effect and retains current source/timi
   expect(reference.clips.map(clip=>clip.id)).toEqual(['video','other']);expect(reference.clips[0]).toEqual(edited.clips[0]);
   expect(checkPlanTiming(bound,edited).pass).toBe(true);expect(checkPlanTiming({...bound,outputClipId:'video'},edited).pass).toBe(false);
 });
+test('solid-color timing accepts visual color layers and legacy FX while rejecting a wrong target or range',()=>{
+  const bound:EffectPlan={...plan,effect:'solid-color',outputClipId:'color'};
+  for(const color of [{id:'color',kind:'solid' as const,start:1,duration:.4,sourceStart:0},{id:'color',kind:'effect' as const,effectPreset:'solid-color' as const,start:1,duration:.4,sourceStart:0}]){
+    const edited={...timeline,clips:[...timeline.clips,color]};
+    expect(checkPlanTiming(bound,edited).pass).toBe(true);
+    expect(checkPlanTiming({...bound,start:1.2},edited).pass).toBe(false);
+    expect(checkPlanTiming({...bound,duration:.8},edited).pass).toBe(false);
+    expect(checkPlanTiming({...bound,effect:'punch'},edited).pass).toBe(false);
+  }
+});
 test('samples are bounded and truthful numeric/vision receipts cannot invent extra plans',()=>{
   const times=compositionSampleTimes([plan],30,.9,1.5);expect(times.length).toBeLessThanOrEqual(12);expect(times.every(time=>time>=.9&&time<1.5)).toBe(true);
+  const distinct={...plan,anchor:{...plan.anchor,time:1.1},peak:1.3};
+  const paired=compositionSampleTimes([distinct,{...distinct,id:'second',start:2,peak:2.3,anchor:{...distinct.anchor,time:2.1}}],30,.9,2.5);
+  expect(paired).toEqual(expect.arrayContaining([1.1,1.3,2.1,2.3]));expect(paired.length).toBeLessThanOrEqual(12);
   expect(pixelDifference(new Uint8Array([0,255]),new Uint8Array([0,0]))).toBe(.5);
   expect(()=>parseCompositionReview(JSON.stringify({observations:[{planId:'other',verdict:'pass',evidence:'Looks good'}],uncertainty:''}),[plan])).toThrow('exactly');
 });

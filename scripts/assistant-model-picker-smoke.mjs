@@ -12,7 +12,7 @@ window.renderFixture=patch=>{Object.assign(window.state,patch);flushSync(()=>roo
  <AssistantPanel key={window.state.fixtureKey??0} {...window.state} configured hasClips demo={false} onSend={async(text,model)=>{window.calls.push({text,model});throw new Error('Fixture request recorded');}} onStop={async()=>{}}/>
  <div className="studio-fixture"><EditComposer value="Studio" onChange={()=>{}} onSubmit={()=>{}}/></div>
 </>));};window.renderFixture({});
-` }, bundle: true, platform: 'browser', format: 'iife', jsx: 'automatic', write: false, outdir: '/tmp/revline-model-picker', define: { 'process.env.NODE_ENV': '"production"' } });
+` }, bundle: true, platform: 'browser', format: 'iife', jsx: 'automatic', write: false, outdir: '/tmp/revline-model-picker', define: { 'process.env.NODE_ENV': '"development"' } });
 const server=createServer((req,res)=>{res.writeHead(200,{'Content-Type':'text/html'});res.end('<html><body></body></html>');});
 await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
 const browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox', '--disable-dev-shm-usage'] });
@@ -45,7 +45,7 @@ try {
   await page.waitForFunction(()=>!document.querySelector('.assistant-content textarea').disabled);
   await page.focus('.assistant-content textarea');await page.keyboard.down('Control');await page.keyboard.press('KeyA');await page.keyboard.up('Control');await page.keyboard.press('Backspace');
  }
- // A production allowlist must hide Opus and immediately reset a stale local selection.
+ // A restricted development allowlist must hide Opus and immediately reset a stale local selection.
  await page.evaluate(()=>window.renderFixture({allowedModels:['haiku','sonnet']}));
  assert.equal(await page.$eval('[aria-label="AI editing model"]',el=>el.textContent),'Sonnet 5.5');
  await page.click('[aria-label="AI editing model"]');

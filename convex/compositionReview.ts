@@ -40,6 +40,13 @@ export const request=internalMutation({args:{...runArgs,expectedRevision:v.numbe
   const start=Math.max(0,Math.min(...bound.map(plan=>plan.start))-1/args.timeline.fps);
   const end=Math.min(start+3,Math.max(...args.timeline.clips.map(clip=>clip.start+clip.duration)),Math.max(...bound.map(plan=>Math.max(plan.start+plan.duration,plan.checks?.returnBy??0)))+2/args.timeline.fps);
   if(end<=start||end-start>3.00001)throw new ConvexError('Choose expectations spanning at most three seconds for rendered review.');
+  // Long looks may use a short sample, but never clamp a promised event into
+  // that sample and imply it was reviewed. Match the capture's frame snapping.
+  const firstFrame=Math.round(start*args.timeline.fps),lastFrame=Math.round((end-1/args.timeline.fps)*args.timeline.fps);
+  for(const plan of bound){
+    const required=[plan.start,plan.anchor.time,...(plan.peak===undefined?[]:[plan.peak]),...(plan.checks?.returnBy===undefined?[]:[plan.checks.returnBy])];
+    if(required.some(time=>{const frame=Math.round(time*args.timeline.fps);return frame<firstFrame||frame>lastFrame;}))throw new ConvexError('A planned start, anchor, peak or return is outside the rendered review window. Choose expectations within the same three-second window.');
+  }
   const reference=effectDisabledReference(args.timeline,bound,saved.originals);
   const used=new Set([...args.timeline.clips,...reference.clips].filter(clip=>clip.kind!=='audio'&&clip.assetId&&(clip.start<end&&clip.start+clip.duration>start||args.timeline.clips.some(transition=>transition.start<end&&transition.start+transition.duration>start&&(transition.transition?.fromClipId===clip.id||transition.transition?.toClipId===clip.id)))).map(clip=>clip.assetId));
   const assetIds=[];

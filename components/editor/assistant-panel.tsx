@@ -66,6 +66,7 @@ function AssistantPanelBody({ messages, running, configured, error, onSend, onSt
   editSnapshot?:AssistantEditSnapshot;
 }) {
   const [prompt, setPrompt] = useState('');
+  const canChooseModel = process.env.NODE_ENV === 'development' && modelSwitcher;
   const sendInFlight=useRef(false);
   const currentDraftKey=useRef(draftKey);currentDraftKey.current=draftKey;
   const [modelChoice, setModelChoice] = useState<ClaudeModelChoice>();
@@ -117,7 +118,7 @@ function AssistantPanelBody({ messages, running, configured, error, onSend, onSt
     const draft=prompt,key=draftKey;sendInFlight.current=true;
     changePrompt('');
     setStopState(null); setSending(true); setPendingReply({ id: `pending-${crypto.randomUUID()}`, text: draft.trim(), previousUserId: latestUser?.id, previousError: error }); setLocalError(''); scroll.resume();
-    try { await onSend(draft.trim(), modelSwitcher ? selectedModelChoice : undefined); }
+    try { await onSend(draft.trim(), canChooseModel ? selectedModelChoice : undefined); }
     catch (e) { if(currentDraftKey.current===key){changePrompt(draft);setPendingReply(null);setLocalError(userError(e, 'Could not send message'));} }
     finally { sendInFlight.current=false;setSending(false); }
   }
@@ -126,7 +127,7 @@ function AssistantPanelBody({ messages, running, configured, error, onSend, onSt
     if (!suggestions || !onSuggestion || sendInFlight.current || sending || running || pendingReply || !configured) return;
     const request = `${suggestion.prompt}\n\nUse the selected clip from “${suggestions.sourceName}”, source ${suggestion.start.toFixed(2)}–${suggestion.end.toFixed(2)} seconds.`;
     sendInFlight.current=true;setStopState(null); setSending(true); setPendingReply({ id: `pending-${crypto.randomUUID()}`, text: request, previousUserId: latestUser?.id, previousError: error }); setLocalError(''); scroll.resume();
-    try { await onSuggestion(request, suggestions.clipId, modelSwitcher ? selectedModelChoice : undefined); }
+    try { await onSuggestion(request, suggestions.clipId, canChooseModel ? selectedModelChoice : undefined); }
     catch (e) { setPendingReply(null); setLocalError(userError(e, 'Could not start this edit.')); }
     finally { sendInFlight.current=false;setSending(false); }
   }
@@ -169,7 +170,7 @@ function AssistantPanelBody({ messages, running, configured, error, onSend, onSt
     </div>
     <div ref={scroll.composer} className="manual-composer-dock">
     {scroll.latestHidden && <button className="chat-jump-latest" onClick={scroll.resume}>Latest response</button>}
-    <EditComposer attachments={attachments} onRemoveAttachment={onRemoveAttachment} requireMedia={requireMedia} actions={modelSwitcher ? <AssistantModelPicker allowedModels={allowedModels} value={effectiveModelChoice} onChange={setModelChoice} disabled={answering}/> : undefined} variant="compact" className="manual-editor-composer" value={prompt} onChange={changePrompt} onSubmit={submit} onAttach={onAttach} placeholder="What would you change next?" disabled={sending || !!pendingReply} running={running} onStop={onStop ? stop : undefined} />
+    <EditComposer attachments={attachments} onRemoveAttachment={onRemoveAttachment} requireMedia={requireMedia} actions={canChooseModel ? <AssistantModelPicker allowedModels={allowedModels} value={effectiveModelChoice} onChange={setModelChoice} disabled={answering}/> : undefined} variant="compact" className="manual-editor-composer" value={prompt} onChange={changePrompt} onSubmit={submit} onAttach={onAttach} placeholder="What would you change next?" disabled={sending || !!pendingReply} running={running} onStop={onStop ? stop : undefined} />
     </div>
   </div>;
 }

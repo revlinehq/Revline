@@ -94,26 +94,29 @@ export function createTimelineSaveQueue(initial: TimelineSnapshot, callbacks: Sa
     saved = snapshot; visible = snapshot.timeline;
     if(snapshot.history===undefined)callbacks.update(visible,'remote');else callbacks.update(visible,'remote',snapshot.history);
   }
+  function adoptSaved(kind: 'saved' | 'recovered') {
+    // Further gestures were made against the optimistic edit, not this server
+    // acknowledgement. The same applies to gestures made during recovery:
+    // rebase them and drain the queue before releasing save waiters.
+    if (pending) {
+      visible = applyTimelineEdit(pending.baseTimeline, pending.timeline, saved.timeline);
+      pending = { baseTimeline: saved.timeline, timeline: visible };
+    } else visible = saved.timeline;
+    callbacks.update(visible, kind);
+  }
   async function flush() {
     if (busy) return;
     busy = true; callbacks.saving(true);
     try {
       while (pending) {
         const edit = pending; pending = null;
-        saved = await callbacks.save({ ...edit, expectedRevision: saved.revision });
-        // Further gestures were made against the optimistic edit, not this server
-        // acknowledgement. Carry only their intent forward onto the saved result.
-        if (pending) {
-          const queued = pending as PendingEdit;
-          visible = applyTimelineEdit(queued.baseTimeline, queued.timeline, saved.timeline);
-          pending = { baseTimeline: saved.timeline, timeline: visible };
-        } else visible = saved.timeline;
-        callbacks.update(visible, 'saved');
+        try { saved = await callbacks.save({ ...edit, expectedRevision: saved.revision }); adoptSaved('saved'); }
+        catch (error) {
+          pending = null; callbacks.error(error);
+          try { saved = await callbacks.load(); adoptSaved('recovered'); }
+          catch (loadError) { pending = null; callbacks.error(loadError); break; }
+        }
       }
-    } catch (error) {
-      pending = null; callbacks.error(error);
-      try { saved = await callbacks.load(); visible = saved.timeline; callbacks.update(visible, 'recovered'); }
-      catch (loadError) { callbacks.error(loadError); }
     } finally {
       busy = false;
       receive(remote);

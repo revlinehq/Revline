@@ -12,7 +12,7 @@ export function parseCompositionReview(text:string,plans:EffectPlan[]) {
 }
 export function compositionSampleTimes(plans:EffectPlan[],fps:number,start:number,end:number) {
   const frame=1/fps;
-  const times=plans.flatMap(plan=>[plan.start-frame,plan.start,plan.peak??plan.anchor.time,plan.start+plan.duration/2,plan.start+plan.duration-frame,plan.checks?.returnBy??plan.start+plan.duration+frame]);
+  const times=plans.flatMap(plan=>[plan.start-frame,plan.start,plan.anchor.time,plan.peak??plan.start+plan.duration/2,plan.start+plan.duration-frame,plan.checks?.returnBy??plan.start+plan.duration+frame]);
   return [...new Set(times.map(time=>Math.round(Math.min(end-frame,Math.max(start,time))*fps)/fps))].sort((a,b)=>a-b).slice(0,12);
 }
 export function pixelDifference(actual:Uint8Array,reference:Uint8Array) {

@@ -108,4 +108,28 @@ describe('timeline save queue', () => {
     expect(error).toHaveBeenCalledTimes(2);
     expect(saving).toHaveBeenLastCalledWith(false);
   });
+  it('saves a new gesture made while a failed save is reloading the timeline', async () => {
+    const recovery = deferred<TimelineSnapshot>(), recoveryStarted = deferred<void>(), lastSave = deferred<TimelineSnapshot>();
+    const update = vi.fn(), error = vi.fn();
+    const save = vi.fn().mockRejectedValueOnce(new Error('Could not save')).mockImplementationOnce(() => lastSave.promise);
+    const queue = createTimelineSaveQueue({ timeline: base, revision: 1 }, {
+      save, update, error, saving: vi.fn(), load: () => { recoveryStarted.resolve(); return recovery.promise; },
+    });
+    queue.edit(patch({ start: 1 }));
+    await recoveryStarted.promise;
+    queue.edit(patch({ start: 1, text: 'Typed during recovery' }));
+    const finished = vi.fn();
+    const waiting = queue.wait().then(finished);
+    recovery.resolve({ timeline: patch({ fontSize: 48 }), revision: 2 });
+    await Promise.resolve(); await Promise.resolve();
+    const expected = patch({ text: 'Typed during recovery', fontSize: 48 });
+    expect(save).toHaveBeenCalledTimes(2);
+    expect(save.mock.calls[1][0]).toMatchObject({ expectedRevision: 2, baseTimeline: patch({ fontSize: 48 }), timeline: expected });
+    expect(queue.busy).toBe(true);
+    expect(finished).not.toHaveBeenCalled();
+    lastSave.resolve({ timeline: expected, revision: 3 });
+    await waiting;
+    expect(update).toHaveBeenLastCalledWith(expected, 'saved');
+    expect(error).toHaveBeenCalledTimes(1);
+  });
 });

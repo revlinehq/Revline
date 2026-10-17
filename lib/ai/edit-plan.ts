@@ -45,7 +45,10 @@ export function checkPlanTiming(plan: EffectPlan, timeline: Timeline) {
   const clip = timeline.clips.find(clip => clip.id === (plan.outputClipId ?? plan.targetClipId));
   if (!clip) return { pass: false, reason: 'The planned target is missing.' };
   const tolerance = 1 / timeline.fps;
-  if (plan.kind === 'timed' || plan.kind === 'transition') return { pass: clip.kind==='effect' && clip.effectPreset===plan.effect && Math.abs(clip.start - plan.start) <= tolerance && Math.abs(clip.duration - plan.duration) <= tolerance, actualStart: clip.start, actualDuration: clip.duration };
+  if (plan.kind === 'timed' || plan.kind === 'transition') {
+    const matchesEffect=clip.kind==='effect'&&clip.effectPreset===plan.effect||plan.kind==='timed'&&plan.effect==='solid-color'&&clip.kind==='solid';
+    return { pass: matchesEffect && Math.abs(clip.start - plan.start) <= tolerance && Math.abs(clip.duration - plan.duration) <= tolerance, actualStart: clip.start, actualDuration: clip.duration };
+  }
   return { pass: plan.start >= clip.start - tolerance && plan.start + plan.duration <= clip.start + clip.duration + tolerance, actualStart: clip.start, actualDuration: clip.duration };
 }
 

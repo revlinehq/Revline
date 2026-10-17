@@ -1,6 +1,6 @@
 'use client';
 
-import { lazy, Suspense, useEffect, useId, useState } from 'react';
+import { lazy, Suspense, useEffect, useId, useMemo, useState } from 'react';
 import { ChevronRight, FolderOpen, Plus, Search } from 'lucide-react';
 import { EffectIcon } from './effect-icon';
 import type { EffectPreset } from '@/lib/editor/clip-effects';
@@ -55,8 +55,10 @@ export function EffectLibrary({ clip, timeline, time = 0, assets, onMedia, onVis
   if (process.env.NODE_ENV === 'development') categories.push({ id: 'sam-dev', label: 'SAM 3 (dev)' }, { id: 'remotion-dev', label: 'Remotion (dev)' });
   categories.push({ id: 'audio-fx', label: 'Audio FX' });
   const visible = catalog.filter(entry => (!entry.action || onSpeed) && (query ? `${entry.label} ${entry.description}`.toLowerCase().includes(query) : entry.category === category));
-  const transitions = onAddTransition && timeline ? transitionAvailabilityAt(timeline, time, { aboveClipId: visual ? clip.id : undefined }) : { available: false as const, reason: 'Add video or image footage before adding a transition.' };
-  const canDragTransition = !!onAddTransition && !!timeline?.clips.some(item => (item.kind === 'video' || item.kind === 'image') && item.duration >= 2 / timeline.fps);
+  const needsTransitions = category !== 'text' && category !== 'audio-fx' && category !== 'remotion-dev' && visible.some(entry => isTransitionPreset(entry.preset));
+  const transitionTarget = visual ? clip.id : undefined;
+  const transitions = useMemo(() => needsTransitions && timeline ? transitionAvailabilityAt(timeline, time, { aboveClipId: transitionTarget }) : { available: false as const, reason: 'Add video or image footage before adding a transition.' }, [needsTransitions, timeline, time, transitionTarget]);
+  const canDragTransition = needsTransitions && !!timeline?.clips.some(item => (item.kind === 'video' || item.kind === 'image') && item.duration >= 2 / timeline.fps);
   function reason(entry: LibraryEntryData) {
     if (isTransitionPreset(entry.preset) && !transitions.available) return transitions.reason;
     if (entry.visual && !visual) return 'Select a video or image clip first.';
