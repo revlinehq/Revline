@@ -53,7 +53,7 @@ export function FootageProcessingCard({ files, phase, index, total, percent, act
   const analyzing = phase === 'watching' || phase === 'listening';
   const label = transferring ? 'Uploading footage…' : analyzing ? stageActivity || `${phaseLabels[phase]}…` : 'Processing footage…';
 
-  const activity = measurable ? `Uploading clip ${fileIndex} of ${fileTotal} · ${Math.round(progress)}%` : analyzing ? fileTotal > 1 ? `Clip ${fileIndex} of ${fileTotal}` : undefined : phase === 'opening' ? undefined : `${stageActivity || phaseLabels[phase]}${fileTotal > 1 ? ` · ${fileIndex} of ${fileTotal}` : ''}`;
+  const activity = measurable ? `Uploading clip ${fileIndex} of ${fileTotal} · ${Math.round(progress)}%` : undefined;
   return <FootagePreparation thumbnail={file?.thumbnail || (file?.kind === 'image' ? file.url : undefined)} fileName={file?.name} activity={activity} label={label} detail={transferring?'Sending your files to your project.':undefined} error={failed ? error || 'Your footage could not be prepared. Retry without choosing the files again.' : undefined}>
     {failed && <div className="footage-processing-actions">
       <PrimaryButton type="button" size="compact" onClick={onRetry}><RotateCcw size={13} aria-hidden="true"/>Retry</PrimaryButton>
