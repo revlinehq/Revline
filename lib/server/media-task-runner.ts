@@ -1,10 +1,10 @@
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { ConvexHttpClient } from 'convex/browser';
 import type { MediaWorkItem, MediaTaskResult } from '@/convex/mediaTasks';
 import { dimensions, timelineDuration, type MediaAsset } from '@/lib/editor/types';
-import { downloadOwnedMedia, extractTranscriptionAudio, prepareVideo, probeMedia } from '@/lib/media-analysis/io';
+import { downloadOwnedMedia, extractTranscriptionAudio, needsAnalysisVideoProxy, prepareVideo, probeMedia } from '@/lib/media-analysis/io';
 import { inspectVideo, inspectVideoFrames, understandVideo } from '@/lib/media-analysis/gemini';
 import { transcribeWithWhisper } from '@/lib/media-analysis/whisper';
 import { detectShots } from '@/lib/media-analysis/detect-shots';
@@ -77,6 +77,7 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
     if (task.kind === 'extract' && asset.audioExtracted) return asset.audioAssetId ? { audioAssetId: asset.audioAssetId } : {};
     if (task.kind === 'waveform' && asset.waveform) return { waveform: asset.waveform };
     if (task.kind === 'transcribe' && asset.analysis?.transcript) return { analysis: { transcript: asset.analysis.transcript } };
+    if (task.kind === 'understand' && asset.analysis?.understanding) return { analysis: { understanding: asset.analysis.understanding } };
     const sourceAsset = task.kind === 'transcribe' ? task.transcriptionAsset ?? asset : asset;
     if (!sourceAsset.url) throw new AnalysisError('The prepared source media is unavailable.', 400);
     const source = join(directory, 'source'), sourceUrl = sourceAsset.url;
@@ -148,15 +149,23 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
     const contentType = asset.contentType?.split(';')[0].trim().toLowerCase() ?? '';
     const mimeType = contentType === 'video/quicktime' ? 'video/mov' : contentType === 'video/x-msvideo' ? 'video/avi' : contentType;
     const nativeType = ['video/mp4', 'video/mpeg', 'video/mov', 'video/avi', 'video/x-flv', 'video/mpg', 'video/webm', 'video/wmv', 'video/3gpp'].includes(mimeType);
-    // Pass supported source files intact so fast action retains its recorded frames.
-    // Unknown containers get a playable MP4 without imposing a sampling rate.
-    const video = nativeType ? source : join(directory, 'analysis.mp4');
-    if (!nativeType) await runPhase('Preparing analysis video',()=>prepareVideo(source, video, signal));
+    const purpose = task.kind === 'video' ? 'inspection' : 'overview';
+    let video = source, videoMimeType = mimeType;
+    if (!nativeType || needsAnalysisVideoProxy(asset, media.duration, purpose)) {
+      const prepared = join(directory, 'analysis.mp4'), preparationStartedAt = Date.now();
+      onActivity?.('preparing-analysis');
+      await runPhase('Preparing analysis video',()=>prepareVideo(source, prepared, signal, purpose));
+      const preparedBytes = (await stat(prepared)).size;
+      // An unusually simple source can already be smaller than the new encode.
+      // Keep its native upload in that case; unsupported containers still need MP4.
+      if (!nativeType || preparedBytes < asset.size) { video = prepared; videoMimeType = 'video/mp4'; }
+      logPhase('Analysis video', video === prepared ? 'prepared' : 'using smaller original', preparationStartedAt, `${purpose} · ${(asset.size / 1048576).toFixed(1)} MiB source · ${(preparedBytes / 1048576).toFixed(1)} MiB copy`);
+    }
     onProgress(30);
     if (task.kind === 'video') {
       if (!task.videoRequest) throw new AnalysisError('Native video inspection needs a question and source window.', 400);
-      return { videoInspection: await runPhase('Inspecting video',()=>inspectVideo(video, media.duration, task.videoRequest!, key, signal, nativeType ? mimeType : 'video/mp4',reportGeminiActivity)) };
+      return { videoInspection: await runPhase('Inspecting video',()=>inspectVideo(video, media.duration, task.videoRequest!, key, signal, videoMimeType,reportGeminiActivity)) };
     }
-    return { analysis: { understanding: await runPhase('Understanding footage',()=>understandVideo(video, media.duration, key, signal, nativeType ? mimeType : 'video/mp4',reportGeminiActivity)) } };
+    return { analysis: { understanding: await runPhase('Understanding footage',()=>understandVideo(video, media.duration, key, signal, videoMimeType,reportGeminiActivity)) } };
   } finally { clearInterval(geminiHeartbeat);await rm(directory, { recursive: true, force: true }); }
 }

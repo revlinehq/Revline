@@ -25,7 +25,7 @@ function configured() {
   try{assertEditorModelConfigured(resolveClaudeModel());return true;}catch{}
   return claudeModelSwitcherEnabled()&&allowedClaudeModelChoices().some(choice=>{try{assertEditorModelConfigured(resolveClaudeModel(choice));return true;}catch{return false;}});
 }
-export const status = query({ args: { projectId: v.id("projects") }, returns: v.object({ configured: v.boolean(), modelSwitcher: v.optional(v.boolean()), allowedModels: v.optional(v.array(claudeModelChoiceValidator)), defaultModelChoice:v.optional(claudeModelChoiceValidator), running: v.boolean(), error: v.union(v.string(), v.null()), reason: v.union(v.string(), v.null()), activity: v.union(v.string(), v.null()), activitySource: v.union(v.string(), v.null()), activityProgress: v.union(v.number(), v.null()), activityStartedAt: v.union(v.number(), v.null()) }), handler: async (ctx, args) => {
+export const status = query({ args: { projectId: v.id("projects") }, returns: v.object({ configured: v.boolean(), modelSwitcher: v.optional(v.boolean()), allowedModels: v.optional(v.array(claudeModelChoiceValidator)), defaultModelChoice:v.optional(claudeModelChoiceValidator), running: v.boolean(), editing: v.boolean(), error: v.union(v.string(), v.null()), reason: v.union(v.string(), v.null()), activity: v.union(v.string(), v.null()), activitySource: v.union(v.string(), v.null()), activityProgress: v.union(v.number(), v.null()), activityStartedAt: v.union(v.number(), v.null()) }), handler: async (ctx, args) => {
   const project = await projectRun(ctx,args.projectId,await requireOwner(ctx));
   const requests = project.aiRunning && project.aiRunId ? await ctx.db.query('analysisRequests').withIndex('by_projectId_runId', q => q.eq('projectId', project._id).eq('aiRunId', project.aiRunId!)).take(16) : [];
   const active = requests.find(request => request.status === 'pending' || request.status === 'running');
@@ -34,8 +34,9 @@ export const status = query({ args: { projectId: v.id("projects") }, returns: v.
   const labels = { transcribe: 'Listening to your footage…', understand: 'Analyzing footage…', shots: 'Finding shot changes…', beats: 'Finding the rhythm…', track: 'Following the subject…', frames: 'Inspecting the moment…', video: 'Analyzing footage…' };
   let defaultModelChoice;try{defaultModelChoice=defaultEditorModelChoice();}catch{}
   const ready=configured();
-  const activity=active?task?.status==='retrying'||task?.status==='queued'&&(task.attempt>1)?'Retrying analysis…':task?.status==='queued'?'Queued for analysis…':task?.activity?MEDIA_ACTIVITY_LABELS[task.activity]:labels[active.mode]:project.aiRunning&&project.aiUndoRecorded?'Applying edits…':null;
-  return { configured: ready, ...(defaultModelChoice?{defaultModelChoice}:{}), ...(claudeModelSwitcherEnabled() ? { modelSwitcher: true, allowedModels: [...allowedClaudeModelChoices()] } : {}), running: project.aiRunning ?? false, error: project.aiError ?? null, reason: ready ? null : providerReason, activity, activityProgress: null, activityStartedAt: active ? task?.activityStartedAt ?? task?.attemptStartedAt ?? active.createdAt : null, activitySource: source?.ownerId === project.ownerId && source.projectId === project._id ? source.fileName : null };
+  const editing=!!project.aiRunning&&(project.aiEditing??project.aiUndoRecorded??false);
+  const activity=active?task?.status==='retrying'||task?.status==='queued'&&(task.attempt>1)?'Retrying analysis…':task?.status==='queued'?'Queued for analysis…':task?.activity?MEDIA_ACTIVITY_LABELS[task.activity]:labels[active.mode]:editing?'Applying edits…':null;
+  return { configured: ready, ...(defaultModelChoice?{defaultModelChoice}:{}), ...(claudeModelSwitcherEnabled() ? { modelSwitcher: true, allowedModels: [...allowedClaudeModelChoices()] } : {}), running: project.aiRunning ?? false, editing, error: project.aiError ?? null, reason: ready ? null : providerReason, activity, activityProgress: null, activityStartedAt: active ? task?.activityStartedAt ?? task?.attemptStartedAt ?? active.createdAt : null, activitySource: source?.ownerId === project.ownerId && source.projectId === project._id ? source.fileName : null };
 }});
 export const send = mutation({ args: { projectId: v.id("projects"), prompt: v.string(), modelChoice: v.optional(claudeModelChoiceValidator), selectedClipId: v.optional(v.string()), selectedClipIds: v.optional(v.array(v.string())), playhead: v.optional(v.number()) }, returns: v.null(), handler: async (ctx, args) => {
   const ownerId = await requireOwner(ctx); await requireEditorAccess(ctx, ownerId); const project = await requireProject(ctx, args.projectId, ownerId);
@@ -56,7 +57,7 @@ export const send = mutation({ args: { projectId: v.id("projects"), prompt: v.st
   const { messageId } = await saveMessage(ctx, components.agent, { threadId, userId: ownerId, prompt });
   const recovery = project.aiRecovery ?? (project.aiError ? assistantRecovery(project, 'failed', project.aiError) : undefined);
   const runId = `${Date.now()}-${Math.random()}`;
-  await writeProject(ctx,project._id, { threadId, aiRunning: true, aiError: undefined, aiRunId: runId, aiUndoRecorded: false, aiCheckpointRevision: undefined, aiRequest:{prompt,messageId,startedRevision:project.revision??0}, aiRecovery:recovery });
+  await writeProject(ctx,project._id, { threadId, aiRunning: true, aiEditing: false, aiError: undefined, aiRunId: runId, aiUndoRecorded: false, aiCheckpointRevision: undefined, aiRequest:{prompt,messageId,startedRevision:project.revision??0}, aiRecovery:recovery });
   await ctx.scheduler.runAfter(0, internal.assistantActions.respond, { projectId: project._id, ownerId, runId, threadId, promptMessageId: messageId, pinnedModel, ...(recovery?{recovery}:{}), ...(args.selectedClipId ? { selectedClipId: args.selectedClipId } : {}), ...(args.selectedClipIds ? { selectedClipIds: args.selectedClipIds } : {}), ...(args.playhead !== undefined ? { playhead: args.playhead } : {}) }); return null;
 }});
 export const messages = query({
@@ -88,7 +89,14 @@ export const stop = mutation({ args: { projectId: v.id('projects') }, returns: v
   const reviews=await ctx.db.query('compositionReviews').withIndex('by_project',q=>q.eq('projectId',project._id)).order('desc').take(2);
   for(const review of reviews)if(review.runId===project.aiRunId&&review.status==='queued'){if(review.taskId)await cancelMediaTask(ctx,review.taskId);await ctx.db.patch(review._id,{status:'failed',error:'Stopped by the user.'});}
   // Already-saved edits remain undoable; invalidating the run blocks every later checkpoint.
-  await writeProject(ctx,project._id, { aiRunning: false, aiRunId: undefined, aiError: undefined, aiRecovery:assistantRecovery(project,'stopped','Stopped by the user. Saved edits remain.'),aiRequest:undefined });
+  await writeProject(ctx,project._id, { aiRunning: false, aiEditing: false, aiRunId: undefined, aiError: undefined, aiRecovery:assistantRecovery(project,'stopped','Stopped by the user. Saved edits remain.'),aiRequest:undefined });
+  return null;
+}});
+/** Begin the timeline lock only when a mutating tool has a real change to make. */
+export const beginEditing = internalMutation({ args: runArgs, returns: v.null(), handler: async (ctx, args) => {
+  const project = await projectRun(ctx,args.projectId,args.ownerId);
+  if (!project.aiRunning || project.aiRunId !== args.runId) throw new ConvexError('AI run is no longer active');
+  if (!project.aiEditing) await writeProject(ctx,project._id,{aiEditing:true});
   return null;
 }});
 export const isRunActive = internalQuery({ args: runArgs, returns: v.boolean(), handler: async (ctx, args) => {
@@ -136,7 +144,7 @@ export const undoLatestEdit=internalMutation({args:{...runArgs,expectedRevision:
   const history=(project.history??[]).map(normalizeTimeline),previous=history.pop();
   if(!previous)return {undone:false,revision:project.revision??0,timeline:currentTimeline(project)};
   const timeline=await validateTimeline(ctx,project,previous),revision=args.expectedRevision+1;
-  await writeProject(ctx,project._id,{timeline,aspectRatio:timeline.aspectRatio,history,revision,aiCheckpointRevision:undefined,updatedAt:Date.now()});
+  await writeProject(ctx,project._id,{timeline,aspectRatio:timeline.aspectRatio,history,revision,aiEditing:true,aiCheckpointRevision:undefined,updatedAt:Date.now()});
   return {undone:true,revision,timeline};
 }});
 // Destructive turns validate each private draft without exposing intermediate deletions.
@@ -156,7 +164,7 @@ export const finish = internalMutation({ args: { ...runArgs, error: v.optional(v
   if (project?.ownerId === args.ownerId && project.aiRunId === args.runId) {
     const requests = await ctx.db.query("analysisRequests").withIndex("by_projectId_runId", q => q.eq("projectId", args.projectId).eq("aiRunId", args.runId)).take(16);
     for (const request of requests) await detachAnalysisRequest(ctx,request);
-    await writeProject(ctx,project._id, { aiRunning: false, aiError: args.error?.slice(0, 1000), aiRecovery:args.error?assistantRecovery(project,'failed',args.error,args.savedEdits):undefined,aiRequest:undefined });
+    await writeProject(ctx,project._id, { aiRunning: false, aiEditing: false, aiError: args.error?.slice(0, 1000), aiRecovery:args.error?assistantRecovery(project,'failed',args.error,args.savedEdits):undefined,aiRequest:undefined });
   }
   return null;
 }});

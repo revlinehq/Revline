@@ -64,7 +64,7 @@ export const timelineMarkerValidator = v.object({ id: v.string(), time: v.number
 export const timelineValidator = v.object({ clips: v.array(clipValidator), fps: v.number(), aspectRatio, tracks: v.optional(v.object({ visual: v.number(), overlay: v.number(), audio: v.number(), effects: v.optional(v.number()) })), markers: v.optional(v.array(timelineMarkerValidator)) });
 export const assistantRecoveryValidator = v.object({requests:v.array(v.string()),runId:v.string(),revision:v.number(),savedEdits:v.optional(v.number()),reason:v.string(),status:v.union(v.literal('failed'),v.literal('stopped')),updatedAt:v.number()});
 export const aiStateFields = {
-  aiRunning: v.optional(v.boolean()), aiError: v.optional(v.string()), aiRunId: v.optional(v.string()), aiUndoRecorded: v.optional(v.boolean()), aiCheckpointRevision: v.optional(v.number()),
+  aiRunning: v.optional(v.boolean()), aiEditing: v.optional(v.boolean()), aiError: v.optional(v.string()), aiRunId: v.optional(v.string()), aiUndoRecorded: v.optional(v.boolean()), aiCheckpointRevision: v.optional(v.number()),
   aiRequest:v.optional(v.object({prompt:v.string(),messageId:v.string(),startedRevision:v.number()})),aiRecovery:v.optional(assistantRecoveryValidator),
 };
 export const projectFields = {
@@ -122,7 +122,7 @@ export const userFields = {
 export const userDocument = v.object({ _id: v.id("users"), _creationTime: v.number(), ...userFields });
 export const mediaTaskKind = v.union(analysisMode, v.literal('extract'), v.literal('waveform'), v.literal('render'), v.literal('import'), v.literal('review'));
 export const mediaTaskStatus = v.union(v.literal('queued'), v.literal('running'), v.literal('retrying'), v.literal('completed'), v.literal('failed'), v.literal('cancelled'));
-export const mediaTaskActivity = v.union(v.literal('downloading'), v.literal('sending-gemini'), v.literal('preparing-gemini'), v.literal('analyzing'), v.literal('retrying-analysis'));
+export const mediaTaskActivity = v.union(v.literal('downloading'), v.literal('preparing-analysis'), v.literal('sending-gemini'), v.literal('preparing-gemini'), v.literal('analyzing'), v.literal('retrying-analysis'));
 export const mediaTaskFields = {
   ownerId: v.string(), projectId: v.id('projects'), kind: mediaTaskKind,
   assetId: v.optional(v.id('assets')), renderJobId: v.optional(v.id('renderJobs')), analysisRequestId: v.optional(v.id('analysisRequests')),

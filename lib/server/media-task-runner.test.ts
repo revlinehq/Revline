@@ -1,20 +1,20 @@
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
-import { access } from 'node:fs/promises';
+import { access, writeFile } from 'node:fs/promises';
 import type { ConvexHttpClient } from 'convex/browser';
 import type { MediaWorkItem } from '../../convex/mediaTasks';
 import { AnalysisError } from '../media-analysis/errors';
-const mocks = vi.hoisted(() => ({ detectShots: vi.fn(), understandVideo: vi.fn(), prepareVideo: vi.fn(), downloadOwnedMedia: vi.fn(), extractTranscriptionAudio: vi.fn(), transcribeWithWhisper: vi.fn(), probeMedia: vi.fn(), extractSourceAudio: vi.fn(), measureAudioWaveform: vi.fn(), uploadMediaFile: vi.fn() }));
+const mocks = vi.hoisted(() => ({ detectShots: vi.fn(), understandVideo: vi.fn(), inspectVideo: vi.fn(), prepareVideo: vi.fn(), downloadOwnedMedia: vi.fn(), extractTranscriptionAudio: vi.fn(), transcribeWithWhisper: vi.fn(), probeMedia: vi.fn(), extractSourceAudio: vi.fn(), measureAudioWaveform: vi.fn(), uploadMediaFile: vi.fn() }));
 vi.mock('../media-analysis/detect-shots', () => ({ detectShots: mocks.detectShots }));
-vi.mock('../media-analysis/gemini', async importOriginal => ({ ...await importOriginal<typeof import('../media-analysis/gemini')>(), understandVideo: mocks.understandVideo }));
+vi.mock('../media-analysis/gemini', async importOriginal => ({ ...await importOriginal<typeof import('../media-analysis/gemini')>(), understandVideo: mocks.understandVideo, inspectVideo: mocks.inspectVideo }));
 vi.mock('../media-analysis/whisper', () => ({ transcribeWithWhisper: mocks.transcribeWithWhisper }));
-vi.mock('../media-analysis/io', () => ({ downloadOwnedMedia: mocks.downloadOwnedMedia, extractTranscriptionAudio: mocks.extractTranscriptionAudio, prepareVideo: mocks.prepareVideo, probeMedia: mocks.probeMedia }));
+vi.mock('../media-analysis/io', async importOriginal => ({ ...await importOriginal<typeof import('../media-analysis/io')>(), downloadOwnedMedia: mocks.downloadOwnedMedia, extractTranscriptionAudio: mocks.extractTranscriptionAudio, prepareVideo: mocks.prepareVideo, probeMedia: mocks.probeMedia }));
 vi.mock('./extract-audio', () => ({ extractSourceAudio: mocks.extractSourceAudio }));
 vi.mock('./audio-waveform', () => ({ measureAudioWaveform: mocks.measureAudioWaveform }));
 vi.mock('./upload-media-file', () => ({ uploadMediaFile: mocks.uploadMediaFile }));
 import { processMediaTask } from './media-task-runner';
-beforeEach(() => { mocks.probeMedia.mockResolvedValue({ duration: 3, hasVideo: true, hasAudio: true }); });
+beforeEach(() => { mocks.probeMedia.mockResolvedValue({ duration: 3, hasVideo: true, hasAudio: true }); mocks.prepareVideo.mockImplementation(async (_input, output) => { await writeFile(output, 'proxy'); }); });
 afterEach(() => { vi.resetAllMocks(); vi.unstubAllEnvs(); vi.restoreAllMocks(); });
-const work = (kind: 'understand' | 'shots' | 'transcribe' | 'extract') => ({ taskId: 'task', leaseToken: 'lease', projectId: 'project', kind, asset: { _id: 'asset', url: 'https://media.example.com/source', fileName: 'source.mp4', kind: 'video', size: 1, duration: 3 } }) as unknown as MediaWorkItem;
+const work = (kind: 'understand' | 'video' | 'shots' | 'transcribe' | 'extract') => ({ taskId: 'task', leaseToken: 'lease', projectId: 'project', kind, asset: { _id: 'asset', url: 'https://media.example.com/source', fileName: 'source.mp4', contentType: 'video/mp4', kind: 'video', size: 1, duration: 3 } }) as unknown as MediaWorkItem;
 const semantic = { summary: 'A visible action.', scenes: [{ start: 0, end: 2, description: 'The person moves.', score: 0.8 }] };
 test('native video understanding returns semantic evidence without reporting local shot boundaries', async () => {
   vi.stubEnv('GOOGLE_GENERATIVE_AI_API_KEY', 'fixture-key');
@@ -24,6 +24,38 @@ test('native video understanding returns semantic evidence without reporting loc
   expect(mocks.downloadOwnedMedia.mock.calls[0][5].concurrency).toBe(1);
   expect(result.analysis).toEqual({ understanding: semantic });
   expect(result.analysis).not.toHaveProperty('shots');
+  expect(mocks.prepareVideo).not.toHaveBeenCalled();
+});
+
+test('large native footage gets a smaller analysis copy while inspection retains original source bounds', async () => {
+  vi.stubEnv('GOOGLE_GENERATIVE_AI_API_KEY', 'fixture-key');
+  const task = work('video'), signal = AbortSignal.timeout(5000), activity = vi.fn();
+  Object.assign(task.asset!, { size: 379_302_892, width: 1440, height: 1440, duration: 175.690956 });
+  mocks.probeMedia.mockResolvedValue({ duration: 175.690956, hasVideo: true, hasAudio: true });
+  task.videoRequest = { question: 'Find the turn.', start: 45, end: 60 };
+  await processMediaTask(task, {} as ConvexHttpClient, 'https://fixture.convex.cloud', signal, () => {}, activity);
+  expect(mocks.prepareVideo).toHaveBeenCalledWith(expect.stringMatching(/source$/), expect.stringMatching(/analysis\.mp4$/), signal, 'inspection');
+  expect(mocks.inspectVideo).toHaveBeenCalledWith(expect.stringMatching(/analysis\.mp4$/), 175.690956, task.videoRequest, 'fixture-key', signal, 'video/mp4', expect.any(Function));
+  expect(activity.mock.calls.map(([phase]) => phase)).toEqual(['downloading', 'preparing-analysis']);
+});
+
+test('overview uses its compact profile, but an efficient original wins if encoding grows the file', async () => {
+  vi.stubEnv('GOOGLE_GENERATIVE_AI_API_KEY', 'fixture-key');
+  const task = work('understand'), signal = AbortSignal.timeout(5000);
+  Object.assign(task.asset!, { size: 20_000_000, width: 1440, height: 1440 });
+  mocks.probeMedia.mockResolvedValue({ duration: 300, hasVideo: true, hasAudio: false });
+  mocks.prepareVideo.mockImplementation(async (_input, output) => { await writeFile(output, Buffer.alloc(20_000_001)); });
+  await processMediaTask(task, {} as ConvexHttpClient, 'https://fixture.convex.cloud', signal, () => {});
+  expect(mocks.prepareVideo).toHaveBeenCalledWith(expect.any(String), expect.any(String), signal, 'overview');
+  expect(mocks.understandVideo).toHaveBeenCalledWith(expect.stringMatching(/source$/), 300, 'fixture-key', signal, 'video/mp4', expect.any(Function));
+});
+
+test('an unsupported container still uses a playable MP4 even if conversion is larger', async () => {
+  vi.stubEnv('GOOGLE_GENERATIVE_AI_API_KEY', 'fixture-key');
+  const task = work('understand'), signal = AbortSignal.timeout(5000);
+  task.asset!.contentType = 'video/unknown';
+  await processMediaTask(task, {} as ConvexHttpClient, 'https://fixture.convex.cloud', signal, () => {});
+  expect(mocks.understandVideo).toHaveBeenCalledWith(expect.stringMatching(/analysis\.mp4$/), 3, 'fixture-key', signal, 'video/mp4', expect.any(Function));
 });
 test('explicit shot detection remains a failure when coverage cannot be verified', async () => {
   mocks.detectShots.mockRejectedValue(new AnalysisError('Shot detection did not inspect the complete video.', 502));
@@ -55,6 +87,14 @@ test('a saved transcript returns immediately without downloading or calling a pr
   expect(await processMediaTask(task, {} as ConvexHttpClient, 'https://fixture.convex.cloud', AbortSignal.timeout(5000), () => {})).toEqual({ analysis: { transcript } });
   expect(mocks.downloadOwnedMedia).not.toHaveBeenCalled();
   expect(mocks.transcribeWithWhisper).not.toHaveBeenCalled();
+});
+
+test('a saved overview returns immediately without downloading or calling Gemini again', async () => {
+  const task = work('understand');
+  task.asset!.analysis = { understanding: semantic };
+  expect(await processMediaTask(task, {} as ConvexHttpClient, 'https://fixture.convex.cloud', AbortSignal.timeout(5000), () => {})).toEqual({ analysis: { understanding: semantic } });
+  expect(mocks.downloadOwnedMedia).not.toHaveBeenCalled();
+  expect(mocks.understandVideo).not.toHaveBeenCalled();
 });
 
 test('Listening downloads prepared small audio while keeping the original video time bounds',async()=>{

@@ -32,7 +32,12 @@ export function modelAssetAnalysis(analysis: NonNullable<MediaAsset['analysis']>
   const denseRead = (count: number) => ({ sampleCount: count, detailsOmitted: true, readTool: 'inspectAssetAnalysis with start/end SOURCE seconds' });
   return { ...observations,
     ...(window ? { sourceWindow: window } : {}),
-    ...(transcript ? { transcript: { segments: transcript.segments.filter(segment => !window || (segment.end >= window.start && segment.start <= window.end)), wordCount: transcript.words.length } } : {}),
+    ...(transcript ? { transcript: {
+      segments: transcript.segments.filter(segment => !window || (segment.end >= window.start && segment.start <= window.end)),
+      wordCount: transcript.words.length,
+      ...(window ? { words: transcript.words.filter(word => word.end >= window.start && word.start <= window.end) }
+        : { wordTimingSummary: { ...denseRead(transcript.words.length), suggestedMaxWindowSeconds: 30 } }),
+    } } : {}),
     ...(shots ? { shots } : {}),
     ...(focus ? window ? { focus: focus.filter(sample => inRange(sample.time)) } : { focusSummary: denseRead(focus.length) } : {}),
     ...(beats ? { beats: { bpm: beats.bpm, confidence: beats.confidence, engine: beats.engine,

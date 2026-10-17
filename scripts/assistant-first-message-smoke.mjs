@@ -67,6 +67,11 @@ try {
   assert.deepEqual(await page.$$eval('textarea,.composer-attachment>span,.composer-more,.composer-submit', nodes => [...new Set(nodes.map(node => getComputedStyle(node).fontSize))]), ['14px'], 'Input, attachment filenames and composer controls all share14px');
   assert.equal(await page.$eval('.manual-editor-composer', node => { const input = node.querySelector('textarea').getBoundingClientRect(), actions = node.querySelector('.edit-composer-actions').getBoundingClientRect(); return input.height >= 44 && actions.top - input.bottom >= 11; }), true, 'Composer keeps a dedicated input floor with breathing room above the controls');
  }
+ await page.evaluate(()=>window.fixture.update({messages:[{id:'question',role:'user',text:'What effects can you help me with?'}],running:true,editing:false,activity:null,error:null,attachments:undefined}));
+ await page.waitForFunction(()=>document.querySelector('.assistant-activity .processing-status-label')?.textContent==='Replying…');
+ assert.equal(await page.$('.assistant-activity[data-phase="applying"]'),null,'An ordinary question is a reply, not an edit');
+ await page.evaluate(()=>window.fixture.update({editing:true}));
+ await page.waitForFunction(()=>document.querySelector('.assistant-activity .processing-status-label')?.textContent==='Editing…');
  const sourceName = 'Interview.mp4';
  await page.evaluate(sourceName=>window.fixture.update({messages:[{id:'analysis-request',role:'user',text:'Find the strongest moment.'}],attachments:undefined,running:true,error:null,activity:'Analyzing footage…',activitySource:sourceName,activityStartedAt:Date.now()-7000}),sourceName);
  await page.waitForSelector('.assistant-activity[data-phase="watching"]');

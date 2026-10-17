@@ -4,7 +4,7 @@ import type { MutationCtx,QueryCtx } from '../_generated/server';
 import { equalTimelineValue } from '../../lib/editor/timeline-equality';
 import { boundedHistory } from './timeline';
 type Context=MutationCtx|QueryCtx;
-const aiKeys=['aiRunning','aiError','aiRunId','aiUndoRecorded','aiCheckpointRevision','aiRequest','aiRecovery'] as const;
+const aiKeys=['aiRunning','aiEditing','aiError','aiRunId','aiUndoRecorded','aiCheckpointRevision','aiRequest','aiRecovery'] as const;
 type AI=Pick<Doc<'projects'>,typeof aiKeys[number]>;
 function aiFields(project:AI):AI {return Object.fromEntries(aiKeys.filter(key=>project[key]!==undefined).map(key=>[key,project[key]]));}
 

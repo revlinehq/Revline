@@ -7,6 +7,7 @@ type EditStorage = {
   apply: (timeline: Timeline, revision: number, publication?:boolean) => Promise<number>;
   validate: (timeline: Timeline, revision: number) => Promise<unknown>;
   refresh?: () => Promise<{ timeline: Timeline; revision: number }>;
+  beforeChange?: () => Promise<unknown>;
 };
 
 /** One serialized model turn. Clip replacements remain private until completion. */
@@ -38,6 +39,7 @@ export class EditSession {
       let previous = this.timeline;
       let next = normalizeTimeline(edit(previous));
       if (next === previous || JSON.stringify(next) === JSON.stringify(previous)) return { applied: false, saved: false, staged: this.staged, unchanged: true, revision: this.revision, changedClips: [], removedClipIds: [], removedMarkerIds: [], aspectRatio: previous.aspectRatio };
+      await this.storage.beforeChange?.();
       const removedClipIds = previous.clips.filter(clip => !next.clips.some(current => current.id === clip.id)).map(clip => clip.id);
       const remainingMarkerIds = new Set(next.markers?.map(marker => marker.id));
       const removedMarkerIds = (previous.markers ?? []).filter(marker => !remainingMarkerIds.has(marker.id)).map(marker => marker.id);

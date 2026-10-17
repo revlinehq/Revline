@@ -60,6 +60,28 @@ test('beat/focus summaries retain saved visual observations and exact range read
   expect(range.understanding).toEqual(understanding);
 });
 
+test('saved speech range reads expose exact overlapping word timings for false starts without expanding the default overview', () => {
+  const transcript = {
+    segments: [{ start: 11.8, end: 14.6, text: 'I I built this today. Next.' }],
+    words: [
+      { start: 11.8, end: 12.1, text: 'I' },
+      { start: 12.2, end: 12.4, text: 'I' },
+      { start: 12.4, end: 12.7, text: 'built' },
+      { start: 12.7, end: 12.7, text: 'this' },
+      { start: 13, end: 14, text: 'today.' },
+      { start: 14.2, end: 14.6, text: 'Next.' },
+    ],
+  };
+  const original = structuredClone(transcript);
+  const summary = modelAssetAnalysis({ transcript });
+  expect(summary.transcript).not.toHaveProperty('words');
+  expect(summary.transcript).toMatchObject({ wordCount: 6, wordTimingSummary: { detailsOmitted: true, readTool: 'inspectAssetAnalysis with start/end SOURCE seconds', suggestedMaxWindowSeconds: 30 } });
+  const range = modelAssetAnalysis({ transcript }, { start: 12.3, end: 13.5 });
+  expect(range.transcript).toMatchObject({ segments: transcript.segments, words: transcript.words.slice(1, 5), wordCount: 6 });
+  expect(modelAssetAnalysis({ transcript }, { start: 20, end: 21 }).transcript).toMatchObject({ words: [] });
+  expect(transcript).toEqual(original);
+});
+
 test('historical visual observations survive stale timeline mapping compaction and current mappings retain exact times', () => {
   const evidence = { assetId: 'source-asset', start: 11.5, end: 14.5, question: 'Find the reaction', summary: 'Real visible reaction', uncertainty: 'Approximate', matches: [{ start: 12, end: 13, description: 'The visible reaction' }], timelineOccurrences: [{ clipId: 'source', sourceStart: 11.5, timelineStart: 1.69, duration: 3, playbackRate: .75, matches: [{ sourceStart: 12, sourceEnd: 13, timelineStart: 2.356666, timelineEnd: 3.69, description: 'The visible reaction' }] }] };
   const result: LanguageModelV4ToolResultPart = { type: 'tool-result', toolCallId: 'vision', toolName: 'inspectVideo', output: { type: 'json', value: evidence } };

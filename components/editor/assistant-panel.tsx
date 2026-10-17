@@ -1,5 +1,4 @@
 'use client';
-import { isCasualChat } from '@/lib/editor/chat-request';
 import { userError } from '@/lib/user-error';
 
 import { PRODUCTION_CLAUDE_MODEL_CHOICES } from '@/lib/ai/claude-model-policy';
@@ -65,8 +64,8 @@ function AssistantResponseText({ text, streaming }: { text: string; streaming: b
   return <ChatProse text={text} animate={receivedLive || streaming} />;
 }
 
-function AssistantPanelBody({ messages, running, configured, error, onSend, onStop, hasClips, demo, onLoadMore, canLoadMore, onAttach, activity, activitySource, activityStartedAt, draftKey, suggestions, onSuggestion, editSnapshot, defaultModelChoice, modelSwitcher = false, allowedModels = PRODUCTION_CLAUDE_MODEL_CHOICES, attachments, onRemoveAttachment, requireMedia = false, conversationStarted = false }: {
-  messages: ChatMessage[]; running: boolean; configured: boolean; error?: string | null;
+function AssistantPanelBody({ messages, running, editing:editingTimeline=running, configured, error, onSend, onStop, hasClips, demo, onLoadMore, canLoadMore, onAttach, activity, activitySource, activityStartedAt, draftKey, suggestions, onSuggestion, editSnapshot, defaultModelChoice, modelSwitcher = false, allowedModels = PRODUCTION_CLAUDE_MODEL_CHOICES, attachments, onRemoveAttachment, requireMedia = false, conversationStarted = false }: {
+  messages: ChatMessage[]; running: boolean; editing?:boolean; configured: boolean; error?: string | null;
   modelSwitcher?: boolean;
   defaultModelChoice?:ClaudeModelChoice;
   allowedModels?: readonly ClaudeModelChoice[];
@@ -94,7 +93,7 @@ function AssistantPanelBody({ messages, running, configured, error, onSend, onSt
   const answering = running || sending || !!pendingReply;
   const waiting = answering || !!activity;
   const latestUser = messages.findLast(message => message.role === 'user');
-  const replyLabel = isCasualChat(pendingReply?.text ?? latestUser?.text ?? '') ? 'Replying…' : 'Editing…';
+  const replyLabel = editingTimeline ? 'Editing…' : 'Replying…';
   const optimisticRequest = pendingReply && latestUser?.id === pendingReply.previousUserId ? pendingReply : null;
   const turnId = optimisticRequest?.id ?? latestUser?.id ?? 'imported';
   const demoNoteMessageId = demo ? messages.findLast(message => message.role === 'assistant')?.id : undefined;

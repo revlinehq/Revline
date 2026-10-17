@@ -13,19 +13,20 @@ async function setup(history:Timeline[]=[before]){
   const t=convexTest(schema,import.meta.glob('./**/*.ts')),owner=t.withIdentity({subject:'owner'});
   const projectId=await owner.mutation(api.projects.create,{title:'Owned undo fixture',aspectRatio:'landscape'});
   const current={...before,clips:before.clips.map(c=>({...c,duration:1,text:'Edited words'}))};
-  await t.run(ctx=>writeProject(ctx,projectId,{timeline:current,history,revision:4,aiRunning:true,aiRunId:'run',aiUndoRecorded:false}));
+  await t.run(ctx=>writeProject(ctx,projectId,{timeline:current,history,revision:4,aiRunning:true,aiEditing:false,aiRunId:'run',aiUndoRecorded:false}));
   return {t,owner,projectId,current,args:{projectId,ownerId:'owner',runId:'run',expectedRevision:4}};
 }
 
 test('active undo restores only the actual last snapshot and pops one history entry atomically',async()=>{
   const x=await setup();const result=await x.t.mutation(internal.assistant.undoLatestEdit,x.args);
   expect(result).toMatchObject({undone:true,revision:5,timeline:{clips:before.clips}});
-  expect(await x.owner.query(api.projects.get,{projectId:x.projectId})).toMatchObject({revision:5,history:[],aiRunning:true,aiUndoRecorded:false,timeline:{clips:before.clips}});
+  expect(await x.owner.query(api.projects.get,{projectId:x.projectId})).toMatchObject({revision:5,history:[],aiRunning:true,aiEditing:true,aiUndoRecorded:false,timeline:{clips:before.clips}});
 });
 
 test('empty saved history reports no undo and preserves the revision',async()=>{
   const x=await setup([]);const result=await x.t.mutation(internal.assistant.undoLatestEdit,x.args);
   expect(result).toMatchObject({undone:false,revision:4,timeline:{clips:x.current.clips}});
+  expect((await x.owner.query(api.projects.get,{projectId:x.projectId})).aiEditing).toBe(false);
 });
 
 test('undo refuses wrong ownership, stale revisions/runs, stopped runs and published current-turn checkpoints',async()=>{

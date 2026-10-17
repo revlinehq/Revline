@@ -26,6 +26,36 @@ async function setup(signal?: AbortSignal) {
   return { t, owner, projectId, run, read, session };
 }
 
+test('inspection and unchanged checkpoints do not begin a timeline edit', async () => {
+  let starts = 0;
+  const session = new EditSession(original, 1, {
+    beforeChange: async () => { starts++; },
+    apply: async () => { throw new Error('No change should be published'); },
+    validate: async () => { throw new Error('No draft should be staged'); },
+  });
+  await session.inspect(async () => ({ timeline: original, revision: 1 }));
+  expect(await session.checkpoint(timeline => structuredClone(timeline))).toMatchObject({ unchanged: true, saved: false });
+  expect(starts).toBe(0);
+});
+
+test.each(['live', 'staged'])('%s checkpoints wait for the timeline lock before changing the working snapshot', async mode => {
+  const started = Promise.withResolvers<void>(), unlocked = Promise.withResolvers<void>();
+  const events: string[] = [];
+  const session = new EditSession(original, 1, {
+    beforeChange: async () => { events.push('begin'); started.resolve(); await unlocked.promise; events.push('locked'); },
+    apply: async () => { events.push('apply'); return 2; },
+    validate: async () => { events.push('validate'); },
+  });
+  const change = session.checkpoint(timeline => mode === 'staged' ? { ...timeline, clips: [] } : { ...timeline, clips: timeline.clips.map(clip => ({ ...clip, text: 'Changed' })) });
+  await started.promise;
+  expect(events).toEqual(['begin']);
+  expect(session.staged).toBe(false);
+  expect(session.timeline.clips).toEqual(original.clips);
+  unlocked.resolve(); await change;
+  expect(events).toEqual(['begin', 'locked', mode === 'staged' ? 'validate' : 'apply']);
+  expect(session.staged).toBe(mode === 'staged');
+});
+
 test('delete-all then rebuild never publishes an empty checkpoint and saves once', async () => {
   const { session, read } = await setup();
   const deletion = await session.checkpoint(t => ({ ...t, clips: [] }));

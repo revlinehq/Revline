@@ -91,6 +91,7 @@ async function run(plan?:(tools:Record<string,Tool>)=>Promise<void>,seed:Timelin
     runMutation:async(reference:Parameters<typeof getFunctionName>[0],args:{timeline?:Timeline;expectedRevision?:number;error?:string;publication?:Pick<TimelinePublicationReceipt,'threadId'|'promptMessageId'>|Extract<TimelinePublicationReceipt,{status:'failed'|'aborted'}>})=>{
       const name=getFunctionName(reference);calls.push(name);
       if(name==='compositionReview:savePlan')return null;
+      if(name==='assistant:beginEditing')return backend?backend.t.mutation(internal.assistant.beginEditing,backend.runArgs):null;
       if(name==='assistant:undoLatestEdit'){
         if(!backend)throw new Error('Undo requires the in-memory saved backend.');
         const result=await backend.t.mutation(internal.assistant.undoLatestEdit,{...backend.runArgs,expectedRevision:args.expectedRevision!});timeline=structuredClone(result.timeline);revision=result.revision;return result;

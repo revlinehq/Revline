@@ -17,6 +17,35 @@ async function fixture() {
   return {t,owner,projectId,read,send};
 }
 
+test('responding stays unlocked until a guarded editing signal and stop or completion clears it', async () => {
+  const f = await fixture();
+  const status = () => f.owner.query(api.assistant.status, { projectId: f.projectId });
+  await f.send('Yo');
+  const first = (await f.read())!;
+  const run = { projectId: f.projectId, ownerId: 'owner', runId: first.aiRunId! };
+  expect(await status()).toMatchObject({ running: true, editing: false });
+  await expect(f.t.mutation(internal.assistant.beginEditing, { ...run, ownerId: 'stranger' })).rejects.toThrow('Project not found');
+  await expect(f.t.mutation(internal.assistant.beginEditing, { ...run, runId: 'stale' })).rejects.toThrow('no longer active');
+  expect(await status()).toMatchObject({ running: true, editing: false });
+  await f.t.mutation(internal.assistant.beginEditing, run);
+  await f.t.mutation(internal.assistant.beginEditing, run);
+  expect(await status()).toMatchObject({ running: true, editing: true });
+  await f.owner.mutation(api.assistant.stop, { projectId: f.projectId });
+  expect(await status()).toMatchObject({ running: false, editing: false });
+  expect((await f.read())?.aiEditing).toBe(false);
+  await expect(f.t.mutation(internal.assistant.beginEditing, run)).rejects.toThrow('no longer active');
+  await f.send('What can you do?');
+  const next = (await f.read())!;
+  expect(await status()).toMatchObject({ running: true, editing: false });
+  const current = { ...run, runId: next.aiRunId! };
+  await f.t.mutation(internal.assistant.beginEditing, current);
+  await f.t.mutation(internal.assistant.finish, run);
+  expect(await status()).toMatchObject({ running: true, editing: true });
+  await f.t.mutation(internal.assistant.finish, current);
+  expect(await status()).toMatchObject({ running: false, editing: false });
+  expect((await f.read())?.aiEditing).toBe(false);
+});
+
 test('failed run retains its request and saved revision, and a rephrased follow-up receives that recovery',async()=>{
   const f=await fixture(); await f.send('Make a hype edit ending on the reaction');
   const run=await f.read();

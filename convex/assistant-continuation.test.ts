@@ -1,4 +1,5 @@
 import { writeProject } from './lib/project_data';
+import { storeAnalysis } from './lib/asset_analysis';
 /// <reference types="vite/client" />
 import { convexTest } from 'convex-test';
 import agentTest from '@convex-dev/agent/test';
@@ -62,8 +63,98 @@ async function fixture(prompt = 'can u put bunch of effects here', scenes: { sta
     sdk.plan = () => plan(sdk.options!.tools);
     await (respond as unknown as { _handler: (ctx: unknown, args: unknown) => Promise<unknown> })._handler(ctx, { ...run, threadId, promptMessageId, playhead: 1.69, selectedClipId: 'source', selectedClipIds: ['source'] });
   };
-  return { t, owner, projectId, threadId, promptMessageId, assetId, source, timeline, analysisRequests, runPlan, read, messages };
+  return { t, owner, projectId, threadId, promptMessageId, assetId, source, timeline, analysisRequests, runPlan, read, messages, ctx };
 }
+
+test('greetings, timeline inspection and unchanged tools never begin timeline editing', async () => {
+  const f = await fixture('Yo, what can you do with this footage?');
+  await f.runPlan(async tools => {
+    expect(await f.owner.query(api.assistant.status, { projectId: f.projectId })).toMatchObject({ running: true, editing: false });
+    await execute(tools, 'inspectTimeline', {});
+    expect(await execute(tools, 'trim', { clipId: f.source.id, duration: f.source.duration, sourceStart: f.source.sourceStart })).toMatchObject({ unchanged: true });
+    expect(await f.owner.query(api.assistant.status, { projectId: f.projectId })).toMatchObject({ running: true, editing: false });
+  });
+  expect((await f.read()).aiError).toBeUndefined();
+  expect((await f.read()).aiEditing).toBe(false);
+});
+
+test('changed tools acquire one editing lock before publication and retain it through a private replacement', async () => {
+  const f = await fixture('Lower the sound and replace the shot');
+  const mutate = f.ctx.runMutation;
+  let starts = 0;
+  f.ctx.runMutation = async (reference, args) => {
+    if (getFunctionName(reference as FunctionReference<'mutation'>) !== 'assistant:beginEditing') return mutate(reference, args);
+    starts++;
+    expect((await f.read()).timeline?.clips).toEqual(f.timeline.clips);
+    const result = await mutate(reference, args);
+    expect((await f.read()).aiEditing).toBe(true);
+    return result;
+  };
+  await f.runPlan(async tools => {
+    await execute(tools, 'setVolume', { clipId: f.source.id, volume: .5 });
+    expect((await f.read()).aiEditing).toBe(true);
+    await execute(tools, 'delete', { clipId: f.source.id });
+    expect((await f.read()).timeline?.clips[0]).toMatchObject({ id: f.source.id, volume: .5 });
+    expect(await execute(tools, 'inspectTimeline', {})).toMatchObject({ staged: true, timeline: { clips: [] } });
+    expect((await f.read()).aiEditing).toBe(true);
+  });
+  expect(starts).toBe(1);
+  expect((await f.read()).timeline?.clips).toEqual([]);
+  expect((await f.read()).aiEditing).toBe(false);
+  expect((await f.read()).aiError).toBeUndefined();
+});
+
+test('prepared overview and transcript are hydrated and reused without requesting another analysis job', async () => {
+  const f = await fixture('Make a concise edit from this prepared footage');
+  const understanding = { summary: 'The saved upload overview', scenes: [{ start: 0, end: 3, description: 'The subject explains the result.', score: .8 }] };
+  const transcript = { segments: [{ start: 0, end: 2, text: 'These are the saved words.' }], words: [{ start: 0, end: .4, text: 'These' }] };
+  await f.t.run(async ctx => { const asset = (await ctx.db.get(f.assetId))!; await storeAnalysis(ctx, asset, { understanding, transcript }); });
+  const mutate = f.ctx.runMutation;
+  let requestedAnalysis = 0;
+  f.ctx.runMutation = async (reference, args) => {
+    if (getFunctionName(reference as FunctionReference<'mutation'>) === 'assistant:requestAnalysis') {
+      requestedAnalysis++;
+      throw new Error('Prepared evidence must not queue another analysis job');
+    }
+    return mutate(reference, args);
+  };
+  const results: unknown[] = [];
+  await f.runPlan(async tools => {
+    results.push(await execute(tools, 'analyzeMedia', { assetId: f.assetId, mode: 'understand' }));
+    results.push(await execute(tools, 'analyzeMedia', { assetId: f.assetId, mode: 'transcribe' }));
+    results.push(await execute(tools, 'inspectAssetAnalysis', { assetId: f.assetId }));
+  });
+  expect(requestedAnalysis).toBe(0);
+  expect(results).toEqual([
+    expect.objectContaining({ analyzed: true, summary: understanding.summary, sceneCount: 1 }),
+    expect.objectContaining({ analyzed: true, segmentCount: 1, wordCount: 1 }),
+    expect.objectContaining({ understanding, transcript: expect.objectContaining({ segments: transcript.segments, wordCount: 1 }) }),
+  ]);
+  expect((await f.read()).aiError).toBeUndefined();
+});
+
+test('a speech edit can trim a false start from saved source word timings without another video analysis', async () => {
+  const f = await fixture('Remove the false start and keep the complete sentence');
+  const words = [
+    { start: 11.5, end: 11.8, text: 'I' },
+    { start: 12.2, end: 12.4, text: 'I' },
+    { start: 12.4, end: 12.7, text: 'built' },
+    { start: 12.7, end: 13, text: 'this' },
+    { start: 13, end: 14, text: 'today.' },
+  ];
+  await f.t.run(async ctx => { const asset = (await ctx.db.get(f.assetId))!; await storeAnalysis(ctx, asset, { transcript: { words, segments: [{ start: 11.5, end: 14, text: 'I I built this today.' }] } }); });
+  await f.runPlan(async tools => {
+    const read = await execute(tools, 'inspectAssetAnalysis', { assetId: f.assetId, start: 11.5, end: 14.5 }) as { transcript: { words: typeof words } };
+    expect(read.transcript.words).toEqual(words);
+    const retained = read.transcript.words.slice(1);
+    await execute(tools, 'trim', { clipId: f.source.id, sourceStart: retained[0].start, duration: retained.at(-1)!.end - retained[0].start });
+  });
+  expect(f.analysisRequests).toEqual([]);
+  const trimmed = (await f.read()).timeline!.clips[0];
+  expect(trimmed.sourceStart).toBe(12.2);
+  expect(trimmed.duration).toBeCloseTo(1.8, 10);
+  expect((await f.read()).aiError).toBeUndefined();
+});
 
 test('durable recovery inspects fresh saved state regardless of wording and does not duplicate footage already published', async () => {
   const f = await fixture('Make it a little softer', [], true); let attemptedWithoutInspection: unknown;
