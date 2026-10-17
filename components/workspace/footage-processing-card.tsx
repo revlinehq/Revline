@@ -50,9 +50,11 @@ export function FootageProcessingCard({ files, phase, index, total, percent, act
   const failed = phase === 'error';
   const measurable = phase === 'uploading';
   const transferring = ['connecting', 'preparing', 'reading', 'uploading'].includes(phase);
+  const analyzing = phase === 'watching' || phase === 'listening';
+  const label = transferring ? 'Uploading footage…' : analyzing ? stageActivity || `${phaseLabels[phase]}…` : 'Processing footage…';
 
-  const activity = measurable ? `Uploading clip ${fileIndex} of ${fileTotal} · ${Math.round(progress)}%` : phase === 'opening' ? undefined : `${stageActivity || phaseLabels[phase]}${fileTotal > 1 ? ` · ${fileIndex} of ${fileTotal}` : ''}`;
-  return <FootagePreparation thumbnail={file?.thumbnail || (file?.kind === 'image' ? file.url : undefined)} fileName={file?.name} activity={activity} label={transferring?'Uploading footage…':phase==='watching'?'Watching your footage…':phase==='listening'?'Listening to your footage…':'Processing footage…'} detail={transferring?'Sending your files to your project.':undefined} error={failed ? error || 'Your footage could not be prepared. Retry without choosing the files again.' : undefined}>
+  const activity = measurable ? `Uploading clip ${fileIndex} of ${fileTotal} · ${Math.round(progress)}%` : analyzing ? fileTotal > 1 ? `Clip ${fileIndex} of ${fileTotal}` : undefined : phase === 'opening' ? undefined : `${stageActivity || phaseLabels[phase]}${fileTotal > 1 ? ` · ${fileIndex} of ${fileTotal}` : ''}`;
+  return <FootagePreparation thumbnail={file?.thumbnail || (file?.kind === 'image' ? file.url : undefined)} fileName={file?.name} activity={activity} label={label} detail={transferring?'Sending your files to your project.':undefined} error={failed ? error || 'Your footage could not be prepared. Retry without choosing the files again.' : undefined}>
     {failed && <div className="footage-processing-actions">
       <PrimaryButton type="button" size="compact" onClick={onRetry}><RotateCcw size={13} aria-hidden="true"/>Retry</PrimaryButton>
       {onOpen && <Button type="button" variant="outline" size="sm" onClick={onOpen}>Open editor</Button>}
