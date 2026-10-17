@@ -6,6 +6,14 @@ export const EDITOR_TOKEN_LIMITS = { requestBytes: 208_000, transportBytes: 24_0
 export const EDITOR_RAW_INPUT_LIMIT = 1_000_000;
 type TokenLimits = { [K in keyof typeof EDITOR_TOKEN_LIMITS]: number };
 type NativeCacheModel = 'anthropic' | 'openai';
+/** Financial token ceilings are a server-controlled benchmark/debug opt-in.
+ * Normal editing retains context projection and the per-call resource cap. */
+export function editorTokenBudgetEnabled(env:Readonly<Record<string,string|undefined>>=process.env){
+  const value=env.EDITOR_ENFORCE_TOKEN_BUDGET;
+  if(value===undefined||value===''||value==='false')return false;
+  if(value==='true')return true;
+  throw new Error('EDITOR_ENFORCE_TOKEN_BUDGET must be true or false.');
+}
 const record = (value:unknown):Record<string,unknown> => value!==null&&typeof value==='object'&&!Array.isArray(value)?value as Record<string,unknown>:{};
 const count = (value:unknown):value is number => typeof value==='number'&&Number.isSafeInteger(value)&&value>=0;
 
@@ -117,9 +125,9 @@ export class AssistantTokenBudget {
     };
   }
 
-  middleware(selectedClipIds: readonly string[] = [], initialRevision?: number, countInput?:(params:LanguageModelV4CallOptions)=>Promise<number>): LanguageModelMiddleware {
+  middleware(selectedClipIds: readonly string[] = [], initialRevision?: number, countInput?:(params:LanguageModelV4CallOptions)=>Promise<number>, enforce = true): LanguageModelMiddleware {
     const exposedResults = new Map<string, LanguageModelV4ToolResultPart>();
-    return {
+    const projection:LanguageModelMiddleware={
       transformParams: async ({ params }) => {
         const projected = compactEditorPrompt(params.prompt, selectedClipIds, initialRevision);
         // Claude's preserved thinking and prefix cache require append-only
@@ -132,6 +140,12 @@ export class AssistantTokenBudget {
         }) } as typeof message);
         return { ...params, prompt, maxOutputTokens: Math.min(params.maxOutputTokens ?? this.limits.outputPerCall, this.limits.outputPerCall) };
       },
+    };
+    // Keep compaction and provider continuation identity even when financial
+    // test ceilings are off. Do not call counting endpoints in normal edits.
+    if(!enforce)return projection;
+    return {
+      ...projection,
       wrapGenerate: async ({ params, model, doGenerate }) => {
         this.estimateInput(params);
         const counted=countInput?await countInput(params):undefined;

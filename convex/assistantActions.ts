@@ -4,7 +4,8 @@ import { EDITOR_STYLE_RULES } from "../lib/ai/editor-style";
 import { wrapLanguageModel } from "ai";
 import { openAIEditorImages } from "../lib/ai/openai-editor-images";
 import { anthropicTokenCounter } from "../lib/ai/anthropic-token-count";
-import { AssistantTokenBudget, AssistantTokenBudgetError, EDITOR_TOKEN_LIMITS } from "../lib/ai/token-budget";
+import { openAITokenCounter } from '../lib/ai/openai-token-count';
+import { AssistantTokenBudget, AssistantTokenBudgetError, EDITOR_TOKEN_LIMITS, editorTokenBudgetEnabled } from "../lib/ai/token-budget";
 import { AssistantCostLog } from '../lib/ai/cost-log';
 import { modelTimeline, modelAssetAnalysis, EDITOR_CONTEXT_NOTICE, EDITOR_CONTEXT_BOUNDARY } from "../lib/ai/editor-context";
 import { assistantFailureReason } from "../lib/ai/assistant-error";
@@ -383,7 +384,14 @@ export const respond = internalAction({
       const { provider, modelId } = selection;
       const gateway = provider === 'gateway';
       const tokenBudget = new AssistantTokenBudget();
-      const model = wrapLanguageModel({ model: provider === 'openai' ? openai.responses(modelId) : gateway ? convexGateway(modelId) : anthropic(modelId), middleware: [...(provider === 'openai' ? [openAIEditorImages] : []), tokenBudget.middleware(args.selectedClipIds ?? (args.selectedClipId ? [args.selectedClipId] : []), editSession.revision,provider==='anthropic'&&process.env.ANTHROPIC_API_KEY?anthropicTokenCounter(modelId,process.env.ANTHROPIC_API_KEY):undefined)] });
+      const enforceTokenBudget=editorTokenBudgetEnabled();
+      let countInput:ReturnType<typeof openAITokenCounter>|undefined;
+      if(enforceTokenBudget){
+        if(provider==='openai'&&process.env.OPENAI_API_KEY)countInput=openAITokenCounter(modelId,process.env.OPENAI_API_KEY,measurement=>console.log(`[ai-budget] ${JSON.stringify({timestamp:new Date().toISOString(),projectId:args.projectId,runId:args.runId,model:modelId,...measurement})}`));
+        else if(provider==='anthropic'&&process.env.ANTHROPIC_API_KEY)countInput=anthropicTokenCounter(modelId,process.env.ANTHROPIC_API_KEY);
+      }
+      console.log(`[ai-budget] ${JSON.stringify({timestamp:new Date().toISOString(),projectId:args.projectId,runId:args.runId,enforced:enforceTokenBudget})}`);
+      const model = wrapLanguageModel({ model: provider === 'openai' ? openai.responses(modelId) : gateway ? convexGateway(modelId) : anthropic(modelId), middleware: [...(provider === 'openai' ? [openAIEditorImages] : []), tokenBudget.middleware(args.selectedClipIds ?? (args.selectedClipId ? [args.selectedClipId] : []), editSession.revision,countInput,enforceTokenBudget)] });
       const providerOptions = editorProviderOptions(selection);
       const agent = new Agent(components.agent, { name: "Revline", languageModel: model, tools, contextOptions: { recentMessages: 100, excludeToolMessages: false }, stopWhen: [stepCountIs(15), ({ steps }) => hasRepeatedToolFailures(steps)], instructions: `${EDITOR_STYLE_RULES}
 # Editing rules
