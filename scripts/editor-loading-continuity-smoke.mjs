@@ -30,7 +30,7 @@ const mocks = {
   'project-draft': `export async function takeFiles(){return []}export async function acknowledgeDraftFiles(){}`,
   'upload-source': `export async function uploadSourceFile(){throw new Error('Uploads are outside this fixture')}`,
 };
-const bundle = await build({ stdin: { contents: fixture, resolveDir: process.cwd(), loader: 'tsx' }, bundle: true, format: 'iife', platform: 'browser', jsx: 'automatic', write: false, outdir: '/tmp/revline-editor-loading-fixture', define: { 'process.env.NODE_ENV': '"production"' }, plugins: [{ name: 'scoped-editor-fixture', setup(build) {
+const bundle = await build({ stdin: { contents: fixture, resolveDir: process.cwd(), loader: 'tsx' }, bundle: true, format: 'iife', platform: 'browser', jsx: 'automatic', write: false, outdir: '/tmp/revline-editor-loading-fixture', define: { 'process.env.NODE_ENV': '"production"', 'process.env': '{}' }, plugins: [{ name: 'scoped-editor-fixture', setup(build) {
   build.onResolve({ filter: /^(convex\/react|@convex-dev\/agent\/react)$/ }, args => ({ path: args.path, namespace: 'mock' }));
   build.onResolve({ filter: /(?:^|\/)(editor-shell|timeline-share-dialog|workspace-nav|project-draft|upload-source)$/ }, args => ({ path: args.path.split('/').at(-1), namespace: 'mock' }));
   build.onLoad({ filter: /.*/, namespace: 'mock' }, args => ({ contents: mocks[args.path], loader: 'tsx', resolveDir: process.cwd() }));
@@ -45,7 +45,7 @@ const server = createServer((request,response) => {
 await new Promise(resolve => server.listen(0,'127.0.0.1',resolve));
 const browser = await puppeteer.launch({headless:true,args:['--no-sandbox','--disable-dev-shm-usage','--js-flags=--max-old-space-size=512']});
 const page = await browser.newPage(), errors=[];
-page.on('pageerror',error=>errors.push(error.message));page.setDefaultTimeout(10_000);
+page.on('pageerror',error=>{errors.push(error.message);console.error(error.message)});page.setDefaultTimeout(10_000);
 const flush = () => page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
 async function snapshotLoading(stage) {
   await flush();
@@ -57,7 +57,7 @@ async function snapshotLoading(stage) {
   assert.equal(view.planLoading,false,`${stage}: no separate plan-check screen flashes`);
   assert.equal(view.ready,false,`${stage}: editor stays hidden until data is ready`);
   assert.equal(view.billing,false,`${stage}: unresolved billing does not show denial`);
-  assert.match(view.status,/Preparing footage…/);
+  assert.match(view.status,/Processing footage…/);
   return {text:view.text,rect:view.rect,background:view.background,status:view.status};
 }
 async function setState(state) { await page.evaluate(state=>{Object.assign(window.mock,state);window.mock.notify()},state);await flush(); }

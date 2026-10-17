@@ -3,15 +3,16 @@ import { NEW_PROJECT_PATH } from '@/lib/workspace-routes';
 import { userError } from '@/lib/user-error';
 
 import { NEW_WORKSPACE_LABEL } from '@/lib/editor/workspace-labels';
-import { useRef, useState, type ReactNode } from 'react';
+import { useRef, useState, type ReactNode, type MouseEvent } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useClerk, useUser } from '@clerk/nextjs';
 import { useConvexAuth, useQuery } from 'convex/react';
 import { Check, ChevronDown, Cloud, Copy, CreditCard, Database, Download, Film, History, LoaderCircle, LogOut, Moon, PanelsTopLeft, Pencil, Plus, Redo2, Share2, UserRound, Undo2 } from 'lucide-react';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
 import { Brand } from './brand';
+import { startNewWorkspace } from './start-new-workspace';
 import { PrimaryButton } from './primary-button';
 import { useWorkspaceTheme } from './theme-provider';
 import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
@@ -65,6 +66,8 @@ export interface WorkspaceNavProps {
 
 export function WorkspaceNav({ title = NEW_WORKSPACE_LABEL, editorHref, active = 'chat', demo = false, saving, canUndo, canRedo, onUndo, onRedo, onFootage, onExport, onShare, shareDisabled, exportDisabled, onRename, chatId, editorControls }: WorkspaceNavProps) {
   const pathname = usePathname();
+  const router = useRouter();
+  const startingWorkspace = useRef(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const { chats, loading } = useWorkspaceChats(demo, historyOpen, 4);
   const { user, isSignedIn, isLoaded } = useUser();
@@ -97,12 +100,21 @@ export function WorkspaceNav({ title = NEW_WORKSPACE_LABEL, editorHref, active =
     try { await navigator.clipboard.writeText(chatId); setCopiedId(true); setCopyError(''); }
     catch { setCopyError('Could not copy the chat ID.'); }
   }
+  async function newWorkspace(event: MouseEvent<HTMLAnchorElement>) {
+    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    event.preventDefault();
+    if (startingWorkspace.current) return;
+    startingWorkspace.current = true;
+    try { await startNewWorkspace(user?.id); router.push(NEW_PROJECT_PATH); }
+    catch (reason) { setAccountError(userError(reason, 'Could not open a new workspace.')); }
+    finally { startingWorkspace.current = false; }
+  }
   return <><header className="workspace-nav">
-    <Link href={NEW_PROJECT_PATH} className="workspace-nav-brand" aria-label="Revline home"><Brand /></Link>
+    <Link href={NEW_PROJECT_PATH} onClick={newWorkspace} className="workspace-nav-brand" aria-label="Revline home"><Brand /></Link>
     <span className="workspace-nav-divider" aria-hidden="true" />
     <DropdownMenu onOpenChange={open => { setHistoryOpen(open); if (open) { setCopiedId(false); setCopyError(''); } }}><DropdownMenuTrigger asChild><button ref={historyTrigger} className="workspace-chat-trigger" aria-label="Open chat menu"><span>{title}</span><ChevronDown size={13} /></button></DropdownMenuTrigger>
       <DropdownMenuContent align="start" sideOffset={10} className="workspace-menu workspace-history-menu" onCloseAutoFocus={event => { if (renameOpen) event.preventDefault(); }}>
-        <DropdownMenuItem asChild className="workspace-menu-item"><Link href={NEW_PROJECT_PATH}><Plus size={16} />{NEW_WORKSPACE_LABEL}</Link></DropdownMenuItem>
+        <DropdownMenuItem asChild className="workspace-menu-item"><Link href={NEW_PROJECT_PATH} onClick={newWorkspace}><Plus size={16} />{NEW_WORKSPACE_LABEL}</Link></DropdownMenuItem>
         {onRename && <DropdownMenuItem className="workspace-menu-item" onSelect={() => { setNewTitle(title); setRenameError(''); setRenameOpen(true); }}><Pencil size={15} />Rename chat</DropdownMenuItem>}
         {chatId && <DropdownMenuItem className="workspace-menu-item" onSelect={event => { event.preventDefault(); void copyChatId(); }}>{copiedId ? <Check size={15} /> : <Copy size={15} />}{copiedId ? 'Chat ID copied' : 'Copy chat ID'}</DropdownMenuItem>}
         {copyError && <p className="workspace-inline-error" role="alert">{copyError}</p>}

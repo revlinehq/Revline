@@ -22,6 +22,7 @@ import { FootageProcessingCard, type FootageProcessingFile, type FootageProcessi
 import { RecentProjects } from './recent-projects';
 import { WorkspaceNav } from './workspace-nav';
 import { acknowledgeDraftFiles, stashFiles, takeFiles } from './project-draft';
+import { NEW_WORKSPACE_EVENT } from './start-new-workspace';
 import './shared.css';
 import './new-conversation.css';
 
@@ -68,6 +69,11 @@ export function NewConversation() {
   const busy = linkStarting || (processing?.phase !== 'error' && (processing !== null || hasMedia));
 
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; unsubscribe.current?.(); }; }, []);
+  useEffect(() => {
+    const fresh = () => { reset(); setDraftReady(true); };
+    window.addEventListener(NEW_WORKSPACE_EVENT, fresh);
+    return () => window.removeEventListener(NEW_WORKSPACE_EVENT, fresh);
+  }, [userId]);
 
   useEffect(() => {
     if (!isLoaded) return;
@@ -142,6 +148,7 @@ export function NewConversation() {
       return;
     }
     submitting.current = true;
+    const epoch = draftEpoch.current;
     setError('');
     try {
       const prompt = brief.current.trim();
@@ -179,8 +186,9 @@ export function NewConversation() {
             await attachThumbnail({ assetId, storageId });
           },
         }, progress),
-        asset: async (projectId, assetId) => {
-          const asset = await convex.query(api.assets.get, { projectId, assetId });
+        asset: (projectId, assetId) => convex.query(api.assets.get, { projectId, assetId }),
+        prepare: async (projectId, asset) => {
+          const assetId = asset._id as Id<'assets'>;
           if (asset.kind === 'video' && !asset.audioExtracted) {
             await prepareVideoAudio(convex,projectId, assetId);
             return convex.query(api.assets.get, { projectId, assetId });
@@ -194,7 +202,7 @@ export function NewConversation() {
         save: async (projectId, timeline, expectedRevision) => (await saveTimeline({ projectId, timeline, expectedRevision })).revision,
         acknowledge: file => acknowledgeDraftFiles([file]),
       });
-      if (!mounted.current) return;
+      if (!mounted.current || draftEpoch.current !== epoch) return;
       try {
         if (prompt) sessionStorage.setItem('revline:brief:' + projectId, prompt);
         sessionStorage.removeItem(briefKey);
@@ -205,11 +213,11 @@ export function NewConversation() {
       clearProjectImportJob(activeJob);
       router.push('/editor/' + projectId);
     } catch (cause) {
-      if (mounted.current) {
+      if (mounted.current && draftEpoch.current === epoch) {
         setError(userError(cause, 'Could not prepare your footage. Retry to continue from where it stopped.'));
         setProcessing(previous => ({ ...(previous ?? { index: 1, total: files.length + cloudIds.length, percent: 0 }), phase: 'error' }));
       }
-      submitting.current = false;
+      if (draftEpoch.current === epoch) submitting.current = false;
     }
   }
 
@@ -222,6 +230,7 @@ export function NewConversation() {
     const job = getProjectImportJob(userId ?? undefined);
     if (job) clearProjectImportJob(job);
     unsubscribe.current?.();
+    submitting.current = false;
     session.current = createProjectImportSession();
     draftEpoch.current++;
     setFiles([]); setCloudIds([]); setProcessing(null); setError('');

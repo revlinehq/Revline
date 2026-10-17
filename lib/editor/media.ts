@@ -30,33 +30,67 @@ export async function inspectMedia(file:File,onThumbnail?:(image:Blob)=>void):Pr
   }finally{URL.revokeObjectURL(url);}
 }
 export type UploadedPart = { partNumber: number; etag: string };
-export function uploadPart(url: string, blob: Blob, onProgress: (bytes: number) => void): Promise<UploadedPart> {
+export function uploadPart(url: string, blob: Blob, onProgress: (bytes: number) => void, signal?: AbortSignal): Promise<UploadedPart> {
   return new Promise((resolve, reject) => {
+    if (signal?.aborted) { reject(signal.reason); return; }
     const request = new XMLHttpRequest();
+    const abort = () => request.abort();
+    const cleanup = () => signal?.removeEventListener('abort', abort);
+    const fail = (error: unknown) => { cleanup(); reject(error); };
     request.open('PUT', url); request.setRequestHeader('Content-Type', 'application/octet-stream');
     request.timeout = 10 * 60_000;
     request.upload.onprogress = event => onProgress(event.loaded);
     request.onload = () => {
+      cleanup();
       if (request.status < 200 || request.status >= 300) { reject(new Error('Upload failed. Please try again.')); return; }
       try { const result = JSON.parse(request.responseText) as UploadedPart; if (!result.etag || !Number.isInteger(result.partNumber)) throw new Error(); resolve(result); }
       catch { reject(new Error('Cloudflare did not confirm this upload part.')); }
     };
-    request.onerror = () => reject(new Error('Upload connection interrupted. Please try again.'));
-    request.ontimeout = () => reject(new Error('The upload connection timed out. Please try again.'));
+    request.onerror = () => fail(new Error('Upload connection interrupted. Please try again.'));
+    request.ontimeout = () => fail(new Error('The upload connection timed out. Please try again.'));
+    request.onabort = () => fail(signal?.reason ?? new Error('Upload cancelled.'));
+    signal?.addEventListener('abort', abort, { once: true });
     request.send(blob);
   });
 }
 export async function uploadMultipart(file: File, partSize: number, getUrl: (partNumber: number) => Promise<string>, onProgress: (percent: number) => void) {
-  const parts: UploadedPart[] = [];
-  for (let offset = 0; offset < file.size; offset += partSize) {
-    const blob = file.slice(offset, Math.min(file.size, offset + partSize));
-    const partNumber = parts.length + 1;
-    let uploaded: UploadedPart | undefined;
-    for (let attempt = 0; attempt < 3; attempt++) {
-      try { uploaded = await uploadPart(await getUrl(partNumber), blob, bytes => onProgress(Math.min(99, Math.round((offset + bytes) / file.size * 100)))); break; }
-      catch (error) { if (attempt === 2) throw error; await new Promise(resolve => setTimeout(resolve, 500 * 2 ** attempt)); }
-    }
-    parts.push(uploaded!);
+  if (!Number.isFinite(partSize) || partSize <= 0) throw new Error('Invalid upload part size.');
+  const partCount = Math.ceil(file.size / partSize), parts: UploadedPart[] = new Array(partCount);
+  const loaded = new Array<number>(partCount).fill(0), controller = new AbortController();
+  let nextPart = 0, loadedBytes = 0, lastPercent = -1;
+  const report = (index: number, bytes: number, size: number) => {
+    if (controller.signal.aborted) return;
+    // Keep each part's high-water mark across retries; retransmitted bytes never
+    // count twice or make the progress bar jump backwards.
+    const amount = Math.max(loaded[index], Math.min(bytes, size));
+    loadedBytes += amount - loaded[index]; loaded[index] = amount;
+    const percent = Math.min(99, Math.round(loadedBytes / file.size * 100));
+    if (percent !== lastPercent) { lastPercent = percent; onProgress(percent); }
+  };
+  try {
+    await Promise.all(Array.from({ length: Math.min(3, partCount) }, async () => {
+      while (!controller.signal.aborted) {
+        const index = nextPart++;
+        if (index >= partCount) return;
+        const partNumber = index + 1, offset = index * partSize;
+        const blob = file.slice(offset, Math.min(file.size, offset + partSize));
+        for (let attempt = 0; attempt < 3; attempt++) {
+          try {
+            const url = await getUrl(partNumber);
+            const uploaded = await uploadPart(url, blob, bytes => report(index, bytes, blob.size), controller.signal);
+            if (uploaded.partNumber !== partNumber) throw new Error('Cloudflare confirmed the wrong upload part.');
+            parts[index] = uploaded; report(index, blob.size, blob.size); break;
+          } catch (error) {
+            if (controller.signal.aborted || attempt === 2) throw error;
+            await new Promise(resolve => setTimeout(resolve, 500 * 2 ** attempt));
+            if (controller.signal.aborted) throw controller.signal.reason;
+          }
+        }
+      }
+    }));
+  } catch (error) {
+    // Stop sibling PUTs before uploadSourceFile releases the multipart lease.
+    controller.abort(error); throw error;
   }
   onProgress(100); return parts;
 }

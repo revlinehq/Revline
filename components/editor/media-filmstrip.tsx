@@ -57,7 +57,7 @@ export const MediaFilmstrip = memo(function MediaFilmstrip({ asset, width, heigh
     const retainedEnd = Math.min(sourceEnd, sourceStart + duration * playbackRate);
     const previousInSource = previous && previous.time >= 0 && previous.time <= sourceEnd ? previous : undefined;
     const fallback = exact ? undefined : previousInSource ?? cachedNearestVideoThumbnail(asset._id, frame.time, [sourceStart, retainedEnd]) ?? cachedNearestVideoThumbnail(asset._id, frame.time, [0, sourceEnd]);
-    const image = exact ?? fallback?.image;
+    const image = exact ?? fallback?.image ?? asset.thumbnailUrl;
     return <div className="filmstrip-frame" data-source-time={frame.time} key={frame.index} style={{ left: frame.left, width: frameWidth }}>{image ? <img src={image} alt="" draggable={false} data-thumbnail-exact={!!exact} data-thumbnail-sampled-time={exact ? frame.time : fallback?.time} onLoad={asset.kind === 'image' ? event => { const image = event.currentTarget; if (image.naturalWidth && image.naturalHeight) setImageAspect(image.naturalWidth / image.naturalHeight); } : undefined} /> : <Film size={12} />}</div>;
   })}</div>;
 });

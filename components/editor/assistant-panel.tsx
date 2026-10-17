@@ -1,4 +1,5 @@
 'use client';
+import { isCasualChat } from '@/lib/editor/chat-request';
 import { userError } from '@/lib/user-error';
 
 import { PRODUCTION_CLAUDE_MODEL_CHOICES } from '@/lib/ai/claude-model-policy';
@@ -79,6 +80,7 @@ function AssistantPanelBody({ messages, running, configured, error, onSend, onSt
   const answering = running || sending || !!pendingReply;
   const waiting = answering || !!activity;
   const latestUser = messages.findLast(message => message.role === 'user');
+  const replyLabel = isCasualChat(pendingReply?.text ?? latestUser?.text ?? '') ? 'Replying…' : 'Editing…';
   const optimisticRequest = pendingReply && latestUser?.id === pendingReply.previousUserId ? pendingReply : null;
   const turnId = optimisticRequest?.id ?? latestUser?.id ?? 'imported';
   const demoNoteMessageId = demo ? messages.findLast(message => message.role === 'assistant')?.id : undefined;
@@ -149,7 +151,7 @@ function AssistantPanelBody({ messages, running, configured, error, onSend, onSt
         return <div className={`assistant-turn ${group.id === turnId ? 'is-latest-turn' : ''}`} data-turn-id={group.id} key={group.id}>
           {groupMessages.filter(message => message.role === 'user').map(message => <article key={message.id} data-message-id={message.id} data-message-status={message.status} className="chat-message chat-user"><p>{message.text}</p></article>)}
           {(replies.length > 0 || editing || cards.length > 0) && <div className="assistant-reply">
-            <AssistantReplyHeader loading={loading} active={editing} label={stopState==='stopping'?'Stopping…':activity || 'Editing…'} detail={processingDetail(activity,activitySource)}/>
+            <AssistantReplyHeader loading={loading} active={editing} label={stopState==='stopping'?'Stopping…':activity || replyLabel} detail={processingDetail(activity,activitySource)}/>
             {replies.map(message => !message.text && !message.tools?.length && message.id !== demoNoteMessageId ? null : <article key={message.id} data-message-id={message.id} data-message-status={message.status} className="chat-message chat-assistant">
               {message.text && <AssistantResponseText text={message.text} streaming={message.status === 'streaming'} />}
               {message.tools?.map((tool, i) => <div className="tool-result" key={`${tool}-${i}`}><Check size={12} />{tool}</div>)}
@@ -161,7 +163,7 @@ function AssistantPanelBody({ messages, running, configured, error, onSend, onSt
           </div>}
         </div>;
       })}
-      {!groups.length && waiting && <div className="assistant-reply"><AssistantReplyHeader loading label={stopState==='stopping'?'Stopping…':activity || 'Editing…'} detail={processingDetail(activity,activitySource)}/></div>}
+      {!groups.length && waiting && <div className="assistant-reply"><AssistantReplyHeader loading label={stopState==='stopping'?'Stopping…':activity || replyLabel} detail={processingDetail(activity,activitySource)}/></div>}
       {!waiting && stopState==='stopped' && <ProcessingStatus label="Stopped." detail="Your existing edit is still here." state="stopped"/>}
       {!running && suggestions?.items.length && onSuggestion && configured ? <div className="assistant-source-suggestions" aria-label="Suggested edits from this footage"><span title={suggestions.sourceName}>Ideas for {suggestions.sourceName}</span>{suggestions.items.map((suggestion, index) => <button key={`${suggestions.clipId}-${index}`} type="button" disabled={sending || !!pendingReply} onClick={() => void chooseSuggestion(suggestion)}><span>{suggestion.label}</span><ArrowUpRight size={14} aria-hidden="true" /></button>)}</div> : null}
       {(error || localError) && <ProcessingStatus className="chat-error" label="Couldn’t finish this step." detail={localError || error} state="error"/>}

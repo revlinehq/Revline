@@ -3,7 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev --hostname localhost",
+    "dev": "node scripts/dev.mjs",
+    "dev:frontend": "next dev --hostname localhost --port 3001",
     "build": "next build",
     "start": "next start --hostname localhost",
     "typecheck": "next typegen && tsc --noEmit",

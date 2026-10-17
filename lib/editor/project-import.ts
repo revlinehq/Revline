@@ -1,10 +1,10 @@
 import type { Id } from '@/convex/_generated/dataModel';
-import { addMediaClip, patchClip } from './operations';
+import { addMediaClip, patchClip, separateVideoClips } from './operations';
 import { layerGroup, timelineDuration, type MediaAsset, type Timeline } from './types';
 import type { SourceUploadPhase } from './upload-source';
 
 export type ImportFile = { id: string; file: File };
-export type ProjectImportProgress = { phase: 'preparing' | SourceUploadPhase | 'opening'; index: number; total: number; percent: number };
+export type ProjectImportProgress = { phase: 'preparing' | SourceUploadPhase | 'processing' | 'opening'; index: number; total: number; percent: number };
 export type ProjectImportSession = { projectId?: Id<'projects'>; uploaded: Map<string, Id<'assets'>>; completed: Set<string> };
 export const createProjectImportSession = (): ProjectImportSession => ({ uploaded: new Map(), completed: new Set() });
 
@@ -14,6 +14,7 @@ type ImportDependencies = {
   project: (projectId: Id<'projects'>) => Promise<{ timeline: Timeline; revision: number }>;
   upload: (projectId: Id<'projects'>, file: File, progress: (percent: number, phase: SourceUploadPhase) => void) => Promise<Id<'assets'>>;
   asset: (projectId: Id<'projects'>, assetId: Id<'assets'>) => Promise<MediaAsset>;
+  prepare?: (projectId: Id<'projects'>, asset: MediaAsset) => Promise<MediaAsset>;
   save: (projectId: Id<'projects'>, timeline: Timeline, revision: number) => Promise<number>;
   acknowledge: (file: File) => Promise<void>;
 };
@@ -52,6 +53,19 @@ export async function importProjectSources(
         const next = patchClip(addMediaClip(timeline, asset, id, end), id, { duration });
         revision = await dependencies.save(projectId, next, revision);
         timeline = next;
+      }
+    }
+    if (dependencies.prepare) {
+      onProgress({ phase: 'processing', percent: 100, index: input.assetIds.length + index + 1, total });
+      const prepared = await dependencies.prepare(projectId, asset);
+      // The editor may have been opened while processing continued. Preserve any
+      // edits made there instead of saving the stale import snapshot over them.
+      ({ timeline, revision } = await dependencies.project(projectId));
+      const linked = separateVideoClips(timeline, prepared);
+      if (linked !== timeline) {
+        report(100, 'saving');
+        revision = await dependencies.save(projectId, linked, revision);
+        timeline = linked;
       }
     }
     await dependencies.acknowledge(source.file);

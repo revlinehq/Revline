@@ -58,10 +58,18 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
       const audioPath = join(directory, 'audio.m4a');
       const hasAudio = await extractSourceAudio(source, audioPath, signal);
       if (!hasAudio) return {};
-      const waveform = await measureAudioWaveform(audioPath, signal);
-      onProgress(75);
-      const audioAssetId = task.outputAssetId ?? await uploadMediaFile(audioPath, { ...credentials, projectId: task.projectId, kind: 'audio', contentType: 'audio/mp4', fileName: `${asset.fileName.replace(/\.[^.]+$/, '').slice(0, 245)}.m4a`, ...(asset.duration ? { duration: asset.duration } : {}) }, uploadContext, signal);
+      onProgress(50);
+      // Both operations only read the completed audio file. Wait for both on
+      // failure as well so task cleanup cannot remove a file still uploading.
+      const [waveformResult, uploadResult] = await Promise.allSettled([
+        measureAudioWaveform(audioPath, signal),
+        task.outputAssetId ? Promise.resolve(task.outputAssetId) : uploadMediaFile(audioPath, { ...credentials, projectId: task.projectId, kind: 'audio', contentType: 'audio/mp4', fileName: `${asset.fileName.replace(/\.[^.]+$/, '').slice(0, 245)}.m4a`, ...(asset.duration ? { duration: asset.duration } : {}) }, uploadContext, signal),
+      ]);
+      if (waveformResult.status === 'rejected') throw waveformResult.reason;
+      if (uploadResult.status === 'rejected') throw uploadResult.reason;
+      const waveform = waveformResult.value, audioAssetId = uploadResult.value;
       if (!audioAssetId) throw new Error('Could not store the extracted audio.');
+      onProgress(98);
       return { audioAssetId, waveform };
     }
     if (task.kind === 'waveform') return { waveform: await measureAudioWaveform(source, signal) };

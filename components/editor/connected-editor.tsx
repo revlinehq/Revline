@@ -22,6 +22,7 @@ import type { ExportSettings } from './export-dialog';
 import { EMPTY_TIMELINE, normalizeTimeline, type Timeline, type MediaAsset } from '@/lib/editor/types';
 import { addMediaClip, separateVideoClips } from '@/lib/editor/operations';
 import { prepareVideoAudio, prepareAudioWaveform } from '@/lib/editor/prepare-video-audio';
+import { isCasualChat } from '@/lib/editor/chat-request';
 import { uploadSourceFile } from '@/lib/editor/upload-source';
 import type { UploadProgress } from './footage-panel';
 const EMPTY_MESSAGES:ChatMessage[]=[];
@@ -133,7 +134,7 @@ function ProjectEditor({project}: {project:Doc<'projects'>}) {
   const waitForSave=()=>saves.wait();
   const sendRequest=async(prompt:string,context:Omit<Parameters<typeof send>[0],'projectId'|'prompt'>={})=>{
     aiStarting.current=true;
-    try{await preparingAudio.current;await waitForSave();await send({projectId,prompt,...context});}
+    try{if(!isCasualChat(prompt)){await preparingAudio.current;await waitForSave();}await send({projectId,prompt,...context});}
     finally{aiStarting.current=false;}
   };
 

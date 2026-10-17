@@ -34,6 +34,23 @@ describe('automatic project import', () => {
     expect(h.dependencies.save.mock.invocationCallOrder[0]).toBeLessThan(h.dependencies.acknowledge.mock.invocationCallOrder[0]);
   });
 
+  test('persists uploaded footage before slow audio preparation, then saves the linked pair', async () => {
+    const h = harness(176);
+    let finish!: () => void;
+    const ready = new Promise<void>(resolve => { finish = resolve; });
+    const prepare = vi.fn(async () => { await ready; return { _id: assetId, kind: 'video' as const, duration: 176, audioAssetId: 'audio', fileName: 'footage.mp4', url: null }; });
+    const progress: ProjectImportProgress[] = [];
+    const run = importProjectSources(createProjectImportSession(), { title: 'Phone video', files: [source()], assetIds: [] }, { ...h.dependencies, prepare }, value => progress.push(value));
+    await vi.waitFor(() => expect(prepare).toHaveBeenCalledTimes(1));
+    expect(h.timeline().clips.some(clip => clip.assetId === assetId)).toBe(true);
+    expect(progress.at(-1)?.phase).toBe('processing');
+    expect(h.dependencies.acknowledge).not.toHaveBeenCalled();
+    finish(); await run;
+    expect(h.timeline().clips.map(clip => clip.kind)).toEqual(['video', 'audio']);
+    expect(h.timeline().clips[0].audioSeparated).toBe(true);
+    expect(h.dependencies.acknowledge).toHaveBeenCalledTimes(1);
+  });
+
   test('retry preserves the project and completed upload after a failed timeline save', async () => {
     const h = harness();
     const session = createProjectImportSession();

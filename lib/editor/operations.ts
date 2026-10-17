@@ -134,7 +134,7 @@ export function addMediaClip(timeline: Timeline, asset: { _id: string; kind: Cli
   if (!Number.isFinite(start) || start < 0) throw new Error('Choose a valid timeline position.');
   const duration = asset.kind === 'image' ? 5 : asset.duration ?? 5;
   if (!Number.isFinite(duration) || duration < 1 / timeline.fps) throw new Error('This source is shorter than one frame. Choose another source.');
-  const next = placeOnFreeLayer(timeline, { id, kind: asset.kind, assetId: asset._id, track, start, duration, sourceStart: 0, volume: 1 });
+  const next = placeOnFreeLayer(timeline, { id, kind: asset.kind, assetId: asset._id, track, start, duration, sourceStart: 0, volume: 1, ...((asset.kind === 'video' || asset.kind === 'image') ? { fit: 'contain' as const } : {}) });
   return separateVideoClips(next, asset);
 }
 /** Preserve existing cuts and levels when giving a video's sound its own clip. */

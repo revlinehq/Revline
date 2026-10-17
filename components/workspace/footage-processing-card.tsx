@@ -14,7 +14,7 @@ export type FootageProcessingFile = {
   thumbnail?: string;
 };
 
-export type FootageProcessingPhase = 'connecting' | 'preparing' | 'reading' | 'uploading' | 'saving' | 'opening' | 'error';
+export type FootageProcessingPhase = 'connecting' | 'preparing' | 'reading' | 'uploading' | 'saving' | 'processing' | 'opening' | 'error';
 
 type FootageProcessingCardProps = {
   files: FootageProcessingFile[];
@@ -35,6 +35,7 @@ const phaseLabels: Record<FootageProcessingPhase, string> = {
   uploading: 'Uploading your footage',
   saving: 'Saving your project',
   opening: 'Opening your editor',
+  processing: 'Upload complete · Preparing audio',
   error: 'Your upload needs attention',
 };
 
@@ -45,9 +46,10 @@ export function FootageProcessingCard({ files, phase, index, total, percent, err
   const progress = Number.isFinite(percent) ? Math.min(100, Math.max(0, percent)) : 0;
   const failed = phase === 'error';
   const measurable = phase === 'uploading';
+  const transferring = ['connecting', 'preparing', 'reading', 'uploading'].includes(phase);
 
   const activity = measurable ? `Uploading clip ${fileIndex} of ${fileTotal} · ${Math.round(progress)}%` : phase === 'opening' ? undefined : `${phaseLabels[phase]}${fileTotal > 1 ? ` · ${fileIndex} of ${fileTotal}` : ''}`;
-  return <FootagePreparation thumbnail={file?.thumbnail || (file?.kind === 'image' ? file.url : undefined)} fileName={file?.name} activity={activity} error={failed ? error || 'Your footage could not be uploaded. Retry without choosing the files again.' : undefined}>
+  return <FootagePreparation thumbnail={file?.thumbnail || (file?.kind === 'image' ? file.url : undefined)} fileName={file?.name} activity={activity} label={transferring?'Uploading footage…':'Processing footage…'} detail={transferring?'Sending your files to your project.':undefined} error={failed ? error || 'Your footage could not be uploaded. Retry without choosing the files again.' : undefined}>
     {failed && <div className="footage-processing-actions">
       <PrimaryButton type="button" size="compact" onClick={onRetry}><RotateCcw size={13} aria-hidden="true"/>Retry</PrimaryButton>
       {onOpen && <Button type="button" variant="outline" size="sm" onClick={onOpen}>Open editor</Button>}
