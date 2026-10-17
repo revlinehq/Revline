@@ -42,6 +42,12 @@ function commandJson<T>(binary: string, args: string[]): T {
   try { return JSON.parse(execFileSync(binary, args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 45_000, maxBuffer: 24 * 1024 * 1024 })) as T; }
   catch { throw new BenchmarkError('Private CLI request failed; no command arguments or provider output were logged.'); }
 }
+export function verifyBenchmarkTokenBudget(fixture: Pick<Fixture, 'deploymentName' | 'usageEnvFile'>, readValue = (args: string[]) => execFileSync(process.execPath, args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 45_000, maxBuffer: 1024 * 1024 })) {
+  let value: string;
+  try { value = readValue([join(process.cwd(), 'node_modules/convex/bin/main.js'), 'env', 'get', 'EDITOR_ENFORCE_TOKEN_BUDGET', '--deployment', fixture.deploymentName, '--env-file', fixture.usageEnvFile]).replace(/\r?\n$/, ''); }
+  catch { throw new BenchmarkError('Cannot verify the target backend token-budget flag. Paid benchmarks require EDITOR_ENFORCE_TOKEN_BUDGET=true; no further benchmark projects or paid edits will be started.'); }
+  requireValue(value === 'true', 'Paid benchmarks require EDITOR_ENFORCE_TOKEN_BUDGET=true on the target backend. Normal editor budgets are off by default; this runner never changes environment variables.');
+}
 function jwtClaims(jwt: string) {
   try { return JSON.parse(Buffer.from(jwt.split('.')[1], 'base64url').toString()) as { sub?: string; exp?: number }; }
   catch { throw new BenchmarkError('The private authentication token is malformed.'); }
@@ -96,6 +102,12 @@ async function main() {
     requireValue(failed?.status === 'failed' && localIds.has(failed._id) && failed.error === history.proof.localFailureError, 'The historical local failure must match its exact persisted source error.');
   }
   const ledger = new CostLedger(fixture.maxModelCostUsd, fixture.perRunReserveUsd, priorKnownCostUsd);
+  if (values.run) {
+    requireValue(!process.env.CONVEX_DEPLOYMENT || process.env.CONVEX_DEPLOYMENT === `${fixture.target === 'production' ? 'prod' : 'dev'}:${fixture.deploymentName}`, 'Current Convex environment conflicts with the fixture target.');
+    requireValue(!process.env.NEXT_PUBLIC_CONVEX_URL || process.env.NEXT_PUBLIC_CONVEX_URL === fixture.convexUrl, 'Current public Convex URL conflicts with the fixture target.');
+    stage = 'server budget preflight';
+    verifyBenchmarkTokenBudget(fixture);
+  }
   const output = resolve(values.output);
   await mkdir(output, { recursive: true, mode: 0o700 }); await chmod(output, 0o700);
   if (values.run) {
@@ -105,7 +117,7 @@ async function main() {
     catch { throw new BenchmarkError('This output already has a benchmark run lock. Inspect the prior run and usage ledger before restarting.'); }
   }
   const save = (name: string, value: unknown) => writeFile(join(output, name), JSON.stringify(value, null, 2) + '\n', { mode: 0o600 });
-  const plan = { version: 1, target: fixture.target, deploymentName: fixture.deploymentName, models: fixture.models, serial: true, cases: cases.map(name => ({ name, prompt: casePrompt(name, 12) })), cost: { maxModelCostUsd: fixture.maxModelCostUsd, perRunReserveUsd: fixture.perRunReserveUsd, priorKnownCostUsd, reconciliationReceiptSha256: history ? createHash('sha256').update(await readFile(resolve(receiptInput!))).digest('hex') : null, conservativeInputUnitsPerRun: 300_000, rawInputTokensPerRun: 1_000_000, inputUnitWeights: { uncached: 1, cacheWrite: 1.25, nativeCacheRead: 0.25 }, nativePromptCacheTtl: { 'claude-sonnet-5-5': '5m', 'gpt-6.1-sol': '30m' }, outputTokensPerRun: 12_000, usdPerMillion: { input: 2, cacheRead: 0.1, cacheWrite: 2.5, output: 10 }, pricingReviewedOn: '2026-10-15', pricingSources: ['https://platform.claude.com/docs/en/about-claude/pricing', 'https://developers.openai.com/api/docs/models/gpt-6.1-sol'], note: 'Model cost estimates from persisted provider usage; preparation/analysis and hosted render costs are separate. The per-run reservation is a spending guard, not a provider billing cap.' }, analysisPreparation: fixture.analysisPreparation };
+  const plan = { version: 1, target: fixture.target, deploymentName: fixture.deploymentName, models: fixture.models, serial: true, cases: cases.map(name => ({ name, prompt: casePrompt(name, 12) })), cost: { maxModelCostUsd: fixture.maxModelCostUsd, perRunReserveUsd: fixture.perRunReserveUsd, priorKnownCostUsd, reconciliationReceiptSha256: history ? createHash('sha256').update(await readFile(resolve(receiptInput!))).digest('hex') : null, backendTokenBudget: { flag: 'EDITOR_ENFORCE_TOKEN_BUDGET', requiredValue: 'true', verified: values.run }, conservativeInputUnitsPerRun: 300_000, rawInputTokensPerRun: 1_000_000, inputUnitWeights: { uncached: 1, cacheWrite: 1.25, nativeCacheRead: 0.25 }, nativePromptCacheTtl: { 'claude-sonnet-5-5': '5m', 'gpt-6.1-sol': '30m' }, outputTokensPerRun: 12_000, usdPerMillion: { input: 2, cacheRead: 0.1, cacheWrite: 2.5, output: 10 }, pricingReviewedOn: '2026-10-15', pricingSources: ['https://platform.claude.com/docs/en/about-claude/pricing', 'https://developers.openai.com/api/docs/models/gpt-6.1-sol'], note: 'Model cost estimates from persisted provider usage; preparation/analysis and hosted render costs are separate. The per-run reservation is a spending guard, not a provider billing cap.' }, analysisPreparation: fixture.analysisPreparation };
   if (history) {
     const originalPlan = await privateJson<{ cases: typeof plan.cases; models: BenchmarkModel[] }>(history.files.plan.path);
     requireValue(digest(originalPlan.cases) === digest(plan.cases) && digest(originalPlan.models) === digest(plan.models), 'Controlled rerun prompts, cases and model order must match the original inputs.');
@@ -113,8 +125,6 @@ async function main() {
   await save('plan.json', plan);
   console.log(JSON.stringify({ mode: values.run ? 'run' : 'dry-run', target: fixture.target, models: fixture.models, cases, maxModelCostUsd: ledger.ceilingUsd, priorKnownCostUsd: ledger.priorKnownCostUsd, perRunReserveUsd: ledger.perRunReserveUsd, output }));
   if (!values.run) return;
-  requireValue(!process.env.CONVEX_DEPLOYMENT || process.env.CONVEX_DEPLOYMENT === `${fixture.target === 'production' ? 'prod' : 'dev'}:${fixture.deploymentName}`, 'Current Convex environment conflicts with the fixture target.');
-  requireValue(!process.env.NEXT_PUBLIC_CONVEX_URL || process.env.NEXT_PUBLIC_CONVEX_URL === fixture.convexUrl, 'Current public Convex URL conflicts with the fixture target.');
   stage = 'authentication';
   let cachedJwt = '', refreshedAt = 0;
   const token = async () => {
@@ -182,6 +192,7 @@ async function main() {
         requireValue(!stopRequested, 'Benchmark interrupted before the next paid call.');
         requireValue(!ledger.blocked && ledger.spentUsd + ledger.perRunReserveUsd <= ledger.ceilingUsd + 1e-9, 'Remaining model-cost budget cannot reserve the next run.');
         stage = `${caseName}/${model}/create`;
+        verifyBenchmarkTokenBudget(fixture);
         const original = caseName === 'subtitles' ? sourceAssets.speech : sourceAssets.cuts;
         const projectId = await (await client()).mutation(api.projects.create, { title: `${fixture.projectTitlePrefix}Benchmark ${caseName} ${model} ${Date.now()}`, aspectRatio: 'landscape', assetIds: [original._id] });
         requireValue(!fixture.allowedSourceProjectIds.includes(projectId), 'A benchmark project must be fresh and separate from source projects.');
@@ -202,6 +213,7 @@ async function main() {
         if (history && caseName === history.attempt.case) requireValue(result.inputSha256 === history.attempt.inputSha256, 'The controlled rerun must retain the original timeline, prompt and saved analysis.');
         await summary();
         stage = `${caseName}/${model}/send`;
+        verifyBenchmarkTokenBudget(fixture);
         ledger.reserve(); await summary();
         const startedAt = Date.now(); active = { client, projectId };
         await (await client()).mutation(api.assistant.send, { projectId, prompt, modelChoice: model === 'claude-sonnet-5-5' ? 'sonnet' : 'gpt-6.1-sol', selectedClipIds: ['benchmark-source'], playhead: 0 });
@@ -284,9 +296,11 @@ function toolCalls(messages: StoredMessage[]) {
   }
   return counts;
 }
-process.on('SIGINT', () => { stopRequested = true; });
-process.on('SIGTERM', () => { stopRequested = true; });
-void main().catch(error => {
-  console.error(JSON.stringify({ stage, error: error instanceof BenchmarkError || error instanceof BenchmarkGuardError ? error.message : 'Benchmark failed; private error details were withheld.', stopped: true }));
-  process.exitCode = 1;
-});
+if (require.main === module) {
+  process.on('SIGINT', () => { stopRequested = true; });
+  process.on('SIGTERM', () => { stopRequested = true; });
+  void main().catch(error => {
+    console.error(JSON.stringify({ stage, error: error instanceof BenchmarkError || error instanceof BenchmarkGuardError ? error.message : 'Benchmark failed; private error details were withheld.', stopped: true }));
+    process.exitCode = 1;
+  });
+}

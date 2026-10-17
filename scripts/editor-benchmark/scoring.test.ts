@@ -1,5 +1,21 @@
 import { expect, test } from 'vitest';
 import { CostLedger, initialTimeline, scoreTimeline, summarizeUsage, type StoredMessage } from './scoring';
+import { verifyBenchmarkTokenBudget } from '../editor-model-benchmark';
+
+const budgetTarget = { deploymentName: 'fixture-backend-123', usageEnvFile: '/private/fixture.env' };
+test('paid benchmark verifies the exact backend debug flag with its explicit deployment and environment', () => {
+  let command: string[] = [];
+  verifyBenchmarkTokenBudget(budgetTarget, args => { command = args; return 'true\n'; });
+  expect(command.slice(1)).toEqual(['env', 'get', 'EDITOR_ENFORCE_TOKEN_BUDGET', '--deployment', budgetTarget.deploymentName, '--env-file', budgetTarget.usageEnvFile]);
+  expect(command[0]).toMatch(/node_modules\/convex\/bin\/main\.js$/);
+});
+test.each(['', 'false', 'TRUE', '"true"', 'true\nfalse', ' true\n', 'true \n', 'true\n\n'])('paid benchmark refuses an unset or disabled backend guard: %j', value => {
+  expect(() => verifyBenchmarkTokenBudget(budgetTarget, () => value)).toThrow('Paid benchmarks require EDITOR_ENFORCE_TOKEN_BUDGET=true');
+});
+test('unavailable backend policy refuses paid work without exposing raw CLI errors', () => {
+  expect(() => verifyBenchmarkTokenBudget(budgetTarget, () => { throw new Error('PRIVATE CLI CONTENT'); })).toThrow('Cannot verify the target backend token-budget flag.');
+  try { verifyBenchmarkTokenBudget(budgetTarget, () => { throw new Error('PRIVATE CLI CONTENT'); }); } catch (error) { expect(String(error)).not.toContain('PRIVATE CLI CONTENT'); }
+});
 
 const source = initialTimeline('precise-cuts', 'source-asset', 6);
 const cutTimeline = { ...source, clips: [
