@@ -273,7 +273,7 @@ test('worker phase heartbeats drive honest chat status and retries reset old pro
     const requestId=await ctx.db.insert('analysisRequests',{ownerId:'owner',projectId:f.projectId,assetId:f.assetId,aiRunId:'phase-run',mode:'transcribe',status:'running',taskId,createdAt:Date.now(),expiresAt:Date.now()+240000});
     await ctx.db.patch(taskId,{analysisRequestId:requestId});
   });
-  for(const [activity,label] of [['downloading','Downloading footage…'],['sending-gemini','Sending to Gemini…'],['preparing-gemini','Preparing video…'],['analyzing','Analyzing footage…'],['retrying-analysis','Retrying analysis…']] as const){
+  for(const [activity,label] of [['downloading','Downloading footage…'],['sending-gemini','Preparing footage…'],['preparing-gemini','Preparing video…'],['analyzing','Analyzing footage…'],['retrying-analysis','Retrying analysis…']] as const){
     await f.t.mutation(api.mediaTasks.heartbeat,{taskId,leaseToken:work.leaseToken,progress:30,activity});
     expect(await f.owner.query(api.assistant.status,{projectId:f.projectId})).toMatchObject({activity:label,activityProgress:null});
   }

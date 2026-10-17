@@ -3,7 +3,7 @@ import type { VideoInspectionDiagnostic } from './video-inspection';
 export const MEDIA_ACTIVITY_LABELS = {
   downloading: 'Downloading footage…',
   'preparing-analysis': 'Preparing video…',
-  'sending-gemini': 'Sending to Gemini…',
+  'sending-gemini': 'Preparing footage…',
   'preparing-gemini': 'Preparing video…',
   analyzing: 'Analyzing footage…',
   'retrying-analysis': 'Retrying analysis…',
