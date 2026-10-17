@@ -212,3 +212,48 @@ readiness check.
 The allowlisted context, image source manifest, overlay Dockerfile, synthetic
 audio verification script and deployment evidence are retained locally under
 `.data/audio-activity-release/`.
+
+### 2026-10-17 inspection retry rollout
+
+Controller version `404d32a4-b4bd-4a0e-bda7-ecbe56a7ef69`, tagged `277b9e5`, uses
+`registry.cloudflare.com/701645e913477e567db69b11343f59d8/revline-media-processor@sha256:102201f0e6724c3f0edd32a86ac1418ef7dfb74cbbd8d7a173b2ce829d738017`.
+Deployment `f4cc790a-0598-419c-a3d5-1711573c925b` routes 100% of traffic to it.
+The local image `revline-media-processor:inspection-retry-v4` has ID
+`sha256:d779ad3089fd426d25ba205ab5669086ecd646d462eaa9ca47c4fe76c1375ea8`.
+Its source-only overlay adds 79,033 bytes to the retained audio activity image;
+no dependency reinstall, model download or Chromium ownership change was needed.
+The release label is v4; the queue protocol remains processor version 3.
+
+The runtime preserves terminal provider HTTP statuses, so an upstream HTTP 400
+fails without repeating the entire media task. Developer diagnostics are bounded
+and redact credentials and URLs; public errors use neutral language. The original
+rejected request's body was discarded, so its precise rejection reason remains
+unknown. This update prevents wasteful retries and retains a safe diagnostic for
+a later failure; it does not establish that the original request is now accepted.
+
+A worker-local cache retains completed immutable source and analysis files across
+attempts, scoped to backend, owner, project, source identity and encoding profile.
+Hard links preserve an active task's input when its cache entry is evicted.
+Retention is bounded to 512 MiB, 16 files and 20 minutes idle, with a 1 GiB
+free-space floor. Cache failures fall back to normal download and preparation.
+Fresh authorized task snapshots remain required; signed URLs are not cache keys.
+
+The exact image passed the runtime check as `node` with networking disabled and
+a 1-CPU/6-GiB cap. A synthetic video exercised the actual runner and FFmpeg through
+three mocked provider attempts: one source download, one encode, source and
+analysis reuse after task cleanup, a retryable 503, a terminal 400, redacted
+diagnostics and deletion of all temporary provider uploads. No external provider
+was called. Synthetic audio backfill and the concurrent decoder/cancellation
+checks passed again; 49 focused tests and TypeScript also passed. All 318
+allowlisted files were reconciled with zero unexplained source differences; two
+generated browser bundles retain the exact previously verified v3 image bytes.
+
+The fresh explicitly approved rollout used the digest-pinned configuration with
+`--keep-vars --strict`. The live image binding, backend variables, three secret
+bindings, compatibility settings and 100% routing were verified. The one-minute
+cron, instance size, concurrency and graceful drain behavior were preserved.
+The container application was ready with zero active instances. A bounded
+read-only production check accepted processor version 3, reported no claimable
+work, returned 404 for GET `/wake` and rejected an unauthenticated POST with 401.
+No paid model request, project mutation or new hosted media task was used for
+this verification. Local evidence is retained in `.data/inspection-retry-release/`.
