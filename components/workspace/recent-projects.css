@@ -3,9 +3,12 @@
 .recent-projects h2{display:flex;align-items:center;gap:8px;margin:0;font-size:13px;line-height:1.5;font-weight:500}
 .recent-projects-see-all{display:flex;align-items:center;gap:3px;margin-right:-6px;padding:6px;border-radius:5px;color:var(--ws-muted);font-size:11px;text-decoration:none}
 .recent-projects-see-all:hover{background:var(--ws-hover);color:var(--ws-text)}
-.recent-projects-list{list-style:none;margin:0;padding:0;border:1px solid var(--ws-border);border-radius:12px}
+.recent-projects-list{list-style:none;margin:0;padding:0;border:1px solid var(--ws-border);border-radius:12px;overflow:hidden}
 .recent-projects-list>li+li{border-top:1px solid var(--ws-border)}
-.recent-project-link{padding:12px 14px;border-radius:10px}
+.recent-project-link{padding:12px 14px;border-radius:0}
+.recent-projects-list>li:first-child>.recent-project-link{border-top-left-radius:11px;border-top-right-radius:11px}
+.recent-projects-list>li:last-child>.recent-project-link{border-bottom-left-radius:11px;border-bottom-right-radius:11px}
+.recent-project-link:focus-visible{outline-offset:-2px}
 .recent-project-link:hover{background:var(--ws-hover)}
 .recent-project-link .workspace-chat-cover{width:42px;height:56px;flex-shrink:0}
 .recent-project-link .workspace-chat-cover img,.recent-project-link .workspace-chat-cover video{width:100%;height:100%;object-fit:cover}
