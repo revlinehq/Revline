@@ -87,7 +87,7 @@ async function runSlot() {
       } catch (error) {
         clearInterval(timer); await heartbeats;
         if (!shutdown.signal.aborted && !controller.signal.aborted) {
-          await client.mutation(api.mediaTasks.fail, { ...credentials, retryable: task.kind!=='review'&&!(error instanceof AnalysisError && error.status < 500), error: error instanceof Error ? error.message.slice(0, 1000) : 'Media processing failed.' }).catch(() => {});
+          await client.mutation(api.mediaTasks.fail, { ...credentials, retryable: task.kind!=='review'&&!(error instanceof AnalysisError && (error.retryable === false || error.status < 500)), error: error instanceof Error ? error.message.slice(0, 1000) : 'Media processing failed.' }).catch(() => {});
         }
         console.log(JSON.stringify({ event: 'media-interrupted', timestamp:new Date().toISOString(),projectId:task.projectId, taskId: task.taskId }));
       } finally { activeTasks--; lastWorkAt = Date.now(); }

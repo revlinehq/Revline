@@ -1,3 +1,5 @@
+import type { VideoInspectionDiagnostic } from './video-inspection';
+
 export const MEDIA_ACTIVITY_LABELS = {
   downloading: 'Downloading footage…',
   'sending-gemini': 'Sending to Gemini…',
@@ -7,4 +9,4 @@ export const MEDIA_ACTIVITY_LABELS = {
 } as const;
 
 export type MediaTaskActivity = keyof typeof MEDIA_ACTIVITY_LABELS;
-export type ReportMediaActivity = (activity: MediaTaskActivity) => void;
+export type ReportMediaActivity = (activity: MediaTaskActivity, diagnostic?: VideoInspectionDiagnostic) => void;

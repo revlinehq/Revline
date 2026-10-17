@@ -39,7 +39,8 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
     finally { clearInterval(heartbeat); }
   };
   let geminiActivity:MediaTaskActivity|undefined,geminiActivityStartedAt=0,geminiHeartbeat:ReturnType<typeof setInterval>|undefined;
-  const reportGeminiActivity:ReportMediaActivity=activity=>{
+  const reportGeminiActivity:ReportMediaActivity=(activity,diagnostic)=>{
+    if(diagnostic)logPhase('Video evidence validation','rejected',geminiActivityStartedAt||startedAt,JSON.stringify(diagnostic));
     if(activity===geminiActivity)return;
     if(geminiActivity)logPhase(MEDIA_ACTIVITY_LABELS[geminiActivity],'complete',geminiActivityStartedAt);
     clearInterval(geminiHeartbeat);geminiActivity=activity;geminiActivityStartedAt=Date.now();

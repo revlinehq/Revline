@@ -14,7 +14,7 @@ import { validateFrameInspectionInput } from '../lib/media-analysis/frame-inspec
 import { validateVideoInspectionInput } from '../lib/media-analysis/video-inspection';
 import { normalizeTimeline } from '../lib/editor/types';
 import {savePublicationReceipt} from './lib/publicationReceipt';
-import { enqueueMediaTask, cancelMediaTask } from './mediaTasks';
+import { enqueueMediaTask, cancelMediaTask, detachAnalysisRequest } from './mediaTasks';
 import { assertEditorModelConfigured, claudeModelSwitcherEnabled, defaultEditorModelChoice, resolveClaudeModel } from '../lib/ai/claude-model';
 import { claudeModelChoiceValidator } from './lib/claude_model';
 import { allowedClaudeModelChoices, enforceClaudeModelPolicy } from '../lib/ai/claude-model-policy';
@@ -155,7 +155,7 @@ export const finish = internalMutation({ args: { ...runArgs, error: v.optional(v
   if(args.publication&&project?.ownerId===args.ownerId&&project.threadId===args.publication.threadId)await savePublicationReceipt(ctx,args.ownerId,{version:1,kind:'timeline-publication',runId:args.runId,...args.publication});
   if (project?.ownerId === args.ownerId && project.aiRunId === args.runId) {
     const requests = await ctx.db.query("analysisRequests").withIndex("by_projectId_runId", q => q.eq("projectId", args.projectId).eq("aiRunId", args.runId)).take(16);
-    for (const request of requests) await ctx.db.delete(request._id);
+    for (const request of requests) await detachAnalysisRequest(ctx,request);
     await writeProject(ctx,project._id, { aiRunning: false, aiError: args.error?.slice(0, 1000), aiRecovery:args.error?assistantRecovery(project,'failed',args.error,args.savedEdits):undefined,aiRequest:undefined });
   }
   return null;
@@ -175,6 +175,11 @@ export const requestAnalysis = internalMutation({ args: { ...runArgs, assetId: v
     try { validateVideoInspectionInput(args.videoRequest, asset.duration); } catch (error) { throw new ConvexError((error as Error).message); }
   } else if (args.videoRequest) throw new ConvexError('Video questions require a native video inspection.');
   const requests = await ctx.db.query("analysisRequests").withIndex("by_projectId_runId", q => q.eq("projectId", project._id).eq("aiRunId", args.runId)).take(16);
+  if(args.mode==='video'&&args.videoRequest){
+    const requested=args.videoRequest;
+    const repeated=requests.find(request=>request.assetId===asset._id&&request.mode==='video'&&request.status!=='failed'&&request.videoRequest?.question===requested.question&&request.videoRequest.start===requested.start&&request.videoRequest.end===requested.end);
+    if(repeated)return repeated._id;
+  }
   if (requests.length >= 15) throw new ConvexError("Too many analysis requests in one AI run");
   const requestId = await ctx.db.insert("analysisRequests", { ownerId: args.ownerId, projectId: project._id, assetId: asset._id, aiRunId: args.runId, mode: args.mode, ...(args.frameRequest ? { frameRequest: args.frameRequest } : {}), ...(args.videoRequest ? { videoRequest: args.videoRequest } : {}), status: "pending", createdAt: Date.now(), expiresAt: Date.now() + 240_000 });
   const taskId = await enqueueMediaTask(ctx, { ownerId: args.ownerId, projectId: project._id, assetId: asset._id, kind: args.mode, analysisRequestId: requestId, ...(args.frameRequest ? { frameRequest: args.frameRequest } : {}), ...(args.videoRequest ? { videoRequest: args.videoRequest } : {}) });
@@ -188,7 +193,7 @@ export const analysisRequest = internalQuery({ args: { ...runArgs, requestId: v.
 }});
 export const clearAnalysis = internalMutation({ args: { ...runArgs, requestId: v.id("analysisRequests") }, returns: v.null(), handler: async (ctx, args) => {
   const request = await ctx.db.get(args.requestId);
-  if (request?.ownerId === args.ownerId && request.projectId === args.projectId && request.aiRunId === args.runId) await ctx.db.delete(request._id);
+  if (request?.ownerId === args.ownerId && request.projectId === args.projectId && request.aiRunId === args.runId) await detachAnalysisRequest(ctx,request);
   return null;
 }});
 

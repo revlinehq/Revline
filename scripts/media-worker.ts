@@ -53,7 +53,7 @@ async function runSlot() {
       } catch (error) {
         clearInterval(timer); await heartbeats;
         if (!shutdown.signal.aborted && !controller.signal.aborted) {
-          const retryable = task.kind!=='review'&&!(error instanceof AnalysisError && error.status < 500);
+          const retryable = task.kind!=='review'&&!(error instanceof AnalysisError && (error.retryable === false || error.status < 500));
           await client.mutation(api.mediaTasks.fail, { ...credentials, error: error instanceof Error ? error.message.slice(0, 1000) : 'Media processing failed.', retryable }).catch(() => {});
         }
         console.log(`[${new Date().toISOString()}] Chat ${task.projectId} · media task ${task.taskId}: interrupted or failed; Convex owns recovery.`);

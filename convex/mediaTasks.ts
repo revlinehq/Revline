@@ -48,6 +48,21 @@ export async function enqueueMediaTask(ctx: MutationCtx, input: Pick<Doc<'mediaT
     const active = existing.find(task => task.status === 'queued' || task.status === 'running' || task.status === 'retrying');
     if (active) { if (input.analysisRequestId) await ctx.db.patch(active._id, { analysisRequestId: input.analysisRequestId }); return active._id; }
   }
+  if(input.assetId&&input.kind==='video'&&input.videoRequest){
+    const requested=input.videoRequest;
+    const existing=await ctx.db.query('mediaTasks').withIndex('by_asset_kind',q=>q.eq('assetId',input.assetId).eq('kind','video')).order('desc').take(20);
+    const reusable=existing.find(task=>task.ownerId===input.ownerId&&task.projectId===input.projectId&&task.videoRequest?.question===requested.question&&task.videoRequest.start===requested.start&&task.videoRequest.end===requested.end&&((task.status==='completed'&&!!task.videoInspection)||['queued','running','retrying'].includes(task.status)));
+    if(reusable){
+      if(input.analysisRequestId){
+        if(reusable.status==='completed')await ctx.db.patch(input.analysisRequestId,{status:'completed',videoInspection:reusable.videoInspection,error:undefined});
+        else {
+          await ctx.db.patch(reusable._id,{analysisRequestId:input.analysisRequestId});
+          if(reusable.status==='running')await ctx.db.patch(input.analysisRequestId,{status:'running'});
+        }
+      }
+      return reusable._id;
+    }
+  }
   const now = Date.now();
   const taskId = await ctx.db.insert('mediaTasks', { ...input, status: 'queued', claimable:false, attempt: 0, progress: 0, createdAt: now, updatedAt: now });
   const workflowId = await mediaWorkflow.start(ctx, internal.mediaTasks.process, { taskId }, { startAsync: true, onComplete: internal.mediaTasks.settle, context: { taskId } });
@@ -151,6 +166,13 @@ export async function cancelMediaTask(ctx: MutationCtx, taskId: Id<'mediaTasks'>
   if (!task || ['completed', 'failed', 'cancelled'].includes(task.status)) return;
   await markTerminal(ctx, taskId, 'cancelled', 'Processing cancelled.');
   if (task.workflowId) await mediaWorkflow.cancel(ctx, task.workflowId as WorkflowId);
+}
+/** A bounded action wait ending must not discard already-running analysis. Stop
+ * cancels its tasks separately before deleting their requests. */
+export async function detachAnalysisRequest(ctx:MutationCtx,request:Doc<'analysisRequests'>){
+  const task=request.taskId?await ctx.db.get(request.taskId):null;
+  if(task?.analysisRequestId===request._id&&task.ownerId===request.ownerId&&task.projectId===request.projectId&&task.assetId===request.assetId&&['queued','running','retrying'].includes(task.status))await ctx.db.patch(task._id,{analysisRequestId:undefined});
+  await ctx.db.delete(request._id);
 }
 async function firstClaimable(ctx:MutationCtx|QueryCtx,processorVersion=1) {
   const indexed=await ctx.db.query('mediaTasks').withIndex('by_status_claimable_created',q=>q.eq('status','queued').eq('claimable',true)).filter(q=>q.or(q.eq(q.field('requiredProcessorVersion'),undefined),q.lte(q.field('requiredProcessorVersion'),processorVersion))).first();
@@ -285,10 +307,12 @@ export const complete = mutation({ args: { ...mediaTaskCredentials, result: task
       if (args.result.analysis || args.result.frameInspection || args.result.audioAssetId || args.result.waveform) throw new ConvexError('Video question tasks return video evidence only.');
       const request = task.analysisRequestId ? await ctx.db.get(task.analysisRequestId) : null;
       const project = await readProject(ctx,task.projectId);
-      if (!request || request.ownerId !== task.ownerId || request.projectId !== task.projectId || request.assetId !== asset._id || request.mode !== 'video' || !project?.aiRunning || project.aiRunId !== request.aiRunId) throw new ConvexError('AI video request is no longer active.');
+      // Older timeout handlers deleted the request without detaching the task.
+      // A valid, uncancelled lease may still save evidence; it cannot edit a timeline.
+      if(request&&(request.ownerId !== task.ownerId || request.projectId !== task.projectId || request.assetId !== asset._id || request.mode !== 'video' || !project?.aiRunning || project.aiRunId !== request.aiRunId)) throw new ConvexError('AI video request is no longer active.');
       try { validateVideoInspectionResult(args.result.videoInspection, task.videoRequest, asset.duration); } catch (error) { throw new ConvexError((error as Error).message); }
       await ctx.db.patch(task._id, { videoInspection: args.result.videoInspection });
-      await ctx.db.patch(request._id, { videoInspection: args.result.videoInspection });
+      if(request)await ctx.db.patch(request._id, { videoInspection: args.result.videoInspection });
     } else if (task.kind === 'frames') {
       if (!task.frameRequest || !args.result.frameInspection || asset.kind !== 'video') throw new ConvexError('Frame inspection evidence is missing.');
       if (args.result.analysis || args.result.audioAssetId || args.result.waveform) throw new ConvexError('Frame inspections return visual evidence only.');

@@ -5,7 +5,7 @@ import { AnalysisError } from './errors';
 import { interactionText, parseTranscript } from './transcript';
 import { parseUnderstanding, understandingJsonSchema, understandingPrompt, type Understanding } from './understanding';
 import { frameInspectionJsonSchema, parseFrameInspection, type FrameInspectionInput, type FrameSample } from './frame-inspection';
-import { parseVideoInspection, validateVideoInspectionInput, videoInspectionJsonSchema, videoInspectionPrompt, type VideoInspectionInput } from './video-inspection';
+import { parseVideoInspection, validateVideoInspectionInput, videoInspectionJsonSchema, videoInspectionPrompt, VideoInspectionValidationError, type VideoInspectionInput } from './video-inspection';
 import type { ReportMediaActivity } from './activity';
 
 const BASE = 'https://generativelanguage.googleapis.com';
@@ -100,14 +100,23 @@ export async function inspectVideo(path: string, duration: number, input: VideoI
   validateVideoInspectionInput(input, duration);
   const file = await uploadFile(path, mimeType, key, signal, onActivity);
   try {
-    onActivity?.('analyzing');
-    const result = await interaction({
-      model: process.env.GEMINI_VIDEO_MODEL || 'gemini-3.7-flash',
-      input: [{ type: 'video', uri: file.uri, mime_type: mimeType, processing: 'agentic' }, { type: 'text', text: videoInspectionPrompt(input, duration) }],
-      response_format: { type: 'text', mime_type: 'application/json', schema: videoInspectionJsonSchema },
-    }, key, signal);
-    try { return parseVideoInspection(interactionText(result), input, duration); }
-    catch { throw new AnalysisError('Gemini returned video evidence outside the requested question or source window. Retry this question.', 502); }
+    let correction = '';
+    for (let attempt = 0; attempt < 2; attempt++) {
+      onActivity?.(attempt ? 'retrying-analysis' : 'analyzing');
+      const result = await interaction({
+        model: process.env.GEMINI_VIDEO_MODEL || 'gemini-3.7-flash',
+        input: [{ type: 'video', uri: file.uri, mime_type: mimeType, processing: 'agentic' }, { type: 'text', text: videoInspectionPrompt(input, duration) + correction }],
+        response_format: { type: 'text', mime_type: 'application/json', schema: videoInspectionJsonSchema },
+      }, key, signal);
+      try { return parseVideoInspection(interactionText(result), input, duration); }
+      catch (error) {
+        const diagnostic = error instanceof VideoInspectionValidationError ? error.diagnostic : { reason: 'invalid-shape' as const };
+        onActivity?.('retrying-analysis', diagnostic);
+        if (attempt) throw new AnalysisError(`Gemini returned invalid video evidence (${diagnostic.reason}). Ask again with a narrower source window.`, 502, false);
+        correction = ` Your previous answer failed local validation: ${JSON.stringify(diagnostic)}. Correct the response using only the required JSON fields. Keep every match inside the exact requested endpoints, preserve numeric precision, and return matches:[] if no supported match fits. Do not include this validation feedback in the answer.`;
+      }
+    }
+    throw new AnalysisError('Gemini did not return valid video evidence.', 502, false);
   } finally { await deleteFile(file.name, key); }
 }
 

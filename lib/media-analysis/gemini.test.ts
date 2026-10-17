@@ -17,7 +17,8 @@ beforeEach(async () => {
 });
 afterEach(async () => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); await rm(directory, { recursive: true, force: true }); });
 
-function mockProvider(result: unknown, status = 200, processing = false) {
+function mockProvider(result: unknown, status = 200, processing = false, subsequent: unknown[] = []) {
+  let interactions = 0;
   vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request, options: RequestInit & { duplex?: string } = {}) => {
     const url = String(input);
     calls.push({ url, options });
@@ -35,7 +36,7 @@ function mockProvider(result: unknown, status = 200, processing = false) {
       const request = JSON.parse(options.body as string);
       const schema = JSON.stringify(request.response_format?.schema ?? {});
       if (/"(?:\$schema|minLength|maxLength|exclusiveMinimum)":/.test(schema)) return Response.json({ error: { message: 'Request contains an invalid argument.' } }, { status: 400 });
-      return Response.json(result, { status });
+      return Response.json([result, ...subsequent][Math.min(interactions++, subsequent.length)], { status });
     }
     if (options.method === 'DELETE') return Response.json({});
     if (url.endsWith('/v1beta/files/fixture')) return Response.json({ name: 'files/fixture', uri: 'https://generativelanguage.googleapis.com/v1beta/files/fixture', state: 'ACTIVE' });
@@ -124,9 +125,29 @@ test('native video questions return zero matches honestly and clean up malformed
     { summary: 'Invented frames.', uncertainty: '', matches: [], frameCount: 300 },
   ]) {
     calls.length = 0; mockProvider({ outputs: [{ text: JSON.stringify(payload) }] });
-    await expect(inspectVideo(source, 1, input, 'test-key', AbortSignal.timeout(5000))).rejects.toMatchObject({ status: 502 });
+    await expect(inspectVideo(source, 1, input, 'test-key', AbortSignal.timeout(5000))).rejects.toMatchObject({ status: 502, retryable: false });
+    expect(calls.filter(call=>call.url.endsWith('/interactions'))).toHaveLength(2);
+    expect(calls.filter(call=>call.url.includes('/upload/v1beta/files'))).toHaveLength(1);
     expect(calls.at(-1)?.options.method).toBe('DELETE');
   }
+});
+
+test('repairs invalid timing once on the existing Gemini upload and reports safe diagnostic bounds',async()=>{
+  const input={start:0,end:175.690956,question:'Private question'};
+  const payload={summary:'One event.',uncertainty:'',matches:[{start:170,end:175.7,description:'Private description'}]};
+  const valid={...payload,matches:[{...payload.matches[0],end:input.end}]};
+  mockProvider({outputs:[{text:JSON.stringify(payload)}]},200,false,[{outputs:[{text:JSON.stringify(valid)}]}]);
+  const activity=vi.fn();
+  const result=await inspectVideo(source,input.end,input,'test-key',AbortSignal.timeout(5000),'video/mp4',activity);
+  expect(result.matches).toEqual(valid.matches);
+  expect(activity).toHaveBeenCalledWith('retrying-analysis',{reason:'outside-window',matchIndex:0,start:170,end:175.7,windowStart:0,windowEnd:input.end,duration:input.end});
+  const interactions=calls.filter(call=>call.url.endsWith('/interactions')).map(call=>JSON.parse(call.options.body as string));
+  expect(interactions).toHaveLength(2);
+  expect(interactions[0].input[0].uri).toBe(interactions[1].input[0].uri);
+  expect(interactions[1].input[1].text).toContain('175.690956');
+  expect(interactions[1].input[1].text).not.toContain('Private description');
+  expect(calls.filter(call=>call.url.includes('/upload/v1beta/files'))).toHaveLength(1);
+  expect(calls.at(-1)?.options.method).toBe('DELETE');
 });
 
 import type { EffectPlan } from '../ai/edit-plan';
