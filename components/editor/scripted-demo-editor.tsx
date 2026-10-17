@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState, type ComponentProps } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ComponentProps } from 'react';
 import { useStore } from 'zustand';
 import { createStore, type StoreApi } from 'zustand/vanilla';
 import { RotateCcw, Play } from 'lucide-react';
@@ -19,6 +19,7 @@ import { userError } from '@/lib/user-error';
 import { AssistantPanel, type ChatMessage } from './assistant-panel';
 import { EditorStateProvider } from './editor-state';
 import { EditorShell } from './editor-shell';
+import type { PreviewHandle } from './preview';
 import './scripted-demo-editor.css';
 
 type DemoConversationStore = StoreApi<{ messages: ChatMessage[] }>;
@@ -46,7 +47,8 @@ export function ScriptedDemoEditor({ demoId }: { demoId: string }) {
   const [error, setError] = useState(''), [title, setTitle] = useState('Your next edit'), [activity, setActivity] = useState<string | null>(null);
   const [activityStartedAt, setActivityStartedAt] = useState<number | null>(null);
   const [lastPrompt, setLastPrompt] = useState('');
-  const input = useRef<HTMLInputElement>(null), assetsRef = useRef<MediaAsset[]>([]), urls = useRef<string[]>([]), activeRun = useRef<AbortController | null>(null);
+  const input = useRef<HTMLInputElement>(null), preview = useRef<PreviewHandle | null>(null), assetsRef = useRef<MediaAsset[]>([]), urls = useRef<string[]>([]), activeRun = useRef<AbortController | null>(null);
+  const onPreviewReady = useCallback((controller: PreviewHandle) => { preview.current = controller; }, []);
   const mounted = useRef(true), importingRef = useRef(false);
   useEffect(() => {
     mounted.current = true;
@@ -104,6 +106,7 @@ export function ScriptedDemoEditor({ demoId }: { demoId: string }) {
     let current = plan.initial;
     const opening = preparedTake ? plan.steps[0].reply : 'I’ll build a short sequence with cuts, captions, and subtle effects.';
     const details = plan.steps.find(step => step.clips.some(clip => clip.kind === 'caption' || clip.kind === 'graphic'))?.reply;
+    const stagedNarration = plan.steps.some(step => step.narrate);
     async function narrate(text: string, separator = '') {
       let prefix = separator;
       await streamDemoText(text, controller.signal, chunk => {
@@ -124,14 +127,28 @@ export function ScriptedDemoEditor({ demoId }: { demoId: string }) {
       setActivity('Applying edits…'); setActivityStartedAt(Date.now());
       const buildTimeline = (async () => {
         await waitForDemoStep(800, controller.signal);
+        let narrated = false;
         for (const step of plan.steps) {
           controller.signal.throwIfAborted();
           current = { ...current, clips: [...current.clips, ...step.clips] };
           store.getState().edit(current); setActivity(step.label);
-          await waitForDemoStep(step.delayMs, controller.signal);
+          if (step.previewTime !== undefined) {
+            // This recording route previews its authored title/FX pose. Updating
+            // the shared clock alone does not seek the native player.
+            preview.current?.seek(step.previewTime);
+            store.setState({ playhead: step.previewTime });
+          }
+          if (step.narrate) {
+            await Promise.all([waitForDemoStep(step.delayMs, controller.signal), narrate(step.reply, narrated ? '\n\n' : '')]);
+            narrated = true;
+          } else await waitForDemoStep(step.delayMs, controller.signal);
         }
       })();
-      await Promise.all([buildTimeline, (async () => {
+      if (stagedNarration) {
+        await buildTimeline;
+        await waitForDemoStep(350, controller.signal);
+        await narrate(plan.summary, '\n\n');
+      } else await Promise.all([buildTimeline, (async () => {
         await narrate(opening);
         if (details && details !== opening) { await waitForDemoStep(320, controller.signal); await narrate(details, '\n\n'); }
         await buildTimeline;
@@ -162,7 +179,7 @@ export function ScriptedDemoEditor({ demoId }: { demoId: string }) {
   function change(next: Timeline) { if (!activeRun.current) { store.getState().edit(next); setError(''); } }
   return <div className="scripted-editor-demo" data-demo-id={demoId} data-building={running || undefined}>
     <input ref={input} data-demo-files type="file" hidden multiple accept="video/*,image/*,audio/*" onChange={event => { const files = Array.from(event.currentTarget.files ?? []); event.currentTarget.value = ''; void attach(files).catch(error => setError(userError(error))); }}/>
-    <EditorStateProvider store={store}><EditorShell onRegisterStockAudio={async catalogId=>{if(activeRun.current)throw new Error('Finish or stop the edit before adding a sound.');const asset=stockAudioAsset(catalogId);setStockAssets(previous=>previous.some(item=>item._id===asset._id)?previous:[...previous,asset]);return asset;}} title={title} onTitle={setTitle} timeline={timeline} assets={media.assets} onChange={change} saving={false} upload={null} error={error} onError={setError} demo assistantPanel={chat}
+    <EditorStateProvider store={store}><EditorShell onPreviewReady={onPreviewReady} onRegisterStockAudio={async catalogId=>{if(activeRun.current)throw new Error('Finish or stop the edit before adding a sound.');const asset=stockAudioAsset(catalogId);setStockAssets(previous=>previous.some(item=>item._id===asset._id)?previous:[...previous,asset]);return asset;}} title={title} onTitle={setTitle} timeline={timeline} assets={media.assets} onChange={change} saving={false} upload={null} error={error} onError={setError} demo assistantPanel={chat}
       onUndo={() => { if (!activeRun.current) store.getState().undo(); }} onRedo={() => { if (!activeRun.current) store.getState().redo(); }} canUndo={!running && !!history.length} canRedo={!running && !!future.length}
       onUpload={attach} onDropUpload={attach} messages={NO_MESSAGES} aiRunning={running} aiConfigured={false} onSend={build} onStop={async () => { activeRun.current?.abort(); }} onExport={async () => {}} exportState={null}/></EditorStateProvider>
   </div>;

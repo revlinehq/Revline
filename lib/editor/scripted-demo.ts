@@ -3,7 +3,7 @@ import type { MotionKeyframe } from './clip-effects';
 import { addTransitionClip } from './operations';
 import { audioSettings } from './audio-settings';
 
-export type DemoBuildStep = { clips: Clip[]; label: string; reply: string; delayMs: number };
+export type DemoBuildStep = { clips: Clip[]; label: string; reply: string; delayMs: number; narrate?: boolean; previewTime?: number };
 export const EMPTY_SCRIPTED_DEMO: Timeline = { fps: 30, aspectRatio: 'landscape', tracks: { visual: 2, overlay: 0, audio: 1, effects: 2 }, clips: [] };
 const keyframe = (time: number, patch: Partial<MotionKeyframe> = {}): MotionKeyframe => ({ time, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, brightness: 1, ...patch });
 
