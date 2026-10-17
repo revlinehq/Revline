@@ -174,3 +174,41 @@ deployment `1ae40041-e9bf-4124-8f38-e44aac3bc448` routes 100% to that version.
 Existing backend, secrets, instance size, concurrency, cron and graceful drain
 behavior were preserved. No shared task was interrupted and no paid model was
 called during this rollout.
+
+### 2026-10-17 audio activity rollout
+
+Controller version `9209bca6-9545-4842-9f19-279b1a4c562f`, tagged `52ff19e`, uses
+`registry.cloudflare.com/701645e913477e567db69b11343f59d8/revline-media-processor@sha256:f46c40e364e058a2010d8610b705f7a992fb0ef2965be442e9e85a6e1bc7018e`.
+Its local image `revline-media-processor:audio-activity-v3` has image
+ID `sha256:f2a380275ac8fcd14719fa5ba36fb7d4d90e8154cc40e0887a9b9eccf4aeeb68`.
+Its source-only overlay reuses retained image
+`sha256:03a1b2ad5584a477ec89a20b31fa0430533892c12555a41c027b1542b6645029`,
+whose package and lockfile hashes match the current source. The overlay adds
+about 126 MB without reinstalling dependencies or changing Chromium ownership.
+It includes the bounded export decoder/cache fix from `1988458` and processor
+version 3 audio activity measurement. The production schema update landed before
+this runtime; older consumers leave version 3 transcription tasks queued until
+the updated consumer is ready.
+
+The exact image passed the runtime dependency check as the `node` user with
+network disabled and a 1-CPU/6-GiB cap. Synthetic checks exercised cached
+transcript measurement through `processMediaTask` without provider credentials:
+only prepared audio was downloaded, original ASR times remained intact, a quiet
+tail refined an editing copy from 2.8 to 2.08 seconds, opposite stereo channels
+remained audible, and uncertain wordless audio caused no timing refinement.
+Delayed AAC source timestamps were preserved. The existing renderer resource
+check completed both concurrent decoder/raw-pipe pairs with all 60 frames and
+reaped their managed child processes on cancellation.
+
+The release used the digest-pinned configuration with `--keep-vars --strict`.
+The live version's image binding, production backend, three runtime secret
+bindings and 100% traffic routing were verified. The container application was
+ready with zero active instances. A bounded hosted readiness check accepted
+processor version 3, reported no queued claimable work, returned 404 for a GET
+to `/wake`, and rejected an unauthenticated POST with 401. It made no paid model
+calls or project mutations. No new production render task was enqueued for this
+readiness check.
+
+The allowlisted context, image source manifest, overlay Dockerfile, synthetic
+audio verification script and deployment evidence are retained locally under
+`.data/audio-activity-release/`.
