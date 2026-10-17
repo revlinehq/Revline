@@ -57,6 +57,18 @@ test('a saved transcript returns immediately without downloading or calling a pr
   expect(mocks.transcribeWithWhisper).not.toHaveBeenCalled();
 });
 
+test('Listening downloads prepared small audio while keeping the original video time bounds',async()=>{
+  vi.stubEnv('OPENAI_API_KEY','fixture-openai-key');
+  const task=work('transcribe');
+  task.transcriptionAsset={...task.asset!,kind:'audio',url:'https://media.example.com/prepared-audio',size:200,duration:3.02};
+  mocks.probeMedia.mockResolvedValue({duration:3.02,hasAudio:true,hasVideo:false});
+  mocks.transcribeWithWhisper.mockResolvedValue({words:[],segments:[]});
+  const signal=AbortSignal.timeout(5000);
+  await processMediaTask(task,{} as ConvexHttpClient,'https://fixture.convex.cloud',signal,()=>{});
+  expect(mocks.downloadOwnedMedia).toHaveBeenCalledWith('https://media.example.com/prepared-audio',expect.any(String),'https://fixture.convex.cloud',200,signal,expect.any(Object));
+  expect(mocks.transcribeWithWhisper).toHaveBeenCalledWith(expect.any(String),3,'fixture-openai-key',signal);
+});
+
 test('transcription reports its own missing provider configuration accurately', async () => {
   vi.stubEnv('OPENAI_API_KEY', ''); vi.stubEnv('GOOGLE_GENERATIVE_AI_API_KEY', 'fixture-google-key');
   await expect(processMediaTask(work('transcribe'), {} as ConvexHttpClient, 'https://fixture.convex.cloud', AbortSignal.timeout(5000), () => {})).rejects.toMatchObject({ status: 503, message: expect.stringContaining('OpenAI Whisper') });

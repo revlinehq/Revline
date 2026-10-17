@@ -76,11 +76,13 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
     if (task.kind === 'extract' && asset.audioExtracted) return asset.audioAssetId ? { audioAssetId: asset.audioAssetId } : {};
     if (task.kind === 'waveform' && asset.waveform) return { waveform: asset.waveform };
     if (task.kind === 'transcribe' && asset.analysis?.transcript) return { analysis: { transcript: asset.analysis.transcript } };
-    const source = join(directory, 'source'), sourceUrl = asset.url;
+    const sourceAsset = task.kind === 'transcribe' ? task.transcriptionAsset ?? asset : asset;
+    if (!sourceAsset.url) throw new AnalysisError('The prepared source media is unavailable.', 400);
+    const source = join(directory, 'source'), sourceUrl = sourceAsset.url;
     onActivity?.('downloading');
     const downloadStartedAt = Date.now();
     let loggedPercent = 0, loggedAt = downloadStartedAt;
-    await runPhase('Downloading source', () => downloadOwnedMedia(sourceUrl, source, new URL(convexUrl).origin, asset.size, signal, {
+    await runPhase('Downloading source', () => downloadOwnedMedia(sourceUrl, source, new URL(convexUrl).origin, sourceAsset.size, signal, {
       concurrency: task.kind === 'extract' ? 3 : 1,
       onProgress: (bytes, total) => {
         const percent = Math.floor(bytes / total * 100), now = Date.now();
@@ -131,7 +133,7 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
       const audio = join(directory, 'speech.mp3');
       await runPhase('Preparing transcription audio',()=>extractTranscriptionAudio(source, audio, signal));
       onProgress(30);
-      return { analysis: { transcript: await runPhase('Transcribing speech',()=>transcribeWithWhisper(audio, media.duration, key, signal)) } };
+      return { analysis: { transcript: await runPhase('Transcribing speech',()=>transcribeWithWhisper(audio, asset.duration ?? media.duration, key, signal)) } };
     }
     if (task.kind === 'beats') {
       if (!media.hasAudio) throw new AnalysisError('This source has no audio to measure.', 400);

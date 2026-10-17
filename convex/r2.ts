@@ -107,6 +107,7 @@ export const finish = internalMutation({ args: { uploadId: v.id('r2Uploads'), si
   else if (lease.kind !== 'image') {
     await enqueueMediaTask(ctx, { ownerId: lease.ownerId, projectId: lease.projectId, assetId, kind: lease.kind === 'video' ? 'extract' : 'waveform' });
     if (lease.kind === 'video') await enqueueMediaTask(ctx, { ownerId: lease.ownerId, projectId: lease.projectId, assetId, kind: 'understand' });
+    else await enqueueMediaTask(ctx, { ownerId: lease.ownerId, projectId: lease.projectId, assetId, kind: 'transcribe' });
   }
   return assetId;
 }});

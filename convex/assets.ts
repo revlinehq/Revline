@@ -57,7 +57,10 @@ export const create = mutation({ args: { projectId: v.id("projects"), storageId:
   await consumeUpload(ctx, args.storageId, ownerId, args.projectId);
   const assetId = await ctx.db.insert("assets", { ownerId, projectId: args.projectId, storageId: args.storageId, fileName, contentType: metadata.contentType, size: metadata.size, kind: args.kind, createdAt: Date.now(), ...(args.duration !== undefined ? { duration: args.duration } : {}), ...(args.width !== undefined ? { width: args.width } : {}), ...(args.height !== undefined ? { height: args.height } : {}) });
   await recordAssetStorage(ctx,(await ctx.db.get(assetId))!);
-  if (args.kind === 'video') await enqueueMediaTask(ctx, { ownerId, projectId: args.projectId, assetId, kind: 'understand' });
+  if(args.kind!=='image'){
+    await enqueueMediaTask(ctx,{ownerId,projectId:args.projectId,assetId,kind:args.kind==='video'?'extract':'waveform'});
+    await enqueueMediaTask(ctx,{ownerId,projectId:args.projectId,assetId,kind:args.kind==='video'?'understand':'transcribe'});
+  }
   return assetId;
 }});
 /** Catalog metadata and immutable media keys are server-owned; no upload or analysis is needed. */

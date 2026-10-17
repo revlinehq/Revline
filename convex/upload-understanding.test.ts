@@ -47,3 +47,18 @@ test('a completed public video upload queues one overview, saves grounded sugges
   expect(await owner.query(api.mediaTasks.list,{projectId:reused})).toEqual([]);
   expect((await owner.query(api.assets.list,{projectId:reused}))[0].analysis?.understanding?.suggestions).toEqual(understanding.suggestions);
 });
+
+test('audio upload queues waveform and Listening once without a video overview',async()=>{
+  vi.stubGlobal('fetch',vi.fn(async(_url,init)=>{
+    const command=JSON.parse(init.body);
+    return Response.json(command.action==='create'?{uploadId:'audio-multipart'}:{size:128,contentType:'audio/mp4'});
+  }));
+  const t=convexTest(schema,modules);workflowTest.register(t);const owner=t.withIdentity(identity('owner'));
+  const projectId=await owner.mutation(api.projects.create,{title:'Audio source',aspectRatio:'vertical'});
+  const upload=await owner.action(api.r2.start,{projectId,fileName:'speech.m4a',contentType:'audio/mp4',kind:'audio',size:128,duration:12});
+  const complete={uploadId:upload.uploadId,parts:[{partNumber:1,etag:'audio-part'}]};
+  const assetId=await owner.action(api.r2.complete,complete);
+  expect(await owner.action(api.r2.complete,complete)).toBe(assetId);
+  expect((await owner.query(api.mediaTasks.list,{projectId})).map(task=>task.kind).sort()).toEqual(['transcribe','waveform']);
+  await t.finishAllScheduledFunctions(vi.runAllTimers);
+});

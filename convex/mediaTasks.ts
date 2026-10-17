@@ -27,7 +27,7 @@ const eventResult = v.object({ success: v.boolean(), retryable: v.boolean(), err
 const taskState = v.object({ _id: v.id('mediaTasks'), kind: mediaTaskKind, status: mediaTaskStatus, progress: v.number(), attempt: v.number(), error: v.optional(v.string()), assetId: v.optional(v.id('assets')),activity:v.optional(mediaTaskActivity),activityStartedAt:v.optional(v.number()) });
 const renderSnapshot = v.object({ timeline: timelineValidator, assets: v.array(assetWithUrl), resolution: v.number(), fps: v.number(), quality: v.string() });
 const reviewSnapshot=v.object({timeline:timelineValidator,reference:timelineValidator,plans:v.array(effectPlanValidator),assets:v.array(assetWithUrl),revision:v.number(),start:v.number(),end:v.number()});
-const workItem = v.object({review:v.optional(reviewSnapshot), ...mediaTaskCredentials, projectId: v.id('projects'), aiRunId:v.optional(v.string()), kind: mediaTaskKind, sourceUrl: v.optional(v.string()), frameRequest: v.optional(frameRequestValidator), videoRequest: v.optional(videoRequestValidator), asset: v.optional(assetWithUrl), outputAssetId: v.optional(v.id('assets')), outputStored: v.optional(v.boolean()), render: v.optional(renderSnapshot), renderJobId: v.optional(v.id('renderJobs')) });
+const workItem = v.object({review:v.optional(reviewSnapshot), ...mediaTaskCredentials, projectId: v.id('projects'), aiRunId:v.optional(v.string()), kind: mediaTaskKind, sourceUrl: v.optional(v.string()), frameRequest: v.optional(frameRequestValidator), videoRequest: v.optional(videoRequestValidator), asset: v.optional(assetWithUrl), transcriptionAsset: v.optional(assetWithUrl), outputAssetId: v.optional(v.id('assets')), outputStored: v.optional(v.boolean()), render: v.optional(renderSnapshot), renderJobId: v.optional(v.id('renderJobs')) });
 export type MediaWorkItem = Infer<typeof workItem>;
 export const taskResult = v.object({review:v.optional(compositionReviewResult), analysis: v.optional(analysisValidator), frameInspection: v.optional(frameInspectionValidator), videoInspection: v.optional(videoInspectionValidator), audioAssetId: v.optional(v.id('assets')), waveform: v.optional(waveformValidator) });
 export type MediaTaskResult = Infer<typeof taskResult>;
@@ -186,6 +186,9 @@ async function analysisStillActive(ctx:import('./_generated/server').QueryCtx|Mu
 async function loadWork(ctx:import('./_generated/server').QueryCtx|MutationCtx,task:Doc<'mediaTasks'>):Promise<MediaWorkItem> {
   const asset=task.assetId?await ctx.db.get(task.assetId):null;
   if(task.assetId&&(!asset||asset.ownerId!==task.ownerId||asset.projectId!==task.projectId))throw new ConvexError('The source media was removed.');
+  const audio=task.kind==='transcribe'&&asset?.kind==='video'&&asset.audioAssetId?await ctx.db.get(asset.audioAssetId):null;
+  if(audio&&(audio.kind!=='audio'||audio.ownerId!==task.ownerId||audio.projectId!==task.projectId))throw new ConvexError('The prepared audio does not belong to this source project.');
+  const transcriptionAsset=audio?{...audio,url:await mediaUrl(ctx,audio)}:undefined;
   let review:Infer<typeof reviewSnapshot>|undefined;
   if(task.reviewId){
     const saved=await ctx.db.get(task.reviewId);if(!saved||saved.ownerId!==task.ownerId||saved.projectId!==task.projectId)throw new ConvexError('Composition review is unavailable.');
@@ -205,7 +208,7 @@ async function loadWork(ctx:import('./_generated/server').QueryCtx|MutationCtx,t
     render = { timeline: job.timeline, assets: assets as Infer<typeof assetWithUrl>[], resolution: job.resolution ?? 1080, fps: job.fps ?? job.timeline.fps, quality: job.quality ?? 'high' };
   }
   const analysisRun=task.analysisRequestId?await ctx.db.get(task.analysisRequestId):null;
-  return { ...(analysisRun?{aiRunId:analysisRun.aiRunId}:{}),...(review?{review}:{}),taskId: task._id, leaseToken: task.leaseToken!, projectId: task.projectId, kind: task.kind, ...(task.sourceUrl ? { sourceUrl: task.sourceUrl } : {}), ...(task.frameRequest ? { frameRequest: task.frameRequest } : {}), ...(task.videoRequest ? { videoRequest: task.videoRequest } : {}), ...(asset ? { asset: { ...await hydrateAsset(ctx,asset), url: await mediaUrl(ctx, asset) } } : {}), ...(render ? { render, outputStored } : {}), ...(task.renderJobId ? { renderJobId: task.renderJobId } : {}), ...(task.outputAssetId ? { outputAssetId: task.outputAssetId } : {}) };
+  return { ...(analysisRun?{aiRunId:analysisRun.aiRunId}:{}),...(review?{review}:{}),taskId: task._id, leaseToken: task.leaseToken!, projectId: task.projectId, kind: task.kind, ...(task.sourceUrl ? { sourceUrl: task.sourceUrl } : {}), ...(task.frameRequest ? { frameRequest: task.frameRequest } : {}), ...(task.videoRequest ? { videoRequest: task.videoRequest } : {}), ...(asset ? { asset: { ...await hydrateAsset(ctx,asset), url: await mediaUrl(ctx, asset) } } : {}), ...(transcriptionAsset?{transcriptionAsset}:{}), ...(render ? { render, outputStored } : {}), ...(task.renderJobId ? { renderJobId: task.renderJobId } : {}), ...(task.outputAssetId ? { outputAssetId: task.outputAssetId } : {}) };
 }
 export const claim = mutation({ args: { workerSecret: v.string(),compact:v.optional(v.boolean()),processorVersion:v.optional(v.number()) }, returns: v.union(workItem, v.null()), handler: async (ctx, args): Promise<MediaWorkItem | null> => {
   requireMediaWorker(args.workerSecret);
@@ -296,10 +299,14 @@ export const complete = mutation({ args: { ...mediaTaskCredentials, result: task
       if (asset.audioExtracted) {
         if (args.result.audioAssetId !== asset.audioAssetId) throw new ConvexError('Audio output does not match the prepared source.');
       } else if (args.result.audioAssetId !== task.outputAssetId) throw new ConvexError('Extracted audio must be the output of this task.');
-      const audio = task.outputAssetId ? await ctx.db.get(task.outputAssetId) : null;
+      const audioId=task.outputAssetId??asset.audioAssetId;
+      const audio = audioId ? await ctx.db.get(audioId) : null;
       if (audio && (audio.kind !== 'audio' || audio.projectId !== task.projectId || audio.ownerId !== task.ownerId)) throw new ConvexError('Invalid extracted audio.');
       if (args.result.waveform) { validateWaveform(args.result.waveform); if (!audio) throw new ConvexError('Audio is required for a waveform.'); await ctx.db.patch(audio._id, { waveform: args.result.waveform }); }
       await ctx.db.patch(asset._id, { audioExtracted: true, ...(audio ? { audioAssetId: audio._id } : {}) });
+      // Listening follows verified extraction; silent footage never queues a
+      // doomed transcription, and evidence remains attached to the video.
+      if(audio)await enqueueMediaTask(ctx,{ownerId:task.ownerId,projectId:task.projectId,assetId:asset._id,kind:'transcribe'});
     } else if (task.kind === 'waveform') {
       if (!args.result.waveform) throw new ConvexError('No waveform was returned.');
       validateWaveform(args.result.waveform); await ctx.db.patch(asset._id, { waveform: args.result.waveform });

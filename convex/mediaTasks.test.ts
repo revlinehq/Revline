@@ -26,6 +26,38 @@ async function fixture() {
 }
 const transcript = { segments: [{ start: 0, end: 1, text: 'Actual words' }], words: [] };
 
+test('extraction queues Listening on the video with owned small audio and persists its transcript on the original source',async()=>{
+  const f=await fixture(),taskId=await f.start('extract');await f.drain();const work=(await f.claim())!;
+  const audioId=await f.t.run(async ctx=>{
+    const storageId=await ctx.storage.store(new Blob(['audio'],{type:'audio/mp4'}));
+    const id=await ctx.db.insert('assets',{ownerId:'owner',projectId:f.projectId,storageId,fileName:'prepared.m4a',kind:'audio',contentType:'audio/mp4',size:5,duration:3,createdAt:Date.now()});
+    await ctx.db.patch(taskId,{outputAssetId:id});return id;
+  });
+  await f.t.mutation(api.mediaTasks.complete,{taskId,leaseToken:work.leaseToken,result:{audioAssetId:audioId,waveform:{peaks:'AA==',samplesPerSecond:100}}});await f.drain();
+  const listening=(await f.claim())!;
+  expect(listening).toMatchObject({kind:'transcribe',asset:{_id:f.assetId},transcriptionAsset:{_id:audioId,size:5}});
+  expect(await f.start('transcribe')).toBe(listening.taskId);
+  await f.t.mutation(api.mediaTasks.complete,{taskId:listening.taskId,leaseToken:listening.leaseToken,result:{analysis:{transcript}}});await f.drain();
+  expect((await f.owner.query(api.assets.get,{projectId:f.projectId,assetId:f.assetId})).analysis?.transcript).toEqual(transcript);
+  expect((await f.owner.query(api.assets.get,{projectId:f.projectId,assetId:audioId})).analysis?.transcript).toBeUndefined();
+});
+
+test('silent extraction finishes without a Listening task, and foreign linked audio never reaches a worker',async()=>{
+  vi.spyOn(console,'log').mockImplementation(()=>{});
+  const silent=await fixture(),silentTask=await silent.start('extract');await silent.drain();const silentWork=(await silent.claim())!;
+  await silent.t.mutation(api.mediaTasks.complete,{taskId:silentTask,leaseToken:silentWork.leaseToken,result:{}});await silent.drain();
+  expect(await silent.claim()).toBeNull();
+  expect(await silent.owner.query(api.assets.get,{projectId:silent.projectId,assetId:silent.assetId})).toMatchObject({audioExtracted:true});
+  const f=await fixture();
+  await f.t.run(async ctx=>{
+    const audioId=await ctx.db.insert('assets',{ownerId:'stranger',projectId:f.projectId,fileName:'foreign.m4a',kind:'audio',contentType:'audio/mp4',size:5,createdAt:Date.now()});
+    await ctx.db.patch(f.assetId,{audioAssetId:audioId,audioExtracted:true});
+  });
+  const invalidTask=await f.start('transcribe');await f.drain();
+  expect(await f.claim()).toBeNull();
+  expect(await f.owner.query(api.mediaTasks.get,{taskId:invalidTask})).toMatchObject({status:'failed',error:'Source media or the export snapshot is unavailable.'});await f.drain();
+});
+
 test('hosted processor wakes with claimable work on initial and retry attempts', async () => {
   const f = await fixture();
   vi.stubEnv('MEDIA_PROCESSOR_WAKE_URL', 'https://processor.example.com/wake');
