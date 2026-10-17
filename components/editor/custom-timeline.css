@@ -113,22 +113,21 @@ html[data-workspace-theme=light] .custom-timeline .timeline-clip.clip-effect.sel
 
 .timeline-track.library-effect-drop{box-shadow:inset 0 0 0 1px var(--ws-accent,var(--revline-accent));background:color-mix(in srgb,var(--ws-accent,var(--revline-accent)) 8%,transparent)}
 
-/* One composited frame signals the edit lock without animating clip content. */
+/* Pen A: one wide inner light signals the edit lock without moving clip content. */
 .custom-timeline{position:relative}
-.custom-timeline .timeline-ai-frame{position:absolute;inset:1px;z-index:15;overflow:hidden;border:1px solid color-mix(in srgb,var(--revline-accent) 55%,transparent);border-radius:7px;box-shadow:inset 0 0 16px color-mix(in srgb,var(--revline-accent) 9%,transparent);opacity:0;pointer-events:none;transition:opacity 180ms ease}
+.custom-timeline .timeline-ai-frame{position:absolute;inset:0;z-index:15;overflow:hidden;border:0;border-radius:0;box-shadow:none;opacity:0;pointer-events:none;transition:opacity 320ms ease}
 .custom-timeline[data-editing-locked] .timeline-ai-frame{opacity:1}
-.custom-timeline .timeline-ai-frame::before,.custom-timeline .timeline-ai-frame::after{content:'';position:absolute;left:-36%;width:36%;height:2px;background:linear-gradient(90deg,transparent,var(--revline-accent-light),transparent);box-shadow:0 0 9px 2px color-mix(in srgb,var(--revline-accent) 60%,transparent);opacity:.85}
-.custom-timeline .timeline-ai-frame::before{top:0}
-.custom-timeline .timeline-ai-frame::after{bottom:0}
-.custom-timeline[data-editing-locked] .timeline-ai-frame::before{animation:timeline-ai-sweep-top 4.8s linear infinite}
-.custom-timeline[data-editing-locked] .timeline-ai-frame::after{animation:timeline-ai-sweep-bottom 4.8s linear infinite}
-@keyframes timeline-ai-sweep-top{to{transform:translateX(380%)}}
-@keyframes timeline-ai-sweep-bottom{from{transform:translateX(380%)}to{transform:translateX(0)}}
+.custom-timeline .timeline-ai-frame::before{content:'';position:absolute;inset:0;border-radius:0;background:none;box-shadow:inset 0 0 80px 8px #8c75f0b3,inset 0 0 24px 1px #aa8bf56b;opacity:.9;animation:demo-ai-inner-glow 3.6s cubic-bezier(.45,0,.55,1) infinite paused}
+.custom-timeline[data-editing-locked] .timeline-ai-frame::before{animation-play-state:running;will-change:opacity}
+.custom-timeline .timeline-ai-frame::after{content:none;animation:none}
+@keyframes demo-ai-inner-glow{0%,100%{opacity:.18}50%{opacity:1}}
+@keyframes demo-ai-inner-glow-soft{0%,100%{opacity:.3}50%{opacity:1}}
 .custom-timeline .timeline-body::after{content:'';position:absolute;inset:0;z-index:12;background:color-mix(in srgb,var(--ws-bg) 22%,transparent);backdrop-filter:blur(1.5px);opacity:0;pointer-events:none;transition:opacity 160ms ease}
-.custom-timeline .timeline-ai-notice{position:absolute;top:50%;left:50%;z-index:13;width:max-content;max-width:calc(100% - 32px);padding:0;border:0;border-radius:0;background:none;color:var(--ws-text);box-shadow:none;font-size:13px;font-weight:500;line-height:1.4;opacity:0;transform:translate(-50%,calc(-50% + 3px));pointer-events:none;transition:opacity 160ms ease,transform 160ms cubic-bezier(.23,1,.32,1);text-align:center}
+.custom-timeline .timeline-ai-notice{position:absolute;top:50%;left:50%;z-index:13;width:max-content;max-width:calc(100% - 32px);padding:0;border:0;border-radius:0;background:none;color:var(--ws-text);box-shadow:none;font-size:13px;font-weight:500;line-height:1.4;opacity:0;transform:translate(-50%,calc(-50% + 3px));pointer-events:none;transition:opacity 240ms ease;text-align:center}
 .custom-timeline[data-editing-locked] .timeline-body:is(:hover,:focus-within)::after,.custom-timeline[data-editing-locked] .timeline-body:is(:hover,:focus-within) .timeline-ai-notice{opacity:1}
 .custom-timeline[data-editing-locked] .timeline-body:is(:hover,:focus-within) .timeline-ai-notice{transform:translate(-50%,-50%)}
+@starting-style{.custom-timeline[data-editing-locked] .timeline-body:is(:hover,:focus-within) .timeline-ai-notice{opacity:0}}
 .custom-timeline[data-editing-locked] :is(.timeline-clip,.time-ruler,.timeline-playhead-cap,.timeline-beat-marker){cursor:default}
 .custom-timeline[data-editing-locked] .timeline-playhead-cap:hover{color:#009DFF}
 .custom-timeline[data-editing-locked] :is(.clip-trim,.audio-volume-line){pointer-events:none}
-@media(prefers-reduced-motion:reduce){.custom-timeline .timeline-ai-frame,.custom-timeline .timeline-ai-notice,.custom-timeline .timeline-body::after{transition:none}.custom-timeline .timeline-ai-frame::before,.custom-timeline .timeline-ai-frame::after{animation:none!important}}
+@media(prefers-reduced-motion:reduce){.custom-timeline .timeline-ai-frame{transition:opacity 320ms ease!important}.custom-timeline .timeline-ai-notice{transition:opacity 240ms ease!important}.custom-timeline .timeline-body::after{transition:none}.custom-timeline .timeline-ai-frame::before{animation:demo-ai-inner-glow-soft 4.4s cubic-bezier(.45,0,.55,1) infinite paused}}

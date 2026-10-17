@@ -85,6 +85,7 @@ try{
  assert.equal(await page.$eval('.timeline-ai-notice',el=>el.textContent),'Revline is editing your timeline');
  assert.deepEqual(await page.$eval('.timeline-ai-notice',el=>{const style=getComputedStyle(el);return[el.children.length,style.padding,style.borderWidth,style.backgroundColor,style.boxShadow,style.fontSize];}),[0,'0px','0px','rgba(0, 0, 0, 0)','none','13px'],'Hover notice is plain text with no icon, card, or extra copy');
  assert.equal(await page.$eval('.timeline-ai-frame',el=>el.getAttribute('aria-hidden')),'true');
+ assert.deepEqual(await page.$eval('.timeline-ai-frame',el=>{const frame=getComputedStyle(el),light=getComputedStyle(el,'::before');return[frame.inset,frame.borderRadius,light.animationName,light.animationPlayState];}),['0px','0px','demo-ai-inner-glow','running'],'The real main-editor timeline uses the shared square breathing halo');
  for(const label of ['Add timeline layer','Unlink video and audio','Mute A1','Volume for A1'])assert.equal(await page.$eval('[aria-label="'+label+'"]',el=>el.disabled),true,'Editing control disabled: '+label);
  assert.equal(await page.$$eval('.clip-trim',nodes=>nodes.every(node=>node.disabled)),true);
  await drag('v',54);assert.equal(await page.$('.timeline-floating-clip'),null,'Locked clips cannot start floating drags');
