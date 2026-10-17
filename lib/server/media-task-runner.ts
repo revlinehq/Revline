@@ -19,12 +19,13 @@ import { importVideoLink } from './import-video-link';
 import { prepareComposition,writeComposition } from './prepare-composition';
 import { reviewComposition } from './review-composition';
 import { extractInspectionFrames } from './inspect-video-frames';
+import { MEDIA_ACTIVITY_LABELS, type MediaTaskActivity, type ReportMediaActivity } from '@/lib/media-analysis/activity';
 
-export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpClient, convexUrl: string, signal: AbortSignal, onProgress: (percent: number) => void): Promise<MediaTaskResult> {
+export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpClient, convexUrl: string, signal: AbortSignal, onProgress: (percent: number) => void, onActivity?: ReportMediaActivity): Promise<MediaTaskResult> {
   const startedAt = Date.now();
   const logPhase = (phase: string, state: string, phaseStartedAt: number, detail = '') => {
     const now = Date.now();
-    console.log(`[${new Date(now).toISOString()}] Media task ${task.taskId} (${task.kind}): ${phase} ${state}${detail ? ` · ${detail}` : ''} · phase ${((now - phaseStartedAt) / 1000).toFixed(1)}s · total ${((now - startedAt) / 1000).toFixed(1)}s`);
+    console.log(`[${new Date(now).toISOString()}] Media task ${task.taskId} (${task.kind}): ${phase} ${state}${detail ? ` · ${detail}` : ''} · phase ${((now - phaseStartedAt) / 1000).toFixed(1)}s · total ${((now - startedAt) / 1000).toFixed(1)}s · chat ${task.projectId}${task.aiRunId ? ` · run ${task.aiRunId}` : ''}`);
   };
   const runPhase = async <T>(phase: string, work: () => Promise<T>): Promise<T> => {
     const phaseStartedAt = Date.now();
@@ -36,6 +37,14 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
       return result;
     } catch (error) { logPhase(phase, 'failed', phaseStartedAt); throw error; }
     finally { clearInterval(heartbeat); }
+  };
+  let geminiActivity:MediaTaskActivity|undefined,geminiActivityStartedAt=0,geminiHeartbeat:ReturnType<typeof setInterval>|undefined;
+  const reportGeminiActivity:ReportMediaActivity=activity=>{
+    if(activity===geminiActivity)return;
+    if(geminiActivity)logPhase(MEDIA_ACTIVITY_LABELS[geminiActivity],'complete',geminiActivityStartedAt);
+    clearInterval(geminiHeartbeat);geminiActivity=activity;geminiActivityStartedAt=Date.now();
+    onActivity?.(activity);logPhase(MEDIA_ACTIVITY_LABELS[activity],'started',geminiActivityStartedAt);
+    geminiHeartbeat=setInterval(()=>logPhase(MEDIA_ACTIVITY_LABELS[activity],'still running',geminiActivityStartedAt),15_000);
   };
   const directory = await mkdtemp(join(tmpdir(), 'revline-task-'));
   const credentials = { taskId: task.taskId, leaseToken: task.leaseToken };
@@ -68,6 +77,7 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
     if (task.kind === 'waveform' && asset.waveform) return { waveform: asset.waveform };
     if (task.kind === 'transcribe' && asset.analysis?.transcript) return { analysis: { transcript: asset.analysis.transcript } };
     const source = join(directory, 'source'), sourceUrl = asset.url;
+    onActivity?.('downloading');
     const downloadStartedAt = Date.now();
     let loggedPercent = 0, loggedAt = downloadStartedAt;
     await runPhase('Downloading source', () => downloadOwnedMedia(sourceUrl, source, new URL(convexUrl).origin, asset.size, signal, {
@@ -142,8 +152,8 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
     onProgress(30);
     if (task.kind === 'video') {
       if (!task.videoRequest) throw new AnalysisError('Native video inspection needs a question and source window.', 400);
-      return { videoInspection: await runPhase('Inspecting video',()=>inspectVideo(video, media.duration, task.videoRequest!, key, signal, nativeType ? mimeType : 'video/mp4')) };
+      return { videoInspection: await runPhase('Inspecting video',()=>inspectVideo(video, media.duration, task.videoRequest!, key, signal, nativeType ? mimeType : 'video/mp4',reportGeminiActivity)) };
     }
-    return { analysis: { understanding: await runPhase('Understanding footage',()=>understandVideo(video, media.duration, key, signal, nativeType ? mimeType : 'video/mp4')) } };
-  } finally { await rm(directory, { recursive: true, force: true }); }
+    return { analysis: { understanding: await runPhase('Understanding footage',()=>understandVideo(video, media.duration, key, signal, nativeType ? mimeType : 'video/mp4',reportGeminiActivity)) } };
+  } finally { clearInterval(geminiHeartbeat);await rm(directory, { recursive: true, force: true }); }
 }

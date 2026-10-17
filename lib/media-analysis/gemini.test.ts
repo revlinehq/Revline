@@ -17,7 +17,7 @@ beforeEach(async () => {
 });
 afterEach(async () => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); await rm(directory, { recursive: true, force: true }); });
 
-function mockProvider(result: unknown, status = 200) {
+function mockProvider(result: unknown, status = 200, processing = false) {
   vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request, options: RequestInit & { duplex?: string } = {}) => {
     const url = String(input);
     calls.push({ url, options });
@@ -28,7 +28,7 @@ function mockProvider(result: unknown, status = 200) {
       const chunks: Buffer[] = [];
       for await (const chunk of stream) chunks.push(chunk);
       expect(Buffer.concat(chunks).toString()).toBe('fixture source');
-      return Response.json({ file: { name: 'files/fixture', uri: 'https://generativelanguage.googleapis.com/v1beta/files/fixture', state: 'ACTIVE' } });
+      return Response.json({ file: { name: 'files/fixture', uri: 'https://generativelanguage.googleapis.com/v1beta/files/fixture', state: processing ? 'PROCESSING' : 'ACTIVE' } });
     }
     if (url.endsWith('/interactions')) {
       // The real Interactions API rejects unsupported Zod schema constraints with HTTP 400.
@@ -38,6 +38,7 @@ function mockProvider(result: unknown, status = 200) {
       return Response.json(result, { status });
     }
     if (options.method === 'DELETE') return Response.json({});
+    if (url.endsWith('/v1beta/files/fixture')) return Response.json({ name: 'files/fixture', uri: 'https://generativelanguage.googleapis.com/v1beta/files/fixture', state: 'ACTIVE' });
     throw new Error(`Unexpected request ${url}`);
   }));
 }
@@ -50,6 +51,14 @@ test('uses dedicated verbatim word timing and deletes the uploaded source', asyn
   expect(JSON.parse(request.options.body as string)).toMatchObject({ model: 'gemini-3.5-transcribe', store: false, generation_config: { transcription_config: { mode: { type: 'verbatim', timestamp_granularities: ['word'] } } } });
   expect(new Headers(request.options.headers).get('x-goog-api-key')).toBe('test-key');
   expect(calls.at(-1)).toMatchObject({ url: 'https://generativelanguage.googleapis.com/v1beta/files/fixture', options: { method: 'DELETE' } });
+});
+
+test('reports actual upload, provider preparation and interaction phases', async () => {
+  const phases:string[]=[];
+  mockProvider({ outputs:[{text:JSON.stringify({summary:'A person waves.',scenes:[{start:0,end:1,description:'A wave.',score:.8}]})}] },200,true);
+  await understandVideo(source,1,'test-key',AbortSignal.timeout(5000),'video/mp4',phase=>phases.push(phase));
+  expect(phases).toEqual(['sending-gemini','preparing-gemini','analyzing']);
+  expect(calls.filter(call=>call.url.endsWith('/interactions'))).toHaveLength(1);
 });
 
 test('deletes temporary uploads even when provider quota is exhausted', async () => {

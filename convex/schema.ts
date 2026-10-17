@@ -122,10 +122,12 @@ export const userFields = {
 export const userDocument = v.object({ _id: v.id("users"), _creationTime: v.number(), ...userFields });
 export const mediaTaskKind = v.union(analysisMode, v.literal('extract'), v.literal('waveform'), v.literal('render'), v.literal('import'), v.literal('review'));
 export const mediaTaskStatus = v.union(v.literal('queued'), v.literal('running'), v.literal('retrying'), v.literal('completed'), v.literal('failed'), v.literal('cancelled'));
+export const mediaTaskActivity = v.union(v.literal('downloading'), v.literal('sending-gemini'), v.literal('preparing-gemini'), v.literal('analyzing'), v.literal('retrying-analysis'));
 export const mediaTaskFields = {
   ownerId: v.string(), projectId: v.id('projects'), kind: mediaTaskKind,
   assetId: v.optional(v.id('assets')), renderJobId: v.optional(v.id('renderJobs')), analysisRequestId: v.optional(v.id('analysisRequests')),
   status: mediaTaskStatus, claimable:v.optional(v.boolean()), workflowId: v.optional(v.string()), attempt: v.number(), progress: v.number(),
+  activity:v.optional(mediaTaskActivity),activityStartedAt:v.optional(v.number()),
   outputAssetId: v.optional(v.id('assets')),
   sourceUrl: v.optional(v.string()),
   reviewId:v.optional(v.id('compositionReviews')),requiredProcessorVersion:v.optional(v.number()),

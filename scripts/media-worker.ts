@@ -2,6 +2,7 @@ import { ConvexHttpClient, ConvexClient } from 'convex/browser';
 import { api } from '../convex/_generated/api';
 import { processMediaTask } from '../lib/server/media-task-runner';
 import { AnalysisError } from '../lib/media-analysis/errors';
+import type { MediaTaskActivity } from '../lib/media-analysis/activity';
 
 const convexUrl = process.env.NEXT_PUBLIC_CONVEX_URL;
 const workerSecret = process.env.RENDER_WORKER_SECRET;
@@ -24,17 +25,17 @@ async function runSlot() {
       const observedRevision = queueRevision;
       const task = await client.mutation(api.mediaTasks.claim, { workerSecret: workerSecret!, compact:true,processorVersion:2 });
       if (!task) { await waitForWork(observedRevision); continue; }
-      console.log(`Media task ${task.taskId}: ${task.kind} started.`);
+      console.log(`[${new Date().toISOString()}] Chat ${task.projectId} · media task ${task.taskId}: ${task.kind} started.`);
       const controller = new AbortController();
       const signal = AbortSignal.any([controller.signal, shutdown.signal, AbortSignal.timeout(15 * 60_000)]);
       const credentials = { taskId: task.taskId, leaseToken: task.leaseToken };
-      let progress = 0, reported = -1;
+      let progress = 0, reported = -1,activity:MediaTaskActivity|undefined;
       let heartbeats = Promise.resolve();
       const heartbeat = () => {
         heartbeats = heartbeats.then(async () => {
           if (signal.aborted) return;
           const next = progress;
-          await client.mutation(api.mediaTasks.heartbeat, { ...credentials, progress: next });
+          await client.mutation(api.mediaTasks.heartbeat, { ...credentials, progress: next,...(activity?{activity}:{}) });
           reported = next;
         }).catch(() => { controller.abort(); });
       };
@@ -45,17 +46,17 @@ async function runSlot() {
         const result = await processMediaTask(snapshot, client, convexUrl!, signal, percent => {
           progress = Math.max(progress, Math.min(99, percent));
           if (progress - reported >= 10) heartbeat();
-        });
+        },next=>{if(activity!==next){activity=next;heartbeat();}});
         clearInterval(timer); await heartbeats; signal.throwIfAborted();
         await client.mutation(api.mediaTasks.complete, { ...credentials, result });
-        console.log(`Media task ${task.taskId}: completed.`);
+        console.log(`[${new Date().toISOString()}] Chat ${task.projectId} · media task ${task.taskId}: completed.`);
       } catch (error) {
         clearInterval(timer); await heartbeats;
         if (!shutdown.signal.aborted && !controller.signal.aborted) {
           const retryable = task.kind!=='review'&&!(error instanceof AnalysisError && error.status < 500);
           await client.mutation(api.mediaTasks.fail, { ...credentials, error: error instanceof Error ? error.message.slice(0, 1000) : 'Media processing failed.', retryable }).catch(() => {});
         }
-        console.log(`Media task ${task.taskId}: interrupted or failed; Convex owns recovery.`);
+        console.log(`[${new Date().toISOString()}] Chat ${task.projectId} · media task ${task.taskId}: interrupted or failed; Convex owns recovery.`);
       }
     } catch {
       if (!shutdown.signal.aborted) { console.error('Media queue connection interrupted. Retrying.'); await pause(5000); }

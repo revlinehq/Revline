@@ -4,6 +4,7 @@ import { ConvexClient, ConvexHttpClient } from 'convex/browser';
 import { api } from '../../convex/_generated/api';
 import { processMediaTask } from '../../lib/server/media-task-runner';
 import { AnalysisError } from '../../lib/media-analysis/errors';
+import type { MediaTaskActivity } from '../../lib/media-analysis/activity';
 
 const convexUrl = process.env.NEXT_PUBLIC_CONVEX_URL;
 const workerSecret = process.env.RENDER_WORKER_SECRET;
@@ -63,32 +64,32 @@ async function runSlot() {
       const controller = new AbortController();
       const signal = AbortSignal.any([controller.signal, shutdown.signal, AbortSignal.timeout(15 * 60_000)]);
       const credentials = { taskId: task.taskId, leaseToken: task.leaseToken };
-      let progress = 0, reported = -1, heartbeats = Promise.resolve();
+      let progress = 0, reported = -1,activity:MediaTaskActivity|undefined, heartbeats = Promise.resolve();
       const heartbeat = () => {
         heartbeats = heartbeats.then(async () => {
           if (signal.aborted) return;
           const next = progress;
-          await client.mutation(api.mediaTasks.heartbeat, { ...credentials, progress: next }); reported = next;
+          await client.mutation(api.mediaTasks.heartbeat, { ...credentials, progress: next,...(activity?{activity}:{}) }); reported = next;
         }).catch(() => controller.abort());
       };
       const timer = setInterval(heartbeat, 20_000);
-      console.log(JSON.stringify({ event: 'media-started', kind: task.kind, taskId: task.taskId }));
+      console.log(JSON.stringify({ event: 'media-started', timestamp:new Date().toISOString(),projectId:task.projectId, kind: task.kind, taskId: task.taskId }));
       try {
         const snapshot=await client.query(api.mediaTasks.work,credentials);
         signal.throwIfAborted();
         const result = await processMediaTask(snapshot, client, convexUrl!, signal, percent => {
           progress = Math.max(progress, Math.min(99, percent));
           if (progress - reported >= 10) heartbeat();
-        });
+        },next=>{if(activity!==next){activity=next;heartbeat();}});
         clearInterval(timer); await heartbeats; signal.throwIfAborted();
         await client.mutation(api.mediaTasks.complete, { ...credentials, result });
-        console.log(JSON.stringify({ event: 'media-completed', taskId: task.taskId }));
+        console.log(JSON.stringify({ event: 'media-completed', timestamp:new Date().toISOString(),projectId:task.projectId,runId:snapshot.aiRunId, taskId: task.taskId }));
       } catch (error) {
         clearInterval(timer); await heartbeats;
         if (!shutdown.signal.aborted && !controller.signal.aborted) {
           await client.mutation(api.mediaTasks.fail, { ...credentials, retryable: task.kind!=='review'&&!(error instanceof AnalysisError && error.status < 500), error: error instanceof Error ? error.message.slice(0, 1000) : 'Media processing failed.' }).catch(() => {});
         }
-        console.log(JSON.stringify({ event: 'media-interrupted', taskId: task.taskId }));
+        console.log(JSON.stringify({ event: 'media-interrupted', timestamp:new Date().toISOString(),projectId:task.projectId, taskId: task.taskId }));
       } finally { activeTasks--; lastWorkAt = Date.now(); }
     } catch {
       if (!shutdown.signal.aborted && !draining) { ready = false; console.error(JSON.stringify({ event: 'queue-reconnecting' })); await pause(); }

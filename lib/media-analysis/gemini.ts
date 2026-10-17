@@ -6,6 +6,7 @@ import { interactionText, parseTranscript } from './transcript';
 import { parseUnderstanding, understandingJsonSchema, understandingPrompt, type Understanding } from './understanding';
 import { frameInspectionJsonSchema, parseFrameInspection, type FrameInspectionInput, type FrameSample } from './frame-inspection';
 import { parseVideoInspection, validateVideoInspectionInput, videoInspectionJsonSchema, videoInspectionPrompt, type VideoInspectionInput } from './video-inspection';
+import type { ReportMediaActivity } from './activity';
 
 const BASE = 'https://generativelanguage.googleapis.com';
 const fileSchema = z.object({ name: z.string(), uri: z.string(), state: z.string().optional() });
@@ -21,7 +22,8 @@ async function googleResponse(response: Response) {
 
 function headers(key: string) { return { 'x-goog-api-key': key }; }
 
-async function uploadFile(path: string, mimeType: string, key: string, signal: AbortSignal) {
+async function uploadFile(path: string, mimeType: string, key: string, signal: AbortSignal, onActivity?: ReportMediaActivity) {
+  onActivity?.('sending-gemini');
   const { size } = await stat(path);
   const initialization = await googleResponse(await fetch(`${BASE}/upload/v1beta/files`, {
     method: 'POST', signal, headers: { ...headers(key), 'Content-Type': 'application/json', 'X-Goog-Upload-Protocol': 'resumable', 'X-Goog-Upload-Command': 'start', 'X-Goog-Upload-Header-Content-Length': String(size), 'X-Goog-Upload-Header-Content-Type': mimeType },
@@ -35,6 +37,7 @@ async function uploadFile(path: string, mimeType: string, key: string, signal: A
   const initialFile = fileSchema.parse(response.file);
   let file = initialFile;
   try {
+    if (file.state === 'PROCESSING') onActivity?.('preparing-gemini');
     for (let attempt = 0; file.state === 'PROCESSING' && attempt < 60; attempt++) {
       await new Promise<void>((resolve, reject) => {
         const timer = setTimeout(() => { signal.removeEventListener('abort', cancel); resolve(); }, 1000);
@@ -74,9 +77,10 @@ export async function transcribeAudio(path: string, duration: number, key: strin
 }
 
 /** Source timestamps describe observed scenes; structured output never becomes executable HTML. */
-export async function understandVideo(path: string, duration: number, key: string, signal: AbortSignal, mimeType = 'video/mp4'): Promise<Understanding> {
-  const file = await uploadFile(path, mimeType, key, signal);
+export async function understandVideo(path: string, duration: number, key: string, signal: AbortSignal, mimeType = 'video/mp4', onActivity?: ReportMediaActivity): Promise<Understanding> {
+  const file = await uploadFile(path, mimeType, key, signal, onActivity);
   try {
+    onActivity?.('analyzing');
     const result = await interaction({
       model: process.env.GEMINI_VIDEO_MODEL || 'gemini-3.7-flash',
       input: [
@@ -92,10 +96,11 @@ export async function understandVideo(path: string, duration: number, key: strin
 }
 
 /** Query-aware native video inspection; timestamp windows are bounded, never invented frame positions. */
-export async function inspectVideo(path: string, duration: number, input: VideoInspectionInput, key: string, signal: AbortSignal, mimeType = 'video/mp4') {
+export async function inspectVideo(path: string, duration: number, input: VideoInspectionInput, key: string, signal: AbortSignal, mimeType = 'video/mp4', onActivity?: ReportMediaActivity) {
   validateVideoInspectionInput(input, duration);
-  const file = await uploadFile(path, mimeType, key, signal);
+  const file = await uploadFile(path, mimeType, key, signal, onActivity);
   try {
+    onActivity?.('analyzing');
     const result = await interaction({
       model: process.env.GEMINI_VIDEO_MODEL || 'gemini-3.7-flash',
       input: [{ type: 'video', uri: file.uri, mime_type: mimeType, processing: 'agentic' }, { type: 'text', text: videoInspectionPrompt(input, duration) }],

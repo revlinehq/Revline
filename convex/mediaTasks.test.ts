@@ -222,6 +222,25 @@ test('chat activity ignores background work and follows only pending analysis in
   await expect(f.stranger.query(api.assistant.status, { projectId: f.projectId })).rejects.toThrow();
 });
 
+test('worker phase heartbeats drive honest chat status and retries reset old progress', async () => {
+  const f=await fixture(),taskId=await f.start('transcribe');await f.drain();const work=(await f.claim())!;
+  await f.t.run(async ctx=>{
+    await writeProject(ctx,f.projectId,{aiRunning:true,aiRunId:'phase-run'});
+    const requestId=await ctx.db.insert('analysisRequests',{ownerId:'owner',projectId:f.projectId,assetId:f.assetId,aiRunId:'phase-run',mode:'transcribe',status:'running',taskId,createdAt:Date.now(),expiresAt:Date.now()+240000});
+    await ctx.db.patch(taskId,{analysisRequestId:requestId});
+  });
+  for(const [activity,label] of [['downloading','Downloading footage…'],['sending-gemini','Sending to Gemini…'],['preparing-gemini','Preparing video…'],['analyzing','Analyzing footage…'],['retrying-analysis','Retrying analysis…']] as const){
+    await f.t.mutation(api.mediaTasks.heartbeat,{taskId,leaseToken:work.leaseToken,progress:30,activity});
+    expect(await f.owner.query(api.assistant.status,{projectId:f.projectId})).toMatchObject({activity:label,activityProgress:null});
+  }
+  const before=await f.owner.query(api.mediaTasks.get,{taskId});
+  await f.t.mutation(api.mediaTasks.heartbeat,{taskId,leaseToken:work.leaseToken,progress:31});
+  expect((await f.owner.query(api.mediaTasks.get,{taskId})).activityStartedAt).toBe(before.activityStartedAt);
+  await f.t.mutation(api.mediaTasks.fail,{taskId,leaseToken:work.leaseToken,error:'Transient disconnect',retryable:true});await f.drain();
+  expect(await f.owner.query(api.mediaTasks.get,{taskId})).toMatchObject({attempt:2,progress:0});
+  expect(await f.owner.query(api.assistant.status,{projectId:f.projectId})).toMatchObject({activity:'Retrying analysis…',activityProgress:null});
+});
+
 test('compact claims return a lease only; owned snapshots are read separately and revoked leases are refused',async()=>{
   const f=await fixture(),taskId=await f.start('transcribe');await f.drain();
   const lease=(await f.t.mutation(api.mediaTasks.claim,{workerSecret:'task-test-secret',compact:true}))!;
