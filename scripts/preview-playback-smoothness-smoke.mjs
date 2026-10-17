@@ -60,7 +60,10 @@ const bundle = await build({
       }
       createRoot(document.getElementById('root')).render(<Fixture/>);`
   },
-  plugins: process.env.REVLINE_DISABLE_WARMUP ? [{ name: 'baseline', setup(build) { build.onLoad({ filter: /preview-media-warmup\.ts$/ }, () => ({ contents: 'export const warmPreviewMedia=()=>()=>{};', loader: 'ts' })); } }] : [],
+  plugins: [
+    ...(process.env.REVLINE_DISABLE_WARMUP ? [{ name: 'baseline', setup(build) { build.onLoad({ filter: /preview-media-warmup\.ts$/ }, () => ({ contents: 'export const warmPreviewMedia=()=>()=>{};', loader: 'ts' })); } }] : []),
+    ...(process.env.REVLINE_DISABLE_BUFFERING ? [{ name: 'buffering-baseline', setup(build) { build.onLoad({ filter: /preview-buffering\.ts$/ }, () => ({ contents: 'export const guardPreviewBuffering=(_doc,player)=>({play:()=>player.play(),pause:()=>player.pause(),cancel:()=>{},dispose:()=>{},isBuffering:()=>false,isPlaying:()=>!player.paused});', loader: 'ts' })); } }] : []),
+  ],
   bundle: true, platform: 'browser', format: 'iife', jsx: 'automatic', write: false,
   outdir: '/tmp/revline-playback-bundle', define: { 'process.env.NODE_ENV': '"production"' }
 });

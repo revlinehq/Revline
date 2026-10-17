@@ -4,6 +4,7 @@ import { userError } from '@/lib/user-error';
 import { previewVisualFade } from '@/lib/editor/visual-fades-runtime';
 import { warmPreviewMedia } from '@/lib/editor/preview-media-warmup';
 import { waitForPreviewMedia } from '@/lib/editor/preview-readiness';
+import { guardPreviewBuffering } from '@/lib/editor/preview-buffering';
 import { useEffect, useLayoutEffect, useRef, useState, useMemo, forwardRef, useImperativeHandle } from 'react';
 import { audioFadeAttributes, audioVolumeEnvelope } from '@/lib/editor/audio-settings';
 import type { HyperframesPlayer } from '@hyperframes/player';
@@ -40,6 +41,7 @@ export const Preview = forwardRef<PreviewHandle,{timeline:Timeline;assets:MediaA
   const selectedClip=inputSelectedClip?timeline.clips.find(clip=>clip.id===inputSelectedClip.id):undefined;
   const cropControls=useRef<CropControlsHandle>(null);
   const container=useRef<HTMLDivElement>(null); const player=useRef<HyperframesPlayer|null>(null); const callbacks=useRef({onTime,onPlaying,onError,onRefreshMedia,onReady,onThumbnail});callbacks.current={onTime,onPlaying,onError,onRefreshMedia,onReady,onThumbnail};
+  const playbackGuard=useRef<ReturnType<typeof guardPreviewBuffering>|null>(null);
   const diagnostic=useRef<(reason:string)=>void>(()=>{});
   const latestAssets=useRef(assets);latestAssets.current=assets;
   const refreshedSources=useRef(new Map<string,{original:string|null;url:string}>());
@@ -100,7 +102,7 @@ export const Preview = forwardRef<PreviewHandle,{timeline:Timeline;assets:MediaA
     if(optional)void optional.then(apply,error=>{if(!cancelled)callbacks.current.onError(userError(error, 'Could not load the preview renderer.'));});else apply();
     return()=>{cancelled=true;};
   },[committedTimeline,assets,contentKey]);
-  useEffect(()=>()=>{player.current?.pause();player.current?.remove();player.current=null;callbacks.current.onPlaying(false);},[]);
+  useEffect(()=>()=>{playbackGuard.current?.dispose();playbackGuard.current=null;player.current?.pause();player.current?.remove();player.current=null;callbacks.current.onPlaying(false);},[]);
   const [transformId,setTransformId]=useState<string|null>(null);
   useEffect(()=>{setTransformId(current=>cropping||current!==selectedClip?.id?null:current);},[selectedClip?.id,cropping]);
   const [selectionVisible,setSelectionVisible]=useState(false);const selection=useRef(selectedClip);selection.current=selectedClip;
@@ -114,8 +116,8 @@ export const Preview = forwardRef<PreviewHandle,{timeline:Timeline;assets:MediaA
     const width=Number(composition.dataset.width),height=Number(composition.dataset.height);
     frame.style.left=`${(transform.x-.5)*width}px`;frame.style.top=`${(transform.y-.5)*height}px`;frame.style.transform=`rotate(${transform.rotation}deg) scale(${transform.scale})`;frame.style.opacity=String(transform.opacity);
   }
-  useImperativeHandle(ref,()=>({retry:()=>setReloadRevision(value=>value+1),play:()=>player.current?.play(),pause:()=>player.current?.pause(),seek:(t)=>{
-    seekPosition.current=t;player.current?.seek(t);setSelectionVisible(selectionAt(t));
+  useImperativeHandle(ref,()=>({retry:()=>setReloadRevision(value=>value+1),play:()=>{if(playbackGuard.current)playbackGuard.current.play();else player.current?.play();},pause:()=>{if(playbackGuard.current)playbackGuard.current.pause();else player.current?.pause();callbacks.current.onPlaying(false);},seek:(t)=>{
+    playbackGuard.current?.cancel();seekPosition.current=t;player.current?.seek(t);setSelectionVisible(selectionAt(t));
     // HyperFrames seek lands paused without emitting a pause event.
     callbacks.current.onPlaying(false);
   },currentTime:()=>frameTime(player.current,seekPosition.current),mute:(v)=>{if(player.current)player.current.muted=v;},clipVolume:(id,volume)=>{
@@ -144,7 +146,7 @@ export const Preview = forwardRef<PreviewHandle,{timeline:Timeline;assets:MediaA
     }catch(error){callbacks.current.onError(userError(error, 'Could not preview this effect.'));}
   },resetCrop:()=>cropControls.current?.reset(),finishCrop:(cancel=false)=>{if(cancel)cropControls.current?.cancel();else cropControls.current?.done();}}),[]);
   useEffect(()=>{
-    let cancelled=false,loaded=false,swapped=false,waitingForMedia=false;let p:HyperframesPlayer|null=null;let swapFrame=0;
+    let cancelled=false,loaded=false,swapped=false,waitingForMedia=false;let p:HyperframesPlayer|null=null;let swapFrame=0;let guard:ReturnType<typeof guardPreviewBuffering>|undefined;
     let diagnosticTimer:ReturnType<typeof setTimeout>|undefined;
     const diagnose=(reason:string)=>{
       if(!p||!debugId)return;
@@ -171,12 +173,12 @@ export const Preview = forwardRef<PreviewHandle,{timeline:Timeline;assets:MediaA
         if(!doc)return;
         void waitForPreviewMedia(doc,seekPosition.current,recovery.signal,callbacks.current.onThumbnail).then(()=>{swapFrame=requestAnimationFrame(()=>{swapFrame=requestAnimationFrame(()=>{
           if(cancelled||!p||swapped)return;
-          swapped=true;const previous=player.current;const resume=previous&&!previous.paused;
+          swapped=true;const previous=player.current;const resume=playbackGuard.current?.isPlaying()??(previous&&!previous.paused);
           if(p.iframeElement?.contentDocument){updateLiveMediaContent(p.iframeElement.contentDocument,timeline,latestTimeline.current,latestAssets.current);updateLiveTextEffects(p.iframeElement.contentDocument,timeline,latestTimeline.current);updateLiveVisualEffects(p.iframeElement.contentDocument,timeline,latestTimeline.current);updateLiveVisualGeometry(p.iframeElement.contentDocument,timeline,latestTimeline.current,assets);updateLiveAdjustmentEffects(p.iframeElement.contentDocument,timeline,latestTimeline.current);}
-          previous?.pause();player.current=p;p.muted=mutedRef.current;p.style.zIndex='1';previous?.remove();
+          playbackGuard.current?.dispose();previous?.pause();player.current=p;playbackGuard.current=guard??null;p.muted=mutedRef.current;p.style.zIndex='1';previous?.remove();
           renderedTimeline.current=latestTimeline.current;
           renderedContentKey.current=contentKey;
-          setSelectionVisible(selectionAt(seekPosition.current));callbacks.current.onTime(seekPosition.current);setReady(true);callbacks.current.onReady?.();setRevision(value=>value+1);if(resume)p.play();
+          setSelectionVisible(selectionAt(seekPosition.current));callbacks.current.onTime(seekPosition.current);setReady(true);callbacks.current.onReady?.();setRevision(value=>value+1);if(resume){if(guard)guard.play();else p.play();}
         });});}).catch(error=>{if(!cancelled&&!recovery.signal.aborted)callbacks.current.onError(userError(error, 'The footage could not load.'));});
       };
       p.addEventListener('ready',()=>{if(cancelled||!p)return;
@@ -215,16 +217,16 @@ export const Preview = forwardRef<PreviewHandle,{timeline:Timeline;assets:MediaA
         doc?.addEventListener('error',mediaError,true);removeMediaErrors=()=>doc?.removeEventListener('error',mediaError,true);
         doc?.defaultView?.addEventListener('revline-effects-error',event=>{if(!cancelled)callbacks.current.onError((event as CustomEvent<string>).detail);});
         if(doc?.documentElement.dataset.visualEffectsError)callbacks.current.onError(doc.documentElement.dataset.visualEffectsError);
-        loaded=true;if(doc)stopWarmup=warmPreviewMedia(doc,()=>frameTime(p,seekPosition.current));p.seek(seekPosition.current);updateLayers(p,latestTimeline.current);if(p.painted)swap();});
+        loaded=true;if(doc){stopWarmup=warmPreviewMedia(doc,()=>frameTime(p,seekPosition.current));guard=guardPreviewBuffering(doc,p,()=>frameTime(p,seekPosition.current));}p.seek(seekPosition.current);updateLayers(p,latestTimeline.current);if(p.painted)swap();});
       p.addEventListener('painted',swap);
       p.addEventListener('timeupdate',(e)=>{if(!loaded||player.current!==p)return;const detail=(e as CustomEvent<{currentTime:number}>).detail;const t=frameTime(p,detail?.currentTime??seekPosition.current);seekPosition.current=t;setSelectionVisible(selectionAt(t));callbacks.current.onTime(t);});
-      const stopped=()=>{if(!loaded||player.current!==p)return;const t=frameTime(p,seekPosition.current);seekPosition.current=t;callbacks.current.onTime(t);callbacks.current.onPlaying(false);};
+      const stopped=()=>{if(!loaded||player.current!==p)return;const t=frameTime(p,seekPosition.current);seekPosition.current=t;callbacks.current.onTime(t);if(!guard?.isBuffering())callbacks.current.onPlaying(false);};
       p.addEventListener('play',()=>{if(p&&loaded&&player.current===p){callbacks.current.onPlaying(true);const start=p.currentTime;if(diagnosticTimer)clearTimeout(diagnosticTimer);diagnosticTimer=setTimeout(()=>{if(p&&!p.paused&&p.currentTime<=start+.05)diagnose('clock did not advance after Play');},1200);}});p.addEventListener('pause',stopped);p.addEventListener('ended',stopped);
       p.addEventListener('error',()=>{if(!cancelled){diagnose('player error');callbacks.current.onError('The preview could not load this media. Try an MP4 with H.264 video.');}});
       container.current.appendChild(p);if(debugId)diagnosticTimer=setTimeout(()=>{if(p&&!p.ready)diagnose('player readiness stalled');},4000);
     }).catch(e=>callbacks.current.onError(String(e)));
     // Leave the displayed player mounted until its replacement has a painted frame.
-    return ()=>{cancelled=true;window.removeEventListener('message',iframeError);if(diagnosticTimer)clearTimeout(diagnosticTimer);recovery.abort();removeMediaErrors?.();stopWarmup?.();cancelAnimationFrame(swapFrame);if(p&&player.current!==p){p.pause();p.remove();}};
+    return ()=>{cancelled=true;window.removeEventListener('message',iframeError);if(diagnosticTimer)clearTimeout(diagnosticTimer);recovery.abort();removeMediaErrors?.();stopWarmup?.();cancelAnimationFrame(swapFrame);if(p&&player.current!==p){guard?.dispose();p.pause();p.remove();}};
   },[contentKey,reloadRevision]);
   const canvas=dimensions(timeline.aspectRatio);
   const asset=assets.find(asset=>asset._id===selectedClip?.assetId);

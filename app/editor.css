@@ -214,6 +214,7 @@ body:has(.conversation-editor) .visual-fit-options button[aria-pressed=true]{bac
 .conversation-editor .assistant-history::-webkit-scrollbar{display:none}
 .conversation-editor .assistant-turns{width:100%;padding-right:0;padding-bottom:16px}
 .conversation-editor .assistant-turn.is-latest-turn{min-height:calc(var(--chat-viewport-height,0px) - 24px)}
+.conversation-editor .assistant-turns:has(>[data-chat-follow]) .assistant-turn.is-latest-turn{min-height:0}
 .conversation-editor .manual-composer-dock{position:relative;flex-shrink:0;min-width:0;width:100%}
 .conversation-editor .manual-composer-dock>.edit-composer{background:var(--ws-bg)}
 .conversation-editor .manual-composer-dock>.chat-jump-latest{position:absolute;top:-40px;right:16px}

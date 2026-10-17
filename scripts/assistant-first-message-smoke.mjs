@@ -42,6 +42,8 @@ try {
  await page.evaluate(() => window.fixture.update({ suggestions: { sourceName: 'Selected footage', clipId: 'clip', items: Array.from({ length: 3 }, (_, index) => ({ label: `Try suggestion ${index}`, prompt: 'Improve this moment', start: index, end: index + 1 })) } }));
  const visible = selector => page.waitForFunction(selector => { const target = document.querySelector(selector), viewport = document.querySelector('.assistant-history'); if (!target || !viewport) return false; const box = target.getBoundingClientRect(), bounds = viewport.getBoundingClientRect(); return box.top >= bounds.top - 1 && box.bottom <= bounds.bottom + 1; }, {}, selector);
  await visible('.assistant-source-suggestions button:last-child');
+ await visible('[data-message-id="u4"]');
+ await visible('[data-message-id="a4"]');
  await page.evaluate(() => window.fixture.update({ error: 'The request could not finish. Your existing edit is still saved. Please try again.' }));
  await visible('.chat-error');
  await page.$eval('.assistant-history', node => { node.dispatchEvent(new WheelEvent('wheel', { deltaY: -300 })); node.scrollTop = 0; });
