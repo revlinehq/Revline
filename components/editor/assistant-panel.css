@@ -10,7 +10,7 @@
 .conversation-editor .assistant-content .manual-editor-composer{padding:10px;border-radius:10px;gap:8px;background:var(--secondary);box-shadow:inset 0 0 0 1px var(--border);font-size:14px}
 .conversation-editor .assistant-content .manual-editor-composer .composer-edit-fields{display:flex;flex-direction:column;gap:12px;min-width:0}
 .conversation-editor .assistant-content .manual-editor-composer textarea{min-height:44px;font-size:14px;line-height:20px;letter-spacing:0}
-.conversation-editor .assistant-content .manual-editor-composer :is(.composer-attachment>span,.composer-add,.composer-empty-hint,.composer-more,.composer-error,.composer-status,.composer-submit,.inspector-select-trigger){font-size:14px}
+.conversation-editor .assistant-content .manual-editor-composer :is(.composer-attachment>span,.composer-add,.composer-empty-hint,.composer-more,.composer-error,.composer-status,.composer-submit){font-size:14px}
 .conversation-editor .assistant-content .manual-editor-composer .edit-composer-actions{height:32px}
 .assistant-content .manual-composer-dock{flex:none}
 .assistant-activity-elapsed{flex:none;margin-top:2px;color:var(--muted-foreground);font-size:11px;font-variant-numeric:tabular-nums}
