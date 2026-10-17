@@ -1,0 +1,86 @@
+[
+  {
+    "id": "01-pit-entry",
+    "source": "pit-stop.webm",
+    "sourceStart": 18,
+    "frames": 60,
+    "duration": 2.0,
+    "width": 1280,
+    "height": 720,
+    "crop": "crop=1600:900:160:180",
+    "waveform": {
+      "peaks": "wZO8fnvDf3WuhK6aqZC+4cS/vJrIiKmbxZmcs9e027+XkMngsM3fuf+0p7XUtbPDjMKntpK8m5q0wo2wrtDOh5iOh3KIjXJzinJ8cHu1b2xzaoNqk1mOfWdiboSMhJikjoOyvqSqv+TOt7GuwbLYjbKhoYKCqoKHXYeWkK6gqZKalqe+5r7erre22N/ZvsLhx9qtuNTNyvf8/8Te5vC1qrFxm4eBvpurX5W3l5+Gl3Nxi6Cfgquko2hwb3Wlfnqaf6aifoKRhqUw",
+      "samplesPerSecond": 100
+    }
+  },
+  {
+    "id": "02-warm-up",
+    "source": "warm-up.webm",
+    "sourceStart": 4.5,
+    "frames": 72,
+    "duration": 2.4,
+    "width": 1280,
+    "height": 720,
+    "crop": null,
+    "waveform": {
+      "peaks": "TmhXdoxfgKN0aV1+Y1GzZGekh3KhmGuIaX5wfph+eoxraGZ/fWZ6iWChYIR3ilF8bZSVY4XAWm5QrZ5seKR4a2VcgHuAeIZjgWR1hN19qpCHeIF4p6KUgZ+M1o2HcpSknY9+kZiYnn+PjZx7ebatnXJ2lXiMg3jJ+6tzgX64g87Ugs6DpF1cf3J2dn39h4/KgXCmioh+e4x9xpV1iqC4to52eYh3apVfj4eEuoqWioxov8BheICXr+Ckt6KFlcSipJF5oH2qjo+klMOobqHyzJaIj7GVr5B5b5Sld4+oiJ+ksMCQzZTug3qFi6GUz2uo",
+      "samplesPerSecond": 100
+    }
+  },
+  {
+    "id": "03-wheel-change",
+    "source": "pit-stop.webm",
+    "sourceStart": 22,
+    "frames": 54,
+    "duration": 1.8,
+    "width": 1280,
+    "height": 720,
+    "crop": "crop=1600:900:80:180",
+    "waveform": {
+      "peaks": "roHfybmsys2h9Ou4xMfAtbB0fZKBX7Odu6xwznmecGu3i5KJaHx6mIeParx1cFliY0g4TFUzZkRFRThAOkpMPjVJMUI3MSwpNiYiIys4NSQmJS84JDAfIykrLC4oMzclJiMfIi4rJistIyEaICMqJyckKywrMDgrKignKS4aJCUoK0gpKi0zO0s7LVtYVjkwNT89NzxNO0oxNShSVEM9NDxOVlZCP0RIOlZMWGdWSVV9baZw",
+      "samplesPerSecond": 100
+    }
+  },
+  {
+    "id": "04-track-pass",
+    "source": "warm-up.webm",
+    "sourceStart": 7.2,
+    "frames": 72,
+    "duration": 2.4,
+    "width": 1280,
+    "height": 720,
+    "crop": null,
+    "waveform": {
+      "peaks": "lXK1X5mjjGNoeWWLd3Z5YIxRa2xkhFvCnn+7goVibVtWUlmCkW9plqKKirKCe3yBZoV3X5N7bXh+Z1Z1b2Nlel9NX2l/haFijoRvlquprbSKopNms3+Jh31XdWJTVGleaFdud1lgXGZrZmh5dGdgjG9obG1zXWxtjXR9kJyWYG6QcFecXH+QgZFvom9/WHabe5Zsfm5je5NhdU9ZYFyFqbR1Y01hjYlxYoRgemBTaWhleHV4aFZcTXZaQ1JAXVBWYV1eYl1BVWVVYFlJi3B+VXJKbWptSE9ai35VPVVeR2d0W1hcY3RcblNdWHhuaHBq",
+      "samplesPerSecond": 100
+    }
+  },
+  {
+    "id": "05-wheel-fit",
+    "source": "pit-stop.webm",
+    "sourceStart": 29.8,
+    "frames": 48,
+    "duration": 1.6,
+    "width": 1280,
+    "height": 720,
+    "crop": "crop=1280:720:160:360",
+    "waveform": {
+      "peaks": "/7m1ttPa0aGOpIi0x5h3i3dSVVs5QDo2OTcvKispKSwoLB0pLiImJh4jISYlIzMkJCwoJCAeHSMgLDMsPS4uKCwgIDUsLzYyRyowLjI8NjNPNzsqL0k4X0xhYTxmWllfWlpKTkdRR0BDSEdaPUtoUDxgdmZTYFVjY492fVyHZIBucZScdJeVqoaJhoO4mqevlLKZn3tYaXhaiY9vgcywqg==",
+      "samplesPerSecond": 100
+    }
+  },
+  {
+    "id": "06-grid-rollout",
+    "source": "warm-up.webm",
+    "sourceStart": 11.4,
+    "frames": 90,
+    "duration": 3.0,
+    "width": 1280,
+    "height": 720,
+    "crop": null,
+    "waveform": {
+      "peaks": "WVVCalpIQIdjYnJwVE9eZ1Z7S12GZGJtanV1UXFtM2NVT1k9THZEKVZWSWR4X2dXUVZqc0tvRmNvZY99Z2dqcGhoZHxrhU9WVm5FQ01nWkdPQnFaQFdiYmZDRUdFXl9MVkNjQEhaWmpkXlWAT05eV05RMzhBPkdJbk5dSklJa0Q/UVdBW0ZbVFc6T0VXV1A/VkpRP2ZePT9DN2dRR1NsVTpVT0JSQGFXXU9PTkdbRUlMRDtHSUVxQVAzUDQ/UTw7MTtfTDc5Ukw6MSYsKjZSOU1STlxcRVNRQ0ZVTD87UTdLOj5iWkFKQzRQUjlRbkxUOzVWbFtHYm1LPko2QUZOPkk3PzA6RzxDV1dANTcyLzBNQVdGSkI0NzhBTkEwXEc8NTMxLTNTQDtESUhK",
+      "samplesPerSecond": 100
+    }
+  }
+]

@@ -10,6 +10,7 @@ import { normalizeMediaFile } from '@/lib/editor/media-file';
 import { EMPTY_SCRIPTED_DEMO, scriptedDemoPlan, scriptedDemoMedia } from '@/lib/editor/scripted-demo';
 import { streamDemoText, waitForDemoStep } from '@/lib/editor/scripted-demo-chat';
 import { HORMOZI_DEMO_ASSET, hormoziDemoPlan } from '@/lib/editor/hormozi-demo';
+import { RACING_DEMO_ASSETS, racingDemoPlan } from '@/lib/editor/racing-demo';
 import type { MediaAsset, Timeline } from '@/lib/editor/types';
 import type { ComposerAttachment } from '@/components/workspace/edit-composer';
 import { stockAudioAsset } from '@/lib/editor/stock-audio';
@@ -30,13 +31,14 @@ function DemoConversation({ chatStore, ...props }: Omit<ComponentProps<typeof As
 
 /** Separate, local-only recording route. The production editor never uses this script. */
 export function ScriptedDemoEditor({ demoId }: { demoId: string }) {
-  const preparedTake=demoId==='hormozi-take-1';
+  const racingTake=demoId==='racing-take-1';
+  const preparedTake=racingTake||demoId==='hormozi-take-1';
   const [store] = useState(() => createEditorStore(EMPTY_SCRIPTED_DEMO));
   const timeline = useStore(store, state => state.timeline), history = useStore(store, state => state.history), future = useStore(store, state => state.future);
   const [assets, setAssets] = useState<MediaAsset[]>([]), [pending, setPending] = useState<ComposerAttachment[]>([]);
   const [stockAssets, setStockAssets] = useState<MediaAsset[]>([]);
   const [submittedAssetIds, setSubmittedAssetIds] = useState<string[]>([]);
-  const media = useMemo(() => scriptedDemoMedia([...(preparedTake?[HORMOZI_DEMO_ASSET]:assets),...stockAssets]), [assets,preparedTake,stockAssets]);
+  const media = useMemo(() => racingTake ? { assets: [...RACING_DEMO_ASSETS, ...stockAssets] } : scriptedDemoMedia([...(preparedTake?[HORMOZI_DEMO_ASSET]:assets),...stockAssets]), [assets,preparedTake,racingTake,stockAssets]);
   const [conversation] = useState(() => createStore<{ messages: ChatMessage[] }>(() => ({ messages: [] })));
   const [running, setRunning] = useState(false), [importing, setImporting] = useState(false);
   const [error, setError] = useState(''), [title, setTitle] = useState('Your next edit'), [activity, setActivity] = useState<string | null>(null);
@@ -90,7 +92,7 @@ export function ScriptedDemoEditor({ demoId }: { demoId: string }) {
   async function build(prompt: string) {
     if (activeRun.current || importingRef.current) return;
     if(preparedTake&&!assetsRef.current.length)throw new Error('Attach media before starting the edit.');
-    const runId = `demo-build-${crypto.randomUUID()}`, plan = preparedTake?hormoziDemoPlan(runId):scriptedDemoPlan(assetsRef.current, prompt, runId);
+    const runId = `demo-build-${crypto.randomUUID()}`, plan = racingTake?racingDemoPlan(runId):preparedTake?hormoziDemoPlan(runId):scriptedDemoPlan(assetsRef.current, prompt, runId);
     const controller = new AbortController(); activeRun.current = controller;
     setSubmittedAssetIds(assetsRef.current.map(asset => asset._id));
     setError(''); setLastPrompt(prompt); setRunning(true); setActivity('Building your edit…');
@@ -98,7 +100,7 @@ export function ScriptedDemoEditor({ demoId }: { demoId: string }) {
     store.getState().recover(plan.initial); store.setState({ playhead: 0, playing: false }); store.getState().beginUndoGroup(runId);
     let current = plan.initial;
     const opening = preparedTake ? plan.steps[0].reply : 'I’ll build a short sequence with cuts, captions, and subtle effects.';
-    const details = plan.steps.find(step => step.clips.some(clip => clip.kind === 'caption'))?.reply;
+    const details = plan.steps.find(step => step.clips.some(clip => clip.kind === 'caption' || clip.kind === 'graphic'))?.reply;
     async function narrate(text: string, separator = '') {
       let prefix = separator;
       await streamDemoText(text, controller.signal, chunk => {
@@ -138,6 +140,7 @@ export function ScriptedDemoEditor({ demoId }: { demoId: string }) {
   const attachments: ComposerAttachment[] = [...assets.filter(asset => !submittedAssetIds.includes(asset._id)).map(asset => ({ id: asset._id, name: asset.fileName, url: asset.thumbnailUrl ?? asset.url ?? undefined, kind: asset.thumbnailUrl ? 'image' as const : asset.kind })), ...pending];
   const chat = <div className="scripted-demo-conversation">
     <div className="scripted-demo-controls" aria-label="Sequence controls">
+      {racingTake ? <a href="/demo/racing/credits.html" target="_blank" rel="noreferrer" style={{ marginRight: 'auto', color: 'inherit' }}>Footage &amp; license ↗</a> : null}
       <button type="button" title="Replay edit" aria-label="Replay edit" disabled={running || importing || !lastPrompt || !assets.length} onClick={() => void build(lastPrompt).catch(error => setError(userError(error)))}><Play size={13}/></button>
       <button type="button" title="Reset the timeline, keep attached footage" aria-label="Reset edit" disabled={importing} onClick={reset}><RotateCcw size={13}/></button>
     </div>
