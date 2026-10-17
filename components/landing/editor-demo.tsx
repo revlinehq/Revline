@@ -141,12 +141,12 @@ export function ProductDemo() {
 
   const building = stage > 0 && stage < FINISHED_STAGE;
   const message = stage === FINISHED_STAGE ? LANDING_DEMO_MESSAGES.length - 1 : step.message;
-  return <><section ref={root} className="landing-product-demo" role="img" aria-label="A request types into Revline’s composer. Formula One pit-stop and track footage is cut into a sequence, animated titles and subtle motion appear, and the finished edit plays." data-story-stage={stage} data-story-active={active} data-building={building || undefined}>
+  return <section ref={root} className="landing-product-demo" role="img" aria-label="A request types into Revline’s composer. Formula One pit-stop and track footage is cut into a sequence, animated titles and subtle motion appear, and the finished edit plays." data-story-stage={stage} data-story-active={active} data-building={building || undefined}>
     <div className="landing-passive-editor" inert aria-hidden="true">
       {compact && <CompactPrompt stage={stage} active={active && ready}/>}
       <EditorStateProvider store={store}><EditorShell embedded demo title="Race day" timeline={timeline} assets={LANDING_DEMO_ASSETS} onChange={noop} onTitle={noop} saving={false} upload={null} error="" onError={() => setFailed(true)} onUndo={noop} onRedo={noop} canUndo={false} canRedo={false}
         assistantPanel={compact ? <div/> : <DemoConversation stage={stage} index={message} active={active && ready} reducedMotion={reducedMotion}/>}
         onPreviewReady={previewReady} messages={[]} aiRunning={building} aiConfigured={false} onSend={noRequest} onUpload={noRequest} onDropUpload={noRequest} onExport={noRequest} exportState={null}/></EditorStateProvider>
     </div>
-  </section><p className="landing-demo-credit">Featured edit: <a href="/demo/f1-edit/credits.html" target="_blank" rel="noreferrer">F1 × NO BATIDAO · Prime Editx</a></p></>;
+  </section>;
 }
