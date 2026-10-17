@@ -10,7 +10,7 @@ const page=await browser.newPage(),errors=[];page.on('pageerror',error=>errors.p
 const frames=()=>page.evaluate(()=>new Promise(resolve=>{let i=0;const tick=()=>++i===5?resolve():requestAnimationFrame(tick);requestAnimationFrame(tick);}));
 const state=()=>page.evaluate(()=>({timeline:window.fixture.getState().timeline,history:window.fixture.getState().history.length}));
 async function reset(timeline,compactTracks=false){await page.evaluate(({timeline,compactTracks})=>{window.fixture.getState().recover(timeline??window.initial);window.fixture.setState({compactTracks,selectedId:null,selectedIds:[],snap:true});document.querySelector('.timeline-scroll').scrollTop=0;},{timeline,compactTracks});await frames();}
-async function drag(id,dx,targetY,grab=30){const box=await page.$eval('.timeline-clip[data-clip-id="'+id+'"]',el=>{const r=el.getBoundingClientRect();return{x:r.x,y:r.y,w:r.width,h:r.height};});const x=box.x+grab,y=box.y+box.h/2;await page.mouse.move(x,y);await page.mouse.down();await page.mouse.move(x+dx,targetY??y,{steps:8});await frames();await page.mouse.up();await frames();}
+async function drag(id,dx,targetY,grab=30,grabY){const box=await page.$eval('.timeline-clip[data-clip-id="'+id+'"]',el=>{const r=el.getBoundingClientRect();return{x:r.x,y:r.y,w:r.width,h:r.height};});const x=box.x+grab,y=box.y+(grabY??box.h/2);await page.mouse.move(x,y);await page.mouse.down();await page.mouse.move(x+dx,targetY??y,{steps:8});await frames();await page.mouse.up();await frames();}
 try{
  await page.setViewport({width:1400,height:650});await page.setContent('<html data-workspace-theme="dark"><body><div id="root" class="editor-app conversation-editor"></div></body></html>');await page.addStyleTag({content:bundle.outputFiles.find(f=>f.path.endsWith('.css')).text});await page.addStyleTag({content:'*{box-sizing:border-box}body{margin:0;font:12px Arial}#root{width:1300px;height:450px;margin:60px auto;display:flex;padding:0}button{border:0;background:transparent;color:inherit;font:inherit}'});await page.addScriptTag({content:bundle.outputFiles.find(f=>f.path.endsWith('.js')).text});await page.waitForSelector('[data-clip-id="moving"]');
  for(const compact of [false,true])for(const miss of [-16,16])for(const grab of [12,80]){
@@ -19,8 +19,22 @@ try{
  await reset();await page.keyboard.down('Alt');await drag('moving',-5*54-16);await page.keyboard.up('Alt');assert.equal((await state()).timeline.clips.find(c=>c.id==='moving').start,9,'Alt bypasses magnetic gap assistance');
  await reset();await drag('moving',-5*54-40);assert.equal((await state()).timeline.clips.find(c=>c.id==='moving').start,9,'A genuine overlap remains rejected');
  const linked={fps:30,aspectRatio:'landscape',tracks:{visual:2,audio:1,effects:0,overlay:0},clips:[{id:'v',kind:'video',track:1,start:0,duration:2,sourceStart:4,linkedClipId:'a',audioSeparated:true,volume:0},{id:'a',kind:'audio',track:1,start:0,duration:2,sourceStart:4,linkedClipId:'v'},{id:'music',kind:'audio',track:1,start:3,duration:4,sourceStart:0}]};
- for(const compact of [false,true])for(const newRow of [false,true]){
-  await reset(linked,compact);const before=await state();const y=await page.$eval('.timeline-track[data-group="visual"][data-layer="2"]',(el,newRow)=>{const r=el.getBoundingClientRect();return newRow?r.top-8:r.y+r.height/2;},newRow);await drag('v',3*54,y);const after=await state();assert.equal(after.timeline.tracks.visual,newRow?3:2);assert.equal(after.timeline.tracks.audio,2);assert.equal(after.history,before.history+1);assert.deepEqual(after.timeline.clips.find(c=>c.id==='music'),linked.clips[2]);for(const id of ['v','a']){const clip=after.timeline.clips.find(c=>c.id===id);assert.equal(clip.start,3);assert.equal(clip.sourceStart,4);assert.equal(clip.track,id==='a'?2:newRow?3:2);}await page.evaluate(()=>window.fixture.getState().undo());await frames();assert.deepEqual((await state()).timeline,linked);
+ // Vertical destination follows the clip's center, regardless of the grab point.
+ for(const compact of [false,true])for(const id of ['v','a'])for(const grabY of [1,compact?35:51]){
+  await reset(linked,compact);await drag(id,54,undefined,30,grabY);const after=await state();
+  assert.deepEqual(after.timeline.tracks,linked.tracks,'A horizontal drag from either edge must not create a track');
+  for(const member of ['v','a'])assert.deepEqual({track:after.timeline.clips.find(c=>c.id===member).track,start:after.timeline.clips.find(c=>c.id===member).start},{track:1,start:1},'Linked video/audio move in time while staying on their rows');
+  assert.deepEqual(after.timeline.clips.find(c=>c.id==='music'),linked.clips[2]);
+ }
+ for(const compact of [false,true])for(const jitter of [-10,-5,5,10]){
+  await reset(linked,compact);
+  const boxes=await page.$$eval('.timeline-clip[data-clip-id]',nodes=>Object.fromEntries(nodes.map(node=>{const r=node.getBoundingClientRect();return[node.dataset.clipId,{x:r.x,y:r.y,h:r.height}];})));
+  const x=boxes.v.x+30,y=boxes.v.y+boxes.v.h/2;await page.mouse.move(x,y);await page.mouse.down();await page.mouse.move(x+54,y+jitter,{steps:8});await frames();
+  for(const id of ['v','a']){const top=await page.$eval('.timeline-floating-clip[data-clip-id="'+id+'"]',node=>node.getBoundingClientRect().top);assert.ok(Math.abs(top-boxes[id].y)<.1,'Small vertical hand movement during horizontal drag keeps video and linked audio visually in their lanes');}
+  await page.mouse.up();await frames();assert.deepEqual((await state()).timeline.tracks,linked.tracks);
+ }
+ for(const compact of [false,true])for(const newRow of [false,true])for(const nearTop of [false,true]){
+  await reset(linked,compact);const before=await state();const offset=nearTop?(compact?36:52)/2-1:0;const y=await page.$eval('.timeline-track[data-group="visual"][data-layer="2"]',(el,newRow)=>{const r=el.getBoundingClientRect();return newRow?r.top-8:r.y+r.height/2;},newRow);await drag('v',3*54,y-offset,30,nearTop?1:undefined);const after=await state();assert.equal(after.timeline.tracks.visual,newRow?3:2);assert.equal(after.timeline.tracks.audio,2);assert.equal(after.history,before.history+1);assert.deepEqual(after.timeline.clips.find(c=>c.id==='music'),linked.clips[2]);for(const id of ['v','a']){const clip=after.timeline.clips.find(c=>c.id===id);assert.equal(clip.start,3);assert.equal(clip.sourceStart,4);assert.equal(clip.track,id==='a'?2:newRow?3:2);}await page.evaluate(()=>window.fixture.getState().undo());await frames();assert.deepEqual((await state()).timeline,linked);
  }
  // One-click packing keeps source trims and is disabled while AI owns the edit.
  await reset(linked);await page.evaluate(()=>window.setEditingLocked(true));await frames();
@@ -51,5 +65,5 @@ try{
   assert.equal(await page.evaluate(()=>window.fixtureEvents.edit.at(-1)),id,'Double-click still opens clip settings');
  }
  const seekCount=await page.evaluate(()=>window.fixtureEvents.seek.length);await drag('v',54);assert.equal(await page.evaluate(()=>window.fixtureEvents.seek.length),seekCount,'Dragging does not seek');
- assert.deepEqual(errors,[]);console.log('PASS: actual Merge clips, linked pair/single selection/clear missing-selection instruction/undo/AI lock; Close gaps toolbar packing, linked audio, undo and AI lock; double-click video/audio seeks at pointer and opens settings; near-gap drops from either side and different grab points, normal/compact tracks, Alt bypass, true overlap rejection, automatic linked-audio row on existing/new video rows, single-edit undo.');
+ assert.deepEqual(errors,[]);console.log('PASS: lane-locked video/audio ghosts under +/-5/10px hand movement, top/bottom horizontal grabs, deliberate existing/new rows from center/top grabs; actual Merge clips, linked pair/single selection/clear missing-selection instruction/undo/AI lock; Close gaps toolbar packing, linked audio, undo and AI lock; double-click video/audio seeks at pointer and opens settings; near-gap drops from either side and different grab points, normal/compact tracks, Alt bypass, true overlap rejection, automatic linked-audio row on existing/new video rows, single-edit undo.');
 }finally{await browser.close();}

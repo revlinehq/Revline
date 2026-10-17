@@ -289,6 +289,8 @@ export function TimelinePanel(p:Props){
       const node=area.current?.querySelector<HTMLElement>(`.timeline-track[data-group="${row.group}"][data-layer="${row.number}"]`);
       const rect=node?.getBoundingClientRect();return {track:row.number,group:row.group,top:rect?.top??0,bottom:rect?.bottom??0};
     });
+    const sourceRow=rows.find(row=>row.group===group&&row.track===trackOf(clip));
+    const startCenterY=sourceRow?(sourceRow.top+sourceRow.bottom)/2:startY;
     const trackMap=new Map(tracks.map(row=>[`${row.group}-${row.number}`,row]));
     const minimumTime=minimumClipMoveDelta(selectedClips,timeline.fps),maximumTime=Infinity;
     let placedClips=new Map(timeline.clips.map(c=>[c.id,c])),targetTrackMap=trackMap,targetTrackKey='';
@@ -337,7 +339,9 @@ export function TimelinePanel(p:Props){
       const magnet=snap&&!bypassSnap&&(mode!=='move'||Math.abs(rawDelta)>1e-6)?{marks:mode==='move'&&Math.abs(clientY-startY)>Math.abs(clientX-startX)?verticalMarks:marks,threshold:(mode==='move'?20:12)/px}:undefined;
       if(mode==='move'){
         const scrollDelta=scrollTop-startScrollY;
-        const target=clipLayerDropTarget(clientY+scrollDelta,rows,group);
+        // Hit-test the moving clip, not its grab point. Grabbing near an edge
+        // must not enter an insertion band during a purely horizontal drag.
+        const target=clipLayerDropTarget(startCenterY+clientY-startY+scrollDelta,rows,group);
         const timeDelta=Math.max(minimumTime,Math.min(maximumTime,rawDelta));
         let insertionNext:{group:LayerGroup;edge:'above'|'below';track?:number}|null=null;
         try{
@@ -376,9 +380,11 @@ export function TimelinePanel(p:Props){
           const candidate=placedClips.get(member.id);
           if(!candidate){pair.floating.style.display='none';pair.placement.style.display='none';continue;}
           pair.floating.style.display='';
-          // Lock to a magnetic join; otherwise keep the floating clip under the pointer.
-          pair.floating.style.transform=`translate3d(${origin+(magnetized?candidate.start:member.start+rawDelta)*px}px,${sourceRow.top+3+(layerGroup(member.kind)===group?clientY-startY+scrollDelta:0)}px,0)`;
           const row=targetTrackMap.get(`${layerGroup(candidate.kind)}-${trackOf(candidate)}`);
+          // Keep the dragged group on a resolved lane instead of floating with
+          // small pointer jitter. Linked media in other groups keeps its row.
+          const floatingTop=layerGroup(member.kind)===group&&row?row.top:sourceRow.top;
+          pair.floating.style.transform=`translate3d(${origin+(magnetized?candidate.start:member.start+rawDelta)*px}px,${floatingTop+3}px,0)`;
           if(!row){pair.placement.style.display='none';continue;}
           pair.placement.style.display='';
           pair.placement.style.transform=`translate3d(${origin+candidate.start*px}px,${row.top+3}px,0)`;
