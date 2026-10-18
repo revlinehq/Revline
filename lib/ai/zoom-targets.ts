@@ -6,7 +6,7 @@ import type { SmoothZoomSettings } from '../editor/smooth-zoom-settings';
 import type { AspectRatio, Clip, MediaAsset } from '../editor/types';
 export type ZoomTargetEvidence = FrameTarget & {assetId:string;sourceWidth:number;sourceHeight:number};
 export type ZoomFocusInput = {kind:'center'}|{kind:'coordinates';centerX:number;centerY:number;units?:'normalized'|'pixels'}|{kind:'target';targetId:string};
-export type ZoomTimingInput = {start:number;inDuration:number;holdDuration:number;outDuration:number;scale:number;easing:SmoothZoomSettings['easing'];replaceMotion?:boolean};
+export type ZoomTimingInput = {start:number;inDuration:number;holdDuration:number;outDuration:number;scale:number;easing:SmoothZoomSettings['easing'];framing?:SmoothZoomSettings['framing'];replaceMotion?:boolean};
 export function rememberZoomTargets(result:FrameInspection,assetId:string,registry:Map<string,ZoomTargetEvidence>,id:()=>string=()=>crypto.randomUUID()){
   validateFrameInspectionResult(result,result);
   return (result.targets??[]).map(target=>{
@@ -37,6 +37,6 @@ export function configureSmoothZoomPatch(clip:Clip,asset:MediaAsset,aspectRatio:
   }
   if(!Number.isFinite(input.start)||input.start<clip.start-1e-9||input.start>=clip.start+clip.duration)throw new Error('The zoom start must be inside this clip in timeline seconds.');
   // Animation timing is local timeline time, never divided by source playback rate.
-  const settings={start:input.start-clip.start,inDuration:input.inDuration,holdDuration:input.holdDuration,outDuration:input.outDuration,scale:input.scale,easing:input.easing,centerX,centerY};
+  const settings={start:input.start-clip.start,inDuration:input.inDuration,holdDuration:input.holdDuration,outDuration:input.outDuration,scale:input.scale,easing:input.easing,framing:input.framing??(focus.kind==='target'?'center':'anchor'),centerX,centerY};
   return smoothZoomPatch(clip,asset,aspectRatio,settings,{replace:input.replaceMotion});
 }

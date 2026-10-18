@@ -6,6 +6,7 @@ import { validateTimeline } from './lib/timeline';
 import { clipValidator, timelineValidator } from './schema';
 import { effectPlanValidator, compositionReviewResult } from './lib/effect_plan';
 import { equalTimelineValue } from '../lib/editor/timeline-equality';
+import { compositionReviewBudget } from '../lib/ai/composition-review';
 import { effectPlanInput, effectDisabledReference, type EffectPlan } from '../lib/ai/edit-plan';
 import { enqueueMediaTask, cancelMediaTask } from './mediaTasks';
 import type { MutationCtx, QueryCtx } from './_generated/server';
@@ -30,8 +31,11 @@ export const request=internalMutation({args:{...runArgs,expectedRevision:v.numbe
   if((project.revision??0)!==args.expectedRevision)throw new ConvexError('The timeline changed elsewhere. Inspect before reviewing.');
   await validateTimeline(ctx,project,args.timeline);
   const saved=await ctx.db.query('assistantPlans').withIndex('by_project',q=>q.eq('projectId',args.projectId)).unique();
-  if(!saved||saved.runId!==args.runId||saved.reviews>=2)throw new ConvexError('Review allows one initial check and one fix pass per run.');
-  if(saved.reviews===1){const prior=await ctx.db.query('compositionReviews').withIndex('by_project',q=>q.eq('projectId',args.projectId)).order('desc').first();if(!prior||prior.runId!==args.runId||prior.status!=='completed'||equalTimelineValue(prior.timeline,args.timeline))throw new ConvexError('Finish the initial review and make one targeted fix before reviewing again.');}
+  if(!saved||saved.runId!==args.runId)throw new ConvexError('Save the effect expectations before reviewing.');
+  const recent=(await ctx.db.query('compositionReviews').withIndex('by_project',q=>q.eq('projectId',args.projectId)).order('desc').take(4)).filter(review=>review.runId===args.runId);
+  let completed:number;
+  try{completed=compositionReviewBudget(saved.reviews,recent.map(review=>review.status));}catch(error){throw new ConvexError(error instanceof Error?error.message:'Rendered review is unavailable.');}
+  if(completed===1){const prior=recent.find(review=>review.status==='completed');if(!prior||equalTimelineValue(prior.timeline,args.timeline))throw new ConvexError('Make one targeted fix before reviewing again.');}
   if(!args.planIds.length||args.planIds.length>2||new Set(args.planIds).size!==args.planIds.length)throw new ConvexError('Review one or two planned effects in a short window.');
   const plans=args.planIds.map(id=>saved.plans.find(plan=>plan.id===id));
   if(plans.some(plan=>!plan))throw new ConvexError('Save the effect expectations before reviewing.');

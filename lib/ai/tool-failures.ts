@@ -33,10 +33,17 @@ function planTarget(toolName:string|undefined,input:unknown){
   return stable(identity.sort((a,b)=>String(a.id).localeCompare(String(b.id))));
 }
 const planPreflightRejection=(error:unknown)=>/^(?:Error:\s*)?(?:Read the current (?:cut|marker) before planning its effect|Plan a supported effect or text control|Plan needs valid fields and a supported effect or text control)\.$/.test(error instanceof Error?error.message:String(error));
+function zoomTarget(toolName:string|undefined,input:unknown){
+  if(toolName!=='configureSmoothZoom')return;
+  const {replaceMotion,...settings}=record(input);
+  if(typeof settings.clipId!=='string')return;
+  return stable(settings);
+}
+const zoomMotionRejection=(error:unknown)=>/^(?:Error:\s*)?This clip already has custom motion\. Explicitly replace its motion to add a smooth zoom\.$/.test(error instanceof Error?error.message:String(error));
 
 /** Derive state from completed steps: the SDK can reevaluate a stop condition. */
 function unresolvedFailures(steps: ToolSteps, recoverPlacements = false) {
-  const calls = new Map<string, { key: string; input: unknown }>(), pending = new Map<string, { count: number; ids: string[]; placement?: string; plan?:boolean; corrected?: boolean }>();
+  const calls = new Map<string, { key: string; input: unknown }>(), pending = new Map<string, { count: number; ids: string[]; placement?: string; plan?:boolean; zoom?:string; corrected?: boolean }>();
   for (const step of steps) for (const value of step.content) {
     if (!value || typeof value !== 'object') continue;
     const part = value as { type?: string; toolCallId?: string; toolName?: string; input?: unknown; output?: unknown; error?: unknown; preliminary?: boolean };
@@ -48,7 +55,7 @@ function unresolvedFailures(steps: ToolSteps, recoverPlacements = false) {
     if (part.type === 'tool-call') calls.set(id, { key, input });
     else if (part.type === 'tool-error' || (part.type === 'tool-result' && (output.success === false || record(part.output).type === 'error-text'))) {
       const failure=part.error??record(part.output).value;
-      pending.set(key, { count: (pending.get(key)?.count ?? 0) + 1, ids: [...pending.get(key)?.ids ?? [], id], ...(recoverPlacements && isOverlapPlacementRejection(part.error) ? { placement: placementTarget(part.toolName, input) } : {}),...(recoverPlacements&&part.toolName==='planEffects'&&planPreflightRejection(failure)?{plan:true}:{}) });
+      pending.set(key, { count: (pending.get(key)?.count ?? 0) + 1, ids: [...pending.get(key)?.ids ?? [], id], ...(recoverPlacements && isOverlapPlacementRejection(part.error) ? { placement: placementTarget(part.toolName, input) } : {}),...(recoverPlacements&&part.toolName==='planEffects'&&planPreflightRejection(failure)?{plan:true}:{}),...(recoverPlacements&&zoomMotionRejection(failure)?{zoom:zoomTarget(part.toolName,input)}:{}) });
     } else if (part.type === 'tool-result') {
       pending.delete(key);
       if (recoverPlacements) {
@@ -56,6 +63,8 @@ function unresolvedFailures(steps: ToolSteps, recoverPlacements = false) {
         // savePlan replaces the run's entire previous plan collection. Only its
         // validated receipt supersedes earlier no-write schema/anchor attempts.
         if(plan&&output.planned===true&&planTarget(part.toolName,{plans:output.plans})===plan)for(const [failedKey,failure]of pending)if(failure.plan)pending.delete(failedKey);
+        const zoom=zoomTarget(part.toolName,input),args=record(input);
+        if(zoom&&args.replaceMotion===true&&(output.saved===true||output.staged===true)&&Array.isArray(output.changedClips)&&output.changedClips.some(clip=>record(clip).id===args.clipId))for(const [failedKey,failure]of pending)if(failure.zoom===zoom)pending.delete(failedKey);
         const target = placementTarget(part.toolName, input);
         if (target && changedTargets(input, output)) for (const failure of pending.values()) if (failure.placement === target) failure.corrected = true;
         if (part.toolName === 'inspectTimeline' && inspectedDraft(output)) for (const [failedKey, failure] of pending) if (failure.corrected) pending.delete(failedKey);
@@ -78,6 +87,21 @@ export function unresolvedToolFailureIds(steps: ToolSteps) {
 
 export function hasRepeatedToolFailures(steps: ToolSteps) {
   return [...unresolvedFailures(steps).values()].some(failure => failure.count >= 3);
+}
+
+/** A corrected tool call must not hide a real failure in the final render check. */
+export function hasFailedRenderChecks(steps:ToolSteps){
+  const latest=new Map<string,string>();
+  for(const step of steps)for(const value of step.content){
+    const part=record(value),output=outputValue(part.output);
+    if(part.type!=='tool-result'||part.toolName!=='previewRender'||part.preliminary||output.reviewed!==true||output.stale===true||output.revision!==output.currentRevision||!Array.isArray(output.observations))continue;
+    for(const observation of output.observations){const item=record(observation);if(typeof item.planId==='string'&&typeof item.verdict==='string')latest.set(item.planId,item.verdict);}
+  }
+  return [...latest.values()].some(verdict=>verdict==='fail');
+}
+
+export class AssistantRenderReviewError extends Error {
+  constructor(){super('The saved edit did not pass the final visual check. Some requested changes remain unfinished.');this.name='AssistantRenderReviewError';}
 }
 
 export class AssistantToolRetryError extends Error {

@@ -149,7 +149,10 @@ export function validateClipEffects(clip: Clip) {
   for (const [index, key] of clip.motion.entries()) {
     if (!Number.isFinite(key.time) || key.time < 0 || (index > 0 && key.time <= clip.motion[index - 1].time)) throw new Error('Motion keyframes need finite, increasing nonnegative times.');
     for (const property of Object.keys(bounds) as (keyof typeof bounds)[]) {
-      const [min, max] = bounds[property];
+      // Centering an edge target at 3x can legitimately translate by more than
+      // one canvas width. Keep ordinary text/FX limits; allow the camera keys
+      // room for the inverse of an existing small or rotated static transform.
+      const [min, max] = clip.smoothZoom?.framing === 'center' && (property === 'x' || property === 'y') ? [-16, 16] : bounds[property];
       if (!Number.isFinite(key[property]) || key[property] < min || key[property] > max) throw new Error(`Motion ${property} is out of range.`);
     }
   }

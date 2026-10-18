@@ -38,21 +38,31 @@ export function smoothZoomPatch(clip: Clip, asset: MediaAsset, aspectRatio: Aspe
   const end = settings.start + settings.inDuration + (settings.outDuration > 0 ? settings.holdDuration + settings.outDuration : 0);
   if (end > clip.duration + 1e-6) throw new Error('The zoom timing must fit inside the selected clip.');
   const focus = smoothZoomFocus(clip, asset, aspectRatio, settings);
+  const canvas = dimensions(aspectRatio), transform = { ...DEFAULT_TRANSFORM, ...clip.transform };
+  const angle = transform.rotation * Math.PI / 180;
+  // Move the target to the canvas center in the parent's local space. Static
+  // placement/rotation/scale stay intact, so returning to neutral restores them.
+  const dx = (.5 - transform.x) * canvas.width / transform.scale;
+  const dy = (.5 - transform.y) * canvas.height / transform.scale;
+  const destinationX = (dx * Math.cos(angle) + dy * Math.sin(angle)) / canvas.width;
+  const destinationY = (-dx * Math.sin(angle) + dy * Math.cos(angle)) / canvas.height;
+  const peakX = (.5 - focus.x) * settings.scale + destinationX;
+  const peakY = (.5 - focus.y) * settings.scale + destinationY;
   const motion: MotionKeyframe[] = [];
-  const add = (time: number, scale: number) => {
-    const key = { time, ...NEUTRAL_MOTION, scale, x: (.5 - focus.x) * (scale - 1), y: (.5 - focus.y) * (scale - 1) };
+  const add = (time: number, scale: number, progress = 0) => {
+    const key = { time, ...NEUTRAL_MOTION, scale, x: settings.framing === 'center' ? (progress === 0 ? 0 : peakX * progress) : (.5 - focus.x) * (scale - 1), y: settings.framing === 'center' ? (progress === 0 ? 0 : peakY * progress) : (.5 - focus.y) * (scale - 1) };
     if (motion.length && Math.abs(motion.at(-1)!.time - time) < 1e-9) motion[motion.length - 1] = key;
     else motion.push(key);
   };
   add(0, 1);
   add(settings.start, 1);
   const steps = settings.easing === 'linear' ? 1 : 32;
-  for (let index = 1; index <= steps; index++) add(settings.start + settings.inDuration * index / steps, 1 + (settings.scale - 1) * zoomEase(index / steps, settings.easing));
+  for (let index = 1; index <= steps; index++) { const p = zoomEase(index / steps, settings.easing); add(settings.start + settings.inDuration * index / steps, 1 + (settings.scale - 1) * p, p); }
   if (settings.outDuration > 0) {
     const returnStart = settings.start + settings.inDuration + settings.holdDuration;
-    add(returnStart, settings.scale);
-    for (let index = 1; index <= steps; index++) add(returnStart + settings.outDuration * index / steps, settings.scale + (1 - settings.scale) * zoomEase(index / steps, settings.easing));
+    add(returnStart, settings.scale, 1);
+    for (let index = 1; index <= steps; index++) { const p = zoomEase(index / steps, settings.easing); add(returnStart + settings.outDuration * index / steps, settings.scale + (1 - settings.scale) * p, 1 - p); }
   }
-  if (clip.duration > motion.at(-1)!.time + 1e-9) add(clip.duration, settings.outDuration > 0 ? 1 : settings.scale);
+  if (clip.duration > motion.at(-1)!.time + 1e-9) add(clip.duration, settings.outDuration > 0 ? 1 : settings.scale, settings.outDuration > 0 ? 0 : 1);
   return { smoothZoom: { ...settings }, motion, motionOffset: 0 };
 }

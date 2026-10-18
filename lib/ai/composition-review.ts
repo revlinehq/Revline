@@ -5,6 +5,15 @@ export const reviewObservations = z.object({
   uncertainty:z.string().max(2000),
 });
 export const reviewObservationsJsonSchema=z.toJSONSchema(reviewObservations);
+/** Failed infrastructure attempts do not consume the two visual judgments.
+ * Bound all attempts as well so an unavailable renderer cannot create a loop. */
+export function compositionReviewBudget(attempts:number,statuses:readonly ('queued'|'completed'|'failed')[]){
+  if(attempts>=4)throw new Error('Rendered review reached its retry limit after infrastructure failures. Saved edits remain.');
+  if(statuses.includes('queued'))throw new Error('Finish the current rendered review before requesting another.');
+  const completed=statuses.filter(status=>status==='completed').length;
+  if(completed>=2)throw new Error('Review allows one initial check and one fix pass per run.');
+  return completed;
+}
 export function parseCompositionReview(text:string,plans:EffectPlan[]) {
   const result=reviewObservations.parse(JSON.parse(text));
   if(result.observations.length!==plans.length||new Set(result.observations.map(o=>o.planId)).size!==plans.length||result.observations.some(o=>!plans.some(plan=>plan.id===o.planId)))throw new Error('Review must address exactly the planned expectations.');
