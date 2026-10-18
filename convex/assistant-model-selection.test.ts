@@ -109,3 +109,20 @@ test('unsupported choices, foreign projects and anonymous calls cannot schedule 
   await expect(t.mutation(api.assistant.send,{projectId,prompt:'Anonymous',modelChoice:'gpt-6.1-sol'})).rejects.toThrow('Authentication required');
   expect(await t.run(ctx=>ctx.db.system.query('_scheduled_functions').take(10))).toHaveLength(0);
 });
+
+test('new composer media references are owned project IDs pinned with the exact request', async () => {
+  const { t, owner, projectId } = await fixture();
+  const own = await t.run(ctx => ctx.db.insert('assets', { ownerId: identity.subject, projectId, fileName: 'fixture.mp4', kind: 'video', contentType: 'video/mp4', size: 1, createdAt: 1 }));
+  await owner.mutation(api.assistant.send, { projectId, prompt: 'Use this new video.', attachedAssetIds: [own] });
+  const [scheduled] = await t.run(ctx => ctx.db.system.query('_scheduled_functions').take(10));
+  expect(scheduled.args[0].attachedAssetIds).toEqual([own]);
+});
+test('foreign, cross-project and duplicate attachments cannot create chat messages or schedule work', async () => {
+  const { t, owner, projectId } = await fixture();
+  const otherProject = await owner.mutation(api.projects.create, { title: 'Other', aspectRatio: 'vertical' });
+  const make = (ownerId: string, project: typeof projectId) => t.run(ctx => ctx.db.insert('assets', { ownerId, projectId: project, fileName: 'fixture.mp4', kind: 'video', contentType: 'video/mp4', size: 1, createdAt: 1 }));
+  const foreign = await make('stranger', projectId), other = await make(identity.subject, otherProject), own = await make(identity.subject, projectId);
+  for(const ids of [[foreign],[other],[own,own],Array(21).fill(own)]) await expect(owner.mutation(api.assistant.send, { projectId, prompt: 'Use this.', attachedAssetIds: ids })).rejects.toThrow(/media|unique/);
+  expect((await t.run(ctx=>readProject(ctx,projectId)))?.threadId).toBeUndefined();
+  expect(await t.run(ctx=>ctx.db.system.query('_scheduled_functions').take(10))).toHaveLength(0);
+});
