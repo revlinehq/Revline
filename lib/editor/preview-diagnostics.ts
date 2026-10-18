@@ -1,7 +1,7 @@
-type Transport = EventTarget & { paused:boolean };
+type Transport = EventTarget & { paused:boolean; pause?:()=>void };
 type MediaSample = { events:Record<string,number>; frames:number; lastFrame?:number; maxFrameGap:number; sourceTime:number; frameCallback?:number };
 
-/** Development-only, bounded client trace. Never records media URLs or contents. */
+/** Development or explicitly opted-in client trace. Never records media URLs or contents. */
 export function tracePreviewPlayback(document:Document,player:Transport,readTime:()=>number,state:()=>{playing:boolean;buffering:boolean},chatId:string) {
   const win=document.defaultView;
   if(!win)return()=>{};
@@ -9,6 +9,13 @@ export function tracePreviewPlayback(document:Document,player:Transport,readTime
   const traceId=crypto.randomUUID().slice(0,8);
   let stopped=false,previousWall=performance.now(),previousClock=readTime(),lastRaf=0,rafCount=0,maxRafGap=0,longTasks=0,longTaskMs=0,raf=0;
   const events=['waiting','stalled','seeking','seeked','playing','pause','error'];
+  const buffered=(node:HTMLMediaElement)=>{const ranges:number[][]=[];for(let index=0;index<node.buffered.length&&ranges.length<6;index++)ranges.push([node.buffered.start(index),node.buffered.end(index)]);return ranges;};
+  const snapshot=()=>{const time=readTime();return [...media.keys()].filter(node=>time>=Number(node.dataset.start)&&time<Number(node.dataset.end)).slice(0,8).map(node=>({id:node.dataset.sourceClip,kind:node.tagName,sourceTime:node.currentTime,ready:node.readyState,seeking:node.seeking,paused:node.paused,error:node.error?.code??null,buffered:buffered(node)}));};
+  const transportEvent=(event:Event)=>console.warn('[Revline playback transport]',JSON.stringify({timestamp:new Date().toISOString(),chatId,traceId,event:event.type,clock:readTime(),paused:player.paused,...state(),media:snapshot()}));
+  for(const name of ['play','pause','ended'])player.addEventListener(name,transportEvent);
+  const originalPause=player.pause;
+  const tracedPause=()=>{console.warn('[Revline playback pause call]',JSON.stringify({timestamp:new Date().toISOString(),chatId,traceId,clock:readTime(),...state(),media:snapshot(),stack:new Error().stack?.split('\n').slice(1,9)}));originalPause?.call(player);};
+  if(originalPause)player.pause=tracedPause;
   function refresh() {
     for(const node of document.querySelectorAll<HTMLMediaElement>('video[data-start],audio[data-start]')) {
       if(media.has(node))continue;
@@ -40,7 +47,7 @@ export function tracePreviewPlayback(document:Document,player:Transport,readTime
     const samples=[...media].map(([node,sample])=>{
       const start=Number(node.dataset.start),end=Number(node.dataset.end),rate=Number(node.dataset.playbackRate??1);
       const active=time>=start&&time<end,expected=Number(node.dataset.mediaStart??0)+(time-start)*rate;
-      const output={id:node.dataset.sourceClip??node.id,kind:node.tagName,active,sourceTime:round(node.currentTime),sourceAdvance:round(node.currentTime-sample.sourceTime),rate:node.playbackRate,expectedRate:rate,driftMs:active?Math.round((node.currentTime-expected)/rate*1000):null,ready:node.readyState,network:node.networkState,seeking:node.seeking,paused:node.paused,muted:node.muted,volume:round(node.volume),decodedFrames:sample.frames,maxFrameGapMs:Math.round(sample.maxFrameGap),events:sample.events};
+      const output={id:node.dataset.sourceClip??node.id,kind:node.tagName,active,sourceTime:round(node.currentTime),sourceAdvance:round(node.currentTime-sample.sourceTime),rate:node.playbackRate,expectedRate:rate,driftMs:active?Math.round((node.currentTime-expected)/rate*1000):null,ready:node.readyState,network:node.networkState,seeking:node.seeking,paused:node.paused,muted:node.muted,volume:round(node.volume),buffered:buffered(node),error:node.error?.code??null,decodedFrames:sample.frames,maxFrameGapMs:Math.round(sample.maxFrameGap),events:sample.events};
       sample.sourceTime=node.currentTime;sample.events={};sample.frames=0;sample.maxFrameGap=0;return output;
     }).filter(sample=>sample.active||sample.decodedFrames||Object.keys(sample.events).length).slice(0,16);
     if(current.playing||rafCount)console.warn('[Revline playback trace]',JSON.stringify({timestamp:new Date().toISOString(),chatId,traceId,visibility:document.visibilityState,clock:round(time),clockAdvance:round(time-previousClock),wallMs:Math.round(wallMs),...current,rafCount,maxRafGapMs:Math.round(maxRafGap),longTasks,longTaskMs:Math.round(longTaskMs),effectsCanvases:document.querySelectorAll('.visual-effect-output').length,media:samples}));
@@ -48,5 +55,5 @@ export function tracePreviewPlayback(document:Document,player:Transport,readTime
   };
   const timer=setInterval(report,2000);
   console.warn('[Revline playback trace]',JSON.stringify({event:'attached',timestamp:new Date().toISOString(),chatId,traceId}));
-  return()=>{stopped=true;clearInterval(timer);win.cancelAnimationFrame(raf);observer?.disconnect();for(const name of events)document.removeEventListener(name,event,true);for(const [node,sample]of media)if(node.tagName==='VIDEO'&&sample.frameCallback!==undefined)(node as HTMLVideoElement).cancelVideoFrameCallback(sample.frameCallback);media.clear();};
+  return()=>{stopped=true;clearInterval(timer);win.cancelAnimationFrame(raf);observer?.disconnect();if(player.pause===tracedPause)player.pause=originalPause;for(const name of ['play','pause','ended'])player.removeEventListener(name,transportEvent);for(const name of events)document.removeEventListener(name,event,true);for(const [node,sample]of media)if(node.tagName==='VIDEO'&&sample.frameCallback!==undefined)(node as HTMLVideoElement).cancelVideoFrameCallback(sample.frameCallback);media.clear();};
 }
