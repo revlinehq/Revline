@@ -14,6 +14,7 @@ beforeEach(async () => {
   await writeFile(source, Buffer.from('fixture source'));
   calls.length = 0;
   vi.stubEnv('GEMINI_VIDEO_MODEL', '');
+  vi.spyOn(console, 'log').mockImplementation(() => {});
 });
 afterEach(async () => { vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.unstubAllEnvs(); await rm(directory, { recursive: true, force: true }); });
 
@@ -104,13 +105,28 @@ test('requires timed words rather than inventing subtitles from plain text', asy
   expect(calls.at(-1)?.options.method).toBe('DELETE');
 });
 
-test('uses Gemini3.7 native agentic video and returns bounded source scene timestamps', async () => {
+test.each([[147.833, 'static'], [300, 'static'], [300.001, 'agentic']] as const)('initial overview chooses the documented broad-summary mode for %ss: %s', async (duration, processing) => {
   mockProvider({ outputs: [{ text: JSON.stringify({ summary: 'A person waves.', scenes: [{ start: 0, end: 1, description: 'A hand wave.', score: 0.8 }] }) }] });
-  expect(await understandVideo(source, 1, 'test-key', AbortSignal.timeout(5000))).toMatchObject({ summary: 'A person waves.', scenes: [{ start: 0, end: 1 }] });
+  expect(await understandVideo(source, duration, 'test-key', AbortSignal.timeout(5000))).toMatchObject({ summary: 'A person waves.', scenes: [{ start: 0, end: 1 }] });
   const request = JSON.parse(calls.find(call => call.url.endsWith('/interactions'))!.options.body as string);
-  expect(request).toMatchObject({ model: 'gemini-3.7-flash', store: false, input: [{ type: 'video', processing: 'agentic' }, { type: 'text' }], response_format: { type: 'text', mime_type: 'application/json' } });
+  expect(request).toMatchObject({ model: 'gemini-3.7-flash', store: false, input: [{ type: 'video', processing }, { type: 'text' }], response_format: { type: 'text', mime_type: 'application/json' } });
   expect(request.input[0]).not.toHaveProperty('fps');
+  expect(request.input[1].text).toContain('initial broad overview');
+  expect(request.input[1].text).not.toContain('inspect rapid action again');
   expect(calls.at(-1)?.options.method).toBe('DELETE');
+});
+
+test('overview metrics correlate phases and numeric usage without exposing media, key or provider content', async () => {
+  mockProvider({ usage: { total_input_tokens: 500, total_output_tokens: 80, total_thought_tokens: 20, total_tool_use_tokens: 150, total_tokens: 750, secret: 'private provider usage content' }, steps: [{ type: 'processing_call', content: [{ text: 'private thought' }] }, { type: 'processing_result', content: [{ uri: 'https://private.example/source' }] }, { type: 'model_output', content: [{ text: JSON.stringify({ summary: 'Private scene summary', scenes: [{ start: 0, end: 1, description: 'Private description', score: .8 }] }) }] }] });
+  await understandVideo(source, 1, 'test-key', AbortSignal.timeout(5000), 'video/mp4', undefined, { projectId: 'fixture-project', taskId: 'fixture-task' });
+  expect(console.log).toHaveBeenCalledWith('[media-analysis] Overview metrics', expect.objectContaining({ projectId: 'fixture-project', taskId: 'fixture-task', processing: 'static', completed: true, uploadElapsedMs: expect.any(Number), inferenceElapsedMs: expect.any(Number), cleanupElapsedMs: expect.any(Number), totalElapsedMs: expect.any(Number), inputTokens: 500, outputTokens: 80, thoughtTokens: 20, toolUseTokens: 150, totalTokens: 750, processingCalls: 1, processingResults: 1 }));
+  expect(JSON.stringify(vi.mocked(console.log).mock.calls)).not.toMatch(/test-key|private|https?:/i);
+});
+
+test('missing usage stays unknown instead of reporting zero cost or tokens', async () => {
+  mockProvider({ outputs: [{ text: JSON.stringify({ summary: 'A person waves.', scenes: [{ start: 0, end: 1, description: 'A hand wave.', score: .8 }] }) }], usage: { total_input_tokens: 'unknown', total_output_tokens: -1 } });
+  await understandVideo(source, 1, 'test-key', AbortSignal.timeout(5000));
+  expect(console.log).toHaveBeenCalledWith('[media-analysis] Overview metrics', expect.objectContaining({ inputTokens: null, outputTokens: null, totalTokens: null, processingCalls: null, processingResults: null }));
 });
 
 test('reads scene JSON from current Gemini model_output steps and ignores input text', async () => {

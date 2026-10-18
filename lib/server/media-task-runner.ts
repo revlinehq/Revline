@@ -175,6 +175,6 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
       if (!task.videoRequest) throw new AnalysisError('Native video inspection needs a question and source window.', 400);
       return { videoInspection: await runPhase('Inspecting video',()=>inspectVideo(video, media.duration, task.videoRequest!, key, signal, videoMimeType,reportGeminiActivity)) };
     }
-    return { analysis: { understanding: await runPhase('Understanding footage',()=>understandVideo(video, media.duration, key, signal, videoMimeType,reportGeminiActivity)) } };
+    return { analysis: { understanding: await runPhase('Understanding footage',()=>understandVideo(video, media.duration, key, signal, videoMimeType,reportGeminiActivity,{projectId:task.projectId,taskId:task.taskId})) } };
   } finally { clearInterval(geminiHeartbeat);await rm(directory, { recursive: true, force: true }); }
 }

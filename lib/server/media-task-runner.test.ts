@@ -69,7 +69,7 @@ test('overview uses its compact profile, but an efficient original wins if encod
   mocks.prepareVideo.mockImplementation(async (_input, output) => { await writeFile(output, Buffer.alloc(20_000_001)); });
   await processMediaTask(task, {} as ConvexHttpClient, 'https://fixture.convex.cloud', signal, () => {});
   expect(mocks.prepareVideo).toHaveBeenCalledWith(expect.any(String), expect.any(String), signal, 'overview');
-  expect(mocks.understandVideo).toHaveBeenCalledWith(expect.stringMatching(/source$/), 300, 'fixture-key', signal, 'video/mp4', expect.any(Function));
+  expect(mocks.understandVideo).toHaveBeenCalledWith(expect.stringMatching(/source$/), 300, 'fixture-key', signal, 'video/mp4', expect.any(Function), { projectId: task.projectId, taskId: task.taskId });
 });
 
 test('an unsupported container still uses a playable MP4 even if conversion is larger', async () => {
@@ -77,7 +77,7 @@ test('an unsupported container still uses a playable MP4 even if conversion is l
   const task = work('understand'), signal = AbortSignal.timeout(5000);
   task.asset!.contentType = 'video/unknown';
   await processMediaTask(task, {} as ConvexHttpClient, 'https://fixture.convex.cloud', signal, () => {});
-  expect(mocks.understandVideo).toHaveBeenCalledWith(expect.stringMatching(/analysis\.mp4$/), 3, 'fixture-key', signal, 'video/mp4', expect.any(Function));
+  expect(mocks.understandVideo).toHaveBeenCalledWith(expect.stringMatching(/analysis\.mp4$/), 3, 'fixture-key', signal, 'video/mp4', expect.any(Function), { projectId: task.projectId, taskId: task.taskId });
 });
 test('explicit shot detection remains a failure when coverage cannot be verified', async () => {
   mocks.detectShots.mockRejectedValue(new AnalysisError('Shot detection did not inspect the complete video.', 502));

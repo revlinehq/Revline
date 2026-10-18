@@ -120,22 +120,53 @@ export async function transcribeAudio(path: string, duration: number, key: strin
 }
 
 /** Source timestamps describe observed scenes; structured output never becomes executable HTML. */
-export async function understandVideo(path: string, duration: number, key: string, signal: AbortSignal, mimeType = 'video/mp4', onActivity?: ReportMediaActivity): Promise<Understanding> {
-  const file = await uploadFile(path, mimeType, key, signal, onActivity);
+export async function understandVideo(path: string, duration: number, key: string, signal: AbortSignal, mimeType = 'video/mp4', onActivity?: ReportMediaActivity, context?: { projectId: string; taskId: string }): Promise<Understanding> {
+  // Google's video guide recommends static processing for short, broad summaries:
+  // agentic navigation adds thought/tool round trips when most content is relevant.
+  // Detailed inspectVideo questions retain native agentic navigation below.
+  const processing = duration <= 300 ? 'static' : 'agentic';
+  const startedAt = Date.now();
+  let uploadElapsedMs: number | null = null, inferenceElapsedMs: number | null = null, cleanupElapsedMs: number | null = null;
+  let file: z.infer<typeof fileSchema> | undefined, result: unknown, completed = false;
   try {
+    file = await uploadFile(path, mimeType, key, signal, onActivity);
+    uploadElapsedMs = Date.now() - startedAt;
     onActivity?.('analyzing');
-    const result = await interaction({
+    const inferenceStartedAt = Date.now();
+    result = await interaction({
       model: process.env.GEMINI_VIDEO_MODEL || 'gemini-3.7-flash',
       input: [
-        // Native agentic processing chooses its own video/audio inspection passes.
-        // Explicit FPS and start/end processing offsets belong to static mode only.
-        { type: 'video', uri: file.uri, mime_type: mimeType, processing: 'agentic' },
+        { type: 'video', uri: file.uri, mime_type: mimeType, processing },
         { type: 'text', text: understandingPrompt(duration) },
       ],
       response_format: { type: 'text', mime_type: 'application/json', schema: understandingJsonSchema },
     }, key, signal);
-    return parseUnderstanding(interactionText(result), duration, 'Video analysis');
-  } finally { await deleteFile(file.name, key); }
+    inferenceElapsedMs = Date.now() - inferenceStartedAt;
+    const understanding = parseUnderstanding(interactionText(result), duration, 'Video analysis');
+    completed = true;
+    return understanding;
+  } finally {
+    if (file) {
+      const cleanupStartedAt = Date.now();
+      await deleteFile(file.name, key);
+      cleanupElapsedMs = Date.now() - cleanupStartedAt;
+    }
+    // Only numeric usage and known step counts. Never log provider content,
+    // input questions, file URIs, authorization headers or thought summaries.
+    const record = result && typeof result === 'object' ? result as Record<string, unknown> : {};
+    const usage = record.usage && typeof record.usage === 'object' ? record.usage as Record<string, unknown> : {};
+    const tokenCount = (key: string) => typeof usage[key] === 'number' && Number.isFinite(usage[key]) && usage[key] >= 0 ? usage[key] : null;
+    const steps = Array.isArray(record.steps) ? record.steps : undefined;
+    const stepCount = (type: string) => steps ? steps.filter(step => step && typeof step === 'object' && step.type === type).length : null;
+    console.log('[media-analysis] Overview metrics', {
+      timestamp: new Date().toISOString(),
+      ...(context ? { projectId: context.projectId, taskId: context.taskId } : {}),
+      processing, completed, durationSeconds: duration,
+      uploadElapsedMs, inferenceElapsedMs, cleanupElapsedMs, totalElapsedMs: Date.now() - startedAt,
+      inputTokens: tokenCount('total_input_tokens'), outputTokens: tokenCount('total_output_tokens'), thoughtTokens: tokenCount('total_thought_tokens'), toolUseTokens: tokenCount('total_tool_use_tokens'), totalTokens: tokenCount('total_tokens'),
+      processingCalls: stepCount('processing_call'), processingResults: stepCount('processing_result'),
+    });
+  }
 }
 
 /** Query-aware native video inspection; timestamp windows are bounded, never invented frame positions. */
