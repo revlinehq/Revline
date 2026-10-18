@@ -116,7 +116,7 @@ async function markTerminal(ctx: MutationCtx, taskId: Id<'mediaTasks'>, status: 
   await ctx.db.patch(taskId, { status, error: error.slice(0, 1000), leaseToken: undefined, leaseExpiresAt: undefined, updatedAt: Date.now() });
   if (task.renderJobId) {
     const job = await ctx.db.get(task.renderJobId);
-    if (job && job.status !== 'completed') await ctx.db.patch(job._id, { status: 'failed', error: error.slice(0, 1000), updatedAt: Date.now() });
+    if (job && job.status !== 'completed' && job.status !== 'cancelled') await ctx.db.patch(job._id, { status: status==='cancelled'?'cancelled':'failed', error: status==='cancelled'?undefined:error.slice(0, 1000), updatedAt: Date.now() });
   }
   if(task.reviewId){const review=await ctx.db.get(task.reviewId);if(review)await ctx.db.patch(review._id,{status:'failed',error:error.slice(0,1000)});}
   if (task.analysisRequestId) {

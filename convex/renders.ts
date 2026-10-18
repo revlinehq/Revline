@@ -12,7 +12,7 @@ import { assetWithUrl, renderSummaryDocument, timelineValidator } from "./schema
 import { consumeUpload, issueUpload } from "./uploads";
 import { MAX_EXPORT_SECONDS } from '../lib/editor/limits';
 import { normalizeTimeline, timelineDuration } from '../lib/editor/types';
-import { enqueueMediaTask } from './mediaTasks';
+import { cancelMediaTask, enqueueMediaTask } from './mediaTasks';
 const workerArgs = { jobId: v.id("renderJobs"), workerSecret: v.string() };
 async function requireJob(ctx: MutationCtx, jobId: Id<"renderJobs">, workerSecret: string) {
   const secret = process.env.RENDER_WORKER_SECRET;
@@ -44,6 +44,15 @@ export const claim = internalMutation({ args: workerArgs, returns: v.object({ pr
   const timeline = normalizeTimeline(job.timeline);
   await ctx.db.patch(job._id, { status: "rendering", timeline, updatedAt: Date.now() });
   return { projectId: job.projectId, timeline, assets, resolution: job.resolution ?? 1080, fps: job.fps ?? timeline.fps, quality: job.quality ?? "high" };
+}});
+export const cancel = mutation({ args:{jobId:v.id('renderJobs')},returns:v.null(),handler:async(ctx,args)=>{
+  const ownerId=await requireOwner(ctx),job=await ctx.db.get(args.jobId);
+  if(!job||job.ownerId!==ownerId)throw new ConvexError('Export not found');
+  await requireProject(ctx,job.projectId,ownerId);
+  if(job.status!=='queued'&&job.status!=='rendering')return null;
+  if(job.taskId)await cancelMediaTask(ctx,job.taskId);
+  await ctx.db.patch(job._id,{status:'cancelled',error:undefined,updatedAt:Date.now()});
+  return null;
 }});
 export const progress = internalMutation({ args: { ...workerArgs, progress: v.number() }, returns: v.null(), handler: async (ctx, args) => {
   const job = await requireJob(ctx, args.jobId, args.workerSecret);

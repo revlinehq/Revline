@@ -108,7 +108,7 @@ export const assetDocument = v.object({ _id: v.id("assets"), _creationTime: v.nu
 export const assetWithUrl = v.object({ _id: v.id("assets"), _creationTime: v.number(), ...assetFields, url: v.union(v.string(), v.null()), thumbnailUrl:v.optional(v.union(v.string(),v.null())) });
 export const renderFields = {
   ownerId: v.string(), projectId: v.id("projects"),
-  status: v.union(v.literal("queued"), v.literal("rendering"), v.literal("completed"), v.literal("failed")),
+  status: v.union(v.literal("queued"), v.literal("rendering"), v.literal("completed"), v.literal("failed"), v.literal("cancelled")),
   outputStorageId: v.optional(v.id("_storage")), outputR2Key: v.optional(v.string()), outputSize: v.optional(v.number()), error: v.optional(v.string()), createdAt: v.number(), updatedAt: v.number(),
   sourceRevision:v.optional(v.number()), timeline: v.optional(timelineValidator), resolution: v.optional(v.number()), fps: v.optional(v.number()), quality: v.optional(v.string()),
   progress: v.optional(v.number()), assetIds: v.optional(v.array(v.id("assets"))), taskId: v.optional(v.id('mediaTasks')),
