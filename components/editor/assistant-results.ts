@@ -1,4 +1,5 @@
 import { normalizeTimeline, type Timeline } from '@/lib/editor/types';
+import {assistantErrorDetail} from './assistant-turn-presentation';
 import type { TimelinePublicationReceipt } from '@/lib/ai/publication-receipt';
 export type { TimelinePublicationReceipt } from '@/lib/ai/publication-receipt';
 
@@ -68,7 +69,7 @@ export function chatToolFromPart(value: unknown): ChatTool | null {
   if (!part || typeof part.type !== 'string' || !part.type.startsWith('tool-') || typeof part.state !== 'string') return null;
   const { output, error } = unpack(part.output);
   const failed = part.state === 'output-error' || part.state === 'output-denied' || !!part.errorText || !!error || (part.state === 'output-available' && !output);
-  return { id: typeof part.toolCallId === 'string' ? part.toolCallId : undefined, name: part.type.slice(5), state: failed ? 'error' : part.state === 'output-available' ? 'done' : 'running', staged: output?.staged === true, output, ...(failed ? { detail: String(part.errorText || error || 'This step could not finish.').slice(0, 240) } : {}) };
+  return { id: typeof part.toolCallId === 'string' ? part.toolCallId : undefined, name: part.type.slice(5), state: failed ? 'error' : part.state === 'output-available' ? 'done' : 'running', staged: output?.staged === true, output, ...(failed ? { detail: assistantErrorDetail(String(part.errorText || error || 'This step could not finish.')).slice(0, 240) } : {}) };
 }
 
 const labels: Record<string, [string, string]> = {

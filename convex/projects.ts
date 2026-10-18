@@ -12,6 +12,9 @@ import { addMediaClip, patchClip } from '../lib/editor/operations';
 import { applyTimelineEdit } from '../lib/editor/timeline-sync';
 import { normalizeTimeline, type Timeline } from '../lib/editor/types';
 import { aspectRatio, projectDocument, timelineValidator } from "./schema";
+import { editingWorkflowActive } from './lib/assistant_workflow';
+import { equalTimelineValue } from '../lib/editor/timeline-equality';
+const workflowLocked = 'Revline is editing your timeline. Wait for it to finish or stop the edit before making changes.';
 function projectTitle(value: string) { const title = value.trim(); if (!title || title.length > 120) throw new ConvexError("Title must contain between 1 and 120 characters"); return title; }
 export const create = mutation({ args: { title: v.string(), aspectRatio, assetIds: v.optional(v.array(v.id('assets'))) }, returns: v.id("projects"), handler: async (ctx, args) => {
   const ownerId = await requireOwner(ctx); await requireEditorAccess(ctx, ownerId); const now = Date.now();
@@ -89,7 +92,10 @@ export const list = query({ args: { limit: v.optional(v.number()) }, returns: v.
 }});
 export const update = mutation({ args: { projectId: v.id("projects"), title: v.optional(v.string()), aspectRatio: v.optional(aspectRatio) }, returns: v.null(), handler: async (ctx, args) => {
   const project = await requireProject(ctx, args.projectId, await requireOwner(ctx)); await requireEditorAccess(ctx, project.ownerId);
-  if (args.aspectRatio !== undefined) await commitTimeline(ctx, project, { ...currentTimeline(project), aspectRatio: args.aspectRatio }, project.revision ?? 0);
+  if (args.aspectRatio !== undefined && args.aspectRatio !== currentTimeline(project).aspectRatio) {
+    if (await editingWorkflowActive(ctx, project)) throw new ConvexError(workflowLocked);
+    await commitTimeline(ctx, project, { ...currentTimeline(project), aspectRatio: args.aspectRatio }, project.revision ?? 0);
+  }
   if (args.title !== undefined) await writeProject(ctx,project._id, { title: projectTitle(args.title), updatedAt: Date.now() });
   return null;
 }});
@@ -104,11 +110,19 @@ export const saveTimeline = mutation({ args: { projectId: v.id("projects"), time
     timeline = applyTimelineEdit(args.baseTimeline, timeline, currentTimeline(project));
     expectedRevision = project.revision ?? 0;
   }
+  if (await editingWorkflowActive(ctx, project)) {
+    const current = currentTimeline(project);
+    // Late acknowledgements of unchanged data must not invalidate the AI draft.
+    if (equalTimelineValue(normalizeTimeline(timeline), current)) return { revision: project.revision ?? 0, timeline: current };
+    throw new ConvexError(workflowLocked);
+  }
   const revision = await commitTimeline(ctx, project, timeline, expectedRevision);
   return { revision, timeline: normalizeTimeline(timeline) };
 }});
 export const undo = mutation({ args: { projectId: v.id("projects") }, returns: v.number(), handler: async (ctx, args) => {
-  const project = await requireProject(ctx, args.projectId, await requireOwner(ctx)); await requireEditorAccess(ctx, project.ownerId); const history = (project.history ?? []).map(normalizeTimeline); const previous = history.pop();
+  const project = await requireProject(ctx, args.projectId, await requireOwner(ctx)); await requireEditorAccess(ctx, project.ownerId);
+  if (await editingWorkflowActive(ctx, project)) throw new ConvexError(workflowLocked);
+  const history = (project.history ?? []).map(normalizeTimeline); const previous = history.pop();
   if (!previous) throw new ConvexError("No edits to undo"); const revision = (project.revision ?? 0) + 1;
   await writeProject(ctx,project._id, { timeline: previous, aspectRatio: previous.aspectRatio, history, revision, updatedAt: Date.now() }); return revision;
 }});

@@ -1,6 +1,8 @@
 .assistant-model-picker{min-width:0;max-width:150px}
-.assistant-model-picker .inspector-select-trigger{width:auto;max-width:100%;height:26px;padding:0 6px;gap:4px;border:0;background:transparent;color:var(--ws-muted);font-size:14px;line-height:20px}
+.assistant-model-picker .inspector-select-trigger{width:auto;max-width:100%;height:26px;padding:0 6px;gap:4px;border:0;background:transparent;color:var(--ws-muted);font-size:13px;line-height:20px}
+.assistant-model-picker .inspector-select-value{font-size:13px;line-height:20px}
 .assistant-model-picker .inspector-select-trigger:hover,.assistant-model-picker .inspector-select-trigger[data-state=open]{background:var(--ws-hover);color:var(--ws-text)}
 .assistant-model-picker .inspector-select-trigger:disabled{opacity:.5;cursor:default}
 .inspector-select-menu.workspace-menu[aria-label="AI editing model options"]{width:220px}
-.inspector-select-menu[aria-label="AI editing model options"] .inspector-select-option{font-size:14px}
+.inspector-select-menu[aria-label="AI editing model options"] .inspector-select-option{font-size:13px}
+@media(pointer:coarse){.assistant-model-picker .inspector-select-trigger{height:44px;min-height:44px}}

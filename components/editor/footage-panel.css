@@ -71,3 +71,6 @@
 .footage-content-library>.source-filters,.footage-content-library>.upload-status{flex-shrink:0}
 
 .source-media-row[data-preparing=true]{opacity:1;cursor:progress}.source-media-row[data-preparing=true] small{display:flex;align-items:center;gap:5px;color:var(--ws-muted)}.source-media-row[data-preparing=true] small svg{flex-shrink:0}
+
+.mobile-inspector-header{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-shrink:0}.mobile-inspector-header h2{min-width:0}.mobile-inspector-header [aria-label="Close editing panel"]{width:44px;height:44px;min-width:44px;flex-shrink:0}
+.preview-inspector-sheet .preview-inspector{flex:1;min-height:0;height:auto}

@@ -12,6 +12,7 @@ import { useUIMessages } from '@convex-dev/agent/react';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
 import { chatMessageFromUI } from './assistant-results';
+import {assistantTurnPresentation,assistantErrorDetail} from './assistant-turn-presentation';
 import { ChatProse } from './chat-prose';
 import { useConversationScroll } from '@/components/workspace/use-conversation-scroll';
 import { savedEditComparison, summarizeTools, turnPublicationReceipt, type AssistantEditSnapshot, type ChatMessage } from './assistant-results';
@@ -109,12 +110,13 @@ function AssistantPanelBody({ messages, running, editing:editingTimeline=running
       if(comparison?.publishedRevision!==undefined)legacyPublications.current.set(group.id,comparison.publishedRevision);
       const publicationReceipt=turnPublicationReceipt(group.messages);
       const draftFailed=!running&&group.id===turnId&&(!!error||replies.some(message=>message.status==='failed'||message.status==='aborted'));
-      return {...group,replies,comparison,cards:summarizeTools(steps,{publicationReceipt,publishedRevision:legacyPublications.current.get(group.id),draftFailed,draftPending:group.id===turnId&&answering})};
+      const cards=summarizeTools(steps,{publicationReceipt,publishedRevision:legacyPublications.current.get(group.id),draftFailed,draftPending:group.id===turnId&&answering});
+      const presentation=assistantTurnPresentation(replies,cards,{receipt:publicationReceipt,error:group.id===turnId?(localError||(!waiting?error:null)):null});
+      return {...group,comparison,...presentation};
     });
-  },[messages,turnId,editSnapshot,running,error,optimisticRequest,answering]);
+  },[messages,turnId,editSnapshot,running,error,localError,waiting,optimisticRequest,answering]);
   const showSuggestions=!conversationStarted&&!latestUser&&!waiting;
-  const replyShowsError=!!error&&groups.at(-1)?.replies.some(message=>message.text.includes(error));
-  const visibleError=localError||(!waiting&&!replyShowsError?error:null);
+  const visibleError=!groups.length?(localError||(!waiting?error:null)):null;
   useEffect(() => { try { setPrompt(draftKey ? sessionStorage.getItem(draftKey) ?? '' : ''); } catch { setPrompt(''); } }, [draftKey]);
   useEffect(() => {
     if (!pendingReply) return;
@@ -182,7 +184,7 @@ function AssistantPanelBody({ messages, running, editing:editingTimeline=running
       {!groups.length && waiting && <div className="assistant-reply"><AssistantReplyHeader loading label={stopState==='stopping'?'Stopping…':activity || replyLabel} detail={processingDetail(activity,activitySource)} startedAt={activityStartedAt}/></div>}
       {!waiting && stopState==='stopped' && <AssistantActivity label="Stopped." detail="Your existing edit is still here." state="stopped"/>}
       {showSuggestions && suggestions?.items.length && onSuggestion && configured ? <div data-chat-follow className="assistant-source-suggestions" aria-label="Suggested edits from this footage"><span title={suggestions.sourceName}>Ideas for {suggestions.sourceName}</span>{suggestions.items.map((suggestion, index) => <button key={`${suggestions.clipId}-${index}`} type="button" disabled={sending || !!pendingReply} onClick={() => void chooseSuggestion(suggestion)}><span>{suggestion.label}</span><ArrowUpRight size={14} aria-hidden="true" /></button>)}</div> : null}
-      {visibleError && <div data-chat-follow><AssistantActivity className="chat-error" label="Needs attention" detail={visibleError} state="error"/></div>}
+      {visibleError && <div data-chat-follow><AssistantActivity className="chat-error" label="Needs attention" detail={assistantErrorDetail(visibleError)} state="error"/></div>}
       {!!messages.length && !demo && !configured && <div className="assistant-demo-note">Connect Claude to edit in conversation. Your footage, preview, and timeline are ready.</div>}
       </div>
     </div>

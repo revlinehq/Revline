@@ -18,6 +18,7 @@ import type * as editorAccess from "../editorAccess.js";
 import type * as http from "../http.js";
 import type * as lib_asset_analysis from "../lib/asset_analysis.js";
 import type * as lib_assistant_recovery from "../lib/assistant_recovery.js";
+import type * as lib_assistant_workflow from "../lib/assistant_workflow.js";
 import type * as lib_auth from "../lib/auth.js";
 import type * as lib_billing_access from "../lib/billing_access.js";
 import type * as lib_claude_model from "../lib/claude_model.js";
@@ -66,6 +67,7 @@ declare const fullApi: ApiFromModules<{
   http: typeof http;
   "lib/asset_analysis": typeof lib_asset_analysis;
   "lib/assistant_recovery": typeof lib_assistant_recovery;
+  "lib/assistant_workflow": typeof lib_assistant_workflow;
   "lib/auth": typeof lib_auth;
   "lib/billing_access": typeof lib_billing_access;
   "lib/claude_model": typeof lib_claude_model;

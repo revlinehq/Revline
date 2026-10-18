@@ -14,7 +14,7 @@ const stubs={
 const bundle=await build({stdin:{resolveDir:process.cwd(),loader:'tsx',contents:`
 import React,{useState} from 'react';import {createRoot} from 'react-dom/client';import {useStore} from 'zustand';import {TooltipProvider} from './components/ui/tooltip';import {EditorShell} from './components/editor/editor-shell';import {EditorStateProvider} from './components/editor/editor-state';import {createEditorStore} from './lib/editor/store';import './components/workspace/workspace-pages.css';import './app/editor.css';
 const initial={fps:30,aspectRatio:'landscape',tracks:{visual:1,overlay:0,audio:0,effects:0},clips:[{id:'footage',kind:'image',assetId:'source',start:0,duration:4,sourceStart:0,track:1}]};const assets=[{_id:'source',kind:'image',fileName:'Synthetic source',width:1920,height:1080,url:'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg"><rect width="1920" height="1080" fill="red"/></svg>'}];const store=createEditorStore(initial);store.setState({selectedId:'footage',selectedIds:['footage'],playhead:.75,playing:true});window.fixture={store};window.fixtureInitial=initial;window.chatMounts=0;window.playerMounts=0;window.playerCalls=0;window.fixtureErrors=[];window.undoCalls=0;window.redoCalls=0;window.mediaTime=1.247;
-function Fixture(){const timeline=useStore(store,state=>state.timeline),[variant,setVariant]=useState('full'),[locked,setLocked]=useState(false),[responding,setResponding]=useState(false);window.fixture.respond=setResponding;window.fixture.variant=setVariant;window.fixture.lock=setLocked;return <TooltipProvider><EditorStateProvider store={store}><EditorShell workspaceOnly={variant==='workspace'} embedded={variant==='embedded'} title="Same project" timeline={timeline} assets={assets} onChange={next=>store.getState().edit(next)} onTitle={()=>{}} onUpload={async()=>{}} onDropUpload={async()=>{}} saving={false} upload={null} error="" onError={message=>window.fixtureErrors.push(message)} onUndo={()=>window.undoCalls++} onRedo={()=>window.redoCalls++} canUndo={false} canRedo={false} messages={[]} aiRunning={locked||responding} aiEditing={locked} aiConfigured={false} onSend={async()=>{}} onExport={async()=>{}} exportState={null} demo/></EditorStateProvider></TooltipProvider>}
+function Fixture(){const timeline=useStore(store,state=>state.timeline),[variant,setVariant]=useState('full'),[locked,setLocked]=useState(false),[responding,setResponding]=useState(false),[analysis,setAnalysis]=useState(null),[workflow,setWorkflow]=useState(false);window.fixture.analyze=setAnalysis;window.fixture.workflow=setWorkflow;window.fixture.respond=setResponding;window.fixture.variant=setVariant;window.fixture.lock=setLocked;return <TooltipProvider><EditorStateProvider store={store}><EditorShell workspaceOnly={variant==='workspace'} embedded={variant==='embedded'} title="Same project" timeline={timeline} assets={assets} onChange={next=>store.getState().edit(next)} onTitle={()=>{}} onUpload={async()=>{}} onDropUpload={async()=>{}} saving={false} upload={null} error="" onError={message=>window.fixtureErrors.push(message)} onUndo={()=>window.undoCalls++} onRedo={()=>window.redoCalls++} canUndo={false} canRedo={false} messages={[]} aiRunning={locked||responding} aiEditing={locked} aiWorkflowActive={workflow||locked} analysisBusy={analysis} aiConfigured={false} onSend={async()=>{}} onExport={async()=>{}} exportState={null} demo/></EditorStateProvider></TooltipProvider>}
 createRoot(document.getElementById('root')).render(<Fixture/>);
 `},plugins:[{name:'isolated-boundaries',setup(builder){builder.onResolve({filter:/.*/},args=>Object.hasOwn(stubs,args.path)?{path:args.path,namespace:'fixture'}:undefined);builder.onLoad({filter:/.*/,namespace:'fixture'},args=>({contents:stubs[args.path],loader:'tsx',resolveDir:process.cwd()}));}}],bundle:true,platform:'browser',format:'iife',jsx:'automatic',write:false,outdir:'/tmp/revline-mode-switch',define:{'process.env.NODE_ENV':'"production"'}});
 const server=createServer((_request,response)=>{response.writeHead(200,{'Content-Type':'text/html'});response.end('<html data-workspace-theme="dark"><body><div id="root"></div></body></html>')});await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));const origin='http://127.0.0.1:'+server.address().port;
@@ -25,12 +25,27 @@ try{
  const initialMounts=await page.evaluate(()=>[window.playerMounts,window.chatMounts]);
  await page.evaluate(()=>window.fixture.respond(true));await flush();
  assert.equal(await page.$('.custom-timeline[data-editing-locked]'),null,'Answering a question leaves the timeline unlocked');
- await page.waitForFunction(()=>{const timeline=document.querySelector('.custom-timeline[data-ai-working]');return timeline&&Number(getComputedStyle(timeline.querySelector('.timeline-ai-frame')).opacity)>.95});
- assert.equal(await page.$eval('.timeline-ai-frame',node=>getComputedStyle(node,'::before').animationPlayState),'running','The working glow breathes throughout the AI run, independently of the edit lock');
+ assert.equal(await page.$('.custom-timeline[data-ai-working]'),null,'A greeting does not start the workflow glow');
  const questionBefore=await state();await page.focus('.custom-timeline');await page.keyboard.press('Period');await flush();
  assert.ok((await state()).calls>questionBefore.calls,'Manual seeking stays usable while an answer is running');
  await page.evaluate(()=>window.previewEdit('footage',{volume:.6}));await flush();
  assert.equal((await state()).timeline.clips[0].volume,.6,'Manual edits stay usable while the assistant is replying');
+ // Analysis belongs to the editing workflow, including the gap before applying edits.
+ const analysisBefore=await state();
+ for(const activity of ['Watching footage…','Listening to your footage…','Downloading footage…',null]){
+  await page.evaluate(activity=>{window.fixture.analyze(activity);window.fixture.workflow(true)},activity);await flush();
+  assert.ok(await page.$('.custom-timeline[data-editing-locked=true]'),'The workflow locks the timeline throughout analysis and planning');
+  await page.waitForFunction(()=>{const timeline=document.querySelector('.custom-timeline[data-ai-working]');return timeline&&Number(getComputedStyle(timeline.querySelector('.timeline-ai-frame')).opacity)>.95});
+  assert.equal(await page.$eval('.timeline-ai-frame',node=>getComputedStyle(node,'::before').animationPlayState),'running');
+  await page.focus('.custom-timeline');await page.keyboard.press('Period');await page.keyboard.press('KeyS');
+  await page.click('[aria-label="Next cut"]');
+  const timelineBox=await page.$eval('.time-ruler',node=>{const r=node.getBoundingClientRect();return {x:r.left+r.width*.7,y:r.top+r.height/2}});
+  await page.mouse.move(timelineBox.x,timelineBox.y);await page.mouse.down();await page.mouse.move(timelineBox.x+25,timelineBox.y);await page.mouse.up();await flush();
+  assert.equal((await state()).calls,analysisBefore.calls,'Analysis blocks playhead clicks, drags, keys and navigation');
+  assert.deepEqual((await state()).timeline,analysisBefore.timeline,'Analysis cannot change clips');
+ }
+ await page.evaluate(()=>{window.fixture.workflow(false);window.fixture.analyze(null)});await flush();
+ assert.equal(await page.$('.custom-timeline[data-editing-locked]'),null,'Finishing the workflow restores interactions');
  await page.evaluate(()=>{window.fixture.respond(false);window.fixture.store.getState().recover(window.fixtureInitial);window.fixture.store.setState({selectedId:'footage',selectedIds:['footage'],playhead:.75,playing:true})});await flush();
  assert.deepEqual(await page.evaluate(()=>[window.playerMounts,window.chatMounts]),initialMounts,'Responding and editing states share the existing editor/player DOM');
  // Production Shell guards must protect edits even when an older callback survives.
@@ -58,6 +73,8 @@ try{
  await page.setViewport({width:700,height:900});await page.waitForSelector('.mobile-panel-controls [data-segment="tracks"]');await page.click('.mobile-panel-controls [data-segment="tracks"]');await flush();collapse=await collapsedFits();
  assert.ok(collapse.toolbar>36&&collapse.toolbar<75,'The narrow toolbar retains its two-row responsive layout');assert.ok(collapse.playbackFits,'Resizing while collapsed preserves the entire playback row');
  await page.screenshot({path:'/tmp/revline-collapsed-toolbar-narrow.png'});
+ await page.setViewport({width:360,height:800});await flush();collapse=await collapsedFits();
+ assert.ok(collapse.toolbar>=88&&collapse.toolbar<110,'Phone collapse retains both full-width touch control rows');assert.ok(collapse.playbackFits);
  await page.setViewport({width:1440,height:900});await flush();collapse=await collapsedFits();assert.equal(collapse.height,36,'A collapsed timeline shrinks again after returning to desktop width');
  await page.click('[aria-label="Expand timeline"]');await page.waitForFunction(()=>!document.querySelector('.timeline-collapsed'));await flush();
  assert.ok(Math.abs(await page.$eval('#timeline[data-panel]',node=>node.getBoundingClientRect().height)-expandedHeight)<1,'Responsive collapse preserves the remembered expanded height');

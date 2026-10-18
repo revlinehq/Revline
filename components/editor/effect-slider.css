@@ -8,3 +8,4 @@
 .effect-slider input::-webkit-slider-runnable-track{height:100%;background:transparent}.effect-slider input::-moz-range-track{height:100%;background:transparent}
 .effect-slider input::-webkit-slider-thumb{appearance:none;width:2px;height:31px;background:transparent;border:0}.effect-slider input::-moz-range-thumb{width:2px;height:31px;background:transparent;border:0;border-radius:0}
 .effect-slider input:disabled{cursor:default}.effect-slider:has(input:focus-visible){outline:2px solid color-mix(in srgb,var(--effect-color,var(--revline-accent)) 80%,var(--ws-text));outline-offset:1px}.effect-slider input:focus-visible{outline:none}
+@media(pointer:coarse){.effect-slider{height:44px}}

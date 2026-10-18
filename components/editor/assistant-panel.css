@@ -14,3 +14,12 @@
 .conversation-editor .assistant-content .manual-editor-composer .edit-composer-actions{height:32px}
 .assistant-content .manual-composer-dock{flex:none}
 .assistant-activity-elapsed{flex:none;margin-top:2px;color:var(--muted-foreground);font-size:11px;font-variant-numeric:tabular-nums}
+.assistant-content :is(.chat-message,.composer-error){overflow-wrap:anywhere}
+@media(pointer:coarse){
+  .conversation-editor .assistant-content .manual-editor-composer .edit-composer-actions{height:44px}
+  .conversation-editor .assistant-content .manual-editor-composer :is(.composer-add,.composer-submit,[aria-label="Stop editing"]){width:44px;height:44px;min-width:44px;min-height:44px}
+  .conversation-editor .assistant-content .manual-editor-composer .composer-add{margin-left:0}
+  .conversation-editor .assistant-content .composer-attachment{height:44px}
+  .conversation-editor .assistant-content .composer-attachment>button{width:44px;height:44px;min-width:44px}
+  .assistant-source-suggestions button,.assistant-content :is(.composer-more,.load-more,.chat-jump-latest){min-height:44px}
+}

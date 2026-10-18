@@ -215,14 +215,18 @@ describe("live AI checkpoints and media analysis", () => {
     const second: Timeline = { ...textTimeline, aspectRatio: "square" };
     expect(await t.mutation(internal.assistant.apply, { ...run, timeline: second, expectedRevision: 1 })).toBe(2);
     expect((await owner.query(api.projects.get, { projectId })).history).toHaveLength(1);
+    await t.mutation(internal.assistant.finish, run);
     await owner.mutation(api.projects.undo, { projectId });
     expect((await owner.query(api.projects.get, { projectId })).timeline?.clips).toEqual([]);
   });
   test("AI checkpoints cannot overwrite a newer manual edit", async () => {
     const t = makeTest(); const projectId = await project(t); const owner = t.withIdentity(identity("owner"));
+    await owner.mutation(api.projects.saveTimeline, { projectId, timeline: textTimeline, expectedRevision: 0 });
     await t.run(ctx => writeProject(ctx,projectId, { aiRunning: true, aiRunId: "run-1", aiUndoRecorded: false }));
-    await t.mutation(internal.assistant.apply, { projectId, ownerId: "owner", runId: "run-1", timeline: textTimeline, expectedRevision: 0 });
+    // A user can still edit during an ordinary response, before analysis or a
+    // mutating tool begins; that revision must invalidate an older AI draft.
     await owner.mutation(api.projects.saveTimeline, { projectId, timeline: { ...textTimeline, aspectRatio: "landscape" }, expectedRevision: 1 });
+    await t.mutation(internal.assistant.beginEditing, { projectId, ownerId: 'owner', runId: 'run-1' });
     await expect(t.mutation(internal.assistant.apply, { projectId, ownerId: "owner", runId: "run-1", timeline: { ...textTimeline, aspectRatio: "square" }, expectedRevision: 1 })).rejects.toThrow("timeline changed elsewhere");
     expect((await owner.query(api.projects.get, { projectId })).aspectRatio).toBe("landscape");
   });
@@ -462,20 +466,62 @@ test("inspection backing query reads the latest manual revision and does not mut
   await expect(t.query(internal.assistant.getRun, { ...run, ownerId: "stranger" })).rejects.toThrow("Project not found");
 });
 
-test("AI edits after inspecting a manual revision start a new undo group preserving manual work", async () => {
+test("completed AI edits and later manual work keep separate undo groups in the next AI run", async () => {
   const t = makeTest(); const projectId = await project(t); const owner = t.withIdentity(identity("owner"));
   await t.run(ctx => writeProject(ctx,projectId, { aiRunning: true, aiRunId: "inspect-undo-run", aiUndoRecorded: false }));
   const run = { projectId, ownerId: "owner", runId: "inspect-undo-run" };
   await t.mutation(internal.assistant.apply, { ...run, expectedRevision: 0, timeline: textTimeline });
+  await t.mutation(internal.assistant.finish, run);
   const manual: Timeline = { ...textTimeline, aspectRatio: "square", clips: [{ ...textTimeline.clips[0], text: "Human edit" }] };
   await owner.mutation(api.projects.saveTimeline, { projectId, expectedRevision: 1, timeline: manual });
-  const fresh = await t.query(internal.assistant.getRun, run);
+  const nextRun = { ...run, runId: 'next-edit-run' };
+  await t.run(ctx => writeProject(ctx, projectId, { aiRunning: true, aiEditing: false, aiRunId: nextRun.runId, aiUndoRecorded: false, aiCheckpointRevision: undefined }));
+  const fresh = await t.query(internal.assistant.getRun, nextRun);
   const updated: Timeline = { ...manual, clips: [{ ...manual.clips[0], fontSize: 64 }] };
-  await t.mutation(internal.assistant.apply, { ...run, expectedRevision: fresh.project.revision!, timeline: updated });
-  await t.mutation(internal.assistant.apply, { ...run, expectedRevision: 3, timeline: { ...updated, clips: [{ ...updated.clips[0], fontSize: 72 }] } });
+  await t.mutation(internal.assistant.apply, { ...nextRun, expectedRevision: fresh.project.revision!, timeline: updated });
+  await t.mutation(internal.assistant.apply, { ...nextRun, expectedRevision: 3, timeline: { ...updated, clips: [{ ...updated.clips[0], fontSize: 72 }] } });
   expect((await owner.query(api.projects.get, { projectId })).history).toHaveLength(3);
+  await t.mutation(internal.assistant.finish, nextRun);
   await owner.mutation(api.projects.undo, { projectId });
   expect((await owner.query(api.projects.get, { projectId })).timeline).toEqual(manual);
+});
+
+test('manual changes cannot bypass an analysis workflow, while no-op saves, ordinary replies and stopped runs stay safe', async () => {
+  const t = makeTest(), projectId = await project(t), owner = t.withIdentity(identity('owner'));
+  await owner.mutation(api.projects.saveTimeline, { projectId, expectedRevision: 0, timeline: textTimeline });
+  const next = { ...textTimeline, clips: [{ ...textTimeline.clips[0], text: 'A manual change' }] };
+  const requestId = await t.run(async ctx => {
+    await writeProject(ctx, projectId, { aiRunning: true, aiEditing: false, aiRunId: 'analysis-run', aiUndoRecorded: false });
+    const assetId = await ctx.db.insert('assets', { projectId, ownerId: 'owner', kind: 'video', fileName: 'Fixture.mp4', contentType: 'video/mp4', size: 1, duration: 5, createdAt: 0 });
+    return ctx.db.insert('analysisRequests', { projectId, ownerId: 'owner', assetId, aiRunId: 'analysis-run', mode: 'video', status: 'pending', createdAt: 0, expiresAt: Date.now() + 60_000 });
+  });
+  const before = await owner.query(api.projects.get, { projectId });
+  for (const status of ['pending', 'running', 'completed', 'failed'] as const) {
+    await t.run(ctx => ctx.db.patch(requestId, { status }));
+    await expect(owner.mutation(api.projects.saveTimeline, { projectId, expectedRevision: 1, timeline: next })).rejects.toThrow('Revline is editing your timeline');
+    await expect(owner.mutation(api.projects.undo, { projectId })).rejects.toThrow('Revline is editing your timeline');
+    await expect(owner.mutation(api.projects.update, { projectId, aspectRatio: 'square' })).rejects.toThrow('Revline is editing your timeline');
+    // Equal in-flight saves, including rebased acknowledgements, do not create
+    // revisions/history that would conflict with a validated AI draft.
+    expect(await owner.mutation(api.projects.saveTimeline, { projectId, expectedRevision: 1, timeline: textTimeline })).toEqual({ revision: 1, timeline: textTimeline });
+    expect(await owner.mutation(api.projects.saveTimeline, { projectId, expectedRevision: 0, baseTimeline: textTimeline, timeline: textTimeline })).toEqual({ revision: 1, timeline: textTimeline });
+    await owner.mutation(api.projects.update, { projectId, aspectRatio: textTimeline.aspectRatio });
+    expect(await owner.query(api.projects.get, { projectId })).toEqual(before);
+    await expect(t.query(internal.assistant.validateDraft, { projectId, ownerId: 'owner', runId: 'analysis-run', expectedRevision: 1, timeline: next })).resolves.toBeNull();
+  }
+  const stranger = t.withIdentity(identity('stranger'));
+  await expect(stranger.mutation(api.projects.saveTimeline, { projectId, expectedRevision: 1, timeline: textTimeline })).rejects.toThrow('Project not found');
+  await expect(stranger.mutation(api.projects.undo, { projectId })).rejects.toThrow('Project not found');
+  // Analysis belonging to another run must not lock a greeting or discussion.
+  await t.run(ctx => writeProject(ctx, projectId, { aiRunId: 'greeting-run' }));
+  expect((await owner.mutation(api.projects.saveTimeline, { projectId, expectedRevision: 1, timeline: next })).revision).toBe(2);
+  expect(await owner.mutation(api.projects.undo, { projectId })).toBe(3);
+  await t.run(ctx => writeProject(ctx, projectId, { aiEditing: true }));
+  await expect(owner.mutation(api.projects.saveTimeline, { projectId, expectedRevision: 3, timeline: next })).rejects.toThrow('Revline is editing your timeline');
+  await expect(owner.mutation(api.projects.undo, { projectId })).rejects.toThrow('Revline is editing your timeline');
+  await owner.mutation(api.assistant.stop, { projectId });
+  expect((await owner.mutation(api.projects.saveTimeline, { projectId, expectedRevision: 3, timeline: next })).revision).toBe(4);
+  expect(await owner.mutation(api.projects.undo, { projectId })).toBe(5);
 });
 
  test("above-unity audio gain persists, snapshots for export, and undoes to the original level", async () => {

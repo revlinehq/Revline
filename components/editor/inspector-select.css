@@ -9,3 +9,4 @@
 .inspector-select-option [data-slot=dropdown-menu-radio-item-indicator]{position:absolute;right:9px;display:grid;place-items:center;color:var(--revline-accent)}
 .inspector-select-option [data-slot=dropdown-menu-radio-item-indicator] svg{width:13px;height:13px}
 .inspector-select-option-copy{display:flex;flex-direction:column;gap:3px;min-width:0}.inspector-select-option-copy small{color:var(--ws-muted);font-size:10px;line-height:1.4}
+@media(pointer:coarse){.inspector-select-trigger,.inspector-select-option.workspace-menu-item{min-height:44px}}
