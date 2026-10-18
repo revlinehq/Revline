@@ -276,9 +276,15 @@ preserves the current renderer image and existing `production` instance so it
 does not interrupt an active job. Local verification covers five-slot wake,
 authentication, health reporting, failure isolation and edge TypeScript.
 
-New containers use `standard-4` (4 vCPU, 12 GiB RAM). A resource-profile label
+New containers use `standard-3` (2 vCPU, 8 GiB RAM). A resource-profile label
 lets the controller drain earlier 1-vCPU containers before replacing them;
 active jobs settle first. The protected status endpoint distinguishes legacy
 instances from the new profile. This raises compute capacity without changing
 resolution, frame rate, quality, the renderer image or its one-task-per-container
 setting. A larger CPU allocation is not a guaranteed export speed multiplier.
+
+An authenticated `POST /restart` accepts only a named slot from the five-slot
+allowlist. It stops that slot's temporary container and schedules recovery;
+Convex's lease expiry requeues interrupted tasks. Use only with explicit
+operator authorization to lose in-flight render progress. It does not alter
+project timelines or remove stored media.

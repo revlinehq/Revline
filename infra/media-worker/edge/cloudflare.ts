@@ -5,8 +5,8 @@ import { makeFunctionReference } from 'convex/server';
 type ProcessorSecrets = { RENDER_WORKER_SECRET: string; GOOGLE_GENERATIVE_AI_API_KEY: string; OPENAI_API_KEY?: string };
 type Bindings = ProcessorEnv & ProcessorSecrets;
 const TIMEOUT_MS = 5 * 60_000;
-const INSTANCE_TYPE = 'standard-4';
-const RESOURCE_PROFILE = '4-vcpu-12g-v1';
+const INSTANCE_TYPE = 'standard-3';
+const RESOURCE_PROFILE = '2-vcpu-8g-v1';
 // Retain the existing instance so an active export survives this capacity rollout.
 const PROCESSOR_NAMES = ['production', 'production-2', 'production-3', 'production-4', 'production-5'];
 const readyQuery = makeFunctionReference<'query', { workerSecret: string;processorVersion:number }, string>('mediaTasks:ready');
@@ -19,6 +19,11 @@ export class MediaProcessor extends DurableObject<Bindings> {
   }
   async wake(): Promise<void> {
     await this.ctx.storage.setAlarm(Date.now());
+  }
+  /** Explicit operator recovery only; Convex requeues work after its lease expires. */
+  async restart(): Promise<void> {
+    if (this.ctx.container?.running) await this.ctx.container.destroy();
+    await this.wake();
   }
   alarm(): Promise<void> {
     return this.tick();
@@ -77,9 +82,15 @@ export class MediaProcessor extends DurableObject<Bindings> {
 export default {
   async fetch(request: Request, env: Bindings): Promise<Response> {
     const path = new URL(request.url).pathname;
-    if (!(request.method === 'POST' && path === '/wake') && !(request.method === 'GET' && path === '/status')) return new Response('Not found', { status: 404 });
+    if (!(request.method === 'POST' && (path === '/wake' || path === '/restart')) && !(request.method === 'GET' && path === '/status')) return new Response('Not found', { status: 404 });
     const encoder = new TextEncoder(), provided = encoder.encode(request.headers.get('authorization') ?? ''), expected = encoder.encode(`Bearer ${env.RENDER_WORKER_SECRET}`);
     if (!env.RENDER_WORKER_SECRET || provided.length !== expected.length || !crypto.subtle.timingSafeEqual(provided, expected)) return new Response('Unauthorized', { status: 401 });
+    if (path === '/restart') {
+      const body = await request.json().catch(() => null) as { name?: unknown } | null;
+      if (typeof body?.name !== 'string' || !PROCESSOR_NAMES.includes(body.name)) return Response.json({ error: 'Choose an existing processor slot.' }, { status: 400 });
+      await env.PROCESSOR.getByName(body.name).restart();
+      return Response.json({ accepted: true }, { status: 202 });
+    }
     if (path === '/status') {
       const processors = await Promise.all(PROCESSOR_NAMES.map(async name => ({ name, ...await env.PROCESSOR.getByName(name).status() })));
       return Response.json({ capacity: PROCESSOR_NAMES.length, instanceType: INSTANCE_TYPE, processors }, { headers: { 'Cache-Control': 'no-store' } });

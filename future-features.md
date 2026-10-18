@@ -21,6 +21,24 @@ Example: “Warm film colors, minimal captions and smooth text entrances” prod
 
 This follows the core editing foundation. Consistent quality and accumulated user preferences are potential sources of defensibility; generation alone is a product capability, not an established moat.
 
+## Ultra plan with faster exports
+
+Offer a future Ultra plan with 4-vCPU export workers, reserved render capacity
+and priority queueing. Standard exports use 2-vCPU workers. Benchmark the speed
+gain before setting pricing or making performance claims, and preserve the same
+output quality across plans.
+
+- Measure representative 720p/1080p timelines at 30/60 fps on 2- and 4-vCPU workers.
+- Separate queue waiting time from actual render time in the export UI.
+- Evaluate Railway or another dedicated render host against Cloudflare using
+  the same project, renderer, CPU allocation and output settings before migrating.
+- Price the plan from measured cost per completed export, including retries,
+  CPU, memory, storage, egress and expected monthly usage.
+- Use bounded concurrency, per-account fairness and idle shutdown so a fast
+  plan does not starve standard users or leave paid machines running needlessly.
+- Evaluate larger-than-4-vCPU capacity only if supported by the chosen provider
+  and real benchmark results justify it; do not promise a fixed speed multiplier.
+
 ## Agent memory across projects
 
 Remember each user's preferred editing style throughout Revline: pacing, cut rhythm, caption design, color treatment, typography and motion intensity. Reuse approved styles and learn preferences from explicit feedback and accepted revisions, while keeping project-specific instructions scoped to their project.
