@@ -148,11 +148,11 @@ test('undo returns a truthful empty result and refuses both saved and private st
     await expect(execute(tools,'undoLatestEdit',{})).rejects.toThrow('before making changes');
   },initial,true);
   expect(staged.calls).not.toContain('assistant:undoLatestEdit');
-  expect(staged.error).toContain('pending replacement was not saved');
-  expect((await staged.backend!.owner.query(api.projects.get,{projectId:staged.backend!.projectId})).timeline).toEqual(staged.backend!.seed);
-  expect(staged.history).toEqual([]);
+  expect(staged.error).toContain('latest valid partial edit was saved');
+  expect((await staged.backend!.owner.query(api.projects.get,{projectId:staged.backend!.projectId})).timeline?.clips.some(clip=>clip.id==='to')).toBe(false);
+  expect(staged.history).toEqual([staged.backend!.seed]);
   const messages=await staged.backend!.owner.query(api.assistant.messages,{projectId:staged.backend!.projectId,threadId:staged.backend!.threadId,paginationOpts:{cursor:null,numItems:20}});
-  expect(messages.page.flatMap(m=>m.parts).map(p=>p.type==='text'?p.providerMetadata?.revline?.publicationReceipt:undefined).filter(Boolean)).toEqual([{version:1,kind:'timeline-publication',status:'failed',runId:'run',threadId:staged.backend!.threadId,promptMessageId:staged.backend!.promptMessageId,stagedRevision:0}]);
+  expect(messages.page.flatMap(m=>m.parts).map(p=>p.type==='text'?p.providerMetadata?.revline?.publicationReceipt:undefined).filter(Boolean)).toEqual([{version:1,kind:'timeline-publication',status:'saved',runId:'run',threadId:staged.backend!.threadId,promptMessageId:staged.backend!.promptMessageId,stagedRevision:0,revision:1}]);
 });
 
 test('group copy/move/trim, layer reorder and common blend use actual editor operations while preserving source identity',async()=>{

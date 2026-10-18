@@ -21,7 +21,7 @@ type EditStorage = {
 
 const sourcePlacementFields = ['assetId', 'kind', 'start', 'duration', 'sourceStart', 'playbackRate', 'track'] as const;
 
-/** One serialized model turn. Source edits and clip replacements remain private until completion. */
+/** One serialized model turn. Source edits stay private until publication. */
 export class EditSession {
   timeline: Timeline;
   revision: number;
@@ -30,6 +30,7 @@ export class EditSession {
   private pending: Promise<unknown> = Promise.resolve();
   private failed = false;
   private needsInspection = false;
+  private stagedEdits = 0;
 
   constructor(timeline: Timeline, revision: number, private storage: EditStorage, private signal?: AbortSignal) {
     this.timeline = normalizeTimeline(timeline);
@@ -93,6 +94,7 @@ export class EditSession {
         this.savedEdits++;
       }
       this.timeline = next;
+      if (this.staged) this.stagedEdits++;
       const changedClips = next.clips.filter(clip => JSON.stringify(clip) !== JSON.stringify(previous.clips.find(current => current.id === clip.id))).map(({ id, kind, track, start, duration, sourceStart, text, transform, crop, fit }) => ({ id, kind, ...(transform ? { transform } : {}), ...(crop ? { crop } : {}), ...(fit ? { fit } : {}), ...(track ? { track } : {}), start, duration, sourceStart, ...(text ? { text: text.slice(0, 120) } : {}) }));
       return { applied: !this.staged, saved: !this.staged, staged: this.staged, revision: this.revision, changedClips, removedClipIds, removedMarkerIds, changedMarkerIds, aspectRatio: next.aspectRatio };
     }, error => preflightRejection !== undefined && error === preflightRejection);
@@ -115,7 +117,10 @@ export class EditSession {
   async complete(finishReason: string, toolFailed = false, steps = 0) {
     await this.pending;
     this.signal?.throwIfAborted();
-    if (finishReason !== 'stop') throw new IncompleteEditError(finishReason === 'tool-calls' && steps >= EDITOR_SOFT_STEPS ? 'step_limit' : finishReason === 'length' ? 'output_limit' : 'incomplete', this.staged, this.savedEdits, steps);
+    if (finishReason !== 'stop') {
+      await this.savePartial();
+      throw new IncompleteEditError(finishReason === 'tool-calls' && steps >= EDITOR_SOFT_STEPS ? 'step_limit' : finishReason === 'length' ? 'output_limit' : 'incomplete', this.staged, this.savedEdits, steps);
+    }
     if (!this.staged) {
       if (this.needsInspection || toolFailed) throw new Error('Some requested changes were not saved. Inspect the current timeline before continuing; previously saved edits remain.');
       return false;
@@ -124,6 +129,23 @@ export class EditSession {
     this.revision = await this.storage.apply(this.timeline, this.revision,true);
     this.savedEdits++;
     this.staged = false;
+    this.stagedEdits = 0;
+    return true;
+  }
+
+  /** Preserve only the latest successful checkpoint, never an operation that
+   * threw before assigning this.timeline. Storage rechecks ownership, active
+   * run, source validity and revision atomically with its publication receipt.
+   * A time-budget abort may reach here; an explicit Stop invalidates the run
+   * in storage and therefore still refuses late writes. */
+  async savePartial() {
+    await this.pending;
+    if (!this.staged || !this.stagedEdits || this.needsInspection) return false;
+    await this.storage.validate(this.timeline, this.revision);
+    this.revision = await this.storage.apply(this.timeline, this.revision, true);
+    this.savedEdits++;
+    this.staged = false;
+    this.stagedEdits = 0;
     return true;
   }
 }

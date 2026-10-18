@@ -66,18 +66,18 @@ test('missing receipt prompt rolls back the timeline, revision and undo history 
   expect(await x.read()).toMatchObject({revision:0,history:[],timeline:original,aiUndoRecorded:false});expect(await x.receipts()).toEqual([]);
 });
 
-test('failure receipt marks only the discarded staged revision and keeps earlier immediate checkpoints saved',async()=>{
+test('output limit publishes the valid partial draft with a receipt and preserves one undo group',async()=>{
   const x=await setup();
   const immediatelySaved={...original,clips:original.clips.map(c=>({...c,fontSize:80}))};
   await x.session.checkpoint(()=>immediatelySaved);
   await x.session.checkpoint(t=>({...t,clips:[]}));
-  await expect(x.session.complete('length')).rejects.toThrow('not saved');
-  await x.t.mutation(internal.assistant.finish,{...x.run,error:'Not saved',publication:{...x.publication,stagedRevision:x.session.revision,status:'failed'}});
-  expect(await x.read()).toMatchObject({revision:1,history:[original],timeline:immediatelySaved,aiRunning:false});
-  expect((await x.receipts()).map(item=>item.receipt)).toEqual([{version:1,kind:'timeline-publication',status:'failed',runId:'run',...x.publication,stagedRevision:1}]);
+  await expect(x.session.complete('length')).rejects.toThrow('Your saved changes remain');
+  await x.t.mutation(internal.assistant.finish,{...x.run,error:'The request reached the model output limit.',savedEdits:x.session.savedEdits});
+  expect(await x.read()).toMatchObject({revision:2,history:[original],timeline:{clips:[]},aiRunning:false});
+  expect((await x.receipts()).map(item=>item.receipt)).toEqual([{version:1,kind:'timeline-publication',status:'saved',runId:'run',...x.publication,stagedRevision:1,revision:2}]);
   await x.prompt('A later message');
   await x.t.run(ctx=>writeProject(ctx,x.projectId,{aiRunId:'later',aiError:undefined}));
-  expect((await x.receipts())[0].receipt.status).toBe('failed');
+  expect((await x.receipts())[0].receipt.status).toBe('saved');
 });
 
 test('an aborted old run retains its prompt receipt without stopping or overwriting a newer run',async()=>{
