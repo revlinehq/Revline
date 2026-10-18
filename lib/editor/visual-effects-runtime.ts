@@ -21,7 +21,7 @@ export function installVisualEffects(sources: VisualEffectSource[], fps: number,
   const host = window as unknown as RuntimeWindow;
   const preview = !!document.querySelector('meta[name="hyperframes-studio-preview"]');
   const clock = host.__timelines.revline.__hfReal ?? host.__timelines.revline;
-  type Entry = { source: HTMLVideoElement | HTMLImageElement; effects: VisualEffects; neonColor?: number; canvas?: HTMLCanvasElement; gl?: WebGLRenderingContext; program?: WebGLProgram; texture?: WebGLTexture; buffer?: WebGLBuffer; uniforms?: Record<string, WebGLUniformLocation | null>; passTextures?: WebGLTexture[]; framebuffer?: WebGLFramebuffer; passWidth?: number; passHeight?: number; nominalWidth?: number; nominalHeight?: number; detailWidth?: number; detailHeight?: number; lastPassKey?: string; lastPassCount?: number; lastFrame?: number; lastSource?: string | number; lastTransform?: string; dirty: boolean; injected?: HTMLImageElement; failed?: boolean; videoCallback?: number; decodedFrame?: number; decodedListener?: () => void; uploadCanvas?: HTMLCanvasElement };
+  type Entry = { source: HTMLVideoElement | HTMLImageElement; effects: VisualEffects; nativeCorners?: { node:HTMLElement; originalRadius:string }; neonColor?: number; canvas?: HTMLCanvasElement; gl?: WebGLRenderingContext; program?: WebGLProgram; texture?: WebGLTexture; buffer?: WebGLBuffer; uniforms?: Record<string, WebGLUniformLocation | null>; passTextures?: WebGLTexture[]; framebuffer?: WebGLFramebuffer; passWidth?: number; passHeight?: number; nominalWidth?: number; nominalHeight?: number; detailWidth?: number; detailHeight?: number; lastPassKey?: string; lastPassCount?: number; lastFrame?: number; lastSource?: string | number; lastTransform?: string; dirty: boolean; injected?: HTMLImageElement; failed?: boolean; videoCallback?: number; decodedFrame?: number; decodedListener?: () => void; uploadCanvas?: HTMLCanvasElement };
   type Resources = Pick<Entry, 'canvas' | 'gl' | 'program' | 'texture' | 'buffer' | 'uniforms' | 'passTextures' | 'framebuffer' | 'passWidth' | 'passHeight'>;
   const entries = new Map<string, Entry>();
   const available: Resources[] = [];
@@ -143,6 +143,27 @@ void main(){
     const c = effects.colorGrade, z = effects.zoomBlur, g = effects.glitch;
     return !!(c?.enabled && (c.exposure || c.contrast !== 1 || c.saturation !== 1 || c.temperature || c.tint || c.vibrance) || z?.enabled && z.amount > 0 || g?.enabled && g.intensity > 0 || effects.invert?.enabled && effects.invert.amount > 0 || effects.dither?.enabled && effects.dither.amount > 0 || effects.neonEdges?.enabled && effects.neonEdges.amount > 0 || effects.lensDistortion?.enabled && (effects.lensDistortion.amount !== 0 || effects.lensDistortion.fringing > 0) || effects.filmOverlay?.enabled && effects.filmOverlay.amount > 0 || effects.vhs?.enabled && effects.vhs.amount > 0 || effects.lightLeak?.enabled && effects.lightLeak.amount > 0 || effects.directionalBlur?.enabled && effects.directionalBlur.amount > 0 || effects.turbulentDisplace?.enabled && effects.turbulentDisplace.amount > 0 || effects.lightSweep?.enabled && effects.lightSweep.amount > 0 || effects.softBlur?.enabled && effects.softBlur.amount > 0 || effects.frameCorners?.enabled && effects.frameCorners.amount>0 || effects.frameDistortion?.enabled && (effects.frameDistortion.horizontal !== 0 || effects.frameDistortion.vertical !== 0 || effects.frameDistortion.skew !== 0 || (effects.frameDistortion.bend??0)!==0));
   }
+  function clearNativeCorners(entry:Entry) {
+    if(!entry.nativeCorners)return;
+    entry.nativeCorners.node.style.borderRadius=entry.nativeCorners.originalRadius;
+    entry.nativeCorners=undefined;
+  }
+  function nativeCorners(entry:Entry,passes:VisualEffects[]) {
+    const corners=passes.length===1?passes[0].frameCorners:undefined,node=entry.source.parentElement;
+    if(!preview||!corners?.enabled||corners.amount<=0||enabled({...passes[0],frameCorners:undefined})||!node?.classList.contains('source-window')||entry.source.hasAttribute('data-revline-transition-visible')||entry.source.hasAttribute('data-revline-transition-hold')) {
+      clearNativeCorners(entry);return false;
+    }
+    // The crop window already clips its native media. A radius alone needs no
+    // per-frame video upload/readback or effect canvas. Match the export mask's
+    // radius in untransformed window pixels; CSS carries crop/motion/scale.
+    if(entry.canvas)release(entry);
+    if(entry.nativeCorners?.node!==node){clearNativeCorners(entry);entry.nativeCorners={node,originalRadius:node.style.borderRadius};}
+    const width=node.style.width.endsWith('px')?parseFloat(node.style.width):node.clientWidth;
+    const height=node.style.height.endsWith('px')?parseFloat(node.style.height):node.clientHeight;
+    const radius=`${corners.amount*Math.min(width,height)*.5}px`;
+    if(node.style.borderRadius!==radius)node.style.borderRadius=radius;
+    return true;
+  }
   function release(entry: Entry) {
     entry.source.removeAttribute('data-revline-effects');
     entry.injected?.removeAttribute('data-revline-effects');
@@ -243,6 +264,7 @@ void main(){
     }
     const time = clock.time(), start = Number(entry.source.dataset.start), end = start + Number(entry.source.dataset.duration);
     const passes=effectPasses(entry.effects,time);
+    if(nativeCorners(entry,passes))return;
     if (!passes.length || !entry.source.hasAttribute('data-revline-transition-visible') && (time < start - 1e-6 || time >= end - 1e-6)) { if (entry.canvas) release(entry); return; }
     const renderId = entry.source.getAttribute('data-hf-render-id') || entry.source.id;
     const held = entry.source.hasAttribute('data-revline-transition-hold');
@@ -373,6 +395,7 @@ void main(){
   function remove(id: string) {
     const previous = entries.get(id);
     if (previous) {
+      clearNativeCorners(previous);
       if (previous.source instanceof HTMLVideoElement && previous.videoCallback !== undefined) previous.source.cancelVideoFrameCallback(previous.videoCallback);
       if (previous.decodedListener) { previous.source.removeEventListener('seeked', previous.decodedListener); previous.source.removeEventListener('loadeddata', previous.decodedListener); }
       release(previous); entries.delete(id);

@@ -21,6 +21,10 @@ export function installSolidColorLayers(initial:SolidColorSource[]):SolidColorCo
       entry.node.style.visibility=time>=clip.start&&time<clip.start+clip.duration?'visible':'hidden';
       entry.node.style.zIndex=String(trackOf(clip)*256+entry.index);entry.node.style.mixBlendMode=clip.blendMode??'normal';
       const rectangle=entry.node.firstElementChild as HTMLElement;
+      // The playback runtime can resynchronize the outer clip's visibility
+      // after a seek. Keep the actual paint on the shared composition clock,
+      // just like the rectangles inside adjustment layers.
+      rectangle.style.visibility=entry.node.style.visibility;
       rectangle.style.backgroundColor=settings.color;
       rectangle.style.left=`${settings.x*100}%`;rectangle.style.top=`${settings.y*100}%`;
       rectangle.style.width=`${settings.width*100}%`;rectangle.style.height=`${settings.height*100}%`;
