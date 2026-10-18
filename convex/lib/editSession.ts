@@ -1,11 +1,12 @@
+import {EDITOR_SOFT_STEPS,EDITOR_HARD_STEPS} from '../../lib/ai/edit-progress';
 import { normalizeTimeline, type Timeline } from '../../lib/editor/types';
 import { rebaseNonDestructiveEdit } from './editSessionRebase';
 import { isOverlapPlacementRejection, type TimelineGestureRejection } from '../../lib/editor/timeline-edit-errors';
 
 export const isTimelineConflict = (error: unknown) => /timeline changed elsewhere/i.test(error instanceof Error ? error.message : String(error));
 export class IncompleteEditError extends Error {
-  constructor(readonly reason: 'step_limit' | 'output_limit' | 'incomplete', staged: boolean, savedEdits: number) {
-    const cause = reason === 'step_limit' ? 'This request reached its editing step limit before finishing.' : reason === 'output_limit' ? 'This request reached the model output limit before finishing.' : 'The assistant stopped before finishing this request.';
+  constructor(readonly reason: 'step_limit' | 'output_limit' | 'incomplete', staged: boolean, savedEdits: number, steps = 0) {
+    const cause = reason === 'step_limit' ? steps >= EDITOR_HARD_STEPS ? 'This request reached its editing step limit before finishing.' : 'The request paused because recent steps made no new timeline changes.' : reason === 'output_limit' ? 'This request reached the model output limit before finishing.' : 'The assistant stopped before finishing this request.';
     super(`${cause} ${staged ? 'The pending replacement was not saved.' : savedEdits ? 'Your saved changes remain. Continue the unfinished part from the current timeline.' : 'No timeline changes were saved.'}`);
     this.name = 'IncompleteEditError';
   }
@@ -66,6 +67,8 @@ export class EditSession {
         const current = nextById.get(clip.id);
         return current && sourcePlacementFields.some(field => clip[field] !== current[field]);
       });
+      const previousMarkers=new Map((previous.markers??[]).map(marker=>[marker.id,marker]));
+      const changedMarkerIds=(next.markers??[]).filter(marker=>JSON.stringify(marker)!==JSON.stringify(previousMarkers.get(marker.id))).map(marker=>marker.id);
       const remainingMarkerIds = new Set(next.markers?.map(marker => marker.id));
       const removedMarkerIds = (previous.markers ?? []).filter(marker => !remainingMarkerIds.has(marker.id)).map(marker => marker.id);
       // Splits preserve the original IDs, and trims/moves can temporarily leave gaps.
@@ -91,7 +94,7 @@ export class EditSession {
       }
       this.timeline = next;
       const changedClips = next.clips.filter(clip => JSON.stringify(clip) !== JSON.stringify(previous.clips.find(current => current.id === clip.id))).map(({ id, kind, track, start, duration, sourceStart, text, transform, crop, fit }) => ({ id, kind, ...(transform ? { transform } : {}), ...(crop ? { crop } : {}), ...(fit ? { fit } : {}), ...(track ? { track } : {}), start, duration, sourceStart, ...(text ? { text: text.slice(0, 120) } : {}) }));
-      return { applied: !this.staged, saved: !this.staged, staged: this.staged, revision: this.revision, changedClips, removedClipIds, removedMarkerIds, aspectRatio: next.aspectRatio };
+      return { applied: !this.staged, saved: !this.staged, staged: this.staged, revision: this.revision, changedClips, removedClipIds, removedMarkerIds, changedMarkerIds, aspectRatio: next.aspectRatio };
     }, error => preflightRejection !== undefined && error === preflightRejection);
   }
 
@@ -112,7 +115,7 @@ export class EditSession {
   async complete(finishReason: string, toolFailed = false, steps = 0) {
     await this.pending;
     this.signal?.throwIfAborted();
-    if (finishReason !== 'stop') throw new IncompleteEditError(finishReason === 'tool-calls' && steps >= 15 ? 'step_limit' : finishReason === 'length' ? 'output_limit' : 'incomplete', this.staged, this.savedEdits);
+    if (finishReason !== 'stop') throw new IncompleteEditError(finishReason === 'tool-calls' && steps >= EDITOR_SOFT_STEPS ? 'step_limit' : finishReason === 'length' ? 'output_limit' : 'incomplete', this.staged, this.savedEdits, steps);
     if (!this.staged) {
       if (this.needsInspection || toolFailed) throw new Error('Some requested changes were not saved. Inspect the current timeline before continuing; previously saved edits remain.');
       return false;

@@ -25,7 +25,8 @@ export function assistantTurnPresentation(replies:readonly ChatMessage[],cards:r
   const failures=cards.filter(card=>card.state==='error');
   const failed=!!error||failures.length>0||summaries.length>0||receipt?.status==='failed'||receipt?.status==='aborted';
   if(!failed)return {replies,cards};
-  const detailCandidates=[error,...summaries,...failures.map(card=>card.detail)].filter((value):value is string=>!!value);
+  const summaryDetails=summaries.map(text=>text.replace(/^(?:No timeline changes were saved\.|\d+ (?:edits were saved before the assistant stopped|changes? (?:were|was) saved)\.)\s*/, '').replace(/^Undo restores the state before the latest consecutive group of AI edits\.\s*/, ''));
+  const detailCandidates=[error,...summaryDetails,...failures.map(card=>card.detail)].filter((value):value is string=>!!value);
   const conflict=detailCandidates.find(value=>/timeline changed elsewhere|timeline changed while|revision conflict/i.test(value));
   const savedIds=new Set(replies.flatMap(message=>(message.steps??[]).flatMap((step,index)=>step.state==='done'&&step.output?.saved===true?[step.id??`${message.id}:${index}`]:[])));
   const reportedSaved=summaries.reduce((count,text)=>Math.max(count,Number(/^(\d+) (?:edits|changes?)/.exec(text)?.[1]??0)),0);
@@ -35,8 +36,8 @@ export function assistantTurnPresentation(replies:readonly ChatMessage[],cards:r
   let detail=conflict?assistantErrorDetail(conflict):specific?assistantErrorDetail(specific):receipt&&receipt.status!=='saved'?'This replacement was not saved. Previously saved edits remain.':assistantErrorDetail(detailCandidates[0]);
   if(savedChanges&&!hasDraft&&!conflict){
     if(detail===fallback||/pending replacement|edits were saved before the assistant stopped/.test(detail))detail='The request did not finish. Continue the unfinished part from the current timeline.';
-    detail=`${savedChanges} ${savedChanges===1?'change was':'changes were'} saved. ${detail}`;
   }
+  if(savedChanges)detail=`${savedChanges} ${savedChanges===1?'change was':'changes were'} saved. ${detail}`;
   const unconfirmed=!error&&!summaries.length&&!receipt&&failures.every(card=>card.title==='Save not confirmed');
   return {
     replies:replies.map(message=>({...message,text:message.text.split(/\n\s*\n/).filter(text=>!failureSummary(text)&&!receiptFailureText.has(text.trim())).join('\n\n')})),

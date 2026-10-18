@@ -1,3 +1,4 @@
+import {EDITOR_SOFT_STEPS,EDITOR_HARD_STEPS,EDITOR_PROGRESS_WINDOW,editStepStopReason,hasRecentEditProgress} from './edit-progress';
 import type { LanguageModelUsage, ProviderMetadata } from 'ai';
 import { OPENAI_EDIT_MODELS, type OpenAIReasoningEffort, type OpenAISpeedMode } from './claude-model';
 import { hasRepeatedToolFailures } from './tool-failures';
@@ -76,19 +77,22 @@ export class AssistantCostLog {
       this.repeated.set(fingerprint, { count: repeat, revision: progress.revision });
       if (repeat === 3) warnings.push('same_tool_repeated_three_times_without_saved_revision');
     }
-    if (this.calls === 12) warnings.push('approaching_existing_15_step_limit');
+    if (this.calls === EDITOR_SOFT_STEPS - 3) warnings.push('approaching_progress_continuation_check');
+    if (this.calls === EDITOR_HARD_STEPS - 3) warnings.push('approaching_hard_editing_step_limit');
     if (cost.estimatedUsd === null) warnings.push('cost_unknown');
     this.log({ event: 'model-step', callId: event.callId, model: event.modelId, provider: event.provider, step: event.stepNumber + 1, callCount: this.calls, ...cost, stepEstimatedUsd: cost.estimatedUsd, runEstimatedUsd: this.unknownCalls ? null : this.knownUsd, knownRunEstimatedUsd: this.knownUsd, unknownUsageCalls: this.unknownCalls, toolCallCount: tools.length, runToolCallCount: this.toolCalls, tools: tools.map(tool => tool.toolName), finishReason: event.finishReason, ...progress, warnings });
   }
 
   toolsFinished(step: Step) {
     this.steps.push({ content: step.content });
+    if(this.steps.length===EDITOR_SOFT_STEPS&&hasRecentEditProgress(this.steps))this.log({event:'continuation',reason:'verified_recent_edit_progress',stepCount:this.steps.length,softStepThreshold:EDITOR_SOFT_STEPS,hardStepLimit:EDITOR_HARD_STEPS,progressWindow:EDITOR_PROGRESS_WINDOW});
     if (hasRepeatedToolFailures(this.steps)) this.log({ event: 'anomaly', reason: 'existing_repeated_tool_failure_guard', model: this.model, provider: this.provider, callCount: this.calls, runToolCallCount: this.toolCalls, tools: [...this.toolNames] });
   }
 
   finish(reason: string, progress?: Progress, unreportedCall = false) {
     if (this.finished) return;
     this.finished = true;
-    this.log({ event: 'run-summary', reason, model: this.model, provider: this.provider, callCount: this.calls, runToolCallCount: this.toolCalls, tools: [...this.toolNames], knownRunEstimatedUsd: this.knownUsd, runEstimatedUsd: this.unknownCalls || unreportedCall ? null : this.knownUsd, unknownUsageCalls: this.unknownCalls, unreportedCall, stepLimitReached: this.calls >= 15, ...progress });
+    const stepStopReason=reason==='step_limit'?editStepStopReason(this.steps):null;
+    this.log({ event: 'run-summary', reason, model: this.model, provider: this.provider, callCount: this.calls, runToolCallCount: this.toolCalls, tools: [...this.toolNames], knownRunEstimatedUsd: this.knownUsd, runEstimatedUsd: this.unknownCalls || unreportedCall ? null : this.knownUsd, unknownUsageCalls: this.unknownCalls, unreportedCall, stepLimitReached:stepStopReason!==null,stepStopReason,softStepThreshold:EDITOR_SOFT_STEPS,hardStepLimit:EDITOR_HARD_STEPS, ...progress });
   }
 }
