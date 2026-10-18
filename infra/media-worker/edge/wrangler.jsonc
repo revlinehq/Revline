@@ -20,5 +20,5 @@
     "MEDIA_WORKER_URL": "https://revline-editor-media-production.makaradze98-s.workers.dev",
     "GEMINI_VIDEO_MODEL": "gemini-3.7-flash"
   },
-  "observability": { "enabled": true, "head_sampling_rate": 1 }
+  "observability": { "enabled": true, "head_sampling_rate": 1, "redact_query_string": true, "traces": { "enabled": true, "head_sampling_rate": 1, "persist": true } }
 }
