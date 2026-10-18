@@ -40,6 +40,17 @@ function mediaUrl(value: string) {
   throw new Error('Media and script URLs must use HTTP, a blob URL, or a local path.');
 }
 
+/** Keep independent range-seeking decoders out of the same browser cache entry. */
+export function previewMediaSource(value:string,key?:string) {
+  if(!key)return value;
+  try {
+    const url=new URL(value);
+    if(url.pathname!=='/read'||!url.searchParams.has('token'))return value;
+    url.searchParams.set('preview',key);
+    return url.href;
+  } catch { return value; }
+}
+
 function bounded(value: number | undefined, fallback: number, min: number, max: number) {
   return Number.isFinite(value) ? Math.min(max, Math.max(min, value!)) : fallback;
 }
@@ -136,7 +147,8 @@ export function generateComposition(timeline: Timeline, assets: MediaAsset[], op
     const source = clip.assetId ? options.assetUrls?.[clip.assetId] ?? asset?.url : undefined;
     if (!asset || !source) throw new Error('A clip references unavailable media.');
     if (asset.kind !== clip.kind) throw new Error('The clip kind does not match its media.');
-    const src = mediaUrl(source);
+    const previewKey=options.preview&&(clip.kind==='video'||clip.kind==='audio')?crypto.randomUUID():undefined;
+    const src = mediaUrl(previewMediaSource(source,previewKey));
     let sourceStyle = 'left:0;top:0;width:100%;height:100%;object-fit:cover';
     let frameStyle = '';
     let windowStyle = 'left:0;top:0;width:100%;height:100%';
@@ -169,7 +181,7 @@ export function generateComposition(timeline: Timeline, assets: MediaAsset[], op
     const volume = bounded(clip.volume, 1, 0, MAX_CLIP_VOLUME);
     const sound=audioFadeAttributes(clip);
     const audioAttrs=clip.kind==='video'||clip.kind==='audio'?` data-fade-in="${sound.fadeIn}" data-fade-out="${sound.fadeOut}" data-automation="${escapeHtml(audioVolumeEnvelope(timeline,clip,volume))}"`:'';
-    const attrs = `${timing} data-media-start="${clip.sourceStart}" data-volume="${volume}"${clip.kind === 'video' || clip.kind === 'audio' ? ` data-playback-rate="${playbackRateOf(clip)}"` : ''}${audioAttrs}`;
+    const attrs = `${timing}${previewKey?` data-preview-key="${previewKey}"`:''} data-media-start="${clip.sourceStart}" data-volume="${volume}"${clip.kind === 'video' || clip.kind === 'audio' ? ` data-playback-rate="${playbackRateOf(clip)}"` : ''}${audioAttrs}`;
     const frame = (media: string) => {
       const content = `<div id="${id}-motion" class="motion-frame"><div class="source-window" style="${windowStyle}">${media}</div></div>`;
       // Camera motion reframes pixels through a stationary aperture. Ordinary
