@@ -34,16 +34,24 @@ function planTarget(toolName:string|undefined,input:unknown){
 }
 const planPreflightRejection=(error:unknown)=>/^(?:Error:\s*)?(?:Read the current (?:cut|marker) before planning its effect|Plan a supported effect or text control|Plan needs valid fields and a supported effect or text control)\.$/.test(error instanceof Error?error.message:String(error));
 function zoomTarget(toolName:string|undefined,input:unknown){
-  if(toolName!=='configureSmoothZoom')return;
+  if(toolName!=='configureSmoothZoom'&&toolName!=='configureCameraMotion')return;
   const {replaceMotion,...settings}=record(input);
   if(typeof settings.clipId!=='string')return;
-  return stable(settings);
+  return stable({toolName,...settings});
 }
-const zoomMotionRejection=(error:unknown)=>/^(?:Error:\s*)?This clip already has custom motion\. Explicitly replace its motion to add a smooth zoom\.$/.test(error instanceof Error?error.message:String(error));
+const zoomMotionRejection=(error:unknown)=>/^(?:Error:\s*)?This clip already has custom motion\. Explicitly replace its motion to add a (?:smooth zoom|camera glide)\.$/.test(error instanceof Error?error.message:String(error));
+function zoomEvidenceTarget(toolName:string|undefined,input:unknown){
+  const args=record(input);
+  if(typeof args.clipId!=='string')return;
+  const {replaceMotion,...settings}=args;
+  if(toolName==='configureSmoothZoom'&&record(args.focus).kind==='target')return stable({toolName,...settings,focus:{kind:'target'}});
+  if(toolName==='configureCameraMotion'&&Array.isArray(args.keyframes)&&args.keyframes.some(key=>record(record(key).focus).kind==='target'))return stable({toolName,...settings,keyframes:args.keyframes.map(key=>{const point=record(key);return record(point.focus).kind==='target'?{...point,focus:{kind:'target'}}:point;})});
+}
+const zoomEvidenceRejection=(error:unknown)=>/^(?:Error:\s*)?(?:Inspect the target during this zoom window, not a different moment\.|Inspect the moving target at this keyframe source time\. A position from another moment cannot verify cursor or object following\.)$/.test(error instanceof Error?error.message:String(error));
 
 /** Derive state from completed steps: the SDK can reevaluate a stop condition. */
 function unresolvedFailures(steps: ToolSteps, recoverPlacements = false) {
-  const calls = new Map<string, { key: string; input: unknown }>(), pending = new Map<string, { count: number; ids: string[]; placement?: string; plan?:boolean; zoom?:string; corrected?: boolean }>();
+  const calls = new Map<string, { key: string; input: unknown }>(), pending = new Map<string, { count: number; ids: string[]; placement?: string; plan?:boolean; zoom?:string; zoomEvidence?:string; corrected?: boolean }>();
   for (const step of steps) for (const value of step.content) {
     if (!value || typeof value !== 'object') continue;
     const part = value as { type?: string; toolCallId?: string; toolName?: string; input?: unknown; output?: unknown; error?: unknown; preliminary?: boolean };
@@ -55,7 +63,7 @@ function unresolvedFailures(steps: ToolSteps, recoverPlacements = false) {
     if (part.type === 'tool-call') calls.set(id, { key, input });
     else if (part.type === 'tool-error' || (part.type === 'tool-result' && (output.success === false || record(part.output).type === 'error-text'))) {
       const failure=part.error??record(part.output).value;
-      pending.set(key, { count: (pending.get(key)?.count ?? 0) + 1, ids: [...pending.get(key)?.ids ?? [], id], ...(recoverPlacements && isOverlapPlacementRejection(part.error) ? { placement: placementTarget(part.toolName, input) } : {}),...(recoverPlacements&&part.toolName==='planEffects'&&planPreflightRejection(failure)?{plan:true}:{}),...(recoverPlacements&&zoomMotionRejection(failure)?{zoom:zoomTarget(part.toolName,input)}:{}) });
+      pending.set(key, { count: (pending.get(key)?.count ?? 0) + 1, ids: [...pending.get(key)?.ids ?? [], id], ...(recoverPlacements && isOverlapPlacementRejection(part.error) ? { placement: placementTarget(part.toolName, input) } : {}),...(recoverPlacements&&part.toolName==='planEffects'&&planPreflightRejection(failure)?{plan:true}:{}),...(recoverPlacements&&zoomMotionRejection(failure)?{zoom:zoomTarget(part.toolName,input)}:{}),...(recoverPlacements&&zoomEvidenceRejection(failure)?{zoomEvidence:zoomEvidenceTarget(part.toolName,input)}:{}) });
     } else if (part.type === 'tool-result') {
       pending.delete(key);
       if (recoverPlacements) {
@@ -65,6 +73,11 @@ function unresolvedFailures(steps: ToolSteps, recoverPlacements = false) {
         if(plan&&output.planned===true&&planTarget(part.toolName,{plans:output.plans})===plan)for(const [failedKey,failure]of pending)if(failure.plan)pending.delete(failedKey);
         const zoom=zoomTarget(part.toolName,input),args=record(input);
         if(zoom&&args.replaceMotion===true&&(output.saved===true||output.staged===true)&&Array.isArray(output.changedClips)&&output.changedClips.some(clip=>record(clip).id===args.clipId))for(const [failedKey,failure]of pending)if(failure.zoom===zoom)pending.delete(failedKey);
+        const evidence=zoomEvidenceTarget(part.toolName,input);
+        // A newer inspected target may correct a no-write timestamp rejection.
+        // Require the same clip and zoom settings plus a real saved/staged
+        // change; a successful analysis or another clip cannot clear it.
+        if(evidence&&(output.saved===true||output.staged===true)&&Array.isArray(output.changedClips)&&output.changedClips.some(clip=>record(clip).id===args.clipId))for(const [failedKey,failure]of pending)if(failure.zoomEvidence===evidence)pending.delete(failedKey);
         const target = placementTarget(part.toolName, input);
         if (target && changedTargets(input, output)) for (const failure of pending.values()) if (failure.placement === target) failure.corrected = true;
         if (part.toolName === 'inspectTimeline' && inspectedDraft(output)) for (const [failedKey, failure] of pending) if (failure.corrected) pending.delete(failedKey);
