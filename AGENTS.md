@@ -8,6 +8,10 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 <!-- END:nextjs-agent-rules -->
 
+## Verification
+
+Do not create new test files or test-only scripts unless the user explicitly requests them. Verify changes using existing checks and direct runtime or UI inspection.
+
 ## Delivery
 
 Start local development with `npm run dev`, which runs the frontend and development media worker together. Verify both `[web]` and `[worker]` readiness logs before handing the editor back; keep them running while the user tests media processing. Use the Codex terminal for visible logs when requested.
