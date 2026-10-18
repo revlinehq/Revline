@@ -151,6 +151,8 @@ export const publicMediaAsset = v.object({
   duration:v.optional(v.number()),width:v.optional(v.number()),height:v.optional(v.number()),
   audioAssetId:v.optional(v.string()),audioExtracted:v.optional(v.boolean()),waveform:v.optional(waveformValidator),thumbnailUrl:v.optional(v.union(v.string(),v.null())),
 });
+export const sharedChatMessage = v.object({role:v.union(v.literal('user'),v.literal('assistant')),text:v.string()});
+export const shareChatPreviewMessage = v.object({id:v.string(),...sharedChatMessage.fields});
 export default defineSchema({
   assistantPlans:defineTable({projectId:v.id('projects'),ownerId:v.string(),runId:v.string(),plans:v.array(effectPlanValidator),originals:v.array(clipValidator),reviews:v.number(),createdAt:v.number()}).index('by_project',['projectId']),
   compositionReviews:defineTable({projectId:v.id('projects'),ownerId:v.string(),runId:v.string(),revision:v.number(),timeline:timelineValidator,reference:timelineValidator,plans:v.array(effectPlanValidator),assetIds:v.array(v.id('assets')),start:v.number(),end:v.number(),taskId:v.optional(v.id('mediaTasks')),status:v.union(v.literal('queued'),v.literal('completed'),v.literal('failed')),result:v.optional(compositionReviewResult),error:v.optional(v.string()),createdAt:v.number()}).index('by_project',['projectId']).index('by_created',['createdAt']),
@@ -168,7 +170,7 @@ export default defineSchema({
     .searchIndex('search_name',{searchField:'fileName',filterFields:['ownerId','auxiliary','pending','kind']}),
   storageAccounting: defineTable({ name:v.string(), ready:v.boolean() }).index('by_name',['name']),
   editorEntitlements: defineTable({ ownerId: v.string(), reason: v.string(), grantedAt: v.number(), updatedAt: v.number(), expiresAt: v.optional(v.number()), revokedAt: v.optional(v.number()) }).index('by_owner', ['ownerId']),
-  timelineShares:defineTable({projectId:v.id('projects'),ownerId:v.string(),title:v.string(),timeline:timelineValidator,published:v.boolean(),createdAt:v.number(),updatedAt:v.number()}).index('by_project',['projectId']),
+  timelineShares:defineTable({projectId:v.id('projects'),ownerId:v.string(),title:v.string(),timeline:timelineValidator,chat:v.optional(v.array(sharedChatMessage)),published:v.boolean(),createdAt:v.number(),updatedAt:v.number()}).index('by_project',['projectId']),
   shareAssets:defineTable({shareId:v.id('timelineShares'),...sharedAssetFields}).index('by_share',['shareId']).index('by_storageId',['storageId']).index('by_r2Key',['r2Key']).index('by_thumbnailStorageId',['thumbnailStorageId']).index('by_owner_r2Key',['ownerId','r2Key']).index('by_owner_storageId',['ownerId','storageId']).index('by_owner_thumbnail',['ownerId','thumbnailStorageId']),
   billingCheckouts: defineTable({ ownerId: v.string(), priceId: v.string(), origin: v.string(), trialEligible: v.boolean(), requestId: v.string(), createdAt: v.number(), sessionId: v.optional(v.string()), url: v.optional(v.string()), expiresAt: v.optional(v.number()) }).index('by_owner', ['ownerId']),
   mediaTasks: defineTable(mediaTaskFields).index('by_status_createdAt', ['status', 'createdAt']).index('by_status_claimable_created',['status','claimable','createdAt']).index('by_status_updated',['status','updatedAt']).index('by_asset_kind', ['assetId', 'kind']).index('by_project_createdAt', ['projectId', 'createdAt']).index('by_project_kind_status',['projectId','kind','status']),

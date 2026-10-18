@@ -3,7 +3,9 @@ import { completeDeletion } from '../lib/test-support/convex-deletion';
 /// <reference types="vite/client" />
 import {convexTest}from'convex-test';
 import {afterEach,expect,test,vi}from'vitest';
-import {api}from'./_generated/api';
+import {api,components}from'./_generated/api';
+import agentTest from '@convex-dev/agent/test';
+import {createThread,saveMessages}from'@convex-dev/agent';
 import schema from'./schema';
 const modules=import.meta.glob('./**/*.ts');afterEach(()=>vi.unstubAllEnvs());
 async function fixture(){
@@ -43,4 +45,82 @@ test('published edits are snapshots and source removal cannot break them',async(
 test('deleting an original project turns off its link while retained copies keep their media',async()=>{
  const {t,owner,other,projectId,storageId}=await fixture(),shareId=await owner.mutation(api.timelineShares.publish,{projectId}),copyId=await other.mutation(api.timelineShares.useTimeline,{shareId});
  await owner.mutation(api.projects.remove,{projectId});await completeDeletion(t,projectId);expect(await t.query(api.timelineShares.get,{shareId})).toBeNull();expect(await t.run(async ctx=>!!await ctx.storage.get(storageId))).toBe(true);expect((await other.query(api.assets.list,{projectId:copyId}))).toHaveLength(2);
+});
+
+async function chatFixture() {
+ const f=await fixture();agentTest.register(f.t);
+ const threadId=await f.t.run(ctx=>createThread(ctx,components.agent,{userId:'owner'}));
+ await f.t.run(ctx=>writeProject(ctx,f.projectId,{threadId}));
+ const save=async(messages:Parameters<typeof saveMessages>[2]['messages'],metadata?:Parameters<typeof saveMessages>[2]['metadata'],thread=threadId,userId='owner')=>f.t.run(ctx=>saveMessages(ctx,components.agent,{threadId:thread,userId,messages,...(metadata?{metadata}:{})}));
+ return{...f,threadId,save,preview:()=>f.owner.query(api.timelineShares.chatPreview,{projectId:f.projectId})};
+}
+
+test('chat sharing defaults off and opt-in publishes only previewed plain conversation, frozen until an explicit update',async()=>{
+ const f=await chatFixture();
+ await f.save([{role:'user',content:'Tighten this edit https://private.example/read?token=SECRET'},{role:'assistant',content:'I kept the complete sentences.'}]);
+ const preview=await f.preview();expect(preview.messages.map(m=>m.text)).toEqual(['Tighten this edit [link removed]','I kept the complete sentences.']);
+ const shareId=await f.owner.mutation(api.timelineShares.publish,{projectId:f.projectId});
+ expect((await f.t.query(api.timelineShares.get,{shareId}))?.chat).toBeUndefined();
+ expect(await f.owner.query(api.timelineShares.status,{projectId:f.projectId})).toMatchObject({includesChat:false});
+ await f.owner.mutation(api.timelineShares.publish,{projectId:f.projectId,chat:preview.messages});
+ const frozen=preview.messages.map(({role,text})=>({role,text}));
+ expect((await f.t.query(api.timelineShares.get,{shareId}))?.chat).toEqual(frozen);
+ expect(await f.owner.query(api.timelineShares.status,{projectId:f.projectId})).toMatchObject({includesChat:true});
+ await f.save([{role:'user',content:'A later private request'}]);
+ expect((await f.t.query(api.timelineShares.get,{shareId}))?.chat).toEqual(frozen);
+ const copyId=await f.other.mutation(api.timelineShares.useTimeline,{shareId});
+ expect((await f.other.query(api.projects.get,{projectId:copyId})).threadId).toBeUndefined();
+ await f.owner.mutation(api.timelineShares.publish,{projectId:f.projectId});
+ expect((await f.t.query(api.timelineShares.get,{shareId}))?.chat).toBeUndefined();
+ await f.owner.mutation(api.timelineShares.publish,{projectId:f.projectId,chat:preview.messages.slice(0,1)});
+ expect((await f.t.query(api.timelineShares.get,{shareId}))?.chat).toEqual(frozen.slice(0,1));
+ await f.owner.mutation(api.timelineShares.revoke,{projectId:f.projectId});
+ expect(await f.t.query(api.timelineShares.get,{shareId})).toBeNull();
+ expect(await f.t.run(ctx=>ctx.db.get(shareId))).not.toHaveProperty('chat');
+});
+
+test('share preview excludes system, tools, reasoning, failed messages, receipts and operational error summaries',async()=>{
+ const f=await chatFixture();
+ await f.save([{role:'system',content:'PRIVATE SYSTEM'},{role:'user',content:'Add subtitles'},{role:'assistant',content:[{type:'reasoning',text:'PRIVATE THOUGHTS'},{type:'text',text:'Subtitles added.'}]},{role:'assistant',content:[{type:'tool-call',toolCallId:'secret-call',toolName:'inspectFrames',input:{signedUrl:'SECRET TOOL'}}]},{role:'tool',content:[{type:'tool-result',toolCallId:'secret-call',toolName:'inspectFrames',output:{type:'json',value:{secret:'TOOL OUTPUT'}}}]}]);
+ await f.save([{role:'assistant',content:'Your replacement edit is saved.'}],[{providerMetadata:{revline:{publicationReceipt:{kind:'timeline-publication'}}}}]);
+ await f.save([{role:'assistant',content:'No timeline changes were saved. PRIVATE FAILURE'}]);
+ await f.save([{role:'assistant',content:'FAILED MESSAGE'}],[{status:'failed',error:'PRIVATE STACK'}]);
+ const preview=await f.preview();expect(preview.messages.map(m=>m.text)).toEqual(['Add subtitles','Subtitles added.']);
+ const shareId=await f.owner.mutation(api.timelineShares.publish,{projectId:f.projectId,chat:preview.messages});
+ const chat=(await f.t.query(api.timelineShares.get,{shareId}))!.chat!;
+ expect(chat).toEqual([{role:'user',text:'Add subtitles'},{role:'assistant',text:'Subtitles added.'}]);
+ expect(JSON.stringify(chat)).not.toMatch(/PRIVATE|TOOL|receipt|thread|model|provider|usage|_id|reasoning/);
+});
+
+test('foreign owners, other conversations, stale or edited messages and duplicate selections cannot publish chat',async()=>{
+ const f=await chatFixture();await f.save([{role:'user',content:'Original private message'}]);
+ const preview=await f.preview();
+ await expect(f.other.query(api.timelineShares.chatPreview,{projectId:f.projectId})).rejects.toThrow('Project not found');
+ await expect(f.t.query(api.timelineShares.chatPreview,{projectId:f.projectId})).rejects.toThrow('Authentication required');
+ await expect(f.other.mutation(api.timelineShares.publish,{projectId:f.projectId,chat:preview.messages})).rejects.toThrow('Project not found');
+ const foreign=await f.t.run(ctx=>createThread(ctx,components.agent,{userId:'other'}));
+ const [otherMessage]=(await f.save([{role:'user',content:'FOREIGN CONVERSATION'}],undefined,foreign,'other')).messages;
+ await expect(f.owner.mutation(api.timelineShares.publish,{projectId:f.projectId,chat:[{id:otherMessage._id,role:'user',text:'FOREIGN CONVERSATION'}]})).rejects.toThrow('Chat preview changed');
+ const sameOwnerThread=await f.t.run(ctx=>createThread(ctx,components.agent,{userId:'owner'}));
+ const [sameOwnerMessage]=(await f.save([{role:'user',content:'ANOTHER PROJECT'}],undefined,sameOwnerThread)).messages;
+ await expect(f.owner.mutation(api.timelineShares.publish,{projectId:f.projectId,chat:[{id:sameOwnerMessage._id,role:'user',text:'ANOTHER PROJECT'}]})).rejects.toThrow('Chat preview changed');
+ await expect(f.owner.mutation(api.timelineShares.publish,{projectId:f.projectId,chat:[...preview.messages,...preview.messages]})).rejects.toThrow('too large');
+ await expect(f.owner.mutation(api.timelineShares.publish,{projectId:f.projectId,chat:[{...preview.messages[0],text:'Forged replacement'}]})).rejects.toThrow('Chat preview changed');
+ await f.t.run(ctx=>ctx.runMutation(components.agent.messages.deleteByIds,{messageIds:[preview.messages[0].id]}));
+ await expect(f.owner.mutation(api.timelineShares.publish,{projectId:f.projectId,chat:preview.messages})).rejects.toThrow('Chat preview changed');
+ expect(await f.owner.query(api.timelineShares.status,{projectId:f.projectId})).toBeNull();
+});
+
+test('preview and publication bound conversation size without exposing earlier unpreviewed records',async()=>{
+ const f=await chatFixture();
+ for(let batch=0;batch<3;batch++)await f.save(Array.from({length:20},(_,index)=>({role:'user' as const,content:`Message ${batch*20+index}`})));
+ const preview=await f.preview();expect(preview.messages).toHaveLength(40);expect(preview.truncated).toBe(true);expect(preview.messages[0].text).toBe('Message 20');
+ await expect(f.owner.mutation(api.timelineShares.publish,{projectId:f.projectId,chat:Array.from({length:41},(_,i)=>({...preview.messages[0],id:`${preview.messages[0].id}-${i}`}))})).rejects.toThrow('too large');
+ await f.save([{role:'user',content:'a'.repeat(5_000)}]);
+ const shortened=await f.preview();expect(shortened.messages.at(-1)!.text).toHaveLength(4_000);expect(shortened.truncated).toBe(true);
+ const shareId=await f.owner.mutation(api.timelineShares.publish,{projectId:f.projectId,chat:shortened.messages});
+ expect((await f.t.query(api.timelineShares.get,{shareId}))?.chat?.at(-1)?.text).toBe(shortened.messages.at(-1)!.text);
+ await f.save(Array.from({length:10},()=>({role:'user' as const,content:'b'.repeat(5_000)})));
+ const bounded=await f.preview();expect(bounded.messages).toHaveLength(8);expect(bounded.messages.reduce((sum,m)=>sum+m.text.length,0)).toBe(32_000);expect(bounded.truncated).toBe(true);
+ await expect(f.owner.mutation(api.timelineShares.publish,{projectId:f.projectId,chat:[...bounded.messages,{...shortened.messages.at(-1)!}]})).rejects.toThrow('too large');
 });

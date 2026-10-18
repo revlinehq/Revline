@@ -18,13 +18,14 @@ const timeline={fps:30,aspectRatio:'landscape',tracks:{visual:2,overlay:0,audio:
 const assets=[{_id:'source',fileName:'Synthetic footage.svg',kind:'image',url:window.location.origin+'/fixture.svg',thumbnailUrl:image,width:640,height:360},{_id:'audio-source',fileName:'Synthetic audio',kind:'audio',url:window.location.origin+'/fixture.wav',duration:12,waveform:{peaks:btoa(String.fromCharCode(...Array.from({length:120},(_,i)=>Math.round(50+Math.sin(i)*30)))),samplesPerSecond:10}}];
 const store=createEditorStore(timeline);window.fixtureStore=store;window.sourceTimeline=structuredClone(timeline);
 let revision=0;const listeners=new Set();const notify=()=>{revision++;for(const listener of listeners)listener()};
-window.mock={shareId,status:null,signedIn:false,publicReady:false,events:[],navigations:[],copied:'',subscribe:listener=>{listeners.add(listener);return()=>listeners.delete(listener)},snapshot:()=>revision,notify,
+const chatPreview={messages:[{id:'prompt',role:'user',text:'Add a title <img src=x onerror=alert(1)>'},{id:'answer',role:'assistant',text:'Title added. [link removed]'}],truncated:false};
+window.mock={shareId,chatPreview,chat:undefined,queries:[],status:null,signedIn:false,publicReady:false,events:[],navigations:[],copied:'',subscribe:listener=>{listeners.add(listener);return()=>listeners.delete(listener)},snapshot:()=>revision,notify,
  auth:()=>window.mock.signedIn,
  waitForSave:()=>new Promise(resolve=>{window.mock.events.push('save:start');window.mock.finishSave=()=>{window.mock.events.push('save:done');resolve()}}),
- query:name=>name==='timelineShares:status'?window.mock.status:!window.mock.publicReady?undefined:window.mock.status?.published?{_id:shareId,title:'Sunday edit',updatedAt:window.mock.status.updatedAt,timeline,assets}:null,
+ query:name=>{window.mock.queries.push(name);return name==='timelineShares:chatPreview'?window.mock.chatPreview:name==='timelineShares:status'?window.mock.status:!window.mock.publicReady?undefined:window.mock.status?.published?{_id:shareId,title:'Sunday edit',updatedAt:window.mock.status.updatedAt,timeline,assets,...(window.mock.chat?{chat:window.mock.chat}:{})}:null},
  run:async(name,args)=>{window.mock.events.push(name);window.mock.lastArgs=args;
-  if(name==='timelineShares:publish'){if(window.mock.failPublish)throw new Error('Synthetic publishing failure');window.mock.status={_id:shareId,title:'Sunday edit',published:true,updatedAt:Date.now()};notify();return shareId}
-  if(name==='timelineShares:revoke'){window.mock.status={...window.mock.status,published:false,updatedAt:Date.now()};notify();return null}
+  if(name==='timelineShares:publish'){if(window.mock.failPublish)throw new Error('Synthetic publishing failure');window.mock.chat=args.chat?.map(({role,text})=>({role,text}));window.mock.status={_id:shareId,title:'Sunday edit',published:true,includesChat:!!window.mock.chat?.length,updatedAt:Date.now()};notify();return shareId}
+  if(name==='timelineShares:revoke'){window.mock.chat=undefined;window.mock.status={...window.mock.status,published:false,includesChat:false,updatedAt:Date.now()};notify();return null}
   if(name==='timelineShares:useTimeline'){await new Promise((resolve,reject)=>{window.mock.finishCopy=resolve;window.mock.failCopy=()=>reject(new Error('Synthetic copy failure'))});return 'new-editable-project'}
  }};
 Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async text=>{if(window.mock.failClipboard)throw new Error('Synthetic clipboard failure');window.mock.copied=text}}});
@@ -65,18 +66,28 @@ try {
   await page.setViewport({ width: 1440, height: 960 }); await page.goto(`${origin}/editor/showcase/fixture`);
   await button('Share timeline').click(); await page.waitForSelector('[role="dialog"]');
   assert.equal(await page.$('[aria-label="Timeline sharing link"]'), null, 'Opening the dialog does not publish');
+  assert.equal(await page.$eval('[role="switch"]', input => input.checked), false, 'Sharing chat requires explicit opt-in');
+  assert.equal(await page.evaluate(() => window.mock.queries.includes('timelineShares:chatPreview')), false, 'Opening with chat off does not fetch the conversation');
   await button('Create link').click(); await flush();
   assert.deepEqual(await page.evaluate(() => window.mock.events), ['save:start'], 'Publishing waits for saved edits');
   await page.evaluate(() => window.mock.finishSave()); await page.waitForSelector('[aria-label="Timeline sharing link"]');
   assert.deepEqual(await page.evaluate(() => window.mock.events), ['save:start', 'save:done', 'timelineShares:publish']);
+  assert.equal(await page.evaluate(() => Object.hasOwn(window.mock.lastArgs, 'chat')), false, 'Default publishing sends no conversation');
   const link = await page.$eval('[aria-label="Timeline sharing link"]', input => input.value);
   assert.equal(link, `${origin}/editor/showcase/j1234567890123456789012345678901`);
   await button('Copy link').click(); await page.waitForFunction(() => window.mock.copied.length > 0);
   assert.equal(await page.evaluate(() => window.mock.copied), link);
   assert.equal(await page.$eval('.timeline-share-actions a', link => link.href), link);
   assert.ok(await page.$('.timeline-share-link .revline-primary'), 'Copy uses the shared blue primary button');
+  await page.click('[role="switch"]'); await page.waitForSelector('.timeline-share-chat details');
+  await page.click('.timeline-share-chat summary'); await flush();
+  assert.equal(await page.$$eval('.timeline-share-chat .shared-chat-messages li', rows => rows.length), 2);
+  assert.equal(await page.$('.timeline-share-chat .shared-chat-messages img'), null, 'Chat text is escaped');
+  await button('Update link with latest saved edit').click(); await page.evaluate(() => window.mock.finishSave());
+  await page.waitForFunction(() => window.mock.status.includesChat === true);
+  assert.deepEqual(await page.evaluate(() => window.mock.lastArgs.chat.map(message => message.id)), ['prompt', 'answer'], 'Only the previewed messages are sent');
   await page.screenshot({ path: '/tmp/revline-timeline-share-dialog-dark.png' });
-  await page.evaluate(() => { window.mock.failClipboard = true; }); await button('Copied').click(); await page.waitForSelector('[role="alert"]');
+  await page.evaluate(() => { window.mock.failClipboard = true; }); await button('Copy link').click(); await page.waitForSelector('[role="alert"]');
   assert.match(await page.$eval('[role="alert"]', node => node.textContent), /copy.*manually/);
   await button('Turn off sharing').click(); await page.waitForFunction(() => !window.mock.status.published);
   assert.equal(await page.$('[aria-label="Timeline sharing link"]'), null, 'Revocation removes the link');
@@ -85,9 +96,14 @@ try {
   await page.setViewport({ width: 390, height: 844 }); await flush();
   assert.ok(await page.$eval('[role="dialog"]', dialog => dialog.getBoundingClientRect().width <= window.innerWidth - 28), 'Sharing fits a phone');
   await page.keyboard.press('Escape'); await page.waitForFunction(() => !document.querySelector('[role="dialog"]'));
+  await page.evaluate(() => window.openShare()); await page.waitForSelector('[role="dialog"]');
+  assert.equal(await page.$eval('[role="switch"]', input => input.checked), false, 'Reopening resets chat opt-in without changing the existing link');
+  await page.keyboard.press('Escape'); await page.waitForFunction(() => !document.querySelector('[role="dialog"]'));
   await page.evaluate(() => window.showMode('public')); await page.waitForSelector('.timeline-showcase-loading');
   await page.evaluate(() => { window.mock.publicReady = true; window.mock.notify(); }); await page.waitForSelector('.timeline-showcase-layout');
   await page.setViewport({ width: 1440, height: 960 });
+  assert.equal(await page.$$eval('.timeline-showcase-chat li', rows => rows.length), 2, 'Public conversation renders the opted-in frozen snapshot');
+  assert.equal(await page.$('.timeline-showcase-chat img,.timeline-showcase-chat a,.timeline-showcase-chat textarea'), null, 'Public chat is escaped text without private media, links or composer');
   await page.waitForFunction(() => document.querySelector('.timeline-showcase-playback')?.disabled === false, { timeout: 20_000 });
   assert.equal(await page.$('.assistant-panel,.effect-library,.clip-trim,.audio-volume-line,.layer-options'), null, 'Public viewing exposes no editor controls');
   for (const label of ['Split selected clip', 'Add caption', 'Delete selected clips', 'Add timeline layer', 'Toggle snapping', 'Volume for A1']) assert.equal(await page.$(`[aria-label="${label}"]`), null);
@@ -124,7 +140,7 @@ try {
   const zoom = await page.$eval('[aria-label="Timeline zoom"]', input => input.value); await button('Zoom in').click(); await flush(); assert.notEqual(await page.$eval('[aria-label="Timeline zoom"]', input => input.value), zoom);
   await page.evaluate(() => { window.mock.status = { ...window.mock.status, published: false }; window.mock.notify(); window.showMode('public'); }); await page.waitForSelector('.timeline-showcase-unavailable');
   assert.deepEqual(errors, []);
-  console.log('PASS: saved snapshot before publish, copy/open link, revoke and provider failures, phone dialog; public real preview/timeline; no editing via pointer/keyboard/drop/context; seek and zoom; sign-in backlink, creating-copy state and copied-project navigation; revoked link unavailable. Mock backend and synthetic media only.');
+  console.log('PASS: chat off/no fetch by default, preview-only opt-in, escaped public snapshot, reset-on-reopen; saved snapshot before publish, copy/open link, revoke and provider failures, phone dialog; public real preview/timeline; no editing via pointer/keyboard/drop/context; seek and zoom; sign-in backlink, creating-copy state and copied-project navigation; revoked link unavailable. Mock backend and synthetic media only.');
 } catch (error) {
   await page.screenshot({ path: '/tmp/revline-timeline-sharing-failure.png' });
   console.error(await page.evaluate(() => ({ alert: document.querySelector('[role="alert"]')?.textContent, previewBounds: document.querySelector('.preview-canvas')?.getBoundingClientRect().toJSON(), viewportBounds: document.querySelector('.preview-viewport')?.getBoundingClientRect().toJSON(), frames: document.querySelectorAll('iframe').length, players: [...document.querySelectorAll('hyperframes-player,hyperframes-player-element,hyperframes-player-web')].map(player => ({ tag: player.tagName, painted: player.painted, duration: player.duration })) })));
