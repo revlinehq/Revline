@@ -188,6 +188,7 @@ export function EditorShell(p: EditorShellProps) {
   const [playbackError,setPlaybackError]=useState('');
   const [thumbnailsReady,setThumbnailsReady]=useState(false);
   const [openingAttempt,setOpeningAttempt]=useState(0);
+  const [openingSlow,setOpeningSlow]=useState(false);
   const firstVisualAsset=assets.find(asset=>asset._id===timeline.clips.find(clip=>clip.kind==='video'||clip.kind==='image')?.assetId);
   const onLoadingThumbnail=useCallback((url:string)=>{setLoadingThumbnail(url);if(firstVisualAsset&&!firstVisualAsset.thumbnailUrl)p.onSaveThumbnail?.(firstVisualAsset._id,url);},[firstVisualAsset,p.onSaveThumbnail]);
   const onPlaybackReady=useCallback(()=>{setPlaybackReady(true);setPlaybackError('');releaseOpeningFootage(p.projectId);if(preview.current)p.onPreviewReady?.(preview.current);},[p.projectId,p.onPreviewReady]);
@@ -195,8 +196,8 @@ export function EditorShell(p: EditorShellProps) {
   const hasVisual=timeline.clips.some(clip=>clip.kind==='video'||clip.kind==='image');
   const openedOnce=useRef(false);
   const initialAnalysis=!openedOnce.current?p.preparationActivity:undefined;
-  const opening=!p.demo&&!p.embedded&&!preparing&&timeline.clips.length>0&&(!playbackReady||!audioPrepared||!!initialAnalysis||(hasVisual&&!thumbnailsReady));
-  useEffect(()=>{if(!opening&&timeline.clips.length>0)openedOnce.current=true;},[opening,timeline.clips.length]);
+  const opening=!openedOnce.current&&!p.demo&&!p.embedded&&!preparing&&timeline.clips.length>0&&(!playbackReady||!audioPrepared||!!initialAnalysis||(hasVisual&&!thumbnailsReady));
+  useEffect(()=>{if(!preparing&&!opening&&timeline.clips.length>0)openedOnce.current=true;},[preparing,opening,timeline.clips.length]);
   const openingLog=useRef<{phase:string;started:number}|null>(null);
   useEffect(()=>{
     if(p.demo||p.embedded)return;
@@ -207,13 +208,19 @@ export function EditorShell(p: EditorShellProps) {
   useEffect(()=>{
     if(!opening||!editorRoot.current)return;
     const root=editorRoot.current;
+    setOpeningSlow(false);
     const check=()=>setThumbnailsReady(timelineThumbnailsPrepared(root));
     const observer=new MutationObserver(check);
     observer.observe(root,{subtree:true,childList:true,attributes:true,attributeFilter:['src','data-thumbnail-exact']});
+    const resize=new ResizeObserver(check);resize.observe(root);
+    const rail=root.querySelector('.timeline-scroll');if(rail)resize.observe(rail);
+    root.addEventListener('scroll',check,true);
     root.addEventListener('load',check,true);check();
-    const timer=initialAnalysis||!playbackReady?undefined:setTimeout(()=>setPlaybackError('Your footage is taking longer to prepare. Try again to reload the preview.'),45_000);
-    return()=>{observer.disconnect();root.removeEventListener('load',check,true);clearTimeout(timer);};
-  },[opening,openingAttempt,initialAnalysis,playbackReady]);
+    // Slow background stills are not a playback failure. The preview owns
+    // decoder errors; allow usable footage through if thumbnail work stalls.
+    const timer=setTimeout(()=>{setOpeningSlow(true);if(playbackReady&&audioPrepared&&!initialAnalysis)setThumbnailsReady(true);},45_000);
+    return()=>{observer.disconnect();resize.disconnect();root.removeEventListener('scroll',check,true);root.removeEventListener('load',check,true);clearTimeout(timer);};
+  },[opening,openingAttempt,initialAnalysis,playbackReady,audioPrepared]);
   const previewError=useCallback((message:string)=>{if(!playbackReady)setPlaybackError(message);onError(message);},[playbackReady,onError]);
   const preview = useRef<PreviewHandle>(null);
   const readPlaybackTime=useCallback(()=>preview.current?.currentTime()??store.getState().playhead,[store]);
@@ -436,7 +443,7 @@ export function EditorShell(p: EditorShellProps) {
 
         </div></ResizablePanel></ResizablePanelGroup>
     </section></>}
-    {opening&&<FootagePreparation thumbnail={firstVisualAsset?.thumbnailUrl||(firstVisualAsset?.kind==='image'?firstVisualAsset.url:null)||openingFootage(p.projectId)?.thumbnail||loadingThumbnail} fileName={openingFootage(p.projectId)?.fileName} error={playbackError||p.error} onRetry={()=>{setPlaybackError('');onError('');setOpeningAttempt(value=>value+1);preview.current?.retry();}}/>}
+    {opening&&<FootagePreparation thumbnail={firstVisualAsset?.thumbnailUrl||(firstVisualAsset?.kind==='image'?firstVisualAsset.url:null)||openingFootage(p.projectId)?.thumbnail||loadingThumbnail} fileName={openingFootage(p.projectId)?.fileName} label={!playbackReady?'Loading footage…':!audioPrepared?'Preparing audio…':initialAnalysis||'Preparing timeline thumbnails…'} detail={openingSlow?'Preparation is taking longer than usual. Your saved edit is intact.':undefined} error={playbackError} onRetry={()=>{setPlaybackError('');onError('');setOpeningAttempt(value=>value+1);preview.current?.retry();}}/>}
     {preparing&&<ProjectImportStage importTask={p.videoImports?.find(task=>!['completed','cancelled'].includes(task.status))} upload={p.upload} onBrowse={browse} onUpload={p.onUpload}/>}
     {compact && inspectorOpen && <Sheet open={inspectorOpen} onOpenChange={setInspectorOpen}><SheetContent className="preview-inspector-sheet" showCloseButton={false}><div className="mobile-inspector-header"><SheetTitle>Tools and My media</SheetTitle><Button type="button" variant="ghost" size="icon" aria-label="Close editing panel" onClick={() => setInspectorOpen(false)}><X size={18}/></Button></div><SheetDescription>Choose media or adjust your selected clip.</SheetDescription><ClockedPreviewInspector readOnly={editing} timeline={timeline} time={time} onSeek={seek} onAddTransition={addEffect} onRemoveAsset={p.onRemoveAsset} usedAssetIds={usedAssetIds} sourceRequest={sourceRequest} editRequest={editRequest} libraryRequest={libraryRequest} onLibraryCategoryChange={setLibraryCategory} onAddTextLook={addLibraryText} captionActions={captionActions} onAddOverlay={addOverlay} onFadeThroughBlack={fadeThroughBlack} videoImports={p.videoImports} assets={assets} upload={p.upload} onUpload={browse} onAdd={addAsset} onAddSound={addSound} onAddStockAudio={p.onRegisterStockAudio ? catalogId=>addStockAudio(catalogId,readPlaybackTime()) : undefined} clip={clip} audioClip={clip?.kind==='video'?timeline.clips.find(c=>c.id===clip.linkedClipId):undefined} asset={assets.find(a => a._id === clip?.assetId)} onChange={patch => { if (clip) changeClip(clip.id, patch); }} onPreviewEffects={patch => { if (clip && (patch === null || !editLock.current)) preview.current?.clipEffects(clip.id, patch); }} onAddEffect={addEffect} onConvertSolidColor={() => { if (clip) onChange(convertSolidColorToVisual(timeline,clip.id)); }} onPlaybackRateChange={changeSpeed} onCrop={cropVisual} cropping={cropping}/></SheetContent></Sheet>}
     <MediaImportDialog open={importOpen} onOpenChange={setImportOpen} onUpload={files=>{if (!editLock.current) void p.onUpload(files);}} onImportVideo={p.onImportVideo} disabled={!!p.upload || editing}/>

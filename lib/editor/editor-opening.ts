@@ -17,7 +17,7 @@ export function editorAudioPrepared(timeline: Timeline, assets: MediaAsset[]) {
   });
 }
 
-/** Check only thumbnails in the current timeline viewport, not offscreen clips. */
+/** Loaded fallback stills can open the editor while exact frames refine in place. */
 export function timelineThumbnailsPrepared(root: HTMLElement) {
   const rail = root.querySelector('.timeline-scroll');
   if (!rail) return false;
@@ -34,6 +34,6 @@ export function timelineThumbnailsPrepared(root: HTMLElement) {
   });
   return frames.every(frame => {
     const image = frame.querySelector('img');
-    return image?.dataset.thumbnailExact === 'true' && image.complete && image.naturalWidth > 0;
+    return !!image?.complete && image.naturalWidth > 0;
   });
 }
