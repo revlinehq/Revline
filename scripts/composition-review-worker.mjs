@@ -9,7 +9,10 @@ const root=resolve(directory),controller=new AbortController();
 process.on('SIGTERM',()=>controller.abort());process.on('disconnect',()=>controller.abort());
 const report=message=>{if(process.connected)process.send(message);};
 try{
-  if(!directory||!Number.isInteger(settings.width)||!Number.isInteger(settings.height)||![24,30,60].includes(settings.fps)||!Array.isArray(settings.times)||!settings.times.length||settings.times.length>12||settings.times.some(t=>!Number.isFinite(t)||t<settings.start||t>settings.end)||settings.end-settings.start>3.00001)throw new Error('Invalid bounded review settings.');
+  // Frame snapping can differ from an equivalent window bound by a few ULPs.
+  // Keep the capture bounded while accepting that numerical round-off only.
+  const tolerance=1e-7;
+  if(!directory||!Number.isInteger(settings.width)||!Number.isInteger(settings.height)||![24,30,60].includes(settings.fps)||!Number.isFinite(settings.start)||!Number.isFinite(settings.end)||settings.start<0||settings.end<=settings.start||!Array.isArray(settings.times)||!settings.times.length||settings.times.length>12||settings.times.some(t=>!Number.isFinite(t)||t<settings.start-tolerance||t>settings.end+tolerance)||settings.end-settings.start>3.00001)throw new Error('Invalid bounded review settings.');
   const safe=[];
   for(const variant of ['edited','reference']){
     const dir=join(root,variant),html=await readFile(join(dir,'index.html'),'utf8');
