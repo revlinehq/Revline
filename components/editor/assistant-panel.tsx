@@ -3,7 +3,7 @@ import { userError } from '@/lib/user-error';
 
 import { PRODUCTION_CLAUDE_MODEL_CHOICES } from '@/lib/ai/claude-model-policy';
 import { memo, useCallback, useState, useEffect, useLayoutEffect, useMemo, useRef, type ComponentProps } from 'react';
-import { Check, ArrowUpRight } from 'lucide-react';
+import { Check, ArrowUpRight, RotateCcw } from 'lucide-react';
 import { Brand } from '@/components/workspace/brand';
 import { AssistantModelPicker } from './assistant-model-picker';
 import {OPENAI_EDIT_MODELS,OPENAI_REASONING_EFFORTS,OPENAI_SPEED_MODES,type ClaudeModelChoice,type OpenAIReasoningEffort,type OpenAISpeedMode} from '@/lib/ai/claude-model';
@@ -72,12 +72,13 @@ function AssistantResponseText({ text, streaming }: { text: string; streaming: b
   return <ChatProse text={text} animate={receivedLive || streaming} />;
 }
 
-function AssistantPanelBody({ messages, running, editing:editingTimeline=running, configured, error, onSend, onStop, hasClips, demo, onLoadMore, canLoadMore, onAttach, activity, activitySource, activityStartedAt, draftKey, suggestions, onSuggestion, editSnapshot, defaultModelChoice, modelSwitcher = false, allowedModels = PRODUCTION_CLAUDE_MODEL_CHOICES, attachments, onRemoveAttachment, composerBusy = false, requireMedia = false, conversationStarted = false }: {
+function AssistantPanelBody({ messages, running, editing:editingTimeline=running, configured, error, onSend, onRetry, onStop, hasClips, demo, onLoadMore, canLoadMore, onAttach, activity, activitySource, activityStartedAt, draftKey, suggestions, onSuggestion, editSnapshot, defaultModelChoice, modelSwitcher = false, allowedModels = PRODUCTION_CLAUDE_MODEL_CHOICES, attachments, onRemoveAttachment, composerBusy = false, requireMedia = false, conversationStarted = false }: {
   messages: ChatMessage[]; running: boolean; editing?:boolean; configured: boolean; error?: string | null;
   modelSwitcher?: boolean;
   defaultModelChoice?:ClaudeModelChoice;
   allowedModels?: readonly ClaudeModelChoice[];
   onSend: (text: string, modelChoice?: ClaudeModelChoice, reasoningEffort?: OpenAIReasoningEffort, speedMode?: OpenAISpeedMode) => Promise<void>; hasClips: boolean; demo: boolean;
+  onRetry?: (text: string, modelChoice?: ClaudeModelChoice, reasoningEffort?: OpenAIReasoningEffort, speedMode?: OpenAISpeedMode) => Promise<void>;
   onLoadMore?: () => void; canLoadMore?: boolean; onAttach?: () => void;
   attachments?: ComposerAttachment[]; onRemoveAttachment?: (id: string) => void; composerBusy?: boolean; requireMedia?: boolean;
   conversationStarted?: boolean;
@@ -147,15 +148,16 @@ function AssistantPanelBody({ messages, running, editing:editingTimeline=running
     catch (e) { setStopState(null); setLocalError(userError(e, 'Could not stop this edit.')); }
   }
 
-  async function submit() {
-    if (!prompt.trim() || sendInFlight.current || sending || running || pendingReply) return;
-    const draft=prompt,key=draftKey;sendInFlight.current=true;
-    changePrompt('');
+  async function sendRequest(draft: string, retry = false) {
+    if (!draft.trim() || sendInFlight.current || sending || running || pendingReply) return;
+    const key=draftKey;sendInFlight.current=true;
+    if (!retry) changePrompt('');
     setStopState(null); setSending(true); setPendingReply({ id: `pending-${crypto.randomUUID()}`, text: draft.trim(), previousUserId: latestUser?.id, previousError: error }); setLocalError(''); scroll.resume();
-    try { await onSend(draft.trim(), canChooseModel ? selectedModelChoice : undefined, canChooseReasoning ? reasoningEffort : undefined, canChooseReasoning ? speedMode : undefined); }
-    catch (e) { if(currentDraftKey.current===key){changePrompt(draft);setPendingReply(null);setLocalError(userError(e, 'Could not send message'));} }
+    try { await (retry && onRetry ? onRetry : onSend)(draft.trim(), canChooseModel ? selectedModelChoice : undefined, canChooseReasoning ? reasoningEffort : undefined, canChooseReasoning ? speedMode : undefined); }
+    catch (e) { if(currentDraftKey.current===key){if(!retry)changePrompt(draft);setPendingReply(null);setLocalError(userError(e, 'Could not send message'));} }
     finally { sendInFlight.current=false;setSending(false); }
   }
+  async function submit() { await sendRequest(prompt); }
 
   async function chooseSuggestion(suggestion: SourceEditSuggestion) {
     if (!suggestions || !onSuggestion || sendInFlight.current || sending || running || pendingReply || !configured) return;
@@ -192,6 +194,7 @@ function AssistantPanelBody({ messages, running, editing:editingTimeline=running
             </article>)}
             {cards.length > 0 && <div className="assistant-result-cards" aria-label="Edit results">{cards.filter(card=>!(card.state==='running'&&(editing||(group.id===turnId&&stopState==='stopped')))).map(card => <div key={card.key} className={`assistant-result-card result-${card.state}${card.staged ? ' result-prepared' : ''}`}>
               <AssistantActivity label={card.title} detail={card.detail} state={card.state==='running'?'working':card.state==='error'?'error':'ready'}/>
+              {card.key==='turn-failure' && group.id===turnId && requestMessage?.text.trim() && !demo && onRetry && <button type="button" className="assistant-retry" disabled={waiting || composerBusy || !configured} onClick={() => void sendRequest(requestMessage.text, true)}><RotateCcw size={13} aria-hidden="true"/>Retry</button>}
             </div>)}</div>}
           </div>}
         </div>;

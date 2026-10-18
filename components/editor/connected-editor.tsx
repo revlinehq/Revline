@@ -148,10 +148,11 @@ function ProjectEditor({project}: {project:Doc<'projects'>}) {
   },[media,assets,timeline,ai?.running,upload,audioBusy,convex,projectId,change,saves]);
   const titleChange=async(value:string)=>{await update({projectId,title:value});setTitle(value);};
   const waitForSave=()=>saves.wait();
-  const sendRequest=async(prompt:string,context:Omit<Parameters<typeof send>[0],'projectId'|'prompt'>={})=>{
+  const sendRequest=async(prompt:string,context:Omit<Parameters<typeof send>[0],'projectId'|'prompt'>&{retry?:boolean}={})=>{
     aiStarting.current=true;
-    const attached=[...composerAssetIds];
-    try{if(!isCasualChat(prompt)){await preparingAudio.current;await waitForSave();}await send({projectId,prompt,...context,...(attached.length?{attachedAssetIds:attached as Id<'assets'>[]}: {})});setComposerAssetIds(previous=>previous.filter(id=>!attached.includes(id)));}
+    const {retry,...requestContext}=context;
+    const attached=retry?[]:[...composerAssetIds];
+    try{if(!isCasualChat(prompt)){await preparingAudio.current;await waitForSave();}await send({projectId,prompt,...requestContext,...(attached.length?{attachedAssetIds:attached as Id<'assets'>[]}: {})});setComposerAssetIds(previous=>previous.filter(id=>!attached.includes(id)));}
     finally{aiStarting.current=false;}
   };
 
