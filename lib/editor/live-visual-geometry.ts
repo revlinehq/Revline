@@ -1,4 +1,5 @@
 import { visibleMotion, NEUTRAL_MOTION } from './clip-effects';
+import { boundedCameraMotion } from './camera-framing';
 import { compositionIndex } from './composition-node';
 import type { gsap } from 'gsap';
 import { calculateVisualRect, trimmedFocus } from './composition';
@@ -34,7 +35,7 @@ export function updateLiveVisualGeometry(document:Document, previous:Timeline, n
     const existing=timelines[clip.id];if(existing){clock.remove(existing);existing.kill();}
     for(const target of [source,motionNode])for(const tween of clock.getTweensOf(target)){tween.kill();clock.remove(tween);}
     const child=host.gsap.timeline({paused:true});timelines[clip.id]=child;
-    const keys=visibleMotion(clip),vars=(key:typeof NEUTRAL_MOTION)=>({x:key.x*width,y:key.y*height,scale:key.scale,rotation:key.rotation,opacity:key.opacity,filter:`brightness(${key.brightness})`});
+    const keys=boundedCameraMotion(clip,asset,next.aspectRatio,visibleMotion(clip)),vars=(key:typeof NEUTRAL_MOTION)=>({x:key.x*width,y:key.y*height,scale:key.scale,rotation:key.rotation,opacity:key.opacity,filter:`brightness(${key.brightness})`});
     child.set(motionNode,vars(keys[0]??NEUTRAL_MOTION),0);
     for(let key=1;key<keys.length;key++)child.fromTo(motionNode,vars(keys[key-1]),{...vars(keys[key]),duration:keys[key].time-keys[key-1].time,ease:'none',immediateRender:false},clip.start+keys[key-1].time);
     const transform = { ...DEFAULT_TRANSFORM,...clip.transform };

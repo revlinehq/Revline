@@ -1,4 +1,5 @@
 import { validateClipEffects } from './clip-effects';
+import { boundedCameraMotion } from './camera-framing';
 import { NEUTRAL_MOTION, sampleMotionAnchors } from './motion-path';
 import { validateCameraMotion, type CameraMotionSettings } from './camera-motion-settings';
 import { smoothZoomFocus } from './smooth-zoom';
@@ -22,7 +23,8 @@ export function cameraMotionPatch(clip: Clip, asset: MediaAsset, aspectRatio: As
   });
   if (anchors[0].time > 0) anchors.unshift({ time: 0, ...NEUTRAL_MOTION, easing: 'linear' });
   const motion = sampleMotionAnchors(anchors, clip.duration);
-  const patch = { cameraMotion: { ...(settings.blurAmount!==undefined?{blurAmount:settings.blurAmount}:{}),keyframes: settings.keyframes.map(key => ({ ...key })) }, motion, motionOffset: 0, smoothZoom: undefined };
+  const cameraMotion = { ...(settings.blurAmount!==undefined?{blurAmount:settings.blurAmount}:{}),keyframes: settings.keyframes.map(key => ({ ...key })) };
+  const patch = { cameraMotion, motion: boundedCameraMotion({ ...clip, cameraMotion }, asset, aspectRatio, motion), motionOffset: 0, smoothZoom: undefined };
   validateClipEffects({ ...clip, ...patch });
   return patch;
 }

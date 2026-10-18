@@ -1,4 +1,5 @@
 import { NEUTRAL_MOTION, sampleMotionAnchors, type EasedMotionAnchor } from './motion-path';
+import { boundedCameraMotion } from './camera-framing';
 import { calculateVisualRect } from './visual-source-geometry';
 import { validateSmoothZoom, type SmoothZoomSettings } from './smooth-zoom-settings';
 import { DEFAULT_TRANSFORM, dimensions, type AspectRatio, type Clip, type MediaAsset } from './types';
@@ -55,5 +56,5 @@ export function smoothZoomPatch(clip: Clip, asset: MediaAsset, aspectRatio: Aspe
     add(returnStart + settings.outDuration, 1);
   }
   const motion = sampleMotionAnchors(anchors, clip.duration);
-  return { smoothZoom: { ...settings }, cameraMotion:undefined, motion, motionOffset: 0 };
+  return { smoothZoom: { ...settings }, cameraMotion:undefined, motion: boundedCameraMotion({ ...clip, smoothZoom: settings }, asset, aspectRatio, motion), motionOffset: 0 };
 }

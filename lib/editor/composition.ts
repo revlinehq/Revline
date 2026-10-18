@@ -1,4 +1,5 @@
 import { validateVisualTransform } from './visual-inputs';
+import { boundedCameraMotion } from './camera-framing';
 import { calculateVisualRect } from './visual-source-geometry';
 import { NEUTRAL_MOTION, cinematicBarSettings, validateClipEffects, visibleMotion, type MotionKeyframe } from './clip-effects';
 import { adjustmentSources } from './adjustment-layers';
@@ -111,7 +112,8 @@ export function generateComposition(timeline: Timeline, assets: MediaAsset[], op
     const id = `clip-${index}`;
     const start = clip.start;
     const end = start + clip.duration;
-    const motion = visibleMotion(clip);
+    const motionAsset = clip.assetId ? assetMap.get(clip.assetId) : undefined;
+    const motion = motionAsset ? boundedCameraMotion(clip, motionAsset, timeline.aspectRatio, visibleMotion(clip)) : visibleMotion(clip);
     const motionVars = (key: MotionKeyframe) => ({ x: key.x * width, y: key.y * height, scale: key.scale, rotation: key.rotation, opacity: key.opacity, filter: `brightness(${key.brightness})` });
     if (clip.kind !== 'effect' && clip.kind !== 'caption' && clip.kind !== 'graphic' && clip.kind !== 'solid') animateKeys(`#${id}-motion`, clip, motion, motionVars, { time: 0, ...NEUTRAL_MOTION });
     // Adjustment wrappers are always mounted. A timed HyperFrames root would
