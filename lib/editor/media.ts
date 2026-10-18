@@ -38,6 +38,8 @@ export function uploadPart(url: string, blob: Blob, onProgress: (bytes: number) 
   return new Promise((resolve, reject) => {
     if (signal?.aborted) { reject(signal.reason); return; }
     const request = new XMLHttpRequest();
+    const started = Date.now();
+    const diagnostic = (reason: string) => console.warn('[upload] Part request failed', { reason, status: request.status, readyState: request.readyState, online: navigator.onLine, elapsedMs: Date.now() - started });
     const abort = () => request.abort();
     const cleanup = () => signal?.removeEventListener('abort', abort);
     const fail = (error: unknown) => { cleanup(); reject(error); };
@@ -46,12 +48,12 @@ export function uploadPart(url: string, blob: Blob, onProgress: (bytes: number) 
     request.upload.onprogress = event => onProgress(event.loaded);
     request.onload = () => {
       cleanup();
-      if (request.status < 200 || request.status >= 300) { reject(new Error('Upload failed. Please try again.')); return; }
+      if (request.status < 200 || request.status >= 300) { diagnostic('http'); reject(new Error('Upload failed. Please try again.')); return; }
       try { const result = JSON.parse(request.responseText) as UploadedPart; if (!result.etag || !Number.isInteger(result.partNumber)) throw new Error(); resolve(result); }
       catch { reject(new Error('Cloudflare did not confirm this upload part.')); }
     };
-    request.onerror = () => fail(new Error('Upload connection interrupted. Please try again.'));
-    request.ontimeout = () => fail(new Error('The upload connection timed out. Please try again.'));
+    request.onerror = () => { diagnostic('network'); fail(new Error('Upload connection interrupted. Please try again.')); };
+    request.ontimeout = () => { diagnostic('timeout'); fail(new Error('The upload connection timed out. Please try again.')); };
     request.onabort = () => fail(signal?.reason ?? new Error('Upload cancelled.'));
     signal?.addEventListener('abort', abort, { once: true });
     request.send(blob);

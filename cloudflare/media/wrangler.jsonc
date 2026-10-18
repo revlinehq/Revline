@@ -9,5 +9,5 @@
   "preview_urls": false,
   "r2_buckets": [{ "binding": "MEDIA", "bucket_name": "revline-editor-media" }],
   "vars": { "ALLOWED_ORIGINS": "http://localhost:3001,https://tryrevline.com,https://www.tryrevline.com" },
-  "observability": { "enabled": false }
+  "observability": { "enabled": true, "logs": { "enabled": true, "invocation_logs": false } }
 }

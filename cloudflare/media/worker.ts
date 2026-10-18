@@ -9,14 +9,20 @@ function json(value: unknown, status = 200) { return Response.json(value, { stat
 export default {
   async fetch(request, env): Promise<Response> {
     const origin = request.headers.get('Origin');
+    const path = new URL(request.url).pathname;
+    const diagnostic = (reason: string, status: number, error?: unknown) => console.warn('[media-storage]', {
+      route: ['/part', '/read', '/control'].includes(path) ? path : '/other', method: request.method, status, reason,
+      ...(error instanceof Error ? { errorType: error.name } : {}),
+      // Never persist signed URLs, authorization headers, media keys or filenames.
+    });
     const allowed = env.ALLOWED_ORIGINS.split(',');
-    if (origin && !allowed.includes(origin)) return json({ error: 'Origin is not allowed' }, 403);
+    if (origin && !allowed.includes(origin)) { diagnostic('origin-not-allowed', 403); return json({ error: 'Origin is not allowed' }, 403); }
     const cors = new Headers({ 'Vary': 'Origin', 'Access-Control-Allow-Methods': 'GET, HEAD, PUT, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type, Range', 'Access-Control-Expose-Headers': 'ETag, Content-Range, Content-Length, Accept-Ranges', ...(origin ? { 'Access-Control-Allow-Origin': origin } : {}) });
     if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors });
     const url = new URL(request.url);
     const token = url.pathname === '/control' ? request.headers.get('Authorization')?.replace(/^Bearer /, '') : url.searchParams.get('token');
     const grant = token ? await verifyMediaToken(env.MEDIA_SIGNING_SECRET, token) : null;
-    const reply = (value: unknown, status: number) => { const response = json(value, status); for (const [name, value] of cors) response.headers.set(name, value); return response; };
+    const reply = (value: unknown, status: number) => { if (status >= 400) diagnostic('request-rejected', status); const response = json(value, status); for (const [name, value] of cors) response.headers.set(name, value); return response; };
     if (!grant) return reply({ error: 'Media access has expired' }, 401);
     let response: Response;
     try {
@@ -65,7 +71,8 @@ export default {
           await env.MEDIA.delete(body.key); response = json({ ok: true });
         } else response = json({ error: 'Invalid storage operation' }, 400);
       } else response = json({ error: 'Media operation is not allowed' }, 403);
-    } catch {
+    } catch (error) {
+      diagnostic('storage-operation-failed', 502, error);
       response = json({ error: 'Cloudflare could not complete this media request. Please retry.' }, 502);
     }
     for (const [name, value] of cors) response.headers.set(name, value);

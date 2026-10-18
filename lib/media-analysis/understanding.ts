@@ -19,14 +19,19 @@ export function parseUnderstanding(text: string, duration: number, provider: str
   let understanding: Understanding;
   try { understanding = understandingSchema.parse(JSON.parse(text)); }
   catch { throw new AnalysisError(`${provider} returned an unreadable scene analysis. Please retry.`, 502); }
-  for (const scene of understanding.scenes) {
-    if (scene.end <= scene.start || scene.start >= duration || scene.end > duration + 0.5) throw new AnalysisError(`${provider} returned a scene outside the source video’s duration.`, 502);
-    scene.end = Math.min(scene.end, duration);
-  }
-  for (const suggestion of understanding.suggestions ?? []) {
-    if (suggestion.end <= suggestion.start || suggestion.start >= duration || suggestion.end > duration + 0.5) throw new AnalysisError(`${provider} returned an edit suggestion outside the source video’s duration.`, 502);
-    suggestion.end = Math.min(suggestion.end, duration);
-  }
+  const validWindow = (window: { start: number; end: number }) => window.end > window.start && window.start < duration && window.end <= duration + 0.5;
+  const invalidScenes = understanding.scenes.filter(scene => !validWindow(scene));
+  const invalidSuggestions = (understanding.suggestions ?? []).filter(suggestion => !validWindow(suggestion));
+  if (invalidScenes.length || invalidSuggestions.length) console.warn('[media-analysis] Invalid overview windows excluded', {
+    duration,
+    scenes: invalidScenes.map(({ start, end }) => ({ start, end })),
+    suggestions: invalidSuggestions.map(({ start, end }) => ({ start, end })),
+  });
+  // An approximate overview is context, never exact cutting evidence. One bad
+  // optional window must not discard all valid context and repeat paid analysis.
+  understanding.scenes = understanding.scenes.filter(validWindow).map(scene => ({ ...scene, end: Math.min(scene.end, duration) }));
+  if (!understanding.scenes.length) throw new AnalysisError(`${provider} returned no scenes within the source video’s duration.`, 502);
+  if (understanding.suggestions) understanding.suggestions = understanding.suggestions.filter(validWindow).map(suggestion => ({ ...suggestion, end: Math.min(suggestion.end, duration) }));
   understanding.scenes.sort((a, b) => a.start - b.start);
   return understanding;
 }
