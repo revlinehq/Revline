@@ -11,7 +11,7 @@ const client = new ConvexHttpClient(convexUrl);
 const subscriptions = new ConvexClient(convexUrl);
 let queueRevision = 0, queueReady = false;
 const queueWaiters = new Set<() => void>();
-const unsubscribe = subscriptions.onUpdate(api.mediaTasks.ready, { workerSecret,processorVersion:3 }, ready => {
+const unsubscribe = subscriptions.onUpdate(api.mediaTasks.ready, { workerSecret,processorVersion:4 }, ready => {
   queueRevision++; queueReady = !!ready;
   if (queueReady) for (const wake of queueWaiters) wake();
 });
@@ -23,7 +23,7 @@ async function runSlot() {
   while (!shutdown.signal.aborted) {
     try {
       const observedRevision = queueRevision;
-      const task = await client.mutation(api.mediaTasks.claim, { workerSecret: workerSecret!, compact:true,processorVersion:3 });
+      const task = await client.mutation(api.mediaTasks.claim, { workerSecret: workerSecret!, compact:true,processorVersion:4 });
       if (!task) { await waitForWork(observedRevision); continue; }
       console.log(`[${new Date().toISOString()}] Chat ${task.projectId} · media task ${task.taskId}: ${task.kind} started.`);
       const controller = new AbortController();

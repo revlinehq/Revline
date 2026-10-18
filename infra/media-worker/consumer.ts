@@ -22,14 +22,14 @@ const subscriptions = new ConvexClient(convexUrl);
 let revision = 0, ready = false, activeTasks = 0, draining = false, lastWorkAt = Date.now();
 const waiters = new Set<() => void>();
 const wake = () => { for (const resolve of waiters) resolve(); };
-const unsubscribe = subscriptions.onUpdate(api.mediaTasks.ready, { workerSecret,processorVersion:3 }, value => {
+const unsubscribe = subscriptions.onUpdate(api.mediaTasks.ready, { workerSecret,processorVersion:4 }, value => {
   revision++; ready = !!value;
   if (ready) { lastWorkAt = Date.now(); wake(); }
 });
 const server = createServer((request, response) => {
   if (request.method === 'GET' && request.url === '/health') {
     response.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' });
-    response.end(JSON.stringify({ healthy: true, activeTasks, draining })); return;
+    response.end(JSON.stringify({ healthy: true, activeTasks, draining, processorVersion:4 })); return;
   }
   if (request.method === 'POST' && request.url === '/drain') {
     const actual = Buffer.from(request.headers.authorization ?? ''), expected = Buffer.from(`Bearer ${workerSecret}`);
@@ -58,7 +58,7 @@ async function runSlot() {
   while (!shutdown.signal.aborted && !draining) {
     try {
       const observed = revision;
-      const task = await client.mutation(api.mediaTasks.claim, { workerSecret: workerSecret!, compact:true,processorVersion:3 });
+      const task = await client.mutation(api.mediaTasks.claim, { workerSecret: workerSecret!, compact:true,processorVersion:4 });
       if (!task) { await waitForWork(observed); continue; }
       activeTasks++; lastWorkAt = Date.now();
       const controller = new AbortController();

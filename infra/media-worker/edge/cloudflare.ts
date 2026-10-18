@@ -45,13 +45,13 @@ export class MediaProcessor extends DurableObject<Bindings> {
     this.pending ??= this.ensureWorker().finally(() => { this.pending = undefined; });
     return this.pending;
   }
-  async status(): Promise<{ running: boolean; healthy: boolean; resourceProfile?: string; activeTasks?: number; draining?: boolean }> {
+  async status(): Promise<{ running: boolean; healthy: boolean; resourceProfile?: string; activeTasks?: number; draining?: boolean; processorVersion?: number }> {
     if (!this.ctx.container?.running) return { running: false, healthy: false };
     try {
       const current = await this.ctx.container.inspect();
       const response = await this.ctx.container.getTcpPort(8080).fetch('http://container/health', { signal: AbortSignal.timeout(2000) });
-      const health = await response.json() as { activeTasks?: number; draining?: boolean };
-      return { running: true, healthy: response.ok, resourceProfile: current?.labels.profile ?? 'legacy-1-vcpu', ...(Number.isInteger(health.activeTasks) ? { activeTasks: health.activeTasks } : {}), ...(typeof health.draining === 'boolean' ? { draining: health.draining } : {}) };
+      const health = await response.json() as { activeTasks?: number; draining?: boolean; processorVersion?: number };
+      return { running: true, healthy: response.ok, resourceProfile: current?.labels.profile ?? 'legacy-1-vcpu', ...(Number.isInteger(health.activeTasks) ? { activeTasks: health.activeTasks } : {}), ...(typeof health.draining === 'boolean' ? { draining: health.draining } : {}), ...(Number.isInteger(health.processorVersion) ? { processorVersion: health.processorVersion } : {}) };
     } catch { return { running: true, healthy: false }; }
   }
   private async ensureWorker(): Promise<void> {
@@ -69,7 +69,7 @@ export class MediaProcessor extends DurableObject<Bindings> {
       }
     } else {
       const client = new ConvexHttpClient(this.env.NEXT_PUBLIC_CONVEX_URL);
-      const ready = await client.query(readyQuery, { workerSecret: this.env.RENDER_WORKER_SECRET,processorVersion:3 });
+      const ready = await client.query(readyQuery, { workerSecret: this.env.RENDER_WORKER_SECRET,processorVersion:4 });
       if (!ready || await this.ctx.storage.get('retired')) return;
       container.start({ image: container.images.processor, instance: INSTANCE_TYPE, labels: { profile: RESOURCE_PROFILE }, enableInternet: true, env: {
         NEXT_PUBLIC_CONVEX_URL: this.env.NEXT_PUBLIC_CONVEX_URL,
@@ -108,7 +108,7 @@ export default {
     if (path === '/status') {
       const processors = await Promise.all(PROCESSOR_NAMES.map(async name => ({ name, ...await env.PROCESSOR.getByName(name).status() })));
       const retiring = await Promise.all(RETIRED_PROCESSOR_NAMES.map(async name => ({ name, ...await env.PROCESSOR.getByName(name).status() })));
-      return Response.json({ capacity: PROCESSOR_NAMES.length, instanceType: INSTANCE_TYPE, processors, retiring }, { headers: { 'Cache-Control': 'no-store' } });
+      return Response.json({ capacity: PROCESSOR_NAMES.length, instanceType: INSTANCE_TYPE, processorVersion: 4, processors, retiring }, { headers: { 'Cache-Control': 'no-store' } });
     }
     await Promise.all([...PROCESSOR_NAMES.map(name => env.PROCESSOR.getByName(name).wake()), ...RETIRED_PROCESSOR_NAMES.map(name => env.PROCESSOR.getByName(name).retire())]);
     return Response.json({ accepted: true }, { status: 202 });

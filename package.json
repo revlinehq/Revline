@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "deploy:production": "node scripts/deploy-production.mjs",
     "dev": "node scripts/dev.mjs",
     "dev:frontend": "next dev --hostname localhost --port 3001",
     "build": "next build",

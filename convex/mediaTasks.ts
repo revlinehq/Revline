@@ -34,6 +34,7 @@ export type MediaTaskResult = Infer<typeof taskResult>;
 
 export async function enqueueMediaTask(ctx: MutationCtx, input: Pick<Doc<'mediaTasks'>, 'ownerId' | 'projectId' | 'kind'> & Partial<Pick<Doc<'mediaTasks'>, 'assetId' | 'renderJobId' | 'analysisRequestId' | 'sourceUrl' | 'frameRequest' | 'videoRequest' | 'reviewId' | 'requiredProcessorVersion'>>): Promise<Id<'mediaTasks'>> {
   if (input.kind === 'transcribe') input = { ...input, requiredProcessorVersion: Math.max(3, input.requiredProcessorVersion ?? 0) };
+  if (input.kind === 'frames') input = { ...input, requiredProcessorVersion: Math.max(4, input.requiredProcessorVersion ?? 0) };
   if (input.assetId && input.kind === 'beats') {
     const asset = await ctx.db.get(input.assetId);
     const beats=asset?(await hydrateAsset(ctx,asset)).analysis?.beats:undefined;
@@ -55,6 +56,8 @@ export async function enqueueMediaTask(ctx: MutationCtx, input: Pick<Doc<'mediaT
     const reusable=existing.find(task=>{
       const inspection = input.kind === 'video' ? task.videoRequest : task.frameRequest;
       const evidence = input.kind === 'video' ? task.videoInspection : task.frameInspection;
+      // Older frame workers returned prose only, which cannot position a camera.
+      if (input.kind === 'frames' && ((task.requiredProcessorVersion ?? 1) < 4 || task.status === 'completed' && !task.frameInspection?.geometry)) return false;
       return task.ownerId===input.ownerId&&task.projectId===input.projectId&&inspection?.question===requested.question&&inspection.start===requested.start&&inspection.end===requested.end&&((task.status==='completed'&&!!evidence)||['queued','running','retrying'].includes(task.status));
     });
     if(reusable){
@@ -197,6 +200,11 @@ export const pruneFinished=internalMutation({args:{},returns:v.null(),handler:as
   }
   return null;
 }});
+export const processorContract = query({ args: { workerSecret: v.string() }, returns: v.object({ processorVersion: v.number() }), handler: (_ctx, args) => {
+  requireMediaWorker(args.workerSecret);
+  return { processorVersion: 4 };
+} });
+
 export const ready = query({ args: { workerSecret: v.string(),processorVersion:v.optional(v.number()) }, returns: v.string(), handler: async (ctx, args) => {
   requireMediaWorker(args.workerSecret);
   const task=await firstClaimable(ctx,args.processorVersion);return task?`${task._id}:${task.attempt}`:'';
@@ -320,6 +328,7 @@ export const complete = mutation({ args: { ...mediaTaskCredentials, result: task
       if(request)await ctx.db.patch(request._id, { videoInspection: args.result.videoInspection });
     } else if (task.kind === 'frames') {
       if (!task.frameRequest || !args.result.frameInspection || asset.kind !== 'video') throw new ConvexError('Frame inspection evidence is missing.');
+      if ((task.requiredProcessorVersion ?? 1) >= 4 && (!args.result.frameInspection.geometry || !Array.isArray(args.result.frameInspection.targets))) throw new ConvexError('The frame worker must return source geometry and localized targets. Update the media worker before retrying.');
       if (args.result.analysis || args.result.audioAssetId || args.result.waveform) throw new ConvexError('Frame inspections return visual evidence only.');
       const request = task.analysisRequestId ? await ctx.db.get(task.analysisRequestId) : null;
       const project = request ? await readProject(ctx, task.projectId) : null;

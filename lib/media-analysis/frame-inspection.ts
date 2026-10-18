@@ -42,7 +42,9 @@ const observation = z.object({ frameIndex: z.number().int().nonnegative(), obser
 const event = z.object({ frameIndex: z.number().int().nonnegative(), description: z.string().min(1).max(500), confidence: z.enum(['low', 'medium', 'high']) });
 const target=z.object({frameIndex:z.number().int().nonnegative(),label:z.string().trim().min(1).max(160),confidence:z.enum(['low','medium','high']),box:z.object({left:z.number().min(0).max(1),top:z.number().min(0).max(1),right:z.number().min(0).max(1),bottom:z.number().min(0).max(1)})});
 const response = z.object({ summary: z.string().max(2000), uncertainty: z.string().max(2000), frames: z.array(observation).min(1).max(MAX_INSPECTION_FRAMES), events: z.array(event).max(MAX_INSPECTION_FRAMES),targets:z.array(target).max(MAX_INSPECTION_FRAMES).optional() });
-export const frameInspectionJsonSchema = z.toJSONSchema(response);
+// New workers must return the localization field explicitly, even when no
+// requested target is visible. Keep parsing older saved observations readable.
+export const frameInspectionJsonSchema = z.toJSONSchema(response.extend({ targets: z.array(target).max(MAX_INSPECTION_FRAMES) }));
 
 export function parseFrameInspection(text: string, input: FrameInspectionInput, samples: FrameSample[], sourceFps: number,geometry?:FrameGeometry): FrameInspection {
   const parsed = response.parse(JSON.parse(text));

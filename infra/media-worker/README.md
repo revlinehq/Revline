@@ -291,3 +291,33 @@ It stops that slot's temporary container and schedules recovery for active slots
 Convex's lease expiry requeues interrupted tasks. Use only with explicit
 operator authorization to lose in-flight render progress. It does not alter
 project timelines or remove stored media.
+
+## Coordinated production release
+
+From the repository root, run:
+
+```sh
+npm run deploy:production
+```
+
+This command validates the separate `.env.production.local` target, typechecks,
+freezes one allow-listed source snapshot, builds and locally checks its image,
+uploads an immutable image digest, deploys the Cloudflare processor, then deploys
+Convex from that same frozen snapshot. It preserves remote settings and secrets,
+keeps active jobs draining, and checks the protected processor-version contract
+before reporting success. A lock prevents concurrent releases. Release manifests
+are stored in ignored `.data/production-releases/`. It does not deploy the Next.js
+frontend or change the two-slot, 2-vCPU pool.
+
+`npm run deploy:production -- --dry-run` validates TypeScript, Cloudflare bundling
+and the Convex deployment plan without uploading an image or deploying either
+service. The actual image build and runtime checks run during a real release.
+
+Cloudflare and Convex cannot deploy atomically. If either deployment or final
+verification fails, the command exits unsuccessfully and names the failed stage;
+it does not silently declare completion or automatically undo successful steps.
+Older workers cannot claim newer frame-analysis jobs. Version 4 frame jobs require
+source geometry and a structured targets array; pre-upgrade prose-only cached
+results are not reused. Worker health/status exposes its processor version for
+rollout verification. Coordinates describe observed frames, not guaranteed
+continuous tracking through occlusion or between sparse samples.
