@@ -257,3 +257,21 @@ read-only production check accepted processor version 3, reported no claimable
 work, returned 404 for GET `/wake` and rejected an unauthenticated POST with 401.
 No paid model request, project mutation or new hosted media task was used for
 this verification. Local evidence is retained in `.data/inspection-retry-release/`.
+
+### Five-slot media processing pool
+
+The edge controller wakes five named processor instances: the existing
+`production` instance and `production-2` through `production-5`. Each retains
+one task slot and its own container resources. Convex claims remain atomic, so
+two consumers cannot process the same lease. An occupied export no longer
+blocks every other export or analysis task. Each idle container still exits
+after 90 seconds; the one-minute cron checks all five slots independently.
+
+Authenticated `GET /status` reports capacity and each slot's health, active-task
+count and drain state. It uses the same worker-secret authentication as `/wake`
+and returns no credentials, source media URLs or project content.
+
+This changes parallel capacity, not single-export rendering speed. The rollout
+preserves the current renderer image and existing `production` instance so it
+does not interrupt an active job. Local verification covers five-slot wake,
+authentication, health reporting, failure isolation and edge TypeScript.

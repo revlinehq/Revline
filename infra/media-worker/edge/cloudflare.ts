@@ -5,6 +5,8 @@ import { makeFunctionReference } from 'convex/server';
 type ProcessorSecrets = { RENDER_WORKER_SECRET: string; GOOGLE_GENERATIVE_AI_API_KEY: string; OPENAI_API_KEY?: string };
 type Bindings = ProcessorEnv & ProcessorSecrets;
 const TIMEOUT_MS = 5 * 60_000;
+// Retain the existing instance so an active export survives this capacity rollout.
+const PROCESSOR_NAMES = ['production', 'production-2', 'production-3', 'production-4', 'production-5'];
 const readyQuery = makeFunctionReference<'query', { workerSecret: string;processorVersion:number }, string>('mediaTasks:ready');
 
 export class MediaProcessor extends DurableObject<Bindings> {
@@ -22,6 +24,14 @@ export class MediaProcessor extends DurableObject<Bindings> {
   tick(): Promise<void> {
     this.pending ??= this.ensureWorker().finally(() => { this.pending = undefined; });
     return this.pending;
+  }
+  async status(): Promise<{ running: boolean; healthy: boolean; activeTasks?: number; draining?: boolean }> {
+    if (!this.ctx.container?.running) return { running: false, healthy: false };
+    try {
+      const response = await this.ctx.container.getTcpPort(8080).fetch('http://container/health', { signal: AbortSignal.timeout(2000) });
+      const health = await response.json() as { activeTasks?: number; draining?: boolean };
+      return { running: true, healthy: response.ok, ...(Number.isInteger(health.activeTasks) ? { activeTasks: health.activeTasks } : {}), ...(typeof health.draining === 'boolean' ? { draining: health.draining } : {}) };
+    } catch { return { running: true, healthy: false }; }
   }
   private async ensureWorker(): Promise<void> {
     if (!this.env.RENDER_WORKER_SECRET || !this.env.GOOGLE_GENERATIVE_AI_API_KEY) throw new Error('Production processing secrets are not configured.');
@@ -61,13 +71,20 @@ export class MediaProcessor extends DurableObject<Bindings> {
 
 export default {
   async fetch(request: Request, env: Bindings): Promise<Response> {
-    if (request.method !== 'POST' || new URL(request.url).pathname !== '/wake') return new Response('Not found', { status: 404 });
+    const path = new URL(request.url).pathname;
+    if (!(request.method === 'POST' && path === '/wake') && !(request.method === 'GET' && path === '/status')) return new Response('Not found', { status: 404 });
     const encoder = new TextEncoder(), provided = encoder.encode(request.headers.get('authorization') ?? ''), expected = encoder.encode(`Bearer ${env.RENDER_WORKER_SECRET}`);
     if (!env.RENDER_WORKER_SECRET || provided.length !== expected.length || !crypto.subtle.timingSafeEqual(provided, expected)) return new Response('Unauthorized', { status: 401 });
-    await env.PROCESSOR.getByName('production').wake();
+    if (path === '/status') {
+      const processors = await Promise.all(PROCESSOR_NAMES.map(async name => ({ name, ...await env.PROCESSOR.getByName(name).status() })));
+      return Response.json({ capacity: PROCESSOR_NAMES.length, processors }, { headers: { 'Cache-Control': 'no-store' } });
+    }
+    await Promise.all(PROCESSOR_NAMES.map(name => env.PROCESSOR.getByName(name).wake()));
     return Response.json({ accepted: true }, { status: 202 });
   },
   async scheduled(_controller: ScheduledController, env: Bindings): Promise<void> {
-    await env.PROCESSOR.getByName('production').tick();
+    // One failed boot must not prevent the other slots from picking up queued jobs.
+    const results = await Promise.allSettled(PROCESSOR_NAMES.map(name => env.PROCESSOR.getByName(name).tick()));
+    if (results.some(result => result.status === 'rejected')) throw new Error('One or more media processor slots could not become ready.');
   },
 } satisfies ExportedHandler<Bindings>;
