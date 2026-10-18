@@ -84,7 +84,8 @@ export function EditorShell(p: EditorShellProps) {
   const { timeline, assets, onError } = p;
   // Status fields can arrive before the workflow flag updates. Any positive
   // run-scoped editing/analysis evidence locks interactions; a plain reply has none.
-  const editing = p.aiRunning && (p.aiWorkflowActive === true || p.aiEditing === true || !!p.analysisBusy);
+  const scriptedWorkflow = !!p.demo && p.aiWorkflowActive === undefined && p.aiEditing === undefined;
+  const editing = p.aiRunning && (p.aiWorkflowActive === true || p.aiEditing === true || !!p.analysisBusy || scriptedWorkflow);
   const editLock = useRef(editing);
   const manualSession = useMemo(() => Symbol('manual-edit-session'), [editing]);
   const currentManualSession = useRef(manualSession);

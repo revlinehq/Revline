@@ -36,6 +36,10 @@ try{
  assert.ok((await state()).calls>questionBefore.calls,'Manual seeking stays usable while an answer is running');
  await page.evaluate(()=>window.previewEdit('footage',{volume:.6}));await flush();
  assert.equal((await state()).timeline.clips[0].volume,.6,'Manual edits stay usable while the assistant is replying');
+ // A lagging explicit workflow flag must not override live run-scoped analysis evidence.
+ await page.evaluate(()=>{window.fixture.analyze('Watching footage…');window.fixture.workflow(false)});await flush();
+ assert.ok(await page.$('.custom-timeline[data-editing-locked=true]'),'Watching footage locks even before the workflow flag catches up');
+ await page.evaluate(()=>window.fixture.analyze(null));await flush();
  // Analysis belongs to the editing workflow, including the gap before applying edits.
  const analysisBefore=await state();
  for(const activity of ['Watching footage…','Listening to your footage…','Downloading footage…',null]){

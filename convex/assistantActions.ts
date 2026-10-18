@@ -177,6 +177,9 @@ export const respond = internalAction({
       const transformFields={units:z.enum(VISUAL_INPUT_UNITS).optional(),x:z.number().optional(),y:z.number().optional(),scale:z.number().min(.1).max(5).optional(),rotation:z.number().min(-360).max(360).optional(),opacity:z.number().min(0).max(1).optional()};
       const tools = {
         planEffects:createTool({description:"Before an authorized effect or creative styling edit, record one to eight concrete expectations: purpose, actual supported strength, timeline window/peak and anchor. For observed action, use an evidenceId returned by this run's inspectVideo mapped match; never invent an impact. Markers and cuts must still exist. Requested-time anchors are for explicit requested timing. Include targetClipId for existing footage/text. No timeline edits, no approval question. Long looks can be reviewed in a short sample window. Keep the plan stable across the single allowed fix pass.",inputSchema:z.object({plans:z.array(effectPlanInput).min(1).max(8)}),execute:async(_ctx,{plans})=>{
+          // Selecting an edit plan is explicit workflow intent, even while the
+          // model corrects a rejected preflight before its first timeline write.
+          await beginEditing();
           await editSession.wait();validateEffectPlan(plans,editSession.timeline,visualEvidence);
           const originals=editSession.timeline.clips.filter(clip=>plans.some(plan=>(plan.outputClipId??plan.targetClipId)===clip.id));
           await ctx.runMutation(internal.compositionReview.savePlan,{...run,plans,originals});
