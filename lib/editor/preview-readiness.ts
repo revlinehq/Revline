@@ -1,4 +1,4 @@
-function playbackReady(node:HTMLMediaElement,time:number) {
+export function previewMediaReady(node:HTMLMediaElement,time:number) {
   if(node.readyState<2||node.seeking)return false;
   // Footage deliberately held at its final decoded frame has no future data.
   if(Number.isFinite(node.duration)&&node.duration-node.currentTime<=.05)return true;
@@ -31,7 +31,7 @@ export async function waitForPreviewMedia(document:Document,time:number,signal:A
       // Browser progress and decode events show activity, not a failed source.
       if(event&&event.type!=='error')progress();
       if(node.error){cleanup();reject(new Error('This footage could not be loaded. Please retry.'));return;}
-      if(!playbackReady(node,time))return;
+      if(!previewMediaReady(node,time))return;
       if(node.tagName==='VIDEO'&&onThumbnail)try{const video=node as HTMLVideoElement,canvas=document.createElement('canvas');const scale=Math.min(352/video.videoWidth,352/video.videoHeight,1);canvas.width=Math.max(1,Math.round(video.videoWidth*scale));canvas.height=Math.max(1,Math.round(video.videoHeight*scale));canvas.getContext('2d')?.drawImage(video,0,0,canvas.width,canvas.height);onThumbnail(canvas.toDataURL('image/jpeg',.7));}catch{/* Playback can still work when a source cannot be captured. */}
       cleanup();resolve();
     };

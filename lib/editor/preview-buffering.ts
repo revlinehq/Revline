@@ -1,3 +1,5 @@
+import { previewMediaReady } from './preview-readiness';
+
 type Playback = EventTarget & { paused: boolean; play(): void; pause(): void };
 
 /** A decoded first frame does not prevent a later network/decode stall. */
@@ -14,7 +16,7 @@ export function guardPreviewBuffering(document: Document, player: Playback, read
       // A source deliberately held past its own last frame cannot provide future data.
       const finished = !node.seeking && (node.ended || Number.isFinite(node.duration) && node.currentTime >= node.duration - .05);
       const silentAudio=node.tagName==='AUDIO'&&Number(node.dataset.volume??1)===0;
-      return time >= start && time < end && !finished && !silentAudio && (node.seeking || node.readyState < 3);
+      return time >= start && time < end && !finished && !silentAudio && (node.seeking || node.readyState < 3 || held && !previewMediaReady(node,time));
     });
   };
   const blocked=()=>blockedMedia().length>0;
@@ -57,7 +59,10 @@ export function guardPreviewBuffering(document: Document, player: Playback, read
   const paused = () => { if (!held) intended = false; };
   player.addEventListener('play', played); player.addEventListener('pause', paused); player.addEventListener('ended', paused);
   document.addEventListener('waiting', waiting, true);
-  for (const name of ['canplay', 'seeked', 'loadeddata', 'playing', 'ended']) document.addEventListener(name, recover, true);
+  // canplay may mean only a fraction of a second is available after a distant
+  // seek. Keep the hold until buffered runway is ready; progress can supply it
+  // without another canplay/seeked event.
+  for (const name of ['canplay', 'seeked', 'loadeddata', 'playing', 'ended', 'progress', 'canplaythrough']) document.addEventListener(name, recover, true);
   return {
     play() {
       if(disposed)return;
@@ -77,7 +82,7 @@ export function guardPreviewBuffering(document: Document, player: Playback, read
       disposed = true; intended = false; held = false;clearSeek();clearDiagnostic();
       player.removeEventListener('play', played); player.removeEventListener('pause', paused); player.removeEventListener('ended', paused);
       document.removeEventListener('waiting', waiting, true);
-      for (const name of ['canplay', 'seeked', 'loadeddata', 'playing', 'ended']) document.removeEventListener(name, recover, true);
+      for (const name of ['canplay', 'seeked', 'loadeddata', 'playing', 'ended', 'progress', 'canplaythrough']) document.removeEventListener(name, recover, true);
     },
   };
 }
