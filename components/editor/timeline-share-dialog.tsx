@@ -3,7 +3,7 @@ import { userError } from '@/lib/user-error';
 
 import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery } from 'convex/react';
-import { ArrowUpRight, Check, Film, Globe, LoaderCircle } from 'lucide-react';
+import { ArrowUpRight, Check, Film, Globe, LoaderCircle, RefreshCw } from 'lucide-react';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
@@ -76,10 +76,10 @@ export function TimelineShareDialog({ open, onOpenChange, title, timeline, asset
       <div className="timeline-share-access"><span><Globe size={16}/>Anyone with the link can view</span><p>Use timeline includes the edit and its original footage.</p></div>
       <div className="timeline-share-chat"><label><span>Include chat history</span><input type="checkbox" role="switch" checked={includeChat} onChange={event => toggleChat(event.currentTarget.checked)} disabled={!!busy}/></label><p>{includeChat ? 'Only the messages in this preview will be shared. Later messages stay private.' : status?.published && status.includesChat ? 'This link already includes a chat snapshot. Update with this off to remove it.' : 'Your conversation stays private.'}</p>{includeChat && (chatPreview === undefined ? <p role="status">Loading chat preview…</p> : chatPreview.messages.length ? <details><summary>Preview {chatPreview.messages.length} messages</summary><SharedChatMessages messages={chatPreview.messages}/>{chatPreview.truncated && <p>Showing recent messages. Long messages may be shortened.</p>}</details> : <p>No messages to share.</p>)}</div>
       {status === undefined ? <p className="timeline-share-status" role="status"><LoaderCircle size={13} className="animate-spin"/>Loading sharing settings…</p> : shareId ? <>
+        <div className="timeline-share-update-block"><PrimaryButton className="timeline-share-update" onClick={() => void publish()} disabled={!!busy || publishDisabled || chatPending} aria-describedby="timeline-share-update-note">{busy === 'publish' ? <LoaderCircle size={14} className="animate-spin"/> : <RefreshCw size={14}/>} {busy === 'publish' ? 'Updating link…' : 'Update link with latest saved edit'}</PrimaryButton><p id="timeline-share-update-note">Publish your latest changes to this same link.</p></div>
         <div className="timeline-share-link"><input aria-label="Timeline sharing link" readOnly value={url} onFocus={event => event.currentTarget.select()}/><PrimaryButton size="compact" onClick={() => void copy()} disabled={!!busy}>{copied ? <><Check size={13}/>Copied</> : 'Copy link'}</PrimaryButton></div>
         <p className="timeline-share-status" role="status">{busy === 'publish' ? 'Updating your shared timeline…' : `Link is live${status?.includesChat ? ' · Includes chat history' : ''}`}</p>
         <div className="timeline-share-actions"><button type="button" onClick={() => void revoke()} disabled={!!busy}>{busy === 'revoke' ? 'Turning off sharing…' : 'Turn off sharing'}</button><a href={url} target="_blank" rel="noopener noreferrer">Open timeline<ArrowUpRight size={13}/></a></div>
-        <button type="button" className="timeline-share-update" onClick={() => void publish()} disabled={!!busy || publishDisabled || chatPending}>Update link with latest saved edit</button>
       </> : <><p className="timeline-share-status">Your edit stays private until you create a link.</p><PrimaryButton className="timeline-share-create" onClick={() => void publish()} disabled={!!busy || publishDisabled || chatPending}>{busy === 'publish' && <LoaderCircle size={14} className="animate-spin"/>}{busy === 'publish' ? 'Creating link…' : 'Create link'}</PrimaryButton></>}
       {error && <p className="timeline-sharing-error" role="alert">{error}</p>}
     </DialogContent>
