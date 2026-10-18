@@ -48,7 +48,14 @@ function zoomEvidenceTarget(toolName:string|undefined,input:unknown){
   if(toolName==='configureCameraMotion'&&Array.isArray(args.keyframes)&&args.keyframes.some(key=>record(record(key).focus).kind==='target'))return stable({toolName,...settings,keyframes:args.keyframes.map(key=>{const point=record(key);return record(point.focus).kind==='target'?{...point,focus:{kind:'target'}}:point;})});
 }
 const zoomEvidenceRejection=(error:unknown)=>/^(?:Error:\s*)?(?:Inspect the target during this zoom window, not a different moment\.|Inspect the moving target at this keyframe source time\. A position from another moment cannot verify cursor or object following\.)$/.test(error instanceof Error?error.message:String(error));
-const reviewWindowRejection=(error:unknown)=>/^(?:(?:Error|ConvexError):\s*)*(?:Uncaught ConvexError:\s*)?(?:Choose expectations spanning at most three seconds for rendered review\.|A planned start, anchor, peak or return is outside the rendered review window\. Choose expectations within the same three-second window\.)$/.test((error instanceof Error?error.message:String(error)).split('\n')[0]);
+const reviewWindowRejection=(error:unknown)=>/^(?:(?:Error|ConvexError):\s*)*(?:Uncaught ConvexError:\s*)?(?:Invalid bounded review settings\.|Choose expectations spanning at most three seconds for rendered review\.|A planned start, anchor, peak or return is outside the rendered review window\. Choose expectations within the same three-second window\.)$/.test((error instanceof Error?error.message:String(error)).split('\n')[0]);
+function reviewPlanIdentity(value:unknown):string{
+  const plan=record(value),{time,description,...anchor}=record(plan.anchor);
+  // A moved cut can correct stale anchor provenance without changing the
+  // expected effect. Keep its target, timing, goal and checks in the identity.
+  const normalize=(item:unknown):unknown=>typeof item==='number'&&Number.isFinite(item)?Math.round(item*1e7)/1e7:Array.isArray(item)?item.map(normalize):item&&typeof item==='object'?Object.fromEntries(Object.entries(item).map(([key,value])=>[key,normalize(value)])):item;
+  return stable(normalize({...plan,anchor}));
+}
 function reviewScope(input:unknown,plans:ReadonlyMap<string,string>){
   const ids=record(input).planIds;
   if(!Array.isArray(ids)||!ids.length||ids.length>2||new Set(ids).size!==ids.length||ids.some(id=>typeof id!=='string'||!plans.has(id)))return;
@@ -80,7 +87,7 @@ function unresolvedFailures(steps: ToolSteps, recoverPlacements = false) {
     const output = outputValue(part.output);
     if (part.type === 'tool-call') calls.set(id, { key, input });
     else if (part.type === 'tool-error' || (part.type === 'tool-result' && (output.success === false || record(part.output).type === 'error-text'))) {
-      const failure=part.error??record(part.output).value;
+      const failure=part.error??output.error??record(part.output).value;
       pending.set(key, { count: (pending.get(key)?.count ?? 0) + 1, ids: [...pending.get(key)?.ids ?? [], id], ...(recoverPlacements && isOverlapPlacementRejection(part.error) ? { placement: placementTarget(part.toolName, input) } : {}),...(recoverPlacements&&part.toolName==='planEffects'&&planPreflightRejection(failure)?{plan:true}:{}),...(recoverPlacements&&zoomMotionRejection(failure)?{zoom:zoomTarget(part.toolName,input)}:{}),...(recoverPlacements&&zoomEvidenceRejection(failure)?{zoomEvidence:zoomEvidenceTarget(part.toolName,input)}:{}),...(recoverPlacements&&part.toolName==='previewRender'&&reviewWindowRejection(failure)?{review:reviewScope(input,plans)}:{}) });
     } else if (part.type === 'tool-result') {
       if(!pending.get(key)?.review)pending.delete(key);
@@ -91,7 +98,7 @@ function unresolvedFailures(steps: ToolSteps, recoverPlacements = false) {
         // savePlan replaces the run's entire previous plan collection. Only its
         // validated receipt supersedes earlier no-write schema/anchor attempts.
         if(plan&&output.planned===true&&planTarget(part.toolName,{plans:output.plans})===plan)for(const [failedKey,failure]of pending)if(failure.plan)pending.delete(failedKey);
-        if(plan&&output.planned===true&&Array.isArray(output.plans)){plans.clear();for(const item of output.plans){const value=record(item);if(typeof value.id==='string')plans.set(value.id,stable(value));}}
+        if(plan&&output.planned===true&&Array.isArray(output.plans)){plans.clear();for(const item of output.plans){const value=record(item);if(typeof value.id==='string')plans.set(value.id,reviewPlanIdentity(value));}}
         // A rejected multi-plan window may be split into smaller reviews. Clear
         // it only when every original expectation passes on the same current
         // draft; another plan, stale receipt or later edit cannot stand in.
