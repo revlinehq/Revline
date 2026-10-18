@@ -1,3 +1,4 @@
+import type { TextGradient } from './text-gradient';
 import type { BlendMode, CinematicBarSettings, EffectPreset, SolidColorSettings, MotionKeyframe, FrameShrinkSettings, ZoomSettings } from './clip-effects';
 import type { ColorGrade, ZoomBlur, Glitch, InvertColors, Dither, NeonEdges, LensDistortion, FilmOverlay, Vhs, LightLeak, DirectionalBlur, TurbulentDisplace, LightSweep, SoftBlur, FrameDistortion, FrameCorners } from './visual-effects';
 import type { RemotionTextTemplate } from './remotion-text';
@@ -74,6 +75,7 @@ export type Clip = {
   frameCorners?: FrameCorners;
   textTemplate?: RemotionTextTemplate;
   textStyle?: TextAppearance;
+  textGradient?: TextGradient;
   fontFamily?: TextFontId;
   animation?: 'none' | 'fade' | 'rise';
   textAnimationTiming?: {duration:number;offset:number};

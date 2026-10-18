@@ -1,3 +1,4 @@
+import { textGradientFill } from './text-gradient';
 import { Fragment, type CSSProperties } from 'react';
 import { Easing, interpolate, spring } from 'remotion';
 import type { RemotionTextProps } from './remotion-text';
@@ -27,7 +28,7 @@ function NeonEcho(props:RemotionTextProps){
   return <span data-text-phase={timing.exiting>0?'exit':timing.entering<1?'enter':'hold'} style={{display:'inline-block',position:'relative',opacity,transform:`translateY(${-timing.exiting*.2}em) scale(${1.18-.18*settle+timing.exiting*.06+pulse*.008*timing.entering})`,transformOrigin:'center'}}>
     <span aria-hidden="true" data-text-layer="echo" style={{...ghost,opacity:.34+pulse*.16,transform:`translate(${.065+spread}em,${-.055-spread*.3}em) scale(1.015)`,filter:'blur(.015em)'}}>{text}</span>
     <span aria-hidden="true" data-text-layer="echo" style={{...ghost,opacity:.18+pulse*.08,transform:`translate(${- .085-spread}em,${.075+spread*.3}em) scale(1.035)`,filter:'blur(.025em)'}}>{text}</span>
-    <span data-text-layer="main" style={{position:'relative',display:'inline-block',color,WebkitTextStroke:`.048em ${highlightColor}`,paintOrder:'stroke fill',textShadow:`0 0 .13em ${highlightColor},0 0 .36em ${color}`,...custom}}>{text}</span>
+    <span data-text-layer="main" style={{position:'relative',display:'inline-block',color,WebkitTextStroke:`.048em ${highlightColor}`,paintOrder:'stroke fill',textShadow:`0 0 .13em ${highlightColor},0 0 .36em ${color}`,...custom,...textGradientFill(props.textGradient,props.gradientTime??frame/fps,custom?.textShadow??`0 0 .13em ${highlightColor},0 0 .36em ${color}`)}}>{text}</span>
   </span>;
 }
 
@@ -38,7 +39,7 @@ function LyricSlam(props:RemotionTextProps){
   const exit=Easing.in(Easing.cubic)(timing.exiting);
   const opacity=timing.visible?Math.min(1,timing.entering*4)*(1-exit):0;
   const custom=props.textStyle?textAppearance(props,props.resolution):undefined;
-  return <span data-text-layer="main" data-text-phase={timing.exiting>0?'exit':timing.entering<1?'enter':'hold'} style={{display:'inline-block',position:'relative',opacity,color,WebkitTextStroke:`.028em ${highlightColor}`,paintOrder:'stroke fill',textShadow:`.045em .05em 0 ${highlightColor},0 .07em .14em #0009`,...custom,transform:`translateY(${(1-settle)*.45-exit*.6}em) rotate(${(1-settle)*-4+exit*2}deg) scale(${1.45-.45*settle+exit*.12},${.58+.42*settle-exit*.2})`,transformOrigin:'center 60%'}}>{text}{!props.textStyle&&<span aria-hidden="true" data-text-accent="underline" style={{position:'absolute',left:0,right:0,bottom:'-.10em',height:'.07em',borderRadius:'.04em',background:highlightColor,transform:`scaleX(${timing.entering*(1-exit)})`,transformOrigin:'left',opacity:.9}}/>}</span>;
+  return <span data-text-layer="main" data-text-phase={timing.exiting>0?'exit':timing.entering<1?'enter':'hold'} style={{display:'inline-block',position:'relative',opacity,color,WebkitTextStroke:`.028em ${highlightColor}`,paintOrder:'stroke fill',textShadow:`.045em .05em 0 ${highlightColor},0 .07em .14em #0009`,...custom,...textGradientFill(props.textGradient,props.gradientTime??frame/fps,custom?.textShadow??`.045em .05em 0 ${highlightColor},0 .07em .14em #0009`),transform:`translateY(${(1-settle)*.45-exit*.6}em) rotate(${(1-settle)*-4+exit*2}deg) scale(${1.45-.45*settle+exit*.12},${.58+.42*settle-exit*.2})`,transformOrigin:'center 60%'}}>{text}{!props.textStyle&&<span aria-hidden="true" data-text-accent="underline" style={{position:'absolute',left:0,right:0,bottom:'-.10em',height:'.07em',borderRadius:'.04em',background:highlightColor,transform:`scaleX(${timing.entering*(1-exit)})`,transformOrigin:'left',opacity:.9}}/>}</span>;
 }
 
 function KineticStack(props:RemotionTextProps){
@@ -56,7 +57,7 @@ function KineticStack(props:RemotionTextProps){
     const exitFrom=timing.last-timing.exit+(words.length<=1?0:word/words.length*timing.exit*.35),exit=timing.last<=1?0:progress(frame,exitFrom,timing.last);
     const lift=(1-entrance)*.75-exit*.45,tilt=(1-entrance)*(word%2?-5:5);
     const accent=word===words.length-1;
-    return <span key={index} data-word-index={word} style={{display:'inline-block',position:'relative',opacity:fade*(1-exit),color:custom?color:accent?highlightColor:color,WebkitTextStroke:`.016em ${accent?color:highlightColor}`,paintOrder:'stroke fill',textShadow:'0 .045em .08em #000a',...custom,transform:`translate(${(1-entrance)*(word%2?.12:-.12)}em,${lift}em) rotate(${tilt}deg) scale(${.82+.18*entrance-exit*.08})`,transformOrigin:'center 75%'}}>{token}{accent&&!props.textStyle&&<span aria-hidden="true" data-text-accent="underline" style={{position:'absolute',left:0,right:0,bottom:'-.09em',height:'.055em',background:highlightColor,borderRadius:'.035em',transform:`scaleX(${Math.min(1,entrance)*(1-exit)})`,transformOrigin:'left'}}/>}</span>;
+    return <span key={index} data-word-index={word} style={{display:'inline-block',position:'relative',opacity:fade*(1-exit),color:custom?color:accent?highlightColor:color,WebkitTextStroke:`.016em ${accent?color:highlightColor}`,paintOrder:'stroke fill',textShadow:'0 .045em .08em #000a',...custom,...textGradientFill(props.textGradient,props.gradientTime??frame/fps,custom?.textShadow??'0 .045em .08em #000a'),transform:`translate(${(1-entrance)*(word%2?.12:-.12)}em,${lift}em) rotate(${tilt}deg) scale(${.82+.18*entrance-exit*.08})`,transformOrigin:'center 75%'}}>{token}{accent&&!props.textStyle&&<span aria-hidden="true" data-text-accent="underline" style={{position:'absolute',left:0,right:0,bottom:'-.09em',height:'.055em',background:highlightColor,borderRadius:'.035em',transform:`scaleX(${Math.min(1,entrance)*(1-exit)})`,transformOrigin:'left'}}/>}</span>;
   })}</span>;
 }
 

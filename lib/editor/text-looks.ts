@@ -18,9 +18,10 @@ export type TextLookId = typeof TEXT_LOOKS[number]['id'];
 export function textLookPatch(clip: Clip, id: TextLookId): Partial<Clip> {
   if (clip.kind !== 'caption' && clip.kind !== 'graphic') throw new Error('Select text before applying a look.');
   const look: TextLook = TEXT_LOOKS.find(item => item.id === id)!;
-  return { color: look.color, background: look.background, fontSize: look.fontSize, blendMode: look.blendMode, textStyle: { ...look.style } };
+  return { textGradient:undefined, color: look.color, background: look.background, fontSize: look.fontSize, blendMode: look.blendMode, textStyle: { ...look.style } };
 }
 
 export function selectedTextLook(clip: Clip): TextLookId | undefined {
+  if(clip.textGradient)return undefined;
   return TEXT_LOOKS.find(look => clip.color === look.color && (clip.background ?? 'transparent') === look.background && (clip.blendMode ?? 'normal') === look.blendMode && Object.keys(DEFAULT_TEXT_APPEARANCE).every(key => (clip.textStyle ?? DEFAULT_TEXT_APPEARANCE)[key as keyof TextAppearance] === look.style[key as keyof TextAppearance]))?.id;
 }

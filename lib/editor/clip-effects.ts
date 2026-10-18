@@ -1,3 +1,4 @@
+import { validateTextGradient, textGradientTimingPatch } from './text-gradient';
 import { flashSettings, punchSettings, shakeSettings, popSettings, flashKeyframes, punchKeyframes, shakeKeyframes, popKeyframes, isPropertyEffectPreset, propertyEffectMotion, motionEffectPatch, validateMotionEffectSettings, type MotionEffectChanges } from './motion-effect-settings';
 import type { Clip } from './types';
 import { DEFAULT_ZOOM_BLUR, validateVisualEffects } from './visual-effects';
@@ -97,6 +98,7 @@ export function validateClipEffects(clip: Clip) {
   validateVisualEffects(clip);
   validateRemotionTextTemplate(clip);
   validateTextStyle(clip);
+  validateTextGradient(clip);
   validateAudioSettings(clip);
   validateTextAnimationTiming(clip);
   validateVisualFade(clip);
@@ -181,7 +183,7 @@ export function motionPreset(clip: Clip, preset: MotionPreset | EffectPreset): P
 }
 
 export function offsetClipMotion(clip: Clip, delta: number): Partial<Clip> {
-  return { ...(clip.motion?.length ? { motionOffset: (clip.motionOffset ?? 0) + delta } : {}), ...textTemplateTimingPatch(clip, delta),...textAnimationTimingPatch(clip,delta),...audioFadeTimingPatch(clip,delta),...visualFadeTimingPatch(clip,delta) };
+  return { ...(clip.motion?.length ? { motionOffset: (clip.motionOffset ?? 0) + delta } : {}), ...textTemplateTimingPatch(clip, delta),...textGradientTimingPatch(clip,delta),...textAnimationTimingPatch(clip,delta),...audioFadeTimingPatch(clip,delta),...visualFadeTimingPatch(clip,delta) };
 }
 
 /** Effect handles stretch the currently visible pulse, including a previously split segment. */

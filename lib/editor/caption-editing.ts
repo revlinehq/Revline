@@ -21,7 +21,7 @@ function validateAppearance(clip:Clip){
 export function applyCaptionStyle(timeline:Timeline,sourceClipId:string,targetIds?:string[]):Timeline{
   const source=caption(timeline,sourceClipId),selected=targets(timeline,targetIds);
   validateAppearance(source);
-  const style=textStyle(source),patch={fontFamily:source.fontFamily??'space-grotesk' as const,fontSize:style.fontSize,color:remotionTextProps(source,source.start,timeline.fps)?.color??style.color,background:style.background,x:style.x,y:style.y,blendMode:source.blendMode??'normal' as const,textStyle:resolvedTextAppearance(source),transform:{...DEFAULT_TRANSFORM,...source.transform}};
+  const style=textStyle(source),patch={fontFamily:source.fontFamily??'space-grotesk' as const,fontSize:style.fontSize,color:remotionTextProps(source,source.start,timeline.fps)?.color??style.color,background:style.background,x:style.x,y:style.y,blendMode:source.blendMode??'normal' as const,textStyle:resolvedTextAppearance(source),textGradient:source.textGradient?{...source.textGradient,offset:0}:undefined,transform:{...DEFAULT_TRANSFORM,...source.transform}};
   return {...timeline,clips:timeline.clips.map(clip=>selected.has(clip.id)?{...clip,...patch}:clip)};
 }
 /** Patch requested appearance fields only; animation changes are a separate explicit action. */
@@ -41,7 +41,7 @@ function patchSelectedTextStyles(timeline:Timeline,changes:CaptionStyleChanges,s
   return {...timeline,clips:timeline.clips.map(clip=>{
     if(!selected.has(clip.id))return clip;
     const caseText=textCase===undefined?{}:{text:convertTextCase(clip.text??'',textCase)};
-    const patch={...appearance,...caseText,...(rotation!==undefined?{transform:{...DEFAULT_TRANSFORM,...clip.transform,rotation}}:{}),...(textStyle?{textStyle:{...resolvedTextAppearance(clip),...textStyle}}:{})};
+    const patch={...appearance,...caseText,...(appearance.color!==undefined?{textGradient:undefined}:{}),...(rotation!==undefined?{transform:{...DEFAULT_TRANSFORM,...clip.transform,rotation}}:{}),...(textStyle?{textStyle:{...resolvedTextAppearance(clip),...textStyle}}:{})};
     const next={...clip,...patch};validateAppearance(next);return next;
   })};
 }

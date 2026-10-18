@@ -1,3 +1,4 @@
+import { cameraGlideBlurAt, type CameraGlideBlurSource } from './camera-motion-blur';
 import type { VisualEffects } from './visual-effects';
 import { trackOf, type Clip } from './types';
 import { adjustmentFrame } from './adjustment-layers';
@@ -11,30 +12,34 @@ export { installAdjustmentLayers } from './adjustment-layers';
 export { installSolidColorLayers } from './solid-color-layers';
 export { installVisualFades } from './visual-fades-runtime';
 
-export type VisualEffectSource = VisualEffects & { id: string };
-export type VisualEffectsController = { set(id: string, effects: VisualEffects): void; setTimedEffects(clips:Clip[]):void; redraw(): void; dispose(): void };
+export type VisualEffectInput = VisualEffects & { cameraGlideBlur?:CameraGlideBlurSource };
+export type VisualEffectSource = VisualEffectInput & { id: string };
+export type VisualEffectsController = { set(id: string, effects: VisualEffectInput): void; setTimedEffects(clips:Clip[]):void; redraw(): void; dispose(): void };
 
 /** One browser bundle runs the same kernel in preview and exported compositions. */
 export function installVisualEffects(sources: VisualEffectSource[], fps: number, resolution: number) {
-  type Clock = { time(): number; render: (...args: unknown[]) => unknown; eventCallback?(name:string,callback?:(()=>void)|null):unknown };
+  type Clock = { time(): number; render: (...args: unknown[]) => unknown; eventCallback?(name:string,callback?:(()=>void)|null):unknown;paused?(value?:boolean):boolean|Clock };
   type RuntimeWindow = Window & { __timelines: { revline: Clock & { __hfReal?: Clock } }; __revlineEffects?: VisualEffectsController; __hf?: { colorGrading?: { redraw?: () => void } } };
   const host = window as unknown as RuntimeWindow;
   const preview = !!document.querySelector('meta[name="hyperframes-studio-preview"]');
   const clock = host.__timelines.revline.__hfReal ?? host.__timelines.revline;
-  type Entry = { source: HTMLVideoElement | HTMLImageElement; effects: VisualEffects; nativeCorners?: { node:HTMLElement; originalRadius:string }; neonColor?: number; canvas?: HTMLCanvasElement; gl?: WebGLRenderingContext; program?: WebGLProgram; texture?: WebGLTexture; buffer?: WebGLBuffer; uniforms?: Record<string, WebGLUniformLocation | null>; passTextures?: WebGLTexture[]; framebuffer?: WebGLFramebuffer; passWidth?: number; passHeight?: number; nominalWidth?: number; nominalHeight?: number; detailWidth?: number; detailHeight?: number; lastPassKey?: string; lastPassCount?: number; lastFrame?: number; lastSource?: string | number; lastTransform?: string; dirty: boolean; injected?: HTMLImageElement; failed?: boolean; videoCallback?: number; decodedFrame?: number; decodedListener?: () => void; uploadCanvas?: HTMLCanvasElement };
+  type Entry = { source: HTMLVideoElement | HTMLImageElement; effects: VisualEffectInput; nativeCorners?: { node:HTMLElement; originalRadius:string }; neonColor?: number; canvas?: HTMLCanvasElement; gl?: WebGLRenderingContext; program?: WebGLProgram; texture?: WebGLTexture; buffer?: WebGLBuffer; uniforms?: Record<string, WebGLUniformLocation | null>; passTextures?: WebGLTexture[]; framebuffer?: WebGLFramebuffer; passWidth?: number; passHeight?: number; nominalWidth?: number; nominalHeight?: number; detailWidth?: number; detailHeight?: number; lastPassKey?: string; lastPassCount?: number; lastFrame?: number; lastSource?: string | number; lastTransform?: string; dirty: boolean; injected?: HTMLImageElement; failed?: boolean; videoCallback?: number; decodedFrame?: number; decodedListener?: () => void; uploadCanvas?: HTMLCanvasElement };
   type Resources = Pick<Entry, 'canvas' | 'gl' | 'program' | 'texture' | 'buffer' | 'uniforms' | 'passTextures' | 'framebuffer' | 'passWidth' | 'passHeight'>;
   const entries = new Map<string, Entry>();
   const available: Resources[] = [];
   let disposed = false;
-  const baseEffects=new Map<string,VisualEffects>();
+  const baseEffects=new Map<string,VisualEffectInput>();
   const defaultNeonColor=Number.parseInt(DEFAULT_NEON_EDGES.color.slice(1),16);
   let timedEffects:Clip[]=[];
-  function effectPasses(base:VisualEffects,time:number):VisualEffects[] {
+  function effectPasses(base:VisualEffectInput,time:number):VisualEffects[] {
     const {softBlur,directionalBlur,frameCorners,...other}=base;
     const passes:VisualEffects[]=[];
     // Blur has its own pass so combining it with radial blur never multiplies sample counts.
     if(softBlur?.enabled&&softBlur.amount>0)passes.push({softBlur});
     if(directionalBlur?.enabled&&directionalBlur.amount>0)passes.push({directionalBlur});
+    const composition=base.cameraGlideBlur?document.getElementById('composition'):null;
+    const cameraBlur=!base.cameraGlideBlur||preview&&clock.paused?.()===true?undefined:cameraGlideBlurAt(base.cameraGlideBlur,time,Number(composition?.dataset.width)*1080/resolution,Number(composition?.dataset.height)*1080/resolution);
+    if(cameraBlur)passes.push({directionalBlur:cameraBlur});
     if(enabled(other))passes.push(other);
     for(const clip of timedEffects){
       if(!clip.zoomBlur?.enabled||time<clip.start||time>=clip.start+clip.duration)continue;
@@ -283,7 +288,7 @@ void main(){
       if (node.style.transform && node.style.transform !== 'none') transforms.push(node.style.transform.includes('%') ? getComputedStyle(node).transform : node.style.transform);
     }
     const transformKey = transforms.join('|');
-    const passKey=passes.map(pass=>pass.zoomBlur?.enabled?`${pass.zoomBlur.amount}:${pass.zoomBlur.centerX}:${pass.zoomBlur.centerY}`:'base').join('|');
+    const passKey=passes.map(pass=>pass.zoomBlur?.enabled?`${pass.zoomBlur.amount}:${pass.zoomBlur.centerX}:${pass.zoomBlur.centerY}`:pass.directionalBlur?.enabled?`directional:${pass.directionalBlur.amount}:${pass.directionalBlur.angle}`:'base').join('|');
     // CSS motion can run between decoded frames. Wait for the next video
     // frame before redrawing its bitmap; paused transforms still redraw now.
     const playingVideo = source instanceof HTMLVideoElement && !source.paused && !!source.requestVideoFrameCallback;
@@ -401,10 +406,10 @@ void main(){
       release(previous); entries.delete(id);
     }
   }
-  function set(id: string, effects: VisualEffects) {
+  function set(id: string, effects: VisualEffectInput) {
     baseEffects.set(id,effects);
     const previous = entries.get(id);
-    if (!enabled(effects)&&!timedEffects.some(clip=>clip.zoomBlur?.enabled&&clip.zoomBlur.amount>0)) { remove(id); return; }
+    if (!enabled(effects)&&!(effects.cameraGlideBlur?.amount&&effects.cameraGlideBlur.amount>0)&&!timedEffects.some(clip=>clip.zoomBlur?.enabled&&clip.zoomBlur.amount>0)) { remove(id); return; }
     const source = document.getElementById(id);
     if (!(source instanceof HTMLVideoElement || source instanceof HTMLImageElement)) return;
     const entry = previous ?? { source, effects, dirty: true };
@@ -419,6 +424,11 @@ void main(){
   const update=()=>{originalUpdate?.call(clock);bindExportBridge();redraw();};
   const wrapped:Clock['render']=function(...args) { const result = originalRender.apply(clock, args); bindExportBridge(); redraw(); return result; };
   clock.render=wrapped;clock.eventCallback?.('onUpdate',update);
+  // Pausing a native timeline does not necessarily render another frame. Clear
+  // preview-only velocity blur immediately, including when the source is an image.
+  const originalPaused=clock.paused;
+  const paused:NonNullable<Clock['paused']>=function(value){if(value===undefined)return originalPaused!.call(clock);const result=originalPaused!.call(clock,value);redraw(true);return result;};
+  if(preview&&originalPaused)clock.paused=paused;
   // Export injects FFmpeg-decoded image siblings, then calls this existing runtime bridge.
   // Chain its draw hook so capture waits for the same kernel after the injected image decodes.
   let bridge: { redraw?: () => void } | undefined, originalRedraw: (() => void) | undefined;
@@ -433,7 +443,7 @@ void main(){
     set,
     setTimedEffects:clips=>{timedEffects=clips.filter(clip=>clip.effectPreset==='zoom-blur').sort((a,b)=>trackOf(a)-trackOf(b));for(const [id,effects] of baseEffects)set(id,effects);redraw(true);},
     redraw: () => { bindExportBridge(); redraw(true); },
-    dispose: () => { disposed = true; for (const id of entries.keys()) remove(id); for (const resources of available) destroy(resources); available.length = 0; if(clock.render===wrapped)clock.render = originalRender;if(clock.eventCallback?.('onUpdate')===update)clock.eventCallback?.('onUpdate',originalUpdate??null); if (bridge) bridge.redraw = originalRedraw; },
+    dispose: () => { disposed = true; for (const id of entries.keys()) remove(id); for (const resources of available) destroy(resources); available.length = 0; if(clock.render===wrapped)clock.render = originalRender;if(clock.paused===paused)clock.paused=originalPaused;if(clock.eventCallback?.('onUpdate')===update)clock.eventCallback?.('onUpdate',originalUpdate??null); if (bridge) bridge.redraw = originalRedraw; },
   };
   host.__revlineEffects = controller;
   for (const source of sources) set(source.id, source);

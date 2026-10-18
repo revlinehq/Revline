@@ -4,6 +4,7 @@ import { resolvedTextAppearance, TEXT_APPEARANCE_LIMITS, type TextAppearance } f
 import type { Clip } from '@/lib/editor/types';
 import { EffectSlider } from './effect-slider';
 import { ColorControl } from './color-control';
+import { TextGradientControls } from './text-gradient-controls';
 import { BlendModeControls } from './blend-mode-controls';
 import './text-style-controls.css';
 
@@ -17,6 +18,7 @@ export function TextStyleControls({ clip, onChange, onPreview }: { clip: Clip; o
     return <ColorControl label={label} value={style[property]} onCommit={value => change({ [property]: value })}/>;
   }
   return <fieldset className="text-style-controls" aria-label="Text style">
+    <TextGradientControls clip={clip} onChange={onChange} onPreview={onPreview}/>
     <details className="text-style-group" open={style.strokeWidth > 0 || undefined}><summary>Stroke<span>{style.strokeWidth ? `${style.strokeWidth} px` : 'Off'}</span></summary><div className="text-style-body">{slider('strokeWidth', 'Stroke width')}{color('strokeColor', 'Stroke color')}</div></details>
     <details className="text-style-group"><summary>Shadow<span>{style.shadowBlur || style.shadowX || style.shadowY ? 'On' : 'Off'}</span></summary><div className="text-style-body">{slider('shadowBlur', 'Shadow blur')}{color('shadowColor', 'Shadow color')}<div className="text-style-offsets">{slider('shadowX', 'Shadow X')}{slider('shadowY', 'Shadow Y')}</div></div></details>
     <details className="text-style-group" open={style.glowBlur > 0 || undefined}><summary>Glow<span>{style.glowBlur ? `${style.glowBlur} px` : 'Off'}</span></summary><div className="text-style-body">{slider('glowBlur', 'Glow blur')}{color('glowColor', 'Glow color')}</div></details>

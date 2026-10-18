@@ -1,12 +1,13 @@
 import type { Clip } from './types';
 import { SMOOTH_ZOOM_EASINGS, type SmoothZoomSettings } from './smooth-zoom-settings';
 
-export type CameraMotionSettings = { keyframes: { time: number; scale: number; centerX: number; centerY: number; easing: SmoothZoomSettings['easing'] }[] };
+export type CameraMotionSettings = { blurAmount?:number; keyframes: { time: number; scale: number; centerX: number; centerY: number; easing: SmoothZoomSettings['easing'] }[] };
 
 /** Recipe times retain motion's original clip-local origin through trims and splits. */
 export function validateCameraMotion(clip: Pick<Clip, 'kind' | 'cameraMotion' | 'smoothZoom'>) {
   const camera = clip.cameraMotion;
   if (!camera) return;
+  if(camera.blurAmount!==undefined&&(!Number.isFinite(camera.blurAmount)||camera.blurAmount<0||camera.blurAmount>1))throw new Error('Camera motion blur must be between 0 and 1.');
   if (clip.kind !== 'video' && clip.kind !== 'image') throw new Error('Camera motion belongs to video or image clips.');
   if (clip.smoothZoom) throw new Error('Use one camera motion or smooth zoom recipe per clip.');
   if (!Array.isArray(camera.keyframes) || camera.keyframes.length < 2 || camera.keyframes.length > 8) throw new Error('Use between 2 and 8 camera keyframes.');
@@ -19,5 +20,5 @@ export function validateCameraMotion(clip: Pick<Clip, 'kind' | 'cameraMotion' | 
 }
 
 export function rescaleCameraMotion(camera: CameraMotionSettings, ratio: number): CameraMotionSettings {
-  return { keyframes: camera.keyframes.map(key => ({ ...key, time: key.time * ratio })) };
+  return { ...camera,keyframes: camera.keyframes.map(key => ({ ...key, time: key.time * ratio })) };
 }

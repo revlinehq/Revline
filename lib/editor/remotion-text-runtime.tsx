@@ -1,10 +1,11 @@
+import { textGradientFill } from './text-gradient';
 import { createRoot, type Root } from 'react-dom/client';
 import { flushSync } from 'react-dom';
 import { VERSION } from 'remotion';
 import { RemotionText } from './remotion-text-component';
 import { remotionTextProps, type RemotionTextProps, type RemotionTextSource } from './remotion-text';
 import { textLayerFrame, type TextLayerSource } from './text-layers';
-import { textAppearance } from './text-style';
+import { resolvedTextAppearance, textAppearance } from './text-style';
 
 const roots = new WeakMap<HTMLElement, { root: Root; props?: RemotionTextProps }>();
 export const version = VERSION;
@@ -13,7 +14,7 @@ export const version = VERSION;
 export function render(host: HTMLElement, props: RemotionTextProps) {
   let entry = roots.get(host);
   const previous = entry?.props;
-  if (previous && (Object.keys(props) as (keyof RemotionTextProps)[]).every(key => props[key] === previous[key])) return;
+  if (previous && Object.keys(props).length === Object.keys(previous).length && (Object.keys(props) as (keyof RemotionTextProps)[]).every(key => props[key] === previous[key])) return;
   if (!entry) { entry = { root: createRoot(host) }; roots.set(host, entry); }
   flushSync(() => entry.root.render(<RemotionText {...props}/>));
   entry.props = { ...props };
@@ -42,7 +43,7 @@ export function install(initialSources: RemotionTextSource[]): RemotionTextContr
       const host = document.querySelector<HTMLElement>(`#${source.id} .text-content`);
       if (!host) continue;
       hosts.set(source.id, host);
-      render(host, { ...source.props, frame: Math.floor((clock!.time() - source.start + source.offset + 1e-7) * source.props.fps) });
+      render(host, { ...source.props, ...(source.props.textGradient?{gradientTime:clock!.time()-source.start}:{}), frame: Math.floor((clock!.time() - source.start + source.offset + 1e-7) * source.props.fps) });
     }
   }
   const previousRender = clock.render;
@@ -107,11 +108,18 @@ export function installTextLayers(initial: TextLayerSource[]): TextLayerControll
       }
       const motion = node.querySelector<HTMLElement>('.text-motion')!, content = node.querySelector<HTMLElement>('.text-content')!;
       Object.assign(motion.style, { transform: frame.transform, opacity: String(frame.opacity), filter: frame.brightness === 1 ? '' : `brightness(${frame.brightness})` });
-      const appearance = clip.textStyle ? textAppearance(clip, source.resolution) : {WebkitTextStroke:'',paintOrder:'',textShadow:''};
+      const appearance = clip.textStyle || clip.textGradient ? textAppearance({textStyle:resolvedTextAppearance(clip)}, source.resolution) : {WebkitTextStroke:'',paintOrder:'',textShadow:''};
       Object.assign(content.style, { ...appearance, background: style.background, transform: `translateY(${frame.lift}px)` });
       const props = remotionTextProps(clip, clock.time(), source.fps, source.resolution);
       if (props) render(content, props);
-      else { dispose(content); if (content.textContent !== style.text) content.textContent = style.text; }
+      else {
+        dispose(content);
+        let fill=content.querySelector<HTMLElement>(':scope > [data-text-fill]');
+        if(!fill){fill=document.createElement('span');fill.dataset.textFill='';content.replaceChildren(fill);}
+        if(fill.textContent!==style.text)fill.textContent=style.text;
+        fill.removeAttribute('style');
+        Object.assign(fill.style,textGradientFill(clip.textGradient,time-clip.start,appearance.textShadow));
+      }
     }
   }
   const previousRender = clock.render, previousUpdate = clock.eventCallback('onUpdate') as (() => void) | undefined;

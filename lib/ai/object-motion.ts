@@ -1,9 +1,21 @@
 import { sampleMotionAnchors } from '../editor/motion-path';
 import { validateClipEffects, type MotionKeyframe } from '../editor/clip-effects';
 import { SMOOTH_ZOOM_EASINGS, type SmoothZoomSettings } from '../editor/smooth-zoom-settings';
-import { DEFAULT_TRANSFORM, dimensions, type AspectRatio, type Clip } from '../editor/types';
+import { DEFAULT_TRANSFORM, dimensions, type AspectRatio, type Clip, type Timeline } from '../editor/types';
 
 export type ObjectMotionAnchor = MotionKeyframe & {easing?:SmoothZoomSettings['easing']};
+export type ObjectMotionCommand = {clipId:string;keyframes:ObjectMotionAnchor[];replaceMotion?:boolean};
+
+/** Coordinate multiple independently editable words/objects in one atomic edit. */
+export function animateObjects(timeline:Timeline,commands:ObjectMotionCommand[]):Timeline {
+  if(!commands.length||commands.length>32||new Set(commands.map(command=>command.clipId)).size!==commands.length)throw new Error('Choose between one and 32 distinct objects.');
+  const patches=new Map(commands.map(command=>{
+    const clip=timeline.clips.find(clip=>clip.id===command.clipId);
+    if(!clip)throw new Error('An animation object was not found.');
+    return [clip.id,objectMotionPatch(clip,command.keyframes,{replaceMotion:command.replaceMotion,aspectRatio:timeline.aspectRatio})] as const;
+  }));
+  return {...timeline,clips:timeline.clips.map(clip=>patches.has(clip.id)?{...clip,...patches.get(clip.id)}:clip)};
+}
 
 /** Canvas-relative object animation shares camera easing without sharing its hierarchy. */
 export function objectMotionPatch(clip:Clip,keyframes:ObjectMotionAnchor[],options:{replaceMotion?:boolean;aspectRatio?:AspectRatio}={}):Partial<Clip>{

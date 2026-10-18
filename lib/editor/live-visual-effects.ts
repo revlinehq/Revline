@@ -1,9 +1,10 @@
+import { cameraGlideBlurSource } from './camera-motion-blur';
 import { compositionIndex } from './composition-node';
 import type { Clip, Timeline } from './types';
 import { validateVisualEffects, visualEffectsOf } from './visual-effects';
 import type { VisualEffectsController } from './visual-effects-runtime';
 
-const effects = visualEffectsOf;
+const effects = (clip:Clip)=>({...visualEffectsOf(clip),cameraGlideBlur:cameraGlideBlurSource(clip)});
 
 export function previewVisualEffects(document: Document, clip: Clip, index: number, patch: Partial<Clip> | null): boolean {
   const controller = (document.defaultView as (Window & { __revlineEffects?: VisualEffectsController }) | null)?.__revlineEffects;

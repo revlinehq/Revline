@@ -1,3 +1,4 @@
+import type { TextGradient } from './text-gradient';
 import { textStyle, type TextAppearance } from './text-style';
 import type { TextFontId } from './text-fonts';
 
@@ -42,6 +43,7 @@ export const DEFAULT_TEXT_HIGHLIGHT = '#F5CF45';
 export type RemotionTextProps = {
   preset: RemotionTextPreset; text: string; frame: number; fps: number; durationInFrames: number;
   color: string; fontSize: number; highlightColor: string;
+  textGradient?: TextGradient; gradientTime?: number;
   textStyle?: TextAppearance; fontFamily?: string; fontWeight?: number; resolution?: number;
   wordTimings?: WordTiming[];
   strength?: number; revealDuration?: number; stagger?: number;
@@ -49,7 +51,7 @@ export type RemotionTextProps = {
 export type RemotionTextSource = { id: string; start: number; offset: number; props: Omit<RemotionTextProps, 'frame'> };
 type TextTemplateClip = {
   kind: string; start: number; duration: number; text?: string; color?: string; fontSize?: number; textTemplate?: RemotionTextTemplate;
-  textStyle?: TextAppearance; fontFamily?: TextFontId;
+  textStyle?: TextAppearance; fontFamily?: TextFontId; textGradient?: TextGradient;
 };
 
 export function validateRemotionTextTemplate(clip: Pick<TextTemplateClip, 'kind' | 'textTemplate'> & {text?: string; duration?: number}) {
@@ -87,6 +89,7 @@ export function remotionTextProps(clip: TextTemplateClip, time: number, fps: num
     frame: Math.floor((time - clip.start + (template.offset ?? 0) + 1e-7) * fps),
     fps, durationInFrames: Math.max(1, Math.ceil(((template.duration ?? clip.duration) - 1e-7) * fps)),
     color: style.color, fontSize: style.fontSize,
+    ...(clip.textGradient ? {textGradient:clip.textGradient,gradientTime:time-clip.start} : {}),
     textStyle: clip.textStyle, fontFamily: style.fontFamily, fontWeight: style.fontWeight, resolution,
     highlightColor: template.highlightColor ?? VFX_TEXT_APPEARANCE[template.preset]?.highlightColor ?? DEFAULT_TEXT_HIGHLIGHT,
     ...(template.strength !== undefined ? { strength: template.strength } : {}),

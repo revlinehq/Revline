@@ -86,6 +86,7 @@ export function patchClip(timeline: Timeline, id: string, patch: Partial<Clip>):
     let next = c.id === id ? { ...c, ...(patch.duration !== undefined && !('textTemplate' in patch) ? textTemplateTimingPatch(c) : {}),...(patch.duration!==undefined&&!('textAnimationTiming' in patch)?textAnimationTimingPatch(c):{}),...(patch.duration!==undefined&&!('audioFadeTiming' in patch)?audioFadeTimingPatch(c):{}),...(patch.duration!==undefined&&!('visualFadeTiming' in patch)?visualFadeTimingPatch(c):{}), ...patch, id: c.id } : c.id === clip.linkedClipId ? { ...c, ...timing,...(patch.duration!==undefined?audioFadeTimingPatch(c):{}) } : c;
     if(c.id===id&&['motion','crop','fit','focus','assetId'].some(key=>key in patch)&&!('smoothZoom' in patch))next={...next,smoothZoom:undefined};
     if(c.id===id&&['motion','crop','fit','focus','assetId'].some(key=>key in patch)&&!('cameraMotion' in patch))next={...next,cameraMotion:undefined};
+    if(c.id===id&&['caption','graphic'].includes(c.kind)&&patch.color!==undefined&&!('textGradient' in patch))next={...next,textGradient:undefined};
     if(c.id===id&&patch.text!==undefined&&c.textTemplate?.wordTimings&&!('textTemplate' in patch)&&patch.text.toLowerCase()!==(c.text??'').toLowerCase())next={...next,textTemplate:{...next.textTemplate!,wordTimings:undefined}};
     if (patch.volume !== undefined && c.id === volumeTarget) next = { ...next, volume: patch.volume };
     if (next.kind === 'video' && next.audioSeparated) next = { ...next, volume: 0 };

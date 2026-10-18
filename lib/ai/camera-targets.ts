@@ -7,6 +7,7 @@ import { resolveZoomFocus, type ZoomFocusInput, type ZoomTargetEvidence } from '
 export type CameraMotionInput = {
   keyframes: {time:number;scale:number;easing:CameraMotionSettings['keyframes'][number]['easing'];focus:ZoomFocusInput}[];
   mode?: 'glide' | 'follow';
+  blurAmount?: number;
   replaceMotion?: boolean;
 };
 
@@ -25,5 +26,6 @@ export function configureCameraMotionPatch(clip:Clip,asset:MediaAsset,aspectRati
     }
     return {time:Math.max(0,Math.min(clip.duration,key.time-clip.start)),scale:key.scale,easing:key.easing,centerX,centerY};
   });
-  return cameraMotionPatch(clip,asset,aspectRatio,{keyframes},{replace:input.replaceMotion});
+  const blurAmount=input.blurAmount??clip.cameraMotion?.blurAmount;
+  return cameraMotionPatch(clip,asset,aspectRatio,{keyframes,...(blurAmount!==undefined?{blurAmount}:{})},{replace:input.replaceMotion});
 }

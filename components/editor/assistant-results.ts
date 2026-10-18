@@ -74,6 +74,7 @@ export function chatToolFromPart(value: unknown): ChatTool | null {
 }
 
 const labels: Record<string, [string, string]> = {
+  setTextGradient: ['Styling gradient text', 'Styled gradient text'],
   configureSmoothZoom: ['Adding smooth zoom', 'Added smooth zoom'],
   configureCameraMotion: ['Adding camera motion', 'Added camera motion'],
   markMusicBeats: ['Marking beats', 'Marked beats'], removeMarker: ['Removing marker', 'Removed marker'], removeMarkers: ['Removing markers', 'Removed markers'], delete: ['Removing clips', 'Removed clips'], addSubtitlesFromTranscript: ['Adding subtitles', 'Added subtitles'],

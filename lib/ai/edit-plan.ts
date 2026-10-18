@@ -17,7 +17,7 @@ const effectPlanFields = {
 export const EFFECT_PLAN_EFFECTS = {
   timed: [...TIMED_EFFECT_PRESETS], transition: [...TRANSITION_PRESETS],
   visual: [...Object.keys(VISUAL_EFFECT_GUIDANCE), 'motion'],
-  text: [...new Set([...TEXT_ANIMATION_PRESETS, ...TEXT_LOOKS.map(look => look.id), 'appearance', 'stroke', 'shadow', 'glow'])],
+  text: [...new Set([...TEXT_ANIMATION_PRESETS, ...TEXT_LOOKS.map(look => look.id), 'appearance', 'stroke', 'shadow', 'glow', 'gradient'])],
 };
 // A union emits JSON Schema anyOf (supported by Responses tool schemas), while
 // exposing the exact effect enum for each kind before the model calls the tool.
@@ -86,8 +86,9 @@ export function effectDisabledReference(timeline: Timeline, plans: EffectPlan[],
       clips=clips.map(clip=>clip.id===id?{...clip,motion:undefined,motionOffset:undefined,smoothZoom:undefined,cameraMotion:undefined}:clip);continue;
     }
     if(plan.kind==='visual'&&plan.effect!=='motion'){clips=clips.map(clip=>{if(clip.id!==id)return clip;const group=clip[plan.effect as keyof Clip];return {...clip,[plan.effect]:group&&typeof group==='object'?{...group,enabled:false}:undefined};});continue;}
+    if(plan.kind==='text'&&plan.effect==='gradient'){clips=clips.map(clip=>clip.id===id?{...clip,textGradient:undefined}:clip);continue;}
     if (!original) throw new Error('The planned clip has no effect-disabled reference.');
-    const keys = plan.kind === 'text' ? ['textTemplate', 'textStyle', 'animation', 'textAnimationTiming', 'color', 'background', 'fontSize', 'fontFamily'] : ['effectPreset', 'motion', 'zoom', 'flash', 'punch', 'shake', 'pop', 'frameShrink', 'cinematicBars', 'zoomBlur', 'solidColor', 'transition'];
+    const keys = plan.kind === 'text' ? ['textTemplate', 'textStyle', 'textGradient', 'animation', 'textAnimationTiming', 'color', 'background', 'fontSize', 'fontFamily'] : ['effectPreset', 'motion', 'zoom', 'flash', 'punch', 'shake', 'pop', 'frameShrink', 'cinematicBars', 'zoomBlur', 'solidColor', 'transition'];
     clips = clips.map(clip => clip.id === id ? { ...clip, ...Object.fromEntries(keys.map(key => [key, original[key as keyof Clip]])) } : clip);
   }
   return { ...timeline, clips };

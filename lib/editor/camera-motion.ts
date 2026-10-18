@@ -22,7 +22,7 @@ export function cameraMotionPatch(clip: Clip, asset: MediaAsset, aspectRatio: As
   });
   if (anchors[0].time > 0) anchors.unshift({ time: 0, ...NEUTRAL_MOTION, easing: 'linear' });
   const motion = sampleMotionAnchors(anchors, clip.duration);
-  const patch = { cameraMotion: { keyframes: settings.keyframes.map(key => ({ ...key })) }, motion, motionOffset: 0, smoothZoom: undefined };
+  const patch = { cameraMotion: { ...(settings.blurAmount!==undefined?{blurAmount:settings.blurAmount}:{}),keyframes: settings.keyframes.map(key => ({ ...key })) }, motion, motionOffset: 0, smoothZoom: undefined };
   validateClipEffects({ ...clip, ...patch });
   return patch;
 }

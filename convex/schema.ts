@@ -10,13 +10,14 @@ export const waveformValidator = v.object({ peaks: v.string(), samplesPerSecond:
 export const focusValidator = v.array(v.object({ time: v.number(), x: v.number(), y: v.number() }));
 export const motionKeyframeValidator = v.object({ time: v.number(), x: v.number(), y: v.number(), scale: v.number(), rotation: v.number(), opacity: v.number(), brightness: v.number() });
 export const smoothZoomValidator = v.object({ start: v.number(), inDuration: v.number(), holdDuration: v.number(), outDuration: v.number(), scale: v.number(), centerX: v.number(), centerY: v.number(), framing: v.optional(v.union(v.literal('anchor'), v.literal('center'))), easing: v.union(v.literal('linear'), v.literal('ease-in-out'), v.literal('ease-out'), v.literal('focused-spring')) });
-export const cameraMotionValidator = v.object({ keyframes:v.array(v.object({time:v.number(),scale:v.number(),centerX:v.number(),centerY:v.number(),easing:smoothZoomValidator.fields.easing})) });
+export const cameraMotionValidator = v.object({ blurAmount:v.optional(v.number()), keyframes:v.array(v.object({time:v.number(),scale:v.number(),centerX:v.number(),centerY:v.number(),easing:smoothZoomValidator.fields.easing})) });
 export const colorGradeValidator = v.object({ enabled: v.boolean(), exposure: v.number(), contrast: v.number(), saturation: v.number(), temperature: v.number(), tint: v.number(), vibrance: v.number() });
 export const zoomBlurValidator = v.object({ enabled: v.boolean(), amount: v.number(), centerX: v.number(), centerY: v.number() });
 export const invertValidator = v.object({ enabled: v.boolean(), amount: v.number() });
 export const ditherValidator = v.object({ enabled: v.boolean(), amount: v.number(), levels: v.number(), size: v.number(), shadowColor: v.optional(v.string()), highlightColor: v.optional(v.string()) });
 export const glitchValidator = v.object({ enabled: v.boolean(), intensity: v.number(), blockSize: v.number(), rgbSplit: v.number() });
 export const textTemplateValidator = v.object({ preset: v.union(v.literal('word-reveal'), v.literal('word-pop'), v.literal('slide-title'), v.literal('karaoke'), v.literal('neon-echo'), v.literal('lyric-slam'), v.literal('kinetic-stack'), v.literal('rgb-split'), v.literal('type-trails'), v.literal('blur-focus'), v.literal('character-scramble'), v.literal('spotlight-sweep'), v.literal('ink-write'), v.literal('tunnel-zoom')), highlightColor: v.optional(v.string()), strength:v.optional(v.number()), revealDuration:v.optional(v.number()), stagger:v.optional(v.number()), duration: v.optional(v.number()), offset: v.optional(v.number()), wordTimings:v.optional(v.array(v.object({start:v.number(),end:v.number()}))) });
+export const textGradientValidator = v.object({colors:v.array(v.string()),angle:v.number(),animation:v.optional(v.object({duration:v.number(),direction:v.union(v.literal('forward'),v.literal('reverse')),loop:v.boolean()})),offset:v.optional(v.number())});
 export const textStyleValidator = v.object({strokeWidth:v.number(),strokeColor:v.string(),shadowBlur:v.number(),shadowX:v.number(),shadowY:v.number(),shadowColor:v.string(),glowBlur:v.number(),glowColor:v.string()});
 export const audioSettingsValidator=v.object({role:v.union(v.literal('original'),v.literal('voice'),v.literal('music')),fadeIn:v.number(),fadeOut:v.number(),ducking:v.object({enabled:v.boolean(),amount:v.number(),attack:v.number(),release:v.number()})});
 export const clipValidator = v.object({
@@ -55,7 +56,7 @@ export const clipValidator = v.object({
   vhs:v.optional(v.object({enabled:v.boolean(),amount:v.number(),scanlines:v.number(),noise:v.number(),bleed:v.number(),tracking:v.number(),speed:v.number()})),
   lightLeak:v.optional(v.object({enabled:v.boolean(),amount:v.number(),color:v.string(),position:v.number(),spread:v.number(),speed:v.number()})),
   textTemplate: v.optional(textTemplateValidator),
-  textStyle:v.optional(textStyleValidator),
+  textStyle:v.optional(textStyleValidator), textGradient:v.optional(textGradientValidator),
   fontFamily:v.optional(v.union(v.literal('space-grotesk'),v.literal('anton'),v.literal('dm-serif'),v.literal('geist-mono'),v.literal('inter'),v.literal('dm-sans'),v.literal('montserrat'),v.literal('poppins'),v.literal('oswald'),v.literal('bebas-neue'),v.literal('playfair-display'),v.literal('caveat'),v.literal('tiktok-sans'))),
   effectPreset: v.optional(v.union(v.literal('none'), v.literal('fade'), v.literal('punch'), v.literal('shake'), v.literal('flash'), v.literal('pop'), v.literal('cinematic-bars'), v.literal('quick-zoom-in'), v.literal('quick-zoom-out'),v.literal('frame-shrink'), v.literal('zoom-blur'), v.literal('solid-color'),v.literal('crossfade'),v.literal('spin-zoom'),v.literal('blur-dissolve'),v.literal('gradient-wipe'),v.literal('iris-wipe'))),
   cinematicBars: v.optional(v.object({ size: v.number(), speed: v.number() })),
