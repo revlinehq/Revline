@@ -32,6 +32,13 @@ const effectPlanBase = z.object(effectPlanFields);
 export type EffectPlan = z.infer<typeof effectPlanBase> & { kind: 'timed' | 'visual' | 'text' | 'transition'; effect: string };
 export type EffectEvidence = { clipIds: string[]; start: number; end: number };
 
+/** Correcting a plan's review window must not turn the edited draft into its
+ * own reference. Keep the first snapshot for each still-planned target. */
+export function preservePlanOriginals(originals: Clip[], previous: Clip[] = []): Clip[] {
+  const first = new Map(previous.map(clip => [clip.id, clip]));
+  return originals.map(clip => first.get(clip.id) ?? clip);
+}
+
 export function validateEffectPlan(plans: EffectPlan[], timeline: Timeline, evidence: ReadonlyMap<string, EffectEvidence> = new Map()) {
   if (!plans.length || plans.length > 8 || new Set(plans.map(plan => plan.id)).size !== plans.length) throw new Error('Plan one to eight effects with unique IDs.');
   const tolerance = 1 / timeline.fps;
@@ -73,9 +80,14 @@ export function effectDisabledReference(timeline: Timeline, plans: EffectPlan[],
     if (!id) throw new Error('Bind the planned effect to an actual clip before reviewing.');
     if (plan.kind === 'timed' || plan.kind === 'transition') { clips = clips.filter(clip => clip.id !== id); continue; }
     if (plan.kind==='text' && [...TEXT_ANIMATION_PRESETS,'motion'].includes(plan.effect as typeof TEXT_ANIMATION_PRESETS[number])) { clips=clips.map(clip=>clip.id===id?{...clip,animation:'none',textTemplate:undefined,textAnimationTiming:undefined,motion:undefined}:clip);continue; }
+    if(plan.kind==='visual'&&plan.effect==='motion'){
+      // This is an effect-disabled comparison, not a copy of an older zoom.
+      // Rechecking an already-saved zoom must also compare against neutral keys.
+      clips=clips.map(clip=>clip.id===id?{...clip,motion:undefined,motionOffset:undefined,smoothZoom:undefined}:clip);continue;
+    }
     if(plan.kind==='visual'&&plan.effect!=='motion'){clips=clips.map(clip=>{if(clip.id!==id)return clip;const group=clip[plan.effect as keyof Clip];return {...clip,[plan.effect]:group&&typeof group==='object'?{...group,enabled:false}:undefined};});continue;}
     if (!original) throw new Error('The planned clip has no effect-disabled reference.');
-    const keys = plan.kind === 'visual' ? [plan.effect] : plan.kind === 'text' ? ['textTemplate', 'textStyle', 'animation', 'textAnimationTiming', 'color', 'background', 'fontSize', 'fontFamily'] : ['effectPreset', 'motion', 'zoom', 'flash', 'punch', 'shake', 'pop', 'frameShrink', 'cinematicBars', 'zoomBlur', 'solidColor', 'transition'];
+    const keys = plan.kind === 'text' ? ['textTemplate', 'textStyle', 'animation', 'textAnimationTiming', 'color', 'background', 'fontSize', 'fontFamily'] : ['effectPreset', 'motion', 'zoom', 'flash', 'punch', 'shake', 'pop', 'frameShrink', 'cinematicBars', 'zoomBlur', 'solidColor', 'transition'];
     clips = clips.map(clip => clip.id === id ? { ...clip, ...Object.fromEntries(keys.map(key => [key, original[key as keyof Clip]])) } : clip);
   }
   return { ...timeline, clips };

@@ -7,7 +7,7 @@ import { clipValidator, timelineValidator } from './schema';
 import { effectPlanValidator, compositionReviewResult } from './lib/effect_plan';
 import { equalTimelineValue } from '../lib/editor/timeline-equality';
 import { compositionReviewBudget } from '../lib/ai/composition-review';
-import { effectPlanInput, effectDisabledReference, type EffectPlan } from '../lib/ai/edit-plan';
+import { effectPlanInput, effectDisabledReference, preservePlanOriginals, type EffectPlan } from '../lib/ai/edit-plan';
 import { enqueueMediaTask, cancelMediaTask } from './mediaTasks';
 import type { MutationCtx, QueryCtx } from './_generated/server';
 import type { Id } from './_generated/dataModel';
@@ -22,7 +22,8 @@ export const savePlan=internalMutation({args:{...runArgs,plans:v.array(effectPla
   for(const plan of args.plans)effectPlanInput.parse(plan);
   const previous=await ctx.db.query('assistantPlans').withIndex('by_project',q=>q.eq('projectId',args.projectId)).unique();
   if(previous?.runId===args.runId&&previous.reviews>0)throw new ConvexError('Keep the original expectations after review; adjust the edit once.');
-  const values={projectId:args.projectId,ownerId:args.ownerId,runId:args.runId,plans:args.plans,originals:args.originals,reviews:previous?.runId===args.runId?previous.reviews:0,createdAt:Date.now()};
+  const sameRun=previous?.runId===args.runId;
+  const values={projectId:args.projectId,ownerId:args.ownerId,runId:args.runId,plans:args.plans,originals:preservePlanOriginals(args.originals,sameRun?previous.originals:[]),reviews:sameRun?previous.reviews:0,createdAt:Date.now()};
   if(previous)await ctx.db.replace(previous._id,values);else await ctx.db.insert('assistantPlans',values);return null;
 }});
 export const request=internalMutation({args:{...runArgs,expectedRevision:v.number(),timeline:timelineValidator,planIds:v.array(v.string()),bindings:v.array(v.object({planId:v.string(),clipId:v.string()}))},returns:v.id('compositionReviews'),handler:async(ctx,args)=>{
