@@ -1,5 +1,5 @@
 import type { VisualFadeController } from './visual-fades-runtime';
-import { generateComposition, previewMediaSource } from './composition';
+import { generateComposition } from './composition';
 import { audioFadeAttributes, audioVolumeEnvelope } from './audio-settings';
 import { playbackRateOf, sourceTimeAt } from './playback-rate';
 import { timelineDuration, type Clip, type MediaAsset, type Timeline } from './types';
@@ -69,7 +69,7 @@ export function updateLiveMediaContent(document:Document,previous:Timeline,next:
   for(const clip of nextMedia){
     const node=nodes.get(clip.id)!,asset=assetMap.get(clip.assetId!);if(!asset?.url)return false;
     const before=old.get(clip.id);
-    if(before&&before.assetId!==clip.assetId)node.setAttribute('src',previewMediaSource(asset.url,node.dataset.previewKey));
+    if(before&&before.assetId!==clip.assetId)node.setAttribute('src',asset.url);
     const attrs={start:clip.start,duration:clip.duration,end:clip.start+clip.duration,mediaStart:clip.sourceStart,playbackRate:playbackRateOf(clip),volume:clip.volume??1};
     for(const [key,value] of Object.entries(attrs))if(node.dataset[key]!==String(value))node.dataset[key]=String(value);
     if(clip.kind==='video'||clip.kind==='audio'){

@@ -1,5 +1,3 @@
-import { previewMediaSource } from './composition';
-
 export type RefreshPlaybackMedia = (assetIds:string[]) => Promise<{_id:string;url:string|null}[]>;
 
 function mediaEvent(media:HTMLMediaElement,event:string,signal:AbortSignal) {
@@ -17,7 +15,7 @@ export async function recoverMediaSource(media:HTMLMediaElement,url:string,optio
   const {signal}=options,volume=media.volume,muted=media.muted,rate=media.playbackRate;
   signal.throwIfAborted();
   const metadata=mediaEvent(media,'loadedmetadata',signal);
-  media.src=previewMediaSource(url,media.dataset.previewKey);media.load();await metadata;
+  media.src=url;media.load();await metadata;
   signal.throwIfAborted();media.volume=volume;media.muted=muted;media.playbackRate=rate;
   const position=Math.max(0,Math.min(options.position(),Number.isFinite(media.duration)?Math.max(0,media.duration-1/120):Infinity));
   if(Math.abs(media.currentTime-position)>.001){const sought=mediaEvent(media,'seeked',signal);media.currentTime=position;await sought;}
