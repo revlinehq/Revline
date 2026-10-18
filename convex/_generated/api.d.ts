@@ -9,12 +9,14 @@
  */
 
 import type * as aiCosts from "../aiCosts.js";
+import type * as alertWebhooks from "../alertWebhooks.js";
 import type * as assets from "../assets.js";
 import type * as assistant from "../assistant.js";
 import type * as assistantActions from "../assistantActions.js";
 import type * as billing from "../billing.js";
 import type * as compositionReview from "../compositionReview.js";
 import type * as crons from "../crons.js";
+import type * as discordAlerts from "../discordAlerts.js";
 import type * as editorAccess from "../editorAccess.js";
 import type * as http from "../http.js";
 import type * as lib_ai_cost from "../lib/ai_cost.js";
@@ -24,6 +26,7 @@ import type * as lib_assistant_workflow from "../lib/assistant_workflow.js";
 import type * as lib_auth from "../lib/auth.js";
 import type * as lib_billing_access from "../lib/billing_access.js";
 import type * as lib_claude_model from "../lib/claude_model.js";
+import type * as lib_discord_alert from "../lib/discord_alert.js";
 import type * as lib_editSession from "../lib/editSession.js";
 import type * as lib_editSessionRebase from "../lib/editSessionRebase.js";
 import type * as lib_effect_plan from "../lib/effect_plan.js";
@@ -62,12 +65,14 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   aiCosts: typeof aiCosts;
+  alertWebhooks: typeof alertWebhooks;
   assets: typeof assets;
   assistant: typeof assistant;
   assistantActions: typeof assistantActions;
   billing: typeof billing;
   compositionReview: typeof compositionReview;
   crons: typeof crons;
+  discordAlerts: typeof discordAlerts;
   editorAccess: typeof editorAccess;
   http: typeof http;
   "lib/ai_cost": typeof lib_ai_cost;
@@ -77,6 +82,7 @@ declare const fullApi: ApiFromModules<{
   "lib/auth": typeof lib_auth;
   "lib/billing_access": typeof lib_billing_access;
   "lib/claude_model": typeof lib_claude_model;
+  "lib/discord_alert": typeof lib_discord_alert;
   "lib/editSession": typeof lib_editSession;
   "lib/editSessionRebase": typeof lib_editSessionRebase;
   "lib/effect_plan": typeof lib_effect_plan;

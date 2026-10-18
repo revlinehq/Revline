@@ -51,6 +51,8 @@ Arranging and saving clips has no fixed duration or clip-count cap. Timelines re
 
 ## Error monitoring
 
+Sentry, PostHog, and signed provider-to-Discord alerts are scaffolded and inactive until configured. See [observability setup](docs/observability.md) for the remaining account settings, endpoint URLs, and verification steps. Browser analytics currently captures page views only, with session replay and text autocapture disabled.
+
 `node scripts/convex-error-monitor.mjs --start` starts read-only Convex log streams for development and production. `--summary` returns new failures plus capture health; `--ack <event-ids...>` acknowledges only reviewed events. The watcher removes validator payloads, signed URLs, and credential patterns before saving bounded, deduplicated summaries in `~/.local/state/revline-monitor` (outside the repository). It never stores raw console payloads or credentials.
 
 The local watcher reconnects interrupted streams. A Codex heartbeat can check its summary every five minutes, triage new failures, and restart it after a computer restart with `--start`. Check `healthy` and `warnings`, not only `running`: the capture parent can remain alive while one deployment stream needs attention. Run these commands with host process visibility; sandbox PID isolation can otherwise report a running host process as absent. Monitoring pauses while this computer is off; Convex log retention limits what can be recovered afterward. This is separate from Sentry's hosted exception integration and is not an instantaneous webhook into Codex.

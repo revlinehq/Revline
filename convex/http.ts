@@ -3,7 +3,10 @@ import { httpAction } from "./_generated/server";
 import { processEvent } from "@convex-dev/stripe";
 import Stripe from 'stripe';
 import { components, internal } from "./_generated/api";
+import { registerAlertWebhooks } from './alertWebhooks';
+import { discordWebhookUrl } from './lib/discord_alert';
 const http = httpRouter();
+registerAlertWebhooks(http);
 const headers = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "POST, OPTIONS", "Access-Control-Allow-Headers": "Content-Type", "Content-Type": "application/json" };
 http.route({ path: "/uploads", method: "OPTIONS", handler: httpAction(async () => new Response(null, { status: 204, headers })) });
 http.route({ path: "/uploads", method: "POST", handler: httpAction(async (ctx, request) => {
@@ -61,6 +64,13 @@ if (process.env.STRIPE_SECRET_KEY && process.env.STRIPE_WEBHOOK_SECRET) {
       // No Stripe payloads, customer details or signing errors in public output.
       console.error('Stripe webhook reconciliation failed', { eventId: event.id, type: event.type });
       return new Response('Webhook processing failed', { status: 500 });
+    }
+    // Discord is an independent, optional sink. It must never break payment reconciliation.
+    if (discordWebhookUrl() && ['checkout.session.completed', 'checkout.session.async_payment_succeeded', 'customer.subscription.created', 'customer.subscription.updated', 'customer.subscription.deleted', 'invoice.paid', 'invoice.payment_failed', 'charge.refunded', 'charge.dispute.created'].includes(event.type)) {
+      try {
+        const objectId = 'id' in event.data.object ? event.data.object.id : 'unavailable';
+        await ctx.runMutation(internal.discordAlerts.enqueue, { source: 'stripe', eventId: event.id, title: `Stripe: ${event.type}`, description: `Event: ${event.id}\nObject: ${objectId}\nMode: ${event.livemode ? 'live' : 'test'}` });
+      } catch { console.error('Stripe notification could not be queued', { eventId: event.id }); }
     }
     return new Response(JSON.stringify({ received: true }), { headers: { 'Content-Type': 'application/json' } });
   }) });

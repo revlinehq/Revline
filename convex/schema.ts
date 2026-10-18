@@ -3,6 +3,7 @@ import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 import { BEAT_ANALYSIS_ENGINE } from '../lib/media-analysis/beat-map';
 import { aiCostRecordFields } from './lib/ai_cost';
+import { alertFields } from './lib/discord_alert';
 
 export const aspectRatio = v.union(v.literal("vertical"), v.literal("square"), v.literal("landscape"), v.literal("portrait-feed"), v.literal("classic"));
 export const assetKind = v.union(v.literal("video"), v.literal("audio"), v.literal("image"));
@@ -182,6 +183,7 @@ export default defineSchema({
   shareAssets:defineTable({shareId:v.id('timelineShares'),...sharedAssetFields}).index('by_share',['shareId']).index('by_storageId',['storageId']).index('by_r2Key',['r2Key']).index('by_thumbnailStorageId',['thumbnailStorageId']).index('by_owner_r2Key',['ownerId','r2Key']).index('by_owner_storageId',['ownerId','storageId']).index('by_owner_thumbnail',['ownerId','thumbnailStorageId']),
   billingCheckouts: defineTable({ ownerId: v.string(), priceId: v.string(), origin: v.string(), trialEligible: v.boolean(), requestId: v.string(), createdAt: v.number(), sessionId: v.optional(v.string()), url: v.optional(v.string()), expiresAt: v.optional(v.number()) }).index('by_owner', ['ownerId']),
   billingSubscriptionSync: defineTable({ stripeSubscriptionId: v.string(), token: v.string(), lastEventId: v.optional(v.string()) }).index('by_subscription', ['stripeSubscriptionId']),
+  discordAlerts: defineTable({ ...alertFields, status: v.union(v.literal('queued'), v.literal('delivering'), v.literal('sent'), v.literal('failed')), attempts: v.number(), leaseUntil: v.optional(v.number()), lastError: v.optional(v.string()), createdAt: v.number(), updatedAt: v.number() }).index('by_source_event', ['source', 'eventId']).index('by_status_updated', ['status', 'updatedAt']),
   mediaTasks: defineTable(mediaTaskFields).index('by_status_createdAt', ['status', 'createdAt']).index('by_status_claimable_created',['status','claimable','createdAt']).index('by_status_updated',['status','updatedAt']).index('by_asset_kind', ['assetId', 'kind']).index('by_project_createdAt', ['projectId', 'createdAt']).index('by_project_kind_status',['projectId','kind','status']),
   users: defineTable(userFields).index("by_clerk_id", ["clerkId"]),
   projects: defineTable(projectFields).index("by_ownerId_updatedAt", ["ownerId", "updatedAt"]),
