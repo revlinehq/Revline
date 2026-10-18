@@ -118,3 +118,16 @@ test.each(['failed','aborted'] as const)('%s receipt applies only to that staged
   expect(summarizeTools(steps,{publicationReceipt:failed,draftPending:false})).toMatchObject([{title:'Trimmed 1 clip',state:'done'},{title:'Not saved: Removed 2 clips',state:'error'}]);
   expect(steps[1].output?.saved).toBe(false);
 });
+
+test.each([
+  {name:'inspectClip',output:{clip:{id:'source',kind:'video'},revision:8,staged:false}},
+  {name:'inspectClip',output:{clip:{id:'source',kind:'video'},revision:8,staged:true}},
+  {name:'inspectFrames',output:{assetId:'source',frames:[{frameIndex:12,sourceTime:.4}],inspectedFrameCount:1}},
+])('successful $name reads do not ask for save confirmation, but failures and real unsaved edits remain visible',({name,output})=>{
+  const read=chatToolFromPart({type:`tool-${name}`,toolCallId:'read',state:'output-available',output})!;
+  expect(summarizeTools([read],{draftPending:false})).toEqual([]);
+  const mutation=chatToolFromPart({type:'tool-trim',toolCallId:'trim',state:'output-available',output:{saved:false,changedClips:[{id:'source'}]}})!;
+  expect(summarizeTools([read,mutation],{draftPending:false})).toMatchObject([{title:'Save not confirmed',state:'error'}]);
+  const failed=chatToolFromPart({type:`tool-${name}`,toolCallId:'failed-read',state:'output-error',errorText:'Footage inspection could not finish.'})!;
+  expect(summarizeTools([failed])).toMatchObject([{title:'Could not finish this step',detail:'Footage inspection could not finish.',state:'error'}]);
+});

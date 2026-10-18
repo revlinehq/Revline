@@ -88,9 +88,9 @@ const labels: Record<string, [string, string]> = {
   useStrongestMoment: ['Choosing a moment', 'Added selected moment'], applyMotionPreset: ['Animating text', 'Animated text'], animateClip: ['Animating text', 'Animated text'], setVisualEffects: ['Adjusting visual effects', 'Adjusted visual effects'],
   setPlaybackRate: ['Changing speed', 'Changed speed'], applyTextTemplate: ['Animating text', 'Animated text'], addTimedEffect: ['Adding an effect', 'Added an effect'],
   planEffects:['Planning effects','Planned effects'],previewRender:['Reviewing rendered edit','Reviewed rendered samples'],
-  inspectTimeline: ['Checking timeline', 'Checked timeline'], inspectAssetAnalysis: ['Reading footage notes', 'Read footage notes'], analyzeMedia: ['Analyzing footage', 'Analyzed footage'], inspectVideo: ['Finding moments', 'Reviewed footage'], inspectVideoFrames: ['Inspecting frames', 'Inspected frames'],
+  inspectTimeline: ['Checking timeline', 'Checked timeline'], inspectClip: ['Checking clip', 'Checked clip'], inspectAssetAnalysis: ['Reading footage notes', 'Read footage notes'], analyzeMedia: ['Analyzing footage', 'Analyzed footage'], inspectVideo: ['Finding moments', 'Reviewed footage'], inspectFrames: ['Inspecting frames', 'Inspected frames'], inspectVideoFrames: ['Inspecting frames', 'Inspected frames'],
 };
-const inspections = new Set(['planEffects','previewRender','inspectTimeline', 'inspectAssetAnalysis', 'analyzeMedia', 'inspectVideo', 'inspectVideoFrames']);
+const inspections = new Set(['planEffects','previewRender','inspectTimeline', 'inspectClip', 'inspectAssetAnalysis', 'analyzeMedia', 'inspectVideo', 'inspectFrames', 'inspectVideoFrames']);
 const count = (value: unknown) => typeof value === 'number' && Number.isInteger(value) && value >= 0 ? value : undefined;
 const isId = (value: unknown): value is string => typeof value === 'string' && value.length > 0;
 const noun = (n: number, singular: string, plural = `${singular}s`) => `${n} ${n === 1 ? singular : plural}`;
