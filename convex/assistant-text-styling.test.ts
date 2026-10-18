@@ -51,6 +51,7 @@ test('five identical visual transforms save as one atomic batch and preserve lin
   ]).flat() };
   const original = structuredClone(timeline); let revision = 35, writes = 0, finishError: string | undefined;
   fixture.generate = async tools => {
+    for(const name of ['configureVisualFade','setVisualEffects','setPlaybackRate','applyMotionPreset','animateClip'])expect(tools[name],`${name} remains available`).toBeDefined();
     const tool = tools.transformClip;
     expect(() => tool.inputSchema.parse({ clipId: 'video-0', clipIds: ['video-1'], scale: .84 })).toThrow();
     expect(() => tool.inputSchema.parse({ clipIds: ['video-0', 'video-0'], scale: .84 })).toThrow();
