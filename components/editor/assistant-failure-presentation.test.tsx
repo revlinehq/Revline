@@ -3,6 +3,7 @@ import {renderToStaticMarkup} from 'react-dom/server';
 import {expect,test} from 'vitest';
 import {AssistantPanel} from './assistant-panel';
 import type {ChatMessage} from './assistant-results';
+import {assistantTurnPresentation} from './assistant-turn-presentation';
 
 const conflict='[CONVEX M(assistantEdits:apply)] [Request ID: private-id] Server Error\nUncaught ConvexError: The timeline changed elsewhere. Your pending replacement was not saved.\n    at handler (convex/assistantEdits.ts:115:9)';
 const messages:ChatMessage[]=[
@@ -17,6 +18,17 @@ const messages:ChatMessage[]=[
   {id:'receipt',role:'assistant',text:'Your pending replacement was not saved.',publicationReceipt:{version:1,kind:'timeline-publication',status:'failed',runId:'run',threadId:'thread',promptMessageId:'request',stagedRevision:10}},
 ];
 function render(replies=messages,error:string|null=conflict){return renderToStaticMarkup(<AssistantPanel messages={replies} running={false} configured hasClips demo={false} error={error} onSend={async()=>{}}/>);}
+
+test('a recoverable rejected planning call is not a failed edit while the agent is running',()=>{
+  const cards=[{key:'plan-error',title:'Could not finish this step',detail:'Error: Read the current cut before planning its effect.',state:'error' as const}];
+  expect(assistantTurnPresentation([],cards,{active:true}).cards).toEqual([]);
+  expect(assistantTurnPresentation([],cards).cards).toHaveLength(1);
+  expect(assistantTurnPresentation([],cards,{active:true,error:'The request stopped.'}).cards).toHaveLength(1);
+  const replies:ChatMessage[]=[{id:'request',role:'user',text:'Reduce rounding and crop the header.'},{id:'answer',role:'assistant',status:'pending',text:'I’ll reduce rounding and crop the header.',steps:[{id:'plan',name:'planEffects',state:'error',detail:cards[0].detail}]}];
+  const html=renderToStaticMarkup(<AssistantPanel messages={replies} running configured hasClips demo={false} onSend={async()=>{}}/>);
+  expect(html).not.toContain('role="alert"');
+  expect(render(replies,null)).toContain('role="alert"');
+});
 
 test('one failed turn shows one actionable failure without duplicate receipts or backend diagnostics',()=>{
   const html=render();

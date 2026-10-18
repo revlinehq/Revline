@@ -13,4 +13,3 @@ export function ProjectCover({ url, kind }: { url: string | null; kind: 'video' 
       : <Film size={18} strokeWidth={1.5} />}
   </span>;
 }
-

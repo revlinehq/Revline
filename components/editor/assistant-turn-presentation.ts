@@ -17,7 +17,10 @@ function failureSummary(text:string):boolean {
 const receiptFailureText=new Set(['Your pending replacement was not saved.','Your pending replacement was cancelled.']);
 
 /** A turn has one failure surface; saved results and the assistant's actual answer stay visible. */
-export function assistantTurnPresentation(replies:readonly ChatMessage[],cards:readonly ResultCard[],{error,receipt}:{error?:string|null;receipt?:TimelinePublicationReceipt}={}) {
+export function assistantTurnPresentation(replies:readonly ChatMessage[],cards:readonly ResultCard[],{error,receipt,active=false}:{error?:string|null;receipt?:TimelinePublicationReceipt;active?:boolean}={}) {
+  // A tool rejection is recoverable while the agent is still working. Publish
+  // one terminal failure only after the run stops, or the server confirms it.
+  if(active&&!error&&receipt?.status!=='failed'&&receipt?.status!=='aborted')return {replies,cards:cards.filter(card=>card.state!=='error')};
   const summaries=replies.flatMap(message=>message.text.split(/\n\s*\n/).filter(failureSummary));
   const failures=cards.filter(card=>card.state==='error');
   const failed=!!error||failures.length>0||summaries.length>0||receipt?.status==='failed'||receipt?.status==='aborted';

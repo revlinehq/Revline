@@ -125,7 +125,7 @@ function AssistantPanelBody({ messages, running, editing:editingTimeline=running
       const publicationReceipt=turnPublicationReceipt(group.messages);
       const draftFailed=!running&&group.id===turnId&&(!!error||replies.some(message=>message.status==='failed'||message.status==='aborted'));
       const cards=summarizeTools(steps,{publicationReceipt,publishedRevision:legacyPublications.current.get(group.id),draftFailed,draftPending:group.id===turnId&&(answering||replies.some(message=>message.status==='pending'||message.status==='streaming'))});
-      const presentation=assistantTurnPresentation(replies,cards,{receipt:publicationReceipt,error:group.id===turnId?(localError||(!waiting?error:null)):null});
+      const presentation=assistantTurnPresentation(replies,cards,{receipt:publicationReceipt,active:group.id===turnId&&answering,error:group.id===turnId?(localError||(!waiting?error:null)):null});
       return {...group,comparison,...presentation};
     });
   },[messages,turnId,editSnapshot,running,error,localError,waiting,optimisticRequest,answering]);
