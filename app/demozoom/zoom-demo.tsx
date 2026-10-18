@@ -101,7 +101,7 @@ export function ZoomDemo() {
   const [replay, setReplay] = useState(0);
   return <main className="zoom-demo">
     <div className="zoom-demo-inner">
-      <nav className="zoom-demo-nav"><a href="/">Revline<span> / Motion studies</span></a><span>01 — Zoom</span></nav>
+      <nav className="zoom-demo-nav"><a href="/">Revline<span> / Motion studies</span></a><span>01 / Zoom</span></nav>
       <header className="zoom-demo-intro"><div><p className="zoom-demo-eyebrow">A FEEL FOR MOTION</p><h1>Same zoom.<br /><span>Different feeling.</span></h1><p>Compare a quick brake, a soft landing, and a little spring.<br className="zoom-demo-desktop-break" /> Every preview uses the same target and timing.</p></div><button className="zoom-demo-replay" onClick={() => setReplay(value => value + 1)}>↻ Replay all</button></header>
       <section className="zoom-demo-controls" aria-label="Zoom comparison controls">
         <label className="zoom-demo-slider"><span>Transition <output>{duration} ms</output></span><input aria-label="Transition duration" type="range" min="300" max="1400" step="50" value={duration} onChange={event => setDuration(Number(event.target.value))} /></label>

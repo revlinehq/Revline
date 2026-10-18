@@ -98,7 +98,7 @@ export function EditComposer({ value, onChange, onSubmit, onAttach, attachments 
   return <><form className={cn('edit-composer', `edit-composer-${variant}`, attachments.length && 'has-attachments', 'composer-upload-enabled', uploadOnHover && 'composer-height-transition', className)} data-upload-view={showUpload || undefined} onPointerEnter={e => { if (uploadOnHover && e.pointerType !== 'touch') setHovered(true); }} onPointerLeave={() => { if (uploadOnHover) { setHovered(false); setEditing(false); } }} onSubmit={e => { e.preventDefault(); if (!showUpload) void submit(); }} aria-label="Edit request">
     <div ref={fields} className="composer-edit-fields" aria-hidden={showUpload || undefined} inert={showUpload} onFocusCapture={() => setFieldsFocused(true)} onBlurCapture={e => { if (!fields.current?.contains(e.relatedTarget as Node | null)) setFieldsFocused(false); }}>{editFields}</div>
     <div className="composer-upload-swap" aria-hidden={!showUpload} inert={!showUpload}>
-      <button type="button" className="composer-new-video" onClick={() => { setEditing(true); onAttach?.(); }} disabled={busy} aria-label="New video — add footage">
+      <button type="button" className="composer-new-video" onClick={() => { setEditing(true); onAttach?.(); }} disabled={busy} aria-label="New video: add footage">
         <span><Plus size={24} strokeWidth={2} aria-hidden="true" />{uploadState === 'dragging' ? 'Drop your footage' : 'New video'}<span className="composer-video-badge">AI</span></span>
       </button>
     </div>

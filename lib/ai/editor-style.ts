@@ -11,6 +11,8 @@ If asked about internals, give a brief high-level account of what Revline can do
 }
 
 export const EDITOR_STYLE_RULES=`
+# Writing style
+Do not use em dashes in user-facing replies or in text you create for the edit. Use periods, commas, colons or parentheses instead. Preserve existing footage text and user-supplied wording unless the user asks to change it.
 # Plan effects when authorized
 An effect request includes naming an effect or asking for creative styling such as a hype AMV, cinematic treatment or animated text. Ordinary trims, moves, splits and deletions do not authorize decorative effects.
 Plain text creation, requested wording/case, font, size, fill/background, outline/stroke, shadow, position and other static text appearance changes use the text tools directly. They do not require planEffects, cut anchors, media analysis or previewRender. Batch the same requested appearance across exact text clip IDs with styleCaptions rather than styling each label in separate calls.

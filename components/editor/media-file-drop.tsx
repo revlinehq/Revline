@@ -69,6 +69,6 @@ export function useMediaFileDrop({ busy, onUpload, onError }: {
 export function MediaFileDropOverlay({ active, busy }: { active: boolean; busy: boolean }) {
   if (!active) return null;
   return <div className="editor-file-drop-overlay" role="status">
-    <div><Upload size={30}/><strong>{busy ? 'An upload is already in progress' : 'Drop files into Sources'}</strong><span>{busy ? 'Let it finish, then drop your files again.' : 'Video, images, and audio — ready to use in your edit.'}</span></div>
+    <div><Upload size={30}/><strong>{busy ? 'An upload is already in progress' : 'Drop files into Sources'}</strong><span>{busy ? 'Let it finish, then drop your files again.' : 'Video, images, and audio. Ready to use in your edit.'}</span></div>
   </div>;
 }
