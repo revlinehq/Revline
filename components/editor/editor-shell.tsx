@@ -211,9 +211,9 @@ export function EditorShell(p: EditorShellProps) {
     const observer=new MutationObserver(check);
     observer.observe(root,{subtree:true,childList:true,attributes:true,attributeFilter:['src','data-thumbnail-exact']});
     root.addEventListener('load',check,true);check();
-    const timer=initialAnalysis?undefined:setTimeout(()=>setPlaybackError('Your footage is taking longer to prepare. Try again to reload the preview.'),45_000);
+    const timer=initialAnalysis||!playbackReady?undefined:setTimeout(()=>setPlaybackError('Your footage is taking longer to prepare. Try again to reload the preview.'),45_000);
     return()=>{observer.disconnect();root.removeEventListener('load',check,true);clearTimeout(timer);};
-  },[opening,openingAttempt,initialAnalysis]);
+  },[opening,openingAttempt,initialAnalysis,playbackReady]);
   const previewError=useCallback((message:string)=>{if(!playbackReady)setPlaybackError(message);onError(message);},[playbackReady,onError]);
   const preview = useRef<PreviewHandle>(null);
   const readPlaybackTime=useCallback(()=>preview.current?.currentTime()??store.getState().playhead,[store]);
