@@ -21,6 +21,12 @@ const server=createServer((_request,response)=>{response.writeHead(200,{'Content
 const browser=await puppeteer.launch({headless:true,args:['--no-sandbox','--disable-dev-shm-usage']});const page=await browser.newPage();page.setDefaultTimeout(8000);const errors=[];page.on('pageerror',error=>errors.push(error.message));const flush=()=>page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));const state=()=>page.evaluate(()=>{const store=window.fixture.store.getState();return {timeline:store.timeline,selected:store.selectedId,selection:store.selectedIds,history:store.history,playing:store.playing,playhead:store.playhead,time:window.mediaTime,playerMounts:window.playerMounts,chatMounts:window.chatMounts,calls:window.playerCalls}});
 try{
  await page.setViewport({width:1440,height:900});await page.goto(origin);await page.addStyleTag({content:bundle.outputFiles.find(file=>file.path.endsWith('.css')).text});await page.addStyleTag({content:'*{box-sizing:border-box}body{margin:0;font:12px Arial;background:var(--ws-bg)}.fixture-header{height:54px;display:flex;align-items:center;gap:20px;padding:0 20px;flex-shrink:0}.editor-app{height:900px}'});await page.addScriptTag({content:bundle.outputFiles.find(file=>file.path.endsWith('.js')).text});await page.waitForSelector('.editor-app');
+ for(const theme of ['light','dark']){
+  await page.evaluate(theme=>document.documentElement.dataset.workspaceTheme=theme,theme);
+  const stroke=await page.$eval('.timeline-clip.selected',node=>{const s=getComputedStyle(node,'::after');return {width:s.borderTopWidth,halo:s.boxShadow,color:s.borderTopColor}});
+  assert.equal(stroke.width,'1px','Selection is a single thin stroke in both themes');assert.equal(stroke.halo,'none','Selection does not combine a dark outline with a white inner halo');
+  if(theme==='dark')assert.ok(Number(stroke.color.match(/[\d.]+/g).at(-1))<=.35,'Dark selection uses a restrained highlight');
+ }
  // An ordinary in-flight answer is not an editing session.
  const initialMounts=await page.evaluate(()=>[window.playerMounts,window.chatMounts]);
  await page.evaluate(()=>window.fixture.respond(true));await flush();
