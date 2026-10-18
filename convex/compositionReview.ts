@@ -7,7 +7,7 @@ import { clipValidator, timelineValidator } from './schema';
 import { effectPlanValidator, compositionReviewResult } from './lib/effect_plan';
 import { equalTimelineValue } from '../lib/editor/timeline-equality';
 import { compositionReviewBudget, compositionReviewWindow } from '../lib/ai/composition-review';
-import { effectPlanInput, effectDisabledReference, preservePlanOriginals, type EffectPlan } from '../lib/ai/edit-plan';
+import { effectPlanInput, effectDisabledReference, preservePlanOriginals, mergeEffectPlans, effectReviewBindings, type EffectPlan } from '../lib/ai/edit-plan';
 import { enqueueMediaTask, cancelMediaTask } from './mediaTasks';
 import type { MutationCtx, QueryCtx } from './_generated/server';
 import type { Id } from './_generated/dataModel';
@@ -21,13 +21,13 @@ export const savePlan=internalMutation({args:{...runArgs,plans:v.array(effectPla
   if(args.plans.length<1||args.plans.length>8||args.originals.length>8||new Set(args.plans.map(p=>p.id)).size!==args.plans.length)throw new ConvexError('Plan one to eight uniquely identified effects.');
   for(const plan of args.plans)effectPlanInput.parse(plan);
   const previous=await ctx.db.query('assistantPlans').withIndex('by_project',q=>q.eq('projectId',args.projectId)).unique();
-  if(previous?.runId===args.runId&&previous.reviews>0){
-    const reviews=(await ctx.db.query('compositionReviews').withIndex('by_project',q=>q.eq('projectId',args.projectId)).order('desc').take(4)).filter(review=>review.runId===args.runId);
-    if(reviews.some(review=>review.status==='queued'))throw new ConvexError('Finish the current rendered review before changing its expectations.');
-    if(reviews.some(review=>review.status==='completed'))throw new ConvexError('Keep the original expectations after review; adjust the edit once.');
-  }
   const sameRun=previous?.runId===args.runId;
-  const values={projectId:args.projectId,ownerId:args.ownerId,runId:args.runId,plans:args.plans,originals:preservePlanOriginals(args.originals,sameRun?previous.originals:[]),reviews:sameRun?previous.reviews:0,createdAt:Date.now()};
+  const reviews=sameRun&&previous.reviews>0?(await ctx.db.query('compositionReviews').withIndex('by_project',q=>q.eq('projectId',args.projectId)).order('desc').take(4)).filter(review=>review.runId===args.runId&&review.status!=='failed'):[];
+  let plans:EffectPlan[];
+  try{plans=mergeEffectPlans(sameRun?previous.plans:[],args.plans,new Set(reviews.flatMap(review=>review.plans.map(plan=>plan.id))));}catch(error){throw new ConvexError(error instanceof Error?error.message:'Effect expectations could not be saved.');}
+  const targets=new Set(plans.map(plan=>plan.outputClipId??plan.targetClipId));
+  const originals=[...new Map([...(sameRun?previous.originals:[]),...args.originals].map(clip=>[clip.id,clip])).values()].filter(clip=>targets.has(clip.id));
+  const values={projectId:args.projectId,ownerId:args.ownerId,runId:args.runId,plans,originals:preservePlanOriginals(originals,sameRun?previous.originals:[]),reviews:sameRun?previous.reviews:0,createdAt:Date.now()};
   if(previous)await ctx.db.replace(previous._id,values);else await ctx.db.insert('assistantPlans',values);return null;
 }});
 export const request=internalMutation({args:{...runArgs,expectedRevision:v.number(),timeline:timelineValidator,planIds:v.array(v.string()),bindings:v.array(v.object({planId:v.string(),clipId:v.string()}))},returns:v.id('compositionReviews'),handler:async(ctx,args)=>{
@@ -43,8 +43,9 @@ export const request=internalMutation({args:{...runArgs,expectedRevision:v.numbe
   if(!args.planIds.length||args.planIds.length>2||new Set(args.planIds).size!==args.planIds.length)throw new ConvexError('Review one or two planned effects in a short window.');
   const plans=args.planIds.map(id=>saved.plans.find(plan=>plan.id===id));
   if(plans.some(plan=>!plan))throw new ConvexError('Save the effect expectations before reviewing.');
-  const bound=(plans as EffectPlan[]).map(plan=>({...plan,outputClipId:args.bindings.find(binding=>binding.planId===plan.id)?.clipId??plan.outputClipId??plan.targetClipId}));
-  for(const plan of bound)if(!args.timeline.clips.some(clip=>clip.id===plan.outputClipId))throw new ConvexError('The planned effect is missing.');
+  let resolved:{planId:string;clipId:string}[];
+  try{resolved=effectReviewBindings(plans as EffectPlan[],args.timeline,args.bindings);}catch(error){throw new ConvexError(error instanceof Error?error.message:'Review output is unavailable.');}
+  const bound=(plans as EffectPlan[]).map(plan=>({...plan,outputClipId:resolved.find(binding=>binding.planId===plan.id)!.clipId}));
   // A separate expectation is an initial review, not a retry requiring edits.
   const alreadyReviewed=new Set(recent.filter(review=>review.status==='completed'&&equalTimelineValue(review.timeline,args.timeline)).flatMap(review=>review.plans.map(plan=>plan.id)));
   if(completed&&args.planIds.every(id=>alreadyReviewed.has(id)))throw new ConvexError('Make one targeted fix before reviewing again.');

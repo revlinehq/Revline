@@ -5,6 +5,7 @@ import { TEXT_ANIMATION_PRESETS } from '../editor/text-effects';
 import { TEXT_LOOKS } from '../editor/text-looks';
 import { VISUAL_EFFECT_GUIDANCE } from '../editor/effect-guidance';
 import type { Clip, Timeline } from '../editor/types';
+import { equalTimelineValue } from '../editor/timeline-equality';
 
 const effectPlanFields = {
   id: z.string().min(1).max(80),
@@ -31,6 +32,40 @@ export const effectPlanInput = z.union([
 const effectPlanBase = z.object(effectPlanFields);
 export type EffectPlan = z.infer<typeof effectPlanBase> & { kind: 'timed' | 'visual' | 'text' | 'transition'; effect: string };
 export type EffectEvidence = { clipIds: string[]; start: number; end: number };
+
+/** Planning another effect must not erase earlier expectations or output links.
+ * Freeze only expectations that actually entered a rendered review. */
+export function mergeEffectPlans(previous:EffectPlan[],incoming:EffectPlan[],lockedIds:ReadonlySet<string>=new Set()):EffectPlan[]{
+  if(!incoming.length||new Set(incoming.map(plan=>plan.id)).size!==incoming.length)throw new Error('Plan one to eight effects with unique IDs.');
+  const merged=new Map(previous.map(plan=>[plan.id,plan]));
+  for(const plan of incoming){
+    if(lockedIds.has(plan.id)&&!equalTimelineValue(merged.get(plan.id),plan))throw new Error('Keep the original expectations after review; adjust the edit once.');
+    merged.set(plan.id,plan);
+  }
+  if(merged.size>8)throw new Error('Keep at most eight effect expectations per run; update an existing unreviewed plan by its ID.');
+  return [...merged.values()];
+}
+
+/** Output selection is review metadata, not a reason to rewrite expectations.
+ * One timed expectation describes one actual FX clip, never a pulse group. */
+export function effectReviewBindings(plans:EffectPlan[],timeline:Timeline,bindings:readonly {planId:string;clipId:string}[]=[]){
+  if(new Set(bindings.map(binding=>binding.planId)).size!==bindings.length||bindings.some(binding=>!plans.some(plan=>plan.id===binding.planId)))throw new Error('Bind each selected review plan at most once.');
+  return plans.map(plan=>{
+    const timed=plan.kind==='timed'||plan.kind==='transition';
+    let clipId=bindings.find(binding=>binding.planId===plan.id)?.clipId??plan.outputClipId??(timed?undefined:plan.targetClipId);
+    if(!clipId&&timed){
+      const matches=timeline.clips.filter(clip=>checkPlanTiming({...plan,outputClipId:clip.id},timeline).pass);
+      if(matches.length===1)clipId=matches[0].id;
+    }
+    const clip=timeline.clips.find(clip=>clip.id===clipId);
+    if(!clip)throw new Error('Identify the actual planned output clip before review. Pass its clip ID in previewRender bindings; keep the effect plan unchanged.');
+    if(!timed&&(plan.outputClipId??plan.targetClipId)&&clip.id!==(plan.outputClipId??plan.targetClipId))throw new Error('Review the planned target clip; a different object cannot verify this expectation.');
+    if(timed&&!checkPlanTiming({...plan,outputClipId:clip.id},timeline).pass)throw new Error('A timed review plan must match one FX clip and its full range. Use a separate plan for each pulse.');
+    if(plan.kind==='text'&&clip.kind!=='caption'&&clip.kind!=='graphic')throw new Error('Bind a text review to its actual text clip.');
+    if(plan.kind==='visual'&&plan.effect!=='motion'&&clip.kind!=='video'&&clip.kind!=='image')throw new Error('Bind a footage effect review to its actual video or image clip.');
+    return {planId:plan.id,clipId:clip.id};
+  });
+}
 
 /** Correcting a plan's review window must not turn the edited draft into its
  * own reference. Keep the first snapshot for each still-planned target. */
