@@ -24,6 +24,7 @@ import type { SourceEditSuggestion } from '@/lib/editor/types';
 import { processingDetail } from './processing-status';
 import { AssistantActivity } from './assistant-activity';
 import { AssistantTurnCostsProvider, AssistantTurnCostBadge } from './assistant-turn-costs';
+import { AssistantHistoryExpansion } from './assistant-history-pagination';
 export type { ChatTool, ChatMessage } from './assistant-results';
 
 type Conversation = {projectId:Id<'projects'>;threadId:string};
@@ -33,6 +34,8 @@ const ConnectedConversation = memo(function ConnectedConversation({conversation,
   const {results,status,loadMore}=useUIMessages(api.assistant.messages,conversation,{initialNumItems:40,stream:true});
   const messages=useMemo(()=>results.map(chatMessageFromUI),[results]);
   const loadMoreRef=useRef(loadMore);loadMoreRef.current=loadMore;
+  const historyExpansion=useRef(new AssistantHistoryExpansion());
+  useEffect(()=>{if(historyExpansion.current.next(conversation.threadId,status,messages))loadMoreRef.current(20);},[conversation.threadId,status,messages]);
   const onLoadMore=useCallback(()=>loadMoreRef.current(20),[]);
   const state=useMemo(()=>({threadId:conversation.threadId,messages,canLoadMore:status==='CanLoadMore',onLoadMore}),[conversation.threadId,messages,status,onLoadMore]);
   useLayoutEffect(()=>onUpdate(state),[state,onUpdate]);
