@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { ChevronDown, Plus, Trash2 } from 'lucide-react';
 import { cameraMotionPatch } from '@/lib/editor/camera-motion';
 import type { CameraMotionSettings } from '@/lib/editor/camera-motion-settings';
-import { SMOOTH_ZOOM_EASINGS } from '@/lib/editor/smooth-zoom-settings';
+import { CAMERA_ZOOM_RANGE, SMOOTH_ZOOM_EASINGS } from '@/lib/editor/smooth-zoom-settings';
 import type { AspectRatio, Clip, MediaAsset } from '@/lib/editor/types';
 import { NumberControl } from './visual-controls';
 import { InspectorSelect } from './inspector-select';
@@ -56,7 +56,7 @@ function DevelopmentCameraMotion({clip,asset,aspectRatio,fps,disabled=false,onCh
         <legend><button type="button" disabled={!onSeek||disabled} onClick={()=>onSeek?.(clip.start+point.time)}>Point {index+1}</button></legend>
         <div className="smooth-zoom-timing">
           <NumberControl label={`Point ${index+1} time`} min={index?settings.keyframes[index-1].time+1/fps:0} max={index<settings.keyframes.length-1?settings.keyframes[index+1].time-1/fps:clip.duration} step={1/fps} value={point.time} unit="s" disabled={disabled} onCommit={time=>change(index,{time})}/>
-          <NumberControl label={`Point ${index+1} zoom`} min={1} max={3} step={.01} value={point.scale} unit="×" disabled={disabled} onCommit={scale=>change(index,{scale})}/>
+          <NumberControl label={`Point ${index+1} zoom`} min={CAMERA_ZOOM_RANGE[0]} max={CAMERA_ZOOM_RANGE[1]} step={.01} value={point.scale} unit="×" disabled={disabled} onCommit={scale=>change(index,{scale})}/>
           <NumberControl label={`Point ${index+1} source X`} min={0} max={100} step={.1} value={point.centerX*100} unit="%" disabled={disabled} onCommit={value=>change(index,{centerX:value/100})}/>
           <NumberControl label={`Point ${index+1} source Y`} min={0} max={100} step={.1} value={point.centerY*100} unit="%" disabled={disabled} onCommit={value=>change(index,{centerY:value/100})}/>
         </div>

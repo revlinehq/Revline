@@ -9,7 +9,7 @@ import { validateTextStyle } from './text-style';
 import { audioFadeTimingPatch,validateAudioSettings } from './audio-settings';
 import { textAnimationTimingPatch,validateTextAnimationTiming } from './text-animation-timing';
 import {validateVisualFade,visualFadeTimingPatch} from './visual-fades';
-import { validateSmoothZoom } from './smooth-zoom-settings';
+import { CAMERA_ZOOM_RANGE, validateSmoothZoom } from './smooth-zoom-settings';
 import { validateCameraMotion } from './camera-motion-settings';
 import { NEUTRAL_MOTION, motionAt, type MotionKeyframe } from './motion-path';
 export { NEUTRAL_MOTION, motionAt, type MotionKeyframe } from './motion-path';
@@ -91,7 +91,7 @@ export const EFFECT_CATALOG: Record<EffectPreset, { label: string; description: 
   'quick-zoom-out': { label: 'Zoom', description: "A smooth visual pull from 1.2\u00d7 to normal framing over the chosen interval.", duration: .5, keyframes: d => [key(0, { scale: 1.2 }), key(d)] },
 };
 export function effectClipLabel(clip: Pick<Clip, 'effectPreset'>) { return clip.effectPreset && clip.effectPreset !== 'none' ? EFFECT_CATALOG[clip.effectPreset].label : 'Custom effect'; }
-const bounds = { x: [-1, 1], y: [-1, 1], scale: [0.1, 5], rotation: [-360, 360], opacity: [0, 1], brightness: [0, 4] } as const;
+const bounds = { x: [-1, 1], y: [-1, 1], scale: [0.1, CAMERA_ZOOM_RANGE[1]], rotation: [-360, 360], opacity: [0, 1], brightness: [0, 4] } as const;
 
 export function validateClipEffects(clip: Clip) {
   validatePlaybackRate(clip);
@@ -153,12 +153,12 @@ export function validateClipEffects(clip: Clip) {
   for (const [index, key] of clip.motion.entries()) {
     if (!Number.isFinite(key.time) || key.time < 0 || (index > 0 && key.time <= clip.motion[index - 1].time)) throw new Error('Motion keyframes need finite, increasing nonnegative times.');
     for (const property of Object.keys(bounds) as (keyof typeof bounds)[]) {
-      // Centering an edge target at 3x can legitimately translate by more than
+      // Centering a zoomed edge target can legitimately translate by more than
       // one canvas width. Keep ordinary text/FX limits; allow the camera keys
       // room for the inverse of an existing small or rotated static transform.
       // Image object paths also invert their parent transform; their public
       // canvas offsets stay bounded to one width/height before compilation.
-      const [min, max] = property === 'x' || property === 'y' ? (clip.cameraMotion || clip.smoothZoom?.framing === 'center') ? [-16, 16] : clip.kind === 'image' ? [-32, 32] : bounds[property] : bounds[property];
+      const [min, max] = property === 'x' || property === 'y' ? (clip.cameraMotion || clip.smoothZoom) ? [-16, 16] : clip.kind === 'image' ? [-32, 32] : bounds[property] : bounds[property];
       if (!Number.isFinite(key[property]) || key[property] < min || key[property] > max) throw new Error(`Motion ${property} is out of range.`);
     }
   }

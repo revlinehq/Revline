@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type PointerEvent } from 'react';
 import { ChevronDown, Plus, Trash2 } from 'lucide-react';
 import { motionAt, type MotionKeyframe } from '@/lib/editor/clip-effects';
+import { CAMERA_ZOOM_RANGE } from '@/lib/editor/smooth-zoom-settings';
 import type { Clip } from '@/lib/editor/types';
 import { NumberControl } from './visual-controls';
 import { InspectorSelect } from './inspector-select';
@@ -10,7 +11,7 @@ import './motion-keyframe-editor.css';
 
 type Props = { clip: Clip; fps: number; time: number; disabled: boolean; onChange: (patch: Partial<Clip>) => void; onPreview?: (patch: Partial<Clip> | null) => void; onSeek?: (time: number) => void };
 const properties = {
-  scale: { label: 'Scale', unit: '%', factor: 100, min: .1, max: 5 },
+  scale: { label: 'Scale', unit: '%', factor: 100, min: .1, max: CAMERA_ZOOM_RANGE[1] },
   x: { label: 'Position X', unit: '%', factor: 100, min: -1, max: 1 },
   y: { label: 'Position Y', unit: '%', factor: 100, min: -1, max: 1 },
   rotation: { label: 'Rotation', unit: '°', factor: 1, min: -360, max: 360 },

@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { ChevronDown } from 'lucide-react';
 import { smoothZoomPatch } from '@/lib/editor/smooth-zoom';
-import { SMOOTH_ZOOM_EASINGS, type SmoothZoomSettings } from '@/lib/editor/smooth-zoom-settings';
+import { CAMERA_ZOOM_RANGE, SMOOTH_ZOOM_EASINGS, type SmoothZoomSettings } from '@/lib/editor/smooth-zoom-settings';
 import type { AspectRatio, Clip, MediaAsset } from '@/lib/editor/types';
 import { NumberControl } from './visual-controls';
 import { EffectSlider } from './effect-slider';
@@ -54,7 +54,7 @@ function DevelopmentZoomControls({ clip, asset, aspectRatio, fps, disabled = fal
       <div className="smooth-zoom-keyframes" role="img" aria-label={`Zoom in from ${settings.start.toFixed(2)} to ${(settings.start + settings.inDuration).toFixed(2)} seconds${settings.outDuration > 0 ? `, return to normal by ${finish.toFixed(2)} seconds` : ', then hold'} across ${clip.duration.toFixed(2)} seconds`}><svg viewBox="0 0 260 44" preserveAspectRatio="none" aria-hidden="true"><path d={`M0 36 L${positions[0] / ratio * 260} 36 L${positions[1] / ratio * 260} 8 ${settings.outDuration > 0 ? `L${positions[2] / ratio * 260} 8 L${positions[3] / ratio * 260} 36 L260 36` : 'L260 8'}`} fill="none" stroke="currentColor" strokeWidth="1.5"/>{positions.map((position, index) => <rect key={index} x={position / ratio * 260 - 2.5} y={(index === 1 || index === 2 ? 8 : 36) - 2.5} width="5" height="5" transform={`rotate(45 ${position / ratio * 260} ${index === 1 || index === 2 ? 8 : 36})`} fill="currentColor"/>)}</svg></div>
       <div className="smooth-zoom-timing">{timing('start', 'Zoom start')}{timing('inDuration', 'Zoom in')}{timing('holdDuration', 'Hold')}{timing('outDuration', 'Zoom out')}</div>
       <p className="smooth-zoom-note">Set Zoom out to 0 to stay zoomed in. Times are relative to this clip.</p>
-      <EffectSlider label="Zoom amount" value={settings.scale} bounds={[1, 3]} step={.01} format={value => `${Math.round(value * 100)}%`} disabled={disabled} onPreview={value => preview(value === null ? null : { scale: value })} onCommit={scale => setSettings(previous => ({ ...previous, scale }))}/>
+      <EffectSlider label="Zoom amount" value={settings.scale} bounds={CAMERA_ZOOM_RANGE} step={.01} format={value => `${Math.round(value * 100)}%`} disabled={disabled} onPreview={value => preview(value === null ? null : { scale: value })} onCommit={scale => setSettings(previous => ({ ...previous, scale }))}/>
       {(['centerX', 'centerY'] as const).map((key, index) => <EffectSlider key={key} label={`Source focus ${index === 0 ? 'X' : 'Y'}`} value={settings[key]} bounds={[0, 1]} step={.01} format={value => `${Math.round(value * 100)}%`} disabled={disabled} onPreview={value => preview(value === null ? null : { [key]: value })} onCommit={value => setSettings(previous => ({ ...previous, [key]: value }))}/>)}
       <InspectorSelect label="Zoom easing" value={settings.easing} disabled={disabled} options={SMOOTH_ZOOM_EASINGS.map(value => ({ value, label: easingLabels[value] }))} onChange={easing => setSettings(previous => ({ ...previous, easing }))}/>
       <InspectorSelect label="Zoom framing" value={settings.framing ?? 'anchor'} disabled={disabled} options={[{value:'anchor',label:'Keep target in place'},{value:'center',label:'Center target'}]} onChange={framing => setSettings(previous => ({ ...previous, framing }))}/>
