@@ -37,7 +37,7 @@ html[data-workspace-theme="dark"] {
 .workspace-menu-divider { height:1px; margin:7px 0; background:var(--ws-border); }
 .workspace-menu-label { height:32px; display:flex; align-items:center; padding:0 10px; color:var(--ws-faint); font-size:11px; font-weight:500; }
 .workspace-menu-chat { min-height:48px; display:flex; align-items:center; gap:8px; padding:6px 10px; border-radius:8px; cursor:pointer; }
-.workspace-menu-chat>span { display:flex; flex:1; min-width:0; flex-direction:column; gap:3px; }
+.workspace-menu-chat>.workspace-menu-chat-details { display:flex; flex:1; min-width:0; flex-direction:column; gap:3px; }
 .workspace-menu-chat strong { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:13px; font-weight:500; }
 .workspace-menu-chat small { font-size:11px; color:var(--ws-faint); }
 .workspace-menu-chat svg { color:var(--ws-muted); }
@@ -131,3 +131,5 @@ html[data-workspace-theme="dark"] {
   .workspace-membership-line { flex-wrap:wrap; } .workspace-account-actions { flex-wrap:wrap; gap:12px; }
 }
 @media (hover:none) { .workspace-chat-more { opacity:1; } }
+
+.workspace-menu-chat>.workspace-chat-cover { width:40px; height:32px; flex:0 0 40px; border-radius:4px; }

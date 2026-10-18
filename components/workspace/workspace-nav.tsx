@@ -12,6 +12,7 @@ import { Check, ChevronDown, Cloud, Copy, CreditCard, Database, Download, Film, 
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
 import { Brand } from './brand';
+import { ProjectCover } from './project-cover';
 import { startNewWorkspace } from './start-new-workspace';
 import { PrimaryButton } from './primary-button';
 import { useWorkspaceTheme } from './theme-provider';
@@ -120,7 +121,7 @@ export function WorkspaceNav({ title = NEW_WORKSPACE_LABEL, editorHref, active =
         {copyError && <p className="workspace-inline-error" role="alert">{copyError}</p>}
         <DropdownMenuSeparator className="workspace-menu-divider" />
         <DropdownMenuLabel className="workspace-menu-label">Recent chats</DropdownMenuLabel>
-        {loading ? <div className="workspace-menu-empty"><LoaderCircle size={14} className="animate-spin" />Loading chats…</div> : chats.length ? chats.slice(0, 4).map(chat => <DropdownMenuItem key={chat.id} asChild className="workspace-menu-chat"><Link href={`/editor/${chat.id}`}><span><strong>{chat.title}</strong><small>{chatRecency(chat.updatedAt)}</small></span>{pathname === `/editor/${chat.id}` && <Check size={14} />}</Link></DropdownMenuItem>) : <div className="workspace-menu-empty">Your chats will appear here.</div>}
+        {loading ? <div className="workspace-menu-empty"><LoaderCircle size={14} className="animate-spin" />Loading chats…</div> : chats.length ? chats.slice(0, 4).map(chat => <DropdownMenuItem key={chat.id} asChild className="workspace-menu-chat"><Link href={`/editor/${chat.id}`}><ProjectCover url={chat.coverUrl} kind={chat.coverKind}/><span className="workspace-menu-chat-details"><strong>{chat.title}</strong><small>{chatRecency(chat.updatedAt)}</small></span>{pathname === `/editor/${chat.id}` && <Check size={14} />}</Link></DropdownMenuItem>) : <div className="workspace-menu-empty">Your chats will appear here.</div>}
         <DropdownMenuSeparator className="workspace-menu-divider" />
         <DropdownMenuItem asChild className="workspace-menu-item"><Link href="/chats" aria-current={active === 'chats' ? 'page' : undefined}><History size={15} />See all chats</Link></DropdownMenuItem>
       </DropdownMenuContent>

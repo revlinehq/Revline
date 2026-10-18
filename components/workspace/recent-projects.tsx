@@ -1,25 +1,15 @@
 'use client';
 
-import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useConvexAuth, useQuery } from 'convex/react';
-import { ChevronRight, Film, FolderOpen } from 'lucide-react';
+import { ChevronRight, FolderOpen } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { api } from '@/convex/_generated/api';
 import { chatRecency } from './workspace-nav';
+import { ProjectCover } from './project-cover';
 import './workspace-pages.css';
 import './recent-projects.css';
 
-function ProjectCover({ url, kind }: { url: string | null; kind: 'video' | 'image' | null }) {
-  const [failed, setFailed] = useState(false);
-  useEffect(() => setFailed(false), [url]);
-  return <span className="workspace-chat-cover" aria-hidden="true">
-    {url && !failed ? kind === 'video'
-      ? <video src={`${url}#t=.1`} muted playsInline preload="metadata" onError={() => setFailed(true)} />
-      : <img src={url} alt="" loading="lazy" onError={() => setFailed(true)} />
-      : <Film size={18} strokeWidth={1.5} />}
-  </span>;
-}
 
 export function RecentProjects() {
   const { isAuthenticated, isLoading } = useConvexAuth();

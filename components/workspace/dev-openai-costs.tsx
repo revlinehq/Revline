@@ -3,10 +3,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { OpenAiCostReport } from '@/lib/server/openai-costs';
 import { formatAiCost } from './ai-cost-report';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import './dev-openai-costs.css';
 
 type Report = OpenAiCostReport | { connected: false };
-export function DevOpenAiCosts({ days }: { days: 7 | 30 }) {
+export function DevOpenAiCosts({ days, onDaysChange }: { days: 7 | 30; onDaysChange?: (days: 7 | 30) => void }) {
   const [report, setReport] = useState<Report | null>(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -42,17 +43,17 @@ export function DevOpenAiCosts({ days }: { days: 7 | 30 }) {
   const connected = report?.connected ? report : null;
   const maximum = Math.max(...(connected?.daily.map(day => day.usd) ?? []), 0.0001);
   return <section className="workspace-profile-section ai-cost-section" aria-labelledby="openai-reported-cost-title">
-    <div className="workspace-section-label"><h2 id="openai-reported-cost-title">OpenAI-reported project cost</h2><p>Official project totals, separate from edit estimates.</p></div>
+    <div className="workspace-section-label"><h2 id="openai-reported-cost-title">OpenAI costs</h2><p>Reported spend for your Revline API project.</p></div>
     <div className="workspace-section-content openai-cost-report" aria-busy={busy}>
+      {onDaysChange && <div className="ai-cost-period" role="group" aria-label="Cost reporting period">{([7, 30] as const).map(period => <button key={period} type="button" aria-pressed={period === days} onClick={() => onDaysChange(period)}>{period} days</button>)}</div>}
       {connected ? <>
         <div className="openai-cost-top"><div><strong>{formatAiCost(connected.totalUsd)}</strong><span>Last {connected.days} days · USD</span></div><button type="button" disabled={busy} onClick={() => void load()}>{busy ? 'Refreshing…' : 'Refresh'}</button></div>
-        <div className="openai-cost-chart" role="img" aria-label={`OpenAI reported ${formatAiCost(connected.totalUsd)} over the last ${connected.days} days`}>
-          {connected.daily.map(day => <div key={day.date} title={`${day.date} (UTC): ${formatAiCost(day.usd)}`}><span style={{ height: `${Math.max(0, day.usd) / maximum * 100}%` }} /></div>)}
-        </div>
+        <TooltipProvider delayDuration={100}><div className="openai-cost-chart" role="group" aria-label="Daily OpenAI-reported cost">
+          {connected.daily.map(day => <Tooltip key={day.date}><TooltipTrigger asChild><button type="button" aria-label={`${day.date} (UTC): ${formatAiCost(day.usd)}`}><span style={{ height: `${Math.max(0, day.usd) / maximum * 100}%` }} /></button></TooltipTrigger><TooltipContent side="top" sideOffset={6}>{day.date} · UTC <strong>{formatAiCost(day.usd)}</strong></TooltipContent></Tooltip>)}
+        </div></TooltipProvider>
         <div className="openai-cost-chart-labels" aria-hidden="true"><span>{connected.daily[0]?.date}</span><span>{connected.daily.at(-1)?.date} · UTC</span></div>
         <p className="openai-cost-meta">Project <code>{connected.projectId}</code></p>
         <p className="openai-cost-meta">Refreshed {new Date(connected.refreshedAt).toLocaleString()}. Daily totals use UTC. OpenAI reporting may lag recent requests.</p>
-        <p className="openai-cost-meta">This includes all reported API activity in the selected project. OpenAI’s costs endpoint does not split these totals by reasoning effort. The model and mode breakdown below remains estimated.</p>
       </> : report?.connected === false ? <form className="openai-cost-connect" onSubmit={connect}>
         <p>Connect a Usage read-only Admin API key to show this project’s official costs. The key stays in this computer’s development server.</p>
         <label>API project ID<input name="projectId" required placeholder="proj_…" autoComplete="off" spellCheck={false} disabled={busy} /></label>
