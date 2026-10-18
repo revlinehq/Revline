@@ -8,7 +8,7 @@ import { DEFAULT_TRANSFORM, dimensions, type Clip, type MediaAsset, type Timelin
 import type { VisualEffectsController } from './visual-effects-runtime';
 
 type PreviewWindow = Window & { gsap?: typeof gsap; __timelines?: { revline?: gsap.core.Timeline & { __hfReal?:gsap.core.Timeline } }; __revlineSourceTimelines?:Record<string,gsap.core.Timeline>; __revlineEffects?:VisualEffectsController };
-const geometry = ({ crop, fit, transform, blendMode, start, duration, sourceStart, focus, motion, motionOffset }: Clip) => ({ crop, fit, transform, blendMode, start, duration, sourceStart, focus, motion, motionOffset });
+const geometry = ({ crop, fit, transform, blendMode, start, duration, sourceStart, focus, motion, motionOffset, cameraMotion, smoothZoom }: Clip) => ({ crop, fit, transform, blendMode, start, duration, sourceStart, focus, motion, motionOffset, camera: !!(cameraMotion || smoothZoom) });
 
 /** Change the retained source geometry without replacing its decoded media or clock. */
 export function updateLiveVisualGeometry(document:Document, previous:Timeline, next:Timeline, assets:MediaAsset[]):boolean {
@@ -27,6 +27,9 @@ export function updateLiveVisualGeometry(document:Document, previous:Timeline, n
     const window = source?.closest<HTMLElement>('.source-window');
     const asset = clip.assetId ? sources.get(clip.assetId) : undefined;
     if (!source || !frame || !window || !asset) return false;
+    const cameraWindow = frame.querySelector<HTMLElement>('.camera-window');
+    const cameraStage = frame.querySelector<HTMLElement>('.camera-stage');
+    if (!!(clip.cameraMotion || clip.smoothZoom) !== !!cameraWindow || cameraWindow && !cameraStage) return false;
     changed = true;
     const clock = host?.__timelines?.revline?.__hfReal ?? host?.__timelines?.revline;
     const motionNode=frame.querySelector<HTMLElement>('.motion-frame');
@@ -46,6 +49,10 @@ export function updateLiveVisualGeometry(document:Document, previous:Timeline, n
       const focus = trimmedFocus(clip);
       const rect = calculateVisualRect(asset.width,asset.height,width,height,clip.crop,focus[0],clip.fit);
       Object.assign(window.style,{left:`${rect.window.left}px`,top:`${rect.window.top}px`,width:`${rect.window.width}px`,height:`${rect.window.height}px`});
+      if (cameraWindow && cameraStage) {
+        Object.assign(cameraWindow.style,{left:`${rect.window.left}px`,top:`${rect.window.top}px`,width:`${rect.window.width}px`,height:`${rect.window.height}px`});
+        Object.assign(cameraStage.style,{left:`${-rect.window.left}px`,top:`${-rect.window.top}px`,width:`${width}px`,height:`${height}px`});
+      }
       Object.assign(source.style,{left:`${rect.left-rect.window.left}px`,top:`${rect.top-rect.window.top}px`,width:`${rect.width}px`,height:`${rect.height}px`,objectFit:'fill'});
       if (focus.length) {
         child.set(source,{left:rect.left-rect.window.left,top:rect.top-rect.window.top},clip.start);

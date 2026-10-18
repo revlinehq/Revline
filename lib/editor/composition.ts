@@ -140,6 +140,7 @@ export function generateComposition(timeline: Timeline, assets: MediaAsset[], op
     let sourceStyle = 'left:0;top:0;width:100%;height:100%;object-fit:cover';
     let frameStyle = '';
     let windowStyle = 'left:0;top:0;width:100%;height:100%';
+    let cameraStageStyle = `position:absolute;left:0;top:0;width:${width}px;height:${height}px`;
     if (clip.kind !== 'audio') {
       const focus = trimmedFocus(clip);
       const transform = { ...DEFAULT_TRANSFORM, ...clip.transform };
@@ -150,6 +151,7 @@ export function generateComposition(timeline: Timeline, assets: MediaAsset[], op
       if (hasDimensions) {
         const rect = calculateVisualRect(asset.width!, asset.height!, width, height, clip.crop, focus[0], clip.fit);
         windowStyle = `left:${rect.window.left}px;top:${rect.window.top}px;width:${rect.window.width}px;height:${rect.window.height}px`;
+        cameraStageStyle = `position:absolute;left:${-rect.window.left}px;top:${-rect.window.top}px;width:${width}px;height:${height}px`;
         sourceStyle = `left:${rect.left - rect.window.left}px;top:${rect.top - rect.window.top}px;width:${rect.width}px;height:${rect.height}px;object-fit:fill`;
       } else if (clip.fit === 'contain') {
         sourceStyle = 'left:0;top:0;width:100%;height:100%;object-fit:contain';
@@ -168,7 +170,15 @@ export function generateComposition(timeline: Timeline, assets: MediaAsset[], op
     const sound=audioFadeAttributes(clip);
     const audioAttrs=clip.kind==='video'||clip.kind==='audio'?` data-fade-in="${sound.fadeIn}" data-fade-out="${sound.fadeOut}" data-automation="${escapeHtml(audioVolumeEnvelope(timeline,clip,volume))}"`:'';
     const attrs = `${timing} data-media-start="${clip.sourceStart}" data-volume="${volume}"${clip.kind === 'video' || clip.kind === 'audio' ? ` data-playback-rate="${playbackRateOf(clip)}"` : ''}${audioAttrs}`;
-    const frame = (media: string) => `<div id="${id}-frame" data-visual-clip="${escapeHtml(clip.id)}" class="visual-frame" style="${frameStyle}"><div id="${id}-motion" class="motion-frame"><div class="source-window" style="${windowStyle}">${media}</div></div></div>`;
+    const frame = (media: string) => {
+      const content = `<div id="${id}-motion" class="motion-frame"><div class="source-window" style="${windowStyle}">${media}</div></div>`;
+      // Camera motion reframes pixels through a stationary aperture. Ordinary
+      // object motion can still move the whole clip and its clipping window.
+      const view = clip.cameraMotion || clip.smoothZoom
+        ? `<div class="camera-window" style="position:absolute;overflow:hidden;${windowStyle}"><div class="camera-stage" style="${cameraStageStyle}">${content}</div></div>`
+        : content;
+      return `<div id="${id}-frame" data-visual-clip="${escapeHtml(clip.id)}" class="visual-frame" style="${frameStyle}">${view}</div>`;
+    };
     if (clip.kind === 'image') return frame(`<img ${attrs} crossorigin="anonymous" src="${src}" class="visual" style="${sourceStyle}" alt="" />`);
     if (clip.kind === 'audio') return `<audio ${attrs} crossorigin="anonymous" src="${src}" preload="${options.preview?'metadata':'auto'}"></audio>`;
     return frame(`<video ${attrs} crossorigin="anonymous" src="${src}" class="visual" style="${sourceStyle}" playsinline preload="${options.preview?'metadata':'auto'}"${volume === 0 ? ' muted' : ''}></video>`);
