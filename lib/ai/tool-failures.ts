@@ -25,10 +25,18 @@ function inspectedDraft(output: Record<string, unknown>) {
   const summary = record(output.summary);
   return typeof output.staged === 'boolean' && Number.isInteger(output.revision) && summary.overlapCount === 0 && Array.isArray(summary.missingAssetRefs) && summary.missingAssetRefs.length === 0;
 }
+function planTarget(toolName:string|undefined,input:unknown){
+  const plans=record(input).plans;
+  if(toolName!=='planEffects'||!Array.isArray(plans)||!plans.length)return;
+  const identity=plans.map(record).map(plan=>({id:plan.id,kind:plan.kind,effect:plan.effect}));
+  if(identity.some(plan=>typeof plan.id!=='string'||typeof plan.kind!=='string'||typeof plan.effect!=='string'))return;
+  return stable(identity.sort((a,b)=>String(a.id).localeCompare(String(b.id))));
+}
+const planPreflightRejection=(error:unknown)=>/^(?:Error:\s*)?(?:Read the current (?:cut|marker) before planning its effect|Plan a supported effect or text control|Plan needs valid fields and a supported effect or text control)\.$/.test(error instanceof Error?error.message:String(error));
 
 /** Derive state from completed steps: the SDK can reevaluate a stop condition. */
 function unresolvedFailures(steps: ToolSteps, recoverPlacements = false) {
-  const calls = new Map<string, { key: string; input: unknown }>(), pending = new Map<string, { count: number; placement?: string; corrected?: boolean }>();
+  const calls = new Map<string, { key: string; input: unknown }>(), pending = new Map<string, { count: number; ids: string[]; placement?: string; plan?:boolean; corrected?: boolean }>();
   for (const step of steps) for (const value of step.content) {
     if (!value || typeof value !== 'object') continue;
     const part = value as { type?: string; toolCallId?: string; toolName?: string; input?: unknown; output?: unknown; error?: unknown; preliminary?: boolean };
@@ -39,10 +47,15 @@ function unresolvedFailures(steps: ToolSteps, recoverPlacements = false) {
     const output = outputValue(part.output);
     if (part.type === 'tool-call') calls.set(id, { key, input });
     else if (part.type === 'tool-error' || (part.type === 'tool-result' && (output.success === false || record(part.output).type === 'error-text'))) {
-      pending.set(key, { count: (pending.get(key)?.count ?? 0) + 1, ...(recoverPlacements && isOverlapPlacementRejection(part.error) ? { placement: placementTarget(part.toolName, input) } : {}) });
+      const failure=part.error??record(part.output).value;
+      pending.set(key, { count: (pending.get(key)?.count ?? 0) + 1, ids: [...pending.get(key)?.ids ?? [], id], ...(recoverPlacements && isOverlapPlacementRejection(part.error) ? { placement: placementTarget(part.toolName, input) } : {}),...(recoverPlacements&&part.toolName==='planEffects'&&planPreflightRejection(failure)?{plan:true}:{}) });
     } else if (part.type === 'tool-result') {
       pending.delete(key);
       if (recoverPlacements) {
+        const plan=planTarget(part.toolName,input);
+        // savePlan replaces the run's entire previous plan collection. Only its
+        // validated receipt supersedes earlier no-write schema/anchor attempts.
+        if(plan&&output.planned===true&&planTarget(part.toolName,{plans:output.plans})===plan)for(const [failedKey,failure]of pending)if(failure.plan)pending.delete(failedKey);
         const target = placementTarget(part.toolName, input);
         if (target && changedTargets(input, output)) for (const failure of pending.values()) if (failure.placement === target) failure.corrected = true;
         if (part.toolName === 'inspectTimeline' && inspectedDraft(output)) for (const [failedKey, failure] of pending) if (failure.corrected) pending.delete(failedKey);
@@ -56,6 +69,11 @@ function unresolvedFailures(steps: ToolSteps, recoverPlacements = false) {
  * resolves after a successful same-target correction and clean draft inspection. */
 export function hasUnresolvedToolFailures(steps: ToolSteps) {
   return unresolvedFailures(steps, true).size > 0;
+}
+
+/** Presentation uses the same exact-retry accounting as the agent guard. */
+export function unresolvedToolFailureIds(steps: ToolSteps) {
+  return new Set([...unresolvedFailures(steps, true).values()].flatMap(failure => failure.ids));
 }
 
 export function hasRepeatedToolFailures(steps: ToolSteps) {

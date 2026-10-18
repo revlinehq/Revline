@@ -38,3 +38,15 @@ test('samples are bounded and truthful numeric/vision receipts cannot invent ext
   expect(pixelDifference(new Uint8Array([0,255]),new Uint8Array([0,0]))).toBe(.5);
   expect(()=>parseCompositionReview(JSON.stringify({observations:[{planId:'other',verdict:'pass',evidence:'Looks good'}],uncertainty:''}),[plan])).toThrow('exactly');
 });
+
+test('tool JSON schema exposes per-kind supported effects before invocation', async () => {
+  const { effectPlanInput, EFFECT_PLAN_EFFECTS } = await import('./edit-plan');
+  const { z } = await import('zod');
+  const schema = z.toJSONSchema(effectPlanInput) as unknown as { anyOf: { properties: { kind: { const: string }; effect: { enum: string[] } } }[] };
+  expect(schema.anyOf).toHaveLength(4);
+  for (const branch of schema.anyOf) expect(branch.properties.effect.enum).toEqual(EFFECT_PLAN_EFFECTS[branch.properties.kind.const as keyof typeof EFFECT_PLAN_EFFECTS]);
+  expect(effectPlanInput.safeParse({ ...plan, kind: 'text', effect: 'Bold numbered instruction' }).success).toBe(false);
+  expect(effectPlanInput.safeParse({ ...plan, kind: 'text', effect: 'text-style' }).success).toBe(false);
+  expect(effectPlanInput.safeParse({ ...plan, kind: 'timed', effect: 'stroke' }).success).toBe(false);
+  expect(effectPlanInput.safeParse({ ...plan, kind: 'text', effect: 'stroke' }).success).toBe(true);
+});

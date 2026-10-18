@@ -131,3 +131,18 @@ test.each([
   const failed=chatToolFromPart({type:`tool-${name}`,toolCallId:'failed-read',state:'output-error',errorText:'Footage inspection could not finish.'})!;
   expect(summarizeTools([failed])).toMatchObject([{title:'Could not finish this step',detail:'Footage inspection could not finish.',state:'error'}]);
 });
+
+test('an exact successful retry removes the obsolete error card but preserves its saved result', () => {
+  const first = chatToolFromPart({ type: 'tool-styleTextClip', toolCallId: 'attempt', input: { clipId: 'title', background: 'transparent' }, state: 'output-error', errorText: 'Temporary failure' })!;
+  const retry = chatToolFromPart({ type: 'tool-styleTextClip', toolCallId: 'retry', input: { background: 'transparent', clipId: 'title' }, state: 'output-available', output: { saved: true, revision: 4, changedClips: [{ id: 'title' }] } })!;
+  expect(summarizeTools([first, retry]).map(card => card.state)).toEqual(['done']);
+});
+
+test('a real canonical plan receipt removes obsolete catalog-preflight cards even when the plan was revised', () => {
+  const failed = chatToolFromPart({ type: 'tool-planEffects', toolCallId: 'attempt', input: { plans: [{ id: 'first', kind: 'text', effect: 'text-style' }] }, state: 'output-available', output: { type: 'error-text', value: 'Error: Plan a supported effect or text control.' } })!;
+  const plans = [{ id: 'revised', kind: 'text', effect: 'boxed' }];
+  const corrected = chatToolFromPart({ type: 'tool-planEffects', toolCallId: 'canonical', input: { plans }, state: 'output-available', output: { planned: true, plans, saved: false } })!;
+  const saved: ChatTool = { id: 'saved-title', name: 'addGraphic', state: 'done', output: { saved: true, revision: 23 } };
+  expect(summarizeTools([failed, corrected, saved]).map(card => card.state)).toEqual(['done']);
+  expect(summarizeTools([{ ...failed, detail: 'Storage failed' }, corrected, saved]).some(card => card.state === 'error')).toBe(true);
+});

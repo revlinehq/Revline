@@ -6,24 +6,37 @@ import { TEXT_LOOKS } from '../editor/text-looks';
 import { VISUAL_EFFECT_GUIDANCE } from '../editor/effect-guidance';
 import type { Clip, Timeline } from '../editor/types';
 
-export const effectPlanInput = z.object({
-  id: z.string().min(1).max(80), kind: z.enum(['timed', 'visual', 'text', 'transition']), effect: z.string().min(1).max(80),
+const effectPlanFields = {
+  id: z.string().min(1).max(80),
   targetClipId: z.string().min(1).max(100).optional(), outputClipId: z.string().min(1).max(100).optional(),
   purpose: z.string().min(5).max(250), strength: z.string().min(1).max(200), expectation: z.string().min(5).max(300),
   start: z.number().min(0), duration: z.number().positive().max(3600), peak: z.number().min(0).optional(),
   anchor: z.object({ kind: z.enum(['requested-time', 'observed-event', 'marker', 'cut']), time: z.number().min(0), clipId: z.string().max(100).optional(), markerId: z.string().max(100).optional(), evidenceId: z.string().max(100).optional(), description: z.string().min(1).max(250) }),
   checks: z.object({ returnBy: z.number().min(0).optional(), minPixelChange: z.number().min(0).max(1).optional(), maxPixelChange: z.number().min(0).max(1).optional(), textSafe: z.boolean().optional(), subjectReadable: z.boolean().optional() }).optional(),
-});
-export type EffectPlan = z.infer<typeof effectPlanInput>;
+};
+export const EFFECT_PLAN_EFFECTS = {
+  timed: [...TIMED_EFFECT_PRESETS], transition: [...TRANSITION_PRESETS],
+  visual: [...Object.keys(VISUAL_EFFECT_GUIDANCE), 'motion'],
+  text: [...new Set([...TEXT_ANIMATION_PRESETS, ...TEXT_LOOKS.map(look => look.id), 'appearance', 'stroke', 'shadow', 'glow'])],
+};
+// A union emits JSON Schema anyOf (supported by Responses tool schemas), while
+// exposing the exact effect enum for each kind before the model calls the tool.
+export const effectPlanInput = z.union([
+  z.object({ ...effectPlanFields, kind: z.literal('timed'), effect: z.enum(EFFECT_PLAN_EFFECTS.timed) }),
+  z.object({ ...effectPlanFields, kind: z.literal('transition'), effect: z.enum(EFFECT_PLAN_EFFECTS.transition) }),
+  z.object({ ...effectPlanFields, kind: z.literal('visual'), effect: z.enum(EFFECT_PLAN_EFFECTS.visual) }),
+  z.object({ ...effectPlanFields, kind: z.literal('text'), effect: z.enum(EFFECT_PLAN_EFFECTS.text) }),
+]);
+// Persistence remains compatible with historical string values, validated at runtime.
+const effectPlanBase = z.object(effectPlanFields);
+export type EffectPlan = z.infer<typeof effectPlanBase> & { kind: 'timed' | 'visual' | 'text' | 'transition'; effect: string };
 export type EffectEvidence = { clipIds: string[]; start: number; end: number };
 
 export function validateEffectPlan(plans: EffectPlan[], timeline: Timeline, evidence: ReadonlyMap<string, EffectEvidence> = new Map()) {
   if (!plans.length || plans.length > 8 || new Set(plans.map(plan => plan.id)).size !== plans.length) throw new Error('Plan one to eight effects with unique IDs.');
   const tolerance = 1 / timeline.fps;
   for (const plan of plans) {
-    effectPlanInput.parse(plan);
-    const presets = plan.kind === 'timed' ? TIMED_EFFECT_PRESETS : plan.kind === 'transition' ? TRANSITION_PRESETS : plan.kind === 'visual' ? [...Object.keys(VISUAL_EFFECT_GUIDANCE), 'motion'] : [...TEXT_ANIMATION_PRESETS, ...TEXT_LOOKS.map(look => look.id), 'appearance', 'stroke', 'shadow', 'glow'];
-    if (!(presets as readonly string[]).includes(plan.effect)) throw new Error('Plan a supported effect or text control.');
+    if(!effectPlanInput.safeParse(plan).success)throw new Error('Plan needs valid fields and a supported effect or text control.');
     if (plan.duration < tolerance || plan.peak !== undefined && (plan.peak < plan.start - tolerance || plan.peak > plan.start + plan.duration + tolerance)) throw new Error('The planned peak must fit its effect window.');
     if (plan.targetClipId && !timeline.clips.some(clip => clip.id === plan.targetClipId)) throw new Error('The planned target is no longer in this timeline.');
     if (plan.anchor.kind === 'marker') {

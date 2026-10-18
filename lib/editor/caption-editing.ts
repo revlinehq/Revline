@@ -3,7 +3,7 @@ import { DEFAULT_TRANSFORM,normalizeTimeline,trackOf,type Clip,type Timeline } f
 import { resolvedTextAppearance,textStyle,type TextAppearance } from './text-style';
 import { remotionTextProps } from './remotion-text';
 
-export type CaptionStyleChanges=Partial<Pick<Clip,'fontSize'|'fontFamily'|'color'|'background'|'x'|'y'|'blendMode'>>&{rotation?:number;textStyle?:Partial<TextAppearance>};
+export type CaptionStyleChanges=Partial<Pick<Clip,'fontSize'|'fontFamily'|'color'|'background'|'x'|'y'|'blendMode'>>&{rotation?:number;textStyle?:Partial<TextAppearance>;textCase?:'sentence'|'upper'|'lower'};
 function caption(timeline:Timeline,id:string){const clip=timeline.clips.find(item=>item.id===id);if(!clip||clip.kind!=='caption')throw new Error('Choose an existing caption clip.');return clip}
 function targets(timeline:Timeline,ids?:string[]){
   if(ids){if(!ids.length)throw new Error('Choose at least one caption.');for(const id of ids)caption(timeline,id);return new Set(ids)}
@@ -27,13 +27,28 @@ export function applyCaptionStyle(timeline:Timeline,sourceClipId:string,targetId
 /** Patch requested appearance fields only; animation changes are a separate explicit action. */
 export function patchCaptionStyles(timeline:Timeline,changes:CaptionStyleChanges,targetIds?:string[]):Timeline{
   const selected=targets(timeline,targetIds);
+  return patchSelectedTextStyles(timeline,changes,selected);
+}
+/** Explicit IDs can include titles. The implicit caption action stays caption-only. */
+export function patchTextStyles(timeline:Timeline,changes:CaptionStyleChanges,targetIds:string[]):Timeline{
+  if(!targetIds.length)throw new Error('Choose at least one text clip.');
+  for(const id of targetIds){const clip=timeline.clips.find(item=>item.id===id);if(!clip||!['caption','graphic'].includes(clip.kind))throw new Error('Choose caption or text graphic clips only.');}
+  return patchSelectedTextStyles(timeline,changes,new Set(targetIds));
+}
+function patchSelectedTextStyles(timeline:Timeline,changes:CaptionStyleChanges,selected:Set<string>):Timeline{
   if(!Object.values(changes).some(value=>value!==undefined))throw new Error('Specify a caption style control.');
-  const {rotation,textStyle,...appearance}=changes;
+  const {rotation,textStyle,textCase,...appearance}=changes;
   return {...timeline,clips:timeline.clips.map(clip=>{
     if(!selected.has(clip.id))return clip;
-    const patch={...appearance,...(rotation!==undefined?{transform:{...DEFAULT_TRANSFORM,...clip.transform,rotation}}:{}),...(textStyle?{textStyle:{...resolvedTextAppearance(clip),...textStyle}}:{})};
+    const caseText=textCase===undefined?{}:{text:convertTextCase(clip.text??'',textCase)};
+    const patch={...appearance,...caseText,...(rotation!==undefined?{transform:{...DEFAULT_TRANSFORM,...clip.transform,rotation}}:{}),...(textStyle?{textStyle:{...resolvedTextAppearance(clip),...textStyle}}:{})};
     const next={...clip,...patch};validateAppearance(next);return next;
   })};
+}
+function convertTextCase(text:string,mode:NonNullable<CaptionStyleChanges['textCase']>){
+  if(mode==='upper')return text.toLocaleUpperCase('en-US');
+  const lower=text.toLocaleLowerCase('en-US');
+  return mode==='lower'?lower:lower.split('\n').map(line=>line.replace(/^(\P{L}*)(\p{L})/u,(_,prefix:string,letter:string)=>prefix+letter.toLocaleUpperCase('en-US'))).join('\n');
 }
 /** Edit a caption's absolute range on project frames, preserving its original animation phase. */
 export function updateCaptionTiming(timeline:Timeline,clipId:string,changes:{start?:number;end?:number}):Timeline{

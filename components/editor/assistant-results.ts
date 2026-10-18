@@ -1,9 +1,10 @@
 import { normalizeTimeline, type Timeline } from '@/lib/editor/types';
 import {assistantErrorDetail} from './assistant-turn-presentation';
 import type { TimelinePublicationReceipt } from '@/lib/ai/publication-receipt';
+import { unresolvedToolFailureIds } from '@/lib/ai/tool-failures';
 export type { TimelinePublicationReceipt } from '@/lib/ai/publication-receipt';
 
-export type ChatTool = { id?: string; name: string; state: 'running' | 'done' | 'error'; detail?: string; staged?: boolean; output?: Record<string, unknown> };
+export type ChatTool = { id?: string; name: string; state: 'running' | 'done' | 'error'; detail?: string; staged?: boolean; input?: Record<string, unknown>; output?: Record<string, unknown> };
 export type ChatMessage = { id:string;sourceId?:string;threadId?:string;role:string;text:string;status?:string;tools?:string[];steps?:ChatTool[];publicationReceipt?:TimelinePublicationReceipt };
 export type ResultCard = { key: string; title: string; detail?: string; state: ChatTool['state']; staged?: boolean };
 export const chatMessageKey = (message: { id: string; key?: string }) => message.key ?? message.id;
@@ -69,7 +70,7 @@ export function chatToolFromPart(value: unknown): ChatTool | null {
   if (!part || typeof part.type !== 'string' || !part.type.startsWith('tool-') || typeof part.state !== 'string') return null;
   const { output, error } = unpack(part.output);
   const failed = part.state === 'output-error' || part.state === 'output-denied' || !!part.errorText || !!error || (part.state === 'output-available' && !output);
-  return { id: typeof part.toolCallId === 'string' ? part.toolCallId : undefined, name: part.type.slice(5), state: failed ? 'error' : part.state === 'output-available' ? 'done' : 'running', staged: output?.staged === true, output, ...(failed ? { detail: assistantErrorDetail(String(part.errorText || error || 'This step could not finish.')).slice(0, 240) } : {}) };
+  return { id: typeof part.toolCallId === 'string' ? part.toolCallId : undefined, name: part.type.slice(5), state: failed ? 'error' : part.state === 'output-available' ? 'done' : 'running', staged: output?.staged === true, ...(record(part.input)?{input:record(part.input)}:{}), output, ...(failed ? { detail: assistantErrorDetail(String(part.errorText || error || 'This step could not finish.')).slice(0, 240) } : {}) };
 }
 
 const labels: Record<string, [string, string]> = {
@@ -101,8 +102,10 @@ export function summarizeTools(steps: ChatTool[], evidence:{publishedRevision?:n
   const published=(output?:Record<string,unknown>)=>output?.staged===true&&typeof output.revision==='number'&&(receipt?receipt.status==='saved'&&output.revision===receipt.stagedRevision&&receipt.revision===receipt.stagedRevision+1:output.revision+1===evidence.publishedRevision);
   const unique = new Map<string, ChatTool>();
   steps.forEach((step, index) => unique.set(step.id ?? `${step.name}-${index}`, step));
+  const unresolved=unresolvedToolFailureIds([{content:[...unique].filter(([,step])=>step.state!=='running').map(([id,step])=>({type:step.state==='error'?'tool-error':'tool-result',toolCallId:id,toolName:step.name,input:step.input,output:step.output,error:step.detail}))}]);
   const groups = new Map<string, ChatTool[]>();
   for (const [id, step] of unique) {
+    if(step.state==='error'&&!unresolved.has(id))continue;
     if (step.state === 'done' && inspections.has(step.name)) continue;
     const staged = (step.staged === true || step.output?.staged === true)&&!published(step.output);
     const savedEvidence = staged ? 'prepared' : step.output?.saved === true || step.output?.unchanged === true || published(step.output) ? 'saved' : 'unconfirmed';

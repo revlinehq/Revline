@@ -3,6 +3,13 @@ import { rebaseNonDestructiveEdit } from './editSessionRebase';
 import { isOverlapPlacementRejection, type TimelineGestureRejection } from '../../lib/editor/timeline-edit-errors';
 
 export const isTimelineConflict = (error: unknown) => /timeline changed elsewhere/i.test(error instanceof Error ? error.message : String(error));
+export class IncompleteEditError extends Error {
+  constructor(readonly reason: 'step_limit' | 'output_limit' | 'incomplete', staged: boolean, savedEdits: number) {
+    const cause = reason === 'step_limit' ? 'This request reached its editing step limit before finishing.' : reason === 'output_limit' ? 'This request reached the model output limit before finishing.' : 'The assistant stopped before finishing this request.';
+    super(`${cause} ${staged ? 'The pending replacement was not saved.' : savedEdits ? 'Your saved changes remain. Continue the unfinished part from the current timeline.' : 'No timeline changes were saved.'}`);
+    this.name = 'IncompleteEditError';
+  }
+}
 
 type EditStorage = {
   apply: (timeline: Timeline, revision: number, publication?:boolean) => Promise<number>;
@@ -102,10 +109,10 @@ export class EditSession {
     });
   }
 
-  async complete(finishReason: string, toolFailed = false) {
+  async complete(finishReason: string, toolFailed = false, steps = 0) {
     await this.pending;
     this.signal?.throwIfAborted();
-    if (finishReason !== 'stop') throw new Error('The assistant stopped before finishing this request. The pending replacement was not saved.');
+    if (finishReason !== 'stop') throw new IncompleteEditError(finishReason === 'tool-calls' && steps >= 15 ? 'step_limit' : finishReason === 'length' ? 'output_limit' : 'incomplete', this.staged, this.savedEdits);
     if (!this.staged) {
       if (this.needsInspection || toolFailed) throw new Error('Some requested changes were not saved. Inspect the current timeline before continuing; previously saved edits remain.');
       return false;

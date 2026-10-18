@@ -79,3 +79,17 @@ test('recovery requires changed-target receipts and a subsequent successful clea
   const wrapped = (step: ReturnType<typeof repaired> | typeof inspected) => ({ content: step.content.map(part => ({ ...part, output: { type: 'json', value: part.output } })) });
   expect(hasUnresolvedToolFailures([rejected(), wrapped(repaired()), wrapped(inspected)])).toBe(false);
 });
+
+test('canonical validated plans supersede only earlier no-write planning rejections', () => {
+  const plans = (clipId: string, id = 'outlined-labels') => ({ plans: [{ id, kind: 'text', effect: 'stroke', anchor: { kind: 'cut', clipId } }] });
+  const rejected = { content: [{ type: 'tool-error', toolName: 'planEffects', toolCallId: 'bad-anchor', input: plans('title'), error: new Error('Read the current cut before planning its effect.') }] };
+  const corrected = { content: [{ type: 'tool-result', toolName: 'planEffects', toolCallId: 'corrected-anchor', input: plans('video'), output: { planned: true, saved: false, ...plans('video') } }] };
+  expect(hasUnresolvedToolFailures([rejected, corrected])).toBe(false);
+  expect(hasUnresolvedToolFailures([rejected, { content: [{ ...corrected.content[0], input: plans('video', 'different-plan') }] }])).toBe(true);
+  const catalogRejection = { content: [{ ...rejected.content[0], error: new Error('Plan a supported effect or text control.') }] };
+  const canonical = { content: [{ ...corrected.content[0], input: plans('video', 'new-plan'), output: { planned: true, ...plans('video', 'new-plan') } }] };
+  expect(hasUnresolvedToolFailures([catalogRejection, canonical])).toBe(false);
+  expect(hasUnresolvedToolFailures([rejected, { content: [{ ...corrected.content[0], output: { saved: false } }] }])).toBe(true);
+  expect(hasUnresolvedToolFailures([{ content: [{ ...rejected.content[0], error: new Error('Storage failed') }] }, corrected])).toBe(true);
+  expect(hasRepeatedToolFailures([rejected, rejected, rejected])).toBe(true);
+});

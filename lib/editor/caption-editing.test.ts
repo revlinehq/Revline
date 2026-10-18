@@ -47,3 +47,15 @@ test.each(['fade','rise','pop'] as const)('%s text keeps the original phase afte
   const split=splitClip(before,'one',2,'right'),right=split.clips.find(item=>item.id==='right')!;
   expect(textLayerFrame(input(right),2.2,1080,1920)).toMatchObject({...textLayerFrame(input(clip),2.2,1080,1920),style:expect.any(Object)});
 });
+
+test('explicit text IDs batch-style graphic titles and requested sentence case without changing motion or timing', async () => {
+  const { patchTextStyles } = await import('./caption-editing');
+  const title = { ...timeline.clips[0], id: 'title', kind: 'graphic' as const, text: '1) UPLOAD YOUR FOOTAGE', fontFamily: 'space-grotesk' as const, animation: 'rise' as const };
+  const source = { ...timeline, clips: [...timeline.clips, title] };
+  const next = patchTextStyles(source, { fontFamily: 'poppins', background: 'transparent', textStyle: { strokeWidth: 3, strokeColor: '#000000' }, textCase: 'sentence' }, ['one', 'title']);
+  const changed = next.clips.find(clip => clip.id === 'title')!;
+  expect(changed).toMatchObject({ text: '1) Upload your footage', fontFamily: 'poppins', background: 'transparent', textStyle: { strokeWidth: 3, strokeColor: '#000000' }, animation: 'rise', start: title.start, duration: title.duration });
+  expect(next.clips.find(clip => clip.id === 'two')).toEqual(source.clips.find(clip => clip.id === 'two'));
+  expect(() => patchCaptionStyles(source, { fontSize: 30 }, ['title'])).toThrow('caption');
+  expect(() => patchTextStyles({ ...source, clips: [...source.clips, { ...title, id: 'video', kind: 'video' }] }, { fontSize: 30 }, ['video'])).toThrow('text graphic');
+});

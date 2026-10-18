@@ -53,3 +53,12 @@ test('known clip-overlap rejection keeps the cause clear without exposing the in
   expect(html).toContain('previously saved edits remain');
   expect(html).not.toContain('TimelineGestureRejection');
 });
+
+test('captured partial styling preserves eight saves and explains unfinished work without generic errors', () => {
+  const replies: ChatMessage[] = [{ id: 'request', role: 'user', text: 'Remove the boxes and use sentence-case outlined text.' }, { id: 'answer', role: 'assistant', text: 'I’ll restyle the labels.', steps: Array.from({ length: 8 }, (_, index) => ({ id: `saved-${index}`, name: index % 2 ? 'setTextStyle' : 'styleTextClip', state: 'done' as const, output: { saved: true, staged: false, revision: 28 + index, changedClips: [{ id: `title-${Math.floor(index / 2)}` }] } })) }, { id: 'summary', role: 'assistant', text: '8 edits were saved before the assistant stopped. Undo restores the state before the latest consecutive group of AI edits. The assistant stopped before finishing this request. The pending replacement was not saved.' }];
+  const html = render(replies, 'An error occurred');
+  expect(html).toContain('8 changes were saved');
+  expect(html).toMatch(/request did not finish|unfinished|step limit/);
+  expect(html).not.toMatch(/An error occurred|pending replacement|No timeline changes were saved/);
+  expect(html.match(/role="alert"/g)).toHaveLength(1);
+});
