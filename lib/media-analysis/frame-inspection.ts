@@ -4,10 +4,13 @@ import { sourceEndOf, timelineTimeAtSource } from '../editor/playback-rate';
 export const MAX_FRAME_WINDOW = 3;
 export const MAX_INSPECTION_FRAMES = 12;
 export type FrameInspectionInput = { start: number; end: number; question: string };
+export type FrameGeometry = { sourceWidth:number; sourceHeight:number; decodedWidth:number; decodedHeight:number };
+export type FrameTarget = {frameIndex:number;time:number;label:string;confidence:'low'|'medium'|'high';box:{left:number;top:number;right:number;bottom:number}};
 export type FrameSample = { frameIndex: number; time: number };
 export type FrameInspection = FrameInspectionInput & {
   sourceFps: number; sampleInterval: number; consecutive: boolean;
   summary: string; uncertainty: string;
+  geometry?:FrameGeometry; targets?:FrameTarget[];
   frames: (FrameSample & { observation: string })[];
   events: (FrameSample & { description: string; confidence: 'low' | 'medium' | 'high' })[];
 };
@@ -19,6 +22,7 @@ export function frameEvidenceOnClip(result: FrameInspection, clip: Clip) {
   return {
     frames: result.frames.filter(retained).map(frame => ({ ...frame, timelineTime: timelineTimeAtSource(clip, frame.time) })),
     events: result.events.filter(retained).map(event => ({ ...event, timelineTime: timelineTimeAtSource(clip, event.time) })),
+    ...(result.targets?{targets:result.targets.filter(retained).map(target=>({...target,timelineTime:timelineTimeAtSource(clip,target.time)}))}:{}),
   };
 }
 
@@ -36,15 +40,16 @@ export function selectInspectionFrames(frames: FrameSample[], input: FrameInspec
 
 const observation = z.object({ frameIndex: z.number().int().nonnegative(), observation: z.string().min(1).max(800) });
 const event = z.object({ frameIndex: z.number().int().nonnegative(), description: z.string().min(1).max(500), confidence: z.enum(['low', 'medium', 'high']) });
-const response = z.object({ summary: z.string().max(2000), uncertainty: z.string().max(2000), frames: z.array(observation).min(1).max(MAX_INSPECTION_FRAMES), events: z.array(event).max(MAX_INSPECTION_FRAMES) });
+const target=z.object({frameIndex:z.number().int().nonnegative(),label:z.string().trim().min(1).max(160),confidence:z.enum(['low','medium','high']),box:z.object({left:z.number().min(0).max(1),top:z.number().min(0).max(1),right:z.number().min(0).max(1),bottom:z.number().min(0).max(1)})});
+const response = z.object({ summary: z.string().max(2000), uncertainty: z.string().max(2000), frames: z.array(observation).min(1).max(MAX_INSPECTION_FRAMES), events: z.array(event).max(MAX_INSPECTION_FRAMES),targets:z.array(target).max(MAX_INSPECTION_FRAMES).optional() });
 export const frameInspectionJsonSchema = z.toJSONSchema(response);
 
-export function parseFrameInspection(text: string, input: FrameInspectionInput, samples: FrameSample[], sourceFps: number): FrameInspection {
+export function parseFrameInspection(text: string, input: FrameInspectionInput, samples: FrameSample[], sourceFps: number,geometry?:FrameGeometry): FrameInspection {
   const parsed = response.parse(JSON.parse(text));
   const byIndex = new Map(samples.map(frame => [frame.frameIndex, frame]));
-  if (new Set(parsed.frames.map(frame => frame.frameIndex)).size !== samples.length || parsed.frames.length !== samples.length || parsed.frames.some(frame => !byIndex.has(frame.frameIndex)) || parsed.events.some(item => !byIndex.has(item.frameIndex))) throw new Error('Frame evidence must refer to the exact frames that were inspected.');
+  if (new Set(parsed.frames.map(frame => frame.frameIndex)).size !== samples.length || parsed.frames.length !== samples.length || parsed.frames.some(frame => !byIndex.has(frame.frameIndex)) || parsed.events.some(item => !byIndex.has(item.frameIndex))||(parsed.targets??[]).some(item=>!byIndex.has(item.frameIndex))) throw new Error('Frame evidence must refer to the exact frames that were inspected.');
   const observed = new Map(parsed.frames.map(frame => [frame.frameIndex, frame.observation]));
-  const result = { ...input, sourceFps, sampleInterval: Math.max(1 / sourceFps, ...samples.slice(1).map((frame, index) => frame.time - samples[index].time)), consecutive: samples.every((frame, index) => index === 0 || frame.frameIndex === samples[index - 1].frameIndex + 1), summary: parsed.summary, uncertainty: parsed.uncertainty, frames: samples.map(({ frameIndex, time }) => ({ frameIndex, time, observation: observed.get(frameIndex)! })), events: parsed.events.map(item => ({ ...item, time: byIndex.get(item.frameIndex)!.time })) };
+  const result:FrameInspection = { ...input, sourceFps,...(geometry?{geometry}:{}),...(parsed.targets?{targets:parsed.targets.map(item=>({...item,time:byIndex.get(item.frameIndex)!.time}))}:{}), sampleInterval: Math.max(1 / sourceFps, ...samples.slice(1).map((frame, index) => frame.time - samples[index].time)), consecutive: samples.every((frame, index) => index === 0 || frame.frameIndex === samples[index - 1].frameIndex + 1), summary: parsed.summary, uncertainty: parsed.uncertainty, frames: samples.map(({ frameIndex, time }) => ({ frameIndex, time, observation: observed.get(frameIndex)! })), events: parsed.events.map(item => ({ ...item, time: byIndex.get(item.frameIndex)!.time })) };
   validateFrameInspectionResult(result, input);
   return result;
 }
@@ -58,5 +63,13 @@ export function validateFrameInspectionResult(result: FrameInspection, input: Fr
   const consecutive = result.frames.every((frame, index) => index === 0 || frame.frameIndex === result.frames[index - 1].frameIndex + 1);
   const interval = Math.max(1 / result.sourceFps, ...result.frames.slice(1).map((frame, index) => frame.time - result.frames[index].time));
   if (result.consecutive !== consecutive || Math.abs(result.sampleInterval - interval) > 1e-6) throw new Error('Frame sampling metadata does not match the evidence.');
+  if(result.geometry&&Object.values(result.geometry).some(value=>!Number.isInteger(value)||value<=0||value>32768))throw new Error('Invalid decoded frame dimensions.');
+  if(result.targets?.length){
+    if(!result.geometry||result.targets.length>MAX_INSPECTION_FRAMES)throw new Error('Localized targets need decoded frame dimensions.');
+    for(const target of result.targets){
+      const box=target.box;
+      if(!result.frames.some(frame=>frame.frameIndex===target.frameIndex&&frame.time===target.time)||!target.label.trim()||target.label.length>160||!['low','medium','high'].includes(target.confidence)||Object.values(box).some(value=>!Number.isFinite(value)||value<0||value>1)||box.right<=box.left||box.bottom<=box.top)throw new Error('Localized targets must use valid boxes on inspected frames.');
+    }
+  }
   for (const event of result.events) if (!result.frames.some(frame => frame.frameIndex === event.frameIndex && frame.time === event.time) || !event.description.trim() || event.description.length > 500 || !['low', 'medium', 'high'].includes(event.confidence)) throw new Error('Events must refer to inspected frames.');
 }

@@ -128,9 +128,9 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
       if (!media.hasVideo || !task.frameRequest) throw new AnalysisError('Frame inspection needs a video window and a question.', 400);
       const key = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
       if (!key) throw new AnalysisError('Gemini frame inspection is not configured on the media worker.', 503);
-      const { sourceFps, images } = await extractInspectionFrames(source, directory, task.frameRequest, media.duration, signal);
+      const { sourceFps, images,geometry } = await extractInspectionFrames(source, directory, task.frameRequest, media.duration, signal);
       onProgress(60);
-      return { frameInspection: await runPhase('Inspecting frames',()=>inspectVideoFrames(images, sourceFps, task.frameRequest!, key, signal)) };
+      return { frameInspection: await runPhase('Inspecting frames',()=>inspectVideoFrames(images, sourceFps, task.frameRequest!, key, signal,geometry)) };
     }
     if (task.kind === 'transcribe') {
       if (!media.hasAudio) throw new AnalysisError('This source has no audio to transcribe.', 400);

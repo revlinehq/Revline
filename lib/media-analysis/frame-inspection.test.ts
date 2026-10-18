@@ -53,3 +53,20 @@ test('frame evidence maps through retained source trims and speed without fillin
   expect(mapped.events).toEqual([{ ...result.events[0], timelineTime: 8 }]);
   expect(mapped.events[0]).not.toHaveProperty('end');
 });
+
+const geometry={sourceWidth:1920,sourceHeight:1080,decodedWidth:960,decodedHeight:540};
+const target={frameIndex:31,label:'Upload modal',confidence:'high' as const,box:{left:.65,top:.2,right:.85,bottom:.4}};
+test('localized boxes use only decoded frame indices, dimensions and code-owned source timestamps',()=>{
+  const result=parseFrameInspection(JSON.stringify({...answer,targets:[target]}),input,samples,30,geometry);
+  expect(result.targets?.[0]).toEqual({...target,time:31/30});expect(result.geometry).toEqual(geometry);
+  expect(()=>parseFrameInspection(JSON.stringify({...answer,targets:[{...target,frameIndex:999}]}),input,samples,30,geometry)).toThrow('exact frames');
+  expect(()=>parseFrameInspection(JSON.stringify({...answer,targets:[target]}),input,samples,30)).toThrow('dimensions');
+  for(const box of [{...target.box,left:-.1},{...target.box,right:1.1},{...target.box,right:.6},{...target.box,bottom:.1}])expect(()=>parseFrameInspection(JSON.stringify({...answer,targets:[{...target,box}]}),input,samples,30,geometry)).toThrow();
+  expect(()=>validateFrameInspectionResult({...result,targets:[{...result.targets![0],time:1.02}]},input)).toThrow('inspected frames');
+});
+test('localization reaches Gemini as labeled uncropped images and explicit normalized target schema',async()=>{
+  const fetcher=vi.fn().mockResolvedValue(new Response(JSON.stringify({output_text:JSON.stringify({...answer,targets:[target]})}),{status:200}));vi.stubGlobal('fetch',fetcher);
+  const result=await inspectVideoFrames(samples.map(frame=>({...frame,data:'ZmFrZS1pbWFnZQ=='})),30,{...input,question:'Locate the Upload modal for a zoom.'},'fixture-key',AbortSignal.timeout(1000),geometry);
+  expect(result.targets?.[0]).toMatchObject({label:'Upload modal',time:31/30,box:target.box});
+  const body=JSON.parse(fetcher.mock.calls[0][1].body);expect(body.input[0].text).toContain('960×540');expect(body.input[0].text).toContain('normalized original-image');expect(body.response_format.schema.properties.targets.items.properties.box.properties.left.maximum).toBe(1);
+});
