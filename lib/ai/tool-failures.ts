@@ -48,10 +48,28 @@ function zoomEvidenceTarget(toolName:string|undefined,input:unknown){
   if(toolName==='configureCameraMotion'&&Array.isArray(args.keyframes)&&args.keyframes.some(key=>record(record(key).focus).kind==='target'))return stable({toolName,...settings,keyframes:args.keyframes.map(key=>{const point=record(key);return record(point.focus).kind==='target'?{...point,focus:{kind:'target'}}:point;})});
 }
 const zoomEvidenceRejection=(error:unknown)=>/^(?:Error:\s*)?(?:Inspect the target during this zoom window, not a different moment\.|Inspect the moving target at this keyframe source time\. A position from another moment cannot verify cursor or object following\.)$/.test(error instanceof Error?error.message:String(error));
+const reviewWindowRejection=(error:unknown)=>/^(?:(?:Error|ConvexError):\s*)*(?:Uncaught ConvexError:\s*)?(?:Choose expectations spanning at most three seconds for rendered review\.|A planned start, anchor, peak or return is outside the rendered review window\. Choose expectations within the same three-second window\.)$/.test((error instanceof Error?error.message:String(error)).split('\n')[0]);
+function reviewScope(input:unknown,plans:ReadonlyMap<string,string>){
+  const ids=record(input).planIds;
+  if(!Array.isArray(ids)||!ids.length||ids.length>2||new Set(ids).size!==ids.length||ids.some(id=>typeof id!=='string'||!plans.has(id)))return;
+  return new Map(ids.map(id=>[id as string,plans.get(id as string)!]));
+}
+function passingReview(input:unknown,output:Record<string,unknown>,revision:number|undefined){
+  const ids=record(input).planIds;
+  if(output.reviewed!==true||output.stale!==false||!Number.isInteger(output.revision)||output.revision!==output.currentRevision||revision!==undefined&&output.revision!==revision||!Array.isArray(ids)||!ids.length||new Set(ids).size!==ids.length)return false;
+  if(!Array.isArray(output.sampleTimes)||!output.sampleTimes.length||output.sampleTimes.some(time=>typeof time!=='number'||!Number.isFinite(time)))return false;
+  if(!Array.isArray(output.observations)||!Array.isArray(output.checks)||output.observations.length!==ids.length||output.checks.length!==ids.length)return false;
+  return ids.every(id=>{
+    const observations=(output.observations as unknown[]).map(record).filter(item=>item.planId===id),checks=(output.checks as unknown[]).map(record).filter(item=>item.planId===id);
+    return observations.length===1&&observations[0].verdict==='pass'&&checks.length===1&&checks[0].timingPass===true&&['pixelPass','textSafe','returnPass'].every(key=>checks[0][key]!==false);
+  });
+}
 
 /** Derive state from completed steps: the SDK can reevaluate a stop condition. */
 function unresolvedFailures(steps: ToolSteps, recoverPlacements = false) {
-  const calls = new Map<string, { key: string; input: unknown }>(), pending = new Map<string, { count: number; ids: string[]; placement?: string; plan?:boolean; zoom?:string; zoomEvidence?:string; corrected?: boolean }>();
+  const calls = new Map<string, { key: string; input: unknown }>(), pending = new Map<string, { count: number; ids: string[]; placement?: string; plan?:boolean; zoom?:string; zoomEvidence?:string; corrected?: boolean; review?:Map<string,string>; reviewed?:Set<string>; reviewEpoch?:number; reviewRevision?:number }>();
+  let revision:number|undefined,editEpoch=0;
+  const plans=new Map<string,string>();
   for (const step of steps) for (const value of step.content) {
     if (!value || typeof value !== 'object') continue;
     const part = value as { type?: string; toolCallId?: string; toolName?: string; input?: unknown; output?: unknown; error?: unknown; preliminary?: boolean };
@@ -63,14 +81,29 @@ function unresolvedFailures(steps: ToolSteps, recoverPlacements = false) {
     if (part.type === 'tool-call') calls.set(id, { key, input });
     else if (part.type === 'tool-error' || (part.type === 'tool-result' && (output.success === false || record(part.output).type === 'error-text'))) {
       const failure=part.error??record(part.output).value;
-      pending.set(key, { count: (pending.get(key)?.count ?? 0) + 1, ids: [...pending.get(key)?.ids ?? [], id], ...(recoverPlacements && isOverlapPlacementRejection(part.error) ? { placement: placementTarget(part.toolName, input) } : {}),...(recoverPlacements&&part.toolName==='planEffects'&&planPreflightRejection(failure)?{plan:true}:{}),...(recoverPlacements&&zoomMotionRejection(failure)?{zoom:zoomTarget(part.toolName,input)}:{}),...(recoverPlacements&&zoomEvidenceRejection(failure)?{zoomEvidence:zoomEvidenceTarget(part.toolName,input)}:{}) });
+      pending.set(key, { count: (pending.get(key)?.count ?? 0) + 1, ids: [...pending.get(key)?.ids ?? [], id], ...(recoverPlacements && isOverlapPlacementRejection(part.error) ? { placement: placementTarget(part.toolName, input) } : {}),...(recoverPlacements&&part.toolName==='planEffects'&&planPreflightRejection(failure)?{plan:true}:{}),...(recoverPlacements&&zoomMotionRejection(failure)?{zoom:zoomTarget(part.toolName,input)}:{}),...(recoverPlacements&&zoomEvidenceRejection(failure)?{zoomEvidence:zoomEvidenceTarget(part.toolName,input)}:{}),...(recoverPlacements&&part.toolName==='previewRender'&&reviewWindowRejection(failure)?{review:reviewScope(input,plans)}:{}) });
     } else if (part.type === 'tool-result') {
-      pending.delete(key);
+      if(!pending.get(key)?.review)pending.delete(key);
       if (recoverPlacements) {
+        if(part.toolName!=='previewRender'&&Number.isInteger(output.revision))revision=output.revision as number;
+        if((output.saved===true||output.staged===true)&&output.unchanged!==true&&(output.applied===true||['changedClips','removedClipIds','removedMarkerIds','changedMarkerIds'].some(field=>Array.isArray(output[field])&&(output[field] as unknown[]).length)))editEpoch++;
         const plan=planTarget(part.toolName,input);
         // savePlan replaces the run's entire previous plan collection. Only its
         // validated receipt supersedes earlier no-write schema/anchor attempts.
         if(plan&&output.planned===true&&planTarget(part.toolName,{plans:output.plans})===plan)for(const [failedKey,failure]of pending)if(failure.plan)pending.delete(failedKey);
+        if(plan&&output.planned===true&&Array.isArray(output.plans)){plans.clear();for(const item of output.plans){const value=record(item);if(typeof value.id==='string')plans.set(value.id,stable(value));}}
+        // A rejected multi-plan window may be split into smaller reviews. Clear
+        // it only when every original expectation passes on the same current
+        // draft; another plan, stale receipt or later edit cannot stand in.
+        if(part.toolName==='previewRender'&&passingReview(input,output,revision)){
+          const scope=reviewScope(input,plans);
+          if(scope)for(const [failedKey,failure]of pending){
+            if(!failure.review)continue;
+            if(failure.reviewEpoch!==editEpoch||failure.reviewRevision!==output.revision){failure.reviewed=new Set();failure.reviewEpoch=editEpoch;failure.reviewRevision=output.revision as number;}
+            for(const [id,identity]of scope)if(failure.review.get(id)===identity)failure.reviewed!.add(id);
+            if([...failure.review.keys()].every(id=>failure.reviewed!.has(id)))pending.delete(failedKey);
+          }
+        }
         const zoom=zoomTarget(part.toolName,input),args=record(input);
         if(zoom&&args.replaceMotion===true&&(output.saved===true||output.staged===true)&&Array.isArray(output.changedClips)&&output.changedClips.some(clip=>record(clip).id===args.clipId))for(const [failedKey,failure]of pending)if(failure.zoom===zoom)pending.delete(failedKey);
         const evidence=zoomEvidenceTarget(part.toolName,input);
