@@ -56,7 +56,7 @@ function DevelopmentKeyframes({ clip, fps, time, disabled, onChange, onPreview, 
   function commit(next: MotionKeyframe[]) {
     if (latest.current.disabled) return;
     onPreview?.(null);
-    onChange({ motion: next.length ? next : undefined, smoothZoom: undefined });
+    onChange({ motion: next.length ? next : undefined, smoothZoom: undefined, cameraMotion:undefined });
   }
   function setKey(index: number, changes: Partial<MotionKeyframe>) {
     const next = keys.map((key, current) => current === index ? { ...key, ...changes } : key);
@@ -84,7 +84,7 @@ function DevelopmentKeyframes({ clip, fps, time, disabled, onChange, onPreview, 
     const snapped = Math.round((event.clientX - rect.left) / rect.width * duration * fps) / fps + offset;
     const at = Math.max(limits.min, Math.min(limits.max, snapped));
     gesture.next = gesture.keys.map((key, index) => index === gesture.index ? { ...key, time: at } : key);
-    setDraft(gesture.next); onPreview?.({ motion: gesture.next, smoothZoom: undefined });
+    setDraft(gesture.next); onPreview?.({ motion: gesture.next, smoothZoom: undefined, cameraMotion:undefined });
     onSeek?.(clip.start + at - offset);
   }
   function finish(event: PointerEvent<HTMLButtonElement>) {
@@ -120,6 +120,7 @@ function DevelopmentKeyframes({ clip, fps, time, disabled, onChange, onPreview, 
       <input className="keyframe-scrubber" type="range" aria-label="Scrub selected clip keyframes" min={0} max={duration} step={1 / fps} value={localTime} disabled={disabled || !onSeek} onChange={event => onSeek?.(clip.start + Number(event.target.value))}/>
       <div className="keyframe-status"><span>{visible.length} saved points · Linear interpolation</span><span>{localTime.toFixed(2)}s</span></div>
       {!keys.length && <p className="smooth-zoom-note">No motion saved. Ask the agent to add a smooth zoom, or add a point at the playhead.</p>}
+      {clip.cameraMotion && <p className="smooth-zoom-note">The agent’s camera path is sampled into these points. Editing a point converts it to custom motion.</p>}
       {clip.smoothZoom && <p className="smooth-zoom-note">The agent’s {clip.smoothZoom.easing.replaceAll('-', ' ')} zoom is sampled into these points. Editing a point converts it to custom motion.</p>}
       {selectedKey && selected !== null && <div className="smooth-zoom-timing"><NumberControl label="Keyframe time" value={selectedKey.time - offset} min={bounds(selected).min - offset} max={bounds(selected).max - offset} step={1 / fps} unit="s" disabled={disabled} onCommit={value => setKey(selected, { time: value + offset })}/><NumberControl label={`Keyframe ${meta.label.toLowerCase()}`} value={selectedKey[property] * meta.factor} min={meta.min * meta.factor} max={meta.max * meta.factor} step={property === 'rotation' ? 1 : .1} unit={meta.unit} disabled={disabled} onCommit={value => setKey(selected, { [property]: value / meta.factor })}/></div>}
       <div className="smooth-zoom-actions"><button type="button" className="footage-crop" disabled={disabled} onClick={add}><Plus size={12}/>Add point</button><button type="button" className="footage-crop" disabled={disabled || !selectedKey} onClick={() => { commit(keys.filter((_, index) => index !== selected)); setSelected(null); }}><Trash2 size={12}/>Remove point</button></div>

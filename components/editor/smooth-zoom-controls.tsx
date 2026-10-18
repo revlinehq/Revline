@@ -33,7 +33,7 @@ function DevelopmentZoomControls({ clip, asset, aspectRatio, fps, disabled = fal
   useEffect(() => () => previewCallback.current?.(null), []);
   useEffect(() => { if (disabled) previewCallback.current?.(null); }, [disabled]);
   const changedOrigin = !!clip.smoothZoom && !!clip.motionOffset;
-  const custom = !!clip.motion?.length && !clip.smoothZoom;
+  const custom = !!clip.motion?.length && !clip.smoothZoom && !clip.cameraMotion;
   const finish = settings.start + settings.inDuration + (settings.outDuration > 0 ? settings.holdDuration + settings.outDuration : 0);
   const ratio = Math.max(clip.duration, finish, 1 / fps);
   const positions = [settings.start, settings.start + settings.inDuration, ...(settings.outDuration > 0 ? [settings.start + settings.inDuration + settings.holdDuration, finish] : [])];

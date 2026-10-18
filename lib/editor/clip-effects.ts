@@ -9,10 +9,12 @@ import { audioFadeTimingPatch,validateAudioSettings } from './audio-settings';
 import { textAnimationTimingPatch,validateTextAnimationTiming } from './text-animation-timing';
 import {validateVisualFade,visualFadeTimingPatch} from './visual-fades';
 import { validateSmoothZoom } from './smooth-zoom-settings';
+import { validateCameraMotion } from './camera-motion-settings';
+import { NEUTRAL_MOTION, motionAt, type MotionKeyframe } from './motion-path';
+export { NEUTRAL_MOTION, motionAt, type MotionKeyframe } from './motion-path';
 
 export const BLEND_MODES = ['normal', 'screen', 'multiply', 'overlay', 'plus-lighter', 'difference'] as const;
 export type BlendMode = typeof BLEND_MODES[number];
-export type MotionKeyframe = { time: number; x: number; y: number; scale: number; rotation: number; opacity: number; brightness: number };
 export const MOTION_PRESETS = ['none', 'fade', 'punch', 'shake', 'flash', 'pop'] as const;
 export type MotionPreset = typeof MOTION_PRESETS[number];
 export const TIMED_EFFECT_PRESETS = ['punch', 'shake', 'flash', 'pop', 'cinematic-bars', 'quick-zoom-in', 'quick-zoom-out', 'zoom-blur', 'solid-color'] as const;
@@ -54,7 +56,6 @@ export function zoomKeyframes(duration: number, settings: ZoomSettings): MotionK
     return key(time, { scale, x: (.5 - settings.centerX) * (scale - 1), y: (.5 - settings.centerY) * (scale - 1) });
   });
 }
-export const NEUTRAL_MOTION = { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, brightness: 1 };
 const key = (time: number, changes: Partial<MotionKeyframe> = {}): MotionKeyframe => ({ time, ...NEUTRAL_MOTION, ...changes });
 export function cinematicBarSettings(clip: Pick<Clip, 'cinematicBars'>): CinematicBarSettings { return clip.cinematicBars ?? DEFAULT_CINEMATIC_BARS; }
 /** Clip length controls hold/end time; speed alone controls the entrance and exit. */
@@ -102,6 +103,7 @@ export function validateClipEffects(clip: Clip) {
   validateTransitionSettings(clip);
   validateMotionEffectSettings(clip);
   validateSmoothZoom(clip);
+  validateCameraMotion(clip);
   if (clip.zoom !== undefined) {
     if (clip.kind !== 'effect' || !isZoomPreset(clip.effectPreset)) throw new Error('Zoom controls belong to Zoom effect clips.');
     if (!['in', 'out'].includes(clip.zoom.direction) || clip.effectPreset !== `quick-zoom-${clip.zoom.direction}`) throw new Error('Choose a matching Zoom direction.');
@@ -152,20 +154,12 @@ export function validateClipEffects(clip: Clip) {
       // Centering an edge target at 3x can legitimately translate by more than
       // one canvas width. Keep ordinary text/FX limits; allow the camera keys
       // room for the inverse of an existing small or rotated static transform.
-      const [min, max] = clip.smoothZoom?.framing === 'center' && (property === 'x' || property === 'y') ? [-16, 16] : bounds[property];
+      // Image object paths also invert their parent transform; their public
+      // canvas offsets stay bounded to one width/height before compilation.
+      const [min, max] = property === 'x' || property === 'y' ? (clip.cameraMotion || clip.smoothZoom?.framing === 'center') ? [-16, 16] : clip.kind === 'image' ? [-32, 32] : bounds[property] : bounds[property];
       if (!Number.isFinite(key[property]) || key[property] < min || key[property] > max) throw new Error(`Motion ${property} is out of range.`);
     }
   }
-}
-
-/** Local-time keyframes travel with the clip; trims and splits retain their phase. */
-export function motionAt(keys: MotionKeyframe[], time: number): MotionKeyframe {
-  const after = keys.findIndex(key => key.time >= time);
-  if (after <= 0) return { ...(keys[after === -1 ? keys.length - 1 : 0] ?? NEUTRAL_MOTION), time };
-  const a = keys[after - 1], b = keys[after], mix = (time - a.time) / (b.time - a.time);
-  const result = { ...a, time };
-  for (const property of Object.keys(bounds) as (keyof typeof bounds)[]) result[property] = a[property] + (b[property] - a[property]) * mix;
-  return result;
 }
 
 export function visibleMotion(clip: Clip): MotionKeyframe[] {

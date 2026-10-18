@@ -8,6 +8,7 @@ import type { TextAppearance } from './text-style';
 import type { TextFontId } from './text-fonts';
 import type { FlashSettings, PunchSettings, ShakeSettings, PopSettings } from './motion-effect-settings';
 import type { SmoothZoomSettings } from './smooth-zoom-settings';
+import type { CameraMotionSettings } from './camera-motion-settings';
 export type AspectRatio = 'vertical' | 'portrait-feed' | 'square' | 'classic' | 'landscape';
 export type ClipKind = 'video' | 'image' | 'audio' | 'caption' | 'graphic' | 'solid' | 'effect';
 export type LayerGroup = 'visual' | 'overlay' | 'audio' | 'effects';
@@ -50,6 +51,7 @@ export type Clip = {
   motion?: MotionKeyframe[];
   motionOffset?: number;
   smoothZoom?: SmoothZoomSettings;
+  cameraMotion?: CameraMotionSettings;
   effectPreset?: EffectPreset | 'none';
   cinematicBars?: CinematicBarSettings;
   solidColor?: SolidColorSettings;

@@ -1,17 +1,9 @@
-import { NEUTRAL_MOTION, type MotionKeyframe } from './clip-effects';
+import { NEUTRAL_MOTION, sampleMotionAnchors, type EasedMotionAnchor } from './motion-path';
 import { calculateVisualRect } from './visual-source-geometry';
 import { validateSmoothZoom, type SmoothZoomSettings } from './smooth-zoom-settings';
 import { DEFAULT_TRANSFORM, dimensions, type AspectRatio, type Clip, type MediaAsset } from './types';
 
-export function zoomEase(progress: number, easing: SmoothZoomSettings['easing']) {
-  const p = Math.max(0, Math.min(1, progress));
-  if (easing === 'focused-spring') {
-    // Critically damped spring: fast response, smooth braking, no overshoot.
-    // Normalize its finite window so preview/export land exactly on the target.
-    return (1 - (1 + 9 * p) * Math.exp(-9 * p)) / (1 - 10 * Math.exp(-9));
-  }
-  return easing === 'ease-in-out' ? p * p * (3 - 2 * p) : easing === 'ease-out' ? 1 - (1 - p) ** 3 : p;
-}
+export { motionEase as zoomEase } from './motion-path';
 
 /** Source coordinates are mapped through the same fit/crop geometry as playback/export. */
 export function smoothZoomFocus(clip: Clip, asset: MediaAsset, aspectRatio: AspectRatio, point: { centerX: number; centerY: number }) {
@@ -31,10 +23,10 @@ export function smoothZoomFocus(clip: Clip, asset: MediaAsset, aspectRatio: Aspe
 }
 
 /** Existing deterministic motion keys are the canonical render input, not a second clock. */
-export function smoothZoomPatch(clip: Clip, asset: MediaAsset, aspectRatio: AspectRatio, settings: SmoothZoomSettings, options: { replace?: boolean } = {}): Pick<Clip, 'smoothZoom' | 'motion' | 'motionOffset'> {
+export function smoothZoomPatch(clip: Clip, asset: MediaAsset, aspectRatio: AspectRatio, settings: SmoothZoomSettings, options: { replace?: boolean } = {}): Pick<Clip, 'smoothZoom' | 'cameraMotion' | 'motion' | 'motionOffset'> {
   validateSmoothZoom({ kind: clip.kind, smoothZoom: settings });
   if (asset._id !== clip.assetId || asset.kind !== clip.kind) throw new Error('Choose the original media asset for this clip.');
-  if (clip.motion?.length && !clip.smoothZoom && !options.replace) throw new Error('This clip already has custom motion. Explicitly replace its motion to add a smooth zoom.');
+  if (clip.motion?.length && !clip.smoothZoom && !clip.cameraMotion && !options.replace) throw new Error('This clip already has custom motion. Explicitly replace its motion to add a smooth zoom.');
   const end = settings.start + settings.inDuration + (settings.outDuration > 0 ? settings.holdDuration + settings.outDuration : 0);
   if (end > clip.duration + 1e-6) throw new Error('The zoom timing must fit inside the selected clip.');
   const focus = smoothZoomFocus(clip, asset, aspectRatio, settings);
@@ -48,21 +40,20 @@ export function smoothZoomPatch(clip: Clip, asset: MediaAsset, aspectRatio: Aspe
   const destinationY = (-dx * Math.sin(angle) + dy * Math.cos(angle)) / canvas.height;
   const peakX = (.5 - focus.x) * settings.scale + destinationX;
   const peakY = (.5 - focus.y) * settings.scale + destinationY;
-  const motion: MotionKeyframe[] = [];
+  const anchors: EasedMotionAnchor[] = [];
   const add = (time: number, scale: number, progress = 0) => {
-    const key = { time, ...NEUTRAL_MOTION, scale, x: settings.framing === 'center' ? (progress === 0 ? 0 : peakX * progress) : (.5 - focus.x) * (scale - 1), y: settings.framing === 'center' ? (progress === 0 ? 0 : peakY * progress) : (.5 - focus.y) * (scale - 1) };
-    if (motion.length && Math.abs(motion.at(-1)!.time - time) < 1e-9) motion[motion.length - 1] = key;
-    else motion.push(key);
+    const key = { time, ...NEUTRAL_MOTION, scale, x: settings.framing === 'center' ? (progress === 0 ? 0 : peakX * progress) : (.5 - focus.x) * (scale - 1), y: settings.framing === 'center' ? (progress === 0 ? 0 : peakY * progress) : (.5 - focus.y) * (scale - 1), easing: settings.easing };
+    if (anchors.length && Math.abs(anchors.at(-1)!.time - time) < 1e-9) anchors[anchors.length - 1] = key;
+    else anchors.push(key);
   };
   add(0, 1);
   add(settings.start, 1);
-  const steps = settings.easing === 'linear' ? 1 : 32;
-  for (let index = 1; index <= steps; index++) { const p = zoomEase(index / steps, settings.easing); add(settings.start + settings.inDuration * index / steps, 1 + (settings.scale - 1) * p, p); }
+  add(settings.start + settings.inDuration, settings.scale, 1);
   if (settings.outDuration > 0) {
     const returnStart = settings.start + settings.inDuration + settings.holdDuration;
     add(returnStart, settings.scale, 1);
-    for (let index = 1; index <= steps; index++) { const p = zoomEase(index / steps, settings.easing); add(returnStart + settings.outDuration * index / steps, settings.scale + (1 - settings.scale) * p, 1 - p); }
+    add(returnStart + settings.outDuration, 1);
   }
-  if (clip.duration > motion.at(-1)!.time + 1e-9) add(clip.duration, settings.outDuration > 0 ? 1 : settings.scale, settings.outDuration > 0 ? 0 : 1);
-  return { smoothZoom: { ...settings }, motion, motionOffset: 0 };
+  const motion = sampleMotionAnchors(anchors, clip.duration);
+  return { smoothZoom: { ...settings }, cameraMotion:undefined, motion, motionOffset: 0 };
 }

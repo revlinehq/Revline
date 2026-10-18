@@ -83,7 +83,7 @@ export function effectDisabledReference(timeline: Timeline, plans: EffectPlan[],
     if(plan.kind==='visual'&&plan.effect==='motion'){
       // This is an effect-disabled comparison, not a copy of an older zoom.
       // Rechecking an already-saved zoom must also compare against neutral keys.
-      clips=clips.map(clip=>clip.id===id?{...clip,motion:undefined,motionOffset:undefined,smoothZoom:undefined}:clip);continue;
+      clips=clips.map(clip=>clip.id===id?{...clip,motion:undefined,motionOffset:undefined,smoothZoom:undefined,cameraMotion:undefined}:clip);continue;
     }
     if(plan.kind==='visual'&&plan.effect!=='motion'){clips=clips.map(clip=>{if(clip.id!==id)return clip;const group=clip[plan.effect as keyof Clip];return {...clip,[plan.effect]:group&&typeof group==='object'?{...group,enabled:false}:undefined};});continue;}
     if (!original) throw new Error('The planned clip has no effect-disabled reference.');

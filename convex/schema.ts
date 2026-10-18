@@ -10,6 +10,7 @@ export const waveformValidator = v.object({ peaks: v.string(), samplesPerSecond:
 export const focusValidator = v.array(v.object({ time: v.number(), x: v.number(), y: v.number() }));
 export const motionKeyframeValidator = v.object({ time: v.number(), x: v.number(), y: v.number(), scale: v.number(), rotation: v.number(), opacity: v.number(), brightness: v.number() });
 export const smoothZoomValidator = v.object({ start: v.number(), inDuration: v.number(), holdDuration: v.number(), outDuration: v.number(), scale: v.number(), centerX: v.number(), centerY: v.number(), framing: v.optional(v.union(v.literal('anchor'), v.literal('center'))), easing: v.union(v.literal('linear'), v.literal('ease-in-out'), v.literal('ease-out'), v.literal('focused-spring')) });
+export const cameraMotionValidator = v.object({ keyframes:v.array(v.object({time:v.number(),scale:v.number(),centerX:v.number(),centerY:v.number(),easing:smoothZoomValidator.fields.easing})) });
 export const colorGradeValidator = v.object({ enabled: v.boolean(), exposure: v.number(), contrast: v.number(), saturation: v.number(), temperature: v.number(), tint: v.number(), vibrance: v.number() });
 export const zoomBlurValidator = v.object({ enabled: v.boolean(), amount: v.number(), centerX: v.number(), centerY: v.number() });
 export const invertValidator = v.object({ enabled: v.boolean(), amount: v.number() });
@@ -40,7 +41,7 @@ export const clipValidator = v.object({
   linkedClipId: v.optional(v.string()), audioSeparated: v.optional(v.boolean()),
   blendMode: v.optional(v.union(v.literal("normal"), v.literal("screen"), v.literal("multiply"), v.literal("overlay"), v.literal("plus-lighter"), v.literal("difference"))),
   motion: v.optional(v.array(motionKeyframeValidator)), motionOffset: v.optional(v.number()),
-  smoothZoom: v.optional(smoothZoomValidator),
+  smoothZoom: v.optional(smoothZoomValidator), cameraMotion:v.optional(cameraMotionValidator),
   colorGrade: v.optional(colorGradeValidator), zoomBlur: v.optional(zoomBlurValidator), glitch: v.optional(glitchValidator), invert: v.optional(invertValidator), dither: v.optional(ditherValidator),
   neonEdges:v.optional(v.object({enabled:v.boolean(),amount:v.number(),color:v.string(),detail:v.number(),threshold:v.number(),glow:v.number()})),
   softBlur:v.optional(v.object({enabled:v.boolean(),amount:v.number()})),

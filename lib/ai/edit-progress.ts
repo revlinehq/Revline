@@ -22,7 +22,8 @@ export function editStepStopReason(steps: Steps): 'hard_step_limit' | 'no_recent
   if (steps.length >= EDITOR_HARD_STEPS) return 'hard_step_limit';
   // Finishing checks do not mutate the draft. Give a productive edit a bounded
   // verification tail instead of treating those checks as stalled editing.
-  const lastEdit = steps.findLastIndex(step => hasRecentEditProgress([step]));
+  let lastEdit = steps.length - 1;
+  while (lastEdit >= 0 && !hasRecentEditProgress([steps[lastEdit]])) lastEdit--;
   const verification = steps.slice(lastEdit + 1);
   if (lastEdit >= 0 && verification.length <= EDITOR_VERIFICATION_STEPS && verification.every(step => {
     const results = step.content.map(record).filter(part => part.type === 'tool-result' || part.type === 'tool-error');

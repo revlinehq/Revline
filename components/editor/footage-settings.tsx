@@ -2,6 +2,7 @@
 
 import { ChevronDown, Crop, Film, Image as ImageIcon } from 'lucide-react';
 import type { AspectRatio, Clip, MediaAsset } from '@/lib/editor/types';
+import { CameraMotionControls } from './camera-motion-controls';
 import { SmoothZoomControls } from './smooth-zoom-controls';
 import { MotionKeyframeEditor } from './motion-keyframe-editor';
 import { NumberControl } from './visual-controls';
@@ -41,6 +42,7 @@ export function FootageSettings({ clip, audioClip, asset, aspectRatio, readOnly 
       {cropping && <p className="footage-crop-note">Drag the edges in the preview. Escape cancels.</p>}
     </section>
     {process.env.NODE_ENV !== 'production' && asset?.width && asset.height && aspectRatio ? <SmoothZoomControls clip={clip} asset={asset} aspectRatio={aspectRatio} fps={fps} disabled={cropping || readOnly} onChange={onChange} onPreview={onPreview}/> : null}
+    {process.env.NODE_ENV !== 'production' && asset?.width && asset.height && aspectRatio ? <CameraMotionControls clip={clip} asset={asset} aspectRatio={aspectRatio} fps={fps} disabled={cropping || readOnly} onChange={onChange} onPreview={onPreview} onSeek={onSeek}/> : null}
     {process.env.NODE_ENV !== 'production' && <MotionKeyframeEditor clip={clip} fps={fps} time={time} disabled={cropping || readOnly} onChange={onChange} onPreview={onPreview} onSeek={onSeek}/>}
     {(hasSpeed || hasVolume) && <details className="footage-disclosure footage-playback" aria-label="Playback">
       <summary><span>Playback</span><ChevronDown size={12}/></summary>

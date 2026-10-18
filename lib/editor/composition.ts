@@ -95,7 +95,9 @@ export function generateComposition(timeline: Timeline, assets: MediaAsset[], op
   function animateKeys(selector: string, clip: Clip, motion: MotionKeyframe[], vars: (key: MotionKeyframe) => Record<string, string | number>, neutral: MotionKeyframe, ease = 'none') {
     if (!motion.length) return;
     if (clip.kind === 'effect') animation.push(`timeline.set('${selector}',${JSON.stringify(vars(neutral))},0);`);
-    animation.push(`timeline.set('${selector}',${JSON.stringify(vars(motion[0]))},${clip.kind === 'effect' ? clip.start : 0});`);
+    // A path may begin already zoomed/panned. Apply its opening pose even
+    // before the paused timeline has advanced from exactly zero.
+    animation.push(`timeline.set('${selector}',${JSON.stringify({ ...vars(motion[0]), ...(clip.kind !== 'effect' ? { immediateRender: true } : {}) })},${clip.kind === 'effect' ? clip.start : 0});`);
     for (let k = 1; k < motion.length; k++) animation.push(`timeline.fromTo('${selector}',${JSON.stringify(vars(motion[k - 1]))},${JSON.stringify({ ...vars(motion[k]), duration: motion[k].time - motion[k - 1].time, ease, immediateRender: false })},${clip.start + motion[k - 1].time});`);
     if (clip.kind === 'effect') animation.push(`timeline.set('${selector}',${JSON.stringify(vars(neutral))},${clip.start + clip.duration});`);
   }

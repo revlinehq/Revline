@@ -5,6 +5,7 @@ import { textAnimationTimingPatch } from './text-animation-timing';
 import { audioFadeTimingPatch } from './audio-settings';
 import { visualFadeTimingPatch } from './visual-fades';
 import { rescaleSmoothZoom } from './smooth-zoom-settings';
+import { rescaleCameraMotion } from './camera-motion-settings';
 import { playbackRateOf, sourceDurationOf, sourceEndOf, validatePlaybackRate } from './playback-rate';
 import { boundedTransitionRange, DEFAULT_TRANSITION_DIRECTION, findTransitionPlacement, isTransitionClip, isTransitionPreset, reconcileTransitionEdits, transitionPair, transitionSources, type ClipTransition, type TransitionDirection, type TransitionPreset } from './clip-transitions';
 import { Clip, Timeline, timelineDuration, layerGroup, trackOf, deriveTrackCounts, normalizeTimeline, maxTrackCount } from './types';
@@ -84,6 +85,7 @@ export function patchClip(timeline: Timeline, id: string, patch: Partial<Clip>):
   return reconcileTransitionEdits(timeline, { ...timeline, clips: timeline.clips.map(c => {
     let next = c.id === id ? { ...c, ...(patch.duration !== undefined && !('textTemplate' in patch) ? textTemplateTimingPatch(c) : {}),...(patch.duration!==undefined&&!('textAnimationTiming' in patch)?textAnimationTimingPatch(c):{}),...(patch.duration!==undefined&&!('audioFadeTiming' in patch)?audioFadeTimingPatch(c):{}),...(patch.duration!==undefined&&!('visualFadeTiming' in patch)?visualFadeTimingPatch(c):{}), ...patch, id: c.id } : c.id === clip.linkedClipId ? { ...c, ...timing,...(patch.duration!==undefined?audioFadeTimingPatch(c):{}) } : c;
     if(c.id===id&&['motion','crop','fit','focus','assetId'].some(key=>key in patch)&&!('smoothZoom' in patch))next={...next,smoothZoom:undefined};
+    if(c.id===id&&['motion','crop','fit','focus','assetId'].some(key=>key in patch)&&!('cameraMotion' in patch))next={...next,cameraMotion:undefined};
     if(c.id===id&&patch.text!==undefined&&c.textTemplate?.wordTimings&&!('textTemplate' in patch)&&patch.text.toLowerCase()!==(c.text??'').toLowerCase())next={...next,textTemplate:{...next.textTemplate!,wordTimings:undefined}};
     if (patch.volume !== undefined && c.id === volumeTarget) next = { ...next, volume: patch.volume };
     if (next.kind === 'video' && next.audioSeparated) next = { ...next, volume: 0 };
@@ -111,6 +113,7 @@ export function setClipPlaybackRate(timeline: Timeline, id: string, playbackRate
     if(!ids.has(member.id))return member;
     let changed=member.motion?.length?{...member,motion:member.motion.map(key=>({...key,time:key.time*ratio})),motionOffset:(member.motionOffset??0)*ratio}:member;
     if(member.smoothZoom)changed={...changed,smoothZoom:rescaleSmoothZoom(member.smoothZoom,ratio)};
+    if(member.cameraMotion)changed={...changed,cameraMotion:rescaleCameraMotion(member.cameraMotion,ratio)};
     if(member.kind==='audio'&&member.audioFadeTiming)changed={...changed,audio:member.audio?{...member.audio,fadeIn:member.audio.fadeIn*ratio,fadeOut:member.audio.fadeOut*ratio}:undefined,audioFadeTiming:{duration:member.audioFadeTiming.duration*ratio,offset:member.audioFadeTiming.offset*ratio}};
     if((member.kind==='video'||member.kind==='image')&&member.visualFadeTiming)changed={...changed,visualFade:member.visualFade?{fadeIn:member.visualFade.fadeIn*ratio,fadeOut:member.visualFade.fadeOut*ratio}:undefined,visualFadeTiming:{duration:member.visualFadeTiming.duration*ratio,offset:member.visualFadeTiming.offset*ratio}};
     return changed;
