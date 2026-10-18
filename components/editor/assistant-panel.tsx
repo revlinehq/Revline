@@ -88,8 +88,10 @@ function AssistantPanelBody({ messages, running, editing:editingTimeline=running
   const [modelChoice, setModelChoice] = useState<ClaudeModelChoice>();
   const [reasoningEffort,setReasoningEffort]=useState<OpenAIReasoningEffort>('medium');
   const [speedMode,setSpeedMode]=useState<OpenAISpeedMode>('standard');
-  const selectedModelChoice=modelChoice&&allowedModels.includes(modelChoice)?modelChoice:undefined;
-  const effectiveModelChoice=selectedModelChoice??(defaultModelChoice&&allowedModels.includes(defaultModelChoice)?defaultModelChoice:allowedModels.includes('sonnet')?'sonnet':allowedModels[0]??'sonnet');
+  const supportedModels=allowedModels.filter(choice=>OPENAI_EDIT_MODELS.some(model=>model.id===choice));
+  const availableModels=supportedModels.length?supportedModels:PRODUCTION_CLAUDE_MODEL_CHOICES;
+  const selectedModelChoice=modelChoice&&availableModels.some(choice=>choice===modelChoice)?modelChoice:undefined;
+  const effectiveModelChoice=selectedModelChoice??(defaultModelChoice&&availableModels.some(choice=>choice===defaultModelChoice)?defaultModelChoice:availableModels.includes('gpt-6.1-sol')?'gpt-6.1-sol':availableModels[0]??'gpt-6.1-sol');
   const canChooseReasoning=canChooseModel&&OPENAI_EDIT_MODELS.some(model=>model.id===effectiveModelChoice);
   const [sending, setSending] = useState(false);
   const [localError, setLocalError] = useState('');
@@ -160,7 +162,7 @@ function AssistantPanelBody({ messages, running, editing:editingTimeline=running
     <div ref={scroll.viewport} className={`assistant-history ${!messages.length && !waiting ? 'assistant-history-empty' : ''}`}>
       <div className="assistant-turns" ref={scroll.content}>
       {canLoadMore && <button className="load-more" onClick={() => { scroll.preserveHistory(); onLoadMore?.(); }}>Earlier messages</button>}
-      {!messages.length && !waiting && !suggestions?.items.length && <div className="assistant-welcome"><h3>What are we making?</h3><p>{hasClips ? 'A tighter cut, a stronger opening, subtitles. Tell me what you have in mind.' : 'Bring your footage, and tell me the story you want to make.'}</p>{!demo&&!configured&&<div className="assistant-demo-note">Connect Claude to edit in conversation. Your footage, preview, and timeline are ready.</div>}</div>}
+      {!messages.length && !waiting && !suggestions?.items.length && <div className="assistant-welcome"><h3>What are we making?</h3><p>{hasClips ? 'A tighter cut, a stronger opening, subtitles. Tell me what you have in mind.' : 'Bring your footage, and tell me the story you want to make.'}</p>{!demo&&!configured&&<div className="assistant-demo-note">Connect OpenAI to edit in conversation. Your footage, preview, and timeline are ready.</div>}</div>}
       {groups.map(group => {
         const groupMessages = group.messages;
         const replies = group.replies;
@@ -189,12 +191,12 @@ function AssistantPanelBody({ messages, running, editing:editingTimeline=running
       {!waiting && stopState==='stopped' && <AssistantActivity label="Stopped." detail="Your existing edit is still here." state="stopped"/>}
       {showSuggestions && suggestions?.items.length && onSuggestion && configured ? <div data-chat-follow className="assistant-source-suggestions" aria-label="Suggested edits from this footage"><span title={suggestions.sourceName}>Ideas for {suggestions.sourceName}</span>{suggestions.items.map((suggestion, index) => <button key={`${suggestions.clipId}-${index}`} type="button" disabled={sending || !!pendingReply} onClick={() => void chooseSuggestion(suggestion)}><span>{suggestion.label}</span><ArrowUpRight size={14} aria-hidden="true" /></button>)}</div> : null}
       {visibleError && <div data-chat-follow><AssistantActivity className="chat-error" label="Needs attention" detail={assistantErrorDetail(visibleError)} state="error"/></div>}
-      {!!messages.length && !demo && !configured && <div className="assistant-demo-note">Connect Claude to edit in conversation. Your footage, preview, and timeline are ready.</div>}
+      {!!messages.length && !demo && !configured && <div className="assistant-demo-note">Connect OpenAI to edit in conversation. Your footage, preview, and timeline are ready.</div>}
       </div>
     </div>
     <div ref={scroll.composer} className="manual-composer-dock">
     {scroll.latestHidden && <button className="chat-jump-latest" onClick={scroll.resume}>Latest response</button>}
-    <EditComposer attachments={attachments} onRemoveAttachment={onRemoveAttachment} requireMedia={requireMedia} actions={canChooseModel ? <div className="assistant-model-controls"><AssistantModelPicker allowedModels={allowedModels} value={effectiveModelChoice} onChange={setModelChoice} disabled={answering}/>{canChooseReasoning&&<><div className="assistant-model-picker assistant-reasoning-picker"><InspectorSelect label="AI reasoning effort" value={reasoningEffort} options={OPENAI_REASONING_EFFORTS.map(value=>({value,label:{low:'Low',medium:'Medium',high:'High',xhigh:'X-high',max:'Max'}[value]}))} onChange={setReasoningEffort} disabled={answering}/></div><div className="assistant-model-picker assistant-speed-picker"><InspectorSelect label="AI speed mode" value={speedMode} options={OPENAI_SPEED_MODES.map(value=>({value,label:value==='fast'?'Fast':'Standard',description:value==='fast'?'2× token cost':'Standard speed and pricing'}))} onChange={setSpeedMode} disabled={answering}/></div></>}</div> : undefined} variant="compact" className="manual-editor-composer" value={prompt} onChange={changePrompt} onSubmit={submit} onAttach={onAttach} placeholder="What would you change next?" disabled={sending || !!pendingReply} running={running} onStop={onStop ? stop : undefined} />
+    <EditComposer attachments={attachments} onRemoveAttachment={onRemoveAttachment} requireMedia={requireMedia} actions={canChooseModel ? <div className="assistant-model-controls"><AssistantModelPicker allowedModels={availableModels} value={effectiveModelChoice} onChange={setModelChoice} disabled={answering}/>{canChooseReasoning&&<><div className="assistant-model-picker assistant-reasoning-picker"><InspectorSelect label="AI reasoning effort" value={reasoningEffort} options={OPENAI_REASONING_EFFORTS.map(value=>({value,label:{low:'Low',medium:'Medium',high:'High',xhigh:'X-high',max:'Max'}[value]}))} onChange={setReasoningEffort} disabled={answering}/></div><div className="assistant-model-picker assistant-speed-picker"><InspectorSelect label="AI speed mode" value={speedMode} options={OPENAI_SPEED_MODES.map(value=>({value,label:value==='fast'?'Fast':'Standard',description:value==='fast'?'2× token cost':'Standard speed and pricing'}))} onChange={setSpeedMode} disabled={answering}/></div></>}</div> : undefined} variant="compact" className="manual-editor-composer" value={prompt} onChange={changePrompt} onSubmit={submit} onAttach={onAttach} placeholder="What would you change next?" disabled={sending || !!pendingReply} running={running} onStop={onStop ? stop : undefined} />
     </div>
   </div>;
 }

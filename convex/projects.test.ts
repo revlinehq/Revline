@@ -29,7 +29,7 @@ async function uploadedFile(t: Test, ownerId: string, projectId: Id<"projects">,
   });
 }
 async function project(t: Test, ownerId = "owner") { return await t.withIdentity(identity(ownerId)).mutation(api.projects.create, { title: "My reel", aspectRatio: "vertical" }); }
-beforeEach(() => { vi.stubEnv("RENDER_WORKER_SECRET", "test-worker-secret"); vi.stubEnv("CONVEX_SITE_URL", "https://test.convex.site"); vi.stubEnv("BILLING_ENABLED", "false"); vi.stubEnv("ANTHROPIC_API_KEY", ""); vi.stubEnv("AI_GATEWAY_ENABLED", "false"); });
+beforeEach(() => { vi.stubEnv("RENDER_WORKER_SECRET", "test-worker-secret"); vi.stubEnv("CONVEX_SITE_URL", "https://test.convex.site"); vi.stubEnv("BILLING_ENABLED", "false"); vi.stubEnv("OPENAI_API_KEY", ""); vi.stubEnv("AI_GATEWAY_ENABLED", "false"); });
 afterEach(() => { vi.unstubAllEnvs(); vi.restoreAllMocks(); });
 test('Zoom controls survive saving and render jobs, with invalid controls rejected before saving', async () => {
   const t = makeTest(), projectId = await project(t), owner = t.withIdentity(identity('owner'));
@@ -176,7 +176,7 @@ describe("inactive providers", () => {
   test("rejects missing Claude credentials before creating a thread or scheduling a run", async () => {
     const t = makeTest(); const projectId = await project(t); const owner = t.withIdentity(identity("owner"));
     expect(await owner.query(api.assistant.status, { projectId })).toMatchObject({ configured: false, running: false });
-    await expect(owner.mutation(api.assistant.send, { projectId, prompt: "Cut my clip" })).rejects.toThrow("ANTHROPIC_API_KEY");
+    await expect(owner.mutation(api.assistant.send, { projectId, prompt: "Cut my clip" })).rejects.toThrow("OPENAI_API_KEY");
     expect((await owner.query(api.projects.get, { projectId })).threadId).toBeUndefined();
     await expect(t.withIdentity(identity("stranger")).query(api.assistant.messages, { projectId, threadId: "foreign-thread", paginationOpts: { cursor: null, numItems: 20 } })).rejects.toThrow("Project not found");
   });
@@ -330,7 +330,7 @@ test("worker analysis requires an active exact run and scoped media, then reject
 });
 
 test("chat selection and playhead cannot reference another timeline or invalid time", async () => {
-  vi.stubEnv("ANTHROPIC_API_KEY", "fixture-only");
+  vi.stubEnv("OPENAI_API_KEY", "fixture-only");
   const t = makeTest(); const projectId = await project(t); const owner = t.withIdentity(identity("owner"));
   await expect(owner.mutation(api.assistant.send, { projectId, prompt: "Style this", selectedClipId: "foreign-clip" })).rejects.toThrow("Selected clip does not belong");
   await expect(owner.mutation(api.assistant.send, { projectId, prompt: "Cut here", playhead: -1 })).rejects.toThrow("Playhead must be a finite");
@@ -403,7 +403,7 @@ test("empty groups can have zero tracks, persist through undo, and cannot contai
 });
 
 test("chat multi-selection validates ownership, duplicates, and limits before scheduling", async () => {
-  vi.stubEnv("ANTHROPIC_API_KEY", "fixture-only");
+  vi.stubEnv("OPENAI_API_KEY", "fixture-only");
   const t = makeTest(); const projectId = await project(t); const owner = t.withIdentity(identity("owner"));
   const clips = Array.from({ length: 200 }, (_, index) => ({ ...textTimeline.clips[0], id: `selected-${index}` }));
   await owner.mutation(api.projects.saveTimeline, { projectId, expectedRevision: 0, timeline: { ...textTimeline, clips } });
@@ -413,15 +413,15 @@ test("chat multi-selection validates ownership, duplicates, and limits before sc
     [Array.from({ length: 201 }, (_, index) => `selected-${index}`), "at most 200"],
   ] as const) await expect(owner.mutation(api.assistant.send, { projectId, prompt: "Style the selection", selectedClipIds: [...selectedClipIds] })).rejects.toThrow(reason);
   await expect(t.withIdentity(identity("stranger")).mutation(api.assistant.send, { projectId, prompt: "Style the selection", selectedClipIds: ["selected-0"] })).rejects.toThrow("Project not found");
-  vi.stubEnv("ANTHROPIC_API_KEY", "");
-  await expect(owner.mutation(api.assistant.send, { projectId, prompt: "Style the selection", selectedClipIds: clips.map(clip => clip.id) })).rejects.toThrow("ANTHROPIC_API_KEY");
+  vi.stubEnv("OPENAI_API_KEY", "");
+  await expect(owner.mutation(api.assistant.send, { projectId, prompt: "Style the selection", selectedClipIds: clips.map(clip => clip.id) })).rejects.toThrow("OPENAI_API_KEY");
   expect((await owner.query(api.projects.get, { projectId })).threadId).toBeUndefined();
 });
 
 test("chat schedules validated multi-selection without changing the visible user prompt", async () => {
   const t = makeTest(); agentTest.register(t); const projectId = await project(t); const owner = t.withIdentity(identity("owner"));
   await owner.mutation(api.projects.saveTimeline, { projectId, expectedRevision: 0, timeline: { ...textTimeline, clips: [...textTimeline.clips, { ...textTimeline.clips[0], id: "caption-2", start: 3 }] } });
-  vi.stubEnv("ANTHROPIC_API_KEY", "unit-test-not-a-provider-key");
+  vi.stubEnv("OPENAI_API_KEY", "unit-test-not-a-provider-key");
   const fetch = vi.spyOn(globalThis, "fetch");
   await owner.mutation(api.assistant.send, { projectId, prompt: "Style these captions", selectedClipId: "caption-1", selectedClipIds: ["caption-1", "caption-2"], playhead: 2 });
   const scheduled = await t.run(ctx => ctx.db.system.query("_scheduled_functions").take(10));

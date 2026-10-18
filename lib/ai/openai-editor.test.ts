@@ -89,15 +89,15 @@ test('OpenAI visual evidence serializes at bounded high detail without losing so
   expect(serialized).toContain('11.5 seconds'); expect(serialized).toContain(image.toString('base64')); expect(serialized).toContain('"detail":"high"');
 });
 
-test('OpenAI selection rejects absent keys and mismatched pins while keeping Sonnet as the default', () => {
+test('OpenAI selection rejects absent keys and mismatched pins while keeping Sol as the default', () => {
   const env = { OPENAI_API_KEY: 'fixture-only', MODEL_SWITCHER_ENABLED: 'true', AI_GATEWAY_ENABLED: 'true' };
   for (const model of OPENAI_EDIT_MODELS) {
     const selection = resolveClaudeModel(model.id, env);
     expect(selection).toEqual({ provider: 'openai', modelId: model.modelId, modelChoice: model.id });
     expect(validatePinnedClaudeModel(selection, { OPENAI_API_KEY: 'fixture-only' })).toEqual(selection);
-    expect(() => validatePinnedClaudeModel({ ...selection, provider: 'gateway' }, env)).toThrow('provider');
+    expect(() => validatePinnedClaudeModel({ ...selection, provider: 'gateway' }, env)).toThrow('supports GPT');
     expect(() => resolveClaudeModel(model.id, { MODEL_SWITCHER_ENABLED: 'true' })).toThrow('OPENAI_API_KEY');
   }
-  expect(resolveClaudeModel(undefined, { OPENAI_API_KEY: 'fixture-only' })).toEqual({ provider: 'anthropic', modelId: 'claude-sonnet-5-5' });
+  expect(resolveClaudeModel(undefined, { OPENAI_API_KEY: 'fixture-only' })).toEqual({ provider: 'openai', modelId: 'gpt-6.1-sol', modelChoice:'gpt-6.1-sol' });
   expect(OPENAI_EDIT_MODELS.map(model => model.pricing)).toEqual([{ input: 2, cacheRead: .1, cacheWrite: 2.5, output: 10 }, { input: 10, cacheRead: 1, cacheWrite: 12.5, output: 50 }]);
 });

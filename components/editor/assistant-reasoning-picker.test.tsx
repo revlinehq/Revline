@@ -10,7 +10,7 @@ function render(defaultModelChoice:ClaudeModelChoice,running=false,modelSwitcher
 test('reasoning starts at Medium for both OpenAI models only behind the development model gate',()=>{
   vi.stubEnv('NODE_ENV','development');
   for(const model of ['gpt-6.1-sol','gpt-6-astra'] as const){const html=render(model);expect(html).toContain('aria-label="AI reasoning effort"');expect(html).toContain('Medium');expect(html).toContain('aria-label="AI speed mode"');expect(html).toContain('Standard');}
-  expect(render('sonnet')).not.toContain('AI reasoning effort');expect(render('sonnet')).not.toContain('AI speed mode');
+  const stale=render('sonnet');expect(stale).toContain('GPT-6.1 Sol');expect(stale).not.toContain('Sonnet');
   expect(render('gpt-6.1-sol',false,false)).not.toContain('AI reasoning effort');
   vi.stubEnv('NODE_ENV','production');
   const html=render('gpt-6.1-sol');expect(html).not.toContain('AI reasoning effort');expect(html).not.toContain('AI editing model');expect(html).not.toContain('AI speed mode');

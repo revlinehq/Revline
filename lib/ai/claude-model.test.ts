@@ -1,46 +1,32 @@
 import { createAnthropic } from '@ai-sdk/anthropic';
 import { generateText } from 'ai';
 import { expect, test } from 'vitest';
-import { CLAUDE_EDIT_MODELS, CLAUDE_GATEWAY_MODEL, CLAUDE_MODEL, claudeModelSwitcherEnabled, claudeProviderOptions, resolveClaudeModel, validatePinnedClaudeModel, type ClaudeModelChoice } from './claude-model';
+import { CLAUDE_EDIT_MODELS, OPENAI_EDIT_MODELS, EDITOR_MODELS, claudeModelSwitcherEnabled, claudeProviderOptions, resolveClaudeModel, validatePinnedClaudeModel, type ClaudeModelChoice } from './claude-model';
 
-test('unselected requests preserve configured provider and model overrides', () => {
-  expect(resolveClaudeModel(undefined, {})).toEqual({ provider: 'anthropic', modelId: CLAUDE_MODEL });
-  expect(resolveClaudeModel(undefined, { AI_GATEWAY_ENABLED: 'true' })).toEqual({ provider: 'gateway', modelId: CLAUDE_GATEWAY_MODEL });
-  expect(resolveClaudeModel(undefined, { CLAUDE_MODEL: 'claude-existing-override' })).toEqual({ provider: 'anthropic', modelId: 'claude-existing-override' });
-  expect(resolveClaudeModel(undefined, { AI_GATEWAY_ENABLED: 'true', CLAUDE_GATEWAY_MODEL: 'anthropic/configured-model' })).toEqual({ provider: 'gateway', modelId: 'anthropic/configured-model' });
+const env={OPENAI_API_KEY:'fixture-only',MODEL_SWITCHER_ENABLED:'true'};
+test('active editor defaults to native Sol regardless of old Claude and gateway settings',()=>{
+  expect(EDITOR_MODELS).toEqual(OPENAI_EDIT_MODELS);
+  for(const overrides of [{},{AI_GATEWAY_ENABLED:'true'},{CLAUDE_MODEL:'claude-opus-5-5',CLAUDE_GATEWAY_MODEL:'anthropic/old'}])expect(resolveClaudeModel(undefined,{...env,...overrides})).toEqual({provider:'openai',modelId:'gpt-6.1-sol',modelChoice:'gpt-6.1-sol'});
+  expect(resolveClaudeModel(undefined,{...env,EDITOR_DEFAULT_MODEL:'gpt-6-astra'}).modelId).toBe('gpt-6-astra');
+  expect(()=>resolveClaudeModel(undefined,{ANTHROPIC_API_KEY:'fixture-only',AI_GATEWAY_ENABLED:'true'})).toThrow('OPENAI_API_KEY');
+});
+test.each(OPENAI_EDIT_MODELS)('$label manual requests and captured pins stay OpenAI',model=>{
+  expect(()=>resolveClaudeModel(model.id,{...env,MODEL_SWITCHER_ENABLED:'false'})).toThrow('disabled');
+  const pinned=resolveClaudeModel(model.id,env);
+  expect(validatePinnedClaudeModel(pinned,{...env,EDITOR_DEFAULT_MODEL:'gpt-6-astra',MODEL_SWITCHER_ENABLED:'false',AI_GATEWAY_ENABLED:'true'})).toEqual(pinned);
+});
+test.each(CLAUDE_EDIT_MODELS)('$label stale selections and queued direct/gateway models are refused clearly',model=>{
+  expect(()=>resolveClaudeModel(model.id,env)).toThrow('supports GPT');
+  expect(()=>resolveClaudeModel(undefined,{...env,EDITOR_DEFAULT_MODEL:model.id})).toThrow('supports GPT');
+  for(const provider of ['anthropic','gateway'] as const)expect(()=>validatePinnedClaudeModel({provider,modelId:provider==='gateway'?model.gatewayModelId:model.modelId,modelChoice:model.id},env)).toThrow('supports GPT');
+});
+test('unsupported choices, inconsistent pins and nonliteral switcher flags fail closed',()=>{
+  expect(claudeModelSwitcherEnabled({MODEL_SWITCHER_ENABLED:'1'})).toBe(false);
+  expect(()=>resolveClaudeModel('unsupported' as ClaudeModelChoice,env)).toThrow('supported GPT');
+  expect(()=>validatePinnedClaudeModel({provider:'openai',modelId:'gpt-6.1-sol',modelChoice:'gpt-6-astra'},env)).toThrow('does not match');
 });
 
-test('an explicit environment default selects native Sol without changing development or manual Sonnet',()=>{
-  const production={EDITOR_DEFAULT_MODEL:'gpt-6.1-sol',OPENAI_API_KEY:'fixture-only',MODEL_SWITCHER_ENABLED:'true',AI_GATEWAY_ENABLED:'true'};
-  expect(resolveClaudeModel(undefined,production)).toEqual({provider:'openai',modelId:'gpt-6.1-sol',modelChoice:'gpt-6.1-sol'});
-  expect(resolveClaudeModel(undefined,{...production,MODEL_SWITCHER_ENABLED:'false'}).provider).toBe('openai');
-  expect(resolveClaudeModel('sonnet',production)).toEqual({provider:'gateway',modelId:CLAUDE_GATEWAY_MODEL,modelChoice:'sonnet'});
-  expect(resolveClaudeModel(undefined,{})).toEqual({provider:'anthropic',modelId:CLAUDE_MODEL});
-  expect(()=>resolveClaudeModel(undefined,{EDITOR_DEFAULT_MODEL:'unsupported'})).toThrow('default');
-  expect(()=>resolveClaudeModel(undefined,{EDITOR_DEFAULT_MODEL:'gpt-6.1-sol'})).toThrow('OPENAI_API_KEY');
-});
-
-test.each(CLAUDE_EDIT_MODELS)('$label only overrides the model when manual selection is enabled', model => {
-  expect(() => resolveClaudeModel(model.id, {})).toThrow('disabled');
-  expect(resolveClaudeModel(model.id, { MODEL_SWITCHER_ENABLED: 'true', CLAUDE_MODEL: 'other' })).toEqual({ provider: 'anthropic', modelId: model.modelId, modelChoice: model.id });
-  expect(resolveClaudeModel(model.id, { MODEL_SWITCHER_ENABLED: 'true', AI_GATEWAY_ENABLED: 'true', CLAUDE_GATEWAY_MODEL: 'other' })).toEqual({ provider: 'gateway', modelId: model.gatewayModelId, modelChoice: model.id });
-});
-
-test('the switcher requires the exact enable flag and rejects unsupported choices', () => {
-  expect(claudeModelSwitcherEnabled({ MODEL_SWITCHER_ENABLED: 'false' })).toBe(false);
-  expect(claudeModelSwitcherEnabled({ MODEL_SWITCHER_ENABLED: '1' })).toBe(false);
-  expect(() => resolveClaudeModel('unsupported' as ClaudeModelChoice, { MODEL_SWITCHER_ENABLED: 'true' })).toThrow('supported');
-  expect(() => validatePinnedClaudeModel({ provider: 'anthropic', modelId: CLAUDE_MODEL, modelChoice: 'opus' })).toThrow('does not match');
-});
-
-test('a captured selection remains pinned regardless of later environment changes', () => {
-  const pinned = resolveClaudeModel('opus', { MODEL_SWITCHER_ENABLED: 'true', AI_GATEWAY_ENABLED: 'true' });
-  expect(resolveClaudeModel(undefined, {})).not.toEqual(pinned);
-  expect(validatePinnedClaudeModel(pinned)).toEqual({ provider: 'gateway', modelId: 'anthropic/claude-opus-5.5', modelChoice: 'opus' });
-  expect(validatePinnedClaudeModel({ provider: 'anthropic', modelId: 'existing-env-override' }).modelId).toBe('existing-env-override');
-});
-
-test.each(CLAUDE_EDIT_MODELS)('installed Anthropic SDK sends supported adaptive thinking and drop-block binding for $label', async model => {
+test.each(CLAUDE_EDIT_MODELS)('historical Anthropic SDK sends supported adaptive thinking and drop-block binding for $label', async model => {
   let request: Record<string, unknown> | undefined;
   const provider = createAnthropic({ apiKey: 'fixture-only', fetch: async (_url, init) => {
     request = JSON.parse(String(init?.body));
@@ -55,19 +41,4 @@ test.each(CLAUDE_EDIT_MODELS)('installed Anthropic SDK sends supported adaptive 
     expect(request).not.toHaveProperty('speed');
     expect(claudeProviderOptions(model.gatewayModelId)?.anthropic).not.toHaveProperty('serviceTier');
   }else expect(claudeProviderOptions(model.gatewayModelId)).toEqual(claudeProviderOptions(model.modelId));
-});
-
-test('production policy also blocks environment overrides and previously queued Opus selections', () => {
-  const production = { EDITOR_ALLOW_OPUS: 'false', MODEL_SWITCHER_ENABLED: 'true' };
-  expect(() => resolveClaudeModel('opus', production)).toThrow('only in development');
-  expect(() => resolveClaudeModel(undefined, { ...production, CLAUDE_MODEL: 'claude-opus-5-5' })).toThrow('only in development');
-  expect(() => resolveClaudeModel(undefined, { ...production, EDITOR_DEFAULT_MODEL: 'opus' })).toThrow('only in development');
-  expect(() => resolveClaudeModel(undefined, { ...production, AI_GATEWAY_ENABLED: 'true', CLAUDE_GATEWAY_MODEL: 'anthropic/claude-opus-5.5' })).toThrow('only in development');
-  expect(() => validatePinnedClaudeModel({ provider: 'anthropic', modelId: 'claude-opus-5-5', modelChoice: 'opus' }, production)).toThrow('only in development');
-  expect(validatePinnedClaudeModel({ provider: 'anthropic', modelId: CLAUDE_MODEL, modelChoice: 'sonnet' }, production).modelId).toBe(CLAUDE_MODEL);
-});
-
-test('older or unrelated configured models retain their prior provider options', () => {
-  expect(claudeProviderOptions('claude-sonnet-4-5')).toBeUndefined();
-  expect(claudeProviderOptions('unrelated/claude-sonnet-5.5')).toBeUndefined();
 });

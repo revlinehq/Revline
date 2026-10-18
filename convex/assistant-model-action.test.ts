@@ -46,30 +46,18 @@ async function run(pinnedModel: ClaudeModelSelection) {
   await (respond as unknown as { _handler: (ctx: unknown, args: unknown) => Promise<unknown> })._handler(ctx, { projectId: 'project', ownerId: 'owner', runId: 'run', threadId: 'thread', promptMessageId: 'prompt', pinnedModel });
 }
 
-test.each(CLAUDE_EDIT_MODELS)('$label action uses the captured direct model after env changes and uses supported thinking options', async model => {
-  await run({ provider: 'anthropic', modelId: model.modelId, modelChoice: model.id });
-  expect(fixture.model?.modelId).toBe(model.modelId);
-  expect(fixture.model?.provider).toContain('anthropic');
-  expect(fixture.options).toMatchObject({ providerOptions: claudeProviderOptions(model.modelId) });
-  expect(fixture.generate).toHaveBeenCalledOnce();
-  expect(fixture.finishError).toBeUndefined();
-  expect(fixture.tokenCounter).toHaveBeenCalledOnce();
-});
-
-test.each(CLAUDE_EDIT_MODELS)('$label action keeps the gateway pinned even when its environment flag changes', async model => {
-  await run({ provider: 'gateway', modelId: model.gatewayModelId, modelChoice: model.id });
-  expect(fixture.model?.modelId).toBe(model.gatewayModelId);
-  expect(fixture.options).toMatchObject({ providerOptions: claudeProviderOptions(model.gatewayModelId) });
-  expect(fixture.generate).toHaveBeenCalledOnce();
-  expect(fixture.finishError).toBeUndefined();
-  expect(fixture.tokenCounter).not.toHaveBeenCalled();
+test.each(CLAUDE_EDIT_MODELS)('$label pre-existing direct/gateway pins are refused without generation or timeline edits',async model=>{
+  for(const provider of ['anthropic','gateway'] as const){
+    await run({provider,modelId:provider==='gateway'?model.gatewayModelId:model.modelId,modelChoice:model.id});
+    expect(fixture.generate).not.toHaveBeenCalled();expect(fixture.model).toBeUndefined();expect(fixture.finishError).toContain('supports GPT');
+  }
 });
 
 test('an inconsistent pinned selection fails without generating or silently falling back', async () => {
   await run({ provider: 'anthropic', modelId: 'claude-haiku-5-5', modelChoice: 'opus' });
   expect(fixture.generate).not.toHaveBeenCalled();
   expect(fixture.model).toBeUndefined();
-  expect(fixture.finishError).toContain('model configuration');
+  expect(fixture.finishError).toContain('supports GPT');
 });
 
 // The real SDK model is constructed, while Agent generation stays mocked.

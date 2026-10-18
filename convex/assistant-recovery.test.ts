@@ -6,7 +6,7 @@ import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { api, internal } from './_generated/api';
 import schema from './schema';
 
-beforeEach(() => { vi.stubEnv('BILLING_ENABLED','false'); vi.stubEnv('ANTHROPIC_API_KEY','fixture-only'); vi.stubEnv('AI_GATEWAY_ENABLED','false'); vi.stubEnv('CLAUDE_MODEL','claude-sonnet-5-5'); });
+beforeEach(() => { vi.stubEnv('BILLING_ENABLED','false'); vi.stubEnv('OPENAI_API_KEY','fixture-only');vi.stubEnv('EDITOR_DEFAULT_MODEL','gpt-6.1-sol'); vi.stubEnv('AI_GATEWAY_ENABLED','false'); vi.stubEnv('CLAUDE_MODEL','claude-sonnet-5-5'); });
 afterEach(() => vi.unstubAllEnvs());
 async function fixture() {
   const t=convexTest(schema,import.meta.glob('./**/*.ts')); agentTest.register(t);

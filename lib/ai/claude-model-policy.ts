@@ -1,18 +1,16 @@
-import type { ClaudeModelChoice, ClaudeModelSelection } from './claude-model';
+import type { ClaudeModelSelection } from './claude-model';
 
 type ModelPolicyEnvironment = Readonly<Record<string, string | undefined>>;
-export const PRODUCTION_CLAUDE_MODEL_CHOICES: readonly ClaudeModelChoice[] = ['haiku', 'sonnet'];
-const ALL_CLAUDE_MODEL_CHOICES: readonly ClaudeModelChoice[] = ['haiku', 'sonnet', 'opus'];
+// Keep the export name compatible with existing clients; active editing is GPT-only.
+export const PRODUCTION_CLAUDE_MODEL_CHOICES = ['gpt-6.1-sol', 'gpt-6-astra'] as const;
+export const GPT_ONLY_EDITING_ERROR = 'Revline editing supports GPT-6.1 Sol and GPT-6 Astra only. Choose a supported GPT model.';
 
-export function allowedClaudeModelChoices(env: ModelPolicyEnvironment = process.env): readonly ClaudeModelChoice[] {
-  const claude = env.EDITOR_ALLOW_OPUS === 'false' ? PRODUCTION_CLAUDE_MODEL_CHOICES : ALL_CLAUDE_MODEL_CHOICES;
-  return env.OPENAI_API_KEY?.trim() ? [...claude, 'gpt-6.1-sol', 'gpt-6-astra'] : claude;
+export function allowedClaudeModelChoices(_env: ModelPolicyEnvironment = process.env): readonly (typeof PRODUCTION_CLAUDE_MODEL_CHOICES)[number][] {
+  return PRODUCTION_CLAUDE_MODEL_CHOICES;
 }
 
 export function enforceClaudeModelPolicy(selection: ClaudeModelSelection, env: ModelPolicyEnvironment = process.env): ClaudeModelSelection {
-  if (selection.provider === 'openai' && !env.OPENAI_API_KEY?.trim()) throw new Error('OpenAI editing requires OPENAI_API_KEY in this Convex environment. Choose Sonnet or configure the backend key.');
-  if (env.EDITOR_ALLOW_OPUS === 'false' && (selection.modelChoice === 'opus' || /(?:^|\/)claude-opus(?:-|\.)/.test(selection.modelId))) {
-    throw new Error('Opus is available only in development. Choose Sonnet 5.5 for this workspace.');
-  }
+  if (selection.provider !== 'openai' || !PRODUCTION_CLAUDE_MODEL_CHOICES.some(choice=>choice===selection.modelId) || (selection.modelChoice !== undefined && !PRODUCTION_CLAUDE_MODEL_CHOICES.some(choice=>choice===selection.modelChoice))) throw new Error(GPT_ONLY_EDITING_ERROR);
+  if (!env.OPENAI_API_KEY?.trim()) throw new Error('OpenAI editing requires OPENAI_API_KEY in this Convex environment. Configure the backend key before editing.');
   return selection;
 }

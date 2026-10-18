@@ -48,7 +48,7 @@ const initial:Timeline={fps:30,aspectRatio:'landscape',tracks:{visual:2,overlay:
   {id:'to',kind:'image',assetId:'image',track:1,start:3,duration:3,sourceStart:0},
   {id:'title',kind:'caption',track:2,start:0,duration:2,sourceStart:0,text:'Keep these words',animation:'fade',color:'#ffffff',background:'transparent',textTemplate:{preset:'karaoke',duration:2,offset:0,highlightColor:'#FFFF00'}},
 ]};
-beforeEach(()=>{sdk.options=null;sdk.plan=async()=>{};sdk.messages=[];vi.stubEnv('BILLING_ENABLED','false');vi.stubEnv('ANTHROPIC_API_KEY','fixture-only');vi.stubEnv('AI_GATEWAY_ENABLED','false')});
+beforeEach(()=>{sdk.options=null;sdk.plan=async()=>{};sdk.messages=[];vi.stubEnv('BILLING_ENABLED','false');vi.stubEnv('OPENAI_API_KEY','fixture-only');vi.stubEnv('EDITOR_DEFAULT_MODEL','gpt-6.1-sol');vi.stubEnv('AI_GATEWAY_ENABLED','false')});
 afterEach(()=>vi.unstubAllEnvs());
 async function memoryBackend(seed:Timeline,priorHistory:Timeline[]=[]){
   const t=convexTest(schema,import.meta.glob('./**/*.ts')),owner=t.withIdentity({subject:'owner'});

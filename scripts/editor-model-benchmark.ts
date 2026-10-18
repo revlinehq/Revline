@@ -179,7 +179,8 @@ async function main() {
   const relevantSegments = transcript.segments.filter(segment => segment.start < speechDuration && segment.end > 0);
   requireValue(relevantSegments.length > 0, 'Speech transcript must intersect the benchmark window.');
   const status = await (await client()).query(api.assistant.status, { projectId: sourceAssets.cuts.projectId });
-  requireValue(status.configured && status.modelSwitcher && status.allowedModels?.includes('sonnet') && status.allowedModels.includes('gpt-6.1-sol'), 'Both pinned models must be enabled before creating benchmark projects.');
+  const legacyEnabledModels:readonly string[]=status.allowedModels??[];
+  requireValue(status.configured && status.modelSwitcher && legacyEnabledModels.includes('sonnet') && legacyEnabledModels.includes('gpt-6.1-sol'), 'This historical Sonnet/Sol benchmark needs a legacy deployment; active Revline editing is GPT-only.');
   await save('sources.json', { cuts: { duration: sourceAssets.cuts.duration, metadataSha256: digest({ size: sourceAssets.cuts.size, duration: sourceAssets.cuts.duration, width: sourceAssets.cuts.width, height: sourceAssets.cuts.height }) }, speech: { duration: speechDuration, transcriptSha256: digest(transcript), transcriptSegments: relevantSegments }, analysisPreparation: fixture.analysisPreparation });
   if (history) requireValue(createHash('sha256').update(await readFile(join(output, 'sources.json'))).digest('hex') === history.files.sources.sha256, 'A controlled rerun must retain the original shared media/transcript inputs.');
   const runs: Record<string, unknown>[] = [];

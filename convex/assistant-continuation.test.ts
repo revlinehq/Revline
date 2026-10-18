@@ -28,7 +28,7 @@ const execute = async(tools: Record<string, Tool>, name: string, input: unknown)
   if(name==='addTimedEffect')await tools.planEffects.execute({},{plans:[{id:'fixture-flash',kind:'timed',effect:'flash',start:1.69,duration:.5,purpose:'Explicitly requested flash',strength:'Fixed preset',expectation:'The flash accents this moment',anchor:{kind:'requested-time',time:1.69,description:'Explicit fixture time'}}]});
   return tools[name].execute({}, tools[name].inputSchema.parse(input));
 };
-beforeEach(() => { sdk.options = null; sdk.plan = async () => {}; sdk.steps = []; sdk.finishReason = 'stop'; vi.stubEnv('BILLING_ENABLED', 'false'); vi.stubEnv('ANTHROPIC_API_KEY', 'fixture-only'); vi.stubEnv('AI_GATEWAY_ENABLED', 'false'); });
+beforeEach(() => { sdk.options = null; sdk.plan = async () => {}; sdk.steps = []; sdk.finishReason = 'stop'; vi.stubEnv('BILLING_ENABLED', 'false'); vi.stubEnv('OPENAI_API_KEY', 'fixture-only');vi.stubEnv('EDITOR_DEFAULT_MODEL','gpt-6.1-sol'); vi.stubEnv('AI_GATEWAY_ENABLED', 'false'); });
 afterEach(() => vi.unstubAllEnvs());
 
 async function fixture(prompt = 'can u put bunch of effects here', scenes: { start: number; end: number; description: string; score: number }[] = [], recovery = false) {
@@ -363,7 +363,7 @@ test.each([
 });
 
 test.each([true, false])('legacy transcription gets at most one audio measurement backfill; available=%s', async backfill => {
-  vi.stubEnv('OPENAI_API_KEY', ''); vi.stubEnv('GOOGLE_GENERATIVE_AI_API_KEY', '');
+  vi.stubEnv('GOOGLE_GENERATIVE_AI_API_KEY', '');
   const f = await fixture('Tighten the quiet tail from this saved transcription');
   const transcript = { segments: [{ start: 13.57, end: 14.19, text: 'you' }], words: [{ start: 13.57, end: 14.19, text: 'you' }] };
   const audioActivity = { version: 1 as const, duration: 60, frameSeconds: .01 as const, quiet: [{ start: 13.753, end: 14.5 }], level: { noiseFloorDb: -90, speechDb: -25, quietThresholdDb: -74, separationDb: 65 }, reliable: true };
@@ -524,7 +524,7 @@ test('credit exhaustion reports billing recovery without claiming a configuratio
   const f = await fixture('Add a flash at 1.69 seconds');
   await f.runPlan(async () => { throw Object.assign(new Error('credit balance too low'), { statusCode: 400 }); });
   const saved = await f.read();
-  expect(saved.revision).toBe(0); expect(saved.aiError).toContain('credits are exhausted');
+  expect(saved.revision).toBe(0); expect(saved.aiError).toContain('OpenAI API credits or spending limits are exhausted');
   expect(saved.aiError).not.toContain('model configuration');
 });
 

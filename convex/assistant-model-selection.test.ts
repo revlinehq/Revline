@@ -18,7 +18,7 @@ async function fixture() {
 }
 beforeEach(() => {
   vi.stubEnv('EDITOR_ALLOW_OPUS', 'true');
-  vi.stubEnv('OPENAI_API_KEY', '');
+  vi.stubEnv('OPENAI_API_KEY', 'fixture-only');
   vi.stubEnv('BILLING_ENABLED', 'false');
   vi.stubEnv('ANTHROPIC_API_KEY', 'fixture-only');
   vi.stubEnv('AI_GATEWAY_ENABLED', 'false');
@@ -63,134 +63,49 @@ test.each(['disabled', 'claude', 'unsupported'])('rejects %s reasoning overrides
   expect(await t.run(ctx => ctx.db.system.query('_scheduled_functions').take(10))).toHaveLength(0);
 });
 
-test('production rejects stale Opus selections before creating messages or starting paid work', async () => {
-  vi.stubEnv('MODEL_SWITCHER_ENABLED', 'true');
-  vi.stubEnv('EDITOR_ALLOW_OPUS', 'false');
-  const { t, owner, projectId } = await fixture();
-  expect(await owner.query(api.assistant.status, { projectId })).toMatchObject({ modelSwitcher: true, allowedModels: ['haiku', 'sonnet'] });
-  await expect(owner.mutation(api.assistant.send, { projectId, prompt: 'Synthetic edit', modelChoice: 'opus' })).rejects.toThrow('development');
-  vi.stubEnv('CLAUDE_MODEL', 'claude-opus-5-5');
-  await expect(owner.mutation(api.assistant.send, { projectId, prompt: 'Synthetic edit' })).rejects.toThrow('development');
-  expect((await t.run(ctx => readProject(ctx,projectId)))?.threadId).toBeUndefined();
-  expect(await t.run(ctx => ctx.db.system.query('_scheduled_functions').take(10))).toHaveLength(0);
-  vi.stubEnv('CLAUDE_MODEL', 'claude-sonnet-5-5');
-  await owner.mutation(api.assistant.send, { projectId, prompt: 'Synthetic edit' });
-  const [scheduled] = await t.run(ctx => ctx.db.system.query('_scheduled_functions').take(10));
-  expect(scheduled.args[0].pinnedModel).toEqual({ provider: 'anthropic', modelId: 'claude-sonnet-5-5' });
+test.each(CLAUDE_EDIT_MODELS)('$label stale requests fail before creating messages or scheduling paid work',async model=>{
+  vi.stubEnv('MODEL_SWITCHER_ENABLED','true');vi.stubEnv('AI_GATEWAY_ENABLED','true');vi.stubEnv('EDITOR_ALLOW_OPUS','true');
+  const {t,owner,projectId}=await fixture();
+  expect(await owner.query(api.assistant.status,{projectId})).toMatchObject({configured:true,defaultModelChoice:'gpt-6.1-sol',allowedModels:['gpt-6.1-sol','gpt-6-astra']});
+  await expect(owner.mutation(api.assistant.send,{projectId,prompt:'Stale request',modelChoice:model.id})).rejects.toThrow('supports GPT');
+  expect((await t.run(ctx=>readProject(ctx,projectId)))?.threadId).toBeUndefined();expect(await t.run(ctx=>ctx.db.system.query('_scheduled_functions').take(10))).toHaveLength(0);
 });
 
-test('disabled manual selection fails before creating a thread, history, messages, or scheduling', async () => {
-  const { t, owner, projectId } = await fixture();
-  await expect(owner.mutation(api.assistant.send, { projectId, prompt: 'Synthetic edit', modelChoice: 'opus' })).rejects.toThrow('disabled');
-  expect(await owner.query(api.assistant.status, { projectId })).not.toHaveProperty('modelSwitcher');
-  const project = await t.run(ctx => readProject(ctx,projectId));
-  expect(project).toMatchObject({ revision: 0, history: [] });
-  expect(project?.threadId).toBeUndefined();
-  expect(project?.aiRunning).not.toBe(true);
-  expect(await t.run(ctx => ctx.db.system.query('_scheduled_functions').take(10))).toHaveLength(0);
+test('disabled manual selection and invalid credentials cannot create a conversation',async()=>{
+  const {t,owner,projectId}=await fixture();
+  await expect(owner.mutation(api.assistant.send,{projectId,prompt:'Synthetic edit',modelChoice:'gpt-6-astra'})).rejects.toThrow('disabled');
+  vi.stubEnv('OPENAI_API_KEY','');
+  await expect(owner.mutation(api.assistant.send,{projectId,prompt:'Synthetic edit'})).rejects.toThrow('OPENAI_API_KEY');
+  expect((await owner.query(api.assistant.status,{projectId})).configured).toBe(false);
+  expect((await t.run(ctx=>readProject(ctx,projectId)))?.threadId).toBeUndefined();expect(await t.run(ctx=>ctx.db.system.query('_scheduled_functions').take(10))).toHaveLength(0);
 });
 
-test.each(CLAUDE_EDIT_MODELS)('$label pins its direct provider/model on a production-enabled switcher', async model => {
-  vi.stubEnv('MODEL_SWITCHER_ENABLED', 'true');
-  vi.stubEnv('CONVEX_CLOUD_URL', 'https://different-gnu-398.convex.cloud');
-  const { t, owner, projectId } = await fixture();
-  expect(await owner.query(api.assistant.status, { projectId })).toMatchObject({ modelSwitcher: true });
-  await owner.mutation(api.assistant.send, { projectId, prompt: 'Synthetic edit', modelChoice: model.id });
-  const scheduled = await t.run(ctx => ctx.db.system.query('_scheduled_functions').take(10));
-  expect(scheduled).toHaveLength(1);
-  expect(scheduled[0].args[0]).toMatchObject({ ownerId: identity.subject, pinnedModel: { provider: 'anthropic', modelId: model.modelId, modelChoice: model.id } });
-  vi.stubEnv('CLAUDE_MODEL', 'changed-after-send');
-  vi.stubEnv('AI_GATEWAY_ENABLED', 'true');
-  vi.stubEnv('MODEL_SWITCHER_ENABLED', 'false');
-  expect((await t.run(ctx => ctx.db.system.query('_scheduled_functions').take(10)))[0].args[0].pinnedModel).toEqual({ provider: 'anthropic', modelId: model.modelId, modelChoice: model.id });
-  await expect(owner.mutation(api.assistant.send, { projectId, prompt: 'Change mid-run', modelChoice: 'haiku' })).rejects.toThrow();
-  expect(await t.run(ctx => ctx.db.system.query('_scheduled_functions').take(10))).toHaveLength(1);
+test.each(OPENAI_EDIT_MODELS)('$label pins native OpenAI despite gateway flags and later defaults',async model=>{
+  vi.stubEnv('MODEL_SWITCHER_ENABLED','true');vi.stubEnv('AI_GATEWAY_ENABLED','true');
+  const {t,owner,projectId}=await fixture();
+  await owner.mutation(api.assistant.send,{projectId,prompt:'Synthetic edit',modelChoice:model.id});
+  const [scheduled]=await t.run(ctx=>ctx.db.system.query('_scheduled_functions').take(10));
+  expect(scheduled.args[0].pinnedModel).toEqual({provider:'openai',modelId:model.modelId,modelChoice:model.id});
+  vi.stubEnv('MODEL_SWITCHER_ENABLED','false');vi.stubEnv('EDITOR_DEFAULT_MODEL','gpt-6-astra');
+  expect((await t.run(ctx=>ctx.db.system.query('_scheduled_functions').take(10)))[0].args[0].pinnedModel).toEqual(scheduled.args[0].pinnedModel);
 });
 
-test.each(CLAUDE_EDIT_MODELS)('$label preserves the configured gateway provider', async model => {
-  vi.stubEnv('MODEL_SWITCHER_ENABLED', 'true');
-  vi.stubEnv('AI_GATEWAY_ENABLED', 'true');
-  const { t, owner, projectId } = await fixture();
-  await owner.mutation(api.assistant.send, { projectId, prompt: 'Synthetic edit', modelChoice: model.id });
-  const [scheduled] = await t.run(ctx => ctx.db.system.query('_scheduled_functions').take(10));
-  expect(scheduled.args[0].pinnedModel).toEqual({ provider: 'gateway', modelId: model.gatewayModelId, modelChoice: model.id });
-});
-
-test('unselected sends keep env overrides and never expose keys in public status', async () => {
-  vi.stubEnv('CLAUDE_MODEL', 'configured-existing-model');
-  const { t, owner, projectId } = await fixture();
-  await owner.mutation(api.assistant.send, { projectId, prompt: 'Synthetic edit' });
-  const [scheduled] = await t.run(ctx => ctx.db.system.query('_scheduled_functions').take(10));
-  expect(scheduled.args[0].pinnedModel).toEqual({ provider: 'anthropic', modelId: 'configured-existing-model' });
-  const status = await owner.query(api.assistant.status, { projectId });
-  expect(JSON.stringify(status)).not.toContain('fixture-only');
-  expect(status).not.toHaveProperty('modelId');
-});
-
-test('unsupported choices and foreign projects cannot schedule a model request', async () => {
-  vi.stubEnv('MODEL_SWITCHER_ENABLED', 'true');
-  const { t, owner, projectId } = await fixture();
-  await expect(owner.mutation(api.assistant.send, { projectId, prompt: 'Invalid', modelChoice: 'arbitrary-model' as ClaudeModelChoice })).rejects.toThrow();
-  await expect(t.withIdentity({ ...identity, subject: 'stranger' }).mutation(api.assistant.send, { projectId, prompt: 'Foreign', modelChoice: 'haiku' })).rejects.toThrow('Project not found');
-  await expect(t.mutation(api.assistant.send, { projectId, prompt: 'Anonymous', modelChoice: 'haiku' })).rejects.toThrow('Authentication required');
-  expect(await t.run(ctx => ctx.db.system.query('_scheduled_functions').take(10))).toHaveLength(0);
-  expect((await t.run(ctx => readProject(ctx,projectId)))?.threadId).toBeUndefined();
-});
-
-test.each(OPENAI_EDIT_MODELS)('$label availability requires this environment key and pins native OpenAI even with gateway enabled', async model => {
-  vi.stubEnv('MODEL_SWITCHER_ENABLED', 'true');
-  const { t, owner, projectId } = await fixture();
-  expect((await owner.query(api.assistant.status, { projectId })).allowedModels).not.toContain(model.id);
-  await expect(owner.mutation(api.assistant.send, { projectId, prompt: 'Synthetic edit', modelChoice: model.id })).rejects.toThrow('OPENAI_API_KEY');
-  expect((await t.run(ctx => readProject(ctx, projectId)))?.threadId).toBeUndefined();
-  expect(await t.run(ctx => ctx.db.system.query('_scheduled_functions').take(10))).toHaveLength(0);
-  vi.stubEnv('OPENAI_API_KEY', 'fixture-openai-only');
-  vi.stubEnv('AI_GATEWAY_ENABLED', 'true');
-  vi.stubEnv('EDITOR_ALLOW_OPUS', 'false');
-  const status = await owner.query(api.assistant.status, { projectId });
-  expect(status.allowedModels).toEqual(['haiku', 'sonnet', 'gpt-6.1-sol', 'gpt-6-astra']);
-  expect(JSON.stringify(status)).not.toContain('fixture-openai-only');
-  await owner.mutation(api.assistant.send, { projectId, prompt: 'Synthetic edit', modelChoice: model.id });
-  const [scheduled] = await t.run(ctx => ctx.db.system.query('_scheduled_functions').take(10));
-  expect(scheduled.args[0].pinnedModel).toEqual({ provider: 'openai', modelId: model.modelId, modelChoice: model.id });
-  vi.stubEnv('OPENAI_API_KEY', '');
-  vi.stubEnv('MODEL_SWITCHER_ENABLED', 'false');
-  expect(scheduled.args[0].pinnedModel.provider).toBe('openai');
-});
-
-test('OpenAI-only configuration does not silently replace the default Sonnet selection', async () => {
-  vi.stubEnv('MODEL_SWITCHER_ENABLED', 'true');
-  vi.stubEnv('ANTHROPIC_API_KEY', '');
-  vi.stubEnv('OPENAI_API_KEY', 'fixture-only');
-  const { t, owner, projectId } = await fixture();
-  expect((await owner.query(api.assistant.status, { projectId })).configured).toBe(true);
-  await expect(owner.mutation(api.assistant.send, { projectId, prompt: 'Synthetic edit' })).rejects.toThrow('ANTHROPIC_API_KEY');
-  expect(await t.run(ctx => ctx.db.system.query('_scheduled_functions').take(10))).toHaveLength(0);
-});
-
-test('the configured Sol default is public as a choice and pinned for unselected new-chat requests',async()=>{
-  vi.stubEnv('EDITOR_DEFAULT_MODEL','gpt-6.1-sol');vi.stubEnv('OPENAI_API_KEY','fixture-openai-only');vi.stubEnv('ANTHROPIC_API_KEY','');
+test('unset default is Sol, while invalid legacy defaults fail without falling back',async()=>{
   const {t,owner,projectId}=await fixture();
   expect(await owner.query(api.assistant.status,{projectId})).toMatchObject({configured:true,defaultModelChoice:'gpt-6.1-sol'});
-  await owner.mutation(api.assistant.send,{projectId,prompt:'Synthetic default edit'});
-  const [scheduled]=await t.run(ctx=>ctx.db.system.query('_scheduled_functions').take(10));
-  expect(scheduled.args[0].pinnedModel).toEqual({provider:'openai',modelId:'gpt-6.1-sol',modelChoice:'gpt-6.1-sol'});
-});
-
-test('Sonnet remains selectable when the configured default is Sol',async()=>{
-  vi.stubEnv('EDITOR_DEFAULT_MODEL','gpt-6.1-sol');vi.stubEnv('OPENAI_API_KEY','fixture-openai-only');vi.stubEnv('MODEL_SWITCHER_ENABLED','true');
-  const {t,owner,projectId}=await fixture();
-  expect((await owner.query(api.assistant.status,{projectId})).allowedModels).toContain('sonnet');
-  await owner.mutation(api.assistant.send,{projectId,prompt:'Synthetic explicit edit',modelChoice:'sonnet'});
-  const [scheduled]=await t.run(ctx=>ctx.db.system.query('_scheduled_functions').take(10));
-  expect(scheduled.args[0].pinnedModel).toEqual({provider:'anthropic',modelId:'claude-sonnet-5-5',modelChoice:'sonnet'});
-});
-
-test('a missing configured default credential fails closed before creating a conversation',async()=>{
-  vi.stubEnv('EDITOR_DEFAULT_MODEL','gpt-6.1-sol');
-  const {t,owner,projectId}=await fixture();
+  vi.stubEnv('EDITOR_DEFAULT_MODEL','sonnet');
   expect((await owner.query(api.assistant.status,{projectId})).configured).toBe(false);
-  await expect(owner.mutation(api.assistant.send,{projectId,prompt:'Synthetic default edit'})).rejects.toThrow('OPENAI_API_KEY');
+  await expect(owner.mutation(api.assistant.send,{projectId,prompt:'Synthetic edit'})).rejects.toThrow('supports GPT');
   expect((await t.run(ctx=>readProject(ctx,projectId)))?.threadId).toBeUndefined();
+  vi.stubEnv('EDITOR_DEFAULT_MODEL','');await owner.mutation(api.assistant.send,{projectId,prompt:'Synthetic edit'});
+  const [scheduled]=await t.run(ctx=>ctx.db.system.query('_scheduled_functions').take(10));expect(scheduled.args[0].pinnedModel).toEqual({provider:'openai',modelId:'gpt-6.1-sol',modelChoice:'gpt-6.1-sol'});
+  expect(JSON.stringify(await owner.query(api.assistant.status,{projectId}))).not.toContain('fixture-only');
+});
+
+test('unsupported choices, foreign projects and anonymous calls cannot schedule requests',async()=>{
+  vi.stubEnv('MODEL_SWITCHER_ENABLED','true');const {t,owner,projectId}=await fixture();
+  await expect(owner.mutation(api.assistant.send,{projectId,prompt:'Invalid',modelChoice:'arbitrary-model' as ClaudeModelChoice})).rejects.toThrow();
+  await expect(t.withIdentity({...identity,subject:'stranger'}).mutation(api.assistant.send,{projectId,prompt:'Foreign',modelChoice:'gpt-6.1-sol'})).rejects.toThrow('Project not found');
+  await expect(t.mutation(api.assistant.send,{projectId,prompt:'Anonymous',modelChoice:'gpt-6.1-sol'})).rejects.toThrow('Authentication required');
   expect(await t.run(ctx=>ctx.db.system.query('_scheduled_functions').take(10))).toHaveLength(0);
 });

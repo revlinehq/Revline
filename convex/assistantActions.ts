@@ -3,19 +3,16 @@ import { effectPlanInput,validateEffectPlan,type EffectPlan,type EffectEvidence 
 import { EDITOR_STYLE_RULES } from "../lib/ai/editor-style";
 import { wrapLanguageModel } from "ai";
 import { openAIEditorImages } from "../lib/ai/openai-editor-images";
-import { anthropicTokenCounter } from "../lib/ai/anthropic-token-count";
 import { openAITokenCounter } from '../lib/ai/openai-token-count';
 import { AssistantTokenBudget, AssistantTokenBudgetError, editorTokenBudgetEnabled } from "../lib/ai/token-budget";
 import { AssistantCostLog } from '../lib/ai/cost-log';
 import { modelTimeline, modelAssetAnalysis, EDITOR_CONTEXT_NOTICE, EDITOR_CONTEXT_BOUNDARY } from "../lib/ai/editor-context";
 import { assistantFailureReason } from "../lib/ai/assistant-error";
-import { anthropic } from "@ai-sdk/anthropic";
 import { openai } from "@ai-sdk/openai";
 import { assertEditorModelConfigured, resolveClaudeModel, validatePinnedClaudeModel, editorProviderOptions, editorMaxOutputTokens, type ClaudeModelSelection } from "../lib/ai/claude-model";
 import { pinnedClaudeModelValidator } from './lib/claude_model';
 import { assistantRecoveryValidator } from './schema';
 import { Agent, createTool, saveMessage, stepCountIs } from "@convex-dev/agent";
-import { convexGateway } from "@convex-dev/ai-sdk-provider";
 import { v } from "convex/values";
 import { z } from "zod";
 import { components, internal } from "./_generated/api";
@@ -442,16 +439,14 @@ export const respond = internalAction({
         } }),
       };
       const { provider, modelId } = selection;
-      const gateway = provider === 'gateway';
       const tokenBudget = new AssistantTokenBudget();
       const enforceTokenBudget=editorTokenBudgetEnabled();
       let countInput:ReturnType<typeof openAITokenCounter>|undefined;
       if(enforceTokenBudget){
         if(provider==='openai'&&process.env.OPENAI_API_KEY)countInput=openAITokenCounter(modelId,process.env.OPENAI_API_KEY,measurement=>console.log(`[ai-budget] ${JSON.stringify({timestamp:new Date().toISOString(),projectId:args.projectId,runId:args.runId,model:modelId,...measurement})}`));
-        else if(provider==='anthropic'&&process.env.ANTHROPIC_API_KEY)countInput=anthropicTokenCounter(modelId,process.env.ANTHROPIC_API_KEY);
       }
       console.log(`[ai-budget] ${JSON.stringify({timestamp:new Date().toISOString(),projectId:args.projectId,runId:args.runId,enforced:enforceTokenBudget})}`);
-      const model = wrapLanguageModel({ model: provider === 'openai' ? openai.responses(modelId) : gateway ? convexGateway(modelId) : anthropic(modelId), middleware: [...(provider === 'openai' ? [openAIEditorImages] : []), tokenBudget.middleware(args.selectedClipIds ?? (args.selectedClipId ? [args.selectedClipId] : []), editSession.revision,countInput,enforceTokenBudget)] });
+      const model = wrapLanguageModel({ model: openai.responses(modelId), middleware: [openAIEditorImages, tokenBudget.middleware(args.selectedClipIds ?? (args.selectedClipId ? [args.selectedClipId] : []), editSession.revision,countInput,enforceTokenBudget)] });
       const providerOptions = editorProviderOptions(selection);
       const agent = new Agent(components.agent, { name: "Revline", languageModel: model, tools, contextOptions: { recentMessages: 100, excludeToolMessages: false }, stopWhen: [stepCountIs(15), ({ steps }) => hasRepeatedToolFailures(steps)], instructions: `${EDITOR_STYLE_RULES}
 # Editing rules
@@ -477,7 +472,7 @@ You edit the user's video timeline using structured tools. Greetings, small talk
       }
       const cause = abortSignal.aborted ? abortSignal.reason : error instanceof AssistantToolRetryError ? error : streamError ?? error;
       costLog.finish(cause instanceof AssistantTokenBudgetError ? 'token_budget' : cause instanceof AssistantBudgetError ? 'time_budget' : cause instanceof AssistantToolRetryError ? 'repeated_tool_failure' : 'provider_or_tool_error', progress(), true);
-      const reason = (cause instanceof AssistantBudgetError || cause instanceof AssistantTokenBudgetError || cause instanceof AssistantToolRetryError || cause instanceof AnalysisStepError) ? cause.message : cause instanceof Error && /timeline changed elsewhere|Source trim|Clip timing|Clip media|replacement was not saved|requested changes were not saved|Inspect the current timeline|^(?:OpenAI|Claude) editing requires (?:OPENAI|ANTHROPIC)_API_KEY in this Convex environment\./.test(cause.message) ? cause.message : assistantFailureReason(cause, selectedProvider) ?? "The assistant could not finish this request. Check the model configuration and try again.";
+      const reason = (cause instanceof AssistantBudgetError || cause instanceof AssistantTokenBudgetError || cause instanceof AssistantToolRetryError || cause instanceof AnalysisStepError) ? cause.message : cause instanceof Error && /timeline changed elsewhere|Source trim|Clip timing|Clip media|replacement was not saved|requested changes were not saved|Inspect the current timeline|^(?:OpenAI editing requires OPENAI_API_KEY in this Convex environment\.|Revline editing supports GPT-)/.test(cause.message) ? cause.message : assistantFailureReason(cause, selectedProvider) ?? "The assistant could not finish this request. Check the model configuration and try again.";
       const edits = session?.savedEdits ?? 0;
       try { await saveMessage(ctx, components.agent, { threadId: args.threadId, userId: args.ownerId,promptMessageId:args.promptMessageId, message: { role: "assistant", content: edits ? `${edits} edits were saved before the assistant stopped. Undo restores the state before the latest consecutive group of AI edits. ${reason}` : `No timeline changes were saved. ${reason}` } }); } catch { /* Status remains the recovery path if the message service is unavailable. */ }
       await ctx.runMutation(internal.assistant.finish, { projectId: args.projectId, ownerId: args.ownerId, runId: args.runId, error: reason, savedEdits: session?.savedEdits ?? 0,...(session?.staged?{publication:{threadId:args.threadId,promptMessageId:args.promptMessageId,stagedRevision:session.revision,status:abortSignal.aborted?'aborted' as const:'failed' as const}}:{}) });

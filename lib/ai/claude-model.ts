@@ -1,6 +1,6 @@
 import type { AnthropicProviderOptions } from '@ai-sdk/anthropic';
 import type { OpenAIResponsesProviderOptions } from '@ai-sdk/openai';
-import { enforceClaudeModelPolicy } from './claude-model-policy';
+import { enforceClaudeModelPolicy, GPT_ONLY_EDITING_ERROR } from './claude-model-policy';
 
 export const CLAUDE_MODEL = 'claude-sonnet-5-5';
 export const CLAUDE_GATEWAY_MODEL = 'anthropic/claude-sonnet-5.5';
@@ -18,12 +18,13 @@ export const OPENAI_EDIT_MODELS = [
   { id: 'gpt-6.1-sol', label: 'GPT-6.1 Sol', modelId: 'gpt-6.1-sol', pricing: { input: 2, cacheRead: .10, cacheWrite: 2.50, output: 10 } },
   { id: 'gpt-6-astra', label: 'GPT-6 Astra', modelId: 'gpt-6-astra', pricing: { input: 10, cacheRead: 1, cacheWrite: 12.50, output: 50 } },
 ] as const;
-export const EDITOR_MODELS = [...CLAUDE_EDIT_MODELS, ...OPENAI_EDIT_MODELS] as const;
+export const EDITOR_MODELS = OPENAI_EDIT_MODELS;
 export const OPENAI_REASONING_EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'] as const;
 export type OpenAIReasoningEffort = typeof OPENAI_REASONING_EFFORTS[number];
 export const OPENAI_SPEED_MODES = ['standard', 'fast'] as const;
 export type OpenAISpeedMode = typeof OPENAI_SPEED_MODES[number];
-export type ClaudeModelChoice = typeof EDITOR_MODELS[number]['id'];
+// Legacy IDs remain decodable for historical records and stale queued requests.
+export type ClaudeModelChoice = typeof OPENAI_EDIT_MODELS[number]['id'] | typeof CLAUDE_EDIT_MODELS[number]['id'];
 export type ClaudeModelSelection = { provider: 'anthropic' | 'gateway' | 'openai'; modelId: string; modelChoice?: ClaudeModelChoice; reasoningEffort?: OpenAIReasoningEffort; speedMode?: OpenAISpeedMode };
 type ClaudeModelEnvironment = Readonly<Record<string, string | undefined>>;
 
@@ -32,38 +33,24 @@ export function claudeModelSwitcherEnabled(env: ClaudeModelEnvironment = process
 }
 
 export function resolveClaudeModel(modelChoice?: ClaudeModelChoice, env: ClaudeModelEnvironment = process.env): ClaudeModelSelection {
-  const provider = env.AI_GATEWAY_ENABLED === 'true' ? 'gateway' : 'anthropic';
-  const choice=modelChoice??(env.EDITOR_DEFAULT_MODEL?.trim()||undefined);
-  if (choice !== undefined) {
-    if (modelChoice!==undefined&&!claudeModelSwitcherEnabled(env)) throw new Error('Manual model selection is currently disabled.');
-    const openai = OPENAI_EDIT_MODELS.find(model => model.id === choice);
-    if (openai) return enforceClaudeModelPolicy({ provider: 'openai', modelId: openai.modelId, modelChoice:openai.id }, env);
-    const selected = CLAUDE_EDIT_MODELS.find(model => model.id === choice);
-    if (!selected) throw new Error(modelChoice===undefined?'Configure a supported EDITOR_DEFAULT_MODEL default.':'Choose a supported editor model.');
-    return enforceClaudeModelPolicy({ provider, modelId: provider === 'gateway' ? selected.gatewayModelId : selected.modelId, modelChoice:selected.id }, env);
-  }
-  return enforceClaudeModelPolicy({ provider, modelId: provider === 'gateway' ? env.CLAUDE_GATEWAY_MODEL ?? CLAUDE_GATEWAY_MODEL : env.CLAUDE_MODEL ?? CLAUDE_MODEL }, env);
+  if (modelChoice !== undefined && !claudeModelSwitcherEnabled(env)) throw new Error('Manual model selection is currently disabled.');
+  const choice = modelChoice ?? (env.EDITOR_DEFAULT_MODEL?.trim() || 'gpt-6.1-sol');
+  const selected = OPENAI_EDIT_MODELS.find(model => model.id === choice);
+  if (!selected) throw new Error(GPT_ONLY_EDITING_ERROR);
+  return enforceClaudeModelPolicy({ provider: 'openai', modelId: selected.modelId, modelChoice: selected.id }, env);
 }
 
-export function defaultEditorModelChoice(env:ClaudeModelEnvironment=process.env):ClaudeModelChoice|undefined {
+export function defaultEditorModelChoice(env:ClaudeModelEnvironment=process.env):typeof OPENAI_EDIT_MODELS[number]['id']|undefined {
   const selected=resolveClaudeModel(undefined,env);
-  return EDITOR_MODELS.find(model=>model.modelId===selected.modelId||('gatewayModelId' in model&&model.gatewayModelId===selected.modelId))?.id;
+  return EDITOR_MODELS.find(model=>model.modelId===selected.modelId)?.id;
 }
 
 export function validatePinnedClaudeModel(selection: ClaudeModelSelection, env: ClaudeModelEnvironment = process.env): ClaudeModelSelection {
-  if (selection.reasoningEffort !== undefined && (selection.provider !== 'openai' || !OPENAI_REASONING_EFFORTS.includes(selection.reasoningEffort))) throw new Error('Choose a supported OpenAI reasoning effort.');
-  if (selection.speedMode !== undefined && (selection.provider !== 'openai' || !OPENAI_SPEED_MODES.includes(selection.speedMode))) throw new Error('Choose a supported OpenAI speed mode.');
-  const openai = OPENAI_EDIT_MODELS.find(model => model.modelId === selection.modelId);
-  if (selection.provider === 'openai') {
-    if (!openai || (selection.modelChoice !== undefined && selection.modelChoice !== openai.id)) throw new Error('Pinned editor model does not match its selection.');
-    return enforceClaudeModelPolicy(selection, env);
-  }
-  if (openai) throw new Error('Pinned editor model does not match its provider.');
-  if (selection.modelChoice !== undefined) {
-    const selected = CLAUDE_EDIT_MODELS.find(model => model.id === selection.modelChoice);
-    if (!selected || selection.modelId !== (selection.provider === 'gateway' ? selected.gatewayModelId : selected.modelId)) throw new Error('Pinned editor model does not match its selection.');
-  }
-  return enforceClaudeModelPolicy(selection, env);
+  enforceClaudeModelPolicy(selection, env);
+  if (selection.reasoningEffort !== undefined && !OPENAI_REASONING_EFFORTS.includes(selection.reasoningEffort)) throw new Error('Choose a supported OpenAI reasoning effort.');
+  if (selection.speedMode !== undefined && !OPENAI_SPEED_MODES.includes(selection.speedMode)) throw new Error('Choose a supported OpenAI speed mode.');
+  if (selection.modelChoice !== undefined && selection.modelChoice !== selection.modelId) throw new Error('Pinned editor model does not match its selection.');
+  return selection;
 }
 
 /** Capture manual effort with the model so a queued run cannot change settings. */
@@ -81,6 +68,7 @@ export function withEditorSpeed(selection: ClaudeModelSelection, speedMode?: Ope
   return { ...selection, speedMode };
 }
 
+/** Historical benchmark adapter; active editor policy refuses these models. */
 export function claudeProviderOptions(modelId: string) {
   if (!/^(?:anthropic\/)?claude-(?:haiku|sonnet|opus)-5[.-]5$/.test(modelId)) return undefined;
   const anthropic = {
@@ -93,7 +81,7 @@ export function claudeProviderOptions(modelId: string) {
 }
 
 export function editorProviderOptions(selection: ClaudeModelSelection) {
-  if (selection.provider !== 'openai') return claudeProviderOptions(selection.modelId);
+  if (selection.provider !== 'openai') throw new Error(GPT_ONLY_EDITING_ERROR);
   const openai = {
     reasoningEffort: selection.reasoningEffort ?? 'medium', reasoningMode: 'standard', serviceTier: selection.speedMode === 'fast' ? 'fast' : 'default',
     // History is managed by the existing Agent thread; retain encrypted reasoning
@@ -111,7 +99,5 @@ export function editorMaxOutputTokens(selection: ClaudeModelSelection) {
 }
 
 export function assertEditorModelConfigured(selection: ClaudeModelSelection, env: ClaudeModelEnvironment = process.env) {
-  if (selection.provider === 'openai' && !env.OPENAI_API_KEY?.trim()) throw new Error('OpenAI editing requires OPENAI_API_KEY in this Convex environment. Choose Sonnet or configure the backend key.');
-  if (selection.provider === 'anthropic' && !env.ANTHROPIC_API_KEY?.trim()) throw new Error('Claude editing requires ANTHROPIC_API_KEY in this Convex environment.');
-  // A captured gateway selection remains pinned even if its selection flag changes.
+  enforceClaudeModelPolicy(selection, env);
 }
