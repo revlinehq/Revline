@@ -155,7 +155,7 @@ export const publicMediaAsset = v.object({
 export const sharedChatMessage = v.object({role:v.union(v.literal('user'),v.literal('assistant')),text:v.string()});
 export const shareChatPreviewMessage = v.object({id:v.string(),...sharedChatMessage.fields});
 export default defineSchema({
-  aiCostRecords:defineTable({ownerId:v.string(),projectId:v.id('projects'),runId:v.string(),...aiCostRecordFields}).index('by_owner_recorded',['ownerId','recordedAt']).index('by_run_key',['runId','key']),
+  aiCostRecords:defineTable({ownerId:v.string(),projectId:v.id('projects'),runId:v.string(),threadId:v.optional(v.string()),promptMessageId:v.optional(v.string()),...aiCostRecordFields}).index('by_owner_recorded',['ownerId','recordedAt']).index('by_run_key',['runId','key']).index('by_owner_project_thread_prompt',['ownerId','projectId','threadId','promptMessageId']),
   assistantPlans:defineTable({projectId:v.id('projects'),ownerId:v.string(),runId:v.string(),plans:v.array(effectPlanValidator),originals:v.array(clipValidator),reviews:v.number(),createdAt:v.number()}).index('by_project',['projectId']),
   compositionReviews:defineTable({projectId:v.id('projects'),ownerId:v.string(),runId:v.string(),revision:v.number(),timeline:timelineValidator,reference:timelineValidator,plans:v.array(effectPlanValidator),assetIds:v.array(v.id('assets')),start:v.number(),end:v.number(),taskId:v.optional(v.id('mediaTasks')),status:v.union(v.literal('queued'),v.literal('completed'),v.literal('failed')),result:v.optional(compositionReviewResult),error:v.optional(v.string()),createdAt:v.number()}).index('by_project',['projectId']).index('by_created',['createdAt']),
 

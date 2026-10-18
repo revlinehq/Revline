@@ -2,7 +2,7 @@ import { getFunctionName } from 'convex/server';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { CLAUDE_EDIT_MODELS, OPENAI_EDIT_MODELS, OPENAI_REASONING_EFFORTS, editorProviderOptions, claudeProviderOptions, type ClaudeModelSelection } from '../lib/ai/claude-model';
 
-const fixture = vi.hoisted(() => ({ model: undefined as undefined | { modelId: string; provider: string }, options: undefined as unknown, finishError: undefined as undefined | string, generate: vi.fn(), tokenCounter: vi.fn(() => async () => 10) }));
+const fixture = vi.hoisted(() => ({ model: undefined as undefined | { modelId: string; provider: string }, options: undefined as unknown, finishError: undefined as undefined | string, generate: vi.fn(), history: vi.fn(), tokenCounter: vi.fn(() => async () => 10) }));
 vi.mock('../lib/ai/anthropic-token-count', () => ({ anthropicTokenCounter: fixture.tokenCounter }));
 vi.mock('@convex-dev/agent', async importOriginal => ({
   ...await importOriginal<Record<string, unknown>>(),
@@ -20,7 +20,7 @@ vi.mock('@convex-dev/agent', async importOriginal => ({
 import { respond } from './assistantActions';
 
 beforeEach(() => {
-  fixture.model = undefined; fixture.options = undefined; fixture.finishError = undefined; fixture.generate.mockReset(); fixture.tokenCounter.mockClear();
+  fixture.model = undefined; fixture.options = undefined; fixture.finishError = undefined; fixture.generate.mockReset(); fixture.history.mockReset(); fixture.tokenCounter.mockClear();
   vi.stubEnv('AI_GATEWAY_ENABLED', 'false');
   vi.stubEnv('ANTHROPIC_API_KEY', 'fixture-only');
   vi.stubEnv('OPENAI_API_KEY', 'fixture-only');
@@ -41,7 +41,7 @@ async function run(pinnedModel: ClaudeModelSelection) {
         default: throw new Error('Unexpected fixture query');
       }
     },
-    runMutation: async (_reference: unknown, args: { error?: string }) => { fixture.finishError = args.error; return null; },
+    runMutation: async (reference: Parameters<typeof getFunctionName>[0], args: { error?: string }) => { if(getFunctionName(reference)==='aiCosts:record')fixture.history(args);else fixture.finishError = args.error; return null; },
   };
   await (respond as unknown as { _handler: (ctx: unknown, args: unknown) => Promise<unknown> })._handler(ctx, { projectId: 'project', ownerId: 'owner', runId: 'run', threadId: 'thread', promptMessageId: 'prompt', pinnedModel });
 }
@@ -83,4 +83,16 @@ test.each(OPENAI_REASONING_EFFORTS)('queued %s reasoning survives switcher chang
   expect(fixture.options).toMatchObject({ providerOptions: { openai: { reasoningEffort, serviceTier: 'fast' } } });
   expect(fixture.generate).toHaveBeenCalledOnce();
   expect(fixture.finishError).toBeUndefined();
+});
+
+test('new usage records carry trusted raw prompt/thread identity for per-turn diagnostics', async () => {
+  vi.stubEnv('MODEL_SWITCHER_ENABLED', 'true'); vi.stubEnv('AI_COST_DASHBOARD_ENABLED', 'true');
+  fixture.generate.mockImplementationOnce(() => {
+    const options = fixture.options as { onLanguageModelCallEnd: (event: unknown) => void };
+    options.onLanguageModelCallEnd({ callId: 'fixture-call', modelId: 'gpt-6.1-sol', provider: 'openai.responses', content: [], usage: { inputTokens: 100, inputTokenDetails: { noCacheTokens: 100, cacheReadTokens: 0, cacheWriteTokens: 0 }, outputTokens: 20, outputTokenDetails: { reasoningTokens: 0 } }, providerMetadata: { openai: { serviceTier: 'default' } } });
+  });
+  await run({ provider: 'openai', modelId: 'gpt-6.1-sol', modelChoice: 'gpt-6.1-sol', reasoningEffort: 'high', speedMode: 'fast' });
+  expect(fixture.finishError).toBeUndefined(); expect(fixture.history).toHaveBeenCalledTimes(2);
+  for (const [args] of fixture.history.mock.calls) expect(args).toMatchObject({ projectId: 'project', runId: 'run', threadId: 'thread', promptMessageId: 'prompt' });
+  expect(fixture.history.mock.calls[0][0].record).toMatchObject({ kind: 'model-call', reasoningEffort: 'high', speedMode: 'fast', serviceTier: 'default' });
 });

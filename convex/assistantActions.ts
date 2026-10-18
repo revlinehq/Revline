@@ -67,7 +67,7 @@ export const respond = internalAction({
     let streamError: unknown;
     let selectedProvider: ClaudeModelSelection['provider'] | undefined;
     const costHistory = new CostHistoryWriter(
-      record => ctx.runMutation(internal.aiCosts.record, { projectId: args.projectId, runId: args.runId, record }),
+      record => ctx.runMutation(internal.aiCosts.record, { projectId: args.projectId, runId: args.runId,threadId:args.threadId,promptMessageId:args.promptMessageId, record }),
       failedWrites => console.warn(`[ai-cost] ${JSON.stringify({ event: 'history-write-failed', projectId: args.projectId, runId: args.runId, failedWrites })}`),
     );
     const costLog = new AssistantCostLog({ projectId: args.projectId, runId: args.runId }, event => {

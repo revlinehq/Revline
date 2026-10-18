@@ -52,3 +52,47 @@ test('bounded report marks truncated totals and keeps original recording start',
   const result = await owner.query(api.aiCosts.summary, { days: 7, timeZone: 'UTC' });
   expect(result?.truncated).toBe(true); expect(result?.summary.callCount).toBe(5000); expect(result?.summary.knownEstimatedUsd).toBe(100); expect(result?.recordingSince).toBe(record.recordedAt);
 });
+
+test('per-turn totals use raw prompt identity, preserve modes and never guess legacy linkage', async () => {
+  const { t, projectId, owner, stranger } = await fixture();
+  await t.run(ctx => ctx.db.patch(projectId, { threadId: 'thread' }));
+  const linked = { projectId, threadId: 'thread', promptMessageId: 'raw-prompt' };
+  await t.mutation(internal.aiCosts.record, { ...linked, runId: 'run-a', record });
+  await t.mutation(internal.aiCosts.record, { ...linked, runId: 'run-a', record });
+  await t.mutation(internal.aiCosts.record, { ...linked, runId: 'run-a', record: { ...record, key: 'call:2', estimatedUsd: .01, serviceTier: 'default' } });
+  await t.mutation(internal.aiCosts.record, { ...linked, runId: 'run-a', record: { ...record, key: 'call:3', estimatedUsd: null, recordedAt: 1 } });
+  await t.mutation(internal.aiCosts.record, { projectId, runId: 'legacy-no-prompt', record: { ...record, estimatedUsd: 100 } });
+  const result = await owner.query(api.aiCosts.turns, { projectId, threadId: 'thread', promptMessageIds: ['raw-prompt', 'react-stream-key', 'old-prompt'] });
+  expect(result).toHaveLength(1);
+  expect(result?.[0]).toMatchObject({ promptMessageId: 'raw-prompt', callCount: 3, knownEstimatedUsd: .03, unknownCostCalls: 1, truncated: false });
+  expect(result?.[0].breakdown).toHaveLength(2);
+  expect(JSON.stringify(result)).not.toMatch(/"(?:ownerId|projectId|runId|threadId|input|promptText)"/);
+  await expect(stranger.query(api.aiCosts.turns, { projectId, threadId: 'thread', promptMessageIds: ['raw-prompt'] })).rejects.toThrow('Project not found');
+  await expect(owner.query(api.aiCosts.turns, { projectId, threadId: 'other-thread', promptMessageIds: ['raw-prompt'] })).rejects.toThrow('Conversation not found');
+  await expect(t.query(api.aiCosts.turns, { projectId, threadId: 'thread', promptMessageIds: ['raw-prompt'] })).rejects.toThrow('Authentication required');
+});
+
+test('turn diagnostics enforce bounds and conversation ownership, including interrupted-usage markers', async () => {
+  const { t, projectId, owner } = await fixture();
+  await t.run(ctx => ctx.db.patch(projectId, { threadId: 'thread' }));
+  const linked = { projectId, threadId: 'thread', promptMessageId: 'raw-prompt' };
+  await expect(t.mutation(internal.aiCosts.record, { projectId, runId: 'bad-thread', threadId: 'foreign-thread', promptMessageId: 'raw-prompt', record })).rejects.toThrow('does not match');
+  await expect(t.mutation(internal.aiCosts.record, { projectId, runId: 'missing-prompt', threadId: 'thread', record })).rejects.toThrow('does not match');
+  await t.mutation(internal.aiCosts.record, { ...linked, runId: 'interrupted', record: { ...record, key: 'summary', kind: 'run-summary', unreportedCall: true } });
+  expect((await owner.query(api.aiCosts.turns, { projectId, threadId: 'thread', promptMessageIds: ['raw-prompt'] }))?.[0]).toMatchObject({ callCount: 0, unreportedRuns: 1 });
+  await expect(owner.query(api.aiCosts.turns, { projectId, threadId: 'thread', promptMessageIds: Array.from({ length: 51 }, (_, i) => `prompt-${i}`) })).rejects.toThrow('up to 50');
+  await expect(owner.query(api.aiCosts.turns, { projectId, threadId: 'thread', promptMessageIds: ['same', 'same'] })).rejects.toThrow('unique');
+  vi.stubEnv('AI_COST_DASHBOARD_ENABLED', 'false');
+  expect(await owner.query(api.aiCosts.turns, { projectId, threadId: 'thread', promptMessageIds: ['raw-prompt'] })).toBeNull();
+});
+
+test('per-turn truncation is explicit and does not expose another project with matching prompt IDs', async () => {
+  const { t, projectId, owner } = await fixture();
+  await t.run(async ctx => {
+    await ctx.db.patch(projectId, { threadId: 'thread' });
+    const other = await ctx.db.insert('projects', { ownerId: 'owner', title: 'Other', aspectRatio: 'landscape', createdAt: 1, updatedAt: 1, threadId: 'thread' });
+    for(let index=0;index<65;index++) await ctx.db.insert('aiCostRecords', { ownerId: 'owner', projectId, runId: 'busy', threadId: 'thread', promptMessageId: 'prompt', ...record, key: `call:${index}` });
+    await ctx.db.insert('aiCostRecords', { ownerId: 'owner', projectId: other, runId: 'other', threadId: 'thread', promptMessageId: 'prompt', ...record, estimatedUsd: 100 });
+  });
+  expect((await owner.query(api.aiCosts.turns, { projectId, threadId: 'thread', promptMessageIds: ['prompt'] }))?.[0]).toMatchObject({ truncated: true, callCount: 64, knownEstimatedUsd: 1.28 });
+});
