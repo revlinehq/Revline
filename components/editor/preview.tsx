@@ -116,7 +116,7 @@ export const Preview = forwardRef<PreviewHandle,{timeline:Timeline;assets:MediaA
     const width=Number(composition.dataset.width),height=Number(composition.dataset.height);
     frame.style.left=`${(transform.x-.5)*width}px`;frame.style.top=`${(transform.y-.5)*height}px`;frame.style.transform=`rotate(${transform.rotation}deg) scale(${transform.scale})`;frame.style.opacity=String(transform.opacity);
   }
-  useImperativeHandle(ref,()=>({retry:()=>setReloadRevision(value=>value+1),play:()=>{if(playbackGuard.current)playbackGuard.current.play();else player.current?.play();},pause:()=>{if(playbackGuard.current)playbackGuard.current.pause();else player.current?.pause();callbacks.current.onPlaying(false);},seek:(t)=>{
+  useImperativeHandle(ref,()=>({retry:()=>setReloadRevision(value=>value+1),play:()=>{if(playbackGuard.current){playbackGuard.current.play();callbacks.current.onPlaying(playbackGuard.current.isPlaying());}else player.current?.play();},pause:()=>{if(playbackGuard.current)playbackGuard.current.pause();else player.current?.pause();callbacks.current.onPlaying(false);},seek:(t)=>{
     playbackGuard.current?.cancel();seekPosition.current=t;player.current?.seek(t);setSelectionVisible(selectionAt(t));
     // HyperFrames seek lands paused without emitting a pause event.
     callbacks.current.onPlaying(false);
@@ -222,7 +222,7 @@ export const Preview = forwardRef<PreviewHandle,{timeline:Timeline;assets:MediaA
         doc?.addEventListener('error',mediaError,true);removeMediaErrors=()=>doc?.removeEventListener('error',mediaError,true);
         doc?.defaultView?.addEventListener('revline-effects-error',event=>{if(!cancelled)callbacks.current.onError((event as CustomEvent<string>).detail);});
         if(doc?.documentElement.dataset.visualEffectsError)callbacks.current.onError(doc.documentElement.dataset.visualEffectsError);
-        loaded=true;if(doc){stopWarmup=warmPreviewMedia(doc,()=>frameTime(p,seekPosition.current));guard=guardPreviewBuffering(doc,p,()=>frameTime(p,seekPosition.current),debugId?()=>diagnose('active video buffering exceeded 2s'):undefined);}p.seek(seekPosition.current);updateLayers(p,latestTimeline.current);if(p.painted)swap();});
+        loaded=true;if(doc){stopWarmup=warmPreviewMedia(doc,()=>frameTime(p,seekPosition.current));guard=guardPreviewBuffering(doc,p,()=>frameTime(p,seekPosition.current),debugId?()=>diagnose('active media buffering exceeded 2s'):undefined);}p.seek(seekPosition.current);updateLayers(p,latestTimeline.current);if(p.painted)swap();});
       p.addEventListener('painted',swap);
       p.addEventListener('timeupdate',(e)=>{if(!loaded||player.current!==p)return;const detail=(e as CustomEvent<{currentTime:number}>).detail;const t=frameTime(p,detail?.currentTime??seekPosition.current);seekPosition.current=t;setSelectionVisible(selectionAt(t));callbacks.current.onTime(t);});
       const stopped=()=>{if(!loaded||player.current!==p)return;const t=frameTime(p,seekPosition.current);seekPosition.current=t;callbacks.current.onTime(t);if(!guard?.isBuffering())callbacks.current.onPlaying(false);};

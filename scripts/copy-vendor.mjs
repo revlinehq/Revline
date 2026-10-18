@@ -1,8 +1,10 @@
-import { copyFileSync, mkdirSync, cpSync, existsSync } from 'node:fs';
+import { copyFileSync, mkdirSync, cpSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { build } from 'esbuild';
+import { patchHyperframesPlaybackRuntime } from './hyperframes-playback-compat.mjs';
 mkdirSync('public/vendor', { recursive: true });
 copyFileSync('node_modules/gsap/dist/gsap.min.js', 'public/vendor/gsap.min.js');
-copyFileSync('node_modules/@hyperframes/core/dist/hyperframe.runtime.iife.js', 'public/vendor/hyperframe.runtime.iife.js');
+const hyperframesVersion=JSON.parse(readFileSync('node_modules/@hyperframes/core/package.json','utf8')).version;
+writeFileSync('public/vendor/hyperframe.runtime.iife.js',patchHyperframesPlaybackRuntime(readFileSync('node_modules/@hyperframes/core/dist/hyperframe.runtime.iife.js','utf8'),hyperframesVersion));
 if(existsSync('node_modules/@mediapipe/tasks-vision/wasm'))cpSync('node_modules/@mediapipe/tasks-vision/wasm','public/vendor/mediapipe',{recursive:true});
 await build({ entryPoints: ['lib/editor/remotion-text-runtime.tsx'], outfile: 'public/vendor/remotion-text.js', bundle: true, minify: true, platform: 'browser', target: 'es2020', format: 'iife', globalName: '__revlineRemotionText', jsx: 'automatic', define: { 'process.env.NODE_ENV': '"production"' }, legalComments: 'linked' });
 copyFileSync('node_modules/remotion/LICENSE.md', 'public/vendor/remotion-LICENSE.md');

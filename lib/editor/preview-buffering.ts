@@ -7,12 +7,16 @@ export function guardPreviewBuffering(document: Document, player: Playback, read
   const clearDiagnostic=()=>{if(diagnosticTimer!==undefined)clearTimeout(diagnosticTimer);diagnosticTimer=undefined;};
   const blocked = () => {
     const time = readTime();
-    return Array.from(document.querySelectorAll<HTMLVideoElement>('video[data-start]')).some(node => {
+    return Array.from(document.querySelectorAll<HTMLMediaElement>('video[data-start],audio[data-start]')).some(node => {
       const start = Number(node.dataset.start), end = Number(node.dataset.end ?? start + Number(node.dataset.duration));
       // A source deliberately held past its own last frame cannot provide future data.
-      const finished = node.ended || Number.isFinite(node.duration) && node.currentTime >= node.duration - .05;
+      const finished = !node.seeking && (node.ended || Number.isFinite(node.duration) && node.currentTime >= node.duration - .05);
       return time >= start && time < end && !finished && (node.seeking || node.readyState < 3);
     });
+  };
+  const hold = () => {
+    held = true;
+    if(onBuffering)diagnosticTimer=setTimeout(()=>{diagnosticTimer=undefined;if(!disposed&&held&&intended)try{onBuffering();}catch{/* Diagnostics must not interrupt media recovery. */}},2000);
   };
   const recover = () => {
     if (disposed || !held || !intended || blocked()) return;
@@ -22,9 +26,8 @@ export function guardPreviewBuffering(document: Document, player: Playback, read
   const waiting = (event: Event) => {
     if (disposed || !intended || held || player.paused) return;
     const node = event.target as HTMLMediaElement;
-    if (node?.tagName !== 'VIDEO' || !node.hasAttribute('data-start') || !blocked()) return;
-    held = true;
-    if(onBuffering)diagnosticTimer=setTimeout(()=>{diagnosticTimer=undefined;if(!disposed&&held&&intended)try{onBuffering();}catch{/* Diagnostics must not interrupt media recovery. */}},2000);
+    if (!['VIDEO','AUDIO'].includes(node?.tagName) || !node.hasAttribute('data-start') || !blocked()) return;
+    hold();
     // Audio can already be fully buffered and driving the transport clock.
     // Pause the shared transport rather than allowing it to outrun the picture.
     player.pause();
@@ -35,7 +38,16 @@ export function guardPreviewBuffering(document: Document, player: Playback, read
   document.addEventListener('waiting', waiting, true);
   for (const name of ['canplay', 'seeked', 'loadeddata', 'playing', 'ended']) document.addEventListener(name, recover, true);
   return {
-    play() { intended = true; if (held) recover(); else player.play(); },
+    play() {
+      if(disposed)return;
+      intended = true;
+      if(held){recover();return;}
+      // A scrub can already be seeking before Play, so no later waiting event
+      // is guaranteed. Starting its audio clock now can repeatedly reseek a
+      // decoder that has not landed, especially at accelerated clip rates.
+      if(blocked()){hold();return;}
+      player.play();
+    },
     pause() { intended = false; held = false; clearDiagnostic();player.pause(); },
     cancel() { intended = false; held = false; clearDiagnostic(); },
     isBuffering: () => held,
