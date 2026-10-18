@@ -44,3 +44,12 @@ test('unknown transport errors are hidden and genuine explanations and saved con
   expect(html).not.toMatch(/ConvexError|internal request|private.ts/);
   expect(html).toContain('Your saved edits remain.');
 });
+
+test('known clip-overlap rejection keeps the cause clear without exposing the internal error class',()=>{
+  const html=render([{id:'request',role:'user',text:'Move this clip.'},{id:'answer',role:'assistant',text:'I’ll move it.',steps:[{id:'overlap',name:'moveClips',state:'error',detail:'TimelineGestureRejection: Overlaps a clip'}]}],null);
+  expect(html.match(/role="alert"/g)).toHaveLength(1);
+  expect(html).toContain('These clips would overlap.');
+  expect(html).toContain('This edit was not saved');
+  expect(html).toContain('previously saved edits remain');
+  expect(html).not.toContain('TimelineGestureRejection');
+});
