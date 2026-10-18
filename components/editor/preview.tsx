@@ -36,19 +36,19 @@ function LiveTextControls(props: Omit<React.ComponentProps<typeof TextControls>,
 }
 function frameTime(player:HyperframesPlayer|null,fallback:number){const frame=player?.iframeElement?.contentWindow as (Window&{__timelines?:{revline?:{time():number}}})|null;return frame?.__timelines?.revline?.time()??player?.currentTime??fallback;}
 export type PreviewHandle = { play():void; pause():void; seek(time:number):void; currentTime():number; mute(value:boolean):void; clipVolume(id:string,volume:number|null):void; clipEffects(id:string,patch:Partial<Clip>|null):void; resetCrop():void; finishCrop(cancel?:boolean):void; retry():void };
-export const Preview = forwardRef<PreviewHandle,{timeline:Timeline;assets:MediaAsset[];time:number;onTime:(time:number)=>void;onPlaying:(playing:boolean)=>void;onError:(error:string)=>void;muted:boolean;selectedClip?:Clip;onRefreshMedia?:RefreshPlaybackMedia;onVisualChange?:(patch:Partial<Clip>)=>void;onSelectClip?:(id:string|null)=>void;onClipChange?:(id:string,patch:Partial<Clip>)=>void;onEditText?:(id:string)=>void;onEditClip?:(id:string)=>void;cropping?:boolean;onCropCommit?:(id:string,crop:SourceCrop)=>void;onCropCancel?:()=>void;debugId?:string;onReady?:()=>void;onThumbnail?:(url:string)=>void}>(function Preview({timeline,assets,time,onTime,onPlaying,onError,muted,selectedClip:inputSelectedClip,onRefreshMedia,onVisualChange,onSelectClip,onClipChange,onEditText,onEditClip,cropping=false,onCropCommit,onCropCancel,debugId,onReady,onThumbnail},ref) {
+export const Preview = forwardRef<PreviewHandle,{timeline:Timeline;assets:MediaAsset[];time:number;onTime:(time:number)=>void;onPlaying:(playing:boolean)=>void;onError:(error:string)=>void;muted:boolean;selectedClip?:Clip;onRefreshMedia?:RefreshPlaybackMedia;onVisualChange?:(patch:Partial<Clip>)=>void;onSelectClip?:(id:string|null)=>void;onClipChange?:(id:string,patch:Partial<Clip>)=>void;onEditText?:(id:string)=>void;onEditClip?:(id:string)=>void;cropping?:boolean;onCropCommit?:(id:string,crop:SourceCrop)=>void;onCropCancel?:()=>void;debugId?:string;onReady?:()=>void;onThumbnail?:(url:string)=>void;onSlowLoad?:()=>void}>(function Preview({timeline,assets,time,onTime,onPlaying,onError,muted,selectedClip:inputSelectedClip,onRefreshMedia,onVisualChange,onSelectClip,onClipChange,onEditText,onEditClip,cropping=false,onCropCommit,onCropCancel,debugId,onReady,onThumbnail,onSlowLoad},ref) {
   const committedTimeline=timeline;
   timeline=normalizeTimeline(timeline);
   const selectedClip=inputSelectedClip?timeline.clips.find(clip=>clip.id===inputSelectedClip.id):undefined;
   const cropControls=useRef<CropControlsHandle>(null);
-  const container=useRef<HTMLDivElement>(null); const player=useRef<HyperframesPlayer|null>(null); const callbacks=useRef({onTime,onPlaying,onError,onRefreshMedia,onReady,onThumbnail});callbacks.current={onTime,onPlaying,onError,onRefreshMedia,onReady,onThumbnail};
+  const container=useRef<HTMLDivElement>(null); const player=useRef<HyperframesPlayer|null>(null); const callbacks=useRef({onTime,onPlaying,onError,onRefreshMedia,onReady,onThumbnail,onSlowLoad});callbacks.current={onTime,onPlaying,onError,onRefreshMedia,onReady,onThumbnail,onSlowLoad};
   const playbackGuard=useRef<ReturnType<typeof guardPreviewBuffering>|null>(null);
   const diagnostic=useRef<(reason:string)=>void>(()=>{});
   const latestAssets=useRef(assets);latestAssets.current=assets;
   const refreshedSources=useRef(new Map<string,{original:string|null;url:string}>());
   const mutedRef=useRef(muted);mutedRef.current=muted;
   useEffect(()=>{if(player.current)player.current.muted=muted;},[muted]);
-  const [ready,setReady]=useState(false);const [revision,setRevision]=useState(0);const [reloadRevision,setReloadRevision]=useState(0);const seekPosition=useRef(time);
+  const [buffering,setBuffering]=useState(false);const [ready,setReady]=useState(false);const [revision,setRevision]=useState(0);const [reloadRevision,setReloadRevision]=useState(0);const seekPosition=useRef(time);
   const latestTimeline=useRef(timeline);latestTimeline.current=timeline;
   const renderedTimeline=useRef<Timeline|null>(null);
   const renderedContentKey=useRef<string|null>(null);
@@ -91,9 +91,9 @@ export const Preview = forwardRef<PreviewHandle,{timeline:Timeline;assets:MediaA
       if(retained){
         updateLayers(active,current);
         if(needsLiveMediaSync(previous,current)){
-          const wasPlaying=!active.paused;
-          active.seek(frameTime(active,seekPosition.current));
-          if(wasPlaying)active.play();
+          const sync=()=>active.seek(frameTime(active,seekPosition.current));
+          if(playbackGuard.current)playbackGuard.current.resync(sync);
+          else { const resume=!active.paused;sync();if(resume)active.play(); }
         }
         renderedTimeline.current=current;setRevision(value=>value+1);
       }
@@ -177,14 +177,14 @@ export const Preview = forwardRef<PreviewHandle,{timeline:Timeline;assets:MediaA
         p.seek(seekPosition.current);updateLayers(p,latestTimeline.current);
         const doc=p.iframeElement?.contentDocument;
         if(!doc)return;
-        void waitForPreviewMedia(doc,seekPosition.current,recovery.signal,callbacks.current.onThumbnail).then(()=>{swapFrame=requestAnimationFrame(()=>{swapFrame=requestAnimationFrame(()=>{
+        void waitForPreviewMedia(doc,seekPosition.current,recovery.signal,callbacks.current.onThumbnail,()=>callbacks.current.onSlowLoad?.()).then(()=>{swapFrame=requestAnimationFrame(()=>{swapFrame=requestAnimationFrame(()=>{
           if(cancelled||!p||swapped)return;
           swapped=true;const previous=player.current;const resume=playbackGuard.current?.isPlaying()??(previous&&!previous.paused);
           if(p.iframeElement?.contentDocument){updateLiveMediaContent(p.iframeElement.contentDocument,timeline,latestTimeline.current,latestAssets.current);updateLiveTextEffects(p.iframeElement.contentDocument,timeline,latestTimeline.current);updateLiveVisualEffects(p.iframeElement.contentDocument,timeline,latestTimeline.current);updateLiveVisualGeometry(p.iframeElement.contentDocument,timeline,latestTimeline.current,assets);updateLiveAdjustmentEffects(p.iframeElement.contentDocument,timeline,latestTimeline.current);}
           playbackGuard.current?.dispose();previous?.pause();player.current=p;playbackGuard.current=guard??null;p.muted=mutedRef.current;p.style.zIndex='1';previous?.remove();
           renderedTimeline.current=latestTimeline.current;
           renderedContentKey.current=contentKey;
-          setSelectionVisible(selectionAt(seekPosition.current));callbacks.current.onTime(seekPosition.current);setReady(true);callbacks.current.onReady?.();setRevision(value=>value+1);if(resume){if(guard)guard.play();else p.play();}
+          setSelectionVisible(selectionAt(seekPosition.current));callbacks.current.onTime(seekPosition.current);setReady(true);setBuffering(false);callbacks.current.onReady?.();setRevision(value=>value+1);if(resume){if(guard)guard.play();else p.play();}
         });});}).catch(error=>{if(!cancelled&&!recovery.signal.aborted)callbacks.current.onError(userError(error, 'The footage could not load.'));});
       };
       p.addEventListener('ready',()=>{if(cancelled||!p)return;
@@ -223,7 +223,7 @@ export const Preview = forwardRef<PreviewHandle,{timeline:Timeline;assets:MediaA
         doc?.addEventListener('error',mediaError,true);removeMediaErrors=()=>doc?.removeEventListener('error',mediaError,true);
         doc?.defaultView?.addEventListener('revline-effects-error',event=>{if(!cancelled)callbacks.current.onError((event as CustomEvent<string>).detail);});
         if(doc?.documentElement.dataset.visualEffectsError)callbacks.current.onError(doc.documentElement.dataset.visualEffectsError);
-        loaded=true;if(doc){stopWarmup=warmPreviewMedia(doc,()=>frameTime(p,seekPosition.current));guard=guardPreviewBuffering(doc,p,()=>frameTime(p,seekPosition.current),debugId?()=>diagnose('active media buffering exceeded 2s'):undefined);if(debugId&&(process.env.NODE_ENV==='development'||new URLSearchParams(window.location.search).get('playbackDebug')==='1'))stopTrace=tracePreviewPlayback(doc,p,()=>frameTime(p,seekPosition.current),()=>({playing:guard?.isPlaying()??false,buffering:guard?.isBuffering()??false}),debugId);}p.seek(seekPosition.current);updateLayers(p,latestTimeline.current);if(p.painted)swap();});
+        loaded=true;if(doc){stopWarmup=warmPreviewMedia(doc,()=>frameTime(p,seekPosition.current));guard=guardPreviewBuffering(doc,p,()=>frameTime(p,seekPosition.current),debugId?()=>diagnose('active media buffering exceeded 2s'):undefined,waiting=>{if(player.current===p)setBuffering(waiting);});if(debugId&&(process.env.NODE_ENV==='development'||new URLSearchParams(window.location.search).get('playbackDebug')==='1'))stopTrace=tracePreviewPlayback(doc,p,()=>frameTime(p,seekPosition.current),()=>({playing:guard?.isPlaying()??false,buffering:guard?.isBuffering()??false}),debugId);}p.seek(seekPosition.current);updateLayers(p,latestTimeline.current);if(p.painted)swap();});
       p.addEventListener('painted',swap);
       p.addEventListener('timeupdate',(e)=>{if(!loaded||player.current!==p)return;const detail=(e as CustomEvent<{currentTime:number}>).detail;const t=frameTime(p,detail?.currentTime??seekPosition.current);seekPosition.current=t;setSelectionVisible(selectionAt(t));callbacks.current.onTime(t);});
       const stopped=()=>{if(!loaded||player.current!==p)return;const t=frameTime(p,seekPosition.current);seekPosition.current=t;callbacks.current.onTime(t);if(!guard?.isBuffering())callbacks.current.onPlaying(false);};
@@ -259,5 +259,5 @@ export const Preview = forwardRef<PreviewHandle,{timeline:Timeline;assets:MediaA
       const frame=Array.from(doc?.querySelectorAll<HTMLElement>('[data-visual-clip]')??[]).find(node=>node.dataset.visualClip===selectedClip.id);
       return frame?.querySelector<HTMLImageElement|HTMLVideoElement>('img,video')??null;
     }} onCommit={crop=>onCropCommit(selectedClip.id,crop)} onCancel={onCropCancel}/>}
-    {!ready&&<div className="preview-loading"><LoaderCircle className="animate-spin" size={20}/></div>}</div>;
+    {(!ready||buffering)&&<div className="preview-loading" style={buffering?{background:'transparent',zIndex:2,pointerEvents:'none'}:undefined} role="status" aria-label={buffering?'Loading clip':'Loading preview'}><LoaderCircle className="animate-spin" size={20}/></div>}</div>;
 });

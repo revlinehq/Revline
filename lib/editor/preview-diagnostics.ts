@@ -8,7 +8,7 @@ export function tracePreviewPlayback(document:Document,player:Transport,readTime
   const media=new Map<HTMLMediaElement,MediaSample>();
   const traceId=crypto.randomUUID().slice(0,8);
   let stopped=false,previousWall=performance.now(),previousClock=readTime(),lastRaf=0,rafCount=0,maxRafGap=0,longTasks=0,longTaskMs=0,raf=0;
-  const events=['waiting','stalled','seeking','seeked','playing','pause','error'];
+  const events=['loadstart','loadedmetadata','progress','suspend','waiting','stalled','seeking','seeked','playing','pause','error'];
   const buffered=(node:HTMLMediaElement)=>{const ranges:number[][]=[];for(let index=0;index<node.buffered.length&&ranges.length<6;index++)ranges.push([node.buffered.start(index),node.buffered.end(index)]);return ranges;};
   const snapshot=()=>{const time=readTime();return [...media.keys()].filter(node=>time>=Number(node.dataset.start)&&time<Number(node.dataset.end)).slice(0,8).map(node=>({id:node.dataset.sourceClip,kind:node.tagName,sourceTime:node.currentTime,ready:node.readyState,seeking:node.seeking,paused:node.paused,error:node.error?.code??null,buffered:buffered(node)}));};
   const transportEvent=(event:Event)=>console.warn('[Revline playback transport]',JSON.stringify({timestamp:new Date().toISOString(),chatId,traceId,event:event.type,clock:readTime(),paused:player.paused,...state(),media:snapshot()}));
@@ -50,7 +50,7 @@ export function tracePreviewPlayback(document:Document,player:Transport,readTime
       const output={id:node.dataset.sourceClip??node.id,kind:node.tagName,active,sourceTime:round(node.currentTime),sourceAdvance:round(node.currentTime-sample.sourceTime),rate:node.playbackRate,expectedRate:rate,driftMs:active?Math.round((node.currentTime-expected)/rate*1000):null,ready:node.readyState,network:node.networkState,seeking:node.seeking,paused:node.paused,muted:node.muted,volume:round(node.volume),buffered:buffered(node),error:node.error?.code??null,decodedFrames:sample.frames,maxFrameGapMs:Math.round(sample.maxFrameGap),events:sample.events};
       sample.sourceTime=node.currentTime;sample.events={};sample.frames=0;sample.maxFrameGap=0;return output;
     }).filter(sample=>sample.active||sample.decodedFrames||Object.keys(sample.events).length).slice(0,16);
-    if(current.playing||rafCount)console.warn('[Revline playback trace]',JSON.stringify({timestamp:new Date().toISOString(),chatId,traceId,visibility:document.visibilityState,clock:round(time),clockAdvance:round(time-previousClock),wallMs:Math.round(wallMs),...current,rafCount,maxRafGapMs:Math.round(maxRafGap),longTasks,longTaskMs:Math.round(longTaskMs),effectsCanvases:document.querySelectorAll('.visual-effect-output').length,media:samples}));
+    if(current.playing||rafCount||samples.some(sample=>sample.active&&(sample.ready<3||sample.seeking)))console.warn('[Revline playback trace]',JSON.stringify({timestamp:new Date().toISOString(),chatId,traceId,visibility:document.visibilityState,clock:round(time),clockAdvance:round(time-previousClock),wallMs:Math.round(wallMs),...current,rafCount,maxRafGapMs:Math.round(maxRafGap),longTasks,longTaskMs:Math.round(longTaskMs),effectsCanvases:document.querySelectorAll('.visual-effect-output').length,media:samples}));
     previousWall=now;previousClock=time;rafCount=0;maxRafGap=0;longTasks=0;longTaskMs=0;
   };
   const timer=setInterval(report,2000);

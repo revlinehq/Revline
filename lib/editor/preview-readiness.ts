@@ -13,19 +13,21 @@ export function previewMediaReady(node:HTMLMediaElement,time:number) {
 }
 
 /** A decoded first frame alone can still stall as soon as playback starts. */
-export async function waitForPreviewMedia(document:Document,time:number,signal:AbortSignal,onThumbnail?:(url:string)=>void) {
+export async function waitForPreviewMedia(document:Document,time:number,signal:AbortSignal,onThumbnail?:(url:string)=>void,onSlow?:()=>void) {
   const transitions=(document.defaultView as (Window & {__revlineTransitionController?:{whenReady(time:number,signal:AbortSignal):Promise<void>}})|null)?.__revlineTransitionController;
   const media=Array.from(document.querySelectorAll<HTMLMediaElement>('video[data-start],audio[data-start]')).filter(node=>time>=Number(node.dataset.start)&&time<Number(node.dataset.end??Number(node.dataset.start)+Number(node.dataset.duration)));
   await Promise.all([transitions?.whenReady(time,signal),...media.map(node=>new Promise<void>((resolve,reject)=>{
     const events=['loadedmetadata','loadeddata','canplay','progress','durationchange','seeked','error'];
     let idleTimer:ReturnType<typeof setTimeout>;
-    const cleanup=()=>{clearTimeout(idleTimer);clearTimeout(deadline);for(const name of events)node.removeEventListener(name,check);signal.removeEventListener('abort',abort);};
+    const cleanup=()=>{clearTimeout(idleTimer);for(const name of events)node.removeEventListener(name,check);signal.removeEventListener('abort',abort);};
     const abort=()=>{cleanup();reject(signal.reason??new DOMException('Cancelled','AbortError'));};
-    const timeout=(reason:'stalled'|'deadline')=>{
-      console.warn('[Revline playback readiness]', { reason, sourceClip:node.dataset.sourceClip, readyState:node.readyState, networkState:node.networkState, sourceTime:node.currentTime, seeking:node.seeking });
-      cleanup();reject(new Error('The footage is taking too long to load. Please retry.'));
+    const delayed=()=>{
+      console.warn('[Revline playback readiness]', JSON.stringify({ reason:'slow', sourceClip:node.dataset.sourceClip, readyState:node.readyState, networkState:node.networkState, sourceTime:node.currentTime, seeking:node.seeking }));
+      // A slow range seek is still recoverable. Keep listening for real media
+      // readiness instead of rejecting a source that can finish loading later.
+      onSlow?.();
     };
-    const progress=()=>{clearTimeout(idleTimer);idleTimer=setTimeout(()=>timeout('stalled'),30_000);};
+    const progress=()=>{clearTimeout(idleTimer);idleTimer=setTimeout(delayed,30_000);};
     const check=(event?:Event)=>{
       // A cold, trimmed source may need several range requests before decoding.
       // Browser progress and decode events show activity, not a failed source.
@@ -35,7 +37,6 @@ export async function waitForPreviewMedia(document:Document,time:number,signal:A
       if(node.tagName==='VIDEO'&&onThumbnail)try{const video=node as HTMLVideoElement,canvas=document.createElement('canvas');const scale=Math.min(352/video.videoWidth,352/video.videoHeight,1);canvas.width=Math.max(1,Math.round(video.videoWidth*scale));canvas.height=Math.max(1,Math.round(video.videoHeight*scale));canvas.getContext('2d')?.drawImage(video,0,0,canvas.width,canvas.height);onThumbnail(canvas.toDataURL('image/jpeg',.7));}catch{/* Playback can still work when a source cannot be captured. */}
       cleanup();resolve();
     };
-    const deadline=setTimeout(()=>timeout('deadline'),90_000);
     progress();
     for(const name of events)node.addEventListener(name,check);
     signal.addEventListener('abort',abort,{once:true});node.preload='auto';if(signal.aborted)abort();else check();
