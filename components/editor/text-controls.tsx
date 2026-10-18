@@ -39,6 +39,7 @@ export function TextControls({timeline,assets,time,revision,selected,activeId,on
       if(!['caption','graphic'].includes(clip.kind)||latest.current.time<clip.start||latest.current.time>=clip.start+clip.duration)return [];
       const node=compositionNode(doc,clip,index);if(!node)return [];
       const rect=node.getBoundingClientRect();
+      if(!Number.isFinite(rect.width)||!Number.isFinite(rect.height)||rect.width<=0||rect.height<=0)return [];
       const sourceRect=projectPreviewBounds(rect,canvas,dimensions(latest.current.timeline.aspectRatio));
       if(isPreviewTextOccluded(latest.current.timeline,latest.current.assets,latest.current.time,clip.id,sourceRect))return [];
       const content=node.querySelector<HTMLElement>('.text-content')??node,contentRect=projectPreviewBounds(content.getBoundingClientRect(),canvas,layout),style=doc.defaultView!.getComputedStyle(content),scale=layout.width/composition.offsetWidth;
@@ -104,6 +105,7 @@ export function TextControls({timeline,assets,time,revision,selected,activeId,on
     const front=corner?undefined:footageAbove(clip,event);
     latest.current.onSelect(front?.id??clip.id);if(front||(latest.current.activeId!==clip.id&&selected!==clip.id))return;
     const screenBounds={...bounds,...projectPreviewBounds(bounds,{left:0,top:0,width:host.clientWidth,height:host.clientHeight},canvas)};
+    if(!Number.isFinite(screenBounds.width)||!Number.isFinite(screenBounds.height)||screenBounds.width<=0||screenBounds.height<=0)return;
     const initial=textPlacement(clip);gesture.current={pointer:event.pointerId,target:event.currentTarget,clip,initial,current:initial,x:event.clientX,y:event.clientY,width:canvas.width,height:canvas.height,bounds:screenBounds,corner};event.currentTarget.setPointerCapture(event.pointerId);
   }
   function rotate(event:PointerEvent<HTMLElement>,clip:Clip,box:Bounds){

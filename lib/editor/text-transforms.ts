@@ -9,6 +9,7 @@ export function textPlacement(clip:Clip):TextPlacement {
   return { x, y, fontSize };
 }
 export function moveText(initial:TextPlacement,dx:number,dy:number,width:number,height:number,snap=true):TextPlacement {
+  if(![dx,dy,width,height].every(Number.isFinite)||width<=0||height<=0)return initial;
   let x=clamp(initial.x+dx/width,0,1),y=clamp(initial.y+dy/height,0,1);
   if(snap&&Math.abs(x-.5)*width<=6)x=.5;
   if(snap&&Math.abs(y-.5)*height<=6)y=.5;
@@ -32,6 +33,9 @@ export function snapTextMove(proposed:TextPlacement,bounds:{width:number;height:
 }
 /** Resize from the opposite corner, using screen bounds and source font units. */
 export function resizeText(initial:TextPlacement,corner:VisualCorner,dx:number,dy:number,boxWidth:number,boxHeight:number,canvasWidth:number,canvasHeight:number):TextPlacement {
+  // Animated text can momentarily collapse to zero size. Keep its placement
+  // until measurable rather than dividing by a zero-sized box or canvas.
+  if(![dx,dy,boxWidth,boxHeight,canvasWidth,canvasHeight].every(Number.isFinite)||boxWidth<=0||boxHeight<=0||canvasWidth<=0||canvasHeight<=0)return initial;
   const sx=corner.endsWith('e')?1:-1,sy=corner.startsWith('s')?1:-1;
   const factor=1+(dx*sx*boxWidth+dy*sy*boxHeight)/(boxWidth*boxWidth+boxHeight*boxHeight);
   const fontSize=clamp(initial.fontSize*factor,8,300),scale=fontSize/initial.fontSize;
