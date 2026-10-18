@@ -48,6 +48,33 @@ export const saveCheckout = internalMutation({
     return null;
   },
 });
+// Claim before the Stripe read, so a slower concurrent response cannot overwrite
+// a later reconciliation. Stripe event.created has only second precision.
+export const beginSubscriptionSync = internalMutation({
+  args: { stripeSubscriptionId: v.string(), eventId: v.string() },
+  returns: v.union(v.string(), v.null()),
+  handler: async (ctx, args) => {
+    const previous = await ctx.db.query('billingSubscriptionSync').withIndex('by_subscription', q => q.eq('stripeSubscriptionId', args.stripeSubscriptionId)).unique();
+    if (previous?.lastEventId === args.eventId) return null;
+    const token = crypto.randomUUID();
+    if (previous) await ctx.db.patch(previous._id, { token });
+    else await ctx.db.insert('billingSubscriptionSync', { stripeSubscriptionId: args.stripeSubscriptionId, token });
+    return token;
+  },
+});
+export const applySubscriptionSync = internalMutation({
+  args: { stripeSubscriptionId: v.string(), eventId: v.string(), token: v.string(), stripeCustomerId: v.string(), status: v.string(), currentPeriodEnd: v.number(), cancelAtPeriodEnd: v.boolean(), cancelAt: v.optional(v.number()), quantity: v.number(), priceId: v.string(), metadata: v.record(v.string(), v.string()) },
+  returns: v.boolean(),
+  handler: async (ctx, { token, eventId, ...subscription }) => {
+    const claim = await ctx.db.query('billingSubscriptionSync').withIndex('by_subscription', q => q.eq('stripeSubscriptionId', subscription.stripeSubscriptionId)).unique();
+    if (!claim || claim.token !== token) return false;
+    // Component writes and this receipt commit in the same transaction. Updated
+    // also upserts, covering cancellation delivered before the creation event.
+    await ctx.runMutation(components.stripe.private.handleSubscriptionUpdated, subscription);
+    await ctx.db.patch(claim._id, { lastEventId: eventId });
+    return true;
+  },
+});
 export const createCheckout = action({ args: { plan: v.literal("pro") }, returns: v.object({ sessionId: v.string(), url: v.union(v.string(), v.null()) }), handler: async (ctx): Promise<{sessionId: string; url: string | null}> => {
   const identity = await ctx.auth.getUserIdentity(); if (!identity) throw new ConvexError("Authentication required");
   if (await ctx.runQuery(internal.editorAccess.hasComplimentary, { ownerId: identity.subject })) throw new ConvexError('Your complimentary membership already includes editor access. No payment is required.');

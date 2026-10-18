@@ -1,6 +1,7 @@
 import { httpRouter } from "convex/server";
 import { httpAction } from "./_generated/server";
-import { registerRoutes } from "@convex-dev/stripe";
+import { processEvent } from "@convex-dev/stripe";
+import Stripe from 'stripe';
 import { components, internal } from "./_generated/api";
 const http = httpRouter();
 const headers = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "POST, OPTIONS", "Access-Control-Allow-Headers": "Content-Type", "Content-Type": "application/json" };
@@ -24,7 +25,45 @@ http.route({ path: "/uploads", method: "POST", handler: httpAction(async (ctx, r
   }
 }) });
 if (process.env.STRIPE_SECRET_KEY && process.env.STRIPE_WEBHOOK_SECRET) {
-  registerRoutes(http, components.stripe, { webhookPath: "/stripe/webhook" });
+  http.route({ path: '/stripe/webhook', method: 'POST', handler: httpAction(async (ctx, request) => {
+    const signature = request.headers.get('stripe-signature');
+    if (!signature) return new Response('Missing signature', { status: 400 });
+    const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
+    let event: Stripe.Event;
+    try {
+      event = await stripe.webhooks.constructEventAsync(await request.text(), signature, process.env.STRIPE_WEBHOOK_SECRET!);
+    } catch {
+      return new Response('Invalid webhook signature', { status: 400 });
+    }
+    try {
+      if (['customer.subscription.created', 'customer.subscription.updated', 'customer.subscription.deleted'].includes(event.type)) {
+        const stripeSubscriptionId = (event.data.object as Stripe.Subscription).id;
+        const token = await ctx.runMutation(internal.billing.beginSubscriptionSync, { stripeSubscriptionId, eventId: event.id });
+        if (token !== null) {
+          // Reconcile CURRENT Stripe state, never an old event snapshot. The sync
+          // token also prevents concurrent reads from applying in reverse order.
+          const subscription = await stripe.subscriptions.retrieve(stripeSubscriptionId);
+          const item = subscription.items.data[0];
+          if (subscription.id !== stripeSubscriptionId) throw new Error('Invalid subscription response');
+          await ctx.runMutation(internal.billing.applySubscriptionSync, {
+            stripeSubscriptionId, eventId: event.id, token,
+            stripeCustomerId: typeof subscription.customer === 'string' ? subscription.customer : subscription.customer.id,
+            status: subscription.status, currentPeriodEnd: item?.current_period_end ?? 0,
+            cancelAtPeriodEnd: subscription.cancel_at_period_end ?? false,
+            cancelAt: subscription.cancel_at ?? undefined, quantity: item?.quantity ?? 1,
+            priceId: item?.price.id ?? '', metadata: subscription.metadata,
+          });
+        }
+      } else {
+        await processEvent(ctx, components.stripe, event, stripe);
+      }
+    } catch {
+      // No Stripe payloads, customer details or signing errors in public output.
+      console.error('Stripe webhook reconciliation failed', { eventId: event.id, type: event.type });
+      return new Response('Webhook processing failed', { status: 500 });
+    }
+    return new Response(JSON.stringify({ received: true }), { headers: { 'Content-Type': 'application/json' } });
+  }) });
 } else {
   http.route({ path: "/stripe/webhook", method: "POST", handler: httpAction(async () => new Response("Billing is not active", { status: 503 })) });
 }

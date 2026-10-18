@@ -5,6 +5,7 @@ import { convexTest } from 'convex-test';
 import stripeTest from '@convex-dev/stripe/test';
 import workflowTest from '@convex-dev/workflow/test';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
+import Stripe from 'stripe';
 import { api, components, internal } from './_generated/api';
 import schema from './schema';
 
@@ -198,4 +199,78 @@ test('native upload completion rechecks access after receiving the file', async 
   await revoke(f, 'revoked');
   await expect(f.t.mutation(internal.uploads.finish, { ticketId, storageId })).rejects.toThrow('SUBSCRIPTION_REQUIRED');
   expect((await f.t.run(ctx => ctx.db.get(ticketId)))?.storageId).toBeUndefined();
+});
+
+test('signed subscription webhooks cannot revive canceled access when delivered out of order', async () => {
+  const f = await fixture(false), stripe = new Stripe('sk_test_audit');
+  let current: object;
+  const requests = vi.spyOn(Stripe.StripeResource.prototype, '_makeRequest').mockImplementation(async (method, path) => {
+    expect(method).toBe('GET'); expect(path).toBe('/v1/subscriptions/sub_ordered_audit');
+    return current as never;
+  });
+  const send = async (id: string, created: number, type: string, status: string, currentStatus = status) => {
+    const object = { id: 'sub_ordered_audit', customer: 'cus_audit', status, cancel_at_period_end: false, metadata: { userId: ownerId, app: 'revline-editor' }, items: { data: [{ current_period_end: Math.floor(Date.now() / 1000) + 3600, quantity: 1, price: { id: 'price_audit' } }] } };
+    current = { ...object, status: currentStatus };
+    const payload = JSON.stringify({ id, created, type, data: { object } });
+    const signature = stripe.webhooks.generateTestHeaderString({ payload, secret: 'whsec_audit' });
+    expect((await f.t.fetch('/stripe/webhook', { method: 'POST', body: payload, headers: { 'stripe-signature': signature } })).status).toBe(200);
+  };
+  await send('evt_create', 100, 'customer.subscription.created', 'active');
+  expect(await f.owner.query(api.billing.isSubscribed, {})).toBe(true);
+  await send('evt_cancel', 300, 'customer.subscription.deleted', 'canceled');
+  expect(await f.owner.query(api.billing.isSubscribed, {})).toBe(false);
+  await send('evt_old_active', 200, 'customer.subscription.updated', 'active', 'canceled');
+  expect(await f.owner.query(api.billing.isSubscribed, {})).toBe(false);
+  const count = requests.mock.calls.length;
+  await send('evt_old_active', 200, 'customer.subscription.updated', 'active', 'canceled');
+  expect(requests).toHaveBeenCalledTimes(count);
+  // Same-second snapshots are not used for ordering or entitlement either.
+  await send('evt_same_second', 300, 'customer.subscription.updated', 'active', 'canceled');
+  expect(await f.owner.query(api.billing.isSubscribed, {})).toBe(false);
+});
+
+test('subscription sync discards a slower concurrent response and upserts deletion first', async () => {
+  const f = await fixture(false);
+  const subscription = { stripeSubscriptionId: 'sub_race_audit', stripeCustomerId: 'cus_audit', status: 'canceled', currentPeriodEnd: Math.floor(Date.now() / 1000) + 3600, cancelAtPeriodEnd: false, quantity: 1, priceId: 'price_audit', metadata: { userId: ownerId } };
+  const first = await f.t.mutation(internal.billing.beginSubscriptionSync, { stripeSubscriptionId: subscription.stripeSubscriptionId, eventId: 'evt_first' });
+  const second = await f.t.mutation(internal.billing.beginSubscriptionSync, { stripeSubscriptionId: subscription.stripeSubscriptionId, eventId: 'evt_second' });
+  expect(await f.t.mutation(internal.billing.applySubscriptionSync, { ...subscription, eventId: 'evt_second', token: second! })).toBe(true);
+  expect(await f.t.mutation(internal.billing.applySubscriptionSync, { ...subscription, status: 'active', eventId: 'evt_first', token: first! })).toBe(false);
+  expect(await f.owner.query(api.billing.isSubscribed, {})).toBe(false);
+  expect(await f.t.query(components.stripe.public.getSubscription, { stripeSubscriptionId: subscription.stripeSubscriptionId })).toMatchObject({ status: 'canceled' });
+});
+
+test('tampered webhooks cannot write; failed Stripe reads remain retryable without leaking details', async () => {
+  const f = await fixture(false), stripe = new Stripe('sk_test_audit');
+  const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+  const requests = vi.spyOn(Stripe.StripeResource.prototype, '_makeRequest').mockRejectedValue(new Error('Private Stripe error details'));
+  const payload = JSON.stringify({ id: 'evt_forged', type: 'customer.subscription.created', data: { object: { id: 'sub_forged', status: 'active' } } });
+  const signature = stripe.webhooks.generateTestHeaderString({ payload, secret: 'whsec_other' });
+  for (const headers of [new Headers(), new Headers({ 'stripe-signature': signature })]) expect((await f.t.fetch('/stripe/webhook', { method: 'POST', body: payload, headers })).status).toBe(400);
+  expect(requests).not.toHaveBeenCalled();
+  expect(await f.t.run(ctx => ctx.db.query('billingSubscriptionSync').take(1))).toEqual([]);
+  const validSignature = stripe.webhooks.generateTestHeaderString({ payload, secret: 'whsec_audit' });
+  const failed = await f.t.fetch('/stripe/webhook', { method: 'POST', body: payload, headers: { 'stripe-signature': validSignature } });
+  expect(failed.status).toBe(500); expect(await failed.text()).not.toContain('Private');
+  expect(JSON.stringify(errors.mock.calls)).not.toContain('Private');
+  expect((await f.t.run(ctx => ctx.db.query('billingSubscriptionSync').take(1)))[0].lastEventId).toBeUndefined();
+  requests.mockResolvedValue({ id: 'sub_forged', customer: 'cus_audit', status: 'canceled', metadata: {}, items: { data: [] } } as never);
+  expect((await f.t.fetch('/stripe/webhook', { method: 'POST', body: payload, headers: { 'stripe-signature': validSignature } })).status).toBe(200);
+  expect((await f.t.run(ctx => ctx.db.query('billingSubscriptionSync').take(1)))[0].lastEventId).toBe('evt_forged');
+});
+
+test.each(['past_due', 'unpaid', 'paused', 'incomplete', 'incomplete_expired', 'canceled'])('%s subscriptions cannot grant editing through a forged client checkout success', async status => {
+  const f = await fixture(false);
+  await f.t.mutation(components.stripe.private.handleSubscriptionCreated, { stripeSubscriptionId: 'sub_status_audit', stripeCustomerId: 'cus_audit', priceId: 'price_audit', status, currentPeriodEnd: Math.floor(Date.now() / 1000) + 3600, cancelAtPeriodEnd: false, metadata: { userId: ownerId, app: 'revline-editor' } });
+  expect(await f.owner.query(api.billing.isSubscribed, {})).toBe(false);
+  await expect(f.owner.mutation(api.assets.saveFocus, { projectId: f.projectId, assetId: f.assetId, focus })).rejects.toThrow('SUBSCRIPTION_REQUIRED');
+  expect((await f.other.query(api.billing.status, {})).subscribed).toBe(false);
+});
+
+test('checkout and portal accept no client customer, price or entitlement overrides', async () => {
+  const f = await fixture(false);
+  await expect(f.t.action(api.billing.createCheckout, { plan: 'pro' })).rejects.toThrow('Authentication required');
+  await expect(f.t.action(api.billing.createPortal, {})).rejects.toThrow('Authentication required');
+  await expect(f.owner.action(api.billing.createCheckout, { plan: 'pro', priceId: 'price_attacker' } as never)).rejects.toThrow();
+  await expect(f.owner.action(api.billing.createPortal, { customerId: 'cus_someone_else' } as never)).rejects.toThrow();
 });
