@@ -5,7 +5,9 @@ export function guardPreviewBuffering(document: Document, player: Playback, read
   let intended = !player.paused, held = false, disposed = false;
   let diagnosticTimer:ReturnType<typeof setTimeout>|undefined;
   let seekTimer:ReturnType<typeof setTimeout>|undefined;
+  let recoveryTimer:ReturnType<typeof setInterval>|undefined;
   const clearSeek=()=>{if(seekTimer!==undefined)clearTimeout(seekTimer);seekTimer=undefined;};
+  const clearRecovery=()=>{if(recoveryTimer!==undefined)clearInterval(recoveryTimer);recoveryTimer=undefined;};
   const clearDiagnostic=()=>{if(diagnosticTimer!==undefined)clearTimeout(diagnosticTimer);diagnosticTimer=undefined;};
   const blockedMedia = () => {
     const time = readTime();
@@ -26,13 +28,16 @@ export function guardPreviewBuffering(document: Document, player: Playback, read
   };
   const hold = () => {
     held = true;
+    // A live split, move or removal can replace the blocked source without a
+    // final media event. Recheck only while held so that wait cannot outlive it.
+    if(recoveryTimer===undefined)recoveryTimer=setInterval(recover,100);
     if(onBuffering)diagnosticTimer=setTimeout(()=>{diagnosticTimer=undefined;if(!disposed&&held&&intended)try{onBuffering();}catch{/* Diagnostics must not interrupt media recovery. */}},2000);
   };
   const recover = () => {
     if(disposed||blocked())return;
     clearSeek();
     if (!held || !intended) return;
-    held = false;clearDiagnostic();
+    held = false;clearRecovery();clearDiagnostic();
     player.play();
   };
   const waiting = (event: Event) => {
@@ -69,12 +74,12 @@ export function guardPreviewBuffering(document: Document, player: Playback, read
       if(blocked()){hold();return;}
       player.play();
     },
-    pause() { intended = false; held = false; clearSeek();clearDiagnostic();player.pause(); },
-    cancel() { intended = false; held = false; clearSeek();clearDiagnostic(); },
+    pause() { intended = false; held = false; clearSeek();clearRecovery();clearDiagnostic();player.pause(); },
+    cancel() { intended = false; held = false; clearSeek();clearRecovery();clearDiagnostic(); },
     isBuffering: () => held,
     isPlaying: () => !disposed && (held ? intended : !player.paused),
     dispose() {
-      disposed = true; intended = false; held = false;clearSeek();clearDiagnostic();
+      disposed = true; intended = false; held = false;clearSeek();clearRecovery();clearDiagnostic();
       player.removeEventListener('play', played); player.removeEventListener('pause', paused); player.removeEventListener('ended', paused);
       document.removeEventListener('waiting', waiting, true);
       for (const name of ['canplay', 'seeked', 'loadeddata', 'playing', 'ended']) document.removeEventListener(name, recover, true);

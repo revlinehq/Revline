@@ -91,9 +91,10 @@ export const Preview = forwardRef<PreviewHandle,{timeline:Timeline;assets:MediaA
       if(retained){
         updateLayers(active,current);
         if(needsLiveMediaSync(previous,current)){
-          const wasPlaying=!active.paused;
+          const wasPlaying=playbackGuard.current?.isPlaying()??!active.paused;
+          playbackGuard.current?.cancel();
           active.seek(frameTime(active,seekPosition.current));
-          if(wasPlaying)active.play();
+          if(wasPlaying){if(playbackGuard.current)playbackGuard.current.play();else active.play();}
         }
         renderedTimeline.current=current;setRevision(value=>value+1);
       }
