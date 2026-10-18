@@ -2,6 +2,25 @@
 
 Planned work after the video-editing MVP. This roadmap records product direction; it does not describe features already available or commit to release dates.
 
+## Product direction
+
+Pivot from a VFX-led editor toward agent-first professional motion design and video editing. Users describe their intent; the agent plans and executes coherent typography, layout, motion, timing and visual style. VFX remain supporting tools for that direction.
+
+Keep generated results editable through the same timeline and controls as manual work. Build on reliable cuts, speech preservation, audio sync, subtitles, playback, saving and export before expanding the creative workflow.
+
+## Personalized style generation
+
+Generate custom color grading, motion graphics and subtitle designs from each user's brief, footage and brand preferences. The agent should compose an editable design using supported controls and motion primitives, rather than depend on choosing a named style preset.
+
+- Coordinate colors, typography, layout, animation curves and timing across an edit.
+- Let users refine specific details through chat or manual controls without rebuilding unrelated work.
+- Save approved styles and user preferences for reuse and consistent future edits.
+- Evaluate quality on real footage, including readability, motion continuity and preview/export consistency.
+
+Example: “Warm film colors, minimal captions and smooth text entrances” produces a custom, adjustable combination of grading, subtitle styling and animation.
+
+This follows the core editing foundation. Consistent quality and accumulated user preferences are potential sources of defensibility; generation alone is a product capability, not an established moat.
+
 ## Motion design from scratch
 
 Let users start with a blank canvas and create an animated composition in Revline, with manual controls or AI. Uploaded footage should be optional.
