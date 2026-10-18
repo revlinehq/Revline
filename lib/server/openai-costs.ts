@@ -42,8 +42,10 @@ export function createOpenAiCostsStore({ directory = join(process.cwd(), '.data'
     }
   }
   async function fetchCosts(connection: Pick<Connection, 'adminKey' | 'projectId'>, days: number) {
-    const end = Math.floor(now() / 1000);
-    const start = Math.floor(end / day) * day - (days - 1) * day;
+    // Costs are daily buckets: a partial end_time omits today's bucket even
+    // when OpenAI already reports spend for it. Include the full current UTC day.
+    const end = (Math.floor(now() / 1000 / day) + 1) * day;
+    const start = end - days * day;
     const totals = new Map<string, number>();
     for (let i = 0; i < days; i++) totals.set(new Date((start + i * day) * 1000).toISOString().slice(0, 10), 0);
     let cursor: string | undefined;
@@ -103,7 +105,7 @@ export function createOpenAiCostsStore({ directory = join(process.cwd(), '.data'
       if (!connection) return { connected: false };
       const key = `${ownerId}:${connection.projectId}:${connection.updatedAt}:${days}`;
       const existing = cache.get(key);
-      if (existing && now() - existing.refreshedAt < 60_000 && new Date(existing.end).toISOString().slice(0, 10) === new Date(now()).toISOString().slice(0, 10)) return existing;
+      if (existing && now() - existing.refreshedAt < 60_000 && new Date(existing.refreshedAt).toISOString().slice(0, 10) === new Date(now()).toISOString().slice(0, 10)) return existing;
       const costs = await fetchCosts(connection, days);
       const report: OpenAiCostReport = { connected: true, projectId: connection.projectId, days, refreshedAt: now(), ...costs };
       cache.set(key, report);
