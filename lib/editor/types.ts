@@ -7,6 +7,7 @@ import type { VisualFadeSettings } from './visual-fades';
 import type { TextAppearance } from './text-style';
 import type { TextFontId } from './text-fonts';
 import type { FlashSettings, PunchSettings, ShakeSettings, PopSettings } from './motion-effect-settings';
+import type { SmoothZoomSettings } from './smooth-zoom-settings';
 export type AspectRatio = 'vertical' | 'portrait-feed' | 'square' | 'classic' | 'landscape';
 export type ClipKind = 'video' | 'image' | 'audio' | 'caption' | 'graphic' | 'solid' | 'effect';
 export type LayerGroup = 'visual' | 'overlay' | 'audio' | 'effects';
@@ -48,6 +49,7 @@ export type Clip = {
   blendMode?: BlendMode;
   motion?: MotionKeyframe[];
   motionOffset?: number;
+  smoothZoom?: SmoothZoomSettings;
   effectPreset?: EffectPreset | 'none';
   cinematicBars?: CinematicBarSettings;
   solidColor?: SolidColorSettings;

@@ -8,6 +8,7 @@ import { validateTextStyle } from './text-style';
 import { audioFadeTimingPatch,validateAudioSettings } from './audio-settings';
 import { textAnimationTimingPatch,validateTextAnimationTiming } from './text-animation-timing';
 import {validateVisualFade,visualFadeTimingPatch} from './visual-fades';
+import { validateSmoothZoom } from './smooth-zoom-settings';
 
 export const BLEND_MODES = ['normal', 'screen', 'multiply', 'overlay', 'plus-lighter', 'difference'] as const;
 export type BlendMode = typeof BLEND_MODES[number];
@@ -100,6 +101,7 @@ export function validateClipEffects(clip: Clip) {
   validateVisualFade(clip);
   validateTransitionSettings(clip);
   validateMotionEffectSettings(clip);
+  validateSmoothZoom(clip);
   if (clip.zoom !== undefined) {
     if (clip.kind !== 'effect' || !isZoomPreset(clip.effectPreset)) throw new Error('Zoom controls belong to Zoom effect clips.');
     if (!['in', 'out'].includes(clip.zoom.direction) || clip.effectPreset !== `quick-zoom-${clip.zoom.direction}`) throw new Error('Choose a matching Zoom direction.');
