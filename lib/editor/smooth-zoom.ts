@@ -5,6 +5,11 @@ import { DEFAULT_TRANSFORM, dimensions, type AspectRatio, type Clip, type MediaA
 
 export function zoomEase(progress: number, easing: SmoothZoomSettings['easing']) {
   const p = Math.max(0, Math.min(1, progress));
+  if (easing === 'focused-spring') {
+    // Critically damped spring: fast response, smooth braking, no overshoot.
+    // Normalize its finite window so preview/export land exactly on the target.
+    return (1 - (1 + 9 * p) * Math.exp(-9 * p)) / (1 - 10 * Math.exp(-9));
+  }
   return easing === 'ease-in-out' ? p * p * (3 - 2 * p) : easing === 'ease-out' ? 1 - (1 - p) ** 3 : p;
 }
 

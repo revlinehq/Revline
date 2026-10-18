@@ -1,6 +1,6 @@
 import type { Clip } from './types';
 
-export const SMOOTH_ZOOM_EASINGS = ['linear', 'ease-in-out', 'ease-out'] as const;
+export const SMOOTH_ZOOM_EASINGS = ['linear', 'ease-in-out', 'ease-out', 'focused-spring'] as const;
 export type SmoothZoomSettings = { start: number; inDuration: number; holdDuration: number; outDuration: number; scale: number; centerX: number; centerY: number; easing: typeof SMOOTH_ZOOM_EASINGS[number] };
 
 /** Recipe times share motion's original clip-local timeline origin, including after trims. */

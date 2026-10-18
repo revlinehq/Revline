@@ -7,7 +7,7 @@ import { zoomEase } from '@/lib/editor/smooth-zoom';
 const STYLES = [
   { id: 'current', name: 'Current ease-out', tag: 'In our editor', description: 'Quick start, gentle braking. Our existing cubic curve.', color: '#aea8ff' },
   { id: 'exponential', name: 'Fast ease-out', tag: 'Demo only', description: 'More punch up front, with a longer, softer landing.', color: '#8cc8ec' },
-  { id: 'focused', name: 'Focused spring', tag: 'Demo only', description: 'A fast pull toward the target. Settles without bouncing.', color: '#a3d5bd' },
+  { id: 'focused', name: 'Focused spring', tag: 'In our editor', description: 'A fast pull toward the target. Settles without bouncing.', color: '#a3d5bd' },
   { id: 'smooth', name: 'Soft spring', tag: 'Demo only', description: 'A little momentum, a tiny overshoot, then a smooth settle.', color: '#e5bc90' },
 ] as const;
 type Style = typeof STYLES[number];
@@ -17,10 +17,7 @@ function ease(id: Style['id'], p: number) {
   if (p >= 1) return 1;
   if (id === 'current') return zoomEase(p, 'ease-out');
   if (id === 'exponential') return (1 - 2 ** (-10 * p)) / (1 - 2 ** -10);
-  if (id === 'focused') {
-    const settle = (t: number) => 1 - (1 + 9 * t) * Math.exp(-9 * t);
-    return settle(p) / settle(1);
-  }
+  if (id === 'focused') return zoomEase(p, 'focused-spring');
   // Analytical damped spring, sampled into compositor transform keyframes.
   const damping = .78, frequency = 11, damped = frequency * Math.sqrt(1 - damping ** 2);
   const settle = (t: number) => 1 - Math.exp(-damping * frequency * t) * (Math.cos(damped * t) + damping * frequency / damped * Math.sin(damped * t));
@@ -112,7 +109,7 @@ export function ZoomDemo() {
         <div className="zoom-demo-toggles"><label><input type="checkbox" checked={slow} onChange={event => setSlow(event.target.checked)} />Half speed</label><label><input type="checkbox" checked={loop} onChange={event => setLoop(event.target.checked)} />Loop</label></div>
       </section>
       <section className="zoom-demo-grid" aria-label="Zoom styles">{STYLES.map(style => <ZoomCard key={style.id} style={style} duration={duration} amount={amount} slow={slow} loop={loop} replay={replay} />)}</section>
-      <p className="zoom-demo-note">The spring versions are motion studies inspired by the feel we discussed, not an exact recreation of Screen Studio. They don’t change your editor or project.</p>
+      <p className="zoom-demo-note">Current ease-out and Focused spring are available in the editor. The other curves are demo studies. These aren’t an exact recreation of Screen Studio; playing this page doesn’t change your project.</p>
     </div>
   </main>;
 }

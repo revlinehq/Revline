@@ -11,7 +11,7 @@ import { InspectorSelect } from './inspector-select';
 import './smooth-zoom-controls.css';
 
 type Props = { clip: Clip; asset: MediaAsset; aspectRatio: AspectRatio; fps: number; disabled?: boolean; onChange: (patch: Partial<Clip>) => void; onPreview?: (patch: Partial<Clip> | null) => void };
-const easingLabels = { linear: 'Linear', 'ease-in-out': 'Ease in / out', 'ease-out': 'Ease out' };
+const easingLabels = { linear: 'Linear', 'ease-in-out': 'Ease in / out', 'ease-out': 'Ease out', 'focused-spring': 'Focused spring' };
 
 function initialSettings(clip: Clip): SmoothZoomSettings {
   if (clip.smoothZoom && !clip.motionOffset) return clip.smoothZoom;
