@@ -104,7 +104,9 @@ try {
       if (!response.ok) throw new Error('Worker status failed after deployment.');
       const status = await response.json();
       if (status.processorVersion !== contract.processorVersion) throw new Error('Cloudflare and Convex processor contracts differ.');
-      if (status.processors.every(slot => !slot.running || slot.healthy && !slot.draining && slot.processorVersion === contract.processorVersion)) break;
+      const expectedImage = config.containers[0].images.processor.image;
+      if (!status.processors?.length || status.processors.some(slot => slot.configuredImage !== expectedImage)) throw new Error('Cloudflare is not configured with this release image.');
+      if (status.processors.every(slot => !slot.running || slot.healthy && !slot.draining && slot.processorVersion === contract.processorVersion && slot.image === expectedImage)) break;
       if (Date.now() >= deadline) throw new Error('Previous workers have not drained. Deployment is not verified; active jobs were preserved.');
       console.log('Waiting for previous workers to finish active jobs and drain.');
       await new Promise(resolve => setTimeout(resolve, 15000));

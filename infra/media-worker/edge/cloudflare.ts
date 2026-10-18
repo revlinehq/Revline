@@ -45,14 +45,15 @@ export class MediaProcessor extends DurableObject<Bindings> {
     this.pending ??= this.ensureWorker().finally(() => { this.pending = undefined; });
     return this.pending;
   }
-  async status(): Promise<{ running: boolean; healthy: boolean; resourceProfile?: string; activeTasks?: number; draining?: boolean; processorVersion?: number }> {
-    if (!this.ctx.container?.running) return { running: false, healthy: false };
+  async status(): Promise<{ running: boolean; healthy: boolean; resourceProfile?: string; activeTasks?: number; draining?: boolean; processorVersion?: number; image?: string; configuredImage?: string }> {
+    const configuredImage = this.ctx.container?.images.processor;
+    if (!this.ctx.container?.running) return { running: false, healthy: false, configuredImage };
     try {
       const current = await this.ctx.container.inspect();
       const response = await this.ctx.container.getTcpPort(8080).fetch('http://container/health', { signal: AbortSignal.timeout(2000) });
       const health = await response.json() as { activeTasks?: number; draining?: boolean; processorVersion?: number };
-      return { running: true, healthy: response.ok, resourceProfile: current?.labels.profile ?? 'legacy-1-vcpu', ...(Number.isInteger(health.activeTasks) ? { activeTasks: health.activeTasks } : {}), ...(typeof health.draining === 'boolean' ? { draining: health.draining } : {}), ...(Number.isInteger(health.processorVersion) ? { processorVersion: health.processorVersion } : {}) };
-    } catch { return { running: true, healthy: false }; }
+      return { running: true, healthy: response.ok, image: current?.image, configuredImage, resourceProfile: current?.labels.profile ?? 'legacy-1-vcpu', ...(Number.isInteger(health.activeTasks) ? { activeTasks: health.activeTasks } : {}), ...(typeof health.draining === 'boolean' ? { draining: health.draining } : {}), ...(Number.isInteger(health.processorVersion) ? { processorVersion: health.processorVersion } : {}) };
+    } catch { return { running: true, healthy: false, configuredImage }; }
   }
   private async ensureWorker(): Promise<void> {
     if (await this.ctx.storage.get('retired')) return;
