@@ -1,6 +1,6 @@
 import { getFunctionName } from 'convex/server';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
-import { CLAUDE_EDIT_MODELS, OPENAI_EDIT_MODELS, editorProviderOptions, claudeProviderOptions, type ClaudeModelSelection } from '../lib/ai/claude-model';
+import { CLAUDE_EDIT_MODELS, OPENAI_EDIT_MODELS, OPENAI_REASONING_EFFORTS, editorProviderOptions, claudeProviderOptions, type ClaudeModelSelection } from '../lib/ai/claude-model';
 
 const fixture = vi.hoisted(() => ({ model: undefined as undefined | { modelId: string; provider: string }, options: undefined as unknown, finishError: undefined as undefined | string, generate: vi.fn(), tokenCounter: vi.fn(() => async () => 10) }));
 vi.mock('../lib/ai/anthropic-token-count', () => ({ anthropicTokenCounter: fixture.tokenCounter }));
@@ -27,6 +27,7 @@ beforeEach(() => {
   vi.stubEnv('CLAUDE_MODEL', 'changed-after-send');
   vi.stubEnv('CLAUDE_GATEWAY_MODEL', 'changed-after-send');
   vi.stubEnv('MODEL_SWITCHER_ENABLED', 'false');
+  vi.stubEnv('EDITOR_ENFORCE_TOKEN_BUDGET', 'true');
 });
 afterEach(() => vi.unstubAllEnvs());
 
@@ -87,4 +88,11 @@ test('a removed OpenAI key fails clearly without generating or silently falling 
   await run({ provider: 'openai', modelId: 'gpt-6.1-sol', modelChoice: 'gpt-6.1-sol' });
   expect(fixture.generate).not.toHaveBeenCalled();
   expect(fixture.finishError).toContain('OPENAI_API_KEY');
+});
+
+test.each(OPENAI_REASONING_EFFORTS)('queued %s reasoning survives switcher changes and reaches generation', async reasoningEffort => {
+  await run({ provider: 'openai', modelId: 'gpt-6.1-sol', modelChoice: 'gpt-6.1-sol', reasoningEffort, speedMode: 'fast' });
+  expect(fixture.options).toMatchObject({ providerOptions: { openai: { reasoningEffort, serviceTier: 'fast' } } });
+  expect(fixture.generate).toHaveBeenCalledOnce();
+  expect(fixture.finishError).toBeUndefined();
 });

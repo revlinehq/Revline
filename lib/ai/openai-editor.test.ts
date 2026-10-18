@@ -2,13 +2,24 @@ import { createOpenAI } from '@ai-sdk/openai';
 import { generateText, streamText, stepCountIs, tool, wrapLanguageModel } from 'ai';
 import { z } from 'zod';
 import { expect, test } from 'vitest';
-import { OPENAI_EDIT_MODELS, editorProviderOptions, resolveClaudeModel, validatePinnedClaudeModel } from './claude-model';
+import { OPENAI_EDIT_MODELS, OPENAI_REASONING_EFFORTS, OPENAI_SPEED_MODES, editorProviderOptions, editorMaxOutputTokens, resolveClaudeModel, validatePinnedClaudeModel } from './claude-model';
 import { AssistantTokenBudget, EDITOR_TOKEN_LIMITS } from './token-budget';
 import { openAIEditorImages } from './openai-editor-images';
 
 const usage = { input_tokens: 100, input_tokens_details: { cached_tokens: 40, cache_write_tokens: 20 }, output_tokens: 30, output_tokens_details: { reasoning_tokens: 20 }, total_tokens: 130 };
 const text = { type: 'message', id: 'msg_fixture', role: 'assistant', content: [{ type: 'output_text', text: 'Saved fixture edit.', annotations: [] }] };
 const reasoning = { type: 'reasoning', id: 'rs_fixture', encrypted_content: 'fixture-encrypted-reasoning', summary: [] };
+
+test.each(OPENAI_EDIT_MODELS.flatMap(model => OPENAI_REASONING_EFFORTS.flatMap(effort => OPENAI_SPEED_MODES.map(speedMode => ({ ...model, effort, speedMode })))))('$label serializes $effort reasoning and $speedMode speed into the actual Responses request', async ({ modelId, effort, speedMode }) => {
+  let body: Record<string, unknown> | undefined;
+  const provider = createOpenAI({ apiKey: 'fixture-only', fetch: async (_url, init) => {
+    body = JSON.parse(String(init?.body));
+    return new Response(JSON.stringify({ id: 'resp_effort', created_at: 0, model: modelId, status: 'completed', output: [text], usage }), { headers: { 'content-type': 'application/json' } });
+  } });
+  const selection = { provider: 'openai' as const, modelId, reasoningEffort: effort, speedMode };
+  await generateText({ model: wrapLanguageModel({ model: provider.responses(modelId), middleware: new AssistantTokenBudget().middleware([], undefined, undefined, false) }), prompt: 'Synthetic effort fixture', maxOutputTokens: editorMaxOutputTokens(selection), providerOptions: editorProviderOptions(selection) });
+  expect(body).toMatchObject({ model: modelId, reasoning: { effort, mode: 'standard' }, service_tier: speedMode === 'fast' ? 'fast' : 'default', store: false, max_output_tokens: editorMaxOutputTokens(selection) });
+});
 
 test.each(OPENAI_EDIT_MODELS)('$label executes the real Responses tool loop with bounded options, encrypted reasoning and complete usage', async selected => {
   const requests: { url: string; body: Record<string, unknown> }[] = [];

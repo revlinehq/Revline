@@ -1,5 +1,5 @@
 import type { LanguageModelUsage, ProviderMetadata } from 'ai';
-import { OPENAI_EDIT_MODELS } from './claude-model';
+import { OPENAI_EDIT_MODELS, type OpenAIReasoningEffort, type OpenAISpeedMode } from './claude-model';
 import { hasRepeatedToolFailures } from './tool-failures';
 
 const count = (value: unknown): value is number => typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
@@ -18,17 +18,19 @@ export function estimateEditorCallCost(model: string, provider: string, usage?: 
     reasoningTokens: count(usage?.outputTokenDetails?.reasoningTokens) ? usage.outputTokenDetails.reasoningTokens : null,
   };
   const tariff = provider === 'openai.responses' && OPENAI_EDIT_MODELS.find(entry => entry.modelId === model);
+  const serviceTier = record(metadata?.openai).serviceTier;
+  const speedMultiplier = serviceTier === 'fast' ? 2 : 1;
   let unknownReason: string | null = null;
   if (!tariff) unknownReason = 'unreviewed_model_or_provider';
-  else if (record(metadata?.openai).serviceTier !== 'default') unknownReason = 'unconfirmed_standard_tariff';
+  else if (serviceTier !== 'default' && serviceTier !== 'fast') unknownReason = 'unconfirmed_standard_tariff';
   else if (Object.values(counts).some(value => value === null)) unknownReason = 'missing_usage';
   else if (counts.uncachedInputTokens! + counts.cacheReadTokens! + counts.cacheWriteTokens! !== counts.inputTokens || counts.reasoningTokens! > counts.outputTokens!) unknownReason = 'inconsistent_usage';
   // Standard tariffs verified 2026-10-17. Output includes reasoning; never add it twice.
   // https://developers.openai.com/api/docs/pricing
   const longContext = counts.inputTokens !== null && counts.inputTokens > 272_000;
   const inputMultiplier = longContext ? 2 : 1, outputMultiplier = longContext ? 1.5 : 1;
-  const estimatedUsd = unknownReason || !tariff ? null : rounded((counts.uncachedInputTokens! * tariff.pricing.input * inputMultiplier + counts.cacheReadTokens! * tariff.pricing.cacheRead * inputMultiplier + counts.cacheWriteTokens! * tariff.pricing.cacheWrite * inputMultiplier + counts.outputTokens! * tariff.pricing.output * outputMultiplier) / 1_000_000);
-  return { ...counts, estimatedUsd, unknownReason, longContext };
+  const estimatedUsd = unknownReason || !tariff ? null : rounded(speedMultiplier * (counts.uncachedInputTokens! * tariff.pricing.input * inputMultiplier + counts.cacheReadTokens! * tariff.pricing.cacheRead * inputMultiplier + counts.cacheWriteTokens! * tariff.pricing.cacheWrite * inputMultiplier + counts.outputTokens! * tariff.pricing.output * outputMultiplier) / 1_000_000);
+  return { ...counts, estimatedUsd, unknownReason, longContext, ...(typeof serviceTier === 'string' ? { serviceTier } : {}) };
 }
 
 type ModelCall = { callId: string; stepNumber: number; modelId: string; provider: string; usage?: LanguageModelUsage; providerMetadata?: ProviderMetadata; finishReason?: string; content: readonly unknown[] };
@@ -46,12 +48,14 @@ export class AssistantCostLog {
   private finished = false;
   private model: string | null = null;
   private provider: string | null = null;
+  private reasoningEffort?: OpenAIReasoningEffort;
+  private speedMode?: OpenAISpeedMode;
   private toolNames = new Set<string>();
   private repeated = new Map<string, { count: number; revision: number }>();
   private steps: Step[] = [];
   constructor(private identity: { projectId: string; runId: string }, private emit: (event: LogRecord) => void = event => console.log(`[ai-cost] ${JSON.stringify(event)}`), private now = () => new Date().toISOString()) {}
-  private log(event: LogRecord) { this.emit({ timestamp: this.now(), ...this.identity, ...event }); }
-  selectModel(model: string, provider: string) { this.model = model; this.provider = provider; }
+  private log(event: LogRecord) { this.emit({ timestamp: this.now(), ...this.identity, ...(this.reasoningEffort ? { reasoningEffort: this.reasoningEffort } : {}), ...(this.speedMode ? { speedMode: this.speedMode } : {}), ...event }); }
+  selectModel(model: string, provider: string, reasoningEffort?: OpenAIReasoningEffort, speedMode?: OpenAISpeedMode) { this.model = model; this.provider = provider; this.reasoningEffort = reasoningEffort; this.speedMode = speedMode; }
 
   modelCall(event: ModelCall, progress: Progress) {
     const key = `${event.callId}:${event.stepNumber}`;

@@ -6,7 +6,8 @@ import { memo, useCallback, useState, useEffect, useLayoutEffect, useMemo, useRe
 import { Check, ArrowUpRight } from 'lucide-react';
 import { Brand } from '@/components/workspace/brand';
 import { AssistantModelPicker } from './assistant-model-picker';
-import type { ClaudeModelChoice } from '@/lib/ai/claude-model';
+import {OPENAI_EDIT_MODELS,OPENAI_REASONING_EFFORTS,OPENAI_SPEED_MODES,type ClaudeModelChoice,type OpenAIReasoningEffort,type OpenAISpeedMode} from '@/lib/ai/claude-model';
+import {InspectorSelect} from './inspector-select';
 import { EditComposer, type ComposerAttachment } from '@/components/workspace/edit-composer';
 import { useUIMessages } from '@convex-dev/agent/react';
 import { api } from '@/convex/_generated/api';
@@ -70,14 +71,14 @@ function AssistantPanelBody({ messages, running, editing:editingTimeline=running
   modelSwitcher?: boolean;
   defaultModelChoice?:ClaudeModelChoice;
   allowedModels?: readonly ClaudeModelChoice[];
-  onSend: (text: string, modelChoice?: ClaudeModelChoice) => Promise<void>; hasClips: boolean; demo: boolean;
+  onSend: (text: string, modelChoice?: ClaudeModelChoice, reasoningEffort?: OpenAIReasoningEffort, speedMode?: OpenAISpeedMode) => Promise<void>; hasClips: boolean; demo: boolean;
   onLoadMore?: () => void; canLoadMore?: boolean; onAttach?: () => void;
   attachments?: ComposerAttachment[]; onRemoveAttachment?: (id: string) => void; requireMedia?: boolean;
   conversationStarted?: boolean;
   activity?: string | null; activitySource?: string | null; activityProgress?:number|null; activityStartedAt?:number|null; draftKey?:string;
   onStop?: () => Promise<void>;
   suggestions?: { sourceName:string;clipId:string;items:SourceEditSuggestion[] };
-  onSuggestion?: (prompt:string,clipId:string,modelChoice?:ClaudeModelChoice) => Promise<void>;
+  onSuggestion?: (prompt:string,clipId:string,modelChoice?:ClaudeModelChoice,reasoningEffort?:OpenAIReasoningEffort,speedMode?:OpenAISpeedMode) => Promise<void>;
   editSnapshot?:AssistantEditSnapshot;
 }) {
   const [prompt, setPrompt] = useState('');
@@ -85,8 +86,11 @@ function AssistantPanelBody({ messages, running, editing:editingTimeline=running
   const sendInFlight=useRef(false);
   const currentDraftKey=useRef(draftKey);currentDraftKey.current=draftKey;
   const [modelChoice, setModelChoice] = useState<ClaudeModelChoice>();
+  const [reasoningEffort,setReasoningEffort]=useState<OpenAIReasoningEffort>('medium');
+  const [speedMode,setSpeedMode]=useState<OpenAISpeedMode>('standard');
   const selectedModelChoice=modelChoice&&allowedModels.includes(modelChoice)?modelChoice:undefined;
   const effectiveModelChoice=selectedModelChoice??(defaultModelChoice&&allowedModels.includes(defaultModelChoice)?defaultModelChoice:allowedModels.includes('sonnet')?'sonnet':allowedModels[0]??'sonnet');
+  const canChooseReasoning=canChooseModel&&OPENAI_EDIT_MODELS.some(model=>model.id===effectiveModelChoice);
   const [sending, setSending] = useState(false);
   const [localError, setLocalError] = useState('');
   const [stopState,setStopState]=useState<'stopping'|'stopped'|null>(null);
@@ -138,7 +142,7 @@ function AssistantPanelBody({ messages, running, editing:editingTimeline=running
     const draft=prompt,key=draftKey;sendInFlight.current=true;
     changePrompt('');
     setStopState(null); setSending(true); setPendingReply({ id: `pending-${crypto.randomUUID()}`, text: draft.trim(), previousUserId: latestUser?.id, previousError: error }); setLocalError(''); scroll.resume();
-    try { await onSend(draft.trim(), canChooseModel ? selectedModelChoice : undefined); }
+    try { await onSend(draft.trim(), canChooseModel ? selectedModelChoice : undefined, canChooseReasoning ? reasoningEffort : undefined, canChooseReasoning ? speedMode : undefined); }
     catch (e) { if(currentDraftKey.current===key){changePrompt(draft);setPendingReply(null);setLocalError(userError(e, 'Could not send message'));} }
     finally { sendInFlight.current=false;setSending(false); }
   }
@@ -147,7 +151,7 @@ function AssistantPanelBody({ messages, running, editing:editingTimeline=running
     if (!suggestions || !onSuggestion || sendInFlight.current || sending || running || pendingReply || !configured) return;
     const request = `${suggestion.prompt}\n\nUse the selected clip from “${suggestions.sourceName}”, source ${suggestion.start.toFixed(2)}–${suggestion.end.toFixed(2)} seconds.`;
     sendInFlight.current=true;setStopState(null); setSending(true); setPendingReply({ id: `pending-${crypto.randomUUID()}`, text: request, previousUserId: latestUser?.id, previousError: error }); setLocalError(''); scroll.resume();
-    try { await onSuggestion(request, suggestions.clipId, canChooseModel ? selectedModelChoice : undefined); }
+    try { await onSuggestion(request, suggestions.clipId, canChooseModel ? selectedModelChoice : undefined, canChooseReasoning ? reasoningEffort : undefined, canChooseReasoning ? speedMode : undefined); }
     catch (e) { setPendingReply(null); setLocalError(userError(e, 'Could not start this edit.')); }
     finally { sendInFlight.current=false;setSending(false); }
   }
@@ -190,7 +194,7 @@ function AssistantPanelBody({ messages, running, editing:editingTimeline=running
     </div>
     <div ref={scroll.composer} className="manual-composer-dock">
     {scroll.latestHidden && <button className="chat-jump-latest" onClick={scroll.resume}>Latest response</button>}
-    <EditComposer attachments={attachments} onRemoveAttachment={onRemoveAttachment} requireMedia={requireMedia} actions={canChooseModel ? <AssistantModelPicker allowedModels={allowedModels} value={effectiveModelChoice} onChange={setModelChoice} disabled={answering}/> : undefined} variant="compact" className="manual-editor-composer" value={prompt} onChange={changePrompt} onSubmit={submit} onAttach={onAttach} placeholder="What would you change next?" disabled={sending || !!pendingReply} running={running} onStop={onStop ? stop : undefined} />
+    <EditComposer attachments={attachments} onRemoveAttachment={onRemoveAttachment} requireMedia={requireMedia} actions={canChooseModel ? <div className="assistant-model-controls"><AssistantModelPicker allowedModels={allowedModels} value={effectiveModelChoice} onChange={setModelChoice} disabled={answering}/>{canChooseReasoning&&<><div className="assistant-model-picker assistant-reasoning-picker"><InspectorSelect label="AI reasoning effort" value={reasoningEffort} options={OPENAI_REASONING_EFFORTS.map(value=>({value,label:{low:'Low',medium:'Medium',high:'High',xhigh:'X-high',max:'Max'}[value]}))} onChange={setReasoningEffort} disabled={answering}/></div><div className="assistant-model-picker assistant-speed-picker"><InspectorSelect label="AI speed mode" value={speedMode} options={OPENAI_SPEED_MODES.map(value=>({value,label:value==='fast'?'Fast':'Standard',description:value==='fast'?'2× token cost':'Standard speed and pricing'}))} onChange={setSpeedMode} disabled={answering}/></div></>}</div> : undefined} variant="compact" className="manual-editor-composer" value={prompt} onChange={changePrompt} onSubmit={submit} onAttach={onAttach} placeholder="What would you change next?" disabled={sending || !!pendingReply} running={running} onStop={onStop ? stop : undefined} />
     </div>
   </div>;
 }

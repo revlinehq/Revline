@@ -9,7 +9,7 @@ import './components/workspace/workspace-pages.css';import './app/editor.css';im
 import {AssistantPanel} from './components/editor/assistant-panel';import {EditComposer} from './components/workspace/edit-composer';
 const root=createRoot(document.getElementById('root'));window.calls=[];window.state={modelSwitcher:true,allowedModels:['haiku','sonnet','opus','gpt-6.1-sol','gpt-6-astra'],running:false,messages:[]};
 window.renderFixture=patch=>{Object.assign(window.state,patch);flushSync(()=>root.render(<>
- <AssistantPanel key={window.state.fixtureKey??0} {...window.state} configured hasClips demo={false} onSend={async(text,model)=>{window.calls.push({text,model});throw new Error('Fixture request recorded');}} onStop={async()=>{}}/>
+ <AssistantPanel key={window.state.fixtureKey??0} {...window.state} configured hasClips demo={false} onSend={async(text,model,reasoningEffort,speedMode)=>{window.calls.push({text,model,reasoningEffort,speedMode});throw new Error('Fixture request recorded');}} onStop={async()=>{}} onSuggestion={async(text,clipId,model,reasoningEffort,speedMode)=>{window.calls.push({text,clipId,model,reasoningEffort,speedMode});throw new Error('Fixture suggestion recorded');}}/>
  <div className="studio-fixture"><EditComposer value="Studio" onChange={()=>{}} onSubmit={()=>{}}/></div>
 </>));};window.renderFixture({});
 ` }, bundle: true, platform: 'browser', format: 'iife', jsx: 'automatic', write: false, outdir: '/tmp/revline-model-picker', define: { 'process.env.NODE_ENV': '"development"' } });
@@ -20,7 +20,7 @@ try {
  const page = await browser.newPage(); const errors=[];page.on('pageerror',error=>errors.push(error.message));
  await page.setViewport({width:500,height:620});
  await page.goto(`http://127.0.0.1:${server.address().port}/`);
- await page.setContent('<html data-workspace-theme="dark"><body><main id="root" class="conversation-editor"></main></body></html>');
+ await page.setContent('<html data-workspace-theme="dark"><head><meta name="viewport" content="width=device-width,initial-scale=1"></head><body><main id="root" class="conversation-editor"></main></body></html>');
  await page.addStyleTag({content:bundle.outputFiles.find(file=>file.path.endsWith('.css')).text});
  await page.addStyleTag({content:':root{--background:#191a1b;--foreground:#eee;--secondary:#252628;--border:#353739;--ws-text:#eee;--ws-muted:#aaa;--ws-hover:#303234;--ws-surface:#252628}*{box-sizing:border-box}body{margin:0;background:#191a1b;color:#eee;font:13px Arial}#root{width:360px;margin:20px;display:flex;flex-direction:column}.assistant-content{height:350px;display:flex;flex-direction:column}.assistant-history{flex:1}.manual-composer-dock{margin-top:auto}.studio-fixture{margin-top:40px}button{font:inherit}'});
  await page.addScriptTag({content:bundle.outputFiles.find(file=>file.path.endsWith('.js')).text});
@@ -29,6 +29,7 @@ try {
  assert.equal(await page.$eval('[aria-label="AI editing model"] .inspector-select-value',el=>getComputedStyle(el).fontSize),'13px','The actual model label is visually subordinate to the composer text');
  assert.equal(await page.$eval('.manual-editor-composer textarea',el=>getComputedStyle(el).fontSize),'14px','Typing text retains its 14px size');
  assert.equal(await page.$eval('.manual-editor-composer',node=>{const input=node.querySelector('textarea').getBoundingClientRect(),actions=node.querySelector('.edit-composer-actions').getBoundingClientRect();return input.height>=44&&actions.top-input.bottom>=11}),true,'Text input sits above a separate model/action row');
+ const addInset=await page.$eval('.manual-editor-composer',node=>{const form=node.getBoundingClientRect(),add=node.querySelector('.composer-add').getBoundingClientRect(),send=node.querySelector('.composer-submit').getBoundingClientRect();return {left:add.left-form.left,right:form.right-send.right}});assert.equal(addInset.left,addInset.right,'Attach and send buttons use equal composer insets');
  const geometry=await page.$$eval('.composer-submit',els=>els.map(el=>{const rect=el.getBoundingClientRect();return {width:rect.width,height:rect.height,shadow:getComputedStyle(el).boxShadow};}));
  assert.equal(geometry[0].width,28);assert.equal(geometry[0].height,28);assert.equal(geometry[0].shadow,'none');
  assert.equal(geometry[1].width,32);assert.equal(geometry[1].height,32,'Other composer variants keep their sizing');
@@ -40,14 +41,31 @@ try {
   assert.equal(await page.$eval(`[role="menuitemradio"][data-value="${choice}"] .inspector-select-value`,el=>el.textContent),label);assert.equal(await page.$eval(`[role="menuitemradio"][data-value="${choice}"] small`,el=>el.textContent),{haiku:'Fast, simple edits',sonnet:'Everyday editing',opus:'Complex, coordinated edits','gpt-6.1-sol':'OpenAI · everyday editing','gpt-6-astra':'OpenAI · complex editing'}[choice]);
   await page.click(`[role="menuitemradio"][data-value="${choice}"]`);
   await page.waitForFunction(()=>document.activeElement?.getAttribute('aria-label')==='AI editing model');
+  const openai=choice.startsWith('gpt-');
+  if(openai){
+   assert.equal(await page.$eval('[aria-label="AI reasoning effort"] .inspector-select-value',el=>getComputedStyle(el).fontSize),'13px');
+   if(choice==='gpt-6.1-sol')assert.equal(await page.$eval('[aria-label="AI reasoning effort"]',el=>el.textContent),'Medium');
+   await page.click('[aria-label="AI reasoning effort"]');await page.waitForSelector('[role="menuitemradio"][data-value="high"]');
+   assert.equal(await page.$$eval('[role="menuitemradio"]',nodes=>nodes.length),5,'All supported effort choices are available');
+   await page.click('[role="menuitemradio"][data-value="high"]');
+   await page.waitForFunction(()=>document.activeElement?.getAttribute('aria-label')==='AI reasoning effort');
+   if(choice==='gpt-6.1-sol')assert.equal(await page.$eval('[aria-label="AI speed mode"]',node=>node.textContent),'Standard');
+   await page.click('[aria-label="AI speed mode"]');await page.waitForSelector('[role="menuitemradio"][data-value="fast"]');
+   assert.equal(await page.$eval('[role="menuitemradio"][data-value="fast"] small',node=>node.textContent),'2× token cost','Fast mode discloses its higher token price');
+   await page.click('[role="menuitemradio"][data-value="fast"]');await page.waitForFunction(()=>document.activeElement?.getAttribute('aria-label')==='AI speed mode');
+  }else assert.equal(await page.$('[aria-label="AI reasoning effort"]'),null,'Claude does not expose an OpenAI option');
   await page.type('.assistant-content textarea',`Test ${choice}`);
   await page.waitForFunction(()=>!document.querySelector('.assistant-content .composer-submit').disabled);
   await page.click('.assistant-content .composer-submit');
   await page.waitForFunction(count=>window.calls.length===count,{},index+1);
-  assert.deepEqual(await page.evaluate(()=>window.calls.at(-1)),{text:`Test ${choice}`,model:choice});
+  assert.deepEqual(await page.evaluate(()=>window.calls.at(-1)),{text:`Test ${choice}`,model:choice,...(openai?{reasoningEffort:'high',speedMode:'fast'}:{})});
   await page.waitForFunction(()=>!document.querySelector('.assistant-content textarea').disabled);
   await page.focus('.assistant-content textarea');await page.keyboard.down('Control');await page.keyboard.press('KeyA');await page.keyboard.up('Control');await page.keyboard.press('Backspace');
  }
+ await page.evaluate(()=>window.renderFixture({running:true}));
+ assert.equal(await page.$eval('[aria-label="AI reasoning effort"]',node=>node.disabled),true,'Reasoning stays fixed while editing');
+ assert.equal(await page.$eval('[aria-label="AI speed mode"]',node=>node.disabled),true,'Speed stays fixed while editing');
+ await page.evaluate(()=>window.renderFixture({running:false}));
  // A restricted development allowlist must hide Opus and immediately reset a stale local selection.
  await page.evaluate(()=>window.renderFixture({allowedModels:['haiku','sonnet']}));
  assert.equal(await page.$eval('[aria-label="AI editing model"]',el=>el.textContent),'Sonnet 5.5');
@@ -62,6 +80,8 @@ try {
  assert.equal(await page.$eval('[aria-label="Stop editing"]',el=>el.getBoundingClientRect().width),28);
  await page.evaluate(()=>window.renderFixture({running:false,modelSwitcher:false}));
  assert.equal(await page.$('[aria-label="AI editing model"]'),null);
+ assert.equal(await page.$('[aria-label="AI reasoning effort"]'),null);
+ assert.equal(await page.$('[aria-label="AI speed mode"]'),null);
  await page.type('.assistant-content textarea','Default run');await page.waitForFunction(()=>!document.querySelector('.assistant-content .composer-submit').disabled);
   await page.click('.assistant-content .composer-submit');
  await page.waitForFunction(()=>window.calls.length===6);
@@ -86,8 +106,11 @@ try {
  await page.evaluate(()=>window.renderFixture({defaultModelChoice:'gpt-6.1-sol'}));
  assert.equal(await page.$eval('[aria-label="AI editing model"]',el=>el.textContent),'GPT-6.1 Sol','The authoritative backend default arrives without requiring a remount');
  await page.focus('.assistant-content textarea');await page.keyboard.down('Control');await page.keyboard.press('KeyA');await page.keyboard.up('Control');await page.keyboard.press('Backspace');
+ const controlsFit=await page.$eval('.assistant-model-controls',node=>{const r=node.getBoundingClientRect(),parent=node.closest('.edit-composer-actions').getBoundingClientRect();return r.left>=parent.left&&r.right<=parent.right&&node.scrollWidth<=node.clientWidth+1});assert.equal(controlsFit,true,'Paired controls fit the narrow composer');
  await page.type('.assistant-content textarea','Use the configured default');await page.click('.assistant-content .composer-submit');
  await page.waitForFunction(()=>window.calls.length===7);
+ assert.equal(await page.evaluate(()=>window.calls.at(-1).reasoningEffort),'medium','Untouched OpenAI reasoning uses Medium');
+ assert.equal(await page.evaluate(()=>window.calls.at(-1).speedMode),'standard','Untouched OpenAI speed uses Standard');
  assert.equal(await page.evaluate(()=>window.calls.at(-1).model),undefined,'An untouched picker preserves the backend default instead of overriding it with Sonnet');
  await page.waitForFunction(()=>!document.querySelector('.assistant-content textarea').disabled);
  await page.click('[aria-label="AI editing model"]');await page.waitForSelector('[role="menuitemradio"][data-value="sonnet"]');await page.click('[role="menuitemradio"][data-value="sonnet"]');
@@ -96,6 +119,24 @@ try {
  await page.type('.assistant-content textarea','Choose Sonnet explicitly');await page.waitForFunction(()=>!document.querySelector('.assistant-content .composer-submit').disabled);await page.click('.assistant-content .composer-submit');
  await page.waitForFunction(()=>window.calls.length===8);
  assert.equal(await page.evaluate(()=>window.calls.at(-1).model),'sonnet','Sonnet remains explicitly selectable when Sol is the backend default');
+ await page.waitForFunction(()=>!document.querySelector('.assistant-content textarea').disabled);
+ await page.evaluate(()=>window.renderFixture({fixtureKey:3,defaultModelChoice:'gpt-6.1-sol',suggestions:{sourceName:'Fixture footage',clipId:'fixture-clip',items:[{label:'Tighten pauses',prompt:'Tighten pauses',start:0,end:3}]}}));
+ await page.click('[aria-label="AI reasoning effort"]');await page.waitForSelector('[role="menuitemradio"][data-value="max"]');await page.click('[role="menuitemradio"][data-value="max"]');await page.waitForFunction(()=>document.activeElement?.getAttribute('aria-label')==='AI reasoning effort');
+ await page.click('[aria-label="AI speed mode"]');await page.waitForSelector('[role="menuitemradio"][data-value="fast"]');await page.click('[role="menuitemradio"][data-value="fast"]');await page.waitForFunction(()=>document.activeElement?.getAttribute('aria-label')==='AI speed mode');
+ await page.click('.assistant-source-suggestions button');await page.waitForFunction(()=>window.calls.length===9);
+ assert.deepEqual(await page.evaluate(()=>({clipId:window.calls.at(-1).clipId,reasoningEffort:window.calls.at(-1).reasoningEffort,speedMode:window.calls.at(-1).speedMode})),{clipId:'fixture-clip',reasoningEffort:'max',speedMode:'fast'},'Suggested requests use the same selected effort');
+ const fixtureStyles=await page.$$eval('style',nodes=>nodes.map(node=>node.textContent));
+ await page.setViewport({width:320,height:740,isMobile:true,hasTouch:true,deviceScaleFactor:1});
+ // Switching touch emulation reloads this synthetic server page; remount its generated fixture.
+ await page.setContent('<html data-workspace-theme="dark"><head><meta name="viewport" content="width=device-width,initial-scale=1"></head><body><main id="root" class="conversation-editor"></main></body></html>');
+ for(const content of fixtureStyles)await page.addStyleTag({content});
+ await page.addScriptTag({content:bundle.outputFiles.find(file=>file.path.endsWith('.js')).text});
+ await page.evaluate(()=>window.renderFixture({defaultModelChoice:'gpt-6.1-sol'}));
+ await page.waitForSelector('[aria-label="AI speed mode"]');
+ const touchInset=await page.$eval('.manual-editor-composer',node=>{const form=node.getBoundingClientRect(),add=node.querySelector('.composer-add').getBoundingClientRect(),send=node.querySelector('.composer-submit').getBoundingClientRect();return {left:add.left-form.left,right:form.right-send.right}});assert.equal(touchInset.left,touchInset.right,'Touch attach and send buttons keep equal insets');
+ const touchControls=await page.$eval('.assistant-model-controls',node=>{const group=node.getBoundingClientRect(),composer=node.closest('.manual-editor-composer').getBoundingClientRect();return {height:group.height,inside:group.left>=composer.left&&group.right<=composer.right&&group.bottom<=composer.bottom,targets:[...node.querySelectorAll('button')].map(button=>({height:button.getBoundingClientRect().height,width:button.getBoundingClientRect().width}))}});
+ assert.equal(touchControls.inside,true,'Wrapped touch controls stay inside the composer');assert.ok(touchControls.height<=90,'The three controls fit within two touch rows on a 320px phone');assert.ok(touchControls.targets.every(target=>target.height>=44),'All wrapped selectors keep touchable rows');
+ await page.screenshot({path:'/tmp/revline-composer-reasoning-speed-mobile.png'});console.log(JSON.stringify({touchControls}));
  assert.deepEqual(errors,[]);
- console.log('PASS: picker follows the backend default without overriding untouched sends; Sonnet and all other native choices remain selectable; environment allowlist, run lock and compact geometry preserved. Synthetic fixture only.');
+ console.log('PASS: compact model/reasoning/speed controls preserve backend defaults; OpenAI effort choices reach typed and suggested requests, stay locked while busy, and fit the narrow composer. Claude and hidden selectors omit effort. Synthetic fixture only.');
 } finally { await browser.close(); await new Promise(resolve=>server.close(resolve)); }

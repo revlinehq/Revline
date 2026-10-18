@@ -3,7 +3,7 @@ import { readProject } from './lib/project_data';
 import agentTest from '@convex-dev/agent/test';
 import { convexTest } from 'convex-test';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
-import { CLAUDE_EDIT_MODELS, OPENAI_EDIT_MODELS, type ClaudeModelChoice } from '../lib/ai/claude-model';
+import { CLAUDE_EDIT_MODELS, OPENAI_EDIT_MODELS, OPENAI_REASONING_EFFORTS, type ClaudeModelChoice } from '../lib/ai/claude-model';
 import { api } from './_generated/api';
 import schema from './schema';
 
@@ -28,6 +28,40 @@ beforeEach(() => {
   vi.stubEnv('EDITOR_DEFAULT_MODEL','');
 });
 afterEach(() => vi.unstubAllEnvs());
+
+test.each(OPENAI_REASONING_EFFORTS)('manual OpenAI %s reasoning is pinned with the queued model', async reasoningEffort => {
+  vi.stubEnv('MODEL_SWITCHER_ENABLED', 'true'); vi.stubEnv('OPENAI_API_KEY', 'fixture-only'); vi.stubEnv('EDITOR_DEFAULT_MODEL', 'gpt-6.1-sol');
+  const { t, owner, projectId } = await fixture();
+  await owner.mutation(api.assistant.send, { projectId, prompt: 'Synthetic effort edit', reasoningEffort });
+  const [scheduled] = await t.run(ctx => ctx.db.system.query('_scheduled_functions').take(10));
+  expect(scheduled.args[0].pinnedModel).toEqual({ provider: 'openai', modelId: 'gpt-6.1-sol', modelChoice: 'gpt-6.1-sol', reasoningEffort });
+});
+
+test.each(OPENAI_EDIT_MODELS)('$label pins Fast mode independently from reasoning', async model => {
+  vi.stubEnv('MODEL_SWITCHER_ENABLED', 'true'); vi.stubEnv('OPENAI_API_KEY', 'fixture-only');
+  const { t, owner, projectId } = await fixture();
+  await owner.mutation(api.assistant.send, { projectId, prompt: 'Synthetic fast edit', modelChoice: model.id, speedMode: 'fast', reasoningEffort: 'high' });
+  const [scheduled] = await t.run(ctx => ctx.db.system.query('_scheduled_functions').take(10));
+  expect(scheduled.args[0].pinnedModel).toEqual({ provider: 'openai', modelId: model.modelId, modelChoice: model.id, reasoningEffort: 'high', speedMode: 'fast' });
+});
+
+test.each(['disabled', 'claude', 'unsupported'])('rejects %s speed overrides before scheduling', async mode => {
+  vi.stubEnv('OPENAI_API_KEY', 'fixture-only'); vi.stubEnv('EDITOR_DEFAULT_MODEL', mode === 'claude' ? 'sonnet' : 'gpt-6.1-sol');
+  vi.stubEnv('MODEL_SWITCHER_ENABLED', mode === 'disabled' ? 'false' : 'true');
+  const { t, owner, projectId } = await fixture();
+  await expect(owner.mutation(api.assistant.send, { projectId, prompt: 'Invalid speed', speedMode: (mode === 'unsupported' ? 'ultrafast' : 'fast') as 'fast' })).rejects.toThrow();
+  expect((await t.run(ctx => readProject(ctx, projectId)))?.threadId).toBeUndefined();
+  expect(await t.run(ctx => ctx.db.system.query('_scheduled_functions').take(10))).toHaveLength(0);
+});
+
+test.each(['disabled', 'claude', 'unsupported'])('rejects %s reasoning overrides before creating a conversation or scheduling paid work', async mode => {
+  vi.stubEnv('OPENAI_API_KEY', 'fixture-only'); vi.stubEnv('EDITOR_DEFAULT_MODEL', mode === 'claude' ? 'sonnet' : 'gpt-6.1-sol');
+  vi.stubEnv('MODEL_SWITCHER_ENABLED', mode === 'disabled' ? 'false' : 'true');
+  const { t, owner, projectId } = await fixture();
+  await expect(owner.mutation(api.assistant.send, { projectId, prompt: 'Invalid effort', reasoningEffort: (mode === 'unsupported' ? 'none' : 'high') as 'high' })).rejects.toThrow();
+  expect((await t.run(ctx => readProject(ctx, projectId)))?.threadId).toBeUndefined();
+  expect(await t.run(ctx => ctx.db.system.query('_scheduled_functions').take(10))).toHaveLength(0);
+});
 
 test('production rejects stale Opus selections before creating messages or starting paid work', async () => {
   vi.stubEnv('MODEL_SWITCHER_ENABLED', 'true');

@@ -19,8 +19,12 @@ export const OPENAI_EDIT_MODELS = [
   { id: 'gpt-6-astra', label: 'GPT-6 Astra', modelId: 'gpt-6-astra', pricing: { input: 10, cacheRead: 1, cacheWrite: 12.50, output: 50 } },
 ] as const;
 export const EDITOR_MODELS = [...CLAUDE_EDIT_MODELS, ...OPENAI_EDIT_MODELS] as const;
+export const OPENAI_REASONING_EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'] as const;
+export type OpenAIReasoningEffort = typeof OPENAI_REASONING_EFFORTS[number];
+export const OPENAI_SPEED_MODES = ['standard', 'fast'] as const;
+export type OpenAISpeedMode = typeof OPENAI_SPEED_MODES[number];
 export type ClaudeModelChoice = typeof EDITOR_MODELS[number]['id'];
-export type ClaudeModelSelection = { provider: 'anthropic' | 'gateway' | 'openai'; modelId: string; modelChoice?: ClaudeModelChoice };
+export type ClaudeModelSelection = { provider: 'anthropic' | 'gateway' | 'openai'; modelId: string; modelChoice?: ClaudeModelChoice; reasoningEffort?: OpenAIReasoningEffort; speedMode?: OpenAISpeedMode };
 type ClaudeModelEnvironment = Readonly<Record<string, string | undefined>>;
 
 export function claudeModelSwitcherEnabled(env: ClaudeModelEnvironment = process.env) {
@@ -47,6 +51,8 @@ export function defaultEditorModelChoice(env:ClaudeModelEnvironment=process.env)
 }
 
 export function validatePinnedClaudeModel(selection: ClaudeModelSelection, env: ClaudeModelEnvironment = process.env): ClaudeModelSelection {
+  if (selection.reasoningEffort !== undefined && (selection.provider !== 'openai' || !OPENAI_REASONING_EFFORTS.includes(selection.reasoningEffort))) throw new Error('Choose a supported OpenAI reasoning effort.');
+  if (selection.speedMode !== undefined && (selection.provider !== 'openai' || !OPENAI_SPEED_MODES.includes(selection.speedMode))) throw new Error('Choose a supported OpenAI speed mode.');
   const openai = OPENAI_EDIT_MODELS.find(model => model.modelId === selection.modelId);
   if (selection.provider === 'openai') {
     if (!openai || (selection.modelChoice !== undefined && selection.modelChoice !== openai.id)) throw new Error('Pinned editor model does not match its selection.');
@@ -58,6 +64,21 @@ export function validatePinnedClaudeModel(selection: ClaudeModelSelection, env: 
     if (!selected || selection.modelId !== (selection.provider === 'gateway' ? selected.gatewayModelId : selected.modelId)) throw new Error('Pinned editor model does not match its selection.');
   }
   return enforceClaudeModelPolicy(selection, env);
+}
+
+/** Capture manual effort with the model so a queued run cannot change settings. */
+export function withEditorReasoning(selection: ClaudeModelSelection, effort?: OpenAIReasoningEffort, env: ClaudeModelEnvironment = process.env): ClaudeModelSelection {
+  if (effort === undefined) return selection;
+  if (!claudeModelSwitcherEnabled(env)) throw new Error('Manual reasoning selection is currently disabled.');
+  if (selection.provider !== 'openai' || !OPENAI_REASONING_EFFORTS.includes(effort)) throw new Error('Choose a supported OpenAI reasoning effort.');
+  return { ...selection, reasoningEffort: effort };
+}
+
+export function withEditorSpeed(selection: ClaudeModelSelection, speedMode?: OpenAISpeedMode, env: ClaudeModelEnvironment = process.env): ClaudeModelSelection {
+  if (speedMode === undefined) return selection;
+  if (!claudeModelSwitcherEnabled(env)) throw new Error('Manual speed selection is currently disabled.');
+  if (selection.provider !== 'openai' || !OPENAI_SPEED_MODES.includes(speedMode)) throw new Error('Choose a supported OpenAI speed mode.');
+  return { ...selection, speedMode };
 }
 
 export function claudeProviderOptions(modelId: string) {
@@ -74,13 +95,19 @@ export function claudeProviderOptions(modelId: string) {
 export function editorProviderOptions(selection: ClaudeModelSelection) {
   if (selection.provider !== 'openai') return claudeProviderOptions(selection.modelId);
   const openai = {
-    reasoningEffort: 'medium', reasoningMode: 'standard', serviceTier: 'default',
+    reasoningEffort: selection.reasoningEffort ?? 'medium', reasoningMode: 'standard', serviceTier: selection.speedMode === 'fast' ? 'fast' : 'default',
     // History is managed by the existing Agent thread; retain encrypted reasoning
     // in its messages rather than relying on provider-side conversation storage.
     store: false, include: ['reasoning.encrypted_content'],
     promptCacheOptions: { ttl: '30m' },
   } satisfies OpenAIResponsesProviderOptions;
   return { openai };
+}
+
+/** Higher effort shares its output allowance with hidden reasoning tokens. */
+export function editorMaxOutputTokens(selection: ClaudeModelSelection) {
+  if (selection.provider !== 'openai') return 4096;
+  return { low: 4096, medium: 4096, high: 16384, xhigh: 24576, max: 32768 }[selection.reasoningEffort ?? 'medium'];
 }
 
 export function assertEditorModelConfigured(selection: ClaudeModelSelection, env: ClaudeModelEnvironment = process.env) {

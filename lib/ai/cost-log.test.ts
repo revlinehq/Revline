@@ -6,6 +6,22 @@ import { AssistantCostLog, estimateEditorCallCost } from './cost-log';
 
 const usage = (input = 1000, read = 600, write = 300, output = 200): LanguageModelUsage => ({ inputTokens: input, inputTokenDetails: { noCacheTokens: input - read - write, cacheReadTokens: read, cacheWriteTokens: write }, outputTokens: output, outputTokenDetails: { textTokens: output - 150, reasoningTokens: 150 }, totalTokens: input + output });
 const metadata = { openai: { serviceTier: 'default' } };
+test('cost events include the pinned reasoning effort without changing usage accounting', () => {
+  const events: Record<string, unknown>[] = [], log = new AssistantCostLog({ projectId: 'project', runId: 'run' }, event => events.push(event));
+  log.selectModel('gpt-6.1-sol', 'openai', 'high', 'standard');
+  log.modelCall({ callId: 'one', stepNumber: 0, modelId: 'gpt-6.1-sol', provider: 'openai.responses', usage: usage(), providerMetadata: metadata, content: [] }, { revision: 1, savedEdits: 0, staged: false });
+  log.finish('completed');
+  expect(events).toHaveLength(2);
+  expect(events.every(event => event.reasoningEffort === 'high' && event.speedMode === 'standard')).toBe(true);
+  expect(events.at(-1)).toMatchObject({ runEstimatedUsd: .00301 });
+});
+test.each(['gpt-6.1-sol', 'gpt-6-astra'])('%s uses the returned speed tier for costs, including a downgrade to Standard', model => {
+  const standard = estimateEditorCallCost(model, 'openai.responses', usage(), metadata);
+  const fast = estimateEditorCallCost(model, 'openai.responses', usage(), { openai: { serviceTier: 'fast' } });
+  expect(fast.estimatedUsd).toBeCloseTo(standard.estimatedUsd! * 2, 12);
+  expect(fast.serviceTier).toBe('fast');
+  expect(estimateEditorCallCost(model, 'openai.responses', usage(), { openai: { serviceTier: 'ultrafast' } }).estimatedUsd).toBeNull();
+});
 test('Sol and Astra price cache reads/writes separately and include reasoning only once', () => {
   expect(estimateEditorCallCost('gpt-6.1-sol', 'openai.responses', usage(), metadata).estimatedUsd).toBe(.00301);
   expect(estimateEditorCallCost('gpt-6-astra', 'openai.responses', usage(), metadata).estimatedUsd).toBe(.01535);

@@ -138,7 +138,8 @@ export class AssistantTokenBudget {
           if (exposed) return exposed;
           exposedResults.set(part.toolCallId, part); return part;
         }) } as typeof message);
-        return { ...params, prompt, maxOutputTokens: Math.min(params.maxOutputTokens ?? this.limits.outputPerCall, this.limits.outputPerCall) };
+        const maxOutputTokens = params.maxOutputTokens ?? this.limits.outputPerCall;
+        return { ...params, prompt, maxOutputTokens: enforce ? Math.min(maxOutputTokens, this.limits.outputPerCall) : maxOutputTokens };
       },
     };
     // Keep compaction and provider continuation identity even when financial

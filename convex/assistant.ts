@@ -15,8 +15,8 @@ import { validateVideoInspectionInput } from '../lib/media-analysis/video-inspec
 import { normalizeTimeline } from '../lib/editor/types';
 import {savePublicationReceipt} from './lib/publicationReceipt';
 import { enqueueMediaTask, cancelMediaTask, detachAnalysisRequest } from './mediaTasks';
-import { assertEditorModelConfigured, claudeModelSwitcherEnabled, defaultEditorModelChoice, resolveClaudeModel } from '../lib/ai/claude-model';
-import { claudeModelChoiceValidator } from './lib/claude_model';
+import { assertEditorModelConfigured, claudeModelSwitcherEnabled, defaultEditorModelChoice, resolveClaudeModel, withEditorReasoning, withEditorSpeed } from '../lib/ai/claude-model';
+import { claudeModelChoiceValidator, openAIReasoningEffortValidator, openAISpeedModeValidator } from './lib/claude_model';
 import { allowedClaudeModelChoices, enforceClaudeModelPolicy } from '../lib/ai/claude-model-policy';
 import { assistantRecovery } from './lib/assistant_recovery';
 import { MEDIA_ACTIVITY_LABELS } from '../lib/media-analysis/activity';
@@ -42,10 +42,10 @@ export const status = query({ args: { projectId: v.id("projects") }, returns: v.
   const activity=active?task?.status==='retrying'||task?.status==='queued'&&(task.attempt>1)?'Retrying analysis…':task?.status==='queued'?'Queued for analysis…':task?.activity?MEDIA_ACTIVITY_LABELS[task.activity]:labels[active.mode]:editing?'Applying edits…':null;
   return { configured: ready, ...(defaultModelChoice?{defaultModelChoice}:{}), ...(claudeModelSwitcherEnabled() ? { modelSwitcher: true, allowedModels: [...allowedClaudeModelChoices()] } : {}), running: project.aiRunning ?? false, editing, workflowActive, error: project.aiError ?? null, reason: ready ? null : providerReason, activity, activityProgress: null, activityStartedAt: active ? task?.activityStartedAt ?? task?.attemptStartedAt ?? active.createdAt : null, activitySource: source?.ownerId === project.ownerId && source.projectId === project._id ? source.fileName : null };
 }});
-export const send = mutation({ args: { projectId: v.id("projects"), prompt: v.string(), modelChoice: v.optional(claudeModelChoiceValidator), selectedClipId: v.optional(v.string()), selectedClipIds: v.optional(v.array(v.string())), playhead: v.optional(v.number()) }, returns: v.null(), handler: async (ctx, args) => {
+export const send = mutation({ args: { projectId: v.id("projects"), prompt: v.string(), modelChoice: v.optional(claudeModelChoiceValidator), reasoningEffort: v.optional(openAIReasoningEffortValidator), speedMode: v.optional(openAISpeedModeValidator), selectedClipId: v.optional(v.string()), selectedClipIds: v.optional(v.array(v.string())), playhead: v.optional(v.number()) }, returns: v.null(), handler: async (ctx, args) => {
   const ownerId = await requireOwner(ctx); await requireEditorAccess(ctx, ownerId); const project = await requireProject(ctx, args.projectId, ownerId);
   let pinnedModel;
-  try { pinnedModel = enforceClaudeModelPolicy(resolveClaudeModel(args.modelChoice)); assertEditorModelConfigured(pinnedModel); } catch (error) { throw new ConvexError((error as Error).message); }
+  try { pinnedModel = withEditorSpeed(withEditorReasoning(enforceClaudeModelPolicy(resolveClaudeModel(args.modelChoice)), args.reasoningEffort), args.speedMode); assertEditorModelConfigured(pinnedModel); } catch (error) { throw new ConvexError((error as Error).message); }
   const clipIds = new Set(currentTimeline(project).clips.map(clip => clip.id));
   if (args.selectedClipId !== undefined && !clipIds.has(args.selectedClipId)) throw new ConvexError("Selected clip does not belong to this project");
   if (args.selectedClipIds) {
