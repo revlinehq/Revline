@@ -23,11 +23,24 @@ This follows the core editing foundation. Consistent quality and accumulated use
 
 ## Ultra plan with faster exports
 
-Offer a future Ultra plan with 4-vCPU export workers, reserved render capacity
-and priority queueing. Standard exports use 2-vCPU workers. Benchmark the speed
+Offer a future Ultra plan with a five-slot pool of 4-vCPU export workers,
+reserved render capacity and priority queueing. The current standard pool has
+two slots with 2 vCPU per worker. Benchmark the speed
 gain before setting pricing or making performance claims, and preserve the same
 output quality across plans.
 
+### Ultra editing controls
+
+- Unlock stronger editing models as part of the Ultra plan.
+- Include a model picker.
+- Include a Fast/Slow GPT speed switcher, separate from reasoning effort.
+- Include GPT-6.1 Sol reasoning modes through Ultra; omit Max from the choices.
+- Keep these controls planned for Ultra rather than enabling a new paid plan now.
+
+### Export capacity and pricing
+
+- Give Ultra workspaces higher export allowances than the standard plan; define
+  monthly usage and per-workspace concurrency limits from measured costs.
 - Measure representative 720p/1080p timelines at 30/60 fps on 2- and 4-vCPU workers.
 - Separate queue waiting time from actual render time in the export UI.
 - Evaluate Railway or another dedicated render host against Cloudflare using

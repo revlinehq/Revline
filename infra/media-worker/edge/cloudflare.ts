@@ -8,7 +8,8 @@ const TIMEOUT_MS = 5 * 60_000;
 const INSTANCE_TYPE = 'standard-3';
 const RESOURCE_PROFILE = '2-vcpu-8g-v1';
 // Retain the existing instance so an active export survives this capacity rollout.
-const PROCESSOR_NAMES = ['production', 'production-2', 'production-3', 'production-4', 'production-5'];
+const PROCESSOR_NAMES = ['production', 'production-2'];
+const RETIRED_PROCESSOR_NAMES = ['production-3', 'production-4', 'production-5'];
 const readyQuery = makeFunctionReference<'query', { workerSecret: string;processorVersion:number }, string>('mediaTasks:ready');
 
 export class MediaProcessor extends DurableObject<Bindings> {
@@ -18,12 +19,24 @@ export class MediaProcessor extends DurableObject<Bindings> {
     if (ctx.container?.running) void ctx.blockConcurrencyWhile(() => ctx.container!.setInactivityTimeout(TIMEOUT_MS));
   }
   async wake(): Promise<void> {
+    await this.ctx.storage.delete('retired');
     await this.ctx.storage.setAlarm(Date.now());
   }
   /** Explicit operator recovery only; Convex requeues work after its lease expires. */
-  async restart(): Promise<void> {
+  async restart(resume = true): Promise<void> {
+    await this.ctx.storage.put('retired', !resume);
+    await this.ctx.storage.deleteAlarm();
     if (this.ctx.container?.running) await this.ctx.container.destroy();
-    await this.wake();
+    if (resume) await this.wake();
+  }
+  async retire(): Promise<void> {
+    await this.ctx.storage.put('retired', true);
+    await this.ctx.storage.deleteAlarm();
+    if (this.ctx.container?.running) {
+      const response = await this.ctx.container.getTcpPort(8080).fetch('http://container/drain', { method: 'POST', headers: { authorization: `Bearer ${this.env.RENDER_WORKER_SECRET}` }, signal: AbortSignal.timeout(5000) });
+      await response.body?.cancel();
+      if (!response.ok) throw new Error('The retired media processor could not drain.');
+    }
   }
   alarm(): Promise<void> {
     return this.tick();
@@ -42,6 +55,7 @@ export class MediaProcessor extends DurableObject<Bindings> {
     } catch { return { running: true, healthy: false }; }
   }
   private async ensureWorker(): Promise<void> {
+    if (await this.ctx.storage.get('retired')) return;
     if (!this.env.RENDER_WORKER_SECRET || !this.env.GOOGLE_GENERATIVE_AI_API_KEY) throw new Error('Production processing secrets are not configured.');
     const container = this.ctx.container!;
     if (container.running) {
@@ -56,7 +70,7 @@ export class MediaProcessor extends DurableObject<Bindings> {
     } else {
       const client = new ConvexHttpClient(this.env.NEXT_PUBLIC_CONVEX_URL);
       const ready = await client.query(readyQuery, { workerSecret: this.env.RENDER_WORKER_SECRET,processorVersion:3 });
-      if (!ready) return;
+      if (!ready || await this.ctx.storage.get('retired')) return;
       container.start({ image: container.images.processor, instance: INSTANCE_TYPE, labels: { profile: RESOURCE_PROFILE }, enableInternet: true, env: {
         NEXT_PUBLIC_CONVEX_URL: this.env.NEXT_PUBLIC_CONVEX_URL,
         MEDIA_WORKER_URL: this.env.MEDIA_WORKER_URL,
@@ -87,20 +101,21 @@ export default {
     if (!env.RENDER_WORKER_SECRET || provided.length !== expected.length || !crypto.subtle.timingSafeEqual(provided, expected)) return new Response('Unauthorized', { status: 401 });
     if (path === '/restart') {
       const body = await request.json().catch(() => null) as { name?: unknown } | null;
-      if (typeof body?.name !== 'string' || !PROCESSOR_NAMES.includes(body.name)) return Response.json({ error: 'Choose an existing processor slot.' }, { status: 400 });
-      await env.PROCESSOR.getByName(body.name).restart();
+      if (typeof body?.name !== 'string' || ![...PROCESSOR_NAMES, ...RETIRED_PROCESSOR_NAMES].includes(body.name)) return Response.json({ error: 'Choose an existing processor slot.' }, { status: 400 });
+      await env.PROCESSOR.getByName(body.name).restart(PROCESSOR_NAMES.includes(body.name));
       return Response.json({ accepted: true }, { status: 202 });
     }
     if (path === '/status') {
       const processors = await Promise.all(PROCESSOR_NAMES.map(async name => ({ name, ...await env.PROCESSOR.getByName(name).status() })));
-      return Response.json({ capacity: PROCESSOR_NAMES.length, instanceType: INSTANCE_TYPE, processors }, { headers: { 'Cache-Control': 'no-store' } });
+      const retiring = await Promise.all(RETIRED_PROCESSOR_NAMES.map(async name => ({ name, ...await env.PROCESSOR.getByName(name).status() })));
+      return Response.json({ capacity: PROCESSOR_NAMES.length, instanceType: INSTANCE_TYPE, processors, retiring }, { headers: { 'Cache-Control': 'no-store' } });
     }
-    await Promise.all(PROCESSOR_NAMES.map(name => env.PROCESSOR.getByName(name).wake()));
+    await Promise.all([...PROCESSOR_NAMES.map(name => env.PROCESSOR.getByName(name).wake()), ...RETIRED_PROCESSOR_NAMES.map(name => env.PROCESSOR.getByName(name).retire())]);
     return Response.json({ accepted: true }, { status: 202 });
   },
   async scheduled(_controller: ScheduledController, env: Bindings): Promise<void> {
     // One failed boot must not prevent the other slots from picking up queued jobs.
-    const results = await Promise.allSettled(PROCESSOR_NAMES.map(name => env.PROCESSOR.getByName(name).tick()));
+    const results = await Promise.allSettled([...PROCESSOR_NAMES.map(name => env.PROCESSOR.getByName(name).tick()), ...RETIRED_PROCESSOR_NAMES.map(name => env.PROCESSOR.getByName(name).retire())]);
     if (results.some(result => result.status === 'rejected')) throw new Error('One or more media processor slots could not become ready.');
   },
 } satisfies ExportedHandler<Bindings>;

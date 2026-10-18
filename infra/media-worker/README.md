@@ -258,14 +258,17 @@ work, returned 404 for GET `/wake` and rejected an unauthenticated POST with 401
 No paid model request, project mutation or new hosted media task was used for
 this verification. Local evidence is retained in `.data/inspection-retry-release/`.
 
-### Five-slot media processing pool
+### Two-slot media processing pool
 
-The edge controller wakes five named processor instances: the existing
-`production` instance and `production-2` through `production-5`. Each retains
+The edge controller wakes two named processor instances: the existing
+`production` instance and `production-2`. Each retains
 one task slot and its own container resources. Convex claims remain atomic, so
 two consumers cannot process the same lease. An occupied export no longer
 blocks every other export or analysis task. Each idle container still exits
-after 90 seconds; the one-minute cron checks all five slots independently.
+after 90 seconds; the one-minute cron checks both slots independently.
+The earlier `production-3` through `production-5` slots are marked retired,
+their alarms are removed and running consumers drain. They cannot restart
+from a stale alarm or resume taking work after retirement.
 
 Authenticated `GET /status` reports capacity and each slot's health, active-task
 count and drain state. It uses the same worker-secret authentication as `/wake`
@@ -273,7 +276,7 @@ and returns no credentials, source media URLs or project content.
 
 This changes parallel capacity, not single-export rendering speed. The rollout
 preserves the current renderer image and existing `production` instance so it
-does not interrupt an active job. Local verification covers five-slot wake,
+does not interrupt an active job. Local verification covers bounded slot wake,
 authentication, health reporting, failure isolation and edge TypeScript.
 
 New containers use `standard-3` (2 vCPU, 8 GiB RAM). A resource-profile label
@@ -283,8 +286,8 @@ instances from the new profile. This raises compute capacity without changing
 resolution, frame rate, quality, the renderer image or its one-task-per-container
 setting. A larger CPU allocation is not a guaranteed export speed multiplier.
 
-An authenticated `POST /restart` accepts only a named slot from the five-slot
-allowlist. It stops that slot's temporary container and schedules recovery;
+An authenticated `POST /restart` accepts only an active or retired named slot.
+It stops that slot's temporary container and schedules recovery for active slots;
 Convex's lease expiry requeues interrupted tasks. Use only with explicit
 operator authorization to lose in-flight render progress. It does not alter
 project timelines or remove stored media.
