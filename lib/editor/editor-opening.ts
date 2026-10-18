@@ -18,7 +18,7 @@ export function editorAudioPrepared(timeline: Timeline, assets: MediaAsset[]) {
 }
 
 /** Loaded fallback stills can open the editor while exact frames refine in place. */
-export function timelineThumbnailsPrepared(root: HTMLElement) {
+export function timelineThumbnailsPrepared(root: HTMLElement, onProgress?:(ready:number,total:number)=>void) {
   const rail = root.querySelector('.timeline-scroll');
   if (!rail) return false;
   if (root.querySelector('.timeline-collapsed')) return true;
@@ -32,8 +32,10 @@ export function timelineThumbnailsPrepared(root: HTMLElement) {
     const box = strip.getBoundingClientRect();
     return box.width > 0 && box.right > bounds.left && box.left < bounds.right && box.bottom > bounds.top && box.top < bounds.bottom;
   });
-  return frames.every(frame => {
+  const ready=frames.filter(frame => {
     const image = frame.querySelector('img');
     return !!image?.complete && image.naturalWidth > 0;
-  });
+  }).length;
+  onProgress?.(ready,frames.length);
+  return ready===frames.length;
 }
