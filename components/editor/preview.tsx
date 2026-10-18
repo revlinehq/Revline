@@ -5,6 +5,7 @@ import { previewVisualFade } from '@/lib/editor/visual-fades-runtime';
 import { warmPreviewMedia } from '@/lib/editor/preview-media-warmup';
 import { waitForPreviewMedia } from '@/lib/editor/preview-readiness';
 import { guardPreviewBuffering } from '@/lib/editor/preview-buffering';
+import { tracePreviewPlayback } from '@/lib/editor/preview-diagnostics';
 import { useEffect, useLayoutEffect, useRef, useState, useMemo, forwardRef, useImperativeHandle } from 'react';
 import { audioFadeAttributes, audioVolumeEnvelope } from '@/lib/editor/audio-settings';
 import type { HyperframesPlayer } from '@hyperframes/player';
@@ -162,7 +163,7 @@ export const Preview = forwardRef<PreviewHandle,{timeline:Timeline;assets:MediaA
     diagnostic.current=diagnose;
     const iframeError=(event:MessageEvent)=>{if(cancelled||event.source!==p?.iframeElement?.contentWindow||event.origin!==window.location.origin||event.data?.source!=='revline-preview-error')return;console.error(`[Revline preview error] ${event.data.label}: ${event.data.message}`,{chatId:debugId});callbacks.current.onError(`Preview: ${event.data.message}`);};
     window.addEventListener('message',iframeError);
-    const recovery=new AbortController(),attempted=new WeakSet<HTMLMediaElement>(),refreshes=new Map<string,Promise<string|null>>();let removeMediaErrors:(()=>void)|undefined, stopWarmup:(()=>void)|undefined;
+    const recovery=new AbortController(),attempted=new WeakSet<HTMLMediaElement>(),refreshes=new Map<string,Promise<string|null>>();let removeMediaErrors:(()=>void)|undefined, stopWarmup:(()=>void)|undefined, stopTrace:(()=>void)|undefined;
     void import('@hyperframes/player').then(()=>{
       if(cancelled||!container.current)return;
       p=document.createElement('hyperframes-player') as HyperframesPlayer;
@@ -222,7 +223,7 @@ export const Preview = forwardRef<PreviewHandle,{timeline:Timeline;assets:MediaA
         doc?.addEventListener('error',mediaError,true);removeMediaErrors=()=>doc?.removeEventListener('error',mediaError,true);
         doc?.defaultView?.addEventListener('revline-effects-error',event=>{if(!cancelled)callbacks.current.onError((event as CustomEvent<string>).detail);});
         if(doc?.documentElement.dataset.visualEffectsError)callbacks.current.onError(doc.documentElement.dataset.visualEffectsError);
-        loaded=true;if(doc){stopWarmup=warmPreviewMedia(doc,()=>frameTime(p,seekPosition.current));guard=guardPreviewBuffering(doc,p,()=>frameTime(p,seekPosition.current),debugId?()=>diagnose('active media buffering exceeded 2s'):undefined);}p.seek(seekPosition.current);updateLayers(p,latestTimeline.current);if(p.painted)swap();});
+        loaded=true;if(doc){stopWarmup=warmPreviewMedia(doc,()=>frameTime(p,seekPosition.current));guard=guardPreviewBuffering(doc,p,()=>frameTime(p,seekPosition.current),debugId?()=>diagnose('active media buffering exceeded 2s'):undefined);if(process.env.NODE_ENV==='development'&&debugId)stopTrace=tracePreviewPlayback(doc,p,()=>frameTime(p,seekPosition.current),()=>({playing:guard?.isPlaying()??false,buffering:guard?.isBuffering()??false}),debugId);}p.seek(seekPosition.current);updateLayers(p,latestTimeline.current);if(p.painted)swap();});
       p.addEventListener('painted',swap);
       p.addEventListener('timeupdate',(e)=>{if(!loaded||player.current!==p)return;const detail=(e as CustomEvent<{currentTime:number}>).detail;const t=frameTime(p,detail?.currentTime??seekPosition.current);seekPosition.current=t;setSelectionVisible(selectionAt(t));callbacks.current.onTime(t);});
       const stopped=()=>{if(!loaded||player.current!==p)return;const t=frameTime(p,seekPosition.current);seekPosition.current=t;callbacks.current.onTime(t);if(!guard?.isBuffering())callbacks.current.onPlaying(false);};
@@ -231,7 +232,7 @@ export const Preview = forwardRef<PreviewHandle,{timeline:Timeline;assets:MediaA
       container.current.appendChild(p);if(debugId)diagnosticTimer=setTimeout(()=>{if(p&&!p.ready)diagnose('player readiness stalled');},4000);
     }).catch(e=>callbacks.current.onError(String(e)));
     // Leave the displayed player mounted until its replacement has a painted frame.
-    return ()=>{cancelled=true;window.removeEventListener('message',iframeError);if(diagnosticTimer)clearTimeout(diagnosticTimer);recovery.abort();removeMediaErrors?.();stopWarmup?.();cancelAnimationFrame(swapFrame);if(p&&player.current!==p){guard?.dispose();p.pause();p.remove();}};
+    return ()=>{cancelled=true;window.removeEventListener('message',iframeError);if(diagnosticTimer)clearTimeout(diagnosticTimer);recovery.abort();removeMediaErrors?.();stopWarmup?.();stopTrace?.();cancelAnimationFrame(swapFrame);if(p&&player.current!==p){guard?.dispose();p.pause();p.remove();}};
   },[contentKey,reloadRevision]);
   const canvas=dimensions(timeline.aspectRatio);
   const asset=assets.find(asset=>asset._id===selectedClip?.assetId);

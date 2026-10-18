@@ -1,0 +1,52 @@
+type Transport = EventTarget & { paused:boolean };
+type MediaSample = { events:Record<string,number>; frames:number; lastFrame?:number; maxFrameGap:number; sourceTime:number; frameCallback?:number };
+
+/** Development-only, bounded client trace. Never records media URLs or contents. */
+export function tracePreviewPlayback(document:Document,player:Transport,readTime:()=>number,state:()=>{playing:boolean;buffering:boolean},chatId:string) {
+  const win=document.defaultView;
+  if(!win)return()=>{};
+  const media=new Map<HTMLMediaElement,MediaSample>();
+  const traceId=crypto.randomUUID().slice(0,8);
+  let stopped=false,previousWall=performance.now(),previousClock=readTime(),lastRaf=0,rafCount=0,maxRafGap=0,longTasks=0,longTaskMs=0,raf=0;
+  const events=['waiting','stalled','seeking','seeked','playing','pause','error'];
+  function refresh() {
+    for(const node of document.querySelectorAll<HTMLMediaElement>('video[data-start],audio[data-start]')) {
+      if(media.has(node))continue;
+      const sample:MediaSample={events:{},frames:0,maxFrameGap:0,sourceTime:node.currentTime};media.set(node,sample);
+      if(node.tagName==='VIDEO'&&'requestVideoFrameCallback' in node){
+        const video=node as HTMLVideoElement;
+        const decoded=(now:number)=>{
+          if(stopped||!video.isConnected)return;
+          const time=readTime(),start=Number(video.dataset.start),end=Number(video.dataset.end);
+          if(state().playing&&time>=start&&time<end){sample.frames++;if(sample.lastFrame!==undefined)sample.maxFrameGap=Math.max(sample.maxFrameGap,now-sample.lastFrame);sample.lastFrame=now;}
+          else sample.lastFrame=undefined;
+          sample.frameCallback=video.requestVideoFrameCallback(decoded);
+        };
+        sample.frameCallback=video.requestVideoFrameCallback(decoded);
+      }
+    }
+    for(const [node,sample]of media)if(!node.isConnected){if(node.tagName==='VIDEO'&&sample.frameCallback!==undefined)(node as HTMLVideoElement).cancelVideoFrameCallback(sample.frameCallback);media.delete(node);}
+  }
+  const event=(event:Event)=>{const sample=media.get(event.target as HTMLMediaElement);if(sample)sample.events[event.type]=(sample.events[event.type]??0)+1;};
+  for(const name of events)document.addEventListener(name,event,true);
+  function tick(now:number){if(stopped)return;if(state().playing){rafCount++;if(lastRaf)maxRafGap=Math.max(maxRafGap,now-lastRaf);lastRaf=now;}else lastRaf=0;raf=win!.requestAnimationFrame(tick);}
+  raf=win.requestAnimationFrame(tick);
+  let observer:PerformanceObserver|undefined;
+  try{observer=new PerformanceObserver(list=>{if(state().playing)for(const item of list.getEntries()){longTasks++;longTaskMs+=item.duration;}});observer.observe({type:'longtask',buffered:false});}catch{/* Not every browser exposes long tasks. */}
+  refresh();
+  const round=(n:number)=>Math.round(n*1000)/1000;
+  const report=()=>{
+    refresh();const now=performance.now(),time=readTime(),wallMs=now-previousWall,current=state();
+    const samples=[...media].map(([node,sample])=>{
+      const start=Number(node.dataset.start),end=Number(node.dataset.end),rate=Number(node.dataset.playbackRate??1);
+      const active=time>=start&&time<end,expected=Number(node.dataset.mediaStart??0)+(time-start)*rate;
+      const output={id:node.dataset.sourceClip??node.id,kind:node.tagName,active,sourceTime:round(node.currentTime),sourceAdvance:round(node.currentTime-sample.sourceTime),rate:node.playbackRate,expectedRate:rate,driftMs:active?Math.round((node.currentTime-expected)/rate*1000):null,ready:node.readyState,network:node.networkState,seeking:node.seeking,paused:node.paused,muted:node.muted,volume:round(node.volume),decodedFrames:sample.frames,maxFrameGapMs:Math.round(sample.maxFrameGap),events:sample.events};
+      sample.sourceTime=node.currentTime;sample.events={};sample.frames=0;sample.maxFrameGap=0;return output;
+    }).filter(sample=>sample.active||sample.decodedFrames||Object.keys(sample.events).length).slice(0,16);
+    if(current.playing||rafCount)console.warn('[Revline playback trace]',JSON.stringify({timestamp:new Date().toISOString(),chatId,traceId,visibility:document.visibilityState,clock:round(time),clockAdvance:round(time-previousClock),wallMs:Math.round(wallMs),...current,rafCount,maxRafGapMs:Math.round(maxRafGap),longTasks,longTaskMs:Math.round(longTaskMs),effectsCanvases:document.querySelectorAll('.visual-effect-output').length,media:samples}));
+    previousWall=now;previousClock=time;rafCount=0;maxRafGap=0;longTasks=0;longTaskMs=0;
+  };
+  const timer=setInterval(report,2000);
+  console.warn('[Revline playback trace]',JSON.stringify({event:'attached',timestamp:new Date().toISOString(),chatId,traceId}));
+  return()=>{stopped=true;clearInterval(timer);win.cancelAnimationFrame(raf);observer?.disconnect();for(const name of events)document.removeEventListener(name,event,true);for(const [node,sample]of media)if(node.tagName==='VIDEO'&&sample.frameCallback!==undefined)(node as HTMLVideoElement).cancelVideoFrameCallback(sample.frameCallback);media.clear();};
+}
