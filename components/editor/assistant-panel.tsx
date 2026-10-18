@@ -30,7 +30,7 @@ type Conversation = {projectId:Id<'projects'>;threadId:string};
 type PanelProps = ComponentProps<typeof AssistantPanelBody> & {conversation?:Conversation};
 type ConversationState = {threadId:string;messages:ChatMessage[];canLoadMore:boolean;onLoadMore:()=>void};
 const ConnectedConversation = memo(function ConnectedConversation({conversation,onUpdate}:{conversation:Conversation;onUpdate:(state:ConversationState)=>void}) {
-  const {results,status,loadMore}=useUIMessages(api.assistant.messages,conversation,{initialNumItems:20,stream:true});
+  const {results,status,loadMore}=useUIMessages(api.assistant.messages,conversation,{initialNumItems:40,stream:true});
   const messages=useMemo(()=>results.map(chatMessageFromUI),[results]);
   const loadMoreRef=useRef(loadMore);loadMoreRef.current=loadMore;
   const onLoadMore=useCallback(()=>loadMoreRef.current(20),[]);
@@ -105,7 +105,9 @@ function AssistantPanelBody({ messages, running, editing:editingTimeline=running
   const latestUser = messages.findLast(message => message.role === 'user');
   const replyLabel = editingTimeline ? 'Editing…' : 'Replying…';
   const optimisticRequest = pendingReply && latestUser?.id === pendingReply.previousUserId ? pendingReply : null;
-  const turnId = optimisticRequest?.id ?? latestUser?.id ?? 'imported';
+  // A long tool run can fill a page before its user message is loaded.
+  // The visible assistant-only prefix is still the active turn, not a failed historical edit.
+  const turnId = optimisticRequest?.id ?? latestUser?.id ?? messages[0]?.id ?? 'imported';
   const demoNoteMessageId = demo ? messages.findLast(message => message.role === 'assistant')?.id : undefined;
   const scroll = useConversationScroll(turnId, true, false);
   const legacyPublications=useRef(new Map<string,number>());
@@ -119,7 +121,7 @@ function AssistantPanelBody({ messages, running, editing:editingTimeline=running
       if(comparison?.publishedRevision!==undefined)legacyPublications.current.set(group.id,comparison.publishedRevision);
       const publicationReceipt=turnPublicationReceipt(group.messages);
       const draftFailed=!running&&group.id===turnId&&(!!error||replies.some(message=>message.status==='failed'||message.status==='aborted'));
-      const cards=summarizeTools(steps,{publicationReceipt,publishedRevision:legacyPublications.current.get(group.id),draftFailed,draftPending:group.id===turnId&&answering});
+      const cards=summarizeTools(steps,{publicationReceipt,publishedRevision:legacyPublications.current.get(group.id),draftFailed,draftPending:group.id===turnId&&(answering||replies.some(message=>message.status==='pending'||message.status==='streaming'))});
       const presentation=assistantTurnPresentation(replies,cards,{receipt:publicationReceipt,error:group.id===turnId?(localError||(!waiting?error:null)):null});
       return {...group,comparison,...presentation};
     });

@@ -62,3 +62,23 @@ test('captured partial styling preserves eight saves and explains unfinished wor
   expect(html).not.toMatch(/An error occurred|pending replacement|No timeline changes were saved/);
   expect(html.match(/role="alert"/g)).toHaveLength(1);
 });
+
+test('a paginated running turn without its user record stays prepared instead of falsely unconfirmed', () => {
+  const partial: ChatMessage[] = [{ id: 'thread-21-1', sourceId: 'raw-assistant', threadId: 'thread', role: 'assistant', status: 'streaming', text: 'I’ll finish the requested changes.', steps: [{ id: 'draft-trim', name: 'trim', state: 'done', staged: true, output: { staged: true, saved: false, revision: 67, changedClips: [{ id: 'clip' }] } }] }];
+  const html = renderToStaticMarkup(<AssistantPanel messages={partial} running configured hasClips demo={false} onSend={async () => {}} />);
+  expect(html).not.toMatch(/Save not confirmed|No saved confirmation|Could not finish this edit/);
+  expect(html).not.toContain('role="alert"');
+  expect(html).toContain('Prepared: Trimmed 1 clip');
+});
+
+test('pending streamed publication does not briefly fail when the run status arrives before its receipt', () => {
+  const partial: ChatMessage[] = [{ id: 'answer', role: 'assistant', status: 'pending', text: '', steps: [{ name: 'trim', state: 'done', output: { staged: true, saved: false, revision: 67, changedClips: [{ id: 'clip' }] } }] }];
+  const html = renderToStaticMarkup(<AssistantPanel messages={partial} running={false} configured hasClips demo={false} onSend={async () => {}} />);
+  expect(html).not.toContain('Save not confirmed'); expect(html).toContain('Awaiting save');
+});
+
+test('completed assistant-only history without a receipt still reports unconfirmed edits honestly', () => {
+  const partial: ChatMessage[] = [{ id: 'answer', role: 'assistant', status: 'success', text: 'Finished.', steps: [{ name: 'trim', state: 'done', output: { staged: true, saved: false, revision: 67, changedClips: [{ id: 'clip' }] } }] }];
+  const html = renderToStaticMarkup(<AssistantPanel messages={partial} running={false} configured hasClips demo={false} onSend={async () => {}} />);
+  expect(html).toContain('Save not confirmed'); expect(html).toContain('role="alert"');
+});
