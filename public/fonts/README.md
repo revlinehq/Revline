@@ -14,3 +14,9 @@ The following unmodified TrueType files were downloaded from the [official Googl
 | Bebas Neue | `bebas-neue.ttf` | [Source](https://github.com/google/fonts/blob/b7c8331cf620346575487ef8db0e2c729f014675/ofl/bebasneue/BebasNeue-Regular.ttf) | [Bebas-Neue-OFL.txt](Bebas-Neue-OFL.txt) | `08e4623805102d819f58601e46e345648846075e363b2ceb23313c2d1c83ec73` |
 | Playfair Display | `playfair-display.ttf` | [Source](https://github.com/google/fonts/blob/b7c8331cf620346575487ef8db0e2c729f014675/ofl/playfairdisplay/PlayfairDisplay%5Bwght%5D.ttf) | [Playfair-Display-OFL.txt](Playfair-Display-OFL.txt) | `c40f2293766a503bc70cce9e512ef844a4ccb7cbcde792fe2ea31d191917d8d6` |
 | Caveat | `caveat.ttf` | [Source](https://github.com/google/fonts/blob/b7c8331cf620346575487ef8db0e2c729f014675/ofl/caveat/Caveat%5Bwght%5D.ttf) | [Caveat-OFL.txt](Caveat-OFL.txt) | `0bdb6b660482d31531b3945849fba5916b3ef8695da7024a9e6b9ee3c4157988` |
+
+TikTok Sans is TikTok's official open-source caption typeface. Its unmodified variable TrueType font (weight 300–900) and original OFL notice are bundled from the official Google Fonts repository at commit `47d54ca1ebb14fd864695f1d39dc734f39017c33`. The upstream project is [tiktok/TikTokSans](https://github.com/tiktok/TikTokSans), licensed under SIL OFL 1.1. Local renaming does not alter font contents or copyright metadata.
+
+| Family | Local file | Official source | License | SHA-256 |
+| --- | --- | --- | --- | --- |
+| TikTok Sans | `tiktok-sans.ttf` | [Source](https://github.com/google/fonts/blob/47d54ca1ebb14fd864695f1d39dc734f39017c33/ofl/tiktoksans/TikTokSans%5Bopsz%2Cslnt%2Cwdth%2Cwght%5D.ttf) | [TikTok-Sans-OFL.txt](TikTok-Sans-OFL.txt) | `0e7f0a3e924c9a86478fc6fc2946de2e4ab8fc704ed72ee40434ade94bb9b0c6` |
