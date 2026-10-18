@@ -1,5 +1,6 @@
 import { normalizeTimeline, type Timeline } from '../../lib/editor/types';
 import { rebaseNonDestructiveEdit } from './editSessionRebase';
+import { isOverlapPlacementRejection, type TimelineGestureRejection } from '../../lib/editor/timeline-edit-errors';
 
 export const isTimelineConflict = (error: unknown) => /timeline changed elsewhere/i.test(error instanceof Error ? error.message : String(error));
 
@@ -27,19 +28,28 @@ export class EditSession {
     this.revision = revision;
   }
 
-  private enqueue<T>(operation: () => Promise<T>): Promise<T> {
+  private enqueue<T>(operation: () => Promise<T>, rejectedBeforeChange?: (error: unknown) => boolean): Promise<T> {
     const result = this.pending.then(() => { this.signal?.throwIfAborted(); return operation(); });
-    this.pending = result.catch(error => { if (this.staged) this.failed = true; if (isTimelineConflict(error)) this.needsInspection = true; });
+    this.pending = result.catch(error => { if (this.staged && !rejectedBeforeChange?.(error)) this.failed = true; if (isTimelineConflict(error)) this.needsInspection = true; });
     return result;
   }
 
   wait() { return this.pending; }
 
   checkpoint(edit: (timeline: Timeline) => Timeline) {
+    let preflightRejection: TimelineGestureRejection | undefined;
     return this.enqueue(async () => {
       if (this.needsInspection) throw new Error('The timeline changed elsewhere. Inspect the refreshed timeline before continuing.');
       let previous = this.timeline;
-      let next = normalizeTimeline(edit(previous));
+      let edited: Timeline;
+      try { edited = edit(previous); }
+      catch (error) {
+        // Only the pure placement calculation can reject without changing the
+        // draft. A similarly named storage/validation failure still poisons it.
+        if (isOverlapPlacementRejection(error)) preflightRejection = error;
+        throw error;
+      }
+      let next = normalizeTimeline(edited);
       if (next === previous || JSON.stringify(next) === JSON.stringify(previous)) return { applied: false, saved: false, staged: this.staged, unchanged: true, revision: this.revision, changedClips: [], removedClipIds: [], removedMarkerIds: [], aspectRatio: previous.aspectRatio };
       await this.storage.beforeChange?.();
       const nextById = new Map(next.clips.map(clip => [clip.id, clip]));
@@ -75,7 +85,7 @@ export class EditSession {
       this.timeline = next;
       const changedClips = next.clips.filter(clip => JSON.stringify(clip) !== JSON.stringify(previous.clips.find(current => current.id === clip.id))).map(({ id, kind, track, start, duration, sourceStart, text, transform, crop, fit }) => ({ id, kind, ...(transform ? { transform } : {}), ...(crop ? { crop } : {}), ...(fit ? { fit } : {}), ...(track ? { track } : {}), start, duration, sourceStart, ...(text ? { text: text.slice(0, 120) } : {}) }));
       return { applied: !this.staged, saved: !this.staged, staged: this.staged, revision: this.revision, changedClips, removedClipIds, removedMarkerIds, aspectRatio: next.aspectRatio };
-    });
+    }, error => preflightRejection !== undefined && error === preflightRejection);
   }
 
   inspect(read: () => Promise<{ timeline: Timeline; revision: number }>) {

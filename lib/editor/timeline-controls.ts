@@ -91,7 +91,7 @@ function placeMovedClips(timeline:Timeline,moved:import('./types').Clip[],direct
     const collides=members.some(clip=>rest.some(other=>layerGroup(other.kind)===group&&trackOf(other)===trackOf(clip)&&other.start<clip.start+clip.duration-1e-6&&clip.start<other.start+other.duration-1e-6));
     if(!collides)continue;
     const linkedAudio=group==='audio'&&members.every(clip=>moved.some(other=>other.kind==='video'&&other.id===clip.linkedClipId));
-    if(!createLayers||createLayers==='linked-audio'&&!linkedAudio)throw new TimelineGestureRejection('Overlaps a clip');
+    if(!createLayers||createLayers==='linked-audio'&&!linkedAudio)throw new TimelineGestureRejection('Overlaps a clip', 'overlap');
     const first=Math.min(...members.map(trackOf));const last=Math.max(...members.map(trackOf));const span=last-first+1;
     const autoAudio=createLayers==='linked-audio'&&linkedAudio;
     const insert=autoAudio?counts[group]+1:first+(direction==='above'?1:0);

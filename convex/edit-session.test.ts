@@ -7,6 +7,7 @@ import schema from './schema';
 import { EditSession } from './lib/editSession';
 import type { Timeline } from '../lib/editor/types';
 import { addMediaClip, deleteClip, patchClip, placeOnFreeLayer, splitClip } from '../lib/editor/operations';
+import { TimelineGestureRejection } from '../lib/editor/timeline-edit-errors';
 
 const modules = import.meta.glob('./**/*.ts');
 const original: Timeline = { fps: 30, aspectRatio: 'landscape', tracks: { visual: 1, overlay: 0, audio: 0 }, clips: [{ id: 'original', kind: 'caption', text: 'Original edit', start: 0, sourceStart: 0, duration: 5, track: 1 }] };
@@ -86,7 +87,7 @@ test('delete-all then rebuild never publishes an empty checkpoint and saves once
 });
 
 test('inspection keeps the private replacement and delete-all can intentionally complete', async () => {
-  const { session, read, owner, projectId } = await setup();
+  const { t, run, session, read, owner, projectId } = await setup();
   await session.checkpoint(t => ({ ...t, clips: [] }));
   const inspected = await session.inspect(async () => { const p = await read(); return { timeline: p.timeline!, revision: p.revision! }; });
   expect(inspected.timeline.clips).toEqual([]);
@@ -94,6 +95,7 @@ test('inspection keeps the private replacement and delete-all can intentionally 
   expect((await read()).timeline?.clips).toEqual(original.clips);
   await session.complete('stop');
   expect((await read()).timeline?.clips).toEqual([]);
+  await t.mutation(internal.assistant.finish, run);
   await owner.mutation(api.projects.undo, { projectId });
   expect((await read()).timeline?.clips).toEqual(original.clips);
 });
@@ -179,7 +181,7 @@ test('staging validation rejects foreign ownership, stale runs, and foreign medi
 });
 
 test('linked video/audio delete and replacement publish together with one undo', async () => {
-  const { owner, projectId, read, asset, initial, session } = await setupMedia();
+  const { t, run, owner, projectId, read, asset, initial, session } = await setupMedia();
   await session.checkpoint(t => deleteClip(t, 'old-video'));
   expect(session.timeline.clips).toHaveLength(0);
   expect((await read()).timeline?.clips).toEqual(initial.clips);
@@ -187,6 +189,7 @@ test('linked video/audio delete and replacement publish together with one undo',
   expect((await read()).timeline?.clips).toEqual(initial.clips);
   await session.complete('stop');
   expect((await read()).timeline?.clips.map(clip => clip.id)).toEqual(['new-video', 'new-video-audio']);
+  await t.mutation(internal.assistant.finish, run);
   await owner.mutation(api.projects.undo, { projectId });
   expect((await read()).timeline?.clips).toEqual(initial.clips);
 });
@@ -216,7 +219,7 @@ test('aborted and failed source edits preserve the original linked footage', asy
 });
 
 test('completed source assembly and captions publish together with one undo', async () => {
-  const { session, initial, read, owner, projectId } = await setupMedia();
+  const { t, run, session, initial, read, owner, projectId } = await setupMedia();
   await session.checkpoint(t => splitClip(t, 'old-video', 20, 'tail'));
   await session.checkpoint(t => patchClip(t, 'old-video', { duration: 10 }));
   await session.checkpoint(t => patchClip(t, 'tail', { start: 10 }));
@@ -227,6 +230,7 @@ test('completed source assembly and captions publish together with one undo', as
   expect((await read()).timeline?.clips).toEqual(expected.clips);
   expect((await read()).revision).toBe(3);
   expect(session.savedEdits).toBe(1);
+  await t.mutation(internal.assistant.finish, run);
   await owner.mutation(api.projects.undo, { projectId });
   expect((await read()).timeline?.clips).toEqual(initial.clips);
 });
@@ -297,4 +301,18 @@ test('retained source timing fields are one conflict group during an automatic r
   await f.owner.mutation(api.projects.saveTimeline, { projectId: f.projectId, expectedRevision: 1, timeline: { ...original, clips: original.clips.map(clip => ({ ...clip, sourceStart: 1 })) } });
   await expect(session.checkpoint(t => ({ ...t, clips: t.clips.map(clip => ({ ...clip, duration: 3 })) }))).rejects.toThrow('Inspect');
   expect((await f.read()).timeline?.clips[0]).toMatchObject({ sourceStart: 1, duration: 5 });
+});
+
+test('a typed overlap thrown by storage validation still poisons the private draft', async () => {
+  const timeline: Timeline = { fps: 30, aspectRatio: 'landscape', clips: [{ id: 'video', kind: 'video', start: 0, sourceStart: 0, duration: 5 }] };
+  let validations = 0, applies = 0;
+  const session = new EditSession(timeline, 0, {
+    apply: async () => { applies++; return 1; },
+    validate: async () => { if (++validations === 2) throw new TimelineGestureRejection('Overlaps a clip', 'overlap'); },
+  });
+  await session.checkpoint(t => patchClip(t, 'video', { duration: 4 }));
+  await expect(session.checkpoint(t => patchClip(t, 'video', { duration: 3 }))).rejects.toThrow('Overlaps');
+  await session.checkpoint(t => patchClip(t, 'video', { duration: 2 }));
+  await expect(session.complete('stop')).rejects.toThrow('not saved');
+  expect(applies).toBe(0);
 });

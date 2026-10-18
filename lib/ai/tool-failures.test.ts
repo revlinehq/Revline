@@ -1,5 +1,6 @@
 import { expect, test } from 'vitest';
 import { hasRepeatedToolFailures, hasUnresolvedToolFailures } from './tool-failures';
+import { moveSelectedClips } from '../editor/timeline-controls';
 const call = (id:string,assetId='source') => ({type:'tool-call',toolCallId:id,toolName:'addMedia',input:{assetId,start:0}});
 const error = (id:string) => ({type:'tool-error',toolCallId:id,toolName:'addMedia'});
 const result = (id:string) => ({type:'tool-result',toolCallId:id,toolName:'addMedia',output:{saved:true}});
@@ -41,4 +42,40 @@ test('returned analysis failures count alongside thrown tool errors and are rese
   expect(hasRepeatedToolFailures(steps)).toBe(true);
   expect(hasRepeatedToolFailures([...steps.slice(0, 2), { content: [{ type: 'tool-error', toolName: 'inspectVideo', toolCallId: 'third-error', input: steps[0].content[0].input }] }])).toBe(true);
   expect(hasRepeatedToolFailures([...steps, analysis('repair', true)])).toBe(false);
+});
+
+function rejectedMove() {
+  try { moveSelectedClips({ fps: 30, aspectRatio: 'landscape', clips: [
+    { id: 'waiting', kind: 'video', track: 1, start: 4.933333333333334, duration: .875, sourceStart: 16.5 },
+    { id: 'tail-a', kind: 'video', track: 1, start: 10.333333333333334, duration: 5.233333333333333, sourceStart: 48.53333333333333 },
+    { id: 'tail-b', kind: 'video', track: 1, start: 15.566666666666666, duration: 27, sourceStart: 59 },
+  ] }, ['tail-a', 'tail-b'], -4.525, 0); } catch (error) { return error; }
+  throw new Error('The recorded overlap must reproduce before testing recovery.');
+}
+const rejected = () => ({ content: [{ type: 'tool-error', toolCallId: 'rejected', toolName: 'moveClips', input: { clipIds: ['tail-a','tail-b'], timeDelta: -4.525 }, error: rejectedMove() }] });
+const repaired = (patch = {}) => ({ content: [{ type: 'tool-result', toolCallId: 'repaired', toolName: 'moveClips', input: { clipIds: ['tail-a','tail-b'], timeDelta: -4.5, ...patch }, output: { staged: true, saved: false, changedClips: [{ id: 'tail-a' }, { id: 'tail-b' }] } }] });
+const inspected = { content: [{ type: 'tool-result', toolCallId: 'checked', toolName: 'inspectTimeline', input: {}, output: { staged: true, revision: 16, summary: { overlapCount: 0, missingAssetRefs: [] } } }] };
+
+test('a real rejected -4.525s placement is superseded by its same-target -4.5s correction after inspection', () => {
+  expect(hasUnresolvedToolFailures([rejected(), repaired()])).toBe(true);
+  expect(hasUnresolvedToolFailures([rejected(), repaired(), inspected])).toBe(false);
+});
+
+test('placement recovery cannot conceal another target, axis, layer change, error type or failed analysis', () => {
+  for (const patch of [{ clipIds: ['other'] }, { timeDelta: undefined, layerDelta: 1 }, { layerDelta: 1 }]) expect(hasUnresolvedToolFailures([rejected(), repaired(patch), inspected])).toBe(true);
+  const unknown = rejected(); unknown.content[0].error = new Error('Overlaps a clip');
+  expect(hasUnresolvedToolFailures([unknown, repaired(), inspected])).toBe(true);
+  expect(hasUnresolvedToolFailures([rejected(), { content: [{ type: 'tool-result', toolCallId: 'analysis', toolName: 'inspectFrames', input: { assetId: 'source', start: 0, end: 1, question: 'Look here' }, output: { success: false } }] }, repaired(), inspected])).toBe(true);
+  expect(hasRepeatedToolFailures([rejected(), rejected(), rejected(), repaired(), inspected])).toBe(true);
+});
+
+
+test('recovery requires changed-target receipts and a subsequent successful clean inspection', () => {
+  const noReceipt = repaired(); noReceipt.content[0].output.changedClips = [{ id: 'tail-a' }];
+  expect(hasUnresolvedToolFailures([rejected(), noReceipt, inspected])).toBe(true);
+  expect(hasUnresolvedToolFailures([rejected(), inspected, repaired()])).toBe(true);
+  const invalidInspection = { content: [{ ...inspected.content[0], output: { ...inspected.content[0].output, summary: { overlapCount: 1, missingAssetRefs: [] } } }] };
+  expect(hasUnresolvedToolFailures([rejected(), repaired(), invalidInspection])).toBe(true);
+  const wrapped = (step: ReturnType<typeof repaired> | typeof inspected) => ({ content: step.content.map(part => ({ ...part, output: { type: 'json', value: part.output } })) });
+  expect(hasUnresolvedToolFailures([rejected(), wrapped(repaired()), wrapped(inspected)])).toBe(false);
 });

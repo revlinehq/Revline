@@ -477,6 +477,49 @@ test('repeated failed commands stop early with saved progress and an unpublished
   expect(texts.some(text => text.includes('1 edits were saved') && text.includes('same tool command failed three times'))).toBe(true);
 });
 
+test('a no-write overlap followed by the recorded corrected placement publishes the inspected linked draft once', async () => {
+  const f = await fixture('Speed up the loading segment and close the remaining gap.');
+  const audioId = await f.t.run(async ctx => {
+    await ctx.db.patch(f.assetId, { duration: 150 });
+    const audioId = await ctx.db.insert('assets', { projectId: f.projectId, ownerId: 'owner', kind: 'audio', fileName: 'Linked sound', contentType: 'audio/mp4', size: 1, duration: 150, createdAt: 0 });
+    await ctx.db.patch(f.assetId, { audioAssetId: audioId, audioExtracted: true });
+    return audioId;
+  });
+  const ranges = [
+    { id: 'source', start: 0, duration: 1.0666666666666667, sourceStart: 4.5, playbackRate: 1.5 },
+    { id: 'picker', start: 1.0666666666666667, duration: 3.8666666666666667, sourceStart: 10.700000000000001, playbackRate: 1.5 },
+    { id: 'waiting', start: 4.933333333333334, duration: 3.5, sourceStart: 16.5, playbackRate: 1 },
+    { id: 'tail-a', start: 10.333333333333334, duration: 5.233333333333333, sourceStart: 48.53333333333333, playbackRate: 2 },
+    { id: 'tail-b', start: 15.566666666666666, duration: 27, sourceStart: 59, playbackRate: 1 },
+  ];
+  const initial = { ...f.timeline, tracks: { visual: 1, overlay: 0, audio: 1, effects: 0 }, clips: ranges.flatMap(clip => [
+    { ...clip, kind: 'video' as const, assetId: f.assetId, track: 1, volume: 0, audioSeparated: true, linkedClipId: `${clip.id}-audio` },
+    { ...clip, id: `${clip.id}-audio`, kind: 'audio' as const, assetId: audioId, track: 1, volume: 1, linkedClipId: clip.id },
+  ]) };
+  await f.t.run(ctx => writeProject(ctx, f.projectId, { timeline: initial }));
+  let planError: unknown;
+  await f.runPlan(async tools => { try {
+    const step = async (name: string, input: unknown) => {
+      const toolCallId = `actual-${sdk.steps.length}`;
+      try { const output = await execute(tools, name, input); sdk.steps.push({ content: [{ type: 'tool-result', toolName: name, toolCallId, input, output }] }); return output; }
+      catch (error) { sdk.steps.push({ content: [{ type: 'tool-error', toolName: name, toolCallId, input, error }] }); throw error; }
+    };
+    await step('setPlaybackRate', { clipId: 'waiting', rate: 4 });
+    const beforeRejection = await step('inspectTimeline', {});
+    await expect(step('moveClips', { clipIds: ['tail-a','tail-b'], timeDelta: -4.525 })).rejects.toThrow('Overlaps a clip');
+    expect(await execute(tools, 'inspectTimeline', {})).toEqual(beforeRejection);
+    await step('moveClips', { clipIds: ['tail-a','tail-b'], timeDelta: -4.5 });
+    await step('setPlaybackRate', { clipId: 'waiting', rate: 3.888888888888889 });
+    expect(await step('inspectTimeline', {})).toMatchObject({ staged: true, summary: { overlapCount: 0, gaps: [], missingAssetRefs: [] } });
+    expect((await f.read()).timeline).toEqual(initial);
+  } catch (error) { planError = error; throw error; } });
+  expect(planError).toBeUndefined();
+  const saved = await f.read(); expect(saved.aiError).toBeUndefined(); expect(saved.revision).toBe(1); expect(saved.history).toEqual([initial]);
+  for (const clip of saved.timeline!.clips.filter(clip => clip.kind === 'video')) expect(saved.timeline!.clips.find(other => other.id === clip.linkedClipId)).toMatchObject({ linkedClipId: clip.id, start: clip.start, sourceStart: clip.sourceStart, duration: clip.duration, playbackRate: clip.playbackRate });
+  expect(saved.timeline!.clips.find(clip => clip.id === 'tail-a')!.start).toBeCloseTo(5.833333333333333);
+  await f.owner.mutation(api.projects.undo, { projectId: f.projectId }); expect((await f.read()).timeline).toEqual(initial);
+});
+
 test('credit exhaustion reports billing recovery without claiming a configuration failure or edit', async () => {
   const f = await fixture('Add a flash at 1.69 seconds');
   await f.runPlan(async () => { throw Object.assign(new Error('credit balance too low'), { statusCode: 400 }); });
