@@ -2,6 +2,7 @@ import { effectPlanValidator, compositionReviewResult } from './lib/effect_plan'
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 import { BEAT_ANALYSIS_ENGINE } from '../lib/media-analysis/beat-map';
+import { aiCostRecordFields } from './lib/ai_cost';
 
 export const aspectRatio = v.union(v.literal("vertical"), v.literal("square"), v.literal("landscape"), v.literal("portrait-feed"), v.literal("classic"));
 export const assetKind = v.union(v.literal("video"), v.literal("audio"), v.literal("image"));
@@ -154,6 +155,7 @@ export const publicMediaAsset = v.object({
 export const sharedChatMessage = v.object({role:v.union(v.literal('user'),v.literal('assistant')),text:v.string()});
 export const shareChatPreviewMessage = v.object({id:v.string(),...sharedChatMessage.fields});
 export default defineSchema({
+  aiCostRecords:defineTable({ownerId:v.string(),projectId:v.id('projects'),runId:v.string(),...aiCostRecordFields}).index('by_owner_recorded',['ownerId','recordedAt']).index('by_run_key',['runId','key']),
   assistantPlans:defineTable({projectId:v.id('projects'),ownerId:v.string(),runId:v.string(),plans:v.array(effectPlanValidator),originals:v.array(clipValidator),reviews:v.number(),createdAt:v.number()}).index('by_project',['projectId']),
   compositionReviews:defineTable({projectId:v.id('projects'),ownerId:v.string(),runId:v.string(),revision:v.number(),timeline:timelineValidator,reference:timelineValidator,plans:v.array(effectPlanValidator),assetIds:v.array(v.id('assets')),start:v.number(),end:v.number(),taskId:v.optional(v.id('mediaTasks')),status:v.union(v.literal('queued'),v.literal('completed'),v.literal('failed')),result:v.optional(compositionReviewResult),error:v.optional(v.string()),createdAt:v.number()}).index('by_project',['projectId']).index('by_created',['createdAt']),
 

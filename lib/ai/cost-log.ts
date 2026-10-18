@@ -78,7 +78,7 @@ export class AssistantCostLog {
     }
     if (this.calls === 12) warnings.push('approaching_existing_15_step_limit');
     if (cost.estimatedUsd === null) warnings.push('cost_unknown');
-    this.log({ event: 'model-step', model: event.modelId, provider: event.provider, step: event.stepNumber + 1, callCount: this.calls, ...cost, stepEstimatedUsd: cost.estimatedUsd, runEstimatedUsd: this.unknownCalls ? null : this.knownUsd, knownRunEstimatedUsd: this.knownUsd, unknownUsageCalls: this.unknownCalls, toolCallCount: tools.length, runToolCallCount: this.toolCalls, tools: tools.map(tool => tool.toolName), finishReason: event.finishReason, ...progress, warnings });
+    this.log({ event: 'model-step', callId: event.callId, model: event.modelId, provider: event.provider, step: event.stepNumber + 1, callCount: this.calls, ...cost, stepEstimatedUsd: cost.estimatedUsd, runEstimatedUsd: this.unknownCalls ? null : this.knownUsd, knownRunEstimatedUsd: this.knownUsd, unknownUsageCalls: this.unknownCalls, toolCallCount: tools.length, runToolCallCount: this.toolCalls, tools: tools.map(tool => tool.toolName), finishReason: event.finishReason, ...progress, warnings });
   }
 
   toolsFinished(step: Step) {

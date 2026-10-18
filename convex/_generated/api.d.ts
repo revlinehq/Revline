@@ -8,6 +8,7 @@
  * @module
  */
 
+import type * as aiCosts from "../aiCosts.js";
 import type * as assets from "../assets.js";
 import type * as assistant from "../assistant.js";
 import type * as assistantActions from "../assistantActions.js";
@@ -16,6 +17,7 @@ import type * as compositionReview from "../compositionReview.js";
 import type * as crons from "../crons.js";
 import type * as editorAccess from "../editorAccess.js";
 import type * as http from "../http.js";
+import type * as lib_ai_cost from "../lib/ai_cost.js";
 import type * as lib_asset_analysis from "../lib/asset_analysis.js";
 import type * as lib_assistant_recovery from "../lib/assistant_recovery.js";
 import type * as lib_assistant_workflow from "../lib/assistant_workflow.js";
@@ -58,6 +60,7 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  aiCosts: typeof aiCosts;
   assets: typeof assets;
   assistant: typeof assistant;
   assistantActions: typeof assistantActions;
@@ -66,6 +69,7 @@ declare const fullApi: ApiFromModules<{
   crons: typeof crons;
   editorAccess: typeof editorAccess;
   http: typeof http;
+  "lib/ai_cost": typeof lib_ai_cost;
   "lib/asset_analysis": typeof lib_asset_analysis;
   "lib/assistant_recovery": typeof lib_assistant_recovery;
   "lib/assistant_workflow": typeof lib_assistant_workflow;

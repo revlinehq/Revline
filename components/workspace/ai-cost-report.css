@@ -1,0 +1,38 @@
+.ai-cost-dev-label { display:inline-block; margin-left:5px; color:var(--ws-muted); font-size:10px; font-weight:400; }
+.ai-cost-report { gap:18px; font-size:12px; }
+.ai-cost-toolbar { display:flex; align-items:center; justify-content:space-between; gap:12px; color:var(--ws-muted); }
+.ai-cost-period { display:flex; flex-shrink:0; gap:2px; padding:3px; border:1px solid var(--ws-border); border-radius:8px; background:var(--ws-input); }
+.ai-cost-period button { min-height:28px; padding:0 9px; border:0; border-radius:5px; background:transparent; color:var(--ws-muted); font:inherit; cursor:pointer; }
+.ai-cost-period button[aria-pressed="true"] { background:var(--ws-surface); color:var(--ws-text); box-shadow:0 1px 3px #0000000d; }
+.ai-cost-report button:focus-visible,.ai-cost-chart-scroll:focus-visible,.ai-cost-token-details summary:focus-visible { outline:2px solid var(--revline-accent,#7364d9); outline-offset:3px; }
+.ai-cost-totals { display:grid; grid-template-columns:1.2fr 1fr 1fr; gap:12px; }
+.ai-cost-totals>div { display:flex; min-width:0; flex-direction:column; gap:6px; }
+.ai-cost-totals strong { font-size:23px; line-height:1.25; font-weight:500; font-variant-numeric:tabular-nums; letter-spacing:-.5px; overflow-wrap:anywhere; }
+.ai-cost-totals span { color:var(--ws-muted); font-size:11px; }
+.ai-cost-chart-scroll { overflow-x:auto; padding-top:6px; scrollbar-width:thin; }
+.ai-cost-chart { display:flex; width:100%; height:153px; gap:4px; }
+.ai-cost-day { display:flex; flex:1; min-width:0; flex-direction:column; align-items:stretch; gap:9px; padding:0; border:0; background:transparent; cursor:pointer; color:var(--ws-muted); }
+.ai-cost-bar-track { display:flex; height:120px; align-items:flex-end; justify-content:center; border-bottom:1px solid var(--ws-border); background:linear-gradient(to top,transparent calc(50% - .5px),var(--ws-border) 50%,transparent calc(50% + .5px)); }
+.ai-cost-bar { display:block; width:74%; max-width:44px; min-height:2px; border-radius:3px 3px 0 0; background:var(--revline-accent,#7364d9); opacity:.55; transition:opacity 120ms; }
+.ai-cost-day[aria-pressed="true"] .ai-cost-bar,.ai-cost-day:hover .ai-cost-bar { opacity:1; }
+.ai-cost-day[aria-pressed="true"] .ai-cost-day-label { color:var(--ws-text); }
+.ai-cost-day-label { min-height:16px; font-size:9px; white-space:nowrap; text-align:center; }
+.ai-cost-selected { display:flex; min-height:18px; flex-wrap:wrap; gap:8px; margin:-6px 0 0; color:var(--ws-muted); font-size:11px; font-variant-numeric:tabular-nums; }
+.ai-cost-selected strong { color:var(--ws-text); font-weight:500; }
+.ai-cost-breakdown h3 { margin:0 0 6px; font-size:12px; font-weight:500; }
+.ai-cost-model { display:flex; justify-content:space-between; gap:16px; padding:13px 0; border-bottom:1px solid var(--ws-border); }
+.ai-cost-model:last-child { border-bottom:0; padding-bottom:0; }
+.ai-cost-model-details { display:flex; min-width:0; flex-direction:column; gap:5px; }
+.ai-cost-model-details strong { font-size:13px; font-weight:500; overflow-wrap:anywhere; }
+.ai-cost-model-details span,.ai-cost-model-details small { font-size:11px; color:var(--ws-muted); line-height:1.5; overflow-wrap:anywhere; }
+.ai-cost-model-amount { flex-shrink:0; font-size:13px; font-weight:500; font-variant-numeric:tabular-nums; }
+.ai-cost-token-details { color:var(--ws-muted); font-size:11px; }
+.ai-cost-token-details summary { width:fit-content; cursor:pointer; }
+.ai-cost-token-details dl { display:grid; gap:7px; margin:12px 0 0; }
+.ai-cost-token-details dl>div { display:flex; justify-content:space-between; gap:12px; }
+.ai-cost-token-details dd { margin:0; color:var(--ws-text); font-variant-numeric:tabular-nums; }
+.ai-cost-footnotes { display:flex; flex-direction:column; gap:6px; }
+.ai-cost-footnotes p,.ai-cost-notice { margin:0; color:var(--ws-muted); font-size:11px; line-height:1.6; }
+.ai-cost-notice { padding:16px 0; font-size:12px; }
+@media(max-width:600px) { .ai-cost-period button { min-height:36px; padding:0 10px; } .ai-cost-toolbar { align-items:flex-start; } .ai-cost-totals strong { font-size:21px; } .ai-cost-totals span { font-size:10px; } .ai-cost-model { gap:10px; } }
+@media(prefers-reduced-motion:reduce) { .ai-cost-bar { transition:none; } }

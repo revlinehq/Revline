@@ -6,6 +6,7 @@ import { openAIEditorImages } from "../lib/ai/openai-editor-images";
 import { openAITokenCounter } from '../lib/ai/openai-token-count';
 import { AssistantTokenBudget, AssistantTokenBudgetError, editorTokenBudgetEnabled } from "../lib/ai/token-budget";
 import { AssistantCostLog } from '../lib/ai/cost-log';
+import { CostHistoryWriter, costDashboardEnabled, costHistoryRecord } from '../lib/ai/cost-history';
 import { modelTimeline, modelAssetAnalysis, EDITOR_CONTEXT_NOTICE, EDITOR_CONTEXT_BOUNDARY } from "../lib/ai/editor-context";
 import { assistantFailureReason } from "../lib/ai/assistant-error";
 import { openai } from "@ai-sdk/openai";
@@ -65,7 +66,16 @@ export const respond = internalAction({
     let session: EditSession | undefined;
     let streamError: unknown;
     let selectedProvider: ClaudeModelSelection['provider'] | undefined;
-    const costLog = new AssistantCostLog({ projectId: args.projectId, runId: args.runId });
+    const costHistory = new CostHistoryWriter(
+      record => ctx.runMutation(internal.aiCosts.record, { projectId: args.projectId, runId: args.runId, record }),
+      failedWrites => console.warn(`[ai-cost] ${JSON.stringify({ event: 'history-write-failed', projectId: args.projectId, runId: args.runId, failedWrites })}`),
+    );
+    const costLog = new AssistantCostLog({ projectId: args.projectId, runId: args.runId }, event => {
+      console.log(`[ai-cost] ${JSON.stringify(event)}`);
+      if (!costDashboardEnabled()) return;
+      const record = costHistoryRecord(event);
+      if (record) costHistory.enqueue(record);
+    });
     const progress = () => ({ revision: session?.revision ?? 0, savedEdits: session?.savedEdits ?? 0, staged: session?.staged ?? false });
     let currentStep = 0;
     const controller = new AbortController();
@@ -476,7 +486,7 @@ You edit the user's video timeline using structured tools. Greetings, small talk
       const edits = session?.savedEdits ?? 0;
       try { await saveMessage(ctx, components.agent, { threadId: args.threadId, userId: args.ownerId,promptMessageId:args.promptMessageId, message: { role: "assistant", content: edits ? `${edits} edits were saved before the assistant stopped. Undo restores the state before the latest consecutive group of AI edits. ${reason}` : `No timeline changes were saved. ${reason}` } }); } catch { /* Status remains the recovery path if the message service is unavailable. */ }
       await ctx.runMutation(internal.assistant.finish, { projectId: args.projectId, ownerId: args.ownerId, runId: args.runId, error: reason, savedEdits: session?.savedEdits ?? 0,...(session?.staged?{publication:{threadId:args.threadId,promptMessageId:args.promptMessageId,stagedRevision:session.revision,status:abortSignal.aborted?'aborted' as const:'failed' as const}}:{}) });
-    } finally { clearInterval(watch); budget.dispose(); }
+    } finally { clearInterval(watch); budget.dispose(); await costHistory.flush(); }
     return null;
   },
 });
