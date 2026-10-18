@@ -16,7 +16,9 @@ export function warmPreviewMedia(document: Document, readTime: () => number): ()
     // Do not preload the whole project: at most four imminent sources.
     const upcoming = media.filter(node => {
       const due = Number(node.dataset.start) - time;
-      return node.isConnected && due > 0 && due <= 1.5;
+      // Large originals can take several seconds to service a cold range seek.
+      // Keep the four-source cap, but start before that wait reaches the cut.
+      return node.isConnected && due > 0 && due <= 6;
     }).sort((a, b) => Number(a.dataset.start) - Number(b.dataset.start)).slice(0, 4);
     for (const node of upcoming) {
       const key = `${node.getAttribute('src')}|${node.dataset.mediaStart}`;
