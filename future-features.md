@@ -21,6 +21,12 @@ Example: “Warm film colors, minimal captions and smooth text entrances” prod
 
 This follows the core editing foundation. Consistent quality and accumulated user preferences are potential sources of defensibility; generation alone is a product capability, not an established moat.
 
+## Agent memory across projects
+
+Remember each user's preferred editing style throughout Revline: pacing, cut rhythm, caption design, color treatment, typography and motion intensity. Reuse approved styles and learn preferences from explicit feedback and accepted revisions, while keeping project-specific instructions scoped to their project.
+
+Apply relevant preferences to later edits and new projects without making users repeat their brief. Let users review, correct and forget saved preferences, and let the current request override their usual style. Keep each user's memory private to their account.
+
 ## Motion design from scratch
 
 Let users start with a blank canvas and create an animated composition in Revline, with manual controls or AI. Uploaded footage should be optional.
