@@ -16,6 +16,8 @@ import type { MediaAsset, Timeline } from '@/lib/editor/types';
 import type { ComposerAttachment } from '@/components/workspace/edit-composer';
 import { stockAudioAsset } from '@/lib/editor/stock-audio';
 import { userError } from '@/lib/user-error';
+import { TIMELINE_BASE_PX } from '@/lib/editor/timeline-zoom';
+import { animateDemoCutPreview } from './demo-cut-preview';
 import { AssistantPanel, type ChatMessage } from './assistant-panel';
 import { EditorStateProvider } from './editor-state';
 import { EditorShell } from './editor-shell';
@@ -47,6 +49,8 @@ export function ScriptedDemoEditor({ demoId }: { demoId: string }) {
   const [error, setError] = useState(''), [title, setTitle] = useState('Your next edit'), [activity, setActivity] = useState<string | null>(null);
   const [activityStartedAt, setActivityStartedAt] = useState<number | null>(null);
   const [lastPrompt, setLastPrompt] = useState('');
+  const [demoPhase, setDemoPhase] = useState<string>();
+  const root = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLInputElement>(null), preview = useRef<PreviewHandle | null>(null), assetsRef = useRef<MediaAsset[]>([]), urls = useRef<string[]>([]), activeRun = useRef<AbortController | null>(null);
   const onPreviewReady = useCallback((controller: PreviewHandle) => { preview.current = controller; }, []);
   const mounted = useRef(true), importingRef = useRef(false);
@@ -61,7 +65,7 @@ export function ScriptedDemoEditor({ demoId }: { demoId: string }) {
   function reset() {
     activeRun.current?.abort(); activeRun.current = null;
     store.getState().recover(EMPTY_SCRIPTED_DEMO); store.setState({ playhead: 0, playing: false });
-    setRunning(false); setActivity(null); setActivityStartedAt(null); setMessages([]); setError(''); setSubmittedAssetIds([]);
+    setRunning(false); setDemoPhase(undefined); setActivity(null); setActivityStartedAt(null); setMessages([]); setError(''); setSubmittedAssetIds([]);
   }
   async function attach(files: File[]) {
     if (activeRun.current || importingRef.current) throw new Error('Finish or stop the edit before adding more footage.');
@@ -97,12 +101,17 @@ export function ScriptedDemoEditor({ demoId }: { demoId: string }) {
   async function build(prompt: string) {
     if (activeRun.current || importingRef.current) return;
     if(preparedTake&&!assetsRef.current.length)throw new Error('Attach media before starting the edit.');
-    const runId = `demo-build-${crypto.randomUUID()}`, plan = f1Take?f1RecordingDemoPlan(runId):racingTake?racingDemoPlan(runId):preparedTake?hormoziDemoPlan(runId):scriptedDemoPlan(assetsRef.current, prompt, runId);
+    const runId = `demo-build-${crypto.randomUUID()}`, f1Plan = f1Take ? f1RecordingDemoPlan(runId) : null, plan = f1Plan ?? (racingTake?racingDemoPlan(runId):preparedTake?hormoziDemoPlan(runId):scriptedDemoPlan(assetsRef.current, prompt, runId));
     const controller = new AbortController(); activeRun.current = controller;
     setSubmittedAssetIds(assetsRef.current.map(asset => asset._id));
     setError(''); setLastPrompt(prompt); setRunning(true); setActivity('Queued for analysis…'); setActivityStartedAt(Date.now());
     setMessages([{ id: `${runId}-request`, role: 'user', text: prompt }, { id: `${runId}-reply`, role: 'assistant', status: 'streaming', text: '' }]);
     store.getState().recover(plan.initial); store.setState({ playhead: 0, playing: false }); store.getState().beginUndoGroup(runId);
+    if (f1Plan) {
+      const width = root.current?.querySelector<HTMLElement>('.timeline-scroll')?.clientWidth ?? 720;
+      store.setState({ zoom: Math.min(1, Math.max(.03, (width - 24) / (TIMELINE_BASE_PX * 90))) });
+      setDemoPhase('queued');
+    }
     let current = plan.initial;
     const opening = preparedTake ? plan.steps[0].reply : 'I’ll build a short sequence with cuts, captions, and subtle effects.';
     const details = plan.steps.find(step => step.clips.some(clip => clip.kind === 'caption' || clip.kind === 'graphic'))?.reply;
@@ -118,20 +127,33 @@ export function ScriptedDemoEditor({ demoId }: { demoId: string }) {
       await waitForDemoStep(450, controller.signal);
       if (media.assets.some(asset => asset.kind === 'video' || asset.kind === 'image')) {
         setActivity('Watching footage…'); setActivityStartedAt(Date.now());
+        if (f1Plan) setDemoPhase('watching');
         await waitForDemoStep(1750, controller.signal);
       }
       if (media.assets.some(asset => asset.kind === 'audio' || asset.audioAssetId || asset.waveform)) {
         setActivity('Listening to your footage…'); setActivityStartedAt(Date.now());
+        if (f1Plan) setDemoPhase('listening');
         await waitForDemoStep(1450, controller.signal);
       }
       setActivity('Applying edits…'); setActivityStartedAt(Date.now());
+      if (f1Plan && root.current) {
+        setActivity('Trimming…');
+        await animateDemoCutPreview(root.current, f1Plan.cutPreview, controller.signal, () => {
+          current = f1Plan.cutPreview.timeline;
+          store.getState().edit(current);
+        }, phase => setDemoPhase(phase === 'planned' ? 'trimming' : phase === 'closing' ? 'closing-gap' : 'arranging'));
+      }
       const buildTimeline = (async () => {
         await waitForDemoStep(800, controller.signal);
         let narrated = false;
         for (const step of plan.steps) {
           controller.signal.throwIfAborted();
-          current = { ...current, clips: [...current.clips, ...step.clips] };
-          store.getState().edit(current); setActivity(step.label);
+          if (step.clips.length) {
+            current = { ...current, clips: [...current.clips, ...step.clips] };
+            store.getState().edit(current);
+          }
+          setActivity(step.label);
+          if (f1Plan) setDemoPhase(step.clips.some(clip => clip.kind === 'graphic') ? 'adding-text' : step.clips.some(clip => clip.kind === 'effect') ? 'adding-effects' : 'arranging');
           if (step.previewTime !== undefined) {
             // This recording route previews its authored title/FX pose. Updating
             // the shared clock alone does not seek the native player.
@@ -155,10 +177,13 @@ export function ScriptedDemoEditor({ demoId }: { demoId: string }) {
         await waitForDemoStep(350, controller.signal);
         await narrate(plan.summary, '\n\n');
       })()]);
+      if (f1Plan) { setDemoPhase('saving'); setActivity('Saving your edit…'); await waitForDemoStep(650, controller.signal); }
       setMessages(previous => previous.map(message => message.id === `${runId}-reply` ? { ...message, status: 'success' } : message));
+      if (f1Plan) setDemoPhase('ready');
     } catch (error) {
       if (!controller.signal.aborted && mounted.current) setError(userError(error, 'The edit stopped. Reset and try again.'));
       controller.abort();
+      if (f1Plan && mounted.current && activeRun.current === controller) setDemoPhase('stopped');
       if (mounted.current && activeRun.current === controller) setMessages(previous => previous.map(message => message.id === `${runId}-reply` ? { ...message, status: 'aborted', text: `${message.text.trimEnd()}${message.text.trim() ? '\n\n' : ''}Stopped. The blocks already placed remain editable.` } : message));
     } finally {
       if (activeRun.current === controller) {
@@ -177,7 +202,7 @@ export function ScriptedDemoEditor({ demoId }: { demoId: string }) {
     <DemoConversation chatStore={conversation} running={running} configured demo={false} hasClips={!!assets.length} onSend={build} onStop={async () => { activeRun.current?.abort(); }} onAttach={() => input.current?.click()} attachments={attachments} onRemoveAttachment={removeAttachment} requireMedia={!assets.length || attachments.length > 0 || importing} activity={importing ? 'Reading local footage…' : activity} activityStartedAt={activityStartedAt} activitySource={(media.assets.find(asset => asset.kind === 'video') ?? media.assets.find(asset => asset.kind === 'audio'))?.fileName} error={error}/>
   </div>;
   function change(next: Timeline) { if (!activeRun.current) { store.getState().edit(next); setError(''); } }
-  return <div className="scripted-editor-demo" data-demo-id={demoId} data-building={running || undefined}>
+  return <div ref={root} className="scripted-editor-demo" data-demo-id={demoId} data-demo-edit-phase={f1Take ? demoPhase : undefined} data-building={running || undefined}>
     <input ref={input} data-demo-files type="file" hidden multiple accept="video/*,image/*,audio/*" onChange={event => { const files = Array.from(event.currentTarget.files ?? []); event.currentTarget.value = ''; void attach(files).catch(error => setError(userError(error))); }}/>
     <EditorStateProvider store={store}><EditorShell onPreviewReady={onPreviewReady} onRegisterStockAudio={async catalogId=>{if(activeRun.current)throw new Error('Finish or stop the edit before adding a sound.');const asset=stockAudioAsset(catalogId);setStockAssets(previous=>previous.some(item=>item._id===asset._id)?previous:[...previous,asset]);return asset;}} title={title} onTitle={setTitle} timeline={timeline} assets={media.assets} onChange={change} saving={false} upload={null} error={error} onError={setError} demo assistantPanel={chat}
       onUndo={() => { if (!activeRun.current) store.getState().undo(); }} onRedo={() => { if (!activeRun.current) store.getState().redo(); }} canUndo={!running && !!history.length} canRedo={!running && !!future.length}

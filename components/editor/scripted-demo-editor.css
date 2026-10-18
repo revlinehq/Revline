@@ -11,3 +11,15 @@
 .scripted-editor-demo .composer-attachments{padding-top:8px}
 @keyframes demo-block-arrive{from{opacity:0;transform:translateY(5px);filter:blur(1.5px)}to{opacity:1;transform:none;filter:none}}
 @media(prefers-reduced-motion:reduce){.scripted-editor-demo[data-building] .timeline-clip{animation:none}}
+.scripted-editor-demo .demo-cut-preview{position:absolute;inset:0;z-index:8;pointer-events:none;overflow:hidden}
+.scripted-editor-demo .demo-cut-copy{position:absolute;pointer-events:none;will-change:transform,opacity}
+.scripted-editor-demo .demo-cut-shade{position:absolute;box-sizing:border-box;border:1px solid #b7a1ffb3;border-radius:var(--timeline-clip-radius,6px);background:#9b78ff45;box-shadow:inset 0 0 16px #9b78ff22;pointer-events:none}
+.scripted-editor-demo .demo-cut-shade::before,.scripted-editor-demo .demo-cut-shade::after{content:"";position:absolute;top:5px;bottom:5px;width:1px;background:#d3c4ffcf}
+.scripted-editor-demo .demo-cut-shade::before{left:3px}.scripted-editor-demo .demo-cut-shade::after{right:3px}
+.scripted-editor-demo .demo-cut-old-position{position:absolute;box-sizing:border-box;border:1px dashed #aaa2ba40;border-radius:var(--timeline-clip-radius,6px);pointer-events:none}
+.scripted-editor-demo .demo-cut-label{position:absolute;font-size:10px;line-height:16px;font-weight:400;color:var(--ws-muted);white-space:nowrap;pointer-events:none}
+.scripted-editor-demo[data-demo-edit-phase=watching] .timeline-clip.clip-video::before{content:"";position:absolute;inset:0;z-index:2;pointer-events:none;background:linear-gradient(100deg,transparent,#b69aff35,transparent);animation:demo-inspection-pass 1.7s ease-in-out both}
+.scripted-editor-demo[data-demo-edit-phase=listening] .audio-waveform{animation:demo-listening-pass 1.4s ease-in-out both}
+@keyframes demo-inspection-pass{from{transform:translateX(-100%);opacity:0}35%{opacity:1}to{transform:translateX(100%);opacity:0}}
+@keyframes demo-listening-pass{0%,100%{opacity:.65}50%{opacity:1}}
+@media(prefers-reduced-motion:reduce){.scripted-editor-demo[data-demo-edit-phase] .timeline-clip::before,.scripted-editor-demo[data-demo-edit-phase] .audio-waveform{animation:none}}

@@ -1,6 +1,6 @@
 import waveform from './f1-recording-waveform.json';
 import { EMPTY_SCRIPTED_DEMO, type DemoBuildStep } from './scripted-demo';
-import { normalizeTimeline, type Clip, type MediaAsset } from './types';
+import { normalizeTimeline, type Clip, type MediaAsset, type Timeline } from './types';
 import { DEFAULT_TEXT_APPEARANCE } from './text-style';
 import { flashKeyframes, punchKeyframes } from './motion-effect-settings';
 
@@ -16,9 +16,21 @@ export const F1_RECORDING_ASSETS: MediaAsset[] = [
   },
 ];
 
-/** Adds editable titles and timed accents without changing the prepared footage or sound. */
+export type DemoCutPreviewPlan = { start: number; end: number; removedClipIds: string[]; movingClipIds: string[]; timeline: Timeline };
+
+/** Authored demo only: cut seven source seconds, then add editable text and accents. */
 export function f1RecordingDemoPlan(runId: string) {
-  const initial = { ...EMPTY_SCRIPTED_DEMO, tracks: { visual: 2, overlay: 0, audio: 1, effects: 1 } };
+  const base = { ...EMPTY_SCRIPTED_DEMO, tracks: { visual: 2, overlay: 0, audio: 1, effects: 1 } };
+  const cutStart = 6, cutEnd = 13;
+  const editedTime = (sourceTime: number) => sourceTime >= cutEnd ? sourceTime - (cutEnd - cutStart) : sourceTime;
+  const pair = (index: number, sourceStart: number, duration: number, start: number): Clip[] => {
+    const id = `${runId}-section-${index}`, audioId = `${id}-audio`;
+    return [
+      { id, kind: 'video', assetId: 'f1-recording-video', track: 1, start, duration, sourceStart, volume: 0, audioSeparated: true, linkedClipId: audioId },
+      { id: audioId, kind: 'audio', assetId: 'f1-recording-audio', track: 1, start, duration, sourceStart, volume: 1, linkedClipId: id },
+    ];
+  };
+  const initial = normalizeTimeline({ ...base, clips: [...pair(0, 0, cutStart, 0), ...pair(1, cutStart, cutEnd-cutStart, cutStart), ...pair(2, cutEnd, 89-cutEnd, cutEnd)] });
   const boundaries = [0, 6, 13, 21, 29, 36, 44, 52, 60, 68, 75, 82, 89];
   const titles: Clip[] = [
     { start: 0, duration: 3.2, text: 'LIGHTS OUT', fontSize: 118 },
@@ -39,34 +51,25 @@ export function f1RecordingDemoPlan(runId: string) {
     const duration = .2, flash = { strength: .12, attack: .15, release: .7 };
     return { id: `${runId}-flash-${index}`, kind: 'effect', effectPreset: 'flash', track: 1, start, duration, sourceStart: 0, flash, motion: flashKeyframes(duration, flash) };
   });
-  const steps: DemoBuildStep[] = [];
+  const compactClips: Clip[] = [];
+  const steps: DemoBuildStep[] = [{ clips: [], label: 'Arranging the remaining clips', reply: 'The gap is closed. I’ll add bold titles and short visual accents around the remaining sequence.', delayMs: 650, narrate: true }];
   boundaries.slice(0, -1).forEach((start, index) => {
     const duration = boundaries[index + 1] - start;
-    const id = `${runId}-section-${index}`, audioId = `${id}-audio`;
-    const video: Clip = {
-      id, kind: 'video', assetId: 'f1-recording-video', track: 1,
-      start, duration, sourceStart: start, volume: 0, audioSeparated: true, linkedClipId: audioId,
-    };
-    const audio: Clip = {
-      id: audioId, kind: 'audio', assetId: 'f1-recording-audio', track: 1,
-      start, duration, sourceStart: start, volume: 1, linkedClipId: id,
-    };
-    steps.push({
-      clips: [video, audio], label: `Placing section ${index + 1} of 12`,
-      reply: index === 0 ? 'I’ll build the F1 sequence, then layer in bold titles and short visual accents.' : `Arranging the F1 sequence. ${index + 1} of 12 sections placed.`,
-      delayMs: 320, ...(index === 0 ? { narrate: true } : {}),
-    });
+    if (start === cutStart) return;
+    compactClips.push(...pair(index, start, duration, editedTime(start)));
     const text = titles.filter(clip => clip.start >= start && clip.start < start + duration);
-    if (text.length) steps.push({ clips: text, label: index === 0 ? 'Adding the opening title' : 'Adding animated text',
+    if (text.length) steps.push({ clips: text.map(clip => ({ ...clip, start: editedTime(clip.start) })), label: index === 0 ? 'Adding the opening title' : 'Adding animated text',
       reply: 'Adding five animated title cards on a separate, editable text layer.', delayMs: 520,
       ...(index === 0 ? { narrate: true, previewTime: .6 } : {}),
     });
     const effects = [...punches, ...flashes].filter(clip => clip.start >= start && clip.start < start + duration).sort((a, b) => a.start - b.start);
-    if (effects.length) steps.push({ clips: effects, label: effects[0].effectPreset === 'flash' ? 'Adding a short flash accent' : 'Adding a subtle punch-in',
+    if (effects.length) steps.push({ clips: effects.map(clip => ({ ...clip, start: editedTime(clip.start) })), label: effects[0].effectPreset === 'flash' ? 'Adding a short flash accent' : 'Adding a subtle punch-in',
       reply: 'Placing four subtle punch-ins and four short flashes on the effects track.', delayMs: 520,
       ...(index === 0 ? { narrate: true } : {}),
     });
   });
-  const timeline = normalizeTimeline({ ...initial, clips: steps.flatMap(step => step.clips) });
-  return { initial, steps, timeline, assets: F1_RECORDING_ASSETS, summary: 'Five animated titles and eight short effects are ready. The full F1 footage and original sound are preserved. Press play.' };
+  const compact = normalizeTimeline({ ...base, clips: compactClips });
+  const cutPreview: DemoCutPreviewPlan = { start: cutStart, end: cutEnd, removedClipIds: pair(1, cutStart, cutEnd-cutStart, cutStart).map(clip => clip.id), movingClipIds: pair(2, cutEnd, 89-cutEnd, cutEnd).map(clip => clip.id), timeline: compact };
+  const timeline = normalizeTimeline({ ...compact, clips: [...compact.clips, ...steps.flatMap(step => step.clips)] });
+  return { initial, cutPreview, steps, timeline, assets: F1_RECORDING_ASSETS, summary: 'Seven seconds removed, with five animated titles and eight short effects. The retained footage and original sound stay in sync. Press play.' };
 }
