@@ -31,17 +31,19 @@ function DevelopmentZoomControls({ clip, asset, aspectRatio, fps, disabled = fal
   useEffect(() => { setSettings(initialSettings(clip)); setReplace(false); setError(''); }, [clip.id, clip.smoothZoom, clip.motionOffset, clip.duration]);
   const previewCallback = useRef(onPreview); previewCallback.current = onPreview;
   useEffect(() => () => previewCallback.current?.(null), []);
+  useEffect(() => { if (disabled) previewCallback.current?.(null); }, [disabled]);
   const changedOrigin = !!clip.smoothZoom && !!clip.motionOffset;
   const custom = !!clip.motion?.length && !clip.smoothZoom;
   const finish = settings.start + settings.inDuration + (settings.outDuration > 0 ? settings.holdDuration + settings.outDuration : 0);
   const ratio = Math.max(clip.duration, finish, 1 / fps);
   const positions = [settings.start, settings.start + settings.inDuration, ...(settings.outDuration > 0 ? [settings.start + settings.inDuration + settings.holdDuration, finish] : [])];
   function preview(changes: Partial<SmoothZoomSettings> | null) {
-    if (!changes) { onPreview?.(null); return; }
+    if (!changes || disabled) { onPreview?.(null); return; }
     try { onPreview?.(smoothZoomPatch(clip, asset, aspectRatio, { ...settings, ...changes }, { replace })); }
     catch { onPreview?.(null); }
   }
   function apply() {
+    if (disabled) return;
     try { const patch = smoothZoomPatch(clip, asset, aspectRatio, settings, { replace }); onChange(patch); onPreview?.(null); setError(''); }
     catch (cause) { setError(cause instanceof Error ? cause.message : 'The zoom could not be applied.'); }
   }

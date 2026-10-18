@@ -1,7 +1,8 @@
 'use client';
 
 import { ChevronDown, Crop, Film, Image as ImageIcon } from 'lucide-react';
-import type { Clip, MediaAsset } from '@/lib/editor/types';
+import type { AspectRatio, Clip, MediaAsset } from '@/lib/editor/types';
+import { SmoothZoomControls } from './smooth-zoom-controls';
 import { NumberControl } from './visual-controls';
 import { PlaybackSpeedControls } from './visual-effects-controls';
 import { EffectSlider } from './effect-slider';
@@ -19,9 +20,10 @@ export function FootageSelection({ clip, asset }: { clip: Clip; asset?: MediaAss
   </div>;
 }
 
-export function FootageSettings({ clip, audioClip, asset, fps = 30, onChange, onPreview, onPlaybackRateChange, onCrop, cropping }: {
+export function FootageSettings({ clip, audioClip, asset, aspectRatio, readOnly = false, fps = 30, onChange, onPreview, onPlaybackRateChange, onCrop, cropping }: {
   clip: Clip; audioClip?: Clip; asset?: MediaAsset; onChange: (patch: Partial<Clip>) => void;
   fps?: number; onPreview?: (patch:Partial<Clip>|null)=>void;
+  aspectRatio?: AspectRatio; readOnly?: boolean;
   onPlaybackRateChange?: (rate: number) => void; onCrop: () => void; cropping: boolean;
 }) {
   const hasVolume = clip.kind === 'video' && (!clip.audioSeparated || !!audioClip);
@@ -37,6 +39,7 @@ export function FootageSettings({ clip, audioClip, asset, fps = 30, onChange, on
       </div>
       {cropping && <p className="footage-crop-note">Drag the edges in the preview. Escape cancels.</p>}
     </section>
+    {process.env.NODE_ENV !== 'production' && asset?.width && asset.height && aspectRatio ? <SmoothZoomControls clip={clip} asset={asset} aspectRatio={aspectRatio} fps={fps} disabled={cropping || readOnly} onChange={onChange} onPreview={onPreview}/> : null}
     {(hasSpeed || hasVolume) && <details className="footage-disclosure footage-playback" aria-label="Playback">
       <summary><span>Playback</span><ChevronDown size={12}/></summary>
       <div className="footage-settings-section">
