@@ -30,7 +30,7 @@
   },
   "routes": [
     {
-      "pattern": "cf-preview.tryrevline.com",
+      "pattern": "preview.tryrevline.com",
       "custom_domain": true
     }
   ]
