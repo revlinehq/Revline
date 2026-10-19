@@ -110,7 +110,7 @@ export const renderFields = {
   ownerId: v.string(), projectId: v.id("projects"),
   status: v.union(v.literal("queued"), v.literal("rendering"), v.literal("completed"), v.literal("failed"), v.literal("cancelled")),
   outputStorageId: v.optional(v.id("_storage")), outputR2Key: v.optional(v.string()), outputSize: v.optional(v.number()), error: v.optional(v.string()), createdAt: v.number(), updatedAt: v.number(),
-  sourceRevision:v.optional(v.number()), timeline: v.optional(timelineValidator), resolution: v.optional(v.number()), fps: v.optional(v.number()), quality: v.optional(v.string()),
+  sourceRevision:v.optional(v.number()), sourceClipId:v.optional(v.string()), timeline: v.optional(timelineValidator), resolution: v.optional(v.number()), fps: v.optional(v.number()), quality: v.optional(v.string()),
   progress: v.optional(v.number()), assetIds: v.optional(v.array(v.id("assets"))), taskId: v.optional(v.id('mediaTasks')),
 };
 export const renderDocument = v.object({ _id: v.id("renderJobs"), _creationTime: v.number(), ...renderFields, url: v.union(v.string(), v.null()) });

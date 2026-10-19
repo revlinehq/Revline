@@ -72,7 +72,7 @@ function AssistantResponseText({ text, streaming }: { text: string; streaming: b
   return <ChatProse text={text} animate={receivedLive || streaming} />;
 }
 
-function AssistantPanelBody({ messages, running, editing:editingTimeline=running, configured, error, onSend, onRetry, onStop, hasClips, demo, onLoadMore, canLoadMore, onAttach, activity, activitySource, activityStartedAt, draftKey, suggestions, onSuggestion, editSnapshot, defaultModelChoice, modelSwitcher = false, allowedModels = PRODUCTION_CLAUDE_MODEL_CHOICES, attachments, onRemoveAttachment, composerBusy = false, requireMedia = false, conversationStarted = false }: {
+function AssistantPanelBody({ messages, running, editing:editingTimeline=running, configured, error, onSend, onRetry, onStop, hasClips, demo, onLoadMore, canLoadMore, onAttach, activity, activitySource, activityStartedAt, draftKey, suggestions, onSuggestion, editSnapshot, canResumeEdit=false, defaultModelChoice, modelSwitcher = false, allowedModels = PRODUCTION_CLAUDE_MODEL_CHOICES, attachments, onRemoveAttachment, composerBusy = false, requireMedia = false, conversationStarted = false }: {
   messages: ChatMessage[]; running: boolean; editing?:boolean; configured: boolean; error?: string | null;
   modelSwitcher?: boolean;
   defaultModelChoice?:ClaudeModelChoice;
@@ -86,6 +86,7 @@ function AssistantPanelBody({ messages, running, editing:editingTimeline=running
   onStop?: () => Promise<void>;
   suggestions?: { sourceName:string;clipId:string;items:SourceEditSuggestion[] };
   onSuggestion?: (prompt:string,clipId:string,modelChoice?:ClaudeModelChoice,reasoningEffort?:OpenAIReasoningEffort,speedMode?:OpenAISpeedMode) => Promise<void>;
+  canResumeEdit?:boolean;
   editSnapshot?:AssistantEditSnapshot;
 }) {
   const [prompt, setPrompt] = useState('');
@@ -194,13 +195,14 @@ function AssistantPanelBody({ messages, running, editing:editingTimeline=running
             </article>)}
             {cards.length > 0 && <div className="assistant-result-cards" aria-label="Edit results">{cards.filter(card=>!(card.state==='running'&&(editing||(group.id===turnId&&stopState==='stopped')))).map(card => <div key={card.key} className={`assistant-result-card result-${card.state}${card.staged ? ' result-prepared' : ''}`}>
               <AssistantActivity label={card.title} detail={card.detail} state={card.state==='running'?'working':card.state==='error'?'error':'ready'}/>
-              {card.key==='turn-failure' && group.id===turnId && requestMessage?.text.trim() && !demo && onRetry && <button type="button" className="assistant-retry" disabled={waiting || composerBusy || !configured} onClick={() => void sendRequest(requestMessage.text, true)}><RotateCcw size={13} aria-hidden="true"/>Retry</button>}
+              {!canResumeEdit&&card.key==='turn-failure' && group.id===turnId && requestMessage?.text.trim() && !demo && onRetry && <button type="button" className="assistant-retry" disabled={waiting || composerBusy || !configured} onClick={() => void sendRequest(requestMessage.text, true)}><RotateCcw size={13} aria-hidden="true"/>Retry</button>}
             </div>)}</div>}
           </div>}
         </div>;
       })}
       {!groups.length && waiting && <div className="assistant-reply"><AssistantReplyHeader loading label={stopState==='stopping'?'Stopping…':activity || replyLabel} detail={processingDetail(activity,activitySource)} startedAt={activityStartedAt}/></div>}
-      {!waiting && stopState==='stopped' && <AssistantActivity label="Stopped." detail="Your existing edit is still here." state="stopped"/>}
+      {canResumeEdit&&!waiting&&!demo&&onRetry&&<div data-chat-follow><button type="button" className="assistant-retry" disabled={composerBusy||!configured||sending||!!pendingReply} onClick={()=>void sendRequest('Finish only the remaining work from my unfinished editing request. Keep the edits already completed.',true)}><RotateCcw size={13} aria-hidden="true"/>Finish remaining edits</button></div>}
+      {!waiting && stopState==='stopped'  && <AssistantActivity label="Stopped." detail="Your existing edit is still here." state="stopped"/>}
       {showSuggestions && suggestions?.items.length && onSuggestion && configured ? <div data-chat-follow className="assistant-source-suggestions" aria-label="Suggested edits from this footage"><span title={suggestions.sourceName}>Ideas for {suggestions.sourceName}</span>{suggestions.items.map((suggestion, index) => <button key={`${suggestions.clipId}-${index}`} type="button" disabled={composerBusy || sending || !!pendingReply} onClick={() => void chooseSuggestion(suggestion)}><span>{suggestion.label}</span><ArrowUpRight size={14} aria-hidden="true" /></button>)}</div> : null}
       {visibleError && <div data-chat-follow><AssistantActivity className="chat-error" label="Needs attention" detail={assistantErrorDetail(visibleError)} state="error"/></div>}
       {!!messages.length && !demo && !configured && <div className="assistant-demo-note">Connect OpenAI to edit in conversation. Your footage, preview, and timeline are ready.</div>}

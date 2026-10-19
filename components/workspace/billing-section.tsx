@@ -1,5 +1,4 @@
 'use client';
-import { NEW_PROJECT_PATH } from '@/lib/workspace-routes';
 import { userError } from '@/lib/user-error';
 
 import { useRef, useState } from 'react';
@@ -52,7 +51,7 @@ export function BillingSection({ checkoutReturn }: { checkoutReturn?: CheckoutRe
         {!active && !status.complimentary && <p className="workspace-billing-notice">Membership is coming soon. No payment is required.</p>}
         <p className="workspace-membership-description">{status.complimentary ? 'Your membership includes full editor access. No payment method is required.' : status.subscribed ? 'Manage your subscription, payment method, and invoices securely through Stripe.' : status.trialEligible ? `Try it free for ${EDITOR_PLAN.trialDays} days, then $${EDITOR_PLAN.monthlyPrice}/month. Cancel anytime.` : `$${EDITOR_PLAN.monthlyPrice}/month. Cancel anytime. Your free trial has already been used.`}</p>
         <ul className="workspace-billing-features">{features.map(feature => <li key={feature}><Check size={13} />{feature}</li>)}</ul>
-        <div>{!status.complimentary && <PrimaryButton size="compact" disabled={!active || busy} onClick={() => void openBilling()}>{busy && <LoaderCircle size={14} className="animate-spin" />}{!active ? 'Coming soon' : status.subscribed || status.needsPayment ? 'Manage subscription' : status.trialEligible ? `Start ${EDITOR_PLAN.trialDays}-day free trial` : 'Subscribe'}</PrimaryButton>}{(status.subscribed || status.complimentary) && <Link className="workspace-outline-button" href={NEW_PROJECT_PATH}>Start editing</Link>}</div>
+        <div>{!status.complimentary && <PrimaryButton size="compact" disabled={!active || busy} onClick={() => void openBilling()}>{busy && <LoaderCircle size={14} className="animate-spin" />}{!active ? 'Coming soon' : status.subscribed || status.needsPayment ? 'Manage subscription' : status.trialEligible ? `Start ${EDITOR_PLAN.trialDays}-day free trial` : 'Subscribe'}</PrimaryButton>}</div>
         {active && !status.subscribed && !status.complimentary && status.trialEligible && <p className="workspace-billing-trial-note">A payment method is required. Your first charge follows the trial unless you cancel.</p>}
         {error && <p className="workspace-inline-error" role="alert">{error}</p>}
       </>}

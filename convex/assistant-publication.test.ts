@@ -3,6 +3,7 @@ import { writeProject } from './lib/project_data';
 import {afterEach,beforeEach,expect,test,vi} from 'vitest';
 import {convexTest} from 'convex-test';
 import agentTest from '@convex-dev/agent/test';
+import workflowTest from '@convex-dev/workflow/test';
 import {createThread,saveMessages} from '@convex-dev/agent';
 import {api,components,internal} from './_generated/api';
 import schema from './schema';
@@ -139,4 +140,28 @@ test('a stale preview is hidden after a revision change and a published edit rem
   expect(await x.owner.query(api.assistant.livePreview,{projectId:x.projectId})).toBeNull();
   await x.owner.mutation(api.projects.undo,{projectId:x.projectId});
   expect((await x.read()).timeline).toEqual(original);
+});
+
+test('finishing footage analysis keeps tracks locked through planning until the run finishes',async()=>{
+  const x=await setup();workflowTest.register(x.t);
+  const assetId=await x.t.run(ctx=>ctx.db.insert('assets',{ownerId:'owner',projectId:x.projectId,kind:'video',fileName:'Source.mp4',contentType:'video/mp4',size:1,duration:10,createdAt:Date.now()}));
+  const requestId=await x.t.mutation(internal.assistant.requestAnalysis,{...x.run,assetId,mode:'understand'});
+  expect((await x.owner.query(api.assistant.status,{projectId:x.projectId})).workflowActive).toBe(true);
+  await x.t.mutation(internal.assistant.clearAnalysis,{...x.run,requestId});
+  expect((await x.owner.query(api.assistant.status,{projectId:x.projectId})).workflowActive).toBe(true);
+  expect((await x.read()).timeline).toEqual(original);
+  await expect(x.owner.mutation(api.projects.saveTimeline,{projectId:x.projectId,expectedRevision:0,timeline:{...original,clips:original.clips.map(clip=>({...clip,duration:2}))}})).rejects.toThrow();
+  await x.t.mutation(internal.assistant.finish,x.run);
+  expect((await x.owner.query(api.assistant.status,{projectId:x.projectId})).workflowActive).toBe(false);
+});
+
+test('answering a follow-up question preserves the unfinished edit for a later continue button',async()=>{
+  const x=await setup();
+  const recovery={requests:['Trim pauses and add subtitles'],runId:'previous-run',revision:0,savedEdits:1,status:'failed' as const,reason:'Time limit',updatedAt:Date.now()};
+  await x.t.run(ctx=>writeProject(ctx,x.projectId,{aiRecovery:recovery,aiEditing:false,aiUndoRecorded:false}));
+  await x.t.mutation(internal.assistant.finish,x.run);
+  expect((await x.read()).aiRecovery).toEqual(recovery);
+  await x.t.run(ctx=>writeProject(ctx,x.projectId,{aiRunning:true,aiEditing:true,aiRunId:'run'}));
+  await x.t.mutation(internal.assistant.finish,x.run);
+  expect((await x.read()).aiRecovery).toBeUndefined();
 });

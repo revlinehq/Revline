@@ -43,3 +43,5 @@
 @media(pointer:coarse){.conversation-editor .assistant-content .manual-editor-composer:has(.assistant-speed-picker) .edit-composer-actions{min-height:44px}}
 
 .assistant-model-controls :is(.assistant-reasoning-picker,.assistant-speed-picker) .inspector-select-trigger{padding-inline:3px;gap:2px}
+
+.conversation-editor .assistant-content .chat-assistant,.conversation-editor .assistant-content .chat-assistant :is(p,li,h3){font-size:14px;line-height:1.55}

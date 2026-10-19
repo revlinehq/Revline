@@ -209,7 +209,7 @@ export const finish = internalMutation({ args: { ...runArgs, error: v.optional(v
     await clearLivePreview(ctx,project._id);
     const requests = await ctx.db.query("analysisRequests").withIndex("by_projectId_runId", q => q.eq("projectId", args.projectId).eq("aiRunId", args.runId)).take(16);
     for (const request of requests) await detachAnalysisRequest(ctx,request);
-    await writeProject(ctx,project._id, { aiRunning: false, aiEditing: false, aiError: args.error?.slice(0, 1000), aiRecovery:args.error?assistantRecovery(project,'failed',args.error,args.savedEdits):undefined,aiRequest:undefined });
+    await writeProject(ctx,project._id, { aiRunning: false, aiEditing: false, aiError: args.error?.slice(0, 1000), aiRecovery:args.error?assistantRecovery(project,'failed',args.error,args.savedEdits):project.aiEditing||project.aiUndoRecorded?undefined:project.aiRecovery,aiRequest:undefined });
   }
   return null;
 }});
@@ -228,6 +228,7 @@ export const requestAnalysis = internalMutation({ args: { ...runArgs, assetId: v
     try { validateVideoInspectionInput(args.videoRequest, asset.duration); } catch (error) { throw new ConvexError((error as Error).message); }
   } else if (args.videoRequest) throw new ConvexError('Video questions require a native video inspection.');
   const requests = await ctx.db.query("analysisRequests").withIndex("by_projectId_runId", q => q.eq("projectId", project._id).eq("aiRunId", args.runId)).take(16);
+  if(!project.aiEditing)await writeProject(ctx,project._id,{aiEditing:true});
   const requested = args.mode === 'video' ? args.videoRequest : args.mode === 'frames' ? args.frameRequest : undefined;
   if(requested){
     const repeated=requests.find(request=>{
@@ -249,7 +250,11 @@ export const analysisRequest = internalQuery({ args: { ...runArgs, requestId: v.
 }});
 export const clearAnalysis = internalMutation({ args: { ...runArgs, requestId: v.id("analysisRequests") }, returns: v.null(), handler: async (ctx, args) => {
   const request = await ctx.db.get(args.requestId);
-  if (request?.ownerId === args.ownerId && request.projectId === args.projectId && request.aiRunId === args.runId) await detachAnalysisRequest(ctx,request);
+  if (request?.ownerId === args.ownerId && request.projectId === args.projectId && request.aiRunId === args.runId) {
+    const project=await projectRun(ctx,args.projectId,args.ownerId);
+    if(project.aiRunning&&project.aiRunId===args.runId&&!project.aiEditing)await writeProject(ctx,args.projectId,{aiEditing:true});
+    await detachAnalysisRequest(ctx,request);
+  }
   return null;
 }});
 

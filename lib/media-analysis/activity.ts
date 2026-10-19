@@ -1,7 +1,7 @@
 import type { VideoInspectionDiagnostic } from './video-inspection';
 
 export const MEDIA_ACTIVITY_LABELS = {
-  downloading: 'Downloading footage…',
+  downloading: 'Preparing footage…',
   'preparing-analysis': 'Preparing video…',
   'sending-gemini': 'Preparing footage…',
   'preparing-gemini': 'Preparing video…',

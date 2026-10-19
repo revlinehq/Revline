@@ -1,6 +1,6 @@
 'use client';
 import type { LiveEditChange } from '@/lib/editor/live-edit';
-import { Sparkles, Square } from 'lucide-react';
+import { Download } from 'lucide-react';
 import { userError } from '@/lib/user-error';
 import { STOCK_AUDIO_DRAG_TYPE } from '@/lib/editor/stock-audio-drag';
 import { useState, useRef, useCallback, useLayoutEffect, useEffect, useMemo } from 'react';
@@ -51,7 +51,7 @@ type Props={
   editingLocked?:boolean;
   aiWorking?:boolean;
   liveEdit?:LiveEditChange & {sequence:number;runId:string};
-  onStopAI?:()=>Promise<void>;
+  onExportClip?:(clipId:string)=>void;
 };
 
 function watchCancellation(cancel: () => void) {
@@ -75,8 +75,6 @@ export function TimelinePanel(p:Props){
   const store=useEditorStore();const zoom=useEditorState(s=>s.zoom);const snap=useEditorState(s=>s.snapping);const dense=useEditorState(s=>s.compactTracks);const RULER_HEIGHT=TIMELINE_RULER_HEIGHT;const origin=TIMELINE_ORIGIN;
   const editingDisabled=!!(p.readOnly||p.editingLocked);
   const liveIds=useMemo(()=>new Set(p.liveEdit?.changedClipIds??[]),[p.liveEdit?.changedClipIds]);
-  const [stopping,setStopping]=useState(false);
-  useEffect(()=>{if(!p.aiWorking)setStopping(false);},[p.aiWorking]);
   const editingLock=useRef(editingDisabled);
   const timelineLock=useRef(!!p.editingLocked);
   const onSeek=(at:number)=>{if(!timelineLock.current)p.onSeek(at);};
@@ -602,7 +600,7 @@ export function TimelinePanel(p:Props){
   return <ContextMenu onOpenChange={open=>{if(!open)setContext(null);}}><ContextMenuTrigger asChild disabled={editingDisabled}><section tabIndex={-1} onContextMenu={openContext} data-read-only={p.readOnly||undefined} data-editing-locked={p.editingLocked||undefined} data-ai-working={p.aiWorking||p.editingLocked||undefined} data-live-edit={!!p.liveEdit||undefined} aria-busy={p.aiWorking||p.editingLocked||undefined} className={`timeline-panel custom-timeline ${p.playbackControls?'timeline-with-playback':''} ${p.collapsed?'timeline-collapsed':''} ${dense?'tracks-compact':''}`} aria-label={p.readOnly?'Shared video timeline':'Video timeline'}>
     <div className="timeline-ai-frame" aria-hidden="true"/>
     <TimelinePlayheadClock playing={p.playing} readTime={p.readPlaybackTime} px={px} duration={end} origin={origin} viewport={scroll} head={head} cap={cap} scrubbing={scrubRef} followPausedUntil={followPausedUntil}/>
-    <div className="timeline-toolbar"><div className="timeline-edit-actions">{p.aiWorking&&<div className="timeline-live-status" role="status"><Sparkles size={13}/><span>{p.liveEdit?.label??'Revline is editing'}</span><small>{p.liveEdit?'Live preview':'Working'}</small>{p.onStopAI&&<button type="button" aria-label="Stop AI editing" disabled={stopping} onClick={()=>{setStopping(true);void p.onStopAI!().catch(error=>{setStopping(false);report(error);});}}><Square size={10} fill="currentColor"/>{stopping?'Stopping':'Stop'}</button>}</div>}{!p.playbackControls&&<EditorPlaybackTime className="timeline-playback-time" time={time} duration={end} fps={timeline.fps} playing={p.playing} readTime={p.readPlaybackTime}/>}
+    <div className="timeline-toolbar"><div className="timeline-edit-actions">{!p.playbackControls&&<EditorPlaybackTime className="timeline-playback-time" time={time} duration={end} fps={timeline.fps} playing={p.playing} readTime={p.readPlaybackTime}/>}
       {p.readOnly&&<span>Timeline</span>}
     </div>{p.playbackControls&&<div className="timeline-playback-controls">{p.playbackControls}</div>}<div className="timeline-view-actions">
       {!p.readOnly&&<IconButton label="Unlink video and audio" disabled={editingDisabled||!timeline.clips.find(c=>c.id===selected)?.linkedClipId} onClick={()=>{if(selected)onChange(unlinkClips(timeline,selected));}}><Unlink size={14}/></IconButton>}
@@ -659,6 +657,7 @@ export function TimelinePanel(p:Props){
     </div>
   </section></ContextMenuTrigger>{!p.readOnly&&<>{context&&!p.editingLocked&&<ContextMenuContent aria-label="Timeline actions">
     {contextMarker?<><ContextMenuLabel>{contextMarker.label||'Beat marker'}</ContextMenuLabel><ContextMenuItem disabled={p.editingLocked} onSelect={()=>onSeek(contextMarker.time)}><Flag/>Go to marker</ContextMenuItem><ContextMenuItem disabled={editingDisabled} onSelect={()=>setEditingMarker({id:contextMarker.id,label:contextMarker.label??''})}><Pencil/>Rename marker</ContextMenuItem><ContextMenuItem disabled={editingDisabled} onSelect={()=>onChange(removeTimelineMarker(timeline,contextMarker.id))}><Trash2/>Delete marker</ContextMenuItem></>:<><ContextMenuLabel>{contextClip?isTransitionClip(contextClip)?'Transition':'Clip':context?.track?`${context.group==='effects'?'FX':context.group==='audio'?'A':'V'}${context.track}`:'Timeline'}</ContextMenuLabel>
+    {contextClip&&p.onExportClip&&(contextClip.kind==='video'||contextClip.kind==='image')&&<ContextMenuItem disabled={editingDisabled} onSelect={()=>p.onExportClip?.(contextClip.id)}><Download/>Export this clip</ContextMenuItem>}
     {contextClip&&p.onCopy&&<ContextMenuItem onSelect={p.onCopy}><Copy/>{isTransitionClip(contextClip)?'Copy transition':'Copy'}</ContextMenuItem>}
     {p.onPaste&&<ContextMenuItem disabled={editingDisabled||!p.canPaste} onSelect={()=>p.onPaste?.(contextTime,context?.group==='visual'?context.track:undefined)}><ClipboardPaste/>Paste here</ContextMenuItem>}
     {contextClip&&isTransitionClip(contextClip)?<>

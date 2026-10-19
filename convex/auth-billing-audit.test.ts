@@ -274,3 +274,23 @@ test('checkout and portal accept no client customer, price or entitlement overri
   await expect(f.owner.action(api.billing.createCheckout, { plan: 'pro', priceId: 'price_attacker' } as never)).rejects.toThrow();
   await expect(f.owner.action(api.billing.createPortal, { customerId: 'cus_someone_else' } as never)).rejects.toThrow();
 });
+
+test('clip export queues a separate bounded snapshot while normal export keeps the whole saved timeline',async()=>{
+  const f=await fixture();
+  const timeline={fps:30,aspectRatio:'vertical' as const,clips:[
+    {id:'first',kind:'video' as const,assetId:f.assetId,start:0,duration:1,sourceStart:0},
+    {id:'target',kind:'video' as const,assetId:f.assetId,start:2,duration:1,sourceStart:1},
+  ]};
+  await f.t.run(ctx=>writeProject(ctx,f.projectId,{timeline,revision:4}));
+  const settings={projectId:f.projectId,resolution:720,fps:30,quality:'standard'};
+  await expect(f.other.mutation(api.renders.start,{...settings,clipId:'target'})).rejects.toThrow();
+  await expect(f.owner.mutation(api.renders.start,{...settings,clipId:'missing'})).rejects.toThrow('existing footage');
+  const id=await f.owner.mutation(api.renders.start,{...settings,clipId:'target'});
+  const clipJob=await f.t.run(ctx=>ctx.db.get(id));
+  expect(clipJob).toMatchObject({sourceClipId:'target',sourceRevision:4,timeline:{clips:[{id:'target',start:0,duration:1,sourceStart:1}]}});
+  expect((await f.owner.query(api.projects.get,{projectId:f.projectId})).timeline?.clips).toEqual(timeline.clips);
+  await f.owner.mutation(api.renders.cancel,{jobId:id});
+  const fullId=await f.owner.mutation(api.renders.start,settings);
+  const fullJob=await f.t.run(ctx=>ctx.db.get(fullId));
+  expect(fullJob?.sourceClipId).toBeUndefined();expect(fullJob?.timeline?.clips).toEqual(timeline.clips);
+});

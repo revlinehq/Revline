@@ -54,7 +54,9 @@ test('a provider retry reuses its verified source and prepared analysis video', 
     mocks.downloadOwnedMedia.mockImplementation(async (_url, output) => writeFile(output, Buffer.alloc(20_000_000)));
     mocks.inspectVideo.mockRejectedValueOnce(new AnalysisError('Gemini timed out.', 504)).mockResolvedValueOnce({ ...task.videoRequest, summary: 'The turn is visible.', uncertainty: '', matches: [] });
     await expect(processMediaTask(task, {} as ConvexHttpClient, 'https://fixture.convex.cloud', signal, () => {})).rejects.toThrow('Gemini timed out');
-    await processMediaTask({ ...task, leaseToken: 'retry-lease' }, {} as ConvexHttpClient, 'https://fixture.convex.cloud', signal, () => {});
+    const cachedActivity=vi.fn();
+    await processMediaTask({ ...task, leaseToken: 'retry-lease' }, {} as ConvexHttpClient, 'https://fixture.convex.cloud', signal, () => {},cachedActivity);
+    expect(cachedActivity.mock.calls.map(([phase])=>phase)).not.toContain('downloading');
     expect(mocks.downloadOwnedMedia).toHaveBeenCalledOnce();
     expect(mocks.prepareVideo).toHaveBeenCalledOnce();
     expect(mocks.inspectVideo).toHaveBeenCalledTimes(2);

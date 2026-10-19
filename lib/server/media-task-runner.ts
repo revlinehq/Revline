@@ -86,10 +86,9 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
     if (!sourceAsset.url) throw new AnalysisError('The prepared source media is unavailable.', 400);
     const source = join(directory, 'source'), sourceUrl = sourceAsset.url;
     const cacheIdentity = mediaSourceCacheIdentity(convexUrl, task.projectId, sourceAsset);
-    onActivity?.('downloading');
     const downloadStartedAt = Date.now();
     let loggedPercent = 0, loggedAt = downloadStartedAt;
-    const reusedSource = await reuseMediaFile({ identity: cacheIdentity, variant: 'source-v1', target: source, signal, expectedBytes: sourceAsset.size }, () => runPhase('Downloading source', () => downloadOwnedMedia(sourceUrl, source, new URL(convexUrl).origin, sourceAsset.size, signal, {
+    const reusedSource = await reuseMediaFile({ identity: cacheIdentity, variant: 'source-v1', target: source, signal, expectedBytes: sourceAsset.size }, () => {onActivity?.('downloading');return runPhase('Downloading source', () => downloadOwnedMedia(sourceUrl, source, new URL(convexUrl).origin, sourceAsset.size, signal, {
       concurrency: task.kind === 'extract' ? 3 : 1,
       onProgress: (bytes, total) => {
         const percent = Math.floor(bytes / total * 100), now = Date.now();
@@ -101,7 +100,7 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
         logPhase('Downloading source', `${percent}%`, downloadStartedAt, `${(bytes / 1048576).toFixed(1)}/${(total / 1048576).toFixed(1)} MiB${measured}`);
         loggedPercent = percent; loggedAt = now;
       },
-    })));
+    }));});
     if (reusedSource) logPhase('Source cache', 'reused', downloadStartedAt);
     onProgress(task.kind === 'extract' ? 45 : 10);
     if (task.kind === 'extract') {
@@ -130,8 +129,10 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
       if (!media.hasVideo || !task.frameRequest) throw new AnalysisError('Frame inspection needs a video window and a question.', 400);
       const key = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
       if (!key) throw new AnalysisError('Gemini frame inspection is not configured on the media worker.', 503);
+      onActivity?.('preparing-analysis');
       const { sourceFps, images,geometry } = await extractInspectionFrames(source, directory, task.frameRequest, media.duration, signal);
       onProgress(60);
+      onActivity?.('analyzing');
       return { frameInspection: await runPhase('Inspecting frames',()=>inspectVideoFrames(images, sourceFps, task.frameRequest!, key, signal,geometry)) };
     }
     if (task.kind === 'transcribe') {

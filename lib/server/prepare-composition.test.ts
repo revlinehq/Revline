@@ -40,3 +40,23 @@ it('omits silent video from native export audio without muting embedded or separ
     expect(timeline).toEqual(before);
   }finally{await rm(directory,{recursive:true,force:true});}
 },15000);
+
+it('exports a clip section at zero with its overlapping sound, text and original animation phase',async()=>{
+  const {clipExportTimeline}=await import('../editor/clip-export');
+  const timeline:Timeline={fps:30,aspectRatio:'landscape',clips:[
+    {id:'before',kind:'video',assetId:'video',start:0,duration:4,sourceStart:0},
+    {id:'selected',kind:'video',assetId:'video',start:4,duration:3,sourceStart:6,playbackRate:2,linkedClipId:'sound',audioSeparated:true},
+    {id:'sound',kind:'audio',assetId:'sound',start:4,duration:3,sourceStart:6,playbackRate:2,linkedClipId:'selected'},
+    {id:'music',kind:'audio',assetId:'music',track:2,start:0,duration:10,sourceStart:1,playbackRate:.5,audio:{role:'music',fadeIn:2,fadeOut:2,ducking:{enabled:false,amount:.65,attack:.12,release:.25}}},
+    {id:'text',kind:'caption',text:'Keep this',track:2,start:3,duration:5,sourceStart:0,motion:[{time:0,x:0,y:0,scale:1,rotation:0,opacity:1,brightness:1},{time:5,x:1,y:0,scale:1,rotation:0,opacity:1,brightness:1}]},
+    {id:'after',kind:'video',assetId:'video',start:7,duration:2,sourceStart:12},
+  ],markers:[{id:'inside',time:5},{id:'outside',time:8}]};
+  const before=structuredClone(timeline),result=clipExportTimeline(timeline,'selected');
+  expect(result.clips.find(clip=>clip.id==='selected')).toMatchObject({start:0,duration:3,sourceStart:6,playbackRate:2});
+  expect(result.clips.find(clip=>clip.id==='sound')).toMatchObject({start:0,duration:3,sourceStart:6,linkedClipId:'selected'});
+  expect(result.clips.find(clip=>clip.id==='music')).toMatchObject({start:0,duration:3,sourceStart:3,audioFadeTiming:{duration:10,offset:4}});
+  expect(result.clips.find(clip=>clip.id==='text')).toMatchObject({start:0,duration:3,motionOffset:1});
+  expect(result.clips.map(clip=>clip.id)).toEqual(['selected','sound','music','text']);
+  expect(result.markers).toEqual([{id:'inside',time:1}]);expect(timeline).toEqual(before);
+  expect(()=>clipExportTimeline(timeline,'missing')).toThrow('existing footage');
+});
