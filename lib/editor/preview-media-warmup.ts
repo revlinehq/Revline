@@ -11,6 +11,12 @@ export function warmPreviewMedia(document: Document, readTime: () => number): ()
   function tick() {
     if (stopped) return;
     const time = readTime();
+    // The player can promote every metadata probe to auto before readiness.
+    // Cold distant video requests then compete with the active range seek.
+    // Cancel only those not-yet-decoded future loads; retain buffered decoders.
+    for(const node of media)if(node.tagName==='VIDEO'&&node.isConnected&&node.paused&&node.readyState===0&&Number(node.dataset.start)-time>6&&node.preload!=='none'){
+      node.preload='none';node.load();
+    }
     // A paused clock must still retry a source whose metadata/play state settled
     // after the first tick. The per-source key below skips already primed media.
     // Do not preload the whole project: at most four imminent sources.
