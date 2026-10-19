@@ -13,6 +13,7 @@ import { AuthFrame } from './auth-frame';
 import { OtpCodeInput } from './otp-code-input';
 import { safeAuthRedirect, sendEmailCode, verifyEmailCode } from './email-auth-flow';
 import { InstagramBrowserHandoff } from './instagram-browser-handoff';
+import { AuthRecovery } from './auth-recovery';
 
 function errorMessage(error: unknown, fallback: string) {
   const value = error as { errors?: { longMessage?: string; message?: string }[]; longMessage?: string; message?: string } | null;
@@ -131,6 +132,7 @@ export function AuthForm() {
       <div className="auth-code-actions"><button type="button" data-auth-action="change-email" disabled={pending} onClick={() => void changeEmail()}>Use a different email</button><button type="button" data-auth-action="resend" disabled={pending || cooldown > 0} onClick={() => void resend()}>{phase === 'resending' ? 'Sending…' : cooldown ? `Resend code in ${cooldown}s` : 'Resend code'}</button></div>
     </form>}
     <div id="auth-feedback" className="auth-feedback">{error && <p role="alert">{error}</p>}{notice && <p role="status">{notice}</p>}</div>
+    {(!isLoaded || pending) && <AuthRecovery key={!isLoaded ? 'loading' : phase} />}
     <div id="clerk-captcha" />
   </div></AuthFrame>;
 }
