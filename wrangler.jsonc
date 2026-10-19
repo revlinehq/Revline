@@ -30,6 +30,14 @@
   },
   "routes": [
     {
+      "pattern": "tryrevline.com",
+      "custom_domain": true
+    },
+    {
+      "pattern": "editor.tryrevline.com",
+      "custom_domain": true
+    },
+    {
       "pattern": "preview.tryrevline.com",
       "custom_domain": true
     }
