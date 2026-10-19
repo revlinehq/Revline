@@ -4,7 +4,14 @@
   "account_id": "701645e913477e567db69b11343f59d8",
   "workers_dev": true,
   "preview_urls": false,
-  "observability": { "enabled": true, "traces": { "enabled": true, "head_sampling_rate": 1, "persist": true } },
+  "observability": {
+    "enabled": true,
+    "traces": {
+      "enabled": true,
+      "head_sampling_rate": 1,
+      "persist": true
+    }
+  },
   "compatibility_date": "2026-10-19",
   "compatibility_flags": [
     "nodejs_compat"
@@ -20,5 +27,11 @@
       "!/_next/static/*",
       "!/*/_next/static/*"
     ]
-  }
+  },
+  "routes": [
+    {
+      "pattern": "cf-preview.tryrevline.com",
+      "custom_domain": true
+    }
+  ]
 }
