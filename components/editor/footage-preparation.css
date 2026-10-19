@@ -16,3 +16,7 @@
 /* The opaque preparation surface covers the editor. Keep its media painted
    underneath so browser visibility throttling cannot block readiness. */
 .editor-app[data-playback-opening=true]>.editor-body,.editor-app[data-playback-opening=true]>.mobile-panel-controls{pointer-events:none}
+
+.footage-preparation-content>.processing-status{display:grid;grid-template-columns:18px minmax(0,1fr) 18px;column-gap:10px}.footage-preparation .processing-status-copy{grid-column:2;align-items:center;width:100%}.footage-preparation .processing-status-label{align-self:center;text-align:center}
+@keyframes revline-preparation-breathe{0%,100%{opacity:.35}50%{opacity:1}}
+@media(prefers-reduced-motion:reduce){.footage-preparation .processing-status[data-state=working] .processing-status-sweep::after{width:100%;animation:revline-preparation-breathe 1.8s ease-in-out infinite}.footage-preparation .processing-status[data-state=working]>.revline-brand{animation:revline-preparation-breathe 1.8s ease-in-out infinite}}

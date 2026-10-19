@@ -71,7 +71,7 @@ export function guardPreviewBuffering(document: Document, player: Playback, read
   // canplay may mean only a fraction of a second is available after a distant
   // seek. Keep the hold until buffered runway is ready; progress can supply it
   // without another canplay/seeked event.
-  for (const name of ['canplay', 'seeked', 'loadeddata', 'playing', 'ended', 'progress', 'canplaythrough']) document.addEventListener(name, recover, true);
+  for (const name of ['canplay', 'seeked', 'loadeddata', 'playing', 'ended', 'progress', 'canplaythrough', 'suspend']) document.addEventListener(name, recover, true);
   const play = () => {
     if(disposed)return;
     intended = true;
@@ -96,7 +96,7 @@ export function guardPreviewBuffering(document: Document, player: Playback, read
       disposed = true; intended = false; held = false;clearSeek();clearDiagnostic();clearRecovery();
       player.removeEventListener('play', played); player.removeEventListener('pause', paused); player.removeEventListener('ended', paused);
       document.removeEventListener('waiting', waiting, true);
-      for (const name of ['canplay', 'seeked', 'loadeddata', 'playing', 'ended', 'progress', 'canplaythrough']) document.removeEventListener(name, recover, true);
+      for (const name of ['canplay', 'seeked', 'loadeddata', 'playing', 'ended', 'progress', 'canplaythrough', 'suspend']) document.removeEventListener(name, recover, true);
     },
   };
 }

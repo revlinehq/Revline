@@ -6,7 +6,11 @@ export function previewMediaReady(node:HTMLMediaElement,time:number) {
   const end=Number(node.dataset.end??Number(node.dataset.start)+Number(node.dataset.duration));
   if(!Number.isFinite(end))return true;
   const rate=Number(node.dataset.playbackRate??1);
-  const runway=Math.min(1.5,Math.max(0,end-time))*(Number.isFinite(rate)&&rate>0?rate:1);
+  // Chromium can suspend a paused range fetch at its native preload budget,
+  // leaving less than our preferred 1.5s even though playback can continue.
+  // Waiting for more bytes while that fetch is idle deadlocks the transport.
+  const minimumRunway=node.paused&&node.networkState===1?.5:1.5;
+  const runway=Math.min(minimumRunway,Math.max(0,end-time))*(Number.isFinite(rate)&&rate>0?rate:1);
   const target=Math.min(node.currentTime+runway,Number.isFinite(node.duration)?node.duration:Infinity);
   for(let index=0;index<node.buffered.length;index++)if(node.buffered.start(index)<=node.currentTime+.025&&node.buffered.end(index)>=target-.025)return true;
   return false;
@@ -17,7 +21,7 @@ export async function waitForPreviewMedia(document:Document,time:number,signal:A
   const transitions=(document.defaultView as (Window & {__revlineTransitionController?:{whenReady(time:number,signal:AbortSignal):Promise<void>}})|null)?.__revlineTransitionController;
   const media=Array.from(document.querySelectorAll<HTMLMediaElement>('video[data-start],audio[data-start]')).filter(node=>(node.tagName!=='AUDIO'||Number(node.dataset.volume??1)>0)&&time>=Number(node.dataset.start)&&time<Number(node.dataset.end??Number(node.dataset.start)+Number(node.dataset.duration)));
   await Promise.all([transitions?.whenReady(time,signal),...media.map(node=>new Promise<void>((resolve,reject)=>{
-    const events=['loadedmetadata','loadeddata','canplay','progress','durationchange','seeked','error'];
+    const events=['loadedmetadata','loadeddata','canplay','progress','durationchange','seeked','suspend','error'];
     let idleTimer:ReturnType<typeof setTimeout>;
     const cleanup=()=>{clearTimeout(idleTimer);for(const name of events)node.removeEventListener(name,check);signal.removeEventListener('abort',abort);};
     const abort=()=>{cleanup();reject(signal.reason??new DOMException('Cancelled','AbortError'));};
