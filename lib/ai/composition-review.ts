@@ -7,13 +7,13 @@ export const reviewObservations = z.object({
   uncertainty:z.string().max(2000),
 });
 export const reviewObservationsJsonSchema=z.toJSONSchema(reviewObservations);
-/** Each of at most eight expectations gets one judgment and one fix pass.
- * Keep infrastructure retries bounded separately from successful judgments. */
+/** Negative judgments survive pixel changes. Refreshing a previously passed
+ * scope still shares the run's strict infrastructure/provider attempt bound. */
 export const MAX_COMPOSITION_REVIEW_ATTEMPTS = 18;
-export function compositionReviewBudget(attempts:number,reviews:readonly {status:'queued'|'completed'|'failed';planIds:readonly string[];currentPlanIds?:readonly string[]}[],planIds:readonly string[]){
+export function compositionReviewBudget(attempts:number,reviews:readonly {status:'queued'|'completed'|'failed';planIds:readonly string[];countedPlanIds?:readonly string[]}[],planIds:readonly string[]){
   if(attempts>=MAX_COMPOSITION_REVIEW_ATTEMPTS)throw new Error('Rendered review reached its retry limit. Saved edits remain.');
   if(reviews.some(review=>review.status==='queued'))throw new Error('Finish the current rendered review before requesting another.');
-  if(planIds.some(id=>reviews.filter(review=>review.status==='completed'&&(review.currentPlanIds??review.planIds).includes(id)).length>=2))throw new Error('Each expectation allows one initial check and one targeted fix review.');
+  if(planIds.some(id=>reviews.filter(review=>review.status==='completed'&&(review.countedPlanIds??review.planIds).includes(id)).length>=2))throw new Error('This expectation reached its visual review limit. Do not repeat a passed check or continue after two nonpassing judgments.');
   return reviews.filter(review=>review.status==='completed').length;
 }
 /** Review pixels depend on the visible window, including held transition
@@ -33,11 +33,30 @@ function expectationIdentity(plan:EffectPlan) {
   const normalize=(value:unknown):unknown=>typeof value==='number'&&Number.isFinite(value)?Math.round(value*1e7)/1e7:Array.isArray(value)?value.map(normalize):value&&typeof value==='object'?Object.fromEntries(Object.entries(value).map(([key,item])=>[key,normalize(item)])):value;
   return normalize({...goal,anchor});
 }
+const matchingGoals=(previous:readonly EffectPlan[],plans:readonly EffectPlan[])=>previous.filter(before=>{const current=plans.find(plan=>plan.id===before.id);return current&&equalTimelineValue(expectationIdentity(before),expectationIdentity(current));});
+type ReviewSnapshot={timeline:Timeline;plans:readonly EffectPlan[];start:number;end:number};
 /** Checkpoint publication changes the revision without changing the pixels.
  * Reuse only exact current goals and the exact rendered visible snapshot. */
-export function currentReviewPlanIds(review:{timeline:Timeline;plans:readonly EffectPlan[];start:number;end:number},timeline:Timeline,plans:readonly EffectPlan[]) {
+export function currentReviewPlanIds(review:ReviewSnapshot,timeline:Timeline,plans:readonly EffectPlan[]) {
   if(!Number.isFinite(review.start)||!Number.isFinite(review.end)||review.start<0||review.end<=review.start||Math.max(0,...timeline.clips.map(clip=>clip.start+clip.duration))<review.end-1e-7||!equalTimelineValue(compositionReviewScope(review.timeline,review.start,review.end),compositionReviewScope(timeline,review.start,review.end)))return [];
-  return review.plans.filter(previous=>{const current=plans.find(plan=>plan.id===previous.id);return current&&equalTimelineValue(expectationIdentity(previous),expectationIdentity(current));}).map(plan=>plan.id);
+  return matchingGoals(review.plans,plans).map(plan=>plan.id);
+}
+type ReviewJudgment={revision:number;sampleTimes:readonly number[];observations:readonly {planId:string;verdict:'pass'|'fail'|'unverifiable'}[];checks:readonly {planId:string;timingPass:boolean;pixelPass:boolean|null;textSafe:boolean|null;returnPass?:boolean|null}[]};
+function passedJudgment(review:ReviewSnapshot&{revision:number;result?:ReviewJudgment},plan:EffectPlan) {
+  const result=review.result;
+  if(!result||result.revision!==review.revision||!result.sampleTimes.length||result.sampleTimes.some(time=>!Number.isFinite(time))||result.observations.length!==review.plans.length||result.checks.length!==review.plans.length)return false;
+  const observations=result.observations.filter(item=>item.planId===plan.id),measurements=result.checks.filter(item=>item.planId===plan.id);
+  if(observations.length!==1||observations[0].verdict!=='pass'||measurements.length!==1)return false;
+  const check=measurements[0],required=plan.checks;
+  return check.timingPass===true&&check.pixelPass!==false&&check.textSafe!==false&&check.returnPass!==false
+    &&(required?.minPixelChange===undefined&&required?.maxPixelChange===undefined||check.pixelPass===true)
+    &&(required?.textSafe!==true||check.textSafe===true)&&(required?.returnBy===undefined||check.returnPass===true);
+}
+/** Failed or unverifiable judgments cannot be reset by tweaking pixels. Only
+ * an earlier pass that became stale is free to refresh after another fix. */
+export function countedReviewPlanIds(review:ReviewSnapshot&{revision:number;result?:ReviewJudgment},timeline:Timeline,plans:readonly EffectPlan[]) {
+  const current=new Set(currentReviewPlanIds(review,timeline,plans));
+  return matchingGoals(review.plans,plans).filter(plan=>current.has(plan.id)||!passedJudgment(review,plan)).map(plan=>plan.id);
 }
 export function parseCompositionReview(text:string,plans:EffectPlan[]) {
   const result=reviewObservations.parse(JSON.parse(text));

@@ -50,13 +50,13 @@ test('review budget covers separate required plans while bounding each repair an
   const firstPass=[completed('a','b'),completed('c','d'),completed('e','f'),completed('g','h')];
   expect(compositionReviewBudget(3,firstPass.slice(0,3),['g','h'])).toBe(3);
   expect(compositionReviewBudget(4,firstPass,['a'])).toBe(4);
-  expect(()=>compositionReviewBudget(5,[...firstPass,completed('a')],['a'])).toThrow('targeted fix');
+  expect(()=>compositionReviewBudget(5,[...firstPass,completed('a')],['a'])).toThrow('review limit');
   expect(()=>compositionReviewBudget(4,[{status:'queued',planIds:['a']}],['b'])).toThrow('Finish');
   expect(compositionReviewBudget(2,[{status:'failed',planIds:['a']},{status:'failed',planIds:['a']}],['a'])).toBe(0);
   expect(()=>compositionReviewBudget(MAX_COMPOSITION_REVIEW_ATTEMPTS,[],['a'])).toThrow('retry limit');
   // A completed judgment for invalidated pixels cannot permanently prevent a
   // fresh check after another overlapping effect is corrected.
-  expect(compositionReviewBudget(5,[...firstPass,completed('a')].map(review=>({...review,currentPlanIds:[]})),['a'])).toBe(5);
+  expect(compositionReviewBudget(5,[...firstPass,completed('a')].map(review=>({...review,countedPlanIds:[]})),['a'])).toBe(5);
 });
 
 async function persistedReviews(){
@@ -71,9 +71,9 @@ async function persistedReviews(){
   });
   const run={projectId,ownerId:'owner',runId:'run'};
   await t.mutation(internal.compositionReview.savePlan,{...run,plans,originals:timeline.clips});
-  const record=async(ids:string[],snapshot=timeline,verdict:'pass'|'fail'|'unverifiable'='pass',runId='run')=>{
+  const record=async(ids:string[],snapshot=timeline,verdict:'pass'|'fail'|'unverifiable'='pass',runId='run',checks:Partial<{timingPass:boolean;pixelPass:boolean|null;textSafe:boolean|null;returnPass:boolean|null}>={})=>{
     await new Promise(resolve=>setTimeout(resolve,2));
-    return t.run(ctx=>ctx.db.insert('compositionReviews',{projectId,ownerId:'owner',runId,revision:0,timeline:snapshot,reference:snapshot,plans:plans.filter(goal=>ids.includes(goal.id)),assetIds:[],start:ids.includes('a')?0:6,end:ids.includes('b')?9:3,status:'completed',createdAt:Date.now(),result:{revision:0,sampleTimes:ids.map(id=>id==='a'?1:7),checks:ids.map(planId=>({planId,timingPass:true,peakPixelChange:.1,pixelPass:true,textSafe:true})),observations:ids.map(planId=>({planId,verdict,evidence:'Captured frame'})),uncertainty:''}}));
+    return t.run(ctx=>ctx.db.insert('compositionReviews',{projectId,ownerId:'owner',runId,revision:0,timeline:snapshot,reference:snapshot,plans:plans.filter(goal=>ids.includes(goal.id)),assetIds:[],start:ids.includes('a')?0:6,end:ids.includes('b')?9:3,status:'completed',createdAt:Date.now(),result:{revision:0,sampleTimes:ids.map(id=>id==='a'?1:7),checks:ids.map(planId=>({planId,timingPass:true,peakPixelChange:.1,pixelPass:true,textSafe:true,...checks})),observations:ids.map(planId=>({planId,verdict,evidence:'Captured frame'})),uncertainty:''}}));
   };
   const state=(snapshot=timeline,expectedRevision=0,ownerId='owner')=>t.query(internal.compositionReview.completionState,{...run,ownerId,timeline:snapshot,expectedRevision});
   return {t,internal,writeProject,projectId,run,timeline,plans,record,state};
@@ -108,10 +108,32 @@ test('targeted visible correction can be reviewed after old judgments without re
   const {default:workflowTest}=await import('@convex-dev/workflow/test');workflowTest.register(x.t);
   await x.record(['a'],x.timeline,'fail');await x.record(['a']);
   await x.t.run(async ctx=>{const saved=await ctx.db.query('assistantPlans').withIndex('by_project',q=>q.eq('projectId',x.projectId)).unique();await ctx.db.patch(saved!._id,{reviews:2});});
-  await expect(x.t.mutation(x.internal.compositionReview.request,{...x.run,expectedRevision:0,timeline:x.timeline,planIds:['a'],bindings:[]})).rejects.toThrow('targeted fix');
+  await expect(x.t.mutation(x.internal.compositionReview.request,{...x.run,expectedRevision:0,timeline:x.timeline,planIds:['a'],bindings:[]})).rejects.toThrow('review limit');
   const changed={...x.timeline,clips:x.timeline.clips.map(clip=>clip.id==='a'?{...clip,color:'#ff0000'}:clip)};
   const reviewId=await x.t.mutation(x.internal.compositionReview.request,{...x.run,expectedRevision:0,timeline:changed,planIds:['a'],bindings:[]});
   expect(await x.t.run(ctx=>ctx.db.get(reviewId))).toMatchObject({status:'queued',timeline:changed});
+});
+
+test.each(['fail','unverifiable'] as const)('two nonpassing judgments cannot be reset by another visible correction: %s',async verdict=>{
+  const x=await persistedReviews();await x.record(['a'],x.timeline,'fail');
+  const firstFix={...x.timeline,clips:x.timeline.clips.map(clip=>clip.id==='a'?{...clip,color:'#ff0000'}:clip)};
+  await x.record(['a'],firstFix,verdict);
+  await x.t.run(async ctx=>{const saved=await ctx.db.query('assistantPlans').withIndex('by_project',q=>q.eq('projectId',x.projectId)).unique();await ctx.db.patch(saved!._id,{reviews:2});});
+  const secondFix={...x.timeline,clips:x.timeline.clips.map(clip=>clip.id==='a'?{...clip,color:'#0000ff'}:clip)};
+  await expect(x.t.mutation(x.internal.compositionReview.request,{...x.run,expectedRevision:0,timeline:secondFix,planIds:['a'],bindings:[]})).rejects.toThrow('two nonpassing judgments');
+});
+
+test('passing prose with failed measurements consumes negative quota, while a different goal does not',async()=>{
+  const {countedReviewPlanIds}=await import('../lib/ai/composition-review');
+  const x=await persistedReviews(),first=await x.record(['a'],x.timeline,'pass','run',{timingPass:false});
+  const firstFix={...x.timeline,clips:x.timeline.clips.map(clip=>clip.id==='a'?{...clip,color:'#ff0000'}:clip)};
+  await x.record(['a'],firstFix,'pass','run',{pixelPass:false});
+  await x.t.run(async ctx=>{const saved=await ctx.db.query('assistantPlans').withIndex('by_project',q=>q.eq('projectId',x.projectId)).unique();await ctx.db.patch(saved!._id,{reviews:2});});
+  const secondFix={...x.timeline,clips:x.timeline.clips.map(clip=>clip.id==='a'?{...clip,color:'#0000ff'}:clip)};
+  await expect(x.t.mutation(x.internal.compositionReview.request,{...x.run,expectedRevision:0,timeline:secondFix,planIds:['a'],bindings:[]})).rejects.toThrow('two nonpassing judgments');
+  const receipt=(await x.t.run(ctx=>ctx.db.get(first)))!;
+  expect(countedReviewPlanIds(receipt,secondFix,x.plans)).toEqual(['a']);
+  expect(countedReviewPlanIds(receipt,secondFix,x.plans.map(goal=>goal.id==='a'?{...goal,expectation:'A separate normalized goal'}:goal))).toEqual([]);
 });
 
 test('visible scope retains held transition dependencies and ignores audio controls',async()=>{

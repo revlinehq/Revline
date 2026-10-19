@@ -5,7 +5,7 @@ import { projectRun } from './lib/project_data';
 import { validateTimeline } from './lib/timeline';
 import { clipValidator, timelineValidator } from './schema';
 import { effectPlanValidator, compositionReviewResult } from './lib/effect_plan';
-import { compositionReviewBudget, compositionReviewWindow, currentReviewPlanIds, MAX_COMPOSITION_REVIEW_ATTEMPTS } from '../lib/ai/composition-review';
+import { compositionReviewBudget, compositionReviewWindow, countedReviewPlanIds, currentReviewPlanIds, MAX_COMPOSITION_REVIEW_ATTEMPTS } from '../lib/ai/composition-review';
 import { effectPlanInput, effectDisabledReference, preservePlanOriginals, mergeEffectPlans, effectReviewBindings, type EffectPlan } from '../lib/ai/edit-plan';
 import { enqueueMediaTask, cancelMediaTask } from './mediaTasks';
 import type { MutationCtx, QueryCtx } from './_generated/server';
@@ -65,7 +65,7 @@ export const request=internalMutation({args:{...runArgs,expectedRevision:v.numbe
   if(!saved||saved.runId!==args.runId)throw new ConvexError('Save the effect expectations before reviewing.');
   const recent=(await ctx.db.query('compositionReviews').withIndex('by_project',q=>q.eq('projectId',args.projectId)).order('desc').take(MAX_COMPOSITION_REVIEW_ATTEMPTS+1)).filter(review=>review.runId===args.runId);
   let completed:number;
-  try{completed=compositionReviewBudget(saved.reviews,recent.map(review=>({status:review.status,planIds:review.plans.map(plan=>plan.id),currentPlanIds:currentReviewPlanIds(review,args.timeline,saved.plans)})),args.planIds);}catch(error){throw new ConvexError(error instanceof Error?error.message:'Rendered review is unavailable.');}
+  try{completed=compositionReviewBudget(saved.reviews,recent.map(review=>({status:review.status,planIds:review.plans.map(plan=>plan.id),countedPlanIds:countedReviewPlanIds(review,args.timeline,saved.plans)})),args.planIds);}catch(error){throw new ConvexError(error instanceof Error?error.message:'Rendered review is unavailable.');}
   if(!args.planIds.length||args.planIds.length>2||new Set(args.planIds).size!==args.planIds.length)throw new ConvexError('Review one or two planned effects in a short window.');
   const plans=args.planIds.map(id=>saved.plans.find(plan=>plan.id===id));
   if(plans.some(plan=>!plan))throw new ConvexError('Save the effect expectations before reviewing.');
