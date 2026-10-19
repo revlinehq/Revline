@@ -1,14 +1,13 @@
 # Revline mobile design
 
-Pen concept, reviewed on October 18, 2026. These are design previews, not an implemented mobile app.
+Fresh Pen concept, reviewed October 18, 2026. Design previews only; no mobile app implementation.
 
-- `01-projects.png`: projects, new project action, and avatar access to Profile. Opening a project goes directly to the chat layout.
-- `02-timeline.png`: persistent video preview, separate video and audio tracks, trim handles, and a collapsed chat input at the bottom. Bottom segmented controls and tab navigation are removed.
-- `03-chat.png`: default project destination, with conversation below a floating video preview and a soft backdrop blur at its lower edge. A header button opens the timeline. No chat sheet or Chat / Timeline segments.
-- `04-subtitles.png`: subtitle text and color controls under the timeline.
-- `05-profile-exports.png`: profile, export creation, and completed export downloads. Export actions live in Profile.
-- `revline-mobile.pdf`: all five screens.
+- `01-projects.png`: projects with a square new-project plus at the bottom-right and profile access through the avatar.
+- `02-chat.png`: default project destination, showing the video, conversation, compact chat input, and one Timeline button. A soft blur at the video edge represents messages scrolling behind it.
+- `03-timeline.png`: video preview, separate video/audio rows, basic trim and split actions, subtitle text/color controls, and chat input. No segmented tabs.
+- `04-profile.png`: account and exports, including export creation and downloads.
+- `revline-mobile.pdf`: all four screens.
 
-Editable canvas: `/tmp/revline-pen-before-renderer-restart.pen`. Screen node IDs: `FLeOV`, `dcKJQ`, `MkYvW`, `IBYpV`, `CZ1jd`. The existing canvas and its other designs were preserved. The project uses Inter and Space Grotesk, neutral surfaces, and the Revline purple accent for actions and selection.
+Editable canvas: `/tmp/revline-pen-before-renderer-restart.pen`. New screen IDs: `nEQ6g`, `F1dbs`, `rs95N`, `rJAkF`. The previous mobile mockups were deleted at the user's request; unrelated Pen designs were preserved.
 
-Verified all five screen trees through Pen's layout checks with no clipped nodes reported, and inspected rendered previews. Navigation descriptions express intended app behavior; this canvas is not a functioning app.
+Reviewed rendered screens and checked all four trees for layout overflow, with no clipped nodes reported. Navigation labels describe intended behavior; this canvas is not a functioning app.
