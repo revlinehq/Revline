@@ -1,3 +1,5 @@
+import { describeLiveEdit } from '../lib/editor/live-edit';
+import { equalTimelineValue } from '../lib/editor/timeline-equality';
 import { hydrateAsset } from './lib/asset_analysis';
 import { writeProject,readProject,projectIdentity,projectRun } from './lib/project_data';
 import { requireEditorAccess } from './lib/billing_access';
@@ -9,7 +11,7 @@ import { components, internal } from "./_generated/api";
 import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { requireOwner, requireProject } from "./lib/auth";
 import { commitTimeline, currentTimeline, validateTimeline } from "./lib/timeline";
-import { analysisMode, analysisRequestDocument, assetDocument, frameRequestValidator, videoRequestValidator, projectDocument, timelineValidator } from "./schema";
+import { analysisMode, analysisRequestDocument, assetDocument, clipValidator, frameRequestValidator, videoRequestValidator, projectDocument, timelineValidator } from "./schema";
 import { validateFrameInspectionInput } from '../lib/media-analysis/frame-inspection';
 import { validateVideoInspectionInput } from '../lib/media-analysis/video-inspection';
 import { normalizeTimeline } from '../lib/editor/types';
@@ -41,6 +43,20 @@ export const status = query({ args: { projectId: v.id("projects") }, returns: v.
   const activity=active?task?.status==='retrying'||task?.status==='queued'&&(task.attempt>1)?'Retrying analysis…':task?.status==='queued'?'Queued for analysis…':task?.activity?MEDIA_ACTIVITY_LABELS[task.activity]:labels[active.mode]:editing?'Applying edits…':null;
   return { configured: ready, ...(defaultModelChoice?{defaultModelChoice}:{}), ...(claudeModelSwitcherEnabled() ? { modelSwitcher: true, allowedModels: [...allowedClaudeModelChoices()] } : {}), running: project.aiRunning ?? false, editing, workflowActive, error: project.aiError ?? null, reason: ready ? null : providerReason, activity, activityProgress: null, activityStartedAt: active ? task?.activityStartedAt ?? task?.attemptStartedAt ?? active.createdAt : null, activitySource: source?.ownerId === project.ownerId && source.projectId === project._id ? source.fileName : null };
 }});
+const livePreviewValidator = v.object({runId:v.string(),baseRevision:v.number(),timeline:timelineValidator,label:v.string(),changedClipIds:v.array(v.string()),removedClips:v.array(clipValidator),at:v.number(),sequence:v.number(),updatedAt:v.number()});
+export const livePreview = query({args:{projectId:v.id('projects')},returns:v.union(v.null(),livePreviewValidator),handler:async(ctx,{projectId})=>{
+  const run=await projectRun(ctx,projectId,await requireOwner(ctx));
+  if(!run.aiRunning)return null;
+  const project=(await ctx.db.get(projectId))!;
+  const preview=await ctx.db.query('aiTimelinePreviews').withIndex('by_project',q=>q.eq('projectId',projectId)).unique();
+  if(!preview||preview.ownerId!==project.ownerId||preview.runId!==run.aiRunId||preview.baseRevision!==(project.revision??0))return null;
+  const {_id,_creationTime,ownerId,projectId:_,...result}=preview;
+  return result;
+}});
+async function clearLivePreview(ctx:import('./_generated/server').MutationCtx,projectId:import('./_generated/dataModel').Id<'projects'>){
+  const preview=await ctx.db.query('aiTimelinePreviews').withIndex('by_project',q=>q.eq('projectId',projectId)).unique();
+  if(preview)await ctx.db.delete(preview._id);
+}
 export const send = mutation({ args: { projectId: v.id("projects"), prompt: v.string(), modelChoice: v.optional(legacyCompatibleModelChoiceValidator), reasoningEffort: v.optional(openAIReasoningEffortValidator), speedMode: v.optional(openAISpeedModeValidator), attachedAssetIds:v.optional(v.array(v.id('assets'))), selectedClipId: v.optional(v.string()), selectedClipIds: v.optional(v.array(v.string())), playhead: v.optional(v.number()) }, returns: v.null(), handler: async (ctx, args) => {
   const ownerId = await requireOwner(ctx); await requireEditorAccess(ctx, ownerId); const project = await requireProject(ctx, args.projectId, ownerId);
   let pinnedModel;
@@ -64,6 +80,7 @@ export const send = mutation({ args: { projectId: v.id("projects"), prompt: v.st
   const { messageId } = await saveMessage(ctx, components.agent, { threadId, userId: ownerId, prompt });
   const recovery = project.aiRecovery ?? (project.aiError ? assistantRecovery(project, 'failed', project.aiError) : undefined);
   const runId = `${Date.now()}-${Math.random()}`;
+  await clearLivePreview(ctx,project._id);
   await writeProject(ctx,project._id, { threadId, aiRunning: true, aiEditing: false, aiError: undefined, aiRunId: runId, aiUndoRecorded: false, aiCheckpointRevision: undefined, aiRequest:{prompt,messageId,startedRevision:project.revision??0}, aiRecovery:recovery });
   await ctx.scheduler.runAfter(0, internal.assistantActions.respond, { projectId: project._id, ownerId, runId, threadId, promptMessageId: messageId, pinnedModel,...(args.attachedAssetIds?{attachedAssetIds:args.attachedAssetIds}:{}), ...(recovery?{recovery}:{}), ...(args.selectedClipId ? { selectedClipId: args.selectedClipId } : {}), ...(args.selectedClipIds ? { selectedClipIds: args.selectedClipIds } : {}), ...(args.playhead !== undefined ? { playhead: args.playhead } : {}) }); return null;
 }});
@@ -95,6 +112,7 @@ export const stop = mutation({ args: { projectId: v.id('projects') }, returns: v
   }
   const reviews=await ctx.db.query('compositionReviews').withIndex('by_project',q=>q.eq('projectId',project._id)).order('desc').take(2);
   for(const review of reviews)if(review.runId===project.aiRunId&&review.status==='queued'){if(review.taskId)await cancelMediaTask(ctx,review.taskId);await ctx.db.patch(review._id,{status:'failed',error:'Stopped by the user.'});}
+  await clearLivePreview(ctx,project._id);
   // Already-saved edits remain undoable; invalidating the run blocks every later checkpoint.
   await writeProject(ctx,project._id, { aiRunning: false, aiEditing: false, aiRunId: undefined, aiError: undefined, aiRecovery:assistantRecovery(project,'stopped','Stopped by the user. Saved edits remain.'),aiRequest:undefined });
   return null;
@@ -130,6 +148,12 @@ export const apply = internalMutation({ args: { ...runArgs, expectedRevision: v.
   if (project.aiRunId !== args.runId || !project.aiRunning) throw new ConvexError("AI run is no longer active");
   if(args.publication&&project.threadId!==args.publication.threadId)throw new ConvexError('Publication conversation does not match this project.');
   const receipt=async(revision:number)=>{
+    const previous=await ctx.db.query('aiTimelinePreviews').withIndex('by_project',q=>q.eq('projectId',project._id)).unique();
+    const timeline=normalizeTimeline(args.timeline);
+    const unchanged=previous?.runId===args.runId&&equalTimelineValue(previous.timeline,timeline);
+    const change=unchanged?{label:previous.label,changedClipIds:previous.changedClipIds,removedClips:previous.removedClips,at:previous.at}:describeLiveEdit(previous?.runId===args.runId?previous.timeline:currentTimeline(project),timeline);
+    const values={projectId:project._id,ownerId:args.ownerId,runId:args.runId,baseRevision:revision,timeline,...change,sequence:(previous?.runId===args.runId?previous.sequence:0)+(unchanged?0:1),updatedAt:Date.now()};
+    if(previous)await ctx.db.replace(previous._id,values);else await ctx.db.insert('aiTimelinePreviews',values);
     if(args.publication)await savePublicationReceipt(ctx,args.ownerId,{version:1,kind:'timeline-publication',status:'saved',...args.publication,runId:args.runId,stagedRevision:args.expectedRevision,revision});
     return revision;
   };
@@ -163,12 +187,26 @@ export const validateDraft = internalQuery({ args: { ...runArgs, expectedRevisio
   await validateTimeline(ctx, project, args.timeline);
   return null;
 }});
+/** A read-only client projection. This never publishes a draft or adds undo history. */
+export const previewDraft = internalMutation({args:{...runArgs,expectedRevision:v.number(),timeline:timelineValidator},returns:v.null(),handler:async(ctx,args)=>{
+  const project=await requireProject(ctx,args.projectId,args.ownerId);
+  if(!project.aiRunning||project.aiRunId!==args.runId)throw new ConvexError('AI run is no longer active');
+  if((project.revision??0)!==args.expectedRevision)throw new ConvexError('The timeline changed elsewhere. Your replacement was not saved.');
+  const timeline=await validateTimeline(ctx,project,args.timeline);
+  const previous=await ctx.db.query('aiTimelinePreviews').withIndex('by_project',q=>q.eq('projectId',project._id)).unique();
+  const current=previous?.runId===args.runId&&previous.baseRevision===args.expectedRevision?previous:null;
+  if(current&&equalTimelineValue(current.timeline,timeline))return null;
+  const values={projectId:project._id,ownerId:args.ownerId,runId:args.runId,baseRevision:args.expectedRevision,timeline,...describeLiveEdit(current?.timeline??currentTimeline(project),timeline),sequence:(current?.sequence??0)+1,updatedAt:Date.now()};
+  if(previous)await ctx.db.replace(previous._id,values);else await ctx.db.insert('aiTimelinePreviews',values);
+  return null;
+}});
 export const finish = internalMutation({ args: { ...runArgs, error: v.optional(v.string()), savedEdits:v.optional(v.number()),publication:v.optional(v.object({threadId:v.string(),promptMessageId:v.string(),stagedRevision:v.number(),status:v.union(v.literal('failed'),v.literal('aborted'))})) }, returns: v.null(), handler: async (ctx, args) => {
   const project = await readProject(ctx,args.projectId);
   // A stopped action may finish after a new run starts. Its receipt belongs to
   // the original prompt; it must never stop or overwrite the newer run.
   if(args.publication&&project?.ownerId===args.ownerId&&project.threadId===args.publication.threadId)await savePublicationReceipt(ctx,args.ownerId,{version:1,kind:'timeline-publication',runId:args.runId,...args.publication});
   if (project?.ownerId === args.ownerId && project.aiRunId === args.runId) {
+    await clearLivePreview(ctx,project._id);
     const requests = await ctx.db.query("analysisRequests").withIndex("by_projectId_runId", q => q.eq("projectId", args.projectId).eq("aiRunId", args.runId)).take(16);
     for (const request of requests) await detachAnalysisRequest(ctx,request);
     await writeProject(ctx,project._id, { aiRunning: false, aiEditing: false, aiError: args.error?.slice(0, 1000), aiRecovery:args.error?assistantRecovery(project,'failed',args.error,args.savedEdits):undefined,aiRequest:undefined });

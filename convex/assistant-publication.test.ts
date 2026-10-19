@@ -102,3 +102,41 @@ test('publication refuses wrong owner/run/revision/conversation and prompt from 
   await expect(x.t.mutation(internal.assistant.apply,{...args,publication:{...x.publication,promptMessageId:foreignPrompt}})).rejects.toThrow('prompt');
   expect(await x.read()).toMatchObject({revision:0,history:[],timeline:original});expect(await x.receipts()).toEqual([]);
 });
+
+test('live draft is owner-only, validates sources and never changes the saved timeline or undo history',async()=>{
+  const x=await setup();
+  const next={...original,clips:original.clips.map(clip=>({...clip,start:1}))};
+  await x.t.mutation(internal.assistant.previewDraft,{...x.run,expectedRevision:0,timeline:next});
+  expect(await x.owner.query(api.assistant.livePreview,{projectId:x.projectId})).toMatchObject({timeline:next,sequence:1,baseRevision:0,label:'Moving clips',changedClipIds:['caption']});
+  expect(await x.read()).toMatchObject({revision:0,timeline:original,history:[]});
+  await expect(x.t.withIdentity({subject:'other'}).query(api.assistant.livePreview,{projectId:x.projectId})).rejects.toThrow('Project not found');
+  await expect(x.t.mutation(internal.assistant.previewDraft,{...x.run,expectedRevision:0,timeline:{...next,clips:[{...next.clips[0],duration:-1}]}})).rejects.toThrow();
+  expect(await x.owner.query(api.assistant.livePreview,{projectId:x.projectId})).toMatchObject({timeline:next,sequence:1});
+  await x.t.mutation(internal.assistant.previewDraft,{...x.run,expectedRevision:0,timeline:next});
+  expect(await x.owner.query(api.assistant.livePreview,{projectId:x.projectId})).toMatchObject({sequence:1});
+});
+
+test('stopping a live draft restores saved state and rejects late changes from that run',async()=>{
+  const x=await setup();
+  await x.t.mutation(internal.assistant.previewDraft,{...x.run,expectedRevision:0,timeline:{...original,clips:[]}});
+  await x.owner.mutation(api.assistant.stop,{projectId:x.projectId});
+  expect(await x.owner.query(api.assistant.livePreview,{projectId:x.projectId})).toBeNull();
+  expect(await x.read()).toMatchObject({timeline:original,revision:0,history:[]});
+  await expect(x.t.mutation(internal.assistant.previewDraft,{...x.run,expectedRevision:0,timeline:original})).rejects.toThrow('no longer active');
+});
+
+test('a stale preview is hidden after a revision change and a published edit remains undoable',async()=>{
+  const x=await setup();
+  const next={...original,clips:original.clips.map(clip=>({...clip,start:1}))};
+  await x.t.mutation(internal.assistant.previewDraft,{...x.run,expectedRevision:0,timeline:next});
+  await x.t.run(ctx=>writeProject(ctx,x.projectId,{revision:1}));
+  expect(await x.owner.query(api.assistant.livePreview,{projectId:x.projectId})).toBeNull();
+  await expect(x.t.mutation(internal.assistant.previewDraft,{...x.run,expectedRevision:0,timeline:next})).rejects.toThrow('changed elsewhere');
+  await x.t.run(ctx=>writeProject(ctx,x.projectId,{revision:0}));
+  await x.t.mutation(internal.assistant.apply,{...x.run,expectedRevision:0,timeline:next,publication:x.publication});
+  expect(await x.owner.query(api.assistant.livePreview,{projectId:x.projectId})).toMatchObject({baseRevision:1,timeline:next});
+  await x.t.mutation(internal.assistant.finish,x.run);
+  expect(await x.owner.query(api.assistant.livePreview,{projectId:x.projectId})).toBeNull();
+  await x.owner.mutation(api.projects.undo,{projectId:x.projectId});
+  expect((await x.read()).timeline).toEqual(original);
+});

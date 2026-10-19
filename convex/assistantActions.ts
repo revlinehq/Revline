@@ -116,7 +116,7 @@ export const respond = internalAction({
       const beginEditing = () => editingStarted ??= ctx.runMutation(internal.assistant.beginEditing, run);
       const editSession = new EditSession(project.timeline ?? { clips: [], fps: 30, aspectRatio: project.aspectRatio }, project.revision ?? 0, {
         apply: (timeline, expectedRevision,publication) => ctx.runMutation(internal.assistant.apply, { ...run, timeline, expectedRevision,...(publication?{publication:{threadId:args.threadId,promptMessageId:args.promptMessageId}}:{}) }),
-        validate: (timeline, expectedRevision) => ctx.runQuery(internal.assistant.validateDraft, { ...run, timeline, expectedRevision }),
+        validate: (timeline, expectedRevision) => ctx.runMutation(internal.assistant.previewDraft, { ...run, timeline, expectedRevision }),
         refresh: async () => { return await ctx.runQuery(internal.assistant.getRunTimeline,run); },
         beforeChange: beginEditing,
       }, abortSignal);

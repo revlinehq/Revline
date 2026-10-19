@@ -168,6 +168,7 @@ export default defineSchema({
 
   assetAnalyses:defineTable({ownerId:v.string(),sourceKey:v.string(),analysis:analysisValidator,updatedAt:v.number()}).index('by_owner_source',['ownerId','sourceKey']),
   projectAccess:defineTable({projectId:v.id('projects'),ownerId:v.string(),historyStored:v.optional(v.boolean()),threadId:v.optional(v.string()),deleting:v.optional(v.boolean())}).index('by_project',['projectId']),
+  aiTimelinePreviews:defineTable({projectId:v.id('projects'),ownerId:v.string(),runId:v.string(),baseRevision:v.number(),timeline:timelineValidator,label:v.string(),changedClipIds:v.array(v.string()),removedClips:v.array(clipValidator),at:v.number(),sequence:v.number(),updatedAt:v.number()}).index('by_project',['projectId']),
   aiRuns:defineTable({projectId:v.id('projects'),ownerId:v.string(),...aiStateFields}).index('by_project',['projectId']),
   timelineRevisions:defineTable({projectId:v.id('projects'),ownerId:v.string(),sequence:v.number(),timeline:timelineValidator}).index('by_project_sequence',['projectId','sequence']),
   projectCatalog:defineTable({projectId:v.id('projects'),ownerId:v.string(),title:v.string(),aspectRatio,createdAt:v.number(),updatedAt:v.number(),clipCount:v.number(),aiRunning:v.boolean(),deleting:v.optional(v.boolean()),coverKind:v.optional(assetKind),coverStorageId:v.optional(v.id('_storage')),coverR2Key:v.optional(v.string())}).index('by_project',['projectId']).index('by_owner_updated',['ownerId','updatedAt']),
