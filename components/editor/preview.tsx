@@ -25,7 +25,7 @@ import { needsLiveMediaSync, updateLiveMediaContent } from '@/lib/editor/live-me
 import { updateLiveTextEffects } from '@/lib/editor/live-preview-effects';
 import { previewVisualEffects, updateLiveVisualEffects } from '@/lib/editor/live-visual-effects';
 import { updateLiveVisualGeometry } from '@/lib/editor/live-visual-geometry';
-import { recoverMediaSource, type RefreshPlaybackMedia } from '@/lib/editor/media-source-recovery';
+import { recoverMediaSource, watchPreviewMediaStalls, type RefreshPlaybackMedia } from '@/lib/editor/media-source-recovery';
 import { sourceTimeAt } from '@/lib/editor/playback-rate';
 import { previewAdjustmentEffect, updateLiveAdjustmentEffects } from '@/lib/editor/live-adjustment-effects';
 import { loadPreviewRemotion } from '@/lib/editor/preview-remotion-runtime';
@@ -189,14 +189,13 @@ export const Preview = forwardRef<PreviewHandle,{timeline:Timeline;assets:MediaA
       };
       p.addEventListener('ready',()=>{if(cancelled||!p)return;
         const doc=p.iframeElement?.contentDocument;
-        const mediaError=(event:Event)=>{
-          const media=event.target as HTMLMediaElement;
-          if(cancelled||player.current!==p||!doc||!media||!['VIDEO','AUDIO'].includes(media.tagName)||attempted.has(media))return;
+        const recoverSource=(media:HTMLMediaElement,quiet=false)=>{
+          if(cancelled||!doc||!media||!['VIDEO','AUDIO'].includes(media.tagName)||attempted.has(media))return;
           const sourceClip=latestTimeline.current.clips.find(clip=>clip.id===media.dataset.sourceClip);
           if(!sourceClip?.assetId)return;
           attempted.add(media);
           const assetId=sourceClip.assetId;
-          void (async()=>{
+          return (async()=>{
             let url=refreshes.get(assetId);
             if(!url){
               const refresh=callbacks.current.onRefreshMedia;
@@ -213,14 +212,16 @@ export const Preview = forwardRef<PreviewHandle,{timeline:Timeline;assets:MediaA
               const current=latestTimeline.current.clips.find(clip=>clip.id===media.dataset.sourceClip),time=frameTime(p,seekPosition.current);
               return !!p&&!p.paused&&!!current&&time>=current.start&&time<current.start+current.duration;
             },redraw:()=>{const host=doc.defaultView as (Window&{__revlineEffects?:{redraw():void}})|null;host?.__revlineEffects?.redraw();}});
-            attempted.delete(media);
           })().catch(error=>{
             if(cancelled||recovery.signal.aborted)return;
+            if(quiet&&!media.error)return;
             if(error&&typeof error==='object'&&'name' in error&&error.name==='NotAllowedError'){p?.pause();callbacks.current.onPlaying(false);callbacks.current.onError('The media has recovered. Press play to resume.');}
             else callbacks.current.onError('This source is unavailable. Reimport the clip or reload the project.');
-          });
+          }).finally(()=>attempted.delete(media));
         };
-        doc?.addEventListener('error',mediaError,true);removeMediaErrors=()=>doc?.removeEventListener('error',mediaError,true);
+        const mediaError=(event:Event)=>{void recoverSource(event.target as HTMLMediaElement);};
+        const stopStalls=doc?watchPreviewMediaStalls(doc,()=>frameTime(p,seekPosition.current),media=>Promise.resolve(recoverSource(media,true))):()=>{};
+        doc?.addEventListener('error',mediaError,true);removeMediaErrors=()=>{stopStalls();doc?.removeEventListener('error',mediaError,true);};
         doc?.defaultView?.addEventListener('revline-effects-error',event=>{if(!cancelled)callbacks.current.onError((event as CustomEvent<string>).detail);});
         if(doc?.documentElement.dataset.visualEffectsError)callbacks.current.onError(doc.documentElement.dataset.visualEffectsError);
         loaded=true;if(doc){stopWarmup=warmPreviewMedia(doc,()=>frameTime(p,seekPosition.current));guard=guardPreviewBuffering(doc,p,()=>frameTime(p,seekPosition.current),debugId?()=>diagnose('active media buffering exceeded 2s'):undefined,waiting=>{if(player.current===p)setBuffering(waiting);});if(debugId&&(process.env.NODE_ENV==='development'||new URLSearchParams(window.location.search).get('playbackDebug')==='1'))stopTrace=tracePreviewPlayback(doc,p,()=>frameTime(p,seekPosition.current),()=>({playing:guard?.isPlaying()??false,buffering:guard?.isBuffering()??false}),debugId);}p.seek(seekPosition.current);updateLayers(p,latestTimeline.current);if(p.painted)swap();});

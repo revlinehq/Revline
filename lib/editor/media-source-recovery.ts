@@ -1,4 +1,34 @@
+import { previewMediaReady } from './preview-readiness';
+
 export type RefreshPlaybackMedia = (assetIds:string[]) => Promise<{_id:string;url:string|null}[]>;
+
+/** Recover a native fetch/seek that stops making progress without emitting an error. */
+export function watchPreviewMediaStalls(document:Document,readTime:()=>number,repair:(media:HTMLMediaElement)=>Promise<void>){
+  const states=new WeakMap<HTMLMediaElement,{signature:string;progressAt:number;attempts:number}>();
+  let disposed=false,repairing=false;
+  const check=()=>{
+    if(disposed||repairing)return;
+    const time=readTime(),now=Date.now();
+    for(const media of document.querySelectorAll<HTMLMediaElement>('video[data-start],audio[data-start]')){
+      const start=Number(media.dataset.start),end=start+Number(media.dataset.duration);
+      if(!media.isConnected||media.error||time<start||time>=end||media.tagName==='AUDIO'&&Number(media.dataset.volume??1)===0)continue;
+      if(previewMediaReady(media,time)){states.delete(media);continue;}
+      const ranges=[];for(let i=0;i<media.buffered.length;i++)ranges.push([media.buffered.start(i),media.buffered.end(i)]);
+      const signature=JSON.stringify([media.readyState,media.seeking,media.currentTime,ranges]);
+      let state=states.get(media);
+      if(!state){state={signature,progressAt:now,attempts:0};states.set(media,state);}
+      if(state.signature!==signature){state.signature=signature;state.progressAt=now;continue;}
+      if(now-state.progressAt<8000||state.attempts>=2)continue;
+      state.attempts++;state.progressAt=now;repairing=true;
+      console.warn('[Revline playback recovery]',JSON.stringify({reason:'no media progress',id:media.dataset.sourceClip,readyState:media.readyState,networkState:media.networkState,seeking:media.seeking,attempt:state.attempts}));
+      const stalled=state;
+      void Promise.resolve().then(()=>repair(media)).catch(()=>{}).finally(()=>{repairing=false;stalled.progressAt=Date.now();});
+      break;
+    }
+  };
+  const timer=setInterval(check,500);
+  return()=>{disposed=true;clearInterval(timer);};
+}
 
 function mediaEvent(media:HTMLMediaElement,event:string,signal:AbortSignal) {
   return new Promise<void>((resolve,reject)=>{
