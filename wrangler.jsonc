@@ -1,0 +1,24 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "revline-web",
+  "account_id": "701645e913477e567db69b11343f59d8",
+  "workers_dev": true,
+  "preview_urls": false,
+  "observability": { "enabled": true, "traces": { "enabled": true, "head_sampling_rate": 1, "persist": true } },
+  "compatibility_date": "2026-10-19",
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  "main": "vinext/server/fetch-handler",
+  "assets": {
+    "directory": "dist/client",
+    "html_handling": "none",
+    "not_found_handling": "none",
+    "binding": "ASSETS",
+    "run_worker_first": [
+      "/*",
+      "!/_next/static/*",
+      "!/*/_next/static/*"
+    ]
+  }
+}

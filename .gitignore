@@ -23,3 +23,5 @@ public/vendor/space-grotesk.woff2
 
 next-env.d.ts
 .vercel/
+/dist/
+.vinext/
