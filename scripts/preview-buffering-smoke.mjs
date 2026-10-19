@@ -25,7 +25,7 @@ const server = createServer(async (request, response) => {
   const start = match ? Number(match[1]) : 0, end = match?.[2] ? Math.min(Number(match[2]), bytes.length - 1) : bytes.length - 1;
   response.writeHead(match ? 206 : 200, { 'Content-Type': path === '/video.mp4' ? 'video/mp4' : 'audio/mp4', 'Cache-Control': 'no-store', 'Accept-Ranges': 'bytes', 'Content-Length': end - start + 1, ...(match ? { 'Content-Range': `bytes ${start}-${end}/${bytes.length}` } : {}) });
   if (path === '/audio.m4a') return response.end(bytes.subarray(start, end + 1));
-  const boundary = Math.min(end + 1, (startup ? 1 : 3) * 1024 * 1024);
+  const boundary = Math.min(end + 1, Math.floor((startup ? .3 : 3) * 1024 * 1024));
   if (start < boundary) response.write(bytes.subarray(start, boundary));
   await gate.promise;
   if (!response.destroyed) response.end(bytes.subarray(Math.max(start, boundary), end + 1));
@@ -51,13 +51,13 @@ try {
   await new Promise(resolve=>setTimeout(resolve,150));
   const early=await page.evaluate(()=>{const player=document.querySelector('hyperframes-player'),video=player.iframeElement.contentDocument.querySelector('video');return{revealed:player.style.zIndex==='1',loading:!!document.querySelector('.preview-loading'),readyState:video.readyState,buffered:video.buffered.length?video.buffered.end(0)-video.currentTime:0};});
   console.log('First decoded frame while initial video bytes are gated',early);
-  assert.equal(early.revealed,false,'One decoded frame with less than1.5s of runway must not mark the preview playable');assert.equal(early.loading,true);
+  assert.ok(early.buffered<.5,'Startup fixture withholds more than a single decoded frame');assert.equal(early.revealed,false,'One decoded frame with less than half a second of runway must not mark the preview playable');assert.equal(early.loading,true);
   gate.resolve();
  }
  await page.waitForFunction(() => document.querySelector('hyperframes-player')?.style.zIndex === '1');
  if (startup) {
   const ready=await page.evaluate(()=>{const player=document.querySelector('hyperframes-player'),video=player.iframeElement.contentDocument.querySelector('video');window.startupFrames=[];window.startupWaits=[];const started=performance.now();video.addEventListener('waiting',()=>window.startupWaits.push({ms:performance.now()-started,time:video.currentTime}));video.requestVideoFrameCallback(function next(now,frame){window.startupFrames.push({ms:performance.now()-started,time:frame.mediaTime});video.requestVideoFrameCallback(next);});window.fixture.play();return{buffered:video.buffered.end(0)-video.currentTime,readyState:video.readyState};});
-  assert.ok(ready.buffered>=1.45,'Playback-ready has a bounded initial buffered runway');
+  assert.ok(ready.buffered>=.45,'Playback-ready has a bounded initial buffered runway');
   await page.waitForFunction(()=>document.querySelector('hyperframes-player').currentTime>.8);
   const presented=await page.evaluate(()=>({frames:window.startupFrames.filter(frame=>frame.time>.01),waiting:window.startupWaits}));const gaps=presented.frames.slice(1).map((frame,index)=>frame.ms-presented.frames[index].ms);
   const startupMetrics={...ready,firstFrameMs:Math.round(presented.frames[0]?.ms??Infinity),maxFrameGapMs:Math.round(Math.max(0,...gaps)),waitingEvents:presented.waiting};

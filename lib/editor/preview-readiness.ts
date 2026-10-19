@@ -6,10 +6,10 @@ export function previewMediaReady(node:HTMLMediaElement,time:number) {
   const end=Number(node.dataset.end??Number(node.dataset.start)+Number(node.dataset.duration));
   if(!Number.isFinite(end))return true;
   const rate=Number(node.dataset.playbackRate??1);
-  // Chromium can suspend a paused range fetch at its native preload budget,
-  // leaving less than our preferred 1.5s even though playback can continue.
-  // Waiting for more bytes while that fetch is idle deadlocks the transport.
-  const minimumRunway=node.paused&&node.networkState===1?.5:1.5;
+  // A paused decoder can stop filling its native preload budget while still
+  // reporting NETWORK_LOADING. Resume from decoded runway rather than waiting
+  // forever for a preferred 1.5s or trusting that network-state flag.
+  const minimumRunway=node.paused?.5:1.5;
   const runway=Math.min(minimumRunway,Math.max(0,end-time))*(Number.isFinite(rate)&&rate>0?rate:1);
   const target=Math.min(node.currentTime+runway,Number.isFinite(node.duration)?node.duration:Infinity);
   for(let index=0;index<node.buffered.length;index++)if(node.buffered.start(index)<=node.currentTime+.025&&node.buffered.end(index)>=target-.025)return true;

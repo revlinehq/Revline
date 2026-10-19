@@ -34,7 +34,7 @@ test('patch is confined to Play/Pause alignment and audible clock selection and 
 });
 
 
-test('production range-seek replay resumes when Chromium suspends a playable paused buffer below 1.5 seconds',()=>{
+test('production range-seek replay resumes when Chromium stops filling a playable paused buffer below 1.5 seconds',()=>{
   const doc=new EventTarget();let bufferedEnd=73.5,plays=0;
   const media={tagName:'VIDEO',paused:true,networkState:2,dataset:{start:'17.6',end:'20.7333333333',duration:'3.1333333333',playbackRate:'1'},currentTime:73.841333,duration:99.987833,ended:false,seeking:true,readyState:1,buffered:{length:1,start:()=>73.481122,end:()=>bufferedEnd},hasAttribute:()=>true};
   doc.querySelectorAll=()=>[media];const player=new EventTarget();player.paused=false;
@@ -44,9 +44,8 @@ test('production range-seek replay resumes when Chromium suspends a playable pau
     const waiting=new Event('waiting');Object.defineProperty(waiting,'target',{value:media});doc.dispatchEvent(waiting);
     assert.equal(guard.isBuffering(),true);
     media.seeking=false;media.readyState=3;bufferedEnd=75.175533;
-    doc.dispatchEvent(new Event('canplay'));assert.equal(guard.isBuffering(),true,'An ongoing fetch still builds preferred runway');
-    media.networkState=1;doc.dispatchEvent(new Event('suspend'));
-    assert.equal(guard.isBuffering(),false,'Idle native preload with 1.334 decoded seconds must not deadlock');
+    doc.dispatchEvent(new Event('canplay'));
+    assert.equal(guard.isBuffering(),false,'Decoded 1.334s runway resumes even when the browser misleadingly reports NETWORK_LOADING');
     assert.equal(plays,1);assert.equal(player.paused,false);
     media.readyState=1;assert.equal(previewMediaReady(media,17.608),false,'Metadata alone never releases the hold');
     media.readyState=3;bufferedEnd=73.94;assert.equal(previewMediaReady(media,17.608),false,'Less than half a second remains a real buffer wait');
@@ -55,10 +54,10 @@ test('production range-seek replay resumes when Chromium suspends a playable pau
 
 test('initial readiness also responds when the browser suspends its bounded paused preload',async()=>{
   const doc=new EventTarget(),media=new EventTarget();let resolved=false;
-  Object.assign(media,{tagName:'VIDEO',paused:true,networkState:2,dataset:{start:'0',end:'3',playbackRate:'1'},currentTime:73.841333,duration:99.987833,seeking:false,readyState:3,buffered:{length:1,start:()=>73.481122,end:()=>75.175533}});
+  Object.assign(media,{tagName:'VIDEO',paused:true,networkState:2,dataset:{start:'0',end:'3',playbackRate:'1'},currentTime:73.841333,duration:99.987833,seeking:false,readyState:3,buffered:{length:1,start:()=>73.481122,end:()=>74.0}});
   doc.querySelectorAll=()=>[media];
   const pending=waitForPreviewMedia(doc,0,new AbortController().signal).then(()=>{resolved=true});
   await Promise.resolve();assert.equal(resolved,false);
-  media.networkState=1;media.dispatchEvent(new Event('suspend'));await pending;
+  media.networkState=1;media.buffered.end=()=>75.175533;media.dispatchEvent(new Event('suspend'));await pending;
   assert.equal(resolved,true);
 });
