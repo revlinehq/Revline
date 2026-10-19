@@ -54,6 +54,6 @@ export function tracePreviewPlayback(document:Document,player:Transport,readTime
     previousWall=now;previousClock=time;rafCount=0;maxRafGap=0;longTasks=0;longTaskMs=0;
   };
   const timer=setInterval(report,2000);
-  console.warn('[Revline playback trace]',JSON.stringify({event:'attached',timestamp:new Date().toISOString(),chatId,traceId}));
+  console.warn('[Revline playback trace]',JSON.stringify({event:'attached',timestamp:new Date().toISOString(),chatId,traceId,codecs:{h264:document.createElement('video').canPlayType('video/mp4; codecs="avc1.64002A"'),aac:document.createElement('audio').canPlayType('audio/mp4; codecs="mp4a.40.2"')}}));
   return()=>{stopped=true;clearInterval(timer);win.cancelAnimationFrame(raf);observer?.disconnect();if(player.pause===tracedPause)player.pause=originalPause;for(const name of ['play','pause','ended'])player.removeEventListener(name,transportEvent);for(const name of events)document.removeEventListener(name,event,true);for(const [node,sample]of media)if(node.tagName==='VIDEO'&&sample.frameCallback!==undefined)(node as HTMLVideoElement).cancelVideoFrameCallback(sample.frameCallback);media.clear();};
 }
