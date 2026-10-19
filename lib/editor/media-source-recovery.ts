@@ -6,6 +6,8 @@ export type RefreshPlaybackMedia = (assetIds:string[]) => Promise<{_id:string;ur
 export function watchPreviewMediaStalls(document:Document,readTime:()=>number,repair:(media:HTMLMediaElement)=>Promise<void>){
   const states=new WeakMap<HTMLMediaElement,{signature:string;progressAt:number;attempts:number}>();
   let disposed=false,repairing=false;
+  const progress=(event:Event)=>{const state=states.get(event.target as HTMLMediaElement);if(state)state.progressAt=Date.now();};
+  document.addEventListener('progress',progress,true);
   const check=()=>{
     if(disposed||repairing)return;
     const time=readTime(),now=Date.now();
@@ -27,7 +29,7 @@ export function watchPreviewMediaStalls(document:Document,readTime:()=>number,re
     }
   };
   const timer=setInterval(check,500);
-  return()=>{disposed=true;clearInterval(timer);};
+  return()=>{disposed=true;clearInterval(timer);document.removeEventListener('progress',progress,true);};
 }
 
 function mediaEvent(media:HTMLMediaElement,event:string,signal:AbortSignal) {

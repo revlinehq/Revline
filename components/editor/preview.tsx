@@ -214,6 +214,7 @@ export const Preview = forwardRef<PreviewHandle,{timeline:Timeline;assets:MediaA
             },redraw:()=>{const host=doc.defaultView as (Window&{__revlineEffects?:{redraw():void}})|null;host?.__revlineEffects?.redraw();}});
           })().catch(error=>{
             if(cancelled||recovery.signal.aborted)return;
+            if(quiet)console.warn('[Revline playback recovery]',JSON.stringify({reason:'source reload failed',id:media.dataset.sourceClip,readyState:media.readyState,networkState:media.networkState,seeking:media.seeking,errorType:error instanceof Error?error.name:'UnknownError'}));
             if(quiet&&!media.error)return;
             if(error&&typeof error==='object'&&'name' in error&&error.name==='NotAllowedError'){p?.pause();callbacks.current.onPlaying(false);callbacks.current.onError('The media has recovered. Press play to resume.');}
             else callbacks.current.onError('This source is unavailable. Reimport the clip or reload the project.');

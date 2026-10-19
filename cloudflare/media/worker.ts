@@ -32,6 +32,7 @@ export default {
         const upload = env.MEDIA.resumeMultipartUpload(grant.key, grant.uploadId);
         response = json(await upload.uploadPart(grant.partNumber!, request.body));
       } else if (url.pathname === '/read' && (request.method === 'GET' || request.method === 'HEAD') && grant.operation === 'read' && validKey(grant.key)) {
+        const readStarted=Date.now();
         const object = request.method === 'HEAD' ? await env.MEDIA.head(grant.key) : await env.MEDIA.get(grant.key, { range: request.headers, onlyIf: request.headers });
         if (!object) response = json({ error: 'Media not found' }, 404);
         else {
@@ -44,6 +45,7 @@ export default {
             const length = range && 'length' in range ? range.length ?? object.size : object.size;
             headers.set('Content-Length', String(length));
             if (range) headers.set('Content-Range', `bytes ${offset}-${offset + length - 1}/${object.size}`);
+            console.info('[media-storage read]',{method:request.method,status:range?206:200,offset,length,size:object.size,metadataMs:Date.now()-readStarted,ray:request.headers.get('cf-ray')});
             response = new Response(hasBody(object) ? object.body : null, { status: range ? 206 : 200, headers });
           }
         }

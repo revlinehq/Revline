@@ -1,5 +1,5 @@
 type Transport = EventTarget & { paused:boolean; pause?:()=>void };
-type MediaSample = { events:Record<string,number>; frames:number; lastFrame?:number; maxFrameGap:number; sourceTime:number; frameCallback?:number };
+type MediaSample = { events:Record<string,number>; frames:number; lastFrame?:number; maxFrameGap:number; sourceTime:number; frameCallback?:number; progressAt:number; seekAt?:number; bufferSignature:string; bufferChangedAt:number };
 
 /** Development or explicitly opted-in client trace. Never records media URLs or contents. */
 export function tracePreviewPlayback(document:Document,player:Transport,readTime:()=>number,state:()=>{playing:boolean;buffering:boolean},chatId:string) {
@@ -40,7 +40,8 @@ export function tracePreviewPlayback(document:Document,player:Transport,readTime
   function refresh() {
     for(const node of document.querySelectorAll<HTMLMediaElement>('video[data-start],audio[data-start]')) {
       if(media.has(node))continue;
-      const sample:MediaSample={events:{},frames:0,maxFrameGap:0,sourceTime:node.currentTime};media.set(node,sample);
+      const now=performance.now();
+      const sample:MediaSample={events:{},frames:0,maxFrameGap:0,sourceTime:node.currentTime,progressAt:now,bufferSignature:JSON.stringify(buffered(node)),bufferChangedAt:now};media.set(node,sample);
       if(node.tagName==='VIDEO'&&'requestVideoFrameCallback' in node){
         const video=node as HTMLVideoElement;
         const decoded=(now:number)=>{
@@ -55,7 +56,16 @@ export function tracePreviewPlayback(document:Document,player:Transport,readTime
     }
     for(const [node,sample]of media)if(!node.isConnected){if(node.tagName==='VIDEO'&&sample.frameCallback!==undefined)(node as HTMLVideoElement).cancelVideoFrameCallback(sample.frameCallback);media.delete(node);}
   }
-  const event=(event:Event)=>{const node=event.target as HTMLMediaElement,sample=media.get(node);if(sample)sample.events[event.type]=(sample.events[event.type]??0)+1;if(sample&&event.type==='error')probeSource(node);};
+  const event=(event:Event)=>{
+    const node=event.target as HTMLMediaElement,sample=media.get(node);if(!sample)return;
+    sample.events[event.type]=(sample.events[event.type]??0)+1;
+    const now=performance.now(),time=readTime();
+    if(event.type==='progress'||event.type==='loadedmetadata')sample.progressAt=now;
+    if(event.type==='seeking')sample.seekAt=now;
+    if(event.type==='seeked')sample.seekAt=undefined;
+    if(['waiting','stalled','seeking','seeked','error'].includes(event.type)&&time>=Number(node.dataset.start)&&time<Number(node.dataset.end))console.warn('[Revline playback media event]',JSON.stringify({timestamp:new Date().toISOString(),chatId,traceId,event:event.type,id:node.dataset.sourceClip,kind:node.tagName,clock:time,sourceTime:node.currentTime,ready:node.readyState,network:node.networkState,seeking:node.seeking,buffered:buffered(node)}));
+    if(event.type==='error')probeSource(node);
+  };
   for(const name of events)document.addEventListener(name,event,true);
   function tick(now:number){if(stopped)return;if(state().playing){rafCount++;if(lastRaf)maxRafGap=Math.max(maxRafGap,now-lastRaf);lastRaf=now;}else lastRaf=0;raf=win!.requestAnimationFrame(tick);}
   raf=win.requestAnimationFrame(tick);
@@ -68,10 +78,13 @@ export function tracePreviewPlayback(document:Document,player:Transport,readTime
     const samples=[...media].map(([node,sample])=>{
       const start=Number(node.dataset.start),end=Number(node.dataset.end),rate=Number(node.dataset.playbackRate??1);
       const active=time>=start&&time<end,expected=Number(node.dataset.mediaStart??0)+(time-start)*rate;
+      const ranges=buffered(node),signature=JSON.stringify(ranges);
+      if(signature!==sample.bufferSignature){sample.bufferSignature=signature;sample.bufferChangedAt=now;}
+      const quality=node.tagName==='VIDEO'?(node as HTMLVideoElement).getVideoPlaybackQuality?.():undefined;
       // Native loading can stall without raising an error. Compare a bounded
       // fetch through the same browser with the stalled native media request.
       if(active&&node.readyState===0&&now-attachedAt>=10000)probeSource(node);
-      const output={id:node.dataset.sourceClip??node.id,kind:node.tagName,active,sourceTime:round(node.currentTime),sourceAdvance:round(node.currentTime-sample.sourceTime),rate:node.playbackRate,expectedRate:rate,driftMs:active?Math.round((node.currentTime-expected)/rate*1000):null,ready:node.readyState,network:node.networkState,seeking:node.seeking,paused:node.paused,muted:node.muted,volume:round(node.volume),buffered:buffered(node),error:node.error?.code??null,errorMessage:node.error?.message.replace(/https?:\/\/[^\s"']+/g,'[media URL]').slice(0,300),decodedFrames:sample.frames,maxFrameGapMs:Math.round(sample.maxFrameGap),events:sample.events};
+      const output={id:node.dataset.sourceClip??node.id,kind:node.tagName,active,sourceTime:round(node.currentTime),sourceAdvance:round(node.currentTime-sample.sourceTime),rate:node.playbackRate,expectedRate:rate,driftMs:active?Math.round((node.currentTime-expected)/rate*1000):null,ready:node.readyState,network:node.networkState,seeking:node.seeking,paused:node.paused,muted:node.muted,volume:round(node.volume),buffered:ranges,progressIdleMs:Math.round(now-sample.progressAt),bufferIdleMs:Math.round(now-sample.bufferChangedAt),seekAgeMs:node.seeking&&sample.seekAt!==undefined?Math.round(now-sample.seekAt):0,totalVideoFrames:quality?.totalVideoFrames,droppedVideoFrames:quality?.droppedVideoFrames,error:node.error?.code??null,errorMessage:node.error?.message.replace(/https?:\/\/[^\s"']+/g,'[media URL]').slice(0,300),decodedFrames:sample.frames,maxFrameGapMs:Math.round(sample.maxFrameGap),events:sample.events};
       sample.sourceTime=node.currentTime;sample.events={};sample.frames=0;sample.maxFrameGap=0;return output;
     }).filter(sample=>sample.active||sample.decodedFrames||Object.keys(sample.events).length).slice(0,16);
     if(current.playing||rafCount||samples.some(sample=>sample.active&&(sample.ready<3||sample.seeking)))console.warn('[Revline playback trace]',JSON.stringify({timestamp:new Date().toISOString(),chatId,traceId,visibility:document.visibilityState,clock:round(time),clockAdvance:round(time-previousClock),wallMs:Math.round(wallMs),...current,rafCount,maxRafGapMs:Math.round(maxRafGap),longTasks,longTaskMs:Math.round(longTaskMs),effectsCanvases:document.querySelectorAll('.visual-effect-output').length,media:samples}));
