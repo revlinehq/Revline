@@ -52,6 +52,7 @@ RUN node scripts/install-beat-model.mjs \
 # Installed Chromium is read-only at runtime. Re-owning it here would copy
 # another ~698 MB into every image after an application-code change.
 RUN mkdir -p /tmp/revline && chown node:node /tmp/revline
+ENV PRODUCER_MAX_WORKERS=2
 USER node
 EXPOSE 8080
 STOPSIGNAL SIGTERM

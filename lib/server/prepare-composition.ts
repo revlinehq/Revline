@@ -7,18 +7,31 @@ import { generateComposition } from '../editor/composition';
 import { downloadOwnedMedia,probeMedia } from '../media-analysis/io';
 import { AnalysisError } from '../media-analysis/errors';
 import { prepareRenderAudioSource } from './prepare-render-audio';
+import { mediaSourceCacheIdentity, reuseMediaFile } from './media-file-cache';
+
+type CompositionAsset=MediaAsset&{size:number;ownerId?:string;projectId?:string;contentType?:string;r2Key?:string;storageId?:string};
 
 /** Shared trusted assets/runtime preparation for MP4 export and rendered review. */
-export async function prepareComposition(directory:string,timeline:Timeline,assets:(MediaAsset & {size:number})[],convexUrl:string,signal:AbortSignal) {
+export async function prepareComposition(directory:string,timeline:Timeline,assets:CompositionAsset[],convexUrl:string,signal:AbortSignal) {
   const assetUrls:Record<string,string>={},audible=new Set(timeline.clips.filter(clip=>clip.kind==='audio'&&(clip.volume??1)>0).map(clip=>clip.assetId));
   for(const [index,asset] of assets.entries()) {
+    if(asset.kind==='audio'&&!audible.has(asset._id))continue;
     if(!asset.url)throw new AnalysisError('Composition source media is unavailable.',400);
     const sourceExtension=extname(asset.fileName).toLowerCase();
     const extension=/^\.(mp4|mov|webm|m4v|mp3|wav|m4a|ogg|flac|aac|aiff|png|jpg|jpeg|webp|gif|avif)$/.test(sourceExtension)?sourceExtension:asset.kind==='video'?'.mp4':asset.kind==='audio'?'.audio':'.image';
     const name=`asset-${index}${extension}`;
-    await downloadOwnedMedia(asset.url,join(directory,name),new URL(convexUrl).origin,asset.size,signal);
-    const audio=asset.kind==='audio'&&audible.has(asset._id)?await prepareRenderAudioSource(join(directory,name),join(directory,`asset-${index}-decoded.wav`),signal):null;
-    assetUrls[asset._id]=audio?.decoded?`./asset-${index}-decoded.wav`:`./${name}`;
+    // Reuse only immutable media identified by a fresh, authorized task snapshot.
+    // The existing bounded cache isolates backend, owner and project and keeps
+    // active files alive through hard links when an older entry is evicted.
+    const identity=asset.projectId&&asset.contentType?mediaSourceCacheIdentity(convexUrl,asset.projectId,{...asset,contentType:asset.contentType}):undefined;
+    await reuseMediaFile({identity,variant:'source-v1',target:join(directory,name),signal,expectedBytes:asset.size},()=>downloadOwnedMedia(asset.url!,join(directory,name),new URL(convexUrl).origin,asset.size,signal));
+    let decoded=false;
+    if(asset.kind==='audio'){
+      const output=join(directory,`asset-${index}-decoded.wav`);
+      const reused=await reuseMediaFile({identity,variant:'export-pcm48k-s16-v1',target:output,signal,maxBytes:128*1024*1024},async()=>{decoded=(await prepareRenderAudioSource(join(directory,name),output,signal)).decoded;});
+      decoded||=reused;
+    }
+    assetUrls[asset._id]=decoded?`./asset-${index}-decoded.wav`:`./${name}`;
   }
   await copyFile(join(process.cwd(),'public/vendor/gsap.min.js'),join(directory,'gsap.min.js'));
   await copyFile(join(process.cwd(),'public/vendor/visual-effects.js'),join(directory,'visual-effects.js'));

@@ -16,8 +16,8 @@ try {
   const settings = JSON.parse(serialized);
   if (!directory || !output || ![24, 30, 60].includes(settings.fps) || !['draft', 'standard', 'high'].includes(settings.quality)) throw new Error('Invalid render worker settings.');
   configureRenderFfmpeg(directory);
-  const producerConfig = resolveConfig({ lowMemoryMode: true, frameDataUriCacheBytesLimitMb: 128 });
-  const job = createRenderJob({ producerConfig, fps: settings.fps, quality: settings.quality, workers: 1, strictness: 'strict', logger: createConsoleLogger('error') });
+  const producerConfig = resolveConfig({ concurrency: 2, lowMemoryMode: true, frameDataUriCacheBytesLimitMb: 128 });
+  const job = createRenderJob({ producerConfig, fps: settings.fps, quality: settings.quality, workers: 2, strictness: 'strict', logger: createConsoleLogger('error') });
   await executeRenderJob(job, directory, output, progress => report({ type: 'progress', progress: progress.progress }), controller.signal);
   if (job.status !== 'complete') throw new Error('The render did not finish.');
   report({ type: 'complete', warnings: job.warnings.length });

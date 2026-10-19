@@ -109,6 +109,10 @@ export function generateComposition(timeline: Timeline, assets: MediaAsset[], op
     validateVisualFade(clip);
     validateVisualEffects(clip);
     validatePlaybackRate(clip);
+    // Silent sound still contributes to the authored duration above, but needs
+    // no decoder or time-stretch/mix work in an export. Preview retains the
+    // element so live volume controls can unmute it without rebuilding footage.
+    if (!options.preview && clip.kind === 'audio' && clip.volume === 0) return '';
     const id = `clip-${index}`;
     const start = clip.start;
     const end = start + clip.duration;
