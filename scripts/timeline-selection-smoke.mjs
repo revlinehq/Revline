@@ -9,7 +9,7 @@ const marker=()=>page.$eval('.playhead',el=>new DOMMatrix(getComputedStyle(el).t
 async function clipPoint(index){const clips=await page.$$('.clip-video');const bounds=await clips[index].boundingBox();return {x:bounds.x+bounds.width/2,y:bounds.y+bounds.height/2};}
 async function clickClip(index,button='left'){const point=await clipPoint(index);await page.mouse.click(point.x,point.y,{button});await wait(100);}
 try{
- await page.goto('http://localhost:3001/editor/demo',{waitUntil:'domcontentloaded'});await page.waitForFunction(()=>document.querySelector('hyperframes-player')?.ready);
+ await page.goto('http://localhost:3001/dev/editor',{waitUntil:'domcontentloaded'});await page.waitForFunction(()=>document.querySelector('hyperframes-player')?.ready);
  const ruler=await page.$eval('.time-ruler',el=>{const r=el.getBoundingClientRect();const origin=parseFloat(el.querySelector('span').style.left);const labels=[...el.querySelectorAll('span')];return {x:r.x+origin+54*2,y:r.y+4};});
  await page.mouse.click(ruler.x,ruler.y);await wait(100);const parked=await marker();
  await clickClip(6);expect(Math.abs(await marker()-parked)<.01,'Selecting footage outside the current frame must leave the playhead parked');

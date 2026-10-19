@@ -5,7 +5,7 @@ const page = await browser.newPage(), errors = [], checks = [];
 page.on('pageerror', error => errors.push(error.message));
 try {
  await page.setViewport({ width: 1440, height: 900 });
- await page.goto(`${process.env.BASE_URL ?? 'http://localhost:3001'}/editor/demo`, { waitUntil: 'networkidle2' });
+ await page.goto(`${process.env.BASE_URL ?? 'http://localhost:3001'}/dev/editor`, { waitUntil: 'networkidle2' });
  await page.waitForSelector('.timeline-panel');
  await page.evaluate(() => {
   const el = document.querySelector('.timeline-panel'); let fiber = el[Object.keys(el).find(k => k.startsWith('__reactFiber$'))];

@@ -80,7 +80,7 @@ async function paintedMediaBounds(value) {
 }
 try {
  await page.setViewport({ width: 1440, height: 900 });
- await page.goto(`${process.env.BASE_URL ?? 'http://localhost:3001'}/editor/demo`, { waitUntil: 'networkidle2' });
+ await page.goto(`${process.env.BASE_URL ?? 'http://localhost:3001'}/dev/editor`, { waitUntil: 'networkidle2' });
  await page.waitForSelector('.timeline-scroll'); await page.waitForFunction(() => document.querySelector('hyperframes-player')?.ready);
  await (await page.$('input[type=file]')).uploadFile(fixture);
  await page.waitForFunction(() => { const node = document.querySelector('.timeline-scroll'); let f = node[Object.keys(node).find(k => k.startsWith('__reactFiber$'))]; while(f && !f.memoizedProps?.store) f=f.return; return f?.memoizedProps.store.getState().timeline.clips.at(-1)?.assetId && !f.memoizedProps.store.getState().timeline.clips.at(-1)?.id.startsWith('shot-'); });

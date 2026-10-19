@@ -82,7 +82,7 @@ function outsideHandles(value) {
 }
 
 try {
-  await page.goto(`${origin}/editor/demo`, { waitUntil: 'networkidle2', timeout: 60000 });
+  await page.goto(`${origin}/dev/editor`, { waitUntil: 'networkidle2', timeout: 60000 });
   await page.waitForSelector('.timeline-scroll');
   await page.waitForFunction(() => document.querySelector('hyperframes-player')?.ready);
   await wait(500);

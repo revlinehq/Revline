@@ -4,7 +4,7 @@ const browser=await puppeteer.launch({executablePath:'/home/sonic/.cache/puppete
 const page=await browser.newPage();await page.setViewport({width:730,height:900});
 const pause=ms=>new Promise(r=>setTimeout(r,ms));
 try{
- await page.goto('http://localhost:3001/editor/demo',{waitUntil:'networkidle2'});
+ await page.goto('http://localhost:3001/dev/editor',{waitUntil:'networkidle2'});
  await page.waitForSelector('.timeline-clip');
  const divider=await page.$eval('[aria-label="Resize preview and timeline"]',e=>{const r=e.getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2};});
  await page.mouse.move(divider.x,divider.y);await page.mouse.down();await page.mouse.move(divider.x,divider.y+160,{steps:10});await page.mouse.up();await pause(150);

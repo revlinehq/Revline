@@ -9,7 +9,7 @@ const state=()=>page.evaluate(()=>{
   const {timeline,selectedId,playhead}=window.testStore.getState();return {clips:timeline.clips,selectedId,playhead,focus:document.activeElement?.tagName};
 });
 try{
-  await page.goto(process.env.BASE_URL??'http://localhost:3001/editor/demo',{waitUntil:'networkidle2'});
+  await page.goto(process.env.BASE_URL??'http://localhost:3001/dev/editor',{waitUntil:'networkidle2'});
   await page.waitForFunction(()=>document.querySelector('hyperframes-player')?.ready&&!document.querySelector('.preview-loading'));
   const original=await state();
   const first=original.clips.find(c=>c.kind==='video'||c.kind==='image');

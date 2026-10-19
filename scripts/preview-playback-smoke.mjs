@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import puppeteer from 'puppeteer';
 const browser=await puppeteer.launch({headless:true,args:['--no-sandbox','--disable-dev-shm-usage','--ignore-certificate-errors']});
 try {
- const page=await browser.newPage();await page.setViewport({width:1440,height:1000});await page.goto('http://localhost:3001/editor/demo',{waitUntil:'networkidle2'});await page.waitForFunction(()=>document.querySelector('hyperframes-player')?.ready);
+ const page=await browser.newPage();await page.setViewport({width:1440,height:1000});await page.goto('http://localhost:3001/dev/editor',{waitUntil:'networkidle2'});await page.waitForFunction(()=>document.querySelector('hyperframes-player')?.ready);
  await page.evaluate(()=>{
   const el=document.querySelector('.timeline-panel');let f=el[Object.keys(el).find(k=>k.startsWith('__reactFiber$'))],store;while(f){store??=f.memoizedProps?.store;f=f.return;}if(!store)throw Error('Missing store');
   const clip=store.getState().timeline.clips.find(c=>c.kind==='video'||c.kind==='image');store.getState().replace({fps:30,aspectRatio:'vertical',clips:[{...clip,id:'fixture',start:0,sourceStart:0,duration:20}]});store.setState({selectedId:'fixture',selectedIds:['fixture'],playhead:0});window.__proofStore=store;

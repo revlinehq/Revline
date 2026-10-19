@@ -5,7 +5,7 @@ const page=await browser.newPage();const errors=[];page.on('pageerror',error=>er
 const wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 async function rect(selector){return page.$eval(selector,el=>{const r=el.getBoundingClientRect();return {x:r.x,y:r.y,width:r.width,height:r.height};});}
 try{
- await page.goto('http://localhost:3001/editor/demo',{waitUntil:'domcontentloaded'});await page.waitForFunction(()=>document.querySelector('hyperframes-player')?.ready);
+ await page.goto('http://localhost:3001/dev/editor',{waitUntil:'domcontentloaded'});await page.waitForFunction(()=>document.querySelector('hyperframes-player')?.ready);
  const row=await rect('.timeline-track[data-group="visual"][data-layer="1"]');const clip=await rect('.timeline-track[data-group="visual"][data-layer="1"] .timeline-clip');
  const before=await page.$eval('.timeline-clip.clip-video',el=>el.getAttribute('aria-label'));
  await page.mouse.move(clip.x+clip.width/2,clip.y+clip.height/2);await page.mouse.down();await page.mouse.move(clip.x+clip.width/2,row.y-12,{steps:15});await wait(100);assert.ok(await page.$('[aria-label="Create visual layer above"]'),"Top insertion indicator must be visible");await page.mouse.up();await wait(200);

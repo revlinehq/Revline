@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import puppeteer from 'puppeteer';
 
-const demoUrl = new URL(process.env.BASE_URL ?? 'http://localhost:3001/editor/demo');
-assert.ok(['localhost', '127.0.0.1'].includes(demoUrl.hostname) && demoUrl.pathname === '/editor/demo', 'Run only the isolated local in-memory demo');
+const demoUrl = new URL(process.env.BASE_URL ?? 'http://localhost:3001/dev/editor');
+assert.ok(['localhost', '127.0.0.1'].includes(demoUrl.hostname) && demoUrl.pathname === '/dev/editor', 'Run only the isolated local in-memory demo');
 const browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox', '--disable-dev-shm-usage', '--ignore-certificate-errors'] });
 try {
   const context = await browser.createBrowserContext();

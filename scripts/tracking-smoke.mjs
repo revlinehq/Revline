@@ -27,7 +27,7 @@ try {
   const page = await browser.newPage();
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
-  const response = await page.goto(base + '/editor/demo', { waitUntil: 'networkidle2', timeout: 60_000 });
+  const response = await page.goto(base + '/dev/editor', { waitUntil: 'networkidle2', timeout: 60_000 });
   assert.equal(response.status(), 200, 'The local editor must remain healthy.');
   await page.waitForFunction(() => document.querySelector('hyperframes-player')?.ready);
   await page.addScriptTag({ content: bundle.outputFiles[0].text });

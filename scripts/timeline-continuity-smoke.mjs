@@ -4,7 +4,7 @@ const browser=await puppeteer.launch({executablePath:'/home/sonic/.cache/puppete
 const page=await browser.newPage();await page.setViewport({width:1440,height:1001});const errors=[];page.on('pageerror',e=>errors.push(e.message));const wait=ms=>new Promise(r=>setTimeout(r,ms));
 const rect=selector=>page.$eval(selector,el=>{const r=el.getBoundingClientRect();return {x:r.x,y:r.y,width:r.width,height:r.height};});
 try{
- await page.goto('http://localhost:3001/editor/demo',{waitUntil:'domcontentloaded'});await page.waitForFunction(()=>document.querySelector('hyperframes-player')?.ready);
+ await page.goto('http://localhost:3001/dev/editor',{waitUntil:'domcontentloaded'});await page.waitForFunction(()=>document.querySelector('hyperframes-player')?.ready);
  await page.evaluate(()=>{window.originalPreview=document.querySelector('hyperframes-player');window.blankFrames=0;window.observePreview=new MutationObserver(()=>{if(!window.originalPreview.isConnected||document.querySelector('.preview-loading'))window.blankFrames++;});window.observePreview.observe(document.querySelector('.preview-canvas'),{subtree:true,childList:true});});
  const row=await rect('.timeline-track[data-group="visual"]');const clip=await rect('.clip-video');
  await page.mouse.move(clip.x+clip.width/2,clip.y+clip.height/2);await page.mouse.down();await page.mouse.move(clip.x+clip.width/2,row.y-12,{steps:15});await page.mouse.up();await wait(400);

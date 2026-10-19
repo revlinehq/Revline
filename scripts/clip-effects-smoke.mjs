@@ -6,7 +6,7 @@ const pause=()=>new Promise(resolve=>setTimeout(resolve,200));
 const ready=async()=>{await page.waitForFunction(()=>document.querySelector('hyperframes-player')?.ready&&!document.querySelector('.preview-loading'));await pause();};
 const selected=()=>page.evaluate(()=>window.testStore.getState().timeline.clips.find(c=>c.id===window.testStore.getState().selectedId));
 try {
- await page.goto(process.env.BASE_URL??'http://localhost:3001/editor/demo',{waitUntil:'networkidle2'});await ready();
+ await page.goto(process.env.BASE_URL??'http://localhost:3001/dev/editor',{waitUntil:'networkidle2'});await ready();
  await page.evaluate(()=>{
   const el=document.querySelector('.timeline-scroll');let fiber=el[Object.keys(el).find(k=>k.startsWith('__reactFiber$'))];
   while(fiber){const store=fiber.memoizedProps?.store;if(store?.getState?.().timeline){window.testStore=store;break;}fiber=fiber.return;}

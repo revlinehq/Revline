@@ -1,4 +1,5 @@
-import { redirect } from 'next/navigation';
-export default function DemoConversationPage() {
-  redirect('/editor/demo');
+import { notFound } from 'next/navigation';
+
+export default function RemovedDemoPage() {
+  notFound();
 }

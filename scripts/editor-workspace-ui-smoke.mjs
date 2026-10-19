@@ -54,7 +54,7 @@ async function conversationCheck(label) {
 
 try {
   await page.setViewport({ width: 1440, height: 1000 });
-  await page.goto(new URL('/editor/demo', baseUrl).href, { waitUntil: 'networkidle2' });
+  await page.goto(new URL('/dev/editor', baseUrl).href, { waitUntil: 'networkidle2' });
   await page.waitForFunction(() => document.querySelector('hyperframes-player')?.ready);
   await wait(800); await theme('light');
   await page.click('#inspector-sources-tab');
@@ -112,7 +112,8 @@ try {
 
   await page.setViewport({ width: 1440, height: 1000 });
   await page.goto(new URL('/chat/demo', baseUrl).href, { waitUntil: 'networkidle2' });
-  check(new URL(page.url()).pathname === '/editor/demo', 'Legacy sample conversation link redirects to the full editor');
+  check((await page.content()).includes('404'), 'The retired sample conversation route is unavailable');
+  await page.goto(new URL('/dev/editor', baseUrl).href, { waitUntil: 'networkidle2' });
   await page.waitForFunction(() => document.querySelector('hyperframes-player')?.ready); await wait(1000);
   await theme('light'); await conversationCheck('Desktop light');
   const panels = await page.evaluate(() => { const sidebar = document.querySelector('.editor-sidebar').getBoundingClientRect(), workspace = document.querySelector('.editor-workspace').getBoundingClientRect(); return { sidebarRight: sidebar.right, workspaceLeft: workspace.left }; });

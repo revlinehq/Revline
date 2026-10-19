@@ -6,7 +6,7 @@ await page.setViewport({width:1600,height:1000});
 const pause=()=>new Promise(resolve=>setTimeout(resolve,150));
 const snapshot=()=>page.evaluate(()=>{const {timeline,playhead}=window.testStore.getState();return {markers:timeline.markers??[],playhead,clips:timeline.clips};});
 try{
-  await page.goto(process.env.BASE_URL??'http://localhost:3001/editor/demo',{waitUntil:'networkidle2'});
+  await page.goto(process.env.BASE_URL??'http://localhost:3001/dev/editor',{waitUntil:'networkidle2'});
   await page.waitForFunction(()=>document.querySelector('hyperframes-player')?.ready&&!document.querySelector('.preview-loading'));
   await page.evaluate(()=>{
     const el=document.querySelector('.timeline-scroll');let fiber=el[Object.keys(el).find(k=>k.startsWith('__reactFiber$'))];

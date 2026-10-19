@@ -37,7 +37,7 @@ function verify(value, label) {
 try {
   for (const width of [1440, 390]) {
     await page.setViewport({ width, height: width === 1440 ? 1000 : 844 });
-    await page.goto(new URL('/editor/demo', baseUrl).href, { waitUntil: 'domcontentloaded' });
+    await page.goto(new URL('/dev/editor', baseUrl).href, { waitUntil: 'domcontentloaded' });
     await page.waitForSelector('.custom-timeline');
     await page.waitForFunction(() => document.querySelector('hyperframes-player')?.ready);
     if (width === 390) await page.waitForFunction(() => document.querySelector('.editor-workspace').getBoundingClientRect().width >= innerWidth - 1);

@@ -6,7 +6,7 @@ const pause=ms=>new Promise(r=>setTimeout(r,ms));
 async function box(selector){return page.$eval(selector,e=>{const r=e.getBoundingClientRect();return {x:r.x,y:r.y,w:r.width,h:r.height};});}
 async function caption(){return page.evaluate(()=>{const players=[...document.querySelectorAll('hyperframes-player')];const p=players.find(p=>p.style.zIndex==='1');const e=p.iframeElement.contentDocument.querySelector('.caption');return {x:parseFloat(e.style.left),y:parseFloat(e.style.top),font:parseFloat(e.style.fontSize),player:p.id||p.getAttribute('data-smoke-player')};});}
 try{
- await page.goto('http://localhost:3001/editor/demo',{waitUntil:'networkidle2'});await page.waitForSelector('.text-controls');const ruler=await box('.time-ruler');await page.mouse.click(ruler.x+54,ruler.y+10);await page.waitForSelector('[aria-label="Move text: A little more outside."]');
+ await page.goto('http://localhost:3001/dev/editor',{waitUntil:'networkidle2'});await page.waitForSelector('.text-controls');const ruler=await box('.time-ruler');await page.mouse.click(ruler.x+54,ruler.y+10);await page.waitForSelector('[aria-label="Move text: A little more outside."]');
  await page.waitForFunction(()=>document.querySelector('[aria-label="Move text: A little more outside."]').getBoundingClientRect().width>20);
  const selector='[aria-label="Move text: A little more outside."]',initial=await caption();let rect=await box(selector);
  await page.mouse.move(rect.x+rect.w/2,rect.y+rect.h/2);await page.mouse.down();await page.mouse.move(rect.x+rect.w/2+30,rect.y+rect.h/2-45,{steps:10});

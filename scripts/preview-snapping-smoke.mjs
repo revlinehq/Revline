@@ -42,7 +42,7 @@ async function move(dx, dy, shift = false) {
 }
 
 try {
-  await page.goto(`${origin}/editor/demo`, { waitUntil: 'networkidle2' });
+  await page.goto(`${origin}/dev/editor`, { waitUntil: 'networkidle2' });
   await page.waitForFunction(() => document.querySelector('hyperframes-player')?.ready);
   await fixture(); const before = await geometry();
   await move(before.root.width * .1 - 3, -before.root.height * .05 + 3);

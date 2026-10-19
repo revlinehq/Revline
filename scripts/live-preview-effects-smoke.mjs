@@ -11,8 +11,8 @@ const generateComposition = compositionModule.generateComposition ?? composition
 const directory = mkdtempSync(join(tmpdir(), 'revline-live-effects-'));
 const fixture = join(directory, 'footage.mp4');
 execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-f', 'lavfi', '-i', 'testsrc2=size=320x180:rate=30', '-t', '12', '-c:v', 'libx264', '-preset', 'ultrafast', '-pix_fmt', 'yuv420p', '-movflags', '+faststart', fixture]);
-const demoUrl = new URL(process.env.BASE_URL ?? 'http://localhost:3001/editor/demo');
-assert.ok(['localhost', '127.0.0.1'].includes(demoUrl.hostname) && demoUrl.pathname === '/editor/demo', 'Run only the isolated local in-memory demo');
+const demoUrl = new URL(process.env.BASE_URL ?? 'http://localhost:3001/dev/editor');
+assert.ok(['localhost', '127.0.0.1'].includes(demoUrl.hostname) && demoUrl.pathname === '/dev/editor', 'Run only the isolated local in-memory demo');
 const browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox', '--disable-dev-shm-usage', '--ignore-certificate-errors', '--enable-unsafe-swiftshader'] });
 const context = await browser.createBrowserContext();
 const page = await context.newPage();

@@ -29,7 +29,7 @@ function assertMarker(value, label) {
  assert.equal(value.clipPath,'none',`${label}: the SVG supplies rounded shoulders and a downward point`);
 }
 try {
- await page.goto('http://localhost:3001/editor/demo', { waitUntil:'domcontentloaded' });
+ await page.goto('http://localhost:3001/dev/editor', { waitUntil:'domcontentloaded' });
  await page.waitForFunction(() => document.querySelector('hyperframes-player')?.ready);
  const initial = await geometry();
  assert.ok(Math.abs(initial.firstClip.left-initial.viewport.left)<=0.6,'Time-zero footage must start flush at the timeline wall, without an inset');

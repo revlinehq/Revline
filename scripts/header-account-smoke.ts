@@ -28,7 +28,7 @@ projectId=await convex.mutation(api.projects.create,{title:'Disposable navbar pr
 const ticket=clerk<{token:string}>('/sign_in_tokens','POST',{user_id:userId,expires_in_seconds:120}).token;
 const installed=await getInstalledBrowsers({cacheDir:process.env.PUPPETEER_CACHE_DIR||join(homedir(),'.cache/puppeteer')});const chrome=installed.find(b=>b.browser==='chrome');assert.ok(chrome);
 browser=await puppeteer.launch({executablePath:chrome.executablePath,headless:true,args:['--no-sandbox','--disable-dev-shm-usage','--ignore-certificate-errors']});
-const page=await browser.newPage();await page.setViewport({width:1440,height:900});await page.goto(origin+'/editor/demo',{waitUntil:'networkidle2',timeout:60000});
+const page=await browser.newPage();await page.setViewport({width:1440,height:900});await page.goto(origin+'/dev/editor',{waitUntil:'networkidle2',timeout:60000});
 await page.waitForFunction(()=>!!(window as unknown as {Clerk?:{loaded?:boolean}}).Clerk?.loaded);
 const signedIn=await page.evaluate(async ticket=>{
 const clerk=(window as unknown as {Clerk:{client:{signIn:{create:(args:unknown)=>Promise<{status:string;createdSessionId:string}>}};setActive:(args:unknown)=>Promise<void>}}).Clerk;

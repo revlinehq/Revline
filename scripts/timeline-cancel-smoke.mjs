@@ -7,7 +7,7 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
 const bounds = selector => page.$eval(selector, el => { const r = el.getBoundingClientRect(); return { x: r.x, y: r.y, width: r.width, height: r.height }; });
 const failures = [];
 try {
- await page.goto('http://localhost:3001/editor/demo', { waitUntil: 'domcontentloaded' });
+ await page.goto('http://localhost:3001/dev/editor', { waitUntil: 'domcontentloaded' });
  await page.waitForFunction(() => document.querySelector('hyperframes-player')?.ready);
  const clip = '.clip-caption';
  const before = await bounds(clip);

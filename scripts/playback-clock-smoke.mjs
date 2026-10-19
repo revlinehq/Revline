@@ -100,7 +100,7 @@ async function scrub(kind, cdp) {
 }
 
 try {
-  await page.goto(new URL('/editor/demo', baseUrl).href, { waitUntil: 'domcontentloaded' });
+  await page.goto(new URL('/dev/editor', baseUrl).href, { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => document.querySelector('hyperframes-player')?.ready);
   await page.evaluate(() => document.fonts.ready);
   await wait(1500);

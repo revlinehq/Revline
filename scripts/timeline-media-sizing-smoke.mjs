@@ -30,7 +30,7 @@ async function measure(name) {
 }
 
 try {
-  await page.goto('http://localhost:3001/editor/demo', { waitUntil: 'networkidle2' });
+  await page.goto('http://localhost:3001/dev/editor', { waitUntil: 'networkidle2' });
   await page.waitForFunction(() => document.querySelector('hyperframes-player')?.ready);
   const demo = await measure('weekend_outside.jpg');
   assert.ok(Math.abs(demo.tileRatio - demo.sourceRatio) < .001, 'Original demo footage preserves its natural ratio');

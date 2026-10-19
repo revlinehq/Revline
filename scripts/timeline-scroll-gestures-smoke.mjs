@@ -8,7 +8,7 @@ page.on('console',message=>{if(message.type()==='error'&&message.text().includes
 const wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 const rect=selector=>page.$eval(selector,el=>{const r=el.getBoundingClientRect();return {x:r.x,y:r.y,width:r.width,height:r.height};});
 const expect=(condition,message)=>{if(!condition)failures.push(message);};
-async function reset(){await page.goto('http://localhost:3001/editor/demo',{waitUntil:'domcontentloaded'});await page.waitForFunction(()=>document.querySelector('hyperframes-player')?.ready);}
+async function reset(){await page.goto('http://localhost:3001/dev/editor',{waitUntil:'domcontentloaded'});await page.waitForFunction(()=>document.querySelector('hyperframes-player')?.ready);}
 try {
  await reset();
  const railLeft=(await rect('.track-headers')).x;

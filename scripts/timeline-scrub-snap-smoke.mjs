@@ -30,7 +30,7 @@ async function heldScrubChecks(){
  console.log(JSON.stringify({passed:true,rapidSamples:rapid.length,maxCursorErrorPx:Math.max(...rapid.map(sample=>Math.abs(sample.markerX-sample.expectedX))),edges:heldProof.cases.filter(item=>item.drift!==undefined).map(({name,drift})=>({name,drift})),crossPanelRelease:true,crossPanelEscape:true}));
 }
 try{
- await page.goto('http://localhost:3001/editor/demo',{waitUntil:'networkidle2'});
+ await page.goto('http://localhost:3001/dev/editor',{waitUntil:'networkidle2'});
  await page.waitForFunction(()=>document.querySelector('hyperframes-player')?.ready&&!document.querySelector('.preview-loading'));
  if(heldOnly){await heldScrubChecks();}else{
  await page.focus('[aria-label="Timeline zoom"]');await page.keyboard.press('End');

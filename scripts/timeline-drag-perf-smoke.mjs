@@ -104,7 +104,7 @@ async function measureGesture(kind, scale) {
 }
 
 async function reset() {
-  await page.goto(new URL('/editor/demo', baseUrl).href, { waitUntil: 'domcontentloaded' });
+  await page.goto(new URL('/dev/editor', baseUrl).href, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('.custom-timeline');
   await page.waitForFunction(() => document.querySelector('hyperframes-player')?.ready);
   await page.evaluate(() => document.fonts.ready);
