@@ -49,8 +49,9 @@ test('production range-seek replay resumes when Chromium stops filling a playabl
     assert.equal(plays,1);assert.equal(player.paused,false);
     media.dataset.playbackRate='4';assert.equal(previewMediaReady(media,17.608),true,'Native source preload cannot be multiplied beyond its paused buffer cap for faster clips');
     media.dataset.playbackRate='1';
+    bufferedEnd=74.122333;assert.equal(previewMediaReady(media,17.608),true,'Captured high-bitrate footage can suspend with only 281ms of decoded future frames');
     media.readyState=1;assert.equal(previewMediaReady(media,17.608),false,'Metadata alone never releases the hold');
-    media.readyState=3;bufferedEnd=73.94;assert.equal(previewMediaReady(media,17.608),false,'Less than half a second remains a real buffer wait');
+    media.readyState=3;bufferedEnd=73.94;assert.equal(previewMediaReady(media,17.608),false,'Less than 150ms remains a real buffer wait');
   }finally{guard.dispose()}
 });
 
