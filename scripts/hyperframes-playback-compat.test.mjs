@@ -26,9 +26,9 @@ test('one-times speed stays correct and decoded frames inside transport toleranc
   assert.deepEqual(run(patched,8,4,59+(8-start)*4),[]);
   assert.deepEqual(run(patched,12,4),[]);
 });
-test('patch is confined to Play/Pause alignment and audible clock selection and rejects changed dependencies',()=>{
+test('patch is confined to alignment, audible clock selection and accelerated audio tolerance and rejects changed dependencies',()=>{
   const before=alignment(upstream),after=alignment(patched);
-  assert.equal(patched.replace(after,before).replace('!pe(S)||!S.isConnected||h(S)||Number(S.dataset.volume??1)<=0||fl(S)','!pe(S)||!S.isConnected||h(S)||fl(S)'),upstream);
+  assert.equal(patched.replace(after,before).replace('!pe(S)||!S.isConnected||h(S)||Number(S.dataset.volume??1)<=0||fl(S)','!pe(S)||!S.isConnected||h(S)||fl(S)').replace('if(!J&&!V&&!G&&X&&ne>Yt*Math.max(1,r.tagName==="AUDIO"&&e.playing?Math.abs(T):1)){','if(!J&&!V&&!G&&X&&ne>Yt){'),upstream);
   assert.throws(()=>patchHyperframesPlaybackRuntime(upstream,'0.8.145'),/Review/);
   assert.throws(()=>patchHyperframesPlaybackRuntime(upstream.replace('I=c-S+L','I=changed'),'0.8.144'),/Review/);
 });
@@ -62,4 +62,31 @@ test('initial readiness also responds when the browser suspends its bounded paus
   await Promise.resolve();assert.equal(resolved,false);
   media.networkState=1;media.buffered.end=()=>75.175533;media.dispatchEvent(new Event('suspend'));await pending;
   assert.equal(resolved,true);
+});
+
+function repeatedAudioSync(source,rate,drift,forceSync=false){
+  const writes=[],maps=Object.fromEntries(['ll','jo','Xr','cl','Jr'].map(key=>[key,new WeakMap()]));
+  let current=0;
+  const media={tagName:'AUDIO',isConnected:true,paused:false,ended:false,volume:1,playbackRate:rate,preload:'auto',ownerDocument:{},closest:()=>null,
+    get currentTime(){return current},set currentTime(value){writes.push(value);current=value}};
+  const start=13.9,mediaStart=9.633333333333333;
+  const clip={el:media,start,end:16,duration:2.1,mediaStart,rate,sourceDuration:24.789333,volume:1};
+  const sync=vm.runInNewContext(`(${source.slice(source.indexOf('function tp('),source.indexOf('var Xt=',source.indexOf('function tp(')))})`,{
+    ...maps,al:new WeakSet(),ul:new WeakSet(),er:new WeakSet(),
+    Kt:(time,start,end)=>time>=start&&time<end,Bs:value=>value,Wn:(value,time)=>value*time,qr:()=>false,qn:()=>false,
+    sl:value=>value,Qe:value=>value,Ff:()=>null,$o:()=>false,jm:{fadeIn:0,fadeOut:0},pl:.5,Yt:.04,fl:()=>false,Qm:()=>{},It:()=>null,H:()=>{},
+  });
+  for(let frame=0;frame<4;frame++){
+    const timeSeconds=14.2+frame/60;current=mediaStart+(timeSeconds-start)*rate-drift;
+    sync({clips:[clip],timeSeconds,playing:true,playbackRate:1,forceSync,getCompositionDuration:()=>28});
+  }
+  return writes;
+}
+
+test('accelerated secondary audio does not repeatedly seek for normal timeline drift',()=>{
+  assert.ok(repeatedAudioSync(upstream,4,.06).length>0,'Captured 4x audio jitter reproduces in the upstream synchronizer');
+  assert.deepEqual(repeatedAudioSync(patched,4,.06),[],'15ms of timeline drift at 4x is normal decoder jitter');
+  assert.ok(repeatedAudioSync(patched,4,.24).length>0,'A real 60ms timeline drift is still corrected');
+  assert.ok(repeatedAudioSync(patched,1,.06).length>0,'Normal-speed audio keeps its existing sync tolerance');
+  assert.ok(repeatedAudioSync(patched,4,.06,true).length>0,'Explicit forced seeks remain exact');
 });
