@@ -1,0 +1,154 @@
+import type { MediaAsset } from './types';
+
+const MAX_PREVIEW_BYTES = 64 * 1024 * 1024;
+const MAX_SESSION_BYTES = 128 * 1024 * 1024;
+type PreviewAsset = MediaAsset & { previewUrl?: string | null; previewVersion?: string | number | null; previewSize?: number | null };
+type Entry = { controller: AbortController; consumers: Set<symbol>; promise: Promise<string>; expectedBytes: number; url?: string };
+
+/** One bounded, immutable preview download shared by every cut of an asset. */
+export function createPreviewSourceCache() {
+  const entries = new Map<string, Entry>();
+  const failures = new Map<string, { url: string; retryAt: number }>();
+  let disposed = false;
+  const keyFor = (asset: PreviewAsset) => `${asset._id}|${asset.previewVersion ?? ''}|${asset.previewSize ?? ''}`;
+  const playable = (asset: PreviewAsset, url: string): MediaAsset => asset.url === url ? asset : { ...asset, url };
+  const preview = (asset: PreviewAsset) => asset.kind === 'video' && asset.previewUrl ? asset.previewUrl : null;
+  const abortReason = (signal: AbortSignal) => signal.reason ?? new DOMException('Preview replaced.', 'AbortError');
+  function nativeAsset(asset: PreviewAsset) {
+    const url = preview(asset);
+    return url ? playable(asset, entries.get(keyFor(asset))?.url ?? url) : asset;
+  }
+  function abortable<T>(pending: Promise<T>, signal: AbortSignal): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
+      const cleanup = () => signal.removeEventListener('abort', abort);
+      const abort = () => { cleanup(); reject(abortReason(signal)); };
+      signal.addEventListener('abort', abort, { once: true });
+      pending.then(value => { cleanup(); resolve(value); }, cause => { cleanup(); reject(cause); });
+      if (signal.aborted) abort();
+    });
+  }
+  async function download(asset: PreviewAsset, controller: AbortController) {
+    const { signal } = controller;
+    let idle: ReturnType<typeof setTimeout>, reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
+    const progress = () => { clearTimeout(idle); idle = setTimeout(() => controller.abort(new DOMException('Preview preparation stalled.', 'TimeoutError')), 30_000); };
+    progress();
+    try {
+      const response = await abortable(fetch(asset.previewUrl!, { signal }), signal);
+      if (!response.ok) throw new Error('Preview download failed.');
+      const declared = Number(response.headers.get('content-length'));
+      if (Number.isFinite(declared) && declared > MAX_PREVIEW_BYTES) throw new Error('Preview exceeds the local playback limit.');
+      if (response.status === 206) {
+        const range = /^bytes 0-(\d+)\/(\d+)$/.exec(response.headers.get('content-range') ?? '');
+        if (!range || Number(range[1]) + 1 !== Number(range[2])) throw new Error('Preview download was incomplete.');
+      }
+      reader = response.body?.getReader();
+      if (!reader) throw new Error('Preview download has no readable body.');
+      const chunks: Uint8Array<ArrayBuffer>[] = [];
+      let size = 0;
+      while (true) {
+        signal.throwIfAborted();
+        const { done, value } = await abortable(reader.read(), signal);
+        if (done) break;
+        size += value.byteLength;
+        if (size > MAX_PREVIEW_BYTES) throw new Error('Preview exceeds the local playback limit.');
+        if (value.byteLength) progress(); // Headers and empty chunks are not byte progress.
+        chunks.push(new Uint8Array(value));
+      }
+      signal.throwIfAborted();
+      if (!size || size !== asset.previewSize) throw new Error('Preview download was incomplete.');
+      return URL.createObjectURL(new Blob(chunks, { type: 'video/mp4' }));
+    } catch (cause) {
+      controller.abort();
+      if (reader) {
+        // A broken stream's cancel promise must not keep fallback playback stuck.
+        let cleanupTimer: ReturnType<typeof setTimeout> | undefined;
+        try { await Promise.race([Promise.resolve(reader.cancel()).catch(() => {}), new Promise<void>(resolve => { cleanupTimer = setTimeout(resolve, 1000); })]); }
+        catch { /* A detached reader can already be closed. */ }
+        finally { if (cleanupTimer !== undefined) clearTimeout(cleanupTimer); }
+      }
+      throw cause;
+    } finally {
+      clearTimeout(idle!);
+      try { reader?.releaseLock(); } catch { /* The aborted fetch releases a pending read. */ }
+    }
+  }
+  function entryFor(asset: PreviewAsset) {
+    const key = keyFor(asset);
+    const failed = failures.get(key);
+    if (failed && failed.url === asset.previewUrl && Date.now() < failed.retryAt) return undefined;
+    if (failed) failures.delete(key);
+    let entry = entries.get(key);
+    if (entry?.controller.signal.aborted) { entries.delete(key); entry = undefined; }
+    if (entry) return entry;
+    // Reserve pending bytes too. Never revoke a Blob still used by a displayed
+    // player merely to make room; later derivatives retain native range URLs.
+    const reserved = Array.from(entries.values()).reduce((sum, item) => sum + item.expectedBytes, 0);
+    if (reserved + asset.previewSize! > MAX_SESSION_BYTES) return undefined;
+    const controller = new AbortController();
+    const created: Entry = { controller, consumers: new Set(), promise: Promise.resolve(''), expectedBytes: asset.previewSize! };
+    entries.set(key, created);
+    created.promise = download(asset, controller).then(url => {
+      if (disposed || controller.signal.aborted) { URL.revokeObjectURL(url); throw new DOMException('Preview replaced.', 'AbortError'); }
+      created.url = url;
+      return url;
+    }).catch(error => {
+      // A native fallback must not restart the same failed full download on
+      // every timeline edit. A renewed URL can retry immediately; user-driven
+      // cancellation never enters this short failure backoff.
+      if (!disposed && created.consumers.size) failures.set(key, { url: asset.previewUrl!, retryAt: Date.now() + 60_000 });
+      if (entries.get(key) === created) entries.delete(key);
+      throw error;
+    });
+    // An aborted caller can leave before the shared fetch settles. Its rejection
+    // remains observed even when another call has already created a new entry.
+    void created.promise.catch(() => {});
+    return created;
+  }
+  async function prepareAsset(asset: PreviewAsset, signal: AbortSignal): Promise<MediaAsset> {
+    const url = preview(asset);
+    if (!url) return asset; // Never download or copy the original source.
+    const size = asset.previewSize;
+    if (typeof size !== 'number' || !Number.isFinite(size) || size <= 0 || size > MAX_PREVIEW_BYTES || typeof URL.createObjectURL !== 'function') return nativeAsset(asset);
+    const entry = entryFor(asset);
+    if (!entry) return nativeAsset(asset);
+    if (entry.url) return playable(asset, entry.url);
+    const consumer = Symbol();
+    entry.consumers.add(consumer);
+    let abort: (() => void) | undefined;
+    const cancelled = new Promise<never>((_resolve, reject) => {
+      abort = () => reject(abortReason(signal));
+      signal.addEventListener('abort', abort, { once: true });
+      if (signal.aborted) abort();
+    });
+    try {
+      const resolved = await Promise.race([entry.promise, cancelled]);
+      signal.throwIfAborted();
+      return playable(asset, resolved);
+    } catch (error) {
+      if (signal.aborted) throw abortReason(signal);
+      if (disposed) throw new DOMException('Preview disposed.', 'AbortError');
+      // A cache failure still leaves the private derivative available to native
+      // byte-range playback; it never substitutes a partial downloaded Blob.
+      return playable(asset, url);
+    } finally {
+      if (abort) signal.removeEventListener('abort', abort);
+      entry.consumers.delete(consumer);
+      if (!entry.url && entry.consumers.size === 0) entry.controller.abort();
+    }
+  }
+  return {
+    async prepare(assets: MediaAsset[], signal: AbortSignal): Promise<MediaAsset[]> {
+      signal.throwIfAborted();
+      if (disposed) throw new DOMException('Preview disposed.', 'AbortError');
+      return Promise.all(assets.map(asset => prepareAsset(asset, signal)));
+    },
+    cachedAssets(assets: MediaAsset[]): MediaAsset[] { return assets.map(nativeAsset); },
+    dispose() {
+      if (disposed) return;
+      disposed = true;
+      for (const entry of entries.values()) { entry.controller.abort(); if (entry.url) URL.revokeObjectURL(entry.url); }
+      entries.clear();
+      failures.clear();
+    },
+  };
+}

@@ -61,6 +61,7 @@ function ProjectEditor({project}: {project:Doc<'projects'>}) {
     void fetch(url).then(response=>response.blob()).then(image=>saveThumbnail(assetId as Id<'assets'>,image)).catch(()=>capturedThumbnails.current.delete(assetId));
   },[saveThumbnail]);
   const refreshMedia=useAction(api.playback.refresh);
+  const preparePlayback=useMutation(api.playback.prepare);
   const handleRefreshMedia=useCallback((assetIds:string[])=>refreshMedia({projectId,assetIds:assetIds as Id<'assets'>[]}),[refreshMedia,projectId]);
   const mediaTasks=useQuery(api.mediaTasks.list,{projectId});
   const jobs=useQuery(api.renders.list,{projectId,limit:5});const [jobId,setJobId]=useState<Id<'renderJobs'>|null>(null);const job=useQuery(api.renders.get,jobId?{jobId}:'skip');
@@ -94,6 +95,18 @@ function ProjectEditor({project}: {project:Doc<'projects'>}) {
     const failed=task?.status==='failed'||task?.status==='cancelled';
     return {...asset,preparation:{status:failed?'failed' as const:'processing' as const,message:failed?'Audio preparation failed.':'Preparing audio…'}};
   }),[media,optimisticAssets,mediaTasks]);
+  const requestedPreviews=useRef(new Set<string>());
+  useEffect(()=>{
+    const used=new Set((activePreview?.timeline??timeline).clips.filter(clip=>clip.kind==='video').map(clip=>clip.assetId));
+    const legacy=assets.filter(asset=>asset.kind==='video'&&used.has(asset._id)&&!asset.previewUrl&&!requestedPreviews.current.has(asset._id)).map(asset=>asset._id);
+    if(!legacy.length)return;
+    for(const id of legacy)requestedPreviews.current.add(id);
+    void preparePlayback({projectId,assetIds:legacy as Id<'assets'>[]}).catch(()=>{
+      // Original footage remains playable while background preparation retries
+      // on a later project opening; this is not a failed upload or saved edit.
+      console.warn('[Revline playback preparation]',JSON.stringify({reason:'background preview preparation unavailable',sources:legacy.length}));
+    });
+  },[assets,timeline,activePreview?.timeline,preparePlayback,projectId]);
   const commit=useCallback((next:Timeline)=>{timelineRef.current=next;if(store.getState().timeline!==next)store.getState().replace(next);saves.edit(next);},[saves]);
   const change=useCallback((next:Timeline)=>{store.getState().edit(next);setError('');commit(store.getState().timeline);},[commit]);
   const undoInFlight=useRef(false);

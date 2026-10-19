@@ -1,29 +1,43 @@
 import { recordStorageObject, recordAssetStorage, forgetStorageObject } from './lib/storage_accounting';
 import { requireEditorAccess } from './lib/billing_access';
-import type { Id } from './_generated/dataModel';
+import type { Doc, Id } from './_generated/dataModel';
 import { ConvexError, v } from 'convex/values';
-import { action, internalAction, internalMutation, internalQuery } from './_generated/server';
+import { action, internalAction, internalMutation, internalQuery, type QueryCtx, type MutationCtx } from './_generated/server';
 import { internal } from './_generated/api';
 import { requireOwner } from './lib/auth';
 import { projectIdentity } from './lib/project_data';
 import { assetKind, r2UploadDocument } from './schema';
-import { mediaConfig, storageControl } from './lib/media_storage';
+import { mediaConfig, storageControl, hasPreview, PREVIEW_VERSION } from './lib/media_storage';
 import { signMediaToken } from '../lib/storage/media-tokens';
 import { requireMediaTask } from './lib/media_task_auth';
 import { enqueueMediaTask } from './mediaTasks';
+import { releaseMediaObjects } from './lib/shared_media';
+import { releaseAccountStorage } from './lib/storage_accounting';
 import { isStockAudioKey } from '../lib/editor/stock-audio';
 
 const metadata = { fileName: v.string(), contentType: v.string(), kind: assetKind, size: v.number(), duration: v.optional(v.number()), width: v.optional(v.number()), height: v.optional(v.number()) };
 const partsValidator = v.array(v.object({ partNumber: v.number(), etag: v.string() }));
 const uploadInfo = v.object({ uploadId: v.id('r2Uploads'), partSize: v.number(), partCount: v.number() });
 const taskAuth = { taskId: v.optional(v.id('mediaTasks')), leaseToken: v.optional(v.string()) };
+const previewUpload = { purpose:v.optional(v.literal('preview')),sourceAssetId:v.optional(v.id('assets')),previewFps:v.optional(v.number()),previewVersion:v.optional(v.number()) };
+type PreviewUploadArgs = { projectId:Id<'projects'>;jobId?:Id<'renderJobs'>;purpose?:'preview';sourceAssetId?:Id<'assets'>;previewFps?:number;previewVersion?:number;kind:'video'|'audio'|'image';contentType:string;duration?:number };
+async function previewSource(ctx:QueryCtx|MutationCtx,args:PreviewUploadArgs,task:Doc<'mediaTasks'>|null) {
+  if(!args.purpose){if(args.sourceAssetId!==undefined||args.previewFps!==undefined||args.previewVersion!==undefined||task?.kind==='preview')throw new ConvexError('Preview upload purpose is required');return null;}
+  if(!task||task.kind!=='preview'||task.projectId!==args.projectId||task.assetId!==args.sourceAssetId||args.jobId||args.kind!=='video'||args.contentType!=='video/mp4'||args.previewVersion!==PREVIEW_VERSION||!Number.isFinite(args.duration)||args.duration!<=0||!Number.isFinite(args.previewFps)||args.previewFps!<=0||args.previewFps!>240)throw new ConvexError('This task cannot upload that preview');
+  const source=task.assetId?await ctx.db.get(task.assetId):null;
+  if(!source||source.kind!=='video'||source.ownerId!==task.ownerId||source.projectId!==task.projectId)throw new ConvexError('Preview source is unavailable');
+  if(args.duration!==undefined&&source.duration!==undefined&&Math.abs(args.duration-source.duration)>.1)throw new ConvexError('Preview duration must match the original');
+  return source;
+}
 
-export const authorize = internalQuery({ args: { projectId: v.id('projects'), jobId: v.optional(v.id('renderJobs')), workerSecret: v.optional(v.string()), ...taskAuth, kind: assetKind, contentType: v.string() }, returns: v.string(), handler: async (ctx, args) => {
+
+export const authorize = internalQuery({ args: { projectId: v.id('projects'), jobId: v.optional(v.id('renderJobs')), workerSecret: v.optional(v.string()), ...taskAuth,...previewUpload, duration:v.optional(v.number()), kind: assetKind, contentType: v.string() }, returns: v.string(), handler: async (ctx, args) => {
   const task = args.taskId && args.leaseToken ? await requireMediaTask(ctx, args.taskId, args.leaseToken) : null;
   if (args.taskId && !task) throw new ConvexError('Media task credentials are required');
   const ownerId = task?.ownerId ?? await requireOwner(ctx); await projectIdentity(ctx, args.projectId, ownerId);
   if (!task && !args.jobId) await requireEditorAccess(ctx, ownerId);
-  if (task && (task.projectId !== args.projectId || !['extract', 'render', 'import'].includes(task.kind) || (task.kind === 'import' && (args.jobId || args.kind !== 'video' || args.contentType !== 'video/mp4')) || (task.kind === 'extract' && (args.jobId || args.kind !== 'audio' || args.contentType !== 'audio/mp4')) || (task.kind === 'render' && (args.jobId !== task.renderJobId || args.kind !== 'video' || args.contentType !== 'video/mp4')))) throw new ConvexError('This task cannot upload that media');
+  await previewSource(ctx,args,task);
+  if (task && (task.projectId !== args.projectId || !['extract', 'preview', 'render', 'import'].includes(task.kind) || (task.kind === 'import' && (args.jobId || args.kind !== 'video' || args.contentType !== 'video/mp4')) || (task.kind === 'extract' && (args.jobId || args.kind !== 'audio' || args.contentType !== 'audio/mp4')) || (task.kind === 'render' && (args.jobId !== task.renderJobId || args.kind !== 'video' || args.contentType !== 'video/mp4')))) throw new ConvexError('This task cannot upload that media');
   if (args.jobId && !task) {
     if (!process.env.RENDER_WORKER_SECRET || args.workerSecret !== process.env.RENDER_WORKER_SECRET) throw new ConvexError('Render worker authentication required');
     const job = await ctx.db.get(args.jobId);
@@ -33,30 +47,41 @@ export const authorize = internalQuery({ args: { projectId: v.id('projects'), jo
   if (pending.filter(upload => !upload.completed && upload.expiresAt > Date.now()).length >= 100) throw new ConvexError('Finish the pending uploads first');
   return ownerId;
 }});
-export const createLease = internalMutation({ args: { ...metadata, ownerId: v.string(), projectId: v.id('projects'), jobId: v.optional(v.id('renderJobs')), ...taskAuth, key: v.string(), uploadId: v.string(), partSize: v.number() }, returns: v.id('r2Uploads'), handler: async (ctx, args) => {
+export const createLease = internalMutation({ args: { ...metadata, ownerId: v.string(), projectId: v.id('projects'), jobId: v.optional(v.id('renderJobs')), ...taskAuth,...previewUpload, key: v.string(), uploadId: v.string(), partSize: v.number() }, returns: v.id('r2Uploads'), handler: async (ctx, args) => {
   await projectIdentity(ctx, args.projectId, args.ownerId);
   if (!args.taskId && !args.jobId) await requireEditorAccess(ctx, args.ownerId);
-  if (args.taskId) await requireMediaTask(ctx, args.taskId, args.leaseToken ?? '');
+  const task=args.taskId?await requireMediaTask(ctx,args.taskId,args.leaseToken??''):null;
+  await previewSource(ctx,args,task);
   const { leaseToken, ...fields } = args;
-  await recordStorageObject(ctx,{...args,r2Key:args.key,createdAt:Date.now(),kind:args.jobId?'export':args.kind,pending:true});
+  await recordStorageObject(ctx,{...args,r2Key:args.key,createdAt:Date.now(),kind:args.jobId?'export':args.kind,pending:true,auxiliary:args.purpose==='preview'});
   const id = await ctx.db.insert('r2Uploads', { ...fields, ...(leaseToken ? { taskLeaseToken: leaseToken } : {}), completed: false, expiresAt: Date.now() + 24 * 3600_000 });
   await ctx.scheduler.runAfter(24 * 3600_000, internal.r2.cleanupLease, { uploadId: id });
   return id;
 }});
-export const getLease = internalQuery({ args: { uploadId: v.id('r2Uploads'), ...taskAuth, forCleanup: v.optional(v.boolean()) }, returns: r2UploadDocument, handler: async (ctx, args) => {
+async function authorizedLease(ctx:QueryCtx|MutationCtx,args:{uploadId:Id<'r2Uploads'>;taskId?:Id<'mediaTasks'>;leaseToken?:string;forCleanup?:boolean}) {
   const lease = await ctx.db.get(args.uploadId);
   const task = args.taskId && args.leaseToken ? await requireMediaTask(ctx, args.taskId, args.leaseToken) : null;
   if ((task || lease?.taskId) && (!task || !lease || lease.taskId !== task._id || lease.taskLeaseToken !== args.leaseToken)) throw new ConvexError('Upload belongs to another task attempt');
   const ownerId = task?.ownerId ?? await requireOwner(ctx);
   if (!lease || lease.ownerId !== ownerId || lease.expiresAt < Date.now()) throw new ConvexError('Upload expired or belongs to another user');
   await projectIdentity(ctx, lease.projectId, ownerId);
+  await previewSource(ctx,lease,task);
+  if (!args.forCleanup && lease.aborting) throw new ConvexError('Upload is being removed');
   // Renewal and completion are paid writes; cleanup remains available after expiry.
   if (!args.forCleanup && !lease.taskId && !lease.jobId) await requireEditorAccess(ctx, ownerId);
   return lease;
+}
+export const getLease = internalQuery({ args: { uploadId: v.id('r2Uploads'), ...taskAuth, forCleanup: v.optional(v.boolean()) }, returns: r2UploadDocument, handler: authorizedLease });
+export const beginAbort = internalMutation({args:{uploadId:v.id('r2Uploads'),...taskAuth,scheduled:v.optional(v.boolean())},returns:v.union(r2UploadDocument,v.null()),handler:async(ctx,args)=>{
+  const lease=args.scheduled?await ctx.db.get(args.uploadId):await authorizedLease(ctx,{uploadId:args.uploadId,taskId:args.taskId,leaseToken:args.leaseToken,forCleanup:true});
+  if(!lease||lease.completed)return lease;
+  if(!lease.aborting)await ctx.db.patch(lease._id,{aborting:true});
+  return {...lease,aborting:true};
 }});
 
-export const start = action({ args: { projectId: v.id('projects'), jobId: v.optional(v.id('renderJobs')), workerSecret: v.optional(v.string()), ...taskAuth, ...metadata }, returns: uploadInfo, handler: async (ctx, args): Promise<{ uploadId: Id<'r2Uploads'>; partSize: number; partCount: number }> => {
-  const ownerId = await ctx.runQuery(internal.r2.authorize, { projectId: args.projectId, kind: args.kind, contentType: args.contentType, ...(args.taskId ? { taskId: args.taskId, leaseToken: args.leaseToken } : {}), ...(args.jobId ? { jobId: args.jobId, workerSecret: args.workerSecret } : {}) });
+export const start = action({ args: { projectId: v.id('projects'), jobId: v.optional(v.id('renderJobs')), workerSecret: v.optional(v.string()), ...taskAuth,...previewUpload, ...metadata }, returns: uploadInfo, handler: async (ctx, args): Promise<{ uploadId: Id<'r2Uploads'>; partSize: number; partCount: number }> => {
+  const ownerId = await ctx.runQuery(internal.r2.authorize, { projectId: args.projectId, kind: args.kind, contentType: args.contentType,...(args.duration!==undefined?{duration:args.duration}:{}),...(args.purpose?{purpose:args.purpose,sourceAssetId:args.sourceAssetId,previewFps:args.previewFps,previewVersion:args.previewVersion}:{}), ...(args.taskId ? { taskId: args.taskId, leaseToken: args.leaseToken } : {}), ...(args.jobId ? { jobId: args.jobId, workerSecret: args.workerSecret } : {}) });
+  if(!args.purpose&&(args.sourceAssetId!==undefined||args.previewFps!==undefined||args.previewVersion!==undefined))throw new ConvexError('Preview upload purpose is required');
   const fileName = args.fileName.trim();
   if (!fileName || fileName.length > 255 || !/^(video|image|audio)\//.test(args.contentType) || args.contentType.length > 128) throw new ConvexError('Choose a supported media file');
   if (!args.contentType.startsWith(`${args.kind}/`) && !(args.kind === 'audio' && /^video\/(mp4|quicktime|webm)$/.test(args.contentType))) throw new ConvexError('File content type does not match the media');
@@ -69,7 +94,7 @@ export const start = action({ args: { projectId: v.id('projects'), jobId: v.opti
   const created = await storageControl({ action: 'create', key, contentType: args.contentType });
   if (!created.uploadId) throw new ConvexError('Cloudflare did not open the upload');
   try {
-    const uploadId = await ctx.runMutation(internal.r2.createLease, { projectId: args.projectId, ownerId, key, uploadId: created.uploadId, partSize, fileName, contentType: args.contentType, kind: args.kind, size: args.size, ...(args.taskId ? { taskId: args.taskId, leaseToken: args.leaseToken } : {}), ...(args.jobId ? { jobId: args.jobId } : {}), ...(args.duration !== undefined ? { duration: args.duration } : {}), ...(args.width !== undefined ? { width: args.width } : {}), ...(args.height !== undefined ? { height: args.height } : {}) });
+    const uploadId = await ctx.runMutation(internal.r2.createLease, { projectId: args.projectId, ownerId, key, uploadId: created.uploadId, partSize, fileName, contentType: args.contentType, kind: args.kind, size: args.size,...(args.purpose?{purpose:args.purpose,sourceAssetId:args.sourceAssetId,previewFps:args.previewFps,previewVersion:args.previewVersion}:{}), ...(args.taskId ? { taskId: args.taskId, leaseToken: args.leaseToken } : {}), ...(args.jobId ? { jobId: args.jobId } : {}), ...(args.duration !== undefined ? { duration: args.duration } : {}), ...(args.width !== undefined ? { width: args.width } : {}), ...(args.height !== undefined ? { height: args.height } : {}) });
     return { uploadId, partSize, partCount };
   } catch (error) { await storageControl({ action: 'abort', key, uploadId: created.uploadId }); throw error; }
 }});
@@ -86,11 +111,27 @@ export const finish = internalMutation({ args: { uploadId: v.id('r2Uploads'), si
   const lease = await ctx.db.get(args.uploadId);
   if (!lease || lease.expiresAt < Date.now()) throw new ConvexError('Upload expired');
   if (lease.completed) return lease.assetId ?? null;
+  if (lease.aborting) throw new ConvexError('Upload is being removed');
   if (lease.size !== args.size || lease.contentType !== args.contentType) throw new ConvexError('Uploaded media does not match the requested file');
   const project = await projectIdentity(ctx, lease.projectId, lease.ownerId);
   // The action performed external IO; access may have expired since authorization.
   if (!lease.taskId && !lease.jobId) await requireEditorAccess(ctx, lease.ownerId);
-  if (lease.taskId) await requireMediaTask(ctx, lease.taskId, lease.taskLeaseToken ?? '');
+  const task=lease.taskId?await requireMediaTask(ctx,lease.taskId,lease.taskLeaseToken??''):null;
+  const source=await previewSource(ctx,lease,task);
+  if(lease.purpose==='preview'&&source){
+    if(!lease.duration||!lease.width||!lease.height)throw new ConvexError('Preview metadata is incomplete');
+    if(hasPreview(source)){
+      await forgetStorageObject(ctx,lease.ownerId,{r2Key:lease.key});
+      await ctx.scheduler.runAfter(0,internal.r2.deleteObject,{key:lease.key});
+    }else{
+      const preview={previewR2Key:lease.key,previewSize:lease.size,previewWidth:lease.width,previewHeight:lease.height,previewFps:lease.previewFps!,previewVersion:lease.previewVersion!};
+      await ctx.db.patch(source._id,preview);
+      await recordStorageObject(ctx,{ownerId:source.ownerId,r2Key:preview.previewR2Key,fileName:`${source.fileName} preview`,kind:'video',size:preview.previewSize,createdAt:source.createdAt,auxiliary:true});
+      if(source.previewR2Key&&source.previewR2Key!==lease.key){await releaseMediaObjects(ctx,{previewR2Key:source.previewR2Key});await releaseAccountStorage(ctx,source.ownerId,{r2Key:source.previewR2Key},'preview');}
+    }
+    await ctx.db.patch(lease._id,{completed:true,assetId:source._id});
+    return source._id;
+  }
   if (lease.jobId) {
     const job = await ctx.db.get(lease.jobId);
     if (!job || job.ownerId !== lease.ownerId || job.status !== 'rendering' || lease.contentType !== 'video/mp4') throw new ConvexError('Render cannot accept this output');
@@ -106,6 +147,7 @@ export const finish = internalMutation({ args: { uploadId: v.id('r2Uploads'), si
   if (lease.taskId) await ctx.db.patch(lease.taskId, { outputAssetId: assetId });
   else if (lease.kind !== 'image') {
     await enqueueMediaTask(ctx, { ownerId: lease.ownerId, projectId: lease.projectId, assetId, kind: lease.kind === 'video' ? 'extract' : 'waveform' });
+    if(lease.kind==='video')await enqueueMediaTask(ctx,{ownerId:lease.ownerId,projectId:lease.projectId,assetId,kind:'preview'});
     if (lease.kind === 'video') await enqueueMediaTask(ctx, { ownerId: lease.ownerId, projectId: lease.projectId, assetId, kind: 'understand' });
     else await enqueueMediaTask(ctx, { ownerId: lease.ownerId, projectId: lease.projectId, assetId, kind: 'transcribe' });
   }
@@ -120,8 +162,8 @@ export const complete = action({ args: { uploadId: v.id('r2Uploads'), parts: par
   return ctx.runMutation(internal.r2.finish, { uploadId: args.uploadId, size: file.size, contentType: file.contentType });
 }});
 export const abort = action({ args: { uploadId: v.id('r2Uploads'), ...taskAuth }, returns: v.null(), handler: async (ctx, args): Promise<null> => {
-  const lease = await ctx.runQuery(internal.r2.getLease, { ...args, forCleanup: true });
-  if (!lease.completed) { await storageControl({ action: 'abort', key: lease.key, uploadId: lease.uploadId }); await ctx.runMutation(internal.r2.removeLease, { uploadId: args.uploadId }); }
+  const lease = await ctx.runMutation(internal.r2.beginAbort, args);
+  if (lease&&!lease.completed) { await storageControl({ action: 'abort', key: lease.key, uploadId: lease.uploadId }); await storageControl({ action: 'delete', key: lease.key }); await ctx.runMutation(internal.r2.removeLease, { uploadId: args.uploadId }); }
   return null;
 }});
 export const deleteObject = internalAction({ args: { key: v.string(),attempt:v.optional(v.number()) }, returns: v.null(), handler: async (ctx, args) => {
@@ -132,10 +174,16 @@ export const deleteObject = internalAction({ args: { key: v.string(),attempt:v.o
 } });
 
 export const leaseForCleanup = internalQuery({ args: { uploadId: v.id('r2Uploads') }, returns: v.union(r2UploadDocument, v.null()), handler: (ctx, args) => ctx.db.get(args.uploadId) });
-export const removeLease = internalMutation({ args: { uploadId: v.id('r2Uploads') }, returns: v.null(), handler: async (ctx, args) => { const lease=await ctx.db.get(args.uploadId);if(lease&&!lease.completed)await forgetStorageObject(ctx,lease.ownerId,{r2Key:lease.key});await ctx.db.delete(args.uploadId); return null; } });
-export const cleanupLease = internalAction({ args: { uploadId: v.id('r2Uploads') }, returns: v.null(), handler: async (ctx, args): Promise<null> => {
-  const lease = await ctx.runQuery(internal.r2.leaseForCleanup, args);
+export const removeLease = internalMutation({ args: { uploadId: v.id('r2Uploads') }, returns: v.null(), handler: async (ctx, args) => { const lease=await ctx.db.get(args.uploadId);if(!lease)return null;if(!lease.completed){if(!lease.aborting)throw new ConvexError('Upload cleanup has not started');await forgetStorageObject(ctx,lease.ownerId,{r2Key:lease.key});}await ctx.db.delete(args.uploadId); return null; } });
+export const cleanupLease = internalAction({ args: { uploadId: v.id('r2Uploads'),attempt:v.optional(v.number()) }, returns: v.null(), handler: async (ctx, args): Promise<null> => {
+  const lease = await ctx.runMutation(internal.r2.beginAbort, {uploadId:args.uploadId,scheduled:true});
   if (!lease) return null;
-  if (!lease.completed && !isStockAudioKey(lease.key)) { await storageControl({ action: 'abort', key: lease.key, uploadId: lease.uploadId }); await storageControl({ action: 'delete', key: lease.key }); }
-  await ctx.runMutation(internal.r2.removeLease, args); return null;
+  try {
+    if (!lease.completed && !isStockAudioKey(lease.key)) { await storageControl({ action: 'abort', key: lease.key, uploadId: lease.uploadId }); await storageControl({ action: 'delete', key: lease.key }); }
+    await ctx.runMutation(internal.r2.removeLease, {uploadId:args.uploadId});
+  } catch(error) {
+    const attempt=args.attempt??0;if(attempt>=8)throw error;
+    await ctx.scheduler.runAfter(Math.min(3600_000,60_000*2**attempt),internal.r2.cleanupLease,{uploadId:args.uploadId,attempt:attempt+1});
+  }
+  return null;
 } });

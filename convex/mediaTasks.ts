@@ -13,7 +13,7 @@ import { validateVideoInspectionResult } from '../lib/media-analysis/video-inspe
 import { requireOwner, requireProject } from './lib/auth';
 import { mediaTaskCredentials, requireMediaTask, requireMediaWorker } from './lib/media_task_auth';
 import { mediaWorkflow } from './lib/workflows';
-import { mediaUrl } from './lib/media_storage';
+import { hasPreview, mediaUrl, PREVIEW_VERSION } from './lib/media_storage';
 import { saveAssetAnalysis, validateWaveform } from './assets';
 import { parseVideoLink } from '../lib/editor/video-link';
 import { addMediaClip } from '../lib/editor/operations';
@@ -32,7 +32,9 @@ export type MediaWorkItem = Infer<typeof workItem>;
 export const taskResult = v.object({review:v.optional(compositionReviewResult), analysis: v.optional(analysisValidator), frameInspection: v.optional(frameInspectionValidator), videoInspection: v.optional(videoInspectionValidator), audioAssetId: v.optional(v.id('assets')), waveform: v.optional(waveformValidator) });
 export type MediaTaskResult = Infer<typeof taskResult>;
 
-export async function enqueueMediaTask(ctx: MutationCtx, input: Pick<Doc<'mediaTasks'>, 'ownerId' | 'projectId' | 'kind'> & Partial<Pick<Doc<'mediaTasks'>, 'assetId' | 'renderJobId' | 'analysisRequestId' | 'sourceUrl' | 'frameRequest' | 'videoRequest' | 'reviewId' | 'requiredProcessorVersion'>>): Promise<Id<'mediaTasks'>> {
+export async function enqueueMediaTask(ctx: MutationCtx, input: Pick<Doc<'mediaTasks'>, 'ownerId' | 'projectId' | 'kind'> & Partial<Pick<Doc<'mediaTasks'>, 'assetId' | 'renderJobId' | 'analysisRequestId' | 'sourceUrl' | 'frameRequest' | 'videoRequest' | 'reviewId' | 'requiredProcessorVersion'|'previewVersion'>>): Promise<Id<'mediaTasks'>> {
+  if(input.kind==='preview')input={...input,previewVersion:PREVIEW_VERSION,requiredProcessorVersion:Math.max(5,input.requiredProcessorVersion??0)};
+  if(input.assetId&&input.kind==='preview'){const asset=await ctx.db.get(input.assetId);if(asset?.ownerId===input.ownerId&&asset.projectId===input.projectId&&hasPreview(asset)){const now=Date.now();return ctx.db.insert('mediaTasks',{...input,status:'completed',attempt:0,progress:100,createdAt:now,updatedAt:now});}}
   if (input.kind === 'transcribe') input = { ...input, requiredProcessorVersion: Math.max(3, input.requiredProcessorVersion ?? 0) };
   if (input.kind === 'frames') input = { ...input, requiredProcessorVersion: Math.max(4, input.requiredProcessorVersion ?? 0) };
   if (input.assetId && input.kind === 'beats') {
@@ -47,7 +49,7 @@ export async function enqueueMediaTask(ctx: MutationCtx, input: Pick<Doc<'mediaT
   }
   if (input.assetId && input.kind !== 'frames' && input.kind !== 'video') {
     const existing = await ctx.db.query('mediaTasks').withIndex('by_asset_kind', q => q.eq('assetId', input.assetId).eq('kind', input.kind)).order('desc').take(10);
-    const active = existing.find(task => task.status === 'queued' || task.status === 'running' || task.status === 'retrying');
+    const active = existing.find(task => (input.kind!=='preview'||task.previewVersion===input.previewVersion)&&['queued','running','retrying'].includes(task.status));
     if (active) { if (input.analysisRequestId) await ctx.db.patch(active._id, { analysisRequestId: input.analysisRequestId }); return active._id; }
   }
   const requested = input.kind === 'video' ? input.videoRequest : input.kind === 'frames' ? input.frameRequest : undefined;
@@ -138,7 +140,7 @@ export const start = mutation({ args: { projectId: v.id('projects'), assetId: v.
   if (!asset || asset.ownerId !== ownerId || asset.projectId !== args.projectId || asset.kind === 'image' || args.kind === 'render' || args.kind === 'import' || args.kind === 'review') throw new ConvexError('Choose media from this project.');
   if (args.kind === 'frames') throw new ConvexError('Frame inspection requires a scoped AI question and source window.');
   if (args.kind === 'video') throw new ConvexError('Native video inspection requires a scoped AI question and source window.');
-  if (['extract', 'shots', 'understand', 'track'].includes(args.kind) && asset.kind !== 'video') throw new ConvexError('This operation requires a video.');
+  if (['extract', 'preview', 'shots', 'understand', 'track'].includes(args.kind) && asset.kind !== 'video') throw new ConvexError('This operation requires a video.');
   if (args.kind === 'waveform' && asset.kind !== 'audio') throw new ConvexError('Waveforms require an audio source.');
   return enqueueMediaTask(ctx, { ...args, ownerId });
 }});
@@ -202,7 +204,7 @@ export const pruneFinished=internalMutation({args:{},returns:v.null(),handler:as
 }});
 export const processorContract = query({ args: { workerSecret: v.string() }, returns: v.object({ processorVersion: v.number() }), handler: (_ctx, args) => {
   requireMediaWorker(args.workerSecret);
-  return { processorVersion: 4 };
+  return { processorVersion: 5 };
 } });
 
 export const ready = query({ args: { workerSecret: v.string(),processorVersion:v.optional(v.number()) }, returns: v.string(), handler: async (ctx, args) => {
@@ -312,6 +314,7 @@ export const complete = mutation({ args: { ...mediaTaskCredentials, result: task
     const next = addMediaClip(timeline, { ...output, duration }, `import-${task._id}`, at);
     await commitTimeline(ctx, project, next, project.revision ?? 0);
     await enqueueMediaTask(ctx, { ownerId: task.ownerId, projectId: task.projectId, assetId: output._id, kind: 'extract' });
+    await enqueueMediaTask(ctx,{ownerId:task.ownerId,projectId:task.projectId,assetId:output._id,kind:'preview'});
     await enqueueMediaTask(ctx, { ownerId: task.ownerId, projectId: task.projectId, assetId: output._id, kind: 'understand' });
   } else if(task.kind!=='review') {
     if (!asset || asset.ownerId !== task.ownerId || asset.projectId !== task.projectId) throw new ConvexError('Source media was removed.');
@@ -336,6 +339,8 @@ export const complete = mutation({ args: { ...mediaTaskCredentials, result: task
       try { validateFrameInspectionResult(args.result.frameInspection, task.frameRequest); } catch (error) { throw new ConvexError((error as Error).message); }
       await ctx.db.patch(task._id, { frameInspection: args.result.frameInspection });
       if(request)await ctx.db.patch(request._id, { frameInspection: args.result.frameInspection });
+    } else if(task.kind==='preview'){
+      if(asset.kind!=='video'||!hasPreview(asset)||args.result.audioAssetId||args.result.analysis||args.result.waveform||args.result.frameInspection||args.result.videoInspection)throw new ConvexError('The playback preview has not been stored for this source.');
     } else if (task.kind === 'extract') {
       if (asset.audioExtracted) {
         if (args.result.audioAssetId !== asset.audioAssetId) throw new ConvexError('Audio output does not match the prepared source.');

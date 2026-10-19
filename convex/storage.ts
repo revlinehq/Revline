@@ -42,7 +42,7 @@ async function describe(ctx:QueryCtx|MutationCtx,row:Doc<'storageObjects'>,reads
     const job=row.jobId?await ctx.db.get(row.jobId):null;
     if(!job||job.ownerId!==row.ownerId){result.protectedReason='This export is unavailable';return result;}
     const project=await(reads?reads.project(job.projectId):ctx.db.get(job.projectId));if(project?.ownerId===row.ownerId)result.workspaces.push({id:project._id,title:project.title});
-    result.canDelete=job.status==='completed'||job.status==='failed';result.protectedReason=result.canDelete?null:'Export in progress';return result;
+    result.canDelete=job.status==='completed'||job.status==='failed'||job.status==='cancelled';result.protectedReason=result.canDelete?null:'Export in progress';return result;
   }
   const refs=await ownedObjectReferences(ctx,row.ownerId,row);
   if(refs.tooMany){result.protectedReason='Remove this media from its workspaces first';return result;}

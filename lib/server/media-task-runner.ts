@@ -16,6 +16,7 @@ import { measureAudioWaveform } from './audio-waveform';
 import { measureAudioActivity } from './measure-audio-activity';
 import { mediaSourceCacheIdentity, reuseMediaFile } from './media-file-cache';
 import { uploadMediaFile } from './upload-media-file';
+import { preparePreviewVideo,probePreviewVideo,type PreviewVideoMetadata } from './preview-video';
 import { runRenderWorker } from './render-worker';
 import { importVideoLink } from './import-video-link';
 import { prepareComposition,writeComposition } from './prepare-composition';
@@ -78,6 +79,7 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
     if(task.kind==='review'){if(!task.review)throw new AnalysisError('Review snapshot is unavailable.',400);return {review:await reviewComposition(task.review,directory,convexUrl,signal,onProgress)};}
     const asset = task.asset;
     if (!asset?.url) throw new AnalysisError('The source media is unavailable.', 400);
+    if(task.kind==='preview'&&asset.kind==='video'&&asset.previewVersion===1&&asset.previewR2Key&&[asset.previewSize,asset.previewWidth,asset.previewHeight,asset.previewFps].every(value=>typeof value==='number'&&Number.isFinite(value)&&value>0))return {};
     if (task.kind === 'extract' && asset.audioExtracted) return asset.audioAssetId ? { audioAssetId: asset.audioAssetId } : {};
     if (task.kind === 'waveform' && asset.waveform) return { waveform: asset.waveform };
     if (task.kind === 'transcribe' && asset.analysis?.transcript && asset.analysis.audioActivity) return { analysis: { transcript: asset.analysis.transcript, audioActivity: asset.analysis.audioActivity } };
@@ -124,6 +126,15 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
       return { audioAssetId, waveform };
     }
     if (task.kind === 'waveform') return { waveform: await measureAudioWaveform(source, signal) };
+    if(task.kind==='preview'){
+      if(asset.kind!=='video')throw new AnalysisError('Playback preview preparation needs a video source.',400);
+      const output=join(directory,'preview.mp4');let metadata:PreviewVideoMetadata|undefined;
+      const reused=await reuseMediaFile({identity:cacheIdentity,variant:'preview-v1',target:output,signal},()=>runPhase('Preparing playback preview',async()=>{metadata=await preparePreviewVideo(source,output,signal);}));
+      if(reused)logPhase('Playback preview cache','reused',Date.now());
+      metadata??=await probePreviewVideo(output,signal);onProgress(90);
+      await runPhase('Saving playback preview',()=>uploadMediaFile(output,{...credentials,projectId:task.projectId,purpose:'preview',sourceAssetId:asset._id,previewVersion:1,previewFps:metadata!.fps,kind:'video',contentType:'video/mp4',fileName:`${asset.fileName.replace(/\.[^.]+$/,'').slice(0,230)}.preview.mp4`,duration:metadata!.duration,width:metadata!.width,height:metadata!.height},uploadContext,signal));
+      onProgress(98);return {};
+    }
     const media = await runPhase('Reading media information',()=>probeMedia(source, signal));
     if (task.kind === 'frames') {
       if (!media.hasVideo || !task.frameRequest) throw new AnalysisError('Frame inspection needs a video window and a question.', 400);

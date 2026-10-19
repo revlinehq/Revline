@@ -1,9 +1,11 @@
 import { ConvexError, v } from 'convex/values';
-import { action, internalQuery } from './_generated/server';
+import { action, internalQuery, mutation } from './_generated/server';
 import { internal } from './_generated/api';
 import type { Id } from './_generated/dataModel';
 import { requireOwner, requireProject } from './lib/auth';
-import { mediaUrl } from './lib/media_storage';
+import { enqueueMediaTask } from './mediaTasks';
+import { requireEditorAccess } from './lib/billing_access';
+import { hasPreview, mediaUrl } from './lib/media_storage';
 
 const request = { projectId: v.id('projects'), assetIds: v.array(v.id('assets')) };
 const source = v.object({ _id: v.id('assets'), storageId: v.optional(v.id('_storage')), r2Key: v.optional(v.string()) });
@@ -19,7 +21,7 @@ export const authorize = internalQuery({
     const assets = await Promise.all([...new Set(args.assetIds)].map(id => ctx.db.get(id)));
     return assets.map(asset => {
       if (!asset || asset.ownerId !== ownerId || asset.projectId !== args.projectId) throw new ConvexError('Media not found');
-      return { _id: asset._id, ...(asset.storageId ? { storageId: asset.storageId } : {}), ...(asset.r2Key ? { r2Key: asset.r2Key } : {}) };
+      return { _id: asset._id, ...(!hasPreview(asset)&&asset.storageId ? { storageId: asset.storageId } : {}), ...(hasPreview(asset)?{r2Key:asset.previewR2Key}:asset.r2Key ? { r2Key: asset.r2Key } : {}) };
     });
   },
 });
@@ -32,3 +34,14 @@ export const refresh = action({
     return Promise.all(assets.map(async asset => ({ _id: asset._id, url: await mediaUrl(ctx, asset,true) })));
   },
 });
+
+/** Prepare legacy footage once; durable tasks deduplicate repeated client requests. */
+export const prepare=mutation({args:request,returns:v.array(v.id('mediaTasks')),handler:async(ctx,args)=>{
+  const ownerId=await requireOwner(ctx);await requireProject(ctx,args.projectId,ownerId);await requireEditorAccess(ctx,ownerId);
+  if(args.assetIds.length>200)throw new ConvexError('Prepare up to 200 project media files');
+  const assets=await Promise.all([...new Set(args.assetIds)].map(id=>ctx.db.get(id)));
+  for(const asset of assets)if(!asset||asset.ownerId!==ownerId||asset.projectId!==args.projectId||asset.kind!=='video')throw new ConvexError('Choose video from this project');
+  const tasks:Id<'mediaTasks'>[]=[];
+  for(const asset of assets)if(asset&&!hasPreview(asset))tasks.push(await enqueueMediaTask(ctx,{ownerId,projectId:args.projectId,assetId:asset._id,kind:'preview'}));
+  return tasks;
+}});

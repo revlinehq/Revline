@@ -96,7 +96,9 @@ export const videoInspectionValidator = v.object({ ...videoRequestValidator.fiel
 export const analysisMode = v.union(v.literal("transcribe"), v.literal("understand"), v.literal("shots"), v.literal("beats"), v.literal("track"), v.literal('frames'), v.literal('video'));
 const analysisRequestFields = { ownerId: v.string(), projectId: v.id("projects"), assetId: v.id("assets"), aiRunId: v.string(), mode: analysisMode, frameRequest: v.optional(frameRequestValidator), frameInspection: v.optional(frameInspectionValidator), videoRequest: v.optional(videoRequestValidator), videoInspection: v.optional(videoInspectionValidator), taskId: v.optional(v.id('mediaTasks')), status: v.union(v.literal("pending"), v.literal("running"), v.literal("completed"), v.literal("failed")), error: v.optional(v.string()), createdAt: v.number(), expiresAt: v.number() };
 export const analysisRequestDocument = v.object({ _id: v.id("analysisRequests"), _creationTime: v.number(), ...analysisRequestFields });
+export const previewFields = { previewR2Key:v.optional(v.string()), previewSize:v.optional(v.number()), previewWidth:v.optional(v.number()), previewHeight:v.optional(v.number()), previewFps:v.optional(v.number()), previewVersion:v.optional(v.number()) };
 export const assetFields = {
+  ...previewFields,
   ownerId: v.string(), projectId: v.id("projects"), storageId: v.optional(v.id("_storage")), r2Key: v.optional(v.string()), fileName: v.string(),
   contentType: v.string(), size: v.number(), kind: assetKind, createdAt: v.number(),
   duration: v.optional(v.number()), width: v.optional(v.number()), height: v.optional(v.number()), analysisId:v.optional(v.id('assetAnalyses')),analysisKinds:v.optional(v.array(v.string())),editSuggestions:understandingValidator.fields.suggestions, analysis: v.optional(analysisValidator), analysisUpdatedAt: v.optional(v.number()),
@@ -106,7 +108,7 @@ export const assetFields = {
   analysisCompletedAt: v.optional(v.object({ transcribe: v.optional(v.number()), understand: v.optional(v.number()), shots: v.optional(v.number()), beats: v.optional(v.number()), track: v.optional(v.number()) })),
 };
 export const assetDocument = v.object({ _id: v.id("assets"), _creationTime: v.number(), ...assetFields });
-export const assetWithUrl = v.object({ _id: v.id("assets"), _creationTime: v.number(), ...assetFields, url: v.union(v.string(), v.null()), thumbnailUrl:v.optional(v.union(v.string(),v.null())) });
+export const assetWithUrl = v.object({ _id: v.id("assets"), _creationTime: v.number(), ...assetFields, url: v.union(v.string(), v.null()), previewUrl:v.optional(v.union(v.string(),v.null())), thumbnailUrl:v.optional(v.union(v.string(),v.null())) });
 export const renderFields = {
   ownerId: v.string(), projectId: v.id("projects"),
   status: v.union(v.literal("queued"), v.literal("rendering"), v.literal("completed"), v.literal("failed"), v.literal("cancelled")),
@@ -118,10 +120,10 @@ export const renderDocument = v.object({ _id: v.id("renderJobs"), _creationTime:
 const {timeline:_snapshot,...renderSummaryFields}=renderFields;
 export const renderSummaryDocument=v.object({_id:v.id('renderJobs'),_creationTime:v.number(),...renderSummaryFields,url:v.union(v.string(),v.null())});
 export const r2UploadFields = {
-    ownerId: v.string(), projectId: v.id("projects"), jobId: v.optional(v.id("renderJobs")), taskId: v.optional(v.id('mediaTasks')), taskLeaseToken: v.optional(v.string()),
+    ownerId: v.string(), projectId: v.id("projects"), jobId: v.optional(v.id("renderJobs")), taskId: v.optional(v.id('mediaTasks')), taskLeaseToken: v.optional(v.string()), purpose:v.optional(v.literal('preview')), sourceAssetId:v.optional(v.id('assets')), previewFps:v.optional(v.number()), previewVersion:v.optional(v.number()),
     key: v.string(), uploadId: v.string(), fileName: v.string(), contentType: v.string(), kind: assetKind,
     size: v.number(), partSize: v.number(), duration: v.optional(v.number()), width: v.optional(v.number()), height: v.optional(v.number()),
-    cleanupScheduled:v.optional(v.boolean()), expiresAt: v.number(), assetId: v.optional(v.id("assets")), completed: v.optional(v.boolean()),
+    cleanupScheduled:v.optional(v.boolean()), aborting:v.optional(v.boolean()), expiresAt: v.number(), assetId: v.optional(v.id("assets")), completed: v.optional(v.boolean()),
 };
 export const r2UploadDocument = v.object({ _id: v.id("r2Uploads"), _creationTime: v.number(), ...r2UploadFields });
 export const userFields = {
@@ -129,7 +131,7 @@ export const userFields = {
   createdAt: v.number(), updatedAt: v.number(),
 };
 export const userDocument = v.object({ _id: v.id("users"), _creationTime: v.number(), ...userFields });
-export const mediaTaskKind = v.union(analysisMode, v.literal('extract'), v.literal('waveform'), v.literal('render'), v.literal('import'), v.literal('review'));
+export const mediaTaskKind = v.union(analysisMode, v.literal('extract'), v.literal('preview'), v.literal('waveform'), v.literal('render'), v.literal('import'), v.literal('review'));
 export const mediaTaskStatus = v.union(v.literal('queued'), v.literal('running'), v.literal('retrying'), v.literal('completed'), v.literal('failed'), v.literal('cancelled'));
 export const mediaTaskActivity = v.union(v.literal('downloading'), v.literal('preparing-analysis'), v.literal('sending-gemini'), v.literal('preparing-gemini'), v.literal('analyzing'), v.literal('retrying-analysis'));
 export const mediaTaskFields = {
@@ -139,7 +141,7 @@ export const mediaTaskFields = {
   activity:v.optional(mediaTaskActivity),activityStartedAt:v.optional(v.number()),
   outputAssetId: v.optional(v.id('assets')),
   sourceUrl: v.optional(v.string()),
-  reviewId:v.optional(v.id('compositionReviews')),requiredProcessorVersion:v.optional(v.number()),
+  reviewId:v.optional(v.id('compositionReviews')),previewVersion:v.optional(v.number()),requiredProcessorVersion:v.optional(v.number()),
   frameRequest: v.optional(frameRequestValidator), frameInspection: v.optional(frameInspectionValidator),
   videoRequest: v.optional(videoRequestValidator), videoInspection: v.optional(videoInspectionValidator),
   leaseToken: v.optional(v.string()), leaseExpiresAt: v.optional(v.number()), attemptStartedAt: v.optional(v.number()),
@@ -147,6 +149,7 @@ export const mediaTaskFields = {
 };
 export const mediaTaskDocument = v.object({ _id: v.id('mediaTasks'), _creationTime: v.number(), ...mediaTaskFields });
 export const sharedAssetFields = {
+  ...previewFields,
   ownerId:v.optional(v.string()),
   sourceId:v.id('assets'), storageId:v.optional(v.id('_storage')), r2Key:v.optional(v.string()),
   fileName:v.string(),contentType:v.string(),size:v.number(),kind:assetKind,
@@ -155,7 +158,8 @@ export const sharedAssetFields = {
   waveform:v.optional(waveformValidator),thumbnailStorageId:v.optional(v.id('_storage')),
 };
 export const publicMediaAsset = v.object({
-  _id:v.string(),fileName:v.string(),kind:assetKind,url:v.union(v.string(),v.null()),
+  previewSize:previewFields.previewSize,previewWidth:previewFields.previewWidth,previewHeight:previewFields.previewHeight,previewFps:previewFields.previewFps,previewVersion:previewFields.previewVersion,
+  _id:v.string(),fileName:v.string(),kind:assetKind,url:v.union(v.string(),v.null()),previewUrl:v.optional(v.union(v.string(),v.null())),
   duration:v.optional(v.number()),width:v.optional(v.number()),height:v.optional(v.number()),
   audioAssetId:v.optional(v.string()),audioExtracted:v.optional(v.boolean()),waveform:v.optional(waveformValidator),thumbnailUrl:v.optional(v.union(v.string(),v.null())),
 });
@@ -183,14 +187,14 @@ export default defineSchema({
   storageAccounting: defineTable({ name:v.string(), ready:v.boolean() }).index('by_name',['name']),
   editorEntitlements: defineTable({ ownerId: v.string(), reason: v.string(), grantedAt: v.number(), updatedAt: v.number(), expiresAt: v.optional(v.number()), revokedAt: v.optional(v.number()) }).index('by_owner', ['ownerId']),
   timelineShares:defineTable({projectId:v.id('projects'),ownerId:v.string(),title:v.string(),timeline:timelineValidator,chat:v.optional(v.array(sharedChatMessage)),published:v.boolean(),createdAt:v.number(),updatedAt:v.number()}).index('by_project',['projectId']),
-  shareAssets:defineTable({shareId:v.id('timelineShares'),...sharedAssetFields}).index('by_share',['shareId']).index('by_storageId',['storageId']).index('by_r2Key',['r2Key']).index('by_thumbnailStorageId',['thumbnailStorageId']).index('by_owner_r2Key',['ownerId','r2Key']).index('by_owner_storageId',['ownerId','storageId']).index('by_owner_thumbnail',['ownerId','thumbnailStorageId']),
+  shareAssets:defineTable({shareId:v.id('timelineShares'),...sharedAssetFields}).index('by_share',['shareId']).index('by_storageId',['storageId']).index('by_r2Key',['r2Key']).index('by_previewR2Key',['previewR2Key']).index('by_owner_previewR2Key',['ownerId','previewR2Key']).index('by_thumbnailStorageId',['thumbnailStorageId']).index('by_owner_r2Key',['ownerId','r2Key']).index('by_owner_storageId',['ownerId','storageId']).index('by_owner_thumbnail',['ownerId','thumbnailStorageId']),
   billingCheckouts: defineTable({ ownerId: v.string(), priceId: v.string(), origin: v.string(), trialEligible: v.boolean(), requestId: v.string(), createdAt: v.number(), sessionId: v.optional(v.string()), url: v.optional(v.string()), expiresAt: v.optional(v.number()) }).index('by_owner', ['ownerId']),
   billingSubscriptionSync: defineTable({ stripeSubscriptionId: v.string(), token: v.string(), lastEventId: v.optional(v.string()) }).index('by_subscription', ['stripeSubscriptionId']),
   discordAlerts: defineTable({ ...alertFields, status: v.union(v.literal('queued'), v.literal('delivering'), v.literal('sent'), v.literal('failed')), attempts: v.number(), leaseUntil: v.optional(v.number()), lastError: v.optional(v.string()), createdAt: v.number(), updatedAt: v.number() }).index('by_source_event', ['source', 'eventId']).index('by_status_updated', ['status', 'updatedAt']),
   mediaTasks: defineTable(mediaTaskFields).index('by_status_createdAt', ['status', 'createdAt']).index('by_status_claimable_created',['status','claimable','createdAt']).index('by_status_updated',['status','updatedAt']).index('by_asset_kind', ['assetId', 'kind']).index('by_project_createdAt', ['projectId', 'createdAt']).index('by_project_kind_status',['projectId','kind','status']),
   users: defineTable(userFields).index("by_clerk_id", ["clerkId"]),
   projects: defineTable(projectFields).index("by_ownerId_updatedAt", ["ownerId", "updatedAt"]),
-  assets: defineTable(assetFields).index("by_analysis",["analysisId"]).index("by_ownerId_projectId", ["ownerId", "projectId"]).index('by_owner_project_r2Key',['ownerId','projectId','r2Key']).index("by_ownerId_createdAt", ["ownerId", "createdAt"]).index("by_storageId", ["storageId"]).index("by_r2Key", ["r2Key"]).index('by_thumbnailStorageId',['thumbnailStorageId']).index('by_owner_r2Key',['ownerId','r2Key']).index('by_owner_storageId',['ownerId','storageId']).index('by_owner_thumbnail',['ownerId','thumbnailStorageId']).index('by_owner_audio',['ownerId','audioAssetId']),
+  assets: defineTable(assetFields).index("by_analysis",["analysisId"]).index("by_ownerId_projectId", ["ownerId", "projectId"]).index('by_owner_project_r2Key',['ownerId','projectId','r2Key']).index("by_ownerId_createdAt", ["ownerId", "createdAt"]).index("by_storageId", ["storageId"]).index("by_r2Key", ["r2Key"]).index('by_previewR2Key',['previewR2Key']).index('by_owner_previewR2Key',['ownerId','previewR2Key']).index('by_thumbnailStorageId',['thumbnailStorageId']).index('by_owner_r2Key',['ownerId','r2Key']).index('by_owner_storageId',['ownerId','storageId']).index('by_owner_thumbnail',['ownerId','thumbnailStorageId']).index('by_owner_audio',['ownerId','audioAssetId']),
   renderJobs: defineTable(renderFields).index("by_ownerId_projectId", ["ownerId", "projectId"]).index("by_status_createdAt", ["status", "createdAt"]).index("by_owner_project_status",["ownerId","projectId","status"]),
   analysisRequests: defineTable(analysisRequestFields).index("by_projectId_runId", ["projectId", "aiRunId"]).index("by_projectId", ["projectId"]),
   r2Uploads: defineTable(r2UploadFields).index("by_projectId", ["projectId"]).index("by_projectId_completed", ["projectId", "completed"]),

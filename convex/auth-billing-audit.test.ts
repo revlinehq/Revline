@@ -94,12 +94,75 @@ test.each(['revoked', 'expired'] as const)('%s access blocks new multipart part 
 
 test('multipart final attachment rechecks access after the external completion request', async () => {
   const f = await fixture(), { uploadId } = await upload(f);
-  vi.mocked(fetch).mockImplementation(async () => {
-    await f.t.mutation(internal.editorAccess.revokeComplimentary, { ownerId });
-    return new Response(JSON.stringify({ size: 10, contentType: 'video/mp4' }));
+  const lease=(await f.t.run(ctx=>ctx.db.get(uploadId)))!,objects=new Set<string>();
+  vi.mocked(fetch).mockImplementation(async (_url,init) => {
+    const body=JSON.parse(String(init?.body));
+    if(body.action==='complete'){
+      objects.add(body.key);
+      await f.t.mutation(internal.editorAccess.revokeComplimentary, { ownerId });
+      return Response.json({ size: 10, contentType: 'video/mp4' });
+    }
+    // R2 cannot abort a multipart upload after its object was completed.
+    if(body.action==='delete')objects.delete(body.key);
+    return Response.json({});
   });
   await expect(f.owner.action(api.r2.complete, { uploadId, parts: [{ partNumber: 1, etag: 'fixture-etag' }] })).rejects.toThrow('SUBSCRIPTION_REQUIRED');
   expect((await f.t.run(ctx => ctx.db.get(uploadId)))?.completed).toBe(false);
+  expect(objects.has(lease.key)).toBe(true);
+  await f.owner.action(api.r2.abort,{uploadId});
+  expect(objects.has(lease.key)).toBe(false);
+  expect(await f.t.run(ctx=>ctx.db.get(uploadId))).toBeNull();
+  expect((await f.owner.query(api.storage.summary,{})).reservedBytes).toBe(0);
+});
+
+test('a completed attachment wins an abort claim without deleting its saved object',async()=>{
+  const f=await fixture(),{uploadId}=await upload(f),lease=(await f.t.run(ctx=>ctx.db.get(uploadId)))!;
+  const assetId=await f.owner.action(api.r2.complete,{uploadId,parts:[{partNumber:1,etag:'fixture-etag'}]});
+  vi.mocked(fetch).mockClear();
+  await f.owner.action(api.r2.abort,{uploadId});
+  await f.t.action(internal.r2.cleanupLease,{uploadId});
+  expect(vi.mocked(fetch)).not.toHaveBeenCalled();
+  expect((await f.t.run(ctx=>ctx.db.get(assetId!)))?.r2Key).toBe(lease.key);
+  expect(await f.t.run(ctx=>ctx.db.get(uploadId))).toBeNull();
+});
+
+test('an abort claim blocks an in-flight completion from attaching the deleted object',async()=>{
+  const f=await fixture(),{uploadId}=await upload(f);
+  let signalComplete!:()=>void,releaseComplete!:()=>void,signalDelete!:()=>void,releaseDelete!:()=>void;
+  const completing=new Promise<void>(resolve=>{signalComplete=resolve;}),allowComplete=new Promise<void>(resolve=>{releaseComplete=resolve;});
+  const deleting=new Promise<void>(resolve=>{signalDelete=resolve;}),allowDelete=new Promise<void>(resolve=>{releaseDelete=resolve;});
+  vi.mocked(fetch).mockImplementation(async(_url,init)=>{
+    const body=JSON.parse(String(init?.body));
+    if(body.action==='complete'){signalComplete();await allowComplete;return Response.json({size:10,contentType:'video/mp4'});}
+    if(body.action==='delete'){signalDelete();await allowDelete;}
+    return Response.json({});
+  });
+  const complete=f.owner.action(api.r2.complete,{uploadId,parts:[{partNumber:1,etag:'fixture-etag'}]});
+  const refused=expect(complete).rejects.toThrow('being removed');
+  await completing;
+  const abort=f.owner.action(api.r2.abort,{uploadId});
+  await deleting;
+  expect((await f.t.run(ctx=>ctx.db.get(uploadId)))?.aborting).toBe(true);
+  await expect(f.owner.action(api.r2.partUrl,{uploadId,partNumber:1})).rejects.toThrow('being removed');
+  releaseComplete();await refused;
+  releaseDelete();await abort;
+  expect(await f.t.run(ctx=>ctx.db.get(uploadId))).toBeNull();
+  expect(await f.owner.query(api.assets.list,{projectId:f.projectId})).toHaveLength(1);
+});
+
+test('failed object deletion retains its abort claim and reservation for scheduled retry',async()=>{
+  const f=await fixture(),{uploadId}=await upload(f),lease=(await f.t.run(ctx=>ctx.db.get(uploadId)))!;
+  vi.mocked(fetch).mockImplementation(async(_url,init)=>JSON.parse(String(init?.body)).action==='delete'?new Response('Unavailable',{status:503}):Response.json({}));
+  await expect(f.owner.action(api.r2.abort,{uploadId})).rejects.toThrow('Cloudflare media request failed');
+  expect(await f.t.run(ctx=>ctx.db.get(uploadId))).toMatchObject({aborting:true,completed:false});
+  expect((await f.owner.query(api.storage.summary,{})).reservedBytes).toBe(lease.size);
+  await f.t.action(internal.r2.cleanupLease,{uploadId});
+  const scheduled=await f.t.run(ctx=>ctx.db.system.query('_scheduled_functions').collect());
+  expect(scheduled.some(row=>row.name==='r2:cleanupLease'&&(row.args[0] as {attempt?:number}).attempt===1)).toBe(true);
+  vi.mocked(fetch).mockImplementation(async()=>Response.json({}));
+  await f.t.action(internal.r2.cleanupLease,{uploadId,attempt:1});
+  expect(await f.t.run(ctx=>ctx.db.get(uploadId))).toBeNull();
+  expect((await f.owner.query(api.storage.summary,{})).reservedBytes).toBe(0);
 });
 
 test('private queries, mutations, uploads and playback reject signed-out and other paid users', async () => {
@@ -324,4 +387,175 @@ test('playback recovery refreshes the signed URL while ordinary media URLs stay 
     expect(await verifyMediaToken('audit-signing-secret',new URL(fresh!).searchParams.get('token')!)).toMatchObject({operation:'read',key:source.r2Key});
     time.mockReturnValue(1_800_000_000_001);expect(await mediaUrl(ctx,source,true)).not.toBe(fresh);
   }finally{time.mockRestore();}
+});
+
+async function previewFixture() {
+  const f=await fixture(),leaseToken='owned-preview-lease';
+  await f.t.run(async ctx=>{
+    await ctx.db.patch(f.assetId,{r2Key:`media/${ownerId}/${f.projectId}/original`,width:1080,height:1920});
+    const {recordAssetStorage}=await import('./lib/storage_accounting');await recordAssetStorage(ctx,(await ctx.db.get(f.assetId))!);
+    await ctx.db.patch(f.taskId,{kind:'preview',previewVersion:1,status:'running',leaseToken,leaseExpiresAt:Date.now()+60_000,requiredProcessorVersion:5});
+  });
+  const metadata={projectId:f.projectId,taskId:f.taskId,leaseToken,purpose:'preview' as const,sourceAssetId:f.assetId,previewFps:60,previewVersion:1,kind:'video' as const,contentType:'video/mp4',fileName:'Private.preview.mp4',size:10,duration:3,width:608,height:1080};
+  return {...f,leaseToken,metadata};
+}
+async function savePreview(f:Awaited<ReturnType<typeof previewFixture>>) {
+  const lease=await f.t.action(api.r2.start,f.metadata);
+  const parent=await f.t.action(api.r2.complete,{uploadId:lease.uploadId,taskId:f.taskId,leaseToken:f.leaseToken,parts:[{partNumber:1,etag:'preview-etag'}]});
+  return {...lease,parent};
+}
+test('preview tasks require project ownership, deduplicate and cannot be claimed by older processors',async()=>{
+  const f=await fixture();
+  expect(await f.t.query(api.mediaTasks.processorContract,{workerSecret:'audit-worker-secret'})).toEqual({processorVersion:5});
+  await expect(f.other.mutation(api.mediaTasks.start,{projectId:f.projectId,assetId:f.assetId,kind:'preview'})).rejects.toThrow();
+  const taskId=await f.owner.mutation(api.mediaTasks.start,{projectId:f.projectId,assetId:f.assetId,kind:'preview'});
+  expect(await f.owner.mutation(api.mediaTasks.start,{projectId:f.projectId,assetId:f.assetId,kind:'preview'})).toBe(taskId);
+  await f.t.run(ctx=>ctx.db.patch(taskId,{claimable:true}));
+  expect(await f.t.mutation(api.mediaTasks.claim,{workerSecret:'audit-worker-secret',processorVersion:4,compact:true})).toBeNull();
+  const task=await f.t.mutation(api.mediaTasks.claim,{workerSecret:'audit-worker-secret',processorVersion:5,compact:true});
+  expect(task).toMatchObject({taskId,kind:'preview'});
+});
+test('preview multipart credentials restrict purpose, source, output type and lease attempt',async()=>{
+  const f=await previewFixture();
+  await expect(f.owner.action(api.r2.start,{...f.metadata,taskId:undefined,leaseToken:undefined})).rejects.toThrow('cannot upload');
+  await expect(f.t.action(api.r2.start,{...f.metadata,purpose:undefined})).rejects.toThrow('purpose');
+  await expect(f.t.action(api.r2.start,{...f.metadata,kind:'audio',contentType:'audio/mp4'})).rejects.toThrow('cannot upload');
+  await expect(f.t.action(api.r2.start,{...f.metadata,previewVersion:2})).rejects.toThrow('cannot upload');
+  const another=await f.t.run(ctx=>ctx.db.insert('assets',{ownerId,projectId:f.projectId,fileName:'Other.mp4',contentType:'video/mp4',kind:'video',size:10,createdAt:0}));
+  await expect(f.t.action(api.r2.start,{...f.metadata,sourceAssetId:another})).rejects.toThrow('cannot upload');
+  const {uploadId}=await f.t.action(api.r2.start,f.metadata);
+  await expect(f.t.action(api.r2.partUrl,{uploadId,taskId:f.taskId,leaseToken:'wrong-attempt',partNumber:1})).rejects.toThrow('lease');
+  await f.t.run(ctx=>ctx.db.patch(f.taskId,{leaseToken:'new-attempt'}));
+  await expect(f.t.action(api.r2.partUrl,{uploadId,taskId:f.taskId,leaseToken:'new-attempt',partNumber:1})).rejects.toThrow('another task attempt');
+});
+test('private preview completion preserves originals, adds auxiliary bytes and never creates another source or audio output',async()=>{
+  const f=await previewFixture();
+  await expect(f.t.mutation(api.mediaTasks.complete,{taskId:f.taskId,leaseToken:f.leaseToken,result:{}})).rejects.toThrow('not been stored');
+  const {parent}=await savePreview(f);expect(parent).toBe(f.assetId);
+  const asset=await f.owner.query(api.assets.get,{projectId:f.projectId,assetId:f.assetId});
+  expect(asset.r2Key).toBe(`media/${ownerId}/${f.projectId}/original`);
+  expect(asset.previewR2Key).not.toBe(asset.r2Key);expect(asset.previewVersion).toBe(1);
+  expect(await verifyMediaToken('audit-signing-secret',new URL(asset.url!).searchParams.get('token')!)).toMatchObject({operation:'read',key:asset.r2Key});
+  expect(await verifyMediaToken('audit-signing-secret',new URL(asset.previewUrl!).searchParams.get('token')!)).toMatchObject({operation:'read',key:asset.previewR2Key});
+  expect(await f.owner.query(api.assets.list,{projectId:f.projectId})).toHaveLength(1);
+  const storage=await f.owner.query(api.storage.summary,{});expect(storage).toMatchObject({usedBytes:20,reservedBytes:0,fileCount:1});
+  const rows=await f.t.run(ctx=>ctx.db.query('storageObjects').withIndex('by_owner_key',q=>q.eq('ownerId',ownerId)).take(10));
+  const derivative=rows.find(row=>row.r2Key===asset.previewR2Key)!;expect(derivative.auxiliary).toBe(true);
+  await expect(f.owner.mutation(api.storage.remove,{fileIds:[derivative._id]})).rejects.toThrow('File not found');
+  expect((await f.t.run(ctx=>ctx.db.get(f.taskId)))?.outputAssetId).toBeUndefined();
+  await f.t.mutation(api.mediaTasks.complete,{taskId:f.taskId,leaseToken:f.leaseToken,result:{}});
+  const refresh=await f.owner.action(api.playback.refresh,{projectId:f.projectId,assetIds:[f.assetId]});
+  expect(await verifyMediaToken('audit-signing-secret',new URL(refresh[0].url!).searchParams.get('token')!)).toMatchObject({key:asset.previewR2Key});
+  await expect(f.other.action(api.playback.refresh,{projectId:f.projectId,assetIds:[f.assetId]})).rejects.toThrow();
+});
+test('finishing an older source preview preserves the current project cover',async()=>{
+  const f=await previewFixture(),coverStorageId=await f.t.run(ctx=>ctx.storage.store(new Blob(['new cover'],{type:'image/png'})));
+  await f.t.run(async ctx=>{
+    const {recordAssetStorage}=await import('./lib/storage_accounting');
+    const newerId=await ctx.db.insert('assets',{ownerId,projectId:f.projectId,storageId:coverStorageId,fileName:'Newer.png',kind:'image',contentType:'image/png',size:9,createdAt:1});
+    await recordAssetStorage(ctx,(await ctx.db.get(newerId))!);
+  });
+  const cover=()=>f.t.run(ctx=>ctx.db.query('projectCatalog').withIndex('by_project',q=>q.eq('projectId',f.projectId)).unique());
+  expect(await cover()).toMatchObject({coverKind:'image',coverStorageId});
+  await savePreview(f);
+  expect(await cover()).toMatchObject({coverKind:'image',coverStorageId});
+});
+
+test.each(['queued','rendering','cancelled'] as const)('storage permits removal of %s exports only after they stop',async status=>{
+  const f=await fixture(),key=`media/${ownerId}/${f.projectId}/export`;
+  await f.t.run(async ctx=>{
+    const {recordStorageObject}=await import('./lib/storage_accounting');
+    await ctx.db.patch(f.jobId,{status,outputR2Key:key});
+    await recordStorageObject(ctx,{ownerId,r2Key:key,fileName:'Export.mp4',kind:'export',size:10,createdAt:0,jobId:f.jobId});
+  });
+  const result=await f.owner.query(api.storage.files,{paginationOpts:{numItems:10,cursor:null},sort:'largest'}),row=result.page[0];
+  expect(row).toMatchObject({canDelete:status==='cancelled',protectedReason:status==='cancelled'?null:'Export in progress'});
+  if(status==='cancelled'){
+    await f.owner.mutation(api.storage.remove,{fileIds:[row.id]});
+    expect(await f.t.run(ctx=>ctx.db.get(f.jobId))).toBeNull();
+    expect((await f.owner.query(api.storage.summary,{})).usedBytes).toBe(0);
+  }else{
+    await expect(f.owner.mutation(api.storage.remove,{fileIds:[row.id]})).rejects.toThrow('Export in progress');
+    expect(await f.t.run(ctx=>ctx.db.get(f.jobId))).not.toBeNull();
+  }
+});
+test('export snapshots keep the original URL even when a private preview exists',async()=>{
+  const f=await previewFixture();await savePreview(f);
+  const timeline={aspectRatio:'vertical' as const,fps:30 as const,clips:[{id:'video',assetId:f.assetId,kind:'video' as const,start:0,duration:3,sourceStart:0}]};
+  await f.t.run(async ctx=>{await ctx.db.patch(f.jobId,{timeline,assetIds:[f.assetId],status:'rendering'});await ctx.db.patch(f.taskId,{kind:'render',renderJobId:f.jobId});});
+  const work=await f.t.query(api.mediaTasks.work,{taskId:f.taskId,leaseToken:f.leaseToken});
+  const original=await f.t.run(ctx=>ctx.db.get(f.assetId));
+  expect(await verifyMediaToken('audit-signing-secret',new URL(work.render!.assets[0].url!).searchParams.get('token')!)).toMatchObject({key:original!.r2Key});
+});
+test('shared copies pin previews until the final attachment is removed and reclaim their bytes separately',async()=>{
+  const f=await previewFixture();await savePreview(f);
+  const timeline={aspectRatio:'vertical' as const,fps:30 as const,clips:[{id:'video',assetId:f.assetId,kind:'video' as const,start:0,duration:3,sourceStart:0}]};
+  await f.t.run(ctx=>writeProject(ctx,f.projectId,{timeline}));
+  const original=await f.t.run(ctx=>ctx.db.get(f.assetId)),shareId=await f.owner.mutation(api.timelineShares.publish,{projectId:f.projectId});
+  const shared=(await f.t.query(api.timelineShares.get,{shareId}))!.assets[0];
+  expect(shared.previewUrl).toBeTruthy();expect(shared).toMatchObject({previewSize:10,previewVersion:1,previewWidth:608,previewHeight:1080,previewFps:60});expect(shared).not.toHaveProperty('previewR2Key');expect(shared).not.toHaveProperty('r2Key');expect(shared).not.toHaveProperty('ownerId');
+  const copiedId=await f.owner.mutation(api.timelineShares.useTimeline,{shareId});
+  const copies=await f.owner.query(api.assets.list,{projectId:copiedId});expect(copies[0].previewR2Key).toBe(original!.previewR2Key);
+  await f.t.run(ctx=>writeProject(ctx,f.projectId,{timeline:{...timeline,clips:[]}}));
+  await f.owner.mutation(api.assets.remove,{assetId:f.assetId});
+  await f.owner.mutation(api.timelineShares.revoke,{projectId:f.projectId});
+  expect((await f.owner.query(api.storage.summary,{})).usedBytes).toBe(20);
+  await f.t.run(ctx=>writeProject(ctx,copiedId,{timeline:{...timeline,clips:[]}}));
+  await f.owner.mutation(api.assets.remove,{assetId:copies[0]._id});
+  expect((await f.owner.query(api.storage.summary,{})).usedBytes).toBe(0);
+  const scheduled=await f.t.run(ctx=>ctx.db.system.query('_scheduled_functions').collect());
+  const deletes=scheduled.filter(row=>row.name==='r2:deleteObject').map(row=>(row.args[0] as {key:string}).key);
+  expect(deletes).toContain(original!.r2Key);expect(deletes).toContain(original!.previewR2Key);
+});
+
+test('batch playback preparation stays within the authenticated project and skips a completed derivative',async()=>{
+  const f=await previewFixture();
+  await expect(f.other.mutation(api.playback.prepare,{projectId:f.projectId,assetIds:[f.assetId]})).rejects.toThrow();
+  expect(await f.owner.mutation(api.playback.prepare,{projectId:f.projectId,assetIds:[f.assetId,f.assetId]})).toEqual([f.taskId]);
+  expect(await f.owner.mutation(api.playback.prepare,{projectId:f.projectId,assetIds:[f.assetId]})).toEqual([f.taskId]);
+  await savePreview(f);
+  expect(await f.owner.mutation(api.playback.prepare,{projectId:f.projectId,assetIds:[f.assetId]})).toEqual([]);
+});
+test('duplicate preview uploads keep one derivative and release the unused reservation',async()=>{
+  const f=await previewFixture(),first=await savePreview(f),before=await f.t.run(ctx=>ctx.db.get(f.assetId));
+  const second=await savePreview(f);expect(second.uploadId).not.toBe(first.uploadId);
+  const after=await f.t.run(ctx=>ctx.db.get(f.assetId));expect(after!.previewR2Key).toBe(before!.previewR2Key);
+  expect(await f.owner.query(api.storage.summary,{})).toMatchObject({usedBytes:20,reservedBytes:0,fileCount:1});
+});
+test('preview upload failure from quota or removed source leaves the original untouched',async()=>{
+  const f=await previewFixture();
+  await expect(f.t.action(api.r2.start,{...f.metadata,duration:4})).rejects.toThrow('duration must match');
+  await f.t.run(async ctx=>{const {recordAssetStorage}=await import('./lib/storage_accounting');await recordAssetStorage(ctx,(await ctx.db.get(f.assetId))!);await ctx.db.insert('storageAccounting',{name:'objects-v1',ready:true});});
+  vi.stubEnv('ACCOUNT_STORAGE_LIMIT_BYTES','15');
+  await expect(f.t.action(api.r2.start,f.metadata)).rejects.toThrow('cloud storage is full');
+  expect(await f.owner.query(api.storage.summary,{})).toMatchObject({usedBytes:10,reservedBytes:0,fileCount:1});
+  expect((await f.t.run(ctx=>ctx.db.get(f.assetId)))?.previewR2Key).toBeUndefined();
+  vi.stubEnv('ACCOUNT_STORAGE_LIMIT_BYTES','15000000000');
+  const {uploadId}=await f.t.action(api.r2.start,f.metadata);
+  await f.t.run(ctx=>ctx.db.delete(f.assetId));
+  await expect(f.t.action(api.r2.complete,{uploadId,taskId:f.taskId,leaseToken:f.leaseToken,parts:[{partNumber:1,etag:'preview-etag'}]})).rejects.toThrow('source is unavailable');
+});
+
+test('project transfer rejects a preview key outside the explicitly copied target namespace',async()=>{
+  const f=await fixture(),email='preview-audit@example.com',transferId='11111111-1111-4111-8111-111111111111';
+  await f.t.run(ctx=>ctx.db.insert('users',{clerkId:ownerId,email,createdAt:0,updatedAt:0}));
+  const args={transferKey:'preview-transfer',transferId,sourceDeployment:'development',sourceProjectId:String(f.projectId),sourceRevision:0,fingerprint:'a'.repeat(64),ownerId,email,title:'Transferred preview',aspectRatio:'vertical' as const,timeline:{fps:30 as const,aspectRatio:'vertical' as const,clips:[{id:'video',assetId:String(f.assetId),kind:'video' as const,start:0,duration:3,sourceStart:0}]},history:[],conversation:[],publicChat:[],media:[{sourceId:String(f.assetId),r2Key:`media/${ownerId}/${transferId}/22222222-2222-4222-8222-222222222222`,fileName:'Original.mp4',contentType:'video/mp4',size:10,kind:'video' as const,duration:3,width:1080,height:1920,previewR2Key:'media/another-owner/project/private-preview',previewSize:5,previewWidth:608,previewHeight:1080,previewFps:60,previewVersion:1}]};
+  await expect(f.t.mutation(internal.projectTransfers.importSnapshot,args)).rejects.toThrow('target namespace');
+  expect(await f.t.run(ctx=>ctx.db.query('projectTransferReceipts').withIndex('by_key',q=>q.eq('transferKey','preview-transfer')).first())).toBeNull();
+});
+
+
+test.each(['cancelled','expired'] as const)('scheduled preview upload cleanup works after its task is %s',async mode=>{
+  const f=await previewFixture(),{uploadId}=await f.t.action(api.r2.start,f.metadata);
+  const lease=(await f.t.run(ctx=>ctx.db.get(uploadId)))!;
+  await f.t.run(ctx=>ctx.db.patch(f.taskId,mode==='cancelled'?{status:'cancelled'}:{leaseExpiresAt:Date.now()-1}));
+  await expect(f.t.action(api.r2.abort,{uploadId,taskId:f.taskId,leaseToken:f.leaseToken})).rejects.toThrow('lease');
+  await f.t.action(internal.r2.cleanupLease,{uploadId});
+  expect(await f.t.run(ctx=>ctx.db.get(uploadId))).toBeNull();
+  expect((await f.owner.query(api.storage.summary,{})).reservedBytes).toBe(0);
+  expect((await f.t.run(ctx=>ctx.db.get(f.assetId)))!.r2Key).toBe(`media/${ownerId}/${f.projectId}/original`);
+  const controls=vi.mocked(fetch).mock.calls.map(([,init])=>JSON.parse(String(init?.body)));
+  expect(controls).toContainEqual({action:'abort',key:lease.key,uploadId:lease.uploadId});
+  expect(controls).toContainEqual({action:'delete',key:lease.key});
+  expect(controls.some(body=>body.action==='delete'&&body.key===`media/${ownerId}/${f.projectId}/original`)).toBe(false);
 });

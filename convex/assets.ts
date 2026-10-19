@@ -2,7 +2,7 @@ import { hydrateAsset,storeAnalysis } from './lib/asset_analysis';
 import { writeProject,projectIdentity,projectRun } from './lib/project_data';
 import { recordAssetStorage,usedByActiveExport,forgetStorageObject } from './lib/storage_accounting';
 import { requireEditorAccess } from './lib/billing_access';
-import { mediaConfig, mediaUrl } from './lib/media_storage';
+import { mediaConfig, mediaUrl, previewUrl } from './lib/media_storage';
 import { removeMediaAttachment } from './lib/shared_media';
 import { paginationOptsValidator } from 'convex/server';
 import { ConvexError, v, type Infer } from "convex/values";
@@ -60,6 +60,7 @@ export const create = mutation({ args: { projectId: v.id("projects"), storageId:
   await recordAssetStorage(ctx,(await ctx.db.get(assetId))!);
   if(args.kind!=='image'){
     await enqueueMediaTask(ctx,{ownerId,projectId:args.projectId,assetId,kind:args.kind==='video'?'extract':'waveform'});
+    if(args.kind==='video')await enqueueMediaTask(ctx,{ownerId,projectId:args.projectId,assetId,kind:'preview'});
     await enqueueMediaTask(ctx,{ownerId,projectId:args.projectId,assetId,kind:args.kind==='video'?'understand':'transcribe'});
   }
   return assetId;
@@ -86,7 +87,7 @@ export const list = query({ args: { projectId: v.id("projects"), limit: v.option
   const limit = args.limit ?? 50;
   if (!Number.isInteger(limit) || limit < 1 || limit > 200) throw new ConvexError("Load between 1 and 200 project media files");
   const assets = await ctx.db.query("assets").withIndex("by_ownerId_projectId", q => q.eq("ownerId", ownerId).eq("projectId", args.projectId)).order("desc").take(limit);
-  return await Promise.all(assets.map(async ({analysis,...asset}) => ({ ...asset,...((asset.editSuggestions??analysis?.understanding?.suggestions)?{analysis:{understanding:{summary:'',scenes:[],suggestions:asset.editSuggestions??analysis?.understanding?.suggestions}}}:{}), url: await mediaUrl(ctx, asset),...await thumbnailUrl(ctx,asset) })));
+  return await Promise.all(assets.map(async ({analysis,...asset}) => ({ ...asset,...((asset.editSuggestions??analysis?.understanding?.suggestions)?{analysis:{understanding:{summary:'',scenes:[],suggestions:asset.editSuggestions??analysis?.understanding?.suggestions}}}:{}), url: await mediaUrl(ctx, asset),...await previewUrl(ctx,asset),...await thumbnailUrl(ctx,asset) })));
 }});
 export const library = query({
   args: { paginationOpts: paginationOptsValidator },
@@ -95,7 +96,7 @@ export const library = query({
     const ownerId = await requireOwner(ctx);
     if (args.paginationOpts.numItems > 60) throw new ConvexError('Load up to 60 uploads at a time');
     const result = await ctx.db.query('assets').withIndex('by_ownerId_createdAt', q => q.eq('ownerId', ownerId)).order('desc').paginate(args.paginationOpts);
-    const page = await Promise.all(result.page.map(async ({ analysis, analysisUpdatedAt, analysisCompletedAt, ...asset }) => ({ ...asset, url: await mediaUrl(ctx, asset),...await thumbnailUrl(ctx,asset) })));
+    const page = await Promise.all(result.page.map(async ({ analysis, analysisUpdatedAt, analysisCompletedAt, ...asset }) => ({ ...asset, url: await mediaUrl(ctx, asset),...await previewUrl(ctx,asset),...await thumbnailUrl(ctx,asset) })));
     return { page, isDone: result.isDone, continueCursor: result.continueCursor };
   },
 });
@@ -105,7 +106,7 @@ export const selected = query({
     const ownerId = await requireOwner(ctx);
     if (args.assetIds.length > 200) throw new ConvexError('Choose up to 200 uploads');
     const assets = await Promise.all([...new Set(args.assetIds)].map(id => ctx.db.get(id)));
-    return await Promise.all(assets.filter(asset => asset?.ownerId === ownerId).map(async asset => ({ ...asset!, url: await mediaUrl(ctx, asset!),...await thumbnailUrl(ctx,asset!) })));
+    return await Promise.all(assets.filter(asset => asset?.ownerId === ownerId).map(async asset => ({ ...asset!, url: await mediaUrl(ctx, asset!),...await previewUrl(ctx,asset!),...await thumbnailUrl(ctx,asset!) })));
   },
 });
 export async function removeOwnedAsset(ctx:MutationCtx,ownerId:string,assetId:Id<'assets'>) {
@@ -123,7 +124,7 @@ export const remove = mutation({ args: { assetId: v.id('assets') }, returns: v.n
 export const get = query({ args: { projectId: v.id("projects"), assetId: v.id("assets") }, returns: assetWithUrl, handler: async (ctx, args) => {
   const ownerId = await requireOwner(ctx); await projectIdentity(ctx,args.projectId,ownerId); const asset = await ctx.db.get(args.assetId);
   if (!asset || asset.ownerId !== ownerId || asset.projectId !== args.projectId) throw new ConvexError("Media not found");
-  return { ...await hydrateAsset(ctx,asset), url: await mediaUrl(ctx, asset),...await thumbnailUrl(ctx,asset) };
+  return { ...await hydrateAsset(ctx,asset), url: await mediaUrl(ctx, asset),...await previewUrl(ctx,asset),...await thumbnailUrl(ctx,asset) };
 }});
 export const saveExtractedAudio = internalMutation({
   args: { projectId: v.id('projects'), assetId: v.id('assets'), audioAssetId: v.optional(v.id('assets')), waveform: v.optional(waveformValidator), workerSecret: v.string() },

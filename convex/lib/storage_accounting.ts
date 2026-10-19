@@ -1,3 +1,4 @@
+import { hasPreview } from './media_storage';
 import { updateProjectCover } from './project_data';
 import { ConvexError } from 'convex/values';
 import type { Doc, Id } from '../_generated/dataModel';
@@ -57,15 +58,16 @@ export async function forgetStorageObject(ctx:MutationCtx,ownerId:string,source:
 export async function recordAssetStorage(ctx:MutationCtx,asset:Doc<'assets'>,backfill=false) {
   await recordStorageObject(ctx,asset,backfill);
   await updateProjectCover(ctx,asset);
+  if(hasPreview(asset))await recordStorageObject(ctx,{ownerId:asset.ownerId,r2Key:asset.previewR2Key,fileName:`${asset.fileName} preview`,kind:'video',size:asset.previewSize!,createdAt:asset.createdAt,auxiliary:true},backfill);
   if(asset.thumbnailStorageId){const metadata=await ctx.db.system.get(asset.thumbnailStorageId);if(metadata)await recordStorageObject(ctx,{ownerId:asset.ownerId,storageId:asset.thumbnailStorageId,fileName:`${asset.fileName} thumbnail`,size:metadata.size,kind:'image',createdAt:asset.createdAt,auxiliary:true},backfill);}
 }
-export async function ownedObjectReferences(ctx:Context,ownerId:string,source:StoredObject,thumbnail=false) {
-  const assets=source.r2Key ? ctx.db.query('assets').withIndex('by_owner_r2Key',q=>q.eq('ownerId',ownerId).eq('r2Key',source.r2Key)) : thumbnail ? ctx.db.query('assets').withIndex('by_owner_thumbnail',q=>q.eq('ownerId',ownerId).eq('thumbnailStorageId',source.storageId)) : ctx.db.query('assets').withIndex('by_owner_storageId',q=>q.eq('ownerId',ownerId).eq('storageId',source.storageId));
-  const pins=source.r2Key ? ctx.db.query('shareAssets').withIndex('by_owner_r2Key',q=>q.eq('ownerId',ownerId).eq('r2Key',source.r2Key)) : thumbnail ? ctx.db.query('shareAssets').withIndex('by_owner_thumbnail',q=>q.eq('ownerId',ownerId).eq('thumbnailStorageId',source.storageId)) : ctx.db.query('shareAssets').withIndex('by_owner_storageId',q=>q.eq('ownerId',ownerId).eq('storageId',source.storageId));
+export async function ownedObjectReferences(ctx:Context,ownerId:string,source:StoredObject,thumbnail:boolean|'preview'=false) {
+  const assets=thumbnail==='preview' ? ctx.db.query('assets').withIndex('by_owner_previewR2Key',q=>q.eq('ownerId',ownerId).eq('previewR2Key',source.r2Key)) : source.r2Key ? ctx.db.query('assets').withIndex('by_owner_r2Key',q=>q.eq('ownerId',ownerId).eq('r2Key',source.r2Key)) : thumbnail ? ctx.db.query('assets').withIndex('by_owner_thumbnail',q=>q.eq('ownerId',ownerId).eq('thumbnailStorageId',source.storageId)) : ctx.db.query('assets').withIndex('by_owner_storageId',q=>q.eq('ownerId',ownerId).eq('storageId',source.storageId));
+  const pins=thumbnail==='preview' ? ctx.db.query('shareAssets').withIndex('by_owner_previewR2Key',q=>q.eq('ownerId',ownerId).eq('previewR2Key',source.r2Key)) : source.r2Key ? ctx.db.query('shareAssets').withIndex('by_owner_r2Key',q=>q.eq('ownerId',ownerId).eq('r2Key',source.r2Key)) : thumbnail ? ctx.db.query('shareAssets').withIndex('by_owner_thumbnail',q=>q.eq('ownerId',ownerId).eq('thumbnailStorageId',source.storageId)) : ctx.db.query('shareAssets').withIndex('by_owner_storageId',q=>q.eq('ownerId',ownerId).eq('storageId',source.storageId));
   const [attachments,shares]=await Promise.all([assets.take(201),pins.take(201)]);
   return {attachments,shares,tooMany:attachments.length>200||shares.length>200};
 }
-export async function releaseAccountStorage(ctx:MutationCtx,ownerId:string,source:StoredObject,thumbnail=false) {
+export async function releaseAccountStorage(ctx:MutationCtx,ownerId:string,source:StoredObject,thumbnail:boolean|'preview'=false) {
   if(!objectKey(source))return;
   const refs=await ownedObjectReferences(ctx,ownerId,source,thumbnail);
   if(!refs.attachments.length&&!refs.shares.length)await forgetStorageObject(ctx,ownerId,source);

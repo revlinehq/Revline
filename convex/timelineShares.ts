@@ -6,7 +6,7 @@ import type { Id,Doc } from './_generated/dataModel';
 import { requireOwner,requireProject } from './lib/auth';
 import { requireEditorAccess } from './lib/billing_access';
 import { validateTimeline } from './lib/timeline';
-import { mediaUrl } from './lib/media_storage';
+import { mediaUrl,previewUrl } from './lib/media_storage';
 import { removeShareAssets } from './lib/shared_media';
 import { timelineValidator,publicMediaAsset,sharedChatMessage,shareChatPreviewMessage } from './schema';
 import { previewSharedChat,snapshotSharedChat } from './lib/share_chat';
@@ -37,8 +37,8 @@ export const publish=mutation({args:{projectId:v.id('projects'),chat:v.optional(
   const shareId=existing?existing._id:await ctx.db.insert('timelineShares',{projectId,ownerId,title:project.title,timeline,...(chat?.length?{chat}:{}),published:true,createdAt:now,updatedAt:now});
   if(existing){await removeShareAssets(ctx,shareId);await ctx.db.patch(shareId,{title:project.title,timeline,chat:chat?.length?chat:undefined,published:true,updatedAt:now});}
   for(const asset of assets.values()){
-    const {_id,storageId,r2Key,fileName,contentType,size,kind,duration,width,height,audioAssetId,audioExtracted,waveform,thumbnailStorageId}=asset;
-    await ctx.db.insert('shareAssets',{shareId,ownerId,sourceId:_id,fileName,contentType,size,kind,...(storageId?{storageId}:{}),...(r2Key?{r2Key}:{}),...(duration!==undefined?{duration}:{}),...(width!==undefined?{width}:{}),...(height!==undefined?{height}:{}),...(audioAssetId?{audioAssetId}:{}),...(audioExtracted!==undefined?{audioExtracted}:{}),...(waveform?{waveform}:{}),...(thumbnailStorageId?{thumbnailStorageId}:{})});
+    const {_id,storageId,r2Key,fileName,contentType,size,kind,duration,width,height,audioAssetId,audioExtracted,waveform,thumbnailStorageId,previewR2Key,previewSize,previewWidth,previewHeight,previewFps,previewVersion}=asset;
+    await ctx.db.insert('shareAssets',{shareId,ownerId,sourceId:_id,fileName,contentType,size,kind,...(storageId?{storageId}:{}),...(r2Key?{r2Key}:{}),...(duration!==undefined?{duration}:{}),...(width!==undefined?{width}:{}),...(height!==undefined?{height}:{}),...(audioAssetId?{audioAssetId}:{}),...(audioExtracted!==undefined?{audioExtracted}:{}),...(waveform?{waveform}:{}),...(thumbnailStorageId?{thumbnailStorageId}:{}),...(previewR2Key?{previewR2Key,previewSize,previewWidth,previewHeight,previewFps,previewVersion}:{})});
   }
   return shareId;
 }});
@@ -50,7 +50,7 @@ export const get=query({args:{shareId:v.string()},returns:v.union(v.object({_id:
   const id=ctx.db.normalizeId('timelineShares',shareId);if(!id)return null;
   const share=await ctx.db.get(id);if(!share?.published)return null;
   const pins=await ctx.db.query('shareAssets').withIndex('by_share',q=>q.eq('shareId',id)).take(200);
-  const assets=await Promise.all(pins.map(async pin=>({_id:String(pin.sourceId),fileName:pin.fileName,kind:pin.kind,url:await mediaUrl(ctx,pin),...(pin.duration!==undefined?{duration:pin.duration}:{}),...(pin.width!==undefined?{width:pin.width}:{}),...(pin.height!==undefined?{height:pin.height}:{}),...(pin.audioAssetId?{audioAssetId:String(pin.audioAssetId)}:{}),...(pin.audioExtracted!==undefined?{audioExtracted:pin.audioExtracted}:{}),...(pin.waveform?{waveform:pin.waveform}:{}),...(pin.thumbnailStorageId?{thumbnailUrl:await ctx.storage.getUrl(pin.thumbnailStorageId)}:{})})));
+  const assets=await Promise.all(pins.map(async pin=>({_id:String(pin.sourceId),fileName:pin.fileName,kind:pin.kind,url:await mediaUrl(ctx,pin),...await previewUrl(ctx,pin),...(pin.previewVersion!==undefined?{previewSize:pin.previewSize,previewWidth:pin.previewWidth,previewHeight:pin.previewHeight,previewFps:pin.previewFps,previewVersion:pin.previewVersion}:{}),...(pin.duration!==undefined?{duration:pin.duration}:{}),...(pin.width!==undefined?{width:pin.width}:{}),...(pin.height!==undefined?{height:pin.height}:{}),...(pin.audioAssetId?{audioAssetId:String(pin.audioAssetId)}:{}),...(pin.audioExtracted!==undefined?{audioExtracted:pin.audioExtracted}:{}),...(pin.waveform?{waveform:pin.waveform}:{}),...(pin.thumbnailStorageId?{thumbnailUrl:await ctx.storage.getUrl(pin.thumbnailStorageId)}:{})})));
   return {_id:share._id,title:share.title,updatedAt:share.updatedAt,timeline:share.timeline,assets,...(share.chat?.length?{chat:share.chat}:{})};
 }});
 export const useTimeline=mutation({args:{shareId:v.id('timelineShares')},returns:v.id('projects'),handler:async(ctx,{shareId})=>{

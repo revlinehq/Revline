@@ -9,6 +9,7 @@ import type { MediaAsset } from '@/lib/editor/types';
 type Props = { asset: MediaAsset; width: number; height: number; sourceStart: number; duration: number; playbackRate?: number; timelineStart: number; px: number; fps: number; viewport: RefObject<HTMLDivElement | null>; paused?: boolean };
 
 export const MediaFilmstrip = memo(function MediaFilmstrip({ asset, width, height, sourceStart, duration, playbackRate = 1, timelineStart, px, fps, viewport, paused = false }: Props) {
+  const sourceUrl = asset.url?.startsWith('blob:') ? asset.url : asset.previewUrl ?? asset.url;
   const root = useRef<HTMLDivElement>(null);
   const [imageAspect, setImageAspect] = useState<number | null>(null);
   const [range, setRange] = useState({ start: 0, end: 0 });
@@ -30,10 +31,10 @@ export const MediaFilmstrip = memo(function MediaFilmstrip({ asset, width, heigh
   }, [frameWidth, width, timelineStart, viewport]);
   const samples = useMemo(() => filmstripFrames({ clipWidth: width, frameWidth, visibleStart: range.start, visibleEnd: range.end, pxPerSecond: px, sourceStart, duration, fps, sourceDuration: asset.duration, playbackRate }), [width, frameWidth, range, px, sourceStart, duration, fps, asset.duration, playbackRate]);
   useEffect(() => {
-    if (paused || asset.kind !== 'video' || !asset.url || !samples.length) return;
+    if (paused || asset.kind !== 'video' || !sourceUrl || !samples.length) return;
     let cancelled = false;
     const controller = new AbortController();
-    const url = asset.url;
+    const url = sourceUrl;
     // First appearance starts immediately; settled zoom refreshes keep their previous stills.
     const timer = setTimeout(() => {
       void videoThumbnails(url, samples.map(frame => frame.time), asset._id, (time, image) => {
@@ -47,8 +48,8 @@ export const MediaFilmstrip = memo(function MediaFilmstrip({ asset, width, heigh
       });
     }, hasDecodedFrame.current ? 100 : 0);
     return () => { cancelled = true; clearTimeout(timer); controller.abort(); };
-  }, [asset.kind, asset.url, asset._id, samples, paused]);
-  if (!asset.url) return null;
+  }, [asset.kind, sourceUrl, asset._id, samples, paused]);
+  if (!sourceUrl) return null;
   return <div ref={root} className="filmstrip media-filmstrip" aria-hidden="true">{samples.map(frame => {
     // Keep the nearest already decoded still visible during a trim or zoom refresh.
     const previous = previousFrames.reduce<typeof previousFrames[number] | undefined>((closest, candidate) => !closest || Math.abs(candidate.time - frame.time) < Math.abs(closest.time - frame.time) ? candidate : closest, undefined);

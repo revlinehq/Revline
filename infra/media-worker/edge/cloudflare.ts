@@ -70,7 +70,7 @@ export class MediaProcessor extends DurableObject<Bindings> {
       }
     } else {
       const client = new ConvexHttpClient(this.env.NEXT_PUBLIC_CONVEX_URL);
-      const ready = await client.query(readyQuery, { workerSecret: this.env.RENDER_WORKER_SECRET,processorVersion:4 });
+      const ready = await client.query(readyQuery, { workerSecret: this.env.RENDER_WORKER_SECRET,processorVersion:5 });
       if (!ready || await this.ctx.storage.get('retired')) return;
       container.start({ image: container.images.processor, instance: INSTANCE_TYPE, labels: { profile: RESOURCE_PROFILE }, enableInternet: true, env: {
         NEXT_PUBLIC_CONVEX_URL: this.env.NEXT_PUBLIC_CONVEX_URL,
@@ -109,7 +109,7 @@ export default {
     if (path === '/status') {
       const processors = await Promise.all(PROCESSOR_NAMES.map(async name => ({ name, ...await env.PROCESSOR.getByName(name).status() })));
       const retiring = await Promise.all(RETIRED_PROCESSOR_NAMES.map(async name => ({ name, ...await env.PROCESSOR.getByName(name).status() })));
-      return Response.json({ capacity: PROCESSOR_NAMES.length, instanceType: INSTANCE_TYPE, processorVersion: 4, processors, retiring }, { headers: { 'Cache-Control': 'no-store' } });
+      return Response.json({ capacity: PROCESSOR_NAMES.length, instanceType: INSTANCE_TYPE, processorVersion: 5, processors, retiring }, { headers: { 'Cache-Control': 'no-store' } });
     }
     await Promise.all([...PROCESSOR_NAMES.map(name => env.PROCESSOR.getByName(name).wake()), ...RETIRED_PROCESSOR_NAMES.map(name => env.PROCESSOR.getByName(name).retire())]);
     return Response.json({ accepted: true }, { status: 202 });

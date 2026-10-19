@@ -3,16 +3,18 @@ import { ConvexError, v, type Infer } from 'convex/values';
 import { components } from './_generated/api';
 import type { Doc, Id } from './_generated/dataModel';
 import { internalMutation, type MutationCtx } from './_generated/server';
-import { analysisValidator, aspectRatio, assetFields, assetKind, sharedChatMessage, timelineValidator, waveformValidator } from './schema';
+import { analysisValidator, aspectRatio, assetFields, assetKind, previewFields, sharedChatMessage, timelineValidator, waveformValidator } from './schema';
 import { shareAnalysis } from './lib/asset_analysis';
 import { requireEditorAccess } from './lib/billing_access';
 import { createProject, writeProject } from './lib/project_data';
+import { enqueueMediaTask } from './mediaTasks';
+import { hasPreview } from './lib/media_storage';
 import { recordAssetStorage } from './lib/storage_accounting';
 import { serializedBytes, validateTimeline } from './lib/timeline';
 
 const ownerArgs = { ownerId: v.string(), email: v.string() };
 const mediaValidator = v.object({
-  sourceId: v.string(), r2Key: v.string(), fileName: v.string(), contentType: v.string(), size: v.number(), kind: assetKind,
+  ...previewFields, sourceId: v.string(), r2Key: v.string(), fileName: v.string(), contentType: v.string(), size: v.number(), kind: assetKind,
   duration: v.optional(v.number()), width: v.optional(v.number()), height: v.optional(v.number()),
   audioSourceId: v.optional(v.string()), audioExtracted: v.optional(v.boolean()), waveform: v.optional(waveformValidator),
   analysis: v.optional(analysisValidator), analysisUpdatedAt: v.optional(v.number()), analysisCompletedAt: assetFields.analysisCompletedAt,
@@ -57,6 +59,7 @@ function validateSnapshot(args: Snapshot) {
     boundedString(media.sourceId, 'source media ID', 200); boundedString(media.fileName, 'media filename', 500); boundedString(media.contentType, 'media content type', 200);
     if (ids.has(media.sourceId) || keys.has(media.r2Key)) throw new ConvexError('Transfer media IDs and object keys must be unique');
     ids.add(media.sourceId); keys.add(media.r2Key);
+    if(media.previewR2Key){if(media.kind!=='video'||!hasPreview(media)||keys.has(media.previewR2Key)||!media.previewR2Key.startsWith(prefix)||!uuid.test(media.previewR2Key.slice(prefix.length)))throw new ConvexError('Transferred preview must use valid copied media in the target namespace');keys.add(media.previewR2Key);}else if(media.previewVersion!==undefined||media.previewSize!==undefined||media.previewWidth!==undefined||media.previewHeight!==undefined||media.previewFps!==undefined)throw new ConvexError('Transferred preview is incomplete');
     if (!media.r2Key.startsWith(prefix) || !uuid.test(media.r2Key.slice(prefix.length))) throw new ConvexError('Transferred media must use the target owner and transfer namespace');
     if (!Number.isSafeInteger(media.size) || media.size < 0 || media.size > 15_000_000_000) throw new ConvexError('Invalid transferred media size');
     if (media.duration !== undefined && media.duration < 0) throw new ConvexError('Invalid media duration');
@@ -107,6 +110,7 @@ export const importSnapshot = internalMutation({
       const asset = await shareAnalysis(ctx, (await ctx.db.get(id))!);
       await recordAssetStorage(ctx, asset);
       ids.set(sourceId, id); imported.set(id, asset);
+      if(asset.kind==='video'&&!hasPreview(asset))await enqueueMediaTask(ctx,{ownerId,projectId,assetId:id,kind:'preview'});
     }
     for (const media of args.media) if (media.audioSourceId) {
       const id = ids.get(media.sourceId)!, audioAssetId = ids.get(media.audioSourceId)!;
@@ -127,8 +131,8 @@ export const importSnapshot = internalMutation({
     for (const clip of timeline.clips) if (clip.assetId) pinned.set(clip.assetId, imported.get(clip.assetId)!);
     for (const asset of Array.from(pinned.values())) if (asset.audioAssetId) pinned.set(asset.audioAssetId, imported.get(asset.audioAssetId)!);
     for (const asset of pinned.values()) {
-      const { _id, r2Key, fileName, contentType, size, kind, duration, width, height, audioAssetId, audioExtracted, waveform, thumbnailStorageId } = asset;
-      await ctx.db.insert('shareAssets', { shareId, ownerId, sourceId: _id, r2Key, fileName, contentType, size, kind, ...(duration !== undefined ? { duration } : {}), ...(width !== undefined ? { width } : {}), ...(height !== undefined ? { height } : {}), ...(audioAssetId ? { audioAssetId } : {}), ...(audioExtracted !== undefined ? { audioExtracted } : {}), ...(waveform ? { waveform } : {}), ...(thumbnailStorageId ? { thumbnailStorageId } : {}) });
+      const { _id, r2Key, fileName, contentType, size, kind, duration, width, height, audioAssetId, audioExtracted, waveform, thumbnailStorageId,previewR2Key,previewSize,previewWidth,previewHeight,previewFps,previewVersion } = asset;
+      await ctx.db.insert('shareAssets', { shareId, ownerId, sourceId: _id, r2Key, fileName, contentType, size, kind, ...(duration !== undefined ? { duration } : {}), ...(width !== undefined ? { width } : {}), ...(height !== undefined ? { height } : {}), ...(audioAssetId ? { audioAssetId } : {}), ...(audioExtracted !== undefined ? { audioExtracted } : {}), ...(waveform ? { waveform } : {}), ...(thumbnailStorageId ? { thumbnailStorageId } : {}),...(previewR2Key?{previewR2Key,previewSize,previewWidth,previewHeight,previewFps,previewVersion}:{}) });
     }
     await ctx.db.insert('projectTransferReceipts', { transferKey: args.transferKey, transferId: args.transferId, sourceDeployment: args.sourceDeployment, sourceProjectId: args.sourceProjectId, sourceRevision: args.sourceRevision, fingerprint: args.fingerprint, ownerId, email: args.email.trim().toLowerCase(), projectId, shareId, createdAt: now });
     return { projectId, shareId, reused: false };

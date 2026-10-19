@@ -90,6 +90,7 @@ export type AudioWaveform = { peaks: string; samplesPerSecond: number };
 export type MediaAsset = {
   _id: string; fileName: string; kind: 'video' | 'image' | 'audio';
   duration?: number; width?: number; height?: number; url: string | null; thumbnailUrl?:string|null;
+  previewUrl?: string | null; previewSize?: number; previewWidth?: number; previewHeight?: number; previewFps?: number; previewVersion?: number;
   audioAssetId?: string; audioExtracted?: boolean;
   analysisKinds?: string[];
   preparation?: {status:'processing'|'failed';message:string};

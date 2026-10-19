@@ -2,6 +2,7 @@ import {guardPreviewBuffering} from '../lib/editor/preview-buffering.ts';
 import {previewMediaReady,waitForPreviewMedia} from '../lib/editor/preview-readiness.ts';
 import {warmPreviewMedia} from '../lib/editor/preview-media-warmup.ts';
 import {generateComposition} from '../lib/editor/composition.ts';
+import {videoThumbnails,cachedVideoThumbnail} from '../lib/editor/video-thumbnails.ts';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
@@ -169,4 +170,218 @@ test('the terminal decoded video frame survives transport end while earlier clip
   const previous=node(0,1),terminal=node(1,2),doc={getElementById:()=>({dataset:{duration:'2'}}),querySelectorAll:()=>[previous,terminal],defaultView:{MutationObserver:class{observe(){}disconnect(){}}}};
   const stop=warmPreviewMedia(doc,()=>2);
   try{assert.equal(terminal.loads,0,'The runtime deliberately holds its last decoded video at the timeline end');assert.equal(terminal.preload,'auto');assert.equal(previous.loads,1,'A normal earlier clip is still released');}finally{stop();}
+});
+
+// A source session shares only the bounded derivative, never the export original.
+import {createPreviewSourceCache} from '../lib/editor/preview-source-cache.ts';
+import {createPreviewMediaSession} from '../lib/editor/preview-media-session.ts';
+
+const proxyAsset=()=>({_id:'shared-video',kind:'video',fileName:'original.mp4',url:'https://media.test/original?private=original',previewUrl:'https://media.test/preview?private=preview',previewVersion:'v1',previewSize:4,duration:10,width:720,height:1280});
+test('all cuts and repeated preparations share one derivative Blob without mutating original assets',async()=>{
+  const originalFetch=globalThis.fetch;let calls=0,revoked=[];
+  globalThis.fetch=async()=>{calls++;return new Response(new Uint8Array([1,2,3,4]))};
+  const create=vi.spyOn(URL,'createObjectURL').mockReturnValue('blob:shared-preview'),revoke=vi.spyOn(URL,'revokeObjectURL').mockImplementation(url=>revoked.push(url));
+  const cache=createPreviewSourceCache(),asset=proxyAsset(),original={_id:'uncached-original',kind:'video',fileName:'large.mp4',url:'https://media.test/large'},audio={...asset,_id:'audio-original',kind:'audio'};
+  try{
+    const [a,b]=await Promise.all([cache.prepare([asset,original,audio],new AbortController().signal),cache.prepare([asset],new AbortController().signal)]);
+    assert.equal(calls,1);assert.equal(create.mock.calls.length,1);assert.equal(a[0].url,'blob:shared-preview');assert.equal(b[0].url,a[0].url);assert.equal(a[1],original);assert.equal(a[2],audio);
+    assert.equal(asset.url,'https://media.test/original?private=original');
+    assert.equal(cache.cachedAssets([{...asset,previewUrl:'https://media.test/preview?private=refreshed'}])[0].url,a[0].url);
+    await cache.prepare([asset],new AbortController().signal);assert.equal(calls,1);
+  }finally{cache.dispose();globalThis.fetch=originalFetch;create.mockRestore();revoke.mockRestore()}
+  assert.deepEqual(revoked,['blob:shared-preview']);
+});
+
+test('cancelling one preview preparation keeps a shared download alive for another caller',async()=>{
+  const originalFetch=globalThis.fetch;let release,fetchSignal,calls=0;
+  globalThis.fetch=(_url,{signal})=>{calls++;fetchSignal=signal;return new Promise(resolve=>{release=()=>resolve(new Response(new Uint8Array([1,2,3,4])))})};
+  const create=vi.spyOn(URL,'createObjectURL').mockReturnValue('blob:shared-cancel'),revoke=vi.spyOn(URL,'revokeObjectURL').mockImplementation(()=>{});
+  const cache=createPreviewSourceCache(),first=new AbortController(),second=new AbortController();
+  try{
+    const a=cache.prepare([proxyAsset()],first.signal),b=cache.prepare([proxyAsset()],second.signal);
+    const rejected=assert.rejects(a,error=>error.name==='AbortError');first.abort();await rejected;
+    assert.equal(fetchSignal.aborted,false);release();assert.equal((await b)[0].url,'blob:shared-cancel');assert.equal(calls,1);
+  }finally{cache.dispose();globalThis.fetch=originalFetch;create.mockRestore();revoke.mockRestore()}
+});
+
+test('an abandoned derivative fetch is aborted and a replacement preparation starts cleanly',async()=>{
+  const originalFetch=globalThis.fetch;let calls=0,firstSignal;
+  globalThis.fetch=(_url,{signal})=>{calls++;if(calls>1)return Promise.resolve(new Response(new Uint8Array([1,2,3,4])));firstSignal=signal;return new Promise((_resolve,reject)=>signal.addEventListener('abort',()=>reject(new DOMException('Cancelled','AbortError')),{once:true}))};
+  const create=vi.spyOn(URL,'createObjectURL').mockReturnValue('blob:replacement'),revoke=vi.spyOn(URL,'revokeObjectURL').mockImplementation(()=>{});
+  const cache=createPreviewSourceCache(),first=new AbortController();
+  try{
+    const pending=cache.prepare([proxyAsset()],first.signal),rejected=assert.rejects(pending,error=>error.name==='AbortError');first.abort();await rejected;
+    assert.equal(firstSignal.aborted,true);
+    assert.equal((await cache.prepare([proxyAsset()],new AbortController().signal))[0].url,'blob:replacement');assert.equal(calls,2);
+  }finally{cache.dispose();globalThis.fetch=originalFetch;create.mockRestore();revoke.mockRestore()}
+});
+
+test('large derivatives stay on native ranges and dishonest oversized response bodies never become Blobs',async()=>{
+  const originalFetch=globalThis.fetch;let calls=0,cancelled=false;
+  globalThis.fetch=async()=>{calls++;return {ok:true,status:200,headers:new Headers(),body:{getReader:()=>({read:async()=>({done:false,value:new Uint8Array(64*1024*1024+1)}),cancel:async()=>{cancelled=true},releaseLock(){}})}}};
+  const create=vi.spyOn(URL,'createObjectURL'),cache=createPreviewSourceCache(),signal=new AbortController().signal;
+  try{
+    const large={...proxyAsset(),previewSize:64*1024*1024+1};assert.equal((await cache.prepare([large],signal))[0].url,large.previewUrl);assert.equal(calls,0);
+    const small=proxyAsset();assert.equal((await cache.prepare([small],signal))[0].url,small.previewUrl);assert.equal(calls,1);assert.equal(cancelled,true);assert.equal(create.mock.calls.length,0);
+  }finally{cache.dispose();globalThis.fetch=originalFetch;create.mockRestore()}
+});
+
+function sessionDocument(media=[]){
+  const doc=new EventTarget(),win=new EventTarget();let disconnected=0;
+  win.MutationObserver=class{observe(){}disconnect(){disconnected++}};
+  Object.assign(doc,{defaultView:win,documentElement:{dataset:{}},querySelectorAll:()=>media,getElementById:()=>({dataset:{duration:'10'}})});
+  const transport=new EventTarget();let clock=0,plays=0;
+  Object.assign(transport,{paused:true,play(){plays++;transport.paused=false;transport.dispatchEvent(new Event('play'))},pause(){transport.paused=true;transport.dispatchEvent(new Event('pause'))},seek(time){clock=time;transport.paused=true}});
+  return {doc,transport,readTime:()=>clock,disconnected:()=>disconnected,plays:()=>plays};
+}
+test('a preview media session owns transport intent, readiness cancellation and complete cleanup',async()=>{
+  vi.useFakeTimers();const fixture=sessionDocument(),errors=[];const session=createPreviewMediaSession({...fixture,document:fixture.doc,timeline:{clips:[],fps:30,aspectRatio:'vertical'},assets:[],onError:message=>errors.push(message),onWaiting:()=>{}});
+  try{
+    session.play();assert.equal(session.isPlaying(),true);session.resync(()=>fixture.transport.seek(3));assert.equal(session.isPlaying(),true);assert.equal(fixture.readTime(),3);
+    session.seek(4);assert.equal(session.isPlaying(),false);
+    const aborted=new AbortController();aborted.abort();await assert.rejects(session.whenReady(4,aborted.signal),error=>error.name==='AbortError');
+    await session.whenReady(4,new AbortController().signal);session.dispose();session.dispose();assert.equal(fixture.disconnected(),1);
+    const count=fixture.plays();session.play();await vi.advanceTimersByTimeAsync(9000);assert.equal(fixture.plays(),count);assert.deepEqual(errors,[]);
+  }finally{session.dispose();vi.useRealTimers()}
+});
+
+test('quiet stalled-source refresh failures never report unavailable footage or expose signed URLs',async()=>{
+  vi.useFakeTimers();const media=new EventTarget();Object.assign(media,{tagName:'VIDEO',isConnected:true,paused:true,preload:'auto',networkState:2,readyState:1,currentTime:0,duration:10,seeking:false,error:null,dataset:{start:'0',end:'10',duration:'10',sourceClip:'clip',mediaStart:'0'},buffered:{length:0},hasAttribute:()=>true});
+  const fixture=sessionDocument([media]),errors=[],refresh=vi.fn(async()=>{throw new Error('https://private.test/read?token=secret')});const warn=vi.spyOn(console,'warn').mockImplementation(()=>{});
+  const session=createPreviewMediaSession({...fixture,document:fixture.doc,timeline:{clips:[{id:'clip',kind:'video',assetId:'shared-video',start:0,duration:10,sourceStart:0}],fps:30,aspectRatio:'vertical'},assets:[proxyAsset()],refreshMedia:refresh,onError:message=>errors.push(message),onWaiting:()=>{}});
+  try{
+    await vi.advanceTimersByTimeAsync(9000);assert.equal(refresh.mock.calls.length,1);assert.deepEqual(errors,[]);assert.ok(!JSON.stringify(warn.mock.calls).includes('token=secret'));
+    const event=new Event('error');Object.defineProperty(event,'target',{value:media});fixture.doc.dispatchEvent(event);await vi.advanceTimersByTimeAsync(0);
+    assert.equal(errors.length,1);assert.ok(!errors[0].includes('https:'));assert.match(errors[0],/source is unavailable/);
+  }finally{session.dispose();warn.mockRestore();vi.useRealTimers()}
+});
+
+test('recovered media blocked by autoplay preserves a clear press-play prompt',async()=>{
+  vi.useFakeTimers();const media=new EventTarget();Object.assign(media,{tagName:'VIDEO',isConnected:true,paused:true,preload:'auto',networkState:1,readyState:3,currentTime:0,duration:10,seeking:false,error:null,volume:1,muted:false,playbackRate:1,dataset:{start:'0',end:'10',duration:'10',sourceClip:'clip',mediaStart:'0'},buffered:{length:1,start:()=>0,end:()=>10},hasAttribute:()=>true,load(){queueMicrotask(()=>media.dispatchEvent(new Event('loadedmetadata')))},play:async()=>{throw new DOMException('gesture required','NotAllowedError')},pause(){media.paused=true}});
+  const fixture=sessionDocument([media]),errors=[];fixture.transport.paused=false;
+  const session=createPreviewMediaSession({...fixture,document:fixture.doc,timeline:{clips:[{id:'clip',kind:'video',assetId:'shared-video',start:0,duration:10,sourceStart:0}],fps:30,aspectRatio:'vertical'},assets:[{...proxyAsset(),url:'blob:local-preview'}],onError:message=>errors.push(message),onWaiting:()=>{}});
+  try{
+    const event=new Event('error');Object.defineProperty(event,'target',{value:media});fixture.doc.dispatchEvent(event);await vi.advanceTimersByTimeAsync(0);
+    assert.deepEqual(errors,['The media has recovered. Press play to resume.']);assert.equal(fixture.transport.paused,true);
+  }finally{session.dispose();vi.useRealTimers()}
+});
+
+test('truncated successful responses are not cached and pending reservations bound total preview memory',async()=>{
+  const originalFetch=globalThis.fetch;let releases=[],calls=0;
+  const create=vi.spyOn(URL,'createObjectURL'),cache=createPreviewSourceCache(),signal=new AbortController().signal;
+  try{
+    globalThis.fetch=async()=>new Response(new Uint8Array([1,2]));
+    const small=proxyAsset();assert.equal((await cache.prepare([small],signal))[0].url,small.previewUrl);assert.equal(create.mock.calls.length,0);
+    globalThis.fetch=async()=>{calls++;await new Promise(resolve=>releases.push(resolve));return new Response(new Uint8Array([1]))};
+    const big=[0,1,2].map(index=>({...proxyAsset(),_id:'bounded-'+index,previewSize:64*1024*1024}));
+    const pending=cache.prepare(big,signal);assert.equal(calls,2,'Pending full-size derivatives reserve the shared128MiB budget');releases.forEach(release=>release());
+    const prepared=await pending;assert.ok(prepared.every(asset=>asset.url===asset.previewUrl));assert.equal(create.mock.calls.length,0);
+  }finally{cache.dispose();globalThis.fetch=originalFetch;create.mockRestore()}
+});
+
+test('session refresh uses the fresh preferred-preview URL from playback.refresh and retains it through live edits',async()=>{
+  vi.useFakeTimers();const media=new EventTarget();let src='https://private.test/stale-preview';
+  Object.assign(media,{tagName:'VIDEO',isConnected:true,paused:true,preload:'auto',networkState:1,readyState:3,currentTime:0,duration:10,seeking:false,error:null,volume:1,muted:false,playbackRate:1,dataset:{start:'0',end:'10',duration:'10',sourceClip:'clip',mediaStart:'0'},buffered:{length:1,start:()=>0,end:()=>10},hasAttribute:()=>true,getAttribute:name=>name==='src'?src:null,load(){queueMicrotask(()=>media.dispatchEvent(new Event('loadedmetadata')))},pause(){media.paused=true}});
+  Object.defineProperty(media,'src',{get:()=>src,set:value=>{src=value}});
+  const fixture=sessionDocument([media]),errors=[],asset={...proxyAsset(),url:src,previewUrl:src},timeline={clips:[{id:'clip',kind:'video',assetId:'shared-video',start:0,duration:10,sourceStart:0}],fps:30,aspectRatio:'vertical'};
+  const fresh='https://private.test/fresh-preview';
+  const session=createPreviewMediaSession({...fixture,document:fixture.doc,timeline,assets:[asset],refreshMedia:async()=>[{_id:asset._id,url:fresh}],onError:message=>errors.push(message),onWaiting:()=>{}});
+  try{
+    const event=new Event('error');Object.defineProperty(event,'target',{value:media});fixture.doc.dispatchEvent(event);await vi.advanceTimersByTimeAsync(0);
+    assert.equal(src,fresh);assert.equal(session.resolveAssets([asset])[0].url,fresh);session.update(timeline,[asset]);assert.equal(session.resolveAssets([asset])[0].url,fresh);assert.deepEqual(errors,[]);
+    session.update(timeline,[{...asset,url:'https://private.test/new-generation'}]);assert.equal(session.resolveAssets([{...asset,url:'https://private.test/new-generation'}])[0].url,'https://private.test/new-generation');
+  }finally{session.dispose();vi.useRealTimers()}
+});
+
+test('a stalled derivative read falls back after byte-idle timeout even when stream cancellation also hangs',async()=>{
+  vi.useFakeTimers();const originalFetch=globalThis.fetch;let fetchSignal,cancelled=0;
+  globalThis.fetch=async(_url,{signal})=>{fetchSignal=signal;return {ok:true,status:200,headers:new Headers(),body:{getReader:()=>({read:()=>new Promise(()=>{}),cancel:()=>{cancelled++;return new Promise(()=>{})},releaseLock(){}})}}};
+  const cache=createPreviewSourceCache(),asset=proxyAsset();
+  try{
+    let settled=false;const pending=cache.prepare([asset],new AbortController().signal).then(assets=>{settled=true;return assets});
+    await vi.advanceTimersByTimeAsync(29_999);assert.equal(settled,false);
+    await vi.advanceTimersByTimeAsync(1002);const prepared=await pending;
+    assert.equal(prepared[0].url,asset.previewUrl);assert.equal(fetchSignal.aborted,true);assert.equal(cancelled,1);
+  }finally{cache.dispose();globalThis.fetch=originalFetch;vi.useRealTimers()}
+});
+
+test('a delayed refresh never replaces a reused clip node after a live edit changes its asset',async()=>{
+  vi.useFakeTimers();const media=new EventTarget();let src='https://private.test/source-a',release;
+  Object.assign(media,{tagName:'VIDEO',isConnected:true,paused:true,preload:'auto',networkState:1,readyState:3,currentTime:0,duration:10,seeking:false,error:null,volume:1,muted:false,playbackRate:1,dataset:{start:'0',end:'10',duration:'10',sourceClip:'clip',mediaStart:'0'},buffered:{length:1,start:()=>0,end:()=>10},hasAttribute:()=>true,getAttribute:name=>name==='src'?src:null,load:vi.fn(),pause(){}});Object.defineProperty(media,'src',{get:()=>src,set:value=>{src=value}});
+  const fixture=sessionDocument([media]),errors=[],asset={...proxyAsset(),url:src,previewUrl:src},timeline={clips:[{id:'clip',kind:'video',assetId:asset._id,start:0,duration:10,sourceStart:0}],fps:30,aspectRatio:'vertical'};
+  const session=createPreviewMediaSession({...fixture,document:fixture.doc,timeline,assets:[asset],refreshMedia:()=>new Promise(resolve=>{release=resolve}),onError:message=>errors.push(message),onWaiting:()=>{}});
+  try{
+    const event=new Event('error');Object.defineProperty(event,'target',{value:media});fixture.doc.dispatchEvent(event);await vi.advanceTimersByTimeAsync(0);
+    const replacement={...asset,_id:'asset-b',url:'https://private.test/source-b',previewUrl:'https://private.test/source-b'};src=replacement.url;
+    session.update({...timeline,clips:timeline.clips.map(clip=>({...clip,assetId:replacement._id}))},[asset,replacement]);release([{_id:asset._id,url:'https://private.test/fresh-a'}]);await vi.advanceTimersByTimeAsync(0);
+    assert.equal(src,replacement.url);assert.equal(media.load.mock.calls.length,0);assert.deepEqual(errors,[]);
+  }finally{session.dispose();vi.useRealTimers()}
+});
+
+function thumbnailDocument(){
+  const videos=[],draws=[];
+  const document={createElement(kind){
+    if(kind==='canvas')return {width:0,height:0,getContext:()=>({drawImage:video=>draws.push({src:video.src,time:video.currentTime})}),toDataURL:()=>`data:image/jpeg;sample=${draws.at(-1).src}:${draws.at(-1).time}`};
+    assert.equal(kind,'video');
+    const video=new EventTarget();Object.assign(video,{src:'',currentTime:0,videoWidth:1920,videoHeight:1080,duration:20,load:vi.fn(),removeAttribute(name){if(name==='src')video.src='';}});videos.push(video);return video;
+  }};
+  return {document,videos,draws};
+}
+const thumbnailTick=async()=>{for(let turn=0;turn<6;turn++)await Promise.resolve();};
+
+test('the final thumbnail consumer cancels a pending native metadata read immediately',async()=>{
+  const originalDocument=globalThis.document,fixture=thumbnailDocument(),controller=new AbortController(),onFrame=vi.fn();globalThis.document=fixture.document;
+  try{
+    const pending=videoThumbnails('https://private.test/original',[0],'abort-metadata',onFrame,controller.signal);
+    assert.equal(fixture.videos[0].src,'https://private.test/original');controller.abort();
+    assert.deepEqual(await pending,[null]);await thumbnailTick();
+    assert.equal(fixture.videos[0].src,'');assert.equal(fixture.videos[0].load.mock.calls.length,2);assert.equal(onFrame.mock.calls.length,0);
+  }finally{globalThis.document=originalDocument;}
+});
+
+test('the final thumbnail consumer also releases a pending native seek',async()=>{
+  const originalDocument=globalThis.document,fixture=thumbnailDocument(),controller=new AbortController();globalThis.document=fixture.document;
+  try{
+    const pending=videoThumbnails('blob:seek-preview',[7.1234567],'abort-seek',undefined,controller.signal),video=fixture.videos[0];
+    video.dispatchEvent(new Event('loadeddata'));await thumbnailTick();assert.equal(video.currentTime,7.1234567);
+    controller.abort();assert.deepEqual(await pending,[null]);await thumbnailTick();
+    assert.equal(video.src,'');assert.equal(fixture.draws.length,0);
+  }finally{globalThis.document=originalDocument;}
+});
+
+test('aborting one thumbnail caller leaves another consumer on the shared decoder',async()=>{
+  const originalDocument=globalThis.document,fixture=thumbnailDocument(),controller=new AbortController();globalThis.document=fixture.document;
+  try{
+    const cancelled=videoThumbnails('blob:shared-preview',[0],'thumbnail-survivor',undefined,controller.signal);
+    const surviving=videoThumbnails('blob:shared-preview',[0],'thumbnail-survivor');
+    controller.abort();assert.deepEqual(await cancelled,[null]);assert.equal(fixture.videos.length,1);assert.equal(fixture.videos[0].src,'blob:shared-preview');
+    fixture.videos[0].dispatchEvent(new Event('loadeddata'));const [image]=await surviving;
+    assert.ok(image.includes('blob:shared-preview'));assert.equal(fixture.draws.length,1);
+  }finally{globalThis.document=originalDocument;}
+});
+
+test('a new thumbnail source URL owns new pending work while decoded stills remain reusable by asset ID',async()=>{
+  const originalDocument=globalThis.document,fixture=thumbnailDocument(),controller=new AbortController();globalThis.document=fixture.document;
+  try{
+    const old=videoThumbnails('https://private.test/old-original',[2.1234567],'thumbnail-generation',undefined,controller.signal);controller.abort();
+    const fresh=videoThumbnails('blob:new-preview',[2.1234567],'thumbnail-generation');
+    assert.equal(fixture.videos.length,2);assert.equal(fixture.videos[1].src,'blob:new-preview');
+    await old;await thumbnailTick();
+    // A third caller joins the new generation even after the old job cleans up.
+    const joined=videoThumbnails('blob:new-preview',[2.1234567],'thumbnail-generation');assert.equal(fixture.videos.length,2);
+    fixture.videos[1].dispatchEvent(new Event('loadeddata'));await thumbnailTick();fixture.videos[1].dispatchEvent(new Event('seeked'));
+    const [image]=await fresh;assert.deepEqual(await joined,[image]);assert.ok(image.includes('blob:new-preview:2.1234567'));
+    assert.equal(cachedVideoThumbnail('thumbnail-generation',2.1234567),image);
+    assert.deepEqual(await videoThumbnails('blob:later-signed-preview',[2.1234567],'thumbnail-generation'),[image]);assert.equal(fixture.videos.length,2);
+  }finally{globalThis.document=originalDocument;}
+});
+
+test('native fallback does not retry the same failed full preview download on every edit',async()=>{
+  vi.useFakeTimers();const originalFetch=globalThis.fetch;let calls=0;
+  globalThis.fetch=async()=>{calls++;throw new Error('temporary network failure')};const cache=createPreviewSourceCache(),asset=proxyAsset(),signal=new AbortController().signal;
+  try{
+    assert.equal((await cache.prepare([asset],signal))[0].url,asset.previewUrl);assert.equal((await cache.prepare([asset],signal))[0].url,asset.previewUrl);assert.equal(calls,1);
+    const renewed={...asset,previewUrl:'https://media.test/preview?private=renewed'};assert.equal((await cache.prepare([renewed],signal))[0].url,renewed.previewUrl);assert.equal(calls,2,'A renewed signed URL can retry immediately');
+    await vi.advanceTimersByTimeAsync(60_001);await cache.prepare([renewed],signal);assert.equal(calls,3,'A later retry is allowed after the failure backoff');
+  }finally{cache.dispose();globalThis.fetch=originalFetch;vi.useRealTimers()}
 });

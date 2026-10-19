@@ -23,3 +23,12 @@ export async function storageControl(body: Record<string, unknown>): Promise<{ u
   if (!response.ok) throw new Error('Cloudflare media request failed. Please retry.');
   return response.json();
 }
+
+export const PREVIEW_VERSION = 1;
+export type PreviewSource = { previewR2Key?:string;previewSize?:number;previewWidth?:number;previewHeight?:number;previewFps?:number;previewVersion?:number };
+export function hasPreview(source:PreviewSource) {
+  return source.previewVersion===PREVIEW_VERSION&&!!source.previewR2Key&&Number.isSafeInteger(source.previewSize)&&source.previewSize!>0&&source.previewSize!<=15_000_000_000&&Number.isInteger(source.previewWidth)&&source.previewWidth!>0&&source.previewWidth!<=16384&&Number.isInteger(source.previewHeight)&&source.previewHeight!>0&&source.previewHeight!<=16384&&Number.isFinite(source.previewFps)&&source.previewFps!>0&&source.previewFps!<=240;
+}
+export async function previewUrl(ctx:QueryCtx|MutationCtx|ActionCtx,source:PreviewSource,fresh=false) {
+  return hasPreview(source)?{previewUrl:await mediaUrl(ctx,{r2Key:source.previewR2Key},fresh)}:{};
+}
