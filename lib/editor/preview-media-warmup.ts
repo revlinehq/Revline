@@ -1,3 +1,5 @@
+import { previewMediaReady } from './preview-readiness';
+
 /** Decode the next cut before it becomes visible, with a small bounded lookahead. */
 export function warmPreviewMedia(document: Document, readTime: () => number): () => void {
   let media: HTMLMediaElement[] = [], stopped = false;
@@ -13,12 +15,21 @@ export function warmPreviewMedia(document: Document, readTime: () => number): ()
   function tick() {
     if (stopped) return;
     const time = readTime();
+    const activeBlocked=media.some(node=>{
+      const start=Number(node.dataset.start),end=start+Number(node.dataset.duration);
+      return node.isConnected&&time>=start&&time<end&&(node.tagName==='VIDEO'||Number(node.dataset.volume??1)>0)&&(node.paused?!previewMediaReady(node,time):node.seeking||node.readyState<3);
+    });
     // The player can promote every metadata probe to auto before readiness.
     // Cold distant video requests then compete with the active range seek.
-    // Cancel only those not-yet-decoded future loads; retain buffered decoders.
-    for(const node of media)if(node.tagName==='VIDEO'&&node.isConnected&&node.paused&&node.readyState===0&&Number(node.dataset.start)-time>6&&node.preload!=='none'){
-      node.preload='none';node.load();
+    // Cancel cold future seeks and frames at the wrong source offset; retain
+    // the correctly primed decoders needed by the next cut.
+    for(const node of media)if(node.tagName==='VIDEO'&&node.isConnected&&node.paused&&Number(node.dataset.start)>time&&(activeBlocked||Number(node.dataset.start)-time>6)&&node.preload!=='none'&&(node.readyState<2||activeBlocked&&Math.abs(node.currentTime-Number(node.dataset.mediaStart??0))>.05)){
+      const listener=pending.get(node);if(listener){node.removeEventListener('loadedmetadata',listener);pending.delete(node);}
+      primed.delete(node);node.preload='none';node.load();
     }
+    // A cold opening or scrub must win bandwidth over speculative future seeks.
+    // Resume lookahead as soon as the current footage has real buffered runway.
+    if(activeBlocked)return;
     // A paused clock must still retry a source whose metadata/play state settled
     // after the first tick. The per-source key below skips already primed media.
     // Do not preload the whole project: at most four imminent sources.
