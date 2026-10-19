@@ -37,10 +37,10 @@ import { generateText,stepCountIs,tool } from 'ai';
 import { CLAUDE_MODEL,claudeProviderOptions } from '../lib/ai/claude-model';
 
 type Tool={description:string;inputSchema:ZodType;execute:(ctx:unknown,input:unknown)=>Promise<unknown>};
-const sdk=vi.hoisted(()=>({options:null as null|{instructions:string;tools:Record<string,Tool>},plan:async()=>{},messages:[] as unknown[]}));
+const sdk=vi.hoisted(()=>({options:null as null|{instructions:string;tools:Record<string,Tool>},plan:async()=>{},steps:[] as {content:unknown[]}[],finishReason:'stop',streams:[] as Record<string,unknown>[],messages:[] as unknown[]}));
 vi.mock('@convex-dev/agent',async importOriginal=>({
   ...await importOriginal<Record<string,unknown>>(),
-  Agent:class{constructor(_component:unknown,options:NonNullable<typeof sdk.options>){sdk.options=options}async streamText(){await sdk.plan();return{finishReason:Promise.resolve('stop'),steps:Promise.resolve([])}}},
+  Agent:class{constructor(_component:unknown,readonly options:NonNullable<typeof sdk.options>){sdk.options=options}async streamText(_ctx:unknown,_thread:unknown,args:Record<string,unknown>){sdk.streams.push(args);await sdk.plan();return{finishReason:Promise.resolve(sdk.finishReason),steps:Promise.resolve([...sdk.steps])}}},
   createTool:(options:unknown)=>options,saveMessage:async(_ctx:unknown,_component:unknown,message:unknown)=>{sdk.messages.push(message)},stepCountIs:()=>()=>false,
 }));
 import { respond } from './assistantActions';
@@ -51,7 +51,7 @@ const initial:Timeline={fps:30,aspectRatio:'landscape',tracks:{visual:2,overlay:
   {id:'to',kind:'image',assetId:'image',track:1,start:3,duration:3,sourceStart:0},
   {id:'title',kind:'caption',track:2,start:0,duration:2,sourceStart:0,text:'Keep these words',animation:'fade',color:'#ffffff',background:'transparent',textTemplate:{preset:'karaoke',duration:2,offset:0,highlightColor:'#FFFF00'}},
 ]};
-beforeEach(()=>{sdk.options=null;sdk.plan=async()=>{};sdk.messages=[];vi.stubEnv('BILLING_ENABLED','false');vi.stubEnv('OPENAI_API_KEY','fixture-only');vi.stubEnv('EDITOR_DEFAULT_MODEL','gpt-6.1-sol');vi.stubEnv('AI_GATEWAY_ENABLED','false')});
+beforeEach(()=>{sdk.options=null;sdk.plan=async()=>{};sdk.steps=[];sdk.finishReason='stop';sdk.streams=[];sdk.messages=[];vi.stubEnv('BILLING_ENABLED','false');vi.stubEnv('OPENAI_API_KEY','fixture-only');vi.stubEnv('EDITOR_DEFAULT_MODEL','gpt-6.1-sol');vi.stubEnv('AI_GATEWAY_ENABLED','false')});
 afterEach(()=>vi.unstubAllEnvs());
 async function memoryBackend(seed:Timeline,priorHistory:Timeline[]=[]){
   const t=convexTest(schema,import.meta.glob('./**/*.ts')),owner=t.withIdentity({subject:'owner'});
@@ -71,11 +71,11 @@ async function memoryBackend(seed:Timeline,priorHistory:Timeline[]=[]){
   await t.run(ctx=>writeProject(ctx,projectId,{timeline,history,revision,threadId,aiRunning:true,aiRunId:'run',aiUndoRecorded:false}));
   return{t,owner,projectId,threadId,promptMessageId,seed:timeline,priorHistory:history,revision,runArgs:{projectId,ownerId:'owner',runId:'run'}};
 }
-async function run(plan?:(tools:Record<string,Tool>)=>Promise<void>,seed:Timeline=initial,realBackend=false,priorHistory:Timeline[]=[],options:{backend?:Awaited<ReturnType<typeof memoryBackend>>;continuation?:{segment:number;savedEdits:number}}={}){
+async function run(plan?:(tools:Record<string,Tool>)=>Promise<void>,seed:Timeline=initial,realBackend=false,priorHistory:Timeline[]=[],options:{backend?:Awaited<ReturnType<typeof memoryBackend>>;continuation?:{segment:number;savedEdits:number};rejectValidationAt?:number[]}={}){
   const backend=options.backend??(realBackend?await memoryBackend(seed,priorHistory):undefined);
   const fresh=options.backend?await options.backend.owner.query(api.projects.get,{projectId:options.backend.projectId}):undefined;
   let timeline=structuredClone(fresh?.timeline??backend?.seed??seed),revision=fresh?.revision??backend?.revision??0,error:string|undefined;
-  const calls:string[]=[];
+  const calls:string[]=[];let validations=0;
   const project=()=>({_id:'project',timeline,revision,aspectRatio:'landscape'});
   const ctx={
     runQuery:async(reference:Parameters<typeof getFunctionName>[0],args:{timeline?:Timeline;expectedRevision?:number})=>{
@@ -96,6 +96,7 @@ async function run(plan?:(tools:Record<string,Tool>)=>Promise<void>,seed:Timelin
     runMutation:async(reference:Parameters<typeof getFunctionName>[0],args:{timeline?:Timeline;expectedRevision?:number;error?:string;publication?:Pick<TimelinePublicationReceipt,'threadId'|'promptMessageId'>|Extract<TimelinePublicationReceipt,{status:'failed'|'aborted'}>})=>{
       const name=getFunctionName(reference);calls.push(name);
       if(name==='compositionReview:savePlan')return null;
+      if(name==='assistant:previewDraft'&&options.rejectValidationAt?.includes(++validations))throw new Error('Temporary draft validation unavailable.');
       if(name==='assistant:previewDraft')return backend?backend.t.mutation(internal.assistant.previewDraft,{...backend.runArgs,timeline:args.timeline!,expectedRevision:args.expectedRevision!}):null;
       if(name==='assistant:beginEditing')return backend?backend.t.mutation(internal.assistant.beginEditing,backend.runArgs):null;
       if(name==='assistant:undoLatestEdit'){
@@ -198,6 +199,69 @@ test('a plain greeting completion creates no edits or analysis requests and pres
   expect(sdk.options!.instructions).toContain('Greetings, small talk, and questions about your abilities do not request footage analysis or editing');
   expect(sdk.options!.instructions).toContain('short Markdown bullet list with bold capability names');
   expect(sdk.options!.instructions).toContain(JSON.stringify(editorCapabilities()));
+});
+
+
+test('unfinished tool feedback automatically resumes the same request and publishes the corrected draft once',async()=>{
+  let pass=0;
+  const input={clipId:'title',fontSize:80};
+  const result=await run(async tools=>{
+    pass++;
+    if(pass===1){
+      await execute(tools,'trim',{clipId:'from',duration:1.5});
+      await expect(execute(tools,'styleTextClip',input)).rejects.toThrow('Temporary draft validation');
+      sdk.steps=[{content:[{type:'tool-call',toolName:'styleTextClip',toolCallId:'failed-style',input},{type:'tool-error',toolName:'styleTextClip',toolCallId:'failed-style',error:'Temporary draft validation unavailable.'}]}];
+    }else{
+      expect(sdk.streams.at(-1)?.instructions).toContain('Temporary draft validation unavailable.');
+      await execute(tools,'inspectTimeline',{});
+      const output=await execute(tools,'styleTextClip',input);
+      sdk.steps=[{content:[{type:'tool-call',toolName:'styleTextClip',toolCallId:'repaired-style',input},{type:'tool-result',toolName:'styleTextClip',toolCallId:'repaired-style',output}]}];
+    }
+  },initial,true,[],{rejectValidationAt:[2]});
+  expect(pass).toBe(2);expect(result.error).toBeUndefined();
+  expect(sdk.streams.every(stream=>stream.promptMessageId===result.backend!.promptMessageId)).toBe(true);
+  expect(result.timeline.clips.find(c=>c.id==='from')?.duration).toBe(1.5);
+  expect(result.timeline.clips.find(c=>c.id==='title')?.fontSize).toBe(80);
+  expect(result.history).toEqual([result.backend!.seed]);
+  expect((await result.backend!.owner.query(api.projects.get,{projectId:result.backend!.projectId})).aiRecovery).toBeUndefined();
+  await assertUndo(result);
+});
+
+test('a failed visual check is corrected before completion without redoing the saved edit',async()=>{
+  let pass=0;
+  const result=await run(async tools=>{
+    pass++;
+    if(pass===1)await execute(tools,'styleTextClip',{clipId:'title',fontSize:80});
+    else expect(sdk.streams.at(-1)?.instructions).toContain('The requested outline is missing');
+    sdk.steps=[{content:[{type:'tool-result',toolName:'previewRender',toolCallId:`review-${pass}`,output:{reviewed:true,stale:false,revision:1,currentRevision:1,observations:[{planId:'outline',verdict:pass===1?'fail':'pass',observation:pass===1?'The requested outline is missing':'Requested outline is visible'}]}}]}];
+  },initial,true);
+  expect(pass).toBe(2);expect(result.error).toBeUndefined();
+  expect(result.revision).toBe(1);expect(result.history).toEqual([result.backend!.seed]);
+});
+
+test('a step-limit stop continues the remaining deliverable in the same draft before publication',async()=>{
+  let pass=0;
+  const result=await run(async tools=>{
+    pass++;
+    if(pass===1){await execute(tools,'trim',{clipId:'from',duration:1.5});sdk.finishReason='tool-calls';sdk.steps=[{content:[]}];}
+    else{await execute(tools,'styleTextClip',{clipId:'title',fontSize:80});sdk.finishReason='stop';sdk.steps=[{content:[]}];}
+  },initial,true);
+  expect(pass).toBe(2);expect(result.error).toBeUndefined();
+  expect(result.timeline.clips.find(c=>c.id==='title')?.fontSize).toBe(80);
+  expect(result.timeline.clips.find(c=>c.id==='from')?.duration).toBe(1.5);
+  expect(result.history).toEqual([result.backend!.seed]);
+});
+
+test('automatic completion recovery is bounded when tools keep failing and preserves the valid partial edit',async()=>{
+  let pass=0;
+  const result=await run(async tools=>{
+    pass++;
+    if(pass===1)await execute(tools,'trim',{clipId:'from',duration:1.5});
+    sdk.steps=[{content:[{type:'tool-call',toolName:'inspectFrames',toolCallId:`failed-${pass}`,input:{clipId:'from'}},{type:'tool-result',toolName:'inspectFrames',toolCallId:`failed-${pass}`,output:{success:false,error:'Video inspection provider unavailable.'}}]}];
+  },initial,true);
+  expect(pass).toBe(3);expect(result.error).toContain('failed three times');
+  expect(result.timeline.clips.find(c=>c.id==='from')?.duration).toBe(1.5);
+  expect(result.history).toEqual([result.backend!.seed]);
 });
 
 test('every implemented effect, text animation/look and transition has a concrete shared behavior description',()=>{

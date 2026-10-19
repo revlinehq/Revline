@@ -114,6 +114,19 @@ export class EditSession {
     });
   }
 
+  /** Only the orchestrator calls this after all recorded tool failures resolve.
+   * A failed operation never assigned its candidate to timeline. Revalidate the
+   * latest successful checkpoint before releasing the failed-draft guard. */
+  async confirmRepairs() {
+    await this.pending;
+    this.signal?.throwIfAborted();
+    if (this.needsInspection) throw new Error('The timeline changed elsewhere. Inspect the refreshed timeline before continuing.');
+    if (this.failed) {
+      await this.storage.validate(this.timeline, this.revision);
+      this.failed = false;
+    }
+  }
+
   async complete(finishReason: string, toolFailed = false, steps = 0) {
     await this.pending;
     this.signal?.throwIfAborted();
