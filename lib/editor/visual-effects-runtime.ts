@@ -155,12 +155,12 @@ void main(){
   }
   function nativeCorners(entry:Entry,passes:VisualEffects[]) {
     const corners=passes.length===1?passes[0].frameCorners:undefined,node=entry.source.parentElement;
-    if(!preview||!corners?.enabled||corners.amount<=0||enabled({...passes[0],frameCorners:undefined})||!node?.classList.contains('source-window')||entry.source.hasAttribute('data-revline-transition-visible')||entry.source.hasAttribute('data-revline-transition-hold')) {
+    if(!corners?.enabled||corners.amount<=0||enabled({...passes[0],frameCorners:undefined})||!node?.classList.contains('source-window')||entry.source.hasAttribute('data-revline-transition-visible')||entry.source.hasAttribute('data-revline-transition-hold')) {
       clearNativeCorners(entry);return false;
     }
     // The crop window already clips its native media. A radius alone needs no
-    // per-frame video upload/readback or effect canvas. Match the export mask's
-    // radius in untransformed window pixels; CSS carries crop/motion/scale.
+    // per-frame video upload/readback or effect canvas, including injected
+    // export frames. CSS carries the same window radius through crop/motion/scale.
     if(entry.canvas)release(entry);
     if(entry.nativeCorners?.node!==node){clearNativeCorners(entry);entry.nativeCorners={node,originalRadius:node.style.borderRadius};}
     const width=node.style.width.endsWith('px')?parseFloat(node.style.width):node.clientWidth;

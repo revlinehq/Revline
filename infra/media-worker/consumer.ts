@@ -62,7 +62,8 @@ async function runSlot() {
       if (!task) { await waitForWork(observed); continue; }
       activeTasks++; lastWorkAt = Date.now();
       const controller = new AbortController();
-      const signal = AbortSignal.any([controller.signal, shutdown.signal, AbortSignal.timeout(15 * 60_000)]);
+      const startedAt=Date.now(),deadline=AbortSignal.timeout(15 * 60_000);
+      const signal = AbortSignal.any([controller.signal, shutdown.signal, deadline]);
       const credentials = { taskId: task.taskId, leaseToken: task.leaseToken };
       let progress = 0, reported = -1,activity:MediaTaskActivity|undefined, heartbeats = Promise.resolve();
       const heartbeat = () => {
@@ -86,10 +87,12 @@ async function runSlot() {
         console.log(JSON.stringify({ event: 'media-completed', timestamp:new Date().toISOString(),projectId:task.projectId,runId:snapshot.aiRunId, taskId: task.taskId }));
       } catch (error) {
         clearInterval(timer); await heartbeats;
+        const timedOut=deadline.aborted;
+        const retryable=task.kind!=='review'&&!(task.kind==='render'&&timedOut)&&!(error instanceof AnalysisError && (error.retryable === false || error.status < 500));
         if (!shutdown.signal.aborted && !controller.signal.aborted) {
-          await client.mutation(api.mediaTasks.fail, { ...credentials, retryable: task.kind!=='review'&&!(error instanceof AnalysisError && (error.retryable === false || error.status < 500)), error: error instanceof Error ? error.message.slice(0, 1000) : 'Media processing failed.' }).catch(() => {});
+          await client.mutation(api.mediaTasks.fail, { ...credentials, retryable, error: timedOut&&task.kind==='render'?'The export exceeded its 15-minute processing limit. Automatic retries were stopped.':error instanceof Error ? error.message.slice(0, 1000) : 'Media processing failed.' }).catch(() => {});
         }
-        console.log(JSON.stringify({ event: 'media-interrupted', timestamp:new Date().toISOString(),projectId:task.projectId, taskId: task.taskId }));
+        console.log(JSON.stringify({ event: 'media-interrupted', timestamp:new Date().toISOString(),projectId:task.projectId, taskId: task.taskId,kind:task.kind,elapsedMs:Date.now()-startedAt,progress,reason:shutdown.signal.aborted?'shutdown':controller.signal.aborted?'lease-ended':timedOut?'timeout':'processing-error',retryable }));
       } finally { activeTasks--; lastWorkAt = Date.now(); }
     } catch {
       if (!shutdown.signal.aborted && !draining) { ready = false; console.error(JSON.stringify({ event: 'queue-reconnecting' })); await pause(); }
