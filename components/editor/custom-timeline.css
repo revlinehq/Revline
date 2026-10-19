@@ -133,3 +133,5 @@ html[data-workspace-theme=light] .custom-timeline .timeline-clip.clip-effect.sel
 .custom-timeline[data-editing-locked] .timeline-playhead-cap:hover{color:#009DFF}
 .custom-timeline[data-editing-locked] :is(.clip-trim,.audio-volume-line){pointer-events:none}
 @media(prefers-reduced-motion:reduce){.custom-timeline .timeline-ai-frame{transition:opacity 320ms ease!important}.custom-timeline .timeline-ai-notice{transition:opacity 240ms ease!important}.custom-timeline .timeline-body::after{transition:none}.custom-timeline .timeline-ai-frame::before{animation:demo-ai-inner-glow-soft 4.4s cubic-bezier(.45,0,.55,1) infinite paused}}
+
+.custom-timeline .timeline-frame-rate{height:26px;min-width:70px;padding:0 6px;border:1px solid var(--timeline-divider);border-radius:6px;background:var(--ws-bg);color:var(--ws-muted);font:inherit;font-size:11px;cursor:pointer}.custom-timeline .timeline-frame-rate:disabled{opacity:.45;cursor:default}.custom-timeline .timeline-frame-rate:focus-visible{outline:2px solid var(--revline-accent);outline-offset:2px}

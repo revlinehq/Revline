@@ -602,6 +602,7 @@ export function TimelinePanel(p:Props){
     <TimelinePlayheadClock playing={p.playing} readTime={p.readPlaybackTime} px={px} duration={end} origin={origin} viewport={scroll} head={head} cap={cap} scrubbing={scrubRef} followPausedUntil={followPausedUntil}/>
     <div className="timeline-toolbar"><div className="timeline-edit-actions">{!p.playbackControls&&<EditorPlaybackTime className="timeline-playback-time" time={time} duration={end} fps={timeline.fps} playing={p.playing} readTime={p.readPlaybackTime}/>}
       {p.readOnly&&<span>Timeline</span>}
+      {!p.readOnly&&<select className="timeline-frame-rate" aria-label="Timeline frame rate" title="Timeline frame rate" value={timeline.fps} disabled={editingDisabled} onChange={event=>{const fps=Number(event.target.value);if(fps===24||fps===30||fps===60)onChange({...timeline,fps});}}>{[24,30,60].map(fps=><option key={fps} value={fps}>{fps} fps</option>)}</select>}
     </div>{p.playbackControls&&<div className="timeline-playback-controls">{p.playbackControls}</div>}<div className="timeline-view-actions">
       {!p.readOnly&&<IconButton label="Unlink video and audio" disabled={editingDisabled||!timeline.clips.find(c=>c.id===selected)?.linkedClipId} onClick={()=>{if(selected)onChange(unlinkClips(timeline,selected));}}><Unlink size={14}/></IconButton>}
       {!p.readOnly&&<IconButton label="Close gaps" disabled={p.editingLocked||!timeline.clips.some(clip=>clip.kind==='video'||clip.kind==='image')} onClick={closeGaps}><FoldHorizontal size={14}/></IconButton>}

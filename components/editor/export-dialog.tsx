@@ -11,10 +11,10 @@ import { ProcessingStatus } from './processing-status';
 export type ExportSettings={resolution:720|1080;fps:24|30|60;quality:'standard'|'high';clipId?:string};
 export type ExportState={status:'queued'|'rendering'|'completed'|'failed'|'cancelled';progress?:number;url?:string|null;error?:string|null;current?:boolean;sourceClipId?:string;requestId?:string;resolution?:number;fps?:number;quality?:string}|null;
 export function ExportDialog({open,onOpenChange,title,timeline,coverUrl,onExport,onCancel,state,demo,clipOnly=false}: {open:boolean;onOpenChange:(v:boolean)=>void;title:string;timeline:Timeline;coverUrl?:string|null;onExport:(settings:ExportSettings)=>Promise<void>;onCancel?:(jobId:string)=>Promise<void>;state:ExportState;demo:boolean;clipOnly?:boolean}) {
-  const [resolution,setResolution]=useState<720|1080>(1080);const [fps,setFps]=useState<24|30|60>(30);const [quality,setQuality]=useState<'standard'|'high'>('standard');const [starting,setStarting]=useState(false);const [error,setError]=useState('');const working=starting||state?.status==='queued'||state?.status==='rendering';
+  const [resolution,setResolution]=useState<720|1080>(1080);const [fps,setFps]=useState<24|30|60>(timeline.fps===24||timeline.fps===60?timeline.fps:30);const [quality,setQuality]=useState<'standard'|'high'>('standard');const [starting,setStarting]=useState(false);const [error,setError]=useState('');const working=starting||state?.status==='queued'||state?.status==='rendering';
   const activeJob=state?.status==='queued'||state?.status==='rendering'?state:null;
   const [stopping,setStopping]=useState(false);
-  useEffect(()=>{if(open)setError('');},[open]);
+  useEffect(()=>{if(open){setError('');setFps(timeline.fps===24||timeline.fps===60?timeline.fps:30);}},[open,timeline.fps]);
   const tooLong = timelineDuration(timeline) > MAX_EXPORT_SECONDS;
   async function startExport(){setError('');setStarting(true);try{await onExport({resolution,fps,quality});}catch(e){setError(userError(e, 'Export failed.'));}finally{setStarting(false);}}
   async function stopExport(){if(!onCancel||!activeJob?.requestId)return;setError('');setStopping(true);try{await onCancel(activeJob.requestId);}catch(e){setError(userError(e,'Could not stop this export.'));}finally{setStopping(false);}}
