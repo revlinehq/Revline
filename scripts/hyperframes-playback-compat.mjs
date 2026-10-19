@@ -9,9 +9,11 @@ const audioClockCandidate = '!pe(S)||!S.isConnected||h(S)||fl(S)';
 const audibleClockCandidate = '!pe(S)||!S.isConnected||h(S)||Number(S.dataset.volume??1)<=0||fl(S)';
 const audioDrift = 'if(!J&&!V&&!G&&X&&ne>Yt){';
 const scaledAudioDrift = 'if(!J&&!V&&!G&&X&&ne>Yt*Math.max(1,r.tagName==="AUDIO"&&e.playing?Math.abs(T):1)){';
+const nativePreload = 'Qy=(c,p,y)=>{let S=d.isPlaying();';
+const managedPreload = 'Qy=(c,p,y)=>{if(document.documentElement.dataset.revlineMediaLoading==="managed")return;let S=d.isPlaying();';
 
 export function patchHyperframesPlaybackRuntime(source, version) {
-  if (version !== HYPERFRAMES_PLAYBACK_COMPAT_VERSION || source.split(original).length !== 2 || source.split(audioClockCandidate).length !== 2 || source.split(audioDrift).length !== 2) throw new Error('Review the HyperFrames playback compatibility patches for this runtime version.');
+  if (version !== HYPERFRAMES_PLAYBACK_COMPAT_VERSION || source.split(original).length !== 2 || source.split(audioClockCandidate).length !== 2 || source.split(audioDrift).length !== 2 || source.split(nativePreload).length !== 2) throw new Error('Review the HyperFrames playback compatibility patches for this runtime version.');
   // Play/Pause must not restart an unfinished video seek or seek a starved
   // decoder a few milliseconds ahead of its buffered frame. Match the runtime's
   // 40ms transport tolerance, scaled into source time for accelerated clips.
@@ -23,5 +25,8 @@ export function patchHyperframesPlaybackRuntime(source, version) {
   // Secondary audio must tolerate 40ms of timeline drift, including at 4x.
   // A fixed source-time threshold repeatedly seeks normal decoder jitter.
   // Large discontinuities and explicit forceSync seeks stay unchanged.
-  return source.replace(original, corrected).replace(audioClockCandidate, audibleClockCandidate).replace(audioDrift, scaledAudioDrift);
+  // Revline's bounded warmup owns preview source preparation. Native visibility
+  // deferral otherwise promotes extra streams and discards already prepared cuts.
+  // Keep the studio marker for first-frame readiness and lazy image behavior.
+  return source.replace(original, corrected).replace(audioClockCandidate, audibleClockCandidate).replace(audioDrift, scaledAudioDrift).replace(nativePreload, managedPreload);
 }

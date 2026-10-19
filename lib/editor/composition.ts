@@ -184,8 +184,9 @@ export function generateComposition(timeline: Timeline, assets: MediaAsset[], op
       return `<div id="${id}-frame" data-visual-clip="${escapeHtml(clip.id)}" class="visual-frame" style="${frameStyle}">${view}</div>`;
     };
     if (clip.kind === 'image') return frame(`<img ${attrs} crossorigin="anonymous" src="${src}" class="visual" style="${sourceStyle}" alt="" />`);
-    if (clip.kind === 'audio') return `<audio ${attrs} crossorigin="anonymous" src="${src}" preload="${options.preview?'metadata':'auto'}"></audio>`;
-    return frame(`<video ${attrs} crossorigin="anonymous" src="${src}" class="visual" style="${sourceStyle}" playsinline preload="${options.preview?'metadata':'auto'}"${volume === 0 ? ' muted' : ''}></video>`);
+    const preload=options.preview&&clip.start>0?'none':'auto';
+    if (clip.kind === 'audio') return `<audio ${attrs} crossorigin="anonymous" src="${src}" preload="${preload}"></audio>`;
+    return frame(`<video ${attrs} crossorigin="anonymous" src="${src}" class="visual" style="${sourceStyle}" playsinline preload="${preload}"${volume === 0 ? ' muted' : ''}></video>`);
   });
   let compositionNodes = nodes.join('\n');
   if (timeline.clips.some(clip => clip.kind === 'effect')) {
@@ -218,7 +219,7 @@ export function generateComposition(timeline: Timeline, assets: MediaAsset[], op
   const previewRuntimeBridge=options.preview?'<script>window.__player=window.__player||{};</script>':'';
   // Fully transparent video is throttled by Chromium at clip activation. A
   // small nonzero opacity keeps preview decoding active under its effect canvas.
-  return `<!doctype html><html><head><meta charset="utf-8">${options.preview?`<meta name="hyperframes-studio-preview" content="true"><script>
+  return `<!doctype html><html${options.preview?' data-revline-media-loading="managed"':''}><head><meta charset="utf-8">${options.preview?`<meta name="hyperframes-studio-preview" content="true"><script>
 function reportPreviewError(error,label){const message=String(error&&error.message||error).replace(/([?&]token=)[^\\s'"<>]+/g,'$1[redacted]');parent.postMessage({source:'revline-preview-error',message,label},parent.location.origin);}
 window.addEventListener('error',event=>{if(event.error)reportPreviewError(event.error,'uncaught');});
 window.addEventListener('unhandledrejection',event=>reportPreviewError(event.reason,'unhandled promise'));

@@ -1,6 +1,7 @@
 import {guardPreviewBuffering} from '../lib/editor/preview-buffering.ts';
 import {previewMediaReady,waitForPreviewMedia} from '../lib/editor/preview-readiness.ts';
 import {warmPreviewMedia} from '../lib/editor/preview-media-warmup.ts';
+import {generateComposition} from '../lib/editor/composition.ts';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
@@ -27,9 +28,9 @@ test('one-times speed stays correct and decoded frames inside transport toleranc
   assert.deepEqual(run(patched,8,4,59+(8-start)*4),[]);
   assert.deepEqual(run(patched,12,4),[]);
 });
-test('patch is confined to alignment, audible clock selection and accelerated audio tolerance and rejects changed dependencies',()=>{
+test('patch is confined to alignment, audible clock selection, accelerated audio tolerance and managed loading and rejects changed dependencies',()=>{
   const before=alignment(upstream),after=alignment(patched);
-  assert.equal(patched.replace(after,before).replace('!pe(S)||!S.isConnected||h(S)||Number(S.dataset.volume??1)<=0||fl(S)','!pe(S)||!S.isConnected||h(S)||fl(S)').replace('if(!J&&!V&&!G&&X&&ne>Yt*Math.max(1,r.tagName==="AUDIO"&&e.playing?Math.abs(T):1)){','if(!J&&!V&&!G&&X&&ne>Yt){'),upstream);
+  assert.equal(patched.replace(after,before).replace('!pe(S)||!S.isConnected||h(S)||Number(S.dataset.volume??1)<=0||fl(S)','!pe(S)||!S.isConnected||h(S)||fl(S)').replace('if(!J&&!V&&!G&&X&&ne>Yt*Math.max(1,r.tagName==="AUDIO"&&e.playing?Math.abs(T):1)){','if(!J&&!V&&!G&&X&&ne>Yt){').replace('Qy=(c,p,y)=>{if(document.documentElement.dataset.revlineMediaLoading==="managed")return;','Qy=(c,p,y)=>{'),upstream);
   assert.throws(()=>patchHyperframesPlaybackRuntime(upstream,'0.8.145'),/Review/);
   assert.throws(()=>patchHyperframesPlaybackRuntime(upstream.replace('I=c-S+L','I=changed'),'0.8.144'),/Review/);
 });
@@ -102,13 +103,13 @@ test('a blocked active range releases network streams held by inactive decoded c
 });
 
 
-test('ready upcoming audio and video do not consume the four preparation slots',()=>{
+test('decoded upcoming video retains the single preparation slot rather than starting more distant source streams',()=>{
   vi.useFakeTimers();
   const node=(kind,start,ready)=>Object.assign(new EventTarget(),{tagName:kind,isConnected:true,paused:true,networkState:1,preload:'none',readyState:ready,seeking:false,currentTime:0,duration:100,dataset:{start:String(start),end:String(start+1),duration:'1',mediaStart:String(start*10)},buffered:{length:1,start:()=>0,end:()=>100},loads:0,load(){this.loads++;},getAttribute:()=>'/source.mp4'});
   const active=node('VIDEO',0,4),soon=[node('VIDEO',1,4),node('AUDIO',1,4),node('VIDEO',2,4),node('AUDIO',2,4)],later=node('VIDEO',3,0);
   const doc={querySelectorAll:()=>[active,...soon,later],defaultView:{MutationObserver:class{observe(){}disconnect(){}}}};
   const stop=warmPreviewMedia(doc,()=>0);
-  try{vi.advanceTimersByTime(200);assert.equal(later.preload,'auto','The next cold video starts preparing once earlier cuts are decoded, without waiting for their timeline starts');}finally{stop();vi.useRealTimers();}
+  try{vi.advanceTimersByTime(200);assert.equal(soon[0].preload,'auto');assert.equal(later.preload,'none','A decoded next video can still have an open loading stream; do not create another competitor');}finally{stop();vi.useRealTimers();}
 });
 
 test('an active seek into buffered bytes retains already prepared future streams',()=>{
@@ -117,4 +118,55 @@ test('an active seek into buffered bytes retains already prepared future streams
   const doc={querySelectorAll:()=>[active,future],defaultView:{MutationObserver:class{observe(){}disconnect(){}}}};
   const stop=warmPreviewMedia(doc,()=>0);
   try{assert.equal(future.loads,0,'A transient buffered seek must not discard the next decoded cut');}finally{stop();}
+});
+
+test('preview HTML defers inactive native probes before the runtime starts',()=>{
+  const timeline={aspectRatio:'16:9',fps:30,clips:[0,3,6].map((start,index)=>({id:`video-${index}`,kind:'video',track:1,start,duration:3,sourceStart:start*10,assetId:'source'}))};
+  const assets=[{_id:'source',kind:'video',name:'Source',url:'https://example.com/source.mp4',duration:100,width:1920,height:1080}];
+  const preview=generateComposition(timeline,assets,{preview:true});
+  assert.match(preview,/data-revline-media-loading="managed"/);
+  assert.match(preview,/name="hyperframes-studio-preview"/,'First-frame asset readiness keeps its deferred scope');
+  assert.equal((preview.match(/preload="auto"/g)??[]).length,1,'Only first-frame footage can issue a media probe before the bounded scheduler starts');
+  assert.equal((preview.match(/preload="none"/g)??[]).length,2);
+  const render=generateComposition(timeline,assets);
+  assert.equal((render.match(/preload="auto"/g)??[]).length,3,'Export source preparation remains eager');
+  assert.doesNotMatch(render,/data-revline-media-loading/);
+});
+
+test('actual native visibility helper leaves managed preview preload ownership unchanged',()=>{
+  const name='Qy=(c,p,y)=>',start=patched.indexOf(name),end=patched.indexOf(',Zy=',start);
+  const run=(managed)=>{
+    const node={preload:'none'},changes=[];
+    const helper=vm.runInNewContext(`(${patched.slice(start+'Qy='.length,end)})`,{
+      document:{documentElement:{dataset:{revlineMediaLoading:managed?'managed':undefined}}},
+      d:{isPlaying:()=>false},no:new WeakSet(),pd:new WeakMap(),Tr:new WeakMap(),Jy:()=>{},
+      Mo:media=>{changes.push('promote');media.preload='auto';},zf:()=>changes.push('discard'),
+    });
+    helper(node,false,true);helper(node,false,false);
+    return changes;
+  };
+  assert.deepEqual(run(true),[],'The native helper must neither promote speculative streams nor discard our prepared decoder');
+  assert.deepEqual(run(false),['promote','discard'],'Unmanaged runtime compositions preserve upstream behavior');
+});
+
+test('a retained outgoing transition frame is never discarded as an inactive stream',()=>{
+  const node=Object.assign(new EventTarget(),{tagName:'VIDEO',isConnected:true,paused:true,networkState:2,preload:'auto',readyState:3,seeking:false,currentTime:8,duration:100,dataset:{start:'0',end:'1',duration:'1',mediaStart:'7',revlineTransitionVisible:''},buffered:{length:1,start:()=>7,end:()=>9},loads:0,load(){this.loads++;},getAttribute:()=>'/source.mp4'});
+  const doc={querySelectorAll:()=>[node],defaultView:{MutationObserver:class{observe(){}disconnect(){}}}};
+  const stop=warmPreviewMedia(doc,()=>1.1);
+  try{assert.equal(node.loads,0,'The transition renderer still displays its outgoing retained native frame beyond the authored clip edge');}finally{stop();}
+});
+
+test('only active and nearest upcoming video keep loading streams, while idle decoded frames survive',()=>{
+  const node=(start,networkState=2)=>Object.assign(new EventTarget(),{tagName:'VIDEO',isConnected:true,paused:true,networkState,preload:'auto',readyState:3,seeking:false,currentTime:0,duration:100,dataset:{start:String(start),end:String(start+1),duration:'1',mediaStart:'0'},buffered:{length:1,start:()=>0,end:()=>100},loads:0,load(){this.loads++;this.networkState=0;},getAttribute:()=>'/large-original.mp4'});
+  const active=node(0),nearest=node(1),distant=[node(2),node(3),node(4),node(5),node(6)],past=node(-1),idle=node(-2,1),all=[active,nearest,...distant,past,idle];
+  const doc={querySelectorAll:()=>all,defaultView:{MutationObserver:class{observe(){}disconnect(){}}}};
+  const stop=warmPreviewMedia(doc,()=>0);
+  try{assert.equal(active.loads,0);assert.equal(nearest.loads,0);assert.ok([...distant,past].every(media=>media.loads===1),'All other open video requests are aborted even when they already decoded a first frame');assert.equal(idle.loads,0,'An idle decoded frame has no competing network stream and must survive');assert.equal(idle.preload,'none');}finally{stop();}
+});
+
+test('the terminal decoded video frame survives transport end while earlier clips release streams',()=>{
+  const node=(start,end)=>Object.assign(new EventTarget(),{tagName:'VIDEO',isConnected:true,paused:true,networkState:2,preload:'auto',readyState:3,seeking:false,currentTime:8,duration:100,dataset:{start:String(start),end:String(end),duration:String(end-start),mediaStart:'7'},buffered:{length:1,start:()=>7,end:()=>9},loads:0,load(){this.loads++;},getAttribute:()=>'/source.mp4'});
+  const previous=node(0,1),terminal=node(1,2),doc={getElementById:()=>({dataset:{duration:'2'}}),querySelectorAll:()=>[previous,terminal],defaultView:{MutationObserver:class{observe(){}disconnect(){}}}};
+  const stop=warmPreviewMedia(doc,()=>2);
+  try{assert.equal(terminal.loads,0,'The runtime deliberately holds its last decoded video at the timeline end');assert.equal(terminal.preload,'auto');assert.equal(previous.loads,1,'A normal earlier clip is still released');}finally{stop();}
 });
