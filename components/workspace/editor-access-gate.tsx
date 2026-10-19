@@ -52,12 +52,11 @@ export function EditorAccessGate({ children, loading, checkoutPending = false }:
     <main className="editor-access-main">
       <section className="editor-access-card" aria-labelledby="editor-access-title">
         <header className="editor-access-heading">
-          <h1 id="editor-access-title">{status.needsPayment ? 'Update your payment method' : trial ? `Start ${EDITOR_PLAN.trialDays}-day free trial` : 'Continue with Revline'}</h1>
+          <h1 id="editor-access-title">{status.needsPayment ? 'Update your payment method' : 'Continue with Revline'}</h1>
           {status.needsPayment && <p>Update your payment method to restore editor access.</p>}
         </header>
         <div className="editor-access-offer">
-          <div className="editor-access-price"><strong>${trial ? 0 : EDITOR_PLAN.monthlyPrice}</strong><span>{trial ? 'today' : `/ month · ${EDITOR_PLAN.currency}`}</span></div>
-          {trial && <p>Then ${EDITOR_PLAN.monthlyPrice}/month · {EDITOR_PLAN.currency}.</p>}
+          <div className="editor-access-price"><strong>${EDITOR_PLAN.monthlyPrice}</strong><span>/ month · {EDITOR_PLAN.currency}</span></div>
         </div>
         <ul className="editor-access-features" aria-label="Included features">
           <li><Check size={16} strokeWidth={1.5} aria-hidden="true" />AI editing in chat</li>
