@@ -3,13 +3,13 @@ import { internalMutation, query } from './_generated/server';
 import { requireOwner } from './lib/auth';
 import { projectIdentity } from './lib/project_data';
 import { aiCostRecordFields, aiCostSummary, aiCostTurnReport } from './lib/ai_cost';
-import { aggregateEditorCosts, COST_HISTORY_LIMIT, costDashboardEnabled, costPeriod, summarizeEditorCosts } from '../lib/ai/cost-history';
+import { aggregateEditorCosts, COST_HISTORY_LIMIT, costDashboardEnabled, costRecordingEnabled, costPeriod, summarizeEditorCosts } from '../lib/ai/cost-history';
 
-/** Development diagnostics. Owner comes from the saved project, never a public argument. */
+/** Opt-in diagnostics. Owner comes from the saved project, never a public argument. */
 export const record = internalMutation({
   args: { projectId: v.id('projects'), runId: v.string(), threadId:v.optional(v.string()),promptMessageId:v.optional(v.string()), record: v.object(aiCostRecordFields) }, returns: v.null(),
   handler: async (ctx, args) => {
-    if (!costDashboardEnabled()) return null;
+    if (!costRecordingEnabled()) return null;
     const project = await projectIdentity(ctx, args.projectId);
     if((args.threadId===undefined)!==(args.promptMessageId===undefined)||args.threadId!==undefined&&args.threadId!==project.threadId)throw new ConvexError('Cost conversation does not match this project');
     const existing = await ctx.db.query('aiCostRecords').withIndex('by_run_key', q => q.eq('runId', args.runId).eq('key', args.record.key)).unique();

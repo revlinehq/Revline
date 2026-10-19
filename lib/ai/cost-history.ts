@@ -1,4 +1,5 @@
-export const costDashboardEnabled = (env: Record<string, string | undefined> = process.env) => env.AI_COST_DASHBOARD_ENABLED === 'true' && env.MODEL_SWITCHER_ENABLED === 'true';
+export const costRecordingEnabled = (env: Record<string, string | undefined> = process.env) => env.AI_COST_DASHBOARD_ENABLED === 'true';
+export const costDashboardEnabled = (env: Record<string, string | undefined> = process.env) => costRecordingEnabled(env) && env.MODEL_SWITCHER_ENABLED === 'true';
 
 /** Sanitized usage only. Never persist prompts, responses, tool inputs or provider metadata. */
 export type EditorCostRecord = {
@@ -12,6 +13,9 @@ export type EditorCostRecord = {
   serviceTier: string | null;
   estimatedUsd: number | null;
   inputTokens: number | null;
+  uncachedInputTokens?: number | null;
+  cacheReadTokens?: number | null;
+  cacheWriteTokens?: number | null;
   outputTokens: number | null;
   reasoningTokens: number | null;
   toolCallCount: number;
@@ -32,6 +36,7 @@ export function costHistoryRecord(event: Record<string, unknown>): EditorCostRec
     model: text(event.model), provider: text(event.provider), reasoningEffort: text(event.reasoningEffort), speedMode: text(event.speedMode), serviceTier: text(event.serviceTier),
     estimatedUsd: !summary && typeof event.stepEstimatedUsd === 'number' && Number.isFinite(event.stepEstimatedUsd) && event.stepEstimatedUsd >= 0 ? event.stepEstimatedUsd : null,
     inputTokens: summary ? null : count(event.inputTokens), outputTokens: summary ? null : count(event.outputTokens), reasoningTokens: summary ? null : count(event.reasoningTokens),
+    ...(summary?{}:{uncachedInputTokens:count(event.uncachedInputTokens),cacheReadTokens:count(event.cacheReadTokens),cacheWriteTokens:count(event.cacheWriteTokens)}),
     toolCallCount: summary ? 0 : count(event.toolCallCount) ?? 0,
     unreportedCall: summary && event.unreportedCall === true,
   };
@@ -55,7 +60,7 @@ export function costPeriod(days: 7 | 30, timeZone: string, now: number) {
   }
   return { start: upper, end: now, days, timeZone, dates, dateAt };
 }
-const totals = () => ({ knownEstimatedUsd: 0, callCount: 0, unknownCostCalls: 0, inputTokens: 0, outputTokens: 0, reasoningTokens: 0, toolCallCount: 0 });
+const totals = () => ({ knownEstimatedUsd: 0, callCount: 0, unknownCostCalls: 0, inputTokens: 0, uncachedInputTokens:0,cacheReadTokens:0,cacheWriteTokens:0,unknownCacheUsageCalls:0,outputTokens: 0, reasoningTokens: 0, toolCallCount: 0 });
 export function aggregateEditorCosts(records: StoredCost[]) {
   const summary = { ...totals(), unreportedRuns: 0, runCount: 0 };
   const groups = new Map<string, ReturnType<typeof totals> & Pick<EditorCostRecord, 'model' | 'provider' | 'reasoningEffort' | 'speedMode' | 'serviceTier'>>();
@@ -67,10 +72,13 @@ export function aggregateEditorCosts(records: StoredCost[]) {
     const key = JSON.stringify(identity);
     if (!groups.has(key)) groups.set(key, { ...identity, ...totals() });
     const group = groups.get(key)!;
+    const cacheUsageKnown = [record.uncachedInputTokens, record.cacheReadTokens, record.cacheWriteTokens].every(value => count(value) !== null)
+      && record.uncachedInputTokens! + record.cacheReadTokens! + record.cacheWriteTokens! === record.inputTokens;
     for (const target of [summary, group]) {
       target.callCount++;
       if (record.estimatedUsd === null) target.unknownCostCalls++; else target.knownEstimatedUsd = round(target.knownEstimatedUsd + record.estimatedUsd);
       target.inputTokens += record.inputTokens ?? 0; target.outputTokens += record.outputTokens ?? 0; target.reasoningTokens += record.reasoningTokens ?? 0; target.toolCallCount += record.toolCallCount;
+      if(cacheUsageKnown){target.uncachedInputTokens+=record.uncachedInputTokens!;target.cacheReadTokens+=record.cacheReadTokens!;target.cacheWriteTokens+=record.cacheWriteTokens!;}else target.unknownCacheUsageCalls++;
     }
   }
   summary.runCount = runs.size; summary.unreportedRuns = unreported.size;

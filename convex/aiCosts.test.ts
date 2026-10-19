@@ -30,14 +30,62 @@ test('owner-only indexed report includes failed-run unknowns and idempotently re
   expect(foreign?.summary.callCount).toBe(0); expect(foreign?.recordingSince).toBeNull();
   await expect(t.query(api.aiCosts.summary, { days: 7, timeZone: 'UTC' })).rejects.toThrow('Authentication required');
 });
-test('explicit gates hide the query and avoid persisting diagnostics outside development', async () => {
+test('explicit recording flag is independent of the picker while both flags still hide the dashboard', async () => {
   const { t, projectId, owner } = await fixture();
   vi.stubEnv('AI_COST_DASHBOARD_ENABLED', 'false');
   await t.mutation(internal.aiCosts.record, { projectId, runId: 'disabled', record });
   expect(await owner.query(api.aiCosts.summary, { days: 30, timeZone: 'UTC' })).toBeNull();
   expect(await t.run(ctx => ctx.db.query('aiCostRecords').withIndex('by_owner_recorded', q => q.eq('ownerId', 'owner')).take(10))).toHaveLength(0);
   vi.stubEnv('AI_COST_DASHBOARD_ENABLED', 'true'); vi.stubEnv('MODEL_SWITCHER_ENABLED', 'false');
+  await t.mutation(internal.aiCosts.record,{projectId,runId:'picker-hidden',record});
+  expect(await t.run(ctx=>ctx.db.query('aiCostRecords').withIndex('by_run_key',q=>q.eq('runId','picker-hidden').eq('key',record.key)).unique())).toMatchObject({inputTokens:300});
   expect(await owner.query(api.aiCosts.summary, { days: 30, timeZone: 'UTC' })).toBeNull();
+});
+
+test('cache usage is sanitized, persisted per call and reported as known subtotals with explicit legacy gaps',async()=>{
+  const {costHistoryRecord}=await import('../lib/ai/cost-history');
+  const event={event:'model-step',timestamp:new Date(record.recordedAt).toISOString(),callId:'cache',step:1,model:record.model,provider:record.provider,inputTokens:300,uncachedInputTokens:20,cacheReadTokens:200,cacheWriteTokens:80,outputTokens:50,reasoningTokens:20,stepEstimatedUsd:.02,prompt:'Private prompt must never persist'};
+  const parsed=costHistoryRecord(event)!;
+  expect(parsed).toMatchObject({uncachedInputTokens:20,cacheReadTokens:200,cacheWriteTokens:80});
+  expect(JSON.stringify(parsed)).not.toContain('Private prompt');
+  expect(costHistoryRecord({...event,cacheWriteTokens:-1})).toMatchObject({cacheWriteTokens:null});
+  const {t,projectId,owner}=await fixture();
+  await t.mutation(internal.aiCosts.record,{projectId,runId:'cache-run',record:parsed});
+  await t.mutation(internal.aiCosts.record,{projectId,runId:'legacy',record});
+  await t.mutation(internal.aiCosts.record,{projectId,runId:'inconsistent',record:{...record,uncachedInputTokens:300,cacheReadTokens:1,cacheWriteTokens:2}});
+  const result=await owner.query(api.aiCosts.summary,{days:7,timeZone:'UTC'});
+  expect(result?.summary).toMatchObject({callCount:3,inputTokens:900,uncachedInputTokens:20,cacheReadTokens:200,cacheWriteTokens:80,unknownCacheUsageCalls:2});
+  expect(await t.run(ctx=>ctx.db.query('aiCostRecords').withIndex('by_run_key',q=>q.eq('runId','cache-run').eq('key',parsed.key)).unique())).toMatchObject({uncachedInputTokens:20,cacheReadTokens:200,cacheWriteTokens:80});
+});
+
+test('installed Agent and OpenAI serializer append ephemeral repair context after the unchanged request prefix',async()=>{
+  vi.useRealTimers();
+  const [{Agent,createThread,saveMessages},{default:agentTest},{createOpenAI},{components},{editorRepairContext,EDITOR_CONTEXT_BOUNDARY},{editorProviderOptions},{wrapLanguageModel},{AssistantTokenBudget}]=await Promise.all([import('@convex-dev/agent'),import('@convex-dev/agent/test'),import('@ai-sdk/openai'),import('./_generated/api'),import('../lib/ai/editor-context'),import('../lib/ai/claude-model'),import('ai'),import('../lib/ai/token-budget')]);
+  const t=convexTest(schema,modules);agentTest.register(t);
+  const threadId=await t.run(ctx=>createThread(ctx,components.agent,{userId:'owner'}));
+  const promptMessageId=await t.run(async ctx=>(await saveMessages(ctx,components.agent,{threadId,userId:'owner',messages:[{role:'user',content:'Keep the original request'}]})).messages[0]._id);
+  const payloads:Record<string,unknown>[]=[];
+  const provider=createOpenAI({apiKey:'offline-fixture',fetch:async(_url,init)=>{
+    payloads.push(JSON.parse(String(init?.body)));
+    return new Response(JSON.stringify({id:`response-${payloads.length}`,object:'response',created_at:1,model:'offline-fixture',status:'completed',output:[{type:'message',id:`answer-${payloads.length}`,status:'completed',role:'assistant',content:[{type:'output_text',text:'Saved response',annotations:[]}]}],usage:{input_tokens:10,output_tokens:2,total_tokens:12,input_tokens_details:{cached_tokens:0},output_tokens_details:{reasoning_tokens:0}}}),{headers:{'content-type':'application/json'}});
+  }});
+  const model=wrapLanguageModel({model:provider.responses('gpt-6.1-sol'),middleware:new AssistantTokenBudget().middleware([],0,undefined,false)});
+  const agent=new Agent(components.agent,{name:'Offline prefix fixture',languageModel:model,instructions:`Keep these instructions byte-identical.${EDITOR_CONTEXT_BOUNDARY}Current timeline fixture.`,contextOptions:{recentMessages:100,excludeToolMessages:false}});
+  const ctx={runQuery:t.query,runMutation:t.mutation,runAction:t.action} as Parameters<typeof agent.generateText>[0];
+  const settings={promptMessageId,providerOptions:editorProviderOptions({provider:'openai',modelId:'gpt-6.1-sol'})};
+  await agent.generateText(ctx,{threadId,userId:'owner'},settings);
+  const feedback='Server diagnostic: finish only the remaining verification.';
+  await agent.generateText(ctx,{threadId,userId:'owner'},settings,{contextHandler:async(_ctx,{allMessages})=>editorRepairContext(allMessages,feedback)});
+  expect(payloads).toHaveLength(2);
+  const [initial,repair]=payloads.map(body=>body.input as {role:string;content:unknown}[]);
+  expect(repair.slice(0,initial.length)).toEqual(initial);
+  expect(repair.at(-1)).toMatchObject({role:'developer'});
+  expect(JSON.stringify(repair.at(-1))).toContain(feedback);
+  expect(payloads[1].model).toBe(payloads[0].model);
+  const saved=await agent.listMessages(ctx,{threadId,paginationOpts:{cursor:null,numItems:100}});
+  expect(saved.page).toHaveLength(3);
+  expect(JSON.stringify(saved.page)).not.toContain(feedback);
+  expect(editorRepairContext([],'x'.repeat(40_000))[0].content).toHaveLength('# Finish the current request\n'.length+16_000);
 });
 test('rejects invalid timezone and unsupported period without reading another owner', async () => {
   const { owner } = await fixture();

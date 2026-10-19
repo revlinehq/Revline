@@ -1,8 +1,15 @@
 import type { LanguageModelV4Prompt, LanguageModelV4ToolResultOutput } from '@ai-sdk/provider';
+import type { ModelMessage } from 'ai';
 import type { Timeline, MediaAsset } from '../editor/types';
 
 export const EDITOR_CONTEXT_NOTICE = 'Context loads the latest 100 saved messages plus associated steps needed to complete their tool calls. Older messages or superseded timeline snapshots may be omitted. Omission is not evidence that an event or edit is absent. Preserve recent user constraints and use the current timeline. Visual observations and images in this context remain intact. Before a creative decision needing absent visual evidence, inspect the relevant source window again (saved analysis may be reused). Read inspectClip for omitted motion/focus samples; never reconstruct source trims from a summary.';
 export const EDITOR_CONTEXT_BOUNDARY = '\nCURRENT EDIT CONTEXT:\n';
+
+/** Agent contextHandler messages are ephemeral. Keep the instruction/history
+ * prefix unchanged when the server asks the same request to finish a repair. */
+export function editorRepairContext(messages:ModelMessage[],feedback:string):ModelMessage[] {
+  return [...messages,{role:'system',content:`# Finish the current request\n${feedback.slice(0,16_000)}`}];
+}
 
 function withoutDiagnostics<T extends { providerOptions?: LanguageModelV4Prompt[number]['providerOptions'] }>(value: T): T {
   const anthropic = value.providerOptions?.anthropic;

@@ -15,8 +15,8 @@ import {configureCameraMotionPatch} from '../lib/ai/camera-targets';
 import {textGradientPatch} from '../lib/editor/text-gradient';
 import {animateObjects} from '../lib/ai/object-motion';
 import {CAMERA_ZOOM_RANGE,SMOOTH_ZOOM_EASINGS} from '../lib/editor/smooth-zoom-settings';
-import { CostHistoryWriter, costDashboardEnabled, costHistoryRecord } from '../lib/ai/cost-history';
-import { modelTimeline, modelAssetAnalysis, EDITOR_CONTEXT_NOTICE, EDITOR_CONTEXT_BOUNDARY } from "../lib/ai/editor-context";
+import { CostHistoryWriter, costRecordingEnabled, costHistoryRecord } from '../lib/ai/cost-history';
+import { editorRepairContext, modelTimeline, modelAssetAnalysis, EDITOR_CONTEXT_NOTICE, EDITOR_CONTEXT_BOUNDARY } from "../lib/ai/editor-context";
 import { assistantFailureReason } from "../lib/ai/assistant-error";
 import { openai } from "@ai-sdk/openai";
 import { assertEditorModelConfigured, resolveClaudeModel, validatePinnedClaudeModel, editorProviderOptions, editorMaxOutputTokens, type ClaudeModelSelection } from "../lib/ai/claude-model";
@@ -81,7 +81,7 @@ export const respond = internalAction({
     );
     const costLog = new AssistantCostLog({ projectId: args.projectId, runId: args.runId }, event => {
       console.log(`[ai-cost] ${JSON.stringify(event)}`);
-      if (!costDashboardEnabled()) return;
+      if (!costRecordingEnabled()) return;
       const record = costHistoryRecord(event);
       if (record) costHistory.enqueue(record);
     });
@@ -520,7 +520,6 @@ You edit the user's video timeline using structured tools. Greetings, small talk
         const result = await agent.streamText(ctx, { threadId: args.threadId, userId: args.ownerId }, {
           promptMessageId: args.promptMessageId, abortSignal, providerOptions, maxOutputTokens: editorMaxOutputTokens(selection),
           ...(repairFeedback ? {
-            instructions: `${agent.options.instructions}\n# Finish the current request\n${repairFeedback}`,
             stopWhen: [({steps: current}) => current.length >= 8 || hasRepeatedToolFailures([...steps, ...current])],
           } : {}),
           onStepStart: event => { currentStep = offset + event.stepNumber; },
@@ -528,7 +527,7 @@ You edit the user's video timeline using structured tools. Greetings, small talk
           onLanguageModelCallEnd: event => costLog.modelCall({ ...event, stepNumber: currentStep }, progress()),
           onStepEnd: event => costLog.toolsFinished(event),
           onError: ({ error }) => { streamError = error; },
-        }, { saveStreamDeltas: { throttleMs: 300 } });
+        }, { saveStreamDeltas: { throttleMs: 300 },...(repairFeedback?{contextHandler:async(_ctx,{allMessages})=>editorRepairContext(allMessages,repairFeedback!)}:{}) });
         const [reason, completed] = await Promise.all([result.finishReason, result.steps]);
         finishReason = reason;
         steps.push(...completed);

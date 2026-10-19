@@ -41,7 +41,7 @@ type Tool={description:string;inputSchema:ZodType;execute:(ctx:unknown,input:unk
 const sdk=vi.hoisted(()=>({options:null as null|{instructions:string;tools:Record<string,Tool>},plan:async()=>{},steps:[] as {content:unknown[]}[],finishReason:'stop',streams:[] as Record<string,unknown>[],messages:[] as unknown[]}));
 vi.mock('@convex-dev/agent',async importOriginal=>({
   ...await importOriginal<Record<string,unknown>>(),
-  Agent:class{constructor(_component:unknown,readonly options:NonNullable<typeof sdk.options>){sdk.options=options}async streamText(_ctx:unknown,_thread:unknown,args:Record<string,unknown>){sdk.streams.push(args);await sdk.plan();return{finishReason:Promise.resolve(sdk.finishReason),steps:Promise.resolve([...sdk.steps])}}},
+  Agent:class{constructor(_component:unknown,readonly options:NonNullable<typeof sdk.options>){sdk.options=options}async streamText(_ctx:unknown,_thread:unknown,args:Record<string,unknown>,options?:{contextHandler?:(ctx:unknown,input:{allMessages:import('ai').ModelMessage[]})=>Promise<import('ai').ModelMessage[]>}){sdk.streams.push({...args,context:options?.contextHandler?await options.contextHandler({}, {allMessages:[]}):[]});await sdk.plan();return{finishReason:Promise.resolve(sdk.finishReason),steps:Promise.resolve([...sdk.steps])}}},
   createTool:(options:unknown)=>options,saveMessage:async(_ctx:unknown,_component:unknown,message:unknown)=>{sdk.messages.push(message)},stepCountIs:()=>()=>false,
 }));
 import { respond } from './assistantActions';
@@ -222,7 +222,8 @@ test('unfinished tool feedback automatically resumes the same request and publis
       await expect(execute(tools,'styleTextClip',input)).rejects.toThrow('Temporary draft validation');
       sdk.steps=[{content:[{type:'tool-call',toolName:'styleTextClip',toolCallId:'failed-style',input},{type:'tool-error',toolName:'styleTextClip',toolCallId:'failed-style',error:'Temporary draft validation unavailable.'}]}];
     }else{
-      expect(sdk.streams.at(-1)?.instructions).toContain('Temporary draft validation unavailable.');
+      expect(sdk.streams.at(-1)?.instructions).toBeUndefined();
+      expect(JSON.stringify(sdk.streams.at(-1)?.context)).toContain('Temporary draft validation unavailable.');
       await execute(tools,'inspectTimeline',{});
       const output=await execute(tools,'styleTextClip',input);
       sdk.steps=[{content:[{type:'tool-call',toolName:'styleTextClip',toolCallId:'repaired-style',input},{type:'tool-result',toolName:'styleTextClip',toolCallId:'repaired-style',output}]}];
@@ -242,7 +243,7 @@ test('a failed visual check is corrected before completion without redoing the s
   const result=await run(async tools=>{
     pass++;
     if(pass===1)await execute(tools,'styleTextClip',{clipId:'title',fontSize:80});
-    else expect(sdk.streams.at(-1)?.instructions).toContain('The requested outline is missing');
+    else {expect(sdk.streams.at(-1)?.instructions).toBeUndefined();expect(JSON.stringify(sdk.streams.at(-1)?.context)).toContain('The requested outline is missing');}
     sdk.steps=[{content:[{type:'tool-result',toolName:'previewRender',toolCallId:`review-${pass}`,output:{reviewed:true,stale:false,revision:1,currentRevision:1,sampleTimes:[0],checks:[{planId:'outline',timingPass:true}],observations:[{planId:'outline',verdict:pass===1?'fail':'pass',evidence:pass===1?'The requested outline is missing':'Requested outline is visible'}]}}]}];
   },initial,true);
   expect(pass).toBe(2);expect(result.error).toBeUndefined();
