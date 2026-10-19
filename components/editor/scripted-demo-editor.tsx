@@ -12,6 +12,7 @@ import { streamDemoText, waitForDemoStep } from '@/lib/editor/scripted-demo-chat
 import { HORMOZI_DEMO_ASSET, hormoziDemoPlan } from '@/lib/editor/hormozi-demo';
 import { RACING_DEMO_ASSETS, racingDemoPlan } from '@/lib/editor/racing-demo';
 import { F1_RECORDING_ASSETS, f1RecordingDemoPlan } from '@/lib/editor/f1-recording-demo';
+import { REVLINE_RECORDING_ASSETS, revlineRecordingDemoPlan } from '@/lib/editor/revline-recording-demo';
 import type { MediaAsset, Timeline } from '@/lib/editor/types';
 import type { ComposerAttachment } from '@/components/workspace/edit-composer';
 import { stockAudioAsset } from '@/lib/editor/stock-audio';
@@ -35,15 +36,16 @@ function DemoConversation({ chatStore, ...props }: Omit<ComponentProps<typeof As
 
 /** Separate, local-only recording route. The production editor never uses this script. */
 export function ScriptedDemoEditor({ demoId }: { demoId: string }) {
+  const revlineTake=demoId==='revline-take-1';
   const racingTake=demoId==='racing-take-1';
   const f1Take=demoId==='hormozi-take-1'||demoId==='f1-take-1';
-  const preparedTake=racingTake||f1Take||demoId==='interview-take-1';
-  const [store] = useState(() => createEditorStore(EMPTY_SCRIPTED_DEMO));
+  const preparedTake=revlineTake||racingTake||f1Take||demoId==='interview-take-1';
+  const [store] = useState(() => createEditorStore(revlineTake?revlineRecordingDemoPlan('opening').initial:EMPTY_SCRIPTED_DEMO));
   const timeline = useStore(store, state => state.timeline), history = useStore(store, state => state.history), future = useStore(store, state => state.future);
-  const [assets, setAssets] = useState<MediaAsset[]>([]), [pending, setPending] = useState<ComposerAttachment[]>([]);
+  const [assets, setAssets] = useState<MediaAsset[]>(()=>revlineTake?REVLINE_RECORDING_ASSETS:[]), [pending, setPending] = useState<ComposerAttachment[]>([]);
   const [stockAssets, setStockAssets] = useState<MediaAsset[]>([]);
   const [submittedAssetIds, setSubmittedAssetIds] = useState<string[]>([]);
-  const media = useMemo(() => f1Take ? { assets: [...F1_RECORDING_ASSETS, ...stockAssets] } : racingTake ? { assets: [...RACING_DEMO_ASSETS, ...stockAssets] } : scriptedDemoMedia([...(preparedTake?[HORMOZI_DEMO_ASSET]:assets),...stockAssets]), [assets,preparedTake,racingTake,f1Take,stockAssets]);
+  const media = useMemo(() => revlineTake ? { assets: [...REVLINE_RECORDING_ASSETS, ...stockAssets] } : f1Take ? { assets: [...F1_RECORDING_ASSETS, ...stockAssets] } : racingTake ? { assets: [...RACING_DEMO_ASSETS, ...stockAssets] } : scriptedDemoMedia([...(preparedTake?[HORMOZI_DEMO_ASSET]:assets),...stockAssets]), [assets,preparedTake,racingTake,f1Take,revlineTake,stockAssets]);
   const [conversation] = useState(() => createStore<{ messages: ChatMessage[] }>(() => ({ messages: [] })));
   const [running, setRunning] = useState(false), [importing, setImporting] = useState(false);
   const [error, setError] = useState(''), [title, setTitle] = useState('Your next edit'), [activity, setActivity] = useState<string | null>(null);
@@ -51,7 +53,7 @@ export function ScriptedDemoEditor({ demoId }: { demoId: string }) {
   const [lastPrompt, setLastPrompt] = useState('');
   const [demoPhase, setDemoPhase] = useState<string>();
   const root = useRef<HTMLDivElement>(null);
-  const input = useRef<HTMLInputElement>(null), preview = useRef<PreviewHandle | null>(null), assetsRef = useRef<MediaAsset[]>([]), urls = useRef<string[]>([]), activeRun = useRef<AbortController | null>(null);
+  const input = useRef<HTMLInputElement>(null), preview = useRef<PreviewHandle | null>(null), assetsRef = useRef<MediaAsset[]>(revlineTake?REVLINE_RECORDING_ASSETS:[]), urls = useRef<string[]>([]), activeRun = useRef<AbortController | null>(null);
   const onPreviewReady = useCallback((controller: PreviewHandle) => { preview.current = controller; }, []);
   const mounted = useRef(true), importingRef = useRef(false);
   useEffect(() => {
@@ -101,7 +103,7 @@ export function ScriptedDemoEditor({ demoId }: { demoId: string }) {
   async function build(prompt: string) {
     if (activeRun.current || importingRef.current) return;
     if(preparedTake&&!assetsRef.current.length)throw new Error('Attach media before starting the edit.');
-    const runId = `demo-build-${crypto.randomUUID()}`, f1Plan = f1Take ? f1RecordingDemoPlan(runId) : null, plan = f1Plan ?? (racingTake?racingDemoPlan(runId):preparedTake?hormoziDemoPlan(runId):scriptedDemoPlan(assetsRef.current, prompt, runId));
+    const runId = `demo-build-${crypto.randomUUID()}`, f1Plan = revlineTake ? revlineRecordingDemoPlan(runId) : f1Take ? f1RecordingDemoPlan(runId) : null, plan = f1Plan ?? (racingTake?racingDemoPlan(runId):preparedTake?hormoziDemoPlan(runId):scriptedDemoPlan(assetsRef.current, prompt, runId));
     const controller = new AbortController(); activeRun.current = controller;
     setSubmittedAssetIds(assetsRef.current.map(asset => asset._id));
     setError(''); setLastPrompt(prompt); setRunning(true); setActivity('Queued for analysis…'); setActivityStartedAt(Date.now());
@@ -109,7 +111,7 @@ export function ScriptedDemoEditor({ demoId }: { demoId: string }) {
     store.getState().recover(plan.initial); store.setState({ playhead: 0, playing: false }); store.getState().beginUndoGroup(runId);
     if (f1Plan) {
       const width = root.current?.querySelector<HTMLElement>('.timeline-scroll')?.clientWidth ?? 720;
-      store.setState({ zoom: Math.min(1, Math.max(.03, (width - 24) / (TIMELINE_BASE_PX * 90))) });
+      store.setState({ zoom: Math.min(1, Math.max(.03, (width - 24) / (TIMELINE_BASE_PX * (Math.max(...plan.initial.clips.map(clip=>clip.start+clip.duration))+1)))) });
       setDemoPhase('queued');
     }
     let current = plan.initial;
