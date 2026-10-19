@@ -5,8 +5,7 @@ import { projectRun } from './lib/project_data';
 import { validateTimeline } from './lib/timeline';
 import { clipValidator, timelineValidator } from './schema';
 import { effectPlanValidator, compositionReviewResult } from './lib/effect_plan';
-import { equalTimelineValue } from '../lib/editor/timeline-equality';
-import { compositionReviewBudget, compositionReviewWindow } from '../lib/ai/composition-review';
+import { compositionReviewBudget, compositionReviewWindow, currentReviewPlanIds, MAX_COMPOSITION_REVIEW_ATTEMPTS } from '../lib/ai/composition-review';
 import { effectPlanInput, effectDisabledReference, preservePlanOriginals, mergeEffectPlans, effectReviewBindings, type EffectPlan } from '../lib/ai/edit-plan';
 import { enqueueMediaTask, cancelMediaTask } from './mediaTasks';
 import type { MutationCtx, QueryCtx } from './_generated/server';
@@ -21,13 +20,35 @@ export const readPlan=internalQuery({args:runArgs,returns:v.array(effectPlanVali
   const plan=await ctx.db.query('assistantPlans').withIndex('by_project',q=>q.eq('projectId',args.projectId)).unique();
   return plan?.runId===args.runId?plan.plans:[];
 }});
+export const completionState=internalQuery({args:{...runArgs,timeline:timelineValidator,expectedRevision:v.number()},returns:v.object({plans:v.array(effectPlanValidator),validReviews:v.array(v.object({planIds:v.array(v.string()),output:v.object({...compositionReviewResult.fields,reviewed:v.literal(true),stale:v.literal(false),currentRevision:v.number()})}))}),handler:async(ctx,args)=>{
+  await active(ctx,args);
+  const project=(await ctx.db.get(args.projectId))!;
+  if((project.revision??0)!==args.expectedRevision)throw new ConvexError('The timeline changed elsewhere. Inspect before completing review.');
+  const saved=await ctx.db.query('assistantPlans').withIndex('by_project',q=>q.eq('projectId',args.projectId)).unique();
+  const plans=saved?.runId===args.runId?saved.plans:[];
+  if(!plans.length)return {plans,validReviews:[]};
+  const recent=(await ctx.db.query('compositionReviews').withIndex('by_project',q=>q.eq('projectId',args.projectId)).order('desc').take(MAX_COMPOSITION_REVIEW_ATTEMPTS+1)).filter(review=>review.runId===args.runId&&review.ownerId===args.ownerId&&review.status==='completed');
+  const seen=new Set<string>(),validReviews=[];
+  for(const review of recent){
+    const current=new Set(currentReviewPlanIds(review,args.timeline,plans));
+    for(const plan of review.plans){
+      if(seen.has(plan.id))continue;
+      seen.add(plan.id);
+      if(!current.has(plan.id)||!review.result)continue;
+      // Preserve the latest judgment, including failure or uncertainty. Split
+      // paired receipts so a later review of one plan cannot hide its verdict.
+      validReviews.push({planIds:[plan.id],output:{...review.result,observations:review.result.observations.filter(item=>item.planId===plan.id),checks:review.result.checks.filter(item=>item.planId===plan.id),reviewed:true as const,stale:false as const,revision:args.expectedRevision,currentRevision:args.expectedRevision}});
+    }
+  }
+  return {plans,validReviews};
+}});
 export const savePlan=internalMutation({args:{...runArgs,plans:v.array(effectPlanValidator),originals:v.array(clipValidator)},returns:v.null(),handler:async(ctx,args)=>{
   await active(ctx,args);
   if(args.plans.length<1||args.plans.length>8||args.originals.length>8||new Set(args.plans.map(p=>p.id)).size!==args.plans.length)throw new ConvexError('Plan one to eight uniquely identified effects.');
   for(const plan of args.plans)effectPlanInput.parse(plan);
   const previous=await ctx.db.query('assistantPlans').withIndex('by_project',q=>q.eq('projectId',args.projectId)).unique();
   const sameRun=previous?.runId===args.runId;
-  const reviews=sameRun&&previous.reviews>0?(await ctx.db.query('compositionReviews').withIndex('by_project',q=>q.eq('projectId',args.projectId)).order('desc').take(4)).filter(review=>review.runId===args.runId&&review.status!=='failed'):[];
+  const reviews=sameRun&&previous.reviews>0?(await ctx.db.query('compositionReviews').withIndex('by_project',q=>q.eq('projectId',args.projectId)).order('desc').take(MAX_COMPOSITION_REVIEW_ATTEMPTS+1)).filter(review=>review.runId===args.runId&&review.status!=='failed'):[];
   let plans:EffectPlan[];
   try{plans=mergeEffectPlans(sameRun?previous.plans:[],args.plans,new Set(reviews.flatMap(review=>review.plans.map(plan=>plan.id))));}catch(error){throw new ConvexError(error instanceof Error?error.message:'Effect expectations could not be saved.');}
   const targets=new Set(plans.map(plan=>plan.outputClipId??plan.targetClipId));
@@ -42,9 +63,9 @@ export const request=internalMutation({args:{...runArgs,expectedRevision:v.numbe
   await validateTimeline(ctx,project,args.timeline);
   const saved=await ctx.db.query('assistantPlans').withIndex('by_project',q=>q.eq('projectId',args.projectId)).unique();
   if(!saved||saved.runId!==args.runId)throw new ConvexError('Save the effect expectations before reviewing.');
-  const recent=(await ctx.db.query('compositionReviews').withIndex('by_project',q=>q.eq('projectId',args.projectId)).order('desc').take(4)).filter(review=>review.runId===args.runId);
+  const recent=(await ctx.db.query('compositionReviews').withIndex('by_project',q=>q.eq('projectId',args.projectId)).order('desc').take(MAX_COMPOSITION_REVIEW_ATTEMPTS+1)).filter(review=>review.runId===args.runId);
   let completed:number;
-  try{completed=compositionReviewBudget(saved.reviews,recent.map(review=>review.status));}catch(error){throw new ConvexError(error instanceof Error?error.message:'Rendered review is unavailable.');}
+  try{completed=compositionReviewBudget(saved.reviews,recent.map(review=>({status:review.status,planIds:review.plans.map(plan=>plan.id),currentPlanIds:currentReviewPlanIds(review,args.timeline,saved.plans)})),args.planIds);}catch(error){throw new ConvexError(error instanceof Error?error.message:'Rendered review is unavailable.');}
   if(!args.planIds.length||args.planIds.length>2||new Set(args.planIds).size!==args.planIds.length)throw new ConvexError('Review one or two planned effects in a short window.');
   const plans=args.planIds.map(id=>saved.plans.find(plan=>plan.id===id));
   if(plans.some(plan=>!plan))throw new ConvexError('Save the effect expectations before reviewing.');
@@ -52,7 +73,7 @@ export const request=internalMutation({args:{...runArgs,expectedRevision:v.numbe
   try{resolved=effectReviewBindings(plans as EffectPlan[],args.timeline,args.bindings);}catch(error){throw new ConvexError(error instanceof Error?error.message:'Review output is unavailable.');}
   const bound=(plans as EffectPlan[]).map(plan=>({...plan,outputClipId:resolved.find(binding=>binding.planId===plan.id)!.clipId}));
   // A separate expectation is an initial review, not a retry requiring edits.
-  const alreadyReviewed=new Set(recent.filter(review=>review.status==='completed'&&equalTimelineValue(review.timeline,args.timeline)).flatMap(review=>review.plans.map(plan=>plan.id)));
+  const alreadyReviewed=new Set(recent.filter(review=>review.status==='completed').flatMap(review=>currentReviewPlanIds(review,args.timeline,saved.plans)));
   if(completed&&args.planIds.every(id=>alreadyReviewed.has(id)))throw new ConvexError('Make one targeted fix before reviewing again.');
   let start:number,end:number;
   try{({start,end}=compositionReviewWindow(bound,args.timeline.fps,Math.max(...args.timeline.clips.map(clip=>clip.start+clip.duration))));}catch(error){throw new ConvexError(error instanceof Error?error.message:'Rendered review window is unavailable.');}

@@ -5,7 +5,7 @@ import type { RemotionTextProps } from './remotion-text';
 import { EXPRESSIVE_TEXT_PRESETS, VFX_TEXT_PRESETS, type ExpressiveTextPreset } from './remotion-text';
 import { RemotionLyricText } from './remotion-lyric-text';
 import { RemotionExpressiveText } from './remotion-expressive-text';
-import { textAppearance } from './text-style';
+import { textAppearance, textTypographyStyle } from './text-style';
 
 const clamp = { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' } as const;
 /** No wall clock, effects, or CSS animation: the same frame always produces the same pixels. */
@@ -22,6 +22,7 @@ export function RemotionText(props: RemotionTextProps) {
   const slide = lastFrame === 0 ? 1 : interpolate(frame, [0, Math.max(1, Math.min(Math.round(fps * .4), lastFrame))], [0, 1], { ...clamp, easing: Easing.out(Easing.cubic) });
   const style: CSSProperties = {
     display: 'inline-block', fontSize, color, fontFamily, fontWeight, whiteSpace: 'pre-wrap',
+    ...textTypographyStyle(textStyle, resolution),
     ...(textStyle ? textAppearance({textStyle}, resolution) : {}),
     opacity: frame < 0 ? 0 : 1,
     ...(preset === 'slide-title' ? { opacity: frame < 0 ? 0 : slide, transform: `translateX(${(1 - slide) * -.65}em)` } : {}),

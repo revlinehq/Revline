@@ -32,7 +32,7 @@ export type MediaWorkItem = Infer<typeof workItem>;
 export const taskResult = v.object({review:v.optional(compositionReviewResult), analysis: v.optional(analysisValidator), frameInspection: v.optional(frameInspectionValidator), videoInspection: v.optional(videoInspectionValidator), audioAssetId: v.optional(v.id('assets')), waveform: v.optional(waveformValidator) });
 export type MediaTaskResult = Infer<typeof taskResult>;
 
-export async function enqueueMediaTask(ctx: MutationCtx, input: Pick<Doc<'mediaTasks'>, 'ownerId' | 'projectId' | 'kind'> & Partial<Pick<Doc<'mediaTasks'>, 'assetId' | 'renderJobId' | 'analysisRequestId' | 'sourceUrl' | 'frameRequest' | 'videoRequest' | 'reviewId' | 'requiredProcessorVersion'|'previewVersion'>>): Promise<Id<'mediaTasks'>> {
+export async function enqueueMediaTask(ctx: MutationCtx, input: Pick<Doc<'mediaTasks'>, 'ownerId' | 'projectId' | 'kind'> & Partial<Pick<Doc<'mediaTasks'>, 'assetId' | 'renderJobId' | 'analysisRequestId' | 'sourceUrl' | 'frameRequest' | 'videoRequest' | 'reviewId' | 'requiredProcessorVersion'|'previewVersion'>>, beforeEnqueue?:()=>Promise<void>): Promise<Id<'mediaTasks'>> {
   if(input.kind==='preview')input={...input,previewVersion:PREVIEW_VERSION,requiredProcessorVersion:Math.max(5,input.requiredProcessorVersion??0)};
   if(input.assetId&&input.kind==='preview'){const asset=await ctx.db.get(input.assetId);if(asset?.ownerId===input.ownerId&&asset.projectId===input.projectId&&hasPreview(asset)){const now=Date.now();return ctx.db.insert('mediaTasks',{...input,status:'completed',attempt:0,progress:100,createdAt:now,updatedAt:now});}}
   if (input.kind === 'transcribe') input = { ...input, requiredProcessorVersion: Math.max(3, input.requiredProcessorVersion ?? 0) };
@@ -73,6 +73,9 @@ export async function enqueueMediaTask(ctx: MutationCtx, input: Pick<Doc<'mediaT
       return reusable._id;
     }
   }
+  // Reused evidence and active tasks need no new provider capacity. Reserve
+  // only when a fresh task will actually be inserted, in this transaction.
+  await beforeEnqueue?.();
   const now = Date.now();
   const taskId = await ctx.db.insert('mediaTasks', { ...input, status: 'queued', claimable:false, attempt: 0, progress: 0, createdAt: now, updatedAt: now });
   const workflowId = await mediaWorkflow.start(ctx, internal.mediaTasks.process, { taskId }, { startAsync: true, onComplete: internal.mediaTasks.settle, context: { taskId } });

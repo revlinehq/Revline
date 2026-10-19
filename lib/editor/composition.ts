@@ -131,10 +131,10 @@ export function generateComposition(timeline: Timeline, assets: MediaAsset[], op
     const timing = `id="${id}" data-source-clip="${escapeHtml(clip.id)}" data-start="${start}" data-duration="${clip.duration}" data-end="${end}" data-track-index="${trackIndex}"`;
     if (clip.kind === 'caption' || clip.kind === 'graphic') {
       const style = textStyle(clip, resolution);
-      const attributes = `left:${style.x * 100}%;top:${style.y * 100}%;font-size:${style.fontSize}px;font-family:'${style.fontFamily}';font-weight:${style.fontWeight};color:${style.color};z-index:${zIndex};mix-blend-mode:${style.blendMode};transform:${style.transform}`;
+      const attributes = `left:${style.x * 100}%;top:${style.y * 100}%;font-size:${style.fontSize}px;font-family:'${style.fontFamily}';font-weight:${style.fontWeight};font-style:${style.fontStyle};letter-spacing:${style.letterSpacing}px;line-height:${style.lineHeight};text-align:${style.textAlign};color:${style.color};z-index:${zIndex};mix-blend-mode:${style.blendMode};transform:${style.transform}`;
       const appearance = clip.textStyle ? textAppearance(clip,resolution) : null;
       const decoration = appearance ? `;-webkit-text-stroke:${appearance.WebkitTextStroke};paint-order:stroke fill;text-shadow:${appearance.textShadow}` : '';
-      return `<div id="${id}" data-text-clip="${escapeHtml(clip.id)}" class="overlay ${clip.kind}" style="${attributes}"><span id="${id}-motion" class="text-motion"><span class="text-content" style="background:${style.background}${decoration}">${escapeHtml(style.text)}</span></span></div>`;
+      return `<div id="${id}" data-text-clip="${escapeHtml(clip.id)}" class="overlay ${clip.kind}" style="${attributes}"><span id="${id}-motion" class="text-motion"><span class="text-content" style="background:${style.background};padding:${style.paddingY}px ${style.paddingX}px;border-radius:${style.borderRadius}px${decoration}">${escapeHtml(style.text)}</span></span></div>`;
     }
     const asset = clip.assetId ? assetMap.get(clip.assetId) : undefined;
     const source = clip.assetId ? options.assetUrls?.[clip.assetId] ?? asset?.url : undefined;

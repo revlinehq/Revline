@@ -12,6 +12,8 @@ import { VISUAL_EFFECT_LIMITS } from '@/lib/editor/visual-effects';
 import { DEFAULT_TRANSFORM } from '@/lib/editor/types';
 import { BlendModeControls } from './blend-mode-controls';
 import { VisualFadeControls } from './visual-fade-controls';
+import { useState } from 'react';
+import { twoRowLayoutPatch, type TwoRowPosition } from '@/lib/editor/two-row-layout';
 import './footage-settings.css';
 
 export function FootageSelection({ clip, asset }: { clip: Clip; asset?: MediaAsset }) {
@@ -31,6 +33,12 @@ export function FootageSettings({ clip, audioClip, asset, aspectRatio, readOnly 
   const hasVolume = clip.kind === 'video' && (!clip.audioSeparated || !!audioClip);
   const hasSpeed = clip.kind === 'video' && !!onPlaybackRateChange;
   const blendMode = clip.blendMode ?? 'normal';
+  const [layoutError, setLayoutError] = useState<string | null>(null);
+  function placeInRow(row: TwoRowPosition) {
+    if (!asset || !aspectRatio) return;
+    try { const patch = twoRowLayoutPatch(clip, asset, aspectRatio, row); onChange(patch); setLayoutError(null); }
+    catch (error) { setLayoutError(error instanceof Error ? error.message : 'Could not apply the row layout.'); }
+  }
   return <div className="footage-settings" aria-label="Footage settings">
     <FootageSelection clip={clip} asset={asset}/>
     <section className="footage-settings-section" aria-label="Framing">
@@ -39,6 +47,12 @@ export function FootageSettings({ clip, audioClip, asset, aspectRatio, readOnly 
         <button type="button" disabled={cropping} aria-pressed={clip.fit !== 'contain'} title="Fill the frame; some edges may be cropped." onClick={() => onChange({ fit: 'cover' })}>Fill frame</button>
         <button type="button" disabled={cropping} aria-pressed={clip.fit === 'contain'} title="Keep the entire clip visible inside the frame." onClick={() => onChange({ fit: 'contain' })}>Show full clip</button>
       </div>
+      <div className="footage-section-heading"><h3>Two-row layout</h3></div>
+      <div className="footage-fit" role="group" aria-label="Two-row layout">
+        <button type="button" disabled={cropping || readOnly || !aspectRatio || !asset?.width || !asset.height} onClick={() => placeInRow('top')}>Top row</button>
+        <button type="button" disabled={cropping || readOnly || !aspectRatio || !asset?.width || !asset.height} onClick={() => placeInRow('bottom')}>Bottom row</button>
+      </div>
+      {layoutError && <p className="footage-crop-note" role="alert">{layoutError}</p>}
       {cropping && <p className="footage-crop-note">Drag the edges in the preview. Escape cancels.</p>}
     </section>
     {process.env.NODE_ENV !== 'production' && asset?.width && asset.height && aspectRatio ? <SmoothZoomControls clip={clip} asset={asset} aspectRatio={aspectRatio} fps={fps} disabled={cropping || readOnly} onChange={onChange} onPreview={onPreview}/> : null}

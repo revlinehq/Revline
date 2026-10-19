@@ -1,4 +1,5 @@
-import {hasUnresolvedToolFailures,hasOnlyUnresolvedInspectionFailures} from '../ai/tool-failures';
+import {completionRepairFeedback,hasFailedRenderChecks,hasUnresolvedToolFailures,hasOnlyUnresolvedInspectionFailures} from '../ai/tool-failures';
+import type { EffectPlan } from '../ai/edit-plan';
 import { expect, test } from 'vitest';
 import { captionClipsFromTranscript, captionsCoverTranscript } from './transcript-captions';
 import { validateRemotionTextTemplate } from './remotion-text';
@@ -78,4 +79,128 @@ test('a failed broad inspection with successful smaller checks remains an incomp
   expect(hasUnresolvedToolFailures(steps)).toBe(true);
   expect(hasOnlyUnresolvedInspectionFailures(steps)).toBe(true);
   expect(hasOnlyUnresolvedInspectionFailures([...steps,{content:[{type:'tool-error',toolName:'trim',error:'Source trim failed'}]}])).toBe(false);
+});
+
+const reviewPlan: EffectPlan = {
+  id:'outline',kind:'text',effect:'stroke',targetClipId:'caption',purpose:'Keep the caption readable',strength:'Black outline',expectation:'The caption has a visible black outline',start:0,duration:1,
+  anchor:{kind:'requested-time',time:0,description:'Requested caption'},checks:{textSafe:true},
+};
+const reviewContext={plans:[reviewPlan],revision:2};
+const renderedReview=(output:Record<string,unknown>={},planIds=['outline'])=>({content:[{
+  type:'tool-result',toolName:'previewRender',input:{planIds},output:{reviewed:true,stale:false,revision:2,currentRevision:2,sampleTimes:[0,.5,1],observations:planIds.map(planId=>({planId,verdict:'pass',evidence:'The requested outline is visible.'})),checks:planIds.map(planId=>({planId,timingPass:true,pixelPass:null,textSafe:true,returnPass:null})),...output},
+}]});
+
+test('ordinary saved trims and read-only inspections do not acquire an unrequested render requirement',()=>{
+  const steps=[{content:[{type:'tool-result',toolName:'trim',output:{saved:true,revision:2,changedClips:[clip]}}]},{content:[{type:'tool-result',toolName:'inspectFrames',output:{success:true}}]}];
+  expect(hasFailedRenderChecks(steps)).toBe(false);
+  expect(completionRepairFeedback(steps,'stop')).toBeUndefined();
+});
+
+test('persisted effect expectations require a real completed review before finishing',()=>{
+  expect(hasFailedRenderChecks([],reviewContext)).toBe(true);
+  expect(completionRepairFeedback([],'stop',reviewContext)).toContain('outline');
+  expect(hasFailedRenderChecks([renderedReview()],reviewContext)).toBe(false);
+  expect(completionRepairFeedback([renderedReview()],'stop',reviewContext)).toBeUndefined();
+});
+
+test.each(['fail','unverifiable'])('a %s rendered observation remains unfinished even when measured checks pass',verdict=>{
+  const steps=[renderedReview({observations:[{planId:'outline',verdict,evidence:'The outline could not be confirmed.'}]})];
+  expect(hasFailedRenderChecks(steps,reviewContext)).toBe(true);
+  expect(completionRepairFeedback(steps,'stop',reviewContext)).toContain(verdict);
+});
+
+test.each(['timingPass','pixelPass','textSafe','returnPass'])('an explicit failed %s cannot be hidden by a passing rendered observation',field=>{
+  const steps=[renderedReview({checks:[{planId:'outline',timingPass:true,pixelPass:null,textSafe:true,returnPass:null,[field]:false}]})];
+  expect(hasFailedRenderChecks(steps,reviewContext)).toBe(true);
+  expect(completionRepairFeedback(steps,'stop',reviewContext)).toContain(field);
+});
+
+test.each([
+  {checks:[]},
+  {observations:[]},
+  {checks:[{planId:'other',timingPass:true,textSafe:true}]},
+  {observations:[{planId:'other',verdict:'pass'}]},
+  {checks:[{planId:'outline',timingPass:true,textSafe:true},{planId:'outline',timingPass:true,textSafe:true}]},
+  {observations:[{planId:'outline',verdict:'pass'},{planId:'outline',verdict:'pass'}]},
+  {sampleTimes:[]},
+  {sampleTimes:[Number.NaN]},
+])('incomplete or mismatched rendered evidence cannot complete a planned expectation: %j',output=>{
+  expect(hasFailedRenderChecks([renderedReview(output)],reviewContext)).toBe(true);
+});
+
+test.each([
+  {textSafe:true},
+  {minPixelChange:.1},
+  {maxPixelChange:.5},
+  {returnBy:1},
+])('a specifically requested measured check needs a positive result: %j',checks=>{
+  const context={plans:[{...reviewPlan,checks}],revision:2};
+  const emptyCheck={planId:'outline',timingPass:true,pixelPass:null,textSafe:null,returnPass:null};
+  expect(hasFailedRenderChecks([renderedReview({checks:[emptyCheck]})],context)).toBe(true);
+  expect(hasFailedRenderChecks([renderedReview({checks:[{...emptyCheck,pixelPass:true,textSafe:true,returnPass:true}]})],context)).toBe(false);
+});
+
+test.each([
+  {reviewed:false},
+  {stale:true},
+  {revision:1},
+  {currentRevision:3},
+])('a stale or unfinished review does not certify the final draft: %j',output=>{
+  expect(hasFailedRenderChecks([renderedReview(output)],reviewContext)).toBe(true);
+});
+
+test('each planned effect needs its own current review, including plans restored from a continuation',()=>{
+  const second={...reviewPlan,id:'shadow',effect:'shadow'};
+  const context={plans:[reviewPlan,second],revision:2};
+  expect(hasFailedRenderChecks([renderedReview()],context)).toBe(true);
+  expect(hasFailedRenderChecks([renderedReview(),renderedReview({},['shadow'])],context)).toBe(false);
+  expect(hasFailedRenderChecks([renderedReview({revision:1,currentRevision:1}),renderedReview({},['shadow'])],context)).toBe(true);
+});
+
+test('a corrected current review replaces a failure, but an invalid later review cannot retain an earlier pass',()=>{
+  const failure=renderedReview({observations:[{planId:'outline',verdict:'unverifiable'}]});
+  expect(hasFailedRenderChecks([failure,renderedReview()],reviewContext)).toBe(false);
+  expect(completionRepairFeedback([failure,renderedReview()],'stop',reviewContext)).toBeUndefined();
+  expect(hasFailedRenderChecks([renderedReview(),failure],reviewContext)).toBe(true);
+  expect(hasFailedRenderChecks([renderedReview(),renderedReview({stale:true})],reviewContext)).toBe(true);
+});
+
+test('plan receipts, matched tool-call inputs and JSON tool outputs use the same completion gate',()=>{
+  const planned={content:[{type:'tool-result',toolName:'planEffects',output:{planned:true,revision:2,plans:[reviewPlan]}}]};
+  const completed=renderedReview().content[0];
+  const steps=[planned,{content:[{type:'tool-call',toolName:'previewRender',toolCallId:'review',input:completed.input},{type:'tool-result',toolName:'previewRender',toolCallId:'review',output:{type:'json',value:completed.output}}]}];
+  expect(hasFailedRenderChecks([planned])).toBe(true);
+  expect(hasFailedRenderChecks(steps)).toBe(false);
+  expect(hasFailedRenderChecks([...steps,{content:[{type:'tool-result',toolName:'inspectTimeline',output:{revision:3}}]}])).toBe(true);
+});
+
+test('changing an expectation invalidates its earlier receipt while attaching an output preserves it',()=>{
+  const planned=(plan:EffectPlan)=>({content:[{type:'tool-result',toolName:'planEffects',output:{planned:true,revision:2,plans:[plan]}}]});
+  expect(hasFailedRenderChecks([planned(reviewPlan),renderedReview(),planned({...reviewPlan,expectation:'The outline is twice as thick'})])).toBe(true);
+  expect(hasFailedRenderChecks([planned(reviewPlan),renderedReview(),planned({...reviewPlan,outputClipId:'caption'})])).toBe(false);
+});
+
+test('later staged mutations invalidate an earlier review even without a saved revision change',()=>{
+  const mutation={content:[{type:'tool-result',toolName:'setTextStyle',output:{staged:true,revision:2,changedClips:[{id:'caption'}]}}]};
+  const unchanged={content:[{type:'tool-result',toolName:'setTextStyle',output:{staged:true,unchanged:true,revision:2,changedClips:[{id:'caption'}]}}]};
+  expect(hasFailedRenderChecks([renderedReview(),mutation],reviewContext)).toBe(true);
+  expect(completionRepairFeedback([renderedReview(),mutation],'stop',reviewContext)).toContain('staged timeline changed');
+  expect(hasFailedRenderChecks([renderedReview(),mutation,renderedReview()],reviewContext)).toBe(false);
+  expect(hasFailedRenderChecks([renderedReview(),unchanged],reviewContext)).toBe(false);
+  const result={...renderedReview().content[0],toolCallId:'in-flight'};
+  const inFlight={content:[{type:'tool-call',toolName:'previewRender',toolCallId:'in-flight',input:result.input}]};
+  expect(hasFailedRenderChecks([inFlight,mutation,{content:[result]}],reviewContext)).toBe(true);
+});
+
+test('only backend-revalidated current-scope receipts survive unrelated changes and continuation',()=>{
+  const mutation={content:[{type:'tool-result',toolName:'trim',output:{staged:true,revision:2,changedClips:[{id:'other'}]}}]};
+  const completed=renderedReview().content[0].output;
+  const context={...reviewContext,validReviews:[{planIds:['outline'],output:completed}]};
+  expect(hasFailedRenderChecks([renderedReview(),mutation],reviewContext)).toBe(true);
+  expect(hasFailedRenderChecks([renderedReview(),mutation],context)).toBe(false);
+  expect(hasFailedRenderChecks([],context)).toBe(false);
+  expect(completionRepairFeedback([],'stop',context)).toBeUndefined();
+  expect(hasFailedRenderChecks([renderedReview()],{...context,validReviews:[{planIds:['outline'],output:{...completed,observations:[{planId:'outline',verdict:'unverifiable'}]}}]})).toBe(true);
+  expect(hasFailedRenderChecks([],{...context,validReviews:[{planIds:['outline'],output:{...completed,checks:[]}}]})).toBe(true);
+  expect(hasFailedRenderChecks([],{...context,validReviews:[{planIds:['outline'],output:{...completed,revision:1,currentRevision:1}}]})).toBe(true);
 });

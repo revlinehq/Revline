@@ -155,6 +155,55 @@ test('finishing footage analysis keeps tracks locked through planning until the 
   expect((await x.owner.query(api.assistant.status,{projectId:x.projectId})).workflowActive).toBe(false);
 });
 
+test('analysis capacity survives clearing completed requests and continuing the original run',async()=>{
+  const x=await setup();workflowTest.register(x.t);
+  const assetId=await x.t.run(ctx=>ctx.db.insert('assets',{ownerId:'owner',projectId:x.projectId,kind:'video',fileName:'Source.mp4',contentType:'video/mp4',size:1,duration:10,createdAt:Date.now()}));
+  const request=(index:number)=>x.t.mutation(internal.assistant.requestAnalysis,{...x.run,assetId,mode:'frames',frameRequest:{start:0,end:1,question:`Inspect distinct detail ${index}`}});
+  for(let index=0;index<15;index++){
+    const requestId=await request(index);
+    await x.t.run(async ctx=>{const row=await ctx.db.get(requestId);await ctx.db.patch(row!.taskId!,{status:'completed'});await ctx.db.patch(requestId,{status:'completed'});});
+    await x.t.mutation(internal.assistant.clearAnalysis,{...x.run,requestId});
+  }
+  expect(await x.t.run(ctx=>ctx.db.query('analysisRequests').withIndex('by_projectId_runId',q=>q.eq('projectId',x.projectId).eq('aiRunId',x.run.runId)).collect())).toEqual([]);
+  // Durable segments keep this exact run ID and may update other run state.
+  await x.t.run(ctx=>writeProject(ctx,x.projectId,{aiEditing:true}));
+  await expect(request(15)).rejects.toThrow('Too many analysis requests');
+  expect((await x.read()).aiAnalysisUsage).toEqual({runId:'run',enqueued:15});
+  expect(await x.t.run(ctx=>ctx.db.query('mediaTasks').withIndex('by_asset_kind',q=>q.eq('assetId',assetId).eq('kind','frames')).collect())).toHaveLength(15);
+  vi.stubEnv('OPENAI_API_KEY','fixture-only');
+  await x.t.mutation(internal.assistant.finish,x.run);
+  await x.owner.mutation(api.assistant.send,{projectId:x.projectId,prompt:'Inspect the next detail'});
+  const next=await x.read();expect(next.aiRunId).not.toBe('run');expect(next.aiAnalysisUsage).toEqual({runId:next.aiRunId,enqueued:0});
+  await x.t.mutation(internal.assistant.requestAnalysis,{...x.run,runId:next.aiRunId!,assetId,mode:'frames',frameRequest:{start:0,end:1,question:'New run detail'}});
+  expect((await x.read()).aiAnalysisUsage).toEqual({runId:next.aiRunId,enqueued:1});
+});
+
+test('saved analysis and active task reuse remain available when the original run reaches capacity',async()=>{
+  const x=await setup();workflowTest.register(x.t);
+  const assetId=await x.t.run(ctx=>ctx.db.insert('assets',{ownerId:'owner',projectId:x.projectId,kind:'video',fileName:'Source.mp4',contentType:'video/mp4',size:1,duration:10,createdAt:Date.now()}));
+  const frameRequest={start:0,end:1,question:'Cached source detail'};
+  const cachedTask=await x.t.run(async ctx=>{
+    await writeProject(ctx,x.projectId,{aiAnalysisUsage:{runId:'run',enqueued:15}});
+    return ctx.db.insert('mediaTasks',{ownerId:'owner',projectId:x.projectId,assetId,kind:'frames',frameRequest,requiredProcessorVersion:4,status:'completed',attempt:1,progress:100,createdAt:Date.now(),updatedAt:Date.now(),frameInspection:{...frameRequest,geometry:{sourceWidth:1920,sourceHeight:1080,decodedWidth:960,decodedHeight:540},sourceFps:30,sampleInterval:1,consecutive:false,summary:'Saved observation',uncertainty:'',frames:[{frameIndex:0,time:0,observation:'Visible detail'}],events:[]}});
+  });
+  const cachedRequest=await x.t.mutation(internal.assistant.requestAnalysis,{...x.run,assetId,mode:'frames',frameRequest});
+  expect(await x.t.run(ctx=>ctx.db.get(cachedRequest))).toMatchObject({status:'completed',taskId:cachedTask});
+  await x.t.mutation(internal.assistant.clearAnalysis,{...x.run,requestId:cachedRequest});
+  const activeTask=await x.t.run(ctx=>ctx.db.insert('mediaTasks',{ownerId:'owner',projectId:x.projectId,assetId,kind:'transcribe',status:'queued',attempt:0,progress:0,createdAt:Date.now(),updatedAt:Date.now()}));
+  const activeRequest=await x.t.mutation(internal.assistant.requestAnalysis,{...x.run,assetId,mode:'transcribe'});
+  expect(await x.t.run(ctx=>ctx.db.get(activeRequest))).toMatchObject({taskId:activeTask});
+  const pendingFrames={...frameRequest,question:'Already queued detail'};
+  const activeFramesTask=await x.t.run(ctx=>ctx.db.insert('mediaTasks',{ownerId:'owner',projectId:x.projectId,assetId,kind:'frames',frameRequest:pendingFrames,requiredProcessorVersion:4,status:'queued',attempt:0,progress:0,createdAt:Date.now(),updatedAt:Date.now()}));
+  const frameArgs={...x.run,assetId,mode:'frames' as const,frameRequest:pendingFrames};
+  const activeFramesRequest=await x.t.mutation(internal.assistant.requestAnalysis,frameArgs);
+  expect(await x.t.run(ctx=>ctx.db.get(activeFramesRequest))).toMatchObject({taskId:activeFramesTask});
+  expect(await x.t.mutation(internal.assistant.requestAnalysis,frameArgs)).toBe(activeFramesRequest);
+  expect((await x.read()).aiAnalysisUsage).toEqual({runId:'run',enqueued:15});
+  const before=await x.t.run(ctx=>ctx.db.query('analysisRequests').withIndex('by_projectId_runId',q=>q.eq('projectId',x.projectId).eq('aiRunId','run')).collect());
+  await expect(x.t.mutation(internal.assistant.requestAnalysis,{...x.run,assetId,mode:'frames',frameRequest:{...frameRequest,question:'Uncached detail'}})).rejects.toThrow('Too many analysis requests');
+  expect(await x.t.run(ctx=>ctx.db.query('analysisRequests').withIndex('by_projectId_runId',q=>q.eq('projectId',x.projectId).eq('aiRunId','run')).collect())).toEqual(before);
+});
+
 test('answering a follow-up question preserves the unfinished edit for a later continue button',async()=>{
   const x=await setup();
   const recovery={requests:['Trim pauses and add subtitles'],runId:'previous-run',revision:0,savedEdits:1,status:'failed' as const,reason:'Time limit',updatedAt:Date.now()};

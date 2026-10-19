@@ -2,7 +2,7 @@ import { textGradientFill } from './text-gradient';
 import { Fragment, type CSSProperties } from 'react';
 import { Easing, interpolate, spring } from 'remotion';
 import type { RemotionTextProps } from './remotion-text';
-import { textAppearance } from './text-style';
+import { textAppearance, textTypographyStyle } from './text-style';
 
 const clamp={extrapolateLeft:'clamp',extrapolateRight:'clamp'} as const;
 const progress=(frame:number,from:number,to:number)=>interpolate(frame,[from,Math.max(from+.001,to)],[0,1],clamp);
@@ -63,6 +63,6 @@ function KineticStack(props:RemotionTextProps){
 
 /** Shared by the canvas composition and exact-frame export; no independent clock. */
 export function RemotionLyricText(props:RemotionTextProps){
-  const style:CSSProperties={display:'inline-block',fontSize:props.fontSize,color:props.color,fontWeight:props.fontWeight??900,fontFamily:props.fontFamily,letterSpacing:props.textStyle?'inherit':'-.045em',lineHeight:props.textStyle?'inherit':1.05,whiteSpace:'pre-wrap',textTransform:props.textStyle?'none':'uppercase'};
+  const style:CSSProperties={display:'inline-block',fontSize:props.fontSize,color:props.color,fontWeight:props.fontWeight??900,fontFamily:props.fontFamily,letterSpacing:props.textStyle?'inherit':'-.045em',lineHeight:props.textStyle?'inherit':1.05,whiteSpace:'pre-wrap',textTransform:props.textStyle?'none':'uppercase',...textTypographyStyle(props.textStyle,props.resolution)};
   return <span data-remotion-text={props.preset} data-frame={props.frame} style={style}>{props.preset==='neon-echo'?<NeonEcho {...props}/>:props.preset==='lyric-slam'?<LyricSlam {...props}/>:<KineticStack {...props}/>}</span>;
 }

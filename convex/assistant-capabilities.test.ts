@@ -17,6 +17,7 @@ import { addEffectClip, patchClip } from '../lib/editor/operations';
 import { EFFECT_CATALOG,TIMED_EFFECT_PRESETS } from '../lib/editor/clip-effects';
 import { editorCapabilities } from '../lib/ai/editor-capabilities';
 import { resolvedTextAppearance } from '../lib/editor/text-style';
+import type { EffectPlan } from '../lib/ai/edit-plan';
 import { AUDIO_ROLES,audioSettings,audioVolumeEnvelope,audioFadeGain,audioFadeAttributes } from '../lib/editor/audio-settings';
 import { TEXT_ANIMATION_PRESETS } from '../lib/editor/text-effects';
 import { TEXT_FONTS } from '../lib/editor/text-fonts';
@@ -75,12 +76,13 @@ async function run(plan?:(tools:Record<string,Tool>)=>Promise<void>,seed:Timelin
   const backend=options.backend??(realBackend?await memoryBackend(seed,priorHistory):undefined);
   const fresh=options.backend?await options.backend.owner.query(api.projects.get,{projectId:options.backend.projectId}):undefined;
   let timeline=structuredClone(fresh?.timeline??backend?.seed??seed),revision=fresh?.revision??backend?.revision??0,error:string|undefined;
-  const calls:string[]=[];let validations=0;
+  const calls:string[]=[];let validations=0;let plannedEffects:EffectPlan[]=[];
   const project=()=>({_id:'project',timeline,revision,aspectRatio:'landscape'});
   const ctx={
     runQuery:async(reference:Parameters<typeof getFunctionName>[0],args:{timeline?:Timeline;expectedRevision?:number})=>{
       const name=getFunctionName(reference);calls.push(name);
       if(name==='compositionReview:readPlan')return [];
+      if(name==='compositionReview:completionState')return {plans:plannedEffects,validReviews:[]};
       if(backend){
       if(name==='assistant:currentPrompt')return 'Synthetic editing request';
         if(name==='assistant:getRun')return backend.t.query(internal.assistant.getRun,backend.runArgs);
@@ -95,7 +97,7 @@ async function run(plan?:(tools:Record<string,Tool>)=>Promise<void>,seed:Timelin
     },
     runMutation:async(reference:Parameters<typeof getFunctionName>[0],args:{timeline?:Timeline;expectedRevision?:number;error?:string;publication?:Pick<TimelinePublicationReceipt,'threadId'|'promptMessageId'>|Extract<TimelinePublicationReceipt,{status:'failed'|'aborted'}>})=>{
       const name=getFunctionName(reference);calls.push(name);
-      if(name==='compositionReview:savePlan')return null;
+      if(name==='compositionReview:savePlan'){plannedEffects=(args as unknown as {plans:EffectPlan[]}).plans;return null;}
       if(name==='assistant:previewDraft'&&options.rejectValidationAt?.includes(++validations))throw new Error('Temporary draft validation unavailable.');
       if(name==='assistant:previewDraft')return backend?backend.t.mutation(internal.assistant.previewDraft,{...backend.runArgs,timeline:args.timeline!,expectedRevision:args.expectedRevision!}):null;
       if(name==='assistant:beginEditing')return backend?backend.t.mutation(internal.assistant.beginEditing,backend.runArgs):null;
@@ -108,7 +110,15 @@ async function run(plan?:(tools:Record<string,Tool>)=>Promise<void>,seed:Timelin
       throw new Error('Unexpected mutation '+name);
     },
   };
-  sdk.plan=async()=>{if(plan)await plan(sdk.options!.tools)};
+  sdk.plan=async()=>{
+    if(plan)await plan(sdk.options!.tools);
+    // These operation-parity tests mock the renderer, just as they mock the
+    // model. Explicit failure/recovery fixtures supply their own receipts.
+    if(!sdk.steps.length&&plannedEffects.length)sdk.steps=Array.from({length:Math.ceil(plannedEffects.length/2)},(_,index)=>{
+      const ids=plannedEffects.slice(index*2,index*2+2).map(plan=>plan.id);
+      return {content:[{type:'tool-call',toolName:'previewRender',toolCallId:`fixture-review-${index}`,input:{planIds:ids}},{type:'tool-result',toolName:'previewRender',toolCallId:`fixture-review-${index}`,output:{reviewed:true,stale:false,revision,currentRevision:revision,sampleTimes:[0],observations:ids.map(planId=>({planId,verdict:'pass',evidence:'Synthetic renderer fixture for operation-parity tests.'})),checks:ids.map(planId=>({planId,timingPass:true,pixelPass:true,textSafe:true,returnPass:true}))}}]};
+    });
+  };
   const handler=(respond as unknown as {_handler:(ctx:unknown,args:unknown)=>Promise<unknown>})._handler;
   const outcome=await handler(ctx,{durable:true,...options.continuation?{continuation:options.continuation}:{},projectId:backend?.projectId??'project',ownerId:'owner',runId:'run',threadId:backend?.threadId??'thread',promptMessageId:backend?.promptMessageId??'greeting-message',playhead:1});
   const history=backend?(await backend.owner.query(api.projects.get,{projectId:backend.projectId})).history??[]:[];
@@ -233,7 +243,7 @@ test('a failed visual check is corrected before completion without redoing the s
     pass++;
     if(pass===1)await execute(tools,'styleTextClip',{clipId:'title',fontSize:80});
     else expect(sdk.streams.at(-1)?.instructions).toContain('The requested outline is missing');
-    sdk.steps=[{content:[{type:'tool-result',toolName:'previewRender',toolCallId:`review-${pass}`,output:{reviewed:true,stale:false,revision:1,currentRevision:1,observations:[{planId:'outline',verdict:pass===1?'fail':'pass',observation:pass===1?'The requested outline is missing':'Requested outline is visible'}]}}]}];
+    sdk.steps=[{content:[{type:'tool-result',toolName:'previewRender',toolCallId:`review-${pass}`,output:{reviewed:true,stale:false,revision:1,currentRevision:1,sampleTimes:[0],checks:[{planId:'outline',timingPass:true}],observations:[{planId:'outline',verdict:pass===1?'fail':'pass',evidence:pass===1?'The requested outline is missing':'Requested outline is visible'}]}}]}];
   },initial,true);
   expect(pass).toBe(2);expect(result.error).toBeUndefined();
   expect(result.revision).toBe(1);expect(result.history).toEqual([result.backend!.seed]);
@@ -943,4 +953,28 @@ test('the durable workflow executes checkpointed actions serially and settles th
     expect(result.timeline?.clips.find(c=>c.id==='title')?.text).toBe('Finished after continuation');
     expect(result.history).toHaveLength(1);
   }finally{vi.useRealTimers();}
+});
+
+
+test('AI composes custom text settings without selecting a look and preserves words/timing',async()=>{
+  const result=await run(async tools=>{
+    await execute(tools,'styleTextClip',{clipId:'title',fontFamily:'fraunces',textStyle:{fontWeight:600,italic:true,letterSpacing:2,lineHeight:1.3,textAlign:'left',paddingX:24,paddingY:12,borderRadius:6}});
+    await execute(tools,'setTextStyle',{clipId:'title',letterSpacing:3,shadowBlur:14,shadowColor:'#112233'});
+  },initial,true);
+  expect(result.error).toBeUndefined();
+  const title=result.timeline.clips.find(c=>c.id==='title')!;
+  expect(title).toMatchObject({fontFamily:'fraunces',text:initial.clips[3].text,start:0,duration:2,textStyle:{fontWeight:600,italic:true,letterSpacing:3,lineHeight:1.3,textAlign:'left',paddingX:24,paddingY:12,borderRadius:6,shadowBlur:14,shadowColor:'#112233'}});
+  expect(result.calls).not.toContain('assistant:requestAnalysis');expect(result.calls).not.toContain('compositionReview:savePlan');
+  await assertUndo(result);
+});
+
+test('AI Two rows preset uses the same framing operation as the inspector without changing audio or timing',async()=>{
+  const seed:Timeline={...initial,tracks:{...initial.tracks!,visual:3},clips:initial.clips.map(clip=>clip.id==='to'?{...clip,kind:'video',assetId:'video',track:3,start:0,duration:3}:clip)};
+  const result=await run(async tools=>{
+    await execute(tools,'applyLayout',{layout:'two-rows',topClipIds:['from'],bottomClipIds:['to']});
+  },seed,true);
+  expect(result.error).toBeUndefined();
+  for(const [id,y]of [['from',.25],['to',.75]] as const){const clip=result.timeline.clips.find(c=>c.id===id)!;expect(clip).toMatchObject({fit:'contain',transform:{x:.5,y}});const before=result.backend!.seed.clips.find(c=>c.id===id)!;expect([clip.start,clip.duration,clip.sourceStart,clip.volume]).toEqual([before.start,before.duration,before.sourceStart,before.volume]);}
+  expect(result.timeline.clips.find(c=>c.id==='audio')).toEqual(result.backend!.seed.clips.find(c=>c.id==='audio'));
+  expect(result.calls).not.toContain('assistant:requestAnalysis');await assertUndo(result);
 });

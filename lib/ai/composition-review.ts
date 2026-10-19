@@ -1,18 +1,43 @@
 import { z } from 'zod';
 import type { EffectPlan } from './edit-plan';
+import { normalizeTimeline, trackOf, type Timeline } from '../editor/types';
+import { equalTimelineValue } from '../editor/timeline-equality';
 export const reviewObservations = z.object({
   observations:z.array(z.object({planId:z.string().max(80),verdict:z.enum(['pass','fail','unverifiable']),evidence:z.string().min(1).max(2000)})).min(1).max(2),
   uncertainty:z.string().max(2000),
 });
 export const reviewObservationsJsonSchema=z.toJSONSchema(reviewObservations);
-/** Failed infrastructure attempts do not consume the two visual judgments.
- * Bound all attempts as well so an unavailable renderer cannot create a loop. */
-export function compositionReviewBudget(attempts:number,statuses:readonly ('queued'|'completed'|'failed')[]){
-  if(attempts>=4)throw new Error('Rendered review reached its retry limit after infrastructure failures. Saved edits remain.');
-  if(statuses.includes('queued'))throw new Error('Finish the current rendered review before requesting another.');
-  const completed=statuses.filter(status=>status==='completed').length;
-  if(completed>=2)throw new Error('Review allows one initial check and one fix pass per run.');
-  return completed;
+/** Each of at most eight expectations gets one judgment and one fix pass.
+ * Keep infrastructure retries bounded separately from successful judgments. */
+export const MAX_COMPOSITION_REVIEW_ATTEMPTS = 18;
+export function compositionReviewBudget(attempts:number,reviews:readonly {status:'queued'|'completed'|'failed';planIds:readonly string[];currentPlanIds?:readonly string[]}[],planIds:readonly string[]){
+  if(attempts>=MAX_COMPOSITION_REVIEW_ATTEMPTS)throw new Error('Rendered review reached its retry limit. Saved edits remain.');
+  if(reviews.some(review=>review.status==='queued'))throw new Error('Finish the current rendered review before requesting another.');
+  if(planIds.some(id=>reviews.filter(review=>review.status==='completed'&&(review.currentPlanIds??review.planIds).includes(id)).length>=2))throw new Error('Each expectation allows one initial check and one targeted fix review.');
+  return reviews.filter(review=>review.status==='completed').length;
+}
+/** Review pixels depend on the visible window, including held transition
+ * sources, rather than unrelated audio, markers or clips elsewhere. */
+export function compositionReviewScope(timeline:Timeline,start:number,end:number) {
+  timeline=normalizeTimeline(timeline);
+  const visible=timeline.clips.filter(clip=>clip.kind!=='audio'&&clip.start<end&&clip.start+clip.duration>start);
+  const visibleIds=new Set(visible.map(clip=>clip.id));
+  const dependencies=new Set(visible.flatMap(clip=>clip.transition?[clip.transition.fromClipId,clip.transition.toClipId]:[]));
+  return {fps:timeline.fps,aspectRatio:timeline.aspectRatio,clips:timeline.clips.filter(clip=>clip.kind!=='audio'&&(visibleIds.has(clip.id)||dependencies.has(clip.id))).map(clip=>{
+    const {audio,audioFadeTiming,volume,linkedClipId,audioSeparated,...visual}=clip;
+    return {...visual,track:trackOf(clip)};
+  })};
+}
+function expectationIdentity(plan:EffectPlan) {
+  const {outputClipId,...goal}=plan,{time,description,...anchor}=plan.anchor;
+  const normalize=(value:unknown):unknown=>typeof value==='number'&&Number.isFinite(value)?Math.round(value*1e7)/1e7:Array.isArray(value)?value.map(normalize):value&&typeof value==='object'?Object.fromEntries(Object.entries(value).map(([key,item])=>[key,normalize(item)])):value;
+  return normalize({...goal,anchor});
+}
+/** Checkpoint publication changes the revision without changing the pixels.
+ * Reuse only exact current goals and the exact rendered visible snapshot. */
+export function currentReviewPlanIds(review:{timeline:Timeline;plans:readonly EffectPlan[];start:number;end:number},timeline:Timeline,plans:readonly EffectPlan[]) {
+  if(!Number.isFinite(review.start)||!Number.isFinite(review.end)||review.start<0||review.end<=review.start||Math.max(0,...timeline.clips.map(clip=>clip.start+clip.duration))<review.end-1e-7||!equalTimelineValue(compositionReviewScope(review.timeline,review.start,review.end),compositionReviewScope(timeline,review.start,review.end)))return [];
+  return review.plans.filter(previous=>{const current=plans.find(plan=>plan.id===previous.id);return current&&equalTimelineValue(expectationIdentity(previous),expectationIdentity(current));}).map(plan=>plan.id);
 }
 export function parseCompositionReview(text:string,plans:EffectPlan[]) {
   const result=reviewObservations.parse(JSON.parse(text));

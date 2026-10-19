@@ -2,7 +2,7 @@ import { textGradientFill } from './text-gradient';
 import { Fragment, type CSSProperties, type ReactNode } from 'react';
 import { Easing, interpolate } from 'remotion';
 import { EXPRESSIVE_TEXT_DEFAULTS, type ExpressiveTextPreset, type RemotionTextProps } from './remotion-text';
-import { textAppearance } from './text-style';
+import { textAppearance, textTypographyStyle } from './text-style';
 
 const clamp = { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' } as const;
 const bounded = (value: number) => Math.max(0, Math.min(1, value));
@@ -50,7 +50,7 @@ function CinematicFocus(props: RemotionTextProps) {
     const t = timing(props, props.frame, index, count, true);
     // Only this hidden resting word participates in layout. Tracking, blur and
     // transforms belong to its absolute copy, so every line break stays fixed.
-    return <span data-word-index={index} data-focus-word="" style={{ position: 'relative', display: 'inline-block', whiteSpace: 'nowrap', verticalAlign: 'baseline' }}><span aria-hidden="true" style={{ visibility: 'hidden' }}>{word}</span><span style={{ position: 'absolute', left: '50%', top: 0, whiteSpace: 'nowrap', ...textGradientFill(props.textGradient,props.gradientTime??props.frame/props.fps), opacity: t.progress, filter: `blur(${(1 - t.progress) * 22 * strength * props.fontSize / 70}px)`, transform: `translateX(-50%) translateY(${(1 - t.progress) * .17}em) scale(${1.16 - t.progress * .16})`, letterSpacing: `${(1 - t.progress) * .18 * strength - .045}em` }}>{word}</span></span>;
+    return <span data-word-index={index} data-focus-word="" style={{ position: 'relative', display: 'inline-block', whiteSpace: 'nowrap', verticalAlign: 'baseline' }}><span aria-hidden="true" style={{ visibility: 'hidden' }}>{word}</span><span style={{ position: 'absolute', left: '50%', top: 0, whiteSpace: 'nowrap', ...textGradientFill(props.textGradient,props.gradientTime??props.frame/props.fps), opacity: t.progress, filter: `blur(${(1 - t.progress) * 22 * strength * props.fontSize / 70}px)`, transform: `translateX(-50%) translateY(${(1 - t.progress) * .17}em) scale(${1.16 - t.progress * .16})`, letterSpacing: props.textStyle?.letterSpacing === undefined ? `${(1 - t.progress) * .18 * strength - .045}em` : `calc(${props.textStyle.letterSpacing * (props.resolution ?? 1080) / 1080}px + ${(1 - t.progress) * .18 * strength}em)` }}>{word}</span></span>;
   }}/>;
 }
 
@@ -88,6 +88,6 @@ function EchoTunnel(props:RemotionTextProps){
 
 /** These effects share the production preview/export clock and reserve resting text layout. */
 export function RemotionExpressiveText(props: RemotionTextProps & { preset: ExpressiveTextPreset }) {
-  const style: CSSProperties = { display: 'inline-block', maxWidth: '100%', fontSize: props.fontSize, color: props.color, fontFamily: props.fontFamily, fontWeight: props.fontWeight, whiteSpace: 'pre-wrap', letterSpacing: '-.045em', ...(props.textStyle ? textAppearance({ textStyle: props.textStyle }, props.resolution) : {}), opacity: props.frame < 0 ? 0 : 1 };
+  const style: CSSProperties = { display: 'inline-block', maxWidth: '100%', fontSize: props.fontSize, color: props.color, fontFamily: props.fontFamily, fontWeight: props.fontWeight, whiteSpace: 'pre-wrap', letterSpacing: '-.045em', ...textTypographyStyle(props.textStyle, props.resolution), ...(props.textStyle ? textAppearance({ textStyle: props.textStyle }, props.resolution) : {}), opacity: props.frame < 0 ? 0 : 1 };
   return <span data-remotion-text={props.preset} data-frame={props.frame} style={style} role="img" aria-label={props.text}><span aria-hidden="true">{props.preset === 'rgb-split' ? <ChromaticSplit {...props}/> : props.preset === 'type-trails' ? <OutlineTrails {...props}/> : props.preset === 'blur-focus' ? <CinematicFocus {...props}/> : props.preset === 'character-scramble' ? <CharacterScramble {...props}/> : props.preset==='spotlight-sweep'?<SpotlightSweep {...props}/>:props.preset==='ink-write'?<InkWrite {...props}/>:<EchoTunnel {...props}/>}</span></span>;
 }

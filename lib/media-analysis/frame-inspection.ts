@@ -15,6 +15,53 @@ export type FrameInspection = FrameInspectionInput & {
   events: (FrameSample & { description: string; confidence: 'low' | 'medium' | 'high' })[];
 };
 
+type CoverageSource = Pick<FrameInspectionInput,'start'|'end'> & {sourceFps:number;frames:readonly FrameSample[];events?:readonly (FrameSample&{confidence?:'low'|'medium'|'high'})[]};
+type RefinementWindow = {start:number;end:number;reason:'observed-event'|'largest-unsampled-gap'|'uncovered-window-edge';anchorFrameIndex?:number;anchorTime?:number};
+
+/** Derived metadata, including for saved evidence from older workers. Sampled
+ * endpoints describe observed instants, never continuous full-window coverage. */
+export function frameInspectionCoverage(source:CoverageSource) {
+  const {frames,sourceFps}=source;
+  if(!frames.length||!Number.isFinite(sourceFps)||sourceFps<=0||!Number.isFinite(source.start)||!Number.isFinite(source.end)||source.end<=source.start)throw new Error('Frame coverage needs decoded frames and a valid source window.');
+  const first=frames[0],last=frames[frames.length-1],frameSeconds=1/sourceFps;
+  const consecutive=frames.every((frame,index)=>index===0||frame.frameIndex===frames[index-1].frameIndex+1);
+  const gaps=frames.slice(1).map((frame,index)=>({before:frames[index],after:frame,seconds:frame.time-frames[index].time}));
+  const leadingGapSeconds=Math.max(0,first.time-source.start),trailingGapSeconds=Math.max(0,source.end-last.time);
+  const maxConsecutiveWindowSeconds=Math.min(MAX_FRAME_WINDOW,(MAX_INSPECTION_FRAMES-1)/sourceFps);
+  const width=Math.min(source.end-source.start,maxConsecutiveWindowSeconds),refinementWindows:RefinementWindow[]=[];
+  const suggest=(time:number,reason:RefinementWindow['reason'],anchor?:FrameSample)=>{
+    if(refinementWindows.length>=3||refinementWindows.some(window=>time>=window.start&&time<window.end))return;
+    const start=Math.max(source.start,Math.min(time-width/2,source.end-width)),end=Math.min(source.end,start+width);
+    refinementWindows.push({start,end,reason,...(anchor?{anchorFrameIndex:anchor.frameIndex,anchorTime:anchor.time}:{})});
+  };
+  const confidence={high:3,medium:2,low:1};
+  const events=[...(source.events??[])].filter(event=>frames.some(frame=>frame.frameIndex===event.frameIndex&&frame.time===event.time)).sort((a,b)=>(confidence[b.confidence??'low']-confidence[a.confidence??'low'])||a.time-b.time);
+  for(const event of events)suggest(event.time,'observed-event',event);
+  if(!refinementWindows.length){
+    const midpoint=(source.start+source.end)/2;
+    // FFprobe emits rounded microsecond PTS. Equivalent gaps should still use
+    // the midpoint tie-break rather than move the suggestion across the source.
+    const skipped=gaps.filter(gap=>gap.after.frameIndex>gap.before.frameIndex+1).sort((a,b)=>Math.abs(b.seconds-a.seconds)>2e-6?b.seconds-a.seconds:Math.abs((a.before.time+a.after.time)/2-midpoint)-Math.abs((b.before.time+b.after.time)/2-midpoint))[0];
+    if(skipped)suggest((skipped.before.time+skipped.after.time)/2,'largest-unsampled-gap');
+    else if(Math.max(leadingGapSeconds,trailingGapSeconds)>frameSeconds+1e-6){
+      const anchor=leadingGapSeconds>=trailingGapSeconds?first:last;
+      suggest(anchor.time,'uncovered-window-edge',anchor);
+    }
+  }
+  return {scope:'sampled-source-frames' as const,start:first.time,end:last.time,sampledFrameCount:frames.length,consecutive,maxGapSeconds:Math.max(0,...gaps.map(gap=>gap.seconds)),leadingGapSeconds,trailingGapSeconds,maxConsecutiveWindowSeconds,refinementWindows,note:'Sampled instants only. Suggested source windows are not proof that the whole requested window was inspected.'};
+}
+
+/** A dense verification receipt must not quietly pass on sparse cached images.
+ * Average FPS only bounds edge tolerance; VFR indices remain authoritative. */
+export function assertConsecutiveInspection(result:FrameInspection) {
+  const coverage=frameInspectionCoverage(result),tolerance=1/result.sourceFps+1e-6;
+  if(!result.consecutive||!coverage.consecutive||coverage.leadingGapSeconds>tolerance||coverage.trailingGapSeconds>tolerance){
+    const suggested=coverage.refinementWindows[0];
+    throw new Error(`Consecutive frame verification did not pass: ${!result.consecutive||!coverage.consecutive?'recorded source frames were skipped':'requested window edges were not covered by nearby sampled frames'}. Inspect a narrower source window${suggested?` such as ${JSON.stringify({start:suggested.start,end:suggested.end})}`:''}; sparse samples cannot verify an unsampled boundary.`);
+  }
+  return coverage;
+}
+
 /** Map only decoded evidence still present in this clip, without inventing an
  * event duration between sampled frames or treating source time as edit time. */
 export function frameEvidenceOnClip(result: FrameInspection, clip: Clip) {

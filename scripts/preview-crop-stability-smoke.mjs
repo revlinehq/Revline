@@ -1,13 +1,37 @@
 import assert from 'node:assert/strict';
-import { calculateVisualRect } from '../lib/editor/composition.ts';
+import { calculateVisualRect, generateComposition } from '../lib/editor/composition.ts';
+import { applyTwoRowLayout } from '../lib/editor/two-row-layout.ts';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
 const require=createRequire(process.cwd()+'/package.json');
 const puppeteer=(await import(pathToFileURL(require.resolve('puppeteer')).href)).default;
+
+if(process.env.REVLINE_TWO_ROW_ONLY==='1'){
+  const sharp=(await import('sharp')).default;
+  const assets=[{_id:'support',kind:'image',fileName:'support.svg',url:'http://fixture.local/support.svg',width:1920,height:1080},{_id:'narrator',kind:'image',fileName:'narrator.svg',url:'http://fixture.local/narrator.svg',width:1080,height:1920}];
+  const timeline=applyTwoRowLayout({aspectRatio:'vertical',fps:30,clips:assets.map((asset,index)=>({id:asset._id,assetId:asset._id,kind:'image',track:index+1,start:0,duration:2,sourceStart:0}))},assets,{topClipIds:['support'],bottomClipIds:['narrator']});
+  const browser=await puppeteer.launch({headless:true,args:['--no-sandbox','--disable-dev-shm-usage']});
+  try{
+    const page=await browser.newPage(),errors=[];
+    page.on('pageerror',error=>errors.push(String(error)));await page.setViewport({width:1080,height:1920});await page.setRequestInterception(true);
+    let composition='';
+    page.on('request',request=>{const path=new URL(request.url()).pathname;if(path==='/')void request.respond({status:200,contentType:'text/html',body:composition});else if(path.endsWith('.svg')){const source=assets.find(asset=>new URL(asset.url).pathname===path);void request.respond({status:200,contentType:'image/svg+xml',body:`<svg xmlns="http://www.w3.org/2000/svg" width="${source.width}" height="${source.height}"><rect width="100%" height="100%" fill="${source._id==='support'?'rgb(220,40,40)':'rgb(40,80,220)'}"/></svg>`});}else if(path.startsWith('/vendor/'))void request.respond({status:200,contentType:'application/javascript',body:readFileSync(join(process.cwd(),'public',path))});else void request.abort();});
+    for(const preview of [true,false]){
+      composition=generateComposition(timeline,assets,{preview,gsapUrl:'http://fixture.local/vendor/gsap.min.js'});
+      await page.goto('http://fixture.local/',{waitUntil:'networkidle0'});await page.waitForFunction(()=>[...document.images].every(image=>image.complete&&image.naturalWidth>0));
+      const bounds=await page.evaluate(()=>[...document.querySelectorAll('.source-window')].map(node=>{const r=node.getBoundingClientRect();return{left:r.left,top:r.top,width:r.width,height:r.height}}));
+      for(const [index,rect]of bounds.entries()){assert.ok(Math.abs(rect.left)<.01);assert.ok(Math.abs(rect.top-index*960)<.01);assert.ok(Math.abs(rect.width-1080)<.01);assert.ok(Math.abs(rect.height-960)<.01);}
+      const {data,info}=await sharp(await page.screenshot()).removeAlpha().raw().toBuffer({resolveWithObject:true});
+      for(const [y,color]of [[0,[220,40,40]],[959,[220,40,40]],[960,[40,80,220]],[1919,[40,80,220]]]){const offset=(y*info.width+540)*info.channels;assert.deepEqual([...data.subarray(offset,offset+3)],color,`Exact ${preview?'preview':'export'} row coverage at y=${y}`);}
+    }
+    assert.deepEqual(errors,[]);console.log('PASS: real preview and export composition paint exact undistorted top/bottom rows with no gap or overlap.');
+  }finally{await browser.close();}
+  process.exit(0);
+}
 
 const directory = mkdtempSync(join(tmpdir(), 'revline-live-effects-'));
 const fixture = join(directory, 'footage.mp4');

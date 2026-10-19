@@ -100,7 +100,7 @@ async function beginRequest(ctx:MutationCtx,project:Doc<'projects'>,prompt:strin
   const recovery = project.aiRecovery ?? (project.aiError ? assistantRecovery(project, 'failed', project.aiError) : undefined);
   const runId = `${Date.now()}-${Math.random()}`;
   await clearLivePreview(ctx,project._id);
-  await writeProject(ctx,project._id, { threadId, aiQueuePaused:false, aiRunning: true, aiEditing: false, aiError: undefined, aiRunId: runId, aiUndoRecorded: false, aiCheckpointRevision: undefined, aiRequest:{prompt,messageId,startedRevision:project.revision??0}, aiRecovery:recovery });
+  await writeProject(ctx,project._id, { threadId, aiQueuePaused:false, aiRunning: true, aiEditing: false, aiError: undefined, aiRunId: runId, aiAnalysisUsage:{runId,enqueued:0}, aiUndoRecorded: false, aiCheckpointRevision: undefined, aiRequest:{prompt,messageId,startedRevision:project.revision??0}, aiRecovery:recovery });
   const workflowId=await mediaWorkflow.start(ctx, internal.assistantWorkflow.run, { projectId: project._id, ownerId, runId, threadId, promptMessageId: messageId, pinnedModel,...(request.attachedAssetIds?{attachedAssetIds:request.attachedAssetIds}:{}), ...(recovery?{recovery}:{}), ...(request.selectedClipId ? { selectedClipId: request.selectedClipId } : {}), ...(request.selectedClipIds ? { selectedClipIds: request.selectedClipIds } : {}), ...(request.playhead !== undefined ? { playhead: request.playhead } : {}) },{startAsync:true,onComplete:internal.assistantWorkflow.settle,context:{projectId:project._id,ownerId,runId}});
   await writeProject(ctx,project._id,{aiWorkflowId:workflowId}); return null;
 }
@@ -264,9 +264,14 @@ export const requestAnalysis = internalMutation({ args: { ...runArgs, assetId: v
     });
     if(repeated)return repeated._id;
   }
-  if (requests.length >= 15) throw new ConvexError("Too many analysis requests in one AI run");
   const requestId = await ctx.db.insert("analysisRequests", { ownerId: args.ownerId, projectId: project._id, assetId: asset._id, aiRunId: args.runId, mode: args.mode, ...(args.frameRequest ? { frameRequest: args.frameRequest } : {}), ...(args.videoRequest ? { videoRequest: args.videoRequest } : {}), status: "pending", createdAt: Date.now(), expiresAt: Date.now() + 240_000 });
-  const taskId = await enqueueMediaTask(ctx, { ownerId: args.ownerId, projectId: project._id, assetId: asset._id, kind: args.mode, analysisRequestId: requestId, ...(args.frameRequest ? { frameRequest: args.frameRequest } : {}), ...(args.videoRequest ? { videoRequest: args.videoRequest } : {}) });
+  const taskId = await enqueueMediaTask(ctx, { ownerId: args.ownerId, projectId: project._id, assetId: asset._id, kind: args.mode, analysisRequestId: requestId, ...(args.frameRequest ? { frameRequest: args.frameRequest } : {}), ...(args.videoRequest ? { videoRequest: args.videoRequest } : {}) },async()=>{
+    // Rows are deleted when callers finish, but the original run's capacity
+    // must survive that cleanup and every durable continuation segment.
+    const enqueued=project.aiAnalysisUsage?.runId===args.runId?project.aiAnalysisUsage.enqueued:requests.length;
+    if(enqueued>=15)throw new ConvexError('Too many analysis requests in one AI run');
+    await writeProject(ctx,project._id,{aiAnalysisUsage:{runId:args.runId,enqueued:enqueued+1}});
+  });
   await ctx.db.patch(requestId, { taskId });
   return requestId;
 }});

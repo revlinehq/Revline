@@ -20,7 +20,7 @@ export const ditherValidator = v.object({ enabled: v.boolean(), amount: v.number
 export const glitchValidator = v.object({ enabled: v.boolean(), intensity: v.number(), blockSize: v.number(), rgbSplit: v.number() });
 export const textTemplateValidator = v.object({ preset: v.union(v.literal('word-reveal'), v.literal('word-pop'), v.literal('slide-title'), v.literal('karaoke'), v.literal('neon-echo'), v.literal('lyric-slam'), v.literal('kinetic-stack'), v.literal('rgb-split'), v.literal('type-trails'), v.literal('blur-focus'), v.literal('character-scramble'), v.literal('spotlight-sweep'), v.literal('ink-write'), v.literal('tunnel-zoom')), highlightColor: v.optional(v.string()), strength:v.optional(v.number()), revealDuration:v.optional(v.number()), stagger:v.optional(v.number()), duration: v.optional(v.number()), offset: v.optional(v.number()), wordTimings:v.optional(v.array(v.object({start:v.number(),end:v.number()}))) });
 export const textGradientValidator = v.object({colors:v.array(v.string()),angle:v.number(),animation:v.optional(v.object({duration:v.number(),direction:v.union(v.literal('forward'),v.literal('reverse')),loop:v.boolean()})),offset:v.optional(v.number())});
-export const textStyleValidator = v.object({strokeWidth:v.number(),strokeColor:v.string(),shadowBlur:v.number(),shadowX:v.number(),shadowY:v.number(),shadowColor:v.string(),glowBlur:v.number(),glowColor:v.string()});
+export const textStyleValidator = v.object({strokeWidth:v.number(),strokeColor:v.string(),shadowBlur:v.number(),shadowX:v.number(),shadowY:v.number(),shadowColor:v.string(),glowBlur:v.number(),glowColor:v.string(),fontWeight:v.optional(v.number()),italic:v.optional(v.boolean()),letterSpacing:v.optional(v.number()),lineHeight:v.optional(v.number()),textAlign:v.optional(v.union(v.literal('left'),v.literal('center'),v.literal('right'))),paddingX:v.optional(v.number()),paddingY:v.optional(v.number()),borderRadius:v.optional(v.number())});
 export const audioSettingsValidator=v.object({role:v.union(v.literal('original'),v.literal('voice'),v.literal('music')),fadeIn:v.number(),fadeOut:v.number(),ducking:v.object({enabled:v.boolean(),amount:v.number(),attack:v.number(),release:v.number()})});
 export const clipValidator = v.object({
   id: v.string(), kind: v.union(assetKind, v.literal("caption"), v.literal("graphic"), v.literal("solid"), v.literal("effect")),
@@ -59,7 +59,7 @@ export const clipValidator = v.object({
   lightLeak:v.optional(v.object({enabled:v.boolean(),amount:v.number(),color:v.string(),position:v.number(),spread:v.number(),speed:v.number()})),
   textTemplate: v.optional(textTemplateValidator),
   textStyle:v.optional(textStyleValidator), textGradient:v.optional(textGradientValidator),
-  fontFamily:v.optional(v.union(v.literal('space-grotesk'),v.literal('anton'),v.literal('dm-serif'),v.literal('geist-mono'),v.literal('inter'),v.literal('dm-sans'),v.literal('montserrat'),v.literal('poppins'),v.literal('oswald'),v.literal('bebas-neue'),v.literal('playfair-display'),v.literal('caveat'),v.literal('tiktok-sans'))),
+  fontFamily:v.optional(v.union(v.literal('space-grotesk'),v.literal('anton'),v.literal('dm-serif'),v.literal('geist-mono'),v.literal('inter'),v.literal('dm-sans'),v.literal('montserrat'),v.literal('poppins'),v.literal('oswald'),v.literal('bebas-neue'),v.literal('playfair-display'),v.literal('caveat'),v.literal('tiktok-sans'),v.literal('barlow-condensed'),v.literal('ibm-plex-mono'),v.literal('lora'),v.literal('archivo-black'),v.literal('fraunces'))),
   effectPreset: v.optional(v.union(v.literal('none'), v.literal('fade'), v.literal('punch'), v.literal('shake'), v.literal('flash'), v.literal('pop'), v.literal('cinematic-bars'), v.literal('quick-zoom-in'), v.literal('quick-zoom-out'),v.literal('frame-shrink'), v.literal('zoom-blur'), v.literal('solid-color'),v.literal('crossfade'),v.literal('spin-zoom'),v.literal('blur-dissolve'),v.literal('gradient-wipe'),v.literal('iris-wipe'))),
   cinematicBars: v.optional(v.object({ size: v.number(), speed: v.number() })),
   solidColor:v.optional(v.object({color:v.string(),width:v.number(),height:v.number(),x:v.number(),y:v.number(),opacity:v.number()})),
@@ -72,6 +72,7 @@ export const timelineValidator = v.object({ clips: v.array(clipValidator), fps: 
 export const assistantRecoveryValidator = v.object({requests:v.array(v.string()),runId:v.string(),revision:v.number(),savedEdits:v.optional(v.number()),reason:v.string(),status:v.union(v.literal('failed'),v.literal('stopped')),updatedAt:v.number()});
 export const aiStateFields = {
   aiQueuePaused:v.optional(v.boolean()), aiWorkflowId:v.optional(v.string()), aiRunning: v.optional(v.boolean()), aiEditing: v.optional(v.boolean()), aiError: v.optional(v.string()), aiRunId: v.optional(v.string()), aiUndoRecorded: v.optional(v.boolean()), aiCheckpointRevision: v.optional(v.number()),
+  aiAnalysisUsage:v.optional(v.object({runId:v.string(),enqueued:v.number()})),
   aiRequest:v.optional(v.object({prompt:v.string(),messageId:v.string(),startedRevision:v.number()})),aiRecovery:v.optional(assistantRecoveryValidator),
 };
 export const projectFields = {

@@ -12,9 +12,19 @@ export const TEXT_FONTS = [
   { id: 'playfair-display', label: 'Playfair Display', family: 'Playfair Display', fileName: 'playfair-display.ttf', weight: 700, faceWeight: '400 900' },
   { id: 'caveat', label: 'Caveat', family: 'Caveat', fileName: 'caveat.ttf', weight: 700, faceWeight: '400 700' },
   { id: 'tiktok-sans', label: 'TikTok Sans', family: 'TikTok Sans', fileName: 'tiktok-sans.ttf', weight: 700, faceWeight: '300 900' },
+  { id: 'barlow-condensed', label: 'Barlow Condensed', family: 'Barlow Condensed', fileName: 'barlow-condensed.ttf', weight: 700, faceWeight: '700' },
+  { id: 'ibm-plex-mono', label: 'IBM Plex Mono', family: 'IBM Plex Mono', fileName: 'ibm-plex-mono.ttf', weight: 500, faceWeight: '500' },
+  { id: 'lora', label: 'Lora', family: 'Lora', fileName: 'lora.ttf', weight: 600, faceWeight: '400 700' },
+  { id: 'archivo-black', label: 'Archivo Black', family: 'Archivo Black', fileName: 'archivo-black.ttf', weight: 400, faceWeight: '400' },
+  { id: 'fraunces', label: 'Fraunces', family: 'Fraunces', fileName: 'fraunces.ttf', weight: 700, faceWeight: '100 900' },
 ] as const;
 export type TextFontId = typeof TEXT_FONTS[number]['id'];
 export function textFont(id?: TextFontId) { return TEXT_FONTS.find(font => font.id === id) ?? TEXT_FONTS[0]; }
+/** Resolve to a weight actually bundled for this family, including fixed faces. */
+export function textFontWeight(id: TextFontId | undefined, requested?: number) {
+  const font = textFont(id), range = font.faceWeight.split(' ').map(Number);
+  return Math.max(range[0], Math.min(range.at(-1)!, Number.isFinite(requested) ? requested! : font.weight));
+}
 /** Parent-document text faces must never override Next's application fonts. */
 export function editorTextFont(id?: TextFontId) {
   const font = textFont(id);
