@@ -16,6 +16,19 @@ for arg in "$@"; do
   args+=("$arg")
   previous="$arg"
 done
+# Spend less CPU on compression searches at the same authored CRF, resolution
+# and frame rate. This applies only to the standard H.264 output preset.
+if [[ "${REVLINE_RENDER_STANDARD_PRESET:-}" == fast ]]; then
+  video_codec=''
+  for ((i=0;i<${#args[@]}-1;i++)); do
+    if [[ "${args[i]}" == '-c:v' || "${args[i]}" == '-vcodec' ]]; then video_codec="${args[i+1]}"; fi
+  done
+  if [[ "$video_codec" == libx264 ]]; then
+    for ((i=0;i<${#args[@]}-1;i++)); do
+      if [[ "${args[i]}" == '-preset' && "${args[i+1]}" == medium ]]; then args[i+1]=fast; fi
+    done
+  fi
+fi
 # All rendering invocations with an input end in their output path. Bound
 # output codec threads too, after the producer's encoder options.
 if [[ "$has_input" == true ]]; then
