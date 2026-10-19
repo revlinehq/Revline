@@ -169,6 +169,24 @@ test('answering a follow-up question preserves the unfinished edit for a later c
   expect((await x.read()).aiRecovery).toBeUndefined();
 });
 
+test.each([
+  {verdict:'pass' as const,revision:0,runId:'run',cleared:true},
+  {verdict:'fail' as const,revision:0,runId:'run',cleared:false},
+  {verdict:'unverifiable' as const,revision:0,runId:'run',cleared:false},
+  {verdict:'pass' as const,revision:1,runId:'run',cleared:false},
+  {verdict:'pass' as const,revision:0,runId:'previous-run',cleared:false},
+])('verification-only recovery clears only after current passed receipts: $verdict/$revision/$runId',async({verdict,revision,runId,cleared})=>{
+  const x=await setup();
+  const recovery={requests:['Finish the visual check'],runId:'previous-run',revision:0,savedEdits:1,status:'failed' as const,reason:'Time limit',updatedAt:Date.now()};
+  await x.t.run(async ctx=>{
+    await writeProject(ctx,x.projectId,{aiRecovery:recovery,aiUndoRecorded:false});
+    await ctx.db.insert('compositionReviews',{projectId:x.projectId,ownerId:'owner',runId,revision,timeline:original,reference:original,plans:[],assetIds:[],start:0,end:3,status:'completed',createdAt:Date.now(),result:{revision,sampleTimes:[1],checks:[{planId:'title',timingPass:true,peakPixelChange:.1,pixelPass:true,textSafe:true}],observations:[{planId:'title',verdict,evidence:'Captured frame'}],uncertainty:''}});
+  });
+  await x.t.mutation(internal.assistant.finish,x.run);
+  expect((await x.read()).aiRecovery).toEqual(cleared?undefined:recovery);
+  expect((await x.read()).timeline).toEqual(original);
+});
+
 
 test('queued messages survive reload, respect ownership and start in order after the active request',async()=>{
   const x=await setup();workflowTest.register(x.t);

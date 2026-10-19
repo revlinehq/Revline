@@ -137,6 +137,7 @@ function AssistantPanelBody({ messages, running, editing:editingTimeline=running
       return {...group,comparison,...presentation};
     });
   },[messages,turnId,editSnapshot,running,error,localError,waiting,optimisticRequest,answering]);
+  const retryTurnId=canResumeEdit?groups.findLast(group=>group.cards.some(card=>card.key==='turn-failure'))?.id:turnId;
   const showSuggestions=!conversationStarted&&!latestUser&&!waiting;
   const visibleError=!groups.length?(localError||(!waiting?error:null)):null;
   useEffect(() => { try { setPrompt(draftKey ? sessionStorage.getItem(draftKey) ?? '' : ''); } catch { setPrompt(''); } }, [draftKey]);
@@ -201,13 +202,12 @@ function AssistantPanelBody({ messages, running, editing:editingTimeline=running
             </article>)}
             {cards.length > 0 && <div className="assistant-result-cards" aria-label="Edit results">{cards.filter(card=>!(card.state==='running'&&(editing||(group.id===turnId&&stopState==='stopped')))).map(card => <div key={card.key} className={`assistant-result-card result-${card.state}${card.staged ? ' result-prepared' : ''}`}>
               <AssistantActivity label={card.title} detail={card.detail} state={card.state==='running'?'working':card.state==='error'?'error':'ready'}/>
-              {!canResumeEdit&&card.key==='turn-failure' && group.id===turnId && requestMessage?.text.trim() && !demo && onRetry && <button type="button" className="assistant-retry" disabled={waiting || composerBusy || !configured} onClick={() => void sendRequest(requestMessage.text, true)}><RotateCcw size={13} aria-hidden="true"/>Retry unfinished steps</button>}
+              {card.key==='turn-failure' && group.id===retryTurnId && requestMessage?.text.trim() && !waiting && !demo && onRetry && <button type="button" className="assistant-retry" disabled={composerBusy || !configured || sending || !!pendingReply} onClick={() => void sendRequest(canResumeEdit?'Finish only the remaining work or checks from my unfinished request. Keep the edits already completed.':requestMessage.text, true)}><RotateCcw size={13} aria-hidden="true"/>Retry unfinished steps</button>}
             </div>)}</div>}
           </div>}
         </div>;
       })}
       {!groups.length && waiting && <div className="assistant-reply"><AssistantReplyHeader loading label={stopState==='stopping'?'Stopping…':activity || replyLabel} detail={processingDetail(activity,activitySource)} startedAt={activityStartedAt}/></div>}
-      {canResumeEdit&&!waiting&&!demo&&onRetry&&<div data-chat-follow><button type="button" className="assistant-retry" disabled={composerBusy||!configured||sending||!!pendingReply} onClick={()=>void sendRequest('Finish only the remaining work or checks from my unfinished request. Keep the edits already completed.',true)}><RotateCcw size={13} aria-hidden="true"/>Retry unfinished steps</button></div>}
       {!waiting && stopState==='stopped'  && <AssistantActivity label="Stopped." detail="Your existing edit is still here." state="stopped"/>}
       {showSuggestions && suggestions?.items.length && onSuggestion && configured ? <div data-chat-follow className="assistant-source-suggestions" aria-label="Suggested edits from this footage"><span title={suggestions.sourceName}>Ideas for {suggestions.sourceName}</span>{suggestions.items.map((suggestion, index) => <button key={`${suggestions.clipId}-${index}`} type="button" disabled={composerBusy || sending || !!pendingReply} onClick={() => void chooseSuggestion(suggestion)}><span>{suggestion.label}</span><ArrowUpRight size={14} aria-hidden="true" /></button>)}</div> : null}
       {visibleError && <div data-chat-follow><AssistantActivity className="chat-error" label="Needs attention" detail={assistantErrorDetail(visibleError)} state="error"/></div>}

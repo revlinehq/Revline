@@ -99,9 +99,16 @@ test('unfinished edits offer one explicit continuation button, even after an exp
   const replies:ChatMessage[]=[...messages,{id:'why',role:'user',text:'Why did it stop?'},{id:'explanation',role:'assistant',text:'The time limit interrupted the edit.'}];
   const html=renderToStaticMarkup(<AssistantPanel messages={replies} running={false} configured hasClips demo={false} canResumeEdit onSend={async()=>{}} onRetry={async()=>{}}/>);
   expect(html.match(/Retry unfinished steps/g)).toHaveLength(1);
+  expect(html.slice(html.indexOf('data-turn-id="request"'),html.indexOf('data-turn-id="why"'))).toContain('Retry unfinished steps');
   expect(html).not.toContain('>Retry</button>');
   const running=renderToStaticMarkup(<AssistantPanel messages={replies} running configured hasClips demo={false} canResumeEdit onSend={async()=>{}} onRetry={async()=>{}}/>);
   expect(running).not.toContain('Retry unfinished steps');
+});
+
+test('a successful reply has no conversation-wide retry button from old recovery state',()=>{
+  const replies:ChatMessage[]=[{id:'check',role:'user',text:'Finish the final check.'},{id:'done',role:'assistant',status:'success',text:'The final visual check passed.'}];
+  const html=renderToStaticMarkup(<AssistantPanel messages={replies} running={false} configured hasClips demo={false} canResumeEdit onSend={async()=>{}} onRetry={async()=>{}}/>);
+  expect(html).not.toContain('Retry unfinished steps');
 });
 
 
