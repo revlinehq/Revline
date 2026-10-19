@@ -51,8 +51,36 @@ async function main() {
     await update(neutral);
     const baseline = await readPixels();
     const distance = (a: number[], b: number[]) => a.reduce((sum, value, i) => sum + Math.abs(value - b[i]), 0) / a.length;
+    const readGradePixels=()=>page.evaluate(()=>{
+      const canvas=document.querySelector<HTMLCanvasElement>('.visual-effect-output')!,gl=canvas.getContext('webgl')!,pixels=new Uint8Array(canvas.width*canvas.height*4);
+      gl.readPixels(0,0,canvas.width,canvas.height,gl.RGBA,gl.UNSIGNED_BYTE,pixels);
+      return Array.from({length:32*18*4},(_,index)=>{const cell=Math.floor(index/4),x=Math.round(cell%32*(canvas.width-1)/31),y=Math.round(Math.floor(cell/32)*(canvas.height-1)/17);return pixels[(y*canvas.width+x)*4+index%4];});
+    });
+    const grades=[settings.colorGrade,{...settings.colorGrade,exposure:1.25,contrast:1.4,saturation:1.7,temperature:-80,tint:55,vibrance:75},{...settings.colorGrade,exposure:-1,contrast:.7,saturation:0,temperature:100,tint:-100,vibrance:-100}];
+    const gradePixels:number[][]=[];
+    for(const colorGrade of grades){await update({colorGrade});gradePixels.push(await readGradePixels());}
+    for(const [index,colorGrade] of grades.entries()){
+      // Inversion selects the full FX kernel. Its exact inverse isolates the
+      // same grade, including clamping and non-linear vibrance, for comparison.
+      await update({colorGrade,invert:{...DEFAULT_INVERT,enabled:true,amount:1}});
+      const error=distance(gradePixels[index],(await readGradePixels()).map((value,channel)=>channel%4===3?value:255-value));
+      assert.ok(error<.25,`Specialized export grade ${index} must match the full FX kernel (mean pixel error ${error.toFixed(3)})`);
+    }
+    await page.evaluate(async()=>{
+      const source=document.querySelector('video')!,canvas=document.createElement('canvas');canvas.width=320;canvas.height=180;
+      const context=canvas.getContext('2d')!;context.fillStyle='rgba(180,70,30,.35)';context.fillRect(0,0,320,180);context.clearRect(0,0,8,180);context.fillStyle='#7080b0';context.fillRect(80,45,160,90);
+      const image=new Image();image.id='__render_frame_'+source.id+'__';image.style.display='none';image.src=canvas.toDataURL();await image.decode();source.parentElement!.appendChild(image);
+    });
+    await update({colorGrade:grades[0]});const transparentGrade=await readGradePixels();
+    await update({colorGrade:grades[0],invert:{...DEFAULT_INVERT,enabled:true,amount:1}});const transparentFull=await readGradePixels();
+    assert.ok(transparentGrade.some((value,index)=>index%4===3&&value>0&&value<255),'Grade fixture includes partially transparent source pixels');
+    assert.deepEqual(transparentGrade.filter((_,index)=>index%4===3),transparentFull.filter((_,index)=>index%4===3),'Specialized grading preserves source alpha at edges and inside the source');
+    assert.ok(distance(transparentGrade,transparentFull.map((value,index)=>index%4===3?value:255-value))<.25,'Transparent source grades match the full kernel RGBA');
+    await page.evaluate(()=>document.querySelector('[id^="__render_frame_"]')?.remove());
+    await update(neutral);
+    assert.deepEqual(await readPixels(),baseline,'Returning from combined FX restores the same grade pixels');
     for (const key of ['colorGrade','zoomBlur','glitch','invert','lensDistortion','filmOverlay','softBlur','frameDistortion','frameCorners'] as const) {
-      await update({ [key]: settings[key] });
+      await update({ ...(key==='frameCorners'?neutral:{}),[key]: settings[key] });
       const difference=distance(baseline, await readPixels());
       assert.ok(difference > (key==='softBlur'? .5 : key==='frameCorners'?1:5), `${key} must actually change pixels (difference ${difference.toFixed(2)})`);
     }
@@ -70,9 +98,10 @@ async function main() {
       assert.ok(bend>0?shape.quarter>shape.middle+.005:shape.middle>shape.quarter+.005,`Bend ${bend} must curve entire outer edges, not only trim corners: ${JSON.stringify(shape)}`);
     }
     await update({...neutral,frameDistortion:{enabled:true,horizontal:0,vertical:0,skew:0}});const legacy=await alphaShape();assert.equal(legacy.corner,255,'Saved perspective without bend keeps its original square silhouette');
-    await update({frameCorners:{enabled:true,amount:.8}});const rounded=await alphaShape();assert.equal(rounded.corner,0,'Independent clip rounding produces transparent corners with Frame distortion absent');assert.equal(rounded.side,255,'Independent corner rounding retains the middle of each straight edge');assert.equal(rounded.center,255);
+    await update({frameCorners:{enabled:true,amount:.8}});assert.equal(await page.$('.visual-effect-output'),null,'Corner-only clips use the native rounded window');
+    await update({...neutral,frameCorners:{enabled:true,amount:.8}});const rounded=await alphaShape();assert.equal(rounded.corner,0,'Independent clip rounding produces transparent corners with Frame distortion absent');assert.equal(rounded.side,255,'Independent corner rounding retains the middle of each straight edge');assert.equal(rounded.center,255);
     await update({...neutral,frameCorners:{enabled:false,amount:.8}});assert.equal((await alphaShape()).corner,255,'Bypassing corner rounding restores square corners');
-    await update({frameCorners:{enabled:true,amount:.8}});
+    await update({...neutral,frameCorners:{enabled:true,amount:.8}});
     const cropped=await page.evaluate(()=>{const source=document.querySelector('video')!,window=source.parentElement!,original=[source.style.left,source.style.top,window.style.width,window.style.height],width=source.offsetWidth,height=source.offsetHeight;source.style.left=`${-width*.15}px`;source.style.top=`${-height*.1}px`;window.style.width=`${width*.7}px`;window.style.height=`${height*.8}px`;(globalThis as any).__revlineEffects.redraw();const output=document.querySelector<HTMLCanvasElement>('.visual-effect-output')!,canvas=document.createElement('canvas');canvas.width=output.width;canvas.height=output.height;const ctx=canvas.getContext('2d')!;ctx.drawImage(output,0,0);const values=[[.16,.11],[.16,.5]].map(([x,y])=>ctx.getImageData(Math.floor(x*canvas.width),Math.floor(y*canvas.height),1,1).data[3]);[source.style.left,source.style.top,window.style.width,window.style.height]=original;(globalThis as any).__revlineEffects.redraw();return values;});assert.deepEqual(cropped,[0,255],'Corner radius follows the visible cropped window instead of hidden original-source corners');
 
     await update({ invert: settings.invert });
@@ -101,14 +130,16 @@ async function main() {
     const shapeSettings={frameDistortion:settings.frameDistortion,frameCorners:settings.frameCorners};await update(shapeSettings);const shapeExport=await readPixels();await livePreview.evaluate(effects=>(window as any).__revlineEffects.set('clip-0',effects),shapeSettings);
     const shapePreview=await livePreview.evaluate(()=>{const source=document.querySelector<HTMLCanvasElement>('.visual-effect-output')!,canvas=document.createElement('canvas');canvas.width=32;canvas.height=18;const ctx=canvas.getContext('2d')!;ctx.fillStyle='#000';ctx.fillRect(0,0,32,18);ctx.imageSmoothingQuality='high';ctx.drawImage(source,0,0,32,18);return Array.from(ctx.getImageData(0,0,32,18).data).filter((_,i)=>i%4!==3);});assert.ok(distance(shapeExport,shapePreview)<6,`Bend/corner actual preview/export parity error: ${distance(shapeExport,shapePreview).toFixed(2)}`);const alphaCaptures=[];for(const target of [page,livePreview])alphaCaptures.push(await target.evaluate(()=>{const source=document.querySelector<HTMLCanvasElement>('.visual-effect-output')!,canvas=document.createElement('canvas');canvas.width=source.width;canvas.height=source.height;const ctx=canvas.getContext('2d')!;ctx.drawImage(source,0,0);const pixels=ctx.getImageData(0,0,canvas.width,canvas.height).data;return Array.from({length:32*18},(_,cell)=>{const column=cell%32,row=Math.floor(cell/32),left=Math.floor(column*canvas.width/32),right=Math.floor((column+1)*canvas.width/32),top=Math.floor(row*canvas.height/18),bottom=Math.floor((row+1)*canvas.height/18);let total=0;for(let y=top;y<bottom;y++)for(let x=left;x<right;x++)total+=pixels[(y*canvas.width+x)*4+3];return total/((right-left)*(bottom-top));});}));const alphaError=distance(alphaCaptures[0],alphaCaptures[1]);assert.ok(alphaError<2,`Bend/corner preview/export alpha mismatch: ${alphaError.toFixed(2)}`);await livePreview.close();
 
+    await browser.close();
     const output = join(directory,'output.mp4');
-    const result = await runRenderWorker(directory, output, { fps:24,quality:'high' }, () => {}, AbortSignal.timeout(90_000));
+    console.log('PASS: grade-only/full-kernel RGBA including transparent source edges, live fallback, crop and preview parity. Rendering combined-effects MP4.');
+    const result = await runRenderWorker(directory, output, { fps:24,quality:'high' }, () => {}, AbortSignal.timeout(240_000));
     assert.equal(result.warnings, 0);
     const exported = [...execFileSync('ffmpeg', ['-v','error','-ss','0.5','-i',output,'-vf','scale=32:18','-frames:v','1','-f','rawvideo','-pix_fmt','rgb24','-'])];
     const error = distance(preview, exported);
     assert.ok(error < 12, `Preview/export pixel mismatch: mean error ${error.toFixed(2)}`);
     assert.ok(distance(baseline, exported) > 5, 'Export must include effects');
     console.log(`PASS: real MP4 curved frame silhouettes, separate rounded clip corners, perspective/skew, lens distortion, film overlay, color, radial zoom blur, deterministic RGB/block glitch and negative inversion; preview/export mean pixel error ${error.toFixed(2)}, geometry alpha error ${alphaError.toFixed(2)}, one decoder and disabled canvas cleanup.`);
-  } finally { await browser.close(); server.close(); await rm(directory, { recursive:true,force:true }); }
+  } finally { if(browser.connected)await browser.close(); server.close(); await rm(directory, { recursive:true,force:true }); }
 }
 main().catch(error => { console.error(error); process.exitCode=1; });

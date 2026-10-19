@@ -23,7 +23,7 @@ export function installVisualEffects(sources: VisualEffectSource[], fps: number,
   const host = window as unknown as RuntimeWindow;
   const preview = !!document.querySelector('meta[name="hyperframes-studio-preview"]');
   const clock = host.__timelines.revline.__hfReal ?? host.__timelines.revline;
-  type Entry = { source: HTMLVideoElement | HTMLImageElement; effects: VisualEffectInput; nativeCorners?: { node:HTMLElement; originalRadius:string }; neonColor?: number; canvas?: HTMLCanvasElement; gl?: WebGLRenderingContext; program?: WebGLProgram; texture?: WebGLTexture; buffer?: WebGLBuffer; uniforms?: Record<string, WebGLUniformLocation | null>; passTextures?: WebGLTexture[]; framebuffer?: WebGLFramebuffer; passWidth?: number; passHeight?: number; nominalWidth?: number; nominalHeight?: number; detailWidth?: number; detailHeight?: number; lastPassKey?: string; lastPassCount?: number; lastFrame?: number; lastSource?: string | number; lastTransform?: string; dirty: boolean; injected?: HTMLImageElement; failed?: boolean; videoCallback?: number; decodedFrame?: number; decodedListener?: () => void; uploadCanvas?: HTMLCanvasElement };
+  type Entry = { source: HTMLVideoElement | HTMLImageElement; effects: VisualEffectInput; nativeCorners?: { node:HTMLElement; originalRadius:string }; neonColor?: number; canvas?: HTMLCanvasElement; gl?: WebGLRenderingContext; program?: WebGLProgram; gradeOnly?: boolean; texture?: WebGLTexture; buffer?: WebGLBuffer; uniforms?: Record<string, WebGLUniformLocation | null>; passTextures?: WebGLTexture[]; framebuffer?: WebGLFramebuffer; passWidth?: number; passHeight?: number; nominalWidth?: number; nominalHeight?: number; detailWidth?: number; detailHeight?: number; lastPassKey?: string; lastPassCount?: number; lastFrame?: number; lastSource?: string | number; lastTransform?: string; dirty: boolean; injected?: HTMLImageElement; failed?: boolean; videoCallback?: number; decodedFrame?: number; decodedListener?: () => void; uploadCanvas?: HTMLCanvasElement };
   type Resources = Pick<Entry, 'canvas' | 'gl' | 'program' | 'texture' | 'buffer' | 'uniforms' | 'passTextures' | 'framebuffer' | 'passWidth' | 'passHeight'>;
   const entries = new Map<string, Entry>();
   const available: Resources[] = [];
@@ -51,6 +51,17 @@ export function installVisualEffects(sources: VisualEffectSource[], fps: number,
     return passes;
   }
   const vertex = `attribute vec2 position;varying vec2 uv;void main(){uv=(position+1.0)*0.5;gl_Position=vec4(position,0.0,1.0);}`;
+  const grade = `vec3 rgb=c.rgb*exp2(grade.x);
+  rgb*=vec3(1.0+balance.x*0.18+balance.y*0.08,1.0-balance.y*0.16,1.0-balance.x*0.18+balance.y*0.08);
+  rgb=(rgb-0.5)*grade.y+0.5;
+  float luma=dot(rgb,vec3(0.2126,0.7152,0.0722));
+  float chroma=max(rgb.r,max(rgb.g,rgb.b))-min(rgb.r,min(rgb.g,rgb.b));
+  float saturation=grade.z*(1.0+balance.z*(1.0-clamp(chroma,0.0,1.0)));
+  rgb=clamp(mix(vec3(luma),rgb,saturation),0.0,1.0);`;
+  // Software export GPUs otherwise compile and run every optional spatial FX
+  // branch for a simple grade. Keep the same grade math, pixels and alpha.
+  const gradeFragment = `precision highp float;varying vec2 uv;uniform sampler2D source;uniform vec4 grade;uniform vec3 balance;uniform vec4 lens;
+void main(){vec2 p=lens.yz+(uv-lens.yz);vec4 c=texture2D(source,clamp(p,vec2(0.0),vec2(1.0)));${grade}gl_FragColor=vec4(rgb,c.a);}`;
   const fragment = `precision highp float;
 varying vec2 uv;uniform sampler2D source;uniform vec2 size;uniform float frame;
 uniform float softBlur;uniform float frameCorners;uniform vec4 cornerWindow;uniform float invert;uniform vec4 grade;uniform vec3 balance;uniform vec3 zoom;uniform vec3 glitch;uniform vec3 dither;uniform float ditherPalette;uniform vec3 ditherShadow;uniform vec3 ditherHighlight;
@@ -109,13 +120,7 @@ void main(){
   }
   if(lensFringing>0.0){vec2 fringe=(uv-lens.yz)*lensFringing/size;c.r=radial(p+fringe).r;c.b=radial(p-fringe).b;}
   // Exposure in stops, then warm/cool and green/magenta balance.
-  vec3 rgb=c.rgb*exp2(grade.x);
-  rgb*=vec3(1.0+balance.x*0.18+balance.y*0.08,1.0-balance.y*0.16,1.0-balance.x*0.18+balance.y*0.08);
-  rgb=(rgb-0.5)*grade.y+0.5;
-  float luma=dot(rgb,vec3(0.2126,0.7152,0.0722));
-  float chroma=max(rgb.r,max(rgb.g,rgb.b))-min(rgb.r,min(rgb.g,rgb.b));
-  float saturation=grade.z*(1.0+balance.z*(1.0-clamp(chroma,0.0,1.0)));
-  rgb=clamp(mix(vec3(luma),rgb,saturation),0.0,1.0);
+  ${grade}
   rgb=mix(rgb,1.0-rgb,invert);
   rgb=neonEdges(p,rgb);
   if(dither.x>0.0){
@@ -204,7 +209,7 @@ void main(){
     const height=colorOnly?entry.detailHeight!:Math.max(1,Math.round(entry.nominalHeight!/budget));
     if(canvas.width!==width||canvas.height!==height){canvas.width=width;canvas.height=height;entry.lastSource=undefined;}
   }
-  function initialize(entry: Entry, width: number, height: number, passes:VisualEffects[]) {
+  function initialize(entry: Entry, width: number, height: number, passes:VisualEffects[], gradeOnly:boolean) {
     let reusable = preview ? available.pop() : undefined;
     while(reusable?.gl?.isContextLost()){destroy(reusable);reusable=available.pop();}
     const canvas = reusable?.canvas ?? document.createElement('canvas');
@@ -220,7 +225,7 @@ void main(){
     entry.nominalWidth=Math.max(1,Math.round(displayWidth*ratio));entry.nominalHeight=Math.max(1,Math.round(displayHeight*ratio));
     const detailRatio=Math.min(1,width/displayWidth,Math.max(1920,resolution*16/9)/Math.max(displayWidth,displayHeight));
     entry.detailWidth=Math.max(1,Math.round(displayWidth*detailRatio));entry.detailHeight=Math.max(1,Math.round(displayHeight*detailRatio));
-    entry.canvas=canvas;sizeOutput(entry,passes);
+    entry.gradeOnly=gradeOnly;entry.canvas=canvas;sizeOutput(entry,passes);
     if (reusable) {
       Object.assign(entry, reusable); entry.source.parentElement!.appendChild(canvas); return;
     }
@@ -231,7 +236,7 @@ void main(){
       if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) { const log = gl.getShaderInfoLog(shader); gl.deleteShader(shader); throw new Error(`Visual effect shader failed: ${log}`); }
       return shader;
     };
-    const program = gl.createProgram()!, vs = compile(gl.VERTEX_SHADER, vertex), fs = compile(gl.FRAGMENT_SHADER, fragment);
+    const program = gl.createProgram()!, vs = compile(gl.VERTEX_SHADER, vertex), fs = compile(gl.FRAGMENT_SHADER, gradeOnly?gradeFragment:fragment);
     gl.attachShader(program, vs); gl.attachShader(program, fs); gl.linkProgram(program); gl.deleteShader(vs); gl.deleteShader(fs);
     if (!gl.getProgramParameter(program, gl.LINK_STATUS)) throw new Error('Visual effect shader could not link.');
     gl.useProgram(program);
@@ -242,7 +247,7 @@ void main(){
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
     const uniforms = Object.fromEntries(['source','size','frame','softBlur','frameCorners','cornerWindow','invert','grade','balance','zoom','glitch','dither','ditherPalette','ditherShadow','ditherHighlight','neon','neonColor','neonPixel','lens','lensFringing','film','filmTone','filmPixel','textureTime','textureOutput','vhs','vhsMotion','lightLeak','lightLeakColor','directional','turbulence','sweep','sweepMotion','sweepColor','perspective','perspectiveFit','perspectiveBend'].map(name => [name, gl.getUniformLocation(program, name)]));
-    Object.assign(entry, { canvas, gl, program, texture, buffer, uniforms });
+    Object.assign(entry, { canvas, gl, program, gradeOnly, texture, buffer, uniforms });
     entry.source.parentElement!.appendChild(canvas);
   }
   /** Reuse GPU-only intermediate pixels; no readback or extra WebGL context. */
@@ -296,7 +301,9 @@ void main(){
     const stablePasses=playingVideo?entry.lastPassCount===passes.length:entry.lastPassKey===passKey;
     if (!force && !entry.dirty && stableFrame && stablePasses && entry.lastSource === sourceKey && (playingVideo || entry.lastTransform === transformKey)) return;
     try {
-      if (!entry.canvas) initialize(entry, width, height,passes);
+      const gradeOnly=!preview&&passes.length===1&&!!passes[0].colorGrade?.enabled&&!passes[0].frameDistortion?.enabled&&!enabled({...passes[0],colorGrade:undefined})&&!entry.effects.cameraGlideBlur?.amount&&!timedEffects.some(clip=>clip.start<end&&clip.start+clip.duration>start);
+      if(entry.canvas&&entry.gradeOnly!==gradeOnly)release(entry);
+      if (!entry.canvas) initialize(entry, width, height,passes,gradeOnly);
       else sizeOutput(entry,passes);
       const { canvas, gl, uniforms: u } = entry;
       if (!canvas || !gl || !u) return;
