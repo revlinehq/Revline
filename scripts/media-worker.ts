@@ -27,7 +27,8 @@ async function runSlot() {
       if (!task) { await waitForWork(observedRevision); continue; }
       console.log(`[${new Date().toISOString()}] Chat ${task.projectId} · media task ${task.taskId}: ${task.kind} started.`);
       const controller = new AbortController();
-      const signal = AbortSignal.any([controller.signal, shutdown.signal, AbortSignal.timeout(15 * 60_000)]);
+      const deadline=AbortSignal.timeout(15 * 60_000);
+      const signal = AbortSignal.any([controller.signal, shutdown.signal, deadline]);
       const credentials = { taskId: task.taskId, leaseToken: task.leaseToken };
       let progress = 0, reported = -1,activity:MediaTaskActivity|undefined;
       let heartbeats = Promise.resolve();
@@ -53,8 +54,8 @@ async function runSlot() {
       } catch (error) {
         clearInterval(timer); await heartbeats;
         if (!shutdown.signal.aborted && !controller.signal.aborted) {
-          const retryable = task.kind!=='review'&&!(error instanceof AnalysisError && (error.retryable === false || error.status < 500));
-          await client.mutation(api.mediaTasks.fail, { ...credentials, error: error instanceof Error ? error.message.slice(0, 1000) : 'Media processing failed.', retryable }).catch(() => {});
+          const retryable = task.kind!=='review'&&!(task.kind==='render'&&deadline.aborted)&&!(error instanceof AnalysisError && (error.retryable === false || error.status < 500));
+          await client.mutation(api.mediaTasks.fail, { ...credentials, error: deadline.aborted&&task.kind==='render'?'The export exceeded its 15-minute processing limit. Automatic retries were stopped.':error instanceof Error ? error.message.slice(0, 1000) : 'Media processing failed.', retryable }).catch(() => {});
         }
         console.log(`[${new Date().toISOString()}] Chat ${task.projectId} · media task ${task.taskId}: interrupted or failed; Convex owns recovery.`);
       }
