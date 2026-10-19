@@ -11,7 +11,9 @@ export function previewMediaReady(node:HTMLMediaElement,time:number) {
   // forever for a preferred 1.5s or trusting that network-state flag.
   const minimumRunway=node.paused?.5:1.5;
   const runway=Math.min(minimumRunway,Math.max(0,end-time))*(Number.isFinite(rate)&&rate>0?rate:1);
-  const target=Math.min(node.currentTime+runway,Number.isFinite(node.duration)?node.duration:Infinity);
+  // Native preload limits are source seconds, including accelerated clips.
+  const bufferedRunway=node.paused?Math.min(.5,runway):runway;
+  const target=Math.min(node.currentTime+bufferedRunway,Number.isFinite(node.duration)?node.duration:Infinity);
   for(let index=0;index<node.buffered.length;index++)if(node.buffered.start(index)<=node.currentTime+.025&&node.buffered.end(index)>=target-.025)return true;
   return false;
 }
