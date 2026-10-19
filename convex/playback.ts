@@ -29,6 +29,6 @@ export const refresh = action({
   args: request, returns: v.array(v.object({ _id: v.id('assets'), url: v.union(v.string(), v.null()) })),
   handler: async (ctx, args): Promise<PlaybackUrl[]> => {
     const assets = await ctx.runQuery(internal.playback.authorize, args);
-    return Promise.all(assets.map(async asset => ({ _id: asset._id, url: await mediaUrl(ctx, asset) })));
+    return Promise.all(assets.map(async asset => ({ _id: asset._id, url: await mediaUrl(ctx, asset,true) })));
   },
 });

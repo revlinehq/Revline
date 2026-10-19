@@ -7,10 +7,13 @@ export function mediaConfig() {
   if (!url || !secret) throw new Error('Cloudflare media storage is not configured');
   return { url: url.replace(/\/$/, ''), secret };
 }
-export async function mediaUrl(ctx: QueryCtx | MutationCtx | ActionCtx, source: { storageId?: Id<'_storage'>; r2Key?: string }) {
+export async function mediaUrl(ctx: QueryCtx | MutationCtx | ActionCtx, source: { storageId?: Id<'_storage'>; r2Key?: string }, fresh=false) {
   if (!source.r2Key) return source.storageId ? ctx.storage.getUrl(source.storageId) : null;
   const { url, secret } = mediaConfig();
-  const token = await signMediaToken(secret, { operation: 'read', key: source.r2Key, expires: Math.floor(Date.now() / 86400_000) * 86400_000 + 7 * 86400_000 });
+  // Reactive reads retain stable URLs. Explicit playback recovery must bypass
+  // a stalled native range/cache entry rather than reload that exact URL.
+  const expires=(fresh?Date.now():Math.floor(Date.now()/86400_000)*86400_000)+7*86400_000;
+  const token = await signMediaToken(secret, { operation: 'read', key: source.r2Key, expires });
   return `${url}/read?token=${token}`;
 }
 export async function storageControl(body: Record<string, unknown>): Promise<{ uploadId?: string; size?: number; contentType?: string }> {

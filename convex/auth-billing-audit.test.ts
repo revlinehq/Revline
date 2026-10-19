@@ -311,3 +311,17 @@ test('a queued message rechecks billing before it starts and pauses without losi
   expect((await f.owner.query(api.projects.get,{projectId:f.projectId})).aiRunning).toBe(false);
   await f.owner.mutation(api.assistant.removeQueued,{projectId:f.projectId,id:queue.messages[0].id});
 });
+import {mediaUrl} from './lib/media_storage';
+import {verifyMediaToken} from '../lib/storage/media-tokens';
+test('playback recovery refreshes the signed URL while ordinary media URLs stay cacheable',async()=>{
+  vi.stubEnv('MEDIA_WORKER_URL','https://media.example.com');vi.stubEnv('MEDIA_SIGNING_SECRET','audit-signing-secret');
+  const time=vi.spyOn(Date,'now').mockReturnValue(1_800_000_000_000);
+  try{
+    const source={r2Key:'media/owner/project/source'},ctx={} as Parameters<typeof mediaUrl>[0];
+    const stable=await mediaUrl(ctx,source),fresh=await mediaUrl(ctx,source,true);
+    expect(await mediaUrl(ctx,source)).toBe(stable);
+    expect(fresh).not.toBe(stable);
+    expect(await verifyMediaToken('audit-signing-secret',new URL(fresh!).searchParams.get('token')!)).toMatchObject({operation:'read',key:source.r2Key});
+    time.mockReturnValue(1_800_000_000_001);expect(await mediaUrl(ctx,source,true)).not.toBe(fresh);
+  }finally{time.mockRestore();}
+});
