@@ -98,6 +98,8 @@ Stripe billing is scaffolded and gated by `BILLING_ENABLED=false`. The single Re
 
 ## Architecture
 
+The existing Convex API can serve web and mobile clients using the same Clerk identities and Cloudflare media services. See [connecting a mobile app](docs/mobile-backend.md) for the current function map, native upload flow, authentication, and remaining platform-specific work.
+
 HyperFrames provides HTML/GSAP playback and video rendering. Revline owns the project/timeline model, editor controls, source geometry, AI tools, media analysis, authentication, persistence, and billing integration.
 
 Zustand holds per-project interaction state and local history. Convex persists owned assets, versioned timelines, conversations, analysis requests, and export jobs. Editing tools use validated structured arguments and revision checks. Consecutive AI edits share undo history; manual edits remain protected from stale writes.
