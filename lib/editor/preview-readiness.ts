@@ -15,7 +15,7 @@ export function previewMediaReady(node:HTMLMediaElement,time:number) {
 /** A decoded first frame alone can still stall as soon as playback starts. */
 export async function waitForPreviewMedia(document:Document,time:number,signal:AbortSignal,onThumbnail?:(url:string)=>void,onSlow?:()=>void) {
   const transitions=(document.defaultView as (Window & {__revlineTransitionController?:{whenReady(time:number,signal:AbortSignal):Promise<void>}})|null)?.__revlineTransitionController;
-  const media=Array.from(document.querySelectorAll<HTMLMediaElement>('video[data-start],audio[data-start]')).filter(node=>time>=Number(node.dataset.start)&&time<Number(node.dataset.end??Number(node.dataset.start)+Number(node.dataset.duration)));
+  const media=Array.from(document.querySelectorAll<HTMLMediaElement>('video[data-start],audio[data-start]')).filter(node=>(node.tagName!=='AUDIO'||Number(node.dataset.volume??1)>0)&&time>=Number(node.dataset.start)&&time<Number(node.dataset.end??Number(node.dataset.start)+Number(node.dataset.duration)));
   await Promise.all([transitions?.whenReady(time,signal),...media.map(node=>new Promise<void>((resolve,reject)=>{
     const events=['loadedmetadata','loadeddata','canplay','progress','durationchange','seeked','error'];
     let idleTimer:ReturnType<typeof setTimeout>;

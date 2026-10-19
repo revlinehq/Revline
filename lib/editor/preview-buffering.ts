@@ -7,6 +7,8 @@ export function guardPreviewBuffering(document: Document, player: Playback, read
   let intended = !player.paused, held = false, disposed = false;
   let diagnosticTimer:ReturnType<typeof setTimeout>|undefined;
   let seekTimer:ReturnType<typeof setTimeout>|undefined;
+  let recoveryTimer:ReturnType<typeof setInterval>|undefined;
+  const clearRecovery=()=>{if(recoveryTimer!==undefined)clearInterval(recoveryTimer);recoveryTimer=undefined;};
   const clearSeek=()=>{if(seekTimer!==undefined)clearTimeout(seekTimer);seekTimer=undefined;};
   const clearDiagnostic=()=>{if(diagnosticTimer!==undefined)clearTimeout(diagnosticTimer);diagnosticTimer=undefined;};
   const blockedMedia = () => {
@@ -29,13 +31,18 @@ export function guardPreviewBuffering(document: Document, player: Playback, read
   const hold = () => {
     held = true;
     onWaiting?.(true);
+    // Pausing the transport can consume the final canplay/seeked event before
+    // its media sync has finished. Readiness can then settle without another
+    // event, so an event-only hold never resumes even with decoded, buffered
+    // footage. Poll only during the hold; readiness, not elapsed time, releases it.
+    clearRecovery();recoveryTimer=setInterval(recover,100);
     if(onBuffering)diagnosticTimer=setTimeout(()=>{diagnosticTimer=undefined;if(!disposed&&held&&intended)try{onBuffering();}catch{/* Diagnostics must not interrupt media recovery. */}},2000);
   };
   const recover = () => {
     if(disposed||blocked())return;
     clearSeek();
     if (!held || !intended) return;
-    held = false;clearDiagnostic();
+    held = false;clearDiagnostic();clearRecovery();
     onWaiting?.(false);
     player.play();
   };
@@ -75,7 +82,7 @@ export function guardPreviewBuffering(document: Document, player: Playback, read
     if(blocked()){hold();return;}
     player.play();
   };
-  const cancel = () => { intended = false; held = false; clearSeek();clearDiagnostic();onWaiting?.(false); };
+  const cancel = () => { intended = false; held = false; clearSeek();clearDiagnostic();clearRecovery();onWaiting?.(false); };
   return {
     play,
     // Live edits can replace the active source while the user intends to keep
@@ -86,7 +93,7 @@ export function guardPreviewBuffering(document: Document, player: Playback, read
     isBuffering: () => held,
     isPlaying: () => !disposed && (held ? intended : !player.paused),
     dispose() {
-      disposed = true; intended = false; held = false;clearSeek();clearDiagnostic();
+      disposed = true; intended = false; held = false;clearSeek();clearDiagnostic();clearRecovery();
       player.removeEventListener('play', played); player.removeEventListener('pause', paused); player.removeEventListener('ended', paused);
       document.removeEventListener('waiting', waiting, true);
       for (const name of ['canplay', 'seeked', 'loadeddata', 'playing', 'ended', 'progress', 'canplaythrough']) document.removeEventListener(name, recover, true);

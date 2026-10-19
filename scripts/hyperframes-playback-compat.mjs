@@ -5,12 +5,18 @@
 export const HYPERFRAMES_PLAYBACK_COMPAT_VERSION = '0.8.144';
 const original = 'let L=vt(y),I=c-S+L;if(I>=0)try{y.currentTime=I}catch{}';
 const corrected = 'let L=vt(y),I=(c-S)*$e(y)+L;if(I>=0&&!y.seeking&&(y.tagName!=="VIDEO"||y.readyState>=3)&&Math.abs(y.currentTime-I)>.04*$e(y))try{y.currentTime=I}catch{}';
+const audioClockCandidate = '!pe(S)||!S.isConnected||h(S)||fl(S)';
+const audibleClockCandidate = '!pe(S)||!S.isConnected||h(S)||Number(S.dataset.volume??1)<=0||fl(S)';
 
 export function patchHyperframesPlaybackRuntime(source, version) {
-  if (version !== HYPERFRAMES_PLAYBACK_COMPAT_VERSION || source.split(original).length !== 2) throw new Error('Review the HyperFrames Play/Pause playback-rate compatibility patch for this runtime version.');
+  if (version !== HYPERFRAMES_PLAYBACK_COMPAT_VERSION || source.split(original).length !== 2 || source.split(audioClockCandidate).length !== 2) throw new Error('Review the HyperFrames playback compatibility patches for this runtime version.');
   // Play/Pause must not restart an unfinished video seek or seek a starved
   // decoder a few milliseconds ahead of its buffered frame. Match the runtime's
   // 40ms transport tolerance, scaled into source time for accelerated clips.
   // Explicit paused seek, render-seek and frame-step sync stay untouched.
-  return source.replace(original, corrected);
+  // A silent native audio element must not drive picture time. Its timestamps
+  // can advance independently of video decoding, causing catch-up seeks and
+  // buffering pauses despite an entirely silent timeline. Preserve audible
+  // audio-master sync and fall back to the monotonic clock for silent projects.
+  return source.replace(original, corrected).replace(audioClockCandidate, audibleClockCandidate);
 }

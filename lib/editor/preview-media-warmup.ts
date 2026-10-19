@@ -7,7 +7,9 @@ export function warmPreviewMedia(document: Document, readTime: () => number): ()
   refresh();
   const Observer = document.defaultView!.MutationObserver;
   const observer = new Observer(refresh);
-  observer.observe(document.getElementById('composition')!, { childList: true, subtree: true, attributes: true, attributeFilter: ['data-start', 'data-media-start', 'src'] });
+  // Player load can precede insertion of the composition root. Observe the
+  // document so preparation survives that initial empty frame and root swaps.
+  observer.observe(document, { childList: true, subtree: true, attributes: true, attributeFilter: ['data-start', 'data-media-start', 'src'] });
   function tick() {
     if (stopped) return;
     const time = readTime();
@@ -24,7 +26,7 @@ export function warmPreviewMedia(document: Document, readTime: () => number): ()
       const due = Number(node.dataset.start) - time;
       // Large originals can take several seconds to service a cold range seek.
       // Keep the four-source cap, but start before that wait reaches the cut.
-      return node.isConnected && due > 0 && due <= 6;
+      return node.isConnected && (node.tagName!=='AUDIO'||Number(node.dataset.volume??1)>0) && due > 0 && due <= 6;
     }).sort((a, b) => Number(a.dataset.start) - Number(b.dataset.start)).slice(0, 4);
     for (const node of upcoming) {
       const key = `${node.getAttribute('src')}|${node.dataset.mediaStart}`;
