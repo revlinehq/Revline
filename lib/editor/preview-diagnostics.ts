@@ -6,7 +6,27 @@ export function tracePreviewPlayback(document:Document,player:Transport,readTime
   const win=document.defaultView;
   if(!win)return()=>{};
   const media=new Map<HTMLMediaElement,MediaSample>();
+  const probedSources=new Set<string>();
   const traceId=crypto.randomUUID().slice(0,8);
+  const probeSource=(node:HTMLMediaElement)=>{
+    const url=node.currentSrc||node.src;
+    if(!url||probedSources.has(url)||probedSources.size>=4)return;
+    probedSources.add(url);
+    void (async()=>{
+      const started=performance.now();
+      try {
+        const response=await fetch(url,{headers:{Range:'bytes=0-32767'},cache:'no-store',signal:AbortSignal.timeout(10000)});
+        const reader=response.body?.getReader(),parts:Uint8Array[]=[];let length=0;
+        try { while(reader&&length<32768){const next=await reader.read();if(next.done)break;const part=next.value.slice(0,32768-length);parts.push(part);length+=part.length;} }
+        finally { await reader?.cancel(); }
+        const bytes=new Uint8Array(length);let offset=0;for(const part of parts){bytes.set(part,offset);offset+=part.length;}
+        const hash=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes)),byte=>byte.toString(16).padStart(2,'0')).join('');
+        console.warn('[Revline playback source probe]',JSON.stringify({chatId,traceId,id:node.dataset.sourceClip,status:response.status,contentType:response.headers.get('content-type'),contentRange:response.headers.get('content-range'),bytes:length,sha256:hash,elapsedMs:Math.round(performance.now()-started)}));
+      } catch(error) {
+        console.warn('[Revline playback source probe]',JSON.stringify({chatId,traceId,id:node.dataset.sourceClip,errorType:error instanceof Error?error.name:'UnknownError',elapsedMs:Math.round(performance.now()-started)}));
+      }
+    })();
+  };
   let stopped=false,previousWall=performance.now(),previousClock=readTime(),lastRaf=0,rafCount=0,maxRafGap=0,longTasks=0,longTaskMs=0,raf=0;
   const events=['loadstart','loadedmetadata','progress','suspend','waiting','stalled','seeking','seeked','playing','pause','error'];
   const buffered=(node:HTMLMediaElement)=>{const ranges:number[][]=[];for(let index=0;index<node.buffered.length&&ranges.length<6;index++)ranges.push([node.buffered.start(index),node.buffered.end(index)]);return ranges;};
@@ -34,7 +54,7 @@ export function tracePreviewPlayback(document:Document,player:Transport,readTime
     }
     for(const [node,sample]of media)if(!node.isConnected){if(node.tagName==='VIDEO'&&sample.frameCallback!==undefined)(node as HTMLVideoElement).cancelVideoFrameCallback(sample.frameCallback);media.delete(node);}
   }
-  const event=(event:Event)=>{const sample=media.get(event.target as HTMLMediaElement);if(sample)sample.events[event.type]=(sample.events[event.type]??0)+1;};
+  const event=(event:Event)=>{const node=event.target as HTMLMediaElement,sample=media.get(node);if(sample)sample.events[event.type]=(sample.events[event.type]??0)+1;if(sample&&event.type==='error')probeSource(node);};
   for(const name of events)document.addEventListener(name,event,true);
   function tick(now:number){if(stopped)return;if(state().playing){rafCount++;if(lastRaf)maxRafGap=Math.max(maxRafGap,now-lastRaf);lastRaf=now;}else lastRaf=0;raf=win!.requestAnimationFrame(tick);}
   raf=win.requestAnimationFrame(tick);
