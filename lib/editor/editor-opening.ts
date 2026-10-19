@@ -1,4 +1,18 @@
 import type { MediaAsset, Timeline } from './types';
+import { MAX_PREVIEW_BYTES } from './preview-source-cache';
+
+/** Do not advertise a large original's first frame as a prepared editing source. */
+export function createPlaybackOpeningGate() {
+  let opened = false;
+  return (timeline: Timeline, assets: MediaAsset[] | undefined) => {
+    if (!assets) return []; // An unresolved asset query must not open the latch.
+    if (opened) return [];
+    const used = new Set(timeline.clips.filter(clip => clip.kind === 'video').map(clip => clip.assetId));
+    const pending = assets.filter(asset => asset.kind === 'video' && used.has(asset._id) && (asset.size ?? 0) > MAX_PREVIEW_BYTES && !asset.previewUrl);
+    if (!pending.length) opened = true;
+    return pending;
+  };
+}
 
 /** Audio extraction and its linked waveform are part of opening the edit. */
 export function editorAudioPrepared(timeline: Timeline, assets: MediaAsset[]) {

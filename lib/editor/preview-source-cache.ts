@@ -1,6 +1,6 @@
 import type { MediaAsset } from './types';
 
-const MAX_PREVIEW_BYTES = 64 * 1024 * 1024;
+export const MAX_PREVIEW_BYTES = 64 * 1024 * 1024;
 const MAX_SESSION_BYTES = 128 * 1024 * 1024;
 type PreviewAsset = MediaAsset & { previewUrl?: string | null; previewVersion?: string | number | null; previewSize?: number | null };
 type Entry = { controller: AbortController; consumers: Set<symbol>; promise: Promise<string>; expectedBytes: number; url?: string };

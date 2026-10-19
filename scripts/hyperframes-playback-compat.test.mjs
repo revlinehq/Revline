@@ -1,6 +1,8 @@
 import {guardPreviewBuffering} from '../lib/editor/preview-buffering.ts';
 import {previewMediaReady,waitForPreviewMedia} from '../lib/editor/preview-readiness.ts';
 import {warmPreviewMedia} from '../lib/editor/preview-media-warmup.ts';
+import {createPlaybackOpeningGate} from '../lib/editor/editor-opening.ts';
+import {MAX_PREVIEW_BYTES} from '../lib/editor/preview-source-cache.ts';
 import {generateComposition} from '../lib/editor/composition.ts';
 import {videoThumbnails,cachedVideoThumbnail} from '../lib/editor/video-thumbnails.ts';
 import assert from 'node:assert/strict';
@@ -10,6 +12,23 @@ import { test, vi } from 'vitest';
 import { patchHyperframesPlaybackRuntime, HYPERFRAMES_PLAYBACK_COMPAT_VERSION } from './hyperframes-playback-compat.mjs';
 
 const upstream=readFileSync('node_modules/@hyperframes/core/dist/hyperframe.runtime.iife.js','utf8');
+test('initial large-original opening waits for its derivative, then never remounts playback for later additions',()=>{
+  const gate=createPlaybackOpeningGate(),large={_id:'large',kind:'video',fileName:'Original.mp4',size:428851563,url:'https://original.invalid/video.mp4'};
+  const timeline={fps:60,aspectRatio:'9:16',clips:[{id:'one-uncut-video',assetId:large._id,kind:'video',start:0,duration:121.381067}]};
+  assert.deepEqual(gate(timeline,undefined),[],'An unresolved query does not mark the editor as opened');
+  assert.deepEqual(gate(timeline,[large]),[large]);
+  assert.deepEqual(gate({...timeline,clips:[{...timeline.clips[0],duration:100}]},[large]),[large],'Edits do not mistake original first-frame readiness for prepared playback');
+  assert.deepEqual(gate(timeline,[{...large,previewUrl:'https://preview.invalid/video.mp4',previewSize:50038423}]),[]);
+  const later={...large,_id:'added-later'};
+  assert.deepEqual(gate({...timeline,clips:[...timeline.clips,{...timeline.clips[0],id:'later',assetId:later._id}]},[large,later]),[],'A mounted editor keeps its session while new sources prepare');
+});
+test('opening gate leaves small sources and unused originals alone',()=>{
+  const small={_id:'small',kind:'video',fileName:'Small.mp4',size:MAX_PREVIEW_BYTES,url:'https://small.invalid/video.mp4'};
+  const unused={...small,_id:'unused',size:MAX_PREVIEW_BYTES+1};
+  const timeline={fps:30,aspectRatio:'16:9',clips:[{id:'small-clip',assetId:small._id,kind:'video',start:0,duration:3}]};
+  assert.deepEqual(createPlaybackOpeningGate()(timeline,[small,unused]),[]);
+  assert.deepEqual(createPlaybackOpeningGate()({...timeline,clips:[]},[unused]),[],'An empty project can open before future imports');
+});
 const patched=patchHyperframesPlaybackRuntime(upstream,HYPERFRAMES_PLAYBACK_COMPAT_VERSION);
 const alignment=source=>source.slice(source.indexOf('Vd=c=>')+'Vd='.length,source.indexOf(',bs=()=>',source.indexOf('Vd=c=>')));
 function run(source,time,rate,current=0){

@@ -24,6 +24,7 @@ import { addMediaClip, separateVideoClips } from '@/lib/editor/operations';
 import { prepareVideoAudio, prepareAudioWaveform } from '@/lib/editor/prepare-video-audio';
 import { prepareMediaForEditing } from '@/lib/editor/prepare-media-for-editing';
 import { MEDIA_ACTIVITY_LABELS } from '@/lib/media-analysis/activity';
+import { createPlaybackOpeningGate } from '@/lib/editor/editor-opening';
 import { isCasualChat } from '@/lib/editor/chat-request';
 import { uploadSourceFile } from '@/lib/editor/upload-source';
 import { composerMedia } from '@/lib/editor/composer-media';
@@ -96,15 +97,18 @@ function ProjectEditor({project}: {project:Doc<'projects'>}) {
     return {...asset,preparation:{status:failed?'failed' as const:'processing' as const,message:failed?'Audio preparation failed.':'Preparing audio…'}};
   }),[media,optimisticAssets,mediaTasks]);
   const requestedPreviews=useRef(new Set<string>());
+  const [previewPreparationError,setPreviewPreparationError]=useState('');
+  const [playbackOpeningGate]=useState(createPlaybackOpeningGate);
   useEffect(()=>{
     const used=new Set((activePreview?.timeline??timeline).clips.filter(clip=>clip.kind==='video').map(clip=>clip.assetId));
     const legacy=assets.filter(asset=>asset.kind==='video'&&used.has(asset._id)&&!asset.previewUrl&&!requestedPreviews.current.has(asset._id)).map(asset=>asset._id);
     if(!legacy.length)return;
     for(const id of legacy)requestedPreviews.current.add(id);
     void preparePlayback({projectId,assetIds:legacy as Id<'assets'>[]}).catch(()=>{
-      // Original footage remains playable while background preparation retries
-      // on a later project opening; this is not a failed upload or saved edit.
+      // Mounted sessions keep their source while preparation retries. An initial
+      // large source waits below; this is not a failed upload or saved edit.
       console.warn('[Revline playback preparation]',JSON.stringify({reason:'background preview preparation unavailable',sources:legacy.length}));
+      setPreviewPreparationError('Could not prepare this footage for editing. Your original footage and saved edit are intact.');
     });
   },[assets,timeline,activePreview?.timeline,preparePlayback,projectId]);
   const commit=useCallback((next:Timeline)=>{timelineRef.current=next;if(store.getState().timeline!==next)store.getState().replace(next);saves.edit(next);},[saves]);
@@ -224,5 +228,13 @@ function ProjectEditor({project}: {project:Doc<'projects'>}) {
     })().catch(e=>setError(userError(e, 'Could not start this edit.')));
   },[media,projectId,send]);
   if(media===undefined)return editorLoading(projectId);
+  const pendingPlayback=playbackOpeningGate(activePreview?.timeline??timeline,assets);
+  if(pendingPlayback.length){
+    const tasks=pendingPlayback.map(asset=>mediaTasks?.find(task=>task.kind==='preview'&&task.assetId===asset._id));
+    const failed=tasks.some(task=>task?.status==='failed'||task?.status==='cancelled');
+    const task=tasks.find(task=>task?.status==='running')??tasks[0];
+    const error=previewPreparationError||(failed?'Could not prepare this footage for editing. Your original footage and saved edit are intact.':'');
+    return <div className="editor-app footage-preparation-boot"><WorkspaceNav title={title}/><FootagePreparation thumbnail={pendingPlayback[0].thumbnailUrl??openingFootage(projectId)?.thumbnail} fileName={pendingPlayback[0].fileName} label="Preparing playback…" activity={task?.status==='queued'?'Queued for playback preparation…':'Optimizing footage for smooth editing…'} detail="Your footage is saved. The editor opens when its editing preview is ready." error={error} onRetry={error?()=>{setPreviewPreparationError('');void preparePlayback({projectId,assetIds:pendingPlayback.map(asset=>asset._id as Id<'assets'>)}).catch(()=>setPreviewPreparationError('Could not prepare this footage for editing. Your original footage and saved edit are intact.'));}:undefined}/></div>;
+  }
   return <EditorStateProvider store={store}><EditorShell onRegisterStockAudio={async catalogId=>{await waitForSave();const asset=await registerStockAudio({projectId,catalogId});setOptimisticAssets(previous=>[...previous.filter(item=>item._id!==asset._id),asset]);return asset;}} onShare={()=>setShareOpen(true)} onSaveThumbnail={persistThumbnail} projectId={projectId} draftKey={`revline:editor-draft:${projectId}`} title={title} onTitle={titleChange} timeline={activePreview?.timeline??timeline} liveEdit={activePreview??undefined} assets={assets} composerAttachments={[...composerMedia(assets,composerAssetIds),...(uploadToComposer?upload?.queue??[]:[]).map(item=>({id:`upload:${item.id}`,name:item.name,kind:item.kind,progress:upload?.phase==='uploading'?item.percent:undefined,error:item.error}))]} composerBusy={!!upload&&uploadToComposer} onRemoveComposerAttachment={id=>setComposerAssetIds(previous=>previous.filter(value=>value!==id))} onRemoveAsset={async asset=>{await waitForSave();await removeAsset({assetId:asset._id as Id<'assets'>});setComposerAssetIds(previous=>previous.filter(id=>id!==asset._id));store.setState(state=>({history:state.history.filter(edit=>!edit.clips.some(clip=>clip.assetId===asset._id)),future:state.future.filter(edit=>!edit.clips.some(clip=>clip.assetId===asset._id))}));setOptimisticAssets(previous=>previous.filter(item=>item._id!==asset._id));}} onRefreshMedia={handleRefreshMedia} onChange={change} saving={saving} upload={upload} error={error} onError={setError} onUndo={undo} onRedo={redo} canUndo={!undoBusy&&(!!history.length||remoteUndo.current.remaining>0)} canRedo={!!future.length} assistantEditSnapshot={assistantEditSnapshot} canResumeEdit={!!project.aiRecovery?.requests.length} messages={EMPTY_MESSAGES} conversation={project.threadId?{projectId,threadId:project.threadId}:undefined} aiRunning={ai?.running??false} aiEditing={ai?.editing??false} aiWorkflowActive={ai?.workflowActive} aiConfigured={ai?.configured??false} modelSwitcher={ai?.modelSwitcher??false} allowedModels={ai?.allowedModels} defaultModelChoice={ai?.defaultModelChoice} aiError={ai?.error} onStop={async()=>{await stop({projectId});}} onSend={sendRequest} onExport={exportVideo} onCancelExport={jobId=>renderCancel({jobId:jobId as Id<'renderJobs'>}).then(()=>{})} exportState={exportState} onUpload={handleUpload} onDropUpload={files=>handleUpload(files,{addToTimeline:false})} onImportVideo={async url=>{await waitForSave();const imported=await importVideo({projectId,url});setComposerImportIds(previous=>[...previous,imported.taskId]);}} videoImports={mediaTasks?.filter(task=>task.kind==='import')} analysisBusy={ai?.activity} analysisSource={ai?.activitySource} analysisProgress={ai?.activityProgress} analysisStartedAt={ai?.activityStartedAt} preparationActivity={!ai?.running?assets.find(asset=>asset.preparation?.status==='processing'&&timeline.clips.some(clip=>clip.assetId===asset._id))?.preparation?.message:undefined}/><ConnectedTimelineShareDialog projectId={projectId} open={shareOpen} onOpenChange={setShareOpen} title={title} timeline={timeline} assets={assets} onBeforePublish={waitForSave} publishDisabled={!!ai?.running || !timeline.clips.length}/></EditorStateProvider>;
 }

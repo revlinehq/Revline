@@ -89,7 +89,7 @@ export type Timeline = { clips: Clip[]; fps: number; aspectRatio: AspectRatio; t
 export type AudioWaveform = { peaks: string; samplesPerSecond: number };
 export type MediaAsset = {
   _id: string; fileName: string; kind: 'video' | 'image' | 'audio';
-  duration?: number; width?: number; height?: number; url: string | null; thumbnailUrl?:string|null;
+  duration?: number; width?: number; height?: number; size?: number; url: string | null; thumbnailUrl?:string|null;
   previewUrl?: string | null; previewSize?: number; previewWidth?: number; previewHeight?: number; previewFps?: number; previewVersion?: number;
   audioAssetId?: string; audioExtracted?: boolean;
   analysisKinds?: string[];
