@@ -12,6 +12,7 @@ import { prepareExternalAuthRedirect } from '@/components/workspace/project-draf
 import { AuthFrame } from './auth-frame';
 import { OtpCodeInput } from './otp-code-input';
 import { safeAuthRedirect, sendEmailCode, verifyEmailCode } from './email-auth-flow';
+import { InstagramBrowserHandoff } from './instagram-browser-handoff';
 
 function errorMessage(error: unknown, fallback: string) {
   const value = error as { errors?: { longMessage?: string; message?: string }[]; longMessage?: string; message?: string } | null;
@@ -30,6 +31,7 @@ export function AuthForm() {
   const params = useSearchParams();
   const redirectParam = params.get('redirect_url') ?? params.get('redirectUrl') ?? params.get('returnTo');
   const [target, setTarget] = useState(NEW_PROJECT_PATH);
+  const [browserUrl, setBrowserUrl] = useState('');
   const [step, setStep] = useState<'email' | 'code'>('email');
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
@@ -45,6 +47,11 @@ export function AuthForm() {
   useEffect(() => {
     const destination = safeAuthRedirect(redirectParam, window.location.origin);
     setTarget(destination);
+    if (/Android/i.test(navigator.userAgent) && /Instagram/i.test(navigator.userAgent)) {
+      const url = new URL('/sign-in', window.location.origin);
+      url.searchParams.set('redirect_url', destination);
+      setBrowserUrl(url.href);
+    }
     if (isLoaded && isSignedIn && phase === 'idle' && !blockedTask) router.replace(destination);
   }, [redirectParam, isLoaded, isSignedIn, phase, blockedTask, router]);
   useEffect(() => {
@@ -105,6 +112,8 @@ export function AuthForm() {
     catch (failure) { setError(errorMessage(failure, 'Could not continue with Google. Please try again.')); }
     finally { inFlight.current = false; setPhase('idle'); }
   }
+
+  if (browserUrl && !isSignedIn) return <InstagramBrowserHandoff url={browserUrl} />;
 
   return <AuthFrame><div className="auth-form" data-auth-step={step}>
     <header className="auth-header"><h1>{step === 'code' ? 'Check your email.' : 'Welcome to Revline.'}</h1><p>{step === 'code' ? <><span>Enter the 6-digit code sent to</span><strong>{email}</strong></> : 'Your next edit is waiting.'}</p></header>
