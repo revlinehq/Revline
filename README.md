@@ -138,3 +138,5 @@ node --import tsx scripts/music-beats-smoke.ts
 The installation script verifies the pinned model checksum; processing jobs do not download model weights. `BEAT_TRACK_PYTHON` and `BEAT_TRACK_MODEL_PATH` override the local paths on a hosted worker. Inference uses two CPU threads and no CUDA runtime. The annotated music smoke checks separate pulse/hit timestamps, a known energy rise, trimmed/speed-adjusted timeline mapping, and silence; it is not a general music-accuracy benchmark.
 
 `node --env-file=.env.local --import tsx scripts/agentic-video-smoke.ts` sends a generated 4-second red/blue video to the actual Gemini API, verifies native agentic processing steps and timestamped scene evidence, and deletes the uploaded fixture without modifying a project.
+
+Cloudflare Workers Builds deploys the frontend from `codex/mvp` with `npm run build:cloudflare` and `npm run deploy:frontend:ci`. The build uses public production settings from `wrangler.jsonc`; Clerk secrets remain in the Worker. Convex and the media worker are deployed separately. Vercel Git auto-deployments are disabled.

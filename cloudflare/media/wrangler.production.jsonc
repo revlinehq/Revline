@@ -8,6 +8,6 @@
   "workers_dev": true,
   "preview_urls": false,
   "r2_buckets": [{ "binding": "MEDIA", "bucket_name": "revline-editor-media" }],
-  "vars": { "ALLOWED_ORIGINS": "https://tryrevline.com,https://editor.tryrevline.com,https://preview.tryrevline.com" },
+  "vars": { "ALLOWED_ORIGINS": "https://tryrevline.com,https://editor.tryrevline.com" },
   "observability": { "enabled": true, "logs": { "enabled": true, "invocation_logs": false }, "redact_query_string": true, "traces": { "enabled": true, "head_sampling_rate": 1, "persist": true } }
 }

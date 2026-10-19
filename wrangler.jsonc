@@ -36,10 +36,17 @@
     {
       "pattern": "editor.tryrevline.com",
       "custom_domain": true
-    },
-    {
-      "pattern": "preview.tryrevline.com",
-      "custom_domain": true
     }
-  ]
+  ],
+  "vars": {
+    "APP_ORIGIN": "https://tryrevline.com",
+    "NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY": "pk_live_Y2xlcmsudHJ5cmV2bGluZS5jb20k",
+    "NEXT_PUBLIC_CONVEX_SITE_URL": "https://different-gnu-398.convex.site",
+    "NEXT_PUBLIC_CONVEX_URL": "https://different-gnu-398.convex.cloud",
+    "MEDIA_WORKER_URL": "https://revline-editor-media-production.makaradze98-s.workers.dev",
+    "NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL": "/",
+    "NEXT_PUBLIC_CLERK_SIGN_IN_URL": "/sign-in",
+    "NEXT_PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL": "/",
+    "NEXT_PUBLIC_CLERK_SIGN_UP_URL": "/sign-up"
+  }
 }
