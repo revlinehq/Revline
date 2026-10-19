@@ -33,7 +33,7 @@ export function createPreviewMediaSession(options: PreviewMediaSessionOptions) {
   const lifetime = new AbortController();
   const attempted = new WeakSet<HTMLMediaElement>();
   const recoveries = new Map<HTMLMediaElement, { controller: AbortController; assetId: string; stamp: string; source: string | undefined }>();
-  const refreshes = new Map<string, Promise<string | null>>();
+  const refreshes = new Map<string, { stamp: string; promise: Promise<string | null> }>();
   const recovered = new Map<string, { original: string | null; url: string }>();
   const error = (message: string) => { if (!disposed) options.onError(redactedMessage(message, 'Could not load this media.')); };
   const guard = guardPreviewBuffering(document, transport, readTime,
@@ -41,14 +41,14 @@ export function createPreviewMediaSession(options: PreviewMediaSessionOptions) {
     waiting => { if (!disposed) options.onWaiting(waiting); });
   const stopWarmup = warmPreviewMedia(document, readTime);
   const playableUrl = (asset: PlaybackAsset | undefined) => asset?.url?.startsWith('blob:') ? asset.url : asset?.previewUrl ?? asset?.url ?? null;
-  const stamp = (asset: MediaAsset | undefined) => JSON.stringify([asset?.url, asset?.previewVersion, asset?.previewSize]);
+  const stamp = (asset: MediaAsset | undefined) => JSON.stringify([asset?.url, asset?.previewUrl, asset?.previewVersion, asset?.previewSize]);
   const nodeSource = (media: HTMLMediaElement) => media.getAttribute?.('src') ?? media.src;
   const currentRecovery = (media: HTMLMediaElement, request: { assetId: string; stamp: string; source: string | undefined }) => media.isConnected &&
     timeline.clips.find(clip => clip.id === media.dataset.sourceClip)?.assetId === request.assetId && stamp(assets.find(asset => asset._id === request.assetId)) === request.stamp && nodeSource(media) === request.source;
   function refreshSource(assetId: string): Promise<string | null> {
-    const existing = refreshes.get(assetId);
-    if (existing) return existing;
     const asset = assets.find(asset => asset._id === assetId) as PlaybackAsset | undefined;
+    const generation=stamp(asset),existing = refreshes.get(assetId);
+    if (existing?.stamp===generation) return existing.promise;
     const url = playableUrl(asset);
     if (url?.startsWith('blob:') || !options.refreshMedia) return Promise.resolve(url);
     const request = Promise.resolve().then(() => options.refreshMedia!([assetId])).then(patches => {
@@ -56,8 +56,8 @@ export function createPreviewMediaSession(options: PreviewMediaSessionOptions) {
       // Playback refresh authorizes the derivative first when one exists.
       return patch?.previewUrl ?? patch?.url ?? url;
     });
-    refreshes.set(assetId, request);
-    void request.finally(() => { if (refreshes.get(assetId) === request) refreshes.delete(assetId); }).catch(() => {});
+    const refresh={stamp:generation,promise:request};refreshes.set(assetId,refresh);
+    void request.finally(() => { if (refreshes.get(assetId) === refresh) refreshes.delete(assetId); }).catch(() => {});
     return request;
   }
   async function recover(media: HTMLMediaElement, quiet = false) {

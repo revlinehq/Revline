@@ -376,6 +376,21 @@ test('a new thumbnail source URL owns new pending work while decoded stills rema
   }finally{globalThis.document=originalDocument;}
 });
 
+test('a delayed original refresh is not reused after the same asset gains a prepared preview profile',async()=>{
+  vi.useFakeTimers();const media=new EventTarget();let src='https://private.test/original',releaseOld;
+  Object.assign(media,{tagName:'VIDEO',isConnected:true,paused:true,preload:'auto',networkState:1,readyState:3,currentTime:0,duration:10,seeking:false,error:null,volume:1,muted:false,playbackRate:1,dataset:{start:'0',end:'10',duration:'10',sourceClip:'clip',mediaStart:'0'},buffered:{length:1,start:()=>0,end:()=>10},hasAttribute:()=>true,getAttribute:name=>name==='src'?src:null,load(){queueMicrotask(()=>media.dispatchEvent(new Event('loadedmetadata')))},pause(){}});Object.defineProperty(media,'src',{get:()=>src,set:value=>{src=value}});
+  const fixture=sessionDocument([media]),errors=[],asset={_id:'profile-asset',kind:'video',url:src},timeline={clips:[{id:'clip',kind:'video',assetId:asset._id,start:0,duration:10,sourceStart:0}],fps:30,aspectRatio:'vertical'};
+  const freshPreview='https://private.test/fresh-preview',refresh=vi.fn(()=>refresh.mock.calls.length===1?new Promise(resolve=>{releaseOld=resolve}):Promise.resolve([{_id:asset._id,url:freshPreview}]));
+  const session=createPreviewMediaSession({...fixture,document:fixture.doc,timeline,assets:[asset],refreshMedia:refresh,onError:message=>errors.push(message),onWaiting:()=>{}});
+  const error=()=>{const event=new Event('error');Object.defineProperty(event,'target',{value:media});fixture.doc.dispatchEvent(event);};
+  try{
+    error();await vi.advanceTimersByTimeAsync(0);
+    src='https://private.test/preview';session.update(timeline,[{...asset,url:src,previewUrl:src,previewVersion:1,previewSize:100}]);await vi.advanceTimersByTimeAsync(0);
+    error();await vi.advanceTimersByTimeAsync(0);releaseOld([{_id:asset._id,url:'https://private.test/fresh-original'}]);await vi.advanceTimersByTimeAsync(0);
+    assert.equal(refresh.mock.calls.length,2,'The new source profile must own a separate refresh request');assert.equal(src,freshPreview);assert.deepEqual(errors,[]);
+  }finally{session.dispose();vi.useRealTimers()}
+});
+
 test('native fallback does not retry the same failed full preview download on every edit',async()=>{
   vi.useFakeTimers();const originalFetch=globalThis.fetch;let calls=0;
   globalThis.fetch=async()=>{calls++;throw new Error('temporary network failure')};const cache=createPreviewSourceCache(),asset=proxyAsset(),signal=new AbortController().signal;
