@@ -11,11 +11,15 @@ const audioDrift = 'if(!J&&!V&&!G&&X&&ne>Yt){';
 const scaledAudioDrift = 'if(!J&&!V&&!G&&X&&ne>Yt*(r.tagName==="AUDIO"&&e.playing?Math.abs(T):1)){';
 const playingVideo = 'J=r.tagName==="VIDEO"&&!r.paused&&e.playing';
 const playingMedia = 'J=(r.tagName==="VIDEO"||r.tagName==="AUDIO"&&a&&!e.forceSync&&ne<=.1*Math.abs(T))&&!r.paused&&e.playing';
+const nativeVolume = 'r.volume=M,cl.set(r,M),e.onElementVolume?.(r,M,O),(t||e.isWebAudioOwned?.(r))';
+const audibleVolume = 'r.volume=M,cl.set(r,M),e.onElementVolume?.(r,M,O);if(r.tagName==="AUDIO"&&M===0){r.paused||r.pause();ml(r);cl.set(r,M);continue}(t||e.isWebAudioOwned?.(r))';
+const nativeAlignment = 'V=d&&ne>.001||r.ended&&h&&ne>.001||j||ne>pl&&(G||Y||U),';
+const resumedAlignment = 'V=r.tagName==="AUDIO"&&r.paused&&e.playing&&ne>.001||d&&ne>.001||r.ended&&h&&ne>.001||j||ne>pl&&(G||Y||U),';
 const nativePreload = 'Qy=(c,p,y)=>{let S=d.isPlaying();';
 const managedPreload = 'Qy=(c,p,y)=>{if(document.documentElement.dataset.revlineMediaLoading==="managed")return;let S=d.isPlaying();';
 
 export function patchHyperframesPlaybackRuntime(source, version) {
-  if (version !== HYPERFRAMES_PLAYBACK_COMPAT_VERSION || source.split(original).length !== 2 || source.split(audioClockCandidate).length !== 2 || source.split(audioDrift).length !== 2 || source.split(playingVideo).length !== 2 || source.split(nativePreload).length !== 2) throw new Error('Review the HyperFrames playback compatibility patches for this runtime version.');
+  if (version !== HYPERFRAMES_PLAYBACK_COMPAT_VERSION || source.split(original).length !== 2 || source.split(audioClockCandidate).length !== 2 || source.split(audioDrift).length !== 2 || source.split(playingVideo).length !== 2 || source.split(nativeVolume).length !== 2 || source.split(nativeAlignment).length !== 2 || source.split(nativePreload).length !== 2) throw new Error('Review the HyperFrames playback compatibility patches for this runtime version.');
   // Play/Pause must not restart an unfinished video seek or seek a starved
   // decoder a few milliseconds ahead of its buffered frame. Match the runtime's
   // 40ms transport tolerance, scaled into source time for accelerated clips.
@@ -32,8 +36,12 @@ export function patchHyperframesPlaybackRuntime(source, version) {
   // repeated seeking/waiting events. Limit this to 100ms of timeline drift so
   // a stable larger offset after preroll still hard-aligns within two samples.
   // Keep paused, preroll and forced sync exact.
+  // Effective zero-gain audio needs no native decoder work. Evaluate automation
+  // and the WebAudio gain callback first, then pause it and clear timing history.
+  // Retain the last gain so live unmute can resolve its authored volume; align
+  // the paused source exactly before any positive-gain playback resumes.
   // Revline's bounded warmup owns preview source preparation. Native visibility
   // deferral otherwise promotes extra streams and discards already prepared cuts.
   // Keep the studio marker for first-frame readiness and lazy image behavior.
-  return source.replace(original, corrected).replace(audioClockCandidate, audibleClockCandidate).replace(audioDrift, scaledAudioDrift).replace(playingVideo, playingMedia).replace(nativePreload, managedPreload);
+  return source.replace(original, corrected).replace(audioClockCandidate, audibleClockCandidate).replace(audioDrift, scaledAudioDrift).replace(playingVideo, playingMedia).replace(nativeVolume, audibleVolume).replace(nativeAlignment, resumedAlignment).replace(nativePreload, managedPreload);
 }

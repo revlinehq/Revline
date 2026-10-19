@@ -31,7 +31,7 @@ test('one-times speed stays correct and decoded frames inside transport toleranc
 });
 test('patch is confined to alignment, clock selection, media drift correction and managed loading and rejects changed dependencies',()=>{
   const before=alignment(upstream),after=alignment(patched);
-  assert.equal(patched.replace(after,before).replace('!pe(S)||!S.isConnected||h(S)||Number(S.dataset.volume??1)<=0||fl(S)','!pe(S)||!S.isConnected||h(S)||fl(S)').replace('if(!J&&!V&&!G&&X&&ne>Yt*(r.tagName==="AUDIO"&&e.playing?Math.abs(T):1)){','if(!J&&!V&&!G&&X&&ne>Yt){').replace('J=(r.tagName==="VIDEO"||r.tagName==="AUDIO"&&a&&!e.forceSync&&ne<=.1*Math.abs(T))&&!r.paused&&e.playing','J=r.tagName==="VIDEO"&&!r.paused&&e.playing').replace('Qy=(c,p,y)=>{if(document.documentElement.dataset.revlineMediaLoading==="managed")return;','Qy=(c,p,y)=>{'),upstream);
+  assert.equal(patched.replace(after,before).replace('!pe(S)||!S.isConnected||h(S)||Number(S.dataset.volume??1)<=0||fl(S)','!pe(S)||!S.isConnected||h(S)||fl(S)').replace('if(!J&&!V&&!G&&X&&ne>Yt*(r.tagName==="AUDIO"&&e.playing?Math.abs(T):1)){','if(!J&&!V&&!G&&X&&ne>Yt){').replace('J=(r.tagName==="VIDEO"||r.tagName==="AUDIO"&&a&&!e.forceSync&&ne<=.1*Math.abs(T))&&!r.paused&&e.playing','J=r.tagName==="VIDEO"&&!r.paused&&e.playing').replace('r.volume=M,cl.set(r,M),e.onElementVolume?.(r,M,O);if(r.tagName==="AUDIO"&&M===0){r.paused||r.pause();ml(r);cl.set(r,M);continue}(t||e.isWebAudioOwned?.(r))','r.volume=M,cl.set(r,M),e.onElementVolume?.(r,M,O),(t||e.isWebAudioOwned?.(r))').replace('V=r.tagName==="AUDIO"&&r.paused&&e.playing&&ne>.001||d&&ne>.001||r.ended&&h&&ne>.001||j||ne>pl&&(G||Y||U),','V=d&&ne>.001||r.ended&&h&&ne>.001||j||ne>pl&&(G||Y||U),').replace('Qy=(c,p,y)=>{if(document.documentElement.dataset.revlineMediaLoading==="managed")return;','Qy=(c,p,y)=>{'),upstream);
   assert.throws(()=>patchHyperframesPlaybackRuntime(upstream,'0.8.145'),/Review/);
   assert.throws(()=>patchHyperframesPlaybackRuntime(upstream.replace('I=c-S+L','I=changed'),'0.8.144'),/Review/);
 });
@@ -69,26 +69,28 @@ test('initial readiness also responds when the browser suspends its bounded paus
 });
 
 function repeatedAudioSync(source,rate,drift,forceSync=false,options={}){
-  const writes=[],rates=[],maps=Object.fromEntries(['ll','jo','Xr','cl','Jr'].map(key=>[key,new WeakMap()]));
-  let current=0,playbackRate=rate;
-  const media={tagName:options.tagName??'AUDIO',isConnected:true,paused:options.paused??false,ended:false,volume:options.volume??1,preload:'auto',ownerDocument:{},closest:()=>null,
-    pause(){this.paused=true},play(){this.paused=false;return Promise.resolve()},
+  const writes=[],rates=[],actions=[],maps=Object.fromEntries(['ll','jo','Xr','cl','Jr'].map(key=>[key,new WeakMap()]));
+  let current=0,playbackRate=rate,frame=0;
+  const media={tagName:options.tagName??'AUDIO',isConnected:true,paused:options.paused??false,ended:false,volume:options.volume??options.volumes?.[0]??1,preload:'auto',ownerDocument:{},closest:()=>null,
+    pause(){actions.push({action:'pause',frame});this.paused=true},play(){actions.push({action:'play',frame});this.paused=false;return Promise.resolve()},
     get playbackRate(){return playbackRate},set playbackRate(value){rates.push(value);playbackRate=value},
-    get currentTime(){return current},set currentTime(value){writes.push(value);current=value}};
+    get currentTime(){return current},set currentTime(value){actions.push({action:'seek',frame});writes.push(value);current=value}};
   const start=options.start??13.9,mediaStart=options.mediaStart??9.633333333333333;
-  const clip={el:media,start,end:options.end??16,duration:2.1,mediaStart,rate,sourceDuration:options.sourceDuration??24.789333,volume:options.volume??1};
+  const clip={el:media,start,end:options.end??16,duration:2.1,mediaStart,rate,sourceDuration:options.sourceDuration??24.789333,volume:options.volume??options.volumes?.[0]??1,fades:options.fades};
   if(options.primed){maps.ll.set(media,drift);maps.jo.set(media,mediaStart);}
-  const softCorrection=source.slice(source.indexOf('function _E('),source.indexOf('function tp('));
-  const sync=vm.runInNewContext(`var AE=.03,wE=.01;${softCorrection};(${source.slice(source.indexOf('function tp('),source.indexOf('var Xt=',source.indexOf('function tp(')))})`,{
+  const softCorrection=source.slice(source.indexOf('function ml('),source.indexOf('function tp('));
+  const fadeHelpers=source.slice(source.indexOf('function rl('),source.indexOf('var Zn='));
+  const sync=vm.runInNewContext(`var AE=.03,wE=.01;${fadeHelpers};${softCorrection};(${source.slice(source.indexOf('function tp('),source.indexOf('var Xt=',source.indexOf('function tp(')))})`,{
     ...maps,al:new WeakSet(),ul:new WeakSet(),er:new WeakSet(),
     Kt:(time,start,end)=>time>=start&&time<end,Bs:value=>value,Wn:(value,time)=>value*time,qr:()=>false,qn:()=>false,
-    sl:value=>value,Qe:value=>value,Ff:()=>null,$o:()=>false,jm:{fadeIn:0,fadeOut:0},pl:.5,Yt:.04,fl:()=>false,Qm:()=>{},It:()=>null,H:()=>{},
+    sl:value=>value,Qe:value=>value,Ff:()=>options.automation?.(frame)??null,$o:()=>false,jm:{fadeIn:0,fadeOut:0},pl:.5,Yt:.04,fl:()=>false,Qm:()=>{},vE:()=>{},It:()=>null,H:()=>{},
   });
-  for(let frame=0;frame<4;frame++){
+  for(frame=0;frame<4;frame++){
+    if(options.volumes)clip.volume=options.volumes[frame];
     const timeSeconds=(options.time??14.2)+frame/60;current=mediaStart+Math.max(0,timeSeconds-start)*rate-drift;
     sync({clips:[clip],timeSeconds,playing:options.playing??true,playbackRate:1,forceSync,cueAheadSeconds:1,getCompositionDuration:()=>28});
   }
-  return {writes,rates};
+  return {writes,rates,actions};
 }
 
 test('accelerated secondary audio does not repeatedly seek for normal timeline drift',()=>{
@@ -105,7 +107,7 @@ test('active playing secondary audio corrects ordinary drift without restarting 
     assert.ok(repeatedAudioSync(upstream,1,.06,false,{volume}).writes.length>0,'The actual upstream helper repeatedly seeks at both native volumes');
     const result=repeatedAudioSync(patched,1,.06,false,{volume});
     assert.deepEqual(result.writes,[],'A stable 60ms audio drift must not cause repeated currentTime assignments');
-    assert.deepEqual(result.rates,[1.03],'The existing gentle clock correction catches up without discarding decoded audio');
+    assert.deepEqual(result.rates,volume===0?[]:[1.03],'Silent audio is paused; audible audio catches up without discarding decoded samples');
   }
 });
 
@@ -118,6 +120,22 @@ test('already-playing secondary audio hard-aligns large stable offsets after pre
     assert.deepEqual(repeatedAudioSync(patched,rate,.06*rate,false,{primed:true}).writes,[],'60ms of timeline drift is corrected gently at each playback rate');
     assert.ok(repeatedAudioSync(patched,rate,.15*rate,false,{primed:true}).writes.length>0,'A stable 150ms timeline offset must hard-align, including slow and accelerated audio');
   }
+});
+
+test('inaudible native audio pauses and skips decoder timing while positive automation resumes exactly',()=>{
+  const silent=repeatedAudioSync(patched,1,.15,false,{volume:0});
+  assert.deepEqual(silent.writes,[],'Effective zero gain must not repeatedly seek an inaudible decoder');
+  assert.deepEqual(silent.rates,[],'Effective zero gain must not adjust native rate');
+  assert.deepEqual(silent.actions,[{action:'pause',frame:0}],'An already-playing silent native audio is paused once');
+  const stopped=repeatedAudioSync(patched,1,.15,false,{volume:0,paused:true});
+  assert.deepEqual(stopped.actions,[],'A paused silent source must not be started');
+  for(const options of [{volumes:[0,0,0,1]},{volume:0,automation:frame=>frame<3?0:.5}]){
+    const resumed=repeatedAudioSync(patched,1,.06,false,options);
+    assert.deepEqual(resumed.actions,[{action:'pause',frame:0},{action:'seek',frame:3},{action:'play',frame:3}],'Unmuting or positive keyframe gain aligns the source before resuming');
+  }
+  const fade=repeatedAudioSync(patched,1,.06,false,{time:13.9,fades:{fadeIn:1,fadeOut:0}});
+  assert.deepEqual(fade.actions.slice(0,3),[{action:'pause',frame:0},{action:'seek',frame:1},{action:'play',frame:1}],'A fade beginning at zero resumes as soon as its effective gain becomes positive');
+  assert.deepEqual(repeatedAudioSync(patched,1,.15,false,{volume:0,tagName:'VIDEO'}),repeatedAudioSync(upstream,1,.15,false,{volume:0,tagName:'VIDEO'}),'Silent video still presents picture normally');
 });
 
 test('secondary audio retains exact paused, preroll, forced and discontinuous seeks',()=>{
