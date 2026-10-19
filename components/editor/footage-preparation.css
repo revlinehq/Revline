@@ -17,6 +17,7 @@
    underneath so browser visibility throttling cannot block readiness. */
 .editor-app[data-playback-opening=true]>.editor-body,.editor-app[data-playback-opening=true]>.mobile-panel-controls{pointer-events:none}
 
-.footage-preparation-content>.processing-status{display:grid;grid-template-columns:18px auto;justify-content:center;align-items:center;column-gap:8px;row-gap:5px}.footage-preparation .processing-status-copy{display:contents}.footage-preparation .processing-status>.revline-brand{grid-column:1;grid-row:1;margin:0}.footage-preparation .processing-status-label{grid-column:2;grid-row:1;text-align:left}.footage-preparation .processing-status-detail{grid-column:1/-1;justify-self:center;text-align:center}
+.footage-preparation .processing-status-copy{align-items:center;width:100%}.footage-preparation .processing-status-heading{display:flex;align-items:center;justify-content:center;gap:8px}.footage-preparation .processing-status-heading>.revline-brand{display:flex;flex:none}.footage-preparation .processing-status-label{text-align:center}
+
 @keyframes revline-preparation-breathe{0%,100%{opacity:.35}50%{opacity:1}}
-@media(prefers-reduced-motion:reduce){.footage-preparation .processing-status[data-state=working] .processing-status-sweep::after{width:100%;animation:revline-preparation-breathe 1.8s ease-in-out infinite}.footage-preparation .processing-status[data-state=working]>.revline-brand{animation:revline-preparation-breathe 1.8s ease-in-out infinite}}
+@media(prefers-reduced-motion:reduce){.footage-preparation .processing-status[data-state=working] .processing-status-sweep::after{width:100%;animation:revline-preparation-breathe 1.8s ease-in-out infinite}.footage-preparation .processing-status[data-state=working] .processing-status-heading>.revline-brand{animation:revline-preparation-breathe 1.8s ease-in-out infinite}}
