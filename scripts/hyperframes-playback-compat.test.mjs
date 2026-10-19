@@ -4,7 +4,7 @@ import {warmPreviewMedia} from '../lib/editor/preview-media-warmup.ts';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
-import { test } from 'vitest';
+import { test, vi } from 'vitest';
 import { patchHyperframesPlaybackRuntime, HYPERFRAMES_PLAYBACK_COMPAT_VERSION } from './hyperframes-playback-compat.mjs';
 
 const upstream=readFileSync('node_modules/@hyperframes/core/dist/hyperframe.runtime.iife.js','utf8');
@@ -99,4 +99,22 @@ test('a blocked active range releases network streams held by inactive decoded c
   const doc={querySelectorAll:()=>[active,previous,next],defaultView:{MutationObserver:class{observe(){}disconnect(){}}}};
   const stop=warmPreviewMedia(doc,()=>17.608);
   try{assert.equal(active.loads,0,'The active seek is retained');assert.equal(previous.loads,1,'A paused previous cut cannot retain a stream while the active source waits');assert.equal(next.loads,1,'Even a primed future cut must release its loading stream when the active range is starved');}finally{stop();}
+});
+
+
+test('ready upcoming audio and video do not consume the four preparation slots',()=>{
+  vi.useFakeTimers();
+  const node=(kind,start,ready)=>Object.assign(new EventTarget(),{tagName:kind,isConnected:true,paused:true,networkState:1,preload:'none',readyState:ready,seeking:false,currentTime:0,duration:100,dataset:{start:String(start),end:String(start+1),duration:'1',mediaStart:String(start*10)},buffered:{length:1,start:()=>0,end:()=>100},loads:0,load(){this.loads++;},getAttribute:()=>'/source.mp4'});
+  const active=node('VIDEO',0,4),soon=[node('VIDEO',1,4),node('AUDIO',1,4),node('VIDEO',2,4),node('AUDIO',2,4)],later=node('VIDEO',3,0);
+  const doc={querySelectorAll:()=>[active,...soon,later],defaultView:{MutationObserver:class{observe(){}disconnect(){}}}};
+  const stop=warmPreviewMedia(doc,()=>0);
+  try{vi.advanceTimersByTime(200);assert.equal(later.preload,'auto','The next cold video starts preparing once earlier cuts are decoded, without waiting for their timeline starts');}finally{stop();vi.useRealTimers();}
+});
+
+test('an active seek into buffered bytes retains already prepared future streams',()=>{
+  const node=(start,time,seeking)=>Object.assign(new EventTarget(),{tagName:'VIDEO',isConnected:true,paused:true,networkState:2,preload:'auto',readyState:3,seeking,currentTime:time,duration:100,dataset:{start:String(start),end:String(start+3),duration:'3',mediaStart:String(time)},buffered:{length:1,start:()=>time-1,end:()=>time+2},loads:0,load(){this.loads++;},getAttribute:()=>'/source.mp4'});
+  const active=node(0,20,true),future=node(3,50,false);
+  const doc={querySelectorAll:()=>[active,future],defaultView:{MutationObserver:class{observe(){}disconnect(){}}}};
+  const stop=warmPreviewMedia(doc,()=>0);
+  try{assert.equal(future.loads,0,'A transient buffered seek must not discard the next decoded cut');}finally{stop();}
 });
