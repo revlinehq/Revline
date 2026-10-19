@@ -1,5 +1,6 @@
 import {guardPreviewBuffering} from '../lib/editor/preview-buffering.ts';
 import {previewMediaReady,waitForPreviewMedia} from '../lib/editor/preview-readiness.ts';
+import {warmPreviewMedia} from '../lib/editor/preview-media-warmup.ts';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
@@ -90,4 +91,12 @@ test('accelerated secondary audio does not repeatedly seek for normal timeline d
   assert.ok(repeatedAudioSync(patched,4,.24).length>0,'A real 60ms timeline drift is still corrected');
   assert.ok(repeatedAudioSync(patched,1,.06).length>0,'Normal-speed audio keeps its existing sync tolerance');
   assert.ok(repeatedAudioSync(patched,4,.06,true).length>0,'Explicit forced seeks remain exact');
+});
+
+test('a blocked active range releases network streams held by inactive decoded clips',()=>{
+  const node=(start,end,source,ready)=>Object.assign(new EventTarget(),{tagName:'VIDEO',isConnected:true,paused:true,networkState:2,preload:'auto',readyState:ready,seeking:ready===1,currentTime:source,duration:100,dataset:{start:String(start),end:String(end),duration:String(end-start),mediaStart:String(source)},buffered:{length:0},loads:0,load(){this.loads++;this.networkState=0;},getAttribute:()=>'/same-large-original.mp4'});
+  const active=node(17.6,20.7,73.83,1),previous=node(13.8,17.1,69.23,3),next=node(20.7,24.3,77.73,3);
+  const doc={querySelectorAll:()=>[active,previous,next],defaultView:{MutationObserver:class{observe(){}disconnect(){}}}};
+  const stop=warmPreviewMedia(doc,()=>17.608);
+  try{assert.equal(active.loads,0,'The active seek is retained');assert.equal(previous.loads,1,'A paused previous cut cannot retain a stream while the active source waits');assert.equal(next.loads,1,'Even a primed future cut must release its loading stream when the active range is starved');}finally{stop();}
 });

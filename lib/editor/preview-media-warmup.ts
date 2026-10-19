@@ -20,10 +20,13 @@ export function warmPreviewMedia(document: Document, readTime: () => number): ()
       return node.isConnected&&time>=start&&time<end&&(node.tagName==='VIDEO'||Number(node.dataset.volume??1)>0)&&(node.paused?!previewMediaReady(node,time):node.seeking||node.readyState<3);
     });
     // The player can promote every metadata probe to auto before readiness.
-    // Cold distant video requests then compete with the active range seek.
-    // Cancel cold future seeks and frames at the wrong source offset; retain
-    // the correctly primed decoders needed by the next cut.
-    for(const node of media)if(node.tagName==='VIDEO'&&node.isConnected&&node.paused&&Number(node.dataset.start)>time&&(activeBlocked||Number(node.dataset.start)-time>6)&&node.preload!=='none'&&(node.readyState<2||activeBlocked&&Math.abs(node.currentTime-Number(node.dataset.mediaStart??0))>.05)){
+    // Paused, decoded cuts can still retain loading streams. When the current
+    // range is blocked, release all inactive video streams, including previous
+    // cuts and correctly primed future cuts, so they cannot starve its request.
+    for(const node of media)if(node.tagName==='VIDEO'&&node.isConnected&&node.paused&&node.preload!=='none'&&(
+      activeBlocked&&node.networkState===2&&(time<Number(node.dataset.start)||time>=Number(node.dataset.end??Number(node.dataset.start)+Number(node.dataset.duration)))||
+      Number(node.dataset.start)-time>6&&node.readyState<2
+    )){
       const listener=pending.get(node);if(listener){node.removeEventListener('loadedmetadata',listener);pending.delete(node);}
       primed.delete(node);node.preload='none';node.load();
     }
