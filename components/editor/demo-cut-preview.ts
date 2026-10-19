@@ -4,7 +4,7 @@ import { waitForDemoStep } from '@/lib/editor/scripted-demo-chat';
 /** Temporary pixels for the recording route. Canonical media changes once, via
  * commit; neither the player nor the timeline's React-owned nodes are replaced. */
 export async function animateDemoCutPreview(root: HTMLElement, plan: DemoCutPreviewPlan, signal: AbortSignal, commit: () => void, onPhase: (phase: 'planned' | 'closing' | 'committed') => void) {
-  if (!['f1-take-1', 'hormozi-take-1'].includes(root.dataset.demoId ?? '')) throw new Error('Cut previews belong to the scripted F1 demo.');
+  if (!['f1-take-1', 'hormozi-take-1', 'revline-take-1'].includes(root.dataset.demoId ?? '')) throw new Error('Cut previews belong to the scripted recording demos.');
   signal.throwIfAborted();
   const area = root.querySelector<HTMLElement>('.timeline-track-area');
   if (!area) throw new Error('The demo timeline is not mounted.');
