@@ -8,6 +8,7 @@ export function tracePreviewPlayback(document:Document,player:Transport,readTime
   const media=new Map<HTMLMediaElement,MediaSample>();
   const probedSources=new Set<string>();
   const traceId=crypto.randomUUID().slice(0,8);
+  const attachedAt=performance.now();
   const probeSource=(node:HTMLMediaElement)=>{
     const url=node.currentSrc||node.src;
     if(!url||probedSources.has(url)||probedSources.size>=4)return;
@@ -67,6 +68,9 @@ export function tracePreviewPlayback(document:Document,player:Transport,readTime
     const samples=[...media].map(([node,sample])=>{
       const start=Number(node.dataset.start),end=Number(node.dataset.end),rate=Number(node.dataset.playbackRate??1);
       const active=time>=start&&time<end,expected=Number(node.dataset.mediaStart??0)+(time-start)*rate;
+      // Native loading can stall without raising an error. Compare a bounded
+      // fetch through the same browser with the stalled native media request.
+      if(active&&node.readyState===0&&now-attachedAt>=10000)probeSource(node);
       const output={id:node.dataset.sourceClip??node.id,kind:node.tagName,active,sourceTime:round(node.currentTime),sourceAdvance:round(node.currentTime-sample.sourceTime),rate:node.playbackRate,expectedRate:rate,driftMs:active?Math.round((node.currentTime-expected)/rate*1000):null,ready:node.readyState,network:node.networkState,seeking:node.seeking,paused:node.paused,muted:node.muted,volume:round(node.volume),buffered:buffered(node),error:node.error?.code??null,errorMessage:node.error?.message.replace(/https?:\/\/[^\s"']+/g,'[media URL]').slice(0,300),decodedFrames:sample.frames,maxFrameGapMs:Math.round(sample.maxFrameGap),events:sample.events};
       sample.sourceTime=node.currentTime;sample.events={};sample.frames=0;sample.maxFrameGap=0;return output;
     }).filter(sample=>sample.active||sample.decodedFrames||Object.keys(sample.events).length).slice(0,16);
