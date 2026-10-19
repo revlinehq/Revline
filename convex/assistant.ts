@@ -1,3 +1,8 @@
+import {validatePinnedClaudeModel,type ClaudeModelSelection} from '../lib/ai/claude-model';
+import type {MutationCtx} from './_generated/server';
+import type {Doc} from './_generated/dataModel';
+import {mediaWorkflow} from './lib/workflows';
+import type {WorkflowId} from '@convex-dev/workflow';
 import { describeLiveEdit } from '../lib/editor/live-edit';
 import { equalTimelineValue } from '../lib/editor/timeline-equality';
 import { hydrateAsset } from './lib/asset_analysis';
@@ -66,6 +71,7 @@ export const send = mutation({ args: { projectId: v.id("projects"), prompt: v.st
     for(const id of args.attachedAssetIds){const asset=await ctx.db.get(id);if(!asset||asset.ownerId!==ownerId||asset.projectId!==project._id)throw new ConvexError('Attached media does not belong to this project.');}
   }
   const clipIds = new Set(currentTimeline(project).clips.map(clip => clip.id));
+  if(project.aiRunning){const preview=await ctx.db.query('aiTimelinePreviews').withIndex('by_project',q=>q.eq('projectId',project._id)).unique();if(preview?.ownerId===ownerId&&preview.runId===project.aiRunId)for(const clip of preview.timeline.clips)clipIds.add(clip.id);}
   if (args.selectedClipId !== undefined && !clipIds.has(args.selectedClipId)) throw new ConvexError("Selected clip does not belong to this project");
   if (args.selectedClipIds) {
     if (args.selectedClipIds.length > 200) throw new ConvexError("Select at most 200 clips");
@@ -75,15 +81,30 @@ export const send = mutation({ args: { projectId: v.id("projects"), prompt: v.st
   if (args.playhead !== undefined && (!Number.isFinite(args.playhead) || args.playhead < 0)) throw new ConvexError("Playhead must be a finite, nonnegative time");
   if (!configured()) throw new ConvexError(providerReason);
   const prompt = args.prompt.trim(); if (!prompt || prompt.length > 8000) throw new ConvexError("Write a prompt between 1 and 8000 characters");
-  if (project.aiRunning) throw new ConvexError("Wait for the current AI edit to finish");
+  const queued=await ctx.db.query('assistantQueue').withIndex('by_project',q=>q.eq('projectId',project._id)).first();
+  if(project.aiRunning||queued){
+    const pending=await ctx.db.query('assistantQueue').withIndex('by_project',q=>q.eq('projectId',project._id)).take(10);
+    if(pending.length>=10)throw new ConvexError('You can queue up to 10 messages. Remove one before adding more.');
+    const {prompt:_,projectId:__,modelChoice:___,reasoningEffort:____,speedMode:_____,...context}=args;
+    await ctx.db.insert('assistantQueue',{projectId:project._id,ownerId,prompt,pinnedModel,...context,createdAt:Date.now()});
+    if(!project.aiRunning&&!project.aiQueuePaused)await ctx.scheduler.runAfter(0,internal.assistant.drainQueue,{projectId:project._id,ownerId});
+    return null;
+  }
+  return beginRequest(ctx,project,prompt,pinnedModel,args);
+}});
+type QueuedContext=Pick<Doc<'assistantQueue'>,'attachedAssetIds'|'selectedClipId'|'selectedClipIds'|'playhead'>;
+async function beginRequest(ctx:MutationCtx,project:Doc<'projects'>,prompt:string,pinnedModel:ClaudeModelSelection,request:QueuedContext):Promise<null>{
+  const ownerId=project.ownerId;
   const threadId = project.threadId ?? await createThread(ctx, components.agent, { userId: ownerId, title: project.title });
   const { messageId } = await saveMessage(ctx, components.agent, { threadId, userId: ownerId, prompt });
   const recovery = project.aiRecovery ?? (project.aiError ? assistantRecovery(project, 'failed', project.aiError) : undefined);
   const runId = `${Date.now()}-${Math.random()}`;
   await clearLivePreview(ctx,project._id);
-  await writeProject(ctx,project._id, { threadId, aiRunning: true, aiEditing: false, aiError: undefined, aiRunId: runId, aiUndoRecorded: false, aiCheckpointRevision: undefined, aiRequest:{prompt,messageId,startedRevision:project.revision??0}, aiRecovery:recovery });
-  await ctx.scheduler.runAfter(0, internal.assistantActions.respond, { projectId: project._id, ownerId, runId, threadId, promptMessageId: messageId, pinnedModel,...(args.attachedAssetIds?{attachedAssetIds:args.attachedAssetIds}:{}), ...(recovery?{recovery}:{}), ...(args.selectedClipId ? { selectedClipId: args.selectedClipId } : {}), ...(args.selectedClipIds ? { selectedClipIds: args.selectedClipIds } : {}), ...(args.playhead !== undefined ? { playhead: args.playhead } : {}) }); return null;
-}});
+  await writeProject(ctx,project._id, { threadId, aiQueuePaused:false, aiRunning: true, aiEditing: false, aiError: undefined, aiRunId: runId, aiUndoRecorded: false, aiCheckpointRevision: undefined, aiRequest:{prompt,messageId,startedRevision:project.revision??0}, aiRecovery:recovery });
+  const workflowId=await mediaWorkflow.start(ctx, internal.assistantWorkflow.run, { projectId: project._id, ownerId, runId, threadId, promptMessageId: messageId, pinnedModel,...(request.attachedAssetIds?{attachedAssetIds:request.attachedAssetIds}:{}), ...(recovery?{recovery}:{}), ...(request.selectedClipId ? { selectedClipId: request.selectedClipId } : {}), ...(request.selectedClipIds ? { selectedClipIds: request.selectedClipIds } : {}), ...(request.playhead !== undefined ? { playhead: request.playhead } : {}) },{startAsync:true,onComplete:internal.assistantWorkflow.settle,context:{projectId:project._id,ownerId,runId}});
+  await writeProject(ctx,project._id,{aiWorkflowId:workflowId}); return null;
+}
+
 export const messages = query({
   args: { projectId: v.id("projects"), threadId: v.string(), paginationOpts: paginationOptsValidator, streamArgs: vStreamArgs },
   // AI SDK UI parts are polymorphic; agent validates and converts their stored representation.
@@ -114,7 +135,8 @@ export const stop = mutation({ args: { projectId: v.id('projects') }, returns: v
   for(const review of reviews)if(review.runId===project.aiRunId&&review.status==='queued'){if(review.taskId)await cancelMediaTask(ctx,review.taskId);await ctx.db.patch(review._id,{status:'failed',error:'Stopped by the user.'});}
   await clearLivePreview(ctx,project._id);
   // Already-saved edits remain undoable; invalidating the run blocks every later checkpoint.
-  await writeProject(ctx,project._id, { aiRunning: false, aiEditing: false, aiRunId: undefined, aiError: undefined, aiRecovery:assistantRecovery(project,'stopped','Stopped by the user. Saved edits remain.'),aiRequest:undefined });
+  if(project.aiWorkflowId)await mediaWorkflow.cancel(ctx,project.aiWorkflowId as WorkflowId);
+  await writeProject(ctx,project._id, { aiRunning: false, aiEditing: false, aiRunId: undefined, aiWorkflowId:undefined, aiQueuePaused:true, aiError: undefined, aiRecovery:assistantRecovery(project,'stopped','Stopped by the user. Saved edits remain.'),aiRequest:undefined });
   return null;
 }});
 /** Begin the timeline lock only when a mutating tool has a real change to make. */
@@ -210,6 +232,7 @@ export const finish = internalMutation({ args: { ...runArgs, error: v.optional(v
     const requests = await ctx.db.query("analysisRequests").withIndex("by_projectId_runId", q => q.eq("projectId", args.projectId).eq("aiRunId", args.runId)).take(16);
     for (const request of requests) await detachAnalysisRequest(ctx,request);
     await writeProject(ctx,project._id, { aiRunning: false, aiEditing: false, aiError: args.error?.slice(0, 1000), aiRecovery:args.error?assistantRecovery(project,'failed',args.error,args.savedEdits):project.aiUndoRecorded?undefined:project.aiRecovery,aiRequest:undefined });
+    if(!project.aiQueuePaused)await ctx.scheduler.runAfter(0,internal.assistant.drainQueue,{projectId:project._id,ownerId:project.ownerId});
   }
   return null;
 }});
@@ -270,3 +293,55 @@ export const currentPrompt = internalQuery({
     return typeof content === 'string' ? content : content.filter(part => part.type === 'text').map(part => part.type === 'text' ? part.text : '').join('\n');
   },
 });
+
+
+export const queued=query({args:{projectId:v.id('projects')},returns:v.object({paused:v.boolean(),messages:v.array(v.object({id:v.id('assistantQueue'),prompt:v.string(),error:v.optional(v.string())}))}),handler:async(ctx,{projectId})=>{
+  const project=await requireProject(ctx,projectId,await requireOwner(ctx));
+  const rows=await ctx.db.query('assistantQueue').withIndex('by_project',q=>q.eq('projectId',projectId)).take(10);
+  return {paused:!!project.aiQueuePaused,messages:rows.map(row=>({id:row._id,prompt:row.prompt,...(row.error?{error:row.error}:{})}))};
+}});
+export const removeQueued=mutation({args:{projectId:v.id('projects'),id:v.id('assistantQueue')},returns:v.null(),handler:async(ctx,args)=>{
+  const ownerId=await requireOwner(ctx);await requireProject(ctx,args.projectId,ownerId);
+  const row=await ctx.db.get(args.id);
+  if(!row)return null;
+  if(row.ownerId!==ownerId||row.projectId!==args.projectId)throw new ConvexError('Queued message not found.');
+  await ctx.db.delete(row._id);return null;
+}});
+export const resumeQueue=mutation({args:{projectId:v.id('projects')},returns:v.null(),handler:async(ctx,{projectId})=>{
+  const ownerId=await requireOwner(ctx);await requireProject(ctx,projectId,ownerId);await requireEditorAccess(ctx,ownerId);
+  await writeProject(ctx,projectId,{aiQueuePaused:false});
+  await ctx.scheduler.runAfter(0,internal.assistant.drainQueue,{projectId,ownerId});return null;
+}});
+export const drainQueue=internalMutation({args:{projectId:v.id('projects'),ownerId:v.string()},returns:v.null(),handler:async(ctx,args)=>{
+  const raw=await ctx.db.get(args.projectId);
+  if(!raw||raw.deleting||raw.ownerId!==args.ownerId)return null;
+  const project=(await readProject(ctx,args.projectId))!;
+  if(project.aiRunning||project.aiQueuePaused)return null;
+  const row=await ctx.db.query('assistantQueue').withIndex('by_project',q=>q.eq('projectId',args.projectId)).first();
+  if(!row)return null;
+  try{
+    await ctx.runMutation(internal.assistant.startQueued,{...args,id:row._id});
+  }catch{
+    await ctx.db.patch(row._id,{error:'This queued request could not start. Check your access and attached footage, then resume the queue.'});
+    await writeProject(ctx,project._id,{aiQueuePaused:true});
+  }
+  return null;
+}});
+
+
+/** Nested mutation makes starting and removing the head one atomic operation. */
+export const startQueued=internalMutation({args:{projectId:v.id('projects'),ownerId:v.string(),id:v.id('assistantQueue')},returns:v.null(),handler:async(ctx,args)=>{
+  const project=await requireProject(ctx,args.projectId,args.ownerId);
+  if(project.aiRunning||project.aiQueuePaused)return null;
+  const row=await ctx.db.query('assistantQueue').withIndex('by_project',q=>q.eq('projectId',args.projectId)).first();
+  if(!row||row._id!==args.id||row.ownerId!==args.ownerId)return null;
+    await requireEditorAccess(ctx,args.ownerId);
+    const pinnedModel=validatePinnedClaudeModel(row.pinnedModel);assertEditorModelConfigured(pinnedModel);
+    enforceClaudeModelPolicy(pinnedModel);
+    for(const id of row.attachedAssetIds??[]){const asset=await ctx.db.get(id);if(!asset||asset.projectId!==project._id||asset.ownerId!==args.ownerId)throw new ConvexError('Attached footage is no longer available. Remove this queued message and send an updated request.');}
+    const ids=new Set(currentTimeline(project).clips.map(clip=>clip.id));
+    const selectedClipIds=row.selectedClipIds?.filter(id=>ids.has(id));
+    await beginRequest(ctx,project,row.prompt,pinnedModel,{...row,selectedClipId:row.selectedClipId&&ids.has(row.selectedClipId)?row.selectedClipId:undefined,selectedClipIds});
+    await ctx.db.delete(row._id);
+  return null;
+}});

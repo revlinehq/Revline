@@ -168,3 +168,41 @@ test('answering a follow-up question preserves the unfinished edit for a later c
   await x.t.mutation(internal.assistant.finish,x.run);
   expect((await x.read()).aiRecovery).toBeUndefined();
 });
+
+
+test('queued messages survive reload, respect ownership and start in order after the active request',async()=>{
+  const x=await setup();workflowTest.register(x.t);
+  vi.stubEnv('OPENAI_API_KEY','fixture-only');vi.stubEnv('EDITOR_DEFAULT_MODEL','gpt-6.1-sol');vi.stubEnv('AI_GATEWAY_ENABLED','false');
+  await x.owner.mutation(api.assistant.send,{projectId:x.projectId,prompt:'First queued request'});
+  await x.owner.mutation(api.assistant.send,{projectId:x.projectId,prompt:'Second queued request'});
+  const queue=await x.owner.query(api.assistant.queued,{projectId:x.projectId});
+  expect(queue.messages.map(row=>row.prompt)).toEqual(['First queued request','Second queued request']);
+  expect((await x.read()).aiRunId).toBe('run');
+  const stranger=x.t.withIdentity({subject:'stranger'});
+  await expect(stranger.query(api.assistant.queued,{projectId:x.projectId})).rejects.toThrow();
+  await expect(stranger.mutation(api.assistant.removeQueued,{projectId:x.projectId,id:queue.messages[0].id})).rejects.toThrow();
+  await x.t.mutation(internal.assistant.finish,x.run);
+  await x.t.mutation(internal.assistant.drainQueue,{projectId:x.projectId,ownerId:'owner'});
+  const started=await x.read();
+  expect(started.aiRequest?.prompt).toBe('First queued request');
+  expect(started.aiWorkflowId).toBeTruthy();
+  expect((await x.owner.query(api.assistant.queued,{projectId:x.projectId})).messages.map(row=>row.prompt)).toEqual(['Second queued request']);
+  await x.owner.mutation(api.assistant.stop,{projectId:x.projectId});
+  expect((await x.owner.query(api.assistant.queued,{projectId:x.projectId})).paused).toBe(true);
+  await x.t.mutation(internal.assistant.drainQueue,{projectId:x.projectId,ownerId:'owner'});
+  expect((await x.read()).aiRunning).toBe(false);
+  await x.owner.mutation(api.assistant.resumeQueue,{projectId:x.projectId});
+  await x.t.mutation(internal.assistant.drainQueue,{projectId:x.projectId,ownerId:'owner'});
+  expect((await x.read()).aiRequest?.prompt).toBe('Second queued request');
+  expect((await x.owner.query(api.assistant.queued,{projectId:x.projectId})).messages).toEqual([]);
+  await x.owner.mutation(api.assistant.stop,{projectId:x.projectId});
+});
+
+test('queued requests can be removed and the queue has a bounded size',async()=>{
+  const x=await setup();vi.stubEnv('OPENAI_API_KEY','fixture-only');vi.stubEnv('EDITOR_DEFAULT_MODEL','gpt-6.1-sol');vi.stubEnv('AI_GATEWAY_ENABLED','false');
+  for(let i=0;i<10;i++)await x.owner.mutation(api.assistant.send,{projectId:x.projectId,prompt:`Queued ${i}`});
+  await expect(x.owner.mutation(api.assistant.send,{projectId:x.projectId,prompt:'Over limit'})).rejects.toThrow('10 messages');
+  const queue=await x.owner.query(api.assistant.queued,{projectId:x.projectId});
+  await x.owner.mutation(api.assistant.removeQueued,{projectId:x.projectId,id:queue.messages[4].id});
+  expect((await x.owner.query(api.assistant.queued,{projectId:x.projectId})).messages.map(row=>row.prompt)).not.toContain('Queued 4');
+});

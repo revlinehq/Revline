@@ -294,3 +294,20 @@ test('clip export queues a separate bounded snapshot while normal export keeps t
   const fullJob=await f.t.run(ctx=>ctx.db.get(fullId));
   expect(fullJob?.sourceClipId).toBeUndefined();expect(fullJob?.timeline?.clips).toEqual(timeline.clips);
 });
+
+
+test('a queued message rechecks billing before it starts and pauses without losing the request',async()=>{
+  const f=await fixture();
+  vi.stubEnv('OPENAI_API_KEY','fixture-only');vi.stubEnv('EDITOR_DEFAULT_MODEL','gpt-6.1-sol');vi.stubEnv('AI_GATEWAY_ENABLED','false');
+  await f.t.run(ctx=>writeProject(ctx,f.projectId,{aiRunning:true,aiRunId:'existing'}));
+  await f.owner.mutation(api.assistant.send,{projectId:f.projectId,prompt:'Add captions after this edit'});
+  await revoke(f,'revoked');
+  await f.t.run(ctx=>writeProject(ctx,f.projectId,{aiRunning:false}));
+  await f.t.mutation(internal.assistant.drainQueue,{projectId:f.projectId,ownerId});
+  const queue=await f.owner.query(api.assistant.queued,{projectId:f.projectId});
+  expect(queue.paused).toBe(true);
+  expect(queue.messages).toHaveLength(1);
+  expect(queue.messages[0].error).toBeTruthy();
+  expect((await f.owner.query(api.projects.get,{projectId:f.projectId})).aiRunning).toBe(false);
+  await f.owner.mutation(api.assistant.removeQueued,{projectId:f.projectId,id:queue.messages[0].id});
+});

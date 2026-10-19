@@ -1,3 +1,6 @@
+import workflowTest from '@convex-dev/workflow/test';
+import {mediaWorkflow} from './lib/workflows';
+import {AssistantBudgetError} from '../lib/ai/run-budget';
 import { writeProject } from './lib/project_data';
 /// <reference types="vite/client" />
 import { beforeEach,afterEach,expect,test,vi } from 'vitest';
@@ -68,16 +71,18 @@ async function memoryBackend(seed:Timeline,priorHistory:Timeline[]=[]){
   await t.run(ctx=>writeProject(ctx,projectId,{timeline,history,revision,threadId,aiRunning:true,aiRunId:'run',aiUndoRecorded:false}));
   return{t,owner,projectId,threadId,promptMessageId,seed:timeline,priorHistory:history,revision,runArgs:{projectId,ownerId:'owner',runId:'run'}};
 }
-async function run(plan?:(tools:Record<string,Tool>)=>Promise<void>,seed:Timeline=initial,realBackend=false,priorHistory:Timeline[]=[]){
-  const backend=realBackend?await memoryBackend(seed,priorHistory):undefined;
-  let timeline=structuredClone(backend?.seed??seed),revision=backend?.revision??0,error:string|undefined;
+async function run(plan?:(tools:Record<string,Tool>)=>Promise<void>,seed:Timeline=initial,realBackend=false,priorHistory:Timeline[]=[],options:{backend?:Awaited<ReturnType<typeof memoryBackend>>;continuation?:{segment:number;savedEdits:number}}={}){
+  const backend=options.backend??(realBackend?await memoryBackend(seed,priorHistory):undefined);
+  const fresh=options.backend?await options.backend.owner.query(api.projects.get,{projectId:options.backend.projectId}):undefined;
+  let timeline=structuredClone(fresh?.timeline??backend?.seed??seed),revision=fresh?.revision??backend?.revision??0,error:string|undefined;
   const calls:string[]=[];
   const project=()=>({_id:'project',timeline,revision,aspectRatio:'landscape'});
   const ctx={
     runQuery:async(reference:Parameters<typeof getFunctionName>[0],args:{timeline?:Timeline;expectedRevision?:number})=>{
       const name=getFunctionName(reference);calls.push(name);
+      if(name==='compositionReview:readPlan')return [];
       if(backend){
-        if(name==='assistant:currentPrompt')return 'Synthetic editing request';
+      if(name==='assistant:currentPrompt')return 'Synthetic editing request';
         if(name==='assistant:getRun')return backend.t.query(internal.assistant.getRun,backend.runArgs);
         if(name==='assistant:isRunActive')return backend.t.query(internal.assistant.isRunActive,backend.runArgs);
         if(name==='assistant:validateDraft')return backend.t.query(internal.assistant.validateDraft,{...backend.runArgs,timeline:args.timeline!,expectedRevision:args.expectedRevision!});
@@ -104,9 +109,9 @@ async function run(plan?:(tools:Record<string,Tool>)=>Promise<void>,seed:Timelin
   };
   sdk.plan=async()=>{if(plan)await plan(sdk.options!.tools)};
   const handler=(respond as unknown as {_handler:(ctx:unknown,args:unknown)=>Promise<unknown>})._handler;
-  await handler(ctx,{projectId:backend?.projectId??'project',ownerId:'owner',runId:'run',threadId:backend?.threadId??'thread',promptMessageId:backend?.promptMessageId??'greeting-message',playhead:1});
+  const outcome=await handler(ctx,{durable:true,...options.continuation?{continuation:options.continuation}:{},projectId:backend?.projectId??'project',ownerId:'owner',runId:'run',threadId:backend?.threadId??'thread',promptMessageId:backend?.promptMessageId??'greeting-message',playhead:1});
   const history=backend?(await backend.owner.query(api.projects.get,{projectId:backend.projectId})).history??[]:[];
-  return{timeline,revision,calls,history,error,backend};
+  return{timeline,revision,calls,history,error,backend,outcome};
 }
 const execute=async(tools:Record<string,Tool>,name:string,input:unknown)=>{
   if(name==='addTimedEffect'){
@@ -813,4 +818,65 @@ test.each(aeVisualCases)('$effect AI control boundaries, partial edits, bypass/r
     expect(result.error).toBeUndefined();expect(result.timeline.clips).toEqual(result.backend!.seed.clips.map(clip=>clip.id===clipId?{...clip,[effect]:undefined}:clip));
     expect(result.calls).not.toContain('assistant:requestAnalysis');await assertUndo(result);
   }
+});
+
+
+test('a time-limited action checkpoints and continues the same request with one undo group',async()=>{
+  const first=await run(async tools=>{
+    await execute(tools,'trim',{clipId:'from',duration:1.5});
+    throw new AssistantBudgetError('total');
+  },initial,true);
+  expect(first.outcome).toEqual({segment:1,savedEdits:1});
+  expect(first.error).toBeUndefined();
+  expect(first.calls).not.toContain('assistant:finish');
+  expect((await first.backend!.owner.query(api.projects.get,{projectId:first.backend!.projectId})).aiRunning).toBe(true);
+  const second=await run(async tools=>{
+    await expect(execute(tools,'editText',{clipId:'title',text:'Continue'})).rejects.toThrow('Inspect the current timeline');
+    await execute(tools,'inspectTimeline',{});
+    await execute(tools,'editText',{clipId:'title',text:'Continue'});
+  },initial,true,[],{backend:first.backend,continuation:first.outcome as{segment:number;savedEdits:number}});
+  expect(second.error).toBeUndefined();
+  expect(second.outcome).toBeNull();
+  expect(second.timeline.clips.find(c=>c.id==='from')?.duration).toBe(1.5);
+  expect(second.timeline.clips.find(c=>c.id==='title')?.text).toBe('Continue');
+  expect(second.history).toHaveLength(1);
+  expect(second.history[0]).toEqual(first.backend!.seed);
+  expect((await second.backend!.owner.query(api.projects.get,{projectId:second.backend!.projectId})).aiRunning).toBe(false);
+});
+
+test('automatic continuation is bounded and leaves recovery when its final segment expires',async()=>{
+  const result=await run(async()=>{throw new AssistantBudgetError('total')},initial,false,[],{continuation:{segment:2,savedEdits:4}});
+  expect(result.outcome).toBeNull();
+  expect(result.error).toContain('total time limit');
+  expect(result.calls).toContain('assistant:finish');
+});
+
+
+test('the durable workflow executes checkpointed actions serially and settles the same request',async()=>{
+  vi.useFakeTimers();
+  try{
+    const b=await memoryBackend(initial);workflowTest.register(b.t);
+    let segments=0;
+    sdk.plan=async()=>{
+      const tools=sdk.options!.tools;
+      segments++;
+      await execute(tools,'inspectTimeline',{});
+      if(segments===1){await execute(tools,'trim',{clipId:'from',duration:1.5});throw new AssistantBudgetError('total');}
+      await execute(tools,'editText',{clipId:'title',text:'Finished after continuation'});
+    };
+    const workflowId=await b.t.run(ctx=>mediaWorkflow.start(ctx,internal.assistantWorkflow.run,{...b.runArgs,threadId:b.threadId,promptMessageId:b.promptMessageId},{startAsync:true,onComplete:internal.assistantWorkflow.settle,context:b.runArgs}));
+    await b.t.run(ctx=>writeProject(ctx,b.projectId,{aiWorkflowId:workflowId}));
+    for(let i=0;i<50;i++){
+      vi.advanceTimersByTime(250);
+      await b.t.finishInProgressScheduledFunctions();
+      if(!(await b.owner.query(api.projects.get,{projectId:b.projectId})).aiRunning)break;
+    }
+    const result=await b.owner.query(api.projects.get,{projectId:b.projectId});
+    expect(segments).toBe(2);
+    expect(result.aiRunning).toBe(false);
+    expect(result.aiError).toBeUndefined();
+    expect(result.timeline?.clips.find(c=>c.id==='from')?.duration).toBe(1.5);
+    expect(result.timeline?.clips.find(c=>c.id==='title')?.text).toBe('Finished after continuation');
+    expect(result.history).toHaveLength(1);
+  }finally{vi.useRealTimers();}
 });

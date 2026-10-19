@@ -3,12 +3,13 @@ import { userError } from '@/lib/user-error';
 
 import { PRODUCTION_CLAUDE_MODEL_CHOICES } from '@/lib/ai/claude-model-policy';
 import { memo, useCallback, useState, useEffect, useLayoutEffect, useMemo, useRef, type ComponentProps } from 'react';
-import { Check, ArrowUpRight, RotateCcw } from 'lucide-react';
+import { Check, ArrowUpRight, RotateCcw, X } from 'lucide-react';
 import { Brand } from '@/components/workspace/brand';
 import { AssistantModelPicker } from './assistant-model-picker';
 import {OPENAI_EDIT_MODELS,OPENAI_REASONING_EFFORTS,OPENAI_SPEED_MODES,type ClaudeModelChoice,type OpenAIReasoningEffort,type OpenAISpeedMode} from '@/lib/ai/claude-model';
 import {InspectorSelect} from './inspector-select';
 import { EditComposer, type ComposerAttachment } from '@/components/workspace/edit-composer';
+import {useQuery,useMutation} from 'convex/react';
 import { useUIMessages } from '@convex-dev/agent/react';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
@@ -29,15 +30,20 @@ export type { ChatTool, ChatMessage } from './assistant-results';
 
 type Conversation = {projectId:Id<'projects'>;threadId:string};
 type PanelProps = ComponentProps<typeof AssistantPanelBody> & {conversation?:Conversation};
-type ConversationState = {threadId:string;messages:ChatMessage[];canLoadMore:boolean;onLoadMore:()=>void};
+type QueuedMessage={id:Id<'assistantQueue'>;prompt:string;error?:string};
+type ConversationState = {queued:QueuedMessage[];queuePaused:boolean;onRemoveQueued:(id:Id<'assistantQueue'>)=>Promise<unknown>;onResumeQueue:()=>Promise<unknown>;threadId:string;messages:ChatMessage[];canLoadMore:boolean;onLoadMore:()=>void};
 const ConnectedConversation = memo(function ConnectedConversation({conversation,onUpdate}:{conversation:Conversation;onUpdate:(state:ConversationState)=>void}) {
+  const queue=useQuery(api.assistant.queued,{projectId:conversation.projectId});
+  const remove=useMutation(api.assistant.removeQueued),resume=useMutation(api.assistant.resumeQueue);
+  const onRemoveQueued=useCallback((id:Id<'assistantQueue'>)=>remove({projectId:conversation.projectId,id}),[remove,conversation.projectId]);
+  const onResumeQueue=useCallback(()=>resume({projectId:conversation.projectId}),[resume,conversation.projectId]);
   const {results,status,loadMore}=useUIMessages(api.assistant.messages,conversation,{initialNumItems:40,stream:true});
   const messages=useMemo(()=>results.map(chatMessageFromUI),[results]);
   const loadMoreRef=useRef(loadMore);loadMoreRef.current=loadMore;
   const historyExpansion=useRef(new AssistantHistoryExpansion());
   useEffect(()=>{if(historyExpansion.current.next(conversation.threadId,status,messages))loadMoreRef.current(20);},[conversation.threadId,status,messages]);
   const onLoadMore=useCallback(()=>loadMoreRef.current(20),[]);
-  const state=useMemo(()=>({threadId:conversation.threadId,messages,canLoadMore:status==='CanLoadMore',onLoadMore}),[conversation.threadId,messages,status,onLoadMore]);
+  const state=useMemo(()=>({queued:queue?.messages??[],queuePaused:queue?.paused??false,onRemoveQueued,onResumeQueue,threadId:conversation.threadId,messages,canLoadMore:status==='CanLoadMore',onLoadMore}),[conversation.threadId,messages,status,onLoadMore,queue,onRemoveQueued,onResumeQueue]);
   useLayoutEffect(()=>onUpdate(state),[state,onUpdate]);
   return null;
 });
@@ -50,7 +56,7 @@ export function AssistantPanel(props:PanelProps) {
   // optimistic message, composer DOM, or scroll position while history loads.
   return <>
     {props.conversation&&<ConnectedConversation conversation={props.conversation} onUpdate={setConversationState}/>}
-    <AssistantTurnCostsProvider conversation={props.conversation} messages={visibleMessages} demo={props.demo}><AssistantPanelBody {...props} conversationStarted={!!props.conversation} messages={visibleMessages} canLoadMore={props.conversation?current?.canLoadMore:props.canLoadMore} onLoadMore={props.conversation?current?.onLoadMore:props.onLoadMore}/></AssistantTurnCostsProvider>
+    <AssistantTurnCostsProvider conversation={props.conversation} messages={visibleMessages} demo={props.demo}><AssistantPanelBody {...props} queued={current?.queued??props.queued} queuePaused={current?.queuePaused??props.queuePaused} onRemoveQueued={current?.onRemoveQueued??props.onRemoveQueued} onResumeQueue={current?.onResumeQueue??props.onResumeQueue} conversationStarted={!!props.conversation} messages={visibleMessages} canLoadMore={props.conversation?current?.canLoadMore:props.canLoadMore} onLoadMore={props.conversation?current?.onLoadMore:props.onLoadMore}/></AssistantTurnCostsProvider>
   </>;
 }
 
@@ -72,7 +78,7 @@ function AssistantResponseText({ text, streaming }: { text: string; streaming: b
   return <ChatProse text={text} animate={receivedLive || streaming} />;
 }
 
-function AssistantPanelBody({ messages, running, editing:editingTimeline=running, configured, error, onSend, onRetry, onStop, hasClips, demo, onLoadMore, canLoadMore, onAttach, activity, activitySource, activityStartedAt, draftKey, suggestions, onSuggestion, editSnapshot, canResumeEdit=false, defaultModelChoice, modelSwitcher = false, allowedModels = PRODUCTION_CLAUDE_MODEL_CHOICES, attachments, onRemoveAttachment, composerBusy = false, requireMedia = false, conversationStarted = false }: {
+function AssistantPanelBody({ messages, running, editing:editingTimeline=running, configured, error, onSend, onRetry, onStop, hasClips, demo, onLoadMore, canLoadMore, onAttach, activity, activitySource, activityStartedAt, draftKey, suggestions, onSuggestion, editSnapshot, canResumeEdit=false, defaultModelChoice, modelSwitcher = false, allowedModels = PRODUCTION_CLAUDE_MODEL_CHOICES, attachments, onRemoveAttachment, composerBusy = false, requireMedia = false, conversationStarted = false, queued=[],queuePaused=false,onRemoveQueued,onResumeQueue }: {
   messages: ChatMessage[]; running: boolean; editing?:boolean; configured: boolean; error?: string | null;
   modelSwitcher?: boolean;
   defaultModelChoice?:ClaudeModelChoice;
@@ -81,7 +87,7 @@ function AssistantPanelBody({ messages, running, editing:editingTimeline=running
   onRetry?: (text: string, modelChoice?: ClaudeModelChoice, reasoningEffort?: OpenAIReasoningEffort, speedMode?: OpenAISpeedMode) => Promise<void>;
   onLoadMore?: () => void; canLoadMore?: boolean; onAttach?: () => void;
   attachments?: ComposerAttachment[]; onRemoveAttachment?: (id: string) => void; composerBusy?: boolean; requireMedia?: boolean;
-  conversationStarted?: boolean;
+  conversationStarted?: boolean;queued?:QueuedMessage[];queuePaused?:boolean;onRemoveQueued?:(id:Id<'assistantQueue'>)=>Promise<unknown>;onResumeQueue?:()=>Promise<unknown>;
   activity?: string | null; activitySource?: string | null; activityProgress?:number|null; activityStartedAt?:number|null; draftKey?:string;
   onStop?: () => Promise<void>;
   suggestions?: { sourceName:string;clipId:string;items:SourceEditSuggestion[] };
@@ -150,10 +156,10 @@ function AssistantPanelBody({ messages, running, editing:editingTimeline=running
   }
 
   async function sendRequest(draft: string, retry = false) {
-    if (!draft.trim() || sendInFlight.current || sending || running || pendingReply) return;
+    if (!draft.trim() || sendInFlight.current || sending || (!conversationStarted&&running) || pendingReply) return;
     const key=draftKey;sendInFlight.current=true;
     if (!retry) changePrompt('');
-    setStopState(null); setSending(true); setPendingReply({ id: `pending-${crypto.randomUUID()}`, text: draft.trim(), previousUserId: latestUser?.id, previousError: error }); setLocalError(''); scroll.resume();
+    setStopState(null); setSending(true); if(!running&&!queued.length)setPendingReply({ id: `pending-${crypto.randomUUID()}`, text: draft.trim(), previousUserId: latestUser?.id, previousError: error }); setLocalError(''); scroll.resume();
     try { await (retry && onRetry ? onRetry : onSend)(draft.trim(), canChooseModel ? selectedModelChoice : undefined, canChooseReasoning ? reasoningEffort : undefined, canChooseReasoning ? speedMode : undefined); }
     catch (e) { if(currentDraftKey.current===key){if(!retry)changePrompt(draft);setPendingReply(null);setLocalError(userError(e, 'Could not send message'));} }
     finally { sendInFlight.current=false;setSending(false); }
@@ -210,7 +216,8 @@ function AssistantPanelBody({ messages, running, editing:editingTimeline=running
     </div>
     <div ref={scroll.composer} className="manual-composer-dock">
     {scroll.latestHidden && <button className="chat-jump-latest" onClick={scroll.resume}>Latest response</button>}
-    <EditComposer attachments={attachments} onRemoveAttachment={onRemoveAttachment} requireMedia={requireMedia} actions={canChooseModel ? <div className="assistant-model-controls"><AssistantModelPicker allowedModels={availableModels} value={effectiveModelChoice} onChange={setModelChoice} disabled={answering}/>{canChooseReasoning&&<><div className="assistant-model-picker assistant-reasoning-picker"><InspectorSelect label="AI reasoning effort" value={reasoningEffort} options={OPENAI_REASONING_EFFORTS.map(value=>({value,label:{low:'Low',medium:'Medium',high:'High',xhigh:'X-high',max:'Max'}[value]}))} onChange={setReasoningEffort} disabled={answering}/></div><div className="assistant-model-picker assistant-speed-picker"><InspectorSelect label="AI speed mode" value={speedMode} options={OPENAI_SPEED_MODES.map(value=>({value,label:value==='fast'?'Fast':'Standard',description:value==='fast'?'2× token cost':'Standard speed and pricing'}))} onChange={setSpeedMode} disabled={answering}/></div></>}</div> : undefined} variant="compact" className="manual-editor-composer" value={prompt} onChange={changePrompt} onSubmit={submit} onAttach={onAttach} placeholder="What would you change next?" disabled={composerBusy || sending || !!pendingReply} running={running} onStop={onStop ? stop : undefined} />
+    {queued.length>0&&<div className="assistant-queue" aria-label="Queued messages"><div className="assistant-queue-heading"><span>{queued.length} queued{queuePaused?' · paused':''}</span>{queuePaused&&onResumeQueue&&<button type="button" onClick={()=>void onResumeQueue().catch(e=>setLocalError(userError(e,'Could not resume the queue.')))}>Resume queue</button>}</div>{queued.map((message,index)=><div className="assistant-queued-message" key={message.id}><span className="assistant-queue-number">{index+1}</span><div><p>{message.prompt}</p>{message.error&&<small>{message.error}</small>}</div><button type="button" aria-label={`Remove queued message ${index+1}`} onClick={()=>void onRemoveQueued?.(message.id).catch(e=>setLocalError(userError(e,'Could not remove queued message.')))}><X size={13}/></button></div>)}</div>}
+    <EditComposer allowQueue={conversationStarted&&!demo} attachments={attachments} onRemoveAttachment={onRemoveAttachment} requireMedia={requireMedia} actions={canChooseModel ? <div className="assistant-model-controls"><AssistantModelPicker allowedModels={availableModels} value={effectiveModelChoice} onChange={setModelChoice} disabled={answering}/>{canChooseReasoning&&<><div className="assistant-model-picker assistant-reasoning-picker"><InspectorSelect label="AI reasoning effort" value={reasoningEffort} options={OPENAI_REASONING_EFFORTS.map(value=>({value,label:{low:'Low',medium:'Medium',high:'High',xhigh:'X-high',max:'Max'}[value]}))} onChange={setReasoningEffort} disabled={answering}/></div><div className="assistant-model-picker assistant-speed-picker"><InspectorSelect label="AI speed mode" value={speedMode} options={OPENAI_SPEED_MODES.map(value=>({value,label:value==='fast'?'Fast':'Standard',description:value==='fast'?'2× token cost':'Standard speed and pricing'}))} onChange={setSpeedMode} disabled={answering}/></div></>}</div> : undefined} variant="compact" className="manual-editor-composer" value={prompt} onChange={changePrompt} onSubmit={submit} onAttach={onAttach} placeholder={running?"Add your next request to the queue…":"What would you change next?"} disabled={composerBusy || sending || !!pendingReply} running={running} onStop={onStop ? stop : undefined} />
     </div>
   </div>;
 }

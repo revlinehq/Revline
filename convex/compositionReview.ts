@@ -16,6 +16,11 @@ async function active(ctx:MutationCtx|QueryCtx,args:{projectId:Id<'projects'>;ow
   const run=await projectRun(ctx,args.projectId,args.ownerId);
   if(!run.aiRunning||run.aiRunId!==args.runId)throw new ConvexError('AI run is no longer active.');
 }
+export const readPlan=internalQuery({args:runArgs,returns:v.array(effectPlanValidator),handler:async(ctx,args)=>{
+  await active(ctx,args);
+  const plan=await ctx.db.query('assistantPlans').withIndex('by_project',q=>q.eq('projectId',args.projectId)).unique();
+  return plan?.runId===args.runId?plan.plans:[];
+}});
 export const savePlan=internalMutation({args:{...runArgs,plans:v.array(effectPlanValidator),originals:v.array(clipValidator)},returns:v.null(),handler:async(ctx,args)=>{
   await active(ctx,args);
   if(args.plans.length<1||args.plans.length>8||args.originals.length>8||new Set(args.plans.map(p=>p.id)).size!==args.plans.length)throw new ConvexError('Plan one to eight uniquely identified effects.');
