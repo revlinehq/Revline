@@ -13,4 +13,6 @@
 .footage-preparation-filename{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;color:var(--ws-muted,var(--muted-foreground))}
 .footage-preparation-activity{display:flex;align-items:center;justify-content:center;gap:7px}
 
-.editor-app[data-playback-opening=true]>.editor-body,.editor-app[data-playback-opening=true]>.mobile-panel-controls{opacity:0;pointer-events:none}
+/* The opaque preparation surface covers the editor. Keep its media painted
+   underneath so browser visibility throttling cannot block readiness. */
+.editor-app[data-playback-opening=true]>.editor-body,.editor-app[data-playback-opening=true]>.mobile-panel-controls{pointer-events:none}
