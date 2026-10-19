@@ -98,8 +98,27 @@ test('completed assistant-only history without a receipt still reports unconfirm
 test('unfinished edits offer one explicit continuation button, even after an explanatory reply',()=>{
   const replies:ChatMessage[]=[...messages,{id:'why',role:'user',text:'Why did it stop?'},{id:'explanation',role:'assistant',text:'The time limit interrupted the edit.'}];
   const html=renderToStaticMarkup(<AssistantPanel messages={replies} running={false} configured hasClips demo={false} canResumeEdit onSend={async()=>{}} onRetry={async()=>{}}/>);
-  expect(html.match(/Finish remaining edits/g)).toHaveLength(1);
+  expect(html.match(/Retry unfinished steps/g)).toHaveLength(1);
   expect(html).not.toContain('>Retry</button>');
   const running=renderToStaticMarkup(<AssistantPanel messages={replies} running configured hasClips demo={false} canResumeEdit onSend={async()=>{}} onRetry={async()=>{}}/>);
-  expect(running).not.toContain('Finish remaining edits');
+  expect(running).not.toContain('Retry unfinished steps');
+});
+
+
+test('an unfinished footage inspection is labeled as a check, not an unsaved edit',()=>{
+  const detail='Some footage checks could not complete. Your timeline was not changed.';
+  const html=render([{id:'request',role:'user',text:'Detect gaze resets without editing.'},{id:'answer',role:'assistant',text:'Two resets were confirmed; the full cut remains unchecked.',steps:[{id:'inspection',name:'inspectVideo',state:'error',detail:'The media analysis request was rejected.'}]}],detail);
+  expect(html).toContain('Footage check incomplete');
+  expect(html).toContain('Your timeline was not changed.');
+  expect(html).not.toContain('Could not finish this edit');
+  expect(html).not.toContain('changes were not saved');
+});
+
+
+test('the generic incomplete request banner preserves trust in earlier saved edits',()=>{
+  const html=render([{id:'request',role:'user',text:'Finish the captions.'},{id:'answer',role:'assistant',text:'The captions are saved.'}],'Some requested changes were not saved. Inspect the current timeline before continuing; previously saved edits remain.');
+  expect(html).toContain('Some steps are unfinished');
+  expect(html).toContain('Your saved edits are still here.');
+  expect(html).not.toContain('Could not finish this edit');
+  expect(html).not.toContain('Some requested changes were not saved');
 });

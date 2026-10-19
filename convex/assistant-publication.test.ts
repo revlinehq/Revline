@@ -163,5 +163,8 @@ test('answering a follow-up question preserves the unfinished edit for a later c
   expect((await x.read()).aiRecovery).toEqual(recovery);
   await x.t.run(ctx=>writeProject(ctx,x.projectId,{aiRunning:true,aiEditing:true,aiRunId:'run'}));
   await x.t.mutation(internal.assistant.finish,x.run);
+  expect((await x.read()).aiRecovery).toEqual(recovery);
+  await x.t.run(ctx=>writeProject(ctx,x.projectId,{aiRunning:true,aiEditing:true,aiUndoRecorded:true,aiRunId:'run'}));
+  await x.t.mutation(internal.assistant.finish,x.run);
   expect((await x.read()).aiRecovery).toBeUndefined();
 });

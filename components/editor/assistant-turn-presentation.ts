@@ -37,10 +37,11 @@ export function assistantTurnPresentation(replies:readonly ChatMessage[],cards:r
   if(savedChanges&&!hasDraft&&!conflict){
     if(detail===fallback||/pending replacement|edits were saved before the assistant stopped/.test(detail))detail='The request did not finish. Continue the unfinished part from the current timeline.';
   }
+  detail=detail.replace('Some requested changes were not saved. Inspect the current timeline before continuing; previously saved edits remain.','Some steps remain unfinished. Your saved edits are still here.');
   if(savedChanges)detail=`${savedChanges} ${savedChanges===1?'change was':'changes were'} saved. ${detail}`;
   const unconfirmed=!error&&!summaries.length&&!receipt&&failures.every(card=>card.title==='Save not confirmed');
   return {
     replies:replies.map(message=>({...message,text:message.text.split(/\n\s*\n/).filter(text=>!failureSummary(text)&&!receiptFailureText.has(text.trim())).join('\n\n')})),
-    cards:[...cards.filter(card=>card.state!=='error'&&card.state!=='running'),{key:'turn-failure',title:unconfirmed?'Save not confirmed':savedChanges?'Edit partially completed':'Could not finish this edit',detail,state:'error' as const}],
+    cards:[...cards.filter(card=>card.state!=='error'&&card.state!=='running'),{key:'turn-failure',title:detail.includes('Some footage checks could not complete.')?'Footage check incomplete':unconfirmed?'Save not confirmed':savedChanges?'Edit partially completed':'Some steps are unfinished',detail,state:'error' as const}],
   };
 }

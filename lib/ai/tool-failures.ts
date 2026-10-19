@@ -74,7 +74,7 @@ function passingReview(input:unknown,output:Record<string,unknown>,revision:numb
 
 /** Derive state from completed steps: the SDK can reevaluate a stop condition. */
 function unresolvedFailures(steps: ToolSteps, recoverPlacements = false) {
-  const calls = new Map<string, { key: string; input: unknown }>(), pending = new Map<string, { count: number; ids: string[]; placement?: string; plan?:string[]; zoom?:string; zoomEvidence?:string; corrected?: boolean; review?:Map<string,string>; reviewed?:Set<string>; reviewEpoch?:number; reviewRevision?:number }>();
+  const calls = new Map<string, { key: string; input: unknown }>(), pending = new Map<string, { count: number; ids: string[]; placement?: string; plan?:string[]; zoom?:string; zoomEvidence?:string; corrected?: boolean; review?:Map<string,string>; reviewed?:Set<string>; reviewEpoch?:number; reviewRevision?:number; captionAssetId?:string; manualCaptions?:boolean }>();
   let revision:number|undefined,editEpoch=0;
   const plans=new Map<string,string>();
   for (const step of steps) for (const value of step.content) {
@@ -89,7 +89,7 @@ function unresolvedFailures(steps: ToolSteps, recoverPlacements = false) {
     else if (part.type === 'tool-error' || (part.type === 'tool-result' && (output.success === false || record(part.output).type === 'error-text'))) {
       const failure=part.error??output.error??record(part.output).value;
       const rejectedPlans=record(input).plans;
-      pending.set(key, { count: (pending.get(key)?.count ?? 0) + 1, ids: [...pending.get(key)?.ids ?? [], id], ...(recoverPlacements && isOverlapPlacementRejection(part.error) ? { placement: placementTarget(part.toolName, input) } : {}),...(recoverPlacements&&part.toolName==='planEffects'&&planPreflightRejection(failure)&&Array.isArray(rejectedPlans)&&rejectedPlans.length&&rejectedPlans.every(item=>typeof record(item).id==='string')?{plan:rejectedPlans.map(item=>record(item).id as string)}:{}),...(recoverPlacements&&zoomMotionRejection(failure)?{zoom:zoomTarget(part.toolName,input)}:{}),...(recoverPlacements&&zoomEvidenceRejection(failure)?{zoomEvidence:zoomEvidenceTarget(part.toolName,input)}:{}),...(recoverPlacements&&part.toolName==='previewRender'&&reviewWindowRejection(failure)?{review:reviewScope(input,plans)}:{}) });
+      pending.set(key, { count: (pending.get(key)?.count ?? 0) + 1, ids: [...pending.get(key)?.ids ?? [], id], ...(recoverPlacements && isOverlapPlacementRejection(part.error) ? { placement: placementTarget(part.toolName, input) } : {}),...(recoverPlacements&&part.toolName==='planEffects'&&planPreflightRejection(failure)&&Array.isArray(rejectedPlans)&&rejectedPlans.length&&rejectedPlans.every(item=>typeof record(item).id==='string')?{plan:rejectedPlans.map(item=>record(item).id as string)}:{}),...(recoverPlacements&&zoomMotionRejection(failure)?{zoom:zoomTarget(part.toolName,input)}:{}),...(recoverPlacements&&zoomEvidenceRejection(failure)?{zoomEvidence:zoomEvidenceTarget(part.toolName,input)}:{}),...(recoverPlacements&&part.toolName==='previewRender'&&reviewWindowRejection(failure)?{review:reviewScope(input,plans)}:{}),...(recoverPlacements&&part.toolName==='addSubtitlesFromTranscript'&&typeof record(input).assetId==='string'&&/Clip timing must be finite, nonnegative, and at least one frame long/.test(String(failure))?{captionAssetId:record(input).assetId as string}:{}) });
     } else if (part.type === 'tool-result') {
       if(!pending.get(key)?.review)pending.delete(key);
       if (recoverPlacements) {
@@ -122,7 +122,10 @@ function unresolvedFailures(steps: ToolSteps, recoverPlacements = false) {
         if(evidence&&(output.saved===true||output.staged===true)&&Array.isArray(output.changedClips)&&output.changedClips.some(clip=>record(clip).id===args.clipId))for(const [failedKey,failure]of pending)if(failure.zoomEvidence===evidence)pending.delete(failedKey);
         const target = placementTarget(part.toolName, input);
         if (target && changedTargets(input, output)) for (const failure of pending.values()) if (failure.placement === target) failure.corrected = true;
-        if (part.toolName === 'inspectTimeline' && inspectedDraft(output)) for (const [failedKey, failure] of pending) if (failure.corrected) pending.delete(failedKey);
+        if(part.toolName==='addCaption'&&(output.saved===true||output.staged===true)&&Array.isArray(output.changedClips)&&output.changedClips.some(clip=>record(clip).kind==='caption'))for(const failure of pending.values())if(failure.captionAssetId)failure.manualCaptions=true;
+        if (part.toolName === 'inspectTimeline' && inspectedDraft(output)) for (const [failedKey, failure] of pending) {
+          if (failure.corrected || failure.manualCaptions&&failure.captionAssetId&&Array.isArray(output.captionedAssetIds)&&output.captionedAssetIds.includes(failure.captionAssetId)) pending.delete(failedKey);
+        }
       }
     }
   }
@@ -138,6 +141,16 @@ export function hasUnresolvedToolFailures(steps: ToolSteps) {
 /** Presentation uses the same exact-retry accounting as the agent guard. */
 export function unresolvedToolFailureIds(steps: ToolSteps) {
   return new Set([...unresolvedFailures(steps, true).values()].flatMap(failure => failure.ids));
+}
+
+/** Failed inspection is not evidence of an unsaved timeline mutation. */
+export function hasOnlyUnresolvedInspectionFailures(steps: ToolSteps) {
+  const failures=[...unresolvedFailures(steps,true).keys()];
+  const inspections=new Set(['inspectTimeline','inspectClip','inspectAssetAnalysis','analyzeMedia','inspectVideo','inspectFrames']);
+  return failures.length>0&&failures.every(key=>inspections.has(key.slice(0,key.indexOf(':'))));
+}
+export class AssistantInspectionError extends Error {
+  constructor(){super('Some footage checks could not complete. Your timeline was not changed.');this.name='AssistantInspectionError';}
 }
 
 export function hasRepeatedToolFailures(steps: ToolSteps) {

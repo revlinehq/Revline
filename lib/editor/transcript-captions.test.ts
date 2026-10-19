@@ -1,5 +1,6 @@
+import {hasUnresolvedToolFailures,hasOnlyUnresolvedInspectionFailures} from '../ai/tool-failures';
 import { expect, test } from 'vitest';
-import { captionClipsFromTranscript } from './transcript-captions';
+import { captionClipsFromTranscript, captionsCoverTranscript } from './transcript-captions';
 import { validateRemotionTextTemplate } from './remotion-text';
 import type { Clip } from './types';
 const clip: Clip = { id: 'video', kind: 'video', assetId: 'source', start: 5, sourceStart: 10, duration: 10 };
@@ -41,4 +42,40 @@ test('segments without word evidence are captioned only when their complete text
   const result = captionClipsFromTranscript({ ...clip, duration: 2 }, { words: [], segments: [{ start: 9, end: 11, text: 'Partially removed' }, { start: 11, end: 11.8, text: 'Fully retained' }] }, 30, ids());
   expect(result.map(caption => caption.text)).toEqual(['Fully retained']);
   expect(result[0].textTemplate).toBeUndefined();
+});
+
+
+test('a one-frame caption at a later timestamp survives strict server duration validation', () => {
+  for (const fps of [24,30,60]) {
+    const result=captionClipsFromTranscript({...clip,start:7.233331807454427}, {segments:[],words:[{start:10,end:10,text:'word'}]},fps,ids());
+    expect(result).toHaveLength(1);
+    expect(result[0].duration).toBeGreaterThanOrEqual(1/fps);
+  }
+});
+
+
+test('manual caption fallback clears only its timing failure after complete source coverage and inspection',()=>{
+  const transcript={words:[{start:10,end:11,text:'First.'},{start:12,end:13,text:'Second.'}],segments:[]};
+  const footage={...clip,duration:3};
+  const captions=captionClipsFromTranscript(footage,transcript,30,ids());
+  const timeline={fps:30,aspectRatio:'landscape' as const,clips:[footage,...captions]};
+  expect(captionsCoverTranscript(timeline,'source',transcript)).toBe(true);
+  expect(captionsCoverTranscript({...timeline,clips:[footage,captions[0]]},'source',transcript)).toBe(false);
+  expect(captionsCoverTranscript(timeline,'other',transcript)).toBe(false);
+  const failed={content:[{type:'tool-call',toolName:'addSubtitlesFromTranscript',toolCallId:'automatic',input:{assetId:'source'}},{type:'tool-result',toolName:'addSubtitlesFromTranscript',toolCallId:'automatic',output:{type:'error-text',value:'ConvexError: Clip timing must be finite, nonnegative, and at least one frame long'}}]};
+  const added={content:[{type:'tool-result',toolName:'addCaption',toolCallId:'manual',input:{text:'First.'},output:{saved:true,revision:1,changedClips:[captions[0]]}}]};
+  const inspect=(ids:string[])=>({content:[{type:'tool-result',toolName:'inspectTimeline',output:{staged:false,revision:1,summary:{overlapCount:0,missingAssetRefs:[]},captionedAssetIds:ids}}]});
+  expect(hasUnresolvedToolFailures([failed,added])).toBe(true);
+  expect(hasUnresolvedToolFailures([failed,inspect(['source'])])).toBe(true);
+  expect(hasUnresolvedToolFailures([failed,added,inspect(['other'])])).toBe(true);
+  expect(hasUnresolvedToolFailures([failed,added,inspect(['source'])])).toBe(false);
+  expect(hasUnresolvedToolFailures([failed,added,inspect(['source']),{content:[{type:'tool-error',toolName:'trim',toolCallId:'unrelated',error:'Source trim failed'}]}])).toBe(true);
+});
+
+
+test('a failed broad inspection with successful smaller checks remains an incomplete check, never an edit failure',()=>{
+  const steps=[{content:[{type:'tool-result',toolName:'inspectVideo',input:{assetId:'source',start:0,end:20},output:{success:false,error:'The media analysis request was rejected.'}}]},{content:[{type:'tool-result',toolName:'inspectFrames',input:{assetId:'source',start:2,end:3},output:{success:true}}]}];
+  expect(hasUnresolvedToolFailures(steps)).toBe(true);
+  expect(hasOnlyUnresolvedInspectionFailures(steps)).toBe(true);
+  expect(hasOnlyUnresolvedInspectionFailures([...steps,{content:[{type:'tool-error',toolName:'trim',error:'Source trim failed'}]}])).toBe(false);
 });

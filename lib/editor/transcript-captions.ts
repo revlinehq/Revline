@@ -1,6 +1,6 @@
 import type { Transcript, TranscriptWord } from '../media-analysis/transcript';
 import { playbackRateOf, sourceEndOf, timelineTimeAtSource } from './playback-rate';
-import type { Clip } from './types';
+import type { Clip, Timeline } from './types';
 
 /** Caption retained speech, never the discarded words of an intersecting segment. */
 export function captionClipsFromTranscript(clip: Clip, transcript: Transcript, fps: number, createId: () => string): Clip[] {
@@ -10,7 +10,7 @@ export function captionClipsFromTranscript(clip: Clip, transcript: Transcript, f
     const first = timelineTimeAtSource(clip, group[0].start);
     const last = timelineTimeAtSource(clip, Math.max(...group.map(word => word.end)));
     const end = Math.min(clip.start + clip.duration, Math.max(last, first + frame));
-    const start = Math.max(clip.start, Math.min(first, end - frame)), duration = end - start;
+    const start = Math.max(clip.start, Math.min(first, end - frame)), duration = Math.max(frame, end - start);
     // Legacy alignments can contain several tokens or overlapping words. Keep
     // their caption text, but do not invent separate measured karaoke timings.
     const timed = measured && group.every((word, index) => word.text.trim().split(/\s+/).length === 1 && (!index || word.start >= group[index - 1].end - 1e-7));
@@ -36,4 +36,23 @@ export function captionClipsFromTranscript(clip: Clip, transcript: Transcript, f
   }
   flush();
   return result;
+}
+
+
+/** A manual fallback must cover every retained speech phrase before it can
+ * resolve an automatic-caption failure. This checks timing, not wording or
+ * visual quality; frame rounding at phrase boundaries is allowed. */
+export function captionsCoverTranscript(timeline: Timeline, assetId: string, transcript: Transcript): boolean {
+  const expected=timeline.clips.filter(clip=>clip.assetId===assetId).flatMap(clip=>captionClipsFromTranscript(clip,transcript,timeline.fps,()=>''));
+  const captions=timeline.clips.filter(clip=>clip.kind==='caption'&&clip.text?.trim()).sort((a,b)=>a.start-b.start);
+  const tolerance=1/timeline.fps+1e-7;
+  return expected.length>0&&expected.every(phrase=>{
+    let covered=phrase.start;
+    for(const caption of captions){
+      if(caption.start>covered+tolerance)break;
+      if(caption.start+caption.duration>=covered-tolerance)covered=Math.max(covered,caption.start+caption.duration);
+      if(covered>=phrase.start+phrase.duration-tolerance)return true;
+    }
+    return false;
+  });
 }

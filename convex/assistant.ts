@@ -209,7 +209,7 @@ export const finish = internalMutation({ args: { ...runArgs, error: v.optional(v
     await clearLivePreview(ctx,project._id);
     const requests = await ctx.db.query("analysisRequests").withIndex("by_projectId_runId", q => q.eq("projectId", args.projectId).eq("aiRunId", args.runId)).take(16);
     for (const request of requests) await detachAnalysisRequest(ctx,request);
-    await writeProject(ctx,project._id, { aiRunning: false, aiEditing: false, aiError: args.error?.slice(0, 1000), aiRecovery:args.error?assistantRecovery(project,'failed',args.error,args.savedEdits):project.aiEditing||project.aiUndoRecorded?undefined:project.aiRecovery,aiRequest:undefined });
+    await writeProject(ctx,project._id, { aiRunning: false, aiEditing: false, aiError: args.error?.slice(0, 1000), aiRecovery:args.error?assistantRecovery(project,'failed',args.error,args.savedEdits):project.aiUndoRecorded?undefined:project.aiRecovery,aiRequest:undefined });
   }
   return null;
 }});

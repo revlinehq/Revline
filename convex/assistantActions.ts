@@ -36,7 +36,7 @@ import { addMediaClip, addEffectClip, convertSolidColorToVisual, addTransitionCl
 import { TRANSITION_DIRECTIONS, TRANSITION_PRESETS, isTransitionClip } from '../lib/editor/clip-transitions';
 import { summarizeTimeline } from "./lib/inspectTimeline";
 import { EditSession, IncompleteEditError } from "./lib/editSession";
-import { AssistantToolRetryError, AssistantRenderReviewError, hasFailedRenderChecks, hasRepeatedToolFailures, hasUnresolvedToolFailures } from "../lib/ai/tool-failures";
+import { AssistantToolRetryError, AssistantRenderReviewError, AssistantInspectionError, hasOnlyUnresolvedInspectionFailures, hasFailedRenderChecks, hasRepeatedToolFailures, hasUnresolvedToolFailures } from "../lib/ai/tool-failures";
 import { AssistantRunBudget, AssistantBudgetError } from "../lib/ai/run-budget";
 import { BLEND_MODES, ZOOM_LIMITS, isZoomPreset, CINEMATIC_BAR_LIMITS,EFFECT_CATALOG,SOLID_COLOR_LIMITS, TIMED_EFFECT_PRESETS,configureTimedEffectPatch, resizeEffectMotion, solidColorPatch } from '../lib/editor/clip-effects';
 import { FLASH_LIMITS, PUNCH_LIMITS, SHAKE_LIMITS, POP_LIMITS, SHAKE_DIRECTIONS, PROPERTY_EFFECT_PRESETS } from '../lib/editor/motion-effect-settings';
@@ -45,7 +45,7 @@ import { TEXT_EFFECT_PRESETS, TEXT_ANIMATION_PRESETS,TEXT_ANIMATION_LABELS,textA
 import { TEXT_LOOKS,textLookPatch } from '../lib/editor/text-looks';
 import { TEXT_FONTS } from '../lib/editor/text-fonts';
 import { applyCaptionStyle,patchCaptionStyles,patchTextStyles,updateCaptionTiming } from '../lib/editor/caption-editing';
-import { captionClipsFromTranscript } from '../lib/editor/transcript-captions';
+import { captionClipsFromTranscript, captionsCoverTranscript } from '../lib/editor/transcript-captions';
 import { AUDIO_LIMITS,AUDIO_ROLES,configureAudio } from '../lib/editor/audio-settings';
 import {configureVisualFade,VISUAL_FADE_MAX_SECONDS} from '../lib/editor/visual-fades';
 import {NEON_EDGE_LIMITS} from '../lib/editor/neon-edges';
@@ -248,7 +248,13 @@ export const respond = internalAction({
             return { timeline: current.project.timeline ?? { clips: [], fps: 30, aspectRatio: current.project.aspectRatio }, revision: current.project.revision ?? 0 };
           });
           inspected = true;
-          return { ...snapshot, timeline: modelTimeline(snapshot.timeline, args.selectedClipIds ?? (args.selectedClipId ? [args.selectedClipId] : [])), layers: deriveTracks(snapshot.timeline), summary: summarizeTimeline(snapshot.timeline, assets) };
+          const captionedAssetIds=assets.filter(asset=>{
+            const raw=asset.analysis?.transcript;
+            if(!raw)return false;
+            const transcript=asset.analysis?.audioActivity?refineTranscriptWithAudioActivity(raw,asset.analysis.audioActivity):raw;
+            return captionsCoverTranscript(snapshot.timeline,asset._id,transcript);
+          }).map(asset=>asset._id);
+          return { ...snapshot, captionedAssetIds, timeline: modelTimeline(snapshot.timeline, args.selectedClipIds ?? (args.selectedClipId ? [args.selectedClipId] : [])), layers: deriveTracks(snapshot.timeline), summary: summarizeTimeline(snapshot.timeline, assets) };
         } }),
         inspectClip: createTool({ description: "Read one exact current clip including all motion/focus samples and settings omitted from the compact timeline. Uses the working edit session; no edits. Read inspectTimeline first when fresh saved state is needed.", inputSchema: z.object({ clipId: z.string() }), execute: async (_ctx, input) => { await editSession.wait(); return { clip: find(editSession.timeline, input.clipId), revision: editSession.revision, staged: editSession.staged }; } }),
         analyzeMedia: createTool({ description: "Request real analysis of this project's uploaded media through durable background jobs. Transcribe word-timed speech, create a native Gemini video overview, measure music beats, or track a visible face. mode track uses face detection only; for a can or other object use inspectFrames and configureCameraMotion mode follow. Use inspectVideo with the actual user question to find specific visual moments; a generic overview is not an answer to every editing question. Saved results are usable immediately; never invent unavailable results.", inputSchema: z.object({ assetId: z.string(), mode: z.enum(["transcribe", "understand", "beats", "track"]) }), execute: async (_ctx, input) => {
@@ -504,6 +510,7 @@ You edit the user's video timeline using structured tools. Greetings, small talk
       if (hasRepeatedToolFailures(steps)) throw new AssistantToolRetryError();
       if (streamError) throw streamError;
       if (hasFailedRenderChecks(steps)) throw new AssistantRenderReviewError();
+      if(!editSession.savedEdits&&!editSession.staged&&hasOnlyUnresolvedInspectionFailures(steps))throw new AssistantInspectionError();
       await editSession.complete(finishReason, hasUnresolvedToolFailures(steps), steps.length);
       await ctx.runMutation(internal.assistant.finish, { projectId: args.projectId, ownerId: args.ownerId, runId: args.runId });
       costLog.finish('completed', progress());
@@ -518,7 +525,7 @@ You edit the user's video timeline using structured tools. Greetings, small talk
       try { partialSaved = await session?.savePartial() ?? false; }
       catch (saveError) { cause = saveError; }
       costLog.finish(cause instanceof IncompleteEditError ? cause.reason : cause instanceof AssistantTokenBudgetError ? 'token_budget' : cause instanceof AssistantBudgetError ? 'time_budget' : cause instanceof AssistantToolRetryError ? 'repeated_tool_failure' : 'provider_or_tool_error', progress(), !(cause instanceof IncompleteEditError));
-      const failureReason = (cause instanceof IncompleteEditError || cause instanceof AssistantBudgetError || cause instanceof AssistantTokenBudgetError || cause instanceof AssistantToolRetryError || cause instanceof AssistantRenderReviewError || cause instanceof AnalysisStepError) ? cause.message : cause instanceof Error && /timeline changed elsewhere|Source trim|Clip timing|Clip media|replacement was not saved|requested changes were not saved|Inspect the current timeline|^(?:OpenAI editing requires OPENAI_API_KEY in this Convex environment\.|Revline editing supports GPT-)/.test(cause.message) ? cause.message : assistantFailureReason(cause, selectedProvider) ?? "The assistant could not finish this request. Check the model configuration and try again.";
+      const failureReason = (cause instanceof IncompleteEditError || cause instanceof AssistantBudgetError || cause instanceof AssistantTokenBudgetError || cause instanceof AssistantToolRetryError || cause instanceof AssistantRenderReviewError || cause instanceof AssistantInspectionError || cause instanceof AnalysisStepError) ? cause.message : cause instanceof Error && /timeline changed elsewhere|Source trim|Clip timing|Clip media|replacement was not saved|requested changes were not saved|Inspect the current timeline|^(?:OpenAI editing requires OPENAI_API_KEY in this Convex environment\.|Revline editing supports GPT-)/.test(cause.message) ? cause.message : assistantFailureReason(cause, selectedProvider) ?? "The assistant could not finish this request. Check the model configuration and try again.";
       const reason = partialSaved ? `${failureReason.replace(/\s*The pending replacement was not saved\./g, '')} The latest valid partial edit was saved. Continue the unfinished part from the current timeline.` : failureReason;
       const edits = session?.savedEdits ?? 0;
       try { await saveMessage(ctx, components.agent, { threadId: args.threadId, userId: args.ownerId,promptMessageId:args.promptMessageId, message: { role: "assistant", content: edits ? `${edits} edits were saved before the assistant stopped. Undo restores the state before the latest consecutive group of AI edits. ${reason}` : `No timeline changes were saved. ${reason}` } }); } catch { /* Status remains the recovery path if the message service is unavailable. */ }
