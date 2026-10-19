@@ -8,9 +8,9 @@ const corrected = 'let L=vt(y),I=(c-S)*$e(y)+L;if(I>=0&&!y.seeking&&(y.tagName!=
 const audioClockCandidate = '!pe(S)||!S.isConnected||h(S)||fl(S)';
 const audibleClockCandidate = '!pe(S)||!S.isConnected||h(S)||Number(S.dataset.volume??1)<=0||fl(S)';
 const audioDrift = 'if(!J&&!V&&!G&&X&&ne>Yt){';
-const scaledAudioDrift = 'if(!J&&!V&&!G&&X&&ne>Yt*Math.max(1,r.tagName==="AUDIO"&&e.playing?Math.abs(T):1)){';
+const scaledAudioDrift = 'if(!J&&!V&&!G&&X&&ne>Yt*(r.tagName==="AUDIO"&&e.playing?Math.abs(T):1)){';
 const playingVideo = 'J=r.tagName==="VIDEO"&&!r.paused&&e.playing';
-const playingMedia = 'J=(r.tagName==="VIDEO"||r.tagName==="AUDIO"&&a&&!e.forceSync)&&!r.paused&&e.playing';
+const playingMedia = 'J=(r.tagName==="VIDEO"||r.tagName==="AUDIO"&&a&&!e.forceSync&&ne<=.1*Math.abs(T))&&!r.paused&&e.playing';
 const nativePreload = 'Qy=(c,p,y)=>{let S=d.isPlaying();';
 const managedPreload = 'Qy=(c,p,y)=>{if(document.documentElement.dataset.revlineMediaLoading==="managed")return;let S=d.isPlaying();';
 
@@ -29,7 +29,9 @@ export function patchHyperframesPlaybackRuntime(source, version) {
   // Large discontinuities and explicit forceSync seeks stay unchanged.
   // Playing secondary audio uses the same gentle rate correction as video.
   // Hard-seeking every two drift samples discards buffered audio and produces
-  // repeated seeking/waiting events. Keep paused, preroll and forced sync exact.
+  // repeated seeking/waiting events. Limit this to 100ms of timeline drift so
+  // a stable larger offset after preroll still hard-aligns within two samples.
+  // Keep paused, preroll and forced sync exact.
   // Revline's bounded warmup owns preview source preparation. Native visibility
   // deferral otherwise promotes extra streams and discards already prepared cuts.
   // Keep the studio marker for first-frame readiness and lazy image behavior.

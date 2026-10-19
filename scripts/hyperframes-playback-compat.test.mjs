@@ -31,7 +31,7 @@ test('one-times speed stays correct and decoded frames inside transport toleranc
 });
 test('patch is confined to alignment, clock selection, media drift correction and managed loading and rejects changed dependencies',()=>{
   const before=alignment(upstream),after=alignment(patched);
-  assert.equal(patched.replace(after,before).replace('!pe(S)||!S.isConnected||h(S)||Number(S.dataset.volume??1)<=0||fl(S)','!pe(S)||!S.isConnected||h(S)||fl(S)').replace('if(!J&&!V&&!G&&X&&ne>Yt*Math.max(1,r.tagName==="AUDIO"&&e.playing?Math.abs(T):1)){','if(!J&&!V&&!G&&X&&ne>Yt){').replace('J=(r.tagName==="VIDEO"||r.tagName==="AUDIO"&&a&&!e.forceSync)&&!r.paused&&e.playing','J=r.tagName==="VIDEO"&&!r.paused&&e.playing').replace('Qy=(c,p,y)=>{if(document.documentElement.dataset.revlineMediaLoading==="managed")return;','Qy=(c,p,y)=>{'),upstream);
+  assert.equal(patched.replace(after,before).replace('!pe(S)||!S.isConnected||h(S)||Number(S.dataset.volume??1)<=0||fl(S)','!pe(S)||!S.isConnected||h(S)||fl(S)').replace('if(!J&&!V&&!G&&X&&ne>Yt*(r.tagName==="AUDIO"&&e.playing?Math.abs(T):1)){','if(!J&&!V&&!G&&X&&ne>Yt){').replace('J=(r.tagName==="VIDEO"||r.tagName==="AUDIO"&&a&&!e.forceSync&&ne<=.1*Math.abs(T))&&!r.paused&&e.playing','J=r.tagName==="VIDEO"&&!r.paused&&e.playing').replace('Qy=(c,p,y)=>{if(document.documentElement.dataset.revlineMediaLoading==="managed")return;','Qy=(c,p,y)=>{'),upstream);
   assert.throws(()=>patchHyperframesPlaybackRuntime(upstream,'0.8.145'),/Review/);
   assert.throws(()=>patchHyperframesPlaybackRuntime(upstream.replace('I=c-S+L','I=changed'),'0.8.144'),/Review/);
 });
@@ -75,8 +75,9 @@ function repeatedAudioSync(source,rate,drift,forceSync=false,options={}){
     pause(){this.paused=true},play(){this.paused=false;return Promise.resolve()},
     get playbackRate(){return playbackRate},set playbackRate(value){rates.push(value);playbackRate=value},
     get currentTime(){return current},set currentTime(value){writes.push(value);current=value}};
-  const start=13.9,mediaStart=9.633333333333333;
-  const clip={el:media,start,end:16,duration:2.1,mediaStart,rate,sourceDuration:24.789333,volume:options.volume??1};
+  const start=options.start??13.9,mediaStart=options.mediaStart??9.633333333333333;
+  const clip={el:media,start,end:options.end??16,duration:2.1,mediaStart,rate,sourceDuration:options.sourceDuration??24.789333,volume:options.volume??1};
+  if(options.primed){maps.ll.set(media,drift);maps.jo.set(media,mediaStart);}
   const softCorrection=source.slice(source.indexOf('function _E('),source.indexOf('function tp('));
   const sync=vm.runInNewContext(`var AE=.03,wE=.01;${softCorrection};(${source.slice(source.indexOf('function tp('),source.indexOf('var Xt=',source.indexOf('function tp(')))})`,{
     ...maps,al:new WeakSet(),ul:new WeakSet(),er:new WeakSet(),
@@ -105,6 +106,17 @@ test('active playing secondary audio corrects ordinary drift without restarting 
     const result=repeatedAudioSync(patched,1,.06,false,{volume});
     assert.deepEqual(result.writes,[],'A stable 60ms audio drift must not cause repeated currentTime assignments');
     assert.deepEqual(result.rates,[1.03],'The existing gentle clock correction catches up without discarding decoded audio');
+  }
+});
+
+test('already-playing secondary audio hard-aligns large stable offsets after preroll',()=>{
+  const options={start:10.0333333333,end:13.2333333333,mediaStart:0,sourceDuration:3.2,time:11.563,primed:true};
+  const result=repeatedAudioSync(patched,1,-1.597,false,options);
+  assert.ok(result.writes.length>0,'An existing drift history must not turn a 1.597s source offset into an indefinitely slow catch-up');
+  assert.ok(result.writes.every(time=>time>=1.5&&time<1.6),'The active source is repositioned within its current clip, before its 3.2s end');
+  for(const rate of [.25,1,4]){
+    assert.deepEqual(repeatedAudioSync(patched,rate,.06*rate,false,{primed:true}).writes,[],'60ms of timeline drift is corrected gently at each playback rate');
+    assert.ok(repeatedAudioSync(patched,rate,.15*rate,false,{primed:true}).writes.length>0,'A stable 150ms timeline offset must hard-align, including slow and accelerated audio');
   }
 });
 
