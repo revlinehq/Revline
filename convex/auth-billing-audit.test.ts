@@ -249,6 +249,9 @@ test('native upload tickets cannot accept new files after editor access is revok
   const f = await fixture();
   const url = await f.owner.mutation(api.assets.generateUploadUrl, { projectId: f.projectId });
   const token = new URL(url).searchParams.get('ticket')!;
+  expect(new URL(url).origin).toBe('https://audit.convex.site');
+  expect(token).toMatch(/^[\da-f]{8}-[\da-f]{4}-4[\da-f]{3}-[89ab][\da-f]{3}-[\da-f]{12}$/i);
+  expect(token).not.toContain('://');
   await revoke(f, 'revoked');
   await expect(f.t.mutation(internal.uploads.reserve, { token })).rejects.toThrow('SUBSCRIPTION_REQUIRED');
 });

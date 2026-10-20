@@ -15,9 +15,9 @@ export async function issueUpload(ctx: MutationCtx, ownerId: string, projectId: 
     } else active++;
   }
   if (active >= 100) throw new ConvexError("Finish existing uploads before requesting more upload URLs");
-  // Convex supplies a cryptographically unguessable upload URL as the bearer token.
-  // Files pass through our HTTP action so the resulting storage ID is bound to its owner.
-  const token = await ctx.storage.generateUploadUrl();
+  // This capability authorizes only our HTTP action, which validates and accounts
+  // for the stored file. A native upload URL here would bypass those controls.
+  const token = crypto.randomUUID();
   const ticketId=await ctx.db.insert("uploadTickets", { token, ownerId, projectId, ...(jobId ? { jobId } : {}), expiresAt: Date.now() + 15 * 60 * 1000, consumed: false });
   await ctx.scheduler.runAfter(15*60*1000,internal.uploads.cleanup,{ticketId});
   const site = process.env.CONVEX_SITE_URL;
