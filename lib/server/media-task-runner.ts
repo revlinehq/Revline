@@ -67,9 +67,9 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
       if (task.outputStored) return {};
       const snapshot = task.render;
       onProgress(1);
-      const assetUrls=await runPhase('Preparing export media',()=>prepareComposition(directory,snapshot.timeline,snapshot.assets as (MediaAsset & {size:number})[],convexUrl,signal));
+      const {assetUrls,audioSourceOffsets}=await runPhase('Preparing export media',()=>prepareComposition(directory,snapshot.timeline,snapshot.assets as (MediaAsset & {size:number})[],convexUrl,signal));
       onProgress(3);
-      await runPhase('Preparing export composition',()=>writeComposition(directory,snapshot.timeline,snapshot.assets as (MediaAsset & {size:number})[],assetUrls,snapshot.resolution as 720|1080,snapshot.fps as 24|30|60,'./',signal));
+      await runPhase('Preparing export composition',()=>writeComposition(directory,snapshot.timeline,snapshot.assets as (MediaAsset & {size:number})[],assetUrls,snapshot.resolution as 720|1080,snapshot.fps as 24|30|60,'./',signal,audioSourceOffsets));
       const output = join(directory, 'video.mp4');
       await runPhase('Rendering export',()=>runRenderWorker(directory, output, { fps: snapshot.fps, quality: snapshot.quality as 'draft' | 'standard' | 'high' }, progress => onProgress(5+Math.round(progress.progress * .90)), signal));
       onProgress(97);

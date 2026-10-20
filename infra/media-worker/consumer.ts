@@ -3,7 +3,7 @@ import { timingSafeEqual } from 'node:crypto';
 import { ConvexClient, ConvexHttpClient } from 'convex/browser';
 import { api } from '../../convex/_generated/api';
 import { processMediaTask } from '../../lib/server/media-task-runner';
-import { AnalysisError } from '../../lib/media-analysis/errors';
+import { isRetryableAnalysisError } from '../../lib/media-analysis/errors';
 import type { MediaTaskActivity } from '../../lib/media-analysis/activity';
 
 const convexUrl = process.env.NEXT_PUBLIC_CONVEX_URL;
@@ -88,7 +88,7 @@ async function runSlot() {
       } catch (error) {
         clearInterval(timer); await heartbeats;
         const timedOut=deadline.aborted;
-        const retryable=task.kind!=='review'&&!(task.kind==='render'&&timedOut)&&!(error instanceof AnalysisError && (error.retryable === false || error.status < 500));
+        const retryable=task.kind!=='review'&&!(task.kind==='render'&&timedOut)&&isRetryableAnalysisError(error);
         if (!shutdown.signal.aborted && !controller.signal.aborted) {
           await client.mutation(api.mediaTasks.fail, { ...credentials, retryable, error: timedOut&&task.kind==='render'?'The export exceeded its 15-minute processing limit. Automatic retries were stopped.':error instanceof Error ? error.message.slice(0, 1000) : 'Media processing failed.' }).catch(() => {});
         }

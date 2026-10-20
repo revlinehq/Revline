@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { ConvexHttpClient } from 'convex/browser';
 import type { MediaWorkItem } from '../../convex/mediaTasks';
-import { AnalysisError } from '../media-analysis/errors';
+import { AnalysisError,isRetryableAnalysisError } from '../media-analysis/errors';
 const mocks = vi.hoisted(() => ({ detectShots: vi.fn(), understandVideo: vi.fn(), inspectVideo: vi.fn(), prepareVideo: vi.fn(), preparePreviewVideo:vi.fn(),probePreviewVideo:vi.fn(), downloadOwnedMedia: vi.fn(), extractTranscriptionAudio: vi.fn(), transcribeWithWhisper: vi.fn(), probeMedia: vi.fn(), extractSourceAudio: vi.fn(), measureAudioWaveform: vi.fn(), measureAudioActivity: vi.fn(), uploadMediaFile: vi.fn() }));
 vi.mock('../media-analysis/detect-shots', () => ({ detectShots: mocks.detectShots }));
 vi.mock('../media-analysis/gemini', async importOriginal => ({ ...await importOriginal<typeof import('../media-analysis/gemini')>(), understandVideo: mocks.understandVideo, inspectVideo: mocks.inspectVideo }));
@@ -21,6 +21,15 @@ afterEach(() => { vi.resetAllMocks(); vi.unstubAllEnvs(); vi.restoreAllMocks(); 
 const work = (kind: 'understand' | 'video' | 'shots' | 'transcribe' | 'extract' | 'preview') => ({ taskId: 'task', leaseToken: 'lease', projectId: 'project', kind, asset: { _id: 'asset', url: 'https://media.example.com/source', fileName: 'source.mp4', contentType: 'video/mp4', kind: 'video', size: 1, duration: 3 } }) as unknown as MediaWorkItem;
 const semantic = { summary: 'A visible action.', scenes: [{ start: 0, end: 2, description: 'The person moves.', score: 0.8 }] };
 const audioActivity = { version: 1 as const, duration: 3, frameSeconds: .01 as const, quiet: [{ start: 1, end: 3 }], level: { noiseFloorDb: -65, speechDb: -20, quietThresholdDb: -45, separationDb: 45 }, reliable: true };
+test('provider retry declarations preserve temporary throttling and permanent failures',()=>{
+  expect(isRetryableAnalysisError(new AnalysisError('Temporary timeout',408,true))).toBe(true);
+  expect(isRetryableAnalysisError(new AnalysisError('Temporary throttle',429,true))).toBe(true);
+  expect(isRetryableAnalysisError(new AnalysisError('Quota exhausted',429,false))).toBe(false);
+  expect(isRetryableAnalysisError(new AnalysisError('Invalid evidence',502,false))).toBe(false);
+  expect(isRetryableAnalysisError(new AnalysisError('Unavailable',503))).toBe(true);
+  expect(isRetryableAnalysisError(new AnalysisError('Invalid source',422))).toBe(false);
+  expect(isRetryableAnalysisError(new Error('Network interrupted'))).toBe(true);
+});
 test('playback preview uploads a parent-attached variant without creating an extracted source',async()=>{
   const signal=AbortSignal.timeout(5000),task=work('preview'),metadata={duration:3,width:1080,height:1920,fps:59.94};
   mocks.preparePreviewVideo.mockResolvedValue(metadata);mocks.uploadMediaFile.mockResolvedValue('asset');

@@ -6,6 +6,13 @@ execFileSync('ffmpeg', ['-version'], { stdio: 'ignore' });
 execFileSync('ffprobe', ['-version'], { stdio: 'ignore' });
 execFileSync('flock', ['--version'], { stdio: 'ignore' });
 if (!existsSync('scripts/render-resources.mjs') || !existsSync('scripts/render-ffmpeg.sh')) throw new Error('Bounded render FFmpeg launcher is missing.');
+// Exercise the packaged TypeScript import graph without claiming work or calling
+// providers. This catches missing server files and aliases during the image build.
+execFileSync(process.execPath,['--import','tsx','--input-type=module','-e',`
+  await import('./lib/server/media-task-runner.ts');
+  const {AnalysisError,isRetryableAnalysisError}=await import('./lib/media-analysis/errors.ts');
+  if(!isRetryableAnalysisError(new AnalysisError('temporary',429,true))||isRetryableAnalysisError(new AnalysisError('quota',429,false)))throw new Error('Media retry policy is invalid.');
+`],{stdio:'inherit'});
 execFileSync(process.env.BEAT_TRACK_PYTHON, ['-c', 'import beat_this, torch, numpy, soxr; assert not torch.cuda.is_available()'], { stdio: 'inherit' });
 execFileSync(process.env.SCENE_DETECT_PYTHON, ['-c', 'import scenedetect, cv2'], { stdio: 'inherit' });
 execFileSync(process.env.YT_DLP_PATH, ['--version'], { stdio: 'ignore' });
@@ -20,4 +27,4 @@ try {
   await page.setContent('<p>Media runtime check</p>');
   if (await page.$eval('p', element => element.textContent) !== 'Media runtime check') throw new Error('Chromium could not render.');
 } finally { await browser.close(); }
-console.log('Media runtime: FFmpeg, Python trackers, pinned model, Chromium and export assets verified.');
+console.log('Media runtime: server imports, retry policy, FFmpeg, Python trackers, pinned model, Chromium and export assets verified.');

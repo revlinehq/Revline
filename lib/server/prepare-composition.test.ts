@@ -1,11 +1,11 @@
 import {execFile} from 'node:child_process';
-import {copyFile,mkdtemp,readFile,rm} from 'node:fs/promises';
+import {copyFile,mkdtemp,readFile,rm,mkdir,stat} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {promisify} from 'node:util';
-import {expect,it} from 'vitest';
+import {expect,it,vi} from 'vitest';
 import type {MediaAsset,Timeline} from '../editor/types';
-import {writeComposition} from './prepare-composition';
+import {prepareComposition,writeComposition} from './prepare-composition';
 
 const run=promisify(execFile);
 it('omits silent video from native export audio without muting embedded or separate sound',async()=>{
@@ -38,7 +38,40 @@ it('omits silent video from native export audio without muting embedded or separ
     expect(embedded).toContain('data-volume="0.3"');expect(embedded).not.toMatch(/\s+muted(?:\s|>)/);
     expect(html.match(/<audio\b[^>]*>/g)).toEqual([expect.stringContaining('data-volume="0.7"')]);
     expect(timeline).toEqual(before);
+    const shifted={...timeline,clips:timeline.clips.map(clip=>clip.kind==='audio'?{...clip,sourceStart:3.25,playbackRate:2}:clip)};
+    await writeComposition(directory,shifted,assets,{silent:'./silent.mp4',audible:'./audible.mp4',sound:'./sound.wav'},720,24,'./',AbortSignal.timeout(10000),{sound:3});
+    const remapped=await readFile(join(directory,'index.html'),'utf8'),audio=remapped.match(/<audio\b[^>]*>/)?.[0];
+    expect(audio).toContain('data-media-start="0.25"');expect(audio).toContain('data-playback-rate="2"');
+    expect(shifted.clips.find(clip=>clip.kind==='audio')?.sourceStart).toBe(3.25);
   }finally{await rm(directory,{recursive:true,force:true});}
+},15000);
+
+it('prepares only audible source bounds and reuses the same sample-aligned section',async()=>{
+  const directory=await mkdtemp(join(tmpdir(),'revline-composition-audio-window-'));
+  try{
+    const source=join(directory,'source.m4a');
+    await run('ffmpeg',['-v','error','-f','lavfi','-i','aevalsrc=0.2*sin(2*PI*440*t)|0.2*sin(2*PI*880*t):s=48000:d=8','-c:a','aac','-y',source]);
+    const bytes=await readFile(source),fetchMedia=vi.fn(async()=>new Response(bytes));
+    vi.stubEnv('MEDIA_WORKER_URL','https://fixture.media');vi.stubEnv('MEDIA_ANALYSIS_CACHE_DIR',join(directory,'cache'));vi.stubGlobal('fetch',fetchMedia);
+    const assets=[{_id:'sound',ownerId:'owner',projectId:'project',r2Key:'media/owner/project/audio',fileName:'source.m4a',contentType:'audio/mp4',kind:'audio' as const,url:'https://fixture.media/read?token=fixture',size:bytes.length,duration:8}];
+    const timeline:Timeline={fps:30,aspectRatio:'landscape',clips:[
+      {id:'first',kind:'audio',assetId:'sound',sourceStart:3.25,start:0,duration:.5,playbackRate:2,volume:.7},
+      {id:'second',kind:'audio',assetId:'sound',sourceStart:4.25,start:.5,duration:.5,volume:.7},
+      {id:'muted',kind:'audio',assetId:'sound',sourceStart:0,start:0,duration:.5,volume:0},
+    ]};
+    for(const name of ['initial','cached']){
+      const output=join(directory,name);await mkdir(output);
+      const prepared=await prepareComposition(output,timeline,assets,'https://fixture.convex.cloud',AbortSignal.timeout(10000));
+      expect(prepared.audioSourceOffsets).toEqual({sound:3.25});
+      expect((await stat(join(output,'asset-0-decoded.wav'))).size).toBeLessThan(1.5*48000*2*2+2048);
+      await writeComposition(output,timeline,assets,prepared.assetUrls,720,30,'./',AbortSignal.timeout(10000),prepared.audioSourceOffsets);
+      const tags=(await readFile(join(output,'index.html'),'utf8')).match(/<audio\b[^>]*>/g)??[];
+      expect(tags[0]).toContain('data-media-start="0"');expect(tags[0]).toContain('data-playback-rate="2"');
+      expect(tags[1]).toContain('data-media-start="1"');expect(tags).toHaveLength(2);
+    }
+    expect(fetchMedia).toHaveBeenCalledTimes(1);
+    expect(timeline.clips[0].sourceStart).toBe(3.25);
+  }finally{vi.unstubAllGlobals();vi.unstubAllEnvs();await rm(directory,{recursive:true,force:true});}
 },15000);
 
 it('exports a clip section at zero with its overlapping sound, text and original animation phase',async()=>{

@@ -14,8 +14,8 @@ export async function reviewComposition(snapshot:NonNullable<MediaWorkItem['revi
   const key=process.env.GOOGLE_GENERATIVE_AI_API_KEY;if(!key)throw new AnalysisError('Gemini composition review is not configured.',503);
   const edited=reviewWindowTimeline(snapshot.timeline,snapshot.start,snapshot.end),reference=reviewWindowTimeline(snapshot.reference,snapshot.start,snapshot.end);
   const assets=snapshot.assets.filter(asset=>[...edited.clips,...reference.clips].some(clip=>clip.assetId===asset._id)) as (MediaAsset & {size:number})[];
-  const urls=await prepareComposition(directory,edited,assets,convexUrl,signal);
-  for(const [name,timeline] of [['edited',edited],['reference',reference]] as const){const path=join(directory,name);await mkdir(path);await linkCompositionResources(directory,path,urls);await writeComposition(path,timeline,assets,urls,720,snapshot.timeline.fps as 24|30|60,'./',signal);}
+  const {assetUrls,audioSourceOffsets}=await prepareComposition(directory,edited,assets,convexUrl,signal);
+  for(const [name,timeline] of [['edited',edited],['reference',reference]] as const){const path=join(directory,name);await mkdir(path);await linkCompositionResources(directory,path,assetUrls);await writeComposition(path,timeline,assets,assetUrls,720,snapshot.timeline.fps as 24|30|60,'./',signal,audioSourceOffsets);}
   const times=compositionSampleTimes(snapshot.plans,snapshot.timeline.fps,snapshot.start,snapshot.end);
   onProgress(25);
   await runCompositionCapture(directory,{...dimensions(snapshot.timeline.aspectRatio,720),fps:snapshot.timeline.fps,times,start:snapshot.start,end:snapshot.end},signal);
