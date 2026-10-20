@@ -50,6 +50,7 @@ const hashTree = async directory => {
 };
 try {
   console.log(`Target: production (${deployment}); Cloudflare revline-media-processor-production. ${dryRun ? 'Validation only.' : 'Deploying both services.'}`);
+  await node([cli('next/dist/bin/next'), 'typegen']);
   await node([cli('typescript/bin/tsc'), '--noEmit']);
   await node([cli('typescript/bin/tsc'), '-p', 'infra/media-worker/edge/tsconfig.json']);
   await node(['infra/media-worker/prepare-context.mjs']);
