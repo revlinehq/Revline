@@ -136,7 +136,11 @@ export async function commitTimeline(ctx: MutationCtx, project: Doc<"projects">,
     const previous = project.history ?? [], target = normalizeTimeline(undoTo);
     if (undoHistoryKeys === undefined) {
       // Keep earlier clients compatible during the backend-first rollout.
-      const index = undoTargetKey ? (await Promise.all(previous.map(timelineHistoryKey))).findLastIndex(key => key === undoTargetKey) : previous.findLastIndex(snapshot => equalTimelineValue(normalizeTimeline(snapshot), target));
+      const keys = undoTargetKey ? await Promise.all(previous.map(timelineHistoryKey)) : undefined;
+      let index = -1;
+      for (let candidate = previous.length - 1; candidate >= 0; candidate--) {
+        if (keys ? keys[candidate] === undoTargetKey : equalTimelineValue(normalizeTimeline(previous[candidate]), target)) { index = candidate; break; }
+      }
       history = index < 0 ? [] : previous.slice(0, index);
       if (index >= 0 && !equalTimelineValue(timeline, target)) history.push(await validateTimeline(ctx, project, target));
     } else {
