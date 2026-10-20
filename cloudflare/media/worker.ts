@@ -1,4 +1,4 @@
-import { verifyMediaToken } from '../../lib/storage/media-tokens';
+import { attachmentDisposition, safeDownloadFileName, verifyMediaToken } from '../../lib/storage/media-tokens';
 
 function validKey(key: unknown): key is string {
   return typeof key === 'string' && /^media\/[a-zA-Z0-9_-]+\/[a-zA-Z0-9_-]+\/[a-zA-Z0-9-]+$/.test(key);
@@ -7,7 +7,7 @@ function hasBody(object: R2Object): object is R2ObjectBody { return 'body' in ob
 function json(value: unknown, status = 200) { return Response.json(value, { status }); }
 
 export default {
-  async fetch(request, env): Promise<Response> {
+  async fetch(request: Request, env: Env): Promise<Response> {
     const origin = request.headers.get('Origin');
     const path = new URL(request.url).pathname;
     const diagnostic = (reason: string, status: number, error?: unknown) => console.warn('[media-storage]', {
@@ -17,13 +17,15 @@ export default {
     });
     const allowed = env.ALLOWED_ORIGINS.split(',');
     if (origin && !allowed.includes(origin)) { diagnostic('origin-not-allowed', 403); return json({ error: 'Origin is not allowed' }, 403); }
-    const cors = new Headers({ 'Vary': 'Origin', 'Access-Control-Allow-Methods': 'GET, HEAD, PUT, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type, Range', 'Access-Control-Expose-Headers': 'ETag, Content-Range, Content-Length, Accept-Ranges', ...(origin ? { 'Access-Control-Allow-Origin': origin } : {}) });
+    const cors = new Headers({ 'Vary': 'Origin', 'Access-Control-Allow-Methods': 'GET, HEAD, PUT, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type, Range', 'Access-Control-Expose-Headers': 'ETag, Content-Range, Content-Length, Accept-Ranges, Content-Disposition', ...(origin ? { 'Access-Control-Allow-Origin': origin } : {}) });
     if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors });
     const url = new URL(request.url);
     const token = url.pathname === '/control' ? request.headers.get('Authorization')?.replace(/^Bearer /, '') : url.searchParams.get('token');
     const grant = token ? await verifyMediaToken(env.MEDIA_SIGNING_SECRET, token) : null;
     const reply = (value: unknown, status: number) => { if (status >= 400) diagnostic('request-rejected', status); const response = json(value, status); for (const [name, value] of cors) response.headers.set(name, value); return response; };
     if (!grant) return reply({ error: 'Media access has expired' }, 401);
+    const download = grant.operation === 'download';
+    if (download && (typeof grant.fileName !== 'string' || grant.fileName !== safeDownloadFileName(grant.fileName))) return reply({ error: 'Invalid download grant' }, 403);
     let response: Response;
     try {
       if (url.pathname === '/part' && request.method === 'PUT' && grant.operation === 'part' && validKey(grant.key) && grant.uploadId && Number.isInteger(grant.partNumber) && grant.partNumber! > 0 && grant.partNumber! <= 10000 && grant.size && request.body) {
@@ -31,13 +33,36 @@ export default {
         if (Number(request.headers.get('Content-Length')) !== grant.size || grant.size > 64 * 1024 * 1024) return reply({ error: 'Upload part size does not match' }, 400);
         const upload = env.MEDIA.resumeMultipartUpload(grant.key, grant.uploadId);
         response = json(await upload.uploadPart(grant.partNumber!, request.body));
-      } else if (url.pathname === '/read' && (request.method === 'GET' || request.method === 'HEAD') && grant.operation === 'read' && validKey(grant.key)) {
+      } else if (url.pathname === '/read' && (request.method === 'GET' || request.method === 'HEAD') && download && grant.storageUrl && !grant.key) {
+        // Only a server-signed legacy source can be proxied. Never accept a URL
+        // or attachment filename from the request's unsigned query parameters.
+        const source = new URL(grant.storageUrl);
+        if (source.protocol !== 'https:' || !source.hostname.endsWith('.convex.cloud') || source.port || source.username || source.password || !source.pathname.startsWith('/api/storage/')) return reply({ error: 'Invalid export source' }, 403);
+        const forwarded = new Headers();
+        for (const name of ['Range', 'If-None-Match', 'If-Modified-Since']) {
+          const value = request.headers.get(name); if (value) forwarded.set(name, value);
+        }
+        const upstream = await fetch(source, { method: request.method, headers: forwarded, redirect: 'error', signal: request.signal });
+        if (![200, 206, 304].includes(upstream.status)) {
+          await upstream.body?.cancel();
+          return reply({ error: 'Export file could not be downloaded' }, upstream.status === 404 ? 404 : 502);
+        }
+        const headers = new Headers({ 'Content-Disposition': attachmentDisposition(grant.fileName!), 'Cache-Control': 'private, no-store', 'X-Content-Type-Options': 'nosniff' });
+        for (const name of ['Content-Type', 'Content-Length', 'Content-Range', 'Accept-Ranges', 'ETag', 'Last-Modified']) {
+          const value = upstream.headers.get(name); if (value) headers.set(name, value);
+        }
+        response = new Response(upstream.body, { status: upstream.status, headers });
+      } else if (url.pathname === '/read' && (request.method === 'GET' || request.method === 'HEAD') && (grant.operation === 'read' || download) && validKey(grant.key) && !grant.storageUrl) {
         const readStarted=Date.now();
         const object = request.method === 'HEAD' ? await env.MEDIA.head(grant.key) : await env.MEDIA.get(grant.key, { range: request.headers, onlyIf: request.headers });
         if (!object) response = json({ error: 'Media not found' }, 404);
         else {
           const headers = new Headers({ 'Accept-Ranges': 'bytes', 'ETag': object.httpEtag, 'Cache-Control': 'private, max-age=300', 'X-Content-Type-Options': 'nosniff' });
           object.writeHttpMetadata(headers);
+          if (download) {
+            headers.set('Content-Disposition', attachmentDisposition(grant.fileName!));
+            headers.set('Cache-Control', 'private, no-store');
+          }
           if (request.method === 'GET' && !hasBody(object)) response = new Response(null, { status: 304, headers });
           else {
             const range = request.method === 'GET' && request.headers.has('Range') ? object.range : undefined;
