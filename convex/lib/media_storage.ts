@@ -1,4 +1,4 @@
-import { signMediaToken } from '../../lib/storage/media-tokens';
+import { safeDownloadFileName, signMediaToken } from '../../lib/storage/media-tokens';
 import type { QueryCtx, MutationCtx, ActionCtx } from '../_generated/server';
 import type { Id } from '../_generated/dataModel';
 
@@ -14,6 +14,18 @@ export async function mediaUrl(ctx: QueryCtx | MutationCtx | ActionCtx, source: 
   // a stalled native range/cache entry rather than reload that exact URL.
   const expires=(fresh?Date.now():Math.floor(Date.now()/86400_000)*86400_000)+7*86400_000;
   const token = await signMediaToken(secret, { operation: 'read', key: source.r2Key, expires });
+  return `${url}/read?token=${token}`;
+}
+export async function mediaDownloadUrl(ctx: QueryCtx | MutationCtx | ActionCtx, source: { storageId?: Id<'_storage'>; r2Key?: string }, fileName: string) {
+  const storageUrl = !source.r2Key && source.storageId ? await ctx.storage.getUrl(source.storageId) : null;
+  if (!source.r2Key && !storageUrl) return null;
+  if (storageUrl) {
+    const target = new URL(storageUrl), site = new URL(process.env.CONVEX_SITE_URL ?? '');
+    const expectedHost = site.hostname.replace(/\.convex\.site$/, '.convex.cloud');
+    if (site.protocol !== 'https:' || !site.hostname.endsWith('.convex.site') || target.protocol !== 'https:' || target.hostname !== expectedHost || target.port || target.username || target.password || !target.pathname.startsWith('/api/storage/')) throw new Error('Export storage origin is invalid');
+  }
+  const { url, secret } = mediaConfig();
+  const token = await signMediaToken(secret, { operation: 'download', expires: Date.now() + 15 * 60_000, fileName: safeDownloadFileName(fileName), ...(source.r2Key ? { key: source.r2Key } : { storageUrl: storageUrl! }) });
   return `${url}/read?token=${token}`;
 }
 export async function storageControl(body: Record<string, unknown>): Promise<{ uploadId?: string; size?: number; contentType?: string }> {

@@ -7,6 +7,8 @@ import { validateVisualFade } from '../../lib/editor/visual-fades';
 import { validateAudioTimeline } from '../../lib/editor/audio-settings';
 import { ConvexError } from "convex/values";
 import { layerGroup, maxTrackCount, normalizeTimeline, trackOf, type Timeline } from "../../lib/editor/types";
+import { equalTimelineValue } from '../../lib/editor/timeline-equality';
+import { timelineHistoryKey } from '../../lib/editor/timeline-history-key';
 import type { Doc } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
 
@@ -100,10 +102,52 @@ export async function validateTimeline(ctx: MutationCtx | QueryCtx, project: Doc
   try { validateAudioTimeline(timeline); } catch(error) { throw new ConvexError((error as Error).message); }
   return timeline;
 }
-export async function commitTimeline(ctx: MutationCtx, project: Doc<"projects">, timeline: Timeline, expectedRevision: number) {
+/** Find an ordered anchor, preferring the earliest equal-scoring match so an
+ * identical future state cannot reappear after an older local undo. */
+function matchedUndoHistory(saved: string[], preceding: string[], target: string) {
+  if (!preceding.length) return [];
+  const matches = Array.from({ length: saved.length + 1 }, () => Array<number>(preceding.length + 1).fill(0));
+  let anchor = -1, anchorScore = 0, exact = -1, exactScore = -1;
+  for (let row = 0; row < saved.length; row++) {
+    if (saved[row] === target && matches[row][preceding.length] > exactScore) { exact = row; exactScore = matches[row][preceding.length]; }
+    for (let column = 0; column < preceding.length; column++) matches[row + 1][column + 1] = saved[row] === preceding[column] ? matches[row][column] + 1 : Math.max(matches[row][column + 1], matches[row + 1][column]);
+    if (matches[row + 1][preceding.length] > anchorScore) { anchor = row; anchorScore = matches[row + 1][preceding.length]; }
+  }
+  const exactMatchesPast = (exactScore > 0 || exact === 0) && exactScore === anchorScore;
+  const boundary = exactMatchesPast ? exact : anchor + 1;
+  const retained: number[] = [];
+  let row = boundary, column = preceding.length;
+  while (row > 0 && column > 0) {
+    if (matches[row - 1][column] === matches[row][column]) row--;
+    else if (saved[row - 1] === preceding[column - 1]) { retained.push(row - 1); row--; column--; }
+    else column--;
+  }
+  return retained.reverse();
+}
+
+export async function commitTimeline(ctx: MutationCtx, project: Doc<"projects">, timeline: Timeline, expectedRevision: number, undoTo?: Timeline, undoHistoryKeys?: string[], undoTargetKey?: string) {
   if ((project.revision ?? 0) !== expectedRevision) throw new ConvexError("The timeline changed elsewhere. Reload before saving.");
   timeline = await validateTimeline(ctx, project, timeline);
   const revision = expectedRevision + 1;
-  await writeProject(ctx,project._id, { timeline, aspectRatio: timeline.aspectRatio, revision, history: boundedHistory([...(project.history ?? []), currentTimeline(project)]), updatedAt: Date.now() });
+  let history = [...(project.history ?? []), currentTimeline(project)];
+  if (undoTo) {
+    // Undo consumes history instead of recording its old state as a new edit.
+    // A following gesture may share this save; retain its actual undo target.
+    const previous = project.history ?? [], target = normalizeTimeline(undoTo);
+    if (undoHistoryKeys === undefined) {
+      // Keep earlier clients compatible during the backend-first rollout.
+      const index = undoTargetKey ? (await Promise.all(previous.map(timelineHistoryKey))).findLastIndex(key => key === undoTargetKey) : previous.findLastIndex(snapshot => equalTimelineValue(normalizeTimeline(snapshot), target));
+      history = index < 0 ? [] : previous.slice(0, index);
+      if (index >= 0 && !equalTimelineValue(timeline, target)) history.push(await validateTimeline(ctx, project, target));
+    } else {
+      const keys = await Promise.all(previous.map(timelineHistoryKey));
+      const matched = matchedUndoHistory(keys, undoHistoryKeys, undoTargetKey ?? await timelineHistoryKey(target));
+      // Unsaved intermediate gestures have no exact server snapshot. Their
+      // preceding local fingerprints still identify the valid persisted past.
+      history = matched.map(index => previous[index]);
+      if (!equalTimelineValue(timeline, target)) history.push(await validateTimeline(ctx, project, target));
+    }
+  }
+  await writeProject(ctx,project._id, { timeline, aspectRatio: timeline.aspectRatio, revision, history: boundedHistory(history), updatedAt: Date.now() });
   return revision;
 }

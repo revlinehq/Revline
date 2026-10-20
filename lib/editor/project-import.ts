@@ -36,6 +36,7 @@ export async function importProjectSources(
   session.projectId ??= await dependencies.create(input.title, input.assetIds);
   const projectId = session.projectId;
   let { timeline, revision } = await dependencies.project(projectId);
+  const preparations: { asset: MediaAsset; index: number; source?: ImportFile }[] = [];
   const prepare = async (asset: MediaAsset, index: number) => {
     if (!dependencies.prepare) return;
     const preparationStarted = Date.now();
@@ -58,7 +59,7 @@ export async function importProjectSources(
   if (input.assetIds.length && dependencies.prepare) {
     const sources = timeline.clips.filter(clip => clip.assetId && (clip.kind === 'video' || clip.kind === 'audio') && !(clip.kind === 'audio' && timeline.clips.some(video => video.kind === 'video' && video.linkedClipId === clip.id)));
     const ids = [...new Set(sources.map(clip => clip.assetId!))];
-    for (const [index, id] of ids.entries()) await prepare(await dependencies.asset(projectId, id as Id<'assets'>), index + 1);
+    for (const [index, id] of ids.entries()) preparations.push({ asset: await dependencies.asset(projectId, id as Id<'assets'>), index: index + 1 });
   }
 
   for (const [index, source] of input.files.entries()) {
@@ -86,9 +87,17 @@ export async function importProjectSources(
         timeline = next;
       }
     }
-    await prepare(asset, input.assetIds.length + index + 1);
-    await dependencies.acknowledge(source.file);
-    session.completed.add(source.id);
+    preparations.push({ asset, index: input.assetIds.length + index + 1, source });
+  }
+  // Saving an upload already starts its durable background tasks. Transfer the
+  // remaining sources while those run instead of holding the next file for AI.
+  // Apply prepared audio/timeline changes serially after all transfers finish.
+  for (const { asset, index, source } of preparations) {
+    await prepare(asset, index);
+    if (source) {
+      await dependencies.acknowledge(source.file);
+      session.completed.add(source.id);
+    }
   }
   onProgress({ phase: 'opening', index: Math.max(1, total), total, percent: 100 });
   log(`Sources, audio and editing context ready; opening editor · chat ${projectId}`);

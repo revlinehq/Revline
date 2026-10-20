@@ -14,6 +14,7 @@ import { normalizeTimeline, type Timeline } from '../lib/editor/types';
 import { aspectRatio, projectDocument, timelineValidator } from "./schema";
 import { editingWorkflowActive } from './lib/assistant_workflow';
 import { equalTimelineValue } from '../lib/editor/timeline-equality';
+import { timelineHistoryKey } from '../lib/editor/timeline-history-key';
 const workflowLocked = 'Revline is editing your timeline. Wait for it to finish or stop the edit before making changes.';
 function projectTitle(value: string) { const title = value.trim(); if (!title || title.length > 120) throw new ConvexError("Title must contain between 1 and 120 characters"); return title; }
 export const create = mutation({ args: { title: v.string(), aspectRatio, assetIds: v.optional(v.array(v.id('assets'))) }, returns: v.id("projects"), handler: async (ctx, args) => {
@@ -99,15 +100,26 @@ export const update = mutation({ args: { projectId: v.id("projects"), title: v.o
   if (args.title !== undefined) await writeProject(ctx,project._id, { title: projectTitle(args.title), updatedAt: Date.now() });
   return null;
 }});
-export const saveTimeline = mutation({ args: { projectId: v.id("projects"), timeline: timelineValidator, baseTimeline: v.optional(timelineValidator), expectedRevision: v.number() }, returns: v.object({ revision: v.number(), timeline: timelineValidator }), handler: async (ctx, args) => {
+export const saveTimeline = mutation({ args: { projectId: v.id("projects"), timeline: timelineValidator, baseTimeline: v.optional(timelineValidator), undoTo: v.optional(timelineValidator), undoHistoryKeys: v.optional(v.array(v.string())), undoTargetKey: v.optional(v.string()), expectedRevision: v.number() }, returns: v.object({ revision: v.number(), timeline: timelineValidator }), handler: async (ctx, args) => {
   const project = await requireProject(ctx, args.projectId, await requireOwner(ctx)); await requireEditorAccess(ctx, project.ownerId);
   let timeline = args.timeline;
+  let undoTo = args.undoTo, undoTargetKey = args.undoTargetKey;
   let expectedRevision = args.expectedRevision;
+  if (args.undoTo && serializedBytes(args.undoTo) > 150_000) throw new ConvexError('Timeline is too large');
+  if (args.undoHistoryKeys && (!args.undoTo || args.undoHistoryKeys.length > 40 || args.undoHistoryKeys.some(key => !/^[a-f0-9]{64}$/.test(key)))) throw new ConvexError('Invalid undo history');
+  if (undoTargetKey !== undefined && (!undoTo || !/^[a-f0-9]{64}$/.test(undoTargetKey))) throw new ConvexError('Invalid undo target');
   if (args.baseTimeline) {
     timeline = await validateTimeline(ctx, project, timeline);
     if (serializedBytes(args.baseTimeline) > 150_000) throw new ConvexError('Timeline is too large');
     if (!Number.isInteger(expectedRevision) || expectedRevision < 0 || expectedRevision > (project.revision ?? 0)) throw new ConvexError('Invalid timeline revision');
-    timeline = applyTimelineEdit(args.baseTimeline, timeline, currentTimeline(project));
+    const current = currentTimeline(project);
+    timeline = applyTimelineEdit(args.baseTimeline, timeline, current);
+    if (undoTo) {
+      // Keep the original history identity while preserving concurrent changes
+      // in both the saved undo and any following gesture's undo target.
+      undoTargetKey ??= await timelineHistoryKey(undoTo);
+      undoTo = applyTimelineEdit(args.baseTimeline, undoTo, current);
+    }
     expectedRevision = project.revision ?? 0;
   }
   if (await editingWorkflowActive(ctx, project)) {
@@ -116,7 +128,7 @@ export const saveTimeline = mutation({ args: { projectId: v.id("projects"), time
     if (equalTimelineValue(normalizeTimeline(timeline), current)) return { revision: project.revision ?? 0, timeline: current };
     throw new ConvexError(workflowLocked);
   }
-  const revision = await commitTimeline(ctx, project, timeline, expectedRevision);
+  const revision = await commitTimeline(ctx, project, timeline, expectedRevision, undoTo, args.undoHistoryKeys, undoTargetKey);
   return { revision, timeline: normalizeTimeline(timeline) };
 }});
 export const undo = mutation({ args: { projectId: v.id("projects") }, returns: v.number(), handler: async (ctx, args) => {

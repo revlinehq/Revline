@@ -8,6 +8,9 @@ import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import Stripe from 'stripe';
 import { api, components, internal } from './_generated/api';
 import schema from './schema';
+import { createTimelineSaveQueue } from '../lib/editor/timeline-sync';
+import { createEditorStore } from '../lib/editor/store';
+import type { Timeline } from '../lib/editor/types';
 
 const modules = import.meta.glob('./**/*.ts');
 const identity = (subject: string) => ({ subject, issuer: 'https://audit.clerk.accounts.dev', tokenIdentifier: `audit|${subject}` });
@@ -53,6 +56,168 @@ async function revoke(f: Awaited<ReturnType<typeof fixture>>, mode: 'revoked' | 
   });
 }
 const upload = (f: Awaited<ReturnType<typeof fixture>>) => f.owner.action(api.r2.start, { projectId: f.projectId, kind: 'video', fileName: 'New.mp4', contentType: 'video/mp4', size: 10, duration: 3, width: 1080, height: 1920 });
+
+test('a failed autosave retains later gestures and rejects dependent work until an explicit retry succeeds', async () => {
+  const original: Timeline = { fps: 30, aspectRatio: 'vertical', clips: [{ id: 'caption', kind: 'caption', text: 'Original', start: 0, duration: 5, sourceStart: 0 }] };
+  let visible = original, rejectSave!: (error: Error) => void;
+  const save = vi.fn().mockImplementationOnce(() => new Promise((_, reject) => { rejectSave = reject; })).mockImplementation(async edit => ({ timeline: edit.timeline, revision: 1 }));
+  const queue = createTimelineSaveQueue({ timeline: original, revision: 0 }, { save, load: async () => ({ timeline: original, revision: 0 }), update: next => { visible = next; }, saving: () => {}, error: () => {} });
+  queue.edit({ ...original, clips: [{ ...original.clips[0], duration: 4 }] });
+  queue.edit({ ...original, clips: [{ ...original.clips[0], duration: 3 }] });
+  const blocked = expect(queue.wait()).rejects.toThrow('Connection interrupted');
+  rejectSave(new Error('Connection interrupted'));
+  await blocked;
+  expect(visible.clips[0].duration).toBe(3);
+  expect(queue.busy).toBe(true);
+  expect(save).toHaveBeenCalledTimes(1);
+  await queue.wait();
+  expect(save).toHaveBeenCalledTimes(2);
+  expect(visible.clips[0].duration).toBe(3);
+  expect(queue.busy).toBe(false);
+});
+
+test.each([false, true])('a lost save response preserves a following undo when the recovery read fails: %s', async failFirstRead => {
+  const a: Timeline = { fps: 30, aspectRatio: 'vertical', clips: [{ id: 'caption', kind: 'caption', text: 'A', start: 0, duration: 3, sourceStart: 0 }] };
+  const b: Timeline = { ...a, clips: [{ ...a.clips[0], text: 'B' }] };
+  let server = { timeline: a, revision: 0 }, visible = a, rejectSave!: (error: Error) => void;
+  const save = vi.fn().mockImplementationOnce(() => new Promise((_, reject) => { server = { timeline: b, revision: 1 }; rejectSave = reject; })).mockImplementation(async edit => {
+    expect(edit.expectedRevision).toBe(1); expect(edit.baseTimeline.clips[0].text).toBe('B');
+    server = { timeline: edit.timeline, revision: 2 }; return server;
+  });
+  let reads = 0;
+  const queue = createTimelineSaveQueue({ timeline: a, revision: 0 }, { save, load: async () => {
+    if (++reads === 1 && failFirstRead) throw new Error('Recovery read unavailable');
+    return server;
+  }, update: next => { visible = next; }, saving: () => {}, error: () => {} });
+  queue.edit(b); queue.edit(a, true, []);
+  const blocked = expect(queue.wait()).rejects.toThrow('Save response lost');
+  rejectSave(new Error('Save response lost')); await blocked;
+  expect(queue.busy).toBe(true); expect(save).toHaveBeenCalledTimes(1);
+  await queue.wait();
+  expect(reads).toBe(failFirstRead ? 2 : 1);
+  expect(save).toHaveBeenCalledTimes(2); expect(server.timeline.clips[0].text).toBe('A');
+  expect(visible.clips[0].text).toBe('A'); expect(queue.busy).toBe(false);
+});
+
+test('a failed uncommitted save and its following undo cancel without retrying a stale write', async () => {
+  const a: Timeline = { fps: 30, aspectRatio: 'vertical', clips: [{ id: 'caption', kind: 'caption', text: 'A', start: 0, duration: 3, sourceStart: 0 }] };
+  let rejectSave!: (error: Error) => void, visible = a;
+  const save = vi.fn(() => new Promise<never>((_, reject) => { rejectSave = reject; }));
+  const queue = createTimelineSaveQueue({ timeline: a, revision: 0 }, { save, load: async () => ({ timeline: a, revision: 0, history: [] }), update: next => { visible = next; }, saving: () => {}, error: () => {} });
+  queue.edit({ ...a, clips: [{ ...a.clips[0], text: 'B' }] }); queue.edit(a, true, []);
+  const completion = queue.wait(); rejectSave(new Error('Write never reached server')); await completion;
+  expect(save).toHaveBeenCalledTimes(1); expect(visible.clips[0].text).toBe('A'); expect(queue.busy).toBe(false);
+});
+
+test('local undo consumes saved history across reloads and redo remains undoable without a server loop', async () => {
+  const f = await fixture();
+  const snapshot = (text: string): Timeline => ({ fps: 30, aspectRatio: 'vertical', tracks: { visual: 1, overlay: 0, audio: 0, effects: 0 }, clips: [{ id: 'title', kind: 'graphic', text, start: 0, duration: 3, sourceStart: 0, track: 1 }] });
+  const a = snapshot('A'), b = snapshot('B'), c = snapshot('C');
+  await f.t.run(ctx => writeProject(ctx, f.projectId, { timeline: c, revision: 2, history: [a, b] }));
+  const store = createEditorStore(c, [a, b]);
+  const queue = createTimelineSaveQueue({ timeline: c, revision: 2 }, {
+    save: edit => f.owner.mutation(api.projects.saveTimeline, { projectId: f.projectId, ...edit }),
+    load: async () => { const project = await f.owner.query(api.projects.get, { projectId: f.projectId }); return { timeline: project.timeline!, revision: project.revision! }; },
+    update: next => store.getState().replace(next), saving: () => {}, error: error => { throw error; },
+  });
+  for (const text of ['B', 'A']) {
+    const previous = store.getState().undo()!;
+    queue.edit(previous, true, store.getState().history); await queue.wait();
+    expect(store.getState().timeline.clips[0].text).toBe(text);
+  }
+  expect(store.getState().undo()).toBeNull();
+  expect(await f.owner.query(api.projects.history, { projectId: f.projectId })).toEqual([]);
+  await expect(f.owner.mutation(api.projects.undo, { projectId: f.projectId })).rejects.toThrow('No edits to undo');
+  const next = store.getState().redo()!; queue.edit(next); await queue.wait();
+  expect((await f.owner.query(api.projects.history, { projectId: f.projectId })).map(timeline => timeline.clips[0].text)).toEqual(['A']);
+  queue.edit(store.getState().undo()!, true, store.getState().history); await queue.wait();
+  const reloaded = await f.owner.query(api.projects.get, { projectId: f.projectId });
+  expect(reloaded.timeline!.clips[0].text).toBe('A'); expect(reloaded.history).toEqual([]);
+  // A normal gesture may be coalesced after undo before the queued save starts.
+  await f.t.run(ctx => writeProject(ctx, f.projectId, { timeline: c, revision: 20, history: [a, b] }));
+  await f.owner.mutation(api.projects.saveTimeline, { projectId: f.projectId, timeline: snapshot('D'), undoTo: b, expectedRevision: 20 });
+  expect((await f.owner.query(api.projects.history, { projectId: f.projectId })).map(timeline => timeline.clips[0].text)).toEqual(['A', 'B']);
+  await f.owner.mutation(api.projects.undo, { projectId: f.projectId });
+  expect((await f.owner.query(api.projects.get, { projectId: f.projectId })).timeline!.clips[0].text).toBe('B');
+});
+
+test('coalesced autosaves keep older undo history when the next undo targets a local-only intermediate edit', async () => {
+  const f = await fixture();
+  const snapshot = (text: string): Timeline => ({ fps: 30, aspectRatio: 'vertical', tracks: { visual: 1, overlay: 0, audio: 0, effects: 0 }, clips: [{ id: 'title', kind: 'graphic', text, start: 0, duration: 3, sourceStart: 0, track: 1 }] });
+  const a = snapshot('A'); await f.t.run(ctx => writeProject(ctx, f.projectId, { timeline: a, history: [], revision: 0 }));
+  const store = createEditorStore(a);
+  let releaseFirst!: () => void, firstCommitted!: () => void, calls = 0;
+  const committed = new Promise<void>(resolve => { firstCommitted = resolve; });
+  const queue = createTimelineSaveQueue({ timeline: a, revision: 0 }, {
+    save: async edit => {
+      const result = await f.owner.mutation(api.projects.saveTimeline, { projectId: f.projectId, ...edit });
+      if (++calls === 1) await new Promise<void>(resolve => { releaseFirst = resolve; firstCommitted(); });
+      return result;
+    },
+    load: async () => { const project = await f.owner.query(api.projects.get, { projectId: f.projectId }); return { timeline: project.timeline!, revision: project.revision! }; },
+    update: next => store.getState().replace(next), saving: () => {}, error: error => { throw error; },
+  });
+  for (const text of ['B', 'C', 'D']) { store.getState().edit(snapshot(text)); queue.edit(store.getState().timeline); }
+  const saved = queue.wait(); await committed; releaseFirst(); await saved;
+  expect((await f.owner.query(api.projects.history, { projectId: f.projectId })).map(timeline => timeline.clips[0].text)).toEqual(['A', 'B']);
+  queue.edit(store.getState().undo()!, true, store.getState().history); await queue.wait();
+  const reloaded = await f.owner.query(api.projects.get, { projectId: f.projectId });
+  expect(reloaded.timeline!.clips[0].text).toBe('C');
+  expect(reloaded.history!.map(timeline => timeline.clips[0].text)).toEqual(['A', 'B']);
+  for (const text of ['B', 'A']) { queue.edit(store.getState().undo()!, true, store.getState().history); await queue.wait(); expect(store.getState().timeline.clips[0].text).toBe(text); }
+  expect(store.getState().undo()).toBeNull(); expect(await f.owner.query(api.projects.history, { projectId: f.projectId })).toEqual([]);
+});
+
+test('queue acknowledgement rebases an undo target while preserving its original history identity', async () => {
+  const f = await fixture();
+  const snapshot = (text: string): Timeline => ({ fps: 30, aspectRatio: 'vertical', tracks: { visual: 1, overlay: 0, audio: 0, effects: 0 }, clips: [{ id: 'title', kind: 'graphic', text, start: 0, duration: 3, sourceStart: 0, track: 1 }] });
+  const a = snapshot('A'), b = snapshot('B'), remote = { ...b.clips[0], id: 'remote', text: 'Other tab', start: 4 };
+  await f.t.run(ctx => writeProject(ctx, f.projectId, { timeline: b, history: [a], revision: 1 }));
+  const store = createEditorStore(b, [a]); let calls = 0, rebasedTarget: Timeline | undefined, originalKey: string | undefined;
+  const queue = createTimelineSaveQueue({ timeline: b, revision: 1, history: [a] }, {
+    save: async edit => {
+      if (++calls === 1) await f.t.run(ctx => writeProject(ctx, f.projectId, { timeline: { ...b, clips: [...b.clips, remote] }, history: [a, b], revision: 2 }));
+      else { rebasedTarget = edit.undoTo; originalKey = edit.undoTargetKey; }
+      return f.owner.mutation(api.projects.saveTimeline, { projectId: f.projectId, ...edit });
+    },
+    load: async () => { const project = await f.owner.query(api.projects.get, { projectId: f.projectId }); return { timeline: project.timeline!, revision: project.revision!, history: project.history }; },
+    update: next => store.getState().replace(next), saving: () => {}, error: error => { throw error; },
+  });
+  store.getState().edit(snapshot('C')); queue.edit(store.getState().timeline);
+  queue.edit(store.getState().undo()!, true, store.getState().history); await queue.wait();
+  expect(rebasedTarget!.clips.map(clip => clip.id)).toEqual(['title', 'remote']);
+  const { timelineHistoryKey } = await import('../lib/editor/timeline-history-key');
+  expect(originalKey).toBe(await timelineHistoryKey(b));
+  const project = await f.owner.query(api.projects.get, { projectId: f.projectId });
+  expect(project.timeline!.clips.map(clip => clip.id)).toEqual(['title', 'remote']);
+  expect(project.timeline!.clips[0].text).toBe('B');
+  expect(project.history!.map(timeline => timeline.clips[0].text)).toEqual(['A']);
+});
+
+test('equal repeated timeline values still persist consumed undo history after an uncommitted save fails', async () => {
+  const f = await fixture();
+  const snapshot = (text: string): Timeline => ({ fps: 30, aspectRatio: 'vertical', tracks: { visual: 1, overlay: 0, audio: 0, effects: 0 }, clips: [{ id: 'title', kind: 'graphic', text, start: 0, duration: 3, sourceStart: 0, track: 1 }] });
+  const a = snapshot('A'), b = snapshot('B');
+  await f.t.run(ctx => writeProject(ctx, f.projectId, { timeline: a, history: [a, b], revision: 2 }));
+  const store = createEditorStore(a, [a, b]); let rejectSave!: (error: Error) => void;
+  const save = vi.fn().mockImplementationOnce(() => new Promise((_, reject) => { rejectSave = reject; })).mockImplementation(edit => f.owner.mutation(api.projects.saveTimeline, { projectId: f.projectId, ...edit }));
+  const queue = createTimelineSaveQueue({ timeline: a, revision: 2, history: [a, b] }, {
+    save,
+    load: async () => { const project = await f.owner.query(api.projects.get, { projectId: f.projectId }); return { timeline: project.timeline!, revision: project.revision!, history: project.history }; },
+    update: next => store.getState().replace(next), saving: () => {}, error: () => {},
+  });
+  queue.edit(store.getState().undo()!, true, store.getState().history);
+  queue.edit(store.getState().undo()!, true, store.getState().history);
+  const blocked = expect(queue.wait()).rejects.toThrow('First undo was not committed');
+  await vi.waitFor(() => expect(rejectSave).toBeTypeOf('function'));
+  rejectSave(new Error('First undo was not committed')); await blocked;
+  expect(store.getState().timeline.clips[0].text).toBe('A'); expect(queue.busy).toBe(true);
+  expect(await f.owner.query(api.projects.history, { projectId: f.projectId })).toHaveLength(2);
+  await queue.wait();
+  expect(queue.busy).toBe(false); expect(save).toHaveBeenCalledTimes(2);
+  expect(store.getState().undo()).toBeNull(); expect(await f.owner.query(api.projects.history, { projectId: f.projectId })).toEqual([]);
+  await expect(f.owner.mutation(api.projects.undo, { projectId: f.projectId })).rejects.toThrow('No edits to undo');
+});
 
 test('multipart lease authorization reads identity without hydrating project history', async () => {
   const f=await fixture();
@@ -561,4 +726,176 @@ test.each(['cancelled','expired'] as const)('scheduled preview upload cleanup wo
   expect(controls).toContainEqual({action:'abort',key:lease.key,uploadId:lease.uploadId});
   expect(controls).toContainEqual({action:'delete',key:lease.key});
   expect(controls.some(body=>body.action==='delete'&&body.key===`media/${ownerId}/${f.projectId}/original`)).toBe(false);
+});
+
+test('simultaneous exports in separate projects share one account limit and cancellation frees a slot', async () => {
+  vi.stubEnv('MAX_ACTIVE_EXPORTS_PER_ACCOUNT', '2');
+  const f = await fixture();
+  const projectIds = await Promise.all(Array.from({ length: 3 }, async (_, index) => {
+    const projectId = await f.owner.mutation(api.projects.create, { title: `Export ${index}`, aspectRatio: 'vertical' });
+    await f.owner.mutation(api.projects.saveTimeline, { projectId, expectedRevision: 0, timeline: { fps: 60, aspectRatio: 'vertical', clips: [{ id: 'title', kind: 'graphic', start: 0, duration: 300, sourceStart: 0, text: 'Export limit check' }] } });
+    return projectId;
+  }));
+  const results = await Promise.allSettled(projectIds.map(projectId => f.owner.mutation(api.renders.start, { projectId, resolution: 1080, fps: 60, quality: 'high' })));
+  const accepted = results.flatMap(result => result.status === 'fulfilled' ? [result.value] : []);
+  expect(accepted).toHaveLength(2);
+  expect(results.filter(result => result.status === 'rejected')).toHaveLength(1);
+  const refusedIndex = results.findIndex(result => result.status === 'rejected');
+  await f.owner.mutation(api.renders.cancel, { jobId: accepted[0] });
+  await expect(f.owner.mutation(api.renders.start, { projectId: projectIds[refusedIndex], resolution: 720, fps: 30, quality: 'draft' })).resolves.toBeTruthy();
+  const occupied = await f.t.run(ctx => ctx.db.get(accepted[1]));
+  await expect(f.owner.mutation(api.renders.start, { projectId: occupied!.projectId, resolution: 720, fps: 30, quality: 'draft' })).rejects.toThrow('already in progress');
+  await f.t.mutation(internal.editorAccess.grantComplimentary, { ownerId: otherId, reason: 'Independent export allowance' });
+  const otherProject = await f.other.mutation(api.projects.create, { title: 'Other owner', aspectRatio: 'vertical' });
+  await f.other.mutation(api.projects.saveTimeline, { projectId: otherProject, expectedRevision: 0, timeline: { fps: 30, aspectRatio: 'vertical', clips: [{ id: 'other-title', kind: 'graphic', start: 0, duration: 1, sourceStart: 0, text: 'Independent export' }] } });
+  await expect(f.other.mutation(api.renders.start, { projectId: otherProject, resolution: 720, fps: 30, quality: 'draft' })).resolves.toBeTruthy();
+});
+
+test('export download signs a fresh owner-scoped attachment while preview URLs remain inline', async () => {
+  const f = await fixture();
+  const key = `media/${ownerId}/${f.projectId}/export`;
+  await f.t.run(async ctx => {
+    await ctx.db.patch(f.jobId, { outputR2Key: key });
+    await writeProject(ctx, f.projectId, { title: 'My "/edit\r\n.mp4' });
+  });
+  await expect(f.t.action(api.renders.download, { jobId: f.jobId })).rejects.toThrow('Authentication required');
+  await expect(f.other.action(api.renders.download, { jobId: f.jobId })).rejects.toThrow('Completed export not found');
+  const { verifyMediaToken } = await import('../lib/storage/media-tokens');
+  const url = await f.owner.action(api.renders.download, { jobId: f.jobId });
+  const grant = await verifyMediaToken('audit-signing-secret', new URL(url).searchParams.get('token')!);
+  expect(grant).toMatchObject({ operation: 'download', key, fileName: 'My edit.mp4' });
+  expect(grant!.expires).toBeGreaterThan(Date.now());
+  expect(grant!.expires).toBeLessThanOrEqual(Date.now() + 15 * 60_000);
+  const preview = await f.owner.query(api.renders.get, { jobId: f.jobId });
+  expect(await verifyMediaToken('audit-signing-secret', new URL(preview.url!).searchParams.get('token')!)).toMatchObject({ operation: 'read', key });
+  await f.t.run(ctx => ctx.db.patch(f.jobId, { status: 'rendering' }));
+  await expect(f.owner.action(api.renders.download, { jobId: f.jobId })).rejects.toThrow('Completed export not found');
+});
+
+test('legacy export download grants accept only this backend storage origin', async () => {
+  const f = await fixture(), storageId = await f.t.run(ctx => ctx.storage.store(new Blob(['export'], { type: 'video/mp4' })));
+  const { mediaDownloadUrl } = await import('./lib/media_storage');
+  const makeUrl = (target: string) => f.t.run(ctx => mediaDownloadUrl({ ...ctx, storage: { ...ctx.storage, getUrl: async () => target } }, { storageId }, 'Legacy.mp4'));
+  await expect(makeUrl('https://another.convex.cloud/api/storage/legacy')).rejects.toThrow('origin is invalid');
+  await expect(makeUrl('https://audit.convex.cloud/redirect')).rejects.toThrow('origin is invalid');
+  const url = await makeUrl('https://audit.convex.cloud/api/storage/legacy');
+  const { verifyMediaToken } = await import('../lib/storage/media-tokens');
+  expect(await verifyMediaToken('audit-signing-secret', new URL(url!).searchParams.get('token')!)).toMatchObject({ operation: 'download', storageUrl: 'https://audit.convex.cloud/api/storage/legacy', fileName: 'Legacy.mp4' });
+});
+
+test('gateway streams signed attachments and ignores unsigned download and filename parameters', async () => {
+  const { default: gateway } = await import('../cloudflare/media/worker');
+  const { signMediaToken } = await import('../lib/storage/media-tokens');
+  const key = 'media/owner/project/export', secret = 'audit-signing-secret';
+  const stream = new ReadableStream<Uint8Array>({ start(controller) { controller.enqueue(new TextEncoder().encode('video')); controller.close(); } });
+  const unused = () => { throw new Error('This storage operation is not part of a download'); };
+  const metadata: R2Object = { key, version: '1', size: 5, etag: 'export', httpEtag: '"export"', uploaded: new Date(), storageClass: 'Standard', checksums: { toJSON: () => ({}) }, writeHttpMetadata(headers: Headers) { headers.set('Content-Type', 'video/mp4'); } };
+  const object: R2ObjectBody = { ...metadata, writeHttpMetadata: headers => metadata.writeHttpMetadata(headers), body: stream, bodyUsed: false, arrayBuffer: unused, bytes: unused, text: unused, json: unused, blob: unused };
+  const bucket: R2Bucket = { get: vi.fn(async () => object), head: vi.fn(async () => metadata), put: unused, createMultipartUpload: unused, resumeMultipartUpload: unused, delete: unused, list: unused };
+  const env: Env = { MEDIA: bucket, MEDIA_SIGNING_SECRET: secret, ALLOWED_ORIGINS: 'http://localhost:3001,https://tryrevline.com,https://www.tryrevline.com' };
+  const token = await signMediaToken(secret, { operation: 'download', key, fileName: 'My export.mp4', expires: Date.now() + 60_000 });
+  const response = await gateway.fetch(new Request(`https://media.example.com/read?token=${token}&fileName=unsigned.mp4`), env);
+  expect(response.status).toBe(200); expect(response.body).toBe(stream);
+  expect(response.headers.get('Content-Disposition')).toContain('filename="My export.mp4"');
+  expect(response.headers.get('Cache-Control')).toBe('private, no-store');
+  const readToken = await signMediaToken(secret, { operation: 'read', key, expires: Date.now() + 60_000 });
+  const inline = await gateway.fetch(new Request(`https://media.example.com/read?token=${readToken}&download=1&fileName=unsigned.mp4`, { method: 'HEAD' }), env);
+  expect(inline.status).toBe(200); expect(inline.headers.get('Content-Disposition')).toBeNull();
+  expect(inline.headers.get('Content-Type')).toBe('video/mp4');
+  const legacyToken = await signMediaToken(secret, { operation: 'download', storageUrl: 'https://audit.convex.cloud/api/storage/legacy', fileName: 'Legacy.mp4', expires: Date.now() + 60_000 });
+  const upstream = new Response('legacy', { headers: { 'Content-Type': 'video/mp4', 'Content-Length': '6' } });
+  vi.mocked(fetch).mockResolvedValueOnce(upstream);
+  const legacy = await gateway.fetch(new Request(`https://media.example.com/read?token=${legacyToken}`), env);
+  expect(legacy.body).toBe(upstream.body); expect(legacy.headers.get('Content-Disposition')).toContain('filename="Legacy.mp4"');
+  expect(vi.mocked(fetch).mock.calls.at(-1)?.[1]).toMatchObject({ method: 'GET', redirect: 'error' });
+});
+
+test('undo to an unsaved intermediate gesture preserves its confirmed past across reloads', async () => {
+  const f = await fixture();
+  const { timelineHistoryKey } = await import('../lib/editor/timeline-history-key');
+  const snapshot = (text: string): Timeline => ({ fps: 30, aspectRatio: 'vertical', clips: [{ id: 'title', kind: 'graphic', text, start: 0, duration: 1, sourceStart: 0 }] });
+  const a = snapshot('A'), b = snapshot('B'), c = snapshot('C'), d = snapshot('D');
+  const keys = await Promise.all([a, b].map(timelineHistoryKey));
+  await f.t.run(ctx => writeProject(ctx, f.projectId, { timeline: d, revision: 5, history: [a, b] }));
+  await f.owner.mutation(api.projects.saveTimeline, { projectId: f.projectId, timeline: c, undoTo: c, undoHistoryKeys: keys, expectedRevision: 5 });
+  expect((await f.owner.query(api.projects.history, { projectId: f.projectId })).map(timeline => timeline.clips[0].text)).toEqual(['A', 'B']);
+  await f.owner.mutation(api.projects.undo, { projectId: f.projectId });
+  expect((await f.owner.query(api.projects.get, { projectId: f.projectId })).timeline!.clips[0].text).toBe('B');
+  // A gesture coalesced after undo must retain the unsaved target as its undo entry.
+  await f.t.run(ctx => writeProject(ctx, f.projectId, { timeline: d, revision: 10, history: [a, b] }));
+  await f.owner.mutation(api.projects.saveTimeline, { projectId: f.projectId, timeline: snapshot('E'), undoTo: c, undoHistoryKeys: keys, expectedRevision: 10 });
+  expect((await f.owner.query(api.projects.history, { projectId: f.projectId })).map(timeline => timeline.clips[0].text)).toEqual(['A', 'B', 'C']);
+  await f.owner.mutation(api.projects.undo, { projectId: f.projectId });
+  expect((await f.owner.query(api.projects.get, { projectId: f.projectId })).timeline!.clips[0].text).toBe('C');
+});
+
+test('undo fingerprints preserve order and never retain forward history after older pruned targets', async () => {
+  const f = await fixture();
+  const { timelineHistoryKey } = await import('../lib/editor/timeline-history-key');
+  const snapshot = (text: string): Timeline => ({ fps: 30, aspectRatio: 'vertical', clips: [{ id: 'title', kind: 'graphic', text, start: 0, duration: 1, sourceStart: 0 }] });
+  const a = snapshot('A'), b = snapshot('B'), c = snapshot('C'), d = snapshot('D');
+  // A later repeated value must not extend the matching ordered past.
+  await f.t.run(ctx => writeProject(ctx, f.projectId, { timeline: d, revision: 5, history: [a, b, a] }));
+  await f.owner.mutation(api.projects.saveTimeline, { projectId: f.projectId, timeline: c, undoTo: c, undoHistoryKeys: await Promise.all([a, b].map(timelineHistoryKey)), expectedRevision: 5 });
+  expect((await f.owner.query(api.projects.history, { projectId: f.projectId })).map(timeline => timeline.clips[0].text)).toEqual(['A', 'B']);
+  // The local undo can reach beyond the server's bounded history. Even a later
+  // identical value must not make those newer snapshots become undoable again.
+  await f.t.run(ctx => writeProject(ctx, f.projectId, { timeline: d, revision: 10, history: [b, a] }));
+  await f.owner.mutation(api.projects.saveTimeline, { projectId: f.projectId, timeline: a, undoTo: a, undoHistoryKeys: [await timelineHistoryKey(snapshot('Older'))], expectedRevision: 10 });
+  expect(await f.owner.query(api.projects.history, { projectId: f.projectId })).toEqual([]);
+  await f.t.run(ctx => writeProject(ctx, f.projectId, { timeline: d, revision: 20, history: [a, b] }));
+  await f.owner.mutation(api.projects.saveTimeline, { projectId: f.projectId, timeline: b, undoTo: b, undoHistoryKeys: [], expectedRevision: 20 });
+  expect(await f.owner.query(api.projects.history, { projectId: f.projectId })).toEqual([]);
+  await expect(f.owner.mutation(api.projects.saveTimeline, { projectId: f.projectId, timeline: a, undoTo: a, undoHistoryKeys: ['invalid'], expectedRevision: 21 })).rejects.toThrow('Invalid undo history');
+  // Unmatched states between known anchors may be forward states from saves
+  // already undone locally. Only the ordered preceding chain is retained.
+  await f.t.run(ctx => writeProject(ctx, f.projectId, { timeline: d, revision: 30, history: [a, b, c] }));
+  await f.owner.mutation(api.projects.saveTimeline, { projectId: f.projectId, timeline: snapshot('Older target'), undoTo: snapshot('Older target'), undoHistoryKeys: await Promise.all([a, c].map(timelineHistoryKey)), expectedRevision: 30 });
+  expect((await f.owner.query(api.projects.history, { projectId: f.projectId })).map(timeline => timeline.clips[0].text)).toEqual(['A', 'C']);
+  // A matching value before a later preceding anchor is an older occurrence,
+  // not the unsaved target reached after that anchor.
+  await f.t.run(ctx => writeProject(ctx, f.projectId, { timeline: d, revision: 40, history: [b, a, c] }));
+  await f.owner.mutation(api.projects.saveTimeline, { projectId: f.projectId, timeline: a, undoTo: a, undoHistoryKeys: await Promise.all([b, c].map(timelineHistoryKey)), expectedRevision: 40 });
+  expect((await f.owner.query(api.projects.history, { projectId: f.projectId })).map(timeline => timeline.clips[0].text)).toEqual(['B', 'C']);
+});
+
+test('undo fingerprints ignore object key order and omitted undefined fields', async () => {
+  const { timelineHistoryKey } = await import('../lib/editor/timeline-history-key');
+  const first: Timeline = { fps: 30, aspectRatio: 'vertical', clips: [{ id: 'words', kind: 'graphic', text: 'Same snapshot', start: 0, duration: 1, sourceStart: 0, background: undefined }] };
+  const second: Timeline = { clips: [{ sourceStart: 0, duration: 1, start: 0, text: 'Same snapshot', kind: 'graphic', id: 'words' }], aspectRatio: 'vertical', fps: 30 };
+  expect(await timelineHistoryKey(first)).toMatch(/^[a-f0-9]{64}$/);
+  expect(await timelineHistoryKey(first)).toBe(await timelineHistoryKey(second));
+  expect(await timelineHistoryKey(first)).not.toBe(await timelineHistoryKey({ ...first, fps: 60 }));
+});
+
+test.each([false, true])('rebased undo preserves concurrent clips without inserting an unrebased undo state (following gesture: %s)', async followingGesture => {
+  const f = await fixture();
+  const snapshot = (text: string): Timeline => ({ fps: 30, aspectRatio: 'vertical', clips: [{ id: 'title', kind: 'graphic', text, start: 0, duration: 1, sourceStart: 0 }] });
+  const a = snapshot('A'), b = snapshot('B');
+  const remote = { id: 'remote', kind: 'graphic' as const, text: 'Remote edit', start: 1, duration: 1, sourceStart: 0 };
+  await f.t.run(ctx => writeProject(ctx, f.projectId, { timeline: { ...b, clips: [...b.clips, remote] }, revision: 2, history: [a, b] }));
+  const result = await f.owner.mutation(api.projects.saveTimeline, { projectId: f.projectId, baseTimeline: b, timeline: followingGesture ? snapshot('Following gesture') : a, undoTo: a, undoHistoryKeys: [], expectedRevision: 1 });
+  expect(result.timeline.clips.map(clip => clip.id)).toEqual(['title', 'remote']);
+  const history = await f.owner.query(api.projects.history, { projectId: f.projectId });
+  if (followingGesture) {
+    expect(history).toHaveLength(1);
+    expect(history[0].clips.map(clip => clip.id)).toEqual(['title', 'remote']);
+    await f.owner.mutation(api.projects.undo, { projectId: f.projectId });
+    expect((await f.owner.query(api.projects.get, { projectId: f.projectId })).timeline!.clips.map(clip => clip.id)).toEqual(['title', 'remote']);
+  } else {
+    expect(history).toEqual([]);
+    await expect(f.owner.mutation(api.projects.undo, { projectId: f.projectId })).rejects.toThrow('No edits to undo');
+  }
+});
+
+test('a client-rebased undo target keeps its original history identity', async () => {
+  const f = await fixture();
+  const { timelineHistoryKey } = await import('../lib/editor/timeline-history-key');
+  const snapshot = (text: string): Timeline => ({ fps: 30, aspectRatio: 'vertical', clips: [{ id: 'title', kind: 'graphic', text, start: 0, duration: 1, sourceStart: 0 }] });
+  const earlier = snapshot('Earlier'), a = snapshot('A'), b = snapshot('B');
+  const remote = { id: 'remote', kind: 'graphic' as const, text: 'Remote edit', start: 1, duration: 1, sourceStart: 0 };
+  const base = { ...b, clips: [...b.clips, remote] }, target = { ...a, clips: [...a.clips, remote] };
+  await f.t.run(ctx => writeProject(ctx, f.projectId, { timeline: base, revision: 3, history: [earlier, a, b] }));
+  await f.owner.mutation(api.projects.saveTimeline, { projectId: f.projectId, baseTimeline: base, timeline: target, undoTo: target, undoTargetKey: await timelineHistoryKey(a), undoHistoryKeys: [await timelineHistoryKey(earlier)], expectedRevision: 3 });
+  expect((await f.owner.query(api.projects.history, { projectId: f.projectId })).map(timeline => timeline.clips[0].text)).toEqual(['Earlier']);
 });

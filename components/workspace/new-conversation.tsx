@@ -12,6 +12,7 @@ import type { Id } from '@/convex/_generated/dataModel';
 import { createProjectImportSession, type ImportFile, type ProjectImportProgress } from '@/lib/editor/project-import';
 import { clearProjectImportJob, getOrCreateProjectImportJob, getProjectImportJob } from '@/lib/editor/project-import-job';
 import { uploadSourceFile } from '@/lib/editor/upload-source';
+import { uploadMediaThumbnail } from '@/lib/editor/upload-thumbnail';
 import { prepareMediaForEditing } from '@/lib/editor/prepare-media-for-editing';
 import { MediaImportDialog } from '@/components/editor/media-import-dialog';
 import { useMediaFileDrop } from '@/components/editor/media-file-drop';
@@ -178,13 +179,9 @@ export function NewConversation() {
             const sourceId = activeJob.input.files.find(item => item.file === file)?.id;
             setPreviews(previous => previous.map(item => item.id === sourceId ? {...item, thumbnail: url} : item));
           },
-          saveThumbnail: async (assetId, image) => {
-            const url = await thumbnailUpload({ projectId });
-            const response = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'image/jpeg' }, body: image });
-            if (!response.ok) throw new Error('Could not save this thumbnail.');
-            const { storageId } = await response.json() as { storageId: Id<'_storage'> };
-            await attachThumbnail({ assetId, storageId });
-          },
+          saveThumbnail: (assetId, image) => uploadMediaThumbnail(image, {
+            uploadUrl: () => thumbnailUpload({ projectId }), attach: storageId => attachThumbnail({ assetId, storageId }),
+          }),
         }, progress),
         asset: (projectId, assetId) => convex.query(api.assets.get, { projectId, assetId }),
         prepare: (projectId, asset, onActivity) => prepareMediaForEditing(convex, projectId, asset._id as Id<'assets'>, onActivity),

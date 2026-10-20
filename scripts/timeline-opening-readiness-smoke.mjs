@@ -26,9 +26,14 @@ try {
   });
   await page.addScriptTag({content:bundle.outputFiles.find(file=>file.path.endsWith('.js')).text});
   await page.waitForFunction(()=>{const images=[...document.querySelectorAll('.filmstrip-frame img')];return images.length>1&&images.every(image=>image.complete&&image.naturalWidth>0);});
-  assert.equal(await page.evaluate(()=>window.prepared()),false,'A loaded poster repeated across the timeline must not release the editor while real thumbnail decoding is pending');
+  assert.equal(await page.evaluate(()=>window.prepared()),true,'Loaded poster fallbacks allow editing while exact thumbnails refine');
   await page.evaluate(()=>window.releaseThumbnails());
+  await page.waitForFunction(()=>[...document.querySelectorAll('.filmstrip-frame img')].every(image=>image.dataset.thumbnailExact==='true'));
   await page.waitForFunction(()=>window.prepared());
   assert.equal(await page.$$eval('.filmstrip-frame img',images=>images.every(image=>image.dataset.thumbnailExact==='true'&&image.complete&&image.naturalWidth>0)),true,'Opening requires the actual requested source samples');
-  console.log('PASS: poster fallbacks cannot dismiss loading; visible source thumbnails finish decoding before the timeline is ready. Local media only.');
+  await page.evaluate(()=>{for(const image of document.querySelectorAll('.filmstrip-frame img'))image.remove();});
+  assert.equal(await page.evaluate(()=>window.prepared()),false,'Missing stills remain pending before a terminal decode result');
+  await page.evaluate(()=>document.querySelector('.media-filmstrip').dataset.thumbnailState='failed');
+  assert.equal(await page.evaluate(()=>window.prepared()),true,'Failed optional stills cannot permanently lock a playable edit');
+  console.log('PASS: loaded poster fallbacks open the timeline; exact samples refine, and terminal thumbnail failure releases the optional opening gate. Local media only.');
 } finally { await browser.close(); }

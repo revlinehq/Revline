@@ -1,5 +1,6 @@
 import { deriveTrackCounts, normalizeTimeline, TIMELINE_LAYER_GROUPS, type Clip, type Timeline } from './types';
 import { reconcileTransitionEdits } from './clip-transitions';
+import { timelineHistoryKey } from './timeline-history-key';
 
 function equal(a: unknown, b: unknown): boolean {
   if (a === b) return true;
@@ -73,7 +74,8 @@ export function applyTimelineEdit(base: Timeline, next: Timeline, current: Timel
 }
 
 export type TimelineSnapshot = { timeline: Timeline; revision: number; history?: Timeline[] };
-type PendingEdit = { baseTimeline: Timeline; timeline: Timeline };
+type PendingEdit = { baseTimeline: Timeline; timeline: Timeline; undoTo?: Timeline; undoHistoryKeys?: string[]; undoTargetKey?: string };
+type QueuedEdit = Omit<PendingEdit, 'undoHistoryKeys' | 'undoTargetKey'> & { undoHistory?: Timeline[]; undoOrigin?: Timeline };
 type SaveCallbacks = {
   save: (edit: PendingEdit & { expectedRevision: number }) => Promise<TimelineSnapshot>;
   load: () => Promise<TimelineSnapshot>;
@@ -82,55 +84,85 @@ type SaveCallbacks = {
   error: (error: unknown) => void;
 };
 
-// One queue per project. Keep the acknowledged server snapshot separate from
-// the optimistic view so rapid gestures never save an old whole-timeline snapshot.
+// One queue per project. Keep acknowledged state separate from optimistic edits.
 export function createTimelineSaveQueue(initial: TimelineSnapshot, callbacks: SaveCallbacks) {
+  initial = { ...initial, timeline: normalizeTimeline(initial.timeline) };
   let saved = initial, visible = initial.timeline, remote = initial;
-  let pending: PendingEdit | null = null, busy = false;
-  const waiters: (() => void)[] = [];
+  let pending: QueuedEdit | null = null, recovery: QueuedEdit[] | null = null;
+  let busy = false, failure: unknown = null;
+  const waiters: { resolve: () => void; reject: (error: unknown) => void }[] = [];
+  function adopt(snapshot: TimelineSnapshot, kind: 'saved' | 'remote' | 'recovered', edits: QueuedEdit[]) {
+    snapshot = { ...snapshot, timeline: normalizeTimeline(snapshot.timeline) };
+    let next = snapshot.timeline, undo: Pick<QueuedEdit, 'undoTo' | 'undoHistory' | 'undoOrigin'> = {};
+    for (const edit of edits) {
+      // Preserve ordered intents. A→B followed by B→A is still an undo if the
+      // first request committed but its response was lost; flattening A→A loses it.
+      if (edit.undoTo) undo = { undoTo: applyTimelineEdit(edit.baseTimeline, edit.undoTo, next), undoOrigin: edit.undoOrigin ?? edit.undoTo, ...(edit.undoHistory ? { undoHistory: edit.undoHistory } : {}) };
+      next = applyTimelineEdit(edit.baseTimeline, edit.timeline, next);
+    }
+    saved = snapshot; visible = next; recovery = null;
+    const historyAcknowledged = !undo.undoTo || (undo.undoHistory !== undefined && snapshot.history !== undefined && equal(undo.undoHistory.map(normalizeTimeline), snapshot.history.map(normalizeTimeline)));
+    pending = equal(next, snapshot.timeline) && historyAcknowledged ? null : { baseTimeline: snapshot.timeline, timeline: next, ...undo };
+    callbacks.update(visible, kind, kind === 'remote' ? snapshot.history : undefined);
+  }
   function receive(snapshot: TimelineSnapshot) {
     if (snapshot.revision > remote.revision) remote = snapshot;
     if (busy || snapshot.revision <= saved.revision) return;
-    saved = snapshot; visible = snapshot.timeline;
-    if(snapshot.history===undefined)callbacks.update(visible,'remote');else callbacks.update(visible,'remote',snapshot.history);
+    const edits = [...(recovery ?? []), ...(pending ? [pending] : [])];
+    adopt(snapshot, edits.length ? 'recovered' : 'remote', edits);
   }
-  function adoptSaved(kind: 'saved' | 'recovered') {
-    // Further gestures were made against the optimistic edit, not this server
-    // acknowledgement. The same applies to gestures made during recovery:
-    // rebase them and drain the queue before releasing save waiters.
-    if (pending) {
-      visible = applyTimelineEdit(pending.baseTimeline, pending.timeline, saved.timeline);
-      pending = { baseTimeline: saved.timeline, timeline: visible };
-    } else visible = saved.timeline;
-    callbacks.update(visible, kind);
+  async function reload() {
+    const loaded = await callbacks.load();
+    adopt(remote.revision > loaded.revision ? remote : loaded, 'recovered', [...(recovery ?? []), ...(pending ? [pending] : [])]);
   }
   async function flush() {
     if (busy) return;
-    busy = true; callbacks.saving(true);
+    busy = true; failure = null; callbacks.saving(true);
     try {
+      if (recovery) {
+        // An unknown write outcome must be read before another save. Keep the
+        // ordered edits intact if this read also fails, including later gestures.
+        try { await reload(); }
+        catch (error) { failure = error; callbacks.error(error); return; }
+      }
       while (pending) {
         const edit = pending; pending = null;
-        try { saved = await callbacks.save({ ...edit, expectedRevision: saved.revision }); adoptSaved('saved'); }
-        catch (error) {
-          pending = null; callbacks.error(error);
-          try { saved = await callbacks.load(); adoptSaved('recovered'); }
-          catch (loadError) { pending = null; callbacks.error(loadError); break; }
+        try {
+          const { undoHistory, undoOrigin, ...request } = edit;
+          const undoHistoryKeys = undoHistory ? await Promise.all(undoHistory.map(timelineHistoryKey)) : undefined;
+          const undoTargetKey = request.undoTo ? await timelineHistoryKey(undoOrigin ?? request.undoTo) : undefined;
+          const snapshot = await callbacks.save({ ...request, ...(undoHistoryKeys ? { undoHistoryKeys } : {}), ...(undoTargetKey ? { undoTargetKey } : {}), expectedRevision: saved.revision });
+          adopt(snapshot, 'saved', pending ? [pending] : []);
+        } catch (error) {
+          failure = error; callbacks.error(error);
+          recovery = [edit, ...(pending ? [pending] : [])]; pending = null;
+          try { await reload(); }
+          catch (loadError) { callbacks.error(loadError); }
+          break; // No automatic retry loop after a failed request.
         }
       }
     } finally {
-      busy = false;
-      receive(remote);
-      callbacks.saving(false);
-      waiters.splice(0).forEach(resolve => resolve());
+      busy = false; receive(remote); callbacks.saving(false);
+      if (!pending && !recovery) failure = null;
+      waiters.splice(0).forEach(waiter => failure ? waiter.reject(failure) : waiter.resolve());
     }
   }
   return {
     receive,
-    edit(next: Timeline) {
-      pending = { baseTimeline: pending?.baseTimeline ?? visible, timeline: next };
+    edit(next: Timeline, undo = false, undoHistory?: Timeline[]) {
+      next = normalizeTimeline(next);
+      pending = {
+        baseTimeline: pending?.baseTimeline ?? visible, timeline: next,
+        ...(undo ? { undoTo: next, undoOrigin: next, ...(undoHistory ? { undoHistory: undoHistory.slice(-40) } : {}) } : pending?.undoTo ? { undoTo: pending.undoTo, undoOrigin: pending.undoOrigin ?? pending.undoTo, ...(pending.undoHistory ? { undoHistory: pending.undoHistory } : {}) } : {}),
+      };
       visible = next; void flush();
     },
-    get busy() { return busy; },
-    wait: () => busy ? new Promise<void>(resolve => waiters.push(resolve)) : Promise.resolve(),
+    get busy() { return busy || !!pending || !!recovery; },
+    wait: () => {
+      if (!busy && !pending && !recovery) return Promise.resolve();
+      const completion = new Promise<void>((resolve, reject) => waiters.push({ resolve, reject }));
+      if (!busy) void flush();
+      return completion;
+    },
   };
 }

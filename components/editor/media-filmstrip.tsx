@@ -14,6 +14,8 @@ export const MediaFilmstrip = memo(function MediaFilmstrip({ asset, width, heigh
   const [imageAspect, setImageAspect] = useState<number | null>(null);
   const [range, setRange] = useState({ start: 0, end: 0 });
   const [decoded, setDecoded] = useState<{ sourceId: string; images: Record<number, string> }>({ sourceId: '', images: {} });
+  const [failedSource, setFailedSource] = useState('');
+  const sourceKey = `${asset._id}|${sourceUrl}`;
   const hasDecodedFrame = useRef(false);
   hasDecodedFrame.current = decoded.sourceId === asset._id && Object.keys(decoded.images).length > 0;
   const previousFrames = useMemo(() => decoded.sourceId === asset._id ? Object.entries(decoded.images).map(([time, image]) => ({ time: Number(time), image })) : [], [decoded, asset._id]);
@@ -34,6 +36,7 @@ export const MediaFilmstrip = memo(function MediaFilmstrip({ asset, width, heigh
     if (paused || asset.kind !== 'video' || !sourceUrl || !samples.length) return;
     let cancelled = false;
     const controller = new AbortController();
+    setFailedSource('');
     const url = sourceUrl;
     // First appearance starts immediately; settled zoom refreshes keep their previous stills.
     const timer = setTimeout(() => {
@@ -44,13 +47,14 @@ export const MediaFilmstrip = memo(function MediaFilmstrip({ asset, width, heigh
         if (cancelled) return;
         const next: Record<number, string> = {};
         images.forEach((image, index) => { if (image) next[samples[index].time] = image; });
+        if (images.some(image => !image)) setFailedSource(sourceKey);
         setDecoded({ sourceId: asset._id, images: next });
       });
     }, hasDecodedFrame.current ? 100 : 0);
     return () => { cancelled = true; clearTimeout(timer); controller.abort(); };
-  }, [asset.kind, sourceUrl, asset._id, samples, paused]);
+  }, [asset.kind, sourceUrl, asset._id, sourceKey, samples, paused]);
   if (!sourceUrl) return null;
-  return <div ref={root} className="filmstrip media-filmstrip" aria-hidden="true">{samples.map(frame => {
+  return <div ref={root} className="filmstrip media-filmstrip" data-thumbnail-state={failedSource === sourceKey ? 'failed' : undefined} aria-hidden="true">{samples.map(frame => {
     // Keep the nearest already decoded still visible during a trim or zoom refresh.
     const previous = previousFrames.reduce<typeof previousFrames[number] | undefined>((closest, candidate) => !closest || Math.abs(candidate.time - frame.time) < Math.abs(closest.time - frame.time) ? candidate : closest, undefined);
     const exact = asset.kind === 'image' ? asset.url! : (decoded.sourceId === asset._id ? decoded.images[frame.time] : undefined) ?? cachedVideoThumbnail(asset._id, frame.time);
@@ -59,6 +63,6 @@ export const MediaFilmstrip = memo(function MediaFilmstrip({ asset, width, heigh
     const previousInSource = previous && previous.time >= 0 && previous.time <= sourceEnd ? previous : undefined;
     const fallback = exact ? undefined : previousInSource ?? cachedNearestVideoThumbnail(asset._id, frame.time, [sourceStart, retainedEnd]) ?? cachedNearestVideoThumbnail(asset._id, frame.time, [0, sourceEnd]);
     const image = exact ?? fallback?.image ?? asset.thumbnailUrl;
-    return <div className="filmstrip-frame" data-source-time={frame.time} key={frame.index} style={{ left: frame.left, width: frameWidth }}>{image ? <img src={image} alt="" draggable={false} data-thumbnail-exact={!!exact} data-thumbnail-sampled-time={exact ? frame.time : fallback?.time} onLoad={asset.kind === 'image' ? event => { const image = event.currentTarget; if (image.naturalWidth && image.naturalHeight) setImageAspect(image.naturalWidth / image.naturalHeight); } : undefined} /> : <Film size={12} />}</div>;
+    return <div className="filmstrip-frame" data-source-time={frame.time} key={frame.index} style={{ left: frame.left, width: frameWidth }}>{image ? <img src={image} alt="" draggable={false} data-thumbnail-exact={!!exact} data-thumbnail-sampled-time={exact ? frame.time : fallback?.time} onError={() => setFailedSource(sourceKey)} onLoad={asset.kind === 'image' ? event => { const image = event.currentTarget; if (image.naturalWidth && image.naturalHeight) setImageAspect(image.naturalWidth / image.naturalHeight); } : undefined} /> : <Film size={12} />}</div>;
   })}</div>;
 });

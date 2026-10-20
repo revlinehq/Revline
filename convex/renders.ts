@@ -3,9 +3,9 @@ import { projectIdentity } from './lib/project_data';
 import { recordStorageObject, forgetStorageObject } from './lib/storage_accounting';
 import { internal } from './_generated/api';
 import { requireEditorAccess } from './lib/billing_access';
-import { mediaUrl } from './lib/media_storage';
+import { mediaDownloadUrl, mediaUrl } from './lib/media_storage';
 import { ConvexError, v } from "convex/values";
-import { mutation, internalMutation, query, type MutationCtx } from "./_generated/server";
+import { action, internalQuery, mutation, internalMutation, query, type MutationCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { listLimit, requireOwner, requireProject } from "./lib/auth";
 import { currentTimeline, validateTimeline } from "./lib/timeline";
@@ -15,6 +15,11 @@ import { MAX_EXPORT_SECONDS } from '../lib/editor/limits';
 import { normalizeTimeline, timelineDuration } from '../lib/editor/types';
 import { cancelMediaTask, enqueueMediaTask } from './mediaTasks';
 const workerArgs = { jobId: v.id("renderJobs"), workerSecret: v.string() };
+function activeExportLimit() {
+  const value = Number(process.env.MAX_ACTIVE_EXPORTS_PER_ACCOUNT ?? 2);
+  if (!Number.isInteger(value) || value < 1 || value > 10) throw new Error('MAX_ACTIVE_EXPORTS_PER_ACCOUNT must be between 1 and 10');
+  return value;
+}
 async function requireJob(ctx: MutationCtx, jobId: Id<"renderJobs">, workerSecret: string) {
   const secret = process.env.RENDER_WORKER_SECRET;
   if (!secret || workerSecret !== secret) throw new ConvexError("Render worker authentication required");
@@ -33,6 +38,11 @@ export const start = mutation({ args: { projectId: v.id("projects"), resolution:
   if (timelineDuration(timeline) > MAX_EXPORT_SECONDS) throw new ConvexError("Exports currently support up to five minutes. Shorten the final edit before exporting; your full arrangement remains saved.");
   const active=await Promise.all((['queued','rendering'] as const).map(status=>ctx.db.query('renderJobs').withIndex('by_owner_project_status',q=>q.eq('ownerId',ownerId).eq('projectId',project._id).eq('status',status)).first()));
   if(active.some(Boolean))throw new ConvexError('A render is already in progress');
+  const limit = activeExportLimit();
+  // The indexed reads and insert share one transaction, so separate projects
+  // cannot race past the account's outstanding-work limit.
+  const accountActive = await Promise.all((['queued', 'rendering'] as const).map(status => ctx.db.query('renderJobs').withIndex('by_owner_status', q => q.eq('ownerId', ownerId).eq('status', status)).take(limit)));
+  if (accountActive.reduce((count, jobs) => count + jobs.length, 0) >= limit) throw new ConvexError(`You already have ${limit} exports in progress. Wait for one to finish or cancel it before exporting again.`);
   const assetIds: Id<"assets">[] = [];
   for (const clip of timeline.clips) if (clip.assetId) { const id = ctx.db.normalizeId("assets", clip.assetId)!; if (!assetIds.includes(id)) assetIds.push(id); }
   const now = Date.now();
@@ -84,6 +94,26 @@ export const get = query({ args: { jobId: v.id("renderJobs") }, returns: renderS
   const ownerId = await requireOwner(ctx); const job = await ctx.db.get(args.jobId); if (!job || job.ownerId !== ownerId) throw new ConvexError("Render not found");
   const {timeline:_timeline,...summary}=job; return { ...summary, url: await mediaUrl(ctx, { storageId: job.outputStorageId, r2Key: job.outputR2Key }) };
 }});
+export const downloadSource = internalQuery({
+  args: { jobId: v.id('renderJobs') },
+  returns: v.object({ storageId: v.optional(v.id('_storage')), r2Key: v.optional(v.string()), fileName: v.string() }),
+  handler: async (ctx, { jobId }) => {
+    const ownerId = await requireOwner(ctx), job = await ctx.db.get(jobId);
+    if (!job || job.ownerId !== ownerId || job.status !== 'completed' || !job.outputStorageId && !job.outputR2Key) throw new ConvexError('Completed export not found');
+    const project = await projectIdentity(ctx, job.projectId, ownerId);
+    const saved = await ctx.db.get(project._id);
+    return { storageId: job.outputStorageId, r2Key: job.outputR2Key, fileName: `${saved!.title.replace(/\.mp4$/i, '')}.mp4` };
+  },
+});
+export const download = action({
+  args: { jobId: v.id('renderJobs') }, returns: v.string(),
+  handler: async (ctx, args): Promise<string> => {
+    const source = await ctx.runQuery(internal.renders.downloadSource, args);
+    const url = await mediaDownloadUrl(ctx, source, source.fileName);
+    if (!url) throw new ConvexError('Export file not found');
+    return url;
+  },
+});
 export const list = query({ args: { projectId: v.id("projects"), limit: v.optional(v.number()) }, returns: v.array(renderSummaryDocument), handler: async (ctx, args) => {
   const ownerId = await requireOwner(ctx); await projectIdentity(ctx,args.projectId,ownerId);
   const jobs = await ctx.db.query("renderJobs").withIndex("by_ownerId_projectId", q => q.eq("ownerId", ownerId).eq("projectId", args.projectId)).order("desc").take(listLimit(args.limit));

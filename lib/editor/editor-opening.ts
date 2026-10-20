@@ -31,7 +31,9 @@ export function editorAudioPrepared(timeline: Timeline, assets: MediaAsset[]) {
   });
 }
 
-/** Loaded fallback stills can open the editor while exact frames refine in place. */
+export const MAX_THUMBNAIL_OPENING_WAIT_MS = 12_000;
+
+/** Loaded fallback stills and terminal thumbnail failures must not block playback. */
 export function timelineThumbnailsPrepared(root: HTMLElement, onProgress?:(ready:number,total:number)=>void) {
   const rail = root.querySelector('.timeline-scroll');
   if (!rail) return false;
@@ -47,6 +49,7 @@ export function timelineThumbnailsPrepared(root: HTMLElement, onProgress?:(ready
     return box.width > 0 && box.right > bounds.left && box.left < bounds.right && box.bottom > bounds.top && box.top < bounds.bottom;
   });
   const ready=frames.filter(frame => {
+    if (frame.closest<HTMLElement>('.media-filmstrip')?.dataset.thumbnailState === 'failed') return true;
     const image = frame.querySelector('img');
     return !!image?.complete && image.naturalWidth > 0;
   }).length;
