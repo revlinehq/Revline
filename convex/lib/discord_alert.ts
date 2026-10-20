@@ -1,4 +1,4 @@
-import { v } from 'convex/values';
+import { v, type Infer } from 'convex/values';
 
 export const alertSource = v.union(v.literal('clerk'), v.literal('stripe'), v.literal('sentry'), v.literal('posthog'));
 export const alertFields = {
@@ -6,9 +6,9 @@ export const alertFields = {
 };
 
 // Only a server-managed Discord incoming webhook may be used as a destination.
-export function discordWebhookUrl() {
+export function discordWebhookUrl(source: Infer<typeof alertSource>) {
   if (process.env.DISCORD_ALERTS_ENABLED !== 'true') return null;
-  const value = process.env.DISCORD_WEBHOOK_URL;
+  const value = process.env[`DISCORD_${source.toUpperCase()}_WEBHOOK_URL`] ?? process.env.DISCORD_WEBHOOK_URL;
   if (!value) return null;
   try {
     const url = new URL(value);

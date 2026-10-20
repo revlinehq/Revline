@@ -10,7 +10,7 @@ const retryDelays = [5_000, 30_000, 120_000];
 export const enqueue = internalMutation({
   args: alertFields, returns: v.union(v.id('discordAlerts'), v.null()),
   handler: async (ctx, args) => {
-    if (!discordWebhookUrl()) return null;
+    if (!discordWebhookUrl(args.source)) return null;
     if (!args.eventId || args.eventId.length > 256 || !args.title || args.title.length > 200 || args.description.length > 1500) throw new Error('Invalid alert');
     const previous = await ctx.db.query('discordAlerts').withIndex('by_source_event', q => q.eq('source', args.source).eq('eventId', args.eventId)).unique();
     if (previous) return previous._id;
@@ -55,7 +55,7 @@ export const deliver = internalAction({
   handler: async (ctx, { id }) => {
     const alert = await ctx.runMutation(internal.discordAlerts.claim, { id });
     if (!alert) return null;
-    const url = discordWebhookUrl();
+    const url = discordWebhookUrl(alert.source);
     let sent = false, retry = false, error = 'Discord destination is not configured';
     let delay = retryDelays[Math.min(alert.attempt - 1, retryDelays.length - 1)];
     if (url) {
@@ -64,7 +64,7 @@ export const deliver = internalAction({
       try {
         const response = await fetch(url, {
           method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: controller.signal, redirect: 'error',
-          body: JSON.stringify({ username: 'Revline', allowed_mentions: { parse: [] }, embeds: [{ title: alert.title, description: alert.description, color: 0x7563ed, footer: { text: `Revline · ${alert.source}` } }] }),
+          body: JSON.stringify({ allowed_mentions: { parse: [] }, embeds: [{ title: alert.title, description: alert.description, color: 0x7563ed, footer: { text: `Revline · ${alert.source}` } }] }),
         });
         sent = response.ok;
         retry = response.status === 429 || response.status >= 500;

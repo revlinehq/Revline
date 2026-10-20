@@ -1,10 +1,10 @@
 # Observability and Discord setup
 
-The integration scaffolds are installed. Account configuration and end-to-end delivery are pending. No new accounts, keys, paid subscriptions, provider destinations, or Discord messages were created as part of the scaffold.
+Clerk signup/deletion and Stripe billing alerts are connected to production (`different-gnu-398`). Each provider has a private channel and a branded webhook under Revline Notifications in Sonic's server. All four channel connection tests were delivered successfully on October 20, 2026. Sentry and PostHog provider configuration remains pending.
 
 ## Frontend hosting
 
-Set these in the intended Vercel environment, then rebuild. Local development uses `.env.local`; production settings must remain separate.
+Set these in the intended Cloudflare frontend environment, then rebuild. Local development uses `.env.local`; production settings must remain separate.
 
 | Variable | Purpose |
 | --- | --- |
@@ -30,6 +30,7 @@ Set these server-side on the intended Convex deployment:
 | --- | --- |
 | `DISCORD_ALERTS_ENABLED` | Set to `true` only when the channel and signed providers are ready. Defaults to disabled. |
 | `DISCORD_WEBHOOK_URL` | An incoming webhook for the chosen Discord channel. This URL is a secret. Only HTTPS `discord.com/api/webhooks/...` destinations are accepted. |
+| `DISCORD_CLERK_WEBHOOK_URL`, `DISCORD_STRIPE_WEBHOOK_URL`, `DISCORD_SENTRY_WEBHOOK_URL`, `DISCORD_POSTHOG_WEBHOOK_URL` | Optional per-provider incoming webhooks. Each provider uses its own channel when configured; otherwise it uses `DISCORD_WEBHOOK_URL`. Invalid configured destinations are rejected. |
 | `CLERK_WEBHOOK_SIGNING_SECRET` | Signing secret for the Clerk webhook endpoint below. |
 | `SENTRY_WEBHOOK_SECRET` | Client Secret of a Sentry internal integration that signs webhook bodies. This is not the Sentry DSN or auth token. |
 | `POSTHOG_WEBHOOK_SECRET` | A long random shared secret to put in the PostHog destination's Authorization header. |
@@ -58,15 +59,32 @@ Discord messages contain bounded operational metadata such as provider event nam
 
 Delivery uses an internal Convex outbox, event deduplication, a 10-second timeout, and at most four attempts for network errors, rate limits, and server errors. Other failures are terminal. Finished receipts expire after 30 days. Delivery is at least once: a process interruption after Discord accepts a message can still produce a duplicate. Discord outages do not turn successful Stripe reconciliation into a payment failure. Other unconfigured notification endpoints return 503 so providers can retry after configuration.
 
-## Remaining activation checklist
+## Discord channel routing
 
-1. Choose the Revline Sentry and PostHog projects and supply their public DSN/project token and regional host.
-2. Choose the Discord server/channel and create its incoming webhook.
-3. Configure the signed Clerk endpoint, Sentry internal integration, and filtered PostHog HTTP destination. Keep Stripe's existing billing setup intact.
-4. Store the server-only secrets in the correct Convex environment and the frontend variables in Vercel. Enable the Discord alert flag and telemetry flag only when ready, and rebuild the frontend.
-5. Run provider dashboard test events and confirm one expected Discord alert for each provider. Replay a signed event to confirm deduplication, then inspect a real browser page view and a controlled error in the corresponding provider dashboard.
+Production uses the following private channels in Sonic's server (`1549103943215218689`), under Revline Notifications (`1561825820689960981`):
 
-Until step 5 is complete, the scaffold is not verified as a live account integration.
+| Provider | Channel ID | State |
+| --- | --- | --- |
+| Clerk | `1561825875249340516` | Signup/deletion alerts active |
+| Stripe | `1561826018660978783` | Billing alerts active |
+| Sentry | `1561826076794159185` | Discord delivery ready; provider configuration pending |
+| PostHog | `1561826134726025296` | Discord delivery ready; provider configuration pending |
+
+Each webhook uses the service's official website icon and its configured display name. The previous `revline-notifications` channel (`1556933361660989440`) was moved into this category and retains its history. No older channels were deleted. Dedicated webhook URLs are stored only on production; development has no production Discord credentials.
+
+## Production status and remaining activation
+
+- The Clerk endpoint now targets `https://different-gnu-398.convex.site/clerk/webhook`, replacing the old backend URL. Its existing signing secret and event subscriptions were preserved. A signed ignored event returned 200; an invalid signature returned 400.
+- Stripe's current production billing endpoint remains `https://different-gnu-398.convex.site/stripe/webhook`. Notification delivery is optional and runs after billing reconciliation. An unsigned request was rejected.
+- A clearly labeled connection test was delivered to the original channel on October 19, 2026. After splitting the channels on October 20, all four provider routes recorded `sent` on their first attempt. Clerk delivery was also verified in the Discord UI. These tests do not simulate actual signups, payments, or provider errors.
+- The old Stripe endpoint on `proficient-chicken-697` is still enabled. It must be reviewed before retirement; do not disable billing reconciliation solely to remove duplicate notifications.
+- Sentry and PostHog provider event integrations and frontend telemetry remain pending. Configure the intended projects, signed integration/shared secret, and filtered events before enabling them. Provider channel creation alone does not activate these integrations.
+
+Verify each provider with its dashboard test and confirm the expected channel receives the alert. Replay a signed event to confirm deduplication. Keep production secrets separate from development and never commit webhook URLs.
+
+## Sign-in recovery
+
+The sign-in form shows a recovery message if Clerk initialization or an authentication request remains pending for 20 seconds. The callback page shows the same message after 20 seconds. A completed attempt or new attempt removes/resets the timer. Users can reload explicitly; the app does not clear storage, retry authentication, or send Discord diagnostics. The notice detects a delay, not the underlying browser or session failure.
 
 ## Local hydration recovery
 

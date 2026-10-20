@@ -46,7 +46,7 @@ function providerLink(value: unknown, domain: string) {
 export function registerAlertWebhooks(http: HttpRouter) {
   http.route({ path: '/clerk/webhook', method: 'POST', handler: httpAction(async (ctx, request) => {
     const signingSecret = process.env.CLERK_WEBHOOK_SIGNING_SECRET;
-    if (!signingSecret || !discordWebhookUrl()) return unavailable();
+    if (!signingSecret || !discordWebhookUrl('clerk')) return unavailable();
     let event;
     try {
       const body = await readBody(request);
@@ -64,7 +64,7 @@ export function registerAlertWebhooks(http: HttpRouter) {
   // Sentry integration-platform webhooks sign the exact JSON body with the integration Client Secret.
   http.route({ path: '/sentry/webhook', method: 'POST', handler: httpAction(async (ctx, request) => {
     const secret = process.env.SENTRY_WEBHOOK_SECRET;
-    if (!secret || !discordWebhookUrl()) return unavailable();
+    if (!secret || !discordWebhookUrl('sentry')) return unavailable();
     const signature = request.headers.get('sentry-hook-signature') ?? '';
     if (!/^[a-f0-9]{64}$/i.test(signature)) return new Response('Invalid signature', { status: 401 });
     let body: string, payload: Record<string, unknown>;
@@ -90,7 +90,7 @@ export function registerAlertWebhooks(http: HttpRouter) {
   // PostHog's HTTP Webhook destination supports a custom Authorization header and JSON body.
   http.route({ path: '/posthog/webhook', method: 'POST', handler: httpAction(async (ctx, request) => {
     const secret = process.env.POSTHOG_WEBHOOK_SECRET;
-    if (!secret || !discordWebhookUrl()) return unavailable();
+    if (!secret || !discordWebhookUrl('posthog')) return unavailable();
     const authorization = request.headers.get('authorization') ?? '';
     if (authorization.length > 1024 || !await equalSecret(authorization, `Bearer ${secret}`)) return new Response('Invalid authorization', { status: 401 });
     let payload: Record<string, unknown>;

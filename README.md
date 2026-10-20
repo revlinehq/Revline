@@ -51,7 +51,7 @@ Arranging and saving clips has no fixed duration or clip-count cap. Timelines re
 
 ## Error monitoring
 
-Sentry, PostHog, and signed provider-to-Discord alerts are scaffolded and inactive until configured. See [observability setup](docs/observability.md) for the remaining account settings, endpoint URLs, and verification steps. Browser analytics currently captures page views only, with session replay and text autocapture disabled.
+Clerk signup/deletion and Stripe billing alerts are connected to production Discord notifications. Sentry and PostHog remain scaffolded and inactive until configured. See [observability setup](docs/observability.md) for the remaining account settings, endpoint URLs, and verification steps. Browser analytics currently captures page views only, with session replay and text autocapture disabled.
 
 `node scripts/convex-error-monitor.mjs --start` starts read-only Convex log streams for development and production. `--summary` returns new failures plus capture health; `--ack <event-ids...>` acknowledges only reviewed events. The watcher removes validator payloads, signed URLs, and credential patterns before saving bounded, deduplicated summaries in `~/.local/state/revline-monitor` (outside the repository). It never stores raw console payloads or credentials.
 

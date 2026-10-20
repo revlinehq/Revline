@@ -66,7 +66,7 @@ if (process.env.STRIPE_SECRET_KEY && process.env.STRIPE_WEBHOOK_SECRET) {
       return new Response('Webhook processing failed', { status: 500 });
     }
     // Discord is an independent, optional sink. It must never break payment reconciliation.
-    if (discordWebhookUrl() && ['checkout.session.completed', 'checkout.session.async_payment_succeeded', 'customer.subscription.created', 'customer.subscription.updated', 'customer.subscription.deleted', 'invoice.paid', 'invoice.payment_failed', 'charge.refunded', 'charge.dispute.created'].includes(event.type)) {
+    if (discordWebhookUrl('stripe') && ['checkout.session.completed', 'checkout.session.async_payment_succeeded', 'customer.subscription.created', 'customer.subscription.updated', 'customer.subscription.deleted', 'invoice.paid', 'invoice.payment_failed', 'charge.refunded', 'charge.dispute.created'].includes(event.type)) {
       try {
         const objectId = 'id' in event.data.object ? event.data.object.id : 'unavailable';
         await ctx.runMutation(internal.discordAlerts.enqueue, { source: 'stripe', eventId: event.id, title: `Stripe: ${event.type}`, description: `Event: ${event.id}\nObject: ${objectId}\nMode: ${event.livemode ? 'live' : 'test'}` });
