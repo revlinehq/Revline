@@ -76,5 +76,10 @@
     "@vitejs/plugin-rsc": "^0.5.38",
     "@cloudflare/vite-plugin": "^1.64.0"
   },
+  "overrides": {
+    "satori": {
+      "fflate": "0.7.5"
+    }
+  },
   "type": "module"
 }
