@@ -98,7 +98,8 @@ try {
     await page.evaluate(()=>window.finishStop());await page.waitForFunction(()=>[...document.querySelectorAll('.processing-status-label')].some(node=>node.textContent==='Stopped.'));
     await check('Stopping keeps historical text intact',async()=>assert.equal(await page.evaluate(()=>document.querySelector('[data-message-id="answer"]')===window.oldAnswer&&window.stopCount===1),true));
     await check('Stopped work has no live working feedback',async()=>assert.equal(await page.$('.assistant-activity[data-state="working"]'),null));
-    await page.evaluate(()=>window.rejectSend=true);await page.type('textarea','Try this follow-up again.');await page.click('[aria-label="Start edit"]');await page.waitForFunction(()=>document.querySelector('.chat-error .processing-status-detail')?.textContent==='The request could not be sent.');
+    await page.evaluate(()=>window.rejectSend=true);await page.type('textarea','Try this follow-up again.');await page.click('[aria-label="Start edit"]');await page.waitForFunction(()=>[...document.querySelectorAll('.assistant-result-card.result-error .processing-status-detail')].some(node=>node.textContent==='The request could not be sent.'));
+    await check('A rejected send is reported once in the latest turn card (d053f7e), not as a footer notice',async()=>assert.equal(await page.$('.chat-error'),null));
     await check('A rejected send preserves the historical answer',async()=>assert.equal(await page.evaluate(()=>document.querySelector('[data-message-id="answer"]')===window.oldAnswer),true));
     await check('A rejected send clears its optimistic loading state',async()=>assert.equal(await page.$('.assistant-reply-header.is-processing'),null));
     await check('A rejected send keeps the prompt for retry',async()=>assert.equal(await page.$eval('textarea',node=>node.value),'Try this follow-up again.'));
@@ -135,7 +136,8 @@ try {
   assert.match(await page.$eval('.assistant-result-card', element => element.textContent), /Save not confirmed/);
   await page.evaluate(() => window.updateFixture({error:'Replacement failed'}));
   assert.equal(await page.$('.assistant-undo-edit'), null);
-  assert.match(await page.$eval('.assistant-result-card', element => element.textContent), /Not saved:.*was not saved/);
+  // A failed unpublished draft collapses into one turn-failure card (d053f7e) and claims no saved change.
+  assert.deepEqual(await page.$$eval('.assistant-result-card', nodes => nodes.map(node => [node.classList.contains('result-error'), node.textContent])), [[true, 'Some steps are unfinishedReplacement failed']]);
 
   await page.evaluate(() => { window.resetFixture(); window.updateFixture({messages:[],editSnapshot:undefined}); });
   await page.click('[aria-label="Add footage"]');
@@ -144,11 +146,12 @@ try {
   await page.click('[aria-label="Start edit"]');
   await page.waitForSelector('.processing-status');
   assert.equal(await page.$eval('.assistant-reply-header > .revline-brand', element => !!element.querySelector('.revline-mark')), true, 'Brand appears before the first assistant event');
-  assert.equal(await page.$eval('.processing-status-label', element => element.textContent), 'Editing…');
+  // Before the server starts a run the header says Replying…; only a running edit locks the timeline as Editing… (106287b).
+  assert.equal(await page.$eval('.processing-status-label', element => element.textContent), 'Replying…');
   await page.evaluate(() => { window.brand = document.querySelector('.assistant-reply-header > .revline-brand'); window.finishSend(); });
   await new Promise(resolve => setTimeout(resolve, 80));
   assert.equal(await page.evaluate(() => document.querySelector('.assistant-reply-header > .revline-brand') === window.brand), true, 'The send/SDK handoff retains the pending header');
-  assert.equal(await page.$eval('.processing-status-label', element => element.textContent), 'Editing…');
+  assert.equal(await page.$eval('.processing-status-label', element => element.textContent), 'Replying…');
   await page.evaluate(() => window.updateFixture({running:true,messages:[window.fixtureState().messages[0],{id:'live-answer',role:'assistant',text:'Tightened the',status:'streaming'}]}));
   assert.equal(await page.evaluate(() => document.querySelector('.assistant-reply-header > .revline-brand') === window.brand), true);
   await page.evaluate(() => window.token = document.querySelector('[data-flow-token]'));

@@ -5,15 +5,21 @@ import { readFile } from 'node:fs/promises';
 import { build } from 'esbuild';
 import puppeteer from 'puppeteer';
 
+// package.json became "type": "module" (82e9648), so esbuild's Node-mode interop would hand the
+// fixture next/image's whole CommonJS exports object. Next itself resolves the default export.
+const nextImage={name:'next-image-default',setup(builder){
+  builder.onResolve({filter:/^next\/image$/},()=>({path:'next/image',namespace:'next-image'}));
+  builder.onLoad({filter:/.*/,namespace:'next-image'},()=>({contents:"import * as image from 'next/dist/shared/lib/image-external.js';export default image.default;export const getImageProps=image.getImageProps;",loader:'js',resolveDir:process.cwd()}));
+}};
 const bundle = await build({stdin:{resolveDir:process.cwd(),loader:'tsx',contents:`
 import React from 'react';import {createRoot,hydrateRoot} from 'react-dom/client';import {LandingFeatures} from './components/landing/features';import {FEATURE_MEDIA} from './components/landing/features-media-config';import './app/landing.css';
 window.featureFixtureMedia=FEATURE_MEDIA;
 const host=document.getElementById('root'),fixture=<main className="landing"><div style={{height:400}}/><LandingFeatures/><section id="pricing" className="landing-section" style={{height:1400}}>Pricing target</section></main>;window.featureFixtureRoot=host.hasChildNodes()?hydrateRoot(host,fixture):createRoot(host);if(!host.hasChildNodes())window.featureFixtureRoot.render(fixture);
-`},bundle:true,platform:'browser',format:'iife',jsx:'automatic',write:false,outdir:'/tmp/revline-feature-scroll-fixture',external:['/fonts/*'],define:{'process.env.NODE_ENV':'"production"','process.env':'{}'}});
+`},bundle:true,platform:'browser',format:'iife',jsx:'automatic',write:false,outdir:'/tmp/revline-feature-scroll-fixture',external:['/fonts/*'],plugins:[nextImage],define:{'process.env.NODE_ENV':'"production"','process.env':'{}'}});
 const serverBundle=await build({stdin:{resolveDir:process.cwd(),loader:'tsx',contents:`
 import React from 'react';import {renderToString} from 'react-dom/server';import {LandingFeatures} from './components/landing/features';
 export const html=renderToString(<main className="landing"><div style={{height:400}}/><LandingFeatures/><section id="pricing" className="landing-section" style={{height:1400}}>Pricing target</section></main>);
-`},bundle:true,platform:'node',format:'cjs',jsx:'automatic',write:false,define:{'process.env.NODE_ENV':'"production"'},plugins:[{name:'server-css',setup(builder){builder.onLoad({filter:/\.css$/},()=>({contents:'',loader:'js'}));}}]});
+`},bundle:true,platform:'node',format:'cjs',jsx:'automatic',write:false,define:{'process.env.NODE_ENV':'"production"'},plugins:[nextImage,{name:'server-css',setup(builder){builder.onLoad({filter:/\.css$/},()=>({contents:'',loader:'js'}));}}]});
 const serverModule={exports:{}};new Function('require','module','exports',serverBundle.outputFiles[0].text)(createRequire(import.meta.url),serverModule,serverModule.exports);
 const fixtureStyle='*{box-sizing:border-box}body{margin:0;font-family:Arial,sans-serif;--font-space-grotesk:Arial;--font-inter:Arial}button{font-family:inherit}';
 const server=createServer(async(req,res)=>{try{

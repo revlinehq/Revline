@@ -58,7 +58,8 @@ try {
   assert.equal(glow.inset,'0px','The glow meets every timeline edge');
   assert.ok(glow.shadow.includes('inset'),'The glow spills inside the timeline');
   assert.deepEqual(glow.animations,['demo-ai-inner-glow','none'],'The demo breathes the inner halo instead of sweeping a thin border');
-  assert.ok(await page.$('.timeline-ai-notice[role="status"]'),'The timeline exposes the AI working status');
+  // The timeline text notice left in 8b399c8/783ee04; the timeline now exposes AI work as a busy region.
+  assert.ok(await page.$('.custom-timeline[aria-busy="true"][data-ai-working]'),'The timeline exposes the AI working status');
   assert.equal(await page.$eval('[aria-label="Describe your next edit"]',node=>node.value),'','Sending clears the composer immediately');
   assert.equal(await page.$('.composer-attachment'),null,'Sending clears media chips immediately without removing project footage');
   await page.waitForFunction(()=>{const text=document.querySelector('.chat-assistant')?.textContent;return text?.startsWith('I’ll')&&text.length<60});
