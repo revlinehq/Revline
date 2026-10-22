@@ -1,7 +1,7 @@
 // HyperFrames' internal Hono server replaces global Request/Response. Keep it
 // inside this isolated, awaited process so Next's HTTP constructors stay intact.
 import { createRenderJob, executeRenderJob, createConsoleLogger, resolveConfig } from '@hyperframes/producer';
-import { configureRenderFfmpeg, renderResources } from './render-resources.mjs';
+import { RENDER_X264, configureRenderFfmpeg, renderResources } from './render-resources.mjs';
 
 const controller = new AbortController();
 process.on('SIGTERM', () => controller.abort());
@@ -20,8 +20,9 @@ try {
   // Cheaper compression searches at the same resolution and frame rate.
   // Standard keeps CRF 18; high moves from slow/CRF 15 to medium/CRF 16,
   // roughly halving its encode CPU for a small SSIM change.
-  if(settings.quality==='standard')process.env.REVLINE_RENDER_X264_PRESET='medium=fast';
-  if(settings.quality==='high'){process.env.REVLINE_RENDER_X264_PRESET='slow=medium';process.env.REVLINE_RENDER_X264_CRF='15=16';}
+  const x264 = RENDER_X264[settings.quality];
+  if (x264.preset !== x264.producerPreset) process.env.REVLINE_RENDER_X264_PRESET = `${x264.producerPreset}=${x264.preset}`;
+  if (x264.crf !== x264.producerCrf) process.env.REVLINE_RENDER_X264_CRF = `${x264.producerCrf}=${x264.crf}`;
   // The low-memory profile forces one worker and per-frame screenshots. Keep it
   // for small hosts; PRODUCER_LOW_MEMORY_MODE still overrides this choice.
   const lowMemory = process.env.PRODUCER_LOW_MEMORY_MODE ? {} : { lowMemoryMode: resources.lowMemory };
