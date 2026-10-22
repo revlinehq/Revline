@@ -13,7 +13,7 @@ import { assetWithUrl, renderSummaryDocument, timelineValidator } from "./schema
 import { consumeUpload, issueUpload } from "./uploads";
 import { MAX_EXPORT_SECONDS } from '../lib/editor/limits';
 import { normalizeTimeline, timelineDuration } from '../lib/editor/types';
-import { cancelMediaTask, enqueueMediaTask } from './mediaTasks';
+import { cancelMediaTask, enqueueMediaTask, failMediaTask } from './mediaTasks';
 const workerArgs = { jobId: v.id("renderJobs"), workerSecret: v.string() };
 function activeExportLimit() {
   const value = Number(process.env.MAX_ACTIVE_EXPORTS_PER_ACCOUNT ?? 2);
@@ -67,6 +67,31 @@ export const cancel = mutation({ args:{jobId:v.id('renderJobs')},returns:v.null(
   if(job.status!=='queued'&&job.status!=='rendering')return null;
   if(job.taskId)await cancelMediaTask(ctx,job.taskId);
   await ctx.db.patch(job._id,{status:'cancelled',error:undefined,updatedAt:Date.now()});
+  return null;
+}});
+// Worker leases recover disconnected renders, but nothing else ends an export
+// that no renderer ever claims or one that keeps heartbeating without finishing.
+const STALLED_QUEUE_MS = 30 * 60_000, STALLED_RENDER_MS = 2 * 3600_000;
+const STALLED_QUEUE_ERROR = 'No renderer became available to start this export. Your saved edit is unchanged; try exporting again.';
+const STALLED_RENDER_ERROR = 'This export took too long to finish and was stopped. Your saved edit is unchanged; try exporting again.';
+export const failStalled = internalMutation({ args: {}, returns: v.null(), handler: async ctx => {
+  const now = Date.now();
+  // Only jobs older than the shorter limit can be stalled; few exports are active at once.
+  for (const status of ['queued', 'rendering'] as const) {
+    const jobs = await ctx.db.query('renderJobs').withIndex('by_status_createdAt', q => q.eq('status', status).lt('createdAt', now - STALLED_QUEUE_MS)).take(100);
+    for (const job of jobs) {
+      const task = job.taskId ? await ctx.db.get(job.taskId) : null;
+      const active = task && ['queued', 'running', 'retrying'].includes(task.status) ? task : null;
+      // Time the current attempt, or the current wait for a renderer.
+      const running = active ? active.status === 'running' : status === 'rendering';
+      const since = active ? running ? active.attemptStartedAt ?? active.updatedAt : active.updatedAt : job.updatedAt;
+      if (now - since < (running ? STALLED_RENDER_MS : STALLED_QUEUE_MS)) continue;
+      const error = running ? STALLED_RENDER_ERROR : STALLED_QUEUE_ERROR;
+      if (active) await failMediaTask(ctx, active._id, error);
+      const current = await ctx.db.get(job._id);
+      if (current && (current.status === 'queued' || current.status === 'rendering')) await ctx.db.patch(job._id, { status: 'failed', error, updatedAt: now });
+    }
+  }
   return null;
 }});
 export const progress = internalMutation({ args: { ...workerArgs, progress: v.number() }, returns: v.null(), handler: async (ctx, args) => {
