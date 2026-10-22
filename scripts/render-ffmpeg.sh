@@ -2,10 +2,16 @@
 set -euo pipefail
 
 # HyperFrames can start one decoder per timeline cut even with workers: 1.
+# Admit at most REVLINE_RENDER_FFMPEG_SLOTS file decoders/encoders at a time
+# (one per vCPU) so a many-cut timeline cannot multiply FFmpeg memory and CPU.
 # Keep each managed child PID intact: queued flock and active FFmpeg are
 # successively exec'd, so the renderer's cancellation reaches either state.
 : "${REVLINE_RENDER_FFMPEG_BINARY:?Missing render FFmpeg binary}"
 : "${REVLINE_RENDER_FFMPEG_LOCK:?Missing render FFmpeg lock}"
+slots="${REVLINE_RENDER_FFMPEG_SLOTS:-1}"
+encode_threads="${REVLINE_RENDER_ENCODE_THREADS:-1}"
+[[ "$slots" =~ ^[1-4]$ ]] || slots=1
+[[ "$encode_threads" =~ ^[1-9][0-9]?$ ]] || encode_threads=1
 args=(-filter_threads 1 -filter_complex_threads 1)
 pipe_input=false
 has_input=false
@@ -16,29 +22,40 @@ for arg in "$@"; do
   args+=("$arg")
   previous="$arg"
 done
+video_codec=''
+for ((i=0;i<${#args[@]}-1;i++)); do
+  if [[ "${args[i]}" == '-c:v' || "${args[i]}" == '-vcodec' ]]; then video_codec="${args[i+1]}"; fi
+done
 # Spend less CPU on compression searches at the same authored CRF, resolution
 # and frame rate. This applies only to the standard H.264 output preset.
-if [[ "${REVLINE_RENDER_STANDARD_PRESET:-}" == fast ]]; then
-  video_codec=''
+if [[ "${REVLINE_RENDER_STANDARD_PRESET:-}" == fast && "$video_codec" == libx264 ]]; then
   for ((i=0;i<${#args[@]}-1;i++)); do
-    if [[ "${args[i]}" == '-c:v' || "${args[i]}" == '-vcodec' ]]; then video_codec="${args[i+1]}"; fi
+    if [[ "${args[i]}" == '-preset' && "${args[i+1]}" == medium ]]; then args[i+1]=fast; fi
   done
-  if [[ "$video_codec" == libx264 ]]; then
-    for ((i=0;i<${#args[@]}-1;i++)); do
-      if [[ "${args[i]}" == '-preset' && "${args[i+1]}" == medium ]]; then args[i+1]=fast; fi
-    done
-  fi
 fi
 # All rendering invocations with an input end in their output path. Bound
-# output codec threads too, after the producer's encoder options.
+# output codec threads too, after the producer's encoder options. Decoders stay
+# single-threaded; the final H.264 encoder may use the host's vCPUs.
 if [[ "$has_input" == true ]]; then
   last=$((${#args[@]} - 1))
-  args=("${args[@]:0:last}" -threads 1 "${args[last]}")
+  output_threads=1
+  if [[ "$video_codec" == libx264 ]]; then output_threads="$encode_threads"; fi
+  args=("${args[@]:0:last}" -threads "$output_threads" "${args[last]}")
 fi
 # VFR normalization pipes a file decoder into a raw-frame consumer. Locking
 # the consumer would stop it draining the decoder and deadlock both. It can
-# run only when its upstream file decoder owns the job's lock.
+# run only when its upstream file decoder owns a job slot.
 if [[ "$pipe_input" == true ]]; then
   exec "$REVLINE_RENDER_FFMPEG_BINARY" "${args[@]}"
 fi
-exec flock --exclusive --no-fork "$REVLINE_RENDER_FFMPEG_LOCK" "$REVLINE_RENDER_FFMPEG_BINARY" "${args[@]}"
+# Take any free slot. The lock belongs to the open descriptor, which FFmpeg
+# inherits across exec and releases on exit.
+for ((slot=0;slot<slots;slot++)); do
+  exec {lock_fd}>>"$REVLINE_RENDER_FFMPEG_LOCK.$slot"
+  if flock --exclusive --nonblock "$lock_fd"; then
+    exec "$REVLINE_RENDER_FFMPEG_BINARY" "${args[@]}"
+  fi
+  exec {lock_fd}>&-
+done
+# Every slot is busy: queue on one, spreading waiters by PID.
+exec flock --exclusive --no-fork "$REVLINE_RENDER_FFMPEG_LOCK.$(($$ % slots))" "$REVLINE_RENDER_FFMPEG_BINARY" "${args[@]}"

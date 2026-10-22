@@ -29,12 +29,14 @@ export function renderResources() {
   return {
     workers,
     lowMemory,
+    ffmpegSlots: boundedInteger('REVLINE_RENDER_FFMPEG_SLOTS', lowMemory ? 1 : Math.min(2, cpus), 4),
+    encodeThreads: boundedInteger('REVLINE_RENDER_ENCODE_THREADS', Math.min(4, cpus), 16),
     memoryMb: Math.floor(memory / MIB),
   };
 }
 
 /** Bound native decoder work while preserving HyperFrames' process ownership. */
-export function configureRenderFfmpeg(directory) {
+export function configureRenderFfmpeg(directory, resources = renderResources()) {
   // The deployed media worker and local Linux development use util-linux flock.
   if (process.platform !== 'linux') return;
   execFileSync('flock', ['--version'], { stdio: 'ignore', timeout: 5000 });
@@ -42,5 +44,7 @@ export function configureRenderFfmpeg(directory) {
   if (!binary) throw new Error('FFmpeg is unavailable for video export.');
   process.env.REVLINE_RENDER_FFMPEG_BINARY = binary;
   process.env.REVLINE_RENDER_FFMPEG_LOCK = join(directory, '.render-ffmpeg.lock');
+  process.env.REVLINE_RENDER_FFMPEG_SLOTS = String(resources.ffmpegSlots);
+  process.env.REVLINE_RENDER_ENCODE_THREADS = String(resources.encodeThreads);
   process.env.HYPERFRAMES_FFMPEG_PATH = fileURLToPath(new URL('./render-ffmpeg.sh', import.meta.url));
 }

@@ -16,7 +16,7 @@ try {
   const settings = JSON.parse(serialized);
   if (!directory || !output || ![24, 30, 60].includes(settings.fps) || !['draft', 'standard', 'high'].includes(settings.quality)) throw new Error('Invalid render worker settings.');
   const resources = renderResources();
-  configureRenderFfmpeg(directory);
+  configureRenderFfmpeg(directory, resources);
   if(settings.quality==='standard')process.env.REVLINE_RENDER_STANDARD_PRESET='fast';
   // The low-memory profile forces one worker and per-frame screenshots. Keep it
   // for small hosts; PRODUCER_LOW_MEMORY_MODE still overrides this choice.

@@ -4,6 +4,7 @@ import { mkdir, writeFile, copyFile, stat, rm, readFile } from 'node:fs/promises
 import { join } from 'node:path';
 import { generateComposition } from '../lib/editor/composition';
 import type { Timeline } from '../lib/editor/types';
+import { renderResources } from './render-resources.mjs';
 
 async function main() {
 const directory = process.env.REVLINE_RENDER_MEMORY_DIR ?? '/tmp/revline-render-memory-smoke';
@@ -53,7 +54,8 @@ if (baselineContents) {
   const differences = samples.flatMap((sample, index) => sample.map((value, channel) => Math.abs(value - baseline.samples[index][channel])));
   assert.ok(Math.max(...differences) <= 4 && differences.reduce((sum, value) => sum + value, 0) / differences.length < .1, 'Bounding decoder threads changed rendered pixels beyond codec rounding.');
 }
-assert.ok(peakFfmpeg <= 1, `Export ran ${peakFfmpeg} FFmpeg decoders concurrently (expected at most 1).`);
+const { ffmpegSlots } = renderResources();
+assert.ok(peakFfmpeg <= ffmpegSlots, `Export ran ${peakFfmpeg} FFmpeg decoders concurrently (expected at most ${ffmpegSlots}).`);
 await verifyCancellation(directory);
 
 
