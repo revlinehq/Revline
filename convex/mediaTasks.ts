@@ -22,10 +22,14 @@ import { commitTimeline, currentTimeline } from './lib/timeline';
 import { BEAT_ANALYSIS_ENGINE } from '../lib/media-analysis/beat-map';
 import { editingWorkflowActive } from './lib/assistant_workflow';
 import { MEDIA_TASK_LEASE_MS } from '../lib/media-analysis/errors';
+import { consumeVideoImport, requireMediaTaskCapacity } from './lib/account_limits';
 
 const LEASE_MS = MEDIA_TASK_LEASE_MS;
 const MAX_ATTEMPTS = 3;
 const IMPORT_PLACEMENT_DELAY_MS = 10_000, IMPORT_PLACEMENT_ATTEMPTS = 360;
+// Fair claiming: an owner already running this many tasks yields to queued work
+// from other owners among the oldest FAIR_CLAIM_SCAN claimable rows.
+const FAIR_RUNNING_PER_OWNER = 1, FAIR_CLAIM_SCAN = 64;
 const eventResult = v.object({ success: v.boolean(), retryable: v.boolean(), error: v.optional(v.string()) });
 const taskState = v.object({ _id: v.id('mediaTasks'), kind: mediaTaskKind, status: mediaTaskStatus, progress: v.number(), attempt: v.number(), error: v.optional(v.string()), assetId: v.optional(v.id('assets')),activity:v.optional(mediaTaskActivity),activityStartedAt:v.optional(v.number()) });
 const renderSnapshot = v.object({ timeline: timelineValidator, assets: v.array(assetWithUrl), resolution: v.number(), fps: v.number(), quality: v.string() });
@@ -149,7 +153,8 @@ export const start = mutation({ args: { projectId: v.id('projects'), assetId: v.
   if (args.kind === 'video') throw new ConvexError('Native video inspection requires a scoped AI question and source window.');
   if (['extract', 'preview', 'shots', 'understand', 'track'].includes(args.kind) && asset.kind !== 'video') throw new ConvexError('This operation requires a video.');
   if (args.kind === 'waveform' && asset.kind !== 'audio') throw new ConvexError('Waveforms require an audio source.');
-  return enqueueMediaTask(ctx, { ...args, ownerId });
+  // Reused or already-active work needs no new capacity.
+  return enqueueMediaTask(ctx, { ...args, ownerId }, () => requireMediaTaskCapacity(ctx, ownerId, 1));
 }});
 export const importVideo = mutation({ args: { projectId: v.optional(v.id('projects')), url: v.string() }, returns: v.object({ projectId: v.id('projects'), taskId: v.id('mediaTasks') }), handler: async (ctx, args) => {
   const ownerId = await requireOwner(ctx); await requireEditorAccess(ctx, ownerId);
@@ -163,6 +168,8 @@ export const importVideo = mutation({ args: { projectId: v.optional(v.id('projec
   const existing = pending.find(task => task.sourceUrl === sourceUrl);
   if (existing) return { projectId, taskId: existing._id };
   if (pending.length >= 3) throw new ConvexError('Wait for the current video imports to finish.');
+  // Counted only once a fresh import is accepted; a refusal rolls back a new edit with it.
+  await consumeVideoImport(ctx, ownerId, !args.projectId); await requireMediaTaskCapacity(ctx, ownerId, 1);
   const taskId = await enqueueMediaTask(ctx, { ownerId, projectId, kind: 'import', sourceUrl });
   return { projectId, taskId };
 }});
@@ -198,11 +205,24 @@ export async function detachAnalysisRequest(ctx:MutationCtx,request:Doc<'analysi
   if(task?.analysisRequestId===request._id&&task.ownerId===request.ownerId&&task.projectId===request.projectId&&task.assetId===request.assetId&&['queued','running','retrying'].includes(task.status))await ctx.db.patch(task._id,{analysisRequestId:undefined});
   await ctx.db.delete(request._id);
 }
+/** Oldest first, except an owner already running FAIR_RUNNING_PER_OWNER tasks
+ * yields to another owner's queued work. Bounded: one scan plus one small
+ * indexed read per distinct owner; with no other owner waiting, the oldest
+ * task is claimed so a lone account still uses every free slot. */
+async function fairest(ctx:MutationCtx|QueryCtx,candidates:Doc<'mediaTasks'>[]) {
+  if(new Set(candidates.map(task=>task.ownerId)).size<2)return candidates[0]??null;
+  const busy=new Map<string,boolean>();
+  for(const task of candidates){
+    if(!busy.has(task.ownerId))busy.set(task.ownerId,(await ctx.db.query('mediaTasks').withIndex('by_owner_status',q=>q.eq('ownerId',task.ownerId).eq('status','running')).take(FAIR_RUNNING_PER_OWNER)).length>=FAIR_RUNNING_PER_OWNER);
+    if(!busy.get(task.ownerId))return task;
+  }
+  return candidates[0];
+}
 async function firstClaimable(ctx:MutationCtx|QueryCtx,processorVersion=1) {
   // Exports are interactive; claim them before long queued analysis work.
-  const render=await ctx.db.query('mediaTasks').withIndex('by_status_claimable_kind_created',q=>q.eq('status','queued').eq('claimable',true).eq('kind','render')).filter(q=>q.or(q.eq(q.field('requiredProcessorVersion'),undefined),q.lte(q.field('requiredProcessorVersion'),processorVersion))).first();
-  if(render)return render;
-  const indexed=await ctx.db.query('mediaTasks').withIndex('by_status_claimable_created',q=>q.eq('status','queued').eq('claimable',true)).filter(q=>q.or(q.eq(q.field('requiredProcessorVersion'),undefined),q.lte(q.field('requiredProcessorVersion'),processorVersion))).first();
+  const renders=await ctx.db.query('mediaTasks').withIndex('by_status_claimable_kind_created',q=>q.eq('status','queued').eq('claimable',true).eq('kind','render')).filter(q=>q.or(q.eq(q.field('requiredProcessorVersion'),undefined),q.lte(q.field('requiredProcessorVersion'),processorVersion))).take(FAIR_CLAIM_SCAN);
+  if(renders.length)return fairest(ctx,renders);
+  const indexed=await fairest(ctx,await ctx.db.query('mediaTasks').withIndex('by_status_claimable_created',q=>q.eq('status','queued').eq('claimable',true)).filter(q=>q.or(q.eq(q.field('requiredProcessorVersion'),undefined),q.lte(q.field('requiredProcessorVersion'),processorVersion))).take(FAIR_CLAIM_SCAN));
   // Legacy prepared tasks remain claimable during rollout, without a ten-row cap.
   return indexed??await ctx.db.query('mediaTasks').withIndex('by_status_createdAt',q=>q.eq('status','queued')).filter(q=>q.and(q.eq(q.field('claimable'),undefined),q.gt(q.field('attempt'),0),q.neq(q.field('workflowId'),undefined),q.or(q.eq(q.field('requiredProcessorVersion'),undefined),q.lte(q.field('requiredProcessorVersion'),processorVersion)))).first();
 }
