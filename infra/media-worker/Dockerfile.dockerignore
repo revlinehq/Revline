@@ -15,6 +15,9 @@
 !infra/
 !infra/media-worker/
 !infra/media-worker/**
+# Pinned beat model seeded by prepare-context.mjs; its checksum is verified at build.
+!models/
+!models/**
 public/uploads/**
 **/.env*
 **/.dev.vars*
