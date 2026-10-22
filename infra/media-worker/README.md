@@ -361,6 +361,12 @@ warning and renders with HyperFrames; `REVLINE_RENDER_FAST_PATH=0` disables it.
 Pinned to two CPUs, a 76 s 1080p30 standard export of two plain clips took
 189.5 s with HyperFrames and 36.5 s with FFmpeg (SSIM 0.987, identical frame
 count, duration and audio level); encoding at the shared preset is most of the
-remaining time. HyperFrames 0.8.143 also mixes an extra unity-gain, normal-speed
-copy of the first audible clip of each video source; the FFmpeg path mixes each
-clip once, so such exports are quieter and no longer double that sound.
+remaining time.
+
+HyperFrames dedupes a video's sound by comparing the authored `src` with the
+browser's server-relative one. While compositions authored `./asset-0.mp4` the
+two never matched, so every browser export also mixed an extra unity-gain,
+normal-speed, unfaded copy of the first audible clip of each video source
+(about 6 dB louder, or garbled when sped up, before the −1 dBTP limiter lowered
+the whole mix). `writeComposition` now authors bare media file names, so each
+clip's sound is mixed once in both renderers.

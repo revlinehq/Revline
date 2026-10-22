@@ -35,8 +35,9 @@ function escapeHtml(value: string) {
   return value.replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]!);
 }
 
-function mediaUrl(value: string) {
-  if (/^(https?:|blob:)/i.test(value) || /^(\.\/|\/[^/])/.test(value)) return escapeHtml(value);
+function mediaUrl(value: string, sameDirectory = false) {
+  // Server exports may name a file in the composition's own directory: no scheme, slash or parent.
+  if (/^(https?:|blob:)/i.test(value) || /^(\.\/|\/[^/])/.test(value) || sameDirectory && /^\w[\w.-]*$/.test(value)) return escapeHtml(value);
   throw new Error('Media and script URLs must use HTTP, a blob URL, or a local path.');
 }
 
@@ -137,10 +138,11 @@ export function generateComposition(timeline: Timeline, assets: MediaAsset[], op
       return `<div id="${id}" data-text-clip="${escapeHtml(clip.id)}" class="overlay ${clip.kind}" style="${attributes}"><span id="${id}-motion" class="text-motion"><span class="text-content" style="background:${style.background};padding:${style.paddingY}px ${style.paddingX}px;border-radius:${style.borderRadius}px${decoration}">${escapeHtml(style.text)}</span></span></div>`;
     }
     const asset = clip.assetId ? assetMap.get(clip.assetId) : undefined;
-    const source = clip.assetId ? options.assetUrls?.[clip.assetId] ?? asset?.url : undefined;
+    const exportSource = clip.assetId ? options.assetUrls?.[clip.assetId] : undefined;
+    const source = exportSource ?? asset?.url;
     if (!asset || !source) throw new Error('A clip references unavailable media.');
     if (asset.kind !== clip.kind) throw new Error('The clip kind does not match its media.');
-    const src = mediaUrl(source);
+    const src = mediaUrl(source, exportSource !== undefined);
     let sourceStyle = 'left:0;top:0;width:100%;height:100%;object-fit:cover';
     let frameStyle = '';
     let windowStyle = 'left:0;top:0;width:100%;height:100%';
