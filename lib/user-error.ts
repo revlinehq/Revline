@@ -8,3 +8,8 @@ export function userError(error:unknown,fallback='This action could not finish. 
   if(error instanceof Error&&!/\[CONVEX|Server Error|Uncaught|\bat .*\(.+:\d+/.test(error.message))return error.message;
   return fallback;
 }
+
+/** Deleted, foreign, and malformed project ids share one typed Convex error. */
+export function isProjectNotFound(error:unknown):boolean {
+  return userError(error,'')==='Project not found';
+}

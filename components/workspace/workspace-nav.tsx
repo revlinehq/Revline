@@ -62,12 +62,14 @@ export interface WorkspaceNavProps {
   onShare?: () => void;
   shareDisabled?: boolean;
   exportDisabled?: boolean;
+  /** Explains a disabled export or its limit before the dialog opens. */
+  exportHint?: string;
   onRename?: (title: string) => void | Promise<void>;
   chatId?: string;
   editorControls?: ReactNode;
 }
 
-export function WorkspaceNav({ title = NEW_WORKSPACE_LABEL, editorHref, active = 'chat', demo = false, saving, saveFailed, onRetrySave, canUndo, canRedo, onUndo, onRedo, onFootage, onExport, onShare, shareDisabled, exportDisabled, onRename, chatId, editorControls }: WorkspaceNavProps) {
+export function WorkspaceNav({ title = NEW_WORKSPACE_LABEL, editorHref, active = 'chat', demo = false, saving, saveFailed, onRetrySave, canUndo, canRedo, onUndo, onRedo, onFootage, onExport, onShare, shareDisabled, exportDisabled, exportHint, onRename, chatId, editorControls }: WorkspaceNavProps) {
   const pathname = usePathname();
   const router = useRouter();
   const startingWorkspace = useRef(false);
@@ -136,7 +138,7 @@ export function WorkspaceNav({ title = NEW_WORKSPACE_LABEL, editorHref, active =
       {(onUndo || onRedo) && <div className="workspace-nav-history"><button className="workspace-nav-icon" aria-label="Undo" title="Undo" disabled={!canUndo} onClick={onUndo}><Undo2 size={15} /></button><button className="workspace-nav-icon" aria-label="Redo" title="Redo" disabled={!canRedo} onClick={onRedo}><Redo2 size={15} /></button></div>}
       {onFootage && <button className="workspace-nav-secondary" aria-label="Footage" onClick={onFootage}><Film size={14} /><span>Footage</span></button>}
       {onShare && <button type="button" className="workspace-nav-secondary" aria-label="Share timeline" onClick={onShare} disabled={shareDisabled}><Share2 size={14}/><span>Share</span></button>}
-      {onExport && !demo && <PrimaryButton size="compact" onClick={onExport} disabled={exportDisabled}>Export<Download size={13} /></PrimaryButton>}
+      {onExport && !demo && <span className="workspace-nav-action-hint" title={exportHint}><PrimaryButton size="compact" onClick={onExport} disabled={exportDisabled} aria-description={exportHint}>Export<Download size={13} /></PrimaryButton></span>}
       {editorHref && <Link href={editorHref} className="workspace-nav-secondary workspace-editor-link" aria-label="Editor"><PanelsTopLeft size={14} /><span>Editor</span></Link>}
       <DropdownMenu><DropdownMenuTrigger asChild><button className="workspace-account-trigger" aria-label="Open account menu" disabled={!isLoaded}>{user?.imageUrl ? <img src={user.imageUrl} alt="" /> : initial}</button></DropdownMenuTrigger>
         <DropdownMenuContent align="end" sideOffset={12} className="workspace-menu workspace-account-menu">

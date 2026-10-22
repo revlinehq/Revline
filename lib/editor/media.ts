@@ -59,10 +59,14 @@ export function uploadPart(url: string, blob: Blob, onProgress: (bytes: number) 
     request.send(blob);
   });
 }
-export async function uploadMultipart(file: File, partSize: number, getUrl: (partNumber: number) => Promise<string>, onProgress: (percent: number) => void) {
+export async function uploadMultipart(file: File, partSize: number, getUrl: (partNumber: number) => Promise<string>, onProgress: (percent: number) => void, signal?: AbortSignal) {
   if (!Number.isFinite(partSize) || partSize <= 0) throw new Error('Invalid upload part size.');
+  signal?.throwIfAborted();
   const partCount = Math.ceil(file.size / partSize), parts: UploadedPart[] = new Array(partCount);
   const loaded = new Array<number>(partCount).fill(0), controller = new AbortController();
+  // A caller's cancellation stops every in-flight part with the caller's reason.
+  const forwardAbort = () => controller.abort(signal?.reason);
+  signal?.addEventListener('abort', forwardAbort, { once: true });
   const started=Date.now();let lastLogged=started;
   console.info(`[upload] ${new Date().toISOString()} Transfer started: ${(file.size/1_000_000).toFixed(1)} MB, ${partCount} parts, ${Math.min(3,partCount)} parallel connections.`);
   let nextPart = 0, loadedBytes = 0, lastPercent = -1;
@@ -99,10 +103,12 @@ export async function uploadMultipart(file: File, partSize: number, getUrl: (par
         }
       }
     }));
+    // Workers between parts exit quietly on abort; never return a partial upload.
+    controller.signal.throwIfAborted();
   } catch (error) {
     // Stop sibling PUTs before uploadSourceFile releases the multipart lease.
     controller.abort(error); throw error;
-  }
+  } finally { signal?.removeEventListener('abort', forwardAbort); }
   console.info(`[upload] ${new Date().toISOString()} Transfer complete in ${((Date.now()-started)/1000).toFixed(1)}s.`);
   onProgress(100); return parts;
 }

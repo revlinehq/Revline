@@ -117,7 +117,8 @@ async function failTask(ctx: MutationCtx, task: Doc<'mediaTasks'>, error: string
 }
 async function markTerminal(ctx: MutationCtx, taskId: Id<'mediaTasks'>, status: 'failed' | 'cancelled', error: string) {
   const task = await ctx.db.get(taskId);
-  if (!task || task.status === 'completed' || task.status === 'cancelled') return;
+  // A workflow cancelled after a permanent failure must not hide its reason.
+  if (!task || task.status === 'completed' || task.status === 'cancelled' || (status === 'cancelled' && task.status === 'failed')) return;
   await ctx.db.patch(taskId, { status, error: error.slice(0, 1000), leaseToken: undefined, leaseExpiresAt: undefined, updatedAt: Date.now() });
   if (task.renderJobId) {
     const job = await ctx.db.get(task.renderJobId);
@@ -174,6 +175,13 @@ export const list = query({ args: { projectId: v.id('projects') }, returns: v.ar
   const tasks = await ctx.db.query('mediaTasks').withIndex('by_project_createdAt', q => q.eq('projectId', args.projectId)).order('desc').take(40);
   return tasks.map(({ _id, kind, status, progress, attempt, error, assetId,activity,activityStartedAt }) => ({ _id, kind, status, progress, attempt, error, assetId,activity,activityStartedAt }));
 }});
+/** Fails an unfinished task permanently and stops its workflow. */
+export async function failMediaTask(ctx: MutationCtx, taskId: Id<'mediaTasks'>, error: string) {
+  const task = await ctx.db.get(taskId);
+  if (!task || ['completed', 'failed', 'cancelled'].includes(task.status)) return;
+  await markTerminal(ctx, taskId, 'failed', error);
+  if (task.workflowId) await mediaWorkflow.cancel(ctx, task.workflowId as WorkflowId);
+}
 export async function cancelMediaTask(ctx: MutationCtx, taskId: Id<'mediaTasks'>) {
   const task = await ctx.db.get(taskId);
   if (!task || ['completed', 'failed', 'cancelled'].includes(task.status)) return;

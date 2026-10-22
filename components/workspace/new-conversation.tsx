@@ -5,7 +5,7 @@ import { userError } from '@/lib/user-error';
 import { NEW_WORKSPACE_LABEL } from '@/lib/editor/workspace-labels';
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useAuth, useClerk, useUser } from '@clerk/nextjs';
+import { useAuth, useUser } from '@clerk/nextjs';
 import { useAction, useConvex, useConvexAuth, useMutation, useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
@@ -22,7 +22,7 @@ import { FootageStartCard } from './footage-start-card';
 import { FootageProcessingCard, type FootageProcessingFile, type FootageProcessingPhase } from './footage-processing-card';
 import { RecentProjects } from './recent-projects';
 import { WorkspaceNav } from './workspace-nav';
-import { acknowledgeDraftFiles, stashFiles, takeFiles } from './project-draft';
+import { acknowledgeDraftFiles, prepareExternalAuthRedirect, stashFiles, takeFiles } from './project-draft';
 import { NEW_WORKSPACE_EVENT } from './start-new-workspace';
 import './shared.css';
 import './new-conversation.css';
@@ -33,7 +33,6 @@ type Processing = Omit<ProjectImportProgress, 'phase'> & { phase: FootageProcess
 
 export function NewConversation() {
   const router = useRouter();
-  const clerk = useClerk();
   const { user } = useUser();
   const firstName = user?.firstName?.trim() || user?.fullName?.trim().split(/\s+/)[0];
   const convex = useConvex();
@@ -49,6 +48,7 @@ export function NewConversation() {
   const finishUpload = useAction(api.r2.complete);
   const abortUpload = useAction(api.r2.abort);
   const submitting = useRef(false);
+  const unsavedSignInWarned = useRef(false);
   const mounted = useRef(false);
   const unsubscribe = useRef<(() => void) | null>(null);
   const draftEpoch = useRef(0);
@@ -135,9 +135,18 @@ export function NewConversation() {
   async function processFootage() {
     if (submitting.current || !hasMedia || !isLoaded || authLoading) return;
     if (!isSignedIn) {
-      setError('Sign in to upload your footage. Your files will stay here.');
+      // Promise persistence only after the files reached durable browser storage.
+      let kept = true;
+      submitting.current = true;
+      try { await prepareExternalAuthRedirect(); } catch { kept = false; } finally { submitting.current = false; }
       setProcessing({ phase: 'error', index: 1, total: files.length + cloudIds.length, percent: 0 });
-      clerk.openSignIn({ fallbackRedirectUrl: NEW_PROJECT_PATH, signUpFallbackRedirectUrl: NEW_PROJECT_PATH });
+      if (!kept && !unsavedSignInWarned.current) {
+        unsavedSignInWarned.current = true;
+        setError('Sign in to upload your footage. This browser couldn’t save your files for sign-in, so you may need to add them again afterward. Retry to continue to sign-in.');
+        return;
+      }
+      setError(kept ? 'Sign in to upload your footage. Your files will stay here.' : 'Opening sign-in. You may need to add your footage again after you sign in.');
+      router.push(`/sign-in?redirect_url=${encodeURIComponent(NEW_PROJECT_PATH)}`);
       return;
     }
     if (!isAuthenticated || !userId) return;

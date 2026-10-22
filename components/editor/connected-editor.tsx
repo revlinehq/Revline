@@ -169,26 +169,32 @@ function ProjectEditor({project}: {project:Doc<'projects'>}) {
   async function handleUpload(files:File[],{requireAll=false,addToTimeline=true}:{requireAll?:boolean;addToTimeline?:boolean}={}){
     if(uploading.current||!files.length)return;uploading.current=true;setUploadToComposer(addToTimeline);setError('');
     let incomplete=false;
+    // Cancel stops the current and remaining transfers; finished sources stay.
+    const cancellation=new AbortController();
+    const cancel=()=>cancellation.abort(new DOMException('Upload cancelled.','AbortError'));
     const queue = files.map(file => ({id:crypto.randomUUID(),name:file.name,percent:0,kind:(file.type.startsWith('audio/')?'audio':file.type.startsWith('image/')?'image':'video') as 'video'|'image'|'audio',error:undefined as string|undefined}));
     const transferred:{file:File;index:number;assetId:Id<'assets'>}[]=[];
     const report=(index:number,percent:number,phase:NonNullable<UploadProgress>['phase'])=>{
       const file=files[index];queue[index].percent=percent;
-      setUpload({name:file.name,size:file.size,index:index+1,total:files.length,percent,phase,queue:queue.slice(index).map(item=>({...item}))});
+      setUpload({name:file.name,size:file.size,index:index+1,total:files.length,percent,phase,queue:queue.slice(index).map(item=>({...item})),...(phase==='reading'||phase==='uploading'?{onCancel:cancel}:{})});
     };
     try{
       // Completion starts durable preparation on the server. Transfer the next
       // source while those tasks run instead of waiting for each AI analysis.
       for(const [index,file] of files.entries()){
+        if(cancellation.signal.aborted){incomplete=true;break;}
         try{
           const assetId=await uploadSourceFile(file,{
             start:meta=>startUpload({projectId,fileName:file.name,contentType:file.type,size:file.size,...meta}),
             partUrl:(uploadId,partNumber)=>partUrl({uploadId,partNumber}),
             complete:(uploadId,parts)=>finishUpload({uploadId,parts}),
             abort:uploadId=>abortUpload({uploadId}),saveThumbnail,
-          },(percent,phase)=>report(index,percent,phase));
+          },(percent,phase)=>report(index,percent,phase),cancellation.signal);
           transferred.push({file,index,assetId});
-        }catch(e){incomplete=true;setError(userError(e,'Could not import this file.'));}
+        }catch(e){incomplete=true;if(!cancellation.signal.aborted)setError(userError(e,'Could not import this file.'));}
       }
+      // Cancelled files must not resume from the local draft on the next open.
+      if(cancellation.signal.aborted)await acknowledgeDraftFiles(files.filter(file=>!transferred.some(item=>item.file===file))).catch(()=>undefined);
       // Keep timeline writes ordered, and acknowledge each local draft only
       // after its preparation and requested timeline attachment have succeeded.
       for(const {file,index,assetId} of transferred){
@@ -211,6 +217,7 @@ function ProjectEditor({project}: {project:Doc<'projects'>}) {
         }catch(e){incomplete=true;setError(userError(e,'Could not import this file.'));}
       }
     }finally{uploading.current=false;setUpload(null);setUploadToComposer(false);}
+    if(requireAll&&cancellation.signal.aborted)throw new Error('Upload cancelled. Your request is still saved; add your footage when you’re ready to start the edit.');
     if(requireAll&&incomplete)throw new Error('Some footage could not be imported. Your request is still saved; retry the missing files before starting the edit.');
   }
   async function exportVideo(settings:ExportSettings){await saves.wait();const id=await renderStart({projectId,...settings});setJobId(id);}

@@ -54,7 +54,7 @@ export function SamMaskLab() {
     setFile(selected);
   }
   return <main className="sam-mask-lab">
-    <header><a href="/projects">Revline</a><span>Development · SAM 3.1</span></header>
+    <header><a href="/chats">Revline</a><span>Development · SAM 3.1</span></header>
     <h1>Mask lab</h1><p>Name a subject. See how the mask follows it.</p>
     {configured === false && <aside>Add <code>META_MODEL_API_KEY</code> to <code>.env.local</code> to connect Meta. Your key stays on the server.</aside>}
     <div className="sam-lab-layout">
