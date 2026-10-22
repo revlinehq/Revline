@@ -268,7 +268,7 @@ test('plain exports render with FFmpeg, fall back to the browser on failure, and
   const progress: number[] = [];
   await processMediaTask(plain, {} as ConvexHttpClient, 'https://fixture.convex.cloud', AbortSignal.timeout(5000), value => progress.push(value));
   expect(mocks.renderPlainExport).toHaveBeenCalledWith(expect.any(String), expect.stringMatching(/video\.mp4$/), expect.objectContaining({ frames: 60, width: 1920, height: 1080 }), { clip: './asset-0.mp4' }, {}, 'standard', expect.any(Function), expect.any(AbortSignal));
-  expect(mocks.writeComposition).toHaveBeenCalledOnce();
+  expect(mocks.writeComposition).not.toHaveBeenCalled();
   expect(mocks.runRenderWorker).not.toHaveBeenCalled();
   expect(progress).toContain(50);
   // A failed fast path keeps the export: the browser renderer runs, and progress never moves back.
@@ -277,8 +277,11 @@ test('plain exports render with FFmpeg, fall back to the browser on failure, and
   progress.length = 0;
   await processMediaTask(plain, {} as ConvexHttpClient, 'https://fixture.convex.cloud', AbortSignal.timeout(5000), value => progress.push(value));
   expect(mocks.runRenderWorker).toHaveBeenCalledOnce();
+  expect(mocks.writeComposition).toHaveBeenCalledOnce();
   expect(warn.mock.calls.flat().join(' ')).toContain('ffmpeg failed');
   expect(progress.every((value, index) => !index || value >= progress[index - 1])).toBe(true);
+  // The browser render advances from where the fast path stopped instead of stalling there.
+  expect(progress.filter(value => value > 77 && value < 95).length).toBeGreaterThan(0);
   // Cancellation during the fast path is not retried in the browser.
   const cancelled = new AbortController();
   mocks.renderPlainExport.mockImplementation(async () => { cancelled.abort(); throw new Error('The render was cancelled.'); });
