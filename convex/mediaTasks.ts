@@ -20,9 +20,11 @@ import { addMediaClip } from '../lib/editor/operations';
 import { timelineDuration } from '../lib/editor/types';
 import { commitTimeline, currentTimeline } from './lib/timeline';
 import { BEAT_ANALYSIS_ENGINE } from '../lib/media-analysis/beat-map';
+import { editingWorkflowActive } from './lib/assistant_workflow';
 
 const LEASE_MS = 60_000;
 const MAX_ATTEMPTS = 3;
+const IMPORT_PLACEMENT_DELAY_MS = 10_000, IMPORT_PLACEMENT_ATTEMPTS = 360;
 const eventResult = v.object({ success: v.boolean(), retryable: v.boolean(), error: v.optional(v.string()) });
 const taskState = v.object({ _id: v.id('mediaTasks'), kind: mediaTaskKind, status: mediaTaskStatus, progress: v.number(), attempt: v.number(), error: v.optional(v.string()), assetId: v.optional(v.id('assets')),activity:v.optional(mediaTaskActivity),activityStartedAt:v.optional(v.number()) });
 const renderSnapshot = v.object({ timeline: timelineValidator, assets: v.array(assetWithUrl), resolution: v.number(), fps: v.number(), quality: v.string() });
@@ -293,6 +295,28 @@ export const fail = mutation({ args: { ...mediaTaskCredentials, error: v.string(
   const task = await requireMediaTask(ctx, args.taskId, args.leaseToken);
   await failTask(ctx, task, args.error, args.retryable); return null;
 }});
+async function placeImportedVideo(ctx: MutationCtx, project: Doc<'projects'>, taskId: Id<'mediaTasks'>, output: Doc<'assets'> & { duration: number }) {
+  const timeline = currentTimeline(project), clipId = `import-${taskId}`;
+  if (timeline.clips.some(clip => clip.id === clipId)) return;
+  const next = addMediaClip(timeline, output, clipId, timelineDuration(timeline));
+  await commitTimeline(ctx, project, next, project.revision ?? 0);
+}
+export const placeImport = internalMutation({ args: { taskId: v.id('mediaTasks'), attempt: v.number() }, returns: v.null(), handler: async (ctx, args) => {
+  const task = await ctx.db.get(args.taskId);
+  const output = task?.status === 'completed' && task.outputAssetId ? await ctx.db.get(task.outputAssetId) : null;
+  if (!task || !output?.duration || output.ownerId !== task.ownerId || output.projectId !== task.projectId) return null;
+  const project = await readProject(ctx, task.projectId);
+  if (!project || project.deleting || project.ownerId !== task.ownerId) return null;
+  if (await editingWorkflowActive(ctx, project)) {
+    // After an hour the video simply stays in Sources.
+    if (args.attempt < IMPORT_PLACEMENT_ATTEMPTS) await ctx.scheduler.runAfter(IMPORT_PLACEMENT_DELAY_MS, internal.mediaTasks.placeImport, { taskId: task._id, attempt: args.attempt + 1 });
+    return null;
+  }
+  // The run may already have placed the waiting import from Sources.
+  if (currentTimeline(project).clips.some(clip => clip.assetId === output._id)) return null;
+  await placeImportedVideo(ctx, project, task._id, { ...output, duration: output.duration });
+  return null;
+}});
 export const complete = mutation({ args: { ...mediaTaskCredentials, result: taskResult }, returns: v.null(), handler: async (ctx, args) => {
   const saved = await ctx.db.get(args.taskId);
   if (saved?.status === 'completed' && saved.leaseToken === args.leaseToken) return null;
@@ -314,11 +338,11 @@ export const complete = mutation({ args: { ...mediaTaskCredentials, result: task
     const output = task.outputAssetId ? await ctx.db.get(task.outputAssetId) : null;
     if (!output || output.ownerId !== task.ownerId || output.projectId !== task.projectId || output.kind !== 'video' || !output.duration) throw new ConvexError('The imported video has not been stored yet.');
     const project = await requireProject(ctx, task.projectId, task.ownerId);
-    const timeline = currentTimeline(project);
-    const at = timelineDuration(timeline), duration = output.duration;
-    if (duration < 1 / timeline.fps) throw new ConvexError('The imported video is shorter than one timeline frame. It remains saved in Sources.');
-    const next = addMediaClip(timeline, { ...output, duration }, `import-${task._id}`, at);
-    await commitTimeline(ctx, project, next, project.revision ?? 0);
+    if (output.duration < 1 / currentTimeline(project).fps) throw new ConvexError('The imported video is shorter than one timeline frame. It remains saved in Sources.');
+    // A new revision would fail an AI edit's staged draft as "changed
+    // elsewhere". The import is saved in Sources; place it once the run settles.
+    if (await editingWorkflowActive(ctx, project)) await ctx.scheduler.runAfter(IMPORT_PLACEMENT_DELAY_MS, internal.mediaTasks.placeImport, { taskId: task._id, attempt: 1 });
+    else await placeImportedVideo(ctx, project, task._id, { ...output, duration: output.duration });
     await enqueueMediaTask(ctx, { ownerId: task.ownerId, projectId: task.projectId, assetId: output._id, kind: 'extract' });
     await enqueueMediaTask(ctx,{ownerId:task.ownerId,projectId:task.projectId,assetId:output._id,kind:'preview'});
     await enqueueMediaTask(ctx, { ownerId: task.ownerId, projectId: task.projectId, assetId: output._id, kind: 'understand' });
