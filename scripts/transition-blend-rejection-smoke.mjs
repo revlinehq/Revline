@@ -25,6 +25,9 @@ try {
   await page.setViewport({ width:1440, height:900 });await page.setContent('<html data-workspace-theme="dark"><body><div id="root"></div></body></html>');
   await page.addStyleTag({content:bundle.outputFiles.find(file=>file.path.endsWith('.css')).text});await page.addStyleTag({content:'body{margin:0;font:12px Arial;background:#171717}*{box-sizing:border-box}.editor-app{height:900px}header{height:54px;flex-shrink:0}'});await page.addScriptTag({content:bundle.outputFiles.find(file=>file.path.endsWith('.js')).text});
   await page.waitForSelector('[data-clip-id="a"]');await page.$eval('[data-clip-id="a"]',node=>node.dispatchEvent(new MouseEvent('dblclick',{bubbles:true})));await page.waitForSelector('[data-blend-mode="screen"]');
+  // Blend modes live in the collapsed Compositing disclosure (c55d5b2); open it like a user would.
+  const openCompositing=async scope=>{if(!await page.$eval(scope+' details.footage-compositing',node=>node.open))await page.click(scope+' details.footage-compositing > summary');await flush();};
+  await openCompositing('.preview-inspector');
   const before=await page.evaluate(()=>window.fixture.store.getState().timeline);
   await page.click('[data-blend-mode="screen"]');await flush();
   assert.deepEqual(errors,[], 'A rejected blend edit must not escape the click handler as a Runtime Error');
@@ -33,7 +36,7 @@ try {
   assert.equal(await page.evaluate(()=>window.fixture.store.getState().history.length),0,'Rejected edit adds no Undo/save');
   assert.equal(await page.$eval('[data-blend-mode="normal"]',node=>node.getAttribute('aria-pressed')),'true');
   await page.click('[aria-label="Dismiss error"]');await flush();
-  await page.setViewport({width:800,height:900});await flush();await page.$eval('[data-clip-id="a"]',node=>node.dispatchEvent(new MouseEvent('dblclick',{bubbles:true})));await page.waitForSelector('.preview-inspector-sheet [data-blend-mode="multiply"]');await page.click('.preview-inspector-sheet [data-blend-mode="multiply"]');await flush();
+  await page.setViewport({width:800,height:900});await flush();await page.$eval('[data-clip-id="a"]',node=>node.dispatchEvent(new MouseEvent('dblclick',{bubbles:true})));await page.waitForSelector('.preview-inspector-sheet [data-blend-mode="multiply"]');await openCompositing('.preview-inspector-sheet');await page.click('.preview-inspector-sheet [data-blend-mode="multiply"]');await flush();
   assert.deepEqual(errors,[], 'The responsive inspector must use the same safe edit handler');
   assert.deepEqual(await page.evaluate(()=>window.fixture.store.getState().timeline),before);
   await page.evaluate(()=>window.fixture.removeTransition());await flush();await page.click('.preview-inspector-sheet [data-blend-mode="screen"]');await flush();

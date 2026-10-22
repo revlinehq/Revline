@@ -66,6 +66,8 @@ try {
   await page.waitForFunction(() => document.querySelector('hyperframes-player')?.style.zIndex === '1');
   await page.evaluate(() => { const p = document.querySelector('hyperframes-player'); window.original = { player: p, document: p.iframeElement.contentDocument, source: p.iframeElement.contentDocument.querySelector('[data-source-clip="red"]') }; window.fixture.seek(1); });
   await check('Initial V2 overlays V1', [255, 0, 0]);
+  // Blend modes live in the collapsed Compositing disclosure of Clip settings.
+  await page.click('details.footage-compositing > summary'); await page.waitForSelector('[data-blend-mode="screen"]', { visible: true });
   await page.click('[data-blend-mode="screen"]'); await check('Clip settings Screen blends two layers', [255, 0, 255]);
   for (const [mode,expected] of [['multiply',[0,0,0]],['overlay',[0,0,255]],['plus-lighter',[255,0,255]],['difference',[255,0,255]],['normal',[255,0,0]]]) {await page.click('[data-blend-mode="'+mode+'"]');await check('Clip settings '+mode,expected);}
   await page.evaluate(()=>window.fixture.addFx());await page.click('[data-blend-mode="screen"]');await check('Clip settings Screen inside timed FX wrappers',[255,0,255]);

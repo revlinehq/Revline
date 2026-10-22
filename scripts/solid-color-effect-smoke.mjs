@@ -34,7 +34,7 @@ const server = createServer(async (req, res) => {
   const files = { '/fixture.js': js, '/fixture.css': css, '/vendor/visual-effects.js': runtime.outputFiles[0].text, '/green.svg': '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="18"><rect width="32" height="18" fill="#00ff00"/></svg>', '/export': exported };
   let body = files[path];
   if (path.startsWith('/vendor/') || path.startsWith('/fonts/')) body ??= await readFile('public' + path).catch(() => null);
-  if (!body) body = '<link rel="stylesheet" href="/fixture.css"><style>body{margin:0}.stage{width:640px;height:360px}.preview-canvas{width:640px;height:360px;position:relative}.hyperframes-host{position:absolute;inset:0}.preview-inspector{position:absolute;left:650px;top:0;width:300px;height:420px}.timeline-stage{width:960px;height:260px;display:flex}.timeline-panel{width:100%}</style><div id="root"></div><script src="/fixture.js"></script>';
+  if (!body) body = '<link rel="stylesheet" href="/fixture.css"><style>body{margin:0}.stage{width:640px;height:360px}.preview-canvas{width:640px;height:360px;position:relative}.hyperframes-host{position:absolute;inset:0}.preview-inspector{position:absolute;left:650px;top:0;width:300px;height:420px}.timeline-stage{width:960px;height:260px;display:flex;margin-top:70px}.timeline-panel{width:100%}</style><div id="root"></div><script src="/fixture.js"></script>';
   res.writeHead(200, { 'Content-Type': path.endsWith('.js') ? 'text/javascript' : path.endsWith('.css') ? 'text/css' : path.endsWith('.svg') ? 'image/svg+xml' : path.endsWith('.woff2') ? 'font/woff2' : 'text/html' }); res.end(body);
 });
 await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
@@ -56,6 +56,7 @@ try {
   await page.setViewport({ width: 1000, height: 900 }); await page.goto(origin, { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => document.querySelector('hyperframes-player')?.style.zIndex === '1');
   await page.evaluate(() => { const p = document.querySelector('hyperframes-player'); window.original = { player: p, doc: p.iframeElement.contentDocument, source: p.iframeElement.contentDocument.querySelector('[data-source-clip="base"]') }; });
+  // Cinematic looks now lead the Color category (10232a5); the fixture timeline starts below the 420px inspector so it cannot cover library rows.
   await page.click('[data-category="color"]');await page.click('button[aria-label="Solid color"]'); await page.waitForSelector('[aria-label="Solid color rectangle settings"]');
   await page.evaluate(() => window.fixture.seek(1.5)); await flush();
   await rgb('.stage', .5, .5, [37, 99, 235], 'New solid effect fills the preview frame');

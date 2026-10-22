@@ -5,6 +5,7 @@ import { copyFile, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import puppeteer from 'puppeteer';
+import sharp from 'sharp';
 import { generateComposition } from '../lib/editor/composition';
 import type { Timeline } from '../lib/editor/types';
 
@@ -23,13 +24,31 @@ async function main() {
   try{
     const page=await browser.newPage();await page.setViewport({width:1280,height:720});const errors:string[]=[];page.on('pageerror',e=>errors.push(String(e)));
     for(const preview of [false,true]){
-      await page.goto(`http://127.0.0.1:${(server.address() as {port:number}).port}/${preview?'preview.html':''}`,{waitUntil:'networkidle0'});await page.waitForSelector('.visual-effect-output');await page.evaluate('globalThis.__name = (fn) => fn');
-      const metrics=await page.evaluate(async()=>{
-        const runtime=(window as any).__revlineEffects;const video=document.querySelector('video')!;await new Promise<void>(resolve=>{video.onseeked=()=>resolve();video.currentTime=.5});(window as any).__timelines.revline.seek(.5,false);runtime.redraw();
-        const alpha=()=>{const canvas=document.querySelector<HTMLCanvasElement>('.visual-effect-output')!,copy=document.createElement('canvas');copy.width=canvas.width;copy.height=canvas.height;const ctx=copy.getContext('2d')!;ctx.drawImage(canvas,0,0);const pixels=ctx.getImageData(0,0,copy.width,copy.height).data;let removed=0;for(let i=3;i<pixels.length;i+=4)if(pixels[i]<250)removed++;const sample=(x:number,y:number)=>pixels[(Math.floor(y)*copy.width+Math.floor(x))*4+3];const x=(-video.offsetLeft+2)/video.offsetWidth*copy.width,y=(-video.offsetTop+2)/video.offsetHeight*copy.height;return{removed,pixels:Array.from(pixels),corner:sample(x,y),top:sample(copy.width/2,y)}};
-        const rounded=alpha();runtime.set('clip-1',{frameCorners:{enabled:false,amount:.06},colorGrade:{enabled:true,exposure:0,contrast:1,saturation:1,temperature:0,tint:0,vibrance:0.000001}});runtime.redraw();const square=alpha();let difference=0;for(let i=3;i<rounded.pixels.length;i+=4)if(rounded.pixels[i]!==square.pixels[i])difference++;runtime.set('clip-1',{frameCorners:{enabled:true,amount:.06}});runtime.redraw();const parent=video.parentElement!,r=parent.getBoundingClientRect();return{corner:rounded.corner,top:rounded.top,squareCorner:square.corner,removed:rounded.removed,squareRemoved:square.removed,changedAlphaPixels:difference,sourceWindow:{left:r.left,top:r.top,width:r.width,height:r.height}};
-      });
-      assert.equal(metrics.corner,0,'Visible crop corner reveals gradient');assert.equal(metrics.squareCorner,255,'Disabling corners restores opaque square boundary');assert.equal(metrics.top,255,'Top-edge center remains opaque');assert(metrics.changedAlphaPixels>10,`6% rounding must change visible cropped corners: ${JSON.stringify(metrics)}`);await page.screenshot({path:`/tmp/revline-rounded-contain-${preview?'preview':'export'}.png`});console.log(JSON.stringify({preview,...metrics}));
+      await page.goto(`http://127.0.0.1:${(server.address() as {port:number}).port}/${preview?'preview.html':''}`,{waitUntil:'networkidle0'});await page.evaluate('globalThis.__name = (fn) => fn');
+      await page.waitForFunction(()=>!!(window as any).__revlineEffects);
+      // Corner-only rounding is native CSS on the crop window in preview and export (bd50edd, f6c5d30):
+      // no effect canvas, no per-frame upload. Verify the actual composited pixels instead of canvas alpha.
+      await page.evaluate(async()=>{const video=document.querySelector('video')!;await new Promise<void>(resolve=>{video.onseeked=()=>resolve();video.currentTime=.5});(window as any).__timelines.revline.seek(.5,false);(window as any).__revlineEffects.redraw();});
+      const windowState=()=>page.evaluate(()=>{const node=document.querySelector('video')!.parentElement!,r=node.getBoundingClientRect();return{radius:node.style.borderRadius,width:parseFloat(node.style.width)||node.clientWidth,height:parseFloat(node.style.height)||node.clientHeight,rect:{left:r.left,top:r.top,width:r.width,height:r.height},canvas:!!document.querySelector('.visual-effect-output')};});
+      const capture=async()=>{const{data,info}=await sharp(await page.screenshot()).removeAlpha().raw().toBuffer({resolveWithObject:true});return{data,width:info.width};};
+      const at=(image:{data:Buffer;width:number},x:number,y:number)=>{const i=(Math.floor(y)*image.width+Math.floor(x))*3;return [image.data[i],image.data[i+1],image.data[i+2]];};
+      const distance=(a:number[],b:number[])=>a.reduce((sum,value,index)=>sum+Math.abs(value-b[index]),0);
+      const rounded=await windowState();
+      assert.equal(rounded.canvas,false,'Corner-only rounding stays native without an effect canvas');
+      assert.ok(Math.abs(parseFloat(rounded.radius)-.06*Math.min(rounded.width,rounded.height)*.5)<.01,`Native radius matches the export mask in untransformed window pixels: ${rounded.radius}`);
+      const corner={x:rounded.rect.left+2,y:rounded.rect.top+2},top={x:rounded.rect.left+rounded.rect.width/2,y:rounded.rect.top+2};
+      const roundedPixels=await capture();
+      await page.evaluate(()=>{(window as any).__revlineEffects.set('clip-1',{frameCorners:{enabled:false,amount:.06}});(window as any).__revlineEffects.redraw();});
+      const square=await windowState();const squarePixels=await capture();
+      await page.evaluate(()=>{document.querySelector('video')!.parentElement!.style.visibility='hidden';});const background=await capture();
+      await page.evaluate(()=>{document.querySelector('video')!.parentElement!.style.visibility='';(window as any).__revlineEffects.set('clip-1',{frameCorners:{enabled:true,amount:.06}});(window as any).__revlineEffects.redraw();});
+      let changed=0;for(let i=0;i<roundedPixels.data.length;i+=3)if(distance([roundedPixels.data[i],roundedPixels.data[i+1],roundedPixels.data[i+2]],[squarePixels.data[i],squarePixels.data[i+1],squarePixels.data[i+2]])>24)changed++;
+      const metrics={corner:at(roundedPixels,corner.x,corner.y),squareCorner:at(squarePixels,corner.x,corner.y),backgroundCorner:at(background,corner.x,corner.y),top:at(roundedPixels,top.x,top.y),squareTop:at(squarePixels,top.x,top.y),changedPixels:changed,squareRadius:square.radius,sourceWindow:rounded.rect};
+      assert.ok(distance(metrics.corner,metrics.backgroundCorner)<=24,`Visible crop corner reveals gradient: ${JSON.stringify(metrics)}`);
+      assert.ok(distance(metrics.squareCorner,metrics.backgroundCorner)>24,`Disabling corners restores the square footage boundary: ${JSON.stringify(metrics)}`);
+      assert.ok(distance(metrics.top,metrics.squareTop)<=24,'Top-edge center remains footage');
+      assert.ok(metrics.changedPixels>10,`6% rounding must change visible cropped corners: ${JSON.stringify(metrics)}`);
+      await page.screenshot({path:`/tmp/revline-rounded-contain-${preview?'preview':'export'}.png`});console.log(JSON.stringify({preview,...metrics}));
     }
     assert.deepEqual(errors,[]);
   }finally{await browser.close();await new Promise<void>(r=>server.close(()=>r()));await rm(directory,{recursive:true,force:true});}

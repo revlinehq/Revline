@@ -90,7 +90,8 @@ try {
   await check('switch text fade');
   const fade = await page.evaluate(() => {
     const p = document.querySelector('hyperframes-player'), doc = p.iframeElement.contentDocument;
-    const at = t => { p.seek(t); return Number(doc.defaultView.getComputedStyle(doc.querySelector('.text-content')).opacity); };
+    // Fade opacity is combined with clip motion on the live text layer's .text-motion wrapper (textLayerFrame).
+    const at = t => { p.seek(t); return Number(doc.defaultView.getComputedStyle(doc.querySelector('.text-content').closest('.text-motion')).opacity); };
     return [at(0), at(.15), at(.3)];
   });
   assert.ok(fade[0] < .001 && fade[1] > 0 && fade[1] < 1 && fade[2] > .999, 'live fade renders deterministic intro frames');
@@ -163,10 +164,14 @@ try {
     const s = window.testStore.getState(), clip = s.timeline.clips.find(c => c.kind === 'video');
     window.testStore.setState({ selectedId: clip.id, selectedIds: [clip.id], playhead: 2 });
   });
-  await page.click('#inspector-effects-tab');
-  await page.click('.visual-effects-add');
-  await page.waitForSelector('[role="menuitem"]');
-  await page.evaluate(() => [...document.querySelectorAll('[role="menuitem"]')].find(n => n.textContent.trim() === 'Color').click());
+  // Visual effects are added from the Tools library (c55d5b2); the panel starts collapsed to the tools rail (e832836).
+  const library = async category => {
+    if (await page.$('[aria-label="Expand editing panel"]')) await page.click('[aria-label="Expand editing panel"]');
+    await page.waitForSelector('#inspector-tools-tab'); await page.click('#inspector-tools-tab');
+    await page.waitForSelector('.effect-library'); await page.click(`[data-category="${category}"]`);
+  };
+  await library('color');
+  await page.click('.library-look[aria-label="Color & light"]');
   await page.waitForSelector('input[aria-label="Exposure"]');
   await settle();
   await page.evaluate(() => {
@@ -213,8 +218,11 @@ try {
     await page.waitForFunction(sourceTime => { const v = document.querySelector('hyperframes-player')?.iframeElement?.contentDocument?.querySelector('video'); return v && !v.seeking && Math.abs(v.currentTime - sourceTime) < .05; }, {}, sourceTime);
     assert.equal(await page.evaluate(() => document.querySelector('hyperframes-player').iframeElement.contentDocument.querySelector('video').playbackRate), rate, 'Native preview uses the clip speed');
   }
-  await page.evaluate(() => [...document.querySelectorAll('.timed-effect-presets button')].find(button => button.textContent.includes('Cinematic bars')).click());
+  // Timed presets come from the Motion library; the new effect is selected and its settings open from the library heading.
+  await library('motion');
+  await page.click('.library-look[aria-label="Cinema bars"]');
   await page.waitForFunction(() => document.querySelector('hyperframes-player')?.iframeElement?.contentDocument?.querySelector('.cinematic-bar'));
+  await page.click('.inspector-library-heading button');
   await page.waitForSelector('input[aria-label="Size"]');
   await page.waitForSelector('input[aria-label="Speed"]');
   await settle();
@@ -253,7 +261,9 @@ try {
   assert.equal(savedSpeed, 4, 'The selected Speed control saves its multiplier');
   assert.ok(Math.abs(rapidFirstFrame.coverage - .148148) < .01, '4× speed renders the first 30-fps frame at its correct eased position');
   assert.ok(Math.abs((await barAt(stretched.start + .1)).coverage - 1) < .01, '4× speed enters in 0.1 seconds');
-  await page.evaluate(() => [...document.querySelectorAll('.timed-effect-presets button')].find(button => button.textContent.includes('Quick zoom in')).click());
+  // Zoom In/Out/Punch are one library entry that adds quick-zoom-in (17ce5f6).
+  await library('motion');
+  await page.click('.library-look[aria-label="Zoom"]');
   await page.waitForFunction(() => window.testStore.getState().timeline.clips.some(clip => clip.effectPreset === 'quick-zoom-in'));
   await page.evaluate(() => {
     const state = window.testStore.getState();
