@@ -12,10 +12,10 @@ The existing `cloudflare/media` Worker signs and serves R2 media. This separate 
 
 ## Runtime and lifecycle
 
-- One named production instance; `standard-2` provides 1 vCPU, 6 GiB memory and 12 GB ephemeral disk. Start with one processing slot. OpenMP/MKL thread caps avoid excessive CPU contention.
+- One named production instance; `standard-2` provides 1 vCPU, 6 GiB memory and 12 GB ephemeral disk. Start with one processing slot. OpenMP/MKL thread caps (two, matching the current `standard-3` vCPUs) avoid excessive CPU contention.
 - A protected wake request schedules a Durable Object alarm and promptly acknowledges it. The alarm starts processing outside the request lifetime. Convex sends the wake after each queued attempt becomes claimable, including retries; waking at initial enqueue would run before the asynchronous workflow publishes attempt 1. A one-minute Cron Trigger provides fallback recovery, subject to Cloudflare trigger propagation and startup time.
 - The consumer subscribes to Convex's ready queue and claims tasks through the existing worker API. It renews task leases every 20 seconds, reuses the normal progress/result APIs and enforces the existing 15-minute task timeout.
-- A private health port becomes ready independently of rendering or model inference. The consumer exits after 90 seconds without work. Health polling does not extend its idle timer, so the container can scale to zero.
+- A private health port becomes ready independently of rendering or model inference. The consumer exits after 10 minutes without work (`MEDIA_WORKER_IDLE_MS`, up to 60 minutes), so back-to-back exports skip the cold start; idle time still bills memory and disk. Health polling does not extend its idle timer, so the container can scale to zero.
 - After all task slots settle, transport cleanup is bounded to five seconds. This prevents an unfinished WebSocket handshake from keeping an idle container running indefinitely.
 - When the edge controller sees a new image digest, it asks the previous consumer to stop claiming work and finish its current task. The next tick starts the replacement image after the previous process exits. Do not rotate the worker secret simultaneously with a runtime rollout, because the old image must authenticate its drain request.
 - SIGTERM aborts active work; unfinished task leases expire and Convex retries. Disk is temporary: downloaded sources and export scratch files are cleaned by `processMediaTask`. A sudden host failure can discard scratch files without discarding the saved project or durable task.
@@ -234,7 +234,7 @@ a later failure; it does not establish that the original request is now accepted
 A worker-local cache retains completed immutable source and analysis files across
 attempts, scoped to backend, owner, project, source identity and encoding profile.
 Hard links preserve an active task's input when its cache entry is evicted.
-Retention is bounded to 512 MiB, 16 files and 20 minutes idle, with a 1 GiB
+Retention was bounded to 512 MiB, 16 files and 20 minutes idle, with a 1 GiB
 free-space floor. Cache failures fall back to normal download and preparation.
 Fresh authorized task snapshots remain required; signed URLs are not cache keys.
 
@@ -265,7 +265,7 @@ The edge controller wakes two named processor instances: the existing
 one task slot and its own container resources. Convex claims remain atomic, so
 two consumers cannot process the same lease. An occupied export no longer
 blocks every other export or analysis task. Each idle container still exits
-after 90 seconds; the one-minute cron checks both slots independently.
+after its idle timeout; the one-minute cron checks both slots independently.
 The earlier `production-3` through `production-5` slots are marked retired,
 their alarms are removed and running consumers drain. They cannot restart
 from a stale alarm or resume taking work after retirement.
@@ -321,3 +321,22 @@ source geometry and a structured targets array; pre-upgrade prose-only cached
 results are not reused. Worker health/status exposes its processor version for
 rollout verification. Coordinates describe observed frames, not guaranteed
 continuous tracking through occlusion or between sparse samples.
+
+### Export throughput on the 2-vCPU profile
+
+`scripts/render-resources.mjs` sizes rendering from the host: hosts with at
+least 6.5 GiB use two HyperFrames capture workers without the low-memory
+profile, two FFmpeg decoder/encoder slots and an H.264 encoder threaded across
+the vCPUs; smaller hosts keep the previous one-worker, one-slot, low-memory
+profile. `REVLINE_RENDER_WORKERS`, `REVLINE_RENDER_FFMPEG_SLOTS`,
+`REVLINE_RENDER_ENCODE_THREADS` and `PRODUCER_LOW_MEMORY_MODE` override it.
+With two workers HyperFrames captures screenshot frames to disk and encodes
+afterwards, so long exports need disk for captured as well as extracted frames.
+Standard exports keep libx264 fast at CRF 18; high exports use medium at CRF 16
+instead of slow at CRF 15. Queued exports are claimed before other media tasks.
+
+The worker cache now retains up to 2 GiB (`MEDIA_ANALYSIS_CACHE_MAX_MB`) with a
+3 GiB free-space floor. On a 2-CPU-pinned local check the bundled 1080p60 high
+smoke render fell from 7.4 to 4.9 seconds and the many-cut memory smoke from 6.6
+to 4.7 seconds, with peak render-process RSS rising from about 1.1 to 1.7 GiB.
+These short fixtures do not establish hosted steady-state throughput.
