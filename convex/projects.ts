@@ -7,15 +7,14 @@ import { ConvexError, v } from "convex/values";
 import { internal } from "./_generated/api";
 import { mutation, query } from "./_generated/server";
 import { listLimit, requireOwner, requireProject } from "./lib/auth";
-import { commitTimeline, currentTimeline, serializedBytes, validateTimeline } from "./lib/timeline";
+import { commitTimeline, currentTimeline, HISTORY_LIMIT, serializedBytes, validateTimeline } from "./lib/timeline";
 import { addMediaClip, patchClip } from '../lib/editor/operations';
-import { applyTimelineEdit } from '../lib/editor/timeline-sync';
+import { applyTimelineEdit, TIMELINE_LOCKED } from '../lib/editor/timeline-sync';
 import { normalizeTimeline, type Timeline } from '../lib/editor/types';
 import { aspectRatio, projectDocument, timelineValidator } from "./schema";
 import { editingWorkflowActive } from './lib/assistant_workflow';
 import { equalTimelineValue } from '../lib/editor/timeline-equality';
-import { timelineHistoryKey } from '../lib/editor/timeline-history-key';
-const workflowLocked = 'Revline is editing your timeline. Wait for it to finish or stop the edit before making changes.';
+import { LOCAL_UNDO_LIMIT, timelineHistoryKey } from '../lib/editor/timeline-history-key';
 function projectTitle(value: string) { const title = value.trim(); if (!title || title.length > 120) throw new ConvexError("Title must contain between 1 and 120 characters"); return title; }
 export const create = mutation({ args: { title: v.string(), aspectRatio, assetIds: v.optional(v.array(v.id('assets'))) }, returns: v.id("projects"), handler: async (ctx, args) => {
   const ownerId = await requireOwner(ctx); await requireEditorAccess(ctx, ownerId); const now = Date.now();
@@ -75,7 +74,7 @@ export const get = query({ args: { projectId: v.id("projects"),includeHistory:v.
 }});
 export const history=query({args:{projectId:v.id('projects')},returns:v.array(timelineValidator),handler:async(ctx,args)=>{
   await projectIdentity(ctx,args.projectId,await requireOwner(ctx));
-  const rows=await ctx.db.query('timelineRevisions').withIndex('by_project_sequence',q=>q.eq('projectId',args.projectId)).order('desc').take(10);
+  const rows=await ctx.db.query('timelineRevisions').withIndex('by_project_sequence',q=>q.eq('projectId',args.projectId)).order('desc').take(HISTORY_LIMIT);
   if(rows.length)return rows.reverse().map(row=>normalizeTimeline(row.timeline));
   const access=await ctx.db.query('projectAccess').withIndex('by_project',q=>q.eq('projectId',args.projectId)).unique();if(access?.historyStored)return [];
   // Old projects are readable before the bounded migration reaches them.
@@ -92,21 +91,22 @@ export const list = query({ args: { limit: v.optional(v.number()) }, returns: v.
   }));
 }});
 export const update = mutation({ args: { projectId: v.id("projects"), title: v.optional(v.string()), aspectRatio: v.optional(aspectRatio) }, returns: v.null(), handler: async (ctx, args) => {
-  const project = await requireProject(ctx, args.projectId, await requireOwner(ctx)); await requireEditorAccess(ctx, project.ownerId);
+  const project = await requireProject(ctx, args.projectId, await requireOwner(ctx), false); await requireEditorAccess(ctx, project.ownerId);
   if (args.aspectRatio !== undefined && args.aspectRatio !== currentTimeline(project).aspectRatio) {
-    if (await editingWorkflowActive(ctx, project)) throw new ConvexError(workflowLocked);
+    if (await editingWorkflowActive(ctx, project)) throw new ConvexError(TIMELINE_LOCKED);
     await commitTimeline(ctx, project, { ...currentTimeline(project), aspectRatio: args.aspectRatio }, project.revision ?? 0);
   }
   if (args.title !== undefined) await writeProject(ctx,project._id, { title: projectTitle(args.title), updatedAt: Date.now() });
   return null;
 }});
 export const saveTimeline = mutation({ args: { projectId: v.id("projects"), timeline: timelineValidator, baseTimeline: v.optional(timelineValidator), undoTo: v.optional(timelineValidator), undoHistoryKeys: v.optional(v.array(v.string())), undoTargetKey: v.optional(v.string()), expectedRevision: v.number() }, returns: v.object({ revision: v.number(), timeline: timelineValidator }), handler: async (ctx, args) => {
-  const project = await requireProject(ctx, args.projectId, await requireOwner(ctx)); await requireEditorAccess(ctx, project.ownerId);
+  // commitTimeline reads stored history itself; skip hydrating it here.
+  const project = await requireProject(ctx, args.projectId, await requireOwner(ctx), false); await requireEditorAccess(ctx, project.ownerId);
   let timeline = args.timeline;
   let undoTo = args.undoTo, undoTargetKey = args.undoTargetKey;
   let expectedRevision = args.expectedRevision;
   if (args.undoTo && serializedBytes(args.undoTo) > 150_000) throw new ConvexError('Timeline is too large');
-  if (args.undoHistoryKeys && (!args.undoTo || args.undoHistoryKeys.length > 40 || args.undoHistoryKeys.some(key => !/^[a-f0-9]{64}$/.test(key)))) throw new ConvexError('Invalid undo history');
+  if (args.undoHistoryKeys && (!args.undoTo || args.undoHistoryKeys.length > LOCAL_UNDO_LIMIT || args.undoHistoryKeys.some(key => !/^[a-f0-9]{64}$/.test(key)))) throw new ConvexError('Invalid undo history');
   if (undoTargetKey !== undefined && (!undoTo || !/^[a-f0-9]{64}$/.test(undoTargetKey))) throw new ConvexError('Invalid undo target');
   if (args.baseTimeline) {
     timeline = await validateTimeline(ctx, project, timeline);
@@ -126,14 +126,14 @@ export const saveTimeline = mutation({ args: { projectId: v.id("projects"), time
     const current = currentTimeline(project);
     // Late acknowledgements of unchanged data must not invalidate the AI draft.
     if (equalTimelineValue(normalizeTimeline(timeline), current)) return { revision: project.revision ?? 0, timeline: current };
-    throw new ConvexError(workflowLocked);
+    throw new ConvexError(TIMELINE_LOCKED);
   }
   const revision = await commitTimeline(ctx, project, timeline, expectedRevision, undoTo, args.undoHistoryKeys, undoTargetKey);
   return { revision, timeline: normalizeTimeline(timeline) };
 }});
 export const undo = mutation({ args: { projectId: v.id("projects") }, returns: v.number(), handler: async (ctx, args) => {
   const project = await requireProject(ctx, args.projectId, await requireOwner(ctx)); await requireEditorAccess(ctx, project.ownerId);
-  if (await editingWorkflowActive(ctx, project)) throw new ConvexError(workflowLocked);
+  if (await editingWorkflowActive(ctx, project)) throw new ConvexError(TIMELINE_LOCKED);
   const history = (project.history ?? []).map(normalizeTimeline); const previous = history.pop();
   if (!previous) throw new ConvexError("No edits to undo"); const revision = (project.revision ?? 0) + 1;
   await writeProject(ctx,project._id, { timeline: previous, aspectRatio: previous.aspectRatio, history, revision, updatedAt: Date.now() }); return revision;

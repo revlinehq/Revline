@@ -2,8 +2,13 @@ import { ConvexError } from 'convex/values';
 import type { Doc,Id } from '../_generated/dataModel';
 import type { MutationCtx,QueryCtx } from '../_generated/server';
 import { equalTimelineValue } from '../../lib/editor/timeline-equality';
-import { boundedHistory } from './timeline';
+import { HISTORY_KEY_VERSION, timelineHistoryKey } from '../../lib/editor/timeline-history-key';
+import { normalizeTimeline, type Timeline } from '../../lib/editor/types';
+import { boundedEntries, HISTORY_LIMIT } from './timeline';
 type Context=MutationCtx|QueryCtx;
+/** A history snapshot; `id` marks a stored row that can be kept as-is. */
+export type HistoryEntry={timeline:Timeline;id?:Id<'timelineRevisions'>;key?:string};
+type HistoryPlan=(previous:HistoryEntry[])=>Promise<HistoryEntry[]>;
 const aiKeys=['aiQueuePaused','aiWorkflowId','aiRunning','aiEditing','aiError','aiRunId','aiUndoRecorded','aiCheckpointRevision','aiAnalysisUsage','aiRequest','aiRecovery'] as const;
 type AI=Pick<Doc<'projects'>,typeof aiKeys[number]>;
 function aiFields(project:AI):AI {return Object.fromEntries(aiKeys.filter(key=>project[key]!==undefined).map(key=>[key,project[key]]));}
@@ -23,31 +28,44 @@ export async function projectRun(ctx:Context,projectId:Id<'projects'>,ownerId?:s
 export async function readProject(ctx:Context,projectId:Id<'projects'>,includeHistory=true):Promise<Doc<'projects'>|null> {
   const project=await ctx.db.get(projectId);if(!project)return null;
   const run=await ctx.db.query('aiRuns').withIndex('by_project',q=>q.eq('projectId',projectId)).unique();
-  const revisions=includeHistory&&project.history===undefined?await ctx.db.query('timelineRevisions').withIndex('by_project_sequence',q=>q.eq('projectId',projectId)).order('desc').take(10):[];
+  const revisions=includeHistory&&project.history===undefined?await ctx.db.query('timelineRevisions').withIndex('by_project_sequence',q=>q.eq('projectId',projectId)).order('desc').take(HISTORY_LIMIT):[];
   // Legacy fields support rollout and old saved fixtures until their next write.
   return {...project,...aiFields(run??{}),...aiFields(project),history:includeHistory?project.history??revisions.reverse().map(row=>row.timeline):undefined};
 }
-async function writeHistory(ctx:MutationCtx,project:Doc<'projects'>,history:NonNullable<Doc<'projects'>['history']>) {
-  const next=boundedHistory(history),old=(await ctx.db.query('timelineRevisions').withIndex('by_project_sequence',q=>q.eq('projectId',project._id)).order('desc').take(11)).reverse();
-  let bestStart=0,bestLength=0;
-  for(let start=0;start<old.length;start++){let length=0;while(start+length<old.length&&length<next.length&&equalTimelineValue(old[start+length].timeline,next[length]))length++;if(length>bestLength){bestStart=start;bestLength=length;}}
-  for(let index=0;index<old.length;index++)if(index<bestStart||index>=bestStart+bestLength)await ctx.db.delete(old[index]._id);
-  let sequence=old.at(-1)?.sequence??0;
-  for(const timeline of next.slice(bestLength))await ctx.db.insert('timelineRevisions',{projectId:project._id,ownerId:project.ownerId,sequence:++sequence,timeline});
+/** Replace history with whole snapshots. One forward scan keeps stored rows
+ * that match in order; common edits (pop, filter) compare each row once. */
+function replaceHistory(history:Timeline[]):HistoryPlan {
+  return async previous=>{let from=0;return history.map(input=>{
+    const timeline=normalizeTimeline(input);
+    for(let index=from;index<previous.length;index++)if(equalTimelineValue(previous[index].timeline,timeline)){from=index+1;return previous[index];}
+    return {timeline};
+  });};
+}
+async function writeHistory(ctx:MutationCtx,project:Doc<'projects'>,plan:HistoryPlan) {
+  const rows=(await ctx.db.query('timelineRevisions').withIndex('by_project_sequence',q=>q.eq('projectId',project._id)).order('desc').take(HISTORY_LIMIT+1)).reverse();
+  const previous=project.history!==undefined?project.history.map(timeline=>({timeline})):rows.slice(-HISTORY_LIMIT).map(row=>({timeline:row.timeline,id:row._id,key:row.keyVersion===HISTORY_KEY_VERSION?row.key:undefined}));
+  // Kept rows must stay in sequence order ahead of every inserted snapshot.
+  const order=new Map(rows.map((row,index)=>[row._id,index]));let last=-1,fresh=false;
+  const next=boundedEntries(await plan(previous)).map(entry=>{const index=entry.id===undefined?undefined:order.get(entry.id);if(!fresh&&index!==undefined&&index>last){last=index;return entry;}fresh=true;return {timeline:entry.timeline,key:entry.key};});
+  const kept=new Set(next.flatMap(entry=>entry.id?[entry.id]:[]));
+  for(const row of rows)if(!kept.has(row._id))await ctx.db.delete(row._id);
+  let sequence=rows.at(-1)?.sequence??0;
+  for(const entry of next)if(!entry.id)await ctx.db.insert('timelineRevisions',{projectId:project._id,ownerId:project.ownerId,sequence:++sequence,timeline:entry.timeline,key:entry.key??await timelineHistoryKey(entry.timeline),keyVersion:HISTORY_KEY_VERSION});
 }
 export async function syncProjectCatalog(ctx:MutationCtx,project:Doc<'projects'>) {
   const existing=await ctx.db.query('projectCatalog').withIndex('by_project',q=>q.eq('projectId',project._id)).unique();
   const values={projectId:project._id,ownerId:project.ownerId,title:project.title,aspectRatio:project.aspectRatio,createdAt:project.createdAt,updatedAt:project.updatedAt,clipCount:project.timeline?.clips.length??0,aiRunning:!!project.aiRunning,deleting:project.deleting};
   if(existing)await ctx.db.patch(existing._id,values);else await ctx.db.insert('projectCatalog',values);
 }
-/** One write seam separates run state/history while preserving the public project shape. */
-export async function writeProject(ctx:MutationCtx,projectId:Id<'projects'>,patch:Partial<Omit<Doc<'projects'>,'_id'|'_creationTime'>>) {
+/** One write seam separates run state/history while preserving the public project shape.
+ * `planHistory` derives the next history from the stored one without a second read. */
+export async function writeProject(ctx:MutationCtx,projectId:Id<'projects'>,patch:Partial<Omit<Doc<'projects'>,'_id'|'_creationTime'>>,planHistory?:HistoryPlan) {
   const raw=await ctx.db.get(projectId);if(!raw)throw new ConvexError('Project not found');
   const existing=await ctx.db.query('aiRuns').withIndex('by_project',q=>q.eq('projectId',projectId)).unique();
   const previous={...raw,...aiFields(existing??{}),...aiFields(raw)},next={...previous,...patch};
   const aiPatch=Object.fromEntries(aiKeys.map(key=>[key,next[key]]));
   if(!existing)await ctx.db.insert('aiRuns',{projectId,ownerId:raw.ownerId,...aiFields(next)});else if(aiKeys.some(key=>Object.hasOwn(patch,key)||Object.hasOwn(raw,key)))await ctx.db.patch(existing._id,aiPatch);
-  if(Object.hasOwn(patch,'history')||raw.history!==undefined)await writeHistory(ctx,raw,patch.history??raw.history??[]);
+  if(planHistory||Object.hasOwn(patch,'history')||raw.history!==undefined)await writeHistory(ctx,raw,planHistory??replaceHistory(patch.history??raw.history??[]));
   const plain={...patch,history:undefined,...Object.fromEntries(aiKeys.map(key=>[key,undefined]))};
   await ctx.db.patch(projectId,plain);
   const access=await ctx.db.query('projectAccess').withIndex('by_project',q=>q.eq('projectId',projectId)).unique();

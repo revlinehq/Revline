@@ -310,7 +310,7 @@ export const complete = mutation({ args: { ...mediaTaskCredentials, result: task
   } else if (task.kind === 'import') {
     const output = task.outputAssetId ? await ctx.db.get(task.outputAssetId) : null;
     if (!output || output.ownerId !== task.ownerId || output.projectId !== task.projectId || output.kind !== 'video' || !output.duration) throw new ConvexError('The imported video has not been stored yet.');
-    const project = await requireProject(ctx, task.projectId, task.ownerId);
+    const project = await requireProject(ctx, task.projectId, task.ownerId, false);
     const timeline = currentTimeline(project);
     const at = timelineDuration(timeline), duration = output.duration;
     if (duration < 1 / timeline.fps) throw new ConvexError('The imported video is shorter than one timeline frame. It remains saved in Sources.');

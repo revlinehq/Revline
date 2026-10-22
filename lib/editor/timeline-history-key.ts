@@ -2,6 +2,9 @@ import { normalizeTimeline, type Timeline } from './types';
 
 /** Local undo depth; a save sends at most this many history fingerprints. */
 export const LOCAL_UNDO_LIMIT = 40;
+/** Bump when canonical() or normalizeTimeline output changes: stored server
+ * fingerprints from another version are recomputed instead of trusted. */
+export const HISTORY_KEY_VERSION = 1;
 
 function canonical(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(canonical);

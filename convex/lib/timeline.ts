@@ -1,5 +1,5 @@
 import { validateVisualTransform } from '../../lib/editor/visual-inputs';
-import { writeProject } from './project_data';
+import { writeProject, type HistoryEntry } from './project_data';
 import { validateClipEffects } from '../../lib/editor/clip-effects';
 import { playbackRateOf, sourceEndOf } from '../../lib/editor/playback-rate';
 import { transitionSources } from '../../lib/editor/clip-transitions';
@@ -9,15 +9,24 @@ import { ConvexError } from "convex/values";
 import { layerGroup, maxTrackCount, normalizeTimeline, trackOf, type Timeline } from "../../lib/editor/types";
 import { equalTimelineValue } from '../../lib/editor/timeline-equality';
 import { timelineHistoryKey } from '../../lib/editor/timeline-history-key';
+import { TIMELINE_CONFLICT } from '../../lib/editor/timeline-sync';
 import type { Doc } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
 
 export function serializedBytes(value: unknown) { return new TextEncoder().encode(JSON.stringify(value)).byteLength; }
-export function boundedHistory(history: Timeline[]) {
-  const snapshots = history.slice(-10).map(normalizeTimeline);
-  while (snapshots.length && serializedBytes(snapshots) > 500_000) snapshots.shift();
-  return snapshots;
+/** Stored undo snapshots: the newest entries within both budgets. */
+export const HISTORY_LIMIT = 10, HISTORY_BYTES = 500_000;
+export function boundedEntries<T extends { timeline: Timeline; id?: unknown }>(entries: T[]): T[] {
+  // Stored rows were normalized when written; only new snapshots need it.
+  const kept = entries.slice(-HISTORY_LIMIT).map(entry => entry.id ? entry : { ...entry, timeline: normalizeTimeline(entry.timeline) });
+  // Serialized array bytes: entries, separating commas, and brackets.
+  const sizes = kept.map(entry => serializedBytes(entry.timeline));
+  let total = sizes.reduce((sum, size) => sum + size, 0) + Math.max(kept.length - 1, 0) + 2;
+  while (kept.length && total > HISTORY_BYTES) { total -= sizes.shift()! + (kept.length > 1 ? 1 : 0); kept.shift(); }
+  return kept;
 }
+/** Stored rows carry a current-version fingerprint; others fall back to hashing. */
+export function historyKeys(entries: HistoryEntry[]) { return Promise.all(entries.map(entry => entry.key ?? timelineHistoryKey(entry.timeline))); }
 export function currentTimeline(project: Doc<"projects">): Timeline {
   return normalizeTimeline(project.timeline ?? { clips: [], fps: 30, aspectRatio: project.aspectRatio });
 }
@@ -126,32 +135,33 @@ function matchedUndoHistory(saved: string[], preceding: string[], target: string
 }
 
 export async function commitTimeline(ctx: MutationCtx, project: Doc<"projects">, timeline: Timeline, expectedRevision: number, undoTo?: Timeline, undoHistoryKeys?: string[], undoTargetKey?: string) {
-  if ((project.revision ?? 0) !== expectedRevision) throw new ConvexError("The timeline changed elsewhere. Reload before saving.");
+  if ((project.revision ?? 0) !== expectedRevision) throw new ConvexError(TIMELINE_CONFLICT);
   timeline = await validateTimeline(ctx, project, timeline);
-  const revision = expectedRevision + 1;
-  let history = [...(project.history ?? []), currentTimeline(project)];
-  if (undoTo) {
+  const revision = expectedRevision + 1, current = currentTimeline(project);
+  // The write seam reads history once; retained rows are kept, not rewritten.
+  await writeProject(ctx, project._id, { timeline, aspectRatio: timeline.aspectRatio, revision, updatedAt: Date.now() }, async previous => {
+    if (!undoTo) return [...previous, { timeline: current }];
     // Undo consumes history instead of recording its old state as a new edit.
     // A following gesture may share this save; retain its actual undo target.
-    const previous = project.history ?? [], target = normalizeTimeline(undoTo);
+    const target = normalizeTimeline(undoTo);
+    let history: HistoryEntry[];
     if (undoHistoryKeys === undefined) {
       // Keep earlier clients compatible during the backend-first rollout.
-      const keys = undoTargetKey ? await Promise.all(previous.map(timelineHistoryKey)) : undefined;
+      const keys = undoTargetKey ? await historyKeys(previous) : undefined;
       let index = -1;
       for (let candidate = previous.length - 1; candidate >= 0; candidate--) {
-        if (keys ? keys[candidate] === undoTargetKey : equalTimelineValue(normalizeTimeline(previous[candidate]), target)) { index = candidate; break; }
+        if (keys ? keys[candidate] === undoTargetKey : equalTimelineValue(normalizeTimeline(previous[candidate].timeline), target)) { index = candidate; break; }
       }
       history = index < 0 ? [] : previous.slice(0, index);
-      if (index >= 0 && !equalTimelineValue(timeline, target)) history.push(await validateTimeline(ctx, project, target));
+      if (index >= 0 && !equalTimelineValue(timeline, target)) history.push({ timeline: await validateTimeline(ctx, project, target) });
     } else {
-      const keys = await Promise.all(previous.map(timelineHistoryKey));
-      const matched = matchedUndoHistory(keys, undoHistoryKeys, undoTargetKey ?? await timelineHistoryKey(target));
+      const matched = matchedUndoHistory(await historyKeys(previous), undoHistoryKeys, undoTargetKey ?? await timelineHistoryKey(target));
       // Unsaved intermediate gestures have no exact server snapshot. Their
       // preceding local fingerprints still identify the valid persisted past.
       history = matched.map(index => previous[index]);
-      if (!equalTimelineValue(timeline, target)) history.push(await validateTimeline(ctx, project, target));
+      if (!equalTimelineValue(timeline, target)) history.push({ timeline: await validateTimeline(ctx, project, target) });
     }
-  }
-  await writeProject(ctx,project._id, { timeline, aspectRatio: timeline.aspectRatio, revision, history: boundedHistory(history), updatedAt: Date.now() });
+    return history;
+  });
   return revision;
 }

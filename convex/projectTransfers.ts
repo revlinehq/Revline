@@ -10,7 +10,7 @@ import { createProject, writeProject } from './lib/project_data';
 import { enqueueMediaTask } from './mediaTasks';
 import { hasPreview } from './lib/media_storage';
 import { recordAssetStorage } from './lib/storage_accounting';
-import { serializedBytes, validateTimeline } from './lib/timeline';
+import { HISTORY_BYTES, HISTORY_LIMIT, serializedBytes, validateTimeline } from './lib/timeline';
 
 const ownerArgs = { ownerId: v.string(), email: v.string() };
 const mediaValidator = v.object({
@@ -51,7 +51,7 @@ function validateSnapshot(args: Snapshot) {
   if (!uuid.test(args.transferId) || !/^[a-f0-9]{64}$/i.test(args.fingerprint)) throw new ConvexError('Invalid transfer identity or fingerprint');
   if (!Number.isSafeInteger(args.sourceRevision) || args.sourceRevision < 0) throw new ConvexError('Invalid source revision');
   if (args.timeline.aspectRatio !== args.aspectRatio || !args.timeline.clips.length) throw new ConvexError('A shared transfer needs a nonempty timeline matching its project canvas');
-  if (args.history.length > 10 || serializedBytes(args.history) > 500_000) throw new ConvexError('Transfer history exceeds its snapshot limits');
+  if (args.history.length > HISTORY_LIMIT || serializedBytes(args.history) > HISTORY_BYTES) throw new ConvexError('Transfer history exceeds its snapshot limits');
   if (args.media.length > 200) throw new ConvexError('A transfer supports up to 200 media sources');
   boundedChat(args.conversation, 1000, 1_000_000); boundedChat(args.publicChat, 200, 200_000);
   const ids = new Set<string>(), keys = new Set<string>(), prefix = `media/${args.ownerId}/${args.transferId}/`;
