@@ -188,6 +188,9 @@ export async function detachAnalysisRequest(ctx:MutationCtx,request:Doc<'analysi
   await ctx.db.delete(request._id);
 }
 async function firstClaimable(ctx:MutationCtx|QueryCtx,processorVersion=1) {
+  // Exports are interactive; claim them before long queued analysis work.
+  const render=await ctx.db.query('mediaTasks').withIndex('by_status_claimable_kind_created',q=>q.eq('status','queued').eq('claimable',true).eq('kind','render')).filter(q=>q.or(q.eq(q.field('requiredProcessorVersion'),undefined),q.lte(q.field('requiredProcessorVersion'),processorVersion))).first();
+  if(render)return render;
   const indexed=await ctx.db.query('mediaTasks').withIndex('by_status_claimable_created',q=>q.eq('status','queued').eq('claimable',true)).filter(q=>q.or(q.eq(q.field('requiredProcessorVersion'),undefined),q.lte(q.field('requiredProcessorVersion'),processorVersion))).first();
   // Legacy prepared tasks remain claimable during rollout, without a ten-row cap.
   return indexed??await ctx.db.query('mediaTasks').withIndex('by_status_createdAt',q=>q.eq('status','queued')).filter(q=>q.and(q.eq(q.field('claimable'),undefined),q.gt(q.field('attempt'),0),q.neq(q.field('workflowId'),undefined),q.or(q.eq(q.field('requiredProcessorVersion'),undefined),q.lte(q.field('requiredProcessorVersion'),processorVersion)))).first();
