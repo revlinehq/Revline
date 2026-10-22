@@ -15,8 +15,9 @@ export async function requireProject(
   ctx: DatabaseContext,
   projectId: Id<"projects">,
   ownerId: string,
+  includeHistory = true,
 ) {
-  const project = await readProject(ctx,projectId);
+  const project = await readProject(ctx,projectId,includeHistory);
   if (!project || project.deleting || project.ownerId !== ownerId) {
     throw new ConvexError("Project not found");
   }

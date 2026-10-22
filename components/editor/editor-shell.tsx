@@ -65,7 +65,7 @@ export type EditorShellProps = {
   title: string; timeline: Timeline; assets: MediaAsset[]; onChange: (t: Timeline) => void;
   onTitle: (title: string) => void; onUpload: (files: File[]) => Promise<void>;
   onDropUpload: (files: File[]) => Promise<void>;
-  saving: boolean; upload: UploadProgress; error: string; onError: (message: string) => void;
+  saving: boolean; saveFailed?: boolean; onRetrySave?: () => void; upload: UploadProgress; error: string; onError: (message: string) => void;
   onUndo: () => void; onRedo: () => void; canUndo: boolean; canRedo: boolean;
   conversation?:{projectId:import('@/convex/_generated/dataModel').Id<'projects'>;threadId:string}; messages: ChatMessage[]; aiRunning: boolean; aiEditing?:boolean; aiWorkflowActive?:boolean; aiConfigured: boolean; modelSwitcher?: boolean; allowedModels?:readonly ClaudeModelChoice[]; defaultModelChoice?:ClaudeModelChoice; aiError?: string | null; draftKey?:string;
   onSend: (text: string, context?: EditContext) => Promise<void>;
@@ -443,7 +443,7 @@ export function EditorShell(p: EditorShellProps) {
   return <main ref={editorRoot} data-playback-opening={opening} tabIndex={-1} {...fileDrop.handlers} onPointerDownCapture={e => { const interactive = (e.target as HTMLElement).closest('input,textarea,button,a,select,[tabindex]'); if (p.embedded) { if (!interactive || interactive === e.currentTarget || !e.currentTarget.contains(interactive)) editorRoot.current?.focus({ preventScroll: true }); else if (interactive.matches('[tabindex]') && !interactive.matches('input,textarea,button,a,select')) (interactive as HTMLElement).focus({ preventScroll: true }); } }} className={`editor-app conversation-editor ${p.embedded ? 'embedded-editor' : ''}`}>
     <TextFontStyles/>
     <MediaFileDropOverlay active={fileDrop.active} busy={!!p.upload}/>
-    {!p.workspaceOnly && <WorkspaceNav chatId={p.demo ? undefined : p.projectId} title={p.title} onRename={p.onTitle} onShare={p.onShare} shareDisabled={!timeline.clips.length || editing} onExport={() => {setExportClipId(null);setExportOpen(true);}} exportDisabled={!timeline.clips.length} onUndo={undo} onRedo={redo} canUndo={p.canUndo && !editing} canRedo={p.canRedo && !editing} saving={p.saving} demo={p.demo} editorControls={compact ? undefined : modeSwitch}/>}
+    {!p.workspaceOnly && <WorkspaceNav chatId={p.demo ? undefined : p.projectId} title={p.title} onRename={p.onTitle} onShare={p.onShare} shareDisabled={!timeline.clips.length || editing} onExport={() => {setExportClipId(null);setExportOpen(true);}} exportDisabled={!timeline.clips.length} onUndo={undo} onRedo={redo} canUndo={p.canUndo && !editing} canRedo={p.canRedo && !editing} saving={p.saving} saveFailed={p.saveFailed} onRetrySave={p.onRetrySave} demo={p.demo} editorControls={compact ? undefined : modeSwitch}/>}
 
     <EditorErrorNotice message={p.error} onDismiss={dismissError} />
     {!preparing&&<>{compact&&!p.workspaceOnly && <div className="mobile-panel-controls">{modeSwitch || <button aria-expanded={mobileChat} onClick={() => setMobileChat(!mobileChat)}><MessageSquare size={14} />{mobileChat ? 'Back to preview' : 'Open conversation'}</button>}<button onClick={() => { setSourceRequest(++inspectorRequest.current); setInspectorOpen(true); }}><Film size={14} />My media</button></div>}

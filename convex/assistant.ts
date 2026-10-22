@@ -16,6 +16,7 @@ import { components, internal } from "./_generated/api";
 import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { requireOwner, requireProject } from "./lib/auth";
 import { commitTimeline, currentTimeline, rejectNewLayerOverlaps, validateTimeline } from "./lib/timeline";
+import { TIMELINE_CONFLICT } from "../lib/editor/timeline-sync";
 import { analysisMode, analysisRequestDocument, assetDocument, clipValidator, frameRequestValidator, videoRequestValidator, projectDocument, timelineValidator } from "./schema";
 import { validateFrameInspectionInput } from '../lib/media-analysis/frame-inspection';
 import { validateVideoInspectionInput } from '../lib/media-analysis/video-inspection';
@@ -166,7 +167,7 @@ export const getRunAsset=internalQuery({args:{...runArgs,assetId:v.string()},ret
   if(!asset||asset.ownerId!==args.ownerId||asset.projectId!==args.projectId)throw new ConvexError('Media not found');return hydrateAsset(ctx,asset);
 }});
 export const apply = internalMutation({ args: { ...runArgs, expectedRevision: v.number(), timeline: timelineValidator,publication:v.optional(v.object({threadId:v.string(),promptMessageId:v.string()})) }, returns: v.number(), handler: async (ctx, args) => {
-  const project = await requireProject(ctx, args.projectId, args.ownerId);
+  const project = await requireProject(ctx, args.projectId, args.ownerId, false);
   if (project.aiRunId !== args.runId || !project.aiRunning) throw new ConvexError("AI run is no longer active");
   if(args.publication&&project.threadId!==args.publication.threadId)throw new ConvexError('Publication conversation does not match this project.');
   // A stale revision is refused below; compare overlaps only against the base this draft was built on.
@@ -182,7 +183,7 @@ export const apply = internalMutation({ args: { ...runArgs, expectedRevision: v.
     return revision;
   };
   if (project.aiUndoRecorded && project.aiCheckpointRevision === args.expectedRevision) {
-    if ((project.revision ?? 0) !== args.expectedRevision) throw new ConvexError("The timeline changed elsewhere. Reload before saving.");
+    if ((project.revision ?? 0) !== args.expectedRevision) throw new ConvexError(TIMELINE_CONFLICT);
     const timeline = await validateTimeline(ctx, project, args.timeline);
     const revision = args.expectedRevision + 1;
     await writeProject(ctx,project._id, { timeline, aspectRatio: timeline.aspectRatio, revision, aiCheckpointRevision: revision, updatedAt: Date.now() }); return receipt(revision);
