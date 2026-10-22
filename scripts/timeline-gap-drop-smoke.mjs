@@ -81,9 +81,9 @@ try{
  await reset(lockedTimeline);await page.evaluate(()=>window.setEditingLocked(true));await frames();const lockedBefore=await state();
  await drag('v',54);assert.deepEqual(await state(),lockedBefore,'AI-owned timelines reject clip movement before it changes persisted state');
  assert.equal(await page.$eval('.timeline-panel',el=>el.getAttribute('aria-busy')),'true');
- assert.equal(await page.$eval('.timeline-ai-notice',el=>el.closest('.timeline-body')!==null),true,'Lock notice belongs in the tracks, never the toolbar');
- assert.equal(await page.$eval('.timeline-ai-notice',el=>el.textContent),'Revline is editing your timeline');
- assert.deepEqual(await page.$eval('.timeline-ai-notice',el=>{const style=getComputedStyle(el);return[el.children.length,style.padding,style.borderWidth,style.backgroundColor,style.boxShadow,style.fontSize];}),[0,'0px','0px','rgba(0, 0, 0, 0)','none','13px'],'Hover notice is plain text with no icon, card, or extra copy');
+ // 8b399c8 removed the hover notice and track blur so live AI edits stay visible; the glow alone marks the lock.
+ assert.equal(await page.$eval('.timeline-panel',el=>el.hasAttribute('data-editing-locked')&&el.hasAttribute('data-ai-working')),true,'The timeline exposes its AI lock state');
+ assert.equal(await page.$('.timeline-ai-notice'),null,'No overlay notice covers the locked tracks');
  assert.equal(await page.$eval('.timeline-ai-frame',el=>el.getAttribute('aria-hidden')),'true');
  assert.deepEqual(await page.$eval('.timeline-ai-frame',el=>{const frame=getComputedStyle(el),light=getComputedStyle(el,'::before');return[frame.inset,frame.borderRadius,light.animationName,light.animationPlayState];}),['0px','0px','demo-ai-inner-glow','running'],'The real main-editor timeline uses the shared square breathing halo');
  for(const label of ['Add timeline layer','Unlink video and audio','Mute A1','Volume for A1'])assert.equal(await page.$eval('[aria-label="'+label+'"]',el=>el.disabled),true,'Editing control disabled: '+label);

@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import puppeteer from 'puppeteer';
+import { TIMELINE_MAX_ZOOM } from '../lib/editor/timeline-zoom.ts'; // 16 since 4436053
 const browser=await puppeteer.launch({headless:true,args:['--no-sandbox','--disable-dev-shm-usage','--ignore-certificate-errors']});
 try {
  const page=await browser.newPage();await page.setViewport({width:1440,height:1000});await page.goto('http://localhost:3001/dev/editor',{waitUntil:'networkidle2'});
@@ -16,6 +17,6 @@ try {
  const back=await burst(10,-30);assert.ok(Math.abs(back.after-out.before)<.000001,'Reverse wheel input must restore scale');
  await page.focus('[aria-label="Timeline zoom"]');await page.keyboard.press('Home');await new Promise(r=>setTimeout(r,100));
  const overview=await burst(100,30);assert.ok(overview.width/overview.px>=14399,'Minimum zoom must show four hours');assert.ok(overview.labels.some(label=>label.includes('h')),'Hour overview needs hour labels');assert.ok(overview.labels.length<20&&overview.ticks<3000,'Overview must keep ruler work bounded');
- await page.keyboard.press('End');await new Promise(r=>setTimeout(r,100));const detail=await burst(1,-30);assert.equal(detail.after,4,'Zoom in clamps exactly at detailed scale');
+ await page.keyboard.press('End');await new Promise(r=>setTimeout(r,100));const detail=await burst(1,-30);assert.equal(detail.after,TIMELINE_MAX_ZOOM,'Zoom in clamps exactly at detailed scale');
  console.log(JSON.stringify({passed:true,rapidZoomOut:out.after,rapidZoomIn:back.after,overviewHours:overview.width/overview.px/3600,overviewLabels:overview.labels,detailedScale:detail.after}));
 }finally{await browser.close();}

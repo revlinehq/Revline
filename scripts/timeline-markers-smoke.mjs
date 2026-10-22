@@ -21,18 +21,23 @@ try{
   await page.keyboard.press('m');await pause();
   assert.equal((await snapshot()).markers.length,1,'M at same frame must not duplicate marker');
   assert.equal(await page.evaluate(()=>window.testPreviewDocument===document.querySelector('hyperframes-player').iframeElement.contentDocument),true,'Marking must not rebuild preview');
-  const marker=await page.$eval('[data-marker-id]',el=>{const r=el.getBoundingClientRect();return {left:r.left,top:r.top};});
-  await page.mouse.move(marker.left+12,marker.top+10);await page.mouse.down();
-  await page.mouse.move(marker.left+12+2*ruler.px,marker.top+10,{steps:15});await page.mouse.up();await pause();
+  // A marker added with M sits under the playhead cap (z-index above markers since 29c5837), so grab
+  // a visible part of the marker rather than its center.
+  const markerPoint=()=>page.$eval('[data-marker-id]',el=>{const r=el.getBoundingClientRect();for(const [dx,dy] of [[12,10],[12,4],[4,14],[22,14],[4,4],[22,4]])if(document.elementFromPoint(r.left+dx,r.top+dy)?.closest('[data-marker-id]')===el)return {x:r.left+dx,y:r.top+dy};return null;});
+  const marker=await markerPoint();
+  assert.ok(marker,'A new marker under the playhead remains grabbable');
+  await page.mouse.move(marker.x,marker.y);await page.mouse.down();
+  await page.mouse.move(marker.x+2*ruler.px,marker.y,{steps:15});await page.mouse.up();await pause();
   assert.equal((await snapshot()).markers[0].time,5);
   assert.equal((await snapshot()).playhead,5);
   await page.keyboard.press('ArrowRight');await pause();
   assert.ok(Math.abs((await snapshot()).markers[0].time-(5+1/30))<1e-6);
   await page.mouse.click(ruler.left+ruler.px,ruler.top+24);await pause();
-  const moved=await page.$eval('[data-marker-id]',el=>{const r=el.getBoundingClientRect();return {left:r.left,top:r.top};});
-  await page.mouse.click(moved.left+12,moved.top+10);await pause();
+  const moved=await markerPoint();
+  await page.mouse.click(moved.x,moved.y);await pause();
   assert.ok(Math.abs((await snapshot()).playhead-(5+1/30))<1e-6,'Clicking orange marker seeks');
-  await page.mouse.click(moved.left+12,moved.top+10,{button:'right'});
+  const menuPoint=await markerPoint();assert.ok(menuPoint,'The marker stays reachable after seeking onto it');
+  await page.mouse.click(menuPoint.x,menuPoint.y,{button:'right'});
   await page.waitForSelector('[role=menuitem]');
   await page.evaluate(()=>[...document.querySelectorAll('[role=menuitem]')].find(el=>el.textContent.includes('Rename marker')).click());
   await page.waitForSelector('input[aria-label="Marker name"]');
