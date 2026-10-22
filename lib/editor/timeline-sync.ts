@@ -1,6 +1,6 @@
 import { deriveTrackCounts, normalizeTimeline, TIMELINE_LAYER_GROUPS, type Clip, type Timeline } from './types';
 import { reconcileTransitionEdits } from './clip-transitions';
-import { timelineHistoryKey } from './timeline-history-key';
+import { LOCAL_UNDO_LIMIT, timelineHistoryKey } from './timeline-history-key';
 
 function equal(a: unknown, b: unknown): boolean {
   if (a === b) return true;
@@ -74,6 +74,15 @@ export function applyTimelineEdit(base: Timeline, next: Timeline, current: Timel
 }
 
 export type TimelineSnapshot = { timeline: Timeline; revision: number; history?: Timeline[] };
+export const TIMELINE_LOCKED = 'Revline is editing your timeline. Wait for it to finish or stop the edit before making changes.';
+export const TIMELINE_CONFLICT = 'The timeline changed elsewhere. Reload before saving.';
+const RETRY_DELAYS = [1000, 2000, 5000, 10000, 30000];
+/** Application rejections are deterministic unless they report the AI lock, a
+ * stale revision, or access (coded) state. Network and server faults are not. */
+export function rejectedEdit(error: unknown) {
+  const data = error && typeof error === 'object' && 'data' in error ? error.data : undefined;
+  return typeof data === 'string' && data !== TIMELINE_LOCKED && !/timeline changed elsewhere/i.test(data) && data !== 'Authentication required';
+}
 type PendingEdit = { baseTimeline: Timeline; timeline: Timeline; undoTo?: Timeline; undoHistoryKeys?: string[]; undoTargetKey?: string };
 type QueuedEdit = Omit<PendingEdit, 'undoHistoryKeys' | 'undoTargetKey'> & { undoHistory?: Timeline[]; undoOrigin?: Timeline };
 type SaveCallbacks = {
@@ -81,7 +90,10 @@ type SaveCallbacks = {
   load: () => Promise<TimelineSnapshot>;
   update: (timeline: Timeline, kind: 'saved' | 'remote' | 'recovered', history?: Timeline[]) => void;
   saving: (busy: boolean) => void;
-  error: (error: unknown) => void;
+  /** `rejected`: the server refused this edit outright, so it was rolled back. */
+  error: (error: unknown, rejected?: boolean) => void;
+  /** Unsaved edits remain after a failed attempt; retries continue in the background. */
+  failed?: (failed: boolean) => void;
 };
 
 // One queue per project. Keep acknowledged state separate from optimistic edits.
@@ -89,8 +101,14 @@ export function createTimelineSaveQueue(initial: TimelineSnapshot, callbacks: Sa
   initial = { ...initial, timeline: normalizeTimeline(initial.timeline) };
   let saved = initial, visible = initial.timeline, remote = initial;
   let pending: QueuedEdit | null = null, recovery: QueuedEdit[] | null = null;
-  let busy = false, failure: unknown = null;
+  let busy = false, failure: unknown = null, attempts = 0, notified = false, timer: ReturnType<typeof setTimeout> | undefined;
   const waiters: { resolve: () => void; reject: (error: unknown) => void }[] = [];
+  function retry(delay = 0) {
+    clearTimeout(timer);
+    timer = setTimeout(() => { timer = undefined; if (!busy && (pending || recovery)) void flush(); }, delay);
+  }
+  // Background retries keep the unsaved indicator instead of repeating the notice.
+  function report(error: unknown) { if (!notified) { notified = true; callbacks.error(error); } }
   function adopt(snapshot: TimelineSnapshot, kind: 'saved' | 'remote' | 'recovered', edits: QueuedEdit[]) {
     snapshot = { ...snapshot, timeline: normalizeTimeline(snapshot.timeline) };
     let next = snapshot.timeline, undo: Pick<QueuedEdit, 'undoTo' | 'undoHistory' | 'undoOrigin'> = {};
@@ -110,20 +128,24 @@ export function createTimelineSaveQueue(initial: TimelineSnapshot, callbacks: Sa
     if (busy || snapshot.revision <= saved.revision) return;
     const edits = [...(recovery ?? []), ...(pending ? [pending] : [])];
     adopt(snapshot, edits.length ? 'recovered' : 'remote', edits);
+    if (!failure) return;
+    // A newer revision settles a lost write or ends the AI lock: retry now.
+    if (pending) retry(); else { failure = null; notified = false; callbacks.failed?.(false); }
   }
-  async function reload() {
+  async function reload(kind: 'recovered' | 'remote' = 'recovered') {
     const loaded = await callbacks.load();
-    adopt(remote.revision > loaded.revision ? remote : loaded, 'recovered', [...(recovery ?? []), ...(pending ? [pending] : [])]);
+    adopt(remote.revision > loaded.revision ? remote : loaded, kind, [...(recovery ?? []), ...(pending ? [pending] : [])]);
   }
   async function flush() {
     if (busy) return;
+    clearTimeout(timer); timer = undefined;
     busy = true; failure = null; callbacks.saving(true);
     try {
       if (recovery) {
         // An unknown write outcome must be read before another save. Keep the
         // ordered edits intact if this read also fails, including later gestures.
         try { await reload(); }
-        catch (error) { failure = error; callbacks.error(error); return; }
+        catch (error) { failure = error; report(error); return; }
       }
       while (pending) {
         const edit = pending; pending = null;
@@ -134,16 +156,28 @@ export function createTimelineSaveQueue(initial: TimelineSnapshot, callbacks: Sa
           const snapshot = await callbacks.save({ ...request, ...(undoHistoryKeys ? { undoHistoryKeys } : {}), ...(undoTargetKey ? { undoTargetKey } : {}), expectedRevision: saved.revision });
           adopt(snapshot, 'saved', pending ? [pending] : []);
         } catch (error) {
-          failure = error; callbacks.error(error);
+          if (rejectedEdit(error)) {
+            // Retrying a deterministic rejection would block every later save.
+            // The mutation rolled back: drop this edit and rebase later gestures.
+            // A dropped undo also resets the local stacks to the server history.
+            callbacks.error(error, true);
+            recovery = pending ? [pending] : []; pending = null;
+            try { await reload(edit.undoTo ? 'remote' : 'recovered'); continue; }
+            catch (loadError) { failure = loadError; break; }
+          }
+          failure = error; report(error);
           recovery = [edit, ...(pending ? [pending] : [])]; pending = null;
           try { await reload(); }
-          catch (loadError) { callbacks.error(loadError); }
-          break; // No automatic retry loop after a failed request.
+          catch (loadError) { report(loadError); }
+          break; // Retries are scheduled below, after this flush settles.
         }
       }
     } finally {
       busy = false; receive(remote); callbacks.saving(false);
       if (!pending && !recovery) failure = null;
+      if (!failure) { attempts = 0; notified = false; }
+      else if (!timer && attempts < RETRY_DELAYS.length) retry(RETRY_DELAYS[attempts++]);
+      callbacks.failed?.(!!failure);
       waiters.splice(0).forEach(waiter => failure ? waiter.reject(failure) : waiter.resolve());
     }
   }
@@ -153,11 +187,14 @@ export function createTimelineSaveQueue(initial: TimelineSnapshot, callbacks: Sa
       next = normalizeTimeline(next);
       pending = {
         baseTimeline: pending?.baseTimeline ?? visible, timeline: next,
-        ...(undo ? { undoTo: next, undoOrigin: next, ...(undoHistory ? { undoHistory: undoHistory.slice(-40) } : {}) } : pending?.undoTo ? { undoTo: pending.undoTo, undoOrigin: pending.undoOrigin ?? pending.undoTo, ...(pending.undoHistory ? { undoHistory: pending.undoHistory } : {}) } : {}),
+        ...(undo ? { undoTo: next, undoOrigin: next, ...(undoHistory ? { undoHistory: undoHistory.slice(-LOCAL_UNDO_LIMIT) } : {}) } : pending?.undoTo ? { undoTo: pending.undoTo, undoOrigin: pending.undoOrigin ?? pending.undoTo, ...(pending.undoHistory ? { undoHistory: pending.undoHistory } : {}) } : {}),
       };
       visible = next; void flush();
     },
+    /** Retry unsaved edits now, e.g. when the browser reconnects or the AI lock lifts. */
+    retry() { attempts = 0; notified = false; if (!busy && (pending || recovery)) retry(); },
     get busy() { return busy || !!pending || !!recovery; },
+    get failed() { return !!failure; },
     wait: () => {
       if (!busy && !pending && !recovery) return Promise.resolve();
       const completion = new Promise<void>((resolve, reject) => waiters.push({ resolve, reject }));

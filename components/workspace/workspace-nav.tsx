@@ -8,7 +8,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useClerk, useUser } from '@clerk/nextjs';
 import { useConvexAuth, useQuery } from 'convex/react';
-import { Check, ChevronDown, Cloud, Copy, CreditCard, Database, Download, Film, History, LoaderCircle, LogOut, Moon, PanelsTopLeft, Pencil, Plus, Redo2, Share2, UserRound, Undo2 } from 'lucide-react';
+import { Check, ChevronDown, CircleAlert, Cloud, Copy, CreditCard, Database, Download, Film, History, LoaderCircle, LogOut, Moon, PanelsTopLeft, Pencil, Plus, Redo2, Share2, UserRound, Undo2 } from 'lucide-react';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
 import { Brand } from './brand';
@@ -51,6 +51,8 @@ export interface WorkspaceNavProps {
   active?: 'chat' | 'chats' | 'profile' | 'storage';
   demo?: boolean;
   saving?: boolean;
+  saveFailed?: boolean;
+  onRetrySave?: () => void;
   canUndo?: boolean;
   canRedo?: boolean;
   onUndo?: () => void;
@@ -65,7 +67,7 @@ export interface WorkspaceNavProps {
   editorControls?: ReactNode;
 }
 
-export function WorkspaceNav({ title = NEW_WORKSPACE_LABEL, editorHref, active = 'chat', demo = false, saving, canUndo, canRedo, onUndo, onRedo, onFootage, onExport, onShare, shareDisabled, exportDisabled, onRename, chatId, editorControls }: WorkspaceNavProps) {
+export function WorkspaceNav({ title = NEW_WORKSPACE_LABEL, editorHref, active = 'chat', demo = false, saving, saveFailed, onRetrySave, canUndo, canRedo, onUndo, onRedo, onFootage, onExport, onShare, shareDisabled, exportDisabled, onRename, chatId, editorControls }: WorkspaceNavProps) {
   const pathname = usePathname();
   const router = useRouter();
   const startingWorkspace = useRef(false);
@@ -130,6 +132,7 @@ export function WorkspaceNav({ title = NEW_WORKSPACE_LABEL, editorHref, active =
     <div className="workspace-nav-actions">
       {!demo && !onExport && !editorControls && <Link href="/storage" className="workspace-nav-secondary" aria-label="Cloud storage" aria-current={active==='storage'?'page':undefined}><Cloud size={15}/><span>Cloud storage</span></Link>}
       {saving && <span className="workspace-nav-save" role="status"><LoaderCircle size={13} className="animate-spin" />Saving…</span>}
+      {saveFailed && onRetrySave && <button type="button" className="workspace-nav-secondary workspace-nav-unsaved" aria-label="Unsaved changes. Retry saving" title="Unsaved changes. Retry saving" onClick={onRetrySave}><CircleAlert size={14} aria-hidden="true" /><span>Unsaved changes — Retry</span></button>}
       {(onUndo || onRedo) && <div className="workspace-nav-history"><button className="workspace-nav-icon" aria-label="Undo" title="Undo" disabled={!canUndo} onClick={onUndo}><Undo2 size={15} /></button><button className="workspace-nav-icon" aria-label="Redo" title="Redo" disabled={!canRedo} onClick={onRedo}><Redo2 size={15} /></button></div>}
       {onFootage && <button className="workspace-nav-secondary" aria-label="Footage" onClick={onFootage}><Film size={14} /><span>Footage</span></button>}
       {onShare && <button type="button" className="workspace-nav-secondary" aria-label="Share timeline" onClick={onShare} disabled={shareDisabled}><Share2 size={14}/><span>Share</span></button>}
