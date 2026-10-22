@@ -1,7 +1,7 @@
 import { ConvexHttpClient, ConvexClient } from 'convex/browser';
 import { api } from '../convex/_generated/api';
 import { processMediaTask } from '../lib/server/media-task-runner';
-import { isRetryableAnalysisError } from '../lib/media-analysis/errors';
+import { isMediaLeaseLost, isRetryableAnalysisError } from '../lib/media-analysis/errors';
 import type { MediaTaskActivity } from '../lib/media-analysis/activity';
 
 const convexUrl = process.env.NEXT_PUBLIC_CONVEX_URL;
@@ -15,6 +15,8 @@ const unsubscribe = subscriptions.onUpdate(api.mediaTasks.ready, { workerSecret,
   queueRevision++; queueReady = !!ready;
   if (queueReady) for (const wake of queueWaiters) wake();
 });
+// Matches Convex's media task lease; heartbeats renew it every 20 seconds.
+const LEASE_MS = 60_000;
 const shutdown = new AbortController();
 process.on('SIGINT', () => shutdown.abort());
 process.on('SIGTERM', () => shutdown.abort());
@@ -31,14 +33,16 @@ async function runSlot() {
       const signal = AbortSignal.any([controller.signal, shutdown.signal, deadline]);
       const credentials = { taskId: task.taskId, leaseToken: task.leaseToken };
       let progress = 0, reported = -1,activity:MediaTaskActivity|undefined;
-      let heartbeats = Promise.resolve();
+      let heartbeats = Promise.resolve(), renewedAt = Date.now();
+      // A transient transport failure retries on the next tick. Stop only once
+      // Convex says the lease ended or it can no longer have been renewed.
       const heartbeat = () => {
         heartbeats = heartbeats.then(async () => {
           if (signal.aborted) return;
           const next = progress;
           await client.mutation(api.mediaTasks.heartbeat, { ...credentials, progress: next,...(activity?{activity}:{}) });
-          reported = next;
-        }).catch(() => { controller.abort(); });
+          reported = next; renewedAt = Date.now();
+        }).catch(error => { if (isMediaLeaseLost(error) || Date.now() - renewedAt >= LEASE_MS) controller.abort(); });
       };
       const timer = setInterval(heartbeat, 20_000);
       try {

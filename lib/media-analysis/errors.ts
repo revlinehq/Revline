@@ -6,3 +6,10 @@ export class AnalysisError extends Error {
 export function isRetryableAnalysisError(error: unknown) {
   return !(error instanceof AnalysisError) || (error.retryable ?? error.status >= 500);
 }
+
+/** Convex rejects a renewal once the attempt's lease expired or was replaced. */
+export const MEDIA_LEASE_LOST = 'Media task lease is no longer active';
+export function isMediaLeaseLost(error: unknown) {
+  const data = (error as { data?: unknown } | null)?.data;
+  return [error instanceof Error ? error.message : String(error), typeof data === 'string' ? data : ''].some(text => text.includes(MEDIA_LEASE_LOST));
+}
