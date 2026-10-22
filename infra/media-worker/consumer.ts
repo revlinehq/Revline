@@ -10,12 +10,14 @@ const convexUrl = process.env.NEXT_PUBLIC_CONVEX_URL;
 const workerSecret = process.env.RENDER_WORKER_SECRET;
 if (!convexUrl || !workerSecret) throw new Error('Configure the production Convex URL and media worker secret.');
 const concurrency = Number(process.env.MEDIA_WORKER_CONCURRENCY ?? 1);
-const idleMs = Number(process.env.MEDIA_WORKER_IDLE_MS ?? 90_000);
+// Staying warm after work spares the next export a container and Chromium cold
+// start; idle containers still bill memory/disk, so this stays bounded.
+const idleMs = Number(process.env.MEDIA_WORKER_IDLE_MS ?? 600_000);
 const port = Number(process.env.PORT ?? 8080);
 // Matches Convex's media task lease; heartbeats renew it every 20 seconds.
 const LEASE_MS = 60_000;
 if (!Number.isInteger(concurrency) || concurrency < 1 || concurrency > 4) throw new Error('Worker concurrency must be 1–4.');
-if (!Number.isFinite(idleMs) || idleMs < 1000 || idleMs > 300_000) throw new Error('Idle timeout must be 1–300 seconds.');
+if (!Number.isFinite(idleMs) || idleMs < 1000 || idleMs > 3_600_000) throw new Error('Idle timeout must be 1 second to 60 minutes.');
 if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('Invalid health port.');
 
 const shutdown = new AbortController();
