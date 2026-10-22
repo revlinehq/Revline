@@ -218,6 +218,16 @@ test('single move and trim tools never leave a clip or its linked audio overlapp
   await assertUndo(result);
 });
 
+test('assistant drafts refuse new same-layer overlaps but keep saved legacy overlaps editable',async()=>{
+  const legacy:Timeline={...initial,clips:[...initial.clips,{id:'legacy',kind:'caption',track:2,start:1,duration:2,sourceStart:0,text:'Older overlapping words'}]};
+  const backend=await memoryBackend(legacy);
+  const draft=(clips:Timeline['clips'])=>backend.t.mutation(internal.assistant.previewDraft,{...backend.runArgs,expectedRevision:backend.revision,timeline:{...backend.seed,clips}});
+  await expect(draft(backend.seed.clips.map(c=>c.id==='legacy'?{...c,text:'Edited overlapping words'}:c))).resolves.toBeNull();
+  // A split piece inside the saved overlap is not a new collision.
+  await expect(draft(backend.seed.clips.flatMap(c=>c.id==='title'?[{...c,duration:1.5,textTemplate:undefined},{...c,id:'title-b',start:1.5,duration:.5,textTemplate:undefined}]:[c]))).resolves.toBeNull();
+  await expect(draft(backend.seed.clips.map(c=>c.id==='to'?{...c,start:2.5}:c))).rejects.toThrow(/from and to would overlap on the same layer/);
+});
+
 test('a plain greeting completion creates no edits or analysis requests and preserves concise abilities policy',async()=>{
   const result=await run();
   expect(result.timeline).toEqual(initial);expect(result.revision).toBe(0);

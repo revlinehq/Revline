@@ -15,7 +15,7 @@ import { ConvexError, v } from "convex/values";
 import { components, internal } from "./_generated/api";
 import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { requireOwner, requireProject } from "./lib/auth";
-import { commitTimeline, currentTimeline, validateTimeline } from "./lib/timeline";
+import { commitTimeline, currentTimeline, rejectNewLayerOverlaps, validateTimeline } from "./lib/timeline";
 import { analysisMode, analysisRequestDocument, assetDocument, clipValidator, frameRequestValidator, videoRequestValidator, projectDocument, timelineValidator } from "./schema";
 import { validateFrameInspectionInput } from '../lib/media-analysis/frame-inspection';
 import { validateVideoInspectionInput } from '../lib/media-analysis/video-inspection';
@@ -169,6 +169,8 @@ export const apply = internalMutation({ args: { ...runArgs, expectedRevision: v.
   const project = await requireProject(ctx, args.projectId, args.ownerId);
   if (project.aiRunId !== args.runId || !project.aiRunning) throw new ConvexError("AI run is no longer active");
   if(args.publication&&project.threadId!==args.publication.threadId)throw new ConvexError('Publication conversation does not match this project.');
+  // A stale revision is refused below; compare overlaps only against the base this draft was built on.
+  if((project.revision??0)===args.expectedRevision)rejectNewLayerOverlaps(currentTimeline(project),args.timeline);
   const receipt=async(revision:number)=>{
     const previous=await ctx.db.query('aiTimelinePreviews').withIndex('by_project',q=>q.eq('projectId',project._id)).unique();
     const timeline=normalizeTimeline(args.timeline);
@@ -207,6 +209,7 @@ export const validateDraft = internalQuery({ args: { ...runArgs, expectedRevisio
   if (project.aiRunId !== args.runId || !project.aiRunning) throw new ConvexError('AI run is no longer active');
   if ((project.revision ?? 0) !== args.expectedRevision) throw new ConvexError('The timeline changed elsewhere. Your replacement was not saved.');
   await validateTimeline(ctx, project, args.timeline);
+  rejectNewLayerOverlaps(currentTimeline(project), args.timeline);
   return null;
 }});
 /** A read-only client projection. This never publishes a draft or adds undo history. */
@@ -215,6 +218,7 @@ export const previewDraft = internalMutation({args:{...runArgs,expectedRevision:
   if(!project.aiRunning||project.aiRunId!==args.runId)throw new ConvexError('AI run is no longer active');
   if((project.revision??0)!==args.expectedRevision)throw new ConvexError('The timeline changed elsewhere. Your replacement was not saved.');
   const timeline=await validateTimeline(ctx,project,args.timeline);
+  rejectNewLayerOverlaps(currentTimeline(project),timeline);
   const previous=await ctx.db.query('aiTimelinePreviews').withIndex('by_project',q=>q.eq('projectId',project._id)).unique();
   const current=previous?.runId===args.runId&&previous.baseRevision===args.expectedRevision?previous:null;
   if(current&&equalTimelineValue(current.timeline,timeline))return null;
