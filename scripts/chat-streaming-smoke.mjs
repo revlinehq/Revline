@@ -60,7 +60,7 @@ try{
  await page.waitForFunction(()=>[...document.querySelectorAll('[data-flow-token]')].every(el=>getComputedStyle(el).opacity==='1'),{timeout:1200});
  await page.evaluate(()=>window.renderMessages([{id:'cards',role:'assistant',text:'I will mark the beats.',status:'success',parts:[{type:'tool-markMusicBeats',toolCallId:'beat',state:'output-available',output:{added:23,saved:true}},{type:'tool-analyzeMedia',toolCallId:'failed',state:'output-available',output:{type:'error-text',value:'Shot detection failed'}}]}]));
  assert.equal(await page.$eval('.assistant-result-card.result-done',el=>el.textContent),'Marked 23 beats');
- assert.match(await page.$eval('.assistant-result-card.result-error',el=>el.textContent),/Could not finish.*Shot detection failed/);
+ assert.match(await page.$eval('.assistant-result-card.result-error',el=>el.textContent),/^Edit partially completed1 change was saved\. Shot detection failed$/,'Turn failures consolidate into one card that keeps the saved count and failure detail');
  await page.evaluate(()=>window.renderMessages([{id:'evidence',role:'assistant',text:'The saved step is complete. The replacement is prepared.',status:'success',parts:[
   {type:'tool-markMusicBeats',toolCallId:'beat',state:'output-available',output:{added:23,saved:true}},
   {type:'tool-delete',toolCallId:'remove',state:'output-available',output:{removedClipIds:['v1','a1'],staged:true,saved:false}},
@@ -69,7 +69,7 @@ try{
   {type:'tool-analyzeMedia',toolCallId:'failed-transcript',state:'output-available',output:{type:'error-json',value:{message:'Transcription failed'}}},
   {type:'tool-analyzeMedia',toolCallId:'failed-shots',state:'output-error',errorText:'Shot detection failed'}
  ]}]));
- assert.deepEqual(await page.$$eval('.assistant-result-card',cards=>cards.map(card=>card.textContent)),['Marked 23 beats','Save not confirmedNo saved confirmation is available for this edit.','Save not confirmedNo saved confirmation is available for this edit.','Save not confirmedThis step did not confirm a saved change.','Could not finish this stepTranscription failed','Could not finish this stepShot detection failed']);
+ assert.deepEqual(await page.$$eval('.assistant-result-card',cards=>cards.map(card=>card.textContent)),['Marked 23 beats','Edit partially completed1 change was saved. Transcription failed'],'Saved steps keep their cards; unconfirmed, staged and failed steps collapse into one turn-failure card (d053f7e)');
  assert.ok(await page.$$eval('.assistant-result-card',cards=>cards.every(card=>card.scrollWidth<=card.clientWidth)),'Result cards fit the chat column');
  const screenshot=process.env.REVLINE_CHAT_SCREENSHOT??'/tmp/revline-chat-streaming.png';
  await page.screenshot({path:screenshot});
