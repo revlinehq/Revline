@@ -9,6 +9,7 @@ import { AnalysisError } from '../media-analysis/errors';
 import { prepareRenderAudioSource } from './prepare-render-audio';
 import { mediaSourceCacheIdentity, reuseMediaFile } from './media-file-cache';
 import { sourceEndOf } from '../editor/playback-rate';
+import { forEachLimited } from './run-limited';
 
 type CompositionAsset=MediaAsset&{size:number;ownerId?:string;projectId?:string;contentType?:string;r2Key?:string;storageId?:string};
 
@@ -20,10 +21,13 @@ export async function prepareComposition(directory:string,timeline:Timeline,asse
     const previous=audioWindows.get(clip.assetId);
     audioWindows.set(clip.assetId,{start:Math.floor(Math.min(previous?.start??clip.sourceStart,clip.sourceStart)*48000)/48000,end:Math.ceil(Math.max(previous?.end??0,sourceEndOf(clip))*48000)/48000});
   }
-  for(const [index,asset] of assets.entries()) {
+  const needed=[...assets.entries()].filter(([,asset])=>asset.kind!=='audio'||audioWindows.has(asset._id));
+  if(needed.some(([,asset])=>!asset.url))throw new AnalysisError('Composition source media is unavailable.',400);
+  const prepared=new Map<number,{url:string;offset?:number}>();
+  // Sources are independent; a few concurrent downloads/decodes stay well
+  // inside the worker's bandwidth, CPU and disk budget.
+  await forEachLimited(needed,3,async([index,asset])=>{
     const audioWindow=audioWindows.get(asset._id);
-    if(asset.kind==='audio'&&!audioWindow)continue;
-    if(!asset.url)throw new AnalysisError('Composition source media is unavailable.',400);
     const sourceExtension=extname(asset.fileName).toLowerCase();
     const extension=/^\.(mp4|mov|webm|m4v|mp3|wav|m4a|ogg|flac|aac|aiff|png|jpg|jpeg|webp|gif|avif)$/.test(sourceExtension)?sourceExtension:asset.kind==='video'?'.mp4':asset.kind==='audio'?'.audio':'.image';
     const name=`asset-${index}${extension}`;
@@ -37,9 +41,13 @@ export async function prepareComposition(directory:string,timeline:Timeline,asse
       const output=join(directory,`asset-${index}-decoded.wav`);
       const reused=await reuseMediaFile({identity,variant:`export-pcm48k-s16-window-v2:${audioWindow!.start}:${audioWindow!.end}`,target:output,signal,maxBytes:128*1024*1024},async()=>{decoded=(await prepareRenderAudioSource(join(directory,name),output,signal,audioWindow)).decoded;});
       decoded||=reused;
-      if(decoded)audioSourceOffsets[asset._id]=audioWindow!.start;
     }
-    assetUrls[asset._id]=decoded?`./asset-${index}-decoded.wav`:`./${name}`;
+    prepared.set(index,decoded?{url:`./asset-${index}-decoded.wav`,offset:audioWindow!.start}:{url:`./${name}`});
+  });
+  for(const [index,asset] of needed){
+    const {url,offset}=prepared.get(index)!;
+    assetUrls[asset._id]=url;
+    if(offset!==undefined)audioSourceOffsets[asset._id]=offset;
   }
   await copyFile(join(process.cwd(),'public/vendor/gsap.min.js'),join(directory,'gsap.min.js'));
   await copyFile(join(process.cwd(),'public/vendor/visual-effects.js'),join(directory,'visual-effects.js'));
@@ -56,11 +64,11 @@ export async function linkCompositionResources(root:string,directory:string,asse
 export async function writeComposition(directory:string,timeline:Timeline,assets:MediaAsset[],assetUrls:Record<string,string>,resolution:720|1080,fps:24|30|60,prefix='./',signal:AbortSignal=AbortSignal.timeout(30_000),audioSourceOffsets:Record<string,number>={}) {
   const audibleVideo=new Set(timeline.clips.filter(clip=>clip.kind==='video'&&clip.volume!==0).map(clip=>clip.assetId));
   const silent=new Set<string>();
-  for(const asset of assets)if(asset.kind==='video'&&audibleVideo.has(asset._id)){
-    const source=assetUrls[asset._id];
-    if(!source?.startsWith('./'))throw new AnalysisError('Composition source media is unavailable.',400);
-    if(!(await probeMedia(join(directory,source.slice(2)),signal)).hasAudio)silent.add(asset._id);
-  }
+  const audible=assets.filter(asset=>asset.kind==='video'&&audibleVideo.has(asset._id));
+  if(audible.some(asset=>!assetUrls[asset._id]?.startsWith('./')))throw new AnalysisError('Composition source media is unavailable.',400);
+  await forEachLimited(audible,4,async asset=>{
+    if(!(await probeMedia(join(directory,assetUrls[asset._id].slice(2)),signal)).hasAudio)silent.add(asset._id);
+  });
   // An unmuted video is also authored as sound by the native producer. Probe
   // the downloaded source rather than assuming every video has an audio stream.
   const rendered={...timeline,clips:timeline.clips.map(clip=>{
