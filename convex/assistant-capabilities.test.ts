@@ -202,6 +202,22 @@ test('group copy/move/trim, layer reorder and common blend use actual editor ope
   await assertUndo(result);
 });
 
+const withVoiceOver:Timeline={...initial,clips:[...initial.clips,{id:'vo',kind:'audio',assetId:'sound',track:1,start:4,duration:3,sourceStart:10,volume:1}]};
+test('single move and trim tools never leave a clip or its linked audio overlapping another clip on the same layer',async()=>{
+  const result=await run(async tools=>{
+    await expect(execute(tools,'trim',{clipId:'from',duration:4})).rejects.toThrow(/overlap clip to on the same layer\. At most 3s fits/);
+    await expect(execute(tools,'trim',{edits:[{clipId:'vo',duration:2},{clipId:'from',duration:3.5}]})).rejects.toThrow(/overlap clip to/);
+    await execute(tools,'move',{clipId:'from',start:3.5});
+  },withVoiceOver,true);
+  const by=(id:string)=>result.timeline.clips.find(c=>c.id===id)!;
+  // The video takes the next free V layer; its linked audio gets a new A layer instead of covering the voice-over.
+  expect(by('from')).toMatchObject({start:3.5,duration:3,sourceStart:2,track:2});
+  expect(by('audio')).toMatchObject({start:3.5,duration:3,sourceStart:2,track:2,linkedClipId:'from'});
+  expect(by('vo')).toEqual(result.backend!.seed.clips[4]);
+  expect(by('to')).toEqual(result.backend!.seed.clips[2]);
+  await assertUndo(result);
+});
+
 test('a plain greeting completion creates no edits or analysis requests and preserves concise abilities policy',async()=>{
   const result=await run();
   expect(result.timeline).toEqual(initial);expect(result.revision).toBe(0);

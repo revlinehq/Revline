@@ -6,7 +6,7 @@ import { textTemplateTimingPatch } from './remotion-text';
 // Adapted from OpenCut Classic's playhead, zoom, and edge-scroll controllers.
 // Copyright 2025–2026 OpenCut. MIT: third-party/OpenCut-LICENSE.
 import { layerGroup,trackOf,deriveTrackCounts,normalizeTimeline,maxTrackCount,TIMELINE_LAYER_GROUPS,type Timeline,type LayerGroup,type MediaAsset,type Clip } from './types';
-import { frameSeekTime, linkedClipIds } from './operations';
+import { frameSeekTime, freeLayer, linkedClipIds } from './operations';
 import { TimelineGestureRejection } from './timeline-edit-errors';
 import { playbackRateOf } from './playback-rate';
 import { isTransitionClip, reconcileTransitionEdits, transitionPair } from './clip-transitions';
@@ -171,6 +171,26 @@ export function moveSelectedClips(timeline:Timeline,ids:string[],timeDelta:numbe
   const moved=members.map(c=>({...c,start:dt===0?c.start:c.start+dt,track:trackOf(c)+(layers.some(member=>member.id===c.id)?dl:0)}));
   const allowLinkedAudio=anchorGroup==='visual';
   return reconcileTransitionEdits(timeline,placeMovedClips(timeline,settleMovedClips(timeline,moved,timeDelta-dt,magnet,allowLinkedAudio),direction,allowLinkedAudio?'linked-audio':false));
+}
+/** Move one clip to an absolute start/layer as a manual drag would, bumping to the next free layer instead of colliding. */
+export function moveClipTo(timeline:Timeline,id:string,start?:number,track?:number):Timeline {
+  timeline=normalizeTimeline(timeline);
+  const clip=timeline.clips.find(c=>c.id===id);if(!clip)throw new Error('Choose a clip to move.');
+  const maximum=maxTrackCount(layerGroup(clip.kind)),requested=start===undefined?0:start-clip.start;
+  let layer=track??trackOf(clip);
+  if(layer>maximum)throw new Error(`Choose a layer from 1 to ${maximum} for this clip.`);
+  // Refusals below change nothing, so they stay overlap rejections a staged draft can recover from.
+  if(!isTransitionClip(clip)){
+    // Search at the frame-rounded, clamped start the drag itself will apply.
+    const ids=linkedClipIds(timeline,[id]),members=timeline.clips.filter(c=>ids.includes(c.id));
+    try{layer=freeLayer(timeline.clips,{...clip,start:clip.start+selectedMoveDelta(timeline,members,requested,id)},layer,new Set(ids));}
+    catch(error){throw new TimelineGestureRejection((error as Error).message,'overlap');}
+  }
+  try{return moveSelectedClips(timeline,[id],requested,layer-trackOf(clip),'above',id);}
+  catch(error){
+    if(error instanceof TimelineGestureRejection)throw new TimelineGestureRejection('This move would overlap another clip on the layer of this clip or its linked clip. Choose another time, or make room first.','overlap');
+    throw error;
+  }
 }
 
 /** Insert rows at an outer edge or beside atTrack in the anchor group, as one undoable edit. */

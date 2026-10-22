@@ -1,4 +1,4 @@
-import { DEFAULT_SOLID_COLOR, EFFECT_CATALOG, isSolidColorClip, motionPreset, offsetClipMotion,validateClipEffects, type BlendMode,type EffectPreset } from './clip-effects';
+import { DEFAULT_SOLID_COLOR, EFFECT_CATALOG, isSolidColorClip, motionPreset, offsetClipMotion, resizeEffectMotion,validateClipEffects, type BlendMode,type EffectPreset } from './clip-effects';
 import { TimelineGestureRejection } from './timeline-edit-errors';
 import { textTemplateTimingPatch } from './remotion-text';
 import { textAnimationTimingPatch } from './text-animation-timing';
@@ -203,27 +203,88 @@ export function addTransitionClip(timeline: Timeline, id: string, preset: Transi
   transitionSources(next.clips, next.fps);
   return next;
 }
+/** The first layer at or above `track` where `clip` meets no other clip of its group. */
+export function freeLayer(clips: Clip[], clip: Clip, track: number, ignore: ReadonlySet<string>) {
+  const group = layerGroup(clip.kind);
+  const overlaps = (other: Clip) => !ignore.has(other.id) && layerGroup(other.kind) === group && trackOf(other) === track && other.start < clip.start + clip.duration - 0.000001 && clip.start < other.start + other.duration - 0.000001;
+  const maximum = maxTrackCount(group);
+  while (track <= maximum && clips.some(overlaps)) track++;
+  if (track > maximum) throw new Error(`All ${maximum} layers overlap here. Move the clip to another time or remove a layer.`);
+  return track;
+}
 /** Keep overlapping clips separate; an existing ID moves rather than duplicates. */
 export function placeOnFreeLayer(timeline: Timeline, clip: Clip): Timeline {
   timeline = normalizeTimeline(timeline);
   const previous = timeline.clips.find(current => current.id === clip.id);
   if (previous?.linkedClipId) timeline = patchClip(timeline, clip.id, { start: clip.start, duration: clip.duration, sourceStart: clip.sourceStart, playbackRate: clip.playbackRate });
   if (clip.kind === 'video' && clip.audioSeparated) clip = { ...clip, volume: 0 };
-  const group = layerGroup(clip.kind);
   let track = trackOf(clip);
   if (clip.track === undefined && (clip.kind === 'caption' || clip.kind === 'graphic')) {
     const beneath = timeline.clips.filter(other => other.id !== clip.id && layerGroup(other.kind) === 'visual'
       && other.start < clip.start + clip.duration - 0.000001 && clip.start < other.start + other.duration - 0.000001);
     track = Math.max(0, ...beneath.map(trackOf)) + 1;
   }
-  const overlaps = (other: Clip) => other.id !== clip.id && layerGroup(other.kind) === group && trackOf(other) === track && other.start < clip.start + clip.duration - 0.000001 && clip.start < other.start + other.duration - 0.000001;
-  const maximum = maxTrackCount(group);
-  while (track <= maximum && timeline.clips.some(overlaps)) track++;
-  if (track > maximum) throw new Error(`All ${maximum} layers overlap here. Move the clip to another time or remove a layer.`);
-  const placed = { ...clip, track };
-  const clips = timeline.clips.some(current => current.id === clip.id) ? timeline.clips.map(current => current.id === clip.id ? placed : current) : [...timeline.clips, placed];
+  const placed = { ...clip, track: freeLayer(timeline.clips, clip, track, new Set([clip.id])) };
+  let clips = timeline.clips.some(current => current.id === clip.id) ? timeline.clips.map(current => current.id === clip.id ? placed : current) : [...timeline.clips, placed];
+  // The re-synced partner follows the new timing, so it needs its own free layer too.
+  const partner = previous?.linkedClipId ? clips.find(current => current.id === previous.linkedClipId) : undefined;
+  if (partner) {
+    const partnerTrack = freeLayer(clips, partner, trackOf(partner), new Set([partner.id, clip.id]));
+    if (partnerTrack !== trackOf(partner)) clips = clips.map(current => current.id === partner.id ? { ...partner, track: partnerTrack } : current);
+  }
   const next = { ...timeline, clips };
   return reconcileTransitionEdits(timeline, { ...next, tracks: deriveTrackCounts(next) });
+}
+/** Same-layer clip pairs overlapping by more than `tolerance` seconds; touching edges never overlap. */
+export function layerOverlaps(timeline: Timeline, tolerance = 0.000001): [Clip, Clip][] {
+  const layers = new Map<string, Clip[]>();
+  for (const clip of timeline.clips) {
+    const key = `${layerGroup(clip.kind)}:${trackOf(clip)}`;
+    const layer = layers.get(key);
+    if (layer) layer.push(clip); else layers.set(key, [clip]);
+  }
+  const pairs: [Clip, Clip][] = [];
+  for (const clips of layers.values()) {
+    clips.sort((a, b) => a.start - b.start);
+    for (let i = 0; i < clips.length; i++) for (let j = i + 1; j < clips.length && clips[j].start < clips[i].start + clips[i].duration - tolerance; j++) pairs.push([clips[i], clips[j]]);
+  }
+  return pairs;
+}
+/** Overlaps an edit introduces. Collisions already saved stay editable: the same pair
+ * may keep overlapping (even after a layer reorder), and split or re-identified pieces
+ * may stay inside a span that already overlapped on that layer. */
+export function newLayerOverlaps(before: Timeline, after: Timeline, tolerance = 0.000001): [Clip, Clip][] {
+  before = normalizeTimeline(before); after = normalizeTimeline(after);
+  const key = ([a, b]: [Clip, Clip]) => a.id < b.id ? `${a.id}\n${b.id}` : `${b.id}\n${a.id}`;
+  const layer = (clip: Clip) => `${layerGroup(clip.kind)}:${trackOf(clip)}`;
+  const span = ([a, b]: [Clip, Clip]) => [Math.max(a.start, b.start), Math.min(a.start + a.duration, b.start + b.duration)] as const;
+  const existing = new Set<string>(), spans = new Map<string, (readonly [number, number])[]>();
+  for (const pair of layerOverlaps(before, tolerance)) {
+    existing.add(key(pair));
+    spans.set(layer(pair[0]), [...(spans.get(layer(pair[0])) ?? []), span(pair)]);
+  }
+  const covered = (pair: [Clip, Clip]) => {
+    const [start, end] = span(pair);
+    return (spans.get(layer(pair[0])) ?? []).some(([from, to]) => start >= from - tolerance && end <= to + tolerance);
+  };
+  return layerOverlaps(after, tolerance).filter(pair => !existing.has(key(pair)) && !covered(pair));
+}
+/** Change a clip's duration (and source in-point) without running into the next clip on its layer. */
+export function trimClip(timeline: Timeline, id: string, duration: number, sourceStart?: number): Timeline {
+  timeline = normalizeTimeline(timeline);
+  const clip = timeline.clips.find(c => c.id === id);
+  if (!clip) throw new Error('Choose a clip to trim.');
+  const next = clip.kind === 'effect' ? patchClip(timeline, id, { ...resizeEffectMotion(clip, duration), duration }) : patchClip(timeline, id, { duration, sourceStart: sourceStart ?? clip.sourceStart });
+  const collision = newLayerOverlaps(timeline, next)[0];
+  if (collision) {
+    // A pure refusal: the draft is unchanged, so the assistant can retry with the room available.
+    const members = new Set(linkedClipIds(timeline, [id]));
+    const own = collision.find(clip => members.has(clip.id)), other = collision.find(clip => clip !== own)!;
+    if (!own) throw new TimelineGestureRejection(`Trimming this clip to ${duration}s would make clips ${collision[0].id} and ${collision[1].id} overlap on the same layer.`, 'overlap');
+    const room = other.start - own.start;
+    throw new TimelineGestureRejection(`Trimming this clip to ${duration}s would overlap clip ${other.id} on the same layer.${room >= 1 / timeline.fps ? ` At most ${Number(room.toFixed(3))}s fits;` : ''} move or trim the neighboring clip first.`, 'overlap');
+  }
+  return next;
 }
 /** Keep only source samples needed to interpolate this trimmed clip's crop. */
 export function focusForClip(focus:NonNullable<Clip['focus']>,clip:Clip):NonNullable<Clip['focus']> {
