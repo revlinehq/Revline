@@ -150,7 +150,7 @@ export function EditorShell(p: EditorShellProps) {
   const fileDrop = useMediaFileDrop({ busy: !!p.upload, onUpload: files => { setSourceRequest(++inspectorRequest.current); setInspectorOpen(true); return p.onDropUpload(files); }, onError });
   const editorRoot = useRef<HTMLElement>(null);
   const bodyRef = useRef<HTMLElement>(null);
-  const chatPanel=usePanelRef();
+  const chatPanel=usePanelRef();const [chatCollapsed,setChatCollapsed]=useState(false);
   const timelinePanel=usePanelRef();const expandedTimelineHeight=useRef<number|null>(null);const collapsed=useEditorState(s=>s.timelineCollapsed);
   const toggleTimeline=()=>{
     const panel=timelinePanel.current;if(!panel)return;
@@ -449,11 +449,11 @@ export function EditorShell(p: EditorShellProps) {
     <EditorErrorNotice message={p.error} onDismiss={dismissError} />
     {!preparing&&<>{compact&&!p.workspaceOnly && <div className="mobile-panel-controls">{modeSwitch || <button aria-expanded={mobileChat} onClick={() => setMobileChat(!mobileChat)}><MessageSquare size={14} />{mobileChat ? 'Back to preview' : 'Open conversation'}</button>}<button onClick={() => { setSourceRequest(++inspectorRequest.current); setInspectorOpen(true); }}><Film size={14} />My media</button></div>}
     <section ref={bodyRef} id="editor-mode-view" data-mode={mode} className="editor-body" role={modeSwitch ? "tabpanel" : undefined} aria-labelledby={modeSwitch ? `editor-${mode}-tab` : undefined} aria-hidden={opening} inert={opening}><ResizablePanelGroup orientation="vertical" className="editor-canvas-panels"><ResizablePanel id="preview" className="editor-preview-row" defaultSize="70%" minSize={180}><ResizablePanelGroup orientation="horizontal" className="editor-horizontal-panels">
-      {p.workspaceOnly?null:<ResizablePanel id="chat" className="editor-chat-panel" onResize={size => { bodyRef.current?.style.setProperty('--editor-chat-width', `${size.inPixels}px`); bodyRef.current?.style.setProperty('--editor-chat-divider', size.inPixels ? '1px' : '0px'); }} panelRef={chatPanel} collapsible collapsedSize={0} defaultSize={p.embedded ? 356 : 400} minSize={300} maxSize={p.embedded ? 600 : undefined}>{chat}</ResizablePanel>}
+      {p.workspaceOnly?null:<ResizablePanel id="chat" className="editor-chat-panel" onResize={size => { bodyRef.current?.style.setProperty('--editor-chat-width', `${size.inPixels}px`); bodyRef.current?.style.setProperty('--editor-chat-divider', size.inPixels ? '1px' : '0px'); setChatCollapsed(size.inPixels === 0); }} panelRef={chatPanel} collapsible collapsedSize={0} defaultSize={p.embedded ? 356 : 400} minSize={300} maxSize={p.embedded ? 600 : undefined}>{chat}</ResizablePanel>}
       {!p.workspaceOnly&&<ResizableHandle aria-label="Resize conversation" className="chat-resize-handle" disabled={compact || !conversationVisible} style={compact || !conversationVisible ? {display:"none"} : undefined}/>}
 
       <ResizablePanel id="workspace" minSize={compact?0:320}><div className="editor-workspace">
-        <ResizablePanelGroup orientation="horizontal" className="preview-layout"><ResizablePanel id="canvas" minSize={220}><PreviewZoomProvider canvas={dimensions(timeline.aspectRatio)}><div className="preview-workspace"><CanvasSettings inspectorOpen={compact ? false : inspectorOpen} onToggleInspector={() => setInspectorOpen(!inspectorOpen)}><AspectRatioControl value={timeline.aspectRatio} onChange={changeAspectRatio} /><PreviewZoomControls/></CanvasSettings>
+        <ResizablePanelGroup orientation="horizontal" className="preview-layout"><ResizablePanel id="canvas" minSize={220}><PreviewZoomProvider canvas={dimensions(timeline.aspectRatio)}><div className="preview-workspace"><CanvasSettings inspectorOpen={compact ? false : inspectorOpen} onToggleInspector={() => setInspectorOpen(!inspectorOpen)} onShowChat={!compact && !p.workspaceOnly && chatCollapsed ? () => chatPanel.current?.expand() : undefined}><AspectRatioControl value={timeline.aspectRatio} onChange={changeAspectRatio} /><PreviewZoomControls/></CanvasSettings>
         <div className="editor-stage">
           {!compact && !inspectorOpen && <FloatingToolsRail category={libraryCategory} onCategory={openLibraryCategory} onExpand={() => openLibraryCategory(libraryCategory)}/>}
 
