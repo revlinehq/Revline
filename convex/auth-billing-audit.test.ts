@@ -792,6 +792,21 @@ test('video-link imports and new edits from links have separate daily account qu
   } finally { time.mockRestore(); }
 });
 
+test('an owner running a task yields the next slot to another owner, then claims again when alone', async () => {
+  const f = await fixture();
+  const ids = await f.t.run(async ctx => {
+    const otherProject = await ctx.db.insert('projects', { ownerId: otherId, title: 'Other queue', aspectRatio: 'vertical', revision: 0, createdAt: 0, updatedAt: 0 });
+    const queued = { status: 'queued' as const, claimable: true, attempt: 1, progress: 0, updatedAt: 0 };
+    const a1 = await ctx.db.insert('mediaTasks', { ownerId, projectId: f.projectId, assetId: f.assetId, kind: 'beats', ...queued, createdAt: 1 });
+    const a2 = await ctx.db.insert('mediaTasks', { ownerId, projectId: f.projectId, assetId: f.assetId, kind: 'shots', ...queued, createdAt: 2 });
+    const b1 = await ctx.db.insert('mediaTasks', { ownerId: otherId, projectId: otherProject, kind: 'import', sourceUrl: 'https://cdn.example.com/b.mp4', ...queued, createdAt: 3 });
+    return [a1, b1, a2];
+  });
+  const claim = () => f.t.mutation(api.mediaTasks.claim, { workerSecret: 'audit-worker-secret', processorVersion: 5, compact: true });
+  for (const taskId of ids) expect(await claim()).toMatchObject({ taskId });
+  expect(await claim()).toBeNull();
+});
+
 test('export download signs a fresh owner-scoped attachment while preview URLs remain inline', async () => {
   const f = await fixture();
   const key = `media/${ownerId}/${f.projectId}/export`;
