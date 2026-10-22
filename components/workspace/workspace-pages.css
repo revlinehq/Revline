@@ -21,6 +21,7 @@ html[data-workspace-theme="dark"] {
 .workspace-chat-trigger:hover,.workspace-chat-trigger[data-state="open"],.workspace-nav-icon:hover { background:var(--ws-hover); }
 .workspace-nav-actions { margin-left:auto; display:flex; gap:12px; align-items:center; flex-shrink:0; }
 .workspace-nav-history { display:flex; gap:2px; }
+.workspace-nav-action-hint { display:inline-flex; }
 .workspace-nav-icon { width:28px; height:30px; display:grid; place-items:center; border:0; border-radius:7px; color:var(--ws-muted); background:transparent; cursor:pointer; }
 .workspace-nav button:disabled { opacity:.45; cursor:default; }
 .workspace-nav-secondary { display:flex; align-items:center; justify-content:center; gap:6px; height:32px; padding:0 10px; border:0; border-radius:7px; background:var(--ws-hover); color:var(--ws-text); text-decoration:none; font-size:13px; font-weight:500; cursor:pointer; }

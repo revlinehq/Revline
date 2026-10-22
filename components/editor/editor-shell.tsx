@@ -1,6 +1,7 @@
 'use client';
 import { userError } from '@/lib/user-error';
 import { clipExportTimeline } from '@/lib/editor/clip-export';
+import { MAX_EXPORT_LABEL, MAX_EXPORT_SECONDS } from '@/lib/editor/limits';
 import { splitAtPlayhead } from '@/lib/editor/split-at-playhead';
 import { addTimelineMarker } from '@/lib/editor/timeline-markers';
 
@@ -443,7 +444,7 @@ export function EditorShell(p: EditorShellProps) {
   return <main ref={editorRoot} data-playback-opening={opening} tabIndex={-1} {...fileDrop.handlers} onPointerDownCapture={e => { const interactive = (e.target as HTMLElement).closest('input,textarea,button,a,select,[tabindex]'); if (p.embedded) { if (!interactive || interactive === e.currentTarget || !e.currentTarget.contains(interactive)) editorRoot.current?.focus({ preventScroll: true }); else if (interactive.matches('[tabindex]') && !interactive.matches('input,textarea,button,a,select')) (interactive as HTMLElement).focus({ preventScroll: true }); } }} className={`editor-app conversation-editor ${p.embedded ? 'embedded-editor' : ''}`}>
     <TextFontStyles/>
     <MediaFileDropOverlay active={fileDrop.active} busy={!!p.upload}/>
-    {!p.workspaceOnly && <WorkspaceNav chatId={p.demo ? undefined : p.projectId} title={p.title} onRename={p.onTitle} onShare={p.onShare} shareDisabled={!timeline.clips.length || editing} onExport={() => {setExportClipId(null);setExportOpen(true);}} exportDisabled={!timeline.clips.length} onUndo={undo} onRedo={redo} canUndo={p.canUndo && !editing} canRedo={p.canRedo && !editing} saving={p.saving} demo={p.demo} editorControls={compact ? undefined : modeSwitch}/>}
+    {!p.workspaceOnly && <WorkspaceNav chatId={p.demo ? undefined : p.projectId} title={p.title} onRename={p.onTitle} onShare={p.onShare} shareDisabled={!timeline.clips.length || editing} onExport={() => {setExportClipId(null);setExportOpen(true);}} exportDisabled={!timeline.clips.length} exportHint={!timeline.clips.length?'Add a clip to export':duration>MAX_EXPORT_SECONDS?`Exports support up to ${MAX_EXPORT_LABEL}. Shorten the edit to export.`:`Export an MP4 up to ${MAX_EXPORT_LABEL} long`} onUndo={undo} onRedo={redo} canUndo={p.canUndo && !editing} canRedo={p.canRedo && !editing} saving={p.saving} demo={p.demo} editorControls={compact ? undefined : modeSwitch}/>}
 
     <EditorErrorNotice message={p.error} onDismiss={dismissError} />
     {!preparing&&<>{compact&&!p.workspaceOnly && <div className="mobile-panel-controls">{modeSwitch || <button aria-expanded={mobileChat} onClick={() => setMobileChat(!mobileChat)}><MessageSquare size={14} />{mobileChat ? 'Back to preview' : 'Open conversation'}</button>}<button onClick={() => { setSourceRequest(++inspectorRequest.current); setInspectorOpen(true); }}><Film size={14} />My media</button></div>}
