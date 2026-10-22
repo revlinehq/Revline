@@ -84,7 +84,8 @@ try{
  assert.ok(collapse.toolbar>36&&collapse.toolbar<75,'The narrow toolbar retains its two-row responsive layout');assert.ok(collapse.playbackFits,'Resizing while collapsed preserves the entire playback row');
  await page.screenshot({path:'/tmp/revline-collapsed-toolbar-narrow.png'});
  await page.setViewport({width:360,height:800});await flush();collapse=await collapsedFits();
- assert.ok(collapse.toolbar>=88&&collapse.toolbar<110,'Phone collapse retains both full-width touch control rows');assert.ok(collapse.playbackFits);
+ // Phones add the 26px frame-rate row (19aead3) below both 44px touch rows.
+ assert.ok(collapse.toolbar>=114&&collapse.toolbar<135,'Phone collapse retains both full-width touch control rows and the frame-rate row');assert.deepEqual(await page.$$eval('.timeline-collapsed .timeline-playback-controls,.timeline-collapsed .timeline-view-actions',nodes=>nodes.map(node=>node.getBoundingClientRect().height>=44)),[true,true],'Both collapsed phone control rows keep 44px touch height');assert.ok(collapse.playbackFits);
  await page.setViewport({width:1440,height:900});await flush();collapse=await collapsedFits();assert.equal(collapse.height,36,'A collapsed timeline shrinks again after returning to desktop width');
  await page.click('[aria-label="Expand timeline"]');await page.waitForFunction(()=>!document.querySelector('.timeline-collapsed'));await flush();
  assert.ok(Math.abs(await page.$eval('#timeline[data-panel]',node=>node.getBoundingClientRect().height)-expandedHeight)<1,'Responsive collapse preserves the remembered expanded height');
