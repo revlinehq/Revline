@@ -14,12 +14,9 @@ import { consumeUpload, issueUpload } from "./uploads";
 import { MAX_EXPORT_SECONDS } from '../lib/editor/limits';
 import { normalizeTimeline, timelineDuration } from '../lib/editor/types';
 import { cancelMediaTask, enqueueMediaTask, failMediaTask } from './mediaTasks';
+import { accountLimit } from './lib/account_limits';
 const workerArgs = { jobId: v.id("renderJobs"), workerSecret: v.string() };
-function activeExportLimit() {
-  const value = Number(process.env.MAX_ACTIVE_EXPORTS_PER_ACCOUNT ?? 2);
-  if (!Number.isInteger(value) || value < 1 || value > 10) throw new Error('MAX_ACTIVE_EXPORTS_PER_ACCOUNT must be between 1 and 10');
-  return value;
-}
+const activeExportLimit = () => accountLimit('MAX_ACTIVE_EXPORTS_PER_ACCOUNT', 2, 1, 10);
 async function requireJob(ctx: MutationCtx, jobId: Id<"renderJobs">, workerSecret: string) {
   const secret = process.env.RENDER_WORKER_SECRET;
   if (!secret || workerSecret !== secret) throw new ConvexError("Render worker authentication required");

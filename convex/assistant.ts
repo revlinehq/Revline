@@ -23,6 +23,7 @@ import { validateVideoInspectionInput } from '../lib/media-analysis/video-inspec
 import { normalizeTimeline } from '../lib/editor/types';
 import {savePublicationReceipt} from './lib/publicationReceipt';
 import { enqueueMediaTask, cancelMediaTask, detachAnalysisRequest } from './mediaTasks';
+import { requireMediaTaskCapacity } from './lib/account_limits';
 import { assertEditorModelConfigured, claudeModelSwitcherEnabled, defaultEditorModelChoice, resolveClaudeModel, withEditorReasoning, withEditorSpeed } from '../lib/ai/claude-model';
 import { claudeModelChoiceValidator, legacyCompatibleModelChoiceValidator, openAIReasoningEffortValidator, openAISpeedModeValidator } from './lib/claude_model';
 import { allowedClaudeModelChoices, enforceClaudeModelPolicy } from '../lib/ai/claude-model-policy';
@@ -275,6 +276,8 @@ export const requestAnalysis = internalMutation({ args: { ...runArgs, assetId: v
     // must survive that cleanup and every durable continuation segment.
     const enqueued=project.aiAnalysisUsage?.runId===args.runId?project.aiAnalysisUsage.enqueued:requests.length;
     if(enqueued>=15)throw new ConvexError('Too many analysis requests in one AI run');
+    // An accepted run may analyse beside upload preparation, up to the ceiling.
+    await requireMediaTaskCapacity(ctx,args.ownerId,1,{ceiling:2});
     await writeProject(ctx,project._id,{aiAnalysisUsage:{runId:args.runId,enqueued:enqueued+1}});
   });
   await ctx.db.patch(requestId, { taskId });

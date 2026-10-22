@@ -751,6 +751,47 @@ test('simultaneous exports in separate projects share one account limit and canc
   await expect(f.other.mutation(api.renders.start, { projectId: otherProject, resolution: 720, fps: 30, quality: 'draft' })).resolves.toBeTruthy();
 });
 
+test('user-initiated media work respects the account task limit while reuse and follow-ups proceed', async () => {
+  vi.stubEnv('MAX_ACTIVE_MEDIA_TASKS_PER_ACCOUNT', '3');
+  const f = await fixture(), { enqueueMediaTask } = await import('./mediaTasks');
+  const start = (kind: 'beats' | 'shots' | 'track' | 'transcribe') => f.owner.mutation(api.mediaTasks.start, { projectId: f.projectId, assetId: f.assetId, kind });
+  const first = await start('beats'); await start('shots'); await start('track');
+  await expect(start('transcribe')).rejects.toThrow('too many media jobs');
+  expect(await start('beats')).toBe(first);
+  await expect(upload(f)).rejects.toThrow('too many media jobs');
+  // Follow-up work of an accepted source is never refused or dropped.
+  await expect(f.t.run(ctx => enqueueMediaTask(ctx, { ownerId, projectId: f.projectId, assetId: f.assetId, kind: 'transcribe' }))).resolves.toBeTruthy();
+  for (const kind of ['beats', 'shots', 'track', 'transcribe'] as const) {
+    const task = await f.t.run(ctx => ctx.db.query('mediaTasks').withIndex('by_asset_kind', q => q.eq('assetId', f.assetId).eq('kind', kind)).order('desc').first());
+    await f.owner.mutation(api.mediaTasks.cancel, { taskId: task!._id });
+  }
+  // A started transfer reserves its preparation, so a parallel start is refused
+  // before any bytes move; follow-ups queued during a transfer do not strand it.
+  const a = await upload(f);
+  await expect(upload(f)).rejects.toThrow('too many media jobs');
+  for (const kind of ['beats', 'shots', 'track'] as const) await f.t.run(ctx => enqueueMediaTask(ctx, { ownerId, projectId: f.projectId, assetId: f.assetId, kind }));
+  await expect(f.owner.action(api.r2.complete, { uploadId: a.uploadId, parts: [{ partNumber: 1, etag: 'a' }] })).resolves.toBeTruthy();
+});
+
+test('video-link imports and new edits from links have separate daily account quotas', async () => {
+  vi.stubEnv('VIDEO_IMPORTS_PER_DAY_PER_ACCOUNT', '2'); vi.stubEnv('IMPORT_PROJECTS_PER_DAY_PER_ACCOUNT', '1');
+  // Midday UTC near real time keeps scheduled work in range and away from a reset.
+  const now = Date.now(), midday = now - now % 86_400_000 + 43_200_000;
+  const f = await fixture(), time = vi.spyOn(Date, 'now').mockReturnValue(midday);
+  try {
+    const projects = () => f.t.run(async ctx => (await ctx.db.query('projects').withIndex('by_ownerId_updatedAt', q => q.eq('ownerId', ownerId)).collect()).length);
+    await f.owner.mutation(api.mediaTasks.importVideo, { url: 'https://cdn.example.com/one.mp4' });
+    await expect(f.owner.mutation(api.mediaTasks.importVideo, { url: 'https://cdn.example.com/two.mp4' })).rejects.toThrow('new edits from video links');
+    expect(await projects()).toBe(2);
+    const existing = await f.owner.mutation(api.mediaTasks.importVideo, { projectId: f.projectId, url: 'https://cdn.example.com/two.mp4' });
+    // A repeated pending link is the same import and is not charged again.
+    expect(await f.owner.mutation(api.mediaTasks.importVideo, { projectId: f.projectId, url: 'https://cdn.example.com/two.mp4' })).toEqual(existing);
+    await expect(f.owner.mutation(api.mediaTasks.importVideo, { projectId: f.projectId, url: 'https://cdn.example.com/three.mp4' })).rejects.toThrow('2 video-link imports');
+    time.mockReturnValue(midday + 86_400_000);
+    await expect(f.owner.mutation(api.mediaTasks.importVideo, { projectId: f.projectId, url: 'https://cdn.example.com/three.mp4' })).resolves.toBeTruthy();
+  } finally { time.mockRestore(); }
+});
+
 test('export download signs a fresh owner-scoped attachment while preview URLs remain inline', async () => {
   const f = await fixture();
   const key = `media/${ownerId}/${f.projectId}/export`;

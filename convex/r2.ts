@@ -12,6 +12,7 @@ import { mediaConfig, storageControl, hasPreview, PREVIEW_VERSION } from './lib/
 import { signMediaToken } from '../lib/storage/media-tokens';
 import { requireMediaTask } from './lib/media_task_auth';
 import { enqueueMediaTask } from './mediaTasks';
+import { requireMediaTaskCapacity, uploadPreparationTasks } from './lib/account_limits';
 import { releaseMediaObjects } from './lib/shared_media';
 import { releaseAccountStorage } from './lib/storage_accounting';
 import { isStockAudioKey } from '../lib/editor/stock-audio';
@@ -46,6 +47,8 @@ export const authorize = internalQuery({ args: { projectId: v.id('projects'), jo
   }
   const pending = await ctx.db.query('r2Uploads').withIndex('by_projectId_completed', q => q.eq('projectId', args.projectId).eq('completed', false)).take(101);
   if (pending.filter(upload => !upload.completed && upload.expiresAt > Date.now()).length >= 100) throw new ConvexError('Finish the pending uploads first');
+  // Fail fast before opening the multipart upload; createLease is authoritative.
+  if (!task && !args.jobId) await requireMediaTaskCapacity(ctx, ownerId, uploadPreparationTasks(args.kind));
   return ownerId;
 }});
 export const createLease = internalMutation({ args: { ...metadata, ownerId: v.string(), projectId: v.id('projects'), jobId: v.optional(v.id('renderJobs')), ...taskAuth,...previewUpload, key: v.string(), uploadId: v.string(), partSize: v.number() }, returns: v.id('r2Uploads'), handler: async (ctx, args) => {
@@ -53,6 +56,8 @@ export const createLease = internalMutation({ args: { ...metadata, ownerId: v.st
   if (!args.taskId && !args.jobId) await requireEditorAccess(ctx, args.ownerId);
   const task=args.taskId?await requireMediaTask(ctx,args.taskId,args.leaseToken??''):null;
   await previewSource(ctx,args,task);
+  // Transactional with the insert below: parallel starts reserve in turn.
+  if (!task && !args.jobId) await requireMediaTaskCapacity(ctx, args.ownerId, uploadPreparationTasks(args.kind));
   const { leaseToken, ...fields } = args;
   await recordStorageObject(ctx,{...args,r2Key:args.key,createdAt:Date.now(),kind:args.jobId?'export':args.kind,pending:true,auxiliary:args.purpose==='preview'});
   const id = await ctx.db.insert('r2Uploads', { ...fields, ...(leaseToken ? { taskLeaseToken: leaseToken } : {}), completed: false, expiresAt: Date.now() + 24 * 3600_000 });
@@ -147,6 +152,10 @@ export const finish = internalMutation({ args: { uploadId: v.id('r2Uploads'), si
   await ctx.db.patch(lease._id, { completed: true, assetId });
   if (lease.taskId) await ctx.db.patch(lease.taskId, { outputAssetId: assetId });
   else if (lease.kind !== 'image') {
+    // The lease reserved this source's tasks before its bytes moved. Follow-ups
+    // of earlier uploads may have queued meanwhile, so completion only enforces
+    // a backstop of twice the limit (for leases older than their reservation).
+    await requireMediaTaskCapacity(ctx, lease.ownerId, uploadPreparationTasks(lease.kind), { ceiling: 2, countUploads: false });
     await enqueueMediaTask(ctx, { ownerId: lease.ownerId, projectId: lease.projectId, assetId, kind: lease.kind === 'video' ? 'extract' : 'waveform' });
     if(lease.kind==='video')await enqueueMediaTask(ctx,{ownerId:lease.ownerId,projectId:lease.projectId,assetId,kind:'preview'});
     if (lease.kind === 'video') await enqueueMediaTask(ctx, { ownerId: lease.ownerId, projectId: lease.projectId, assetId, kind: 'understand' });

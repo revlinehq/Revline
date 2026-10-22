@@ -16,6 +16,7 @@ import { parseShots } from '../lib/media-analysis/shots';
 import { serializedBytes, validateFocus } from "./lib/timeline";
 import { consumeUpload, issueUpload } from "./uploads";
 import { enqueueMediaTask } from './mediaTasks';
+import { requireMediaTaskCapacity, uploadPreparationTasks } from './lib/account_limits';
 import { stockAudio } from '../lib/editor/stock-audio';
 import { signMediaToken } from '../lib/storage/media-tokens';
 /** Public playback is restricted to immutable CC0 catalog IDs, never arbitrary stored keys. */
@@ -59,6 +60,7 @@ export const create = mutation({ args: { projectId: v.id("projects"), storageId:
   const assetId = await ctx.db.insert("assets", { ownerId, projectId: args.projectId, storageId: args.storageId, fileName, contentType: metadata.contentType, size: metadata.size, kind: args.kind, createdAt: Date.now(), ...(args.duration !== undefined ? { duration: args.duration } : {}), ...(args.width !== undefined ? { width: args.width } : {}), ...(args.height !== undefined ? { height: args.height } : {}) });
   await recordAssetStorage(ctx,(await ctx.db.get(assetId))!);
   if(args.kind!=='image'){
+    await requireMediaTaskCapacity(ctx,ownerId,uploadPreparationTasks(args.kind));
     await enqueueMediaTask(ctx,{ownerId,projectId:args.projectId,assetId,kind:args.kind==='video'?'extract':'waveform'});
     if(args.kind==='video')await enqueueMediaTask(ctx,{ownerId,projectId:args.projectId,assetId,kind:'preview'});
     await enqueueMediaTask(ctx,{ownerId,projectId:args.projectId,assetId,kind:args.kind==='video'?'understand':'transcribe'});

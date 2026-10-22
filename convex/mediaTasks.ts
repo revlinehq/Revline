@@ -22,6 +22,7 @@ import { commitTimeline, currentTimeline } from './lib/timeline';
 import { BEAT_ANALYSIS_ENGINE } from '../lib/media-analysis/beat-map';
 import { editingWorkflowActive } from './lib/assistant_workflow';
 import { MEDIA_TASK_LEASE_MS } from '../lib/media-analysis/errors';
+import { consumeVideoImport, requireMediaTaskCapacity } from './lib/account_limits';
 
 const LEASE_MS = MEDIA_TASK_LEASE_MS;
 const MAX_ATTEMPTS = 3;
@@ -149,7 +150,8 @@ export const start = mutation({ args: { projectId: v.id('projects'), assetId: v.
   if (args.kind === 'video') throw new ConvexError('Native video inspection requires a scoped AI question and source window.');
   if (['extract', 'preview', 'shots', 'understand', 'track'].includes(args.kind) && asset.kind !== 'video') throw new ConvexError('This operation requires a video.');
   if (args.kind === 'waveform' && asset.kind !== 'audio') throw new ConvexError('Waveforms require an audio source.');
-  return enqueueMediaTask(ctx, { ...args, ownerId });
+  // Reused or already-active work needs no new capacity.
+  return enqueueMediaTask(ctx, { ...args, ownerId }, () => requireMediaTaskCapacity(ctx, ownerId, 1));
 }});
 export const importVideo = mutation({ args: { projectId: v.optional(v.id('projects')), url: v.string() }, returns: v.object({ projectId: v.id('projects'), taskId: v.id('mediaTasks') }), handler: async (ctx, args) => {
   const ownerId = await requireOwner(ctx); await requireEditorAccess(ctx, ownerId);
@@ -163,6 +165,8 @@ export const importVideo = mutation({ args: { projectId: v.optional(v.id('projec
   const existing = pending.find(task => task.sourceUrl === sourceUrl);
   if (existing) return { projectId, taskId: existing._id };
   if (pending.length >= 3) throw new ConvexError('Wait for the current video imports to finish.');
+  // Counted only once a fresh import is accepted; a refusal rolls back a new edit with it.
+  await consumeVideoImport(ctx, ownerId, !args.projectId); await requireMediaTaskCapacity(ctx, ownerId, 1);
   const taskId = await enqueueMediaTask(ctx, { ownerId, projectId, kind: 'import', sourceUrl });
   return { projectId, taskId };
 }});
