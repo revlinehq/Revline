@@ -12,7 +12,7 @@ import { streamDemoText, waitForDemoStep } from '@/lib/editor/scripted-demo-chat
 import { HORMOZI_DEMO_ASSET, hormoziDemoPlan } from '@/lib/editor/hormozi-demo';
 import { RACING_DEMO_ASSETS, racingDemoPlan } from '@/lib/editor/racing-demo';
 import { F1_RECORDING_ASSETS, f1RecordingDemoPlan } from '@/lib/editor/f1-recording-demo';
-import type { MediaAsset, Timeline } from '@/lib/editor/types';
+import {timelineDuration,type MediaAsset,type Timeline} from '@/lib/editor/types';
 import type { ComposerAttachment } from '@/components/workspace/edit-composer';
 import { stockAudioAsset } from '@/lib/editor/stock-audio';
 import { userError } from '@/lib/user-error';
@@ -62,6 +62,12 @@ export function ScriptedDemoEditor({ demoId }: { demoId: string }) {
   function setMessages(next: ChatMessage[] | ((previous: ChatMessage[]) => ChatMessage[])) {
     conversation.setState(state => ({ messages: typeof next === 'function' ? next(state.messages) : next }));
   }
+  function focusDemoTimeline(seconds:number) {
+    const scroll=root.current?.querySelector<HTMLElement>('.timeline-scroll');
+    const width=scroll?.clientWidth??720;
+    store.setState({zoom:Math.max(.03,(width-24)/(TIMELINE_BASE_PX*seconds))});
+    if(scroll)scroll.scrollLeft=0;
+  }
   function reset() {
     activeRun.current?.abort(); activeRun.current = null;
     store.getState().recover(EMPTY_SCRIPTED_DEMO); store.setState({ playhead: 0, playing: false });
@@ -108,8 +114,7 @@ export function ScriptedDemoEditor({ demoId }: { demoId: string }) {
     setMessages([{ id: `${runId}-request`, role: 'user', text: prompt }, { id: `${runId}-reply`, role: 'assistant', status: 'streaming', text: '' }]);
     store.getState().recover(plan.initial); store.setState({ playhead: 0, playing: false }); store.getState().beginUndoGroup(runId);
     if (f1Plan) {
-      const width = root.current?.querySelector<HTMLElement>('.timeline-scroll')?.clientWidth ?? 720;
-      store.setState({ zoom: Math.min(1, Math.max(.03, (width - 24) / (TIMELINE_BASE_PX * 90))) });
+      focusDemoTimeline(90);
       setDemoPhase('queued');
     }
     let current = plan.initial;
@@ -179,7 +184,7 @@ export function ScriptedDemoEditor({ demoId }: { demoId: string }) {
       })()]);
       if (f1Plan) { setDemoPhase('saving'); setActivity('Saving your edit…'); await waitForDemoStep(650, controller.signal); }
       setMessages(previous => previous.map(message => message.id === `${runId}-reply` ? { ...message, status: 'success' } : message));
-      if (f1Plan) setDemoPhase('ready');
+      if (f1Plan) {focusDemoTimeline(timelineDuration(current)+1);setDemoPhase('ready');}
     } catch (error) {
       if (!controller.signal.aborted && mounted.current) setError(userError(error, 'The edit stopped. Reset and try again.'));
       controller.abort();
@@ -196,7 +201,7 @@ export function ScriptedDemoEditor({ demoId }: { demoId: string }) {
   const chat = <div className="scripted-demo-conversation">
     <div className="scripted-demo-controls" aria-label="Sequence controls">
       {racingTake ? <a href="/demo/racing/credits.html" target="_blank" rel="noreferrer" style={{ marginRight: 'auto', color: 'inherit' }}>Footage &amp; license ↗</a> : null}
-      <button type="button" title="Replay edit" aria-label="Replay edit" disabled={running || importing || !lastPrompt || !assets.length} onClick={() => void build(lastPrompt).catch(error => setError(userError(error)))}><Play size={13}/></button>
+      <button type="button" className="scripted-demo-replay" title="Replay edit" aria-label="Replay edit" disabled={running || importing || !lastPrompt || !assets.length} onClick={() => void build(lastPrompt).catch(error => setError(userError(error)))}><Play size={13}/><span>Replay edit</span></button>
       <button type="button" title="Reset the timeline, keep attached footage" aria-label="Reset edit" disabled={importing} onClick={reset}><RotateCcw size={13}/></button>
     </div>
     <DemoConversation chatStore={conversation} running={running} configured demo={false} hasClips={!!assets.length} onSend={build} onStop={async () => { activeRun.current?.abort(); }} onAttach={() => input.current?.click()} attachments={attachments} onRemoveAttachment={removeAttachment} requireMedia={!assets.length || attachments.length > 0 || importing} activity={importing ? 'Reading local footage…' : activity} activityStartedAt={activityStartedAt} activitySource={(media.assets.find(asset => asset.kind === 'video') ?? media.assets.find(asset => asset.kind === 'audio'))?.fileName} error={error}/>

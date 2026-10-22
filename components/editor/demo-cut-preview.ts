@@ -57,14 +57,15 @@ export async function animateDemoCutPreview(root: HTMLElement, plan: DemoCutPrev
     const target = box(removed[0]!); Object.assign(label.style, { left: `${target.left}px`, top: `${Math.max(2, target.top - 20)}px` }); layer.appendChild(label);
     area.appendChild(layer); onPhase('planned');
     shades.forEach(shade => animate(shade, [{ opacity: 0 }, { opacity: 1 }], 280));
-    await waitForDemoStep(reduced ? 80 : 950, combined);
-    removedCopies.forEach(node => animate(node, [{ opacity: 1 }, { opacity: 0 }], 380));
-    shades.forEach(node => animate(node, [{ opacity: 1 }, { opacity: .12 }], 380));
-    await waitForDemoStep(reduced ? 0 : 380, combined);
+    await waitForDemoStep(reduced ? 80 : 1500, combined);
+    removedCopies.forEach(node => animate(node, [{ opacity: 1 }, { opacity: 0 }], 500));
+    shades.forEach(node => animate(node, [{ opacity: 1 }, { opacity: .12 }], 500));
+    await waitForDemoStep(reduced ? 0 : 500, combined);
     onPhase('closing');
     const gap = target.width;
-    movingCopies.forEach(node => animate(node, [{ transform: 'translateX(0)' }, { transform: `translateX(${-gap}px)` }], 1100));
-    await waitForDemoStep(reduced ? 0 : 1100, combined);
+    movingCopies.forEach(node => animate(node, [{ transform: 'translateX(0)' }, { transform: `translateX(${-gap}px)` }], 1500));
+    await waitForDemoStep(reduced ? 0 : 1500, combined);
+    await waitForDemoStep(reduced ? 0 : 300, combined);
     signal.throwIfAborted(); commit(); committed = true; onPhase('committed');
     // Keep the final preview pixels until React has painted the one canonical cut.
     await waitForDemoStep(40, signal);

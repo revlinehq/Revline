@@ -11,7 +11,7 @@ import './components/editor/scripted-demo-editor.css';
 const plan=f1RecordingDemoPlan('smoke'),root=createRoot(document.getElementById('timeline'));
 const render=timeline=>flushSync(()=>root.render(<>{timeline.clips.map(clip=><div key={clip.id} className={'timeline-clip clip-'+clip.kind} data-clip-id={clip.id} role="button" style={{position:'absolute',left:clip.start*10,top:clip.kind==='audio'?95:30,width:clip.duration*10,height:45,background:clip.kind==='audio'?'#8761c5':'#4b6374'}}><canvas width="20" height="8"/>{clip.kind}</div>)}</>));
 window.resetFixture=()=>{render(plan.initial);window.phase='idle';document.querySelectorAll('canvas').forEach(canvas=>{const ctx=canvas.getContext('2d');ctx.fillStyle='#55ddaa';ctx.fillRect(0,0,20,8)});window.first=document.querySelector('[data-clip-id="smoke-section-0"]');window.player=document.querySelector('video');};
-window.startFixture=()=>{window.commits=0;window.controller=new AbortController();window.completion=animateDemoCutPreview(document.querySelector('.scripted-editor-demo'),plan.cutPreview,window.controller.signal,()=>{window.commits++;render(plan.cutPreview.timeline);},phase=>{window.phase=phase;}).then(()=>({ok:true}),error=>({ok:false,error:String(error)}));};
+window.startFixture=()=>{window.phases=[];window.commits=0;window.controller=new AbortController();window.completion=animateDemoCutPreview(document.querySelector('.scripted-editor-demo'),plan.cutPreview,window.controller.signal,()=>{window.commits++;render(plan.cutPreview.timeline);},phase=>{window.phase=phase;window.phases.push({phase,time:performance.now()});}).then(()=>({ok:true}),error=>({ok:false,error:String(error)}));};
 window.resetFixture();
 ` }, bundle: true, platform: 'browser', format: 'iife', jsx: 'automatic', write: false, outdir: '/tmp/revline-demo-cut-test', define: { 'process.env.NODE_ENV': '"development"' } });
 const server = createServer((_request, response) => { response.writeHead(200, { 'Content-Type': 'text/html' }); response.end('<html><body></body></html>'); });
@@ -43,6 +43,9 @@ try {
     return Math.abs(x('smoke-section-2')-x('smoke-section-2-audio'))<.1 && window.commits===0;
   }), true, 'Video and linked audio close the gap together before the canonical cut is saved');
   assert.deepEqual(await page.evaluate(() => window.completion), { ok: true });
+  const phases=await page.evaluate(()=>window.phases);const at=name=>phases.find(item=>item.phase===name).time;
+  assert.ok(at('closing')-at('planned')>=1900,'The planned region remains readable through a 1.5s hold and half-second fade');
+  assert.ok(at('committed')-at('closing')>=1700,'Linked clips close the gap over 1.5s and briefly settle before the single save');
   assert.equal(await page.evaluate(() => window.commits===1 && !document.querySelector('.demo-cut-preview') && window.first===document.querySelector('[data-clip-id="smoke-section-0"]') && window.player===document.querySelector('video') && [...document.querySelectorAll('[data-clip-id]')].every(node => node.style.visibility!=='hidden')), true, 'One save removes overlays, restores visibility and retains player/kept-node identity');
 
   await page.evaluate(() => { window.resetFixture(); window.startFixture(); });

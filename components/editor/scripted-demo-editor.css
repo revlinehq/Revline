@@ -5,6 +5,7 @@
 .scripted-demo-controls{display:flex;align-items:center;gap:8px;justify-content:flex-end;padding:10px 14px;color:var(--ws-muted);font-size:10px}
 .scripted-demo-controls button{display:grid;place-items:center;width:28px;height:28px;border:0;border-radius:5px;background:transparent;color:var(--ws-muted);cursor:pointer}
 .scripted-demo-controls button:hover,.scripted-demo-controls button:focus-visible{background:var(--ws-hover);color:var(--ws-text)}
+.scripted-demo-controls .scripted-demo-replay{display:inline-flex;align-items:center;gap:6px;width:auto;padding:0 8px;white-space:nowrap;font:inherit}
 .scripted-demo-controls button:disabled{opacity:.35;cursor:default}
 .scripted-editor-demo[data-building] .timeline-clip{animation:demo-block-arrive .55s cubic-bezier(.2,0,0,1) both}
 .scripted-editor-demo[data-building] .timeline-track{pointer-events:none}
