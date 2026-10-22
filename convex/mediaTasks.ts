@@ -313,8 +313,10 @@ export const placeImport = internalMutation({ args: { taskId: v.id('mediaTasks')
     if (args.attempt < IMPORT_PLACEMENT_ATTEMPTS) await ctx.scheduler.runAfter(IMPORT_PLACEMENT_DELAY_MS, internal.mediaTasks.placeImport, { taskId: task._id, attempt: args.attempt + 1 });
     return null;
   }
-  // The run may already have placed the waiting import from Sources.
-  if (currentTimeline(project).clips.some(clip => clip.assetId === output._id)) return null;
+  // The run may already have placed the waiting import from Sources, or changed
+  // the frame rate so the video is now shorter than one frame.
+  const timeline = currentTimeline(project);
+  if (output.kind !== 'video' || output.duration < 1 / timeline.fps || timeline.clips.some(clip => clip.assetId === output._id)) return null;
   await placeImportedVideo(ctx, project, task._id, { ...output, duration: output.duration });
   return null;
 }});
