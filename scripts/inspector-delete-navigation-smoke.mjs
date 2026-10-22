@@ -39,6 +39,15 @@ try {
     assert.equal(await page.$eval('#inspector-tools-tab', node => node.getAttribute('aria-selected')), 'true');
   };
 
+  // Removing an applied effect keeps its clip selected, so the inspector stays in Clip settings (10be298).
+  const assertClipSettings = async reason => {
+    await flush();
+    assert.ok(await page.$('#inspector-effects .inspector-clip-settings'), reason);
+    assert.equal(await page.$('.effect-library'), null, 'Removing an applied effect does not jump to the library');
+    assert.equal(await page.$('.inspector-empty'), null, 'Clip settings never show a selection placeholder after removal');
+    assert.equal(await page.$('[aria-label="Remove Invert colors"]'), null, 'The removed effect is no longer listed');
+  };
+
   await page.waitForSelector('[aria-label="Effect settings"]');
   await page.evaluate(() => window.fixture.remove());
   await assertTools('Deleting the selected timed effect returns to the Tools library');
@@ -60,14 +69,16 @@ try {
   await page.click('[aria-label="Invert colors"]');
   await page.waitForSelector('[aria-label="Remove Invert colors"]');
   await page.click('[aria-label="Remove Invert colors"]');
-  await assertTools('Removing the selected applied effect returns to Tools');
+  await assertClipSettings('Removing the selected applied effect stays in its Clip settings');
   assert.equal(await page.evaluate(() => window.fixture.timeline.clips.find(clip => clip.id === 'footage').invert), undefined);
 
+  await page.click('[aria-label="Add effect"]');
+  await page.waitForSelector('.effect-library');
   await page.click('[data-category="color"]');
   await page.click('[aria-label="Invert colors"]');
   await page.waitForSelector('[aria-label="Remove Invert colors"]');
   await page.evaluate(() => window.fixture.removeApplied('invert'));
-  await assertTools('External removal of the selected applied effect also returns to Tools');
+  await assertClipSettings('External removal of the selected applied effect also stays in Clip settings');
 
   await page.evaluate(() => { window.fixture.restore(); window.fixture.select('effect'); });
   await page.waitForSelector('[aria-label="Effect settings"]');
@@ -90,7 +101,7 @@ try {
   await page.waitForSelector('[aria-label="Effect settings"]');
   assert.equal(await page.$('.effect-library'), null, 'Changing clips from an applied-effect detail opens the next selected clip settings');
   assert.deepEqual(errors, []);
-  console.log('PASS: timed and applied effect deletion return to Tools; cleared selection, direct clip changes, reselection, external removal, and My media remain correct.');
+  console.log('PASS: timed effect deletion returns to Tools; applied effect removal (direct and external) stays in Clip settings; cleared selection, direct clip changes, reselection, external removal, and My media remain correct.');
 } finally {
   await browser.close();
   await fonts.close();

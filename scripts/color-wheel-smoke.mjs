@@ -11,7 +11,7 @@ window.fixture={store,queue};function Fixture(){const timeline=useStore(store,s=
 const browser=await puppeteer.launch({headless:true,args:['--no-sandbox','--disable-dev-shm-usage']});const page=await browser.newPage();const errors=[];page.on('pageerror',e=>errors.push(e.message));
 try{await page.setContent('<div id="root" style="width:320px"></div>');await page.addStyleTag({content:bundle.outputFiles.find(f=>f.path.endsWith('.css')).text});await page.addScriptTag({content:bundle.outputFiles.find(f=>f.path.endsWith('.js')).text});await page.waitForSelector('[aria-label="Text color"]');
 for(const label of ['Text color','Stroke color']){
- if(label==='Stroke color'){await page.click('#text-settings-style-tab');await page.$eval('.text-style-group',node=>node.open=true);}
+ if(label==='Stroke color'){await page.$eval('#text-settings-text .text-style-group',node=>node.open=true);}
  assert.ok(await page.$eval('[aria-label="'+label+'"]',node=>!!node.closest('.editor-color-control')),'Every picker uses the shared swatch and hex row');
  const before=await page.evaluate(()=>({...window.stats,history:window.fixture.store.getState().history.length}));
  await page.evaluate(label=>{const input=document.querySelector('[aria-label="'+label+'"]');input.focus();const set=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set;for(let i=0;i<80;i++){set.call(input,'#'+(0x110000+i*64).toString(16));input.dispatchEvent(new Event('input',{bubbles:true}));}},label);
