@@ -26,11 +26,14 @@ video_codec=''
 for ((i=0;i<${#args[@]}-1;i++)); do
   if [[ "${args[i]}" == '-c:v' || "${args[i]}" == '-vcodec' ]]; then video_codec="${args[i+1]}"; fi
 done
-# Spend less CPU on compression searches at the same authored CRF, resolution
-# and frame rate. This applies only to the standard H.264 output preset.
-if [[ "${REVLINE_RENDER_STANDARD_PRESET:-}" == fast && "$video_codec" == libx264 ]]; then
+# Spend less CPU on compression searches at the same resolution and frame
+# rate. REVLINE_RENDER_X264_PRESET maps the producer's preset (from=to) and
+# REVLINE_RENDER_X264_CRF its CRF, for the H.264 output encoder only.
+if [[ "$video_codec" == libx264 ]]; then
+  preset_map="${REVLINE_RENDER_X264_PRESET:-}" crf_map="${REVLINE_RENDER_X264_CRF:-}"
   for ((i=0;i<${#args[@]}-1;i++)); do
-    if [[ "${args[i]}" == '-preset' && "${args[i+1]}" == medium ]]; then args[i+1]=fast; fi
+    if [[ -n "$preset_map" && "${args[i]}" == '-preset' && "${args[i+1]}" == "${preset_map%%=*}" ]]; then args[i+1]="${preset_map#*=}"; fi
+    if [[ -n "$crf_map" && "${args[i]}" == '-crf' && "${args[i+1]}" == "${crf_map%%=*}" ]]; then args[i+1]="${crf_map#*=}"; fi
   done
 fi
 # All rendering invocations with an input end in their output path. Bound

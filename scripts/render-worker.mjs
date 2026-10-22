@@ -17,7 +17,11 @@ try {
   if (!directory || !output || ![24, 30, 60].includes(settings.fps) || !['draft', 'standard', 'high'].includes(settings.quality)) throw new Error('Invalid render worker settings.');
   const resources = renderResources();
   configureRenderFfmpeg(directory, resources);
-  if(settings.quality==='standard')process.env.REVLINE_RENDER_STANDARD_PRESET='fast';
+  // Cheaper compression searches at the same resolution and frame rate.
+  // Standard keeps CRF 18; high moves from slow/CRF 15 to medium/CRF 16,
+  // roughly halving its encode CPU for a small SSIM change.
+  if(settings.quality==='standard')process.env.REVLINE_RENDER_X264_PRESET='medium=fast';
+  if(settings.quality==='high'){process.env.REVLINE_RENDER_X264_PRESET='slow=medium';process.env.REVLINE_RENDER_X264_CRF='15=16';}
   // The low-memory profile forces one worker and per-frame screenshots. Keep it
   // for small hosts; PRODUCER_LOW_MEMORY_MODE still overrides this choice.
   const lowMemory = process.env.PRODUCER_LOW_MEMORY_MODE ? {} : { lowMemoryMode: resources.lowMemory };
