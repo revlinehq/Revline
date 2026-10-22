@@ -10,6 +10,7 @@
     "start": "next start --hostname localhost",
     "typecheck": "next typegen && tsc --noEmit",
     "test": "vitest run",
+    "smoke": "fail=; log=$(mktemp); for f in scripts/*-smoke.mjs scripts/*-smoke.ts; do case \"${f#scripts/}\" in agentic-video-*|claude-model-*|frame-inspection-*|video-import-*|music-beats-*|assistant-mobile-layout-*|preview-immediate-resume-*|preview-playback-smoothness-*) continue;; esac; grep -q 'localhost:3001\\|storage.googleapis.com' \"$f\" && continue; if timeout 300 node --import tsx \"$f\" > \"$log\" 2>&1; then echo \"PASS $f\"; else cat \"$log\"; echo \"FAIL $f\"; fail=\"$fail $f\"; fi; done; rm -f \"$log\"; [ -z \"$fail\" ] || { echo \"Failed smoke checks:$fail\"; exit 1; }",
     "postinstall": "node scripts/copy-vendor.mjs",
     "convex:dev": "convex dev",
     "worker": "node --env-file=.env.local --import tsx scripts/media-worker.ts",
