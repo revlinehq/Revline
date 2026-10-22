@@ -82,7 +82,13 @@ jobs:
           key: beat-this-final0-8c328b45f59d8dd3dff219253ff6a8d6482be57d0133a29140e2febbf8eb8331
       - name: Install pinned beat model
         if: steps.processor.outputs.changed == 'true'
-        run: node scripts/install-beat-model.mjs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # The upstream model host returns intermittent 503s; use the repository's mirrored copy.
+          model=.data/beat-tracking-models/hub/checkpoints/beat_this-final0.ckpt
+          [ -f "$model" ] || gh release download beat-model-final0 -R "$GITHUB_REPOSITORY" -p beat_this-final0.ckpt -D "$(dirname "$model")"
+          node scripts/install-beat-model.mjs
       - uses: docker/setup-buildx-action@v3
         if: steps.processor.outputs.changed == 'true'
       - name: Expose the Actions cache to Docker
