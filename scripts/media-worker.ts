@@ -1,7 +1,7 @@
 import { ConvexHttpClient, ConvexClient } from 'convex/browser';
 import { api } from '../convex/_generated/api';
 import { processMediaTask } from '../lib/server/media-task-runner';
-import { isRetryableAnalysisError } from '../lib/media-analysis/errors';
+import { isMediaLeaseLost, isRetryableAnalysisError, MEDIA_TASK_LEASE_MS } from '../lib/media-analysis/errors';
 import type { MediaTaskActivity } from '../lib/media-analysis/activity';
 
 const convexUrl = process.env.NEXT_PUBLIC_CONVEX_URL;
@@ -15,6 +15,7 @@ const unsubscribe = subscriptions.onUpdate(api.mediaTasks.ready, { workerSecret,
   queueRevision++; queueReady = !!ready;
   if (queueReady) for (const wake of queueWaiters) wake();
 });
+const HEARTBEAT_MS = 20_000;
 const shutdown = new AbortController();
 process.on('SIGINT', () => shutdown.abort());
 process.on('SIGTERM', () => shutdown.abort());
@@ -23,6 +24,7 @@ async function runSlot() {
   while (!shutdown.signal.aborted) {
     try {
       const observedRevision = queueRevision;
+      const claimedAt = Date.now();
       const task = await client.mutation(api.mediaTasks.claim, { workerSecret: workerSecret!, compact:true,processorVersion:5 });
       if (!task) { await waitForWork(observedRevision); continue; }
       console.log(`[${new Date().toISOString()}] Chat ${task.projectId} · media task ${task.taskId}: ${task.kind} started.`);
@@ -31,16 +33,21 @@ async function runSlot() {
       const signal = AbortSignal.any([controller.signal, shutdown.signal, deadline]);
       const credentials = { taskId: task.taskId, leaseToken: task.leaseToken };
       let progress = 0, reported = -1,activity:MediaTaskActivity|undefined;
-      let heartbeats = Promise.resolve();
+      let heartbeats = Promise.resolve(), renewedAt = claimedAt;
+      // A transient transport failure retries on the next tick. Stop when Convex
+      // says the lease ended, or once two renewals were missed: renewedAt is when
+      // the last successful request was sent, so the lease then has under one
+      // interval left and Convex cannot yet have re-queued the task.
       const heartbeat = () => {
+        if (Date.now() - renewedAt >= MEDIA_TASK_LEASE_MS - HEARTBEAT_MS) { controller.abort(); return; }
         heartbeats = heartbeats.then(async () => {
           if (signal.aborted) return;
-          const next = progress;
+          const next = progress, sentAt = Date.now();
           await client.mutation(api.mediaTasks.heartbeat, { ...credentials, progress: next,...(activity?{activity}:{}) });
-          reported = next;
-        }).catch(() => { controller.abort(); });
+          reported = next; renewedAt = sentAt;
+        }).catch(error => { if (isMediaLeaseLost(error)) controller.abort(); });
       };
-      const timer = setInterval(heartbeat, 20_000);
+      const timer = setInterval(heartbeat, HEARTBEAT_MS);
       try {
         const snapshot=await client.query(api.mediaTasks.work,credentials);
         signal.throwIfAborted();

@@ -3,10 +3,19 @@ import { link, mkdir, readdir, rm, stat, statfs, utimes } from 'node:fs/promises
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-const MAX_BYTES = 512 * 1024 * 1024;
+const MIB = 1024 * 1024;
+// Budget for the 16 GB processor disk, which also holds the ~5 GB image and an
+// export's extracted/captured frames: up to 2 GiB of retained sources, so a
+// large source survives between exports, evicted first when free space runs low.
+const MAX_BYTES = cacheBudget(process.env.MEDIA_ANALYSIS_CACHE_MAX_MB, 2048) * MIB;
 const MAX_ENTRIES = 16;
 const TTL_MS = 20 * 60_000;
-const MIN_FREE_BYTES = 1024 * 1024 * 1024;
+const MIN_FREE_BYTES = 3 * 1024 * MIB;
+
+function cacheBudget(raw: string | undefined, fallback: number) {
+  const value = raw ? Number(raw) : fallback;
+  return Number.isInteger(value) && value >= 0 && value <= 16384 ? value : fallback;
+}
 
 type SourceIdentity = { _id: string; ownerId?: string; size: number; contentType: string; r2Key?: string; storageId?: string; duration?: number; width?: number; height?: number };
 /** Only fresh, lease-authorized task snapshots supply this identity. Never key on signed URLs. */

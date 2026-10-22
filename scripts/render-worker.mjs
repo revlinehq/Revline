@@ -1,7 +1,7 @@
 // HyperFrames' internal Hono server replaces global Request/Response. Keep it
 // inside this isolated, awaited process so Next's HTTP constructors stay intact.
 import { createRenderJob, executeRenderJob, createConsoleLogger, resolveConfig } from '@hyperframes/producer';
-import { configureRenderFfmpeg } from './render-resources.mjs';
+import { configureRenderFfmpeg, renderResources } from './render-resources.mjs';
 
 const controller = new AbortController();
 process.on('SIGTERM', () => controller.abort());
@@ -15,10 +15,18 @@ try {
   const [directory, output, serialized] = process.argv.slice(2);
   const settings = JSON.parse(serialized);
   if (!directory || !output || ![24, 30, 60].includes(settings.fps) || !['draft', 'standard', 'high'].includes(settings.quality)) throw new Error('Invalid render worker settings.');
-  configureRenderFfmpeg(directory);
-  if(settings.quality==='standard')process.env.REVLINE_RENDER_STANDARD_PRESET='fast';
-  const producerConfig = resolveConfig({ concurrency: 1, lowMemoryMode: true, frameDataUriCacheBytesLimitMb: 128 });
-  const job = createRenderJob({ producerConfig, fps: settings.fps, quality: settings.quality, workers: 1, strictness: 'strict', logger: createConsoleLogger('error') });
+  const resources = renderResources();
+  configureRenderFfmpeg(directory, resources);
+  // Cheaper compression searches at the same resolution and frame rate.
+  // Standard keeps CRF 18; high moves from slow/CRF 15 to medium/CRF 16,
+  // roughly halving its encode CPU for a small SSIM change.
+  if(settings.quality==='standard')process.env.REVLINE_RENDER_X264_PRESET='medium=fast';
+  if(settings.quality==='high'){process.env.REVLINE_RENDER_X264_PRESET='slow=medium';process.env.REVLINE_RENDER_X264_CRF='15=16';}
+  // The low-memory profile forces one worker and per-frame screenshots. Keep it
+  // for small hosts; PRODUCER_LOW_MEMORY_MODE still overrides this choice.
+  const lowMemory = process.env.PRODUCER_LOW_MEMORY_MODE ? {} : { lowMemoryMode: resources.lowMemory };
+  const producerConfig = resolveConfig({ concurrency: resources.workers, ...lowMemory, frameDataUriCacheBytesLimitMb: 128 });
+  const job = createRenderJob({ producerConfig, fps: settings.fps, quality: settings.quality, workers: resources.workers, strictness: 'strict', logger: createConsoleLogger('error') });
   await executeRenderJob(job, directory, output, progress => report({ type: 'progress', progress: progress.progress }), controller.signal);
   if (job.status !== 'complete') throw new Error('The render did not finish.');
   report({ type: 'complete', warnings: job.warnings.length });
