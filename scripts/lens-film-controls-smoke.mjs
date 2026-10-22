@@ -36,6 +36,8 @@ try{
   await page.evaluate(()=>{window.fixture.seek(.8);});await flush();assert.ok(distance(first,await pixels())>.1,'Film texture animates even on a still image');
   await page.evaluate(()=>{window.fixture.seek(.3);});await flush();assert.deepEqual(await pixels(),first,'Film returns to exactly the same pixels at the same frame');
   assert.equal(await page.$('[data-effect="softBlur"]'),null,'Whole-clip blur is a clip setting rather than an effect card');
+  // Blur and opacity live in the collapsed Compositing disclosure of Clip settings.
+  await page.click('details.footage-compositing > summary');await page.waitForSelector('input[aria-label="Blur"]',{visible:true});
   await page.focus('input[aria-label="Blur"]');for(let i=0;i<20;i++)await page.keyboard.press('ArrowRight');await flush();
   assert.equal(await page.evaluate(()=>window.fixture.clip.softBlur.amount),10);assert.ok(distance(first,await pixels())>1,'Clip blur actually softens pixels');
   await page.focus('input[aria-label="Opacity"]');await page.keyboard.press('ArrowLeft');await flush();assert.ok(await page.evaluate(()=>window.fixture.clip.transform.opacity<1),'Blur combines with clip transparency');

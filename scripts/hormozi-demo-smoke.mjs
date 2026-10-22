@@ -7,13 +7,14 @@ import { join } from 'node:path';
 import puppeteer from 'puppeteer';
 
 const directory = await mkdtemp(join(tmpdir(), 'revline-scripted-demo-'));
+// 126378d moved the hormozi-take-1 id to the F1 recording; the Hormozi plan runs as interview-take-1.
 const stubs = {
   'next/navigation': `const params=new URLSearchParams();export const useSearchParams=()=>params;`,
   '@/components/workspace/workspace-nav': `import React from 'react';export const WorkspaceNav=p=><header className="demo-fixture-nav"><span>revline</span>{p.editorControls}<button id="undo" disabled={!p.canUndo} onClick={p.onUndo}>Undo</button><button id="redo" disabled={!p.canRedo} onClick={p.onRedo}>Redo</button></header>;`,
 };
 const bundle = await build({stdin:{resolveDir:process.cwd(),loader:'tsx',contents:`
 import React from 'react';import {createRoot} from 'react-dom/client';import {TooltipProvider} from './components/ui/tooltip';import {ScriptedDemoEditor} from './components/editor/scripted-demo-editor';import './components/workspace/shared.css';import './app/editor.css';import './components/workspace/workspace-pages.css';
-const make=URL.createObjectURL.bind(URL),revoke=URL.revokeObjectURL.bind(URL);window.liveURLs=new Set();URL.createObjectURL=blob=>{const url=make(blob);window.liveURLs.add(url);return url};URL.revokeObjectURL=url=>{window.liveURLs.delete(url);revoke(url)};const root=createRoot(document.getElementById('root'));window.unmountDemo=()=>root.unmount();root.render(<TooltipProvider><ScriptedDemoEditor demoId="hormozi-take-1"/></TooltipProvider>);
+const make=URL.createObjectURL.bind(URL),revoke=URL.revokeObjectURL.bind(URL);window.liveURLs=new Set();URL.createObjectURL=blob=>{const url=make(blob);window.liveURLs.add(url);return url};URL.revokeObjectURL=url=>{window.liveURLs.delete(url);revoke(url)};const root=createRoot(document.getElementById('root'));window.unmountDemo=()=>root.unmount();root.render(<TooltipProvider><ScriptedDemoEditor demoId="interview-take-1"/></TooltipProvider>);
 `},plugins:[{name:'local-boundaries',setup(builder){builder.onResolve({filter:/.*/},args=>Object.hasOwn(stubs,args.path)?{path:args.path,namespace:'fixture'}:undefined);builder.onLoad({filter:/.*/,namespace:'fixture'},args=>({contents:stubs[args.path],loader:'tsx',resolveDir:process.cwd()}));}}],bundle:true,platform:'browser',format:'iife',jsx:'automatic',write:false,outdir:directory,define:{'process.env.NODE_ENV':'"production"'}});
 const js=bundle.outputFiles.find(file=>file.path.endsWith('.js')).text,css=bundle.outputFiles.find(file=>file.path.endsWith('.css')).text;
 const server=createServer(async(req,res)=>{

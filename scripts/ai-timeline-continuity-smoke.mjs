@@ -62,14 +62,17 @@ try {
   assert.deepEqual(await page.$$eval('[data-clip]',nodes=>nodes.map(n=>n.dataset.clip)),['replacement','replacement-audio']);
   assert.equal(await page.evaluate(()=>window.fixture.renders.some(r=>r.ids.length===0)),false,'No render sees an intermediate empty timeline');
   assert.equal(await page.evaluate(()=>window.previewNode===document.querySelector('[data-preview]')),true,'AI status and atomic publication keep the preview subtree mounted');
-  await page.evaluate(()=>window.startEdit());await page.evaluate(()=>window.splitCurrent());await flush();
-  assert.equal(await page.$$eval('[data-clip]',nodes=>nodes.length),4,'Ordinary splits still update the connected editor live');
+  // Splits change source placement, so EditSession stages them until the turn completes (00825e4).
+  await page.evaluate(()=>window.startEdit());const writesBeforeSplit=await page.evaluate(()=>window.fixture.writes.length);await page.evaluate(()=>window.splitCurrent());await flush();
+  assert.equal(await page.$$eval('[data-clip]',nodes=>nodes.length),2,'A staged split stays private until the turn completes');
+  assert.equal(await page.evaluate(()=>window.fixture.writes.length),writesBeforeSplit,'A staged split is not published early');
   await page.evaluate(()=>window.completeEdit());await flush();
+  assert.equal(await page.$$eval('[data-clip]',nodes=>nodes.length),4,'Completed splits update the connected editor');
   await page.evaluate(()=>window.startEdit());await page.evaluate(()=>window.stageDelete());await page.evaluate(()=>window.stageDelete());await flush();
   assert.equal(await page.$('[data-empty]'),null,'Intentional delete-all remains private until completion');
   await page.evaluate(()=>window.completeEdit());await flush();
   assert.ok(await page.$('[data-empty]'),'A successful final delete-all must display the genuine empty result');
   assert.deepEqual(await page.evaluate(()=>({mounts:window.fixture.mounts,unmounts:window.fixture.unmounts})),{mounts:1,unmounts:0});
   assert.deepEqual(errors,[]);
-  console.log('PASS: actual EditSession → ConnectedEditor keeps linked clips visible during replacement, publishes once, preserves the mounted editor through first-thread/AI status updates, applies live splits, and shows intentional final delete-all. No model calls or real project writes.');
+  console.log('PASS: actual EditSession → ConnectedEditor keeps linked clips visible during replacement, publishes once, preserves the mounted editor through first-thread/AI status updates, publishes splits on completion, and shows intentional final delete-all. No model calls or real project writes.');
 } finally {await browser.close();await new Promise(resolve=>server.close(resolve));}

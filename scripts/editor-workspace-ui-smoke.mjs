@@ -14,7 +14,7 @@ page.on('pageerror', error => errors.push(error.message));
 async function theme(value) {
   await page.evaluate(value => { localStorage.setItem('revline:workspace-theme', value); window.dispatchEvent(new Event('revline:theme-change')); }, value);
   await page.waitForFunction(value => document.documentElement.dataset.workspaceTheme === value, {}, value);
-  await wait(100);
+  await wait(400); // Tab triggers ease their color change.
 }
 async function state() {
   return page.evaluate(() => {
@@ -46,7 +46,7 @@ async function conversationCheck(label) {
     return { sidebar: bounds(sidebar), history: bounds(history), composer: bounds(composer), font: getComputedStyle(textarea).fontSize, senderWidths: [...history.querySelectorAll('.chat-user')].map(el => el.getBoundingClientRect().width), inlineVersions: document.querySelectorAll('.conversation-version').length, timeline: !!document.querySelector('.custom-timeline'), redundantEditorLink: !!document.querySelector('.workspace-editor-link'), viewportWidth: innerWidth, viewportHeight: innerHeight, pageWidth: document.documentElement.scrollWidth, previewRadius: getComputedStyle(document.querySelector('.preview-canvas')).borderTopLeftRadius };
   });
   check(result.timeline && !result.inlineVersions && !result.redundantEditorLink, `${label}: the conversation opens beside the full editor without an inline preview or redundant editor link`, result);
-  check(result.font === '16px' && result.senderWidths.every(width => width <= 389), `${label}: the composer uses 16px text and sender messages fit their content`, result);
+  check(result.font === '14px' && result.senderWidths.every(width => width <= 389), `${label}: the composer uses 14px text and sender messages fit their content`, result); // 1cd3ef0
   check(result.composer.bottom <= result.viewportHeight + 1 && result.pageWidth <= result.viewportWidth, `${label}: the composer remains visible without horizontal overflow`, result);
   check(result.sidebar.right - result.history.right <= 21 && result.composer.left - result.sidebar.left <= 21 && result.sidebar.right - result.composer.right <= 21, `${label}: the composer keeps small side gaps and keeps history and composer within the pane`, result);
   check(result.previewRadius === '0px', `${label}: the preview keeps square edges`, result.previewRadius);
@@ -54,32 +54,38 @@ async function conversationCheck(label) {
 
 try {
   await page.setViewport({ width: 1440, height: 1000 });
+  // The editor opens in Agentic mode by default (57c304e); the source inspector lives in Tracks mode.
+  await page.evaluateOnNewDocument(() => { try { localStorage.setItem('revline-editor-mode', 'tracks'); } catch {} });
   await page.goto(new URL('/dev/editor', baseUrl).href, { waitUntil: 'networkidle2' });
   await page.waitForFunction(() => document.querySelector('hyperframes-player')?.ready);
   await wait(800); await theme('light');
-  await page.click('#inspector-sources-tab');
+  if (!await page.$('.preview-inspector')) await page.click('[aria-label="Show editing panel"]');
+  // Sources/Edit/Effects became Tools/My media (ce161d7, 57c304e); My media owns the source list.
+  await page.waitForSelector('#inspector-media-tab'); await page.click('#inspector-media-tab'); await wait(300);
   const normal = await inspectorCheck('Desktop light');
-  check(Math.abs(normal.width - 320) < 1, 'Desktop inspector defaults to 320px', normal.width);
+  check(Math.abs(normal.width - 480) < 1, 'Desktop inspector defaults to 480px', normal.width);
   const handle = await page.$('[aria-label="Resize editing panel"]'), handleBox = await handle.boundingBox();
   await page.mouse.move(handleBox.x + handleBox.width / 2, handleBox.y + handleBox.height / 2); await page.mouse.down(); await page.mouse.move(handleBox.x + 200, handleBox.y + handleBox.height / 2, { steps: 10 }); await page.mouse.up(); await wait(150);
   const minimum = await inspectorCheck('Desktop minimum');
-  check(Math.abs(minimum.width - 280) < 1, 'Inspector resize respects the 280px minimum', minimum.width);
-  await page.focus('#inspector-sources-tab'); await page.keyboard.press('ArrowRight');
-  check(await page.$eval('#inspector-edit-tab', el => el.getAttribute('aria-selected') === 'true' && document.activeElement === el), 'Sources tab keyboard navigation activates and focuses Edit');
-  await page.keyboard.press('End');
-  check(await page.$eval('#inspector-effects-tab', el => el.getAttribute('aria-selected') === 'true' && document.activeElement === el), 'End key activates Effects');
-  await page.keyboard.press('Home');
-  check(await page.$eval('#inspector-sources', el => el.getAttribute('aria-labelledby') === 'inspector-sources-tab'), 'Sources panel is associated with its active tab');
+  check(Math.abs(minimum.width - 320) < 1, 'Inspector resize respects the 320px minimum', minimum.width);
+  await page.focus('#inspector-media-tab'); await page.keyboard.press('ArrowLeft'); await wait(150);
+  check(await page.$eval('#inspector-tools-tab', el => el.getAttribute('aria-selected') === 'true' && document.activeElement === el), 'My media tab keyboard navigation activates and focuses Tools');
+  await page.keyboard.press('End'); await wait(150);
+  check(await page.$eval('#inspector-media-tab', el => el.getAttribute('aria-selected') === 'true' && document.activeElement === el), 'End key activates My media');
+  check(await page.$eval('#inspector-media', el => el.getAttribute('aria-labelledby') === 'inspector-media-tab'), 'My media panel is associated with its active tab');
   const image = await page.evaluate(() => { const canvas = document.createElement('canvas'); canvas.width = 320; canvas.height = 180; const context = canvas.getContext('2d'); context.fillStyle = '#c36b40'; context.fillRect(0, 0, 320, 180); context.fillStyle = '#e7d8b2'; context.fillRect(100, 40, 120, 100); return canvas.toDataURL('image/png').split(',')[1]; });
   const imagePath = join(directory, 'workspace-source-test.png'), audioPath = join(directory, 'workspace-source-test.wav');
   await writeFile(imagePath, Buffer.from(image, 'base64'));
   const wav = Buffer.alloc(16044); wav.write('RIFF'); wav.writeUInt32LE(wav.length - 8, 4); wav.write('WAVEfmt ', 8); wav.writeUInt32LE(16, 16); wav.writeUInt16LE(1, 20); wav.writeUInt16LE(1, 22); wav.writeUInt32LE(8000, 24); wav.writeUInt32LE(16000, 28); wav.writeUInt16LE(2, 32); wav.writeUInt16LE(16, 34); wav.write('data', 36); wav.writeUInt32LE(16000, 40); await writeFile(audioPath, wav);
-  await page.click('[aria-label="Import footage"]');
+  await page.click('#inspector-media [data-slot="button"]');
   await page.waitForSelector('.media-import-dialog');
   check(!!await page.$('.media-import-dialog .media-import-link'), 'Upload modal offers YouTube or MP4 import in the demo');
+  const beforeImport = await state();
   const [chooser] = await Promise.all([page.waitForFileChooser(), page.click('.media-import-drop')]); await chooser.accept([imagePath, audioPath]);
   await page.waitForSelector('.asset-card[title="Add workspace-source-test.wav to timeline"]'); await wait(300);
-  check((await state()).timeline.clips.some(clip => clip.kind === 'audio'), 'Import footage decodes local image/audio and adds actual timeline clips');
+  // My media imports go to sources only (8a70a16); clicking or dragging a source adds it below.
+  const afterImport = await state();
+  check(!!await page.$('.asset-card[title="Add workspace-source-test.png to timeline"]') && afterImport.timeline.clips.length === beforeImport.timeline.clips.length && afterImport.history === beforeImport.history, 'My media import decodes local image/audio into sources without editing the timeline');
   await page.select('[aria-label="Source type"]', 'audio');
   check(await page.$$eval('.footage-content-inspector .asset-card', cards => cards.length === 1 && cards[0].textContent.includes('workspace-source-test.wav')), 'Audio type filter shows only the imported audio');
   await page.select('[aria-label="Source type"]', 'video');
@@ -93,20 +99,22 @@ try {
   check(undone.timeline.clips.length === beforeClick.timeline.clips.length && Math.abs(undone.playhead - beforeClick.playhead) < 1 / 30, 'Undoing a source insertion preserves the playhead');
   await page.click('[aria-label="Add timeline layer"]'); await page.waitForSelector('[role="menuitem"]');
   const item = await page.$$(' [role="menuitem"]');
-  for (const candidate of item) if (await candidate.evaluate(el => el.textContent.includes('Video layer'))) { await candidate.click(); break; }
-  await wait(150); const beforeDrag = await state(), empty = beforeDrag.tracks.find(track => track.trackId === 'visual-2');
-  assert.ok(empty, `Video layer created for actual source drop: ${JSON.stringify(beforeDrag.tracks)}`);
+  const layersBefore = (await state()).tracks.map(track => track.trackId);
+  for (const candidate of item) if (await candidate.evaluate(el => el.textContent === 'Visual layer')) { await candidate.click(); break; }
+  await wait(150); const beforeDrag = await state(), empty = beforeDrag.tracks.find(track => !layersBefore.includes(track.trackId));
+  assert.ok(empty?.trackId.startsWith('visual-'), `Visual layer created for actual source drop: ${JSON.stringify(beforeDrag.tracks)}`);
+  const emptyLayer = Number(empty.trackId.split('-')[1]);
   await page.setDragInterception(true);
   const source = await page.$('.asset-card[title="Add workspace-source-test.png to timeline"]'), sourceBox = await source.boundingBox();
   await page.mouse.dragAndDrop({ x: sourceBox.x + sourceBox.width / 2, y: sourceBox.y + sourceBox.height / 2 }, { x: beforeDrag.surface.x + 6 * beforeDrag.zoom - beforeDrag.scroll, y: beforeDrag.surface.y + empty.y + empty.height / 2 }, { delay: 100 });
   await page.setDragInterception(false); await wait(300); const dragged = await state();
-  check(dragged.timeline.clips.length === beforeDrag.timeline.clips.length + 1 && dragged.history === beforeDrag.history + 1 && dragged.timeline.clips.some(clip => clip.track === 2 && Math.abs(clip.start - 6) < .05) && Math.abs(dragged.playhead - beforeDrag.playhead) < 1 / 30, 'Source drag drops into the requested layer/time and preserves the playhead', { before: beforeDrag.timeline.clips.length, after: dragged.timeline.clips.length, added: dragged.timeline.clips.filter(clip => !beforeDrag.timeline.clips.some(old => old.id === clip.id)) });
+  check(dragged.timeline.clips.length === beforeDrag.timeline.clips.length + 1 && dragged.history === beforeDrag.history + 1 && dragged.timeline.clips.some(clip => clip.track === emptyLayer && Math.abs(clip.start - 6) < .05) && Math.abs(dragged.playhead - beforeDrag.playhead) < 1 / 30, 'Source drag drops into the requested layer/time and preserves the playhead', { before: beforeDrag.timeline.clips.length, after: dragged.timeline.clips.length, added: dragged.timeline.clips.filter(clip => !beforeDrag.timeline.clips.some(old => old.id === clip.id)) });
   await page.click('[aria-label="Undo"]'); await wait(100);
   check((await state()).timeline.clips.length === beforeDrag.timeline.clips.length && Math.abs((await state()).playhead - beforeDrag.playhead) < 1 / 30, 'Undoing the source drop preserves time and the preexisting empty layer');
   await theme('dark'); await inspectorCheck('Desktop dark');
   await page.setViewport({ width: 390, height: 844 }); await wait(250);
   if (!await page.$('.preview-inspector-sheet')) await page.click('[aria-label="Show editing panel"]');
-  await page.waitForSelector('.preview-inspector-sheet'); await page.click('#inspector-sources-tab'); await inspectorCheck('Mobile dark');
+  await page.waitForSelector('.preview-inspector-sheet'); await page.click('#inspector-media-tab'); await wait(300); await inspectorCheck('Mobile dark');
   await theme('light'); await inspectorCheck('Mobile light');
   check(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'Mobile editing sheet does not widen the viewport');
 
@@ -121,7 +129,8 @@ try {
   await page.screenshot({ path: '/tmp/revline-editor-workspace-light.png' });
   await theme('dark'); await conversationCheck('Desktop dark');
   await page.click('[aria-label="Collapse timeline"]'); await wait(350);
-  check(await page.$eval('.custom-timeline', el => Math.abs(el.getBoundingClientRect().height - 56) < 1), 'Collapsed timeline leaves only its 56px toolbar');
+  // The collapsed panel is sized to the measured toolbar (a7bc215), currently one 36px row.
+  check(await page.$eval('.custom-timeline', el => { const toolbar = el.querySelector('.timeline-toolbar').getBoundingClientRect().height; return Math.abs(el.getBoundingClientRect().height - toolbar) < 1 && toolbar <= 56; }), 'Collapsed timeline leaves only its toolbar');
   await page.click('[aria-label="Expand timeline"]'); await wait(350);
   check(await page.$eval('.custom-timeline', el => el.getBoundingClientRect().height >= 160), 'Timeline expands back to a usable height');
   await page.setViewport({ width: 390, height: 844 }); await wait(250);

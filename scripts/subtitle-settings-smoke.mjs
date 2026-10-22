@@ -32,7 +32,7 @@ createRoot(document.getElementById('root')).render(<Fixture/>);
 const browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox', '--disable-dev-shm-usage', '--js-flags=--max-old-space-size=768'] });
 const page = await browser.newPage();page.setDefaultTimeout(8000); const errors = [];page.on('pageerror', error => errors.push(error.message));
 const flush = () => page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
-const library = async () => { if (!await page.$('.effect-library')) await page.click('#inspector-sources-tab');await flush(); };
+const library = async () => { if (!await page.$('.effect-library')) await page.click('#inspector-tools-tab');await flush(); };
 const caption = () => page.evaluate(() => window.fixture.store.getState().timeline.clips.find(clip => clip.id === 'caption'));
 try {
   await page.setViewport({ width: 1280, height: 900 });
@@ -41,15 +41,17 @@ try {
   await page.addStyleTag({ content: bundle.outputFiles.find(file => file.path.endsWith('.css')).text });
   await page.addStyleTag({ content: '*{box-sizing:border-box}body{margin:0;font-family:Arial;background:var(--ws-bg)}.editor-app{height:900px}.fixture-preview{pointer-events:auto}.text-controls{position:absolute;inset:0}button{font-family:inherit}' });
   await page.addScriptTag({ content: bundle.outputFiles.find(file => file.path.endsWith('.js')).text });
+  // The editing panel starts collapsed until the user opens it (4cce5bc).
+  await page.waitForSelector('[aria-label="Show editing panel"]');await page.click('[aria-label="Show editing panel"]');
   await page.waitForSelector('.effect-library');
   assert.ok(await page.$eval('.preview-inspector', element=>element.getBoundingClientRect().width>=470));
   await page.click('[aria-label="Move text: Keep these words"]');await page.waitForSelector('[aria-label="Selected text"]');
   assert.equal(await page.$eval('[aria-label="Selected text"]', element => element.value), 'Keep these words');
   for (const label of ['Text color','Text size','Custom text size','Text font']) assert.ok(await page.$('[aria-label="'+label+'"]'));
   assert.equal(await page.$('.quick-text-dialog'),null);
-  assert.ok(await page.$('[aria-label="Rotate text in preview"]'));assert.equal(await page.$('[aria-label="Text rotation"]'),null);
+  assert.ok(await page.$('[aria-label="Rotate text in preview"]'));assert.ok(await page.$('details.text-transform-controls:not([open]) [aria-label="Text rotation"]'),'Numeric rotation lives in the collapsed Transform group (c55d5b2)');
   assert.equal(await page.$('.subtitle-style-card'),null,'Captions use the shared text editor');
-  const original=await caption();await page.click('.text-look-settings summary');await page.waitForSelector('.text-look-card[aria-label="Bold"]');
+  const original=await caption();await page.waitForSelector('.text-look-settings .text-look-card[aria-label="Bold"]');// Text styles are an always-open section of the Text view (aef76cd).
   for(const [label,expected] of [['Bold',{color:'#F5CF45',background:'transparent',fontSize:104}],['Boxed',{color:'#F4F4F0',background:'#0B0C0EE6',fontSize:92}],['Difference',{color:'#FFFFFF',background:'transparent',fontSize:92}],['Highlight',{color:'#151619',background:'#F5CF45',fontSize:92}]]) {
     const commits=await page.evaluate(()=>window.commits);await page.click('.text-look-card[aria-label="'+label+'"]');await flush();const current=await caption();
     assert.deepEqual({color:current.color,background:current.background,fontSize:current.fontSize},expected);
@@ -60,11 +62,12 @@ try {
   assert.equal(await page.$eval('[aria-label="Selected text"]',node=>node.value),'Keep these words');
   await library();await page.click('.timeline-clip[data-clip-id="title"]');await page.waitForSelector('[aria-label="Selected text"]');assert.equal(await page.$eval('[aria-label="Selected text"]',node=>node.value),'Actual title');
   await library();await page.click('.timeline-clip[data-clip-id="footage"]');await flush();assert.ok(await page.$('.effect-library'));
-  await page.click('[data-segment="text"]');await page.waitForSelector('[aria-label="Default text"]');
+  await page.click('[data-category="text"]');await page.waitForSelector('[aria-label="Default text"]');
   assert.equal(await page.$('[aria-label="Text animations"]'),null,'Text library offers looks only before adding text');
   await page.click('[aria-label="Default text"]');await page.waitForSelector('[aria-label="Selected text"]');
   const created=await page.evaluate(()=>{const state=window.fixture.store.getState();return state.timeline.clips.find(clip=>clip.id===state.selectedId)});
   assert.equal(created.kind,'graphic');assert.equal(created.start,1);assert.equal(created.animation,'none');assert.equal(created.textTemplate,undefined);assert.equal(created.background,'transparent');
+  await page.click('#text-settings-animation-tab');await page.waitForSelector('[aria-label="Apply Word reveal"]');// Animations have their own tab (aef76cd).
   await page.click('[aria-label="Apply Word reveal"]');await flush();assert.equal(await page.evaluate(()=>window.fixture.store.getState().timeline.clips.find(clip=>clip.id===window.fixture.store.getState().selectedId).textTemplate.preset),'word-reveal');
   await library();await page.click('#inspector-media-tab');await page.waitForSelector('.source-media-row');
   assert.equal(await page.$('.library-media-access'),null);await page.screenshot({path:'/tmp/revline-text-shell-media-dark.png'});
@@ -73,8 +76,12 @@ try {
   for(const [id,selector] of [['footage','.footage-settings'],['video','.footage-settings'],['audio','#inspector-edit [aria-label="Clip volume"]'],['effect','[aria-label="Cinematic bars settings"]'],['caption','[aria-label="Selected text"]'],['title','[aria-label="Selected text"]']]) {
     await library();await page.click('.timeline-clip[data-clip-id="'+id+'"]',{count:2,delay:35});await page.waitForSelector(selector);assert.equal(await page.evaluate(()=>window.fixture.store.getState().selectedId),id,'Double click selects and opens '+id+' settings');
   }
-  await page.setViewport({width:800,height:900});await page.waitForFunction(()=>!document.querySelector('.preview-inspector'));
-  await page.click('.timeline-clip[data-clip-id="caption"]');await page.waitForSelector('.preview-inspector-sheet [aria-label="Selected text"]');assert.equal(await page.$eval('[aria-label="Selected text"]',node=>node.value),'Keep these words');
+  await page.setViewport({width:800,height:900});await page.waitForFunction(()=>[...document.querySelectorAll('.preview-inspector')].every(node=>node.closest('.preview-inspector-sheet')),{},'Compact width removes the side inspector');
+  // The open-panel preference persists (4cce5bc), so compact width may open the sheet directly; close it to test selection.
+  if(await page.$('.preview-inspector-sheet')){await page.keyboard.press('Escape');await page.waitForFunction(()=>!document.querySelector('.preview-inspector-sheet'));}
+  // On compact layouts a single click only selects (dff27bb); double click opens the settings sheet.
+  await page.click('.timeline-clip[data-clip-id="caption"]');await flush();assert.equal(await page.evaluate(()=>window.fixture.store.getState().selectedId),'caption');assert.equal(await page.$('.preview-inspector-sheet'),null,'Compact single click keeps the sheet closed');
+  await page.click('.timeline-clip[data-clip-id="caption"]',{count:2,delay:35});await page.waitForSelector('.preview-inspector-sheet [aria-label="Selected text"]');assert.equal(await page.$eval('[aria-label="Selected text"]',node=>node.value),'Keep these words');
   assert.deepEqual(await page.evaluate(()=>window.errors),[]);assert.deepEqual(errors,[]);
   console.log('PASS: actual EditorShell/Timeline/TextControls selection, shared caption/title editor, editable look application without words/timing/animation changes, real Default text creation, separate animation application, double-click settings for every clip kind, My media and responsive sheet. Synthetic only.');
 } catch(error){console.error(JSON.stringify({errors,appErrors:await page.evaluate(()=>window.errors),dom:await page.evaluate(()=>document.body.innerText.slice(0,1000))}));throw error;}finally{await browser.close();}

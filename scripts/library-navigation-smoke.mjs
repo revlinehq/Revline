@@ -29,7 +29,7 @@ try {
   await page.waitForSelector('.library-category-rail');
   assert.equal(await page.$eval('.inspector-section-tabs', node => node.dataset.slot), 'tabs-list', 'Top navigation uses shadcn TabsList');
   assert.deepEqual(await page.$$eval('.inspector-section-tabs [role="tab"]', nodes => nodes.map(node => node.textContent)), ['Tools', 'My media']);
-  assert.deepEqual(await page.$$eval('.library-category-rail [role="tab"]', nodes => nodes.map(node => node.textContent)), ['Motion', 'Color', 'Texture', 'Transitions', 'Text']);
+  assert.deepEqual(await page.$$eval('.library-category-rail [role="tab"]', nodes => nodes.map(node => node.textContent)), ['Motion', 'Color', 'Texture', 'Transitions', 'Text', 'Audio FX']);
   assert.equal(await page.$('[aria-label="Frame shrink"]'), null, 'Retired Frame shrink is absent from new choices');
   assert.equal(await page.$('.library-tabs'), null, 'There is no separate Effects / Text segment');
   assert.ok(await page.$eval('.inspector-section-tabs [aria-selected=true]', node => getComputedStyle(node).backgroundColor !== 'rgba(0, 0, 0, 0)'), 'The active top segment has a visible surface');
@@ -40,7 +40,7 @@ try {
   await page.focus('[data-category="motion"]'); await page.keyboard.press('ArrowDown'); assert.ok(await page.$('[aria-label="Invert colors"]'));
   await page.keyboard.press('ArrowDown'); assert.ok(await page.$('[aria-label="Dither"]'));
   await page.keyboard.press('ArrowDown'); assert.ok(await page.$('[data-category="transitions"][aria-selected=true]'));
-  await page.keyboard.press('End'); await page.waitForSelector('[aria-label="Default text"]'); assert.ok(await page.$('[data-category="text"][aria-selected=true]'));
+  await page.keyboard.press('End'); assert.ok(await page.$('[data-category="audio-fx"][aria-selected=true]'), 'End reaches the last category, Audio FX'); await page.keyboard.press('ArrowUp'); await page.waitForSelector('[aria-label="Default text"]'); assert.ok(await page.$('[data-category="text"][aria-selected=true]'));
   assert.equal(await page.$('[aria-label="Text animations"]'), null, 'Text category contains looks without standalone animation entities');
   assert.ok(await page.$('[aria-label="Search effects"]'), 'Text keeps the same search bar');
   assert.equal(await page.$eval('[aria-label="Search effects"]', node => node.placeholder), 'Search tools');
@@ -48,7 +48,7 @@ try {
   const enterSearch = async query => {await page.focus('[aria-label="Search effects"]');await page.keyboard.down('Control');await page.keyboard.press('KeyA');await page.keyboard.up('Control');await page.keyboard.press('Backspace');if(query)await page.keyboard.type(query);await flush()};
   await enterSearch('BOXED');assert.deepEqual(await page.$$eval('.text-look-card',nodes=>nodes.map(node=>node.getAttribute('aria-label'))), ['Boxed'], 'Text searches look labels without showing effects');
   await enterSearch('translucent');assert.deepEqual(await page.$$eval('.text-look-card',nodes=>nodes.map(node=>node.getAttribute('aria-label'))), ['Boxed'], 'Text search includes descriptions');
-  await enterSearch('no such text preset');assert.equal(await page.$('.text-look-card'),null);assert.equal(await page.$eval('.library-empty',node=>node.textContent),'No matching text presets.');assert.deepEqual(await navigationGeometry(), motionGeometry, 'Empty text search does not shift navigation');
+  await enterSearch('no such text preset');assert.equal(await page.$('.text-look-card'),null);assert.equal(await page.$eval('.library-empty',node=>node.textContent),'No matching text styles.');assert.deepEqual(await navigationGeometry(), motionGeometry, 'Empty text search does not shift navigation');
   await enterSearch(' ');assert.equal(await page.$$eval('.text-look-card',nodes=>nodes.length),6,'Whitespace search shows all looks');await enterSearch('');await page.evaluate(()=>document.activeElement.blur());
   await page.evaluate(() => document.fonts.ready); await page.screenshot({ path: '/tmp/revline-library-text-right-dark.png' });
   await page.evaluate(() => document.documentElement.dataset.workspaceTheme = 'light'); await page.screenshot({ path: '/tmp/revline-library-text-right-light.png' });

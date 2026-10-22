@@ -14,24 +14,29 @@ const page = await browser.newPage();
 const input = label => `input[aria-label="${label}"]`;
 const flush = () => page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
 const counts = () => page.evaluate(() => ({ commits: window.commits.length, previews: window.previews.length }));
-const add = async name => { await page.click('.visual-effects-add'); await page.locator(`::-p-aria([name="${name}"][role="menuitem"])`).click(); await flush(); };
+const libraryButton = name => page.locator(`::-p-aria([name="${name}"][role="button"])`);
+// Applied effects are added from the Tools library, open on their own page, then stay expanded inline in Clip settings (c55d5b2, 10be298).
+const add = async (category, name) => { await page.click('[aria-label="Add effect"]'); await page.waitForSelector('.effect-library'); await page.click(`[data-category="${category}"]`); await libraryButton(name).click(); await page.waitForSelector('.inspector-effect-detail'); await page.click('[aria-label="Back to clip settings"]'); await page.waitForSelector('#inspector-effects .inspector-clip-settings'); await flush(); };
+// Playback speed is a shared slider inside the collapsed Playback disclosure (f6a061d).
+const speedKey = async key => { await page.$$eval('details.footage-playback', nodes => nodes.forEach(node => { node.open = true; })); await page.focus(input('Playback speed')); await page.keyboard.press(key); await flush(); };
 try {
   await page.setViewport({ width: 600, height: 820 });
   await page.setContent('<div id="root" class="conversation-editor"></div>');
   await page.addStyleTag({ content: bundled.outputFiles.find(file => file.path.endsWith('.css')).text });
   await page.addStyleTag({ content: '*{box-sizing:border-box}body{margin:0;background:var(--ws-bg);font-family:Arial,sans-serif}#root{width:320px;height:800px;margin:10px auto}button{border:0;font-family:inherit}.visual-effects-menu [role=menuitem]{display:flex;align-items:center;padding:6px}.visual-effects-menu{padding:4px;border:1px solid var(--ws-artifact-border);border-radius:6px}' });
   await page.addScriptTag({ content: bundled.outputFiles.find(file => file.path.endsWith('.js')).text });
-  await page.waitForSelector('.effect-library'); await page.click('.inspector-library-heading button');
-  await page.waitForSelector('#inspector-effects-tab'); await page.click('#inspector-effects-tab');
-  assert.equal(await page.$eval('#inspector-effects-tab', el => el.textContent), 'Effects');
-  await page.select('select[aria-label="Playback speed"]', '2'); await flush();
-  assert.deepEqual(await page.evaluate(() => [window.fixtureClip.playbackRate, window.fixtureClip.duration]), [2, 2]);
-  await page.select('select[aria-label="Playback speed"]', '0.5'); await flush();
-  assert.deepEqual(await page.evaluate(() => [window.fixtureClip.playbackRate, window.fixtureClip.duration]), [.5, 8]);
-  await page.select('select[aria-label="Playback speed"]', '1'); await flush();
-  for (const label of ['Cinematic bars', 'Quick zoom in', 'Quick zoom out']) await page.locator(`::-p-aria([name="${label}"][role="button"])`).click();
-  assert.deepEqual(await page.evaluate(() => window.addedPresets), ['cinematic-bars', 'quick-zoom-in', 'quick-zoom-out']);
-  await add('Color');
+  await page.waitForSelector('.effect-library');
+  // Timed presets come from the Motion library; Zoom folds In/Out/Punch into one entry (17ce5f6) and, unlike bars/blur, opens Clip settings.
+  await page.click('[data-category="motion"]');
+  for (const label of ['Cinema bars', 'Zoom blur', 'Zoom']) await libraryButton(label).click();
+  assert.deepEqual(await page.evaluate(() => window.addedPresets), ['cinematic-bars', 'zoom-blur', 'quick-zoom-in']);
+  await page.waitForSelector('#inspector-effects .inspector-clip-settings');
+  assert.equal(await page.$('#inspector-effects-tab'), null, 'Footage opens one Clip settings view without Edit / Effects tabs');
+  await speedKey('End');
+  assert.deepEqual(await page.evaluate(() => [window.fixtureClip.playbackRate, window.fixtureClip.duration]), [4, 1]);
+  await speedKey('Home');
+  assert.deepEqual(await page.evaluate(() => [window.fixtureClip.playbackRate, window.fixtureClip.duration]), [.25, 16]);
+  await add('color', 'Color & light');
   assert.equal(await page.evaluate(() => window.fixtureClip.colorGrade.enabled), true);
   await page.evaluate(() => window.resetCounters());
   const exposure = await page.$eval(input('Exposure'), el => { const r = el.getBoundingClientRect(); return { x: r.x, y: r.y, width: r.width, height: r.height }; });
@@ -62,9 +67,9 @@ try {
   await page.click('[data-effect="colorGrade"] .effect-collapse');
   assert.equal(await page.$eval('[data-effect="colorGrade"] .visual-effect-fields', el => el.hidden), true);
   await page.click('[data-effect="colorGrade"] .effect-collapse');
-  await add('Zoom blur'); await add('Glitch'); await add('Invert colors');
-  assert.equal(await page.$eval('.visual-effects-add', el => el.disabled), true);
+  await add('texture', 'Digital glitch'); await add('color', 'Invert colors'); await add('texture', 'Dither');
   assert.equal(await page.$$eval('.visual-effect-card', cards => cards.length), 4);
+  assert.equal(await page.$$eval('.visual-effect-fields:not([hidden])', fields => fields.length), 1, 'Only the newest applied effect is expanded');
   assert.ok(await page.$eval('.preview-inspector', el => el.scrollWidth <= el.clientWidth), 'Cards fit a 320px inspector');
   await page.$eval('.inspector-content', el => { el.scrollTop = 0; });
   await page.screenshot({ path: '/tmp/revline-visual-effects-light.png' });
@@ -76,13 +81,15 @@ try {
   assert.equal(await page.evaluate(() => window.fixtureClip.glitch), undefined);
   assert.equal(await page.$('[data-effect="glitch"]'), null);
   await page.evaluate(() => window.selectClip({ id: 'title', kind: 'graphic', text: 'Text', start: 0, sourceStart: 0, duration: 4 })); await flush();
-  assert.equal(await page.$eval('#inspector-effects-tab', el => el.textContent), 'Text effects');
-  assert.ok(await page.$('[aria-label="Text animation"]'));
+  // Text clips keep text settings and animations in their own Edit view (7620721, aef76cd).
+  assert.equal(await page.$('#inspector-effects-tab'), null, 'Text has no visual Effects tab');
+  await page.click('#text-settings-animation-tab'); await page.waitForSelector('[aria-label="Text animations"]');
   assert.equal(await page.$('.visual-effects-controls'), null);
   await page.evaluate(() => window.selectClip({ id: 'sound', kind: 'audio', start: 0, sourceStart: 0, duration: 4 })); await flush();
-  assert.ok(await page.$('select[aria-label="Playback speed"]'));
+  if (await page.$('#inspector-effects-tab')) await page.click('#inspector-effects-tab');
+  await page.waitForSelector(input('Playback speed'));
   assert.equal(await page.$('.visual-effect-card'), null);
-  await page.select('select[aria-label="Playback speed"]', '4'); await flush();
+  await speedKey('End');
   assert.deepEqual(await page.evaluate(() => [window.fixtureClip.playbackRate, window.fixtureClip.duration]), [4, 1]);
-  console.log('PASS: Effects controls support timed zoom/bars presets, video/audio speed, all four visual effect groups, live drag + one save, keyboard, cancel, enable, reset, collapse, removal, light/dark, reduced motion, and text effects.');
+  console.log('PASS: Clip settings support library timed zoom/bars/zoom-blur presets, video/audio speed, all four visual effect groups, live drag + one save, keyboard, cancel, enable, reset, collapse, removal, light/dark, reduced motion, and text effects.');
 } finally { await browser.close(); }

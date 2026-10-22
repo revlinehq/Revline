@@ -28,7 +28,8 @@ try{
  await update({...settings,shadowColor:'#0000ff',highlightColor:'#ffff00'});const palette=await read();const colors=new Set();for(let i=0;i<palette.length;i+=4)colors.add(palette.slice(i,i+3).join(','));assert.deepEqual([...colors].sort(),['0,0,255','255,255,0'],'Configured dark/light colors form the actual shader palette');
  await update({...settings,size:2});
  const sourceCanvas=await page.evaluate(()=>document.querySelector('.visual-effect-output').width);
- await page.evaluate(()=>{document.getElementById('clip-0').parentElement.style.transform='rotate(30deg) scale(2)';});
+ // Idle previews no longer poll (638ab12): a transform change reaches the shader through the player's next clock render.
+ await page.evaluate(()=>{document.getElementById('clip-0').parentElement.style.transform='rotate(30deg) scale(2)';window.__timelines.revline.render();});
  await page.waitForFunction(()=>{const c=document.querySelector('.visual-effect-output'),g=c.getContext('webgl'),v=new Uint8Array(c.width*c.height*4);g.readPixels(0,0,c.width,c.height,g.RGBA,g.UNSIGNED_BYTE,v);return v[0]!==v[4];});
  assert.equal(await page.evaluate(()=>document.querySelector('.visual-effect-output').width),sourceCanvas,'Transform adjusts the shader without rebuilding its canvas');
  const fine=reds(await read());assert.notEqual(fine[0],fine[1],'At 2× scale the pattern halves its local cell width, preserving composition block size');

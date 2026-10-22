@@ -53,7 +53,13 @@ async function main(){
     const paint=async(frame:number)=>{await page.evaluate(frame=>{
       const time=frame/30;(window as any).__timelines.revline.seek(time,false);
       document.querySelectorAll<HTMLElement>('[data-start][data-end]').forEach(node=>{node.style.visibility=time>=Number(node.dataset.start)&&time<Number(node.dataset.end)?'visible':'hidden'});
-    },frame);return Buffer.from(await page.screenshot());};
+    },frame);
+    // Chromium keeps raster state from the previously painted frame: re-entering an identical DOM
+    // from an opacity-0 frame can shift a fractional-line glyph row by 1px. Force a fresh raster so
+    // pixels depend only on the composition's DOM state; textState() below checks that state exactly.
+    await page.evaluate(()=>new Promise<void>(resolve=>{document.body.style.visibility='hidden';requestAnimationFrame(()=>requestAnimationFrame(()=>{document.body.style.visibility='';requestAnimationFrame(()=>requestAnimationFrame(()=>resolve()));}));}));
+    return Buffer.from(await page.screenshot());};
+    const textState=()=>page.$$eval('[data-remotion-text]',nodes=>nodes.map(node=>node.outerHTML));
     const frames=new Map<number,Buffer>();
     for(const frame of [2,21,56]){
       const screenshot=await paint(frame);
@@ -61,8 +67,10 @@ async function main(){
       await writeFile(`/tmp/revline-lyric-preview-${frame}.png`,screenshot);
       const pixels=execFileSync('ffmpeg',['-v','error','-i','pipe:0','-f','rawvideo','-pix_fmt','rgb24','-'],{input:screenshot,maxBuffer:4*1024*1024});
       frames.set(frame,pixels);
+      const state=await textState();
       await paint(59);await paint(0);
       assertSamePixels(await paint(frame),screenshot,'Backward seeks preserve the rendered frame');
+      assert.deepEqual(await textState(),state,'Backward seeks rebuild the identical text DOM');
       await new Promise(resolve=>setTimeout(resolve,85));
       assertSamePixels(Buffer.from(await page.screenshot()),screenshot,'A paused frame never starts an independent clock');
     }

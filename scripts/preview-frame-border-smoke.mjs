@@ -73,12 +73,15 @@ async function checkEdges(label) {
     sampled++;
     if ([0, 1, 2].some(channel => Math.abs(data[at + channel] - reference[at + channel]) > 4)) obstructed++;
   }
+  // The focus ring uses the shared violet accent (049b1e3), read from the page rather than hard-coded.
+  const accent = await page.evaluate(() => { const probe = document.createElement('div'); probe.style.color = 'var(--revline-accent)'; document.body.append(probe); const rgb = getComputedStyle(probe).color.match(/\d+/g).slice(0, 3).map(Number); probe.remove(); return rgb; });
+  assert.ok(accent.some(channel => channel > 40) && Math.max(...accent) - Math.min(...accent) > 40, 'The accent token resolves to a saturated color: ' + accent);
   const center = (Math.floor((top + bottom) * dpr / 2) * info.width + Math.floor((left + right) * dpr / 2)) * info.channels;
   assert.ok(Math.abs(data[center] - 208) < 6 && Math.abs(data[center + 1] - 79) < 6 && Math.abs(data[center + 2] - 50) < 6, 'The generated source is actually painted before checking its edges.');
   for (let y = Math.floor((top - 3) * dpr); y < Math.ceil((bottom + 3) * dpr); y++) for (let x = Math.floor((left - 3) * dpr); x < Math.ceil((right + 3) * dpr); x++) {
     if (x >= x0 && x <= x1 && y >= y0 && y <= y1) continue;
     const at = (y * info.width + x) * info.channels;
-    if (Math.abs(data[at] - 82) < 6 && Math.abs(data[at + 1] - 120) < 6 && data[at + 2] > 249) outsideFocusPixels++;
+    if (Math.abs(data[at] - accent[0]) < 6 && Math.abs(data[at + 1] - accent[1]) < 6 && Math.abs(data[at + 2] - accent[2]) < 6) outsideFocusPixels++;
   }
   const result = { label, obstructed, sampled, outsideFocusPixels, ...geometry }; checks.push(result);
   if (obstructed && !checks.slice(0, -1).some(check => check.obstructed)) await page.screenshot({ path: '/tmp/revline-preview-border-before.png' });

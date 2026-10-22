@@ -11,6 +11,8 @@ const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
 const expect = (condition, name, detail) => checks.push({ name, passed: !!condition, ...(detail === undefined ? {} : { detail }) });
 page.on('pageerror', error => errors.push(error.message));
 await page.setViewport({ width: 1440, height: 1000 });
+// The timeline toolbar hosts the shared transport readout (.preview-time) whenever playbackControls are passed;
+// .timeline-playback-time only renders without them.
 // Inspect the existing project store, rather than exposing a test-only app store.
 async function state(id = 'caption-0') {
   return page.evaluate(id => {
@@ -26,7 +28,7 @@ async function state(id = 'caption-0') {
     const player = document.querySelector('hyperframes-player');
     const actual = player.iframeElement.contentWindow.__timelines.revline.time();
     const parse = text => { const [minutes, seconds, frames] = text.split(' / ')[0].split(':').map(Number); return minutes * 60 + seconds + frames / store.getState().timeline.fps; };
-    return { timeline: store.getState().timeline, history: store.getState().history.length, playhead: store.getState().playhead, playing: store.getState().playing, actual, previewTime: parse(document.querySelector('.preview-time').textContent), timelineTime: parse(document.querySelector('.timeline-playback-time').textContent), zoom: store.getState().zoom * 54, surface: { x: surface.x, y: surface.y }, clip: rect ? { x: rect.x, y: rect.y, width: rect.width, height: rect.height } : null };
+    return { timeline: store.getState().timeline, history: store.getState().history.length, playhead: store.getState().playhead, playing: store.getState().playing, actual, previewTime: parse(document.querySelector('.preview-time').textContent), timelineTime: parse((document.querySelector('.timeline-playback-time') ?? document.querySelector('.timeline-toolbar .preview-time')).textContent), zoom: store.getState().zoom * 54, surface: { x: surface.x, y: surface.y }, clip: rect ? { x: rect.x, y: rect.y, width: rect.width, height: rect.height } : null };
   }, id);
 }
 async function select(id) { const value = await state(id); assert.ok(value.clip); await page.mouse.click(value.clip.x + value.clip.width / 2, value.clip.y + value.clip.height / 2); await wait(150); }
@@ -47,7 +49,7 @@ async function playback(kind) {
     let start;
     function tick(now) {
       start ??= now;
-      samples.push({ at: now - start, actual: actual(), head: new DOMMatrix(head.style.transform).m41, preview: parse(document.querySelector('.preview-time').textContent), timeline: parse(document.querySelector('.timeline-playback-time').textContent) });
+      samples.push({ at: now - start, actual: actual(), head: new DOMMatrix(head.style.transform).m41, preview: parse(document.querySelector('.preview-time').textContent), timeline: parse((document.querySelector('.timeline-playback-time') ?? document.querySelector('.timeline-toolbar .preview-time')).textContent) });
       if (now - start < 1600) requestAnimationFrame(tick);
       else { observer.disconnect(); mutations.disconnect(); player.pause(); resolve({ samples, tasks, trackMutations }); }
     }
@@ -129,13 +131,18 @@ try {
   const target = await state('shot-3');
   await page.mouse.click(target.surface.x + (target.timeline.clips.find(clip => clip.id === 'shot-3').start + .2) * target.zoom, target.surface.y + 8); await select('shot-3');
   await page.click('[aria-label="Play (Space)"]'); await wait(220); const live = await state('shot-3');
-  await page.click('[aria-label="Split selected clip"]'); await wait(350); const split = await state('shot-3');
+  // The toolbar split button was removed (c0e6acd); the S shortcut runs the same live-clock split.
+  await page.keyboard.press('s'); await wait(350); const split = await state('shot-3');
   const original = live.timeline.clips.find(clip => clip.id === 'shot-3'), left = split.timeline.clips.find(clip => clip.id === 'shot-3');
   expect(left.duration < original.duration && left.start + left.duration > original.start + .25 && Math.abs(left.start + left.duration - live.actual) < .3, 'Split reads the live playback clock', { live: live.actual, split: left.start + left.duration });
   await page.evaluate(() => document.querySelector('hyperframes-player').pause());
   await select('shot-6'); const selectedVisual = await state('shot-6');
   const visualClip = selectedVisual.timeline.clips.find(clip => clip.id === 'shot-6');
   await page.mouse.click(selectedVisual.surface.x + (visualClip.start + .2) * selectedVisual.zoom, selectedVisual.surface.y + 8); await wait(80);
+  // Transform handles need explicit preview activation (81b883d); keyboard activation hits the visible footage at the
+  // canvas center without the double-click that also opens Clip settings (ab82c81).
+  await page.focus('.preview-hit-surface'); await page.keyboard.press('Enter'); await page.evaluate(() => document.activeElement?.blur()); await wait(80);
+  expect(await page.evaluate(() => { const node = document.querySelector('.timeline-panel'); let fiber = node[Object.keys(node).find(key => key.startsWith('__reactFiber$'))]; while (fiber && !fiber.memoizedProps?.store?.getState?.().timeline) fiber = fiber.return; return fiber?.memoizedProps.store.getState().selectedId; }) === 'shot-6', 'Preview activation keeps the selected footage');
   expect(!!await page.$('[data-testid="visual-handles"]'), 'Paused seek into selected footage shows transform handles');
   await page.mouse.click(selectedVisual.surface.x + .3 * selectedVisual.zoom, selectedVisual.surface.y + 8); await wait(80);
   expect(!await page.$('[data-testid="visual-handles"]'), 'Paused seek out of selected footage hides transform handles');

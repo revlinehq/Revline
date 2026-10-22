@@ -19,6 +19,6 @@ try{
  assert.equal(edges.panelRight,edges.viewportRight,'Divider is inset from the right edge');
  assert.ok(edges.rowRight>=edges.viewportRight-10,'Lane divider ends before the visible timeline edge');
  await page.setViewport({width:1440,height:1000});await pause(150);
- await page.screenshot({path:'design/implementation/timeline-b-fixed.png'});
+ await page.screenshot({path:'/tmp/revline-timeline-b-fixed.png'});
  console.log(JSON.stringify({passed:true,scrolledDividersAligned:true,edges}));
 }finally{await browser.close();}

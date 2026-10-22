@@ -15,24 +15,26 @@ try {
  for(let index=0;index<3;index++)await page.click('[aria-label="Zoom in"]');
  await page.$eval('.timeline-scroll',el=>el.scrollLeft=200);await wait(80);
  expect((await rect('.track-headers')).x===railLeft,'Track names must remain pinned while the timeline scrolls horizontally');
- const origin=await page.$eval('.time-ruler span',el=>parseFloat(el.style.left));
- expect(await page.$eval('.clip-video',el=>parseFloat(el.style.left))===origin,'Footage starting at zero must align with the shared marker origin');
- const label=await rect('.track-label[data-group="overlay"]');
+ // Ruler ticks sit on half pixels for crisp 1px lines (f0b874a), so the 0s label is origin + 0.5.
+ const origin=await page.$eval('.time-ruler .ruler-origin-label',el=>parseFloat(el.style.left)-.5);
+ expect(await page.$eval('.clip-video',el=>parseFloat(el.style.left))===origin&&await page.$eval('.playhead',el=>parseFloat(el.style.left))===origin,'Footage starting at zero must align with the shared marker origin');
+ // Overlay rows merged into shared V tracks: the demo keeps graphics on V2 and captions on V3.
+ const label=await rect('.track-label[data-group="visual"]');
  await page.mouse.move(label.x+label.width/2,label.y+label.height/2);await page.mouse.down();await wait(450);
  results.headerStationaryScroll=await page.$eval('.timeline-scroll',el=>el.scrollLeft);
  expect(Math.abs(results.headerStationaryScroll-200)<1,`Holding a layer header moved horizontal scroll from 200 to ${results.headerStationaryScroll}`);
  await page.keyboard.press('Escape');await page.mouse.up();
 
  await reset();
- const rowCount=await page.$$eval('.timeline-track[data-group="overlay"]',rows=>rows.length);
- const captionLabel=await rect('.track-label[data-group="overlay"]');
- const graphicLabel=await page.$eval('.track-label[data-group="overlay"][data-layer="1"]',el=>{const r=el.getBoundingClientRect();return {x:r.x,y:r.y,width:r.width,height:r.height};});
+ const rowCount=await page.$$eval('.timeline-track[data-group="visual"]',rows=>rows.length);
+ const captionLabel=await rect('.track-label[data-group="visual"][data-layer="3"]');
+ const graphicLabel=await page.$eval('.track-label[data-group="visual"][data-layer="2"]',el=>{const r=el.getBoundingClientRect();return {x:r.x,y:r.y,width:r.width,height:r.height};});
  await page.mouse.move(graphicLabel.x+graphicLabel.width/2,graphicLabel.y+graphicLabel.height/2);await page.mouse.down();await page.mouse.move(graphicLabel.x+graphicLabel.width/2,captionLabel.y-8,{steps:12});await page.mouse.up();await wait(120);
- results.headerEdgeRows=await page.$$eval('.timeline-track[data-group="overlay"]',rows=>rows.length);
+ results.headerEdgeRows=await page.$$eval('.timeline-track[data-group="visual"]',rows=>rows.length);
  expect(results.headerEdgeRows===rowCount,`Reordering a layer past the top added a track (${rowCount} -> ${results.headerEdgeRows})`);
- expect((await page.$$('.timeline-track[data-group="overlay"][data-layer="2"] .clip-graphic')).length===2,'Dragging the graphic header above captions should reorder the existing row');
+ expect((await page.$$('.timeline-track[data-group="visual"][data-layer="3"] .clip-graphic')).length===2,'Dragging the graphic header above captions should reorder the existing row');
  await page.click('[aria-label="Undo"]');await wait(100);
- expect((await page.$$('.timeline-track[data-group="overlay"][data-layer="1"] .clip-graphic')).length===2,'One undo restores the original graphic row');
+ expect((await page.$$('.timeline-track[data-group="visual"][data-layer="2"] .clip-graphic')).length===2,'One undo restores the original graphic row');
 
  await reset();
  for(let index=0;index<3;index++)await page.click('[aria-label="Zoom in"]');
@@ -64,7 +66,7 @@ try {
  await reset();
  for(let index=0;index<6;index++){
    await page.click('[aria-label="Add timeline layer"]');await page.waitForSelector('[role="menuitem"]');
-   await page.evaluate(()=>[...document.querySelectorAll('[role="menuitem"]')].find(item=>item.textContent==='Overlay layer').click());
+   await page.evaluate(()=>[...document.querySelectorAll('[role="menuitem"]')].find(item=>item.textContent==='Visual layer').click());
    await page.waitForSelector('[role="menuitem"]',{hidden:true});
  }
  await page.$eval('.timeline-scroll',el=>el.scrollTop=0);await wait(80);
@@ -80,7 +82,7 @@ try {
  results.verticalTiming=[];
  for(const caption of ['A little more outside.','A little less on your phone.']){
    await reset();const selector=`.clip-caption[aria-label^="${caption}"]`;
-   const clip=await rect(selector),row=await rect('.timeline-track[data-group="overlay"][data-layer="2"]');
+   const clip=await rect(selector),row=await rect('.timeline-track[data-group="visual"][data-layer="3"]');
    const before=await page.$eval(selector,el=>parseFloat(el.style.left));
    await page.mouse.move(clip.x+clip.width/2,clip.y+clip.height/2);await page.mouse.down();await page.mouse.move(clip.x+clip.width/2,row.y-8,{steps:12});await page.mouse.up();await wait(100);
    const after=await page.$eval(selector,el=>parseFloat(el.style.left));results.verticalTiming.push({caption,before,after});

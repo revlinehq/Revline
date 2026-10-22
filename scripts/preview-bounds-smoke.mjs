@@ -27,6 +27,12 @@ function projectStore() {
  if (!fiber) throw new Error('Project provider was not found');
  return fiber.memoizedProps.store;
 }
+async function activateHandles() {
+ await page.waitForSelector('.preview-hit-surface'); await page.focus('.preview-hit-surface'); await page.keyboard.press('Enter');
+ await page.waitForSelector('.visual-selection-box');
+ // Keyboard focus would thicken the selection stroke; measure the idle 1px outline.
+ await page.evaluate(() => document.activeElement?.blur());
+}
 async function installCase({ ratio = 'vertical', fit = 'cover', crop, transform = { x: .5, y: .5, scale: 1, rotation: 0, opacity: 1 } }) {
  await page.evaluate(({ functionText, ratio, fit, crop, transform }) => {
   const store = eval(`(${functionText})`)(), timeline = store.getState().timeline, clip = timeline.clips[0];
@@ -82,10 +88,17 @@ try {
  await page.setViewport({ width: 1440, height: 900 });
  await page.goto(`${process.env.BASE_URL ?? 'http://localhost:3001'}/dev/editor`, { waitUntil: 'networkidle2' });
  await page.waitForSelector('.timeline-scroll'); await page.waitForFunction(() => document.querySelector('hyperframes-player')?.ready);
- await (await page.$('input[type=file]')).uploadFile(fixture);
+ // Uploads go through the Add media dialog (81b883d). Its timeline destination is the empty-editor
+ // "Choose files" action, so clear the sample timeline before uploading the real fixture.
+ await page.evaluate(functionText => { const store = eval(`(${functionText})`)(); store.getState().replace({ ...store.getState().timeline, clips: [] }); store.setState({ selectedId: null, selectedIds: [] }); }, projectStore.toString());
+ await page.locator('::-p-aria([name="Choose files"][role="button"])').click();
+ await (await page.waitForSelector('input[type=file][aria-label="Choose media to upload"]')).uploadFile(fixture);
  await page.waitForFunction(() => { const node = document.querySelector('.timeline-scroll'); let f = node[Object.keys(node).find(k => k.startsWith('__reactFiber$'))]; while(f && !f.memoizedProps?.store) f=f.return; return f?.memoizedProps.store.getState().timeline.clips.at(-1)?.assetId && !f.memoizedProps.store.getState().timeline.clips.at(-1)?.id.startsWith('shot-'); });
  await page.evaluate(functionText => { const store = eval(`(${functionText})`)(), t = store.getState().timeline, c = t.clips.at(-1); store.getState().replace({ ...t, clips: [{ ...c, start: 0, duration: 4, track: 1 }], tracks: { visual: 1, overlay: 0, audio: 0 } }); store.setState({ selectedId: c.id, selectedIds: [c.id], playhead: 0 }); }, projectStore.toString());
- await page.waitForSelector('.visual-selection-box');
+ // Transform handles need explicit activation (81b883d). Keyboard activation targets the canvas center, which the
+ // full-frame upload covers, without the double-click that also opens Clip settings (ab82c81). Later cases keep the
+ // same selected clip, so the handles stay active.
+ await activateHandles();
  await page.waitForFunction(functionText=>{const store=eval(`(${functionText})`)(),p=[...document.querySelectorAll('hyperframes-player')].find(p=>p.style.zIndex==='1'),frame=p?.iframeElement?.contentDocument?.querySelector('[data-visual-clip]');return document.querySelectorAll('hyperframes-player').length===1&&p?.ready&&frame?.dataset.visualClip===store.getState().selectedId;},{},projectStore.toString());
  const expectedMetadata=await sharp(fixture).metadata();
  const importedMetadata=await page.evaluate(()=>{const image=document.querySelector('hyperframes-player').iframeElement.contentDocument.querySelector('.visual');return{width:image.naturalWidth,height:image.naturalHeight};});
@@ -103,6 +116,8 @@ try {
  ];
  for (const viewport of (process.env.NARROW==='1'?[{width:Number(process.env.NARROW_WIDTH??1440),height:Number(process.env.NARROW_HEIGHT??900)}]:[{ width: 1440, height: 900 }, { width: 1366, height: 740 }, { width: 1920, height: 1080 }, { width: 390, height: 844 }])) {
   await page.setViewport(viewport); await wait(100);
+  // The compact layout shows one pane at a time; Agentic shows the conversation, Tracks shows the preview (57c304e).
+  if (viewport.width < 768 && await page.$('#editor-tracks-tab[aria-selected="false"]')) { await page.click('#editor-tracks-tab'); await page.waitForSelector('#editor-tracks-tab[aria-selected="true"]'); await wait(150); if (!await page.$('.visual-selection-box')) await activateHandles(); }
   for (const scenario of cases) {
    await installCase(scenario); const value = await metrics(), prefix = `${viewport.width}×${viewport.height} ${scenario.name}`;
    const s = value.selection, stage = value.stage;

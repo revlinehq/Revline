@@ -5,13 +5,15 @@ import puppeteer from 'puppeteer';
 
 // Real chat/composer/scroll code with a synthetic subscription. No model calls.
 const subscription = `import {useEffect,useState} from 'react';export function useUIMessages(){const[,update]=useState(0);useEffect(()=>{window.remoteChanged=()=>update(value=>value+1);return()=>{window.remoteChanged=null}},[]);return {results:window.remoteMessages??[],status:'Exhausted',loadMore:()=>{}}}`;
+const backend = `export const useQuery=()=>undefined;export const useMutation=()=>async()=>{throw Error('Unexpected backend write')};export const useAction=useMutation;export const useConvexAuth=()=>({isAuthenticated:true,isLoading:false});`;
 const bundle = await build({ stdin: { resolveDir: process.cwd(), loader: 'tsx', contents: `
 import React,{useState} from 'react';import {createRoot} from 'react-dom/client';import {AssistantPanel} from './components/editor/assistant-panel';
 import './components/workspace/shared.css';import './components/workspace/workspace-pages.css';import './app/editor.css';
 function Fixture(){const[state,setState]=useState({messages:[],running:false,conversation:undefined,error:null,suggestions:undefined,attachments:undefined});window.fixture={update:patch=>setState(current=>({...current,...patch})),remote:messages=>{window.remoteMessages=messages;window.remoteChanged?.()}};return <AssistantPanel {...state} configured hasClips demo={false} onSuggestion={async()=>{}} onSend={text=>{window.sent=text;return new Promise(resolve=>window.accept=resolve)}}/>};createRoot(document.getElementById('root')).render(<Fixture/>);
 ` }, plugins: [{ name: 'synthetic-conversation', setup(builder) {
- builder.onResolve({ filter: /^@convex-dev\/agent\/react$/ }, args => ({ path: args.path, namespace: 'fixture' }));
- builder.onLoad({ filter: /.*/, namespace: 'fixture' }, () => ({ contents: subscription, loader: 'tsx', resolveDir: process.cwd() }));
+ // The connected conversation also reads its follow-up queue (d3fbc95); no queued requests here.
+ builder.onResolve({ filter: /^(@convex-dev\/agent\/react|convex\/react)$/ }, args => ({ path: args.path, namespace: 'fixture' }));
+ builder.onLoad({ filter: /.*/, namespace: 'fixture' }, args => ({ contents: args.path === 'convex/react' ? backend : subscription, loader: 'tsx', resolveDir: process.cwd() }));
 } }], bundle: true, platform: 'browser', format: 'iife', jsx: 'automatic', write: false, outdir: '/tmp/revline-first-message', define: { 'process.env.NODE_ENV': '"production"' } });
 const server = createServer((_request, response) => { response.writeHead(200, { 'Content-Type': 'text/html' }); response.end('<html data-workspace-theme="dark"><body><main class="conversation-editor"><div id="root"></div></main></body></html>'); });
 await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
@@ -49,13 +51,15 @@ try {
  await visible('[data-message-id="u4"]');
  await visible('[data-message-id="a4"]');
  await page.evaluate(() => window.fixture.update({ error: 'The request could not finish. Your existing edit is still saved. Please try again.' }));
- await visible('.chat-error');
+ // With a turn on screen, errors render as that turn's failure card instead of a footer notice (d053f7e).
+ const turnFailure='.assistant-result-card.result-error';
+ await visible(turnFailure);assert.match(await page.$eval(turnFailure,node=>node.textContent),/Your existing edit is still saved/);assert.equal(await page.$('.chat-error'),null,'The turn failure is not repeated as a footer notice');
  const budgetError='This request reached its token budget. Previously saved edits remain; continue from the current timeline.';
  await page.evaluate(({messages,budgetError})=>window.fixture.update({messages:[...messages.slice(0,-1),{...messages.at(-1),text:'No timeline changes were saved. '+budgetError}],error:budgetError}),{messages,budgetError});
- await page.waitForFunction(()=>!document.querySelector('.chat-error'));
- assert.equal(await page.$$eval('[data-message-id="a4"]',nodes=>nodes.length),1,'A persisted failure is shown once, without a duplicate error footer');
+ await page.waitForFunction(budgetError=>!document.querySelector('.chat-error')&&document.querySelector('.assistant-history').textContent.split(budgetError).length===2,{},budgetError);
+ assert.deepEqual(await page.$$eval(turnFailure,nodes=>nodes.map(node=>node.textContent.includes('token budget'))),[true],'A persisted failure is shown once in its turn card, without a duplicate error footer');
  await page.evaluate(({messages})=>window.fixture.update({messages,error:'The request could not finish.'}),{messages});
- await visible('.chat-error');
+ await visible(turnFailure);assert.match(await page.$eval(turnFailure,node=>node.textContent),/The request could not finish\./);
  await page.$eval('.assistant-history', node => { node.dispatchEvent(new WheelEvent('wheel', { deltaY: -300 })); node.scrollTop = 0; });
  await page.evaluate(() => window.fixture.update({ error: 'The request could not finish. '.repeat(8) }));
  await new Promise(resolve => setTimeout(resolve, 150));
@@ -96,16 +100,17 @@ try {
  await page.evaluate(()=>window.fixture.update({activity:'Applying edits…',messages:[{id:'analysis-request',role:'user',text:'Find the strongest moment.'},{id:'applying',role:'assistant',text:'',steps:[{id:'trim',name:'trim',state:'running'}]}]}));
  await page.waitForSelector('.assistant-activity[data-phase="applying"]');
  assert.equal(await page.$eval('.assistant-activity .processing-status-detail',node=>node.textContent),'Trimming footage');
- const assertSpinning = async () => {
-  const initial = await page.$eval('.assistant-activity-symbol svg',node=>{const style=getComputedStyle(node);return{animation:style.animationName,transform:style.transform};});
-  assert.notEqual(initial.animation,'none','The working loader icon has a spin animation');
-  await page.waitForFunction(transform=>{const icon=document.querySelector('.assistant-activity-symbol svg');return icon&&getComputedStyle(icon).transform!==transform;},{},initial.transform);
+ // Working states use text-only feedback: shimmering label plus elapsed time, no loader glyph (f579cda).
+ const assertTextFeedback = async () => {
+  assert.equal(await page.$('.assistant-activity[data-phase="applying"] .assistant-activity-symbol'),null,'Applying has no loader glyph');
+  assert.ok(await page.$('.assistant-activity[data-phase="applying"] .assistant-activity-elapsed'),'Applying shows elapsed time');
+  assert.notEqual(await page.$eval('.assistant-activity .processing-status-label',node=>getComputedStyle(node).animationName),'none','The working label shimmers');
  };
- await assertSpinning();
+ await assertTextFeedback();
  await page.emulateMediaFeatures([{name:'prefers-reduced-motion',value:'reduce'}]);
- assert.deepEqual(await page.$eval('.assistant-activity .processing-status-label',node=>{const style=getComputedStyle(node);return[style.animationName,style.animationDuration]}),['revline-status-shimmer','3s'],'Reduced motion keeps the shared slower text-only shimmer');
- assert.equal(await page.$eval('.assistant-activity-symbol',node=>getComputedStyle(node).animationName),'none','The spinner wrapper stays fixed while its SVG rotates');
- await assertSpinning();
+ // Reduced motion now shows a static muted label instead of a slower shimmer (783ee04).
+ assert.deepEqual(await page.$eval('.assistant-activity .processing-status-label',node=>{const style=getComputedStyle(node);return[style.animationName,style.color!=='rgba(0, 0, 0, 0)']}),['none',true],'Reduced motion shows a static, readable working label');
+ assert.equal(await page.$('.assistant-activity[data-phase="applying"] .assistant-activity-symbol'),null,'Reduced motion adds no loader glyph');
  assert.equal(await page.$eval('.assistant-activity',node=>node.scrollWidth<=node.clientWidth),true,'Activity fits the narrow sidebar');
  assert.equal(await page.$('.assistant-activity button'),null,'Status cards add no Preview, Undo, Continue or Retry actions');
  assert.deepEqual(errors, []);

@@ -47,6 +47,8 @@ page.on('console', message => { if (message.type() === 'error' && message.text()
 await page.setRequestInterception(true);
 page.on('request', request => ['GET', 'HEAD', 'OPTIONS'].includes(request.method()) ? request.continue() : request.abort());
 await page.setViewport({ width: 1600, height: 1000 });
+// Agentic mode and a collapsed inspector are the saved defaults (57c304e, e832836); crop lives in the Tracks inspector.
+await page.evaluateOnNewDocument(() => { try { localStorage.setItem('revline-editor-mode', 'tracks'); localStorage.setItem('revline-inspector-open', 'true'); } catch {} });
 const settle = () => new Promise(resolve => setTimeout(resolve, 250));
 try {
   await page.goto(demoUrl.href, { waitUntil: 'networkidle2' });
@@ -78,8 +80,9 @@ try {
     window.playerAdds=0;window.playerObserver=new MutationObserver(entries=>{for(const e of entries)for(const n of e.addedNodes)if(n.tagName==='HYPERFRAMES-PLAYER')window.playerAdds++;});
     window.playerObserver.observe(document.querySelector('.hyperframes-host'),{childList:true});
   });
-  await page.click('#inspector-edit-tab');
-  await page.click('.inspector-transform');
+  // Store selection leaves the inspector on Tools; crop is the Framing action in Clip settings (0ea0ca0).
+  await page.locator('::-p-aria([name="Clip settings"][role="button"])').click();
+  await page.click('.footage-crop');
   await page.waitForSelector('[aria-label="Crop left. Use arrow keys to adjust."]');
   await page.focus('[aria-label="Crop left. Use arrow keys to adjust."]');
   await page.keyboard.down('Shift');await page.keyboard.press('ArrowRight');await page.keyboard.up('Shift');
@@ -99,7 +102,7 @@ try {
   assert.equal(result.thumbnailIdentity,true,'Crop must keep existing timeline thumbnails');
   assert.deepEqual(browserErrors,[]);
   const wait=()=>new Promise(resolve=>setTimeout(resolve,150));
-  await page.click('.inspector-transform');
+  await page.click('.footage-crop');
   await page.waitForSelector('[data-crop-handle="n"]');
   const bounds=await page.$eval('.source-crop-bounds',n=>{const r=n.getBoundingClientRect();return{w:r.width,h:r.height};});
   const drag=async(handle,dx,dy)=>{const n=await page.$(`[data-crop-handle="${handle}"]`);const r=await n.boundingBox();await page.mouse.move(r.x+r.width/2,r.y+r.height/2);await page.mouse.down();await page.mouse.move(r.x+r.width/2+dx,r.y+r.height/2+dy,{steps:10});await page.mouse.up();await wait();};
@@ -129,7 +132,9 @@ try {
   await page.evaluate(()=>{const p=document.querySelector('hyperframes-player');p.pause();p.seek(0);});
   await page.evaluate(()=>window.beforeFocusPlayer=document.querySelector('hyperframes-player'));
   await patch({focus:[{time:0,x:.3,y:.4},{time:12,x:.7,y:.6}],fit:'cover'});
-  await page.waitForFunction(()=>document.querySelector('hyperframes-player')!==window.beforeFocusPlayer&&document.querySelector('hyperframes-player')?.style.zIndex==='1'&&document.querySelector('hyperframes-player')?.ready&&document.querySelector('hyperframes-player')?.iframeElement?.contentDocument?.querySelector('video')?.readyState>=2);
+  // Focus keyframes now reconcile on the live player; only fps/aspect changes need a new one (preview-content-key.ts, bc65a0a).
+  await page.waitForFunction(()=>document.querySelector('hyperframes-player')?.style.zIndex==='1'&&document.querySelector('hyperframes-player')?.ready&&document.querySelector('hyperframes-player')?.iframeElement?.contentDocument?.querySelector('video')?.readyState>=2);
+  assert.equal(await page.evaluate(()=>[...document.querySelectorAll('hyperframes-player')].find(p=>p.style.zIndex==='1')===window.beforeFocusPlayer),true,'Adding focus keyframes keeps the live player');
   await page.evaluate(()=>{const p=document.querySelector('hyperframes-player');window.baseline={p,doc:p.iframeElement.contentDocument,video:p.iframeElement.contentDocument.querySelector('video')};});
   const focusedCrop={left:.2,right:.05,top:.05,bottom:.1};await patch({crop:focusedCrop});
   await page.evaluate(()=>document.querySelector('hyperframes-player').seek(6));await wait();

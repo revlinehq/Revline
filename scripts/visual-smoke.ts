@@ -26,11 +26,15 @@ async function main() {
     function pixel(time:number,x:number,y:number){return [...execFileSync('ffmpeg',['-v','error','-ss',String(time),'-i',output,'-vf',`crop=2:2:${x}:${y},scale=1:1`,'-frames:v','1','-f','rawvideo','-pix_fmt','rgb24','-'])];}
     function blue(time:number,x:number,y:number){const p=pixel(time,x,y);assert.ok(p[2]>180&&p[0]<40&&p[1]<40,`Expected blue ${time}s ${x},${y}; got ${p}`);}
     function red(time:number,x:number,y:number){const p=pixel(time,x,y);assert.ok(p[0]>180&&p[1]<40&&p[2]<40,`Expected red ${time}s ${x},${y}; got ${p}`);}
-    blue(0,504,216);red(.5,380,216);red(.5,504,50);
-    const purple=pixel(1.5,380,216);assert.ok(purple[0]>100&&purple[0]<155&&purple[2]>100&&purple[2]<155&&purple[1]<40,`Rotation/opacity expected purple at 380,216; got ${purple}`);
-    red(1.5,504,90);
-    blue(2.5,10,10);blue(2.5,710,710);
-    console.log('Visual render passed: higher V2 layer wins, true blue source crop, contain mask reveals V1 letterbox, position/scale, 90-degree rotation, real opacity blend, cover fill, exact-zero frame, zero warnings.');
+    // Crop masks the source in place instead of re-framing it (bc65a0a "Preserve crop position").
+    // Contain box: 288x162 at center (504,216) spans x360-648, y135-297; the kept right third is x552-648.
+    blue(0,600,216);red(0,540,216);red(0,600,130);red(0,600,300);red(.5,380,216);red(.5,504,50);
+    // 90-degree rotation about the box center moves the blue strip to x423-585, y264-360 at 50% opacity.
+    for(const [x,y] of [[504,312],[430,312],[580,312],[504,268],[504,356]]){const purple=pixel(1.5,x,y);assert.ok(purple[0]>100&&purple[0]<155&&purple[2]>100&&purple[2]<155&&purple[1]<40,`Rotation/opacity expected purple at ${x},${y}; got ${purple}`);}
+    red(1.5,600,216);red(1.5,504,90);
+    // Cover scales the full source to 1280x720 (left -280); the kept blue third covers x573-720 at full height.
+    blue(2.5,710,710);blue(2.5,650,10);blue(2.5,590,360);red(2.5,560,360);red(2.5,10,10);
+    console.log('Visual render passed: higher V2 layer wins, blue source crop masks in place and reveals V1, contain letterbox reveals V1, position/scale, 90-degree rotation, real opacity blend, full-height cover fill, exact-zero frame, zero warnings.');
   } finally {await rm(directory,{recursive:true,force:true});}
 }
 main().catch(error=>{console.error(error);process.exitCode=1;});

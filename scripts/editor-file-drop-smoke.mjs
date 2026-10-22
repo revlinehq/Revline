@@ -23,6 +23,8 @@ const stubs = {
     };}`,
   '@convex-dev/agent/react': `const messages=[];export const useUIMessages=()=>({results:messages,status:'Exhausted',loadMore:()=>{}});`,
   'next/link': `export default function Link({children,...props}){return <a {...props}>{children}</a>;}`,
+  // ConnectedEditor renders the account-bound WorkspaceNav while loading (92a6e79); it is a workspace leaf here.
+  '@/components/workspace/workspace-nav': `export const WorkspaceNav=()=>null;`,
   '@/components/workspace/editor-access-gate': `export function EditorAccessGate({children}){return children;}`,
   '@/components/workspace/project-draft': `export const takeFiles=async()=>[],acknowledgeDraftFiles=async()=>{};`,
   '@/lib/editor/prepare-video-audio': `export const prepareVideoAudio=async()=>{throw Error('Unexpected video preparation');},prepareAudioWaveform=async()=>{throw Error('Unexpected audio preparation');};`,

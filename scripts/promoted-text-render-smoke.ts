@@ -96,9 +96,9 @@ try{
     const label=REMOTION_TEXT_LABELS[preset],before=await page.evaluate(()=>(window as any).currentClip.textTemplate?.preset);
     await page.click(`[aria-label="Preview ${label}"]`);assert.equal(await page.evaluate(()=>(window as any).currentClip.textTemplate?.preset),before,'Preview card never applies an animation');
     await page.click(`[aria-label="Apply ${label}"]`);assert.equal(await page.evaluate(()=>(window as any).currentClip.textTemplate.preset),preset);
-    assert.deepEqual(await page.$$eval('.text-animation-tuning input',nodes=>nodes.map(node=>({label:node.getAttribute('aria-label'),value:Number((node as HTMLInputElement).value)}))),[{label:'Animation strength',value:1},{label:'Reveal duration',value:.65},{label:'Text stagger',value:.07}]);
+    assert.deepEqual(await page.$$eval('.text-animation-tuning input',nodes=>nodes.map(node=>({label:node.getAttribute('aria-label'),value:Number((node as HTMLInputElement).value)}))),[{label:'Animation strength',value:1},{label:'Entrance duration',value:.65},{label:'Text stagger',value:.07}]);
   }
-  for(const [label,,target] of [['Animation strength','strength','End'],['Reveal duration','revealDuration','Home'],['Text stagger','stagger','End']]){await page.focus(`[aria-label="${label}"]`);await page.keyboard.press(target as 'Home'|'End');}
+  for(const [label,,target] of [['Animation strength','strength','End'],['Entrance duration','revealDuration','Home'],['Text stagger','stagger','End']]){await page.focus(`[aria-label="${label}"]`);await page.keyboard.press(target as 'Home'|'End');}
   assert.deepEqual(await page.evaluate(()=>{const clip=(window as any).currentClip;return{text:clip.text,start:clip.start,duration:clip.duration,settings:[clip.textTemplate.strength,clip.textTemplate.revealDuration,clip.textTemplate.stagger]};}),{text:'Words and timing stay intact',start:0,duration:4,settings:[2,.15,.18]});
   await page.screenshot({path:'/tmp/revline-promoted-text-controls.png'});assert.deepEqual(errors,[]);
   console.log('PASS: all7 promoted production text animations render at exact entrance/rest frames and backward seeks, preserve split phase, keep Cinematic focus line geometry stable, match actual720p+1080p MP4 pixels, retain original7/karaoke speech timings, and expose selectable/editable bounded production controls. No paid calls.');

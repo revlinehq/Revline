@@ -9,6 +9,9 @@ const check = (condition, name, detail) => checks.push({ passed: !!condition, na
 page.on('pageerror', error => errors.push(error.message));
 await page.setViewport({ width: 1440, height: 1000 });
 
+async function closeEditingSheet() {
+  if (await page.$('.preview-inspector-sheet [aria-label="Close editing panel"]')) { await page.click('.preview-inspector-sheet [aria-label="Close editing panel"]'); await page.waitForFunction(() => !document.querySelector('.preview-inspector-sheet')); }
+}
 async function fixture({ rotation = 0, x = .4, y = .55, scale = .6, crop } = {}) {
   await page.evaluate(options => {
     const element = document.querySelector('.timeline-scroll');
@@ -21,7 +24,14 @@ async function fixture({ rotation = 0, x = .4, y = .55, scale = .6, crop } = {})
     store.getState().replace({ fps: 30, aspectRatio: 'vertical', tracks: { visual: 1, overlay: 0, audio: 0 }, clips: [clip] });
     store.setState({ selectedId: clip.id, selectedIds: [clip.id], playhead: 0 });
   }, { rotation, x, y, scale, crop });
-  await page.waitForFunction(() => [...document.querySelectorAll('hyperframes-player')].some(player => player !== window.__snapPreviousPlayer && player.style.zIndex === '1' && player.ready && player.iframeElement?.contentDocument?.querySelector('[data-visual-clip="snap-fixture"]')));
+  await page.waitForFunction(() => [...document.querySelectorAll('hyperframes-player')].some(player => player.style.zIndex === '1' && player.ready && player.iframeElement?.contentDocument?.querySelector('[data-visual-clip="snap-fixture"]')));
+  // Same-format timeline replacements reconcile on the live player instead of mounting a new one (bc65a0a).
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  // Transform handles appear after double-clicking the footage (81b883d). The double-click also opens Clip
+  // settings (ab82c81), which is a sheet over the preview in the compact layout; close it to drag the handles.
+  const surface = await page.$eval('.preview-hit-surface', node => { const r = node.getBoundingClientRect(); return { x: r.x, y: r.y, width: r.width, height: r.height }; });
+  await page.mouse.click(surface.x + x * surface.width, surface.y + y * surface.height, { count: 2 });
+  await closeEditingSheet();
   await page.waitForSelector('.visual-selection-box'); await wait(100);
 }
 async function geometry() {
@@ -88,7 +98,14 @@ try {
   await page.mouse.up(); await wait(250); const resizeAfter = await geometry();
   check(resizeAfter.history === resizeBefore.history + 1 && resizeAfter.guides.length === 0, 'Magnetic resize commits once and clears guides');
   for (const width of [1200, 390]) {
-    await page.setViewport({ width, height: 850 }); await wait(150); await fixture(); const responsive = await geometry();
+    await page.setViewport({ width, height: 850 }); await wait(150);
+    // The compact layout shows one pane at a time; Agentic shows the conversation, Tracks shows the preview (57c304e).
+    // The editing panel preference persists as a modal sheet there, so close it before switching panes.
+    if (await page.evaluate(() => innerWidth < 768)) {
+      await closeEditingSheet();
+      if (await page.$('#editor-tracks-tab[aria-selected="false"]')) { await page.click('#editor-tracks-tab'); await page.waitForSelector('#editor-tracks-tab[aria-selected="true"]'); await wait(150); }
+    }
+    await fixture(); const responsive = await geometry();
     await move(responsive.root.width * .1 - 3, -responsive.root.height * .05 + 3); const live = await geometry();
     check(Math.abs(live.box.x + live.box.width / 2 - live.root.x - live.root.width / 2) < .6 && live.guides.some(line => line.axis === 'x'), `A 3px magnetic reach stays usable at ${width}px viewport`, live.root);
     await page.mouse.up(); await wait(200);

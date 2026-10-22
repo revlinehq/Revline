@@ -46,10 +46,13 @@ try {
     await page.screenshot({ path: '/tmp/revline-' + key + '-controls.png' });
     await page.click('[aria-label="Remove ' + name + '"]'); await flush();
     assert.equal(await page.evaluate(key => window.timeline.clips[0][key], key), undefined);
-    assert.ok(await page.$('.effect-library'), 'Removal returns directly to tools');
+    // Removing an applied effect keeps the clip's settings open instead of jumping to the library (10be298).
+    assert.ok(await page.$('#inspector-effects .inspector-clip-settings'), 'Removal stays in Clip settings');
+    assert.equal(await page.$('.effect-library'), null, 'Removal does not jump to the library');
+    assert.equal(await page.$(controls(key)), null, 'Removed effect controls disappear');
     await page.evaluate(() => window.tools()); await flush();
   }
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'Texture controls fit 320px');
   assert.deepEqual(errors, []);
-  console.log('PASS: production Texture catalog applies both effects, editable slider/color controls commit, bypass/reset preserve settings, removal returns to tools, 320px layout.');
+  console.log('PASS: production Texture catalog applies both effects, editable slider/color controls commit, bypass/reset preserve settings, removal stays in Clip settings, 320px layout.');
 } finally { await browser.close(); }
