@@ -23,7 +23,7 @@ import { validateVideoInspectionInput } from '../lib/media-analysis/video-inspec
 import { normalizeTimeline } from '../lib/editor/types';
 import {savePublicationReceipt} from './lib/publicationReceipt';
 import { enqueueMediaTask, cancelMediaTask, detachAnalysisRequest } from './mediaTasks';
-import { requireMediaTaskCapacity } from './lib/account_limits';
+import { consumeAssistantRequest, requireMediaTaskCapacity } from './lib/account_limits';
 import { assertEditorModelConfigured, claudeModelSwitcherEnabled, defaultEditorModelChoice, resolveClaudeModel, withEditorReasoning, withEditorSpeed } from '../lib/ai/claude-model';
 import { claudeModelChoiceValidator, legacyCompatibleModelChoiceValidator, openAIReasoningEffortValidator, openAISpeedModeValidator } from './lib/claude_model';
 import { allowedClaudeModelChoices, enforceClaudeModelPolicy } from '../lib/ai/claude-model-policy';
@@ -87,11 +87,13 @@ export const send = mutation({ args: { projectId: v.id("projects"), prompt: v.st
   if(project.aiRunning||queued){
     const pending=await ctx.db.query('assistantQueue').withIndex('by_project',q=>q.eq('projectId',project._id)).take(10);
     if(pending.length>=10)throw new ConvexError('You can queue up to 10 messages. Remove one before adding more.');
+    await consumeAssistantRequest(ctx,ownerId);
     const {prompt:_,projectId:__,modelChoice:___,reasoningEffort:____,speedMode:_____,...context}=args;
     await ctx.db.insert('assistantQueue',{projectId:project._id,ownerId,prompt,pinnedModel,...context,createdAt:Date.now()});
     if(!project.aiRunning&&!project.aiQueuePaused)await ctx.scheduler.runAfter(0,internal.assistant.drainQueue,{projectId:project._id,ownerId});
     return null;
   }
+  await consumeAssistantRequest(ctx,ownerId);
   return beginRequest(ctx,project,prompt,pinnedModel,args);
 }});
 type QueuedContext=Pick<Doc<'assistantQueue'>,'attachedAssetIds'|'selectedClipId'|'selectedClipIds'|'playhead'>;

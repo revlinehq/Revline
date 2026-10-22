@@ -1,7 +1,7 @@
 import { ConvexError } from 'convex/values';
 import type { MutationCtx, QueryCtx } from '../_generated/server';
 
-const DAY_MS = 86_400_000;
+const MINUTE_MS = 60_000, DAY_MS = 86_400_000;
 /** One upload legitimately queues three tasks (extract, preview, understand),
  * so the default admits eight sources transferring and preparing at once. */
 export const DEFAULT_MAX_ACTIVE_MEDIA_TASKS = 24;
@@ -67,3 +67,11 @@ export async function consumeVideoImport(ctx: MutationCtx, ownerId: string, crea
   await consumeAccountQuota(ctx, ownerId, 'importProject', [{ period: DAY_MS, max: projects, message: `You have reached today's limit of ${projects} new edits from video links. Import into an existing edit, or try again after midnight UTC.` }]);
 }
 
+/** Counted at submission, so a queued message is charged once, when sent. */
+export async function consumeAssistantRequest(ctx: MutationCtx, ownerId: string) {
+  const perMinute = accountLimit('AI_REQUESTS_PER_MINUTE_PER_ACCOUNT', 20, 1, 120), perDay = accountLimit('AI_REQUESTS_PER_DAY_PER_ACCOUNT', 200, 1, 10_000);
+  await consumeAccountQuota(ctx, ownerId, 'assistantRequest', [
+    { period: MINUTE_MS, max: perMinute, message: 'You are sending AI requests too quickly. Wait a minute, then try again.' },
+    { period: DAY_MS, max: perDay, message: `You have reached today's limit of ${perDay} AI requests. It resets at midnight UTC.` },
+  ]);
+}
