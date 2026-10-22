@@ -2,7 +2,7 @@
 import { NEW_PROJECT_PATH } from '@/lib/workspace-routes';
 
 import { useEffect, useRef, useState } from 'react';
-import { useAuth, useSignIn, useSignUp } from '@clerk/nextjs';
+import { useAuth, useClerk, useSignIn, useSignUp } from '@clerk/nextjs';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { LoaderCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -28,6 +28,7 @@ export function AuthForm() {
   const { signIn, fetchStatus } = useSignIn();
   const { signUp } = useSignUp();
   const { isLoaded, isSignedIn } = useAuth();
+  const clerk = useClerk();
   const router = useRouter();
   const params = useSearchParams();
   const redirectParam = params.get('redirect_url') ?? params.get('redirectUrl') ?? params.get('returnTo');
@@ -76,7 +77,7 @@ export function AuthForm() {
       const flow = await verifyEmailCode(signIn, signUp, code);
       const done = await (flow === 'signUp' ? signUp : signIn).finalize({ navigate: ({ session, decorateUrl }) => {
         if (session?.currentTask) {
-          setBlockedTask(true); setError('Your account requires an additional security step. Please contact support to complete sign-in.'); return;
+          setBlockedTask(true); setError('This account needs an additional security step that Revline can’t complete here. Sign in with another account to continue.'); return;
         }
         const destination = decorateUrl(target);
         if (destination.startsWith('http')) window.location.assign(destination); else router.replace(destination);
@@ -100,6 +101,18 @@ export function AuthForm() {
       for (const result of results) if (result.error) throw result.error;
       setStep('email'); setCode(''); setError(''); setNotice(''); setResendAt(0);
     } catch (failure) { setError(errorMessage(failure, 'Could not change your email. Please try again.')); }
+    finally { inFlight.current = false; setPhase('idle'); }
+  }
+  async function switchAccount() {
+    if (inFlight.current) return;
+    inFlight.current = true; setPhase('resetting'); setError(''); setNotice('');
+    try {
+      // Stay on this sign-in page, with its redirect, for the next account.
+      await clerk.signOut({ redirectUrl: window.location.href });
+      setBlockedTask(false); setStep('email'); setEmail(''); setCode(''); setResendAt(0);
+      // The session is gone; stale attempt resources only need a best-effort reset.
+      await Promise.all([signIn.reset(), signUp.reset()]).catch(() => undefined);
+    } catch (failure) { setError(errorMessage(failure, 'Could not sign out of this account. Reload the page and try again.')); }
     finally { inFlight.current = false; setPhase('idle'); }
   }
   async function google() {
@@ -132,6 +145,7 @@ export function AuthForm() {
       <div className="auth-code-actions"><button type="button" data-auth-action="change-email" disabled={pending} onClick={() => void changeEmail()}>Use a different email</button><button type="button" data-auth-action="resend" disabled={pending || cooldown > 0} onClick={() => void resend()}>{phase === 'resending' ? 'Sending…' : cooldown ? `Resend code in ${cooldown}s` : 'Resend code'}</button></div>
     </form>}
     <div id="auth-feedback" className="auth-feedback">{error && <p role="alert">{error}</p>}{notice && <p role="status">{notice}</p>}</div>
+    {blockedTask && <div className="auth-code-actions"><button type="button" data-auth-action="another-account" disabled={pending} onClick={() => void switchAccount()}>{phase === 'resetting' ? 'Signing out…' : 'Use another account'}</button></div>}
     {(!isLoaded || pending) && <AuthRecovery key={!isLoaded ? 'loading' : phase} />}
     <div id="clerk-captcha" />
   </div></AuthFrame>;
