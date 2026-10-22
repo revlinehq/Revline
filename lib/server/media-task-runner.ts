@@ -20,6 +20,8 @@ import { preparePreviewVideo,probePreviewVideo,type PreviewVideoMetadata } from 
 import { runRenderWorker } from './render-worker';
 import { importVideoLink } from './import-video-link';
 import { prepareComposition,writeComposition } from './prepare-composition';
+import { renderPlainExport } from './plain-export-render';
+import { plainExportPlan } from '@/lib/editor/plain-export';
 import { reviewComposition } from './review-composition';
 import { extractInspectionFrames } from './inspect-video-frames';
 import { MEDIA_ACTIVITY_LABELS, type MediaTaskActivity, type ReportMediaActivity } from '@/lib/media-analysis/activity';
@@ -70,8 +72,24 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
       const {assetUrls,audioSourceOffsets}=await runPhase('Preparing export media',()=>prepareComposition(directory,snapshot.timeline,snapshot.assets as (MediaAsset & {size:number})[],convexUrl,signal));
       onProgress(3);
       await runPhase('Preparing export composition',()=>writeComposition(directory,snapshot.timeline,snapshot.assets as (MediaAsset & {size:number})[],assetUrls,snapshot.resolution as 720|1080,snapshot.fps as 24|30|60,'./',signal,audioSourceOffsets));
-      const output = join(directory, 'video.mp4');
-      await runPhase('Rendering export',()=>runRenderWorker(directory, output, { fps: snapshot.fps, quality: snapshot.quality as 'draft' | 'standard' | 'high' }, progress => onProgress(5+Math.round(progress.progress * .90)), signal));
+      const output = join(directory, 'video.mp4'), quality = snapshot.quality as 'draft' | 'standard' | 'high';
+      // Report monotonically: a fast-path fallback restarts the browser render's progress.
+      let reported = 0;
+      const renderProgress = (progress: { progress: number }) => { reported = Math.max(reported, 5 + Math.round(progress.progress * .90)); onProgress(reported); };
+      // Plain video/audio timelines skip browser compositing. REVLINE_RENDER_FAST_PATH=0 disables it.
+      const decision = process.env.REVLINE_RENDER_FAST_PATH === '0' ? { eligible: false as const, reason: 'disabled by REVLINE_RENDER_FAST_PATH=0' } : plainExportPlan(snapshot.timeline, snapshot.assets as MediaAsset[], snapshot.resolution as 720 | 1080, snapshot.fps);
+      let rendered = false;
+      if (decision.eligible) {
+        try {
+          await runPhase('Rendering export with FFmpeg', () => renderPlainExport(directory, output, decision.plan, assetUrls, audioSourceOffsets, quality, renderProgress, signal));
+          rendered = true;
+        } catch (error) {
+          if (signal.aborted) throw error;
+          console.warn(`Media task ${task.taskId}: FFmpeg export failed; falling back to the browser renderer.`, error instanceof Error ? error.message : error);
+          await rm(output, { force: true });
+        }
+      } else logPhase('FFmpeg export', 'skipped', Date.now(), decision.reason);
+      if (!rendered) await runPhase('Rendering export',()=>runRenderWorker(directory, output, { fps: snapshot.fps, quality }, renderProgress, signal));
       onProgress(97);
       await runPhase('Uploading export',()=>uploadMediaFile(output, { ...credentials, jobId: task.renderJobId, projectId: task.projectId, fileName: 'video.mp4', contentType: 'video/mp4', kind: 'video', duration: timelineDuration(snapshot.timeline), ...dimensions(snapshot.timeline.aspectRatio, snapshot.resolution) }, uploadContext, signal));
       return {};
