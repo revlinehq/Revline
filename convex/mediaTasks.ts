@@ -21,8 +21,9 @@ import { timelineDuration } from '../lib/editor/types';
 import { commitTimeline, currentTimeline } from './lib/timeline';
 import { BEAT_ANALYSIS_ENGINE } from '../lib/media-analysis/beat-map';
 import { editingWorkflowActive } from './lib/assistant_workflow';
+import { MEDIA_TASK_LEASE_MS } from '../lib/media-analysis/errors';
 
-const LEASE_MS = 60_000;
+const LEASE_MS = MEDIA_TASK_LEASE_MS;
 const MAX_ATTEMPTS = 3;
 const IMPORT_PLACEMENT_DELAY_MS = 10_000, IMPORT_PLACEMENT_ATTEMPTS = 360;
 const eventResult = v.object({ success: v.boolean(), retryable: v.boolean(), error: v.optional(v.string()) });
