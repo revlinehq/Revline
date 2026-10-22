@@ -37,6 +37,7 @@ RUN python3 -m venv /opt/beat-tracking \
     && python3 -m venv /opt/video-import \
     && /opt/video-import/bin/pip install --no-cache-dir -r /opt/requirements/video-import-requirements.txt
 
+COPY models/ /opt/models/
 COPY tsconfig.json ./
 COPY convex ./convex
 COPY lib ./lib
