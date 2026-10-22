@@ -89,6 +89,14 @@ function monoPcm(path: string) {
   const pcm = execFileSync('ffmpeg', ['-v', 'error', '-i', path, '-map', '0:a:0', '-f', 's16le', '-ac', '1', '-ar', '48000', '-'], { maxBuffer: 256 * 1024 * 1024 });
   return Int16Array.from({ length: pcm.length / 2 }, (_, index) => pcm.readInt16LE(index * 2));
 }
+/** Level of `a` relative to reference `b` over [from, to) samples, their correlation and residual. */
+function compareSound(a: Int16Array, b: Int16Array, from = 0, to = Math.min(a.length, b.length)) {
+  let energyA = 0, energyB = 0, product = 0, difference = 0;
+  for (let index = from; index < to; index++) { energyA += a[index] ** 2; energyB += b[index] ** 2; product += a[index] * b[index]; difference += (a[index] - b[index]) ** 2; }
+  // Silence on either side would make every ratio NaN and pass the range checks unnoticed.
+  assert.ok(energyA > 0 && energyB > 0, 'A compared sound section is silent.');
+  return { levelDb: 10 * Math.log10(energyA / energyB), correlation: product / Math.sqrt(energyA * energyB), residualDb: 10 * Math.log10(difference / energyB) };
+}
 
 /** Render one plain timeline through HyperFrames and the FFmpeg-only path and compare the files. */
 async function plainExportParity() {
@@ -112,9 +120,8 @@ async function plainExportParity() {
       { _id: 'wide-sound', fileName: 'wide.mp4', kind: 'audio', url: null },
     ];
     const assetUrls = { wide: './wide.mp4', second: './second.mp4', music: './music.wav', voice: './voice.wav', 'wide-sound': './wide.mp4' };
-    // HyperFrames 0.8.143 adds an extra unity-gain, 1x copy of the first audible clip of each video
-    // source (appendAutoDetectedVideoAudio), so the parity timeline carries its sound on separate
-    // audio clips, as linked audio does; embedded video sound is checked against that path below.
+    // The parity timeline carries its sound on separate audio clips, as linked audio does; embedded
+    // video sound is checked against that path below and in embeddedVideoSoundOnce.
     // Long: the measured production shape, two plain 38 s clips at 1080p30. Short: cover and contain
     // framing, an SD source, a black gap, 1.5x and 0.5x speed, gain and a faded music bed.
     const timeline: Timeline = long ? { fps: 30, aspectRatio: 'landscape', clips: [
@@ -155,10 +162,7 @@ async function plainExportParity() {
     execFileSync('ffmpeg', ['-v', 'error', '-i', fast, '-i', browser, '-lavfi', `[0:v][1:v]ssim=stats_file=${stats}`, '-f', 'null', '-']);
     const frames = (await readFile(stats, 'utf8')).trim().split('\n').map(line => Number(/All:([\d.]+)/.exec(line)?.[1]));
     const meanSsim = frames.reduce((sum, value) => sum + value, 0) / frames.length, minSsim = Math.min(...frames);
-    const a = monoPcm(fast), b = monoPcm(browser), length = Math.min(a.length, b.length);
-    let energyA = 0, energyB = 0, product = 0, difference = 0;
-    for (let index = 0; index < length; index++) { energyA += a[index] ** 2; energyB += b[index] ** 2; product += a[index] * b[index]; difference += (a[index] - b[index]) ** 2; }
-    const levelDb = 10 * Math.log10(energyA / energyB), correlation = product / Math.sqrt(energyA * energyB), residualDb = 10 * Math.log10(difference / energyB);
+    const { levelDb, correlation, residualDb } = compareSound(monoPcm(fast), monoPcm(browser));
     console.log(`Plain export parity (${long ? '76 s two-clip' : 'multi-clip'} ${reference.video.width}x${reference.video.height} ${reference.video.avg_frame_rate} ${quality}): ${candidate.video.nb_read_packets} frames, duration ${candidate.duration.toFixed(3)}s vs ${reference.duration.toFixed(3)}s, SSIM mean ${meanSsim.toFixed(4)} min ${minSsim.toFixed(4)}, audio level ${levelDb.toFixed(2)} dB, correlation ${correlation.toFixed(4)}, residual ${residualDb.toFixed(1)} dB. Browser ${browserSeconds.toFixed(1)}s, FFmpeg ${fastSeconds.toFixed(1)}s.`);
     // A frame sampled one tick early or late drops a moving test pattern below 0.85.
     assert.ok(meanSsim > .98 && minSsim > .95, 'The FFmpeg export does not match the browser frames.');
@@ -187,4 +191,49 @@ async function plainExportParity() {
   }
 }
 
-(process.env.REVLINE_SMOKE_PLAIN_ONLY === '1' ? plainExportParity() : main().then(plainExportParity)).catch(error => { console.error(error); process.exitCode = 1; });
+/** A composited export mixes each clip's embedded video sound once, with that clip's own gain and speed. */
+async function embeddedVideoSoundOnce() {
+  const directory = await mkdtemp(join(tmpdir(), 'revline-embedded-sound-'));
+  try {
+    // Non-periodic sweeps, so a second copy from another source offset or speed cannot hide.
+    execFileSync('ffmpeg', ['-v', 'error', '-f', 'lavfi', '-i', 'testsrc2=s=1280x720:r=30:d=6', '-f', 'lavfi', '-i', 'aevalsrc=0.2*sin(2*PI*(300+60*t)*t)|0.2*sin(2*PI*(450+30*t)*t):s=48000:d=6', '-c:v', 'libx264', '-preset', 'veryfast', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-shortest', '-y', join(directory, 'wide.mp4')]);
+    execFileSync('ffmpeg', ['-v', 'error', '-f', 'lavfi', '-i', 'testsrc2=s=1280x720:r=30:d=6', '-f', 'lavfi', '-i', 'aevalsrc=0.25*sin(2*PI*(500+150*t)*t):s=44100:d=6', '-c:v', 'libx264', '-preset', 'veryfast', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-shortest', '-y', join(directory, 'second.mp4')]);
+    for (const name of ['gsap.min.js', 'visual-effects.js', 'remotion-runtime.js']) await copyFile(join(process.cwd(), 'public/vendor', name), join(directory, name));
+    for (const font of TEXT_FONTS) await copyFile(join(process.cwd(), 'public/fonts', font.fileName), join(directory, font.fileName));
+    const assets: MediaAsset[] = [
+      { _id: 'wide', fileName: 'wide.mp4', kind: 'video', url: null, width: 1280, height: 720 },
+      { _id: 'second', fileName: 'second.mp4', kind: 'video', url: null, width: 1280, height: 720 },
+    ];
+    const assetUrls = { wide: './wide.mp4', second: './second.mp4' };
+    // Three clips of one source (one sped up) and the first clip of another, all with their own gain.
+    const footage: Timeline['clips'] = [
+      { id: 'first', kind: 'video', assetId: 'wide', start: 0, duration: 1.5, sourceStart: .5 },
+      { id: 'quick', kind: 'video', assetId: 'wide', start: 1.5, duration: 1, sourceStart: 2, playbackRate: 1.5, volume: .6 },
+      { id: 'other', kind: 'video', assetId: 'second', start: 2.5, duration: 1, sourceStart: 1, volume: 1.3 },
+      { id: 'again', kind: 'video', assetId: 'wide', start: 3.5, duration: 1, sourceStart: 3.5, volume: .8 },
+    ];
+    const plain: Timeline = { fps: 30, aspectRatio: 'landscape', clips: footage };
+    const composited: Timeline = { ...plain, clips: [...footage, { id: 'title', kind: 'caption', start: 0, duration: 4.5, sourceStart: 0, text: 'Sound check', fontSize: 64, color: '#FFFFFF', x: .5, y: .8 }] };
+    const fast = plainExportPlan(plain, assets, 720, 30);
+    assert.ok(fast.eligible && !plainExportPlan(composited, assets, 720, 30).eligible);
+    const browser = join(directory, 'browser.mp4'), reference = join(directory, 'reference.mp4');
+    await writeComposition(directory, composited, assets, assetUrls, 720, 30);
+    await runRenderWorker(directory, browser, { fps: 30, quality: 'draft' }, () => {}, AbortSignal.timeout(120_000));
+    // The FFmpeg path reproduces the producer's per-track chain, with each clip mixed once.
+    await renderPlainExport(directory, reference, fast.plan, assetUrls, {}, 'draft', () => {}, AbortSignal.timeout(60_000));
+    const a = monoPcm(browser), b = monoPcm(reference), results: string[] = [], failures: string[] = [];
+    for (const clip of footage) {
+      // Skip 30 ms at each edge, where AAC frames straddle clip boundaries.
+      const from = Math.round((clip.start + .03) * 48000), to = Math.round((clip.start + clip.duration - .03) * 48000);
+      const { levelDb, correlation } = compareSound(a, b, from, to);
+      results.push(`${clip.id} ${levelDb >= 0 ? '+' : ''}${levelDb.toFixed(2)} dB r=${correlation.toFixed(4)}`);
+      if (Math.abs(levelDb) >= .5 || correlation <= .98) failures.push(clip.id);
+    }
+    assert.deepEqual(failures, [], `Embedded video sound is not mixed once per clip: ${results.join(', ')}.`);
+    console.log(`Composited export mixes embedded video sound once per clip: ${results.join(', ')}.`);
+  } finally {
+    if (process.env.REVLINE_SMOKE_KEEP === '1') console.log('Kept', directory); else await rm(directory, { recursive: true, force: true });
+  }
+}
+
+(process.env.REVLINE_SMOKE_PLAIN_ONLY === '1' ? plainExportParity() : process.env.REVLINE_SMOKE_SOUND_ONLY === '1' ? embeddedVideoSoundOnce() : main().then(plainExportParity).then(embeddedVideoSoundOnce)).catch(error => { console.error(error); process.exitCode = 1; });

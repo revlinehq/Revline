@@ -30,6 +30,8 @@ it('omits silent video from native export audio without muting embedded or separ
     const html=await readFile(join(directory,'index.html'),'utf8');
     const videos=html.match(/<video\b[^>]*>/g)??[];
     expect(videos).toHaveLength(3);
+    // Media src matches HyperFrames' server-relative form, so it never adds a second copy of a video's sound.
+    expect([...html.matchAll(/<(?:video|audio)\b[^>]*\ssrc="([^"]+)"/g)].map(match=>match[1])).toEqual(['silent.mp4','silent.mp4','audible.mp4','sound.wav']);
     for(const id of ['silent-1','silent-2']){
       const tag=videos.find(value=>value.includes(`data-source-clip="${id}"`));
       expect(tag).toContain('data-volume="0"');expect(tag).toMatch(/\s+muted(?:\s|>)/);

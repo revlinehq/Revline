@@ -77,7 +77,12 @@ export async function writeComposition(directory:string,timeline:Timeline,assets
     const offset=clip.kind==='audio'&&clip.assetId?audioSourceOffsets[clip.assetId]:undefined;
     return offset?{...clip,sourceStart:Math.max(0,clip.sourceStart-offset)}:clip;
   })};
-  await writeFile(join(directory,'index.html'),generateComposition(rendered,assets,{resolution,fps,gsapUrl:prefix+'gsap.min.js',visualEffectsUrl:prefix+'visual-effects.js',remotionRuntimeUrl:prefix+'remotion-runtime.js',fontUrl:prefix+'space-grotesk-latin.woff2',fontUrls:Object.fromEntries(TEXT_FONTS.map(font=>[font.id,prefix+font.fileName])),assetUrls:Object.fromEntries(Object.entries(assetUrls).map(([id,url])=>[id,prefix+url.slice(2)]))}));
+  // HyperFrames dedupes a video's sound by comparing the authored src with the
+  // browser's server-relative src ("asset-0.mp4"). A "./" prefix never matches,
+  // so it mixed an extra unity-gain, 1x copy of each source's first audible clip.
+  // Author media in that same form so every clip's sound is mixed exactly once.
+  const mediaSrc=(url:string)=>(prefix+url.slice(2)).replace(/^\.\//,'');
+  await writeFile(join(directory,'index.html'),generateComposition(rendered,assets,{resolution,fps,gsapUrl:prefix+'gsap.min.js',visualEffectsUrl:prefix+'visual-effects.js',remotionRuntimeUrl:prefix+'remotion-runtime.js',fontUrl:prefix+'space-grotesk-latin.woff2',fontUrls:Object.fromEntries(TEXT_FONTS.map(font=>[font.id,prefix+font.fileName])),assetUrls:Object.fromEntries(Object.entries(assetUrls).map(([id,url])=>[id,mediaSrc(url)]))}));
 }
 /** Keep original times/animation phases and source holds for transitions in the window. */
 export function reviewWindowTimeline(timeline:Timeline,start:number,end:number):Timeline {
