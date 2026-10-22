@@ -340,3 +340,27 @@ The worker cache now retains up to 2 GiB (`MEDIA_ANALYSIS_CACHE_MAX_MB`) with a
 smoke render fell from 7.4 to 4.9 seconds and the many-cut memory smoke from 6.6
 to 4.7 seconds, with peak render-process RSS rising from about 1.1 to 1.7 GiB.
 These short fixtures do not establish hosted steady-state throughput.
+
+### FFmpeg-only export for plain timelines
+
+Exports whose timeline is only plain video and audio skip browser compositing.
+`plainExportPlan` (`lib/editor/plain-export.ts`) decides eligibility conservatively: every clip is
+video or audio with default framing (no transform, crop, blend mode, tracked
+focus, motion, visual fade, effect preset or enabled visual effect), at most
+one footage clip is visible on any export frame, every sound has a constant
+gain lane (no ducking under voice or retained fade clock) and there are at most
+64 sounding clips. Any other clip kind or field keeps the HyperFrames path.
+`lib/server/plain-export-render.ts` reproduces HyperFrames' frame sampling,
+speed mapping, final-frame hold, cover/contain framing from
+`calculateVisualRect`, black gaps, its per-track audio chain and mix, and its
+libx264/AAC settings. Footage is decoded by sequential FFmpeg processes of at
+most eight clips that pipe raw frames into one encoder, bounding decoder memory
+at about 300 MiB for 1080p sources. If the fast path fails the export logs a
+warning and renders with HyperFrames; `REVLINE_RENDER_FAST_PATH=0` disables it.
+
+Pinned to two CPUs, a 76 s 1080p30 standard export of two plain clips took
+189.5 s with HyperFrames and 36.5 s with FFmpeg (SSIM 0.987, identical frame
+count, duration and audio level); encoding at the shared preset is most of the
+remaining time. HyperFrames 0.8.143 also mixes an extra unity-gain, normal-speed
+copy of the first audible clip of each video source; the FFmpeg path mixes each
+clip once, so such exports are quieter and no longer double that sound.

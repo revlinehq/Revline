@@ -1,11 +1,15 @@
 import { execFileSync } from 'node:child_process';
-import { mkdtemp, writeFile, copyFile, rm, stat } from 'node:fs/promises';
+import { mkdtemp, writeFile, copyFile, readFile, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import assert from 'node:assert/strict';
 import { generateComposition } from '../lib/editor/composition';
-import type { Timeline } from '../lib/editor/types';
+import type { MediaAsset, Timeline } from '../lib/editor/types';
+import { plainExportPlan } from '../lib/editor/plain-export';
+import { TEXT_FONTS } from '../lib/editor/text-fonts';
 import { runRenderWorker } from '../lib/server/render-worker';
+import { renderPlainExport } from '../lib/server/plain-export-render';
+import { writeComposition } from '../lib/server/prepare-composition';
 
 async function main() {
   const originalRequest = globalThis.Request, originalResponse = globalThis.Response;
@@ -76,4 +80,111 @@ async function main() {
   }
 }
 
-main().catch(error => { console.error(error); process.exitCode = 1; });
+function probeOutput(path: string) {
+  const value = JSON.parse(execFileSync('ffprobe', ['-v', 'error', '-count_packets', '-show_entries', 'stream=codec_type,codec_name,width,height,avg_frame_rate,pix_fmt,color_space,nb_read_packets,sample_rate,channels:format=duration', '-of', 'json', path], { encoding: 'utf8' }));
+  const video = value.streams.find((stream: { codec_type: string }) => stream.codec_type === 'video'), audio = value.streams.find((stream: { codec_type: string }) => stream.codec_type === 'audio');
+  return { duration: Number(value.format.duration), video, audio };
+}
+function monoPcm(path: string) {
+  const pcm = execFileSync('ffmpeg', ['-v', 'error', '-i', path, '-map', '0:a:0', '-f', 's16le', '-ac', '1', '-ar', '48000', '-'], { maxBuffer: 256 * 1024 * 1024 });
+  return Int16Array.from({ length: pcm.length / 2 }, (_, index) => pcm.readInt16LE(index * 2));
+}
+
+/** Render one plain timeline through HyperFrames and the FFmpeg-only path and compare the files. */
+async function plainExportParity() {
+  const long = process.env.REVLINE_SMOKE_PLAIN_LONG === '1';
+  const directory = await mkdtemp(join(tmpdir(), 'revline-plain-export-'));
+  try {
+    const seconds = long ? 40 : 6;
+    // Moving test patterns with embedded sound: 16:9 HD (BT.709 by Chromium's guess) and 4:3 SD at 24 fps (BT.601).
+    execFileSync('ffmpeg', ['-v', 'error', '-f', 'lavfi', '-i', `testsrc2=s=1920x1080:r=30:d=${seconds}`, '-f', 'lavfi', '-i', `aevalsrc=0.2*sin(2*PI*(300+60*t)*t)|0.2*sin(2*PI*(450+30*t)*t):s=48000:d=${seconds}`, '-c:v', 'libx264', '-preset', 'veryfast', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-shortest', '-y', join(directory, 'wide.mp4')]);
+    execFileSync('ffmpeg', ['-v', 'error', '-f', 'lavfi', '-i', long ? `testsrc2=s=1920x1080:r=30:d=${seconds}` : `mandelbrot=s=640x480:r=24,trim=duration=${seconds}`, '-f', 'lavfi', '-i', `sine=frequency=330:sample_rate=44100:duration=${seconds}`, '-c:v', 'libx264', '-preset', 'veryfast', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-shortest', '-y', join(directory, 'second.mp4')]);
+    // Non-periodic sweeps expose any audio offset; the voice is mono 44.1 kHz like many recordings.
+    execFileSync('ffmpeg', ['-v', 'error', '-f', 'lavfi', '-i', `aevalsrc=0.3*sin(2*PI*(220+40*t)*t)|0.3*sin(2*PI*(330+25*t)*t):s=48000:d=${seconds}`, '-c:a', 'pcm_s16le', '-y', join(directory, 'music.wav')]);
+    execFileSync('ffmpeg', ['-v', 'error', '-f', 'lavfi', '-i', `aevalsrc=0.25*sin(2*PI*(500+150*t)*t):s=44100:d=${seconds}`, '-c:a', 'pcm_s16le', '-y', join(directory, 'voice.wav')]);
+    for (const name of ['gsap.min.js', 'visual-effects.js']) await copyFile(join(process.cwd(), 'public/vendor', name), join(directory, name));
+    for (const font of TEXT_FONTS) await copyFile(join(process.cwd(), 'public/fonts', font.fileName), join(directory, font.fileName));
+    const assets: MediaAsset[] = [
+      { _id: 'wide', fileName: 'wide.mp4', kind: 'video', url: null, width: 1920, height: 1080 },
+      { _id: 'second', fileName: 'second.mp4', kind: 'video', url: null, width: long ? 1920 : 640, height: long ? 1080 : 480 },
+      { _id: 'music', fileName: 'music.wav', kind: 'audio', url: null },
+      { _id: 'voice', fileName: 'voice.wav', kind: 'audio', url: null },
+      { _id: 'wide-sound', fileName: 'wide.mp4', kind: 'audio', url: null },
+    ];
+    const assetUrls = { wide: './wide.mp4', second: './second.mp4', music: './music.wav', voice: './voice.wav', 'wide-sound': './wide.mp4' };
+    // HyperFrames 0.8.143 adds an extra unity-gain, 1x copy of the first audible clip of each video
+    // source (appendAutoDetectedVideoAudio), so the parity timeline carries its sound on separate
+    // audio clips, as linked audio does; embedded video sound is checked against that path below.
+    // Long: the measured production shape, two plain 38 s clips at 1080p30. Short: cover and contain
+    // framing, an SD source, a black gap, 1.5x and 0.5x speed, gain and a faded music bed.
+    const timeline: Timeline = long ? { fps: 30, aspectRatio: 'landscape', clips: [
+      { id: 'first', kind: 'video', assetId: 'wide', start: 0, duration: 38, sourceStart: 1, volume: 0 },
+      { id: 'second', kind: 'video', assetId: 'second', start: 38, duration: 38, sourceStart: .5, volume: 0 },
+      { id: 'first-sound', kind: 'audio', assetId: 'wide-sound', start: 0, duration: 38, sourceStart: 1 },
+      { id: 'second-sound', kind: 'audio', assetId: 'music', start: 38, duration: 38, sourceStart: .5 },
+    ] } : { fps: 30, aspectRatio: 'vertical', clips: [
+      { id: 'cover', kind: 'video', assetId: 'wide', start: 0, duration: 1.5, sourceStart: .5, volume: 0 },
+      { id: 'contain', kind: 'video', assetId: 'second', start: 1.5, duration: 1, sourceStart: 1, fit: 'contain', playbackRate: 1.5, volume: 0 },
+      { id: 'slow', kind: 'video', assetId: 'wide', start: 3, duration: 1, sourceStart: 3, playbackRate: .5, volume: 0 },
+      { id: 'quick', kind: 'video', assetId: 'wide', start: 4, duration: .9, sourceStart: 2, volume: 0 },
+      { id: 'voice', kind: 'audio', assetId: 'voice', start: 1.5, duration: 1, sourceStart: 1, playbackRate: 1.5, volume: .8 },
+      { id: 'quick-sound', kind: 'audio', assetId: 'wide-sound', start: 4, duration: .9, sourceStart: 2, volume: 1.4 },
+      { id: 'music', kind: 'audio', assetId: 'music', start: .25, duration: 4.5, sourceStart: 1, volume: .5, audio: { role: 'music', fadeIn: .5, fadeOut: 1, ducking: { enabled: false, amount: .65, attack: .12, release: .25 } } },
+    ] };
+    const fps = 30, resolution = 1080, quality = 'standard';
+    const decision = plainExportPlan(timeline, assets, resolution, fps);
+    assert.ok(decision.eligible, decision.eligible ? '' : decision.reason);
+    assert.equal(plainExportPlan({ ...timeline, clips: [...timeline.clips, { id: 'title', kind: 'caption', start: 0, duration: 1, sourceStart: 0, text: 'Title' }] }, assets, resolution, fps).eligible, false);
+    await writeComposition(directory, timeline, assets, assetUrls, resolution, fps);
+    const browser = join(directory, 'browser.mp4'), fast = join(directory, 'fast.mp4');
+    let started = Date.now();
+    await runRenderWorker(directory, browser, { fps, quality }, () => {}, AbortSignal.timeout(long ? 1_800_000 : 120_000));
+    const browserSeconds = (Date.now() - started) / 1000;
+    const progress: number[] = [];
+    started = Date.now();
+    await renderPlainExport(directory, fast, decision.plan, assetUrls, {}, quality, value => progress.push(value.progress), AbortSignal.timeout(long ? 600_000 : 60_000));
+    const fastSeconds = (Date.now() - started) / 1000;
+    assert.ok(progress.some(value => value > 0 && value < 100), 'The fast path did not report live progress.');
+    const reference = probeOutput(browser), candidate = probeOutput(fast);
+    for (const key of ['codec_name', 'width', 'height', 'avg_frame_rate', 'pix_fmt', 'nb_read_packets'] as const) assert.equal(candidate.video[key], reference.video[key], `video ${key}`);
+    assert.ok(Math.abs(candidate.duration - reference.duration) < 1.5 / fps, `duration ${candidate.duration} vs ${reference.duration}`);
+    assert.equal(candidate.audio?.codec_name, reference.audio?.codec_name);
+    assert.equal(candidate.audio?.sample_rate, reference.audio?.sample_rate);
+    assert.equal(candidate.audio?.channels, reference.audio?.channels);
+    const stats = join(directory, 'ssim.log');
+    execFileSync('ffmpeg', ['-v', 'error', '-i', fast, '-i', browser, '-lavfi', `[0:v][1:v]ssim=stats_file=${stats}`, '-f', 'null', '-']);
+    const frames = (await readFile(stats, 'utf8')).trim().split('\n').map(line => Number(/All:([\d.]+)/.exec(line)?.[1]));
+    const meanSsim = frames.reduce((sum, value) => sum + value, 0) / frames.length, minSsim = Math.min(...frames);
+    const a = monoPcm(fast), b = monoPcm(browser), length = Math.min(a.length, b.length);
+    let energyA = 0, energyB = 0, product = 0, difference = 0;
+    for (let index = 0; index < length; index++) { energyA += a[index] ** 2; energyB += b[index] ** 2; product += a[index] * b[index]; difference += (a[index] - b[index]) ** 2; }
+    const levelDb = 10 * Math.log10(energyA / energyB), correlation = product / Math.sqrt(energyA * energyB), residualDb = 10 * Math.log10(difference / energyB);
+    console.log(`Plain export parity (${long ? '76 s two-clip' : 'multi-clip'} ${reference.video.width}x${reference.video.height} ${reference.video.avg_frame_rate} ${quality}): ${candidate.video.nb_read_packets} frames, duration ${candidate.duration.toFixed(3)}s vs ${reference.duration.toFixed(3)}s, SSIM mean ${meanSsim.toFixed(4)} min ${minSsim.toFixed(4)}, audio level ${levelDb.toFixed(2)} dB, correlation ${correlation.toFixed(4)}, residual ${residualDb.toFixed(1)} dB. Browser ${browserSeconds.toFixed(1)}s, FFmpeg ${fastSeconds.toFixed(1)}s.`);
+    // A frame sampled one tick early or late drops a moving test pattern below 0.85.
+    assert.ok(meanSsim > .98 && minSsim > .95, 'The FFmpeg export does not match the browser frames.');
+    const cancelled = new AbortController(), cancellationStarted = Date.now();
+    await assert.rejects(renderPlainExport(directory, join(directory, 'cancelled.mp4'), decision.plan, assetUrls, {}, quality, value => { if (value.progress > 0) cancelled.abort(); }, cancelled.signal), /cancelled/);
+    assert.ok(Date.now() - cancellationStarted < 15_000, 'Cancelling the FFmpeg export left it running.');
+    assert.ok(Math.abs(levelDb) < .5 && correlation > .98, 'The FFmpeg export audio does not match the browser mix.');
+    if (!long) {
+      // Embedded video sound takes the producer's video extraction path; it must equal the same
+      // source read as a separate audio clip, including speed and gain.
+      const embedded = { ...timeline, clips: timeline.clips.filter(clip => clip.kind === 'video').map(clip => clip.id === 'contain' ? { ...clip, assetId: 'wide', volume: .8 } : clip.id === 'quick' ? { ...clip, volume: 1.4 } : clip) };
+      const separate = { ...timeline, clips: [...timeline.clips.filter(clip => clip.kind === 'video').map(clip => clip.id === 'contain' ? { ...clip, assetId: 'wide' } : clip), { id: 'contain-sound', kind: 'audio' as const, assetId: 'wide-sound', start: 1.5, duration: 1, sourceStart: 1, playbackRate: 1.5, volume: .8 }, { id: 'quick-sound', kind: 'audio' as const, assetId: 'wide-sound', start: 4, duration: .9, sourceStart: 2, volume: 1.4 }] };
+      const outputs = [join(directory, 'embedded.mp4'), join(directory, 'separate.mp4')];
+      for (const [index, variant] of [embedded, separate].entries()) {
+        const plan = plainExportPlan(variant, assets, resolution, fps);
+        assert.ok(plan.eligible);
+        await renderPlainExport(directory, outputs[index], plan.plan, assetUrls, {}, 'draft', () => {}, AbortSignal.timeout(60_000));
+      }
+      const first = monoPcm(outputs[0]), second = monoPcm(outputs[1]);
+      let same = 0, energy = 0;
+      for (let index = 0; index < Math.min(first.length, second.length); index++) { same += (first[index] - second[index]) ** 2; energy += second[index] ** 2; }
+      assert.ok(energy > 0 && same / energy < 1e-4, 'Embedded video sound differs from the same source as an audio clip.');
+    }
+  } finally {
+    if (process.env.REVLINE_SMOKE_KEEP === '1') console.log('Kept', directory); else await rm(directory, { recursive: true, force: true });
+  }
+}
+
+(process.env.REVLINE_SMOKE_PLAIN_ONLY === '1' ? plainExportParity() : main().then(plainExportParity)).catch(error => { console.error(error); process.exitCode = 1; });

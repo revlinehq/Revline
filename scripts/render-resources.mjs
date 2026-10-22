@@ -17,6 +17,15 @@ function boundedInteger(name, fallback, max) {
   return value;
 }
 
+// HyperFrames' libx264 presets (draft ultrafast/28, standard medium/18, high
+// slow/15) after Revline's cheaper searches. render-worker.mjs maps the
+// producer's arguments to these; the FFmpeg-only export encodes with them.
+export const RENDER_X264 = Object.freeze({
+  draft: Object.freeze({ producerPreset: 'ultrafast', preset: 'ultrafast', producerCrf: 28, crf: 28 }),
+  standard: Object.freeze({ producerPreset: 'medium', preset: 'fast', producerCrf: 18, crf: 18 }),
+  high: Object.freeze({ producerPreset: 'slow', preset: 'medium', producerCrf: 15, crf: 16 }),
+});
+
 /** Size renderer parallelism from this host's CPUs and memory. Env values override. */
 export function renderResources() {
   const limit = process.constrainedMemory?.() ?? 0;
