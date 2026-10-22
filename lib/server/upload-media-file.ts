@@ -3,6 +3,7 @@ import { stat } from 'node:fs/promises';
 import type { ConvexHttpClient } from 'convex/browser';
 import type { FunctionArgs } from 'convex/server';
 import { api } from '@/convex/_generated/api';
+import { forEachLimited } from './run-limited';
 
 export async function uploadMediaFile(path: string, metadata: Omit<FunctionArgs<typeof api.r2.start>, 'size'>, context: { convex: ConvexHttpClient; refreshAuth: () => Promise<void> }, signal: AbortSignal) {
   const { size } = await stat(path);
@@ -12,7 +13,9 @@ export async function uploadMediaFile(path: string, metadata: Omit<FunctionArgs<
   let completed = false;
   try {
     const parts: { partNumber: number; etag: string }[] = [];
-    for (let partNumber = 1; partNumber <= upload.partCount; partNumber++) {
+    // Parts are independent. A few in flight hide per-part URL signing and
+    // request latency; each part keeps its own three attempts.
+    await forEachLimited(Array.from({ length: upload.partCount }, (_, index) => index + 1), 4, async partNumber => {
       const start = (partNumber - 1) * upload.partSize, end = Math.min(size, start + upload.partSize) - 1;
       for (let attempt = 0; attempt < 3; attempt++) {
         signal.throwIfAborted(); await context.refreshAuth();
@@ -27,7 +30,9 @@ export async function uploadMediaFile(path: string, metadata: Omit<FunctionArgs<
         } catch (error) { if (attempt === 2 || signal.aborted) throw error; }
         finally { body.destroy(); }
       }
-    }
+    });
+    // Completion requires parts in ascending order.
+    parts.sort((a, b) => a.partNumber - b.partNumber);
     await context.refreshAuth();
     const assetId = await context.convex.action(api.r2.complete, { uploadId: upload.uploadId, parts, ...taskAuth });
     completed = true; return assetId;
