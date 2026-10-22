@@ -67,7 +67,9 @@ try {
   const tag = `revline-media-processor:${releaseId}`;
   if (!dryRun) {
     stage = 'local image verification';
-    await run('docker', ['build', '--platform', 'linux/amd64', '-f', config.containers[0].images.processor.dockerfile, '-t', tag, source]);
+    // CI keeps image layers in the GitHub Actions cache so code-only releases skip the dependency layers.
+    const cache = process.env.REVLINE_DOCKER_CACHE === 'gha' ? ['buildx', 'build', '--load', '--cache-from', 'type=gha,scope=processor', '--cache-to', 'type=gha,mode=max,scope=processor'] : ['build'];
+    await run('docker', [...cache, '--platform', 'linux/amd64', '-f', config.containers[0].images.processor.dockerfile, '-t', tag, source]);
     await run('docker', ['run', '--rm', '--network=none', '--entrypoint', 'node', tag, 'infra/media-worker/runtime-check.mjs']);
     stage = 'registry upload';
     await node([cli('wrangler/bin/wrangler.js'), 'containers', 'push', tag, '--config', join(root, 'infra/media-worker/edge/wrangler.jsonc')]);
