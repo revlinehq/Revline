@@ -31,7 +31,7 @@ async function selectFixture(rotation = 0, crop = undefined, fit = 'contain') {
   }, { rotation, crop, fit });
   await page.waitForFunction(rotation => {
     const players = [...document.querySelectorAll('hyperframes-player')];
-    return players.some(p => p !== window.__previousFixturePlayer && p.style.zIndex === '1' && p.ready && p.iframeElement?.contentDocument?.querySelector('[data-visual-clip="preview-fixture"]')?.style.transform.includes(`rotate(${rotation}deg)`));
+    return players.some(p => p.style.zIndex === '1' && p.ready && p.iframeElement?.contentDocument?.querySelector('[data-visual-clip="preview-fixture"]')?.style.transform.includes(`rotate(${rotation}deg)`));
   }, {}, rotation);
   await page.click('.preview-hit-surface', {count:2});
   await page.waitForSelector('.visual-selection-box');
@@ -113,7 +113,9 @@ try {
   await page.mouse.up(); await wait(200);
   const resizeAfter = await state();
   check(resizeAfter.history === resizeBefore.history + 1 && resizeAfter.clip.transform.scale > resizeBefore.clip.transform.scale, 'One resize commits one canonical undo entry', { before: resizeBefore, after: resizeAfter });
-  await page.waitForFunction(() => [...document.querySelectorAll('hyperframes-player')].some(player => player.style.zIndex === '1' && player.ready && player !== window.__liveFixturePlayer));
+  // Committed transforms reconcile on the live player; only fps/aspect changes rebuild it (bc65a0a).
+  await page.waitForFunction(() => [...document.querySelectorAll('hyperframes-player')].some(player => player.style.zIndex === '1' && player.ready));
+  check(await page.evaluate(() => window.__liveFixturePlayer === [...document.querySelectorAll('hyperframes-player')].find(player => player.style.zIndex === '1')), 'Committed resize keeps the current preview player');
   const cancelBefore = await state(), cancelGeometry = await geometry();
   await page.mouse.move(cancelGeometry.rect.x + cancelGeometry.rect.width / 2, cancelGeometry.rect.y + cancelGeometry.rect.height / 2); await page.mouse.down();
   await page.mouse.move(cancelGeometry.rect.x + cancelGeometry.rect.width / 2 + 16, cancelGeometry.rect.y + cancelGeometry.rect.height / 2 + 10, { steps: 6 });

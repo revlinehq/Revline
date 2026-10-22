@@ -131,6 +131,9 @@ try {
     return time;
   });
   await new Promise((r) => setTimeout(r, 250));
+  // A new fragment may briefly hold the native player while it decodes (3544a5f holds playback during
+  // video stalls); playback must still resume on the same player within a bounded wait.
+  await page.waitForFunction((before) => { const p = document.querySelector("hyperframes-player"); return !p.paused && p.iframeElement.contentWindow.__timelines.revline.time() > before + 0.05; }, { timeout: 2000 }, playingBefore).catch(() => {});
   const playingProof = await page.evaluate(() => {
     const p = document.querySelector("hyperframes-player"), d = p.iframeElement.contentDocument, time = d.defaultView.__timelines.revline.time();
     return { clock: time, nativePaused: p.paused, playing: window.fixture.store.getState().playing, player: p === window.original.player, document: d === window.original.doc, retainedVideo: d.contains(window.original.video), events: window.original.events };
