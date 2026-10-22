@@ -5,7 +5,7 @@ import { requireEditorAccess } from './lib/billing_access';
 import { mediaUrl } from './lib/media_storage';
 import { ConvexError, v } from "convex/values";
 import { internal } from "./_generated/api";
-import { mutation, query } from "./_generated/server";
+import { mutation, query, type QueryCtx } from "./_generated/server";
 import { listLimit, requireOwner, requireProject } from "./lib/auth";
 import { commitTimeline, currentTimeline, serializedBytes, validateTimeline } from "./lib/timeline";
 import { addMediaClip, patchClip } from '../lib/editor/operations';
@@ -70,16 +70,21 @@ export const create = mutation({ args: { title: v.string(), aspectRatio, assetId
   }
   return projectId;
 }});
-export const get = query({ args: { projectId: v.id("projects"),includeHistory:v.optional(v.boolean()) }, returns: projectDocument, handler: async (ctx, args) => {
-  await projectIdentity(ctx,args.projectId,await requireOwner(ctx));const project=(await readProject(ctx,args.projectId,args.includeHistory!==false))!; return { ...project, timeline: currentTimeline(project), ...(project.history ? { history: project.history.map(normalizeTimeline) } : {}), revision: project.revision ?? 0 };
+// Editor URLs are user input: a malformed id is the same typed not-found as a
+// deleted or foreign project, never a redacted argument validation error.
+function routeProjectId(ctx:QueryCtx,projectId:string){const id=ctx.db.normalizeId('projects',projectId);if(!id)throw new ConvexError('Project not found');return id;}
+export const get = query({ args: { projectId: v.string(),includeHistory:v.optional(v.boolean()) }, returns: projectDocument, handler: async (ctx, args) => {
+  const projectId=routeProjectId(ctx,args.projectId);
+  await projectIdentity(ctx,projectId,await requireOwner(ctx));const project=(await readProject(ctx,projectId,args.includeHistory!==false))!; return { ...project, timeline: currentTimeline(project), ...(project.history ? { history: project.history.map(normalizeTimeline) } : {}), revision: project.revision ?? 0 };
 }});
-export const history=query({args:{projectId:v.id('projects')},returns:v.array(timelineValidator),handler:async(ctx,args)=>{
-  await projectIdentity(ctx,args.projectId,await requireOwner(ctx));
-  const rows=await ctx.db.query('timelineRevisions').withIndex('by_project_sequence',q=>q.eq('projectId',args.projectId)).order('desc').take(10);
+export const history=query({args:{projectId:v.string()},returns:v.array(timelineValidator),handler:async(ctx,args)=>{
+  const projectId=routeProjectId(ctx,args.projectId);
+  await projectIdentity(ctx,projectId,await requireOwner(ctx));
+  const rows=await ctx.db.query('timelineRevisions').withIndex('by_project_sequence',q=>q.eq('projectId',projectId)).order('desc').take(10);
   if(rows.length)return rows.reverse().map(row=>normalizeTimeline(row.timeline));
-  const access=await ctx.db.query('projectAccess').withIndex('by_project',q=>q.eq('projectId',args.projectId)).unique();if(access?.historyStored)return [];
+  const access=await ctx.db.query('projectAccess').withIndex('by_project',q=>q.eq('projectId',projectId)).unique();if(access?.historyStored)return [];
   // Old projects are readable before the bounded migration reaches them.
-  const legacy=await ctx.db.get(args.projectId);return legacy?.history?.map(normalizeTimeline)??[];
+  const legacy=await ctx.db.get(projectId);return legacy?.history?.map(normalizeTimeline)??[];
 }});
 export const list = query({ args: { limit: v.optional(v.number()) }, returns: v.array(v.object({ _id: v.id('projects'), title: v.string(), createdAt: v.number(), updatedAt: v.number(), aspectRatio, clipCount: v.number(), aiRunning: v.boolean(), coverUrl: v.union(v.string(), v.null()), coverKind: v.union(v.literal("video"), v.literal("image"), v.null()) })), handler: async (ctx, args) => {
   const migration=await ctx.db.query('projectDataMigration').withIndex('by_key',q=>q.eq('key','project-data-v1')).unique();
