@@ -52,7 +52,7 @@ export const Preview = forwardRef<PreviewHandle,{timeline:Timeline;assets:MediaA
   const latestAssets=useRef(assets);latestAssets.current=assets;
   const mutedRef=useRef(muted);mutedRef.current=muted;
   useEffect(()=>{if(player.current)player.current.muted=muted;},[muted]);
-  const [buffering,setBuffering]=useState(false);const [ready,setReady]=useState(false);const [revision,setRevision]=useState(0);const [reloadRevision,setReloadRevision]=useState(0);const [playerVersion,setPlayerVersion]=useState(0);const seekPosition=useRef(time);
+  const [buffering,setBuffering]=useState(false);const [ready,setReady]=useState(false);const [revision,setRevision]=useState(0);const [reloadRevision,setReloadRevision]=useState(0);const [playerVersion,setPlayerVersion]=useState(0);const seekPosition=useRef(time);const seekRequest=useRef(0);
   const latestTimeline=useRef(timeline);latestTimeline.current=timeline;
   const latestCommittedTimeline=useRef(committedTimeline);latestCommittedTimeline.current=committedTimeline;
   const renderedTimeline=useRef<Timeline|null>(null);
@@ -133,7 +133,7 @@ export const Preview = forwardRef<PreviewHandle,{timeline:Timeline;assets:MediaA
     frame.style.left=`${(transform.x-.5)*width}px`;frame.style.top=`${(transform.y-.5)*height}px`;frame.style.transform=`rotate(${transform.rotation}deg) scale(${transform.scale})`;frame.style.opacity=String(transform.opacity);
   }
   useImperativeHandle(ref,()=>({retry:()=>setReloadRevision(value=>value+1),play:()=>{if(mediaSession.current){mediaSession.current.play();callbacks.current.onPlaying(mediaSession.current.isPlaying());}else player.current?.play();},pause:()=>{if(mediaSession.current)mediaSession.current.pause();else player.current?.pause();callbacks.current.onPlaying(false);},seek:(t)=>{
-    seekPosition.current=t;if(mediaSession.current)mediaSession.current.seek(t);else player.current?.seek(t);setSelectionVisible(selectionAt(t));
+    seekPosition.current=t;seekRequest.current++;if(mediaSession.current)mediaSession.current.seek(t);else player.current?.seek(t);setSelectionVisible(selectionAt(t));
     // HyperFrames seek lands paused without emitting a pause event.
     callbacks.current.onPlaying(false);
   },currentTime:()=>frameTime(player.current,seekPosition.current),mute:(v)=>{if(player.current)player.current.muted=v;},clipVolume:(id,volume)=>{
@@ -203,11 +203,13 @@ export const Preview = forwardRef<PreviewHandle,{timeline:Timeline;assets:MediaA
           await loadPreviewRemotion(doc,current);
           if(cancelled)return;
           updateLiveMediaContent(doc,stagedTimeline,current,prepared);updateLiveTextEffects(doc,stagedTimeline,current);updateLiveVisualEffects(doc,stagedTimeline,current);updateLiveVisualGeometry(doc,stagedTimeline,current,prepared);updateLiveAdjustmentEffects(doc,stagedTimeline,current);stagedTimeline=current;
+          // Seeks while this replacement loads only reach the displayed player.
+          const requested=seekRequest.current;
           playbackAssets=prepared;session.update(current,prepared);session.seek(seekPosition.current);updateLayers(p,current);
           await session.whenReady(seekPosition.current,preparation.signal,callbacks.current.onThumbnail,()=>callbacks.current.onSlowLoad?.());
           swapFrame=requestAnimationFrame(()=>{swapFrame=requestAnimationFrame(()=>{
             if(cancelled||!p||!session||swapped)return;
-            if(latestCommittedTimeline.current!==committed){waitingForMedia=false;swap();return;}
+            if(latestCommittedTimeline.current!==committed||seekRequest.current!==requested){waitingForMedia=false;swap();return;}
             swapped=true;const previous=disposeDisplayed.current,resume=mediaSession.current?.isPlaying()??false;
             player.current=p;mediaSession.current=session;disposeDisplayed.current=disposePlayer;
             p.muted=mutedRef.current;p.style.zIndex='1';previous?.();
