@@ -20,6 +20,7 @@ import type * as crons from "../crons.js";
 import type * as discordAlerts from "../discordAlerts.js";
 import type * as editorAccess from "../editorAccess.js";
 import type * as http from "../http.js";
+import type * as lib_account_limits from "../lib/account_limits.js";
 import type * as lib_ai_cost from "../lib/ai_cost.js";
 import type * as lib_asset_analysis from "../lib/asset_analysis.js";
 import type * as lib_assistant_recovery from "../lib/assistant_recovery.js";
@@ -78,6 +79,7 @@ declare const fullApi: ApiFromModules<{
   discordAlerts: typeof discordAlerts;
   editorAccess: typeof editorAccess;
   http: typeof http;
+  "lib/account_limits": typeof lib_account_limits;
   "lib/ai_cost": typeof lib_ai_cost;
   "lib/asset_analysis": typeof lib_asset_analysis;
   "lib/assistant_recovery": typeof lib_assistant_recovery;
