@@ -243,7 +243,7 @@ export function TimelinePanel(p:Props){
     if(timelineLock.current)return;
     gestureCleanup.current?.();
     focusTimeline(e.currentTarget);
-    const target=e.currentTarget;target.setPointerCapture(e.pointerId);pointerX.current=e.clientX;pointerY.current=e.clientY;
+    const target=e.currentTarget,pointer=e.pointerId;try{target.setPointerCapture(pointer);}catch{/* A released pointer still scrubs via window events. */}pointerX.current=e.clientX;pointerY.current=e.clientY;
     const originalTime=frameSeekTime(p.readPlaybackTime?.()??time,timeline.fps,end);
     scrubRef.current=true;store.setState({scrubbing:true});setScrubbing(true);let frame=0;let last=-1;
     function update(){
@@ -252,13 +252,15 @@ export function TimelinePanel(p:Props){
       paint(at);if(at!==last){last=at;onSeek(at);}
     }
     function tick(){if(timelineLock.current)return;update();frame=requestAnimationFrame(tick);}
-    const move=(event:PointerEvent)=>{pointerX.current=event.clientX;pointerY.current=event.clientY;};
-    let unwatch=()=>{};
-    const cleanup=()=>{unwatch();cancelAnimationFrame(frame);scrubRef.current=false;store.setState({scrubbing:false});setScrubbing(false);target.removeEventListener('pointermove',move);target.removeEventListener('pointerup',finish);target.removeEventListener('pointercancel',cancel);target.removeEventListener('lostpointercapture',cancel);gestureCleanup.current=null;if(target.hasPointerCapture(e.pointerId))target.releasePointerCapture(e.pointerId);};
-    const finish=(event:PointerEvent)=>{pointerX.current=event.clientX;pointerY.current=event.clientY;update();cleanup();};
-    const cancel=()=>{cleanup();if(!timelineLock.current){onSeek(originalTime);paint(originalTime);}};
-    gestureCleanup.current=cancel;unwatch=watchCancellation(cancel);
-    target.addEventListener('pointermove',move);target.addEventListener('pointerup',finish);target.addEventListener('pointercancel',cancel);target.addEventListener('lostpointercapture',cancel);tick();
+    // Window listeners outlive re-renders and capture loss. Every interruption
+    // keeps the last scrubbed time; only Escape returns to where the drag began.
+    const move=(event:PointerEvent)=>{if(event.pointerId!==pointer)return;pointerX.current=event.clientX;pointerY.current=event.clientY;};
+    const cleanup=()=>{cancelAnimationFrame(frame);scrubRef.current=false;store.setState({scrubbing:false});setScrubbing(false);window.removeEventListener('pointermove',move);window.removeEventListener('pointerup',release);window.removeEventListener('pointercancel',stop);window.removeEventListener('blur',stop);window.removeEventListener('keydown',key,true);gestureCleanup.current=null;if(target.hasPointerCapture(pointer))target.releasePointerCapture(pointer);};
+    const release=(event:PointerEvent)=>{if(event.pointerId!==pointer)return;pointerX.current=event.clientX;pointerY.current=event.clientY;update();cleanup();};
+    const stop=(event?:Event)=>{if(event instanceof PointerEvent&&event.pointerId!==pointer)return;cleanup();};
+    const key=(event:KeyboardEvent)=>{if(event.key!=='Escape')return;event.preventDefault();event.stopImmediatePropagation();cleanup();if(!timelineLock.current){onSeek(originalTime);paint(originalTime);}};
+    gestureCleanup.current=stop;
+    window.addEventListener('pointermove',move);window.addEventListener('pointerup',release);window.addEventListener('pointercancel',stop);window.addEventListener('blur',stop);window.addEventListener('keydown',key,true);tick();
   }
   function startLayerDrag(e:React.PointerEvent,group:LayerGroup,number:number){
     if(editingLock.current)return;
