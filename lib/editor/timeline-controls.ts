@@ -207,6 +207,9 @@ export function moveSelectionToNewLayers(timeline:Timeline,ids:string[],timeDelt
     return moveTransitionAt(layered,clip.id,members[0].start+members[0].duration/2+dt,trackOf(clip));
   }
   let clips=timeline.clips.map(clip=>selected.has(clip.id)?{...clip,start:dt===0?clip.start:clip.start+dt}:clip);
+  // Rows this move empties, in their post-insertion numbering. A row the user
+  // added empty on purpose is never in this list.
+  const vacated:{group:LayerGroup;track:number}[]=[];
   for(const group of TIMELINE_LAYER_GROUPS){
     const groupMembers=members.filter(clip=>explicit.has(clip.id)&&layerGroup(clip.kind)===group&&(!clip.linkedClipId||group===anchorGroup));if(!groupMembers.length)continue;
     const first=Math.min(...groupMembers.map(trackOf));const last=Math.max(...groupMembers.map(trackOf));const span=last-first+1;
@@ -214,6 +217,7 @@ export function moveSelectionToNewLayers(timeline:Timeline,ids:string[],timeDelt
     const originalCount=counts[group],insertion=group===anchorGroup?atTrack:undefined;
     if(insertion!==undefined&&(!Number.isInteger(insertion)||insertion<1||insertion>originalCount))throw new Error('Choose an existing layer in this group.');
     const base=insertion===undefined?(edge==='above'?originalCount+1:1):insertion+(edge==='above'?1:0);
+    for(const track of new Set(groupMembers.map(trackOf)))if(timeline.clips.every(clip=>layerGroup(clip.kind)!==group||trackOf(clip)!==track||selected.has(clip.id)))vacated.push({group,track:track>=base?track+span:track});
     counts[group]+=span;
     clips=clips.map(clip=>{
       if(layerGroup(clip.kind)!==group)return clip;
@@ -222,7 +226,10 @@ export function moveSelectionToNewLayers(timeline:Timeline,ids:string[],timeDelt
     });
   }
   const next={...timeline,tracks:counts,clips};
-  return reconcileTransitionEdits(timeline,placeMovedClips(next,clips.filter(clip=>selected.has(clip.id)),edge,anchorGroup==='visual'?'linked-audio':false));
+  let placed=placeMovedClips(next,clips.filter(clip=>selected.has(clip.id)),edge,anchorGroup==='visual'?'linked-audio':false);
+  // Moving a row's only clips to a new row must not leave the old row behind.
+  for(const row of vacated.sort((a,b)=>b.track-a.track))if(!placed.clips.some(clip=>layerGroup(clip.kind)===row.group&&trackOf(clip)===row.track))placed=deleteEmptyLayer(placed,row.group,row.track);
+  return reconcileTransitionEdits(timeline,placed);
 }
 
 export type LayerDropTarget={edge:'above'|'below'}|{track:number;direction:'above'|'below';insert?:true};
