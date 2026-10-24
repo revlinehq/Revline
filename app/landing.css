@@ -166,11 +166,12 @@ body:has(>.landing),body:has(main.landing){background:#fff}
 .landing-testimonial{padding:120px 200px}
 .landing-testimonial figure{display:flex;flex-direction:column;align-items:center;gap:32px}
 .landing-testimonial blockquote{font:400 34px/1.28 var(--l-head);letter-spacing:-.5px;text-align:center;color:var(--l-fg)}
-.landing-testimonial figcaption{display:flex;align-items:center;gap:12px}
+.landing-testimonial figcaption a{display:flex;align-items:center;gap:12px}
+.landing-testimonial figcaption a:hover strong{text-decoration:underline}
 .landing-testimonial img{width:44px;height:44px;border-radius:50%;object-fit:cover}
-.landing-testimonial figcaption>span{display:flex;flex-direction:column;gap:2px}
+.landing-testimonial figcaption a>span{display:flex;flex-direction:column;gap:2px}
 .landing-testimonial strong{font-size:15px;font-weight:600;color:var(--l-fg)}
-.landing-testimonial figcaption>span>span{font-size:14px;color:var(--l-fg-2)}
+.landing-testimonial figcaption a>span>span{font-size:14px;color:var(--l-fg-2)}
 
 /* Pricing */
 .landing-pricing{display:flex;flex-direction:column;align-items:center;gap:40px;padding-block:96px}
