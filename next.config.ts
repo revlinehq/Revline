@@ -3,6 +3,7 @@ import { withSentryConfig } from '@sentry/nextjs/config';
 const config: NextConfig = {
   distDir: process.env.REVLINE_DIST_DIR || ".next",
   turbopack: { root: process.cwd() },
+  experimental: { agentUpgrade: 'security' },
 };
 export default process.env.NEXT_PUBLIC_TELEMETRY_ENABLED === 'true' && process.env.NEXT_PUBLIC_SENTRY_DSN
   ? withSentryConfig(config, { org: process.env.SENTRY_ORG, project: process.env.SENTRY_PROJECT,
