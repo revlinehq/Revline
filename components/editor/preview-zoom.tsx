@@ -149,7 +149,13 @@ export function PreviewViewport({ children }: { children: ReactNode }) {
   const unit = aspectUnit(canvas);
   const multiples = Math.max(1, Math.floor(Math.min(geometry.layoutWidth / unit.width, geometry.layoutHeight / unit.height)));
   const layoutWidth = unit.width * multiples, layoutHeight = unit.height * multiples;
-  const sceneScale = geometry.width / layoutWidth;
+  // Place the scaled frame on whole device pixels in the exact project ratio. A
+  // fractional edge blends the frame background into the picture as a thin line.
+  const dpr = typeof window === 'undefined' ? 1 : window.devicePixelRatio || 1;
+  const units = Math.max(1, Math.floor(geometry.width * dpr / unit.width + 1e-6));
+  const frameWidth = units * unit.width / dpr, frameHeight = units * unit.height / dpr;
+  const frameLeft = Math.round((geometry.left + (geometry.width - frameWidth) / 2) * dpr) / dpr, frameTop = Math.round((geometry.top + (geometry.height - frameHeight) / 2) * dpr) / dpr;
+  const sceneScale = frameWidth / layoutWidth;
   const pan = useRef<PanSession | null>(null);
   const pinch = useRef<PinchSession | null>(null);
   const touches = useRef(new Map<number, PreviewPoint>());
@@ -221,7 +227,7 @@ export function PreviewViewport({ children }: { children: ReactNode }) {
       event.preventDefault(); event.stopPropagation(); commit(panPreviewBy(getView(), canvas, viewport, delta));
     }
   }}>
-    <div className="preview-viewport-frame" style={{ width: geometry.width, height: geometry.height, left: geometry.left, top: geometry.top, visibility: viewport.width && viewport.height ? 'visible' : 'hidden' }}>
+    <div className="preview-viewport-frame" style={{ width: frameWidth, height: frameHeight, left: frameLeft, top: frameTop, visibility: viewport.width && viewport.height ? 'visible' : 'hidden' }}>
       <div className="preview-viewport-scene" style={{ width: layoutWidth, height: layoutHeight, transform: `scale(${sceneScale})`, '--preview-view-scale': sceneScale } as CSSProperties}>{children}</div>
       {safeGuides&&canvas.height>canvas.width&&<div className="preview-safe-guides" aria-hidden="true"><div className="preview-safe-area"><span>Keep important text inside</span></div></div>}
     </div>
