@@ -64,6 +64,16 @@ function watchCancellation(cancel: () => void) {
   return () => { window.removeEventListener('keydown', key, true); window.removeEventListener('blur', cancel); };
 }
 
+/** Follows one pointer through window events so a re-render or lost capture never ends the gesture. */
+function followPointer(target:HTMLElement,pointer:number,handlers:{move(event:PointerEvent):void;release(event:PointerEvent):void;cancel():void}){
+  try{target.setPointerCapture(pointer);}catch{/* A released pointer still drags via window events. */}
+  const move=(event:PointerEvent)=>{if(event.pointerId===pointer)handlers.move(event);};
+  const release=(event:PointerEvent)=>{if(event.pointerId===pointer)handlers.release(event);};
+  const cancel=(event:PointerEvent)=>{if(event.pointerId===pointer)handlers.cancel();};
+  window.addEventListener('pointermove',move);window.addEventListener('pointerup',release);window.addEventListener('pointercancel',cancel);
+  return()=>{window.removeEventListener('pointermove',move);window.removeEventListener('pointerup',release);window.removeEventListener('pointercancel',cancel);if(target.hasPointerCapture(pointer))target.releasePointerCapture(pointer);};
+}
+
 function TimelinePlayheadClock(props: Omit<Parameters<typeof useTimelinePlayhead>[0], 'time'>) {
   const time=usePausedPlaybackTime();
   useTimelinePlayhead({...props,time});
@@ -210,7 +220,7 @@ export function TimelinePanel(p:Props){
     if(timelineLock.current){e.preventDefault();e.stopPropagation();return;}
     if(editingLock.current){if(e.button===0){e.preventDefault();e.stopPropagation();onSeek(marker.time);}return;}
     if(e.button!==0)return;e.preventDefault();e.stopPropagation();gestureCleanup.current?.();
-    const target=e.currentTarget;target.focus({preventScroll:true});target.setPointerCapture(e.pointerId);
+    const target=e.currentTarget;target.focus({preventScroll:true});
     const startX=e.clientX,startScroll=scroll.current?.scrollLeft??0;let moved=false,at=marker.time;
     pointerX.current=e.clientX;setDraggingMarker(true);
     const update=()=>{
@@ -220,12 +230,12 @@ export function TimelinePanel(p:Props){
       target.style.left=`${origin+at*px}px`;target.title=`${marker.label||'Beat marker'} · ${formatTime(at,true,timeline.fps)}`;
     };
     const frame=timelineGestureFrame(update);let unwatch=()=>{};
-    const move=(event:PointerEvent)=>{pointerX.current=event.clientX;frame.request();};
-    const cleanup=()=>{unwatch();frame.cancel();gestureUpdate.current=null;setDraggingMarker(false);target.removeEventListener('pointermove',move);target.removeEventListener('pointerup',finish);target.removeEventListener('pointercancel',cancel);target.removeEventListener('lostpointercapture',cancel);gestureCleanup.current=null;if(target.hasPointerCapture(e.pointerId))target.releasePointerCapture(e.pointerId);};
+    let stopFollowing=()=>{};
+    const cleanup=()=>{unwatch();stopFollowing();frame.cancel();gestureUpdate.current=null;setDraggingMarker(false);gestureCleanup.current=null;};
     const cancel=()=>{cleanup();target.style.left=`${origin+marker.time*px}px`;};
     const finish=(event:PointerEvent)=>{pointerX.current=event.clientX;frame.flush();cleanup();if(moved){const next=moveTimelineMarker(timeline,marker.id,at);if(next!==timeline)onChange(next);}onSeek(at);};
     gestureCleanup.current=cancel;gestureUpdate.current=()=>frame.request();unwatch=watchCancellation(cancel);
-    target.addEventListener('pointermove',move);target.addEventListener('pointerup',finish);target.addEventListener('pointercancel',cancel);target.addEventListener('lostpointercapture',cancel);
+    stopFollowing=followPointer(target,e.pointerId,{move:event=>{pointerX.current=event.clientX;frame.request();},release:finish,cancel});
   }
   function markerKeyboard(e:React.KeyboardEvent,marker:TimelineMarker){
     if(timelineLock.current){if(['Enter',' ','Delete','Backspace','ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Home','End'].includes(e.key)){e.preventDefault();e.stopPropagation();}return;}
@@ -507,7 +517,7 @@ export function TimelinePanel(p:Props){
     const handle=e.currentTarget,rail=handle.parentElement!,node=rail.parentElement!;
     const initial=clip.volume??1,startY=e.clientY,height=rail.getBoundingClientRect().height;
     let volume=initial,pointerY=startY,unwatch=()=>{};
-    onSelect(clip.id);handle.focus({preventScroll:true});handle.setPointerCapture(e.pointerId);rail.dataset.adjusting='true';
+    onSelect(clip.id);handle.focus({preventScroll:true});rail.dataset.adjusting='true';
     const paint=(next:number)=>{
       rail.style.setProperty('--clip-volume',String(next));
       handle.setAttribute('aria-valuenow',String(Math.round(next*100)));handle.setAttribute('aria-valuetext',next===0?'Muted':`${Math.round(next*100)}%`);
@@ -515,12 +525,8 @@ export function TimelinePanel(p:Props){
       node.dispatchEvent(new CustomEvent('revline:clip-volume-preview',{detail:next}));
     };
     const frame=timelineGestureFrame(()=>{volume=clipVolumeAtPointer(initial,startY,pointerY,height);paint(volume);p.onPreviewVolume?.(clip.id,volume);});
-    const move=(event:PointerEvent)=>{if(event.pointerId!==e.pointerId)return;pointerY=event.clientY;frame.request();};
-    const cleanup=()=>{
-      unwatch();frame.cancel();delete rail.dataset.adjusting;
-      handle.removeEventListener('pointermove',move);handle.removeEventListener('pointerup',finish);handle.removeEventListener('pointercancel',cancel);handle.removeEventListener('lostpointercapture',cancel);
-      gestureCleanup.current=null;if(handle.hasPointerCapture(e.pointerId))handle.releasePointerCapture(e.pointerId);
-    };
+    let stopFollowing=()=>{};
+    const cleanup=()=>{unwatch();stopFollowing();frame.cancel();delete rail.dataset.adjusting;gestureCleanup.current=null;};
     const cancel=()=>{cleanup();paint(initial);p.onPreviewVolume?.(clip.id,null);};
     const finish=(event:PointerEvent)=>{
       if(event.pointerId!==e.pointerId)return;pointerY=event.clientY;frame.flush();cleanup();
@@ -528,14 +534,14 @@ export function TimelinePanel(p:Props){
       else p.onPreviewVolume?.(clip.id,null);
     };
     gestureCleanup.current=cancel;unwatch=watchCancellation(cancel);
-    handle.addEventListener('pointermove',move);handle.addEventListener('pointerup',finish);handle.addEventListener('pointercancel',cancel);handle.addEventListener('lostpointercapture',cancel);
+    stopFollowing=followPointer(handle,e.pointerId,{move:event=>{pointerY=event.clientY;frame.request();},release:finish,cancel});
   }
   function startTrackVolume(e:React.PointerEvent<HTMLInputElement>,clips:Clip[]){
     if(editingLock.current)return;
     if(e.button!==0||!clips.length)return;e.preventDefault();e.stopPropagation();gestureCleanup.current?.();
     const handle=e.currentTarget,rect=handle.getBoundingClientRect();
     const initial=Math.max(...clips.map(clip=>clip.volume??1));let volume=initial,pointerX=e.clientX,unwatch=()=>{};
-    handle.focus({preventScroll:true});handle.setPointerCapture(e.pointerId);
+    handle.focus({preventScroll:true});
     const nodes=new Map(Array.from(area.current?.querySelectorAll<HTMLElement>('.timeline-clip[data-clip-id]')??[]).map(node=>[node.dataset.clipId!,node]));
     const rails=new Map(clips.map(clip=>[clip.id,nodes.get(clip.id)?.querySelector<HTMLElement>('.audio-clip-volume')]));
     const paint=(next:number|null)=>{
@@ -547,18 +553,15 @@ export function TimelinePanel(p:Props){
       }
     };
     const frame=timelineGestureFrame(()=>{volume=clipVolumeAtFraction((pointerX-rect.left-6)/Math.max(1,rect.width-12));paint(volume);});
-    const move=(event:PointerEvent)=>{if(event.pointerId!==e.pointerId)return;pointerX=event.clientX;frame.request();};
-    const cleanup=()=>{
-      unwatch();frame.cancel();handle.removeEventListener('pointermove',move);handle.removeEventListener('pointerup',finish);handle.removeEventListener('pointercancel',cancel);handle.removeEventListener('lostpointercapture',cancel);
-      gestureCleanup.current=null;if(handle.hasPointerCapture(e.pointerId))handle.releasePointerCapture(e.pointerId);
-    };
+    let stopFollowing=()=>{};
+    const cleanup=()=>{unwatch();stopFollowing();frame.cancel();gestureCleanup.current=null;};
     const cancel=()=>{cleanup();paint(null);};
     const finish=(event:PointerEvent)=>{
       if(event.pointerId!==e.pointerId)return;pointerX=event.clientX;frame.flush();cleanup();
       if(clips.some(clip=>(clip.volume??1)!==volume))onChange(clips.reduce((next,clip)=>patchClip(next,clip.id,{volume}),timeline));else paint(null);
     };
     gestureCleanup.current=cancel;unwatch=watchCancellation(cancel);
-    handle.addEventListener('pointermove',move);handle.addEventListener('pointerup',finish);handle.addEventListener('pointercancel',cancel);handle.addEventListener('lostpointercapture',cancel);frame.flush();
+    stopFollowing=followPointer(handle,e.pointerId,{move:event=>{pointerX=event.clientX;frame.request();},release:finish,cancel});frame.flush();
   }
   function volumeWithKeyboard(e:React.KeyboardEvent<HTMLDivElement>,clip:Clip){
     if(editingLock.current)return;
