@@ -1,3 +1,5 @@
+import { LandingSection } from './ui';
+
 const logos = [
   { name: 'Northwind', font: 'head', weight: 600 },
   { name: 'lumen.fm', font: 'mono', weight: 500 },
@@ -8,8 +10,8 @@ const logos = [
 ] as const;
 
 export function LandingLogos() {
-  return <section className="landing-logos landing-section" aria-label="Teams using Revline">
+  return <LandingSection className="landing-logos" aria-label="Teams using Revline">
     <p>Editing faster with Revline at</p>
     <ul>{logos.map(({ name, font, weight }) => <li key={name} style={{ fontFamily: `var(--landing-font-${font})`, fontWeight: weight }}>{name}</li>)}</ul>
-  </section>;
+  </LandingSection>;
 }

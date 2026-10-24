@@ -1,4 +1,5 @@
 import { Minus, Plus } from 'lucide-react';
+import { LandingHeading, LandingSection } from './ui';
 
 const questions = [
   ['What is Revline, and who is it for?', 'Revline is an AI video editor you talk to. Upload raw footage, describe what you want, and the agent cuts, captions and formats it for you. It’s built for creators, podcasters, marketers and teams who publish video but don’t want to live in a timeline.'],
@@ -12,11 +13,11 @@ const questions = [
 ];
 
 export function LandingFaq() {
-  return <section id="faq" className="landing-faq landing-section" aria-labelledby="landing-faq-heading">
-    <h2 id="landing-faq-heading">Frequently asked questions</h2>
+  return <LandingSection id="faq" className="landing-faq" headingId="landing-faq-heading">
+    <LandingHeading id="landing-faq-heading" title="Frequently asked questions" />
     <div className="landing-faq-list">{questions.map(([question, answer], index) => <details name="landing-faq" key={question} open={index === 0}>
       <summary>{question}<Plus className="landing-faq-plus" size={18} aria-hidden="true" /><Minus className="landing-faq-minus" size={18} aria-hidden="true" /></summary>
       <p>{answer}</p>
     </details>)}</div>
-  </section>;
+  </LandingSection>;
 }

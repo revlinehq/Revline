@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth, useSignIn } from '@clerk/nextjs';
 import { LoaderCircle } from 'lucide-react';
+import { LandingButton, LandingHeading, LandingSection } from './ui';
 
 function GoogleIcon() {
   return <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true">
@@ -39,19 +40,18 @@ export function LandingFinalCta() {
     } catch { setGoogle('failed'); }
   }
 
-  return <section className="landing-final landing-section" aria-labelledby="landing-final-heading">
+  return <LandingSection className="landing-final" headingId="landing-final-heading">
     <div className="landing-final-card">
-      <h2 id="landing-final-heading">Your next video is<br />one prompt away.</h2>
-      <p>Upload a clip and see what Revline does with it.</p>
+      <LandingHeading id="landing-final-heading" align="center" tone="inverse" size="lg" title={<>Your next video is<br />one prompt away.</>} description="Upload a clip and see what Revline does with it." />
       <div className="landing-signup">
         <form className="landing-email" onSubmit={start}>
           <label className="sr-only" htmlFor="landing-email">Email address</label>
           <input id="landing-email" type="email" name="email" autoComplete="email" placeholder="Enter your email" value={email} onChange={event => setEmail(event.target.value)} />
-          <button type="submit">Get started free</button>
+          <LandingButton type="submit" variant="brand" size="sm">Get started free</LandingButton>
         </form>
-        <button type="button" className="landing-google" disabled={google === 'pending'} onClick={() => void continueWithGoogle()}>{google === 'pending' ? <LoaderCircle size={18} className="animate-spin" aria-hidden="true" /> : <GoogleIcon />}Continue with Google</button>
+        <LandingButton className="landing-google" variant="inverse-outline" size="lg" block disabled={google === 'pending'} onClick={() => void continueWithGoogle()}>{google === 'pending' ? <LoaderCircle size={18} className="animate-spin" aria-hidden="true" /> : <GoogleIcon />}Continue with Google</LandingButton>
       </div>
       <small role={google === 'failed' ? 'alert' : undefined}>{google === 'failed' ? 'Could not continue with Google. Please try again.' : 'Free to start · No credit card required'}</small>
     </div>
-  </section>;
+  </LandingSection>;
 }

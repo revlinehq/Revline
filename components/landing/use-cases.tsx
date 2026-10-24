@@ -1,3 +1,5 @@
+import { LandingChip, LandingHeading, LandingSection } from './ui';
+
 type Tile = { label: string; image: string; wide?: boolean };
 
 const rows: Tile[][] = [
@@ -22,18 +24,15 @@ const rows: Tile[][] = [
 function TileSet({ tiles, hidden = false }: { tiles: Tile[]; hidden?: boolean }) {
   return <ul className="landing-marquee-set" aria-hidden={hidden || undefined}>{tiles.map(({ label, image, wide }) => <li key={label} className={wide ? 'landing-tile landing-tile-wide' : 'landing-tile'}>
     <img src={`/landing/${image}.webp`} alt="" loading="lazy" decoding="async" />
-    <span>{label}</span>
+    <LandingChip>{label}</LandingChip>
   </li>)}</ul>;
 }
 
 export function LandingUseCases() {
-  return <section id="use-cases" className="landing-use-cases landing-section" aria-labelledby="landing-use-cases-heading">
-    <header className="landing-section-header">
-      <h2 id="landing-use-cases-heading">Edit any kind of<br />video with Revline</h2>
-      <p>Podcasts, vlogs, product demos, tutorials, ads and more. No editing experience required.</p>
-    </header>
+  return <LandingSection id="use-cases" className="landing-use-cases" headingId="landing-use-cases-heading">
+    <LandingHeading id="landing-use-cases-heading" title={<>Edit any kind of<br />video with Revline</>} description="Podcasts, vlogs, product demos, tutorials, ads and more. No editing experience required." />
     <div className="landing-carousel">{rows.map((tiles, index) => <div key={index} className="landing-marquee" data-direction={index ? 'right' : 'left'}>
       <div className="landing-marquee-track"><TileSet tiles={tiles} /><TileSet tiles={tiles} hidden /></div>
     </div>)}</div>
-  </section>;
+  </LandingSection>;
 }

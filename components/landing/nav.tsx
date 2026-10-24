@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { ChevronDown } from 'lucide-react';
 import { Brand } from '@/components/workspace/brand';
 import { LandingStartButton } from './start-button';
+import { LandingButton } from './ui';
 
 const links = [
   { label: 'Product', href: '#how-it-works', menu: true },
@@ -17,8 +18,8 @@ export function LandingNav() {
       <div className="landing-nav-links">{links.map(({ label, href, menu }) => <a key={label} href={href}>{label}{menu && <ChevronDown size={14} aria-hidden="true" />}</a>)}</div>
     </div>
     <div className="landing-nav-right">
-      <Link className="landing-button landing-button-neutral" href="/sign-in">Log in</Link>
-      <LandingStartButton label="Start free" className="landing-button-dark" />
+      <LandingButton className="landing-nav-login" href="/sign-in" variant="neutral" size="sm">Log in</LandingButton>
+      <LandingStartButton label="Start free" variant="dark" size="sm" />
     </div>
   </nav>;
 }
