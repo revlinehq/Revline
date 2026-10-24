@@ -7,10 +7,11 @@ import { requireOwner } from './lib/auth';
 import { accountingReady,activeExportGroups,emptyStorage,ownedObjectReferences,storageAccount,storageLimit,usedByActiveExport } from './lib/storage_accounting';
 import { removeOwnedAsset } from './assets';
 import { removeOwnedExport } from './renders';
+import { mediaUrl } from './lib/media_storage';
 
 const kind=v.union(v.literal('video'),v.literal('audio'),v.literal('image'),v.literal('export'));
 const workspace=v.object({id:v.id('projects'),title:v.string()});
-const item=v.object({id:v.id('storageObjects'),fileName:v.string(),kind,size:v.number(),createdAt:v.number(),workspaces:v.array(workspace),canDelete:v.boolean(),protectedReason:v.union(v.string(),v.null())});
+const item=v.object({id:v.id('storageObjects'),fileName:v.string(),kind,size:v.number(),createdAt:v.number(),workspaces:v.array(workspace),canDelete:v.boolean(),protectedReason:v.union(v.string(),v.null()),thumbnailUrl:v.union(v.string(),v.null())});
 export const summary=query({args:{},returns:v.object({usedBytes:v.number(),reservedBytes:v.number(),videoBytes:v.number(),audioBytes:v.number(),imageBytes:v.number(),exportBytes:v.number(),fileCount:v.number(),limitBytes:v.number(),ready:v.boolean()}),handler:async ctx=>{
   const ownerId=await requireOwner(ctx),[account,ready]=await Promise.all([storageAccount(ctx,ownerId),accountingReady(ctx)]);
   const values=Object.fromEntries(Object.keys(emptyStorage).map(key=>[key,account?.[key as keyof typeof emptyStorage]??0])) as typeof emptyStorage;
@@ -37,7 +38,7 @@ function listingReads(ctx:QueryCtx):DescriptionReads {
   };
 }
 async function describe(ctx:QueryCtx|MutationCtx,row:Doc<'storageObjects'>,reads?:DescriptionReads) {
-  const result={id:row._id,fileName:row.fileName,kind:row.kind,size:row.size,createdAt:row.createdAt,workspaces:[] as {id:Doc<'projects'>['_id'];title:string}[],canDelete:false,protectedReason:null as string|null};
+  const result={id:row._id,fileName:row.fileName,kind:row.kind,size:row.size,createdAt:row.createdAt,workspaces:[] as {id:Doc<'projects'>['_id'];title:string}[],canDelete:false,protectedReason:null as string|null,thumbnailUrl:null as string|null};
   if(row.kind==='export') {
     const job=row.jobId?await ctx.db.get(row.jobId):null;
     if(!job||job.ownerId!==row.ownerId){result.protectedReason='This export is unavailable';return result;}
@@ -45,6 +46,9 @@ async function describe(ctx:QueryCtx|MutationCtx,row:Doc<'storageObjects'>,reads
     result.canDelete=job.status==='completed'||job.status==='failed'||job.status==='cancelled';result.protectedReason=result.canDelete?null:'Export in progress';return result;
   }
   const refs=await ownedObjectReferences(ctx,row.ownerId,row);
+  // Listing previews reuse the editor's small JPEG thumbnail; an image falls back to itself.
+  const thumbnail=row.kind==='video'||row.kind==='image'?refs.attachments.find(asset=>asset.thumbnailStorageId)?.thumbnailStorageId:undefined;
+  result.thumbnailUrl=thumbnail?await ctx.storage.getUrl(thumbnail):row.kind==='image'?await mediaUrl(ctx,row):null;
   if(refs.tooMany){result.protectedReason='Remove this media from its workspaces first';return result;}
   if(refs.shares.length)result.protectedReason='Used by a shared timeline';
   const projectIds=[...new Set(refs.attachments.map(asset=>asset.projectId))];
