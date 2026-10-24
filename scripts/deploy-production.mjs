@@ -9,8 +9,11 @@ import { makeFunctionReference } from 'convex/server';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const args = process.argv.slice(2);
-if (args.some(arg => arg !== '--dry-run')) throw new Error('Usage: npm run deploy:production [-- --dry-run]');
+if (args.some(arg => arg !== '--dry-run' && arg !== '--processor-only')) throw new Error('Usage: npm run deploy:production [-- --dry-run] [--processor-only]');
 const dryRun = args.includes('--dry-run');
+// CI deploys Convex from the same commit in its own job first; redeploying it
+// here could roll back a newer push whose Convex release already finished.
+const processorOnly = args.includes('--processor-only');
 const deployment = 'different-gnu-398', convexUrl = `https://${deployment}.convex.cloud`;
 const envFile = join(root, '.env.production.local');
 const production = parseEnv(await readFile(envFile, 'utf8'));
@@ -49,7 +52,7 @@ const hashTree = async directory => {
   return hash.digest('hex');
 };
 try {
-  console.log(`Target: production (${deployment}); Cloudflare revline-media-processor-production. ${dryRun ? 'Validation only.' : 'Deploying both services.'}`);
+  console.log(`Target: production (${deployment}); Cloudflare revline-media-processor-production. ${dryRun ? 'Validation only.' : processorOnly ? 'Deploying the processor; Convex is already released.' : 'Deploying both services.'}`);
   await node([cli('next/dist/bin/next'), 'typegen']);
   await node([cli('typescript/bin/tsc'), '--noEmit']);
   await node([cli('typescript/bin/tsc'), '-p', 'infra/media-worker/edge/tsconfig.json']);
@@ -89,9 +92,11 @@ try {
   stage = 'Cloudflare deployment';
   await node([cli('wrangler/bin/wrangler.js'), 'deploy', '--config', configPath, '--keep-vars', '--strict', '--tag', releaseId, ...(dryRun ? ['--dry-run', '--outdir', join(directory,'bundle')] : [])]);
   // Convex deploys the exact frozen backend used for the image, not later edits.
-  await symlink(join(root, 'node_modules'), join(source, 'node_modules'), 'dir');
-  stage = 'Convex deployment';
-  await node([cli('convex/bin/main.js'), 'deploy', '--env-file', envFile, '--typecheck', 'enable', '--message', releaseId, ...(dryRun ? ['--dry-run'] : [])], source);
+  if (!processorOnly) {
+    await symlink(join(root, 'node_modules'), join(source, 'node_modules'), 'dir');
+    stage = 'Convex deployment';
+    await node([cli('convex/bin/main.js'), 'deploy', '--env-file', envFile, '--typecheck', 'enable', '--message', releaseId, ...(dryRun ? ['--dry-run'] : [])], source);
+  }
   if (dryRun) { console.log('Validation passed. No image was uploaded and neither service was deployed.'); }
   else {
     stage = 'release verification';

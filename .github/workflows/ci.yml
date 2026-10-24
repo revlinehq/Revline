@@ -27,93 +27,68 @@ jobs:
       - run: npm run typecheck
       - run: npm run build
 
-  # Production releases run only after checks pass on main, one at a time, in
-  # dependency order: backend (Convex, plus the media processor when its inputs
-  # changed) before the frontend that calls it.
-  deploy-backend:
+  # Production releases run only after checks pass on main. Convex goes first;
+  # the frontend and the media processor then release independently, so site
+  # changes never wait for a processor image build.
+  processor-plan:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: checks
     runs-on: ubuntu-latest
-    environment: production
-    concurrency:
-      group: production-release
-      cancel-in-progress: false
     permissions:
       contents: read
-      actions: write
+      actions: read
+    outputs:
+      changed: ${{ steps.plan.outputs.changed }}
     env:
-      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-      CLOUDFLARE_ACCOUNT_ID: 701645e913477e567db69b11343f59d8
-      CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
       PUPPETEER_SKIP_DOWNLOAD: 'true'
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Detect media processor changes
-        id: processor
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - name: Compare with the last released processor
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          before='${{ github.event.before }}'
-          # Mirrors the allow-list in infra/media-worker/prepare-context.mjs.
-          paths='package.json package-lock.json tsconfig.json lib convex public infra/media-worker scripts'
-          # An unknown previous commit (first push, force push) rebuilds to be safe.
-          if git cat-file -e "$before^{commit}" 2>/dev/null && git diff --quiet "$before" HEAD -- $paths; then
-            echo changed=false >> "$GITHUB_OUTPUT"
-          else
-            echo changed=true >> "$GITHUB_OUTPUT"
-          fi
+          # Compare with the commit the processor was last released from, not the
+          # previous push: a cancelled queued release must not hide its changes.
+          base=''
+          for run in $(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?branch=main&event=push&status=completed&per_page=60" --jq '.workflow_runs[].id'); do
+            base=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run/jobs?per_page=50" --jq '[.jobs[] | select((.name == "deploy-processor" and .conclusion == "success") or (.name == "deploy-backend" and any(.steps[]; .name == "Release media processor and Convex" and .conclusion == "success")))] | if length > 0 then .[0].head_sha else empty end')
+            [ -n "$base" ] && break
+          done
+          node scripts/processor-changes.mjs "$base"
+
+  deploy-convex:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: checks
+    runs-on: ubuntu-latest
+    environment: production
+    concurrency:
+      group: production-convex
+      cancel-in-progress: false
+    env:
+      CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
+      PUPPETEER_SKIP_DOWNLOAD: 'true'
+    steps:
+      - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
       - run: npm ci
-      - name: Check production targets
+      - name: Check production target
         run: |
           case "$CONVEX_DEPLOY_KEY" in prod:different-gnu-398\|*) ;; *) echo "CONVEX_DEPLOY_KEY must target prod:different-gnu-398"; exit 1;; esac
-          test -n "$CLOUDFLARE_API_TOKEN" || { echo "CLOUDFLARE_API_TOKEN is missing"; exit 1; }
-      - name: Free runner disk for the processor image
-        if: steps.processor.outputs.changed == 'true'
-        run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL && df -h /
-      - name: Restore pinned beat model
-        if: steps.processor.outputs.changed == 'true'
-        uses: actions/cache@v4
-        with:
-          path: .data/beat-tracking-models
-          key: beat-this-final0-8c328b45f59d8dd3dff219253ff6a8d6482be57d0133a29140e2febbf8eb8331
-      - name: Install pinned beat model
-        if: steps.processor.outputs.changed == 'true'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          # The upstream model host returns intermittent 503s; use the repository's mirrored copy.
-          model=.data/beat-tracking-models/hub/checkpoints/beat_this-final0.ckpt
-          [ -f "$model" ] || gh release download beat-model-final0 -R "$GITHUB_REPOSITORY" -p beat_this-final0.ckpt -D "$(dirname "$model")"
-          node scripts/install-beat-model.mjs
-      - uses: docker/setup-buildx-action@v3
-        if: steps.processor.outputs.changed == 'true'
-      - name: Expose the Actions cache to Docker
-        if: steps.processor.outputs.changed == 'true'
-        uses: crazy-max/ghaction-github-runtime@v3
-      - name: Release media processor and Convex
-        if: steps.processor.outputs.changed == 'true'
-        env:
-          REVLINE_DOCKER_CACHE: gha
-          RENDER_WORKER_SECRET: ${{ secrets.RENDER_WORKER_SECRET }}
-        run: |
-          umask 077
-          {
-            echo 'CONVEX_DEPLOYMENT=prod:different-gnu-398'
-            echo 'NEXT_PUBLIC_CONVEX_URL=https://different-gnu-398.convex.cloud'
-            echo "CONVEX_DEPLOY_KEY=$CONVEX_DEPLOY_KEY"
-            echo "RENDER_WORKER_SECRET=$RENDER_WORKER_SECRET"
-          } > .env.production.local
-          npm run deploy:production
-      - name: Deploy Convex
-        if: steps.processor.outputs.changed != 'true'
-        run: npx convex deploy --yes --typecheck enable --message "${{ github.sha }}"
+      - run: npx convex deploy --yes --typecheck enable --message "${{ github.sha }}"
 
   deploy-frontend:
-    needs: deploy-backend
+    needs: deploy-convex
     runs-on: ubuntu-latest
     environment: production
     concurrency:
@@ -134,3 +109,62 @@ jobs:
       # secrets stay on the Worker and are preserved by wrangler deploy.
       - run: npm run build:cloudflare
       - run: npm run deploy:frontend:ci
+
+  deploy-processor:
+    needs: [processor-plan, deploy-convex]
+    if: needs.processor-plan.outputs.changed == 'true'
+    runs-on: ubuntu-latest
+    environment: production
+    concurrency:
+      group: production-processor
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      actions: write
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: 701645e913477e567db69b11343f59d8
+      CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
+      PUPPETEER_SKIP_DOWNLOAD: 'true'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Check production targets
+        run: |
+          case "$CONVEX_DEPLOY_KEY" in prod:different-gnu-398\|*) ;; *) echo "CONVEX_DEPLOY_KEY must target prod:different-gnu-398"; exit 1;; esac
+          test -n "$CLOUDFLARE_API_TOKEN" || { echo "CLOUDFLARE_API_TOKEN is missing"; exit 1; }
+      - name: Free runner disk for the processor image
+        run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL && df -h /
+      - name: Restore pinned beat model
+        uses: actions/cache@v4
+        with:
+          path: .data/beat-tracking-models
+          key: beat-this-final0-8c328b45f59d8dd3dff219253ff6a8d6482be57d0133a29140e2febbf8eb8331
+      - name: Install pinned beat model
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # The upstream model host returns intermittent 503s; use the repository's mirrored copy.
+          model=.data/beat-tracking-models/hub/checkpoints/beat_this-final0.ckpt
+          [ -f "$model" ] || gh release download beat-model-final0 -R "$GITHUB_REPOSITORY" -p beat_this-final0.ckpt -D "$(dirname "$model")"
+          node scripts/install-beat-model.mjs
+      - uses: docker/setup-buildx-action@v3
+      - name: Expose the Actions cache to Docker
+        uses: crazy-max/ghaction-github-runtime@v3
+      - name: Release media processor
+        env:
+          REVLINE_DOCKER_CACHE: gha
+          RENDER_WORKER_SECRET: ${{ secrets.RENDER_WORKER_SECRET }}
+        run: |
+          umask 077
+          {
+            echo 'CONVEX_DEPLOYMENT=prod:different-gnu-398'
+            echo 'NEXT_PUBLIC_CONVEX_URL=https://different-gnu-398.convex.cloud'
+            echo "CONVEX_DEPLOY_KEY=$CONVEX_DEPLOY_KEY"
+            echo "RENDER_WORKER_SECRET=$RENDER_WORKER_SECRET"
+          } > .env.production.local
+          npm run deploy:production -- --processor-only
