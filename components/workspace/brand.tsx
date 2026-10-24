@@ -6,10 +6,10 @@ const LOWER_FOLD = 'M27.52819 18.775c-6.775 2.42499-12.325 6.45-14.65 11.4l-11.9
 
 function Folds({ drawn = false }: { drawn?: boolean }) {
   const path = (d: string) => drawn ? <><path className="revline-fold-line" d={d} pathLength={1}/><path className="revline-fold-fill" d={d}/></> : <path d={d}/>;
-  return <>
-    <svg x="4.20005" y="1.32132" width="13.80645" height="11.48387" viewBox="0 0 107 89">{path(UPPER_FOLD)}</svg>
-    <svg x="1.52862" y="10.44839" width="14.19355" height="8.51613" viewBox="0 0 110 66">{path(LOWER_FOLD)}</svg>
-  </>;
+  // The loader eases the folds apart so each reads as its own stroke.
+  const upper = <svg x="4.20005" y="1.32132" width="13.80645" height="11.48387" viewBox="0 0 107 89">{path(UPPER_FOLD)}</svg>;
+  const lower = <svg x="1.52862" y="10.44839" width="14.19355" height="8.51613" viewBox="0 0 110 66">{path(LOWER_FOLD)}</svg>;
+  return drawn ? <><g transform="translate(0.32 -0.36)">{upper}</g><g transform="translate(-0.32 0.36)">{lower}</g></> : <>{upper}{lower}</>;
 }
 
 export function Brand({ markOnly = false, className }: { markOnly?: boolean; className?: string }) {
