@@ -10,6 +10,7 @@ import { DevAiCosts } from './dev-ai-costs';
 import { WorkspaceNav } from './workspace-nav';
 import { useWorkspaceTheme } from './theme-provider';
 import './workspace-pages.css';
+import { BrandLoader } from '@/components/workspace/brand';
 
 export function ProfilePage({ checkoutReturn }: { checkoutReturn?: CheckoutReturn }) {
   const { user, isLoaded, isSignedIn } = useUser();
@@ -40,7 +41,7 @@ export function ProfilePage({ checkoutReturn }: { checkoutReturn?: CheckoutRetur
   return <div className="workspace-page workspace-profile-page">
     <WorkspaceNav title="Your profile" active="profile" />
     <main className="workspace-profile-content"><div className="workspace-page-heading"><h1>Your profile</h1><p>Your details, membership, and appearance.</p></div>
-      {!isLoaded ? <div className="workspace-empty-state" role="status"><LoaderCircle size={20} className="animate-spin" /><p>Loading your account…</p></div> : <>
+      {!isLoaded ? <BrandLoader className="workspace-empty-state" label="Loading your account…"/> : <>
         <section className="workspace-profile-section"><div className="workspace-section-label"><h2>Personal details</h2><p>How you appear in Revline.</p></div><div className="workspace-section-content"><div className="workspace-profile-photo"><span className="workspace-profile-avatar">{user?.imageUrl ? <img src={user.imageUrl} alt="Your profile" /> : initial}</span><div><strong>{name}</strong>{isSignedIn ? <button className="workspace-outline-button workspace-photo-button" disabled={photoBusy} onClick={() => fileInput.current?.click()}>{photoBusy && <LoaderCircle size={12} className="animate-spin" />}{photoBusy ? 'Updating…' : 'Change photo'}</button> : <Link className="workspace-outline-button workspace-photo-button" href="/sign-in">Sign in</Link>}<input className="workspace-photo-input" type="file" accept="image/*" ref={fileInput} aria-label="Choose a profile photo" onChange={event => void changePhoto(event.target.files?.[0])} /></div></div>{photoError && <p className="workspace-inline-error" role="alert">{photoError}</p>}<div className="workspace-profile-email"><label htmlFor="profile-email">Email address</label><div><input id="profile-email" readOnly value={user?.primaryEmailAddress?.emailAddress ?? ''} placeholder="Sign in to view your email" /><LockKeyhole size={13} /></div><p>Your sign-in email.</p></div></div></section>
         <BillingSection checkoutReturn={checkoutReturn} />
         <DevAiCosts />

@@ -27,6 +27,7 @@ import { updateLiveVisualGeometry } from '@/lib/editor/live-visual-geometry';
 import type { RefreshPlaybackMedia } from '@/lib/editor/media-source-recovery';
 import { previewAdjustmentEffect, updateLiveAdjustmentEffects } from '@/lib/editor/live-adjustment-effects';
 import { loadPreviewRemotion } from '@/lib/editor/preview-remotion-runtime';
+import { BrandLoader } from '@/components/workspace/brand';
 function LiveTextControls(props: Omit<React.ComponentProps<typeof TextControls>, 'time'>) {
   const time=usePausedPlaybackTime(),playing=useEditorState(state=>state.playing);
   if(playing)return null;
@@ -267,5 +268,5 @@ export const Preview = forwardRef<PreviewHandle,{timeline:Timeline;assets:MediaA
       const frame=Array.from(doc?.querySelectorAll<HTMLElement>('[data-visual-clip]')??[]).find(node=>node.dataset.visualClip===selectedClip.id);
       return frame?.querySelector<HTMLImageElement|HTMLVideoElement>('img,video')??null;
     }} onCommit={crop=>onCropCommit(selectedClip.id,crop)} onCancel={onCropCancel}/>}
-    {(!ready||buffering)&&<div className="preview-loading" style={buffering?{background:'transparent',zIndex:2,pointerEvents:'none'}:undefined} role="status" aria-label={buffering?'Loading clip':'Loading preview'}><LoaderCircle className="animate-spin" size={20}/></div>}</div>;
+    {(!ready||buffering)&&<div className="preview-loading" style={buffering?{background:'transparent',zIndex:2,pointerEvents:'none'}:undefined} role="status" aria-label={buffering?'Loading clip':'Loading preview'}>{buffering?<LoaderCircle className="animate-spin" size={20}/>:<BrandLoader size={34} announce={false}/>}</div>}</div>;
 });

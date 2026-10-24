@@ -12,6 +12,7 @@ import { PrimaryButton } from './primary-button';
 import { WorkspaceNav } from './workspace-nav';
 import './shared.css';
 import './editor-access-gate.css';
+import { BrandLoader } from '@/components/workspace/brand';
 
 export function EditorAccessGate({ children, loading, checkoutPending = false }: { children: ReactNode; loading?: ReactNode; checkoutPending?: boolean }) {
   const { isAuthenticated } = useConvexAuth();
@@ -22,7 +23,7 @@ export function EditorAccessGate({ children, loading, checkoutPending = false }:
   const [error, setError] = useState('');
   const inFlight = useRef(false);
 
-  if (!status) return loading ?? <div className="editor-access-loading" role="status"><LoaderCircle size={18} className="animate-spin" />Checking your plan…</div>;
+  if (!status) return loading ?? <BrandLoader className="editor-access-loading" label="Checking your plan…"/>;
   if (!status.enabled || status.subscribed || status.complimentary) return children;
   if (checkoutPending && !status.needsPayment) return <div className="workspace-page editor-access-page">
     <WorkspaceNav title={NEW_WORKSPACE_LABEL} />

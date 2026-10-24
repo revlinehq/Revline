@@ -7,12 +7,12 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@clerk/nextjs';
 import { useConvexAuth, useMutation, useQuery } from 'convex/react';
-import { ArrowUpRight, Film, LoaderCircle, RectangleHorizontal } from 'lucide-react';
+import { ArrowUpRight, Film, RectangleHorizontal } from 'lucide-react';
 import { api } from '@/convex/_generated/api';
 import { createEditorStore } from '@/lib/editor/store';
 import { frameSeekTime } from '@/lib/editor/operations';
 import { dimensions, timelineDuration, type MediaAsset, type Timeline } from '@/lib/editor/types';
-import { Brand } from '@/components/workspace/brand';
+import { Brand, BrandLoader } from '@/components/workspace/brand';
 import { PrimaryButton } from '@/components/workspace/primary-button';
 import { EditorStateProvider, useEditorState, useEditorStore, usePausedPlaybackTime } from './editor-state';
 import { Preview, type PreviewHandle } from './preview';
@@ -34,7 +34,7 @@ export function TimelineShowcase({ shareId }: { shareId: string }) {
   const { isLoaded, isSignedIn } = useAuth(), { isAuthenticated } = useConvexAuth();
   const share = useQuery(api.timelineShares.get, { shareId });
   const copy = useMutation(api.timelineShares.useTimeline);
-  if (share === undefined) return <div className="timeline-showcase"><ShowcaseHeader/><div className="timeline-showcase-loading" role="status"><LoaderCircle size={22} className="animate-spin"/><span>Loading timeline…</span></div></div>;
+  if (share === undefined) return <div className="timeline-showcase"><ShowcaseHeader/><BrandLoader className="timeline-showcase-loading" label="Loading timeline…"/></div>;
   if (!share) return <div className="timeline-showcase"><ShowcaseHeader/><div className="timeline-showcase-unavailable"><h1>This timeline isn’t available</h1><p>The link may have been turned off or the original project removed.</p><PrimaryButton asChild><Link href={NEW_PROJECT_PATH}>Open Revline<ArrowUpRight size={14}/></Link></PrimaryButton></div></div>;
   return <TimelineShowcaseView key={`${share._id}:${share.updatedAt}`} share={share} signedIn={!!isSignedIn} useDisabled={!isLoaded || (!!isSignedIn && !isAuthenticated)} onUse={async () => {
     if (!isSignedIn) { router.push(timelineSignInPath(share._id)); return; }
