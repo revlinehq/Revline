@@ -10,7 +10,6 @@ const shortcuts: { category: LibraryShortcutCategory; label: string; icon?: Effe
   { category: 'motion', label: 'Motion', icon: 'punch' },
   { category: 'color', label: 'Color', icon: 'colorGrade' },
   { category: 'texture', label: 'Texture', icon: 'filmOverlay' },
-  { category: 'transitions', label: 'Transitions', icon: 'crossfade' },
   { category: 'text', label: 'Text' },
 ];
 

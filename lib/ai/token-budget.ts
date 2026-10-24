@@ -2,12 +2,14 @@ import type { LanguageModelV4, LanguageModelV4CallOptions, LanguageModelV4Usage,
 import type { LanguageModelMiddleware } from 'ai';
 import { compactEditorPrompt } from './editor-context';
 
-export const EDITOR_TOKEN_LIMITS = { requestBytes: 208_000, transportBytes: 24_000_000, inputTokens: 300_000, outputTokens: 12_000, outputPerCall: 4096 } as const;
-export const EDITOR_RAW_INPUT_LIMIT = 1_000_000;
+// An anomaly backstop, not a work limit: a three-scene explainer (13 calls)
+// used ~10% of these ceilings. Only runaway tool loops should reach them.
+export const EDITOR_TOKEN_LIMITS = { requestBytes: 450_000, transportBytes: 24_000_000, inputTokens: 2_000_000, outputTokens: 150_000, outputPerCall: 8192 } as const;
+export const EDITOR_RAW_INPUT_LIMIT = 7_000_000;
 type TokenLimits = { [K in keyof typeof EDITOR_TOKEN_LIMITS]: number };
 type NativeCacheModel = 'anthropic' | 'openai';
-/** Financial token ceilings are a server-controlled benchmark/debug opt-in.
- * Normal editing retains context projection and the per-call resource cap. */
+/** Per-request financial ceilings, switched on per deployment. Context
+ * projection and the per-call output cap apply either way. */
 export function editorTokenBudgetEnabled(env:Readonly<Record<string,string|undefined>>=process.env){
   const value=env.EDITOR_ENFORCE_TOKEN_BUDGET;
   if(value===undefined||value===''||value==='false')return false;
@@ -42,6 +44,13 @@ function nativeCacheModel(params:LanguageModelV4CallOptions,model?:Pick<Language
   return anthropic?'anthropic':'openai';
 }
 
+/** Provider-normalized cache split, weighted conservatively (writes 1.25x, reads 0.25x). */
+function normalizedInput(usage:LanguageModelV4Usage):number|undefined {
+  const input=usage.inputTokens;
+  if(!count(input.total)||!count(input.noCache)||!count(input.cacheRead)||!count(input.cacheWrite)||input.noCache+input.cacheRead+input.cacheWrite!==input.total)return;
+  return input.noCache+input.cacheWrite*1.25+input.cacheRead*.25;
+}
+
 function weightedInput(usage:LanguageModelV4Usage,model:NativeCacheModel,metadata?:SharedV4ProviderMetadata):number|undefined {
   const input=usage.inputTokens,raw=record(usage.raw),output=usage.outputTokens.total;
   if(!count(input.noCache)||!count(input.cacheRead)||!count(input.cacheWrite)||input.noCache+input.cacheRead+input.cacheWrite!==input.total||raw.output_tokens!==output||[usage.outputTokens.text,usage.outputTokens.reasoning].some(value=>value!==undefined&&(!count(value)||value>Number(output)))||(usage.outputTokens.text!==undefined&&usage.outputTokens.reasoning!==undefined&&usage.outputTokens.text+usage.outputTokens.reasoning!==output))return;
@@ -66,19 +75,21 @@ export class AssistantTokenBudgetError extends Error {
 }
 
 /** Reserve full next input at worst cache-write cost; credit only verified usage.
- * The 300k input limit is conservative cost units for the two known native
- * tariffs; other models retain strict raw accounting. Even Sol long-context
- * costs <= $4/M units + $15/M output, hence <= $1.38 at these limits (< $1.68).
+ * The input limit is conservative cost units: verified native tariffs, else
+ * the provider-normalized cache split, else raw input. Sol long-context costs
+ * <= $4/M units + $15/M output, hence <= ~$10 at these limits.
  * Raw volume, request bytes, output and runtime/step limits remain independent.
- * Failed calls and missing/invalid usage retain their full reservations.
+ * Calls are charged their actual usage; only missing usage blocks the run.
  */
 export class AssistantTokenBudget {
   private input = 0;
   private rawInput = 0;
   private output = 0;
   private blocked = false;
-  constructor(private limits: TokenLimits = EDITOR_TOKEN_LIMITS) {}
+  constructor(private limits: TokenLimits = EDITOR_TOKEN_LIMITS, private onUsage?: (fraction: number) => void) {}
   get usage() { return { inputTokens: this.rawInput, outputTokens: this.output }; }
+  /** The largest share of any ceiling this request has used, 0–1. */
+  get fraction() { return Math.min(1, Math.max(this.input / this.limits.inputTokens, this.rawInput / EDITOR_RAW_INPUT_LIMIT, this.output / this.limits.outputTokens)); }
 
   private estimateInput(params:LanguageModelV4CallOptions) {
     if (this.blocked) throw new AssistantTokenBudgetError('usage');
@@ -101,14 +112,15 @@ export class AssistantTokenBudget {
     }) });
     const bytes = encodedBytes({ ...payload, prompt: estimatedPrompt });
     if (bytes > this.limits.requestBytes) throw new AssistantTokenBudgetError('context');
-    return bytes+4096+images*8192;
+    // Serialized JSON and prose run ~3–4 bytes per token; calls settle at actual usage.
+    return Math.ceil(bytes/3)+4096+images*8192;
   }
 
   reserve(params: LanguageModelV4CallOptions,countedInput?:number,model?:Pick<LanguageModelV4,'provider'|'modelId'>) {
     const estimate=this.estimateInput(params);
     const native=nativeCacheModel(params,model),reservedRaw=countedInput??estimate;
     if(!count(reservedRaw))throw new AssistantTokenBudgetError('usage');
-    const reservedInput=native?Math.ceil(reservedRaw*1.25):reservedRaw;
+    const reservedInput=Math.ceil(reservedRaw*1.25);
     const reservedOutput = Math.min(params.maxOutputTokens ?? this.limits.outputPerCall, this.limits.outputPerCall);
     if(!count(reservedOutput))throw new AssistantTokenBudgetError('usage');
     if (this.input + reservedInput > this.limits.inputTokens || this.rawInput+reservedRaw>EDITOR_RAW_INPUT_LIMIT || this.output + reservedOutput > this.limits.outputTokens) throw new AssistantTokenBudgetError('tokens');
@@ -119,9 +131,10 @@ export class AssistantTokenBudget {
       settled = true;
       const input = usage.inputTokens.total;
       const output = usage.outputTokens.total;
-      const charged=native?weightedInput(usage,native,metadata):input;
-      if (!count(input)||!count(output)||charged===undefined||input>reservedRaw||output>reservedOutput||charged>reservedInput) { this.blocked = true; return; }
+      if (!count(input)||!count(output)) { this.blocked = true; return; }
+      const charged=(native?weightedInput(usage,native,metadata):undefined)??normalizedInput(usage)??input;
       this.input += charged-reservedInput; this.rawInput+=input-reservedRaw; this.output += output-reservedOutput;
+      this.onUsage?.(this.fraction);
     };
   }
 

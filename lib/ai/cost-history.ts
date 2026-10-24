@@ -20,6 +20,8 @@ export type EditorCostRecord = {
   reasoningTokens: number | null;
   toolCallCount: number;
   unreportedCall: boolean;
+  /** Run summaries: the share of the per-request token cap used, when it was enforced. */
+  budgetUsed?: number | null;
 };
 const text = (value: unknown) => typeof value === 'string' && value.length <= 160 ? value : null;
 const count = (value: unknown) => typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : null;
@@ -39,6 +41,7 @@ export function costHistoryRecord(event: Record<string, unknown>): EditorCostRec
     ...(summary?{}:{uncachedInputTokens:count(event.uncachedInputTokens),cacheReadTokens:count(event.cacheReadTokens),cacheWriteTokens:count(event.cacheWriteTokens)}),
     toolCallCount: summary ? 0 : count(event.toolCallCount) ?? 0,
     unreportedCall: summary && event.unreportedCall === true,
+    ...(summary && typeof event.budgetUsed === 'number' && event.budgetUsed >= 0 && event.budgetUsed <= 1 ? { budgetUsed: event.budgetUsed } : {}),
   };
 }
 export const COST_HISTORY_LIMIT = 5000;
@@ -65,9 +68,10 @@ export function aggregateEditorCosts(records: StoredCost[]) {
   const summary = { ...totals(), unreportedRuns: 0, runCount: 0 };
   const groups = new Map<string, ReturnType<typeof totals> & Pick<EditorCostRecord, 'model' | 'provider' | 'reasoningEffort' | 'speedMode' | 'serviceTier'>>();
   const runs = new Set<string>(), unreported = new Set<string>();
+  let budgetUsed: number | undefined;
   for (const record of records) {
     runs.add(record.runId);
-    if (record.kind === 'run-summary') { if (record.unreportedCall) unreported.add(record.runId); continue; }
+    if (record.kind === 'run-summary') { if (record.unreportedCall) unreported.add(record.runId); if (typeof record.budgetUsed === 'number') budgetUsed = Math.max(budgetUsed ?? 0, record.budgetUsed); continue; }
     const identity = { model: record.model, provider: record.provider, reasoningEffort: record.reasoningEffort, speedMode: record.speedMode, serviceTier: record.serviceTier };
     const key = JSON.stringify(identity);
     if (!groups.has(key)) groups.set(key, { ...identity, ...totals() });
@@ -82,7 +86,7 @@ export function aggregateEditorCosts(records: StoredCost[]) {
     }
   }
   summary.runCount = runs.size; summary.unreportedRuns = unreported.size;
-  return { summary, breakdown: [...groups.values()].sort((a, b) => b.knownEstimatedUsd - a.knownEstimatedUsd || b.callCount - a.callCount) };
+  return { summary, budgetUsed, breakdown: [...groups.values()].sort((a, b) => b.knownEstimatedUsd - a.knownEstimatedUsd || b.callCount - a.callCount) };
 }
 export function summarizeEditorCosts(records: StoredCost[], period: ReturnType<typeof costPeriod>) {
   const daily = period.dates.map(date => ({ date, knownEstimatedUsd: 0, callCount: 0, unknownCostCalls: 0 }));
@@ -94,7 +98,8 @@ export function summarizeEditorCosts(records: StoredCost[], period: ReturnType<t
     day.callCount++;
     if (record.estimatedUsd === null) day.unknownCostCalls++; else day.knownEstimatedUsd = round(day.knownEstimatedUsd + record.estimatedUsd);
   }
-  return { ...aggregateEditorCosts(selected), daily };
+  const { budgetUsed: _budgetUsed, ...totals } = aggregateEditorCosts(selected);
+  return { ...totals, daily };
 }
 
 /** Keep diagnostics failures separate from editing, but do not abandon pending writes on return. */

@@ -20,6 +20,8 @@ export const MOTION_PRESETS = ['none', 'fade', 'punch', 'shake', 'flash', 'pop']
 export type MotionPreset = typeof MOTION_PRESETS[number];
 export const TIMED_EFFECT_PRESETS = ['punch', 'shake', 'flash', 'pop', 'cinematic-bars', 'quick-zoom-in', 'quick-zoom-out', 'zoom-blur', 'solid-color'] as const;
 export type TimedEffectPreset=typeof TIMED_EFFECT_PRESETS[number];
+/** Presets offered for new edits; the rest stay renderable in saved projects. */
+export const OFFERED_TIMED_EFFECT_PRESETS = ['punch', 'quick-zoom-in', 'quick-zoom-out', 'solid-color'] as const satisfies readonly TimedEffectPreset[];
 /** Retired presets remain valid for saved projects; new choices use the active catalog. */
 export const EFFECT_PRESETS = ['fade', 'frame-shrink', ...TIMED_EFFECT_PRESETS, ...TRANSITION_PRESETS] as const;
 export type EffectPreset = typeof EFFECT_PRESETS[number];

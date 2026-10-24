@@ -88,6 +88,17 @@ function passingReview(input:unknown,output:Record<string,unknown>,revision:numb
 }
 
 /** Derive state from completed steps: the SDK can reevaluate a stop condition. */
+/** A deployment without a configured review service cannot review; that is not a failed check. */
+const REVIEW_UNAVAILABLE = /composition review is not configured/i;
+function reviewUnavailable(part: { toolName?: string; error?: unknown; output?: unknown }) {
+  if (part.toolName !== 'previewRender') return false;
+  const output = outputValue(part.output);
+  return output.reviewUnavailable === true || REVIEW_UNAVAILABLE.test(String(part.error ?? output.error ?? record(part.output).value ?? ''));
+}
+export function renderReviewUnavailable(steps: ToolSteps) {
+  return steps.some(step => step.content.some(value => { const part = record(value); return (part.type === 'tool-error' || part.type === 'tool-result') && reviewUnavailable(part); }));
+}
+
 function unresolvedFailures(steps: ToolSteps, recoverPlacements = false) {
   const calls = new Map<string, { key: string; input: unknown }>(), pending = new Map<string, { count: number; ids: string[]; placement?: string; plan?:string[]; zoom?:string; zoomEvidence?:string; corrected?: boolean; review?:Map<string,string>; reviewed?:Set<string>; reviewEpoch?:number; reviewRevision?:number; captionAssetId?:string; manualCaptions?:boolean; frameRefinement?:FrameRefinement }>();
   let revision:number|undefined,editEpoch=0;
@@ -101,7 +112,7 @@ function unresolvedFailures(steps: ToolSteps, recoverPlacements = false) {
     const key = input !== undefined ? `${part.toolName}:${stable(input)}` : calls.get(id)?.key ?? `${part.toolName}:${id}`;
     const output = outputValue(part.output);
     if (part.type === 'tool-call') calls.set(id, { key, input });
-    else if (part.type === 'tool-error' || (part.type === 'tool-result' && (output.success === false || record(part.output).type === 'error-text'))) {
+    else if ((part.type === 'tool-error' || (part.type === 'tool-result' && (output.success === false || record(part.output).type === 'error-text'))) && !reviewUnavailable(part)) {
       const failure=part.error??output.error??record(part.output).value;
       const rejectedPlans=record(input).plans;
       pending.set(key, { count: (pending.get(key)?.count ?? 0) + 1, ids: [...pending.get(key)?.ids ?? [], id], ...(recoverPlacements&&part.toolName==='inspectFrames'?{frameRefinement:frameRefinement(input,output)}:{}), ...(recoverPlacements && isOverlapPlacementRejection(part.error) ? { placement: placementTarget(part.toolName, input) } : {}),...(recoverPlacements&&part.toolName==='planEffects'&&planPreflightRejection(failure)&&Array.isArray(rejectedPlans)&&rejectedPlans.length&&rejectedPlans.every(item=>typeof record(item).id==='string')?{plan:rejectedPlans.map(item=>record(item).id as string)}:{}),...(recoverPlacements&&zoomMotionRejection(failure)?{zoom:zoomTarget(part.toolName,input)}:{}),...(recoverPlacements&&zoomEvidenceRejection(failure)?{zoomEvidence:zoomEvidenceTarget(part.toolName,input)}:{}),...(recoverPlacements&&part.toolName==='previewRender'&&reviewWindowRejection(failure)?{review:reviewScope(input,plans)}:{}),...(recoverPlacements&&part.toolName==='addSubtitlesFromTranscript'&&typeof record(input).assetId==='string'&&/Clip timing must be finite, nonnegative, and at least one frame long/.test(String(failure))?{captionAssetId:record(input).assetId as string}:{}) });
@@ -184,6 +195,7 @@ type RenderCheckFailure = { planId: string; reasons: string[]; observation?: Rec
 /** Plans survive continuation, whereas tool steps may cover only its latest
  * segment. A review certifies the exact expectation and staged draft it saw. */
 function unfinishedRenderChecks(steps: ToolSteps, requirements: RenderReviewRequirements = {}): RenderCheckFailure[] {
+  if (renderReviewUnavailable(steps)) return [];
   const plans = new Map<string, Record<string, unknown>>((requirements.plans ?? []).map(plan => [plan.id, plan]));
   const identities = () => new Map([...plans].map(([id, plan]) => [id, reviewPlanIdentity(plan)]));
   const calls = new Map<string, { input: unknown; identities: Map<string, string>; epoch: number }>();

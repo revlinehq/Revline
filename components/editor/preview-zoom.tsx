@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from 'react';
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from 'react';
 import { ChevronDown, Hand, Minus, Plus, ScanLine } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
@@ -149,12 +149,22 @@ export function PreviewViewport({ children }: { children: ReactNode }) {
   const unit = aspectUnit(canvas);
   const multiples = Math.max(1, Math.floor(Math.min(geometry.layoutWidth / unit.width, geometry.layoutHeight / unit.height)));
   const layoutWidth = unit.width * multiples, layoutHeight = unit.height * multiples;
-  // Place the scaled frame on whole device pixels in the exact project ratio. A
+  // Place the scaled frame on whole device pixels of the screen, in the exact
+  // project ratio. The viewport itself can sit at a fractional position, and a
   // fractional edge blends the frame background into the picture as a thin line.
   const dpr = typeof window === 'undefined' ? 1 : window.devicePixelRatio || 1;
+  const [origin, setOrigin] = useState({ x: 0, y: 0 });
+  useLayoutEffect(() => {
+    const element = viewportRef.current; if (!element) return;
+    const measure = () => { const rect = element.getBoundingClientRect(); setOrigin(previous => previous.x === rect.x && previous.y === rect.y ? previous : { x: rect.x, y: rect.y }); };
+    measure();
+    const observer = new ResizeObserver(measure); observer.observe(element); window.addEventListener('resize', measure);
+    return () => { observer.disconnect(); window.removeEventListener('resize', measure); };
+  }, [viewportRef, viewport.width, viewport.height]);
+  const snap = (value: number, offset: number) => Math.round((offset + value) * dpr) / dpr - offset;
   const units = Math.max(1, Math.floor(geometry.width * dpr / unit.width + 1e-6));
   const frameWidth = units * unit.width / dpr, frameHeight = units * unit.height / dpr;
-  const frameLeft = Math.round((geometry.left + (geometry.width - frameWidth) / 2) * dpr) / dpr, frameTop = Math.round((geometry.top + (geometry.height - frameHeight) / 2) * dpr) / dpr;
+  const frameLeft = snap(geometry.left + (geometry.width - frameWidth) / 2, origin.x), frameTop = snap(geometry.top + (geometry.height - frameHeight) / 2, origin.y);
   const sceneScale = frameWidth / layoutWidth;
   const pan = useRef<PanSession | null>(null);
   const pinch = useRef<PinchSession | null>(null);

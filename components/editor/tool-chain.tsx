@@ -32,12 +32,12 @@ export function toolChainRows(steps: ChatTool[]): Row[] {
   return rows;
 }
 
-/** One group of tool calls, shown where it ran. It stays open while running and collapses when done. */
-export function ToolChain({ steps }: { steps: ChatTool[] }) {
+/** One group of tool calls, shown where it ran. Open while its turn streams; collapses when the turn ends. */
+export function ToolChain({ steps, active = false }: { steps: ChatTool[]; active?: boolean }) {
   const rows = toolChainRows(steps);
   const running = steps.some(step => step.state === 'running'), failed = steps.some(step => step.state === 'error');
-  const [open, setOpen] = useState(running);
-  useEffect(() => { setOpen(running); }, [running]);
+  const [open, setOpen] = useState(active);
+  useEffect(() => { setOpen(active); }, [active]);
   if (!rows.length) return null;
   const skill = steps.find(step => step.name === 'readSkill' && typeof step.input?.name === 'string')?.input?.name as string | undefined;
   const count = `${steps.length} ${steps.length === 1 ? 'step' : 'steps'}`;

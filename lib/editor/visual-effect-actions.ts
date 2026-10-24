@@ -3,6 +3,9 @@ import type {Clip} from './types';
 
 export const VISUAL_EFFECT_GROUPS=VISUAL_EFFECT_KEYS;
 export type VisualEffectGroup=typeof VISUAL_EFFECT_GROUPS[number];
+/** Groups offered for new edits; retired ones stay renderable in saved projects. */
+const RETIRED_VISUAL_EFFECT_GROUPS:readonly string[]=['dither','neonEdges','lightLeak','zoomBlur'];
+export const OFFERED_VISUAL_EFFECT_GROUPS=VISUAL_EFFECT_GROUPS.filter(group=>!RETIRED_VISUAL_EFFECT_GROUPS.includes(group)) as [VisualEffectGroup,...VisualEffectGroup[]];
 /** Match manual group reset/removal and palette reset without touching other controls. */
 export function visualEffectActionPatch(clip:Clip,effect:VisualEffectGroup,action:'reset'|'remove'|'original-colors'):VisualEffects{
   if((clip.kind!=='video'&&clip.kind!=='image')&&!(clip.kind==='effect'&&clip.effectPreset==='zoom-blur'&&effect==='zoomBlur'))throw new Error('Choose visual footage or its timed zoom-blur FX.');

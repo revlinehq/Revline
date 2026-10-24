@@ -13,8 +13,8 @@ import type {TimelinePublicationReceipt} from '../lib/ai/publication-receipt';
 import { getFunctionName } from 'convex/server';
 import type { Timeline } from '../lib/editor/types';
 import { TRANSITION_PRESETS } from '../lib/editor/clip-transitions';
-import { addEffectClip, patchClip } from '../lib/editor/operations';
-import { EFFECT_CATALOG,TIMED_EFFECT_PRESETS } from '../lib/editor/clip-effects';
+import { addEffectClip, addTransitionClip, patchClip } from '../lib/editor/operations';
+import { EFFECT_CATALOG,OFFERED_TIMED_EFFECT_PRESETS } from '../lib/editor/clip-effects';
 import { editorCapabilities } from '../lib/ai/editor-capabilities';
 import { resolvedTextAppearance } from '../lib/editor/text-style';
 import type { EffectPlan } from '../lib/ai/edit-plan';
@@ -126,7 +126,7 @@ async function run(plan?:(tools:Record<string,Tool>)=>Promise<void>,seed:Timelin
 }
 const execute=async(tools:Record<string,Tool>,name:string,input:unknown)=>{
   if(name==='addTimedEffect'){
-    const effect=input as {preset:typeof TIMED_EFFECT_PRESETS[number];start?:number;duration?:number};
+    const effect=input as {preset:typeof OFFERED_TIMED_EFFECT_PRESETS[number];start?:number;duration?:number};
     const start=effect.start??1,duration=effect.duration??EFFECT_CATALOG[effect.preset].duration;
     await tools.planEffects.execute({},{plans:[{id:'test-effect',kind:'timed',effect:effect.preset,start,duration,purpose:'Requested synthetic effect',strength:'Requested controls',expectation:'The requested effect is visible',anchor:{kind:'requested-time',time:start,description:'Explicit fixture timing'}}]});
   }
@@ -173,8 +173,8 @@ test('undo returns a truthful empty result and refuses both saved and private st
 });
 
 test('group copy/move/trim, layer reorder and common blend use actual editor operations while preserving source identity',async()=>{
+  const seeded=addTransitionClip(initial,'seed-crossfade','crossfade','from','to');
   const result=await run(async tools=>{
-    await execute(tools,'addClipTransition',{preset:'crossfade',fromClipId:'from',toClipId:'to'});
     const current=await execute(tools,'inspectTimeline',{}) as{timeline:Timeline};
     const oldTransition=current.timeline.clips.find(c=>c.transition)!;
     const copied=await execute(tools,'duplicateClips',{clipIds:['from','to',oldTransition.id],at:6}) as{newClipIds:string[]};
@@ -191,7 +191,7 @@ test('group copy/move/trim, layer reorder and common blend use actual editor ope
     await execute(tools,'resizeClips',{clipIds:[pair.transition!.fromClipId],side:'left',delta:.2});
     await execute(tools,'reorderLayer',{group:'visual',from:2,to:3});
     await execute(tools,'followSubject',{clipId:'from',enabled:false});
-  },initial,true);
+  },seeded,true);
   const copies=result.timeline.clips.filter(c=>c.kind==='video'&&c.id!=='from');expect(copies).toHaveLength(1);
   const copy=copies[0],audio=result.timeline.clips.find(c=>c.id===copy.linkedClipId)!;
   expect(copy).toMatchObject({track:3,start:8.2,duration:2.8,sourceStart:2.2,blendMode:'screen',assetId:result.backend!.seed.clips[0].assetId});
@@ -303,10 +303,10 @@ test('automatic completion recovery is bounded when tools keep failing and prese
 
 test('every implemented effect, text animation/look and transition has a concrete shared behavior description',()=>{
   const catalog=editorCapabilities();
-  for(const entry of [...catalog.effects.flatMap(category=>category.items),...catalog.timedFX,...catalog.transitions.items,...catalog.text.animations,...catalog.text.looks]){
+  for(const entry of [...catalog.effects.flatMap(category=>category.items),...catalog.timedFX,...catalog.text.animations,...catalog.text.looks]){
     expect(entry.description.trim().length).toBeGreaterThan(20);expect(entry.description).not.toBe('Add at the playhead');
   }
-  expect(catalog.text.animations).toHaveLength(TEXT_ANIMATION_PRESETS.length);expect(catalog.text.looks).toHaveLength(6);expect(catalog.transitions.items).toHaveLength(TRANSITION_PRESETS.length);
+  expect(catalog.text.animations).toHaveLength(TEXT_ANIMATION_PRESETS.length);expect(catalog.text.looks).toHaveLength(6);
   expect(catalog.text.animations.find(item=>item.preset==='karaoke')?.description).toContain('Supplied speech timings');
   expect(catalog.visual.canvasReference.landscape).toEqual({width:1920,height:1080});expect(catalog.visual.canvasReference.vertical).toEqual({width:1080,height:1920});
 });
@@ -325,17 +325,21 @@ test('pixel transform/crop tools use known canvas/source axes, preserve omitted 
   await assertUndo(result);
 });
 
-test('every current timed FX has a tool schema, while transitions require explicit distinct clip targets',async()=>{
+test('only offered timed FX and footage effects have tool schemas; retired effects and transitions are not offered',async()=>{
   await run(async tools=>{
-    for(const preset of TIMED_EFFECT_PRESETS)expect(()=>tools.addTimedEffect.inputSchema.parse({preset})).not.toThrow();
-    expect(()=>tools.addTimedEffect.inputSchema.parse({preset:'fade'})).toThrow();
-    expect(()=>tools.addTimedEffect.inputSchema.parse({preset:'crossfade'})).toThrow();
-    expect(()=>tools.addClipTransition.inputSchema.parse({preset:'crossfade',fromClipId:'from'})).toThrow();
-    expect(()=>tools.addClipTransition.inputSchema.parse({preset:'spin-zoom',fromClipId:'from',toClipId:'to',direction:'diagonal'})).toThrow();
-    await expect(execute(tools,'addClipTransition',{preset:'blur-dissolve',fromClipId:'from',toClipId:'from'})).rejects.toThrow('neighboring');
-    await execute(tools,'addClipTransition',{preset:'blur-dissolve',fromClipId:'from',toClipId:'to',direction:'counter-clockwise',duration:.8});
+    for(const preset of OFFERED_TIMED_EFFECT_PRESETS)expect(()=>tools.addTimedEffect.inputSchema.parse({preset})).not.toThrow();
+    for(const preset of ['shake','flash','pop','cinematic-bars','zoom-blur','crossfade','fade'])expect(()=>tools.addTimedEffect.inputSchema.parse({preset})).toThrow();
+    expect(tools).not.toHaveProperty('addClipTransition');expect(tools).not.toHaveProperty('configureClipTransition');
+    for(const effect of ['dither','neonEdges','lightLeak','zoomBlur'])expect(()=>tools.resetVisualEffect.inputSchema.parse({clipId:'from',effect,action:'remove'})).toThrow();
+    for(const group of ['dither','neonEdges','lightLeak','zoomBlur']){
+      const parsed=tools.setVisualEffects.inputSchema.safeParse({clipId:'from',[group]:{enabled:true}});
+      expect(parsed.success?(parsed.data as Record<string,unknown>)[group]:undefined).toBeUndefined();
+    }
   });
   expect(sdk.messages).toHaveLength(0);
+  const offered=editorCapabilities().effects.flatMap(group=>group.items).map(item=>item.name);
+  for(const name of ['Zoom blur','Cinema bars','Dither','Neon edges','Light leak','Crossfade','Spin zoom'])expect(offered).not.toContain(name);
+  expect(editorCapabilities()).not.toHaveProperty('transitions');expect(editorCapabilities()).not.toHaveProperty('neonEdges');
 });
 
 test('solid color creation/configuration changes only the new V rectangle and retains omitted controls',async()=>{
@@ -387,27 +391,9 @@ test('free marker tools accept requested seconds/labels, preserve clips and shar
   await assertUndo(result);
 });
 
-test('cinematic bars size/speed and dither original-palette reset are independently editable',async()=>{
-  const result=await run(async tools=>{
-    await execute(tools,'addTimedEffect',{preset:'cinematic-bars',start:2,duration:2});
-    const inspected=await execute(tools,'inspectTimeline',{}) as{timeline:Timeline};
-    const bars=inspected.timeline.clips.find(clip=>clip.effectPreset==='cinematic-bars')!;
-    await execute(tools,'configureTimedEffect',{clipId:bars.id,cinematicBars:{size:.2,speed:2}});
-    await execute(tools,'configureTimedEffect',{clipId:bars.id,duration:3});
-    await expect(execute(tools,'configureTimedEffect',{clipId:'from',duration:3})).rejects.toThrow('timed FX');
-    await execute(tools,'setVisualEffects',{clipId:'from',dither:{enabled:true,levels:5,shadowColor:'#112233',highlightColor:'#abcdef'},invert:{enabled:true,amount:.3}});
-    await execute(tools,'resetVisualEffect',{clipId:'from',effect:'dither',action:'original-colors'});
-    await execute(tools,'resetVisualEffect',{clipId:'from',effect:'invert',action:'remove'});
-  },initial,true);
-  expect(result.timeline.clips.at(-1)).toMatchObject({start:2,duration:3,cinematicBars:{size:.2,speed:2}});
-  expect(result.timeline.clips[0].dither).toMatchObject({enabled:true,levels:5});expect(result.timeline.clips[0].dither?.shadowColor).toBeUndefined();expect(result.timeline.clips[0].dither?.highlightColor).toBeUndefined();expect(result.timeline.clips[0].invert).toBeUndefined();
-  expect(result.timeline.clips.slice(1,4)).toEqual(result.backend!.seed.clips.slice(1,4));
-  await assertUndo(result);
-});
-
 test('Zoom agent controls share the manual recipe, preserve omitted controls and linked media, and undo together', async () => {
   const result = await run(async tools => {
-    expect(() => tools.addTimedEffect.inputSchema.parse({ preset: 'flash', zoom: { amount: 2 } })).toThrow('Zoom');
+    expect(() => tools.addTimedEffect.inputSchema.parse({ preset: 'punch', zoom: { amount: 2 } })).toThrow('Zoom');
     await execute(tools, 'addTimedEffect', { preset: 'quick-zoom-in', start: 1, duration: 2, zoom: { amount: 2, centerX: .75 } });
     const inspected = await execute(tools, 'inspectTimeline', {}) as { timeline: Timeline };
     const effect = inspected.timeline.clips.find(clip => clip.effectPreset === 'quick-zoom-in')!;
@@ -422,13 +408,10 @@ test('Zoom agent controls share the manual recipe, preserve omitted controls and
 });
 
 test.each([
-  {preset:'flash' as const,settings:{strength:.3,attack:.2,release:.6},change:{strength:.6}},
   {preset:'punch' as const,settings:{amount:1.6,speed:.5,centerX:.3,centerY:.7},change:{speed:2}},
-  {preset:'shake' as const,settings:{strength:.7,speed:.5,direction:'horizontal'},change:{direction:'vertical'}},
-  {preset:'pop' as const,settings:{startScale:.4,bounce:.1,speed:.5},change:{speed:2}},
 ])('$preset properties are available through actual agent tools and persist/undo without changing footage',async({preset,settings,change})=>{
   const result=await run(async tools=>{
-    expect(()=>tools.addTimedEffect.inputSchema.parse({preset:'quick-zoom-in',zoom:{amount:2},flash:{strength:.3}})).toThrow('match');
+    expect(()=>tools.addTimedEffect.inputSchema.parse({preset:'quick-zoom-in',zoom:{amount:2},punch:{amount:2}})).toThrow('match');
     await execute(tools,'addTimedEffect',{preset,start:1,duration:2,[preset]:settings});
     const inspected=await execute(tools,'inspectTimeline',{}) as {timeline:Timeline};
     const effect=inspected.timeline.clips.find(clip=>clip.effectPreset===preset)!;
@@ -533,28 +516,6 @@ test('lens, film and whole-clip blur agent controls save and retain source/audio
   expect(result.calls).not.toContain('assistant:requestAnalysis');await assertUndo(result);
 });
 
-test('Neon edges agent controls merge, bypass, reset and remove only the requested clip effect',async()=>{
-  const result=await run(async tools=>{
-    expect(()=>tools.setVisualEffects.inputSchema.parse({clipId:'from',neonEdges:{color:'url(bad)'}})).toThrow();
-    expect(()=>tools.setVisualEffects.inputSchema.parse({clipId:'from',neonEdges:{glow:1.01}})).toThrow();
-    await execute(tools,'setVisualEffects',{clipId:'from',neonEdges:{enabled:true,color:'#ff00cc',amount:.7}});
-    await execute(tools,'setVisualEffects',{clipId:'from',neonEdges:{detail:.8,threshold:.4,glow:.5}});
-    let current=await execute(tools,'inspectTimeline',{}) as{timeline:Timeline};
-    expect(current.timeline.clips[0].neonEdges).toEqual({enabled:true,color:'#ff00cc',amount:.7,detail:.8,threshold:.4,glow:.5});
-    await execute(tools,'setVisualEffects',{clipId:'from',neonEdges:{enabled:false}});
-    current=await execute(tools,'inspectTimeline',{}) as{timeline:Timeline};
-    expect(current.timeline.clips[0].neonEdges).toEqual({enabled:false,color:'#ff00cc',amount:.7,detail:.8,threshold:.4,glow:.5});
-    await execute(tools,'resetVisualEffect',{clipId:'from',effect:'neonEdges',action:'reset'});
-    current=await execute(tools,'inspectTimeline',{}) as{timeline:Timeline};expect(current.timeline.clips[0].neonEdges).toEqual(DEFAULT_NEON_EDGES);
-    await execute(tools,'setVisualEffects',{clipId:'from',neonEdges:{enabled:true,color:'#112233'}});
-    await execute(tools,'resetVisualEffect',{clipId:'from',effect:'neonEdges',action:'remove'});
-    await expect(execute(tools,'setVisualEffects',{clipId:'audio',neonEdges:{enabled:true}})).rejects.toThrow('video or image');
-  },initial,true);
-  expect(result.timeline.clips[0]).toEqual({...result.backend!.seed.clips[0],neonEdges:undefined});
-  expect(result.timeline.clips.slice(1)).toEqual(result.backend!.seed.clips.slice(1));
-  expect(editorCapabilities().neonEdges.description).toContain('Luminous');expect(result.calls).not.toContain('assistant:requestAnalysis');await assertUndo(result);
-});
-
 test.each(['rgb-split','type-trails','blur-focus','character-scramble','spotlight-sweep','ink-write','tunnel-zoom'] as const)('%s animation tools preserve omitted controls, original clock, words and unrelated clips',async preset=>{
   const seed:Timeline={...initial,clips:initial.clips.map(clip=>clip.id==='title'?{...clip,textTemplate:{preset,strength:.7,revealDuration:1,stagger:.1,highlightColor:'#C4B5FD',duration:4,offset:.4}}:clip)};
   const result=await run(async tools=>{
@@ -577,14 +538,13 @@ test.each(['rgb-split','type-trails','blur-focus','character-scramble','spotligh
   expect(result.calls).not.toContain('assistant:requestAnalysis');await assertUndo(result);
 });
 
-test('dither palette and text template/color/rotation controls combine without changing words, source or timing',async()=>{
+test('text template/color/rotation controls combine without changing words, source or timing',async()=>{
   const result=await run(async tools=>{
-    await execute(tools,'setVisualEffects',{clipId:'from',dither:{enabled:true,shadowColor:'#101080',highlightColor:'#FFFF00',levels:3}});
     await execute(tools,'styleTextClip',{clipId:'title',rotation:18,color:'#AABBCC',blendMode:'difference'});
     await execute(tools,'configureTextTemplate',{clipId:'title',highlightColor:'#FF5500'});
     await execute(tools,'applyMotionPreset',{clipId:'title',preset:'pop'});
   });
-  expect(result.timeline.clips.find(clip=>clip.id==='from')).toMatchObject({...initial.clips[0],dither:{enabled:true,shadowColor:'#101080',highlightColor:'#FFFF00',levels:3}});
+  expect(result.timeline.clips.find(clip=>clip.id==='from')).toEqual(initial.clips[0]);
   expect(result.timeline.clips.find(clip=>clip.id==='audio')).toEqual(initial.clips[1]);
   expect(result.timeline.clips.find(clip=>clip.id==='title')).toMatchObject({text:'Keep these words',start:0,duration:2,color:'#AABBCC',blendMode:'difference',transform:{rotation:18},textTemplate:{preset:'karaoke',duration:2,offset:0,highlightColor:'#FF5500'}});
   expect(result.timeline.clips.find(clip=>clip.id==='title')!.motion?.length).toBeGreaterThan(1);
@@ -657,27 +617,22 @@ test('audio tools change only requested roles/fades/ducking and preserve source 
   await assertUndo(result);
 });
 
-test('actual transition and FX tools retain the original cut through linked split, then remove a broken cut in one undo group',async()=>{
+test('saved transitions and FX retain the original cut through an agent linked split, then a broken cut is removed in one undo group',async()=>{
   let outgoingPiece='';
+  const seed=addEffectClip(addTransitionClip(initial,'seed-crossfade','crossfade','from','to',{duration:1}),'seed-bars','cinematic-bars',2,{duration:2});
   const result=await run(async tools=>{
-    await execute(tools,'addClipTransition',{preset:'crossfade',fromClipId:'from',toClipId:'to',duration:.8});
-    const before=await execute(tools,'inspectTimeline',{}) as{timeline:Timeline};
-    const transition=before.timeline.clips.find(clip=>clip.transition)!;
-    await execute(tools,'configureClipTransition',{clipId:transition.id,preset:'spin-zoom',direction:'counter-clockwise',duration:1});
-    await execute(tools,'addTimedEffect',{preset:'cinematic-bars',start:2,duration:2});
     await execute(tools,'split',{clipId:'from',time:1.5});
     const split=await execute(tools,'inspectTimeline',{}) as{timeline:Timeline};
     const retained=split.timeline.clips.find(clip=>clip.transition)!;
     outgoingPiece=retained.transition!.fromClipId;
     expect(outgoingPiece).not.toBe('from');
-    expect(retained).toMatchObject({start:2.5,duration:1,effectPreset:'spin-zoom',transition:{fromClipId:outgoingPiece,toClipId:'to',direction:'counter-clockwise'}});
+    expect(retained).toMatchObject({effectPreset:'crossfade',transition:{fromClipId:outgoingPiece,toClipId:'to'}});
     const outgoing=split.timeline.clips.find(clip=>clip.id===outgoingPiece)!;
     const sound=split.timeline.clips.find(clip=>clip.id===outgoing.linkedClipId)!;
     expect(outgoing).toMatchObject({start:1.5,duration:1.5,sourceStart:3.5});
     expect(sound).toMatchObject({start:1.5,duration:1.5,sourceStart:3.5,linkedClipId:outgoing.id});
-    await execute(tools,'configureClipTransition',{clipId:transition.id,preset:'blur-dissolve'});
     await execute(tools,'move',{clipId:'to',start:4});
-  },initial,true);
+  },seed,true);
   expect(result.timeline.clips.some(clip=>clip.transition)).toBe(false);
   expect(result.timeline.clips.find(clip=>clip.id==='to')).toMatchObject({start:4,duration:3,sourceStart:0});
   expect(result.timeline.clips.find(clip=>clip.id==='title')).toEqual(result.backend!.seed.clips[3]);
@@ -823,72 +778,42 @@ test('corner rounding is an independent clip setting and preserves distortion, f
 });
 
 
-test.each(['from','to'])('VHS and Light leak tools merge, bypass, reset, remove and undo on %s while preserving footage and audio',async clipId=>{
+test.each(['from','to'])('VHS tools merge, bypass, reset, remove and undo on %s while preserving footage and audio',async clipId=>{
   const styled:Timeline={...initial,clips:initial.clips.map(clip=>clip.id===clipId?{...clip,lensDistortion:{...DEFAULT_LENS_DISTORTION,enabled:true}}:clip)};
   const seed=addEffectClip(styled,'fx-blur','zoom-blur',1,{duration:1});
   const result=await run(async tools=>{
-    expect(tools.setVisualEffects.description).toContain('VHS');expect(tools.setVisualEffects.description).toContain('0 left, .25 top, .5 right, .75 bottom');
-    for(const group of ['vhs','lightLeak'] as const){
-      for(const [control,[min,max]] of Object.entries(VISUAL_EFFECT_LIMITS[group]))for(const value of [min-.01,max+.01,NaN,Infinity])expect(()=>tools.setVisualEffects.inputSchema.parse({clipId,[group]:{[control]:value}})).toThrow();
-      for(const bad of ['audio','title','fx-blur']){
-        await expect(execute(tools,'setVisualEffects',{clipId:bad,[group]:{enabled:true}})).rejects.toThrow('video or image');
-        await expect(execute(tools,'resetVisualEffect',{clipId:bad,effect:group,action:'reset'})).rejects.toThrow('visual footage');
-      }
-      await expect(execute(tools,'setVisualEffects',{clipId,[group]:{}})).rejects.toThrow('Specify');
-      await expect(execute(tools,'resetVisualEffect',{clipId,effect:group,action:'original-colors'})).rejects.toThrow('dither only');
+    expect(tools.setVisualEffects.description).toContain('VHS');
+    for(const [control,[min,max]] of Object.entries(VISUAL_EFFECT_LIMITS.vhs))for(const value of [min-.01,max+.01,NaN,Infinity])expect(()=>tools.setVisualEffects.inputSchema.parse({clipId,vhs:{[control]:value}})).toThrow();
+    for(const bad of ['audio','title','fx-blur']){
+      await expect(execute(tools,'setVisualEffects',{clipId:bad,vhs:{enabled:true}})).rejects.toThrow('video or image');
+      await expect(execute(tools,'resetVisualEffect',{clipId:bad,effect:'vhs',action:'reset'})).rejects.toThrow('visual footage');
     }
-    for(const color of ['red','#123','#12345678','transparent','url(example)'])expect(()=>tools.setVisualEffects.inputSchema.parse({clipId,lightLeak:{color}})).toThrow();
-    await execute(tools,'setVisualEffects',{clipId,vhs:{enabled:true,scanlines:.8},lightLeak:{enabled:true,color:'#12ABCF'}});
+    await expect(execute(tools,'setVisualEffects',{clipId,vhs:{}})).rejects.toThrow('Specify');
+    await execute(tools,'setVisualEffects',{clipId,vhs:{enabled:true,scanlines:.8}});
     const read=async()=>((await execute(tools,'inspectTimeline',{})) as{timeline:Timeline}).timeline.clips.find(clip=>clip.id===clipId)!;
-    expect((await read()).vhs).toEqual({...DEFAULT_VHS,enabled:true,scanlines:.8});expect((await read()).lightLeak).toEqual({...DEFAULT_LIGHT_LEAK,enabled:true,color:'#12ABCF'});
-    await execute(tools,'setVisualEffects',{clipId,vhs:{noise:.6,tracking:.4,speed:0},lightLeak:{position:.75,spread:.9,speed:3}});
-    await execute(tools,'setVisualEffects',{clipId,vhs:{enabled:false},lightLeak:{enabled:false}});
-    expect((await read()).vhs).toEqual({...DEFAULT_VHS,scanlines:.8,noise:.6,tracking:.4,speed:0});expect((await read()).lightLeak).toEqual({...DEFAULT_LIGHT_LEAK,color:'#12ABCF',position:.75,spread:.9,speed:3});
-    for(const group of ['vhs','lightLeak'] as const)await execute(tools,'resetVisualEffect',{clipId,effect:group,action:'reset'});
-    expect((await read()).vhs).toEqual(DEFAULT_VHS);expect((await read()).lightLeak).toEqual(DEFAULT_LIGHT_LEAK);
-    await execute(tools,'setVisualEffects',{clipId,vhs:{enabled:true,amount:.9},lightLeak:{enabled:true,amount:.8}});
-    for(const group of ['vhs','lightLeak'] as const)await execute(tools,'resetVisualEffect',{clipId,effect:group,action:'reset'});
-    expect((await read()).vhs).toEqual({...DEFAULT_VHS,enabled:true});expect((await read()).lightLeak).toEqual({...DEFAULT_LIGHT_LEAK,enabled:true});
-    await execute(tools,'resetVisualEffect',{clipId,effect:'vhs',action:'remove'});expect((await read()).vhs).toBeUndefined();expect((await read()).lightLeak).toEqual({...DEFAULT_LIGHT_LEAK,enabled:true});
-    await execute(tools,'resetVisualEffect',{clipId,effect:'lightLeak',action:'remove'});
+    expect((await read()).vhs).toEqual({...DEFAULT_VHS,enabled:true,scanlines:.8});
+    await execute(tools,'setVisualEffects',{clipId,vhs:{noise:.6,tracking:.4,speed:0}});
+    await execute(tools,'setVisualEffects',{clipId,vhs:{enabled:false}});
+    expect((await read()).vhs).toEqual({...DEFAULT_VHS,scanlines:.8,noise:.6,tracking:.4,speed:0});
+    await execute(tools,'resetVisualEffect',{clipId,effect:'vhs',action:'reset'});
+    expect((await read()).vhs).toEqual(DEFAULT_VHS);
+    await execute(tools,'setVisualEffects',{clipId,vhs:{enabled:true,amount:.9}});
+    await execute(tools,'resetVisualEffect',{clipId,effect:'vhs',action:'reset'});
+    expect((await read()).vhs).toEqual({...DEFAULT_VHS,enabled:true});
+    await execute(tools,'resetVisualEffect',{clipId,effect:'vhs',action:'remove'});expect((await read()).vhs).toBeUndefined();
   },seed,true);
-  expect(result.error).toBeUndefined();expect(result.timeline.clips).toEqual(result.backend!.seed.clips.map(clip=>clip.id===clipId?{...clip,vhs:undefined,lightLeak:undefined}:clip));
+  expect(result.error).toBeUndefined();expect(result.timeline.clips).toEqual(result.backend!.seed.clips.map(clip=>clip.id===clipId?{...clip,vhs:undefined}:clip));
   expect(result.calls).not.toContain('assistant:requestAnalysis');await assertUndo(result);
 });
-
-
-test.each(['gradient-wipe','iris-wipe'] as const)('%s AI controls preserve omitted wipe settings, real pair copies, source/audio and grouped undo',async preset=>{
-  const settings={wipeDirection:'left',softness:.2,centerX:.3,centerY:.7,shape:'ellipse'};
-  const result=await run(async tools=>{
-    for(const key of ['softness','centerX','centerY'])for(const value of [-.01,1.01,NaN,Infinity])for(const name of ['addClipTransition','configureClipTransition'])expect(()=>tools[name].inputSchema.parse({preset,fromClipId:'from',toClipId:'to',clipId:'later',[key]:value})).toThrow();
-    for(const invalid of [{wipeDirection:'diagonal'},{shape:'square'}])expect(()=>tools.addClipTransition.inputSchema.parse({preset,fromClipId:'from',toClipId:'to',...invalid})).toThrow();
-    expect(()=>tools.configureClipTransition.inputSchema.parse({clipId:'later'})).toThrow('Specify');
-    await execute(tools,'addClipTransition',{preset,fromClipId:'from',toClipId:'to',...settings});
-    let current=await execute(tools,'inspectTimeline',{}) as{timeline:Timeline};const transition=current.timeline.clips.find(clip=>clip.transition)!;
-    expect(transition.transition).toMatchObject(settings);
-    await execute(tools,'configureClipTransition',{clipId:transition.id,softness:.8});
-    current=await execute(tools,'inspectTimeline',{}) as{timeline:Timeline};expect(current.timeline.clips.find(clip=>clip.id===transition.id)!.transition).toEqual({...transition.transition!,softness:.8});
-    await execute(tools,'configureClipTransition',{clipId:transition.id,preset:preset==='gradient-wipe'?'iris-wipe':'gradient-wipe',centerX:0,centerY:1});
-    await execute(tools,'duplicateClips',{clipIds:['from','to',transition.id],at:8});
-    current=await execute(tools,'inspectTimeline',{}) as{timeline:Timeline};const copies=current.timeline.clips.filter(clip=>clip.transition);
-    expect(copies).toHaveLength(2);
-    for(const clip of copies)expect(clip.transition).toMatchObject({...settings,softness:.8,centerX:0,centerY:1});
-    expect(copies[0].transition!.fromClipId).not.toBe(copies[1].transition!.fromClipId);expect(copies[0].transition!.toClipId).not.toBe(copies[1].transition!.toClipId);
-    await expect(execute(tools,'configureClipTransition',{clipId:'audio',softness:.4})).rejects.toThrow('clip-to-clip');
-    expect(current.timeline.clips.slice(0,initial.clips.length)).toEqual(initial.clips.map(clip=>({...clip,assetId:current.timeline.clips.find(item=>item.id===clip.id)?.assetId})));
-  },initial,true);
-  expect(result.error).toBeUndefined();expect(result.calls).not.toContain('assistant:requestAnalysis');await assertUndo(result);
-});
-
 
 test('retired footage Light sweep cannot be enabled by the agent; saved settings and other sweep/leak features remain',async()=>{
   const saved={...DEFAULT_LIGHT_SWEEP,enabled:true,color:'#12ABCF',speed:0};
   const seed={...initial,clips:initial.clips.map(clip=>clip.id==='from'?{...clip,lightSweep:saved}:clip)};
   const result=await run(async tools=>{
     expect(()=>tools.setVisualEffects.inputSchema.parse({clipId:'from',lightSweep:{enabled:true}})).toThrow();
-    expect(()=>tools.setVisualEffects.inputSchema.parse({clipId:'from',lightLeak:{enabled:true}})).not.toThrow();
+    expect(()=>tools.setVisualEffects.inputSchema.parse({clipId:'from',vhs:{enabled:true}})).not.toThrow();
     expect(()=>tools.applyTextTemplate.inputSchema.parse({clipId:'title',preset:'spotlight-sweep'})).not.toThrow();
-    await execute(tools,'setVisualEffects',{clipId:'from',lightLeak:{enabled:true}});
+    await execute(tools,'setVisualEffects',{clipId:'from',vhs:{enabled:true}});
   },seed,true);
   expect(result.error).toBeUndefined();expect(result.timeline.clips.find(clip=>clip.id==='from')?.lightSweep).toEqual(saved);
   await assertUndo(result);

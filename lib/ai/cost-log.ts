@@ -36,7 +36,7 @@ export function estimateEditorCallCost(model: string, provider: string, usage?: 
 
 type ModelCall = { callId: string; stepNumber: number; modelId: string; provider: string; usage?: LanguageModelUsage; providerMetadata?: ProviderMetadata; finishReason?: string; content: readonly unknown[] };
 type Step = { content: readonly unknown[] };
-type Progress = { revision: number; savedEdits: number; staged: boolean };
+type Progress = { revision: number; savedEdits: number; staged: boolean; budgetUsed?: number };
 type LogRecord = Record<string, unknown>;
 
 /** One provider callback owns accounting; step/tool callbacks only report anomalies. */

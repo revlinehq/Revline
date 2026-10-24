@@ -35,6 +35,12 @@ A scene is one beat of an explainer: a React component rendered full-frame on it
 7. Keep text inside the central 80% of the frame.
 8. One title per scene. Never put a small label, eyebrow or kicker line (such as "EDITING TIME") above or on top of the main title; let the title stand alone.
 
+## Verifying a scene
+
+- Scenes are not effects: never call planEffects or previewRender for a scene clip. They cannot review scenes.
+- Check your own code instead: walk through the key times (start, each beat, the end) and confirm what is on screen at each, that text stays inside the frame, and that nothing pops at the cut.
+- If the user asks to check a scene visually, do that walk-through and say they can scrub it in the preview.
+
 ## Fonts
 
 \`fontFamily\` may be any of: ${SCENE_FONT_FAMILIES.join(', ')}. Images must be inline SVG or data: URIs.

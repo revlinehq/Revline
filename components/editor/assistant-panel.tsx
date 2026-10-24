@@ -79,7 +79,7 @@ function AssistantResponseText({ text, streaming }: { text: string; streaming: b
   return <ChatProse text={text} animate={receivedLive || streaming} />;
 }
 
-function AssistantPanelBody({ messages, running, editing:editingTimeline=running, configured, error, onSend, onRetry, onStop, hasClips, demo, onLoadMore, canLoadMore, onAttach, activity, activitySource, activityStartedAt, draftKey, suggestions, onSuggestion, editSnapshot, canResumeEdit=false, defaultModelChoice, modelSwitcher = false, allowedModels = PRODUCTION_CLAUDE_MODEL_CHOICES, attachments, onRemoveAttachment, composerBusy = false, requireMedia = false, conversationStarted = false, queued=[],queuePaused=false,onRemoveQueued,onResumeQueue }: {
+function AssistantPanelBody({ messages, running, editing:editingTimeline=running, configured, error, onSend, onRetry, onStop, hasClips, demo, onLoadMore, canLoadMore, onAttach, activity, activitySource, activityStartedAt, budgetUsed, draftKey, suggestions, onSuggestion, editSnapshot, canResumeEdit=false, defaultModelChoice, modelSwitcher = false, allowedModels = PRODUCTION_CLAUDE_MODEL_CHOICES, attachments, onRemoveAttachment, composerBusy = false, requireMedia = false, conversationStarted = false, queued=[],queuePaused=false,onRemoveQueued,onResumeQueue }: {
   messages: ChatMessage[]; running: boolean; editing?:boolean; configured: boolean; error?: string | null;
   modelSwitcher?: boolean;
   defaultModelChoice?:ClaudeModelChoice;
@@ -90,6 +90,8 @@ function AssistantPanelBody({ messages, running, editing:editingTimeline=running
   attachments?: ComposerAttachment[]; onRemoveAttachment?: (id: string) => void; composerBusy?: boolean; requireMedia?: boolean;
   conversationStarted?: boolean;queued?:QueuedMessage[];queuePaused?:boolean;onRemoveQueued?:(id:Id<'assistantQueue'>)=>Promise<unknown>;onResumeQueue?:()=>Promise<unknown>;
   activity?: string | null; activitySource?: string | null; activityProgress?:number|null; activityStartedAt?:number|null; draftKey?:string;
+  /** Share of this request's token cap used; the working block warns from 70%. */
+  budgetUsed?: number;
   onStop?: () => Promise<void>;
   suggestions?: { sourceName:string;clipId:string;items:SourceEditSuggestion[] };
   onSuggestion?: (prompt:string,clipId:string,modelChoice?:ClaudeModelChoice,reasoningEffort?:OpenAIReasoningEffort,speedMode?:OpenAISpeedMode) => Promise<void>;
@@ -196,19 +198,19 @@ function AssistantPanelBody({ messages, running, editing:editingTimeline=running
           {groupMessages.filter(message => message.role === 'user').map(message => <article key={message.id} data-message-id={message.id} data-message-status={message.status} className="chat-message chat-user"><p>{message.text}</p></article>)}
           {(replies.length > 0 || editing || cards.length > 0) && <div className="assistant-reply">
             {replies.map(message => <Fragment key={message.id}>{!message.text && !message.tools?.length && !message.blocks?.length && message.id !== demoNoteMessageId ? null : <article data-message-id={message.id} data-message-status={message.status} className="chat-message chat-assistant">
-              {message.blocks ? message.blocks.map((block, index) => block.type === 'tools' ? <ToolChain key={`tools-${index}`} steps={block.steps}/> : <AssistantResponseText key={`text-${index}`} text={block.text} streaming={message.status === 'streaming' && index === message.blocks!.length - 1} />) : message.text && <AssistantResponseText text={message.text} streaming={message.status === 'streaming'} />}
+              {message.blocks ? message.blocks.map((block, index) => block.type === 'tools' ? <ToolChain key={`tools-${index}`} steps={block.steps} active={editing}/> : <AssistantResponseText key={`text-${index}`} text={block.text} streaming={message.status === 'streaming' && index === message.blocks!.length - 1} />) : message.text && <AssistantResponseText text={message.text} streaming={message.status === 'streaming'} />}
               {message.tools?.map((tool, i) => <div className="tool-result" key={`${tool}-${i}`}><Check size={12} />{tool}</div>)}
               {message.id === demoNoteMessageId && <div className="assistant-demo-note">Sample conversation. Explore the timeline, or <a href={NEW_PROJECT_PATH}>start your own project</a>.</div>}
-            </article>}{!message.blocks && !!message.steps?.length && <ToolChain steps={message.steps}/>}</Fragment>)}
+            </article>}{!message.blocks && !!message.steps?.length && <ToolChain steps={message.steps} active={editing}/>}</Fragment>)}
             {cards.some(card=>card.state!=='done'||card.staged) && <div className="assistant-result-cards" aria-label="Edit results">{cards.filter(card=>(card.state!=='done'||card.staged)&&!(card.state==='running'&&(editing||(group.id===turnId&&stopState==='stopped')))).map(card => <div key={card.key} className={`assistant-result-card result-${card.state}${card.staged ? ' result-prepared' : ''}`}>
               <AssistantActivity label={card.title} detail={card.detail} state={card.state==='running'?'working':card.state==='error'?'error':'ready'}/>
               {card.key==='turn-failure' && group.id===retryTurnId && requestMessage?.text.trim() && !waiting && !demo && onRetry && <button type="button" className="assistant-retry" disabled={composerBusy || !configured || sending || !!pendingReply} onClick={() => void sendRequest(canResumeEdit?'Finish only the remaining work or checks from my unfinished request. Keep the edits already completed.':requestMessage.text, true)}><RotateCcw size={13} aria-hidden="true"/>Retry unfinished steps</button>}
             </div>)}</div>}
-            <AssistantReplyHeader promptMessageId={requestMessage?.sourceId??requestMessage?.id} loading={loading} active={editing} label={stopState==='stopping'?'Stopping…':activity || replyLabel} detail={processingDetail(activity,activitySource)||cards.find(card=>card.state==='running')?.title} startedAt={activityStartedAt}/>
+            <AssistantReplyHeader promptMessageId={requestMessage?.sourceId??requestMessage?.id} loading={loading} active={editing} label={stopState==='stopping'?'Stopping…':'Working'} detail={editing&&budgetUsed!==undefined&&budgetUsed>=.7?`Near this request's limit · ${Math.round(budgetUsed*100)}% used`:undefined} startedAt={activityStartedAt}/>
           </div>}
         </div>;
       })}
-      {!groups.length && waiting && <div className="assistant-reply"><AssistantReplyHeader loading label={stopState==='stopping'?'Stopping…':activity || replyLabel} detail={processingDetail(activity,activitySource)} startedAt={activityStartedAt}/></div>}
+      {!groups.length && waiting && <div className="assistant-reply"><AssistantReplyHeader loading label={stopState==='stopping'?'Stopping…':'Working'} startedAt={activityStartedAt}/></div>}
       {!waiting && stopState==='stopped'  && <AssistantActivity label="Stopped." detail="Your existing edit is still here." state="stopped"/>}
       {showSuggestions && suggestions?.items.length && onSuggestion && configured ? <div data-chat-follow className="assistant-source-suggestions" aria-label="Suggested edits from this footage"><span title={suggestions.sourceName}>Ideas for {suggestions.sourceName}</span>{suggestions.items.map((suggestion, index) => <button key={`${suggestions.clipId}-${index}`} type="button" disabled={composerBusy || sending || !!pendingReply} onClick={() => void chooseSuggestion(suggestion)}><span>{suggestion.label}</span><ArrowUpRight size={14} aria-hidden="true" /></button>)}</div> : null}
       {visibleError && <div data-chat-follow><AssistantActivity className="chat-error" label="Needs attention" detail={assistantErrorDetail(visibleError)} state="error"/></div>}

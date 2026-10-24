@@ -41,7 +41,7 @@ export function sceneRuntimeScript(sources: SceneLayerSource[], fonts: SceneFont
   return `(function(initial,fonts,runtimeUrl){
 var host=window,clock=host.__timelines.revline.__hfReal||host.__timelines.revline,composition=document.getElementById('composition'),entries=new Map(),fontData=new Map(),unregister;
 var virtual=host.__HF_VIRTUAL_TIME__,later=virtual&&virtual.originalSetTimeout?virtual.originalSetTimeout:setTimeout.bind(window),nextFrame=virtual&&virtual.originalRequestAnimationFrame?virtual.originalRequestAnimationFrame:requestAnimationFrame.bind(window);
-var runtimeSource=null;
+var runtimeSource=null,overscan=16;
 function runtimeScript(){if(!runtimeSource)runtimeSource=fetch(new URL(runtimeUrl,document.baseURI).href).then(function(response){if(!response.ok)throw new Error('The scene renderer could not load.');return response.text();}).then(function(text){return text.replace(/<\\/script/gi,'<\\\\/script');});return runtimeSource;}
 var anchor=document.createElement('span');anchor.dataset.sceneFrameSource='';anchor.style.cssText='position:absolute;width:0;height:0;pointer-events:none';composition.appendChild(anchor);
 function report(entry,message){var error=new Error('Scene "'+entry.source.title+'": '+message);entry.error=error;window.dispatchEvent(new ErrorEvent('error',{error:error,message:error.message}));}
@@ -49,7 +49,7 @@ function inner(){var layers=composition.querySelectorAll('.adjustment-layer');fo
 function find(id){var nodes=composition.querySelectorAll('[data-scene-clip]');for(var i=0;i<nodes.length;i++)if(nodes[i].dataset.sceneClip===id)return nodes[i];return null;}
 function font(item){if(!fontData.has(item.url))fontData.set(item.url,fetch(new URL(item.url,document.baseURI).href).then(function(response){if(!response.ok)throw new Error('font');return response.arrayBuffer();}).then(function(data){return {family:item.family,weight:item.weight,data:data};},function(){return null;}));return fontData.get(item.url);}
 function wantedFonts(code){return Promise.all(fonts.filter(function(item){return item.family==='Space Grotesk'||code.indexOf(item.family)>=0;}).map(font)).then(function(list){return list.filter(Boolean);});}
-function frameDocument(source,script){return '<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src \\'none\\'; script-src \\'unsafe-inline\\' \\'unsafe-eval\\'; style-src \\'unsafe-inline\\'; img-src data: blob:; font-src data: blob:"><style>html,body{margin:0;width:'+source.width+'px;height:'+source.height+'px;overflow:hidden;background:transparent}body{font-family:\\'Space Grotesk\\',Arial,sans-serif;color:#F4F4F0;-webkit-font-smoothing:antialiased}#scene-root{position:relative;width:100%;height:100%;overflow:hidden}</style></head><body><div id="scene-root"></div><script>'+script+'</'+'script></body></html>';}
+function frameDocument(source,script){return '<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src \\'none\\'; script-src \\'unsafe-inline\\' \\'unsafe-eval\\'; style-src \\'unsafe-inline\\'; img-src data: blob:; font-src data: blob:"><style>html,body{margin:0;width:'+(source.width+overscan*2)+'px;height:'+(source.height+overscan*2)+'px;overflow:hidden;background:transparent}body{font-family:\\'Space Grotesk\\',Arial,sans-serif;color:#F4F4F0;-webkit-font-smoothing:antialiased}#scene-root{position:absolute;left:'+overscan+'px;top:'+overscan+'px;width:'+source.width+'px;height:'+source.height+'px;overflow:hidden}</style></head><body><div id="scene-root"></div><script>'+script+'</'+'script></body></html>';}
 function send(entry,message){if(entry.frame.contentWindow)entry.frame.contentWindow.postMessage(Object.assign({source:'revline-scene-host'},message),'*');}
 function mount(source){
   var key=JSON.stringify([source.code,source.width,source.height,source.fps,source.duration]),entry=entries.get(source.clipId);
@@ -63,7 +63,7 @@ function mount(source){
     var current=entry;current.ready=new Promise(function(resolve){current.resolve=resolve;});
     node.appendChild(frame);runtimeScript().then(function(script){if(entries.get(source.clipId)===current)frame.srcdoc=frameDocument(source,script);},function(error){report(current,error.message);current.resolve();});
   }
-  entry.source=source;entry.frame.style.width=source.width+'px';entry.frame.style.height=source.height+'px';entry.frame.style.transform='scale('+source.scale+')';
+  entry.source=source;entry.frame.style.width=(source.width+overscan*2)+'px';entry.frame.style.height=(source.height+overscan*2)+'px';entry.frame.style.left=entry.frame.style.top=(-overscan*source.scale)+'px';entry.frame.style.transform='scale('+source.scale+')';
   entries.set(source.clipId,entry);
 }
 function localTime(entry,time){return Math.max(0,time-entry.source.start+entry.source.offset);}

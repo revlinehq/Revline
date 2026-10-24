@@ -77,6 +77,14 @@ function timelineOutput(output: LanguageModelV4ToolResultOutput): Record<string,
  * Only obsolete timeline snapshots and dense timeline samples are compacted.
  * Applying this at the provider boundary also covers tool results in this run.
  */
+/** Earlier turns keep a scene's title and size; inspectClip returns its current code. */
+const SCENE_TOOLS = new Set(['addScene', 'editScene']);
+function sceneCodeNote(code: string) { return `[${code.length} characters of earlier scene code omitted; inspectClip returns the current code]`; }
+function withoutSceneCode(clip: unknown): unknown {
+  if (!object(clip) || !object(clip.scene) || typeof clip.scene.code !== 'string') return clip;
+  return { ...clip, scene: { ...clip.scene, code: sceneCodeNote(clip.scene.code) } };
+}
+
 export function compactEditorPrompt(prompt: LanguageModelV4Prompt, selectedClipIds: readonly string[] = [], initialRevision?: number): LanguageModelV4Prompt {
   let latestTimelineCall: string | undefined;
   const latestClipState = new Map<string, string>();
@@ -119,10 +127,12 @@ export function compactEditorPrompt(prompt: LanguageModelV4Prompt, selectedClipI
     if (!content.length) return [];
     return { ...message, content: content.map(original => {
       const part = withoutDiagnostics(original);
+      if (part.type === 'tool-call' && index < lastUser && SCENE_TOOLS.has(part.toolName) && object(part.input) && typeof part.input.code === 'string') return { ...part, input: { ...part.input, code: sceneCodeNote(part.input.code) } };
       if (part.type !== 'tool-result') return part;
       const value = timelineOutput(part.output);
       if (!value) return part;
       let projected = value;
+      if (index < lastUser && (object(value.clip) || Array.isArray(value.changedClips))) projected = { ...projected, ...(object(value.clip) ? { clip: withoutSceneCode(value.clip) } : {}), ...(Array.isArray(value.changedClips) ? { changedClips: value.changedClips.map(withoutSceneCode) } : {}) };
       if (part.toolName === 'inspectVideo' && Array.isArray(value.matches) && Array.isArray(value.timelineOccurrences)) {
         // Keep every original visual observation once; mapped occurrences retain
         // exact source/timeline timing and point to their original description.
@@ -144,7 +154,7 @@ export function compactEditorPrompt(prompt: LanguageModelV4Prompt, selectedClipI
         projected = { assetId: value.assetId, start: value.start, end: value.end, question: value.question,
           duplicateReadOmitted: 'Identical saved evidence is retained in the latest read result.', latestToolCallId: latestRead.get(readKey(part.toolName, part.toolCallId, value)) };
       }
-      if (Array.isArray(value.changedClips)) projected = { ...projected, changedClips: value.changedClips.map(clip => {
+      if (Array.isArray(value.changedClips)) projected = { ...projected, changedClips: (projected.changedClips as unknown[]).map(clip => {
         if (!object(clip) || typeof clip.id !== 'string' || latestClipState.get(clip.id) === part.toolCallId) return clip;
         return { id: clip.id, kind: clip.kind, assetId: clip.assetId, track: clip.track, start: clip.start, duration: clip.duration, sourceStart: clip.sourceStart, playbackRate: clip.playbackRate,
           previousSettingsOmitted: true, latestToolCallId: latestClipState.get(clip.id) };

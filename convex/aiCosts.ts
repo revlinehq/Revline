@@ -48,8 +48,8 @@ export const turns = query({
     for(const promptMessageId of args.promptMessageIds){
       const records=await ctx.db.query('aiCostRecords').withIndex('by_owner_project_thread_prompt',q=>q.eq('ownerId',ownerId).eq('projectId',args.projectId).eq('threadId',args.threadId).eq('promptMessageId',promptMessageId)).order('desc').take(65);
       if(!records.length)continue;
-      const {summary,breakdown}=aggregateEditorCosts(records.slice(0,64));
-      reports.push({promptMessageId,...summary,breakdown,truncated:records.length>64});
+      const {summary,breakdown,budgetUsed}=aggregateEditorCosts(records.slice(0,64));
+      reports.push({promptMessageId,...summary,breakdown,truncated:records.length>64,...(budgetUsed===undefined?{}:{budgetUsed})});
     }
     return reports;
   },

@@ -81,6 +81,7 @@ export function validateEffectPlan(plans: EffectPlan[], timeline: Timeline, evid
     if(!effectPlanInput.safeParse(plan).success)throw new Error('Plan needs valid fields and a supported effect or text control.');
     if (plan.duration < tolerance || plan.peak !== undefined && (plan.peak < plan.start - tolerance || plan.peak > plan.start + plan.duration + tolerance)) throw new Error('The planned peak must fit its effect window.');
     if (plan.targetClipId && !timeline.clips.some(clip => clip.id === plan.targetClipId)) throw new Error('The planned target is no longer in this timeline.');
+    if ([plan.targetClipId, plan.anchor.kind === 'cut' ? plan.anchor.clipId : undefined].some(id => id && timeline.clips.find(clip => clip.id === id)?.kind === 'scene')) throw new Error('Scenes are verified by their code, not planned as effects. Edit the scene with editScene; no planEffects or previewRender is needed.');
     if (plan.anchor.kind === 'marker') {
       const marker = timeline.markers?.find(marker => marker.id === plan.anchor.markerId);
       if (!marker || Math.abs(marker.time - plan.anchor.time) > tolerance) throw new Error('Read the current marker before planning its effect.');

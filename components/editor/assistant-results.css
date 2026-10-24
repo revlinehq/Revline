@@ -8,7 +8,7 @@
 .assistant-result-card.result-error>svg{color:#c3853c}
 .assistant-result-card.result-prepared>svg{color:var(--muted-foreground);opacity:.6}
 @media(prefers-reduced-motion:reduce){.assistant-result-card .animate-spin{animation:none}}
-.tool-chain{margin:8px 0 12px;color:#666872;font-size:12px;line-height:16px}
+.tool-chain{margin:10px 0;color:#666872;font-size:12px;line-height:16px}
 .tool-chain-root{display:flex;align-items:center;gap:7px;height:24px;padding:0;border:0;background:none;color:inherit;font:inherit;cursor:pointer}
 .tool-chain-label{color:#A1A3AB}
 .tool-chain-chevron{transform:rotate(-90deg);transition:transform .15s ease}

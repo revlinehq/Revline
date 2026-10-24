@@ -175,6 +175,8 @@ export default defineSchema({
 
   assetAnalyses:defineTable({ownerId:v.string(),sourceKey:v.string(),analysis:analysisValidator,updatedAt:v.number()}).index('by_owner_source',['ownerId','sourceKey']),
   projectAccess:defineTable({projectId:v.id('projects'),ownerId:v.string(),historyStored:v.optional(v.boolean()),threadId:v.optional(v.string()),deleting:v.optional(v.boolean())}).index('by_project',['projectId']),
+  // Share of the per-request token cap the active run has used, 0–1.
+  aiBudgets:defineTable({projectId:v.id('projects'),runId:v.string(),used:v.number(),updatedAt:v.number()}).index('by_project',['projectId']),
   aiTimelinePreviews:defineTable({projectId:v.id('projects'),ownerId:v.string(),runId:v.string(),baseRevision:v.number(),timeline:timelineValidator,label:v.string(),changedClipIds:v.array(v.string()),removedClips:v.array(clipValidator),at:v.number(),sequence:v.number(),updatedAt:v.number()}).index('by_project',['projectId']),
   assistantQueue:defineTable({projectId:v.id('projects'),ownerId:v.string(),prompt:v.string(),pinnedModel:pinnedClaudeModelValidator,attachedAssetIds:v.optional(v.array(v.id('assets'))),selectedClipId:v.optional(v.string()),selectedClipIds:v.optional(v.array(v.string())),playhead:v.optional(v.number()),error:v.optional(v.string()),createdAt:v.number()}).index('by_project',['projectId']),
   aiRuns:defineTable({projectId:v.id('projects'),ownerId:v.string(),...aiStateFields}).index('by_project',['projectId']),

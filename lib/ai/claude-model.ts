@@ -101,8 +101,9 @@ export function editorProviderOptions(selection: ClaudeModelSelection) {
 
 /** Higher effort shares its output allowance with hidden reasoning tokens. */
 export function editorMaxOutputTokens(selection: ClaudeModelSelection) {
-  if (selection.provider !== 'openai') return 4096;
-  return { low: 4096, medium: 4096, high: 16384, xhigh: 24576, max: 32768 }[selection.reasoningEffort ?? 'medium'];
+  // A full-size scene module is ~6k tokens of tool input.
+  if (selection.provider !== 'openai') return 8192;
+  return { low: 8192, medium: 8192, high: 16384, xhigh: 24576, max: 32768 }[selection.reasoningEffort ?? 'medium'];
 }
 
 export function assertEditorModelConfigured(selection: ClaudeModelSelection, env: ClaudeModelEnvironment = process.env) {

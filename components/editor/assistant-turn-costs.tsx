@@ -15,6 +15,8 @@ export type AssistantTurnCost = {
   unknownCostCalls: number;
   unreportedRuns: number;
   truncated?: boolean;
+  /** Share of the per-request token cap used, when the cap was on. */
+  budgetUsed?: number;
   breakdown: { model: string | null; provider: string | null; reasoningEffort: string | null; speedMode: string | null; serviceTier: string | null; knownEstimatedUsd: number; callCount: number; unknownCostCalls: number }[];
 };
 export type AssistantTurnCostState = { threadId: string; reports: AssistantTurnCost[] | null | undefined };
@@ -61,6 +63,7 @@ export function AssistantTurnCostDetails({ report, loading = false, unavailable 
   return <>
     <div className="assistant-turn-cost-total"><strong>{report.unknownCostCalls === report.callCount ? 'Unknown' : cost(report.knownEstimatedUsd)}</strong><span>Estimated API cost · {report.callCount} {report.callCount === 1 ? 'call' : 'calls'}</span></div>
     {report.breakdown.map((row, index) => <div className="assistant-turn-cost-model" key={`${row.model}-${row.reasoningEffort}-${row.speedMode}-${row.serviceTier}-${index}`}><strong>{model(row.model)}</strong><span>Reasoning: {mode(row.reasoningEffort)}</span><span>Requested speed: {mode(row.speedMode)}</span><span>Returned tier: {row.serviceTier === 'default' ? 'Standard' : mode(row.serviceTier)}</span><small>{row.callCount} {row.callCount === 1 ? 'call' : 'calls'} · {row.unknownCostCalls === row.callCount ? 'Unpriced' : cost(row.knownEstimatedUsd)}{row.unknownCostCalls > 0 ? ` · ${row.unknownCostCalls} unpriced` : ''}</small></div>)}
+    {report.budgetUsed !== undefined && <p className="assistant-turn-cost-note">Used {Math.round(report.budgetUsed * 100)}% of the request's token cap.</p>}
     {report.unknownCostCalls > 0 && <p className="assistant-turn-cost-note">{report.unknownCostCalls} unpriced {report.unknownCostCalls === 1 ? 'call is' : 'calls are'} excluded from the amount.</p>}
     {report.unreportedRuns > 0 && <p className="assistant-turn-cost-note">Some usage was not reported. The total may be incomplete.</p>}
     {report.truncated && <p className="assistant-turn-cost-note">Some usage was omitted from this report. The displayed total may be incomplete.</p>}

@@ -23,7 +23,7 @@ const AudioFxLibrary = lazy(() => import('./sfx-library').then(module => ({ defa
 export type LibraryVisualEffect = keyof VisualEffects;
 export type LibraryShortcutCategory = EffectLibraryCategory | 'text' | 'audio-fx';
 export type LibraryCategoryRequest = { category: LibraryShortcutCategory; requestId: number };
-type LibraryCategory = LibraryShortcutCategory | 'scenes' | 'sam-dev' | 'remotion-dev';
+type LibraryCategory = LibraryShortcutCategory | 'sam-dev' | 'remotion-dev';
 
 function LibraryEntry({ entry, disabled, reason, draggable, onApply }: { entry: LibraryEntryData; disabled: boolean; reason?: string; draggable: boolean; onApply: () => void }) {
   return <button type="button" className="library-look" aria-disabled={disabled} draggable={draggable} aria-label={entry.label} title={reason || entry.description} onClick={() => { if (!disabled) onApply(); }} onDragStart={event => {
@@ -33,13 +33,12 @@ function LibraryEntry({ entry, disabled, reason, draggable, onApply }: { entry: 
   }}><EffectIcon name={entry.id} size={18}/><span>{entry.label}</span>{entry.action ? <ChevronRight size={12} aria-hidden="true"/> : <Plus size={12} aria-hidden="true"/>}</button>;
 }
 
-export function EffectLibrary({ clip, timeline, time = 0, assets, onMedia, onVisualEffect, onColorLook, onAddEffect, onAddTransition, onTextLook, onSpeed, onAddSound, onAddStockAudio, onUploadSound, uploading = false, categoryRequest, onCategoryChange, onAddScene }: {
+export function EffectLibrary({ clip, timeline, time = 0, assets, onMedia, onVisualEffect, onColorLook, onAddEffect, onAddTransition, onTextLook, onSpeed, onAddSound, onAddStockAudio, onUploadSound, uploading = false, categoryRequest, onCategoryChange }: {
   clip?: Clip; timeline?: Timeline; time?: number; assets: readonly MediaAsset[];
   categoryRequest?: LibraryCategoryRequest; onCategoryChange?: (category: LibraryShortcutCategory) => void;
   onMedia?: () => void; onVisualEffect: (effect: LibraryVisualEffect) => void;
   onColorLook?: (look: ColorLookId) => void;
   onAddEffect?: (preset: EffectPreset) => void;
-  onAddScene?: () => void;
   onAddTransition?: (preset: TransitionPreset) => void;
   onTextLook?: (look: TextLookId) => void;
   onUploadOverlay?: () => void; onAddOverlay?: (asset: MediaAsset) => void; overlayAssets?: readonly MediaAsset[]; onAddCatalogOverlay?: (overlay: OverlayCatalogItem) => void;
@@ -56,12 +55,11 @@ export function EffectLibrary({ clip, timeline, time = 0, assets, onMedia, onVis
   const catalog = EFFECT_LIBRARY_CATALOG.filter(entry => !isTransitionPreset(entry.preset) || onAddTransition);
   const categories: { id: LibraryCategory; label: string }[] = EFFECT_LIBRARY_CATEGORIES.filter(item => catalog.some(entry => entry.category === item.id));
   categories.push({ id: 'text', label: 'Text' });
-  if (onAddScene) categories.push({ id: 'scenes', label: 'Scenes' });
   if (process.env.NODE_ENV === 'development') categories.push({ id: 'sam-dev', label: 'SAM 3 (dev)' }, { id: 'remotion-dev', label: 'Remotion (dev)' });
   categories.push({ id: 'audio-fx', label: 'Audio FX' });
   const visible = catalog.filter(entry => (!entry.action || onSpeed) && (query ? `${entry.label} ${entry.description}`.toLowerCase().includes(query) : entry.category === category));
   const colorLooks = category === 'color' && !!onColorLook && COLOR_LOOKS.some(look => `${look.label} cinematic color`.toLowerCase().includes(query));
-  const needsTransitions = category !== 'text' && category !== 'scenes' && category !== 'audio-fx' && category !== 'remotion-dev' && visible.some(entry => isTransitionPreset(entry.preset));
+  const needsTransitions = category !== 'text' && category !== 'audio-fx' && category !== 'remotion-dev' && visible.some(entry => isTransitionPreset(entry.preset));
   const transitionTarget = visual ? clip.id : undefined;
   const transitions = useMemo(() => needsTransitions && timeline ? transitionAvailabilityAt(timeline, time, { aboveClipId: transitionTarget }) : { available: false as const, reason: 'Add video or image footage before adding a transition.' }, [needsTransitions, timeline, time, transitionTarget]);
   const canDragTransition = needsTransitions && !!timeline?.clips.some(item => (item.kind === 'video' || item.kind === 'image') && item.duration >= 2 / timeline.fps);
@@ -95,15 +93,13 @@ export function EffectLibrary({ clip, timeline, time = 0, assets, onMedia, onVis
           {category === 'text' ? <div className="library-text-results">
             <TextFontStyles/>
             <section className="library-text-section"><h3>{text ? 'Presets' : 'Add text'}</h3><Suspense fallback={<p className="library-selection-note">Loading presets…</p>}><TextLookPicker query={search} selected={text ? selectedTextLook(clip) : undefined} onSelect={onTextLook}/></Suspense></section>
-          </div> : category === 'scenes' && onAddScene ? <div className="library-text-results">
-            <section className="library-text-section"><h3>Explainer scenes</h3><p className="library-selection-note">A scene is an animated visual written as code, such as a title, diagram or chart. It renders frame by frame over or between your footage. Ask the assistant to write one, or start from a template and edit its code.</p><button type="button" className="effect-color-reset" onClick={onAddScene}>Add title scene</button></section>
           </div> : category === 'remotion-dev' && DevRemotionTests ? <Suspense fallback={<div className="library-look-grid" aria-label="Loading motion experiments" aria-busy="true">{[0,1,2].map(key=><div key={key} className="h-20 rounded-md bg-current/5 animate-pulse"/>)}</div>}><DevRemotionTests embedded query={search}/></Suspense> : category === 'audio-fx'  ? <Suspense fallback={<div className="library-look-grid" aria-label="Loading sounds" aria-busy="true">{[0, 1, 2].map(key => <div key={key} className="h-9 rounded-md bg-current/5 animate-pulse"/>)}</div>}><AudioFxLibrary assets={assets} query={search} onAdd={onAddSound} onAddStockAudio={onAddStockAudio} onUpload={onUploadSound} uploading={uploading}/></Suspense> : category === 'sam-dev' && !query ? <section className="library-sam-dev"><h3>Subject masks</h3><a href="/dev/sam" target="_blank" rel="noopener noreferrer">Open mask lab <ChevronRight size={13}/></a></section> : <div className="library-look-grid">{visible.map(entry => {
             const unavailable = reason(entry);
             const draggable = !!entry.visual || (isTransitionPreset(entry.preset) ? !!canDragTransition : !!entry.preset && !!onAddEffect);
             return <LibraryEntry key={entry.id} entry={entry} disabled={!!unavailable} reason={unavailable} draggable={draggable} onApply={() => apply(entry)}/>;
           })}</div>}
-          {category !== 'text' && category !== 'scenes' && category !== 'remotion-dev' && category !== 'audio-fx' && !visible.length && !colorLooks && (category !== 'sam-dev' || query) && <p className="library-empty">No matching looks.</p>}
-          {category !== 'text' && category !== 'scenes' && category !== 'remotion-dev' && category !== 'audio-fx' && !transitions.available && visible.some(entry => isTransitionPreset(entry.preset)) && <p className="library-transition-availability" role="status">{transitions.reason}</p>}
+          {category !== 'text' && category !== 'remotion-dev' && category !== 'audio-fx' && !visible.length && !colorLooks && (category !== 'sam-dev' || query) && <p className="library-empty">No matching looks.</p>}
+          {category !== 'text' && category !== 'remotion-dev' && category !== 'audio-fx' && !transitions.available && visible.some(entry => isTransitionPreset(entry.preset)) && <p className="library-transition-availability" role="status">{transitions.reason}</p>}
         </div>
     </div>
   </div>;
