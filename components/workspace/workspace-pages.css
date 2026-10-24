@@ -106,9 +106,6 @@ html[data-workspace-theme="dark"] {
 .workspace-membership-line span { font-size:13px; color:var(--ws-muted); white-space:nowrap; }
 .workspace-membership-description { margin:0; font-size:13px; color:var(--ws-muted); }
 .workspace-account-actions { flex-direction:row; justify-content:space-between; align-items:center; }
-.workspace-appearance { align-self:flex-start; display:inline-flex; gap:3px; padding:3px; border:1px solid var(--ws-border); border-radius:9px; background:var(--ws-input); }
-.workspace-appearance button { display:flex; align-items:center; justify-content:center; gap:7px; height:30px; min-width:82px; padding:0 12px; border:0; border-radius:6px; background:transparent; color:var(--ws-muted); font-size:12px; cursor:pointer; }
-.workspace-appearance button[aria-pressed="true"] { color:var(--ws-text); background:var(--ws-surface); box-shadow:0 1px 3px #0000000d; }
 .workspace-signout-button { display:inline-flex; align-items:center; gap:8px; height:34px; padding:0 8px; border:0; border-radius:8px; background:transparent; color:var(--ws-muted); font-size:12px; cursor:pointer; }
 .workspace-signout-button:hover { background:var(--ws-hover); }
 .workspace-dialog { max-width:min(440px,calc(100vw - 32px)); max-height:calc(100dvh - 32px); overflow-y:auto; font-family:var(--font-inter),sans-serif; background:var(--ws-surface); color:var(--ws-text); border:1px solid var(--ws-border); border-radius:14px; }

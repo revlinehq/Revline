@@ -15,9 +15,6 @@
 .custom-timeline .timeline-transition-duration{position:absolute;left:50%;bottom:28px;transform:translateX(-50%);padding:3px 5px;border-radius:4px;background:var(--ws-bg);color:var(--ws-text);font-size:10px;white-space:nowrap;opacity:0}
 .custom-timeline .timeline-cut-transition:is(:hover,:has(:focus-visible),.resizing) .timeline-transition-duration{opacity:1}
 .custom-timeline .timeline-cut-transition button:focus-visible{outline:2px solid var(--revline-accent-light);outline-offset:2px}
-html[data-workspace-theme=light] .custom-timeline .has-transition .timeline-transition-badge{background:color-mix(in srgb,var(--revline-accent) 10%,#fff);border-color:var(--revline-accent);color:var(--revline-accent)}
-html[data-workspace-theme=light] .custom-timeline .timeline-transition-range{border-color:color-mix(in srgb,var(--revline-accent) 53%,transparent);background:color-mix(in srgb,var(--revline-accent) 11%,transparent)}
-html[data-workspace-theme=light] .custom-timeline .timeline-transition-handle:after{background:var(--revline-accent)}
 .timeline-transition-menu{min-width:176px;padding:5px;border-radius:8px;background:var(--ws-bg,var(--popover));color:var(--ws-text,var(--popover-foreground))}
 .timeline-transition-menu [role=menuitem]{display:flex;align-items:center;gap:8px;min-height:32px;padding:7px 9px;border-radius:5px;font-size:11px;cursor:pointer}
 .timeline-transition-menu [role=menuitem]:is(:hover,:focus,[data-highlighted]){background:var(--ws-hover,#232a43);color:var(--ws-text,var(--popover-foreground));outline:none}

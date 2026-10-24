@@ -8,15 +8,14 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useClerk, useUser } from '@clerk/nextjs';
 import { useConvexAuth, useQuery } from 'convex/react';
-import { Check, ChevronDown, CircleAlert, Cloud, Copy, CreditCard, Database, Download, Film, History, LoaderCircle, LogOut, Moon, PanelsTopLeft, Pencil, Plus, Redo2, Share2, UserRound, Undo2 } from 'lucide-react';
+import { Check, ChevronDown, CircleAlert, Cloud, Copy, CreditCard, Database, Download, Film, History, LoaderCircle, LogOut, PanelsTopLeft, Pencil, Plus, Redo2, Share2, UserRound, Undo2 } from 'lucide-react';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
 import { Brand } from './brand';
 import { ProjectCover } from './project-cover';
 import { startNewWorkspace } from './start-new-workspace';
 import { PrimaryButton } from './primary-button';
-import { useWorkspaceTheme } from './theme-provider';
-import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
 import './workspace-pages.css';
 
@@ -77,7 +76,6 @@ export function WorkspaceNav({ title = NEW_WORKSPACE_LABEL, editorHref, active =
   const { chats, loading } = useWorkspaceChats(demo, historyOpen, 4);
   const { user, isSignedIn, isLoaded } = useUser();
   const clerk = useClerk();
-  const { theme, setTheme } = useWorkspaceTheme();
   const [accountError, setAccountError] = useState('');
   const [signingOut, setSigningOut] = useState(false);
   const [renameOpen, setRenameOpen] = useState(false);
@@ -147,7 +145,6 @@ export function WorkspaceNav({ title = NEW_WORKSPACE_LABEL, editorHref, active =
           <DropdownMenuItem asChild className="workspace-menu-item"><Link href="/profile" aria-current={active === 'profile' ? 'page' : undefined}><UserRound size={16} />Profile</Link></DropdownMenuItem>
           <DropdownMenuItem asChild className="workspace-menu-item"><Link href="/storage" aria-current={active === 'storage' ? 'page' : undefined}><Database size={16} />Cloud storage</Link></DropdownMenuItem>
           <DropdownMenuItem asChild className="workspace-menu-item"><Link href="/profile#billing"><CreditCard size={16} />Membership & billing</Link></DropdownMenuItem>
-          <DropdownMenuCheckboxItem className="workspace-menu-item" checked={theme === 'dark'} onCheckedChange={checked => setTheme(checked ? 'dark' : 'light')}><Moon size={16} />Dark mode</DropdownMenuCheckboxItem>
           <DropdownMenuSeparator className="workspace-menu-divider" />
           {isSignedIn ? <DropdownMenuItem className="workspace-menu-item" disabled={signingOut} onSelect={event => { event.preventDefault(); void signOut(); }}>{signingOut ? <LoaderCircle size={16} className="animate-spin" /> : <LogOut size={16} />}Sign out</DropdownMenuItem> : <DropdownMenuItem asChild className="workspace-menu-item"><Link href="/sign-in"><LogOut size={16} />Sign in</Link></DropdownMenuItem>}
           {accountError && <p className="workspace-inline-error" role="alert">{accountError}</p>}

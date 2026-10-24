@@ -20,7 +20,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" data-scroll-behavior="smooth" suppressHydrationWarning className={`${spaceGrotesk.variable} ${inter.variable}`}>
       <body className="antialiased" suppressHydrationWarning>
-        <script dangerouslySetInnerHTML={{ __html: `try{if(['dashboard','chat','chats','profile','editor','projects','billing','storage'].includes(location.pathname.split('/')[1])){var t=localStorage.getItem('revline:workspace-theme')==='dark'?'dark':'light';document.documentElement.dataset.workspaceTheme=t;document.documentElement.classList.toggle('dark',t==='dark');document.documentElement.style.colorScheme=t}}catch(e){}` }} />
+        <script dangerouslySetInnerHTML={{ __html: `try{if(['dashboard','chat','chats','profile','editor','projects','billing','storage'].includes(location.pathname.split('/')[1])){document.documentElement.dataset.workspaceTheme='dark';document.documentElement.classList.add('dark');document.documentElement.style.colorScheme='dark'}}catch(e){}` }} />
         <ClerkProvider signInUrl="/sign-in" signUpUrl="/sign-up" signInFallbackRedirectUrl={NEW_PROJECT_PATH} signUpFallbackRedirectUrl={NEW_PROJECT_PATH} appearance={{ theme: shadcn }}>
           <Providers>{children}</Providers>
         </ClerkProvider>
