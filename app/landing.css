@@ -51,9 +51,8 @@ body:has(>.landing),body:has(main.landing){background:#fff}
 .landing-nav .revline-brand,.landing-footer .revline-brand{gap:8px;font:650 24px var(--font-space-grotesk),sans-serif;letter-spacing:-.7px;color:#1c1c1c}
 .landing-nav .revline-mark,.landing-footer .revline-mark{width:20px;height:20px}
 .landing-nav-links{display:flex;align-items:center;gap:28px}
-.landing-nav-links a{display:flex;align-items:center;gap:4px;font-size:14px;font-weight:500;color:var(--l-fg-2);transition:color 140ms ease}
+.landing-nav-links a{font-size:14px;font-weight:500;color:var(--l-fg-2);transition:color 140ms ease}
 .landing-nav-links a:hover{color:var(--l-fg)}
-.landing-nav-links svg{color:var(--l-fg-3)}
 .landing-nav-right{display:flex;align-items:center;gap:10px}
 
 /* Hero */
