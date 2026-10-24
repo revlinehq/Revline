@@ -8,3 +8,14 @@
 .assistant-result-card.result-error>svg{color:#c3853c}
 .assistant-result-card.result-prepared>svg{color:var(--muted-foreground);opacity:.6}
 @media(prefers-reduced-motion:reduce){.assistant-result-card .animate-spin{animation:none}}
+.tool-chain{display:flex;flex-wrap:wrap;align-items:center;gap:4px 0;margin:2px 0 10px;padding:0;list-style:none}
+.tool-chain-link{display:flex;align-items:center;min-width:0}
+.tool-chain-arrow{flex:none;margin:0 2px;color:var(--muted-foreground);opacity:.55}
+.tool-chain-chip{display:inline-flex;align-items:center;gap:5px;min-height:22px;max-width:100%;padding:2px 8px;border:1px solid var(--border);border-radius:999px;background:var(--secondary);color:var(--muted-foreground);font-size:11px;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tool-chain-chip>svg{flex:none}
+.tool-chain-chip>b{font-weight:600;color:var(--foreground)}
+.tool-chain-link.kind-skill .tool-chain-chip{border-color:color-mix(in srgb,var(--revline-accent) 55%,var(--border));background:color-mix(in srgb,var(--revline-accent) 14%,transparent);color:var(--foreground)}
+.tool-chain-link.kind-edit .tool-chain-chip{color:var(--foreground)}
+.tool-chain-link.state-running .tool-chain-chip{border-style:dashed}
+.tool-chain-link.state-error .tool-chain-chip{border-color:color-mix(in srgb,#d28b38 60%,var(--border));color:#d9a15a}
+@media(prefers-reduced-motion:reduce){.tool-chain .animate-spin{animation:none}}

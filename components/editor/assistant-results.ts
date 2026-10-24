@@ -17,7 +17,7 @@ export function matchesUndoSnapshot(snapshot:Pick<AssistantEditSnapshot,'before'
 /** A tool revision must match the saved snapshot before a turn can claim its difference. */
 export function savedEditComparison(steps:ChatTool[],snapshot?:AssistantEditSnapshot):SavedEditComparison|null {
   if(!snapshot)return null;
-  const done=steps.filter(step=>step.state==='done'&&!inspections.has(step.name));
+  const done=steps.filter(step=>step.state==='done'&&!READ_ONLY_TOOLS.has(step.name));
   const saved=done.flatMap(step=>step.output?.saved===true&&typeof step.output.revision==='number'?[step.output.revision]:[]);
   const staged=done.flatMap(step=>(step.staged||step.output?.staged===true)&&typeof step.output?.revision==='number'?[step.output.revision]:[]);
   const published=snapshot.publishedDraft&&staged.length>0&&Math.max(...staged)+1===snapshot.revision;
@@ -73,7 +73,7 @@ export function chatToolFromPart(value: unknown): ChatTool | null {
   return { id: typeof part.toolCallId === 'string' ? part.toolCallId : undefined, name: part.type.slice(5), state: failed ? 'error' : part.state === 'output-available' ? 'done' : 'running', staged: output?.staged === true, ...(record(part.input)?{input:record(part.input)}:{}), output, ...(failed ? { detail: assistantErrorDetail(String(part.errorText || error || 'This step could not finish.')).slice(0, 240) } : {}) };
 }
 
-const labels: Record<string, [string, string]> = {
+export const TOOL_LABELS: Record<string, [string, string]> = {
   setTextGradient: ['Styling gradient text', 'Styled gradient text'],
   configureSmoothZoom: ['Adding smooth zoom', 'Added smooth zoom'],
   configureCameraMotion: ['Adding camera motion', 'Added camera motion'],
@@ -95,7 +95,7 @@ const labels: Record<string, [string, string]> = {
   readSkill: ['Reading editing guide', 'Read editing guide'], addScene: ['Adding scene', 'Added scene'], editScene: ['Updating scene', 'Updated scene'],
   inspectTimeline: ['Checking timeline', 'Checked timeline'], inspectClip: ['Checking clip', 'Checked clip'], inspectAssetAnalysis: ['Reading footage notes', 'Read footage notes'], analyzeMedia: ['Analyzing footage', 'Analyzed footage'], inspectVideo: ['Finding moments', 'Reviewed footage'], inspectFrames: ['Inspecting frames', 'Inspected frames'], inspectVideoFrames: ['Inspecting frames', 'Inspected frames'],
 };
-const inspections = new Set(['readSkill','planEffects','previewRender','inspectTimeline', 'inspectClip', 'inspectAssetAnalysis', 'analyzeMedia', 'inspectVideo', 'inspectFrames', 'inspectVideoFrames']);
+export const READ_ONLY_TOOLS = new Set(['readSkill','planEffects','previewRender','inspectTimeline', 'inspectClip', 'inspectAssetAnalysis', 'analyzeMedia', 'inspectVideo', 'inspectFrames', 'inspectVideoFrames']);
 const count = (value: unknown) => typeof value === 'number' && Number.isInteger(value) && value >= 0 ? value : undefined;
 const isId = (value: unknown): value is string => typeof value === 'string' && value.length > 0;
 const noun = (n: number, singular: string, plural = `${singular}s`) => `${n} ${n === 1 ? singular : plural}`;
@@ -110,7 +110,7 @@ export function summarizeTools(steps: ChatTool[], evidence:{publishedRevision?:n
   const groups = new Map<string, ChatTool[]>();
   for (const [id, step] of unique) {
     if(step.state==='error'&&!unresolved.has(id))continue;
-    if (step.state === 'done' && inspections.has(step.name)) continue;
+    if (step.state === 'done' && READ_ONLY_TOOLS.has(step.name)) continue;
     const staged = (step.staged === true || step.output?.staged === true)&&!published(step.output);
     const savedEvidence = staged ? 'prepared' : step.output?.saved === true || step.output?.unchanged === true || published(step.output) ? 'saved' : 'unconfirmed';
     const kind = step.name === 'markMusicBeats' ? `-${step.output?.kind ?? 'beats'}` : '';
@@ -118,7 +118,7 @@ export function summarizeTools(steps: ChatTool[], evidence:{publishedRevision?:n
     groups.set(key, [...groups.get(key) ?? [], { ...step, staged }]);
   }
   return [...groups].map(([key, group]) => {
-    const step = group[0], name = labels[step.name] ?? ['Working on your edit', 'Updated your edit'];
+    const step = group[0], name = TOOL_LABELS[step.name] ?? ['Working on your edit', 'Updated your edit'];
     if (step.state === 'error') return { key, title: 'Could not finish this step', detail: step.detail, state: step.state };
     if (step.state === 'running') return { key, title: name[0], state: step.state };
     const outputs = group.map(item => item.output ?? {});

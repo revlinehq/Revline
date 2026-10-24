@@ -1,11 +1,11 @@
 'use client';
+import { ToolChain } from './tool-chain';
 import { userError } from '@/lib/user-error';
 import { NEW_PROJECT_PATH } from '@/lib/workspace-routes';
 
 import { PRODUCTION_CLAUDE_MODEL_CHOICES } from '@/lib/ai/claude-model-policy';
 import { memo, useCallback, useState, useEffect, useLayoutEffect, useMemo, useRef, type ComponentProps } from 'react';
 import { Check, ArrowUpRight, RotateCcw, X } from 'lucide-react';
-import { Brand } from '@/components/workspace/brand';
 import { AssistantModelPicker } from './assistant-model-picker';
 import {OPENAI_EDIT_MODELS,OPENAI_REASONING_EFFORTS,OPENAI_SPEED_MODES,type ClaudeModelChoice,type OpenAIReasoningEffort,type OpenAISpeedMode} from '@/lib/ai/claude-model';
 import {InspectorSelect} from './inspector-select';
@@ -64,9 +64,9 @@ export function AssistantPanel(props:PanelProps) {
 type PendingReply = { id: string; text: string; previousUserId?: string; previousError?: string | null };
 
 function AssistantReplyHeader({ loading, active=loading, label, detail, startedAt, promptMessageId }: { promptMessageId?:string; loading: boolean; active?:boolean; label: string; detail?: string; startedAt?:number|null }) {
+  if (!active && !promptMessageId) return null;
   return <div className={`assistant-reply-header ${active ? 'is-processing' : 'chat-author'}`}>
-    <Brand markOnly/>
-    {active ? <AssistantActivity label={loading?label:'Revline'} detail={loading?detail:undefined} startedAt={startedAt}/> : <span>Revline</span>}
+    {active && <AssistantActivity label={loading?label:'Working'} detail={loading?detail:undefined} startedAt={startedAt}/>}
     {promptMessageId&&<AssistantTurnCostBadge promptMessageId={promptMessageId}/>}
   </div>;
 }
@@ -135,7 +135,7 @@ function AssistantPanelBody({ messages, running, editing:editingTimeline=running
       const draftFailed=!running&&group.id===turnId&&(!!error||replies.some(message=>message.status==='failed'||message.status==='aborted'));
       const cards=summarizeTools(steps,{publicationReceipt,publishedRevision:legacyPublications.current.get(group.id),draftFailed,draftPending:group.id===turnId&&(answering||replies.some(message=>message.status==='pending'||message.status==='streaming'))});
       const presentation=assistantTurnPresentation(replies,cards,{receipt:publicationReceipt,active:group.id===turnId&&answering,error:group.id===turnId?(localError||(!waiting?error:null)):null});
-      return {...group,comparison,...presentation};
+      return {...group,steps,comparison,...presentation};
     });
   },[messages,turnId,editSnapshot,running,error,localError,waiting,optimisticRequest,answering]);
   const retryTurnId=canResumeEdit?groups.findLast(group=>group.cards.some(card=>card.key==='turn-failure'))?.id:turnId;
@@ -196,6 +196,7 @@ function AssistantPanelBody({ messages, running, editing:editingTimeline=running
           {groupMessages.filter(message => message.role === 'user').map(message => <article key={message.id} data-message-id={message.id} data-message-status={message.status} className="chat-message chat-user"><p>{message.text}</p></article>)}
           {(replies.length > 0 || editing || cards.length > 0) && <div className="assistant-reply">
             <AssistantReplyHeader promptMessageId={requestMessage?.sourceId??requestMessage?.id} loading={loading} active={editing} label={stopState==='stopping'?'Stopping…':activity || replyLabel} detail={processingDetail(activity,activitySource)||cards.find(card=>card.state==='running')?.title} startedAt={activityStartedAt}/>
+            <ToolChain steps={group.steps}/>
             {replies.map(message => !message.text && !message.tools?.length && message.id !== demoNoteMessageId ? null : <article key={message.id} data-message-id={message.id} data-message-status={message.status} className="chat-message chat-assistant">
               {message.text && <AssistantResponseText text={message.text} streaming={message.status === 'streaming'} />}
               {message.tools?.map((tool, i) => <div className="tool-result" key={`${tool}-${i}`}><Check size={12} />{tool}</div>)}
