@@ -1,5 +1,6 @@
 'use client';
 
+import { Brand } from '@/components/workspace/brand';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 
 const footerNotes = [
@@ -9,7 +10,7 @@ const footerNotes = [
 
 export function LandingFooter() {
   return <footer className="landing-footer landing-section">
-    <div className="landing-footer-brand"><span>Revline</span><small>© 2026</small></div>
+    <div className="landing-footer-brand"><Brand /><small>© 2026</small></div>
     <nav aria-label="Footer navigation">
       <a href="#pricing">Pricing</a>
       <a href="#faq">FAQ</a>

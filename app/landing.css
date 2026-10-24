@@ -25,8 +25,11 @@ body:has(>.landing),body:has(main.landing){background:#fff}
 /* Nav */
 .landing-nav{position:sticky;top:0;z-index:40;height:64px;display:flex;align-items:center;justify-content:space-between;padding-inline:80px;background:#ffffffeb;backdrop-filter:blur(12px);border-bottom:1px solid var(--l-border)}
 .landing-nav-left{display:flex;align-items:center;gap:48px}
-.landing-brand{display:flex;align-items:center;gap:10px;font:500 21px/1 var(--l-head);letter-spacing:-.4px;color:var(--l-fg)}
-.landing-mark{width:24px;height:24px;flex-shrink:0}
+/* The original Revline logo, styled as on the previous landing page. */
+.landing{--ws-logo:#0c1424}
+.landing-brand{display:flex}
+.landing-nav .revline-brand,.landing-footer .revline-brand{gap:8px;font:650 24px var(--font-space-grotesk),sans-serif;letter-spacing:-.7px;color:#1c1c1c}
+.landing-nav .revline-mark,.landing-footer .revline-mark{width:20px;height:20px}
 .landing-nav-links{display:flex;align-items:center;gap:28px}
 .landing-nav-links a{display:flex;align-items:center;gap:4px;font-size:14px;font-weight:500;color:var(--l-fg-2);transition:color 140ms ease}
 .landing-nav-links a:hover{color:var(--l-fg)}
@@ -180,8 +183,7 @@ body:has(>.landing),body:has(main.landing){background:#fff}
 
 /* Footer */
 .landing-footer{display:flex;align-items:center;justify-content:space-between;gap:24px;padding-block:32px;border-top:1px solid var(--l-border)}
-.landing-footer-brand{display:flex;align-items:center;gap:8px}
-.landing-footer-brand span{font:500 18px var(--l-head);color:var(--l-fg)}
+.landing-footer-brand{display:flex;align-items:center;gap:12px}
 .landing-footer-brand small{font-size:14px;color:var(--l-fg-3)}
 .landing-footer nav{display:flex;flex-wrap:wrap;gap:12px 28px}
 .landing-footer nav a,.landing-footer .landing-footer-link{padding:0;border:0;background:none;font:14px var(--l-body);color:var(--l-fg-2);transition:color 140ms ease}
@@ -204,6 +206,7 @@ body:has(>.landing),body:has(main.landing){background:#fff}
 }
 @media(max-width:760px){
   .landing-section,.landing-nav{padding-inline:20px}
+  .landing-nav .revline-brand{font-size:22px}
   .landing h2{font-size:34px;letter-spacing:-.8px}
   .landing-nav-links,.landing-nav-right .landing-button-neutral{display:none}
   .landing-hero{gap:40px;padding-block:56px 64px}
