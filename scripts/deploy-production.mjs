@@ -113,10 +113,12 @@ try {
       const status = await response.json();
       if (status.processorVersion !== contract.processorVersion) throw new Error('Cloudflare and Convex processor contracts differ.');
       const expectedImage = config.containers[0].images.processor.image;
-      if (!status.processors?.length || status.processors.some(slot => slot.configuredImage !== expectedImage)) throw new Error('Cloudflare is not configured with this release image.');
-      if (status.processors.every(slot => !slot.running || slot.healthy && !slot.draining && slot.processorVersion === contract.processorVersion && slot.image === expectedImage)) break;
-      if (Date.now() >= deadline) throw new Error('Previous workers have not drained. Deployment is not verified; active jobs were preserved.');
-      console.log('Waiting for previous workers to finish active jobs and drain.');
+      // The controller can report the previous image for a few seconds after
+      // deploy; wait for it rather than failing a release that just landed.
+      const configured = !!status.processors?.length && status.processors.every(slot => slot.configuredImage === expectedImage);
+      if (configured && status.processors.every(slot => !slot.running || slot.healthy && !slot.draining && slot.processorVersion === contract.processorVersion && slot.image === expectedImage)) break;
+      if (Date.now() >= deadline) throw new Error(configured ? 'Previous workers have not drained. Deployment is not verified; active jobs were preserved.' : 'Cloudflare is not configured with this release image.');
+      console.log(configured ? 'Waiting for previous workers to finish active jobs and drain.' : 'Waiting for Cloudflare to report this release image.');
       await new Promise(resolve => setTimeout(resolve, 15000));
     }
     console.log(`Verified production release ${releaseId}: Cloudflare and Convex agree on processor version ${contract.processorVersion}.`);
