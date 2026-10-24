@@ -10,8 +10,9 @@ import type { TextFontId } from './text-fonts';
 import type { FlashSettings, PunchSettings, ShakeSettings, PopSettings } from './motion-effect-settings';
 import type { SmoothZoomSettings } from './smooth-zoom-settings';
 import type { CameraMotionSettings } from './camera-motion-settings';
+import type { SceneSource } from './scene-layers';
 export type AspectRatio = 'vertical' | 'portrait-feed' | 'square' | 'classic' | 'landscape';
-export type ClipKind = 'video' | 'image' | 'audio' | 'caption' | 'graphic' | 'solid' | 'effect';
+export type ClipKind = 'video' | 'image' | 'audio' | 'caption' | 'graphic' | 'solid' | 'scene' | 'effect';
 export type LayerGroup = 'visual' | 'overlay' | 'audio' | 'effects';
 export type TrackCounts = Record<Exclude<LayerGroup, 'effects'>, number> & { effects?:number };
 export type ResolvedTrackCounts = Required<TrackCounts>;
@@ -56,6 +57,7 @@ export type Clip = {
   effectPreset?: EffectPreset | 'none';
   cinematicBars?: CinematicBarSettings;
   solidColor?: SolidColorSettings;
+  scene?: SceneSource;
   transition?: ClipTransition;
   colorGrade?: ColorGrade;
   zoomBlur?: ZoomBlur;
@@ -122,7 +124,7 @@ export function trackOf(clip: Pick<Clip, 'kind' | 'track'>) { return validTrack(
 /** Zero legacy overlay rows marks the shared V-track model, without a schema migration. */
 export function normalizeTimeline(timeline: Timeline): Timeline {
   if (timeline.tracks?.overlay === 0) return timeline;
-  const visuals = timeline.clips.filter(clip => clip.kind === 'video' || clip.kind === 'image' || clip.kind === 'solid');
+  const visuals = timeline.clips.filter(clip => clip.kind === 'video' || clip.kind === 'image' || clip.kind === 'solid' || clip.kind === 'scene');
   // Old separated-overlay projects counted effects as V rows. Preserve that
   // historical text offset; explicit FX counts and FX13–24 never belonged to it.
   const legacyEffects = timeline.tracks?.effects === undefined ? timeline.clips.filter(clip=>clip.kind==='effect'&&(clip.track??1)<=12) : [];
@@ -152,7 +154,7 @@ export function deriveTrackCounts(timeline: Timeline): ResolvedTrackCounts {
   return counts;
 }
 export function clipColor(kind: ClipKind) {
-  return kind === 'effect' ? '#F53F46' : kind === 'caption' ? '#5DBAA0' : kind === 'graphic' ? '#BA5D7A' : kind === 'audio' ? '#8F5DBA' : '#303030';
+  return kind === 'effect' ? '#F53F46' : kind === 'caption' ? '#5DBAA0' : kind === 'graphic' ? '#BA5D7A' : kind === 'scene' ? '#5D86BA' : kind === 'audio' ? '#8F5DBA' : '#303030';
 }
 export function deriveTracks(timeline: Timeline) {
   const counts = deriveTrackCounts(timeline);

@@ -11,10 +11,13 @@ import {VISUAL_CANVAS_REFERENCE,VISUAL_TRANSFORM_LIMITS,MAX_SOURCE_CROP} from '.
 import {dimensions} from '../editor/types';
 import {VISUAL_FADE_MAX_SECONDS} from '../editor/visual-fades';
 import {NEON_EDGE_LIMITS} from '../editor/neon-edges';
+import {editorSkillIndex} from './skills';
 
 /** Pure shared metadata: backend instructions and the UI read the same implemented inventory. */
 export function editorCapabilities(){
   return {
+    skills:editorSkillIndex(),
+    scenes:{tools:['addScene','editScene'],skill:'explainer-scenes',description:'Animated explainer visuals (titles, diagrams, charts, UI walkthroughs, kinetic type) written as React components and rendered frame by frame on their own V layer, over or between footage. Read the explainer-scenes skill before writing one.'},
     stylePlaybooks:STYLE_PLAYBOOKS,
     editing:{controls:['undo the latest saved edit before this turn changes anything','unlink a video/audio pair without losing either source or changing timing','trim, split, move or delete only the chosen unlinked clip','duplicate/copy an identified group to a requested time with linked pairs and transitions','move/edge-trim a group with the manual source/collision limits','reorder whole V/A/FX layers','blend exact visual clip IDs atomically','disable subject-follow without analysis'],undo:'Uses actual saved history; later changes share a new undo group',clientOnly:['playback/seek/view zoom/snapping/selection','browser clipboard storage','redo future stack'],appWorkflows:['media upload/import','export','sharing']},
     effects:EFFECT_LIBRARY_CATEGORIES.map(category=>({category:category.label,items:EFFECT_LIBRARY_CATALOG.filter(entry=>entry.category===category.id).map(entry=>({name:entry.label,guidance:entry.preset?EFFECT_GUIDANCE[entry.preset]:entry.visual?VISUAL_EFFECT_GUIDANCE[entry.visual]:undefined,description:entry.preset?EFFECT_CATALOG[entry.preset].description:entry.description,...(entry.visual?{footageControl:entry.visual}:{}),...(entry.preset?{fxPreset:entry.preset}:{}),...(entry.action?{action:entry.action}:{})}))})),

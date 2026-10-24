@@ -8,7 +8,7 @@ export function summarizeTimeline(timeline: Timeline, assets: { _id: string; kin
   const duration = timelineDuration(timeline);
   const gaps: { start: number; end: number }[] = [];
   let coveredUntil = 0;
-  for (const clip of timeline.clips.filter(clip => clip.kind === "video" || clip.kind === "image" || clip.kind === "solid").sort((a, b) => a.start - b.start)) {
+  for (const clip of timeline.clips.filter(clip => clip.kind === "video" || clip.kind === "image" || clip.kind === "solid" || clip.kind === "scene").sort((a, b) => a.start - b.start)) {
     if (clip.start > coveredUntil + 0.000001) gaps.push({ start: coveredUntil, end: clip.start });
     coveredUntil = Math.max(coveredUntil, clip.start + clip.duration);
   }

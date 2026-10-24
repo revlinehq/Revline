@@ -277,7 +277,7 @@ export function resizeSelectedClips(timeline:Timeline,assets:MediaAsset[],ids:st
     const end=clip.start+clip.duration;
     const left=Math.max(0,...neighbors.filter(other=>other.start+other.duration<=clip.start+1e-6).map(other=>other.start+other.duration));
     const right=Math.min(Infinity,...neighbors.filter(other=>other.start>=end-1e-6).map(other=>other.start));
-    const asset=sources.get(clip.assetId??'');const timedSource=clip.kind==='video'||clip.kind==='audio';
+    const asset=sources.get(clip.assetId??'');const timedSource=clip.kind==='video'||clip.kind==='audio'||clip.kind==='scene';
     if(isTransitionClip(clip)){
       const pair=transitionPair(timeline.clips,clip.transition!);
       if(side==='left'){
@@ -312,6 +312,6 @@ export function resizeSelectedClips(timeline:Timeline,assets:MediaAsset[],ids:st
     const tolerance=Number.EPSILON*Math.max(1,clip.duration,Math.abs(dt))*8;
     const duration=Math.abs(rawDuration-frame)<=tolerance?frame:rawDuration;
     if(clip.kind==='effect')return {...clip,...resizeEffectMotion(clip,duration),start:side==='left'?clip.start+dt:clip.start,duration};
-    return side==='right'?{...clip,...textTemplateTimingPatch(clip),...textAnimationTimingPatch(clip),...audioFadeTimingPatch(clip),...visualFadeTimingPatch(clip),duration}:{...clip,...offsetClipMotion(clip,dt),start:clip.start+dt,duration,sourceStart:clip.kind==='video'||clip.kind==='audio'?clip.sourceStart+dt*playbackRateOf(clip):clip.sourceStart};
+    return side==='right'?{...clip,...textTemplateTimingPatch(clip),...textAnimationTimingPatch(clip),...audioFadeTimingPatch(clip),...visualFadeTimingPatch(clip),duration}:{...clip,...offsetClipMotion(clip,dt),start:clip.start+dt,duration,sourceStart:clip.kind==='video'||clip.kind==='audio'||clip.kind==='scene'?clip.sourceStart+dt*playbackRateOf(clip):clip.sourceStart};
   })});
 }

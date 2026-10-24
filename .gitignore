@@ -11,6 +11,8 @@ public/vendor/remotion-transitions.js
 public/vendor/remotion-transitions.js.LEGAL.txt
 public/vendor/remotion-runtime.js
 public/vendor/remotion-runtime.js.LEGAL.txt
+public/vendor/scene-runtime.js
+public/vendor/scene-runtime.js.LEGAL.txt
 public/vendor/remotion-LICENSE.md
 public/vendor/visual-effects.js
 .env*

@@ -5,7 +5,7 @@ export const EDITOR_PROGRESS_WINDOW = 5;
 export const EDITOR_VERIFICATION_STEPS = 8;
 type Steps = readonly { content: readonly unknown[] }[];
 const record = (value: unknown): Record<string, unknown> => value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
-const inspections = new Set(['inspectTimeline', 'inspectClip', 'inspectAssetAnalysis', 'inspectVideo', 'inspectFrames', 'inspectVideoFrames', 'analyzeMedia', 'planEffects', 'previewRender']);
+const inspections = new Set(['readSkill', 'inspectTimeline', 'inspectClip', 'inspectAssetAnalysis', 'inspectVideo', 'inspectFrames', 'inspectVideoFrames', 'analyzeMedia', 'planEffects', 'previewRender']);
 const ids = (value: unknown) => Array.isArray(value) && value.some(id => typeof id === 'string' && id.length > 0);
 export function hasRecentEditProgress(steps: Steps) {
   return steps.slice(-EDITOR_PROGRESS_WINDOW).some(step => step.content.some(value => {

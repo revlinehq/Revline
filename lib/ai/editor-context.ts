@@ -24,10 +24,12 @@ function withoutDiagnostics<T extends { providerOptions?: LanguageModelV4Prompt[
 export function modelTimeline(timeline: Timeline, selectedClipIds: readonly string[] = []) {
   const selected = new Set(selectedClipIds);
   return { ...timeline, clips: timeline.clips.map(clip => {
-    const { motion, focus, ...settings } = clip;
+    const { motion, focus, scene, ...settings } = clip;
     return { ...settings,
       ...(motion ? selected.has(clip.id) || motion.length <= 16 ? { motion } : { motionSummary: { sampleCount: motion.length, detailsOmitted: true, readTool: 'inspectClip' } } : {}),
       ...(focus ? { focusSummary: { sampleCount: focus.length, detailsOmitted: true, readTool: 'inspectClip' } } : {}),
+      // Compacted history can hold timelines whose scene code was already summarized.
+      ...(scene ? selected.has(clip.id) || typeof scene.code !== 'string' ? { scene } : { scene: { title: scene.title, codeCharacters: scene.code.length, detailsOmitted: true, readTool: 'inspectClip' } } : {}),
     };
   }) };
 }

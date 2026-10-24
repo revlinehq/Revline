@@ -12,6 +12,7 @@ import { validateVisualEffects, visualEffectsOf } from './visual-effects';
 import { cameraGlideBlurSource } from './camera-motion-blur';
 import { visualEffectsRuntimeScript } from './visual-effects-runtime';
 import { textLayerSources } from './text-layers';
+import { sceneFonts, sceneLayerSources, sceneRuntimeScript, validateScene } from './scene-layers';
 import { textStyle, textAppearance } from './text-style';
 import { TEXT_FONTS, textFontFaceCss, type TextFontId } from './text-fonts';
 import { playbackRateOf, sourceEndOf, timelineTimeAtSource, validatePlaybackRate } from './playback-rate';
@@ -26,6 +27,7 @@ export type CompositionOptions = {
   remotionTextUrl?: string;
   remotionTransitionsUrl?: string;
   remotionRuntimeUrl?: string;
+  sceneRuntimeUrl?: string;
   fontUrl?: string;
   fontUrls?: Partial<Record<TextFontId, string>>;
   assetUrls?: Record<string, string>;
@@ -110,6 +112,7 @@ export function generateComposition(timeline: Timeline, assets: MediaAsset[], op
     validateVisualFade(clip);
     validateVisualEffects(clip);
     validatePlaybackRate(clip);
+    validateScene(clip);
     // Silent sound still contributes to the authored duration above, but needs
     // no decoder or time-stretch/mix work in an export. Preview retains the
     // element so live volume controls can unmute it without rebuilding footage.
@@ -120,12 +123,14 @@ export function generateComposition(timeline: Timeline, assets: MediaAsset[], op
     const motionAsset = clip.assetId ? assetMap.get(clip.assetId) : undefined;
     const motion = motionAsset ? boundedCameraMotion(clip, motionAsset, timeline.aspectRatio, visibleMotion(clip)) : visibleMotion(clip);
     const motionVars = (key: MotionKeyframe) => ({ x: key.x * width, y: key.y * height, scale: key.scale, rotation: key.rotation, opacity: key.opacity, filter: `brightness(${key.brightness})` });
-    if (clip.kind !== 'effect' && clip.kind !== 'caption' && clip.kind !== 'graphic' && clip.kind !== 'solid') animateKeys(`#${id}-motion`, clip, motion, motionVars, { time: 0, ...NEUTRAL_MOTION });
+    if (clip.kind !== 'effect' && clip.kind !== 'caption' && clip.kind !== 'graphic' && clip.kind !== 'solid' && clip.kind !== 'scene') animateKeys(`#${id}-motion`, clip, motion, motionVars, { time: 0, ...NEUTRAL_MOTION });
     // Adjustment wrappers are always mounted. A timed HyperFrames root would
     // hide all the footage it contains before and after the effect range.
     if (clip.kind === 'effect') return '';
     const trackIndex = compositionTrackIndex(clip);
     const zIndex = layerZIndex(clip, index);
+    // The scene controller below fills this sandboxed frame and seeks its animations.
+    if (clip.kind === 'scene') return `<div id="${id}" data-scene-clip="${escapeHtml(clip.id)}" class="scene-layer" style="z-index:${zIndex}"></div>`;
     if (clip.kind === 'solid') return `<div id="${id}" data-solid-color-clip="${escapeHtml(clip.id)}" class="solid-color-layer" style="z-index:${zIndex}"><div class="solid-color-rectangle"></div></div>`;
     // HyperFrames activates data-start/data-duration clip roots. Animations target
     // children or crop properties so exact-zero seeks never fight its visibility.
@@ -216,6 +221,9 @@ export function generateComposition(timeline: Timeline, assets: MediaAsset[], op
   const defaultFontUrl = /^https?:/i.test(options.gsapUrl ?? '') ? new URL('/fonts/space-grotesk-latin.woff2', options.gsapUrl).href : '/fonts/space-grotesk-latin.woff2';
   const fontUrl = mediaUrl(options.fontUrl ?? defaultFontUrl);
   const fontUrls = Object.fromEntries(TEXT_FONTS.map(font => [font.id, mediaUrl(options.fontUrls?.[font.id] ?? (font.id === 'space-grotesk' ? fontUrl : /^https?:/i.test(options.gsapUrl ?? '') ? new URL(`/fonts/${font.fileName}`,options.gsapUrl).href : `/fonts/${font.fileName}`))]));
+  const rawFontUrls = Object.fromEntries(TEXT_FONTS.map(font => [font.id, options.fontUrls?.[font.id] ?? (font.id === 'space-grotesk' ? options.fontUrl ?? defaultFontUrl : /^https?:/i.test(options.gsapUrl ?? '') ? new URL(`/fonts/${font.fileName}`, options.gsapUrl).href : `/fonts/${font.fileName}`)]));
+  const sceneRuntimeUrl = options.sceneRuntimeUrl ?? (/^https?:/i.test(options.gsapUrl ?? '') ? new URL('/vendor/scene-runtime.js', options.gsapUrl).href : '/vendor/scene-runtime.js');
+  mediaUrl(sceneRuntimeUrl);
   // Reserve runtime ownership before GSAP becomes discoverable. Otherwise a
   // late runtime leaves HyperFrames controlling its cached direct-GSAP adapter.
   const previewRuntimeBridge=options.preview?'<script>window.__player=window.__player||{};</script>':'';
@@ -230,6 +238,7 @@ window.__hf=window.__hf||{};window.__hf.onSwallowed=event=>reportPreviewError(ev
 ${textFontFaceCss(fontUrls)}
 html,body{margin:0;width:${width}px;height:${height}px;overflow:hidden;background:#000;font-family:'Space Grotesk',Arial,Helvetica,sans-serif}*{box-sizing:border-box}#composition{isolation:isolate;position:relative;width:${width}px;height:${height}px;overflow:hidden;background:#000}.visual-frame{position:absolute;width:${width}px;height:${height}px;overflow:hidden;transform-origin:center}.motion-frame{width:100%;height:100%;transform-origin:center}.text-motion{display:inline-block}.source-window{position:absolute;overflow:hidden}.visual{position:absolute}.overlay{position:absolute;max-width:90%;width:max-content;transform:translate(-50%,-50%);font-weight:700;line-height:1.12;text-align:center;white-space:pre-wrap;overflow-wrap:anywhere}.text-content{display:inline-block;padding:${10 * scale}px ${18 * scale}px;border-radius:${8 * scale}px}.caption{text-shadow:0 2px 12px #0009}audio{position:absolute}
 .adjustment-layer,.solid-color-layer{position:absolute;inset:0;transform-origin:center;pointer-events:none}
+.scene-layer{position:absolute;inset:0;overflow:hidden;pointer-events:none;visibility:hidden}.scene-frame{position:absolute;left:0;top:0;border:0;background:transparent;color-scheme:normal;transform-origin:0 0;pointer-events:none}
 [data-revline-effects]{opacity:0!important}${options.preview?'video[data-revline-effects]{opacity:0.001!important}':''}.visual-effect-output{position:absolute;pointer-events:none}.solid-color-rectangle{position:absolute;z-index:2147483647;pointer-events:none;transform-origin:center}
 .cinematic-bars{position:absolute;inset:0;overflow:hidden;z-index:2147483647;pointer-events:none}.cinematic-bar{position:absolute;left:0;right:0;background:#000}.cinematic-bar.top{top:0;transform:translateY(-100%)}.cinematic-bar.bottom{bottom:0;transform:translateY(100%)}
 </style>${sharedRuntimeUrl?`<meta name="revline-remotion-runtime" content="${sharedRuntimeUrl}">`:''}${previewRuntimeBridge}<script src="${gsapUrl}"></script><script src="${visualEffectsUrl}"></script>${sceneScripts}</head><body><div id="composition" data-composition-id="revline" data-duration="${safeDuration}" data-width="${width}" data-height="${height}" data-fps="${fps}">${compositionNodes}</div><script>
@@ -242,6 +251,7 @@ window.__revlineVisualEffects.installAdjustmentLayers(${JSON.stringify(adjustmen
 window.__revlineVisualEffects.installSolidColorLayers(${JSON.stringify(solidColorSources(timeline.clips)).replace(/</g, '\\u003c')});
 if(window.__revlineVisualEffects.installVisualFades)window.__revlineVisualEffects.installVisualFades(${JSON.stringify(timeline.clips.filter(clip=>clip.kind==='video'||clip.kind==='image').map(({id,kind,start,duration,visualFade,visualFadeTiming})=>({id,kind,start,duration,sourceStart:0,visualFade,visualFadeTiming}))).replace(/</g, '\\u003c')},${timeline.fps});${timeline.clips.some(clip=>(clip.visualFade?.fadeIn??0)>0||(clip.visualFade?.fadeOut??0)>0)?"else throw new Error('Visual fade renderer failed to load.');":''}
 if(window.__revlineRemotionText)window.__revlineTextLayerController=window.__revlineRemotionText.installTextLayers(${textSources});${hasText?"else throw new Error('Text renderer failed to load.');":''}
+${sceneRuntimeScript(sceneLayerSources(timeline, resolution), sceneFonts(rawFontUrls), sceneRuntimeUrl)}
 ${transitions.length ? `if(window.__revlineRemotionTransitions)window.__revlineRemotionTransitions.installTransitions(${JSON.stringify(transitions).replace(/</g, '\\u003c')},${timeline.fps});else throw new Error('Transition renderer failed to load.');` : ''}
 document.querySelectorAll('video,audio').forEach(media=>{media.volume=Math.min(1,Number(media.dataset.volume));media.preservesPitch=true;});
 </script></body></html>`;

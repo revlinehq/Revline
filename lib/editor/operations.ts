@@ -219,7 +219,7 @@ export function placeOnFreeLayer(timeline: Timeline, clip: Clip): Timeline {
   if (previous?.linkedClipId) timeline = patchClip(timeline, clip.id, { start: clip.start, duration: clip.duration, sourceStart: clip.sourceStart, playbackRate: clip.playbackRate });
   if (clip.kind === 'video' && clip.audioSeparated) clip = { ...clip, volume: 0 };
   let track = trackOf(clip);
-  if (clip.track === undefined && (clip.kind === 'caption' || clip.kind === 'graphic')) {
+  if (clip.track === undefined && (clip.kind === 'caption' || clip.kind === 'graphic' || clip.kind === 'scene')) {
     const beneath = timeline.clips.filter(other => other.id !== clip.id && layerGroup(other.kind) === 'visual'
       && other.start < clip.start + clip.duration - 0.000001 && clip.start < other.start + other.duration - 0.000001);
     track = Math.max(0, ...beneath.map(trackOf)) + 1;

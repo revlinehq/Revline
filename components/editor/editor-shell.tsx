@@ -38,7 +38,8 @@ import type { AssistantEditSnapshot } from './assistant-results';
 import { ExportDialog, type ExportSettings, type ExportState } from './export-dialog';
 import { EditorErrorNotice } from './error-notice';
 import { type Timeline, type MediaAsset, type AspectRatio, type Clip, timelineDuration, dimensions } from '@/lib/editor/types';
-import { addMediaClip, addTextClip, addEffectClip, convertSolidColorToVisual, setClipPlaybackRate, patchClip, frameSeekTime, linkedClipIds } from '@/lib/editor/operations';
+import { addMediaClip, addTextClip, addEffectClip, convertSolidColorToVisual, setClipPlaybackRate, patchClip, frameSeekTime, linkedClipIds, placeOnFreeLayer, snapTime } from '@/lib/editor/operations';
+import { STARTER_SCENE_CODE } from '@/lib/editor/scene-layers';
 import type { EffectPreset } from '@/lib/editor/clip-effects';
 import { isTransitionPreset } from '@/lib/editor/clip-transitions';
 import { placeTransitionAt } from '@/lib/editor/transition-placement';
@@ -383,6 +384,14 @@ export function EditorShell(p: EditorShellProps) {
     const id = crypto.randomUUID();
     onChange(addMediaClip(store.getState().timeline, asset, id, at, track));setSelected(id);
   }
+  function addScene() {
+    if (editLock.current) return;
+    try {
+      const id = crypto.randomUUID(), at = snapTime(preview.current?.currentTime() ?? time, timeline.fps);
+      onChange(placeOnFreeLayer(timeline, { id, kind: 'scene', start: at, duration: 4, sourceStart: 0, scene: { title: 'Title scene', code: STARTER_SCENE_CODE } }));
+      setSelected(id);
+    } catch (error) { onError(userError(error, 'Could not add this scene.')); }
+  }
   function addEffect(preset: EffectPreset) {
     if (editLock.current) return;
     try {
@@ -453,7 +462,7 @@ export function EditorShell(p: EditorShellProps) {
   const browse = () => { setImportDestination('timeline');setImportOpen(true); };
   const browseSources=()=>{setImportDestination('sources');setImportOpen(true);};
 
-  const inspector = <ClockedPreviewInspector readOnly={editing} timeline={timeline} time={time} onSeek={seek} onAddTransition={addEffect} onRemoveAsset={p.onRemoveAsset} usedAssetIds={usedAssetIds} sourceRequest={sourceRequest} editRequest={editRequest} libraryRequest={libraryRequest} onLibraryCategoryChange={setLibraryCategory} onAddTextLook={addLibraryText} captionActions={captionActions} onAddOverlay={addOverlay} onFadeThroughBlack={fadeThroughBlack} videoImports={p.videoImports} assets={assets} upload={p.upload} onUpload={browseSources} onAdd={addAsset} onAddSound={addSound} onAddStockAudio={p.onRegisterStockAudio ? catalogId=>addStockAudio(catalogId,readPlaybackTime()) : undefined} clip={clip} audioClip={clip?.kind==='video'?timeline.clips.find(c=>c.id===clip.linkedClipId):undefined} asset={assets.find(a => a._id === clip?.assetId)} onChange={patch => { if (clip) changeClip(clip.id, patch); }} onPreviewEffects={patch => { if (clip && (patch === null || !editLock.current)) preview.current?.clipEffects(clip.id, patch); }} onAddEffect={addEffect} onConvertSolidColor={() => { if (clip) onChange(convertSolidColorToVisual(timeline,clip.id)); }} onPlaybackRateChange={changeSpeed} onCrop={cropVisual} cropping={cropping}/>;
+  const inspector = <ClockedPreviewInspector onAddScene={addScene} readOnly={editing} timeline={timeline} time={time} onSeek={seek} onAddTransition={addEffect} onRemoveAsset={p.onRemoveAsset} usedAssetIds={usedAssetIds} sourceRequest={sourceRequest} editRequest={editRequest} libraryRequest={libraryRequest} onLibraryCategoryChange={setLibraryCategory} onAddTextLook={addLibraryText} captionActions={captionActions} onAddOverlay={addOverlay} onFadeThroughBlack={fadeThroughBlack} videoImports={p.videoImports} assets={assets} upload={p.upload} onUpload={browseSources} onAdd={addAsset} onAddSound={addSound} onAddStockAudio={p.onRegisterStockAudio ? catalogId=>addStockAudio(catalogId,readPlaybackTime()) : undefined} clip={clip} audioClip={clip?.kind==='video'?timeline.clips.find(c=>c.id===clip.linkedClipId):undefined} asset={assets.find(a => a._id === clip?.assetId)} onChange={patch => { if (clip) changeClip(clip.id, patch); }} onPreviewEffects={patch => { if (clip && (patch === null || !editLock.current)) preview.current?.clipEffects(clip.id, patch); }} onAddEffect={addEffect} onConvertSolidColor={() => { if (clip) onChange(convertSolidColorToVisual(timeline,clip.id)); }} onPlaybackRateChange={changeSpeed} onCrop={cropVisual} cropping={cropping}/>;
 
   const chat=(<aside className={`editor-sidebar ${mobileChat ? 'mobile-open' : ''}`} aria-label="Editing conversation" hidden={!conversationVisible}>
         {p.assistantPanel ?? <AssistantPanel attachments={p.composerAttachments} composerBusy={p.composerBusy} onRemoveAttachment={p.onRemoveComposerAttachment} conversation={p.conversation} editSnapshot={p.assistantEditSnapshot} canResumeEdit={p.canResumeEdit} messages={p.messages} running={p.aiRunning} editing={editing} configured={p.aiConfigured} modelSwitcher={p.modelSwitcher} allowedModels={p.allowedModels} defaultModelChoice={p.defaultModelChoice} error={p.aiError} onSend={(text, modelChoice, reasoningEffort, speedMode) => p.onSend(text, { modelChoice, reasoningEffort, speedMode, selectedClipId: clip?.id, selectedClipIds:selectedIds, playhead: readPlaybackTime() })} onRetry={(text, modelChoice, reasoningEffort, speedMode) => p.onSend(text, { modelChoice, reasoningEffort, speedMode, playhead: readPlaybackTime(), retry: true })} onStop={p.onStop} hasClips={!!timeline.clips.length} demo={!!p.demo} onLoadMore={p.onLoadMore} canLoadMore={p.canLoadMore} onAttach={browse} activity={p.analysisBusy} activitySource={p.analysisSource} activityProgress={p.analysisProgress} activityStartedAt={p.analysisStartedAt} draftKey={p.draftKey} suggestions={sourceSuggestions} onSuggestion={async (text, clipId, modelChoice, reasoningEffort, speedMode) => { const target = timeline.clips.find(item => item.id === clipId && item.kind === 'video'); if (!target) throw new Error('This clip is no longer on the timeline.'); setSelected(clipId); await p.onSend(text, { modelChoice, reasoningEffort, speedMode, selectedClipId: clipId, selectedClipIds: [clipId], playhead: target.start }); }} />}

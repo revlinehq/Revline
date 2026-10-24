@@ -5,6 +5,7 @@ import { playbackRateOf, sourceEndOf } from '../../lib/editor/playback-rate';
 import { transitionSources } from '../../lib/editor/clip-transitions';
 import { validateVisualFade } from '../../lib/editor/visual-fades';
 import { validateAudioTimeline } from '../../lib/editor/audio-settings';
+import { validateScene } from '../../lib/editor/scene-layers';
 import { ConvexError } from "convex/values";
 import { layerGroup, maxTrackCount, normalizeTimeline, trackOf, type Timeline } from "../../lib/editor/types";
 import { equalTimelineValue } from '../../lib/editor/timeline-equality';
@@ -35,7 +36,7 @@ export function validateFocus(focus: { time: number; x: number; y: number }[], d
   if (focus.length > 1500 || focus.some((sample, i) => !Number.isFinite(sample.time) || sample.time < 0 || sample.time > duration + 0.5 || !Number.isFinite(sample.x) || !Number.isFinite(sample.y) || sample.x < 0 || sample.x > 1 || sample.y < 0 || sample.y > 1 || (i > 0 && sample.time <= focus[i - 1].time))) throw new ConvexError("Invalid subject tracking samples");
 }
 export async function validateTimeline(ctx: MutationCtx | QueryCtx, project: Doc<"projects">, timeline: Timeline) {
-  if (serializedBytes(timeline) > 150_000) throw new ConvexError("Timeline is too large. Shorten text or reduce subject tracking samples.");
+  if (serializedBytes(timeline) > 300_000) throw new ConvexError("Timeline is too large. Shorten text or scenes, or reduce subject tracking samples.");
   if (![24, 30, 60].includes(timeline.fps)) throw new ConvexError("Choose 24, 30, or 60 fps");
   const markerIds = new Set<string>();
   for (const marker of timeline.markers ?? []) {
@@ -65,7 +66,7 @@ export async function validateTimeline(ctx: MutationCtx | QueryCtx, project: Doc
   for (const clip of timeline.clips) {
     if (!clip.id || clip.id.length > 100 || ids.has(clip.id)) throw new ConvexError("Clip IDs must be unique and nonempty");
     ids.add(clip.id);
-    try { validateClipEffects(clip); validateVisualFade(clip); } catch (error) { throw new ConvexError((error as Error).message); }
+    try { validateClipEffects(clip); validateVisualFade(clip); validateScene(clip); } catch (error) { throw new ConvexError((error as Error).message); }
     if (![clip.start, clip.duration, clip.sourceStart, clip.start + clip.duration].every(Number.isFinite) || clip.start < 0 || clip.sourceStart < 0 || clip.duration < 1 / timeline.fps) throw new ConvexError("Clip timing must be finite, nonnegative, and at least one frame long");
     for (const key of ["x", "y"] as const) if (clip[key] !== undefined && (!Number.isFinite(clip[key]) || clip[key] < 0 || clip[key] > 1)) throw new ConvexError("Position must be between 0 and 1");
     if (clip.volume !== undefined && (!Number.isFinite(clip.volume) || clip.volume < 0 || clip.volume > 2)) throw new ConvexError("Volume must be between 0 and 2");
@@ -96,7 +97,7 @@ export async function validateTimeline(ctx: MutationCtx | QueryCtx, project: Doc
     for (const value of [clip.color, clip.background]) if (value !== undefined && !/^(#(?:[\da-f]{3,4}|[\da-f]{6}|[\da-f]{8})|transparent)$/i.test(value)) throw new ConvexError("Colors must use a hex value or transparent");
     if ((clip.text?.length ?? 0) > 2000) throw new ConvexError("Text clips support up to 2000 characters");
     if (clip.focus && clip.kind !== "video") throw new ConvexError("Subject tracking applies to video clips only");
-    if (clip.kind === 'effect' || clip.kind === 'solid') continue;
+    if (clip.kind === 'effect' || clip.kind === 'solid' || clip.kind === 'scene') continue;
     if (clip.kind === "caption" || clip.kind === "graphic") {
       if (clip.text === undefined || clip.assetId) throw new ConvexError("Text clips need text and cannot reference media");
       continue;
