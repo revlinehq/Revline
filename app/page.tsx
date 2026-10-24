@@ -1,29 +1,31 @@
-import Link from 'next/link';
-import { Brand } from '@/components/workspace/brand';
+import { Geist, Geist_Mono, Outfit } from 'next/font/google';
+import { LandingNav } from '@/components/landing/nav';
 import { LandingHero } from '@/components/landing/hero';
-import { Workflow } from '@/components/landing/workflow';
-import { LandingFeatures } from '@/components/landing/features';
+import { LandingLogos } from '@/components/landing/logos';
+import { LandingUseCases } from '@/components/landing/use-cases';
+import { LandingHowItWorks } from '@/components/landing/how-it-works';
+import { LandingTestimonial } from '@/components/landing/testimonial';
 import { LandingPricing } from '@/components/landing/pricing';
-import { LandingFaq, LandingFooter } from '@/components/landing/footer';
-import { LandingStartButton } from '@/components/landing/start-button';
-import '@/components/workspace/shared.css';
+import { LandingFaq } from '@/components/landing/faq';
+import { LandingFinalCta } from '@/components/landing/final-cta';
+import { LandingFooter } from '@/components/landing/footer';
 import './landing.css';
 
+const outfit = Outfit({ subsets: ['latin'], variable: '--landing-font-head' });
+const geist = Geist({ subsets: ['latin'], variable: '--landing-font-body' });
+const geistMono = Geist_Mono({ subsets: ['latin'], variable: '--landing-font-mono' });
+
 export default function Home() {
-  return <main className="landing">
-    <nav className="landing-nav landing-container" aria-label="Main navigation">
-      <Link className="landing-brand" href="/" aria-label="Revline home"><Brand /></Link>
-      <LandingStartButton compact play={false} className="landing-nav-start" />
-    </nav>
+  return <main className={`landing ${outfit.variable} ${geist.variable} ${geistMono.variable}`}>
+    <LandingNav />
     <LandingHero />
-    <Workflow heading="The simplest way to edit." />
-    <LandingFeatures />
+    <LandingLogos />
+    <LandingUseCases />
+    <LandingHowItWorks />
+    <LandingTestimonial />
     <LandingPricing />
     <LandingFaq />
-    <section className="landing-final-cta landing-section" aria-labelledby="landing-closing-heading">
-      <div className="landing-final-copy"><h2 id="landing-closing-heading">Your next edit starts here.</h2><p>Turn the footage you have into the video you had in mind.</p></div>
-      <div className="landing-final-action"><LandingStartButton /></div>
-    </section>
+    <LandingFinalCta />
     <LandingFooter />
   </main>;
 }
