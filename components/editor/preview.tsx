@@ -33,6 +33,16 @@ function LiveTextControls(props: Omit<React.ComponentProps<typeof TextControls>,
   if(playing)return null;
   return <TextControls {...props} time={time}/>;
 }
+// A cold preview download can take seconds. Opening waits briefly for the
+// local copy, then starts on byte-range playback; the live-update path swaps
+// the local copy in once its shared download finishes.
+const LOCAL_COPY_WAIT_MS=1200;
+function openingAssets(cache:ReturnType<typeof createPreviewSourceCache>,assets:MediaAsset[],signal:AbortSignal):Promise<MediaAsset[]>{
+  const local=cache.prepare(assets,signal);void local.catch(()=>{});
+  let timer:ReturnType<typeof setTimeout>|undefined;
+  const fallback=new Promise<MediaAsset[]>(resolve=>{timer=setTimeout(()=>resolve(cache.cachedAssets(assets)),LOCAL_COPY_WAIT_MS);});
+  return Promise.race([local,fallback]).finally(()=>clearTimeout(timer));
+}
 function frameTime(player:HyperframesPlayer|null,fallback:number){const frame=player?.iframeElement?.contentWindow as (Window&{__timelines?:{revline?:{time():number}}})|null;return frame?.__timelines?.revline?.time()??player?.currentTime??fallback;}
 export type PreviewHandle = { play():void; pause():void; seek(time:number):void; currentTime():number; mute(value:boolean):void; clipVolume(id:string,volume:number|null):void; clipEffects(id:string,patch:Partial<Clip>|null):void; resetCrop():void; finishCrop(cancel?:boolean):void; retry():void };
 export const Preview = forwardRef<PreviewHandle,{timeline:Timeline;assets:MediaAsset[];time:number;onTime:(time:number)=>void;onPlaying:(playing:boolean)=>void;onError:(error:string)=>void;muted:boolean;selectedClip?:Clip;onRefreshMedia?:RefreshPlaybackMedia;onPlaybackAssets?:(assets:MediaAsset[])=>void;onVisualChange?:(patch:Partial<Clip>)=>void;onSelectClip?:(id:string|null)=>void;onClipChange?:(id:string,patch:Partial<Clip>)=>void;onEditText?:(id:string)=>void;onEditClip?:(id:string)=>void;cropping?:boolean;onCropCommit?:(id:string,crop:SourceCrop)=>void;onCropCancel?:()=>void;debugId?:string;onReady?:()=>void;onThumbnail?:(url:string)=>void;onSlowLoad?:()=>void}>(function Preview({timeline,assets,time,onTime,onPlaying,onError,muted,selectedClip:inputSelectedClip,onRefreshMedia,onPlaybackAssets,onVisualChange,onSelectClip,onClipChange,onEditText,onEditClip,cropping=false,onCropCommit,onCropCancel,debugId,onReady,onThumbnail,onSlowLoad},ref) {
@@ -191,7 +201,7 @@ export const Preview = forwardRef<PreviewHandle,{timeline:Timeline;assets:MediaA
       cancelAnimationFrame(swapFrame);stopTrace?.();session?.dispose();p?.pause();p?.remove();
     };
     const used=new Set(timeline.clips.map(clip=>clip.assetId));
-    void Promise.all([import('@hyperframes/player'),cache.prepare(assets.filter(asset=>used.has(asset._id)),preparation.signal)]).then(([,prepared])=>{
+    void Promise.all([import('@hyperframes/player'),openingAssets(cache,assets.filter(asset=>used.has(asset._id)),preparation.signal)]).then(([,prepared])=>{
       if(cancelled||!container.current)return;
       playbackAssets=prepared;callbacks.current.onPlaybackAssets?.(prepared);p=document.createElement('hyperframes-player') as HyperframesPlayer;
       p.muted=true;p.style.cssText='position:absolute;inset:0;width:100%;height:100%;z-index:0';p.setAttribute('assets-loading-ui','none');p.setAttribute('runtime-src',`${window.location.origin}/vendor/hyperframe.runtime.iife.js?v=managed-media-4`);p.setAttribute('disable-click-to-play','');p.removeAttribute('controls');
@@ -201,7 +211,7 @@ export const Preview = forwardRef<PreviewHandle,{timeline:Timeline;assets:MediaA
         waitingForMedia=true;
         void(async()=>{
           const current=latestTimeline.current,committed=latestCommittedTimeline.current,used=new Set(current.clips.map(clip=>clip.assetId));
-          const prepared=await cache.prepare(latestAssets.current.filter(asset=>used.has(asset._id)),preparation.signal);
+          const prepared=await openingAssets(cache,latestAssets.current.filter(asset=>used.has(asset._id)),preparation.signal);
           if(cancelled||!p||!session)return;
           const doc=p.iframeElement?.contentDocument;if(!doc)return;
           await loadPreviewRemotion(doc,current);
