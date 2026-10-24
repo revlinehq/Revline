@@ -13,7 +13,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { PrimaryButton } from './primary-button';
 import { WorkspaceNav, chatRecency, useWorkspaceChats, type WorkspaceChat } from './workspace-nav';
 import './workspace-pages.css';
-import { BrandLoader } from '@/components/workspace/brand';
+import { BrandLoader } from '@/components/workspace/brand-loader';
 
 export function ChatHistory() {
   const { chats, loading, connected } = useWorkspaceChats();

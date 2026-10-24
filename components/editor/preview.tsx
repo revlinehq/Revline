@@ -27,7 +27,7 @@ import { updateLiveVisualGeometry } from '@/lib/editor/live-visual-geometry';
 import type { RefreshPlaybackMedia } from '@/lib/editor/media-source-recovery';
 import { previewAdjustmentEffect, updateLiveAdjustmentEffects } from '@/lib/editor/live-adjustment-effects';
 import { loadPreviewRemotion } from '@/lib/editor/preview-remotion-runtime';
-import { BrandLoader } from '@/components/workspace/brand';
+import { BrandLoader } from '@/components/workspace/brand-loader';
 function LiveTextControls(props: Omit<React.ComponentProps<typeof TextControls>, 'time'>) {
   const time=usePausedPlaybackTime(),playing=useEditorState(state=>state.playing);
   if(playing)return null;

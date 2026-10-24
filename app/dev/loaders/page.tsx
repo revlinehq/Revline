@@ -1,5 +1,5 @@
 import { notFound } from 'next/navigation';
-import { BrandLoader } from '@/components/workspace/brand';
+import { BrandLoader } from '@/components/workspace/brand-loader';
 import './loaders.css';
 
 const PLACES = [

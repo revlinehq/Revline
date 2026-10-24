@@ -6,7 +6,7 @@ import { useState } from 'react';
 import { AuthFrame } from './auth-frame';
 import { safeAuthRedirect } from './email-auth-flow';
 import { AuthRecovery } from './auth-recovery';
-import { BrandLoader } from '@/components/workspace/brand';
+import { BrandLoader } from '@/components/workspace/brand-loader';
 
 export function SsoCallback() {
   const params = useSearchParams();

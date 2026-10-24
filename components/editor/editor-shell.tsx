@@ -55,7 +55,7 @@ import { TextFontStyles } from './text-font-styles';
 import './editor-mode.css';
 import './live-edit.css';
 import type { LiveEditChange } from '@/lib/editor/live-edit';
-import { BrandLoader } from '@/components/workspace/brand';
+import { BrandLoader } from '@/components/workspace/brand-loader';
 
 const NO_SELECTED_CLIPS:string[]=[];
 function ClockedPreviewInspector(props: React.ComponentProps<typeof PreviewInspector>) {

@@ -12,7 +12,7 @@ import { PrimaryButton } from './primary-button';
 import { WorkspaceNav } from './workspace-nav';
 import './shared.css';
 import './editor-access-gate.css';
-import { BrandLoader } from '@/components/workspace/brand';
+import { BrandLoader } from '@/components/workspace/brand-loader';
 
 export function EditorAccessGate({ children, loading, checkoutPending = false }: { children: ReactNode; loading?: ReactNode; checkoutPending?: boolean }) {
   const { isAuthenticated } = useConvexAuth();

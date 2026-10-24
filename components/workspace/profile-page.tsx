@@ -10,7 +10,7 @@ import { DevAiCosts } from './dev-ai-costs';
 import { WorkspaceNav } from './workspace-nav';
 import { useWorkspaceTheme } from './theme-provider';
 import './workspace-pages.css';
-import { BrandLoader } from '@/components/workspace/brand';
+import { BrandLoader } from '@/components/workspace/brand-loader';
 
 export function ProfilePage({ checkoutReturn }: { checkoutReturn?: CheckoutReturn }) {
   const { user, isLoaded, isSignedIn } = useUser();
