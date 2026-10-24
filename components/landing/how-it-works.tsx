@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { ArrowUp, Clapperboard, Folder, Mic, Paperclip, Youtube } from 'lucide-react';
+import { ArrowUp, Clapperboard, Folder, Mic, MousePointer2, Paperclip, Upload, Youtube } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { LandingChip, LandingHeading, LandingSection } from './ui';
 
@@ -30,10 +30,17 @@ export function LandingHowItWorks() {
     <div className="landing-bento">
       <div className="landing-bento-row landing-bento-row-top">
         <Card className="landing-bento-upload" title="Drop in anything" description="Raw files, a whole folder of b-roll, or a YouTube link. Hours of footage is fine.">
-          <ul className="landing-panel landing-upload-panel" aria-hidden="true">{uploads.map(({ name, meta, icon: Icon, progress }) => <li key={name}>
-            <span className="landing-upload-icon"><Icon size={16} /></span>
-            <div><div className="landing-upload-top"><strong>{name}</strong><span>{meta}</span></div><span className="landing-progress" data-progress={progress}><span /></span></div>
-          </li>)}</ul>
+          <div className="landing-drop" aria-hidden="true">
+            <ul className="landing-panel landing-upload-panel">{uploads.map(({ name, meta, icon: Icon, progress }) => <li key={name}>
+              <span className="landing-upload-icon"><Icon size={16} /></span>
+              <div><div className="landing-upload-top"><strong>{name}</strong><span>{meta}</span></div><span className="landing-progress" data-progress={progress}><span /></span></div>
+            </li>)}</ul>
+            <div className="landing-drop-zone"><Upload size={18} />Drop files to import</div>
+            <div className="landing-drop-cursor">
+              <span className="landing-drop-file"><Clapperboard size={14} />Raw interview.mp4</span>
+              <MousePointer2 className="landing-drop-pointer" size={22} fill="currentColor" />
+            </div>
+          </div>
         </Card>
         <Card className="landing-bento-prompt" title="Say what you want" description="Plain English. No keyframes, no menus, no tutorials.">
           <div className="landing-panel landing-prompt-panel" aria-hidden="true">
