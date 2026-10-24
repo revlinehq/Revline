@@ -5,7 +5,8 @@ import { unresolvedToolFailureIds } from '@/lib/ai/tool-failures';
 export type { TimelinePublicationReceipt } from '@/lib/ai/publication-receipt';
 
 export type ChatTool = { id?: string; name: string; state: 'running' | 'done' | 'error'; detail?: string; staged?: boolean; input?: Record<string, unknown>; output?: Record<string, unknown> };
-export type ChatMessage = { id:string;sourceId?:string;threadId?:string;role:string;text:string;status?:string;tools?:string[];steps?:ChatTool[];publicationReceipt?:TimelinePublicationReceipt };
+export type ChatBlock = { type:'text'; text:string } | { type:'tools'; steps:ChatTool[] };
+export type ChatMessage = { id:string;sourceId?:string;threadId?:string;role:string;text:string;status?:string;tools?:string[];steps?:ChatTool[];blocks?:ChatBlock[];publicationReceipt?:TimelinePublicationReceipt };
 export type ResultCard = { key: string; title: string; detail?: string; state: ChatTool['state']; staged?: boolean };
 export const chatMessageKey = (message: { id: string; key?: string }) => message.key ?? message.id;
 export type AssistantEditSnapshot = { before:Timeline;after:Timeline;revision:number;canUndo:boolean;publishedDraft:boolean };
@@ -41,7 +42,16 @@ export function publicationReceiptFromPart(value:unknown):TimelinePublicationRec
 /** Preserve the SDK's raw prompt identity alongside its stable streamed React key. */
 export function chatMessageFromUI(message:{id:string;key?:string;threadId?:string;role:string;status?:string;parts:readonly unknown[]}):ChatMessage {
   const publicationReceipt=message.parts.flatMap(part=>{const receipt=publicationReceiptFromPart(part);return receipt?[receipt]:[];}).at(-1);
-  return {id:chatMessageKey(message),sourceId:message.id,threadId:message.threadId,role:message.role,status:message.status,text:message.parts.filter(part=>record(part)?.type==='text').map(part=>String(record(part)?.text??'')).join('\n\n'),steps:message.parts.flatMap(part=>{const step=chatToolFromPart(part);return step?[step]:[];}),...(publicationReceipt?{publicationReceipt}:{})};
+  // Text and tool calls in the order the model produced them; adjacent tool calls form one group.
+  const blocks:ChatBlock[]=[];
+  for(const part of message.parts){
+    const step=chatToolFromPart(part),last=blocks.at(-1);
+    if(step){if(last?.type==='tools')last.steps.push(step);else blocks.push({type:'tools',steps:[step]});continue;}
+    const text=record(part)?.type==='text'?String(record(part)?.text??''):'';
+    if(!text.trim())continue;
+    if(last?.type==='text')last.text+=`\n\n${text}`;else blocks.push({type:'text',text});
+  }
+  return {id:chatMessageKey(message),sourceId:message.id,threadId:message.threadId,role:message.role,status:message.status,blocks,text:message.parts.filter(part=>record(part)?.type==='text').map(part=>String(record(part)?.text??'')).join('\n\n'),steps:message.parts.flatMap(part=>{const step=chatToolFromPart(part);return step?[step]:[];}),...(publicationReceipt?{publicationReceipt}:{})};
 }
 
 /** The receipt stays with its original request, including a paginated partial turn. */

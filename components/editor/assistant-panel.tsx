@@ -4,7 +4,7 @@ import { userError } from '@/lib/user-error';
 import { NEW_PROJECT_PATH } from '@/lib/workspace-routes';
 
 import { PRODUCTION_CLAUDE_MODEL_CHOICES } from '@/lib/ai/claude-model-policy';
-import { memo, useCallback, useState, useEffect, useLayoutEffect, useMemo, useRef, type ComponentProps } from 'react';
+import { Fragment, memo, useCallback, useState, useEffect, useLayoutEffect, useMemo, useRef, type ComponentProps } from 'react';
 import { Check, ArrowUpRight, RotateCcw, X } from 'lucide-react';
 import { AssistantModelPicker } from './assistant-model-picker';
 import {EDITOR_MODELS,OPENAI_EDIT_MODELS,OPENAI_REASONING_EFFORTS,OPENAI_SPEED_MODES,type ClaudeModelChoice,type OpenAIReasoningEffort,type OpenAISpeedMode} from '@/lib/ai/claude-model';
@@ -135,7 +135,7 @@ function AssistantPanelBody({ messages, running, editing:editingTimeline=running
       const draftFailed=!running&&group.id===turnId&&(!!error||replies.some(message=>message.status==='failed'||message.status==='aborted'));
       const cards=summarizeTools(steps,{publicationReceipt,publishedRevision:legacyPublications.current.get(group.id),draftFailed,draftPending:group.id===turnId&&(answering||replies.some(message=>message.status==='pending'||message.status==='streaming'))});
       const presentation=assistantTurnPresentation(replies,cards,{receipt:publicationReceipt,active:group.id===turnId&&answering,error:group.id===turnId?(localError||(!waiting?error:null)):null});
-      return {...group,steps,comparison,...presentation};
+      return {...group,comparison,...presentation};
     });
   },[messages,turnId,editSnapshot,running,error,localError,waiting,optimisticRequest,answering]);
   const retryTurnId=canResumeEdit?groups.findLast(group=>group.cards.some(card=>card.key==='turn-failure'))?.id:turnId;
@@ -195,18 +195,16 @@ function AssistantPanelBody({ messages, running, editing:editingTimeline=running
         return <div className={`assistant-turn ${group.id === turnId ? 'is-latest-turn' : ''}`} data-turn-id={group.id} key={group.id}>
           {groupMessages.filter(message => message.role === 'user').map(message => <article key={message.id} data-message-id={message.id} data-message-status={message.status} className="chat-message chat-user"><p>{message.text}</p></article>)}
           {(replies.length > 0 || editing || cards.length > 0) && <div className="assistant-reply">
-            <AssistantReplyHeader promptMessageId={requestMessage?.sourceId??requestMessage?.id} loading={loading} active={editing} label={stopState==='stopping'?'Stopping…':activity || replyLabel} detail={processingDetail(activity,activitySource)||cards.find(card=>card.state==='running')?.title} startedAt={activityStartedAt}/>
-            <ToolChain steps={group.steps} running={editing}/>
-            {replies.map(message => !message.text && !message.tools?.length && message.id !== demoNoteMessageId ? null : <article key={message.id} data-message-id={message.id} data-message-status={message.status} className="chat-message chat-assistant">
-              {message.text && <AssistantResponseText text={message.text} streaming={message.status === 'streaming'} />}
+            {replies.map(message => <Fragment key={message.id}>{!message.text && !message.tools?.length && !message.blocks?.length && message.id !== demoNoteMessageId ? null : <article data-message-id={message.id} data-message-status={message.status} className="chat-message chat-assistant">
+              {message.blocks ? message.blocks.map((block, index) => block.type === 'tools' ? <ToolChain key={`tools-${index}`} steps={block.steps}/> : <AssistantResponseText key={`text-${index}`} text={block.text} streaming={message.status === 'streaming' && index === message.blocks!.length - 1} />) : message.text && <AssistantResponseText text={message.text} streaming={message.status === 'streaming'} />}
               {message.tools?.map((tool, i) => <div className="tool-result" key={`${tool}-${i}`}><Check size={12} />{tool}</div>)}
               {message.id === demoNoteMessageId && <div className="assistant-demo-note">Sample conversation. Explore the timeline, or <a href={NEW_PROJECT_PATH}>start your own project</a>.</div>}
-            </article>)}
-            {cards.some(card=>card.state==='done')&&<ul className="assistant-changes" aria-label="Changes">{cards.filter(card=>card.state==='done').map(card=><li key={card.key}><span aria-hidden>–</span><span>{card.title}{card.detail&&<small>{card.detail}</small>}</span></li>)}</ul>}
-            {cards.some(card=>card.state!=='done') && <div className="assistant-result-cards" aria-label="Edit results">{cards.filter(card=>card.state!=='done'&&!(card.state==='running'&&(editing||(group.id===turnId&&stopState==='stopped')))).map(card => <div key={card.key} className={`assistant-result-card result-${card.state}${card.staged ? ' result-prepared' : ''}`}>
+            </article>}{!message.blocks && !!message.steps?.length && <ToolChain steps={message.steps}/>}</Fragment>)}
+            {cards.some(card=>card.state!=='done'||card.staged) && <div className="assistant-result-cards" aria-label="Edit results">{cards.filter(card=>(card.state!=='done'||card.staged)&&!(card.state==='running'&&(editing||(group.id===turnId&&stopState==='stopped')))).map(card => <div key={card.key} className={`assistant-result-card result-${card.state}${card.staged ? ' result-prepared' : ''}`}>
               <AssistantActivity label={card.title} detail={card.detail} state={card.state==='running'?'working':card.state==='error'?'error':'ready'}/>
               {card.key==='turn-failure' && group.id===retryTurnId && requestMessage?.text.trim() && !waiting && !demo && onRetry && <button type="button" className="assistant-retry" disabled={composerBusy || !configured || sending || !!pendingReply} onClick={() => void sendRequest(canResumeEdit?'Finish only the remaining work or checks from my unfinished request. Keep the edits already completed.':requestMessage.text, true)}><RotateCcw size={13} aria-hidden="true"/>Retry unfinished steps</button>}
             </div>)}</div>}
+            <AssistantReplyHeader promptMessageId={requestMessage?.sourceId??requestMessage?.id} loading={loading} active={editing} label={stopState==='stopping'?'Stopping…':activity || replyLabel} detail={processingDetail(activity,activitySource)||cards.find(card=>card.state==='running')?.title} startedAt={activityStartedAt}/>
           </div>}
         </div>;
       })}

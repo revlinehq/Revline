@@ -34,7 +34,8 @@ test('one failed turn shows one actionable failure without duplicate receipts or
   const html=render();
   expect(html.match(/role="alert"/g)).toHaveLength(1);
   expect(html.replace(/<[^>]*>/g,'')).toContain('I’ll keep complete sentences.');
-  expect(html).toContain('Trimmed 1 clip');
+  // Saved steps appear in the turn's tool group instead of a confirmation card.
+  expect(html).toContain('tool-chain');
   expect(html).toMatch(/timeline changed/i);
   expect(html).toMatch(/not saved|unsaved/i);
   expect(html).not.toMatch(/CONVEX|ConvexError|Request ID|assistantEdits|at handler|Save not confirmed|No timeline changes were saved|Your pending replacement was not saved\./);
@@ -44,7 +45,7 @@ test('historical failed turns remain clear after reload without the live error p
   const html=render(messages,null);
   expect(html.match(/role="alert"/g)).toHaveLength(1);
   expect(html).not.toMatch(/ConvexError|at handler|Save not confirmed/);
-  expect(html).toContain('Trimmed 1 clip');
+  expect(html).toContain('tool-chain');
 });
 
 
