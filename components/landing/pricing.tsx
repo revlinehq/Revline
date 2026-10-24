@@ -24,6 +24,7 @@ export function LandingPricing() {
       </div>
       <LandingStartButton label="Start free trial" size="lg" block />
       <ul>{features.map(feature => <li key={feature}><Check size={16} aria-hidden="true" />{feature}</li>)}</ul>
+      <LandingStartButton label="Start free trial" size="lg" block />
     </div>
   </LandingSection>;
 }
