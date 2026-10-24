@@ -7,7 +7,7 @@ import { PRODUCTION_CLAUDE_MODEL_CHOICES } from '@/lib/ai/claude-model-policy';
 import { memo, useCallback, useState, useEffect, useLayoutEffect, useMemo, useRef, type ComponentProps } from 'react';
 import { Check, ArrowUpRight, RotateCcw, X } from 'lucide-react';
 import { AssistantModelPicker } from './assistant-model-picker';
-import {OPENAI_EDIT_MODELS,OPENAI_REASONING_EFFORTS,OPENAI_SPEED_MODES,type ClaudeModelChoice,type OpenAIReasoningEffort,type OpenAISpeedMode} from '@/lib/ai/claude-model';
+import {EDITOR_MODELS,OPENAI_EDIT_MODELS,OPENAI_REASONING_EFFORTS,OPENAI_SPEED_MODES,type ClaudeModelChoice,type OpenAIReasoningEffort,type OpenAISpeedMode} from '@/lib/ai/claude-model';
 import {InspectorSelect} from './inspector-select';
 import { EditComposer, type ComposerAttachment } from '@/components/workspace/edit-composer';
 import {useQuery,useMutation} from 'convex/react';
@@ -103,7 +103,7 @@ function AssistantPanelBody({ messages, running, editing:editingTimeline=running
   const [modelChoice, setModelChoice] = useState<ClaudeModelChoice>();
   const [reasoningEffort,setReasoningEffort]=useState<OpenAIReasoningEffort>('medium');
   const [speedMode,setSpeedMode]=useState<OpenAISpeedMode>('standard');
-  const supportedModels=allowedModels.filter(choice=>OPENAI_EDIT_MODELS.some(model=>model.id===choice));
+  const supportedModels=allowedModels.filter(choice=>EDITOR_MODELS.some(model=>model.id===choice));
   const availableModels=supportedModels.length?supportedModels:PRODUCTION_CLAUDE_MODEL_CHOICES;
   const selectedModelChoice=modelChoice&&availableModels.some(choice=>choice===modelChoice)?modelChoice:undefined;
   const effectiveModelChoice=selectedModelChoice??(defaultModelChoice&&availableModels.some(choice=>choice===defaultModelChoice)?defaultModelChoice:availableModels.includes('gpt-6.1-sol')?'gpt-6.1-sol':availableModels[0]??'gpt-6.1-sol');
@@ -196,13 +196,14 @@ function AssistantPanelBody({ messages, running, editing:editingTimeline=running
           {groupMessages.filter(message => message.role === 'user').map(message => <article key={message.id} data-message-id={message.id} data-message-status={message.status} className="chat-message chat-user"><p>{message.text}</p></article>)}
           {(replies.length > 0 || editing || cards.length > 0) && <div className="assistant-reply">
             <AssistantReplyHeader promptMessageId={requestMessage?.sourceId??requestMessage?.id} loading={loading} active={editing} label={stopState==='stopping'?'Stopping…':activity || replyLabel} detail={processingDetail(activity,activitySource)||cards.find(card=>card.state==='running')?.title} startedAt={activityStartedAt}/>
-            <ToolChain steps={group.steps}/>
+            <ToolChain steps={group.steps} running={editing}/>
             {replies.map(message => !message.text && !message.tools?.length && message.id !== demoNoteMessageId ? null : <article key={message.id} data-message-id={message.id} data-message-status={message.status} className="chat-message chat-assistant">
               {message.text && <AssistantResponseText text={message.text} streaming={message.status === 'streaming'} />}
               {message.tools?.map((tool, i) => <div className="tool-result" key={`${tool}-${i}`}><Check size={12} />{tool}</div>)}
               {message.id === demoNoteMessageId && <div className="assistant-demo-note">Sample conversation. Explore the timeline, or <a href={NEW_PROJECT_PATH}>start your own project</a>.</div>}
             </article>)}
-            {cards.length > 0 && <div className="assistant-result-cards" aria-label="Edit results">{cards.filter(card=>!(card.state==='running'&&(editing||(group.id===turnId&&stopState==='stopped')))).map(card => <div key={card.key} className={`assistant-result-card result-${card.state}${card.staged ? ' result-prepared' : ''}`}>
+            {cards.some(card=>card.state==='done')&&<ul className="assistant-changes" aria-label="Changes">{cards.filter(card=>card.state==='done').map(card=><li key={card.key}><span aria-hidden>–</span><span>{card.title}{card.detail&&<small>{card.detail}</small>}</span></li>)}</ul>}
+            {cards.some(card=>card.state!=='done') && <div className="assistant-result-cards" aria-label="Edit results">{cards.filter(card=>card.state!=='done'&&!(card.state==='running'&&(editing||(group.id===turnId&&stopState==='stopped')))).map(card => <div key={card.key} className={`assistant-result-card result-${card.state}${card.staged ? ' result-prepared' : ''}`}>
               <AssistantActivity label={card.title} detail={card.detail} state={card.state==='running'?'working':card.state==='error'?'error':'ready'}/>
               {card.key==='turn-failure' && group.id===retryTurnId && requestMessage?.text.trim() && !waiting && !demo && onRetry && <button type="button" className="assistant-retry" disabled={composerBusy || !configured || sending || !!pendingReply} onClick={() => void sendRequest(canResumeEdit?'Finish only the remaining work or checks from my unfinished request. Keep the edits already completed.':requestMessage.text, true)}><RotateCcw size={13} aria-hidden="true"/>Retry unfinished steps</button>}
             </div>)}</div>}

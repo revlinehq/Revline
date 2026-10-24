@@ -30,7 +30,7 @@ import { allowedClaudeModelChoices, enforceClaudeModelPolicy } from '../lib/ai/c
 import { assistantRecovery } from './lib/assistant_recovery';
 import { MEDIA_ACTIVITY_LABELS } from '../lib/media-analysis/activity';
 import { editingWorkflowActive } from './lib/assistant_workflow';
-const providerReason = "Configure OPENAI_API_KEY in Convex to edit with GPT-6.1 Sol or GPT-6 Astra.";
+const providerReason = "Configure OPENAI_API_KEY (GPT-6.1 Sol, GPT-6 Astra) or ANTHROPIC_API_KEY (Sonnet 5.5, Opus 5.5) in Convex to edit.";
 function configured() {
   try{assertEditorModelConfigured(resolveClaudeModel());return true;}catch{return false;}
 }

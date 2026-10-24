@@ -18,7 +18,7 @@ export const OPENAI_EDIT_MODELS = [
   { id: 'gpt-6.1-sol', label: 'GPT-6.1 Sol', modelId: 'gpt-6.1-sol', pricing: { input: 2, cacheRead: .10, cacheWrite: 2.50, output: 10 } },
   { id: 'gpt-6-astra', label: 'GPT-6 Astra', modelId: 'gpt-6-astra', pricing: { input: 10, cacheRead: 1, cacheWrite: 12.50, output: 50 } },
 ] as const;
-export const EDITOR_MODELS = OPENAI_EDIT_MODELS;
+export const EDITOR_MODELS = [...OPENAI_EDIT_MODELS, CLAUDE_EDIT_MODELS[1], CLAUDE_EDIT_MODELS[2]] as const;
 export const OPENAI_REASONING_EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'] as const;
 export type OpenAIReasoningEffort = typeof OPENAI_REASONING_EFFORTS[number];
 export const OPENAI_SPEED_MODES = ['standard', 'fast'] as const;
@@ -36,17 +36,24 @@ export function resolveClaudeModel(modelChoice?: ClaudeModelChoice, env: ClaudeM
   if (modelChoice !== undefined && !claudeModelSwitcherEnabled(env)) throw new Error('Manual model selection is currently disabled.');
   const choice = modelChoice ?? (env.EDITOR_DEFAULT_MODEL?.trim() || 'gpt-6.1-sol');
   const selected = OPENAI_EDIT_MODELS.find(model => model.id === choice);
-  if (!selected) throw new Error(GPT_ONLY_EDITING_ERROR);
-  return enforceClaudeModelPolicy({ provider: 'openai', modelId: selected.modelId, modelChoice: selected.id }, env);
+  if (selected) return enforceClaudeModelPolicy({ provider: 'openai', modelId: selected.modelId, modelChoice: selected.id }, env);
+  const claude = EDITOR_MODELS.find(model => model.id === choice && !OPENAI_EDIT_MODELS.some(item => item.id === model.id));
+  if (!claude) throw new Error(GPT_ONLY_EDITING_ERROR);
+  return enforceClaudeModelPolicy({ provider: 'anthropic', modelId: claude.modelId, modelChoice: claude.id }, env);
 }
 
-export function defaultEditorModelChoice(env:ClaudeModelEnvironment=process.env):typeof OPENAI_EDIT_MODELS[number]['id']|undefined {
+export function defaultEditorModelChoice(env:ClaudeModelEnvironment=process.env):typeof EDITOR_MODELS[number]['id']|undefined {
   const selected=resolveClaudeModel(undefined,env);
   return EDITOR_MODELS.find(model=>model.modelId===selected.modelId)?.id;
 }
 
 export function validatePinnedClaudeModel(selection: ClaudeModelSelection, env: ClaudeModelEnvironment = process.env): ClaudeModelSelection {
   enforceClaudeModelPolicy(selection, env);
+  if (selection.provider !== 'openai') {
+    if (selection.reasoningEffort !== undefined || selection.speedMode !== undefined) throw new Error('Reasoning and speed controls apply to OpenAI models only.');
+    if (selection.modelChoice !== undefined && CLAUDE_EDIT_MODELS.find(model => model.id === selection.modelChoice)?.modelId !== selection.modelId) throw new Error('Pinned editor model does not match its selection.');
+    return selection;
+  }
   if (selection.reasoningEffort !== undefined && !OPENAI_REASONING_EFFORTS.includes(selection.reasoningEffort)) throw new Error('Choose a supported OpenAI reasoning effort.');
   if (selection.speedMode !== undefined && !OPENAI_SPEED_MODES.includes(selection.speedMode)) throw new Error('Choose a supported OpenAI speed mode.');
   if (selection.modelChoice !== undefined && selection.modelChoice !== selection.modelId) throw new Error('Pinned editor model does not match its selection.');
@@ -68,7 +75,7 @@ export function withEditorSpeed(selection: ClaudeModelSelection, speedMode?: Ope
   return { ...selection, speedMode };
 }
 
-/** Historical benchmark adapter; active editor policy refuses these models. */
+/** Anthropic request options for the Claude editing models. */
 export function claudeProviderOptions(modelId: string) {
   if (!/^(?:anthropic\/)?claude-(?:haiku|sonnet|opus)-5[.-]5$/.test(modelId)) return undefined;
   const anthropic = {
@@ -81,7 +88,7 @@ export function claudeProviderOptions(modelId: string) {
 }
 
 export function editorProviderOptions(selection: ClaudeModelSelection) {
-  if (selection.provider !== 'openai') throw new Error(GPT_ONLY_EDITING_ERROR);
+  if (selection.provider !== 'openai') { const options = claudeProviderOptions(selection.modelId); if (!options) throw new Error(GPT_ONLY_EDITING_ERROR); return options; }
   const openai = {
     reasoningEffort: selection.reasoningEffort ?? 'medium', reasoningMode: 'standard', serviceTier: selection.speedMode === 'fast' ? 'fast' : 'default',
     // History is managed by the existing Agent thread; retain encrypted reasoning
