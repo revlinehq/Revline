@@ -14,7 +14,6 @@ import { clearProjectImportJob, getOrCreateProjectImportJob, getProjectImportJob
 import { uploadSourceFile } from '@/lib/editor/upload-source';
 import { uploadMediaThumbnail } from '@/lib/editor/upload-thumbnail';
 import { prepareMediaForEditing } from '@/lib/editor/prepare-media-for-editing';
-import { VideoLinkImport } from '@/components/editor/video-link-import';
 import { useMediaFileDrop } from '@/components/editor/media-file-drop';
 import { rememberOpeningFootage } from '@/lib/editor/footage-opening';
 import { normalizeMediaFile } from '@/lib/editor/media-file';
@@ -38,9 +37,7 @@ export function NewConversation() {
   const convex = useConvex();
   const { isLoaded, isSignedIn, userId } = useAuth();
   const { isAuthenticated, isLoading: authLoading } = useConvexAuth();
-  const importVideo = useMutation(api.mediaTasks.importVideo);
   const picker=useRef<HTMLInputElement>(null);
-  const [linkStarting, setLinkStarting] = useState(false);
   const createProject = useMutation(api.projects.create);
   const saveTimeline = useMutation(api.projects.saveTimeline);
   const startUpload = useAction(api.r2.start);
@@ -67,7 +64,7 @@ export function NewConversation() {
   const [processing, setProcessing] = useState<Processing | null>(null);
   const [error, setError] = useState('');
   const hasMedia = files.length + cloudIds.length > 0;
-  const busy = linkStarting || (processing?.phase !== 'error' && (processing !== null || hasMedia));
+  const busy = processing?.phase !== 'error' && (processing !== null || hasMedia);
 
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; unsubscribe.current?.(); }; }, []);
   useEffect(() => {
@@ -255,13 +252,8 @@ export function NewConversation() {
       <div className="new-conversation-start">
         <div className="new-conversation-intro"><h1 id="new-conversation-title">Welcome{firstName ? `, ${firstName}` : ''}.</h1><p>Start your edit. Add your clips, then tell Revline what to make.</p></div>
         <div className="new-conversation-entry" data-dragging={dragging || undefined} aria-busy={busy}>
-          <FootageStartCard onAttach={() => picker.current?.click()} disabled={!draftReady || linkStarting} dragging={dragging}/>
+          <FootageStartCard onAttach={() => picker.current?.click()} disabled={!draftReady} dragging={dragging}/>
           <input ref={picker} type="file" accept="video/*,audio/*,image/*" multiple className="sr-only" tabIndex={-1} aria-label="Choose media to upload" onChange={event => { const files = Array.from(event.target.files ?? []); event.target.value = ''; if (files.length) attach(files); }}/>
-          <VideoLinkImport disabled={!draftReady || authLoading || !isAuthenticated || linkStarting} onImport={async url=>{
-      if(submitting.current)return;submitting.current=true;setLinkStarting(true);
-      try{const result=await importVideo({url});router.push('/editor/'+result.projectId);}
-      finally{submitting.current=false;setLinkStarting(false);}
-    }}/>
           {error && <p className="new-conversation-error" role="alert">{error}</p>}
         </div>
       </div>
