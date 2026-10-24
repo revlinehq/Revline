@@ -5,7 +5,7 @@ import { userError } from '@/lib/user-error';
 import { STOCK_AUDIO_DRAG_TYPE } from '@/lib/editor/stock-audio-drag';
 import { useState, useRef, useCallback, useLayoutEffect, useEffect, useMemo } from 'react';
 import { EffectIcon } from './effect-icon';
-import { Scissors, Copy, ClipboardPaste, Trash2, Magnet, Minus, Plus, Type, Layers, Volume2, VolumeX, ChevronDown, ChevronUp, MoreHorizontal, Rows3, ListMinus, Unlink, Flag, Pencil, FoldHorizontal, Combine } from 'lucide-react';
+import { Scissors, Copy, ClipboardPaste, Trash2, Magnet, Minus, Plus, Type, Layers, Volume2, VolumeX, ChevronDown, ChevronUp, MoreHorizontal, Rows3, ListMinus, Unlink, Flag, Pencil, FoldHorizontal, Combine, Undo2, Redo2 } from 'lucide-react';
 import { IconButton } from './primitives';
 import { TimelineRulerTicks } from './timeline-ruler';
 import { EditorPlaybackTime } from './playback-time';
@@ -44,6 +44,7 @@ type Props={
   onAddStockAudio?:(catalogId:string,at:number,track:number)=>Promise<void>;
   onCopy?:()=>void;onPaste?:(time?:number,visualTrack?:number)=>void;canPaste?:boolean;
   onTogglePlay?:()=>void;muted?:boolean;onToggleMute?:()=>void;
+  onUndo?:()=>void;onRedo?:()=>void;canUndo?:boolean;canRedo?:boolean;
   playbackControls?:React.ReactNode;
   onPreviewVolume?:(id:string,volume:number|null)=>void;
   onEditText?:(id:string)=>void;onEditClip?:(id:string)=>void;onError?:(message:string)=>void;collapsed?:boolean;onToggleCollapse?:()=>void;
@@ -608,6 +609,8 @@ export function TimelinePanel(p:Props){
     <div className="timeline-toolbar"><div className="timeline-edit-actions">{!p.playbackControls&&<EditorPlaybackTime className="timeline-playback-time" time={time} duration={end} fps={timeline.fps} playing={p.playing} readTime={p.readPlaybackTime}/>}
       {p.readOnly&&<span>Timeline</span>}
       {!p.readOnly&&<select className="timeline-frame-rate" aria-label="Timeline frame rate" title="Timeline frame rate" value={timeline.fps} disabled={editingDisabled} onChange={event=>{const fps=Number(event.target.value);if(fps===24||fps===30||fps===60){if(timeline.clips.some(clip=>clip.duration<1/fps)){report(new Error(`Some clips are shorter than one frame at ${fps} fps. Extend those clips before changing the frame rate.`));return;}onChange({...timeline,fps});}}}>{[24,30,60].map(fps=><option key={fps} value={fps}>{fps} fps</option>)}</select>}
+      {!p.readOnly&&p.onUndo&&<IconButton label="Undo" disabled={!p.canUndo} onClick={p.onUndo}><Undo2 size={14}/></IconButton>}
+      {!p.readOnly&&p.onRedo&&<IconButton label="Redo" disabled={!p.canRedo} onClick={p.onRedo}><Redo2 size={14}/></IconButton>}
     </div>{p.playbackControls&&<div className="timeline-playback-controls">{p.playbackControls}</div>}<div className="timeline-view-actions">
       {!p.readOnly&&<IconButton label="Unlink video and audio" disabled={editingDisabled||!timeline.clips.find(c=>c.id===selected)?.linkedClipId} onClick={()=>{if(selected)onChange(unlinkClips(timeline,selected));}}><Unlink size={14}/></IconButton>}
       {!p.readOnly&&<IconButton label="Close gaps" disabled={p.editingLocked||!timeline.clips.some(clip=>clip.kind==='video'||clip.kind==='image')} onClick={closeGaps}><FoldHorizontal size={14}/></IconButton>}

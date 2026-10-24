@@ -40,7 +40,7 @@ export function sceneFonts(urls: Partial<Record<string, string>>): SceneFont[] {
 export function sceneRuntimeScript(sources: SceneLayerSource[], fonts: SceneFont[], runtimeUrl: string) {
   return `(function(initial,fonts,runtimeUrl){
 var host=window,clock=host.__timelines.revline.__hfReal||host.__timelines.revline,composition=document.getElementById('composition'),entries=new Map(),fontData=new Map(),unregister;
-var virtual=host.__HF_VIRTUAL_TIME__,later=virtual&&virtual.originalSetTimeout?virtual.originalSetTimeout:setTimeout.bind(window);
+var virtual=host.__HF_VIRTUAL_TIME__,later=virtual&&virtual.originalSetTimeout?virtual.originalSetTimeout:setTimeout.bind(window),nextFrame=virtual&&virtual.originalRequestAnimationFrame?virtual.originalRequestAnimationFrame:requestAnimationFrame.bind(window);
 var runtimeSource=null;
 function runtimeScript(){if(!runtimeSource)runtimeSource=fetch(new URL(runtimeUrl,document.baseURI).href).then(function(response){if(!response.ok)throw new Error('The scene renderer could not load.');return response.text();}).then(function(text){return text.replace(/<\\/script/gi,'<\\\\/script');});return runtimeSource;}
 var anchor=document.createElement('span');anchor.dataset.sceneFrameSource='';anchor.style.cssText='position:absolute;width:0;height:0;pointer-events:none';composition.appendChild(anchor);
@@ -71,8 +71,10 @@ function visibleAt(entry,time){var local=time-entry.source.start;return local>=0
 function seek(entry,time){entry.seq++;entry.posted=time;send(entry,{type:'seek',time:time,seq:entry.seq});return entry.seq;}
 function paint(time){
   bindExport();
-  entries.forEach(function(entry){var visible=visibleAt(entry,time);entry.node.style.visibility=visible?'visible':'hidden';if(visible&&entry.compiled&&entry.posted!==localTime(entry,time))seek(entry,localTime(entry,time));});
+  entries.forEach(function(entry){try{var visible=visibleAt(entry,time),state=visible?'visible':'hidden';if(entry.node.style.visibility!==state)entry.node.style.visibility=state;if(visible&&entry.compiled&&entry.posted!==localTime(entry,time))seek(entry,localTime(entry,time));}catch(error){report(entry,error&&error.message||String(error));}});
 }
+// Some clock moves (player swaps, end-of-playback resets) bypass render and onUpdate.
+function watch(){if(entries.size)paint(clock.time());nextFrame(watch);}
 function whenReady(time){
   var pending=[];
   entries.forEach(function(entry){
@@ -106,7 +108,7 @@ clock.render=function(){var result=previousRender.apply(clock,arguments);paint(c
 clock.eventCallback('onUpdate',function(){if(previousUpdate)previousUpdate.call(clock);paint(clock.time());});
 window.addEventListener('hf-seek',function(event){var detail=event.detail;if(detail&&typeof detail.waitUntil==='function')detail.waitUntil(whenReady(detail.time));});
 host.__revlineSceneController={setSources:setSources,whenReady:whenReady};
-setSources(initial);
+setSources(initial);nextFrame(watch);
 })(${JSON.stringify(sources).replace(/</g, '\\u003c')},${JSON.stringify(fonts).replace(/</g, '\\u003c')},${JSON.stringify(runtimeUrl).replace(/</g, '\\u003c')});`;
 }
 
