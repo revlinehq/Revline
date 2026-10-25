@@ -6,6 +6,7 @@ import { LandingLogos } from '@/components/landing/logos';
 // import { LandingUseCases } from '@/components/landing/use-cases';
 import { LandingHowItWorks } from '@/components/landing/how-it-works';
 import { LandingFeatures } from '@/components/landing/features';
+import { LandingMcp } from '@/components/landing/mcp';
 import { LandingTestimonial } from '@/components/landing/testimonial';
 import { LandingPricing } from '@/components/landing/pricing';
 import { LandingFaq } from '@/components/landing/faq';
@@ -25,6 +26,7 @@ export default function Home() {
     {/* <LandingUseCases /> */}
     <LandingHowItWorks />
     <LandingFeatures />
+    <LandingMcp />
     <LandingTestimonial />
     <LandingPricing />
     <LandingFaq />

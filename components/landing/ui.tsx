@@ -4,7 +4,7 @@ import { cn } from '@/lib/utils';
 
 /* Shared landing primitives. Their styles live in the "Shared UI" block of app/landing.css. */
 
-export type LandingButtonVariant = 'primary' | 'secondary' | 'neutral' | 'dark' | 'brand' | 'inverse-outline';
+export type LandingButtonVariant = 'primary' | 'secondary' | 'neutral' | 'dark' | 'brand' | 'inverse' | 'inverse-outline';
 export type LandingButtonSize = 'sm' | 'md' | 'lg';
 type ButtonStyle = { variant?: LandingButtonVariant; size?: LandingButtonSize; block?: boolean; className?: string };
 type LinkButtonProps = ButtonStyle & Omit<ComponentProps<typeof Link>, 'className'>;
