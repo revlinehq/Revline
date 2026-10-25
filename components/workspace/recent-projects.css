@@ -18,4 +18,4 @@
 .recent-projects-empty{display:flex;align-items:center;justify-content:center;gap:8px;margin:0;padding:24px 16px;border-radius:12px;background:var(--ws-chip);color:var(--ws-muted);font-size:12px;line-height:1.6;text-align:center}
 @media(max-width:600px){.recent-project-link{gap:12px;padding:10px 12px}.recent-project-link .workspace-chat-cover{width:36px;height:48px}.recent-project-link time{font-size:10px}}
 @media(max-width:360px){.recent-project-link{flex-wrap:wrap}.recent-project-link .workspace-chat-description{flex-basis:calc(100% - 48px)}.recent-project-link time{margin-left:48px}}
-@media(prefers-reduced-motion:reduce){.recent-projects-spinner{animation:none}}
+

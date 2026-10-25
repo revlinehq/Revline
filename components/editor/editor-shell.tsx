@@ -41,7 +41,6 @@ import { addMediaClip, addTextClip, addEffectClip, convertSolidColorToVisual, se
 import type { EffectPreset } from '@/lib/editor/clip-effects';
 import { isTransitionPreset } from '@/lib/editor/clip-transitions';
 import { placeTransitionAt } from '@/lib/editor/transition-placement';
-import { addFadeThroughBlack, addOverlayClip } from '@/lib/editor/library-actions';
 import { textLookPatch, type TextLookId } from '@/lib/editor/text-looks';
 import { applyCaptionStyle, updateCaptionTiming } from '@/lib/editor/caption-editing';
 import { copyTimelineClips, pasteTimelineClips } from '@/lib/editor/clipboard';
@@ -388,23 +387,6 @@ export function EditorShell(p: EditorShellProps) {
     } catch (error) { onError(userError(error, 'Could not add this effect.')); }
   }
   function addLibraryText(look: TextLookId) { addText('graphic', { look }); }
-  function addOverlay(asset: MediaAsset) {
-    if (editLock.current) return;
-    try {
-      const id = crypto.randomUUID();
-      onChange(addOverlayClip(timeline, asset, id, readPlaybackTime()));
-      setSelected(id);
-    } catch (error) { onError(userError(error, 'Could not add this overlay.')); }
-  }
-  function fadeThroughBlack() {
-    if (editLock.current) return;
-    if (!clip) return;
-    try {
-      const id = crypto.randomUUID();
-      onChange(addFadeThroughBlack(timeline, clip.id, id));
-      setSelected(id);
-    } catch (error) { onError(userError(error, 'Could not add this transition.')); }
-  }
   function changeSpeed(rate: number) {
     if (editLock.current) return;
     if (!clip) return;
@@ -449,7 +431,7 @@ export function EditorShell(p: EditorShellProps) {
   const browseSources=()=>{setImportDestination('sources');setImportOpen(true);};
   const browseComposer=()=>{setImportDestination('composer');setImportOpen(true);};
 
-  const inspector = <ClockedPreviewInspector backgroundRemoval={p.ultra && p.projectId && !p.demo ? { projectId: p.projectId as import('@/convex/_generated/dataModel').Id<'projects'> } : undefined} onClose={compact ? undefined : () => setInspectorOpen(false)} readOnly={editing} timeline={timeline} time={time} onSeek={seek} onAddTransition={addEffect} onRemoveAsset={p.onRemoveAsset} usedAssetIds={usedAssetIds} sourceRequest={sourceRequest} editRequest={editRequest} libraryRequest={libraryRequest} onLibraryCategoryChange={setLibraryCategory} onAddTextLook={addLibraryText} captionActions={captionActions} onAddOverlay={addOverlay} onFadeThroughBlack={fadeThroughBlack} videoImports={p.videoImports} assets={assets} upload={p.upload} onUpload={browseSources} onAdd={addAsset} onAddSound={addSound} onAddStockAudio={p.onRegisterStockAudio ? catalogId=>addStockAudio(catalogId,readPlaybackTime()) : undefined} clip={clip} audioClip={clip?.kind==='video'?timeline.clips.find(c=>c.id===clip.linkedClipId):undefined} asset={assets.find(a => a._id === clip?.assetId)} onChange={patch => { if (clip) changeClip(clip.id, patch); }} onPreviewEffects={patch => { if (clip && (patch === null || !editLock.current)) preview.current?.clipEffects(clip.id, patch); }} onAddEffect={addEffect} onConvertSolidColor={() => { if (clip) onChange(convertSolidColorToVisual(timeline,clip.id)); }} onPlaybackRateChange={changeSpeed} onCrop={cropVisual} cropping={cropping}/>;
+  const inspector = <ClockedPreviewInspector backgroundRemoval={p.ultra && p.projectId && !p.demo ? { projectId: p.projectId as import('@/convex/_generated/dataModel').Id<'projects'> } : undefined} onClose={compact ? undefined : () => setInspectorOpen(false)} readOnly={editing} timeline={timeline} time={time} onSeek={seek} onAddTransition={addEffect} onRemoveAsset={p.onRemoveAsset} usedAssetIds={usedAssetIds} sourceRequest={sourceRequest} editRequest={editRequest} libraryRequest={libraryRequest} onLibraryCategoryChange={setLibraryCategory} onAddTextLook={addLibraryText} captionActions={captionActions} videoImports={p.videoImports} assets={assets} upload={p.upload} onUpload={browseSources} onAdd={addAsset} onAddSound={addSound} onAddStockAudio={p.onRegisterStockAudio ? catalogId=>addStockAudio(catalogId,readPlaybackTime()) : undefined} clip={clip} audioClip={clip?.kind==='video'?timeline.clips.find(c=>c.id===clip.linkedClipId):undefined} asset={assets.find(a => a._id === clip?.assetId)} onChange={patch => { if (clip) changeClip(clip.id, patch); }} onPreviewEffects={patch => { if (clip && (patch === null || !editLock.current)) preview.current?.clipEffects(clip.id, patch); }} onAddEffect={addEffect} onConvertSolidColor={() => { if (clip) onChange(convertSolidColorToVisual(timeline,clip.id)); }} onPlaybackRateChange={changeSpeed} onCrop={cropVisual} cropping={cropping}/>;
 
   // On desktop the ratio chip sits on the preview frame's top-left corner, as in the design.
   const ratioOnFrame = !compact && !!previewTimeline.clips.length;

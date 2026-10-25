@@ -11,7 +11,6 @@ import type { VisualEffects } from '@/lib/editor/visual-effects';
 import type { Clip, MediaAsset, Timeline } from '@/lib/editor/types';
 import { isTransitionPreset, type TransitionPreset } from '@/lib/editor/clip-transitions';
 import { transitionAvailabilityAt } from '@/lib/editor/transition-placement';
-import type { OverlayCatalogItem } from '@/lib/editor/overlay-catalog';
 import { EFFECT_DRAG_TYPE } from '@/lib/editor/effect-drag';
 import { EFFECT_LIBRARY_CATALOG, EFFECT_LIBRARY_CATEGORIES, type EffectLibraryCategory, type EffectLibraryEntry as LibraryEntryData } from './effect-library-catalog';
 import './effect-library.css';
@@ -43,8 +42,7 @@ export function EffectLibrary({ cutoutLab, clip, timeline, time = 0, assets, onM
   onAddEffect?: (preset: EffectPreset) => void;
   onAddTransition?: (preset: TransitionPreset) => void;
   onTextLook?: (look: TextLookId) => void;
-  onUploadOverlay?: () => void; onAddOverlay?: (asset: MediaAsset) => void; overlayAssets?: readonly MediaAsset[]; onAddCatalogOverlay?: (overlay: OverlayCatalogItem) => void;
-  onFadeThroughBlack?: () => void; onSpeed?: () => void;
+  onSpeed?: () => void;
   onAddSound?: (asset: MediaAsset) => void; onAddStockAudio?: (catalogId: string) => Promise<void>; onUploadSound?: () => void; uploading?: boolean;
 }) {
   const [category, setCategory] = useState<LibraryCategory>(categoryRequest?.category ?? 'texture');

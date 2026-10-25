@@ -1,6 +1,6 @@
 /* The recovered custom timeline owns pointer gestures and canonical edits. */
 .custom-timeline{--timeline-selection-border:#45454599;--timeline-selection-width:1px;--timeline-selection-halo:none;--timeline-marquee-border:var(--revline-accent);--timeline-marquee-fill:color-mix(in srgb,var(--revline-accent) 7.84%,transparent);--timeline-divider:color-mix(in srgb,var(--ws-text) 10%,var(--ws-bg));height:100%;min-width:0;min-height:0;overflow:hidden;padding:0;gap:0;background:var(--ws-bg);color:var(--ws-muted);container-type:inline-size;container-name:timeline}
-html[data-workspace-theme=dark] .editor-app:not(.landing-product-demo) .custom-timeline{--timeline-selection-border:#ffffff52;--timeline-selection-width:1px;--timeline-selection-halo:none;--timeline-marquee-border:#526b94;--timeline-marquee-fill:#7892c710;--timeline-divider:color-mix(in srgb,var(--ws-text) 5%,var(--ws-bg))}
+html[data-workspace-theme=dark] .editor-app .custom-timeline{--timeline-selection-border:#ffffff52;--timeline-selection-width:1px;--timeline-selection-halo:none;--timeline-marquee-border:#526b94;--timeline-marquee-fill:#7892c710;--timeline-divider:color-mix(in srgb,var(--ws-text) 5%,var(--ws-bg))}
 .custom-timeline .timeline-body{position:relative;flex:1;min-height:0;overflow:hidden}
 .custom-timeline .timeline-scroll{--timeline-scrollbar-thumb:color-mix(in srgb,var(--ws-text) 16%,var(--ws-bg));min-width:0;overflow:auto;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:var(--timeline-scrollbar-thumb) transparent}
 .custom-timeline .timeline-scroll::-webkit-scrollbar{width:6px;height:6px;background:transparent}
@@ -64,13 +64,13 @@ html[data-workspace-theme=dark] .editor-app:not(.landing-product-demo) .custom-t
 .custom-timeline .timeline-clip.selected::after{inset:0;border-width:var(--timeline-selection-width);border-color:var(--timeline-selection-border);border-radius:inherit;box-shadow:var(--timeline-selection-halo)}
 .custom-timeline .timeline-clip:focus-visible{outline-color:var(--timeline-selection-border);outline-offset:-2px}
 .custom-timeline .timeline-selection-box{border-color:var(--timeline-marquee-border);background:var(--timeline-marquee-fill)}
-html[data-workspace-theme=dark] .editor-app:not(.landing-product-demo) .custom-timeline .timeline-clip:focus-visible{outline-color:#fff}
-html[data-workspace-theme=dark] .editor-app:not(.landing-product-demo) .custom-timeline .track-label.layer-drop-target{background:#6e8abb0a;box-shadow:inset 0 1px #526b94,inset 0 -1px #526b94}
-html[data-workspace-theme=dark] .editor-app:not(.landing-product-demo) .custom-timeline .timeline-floating-clip{outline-color:var(--timeline-selection-border)}
-html[data-workspace-theme=dark] .editor-app:not(.landing-product-demo) .custom-timeline .timeline-destination-preview{border-color:var(--timeline-marquee-border);background:#6e8abb0a}
-html[data-workspace-theme=dark] .editor-app:not(.landing-product-demo) .custom-timeline .timeline-insert-indicator{border-top-color:var(--timeline-marquee-border)}
-html[data-workspace-theme=dark] .editor-app:not(.landing-product-demo) .custom-timeline .timeline-insert-indicator>span{background:#303d56;color:#d8e0ef}
-html[data-workspace-theme=dark] .editor-app:not(.landing-product-demo) .custom-timeline .timeline-insert-indicator:before{background:var(--timeline-marquee-border)}
+html[data-workspace-theme=dark] .editor-app .custom-timeline .timeline-clip:focus-visible{outline-color:#fff}
+html[data-workspace-theme=dark] .editor-app .custom-timeline .track-label.layer-drop-target{background:#6e8abb0a;box-shadow:inset 0 1px #526b94,inset 0 -1px #526b94}
+html[data-workspace-theme=dark] .editor-app .custom-timeline .timeline-floating-clip{outline-color:var(--timeline-selection-border)}
+html[data-workspace-theme=dark] .editor-app .custom-timeline .timeline-destination-preview{border-color:var(--timeline-marquee-border);background:#6e8abb0a}
+html[data-workspace-theme=dark] .editor-app .custom-timeline .timeline-insert-indicator{border-top-color:var(--timeline-marquee-border)}
+html[data-workspace-theme=dark] .editor-app .custom-timeline .timeline-insert-indicator>span{background:#303d56;color:#d8e0ef}
+html[data-workspace-theme=dark] .editor-app .custom-timeline .timeline-insert-indicator:before{background:var(--timeline-marquee-border)}
 .conversation-editor .custom-timeline .playhead,.custom-timeline .playhead{width:1px;background:#009DFF;pointer-events:none;z-index:10}
 .custom-timeline .playhead::before{content:none}
 .custom-timeline .time-ruler{position:sticky;top:0;z-index:11;touch-action:none}
@@ -119,16 +119,14 @@ html[data-workspace-theme=dark] .editor-app:not(.landing-product-demo) .custom-t
 /* AI editing shows a small badge in the toolbar; the timeline itself stays unlit. */
 .custom-timeline{position:relative}
 .custom-timeline .timeline-body::after{content:'';position:absolute;inset:0;z-index:12;background:color-mix(in srgb,var(--ws-bg) 22%,transparent);backdrop-filter:blur(1.5px);opacity:0;pointer-events:none;transition:opacity 160ms ease}
-.custom-timeline .timeline-ai-notice{position:absolute;top:50%;left:50%;z-index:13;width:max-content;max-width:calc(100% - 32px);padding:0;border:0;border-radius:0;background:none;color:var(--ws-text);box-shadow:none;font-size:13px;font-weight:500;line-height:1.4;opacity:0;transform:translate(-50%,calc(-50% + 3px));pointer-events:none;transition:opacity 240ms ease;text-align:center}
-.custom-timeline[data-editing-locked] .timeline-body:is(:hover,:focus-within)::after,.custom-timeline[data-editing-locked] .timeline-body:is(:hover,:focus-within) .timeline-ai-notice{opacity:1}
-.custom-timeline[data-editing-locked] .timeline-body:is(:hover,:focus-within) .timeline-ai-notice{transform:translate(-50%,-50%)}
-@starting-style{.custom-timeline[data-editing-locked] .timeline-body:is(:hover,:focus-within) .timeline-ai-notice{opacity:0}}
+
+.custom-timeline[data-editing-locked] .timeline-body:is(:hover,:focus-within)::after{opacity:1}
+
 .custom-timeline[data-editing-locked] :is(.timeline-clip,.timeline-beat-marker){cursor:default}
 .custom-timeline[data-editing-locked] .timeline-playhead-cap:hover{color:#009DFF}
 .custom-timeline[data-editing-locked] :is(.clip-trim,.audio-volume-line){pointer-events:none}
-@media(prefers-reduced-motion:reduce){.custom-timeline .timeline-ai-notice{transition:opacity 240ms ease!important}.custom-timeline .timeline-body::after{transition:none}.custom-timeline .timeline-ai-badge-dot{animation:none}}
+@media(prefers-reduced-motion:reduce){.custom-timeline .timeline-body::after{transition:none}.custom-timeline .timeline-ai-badge-dot{animation:none}}
 
-.custom-timeline .timeline-frame-rate{height:26px;min-width:70px;padding:0 6px;border:1px solid var(--timeline-divider);border-radius:6px;background:var(--ws-bg);color:var(--ws-muted);font:inherit;font-size:11px;cursor:pointer}.custom-timeline .timeline-frame-rate:disabled{opacity:.45;cursor:default}.custom-timeline .timeline-frame-rate:focus-visible{outline:2px solid var(--revline-accent);outline-offset:2px}
 /* Blade tool (B): clips cut where they are clicked; the line previews the cut frame. */
 .custom-timeline[data-tool=blade] .timeline-clip,.custom-timeline[data-tool=blade] .timeline-clip *{cursor:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke-linecap='round' stroke-linejoin='round'%3E%3Cg stroke='%23000' stroke-width='4'%3E%3Ccircle cx='6' cy='6' r='3'/%3E%3Ccircle cx='6' cy='18' r='3'/%3E%3Cpath d='M20 4 8.12 15.88M14.47 14.48 20 20M8.12 8.12 12 12'/%3E%3C/g%3E%3Cg stroke='%23fff' stroke-width='2'%3E%3Ccircle cx='6' cy='6' r='3'/%3E%3Ccircle cx='6' cy='18' r='3'/%3E%3Cpath d='M20 4 8.12 15.88M14.47 14.48 20 20M8.12 8.12 12 12'/%3E%3C/g%3E%3C/svg%3E") 10 10,crosshair}
 .custom-timeline[data-tool=blade] .timeline-clip:hover::before{content:'';position:absolute;top:-2px;bottom:-2px;left:var(--blade-x,50%);width:2px;margin-left:-1px;z-index:5;background:#fff;box-shadow:0 0 0 1px #0009;pointer-events:none}

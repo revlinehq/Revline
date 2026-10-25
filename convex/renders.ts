@@ -1,7 +1,7 @@
 import { clipExportTimeline } from '../lib/editor/clip-export';
 import { flyRendersEnabled, queuedExportLimit } from './lib/render_seats';
 import { projectIdentity } from './lib/project_data';
-import { recordStorageObject, forgetStorageObject } from './lib/storage_accounting';
+import { forgetStorageObject } from './lib/storage_accounting';
 import { internal } from './_generated/api';
 import { hasUltraPlan, requireEditorAccess } from './lib/billing_access';
 import { mediaDownloadUrl, mediaUrl } from './lib/media_storage';
@@ -10,21 +10,12 @@ import { action, internalQuery, mutation, internalMutation, query, type Mutation
 import type { Id } from "./_generated/dataModel";
 import { listLimit, requireOwner, requireProject } from "./lib/auth";
 import { currentTimeline, validateTimeline } from "./lib/timeline";
-import { assetWithUrl, renderSummaryDocument, timelineValidator } from "./schema";
-import { consumeUpload, issueUpload } from "./uploads";
+import { renderSummaryDocument } from "./schema";
 import { MAX_EXPORT_SECONDS } from '../lib/editor/limits';
-import { normalizeTimeline, timelineDuration } from '../lib/editor/types';
+import { timelineDuration } from '../lib/editor/types';
 import { cancelMediaTask, enqueueMediaTask, failMediaTask } from './mediaTasks';
 import { accountLimit } from './lib/account_limits';
-const workerArgs = { jobId: v.id("renderJobs"), workerSecret: v.string() };
 const activeExportLimit = () => accountLimit('MAX_ACTIVE_EXPORTS_PER_ACCOUNT', 2, 1, 10);
-async function requireJob(ctx: MutationCtx, jobId: Id<"renderJobs">, workerSecret: string) {
-  const secret = process.env.RENDER_WORKER_SECRET;
-  if (!secret || workerSecret !== secret) throw new ConvexError("Render worker authentication required");
-  const ownerId = await requireOwner(ctx); const job = await ctx.db.get(jobId);
-  if (!job || job.ownerId !== ownerId) throw new ConvexError("Render not found");
-  await requireProject(ctx, job.projectId, ownerId); return job;
-}
 const startRenderForArgs = { projectId: v.id("projects"), resolution: v.number(), fps: v.number(), quality: v.string(), clipId:v.optional(v.string()) };
 export async function startRenderFor(ctx: MutationCtx, ownerId: string, args: ObjectType<typeof startRenderForArgs>) {
   await requireEditorAccess(ctx, ownerId); const project = await requireProject(ctx, args.projectId, ownerId);
@@ -54,15 +45,6 @@ export async function startRenderFor(ctx: MutationCtx, ownerId: string, args: Ob
   return jobId;
 }
 export const start = mutation({ args: startRenderForArgs, returns: v.id("renderJobs"), handler: async (ctx, args) => startRenderFor(ctx, await requireOwner(ctx), args) });
-export const claim = internalMutation({ args: workerArgs, returns: v.object({ projectId: v.id("projects"), timeline: timelineValidator, assets: v.array(assetWithUrl), resolution: v.number(), fps: v.number(), quality: v.string() }), handler: async (ctx, args) => {
-  const job = await requireJob(ctx, args.jobId, args.workerSecret);
-  if (job.status !== "queued" || !job.timeline) throw new ConvexError("Render cannot be claimed");
-  const assets = [];
-  for (const assetId of job.assetIds ?? []) { const asset = await ctx.db.get(assetId); if (!asset || asset.ownerId !== job.ownerId || asset.projectId !== job.projectId) throw new ConvexError("Render media not found"); const url = await mediaUrl(ctx, asset); if (!url) throw new ConvexError("Render media storage not found"); assets.push({ ...asset, url }); }
-  const timeline = normalizeTimeline(job.timeline);
-  await ctx.db.patch(job._id, { status: "rendering", timeline, updatedAt: Date.now() });
-  return { projectId: job.projectId, timeline, assets, resolution: job.resolution ?? 1080, fps: job.fps ?? timeline.fps, quality: job.quality ?? "high" };
-}});
 export const cancel = mutation({ args:{jobId:v.id('renderJobs')},returns:v.null(),handler:async(ctx,args)=>{
   const ownerId=await requireOwner(ctx),job=await ctx.db.get(args.jobId);
   if(!job||job.ownerId!==ownerId)throw new ConvexError('Export not found');
@@ -96,27 +78,6 @@ export const failStalled = internalMutation({ args: {}, returns: v.null(), handl
     }
   }
   return null;
-}});
-export const progress = internalMutation({ args: { ...workerArgs, progress: v.number() }, returns: v.null(), handler: async (ctx, args) => {
-  const job = await requireJob(ctx, args.jobId, args.workerSecret);
-  if (job.status !== "rendering") throw new ConvexError("Render is not running");
-  if (!Number.isFinite(args.progress) || args.progress < (job.progress ?? 0) || args.progress > 99) throw new ConvexError("Render progress must increase from 0 to 99");
-  await ctx.db.patch(job._id, { progress: args.progress, updatedAt: Date.now() }); return null;
-}});
-export const generateUploadUrl = internalMutation({ args: workerArgs, returns: v.string(), handler: async (ctx, args) => {
-  const job = await requireJob(ctx, args.jobId, args.workerSecret); if (job.status !== "rendering") throw new ConvexError("Render is not running");
-  return await issueUpload(ctx, job.ownerId, job.projectId, job._id);
-}});
-export const complete = internalMutation({ args: { ...workerArgs, storageId: v.id("_storage") }, returns: v.null(), handler: async (ctx, args) => {
-  const job = await requireJob(ctx, args.jobId, args.workerSecret); if (job.status !== "rendering") throw new ConvexError("Render is not running");
-  const file = await ctx.db.system.get(args.storageId); if (!file || file.contentType !== "video/mp4") throw new ConvexError("Render output must be an uploaded MP4");
-  await consumeUpload(ctx, args.storageId, job.ownerId, job.projectId, job._id);
-  await recordStorageObject(ctx,{ownerId:job.ownerId,storageId:args.storageId,fileName:"Export.mp4",kind:"export",size:file.size,createdAt:job.createdAt,jobId:job._id});
-  await ctx.db.patch(job._id, { outputSize:file.size,status: "completed", outputStorageId: args.storageId, progress: 100, updatedAt: Date.now() }); return null;
-}});
-export const fail = internalMutation({ args: { ...workerArgs, error: v.string() }, returns: v.null(), handler: async (ctx, args) => {
-  const job = await requireJob(ctx, args.jobId, args.workerSecret); if (job.status !== "queued" && job.status !== "rendering") throw new ConvexError("Render is already finished");
-  await ctx.db.patch(job._id, { status: "failed", error: args.error.slice(0, 1000), updatedAt: Date.now() }); return null;
 }});
 export const get = query({ args: { jobId: v.id("renderJobs") }, returns: renderSummaryDocument, handler: async (ctx, args) => {
   const ownerId = await requireOwner(ctx); const job = await ctx.db.get(args.jobId); if (!job || job.ownerId !== ownerId) throw new ConvexError("Render not found");
