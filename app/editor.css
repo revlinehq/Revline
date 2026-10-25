@@ -198,7 +198,9 @@ html[data-workspace-theme=dark] .conversation-editor .assistant-source-suggestio
 html[data-workspace-theme=dark] .conversation-editor .assistant-source-suggestions button{padding:11px 12px;border-color:var(--ed-border);border-radius:8px;background:var(--ed-surface);font-size:13px;color:var(--ed-text)}
 html[data-workspace-theme=dark] .conversation-editor .assistant-source-suggestions button>svg{color:var(--ed-text-3)}
 html[data-workspace-theme=dark] .conversation-editor .assistant-source-suggestions button:hover:not(:disabled){background:var(--ed-surface-2)}
-html[data-workspace-theme=dark] .conversation-editor .manual-composer-dock>.edit-composer{padding:12px 10px 10px 12px;border-radius:8px;background:#2a2a2a;box-shadow:inset 0 0 0 1px #363636}
+html[data-workspace-theme=dark] .conversation-editor .manual-composer-dock>.edit-composer{padding:12px 10px 10px 12px;border-radius:8px;background:#2a2a2a;box-shadow:inset 0 0 0 1px #8b5cf659;transition:box-shadow 160ms ease}
+/* A soft purple outline, brighter with a faint halo while typing. */
+html[data-workspace-theme=dark] .conversation-editor .manual-composer-dock>.edit-composer:focus-within{box-shadow:inset 0 0 0 1px #8b5cf6b3,0 0 0 3px #7c3aed24}
 html[data-workspace-theme=dark] .conversation-editor .manual-composer-dock>.edit-composer textarea{padding:0 2px;font-size:14px}
 html[data-workspace-theme=dark] .conversation-editor .manual-composer-dock>.edit-composer textarea::placeholder{color:var(--ed-text-3)}
 html[data-workspace-theme=dark] .conversation-editor .manual-composer-dock>.edit-composer .composer-add{color:var(--ed-text-3)}
