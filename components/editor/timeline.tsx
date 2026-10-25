@@ -621,12 +621,12 @@ export function TimelinePanel(p:Props){
   };
 
   return <ContextMenu onOpenChange={open=>{if(!open)setContext(null);}}><ContextMenuTrigger asChild disabled={editingDisabled}><section tabIndex={-1} onContextMenu={openContext} data-read-only={p.readOnly||undefined} data-tool={blade&&!editingDisabled?'blade':undefined} data-editing-locked={p.editingLocked||undefined} data-ai-working={p.aiWorking||p.editingLocked||undefined} data-live-edit={!!p.liveEdit||undefined} aria-busy={p.aiWorking||p.editingLocked||undefined} className={`timeline-panel custom-timeline ${p.playbackControls?'timeline-with-playback':''} ${p.collapsed?'timeline-collapsed':''} ${dense?'tracks-compact':''}`} aria-label={p.readOnly?'Shared video timeline':'Video timeline'}>
-    <div className="timeline-ai-frame" aria-hidden="true"/>
     <TimelinePlayheadClock playing={p.playing} readTime={p.readPlaybackTime} px={px} duration={end} origin={origin} viewport={scroll} head={head} cap={cap} scrubbing={scrubRef} followPausedUntil={followPausedUntil}/>
     <div className="timeline-toolbar"><div className="timeline-edit-actions">{!p.playbackControls&&<EditorPlaybackTime className="timeline-playback-time" time={time} duration={end} fps={timeline.fps} playing={p.playing} readTime={p.readPlaybackTime}/>}
       {p.readOnly&&<span>Timeline</span>}
       {!p.readOnly&&<IconButton label={blade?'Blade on · click a clip to cut · A to select':'Blade tool (B)'} aria-pressed={blade} data-active={blade||undefined} disabled={editingDisabled} onClick={()=>store.setState({tool:blade?'select':'blade'})}><Scissors size={14}/></IconButton>}
       {!p.readOnly&&<IconButton label="Delete selected clips" disabled={editingDisabled||!selected} onClick={p.onDelete}><Trash2 size={14}/></IconButton>}
+      {(p.aiWorking||p.editingLocked)&&!p.readOnly&&<span className="timeline-ai-badge" role="status"><span className="timeline-ai-badge-dot" aria-hidden="true"/>AI editing</span>}
     </div>{p.playbackControls&&<div className="timeline-playback-controls">{p.playbackControls}</div>}<div className="timeline-view-actions">
       {!p.readOnly&&<Tooltip><TooltipTrigger asChild><button aria-label="Auto-join when trimming" onClick={()=>{store.setState({ripple:!ripple});setRipplePreference(!ripple);}} aria-pressed={ripple} className={ripple?'snap-active':''}><ChevronsRightLeft size={14}/></button></TooltipTrigger><TooltipContent>{ripple?'Auto-join on: trims pull later clips along':'Auto-join off: trims leave gaps'}</TooltipContent></Tooltip>}
       {!p.readOnly&&<button aria-label="Toggle snapping" onClick={()=>store.setState({snapping:!snap})} aria-pressed={snap} className={snap?'snap-active':''}><Magnet size={14}/></button>}
