@@ -12,8 +12,12 @@ const LANES: Lane[] = ['ultra', 'standard'];
 // saturate 16 vCPUs (16 measured no faster). Frames stream into the encoder, so the scratch volume
 // (Fly's root filesystem is ~8 GB and slow) only holds sources and the output: a 98 s 4K60 export peaked under 0.4 GB.
 /** Each export is split into up to `chunks` slices rendered at once on short-lived machines of `guest` size. */
+// HyperFrames' distributed path forces screenshot capture under software GL unless the
+// environment opts out, so planner and chunk machines both set PRODUCER_FORCE_SCREENSHOT=false.
 const distributed = (chunks: number, guest: { cpu_kind: 'performance'; cpus: number; memory_mb: number }, env: Record<string, string>) => ({
-  REVLINE_DISTRIBUTED_EXPORT: 'true', REVLINE_EXPORT_MAX_CHUNKS: String(chunks), REVLINE_EXPORT_CHUNK_GUEST: JSON.stringify(guest), REVLINE_EXPORT_CHUNK_ENV: JSON.stringify(env),
+  // The filtered renderer stage log (render-worker.ts) is how export timings are measured.
+  REVLINE_DISTRIBUTED_EXPORT: 'true', PRODUCER_FORCE_SCREENSHOT: 'false', REVLINE_RENDER_LOG_LEVEL: 'info', REVLINE_EXPORT_MAX_CHUNKS: String(chunks), REVLINE_EXPORT_CHUNK_GUEST: JSON.stringify(guest),
+  REVLINE_EXPORT_CHUNK_ENV: JSON.stringify({ ...env, PRODUCER_FORCE_SCREENSHOT: 'false' }),
 });
 const PROFILES: Record<Lane, { guest: { cpu_kind: 'performance'; cpus: number; memory_mb: number }; scratchGb: number; env: Record<string, string> }> = {
   ultra: { guest: { cpu_kind: 'performance', cpus: 16, memory_mb: 32768 }, scratchGb: 20, env: { MEDIA_LANE: 'ultra', REVLINE_RENDER_WORKERS: '8', REVLINE_RENDER_FFMPEG_SLOTS: '4', REVLINE_RENDER_ENCODE_THREADS: '16', ...distributed(16, { cpu_kind: 'performance', cpus: 8, memory_mb: 16384 }, { REVLINE_RENDER_WORKERS: '4', REVLINE_RENDER_FFMPEG_SLOTS: '4', REVLINE_RENDER_ENCODE_THREADS: '8' }) } },

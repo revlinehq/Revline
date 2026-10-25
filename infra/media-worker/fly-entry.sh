@@ -4,6 +4,10 @@
 # at /scratch when present. Volumes mount root-owned: prepare as root, then run
 # the consumer as the unprivileged node user.
 set -e
+# BeginFrame capture needs chrome-headless-shell. HyperFrames' distributed path only
+# looks in ~/.cache, but the image installs browsers under PUPPETEER_CACHE_DIR.
+shell=$(ls -d /opt/chrome/chrome-headless-shell/*/chrome-headless-shell-linux64/chrome-headless-shell 2>/dev/null | sort | tail -1)
+if [ -n "$shell" ]; then export PRODUCER_HEADLESS_SHELL_PATH="$shell"; fi
 # Chunk machines (no volume) render one slice of a distributed export, then exit.
 if [ -n "$REVLINE_CHUNK_INDEX" ]; then
   export HOME=/home/node
