@@ -103,9 +103,17 @@ div.landing-reveal,div.landing-reveal>.landing-reveal-content{display:inline-blo
 
 /* How it works */
 .landing-how{display:flex;flex-direction:column;gap:48px;padding-block:96px}
+.landing-features{display:flex;flex-direction:column;gap:56px;padding-block:96px}
+.landing .landing-feature-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:48px 40px}
+.landing-feature-grid li{display:flex;flex-direction:column;gap:10px;padding-top:24px;border-top:1px solid var(--l-border)}
+.landing-feature-grid svg{margin-bottom:16px;color:var(--l-brand)}
+.landing-feature-grid h3{font:400 19px/1.25 var(--l-head);letter-spacing:-.2px;color:var(--l-fg)}
+.landing-feature-grid p{font-size:14px;line-height:1.5;color:var(--l-fg-2)}
 .landing-steps{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px}
 .landing-step{display:flex;flex-direction:column;min-width:0;background:var(--l-bg-subtle);border-radius:12px;overflow:hidden}
-.landing-step-visual{height:280px;display:flex;flex-direction:column;justify-content:center;padding:28px 24px 0}
+.landing-step-visual{height:280px;display:flex;flex-direction:column;justify-content:center;padding:28px 20px 0}
+.landing-step .landing-edit-notes{flex-wrap:wrap;gap:6px}
+.landing-step .landing-chip{padding:4px 7px;font-size:11px}
 .landing-step-text{display:flex;flex-direction:column;gap:6px;padding:8px 28px 28px}
 .landing-step-text h3{font:500 22px/1.25 var(--l-head);letter-spacing:-.3px;color:var(--l-fg)}
 .landing-step-text p{font-size:15px;line-height:1.5;color:var(--l-fg-2)}
@@ -210,6 +218,7 @@ div.landing-reveal,div.landing-reveal>.landing-reveal-content{display:inline-blo
   .landing-nav-links{gap:20px}
   .landing-hero h1{font-size:56px}
   .landing-steps{grid-template-columns:minmax(0,1fr)}
+  .landing .landing-feature-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
   .landing-testimonial{padding-block:96px}
   .landing-faq{flex-direction:column;gap:32px}
   .landing-faq .landing-heading{width:100%}
@@ -229,8 +238,9 @@ div.landing-reveal,div.landing-reveal>.landing-reveal-content{display:inline-blo
   .landing-logos{padding-bottom:56px}
   .landing-logos ul{gap:16px 36px}
   .landing-logos li{font-size:18px}
-  .landing-use-cases,.landing-how,.landing-pricing,.landing-faq{padding-block:64px}
-  .landing-use-cases,.landing-how{gap:32px}
+  .landing-use-cases,.landing-how,.landing-features,.landing-pricing,.landing-faq{padding-block:64px}
+  .landing-use-cases,.landing-how,.landing-features{gap:32px}
+  .landing .landing-feature-grid{grid-template-columns:minmax(0,1fr);gap:32px}
   .landing-tile{height:180px;width:102px}
   .landing-tile-wide{width:320px}
   .landing-step-visual{padding:20px 16px 0}
