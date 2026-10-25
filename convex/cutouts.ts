@@ -12,7 +12,8 @@ import { enqueueMediaTask } from './mediaTasks';
 import { sourceEndOf } from '../lib/editor/playback-rate';
 
 // fal.ai bills per frame: $0.0225 per 30 frames with edge refinement (Oct 2026).
-const USD_PER_SECOND_AT_30FPS = 0.0225, HANDLE_SECONDS = 0.25, MAX_SECONDS = 120;
+// The worker sends at most the project's frame rate, so 60 fps footage in a 30 fps edit costs half.
+const USD_PER_30_FRAMES = 0.0225, HANDLE_SECONDS = 0.25, MAX_SECONDS = 120;
 const PLACEMENT_DELAY_MS = 10_000, PLACEMENT_ATTEMPTS = 360;
 export const CUTOUT_PLAN_ERROR = 'Background removal is part of the Ultra plan.';
 
@@ -31,7 +32,7 @@ export async function startCutoutFor(ctx: MutationCtx, ownerId: string, projectI
   if (end - start > MAX_SECONDS) throw new ConvexError(`Remove the background from up to ${MAX_SECONDS / 60} minutes at a time. Split this clip first.`);
   const recent = await ctx.db.query('cutouts').withIndex('by_project', q => q.eq('projectId', project._id)).order('desc').take(50);
   const pending = recent.find(row => row.clipId === clipId && row.status === 'queued');
-  if (pending) return { cutoutId: pending._id, estimatedUsd: estimate(pending.end - pending.start), alreadyRunning: true, reused: false };
+  if (pending) return { cutoutId: pending._id, estimatedUsd: estimate(pending.end - pending.start, pending.fps), alreadyRunning: true, reused: false };
   // A finished cut-out of this footage that covers the clip applies again for free.
   for (const row of recent) {
     if (row.status !== 'completed' || !row.outputAssetId || row.sourceAssetId !== asset._id || row.start > clip.sourceStart + 1e-6 || row.end < sourceEndOf(clip) - 1e-6) continue;
@@ -42,12 +43,13 @@ export async function startCutoutFor(ctx: MutationCtx, ownerId: string, projectI
     return { cutoutId: row._id, estimatedUsd: 0, alreadyRunning: false, reused: true };
   }
   await requireMediaTaskCapacity(ctx, ownerId, 1);
-  const cutoutId = await ctx.db.insert('cutouts', { ownerId, projectId: project._id, clipId, sourceAssetId: asset._id, start, end, status: 'queued', createdAt: Date.now() });
+  const fps = currentTimeline(project).fps;
+  const cutoutId = await ctx.db.insert('cutouts', { ownerId, projectId: project._id, clipId, sourceAssetId: asset._id, start, end, fps, status: 'queued', createdAt: Date.now() });
   const taskId = await enqueueMediaTask(ctx, { ownerId, projectId: project._id, assetId: asset._id, kind: 'cutout', cutoutId });
   await ctx.db.patch(cutoutId, { taskId });
-  return { cutoutId, estimatedUsd: estimate(end - start), alreadyRunning: false, reused: false };
+  return { cutoutId, estimatedUsd: estimate(end - start, fps), alreadyRunning: false, reused: false };
 }
-const estimate = (seconds: number) => Math.round(seconds * USD_PER_SECOND_AT_30FPS * 100) / 100;
+const estimate = (seconds: number, fps = 30) => Math.round(Math.ceil(seconds * fps / 30) * USD_PER_30_FRAMES * 100) / 100;
 
 export const startFromRun = internalMutation({ args: { projectId: v.id('projects'), ownerId: v.string(), runId: v.string(), clipId: v.string() }, returns: v.object({ cutoutId: v.id('cutouts'), estimatedUsd: v.number(), alreadyRunning: v.boolean(), reused: v.boolean() }), handler: async (ctx, args) => {
   const project = await readProject(ctx, args.projectId);
