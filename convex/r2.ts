@@ -12,7 +12,7 @@ import { mediaConfig, storageControl, hasPreview, PREVIEW_VERSION } from './lib/
 import { signMediaToken } from '../lib/storage/media-tokens';
 import { requireMediaTask } from './lib/media_task_auth';
 import { enqueueMediaTask } from './mediaTasks';
-import { requireMediaTaskCapacity, uploadPreparationTasks } from './lib/account_limits';
+import { requireMediaTaskCapacity, uploadPreparationTasks, UPLOAD_RESERVATION_MS } from './lib/account_limits';
 import { releaseMediaObjects } from './lib/shared_media';
 import { releaseAccountStorage } from './lib/storage_accounting';
 import { isStockAudioKey } from '../lib/editor/stock-audio';
@@ -32,6 +32,18 @@ async function previewSource(ctx:QueryCtx|MutationCtx,args:PreviewUploadArgs,tas
   return source;
 }
 
+
+/** Media-task heartbeats rewrite the running tasks that capacity checks read.
+ * Retry a mutation that lost Convex's own conflict retries to those writes. */
+async function retryOnWriteConflict<T>(run: () => Promise<T>): Promise<T> {
+  for (let attempt = 0; ; attempt++) {
+    try { return await run(); }
+    catch (error) {
+      if (attempt >= 3 || !(error instanceof Error) || !error.message.includes('changed while this mutation was being run')) throw error;
+      await new Promise(resolve => setTimeout(resolve, 300 * 2 ** attempt));
+    }
+  }
+}
 
 export const authorize = internalQuery({ args: { projectId: v.id('projects'), jobId: v.optional(v.id('renderJobs')), workerSecret: v.optional(v.string()), ...taskAuth,...previewUpload, duration:v.optional(v.number()), kind: assetKind, contentType: v.string() }, returns: v.string(), handler: async (ctx, args) => {
   const task = args.taskId && args.leaseToken ? await requireMediaTask(ctx, args.taskId, args.leaseToken) : null;
@@ -99,8 +111,9 @@ export const start = action({ args: { projectId: v.id('projects'), jobId: v.opti
   const key = `media/${ownerId}/${args.projectId}/${crypto.randomUUID()}`;
   const created = await storageControl({ action: 'create', key, contentType: args.contentType });
   if (!created.uploadId) throw new ConvexError('Cloudflare did not open the upload');
+  const multipartId = created.uploadId;
   try {
-    const uploadId = await ctx.runMutation(internal.r2.createLease, { projectId: args.projectId, ownerId, key, uploadId: created.uploadId, partSize, fileName, contentType: args.contentType, kind: args.kind, size: args.size,...(args.purpose?{purpose:args.purpose,sourceAssetId:args.sourceAssetId,previewFps:args.previewFps,previewVersion:args.previewVersion}:{}), ...(args.taskId ? { taskId: args.taskId, leaseToken: args.leaseToken } : {}), ...(args.jobId ? { jobId: args.jobId } : {}), ...(args.duration !== undefined ? { duration: args.duration } : {}), ...(args.width !== undefined ? { width: args.width } : {}), ...(args.height !== undefined ? { height: args.height } : {}) });
+    const uploadId = await retryOnWriteConflict(() => ctx.runMutation(internal.r2.createLease, { projectId: args.projectId, ownerId, key, uploadId: multipartId, partSize, fileName, contentType: args.contentType, kind: args.kind, size: args.size,...(args.purpose?{purpose:args.purpose,sourceAssetId:args.sourceAssetId,previewFps:args.previewFps,previewVersion:args.previewVersion}:{}), ...(args.taskId ? { taskId: args.taskId, leaseToken: args.leaseToken } : {}), ...(args.jobId ? { jobId: args.jobId } : {}), ...(args.duration !== undefined ? { duration: args.duration } : {}), ...(args.width !== undefined ? { width: args.width } : {}), ...(args.height !== undefined ? { height: args.height } : {}) }));
     return { uploadId, partSize, partCount };
   } catch (error) { await storageControl({ action: 'abort', key, uploadId: created.uploadId }); throw error; }
 }});
@@ -152,10 +165,11 @@ export const finish = internalMutation({ args: { uploadId: v.id('r2Uploads'), si
   await ctx.db.patch(lease._id, { completed: true, assetId });
   if (lease.taskId) await ctx.db.patch(lease.taskId, { outputAssetId: assetId });
   else if (lease.kind !== 'image') {
-    // The lease reserved this source's tasks before its bytes moved. Follow-ups
-    // of earlier uploads may have queued meanwhile, so completion only enforces
-    // a backstop of twice the limit (for leases older than their reservation).
-    await requireMediaTaskCapacity(ctx, lease.ownerId, uploadPreparationTasks(lease.kind), { ceiling: 2, countUploads: false });
+    // The lease reserved this source's tasks before its bytes moved, so only a
+    // lease older than its reservation meets a backstop of twice the limit.
+    // Fresh leases skip the read: running tasks heartbeat constantly, and
+    // reading them here made finishing collide with those writes on every retry.
+    if (Date.now() - lease._creationTime > UPLOAD_RESERVATION_MS) await requireMediaTaskCapacity(ctx, lease.ownerId, uploadPreparationTasks(lease.kind), { ceiling: 2, countUploads: false });
     await enqueueMediaTask(ctx, { ownerId: lease.ownerId, projectId: lease.projectId, assetId, kind: lease.kind === 'video' ? 'extract' : 'waveform' });
     if(lease.kind==='video')await enqueueMediaTask(ctx,{ownerId:lease.ownerId,projectId:lease.projectId,assetId,kind:'preview'});
     if (lease.kind === 'video') await enqueueMediaTask(ctx, { ownerId: lease.ownerId, projectId: lease.projectId, assetId, kind: 'understand' });
@@ -169,7 +183,9 @@ export const complete = action({ args: { uploadId: v.id('r2Uploads'), parts: par
   if (args.parts.length !== Math.ceil(lease.size / lease.partSize) || args.parts.some((part, i) => part.partNumber !== i + 1 || !part.etag || part.etag.length > 256)) throw new ConvexError('Upload parts are incomplete');
   const file = await storageControl({ action: 'complete', key: lease.key, uploadId: lease.uploadId, parts: args.parts });
   if (file.size === undefined || !file.contentType) throw new ConvexError('Cloudflare did not return media metadata');
-  return ctx.runMutation(internal.r2.finish, { uploadId: args.uploadId, size: file.size, contentType: file.contentType });
+  // The bytes are already assembled in R2; a lost write race must not discard them.
+  const size = file.size, contentType = file.contentType;
+  return retryOnWriteConflict(() => ctx.runMutation(internal.r2.finish, { uploadId: args.uploadId, size, contentType }));
 }});
 export const abort = action({ args: { uploadId: v.id('r2Uploads'), ...taskAuth }, returns: v.null(), handler: async (ctx, args): Promise<null> => {
   const lease = await ctx.runMutation(internal.r2.beginAbort, args);

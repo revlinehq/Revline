@@ -9,7 +9,7 @@ export const DEFAULT_MAX_ACTIVE_MEDIA_TASKS = 24;
 export const uploadPreparationTasks = (kind: 'video' | 'audio' | 'image') => kind === 'video' ? 3 : kind === 'audio' ? 2 : 0;
 
 /** An abandoned transfer stops holding capacity after this; its completion still meets the ceiling. */
-const UPLOAD_RESERVATION_MS = 3600_000;
+export const UPLOAD_RESERVATION_MS = 3600_000;
 
 /** Operator override from Convex env, validated, else the default. */
 export function accountLimit(name: string, fallback: number, min: number, max: number) {
