@@ -180,7 +180,24 @@ export const respond = internalAction({
       };
       const loadAsset=async(assetId:string)=>{const asset=await ctx.runQuery(internal.assistant.getRunAsset,{...run,assetId});const index=assets.findIndex(item=>item._id===asset._id);if(index<0)throw new Error('Choose media from this project');assets[index]=asset;return asset;};
       const savedCheckpoint=async(assetId:string,edit:(timeline:Timeline)=>Timeline)=>{await loadAsset(assetId);return checkpoint(edit);};
+      // A media task links to one analysis request. Parallel tool calls for the
+      // same source and mode share one request: a second request would relink the
+      // task and leave the first waiting until it timed out.
+      const sharedAnalyses = new Map<string, ReturnType<typeof analyzeOnce>>();
+      const transcriptRefreshFailures = new Map<string, string>();
       const analyze = async (assetId: string, mode: "transcribe" | "understand" | "shots" | "beats" | "track", requireAudioActivity = false) => {
+        const key = `${assetId}:${mode}`;
+        const shared = sharedAnalyses.get(key);
+        if (shared) {
+          const asset = await shared;
+          // The shared call may not have needed boundary audio; measure it afterwards.
+          return requireAudioActivity && asset.analysis?.audioActivity?.version !== AUDIO_ACTIVITY_VERSION ? analyzeOnce(assetId, mode, true) : asset;
+        }
+        const pending = analyzeOnce(assetId, mode, requireAudioActivity).finally(() => sharedAnalyses.delete(key));
+        sharedAnalyses.set(key, pending);
+        return pending;
+      };
+      const analyzeOnce = async (assetId: string, mode: "transcribe" | "understand" | "shots" | "beats" | "track", requireAudioActivity = false) => {
         if (mode === 'understand' || mode === 'transcribe') {
           const saved = await loadAsset(assetId);
           if (mode === 'understand' ? saved.analysis?.understanding : currentTranscript(saved.analysis?.transcript) && (!requireAudioActivity || saved.analysis?.audioActivity?.version === AUDIO_ACTIVITY_VERSION)) return saved;
@@ -422,13 +439,15 @@ export const respond = internalAction({
           return placeOnFreeLayer(next, { ...shot, sourceStart: range.start, duration, focus: asset.analysis?.focus ? focusForClip(asset.analysis.focus, { ...shot, sourceStart: range.start, duration }) : undefined });
         }) }),
         inspectAssetAnalysis: createTool({ description: "Read this media's saved transcript, scene descriptions and measured shot boundaries. The default transcript includes sentence segments and a word-timing read hint. Supply start/end SOURCE seconds for the relevant sentence, preferably windows up to 30 seconds, to receive exact overlapping words with text/start/end. Measured source audio quiet intervals, dense subject tracking and beat samples are summarized by default; ranged reads return their exact samples. Audio energy is not a visual observation or proof of silence. Visual descriptions remain intact. If absent, analysis has not been run; never invent results.", inputSchema: z.object({ assetId: z.string(), start: z.number().min(0).optional(), end: z.number().positive().optional() }).refine(input => (input.start === undefined && input.end === undefined) || (input.start !== undefined && input.end !== undefined && input.end > input.start), { message: 'Provide a valid start/end SOURCE range together.' }), execute: async (_ctx, input) => {
-          let asset = await loadAsset(input.assetId), transcriptNote: string | undefined;
+          let asset = await loadAsset(input.assetId);
           // Transcripts made before windowed transcription merged repeated takes
-          // and dropped speech. Refresh one before the model plans cuts from it.
-          if (asset.analysis?.transcript && !currentTranscript(asset.analysis.transcript)) {
+          // and dropped speech. Refresh one before the model plans cuts from it;
+          // a failed refresh is not retried by every later read in this run.
+          if (asset.analysis?.transcript && !currentTranscript(asset.analysis.transcript) && !transcriptRefreshFailures.has(asset._id)) {
             try { asset = await analyze(asset._id, 'transcribe'); }
-            catch (error) { transcriptNote = `This transcript predates current transcription and may merge repeated takes or miss speech; refreshing it failed (${error instanceof Error ? error.message : 'unknown error'}). Treat missing lines as unverified.`; }
+            catch (error) { transcriptRefreshFailures.set(asset._id, error instanceof Error ? error.message : 'unknown error'); }
           }
+          const transcriptNote = asset.analysis?.transcript && !currentTranscript(asset.analysis.transcript) ? `This transcript predates current transcription and may merge repeated takes or miss speech${transcriptRefreshFailures.has(asset._id) ? `; refreshing it failed (${transcriptRefreshFailures.get(asset._id)})` : ''}. Treat lines missing from it as unverified, not absent.` : undefined;
           return asset.analysis ? { assetId: asset._id, ...modelAssetAnalysis(asset.analysis, input.start !== undefined && input.end !== undefined ? { start: input.start, end: input.end } : undefined), ...(transcriptNote ? { transcriptNote } : {}) } : { assetId: asset._id, unavailable: true };
         } }),
         retainSourceRanges: createTool({ description: "Keep ordered measured SOURCE-time ranges from one existing video/audio clip and compact them at that clip's timeline start in one change. For speech cleanup use tightenSilence:true: reuse or locally measure source audio energy, conservatively tighten each requested outer quiet edge with 80ms padding, and leave internal pauses untouched. Unclear/noisy evidence leaves edges unchanged. Omit it for exact user-requested timestamp cuts. Every requested range must fit the current retained source; never restore removed footage. Preserve speed, styling, motion/fade phase and linked audio. Round outward to project frames; sub-frame gaps merge conservatively. Other clips/tracks/markers keep their positions; no global ripple. Refuses transition-connected sources. Inspect actual retained ranges before adding subtitles.", inputSchema: z.object({ clipId: z.string().min(1).max(100), ranges: z.array(z.object({ start: z.number().min(0), end: z.number().positive() }).strict()).min(1).max(100), tightenSilence: z.boolean().optional() }), execute: async (_ctx, input) => {
