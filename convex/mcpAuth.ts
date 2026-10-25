@@ -29,10 +29,10 @@ export function validRedirectUri(value: string) {
   return APP_SCHEMES.includes(url.protocol) || /^[a-z][a-z0-9+-]*(\.[a-z0-9+-]+)+:$/.test(url.protocol);
 }
 
-/** Redirects that belong to Claude itself or stay on this computer. */
+/** Redirects that belong to Claude or ChatGPT themselves, or stay on this computer. */
 function trustedRedirect(value: string) {
   const url = new URL(value);
-  return (url.protocol === 'https:' && ['claude.ai', 'claude.com'].includes(url.hostname)) || (url.protocol === 'http:' && LOOPBACK.includes(url.hostname));
+  return (url.protocol === 'https:' && ['claude.ai', 'claude.com', 'chatgpt.com'].includes(url.hostname)) || (url.protocol === 'http:' && LOOPBACK.includes(url.hostname));
 }
 
 async function requireConnectorAccess(ctx: QueryCtx | MutationCtx, ownerId: string) {
