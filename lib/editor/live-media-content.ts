@@ -4,6 +4,7 @@ import { audioFadeAttributes, audioVolumeEnvelope } from './audio-settings';
 import { playbackRateOf, sourceTimeAt } from './playback-rate';
 import { timelineDuration, type Clip, type MediaAsset, type Timeline } from './types';
 import type { gsap } from 'gsap';
+import { clipMediaUrl } from './clip-media-url';
 
 type MediaWindow=Window&{gsap?:typeof gsap;__timelines?:{revline?:gsap.core.Timeline&{__hfReal?:gsap.core.Timeline}};__revlineDurationTween?:gsap.core.Tween;__revlineNextMediaIndex?:number;__revlineVisualFadeController?:VisualFadeController;__revlineEffects?:{set(id:string,effects:Partial<Clip>):void}};
 const mediaClip=(clip:Clip)=>clip.kind==='video'||clip.kind==='image'||clip.kind==='audio';
@@ -69,8 +70,9 @@ export function updateLiveMediaContent(document:Document,previous:Timeline,next:
   for(const clip of nextMedia){
     const node=nodes.get(clip.id)!,asset=assetMap.get(clip.assetId!);if(!asset?.url)return false;
     const before=old.get(clip.id);
-    if(node.getAttribute('src')!==asset.url){
-      node.setAttribute('src',asset.url);
+    const url=clipMediaUrl(asset.url,clip);
+    if(node.getAttribute('src')!==url){
+      node.setAttribute('src',url);
       if(clip.kind==='video'||clip.kind==='audio'){
         // Before metadata arrives currentTime becomes the native default start
         // position. Source replacement therefore preserves the live cut's time.

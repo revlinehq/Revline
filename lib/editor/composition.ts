@@ -17,6 +17,7 @@ import { textStyle, textAppearance } from './text-style';
 import { TEXT_FONTS, textFontFaceCss, type TextFontId } from './text-fonts';
 import { playbackRateOf, sourceEndOf, timelineTimeAtSource, validatePlaybackRate } from './playback-rate';
 import { dimensions, timelineDuration, deriveTrackCounts, normalizeTimeline, trackOf, DEFAULT_TRANSFORM, type Clip, type MediaAsset, type Timeline } from './types';
+import { clipMediaUrl } from './clip-media-url';
 
 /** Export short-side pixels; 2160 (4K) is offered to Ultra accounts. */
 export type ExportResolution = 720 | 1080 | 2160;
@@ -151,7 +152,7 @@ export function generateComposition(timeline: Timeline, assets: MediaAsset[], op
     const source = exportSource ?? asset?.url;
     if (!asset || !source) throw new Error('A clip references unavailable media.');
     if (asset.kind !== clip.kind) throw new Error('The clip kind does not match its media.');
-    const src = mediaUrl(source, exportSource !== undefined);
+    const src = mediaUrl(exportSource !== undefined ? source : clipMediaUrl(source, clip), exportSource !== undefined);
     let sourceStyle = 'left:0;top:0;width:100%;height:100%;object-fit:cover';
     let frameStyle = '';
     let windowStyle = 'left:0;top:0;width:100%;height:100%';
