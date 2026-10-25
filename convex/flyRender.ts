@@ -8,11 +8,12 @@ import { flyRendersEnabled, seatedRenders } from './lib/render_seats';
 type Lane = 'ultra' | 'standard';
 type Pool = 'warm' | 'burst';
 const LANES: Lane[] = ['ultra', 'standard'];
-// Ultra exports get a 16-vCPU machine with more capture workers; regular exports 4 vCPUs.
-// Each machine has a scratch volume: Fly's root filesystem is ~8 GB (mostly the image) and slow.
+// Ultra exports get a 16-vCPU machine; regular exports 4 vCPUs. With BeginFrame capture, 8 workers
+// saturate 16 vCPUs (16 measured no faster). Frames stream into the encoder, so the scratch volume
+// (Fly's root filesystem is ~8 GB and slow) only holds sources and the output: a 98 s 4K60 export peaked under 0.4 GB.
 const PROFILES: Record<Lane, { guest: { cpu_kind: 'performance'; cpus: number; memory_mb: number }; scratchGb: number; env: Record<string, string> }> = {
-  ultra: { guest: { cpu_kind: 'performance', cpus: 16, memory_mb: 32768 }, scratchGb: 60, env: { MEDIA_LANE: 'ultra', REVLINE_RENDER_WORKERS: '8', REVLINE_RENDER_FFMPEG_SLOTS: '4', REVLINE_RENDER_ENCODE_THREADS: '16' } },
-  standard: { guest: { cpu_kind: 'performance', cpus: 4, memory_mb: 8192 }, scratchGb: 30, env: { REVLINE_RENDER_WORKERS: '3', REVLINE_RENDER_FFMPEG_SLOTS: '2', REVLINE_RENDER_ENCODE_THREADS: '4' } },
+  ultra: { guest: { cpu_kind: 'performance', cpus: 16, memory_mb: 32768 }, scratchGb: 20, env: { MEDIA_LANE: 'ultra', REVLINE_RENDER_WORKERS: '8', REVLINE_RENDER_FFMPEG_SLOTS: '4', REVLINE_RENDER_ENCODE_THREADS: '16' } },
+  standard: { guest: { cpu_kind: 'performance', cpus: 4, memory_mb: 8192 }, scratchGb: 10, env: { REVLINE_RENDER_WORKERS: '3', REVLINE_RENDER_FFMPEG_SLOTS: '2', REVLINE_RENDER_ENCODE_THREADS: '4' } },
 };
 // A machine whose worker found no export for this long exits; Fly then stops it and CPU billing stops.
 const IDLE_MS = '60000';
