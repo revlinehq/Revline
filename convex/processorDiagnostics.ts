@@ -14,9 +14,10 @@ const stackedSource = 'iVBORw0KGgoAAAANSUhEUgAAAoAAAAFoCAYAAADHMkpRAAAACXBIWXMAA
 
 /** Admin CLI only: exercise hosting without reading a customer identity or media. */
 export const createExportFixture = internalMutation({
-  args: {},
+  // ultra exercises the 4-vCPU Ultra slot with a 4K render.
+  args: { ultra: v.optional(v.boolean()) },
   returns: fixtureResult,
-  handler: async ctx => {
+  handler: async (ctx, args) => {
     const ownerId = `revline-hosting-smoke-${crypto.randomUUID()}`, now = Date.now();
     const projectId = await createProject(ctx, { ownerId, title: 'Hosted processor smoke test', aspectRatio: 'landscape', createdAt: now, updatedAt: now, revision: 0, history: [] });
     const source: Timeline = { fps: 24, aspectRatio: 'landscape', tracks: { visual: 1, overlay: 0, audio: 0, effects: 0 }, clips: [
@@ -24,8 +25,8 @@ export const createExportFixture = internalMutation({
     ] };
     const timeline = await validateTimeline(ctx, (await ctx.db.get(projectId))!, source);
     await writeProject(ctx,projectId, { timeline });
-    const jobId = await ctx.db.insert('renderJobs', { ownerId, projectId, timeline, assetIds: [], resolution: 720, fps: 24, quality: 'draft', status: 'queued', progress: 0, createdAt: now, updatedAt: now });
-    const taskId = await enqueueMediaTask(ctx, { ownerId, projectId, kind: 'render', renderJobId: jobId });
+    const jobId = await ctx.db.insert('renderJobs', { ownerId, projectId, timeline, assetIds: [], resolution: args.ultra ? 2160 : 720, fps: 24, quality: 'draft', status: 'queued', progress: 0, createdAt: now, updatedAt: now });
+    const taskId = await enqueueMediaTask(ctx, { ownerId, projectId, kind: 'render', renderJobId: jobId, ...(args.ultra ? { lane: 'ultra' as const } : {}) });
     await ctx.db.patch(jobId, { taskId });
     return { ownerId, projectId, jobId, taskId };
   },
