@@ -160,7 +160,7 @@ export function deriveTracks(timeline: Timeline) {
   const counts = deriveTrackCounts(timeline);
   return TIMELINE_LAYER_GROUPS.flatMap(group => Array.from({ length: counts[group] }, (_, index) => {
     const number = counts[group] - index;
-    return { id: `${group}-${number}`, group, number, label: `${group === 'effects' ? 'FX' : group === 'visual' ? 'V' : 'A'}${number}`, color: group === 'visual' ? '#32C878' : clipColor(group === 'effects' ? 'effect' : 'audio') };
+    return { id: `${group}-${number}`, group, number, label: `${group === 'effects' ? 'FX' : group === 'visual' ? 'V' : 'A'}${number}`, color: group === 'visual' ? '#3DD68C' : group === 'audio' ? '#A78BFA' : clipColor('effect') };
   }));
 }
 export function timelineDuration(timeline: Timeline) {
