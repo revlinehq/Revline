@@ -191,11 +191,6 @@ html[data-workspace-theme=dark] .conversation-editor .workspace-nav .revline-pri
 html[data-workspace-theme=dark] .conversation-editor .editor-mode-switch{gap:4px;padding:0;border-color:var(--ed-border);border-radius:6px;background:transparent}
 html[data-workspace-theme=dark] .conversation-editor .editor-mode-switch>[role=tab]{min-height:28px;border-radius:6px;color:var(--ed-text-3);font-size:12px}
 html[data-workspace-theme=dark] .conversation-editor .editor-mode-switch>[role=tab][aria-selected=true]{background:var(--ed-surface-2);box-shadow:none;color:var(--ed-text)}
-/* Chat header: title and the icon-only mode switch, full bleed across the sidebar padding. */
-.conversation-editor .editor-chat-header{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-shrink:0;height:48px;margin:-16px -16px 12px;padding:10px 12px 10px 16px;border-bottom:1px solid var(--ws-artifact-border)}
-.conversation-editor .editor-chat-header>span{font-size:13px;font-weight:500;color:var(--ws-text)}
-.conversation-editor .editor-mode-switch[data-appearance=icons]{width:auto;grid-template-columns:repeat(2,28px)!important;padding:0}
-.conversation-editor .editor-mode-switch[data-appearance=icons]>[role=tab]{width:28px;min-height:28px;padding:0}
 /* Chat panel: suggestion cards and the prompt box. */
 html[data-workspace-theme=dark] .conversation-editor .assistant-source-suggestions{gap:8px}
 html[data-workspace-theme=dark] .conversation-editor .assistant-source-suggestions>span{display:flex;align-items:center;gap:6px;padding:0 2px 4px;margin:0;font-size:12px;color:var(--ed-text-3)}

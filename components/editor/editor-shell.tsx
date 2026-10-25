@@ -7,7 +7,7 @@ import { addTimelineMarker } from '@/lib/editor/timeline-markers';
 
 import { useRef, useState, useEffect, useLayoutEffect, useCallback, useMemo, type ReactNode } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { Upload, MessageSquare, Film, LoaderCircle, RotateCcw, X, Bot, ChartGantt } from 'lucide-react';
+import { Upload, MessageSquare, Film, LoaderCircle, RotateCcw, X } from 'lucide-react';
 import { trackOf } from '@/lib/editor/types';
 import { useEditorStore, useEditorState, useInspectorPlaybackTime } from './editor-state';
 import { usePanelRef } from 'react-resizable-panels';
@@ -210,11 +210,9 @@ export function EditorShell(p: EditorShellProps) {
       if(panel.isCollapsed())panel.collapse();else panel.resize(collapsedTimelineHeight);
     }
   },[collapsed,collapsedTimelineHeight,preparing,timelinePanel]);
-  // Desktop shows the switch as icons in the chat header; the top bar takes it while the chat is collapsed, and compact layouts keep labels.
-  const modeInChatHeader = !compact && !p.workspaceOnly && !chatCollapsed;
-  const modeSwitch = modeAvailable && !preparing ? <SegmentedTabs label="Editor mode" className="editor-mode-switch" appearance={modeInChatHeader ? 'icons' : 'segmented'} value={mode} onChange={value => compact ? setMobileChat(value === 'agentic') : setDesktopMode(value)} options={[
-    { value: 'agentic', label: 'Agentic', id: 'editor-agentic-tab', panelId: 'editor-mode-view', icon: modeInChatHeader ? <Bot size={15}/> : <MessageSquare size={13}/> },
-    { value: 'tracks', label: 'Tracks', id: 'editor-tracks-tab', panelId: 'editor-mode-view', icon: modeInChatHeader ? <ChartGantt size={15}/> : <Film size={13}/> },
+  const modeSwitch = modeAvailable && !preparing ? <SegmentedTabs label="Editor mode" className="editor-mode-switch" value={mode} onChange={value => compact ? setMobileChat(value === 'agentic') : setDesktopMode(value)} options={[
+    { value: 'agentic', label: 'Agentic', id: 'editor-agentic-tab', panelId: 'editor-mode-view', icon: <MessageSquare size={13}/> },
+    { value: 'tracks', label: 'Tracks', id: 'editor-tracks-tab', panelId: 'editor-mode-view', icon: <Film size={13}/> },
   ]}/> : null;
   const [playbackReady,setPlaybackReady]=useState(!timeline.clips.length);
   const [loadingThumbnail,setLoadingThumbnail]=useState<string|null>(null);
@@ -466,13 +464,12 @@ export function EditorShell(p: EditorShellProps) {
   const ratioOnFrame = !compact && !!previewTimeline.clips.length;
   const ratioControl = <AspectRatioControl value={timeline.aspectRatio} onChange={changeAspectRatio} />;
   const chat=(<aside className={`editor-sidebar ${mobileChat ? 'mobile-open' : ''}`} aria-label="Editing conversation" hidden={!conversationVisible}>
-        {modeInChatHeader && modeSwitch && <div className="editor-chat-header"><span>Chat</span>{modeSwitch}</div>}
         {p.assistantPanel ?? <AssistantPanel attachments={p.composerAttachments} composerBusy={p.composerBusy} onRemoveAttachment={p.onRemoveComposerAttachment} conversation={p.conversation} editSnapshot={p.assistantEditSnapshot} canResumeEdit={p.canResumeEdit} messages={p.messages} running={p.aiRunning} editing={editing} configured={p.aiConfigured} modelSwitcher={p.modelSwitcher} allowedModels={p.allowedModels} defaultModelChoice={p.defaultModelChoice} error={p.aiError} onSend={(text, modelChoice, reasoningEffort, speedMode) => p.onSend(text, { modelChoice, reasoningEffort, speedMode, selectedClipId: clip?.id, selectedClipIds:selectedIds, playhead: readPlaybackTime() })} onRetry={(text, modelChoice, reasoningEffort, speedMode) => p.onSend(text, { modelChoice, reasoningEffort, speedMode, playhead: readPlaybackTime(), retry: true })} onStop={p.onStop} hasClips={!!timeline.clips.length} demo={!!p.demo} onLoadMore={p.onLoadMore} canLoadMore={p.canLoadMore} onAttach={browse} activity={p.analysisBusy} activitySource={p.analysisSource} activityProgress={p.analysisProgress} activityStartedAt={p.analysisStartedAt} budgetUsed={p.assistantBudgetUsed} draftKey={p.draftKey} suggestions={sourceSuggestions} onSuggestion={async (text, clipId, modelChoice, reasoningEffort, speedMode) => { const target = timeline.clips.find(item => item.id === clipId && item.kind === 'video'); if (!target) throw new Error('This clip is no longer on the timeline.'); setSelected(clipId); await p.onSend(text, { modelChoice, reasoningEffort, speedMode, selectedClipId: clipId, selectedClipIds: [clipId], playhead: target.start }); }} />}
       </aside>);
   return <main ref={editorRoot} data-playback-opening={opening} tabIndex={-1} {...fileDrop.handlers} onPointerDownCapture={e => { const interactive = (e.target as HTMLElement).closest('input,textarea,button,a,select,[tabindex]'); if (p.embedded) { if (!interactive || interactive === e.currentTarget || !e.currentTarget.contains(interactive)) editorRoot.current?.focus({ preventScroll: true }); else if (interactive.matches('[tabindex]') && !interactive.matches('input,textarea,button,a,select')) (interactive as HTMLElement).focus({ preventScroll: true }); } }} className={`editor-app conversation-editor ${p.embedded ? 'embedded-editor' : ''}`}>
     <TextFontStyles/>
     <MediaFileDropOverlay active={fileDrop.active} busy={!!p.upload}/>
-    {!p.workspaceOnly && <WorkspaceNav chatId={p.demo ? undefined : p.projectId} title={p.title} onRename={p.onTitle} onShare={p.onShare} shareDisabled={!timeline.clips.length || editing} onExport={() => {setExportClipId(null);setExportOpen(true);}} exportDisabled={!timeline.clips.length} exportHint={!timeline.clips.length?'Add a clip to export':duration>MAX_EXPORT_SECONDS?`Exports support up to ${MAX_EXPORT_LABEL}. Shorten the edit to export.`:`Export an MP4 up to ${MAX_EXPORT_LABEL} long`} saving={p.saving} saveFailed={p.saveFailed} onRetrySave={p.onRetrySave} demo={p.demo} editorControls={compact || modeInChatHeader ? undefined : modeSwitch}/>}
+    {!p.workspaceOnly && <WorkspaceNav chatId={p.demo ? undefined : p.projectId} title={p.title} onRename={p.onTitle} onShare={p.onShare} shareDisabled={!timeline.clips.length || editing} onExport={() => {setExportClipId(null);setExportOpen(true);}} exportDisabled={!timeline.clips.length} exportHint={!timeline.clips.length?'Add a clip to export':duration>MAX_EXPORT_SECONDS?`Exports support up to ${MAX_EXPORT_LABEL}. Shorten the edit to export.`:`Export an MP4 up to ${MAX_EXPORT_LABEL} long`} saving={p.saving} saveFailed={p.saveFailed} onRetrySave={p.onRetrySave} demo={p.demo} editorControls={compact ? undefined : modeSwitch}/>}
 
     <EditorErrorNotice message={p.error} onDismiss={dismissError} />
     {!preparing&&<>{compact&&!p.workspaceOnly && <div className="mobile-panel-controls">{modeSwitch || <button aria-expanded={mobileChat} onClick={() => setMobileChat(!mobileChat)}><MessageSquare size={14} />{mobileChat ? 'Back to preview' : 'Open conversation'}</button>}<button onClick={() => { setSourceRequest(++inspectorRequest.current); setInspectorOpen(true); }}><Film size={14} />My media</button></div>}
