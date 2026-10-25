@@ -175,6 +175,20 @@ html[data-workspace-theme=dark] .conversation-editor{--ws-muted:#969696}
 /* Dark editor palette from the Pen design "Revline — Editor" (node jR3JS): backgrounds, panels, borders and tracks. Clips keep their own colors. */
 html[data-workspace-theme=dark] .editor-app:not(.landing-product-demo){--ed-bg:#0b0c0e;--ed-panel:#111215;--ed-surface:#17181c;--ed-surface-2:#1f2126;--ed-border:#25272d;--ed-tick:#3a3c43;--ed-text:#ededef;--ed-text-3:#666872;--ws-bg:var(--ed-bg);--ws-preview:var(--ed-bg);--ws-surface:var(--ed-surface-2);--ws-hover:var(--ed-surface-2);--ws-input:var(--ed-surface);--ws-artifact-border:var(--ed-border);--ws-border:var(--ed-border)}
 html[data-workspace-theme=dark] .editor-app:not(.landing-product-demo) :is(.editor-sidebar,.custom-timeline){--ws-bg:var(--ed-panel)}
+/* The editor UI uses Geist from the design; rules that name --font-inter pick it up too. */
+html[data-workspace-theme=dark] .editor-app:not(.landing-product-demo){--font-inter:var(--font-geist);--font-ui:var(--font-geist);font-family:var(--font-geist),sans-serif}
+html[data-workspace-theme=dark] .conversation-editor .workspace-nav{padding:0 16px 0 20px;background:var(--ed-bg);border-bottom-color:var(--ed-border)}
+html[data-workspace-theme=dark] .conversation-editor .workspace-chat-trigger{font-size:14px;font-weight:500;color:var(--ed-text)}
+html[data-workspace-theme=dark] .conversation-editor .workspace-chat-trigger svg,html[data-workspace-theme=dark] .conversation-editor .workspace-nav-icon{color:var(--ed-text-3)}
+html[data-workspace-theme=dark] .conversation-editor .workspace-nav-actions{gap:6px}
+html[data-workspace-theme=dark] .conversation-editor .workspace-nav-history{margin-right:6px}
+html[data-workspace-theme=dark] .conversation-editor .workspace-nav-secondary{height:33px;padding:0 10px;border:1px solid var(--ed-border);border-radius:8px;background:transparent;color:#a1a3ab;font-size:13px;font-weight:500}
+html[data-workspace-theme=dark] .conversation-editor .workspace-nav-secondary:hover:not(:disabled){background:var(--ed-surface);color:var(--ed-text);filter:none}
+html[data-workspace-theme=dark] .conversation-editor .workspace-nav .revline-primary[data-slot=button]{height:33px;padding:0 14px;gap:6px;border-radius:8px;background:#7c3aed;color:#fff;font-size:13px;font-weight:600}
+html[data-workspace-theme=dark] .conversation-editor .workspace-nav .revline-primary[data-slot=button]:hover:not(:disabled){background:#8b4cf0}
+html[data-workspace-theme=dark] .conversation-editor .editor-mode-switch{gap:4px;padding:0;border-color:var(--ed-border);border-radius:6px;background:transparent}
+html[data-workspace-theme=dark] .conversation-editor .editor-mode-switch>[role=tab]{min-height:28px;border-radius:6px;color:var(--ed-text-3);font-size:12px}
+html[data-workspace-theme=dark] .conversation-editor .editor-mode-switch>[role=tab][aria-selected=true]{background:var(--ed-surface-2);box-shadow:none;color:var(--ed-text)}
 html[data-workspace-theme=dark] .editor-app:not(.landing-product-demo) .ruler-tick{border-left-color:var(--ed-tick)}
 html[data-workspace-theme=dark] .editor-app:not(.landing-product-demo) .custom-timeline .ruler-ticks path{stroke:var(--ed-tick)}
 html[data-workspace-theme=dark] .editor-app:not(.landing-product-demo) .custom-timeline .time-ruler span{color:var(--ed-text-3)}
