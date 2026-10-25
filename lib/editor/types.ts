@@ -94,7 +94,7 @@ export type MediaAsset = {
   duration?: number; width?: number; height?: number; size?: number; url: string | null; thumbnailUrl?:string|null;
   previewUrl?: string | null; previewSize?: number; previewWidth?: number; previewHeight?: number; previewFps?: number; previewVersion?: number;
   audioAssetId?: string; audioExtracted?: boolean;
-  /** Set on a background-removed copy (VP9 with alpha) of cutoutStart.. seconds of this asset. */
+  /** Set on a background-removed copy (VP9 with alpha) of cutoutOf, on the same source timeline; frames before cutoutStart are transparent. */
   cutoutOf?: string; cutoutStart?: number;
   analysisKinds?: string[];
   preparation?: {status:'processing'|'failed';message:string};

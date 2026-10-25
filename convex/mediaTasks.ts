@@ -435,8 +435,10 @@ export const complete = mutation({ args: { ...mediaTaskCredentials, result: task
     const output = task.outputAssetId ? await ctx.db.get(task.outputAssetId) : null;
     if (!cutout || cutout.status !== 'queued') throw new ConvexError('The background removal request is no longer active.');
     if (!output || output.ownerId !== task.ownerId || output.projectId !== task.projectId || output.kind !== 'video' || !output.duration) throw new ConvexError('The background-removed video has not been stored yet.');
-    // The clip keeps its original linked audio; the cut-out carries picture only.
-    await ctx.db.patch(output._id, { cutoutOf: cutout.sourceAssetId, cutoutStart: cutout.start, audioExtracted: true });
+    // Picture only, on the original's source timeline: it shares the original's
+    // extracted audio, so the clip's linked audio stays valid.
+    const source = await ctx.db.get(cutout.sourceAssetId);
+    await ctx.db.patch(output._id, { cutoutOf: cutout.sourceAssetId, cutoutStart: cutout.start, audioExtracted: true, ...(source?.audioAssetId ? { audioAssetId: source.audioAssetId } : {}) });
     await ctx.db.patch(cutout._id, { status: 'completed', outputAssetId: output._id });
     await placeCutout(ctx, { ...cutout, status: 'completed', outputAssetId: output._id }, { ...output, cutoutOf: cutout.sourceAssetId, cutoutStart: cutout.start });
   } else if(task.kind!=='review'&&task.kind!=='snapshot') {

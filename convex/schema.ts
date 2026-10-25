@@ -108,7 +108,8 @@ export const assetFields = {
   waveform: v.optional(waveformValidator),
   // JSON recipe of an assistant-generated sound effect; editSound re-renders from it.
   soundRecipe: v.optional(v.string()),
-  // A background-removed copy (VP9 with alpha) of cutoutStart.. seconds of cutoutOf.
+  // A background-removed copy (VP9 with alpha) of cutoutOf on the same source timeline;
+  // frames before cutoutStart are transparent padding.
   cutoutOf: v.optional(v.id('assets')), cutoutStart: v.optional(v.number()),
   thumbnailStorageId: v.optional(v.id('_storage')),
   analysisCompletedAt: v.optional(v.object({ transcribe: v.optional(v.number()), understand: v.optional(v.number()), shots: v.optional(v.number()), beats: v.optional(v.number()), track: v.optional(v.number()) })),

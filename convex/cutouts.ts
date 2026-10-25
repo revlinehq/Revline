@@ -29,23 +29,33 @@ export async function startCutoutFor(ctx: MutationCtx, ownerId: string, projectI
   // A short handle on each side keeps later small trims inside the cut-out.
   const start = Math.max(0, clip.sourceStart - HANDLE_SECONDS), end = Math.min(asset.duration, sourceEndOf(clip) + HANDLE_SECONDS);
   if (end - start > MAX_SECONDS) throw new ConvexError(`Remove the background from up to ${MAX_SECONDS / 60} minutes at a time. Split this clip first.`);
-  const pending = (await ctx.db.query('cutouts').withIndex('by_project', q => q.eq('projectId', project._id)).order('desc').take(20)).find(row => row.clipId === clipId && row.status === 'queued');
-  if (pending) return { cutoutId: pending._id, estimatedUsd: estimate(pending.end - pending.start), alreadyRunning: true };
+  const recent = await ctx.db.query('cutouts').withIndex('by_project', q => q.eq('projectId', project._id)).order('desc').take(50);
+  const pending = recent.find(row => row.clipId === clipId && row.status === 'queued');
+  if (pending) return { cutoutId: pending._id, estimatedUsd: estimate(pending.end - pending.start), alreadyRunning: true, reused: false };
+  // A finished cut-out of this footage that covers the clip applies again for free.
+  for (const row of recent) {
+    if (row.status !== 'completed' || !row.outputAssetId || row.sourceAssetId !== asset._id || row.start > clip.sourceStart + 1e-6 || row.end < sourceEndOf(clip) - 1e-6) continue;
+    const output = await ctx.db.get(row.outputAssetId);
+    if (!output || output.ownerId !== ownerId || output.projectId !== project._id || !output.duration || output.duration < sourceEndOf(clip) - 1e-3) continue;
+    const timeline = currentTimeline(project);
+    await commitTimeline(ctx, project, { ...timeline, clips: timeline.clips.map(item => item.id === clip.id ? { ...item, assetId: output._id } : item) }, project.revision ?? 0);
+    return { cutoutId: row._id, estimatedUsd: 0, alreadyRunning: false, reused: true };
+  }
   await requireMediaTaskCapacity(ctx, ownerId, 1);
   const cutoutId = await ctx.db.insert('cutouts', { ownerId, projectId: project._id, clipId, sourceAssetId: asset._id, start, end, status: 'queued', createdAt: Date.now() });
   const taskId = await enqueueMediaTask(ctx, { ownerId, projectId: project._id, assetId: asset._id, kind: 'cutout', cutoutId });
   await ctx.db.patch(cutoutId, { taskId });
-  return { cutoutId, estimatedUsd: estimate(end - start), alreadyRunning: false };
+  return { cutoutId, estimatedUsd: estimate(end - start), alreadyRunning: false, reused: false };
 }
 const estimate = (seconds: number) => Math.round(seconds * USD_PER_SECOND_AT_30FPS * 100) / 100;
 
-export const startFromRun = internalMutation({ args: { projectId: v.id('projects'), ownerId: v.string(), runId: v.string(), clipId: v.string() }, returns: v.object({ cutoutId: v.id('cutouts'), estimatedUsd: v.number(), alreadyRunning: v.boolean() }), handler: async (ctx, args) => {
+export const startFromRun = internalMutation({ args: { projectId: v.id('projects'), ownerId: v.string(), runId: v.string(), clipId: v.string() }, returns: v.object({ cutoutId: v.id('cutouts'), estimatedUsd: v.number(), alreadyRunning: v.boolean(), reused: v.boolean() }), handler: async (ctx, args) => {
   const project = await readProject(ctx, args.projectId);
   if (!project || project.ownerId !== args.ownerId || project.aiRunId !== args.runId || !project.aiRunning) throw new ConvexError('AI run is no longer active');
   return startCutoutFor(ctx, args.ownerId, args.projectId, args.clipId);
 }});
 
-export const start = mutation({ args: { projectId: v.id('projects'), clipId: v.string() }, returns: v.object({ cutoutId: v.id('cutouts'), estimatedUsd: v.number(), alreadyRunning: v.boolean() }), handler: async (ctx, args) => startCutoutFor(ctx, await requireOwner(ctx), args.projectId, args.clipId) });
+export const start = mutation({ args: { projectId: v.id('projects'), clipId: v.string() }, returns: v.object({ cutoutId: v.id('cutouts'), estimatedUsd: v.number(), alreadyRunning: v.boolean(), reused: v.boolean() }), handler: async (ctx, args) => startCutoutFor(ctx, await requireOwner(ctx), args.projectId, args.clipId) });
 
 export const forProject = query({ args: { projectId: v.id('projects') }, returns: v.array(v.object({ _id: v.id('cutouts'), clipId: v.string(), status: v.union(v.literal('queued'), v.literal('completed'), v.literal('failed')), placed: v.optional(v.boolean()), error: v.optional(v.string()), createdAt: v.number(), progress: v.optional(v.number()) })), handler: async (ctx, args) => {
   const ownerId = await requireOwner(ctx);
@@ -65,7 +75,8 @@ export const restore = mutation({ args: { projectId: v.id('projects'), clipId: v
   const clip = timeline.clips.find(item => item.id === args.clipId);
   const id = clip?.assetId ? ctx.db.normalizeId('assets', clip.assetId) : null, cutout = id ? await ctx.db.get(id) : null;
   if (!clip || !cutout?.cutoutOf || cutout.ownerId !== ownerId || cutout.projectId !== project._id) throw new ConvexError('This clip has no removed background to restore.');
-  const next = { ...timeline, clips: timeline.clips.map(item => item.id === clip.id ? { ...item, assetId: cutout.cutoutOf!, sourceStart: item.sourceStart + (cutout.cutoutStart ?? 0) } : item) };
+  // The cut-out shares the original's source timeline, so only the media changes.
+  const next = { ...timeline, clips: timeline.clips.map(item => item.id === clip.id ? { ...item, assetId: cutout.cutoutOf! } : item) };
   await commitTimeline(ctx, project, next, project.revision ?? 0);
   return null;
 }});
@@ -80,9 +91,10 @@ export async function placeCutout(ctx: MutationCtx, cutout: Doc<'cutouts'>, outp
     return;
   }
   const timeline = currentTimeline(project), clip = timeline.clips.find(item => item.id === cutout.clipId);
-  const fits = !!clip && clip.assetId === cutout.sourceAssetId && clip.sourceStart >= cutout.start - 1e-6 && sourceEndOf(clip) <= cutout.end + 1e-6 && sourceEndOf(clip) - cutout.start <= (output.duration ?? 0) + 1 / timeline.fps;
+  // The cut-out leads with transparent frames, so its times are the source's; the clip must still use the processed range.
+  const fits = !!clip && clip.assetId === cutout.sourceAssetId && clip.sourceStart >= cutout.start - 1e-6 && sourceEndOf(clip) <= Math.min(cutout.end, output.duration ?? 0) + 1 / timeline.fps;
   if (fits) {
-    const next = { ...timeline, clips: timeline.clips.map(item => item.id === clip.id ? { ...item, assetId: output._id, sourceStart: Math.max(0, item.sourceStart - cutout.start) } : item) };
+    const next = { ...timeline, clips: timeline.clips.map(item => item.id === clip.id ? { ...item, assetId: output._id } : item) };
     await commitTimeline(ctx, project, next, project.revision ?? 0);
   }
   await ctx.db.patch(cutout._id, { placed: fits });

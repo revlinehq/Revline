@@ -553,7 +553,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
     } }),
     removeBackground: createTool({ description: "Ultra only. Remove the background behind the person in one existing video clip so visuals on a LOWER V layer show behind them (fal.ai cut-out). Use only when the user asks to remove or replace their background or put visuals behind them. It runs in the background for about 1-3 minutes and costs the user's fal.ai credit (about $0.02 per second of the clip); the clip switches to the transparent cut-out automatically, after this turn's edits are saved. Place the replacement visuals on a lower V layer under the clip.", inputSchema: z.object({ clipId: z.string().min(1) }), execute: async (_ctx, { clipId }) => {
       const result = await ctx.runMutation(internal.cutouts.startFromRun, { ...run, clipId });
-      return { started: !result.alreadyRunning, alreadyRunning: result.alreadyRunning, estimatedUsd: result.estimatedUsd, note: 'Background removal is processing; the clip switches to the cut-out automatically when it finishes. Visuals belong on a lower V layer.' };
+      return result.reused ? { applied: true, reusedExistingCutOut: true, estimatedUsd: 0, note: 'An existing cut-out of this footage was applied; the background is already removed. Visuals belong on a lower V layer.' } : { started: !result.alreadyRunning, alreadyRunning: result.alreadyRunning, estimatedUsd: result.estimatedUsd, note: 'Background removal is processing; the clip switches to the cut-out automatically when it finishes. Visuals belong on a lower V layer.' };
     } }),
   };
   return { tools, editSession, plans: () => effectPlans };

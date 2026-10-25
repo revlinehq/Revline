@@ -42,11 +42,19 @@ export async function removeBackground(source: string, directory: string, window
   const output = (result.data as { video?: { url?: string }[] }).video?.[0]?.url;
   if (!output) throw new AnalysisError('Background removal returned no video.', 502);
   onProgress(80);
-  const path = join(directory, 'cutout.webm');
+  let path = join(directory, 'cutout.webm');
   const response = await fetch(output, { signal });
   if (!response.ok || !response.body) throw new AnalysisError(`Could not download the background-removed video (HTTP ${response.status}).`, 502);
   if (Number(response.headers.get('content-length') ?? 0) > MAX_OUTPUT_BYTES) throw new AnalysisError('The background-removed video is too large to store.', 400);
   await pipeline(Readable.fromWeb(response.body as import('node:stream/web').ReadableStream), createWriteStream(path), { signal });
+  // Lead with transparent frames so second N of the cut-out is second N of the source:
+  // the clip keeps its sourceStart and stays in sync with its linked original audio.
+  if (window.start > 0) {
+    onProgress(84);
+    const padded = join(directory, 'cutout-aligned.webm');
+    await run('ffmpeg', ['-v', 'error', '-c:v', 'libvpx-vp9', '-i', path, '-vf', `format=yuva420p,tpad=start_duration=${window.start}:start_mode=add:color=0x00000000`, '-c:v', 'libvpx-vp9', '-pix_fmt', 'yuva420p', '-auto-alt-ref', '0', '-metadata:s:v:0', 'alpha_mode=1', '-b:v', '0', '-crf', '18', '-deadline', 'good', '-cpu-used', '4', '-row-mt', '1', '-an', '-y', padded], { signal, timeout: 1_800_000, maxBuffer: 1024 * 1024 });
+    path = padded;
+  }
   const { stdout } = await run('ffprobe', ['-v', 'error', '-show_entries', 'format=duration:stream=codec_type,codec_name,width,height', '-of', 'json', path], { signal, timeout: 30_000, maxBuffer: 1024 * 1024 });
   const probe = JSON.parse(stdout) as { format?: { duration?: string }; streams?: { codec_type: string; codec_name: string; width?: number; height?: number }[] };
   const video = probe.streams?.find(stream => stream.codec_type === 'video'), duration = Number(probe.format?.duration);
