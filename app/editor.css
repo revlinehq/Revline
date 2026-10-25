@@ -241,15 +241,6 @@ html[data-workspace-theme=dark] .conversation-editor .custom-timeline .track-lab
 html[data-workspace-theme=dark] .conversation-editor .custom-timeline .track-dot{width:6px;height:6px}
 html[data-workspace-theme=dark] .conversation-editor .custom-timeline .playhead{width:2px;margin-left:-.5px;background:#7c3aed}
 html[data-workspace-theme=dark] .conversation-editor .custom-timeline :is(.track-label,.timeline-track){border-bottom-color:transparent}
-/* The timeline floats as a rounded card inset from the editor edges. */
-html[data-workspace-theme=dark] .conversation-editor .editor-timeline-content{box-sizing:border-box;padding:0 8px 8px;background:var(--ed-bg)}
-html[data-workspace-theme=dark] .conversation-editor .editor-timeline-content>.custom-timeline{border:1px solid var(--ed-border);border-radius:12px;overflow:hidden}
-/* The chat panel floats the same way, inset from the left and bottom edges. */
-@media(min-width:901px){
-  html[data-workspace-theme=dark] .conversation-editor .editor-chat-panel{box-sizing:border-box;padding:0 0 8px 8px}
-  html[data-workspace-theme=dark] .conversation-editor .editor-sidebar{box-sizing:border-box;border:1px solid var(--ed-border);border-radius:12px;overflow:hidden}
-  html[data-workspace-theme=dark] .conversation-editor .editor-body[data-mode=agentic] .editor-sidebar{height:calc(var(--editor-body-height,100%) - 8px)}
-}
 @media(min-width:901px){html[data-workspace-theme=dark] .conversation-editor .custom-timeline .track-headers{width:168px}}
 html[data-workspace-theme=dark] .conversation-editor .custom-timeline .timeline-playhead-cap{color:#7c3aed}
 html[data-workspace-theme=dark] .conversation-editor .custom-timeline .timeline-playhead-cap:hover{color:#8b5cf6}
@@ -258,8 +249,6 @@ html[data-workspace-theme=dark] .editor-app:not(.landing-product-demo) .custom-t
 html[data-workspace-theme=dark] .editor-app:not(.landing-product-demo) .custom-timeline .time-ruler span{color:var(--ed-text-3)}
 html[data-workspace-theme=dark] .editor-app:not(.landing-product-demo) .custom-timeline .track-label-name{color:var(--ed-text)}
 html[data-workspace-theme=dark] .editor-app:not(.landing-product-demo) .custom-timeline .track-headers{border-right-color:var(--ed-border)}
-/* With floating panels the resize handles are invisible gaps until hovered. */
-html[data-workspace-theme=dark] .editor-app:not(.landing-product-demo) :is(.chat-resize-handle,.timeline-resize-handle){background:transparent!important}
 html[data-workspace-theme=dark] .editor-app:not(.landing-product-demo) :is(.chat-resize-handle,.timeline-resize-handle,.inspector-resize-handle):hover{background:#393939!important}
 html[data-workspace-theme=dark] .editor-app:not(.landing-product-demo) .preview-viewport:not(:focus-visible) .preview-viewport-frame:after{border-color:var(--ed-border)}
 .conversation-editor .editor-sidebar,.conversation-editor .preview-inspector,.conversation-editor .mobile-panel-controls,.conversation-editor .timeline-panel,.conversation-editor .timeline-toolbar{background:var(--ws-bg);color:var(--ws-text)}
