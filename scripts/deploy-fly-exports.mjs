@@ -19,8 +19,10 @@ const context = join(root, '.wrangler/media-processor-build');
 function run(command, argv, options = {}) {
   return new Promise((accept, reject) => {
     let output = '';
-    const child = spawn(command, argv, { cwd: root, stdio: ['ignore', 'pipe', 'inherit'], ...options });
+    // flyctl reports the pushed image on stderr, so read both streams.
+    const child = spawn(command, argv, { cwd: root, stdio: ['ignore', 'pipe', 'pipe'], ...options });
     child.stdout.on('data', chunk => { output += chunk; process.stdout.write(chunk); });
+    child.stderr.on('data', chunk => { output += chunk; process.stderr.write(chunk); });
     child.on('error', reject);
     child.on('exit', code => code === 0 ? accept(output) : reject(new Error(`${command} ${argv[0]} failed (${code}).`)));
   });
@@ -31,7 +33,8 @@ await run(process.execPath, ['infra/media-worker/prepare-context.mjs']);
 await writeFile(join(context, 'fly.toml'), `app = "${app}"\nprimary_region = "iad"\n[build]\n  dockerfile = "infra/media-worker/Dockerfile"\n  build-target = "exports"\n`);
 const label = `exports-${execFileSync('git', ['rev-parse', '--short', 'HEAD'], { cwd: root }).toString().trim()}-${Date.now()}`;
 const output = await run('fly', ['deploy', '--build-only', '--push', '--remote-only', '--build-target', 'exports', '--image-label', label, '-a', app], { cwd: context });
-const image = /^image: (registry\.fly\.io\/\S+)$/m.exec(output)?.[1];
+// flyctl may colour or CR-terminate its lines; take the bare image reference.
+const image = /image: (registry\.fly\.io\/[\w.:/-]+)/.exec(output.replace(/\x1b\[[0-9;]*m/g, ''))?.[1];
 if (!image || !image.startsWith(`registry.fly.io/${app}:`)) throw new Error('Fly did not report the pushed image.');
 await run('npx', ['convex', 'env', 'set', 'FLY_RENDER_IMAGE', image, ...convexTarget]);
 console.log(`Exports now use ${image}.`);
