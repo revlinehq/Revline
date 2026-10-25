@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
-import { ArrowUp, Clapperboard, Folder, Mic, MousePointer2, Paperclip, Upload, Youtube } from 'lucide-react';
+import { Clapperboard, Folder, MousePointer2, Upload, Youtube } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { PromptDemo } from './prompt-demo';
 import { LandingChip, LandingHeading, LandingSection } from './ui';
 
 const uploads = [
@@ -43,10 +44,7 @@ export function LandingHowItWorks() {
           </div>
         </Card>
         <Card className="landing-bento-prompt" title="Say what you want" description="Plain English. No keyframes, no menus, no tutorials.">
-          <div className="landing-panel landing-prompt-panel" aria-hidden="true">
-            <p>Tighten it to 60 seconds, punchier pacing, captions in our brand font.</p>
-            <div><span><Paperclip size={16} /><Mic size={16} /></span><span className="landing-prompt-send"><ArrowUp size={15} /></span></div>
-          </div>
+          <PromptDemo />
         </Card>
       </div>
       <div className="landing-bento-row landing-bento-row-bottom">

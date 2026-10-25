@@ -142,7 +142,24 @@ body:has(>.landing),body:has(main.landing){background:#fff}
 .landing-prompt-panel p{font-size:15px;line-height:1.45;color:var(--l-fg)}
 .landing-prompt-panel>div{display:flex;align-items:center;justify-content:space-between}
 .landing-prompt-panel>div>span:first-child{display:flex;gap:10px;color:var(--l-fg-3)}
-.landing-prompt-send{display:grid;place-items:center;width:28px;height:28px;border-radius:6px;background:var(--l-brand);color:#fff;animation:landing-pulse 3.9s ease-in-out infinite}
+.landing-prompt-send{display:grid;place-items:center;width:28px;height:28px;border-radius:6px;background:var(--l-brand);color:#fff;animation:landing-pulse 3.9s ease-in-out infinite;transition:transform 120ms ease}
+.landing-prompt-send[data-pressed]{transform:scale(.86)}
+/* "Say what you want" loop, driven by components/landing/prompt-demo.tsx. The thread keeps its space so nothing jumps. */
+.landing-prompt-demo{width:100%;height:248px;display:flex;flex-direction:column;justify-content:flex-end;gap:12px;transition:opacity 400ms ease}
+.landing-prompt-demo[data-leaving]{opacity:0}
+.landing-prompt-thread{display:flex;flex-direction:column;align-items:flex-end;gap:10px}
+.landing-prompt-bubble{max-width:88%;padding:10px 12px;border-radius:12px 12px 4px 12px;background:var(--l-brand-tint);font-size:14px;line-height:1.45;color:var(--l-fg);opacity:0;transform:translateY(8px);transition:opacity 300ms ease,transform 300ms ease}
+.landing-prompt-demo[data-sent] .landing-prompt-bubble{opacity:1;transform:none}
+.landing-prompt-steps{align-self:stretch;display:flex;flex-direction:column;gap:6px;padding-left:2px}
+.landing-prompt-steps li{display:flex;align-items:center;gap:8px;font-size:13px;line-height:20px;color:var(--l-fg-2);transition:opacity 250ms ease,transform 250ms ease}
+.landing-prompt-steps li[data-state=waiting]{opacity:0;transform:translateY(4px)}
+.landing-prompt-steps svg{flex-shrink:0;color:var(--l-brand)}
+.landing-prompt-steps li[data-state=working] svg{animation:landing-spin 900ms linear infinite}
+.landing-prompt-steps li[data-state=done]{color:var(--l-fg)}
+.landing-prompt-placeholder{color:var(--l-fg-3)}
+.landing-prompt-caret{display:inline-block;width:1.5px;height:1.05em;margin-left:1px;vertical-align:-.15em;background:var(--l-brand);animation:landing-caret 1s steps(1) infinite}
+@keyframes landing-caret{50%{opacity:0}}
+@keyframes landing-spin{to{transform:rotate(360deg)}}
 @keyframes landing-pulse{0%,100%{background:var(--l-brand)}50%{background:#9a6af2}}
 .landing-timeline-panel{width:100%;display:flex;flex-direction:column;gap:8px;padding:16px}
 .landing-edit-notes{display:flex;gap:8px;padding-bottom:6px}
