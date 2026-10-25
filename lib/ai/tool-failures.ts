@@ -156,6 +156,9 @@ function unresolvedFailures(steps: ToolSteps, recoverPlacements = false) {
       }
     }
   }
+  // Without a review service no visual check could pass, so earlier review
+  // rejections are moot; the reply already says the edit was not visually checked.
+  if (renderReviewUnavailable(steps)) for (const key of pending.keys()) if (key.startsWith('previewRender:')) pending.delete(key);
   return pending;
 }
 
