@@ -7,8 +7,6 @@ import type { LibraryShortcutCategory } from './effect-library';
 import './floating-tools-rail.css';
 
 const shortcuts: { category: LibraryShortcutCategory; label: string; icon?: EffectIconName }[] = [
-  { category: 'motion', label: 'Motion', icon: 'punch' },
-  { category: 'color', label: 'Color', icon: 'colorGrade' },
   { category: 'texture', label: 'Texture', icon: 'filmOverlay' },
   { category: 'text', label: 'Text' },
 ];

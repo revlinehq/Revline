@@ -6,8 +6,7 @@ import { EffectIcon } from './effect-icon';
 import type { EffectPreset } from '@/lib/editor/clip-effects';
 import { selectedTextLook, type TextLookId } from '@/lib/editor/text-looks';
 import { TextFontStyles } from './text-font-styles';
-import { ColorLookPicker } from './color-look-picker';
-import { COLOR_LOOKS, selectedColorLook, type ColorLookId } from '@/lib/editor/color-looks';
+import type { ColorLookId } from '@/lib/editor/color-looks';
 import type { VisualEffects } from '@/lib/editor/visual-effects';
 import type { Clip, MediaAsset, Timeline } from '@/lib/editor/types';
 import { isTransitionPreset, type TransitionPreset } from '@/lib/editor/clip-transitions';
@@ -45,7 +44,7 @@ export function EffectLibrary({ clip, timeline, time = 0, assets, onMedia, onVis
   onFadeThroughBlack?: () => void; onSpeed?: () => void;
   onAddSound?: (asset: MediaAsset) => void; onAddStockAudio?: (catalogId: string) => Promise<void>; onUploadSound?: () => void; uploading?: boolean;
 }) {
-  const [category, setCategory] = useState<LibraryCategory>(categoryRequest?.category ?? 'motion');
+  const [category, setCategory] = useState<LibraryCategory>(categoryRequest?.category ?? 'texture');
   const [search, setSearch] = useState('');
   const id = useId();
   useEffect(() => { if (categoryRequest) { setCategory(categoryRequest.category); setSearch(''); } }, [categoryRequest]);
@@ -56,9 +55,9 @@ export function EffectLibrary({ clip, timeline, time = 0, assets, onMedia, onVis
   const categories: { id: LibraryCategory; label: string }[] = EFFECT_LIBRARY_CATEGORIES.filter(item => catalog.some(entry => entry.category === item.id));
   categories.push({ id: 'text', label: 'Text' });
   if (process.env.NODE_ENV === 'development') categories.push({ id: 'sam-dev', label: 'SAM 3 (dev)' }, { id: 'remotion-dev', label: 'Remotion (dev)' });
-  categories.push({ id: 'audio-fx', label: 'Audio FX' });
+  // Audio FX is hidden; the assistant still places library sounds on request.
+  // categories.push({ id: 'audio-fx', label: 'Audio FX' });
   const visible = catalog.filter(entry => (!entry.action || onSpeed) && (query ? `${entry.label} ${entry.description}`.toLowerCase().includes(query) : entry.category === category));
-  const colorLooks = category === 'color' && !!onColorLook && COLOR_LOOKS.some(look => `${look.label} cinematic color`.toLowerCase().includes(query));
   const needsTransitions = category !== 'text' && category !== 'audio-fx' && category !== 'remotion-dev' && visible.some(entry => isTransitionPreset(entry.preset));
   const transitionTarget = visual ? clip.id : undefined;
   const transitions = useMemo(() => needsTransitions && timeline ? transitionAvailabilityAt(timeline, time, { aboveClipId: transitionTarget }) : { available: false as const, reason: 'Add video or image footage before adding a transition.' }, [needsTransitions, timeline, time, transitionTarget]);
@@ -89,7 +88,6 @@ export function EffectLibrary({ clip, timeline, time = 0, assets, onMedia, onVis
           event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="tab"]')[next]?.focus();
         }}>{categories.map(item => <button key={item.id} type="button" role="tab" id={`${id}-category-${item.id}`} data-category={item.id} aria-controls={`${id}-category-results`} aria-selected={category === item.id} tabIndex={category === item.id ? 0 : -1} onClick={() => selectCategory(item.id)}>{item.label}</button>)}</div>
         <div className="library-category-results" id={`${id}-category-results`} role={query ? 'region' : 'tabpanel'} aria-label={query ? category === 'text' ? 'Text search results' : category === 'audio-fx' ? 'Audio FX search results' : 'Effect search results' : undefined} aria-labelledby={query ? undefined : `${id}-category-${category}`}>
-          {colorLooks && onColorLook && <section className="library-color-looks"><h3>Cinematic looks</h3><ColorLookPicker query={search} selected={selectedColorLook(clip?.colorGrade)?.id} disabled={!visual} onSelect={onColorLook}/></section>}
           {category === 'text' ? <div className="library-text-results">
             <TextFontStyles/>
             <section className="library-text-section"><h3>{text ? 'Presets' : 'Add text'}</h3><Suspense fallback={<p className="library-selection-note">Loading presets…</p>}><TextLookPicker query={search} selected={text ? selectedTextLook(clip) : undefined} onSelect={onTextLook}/></Suspense></section>
@@ -98,7 +96,7 @@ export function EffectLibrary({ clip, timeline, time = 0, assets, onMedia, onVis
             const draggable = !!entry.visual || (isTransitionPreset(entry.preset) ? !!canDragTransition : !!entry.preset && !!onAddEffect);
             return <LibraryEntry key={entry.id} entry={entry} disabled={!!unavailable} reason={unavailable} draggable={draggable} onApply={() => apply(entry)}/>;
           })}</div>}
-          {category !== 'text' && category !== 'remotion-dev' && category !== 'audio-fx' && !visible.length && !colorLooks && (category !== 'sam-dev' || query) && <p className="library-empty">No matching looks.</p>}
+          {category !== 'text' && category !== 'remotion-dev' && category !== 'audio-fx' && !visible.length && (category !== 'sam-dev' || query) && <p className="library-empty">No matching looks.</p>}
           {category !== 'text' && category !== 'remotion-dev' && category !== 'audio-fx' && !transitions.available && visible.some(entry => isTransitionPreset(entry.preset)) && <p className="library-transition-availability" role="status">{transitions.reason}</p>}
         </div>
     </div>

@@ -145,7 +145,7 @@ export function EditorShell(p: EditorShellProps) {
   const inspectorRequest = useRef(params.get('panel') === 'footage' ? 1 : 0);
   const [sourceRequest, setSourceRequest] = useState(inspectorRequest.current);
   const [editRequest, setEditRequest] = useState(0);
-  const [libraryCategory, setLibraryCategory] = useState<LibraryShortcutCategory>('motion');
+  const [libraryCategory, setLibraryCategory] = useState<LibraryShortcutCategory>('texture');
   const [libraryRequest, setLibraryRequest] = useState<LibraryCategoryRequest>();
   function openLibraryCategory(category: LibraryShortcutCategory) {
     setLibraryCategory(category); setLibraryRequest({ category, requestId: ++inspectorRequest.current }); setInspectorOpen(true);
