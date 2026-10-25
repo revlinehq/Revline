@@ -77,8 +77,8 @@ html[data-workspace-theme=dark] .editor-app:not(.landing-product-demo) .custom-t
 .custom-timeline.timeline-collapsed{height:100%!important;padding:0}
 .custom-timeline.timeline-collapsed .timeline-toolbar{border-bottom:0}
 /* A collapsed timeline keeps only playback and the expand button; the other tools fade and slide right. */
-.custom-timeline .timeline-edit-actions>*,.custom-timeline .timeline-view-actions>:not(:last-child){transition:opacity 260ms ease,transform 320ms cubic-bezier(.2,.8,.2,1),visibility 0s linear 0s}
-.custom-timeline.timeline-collapsed .timeline-edit-actions>*,.custom-timeline.timeline-collapsed .timeline-view-actions>:not(:last-child){opacity:0;transform:translateX(24px);visibility:hidden;pointer-events:none;transition:opacity 280ms ease-in,transform 300ms ease-in,visibility 0s linear 300ms}
+.custom-timeline .timeline-edit-actions>*,.custom-timeline .timeline-view-actions>:not(:last-child){transition:opacity 140ms ease,transform 170ms cubic-bezier(.2,.8,.2,1),visibility 0s linear 0s}
+.custom-timeline.timeline-collapsed .timeline-edit-actions>*,.custom-timeline.timeline-collapsed .timeline-view-actions>:not(:last-child){opacity:0;transform:translateX(24px);visibility:hidden;pointer-events:none;transition:opacity 140ms ease-in,transform 160ms ease-in,visibility 0s linear 160ms}
 @container timeline (max-width:760px){.custom-timeline.timeline-collapsed .timeline-edit-actions>*,.custom-timeline.timeline-collapsed .timeline-view-actions>:not(:last-child){display:none}}
 @media(prefers-reduced-motion:reduce){.custom-timeline .timeline-edit-actions>*,.custom-timeline .timeline-view-actions>:not(:last-child){transition:none}}
 .custom-timeline.timeline-collapsed .timeline-body{display:none}
