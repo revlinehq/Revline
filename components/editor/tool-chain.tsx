@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { AlertTriangle, Check, ChevronDown, CircleCheck, CircleStop, LoaderCircle, Minus } from 'lucide-react';
 import { READ_ONLY_TOOLS, type ChatTool } from './assistant-results';
 
-type Row = { key: string; tool: string; args: string; state: ChatTool['state']; count: number };
+type Row = { key: string; tool: string; args: string; state: ChatTool['state']; count: number; span?: [number, number] };
 
 const short = (value: string, length = 32) => value.length > length ? `${value.slice(0, length - 1)}…` : value;
 const seconds = (value: unknown) => typeof value === 'number' && Number.isFinite(value) ? `${Number(value.toFixed(2))}s` : undefined;
@@ -20,16 +20,27 @@ function argumentsOf(step: ChatTool) {
   return parts.filter(Boolean).join(' · ');
 }
 
-/** One row per tool call in order; identical consecutive calls fold into ×N. */
+const timeOf = (step: ChatTool) => {
+  const input = step.input ?? {}, start = [input.start, input.time, input.at].find(value => typeof value === 'number' && Number.isFinite(value)) as number | undefined;
+  return start === undefined ? undefined : [start, start + (typeof input.duration === 'number' && Number.isFinite(input.duration) ? input.duration : 0)] as [number, number];
+};
+
+/** One row per run of the same tool: consecutive successful calls fold into ×N
+ * with the timeline range they covered, so 20 captions read as one line. */
 export function toolChainRows(steps: ChatTool[]): Row[] {
   const rows: Row[] = [];
   steps.forEach((step, index) => {
-    const args = argumentsOf(step), previous = rows.at(-1);
-    if (previous && previous.tool === step.name && previous.args === args && previous.state === step.state && step.state === 'done') { previous.count++; return; }
+    const args = argumentsOf(step), previous = rows.at(-1), time = timeOf(step);
+    if (previous && previous.tool === step.name && previous.state === 'done' && step.state === 'done') {
+      previous.count++;
+      if (previous.args !== args) previous.args = '';
+      previous.span = previous.span && time ? [Math.min(previous.span[0], time[0]), Math.max(previous.span[1], time[1])] : undefined;
+      return;
+    }
     // Raw tool errors can carry backend internals; the turn's failure card explains them.
-    rows.push({ key: step.id ?? `${step.name}-${index}`, tool: step.name, args, state: step.state, count: 1 });
+    rows.push({ key: step.id ?? `${step.name}-${index}`, tool: step.name, args, state: step.state, count: 1, ...(time ? { span: time } : {}) });
   });
-  return rows;
+  return rows.map(row => row.count > 1 && !row.args && row.span ? { ...row, args: `${seconds(row.span[0])}–${seconds(row.span[1])}` } : row);
 }
 
 /** One group of tool calls, shown where it ran. Open while its turn streams; collapses when the turn ends. */
