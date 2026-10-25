@@ -24,7 +24,7 @@ export function VideoLinkImport({ onImport, disabled = false }: { onImport: (url
   }}>
     <label htmlFor={id}><Link2 size={13}/>Import a video link</label>
     <div className="video-link-field"><input id={id} type="url" required maxLength={2048} placeholder="YouTube or MP4 URL" autoComplete="off" value={url} disabled={disabled || busy} aria-describedby={`${id}-hint${error ? ` ${id}-error` : ''}`} aria-invalid={!!error} onChange={event => { setUrl(event.target.value); setError(''); }}/><button type="submit" disabled={disabled || busy || !url.trim()}>{busy ? <LoaderCircle size={14} className="animate-spin" aria-label="Starting import"/> : 'Import'}</button></div>
-    <small id={`${id}-hint`}>Links: up to 5 min / 500 MB. Upload longer footage as a file.</small>
+    <small id={`${id}-hint`}>Links: up to 5 min. Upload longer footage as a file.</small>
     {error && <p id={`${id}-error`} className="video-link-error" role="alert">{error}</p>}
   </form>;
 }
