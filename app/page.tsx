@@ -2,7 +2,8 @@ import { Geist, Geist_Mono, Outfit } from 'next/font/google';
 import { LandingNav } from '@/components/landing/nav';
 import { LandingHero } from '@/components/landing/hero';
 import { LandingLogos } from '@/components/landing/logos';
-import { LandingUseCases } from '@/components/landing/use-cases';
+// Hidden until there is enough footage to show each use case.
+// import { LandingUseCases } from '@/components/landing/use-cases';
 import { LandingHowItWorks } from '@/components/landing/how-it-works';
 import { LandingTestimonial } from '@/components/landing/testimonial';
 import { LandingPricing } from '@/components/landing/pricing';
@@ -20,7 +21,7 @@ export default function Home() {
     <LandingNav />
     <LandingHero />
     <LandingLogos />
-    <LandingUseCases />
+    {/* <LandingUseCases /> */}
     <LandingHowItWorks />
     <LandingTestimonial />
     <LandingPricing />

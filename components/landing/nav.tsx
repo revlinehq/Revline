@@ -5,7 +5,7 @@ import { LandingButton } from './ui';
 
 const links = [
   { label: 'Product', href: '#how-it-works' },
-  { label: 'Use cases', href: '#use-cases' },
+  // { label: 'Use cases', href: '#use-cases' }, // Section hidden for now.
   { label: 'Pricing', href: '#pricing' },
   { label: 'FAQ', href: '#faq' },
 ];
