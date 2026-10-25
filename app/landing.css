@@ -7,9 +7,8 @@ body:has(>.landing),body:has(main.landing){background:#fff}
 :where(.landing) a{color:inherit;text-decoration:none}
 .landing button{cursor:pointer;font:inherit}
 .landing a:focus-visible,.landing summary:focus-visible,.landing button:focus-visible,.landing input:focus-visible{outline:2px solid var(--l-brand);outline-offset:3px}
-/* Content is capped at 1152px (max-w-6xl) with at least --l-gutter on each side; the nav spans the full width. */
-.landing-section{padding-inline:max(var(--l-gutter),(100% - var(--l-content)) / 2)}
-.landing-nav{padding-inline:var(--l-gutter)}
+/* Content is capped at 1152px (max-w-6xl) with at least --l-gutter on each side; the nav background spans the full width. */
+.landing-section,.landing-nav{padding-inline:max(var(--l-gutter),(100% - var(--l-content)) / 2)}
 .landing-section[id]{scroll-margin-top:80px}
 
 /* Shared UI: components/landing/ui.tsx */
