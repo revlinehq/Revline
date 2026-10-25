@@ -30,6 +30,7 @@ import type * as lib_assistant_workflow from "../lib/assistant_workflow.js";
 import type * as lib_auth from "../lib/auth.js";
 import type * as lib_billing_access from "../lib/billing_access.js";
 import type * as lib_claude_model from "../lib/claude_model.js";
+import type * as lib_cutout_effect_validator from "../lib/cutout_effect_validator.js";
 import type * as lib_discord_alert from "../lib/discord_alert.js";
 import type * as lib_editSession from "../lib/editSession.js";
 import type * as lib_editSessionRebase from "../lib/editSessionRebase.js";
@@ -95,6 +96,7 @@ declare const fullApi: ApiFromModules<{
   "lib/auth": typeof lib_auth;
   "lib/billing_access": typeof lib_billing_access;
   "lib/claude_model": typeof lib_claude_model;
+  "lib/cutout_effect_validator": typeof lib_cutout_effect_validator;
   "lib/discord_alert": typeof lib_discord_alert;
   "lib/editSession": typeof lib_editSession;
   "lib/editSessionRebase": typeof lib_editSessionRebase;

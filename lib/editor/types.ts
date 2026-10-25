@@ -11,6 +11,7 @@ import type { FlashSettings, PunchSettings, ShakeSettings, PopSettings } from '.
 import type { SmoothZoomSettings } from './smooth-zoom-settings';
 import type { CameraMotionSettings } from './camera-motion-settings';
 import type { SceneSource } from './scene-layers';
+import type { ClipOutline } from './clip-outline';
 export type AspectRatio = 'vertical' | 'portrait-feed' | 'square' | 'classic' | 'landscape';
 export type ClipKind = 'video' | 'image' | 'audio' | 'caption' | 'graphic' | 'solid' | 'scene' | 'effect';
 export type LayerGroup = 'visual' | 'overlay' | 'audio' | 'effects';
@@ -75,6 +76,7 @@ export type Clip = {
   softBlur?: SoftBlur;
   frameDistortion?: FrameDistortion;
   frameCorners?: FrameCorners;
+  outline?: ClipOutline;
   textTemplate?: RemotionTextTemplate;
   textStyle?: TextAppearance;
   textGradient?: TextGradient;

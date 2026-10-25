@@ -18,6 +18,7 @@ import './effect-library.css';
 
 const TextLookPicker = lazy(() => import('./text-look-picker').then(module => ({ default: module.TextLookPicker })));
 const DevRemotionTests = process.env.NODE_ENV === 'development' ? lazy(() => import('../dev/remotion-dev-tests').then(module => ({ default: module.RemotionDevTests }))) : null;
+const DevCutoutEffectsLab = process.env.NODE_ENV === 'development' ? lazy(() => import('../dev/cutout-effects-lab').then(module => ({ default: module.CutoutEffectsLab }))) : null;
 const AudioFxLibrary = lazy(() => import('./sfx-library').then(module => ({ default: module.SfxLibrary })));
 export type LibraryVisualEffect = keyof VisualEffects;
 export type LibraryShortcutCategory = EffectLibraryCategory | 'text' | 'audio-fx';
@@ -32,8 +33,10 @@ function LibraryEntry({ entry, disabled, reason, draggable, onApply }: { entry: 
   }}><EffectIcon name={entry.id} size={18}/><span>{entry.label}</span>{entry.action ? <ChevronRight size={12} aria-hidden="true"/> : <Plus size={12} aria-hidden="true"/>}</button>;
 }
 
-export function EffectLibrary({ clip, timeline, time = 0, assets, onMedia, onVisualEffect, onColorLook, onAddEffect, onAddTransition, onTextLook, onSpeed, onAddSound, onAddStockAudio, onUploadSound, uploading = false, categoryRequest, onCategoryChange }: {
+export function EffectLibrary({ cutoutLab, clip, timeline, time = 0, assets, onMedia, onVisualEffect, onColorLook, onAddEffect, onAddTransition, onTextLook, onSpeed, onAddSound, onAddStockAudio, onUploadSound, uploading = false, categoryRequest, onCategoryChange }: {
   clip?: Clip; timeline?: Timeline; time?: number; assets: readonly MediaAsset[];
+  /** Development-only cut-out effects lab; set when the project may use cut-outs. */
+  cutoutLab?: { projectId: import('@/convex/_generated/dataModel').Id<'projects'> };
   categoryRequest?: LibraryCategoryRequest; onCategoryChange?: (category: LibraryShortcutCategory) => void;
   onMedia?: () => void; onVisualEffect: (effect: LibraryVisualEffect) => void;
   onColorLook?: (look: ColorLookId) => void;
@@ -91,7 +94,7 @@ export function EffectLibrary({ clip, timeline, time = 0, assets, onMedia, onVis
           {category === 'text' ? <div className="library-text-results">
             <TextFontStyles/>
             <section className="library-text-section"><h3>{text ? 'Presets' : 'Add text'}</h3><Suspense fallback={<p className="library-selection-note">Loading presets…</p>}><TextLookPicker query={search} selected={text ? selectedTextLook(clip) : undefined} onSelect={onTextLook}/></Suspense></section>
-          </div> : category === 'remotion-dev' && DevRemotionTests ? <Suspense fallback={<div className="library-look-grid" aria-label="Loading motion experiments" aria-busy="true">{[0,1,2].map(key=><div key={key} className="h-20 rounded-md bg-current/5 animate-pulse"/>)}</div>}><DevRemotionTests embedded query={search}/></Suspense> : category === 'audio-fx'  ? <Suspense fallback={<div className="library-look-grid" aria-label="Loading sounds" aria-busy="true">{[0, 1, 2].map(key => <div key={key} className="h-9 rounded-md bg-current/5 animate-pulse"/>)}</div>}><AudioFxLibrary assets={assets} query={search} onAdd={onAddSound} onAddStockAudio={onAddStockAudio} onUpload={onUploadSound} uploading={uploading}/></Suspense> : category === 'sam-dev' && !query ? <section className="library-sam-dev"><h3>Subject masks</h3><a href="/dev/sam" target="_blank" rel="noopener noreferrer">Open mask lab <ChevronRight size={13}/></a></section> : <div className="library-look-grid">{visible.map(entry => {
+          </div> : category === 'sam-dev' && DevCutoutEffectsLab && !query ? (cutoutLab ? <Suspense fallback={<p className="library-selection-note">Loading cut-out effects…</p>}><DevCutoutEffectsLab projectId={cutoutLab.projectId} clip={clip} asset={assets.find(asset => asset._id === clip?.assetId)}/></Suspense> : <p className="library-selection-note">Cut-out effects need Ultra and a saved project.</p>) : category === 'remotion-dev' && DevRemotionTests ? <Suspense fallback={<div className="library-look-grid" aria-label="Loading motion experiments" aria-busy="true">{[0,1,2].map(key=><div key={key} className="h-20 rounded-md bg-current/5 animate-pulse"/>)}</div>}><DevRemotionTests embedded query={search}/></Suspense> : category === 'audio-fx'  ? <Suspense fallback={<div className="library-look-grid" aria-label="Loading sounds" aria-busy="true">{[0, 1, 2].map(key => <div key={key} className="h-9 rounded-md bg-current/5 animate-pulse"/>)}</div>}><AudioFxLibrary assets={assets} query={search} onAdd={onAddSound} onAddStockAudio={onAddStockAudio} onUpload={onUploadSound} uploading={uploading}/></Suspense> : category === 'sam-dev' && !query ? <section className="library-sam-dev"><h3>Subject masks</h3><a href="/dev/sam" target="_blank" rel="noopener noreferrer">Open mask lab <ChevronRight size={13}/></a></section> : <div className="library-look-grid">{visible.map(entry => {
             const unavailable = reason(entry);
             const draggable = !!entry.visual || (isTransitionPreset(entry.preset) ? !!canDragTransition : !!entry.preset && !!onAddEffect);
             return <LibraryEntry key={entry.id} entry={entry} disabled={!!unavailable} reason={unavailable} draggable={draggable} onApply={() => apply(entry)}/>;

@@ -10,6 +10,7 @@ import { audioFadeAttributes, audioVolumeEnvelope, validateAudioTimeline } from 
 import { MAX_CLIP_VOLUME } from './clip-volume';
 import { validateVisualEffects, visualEffectsOf } from './visual-effects';
 import { cameraGlideBlurSource } from './camera-motion-blur';
+import { outlineFilter, validateOutline } from './clip-outline';
 import { visualEffectsRuntimeScript } from './visual-effects-runtime';
 import { textLayerSources } from './text-layers';
 import { sceneFonts, sceneLayerSources, sceneRuntimeScript, validateScene } from './scene-layers';
@@ -119,6 +120,7 @@ export function generateComposition(timeline: Timeline, assets: MediaAsset[], op
     validateClipEffects(clip);
     validateVisualFade(clip);
     validateVisualEffects(clip);
+    validateOutline(clip);
     validatePlaybackRate(clip);
     validateScene(clip);
     // Silent sound still contributes to the authored duration above, but needs
@@ -191,6 +193,7 @@ export function generateComposition(timeline: Timeline, assets: MediaAsset[], op
     const sound=audioFadeAttributes(clip);
     const audioAttrs=clip.kind==='video'||clip.kind==='audio'?` data-fade-in="${sound.fadeIn}" data-fade-out="${sound.fadeOut}" data-automation="${escapeHtml(audioVolumeEnvelope(timeline,clip,volume))}"`:'';
     const attrs = `${timing} data-media-start="${attrTime(clip.sourceStart)}" data-volume="${volume}"${clip.kind === 'video' || clip.kind === 'audio' ? ` data-playback-rate="${playbackRateOf(clip)}"` : ''}${audioAttrs}`;
+    const outline = outlineFilter(clip.outline, scale);
     const frame = (media: string) => {
       const content = `<div id="${id}-motion" class="motion-frame"><div class="source-window" style="${windowStyle}">${media}</div></div>`;
       // Camera motion reframes pixels through a stationary aperture. Ordinary
@@ -198,7 +201,7 @@ export function generateComposition(timeline: Timeline, assets: MediaAsset[], op
       const view = clip.cameraMotion || clip.smoothZoom
         ? `<div class="camera-window" style="position:absolute;overflow:hidden;${windowStyle}"><div class="camera-stage" style="${cameraStageStyle}">${content}</div></div>`
         : content;
-      return `<div id="${id}-frame" data-visual-clip="${escapeHtml(clip.id)}" class="visual-frame" style="${frameStyle}">${view}</div>`;
+      return `<div id="${id}-frame" data-visual-clip="${escapeHtml(clip.id)}" class="visual-frame" style="${frameStyle}${outline ? `;filter:${outline}` : ''}">${view}</div>`;
     };
     if (clip.kind === 'image') return frame(`<img ${attrs} crossorigin="anonymous" src="${src}" class="visual" style="${sourceStyle}" alt="" />`);
     const preload=options.preview&&clip.start>0?'none':'auto';

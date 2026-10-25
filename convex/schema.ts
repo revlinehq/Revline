@@ -1,5 +1,6 @@
 import {pinnedClaudeModelValidator} from './lib/claude_model';
 import { effectPlanValidator, compositionReviewResult } from './lib/effect_plan';
+import { cutoutEffectValidator } from './lib/cutout_effect_validator';
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 import { BEAT_ANALYSIS_ENGINE } from '../lib/media-analysis/beat-map';
@@ -49,6 +50,7 @@ export const clipValidator = v.object({
   neonEdges:v.optional(v.object({enabled:v.boolean(),amount:v.number(),color:v.string(),detail:v.number(),threshold:v.number(),glow:v.number()})),
   softBlur:v.optional(v.object({enabled:v.boolean(),amount:v.number()})),
   frameCorners:v.optional(v.object({enabled:v.boolean(),amount:v.number()})),
+  outline:v.optional(v.object({enabled:v.boolean(),color:v.string(),width:v.number(),glow:v.number()})),
   lensDistortion:v.optional(v.object({enabled:v.boolean(),amount:v.number(),centerX:v.number(),centerY:v.number(),fringing:v.number()})),
   frameDistortion:v.optional(v.object({enabled:v.boolean(),horizontal:v.number(),vertical:v.number(),skew:v.number(),bend:v.optional(v.number())})),
   filmOverlay:v.optional(v.object({enabled:v.boolean(),amount:v.number(),grain:v.number(),dust:v.number(),scratches:v.number(),vignette:v.number(),flicker:v.number(),warmth:v.number()})),
@@ -226,7 +228,7 @@ export default defineSchema({
     createdAt: v.number(), expiresAt: v.optional(v.number()), lastUsedAt: v.optional(v.number()), revokedAt: v.optional(v.number()),
   }).index("by_tokenHash", ["tokenHash"]).index("by_owner", ["ownerId"]).index("by_grant", ["grantId"]).index("by_grant_revoked", ["grantId", "revokedAt"]).index("by_clientId", ["clientId"]).index("by_revokedAt", ["revokedAt"]),
   // Background removal for one clip's source range, run by fal.ai through the media worker.
-  cutouts: defineTable({ ownerId: v.string(), projectId: v.id("projects"), clipId: v.string(), sourceAssetId: v.id("assets"), start: v.number(), end: v.number(), fps: v.optional(v.number()), subject: v.optional(v.string()), status: v.union(v.literal("queued"), v.literal("completed"), v.literal("failed")), taskId: v.optional(v.id("mediaTasks")), outputAssetId: v.optional(v.id("assets")), placed: v.optional(v.boolean()), error: v.optional(v.string()), createdAt: v.number() }).index("by_project", ["projectId"]),
+  cutouts: defineTable({ ownerId: v.string(), projectId: v.id("projects"), clipId: v.string(), sourceAssetId: v.id("assets"), start: v.number(), end: v.number(), fps: v.optional(v.number()), subject: v.optional(v.string()), effect: v.optional(cutoutEffectValidator), status: v.union(v.literal("queued"), v.literal("completed"), v.literal("failed")), taskId: v.optional(v.id("mediaTasks")), outputAssetId: v.optional(v.id("assets")), placed: v.optional(v.boolean()), error: v.optional(v.string()), createdAt: v.number() }).index("by_project", ["projectId"]),
   // Rendered timeline frames an MCP client asked to see; deleted once read.
   frameSnapshots: defineTable({ projectId: v.id("projects"), ownerId: v.string(), revision: v.number(), times: v.array(v.number()), taskId: v.optional(v.id("mediaTasks")), status: v.union(v.literal("queued"), v.literal("completed"), v.literal("failed")), frames: v.optional(v.array(v.object({ time: v.number(), image: v.string() }))), error: v.optional(v.string()), createdAt: v.number() }).index("by_project", ["projectId"]),
   // Per-minute counters keyed by owner (tool calls) or "register:<ip>" (client registration).
