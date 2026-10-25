@@ -3,7 +3,7 @@ import type { EditorSkill } from './index';
 
 export const explainerScenes: EditorSkill = {
   name: 'explainer-scenes',
-  description: 'Write or rewrite scene clips: animated explainer visuals (titles, diagrams, charts, UI walkthroughs, kinetic type) authored as React components and rendered frame by frame. Read before addScene or editScene.',
+  description: 'Write or rewrite scene clips: animated explainer visuals (titles, diagrams, charts, UI walkthroughs, kinetic type) authored as React components and rendered frame by frame. Read before addScene or editScene. Scenes come with matching generated sound (see Sound).',
   body: `# Explainer scenes
 
 A scene is one beat of an explainer: a React component rendered full-frame on its own V layer. Footage below shows through transparent areas, so leave the background transparent when the scene is an overlay.
@@ -34,6 +34,14 @@ A scene is one beat of an explainer: a React component rendered full-frame on it
 6. Match the cut: end on a stable frame and start the next scene from a compatible layout so nothing pops between beats.
 7. Keep text inside the central 80% of the frame.
 8. One title per scene. Never put a small label, eyebrow or kicker line (such as "EDITING TIME") above or on top of the main title; let the title stand alone.
+
+## Sound
+
+Every scene you create, or whose choreography you substantially change, gets matching sound in the same turn without being asked. Read the sound-design skill, then:
+
+- After addScene, call generateSound once for that scene: one clip at the scene's start, layers keyed to its key beats (enter, draw, pop and Show times). Only the key beats, not every element.
+- After editScene changes timing or motion, update that scene's existing generated sound with editSound (find it by start time and inspectClip's soundRecipe) instead of adding a second clip. Leave sounds alone for scenes whose motion did not change, and for text-only or color edits.
+- Skip sound when the user asked for no sound or a silent edit, or when speech (transcript words) or a music-role clip plays under the scene; say that you skipped it and why.
 
 ## Verifying a scene
 

@@ -6,12 +6,20 @@ const presetTable = Object.entries(SOUND_PRESETS).map(([name, spec]) => `| \`${n
 
 export const soundDesign: EditorSkill = {
   name: 'sound-design',
-  description: 'Add sound effects: generate every sound by default with generateSound/editSound, keyed to a scene\'s beat times (whoosh on a slide-in, pop per card, riser into a hit); restraint around speech and gain. Library recordings only on explicit request. Read before generateSound, editSound or addSoundEffect.',
+  description: 'Add sound effects, including the sound every new or reworked scene gets: generate every sound by default with generateSound/editSound, keyed to a scene\'s beat times (whoosh on a slide-in, pop per card, riser into a hit); restraint around speech and gain. Library recordings only on explicit request. Read before generateSound, editSound or addSoundEffect.',
   body: `# Sound design
 
 Sound effects make edits feel deliberate: each one marks a visual event the viewer already sees. **Generate every sound by default** with \`generateSound\`, timed to the exact beats of the motion: a whoosh as long as a slide-in, one pop per card, a counter while a number counts, a riser that ends on a reveal. Change one with \`editSound\`. Generated sounds are rendered from a recipe, contain no samples, and are safe to publish.
 
 The recorded library (\`soundEffects.library\`, placed with \`addSoundEffect\`) is **only** for when the user explicitly asks for a realistic or recorded sound, such as a camera shutter, a phone vibrating, a clock ticking, a lock, water or bubbles, or ambience like a city, the ocean or a server room, or names a library sound. Never add a library sound on your own initiative, and never mix library sounds into motion-graphics sound design. If the user asks for a recording the library does not have (for example keyboard typing), say there is no recorded one and generate the closest sound, labeled as synthesized.
+
+## Scenes
+
+Motion design comes with sound. When you add a scene, or change a scene's choreography with editScene, generate its sound in the same turn without being asked:
+
+- One generateSound clip per scene at the scene's start, layered on its key beats only.
+- When editScene changes a scene's timing, change its existing generated clip with editSound to the new beats; never add a second clip for the same scene. Leave other scenes' sounds alone.
+- Skip it if the user asked for no sound or silence, or speech or music plays under the scene. Library recordings stay request-only, even for scenes.
 
 ## Timing
 
@@ -71,7 +79,7 @@ Notes are names like \`F5\` or Hz. Keep pitched sounds in one key across a video
 - Leave space. Skip small beats quicker than about 0.5 s apart, or the edit sounds busy. Not every cut needs a whoosh: use them for topic or scene changes, not every jump cut inside one shot.
 - Nothing under speech. Check transcript word times (inspectAssetAnalysis) and place sounds in pauses, before the first word or after a sentence ends. If a tool result's \`overlapsAudio\` lists a voice clip with a word spoken there, move the sound to the nearest pause or drop it.
 - Match the tone. A calm explainer gets soft pops, ticks and chimes at low gain; hits, booms and fast whooshes are for energetic edits. Deep sounds below about 120 Hz barely play on phone speakers: pair a sub-drop with a brighter layer.
-- Add sounds only when the user asks for sound or authorized creative styling. Say which sounds you placed and where.
+- Add sounds when the user asks for sound, authorizes creative styling, or asks for motion design: every scene you create or rework gets one generated clip for its key beats in the same turn (see Scenes). Otherwise do not decorate. Say which sounds you placed and where.
 
 ## Gain
 
