@@ -93,7 +93,7 @@ Run `node scripts/author-stock-audio.mjs` to regenerate the original sounds and 
 
 ## Revline designed
 
-Five sounds synthesized by `scripts/author-library-audio.mjs`, a port of the matching functions in cstack's MIT-licensed `designed.py`. They contain no samples and are dedicated to CC0 (`LICENSE-Revline-designed.txt`). Run `node scripts/author-library-audio.mjs --freesound <video-edit assets/sfx>` to rebuild both packs; the output is deterministic. New sounds are Ogg Opus because current Homebrew ffmpeg ships without libvorbis.
+Five sounds synthesized by `scripts/author-library-audio.mjs`, a port of the matching functions in cstack's MIT-licensed `designed.py`. They contain no samples and are dedicated to CC0 (`LICENSE-Revline-designed.txt`). Run `node --import tsx scripts/author-library-audio.mjs --freesound <video-edit assets/sfx>` to rebuild both packs; the output is deterministic. New sounds are Ogg Opus because current Homebrew ffmpeg ships without libvorbis.
 
 | Name | Category | Duration |
 | --- | --- | --- |

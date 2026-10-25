@@ -5,7 +5,7 @@ export const soundDesign: EditorSkill = {
   description: 'Place sound effects from the CC0 Audio FX library: whooshes on cuts, pops and clicks on UI and text reveals, hits on reveals, ambience beds. Covers when to add sound, restraint around speech and gain levels. Read before addSoundEffect.',
   body: `# Sound design
 
-Sound effects make edits feel deliberate. Each one marks a visual event the viewer already sees. Every sound in the library is CC0 and safe to publish commercially. Use only ids listed under \`soundEffects\` in the catalog; there is no other source and nothing is generated on request.
+Sound effects make edits feel deliberate. Each one marks a visual event the viewer already sees. Every sound in the library is CC0 and safe to publish commercially. Use ids listed under \`soundEffects.library\` in the catalog. To design a sound that fits a motion graphic exactly (a whoosh as long as a slide-in, a pop per card), use \`generateSound\` and read the sound-synthesis skill; these rules apply to both.
 
 ## Tool
 

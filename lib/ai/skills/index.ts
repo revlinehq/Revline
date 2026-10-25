@@ -1,10 +1,11 @@
 import { explainerScenes } from './explainer-scenes';
 import { soundDesign } from './sound-design';
+import { soundSynthesis } from './sound-synthesis';
 
 /** Format-specific instructions the assistant loads on demand with readSkill. */
 export type EditorSkill = { name: string; description: string; body: string };
 
-export const EDITOR_SKILLS: EditorSkill[] = [explainerScenes, soundDesign];
+export const EDITOR_SKILLS: EditorSkill[] = [explainerScenes, soundDesign, soundSynthesis];
 export const EDITOR_SKILL_NAMES = EDITOR_SKILLS.map(skill => skill.name) as [string, ...string[]];
 
 /** The always-visible index: names and when to read each skill. */

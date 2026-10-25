@@ -36,6 +36,22 @@ export async function storageControl(body: Record<string, unknown>): Promise<{ u
   return response.json();
 }
 
+/** Upload a small server-made file (under one 64 MB part) through the same multipart Worker path as browser uploads. */
+export async function putMediaObject(key: string, bytes: Uint8Array<ArrayBuffer>, contentType: string): Promise<number> {
+  const { url, secret } = mediaConfig();
+  const created = await storageControl({ action: 'create', key, contentType });
+  if (!created.uploadId) throw new Error('Cloudflare did not open the upload');
+  try {
+    const token = await signMediaToken(secret, { operation: 'part', key, uploadId: created.uploadId, partNumber: 1, size: bytes.length, expires: Date.now() + 600_000 });
+    const part = await fetch(`${url}/part?token=${token}`, { method: 'PUT', headers: { 'Content-Length': String(bytes.length) }, body: bytes });
+    if (!part.ok) throw new Error('Cloudflare media upload failed. Please retry.');
+    const { etag } = await part.json() as { etag: string };
+    const file = await storageControl({ action: 'complete', key, uploadId: created.uploadId, parts: [{ partNumber: 1, etag }] });
+    if (file.size !== bytes.length) throw new Error('Stored media size does not match the upload');
+    return file.size;
+  } catch (error) { await storageControl({ action: 'abort', key, uploadId: created.uploadId }).catch(() => {}); throw error; }
+}
+
 export const PREVIEW_VERSION = 1;
 export type PreviewSource = { previewR2Key?:string;previewSize?:number;previewWidth?:number;previewHeight?:number;previewFps?:number;previewVersion?:number };
 export function hasPreview(source:PreviewSource) {

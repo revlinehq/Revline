@@ -106,6 +106,8 @@ export const assetFields = {
   duration: v.optional(v.number()), width: v.optional(v.number()), height: v.optional(v.number()), analysisId:v.optional(v.id('assetAnalyses')),analysisKinds:v.optional(v.array(v.string())),editSuggestions:understandingValidator.fields.suggestions, analysis: v.optional(analysisValidator), analysisUpdatedAt: v.optional(v.number()),
   audioAssetId: v.optional(v.id("assets")), audioExtracted: v.optional(v.boolean()),
   waveform: v.optional(waveformValidator),
+  // JSON recipe of an assistant-generated sound effect; editSound re-renders from it.
+  soundRecipe: v.optional(v.string()),
   thumbnailStorageId: v.optional(v.id('_storage')),
   analysisCompletedAt: v.optional(v.object({ transcribe: v.optional(v.number()), understand: v.optional(v.number()), shots: v.optional(v.number()), beats: v.optional(v.number()), track: v.optional(v.number()) })),
 };
