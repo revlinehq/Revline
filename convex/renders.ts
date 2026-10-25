@@ -1,4 +1,5 @@
 import { clipExportTimeline } from '../lib/editor/clip-export';
+import { flyRendersEnabled, queuedExportLimit } from './lib/render_seats';
 import { projectIdentity } from './lib/project_data';
 import { recordStorageObject, forgetStorageObject } from './lib/storage_accounting';
 import { internal } from './_generated/api';
@@ -37,7 +38,8 @@ export async function startRenderFor(ctx: MutationCtx, ownerId: string, args: Ob
   if (timelineDuration(timeline) > MAX_EXPORT_SECONDS) throw new ConvexError("Exports currently support up to five minutes. Shorten the final edit before exporting; your full arrangement remains saved.");
   const active=await Promise.all((['queued','rendering'] as const).map(status=>ctx.db.query('renderJobs').withIndex('by_owner_project_status',q=>q.eq('ownerId',ownerId).eq('projectId',project._id).eq('status',status)).first()));
   if(active.some(Boolean))throw new ConvexError('A render is already in progress');
-  const limit = activeExportLimit();
+  // With Fly, seats bound concurrent renders; beyond them exports wait in a longer queue.
+  const limit = flyRendersEnabled() ? queuedExportLimit(ultra) : activeExportLimit();
   // The indexed reads and insert share one transaction, so separate projects
   // cannot race past the account's outstanding-work limit.
   const accountActive = await Promise.all((['queued', 'rendering'] as const).map(status => ctx.db.query('renderJobs').withIndex('by_owner_status', q => q.eq('ownerId', ownerId).eq('status', status)).take(limit)));
@@ -46,7 +48,7 @@ export async function startRenderFor(ctx: MutationCtx, ownerId: string, args: Ob
   for (const clip of timeline.clips) if (clip.assetId) { const id = ctx.db.normalizeId("assets", clip.assetId)!; if (!assetIds.includes(id)) assetIds.push(id); }
   const now = Date.now();
   const jobId = await ctx.db.insert("renderJobs", { ownerId, projectId: project._id, sourceRevision:project.revision??0, ...(args.clipId!==undefined?{sourceClipId:args.clipId}:{}), timeline, assetIds, resolution: args.resolution, fps: args.fps, quality: args.quality, status: "queued", progress: 0, createdAt: now, updatedAt: now });
-  // Ultra exports go to the 4-vCPU processor slot.
+  // Ultra exports take the Ultra lane: the large Fly machines, or the 4-vCPU Cloudflare slot.
   const taskId = await enqueueMediaTask(ctx, { ownerId, projectId: project._id, kind: 'render', renderJobId: jobId, ...(ultra ? { lane: 'ultra' as const } : {}) });
   await ctx.db.patch(jobId, { taskId });
   return jobId;

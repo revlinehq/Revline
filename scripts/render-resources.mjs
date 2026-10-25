@@ -34,11 +34,12 @@ export function renderResources() {
   const cpus = Math.max(1, availableParallelism());
   // Two capture workers use both vCPUs of the hosted profile; more would
   // contend with the encoder and need re-measuring against the memory budget.
-  const workers = boundedInteger('REVLINE_RENDER_WORKERS', lowMemory ? 1 : Math.min(2, cpus), 4);
+  // Large export machines (Fly, 16 vCPU) raise these through the environment.
+  const workers = boundedInteger('REVLINE_RENDER_WORKERS', lowMemory ? 1 : Math.min(2, cpus), 16);
   return {
     workers,
     lowMemory,
-    ffmpegSlots: boundedInteger('REVLINE_RENDER_FFMPEG_SLOTS', lowMemory ? 1 : Math.min(2, cpus), 4),
+    ffmpegSlots: boundedInteger('REVLINE_RENDER_FFMPEG_SLOTS', lowMemory ? 1 : Math.min(2, cpus), 8),
     encodeThreads: boundedInteger('REVLINE_RENDER_ENCODE_THREADS', Math.min(4, cpus), 16),
     memoryMb: Math.floor(memory / MIB),
   };

@@ -22,6 +22,7 @@ import { commitTimeline, currentTimeline } from './lib/timeline';
 import { BEAT_ANALYSIS_ENGINE } from '../lib/media-analysis/beat-map';
 import { editingWorkflowActive } from './lib/assistant_workflow';
 import { placeCutout } from './cutouts';
+import { flyRendersEnabled, seatedRenders } from './lib/render_seats';
 import { MEDIA_PROCESSOR_VERSION } from '../lib/media-analysis/processor-version';
 import { MEDIA_TASK_LEASE_MS } from '../lib/media-analysis/errors';
 import { consumeVideoImport, requireMediaTaskCapacity } from './lib/account_limits';
@@ -120,6 +121,7 @@ export const prepareAttempt = internalMutation({ args: { taskId: v.id('mediaTask
   if (!task || ['completed', 'cancelled', 'failed'].includes(task.status)) return false;
   await ctx.db.patch(task._id, { status: 'queued', claimable:true, attempt: args.attempt, progress:0,activity:undefined,activityStartedAt:undefined,leaseToken: undefined, leaseExpiresAt: undefined, attemptStartedAt: undefined, updatedAt: Date.now() });
   // Wake only after this attempt is claimable, including retries after backoff.
+  if (task.kind === 'render' && flyRendersEnabled()) { await ctx.scheduler.runAfter(0, internal.flyRender.dispatch, {}); return true; }
   if (globalThis.process.env.MEDIA_PROCESSOR_WAKE_URL) await ctx.scheduler.runAfter(0, internal.mediaProcessor.wake, {});
   // Each Ultra attempt gets the 4-vCPU slot first, then any slot.
   if (task.lane === 'ultra') await ctx.scheduler.runAfter(ULTRA_FALLBACK_MS, internal.mediaTasks.releaseUltraLane, { taskId: task._id, attempt: args.attempt });
@@ -138,8 +140,13 @@ export const releaseUltraLane = internalMutation({ args: { taskId: v.id('mediaTa
 async function signalResult(ctx: MutationCtx, task: Doc<'mediaTasks'>, value: Infer<typeof eventResult>) {
   if (task.workflowId) await mediaWorkflow.sendEvent(ctx, { workflowId: task.workflowId as WorkflowId, name: `attempt-${task.attempt}`, validator: eventResult, value });
 }
+/** A finished or failed export frees one of its owner's seats; let a waiting export take it. */
+async function releaseRenderSeat(ctx: MutationCtx, task: Doc<'mediaTasks'>) {
+  if (task.kind === 'render' && flyRendersEnabled()) await ctx.scheduler.runAfter(0, internal.flyRender.dispatch, {});
+}
 async function failTask(ctx: MutationCtx, task: Doc<'mediaTasks'>, error: string, retryable: boolean) {
   await ctx.db.patch(task._id, { status: retryable ? 'retrying' : 'failed', error: error.slice(0, 1000), leaseToken: undefined, leaseExpiresAt: undefined, updatedAt: Date.now() });
+  await releaseRenderSeat(ctx, task);
   await signalResult(ctx, task, { success: false, retryable, error: error.slice(0, 1000) });
 }
 async function markTerminal(ctx: MutationCtx, taskId: Id<'mediaTasks'>, status: 'failed' | 'cancelled', error: string) {
@@ -147,6 +154,7 @@ async function markTerminal(ctx: MutationCtx, taskId: Id<'mediaTasks'>, status: 
   // A workflow cancelled after a permanent failure must not hide its reason.
   if (!task || task.status === 'completed' || task.status === 'cancelled' || (status === 'cancelled' && task.status === 'failed')) return;
   await ctx.db.patch(taskId, { status, error: error.slice(0, 1000), leaseToken: undefined, leaseExpiresAt: undefined, updatedAt: Date.now() });
+  await releaseRenderSeat(ctx, task);
   if (task.renderJobId) {
     const job = await ctx.db.get(task.renderJobId);
     if (job && job.status !== 'completed' && job.status !== 'cancelled') await ctx.db.patch(job._id, { status: status==='cancelled'?'cancelled':'failed', error: status==='cancelled'?undefined:error.slice(0, 1000), updatedAt: Date.now() });
@@ -242,19 +250,23 @@ async function fairest(ctx:MutationCtx|QueryCtx,candidates:Doc<'mediaTasks'>[]) 
   }
   return candidates[0];
 }
-async function firstClaimable(ctx:MutationCtx|QueryCtx,processorVersion=1,lane?:'ultra'|'any') {
+async function firstClaimable(ctx:MutationCtx|QueryCtx,processorVersion=1,lane?:'ultra'|'any',rendersOnly=false) {
   const versioned=(q:import('convex/server').FilterBuilder<import('convex/server').GenericTableInfo>)=>q.or(q.eq(q.field('requiredProcessorVersion'),undefined),q.lte(q.field('requiredProcessorVersion'),processorVersion));
+  // Fly export machines take only their lane's exports, within each owner's seats.
+  if(rendersOnly)return (await seatedRenders(ctx,lane==='ultra'?'ultra':undefined,versioned))[0]??null;
+  // With Fly exports, the regular processors leave every export to Fly.
+  const fly=flyRendersEnabled();
   // The Ultra slot only runs Ultra exports; regular slots leave them to it unless they wait too long.
-  if(lane==='ultra')return fairest(ctx,await ctx.db.query('mediaTasks').withIndex('by_status_claimable_kind_created',q=>q.eq('status','queued').eq('claimable',true).eq('kind','render')).filter(q=>q.and(q.eq(q.field('lane'),'ultra'),versioned(q))).take(FAIR_CLAIM_SCAN));
+  if(lane==='ultra')return fly?null:fairest(ctx,await ctx.db.query('mediaTasks').withIndex('by_status_claimable_kind_created',q=>q.eq('status','queued').eq('claimable',true).eq('kind','render')).filter(q=>q.and(q.eq(q.field('lane'),'ultra'),versioned(q))).take(FAIR_CLAIM_SCAN));
   // Regular slots leave Ultra exports to the Ultra slot until releaseUltraLane
   // clears the lane. A local development worker has no Ultra slot and runs every lane.
-  const laneOk=(q:import('convex/server').FilterBuilder<import('convex/server').GenericTableInfo>)=>lane==='any'?versioned(q):q.and(versioned(q),q.eq(q.field('lane'),undefined));
+  const laneOk=(q:import('convex/server').FilterBuilder<import('convex/server').GenericTableInfo>)=>{const base=lane==='any'?versioned(q):q.and(versioned(q),q.eq(q.field('lane'),undefined));return fly?q.and(base,q.neq(q.field('kind'),'render')):base;};
   // Exports are interactive; claim them before long queued analysis work.
-  const renders=await ctx.db.query('mediaTasks').withIndex('by_status_claimable_kind_created',q=>q.eq('status','queued').eq('claimable',true).eq('kind','render')).filter(laneOk).take(FAIR_CLAIM_SCAN);
+  const renders=fly?[]:await ctx.db.query('mediaTasks').withIndex('by_status_claimable_kind_created',q=>q.eq('status','queued').eq('claimable',true).eq('kind','render')).filter(laneOk).take(FAIR_CLAIM_SCAN);
   if(renders.length)return fairest(ctx,renders);
   const indexed=await fairest(ctx,await ctx.db.query('mediaTasks').withIndex('by_status_claimable_created',q=>q.eq('status','queued').eq('claimable',true)).filter(laneOk).take(FAIR_CLAIM_SCAN));
   // Legacy prepared tasks remain claimable during rollout, without a ten-row cap.
-  return indexed??await ctx.db.query('mediaTasks').withIndex('by_status_createdAt',q=>q.eq('status','queued')).filter(q=>q.and(q.eq(q.field('claimable'),undefined),q.gt(q.field('attempt'),0),q.neq(q.field('workflowId'),undefined),q.or(q.eq(q.field('requiredProcessorVersion'),undefined),q.lte(q.field('requiredProcessorVersion'),processorVersion)))).first();
+  return indexed??await ctx.db.query('mediaTasks').withIndex('by_status_createdAt',q=>q.eq('status','queued')).filter(q=>q.and(q.eq(q.field('claimable'),undefined),q.gt(q.field('attempt'),0),q.neq(q.field('workflowId'),undefined),...(fly?[q.neq(q.field('kind'),'render')]:[]),q.or(q.eq(q.field('requiredProcessorVersion'),undefined),q.lte(q.field('requiredProcessorVersion'),processorVersion)))).first();
 }
 export const cancel=mutation({args:{taskId:v.id('mediaTasks')},returns:v.null(),handler:async(ctx,args)=>{
   const task=await ctx.db.get(args.taskId);if(!task||task.ownerId!==await requireOwner(ctx))throw new ConvexError('Media task not found.');
@@ -274,9 +286,9 @@ export const processorContract = query({ args: { workerSecret: v.string() }, ret
   return { processorVersion: MEDIA_PROCESSOR_VERSION };
 } });
 
-export const ready = query({ args: { workerSecret: v.string(),processorVersion:v.optional(v.number()),lane:v.optional(v.union(v.literal('ultra'),v.literal('any'))) }, returns: v.string(), handler: async (ctx, args) => {
+export const ready = query({ args: { workerSecret: v.string(),processorVersion:v.optional(v.number()),lane:v.optional(v.union(v.literal('ultra'),v.literal('any'))),rendersOnly:v.optional(v.boolean()) }, returns: v.string(), handler: async (ctx, args) => {
   requireMediaWorker(args.workerSecret);
-  const task=await firstClaimable(ctx,args.processorVersion,args.lane);return task?`${task._id}:${task.attempt}`:'';
+  const task=await firstClaimable(ctx,args.processorVersion,args.lane,args.rendersOnly);return task?`${task._id}:${task.attempt}`:'';
 }});
 
 async function analysisStillActive(ctx:import('./_generated/server').QueryCtx|MutationCtx,task:Doc<'mediaTasks'>) {
@@ -326,9 +338,9 @@ async function loadWork(ctx:import('./_generated/server').QueryCtx|MutationCtx,t
   const analysisRun=task.analysisRequestId?await ctx.db.get(task.analysisRequestId):null;
   return { ...(analysisRun?{aiRunId:analysisRun.aiRunId}:{}),...(review?{review}:{}),...(snapshot?{snapshot}:{}),...(cutoutRow?{cutout:{start:cutoutRow.start,end:cutoutRow.end,...(cutoutRow.fps?{fps:cutoutRow.fps}:{}),...(cutoutRow.subject?{subject:cutoutRow.subject}:{})}}:{}),taskId: task._id, leaseToken: task.leaseToken!, projectId: task.projectId, kind: task.kind, ...(task.sourceUrl ? { sourceUrl: task.sourceUrl } : {}), ...(task.frameRequest ? { frameRequest: task.frameRequest } : {}), ...(task.videoRequest ? { videoRequest: task.videoRequest } : {}), ...(asset ? { asset: { ...await hydrateAsset(ctx,asset), url: await mediaUrl(ctx, asset), ...await previewUrl(ctx, asset) } } : {}), ...(transcriptionAsset?{transcriptionAsset}:{}), ...(render ? { render, outputStored } : {}), ...(task.renderJobId ? { renderJobId: task.renderJobId } : {}), ...(task.outputAssetId ? { outputAssetId: task.outputAssetId } : {}) };
 }
-export const claim = mutation({ args: { workerSecret: v.string(),compact:v.optional(v.boolean()),processorVersion:v.optional(v.number()),lane:v.optional(v.union(v.literal('ultra'),v.literal('any'))) }, returns: v.union(workItem, v.null()), handler: async (ctx, args): Promise<MediaWorkItem | null> => {
+export const claim = mutation({ args: { workerSecret: v.string(),compact:v.optional(v.boolean()),processorVersion:v.optional(v.number()),lane:v.optional(v.union(v.literal('ultra'),v.literal('any'))),rendersOnly:v.optional(v.boolean()) }, returns: v.union(workItem, v.null()), handler: async (ctx, args): Promise<MediaWorkItem | null> => {
   requireMediaWorker(args.workerSecret);
-  const task=await firstClaimable(ctx,args.processorVersion,args.lane);if(!task)return null;
+  const task=await firstClaimable(ctx,args.processorVersion,args.lane,args.rendersOnly);if(!task)return null;
   try {await projectIdentity(ctx,task.projectId,task.ownerId);}catch{await failTask(ctx,task,'The project was removed.',false);return null;}
   if(!await analysisStillActive(ctx,task)){await markTerminal(ctx,task._id,'cancelled','The AI analysis request is no longer active.');await signalResult(ctx,task,{success:false,retryable:false,error:'The AI run stopped.'});return null;}
   const leaseToken=crypto.randomUUID(),now=Date.now();
@@ -492,5 +504,6 @@ export const complete = mutation({ args: { ...mediaTaskCredentials, result: task
   if (task.analysisRequestId && await ctx.db.get(task.analysisRequestId)) await ctx.db.patch(task.analysisRequestId, { status: 'completed', error: undefined });
   await ctx.db.patch(task._id, { status: 'completed', progress: 100, error: undefined, leaseExpiresAt: undefined, updatedAt: Date.now() });
   await signalResult(ctx, task, { success: true, retryable: false });
+  await releaseRenderSeat(ctx, task);
   return null;
 }});

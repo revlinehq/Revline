@@ -6,4 +6,6 @@ crons.daily('Prune rendered review snapshots',{hourUTC:9,minuteUTC:20},internal.
 crons.daily('Prune delivered Discord alert receipts',{hourUTC:9,minuteUTC:25},internal.discordAlerts.prune,{});
 crons.interval('Fail stalled exports',{minutes:10},internal.renders.failStalled,{});
 crons.daily('Prune MCP tokens, codes and unused clients',{hourUTC:9,minuteUTC:30},internal.mcpAuth.prune,{});
+// Exports re-queued by an expired lease or a failed Fly call get a machine within a minute; a no-op unless RENDER_PROVIDER=fly.
+crons.interval('Dispatch waiting exports to Fly',{minutes:1},internal.flyRender.dispatch,{});
 export default crons;
