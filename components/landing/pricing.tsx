@@ -22,7 +22,6 @@ export function LandingPricing() {
         <div className="landing-price"><strong>$39</strong><span>/ month <small>USD</small></span></div>
         <p>3 days free. Then $39/month. Cancel anytime.</p>
       </div>
-      <LandingStartButton label="Start free trial" size="lg" block />
       <ul>{features.map(feature => <li key={feature}><Check size={16} aria-hidden="true" />{feature}</li>)}</ul>
       <LandingStartButton label="Start free trial" size="lg" block />
     </div>
