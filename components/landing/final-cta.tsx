@@ -47,7 +47,7 @@ export function LandingFinalCta() {
         <form className="landing-email" onSubmit={start}>
           <label className="sr-only" htmlFor="landing-email">Email address</label>
           <input id="landing-email" type="email" name="email" autoComplete="email" placeholder="Enter your email" value={email} onChange={event => setEmail(event.target.value)} />
-          <LandingButton type="submit" variant="brand" size="sm">Get started free</LandingButton>
+          <LandingButton type="submit" variant="primary" size="sm">Get started free</LandingButton>
         </form>
         <LandingButton className="landing-google" variant="neutral" size="lg" block disabled={google === 'pending'} onClick={() => void continueWithGoogle()}>{google === 'pending' ? <LoaderCircle size={18} className="animate-spin" aria-hidden="true" /> : <GoogleIcon />}Continue with Google</LandingButton>
       </div>
