@@ -3,6 +3,8 @@ import type { Clip } from '../editor/types';
 import { sourceEndOf, timelineTimeAtSource } from '../editor/playback-rate';
 
 export type VideoInspectionInput = { start: number; end: number; question: string };
+/** Room for a full multi-line edit brief; 1000 rejected real 13-line requests. */
+export const MAX_INSPECTION_QUESTION = 4000;
 export type VideoInspection = VideoInspectionInput & {
   summary: string; uncertainty: string;
   matches: { start: number; end: number; description: string }[];
@@ -29,7 +31,7 @@ export const videoInspectionJsonSchema = {
 
 export function validateVideoInspectionInput(input: VideoInspectionInput, duration: number) {
   if (![input.start, input.end, duration].every(Number.isFinite) || duration <= 0 || input.start < 0 || input.end <= input.start || input.end > duration) throw new Error('Choose a positive source window within this video.');
-  if (!input.question.trim() || input.question.length > 1000) throw new Error('Ask a video question of 1–1000 characters.');
+  if (!input.question.trim() || input.question.length > MAX_INSPECTION_QUESTION) throw new Error(`Ask a video question of 1–${MAX_INSPECTION_QUESTION} characters.`);
 }
 
 export function validateVideoInspectionResult(result: VideoInspection, input: VideoInspectionInput, duration: number) {

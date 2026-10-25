@@ -1,6 +1,6 @@
 import { execFile, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
-import { analyzeAudioActivity, AUDIO_ACTIVITY_FRAME_SECONDS, MAX_AUDIO_ACTIVITY_DURATION, type AudioActivity } from '@/lib/media-analysis/audio-activity';
+import { analyzeAudioActivity, AUDIO_ACTIVITY_FRAME_SECONDS, MAX_AUDIO_ACTIVITY_DURATION, type AudioActivity, type AudioEnergyFrames } from '@/lib/media-analysis/audio-activity';
 import type { Transcript } from '@/lib/media-analysis/transcript';
 
 const run = promisify(execFile);
@@ -9,6 +9,12 @@ const FRAME_SAMPLES = SAMPLE_RATE * AUDIO_ACTIVITY_FRAME_SECONDS;
 
 /** Stream bounded PCM; preserve source-time gaps and avoid stereo phase cancellation. */
 export async function measureAudioActivity(input: string, signal: AbortSignal, transcript?: Transcript): Promise<AudioActivity> {
+  const { frames, duration } = await measureAudioEnergy(input, signal);
+  return analyzeAudioActivity(frames, duration, transcript);
+}
+
+/** 10ms RMS and peak levels in source time, shared by activity and speech windowing. */
+export async function measureAudioEnergy(input: string, signal: AbortSignal): Promise<{ frames: AudioEnergyFrames; duration: number }> {
   const { stdout } = await run('ffprobe', ['-v', 'error', '-select_streams', 'a:0', '-show_entries', 'stream=channels,start_time:format=duration', '-of', 'json', input], { signal, timeout: 30_000, maxBuffer: 1024 * 1024 });
   const probe = JSON.parse(stdout) as { streams?: { channels?: number; start_time?: string }[]; format?: { duration?: string } };
   const duration = Number(probe.format?.duration), channels = probe.streams?.[0]?.channels ?? 0;
@@ -59,7 +65,7 @@ export async function measureAudioActivity(input: string, signal: AbortSignal, t
     await completion;
     if (remainder.length || !sampleCount) throw new Error('Could not decode complete audio activity samples.');
     if (frameSampleCount) flush();
-    return analyzeAudioActivity({ rmsDb: rmsDb.subarray(0, frameCount), peakDb: peakDb.subarray(0, frameCount) }, sampleCount / SAMPLE_RATE, transcript);
+    return { frames: { rmsDb: rmsDb.subarray(0, frameCount), peakDb: peakDb.subarray(0, frameCount) }, duration: sampleCount / SAMPLE_RATE };
   } catch (error) {
     child.kill('SIGKILL');
     await completion.catch(() => {});

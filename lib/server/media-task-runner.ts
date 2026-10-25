@@ -4,9 +4,10 @@ import { join } from 'node:path';
 import type { ConvexHttpClient } from 'convex/browser';
 import type { MediaWorkItem, MediaTaskResult } from '@/convex/mediaTasks';
 import { dimensions, timelineDuration, type MediaAsset } from '@/lib/editor/types';
-import { downloadOwnedMedia, extractTranscriptionAudio, needsAnalysisVideoProxy, prepareVideo, probeMedia } from '@/lib/media-analysis/io';
+import { downloadOwnedMedia, extractTranscriptionAudio, extractVideoWindow, needsAnalysisVideoProxy, prepareVideo, probeMedia } from '@/lib/media-analysis/io';
 import { inspectVideo, inspectVideoFrames, understandVideo } from '@/lib/media-analysis/gemini';
 import { transcribeWithWhisper } from '@/lib/media-analysis/whisper';
+import { currentTranscript } from '@/lib/media-analysis/transcript';
 import { detectShots } from '@/lib/media-analysis/detect-shots';
 import { detectMusicBeats } from '@/lib/media-analysis/music-beats';
 import { AnalysisError } from '@/lib/media-analysis/errors';
@@ -102,15 +103,21 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
     if(task.kind==='preview'&&asset.kind==='video'&&asset.previewVersion===1&&asset.previewR2Key&&[asset.previewSize,asset.previewWidth,asset.previewHeight,asset.previewFps].every(value=>typeof value==='number'&&Number.isFinite(value)&&value>0))return {};
     if (task.kind === 'extract' && asset.audioExtracted) return asset.audioAssetId ? { audioAssetId: asset.audioAssetId } : {};
     if (task.kind === 'waveform' && asset.waveform) return { waveform: asset.waveform };
-    if (task.kind === 'transcribe' && asset.analysis?.transcript && asset.analysis.audioActivity) return { analysis: { transcript: asset.analysis.transcript, audioActivity: asset.analysis.audioActivity } };
+    if (task.kind === 'transcribe' && currentTranscript(asset.analysis?.transcript) && asset.analysis?.audioActivity) return { analysis: { transcript: asset.analysis.transcript, audioActivity: asset.analysis.audioActivity } };
     if (task.kind === 'understand' && asset.analysis?.understanding) return { analysis: { understanding: asset.analysis.understanding } };
     const sourceAsset = task.kind === 'transcribe' ? task.transcriptionAsset ?? asset : asset;
     if (!sourceAsset.url) throw new AnalysisError('The prepared source media is unavailable.', 400);
-    const source = join(directory, 'source'), sourceUrl = sourceAsset.url;
+    // Footage questions read the stored 1280px playback preview when it exists:
+    // originals reach hundreds of MB, and downloading and re-encoding one took
+    // minutes before Gemini could start. The preview keeps every frame and audio.
+    const preview = (task.kind === 'video' || task.kind === 'understand') && asset.kind === 'video' && asset.previewUrl && asset.previewVersion === 1 && [asset.previewSize, asset.previewWidth, asset.previewHeight].every(value => typeof value === 'number' && Number.isFinite(value) && value > 0)
+      ? { url: asset.previewUrl, size: asset.previewSize!, width: asset.previewWidth!, height: asset.previewHeight!, contentType: 'video/mp4' } : undefined;
+    const download = preview ?? { url: sourceAsset.url, size: sourceAsset.size, width: sourceAsset.width, height: sourceAsset.height, contentType: sourceAsset.contentType };
+    const source = join(directory, 'source'), sourceUrl = download.url;
     const cacheIdentity = mediaSourceCacheIdentity(convexUrl, task.projectId, sourceAsset);
     const downloadStartedAt = Date.now();
     let loggedPercent = 0, loggedAt = downloadStartedAt;
-    const reusedSource = await reuseMediaFile({ identity: cacheIdentity, variant: 'source-v1', target: source, signal, expectedBytes: sourceAsset.size }, () => {onActivity?.('downloading');return runPhase('Downloading source', () => downloadOwnedMedia(sourceUrl, source, new URL(convexUrl).origin, sourceAsset.size, signal, {
+    const reusedSource = await reuseMediaFile({ identity: cacheIdentity, variant: preview ? 'preview-file-v1' : 'source-v1', target: source, signal, expectedBytes: download.size }, () => {onActivity?.('downloading');return runPhase(preview ? 'Downloading playback preview' : 'Downloading source', () => downloadOwnedMedia(sourceUrl, source, new URL(convexUrl).origin, download.size, signal, {
       concurrency: task.kind === 'extract' ? 3 : 1,
       onProgress: (bytes, total) => {
         const percent = Math.floor(bytes / total * 100), now = Date.now();
@@ -168,7 +175,8 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
     }
     if (task.kind === 'transcribe') {
       if (!media.hasAudio) throw new AnalysisError('This source has no audio to transcribe.', 400);
-      const savedTranscript = asset.analysis?.transcript;
+      // Older whole-file transcripts lost retakes; only a current one is reused.
+      const savedTranscript = currentTranscript(asset.analysis?.transcript) ? asset.analysis?.transcript : undefined;
       if (savedTranscript) return { analysis: { transcript: savedTranscript, audioActivity: await runPhase('Measuring quiet audio', () => measureAudioActivity(source, signal, savedTranscript)) } };
       const key = process.env.OPENAI_API_KEY;
       if (!key) throw new AnalysisError('OpenAI Whisper transcription is not configured on the media worker.', 503);
@@ -187,27 +195,40 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
     if (!media.hasVideo) throw new AnalysisError('Footage understanding needs a video source.', 400);
     const key = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
     if (!key) throw new AnalysisError('Gemini agentic footage understanding is not configured on the media worker.', 503);
-    const contentType = asset.contentType?.split(';')[0].trim().toLowerCase() ?? '';
+    const contentType = download.contentType?.split(';')[0].trim().toLowerCase() ?? '';
     const mimeType = contentType === 'video/quicktime' ? 'video/mov' : contentType === 'video/x-msvideo' ? 'video/avi' : contentType;
     const nativeType = ['video/mp4', 'video/mpeg', 'video/mov', 'video/avi', 'video/x-flv', 'video/mpg', 'video/webm', 'video/wmv', 'video/3gpp'].includes(mimeType);
     const purpose = task.kind === 'video' ? 'inspection' : 'overview';
     let video = source, videoMimeType = mimeType;
-    if (!nativeType || needsAnalysisVideoProxy(asset, media.duration, purpose)) {
+    const request = task.kind === 'video' ? task.videoRequest : undefined;
+    if (task.kind === 'video' && !request) throw new AnalysisError('Native video inspection needs a question and source window.', 400);
+    // A question about part of the footage uploads only that part; encoding the
+    // window is also the analysis proxy, so the full-length proxy is skipped.
+    const windowed = !!request && request.end - request.start < media.duration - 1;
+    if (!windowed && (!nativeType || needsAnalysisVideoProxy({ size: download.size, width: download.width, height: download.height }, media.duration, purpose))) {
       const prepared = join(directory, 'analysis.mp4'), preparationStartedAt = Date.now();
       onActivity?.('preparing-analysis');
       // Increment this variant if the corresponding prepareVideo profile changes.
-      const reusedAnalysis = await reuseMediaFile({ identity: cacheIdentity, variant: `analysis-${purpose}-v1`, target: prepared, signal, ...(nativeType ? { maxBytes: asset.size - 1 } : {}) }, () => runPhase('Preparing analysis video',()=>prepareVideo(source, prepared, signal, purpose)));
+      const reusedAnalysis = await reuseMediaFile({ identity: cacheIdentity, variant: `analysis-${purpose}${preview ? '-preview' : ''}-v1`, target: prepared, signal, ...(nativeType ? { maxBytes: download.size - 1 } : {}) }, () => runPhase('Preparing analysis video',()=>prepareVideo(source, prepared, signal, purpose)));
       if (reusedAnalysis) logPhase('Analysis video cache', 'reused', preparationStartedAt, purpose);
       const preparedBytes = (await stat(prepared)).size;
       // An unusually simple source can already be smaller than the new encode.
       // Keep its native upload in that case; unsupported containers still need MP4.
-      if (!nativeType || preparedBytes < asset.size) { video = prepared; videoMimeType = 'video/mp4'; }
-      logPhase('Analysis video', video === prepared ? 'prepared' : 'using smaller original', preparationStartedAt, `${purpose} · ${(asset.size / 1048576).toFixed(1)} MiB source · ${(preparedBytes / 1048576).toFixed(1)} MiB copy`);
+      if (!nativeType || preparedBytes < download.size) { video = prepared; videoMimeType = 'video/mp4'; }
+      logPhase('Analysis video', video === prepared ? 'prepared' : 'using smaller original', preparationStartedAt, `${purpose} · ${(download.size / 1048576).toFixed(1)} MiB ${preview ? 'preview' : 'source'} · ${(preparedBytes / 1048576).toFixed(1)} MiB copy`);
     }
     onProgress(30);
-    if (task.kind === 'video') {
-      if (!task.videoRequest) throw new AnalysisError('Native video inspection needs a question and source window.', 400);
-      return { videoInspection: await runPhase('Inspecting video',()=>inspectVideo(video, media.duration, task.videoRequest!, key, signal, videoMimeType,reportGeminiActivity)) };
+    if (request) {
+      // A preview can end milliseconds before the original; requests use source time.
+      if (!windowed) return { videoInspection: await runPhase('Inspecting video',()=>inspectVideo(video, Math.max(media.duration, preview ? asset.duration ?? 0 : 0), request, key, signal, videoMimeType,reportGeminiActivity)) };
+      const clip = join(directory, 'window.mp4');
+      onActivity?.('preparing-analysis');
+      await runPhase('Preparing video window',()=>extractVideoWindow(source, clip, request.start, request.end, signal));
+      const clipDuration = Math.min(request.end - request.start, (await probeMedia(clip, signal)).duration);
+      const local = await runPhase('Inspecting video',()=>inspectVideo(clip, clipDuration, { question: request.question, start: 0, end: clipDuration }, key, signal, 'video/mp4', reportGeminiActivity));
+      // Answers use window time; report them in source time inside the request.
+      const toSource = (time: number) => Math.min(request.end, Math.max(request.start, request.start + time));
+      return { videoInspection: { ...local, question: request.question, start: request.start, end: request.end, matches: local.matches.map(match => ({ ...match, start: toSource(match.start), end: toSource(match.end) })).filter(match => match.end > match.start) } };
     }
     return { analysis: { understanding: await runPhase('Understanding footage',()=>understandVideo(video, media.duration, key, signal, videoMimeType,reportGeminiActivity,{projectId:task.projectId,taskId:task.taskId})) } };
   } finally { clearInterval(geminiHeartbeat);await rm(directory, { recursive: true, force: true }); }

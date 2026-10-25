@@ -1,8 +1,12 @@
 import { z } from 'zod';
 
 export type TranscriptWord = { start: number; end: number; text: string };
-export type Transcript = { words: TranscriptWord[]; segments: TranscriptWord[] };
+export type Transcript = { words: TranscriptWord[]; segments: TranscriptWord[]; version?: number };
 export const MAX_TRANSCRIPT_WORDS = 5000;
+/** 2: Whisper runs on short pause-cut windows. Whole-file Whisper (unversioned)
+ * merged repeated takes and dropped speech, so those transcripts are redone. */
+export const TRANSCRIPT_VERSION = 2;
+export const currentTranscript = (transcript?: { version?: number } | null) => transcript?.version === TRANSCRIPT_VERSION;
 
 const annotationSchema = z.object({ type: z.literal('word_info'), text: z.string(), start_offset: z.union([z.string(), z.number()]), end_offset: z.union([z.string(), z.number()]) });
 const contentSchema = z.object({ text: z.string().optional(), annotations: z.array(z.unknown()).optional() });

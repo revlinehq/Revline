@@ -35,6 +35,16 @@ export async function extractTranscriptionAudio(input: string, output: string, s
   await run('ffmpeg', ['-v', 'error', ...seek, '-i', input, ...length, '-map', '0:a:0', '-vn', '-ac', '1', '-ar', '16000', '-c:a', 'libmp3lame', '-b:a', '32k', '-y', output], { signal, timeout: 120_000, maxBuffer: 1024 * 1024 });
 }
 
+/** Encode only the asked source window for a video question, at the inspection
+ * profile. Gemini then watches seconds, not the whole upload; times in its answer
+ * are relative to the window start. Accurate input seeking decodes from the
+ * prior keyframe, so the window starts exactly at `start`. */
+export async function extractVideoWindow(input: string, output: string, start: number, end: number, signal: AbortSignal) {
+  const profile = analysisProfiles.inspection;
+  const geometry = `scale=w='min(${profile.maxEdge},iw)':h='min(${profile.maxEdge},ih)':force_original_aspect_ratio=decrease:force_divisible_by=2`;
+  await run('ffmpeg', ['-v', 'error', '-threads', '2', '-ss', String(start), '-i', input, '-t', String(end - start), '-map', '0:v:0', '-map', '0:a:0?', '-vf', geometry, '-fps_mode', 'vfr', '-c:v', 'libx264', '-threads', '2', '-preset', 'veryfast', '-crf', String(profile.crf), '-maxrate', `${profile.videoKbps}k`, '-bufsize', `${profile.videoKbps * 2}k`, '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', `${profile.audioKbps}k`, '-movflags', '+faststart', '-y', output], { signal, timeout: 600_000, maxBuffer: 1024 * 1024 });
+}
+
 export async function prepareVideo(input: string, output: string, signal: AbortSignal, purpose?: AnalysisVideoPurpose) {
   const profile = purpose ? analysisProfiles[purpose] : { maxEdge: 1280, crf: 24, audioKbps: 128 };
   // Bound transfer size through resolution/bitrate, retaining every recorded frame,
