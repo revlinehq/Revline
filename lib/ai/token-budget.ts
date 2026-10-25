@@ -37,7 +37,9 @@ function nativeCacheModel(params:LanguageModelV4CallOptions,model?:Pick<Language
     if(longCache||options.speed!==undefined||(options.serviceTier!==undefined&&options.serviceTier!=='standard_only')||(options.inferenceGeo!==undefined&&options.inferenceGeo!=='global')||options.fallbacks!==undefined||options.contextManagement!==undefined||options.compaction!==undefined)throw new AssistantTokenBudgetError('usage');
     if(options.serviceTier!=='standard_only'||options.inferenceGeo!=='global'||record(options.cacheControl).ttl!=='5m')return;
   }else{
-    if((options.serviceTier!==undefined&&options.serviceTier!=='default')||(options.reasoningMode!==undefined&&options.reasoningMode!=='standard')||(record(options.promptCacheOptions).ttl!==undefined&&record(options.promptCacheOptions).ttl!=='30m')||['previousResponseId','conversation','instructions','contextManagement','compactionTrigger'].some(key=>options[key]!==undefined))throw new AssistantTokenBudgetError('usage');
+    // Fast and other tiers are billed differently; their usage is still counted
+    // conservatively below rather than refusing the request.
+    if((options.reasoningMode!==undefined&&options.reasoningMode!=='standard')||(record(options.promptCacheOptions).ttl!==undefined&&record(options.promptCacheOptions).ttl!=='30m')||['previousResponseId','conversation','instructions','contextManagement','compactionTrigger'].some(key=>options[key]!==undefined))throw new AssistantTokenBudgetError('usage');
     if(options.serviceTier!=='default'||options.reasoningMode!=='standard'||record(options.promptCacheOptions).ttl!=='30m')return;
   }
   if(params.tools?.some(tool=>tool.type!=='function'))throw new AssistantTokenBudgetError('usage');

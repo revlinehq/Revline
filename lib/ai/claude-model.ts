@@ -18,7 +18,8 @@ export const OPENAI_EDIT_MODELS = [
   { id: 'gpt-6.1-sol', label: 'GPT-6.1 Sol', modelId: 'gpt-6.1-sol', pricing: { input: 2, cacheRead: .10, cacheWrite: 2.50, output: 10 } },
   { id: 'gpt-6-astra', label: 'GPT-6 Astra', modelId: 'gpt-6-astra', pricing: { input: 10, cacheRead: 1, cacheWrite: 12.50, output: 50 } },
   // Cheaper agent model (third-party price trackers, Oct 2026); cache rates assume Sol's ratios.
-  { id: 'gpt-5.4-mini', label: 'GPT-5.4 mini', modelId: 'gpt-5.4-mini', pricing: { input: .75, cacheRead: .075, cacheWrite: .9375, output: 4.5 } },
+  // Rejects prompt_cache_options and the 'max' effort (OpenAI API, Oct 2026); reasoning modes are GPT-6 only.
+  { id: 'gpt-5.4-mini', label: 'GPT-5.4 mini', modelId: 'gpt-5.4-mini', pricing: { input: .75, cacheRead: .075, cacheWrite: .9375, output: 4.5 }, legacyOptions: true },
 ] as const;
 export const EDITOR_MODELS = [...OPENAI_EDIT_MODELS, CLAUDE_EDIT_MODELS[1], CLAUDE_EDIT_MODELS[2]] as const;
 export const OPENAI_REASONING_EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'] as const;
@@ -91,12 +92,16 @@ export function claudeProviderOptions(modelId: string) {
 
 export function editorProviderOptions(selection: ClaudeModelSelection, cacheKey?: string) {
   if (selection.provider !== 'openai') { const options = claudeProviderOptions(selection.modelId); if (!options) throw new Error(GPT_ONLY_EDITING_ERROR); return options; }
+  // GPT-6 models take reasoning modes, cache retention and every effort; older
+  // models reject those request fields outright.
+  const legacy = OPENAI_EDIT_MODELS.some(model => model.modelId === selection.modelId && 'legacyOptions' in model);
+  const effort = selection.reasoningEffort ?? 'medium';
   const openai = {
-    reasoningEffort: selection.reasoningEffort ?? 'medium', reasoningMode: 'standard', serviceTier: selection.speedMode === 'fast' ? 'fast' : 'default',
+    reasoningEffort: legacy && effort === 'max' ? 'xhigh' : effort, ...(legacy ? {} : { reasoningMode: 'standard' as const }), serviceTier: selection.speedMode === 'fast' ? 'fast' : 'default',
     // History is managed by the existing Agent thread; retain encrypted reasoning
     // in its messages rather than relying on provider-side conversation storage.
     store: false, include: ['reasoning.encrypted_content'],
-    promptCacheOptions: { ttl: '30m' },
+    ...(legacy ? {} : { promptCacheOptions: { ttl: '30m' as const } }),
     // One conversation's requests share a prefix; keep them on the same cache.
     ...(cacheKey ? { promptCacheKey: cacheKey } : {}),
   } satisfies OpenAIResponsesProviderOptions;
