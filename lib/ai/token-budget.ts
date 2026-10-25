@@ -74,6 +74,36 @@ export class AssistantTokenBudgetError extends Error {
   }
 }
 
+const OMITTED_HISTORY_NOTE = 'Earlier messages in this conversation were left out to keep this request within its size limit. The project timeline and saved media analysis are current: inspect them instead of relying on omitted history.';
+
+/** Request bytes as the budget measures them: image payloads count as a placeholder. */
+export function editorPromptBytes(prompt: LanguageModelV4CallOptions['prompt']) {
+  const placeholder = <T extends { type: string }>(part: T) => part.type === 'file' ? { ...part, data: '[image payload preserved]' } : part;
+  return new TextEncoder().encode(JSON.stringify(prompt.map(message => message.role === 'system' ? message : { ...message, content: message.content.map(part => {
+    if (part.type === 'tool-result' && part.output.type === 'content') return { ...part, output: { ...part.output, value: part.output.value.map(placeholder) } };
+    return placeholder(part);
+  }) }))).length;
+}
+
+/** A long conversation must not make every request fail. Drop whole earlier
+ * turns, oldest first, until the request fits with room left for this run's
+ * own steps. The current turn and every system message are always kept, and
+ * a tool call always leaves with its result because both belong to one turn. */
+export function fitEditorPrompt(prompt: LanguageModelV4CallOptions['prompt'], overheadBytes: number, targetBytes: number, minimumDropped = 0) {
+  const users = prompt.flatMap((message, index) => message.role === 'user' ? [index] : []);
+  const withoutTurns = (count: number) => {
+    if (count <= 0) return prompt;
+    const cut = users[count];
+    const kept = prompt.filter((message, index) => message.role === 'system' || index >= cut);
+    const leading = kept.findIndex(message => message.role !== 'system');
+    return [...kept.slice(0, leading), { role: 'system' as const, content: OMITTED_HISTORY_NOTE }, ...kept.slice(leading)];
+  };
+  let dropped = Math.min(Math.max(0, minimumDropped), Math.max(0, users.length - 1));
+  let fitted = withoutTurns(dropped);
+  while (dropped < users.length - 1 && editorPromptBytes(fitted) + overheadBytes > targetBytes) fitted = withoutTurns(++dropped);
+  return { prompt: fitted, dropped };
+}
+
 /** Reserve full next input at worst cache-write cost; credit only verified usage.
  * The input limit is conservative cost units: verified native tariffs, else
  * the provider-normalized cache split, else raw input. Sol long-context costs
@@ -86,6 +116,8 @@ export class AssistantTokenBudget {
   private rawInput = 0;
   private output = 0;
   private blocked = false;
+  /** Earlier turns dropped to fit; only grows within a run so its prefix stays stable. */
+  private droppedTurns = 0;
   constructor(private limits: TokenLimits = EDITOR_TOKEN_LIMITS, private onUsage?: (fraction: number) => void) {}
   get usage() { return { inputTokens: this.rawInput, outputTokens: this.output }; }
   /** The largest share of any ceiling this request has used, 0–1. */
@@ -151,8 +183,12 @@ export class AssistantTokenBudget {
           if (exposed) return exposed;
           exposedResults.set(part.toolCallId, part); return part;
         }) } as typeof message);
+        const overhead = new TextEncoder().encode(JSON.stringify({ tools: params.tools, responseFormat: params.responseFormat })).length;
+        const fitted = fitEditorPrompt(prompt, overhead, this.limits.requestBytes * .8, this.droppedTurns);
+        if (fitted.dropped > this.droppedTurns) console.log(`[ai-context] ${JSON.stringify({ droppedTurns: fitted.dropped, requestBytes: editorPromptBytes(fitted.prompt) + overhead, toolBytes: overhead })}`);
+        this.droppedTurns = fitted.dropped;
         const maxOutputTokens = params.maxOutputTokens ?? this.limits.outputPerCall;
-        return { ...params, prompt, maxOutputTokens: enforce ? Math.min(maxOutputTokens, this.limits.outputPerCall) : maxOutputTokens };
+        return { ...params, prompt: fitted.prompt, maxOutputTokens: enforce ? Math.min(maxOutputTokens, this.limits.outputPerCall) : maxOutputTokens };
       },
     };
     // Keep compaction and provider continuation identity even when financial
