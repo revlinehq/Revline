@@ -1,5 +1,5 @@
 import { LandingStartButton } from './start-button';
-import { LandingButton, LandingSection } from './ui';
+import { LandingSection } from './ui';
 
 export function LandingHero() {
   return <LandingSection className="landing-hero" headingId="landing-hero-heading">
@@ -8,7 +8,6 @@ export function LandingHero() {
       <p>From podcasts and YouTube videos to product demos, ads, and social clips.{' '}<br />Revline cuts, captions, reframes, and polishes every video for you.</p>
       <div className="landing-hero-actions">
         <LandingStartButton />
-        <LandingButton href="/sign-in" variant="secondary">Sign in</LandingButton>
       </div>
     </div>
     <img className="landing-product-window" src="/landing/product-window.webp" width={2560} height={1307} alt="The Revline editor with its conversation, preview, and timeline" fetchPriority="high" />
