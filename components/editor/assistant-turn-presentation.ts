@@ -4,6 +4,7 @@ import type {ChatMessage,ResultCard,TimelinePublicationReceipt} from './assistan
 const fallback='This step could not finish. Your saved edits remain.';
 /** Tool transport strings are diagnostics, not copy for the conversation. */
 export function assistantErrorDetail(value:string|undefined):string {
+  value=value?.replace(/^(?:Error:\s*)+(?=\S)/,'');
   if(!value||/^(?:An error occurred[.!]?|Error|Unknown error|This step could not finish[.!]?)$/i.test(value.trim()))return fallback;
   if(/\bTimelineGestureRejection:\s*Overlaps a clip\b/i.test(value))return 'These clips would overlap. This edit was not saved; previously saved edits remain.';
   if(/timeline changed elsewhere|timeline changed while|revision conflict/i.test(value))return 'Your timeline changed while this edit was being prepared. This change was not saved. Previously saved edits remain.';

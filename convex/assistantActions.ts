@@ -117,6 +117,10 @@ export const respond = internalAction({
       const recovering = recovery !== undefined || !!args.continuation;
       let inspected = false;
       let effectPlans:EffectPlan[]=args.continuation?await ctx.runQuery(internal.compositionReview.readPlan,run):[];
+      // Once this environment reports no review service, later reviews answer at once.
+      let reviewServiceMissing=false;
+      const reviewUnavailableResult={reviewed:false,reviewUnavailable:true,note:'Visual review is not available in this environment. Say the result was not visually checked; do not retry.'};
+      const sceneCheckNote='Scenes are checked by their code, never planned or reviewed as effects. Walk through the scene\'s key times in its code instead.';
       const visualEvidence=new Map<string,EffectEvidence>();
       const zoomTargets=new Map<string,ZoomTargetEvidence>();
       const planBindings=new Map<string,string>();
@@ -196,7 +200,10 @@ export const respond = internalAction({
           // Selecting an edit plan is explicit workflow intent, even while the
           // model corrects a rejected preflight before its first timeline write.
           await beginEditing();
-          await editSession.wait();validateEffectPlan(plans,editSession.timeline,visualEvidence);
+          await editSession.wait();
+          const sceneIds=new Set(editSession.timeline.clips.filter(clip=>clip.kind==='scene').map(clip=>clip.id));
+          if(plans.some(plan=>[plan.targetClipId,plan.outputClipId,plan.anchor.kind==='cut'?plan.anchor.clipId:undefined].some(id=>id&&sceneIds.has(id))))return {planned:false,sceneTarget:true,note:sceneCheckNote,plans:effectPlans};
+          validateEffectPlan(plans,editSession.timeline,visualEvidence);
           const merged=mergeEffectPlans(effectPlans,plans);
           const originals=editSession.timeline.clips.filter(clip=>merged.some(plan=>(plan.outputClipId??plan.targetClipId)===clip.id));
           await ctx.runMutation(internal.compositionReview.savePlan,{...run,plans,originals});
@@ -205,7 +212,9 @@ export const respond = internalAction({
         }}),
         previewRender:createTool({description:"Not for scene clips. Review one or two planned effects using the actual composited timeline, the export frame-capture engine and an effect-disabled reference. Returns measured pixel differences, clip timing/text bounds and narrow Gemini observations about the recorded expectations, with uncertainty. Each selected expectation, including start/anchor/peak/return, must fit inside the same three-second sampled window. If two expectations span more than three seconds, review each planId separately; do not repeatedly submit the same out-of-window pair. After a failed check make one targeted correction; two nonpassing judgments stop that expectation. Reuse passed checks unless another edit changes their visible scope, then refresh only those affected. A rejected window or failed renderer is not a completed visual judgment. Finish planned edits before reviewing. Optional bindings attach each selected plan to its existing output clip without changing the plan or repeating a passed review. Each timed plan must describe exactly one matching FX clip and its full range; separate pulses need separate plans. Does not edit the timeline. Sparse stills cannot prove audio sync, continuous motion, exact between-sample contact, or the whole edit's taste. After a failed check, correct only that expectation and review the corrected result once. Do not repeat passed checks or loop on an unavailable service. If the final review still fails, name the unfinished expectation in the final reply and do not claim full completion.",inputSchema:z.object({planIds:z.array(z.string()).min(1).max(2),bindings:z.array(z.object({planId:z.string(),clipId:z.string()})).max(2).optional()}),execute:async(_ctx,{planIds,bindings:explicitBindings})=>reportAnalysisFailure(async()=>{
           await editSession.wait();
-          const selected=planIds.map(id=>effectPlans.find(plan=>plan.id===id));if(selected.some(plan=>!plan))throw new Error('Record the effect expectations with planEffects before review.');
+          if(reviewServiceMissing)return reviewUnavailableResult;
+          // Without a recorded plan there is nothing to review; that is guidance, not a failed step.
+          const selected=planIds.map(id=>effectPlans.find(plan=>plan.id===id));if(selected.some(plan=>!plan))return {reviewed:false,needsPlan:true,note:`Nothing is planned under that ID, so there is nothing to review. ${sceneCheckNote} For an effect edit, record it with planEffects first.`};
           if(explicitBindings&&(new Set(explicitBindings.map(binding=>binding.planId)).size!==explicitBindings.length||explicitBindings.some(binding=>!planIds.includes(binding.planId))))throw new Error('Bind each selected review plan at most once.');
           const known=planIds.flatMap(planId=>{const clipId=explicitBindings?.find(binding=>binding.planId===planId)?.clipId??planBindings.get(planId);return clipId?[{planId,clipId}]:[];});
           const bindings=effectReviewBindings(selected as EffectPlan[],editSession.timeline,known);
@@ -216,7 +225,7 @@ export const respond = internalAction({
             const deadline=Date.now()+180000;
             while(true){abortSignal.throwIfAborted();const review=await ctx.runQuery(internal.compositionReview.get,{...run,reviewId});
               // An environment without the review service cannot review; report it plainly instead of failing.
-              if(review.status==='failed'&&/composition review is not configured/i.test(review.error??''))return {reviewed:false,reviewUnavailable:true,note:'Visual review is not available in this environment. Say the result was not visually checked; do not retry.'};
+              if(review.status==='failed'&&/composition review is not configured/i.test(review.error??'')){reviewServiceMissing=true;return reviewUnavailableResult;}
               if(review.status==='failed')throw new AnalysisStepError(review.error??'Rendered review failed.');
               if(review.status==='completed'){const current=await ctx.runQuery(internal.assistant.getRunTimeline,run),stale=current.revision!==review.result?.revision;return {reviewed:!stale,stale,currentRevision:current.revision,scope:stale?'The timeline changed during review. Inspect the latest state; this receipt describes the earlier snapshot.':'Sampled composited timeline; no audio judgment',staged:editSession.staged,...review.result};}
               if(Date.now()>deadline)throw new AnalysisStepError('Rendered review exceeded its three-minute limit. Saved edits remain.');
