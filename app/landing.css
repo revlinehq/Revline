@@ -44,7 +44,7 @@ body:has(>.landing),body:has(main.landing){background:#fff}
 .landing-panel{background:#fff;border:1px solid var(--l-border);border-radius:10px;padding:14px}
 
 /* Nav */
-.landing-nav{position:sticky;top:0;z-index:40;height:64px;display:flex;align-items:center;justify-content:space-between;background:#ffffffeb;backdrop-filter:blur(12px);border-bottom:1px solid var(--l-border)}
+.landing-nav{position:sticky;top:0;z-index:40;height:64px;display:flex;align-items:center;justify-content:space-between;background:#f7f7f8eb;backdrop-filter:blur(12px)}
 .landing-nav-left{display:flex;align-items:center;gap:48px}
 /* The original Revline logo, styled as on the previous landing page. */
 .landing{--ws-logo:#0c1424}
