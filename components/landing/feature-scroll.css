@@ -1,9 +1,0 @@
-/* Scroll changes only this gallery's existing segments, using the normal page scrollbar. */
-.landing-features[data-scroll-driven=true] .landing-feature-scroll-stage{position:sticky}
-.landing-features .landing-features-panels{display:grid;isolation:isolate}
-.landing-features .landing-features-panel[data-slot=tabs-content]{grid-area:1/1;animation:none;opacity:0;visibility:hidden;pointer-events:none;transform:translateY(8px);transition:opacity 240ms cubic-bezier(.23,1,.32,1),transform 240ms cubic-bezier(.23,1,.32,1),visibility 0s 240ms}
-.landing-features .landing-features-panel[data-phase=before]{transform:translateY(-8px)}
-.landing-features .landing-features-panel[data-phase=active]{opacity:1;visibility:visible;pointer-events:auto;transform:translateY(0);transition-delay:0s;z-index:1}
-.landing-features[data-keyboard-transition=true] .landing-features-panel[data-slot=tabs-content]{transition:none}
-@media(max-width:900px){.landing-feature-scroll-stage{position:static!important}.landing-feature-scroll-rail{height:auto!important}}
-@media(prefers-reduced-motion:reduce){.landing-features .landing-features-panel[data-slot=tabs-content]{transition:none;transform:none}}

@@ -1,14 +1,15 @@
-import { ProductDemoPreview } from './editor-demo-preview';
 import { LandingStartButton } from './start-button';
+import { LandingReveal, LandingSection } from './ui';
 
 export function LandingHero() {
-  return <section className="landing-hero landing-section" aria-labelledby="landing-hero-heading">
+  return <LandingSection className="landing-hero" headingId="landing-hero-heading">
     <div className="landing-hero-copy">
-      <h1 id="landing-hero-heading">AI Native Video Editing</h1>
-      <p>Turn your footage into finished edits.<br />Just tell Revline what you have in mind.</p>
-      <LandingStartButton label="Get started" className="landing-hero-start" />
-      <p className="landing-social-proof">Loved by 49,216 creators</p>
+      <LandingReveal as="h1" id="landing-hero-heading">The AI video editor that{' '}<br />actually does the editing</LandingReveal>
+      <LandingReveal as="p" order={1}>From podcasts and YouTube videos to product demos, ads, and social clips.{' '}<br />Revline cuts, captions, reframes, and polishes every video for you.</LandingReveal>
+      <div className="landing-hero-actions">
+        <LandingReveal order={2}><LandingStartButton /></LandingReveal>
+      </div>
     </div>
-    <ProductDemoPreview />
-  </section>;
+    <div className="landing-product-frame"><img className="landing-product-window" src="/landing/product-window.webp" width={2560} height={1307} alt="The Revline editor with its conversation, preview, and timeline" fetchPriority="high" /></div>
+  </LandingSection>;
 }

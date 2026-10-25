@@ -52,6 +52,15 @@ output quality across plans.
 - Evaluate larger-than-4-vCPU capacity only if supported by the chosen provider
   and real benchmark results justify it; do not promise a fixed speed multiplier.
 
+## 4K export
+
+Exports currently go up to 1080p (Full HD), with 720p as the smaller option. Add 4K (2160p) export as a later upgrade.
+
+- Extend the export settings, render validation and composition scaling beyond the 720/1080 choices.
+- Keep source quality: only offer 4K output when the timeline's footage supports it, and avoid upscaling lower-resolution clips without saying so.
+- Benchmark 4K render time, memory, file size, storage and egress on the export workers before pricing it or naming it on the landing page.
+- Consider making 4K part of the Ultra plan alongside faster exports.
+
 ## Agent memory across projects
 
 Remember each user's preferred editing style throughout Revline: pacing, cut rhythm, caption design, color treatment, typography and motion intensity. Reuse approved styles and learn preferences from explicit feedback and accepted revisions, while keeping project-specific instructions scoped to their project.
