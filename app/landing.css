@@ -241,9 +241,11 @@ div.landing-reveal,div.landing-reveal>.landing-reveal-content{display:inline-blo
 .landing-final{padding-bottom:40px}
 .landing-final-card{display:flex;flex-direction:column;align-items:center;gap:16px;padding:88px 80px;border-radius:20px;text-align:center}
 .landing-signup{width:420px;max-width:100%;display:flex;flex-direction:column;gap:10px;padding-top:16px}
-.landing-email{display:flex;align-items:center;gap:8px;height:52px;padding:5px 5px 5px 16px;background:#fff;border:1px solid var(--l-border);border-radius:10px;transition:border-color 140ms ease}
-.landing-email:focus-within{border-color:var(--l-brand-ring)}
+.landing-email{display:flex;align-items:center;gap:8px;height:52px;padding:5px 5px 5px 16px;background:#fff;border:1px solid var(--l-border);border-radius:10px;transition:border-color 140ms ease,box-shadow 140ms ease}
+.landing-email:focus-within{border-color:var(--l-brand-ring);box-shadow:0 0 0 3px var(--l-brand-tint)}
 .landing-email input{flex:1;min-width:0;height:100%;border:0;background:transparent;font:15px var(--l-body);color:var(--l-fg);outline:none}
+.landing .landing-email input:focus-visible{outline:none}
+.landing-email input:-webkit-autofill{-webkit-box-shadow:0 0 0 40px #fff inset;-webkit-text-fill-color:var(--l-fg);caret-color:var(--l-fg)}
 .landing-email input::placeholder{color:var(--l-fg-3)}
 .landing-email .landing-button{height:100%;border-radius:7px}
 .landing-google[data-size=lg]{height:46px;gap:10px;border-color:var(--l-border);border-radius:10px;font-size:14px;font-weight:500}
