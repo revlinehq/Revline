@@ -5,13 +5,15 @@ import { userError } from '@/lib/user-error';
 import { STOCK_AUDIO_DRAG_TYPE } from '@/lib/editor/stock-audio-drag';
 import { useState, useRef, useCallback, useLayoutEffect, useEffect, useMemo } from 'react';
 import { EffectIcon } from './effect-icon';
-import { Scissors, Copy, ClipboardPaste, Trash2, Magnet, Minus, Plus, Type, Layers, Volume2, VolumeX, ChevronDown, ChevronUp, MoreHorizontal, Rows3, ListMinus, Unlink, Flag, Pencil, FoldHorizontal, Combine, Undo2, Redo2 } from 'lucide-react';
+import { Scissors, Copy, ClipboardPaste, Trash2, Magnet, Minus, Plus, Type, Layers, Volume2, VolumeX, ChevronDown, ChevronUp, MoreHorizontal, Rows3, ListMinus, Unlink, Flag, Pencil, FoldHorizontal, Combine, Undo2, Redo2, ChevronsRightLeft } from 'lucide-react';
 import { IconButton } from './primitives';
 import { TimelineRulerTicks } from './timeline-ruler';
 import { EditorPlaybackTime } from './playback-time';
 import { MediaFilmstrip } from './media-filmstrip';
 import { AudioWaveform } from './audio-waveform';
 import { useEditorState, useEditorStore, usePausedPlaybackTime } from './editor-state';
+import { setRipplePreference } from '@/lib/editor/store';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { paintPlayhead, useTimelinePlayhead, useEdgeAutoScroll } from './use-timeline-playhead';
 import { deriveTrackCounts, layerGroup, trackOf, clipColor, timelineDuration, formatTime, maxTrackCount, type Timeline, type MediaAsset, type Clip, type LayerGroup, type TimelineMarker } from '@/lib/editor/types';
 import { moveTimelineMarker, removeTimelineMarker } from '@/lib/editor/timeline-markers';
@@ -84,7 +86,7 @@ function TimelinePlayheadClock(props: Omit<Parameters<typeof useTimelinePlayhead
 
 export function TimelinePanel(p:Props){
   const {timeline,assets,selected,onSelect,time}=p;
-  const store=useEditorStore();const zoom=useEditorState(s=>s.zoom);const snap=useEditorState(s=>s.snapping);const blade=useEditorState(s=>s.tool==='blade')&&!p.readOnly;const dense=useEditorState(s=>s.compactTracks);const RULER_HEIGHT=TIMELINE_RULER_HEIGHT;const origin=TIMELINE_ORIGIN;
+  const store=useEditorStore();const zoom=useEditorState(s=>s.zoom);const snap=useEditorState(s=>s.snapping);const ripple=useEditorState(s=>s.ripple);const blade=useEditorState(s=>s.tool==='blade')&&!p.readOnly;const dense=useEditorState(s=>s.compactTracks);const RULER_HEIGHT=TIMELINE_RULER_HEIGHT;const origin=TIMELINE_ORIGIN;
   const editingDisabled=!!(p.readOnly||p.editingLocked);
   const liveIds=useMemo(()=>new Set(p.liveEdit?.changedClipIds??[]),[p.liveEdit?.changedClipIds]);
   const editingLock=useRef(editingDisabled);
@@ -352,6 +354,8 @@ export function TimelinePanel(p:Props){
     let placedClips=new Map(timeline.clips.map(c=>[c.id,c])),targetTrackMap=trackMap,targetTrackKey='';
         const sourceNodes=new Map(Array.from(area.current?.querySelectorAll<HTMLElement>('.timeline-clip[data-clip-id]')??[]).map(node=>[node.dataset.clipId!,node]));
     const elements=new Map<string,{floating:HTMLElement;placement:HTMLElement}>();
+    // Auto-join moves later clips during a trim, so the preview repositions every clip, not only the trimmed ones.
+    const rippleTrim=mode!=='move'&&store.getState().ripple,trimPreviewClips=rippleTrim?timeline.clips:selectedClips;
     let clientX=startX,clientY=startY,next=clip,placed=timeline,moved=false,dropError:unknown=null,bypassSnap=e.altKey,lastInsertion='';
     let readout:HTMLDivElement|null=null,snapGuide:HTMLDivElement|null=null,dropHint:HTMLDivElement|null=null,insertionGuide:HTMLDivElement|null=null;
     activeMode.current=mode;pointerX.current=clientX;pointerY.current=clientY;
@@ -448,9 +452,9 @@ export function TimelinePanel(p:Props){
           pair.placement.style.width=`${Math.max(6,candidate.duration*px)}px`;pair.placement.style.height=`${row.clipHeight}px`;
         }
       }else{
-        placed=resizeSelectedClips(timeline,assets,[clip.id,...members.filter(id=>id!==clip.id)],mode,rawDelta,magnet);placedClips=new Map(placed.clips.map(c=>[c.id,c]));next=placedClips.get(clip.id)!;
+        placed=resizeSelectedClips(timeline,assets,[clip.id,...members.filter(id=>id!==clip.id)],mode,rawDelta,magnet,rippleTrim);placedClips=new Map(placed.clips.map(c=>[c.id,c]));next=placedClips.get(clip.id)!;
         showSnapGuide(!!magnet,scrollTop,viewportHeight);
-        for(const member of selectedClips){const node=sourceNodes.get(member.id),candidate=placedClips.get(member.id)!;if(node){node.style.left=`${origin+candidate.start*px}px`;node.style.width=`${Math.max(6,candidate.duration*px)}px`;if(candidate.kind==='audio')node.dispatchEvent(new CustomEvent('revline:clip-trim-preview',{detail:{sourceStart:candidate.sourceStart,duration:candidate.duration}}));}}
+        for(const member of trimPreviewClips){const node=sourceNodes.get(member.id),candidate=placedClips.get(member.id)!;if(node){node.style.left=`${origin+candidate.start*px}px`;node.style.width=`${Math.max(6,candidate.duration*px)}px`;if(candidate.kind==='audio')node.dispatchEvent(new CustomEvent('revline:clip-trim-preview',{detail:{sourceStart:candidate.sourceStart,duration:candidate.duration}}));}}
         if(readout){readout.textContent=`${next.duration.toFixed(2)}s`;readout.style.left=`${origin+(next.start+next.duration)*px}px`;readout.style.top=`${(tracks.find(row=>row.group===group&&row.number===trackOf(clip))?.top??RULER_HEIGHT)-18}px`;}
       }
     };
@@ -464,7 +468,7 @@ export function TimelinePanel(p:Props){
     const cleanup=()=>{
       unwatch();gestureUpdate.current=null;document.body.style.cursor=previousCursor;cursorStyle.remove();frame.cancel();
       window.removeEventListener('pointermove',move);window.removeEventListener('pointerup',finish);window.removeEventListener('pointercancel',cancel);
-      if(mode!=='move')for(const member of selectedClips){const node=sourceNodes.get(member.id);if(node){node.style.left=`${origin+member.start*px}px`;node.style.width=`${Math.max(6,member.duration*px)}px`;if(member.kind==='audio')node.dispatchEvent(new CustomEvent('revline:clip-trim-preview',{detail:{sourceStart:member.sourceStart,duration:member.duration}}));}}
+      if(mode!=='move')for(const member of trimPreviewClips){const node=sourceNodes.get(member.id);if(node){node.style.left=`${origin+member.start*px}px`;node.style.width=`${Math.max(6,member.duration*px)}px`;if(member.kind==='audio')node.dispatchEvent(new CustomEvent('revline:clip-trim-preview',{detail:{sourceStart:member.sourceStart,duration:member.duration}}));}}
       host.replaceChildren();delete host.dataset.invalid;setDrag(null);gestureCleanup.current=null;gestureClipIds.current=[];
     };
     const finish=(event:PointerEvent)=>{
@@ -521,7 +525,7 @@ export function TimelinePanel(p:Props){
     const members=current.includes(clip.id)?current:[clip.id];
     if(!current.includes(clip.id))onSelect(clip.id);
     const delta=(e.key==='ArrowLeft'?-1:1)*(e.shiftKey?10:1)/timeline.fps;
-    const next=resizeSelectedClips(timeline,assets,members,side,delta);
+    const next=resizeSelectedClips(timeline,assets,members,side,delta,undefined,store.getState().ripple);
     if(next.clips.some((candidate,index)=>candidate.start!==timeline.clips[index].start||candidate.duration!==timeline.clips[index].duration))onChange(next);
   }
 
@@ -624,6 +628,7 @@ export function TimelinePanel(p:Props){
       {!p.readOnly&&<IconButton label={blade?'Blade tool on (B) · click a clip to cut':'Blade tool (B)'} aria-pressed={blade} data-active={blade||undefined} disabled={editingDisabled} onClick={()=>store.setState({tool:blade?'select':'blade'})}><Scissors size={14}/></IconButton>}
       {!p.readOnly&&<IconButton label="Delete selected clips" disabled={editingDisabled||!selected} onClick={p.onDelete}><Trash2 size={14}/></IconButton>}
     </div>{p.playbackControls&&<div className="timeline-playback-controls">{p.playbackControls}</div>}<div className="timeline-view-actions">
+      {!p.readOnly&&<Tooltip><TooltipTrigger asChild><button aria-label="Auto-join when trimming" onClick={()=>{store.setState({ripple:!ripple});setRipplePreference(!ripple);}} aria-pressed={ripple} className={ripple?'snap-active':''}><ChevronsRightLeft size={14}/></button></TooltipTrigger><TooltipContent>{ripple?'Auto-join on: trims pull later clips along':'Auto-join off: trims leave gaps'}</TooltipContent></Tooltip>}
       {!p.readOnly&&<button aria-label="Toggle snapping" onClick={()=>store.setState({snapping:!snap})} aria-pressed={snap} className={snap?'snap-active':''}><Magnet size={14}/></button>}
       <input aria-label="Timeline zoom" type="range" min="0" max="100" step="any" value={timelineZoomPosition(zoom,minimumZoom)} aria-valuetext={`${Math.round(zoom*100)}%`} onChange={e=>changeZoom(timelineZoomAtPosition(Number(e.target.value),minimumZoom))}/>
       <DropdownMenu><DropdownMenuTrigger className="timeline-more-trigger" aria-label="More timeline tools" title="More timeline tools"><MoreHorizontal size={15}/></DropdownMenuTrigger><DropdownMenuContent align="end" className="timeline-more-menu">

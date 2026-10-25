@@ -7,7 +7,7 @@ import { LOCAL_UNDO_LIMIT } from './timeline-history-key';
 export type EditorState = {
   timeline: Timeline; history: Timeline[]; future: Timeline[];
   selectedId: string | null; selectedIds:string[]; playhead: number; playing: boolean; muted: boolean;
-  zoom: number; snapping: boolean; tool:'select'|'blade'; compactTracks:boolean; timelineCollapsed:boolean; scrubbing:boolean;
+  zoom: number; snapping: boolean; ripple: boolean; tool:'select'|'blade'; compactTracks:boolean; timelineCollapsed:boolean; scrubbing:boolean;
   edit: (next: Timeline) => void;
   replace: (next: Timeline, remember?: boolean | Timeline[]) => void;
   recover: (next: Timeline) => void;
@@ -16,6 +16,11 @@ export type EditorState = {
   beginUndoGroup: (key: string) => void;
   endUndoGroup: () => void;
 };
+
+export const RIPPLE_STORAGE_KEY = 'revline-timeline-ripple';
+/** Auto-join is a personal editing preference, so it survives reloads and projects. */
+function savedRipple() { try { return typeof window !== 'undefined' && localStorage.getItem(RIPPLE_STORAGE_KEY) === 'true'; } catch { return false; } }
+export function setRipplePreference(on: boolean) { try { localStorage.setItem(RIPPLE_STORAGE_KEY, String(on)); } catch { /* The toggle still applies to this session. */ } }
 
 // One store per open project. Convex remains the source for saved revisions.
 export function createEditorStore(timeline: Timeline, history: Timeline[] = []) {
@@ -27,7 +32,7 @@ export function createEditorStore(timeline: Timeline, history: Timeline[] = []) 
     return {selectedIds,selectedId:state.selectedId&&ids.has(state.selectedId)?state.selectedId:selectedIds.at(-1)??null};
   };
   return createStore<EditorState>()((set, get) => ({
-    timeline, history: history.slice(-LOCAL_UNDO_LIMIT).map(normalizeTimeline), future: [], selectedId: null, selectedIds:[], playhead: 0, playing: false, muted: false, zoom: 1, snapping: true, tool:'select', compactTracks:false,timelineCollapsed:false,scrubbing:false,
+    timeline, history: history.slice(-LOCAL_UNDO_LIMIT).map(normalizeTimeline), future: [], selectedId: null, selectedIds:[], playhead: 0, playing: false, muted: false, zoom: 1, snapping: true, ripple: savedRipple(), tool:'select', compactTracks:false,timelineCollapsed:false,scrubbing:false,
     beginUndoGroup: key => { if (undoGroup?.key !== key) undoGroup = { key, recorded: false }; },
     endUndoGroup: () => { undoGroup = null; },
     edit: input => { const next=reconcileTransitionEdits(get().timeline,normalizeTimeline(input)); const grouped=undoGroup?.recorded; if(undoGroup)undoGroup.recorded=true; set(s => ({ timeline: next, history: grouped ? s.history : [...s.history.slice(1-LOCAL_UNDO_LIMIT), s.timeline], future: [],...selectionFor(next,s) })); },

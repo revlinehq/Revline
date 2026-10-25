@@ -265,11 +265,38 @@ export function clipLayerDropTarget(pointerY:number,rows:{top:number;bottom:numb
   return layerDropTarget(pointerY,members);
 }
 
-/** OpenCut's shared edge delta: clamp against neighbors and real source extents. */
-export function resizeSelectedClips(timeline:Timeline,assets:MediaAsset[],ids:string[],side:'left'|'right',delta:number,magnet?:TimelineMagnet):Timeline {
+/** Ripple: later clips on each trimmed lane, and their linked partners, follow the trimmed end so no gap opens or overlap forms. */
+function rippleTrim(timeline:Timeline,clips:Clip[],members:Clip[],side:'left'|'right',dt:number):Clip[]{
+  const shift=side==='right'?dt:-dt;
+  if(Math.abs(shift)<1e-9)return clips;
+  const lane=(clip:Clip)=>`${layerGroup(clip.kind)}:${trackOf(clip)}`;
+  const offsets=new Map<string,number>();
+  for(const clip of timeline.clips){
+    const before=members.filter(member=>member.id!==clip.id&&lane(member)===lane(clip)&&member.start+member.duration<=clip.start+1e-6).length;
+    if(before)offsets.set(clip.id,before*shift);
+  }
+  const byId=new Map(timeline.clips.map(clip=>[clip.id,clip]));
+  for(const [id,offset] of [...offsets]){const partner=byId.get(id)?.linkedClipId;if(partner&&!offsets.has(partner)&&!members.some(member=>member.id===partner))offsets.set(partner,offset);}
+  const memberIds=new Set(members.map(member=>member.id));
+  const next=clips.map(clip=>{
+    const start=(side==='left'&&memberIds.has(clip.id)?byId.get(clip.id)!.start:clip.start)+(offsets.get(clip.id)??0);
+    return start===clip.start?clip:{...clip,start};
+  });
+  const moved=next.filter((clip,index)=>clip!==clips[index]||memberIds.has(clip.id));
+  for(const clip of moved){
+    if(clip.start<-1e-6)throw new TimelineGestureRejection('There is no room to ripple this trim.');
+    if(isTransitionClip(clip))continue;
+    if(next.some(other=>other.id!==clip.id&&!isTransitionClip(other)&&lane(other)===lane(clip)&&other.start<clip.start+clip.duration-1e-6&&clip.start<other.start+other.duration-1e-6))throw new TimelineGestureRejection('There is no room to ripple this trim.');
+  }
+  return next;
+}
+
+/** OpenCut's shared edge delta: clamp against neighbors and real source extents. With ripple, neighbors move instead of limiting the edge. */
+export function resizeSelectedClips(timeline:Timeline,assets:MediaAsset[],ids:string[],side:'left'|'right',delta:number,magnet?:TimelineMagnet,ripple=false):Timeline {
   timeline=normalizeTimeline(timeline);
   const selected=new Set(linkedClipIds(timeline,ids));const members=timeline.clips.filter(clip=>selected.has(clip.id));
   if(!members.length)return timeline;
+  const rippling=ripple&&!members.some(isTransitionClip);
   const sources=new Map(assets.map(asset=>[asset._id,asset]));const frame=1/timeline.fps;
   let minimum=-Infinity,maximum=Infinity;
   for(const clip of members){
@@ -289,11 +316,11 @@ export function resizeSelectedClips(timeline:Timeline,assets:MediaAsset[],ids:st
       }
     }
     if(side==='left'){
-      minimum=Math.max(minimum,left-clip.start,timedSource?-clip.sourceStart/playbackRateOf(clip):-Infinity);
+      minimum=Math.max(minimum,rippling?-Infinity:left-clip.start,timedSource?-clip.sourceStart/playbackRateOf(clip):-Infinity);
       maximum=Math.min(maximum,clip.duration-frame);
     }else{
       minimum=Math.max(minimum,frame-clip.duration);
-      maximum=Math.min(maximum,right-end,timedSource&&asset?.duration!==undefined?(asset.duration-clip.sourceStart)/playbackRateOf(clip)-clip.duration:Infinity);
+      maximum=Math.min(maximum,rippling?Infinity:right-end,timedSource&&asset?.duration!==undefined?(asset.duration-clip.sourceStart)/playbackRateOf(clip)-clip.duration:Infinity);
     }
   }
   // Imported timings/source limits can fall between project frames. Once the
@@ -305,7 +332,7 @@ export function resizeSelectedClips(timeline:Timeline,assets:MediaAsset[],ids:st
     const edge=anchor.start+(side==='right'?anchor.duration:0)+dt;
     dt=Math.max(minimum,Math.min(maximum,dt+closestSnap(edge,magnet.marks,magnet.threshold)-edge));
   }
-  return reconcileTransitionEdits(timeline,{...timeline,clips:timeline.clips.map(clip=>{
+  const clips=timeline.clips.map(clip=>{
     if(!selected.has(clip.id))return clip;
     const rawDuration=clip.duration+(side==='right'?dt:-dt);
     // Subtracting the edge delta can round a valid one-frame clip below its minimum.
@@ -313,5 +340,9 @@ export function resizeSelectedClips(timeline:Timeline,assets:MediaAsset[],ids:st
     const duration=Math.abs(rawDuration-frame)<=tolerance?frame:rawDuration;
     if(clip.kind==='effect')return {...clip,...resizeEffectMotion(clip,duration),start:side==='left'?clip.start+dt:clip.start,duration};
     return side==='right'?{...clip,...textTemplateTimingPatch(clip),...textAnimationTimingPatch(clip),...audioFadeTimingPatch(clip),...visualFadeTimingPatch(clip),duration}:{...clip,...offsetClipMotion(clip,dt),start:clip.start+dt,duration,sourceStart:clip.kind==='video'||clip.kind==='audio'||clip.kind==='scene'?clip.sourceStart+dt*playbackRateOf(clip):clip.sourceStart};
-  })});
+  });
+  if(!rippling)return reconcileTransitionEdits(timeline,{...timeline,clips});
+  // A lane without room for the ripple keeps the ordinary, neighbor-bounded trim.
+  try{return reconcileTransitionEdits(timeline,{...timeline,clips:rippleTrim(timeline,clips,members,side,dt)});}
+  catch(error){if(error instanceof TimelineGestureRejection)return resizeSelectedClips(timeline,assets,ids,side,delta,magnet);throw error;}
 }
