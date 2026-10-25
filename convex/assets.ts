@@ -72,18 +72,23 @@ export const registerStockAudio = mutation({ args: { projectId: v.id('projects')
   const ownerId = await requireOwner(ctx);
   await requireEditorAccess(ctx, ownerId);
   await requireProject(ctx, args.projectId, ownerId);
-  const entry = stockAudio(args.catalogId);
-  if (!entry) throw new ConvexError('Audio FX not found');
-  const existing = await ctx.db.query('assets').withIndex('by_owner_project_r2Key', q => q.eq('ownerId', ownerId).eq('projectId', args.projectId).eq('r2Key', entry.r2Key)).unique();
-  if (existing) return { ...existing, url: await mediaUrl(ctx, existing) };
-  const count = await ctx.db.query('assets').withIndex('by_ownerId_projectId', q => q.eq('ownerId', ownerId).eq('projectId', args.projectId)).take(200);
-  if (count.length >= 200) throw new ConvexError('A project supports up to 200 media files');
-  validateWaveform(entry.waveform);
-  const id = await ctx.db.insert('assets', { ownerId, projectId: args.projectId, kind: 'audio', fileName: `${entry.name}.ogg`, r2Key: entry.r2Key, contentType: entry.contentType, size: entry.size, duration: entry.duration, waveform: entry.waveform, createdAt: Date.now() });
-  const asset = (await ctx.db.get(id))!;
-  await recordAssetStorage(ctx, asset);
+  const asset = await attachStockAudio(ctx, ownerId, args.projectId, args.catalogId);
   return { ...asset, url: await mediaUrl(ctx, asset) };
 }});
+/** Reuse or add the project's reference to one shared catalog sound; also used by the assistant's addSoundEffect. */
+export async function attachStockAudio(ctx: MutationCtx, ownerId: string, projectId: Id<'projects'>, catalogId: string): Promise<Doc<'assets'>> {
+  const entry = stockAudio(catalogId);
+  if (!entry) throw new ConvexError('Audio FX not found');
+  const existing = await ctx.db.query('assets').withIndex('by_owner_project_r2Key', q => q.eq('ownerId', ownerId).eq('projectId', projectId).eq('r2Key', entry.r2Key)).unique();
+  if (existing) return existing;
+  const count = await ctx.db.query('assets').withIndex('by_ownerId_projectId', q => q.eq('ownerId', ownerId).eq('projectId', projectId)).take(200);
+  if (count.length >= 200) throw new ConvexError('A project supports up to 200 media files');
+  validateWaveform(entry.waveform);
+  const id = await ctx.db.insert('assets', { ownerId, projectId, kind: 'audio', fileName: `${entry.name}.ogg`, r2Key: entry.r2Key, contentType: entry.contentType, size: entry.size, duration: entry.duration, waveform: entry.waveform, createdAt: Date.now() });
+  const asset = (await ctx.db.get(id))!;
+  await recordAssetStorage(ctx, asset);
+  return asset;
+}
 export const list = query({ args: { projectId: v.id("projects"), limit: v.optional(v.number()) }, returns: v.array(assetWithUrl), handler: async (ctx, args) => {
   const ownerId = await requireOwner(ctx); await projectIdentity(ctx,args.projectId,ownerId);
   const limit = args.limit ?? 50;

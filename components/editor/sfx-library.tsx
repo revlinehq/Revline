@@ -7,7 +7,7 @@ import { STOCK_AUDIO_CATALOG, isStockAudioAsset, stockAudioAsset } from '@/lib/e
 import { STOCK_AUDIO_DRAG_TYPE } from '@/lib/editor/stock-audio-drag';
 import './sfx-library.css';
 
-const categories = ['All sounds', 'Whooshes', 'Risers', 'Clicks', 'Pops & tones', 'Transitions', 'Hits', 'Your audio'];
+const categories = ['All sounds', 'Whooshes', 'Risers', 'Clicks', 'Pops & tones', 'Transitions', 'Hits', 'Textures', 'Ambience', 'Your audio'];
 export function SfxLibrary({ assets, query, onAdd, onAddStockAudio, onUpload, uploading }: {
   assets: readonly MediaAsset[]; query: string; onAdd?: (asset: MediaAsset) => void;
   onAddStockAudio?: (catalogId: string) => Promise<void>; onUpload?: () => void; uploading: boolean;
@@ -52,6 +52,6 @@ export function SfxLibrary({ assets, query, onAdd, onAddStockAudio, onUpload, up
     })}</div>}
     {error && <p className="library-selection-note" role="alert">{error}</p>}
     {preview?.url && <audio key={preview._id} ref={audio} src={preview.url} preload="none" onEnded={() => setPreviewId(null)}/>}
-    <a className="library-sfx-credits" href="https://kenney.nl/support" target="_blank" rel="noreferrer" title="CC0 sounds: Kenney Interface / Impact packs and Revline originals. Source licenses included with the application.">Sound credits ↗</a>
+    <a className="library-sfx-credits" href="https://kenney.nl/support" target="_blank" rel="noreferrer" title="CC0 sounds: Kenney Interface / Impact packs, Freesound CC0 recordings, and Revline originals and designed sounds. Source licenses included with the application.">Sound credits ↗</a>
   </section>;
 }

@@ -1,0 +1,17 @@
+Revline designed Audio FX (2026)
+
+Files: synth-pop.ogg, synth-whoosh.ogg, synth-tick.ogg, synth-chime.ogg, synth-thud.ogg.
+
+These sounds were synthesized for Revline by scripts/author-library-audio.mjs from deterministic
+noise and sine partials. They contain no sampled material. To the extent possible under law, their
+authors have waived all copyright and related or neighboring rights to these sounds under CC0 1.0
+Universal. You may copy, modify, distribute and use them, including commercially, without asking
+permission or providing attribution.
+
+CC0: https://creativecommons.org/publicdomain/zero/1.0/
+Legal code: https://creativecommons.org/publicdomain/zero/1.0/legalcode
+
+The synthesis code is a port of pop(), whoosh(), tick(), chime() and thud() from cstack's
+skills/animated-video/templates/parts/audio/designed.py (https://github.com/goodnight000/cstack),
+used under the MIT License, Copyright (c) 2026 Charles Zheng. The full MIT notice is reproduced in
+the script header.

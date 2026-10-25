@@ -6,6 +6,7 @@ import type {WorkflowId} from '@convex-dev/workflow';
 import { describeLiveEdit } from '../lib/editor/live-edit';
 import { equalTimelineValue } from '../lib/editor/timeline-equality';
 import { hydrateAsset } from './lib/asset_analysis';
+import { attachStockAudio } from './assets';
 import { writeProject,readProject,projectIdentity,projectRun } from './lib/project_data';
 import { requireEditorAccess } from './lib/billing_access';
 import { abortStream, createThread, listStreams, listUIMessages, saveMessage, syncStreams, vPaginationResult, vStreamArgs } from "@convex-dev/agent";
@@ -177,6 +178,11 @@ export const getRunAsset=internalQuery({args:{...runArgs,assetId:v.string()},ret
   const run=await projectRun(ctx,args.projectId,args.ownerId);if(run.aiRunId!==args.runId||!run.aiRunning)throw new ConvexError('AI run is no longer active');
   const id=ctx.db.normalizeId('assets',args.assetId),asset=id?await ctx.db.get(id):null;
   if(!asset||asset.ownerId!==args.ownerId||asset.projectId!==args.projectId)throw new ConvexError('Media not found');return hydrateAsset(ctx,asset);
+}});
+/** The assistant's addSoundEffect attaches the shared catalog sound to this project before placing it. */
+export const attachRunStockAudio=internalMutation({args:{...runArgs,catalogId:v.string()},returns:assetDocument,handler:async(ctx,args)=>{
+  const run=await projectRun(ctx,args.projectId,args.ownerId);if(run.aiRunId!==args.runId||!run.aiRunning)throw new ConvexError('AI run is no longer active');
+  return hydrateAsset(ctx,await attachStockAudio(ctx,args.ownerId,args.projectId,args.catalogId));
 }});
 export const apply = internalMutation({ args: { ...runArgs, expectedRevision: v.number(), timeline: timelineValidator,publication:v.optional(v.object({threadId:v.string(),promptMessageId:v.string()})) }, returns: v.number(), handler: async (ctx, args) => {
   const project = await requireProject(ctx, args.projectId, args.ownerId, false);

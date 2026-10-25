@@ -1,0 +1,44 @@
+Freesound CC0 Audio FX
+
+These 33 recordings were published on Freesound (https://freesound.org) under the
+Creative Commons CC0 1.0 Universal public domain dedication. They may be copied, modified,
+distributed and used commercially without permission or attribution; crediting each uploader
+is a courtesy. Revline cut them from the Freesound previews and re-encoded them as Ogg Opus.
+
+CC0: https://creativecommons.org/publicdomain/zero/1.0/
+Legal code: https://creativecommons.org/publicdomain/zero/1.0/legalcode
+
+File | Uploader | Source
+fs-bubbles-burst.ogg | ristooooo1 | https://freesound.org/people/ristooooo1/sounds/539823/
+fs-water-plunge.ogg | adviseme333 | https://freesound.org/people/adviseme333/sounds/679407/
+fs-ship-creak.ogg | laft2k | https://freesound.org/people/laft2k/sounds/397620/
+fs-padlock-close.ogg | Vrymaa | https://freesound.org/people/Vrymaa/sounds/734641/
+fs-padlock-open.ogg | Rudmer_Rotteveel | https://freesound.org/people/Rudmer_Rotteveel/sounds/536414/
+fs-vault-clank.ogg | AudioPapkin | https://freesound.org/people/AudioPapkin/sounds/814977/
+fs-servo-arm.ogg | JoontheFloof | https://freesound.org/people/JoontheFloof/sounds/740247/
+fs-blade-slice.ogg | SamuelGremaud | https://freesound.org/people/SamuelGremaud/sounds/573300/
+fs-phone-vibrate-wood.ogg | steeltowngaming | https://freesound.org/people/steeltowngaming/sounds/537738/
+fs-screen-tap.ogg | vacuumfan7072 | https://freesound.org/people/vacuumfan7072/sounds/332713/
+fs-clock-tick.ogg | felix.blume | https://freesound.org/people/felix.blume/sounds/170445/
+fs-card-riffle.ogg | Kodack | https://freesound.org/people/Kodack/sounds/256508/
+fs-glass-ting.ogg | fleurescence | https://freesound.org/people/fleurescence/sounds/573157/
+fs-electric-zap.ogg | michael_grinnell | https://freesound.org/people/michael_grinnell/sounds/512471/
+fs-electric-spark-crackle.ogg | weaveofkev | https://freesound.org/people/weaveofkev/sounds/396240/
+fs-relay-click.ogg | Deathscyp | https://freesound.org/people/Deathscyp/sounds/404049/
+fs-wing-flutter.ogg | TRP | https://freesound.org/people/TRP/sounds/616623/
+fs-whoosh-fast.ogg | qubodup | https://freesound.org/people/qubodup/sounds/60013/
+fs-whoosh-deep.ogg | Paul368 | https://freesound.org/people/Paul368/sounds/237980/
+fs-impact-deep.ogg | rhapsodize | https://freesound.org/people/rhapsodize/sounds/255111/
+fs-dslr-shutter.ogg | xef6 | https://freesound.org/people/xef6/sounds/61059/
+fs-sonar-ping.ogg | Peter_Gross | https://freesound.org/people/Peter_Gross/sounds/12677/
+fs-ship-horn-distant.ogg | Danjocross | https://freesound.org/people/Danjocross/sounds/507471/
+fs-rope-or-cable-winch.ogg | mikewest | https://freesound.org/people/mikewest/sounds/394222/
+fs-tile-clicks.ogg | Detective_Lemons | https://freesound.org/people/Detective_Lemons/sounds/785585/
+fs-pop-soft.ogg | ImAFoley | https://freesound.org/people/ImAFoley/sounds/537061/
+fs-rubber-stamp.ogg | I.fekry | https://freesound.org/people/I.fekry/sounds/470710/
+fs-underwater-deep.ogg | jhumbucker | https://freesound.org/people/jhumbucker/sounds/193822/
+fs-city-night.ogg | janbezouska | https://freesound.org/people/janbezouska/sounds/330427/
+fs-server-room.ogg | Nox_Sound | https://freesound.org/people/Nox_Sound/sounds/465613/
+fs-ocean-surface.ogg | Pfannkuchn | https://freesound.org/people/Pfannkuchn/sounds/360631/
+fs-electrical-hum.ogg | kyles | https://freesound.org/people/kyles/sounds/453445/
+fs-radio-static.ogg | Cloud-10 | https://freesound.org/people/Cloud-10/sounds/545962/

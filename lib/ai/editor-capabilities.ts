@@ -10,11 +10,13 @@ import {VISUAL_CANVAS_REFERENCE,VISUAL_TRANSFORM_LIMITS,MAX_SOURCE_CROP} from '.
 import {dimensions} from '../editor/types';
 import {VISUAL_FADE_MAX_SECONDS} from '../editor/visual-fades';
 import {editorSkillIndex} from './skills';
+import {STOCK_AUDIO_CATALOG} from '../editor/stock-audio';
 
 /** Pure shared metadata: backend instructions and the UI read the same implemented inventory. */
 export function editorCapabilities(){
   return {
     skills:editorSkillIndex(),
+    soundEffects:{tool:'addSoundEffect',skill:'sound-design',description:'CC0 Audio FX library, safe to publish commercially. addSoundEffect places one by id on a free A layer at a timeline time. Read the sound-design skill before placing the first one.',library:STOCK_AUDIO_CATALOG.reduce<Record<string,string[]>>((groups,sound)=>({...groups,[sound.category]:[...groups[sound.category]??[],`${sound.id}: ${sound.name}, ${sound.duration.toFixed(2)} s [${sound.tags.join(' ')}]`]}),{})},
     scenes:{tools:['addScene','editScene'],skill:'explainer-scenes',description:'Animated explainer visuals (titles, diagrams, charts, UI walkthroughs, kinetic type) written as React components and rendered frame by frame on their own V layer, over or between footage. Read the explainer-scenes skill before writing one.'},
     stylePlaybooks:STYLE_PLAYBOOKS,
     editing:{controls:['undo the latest saved edit before this turn changes anything','unlink a video/audio pair without losing either source or changing timing','trim, split, move or delete only the chosen unlinked clip','duplicate/copy an identified group to a requested time with linked pairs and transitions','move/edge-trim a group with the manual source/collision limits','reorder whole V/A/FX layers','blend exact visual clip IDs atomically','disable subject-follow without analysis'],undo:'Uses actual saved history; later changes share a new undo group',clientOnly:['playback/seek/view zoom/snapping/selection','browser clipboard storage','redo future stack'],appWorkflows:['media upload/import','export','sharing']},

@@ -742,5 +742,998 @@
       "peaks": "AAABAQECAgICAgICAgQCAgIDAwQDBAMGBQQFBAUFBAUGBgcGBQUHCAgIBQcGCwcKCQkICQwLDAgJCgkKCwkJCw0QCwsPCwoPDQoLDw0QEA0ODAsODQsMDwwVDA8ZFBAQEg8RFBISEhQRFRIREhMXFBoaEx0TGxUZFxYZGRoYFR4YHyMdIBwbGh8iHhgYFxscJB8hHSogJCEfGiIgHCggIyksHigkJyUmJyAmMyUwKyAlLCYsKR0mJh8dLyoxKThAOzkyNSwtQCsoSTE4PDwxMTQ0Ki47SkM/Rz88PzgpOz5DN1BEOzM8OlE+OkVCQUNFU05BSUtFRVBaUUhlSE1UTU9oemtbUU9RUVpSVVZbY1tZSlhRb2+UXXNRa1xpXlqHZHh4d2RXbZF2ZIFoY2pxcXR2g5x4bXd5d2x8iIiSc3hkb4aEt4WJenV4hZm8iZR+hISNn6uZgJKXjYeNnKajl3+ToZuhoJ+lnouZvLC9u8KZyKvArq/LsqGlwbnPt7Cnu7HYos7Lzqm82O7zzKqpTg==",
       "samplesPerSecond": 100
     }
+  },
+  {
+    "id": "fs-bubbles-burst",
+    "name": "Bubble burst",
+    "category": "Textures",
+    "tags": [
+      "bubbles",
+      "underwater",
+      "water",
+      "recorded"
+    ],
+    "pack": "Freesound CC0",
+    "sourceFile": "freesound 539823 preview 1.250-2.950 s",
+    "sourceUrl": "https://freesound.org/people/ristooooo1/sounds/539823/",
+    "license": "CC0-1.0",
+    "creator": "ristooooo1",
+    "r2Key": "media/stock/audio-fx-v1/262230645af812d06d06e13765485e0c578b5c86535b7e93c7bfe72d66cab28e",
+    "sha256": "262230645af812d06d06e13765485e0c578b5c86535b7e93c7bfe72d66cab28e",
+    "file": "assets/audio-fx/fs-bubbles-burst.ogg",
+    "contentType": "audio/ogg",
+    "duration": 1.7065,
+    "size": 37788,
+    "waveform": {
+      "peaks": "AAEYJ09ETVJerW1BOCYQQEMxLjgrLy4VDCZjTCYlFhwvCBsiKUxKU/+FgnsyDQYFAhEyJB8cHB0bEEBFRFcwHRkiLS8aECEPLiEXFxUWExkqPDonG0w0LCAkIR8yRjlaOy0ZGxYqMkZIQZc0JxgYIBMkNDILQh4cGRYUICksbRYCDwg+LiAVDg4vToFwPEQVQGMhGxUREgkNEQYxGxQRGwoRFRwHAQICAQA=",
+      "samplesPerSecond": 100
+    }
+  },
+  {
+    "id": "fs-water-plunge",
+    "name": "Water plunge",
+    "category": "Textures",
+    "tags": [
+      "water",
+      "splash",
+      "underwater",
+      "recorded"
+    ],
+    "pack": "Freesound CC0",
+    "sourceFile": "freesound 679407 preview 2.150-3.850 s",
+    "sourceUrl": "https://freesound.org/people/adviseme333/sounds/679407/",
+    "license": "CC0-1.0",
+    "creator": "adviseme333",
+    "r2Key": "media/stock/audio-fx-v1/16d9c13ea11fa8d3a7716e8b0ebf03ad822f2fa1112860f1ea217e9ec0de07aa",
+    "sha256": "16d9c13ea11fa8d3a7716e8b0ebf03ad822f2fa1112860f1ea217e9ec0de07aa",
+    "file": "assets/audio-fx/fs-water-plunge.ogg",
+    "contentType": "audio/ogg",
+    "duration": 1.7065,
+    "size": 27636,
+    "waveform": {
+      "peaks": "AQECAgoHBwsGCgoJGg4FBQ8ICBQIFwUfBgkMDBAYGgoICAQHBgUDBggGDAUNBAQMERsSCQsLCQoGBAgFCQUOExEGDBIMDAoGBBMTEgwNCgoWCTQJFQkHDxEOGhILEwwSDRomGB4PEQy/IRoeGxgiNC4iGxshFzEpf/9eEw4QDwkHGBQaEA4JDh4VDQcFBAICAgIBAQEBBw4HBQUDAwMBAwIAAAAAAAAAAAA=",
+      "samplesPerSecond": 100
+    }
+  },
+  {
+    "id": "fs-ship-creak",
+    "name": "Wooden creak",
+    "category": "Textures",
+    "tags": [
+      "wood",
+      "creak",
+      "ship",
+      "recorded"
+    ],
+    "pack": "Freesound CC0",
+    "sourceFile": "freesound 397620 preview 55.620-58.500 s",
+    "sourceUrl": "https://freesound.org/people/laft2k/sounds/397620/",
+    "license": "CC0-1.0",
+    "creator": "laft2k",
+    "r2Key": "media/stock/audio-fx-v1/efee7f7c8f854f6cf40737b89b3a852bded83dca510017c1d8324adfcf7536e8",
+    "sha256": "efee7f7c8f854f6cf40737b89b3a852bded83dca510017c1d8324adfcf7536e8",
+    "file": "assets/audio-fx/fs-ship-creak.ogg",
+    "contentType": "audio/ogg",
+    "duration": 2.8865,
+    "size": 39277,
+    "waveform": {
+      "peaks": "BSIVDRETBwcIQT8nHBYNCQkxSyIgGA8MDg0HBgVDPCAeHBISCgsJBgQHBlFFHikgEAwLD2BFJywXEwoKDAgKKEglIBoPDgoMCwoHBgUGBwYGCwgGBQYFmndEMisWEA4WF5efRj4uGhgRFRUJCwsICAgIBwoHCwYEBwcFBgfxlE1WKR8ZGBgRDAwNCQUGBwcHCAkHBwQEBAYFBQYHBQYHBgcFBAMFAwYEBAYIBgYDBgYFAwYFBgYHBQQGBQMDBAUEBgMFBgQCAwMFBQQGAgMFAgQcEREPDgYLCQgFBAMFAgI/KxYZEAsHCjEtGBwRDSYeGBQRCw0mJxsRDQcMCAsFIh0TDgsIBgUGBQUcFAwNCAYGAwQCCAQCAgIBAQEBAAAA",
+      "samplesPerSecond": 100
+    }
+  },
+  {
+    "id": "fs-padlock-close",
+    "name": "Lock clunk",
+    "category": "Clicks",
+    "tags": [
+      "lock",
+      "click",
+      "security",
+      "recorded"
+    ],
+    "pack": "Freesound CC0",
+    "sourceFile": "freesound 734641 preview 0.830-1.150 s",
+    "sourceUrl": "https://freesound.org/people/Vrymaa/sounds/734641/",
+    "license": "CC0-1.0",
+    "creator": "Vrymaa",
+    "r2Key": "media/stock/audio-fx-v1/7538d6a6ec510ee4b59c4c6bb02edff6f8e8c0cad94df36917da0435e7eff139",
+    "sha256": "7538d6a6ec510ee4b59c4c6bb02edff6f8e8c0cad94df36917da0435e7eff139",
+    "file": "assets/audio-fx/fs-padlock-close.ogg",
+    "contentType": "audio/ogg",
+    "duration": 0.3265,
+    "size": 5025,
+    "waveform": {
+      "peaks": "CxIgDyc0QUlCJiJox/++fUhHUCciIhsUDw8KCgQDAgE=",
+      "samplesPerSecond": 100
+    }
+  },
+  {
+    "id": "fs-padlock-open",
+    "name": "Padlock click",
+    "category": "Clicks",
+    "tags": [
+      "lock",
+      "click",
+      "security",
+      "recorded"
+    ],
+    "pack": "Freesound CC0",
+    "sourceFile": "freesound 536414 preview 0.000-0.250 s",
+    "sourceUrl": "https://freesound.org/people/Rudmer_Rotteveel/sounds/536414/",
+    "license": "CC0-1.0",
+    "creator": "Rudmer_Rotteveel",
+    "r2Key": "media/stock/audio-fx-v1/939114211fc809400e04ce622a6819f2a483396f9dd0fd3074b2f650a81297cd",
+    "sha256": "939114211fc809400e04ce622a6819f2a483396f9dd0fd3074b2f650a81297cd",
+    "file": "assets/audio-fx/fs-padlock-open.ogg",
+    "contentType": "audio/ogg",
+    "duration": 0.2665,
+    "size": 5322,
+    "waveform": {
+      "peaks": "ACMEBRD/TRsQBQMBAQEBAQAAAAAAAAAAAAA=",
+      "samplesPerSecond": 100
+    }
+  },
+  {
+    "id": "fs-vault-clank",
+    "name": "Vault clank",
+    "category": "Hits",
+    "tags": [
+      "metallic",
+      "impact",
+      "door",
+      "recorded"
+    ],
+    "pack": "Freesound CC0",
+    "sourceFile": "freesound 814977 preview 0.137-1.350 s",
+    "sourceUrl": "https://freesound.org/people/AudioPapkin/sounds/814977/",
+    "license": "CC0-1.0",
+    "creator": "AudioPapkin",
+    "r2Key": "media/stock/audio-fx-v1/21e72bc9b4d3e2d7525d409761daa3a6715277542fd0941ad2d4cbb5c934a501",
+    "sha256": "21e72bc9b4d3e2d7525d409761daa3a6715277542fd0941ad2d4cbb5c934a501",
+    "file": "assets/audio-fx/fs-vault-clank.ogg",
+    "contentType": "audio/ogg",
+    "duration": 1.2195,
+    "size": 19698,
+    "waveform": {
+      "peaks": "NmmERk9EPNnI4v3BpNPvxbStv4mtg37lymhNpZFzXb6BtnurWUiFUpZoZEtHbDM0PDJiPEhBZDY1KSw4SB45LTVENR4fLioqKzMfOS4rJCgwHCcuJxohIhUeIygaEhoWFRETExELEg0KDgcHBgkJBwUFBQMCAQEBAAA=",
+      "samplesPerSecond": 100
+    }
+  },
+  {
+    "id": "fs-servo-arm",
+    "name": "Servo motor",
+    "category": "Textures",
+    "tags": [
+      "mechanical",
+      "motor",
+      "robot",
+      "recorded"
+    ],
+    "pack": "Freesound CC0",
+    "sourceFile": "freesound 740247 preview 0.080-1.320 s",
+    "sourceUrl": "https://freesound.org/people/JoontheFloof/sounds/740247/",
+    "license": "CC0-1.0",
+    "creator": "JoontheFloof",
+    "r2Key": "media/stock/audio-fx-v1/2174b2c12ec6d432ffcfa35b185e5206317ab4932bf818679de2dc8602c1e373",
+    "sha256": "2174b2c12ec6d432ffcfa35b185e5206317ab4932bf818679de2dc8602c1e373",
+    "file": "assets/audio-fx/fs-servo-arm.ogg",
+    "contentType": "audio/ogg",
+    "duration": 1.2465,
+    "size": 16439,
+    "waveform": {
+      "peaks": "BRsbCwUEDhcXHCEjQzU+WGFgfuPu5KN3p6C4ws7Thl+8cqGMuKGDYVWYorOYqItlc1pobG2BdLSyomZJYG2EdnrYipV2WnN7d2Z1qJJRdVaDam2Wd6eDTFVEemdacnSQa35VUHCFtJSh9/B3k2qimIezlnVtFQkFBgMCAA==",
+      "samplesPerSecond": 100
+    }
+  },
+  {
+    "id": "fs-blade-slice",
+    "name": "Blade slice",
+    "category": "Whooshes",
+    "tags": [
+      "slice",
+      "whoosh",
+      "cut",
+      "recorded"
+    ],
+    "pack": "Freesound CC0",
+    "sourceFile": "freesound 573300 preview 0.150-0.800 s",
+    "sourceUrl": "https://freesound.org/people/SamuelGremaud/sounds/573300/",
+    "license": "CC0-1.0",
+    "creator": "SamuelGremaud",
+    "r2Key": "media/stock/audio-fx-v1/c2905e46e94704c5254e8ce98ab956c0115fed8fae3903dabebf82c8fbf11b93",
+    "sha256": "c2905e46e94704c5254e8ce98ab956c0115fed8fae3903dabebf82c8fbf11b93",
+    "file": "assets/audio-fx/fs-blade-slice.ogg",
+    "contentType": "audio/ogg",
+    "duration": 0.6565,
+    "size": 10013,
+    "waveform": {
+      "peaks": "AwMFAwUKDQkODQ8VFhYTExosLTE+LDdUZ5ftz9GGNiEbFRMRDw0KCwkGCAUEBAMDAgICAgECAQEBAQAAAAAAAAA=",
+      "samplesPerSecond": 100
+    }
+  },
+  {
+    "id": "fs-phone-vibrate-wood",
+    "name": "Phone buzz",
+    "category": "Textures",
+    "tags": [
+      "phone",
+      "notification",
+      "vibrate",
+      "recorded"
+    ],
+    "pack": "Freesound CC0",
+    "sourceFile": "freesound 537738 preview 1.000-2.580 s",
+    "sourceUrl": "https://freesound.org/people/steeltowngaming/sounds/537738/",
+    "license": "CC0-1.0",
+    "creator": "steeltowngaming",
+    "r2Key": "media/stock/audio-fx-v1/ab55cd82ffa3e3687a55dd3a7980f5a8b6c5fa11653f56660d73a026ceb92e39",
+    "sha256": "ab55cd82ffa3e3687a55dd3a7980f5a8b6c5fa11653f56660d73a026ceb92e39",
+    "file": "assets/audio-fx/fs-phone-vibrate-wood.ogg",
+    "contentType": "audio/ogg",
+    "duration": 1.5865,
+    "size": 20793,
+    "waveform": {
+      "peaks": "DBk7Zaz+/8zTr4eRxdO5vaW4qZydoZ2cnaepn56smKecpaagoZmbpKVydOfacprWlYQ5JSkXGxAGBgcDAgMBAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA4LLlaf+Mjp08qrj7zYyNihrqyhoZicmLKmqZ6ooZ+qpKOcmp+dpJ2ri1by0piBzqmmVTMqFhwgEQwNBgM=",
+      "samplesPerSecond": 100
+    }
+  },
+  {
+    "id": "fs-screen-tap",
+    "name": "Screen tap",
+    "category": "Clicks",
+    "tags": [
+      "tap",
+      "phone",
+      "ui",
+      "click",
+      "recorded"
+    ],
+    "pack": "Freesound CC0",
+    "sourceFile": "freesound 332713 preview 0.010-0.106 s",
+    "sourceUrl": "https://freesound.org/people/vacuumfan7072/sounds/332713/",
+    "license": "CC0-1.0",
+    "creator": "vacuumfan7072",
+    "r2Key": "media/stock/audio-fx-v1/f5299e71e5f175003e9aabe31b6db57524335fd7c62e1be3e76de9f9f5e34989",
+    "sha256": "f5299e71e5f175003e9aabe31b6db57524335fd7c62e1be3e76de9f9f5e34989",
+    "file": "assets/audio-fx/fs-screen-tap.ogg",
+    "contentType": "audio/ogg",
+    "duration": 0.102458,
+    "size": 3225,
+    "waveform": {
+      "peaks": "AA7/DAAAAAAAAA==",
+      "samplesPerSecond": 100
+    }
+  },
+  {
+    "id": "fs-clock-tick",
+    "name": "Clock ticking",
+    "category": "Textures",
+    "tags": [
+      "clock",
+      "ticking",
+      "timer",
+      "recorded"
+    ],
+    "pack": "Freesound CC0",
+    "sourceFile": "freesound 170445 preview 0.650-12.600 s",
+    "sourceUrl": "https://freesound.org/people/felix.blume/sounds/170445/",
+    "license": "CC0-1.0",
+    "creator": "felix.blume",
+    "r2Key": "media/stock/audio-fx-v1/d3edf290a201acd40f999e5e0eff24bf1228f62271260eeba3cedc1a61d7378f",
+    "sha256": "d3edf290a201acd40f999e5e0eff24bf1228f62271260eeba3cedc1a61d7378f",
+    "file": "assets/audio-fx/fs-clock-tick.ogg",
+    "contentType": "audio/ogg",
+    "duration": 11.9565,
+    "size": 128877,
+    "waveform": {
+      "peaks": "Ayg7cmt4EhkPEAsDCAMCAQIBAQEBAQABAAEBAAAAAQEBAQEAAQAAAAEBAQEBAAEBAAABAQABAQEBAQEBAQEBAAAAAQABAQAAAQEAAAAAAQAAAQEBAQEAAQEAAQEBAQEAAAAAAAIoMLainHwVFgo0BwQCAQUGAwEBAQAAAAEBAAAAAAAAAAAAAQEBAQEAAAEBAAABAQEBAQEBAQAAAAEBAQAAAAEAAQABAAABAQEAAQEBAQABAAAAAAAAAQEBAQEBAAEBAQEBAQECPCuQyL8rDRwWDgYFAgEBAQEBAQEBAAEBAQEBAQEBAQEAAAEBAQAAAAEBAAAAAQAAAAEBAQEAAQEBAQAAAQABAQEBAAAAAAAAAAEBAQEBAAABAQEBAQEBAQEBAQABAQEBAAEBPh8dq6y6RBscDiIGAwIWCAMCAQEBAQEBAQEAAQEBAQEBAAABAAABAAEBAQEAAAABAQAAAQEAAQEBAQEBAQEBAAEAAQABAQEBAQEBAAAAAAAAAAEAAQEAAQAAAAABAQAAAQAAAAQoLnSnHRoUEBEJAggCBwUBAgEBAQEBAQEAAAEAAAEAAAABAQEAAQEBAQAAAQEBAAEAAQEBAQEBAAEBAQEBAQEBAQAAAAAAAQEBAAABAQEBAQAAAQEBAAEBAQEAAQAAAQEBAQABHiCQnujSYDESHwoFBAERBAMBAQEBAQEAAQEBAAEBAQEBAQABAAABAQEAAAAAAAAAAAABAQEAAQEBAAEBAAAAAAEBAQEBAQEBAQEBAQEBAAABAQEAAQEBAAEBAQEAAAABAQEBAy4umf/+13oSBRUGBwICCQIBAwIBAQEBAQEBAQABAQEBAAEBAQEBAQEBAQEBAQEAAAAAAAABAQEBAQEBAQEAAQAAAAAAAAAAAAABAQAAAQABAQEBAQEBAQEBAQEAAQEAAQEAAAEsHteOTh0ZFwgzDQMCAgECAgEBAQEBAQEBAAEAAAEBAQEBAAEBAQEBAAEBAQEBAQEBAAEBAQEBAQEBAQEBAQEBAQEBAQABAQEBAQEBAQEBAQEBAAABAQEBAQEBAQAAAAEBAAACET2Hn7RtFg0MGAgGAgEBAQEBAQEBAQEBAQEBAQEBAAEAAAABAQEBAQEBAQEBAQEBAQEBAAAAAQEAAQEBAQABAQAAAQEBAQAAAQABAQABAAAAAQEAAQABAAAAAQEAAAEAAQEBHSErmHy0kxIQDkoHBQIBDAQDAQEBAQABAQEBAQEAAQEBAQEBAQEBAQEBAQEBAQAAAQEBAQEBAAAAAQEAAAAAAQEBAAEBAAABAAABAAEAAAABAQEBAQAAAAAAAQAAAAABAQEBAQM+Gpbx2z0PERMKBQcDAQEBAQEAAQABAQABAAEBAAABAQEBAQEAAQEAAQEBAQEAAAEBAQAAAAAAAAAAAQEBAQEBAQEBAQEBAQEBAAEBAAEAAQEBAQEAAAEBAQEBAQEAAQEBAQEpGR8qo9y2LBUKPAYFAhMFAgEBAQEAAQEBAQEBAAABAAEAAQEAAAEBAQABAQABAAAAAAEAAAEBAQEAAAABAQEAAAEBAAEBAQABAQEAAAEBAQEBAQAAAAAAAAAAAAAAAA==",
+      "samplesPerSecond": 100
+    }
+  },
+  {
+    "id": "fs-card-riffle",
+    "name": "Card riffle",
+    "category": "Textures",
+    "tags": [
+      "cards",
+      "shuffle",
+      "texture",
+      "recorded"
+    ],
+    "pack": "Freesound CC0",
+    "sourceFile": "freesound 256508 preview 0.300-1.800 s",
+    "sourceUrl": "https://freesound.org/people/Kodack/sounds/256508/",
+    "license": "CC0-1.0",
+    "creator": "Kodack",
+    "r2Key": "media/stock/audio-fx-v1/3eabcbfab3382516b0ff9730506b0c20dda3b99072fe145efd0619843cfa2a92",
+    "sha256": "3eabcbfab3382516b0ff9730506b0c20dda3b99072fe145efd0619843cfa2a92",
+    "file": "assets/audio-fx/fs-card-riffle.ogg",
+    "contentType": "audio/ogg",
+    "duration": 1.5065,
+    "size": 27923,
+    "waveform": {
+      "peaks": "AoUOBwYPCQQCAgEBAaoPIQkGBAQDGRV7ImX+KyIweCkSKxcoaxYMTId4GRRCYiiMH4EccxYQJpIVDhEJEKgMbw+rCBCRcBwXEX1hEROMFxR7CQoUB1FQcCFvGIUnVBYVhyIgZ0YtD2ULDBVeZlsSSnIRe3cPmAwUmxAQDxO4fn1jkxhXhr0UIBgVTLsSDgoHBAMBAQAA",
+      "samplesPerSecond": 100
+    }
+  },
+  {
+    "id": "fs-glass-ting",
+    "name": "Glass ting",
+    "category": "Pops & tones",
+    "tags": [
+      "glass",
+      "ding",
+      "tone",
+      "recorded"
+    ],
+    "pack": "Freesound CC0",
+    "sourceFile": "freesound 573157 preview 0.003-2.600 s",
+    "sourceUrl": "https://freesound.org/people/fleurescence/sounds/573157/",
+    "license": "CC0-1.0",
+    "creator": "fleurescence",
+    "r2Key": "media/stock/audio-fx-v1/e73db8d6afcae6a802a9484511e0064b9f58b4b9c99822923db816d455a103a3",
+    "sha256": "e73db8d6afcae6a802a9484511e0064b9f58b4b9c99822923db816d455a103a3",
+    "file": "assets/audio-fx/fs-glass-ting.ogg",
+    "contentType": "audio/ogg",
+    "duration": 2.6035,
+    "size": 36285,
+    "waveform": {
+      "peaks": "Ev9xSEA8QT82MywsIyMeGhkXFxUQERQUFhUVGh4eHBkYGxsaFhYWFRQUExQTEhAODAsJCAgHBgUFBQUFBQMEBQUGBQYHBwcHCQoKCAgHBgcGBgUFBQUFBAQEAwMDAwICAQEBAgIBAQICAgICAgICAgICAgICAgMDAwICAgICAgEBAQEBAQEBAQEAAAAAAQEBAAABAQEBAQEBAQEBAQEBAQEBAQEBAAABAQEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+      "samplesPerSecond": 100
+    }
+  },
+  {
+    "id": "fs-electric-zap",
+    "name": "Electric zap",
+    "category": "Transitions",
+    "tags": [
+      "electric",
+      "zap",
+      "glitch",
+      "recorded"
+    ],
+    "pack": "Freesound CC0",
+    "sourceFile": "freesound 512471 preview 0.000-0.225 s",
+    "sourceUrl": "https://freesound.org/people/michael_grinnell/sounds/512471/",
+    "license": "CC0-1.0",
+    "creator": "michael_grinnell",
+    "r2Key": "media/stock/audio-fx-v1/ca6fa2a591df66f14fd6d5224e324d96037e2457ccda988b14166712088802d4",
+    "sha256": "ca6fa2a591df66f14fd6d5224e324d96037e2457ccda988b14166712088802d4",
+    "file": "assets/audio-fx/fs-electric-zap.ogg",
+    "contentType": "audio/ogg",
+    "duration": 0.241479,
+    "size": 7384,
+    "waveform": {
+      "peaks": "AISJqaaps8WylLmexLy2lLaovIiTZSUE",
+      "samplesPerSecond": 100
+    }
+  },
+  {
+    "id": "fs-electric-spark-crackle",
+    "name": "Spark crackle",
+    "category": "Textures",
+    "tags": [
+      "electric",
+      "spark",
+      "texture",
+      "recorded"
+    ],
+    "pack": "Freesound CC0",
+    "sourceFile": "freesound 396240 preview 2.260-3.700 s",
+    "sourceUrl": "https://freesound.org/people/weaveofkev/sounds/396240/",
+    "license": "CC0-1.0",
+    "creator": "weaveofkev",
+    "r2Key": "media/stock/audio-fx-v1/4ffd6afc0a80b0b5f260fda12d5033ddcdcd0efa438dc3bded7c7977addf9768",
+    "sha256": "4ffd6afc0a80b0b5f260fda12d5033ddcdcd0efa438dc3bded7c7977addf9768",
+    "file": "assets/audio-fx/fs-electric-spark-crackle.ogg",
+    "contentType": "audio/ogg",
+    "duration": 1.4465,
+    "size": 24213,
+    "waveform": {
+      "peaks": "BRtHb2I7cEYnIi01Myw9S1onDw4ICQoHCAh8d3JLZUx1T3RXU0kxEw4OCAkHBxx+W0ZKWU5HRiw1PR8PT2ZqSEg1QKVIUE2aUV0qFg8KCQgtNkJclHerY6Viapt7eUZwd5NPNEJ0YLNMglRmUWtJM0AxGA8LCAlDMEg3sks4WTIbEgsJBwUDCx8YEyMLCgcE",
+      "samplesPerSecond": 100
+    }
+  },
+  {
+    "id": "fs-relay-click",
+    "name": "Switch clack",
+    "category": "Clicks",
+    "tags": [
+      "click",
+      "switch",
+      "mechanical",
+      "recorded"
+    ],
+    "pack": "Freesound CC0",
+    "sourceFile": "freesound 404049 preview 0.000-0.350 s",
+    "sourceUrl": "https://freesound.org/people/Deathscyp/sounds/404049/",
+    "license": "CC0-1.0",
+    "creator": "Deathscyp",
+    "r2Key": "media/stock/audio-fx-v1/5d251a190c66f0e6209437b392b4bddbb5250ad5d5bfde0ffbc0f7555c70f492",
+    "sha256": "5d251a190c66f0e6209437b392b4bddbb5250ad5d5bfde0ffbc0f7555c70f492",
+    "file": "assets/audio-fx/fs-relay-click.ogg",
+    "contentType": "audio/ogg",
+    "duration": 0.3665,
+    "size": 6021,
+    "waveform": {
+      "peaks": "ACxtsv3Cd0FBIxUPExQNEAwJCQoHBgYGBgUGBAMDAgEBAQAA",
+      "samplesPerSecond": 100
+    }
+  },
+  {
+    "id": "fs-wing-flutter",
+    "name": "Wing flutter",
+    "category": "Textures",
+    "tags": [
+      "wings",
+      "flutter",
+      "texture",
+      "recorded"
+    ],
+    "pack": "Freesound CC0",
+    "sourceFile": "freesound 616623 preview 1.100-3.100 s",
+    "sourceUrl": "https://freesound.org/people/TRP/sounds/616623/",
+    "license": "CC0-1.0",
+    "creator": "TRP",
+    "r2Key": "media/stock/audio-fx-v1/d77cd07b17c02dd3283a1179ab936d7249fe44ed42dec4660a23dc7e0d15b705",
+    "sha256": "d77cd07b17c02dd3283a1179ab936d7249fe44ed42dec4660a23dc7e0d15b705",
+    "file": "assets/audio-fx/fs-wing-flutter.ogg",
+    "contentType": "audio/ogg",
+    "duration": 2.0065,
+    "size": 33219,
+    "waveform": {
+      "peaks": "BQcFBQUHCQwZGgoKGRIQDyAnQx8QEiImJRcUERgeHygrQDIqLhktJRsdIhQlM5hBLiIsHzspJS0dHCkgIx0iKTYxNjFGTileO0JoSEEiFx8mIBsWGyJWJD5nHRYZHSIgIRgbXx0ZHxgyHB4eGE44HiQbHiAeGB4ZGxgrHBYWIB4YFDY3JiIcFxQUFBIOEBIaEhUTJxkKCg4NChEOMx8ODA0JCBMVBwgJCQcGBwYFBgUFBgUIBAMFAwQDAwICAgMCAQEBAQEAAAA=",
+      "samplesPerSecond": 100
+    }
+  },
+  {
+    "id": "fs-whoosh-fast",
+    "name": "Quick swish",
+    "category": "Whooshes",
+    "tags": [
+      "whoosh",
+      "transition",
+      "recorded"
+    ],
+    "pack": "Freesound CC0",
+    "sourceFile": "freesound 60013 preview 0.000-0.420 s",
+    "sourceUrl": "https://freesound.org/people/qubodup/sounds/60013/",
+    "license": "CC0-1.0",
+    "creator": "qubodup",
+    "r2Key": "media/stock/audio-fx-v1/385e24799d8174c3170fc3c66290368f0599474e33510c631000ed03e29020bc",
+    "sha256": "385e24799d8174c3170fc3c66290368f0599474e33510c631000ed03e29020bc",
+    "file": "assets/audio-fx/fs-whoosh-fast.ogg",
+    "contentType": "audio/ogg",
+    "duration": 0.4265,
+    "size": 6757,
+    "waveform": {
+      "peaks": "Ag0gGqe9xqzHak84MkcrOighJRQXFBQMEQsHCQkHCgUEAgIDAgEBAAAA",
+      "samplesPerSecond": 100
+    }
+  },
+  {
+    "id": "fs-whoosh-deep",
+    "name": "Low rumble whoosh",
+    "category": "Whooshes",
+    "tags": [
+      "whoosh",
+      "transition",
+      "recorded"
+    ],
+    "pack": "Freesound CC0",
+    "sourceFile": "freesound 237980 preview 0.100-2.750 s",
+    "sourceUrl": "https://freesound.org/people/Paul368/sounds/237980/",
+    "license": "CC0-1.0",
+    "creator": "Paul368",
+    "r2Key": "media/stock/audio-fx-v1/1a4ca067c0d36aac068b60df6d6412512e3deeb7d38744af742fe63ba133ce92",
+    "sha256": "1a4ca067c0d36aac068b60df6d6412512e3deeb7d38744af742fe63ba133ce92",
+    "file": "assets/audio-fx/fs-whoosh-deep.ogg",
+    "contentType": "audio/ogg",
+    "duration": 2.6565,
+    "size": 28890,
+    "waveform": {
+      "peaks": "Cg0QERgQDxUUERkTFxciExkZIh03JSQhHzEzLTE8NT4/QklPQ0dAXVR6c57Rh32bw+2k1vrfd/+y9LX/marNftiPwqlxtJ2LhqKmVLqlyop2WU+phI2rj1k8ZFp+tLBWa6SjUF96dV9ZVpKCZWCognFBI2JkgIN4cik4Slhjcm1MR15rcW+Oh5E6LDE6LEOWeHlZUE9VO0k2OXlDQBxDbnFUQDElNj89LjEjTUc3RUtNSicYKisZKTwwJyEjNCMyKxcfFQ0SEhYKEg8NExEVGSIeEw4UIyYdBRELCQoKCw0QDAcDBQQEAQQGBgUBAgECAwQEAwMBAQEBAQEBAQEAAAAAAAAAAAAAAA==",
+      "samplesPerSecond": 100
+    }
+  },
+  {
+    "id": "fs-impact-deep",
+    "name": "Deep boom",
+    "category": "Hits",
+    "tags": [
+      "boom",
+      "impact",
+      "recorded"
+    ],
+    "pack": "Freesound CC0",
+    "sourceFile": "freesound 255111 preview 0.000-5.000 s",
+    "sourceUrl": "https://freesound.org/people/rhapsodize/sounds/255111/",
+    "license": "CC0-1.0",
+    "creator": "rhapsodize",
+    "r2Key": "media/stock/audio-fx-v1/b23962792e7e6e51cf1186eeac5f9077e0c3fba25bfb4bfc1b1a5c564c8ae873",
+    "sha256": "b23962792e7e6e51cf1186eeac5f9077e0c3fba25bfb4bfc1b1a5c564c8ae873",
+    "file": "assets/audio-fx/fs-impact-deep.ogg",
+    "contentType": "audio/ogg",
+    "duration": 5.0065,
+    "size": 71917,
+    "waveform": {
+      "peaks": "O2ZXV6Cip3ZrX4mRkqKnopHacodjl5OMYkt7hdHOnVA0XZN4apJKSj1sh4stPHd2d3csPH2KY5JnSnisdldfVHCXaotUSFhfg3NhYEJVZWdWWDorSEgwMyMmJBJLT01PajMrQDhUKDYfIyIhNCUaJC0yGR8qGhwmJBRBQjQ2MykmICsaKBIZFx4bDhgSFw4UDQ4iGR4vJhcfKDIyMi02MiAeKiUgJCIiGh4hHhYXIRwPERsaDxgTExQMEhgWDxYMBxANDxIRIhkLDA0LDAkJCwcMDQ0HCQcJCgkKChIMFRYNHR0LFBQGCAUHDQcKEw8KEQsFAwYKCg0RFg8QERYSEBEQDw8IBwwMCAkGBQUDBAMGBwQGBgMFCgoICQsICQkIBwsLCAoJCgoMBggEAQEEBQMGBgUGBwYHCAcHBgcFBggHBQYFAgIDBQUDBQgGBgYFBwYEAwUFBAQBAgECAgIDAgIDAwMBAQEBAwMCAwQDBAUDBAQDAwQCBAMCBAQDBAQDBAQDAwQEBAMDBAMDAwMDAgIDAgIBAQEBAQAAAQEBAQEBAQEBAQEBAQEAAQEBAAEBAQEBAAAAAAAAAAAAAAAAAQEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+      "samplesPerSecond": 100
+    }
+  },
+  {
+    "id": "fs-dslr-shutter",
+    "name": "Camera shutter",
+    "category": "Clicks",
+    "tags": [
+      "camera",
+      "shutter",
+      "recorded"
+    ],
+    "pack": "Freesound CC0",
+    "sourceFile": "freesound 61059 preview 0.030-0.450 s",
+    "sourceUrl": "https://freesound.org/people/xef6/sounds/61059/",
+    "license": "CC0-1.0",
+    "creator": "xef6",
+    "r2Key": "media/stock/audio-fx-v1/07bf8073bbe6b77f98da7845ab4a6d1b38cb6e70852a3e3bc19e695dfc1ca3a3",
+    "sha256": "07bf8073bbe6b77f98da7845ab4a6d1b38cb6e70852a3e3bc19e695dfc1ca3a3",
+    "file": "assets/audio-fx/fs-dslr-shutter.ogg",
+    "contentType": "audio/ogg",
+    "duration": 0.4265,
+    "size": 9439,
+    "waveform": {
+      "peaks": "ABMFERSUO/EjCwjmGQYDAwIBAQABGbUgDREhLyYrJEgxKyYjKBoKBAEA",
+      "samplesPerSecond": 100
+    }
+  },
+  {
+    "id": "fs-sonar-ping",
+    "name": "Sonar ping",
+    "category": "Pops & tones",
+    "tags": [
+      "sonar",
+      "underwater",
+      "tone",
+      "recorded"
+    ],
+    "pack": "Freesound CC0",
+    "sourceFile": "freesound 12677 preview 0.030-1.980 s",
+    "sourceUrl": "https://freesound.org/people/Peter_Gross/sounds/12677/",
+    "license": "CC0-1.0",
+    "creator": "Peter_Gross",
+    "r2Key": "media/stock/audio-fx-v1/28af06e58f1a6af3ebd76c667704dab7e1c3d3bd1b634f6f5dcbe9742d766909",
+    "sha256": "28af06e58f1a6af3ebd76c667704dab7e1c3d3bd1b634f6f5dcbe9742d766909",
+    "file": "assets/audio-fx/fs-sonar-ping.ogg",
+    "contentType": "audio/ogg",
+    "duration": 1.956542,
+    "size": 27785,
+    "waveform": {
+      "peaks": "CqOlR///Zcq0X2u01D/Bv0RPUEEvMTEtGygjKTIfLCk0OitEPzVCLhweKCkkNC8hLBkvKhYwMjI/JEhEMjg0MSstOxc5OSY1Nh0kGhcTDRIMBRQJDw4TDhAeEhkcESMhFRoYEwwVFA0WFhERDgoLCwoJDg0LEA8LDwwMCQYKCAkJBAkJAwYGBAYFAwUFBQMEBQYGBQgECQgFCQgFBwYFBAUFBQYFBAQEAQMDAwMDAgICAQEBAQECAQEBAQEAAQEAAAAAAA==",
+      "samplesPerSecond": 100
+    }
+  },
+  {
+    "id": "fs-ship-horn-distant",
+    "name": "Distant foghorn",
+    "category": "Pops & tones",
+    "tags": [
+      "horn",
+      "ship",
+      "tone",
+      "recorded"
+    ],
+    "pack": "Freesound CC0",
+    "sourceFile": "freesound 507471 preview 1.080-7.300 s",
+    "sourceUrl": "https://freesound.org/people/Danjocross/sounds/507471/",
+    "license": "CC0-1.0",
+    "creator": "Danjocross",
+    "r2Key": "media/stock/audio-fx-v1/f7147d6b8683ad4ec7020be3e978f69e6dd19e62c6299e5f36bf9c50805297bb",
+    "sha256": "f7147d6b8683ad4ec7020be3e978f69e6dd19e62c6299e5f36bf9c50805297bb",
+    "file": "assets/audio-fx/fs-ship-horn-distant.ogg",
+    "contentType": "audio/ogg",
+    "duration": 6.2265,
+    "size": 99139,
+    "waveform": {
+      "peaks": "CQ4SFxgQDhAKCAoaIicjLDBITGVvg4mGi5ycn8PJ0eLW2tjYx8i6ycjFx6yip5GEeFVFPTs2UmBtjZCenY2ShYh+XlBEV22GjIecnLbK1+jr7O3m4t7NzcnEwLq8uq+1t7y+trKzraekpqWkpKWjoaCjrKyqraywqae0s7i4vry1sLu4v7rExsK8vbrBvbiyq6uoq6ulpaOam5GTiHdycXV6e4J9fYF6fn6FhImLko2Ul5+coqeorailqa+sppKVmZmemJqMkIyQkZ2mrKOusq6xtrisrq2mnY+aopeRhXyCioJyfHWAg4mFiJCPi4iGdn+SiYSOi5CSh4+alJ2OjJaUhHV7gISGenVrZl96b2pidHiBfXhqbWducHdqaFtaXFRfVVBQTUxOUE5JQz46OjMtLC0uJyIjIyAeJCcrMDM0MzEvMDM1PEZMSU9NUUxJQDs3NCoqJicmIyMgISMjISIjHh4eGxweGx8lJyglJyMlIyQjKCcvMj06P0BAOjEvMC0sLioqKSkkJSUlJy4qMDQzNjs8PDY5NDU3NTc2MzAvLi8sKScnJiQjICIkJCQmJCYmJyktMC8zMCwwLzY2MzAzLjAtKyckJicnJiYmJCYmJSYnIicnJyknKCsqJyUiISEjIB8bGhoZGBsXFhcXFxgbHh0eHR4bHBwfISMlIyMkIR8hIiIiIiEgIR8gHh4cGxwWFxYXFRMRDw4NDQ0PERMVFBMVFRUVFRQTEhMTExMUExMTFxcYGBgYFxQTDw4NDAsJCAcHBgYGBQUFBQUFBAQEAwMDAwICAgIBAQEBAQABAQEBAQEAAAAAAAAAAA==",
+      "samplesPerSecond": 100
+    }
+  },
+  {
+    "id": "fs-rope-or-cable-winch",
+    "name": "Rope pulley",
+    "category": "Textures",
+    "tags": [
+      "mechanical",
+      "rope",
+      "winch",
+      "recorded"
+    ],
+    "pack": "Freesound CC0",
+    "sourceFile": "freesound 394222 preview 12.160-15.600 s",
+    "sourceUrl": "https://freesound.org/people/mikewest/sounds/394222/",
+    "license": "CC0-1.0",
+    "creator": "mikewest",
+    "r2Key": "media/stock/audio-fx-v1/9859c0ebe945a2baa01e7fe6adc010b314d1dca6f6b3f21c03d1e6ec5ac4752c",
+    "sha256": "9859c0ebe945a2baa01e7fe6adc010b314d1dca6f6b3f21c03d1e6ec5ac4752c",
+    "file": "assets/audio-fx/fs-rope-or-cable-winch.ogg",
+    "contentType": "audio/ogg",
+    "duration": 3.4465,
+    "size": 48690,
+    "waveform": {
+      "peaks": "Cw4uKBkuMTRGN2ZgOTJHSjlEQDEjsauDeVF5WH+KQ4vgwLySoZmpfqJhW1pzRE0+SDVit0yihqrUwFeUiNjD2LaL84ra6djc/dSWbr5bQEEqWkBGVjslJjMpSDI8JD0mKi4uLTQqJiIfFBkkKB4eJB0uRkc6NS8qQzhINzI/LjY2RDVSQilAUjApLCp8Oi5FMkItN0RIvnuVSFtdd018enmKbHpaW15iS1ZDPj9XSEpAMDY1MS1HNDUiNUpHPSc2PVVDVEpJLkE/Nm0yTEkwSTluTFVVUVdYYlhVVm0wdJt3YEdeaD9QRTE/c1dKJzE9Q0Q5LElUOkp/e0toWGFxRWUqODdmTD1hUqY+MSYwKjYrNTZiXUtPUllSW1hUj21dWEhMOypHQ0pwRUdaT2FjeUY+KTlDNzcyMzgsMDQqJh4jcisbEyUiGR8aJSITEA8LCg4LBwQCAQE=",
+      "samplesPerSecond": 100
+    }
+  },
+  {
+    "id": "fs-tile-clicks",
+    "name": "Tiles falling",
+    "category": "Textures",
+    "tags": [
+      "clicks",
+      "texture",
+      "tiles",
+      "recorded"
+    ],
+    "pack": "Freesound CC0",
+    "sourceFile": "freesound 785585 preview 0.500-2.750 s",
+    "sourceUrl": "https://freesound.org/people/Detective_Lemons/sounds/785585/",
+    "license": "CC0-1.0",
+    "creator": "Detective_Lemons",
+    "r2Key": "media/stock/audio-fx-v1/8f03bf5ab6aa612fc792dc53bd196355843693971ab78d28e6d7cc72d2f214f7",
+    "sha256": "8f03bf5ab6aa612fc792dc53bd196355843693971ab78d28e6d7cc72d2f214f7",
+    "file": "assets/audio-fx/fs-tile-clicks.ogg",
+    "contentType": "audio/ogg",
+    "duration": 2.2565,
+    "size": 38517,
+    "waveform": {
+      "peaks": "AAAAAAEKMzsYGA0KCAoESgd9JRgrhyoeJQdibDBAcUgvHxUVDxyXRR3ctb7AklWZczgc23eGvkR0PERojv/3TveOhlE8jbhuwO/JiYKi3bReqYF+XIBDPXx5WfidxKHVbEw0YlpMnMFl5OT7pzyGvLHVSSguOUIjFBoZEw85GyYNGQ5hYC39nTp7mEdDOywnFRYfJi4WKhIYJC4fHQ8lExEKKEAmFSItMhohIyoeEhgOCwoGBQUCAgEBAQABAQEBAAEAAAAAAAABAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "samplesPerSecond": 100
+    }
+  },
+  {
+    "id": "fs-pop-soft",
+    "name": "Soft pop",
+    "category": "Pops & tones",
+    "tags": [
+      "pop",
+      "ui",
+      "recorded"
+    ],
+    "pack": "Freesound CC0",
+    "sourceFile": "freesound 537061 preview 0.000-0.060 s",
+    "sourceUrl": "https://freesound.org/people/ImAFoley/sounds/537061/",
+    "license": "CC0-1.0",
+    "creator": "ImAFoley",
+    "r2Key": "media/stock/audio-fx-v1/4dca3d5d4cc32094923802cb21bede7fe825ec94e727bbb54daa4f86906d2f8d",
+    "sha256": "4dca3d5d4cc32094923802cb21bede7fe825ec94e727bbb54daa4f86906d2f8d",
+    "file": "assets/audio-fx/fs-pop-soft.ogg",
+    "contentType": "audio/ogg",
+    "duration": 0.0665,
+    "size": 2581,
+    "waveform": {
+      "peaks": "AOWXCAIA",
+      "samplesPerSecond": 100
+    }
+  },
+  {
+    "id": "fs-rubber-stamp",
+    "name": "Rubber stamp",
+    "category": "Hits",
+    "tags": [
+      "stamp",
+      "impact",
+      "recorded"
+    ],
+    "pack": "Freesound CC0",
+    "sourceFile": "freesound 470710 preview",
+    "sourceUrl": "https://freesound.org/people/I.fekry/sounds/470710/",
+    "license": "CC0-1.0",
+    "creator": "I.fekry",
+    "r2Key": "media/stock/audio-fx-v1/fa248aff5f4449fff074f6efe6ee10d21829f8d3cb9e814a4fb40ff530466e09",
+    "sha256": "fa248aff5f4449fff074f6efe6ee10d21829f8d3cb9e814a4fb40ff530466e09",
+    "file": "assets/audio-fx/fs-rubber-stamp.ogg",
+    "contentType": "audio/ogg",
+    "duration": 0.4565,
+    "size": 5219,
+    "waveform": {
+      "peaks": "gK5oVE4qKxgSKCUfFxMYHA8QCwoIBgYHBAMDAwUFBAICAQEBAQEBAQEAAAAA",
+      "samplesPerSecond": 100
+    }
+  },
+  {
+    "id": "fs-underwater-deep",
+    "name": "Underwater bed",
+    "category": "Ambience",
+    "tags": [
+      "ambience",
+      "underwater",
+      "bed",
+      "loop",
+      "recorded"
+    ],
+    "pack": "Freesound CC0",
+    "sourceFile": "freesound 193822 preview 73.000-104.000 s",
+    "sourceUrl": "https://freesound.org/people/jhumbucker/sounds/193822/",
+    "license": "CC0-1.0",
+    "creator": "jhumbucker",
+    "r2Key": "media/stock/audio-fx-v1/adba3858330355cc62f08320e8f5055e53424c6cc9ebecb4a9f7abe0a5c7309b",
+    "sha256": "adba3858330355cc62f08320e8f5055e53424c6cc9ebecb4a9f7abe0a5c7309b",
+    "file": "assets/audio-fx/fs-underwater-deep.ogg",
+    "contentType": "audio/ogg",
+    "duration": 31.0065,
+    "size": 466340,
+    "waveform": {
+      "peaks": "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",
+      "samplesPerSecond": 100
+    }
+  },
+  {
+    "id": "fs-city-night",
+    "name": "City night bed",
+    "category": "Ambience",
+    "tags": [
+      "ambience",
+      "city",
+      "traffic",
+      "bed",
+      "loop",
+      "recorded"
+    ],
+    "pack": "Freesound CC0",
+    "sourceFile": "freesound 330427 preview 103.250-134.250 s",
+    "sourceUrl": "https://freesound.org/people/janbezouska/sounds/330427/",
+    "license": "CC0-1.0",
+    "creator": "janbezouska",
+    "r2Key": "media/stock/audio-fx-v1/f4449ee01f3e5c7e7bda84a72aa1d11dd471083bf1183c1e0b38824ba6937e55",
+    "sha256": "f4449ee01f3e5c7e7bda84a72aa1d11dd471083bf1183c1e0b38824ba6937e55",
+    "file": "assets/audio-fx/fs-city-night.ogg",
+    "contentType": "audio/ogg",
+    "duration": 31.0065,
+    "size": 484991,
+    "waveform": {
+      "peaks": "M0k/LDc1RDA1PDY7QzczOjAyOTs+LD9LRi1qNEtSJDA3QEI4Mzg7K0ApTzE2Qjs8PTtKOFI3QDU1Mz06NS9NODs0OFRMMDUuNjg5Pkg7XjpEVjxNQUc2NzBBRFpHPFlgWTpBQjoxQEk/Nio8LjBNWytLQEU/QFo+Ojw6OlhCOEdRMEQ8Q0BNXDZCNk43US07ODlOQEBDQC5LaDA8TVA2az01Miw0OTdFW0g9REs0Pk1iUTRecEA6SFpUW0ZYKUk8aFdIOUpdWVhlT2pcVVBGU2RHdU1KXltpXExEZkFaWmNlT09reUpSVFlMTl9OUkFfX15NTmFBY15VXIZIUl5fUFdOVFNdazVWbU1IW1xZT0xQXWZhVWBhfndaQmtvZ2puVTlyUkg+XEdXVWl8eYB5cF1tf2aMfcmfaHyMXn92U1I/RE9HQkxHQlNSQVNYTkxKWIprcF98dnlLbEtTUU9TO05QSDc3QzlNR00rSkFaRU1MTlljVEZbYlRHQ0hHX1FAVDNGc1ZWUnB3SXVcUFtaY1NSd0NfWWxKS1FkVElXSzlaXzxLVlA2VFZCRElJU0o+TTpIZlE9WEI5Vjs7UT1EPlg8PFNRPVBTYVdBUEA8ODJGQkQ/OE1CUFNJPi01N0VTP0dPO0JNOU5HPUQ/QUFDRkU2PkxNRzM/Pz07WV1aYj9AUTpoR1BPUlBPRUQ6PzNXRjxGWEZkQktYOzs2VzhAWDpJP0VRN0c/RydISkk3QTVKYVwvQTxGRDlQS0EuRS4qRFExQ1YvSEdOMik/OU9USzowPjoqRzFBUEI/QD87NkoyNSc9SzpNYj1CYlRCQVBVPkNAR0RONz5PTVd5REJIZzFbS0JQOUwvRU08PllDRDpPKUJNQUhMNzhDQ05hNWQ2RVI9Qy85OURAQ2tENUVKRixIUyZDP09JRz0/TVQ9PjNKQD48UjdlP0ZdQlU8OkAyLjk1QEE+PTg5QjdDMTY+MzInP1I4YUtJSjVBOFE7QkQ9TEtXMEU4WTs1UjhFSlNFPEYzM1RMNkhNQ3dnRUk/RkZFNFE2REw0K0xCMEJBSj0uPFAzRj88Uk9CQ0RGSD9FRThaQEg4OD5BVTIzMjopRjY5PlVeNkMxMjRMTzk/Sy1JUjgzY18+OUErXjBGLjxWKU1OXDFONyV0VTc8TzREPzBIPzNFRTdGKUM1OzBBRT5DQVo5M1NOMj5fKz4wSkNFRUwrMVFfRz9ATzk+NC48WUtSR1Y3WTk/Tjg5X0w0Nkw+PzM6NVZAKy03PWtSNTk9Q0tHOiw4KTI5LEBYUzpGSjlUQktBNkpIQHxNTlpFMk9BVy0pLFc+UjJCOzYpQD9uNEs8Sl5UUktRQFVMSEVKUFAmMjMzSkFXLkhBU0JMMURXNS9sbHFPQktTP0U5SE1GQUBeRT4+OjxMUUQwQUVLS0tZU0lUV1lKOkQ/RFxgaFBUU0VkQjpEQj5XSmFTMDNHVzY6Q1JRTEBcWVldaURoPFVMQkVnRTNHNV5NOjkvTl03RzliVS81VDlLODtBPmddTVBTR1xRRWtQRVM3aV9KNlpVR1RXR0xfRF1aWTREUU1uRjRnWFtYQ1pdOldcTUFTN0VEWE1RUGs/WFRRQDgvT0lJNkpMTlZMPkpORDVRUUQ3PDBBSFs+OlZQW0hBJzY4LU5KXzlJTDw+KTE2Q0Y8Sj89TTlbYkpLWEpJSURiWDFGPzVUNi9QSEZQUzo4TEo4O2pTQWtWXU86SE5RWkFFQlwwVUpeQUxZUUdEXz5SSlhTPVNzhEpbRFtAREw3TlE/T2UzYW5fWzpLVFw8SFtFTFFFQz9AcTVTW1EySE9VRlFNRzxVM15MW1RXPlRaTj9EQ1NQQmxWRktOZTc9bENIWUVpS1hHYkY7Pjo0XFpCSERHXT1DRlhDQkZmV21WVG07OztAT3ZSU1lEV0JkR15WOkg+V29hUVI/RlJTVk5bY2ZCZks/QD1LSz1HSzw6TEZMPThAbFBPUFBbSD9oPFE+O0cwUj5QOVY/QDhNSFVrVG9maTpVPUhhSGBGQVNdTFJMTVxMTGI3O2BFVTtdRE4/blxKO1NTX0w6MztPWztSOkFnT0RSQzxQQUo+TTNOOk9aaW9lT2ZFVTdhWlBRQkxHOSw4TWdRb0RbWTIvUVhRSzc+Qj9VWV5EV0tKQVgtT4F+WFBbXGFWQUM1UFdNaVRDTVhUZkBFRUh9SVhLaTcwWTdeSUNRP1JUQ0NHV1hCUk9FTEBJOj9FPDZLWUgtUjFAM1BJTkVOQjtUOk9BQ0diWFZTQUdTVFZdUVA0Tjc+TlNWQEVlQltCVThYO1E1OTc8RkVHUTw0N2A7RjFOTjhWSkJBPzQ/T0hCOTY8Oz9HTEZOW1A6Sj9SNzszPTI/UkBVT0NXQVQ+UVhHQ1JAWVZTPlVdRk1BbjpkYD5OLTZOUnBRVDU6NUFZPDw/RV9fUWFOUTI1NGBaYFNGQTk0TzxUO0pFJlBRWklHNGVEP0BoNkdHRFhLVWolXlM5TkdELzUyUEZDOEZGYFdqRUo/QlM2PTdQj2RLSEBgSC1jQzlKS2Y+M1NGRVM5UTNfO2MuUEg6RTVHQF47NGtLWk1Lb2M6QkFibEVLSGxeOURVQ1tHRC4xZVRPSEhCNmVEXUAvQjZcTlhPXzdZPFZDRjg9T1RDR05XQT83SlRFYkNdOENWUk5HUCtKWVZNQTpGRExZQk46OERMQVR8X0FkSDxOPE9aTE1ZO1RgQUEwbVBJY09hQDg4XlBaQ1pQS3BHW1VHOnRHUnI1VFJfSUtWRz9dYmxVVlVkNVNZYDxQVkpDb0dfZjJXPURafThTT1VfPFFSQ1pcPTwzT0xDQVxdVjFPUGk2ajplaFBETEJCND4zRDE7XFhCZkM7RzdTQVVYOpZfXExESDxATGltUDwzMD43P1s+PV1GXlFLODRIPEg9OztaUTU8Qzs8MDpBTEtCTWJlNDhXR0xcOy9PRDZKNjg2QUxFMlFfbEJHXTdRQjs/TUdEOkNdU11VPUdURlQ/PjsrSzhbVVNISV49L0U7Mj5RUkB6PkM4RXs3UEM9P1hGMTU/S1QvVE8+UTVGMzlKOy4uRTxIUzo9Qk0wQixZQldQTFA9RFVPNT4tPEM1WVJBVEo4Vy9PWUE7OT5ROEM4WlM/QTIsQjwtPj9IQ0BXNkwvNjpXRVVEPDQ+RktIQD84PlBLOVNNMEc9RT9GSEw0OzZBOlliV0JPLT4/Pj9sVk1gVFYwPjg5LkszQz4kTVBMTUo3SzlMXDlXSjs3Pkc1RT9GM0hUNEZLSU89U0VZW1BGPElKSFJDP29NPDo5S0JWVjlWTEFXNHMzQD4+OE9ZXX1UNUc1WVRHNjlENk5XSEZJTFZPSFJGZ2hxUVdUV15QSkFGUEBeUjpQTDRBST9ZRF80PTc+Q04/Nk1ORj5cTlJTZl47Pld1S1+QRDk1QU5RWi9GOkZRU0RKTVs2PlkuMjg/NmZJSUMwMlJPQ0o9O0RHTGlGTEJPVFBRTUZKN0RFOD05QTszPjpDMExRbWBeU1A8QC5DX0o3S1M+RFJLQzE3TzdMPDRWVEFCS0w9OU1QSFVKQzU+SkFARThTSjkvOT5MVzNOaDg7OVRBVjtDRSY1WUNCR0w4RV49QlFGS09RRTtgTE42NUlPR0M+LjRdMz8xU0E/UUdEMDpMTyxDNjA4O0dIQEFYPT1ATldTLkk+ZD46VVE+WjQ1RU09STxBSj09SVFWNzhAUlpLLUQ6RURCOlJAWVZMODI6Q1BBTUs3MDIwRi4uVEpHaVdbSkFISzo4QlRAM1dAUE10S0BiWUtPSVhLQT9Bbkg3T0BBPFRLR0NobzxMUU12L1poYEVNLEI4RjwjNT47Qj46PURCLlRAT08tRydKPEFMQkY3SFQmOjw6NUVENEsqRT4wJUc3ODwyMTM4MkAsYDE7NzUzW008QUY/NkA9ODY8KD5BN1AiLjQ0QS00L1w2OUYzLUxRMzc1OkU1SikxQS07QkM0LkdOQTE1HjEyMDkwPFYnQC1CPyQwNDkyMi0oOS0uJyUfGyQoKhsdMhwkLywkFSQfGB4aFhsgFR0XFRYVJBIRFA0RFRgKDA8SEhIUDQ0SDAsLDwsICQcHBwUGBgkEAwQDAgEBAQ==",
+      "samplesPerSecond": 100
+    }
+  },
+  {
+    "id": "fs-server-room",
+    "name": "Server room bed",
+    "category": "Ambience",
+    "tags": [
+      "ambience",
+      "server",
+      "hum",
+      "bed",
+      "loop",
+      "tech",
+      "recorded"
+    ],
+    "pack": "Freesound CC0",
+    "sourceFile": "freesound 465613 preview 8.000-39.000 s",
+    "sourceUrl": "https://freesound.org/people/Nox_Sound/sounds/465613/",
+    "license": "CC0-1.0",
+    "creator": "Nox_Sound",
+    "r2Key": "media/stock/audio-fx-v1/a370610490a5712a5595f87479ba82fa8b6461c2e22997ea69ceb3323a72597b",
+    "sha256": "a370610490a5712a5595f87479ba82fa8b6461c2e22997ea69ceb3323a72597b",
+    "file": "assets/audio-fx/fs-server-room.ogg",
+    "contentType": "audio/ogg",
+    "duration": 31.0065,
+    "size": 350854,
+    "waveform": {
+      "peaks": "SGKJjIhff3BGWXJJSW1qRHhSXlZ6WjBQRyyDYGVWXUk5YVFyU19DXWd2iltsZmpVWklHPjp4YnJPNEpYX2VVTltGsHqUbz1hdq6gWJ9mW0RheHSac3k6YXl2UVRdgZV3YFpic3ymsn9YiJ5daVBwnlZpf1V7mMC3cURyZm1mY3VRVHtCb39fd4xsbGFBhZ5eZltoknNwjlt9iFFJRmdUeHM1Mk9ZVJGYgllmckNDPV5cWHRgeZlLVW1WcF1YlmxDRFZns2JeWD5ufzZkmpZ2YFZDgGRVTXBeZqh3d25WbkZSjXhPg3trYZpZeUFgblqbYkWJS0qHajuSakJJPlt4eodcTF9YlWZCcGZreYZphWpwlmG+0ngxe2NjZD5PTmtgUX5rUXJlPVlEZURERVRWVoc5YJVnaHNVTCVgbXY9dndsWYuTcnmnX1psaF9kQnl7inpPOk1JbzRcr5Vkf4lEjmNgRT0+b3GUmVZ2qlqnqEpQVWd6T4FfTlKci21rYYOQbjxfWF1Yj4xdZFVAmnxDUIZnV11WaWBZeEWRem+MSnKJaYRVNGSlclulXFpmWmNgU4draI0zPmxQNWJRiU9Sv2lYfYReQGuHez2olliea2FgPkmCaWBQR1prYFxgfTxjdKWQlIddeT5FPWxaO0COak5/XFEyd1qCXYViMm1iaVx1cXFEZ2YuQJR8bHdQcGk0iFJUVUJ3lW1QjFtVQWa0mYZYelhqbYVzR1dwkFw1gYBlRJdrUV5xjVM/d1+MmY92Z1FJQUFgXGJ8a31UV1NAkTFBW0t+T3JbdW1GUmZ4bYFdYEtDU12Hsz9sfjxsg2BsaTaMZEygiGJKTERYX1lHb1BjKICNUXRnY52cjXxSToppSFRIXUiEZHCnbn5BYWqZkFNWd4ywXFRwSGWMY151a5A/SF93PmBqlG5KgZ5pV12HdDlvcnJ2l46JVFKwYEGCkkVNm5t/JH5clGIrQmRjemWRdldrQHJnhW5UWUpXWz5ROoWMU2FhR2F4iY1fZ0pnSKeKTEhUanlogX1yazhZommHo2pfU2dXjkZpoFWDk1tOUlx0YlB3oWtNWbpVe5BCa41EeG52fJJdpJhXmHB4clJxmjOCbEZ5fV6DcmhUhmFXYmlgaWJ3boR7PX4/WnJfhXJ/UFBUZlGGe3Z1YmxYbpKSlpRUMEZgfUVFP2eXW2uCaV9ic6xATj98U3lQmTZiZmc9XWFLX1pIbzpBeDlzVTZGfGFje1hDXG9ohpFecFVeXlRvdk5RaXlbWGtvTT04Q1hhWW1bYmj6SGttbnZwa2pscmVKal1bg44vV1M+Wp5pkIlfaWqQW02JTV5UeXJacI54YmlChnFva2F5YJ2XMnp1lXJLaT88YmV7kH5HQaiid2dyiJRfW46Mk2aocVmxaoyJZGlCVXlvgH+sMmZfQ3qQWUxsgodKSW5rcl9QWaVacT1ydl+ITVA7P4iHUz5XN4FfYLaHQmt6PUFgX5VTcZObZzpuiTt4iG51cH94VF0+alJQVk1oYKdxVmFMXV2Ma7CcR2p8dXZfd3Z1YpdaTSRKq5tRZnSJfnRbalR1aXdIbm+VRWc9UnlUZbBabH1lZ3V1Qj9qn2pUWE1Wg6FXWjmllFyTj5JnRYFViFWNl3uwTWxDWIuIi45onmRRPjyAcIBKkENCYHteRmGmfVhhOlE9RVZuU3OUN0RHUbZyZGkuXYZshnlCfn+yioprUGhhU0dOjlI2X2ChaJSBVFtRbEN3TWxtTTdXWX1ZZEZlPkl3h0ttYmJAenJdfzpxcm5nTVWHSlCKeWtFQjczSFRXNDFmXExhTpt1XoaQZXZKUEhfi4fAnl1Zdlyagl1hb3ByU3R9XYGEiV9UU1VfUFGgV449WXlKhFhprnxRU2pkV3Z3TFl+ZkRjclNTbE9XfJl1T2pUVVdkaYBmSF9veGlFcf1FhoCKjUlKT15VUWNwbWdQZldlRFJORIV7OWtaTWtJTXY9c4FRj4E0haA7S05mfnJwV2x0zW+XolpbVGBrZGBZe21sR2eJU1RITVJHYHRvUUpoU4lSO0tTiIV0Z1k7UUqJVGh6WqumdTtdTEy0fHOId0ZxXo2ebJFRcVKBWWZEkYpYf4KBqFOeQzxUQ3ljX2hUc6fJYGmMfT5KRV9cX0dHj2VOk55hwIY8WWN6cl9ga0xhUThxnZGnXTyFUl26cFZngmqghnJ7T2WFh40ydXJeiXdydldLf3xjg4lPU0lldFNVVLSuqmk8RGcwXEPXRVsweoNxfkY2aWVCeXZsbWpXRnM2XldWcVlQUFZok01PXVtsQEJPampyUj9dPltagm1EY0VYXHKTe31VV3RmQGdXcEuCYzlvTmNqfXtogZOAclN6TU1UTl4/b1xXYV1TTGtVaENVZmxTWWp1ZoB5qk97YG84OHeSYm5qfJWBWWeDXXRtZm5XYYJffm9Ld4uFdFxJSHZ7fFywhF5xYINoOUitanN+PkxojNCoXlNBPXtWZJk2SmlLk524sWVjaox8dW9bYXlPbUqPUGN1dIKqcLBeyMOvdXxbQZN1cKZ0d1hsTERefnmEgWBVaF5clTJhc1aklW50dk6RToBYmo2uZnVvhXdaWYZWS0pcn2FZa2Nphz6Dh3E/aFBMq3ZqTkFFWWiHfJxcg4RNNVSBgHhWYKpHUHJablpQaUBbP0I9Z2OajFdrfk5UYWePeWhiMUVWUFheY2uQPUhEXlZ5XJyYVo9Fh2lYI4hmiWtkZCp4TnN1nmFXdENOU2RWf4pxUk6DUVRddmeEX5Nch45tkXxWd3w7SFp5aV13bTtNZF5rhH9RLmmnR3eQQWpthWxjenyNgGxSZIdrW0BBeG52TlhHeEuVeV94VnKKdmdwc6u4Z25pemlVjGs4fnRXh4yReV93oodHd4tNq2tYfk16a3yXkpiKc0mCpEdvX0FYeXRte4tdbMCaREaWVoJzaGNYdXmEhFlvg3FYcjqlZEibeFdSV05xbFBKRERZbp1ccVdNToFIbEQijYSqenQwaWyGe045Y2FlXHp7Q115XkhaOkNFdVtfQGp/fHVlXYRMgIhaZlVXV2OYXjlUaF1bZkdxR0aBYjtqf5JmfXBHWXSVhpVKYIRcaV44jWqXTUc/dXRxiEmlnnxogUl2cWSFmFtNWXCXSWNdbGRka3ZqZo1lbbd5iVthhk+xsHdXNl5zWTQ9QlFSRYF7imx/X4R2XmZWVXeeZWRYVjhfYnNkcmZoj4xcYXFPbSZbT1N1TmFsYUNCV5FxXmRbeXOJWmpLTm6cVZWhQEREcWRSVGGCTmxfeWZUTzh8dj9ZgWiXlH9/S36GQUFGZUidUnd1UJ1FhElRTaGhdmyNa4xrfVlsfD9dbHOPT2lPWHZlU2ehfH86cplOf3dRdnU+XYh/V3A9cXJudVtDYWlkXzetUD9xUEGsWXtQQIWBRE1tY1dNVUBfOHFSfWRDi3RrSGhihXZ8b4ZXelmBR496VFVwiZGGWU5ZiEeKjXt+SlyAMmRXQldXj4B0g3SQcD9FUkhdSVhwZF+JikVnnF2GcU46UH5RapFaPHCJj19WZUtMRGaqT3tOQX5gm1aTpbSThkyHY2iNfltdald6Qq15W6xxQ3VqdZF/kW9BSXJhYlUwdVtchqhsskuGjZKlXzNVXF6Ei3CjRkdleWxjcl5xVo2DfF89sHulp2JJgnhcfZNNPTyNYkxlXWaFZE51V3iIkI5zUoBzbnl2ZWxXW05brpeBg05jk3h5QlR5WVZWYThiZDliX3M3OVyHZWZ0NlZ1amlPZX1NUmNfcaxecXJMSYNLQjVjcF9SXzZpUVlpaml7X0ljYrS7rJhlam9ag7NWYnozjG5Ua1pphXRKnoqMVFh6VGp9eV95Vn+JZbh0VWhRhWJVnH1CgJNhTZdee11/iGJlUEhSf1iJYUhcYFBWUGeCW4aYZH+EUWw4noNagZI8V3SwhFNaY6Fpc2N8YkeCgmt2Znw+QHlNal5FijxKY155Mmk/ZFNEW4ZUNj9zeXMtVlA0TENmVDctQWFxXStVMShVQCYrREw0Oj49RlU7TSNMPSNNLEwvHiofLB8nRCsUIyUhKhcmLh0eGhwgFx4RKCATFhUVFhcUCg8MEQ4HBgYFBAYFBQIBAQ==",
+      "samplesPerSecond": 100
+    }
+  },
+  {
+    "id": "fs-ocean-surface",
+    "name": "Hull water bed",
+    "category": "Ambience",
+    "tags": [
+      "ambience",
+      "ocean",
+      "water",
+      "boat",
+      "bed",
+      "loop",
+      "recorded"
+    ],
+    "pack": "Freesound CC0",
+    "sourceFile": "freesound 360631 preview 1.500-24.500 s",
+    "sourceUrl": "https://freesound.org/people/Pfannkuchn/sounds/360631/",
+    "license": "CC0-1.0",
+    "creator": "Pfannkuchn",
+    "r2Key": "media/stock/audio-fx-v1/47e5b020f0cceac9e2e6dff3e08cd33f19d28fa805a15aad424ac9d725f92848",
+    "sha256": "47e5b020f0cceac9e2e6dff3e08cd33f19d28fa805a15aad424ac9d725f92848",
+    "file": "assets/audio-fx/fs-ocean-surface.ogg",
+    "contentType": "audio/ogg",
+    "duration": 23.0065,
+    "size": 333193,
+    "waveform": {
+      "peaks": "S1lIjVxAUlhpaUdRSz1PPmFFQFU/PDVKOEVKSjhCNkZBNjM0Pjo2NTE8QS02QUgyKTtALUdTRUNNPUNHSkpRVEMyNkBTMzM2Oko6OC04MDA4MyY8NyszPzsxPTAuLDI1MjQ/MDpAJy02KDI0MkAsMi03KiMqLTEsLT9ISDY+QjdBPDJFODc1OTA6LzYjIiwxKUEoMT8vJi0xPzxWOTo4NVFWRz47S0Y6LT82RTk2PEM9PDYzO0ZOQWFRTj09PkZBRkVLS1RQQUlOPDpTUFpKUlRBUmJSSk9FRDhEOjpISzc2QTA1SDw5OElBTkBFWVVSQj89Uzk6Pz88PTY7RUE2NUhJQU4+OTc7OklFPDpFQkFKMzo7Vkc5QUM/QVA6Sjk9SjdeU3VMY0xEcDdgSTc5NzI/OTQ0OEA/NDVNVU4+N0I+RktFQlJEQGWCaUNVS1BORUQ2VDNMNllMO1Y6UUdMTU1aPUNCOltXUVQ7NUJLNUY9R0AuNjVVVU9gWj9PTTlESWBWNDE6OUhLWjxLOXw4Pl1UN0VLW0hgSl9xU1VCOzlOT1ZEMzpDPTw3Ok1SRllSSUU5PUU6MTMrOCo1NDo1T0Y2NSw4STRLT1FRXkFNOEdTSk9DOUVPPTwqK0g6PC0yKjotMjA8Jzc0JDQ1OS0uRERFV0w+PTA8Qz87fVBENjdJU0M3RUA4QzwwRjIxPzMzLzRBPzE3QkY7NDhWMzw9LzMnNi4qQEUvOz1IN0JBUjczTDE0REQ3RUFMWV1dV0xaUVVLSWxvRk9YPGU+T0BIUz1NQ0c/TNenWz1VTFhdYFZaQ0c7LjszNDJET3Q/MzlNTkY8T1dTP0ZCYU9aW0BDXz9VN0BBSTRVRU9ARVJSPTQ1WVA0MEUvMS87Ni80LDE9PEEwRzRIRkMzQzwxNjsyNS48SEBDQFZDNj40RDU2PUEwRzY8Ni0qQU1DRjM4SDgoLkJOMTQ0KCkrLCwnLTUvOzY7PC1DOD8sOUc3PTExOzY/UTU1OC81QTM0V0NOXFlSQUJMO0FHYD9XUERJZEZXT1duaXVgYVhPRVdWUEtqU0hnbE5GYU9LYmZLS1hOUUlpRV5EVVFLVU5jVFFZfUNedl1RS0lUVGh8TV9nXVpWUj9QU288UFNpYkNSbFBzY1VOToZlYWA+ekdMSWpaaY5taVNhXGtqSmJTXlNLY09nW1BOS0xYREx8U11ZW2RKcFpdYl1LcVBfTUhAVV9JQVJSZk5pPldhTVlgVkVOUUJJWVFHSkpFQktFTlE3N1xWV2hbSU4/TDhFRUYzTy1LPEFPSkBRNis3KzhHPVM9QTw9Lzo6LDcsLjw0PkI3LzZHNkQ6PTArMTU6LktCOUYuPzc2PD84Sz88MDwzLzIwRDtFQD9JPDhCTEVBQj5DNjkvPz9tUUEyUk5RSzxNPD1IP0BaXkI+QENNRkFGOT0vO0Y8NTw7NFcsNkNAOjY5Oy43Ljw3QUE6NzMvQzM2MjhMSD0oLzsqLD89LDo2Mjk8MD1IMjlRQDMzQzpBOy05Pz9CL045PEtMQkY+RVVOUF9EVFlWXk0/P0c7NkJfTEN0ZTJPXkBcT0xhO0U6SkRVpnFWaWpYWFRLcU52XW5uPlZMa1BSdWpmRmlxcWpebXiVbl9QYUNaeXRNTF1ZYWRlUENgVV9tUVZQVDtESTg7PDQ9PUM1PUwvPT8xNlZcU0Q+Lk8wTlE/OztDP05hRlRRUltgR1ZgTFVcbVdFTUNZTlNLV1hXS3FoPktCL0c9XGhdWzVEQzxDPDxPYFdDRUg8RkQ3Nzs4MjE7QDcuNDBAUkguQE1QJyY4MjgxRzw1KikzMUkvJ0M8YUZHPys8UTwzMSo+MCsxPTEyKTEiODw4OkIySDk7N0E6KCwhLy4sMEJGUzU5PDk7NUA9KTwtO0MqMycoMDkrL0MyOEItPDY6NTc5NC0zRTtCODE7Nig5KEGfjTI9Uz49OT1CQ01DRlA8UDtGRz9FPUZHVlJfikdgUkFDS1BNR1t0PUlVPkNQRUs/SERaS0VbUEBBYE1KQzo2QEYyREhPRTpFTEM9MT49PDpGPDdBNDhQRTQ+PEE5Zl9bSm9fWlhBO0Q6TU9BXlJMQjtATnNPYGVTQE0wUEA8RT9ITEZFVVJLUFVaUFBFUFpBSUU+TFBCVk1ARklUcUlbR2huc1RhWVY5Uz5SSk5eXl1HXzqAal9mZVRRSktAPTxQP0ZPSGdRVk1PU1JdXWJWQl1pX2haUWxUWlNlRU5LQltHXmZJZmdXWlhIOUNgPVJBOj8vO09BR1w+MDlBOk87Rj5eUFhQUWhfc09Da1+CVzlHSz5BRS5NQEJNW1VVbEc6cGCAT0ZpO0lLPlFZPlVHTFdnaUlGNlhGQFNEPkFWUkJAd3dLMz8wRm5MQEg8STBNN0hcOD5HRDwtPEtAYDo2SVZegkk/PjlJQkU8NzpDQDBFQzw7OC80N0ZPSkxNLDE8NkNKOEdBTjRBP0IrVztfTDo1ODk8SDhKSVlOXlNzVGJMcnI4RVNEaT5NVlRDbEVbOGA8WEI+RlheQENRSVZMPJA8RDw8PjlOWlJfYFVWXUo8Pk9OR0RgSG8vRkY4UVU8ZUUuWjktOztKQTk9U0cxQzM6LF86PDs/NDQwMCcxMj5AQDFDMzA8MiovKzMxMzdTNTlAPE5FP0Q6RERCREdSODQ4U1Y3TkZISUEpLCMrREc4NDhQP0spQTVDOiwuLi9DPCtLS0BVMTSQWTk3Q4VEOkBOWywzP0tXPD09MDQxMCoyPjU0NTlBQjQ0Qzo6QDZlNjA9MTAuPjk+Pzg2NC80Kz4xMjJSTDAsNigxIy4sPDUpMTEoMSYwKSkuLy46LzNJP0dIPD84OTdHVUpCTj07RE83P2ZFRVFGUEFCLzUuPEdNVFM3KVQ7MzU1KytULiYvLDA4NzQyO1tGTzQ5QkE8JjYjKzEuOCszLioeLy0rPj0oMjIsJDEoOiQ1IhwlHi0dHxcbGRkbHR0cFhgbFhcYFBsTFhUODw4RFBIUERISEwsRDgoOCggJCQgJCAkKBwYGBgUEBQQHBQQFBAMEAgMBAQA=",
+      "samplesPerSecond": 100
+    }
+  },
+  {
+    "id": "fs-electrical-hum",
+    "name": "Electrical hum bed",
+    "category": "Ambience",
+    "tags": [
+      "ambience",
+      "electric",
+      "hum",
+      "bed",
+      "loop",
+      "recorded"
+    ],
+    "pack": "Freesound CC0",
+    "sourceFile": "freesound 453445 preview 1.500-27.500 s",
+    "sourceUrl": "https://freesound.org/people/kyles/sounds/453445/",
+    "license": "CC0-1.0",
+    "creator": "kyles",
+    "r2Key": "media/stock/audio-fx-v1/a8743a1d6900a823514e4a388e9076ab0428c6288ab28fb1c34eab250833c0c2",
+    "sha256": "a8743a1d6900a823514e4a388e9076ab0428c6288ab28fb1c34eab250833c0c2",
+    "file": "assets/audio-fx/fs-electrical-hum.ogg",
+    "contentType": "audio/ogg",
+    "duration": 26.0065,
+    "size": 395163,
+    "waveform": {
+      "peaks": "Q1+OiGVkq0xif4t4hHVNcIhhW5N8UG18TXGTYmxxZF2GkVtUi0hgcGmDYIdna4NIgZBlaGmHaItranhtWp12ZF6UdUllf1eKZWlneWtlbFJffH91c3ZbZXdXXal0gXiBXFV1Ulh9clVmXE+Cf3WUdVNRfF9cZ2hdf5lOXXRpXpFmZHFtTWuCTnNoV3h6bGmHbmyAfnJ5h2x3b2Jfb1VQYl5SYIpScXRDZWpsVWl4bXyEaF+HX2mHY310clZyc2Nhgn5xcXpReYJcb5FihH5tV5ZsXGtvWGV7ZWmLd3pkb2KhYlNjbHtbYGVNc3B/X1JTf2pZTmhDW3pgSGpdVIFrTm57UlF6YVV+c09bZ1Bhi1padVpmf69VbYBnanBgW2l3ZIKFXmycelNeXnWhRFxmdFVJgltYf3BHfnlqSHyVfo1cWoOXZ4CGWolqZWZmZkuin06AdUZkhVVejVNIb2ZjgoRhcYRkZ39rWn1qT5d7Xmx0ZGRzaUlljFVlYUtke5dccmtgaHdFYrBMb4hpY1WZWXeEYmt6XWx6W2FspHxabnhjeqF5aH1GX5NmX32KV3J0Z4FwbICda3efZ3ORVEyBmIVRiHxihYdce4N4a2VtXGiNRmiAbFh4kmRhi3CPj2FtYGlWa35mlmiDandfWXGIdFVhbmtshW9Ph2FcmnVZXIRweJ1fiX9mRoFtfWJ2UGFrcVxwhHlZhXpYUrNOap9iiX9haYWWc2emVGSgXnRYbWZdf2lXcIdkl6duYIxzdIqPZmqWZWV8d2BldWdtanN0gp9kbINWaKVKV3RjVWhxVmyza1dmXV5tV09Xj2xqfoB5eYBhaWliYX6VYlp9aqp5fKKiVGSYg1xqfZR1aXRSb7FyanhiZ4ODd4iXWUmEdFtpimxMcYBhgHxjXZtMkplojnCJW2eDZlV6WGZocHxrhJFpepBuppZTjnxtg59kUH+AX25wZV2RmGqUYXNymUtbhHdni4FveYZieGhgX35rSW92Z2t2X190X2N0blxhe2pMcn9ZcXd2kWN3W2V8cXuHYml8ZFpwZXdhi3p6e4d7pHVVd2xod3ZXTHB7WZd7WHaDW1lvc2yioWRbdWFfi1dpi3BfrlpQgohmb2JDZXhkYXCPVnlkXGRtkYl/dnVbjFOJlIFOgHlId1dKclt0aHlWY3RcYIxgXXKFbnicdmKTam99jV59gGZodF9Un2NYc2JtcYRceXOgTXiKWJKQS22TZGWQVlRoXamEi2h0i19wjFNIiXJJkpRlcodVhoJsV39wall1WJ9tbIhzU0aId1mPhGJmdFtzeXJNYVxreWl0YnlpZW1jWWpqS2WgclamoH9+lmpuaHJzc4VRdrNSlqBWlJ5geG6AX31/dllwlGd0VGR6ZGttfF9PaodjanRRZJtecoOVeHuISHOAZWd4hFppiV+LfmJnfoFJfHFfYGJzf3NrVoeFal1xX0tzb2p2a1SHd4hdfm9PbId2m4BafYGHWmB3gmh1T15vb318i151aWtxhmNqb3JggYxhimxkYnqFX3OkWl5/a2tve2mTbVFecWl5iXJWb3BkhWZoW2N5X3JmVIBxd2KAh1lvaWl/dnlxjWRhZnFha5J1dH14Xm91R25XelSGb2N8ZnWUhnBgZFBwcmNZbKlfXqBxXYaLVYt6V3uDb3KGknd6akdvnohen4ledZRxdFlcZICZeYZTYoxkaIGAamd7dIKGZVpjb2pwsYNZhHpnfXJta3xHg6ZvY1ljfl2HX3yYelN9aX16a1deb1hcZnpndGCSb2ZlfnlrgZh0UXGPRGqIX4GKYWGCYWiCn3NweHJ8jYONi2twbG5OfIBfeYVjV6iOYn6QfXN1gHyCiUmBcWJhhE9jeWpogF9Hd5BvcGliZ49wa518UHyQT25zaVZ6Y3ildl56cUuPiFtZlGBdWm1NXW1mhJNmdHdtbJJXbHRub3SSTmpxalh6YmNYgm9siY9iYIxbfX1yhnJUcXprSYx9YHqXbl9oZGd3iUx7gU1zaWtlhnRWjHNbgH9kcIN1TX+EZnWNSXOLb1p2XF+Fg3VybGZZcEtOaVZkmHpeYoRpXmJZdpVaYXmGe4CVWmFjXHB7W1F8eFBMf2F/dWVxWX1wT5ZQe3JoXJNseWRkWl90b058ZWeCf2OHZnpsd4BWZn5aeXVTdKJ5UnGGS4J9iF6ncVmSaWdZc3pYgm5PZp9UfYptYHhje49+YIJ9hW19YU54kFViiF5ndmhvmpJDbHBYkIZcjGaAZKh7V3Jkb3xqhWdicFyQbYZwdm5CX2Nta3JrWmR3VI52d3GhalWIYHJYhnGAfkBdYXtLcE9UeW5fa45sW1h5aXR4ZIB1W25xomlmcYSLlWV7dHpMgIRZYGOeTKVuX3Nla29Za3BohWBgdFtYe194eoB/aGZpVomDdXObVnKXZF+Ec22BgXZhg1pyaWl+enVVbHZ0YnFvXVRvYlmNcGqXd3OFr2hrb2lrgX1jfZFcfJZue4R3Y4NoX2RpZFt2jGdffWB7omlncWtSZW1Qf2twT4K2X2RtSol2dWOcfVFoaWxMaF9seWxKard/fn1oaHJzb1p8YYdzcXVXVVxmhlR3bmpwYFFiX6tnf3Rpa6OMVINVYWx4QWpgmlFmcGl3bGKCZWtRdXZSYINaX2tWWZFtU3thWmqRR2x+U310akd3n014imiPbG9JY35YbnFwaoFTcGdmcmOWWWpiik9ucGl9bFV5gV5VcoFTZHReWIJsfmqKgmd1UmOyYm9eYnxsd1FqakFvf2ZnXXJaYltTfHJlYmd/WXKfYVxqdoSGeWhef3FekmFyYm1fc3OOYX2EVF18d3eGSW9YoHZxfEqAg2ekcWt6hnRDbWpoZ3mvhG6HXGlpaVBNmmZWgz9UgXtsYHJfXWlZbHZUZ3+wdk+CTWyfXWJ3V1uThIaDfGFxU3FgipddZW1peGyCW3NyWZBeYFiGd2KKWmVfeEh7cT9RaWJgZHBKhXBlb3VJdIOCbF+BeW50dHadYEadSWpncFR7gVh4gVJpbWx2aaBbUYV6XKdyZWdua19rXXCXX2KMcWB2e3JZdmRWeZdvcnxoS35zWolwfolxamFecaxzRV9aX2h1amx3e15YiGhZj3FXYIRdW4l/bWd0boaNR1+Da0xjc2Rrl1+BdGh5d1BPlHpiYW9ZRoV4R2ZwRnqda3aEcFJ2dU5ljGZjd2BLcXRof3dWTXlRfHpnUoyPRFd6oE1UgF9TakpTYkxTcXlkf1+DeImiSlF1TVddblxnd1dyZENYgYV1m19hcnFoaGmDb3SIO3x/ZFl4dmSIfnBgXUaDf1t8eWBrZmxXYIJcVl6HPkpVU1RuWVddZDtLVVJlWFlRRkFXR2o3RVI/RldNRThcaTpMPTI9QTs0MiAzNyknKSwnMTE5IS4hKycjHx0tIyckHSAfHxcmFRoUFBkOEREQDQ8RCQsKBwgHBwQDAgE=",
+      "samplesPerSecond": 100
+    }
+  },
+  {
+    "id": "fs-radio-static",
+    "name": "Radio static bed",
+    "category": "Ambience",
+    "tags": [
+      "ambience",
+      "radio",
+      "static",
+      "noise",
+      "bed",
+      "loop",
+      "recorded"
+    ],
+    "pack": "Freesound CC0",
+    "sourceFile": "freesound 545962 preview 4.000-35.000 s",
+    "sourceUrl": "https://freesound.org/people/Cloud-10/sounds/545962/",
+    "license": "CC0-1.0",
+    "creator": "Cloud-10",
+    "r2Key": "media/stock/audio-fx-v1/54977388e8d1572e0ca0bda4cfbee4e044e09bb089c62a89fb2826b42c76196b",
+    "sha256": "54977388e8d1572e0ca0bda4cfbee4e044e09bb089c62a89fb2826b42c76196b",
+    "file": "assets/audio-fx/fs-radio-static.ogg",
+    "contentType": "audio/ogg",
+    "duration": 31.0065,
+    "size": 512739,
+    "waveform": {
+      "peaks": "YJCMcnhdaXF4cYlrinuDfH12lHNef4p1fqVmhpRse4GacbOFnW+IlXKIjo2mf3CLjl9xj4aSiIl9b4V6YGtseWaIkoF8nYl1dI+Pi4V6cp2Gmnp4eGl2bIGHe41ih31md2KIfYqWaJGqm3CejH+yjJOThHCZppGhlGyjpaCJeayKpaCOnqp60Zl9b2V8bMGdna+Gi5SdtbCljbR/rdiKraGHrK6QoI7Kkb7idYB7qoK6m31xiKuSn5R1qdiikFpcYJaGpJurf555q6Rwp6GRlK+SinOKhLCMjsfItaickWubb9OYiF5raISHk3p5lmmOmYJrZqx+oIqUiYCvaGHOc2h6dqCAYW5gfYCCc2qFlXx1jo1rdoR/bbeDaXRmgX94gYxthmZ8d3l5hn58e2qTd4LEqp6rb4+LtJWQkoZzqZ+bioasf4vMf6qMgaOdtZKyoKTVoZGxjKydmJ+ojqGOqIWVn5WYvqWdq4Och3WmhJiCkH7ClnnHm3uOkqRxqbaHiIKIkYiBk4Cei6Shv6iGrot+Z4Gulod1oYGuqpCrsZCNscSmpdTAlKGoiX1uzaVxqYW7vL6tjpKJj6GZpK+2qaWHhZ2cjZi/c4iMxbOWk3u3dYqWdqeZaqtmfntpZWSOdm6AsZh7b56b0XaPlJOOgYGfrXKclZGSlnyRlYyYn7qco7x8iYuWpJd5gKOkqKBueIF3sLh+kpOKb7abn4iClqqnnLWwiqWhn5e6nZu6tqeHqpPaiZSagpCWqauRg7+fpbCJjX7By5/Ap6qursWZiY6b1Z3GoKyLnqp+fJqTqIexgJ9xnI+0jY+mtb6yu6m0mq2vt7Wh4OCIsqWgp7uPmHmGjpF5prrAmbmmasKfmI62nKiugZjaeoa8r6KflJ+gpJySk9LGoZSdoJOVuKSosYKBdKyqnZ6qu6mZqpm4oXuv356yyYi3q4+Uyberxay/u5e2wqOaqrq4rb2vhJSYj7t7f7KsjarIu4i5cXJbmIulbnt3kbZvdptfspt7iquHjpCdgWmMb61uYmjBbXCaZmmJjpmMkZKSw9uGhaano5qMh4aemNWSnaSkpbKniZWzpZ/JrJOkqYOQqJTDjZWTlsyajK2yk7V8p5ODkpW6p4nOn4DUrJenoKiJpcW2jKehpLWemIyclKiLsIidwaSgmqCforGLl8OmmsOoa6GXqZWatpyzlsazkI2RraC8s7Ouk5ifiH+LmYFbm31t7J+olYKYtXmTqayKt47Atqm1jMzGkruzmJlrfZKIiYZ4sW/EmLDCgqpwk5KonpSXhZemdJqzkaOuiHONyLaNm5SZjol5l5ByuX6tgYOQecXboJOjkZZ+kXmOoWu7h6GErLeraaeVXYObn3WKeXxyo4aPyndwXIOKj350j392knJ1dHSqrWpzdKuMnHJ/gGxulJeEeoGkc3R/kZhqhYhpZnKFb2t8YnV4d6tdemt5aH6ej2yMkGSldGJjnJBrrZFvaH9rfYdgc3SKpY5drGaUi3tlXGpjd2hyi2xtmoFniZFuaXd3il5zZ117YICCtXxqaX+Di2Rngnm2uX/Jo5WTm8WXbNSUj2qTcnOIo5hnlo6MocmPfniOx2+zlrOdnMuCqrODh3WTcqKJhI1+iKWLkqGNmZiwwXGbipWRtX6hppWDiKnBcZSnmG5ka5xsZ2ZsZX1lX4iVsZJ1cId2eoWXenh8emmPjISuhn+op5h3h3aWh6J2q4uXq6WempitormUw5CeqY2gmGfaqq64roupnZqYoa+oeridl3i1jreak3xwu6OlvZ2tqXWNjYl0eJCnzHWZdq6YcFpncIG+bc+wgrPBgI6sjHuVbZG4scm5npWgwpeOeomumm55xIyOYXmabnRyaH2VaGR5bGidhIOBbaKUd7WViZGBqoy0uL+cmYp0lcKhpqqhf7qpqajNgM12foVrtpyyp6HJv6GnoIySkL6zvo2KtZ+ntZ+pqsSZj7KpqLKHkad2t6yXfZ27qqGGnpGzl5L0ppGljY29sY1+kZ6Wta2TuLKYmLmXur6Zu7e1wJSfl6eol4iNnMO+xaav3nm4zrOLy6G/j4aJcJmgwJSJw76oka6Ui5LAicKee6abma+Dhr6Mjp2hopOhpaONlqixiJec+MGMs316tJSbkpWclH5VnbaJcH3PmaSnjL2qo5WdhrFkb3VeoJNsaGiZt4CRmYVla4tqepWClKiWn4ShsXy1pKOJopjMkreHWnt2fmqacre0ore5nLWynJWPiqCimIO9npeEjZqQhLlmlpyFpomSqodyfXKHwoOI27imn3x0xK2IlKy9mduIo4Zut7t4gG2QmYx2dKnHkaSUaqKXlJz6j4WajayNq6F4vZ+hu4qimIzGpaaepa2doqC6jaeQns2rsqirl7qJwaqeiZyooq7BoMyem4nOdrWZpaGerqefqJ+FtsOQhbN8jbW5snWXYJJhr5V7eaWYbIOAqn+JlJOvcq2ikXGTr3yHyKV0lKuusn+UfZKnrX+eqpiChYuvo4p/ipPZaYa7i76itH+rsaC2h7i5s4Wt34OUkpGRqa+7kMK1c+6motDKb3VieouFgWnKc2efmWxyZniuwW/QqbCProt0aYV2Y35QaGOGipVabrezu8OmjnmXg4SMZ8maYpObZ5V7X4yLgHShiX2Bb8Ozl4x/qpfQn4Ofkqi4j4x+sZajgHyDvri1oJJ7npWjm6KSoIh4f3B0d5KMep2Cn4SLjtF/aIKIcWd8podwgH28jHKheVSPfm6CeIx3d4FunJe5eXuSZYSFcH6dh2bCtrKVnJpvfZVuaHiBhYqhh3SQc5Vtb4VxiHJtcY5+XWuHfX9xmltpenTUdpuapZNqgmV3d8NsaWZze4pvgXRlcGOIeot1fZJsh65skICfYIy9cX97loxfknlbd5q0baHNnX2HiravjYSbl4+3maaMnbZ3qqWUi5CtuY9keZx6YrqNxX+Rk5KpdnWdlHeRx2+HnNWZfZekgIyJfWhchLdpnXq6j6azmIhvfHuQiqaVjYl9n3R3bZRsdmptgZp/ZXdkqaeQg5VoqoCHZ2R0oXSzqXiHhbqgkrqB0HJwsXOxm5m+j6G7c4SXopmrknvPpLa6onp5tH2/d7uXlod1ZISTd1t3c22xhKFqq3icaoKrioBpfG+Yc4l/o2qDbJdve2p2jl18ioGuW3uOfmJsfHd1gXNrsm1yZJZtfXtqbW12eoF2dJF1a5N+Z4p+ZHOEw7Z/dnCVaJBuhWpkY4ZiemyJhomFiIZ4fne0onFwbFN4hYRyg2mLmox5cmV2ZqVvYmt5noWEhoeFhqd1bnp+lIuGfM92cWacuMWUsH+11YqGhduVrY6MmpG7vpDBpr+dqL+cv5Wgd8mWmIiEqZ2gu4GIeqKNkoh6obOncYmYY2+ZaWOJiZ5yj2/Gfa3foo2gopKmyHacibSar7i1m6DEv6uxjIehrJHCnZjJnqi9pr6fnoyloI2CgJ94paOclHymmqmCiXfRqG1vcWFac7W0maKMeHB3em+AsomUqbiza6+4b5Rif32ZmICjtGZrbX5mdmqffqldhWlzc9toe8h7aZmPZM2huZidiIWHcmfTkJKchHqGjnRdcKttfXKUbW5nqXJxf4twgXR7gXtu1piWlYluy5WvvZ6Fq7OnkbC83oKrtZSHidF5ipixc5GBfKqso6yjfW6ssZiLoZitgnt8fX5yq66dd4VukIx1Zm1ff3mIgmySi2pyfIZ4j258d3Rya3VvioyLYnZweYOPeINyaXB7lLqLi3Jzd4yZgJhrcqWZhcZ7e2h1gWlyboCHd22Genh2bWNqYndxcnBzZ3OIaKNuZmp2ZXhie2ZjfX6LZHqFoXCdaqhmanOKYY2Fa21zbqllXoG5eYWVY4dpdHuKYX13aG14dm9heHp1npttp6Z2gYxxYXlfaHtoio95oXyEn52HcWJ0tWdqhmlib1iLeWJoYYpuj5aaYXZ0kK3OaG2naXywwm9elcWIl6CZeHpuaH5sgmNeaWBSbllkXF1fWVRXWW+KV1hXTklSUldoVFdJPkRjQFtlUl5RQ1FJSDQ8Nkc4MzIvOi45KDIlKS4nKicrLh8cKCUnGyEdGRcYHREREhYMDA8LDQwKDAsFBAUCAQ==",
+      "samplesPerSecond": 100
+    }
+  },
+  {
+    "id": "synth-pop",
+    "name": "Synth pop",
+    "category": "Pops & tones",
+    "tags": [
+      "pop",
+      "ui",
+      "appear",
+      "synth"
+    ],
+    "pack": "Revline designed",
+    "sourceFile": "scripts/author-library-audio.mjs#synth-pop",
+    "sourceUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "license": "CC0-1.0",
+    "r2Key": "media/stock/audio-fx-v1/3841236b92475abee76597ca7ffd7d2ffe3d2d766b2e77b6d11828052e762143",
+    "sha256": "3841236b92475abee76597ca7ffd7d2ffe3d2d766b2e77b6d11828052e762143",
+    "file": "assets/audio-fx/synth-pop.ogg",
+    "contentType": "audio/ogg",
+    "duration": 0.05525,
+    "size": 1744,
+    "waveform": {
+      "peaks": "/J1aMh0=",
+      "samplesPerSecond": 100
+    }
+  },
+  {
+    "id": "synth-whoosh",
+    "name": "Panning whoosh",
+    "category": "Whooshes",
+    "tags": [
+      "whoosh",
+      "transition",
+      "swoosh",
+      "synth"
+    ],
+    "pack": "Revline designed",
+    "sourceFile": "scripts/author-library-audio.mjs#synth-whoosh",
+    "sourceUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "license": "CC0-1.0",
+    "r2Key": "media/stock/audio-fx-v1/b26481bf143a0fc703f64fec378f316a46afd28f3d639a68ac7bc91dcc3e3438",
+    "sha256": "b26481bf143a0fc703f64fec378f316a46afd28f3d639a68ac7bc91dcc3e3438",
+    "file": "assets/audio-fx/synth-whoosh.ogg",
+    "contentType": "audio/ogg",
+    "duration": 0.581333,
+    "size": 8059,
+    "waveform": {
+      "peaks": "AAABAQIFBwoOERkZKzY1NUxiT2J8c5ivpbC1rt3/7LzPu6KdjXxfUFI2NyMsIB8TDgsJBgQDAgEAAA==",
+      "samplesPerSecond": 100
+    }
+  },
+  {
+    "id": "synth-tick",
+    "name": "Single tick",
+    "category": "Clicks",
+    "tags": [
+      "tick",
+      "clock",
+      "ui",
+      "synth"
+    ],
+    "pack": "Revline designed",
+    "sourceFile": "scripts/author-library-audio.mjs#synth-tick",
+    "sourceUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "license": "CC0-1.0",
+    "r2Key": "media/stock/audio-fx-v1/345c3c484a25f649f17573be3534e8978a593a3637d23eac5bb512673897beb7",
+    "sha256": "345c3c484a25f649f17573be3534e8978a593a3637d23eac5bb512673897beb7",
+    "file": "assets/audio-fx/synth-tick.ogg",
+    "contentType": "audio/ogg",
+    "duration": 0.358125,
+    "size": 6113,
+    "waveform": {
+      "peaks": "4D4WCwgKCgkMBgUGBgUDAgMCAgEBAQEBAQEBAAEAAAAAAAAA",
+      "samplesPerSecond": 100
+    }
+  },
+  {
+    "id": "synth-chime",
+    "name": "Soft chime",
+    "category": "Pops & tones",
+    "tags": [
+      "chime",
+      "bell",
+      "tone",
+      "success",
+      "synth"
+    ],
+    "pack": "Revline designed",
+    "sourceFile": "scripts/author-library-audio.mjs#synth-chime",
+    "sourceUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "license": "CC0-1.0",
+    "r2Key": "media/stock/audio-fx-v1/b241ffe5e76f5cb669041691da05493e9e3201c4d1e3dcb1583875b771ca7bc8",
+    "sha256": "b241ffe5e76f5cb669041691da05493e9e3201c4d1e3dcb1583875b771ca7bc8",
+    "file": "assets/audio-fx/synth-chime.ogg",
+    "contentType": "audio/ogg",
+    "duration": 3.655458,
+    "size": 80249,
+    "waveform": {
+      "peaks": "1MzAvL+/wsDIw8TF1uHYy87KwL7Ht7O0tKWrpaSrnZ6ZlZeXjYyFho2Ign1/e359fHx3eXRubWxsam1qZmdfX1tcXVlYV1RUWFNXVFNUU1VTU1NRUk5NTkdERkZGQUFBQD4+PDs7Nzk4Nzg2NTQ0NTMzMjQyMjMxMDAwLy4uLS0rKyoqKSgoKCYmJSQkJCQjIyIiIiEgIB8fHx4eHh0dHBwcGxsaGhkZGRkYGBgYFxcXFhYVFRUUFBQUExMTExMSEhIREREREBAQEBAQDw8PDw4ODg4ODQ0NDQ0MDAwMDAwLCwsLCwsLCgoKCgoKCgkJCQkJCQkJCAgICAgICAgICAcHBwcHBwcHBwcHBgYGBgYGBgYGBgYGBQUFBQUFBQQEBAQDAwMDAgICAgIBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+      "samplesPerSecond": 100
+    }
+  },
+  {
+    "id": "synth-thud",
+    "name": "Soft thud",
+    "category": "Hits",
+    "tags": [
+      "thud",
+      "impact",
+      "land",
+      "synth"
+    ],
+    "pack": "Revline designed",
+    "sourceFile": "scripts/author-library-audio.mjs#synth-thud",
+    "sourceUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "license": "CC0-1.0",
+    "r2Key": "media/stock/audio-fx-v1/babebe471b239ca658b85a965f26c6325efea5cc30c679018af656c4bb2e963e",
+    "sha256": "babebe471b239ca658b85a965f26c6325efea5cc30c679018af656c4bb2e963e",
+    "file": "assets/audio-fx/synth-thud.ogg",
+    "contentType": "audio/ogg",
+    "duration": 0.498417,
+    "size": 12529,
+    "waveform": {
+      "peaks": "//fz4dzMwbOko5aLfnRqZl9WT0dAOjkzLiomIh8eGxkWFBIREA4NDAsKCQgHBwUDAgA=",
+      "samplesPerSecond": 100
+    }
   }
 ]
