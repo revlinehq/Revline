@@ -170,7 +170,7 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
       if (task.outputAssetId) return {};
       if (!task.cutout || !media.hasVideo) throw new AnalysisError('The background removal request is unavailable.', 400);
       const output = await runPhase('Removing background', () => removeBackground(source, directory, task.cutout!, signal, onProgress));
-      await runPhase('Saving cut-out', () => uploadMediaFile(output.path, { ...credentials, projectId: task.projectId, fileName: `${asset.fileName.replace(/\.[^.]+$/, '').slice(0, 200)} (background removed).webm`, duration: output.duration, width: output.width, height: output.height, kind: 'video', contentType: 'video/webm' }, uploadContext, signal));
+      await runPhase('Saving cut-out', () => uploadMediaFile(output.path, { ...credentials, projectId: task.projectId, fileName: `${asset.fileName.replace(/\.[^.]+$/, '').slice(0, 200)} (${task.cutout!.subject ? `only ${task.cutout!.subject.slice(0, 40)}` : 'background removed'}).webm`, duration: output.duration, width: output.width, height: output.height, kind: 'video', contentType: 'video/webm' }, uploadContext, signal));
       onProgress(98);
       return {};
     }

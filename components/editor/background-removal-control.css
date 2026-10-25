@@ -4,3 +4,9 @@
 .background-removal-row strong { font-size:12px; font-weight:500; }
 .background-removal-row small, .background-removal-note { margin:0; font-size:11px; line-height:1.45; color:var(--ws-faint); }
 .background-removal-row button { flex-shrink:0; }
+.background-removal-object { display:flex; gap:8px; }
+.background-removal-object input { flex:1; min-width:0; height:34px; padding:0 9px; border:1px solid var(--ws-artifact-border); border-radius:5px; background:var(--ws-input); color:var(--ws-text); font:inherit; font-size:11px; }
+.background-removal-object input::placeholder { color:var(--ws-faint); }
+.background-removal-object input:focus-visible { outline:2px solid var(--revline-accent); outline-offset:1px; }
+.background-removal-object input:disabled { opacity:.45; }
+.background-removal-object button { flex-shrink:0; }

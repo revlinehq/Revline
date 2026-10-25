@@ -9,6 +9,7 @@ import Stripe from 'stripe';
 import { api, components, internal } from './_generated/api';
 import schema from './schema';
 import { createTimelineSaveQueue } from '../lib/editor/timeline-sync';
+import { MEDIA_PROCESSOR_VERSION } from '../lib/media-analysis/processor-version';
 import { createEditorStore } from '../lib/editor/store';
 import type { Timeline } from '../lib/editor/types';
 
@@ -574,7 +575,7 @@ async function savePreview(f:Awaited<ReturnType<typeof previewFixture>>) {
 }
 test('preview tasks require project ownership, deduplicate and cannot be claimed by older processors',async()=>{
   const f=await fixture();
-  expect(await f.t.query(api.mediaTasks.processorContract,{workerSecret:'audit-worker-secret'})).toEqual({processorVersion:7});
+  expect(await f.t.query(api.mediaTasks.processorContract,{workerSecret:'audit-worker-secret'})).toEqual({processorVersion:MEDIA_PROCESSOR_VERSION});
   await expect(f.other.mutation(api.mediaTasks.start,{projectId:f.projectId,assetId:f.assetId,kind:'preview'})).rejects.toThrow();
   const taskId=await f.owner.mutation(api.mediaTasks.start,{projectId:f.projectId,assetId:f.assetId,kind:'preview'});
   expect(await f.owner.mutation(api.mediaTasks.start,{projectId:f.projectId,assetId:f.assetId,kind:'preview'})).toBe(taskId);
