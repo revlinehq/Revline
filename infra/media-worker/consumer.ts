@@ -15,6 +15,7 @@ const concurrency = Number(process.env.MEDIA_WORKER_CONCURRENCY ?? 1);
 const idleMs = Number(process.env.MEDIA_WORKER_IDLE_MS ?? 600_000);
 const port = Number(process.env.PORT ?? 8080);
 const HEARTBEAT_MS = 20_000;
+const CANCEL_CHECK_MS = 3_000;
 if (!Number.isInteger(concurrency) || concurrency < 1 || concurrency > 4) throw new Error('Worker concurrency must be 1–4.');
 if (!Number.isFinite(idleMs) || idleMs < 1000 || idleMs > 3_600_000) throw new Error('Idle timeout must be 1 second to 60 minutes.');
 if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('Invalid health port.');
@@ -83,6 +84,12 @@ async function runSlot() {
         }).catch(error => { if (isMediaLeaseLost(error)) controller.abort(); });
       };
       const timer = setInterval(heartbeat, HEARTBEAT_MS);
+      // Stop and cancellation end the lease in Convex; check every few seconds
+      // instead of learning it at the next 20-second heartbeat.
+      const cancelled = setInterval(() => {
+        if (signal.aborted) return;
+        void client.query(api.mediaTasks.leaseActive, credentials).then(active => { if (!active) controller.abort(); }).catch(() => {});
+      }, CANCEL_CHECK_MS);
       console.log(JSON.stringify({ event: 'media-started', timestamp:new Date().toISOString(),projectId:task.projectId, kind: task.kind, taskId: task.taskId }));
       try {
         const snapshot=await client.query(api.mediaTasks.work,credentials);
@@ -91,11 +98,11 @@ async function runSlot() {
           progress = Math.max(progress, Math.min(99, percent));
           if (progress - reported >= 10) heartbeat();
         },next=>{if(activity!==next){activity=next;heartbeat();}});
-        clearInterval(timer); await heartbeats; signal.throwIfAborted();
+        clearInterval(timer); clearInterval(cancelled); await heartbeats; signal.throwIfAborted();
         await client.mutation(api.mediaTasks.complete, { ...credentials, result });
         console.log(JSON.stringify({ event: 'media-completed', timestamp:new Date().toISOString(),projectId:task.projectId,runId:snapshot.aiRunId, taskId: task.taskId }));
       } catch (error) {
-        clearInterval(timer); await heartbeats;
+        clearInterval(timer); clearInterval(cancelled); await heartbeats;
         const timedOut=deadline.aborted;
         const retryable=task.kind!=='review'&&!(task.kind==='render'&&timedOut)&&isRetryableAnalysisError(error);
         if (!shutdown.signal.aborted && !controller.signal.aborted) {

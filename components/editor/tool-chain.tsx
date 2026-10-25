@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { AlertTriangle, Check, ChevronDown, CircleCheck, LoaderCircle } from 'lucide-react';
+import { AlertTriangle, Check, ChevronDown, CircleCheck, CircleStop, LoaderCircle, Minus } from 'lucide-react';
 import { READ_ONLY_TOOLS, type ChatTool } from './assistant-results';
 
 type Row = { key: string; tool: string; args: string; state: ChatTool['state']; count: number };
@@ -33,16 +33,19 @@ export function toolChainRows(steps: ChatTool[]): Row[] {
 }
 
 /** One group of tool calls, shown where it ran. Open while its turn streams; collapses when the turn ends. */
-export function ToolChain({ steps, active = false }: { steps: ChatTool[]; active?: boolean }) {
+export function ToolChain({ steps: saved, active = false }: { steps: ChatTool[]; active?: boolean }) {
+  // A step without a result is running only while its run is live. After Stop,
+  // a time limit or a reload it was cut off, not still working.
+  const steps = active ? saved : saved.map(step => step.state === 'running' ? { ...step, state: 'stopped' as const } : step);
   const rows = toolChainRows(steps);
-  const running = steps.some(step => step.state === 'running'), failed = steps.some(step => step.state === 'error');
+  const running = steps.some(step => step.state === 'running'), failed = steps.some(step => step.state === 'error'), stopped = steps.some(step => step.state === 'stopped');
   const [open, setOpen] = useState(active);
   useEffect(() => { setOpen(active); }, [active]);
   if (!rows.length) return null;
   const skill = steps.find(step => step.name === 'readSkill' && typeof step.input?.name === 'string')?.input?.name as string | undefined;
   const count = `${steps.length} ${steps.length === 1 ? 'step' : 'steps'}`;
-  const label = running ? `Running ${count}` : skill && steps.every(step => step.name === 'readSkill') ? `Read skill ${skill}` : steps.every(step => READ_ONLY_TOOLS.has(step.name)) ? 'Checked your project' : `Ran ${count}`;
-  const Status = running ? LoaderCircle : failed ? AlertTriangle : CircleCheck;
+  const label = running ? `Running ${count}` : stopped ? `Stopped after ${count}` : skill && steps.every(step => step.name === 'readSkill') ? `Read skill ${skill}` : steps.every(step => READ_ONLY_TOOLS.has(step.name)) ? 'Checked your project' : `Ran ${count}`;
+  const Status = running ? LoaderCircle : failed ? AlertTriangle : stopped ? CircleStop : CircleCheck;
   return <div className={`tool-chain${failed ? ' has-error' : ''}`} data-open={open || undefined}>
     <button type="button" className="tool-chain-root" aria-expanded={open} onClick={() => setOpen(value => !value)}>
       <Status size={14} className={`tool-chain-status-icon${running ? ' animate-spin' : ''}`} aria-hidden/>
@@ -51,10 +54,10 @@ export function ToolChain({ steps, active = false }: { steps: ChatTool[]; active
     </button>
     {open && <ol className="tool-chain-rows" aria-label="Assistant steps">
       {rows.map((row, index) => {
-        const Mark = row.state === 'running' ? LoaderCircle : row.state === 'error' ? AlertTriangle : Check;
+        const Mark = row.state === 'running' ? LoaderCircle : row.state === 'error' ? AlertTriangle : row.state === 'stopped' ? Minus : Check;
         return <li key={row.key} className={`tool-chain-row state-${row.state}${index === rows.length - 1 ? ' is-last' : ''}`}>
           <span className="tool-chain-branch" aria-hidden><span className="tool-chain-stem"/><span className="tool-chain-elbow"/></span>
-          <Mark size={12} className={`tool-chain-mark${row.state === 'running' ? ' animate-spin' : ''}`} aria-label={row.state === 'running' ? 'Running' : row.state === 'error' ? 'Failed' : 'Done'}/>
+          <Mark size={12} className={`tool-chain-mark${row.state === 'running' ? ' animate-spin' : ''}`} aria-label={row.state === 'running' ? 'Running' : row.state === 'error' ? 'Failed' : row.state === 'stopped' ? 'Stopped' : 'Done'}/>
           <span className="tool-chain-text"><span className="tool-chain-tool">{row.tool}</span>{(row.args || row.count > 1) && <span className="tool-chain-args">{row.args}{row.count > 1 ? `${row.args ? ' ' : ''}×${row.count}` : ''}</span>}</span>
           {row.state === 'error' && <span className="tool-chain-status">Failed</span>}
         </li>;

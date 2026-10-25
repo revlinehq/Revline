@@ -303,6 +303,11 @@ export const work=query({args:mediaTaskCredentials,returns:workItem,handler:asyn
   if(!await analysisStillActive(ctx,task))throw new ConvexError('The AI analysis request is no longer active.');
   return loadWork(ctx,task);
 }});
+/** Workers poll this between heartbeats so Stop and cancellation end work within seconds. */
+export const leaseActive = query({ args: mediaTaskCredentials, returns: v.boolean(), handler: async (ctx, args) => {
+  const task = await ctx.db.get(args.taskId);
+  return !!task && task.status === 'running' && task.leaseToken === args.leaseToken;
+}});
 export const heartbeat = mutation({ args: { ...mediaTaskCredentials, progress: v.optional(v.number()),activity:v.optional(mediaTaskActivity) }, returns: v.null(), handler: async (ctx, args) => {
   const task = await requireMediaTask(ctx, args.taskId, args.leaseToken);
   if (args.progress !== undefined && (!Number.isFinite(args.progress) || args.progress < 0 || args.progress > 99)) throw new ConvexError('Invalid processing progress.');

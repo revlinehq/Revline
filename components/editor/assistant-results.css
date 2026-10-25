@@ -33,3 +33,4 @@
 .tool-chain.has-error .tool-chain-status-icon{color:#c3853c}
 .tool-chain-root .tool-chain-label{color:#E4E5E9;font-size:13px}
 .tool-chain-rows{padding-left:3px}
+.tool-chain-row.state-stopped .tool-chain-mark{color:#A1A3AB}

@@ -16,6 +16,7 @@ const unsubscribe = subscriptions.onUpdate(api.mediaTasks.ready, { workerSecret,
   if (queueReady) for (const wake of queueWaiters) wake();
 });
 const HEARTBEAT_MS = 20_000;
+const CANCEL_CHECK_MS = 3_000;
 const shutdown = new AbortController();
 process.on('SIGINT', () => shutdown.abort());
 process.on('SIGTERM', () => shutdown.abort());
@@ -48,6 +49,12 @@ async function runSlot() {
         }).catch(error => { if (isMediaLeaseLost(error)) controller.abort(); });
       };
       const timer = setInterval(heartbeat, HEARTBEAT_MS);
+      // Stop and cancellation end the lease in Convex; check every few seconds
+      // instead of learning it at the next 20-second heartbeat.
+      const cancelled = setInterval(() => {
+        if (signal.aborted) return;
+        void client.query(api.mediaTasks.leaseActive, credentials).then(active => { if (!active) controller.abort(); }).catch(() => {});
+      }, CANCEL_CHECK_MS);
       try {
         const snapshot=await client.query(api.mediaTasks.work,credentials);
         signal.throwIfAborted();
@@ -55,11 +62,11 @@ async function runSlot() {
           progress = Math.max(progress, Math.min(99, percent));
           if (progress - reported >= 10) heartbeat();
         },next=>{if(activity!==next){activity=next;heartbeat();}});
-        clearInterval(timer); await heartbeats; signal.throwIfAborted();
+        clearInterval(timer); clearInterval(cancelled); await heartbeats; signal.throwIfAborted();
         await client.mutation(api.mediaTasks.complete, { ...credentials, result });
         console.log(`[${new Date().toISOString()}] Chat ${task.projectId} · media task ${task.taskId}: completed.`);
       } catch (error) {
-        clearInterval(timer); await heartbeats;
+        clearInterval(timer); clearInterval(cancelled); await heartbeats;
         if (!shutdown.signal.aborted && !controller.signal.aborted) {
           const retryable = task.kind!=='review'&&!(task.kind==='render'&&deadline.aborted)&&isRetryableAnalysisError(error);
           await client.mutation(api.mediaTasks.fail, { ...credentials, error: deadline.aborted&&task.kind==='render'?'The export exceeded its 15-minute processing limit. Automatic retries were stopped.':error instanceof Error ? error.message.slice(0, 1000) : 'Media processing failed.', retryable }).catch(() => {});

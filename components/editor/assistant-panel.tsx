@@ -189,7 +189,8 @@ function AssistantPanelBody({ messages, running, editing:editingTimeline=running
         const replies = group.replies;
         const editing = group.id === turnId && waiting;
         const currentReply = replies.at(-1);
-        const hasRunningTool = replies.some(message=>message.steps?.some(step=>step.state==='running'));
+        // Steps left without results by Stop or a finished run are not still working.
+        const hasRunningTool = editing && replies.some(message=>message.steps?.some(step=>step.state==='running'));
         const showingReply = !!currentReply?.text.trim() && !activity && !hasRunningTool && (currentReply.status === 'streaming' || answering);
         const loading = editing && (!showingReply || stopState === 'stopping');
         const cards = group.cards;
@@ -202,7 +203,7 @@ function AssistantPanelBody({ messages, running, editing:editingTimeline=running
               {message.tools?.map((tool, i) => <div className="tool-result" key={`${tool}-${i}`}><Check size={12} />{tool}</div>)}
               {message.id === demoNoteMessageId && <div className="assistant-demo-note">Sample conversation. Explore the timeline, or <a href={NEW_PROJECT_PATH}>start your own project</a>.</div>}
             </article>}{!message.blocks && !!message.steps?.length && <ToolChain steps={message.steps} active={editing}/>}</Fragment>)}
-            {cards.some(card=>card.state!=='done') && <div className="assistant-result-cards" aria-label="Edit results">{cards.filter(card=>card.state!=='done'&&!(card.state==='running'&&(editing||(group.id===turnId&&stopState==='stopped')))).map(card => <div key={card.key} className={`assistant-result-card result-${card.state}${card.staged ? ' result-prepared' : ''}`}>
+            {cards.some(card=>card.state!=='done'&&card.state!=='running') && <div className="assistant-result-cards" aria-label="Edit results">{cards.filter(card=>card.state!=='done'&&card.state!=='running').map(card => <div key={card.key} className={`assistant-result-card result-${card.state}${card.staged ? ' result-prepared' : ''}`}>
               <AssistantActivity label={card.title} detail={card.detail} state={card.state==='running'?'working':card.state==='error'?'error':'ready'}/>
               {card.key==='turn-failure' && group.id===retryTurnId && requestMessage?.text.trim() && !waiting && !demo && onRetry && <button type="button" className="assistant-retry" disabled={composerBusy || !configured || sending || !!pendingReply} onClick={() => void sendRequest(canResumeEdit?'Finish only the remaining work or checks from my unfinished request. Keep the edits already completed.':requestMessage.text, true)}><RotateCcw size={13} aria-hidden="true"/>Retry unfinished steps</button>}
             </div>)}</div>}

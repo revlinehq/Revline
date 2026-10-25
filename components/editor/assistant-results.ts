@@ -4,7 +4,7 @@ import type { TimelinePublicationReceipt } from '@/lib/ai/publication-receipt';
 import { unresolvedToolFailureIds } from '@/lib/ai/tool-failures';
 export type { TimelinePublicationReceipt } from '@/lib/ai/publication-receipt';
 
-export type ChatTool = { id?: string; name: string; state: 'running' | 'done' | 'error'; detail?: string; staged?: boolean; input?: Record<string, unknown>; output?: Record<string, unknown> };
+export type ChatTool = { id?: string; name: string; state: 'running' | 'done' | 'error' | 'stopped'; detail?: string; staged?: boolean; input?: Record<string, unknown>; output?: Record<string, unknown> };
 export type ChatBlock = { type:'text'; text:string } | { type:'tools'; steps:ChatTool[] };
 export type ChatMessage = { id:string;sourceId?:string;threadId?:string;role:string;text:string;status?:string;tools?:string[];steps?:ChatTool[];blocks?:ChatBlock[];publicationReceipt?:TimelinePublicationReceipt };
 export type ResultCard = { key: string; title: string; detail?: string; state: ChatTool['state']; staged?: boolean };
