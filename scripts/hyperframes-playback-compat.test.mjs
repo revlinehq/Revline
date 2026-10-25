@@ -165,22 +165,28 @@ test('secondary audio retains exact paused, preroll, forced and discontinuous se
   for(const force of [false,true])assert.deepEqual(repeatedAudioSync(patched,1,.06,force,{tagName:'VIDEO'}),repeatedAudioSync(upstream,1,.06,force,{tagName:'VIDEO'}),'Playing video behavior is unchanged');
 });
 
+// Media element stand-in with a real src attribute, so tests can see which
+// elements keep a source (and its download) and which give it up.
+const mediaNode=({tag='VIDEO',start,end=start+1,mediaStart=0,ready=3,network=2,src='/source.mp4',buffered={length:1,start:()=>0,end:()=>100},...rest})=>{
+  const attrs=new Map([['src',src]]);
+  return Object.assign(new EventTarget(),{tagName:tag,isConnected:true,paused:true,networkState:network,preload:'auto',readyState:ready,seeking:false,currentTime:mediaStart,duration:100,dataset:{start:String(start),end:String(end),duration:String(end-start),mediaStart:String(mediaStart)},buffered,loads:0,load(){this.loads++;if(!attrs.has('src'))this.networkState=0;},getAttribute:name=>attrs.get(name)??null,setAttribute:(name,value)=>attrs.set(name,value),removeAttribute:name=>attrs.delete(name),...rest});
+};
+const warmDocument=(nodes,extra={})=>({querySelectorAll:()=>nodes,defaultView:{MutationObserver:class{observe(){}disconnect(){}}},...extra});
+const hasSource=node=>node.getAttribute('src')!==null;
+
 test('a blocked active range releases network streams held by inactive decoded clips',()=>{
-  const node=(start,end,source,ready)=>Object.assign(new EventTarget(),{tagName:'VIDEO',isConnected:true,paused:true,networkState:2,preload:'auto',readyState:ready,seeking:ready===1,currentTime:source,duration:100,dataset:{start:String(start),end:String(end),duration:String(end-start),mediaStart:String(source)},buffered:{length:0},loads:0,load(){this.loads++;this.networkState=0;},getAttribute:()=>'/same-large-original.mp4'});
-  const active=node(17.6,20.7,73.83,1),previous=node(13.8,17.1,69.23,3),next=node(20.7,24.3,77.73,3);
-  const doc={querySelectorAll:()=>[active,previous,next],defaultView:{MutationObserver:class{observe(){}disconnect(){}}}};
-  const stop=warmPreviewMedia(doc,()=>17.608);
-  try{assert.equal(active.loads,0,'The active seek is retained');assert.equal(previous.loads,1,'A paused previous cut cannot retain a stream while the active source waits');assert.equal(next.loads,1,'Even a primed future cut must release its loading stream when the active range is starved');}finally{stop();}
+  const active=mediaNode({start:17.6,end:20.7,mediaStart:73.83,ready:1,seeking:true,buffered:{length:0},src:'/same-large-original.mp4'}),previous=mediaNode({start:13.8,end:17.1,mediaStart:69.23,buffered:{length:0},src:'/same-large-original.mp4'}),next=mediaNode({start:20.7,end:24.3,mediaStart:77.73,buffered:{length:0},src:'/same-large-original.mp4'});
+  const stop=warmPreviewMedia(warmDocument([active,previous,next]),()=>17.608);
+  try{assert.ok(hasSource(active),'The active seek is retained');assert.ok(!hasSource(previous),'A paused previous cut gives up its source while the active one waits');assert.ok(!hasSource(next),'A future cut more than a second away gives up its loading stream while the active range is starved');}finally{stop();}
 });
 
 
-test('decoded upcoming video retains the single preparation slot rather than starting more distant source streams',()=>{
+test('only the next two video and audio cuts are prepared; later cuts give up their sources',()=>{
   vi.useFakeTimers();
-  const node=(kind,start,ready)=>Object.assign(new EventTarget(),{tagName:kind,isConnected:true,paused:true,networkState:1,preload:'none',readyState:ready,seeking:false,currentTime:0,duration:100,dataset:{start:String(start),end:String(start+1),duration:'1',mediaStart:String(start*10)},buffered:{length:1,start:()=>0,end:()=>100},loads:0,load(){this.loads++;},getAttribute:()=>'/source.mp4'});
-  const active=node('VIDEO',0,4),soon=[node('VIDEO',1,4),node('AUDIO',1,4),node('VIDEO',2,4),node('AUDIO',2,4)],later=node('VIDEO',3,0);
-  const doc={querySelectorAll:()=>[active,...soon,later],defaultView:{MutationObserver:class{observe(){}disconnect(){}}}};
-  const stop=warmPreviewMedia(doc,()=>0);
-  try{vi.advanceTimersByTime(200);assert.equal(soon[0].preload,'auto');assert.equal(later.preload,'none','A decoded next video can still have an open loading stream; do not create another competitor');}finally{stop();vi.useRealTimers();}
+  const node=(tag,start,ready)=>mediaNode({tag,start,mediaStart:start*10,ready,network:1});
+  const active=node('VIDEO',0,4),soon=[node('VIDEO',1,4),node('AUDIO',1,4),node('VIDEO',2,4),node('AUDIO',2,4)],later=[node('VIDEO',3,0),node('AUDIO',3,0)];
+  const stop=warmPreviewMedia(warmDocument([active,...soon,...later]),()=>0);
+  try{vi.advanceTimersByTime(200);assert.ok(soon.every(media=>hasSource(media)&&media.preload==='auto'),'Two cuts of each kind stay prepared');assert.ok(later.every(media=>!hasSource(media)&&media.preload==='none'),'A third cut would hold another open download');}finally{stop();vi.useRealTimers();}
 });
 
 test('an active seek into buffered bytes retains already prepared future streams',()=>{
@@ -227,19 +233,17 @@ test('a retained outgoing transition frame is never discarded as an inactive str
   try{assert.equal(node.loads,0,'The transition renderer still displays its outgoing retained native frame beyond the authored clip edge');}finally{stop();}
 });
 
-test('only active and nearest upcoming video keep loading streams, while idle decoded frames survive',()=>{
-  const node=(start,networkState=2)=>Object.assign(new EventTarget(),{tagName:'VIDEO',isConnected:true,paused:true,networkState,preload:'auto',readyState:3,seeking:false,currentTime:0,duration:100,dataset:{start:String(start),end:String(start+1),duration:'1',mediaStart:'0'},buffered:{length:1,start:()=>0,end:()=>100},loads:0,load(){this.loads++;this.networkState=0;},getAttribute:()=>'/large-original.mp4'});
-  const active=node(0),nearest=node(1),distant=[node(2),node(3),node(4),node(5),node(6)],past=node(-1),idle=node(-2,1),all=[active,nearest,...distant,past,idle];
-  const doc={querySelectorAll:()=>all,defaultView:{MutationObserver:class{observe(){}disconnect(){}}}};
-  const stop=warmPreviewMedia(doc,()=>0);
-  try{assert.equal(active.loads,0);assert.equal(nearest.loads,0);assert.ok([...distant,past].every(media=>media.loads===1),'All other open video requests are aborted even when they already decoded a first frame');assert.equal(idle.loads,0,'An idle decoded frame has no competing network stream and must survive');assert.equal(idle.preload,'none');}finally{stop();}
+test('only active, recently ended and the two nearest upcoming videos keep sources; idle decoded clips release theirs',()=>{
+  const node=(start,network=2)=>mediaNode({start,network});
+  const active=node(0),nearest=[node(1),node(2)],distant=[node(3),node(4),node(5),node(6)],justEnded=node(-1),past=node(-2),idle=node(-3,1),all=[active,...nearest,...distant,justEnded,past,idle];
+  const stop=warmPreviewMedia(warmDocument(all),()=>0);
+  try{assert.ok(hasSource(active));assert.ok(nearest.every(hasSource));assert.ok(hasSource(justEnded),'A cut that just ended keeps its source across the boundary');assert.ok([...distant,past,idle].every(media=>!hasSource(media)),'Every other element releases its download, even an idle decoded one');}finally{stop();}
 });
 
 test('the terminal decoded video frame survives transport end while earlier clips release streams',()=>{
-  const node=(start,end)=>Object.assign(new EventTarget(),{tagName:'VIDEO',isConnected:true,paused:true,networkState:2,preload:'auto',readyState:3,seeking:false,currentTime:8,duration:100,dataset:{start:String(start),end:String(end),duration:String(end-start),mediaStart:'7'},buffered:{length:1,start:()=>7,end:()=>9},loads:0,load(){this.loads++;},getAttribute:()=>'/source.mp4'});
-  const previous=node(0,1),terminal=node(1,2),doc={getElementById:()=>({dataset:{duration:'2'}}),querySelectorAll:()=>[previous,terminal],defaultView:{MutationObserver:class{observe(){}disconnect(){}}}};
-  const stop=warmPreviewMedia(doc,()=>2);
-  try{assert.equal(terminal.loads,0,'The runtime deliberately holds its last decoded video at the timeline end');assert.equal(terminal.preload,'auto');assert.equal(previous.loads,1,'A normal earlier clip is still released');}finally{stop();}
+  const previous=mediaNode({start:0,end:1,mediaStart:7,buffered:{length:1,start:()=>7,end:()=>9}}),terminal=mediaNode({start:1,end:2,mediaStart:7,buffered:{length:1,start:()=>7,end:()=>9}});
+  const stop=warmPreviewMedia(warmDocument([previous,terminal],{getElementById:()=>({dataset:{duration:'2'}})}),()=>2);
+  try{assert.ok(hasSource(terminal),'The runtime deliberately holds its last decoded video at the timeline end');assert.equal(terminal.preload,'auto');assert.ok(!hasSource(previous),'A normal earlier clip is still released');}finally{stop();}
 });
 
 // A source session shares only the bounded derivative, never the export original.
