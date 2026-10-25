@@ -20,10 +20,14 @@ const lane = { ...(process.env.MEDIA_LANE === 'ultra' ? { lane: 'ultra' as const
 const idleMs = Number(process.env.MEDIA_WORKER_IDLE_MS ?? 600_000);
 const port = Number(process.env.PORT ?? 8080);
 const HEARTBEAT_MS = 20_000;
+// Long 4K60 exports on large export machines legitimately need more than 15 minutes.
+const deadlineMs = Number(process.env.MEDIA_TASK_DEADLINE_MS ?? 15 * 60_000);
+const deadlineMinutes = Math.round(deadlineMs / 60_000);
 const CANCEL_CHECK_MS = 3_000;
 if (!Number.isInteger(concurrency) || concurrency < 1 || concurrency > 4) throw new Error('Worker concurrency must be 1–4.');
 if (!Number.isFinite(idleMs) || idleMs < 1000 || idleMs > 3_600_000) throw new Error('Idle timeout must be 1 second to 60 minutes.');
 if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('Invalid health port.');
+if (!Number.isFinite(deadlineMs) || deadlineMs < 60_000 || deadlineMs > 2 * 3600_000) throw new Error('Task deadline must be 1 minute to 2 hours.');
 
 const shutdown = new AbortController();
 const client = new ConvexHttpClient(convexUrl, { fetch: (input, init) => fetch(input, { ...init, signal: AbortSignal.any([shutdown.signal, AbortSignal.timeout(25_000), ...(init?.signal ? [init.signal] : [])]) }) });
@@ -72,7 +76,7 @@ async function runSlot() {
       if (!task) { await waitForWork(observed); continue; }
       activeTasks++; lastWorkAt = Date.now();
       const controller = new AbortController();
-      const startedAt=Date.now(),deadline=AbortSignal.timeout(15 * 60_000);
+      const startedAt=Date.now(),deadline=AbortSignal.timeout(deadlineMs);
       const signal = AbortSignal.any([controller.signal, shutdown.signal, deadline]);
       const credentials = { taskId: task.taskId, leaseToken: task.leaseToken };
       let progress = 0, reported = -1,activity:MediaTaskActivity|undefined, heartbeats = Promise.resolve(), renewedAt = claimedAt;
@@ -111,7 +115,7 @@ async function runSlot() {
         const timedOut=deadline.aborted;
         const retryable=task.kind!=='review'&&!(task.kind==='render'&&timedOut)&&isRetryableAnalysisError(error);
         if (!shutdown.signal.aborted && !controller.signal.aborted) {
-          await client.mutation(api.mediaTasks.fail, { ...credentials, retryable, error: timedOut&&task.kind==='render'?'The export exceeded its 15-minute processing limit. Automatic retries were stopped.':error instanceof Error ? error.message.slice(0, 1000) : 'Media processing failed.' }).catch(() => {});
+          await client.mutation(api.mediaTasks.fail, { ...credentials, retryable, error: timedOut&&task.kind==='render'?`The export exceeded its ${deadlineMinutes}-minute processing limit. Automatic retries were stopped.`:error instanceof Error ? error.message.slice(0, 1000) : 'Media processing failed.' }).catch(() => {});
         }
         console.log(JSON.stringify({ event: 'media-interrupted', timestamp:new Date().toISOString(),projectId:task.projectId, taskId: task.taskId,kind:task.kind,elapsedMs:Date.now()-startedAt,progress,reason:shutdown.signal.aborted?'shutdown':controller.signal.aborted?'lease-ended':timedOut?'timeout':'processing-error',retryable }));
       } finally { activeTasks--; lastWorkAt = Date.now(); }

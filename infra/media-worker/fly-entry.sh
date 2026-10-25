@@ -4,6 +4,11 @@
 # at /scratch when present. Volumes mount root-owned: prepare as root, then run
 # the consumer as the unprivileged node user.
 set -e
+# Chunk machines (no volume) render one slice of a distributed export, then exit.
+if [ -n "$REVLINE_CHUNK_INDEX" ]; then
+  export HOME=/home/node
+  exec setpriv --reuid=node --regid=node --init-groups node scripts/render-chunk.mjs
+fi
 if [ -d /scratch ]; then
   # A crashed export can leave files behind; this machine runs one export at a time.
   rm -rf /scratch/tmp

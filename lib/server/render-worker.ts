@@ -8,6 +8,11 @@ export type ReviewCaptureSettings={width:number;height:number;fps:number;times:n
 export function runRenderWorker(directory: string, output: string, settings: Settings, onProgress: (render: { progress: number }) => void, signal: AbortSignal): Promise<{ warnings: number }> {
   return runRendererProcess('render-worker.mjs',[directory,output,JSON.stringify(settings)],onProgress,signal);
 }
+/** Fly export machines: plan here, render chunks on parallel machines, assemble (render-distributed.mjs). */
+export type DistributedSettings = Settings & { width: number; height: number; exportId: string; maxChunks: number; chunkGuest: { cpu_kind: string; cpus: number; memory_mb: number }; chunkEnv: Record<string, string> };
+export function runDistributedRender(directory: string, output: string, settings: DistributedSettings, onProgress: (render: { progress: number }) => void, signal: AbortSignal): Promise<{ warnings: number }> {
+  return runRendererProcess('render-distributed.mjs',[directory,output,JSON.stringify(settings)],onProgress,signal);
+}
 export function runCompositionCapture(directory:string,settings:ReviewCaptureSettings,signal:AbortSignal){
   return runRendererProcess('composition-review-worker.mjs',[directory,JSON.stringify(settings)],()=>{},signal);
 }
@@ -21,8 +26,15 @@ function runRendererProcess(script:string,args:string[],onProgress:(render:{prog
     let stderr = '';
     let forceStop: ReturnType<typeof setTimeout> | undefined;
     // Drain diagnostics without buffering large compiler/browser logs into Next.
-    // REVLINE_RENDER_LOG_LEVEL (export machines) forwards the renderer's own stage log.
-    if (process.env.REVLINE_RENDER_LOG_LEVEL) worker.stdout?.pipe(process.stdout); else worker.stdout?.resume();
+    // REVLINE_RENDER_LOG_LEVEL (export machines) forwards the renderer's stage timings and
+    // warnings; per-worker chatter would push them out of the host's bounded log buffer.
+    if (process.env.REVLINE_RENDER_LOG_LEVEL) {
+      let pending = '';
+      worker.stdout?.on('data', (chunk: Buffer) => {
+        const lines = (pending + chunk.toString()).split('\n'); pending = lines.pop() ?? '';
+        for (const line of lines) if (/Render:trace|WARN|ERROR/.test(line) && !/Parallel capture worker phase/.test(line)) console.log(line.slice(0, 2000));
+      });
+    } else worker.stdout?.resume();
     worker.stderr?.on('data', (chunk: Buffer) => { stderr = (stderr + chunk.toString()).slice(-2000); if (process.env.REVLINE_RENDER_LOG_LEVEL) process.stderr.write(chunk); });
     const cancel = () => {
       worker.kill('SIGTERM');

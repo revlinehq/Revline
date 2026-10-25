@@ -19,7 +19,7 @@ import { measureAudioActivity } from './measure-audio-activity';
 import { mediaSourceCacheIdentity, reuseMediaFile } from './media-file-cache';
 import { uploadMediaFile } from './upload-media-file';
 import { preparePreviewVideo,probePreviewVideo,type PreviewVideoMetadata } from './preview-video';
-import { runRenderWorker } from './render-worker';
+import { runDistributedRender, runRenderWorker } from './render-worker';
 import { importVideoLink } from './import-video-link';
 import { removeBackground } from './remove-background';
 import { prepareComposition,writeComposition } from './prepare-composition';
@@ -94,7 +94,10 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
       } else logPhase('FFmpeg export', 'skipped', Date.now(), decision.reason);
       // Only the browser renderer reads the HTML composition.
       if (!rendered) await runPhase('Preparing export composition',()=>writeComposition(directory,snapshot.timeline,snapshot.assets as (MediaAsset & {size:number})[],assetUrls,snapshot.resolution as ExportResolution,snapshot.fps as 24|30|60,'./',signal,audioSourceOffsets));
-      if (!rendered) await runPhase('Rendering export',()=>runRenderWorker(directory, output, { fps: snapshot.fps, quality }, renderProgress, signal));
+      // Fly export machines split the render across parallel chunk machines (REVLINE_DISTRIBUTED_EXPORT).
+      const distributed = process.env.REVLINE_DISTRIBUTED_EXPORT === 'true' ? { maxChunks: Number(process.env.REVLINE_EXPORT_MAX_CHUNKS ?? 8), chunkGuest: JSON.parse(process.env.REVLINE_EXPORT_CHUNK_GUEST ?? '{"cpu_kind":"performance","cpus":4,"memory_mb":8192}'), chunkEnv: JSON.parse(process.env.REVLINE_EXPORT_CHUNK_ENV ?? '{}') as Record<string, string> } : null;
+      if (!rendered && distributed) await runPhase('Rendering export across machines',()=>runDistributedRender(directory, output, { fps: snapshot.fps, quality, ...dimensions(snapshot.timeline.aspectRatio, snapshot.resolution as ExportResolution), exportId: task.taskId, ...distributed }, renderProgress, signal));
+      else if (!rendered) await runPhase('Rendering export',()=>runRenderWorker(directory, output, { fps: snapshot.fps, quality }, renderProgress, signal));
       onProgress(97);
       await runPhase('Uploading export',()=>uploadMediaFile(output, { ...credentials, jobId: task.renderJobId, projectId: task.projectId, fileName: 'video.mp4', contentType: 'video/mp4', kind: 'video', duration: timelineDuration(snapshot.timeline), ...dimensions(snapshot.timeline.aspectRatio, snapshot.resolution) }, uploadContext, signal));
       return {};

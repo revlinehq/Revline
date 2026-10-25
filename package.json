@@ -42,6 +42,7 @@
     "@sentry/nextjs": "^11.8.0",
     "@vinext/cloudflare": "^1.1.1",
     "ai": "^7.0.137",
+    "aws4fetch": "^1.0.20",
     "class-variance-authority": "^0.7.1",
     "cn": "^0.4.0",
     "convex": "^1.46.0",

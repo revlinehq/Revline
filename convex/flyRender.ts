@@ -11,9 +11,13 @@ const LANES: Lane[] = ['ultra', 'standard'];
 // Ultra exports get a 16-vCPU machine; regular exports 4 vCPUs. With BeginFrame capture, 8 workers
 // saturate 16 vCPUs (16 measured no faster). Frames stream into the encoder, so the scratch volume
 // (Fly's root filesystem is ~8 GB and slow) only holds sources and the output: a 98 s 4K60 export peaked under 0.4 GB.
+/** Each export is split into up to `chunks` slices rendered at once on short-lived machines of `guest` size. */
+const distributed = (chunks: number, guest: { cpu_kind: 'performance'; cpus: number; memory_mb: number }, env: Record<string, string>) => ({
+  REVLINE_DISTRIBUTED_EXPORT: 'true', REVLINE_EXPORT_MAX_CHUNKS: String(chunks), REVLINE_EXPORT_CHUNK_GUEST: JSON.stringify(guest), REVLINE_EXPORT_CHUNK_ENV: JSON.stringify(env),
+});
 const PROFILES: Record<Lane, { guest: { cpu_kind: 'performance'; cpus: number; memory_mb: number }; scratchGb: number; env: Record<string, string> }> = {
-  ultra: { guest: { cpu_kind: 'performance', cpus: 16, memory_mb: 32768 }, scratchGb: 20, env: { MEDIA_LANE: 'ultra', REVLINE_RENDER_WORKERS: '8', REVLINE_RENDER_FFMPEG_SLOTS: '4', REVLINE_RENDER_ENCODE_THREADS: '16' } },
-  standard: { guest: { cpu_kind: 'performance', cpus: 4, memory_mb: 8192 }, scratchGb: 10, env: { REVLINE_RENDER_WORKERS: '3', REVLINE_RENDER_FFMPEG_SLOTS: '2', REVLINE_RENDER_ENCODE_THREADS: '4' } },
+  ultra: { guest: { cpu_kind: 'performance', cpus: 16, memory_mb: 32768 }, scratchGb: 20, env: { MEDIA_LANE: 'ultra', REVLINE_RENDER_WORKERS: '8', REVLINE_RENDER_FFMPEG_SLOTS: '4', REVLINE_RENDER_ENCODE_THREADS: '16', ...distributed(16, { cpu_kind: 'performance', cpus: 8, memory_mb: 16384 }, { REVLINE_RENDER_WORKERS: '4', REVLINE_RENDER_FFMPEG_SLOTS: '4', REVLINE_RENDER_ENCODE_THREADS: '8' }) } },
+  standard: { guest: { cpu_kind: 'performance', cpus: 4, memory_mb: 8192 }, scratchGb: 10, env: { REVLINE_RENDER_WORKERS: '3', REVLINE_RENDER_FFMPEG_SLOTS: '2', REVLINE_RENDER_ENCODE_THREADS: '4', ...distributed(4, { cpu_kind: 'performance', cpus: 4, memory_mb: 8192 }, { REVLINE_RENDER_WORKERS: '3', REVLINE_RENDER_FFMPEG_SLOTS: '2', REVLINE_RENDER_ENCODE_THREADS: '4' }) } },
 };
 // A machine whose worker found no export for this long exits; Fly then stops it and CPU billing stops.
 const IDLE_MS = '60000';
@@ -49,7 +53,7 @@ function machineConfig(config: Config, lane: Lane, pool: Pool, mounts: Mount[]) 
   const profile = PROFILES[lane];
   return {
     image: config.image, guest: profile.guest, mounts, restart: { policy: 'no' }, auto_destroy: pool === 'burst', metadata: { revline_lane: lane, revline_pool: pool },
-    env: { ...profile.env, MEDIA_RENDERS_ONLY: 'true', MEDIA_WORKER_CONCURRENCY: '1', MEDIA_WORKER_IDLE_MS: IDLE_MS },
+    env: { ...profile.env, MEDIA_RENDERS_ONLY: 'true', MEDIA_WORKER_CONCURRENCY: '1', MEDIA_WORKER_IDLE_MS: IDLE_MS, MEDIA_TASK_DEADLINE_MS: String(45 * 60_000) },
   };
 }
 
