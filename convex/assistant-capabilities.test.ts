@@ -471,47 +471,17 @@ test('Punch timing tools preserve legacy controls, merge partial seconds and sav
   expect(result.error).toBeUndefined();expect(result.timeline.clips.slice(0,initial.clips.length)).toEqual(result.backend!.seed.clips.slice(0,initial.clips.length));await assertUndo(result);
 });
 
-test.each(['from','to'])('frame distortion agent controls merge, bypass, reset and remove on %s without changing other settings',async clipId=>{
-  const seed:Timeline={...initial,clips:initial.clips.map(clip=>clip.id===clipId?{...clip,lensDistortion:{...DEFAULT_LENS_DISTORTION,enabled:true}}:clip)};
+test('film and whole-clip blur agent controls save and retain source/audio; retired distortions are not offered',async()=>{
   const result=await run(async tools=>{
-    expect(tools.setVisualEffects.description).toContain('horizontal shear');
-    expect(tools.setVisualEffects.description).toContain('unused corners transparent');
-    for(const control of ['horizontal','vertical','skew','bend'])for(const value of [-1.01,1.01,NaN,Infinity]){
-      expect(()=>tools.setVisualEffects.inputSchema.parse({clipId,frameDistortion:{[control]:value}})).toThrow();
-    }
-    await execute(tools,'setVisualEffects',{clipId,frameDistortion:{enabled:true,horizontal:.4}});
-    let current=await execute(tools,'inspectTimeline',{}) as{timeline:Timeline};
-    expect(current.timeline.clips.find(clip=>clip.id===clipId)!.frameDistortion).toEqual({...DEFAULT_FRAME_DISTORTION,enabled:true,horizontal:.4});
-    await execute(tools,'setVisualEffects',{clipId,frameDistortion:{vertical:-.3,skew:.2}});
-    await execute(tools,'setVisualEffects',{clipId,frameDistortion:{enabled:false}});
-    current=await execute(tools,'inspectTimeline',{}) as{timeline:Timeline};
-    expect(current.timeline.clips.find(clip=>clip.id===clipId)!.frameDistortion).toEqual({...DEFAULT_FRAME_DISTORTION,enabled:false,horizontal:.4,vertical:-.3,skew:.2});
-    await execute(tools,'resetVisualEffect',{clipId,effect:'frameDistortion',action:'reset'});
-    current=await execute(tools,'inspectTimeline',{}) as{timeline:Timeline};
-    expect(current.timeline.clips.find(clip=>clip.id===clipId)!.frameDistortion).toEqual(DEFAULT_FRAME_DISTORTION);
-    await execute(tools,'setVisualEffects',{clipId,frameDistortion:{enabled:true,skew:-.5}});
-    await execute(tools,'resetVisualEffect',{clipId,effect:'frameDistortion',action:'reset'});
-    current=await execute(tools,'inspectTimeline',{}) as{timeline:Timeline};
-    expect(current.timeline.clips.find(clip=>clip.id===clipId)!.frameDistortion).toEqual({...DEFAULT_FRAME_DISTORTION,enabled:true});
-    await execute(tools,'resetVisualEffect',{clipId,effect:'frameDistortion',action:'remove'});
-    for(const unsupported of ['audio','title'])await expect(execute(tools,'setVisualEffects',{clipId:unsupported,frameDistortion:{enabled:true}})).rejects.toThrow('video or image');
-  },seed,true);
-  expect(result.timeline.clips).toEqual(result.backend!.seed.clips.map(clip=>clip.id===clipId?{...clip,frameDistortion:undefined}:clip));
-  expect(result.calls).not.toContain('assistant:requestAnalysis');await assertUndo(result);
-});
-
-test('lens, film and whole-clip blur agent controls save and retain source/audio',async()=>{
-  const result=await run(async tools=>{
-    expect(()=>tools.setVisualEffects.inputSchema.parse({clipId:'from',lensDistortion:{amount:1}})).toThrow();
+    for(const retired of ['lensDistortion','frameDistortion','directionalBlur']){const parsed=tools.setVisualEffects.inputSchema.safeParse({clipId:'from',[retired]:{enabled:true}});expect(parsed.success&&retired in (parsed.data as object)).toBe(false);}
     expect(()=>tools.setVisualEffects.inputSchema.parse({clipId:'from',filmOverlay:{grain:-1}})).toThrow();
-    await execute(tools,'setVisualEffects',{clipId:'from',lensDistortion:{enabled:true,amount:.2},filmOverlay:{enabled:true,grain:.4},softBlur:{enabled:true,amount:12}});
+    await execute(tools,'setVisualEffects',{clipId:'from',filmOverlay:{enabled:true,grain:.4},softBlur:{enabled:true,amount:12}});
     const current=await execute(tools,'inspectTimeline',{}) as{timeline:Timeline};
-    expect(current.timeline.clips[0]).toMatchObject({lensDistortion:{enabled:true,amount:.2,centerX:.5,centerY:.5},filmOverlay:{enabled:true,grain:.4},softBlur:{enabled:true,amount:12}});
-    await execute(tools,'setVisualEffects',{clipId:'from',lensDistortion:{enabled:false}});
+    expect(current.timeline.clips[0]).toMatchObject({filmOverlay:{enabled:true,grain:.4},softBlur:{enabled:true,amount:12}});
     await execute(tools,'resetVisualEffect',{clipId:'from',effect:'filmOverlay',action:'remove'});
     await expect(execute(tools,'setVisualEffects',{clipId:'audio',softBlur:{enabled:true,amount:5}})).rejects.toThrow('video or image');
   },initial,true);
-  expect(result.timeline.clips[0]).toMatchObject({...result.backend!.seed.clips[0],lensDistortion:{enabled:false,amount:.2},softBlur:{enabled:true,amount:12}});
+  expect(result.timeline.clips[0]).toMatchObject({...result.backend!.seed.clips[0],softBlur:{enabled:true,amount:12}});
   expect(result.timeline.clips.slice(1)).toEqual(result.backend!.seed.clips.slice(1));
   expect(result.calls).not.toContain('assistant:requestAnalysis');await assertUndo(result);
 });
@@ -820,7 +790,6 @@ test('retired footage Light sweep cannot be enabled by the agent; saved settings
 });
 
 const aeVisualCases=[
-  {effect:'directionalBlur',defaults:DEFAULT_DIRECTIONAL_BLUR,first:{enabled:true,amount:24},second:{angle:45},expected:{...DEFAULT_DIRECTIONAL_BLUR,enabled:true,amount:24,angle:45}},
   {effect:'turbulentDisplace',defaults:DEFAULT_TURBULENT_DISPLACE,first:{enabled:true,amount:40},second:{scale:220,speed:0},expected:{...DEFAULT_TURBULENT_DISPLACE,enabled:true,amount:40,scale:220,speed:0}},
 ] as const;
 test.each(aeVisualCases)('$effect AI control boundaries, partial edits, bypass/reset/remove and undo preserve video/image/audio',async({effect,defaults,first,second,expected})=>{
