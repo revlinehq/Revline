@@ -269,8 +269,8 @@ export function EditorShell(p: EditorShellProps) {
   const sourceSuggestions = suggestionAsset && suggestionClip && suggestionAsset.analysis?.understanding?.suggestions?.length ? { sourceName: suggestionAsset.fileName, clipId: suggestionClip.id, items: suggestionAsset.analysis.understanding.suggestions } : undefined;
   const cropping = !!clip && clip.id === croppingClip;
   useEffect(() => { if (croppingClip && (!clip || clip.id !== croppingClip)) setCroppingClip(null); }, [clip?.id, croppingClip]);
+  // Moving the playhead never edits the timeline, so it stays free while the AI edits.
   const seek = useCallback((n: number) => {
-    if (editLock.current) return;
     const t = frameSeekTime(n, timeline.fps, duration);
     setCroppingClip(null); setTime(t); preview.current?.seek(t);
   }, [duration, timeline.fps, setTime]);
@@ -287,7 +287,6 @@ export function EditorShell(p: EditorShellProps) {
     else { if (readPlaybackTime() >= duration) seek(0); preview.current?.play(); }
   }, [cropping, playing, readPlaybackTime, duration, seek]);
   const jumpCut = (direction: -1 | 1) => {
-    if (editLock.current) return;
     preview.current?.pause();
     const current = readPlaybackTime();
     const cuts = [...new Set([0, duration, ...timeline.clips.filter(c => c.kind === 'video' || c.kind === 'image').flatMap(c => [c.start, c.start + c.duration])])].sort((a, b) => a - b);
@@ -338,7 +337,7 @@ export function EditorShell(p: EditorShellProps) {
       if (e.code === 'Space' && target.closest('button,a,[role="button"],[role="menuitem"],[role="tab"],[role="checkbox"],[role="switch"]')) return;
       if (e.code === 'Space') { e.preventDefault(); togglePlay(); }
       else if (['<','>',',','.'].includes(e.key) && !e.metaKey && !e.ctrlKey && !e.altKey) {
-        e.preventDefault();if(editLock.current)return;
+        e.preventDefault();
         preview.current?.pause(); setPlaying(false);
         const direction = e.key === '<' || e.key === ',' ? -1 : 1;
         seek(frameSeekTime(readPlaybackTime(), timeline.fps, duration) + direction / timeline.fps);

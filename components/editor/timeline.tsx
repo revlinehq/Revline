@@ -91,7 +91,8 @@ export function TimelinePanel(p:Props){
   const liveIds=useMemo(()=>new Set(p.liveEdit?.changedClipIds??[]),[p.liveEdit?.changedClipIds]);
   const editingLock=useRef(editingDisabled);
   const timelineLock=useRef(!!p.editingLocked);
-  const onSeek=(at:number)=>{if(!timelineLock.current)p.onSeek(at);};
+  // The playhead stays free while the AI edits; only timeline changes are locked.
+  const onSeek=(at:number)=>p.onSeek(at);
   // Pointer handlers can outlive the render that started their gesture.
   const onChange=(next:Timeline)=>{if(!editingLock.current)p.onChange(applyTimelineEdit(timeline,next,store.getState().timeline));};
   const selectedIds=useEditorState(s=>s.selectedIds);const selectionBox=useRef<HTMLDivElement>(null);const [selecting,setSelecting]=useState(false);
@@ -126,7 +127,7 @@ export function TimelinePanel(p:Props){
     timelineLock.current=!!p.editingLocked;
     if(editingDisabled){
       // The AI may already have begun its undo group; cancel only local gestures.
-      if(p.editingLocked||!scrubRef.current)gestureCleanup.current?.();
+      if(!scrubRef.current)gestureCleanup.current?.();
       area.current?.querySelectorAll('.library-effect-drop').forEach(node=>node.classList.remove('library-effect-drop'));
       setContext(null);
       setEditingMarker(null);
@@ -254,25 +255,24 @@ export function TimelinePanel(p:Props){
   }
   function startScrub(e:React.PointerEvent<HTMLElement>){
     if(e.button!==0)return;e.preventDefault();e.stopPropagation();
-    if(timelineLock.current)return;
     gestureCleanup.current?.();
     focusTimeline(e.currentTarget);
     const target=e.currentTarget,pointer=e.pointerId;try{target.setPointerCapture(pointer);}catch{/* A released pointer still scrubs via window events. */}pointerX.current=e.clientX;pointerY.current=e.clientY;
     const originalTime=frameSeekTime(p.readPlaybackTime?.()??time,timeline.fps,end);
     scrubRef.current=true;store.setState({scrubbing:true});setScrubbing(true);let frame=0;let last=-1;
     function update(){
-      const el=scroll.current;if(!el||timelineLock.current)return;
+      const el=scroll.current;if(!el)return;
       const at=timelineTimeAtPointer(pointerX.current,{left:el.getBoundingClientRect().left,scrollLeft:el.scrollLeft,origin,px,end,fps:timeline.fps});
       paint(at);if(at!==last){last=at;onSeek(at);}
     }
-    function tick(){if(timelineLock.current)return;update();frame=requestAnimationFrame(tick);}
+    function tick(){update();frame=requestAnimationFrame(tick);}
     // Window listeners outlive re-renders and capture loss. Every interruption
     // keeps the last scrubbed time; only Escape returns to where the drag began.
     const move=(event:PointerEvent)=>{if(event.pointerId!==pointer)return;pointerX.current=event.clientX;pointerY.current=event.clientY;};
     const cleanup=()=>{cancelAnimationFrame(frame);scrubRef.current=false;store.setState({scrubbing:false});setScrubbing(false);window.removeEventListener('pointermove',move);window.removeEventListener('pointerup',release);window.removeEventListener('pointercancel',stop);window.removeEventListener('blur',stop);window.removeEventListener('keydown',key,true);gestureCleanup.current=null;if(target.hasPointerCapture(pointer))target.releasePointerCapture(pointer);};
     const release=(event:PointerEvent)=>{if(event.pointerId!==pointer)return;pointerX.current=event.clientX;pointerY.current=event.clientY;update();cleanup();};
     const stop=(event?:Event)=>{if(event instanceof PointerEvent&&event.pointerId!==pointer)return;cleanup();};
-    const key=(event:KeyboardEvent)=>{if(event.key!=='Escape')return;event.preventDefault();event.stopImmediatePropagation();cleanup();if(!timelineLock.current){onSeek(originalTime);paint(originalTime);}};
+    const key=(event:KeyboardEvent)=>{if(event.key!=='Escape')return;event.preventDefault();event.stopImmediatePropagation();cleanup();onSeek(originalTime);paint(originalTime);};
     gestureCleanup.current=stop;
     window.addEventListener('pointermove',move);window.addEventListener('pointerup',release);window.addEventListener('pointercancel',stop);window.addEventListener('blur',stop);window.addEventListener('keydown',key,true);tick();
   }
