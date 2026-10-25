@@ -130,7 +130,9 @@ export function generateComposition(timeline: Timeline, assets: MediaAsset[], op
     const trackIndex = compositionTrackIndex(clip);
     const zIndex = layerZIndex(clip, index);
     // The scene controller below fills this sandboxed frame and seeks its animations.
-    if (clip.kind === 'scene') return `<div id="${id}" data-scene-clip="${escapeHtml(clip.id)}" class="scene-layer" style="z-index:${zIndex}"></div>`;
+    // Untimed composition children are stamped to the whole video, and HyperFrames
+    // would then show every scene on each playback frame.
+    if (clip.kind === 'scene') return `<div id="${id}" data-scene-clip="${escapeHtml(clip.id)}" data-start="${start}" data-duration="${clip.duration}" data-end="${end}" data-track-index="${trackIndex}" class="scene-layer" style="z-index:${zIndex}"></div>`;
     if (clip.kind === 'solid') return `<div id="${id}" data-solid-color-clip="${escapeHtml(clip.id)}" class="solid-color-layer" style="z-index:${zIndex}"><div class="solid-color-rectangle"></div></div>`;
     // HyperFrames activates data-start/data-duration clip roots. Animations target
     // children or crop properties so exact-zero seeks never fight its visibility.

@@ -56,6 +56,8 @@ function mount(source){
   var node=entry?entry.node:find(source.clipId);
   if(!node){node=document.createElement('div');node.className='scene-layer';node.dataset.sceneClip=source.clipId;inner().appendChild(node);}
   node.style.zIndex=String(source.zIndex);
+  // HyperFrames sets visibility from these on every playback frame.
+  node.dataset.start=String(source.start);node.dataset.duration=String(source.duration);node.dataset.end=String(source.start+source.duration);delete node.dataset.hfAutostamped;
   if(!entry||entry.key!==key){
     if(entry)entry.frame.remove();
     var frame=document.createElement('iframe');frame.className='scene-frame';frame.setAttribute('sandbox','allow-scripts');frame.setAttribute('tabindex','-1');frame.setAttribute('aria-hidden','true');
