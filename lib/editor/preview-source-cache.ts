@@ -1,7 +1,12 @@
 import type { MediaAsset } from './types';
 
+/** Originals above this wait for a preview derivative; derivatives up to it download first. */
 export const MAX_PREVIEW_BYTES = 64 * 1024 * 1024;
-const MAX_SESSION_BYTES = 128 * 1024 * 1024;
+// A derivative streamed by byte range stalls at every cold cut: each cut's element
+// fetches its own source position on first play. A few minutes of 720p60 footage
+// is ~100 MB, so derivatives up to this size are downloaded whole into memory too.
+const MAX_LOCAL_COPY_BYTES = 192 * 1024 * 1024;
+const MAX_SESSION_BYTES = 384 * 1024 * 1024;
 type PreviewAsset = MediaAsset & { previewUrl?: string | null; previewVersion?: string | number | null; previewSize?: number | null };
 type Entry = { controller: AbortController; consumers: Set<symbol>; promise: Promise<string>; expectedBytes: number; url?: string };
 
@@ -36,7 +41,7 @@ export function createPreviewSourceCache() {
       const response = await abortable(fetch(asset.previewUrl!, { signal }), signal);
       if (!response.ok) throw new Error('Preview download failed.');
       const declared = Number(response.headers.get('content-length'));
-      if (Number.isFinite(declared) && declared > MAX_PREVIEW_BYTES) throw new Error('Preview exceeds the local playback limit.');
+      if (Number.isFinite(declared) && declared > MAX_LOCAL_COPY_BYTES) throw new Error('Preview exceeds the local playback limit.');
       if (response.status === 206) {
         const range = /^bytes 0-(\d+)\/(\d+)$/.exec(response.headers.get('content-range') ?? '');
         if (!range || Number(range[1]) + 1 !== Number(range[2])) throw new Error('Preview download was incomplete.');
@@ -50,7 +55,7 @@ export function createPreviewSourceCache() {
         const { done, value } = await abortable(reader.read(), signal);
         if (done) break;
         size += value.byteLength;
-        if (size > MAX_PREVIEW_BYTES) throw new Error('Preview exceeds the local playback limit.');
+        if (size > MAX_LOCAL_COPY_BYTES) throw new Error('Preview exceeds the local playback limit.');
         if (value.byteLength) progress(); // Headers and empty chunks are not byte progress.
         chunks.push(new Uint8Array(value));
       }
@@ -104,11 +109,11 @@ export function createPreviewSourceCache() {
     void created.promise.catch(() => {});
     return created;
   }
-  async function prepareAsset(asset: PreviewAsset, signal: AbortSignal): Promise<MediaAsset> {
+  async function prepareAsset(asset: PreviewAsset, signal: AbortSignal, maxBytes: number): Promise<MediaAsset> {
     const url = preview(asset);
     if (!url) return asset; // Never download or copy the original source.
     const size = asset.previewSize;
-    if (typeof size !== 'number' || !Number.isFinite(size) || size <= 0 || size > MAX_PREVIEW_BYTES || typeof URL.createObjectURL !== 'function') return nativeAsset(asset);
+    if (typeof size !== 'number' || !Number.isFinite(size) || size <= 0 || size > maxBytes || typeof URL.createObjectURL !== 'function') return nativeAsset(asset);
     const entry = entryFor(asset);
     if (!entry) return nativeAsset(asset);
     if (entry.url) return playable(asset, entry.url);
@@ -137,10 +142,11 @@ export function createPreviewSourceCache() {
     }
   }
   return {
-    async prepare(assets: MediaAsset[], signal: AbortSignal): Promise<MediaAsset[]> {
+    /** Local copies for derivatives up to `maxBytes`; larger ones keep their native range URL. */
+    async prepare(assets: MediaAsset[], signal: AbortSignal, maxBytes = MAX_LOCAL_COPY_BYTES): Promise<MediaAsset[]> {
       signal.throwIfAborted();
       if (disposed) throw new DOMException('Preview disposed.', 'AbortError');
-      return Promise.all(assets.map(asset => prepareAsset(asset, signal)));
+      return Promise.all(assets.map(asset => prepareAsset(asset, signal, Math.min(maxBytes, MAX_LOCAL_COPY_BYTES))));
     },
     cachedAssets(assets: MediaAsset[]): MediaAsset[] { return assets.map(nativeAsset); },
     dispose() {

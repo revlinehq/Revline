@@ -3,7 +3,7 @@ import { userError } from '@/lib/user-error';
 // @refresh reset
 import { previewVisualFade } from '@/lib/editor/visual-fades-runtime';
 import { createPreviewMediaSession } from '@/lib/editor/preview-media-session';
-import { createPreviewSourceCache } from '@/lib/editor/preview-source-cache';
+import { createPreviewSourceCache, MAX_PREVIEW_BYTES } from '@/lib/editor/preview-source-cache';
 import { tracePreviewPlayback } from '@/lib/editor/preview-diagnostics';
 import { useEffect, useLayoutEffect, useRef, useState, useMemo, forwardRef, useImperativeHandle } from 'react';
 import { audioFadeAttributes, audioVolumeEnvelope } from '@/lib/editor/audio-settings';
@@ -127,10 +127,11 @@ export const Preview = forwardRef<PreviewHandle,{timeline:Timeline;assets:MediaA
       // downloads. Timeline/text edits do not wait for that background copy.
       return retained&&asset.previewUrl&&asset.url===asset.previewUrl&&asset.previewSize!==undefined&&asset.previewSize<=64*1024*1024?{...asset,url:retained.url}:asset;
     });
-    const prepare=cache.prepare(usedAssets,controller.signal);
+    // Small local copies swap in as soon as they finish; a long take's larger copy follows on its own.
+    const prepared=[cache.prepare(usedAssets,controller.signal,MAX_PREVIEW_BYTES),cache.prepare(usedAssets,controller.signal)];
     const optional=loadPreviewRemotion(doc,current);
     if(optional)void optional.then(()=>apply(immediate),()=>{});else apply(immediate);
-    void Promise.all([prepare,optional]).then(([playbackAssets])=>{if(!cancelled&&player.current===active)callbacks.current.onPlaybackAssets?.(mediaSession.current?.resolveAssets(playbackAssets)??playbackAssets);apply(playbackAssets);},error=>{if(!cancelled)callbacks.current.onError(userError(error,'Could not load the preview renderer.'));});
+    for(const prepare of prepared)void Promise.all([prepare,optional]).then(([playbackAssets])=>{if(!cancelled&&player.current===active)callbacks.current.onPlaybackAssets?.(mediaSession.current?.resolveAssets(playbackAssets)??playbackAssets);apply(playbackAssets);},error=>{if(!cancelled)callbacks.current.onError(userError(error,'Could not load the preview renderer.'));});
     return()=>{cancelled=true;controller.abort();};
   },[committedTimeline,assets,contentKey,playerVersion]);
   const [transformId,setTransformId]=useState<string|null>(null);

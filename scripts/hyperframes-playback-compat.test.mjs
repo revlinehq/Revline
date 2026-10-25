@@ -295,7 +295,7 @@ test('large derivatives stay on native ranges and dishonest oversized response b
   globalThis.fetch=async()=>{calls++;return {ok:true,status:200,headers:new Headers(),body:{getReader:()=>({read:async()=>({done:false,value:new Uint8Array(64*1024*1024+1)}),cancel:async()=>{cancelled=true},releaseLock(){}})}}};
   const create=vi.spyOn(URL,'createObjectURL'),cache=createPreviewSourceCache(),signal=new AbortController().signal;
   try{
-    const large={...proxyAsset(),previewSize:64*1024*1024+1};assert.equal((await cache.prepare([large],signal))[0].url,large.previewUrl);assert.equal(calls,0);
+    const large={...proxyAsset(),previewSize:192*1024*1024+1};assert.equal((await cache.prepare([large],signal))[0].url,large.previewUrl);assert.equal(calls,0);
     const small=proxyAsset();assert.equal((await cache.prepare([small],signal))[0].url,small.previewUrl);assert.equal(calls,1);assert.equal(cancelled,true);assert.equal(create.mock.calls.length,0);
   }finally{cache.dispose();globalThis.fetch=originalFetch;create.mockRestore()}
 });
@@ -347,8 +347,8 @@ test('truncated successful responses are not cached and pending reservations bou
     globalThis.fetch=async()=>new Response(new Uint8Array([1,2]));
     const small=proxyAsset();assert.equal((await cache.prepare([small],signal))[0].url,small.previewUrl);assert.equal(create.mock.calls.length,0);
     globalThis.fetch=async()=>{calls++;await new Promise(resolve=>releases.push(resolve));return new Response(new Uint8Array([1]))};
-    const big=[0,1,2].map(index=>({...proxyAsset(),_id:'bounded-'+index,previewSize:64*1024*1024}));
-    const pending=cache.prepare(big,signal);assert.equal(calls,2,'Pending full-size derivatives reserve the shared128MiB budget');releases.forEach(release=>release());
+    const big=[0,1,2].map(index=>({...proxyAsset(),_id:'bounded-'+index,previewSize:192*1024*1024}));
+    const pending=cache.prepare(big,signal);assert.equal(calls,2,'Pending full-size derivatives reserve the shared 384MiB budget');releases.forEach(release=>release());
     const prepared=await pending;assert.ok(prepared.every(asset=>asset.url===asset.previewUrl));assert.equal(create.mock.calls.length,0);
   }finally{cache.dispose();globalThis.fetch=originalFetch;create.mockRestore()}
 });
