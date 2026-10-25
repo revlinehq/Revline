@@ -75,7 +75,7 @@ export const registerStockAudio = mutation({ args: { projectId: v.id('projects')
   const asset = await attachStockAudio(ctx, ownerId, args.projectId, args.catalogId);
   return { ...asset, url: await mediaUrl(ctx, asset) };
 }});
-/** Reuse or add the project's reference to one shared catalog sound; also used by the assistant's addSoundEffect. */
+/** Reuse or add the project's reference to one shared catalog sound; also used when the assistant places a requested library sound. */
 export async function attachStockAudio(ctx: MutationCtx, ownerId: string, projectId: Id<'projects'>, catalogId: string): Promise<Doc<'assets'>> {
   const entry = stockAudio(catalogId);
   if (!entry) throw new ConvexError('Audio FX not found');
