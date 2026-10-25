@@ -3,9 +3,11 @@
 .assistant-model-picker .inspector-select-value{font-size:13px;line-height:20px}
 .assistant-model-picker .inspector-select-trigger:hover,.assistant-model-picker .inspector-select-trigger[data-state=open]{background:var(--ws-hover);color:var(--ws-text)}
 .assistant-model-picker .inspector-select-trigger:disabled{opacity:.5;cursor:default}
-/* Composer pickers open roomier than their compact triggers so every option has breathing space. */
-.inspector-select-menu.workspace-menu:is([aria-label="AI editing model options"],[aria-label="AI reasoning effort options"]){width:220px}
-.inspector-select-menu:is([aria-label="AI editing model options"],[aria-label="AI reasoning effort options"]) .inspector-select-option{font-size:13px}
+.inspector-select-menu.workspace-menu[aria-label="AI editing model options"]{width:220px}
+/* The reasoning menu fits its options; composer rows get a roomier hover highlight than inspector selects. */
+.inspector-select-menu.workspace-menu[aria-label="AI reasoning effort options"]{width:max-content;min-width:var(--radix-dropdown-menu-trigger-width)}
+.inspector-select-menu:is([aria-label="AI editing model options"],[aria-label="AI reasoning effort options"]) .inspector-select-option{min-height:38px;padding:8px 32px 8px 12px;font-size:13px}
+.inspector-select-menu:is([aria-label="AI editing model options"],[aria-label="AI reasoning effort options"]) [data-slot$=item-indicator]{right:11px}
 :is(.assistant-model-picker,.assistant-fast-option) svg.assistant-fast-icon{flex-shrink:0;color:#f5b301;fill:currentColor}
 .assistant-reasoning-separator{height:1px;margin:5px 4px;background:var(--ws-border)}
 .inspector-select-option.assistant-fast-option{gap:9px}
