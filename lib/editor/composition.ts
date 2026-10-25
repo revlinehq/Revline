@@ -45,6 +45,12 @@ function mediaUrl(value: string, sameDirectory = false) {
   throw new Error('Media and script URLs must use HTTP, a blob URL, or a local path.');
 }
 
+/** Times written into HTML for the export engine, which passes them to FFmpeg verbatim.
+ * Edit arithmetic leaves residue such as 1.1e-15; FFmpeg rejects exponent notation
+ * ("Invalid duration for option ss"), so snap to microseconds, which never prints one. */
+function attrTime(value: number) {
+  return Math.round(value * 1e6) / 1e6 || 0;
+}
 function bounded(value: number | undefined, fallback: number, min: number, max: number) {
   return Number.isFinite(value) ? Math.min(max, Math.max(min, value!)) : fallback;
 }
@@ -134,11 +140,11 @@ export function generateComposition(timeline: Timeline, assets: MediaAsset[], op
     // The scene controller below fills this sandboxed frame and seeks its animations.
     // Untimed composition children are stamped to the whole video, and HyperFrames
     // would then show every scene on each playback frame.
-    if (clip.kind === 'scene') return `<div id="${id}" data-scene-clip="${escapeHtml(clip.id)}" data-start="${start}" data-duration="${clip.duration}" data-end="${end}" data-track-index="${trackIndex}" class="scene-layer" style="z-index:${zIndex}"></div>`;
+    if (clip.kind === 'scene') return `<div id="${id}" data-scene-clip="${escapeHtml(clip.id)}" data-start="${attrTime(start)}" data-duration="${attrTime(clip.duration)}" data-end="${attrTime(end)}" data-track-index="${trackIndex}" class="scene-layer" style="z-index:${zIndex}"></div>`;
     if (clip.kind === 'solid') return `<div id="${id}" data-solid-color-clip="${escapeHtml(clip.id)}" class="solid-color-layer" style="z-index:${zIndex}"><div class="solid-color-rectangle"></div></div>`;
     // HyperFrames activates data-start/data-duration clip roots. Animations target
     // children or crop properties so exact-zero seeks never fight its visibility.
-    const timing = `id="${id}" data-source-clip="${escapeHtml(clip.id)}" data-start="${start}" data-duration="${clip.duration}" data-end="${end}" data-track-index="${trackIndex}"`;
+    const timing = `id="${id}" data-source-clip="${escapeHtml(clip.id)}" data-start="${attrTime(start)}" data-duration="${attrTime(clip.duration)}" data-end="${attrTime(end)}" data-track-index="${trackIndex}"`;
     if (clip.kind === 'caption' || clip.kind === 'graphic') {
       const style = textStyle(clip, resolution);
       const attributes = `left:${style.x * 100}%;top:${style.y * 100}%;font-size:${style.fontSize}px;font-family:'${style.fontFamily}';font-weight:${style.fontWeight};font-style:${style.fontStyle};letter-spacing:${style.letterSpacing}px;line-height:${style.lineHeight};text-align:${style.textAlign};color:${style.color};z-index:${zIndex};mix-blend-mode:${style.blendMode};transform:${style.transform}`;
@@ -184,7 +190,7 @@ export function generateComposition(timeline: Timeline, assets: MediaAsset[], op
     const volume = bounded(clip.volume, 1, 0, MAX_CLIP_VOLUME);
     const sound=audioFadeAttributes(clip);
     const audioAttrs=clip.kind==='video'||clip.kind==='audio'?` data-fade-in="${sound.fadeIn}" data-fade-out="${sound.fadeOut}" data-automation="${escapeHtml(audioVolumeEnvelope(timeline,clip,volume))}"`:'';
-    const attrs = `${timing} data-media-start="${clip.sourceStart}" data-volume="${volume}"${clip.kind === 'video' || clip.kind === 'audio' ? ` data-playback-rate="${playbackRateOf(clip)}"` : ''}${audioAttrs}`;
+    const attrs = `${timing} data-media-start="${attrTime(clip.sourceStart)}" data-volume="${volume}"${clip.kind === 'video' || clip.kind === 'audio' ? ` data-playback-rate="${playbackRateOf(clip)}"` : ''}${audioAttrs}`;
     const frame = (media: string) => {
       const content = `<div id="${id}-motion" class="motion-frame"><div class="source-window" style="${windowStyle}">${media}</div></div>`;
       // Camera motion reframes pixels through a stationary aperture. Ordinary

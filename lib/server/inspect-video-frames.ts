@@ -25,7 +25,7 @@ export async function extractInspectionFrames(path: string, directory: string, i
   // FFprobe prints microsecond PTS. Match those measured instants after seeking;
   // local decoder indices or average-FPS arithmetic would relabel VFR frames.
   const select = selected.map(frame => `between(t,${frame.time+origin-1e-6},${frame.time+origin+1e-6})`).join('+'),seek=Math.max(0,input.start-.5);
-  await run('ffmpeg', ['-v', 'error', '-copyts','-ss',String(seek),'-t',String(input.end-seek+1),'-i', path, '-map', '0:v:0', '-vf', `select='${select}',scale=960:960:force_original_aspect_ratio=decrease`, '-frames:v', String(selected.length), '-fps_mode', 'vfr', '-q:v', '4', '-y', join(directory, 'inspect-%02d.jpg')], { signal, timeout: 60_000, maxBuffer: 1024 * 1024 });
+  await run('ffmpeg', ['-v', 'error', '-copyts','-ss',seek.toFixed(6),'-t',(input.end-seek+1).toFixed(6),'-i', path, '-map', '0:v:0', '-vf', `select='${select}',scale=960:960:force_original_aspect_ratio=decrease`, '-frames:v', String(selected.length), '-fps_mode', 'vfr', '-q:v', '4', '-y', join(directory, 'inspect-%02d.jpg')], { signal, timeout: 60_000, maxBuffer: 1024 * 1024 });
   const images = await Promise.all(selected.map(async (frame, index) => ({ ...frame, data: (await readFile(join(directory, `inspect-${String(index + 1).padStart(2, '0')}.jpg`))).toString('base64') })));
   if (images.reduce((bytes, image) => bytes + image.data.length, 0) > 12 * 1024 * 1024) throw new AnalysisError('Frame inspection images exceed the request size limit.', 400);
   const {stdout:decoded}=await run('ffprobe',['-v','error','-select_streams','v:0','-show_entries','stream=width,height','-of','json',join(directory,'inspect-01.jpg')],{signal,timeout:10000,maxBuffer:65536});
