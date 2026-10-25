@@ -177,7 +177,7 @@ html[data-workspace-theme=dark] .editor-app:not(.landing-product-demo){--ed-bg:#
 html[data-workspace-theme=dark] .editor-app:not(.landing-product-demo) :is(.editor-sidebar,.custom-timeline){--ws-bg:var(--ed-panel)}
 /* The editor UI uses Geist from the design; rules that name --font-inter pick it up too. */
 html[data-workspace-theme=dark] .editor-app:not(.landing-product-demo){--font-inter:var(--font-geist);--font-ui:var(--font-geist);font-family:var(--font-geist),sans-serif}
-html[data-workspace-theme=dark] .conversation-editor .workspace-nav{padding:0 16px 0 20px;background:var(--ed-bg);border-bottom-color:var(--ed-border)}
+html[data-workspace-theme=dark] .conversation-editor .workspace-nav{padding:0 16px 0 20px;background:var(--ed-bg);border-bottom:0}
 html[data-workspace-theme=dark] .conversation-editor .workspace-chat-trigger{font-size:14px;font-weight:500;color:var(--ed-text)}
 html[data-workspace-theme=dark] .conversation-editor .workspace-chat-trigger svg,html[data-workspace-theme=dark] .conversation-editor .workspace-nav-icon{color:var(--ed-text-3)}
 html[data-workspace-theme=dark] .conversation-editor .workspace-nav-actions{gap:6px}
