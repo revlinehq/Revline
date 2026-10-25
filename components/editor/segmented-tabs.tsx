@@ -12,7 +12,7 @@ export function SegmentedTabs<Value extends string>({ label, options, value, onC
   value: Value;
   onChange: (value: Value) => void;
   className?: string;
-  appearance?: 'segmented' | 'navigation';
+  appearance?: 'segmented' | 'navigation' | 'icons';
 }) {
   return <div className={`segmented-tabs ${className}`} style={{gridTemplateColumns:`repeat(${options.length},minmax(0,1fr))`}} data-appearance={appearance} role="tablist" aria-label={label} onKeyDown={event => {
     if (!(event.target as HTMLElement).matches('[role="tab"]')) return;
@@ -22,5 +22,5 @@ export function SegmentedTabs<Value extends string>({ label, options, value, onC
     event.preventDefault();
     onChange(options[index].value);
     event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="tab"]')[index]?.focus();
-  }}>{options.map(option => <button key={option.value} type="button" role="tab" id={option.id} data-segment={option.value} data-library-tab={option.value} aria-controls={option.panelId} aria-selected={value === option.value} tabIndex={value === option.value ? 0 : -1} onClick={() => onChange(option.value)}>{option.icon}{option.label}</button>)}</div>;
+  }}>{options.map(option => <button key={option.value} type="button" role="tab" id={option.id} data-segment={option.value} data-library-tab={option.value} aria-controls={option.panelId} aria-selected={value === option.value} tabIndex={value === option.value ? 0 : -1} title={appearance === 'icons' ? option.label : undefined} onClick={() => onChange(option.value)}>{option.icon}{appearance === 'icons' ? <span className="sr-only">{option.label}</span> : option.label}</button>)}</div>;
 }

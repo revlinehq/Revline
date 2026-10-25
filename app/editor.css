@@ -189,6 +189,11 @@ html[data-workspace-theme=dark] .conversation-editor .workspace-nav .revline-pri
 html[data-workspace-theme=dark] .conversation-editor .editor-mode-switch{gap:4px;padding:0;border-color:var(--ed-border);border-radius:6px;background:transparent}
 html[data-workspace-theme=dark] .conversation-editor .editor-mode-switch>[role=tab]{min-height:28px;border-radius:6px;color:var(--ed-text-3);font-size:12px}
 html[data-workspace-theme=dark] .conversation-editor .editor-mode-switch>[role=tab][aria-selected=true]{background:var(--ed-surface-2);box-shadow:none;color:var(--ed-text)}
+/* Chat header: title and the icon-only mode switch, full bleed across the sidebar padding. */
+.conversation-editor .editor-chat-header{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-shrink:0;height:48px;margin:-16px -16px 12px;padding:10px 12px 10px 16px;border-bottom:1px solid var(--ws-artifact-border)}
+.conversation-editor .editor-chat-header>span{font-size:13px;font-weight:500;color:var(--ws-text)}
+.conversation-editor .editor-mode-switch[data-appearance=icons]{width:auto;grid-template-columns:repeat(2,28px)!important;padding:0}
+.conversation-editor .editor-mode-switch[data-appearance=icons]>[role=tab]{width:28px;min-height:28px;padding:0}
 /* Chat panel: suggestion cards and the prompt box. */
 html[data-workspace-theme=dark] .conversation-editor .assistant-source-suggestions{gap:8px}
 html[data-workspace-theme=dark] .conversation-editor .assistant-source-suggestions>span{display:flex;align-items:center;gap:6px;padding:0 2px 4px;margin:0;font-size:12px;color:var(--ed-text-3)}
@@ -210,6 +215,14 @@ html[data-workspace-theme=dark] .conversation-editor .floating-tools-rail button
 html[data-workspace-theme=dark] .conversation-editor .floating-tools-rail-divider{background:var(--ed-border)}
 html[data-workspace-theme=dark] .conversation-editor .canvas-toolbar .aspect-ratio-trigger{height:28px;gap:8px;padding:0 10px;border:1px solid var(--ed-border);border-radius:6px;background:var(--ed-surface);color:var(--ed-text);font-size:12px}
 html[data-workspace-theme=dark] .conversation-editor .canvas-toolbar .aspect-ratio-trigger:hover,html[data-workspace-theme=dark] .conversation-editor .canvas-toolbar .aspect-ratio-trigger[data-state=open]{background:var(--ed-surface-2)}
+/* Share is a text button in the design. */
+html[data-workspace-theme=dark] .conversation-editor .workspace-nav-secondary[aria-label="Share timeline"]{border-color:transparent}
+html[data-workspace-theme=dark] .conversation-editor .workspace-nav-secondary[aria-label="Share timeline"] svg{display:none}
+/* Under the preview: the clip name and the output size. */
+.conversation-editor .stage-center{position:relative}
+.conversation-editor .preview-meta{--preview-width:min(calc(100cqw - 36px),calc((100cqh - 36px) * var(--preview-ratio)));position:absolute;left:50%;top:calc(50% + var(--preview-width) / var(--preview-ratio) / 2 + 3px);width:var(--preview-width);translate:-50% 0;display:flex;justify-content:space-between;gap:12px;font-size:11px;line-height:14px;color:var(--ws-muted);pointer-events:none}
+.conversation-editor .preview-meta>span:first-child{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.conversation-editor .preview-meta>span:last-child{flex-shrink:0;color:var(--ed-text-3,var(--ws-faint));font-variant-numeric:tabular-nums}
 /* Timeline chrome: transport bar, timecode, ruler labels, track names and the playhead. Clips are untouched. */
 html[data-workspace-theme=dark] .conversation-editor .custom-timeline .timeline-toolbar{min-height:48px}
 html[data-workspace-theme=dark] .conversation-editor .custom-timeline:not(.timeline-collapsed) .timeline-toolbar{border-bottom:1px solid var(--ed-border)}
@@ -222,6 +235,9 @@ html[data-workspace-theme=dark] .conversation-editor .custom-timeline .time-rule
 html[data-workspace-theme=dark] .conversation-editor .custom-timeline .track-label-name{gap:8px;font-size:12px;font-weight:500}
 html[data-workspace-theme=dark] .conversation-editor .custom-timeline .track-dot{width:6px;height:6px}
 html[data-workspace-theme=dark] .conversation-editor .custom-timeline .playhead{width:2px;margin-left:-.5px;background:#7c3aed}
+html[data-workspace-theme=dark] .conversation-editor .custom-timeline .timeline-playhead-cap{width:12px;height:14px;margin-top:9px}
+html[data-workspace-theme=dark] .conversation-editor .custom-timeline :is(.track-label,.timeline-track){border-bottom-color:transparent}
+@media(min-width:901px){html[data-workspace-theme=dark] .conversation-editor .custom-timeline .track-headers{width:168px}}
 html[data-workspace-theme=dark] .conversation-editor .custom-timeline .timeline-playhead-cap{color:#7c3aed}
 html[data-workspace-theme=dark] .conversation-editor .custom-timeline .timeline-playhead-cap:hover{color:#8b5cf6}
 html[data-workspace-theme=dark] .editor-app:not(.landing-product-demo) .ruler-tick{border-left-color:var(--ed-tick)}
