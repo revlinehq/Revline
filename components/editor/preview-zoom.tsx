@@ -246,7 +246,10 @@ export function PreviewViewport({ children }: { children: ReactNode }) {
 
 /** Places content just above and below the rendered preview frame (fitted, zoomed or panned), clamped inside the viewport. */
 export function PreviewFrameOverlay({ above, below }: { above?: ReactNode; below?: ReactNode }) {
-  const { geometry, viewport, viewportRef } = usePreviewZoom();
+  const { canvas, geometry, view, viewport, viewportRef } = usePreviewZoom();
+  // Controls above the frame stay where the fitted frame sits; zooming or
+  // panning the picture must not carry them around the stage.
+  const fitted = useRef<{ left: number; top: number; width: number; height: number } | null>(null);
   const [frame, setFrame] = useState<{ left: number; top: number; right: number; bottom: number } | null>(null);
   useLayoutEffect(() => {
     // The frame snaps to whole aspect units, so measure it rather than recomputing its size.
@@ -257,8 +260,13 @@ export function PreviewFrameOverlay({ above, below }: { above?: ReactNode; below
   }, [viewportRef, geometry.left, geometry.top, geometry.width, geometry.height, viewport.width, viewport.height]);
   if (!frame) return null;
   const left = Math.max(0, frame.left), right = Math.min(viewport.width, frame.right);
+  if (view.scale === null) fitted.current = { left: frame.left, top: frame.top, width: viewport.width, height: viewport.height };
+  const fit = fitted.current?.width === viewport.width && fitted.current.height === viewport.height ? fitted.current : (() => {
+    const base = previewViewGeometry(fitPreviewView(canvas), canvas, viewport);
+    return { left: base.left, top: base.top };
+  })();
   return <>
-    {above && <div className="preview-frame-above" style={{ left, top: Math.max(0, frame.top - 32) }}>{above}</div>}
+    {above && <div className="preview-frame-above" style={{ left: Math.max(0, fit.left), top: Math.max(0, fit.top - 32) }}>{above}</div>}
     {below && <div className="preview-frame-below" style={{ left, top: Math.min(viewport.height - 16, frame.bottom + 6), width: Math.max(0, right - left) }}>{below}</div>}
   </>;
 }
