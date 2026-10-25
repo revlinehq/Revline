@@ -62,6 +62,18 @@ export function modelAssetAnalysis(analysis: NonNullable<MediaAsset['analysis']>
   };
 }
 
+/** Several source windows in one read: shared observations and audio levels
+ * once, then each window's words, quiet intervals and dense samples. */
+export function modelAssetAnalysisWindows(analysis: NonNullable<MediaAsset['analysis']>, windows: readonly { start: number; end: number }[]) {
+  const reads = windows.map(window => modelAssetAnalysis(analysis, window));
+  const { sourceWindow: _window, transcript: _transcript, audioActivity, focus: _focus, beats: _beats, ...shared } = reads[0] as Record<string, unknown> & { audioActivity?: { quiet?: unknown } };
+  const { quiet: _quiet, ...audioLevels } = audioActivity ?? {};
+  return { ...shared, ...(audioActivity ? { audioActivity: audioLevels } : {}),
+    windows: reads.map(read => { const { sourceWindow, transcript, audioActivity: activity, focus, beats } = read as Record<string, unknown> & { audioActivity?: { quiet?: unknown } };
+      return { sourceWindow, ...(transcript ? { transcript } : {}), ...(activity?.quiet ? { quiet: activity.quiet } : {}), ...(focus ? { focus } : {}), ...(beats ? { beats } : {}) }; }),
+  };
+}
+
 function object(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
