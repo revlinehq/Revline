@@ -4,7 +4,6 @@ import { warmPreviewMedia } from './preview-media-warmup';
 import { recoverMediaSource, watchPreviewMediaStalls } from './media-source-recovery';
 import { sourceTimeAt } from './playback-rate';
 import type { MediaAsset, Timeline } from './types';
-import { clipMediaUrl } from './clip-media-url';
 
 export type PreviewTransport = EventTarget & { paused: boolean; play(): void; pause(): void; seek(time: number): void };
 export type PreviewMediaRefresh = (assetIds: string[]) => Promise<{ _id: string; url: string | null; previewUrl?: string | null }[]>;
@@ -80,9 +79,8 @@ export function createPreviewMediaSession(options: PreviewMediaSessionOptions) {
       if (!currentRecovery(media, request)) return;
       if (!fresh) throw new Error('No playable source.');
       recovered.set(sourceClip.assetId, { original: assets.find(asset => asset._id === sourceClip.assetId)?.url ?? null, url: fresh });
-      const url = clipMediaUrl(fresh, sourceClip);
-      request.source = url;
-      await recoverMediaSource(media, url, {
+      request.source = fresh;
+      await recoverMediaSource(media, fresh, {
         signal: request.controller.signal,
         position: () => sourceTimeAt(timeline.clips.find(clip => clip.id === media.dataset.sourceClip) ?? sourceClip, readTime()),
         playing: () => {
@@ -124,9 +122,7 @@ export function createPreviewMediaSession(options: PreviewMediaSessionOptions) {
       // owner reapplies its successful refresh without rebuilding the player.
       for (const media of document.querySelectorAll<HTMLMediaElement>('video[data-start],audio[data-start]')) {
         const clip = timeline.clips.find(clip => clip.id === media.dataset.sourceClip), replacement = clip?.assetId ? recovered.get(clip.assetId) : undefined;
-        if (!clip || !replacement || replacement.original === null) continue;
-        const original = clipMediaUrl(replacement.original, clip), url = clipMediaUrl(replacement.url, clip);
-        if (media.getAttribute('src') === original && media.getAttribute('src') !== url) media.src = url;
+        if (replacement && media.getAttribute('src') === replacement.original && media.getAttribute('src') !== replacement.url) media.src = replacement.url;
       }
     },
     async whenReady(time: number, signal: AbortSignal, onThumbnail?: (url: string) => void, onSlow?: () => void) {

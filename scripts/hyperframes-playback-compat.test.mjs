@@ -227,12 +227,12 @@ test('a retained outgoing transition frame is never discarded as an inactive str
   try{assert.equal(node.loads,0,'The transition renderer still displays its outgoing retained native frame beyond the authored clip edge');}finally{stop();}
 });
 
-test('only active and the two nearest upcoming videos keep loading streams, while idle decoded frames survive',()=>{
+test('only active and nearest upcoming video keep loading streams, while idle decoded frames survive',()=>{
   const node=(start,networkState=2)=>Object.assign(new EventTarget(),{tagName:'VIDEO',isConnected:true,paused:true,networkState,preload:'auto',readyState:3,seeking:false,currentTime:0,duration:100,dataset:{start:String(start),end:String(start+1),duration:'1',mediaStart:'0'},buffered:{length:1,start:()=>0,end:()=>100},loads:0,load(){this.loads++;this.networkState=0;},getAttribute:()=>'/large-original.mp4'});
-  const active=node(0),nearest=[node(1),node(2)],distant=[node(3),node(4),node(5),node(6)],past=node(-1),idle=node(-2,1),all=[active,...nearest,...distant,past,idle];
+  const active=node(0),nearest=node(1),distant=[node(2),node(3),node(4),node(5),node(6)],past=node(-1),idle=node(-2,1),all=[active,nearest,...distant,past,idle];
   const doc={querySelectorAll:()=>all,defaultView:{MutationObserver:class{observe(){}disconnect(){}}}};
   const stop=warmPreviewMedia(doc,()=>0);
-  try{assert.equal(active.loads,0);assert.ok(nearest.every(media=>media.loads===0),'The next two cuts keep their streams');assert.ok([...distant,past].every(media=>media.loads===1),'All other open video requests are aborted even when they already decoded a first frame');assert.equal(idle.loads,0,'An idle decoded frame has no competing network stream and must survive');assert.equal(idle.preload,'none');}finally{stop();}
+  try{assert.equal(active.loads,0);assert.equal(nearest.loads,0);assert.ok([...distant,past].every(media=>media.loads===1),'All other open video requests are aborted even when they already decoded a first frame');assert.equal(idle.loads,0,'An idle decoded frame has no competing network stream and must survive');assert.equal(idle.preload,'none');}finally{stop();}
 });
 
 test('the terminal decoded video frame survives transport end while earlier clips release streams',()=>{
@@ -358,7 +358,7 @@ test('session refresh uses the fresh preferred-preview URL from playback.refresh
   const session=createPreviewMediaSession({...fixture,document:fixture.doc,timeline,assets:[asset],refreshMedia:async()=>[{_id:asset._id,url:fresh}],onError:message=>errors.push(message),onWaiting:()=>{}});
   try{
     const event=new Event('error');Object.defineProperty(event,'target',{value:media});fixture.doc.dispatchEvent(event);await vi.advanceTimersByTimeAsync(0);
-    assert.equal(src,`${fresh}?clip=clip`,'Each clip loads through its own URL');assert.equal(session.resolveAssets([asset])[0].url,fresh);session.update(timeline,[asset]);assert.equal(session.resolveAssets([asset])[0].url,fresh);assert.deepEqual(errors,[]);
+    assert.equal(src,fresh);assert.equal(session.resolveAssets([asset])[0].url,fresh);session.update(timeline,[asset]);assert.equal(session.resolveAssets([asset])[0].url,fresh);assert.deepEqual(errors,[]);
     session.update(timeline,[{...asset,url:'https://private.test/new-generation'}]);assert.equal(session.resolveAssets([{...asset,url:'https://private.test/new-generation'}])[0].url,'https://private.test/new-generation');
   }finally{session.dispose();vi.useRealTimers()}
 });
@@ -457,7 +457,7 @@ test('a delayed original refresh is not reused after the same asset gains a prep
     error();await vi.advanceTimersByTimeAsync(0);
     src='https://private.test/preview';session.update(timeline,[{...asset,url:src,previewUrl:src,previewVersion:1,previewSize:100}]);await vi.advanceTimersByTimeAsync(0);
     error();await vi.advanceTimersByTimeAsync(0);releaseOld([{_id:asset._id,url:'https://private.test/fresh-original'}]);await vi.advanceTimersByTimeAsync(0);
-    assert.equal(refresh.mock.calls.length,2,'The new source profile must own a separate refresh request');assert.equal(src,`${freshPreview}?clip=clip`);assert.deepEqual(errors,[]);
+    assert.equal(refresh.mock.calls.length,2,'The new source profile must own a separate refresh request');assert.equal(src,freshPreview);assert.deepEqual(errors,[]);
   }finally{session.dispose();vi.useRealTimers()}
 });
 

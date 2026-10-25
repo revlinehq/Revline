@@ -26,16 +26,12 @@ export function warmPreviewMedia(document: Document, readTime: () => number): ()
       const start=Number(node.dataset.start),end=start+Number(node.dataset.duration);
       return node.isConnected&&time>=start&&time<end&&(node.tagName==='VIDEO'||Number(node.dataset.volume??1)>0)&&(node.paused?!previewMediaReady(node,time):node.seeking||node.readyState<3)&&!bufferedTarget(node,time);
     });
-    // Each clip streams through its own URL (clipMediaUrl), so elements no longer
-    // share one stream. Prepare the next two video cuts: edits often cut twice
-    // within half a second (a talking-head cut, then B-roll over it). Further
-    // cuts wait, so open streams stay within the browser's preload budget.
+    // Several native elements reading distant ranges of the same large original
+    // can starve one another. Keep only the nearest video cut, even when it is
+    // decoded: its open stream still consumes the browser's native preload budget.
     const upcoming=media.filter(node=>node.isConnected&&(node.tagName!=='AUDIO'||Number(node.dataset.volume??1)>0)&&Number(node.dataset.start)>time&&Number(node.dataset.start)<=time+6)
       .sort((a,b)=>Number(a.dataset.start)-Number(b.dataset.start));
-    const nextVideos=upcoming.filter(node=>node.tagName==='VIDEO').slice(0,2),nextAudio=upcoming.find(node=>node.tagName==='AUDIO');
-    // A cut starting within a second is needed now; cancelling it while the active
-    // clip buffers only moves the stall to the next cut.
-    const imminent=(node:HTMLMediaElement)=>Number(node.dataset.start)-time<=1;
+    const nextVideo=upcoming.find(node=>node.tagName==='VIDEO'),nextAudio=upcoming.find(node=>node.tagName==='AUDIO');
     const compositionEnd=Number(document.getElementById?.('composition')?.dataset.duration??Infinity);
     const heldAtEnd=(node:HTMLMediaElement)=>{
       const end=Number(node.dataset.end??Number(node.dataset.start)+Number(node.dataset.duration));
@@ -44,7 +40,7 @@ export function warmPreviewMedia(document: Document, readTime: () => number): ()
     for(const node of media)if(node.tagName==='VIDEO'&&node.isConnected&&node.paused&&node.preload!=='none'&&node.dataset.revlineTransitionVisible===undefined&&
       !heldAtEnd(node)&&
       (time<Number(node.dataset.start)||time>=Number(node.dataset.end??Number(node.dataset.start)+Number(node.dataset.duration)))&&
-      !(nextVideos.includes(node)&&(!activeBlocked||imminent(node)))){
+      (activeBlocked||node!==nextVideo)){
       const listener=pending.get(node);if(listener){node.removeEventListener('loadedmetadata',listener);pending.delete(node);}
       primed.delete(node);node.preload='none';
       // An idle decoder has no competing request. Retain its decoded frame and
@@ -53,8 +49,8 @@ export function warmPreviewMedia(document: Document, readTime: () => number): ()
     }
     // A cold opening or scrub must win bandwidth over speculative future seeks.
     // Resume lookahead as soon as the current footage has real buffered runway.
-    for (const node of [...nextVideos,nextAudio]) {
-      if(activeBlocked&&!(node&&imminent(node)))continue;
+    if(activeBlocked)return;
+    for (const node of [nextVideo,nextAudio]) {
       if(!node)continue;
       const key = `${node.getAttribute('src')}|${node.dataset.mediaStart}`;
       const sourceTime = Number(node.dataset.mediaStart ?? 0);
