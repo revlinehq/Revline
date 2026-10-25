@@ -7,10 +7,15 @@ type Bindings = ProcessorEnv & ProcessorSecrets;
 const TIMEOUT_MS = 5 * 60_000;
 const INSTANCE_TYPE = 'standard-3';
 const RESOURCE_PROFILE = '2-vcpu-8g-v1';
+// Ultra exports run on their own 4-vCPU slot; it claims only Ultra jobs and
+// starts only when one is queued.
+const ULTRA_INSTANCE_TYPE = 'standard-4';
+const ULTRA_RESOURCE_PROFILE = '4-vcpu-12g-v1';
+const ULTRA_PROCESSOR_NAME = 'production-ultra';
 // Retain the existing instance so an active export survives this capacity rollout.
-const PROCESSOR_NAMES = ['production', 'production-2'];
+const PROCESSOR_NAMES = ['production', 'production-2', ULTRA_PROCESSOR_NAME];
 const RETIRED_PROCESSOR_NAMES = ['production-3', 'production-4', 'production-5'];
-const readyQuery = makeFunctionReference<'query', { workerSecret: string;processorVersion:number }, string>('mediaTasks:ready');
+const readyQuery = makeFunctionReference<'query', { workerSecret: string;processorVersion:number;lane?:'ultra' }, string>('mediaTasks:ready');
 
 export class MediaProcessor extends DurableObject<Bindings> {
   private pending: Promise<void> | undefined;
@@ -18,7 +23,10 @@ export class MediaProcessor extends DurableObject<Bindings> {
     super(ctx, env);
     if (ctx.container?.running) void ctx.blockConcurrencyWhile(() => ctx.container!.setInactivityTimeout(TIMEOUT_MS));
   }
-  async wake(): Promise<void> {
+  /** The slot's lane arrives with each controller call and is kept for its own alarms. */
+  private async remember(ultra?: boolean) { if (ultra !== undefined) await this.ctx.storage.put('ultra', ultra); }
+  async wake(ultra?: boolean): Promise<void> {
+    await this.remember(ultra);
     await this.ctx.storage.delete('retired');
     await this.ctx.storage.setAlarm(Date.now());
   }
@@ -41,7 +49,8 @@ export class MediaProcessor extends DurableObject<Bindings> {
   alarm(): Promise<void> {
     return this.tick();
   }
-  tick(): Promise<void> {
+  async tick(ultra?: boolean): Promise<void> {
+    await this.remember(ultra);
     this.pending ??= this.ensureWorker().finally(() => { this.pending = undefined; });
     return this.pending;
   }
@@ -59,9 +68,11 @@ export class MediaProcessor extends DurableObject<Bindings> {
     if (await this.ctx.storage.get('retired')) return;
     if (!this.env.RENDER_WORKER_SECRET || !this.env.GOOGLE_GENERATIVE_AI_API_KEY) throw new Error('Production processing secrets are not configured.');
     const container = this.ctx.container!;
+    const ultra = await this.ctx.storage.get('ultra') === true;
+    const profile = ultra ? ULTRA_RESOURCE_PROFILE : RESOURCE_PROFILE;
     if (container.running) {
       const current = await container.inspect();
-      if (current?.image && (current.image !== container.images.processor || current.labels.profile !== RESOURCE_PROFILE)) {
+      if (current?.image && (current.image !== container.images.processor || current.labels.profile !== profile)) {
         const response = await container.getTcpPort(8080).fetch('http://container/drain', { method: 'POST', headers: { authorization: `Bearer ${this.env.RENDER_WORKER_SECRET}` }, signal: AbortSignal.timeout(5000) });
         await response.body?.cancel();
         if (!response.ok) throw new Error('The previous media processor could not drain.');
@@ -70,9 +81,11 @@ export class MediaProcessor extends DurableObject<Bindings> {
       }
     } else {
       const client = new ConvexHttpClient(this.env.NEXT_PUBLIC_CONVEX_URL);
-      const ready = await client.query(readyQuery, { workerSecret: this.env.RENDER_WORKER_SECRET,processorVersion:5 });
+      const ready = await client.query(readyQuery, { workerSecret: this.env.RENDER_WORKER_SECRET,processorVersion:5,...(ultra?{lane:'ultra' as const}:{}) });
       if (!ready || await this.ctx.storage.get('retired')) return;
-      container.start({ image: container.images.processor, instance: INSTANCE_TYPE, labels: { profile: RESOURCE_PROFILE }, enableInternet: true, env: {
+      container.start({ image: container.images.processor, instance: ultra ? ULTRA_INSTANCE_TYPE : INSTANCE_TYPE, labels: { profile }, enableInternet: true, env: {
+        // Three capture workers and FFmpeg slots use the Ultra slot's four vCPUs.
+        ...(ultra ? { MEDIA_LANE: 'ultra', REVLINE_RENDER_WORKERS: '3', REVLINE_RENDER_FFMPEG_SLOTS: '3' } : {}),
         NEXT_PUBLIC_CONVEX_URL: this.env.NEXT_PUBLIC_CONVEX_URL,
         MEDIA_WORKER_URL: this.env.MEDIA_WORKER_URL,
         RENDER_WORKER_SECRET: this.env.RENDER_WORKER_SECRET,
@@ -103,20 +116,21 @@ export default {
     if (path === '/restart') {
       const body = await request.json().catch(() => null) as { name?: unknown } | null;
       if (typeof body?.name !== 'string' || ![...PROCESSOR_NAMES, ...RETIRED_PROCESSOR_NAMES].includes(body.name)) return Response.json({ error: 'Choose an existing processor slot.' }, { status: 400 });
+      if (body.name === ULTRA_PROCESSOR_NAME) await env.PROCESSOR.getByName(body.name).wake(true);
       await env.PROCESSOR.getByName(body.name).restart(PROCESSOR_NAMES.includes(body.name));
       return Response.json({ accepted: true }, { status: 202 });
     }
     if (path === '/status') {
       const processors = await Promise.all(PROCESSOR_NAMES.map(async name => ({ name, ...await env.PROCESSOR.getByName(name).status() })));
       const retiring = await Promise.all(RETIRED_PROCESSOR_NAMES.map(async name => ({ name, ...await env.PROCESSOR.getByName(name).status() })));
-      return Response.json({ capacity: PROCESSOR_NAMES.length, instanceType: INSTANCE_TYPE, processorVersion: 5, processors, retiring }, { headers: { 'Cache-Control': 'no-store' } });
+      return Response.json({ capacity: PROCESSOR_NAMES.length, instanceType: INSTANCE_TYPE, ultraInstanceType: ULTRA_INSTANCE_TYPE, processorVersion: 5, processors, retiring }, { headers: { 'Cache-Control': 'no-store' } });
     }
-    await Promise.all([...PROCESSOR_NAMES.map(name => env.PROCESSOR.getByName(name).wake()), ...RETIRED_PROCESSOR_NAMES.map(name => env.PROCESSOR.getByName(name).retire())]);
+    await Promise.all([...PROCESSOR_NAMES.map(name => env.PROCESSOR.getByName(name).wake(name === ULTRA_PROCESSOR_NAME)), ...RETIRED_PROCESSOR_NAMES.map(name => env.PROCESSOR.getByName(name).retire())]);
     return Response.json({ accepted: true }, { status: 202 });
   },
   async scheduled(_controller: ScheduledController, env: Bindings): Promise<void> {
     // One failed boot must not prevent the other slots from picking up queued jobs.
-    const results = await Promise.allSettled([...PROCESSOR_NAMES.map(name => env.PROCESSOR.getByName(name).tick()), ...RETIRED_PROCESSOR_NAMES.map(name => env.PROCESSOR.getByName(name).retire())]);
+    const results = await Promise.allSettled([...PROCESSOR_NAMES.map(name => env.PROCESSOR.getByName(name).tick(name === ULTRA_PROCESSOR_NAME)), ...RETIRED_PROCESSOR_NAMES.map(name => env.PROCESSOR.getByName(name).retire())]);
     if (results.some(result => result.status === 'rejected')) throw new Error('One or more media processor slots could not become ready.');
   },
 } satisfies ExportedHandler<Bindings>;

@@ -18,9 +18,11 @@ import { TEXT_FONTS, textFontFaceCss, type TextFontId } from './text-fonts';
 import { playbackRateOf, sourceEndOf, timelineTimeAtSource, validatePlaybackRate } from './playback-rate';
 import { dimensions, timelineDuration, deriveTrackCounts, normalizeTimeline, trackOf, DEFAULT_TRANSFORM, type Clip, type MediaAsset, type Timeline } from './types';
 
+/** Export short-side pixels; 2160 (4K) is offered to Ultra accounts. */
+export type ExportResolution = 720 | 1080 | 2160;
 export type CompositionOptions = {
   preview?: boolean;
-  resolution?: 720 | 1080;
+  resolution?: ExportResolution;
   fps?: 24 | 30 | 60;
   gsapUrl?: string;
   visualEffectsUrl?: string;

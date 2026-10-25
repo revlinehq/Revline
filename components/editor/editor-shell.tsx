@@ -77,7 +77,7 @@ export type EditorShellProps = {
   canResumeEdit?:boolean;
   assistantEditSnapshot?:AssistantEditSnapshot;
   assistantPanel?: ReactNode;
-  onExport: (settings: ExportSettings) => Promise<void>; onDownloadExport?: (jobId:string)=>Promise<void>; onCancelExport?: (jobId:string)=>Promise<void>; exportState: ExportState; demo?: boolean; embedded?: boolean;
+  onExport: (settings: ExportSettings) => Promise<void>; onDownloadExport?: (jobId:string)=>Promise<void>; onCancelExport?: (jobId:string)=>Promise<void>; exportState: ExportState; demo?: boolean; ultra?: boolean; embedded?: boolean;
   analysisBusy?: string | null; analysisSource?: string | null; analysisProgress?: number | null; analysisStartedAt?:number|null; assistantBudgetUsed?:number; preparationActivity?:string; onLoadMore?: () => void; canLoadMore?: boolean;
   projectId?: string; workspaceOnly?: boolean; onImportVideo?: (url:string)=>Promise<void>; videoImports?: VideoImportState[];
   onRefreshMedia?:RefreshPlaybackMedia;
@@ -485,6 +485,6 @@ export function EditorShell(p: EditorShellProps) {
     {preparing&&<ProjectImportStage importTask={p.videoImports?.find(task=>!['completed','cancelled'].includes(task.status))} upload={p.upload} onBrowse={browse} onUpload={p.onUpload}/>}
     {compact && inspectorOpen && <Sheet open={inspectorOpen} onOpenChange={setInspectorOpen}><SheetContent className="preview-inspector-sheet" showCloseButton={false}><div className="mobile-inspector-header"><SheetTitle>Tools and My media</SheetTitle><Button type="button" variant="ghost" size="icon" aria-label="Close editing panel" onClick={() => setInspectorOpen(false)}><X size={18}/></Button></div><SheetDescription>Choose media or adjust your selected clip.</SheetDescription>{inspector}</SheetContent></Sheet>}
     <MediaImportDialog open={importOpen} onOpenChange={setImportOpen} onUpload={files=>{void (importDestination==='composer'?p.onAttachUpload??p.onDropUpload:editLock.current||importDestination==='sources'?p.onDropUpload:p.onUpload)(files);}} onImportVideo={editing?undefined:p.onImportVideo} disabled={!!p.upload}/>
-    <ExportDialog open={exportOpen} onOpenChange={setExportOpen} title={exportClipId?`${p.title} clip`:p.title} timeline={exportTimeline} clipOnly={!!exportClipId} coverUrl={assets.find(a => a.kind === 'image')?.url} onExport={settings=>p.onExport({...settings,...(exportClipId?{clipId:exportClipId}:{})})} onCancel={p.onCancelExport} onDownload={p.onDownloadExport} state={p.exportState?{...p.exportState,current:p.exportState.current&&(p.exportState.sourceClipId??null)===exportClipId}:null} demo={!!p.demo} />
+    <ExportDialog ultra={p.ultra} open={exportOpen} onOpenChange={setExportOpen} title={exportClipId?`${p.title} clip`:p.title} timeline={exportTimeline} clipOnly={!!exportClipId} coverUrl={assets.find(a => a.kind === 'image')?.url} onExport={settings=>p.onExport({...settings,...(exportClipId?{clipId:exportClipId}:{})})} onCancel={p.onCancelExport} onDownload={p.onDownloadExport} state={p.exportState?{...p.exportState,current:p.exportState.current&&(p.exportState.sourceClipId??null)===exportClipId}:null} demo={!!p.demo} />
   </main>;
 }

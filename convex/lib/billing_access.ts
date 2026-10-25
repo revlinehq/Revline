@@ -16,6 +16,12 @@ export async function hasComplimentaryEditorAccess(ctx: QueryCtx | MutationCtx, 
   return !!entitlement && entitlement.revokedAt === undefined && (entitlement.expiresAt === undefined || entitlement.expiresAt > Date.now());
 }
 
+/** Ultra is an operator grant on an active complimentary entitlement; nothing sells it yet. */
+export async function hasUltraPlan(ctx: QueryCtx | MutationCtx, ownerId: string) {
+  const entitlement = await ctx.db.query('editorEntitlements').withIndex('by_owner', q => q.eq('ownerId', ownerId)).unique();
+  return !!entitlement && entitlement.plan === 'ultra' && entitlement.revokedAt === undefined && (entitlement.expiresAt === undefined || entitlement.expiresAt > Date.now());
+}
+
 export async function requireEditorAccess(ctx: QueryCtx | MutationCtx, ownerId: string) {
   if (!billingEnabled()) return;
   if (await hasComplimentaryEditorAccess(ctx, ownerId)) return;

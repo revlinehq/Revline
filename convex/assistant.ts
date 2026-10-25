@@ -1,5 +1,5 @@
 import {validatePinnedClaudeModel,type ClaudeModelSelection} from '../lib/ai/claude-model';
-import type {MutationCtx} from './_generated/server';
+import type {MutationCtx, QueryCtx} from './_generated/server';
 import type {Doc} from './_generated/dataModel';
 import {mediaWorkflow} from './lib/workflows';
 import type {WorkflowId} from '@convex-dev/workflow';
@@ -9,7 +9,7 @@ import { hydrateAsset } from './lib/asset_analysis';
 import { attachStockAudio, validateWaveform } from './assets';
 import { recordAssetStorage } from './lib/storage_accounting';
 import { writeProject,readProject,projectIdentity,projectRun } from './lib/project_data';
-import { requireEditorAccess } from './lib/billing_access';
+import { hasUltraPlan, requireEditorAccess } from './lib/billing_access';
 import { abortStream, createThread, listStreams, listUIMessages, saveMessage, syncStreams, vPaginationResult, vStreamArgs } from "@convex-dev/agent";
 import { vStreamDelta, vStreamMessage } from "@convex-dev/agent/validators";
 import { paginationOptsValidator } from "convex/server";
@@ -36,8 +36,13 @@ const providerReason = "Configure OPENAI_API_KEY (GPT-6.1 Sol, GPT-6 Astra) or A
 function configured() {
   try{assertEditorModelConfigured(resolveClaudeModel());return true;}catch{return false;}
 }
+/** Manual model, reasoning and speed choices: Ultra accounts, or a deployment
+ * that opens them to everyone (development sets EDITOR_MODEL_CHOICE_OPEN). */
+async function canChooseEditorModel(ctx: QueryCtx | MutationCtx, ownerId: string) {
+  return claudeModelSwitcherEnabled() && (process.env.EDITOR_MODEL_CHOICE_OPEN === 'true' || await hasUltraPlan(ctx, ownerId));
+}
 export const status = query({ args: { projectId: v.id("projects") }, returns: v.object({ configured: v.boolean(), modelSwitcher: v.optional(v.boolean()), allowedModels: v.optional(v.array(claudeModelChoiceValidator)), defaultModelChoice:v.optional(claudeModelChoiceValidator), running: v.boolean(), editing: v.boolean(), workflowActive: v.boolean(), error: v.union(v.string(), v.null()), reason: v.union(v.string(), v.null()), activity: v.union(v.string(), v.null()), activitySource: v.union(v.string(), v.null()), activityProgress: v.union(v.number(), v.null()), activityStartedAt: v.union(v.number(), v.null()), budgetUsed: v.optional(v.number()) }), handler: async (ctx, args) => {
-  const project = await projectRun(ctx,args.projectId,await requireOwner(ctx));
+  const ownerId = await requireOwner(ctx), project = await projectRun(ctx,args.projectId,ownerId);
   const requests = project.aiRunning && project.aiRunId ? await ctx.db.query('analysisRequests').withIndex('by_projectId_runId', q => q.eq('projectId', project._id).eq('aiRunId', project.aiRunId!)).take(16) : [];
   const active = requests.find(request => request.status === 'pending' || request.status === 'running');
   const task = active?.taskId ? await ctx.db.get(active.taskId) : null;
@@ -51,7 +56,7 @@ export const status = query({ args: { projectId: v.id("projects") }, returns: v.
   const workflowActive=await editingWorkflowActive(ctx,project,requests.length>0);
   const budget=project.aiRunning&&project.aiRunId?await ctx.db.query('aiBudgets').withIndex('by_project',q=>q.eq('projectId',project._id)).unique():null;
   const activity=active?task?.status==='retrying'||task?.status==='queued'&&(task.attempt>1)?'Retrying analysis…':task?.status==='queued'?'Queued for analysis…':task?.activity?MEDIA_ACTIVITY_LABELS[task.activity]:labels[active.mode]:editing?'Applying edits…':null;
-  return { configured: ready, ...(defaultModelChoice?{defaultModelChoice}:{}), ...(claudeModelSwitcherEnabled() ? { modelSwitcher: true, allowedModels: [...allowedClaudeModelChoices()] } : {}), running: project.aiRunning ?? false, editing, workflowActive, error: project.aiError ?? null, reason: ready ? null : providerReason, activity, activityProgress: null, activityStartedAt: active ? task?.activityStartedAt ?? task?.attemptStartedAt ?? active.createdAt : null, activitySource: source?.ownerId === project.ownerId && source.projectId === project._id ? source.fileName : null, ...(budget&&budget.runId===project.aiRunId?{budgetUsed:budget.used}:{}) };
+  return { configured: ready, ...(defaultModelChoice?{defaultModelChoice}:{}), ...(await canChooseEditorModel(ctx, ownerId) ? { modelSwitcher: true, allowedModels: [...allowedClaudeModelChoices()] } : {}), running: project.aiRunning ?? false, editing, workflowActive, error: project.aiError ?? null, reason: ready ? null : providerReason, activity, activityProgress: null, activityStartedAt: active ? task?.activityStartedAt ?? task?.attemptStartedAt ?? active.createdAt : null, activitySource: source?.ownerId === project.ownerId && source.projectId === project._id ? source.fileName : null, ...(budget&&budget.runId===project.aiRunId?{budgetUsed:budget.used}:{}) };
 }});
 const livePreviewValidator = v.object({runId:v.string(),baseRevision:v.number(),timeline:timelineValidator,label:v.string(),changedClipIds:v.array(v.string()),removedClips:v.array(clipValidator),at:v.number(),sequence:v.number(),updatedAt:v.number()});
 export const livePreview = query({args:{projectId:v.id('projects')},returns:v.union(v.null(),livePreviewValidator),handler:async(ctx,{projectId})=>{
@@ -69,6 +74,7 @@ async function clearLivePreview(ctx:import('./_generated/server').MutationCtx,pr
 }
 export const send = mutation({ args: { projectId: v.id("projects"), prompt: v.string(), modelChoice: v.optional(legacyCompatibleModelChoiceValidator), reasoningEffort: v.optional(openAIReasoningEffortValidator), speedMode: v.optional(openAISpeedModeValidator), attachedAssetIds:v.optional(v.array(v.id('assets'))), selectedClipId: v.optional(v.string()), selectedClipIds: v.optional(v.array(v.string())), playhead: v.optional(v.number()) }, returns: v.null(), handler: async (ctx, args) => {
   const ownerId = await requireOwner(ctx); await requireEditorAccess(ctx, ownerId); const project = await requireProject(ctx, args.projectId, ownerId);
+  if ((args.modelChoice !== undefined || args.reasoningEffort !== undefined || args.speedMode !== undefined) && !await canChooseEditorModel(ctx, ownerId)) throw new ConvexError('Choosing the AI model is part of the Ultra plan.');
   let pinnedModel;
   try { pinnedModel = withEditorSpeed(withEditorReasoning(enforceClaudeModelPolicy(resolveClaudeModel(args.modelChoice)), args.reasoningEffort), args.speedMode); assertEditorModelConfigured(pinnedModel); } catch (error) { throw new ConvexError((error as Error).message); }
   if(args.attachedAssetIds){

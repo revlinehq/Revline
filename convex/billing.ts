@@ -5,7 +5,7 @@ import { components, internal } from "./_generated/api";
 import { action, internalMutation, query } from "./_generated/server";
 import { EDITOR_PLAN } from "../lib/billing/plan";
 import { NEW_PROJECT_PATH } from '../lib/workspace-routes';
-import { billingConfigured, billingEnabled, editorSubscriptions, hasComplimentaryEditorAccess, hasEditorAccess, isEditorSubscription } from './lib/billing_access';
+import { billingConfigured, billingEnabled, editorSubscriptions, hasComplimentaryEditorAccess, hasEditorAccess, hasUltraPlan, isEditorSubscription } from './lib/billing_access';
 
 const hasAccess = hasEditorAccess;
 function ready() { return billingEnabled() && billingConfigured(); }
@@ -20,12 +20,13 @@ export const isSubscribed = query({ args: {}, returns: v.boolean(), handler: asy
   const identity = await ctx.auth.getUserIdentity(); if (!identity || !ready()) return false;
   return (await editorSubscriptions(ctx, identity.subject)).some(hasAccess);
 }});
-export const status = query({ args: {}, returns: v.object({ enabled: v.boolean(), configured: v.boolean(), subscribed: v.boolean(), complimentary: v.optional(v.boolean()), complimentaryExpiresAt: v.optional(v.number()), trialEligible: v.boolean(), needsPayment: v.boolean(), plan: v.union(v.literal("free"), v.literal("pro")) }), handler: async (ctx) => {
+export const status = query({ args: {}, returns: v.object({ enabled: v.boolean(), configured: v.boolean(), subscribed: v.boolean(), complimentary: v.optional(v.boolean()), complimentaryExpiresAt: v.optional(v.number()), trialEligible: v.boolean(), needsPayment: v.boolean(), plan: v.union(v.literal("free"), v.literal("pro"), v.literal("ultra")) }), handler: async (ctx) => {
   const identity = await ctx.auth.getUserIdentity(); let subscribed = false; let trialEligible = true; let needsPayment = false;
   const complimentary = !!identity && await hasComplimentaryEditorAccess(ctx, identity.subject);
+  const ultra = !!identity && await hasUltraPlan(ctx, identity.subject);
   if (identity && ready()) { const subs = await editorSubscriptions(ctx, identity.subject); subscribed = subs.some(hasAccess); trialEligible = subs.length === 0; needsPayment = subs.some(sub => ['past_due', 'unpaid', 'paused', 'incomplete'].includes(sub.status)); }
   const entitlement = complimentary ? await ctx.db.query('editorEntitlements').withIndex('by_owner', q => q.eq('ownerId', identity!.subject)).unique() : null;
-  return { enabled: billingEnabled(), configured: ready(), subscribed, ...(complimentary ? { complimentary: true, ...(entitlement?.expiresAt !== undefined ? { complimentaryExpiresAt: entitlement.expiresAt } : {}) } : {}), trialEligible: complimentary ? false : trialEligible, needsPayment: complimentary ? false : needsPayment, plan: subscribed || complimentary ? "pro" as const : "free" as const };
+  return { enabled: billingEnabled(), configured: ready(), subscribed, ...(complimentary ? { complimentary: true, ...(entitlement?.expiresAt !== undefined ? { complimentaryExpiresAt: entitlement.expiresAt } : {}) } : {}), trialEligible: complimentary ? false : trialEligible, needsPayment: complimentary ? false : needsPayment, plan: ultra ? "ultra" as const : subscribed || complimentary ? "pro" as const : "free" as const };
 }});
 export const reserveCheckout = internalMutation({
   args: { ownerId: v.string(), priceId: v.string(), origin: v.string(), trialEligible: v.boolean(), expiredRequestId: v.optional(v.string()) },

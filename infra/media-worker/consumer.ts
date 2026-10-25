@@ -10,6 +10,8 @@ const convexUrl = process.env.NEXT_PUBLIC_CONVEX_URL;
 const workerSecret = process.env.RENDER_WORKER_SECRET;
 if (!convexUrl || !workerSecret) throw new Error('Configure the production Convex URL and media worker secret.');
 const concurrency = Number(process.env.MEDIA_WORKER_CONCURRENCY ?? 1);
+// The Ultra slot claims only Ultra exports; regular slots leave them to it.
+const lane = process.env.MEDIA_LANE === 'ultra' ? { lane: 'ultra' as const } : {};
 // Staying warm after work spares the next export a container and Chromium cold
 // start; idle containers still bill memory/disk, so this stays bounded.
 const idleMs = Number(process.env.MEDIA_WORKER_IDLE_MS ?? 600_000);
@@ -26,7 +28,7 @@ const subscriptions = new ConvexClient(convexUrl);
 let revision = 0, ready = false, activeTasks = 0, draining = false, lastWorkAt = Date.now();
 const waiters = new Set<() => void>();
 const wake = () => { for (const resolve of waiters) resolve(); };
-const unsubscribe = subscriptions.onUpdate(api.mediaTasks.ready, { workerSecret,processorVersion:5 }, value => {
+const unsubscribe = subscriptions.onUpdate(api.mediaTasks.ready, { workerSecret,processorVersion:5,...lane }, value => {
   revision++; ready = !!value;
   if (ready) { lastWorkAt = Date.now(); wake(); }
 });
@@ -63,7 +65,7 @@ async function runSlot() {
     try {
       const observed = revision;
       const claimedAt = Date.now();
-      const task = await client.mutation(api.mediaTasks.claim, { workerSecret: workerSecret!, compact:true,processorVersion:5 });
+      const task = await client.mutation(api.mediaTasks.claim, { workerSecret: workerSecret!, compact:true,processorVersion:5,...lane });
       if (!task) { await waitForWork(observed); continue; }
       activeTasks++; lastWorkAt = Date.now();
       const controller = new AbortController();

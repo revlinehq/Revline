@@ -3,7 +3,7 @@ import { extname, join } from 'node:path';
 import type { MediaAsset, Timeline } from '../editor/types';
 import { TEXT_FONTS } from '../editor/text-fonts';
 import { isTransitionClip } from '../editor/clip-transitions';
-import { generateComposition } from '../editor/composition';
+import { generateComposition, type ExportResolution } from '../editor/composition';
 import { downloadOwnedMedia,probeMedia } from '../media-analysis/io';
 import { AnalysisError } from '../media-analysis/errors';
 import { prepareRenderAudioSource } from './prepare-render-audio';
@@ -63,7 +63,7 @@ export async function linkCompositionResources(root:string,directory:string,asse
     await link(join(root,name),join(directory,name));
   }
 }
-export async function writeComposition(directory:string,timeline:Timeline,assets:MediaAsset[],assetUrls:Record<string,string>,resolution:720|1080,fps:24|30|60,prefix='./',signal:AbortSignal=AbortSignal.timeout(30_000),audioSourceOffsets:Record<string,number>={}) {
+export async function writeComposition(directory:string,timeline:Timeline,assets:MediaAsset[],assetUrls:Record<string,string>,resolution:ExportResolution,fps:24|30|60,prefix='./',signal:AbortSignal=AbortSignal.timeout(30_000),audioSourceOffsets:Record<string,number>={}) {
   const audibleVideo=new Set(timeline.clips.filter(clip=>clip.kind==='video'&&clip.volume!==0).map(clip=>clip.assetId));
   const silent=new Set<string>();
   const audible=assets.filter(asset=>asset.kind==='video'&&audibleVideo.has(asset._id));

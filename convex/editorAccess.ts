@@ -22,6 +22,17 @@ export const grantComplimentary = internalMutation({
   },
 });
 
+/** Operator-only: set or clear the Ultra plan on an existing complimentary grant. */
+export const setPlan = internalMutation({
+  args: { ownerId: v.string(), plan: v.union(v.literal('ultra'), v.null()) }, returns: v.null(),
+  handler: async (ctx, { ownerId, plan }) => {
+    const entitlement = await ctx.db.query('editorEntitlements').withIndex('by_owner', q => q.eq('ownerId', ownerId)).unique();
+    if (!entitlement || !await hasComplimentaryEditorAccess(ctx, ownerId)) throw new ConvexError('Ultra needs an active complimentary grant for this account first');
+    await ctx.db.patch(entitlement._id, { plan: plan ?? undefined, updatedAt: Date.now() });
+    return null;
+  },
+});
+
 export const revokeComplimentary = internalMutation({
   args: { ownerId: v.string() }, returns: v.null(),
   handler: async (ctx, { ownerId }) => {

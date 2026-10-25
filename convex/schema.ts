@@ -140,6 +140,8 @@ export const mediaTaskStatus = v.union(v.literal('queued'), v.literal('running')
 export const mediaTaskActivity = v.union(v.literal('downloading'), v.literal('preparing-analysis'), v.literal('sending-gemini'), v.literal('preparing-gemini'), v.literal('analyzing'), v.literal('retrying-analysis'));
 export const mediaTaskFields = {
   ownerId: v.string(), projectId: v.id('projects'), kind: mediaTaskKind,
+  // Ultra exports run on the 4-vCPU processor slot; other work leaves this unset.
+  lane: v.optional(v.literal('ultra')),
   assetId: v.optional(v.id('assets')), renderJobId: v.optional(v.id('renderJobs')), analysisRequestId: v.optional(v.id('analysisRequests')),
   status: mediaTaskStatus, claimable:v.optional(v.boolean()), workflowId: v.optional(v.string()), attempt: v.number(), progress: v.number(),
   activity:v.optional(mediaTaskActivity),activityStartedAt:v.optional(v.number()),
@@ -191,7 +193,7 @@ export default defineSchema({
     .index('by_owner_kind_size',['ownerId','auxiliary','pending','kind','size']).index('by_owner_kind_created',['ownerId','auxiliary','pending','kind','createdAt'])
     .searchIndex('search_name',{searchField:'fileName',filterFields:['ownerId','auxiliary','pending','kind']}),
   storageAccounting: defineTable({ name:v.string(), ready:v.boolean() }).index('by_name',['name']),
-  editorEntitlements: defineTable({ ownerId: v.string(), reason: v.string(), grantedAt: v.number(), updatedAt: v.number(), expiresAt: v.optional(v.number()), revokedAt: v.optional(v.number()) }).index('by_owner', ['ownerId']),
+  editorEntitlements: defineTable({ ownerId: v.string(), reason: v.string(), grantedAt: v.number(), updatedAt: v.number(), expiresAt: v.optional(v.number()), revokedAt: v.optional(v.number()), plan: v.optional(v.literal('ultra')) }).index('by_owner', ['ownerId']),
   timelineShares:defineTable({projectId:v.id('projects'),ownerId:v.string(),title:v.string(),timeline:timelineValidator,chat:v.optional(v.array(sharedChatMessage)),published:v.boolean(),createdAt:v.number(),updatedAt:v.number()}).index('by_project',['projectId']),
   shareAssets:defineTable({shareId:v.id('timelineShares'),...sharedAssetFields}).index('by_share',['shareId']).index('by_storageId',['storageId']).index('by_r2Key',['r2Key']).index('by_previewR2Key',['previewR2Key']).index('by_owner_previewR2Key',['ownerId','previewR2Key']).index('by_thumbnailStorageId',['thumbnailStorageId']).index('by_owner_r2Key',['ownerId','r2Key']).index('by_owner_storageId',['ownerId','storageId']).index('by_owner_thumbnail',['ownerId','thumbnailStorageId']),
   billingCheckouts: defineTable({ ownerId: v.string(), priceId: v.string(), origin: v.string(), trialEligible: v.boolean(), requestId: v.string(), createdAt: v.number(), sessionId: v.optional(v.string()), url: v.optional(v.string()), expiresAt: v.optional(v.number()) }).index('by_owner', ['ownerId']),

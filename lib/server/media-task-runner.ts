@@ -1,3 +1,4 @@
+import type { ExportResolution } from '@/lib/editor/composition';
 import { mkdtemp, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -77,7 +78,7 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
       let reported = 0, base = 5, span = 90;
       const renderProgress = (progress: { progress: number }) => { reported = Math.max(reported, base + Math.round(progress.progress / 100 * span)); onProgress(reported); };
       // Plain video/audio timelines skip browser compositing. REVLINE_RENDER_FAST_PATH=0 disables it.
-      const decision = process.env.REVLINE_RENDER_FAST_PATH === '0' ? { eligible: false as const, reason: 'disabled by REVLINE_RENDER_FAST_PATH=0' } : plainExportPlan(snapshot.timeline, snapshot.assets as MediaAsset[], snapshot.resolution as 720 | 1080, snapshot.fps);
+      const decision = process.env.REVLINE_RENDER_FAST_PATH === '0' ? { eligible: false as const, reason: 'disabled by REVLINE_RENDER_FAST_PATH=0' } : plainExportPlan(snapshot.timeline, snapshot.assets as MediaAsset[], snapshot.resolution as ExportResolution, snapshot.fps);
       let rendered = false;
       if (decision.eligible) {
         try {
@@ -91,7 +92,7 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
         }
       } else logPhase('FFmpeg export', 'skipped', Date.now(), decision.reason);
       // Only the browser renderer reads the HTML composition.
-      if (!rendered) await runPhase('Preparing export composition',()=>writeComposition(directory,snapshot.timeline,snapshot.assets as (MediaAsset & {size:number})[],assetUrls,snapshot.resolution as 720|1080,snapshot.fps as 24|30|60,'./',signal,audioSourceOffsets));
+      if (!rendered) await runPhase('Preparing export composition',()=>writeComposition(directory,snapshot.timeline,snapshot.assets as (MediaAsset & {size:number})[],assetUrls,snapshot.resolution as ExportResolution,snapshot.fps as 24|30|60,'./',signal,audioSourceOffsets));
       if (!rendered) await runPhase('Rendering export',()=>runRenderWorker(directory, output, { fps: snapshot.fps, quality }, renderProgress, signal));
       onProgress(97);
       await runPhase('Uploading export',()=>uploadMediaFile(output, { ...credentials, jobId: task.renderJobId, projectId: task.projectId, fileName: 'video.mp4', contentType: 'video/mp4', kind: 'video', duration: timelineDuration(snapshot.timeline), ...dimensions(snapshot.timeline.aspectRatio, snapshot.resolution) }, uploadContext, signal));

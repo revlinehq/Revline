@@ -2,7 +2,7 @@ import { clipExportTimeline } from '../lib/editor/clip-export';
 import { projectIdentity } from './lib/project_data';
 import { recordStorageObject, forgetStorageObject } from './lib/storage_accounting';
 import { internal } from './_generated/api';
-import { requireEditorAccess } from './lib/billing_access';
+import { hasUltraPlan, requireEditorAccess } from './lib/billing_access';
 import { mediaDownloadUrl, mediaUrl } from './lib/media_storage';
 import { ConvexError, v } from "convex/values";
 import { action, internalQuery, mutation, internalMutation, query, type MutationCtx } from "./_generated/server";
@@ -26,7 +26,8 @@ async function requireJob(ctx: MutationCtx, jobId: Id<"renderJobs">, workerSecre
 }
 export const start = mutation({ args: { projectId: v.id("projects"), resolution: v.number(), fps: v.number(), quality: v.string(), clipId:v.optional(v.string()) }, returns: v.id("renderJobs"), handler: async (ctx, args) => {
   const ownerId = await requireOwner(ctx); await requireEditorAccess(ctx, ownerId); const project = await requireProject(ctx, args.projectId, ownerId);
-  if (![720, 1080].includes(args.resolution) || ![24, 30, 60].includes(args.fps) || !["draft", "standard", "high"].includes(args.quality)) throw new ConvexError("Invalid export settings");
+  const ultra = await hasUltraPlan(ctx, ownerId);
+  if (![720, 1080, ...(ultra ? [2160] : [])].includes(args.resolution) || ![24, 30, 60].includes(args.fps) || !["draft", "standard", "high"].includes(args.quality)) throw new ConvexError(args.resolution === 2160 ? "4K export is part of the Ultra plan." : "Invalid export settings");
   const saved=currentTimeline(project);
   if(args.clipId!==undefined&&project.aiRunning)throw new ConvexError('Wait for the current AI edit to finish before exporting this clip.');
   let snapshot=saved;
@@ -44,7 +45,8 @@ export const start = mutation({ args: { projectId: v.id("projects"), resolution:
   for (const clip of timeline.clips) if (clip.assetId) { const id = ctx.db.normalizeId("assets", clip.assetId)!; if (!assetIds.includes(id)) assetIds.push(id); }
   const now = Date.now();
   const jobId = await ctx.db.insert("renderJobs", { ownerId, projectId: project._id, sourceRevision:project.revision??0, ...(args.clipId!==undefined?{sourceClipId:args.clipId}:{}), timeline, assetIds, resolution: args.resolution, fps: args.fps, quality: args.quality, status: "queued", progress: 0, createdAt: now, updatedAt: now });
-  const taskId = await enqueueMediaTask(ctx, { ownerId, projectId: project._id, kind: 'render', renderJobId: jobId });
+  // Ultra exports go to the 4-vCPU processor slot.
+  const taskId = await enqueueMediaTask(ctx, { ownerId, projectId: project._id, kind: 'render', renderJobId: jobId, ...(ultra ? { lane: 'ultra' as const } : {}) });
   await ctx.db.patch(jobId, { taskId });
   return jobId;
 }});

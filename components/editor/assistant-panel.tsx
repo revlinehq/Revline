@@ -99,7 +99,8 @@ function AssistantPanelBody({ messages, running, editing:editingTimeline=running
   editSnapshot?:AssistantEditSnapshot;
 }) {
   const [prompt, setPrompt] = useState('');
-  const canChooseModel = process.env.NODE_ENV === 'development' && modelSwitcher;
+  // The server offers the switcher to Ultra accounts and to open (development) deployments.
+  const canChooseModel = !!modelSwitcher;
   const sendInFlight=useRef(false);
   const currentDraftKey=useRef(draftKey);currentDraftKey.current=draftKey;
   const [modelChoice, setModelChoice] = useState<ClaudeModelChoice>();
