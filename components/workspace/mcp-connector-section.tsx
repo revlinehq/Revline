@@ -51,7 +51,7 @@ export function McpConnectorSection() {
   const connected = (app: AppId) => connector.connections.some(connection => connection.kind !== 'personal' && APPS[app].match.test(connection.label));
   const app = open ? APPS[open] : null;
 
-  return <section className="workspace-profile-section mcp-connector"><div className="workspace-section-label"><h2>Connect AI apps</h2><p>Edit your projects from Claude or ChatGPT with your own subscription. Every edit is saved and undoable.</p></div>
+  return <section className="workspace-profile-section mcp-connector"><div className="workspace-section-label"><h2>Connect AI apps</h2></div>
     <div className="workspace-section-content">
       <div className="mcp-apps">
         {(Object.keys(APPS) as AppId[]).map(id => {
