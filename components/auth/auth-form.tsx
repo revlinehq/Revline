@@ -35,7 +35,7 @@ export function AuthForm() {
   const [target, setTarget] = useState(NEW_PROJECT_PATH);
   const [browserUrl, setBrowserUrl] = useState('');
   const [step, setStep] = useState<'email' | 'code'>('email');
-  const [email, setEmail] = useState(() => params.get('email') ?? '');
+  const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
   const [phase, setPhase] = useState<'idle' | 'sending' | 'verifying' | 'resending' | 'resetting' | 'google'>('idle');
   const [blockedTask, setBlockedTask] = useState(false);

@@ -27,11 +27,11 @@ body:has(>.landing),body:has(main.landing){background:#fff}
 .landing-button[data-variant=secondary]:hover{background:var(--l-brand-tint)}
 .landing-button[data-variant=neutral]:hover{background:#f4f4f5}
 .landing-button[data-variant=inverse-outline]:hover:not(:disabled){background:#18181d}
-.landing-heading{display:flex;flex-direction:column;gap:14px}
+.landing-heading{display:flex;flex-direction:column;gap:14px;max-width:100%}
 .landing-heading[data-align=center]{align-items:center;text-align:center}
 .landing-heading h2{font:400 44px/1.1 var(--l-head);letter-spacing:-1.1px;color:var(--l-fg)}
 .landing-heading p{width:520px;max-width:100%;font-size:16px;line-height:1.5;color:var(--l-fg-2)}
-.landing-heading[data-align=center] p{width:auto;font-size:17px;line-height:1.3}
+.landing-heading[data-align=center] p{width:auto;text-wrap:balance;font-size:17px;line-height:1.3}
 .landing-heading[data-size=lg] h2{width:640px;max-width:100%;font-size:52px;letter-spacing:-1.6px;line-height:1.05}
 .landing-heading[data-tone=inverse] h2{color:#f2f2f4}
 .landing-heading[data-tone=inverse] p{font-size:18px;color:#a6a6ae}
@@ -203,14 +203,19 @@ body:has(>.landing),body:has(main.landing){background:#fff}
 
 /* Final CTA */
 .landing-final{padding-bottom:40px}
-.landing-final-card{display:flex;flex-direction:column;align-items:center;gap:16px;padding:88px 80px;border:1px solid #1f1f25;border-radius:20px;background:radial-gradient(90% 120% at 50% 0,#7c3aed2e,#7c3aed00) #0f0f12;text-align:center}
-.landing-signup{width:420px;max-width:100%;display:flex;flex-direction:column;gap:10px;padding-top:16px}
-.landing-email{display:flex;align-items:center;gap:8px;height:52px;padding:5px 5px 5px 16px;background:#18181d;border:1px solid #2c2c34;border-radius:10px}
-.landing-email:focus-within{border-color:#4a3a7a}
-.landing-email input{flex:1;min-width:0;height:100%;border:0;background:transparent;font:15px var(--l-body);color:#f2f2f4;outline:none}
-.landing-email input::placeholder{color:#6e6e78}
-.landing-email .landing-button{height:100%;border-radius:7px}
-.landing-google[data-size=lg]{height:46px;gap:10px;font-size:14px}
+.landing-final-card{position:relative;isolation:isolate;display:flex;flex-direction:column;align-items:center;gap:20px;padding:88px 80px 72px;border:1px solid #1f1f25;border-radius:20px;background:radial-gradient(90% 120% at 50% 0,#7c3aed2e,#7c3aed00) #0f0f12;text-align:center;overflow:hidden}
+.landing-final-backdrop{position:absolute;inset:auto -40px -36px;z-index:-1;display:flex;justify-content:center;gap:14px;opacity:.46;filter:blur(1.5px) saturate(.8);-webkit-mask-image:linear-gradient(to top,#000 10%,transparent 85%);mask-image:linear-gradient(to top,#000 10%,transparent 85%)}
+.landing-final-backdrop img{width:220px;height:150px;flex-shrink:0;object-fit:cover;border-radius:12px}
+.landing-final-backdrop img:nth-child(odd){transform:translateY(18px)}
+.landing-composer{width:600px;max-width:100%;margin-top:12px;display:flex;flex-direction:column;gap:10px;padding:16px 16px 12px;border:1px solid #2c2c34;border-radius:14px;background:#16161bcc;backdrop-filter:blur(10px);text-align:left;box-shadow:0 20px 60px #00000059;transition:border-color 140ms ease}
+.landing-composer:focus-within{border-color:#5b3fa3}
+.landing-composer textarea{width:100%;resize:none;border:0;background:transparent;font:16px/1.5 var(--l-body);color:#f2f2f4;outline:none}
+.landing-composer textarea::placeholder{color:#6e6e78}
+.landing-composer-bar{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.landing-composer-bar>span{display:flex;align-items:center;gap:6px;font-size:13px;color:#6e6e78}
+.landing-suggestions{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;width:640px;max-width:100%}
+.landing-suggestions .landing-button{border-radius:999px;background:#16161b99;font-weight:400;color:#a6a6ae}
+.landing-suggestions .landing-button:hover{color:#f2f2f4}
 .landing-final-card>small{font-size:13px;color:#6e6e78}
 
 /* Footer */
@@ -264,7 +269,9 @@ body:has(>.landing),body:has(main.landing){background:#fff}
   .landing-testimonial blockquote{font-size:24px}
   .landing-plan{padding:24px}
   .landing-final{padding-inline:12px}
-  .landing-final-card{padding:56px 20px}
+  .landing-final-card{padding:56px 16px 48px}
+  .landing-final-backdrop img{width:150px;height:104px}
+  .landing-suggestions .landing-button{white-space:normal;height:auto;min-height:32px;padding-block:6px;line-height:1.3}
   .landing-heading[data-size=lg] h2{font-size:36px;letter-spacing:-1px}
   .landing-heading[data-tone=inverse] p{font-size:16px}
   .landing-footer{flex-direction:column;align-items:flex-start}
