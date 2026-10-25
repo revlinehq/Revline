@@ -196,7 +196,9 @@ export function EditorShell(p: EditorShellProps) {
   useLayoutEffect(() => {
     const toolbar=bodyRef.current?.querySelector<HTMLElement>('.timeline-toolbar');
     if(!toolbar)return;
-    const measure=()=>setCollapsedTimelineHeight(Math.max(1,Math.ceil(toolbar.getBoundingClientRect().height)));
+    // A collapsed timeline keeps its toolbar plus the floating card's border and the padding around it.
+    const edges=(element:Element|null,start:string,end:string)=>{if(!element)return 0;const style=getComputedStyle(element);return (parseFloat(style.getPropertyValue(start))||0)+(parseFloat(style.getPropertyValue(end))||0);};
+    const measure=()=>setCollapsedTimelineHeight(Math.max(1,Math.ceil(toolbar.getBoundingClientRect().height+edges(toolbar.closest('.custom-timeline'),'border-top-width','border-bottom-width')+edges(toolbar.closest('.editor-timeline-content'),'padding-top','padding-bottom'))));
     const observer=new ResizeObserver(measure);
     measure();observer.observe(toolbar);
     return()=>observer.disconnect();

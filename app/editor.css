@@ -242,6 +242,9 @@ html[data-workspace-theme=dark] .conversation-editor .custom-timeline .track-dot
 html[data-workspace-theme=dark] .conversation-editor .custom-timeline .playhead{width:2px;margin-left:-.5px;background:#7c3aed}
 html[data-workspace-theme=dark] .conversation-editor .custom-timeline .timeline-playhead-cap{width:12px;height:14px;margin-top:9px}
 html[data-workspace-theme=dark] .conversation-editor .custom-timeline :is(.track-label,.timeline-track){border-bottom-color:transparent}
+/* The timeline floats as a rounded card inset from the editor edges. */
+html[data-workspace-theme=dark] .conversation-editor .editor-timeline-content{box-sizing:border-box;padding:0 8px 8px;background:var(--ed-bg)}
+html[data-workspace-theme=dark] .conversation-editor .editor-timeline-content>.custom-timeline{border:1px solid var(--ed-border);border-radius:12px;overflow:hidden}
 @media(min-width:901px){html[data-workspace-theme=dark] .conversation-editor .custom-timeline .track-headers{width:168px}}
 html[data-workspace-theme=dark] .conversation-editor .custom-timeline .timeline-playhead-cap{color:#7c3aed}
 html[data-workspace-theme=dark] .conversation-editor .custom-timeline .timeline-playhead-cap:hover{color:#8b5cf6}
