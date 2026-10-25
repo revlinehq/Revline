@@ -1,8 +1,6 @@
-import { addEffectClip, addMediaClip, addTextClip, patchClip, snapTime } from './operations';
+import { addEffectClip, addMediaClip, patchClip, snapTime } from './operations';
 import { NEUTRAL_MOTION } from './clip-effects';
-import { textTemplatePatch } from './text-effects';
 import { normalizeTimeline, trackOf, type MediaAsset, type Timeline } from './types';
-import type { RemotionTextPreset } from './remotion-text';
 
 /** A transition is centered on an existing cut; no source timing or sound moves. */
 export function addFadeThroughBlack(timeline: Timeline, clipId: string, id: string): Timeline {
@@ -18,12 +16,6 @@ export function addFadeThroughBlack(timeline: Timeline, clipId: string, id: stri
   return patchClip(next, id, { effectPreset: 'none', motion: [
     { ...NEUTRAL_MOTION, time: 0 }, { ...NEUTRAL_MOTION, time: half, opacity: 0 }, { ...NEUTRAL_MOTION, time: duration },
   ] });
-}
-
-export function addTextTemplateClip(timeline: Timeline, id: string, preset: RemotionTextPreset, at: number): Timeline {
-  const next = addTextClip(timeline, id, 'graphic', at);
-  const clip = next.clips.find(item => item.id === id)!;
-  return patchClip(next, id, textTemplatePatch(clip, preset));
 }
 
 export function addOverlayClip(timeline: Timeline, asset: MediaAsset, id: string, at: number): Timeline {

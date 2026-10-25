@@ -13,23 +13,23 @@ async function reset(timeline,compactTracks=false){await page.evaluate(({timelin
 async function drag(id,dx,targetY,grab=30,grabY){const box=await page.$eval('.timeline-clip[data-clip-id="'+id+'"]',el=>{const r=el.getBoundingClientRect();return{x:r.x,y:r.y,w:r.width,h:r.height};});const x=box.x+grab,y=box.y+(grabY??box.h/2);await page.mouse.move(x,y);await page.mouse.down();await page.mouse.move(x+dx,targetY??y,{steps:8});await frames();await page.mouse.up();await frames();}
 try{
  await page.setViewport({width:1400,height:650});await page.setContent('<html data-workspace-theme="dark"><body><div id="root" class="editor-app conversation-editor"></div></body></html>');await page.addStyleTag({content:bundle.outputFiles.find(f=>f.path.endsWith('.css')).text});await page.addStyleTag({content:'*{box-sizing:border-box}body{margin:0;font:12px Arial}#root{width:1300px;height:450px;margin:60px auto;display:flex;padding:0}button{border:0;background:transparent;color:inherit;font:inherit}'});await page.addScriptTag({content:bundle.outputFiles.find(f=>f.path.endsWith('.js')).text});await page.waitForSelector('[data-clip-id="moving"]');
- // AI owns the playback position as well as edits while the timeline is locked.
+ // The AI owns edits while the timeline is locked, but the user can still move the playhead.
  await page.evaluate(()=>{window.fixture.setState({playhead:1});window.setEditingLocked(true);});await frames();
  const lockedSeekCount=await page.evaluate(()=>window.fixtureEvents.seek.length);
  for(const selector of ['.timeline-playhead-cap','.time-ruler']){
   const point=await page.$eval(selector,el=>{const r=el.getBoundingClientRect();return{x:r.x+r.width/2,y:r.y+10};});
   await page.mouse.move(point.x,point.y);await page.mouse.down();await page.mouse.move(point.x+80,point.y,{steps:4});await frames();await page.mouse.up();await frames();
  }
- assert.equal(await page.evaluate(()=>window.fixtureEvents.seek.length),lockedSeekCount,'Locked ruler and playhead drags cannot seek');
- assert.equal(await page.evaluate(()=>window.fixture.getState().scrubbing),false,'Locked scrubs cannot start pointer capture or an animation loop');
+ assert.ok(await page.evaluate(()=>window.fixtureEvents.seek.length)>lockedSeekCount,'Locked ruler and playhead drags still seek');
+ assert.equal(await page.evaluate(()=>window.fixture.getState().scrubbing),false,'Locked scrubs end cleanly');
  await page.evaluate(()=>{window.setEditingLocked(false);window.fixture.setState({zoom:4});});await frames();await reset();
  const rulerPoint=await page.$eval('.time-ruler',el=>{const r=el.getBoundingClientRect();return{x:r.left+100,y:r.top+10};});
  await page.mouse.move(rulerPoint.x,rulerPoint.y);await page.mouse.down();const rightEdge=await page.$eval('.timeline-scroll',el=>el.getBoundingClientRect().right-1);await page.mouse.move(rightEdge,rulerPoint.y,{steps:4});await frames();assert.equal(await page.evaluate(()=>window.fixture.getState().scrubbing),true);assert.ok(await page.$eval('.timeline-scroll',el=>el.scrollLeft>0),'A held unlocked scrub really starts edge auto-scroll');
  await page.evaluate(()=>window.setEditingLocked(true));await frames();
  const frozenScrub=await page.evaluate(()=>({time:window.fixture.getState().playhead,seeks:window.fixtureEvents.seek.length,scroll:document.querySelector('.timeline-scroll').scrollLeft}));
  await page.mouse.move(1398,rulerPoint.y);await frames();await page.mouse.up();await frames();
- assert.deepEqual(await page.evaluate(()=>({time:window.fixture.getState().playhead,seeks:window.fixtureEvents.seek.length,scroll:document.querySelector('.timeline-scroll').scrollLeft})),frozenScrub,'AI start cancels a held scrub without seeking, rewinding, or edge-scroll drift');
- assert.equal(await page.evaluate(()=>window.fixture.getState().scrubbing),false,'AI start releases scrub state and pointer capture');
+ assert.ok(await page.evaluate(()=>window.fixtureEvents.seek.length)>frozenScrub.seeks,'A held scrub keeps seeking after the AI starts editing');
+ assert.equal(await page.evaluate(()=>window.fixture.getState().scrubbing),false,'Releasing the held scrub ends scrub state');
  await page.evaluate(()=>window.setEditingLocked(false));await frames();await page.mouse.click(rulerPoint.x+54,rulerPoint.y);await frames();assert.ok(await page.evaluate(before=>window.fixtureEvents.seek.length>before,frozenScrub.seeks),'Ruler seeking resumes after AI unlock');await page.evaluate(()=>{window.fixture.setState({zoom:1});document.querySelector('.timeline-scroll').scrollLeft=0;});await frames();
  for(const compact of [false,true])for(const miss of [-16,16])for(const grab of [12,80]){
   await reset(undefined,compact);const before=await state();await drag('moving',-5*54+miss,undefined,grab);const after=await state();assert.equal(after.timeline.clips.find(c=>c.id==='moving').start,4,'A drop 16px either side of the exact gap fits without overlap');assert.equal(after.history,before.history+1,'One drag is one edit');assert.equal(after.timeline.tracks.visual,2);await page.evaluate(()=>window.fixture.getState().undo());await frames();assert.equal((await state()).timeline.clips.find(c=>c.id==='moving').start,9);

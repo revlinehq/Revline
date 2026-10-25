@@ -2,7 +2,7 @@ import { createReadStream } from 'node:fs';
 import { stat } from 'node:fs/promises';
 import { z } from 'zod';
 import { AnalysisError } from './errors';
-import { interactionText, parseTranscript } from './transcript';
+import { interactionText } from './transcript';
 import { parseUnderstanding, understandingJsonSchema, understandingPrompt, type Understanding } from './understanding';
 import { frameInspectionCoverage, frameInspectionJsonSchema, parseFrameInspection, type FrameInspectionInput, type FrameSample, type FrameGeometry } from './frame-inspection';
 import { parseVideoInspection, validateVideoInspectionInput, videoInspectionJsonSchema, videoInspectionPrompt, VideoInspectionValidationError, type VideoInspectionInput } from './video-inspection';
@@ -107,16 +107,6 @@ async function interaction(body: Record<string, unknown>, key: string, signal: A
   const result = await response.json() as { status?: string; error?: unknown };
   if (result.error || result.status === 'failed') throw new AnalysisError('The media analysis could not be completed.', 502);
   return result;
-}
-
-/** REST contract verified against https://ai.google.dev/gemini-api/docs/transcribe. */
-export async function transcribeAudio(path: string, duration: number, key: string, signal: AbortSignal) {
-  const file = await uploadFile(path, 'audio/wav', key, signal);
-  try {
-    const result = await interaction({ model: process.env.GEMINI_TRANSCRIPTION_MODEL || 'gemini-3.5-transcribe', input: [{ type: 'audio', uri: file.uri, mime_type: 'audio/wav' }], generation_config: { transcription_config: { mode: { type: 'verbatim', timestamp_granularities: ['word'] } } } }, key, signal);
-    try { return parseTranscript(result, duration); }
-    catch { throw new AnalysisError('Speech analysis returned invalid word timing. Please retry.', 502); }
-  } finally { await deleteFile(file.name, key); }
 }
 
 /** Source timestamps describe observed scenes; structured output never becomes executable HTML. */

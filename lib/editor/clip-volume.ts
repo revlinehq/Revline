@@ -10,8 +10,3 @@ export function clipVolumeAtPointer(volume:number,startY:number,pointerY:number,
   if(startY===pointerY)return volume;
   return clipVolumeAtFraction(volume/MAX_CLIP_VOLUME+(startY-pointerY)/Math.max(1,height));
 }
-
-/** A constant HyperFrames lane also carries live gains above native HTML's ceiling. */
-export function clipVolumeEnvelope(volume:number){
-  return JSON.stringify({version:1,lanes:[{target:'volume',points:[{t:0,v:volume}]}]});
-}

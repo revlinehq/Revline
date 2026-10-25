@@ -69,13 +69,19 @@ function watchCancellation(cancel: () => void) {
 }
 
 /** Follows one pointer through window events so a re-render or lost capture never ends the gesture. */
-function followPointer(target:HTMLElement,pointer:number,handlers:{move(event:PointerEvent):void;release(event:PointerEvent):void;cancel():void}){
-  try{target.setPointerCapture(pointer);}catch{/* A released pointer still drags via window events. */}
+/** Routes one pointer's window events to a gesture until the returned cleanup runs. */
+function watchPointer(pointer:number,handlers:{move(event:PointerEvent):void;release(event:PointerEvent):void;cancel():void}){
   const move=(event:PointerEvent)=>{if(event.pointerId===pointer)handlers.move(event);};
   const release=(event:PointerEvent)=>{if(event.pointerId===pointer)handlers.release(event);};
   const cancel=(event:PointerEvent)=>{if(event.pointerId===pointer)handlers.cancel();};
   window.addEventListener('pointermove',move);window.addEventListener('pointerup',release);window.addEventListener('pointercancel',cancel);
-  return()=>{window.removeEventListener('pointermove',move);window.removeEventListener('pointerup',release);window.removeEventListener('pointercancel',cancel);if(target.hasPointerCapture(pointer))target.releasePointerCapture(pointer);};
+  return()=>{window.removeEventListener('pointermove',move);window.removeEventListener('pointerup',release);window.removeEventListener('pointercancel',cancel);};
+}
+
+function followPointer(target:HTMLElement,pointer:number,handlers:Parameters<typeof watchPointer>[1]){
+  try{target.setPointerCapture(pointer);}catch{/* A released pointer still drags via window events. */}
+  const unwatch=watchPointer(pointer,handlers);
+  return()=>{unwatch();if(target.hasPointerCapture(pointer))target.releasePointerCapture(pointer);};
 }
 
 function TimelinePlayheadClock(props: Omit<Parameters<typeof useTimelinePlayhead>[0], 'time'>) {
@@ -295,10 +301,9 @@ export function TimelinePanel(p:Props){
       if(next===target)return;target=next;setLayerDrop(target!==number?`${group}-${target}`:null);
     };
     const frame=timelineGestureFrame(update);
-    const move=(event:PointerEvent)=>{if(event.pointerId!==e.pointerId)return;pointerX.current=event.clientX;pointerY.current=event.clientY;frame.request();};
-    const cleanup=()=>{unwatch();frame.cancel();gestureUpdate.current=null;window.removeEventListener('pointermove',move);window.removeEventListener('pointerup',finish);window.removeEventListener('pointercancel',cancel);setMovingLayer(null);setLayerDrop(null);gestureCleanup.current=null;};
+    let stopFollowing=()=>{};
+    const cleanup=()=>{unwatch();frame.cancel();gestureUpdate.current=null;stopFollowing();setMovingLayer(null);setLayerDrop(null);gestureCleanup.current=null;};
     const finish=(event:PointerEvent)=>{
-      if(event.pointerId!==e.pointerId)return;
       const bounds=scroll.current?.parentElement?.getBoundingClientRect();
       const inside=!!bounds&&event.clientX>=bounds.left&&event.clientX<bounds.right&&event.clientY>=bounds.top&&event.clientY<bounds.bottom;
       if(inside){pointerX.current=event.clientX;pointerY.current=event.clientY;frame.flush();}cleanup();
@@ -307,7 +312,7 @@ export function TimelinePanel(p:Props){
       }catch(error){report(error);}
     };
     const cancel=()=>cleanup();gestureCleanup.current=cancel;unwatch=watchCancellation(cancel);gestureUpdate.current=frame.request;
-    window.addEventListener('pointermove',move);window.addEventListener('pointerup',finish);window.addEventListener('pointercancel',cancel);
+    stopFollowing=watchPointer(e.pointerId,{move:event=>{pointerX.current=event.clientX;pointerY.current=event.clientY;frame.request();},release:finish,cancel});
   }
   /** Blade cuts land on a frame, and snap to the playhead when it is within a few pixels. */
   function bladeTime(clientX:number,clip:Clip){
@@ -465,9 +470,10 @@ export function TimelinePanel(p:Props){
       if(!moved&&Math.hypot(clientX-startX,clientY-startY)>tapSlop){moved=true;beginPreview();}
       frame.request();
     };
+    let stopFollowing=()=>{};
     const cleanup=()=>{
       unwatch();gestureUpdate.current=null;document.body.style.cursor=previousCursor;cursorStyle.remove();frame.cancel();
-      window.removeEventListener('pointermove',move);window.removeEventListener('pointerup',finish);window.removeEventListener('pointercancel',cancel);
+      stopFollowing();
       if(mode!=='move')for(const member of trimPreviewClips){const node=sourceNodes.get(member.id);if(node){node.style.left=`${origin+member.start*px}px`;node.style.width=`${Math.max(6,member.duration*px)}px`;if(member.kind==='audio')node.dispatchEvent(new CustomEvent('revline:clip-trim-preview',{detail:{sourceStart:member.sourceStart,duration:member.duration}}));}}
       host.replaceChildren();delete host.dataset.invalid;setDrag(null);gestureCleanup.current=null;gestureClipIds.current=[];
     };
@@ -481,7 +487,7 @@ export function TimelinePanel(p:Props){
       if(placed.clips.length!==timeline.clips.length||placed.clips.some((candidate,index)=>{const original=timeline.clips[index];return candidate.id!==original.id||candidate.start!==original.start||candidate.duration!==original.duration||candidate.sourceStart!==original.sourceStart||trackOf(candidate)!==trackOf(original);})||JSON.stringify(deriveTrackCounts(placed))!==JSON.stringify(deriveTrackCounts(timeline))){try{onChange(placed);}catch(error){report(error);}}
     };
     const cancel=()=>{cleanup();};gestureCleanup.current=cancel;unwatch=watchCancellation(cancel);gestureUpdate.current=frame.request;
-    window.addEventListener('pointermove',move);window.addEventListener('pointerup',finish);window.addEventListener('pointercancel',cancel);
+    stopFollowing=watchPointer(e.pointerId,{move,release:finish,cancel});
   }
 
   function selectBox(e:React.PointerEvent<HTMLDivElement>){
@@ -508,11 +514,11 @@ export function TimelinePanel(p:Props){
       if(ids.length!==current.length||ids.some((id,index)=>id!==current[index]))store.setState({selectedIds:ids,selectedId:ids.at(-1)??null});
     };
     const frame=timelineGestureFrame(update);
-    const move=(event:PointerEvent)=>{if(event.pointerId!==e.pointerId)return;pointerX.current=event.clientX;pointerY.current=event.clientY;frame.request();};
-    const cleanup=()=>{unwatch();frame.cancel();gestureUpdate.current=null;window.removeEventListener('pointermove',move);window.removeEventListener('pointerup',finish);window.removeEventListener('pointercancel',cancel);if(selectionBox.current)selectionBox.current.style.display='none';setSelecting(false);gestureCleanup.current=null;};
-    const finish=(event:PointerEvent)=>{if(event.pointerId!==e.pointerId)return;pointerX.current=event.clientX;pointerY.current=event.clientY;frame.flush();cleanup();if(!active&&!initial.length)onSelect(null);};
+    let stopFollowing=()=>{};
+    const cleanup=()=>{unwatch();frame.cancel();gestureUpdate.current=null;stopFollowing();if(selectionBox.current)selectionBox.current.style.display='none';setSelecting(false);gestureCleanup.current=null;};
+    const finish=(event:PointerEvent)=>{pointerX.current=event.clientX;pointerY.current=event.clientY;frame.flush();cleanup();if(!active&&!initial.length)onSelect(null);};
     const cancel=()=>{cleanup();store.setState({selectedIds:previousSelection,selectedId:previousSelection.at(-1)??null});};gestureCleanup.current=cancel;unwatch=watchCancellation(cancel);gestureUpdate.current=frame.request;
-    window.addEventListener('pointermove',move);window.addEventListener('pointerup',finish);window.addEventListener('pointercancel',cancel);
+    stopFollowing=watchPointer(e.pointerId,{move:event=>{pointerX.current=event.clientX;pointerY.current=event.clientY;frame.request();},release:finish,cancel});
   }
 
   function trimWithKeyboard(e:React.KeyboardEvent<HTMLButtonElement>,clip:Clip,side:'left'|'right'){

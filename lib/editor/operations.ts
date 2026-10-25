@@ -121,17 +121,6 @@ export function setClipPlaybackRate(timeline: Timeline, id: string, playbackRate
   }) };
 }
 export function deleteClip(timeline: Timeline, id: string): Timeline { timeline = normalizeTimeline(timeline); const ids = new Set(linkedClipIds(timeline, [id])); return reconcileTransitionEdits(timeline, { ...timeline, clips: timeline.clips.filter(c => !ids.has(c.id)) }); }
-export function duplicateClip(timeline: Timeline, id: string, newId: string): Timeline {
-  timeline = normalizeTimeline(timeline);
-  const clip = timeline.clips.find(c => c.id === id);
-  if (!clip) return timeline;
-  if (isTransitionClip(clip)) throw new Error('Copy both connected clips with their transition to duplicate it.');
-  const pair = timeline.clips.find(c => c.id === clip.linkedClipId && c.linkedClipId === clip.id);
-  const pairId = `${newId}-audio`;
-  let next = placeOnFreeLayer(timeline, { ...clip, id: newId, linkedClipId: pair ? pairId : undefined, start: clip.start + clip.duration });
-  if (pair) next = placeOnFreeLayer(next, { ...pair, id: pairId, linkedClipId: newId, start: pair.start + clip.duration });
-  return next;
-}
 export function addMediaClip(timeline: Timeline, asset: { _id: string; kind: Clip['kind']; duration?: number; audioAssetId?: string; preparation?: {message:string} }, id: string, at?: number, track = 1): Timeline {
   if(asset.preparation)throw new Error(asset.preparation.message);
   timeline = normalizeTimeline(timeline);

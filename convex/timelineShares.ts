@@ -7,7 +7,7 @@ import { requireOwner,requireProject } from './lib/auth';
 import { requireEditorAccess } from './lib/billing_access';
 import { validateTimeline } from './lib/timeline';
 import { mediaUrl,previewUrl } from './lib/media_storage';
-import { removeShareAssets } from './lib/shared_media';
+import { removeShareAssets, sharedAssetFields } from './lib/shared_media';
 import { timelineValidator,publicMediaAsset,sharedChatMessage,shareChatPreviewMessage } from './schema';
 import { previewSharedChat,snapshotSharedChat } from './lib/share_chat';
 import { normalizeTimeline } from '../lib/editor/types';
@@ -36,10 +36,7 @@ export const publish=mutation({args:{projectId:v.id('projects'),chat:v.optional(
   const existing=await ctx.db.query('timelineShares').withIndex('by_project',q=>q.eq('projectId',projectId)).unique(),now=Date.now();
   const shareId=existing?existing._id:await ctx.db.insert('timelineShares',{projectId,ownerId,title:project.title,timeline,...(chat?.length?{chat}:{}),published:true,createdAt:now,updatedAt:now});
   if(existing){await removeShareAssets(ctx,shareId);await ctx.db.patch(shareId,{title:project.title,timeline,chat:chat?.length?chat:undefined,published:true,updatedAt:now});}
-  for(const asset of assets.values()){
-    const {_id,storageId,r2Key,fileName,contentType,size,kind,duration,width,height,audioAssetId,audioExtracted,waveform,thumbnailStorageId,previewR2Key,previewSize,previewWidth,previewHeight,previewFps,previewVersion}=asset;
-    await ctx.db.insert('shareAssets',{shareId,ownerId,sourceId:_id,fileName,contentType,size,kind,...(storageId?{storageId}:{}),...(r2Key?{r2Key}:{}),...(duration!==undefined?{duration}:{}),...(width!==undefined?{width}:{}),...(height!==undefined?{height}:{}),...(audioAssetId?{audioAssetId}:{}),...(audioExtracted!==undefined?{audioExtracted}:{}),...(waveform?{waveform}:{}),...(thumbnailStorageId?{thumbnailStorageId}:{}),...(previewR2Key?{previewR2Key,previewSize,previewWidth,previewHeight,previewFps,previewVersion}:{})});
-  }
+  for(const asset of assets.values())await ctx.db.insert('shareAssets',{shareId,ownerId,...sharedAssetFields(asset)});
   return shareId;
 }});
 export const revoke=mutation({args:{projectId:v.id('projects')},returns:v.null(),handler:async(ctx,{projectId})=>{

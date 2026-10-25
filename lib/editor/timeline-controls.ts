@@ -105,10 +105,6 @@ function placeMovedClips(timeline:Timeline,moved:import('./types').Clip[],direct
   const next={...timeline,tracks:counts,clips:timeline.clips.map(clip=>placed.get(clip.id)??clip)};
   return {...next,tracks:deriveTrackCounts(next)};
 }
-export function moveClipToLayer(timeline:Timeline,clip:import('./types').Clip):Timeline {
-  timeline=normalizeTimeline(timeline);
-  return reconcileTransitionEdits(timeline,placeMovedClips(timeline,[clip]));
-}
 
 export type SelectionBounds={left:number;top:number;width:number;height:number};
 export function intersectsSelection(a:SelectionBounds,b:SelectionBounds){return a.left<b.left+b.width&&a.left+a.width>b.left&&a.top<b.top+b.height&&a.top+a.height>b.top;}

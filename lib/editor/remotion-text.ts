@@ -98,12 +98,3 @@ export function remotionTextProps(clip: TextTemplateClip, time: number, fps: num
     ...(template.wordTimings?{wordTimings:template.wordTimings}:{}),
   };
 }
-
-export function remotionTextSources(clips: TextTemplateClip[], fps: number, resolution = 1080): RemotionTextSource[] {
-  return clips.flatMap((clip, index) => {
-    const input = remotionTextProps(clip, clip.start, fps, resolution);
-    if (!input) return [];
-    const { frame: _frame, ...props } = input;
-    return [{ id: `clip-${index}`, start: clip.start, offset: clip.textTemplate?.offset ?? 0, props }];
-  });
-}

@@ -45,3 +45,9 @@ export async function removeProjectShares(ctx:MutationCtx,projectId:Id<'projects
   const shares=await ctx.db.query('timelineShares').withIndex('by_project',q=>q.eq('projectId',projectId)).take(2);
   for(const share of shares){await removeShareAssets(ctx,share._id);await ctx.db.delete(share._id);}
 }
+
+/** The playback fields a shared timeline copies from one source asset; its analysis stays with the source. */
+export function sharedAssetFields(asset: Doc<'assets'>) {
+  const { _id, storageId, r2Key, fileName, contentType, size, kind, duration, width, height, audioAssetId, audioExtracted, waveform, thumbnailStorageId, previewR2Key, previewSize, previewWidth, previewHeight, previewFps, previewVersion } = asset;
+  return { sourceId: _id, fileName, contentType, size, kind, ...(storageId ? { storageId } : {}), ...(r2Key ? { r2Key } : {}), ...(duration !== undefined ? { duration } : {}), ...(width !== undefined ? { width } : {}), ...(height !== undefined ? { height } : {}), ...(audioAssetId ? { audioAssetId } : {}), ...(audioExtracted !== undefined ? { audioExtracted } : {}), ...(waveform ? { waveform } : {}), ...(thumbnailStorageId ? { thumbnailStorageId } : {}), ...(previewR2Key ? { previewR2Key, previewSize, previewWidth, previewHeight, previewFps, previewVersion } : {}) };
+}

@@ -1,3 +1,4 @@
+import { sharedAssetFields } from './lib/shared_media';
 import { createThread, saveMessages } from '@convex-dev/agent';
 import { ConvexError, v, type Infer } from 'convex/values';
 import { components } from './_generated/api';
@@ -130,10 +131,7 @@ export const importSnapshot = internalMutation({
     const pinned = new Map<string, Doc<'assets'>>();
     for (const clip of timeline.clips) if (clip.assetId) pinned.set(clip.assetId, imported.get(clip.assetId)!);
     for (const asset of Array.from(pinned.values())) if (asset.audioAssetId) pinned.set(asset.audioAssetId, imported.get(asset.audioAssetId)!);
-    for (const asset of pinned.values()) {
-      const { _id, r2Key, fileName, contentType, size, kind, duration, width, height, audioAssetId, audioExtracted, waveform, thumbnailStorageId,previewR2Key,previewSize,previewWidth,previewHeight,previewFps,previewVersion } = asset;
-      await ctx.db.insert('shareAssets', { shareId, ownerId, sourceId: _id, r2Key, fileName, contentType, size, kind, ...(duration !== undefined ? { duration } : {}), ...(width !== undefined ? { width } : {}), ...(height !== undefined ? { height } : {}), ...(audioAssetId ? { audioAssetId } : {}), ...(audioExtracted !== undefined ? { audioExtracted } : {}), ...(waveform ? { waveform } : {}), ...(thumbnailStorageId ? { thumbnailStorageId } : {}),...(previewR2Key?{previewR2Key,previewSize,previewWidth,previewHeight,previewFps,previewVersion}:{}) });
-    }
+    for (const asset of pinned.values()) await ctx.db.insert('shareAssets', { shareId, ownerId, ...sharedAssetFields(asset) });
     await ctx.db.insert('projectTransferReceipts', { transferKey: args.transferKey, transferId: args.transferId, sourceDeployment: args.sourceDeployment, sourceProjectId: args.sourceProjectId, sourceRevision: args.sourceRevision, fingerprint: args.fingerprint, ownerId, email: args.email.trim().toLowerCase(), projectId, shareId, createdAt: now });
     return { projectId, shareId, reused: false };
   },

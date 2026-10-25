@@ -69,7 +69,6 @@ function transitionCandidates(clips: Clip[], at: number, options: { aboveClipId?
   if (!candidates.length) throw firstError ?? new Error('Add neighboring video or image clips on one V track before adding a transition.');
   return candidates;
 }
-export function nearestTransitionPair(clips: Clip[], at: number, options: { aboveClipId?: string; visualTrack?: number } = {}) { return transitionCandidates(clips,at,options)[0]; }
 
 export function maxTransitionDuration(from: Clip, to: Clip, fps: number) { return Math.floor((2 * Math.min(from.duration, to.duration) + tolerance) * fps) / fps; }
 export function centeredTransitionRange(from: Clip, to: Clip, fps: number, requested = DEFAULT_TRANSITION_DURATION) {
@@ -113,10 +112,6 @@ export function findTransitionPlacement(timeline: Pick<Timeline,'clips'|'fps'>, 
     return {...pair,...range};
   }catch(error){firstError??=error;}
   throw firstError;
-}
-export function transitionAvailability(timeline: Pick<Timeline,'clips'|'fps'>, at: number, options: TransitionPlacementOptions = {}) {
-  try{return {available:true as const,placement:findTransitionPlacement(timeline,at,options)};}
-  catch(error){return {available:false as const,reason:error instanceof Error?error.message:'No transition can be placed at this cut.'};}
 }
 
 /** Native source time stays inside the retained range, including non-unit speed. */

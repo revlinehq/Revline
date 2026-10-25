@@ -25,10 +25,6 @@ export async function probeMedia(path: string, signal: AbortSignal) {
   return { duration, hasAudio: !!value.streams?.some(stream => stream.codec_type === 'audio'), hasVideo: !!value.streams?.some(stream => stream.codec_type === 'video') };
 }
 
-export async function extractSpeechAudio(input: string, output: string, signal: AbortSignal) {
-  await run('ffmpeg', ['-v', 'error', '-i', input, '-map', '0:a:0', '-vn', '-ac', '1', '-ar', '16000', '-c:a', 'pcm_s16le', '-y', output], { signal, timeout: 60_000, maxBuffer: 1024 * 1024 });
-}
-
 export async function extractTranscriptionAudio(input: string, output: string, signal: AbortSignal, window?: { start: number; end: number }) {
   const seek = window ? ['-ss', String(window.start)] : [];
   const length = window ? ['-t', String(window.end - window.start)] : [];
