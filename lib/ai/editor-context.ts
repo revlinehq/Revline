@@ -111,15 +111,17 @@ export function compactEditorPrompt(prompt: LanguageModelV4Prompt, selectedClipI
       }
     }
   }
-  return prompt.flatMap<LanguageModelV4Prompt[number]>((message, index) => {
+  // The per-request context (current prompt, recovery, continuation) follows the
+  // latest user message. Ahead of the history it changed every request's prefix,
+  // so no saved turn was ever read from the provider cache by the next request.
+  let requestContext: LanguageModelV4Prompt[number] | undefined;
+  const compacted = prompt.flatMap<LanguageModelV4Prompt[number]>((message, index) => {
     message = withoutDiagnostics(message);
     if (message.role === 'system') {
       const boundary = message.content.indexOf(EDITOR_CONTEXT_BOUNDARY);
       if (boundary <= 0) return [message];
-      return [
-        { ...message, content: message.content.slice(0, boundary), providerOptions: { ...message.providerOptions, anthropic: { ...message.providerOptions?.anthropic, cacheControl: { type: 'ephemeral', ttl: '5m' } } } },
-        { ...message, content: message.content.slice(boundary) },
-      ];
+      requestContext = { ...message, content: message.content.slice(boundary) };
+      return [{ ...message, content: message.content.slice(0, boundary), providerOptions: { ...message.providerOptions, anthropic: { ...message.providerOptions?.anthropic, cacheControl: { type: 'ephemeral', ttl: '5m' } } } }];
     }
     // Old private reasoning is not saved visual evidence or user constraints.
     // Keep this run's signed reasoning blocks so tool continuations stay valid.
@@ -172,4 +174,8 @@ export function compactEditorPrompt(prompt: LanguageModelV4Prompt, selectedClipI
         : { ...part.output, value: JSON.parse(JSON.stringify(projected)) } };
     }) } as typeof message;
   });
+  if (!requestContext) return compacted;
+  let latestUser = -1;
+  for (let index = compacted.length - 1; index >= 0; index--) if (compacted[index].role === 'user') { latestUser = index; break; }
+  return latestUser < 0 ? [...compacted, requestContext] : [...compacted.slice(0, latestUser + 1), requestContext, ...compacted.slice(latestUser + 1)];
 }

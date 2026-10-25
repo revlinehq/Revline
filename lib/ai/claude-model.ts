@@ -87,7 +87,7 @@ export function claudeProviderOptions(modelId: string) {
   return { anthropic };
 }
 
-export function editorProviderOptions(selection: ClaudeModelSelection) {
+export function editorProviderOptions(selection: ClaudeModelSelection, cacheKey?: string) {
   if (selection.provider !== 'openai') { const options = claudeProviderOptions(selection.modelId); if (!options) throw new Error(GPT_ONLY_EDITING_ERROR); return options; }
   const openai = {
     reasoningEffort: selection.reasoningEffort ?? 'medium', reasoningMode: 'standard', serviceTier: selection.speedMode === 'fast' ? 'fast' : 'default',
@@ -95,6 +95,8 @@ export function editorProviderOptions(selection: ClaudeModelSelection) {
     // in its messages rather than relying on provider-side conversation storage.
     store: false, include: ['reasoning.encrypted_content'],
     promptCacheOptions: { ttl: '30m' },
+    // One conversation's requests share a prefix; keep them on the same cache.
+    ...(cacheKey ? { promptCacheKey: cacheKey } : {}),
   } satisfies OpenAIResponsesProviderOptions;
   return { openai };
 }

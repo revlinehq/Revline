@@ -603,7 +603,7 @@ export const respond = internalAction({
       }
       console.log(`[ai-budget] ${JSON.stringify({timestamp:new Date().toISOString(),projectId:args.projectId,runId:args.runId,enforced:enforceTokenBudget})}`);
       const model = wrapLanguageModel({ model: provider === 'anthropic' ? anthropic(modelId) : openai.responses(modelId), middleware: [...(provider === 'openai' ? [openAIEditorImages] : []), tokenBudget.middleware(args.selectedClipIds ?? (args.selectedClipId ? [args.selectedClipId] : []), editSession.revision,countInput,enforceTokenBudget)] });
-      const providerOptions = editorProviderOptions(selection);
+      const providerOptions = editorProviderOptions(selection, `revline-thread-${args.threadId}`);
       const agent = new Agent(components.agent, { name: "Revline", languageModel: model, tools, contextOptions: { recentMessages: 100, excludeToolMessages: false }, stopWhen: [({steps})=>shouldStopEditingSteps(steps), ({ steps }) => hasRepeatedToolFailures(steps)], instructions: `${EDITOR_STYLE_RULES}
 ${editorDisclosureRules(process.env.EDITOR_INTERNAL_DETAILS_ENABLED === "true")}
 # Editing rules
