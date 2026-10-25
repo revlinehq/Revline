@@ -9,7 +9,7 @@ const features = [
   'Auto captions in your brand font',
   'Silence and filler-word removal',
   'Export in 9:16, 1:1 and 16:9',
-  'Up to 4K, no watermark',
+  'Up to 1080p, no watermark',
   'Unlimited projects and uploads',
 ];
 
