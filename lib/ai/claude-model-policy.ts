@@ -2,7 +2,7 @@ import type { ClaudeModelSelection } from './claude-model';
 
 type ModelPolicyEnvironment = Readonly<Record<string, string | undefined>>;
 // Keep the export name compatible with existing clients: the GPT editing models.
-export const PRODUCTION_CLAUDE_MODEL_CHOICES = ['gpt-6.1-sol', 'gpt-6-astra'] as const;
+export const PRODUCTION_CLAUDE_MODEL_CHOICES = ['gpt-6.1-sol', 'gpt-6-astra', 'gpt-5.4-mini'] as const;
 /** Claude editing models, offered when ANTHROPIC_API_KEY is configured. */
 export const ANTHROPIC_EDIT_CHOICES = ['sonnet', 'opus'] as const;
 const ANTHROPIC_EDIT_MODEL_IDS = ['claude-sonnet-5-5', 'claude-opus-5-5'];

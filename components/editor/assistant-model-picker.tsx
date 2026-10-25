@@ -4,7 +4,7 @@ import { EDITOR_MODELS, type ClaudeModelChoice } from '@/lib/ai/claude-model';
 import { InspectorSelect } from './inspector-select';
 import './assistant-model-picker.css';
 
-const descriptions: Record<typeof EDITOR_MODELS[number]['id'], string> = { 'gpt-6.1-sol': 'OpenAI · everyday editing', 'gpt-6-astra': 'OpenAI · complex editing', sonnet: 'Anthropic · everyday editing', opus: 'Anthropic · complex editing' };
+const descriptions: Record<typeof EDITOR_MODELS[number]['id'], string> = { 'gpt-6.1-sol': 'OpenAI · everyday editing', 'gpt-6-astra': 'OpenAI · complex editing', 'gpt-5.4-mini': 'OpenAI · cheaper, simple edits', sonnet: 'Anthropic · everyday editing', opus: 'Anthropic · complex editing' };
 
 
 export function AssistantModelPicker({ value, onChange, disabled, allowedModels }: {

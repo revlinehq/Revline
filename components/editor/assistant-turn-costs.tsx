@@ -55,7 +55,7 @@ export function AssistantTurnCostBadge({ promptMessageId }: { promptMessageId?: 
 }
 const cost = (amount: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: amount > 0 && amount < .01 ? 4 : 2 }).format(amount);
 const mode = (value: string | null) => value ? value === 'xhigh' ? 'X-high' : value.charAt(0).toUpperCase() + value.slice(1) : 'Not recorded';
-const model = (value: string | null) => value === 'gpt-6.1-sol' ? 'GPT-6.1 Sol' : value === 'gpt-6-astra' ? 'GPT-6 Astra' : value ?? 'Model not recorded';
+const model = (value: string | null) => value === 'gpt-6.1-sol' ? 'GPT-6.1 Sol' : value === 'gpt-6-astra' ? 'GPT-6 Astra' : value === 'gpt-5.4-mini' ? 'GPT-5.4 mini' : value ?? 'Model not recorded';
 
 export function AssistantTurnCostDetails({ report, loading = false, unavailable = false }: { report?: AssistantTurnCost; loading?: boolean; unavailable?: boolean }) {
   if (loading) return <p className="assistant-turn-cost-note">Loading recorded usage…</p>;

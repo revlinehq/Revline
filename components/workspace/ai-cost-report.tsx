@@ -21,7 +21,7 @@ function dayLabel(date: string, options: Intl.DateTimeFormatOptions) {
 }
 
 function modelLabel(model: string | null) {
-  return model === 'gpt-6.1-sol' ? 'GPT-6.1 Sol' : model === 'gpt-6-astra' ? 'GPT-6 Astra' : model ?? 'Model not recorded';
+  return model === 'gpt-6.1-sol' ? 'GPT-6.1 Sol' : model === 'gpt-6-astra' ? 'GPT-6 Astra' : model === 'gpt-5.4-mini' ? 'GPT-5.4 mini' : model ?? 'Model not recorded';
 }
 
 function modeLabel(value: string | null) {
