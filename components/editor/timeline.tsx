@@ -688,7 +688,7 @@ export function TimelinePanel(p:Props){
               </div>;
             })}
             {p.liveEdit?.removedClips.filter(clip=>layerGroup(clip.kind)===track.group&&trackOf(clip)===track.number).map(clip=><div key={`${p.liveEdit!.runId}:${p.liveEdit!.sequence}:${clip.id}`} className="timeline-live-removed" aria-hidden="true" style={{left:origin+clip.start*px,width:Math.max(6,clip.duration*px),height:track.clipHeight}}/>)}
-            {track.group==='visual'&&!drag&&(cutsByTrack.get(track.number)??[]).map(cut=><TimelineCutTransition key={`${cut.from.id}:${cut.to.id}`} timeline={timeline} from={cut.from} to={cut.to} clip={cut.clip} px={px} origin={origin} selected={!!cut.clip&&linkedSelection.has(cut.clip.id)} adjacentSelected={linkedSelection.has(cut.from.id)||linkedSelection.has(cut.to.id)} readOnly={editingDisabled} onSelect={onSelect} onEdit={p.onEditClip} onChange={onChange} onError={report}/>)}
+            {track.group==='visual'&&!drag&&(cutsByTrack.get(track.number)??[]).map(cut=><TimelineCutTransition key={`${cut.from.id}:${cut.to.id}`} timeline={timeline} from={cut.from} to={cut.to} clip={cut.clip} px={px} origin={origin} selected={!!cut.clip&&linkedSelection.has(cut.clip.id)} readOnly={editingDisabled} onSelect={onSelect} onEdit={p.onEditClip} onChange={onChange} onError={report}/>)}
           </div>)}
           <div ref={selectionBox} className="timeline-selection-box" style={{display:'none',left:0,top:0}} aria-hidden="true"/>
           <div ref={previews} className="timeline-drag-previews" aria-hidden="true"/>
