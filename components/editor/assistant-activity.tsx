@@ -6,15 +6,20 @@ import type { ProcessingState } from './processing-status';
 import './processing-status.css';
 import './assistant-activity.css';
 
+/** Elapsed run time is a development diagnostic; users see only the activity. */
+const SHOW_ELAPSED = process.env.NODE_ENV === 'development';
+
 function Elapsed({ startedAt }: { startedAt?: number | null }) {
   const [seconds, setSeconds] = useState(0);
+  // Without a run start, count from first render; phase changes must not restart it.
+  const [mountedAt] = useState(() => Date.now());
   useEffect(() => {
-    const start = startedAt ?? Date.now();
+    const start = startedAt ?? mountedAt;
     const update = () => setSeconds(Math.max(0, Math.floor((Date.now() - start) / 1000)));
     update();
     const timer = setInterval(update, 1000);
     return () => clearInterval(timer);
-  }, [startedAt]);
+  }, [startedAt, mountedAt]);
   return <small className="assistant-activity-elapsed" aria-hidden="true">{Math.floor(seconds / 60)}:{String(seconds % 60).padStart(2, '0')}</small>;
 }
 
@@ -32,7 +37,7 @@ export function AssistantActivity({ label, detail, state = 'working', startedAt,
     <div className="assistant-activity-heading">
       {Icon && <span className="assistant-activity-symbol" aria-hidden="true"><Icon size={15} strokeWidth={1.6}/></span>}
       <span className="processing-status-label">{title}</span>
-      {state === 'working' && <Elapsed key={phase} startedAt={startedAt}/>}
+      {SHOW_ELAPSED && state === 'working' && <Elapsed startedAt={startedAt}/>}
     </div>
     {detail && <span className="processing-status-detail">{detail}</span>}
   </div>;
