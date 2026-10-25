@@ -3,6 +3,7 @@ import { api } from '../convex/_generated/api';
 import { processMediaTask } from '../lib/server/media-task-runner';
 import { isMediaLeaseLost, isRetryableAnalysisError, MEDIA_TASK_LEASE_MS } from '../lib/media-analysis/errors';
 import type { MediaTaskActivity } from '../lib/media-analysis/activity';
+import { MEDIA_PROCESSOR_VERSION } from '../lib/media-analysis/processor-version';
 
 const convexUrl = process.env.NEXT_PUBLIC_CONVEX_URL;
 const workerSecret = process.env.RENDER_WORKER_SECRET;
@@ -11,7 +12,7 @@ const client = new ConvexHttpClient(convexUrl);
 const subscriptions = new ConvexClient(convexUrl);
 let queueRevision = 0, queueReady = false;
 const queueWaiters = new Set<() => void>();
-const unsubscribe = subscriptions.onUpdate(api.mediaTasks.ready, { workerSecret,processorVersion:6,lane:'any' }, ready => {
+const unsubscribe = subscriptions.onUpdate(api.mediaTasks.ready, { workerSecret,processorVersion:MEDIA_PROCESSOR_VERSION,lane:'any' }, ready => {
   queueRevision++; queueReady = !!ready;
   if (queueReady) for (const wake of queueWaiters) wake();
 });
@@ -26,7 +27,7 @@ async function runSlot() {
     try {
       const observedRevision = queueRevision;
       const claimedAt = Date.now();
-      const task = await client.mutation(api.mediaTasks.claim, { workerSecret: workerSecret!, compact:true,processorVersion:6,lane:'any' });
+      const task = await client.mutation(api.mediaTasks.claim, { workerSecret: workerSecret!, compact:true,processorVersion:MEDIA_PROCESSOR_VERSION,lane:'any' });
       if (!task) { await waitForWork(observedRevision); continue; }
       console.log(`[${new Date().toISOString()}] Chat ${task.projectId} · media task ${task.taskId}: ${task.kind} started.`);
       const controller = new AbortController();

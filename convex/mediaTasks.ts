@@ -21,6 +21,8 @@ import { timelineDuration } from '../lib/editor/types';
 import { commitTimeline, currentTimeline } from './lib/timeline';
 import { BEAT_ANALYSIS_ENGINE } from '../lib/media-analysis/beat-map';
 import { editingWorkflowActive } from './lib/assistant_workflow';
+import { placeCutout } from './cutouts';
+import { MEDIA_PROCESSOR_VERSION } from '../lib/media-analysis/processor-version';
 import { MEDIA_TASK_LEASE_MS } from '../lib/media-analysis/errors';
 import { consumeVideoImport, requireMediaTaskCapacity } from './lib/account_limits';
 
@@ -35,17 +37,19 @@ const taskState = v.object({ _id: v.id('mediaTasks'), kind: mediaTaskKind, statu
 const renderSnapshot = v.object({ timeline: timelineValidator, assets: v.array(assetWithUrl), resolution: v.number(), fps: v.number(), quality: v.string() });
 const timelineFrames=v.object({timeline:timelineValidator,assets:v.array(assetWithUrl),times:v.array(v.number())});
 const reviewSnapshot=v.object({timeline:timelineValidator,reference:timelineValidator,plans:v.array(effectPlanValidator),assets:v.array(assetWithUrl),revision:v.number(),start:v.number(),end:v.number()});
-const workItem = v.object({review:v.optional(reviewSnapshot),snapshot:v.optional(timelineFrames), ...mediaTaskCredentials, projectId: v.id('projects'), aiRunId:v.optional(v.string()), kind: mediaTaskKind, sourceUrl: v.optional(v.string()), frameRequest: v.optional(frameRequestValidator), videoRequest: v.optional(videoRequestValidator), asset: v.optional(assetWithUrl), transcriptionAsset: v.optional(assetWithUrl), outputAssetId: v.optional(v.id('assets')), outputStored: v.optional(v.boolean()), render: v.optional(renderSnapshot), renderJobId: v.optional(v.id('renderJobs')) });
+const workItem = v.object({review:v.optional(reviewSnapshot),snapshot:v.optional(timelineFrames),cutout:v.optional(v.object({start:v.number(),end:v.number()})), ...mediaTaskCredentials, projectId: v.id('projects'), aiRunId:v.optional(v.string()), kind: mediaTaskKind, sourceUrl: v.optional(v.string()), frameRequest: v.optional(frameRequestValidator), videoRequest: v.optional(videoRequestValidator), asset: v.optional(assetWithUrl), transcriptionAsset: v.optional(assetWithUrl), outputAssetId: v.optional(v.id('assets')), outputStored: v.optional(v.boolean()), render: v.optional(renderSnapshot), renderJobId: v.optional(v.id('renderJobs')) });
 export type MediaWorkItem = Infer<typeof workItem>;
 export const taskResult = v.object({review:v.optional(compositionReviewResult),snapshot:v.optional(v.object({frames:v.array(v.object({time:v.number(),image:v.string()}))})), analysis: v.optional(analysisValidator), frameInspection: v.optional(frameInspectionValidator), videoInspection: v.optional(videoInspectionValidator), audioAssetId: v.optional(v.id('assets')), waveform: v.optional(waveformValidator) });
 export type MediaTaskResult = Infer<typeof taskResult>;
 
-export async function enqueueMediaTask(ctx: MutationCtx, input: Pick<Doc<'mediaTasks'>, 'ownerId' | 'projectId' | 'kind'> & Partial<Pick<Doc<'mediaTasks'>, 'assetId' | 'renderJobId' | 'analysisRequestId' | 'sourceUrl' | 'frameRequest' | 'videoRequest' | 'reviewId' | 'snapshotId' | 'requiredProcessorVersion'|'previewVersion'|'lane'>>, beforeEnqueue?:()=>Promise<void>): Promise<Id<'mediaTasks'>> {
+export async function enqueueMediaTask(ctx: MutationCtx, input: Pick<Doc<'mediaTasks'>, 'ownerId' | 'projectId' | 'kind'> & Partial<Pick<Doc<'mediaTasks'>, 'assetId' | 'renderJobId' | 'analysisRequestId' | 'sourceUrl' | 'frameRequest' | 'videoRequest' | 'reviewId' | 'snapshotId' | 'cutoutId' | 'requiredProcessorVersion'|'previewVersion'|'lane'>>, beforeEnqueue?:()=>Promise<void>): Promise<Id<'mediaTasks'>> {
   if(input.kind==='preview')input={...input,previewVersion:PREVIEW_VERSION,requiredProcessorVersion:Math.max(5,input.requiredProcessorVersion??0)};
-  if(input.assetId&&input.kind==='preview'){const asset=await ctx.db.get(input.assetId);if(asset?.ownerId===input.ownerId&&asset.projectId===input.projectId&&hasPreview(asset)){const now=Date.now();return ctx.db.insert('mediaTasks',{...input,status:'completed',attempt:0,progress:100,createdAt:now,updatedAt:now});}}
+  if(input.assetId&&input.kind==='preview'){const asset=await ctx.db.get(input.assetId);// A cut-out plays its own VP9 alpha file; an H.264 proxy would drop the transparency.
+  if(asset?.ownerId===input.ownerId&&asset.projectId===input.projectId&&(hasPreview(asset)||asset.cutoutOf)){const now=Date.now();return ctx.db.insert('mediaTasks',{...input,status:'completed',attempt:0,progress:100,createdAt:now,updatedAt:now});}}
   if (input.kind === 'transcribe') input = { ...input, requiredProcessorVersion: Math.max(3, input.requiredProcessorVersion ?? 0) };
   if (input.kind === 'frames') input = { ...input, requiredProcessorVersion: Math.max(4, input.requiredProcessorVersion ?? 0) };
   if (input.kind === 'snapshot') input = { ...input, requiredProcessorVersion: Math.max(6, input.requiredProcessorVersion ?? 0) };
+  if (input.kind === 'cutout') input = { ...input, requiredProcessorVersion: Math.max(7, input.requiredProcessorVersion ?? 0) };
   if (input.assetId && input.kind === 'beats') {
     const asset = await ctx.db.get(input.assetId);
     const beats=asset?(await hydrateAsset(ctx,asset)).analysis?.beats:undefined;
@@ -56,7 +60,7 @@ export async function enqueueMediaTask(ctx: MutationCtx, input: Pick<Doc<'mediaT
       return taskId;
     }
   }
-  if (input.assetId && input.kind !== 'frames' && input.kind !== 'video') {
+  if (input.assetId && input.kind !== 'frames' && input.kind !== 'video' && input.kind !== 'cutout') {
     const existing = await ctx.db.query('mediaTasks').withIndex('by_asset_kind', q => q.eq('assetId', input.assetId).eq('kind', input.kind)).order('desc').take(10);
     const active = existing.find(task => (input.kind!=='preview'||task.previewVersion===input.previewVersion)&&['queued','running','retrying'].includes(task.status));
     if (active) { if (input.analysisRequestId) await ctx.db.patch(active._id, { analysisRequestId: input.analysisRequestId }); return active._id; }
@@ -149,6 +153,7 @@ async function markTerminal(ctx: MutationCtx, taskId: Id<'mediaTasks'>, status: 
   }
   if(task.reviewId){const review=await ctx.db.get(task.reviewId);if(review)await ctx.db.patch(review._id,{status:'failed',error:error.slice(0,1000)});}
   if(task.snapshotId){const snapshot=await ctx.db.get(task.snapshotId);if(snapshot&&snapshot.status==='queued')await ctx.db.patch(snapshot._id,{status:'failed',error:error.slice(0,1000)});}
+  if(task.cutoutId){const cutout=await ctx.db.get(task.cutoutId);if(cutout&&cutout.status==='queued')await ctx.db.patch(cutout._id,{status:'failed',error:error.slice(0,1000)});}
   if (task.analysisRequestId) {
     const request = await ctx.db.get(task.analysisRequestId);
     if (request) await ctx.db.patch(request._id, { status: 'failed', error: error.slice(0, 1000) });
@@ -266,7 +271,7 @@ export const pruneFinished=internalMutation({args:{},returns:v.null(),handler:as
 }});
 export const processorContract = query({ args: { workerSecret: v.string() }, returns: v.object({ processorVersion: v.number() }), handler: (_ctx, args) => {
   requireMediaWorker(args.workerSecret);
-  return { processorVersion: 6 };
+  return { processorVersion: MEDIA_PROCESSOR_VERSION };
 } });
 
 export const ready = query({ args: { workerSecret: v.string(),processorVersion:v.optional(v.number()),lane:v.optional(v.union(v.literal('ultra'),v.literal('any'))) }, returns: v.string(), handler: async (ctx, args) => {
@@ -275,6 +280,7 @@ export const ready = query({ args: { workerSecret: v.string(),processorVersion:v
 }});
 
 async function analysisStillActive(ctx:import('./_generated/server').QueryCtx|MutationCtx,task:Doc<'mediaTasks'>) {
+  if(task.cutoutId){const cutout=await ctx.db.get(task.cutoutId);return !!cutout&&cutout.ownerId===task.ownerId&&cutout.projectId===task.projectId&&cutout.status==='queued';}
   if(task.snapshotId){const snapshot=await ctx.db.get(task.snapshotId);return !!snapshot&&snapshot.ownerId===task.ownerId&&snapshot.projectId===task.projectId&&snapshot.status==='queued'&&snapshot.createdAt+180000>Date.now();}
   if(task.reviewId){const review=await ctx.db.get(task.reviewId);if(!review||review.ownerId!==task.ownerId||review.projectId!==task.projectId||review.status!=='queued'||review.createdAt+180000<=Date.now())return false;const run=await projectRun(ctx,task.projectId,task.ownerId);return !!run.aiRunning&&run.aiRunId===review.runId;}
   if(!task.analysisRequestId)return true;
@@ -303,6 +309,8 @@ async function loadWork(ctx:import('./_generated/server').QueryCtx|MutationCtx,t
     const assets=await Promise.all(ids.map(async raw=>{const id=ctx.db.normalizeId('assets',raw),asset=id?await ctx.db.get(id):null;if(!asset||asset.ownerId!==task.ownerId||asset.projectId!==task.projectId)throw new ConvexError('Frame source media is unavailable.');return {...asset,url:await mediaUrl(ctx,asset)};}));
     snapshot={timeline,assets,times:saved.times};
   }
+  const cutoutRow=task.cutoutId?await ctx.db.get(task.cutoutId):null;
+  if(task.cutoutId&&(!cutoutRow||cutoutRow.ownerId!==task.ownerId||cutoutRow.projectId!==task.projectId))throw new ConvexError('The background removal request is unavailable.');
   let render: Infer<typeof renderSnapshot> | undefined, outputStored = false;
   if (task.renderJobId) {
     const job = await ctx.db.get(task.renderJobId);
@@ -316,7 +324,7 @@ async function loadWork(ctx:import('./_generated/server').QueryCtx|MutationCtx,t
     render = { timeline: job.timeline, assets: assets as Infer<typeof assetWithUrl>[], resolution: job.resolution ?? 1080, fps: job.fps ?? job.timeline.fps, quality: job.quality ?? 'high' };
   }
   const analysisRun=task.analysisRequestId?await ctx.db.get(task.analysisRequestId):null;
-  return { ...(analysisRun?{aiRunId:analysisRun.aiRunId}:{}),...(review?{review}:{}),...(snapshot?{snapshot}:{}),taskId: task._id, leaseToken: task.leaseToken!, projectId: task.projectId, kind: task.kind, ...(task.sourceUrl ? { sourceUrl: task.sourceUrl } : {}), ...(task.frameRequest ? { frameRequest: task.frameRequest } : {}), ...(task.videoRequest ? { videoRequest: task.videoRequest } : {}), ...(asset ? { asset: { ...await hydrateAsset(ctx,asset), url: await mediaUrl(ctx, asset), ...await previewUrl(ctx, asset) } } : {}), ...(transcriptionAsset?{transcriptionAsset}:{}), ...(render ? { render, outputStored } : {}), ...(task.renderJobId ? { renderJobId: task.renderJobId } : {}), ...(task.outputAssetId ? { outputAssetId: task.outputAssetId } : {}) };
+  return { ...(analysisRun?{aiRunId:analysisRun.aiRunId}:{}),...(review?{review}:{}),...(snapshot?{snapshot}:{}),...(cutoutRow?{cutout:{start:cutoutRow.start,end:cutoutRow.end}}:{}),taskId: task._id, leaseToken: task.leaseToken!, projectId: task.projectId, kind: task.kind, ...(task.sourceUrl ? { sourceUrl: task.sourceUrl } : {}), ...(task.frameRequest ? { frameRequest: task.frameRequest } : {}), ...(task.videoRequest ? { videoRequest: task.videoRequest } : {}), ...(asset ? { asset: { ...await hydrateAsset(ctx,asset), url: await mediaUrl(ctx, asset), ...await previewUrl(ctx, asset) } } : {}), ...(transcriptionAsset?{transcriptionAsset}:{}), ...(render ? { render, outputStored } : {}), ...(task.renderJobId ? { renderJobId: task.renderJobId } : {}), ...(task.outputAssetId ? { outputAssetId: task.outputAssetId } : {}) };
 }
 export const claim = mutation({ args: { workerSecret: v.string(),compact:v.optional(v.boolean()),processorVersion:v.optional(v.number()),lane:v.optional(v.union(v.literal('ultra'),v.literal('any'))) }, returns: v.union(workItem, v.null()), handler: async (ctx, args): Promise<MediaWorkItem | null> => {
   requireMediaWorker(args.workerSecret);
@@ -422,6 +430,15 @@ export const complete = mutation({ args: { ...mediaTaskCredentials, result: task
     await enqueueMediaTask(ctx, { ownerId: task.ownerId, projectId: task.projectId, assetId: output._id, kind: 'extract' });
     await enqueueMediaTask(ctx,{ownerId:task.ownerId,projectId:task.projectId,assetId:output._id,kind:'preview'});
     await enqueueMediaTask(ctx, { ownerId: task.ownerId, projectId: task.projectId, assetId: output._id, kind: 'understand' });
+  } else if (task.kind === 'cutout') {
+    const cutout = task.cutoutId ? await ctx.db.get(task.cutoutId) : null;
+    const output = task.outputAssetId ? await ctx.db.get(task.outputAssetId) : null;
+    if (!cutout || cutout.status !== 'queued') throw new ConvexError('The background removal request is no longer active.');
+    if (!output || output.ownerId !== task.ownerId || output.projectId !== task.projectId || output.kind !== 'video' || !output.duration) throw new ConvexError('The background-removed video has not been stored yet.');
+    // The clip keeps its original linked audio; the cut-out carries picture only.
+    await ctx.db.patch(output._id, { cutoutOf: cutout.sourceAssetId, cutoutStart: cutout.start, audioExtracted: true });
+    await ctx.db.patch(cutout._id, { status: 'completed', outputAssetId: output._id });
+    await placeCutout(ctx, { ...cutout, status: 'completed', outputAssetId: output._id }, { ...output, cutoutOf: cutout.sourceAssetId, cutoutStart: cutout.start });
   } else if(task.kind!=='review'&&task.kind!=='snapshot') {
     if (!asset || asset.ownerId !== task.ownerId || asset.projectId !== task.projectId) throw new ConvexError('Source media was removed.');
     if (task.kind === 'video') {

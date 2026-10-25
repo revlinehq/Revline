@@ -77,6 +77,8 @@ export type EditorToolkitOptions = {
   publication?: { threadId: string; promptMessageId: string };
   abortSignal: AbortSignal;
   budget: AssistantRunBudget;
+  /** MCP clients review their own work (getFrames); effects need no in-turn plan there. */
+  planlessEffects?: boolean;
 };
 
 /** The editor's AI tools bound to one active run: the in-app assistant and MCP share them. */
@@ -517,10 +519,11 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
     })}),
     addTimedEffect: createTool({ description: `For explicit effects or authorized creative styling: add a supported independent FX clip (solid-color instead creates a normal V color layer): ${OFFERED_TIMED_EFFECT_PRESETS.map(preset=>EFFECT_CATALOG[preset].label).join(', ')}. One planId maps to one FX clip with the same start and full duration; plan repeated pulses separately. It affects the visual composition during its range; use explicit start or current playhead. Punch is the returning pulse in the Zoom family. It has amount1..3, speed.25..4 and centerX/centerY0..1. Optional attack/release are .01..30 seconds at1x speed; speed scales both, and if their total exceeds the FX duration both fit proportionally. Omitted timing fields preserve the legacy pulse; partial timing edits preserve every omitted control. Quick zoom in/out are one configurable Zoom family: optional zoom direction in/out, amount 1..3 times normal framing, speed 0.25..4 and centerX/centerY 0..1. Speed is progression relative to the FX range: 1 completes across the range, faster reaches the target early and holds, slower ends partway. Optional solidColor controls configure a solid-color V frame/rectangle only. Solid color follows V layer stacking; put it below footage for a background or above it for an overlay. This is independent of footage and sound timing. Footage fade in/out belongs to configureVisualFade, and sound fades to configureAudio; do not create a separate fade FX. Use addClipTransition for a real neighboring-pair transition.`, inputSchema: z.object({ planId:z.string().optional(),preset:z.enum(OFFERED_TIMED_EFFECT_PRESETS),start:z.number().min(0).optional(),duration:z.number().positive().optional(),aboveClipId:z.string().optional(),solidColor:solidColorInput.optional(),zoom:zoomInput.optional(),...pulseInputs }).strict().refine(input=>!input.zoom||isZoomPreset(input.preset),{message:'Zoom controls belong to Zoom FX.'}).refine(input=>!input.solidColor||input.preset==='solid-color',{message:'Solid color controls belong to solid-color FX.'}).refine(input=>!input.punch||input.preset==='punch',{message:'Controls must match the requested effect preset.'}), execute:async(_ctx,input)=>checkpoint(t=>{
       const start=input.start??options.playhead??0,plan=effectPlans.find(plan=>(!input.planId||plan.id===input.planId)&&plan.kind==='timed'&&plan.effect===input.preset&&Math.abs(plan.start-start)<1/t.fps);
-      if(!plan)throw new Error('Record this effect with planEffects before adding it.');
-      if(Math.abs((input.duration??plan.duration)-plan.duration)>1/t.fps)throw new Error('Match the timed plan duration to this one FX clip. Plan each separate pulse with its own ID and range.');
-      const id=crypto.randomUUID();planBindings.set(plan.id,id);
-      const next=addEffectClip(t,id,input.preset,start,{duration:input.duration??plan.duration,aboveClipId:input.aboveClipId});
+      if(!plan&&!options.planlessEffects)throw new Error('Record this effect with planEffects before adding it.');
+      if(plan&&Math.abs((input.duration??plan.duration)-plan.duration)>1/t.fps)throw new Error('Match the timed plan duration to this one FX clip. Plan each separate pulse with its own ID and range.');
+      const duration=input.duration??plan?.duration;if(duration===undefined)throw new Error('Give the effect a duration in seconds.');
+      const id=crypto.randomUUID();if(plan)planBindings.set(plan.id,id);
+      const next=addEffectClip(t,id,input.preset,start,{duration,aboveClipId:input.aboveClipId});
       if(input.zoom)return patchClip(next,id,configureTimedEffectPatch(find(next,id),{zoom:input.zoom}));
       if(input.solidColor)return patchClip(next,id,solidColorPatch(find(next,id),input.solidColor));
       return input.punch?patchClip(next,id,configureTimedEffectPatch(find(next,id),{punch:input.punch})):next;
@@ -547,6 +550,10 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       if (selected.kind !== "video" || !source) throw new Error("Choose an uploaded video clip");
       if (!source.analysis?.focus?.length) await analyze(source._id, "track");
       return checkpoint(t => { const clip = find(t, input.clipId); const asset = assets.find(current => current._id === clip.assetId); if (clip.kind !== "video" || !asset?.analysis?.focus?.length) throw new Error("No visible subject was detected in this video"); return patchClip(t, input.clipId, { focus: focusForClip(asset.analysis.focus, clip) }); });
+    } }),
+    removeBackground: createTool({ description: "Ultra only. Remove the background behind the person in one existing video clip so visuals on a LOWER V layer show behind them (fal.ai cut-out). Use only when the user asks to remove or replace their background or put visuals behind them. It runs in the background for about 1-3 minutes and costs the user's fal.ai credit (about $0.02 per second of the clip); the clip switches to the transparent cut-out automatically, after this turn's edits are saved. Place the replacement visuals on a lower V layer under the clip.", inputSchema: z.object({ clipId: z.string().min(1) }), execute: async (_ctx, { clipId }) => {
+      const result = await ctx.runMutation(internal.cutouts.startFromRun, { ...run, clipId });
+      return { started: !result.alreadyRunning, alreadyRunning: result.alreadyRunning, estimatedUsd: result.estimatedUsd, note: 'Background removal is processing; the clip switches to the cut-out automatically when it finishes. Visuals belong on a lower V layer.' };
     } }),
   };
   return { tools, editSession, plans: () => effectPlans };

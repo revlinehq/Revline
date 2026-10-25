@@ -17,6 +17,7 @@ import type * as assistantWorkflow from "../assistantWorkflow.js";
 import type * as billing from "../billing.js";
 import type * as compositionReview from "../compositionReview.js";
 import type * as crons from "../crons.js";
+import type * as cutouts from "../cutouts.js";
 import type * as discordAlerts from "../discordAlerts.js";
 import type * as editorAccess from "../editorAccess.js";
 import type * as http from "../http.js";
@@ -81,6 +82,7 @@ declare const fullApi: ApiFromModules<{
   billing: typeof billing;
   compositionReview: typeof compositionReview;
   crons: typeof crons;
+  cutouts: typeof cutouts;
   discordAlerts: typeof discordAlerts;
   editorAccess: typeof editorAccess;
   http: typeof http;

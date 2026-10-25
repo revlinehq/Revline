@@ -108,6 +108,8 @@ export const assetFields = {
   waveform: v.optional(waveformValidator),
   // JSON recipe of an assistant-generated sound effect; editSound re-renders from it.
   soundRecipe: v.optional(v.string()),
+  // A background-removed copy (VP9 with alpha) of cutoutStart.. seconds of cutoutOf.
+  cutoutOf: v.optional(v.id('assets')), cutoutStart: v.optional(v.number()),
   thumbnailStorageId: v.optional(v.id('_storage')),
   analysisCompletedAt: v.optional(v.object({ transcribe: v.optional(v.number()), understand: v.optional(v.number()), shots: v.optional(v.number()), beats: v.optional(v.number()), track: v.optional(v.number()) })),
 };
@@ -135,7 +137,7 @@ export const userFields = {
   createdAt: v.number(), updatedAt: v.number(),
 };
 export const userDocument = v.object({ _id: v.id("users"), _creationTime: v.number(), ...userFields });
-export const mediaTaskKind = v.union(analysisMode, v.literal('extract'), v.literal('preview'), v.literal('waveform'), v.literal('render'), v.literal('import'), v.literal('review'), v.literal('snapshot'));
+export const mediaTaskKind = v.union(analysisMode, v.literal('extract'), v.literal('preview'), v.literal('waveform'), v.literal('render'), v.literal('import'), v.literal('review'), v.literal('snapshot'), v.literal('cutout'));
 export const mediaTaskStatus = v.union(v.literal('queued'), v.literal('running'), v.literal('retrying'), v.literal('completed'), v.literal('failed'), v.literal('cancelled'));
 export const mediaTaskActivity = v.union(v.literal('downloading'), v.literal('preparing-analysis'), v.literal('sending-gemini'), v.literal('preparing-gemini'), v.literal('analyzing'), v.literal('retrying-analysis'));
 export const mediaTaskFields = {
@@ -147,7 +149,7 @@ export const mediaTaskFields = {
   activity:v.optional(mediaTaskActivity),activityStartedAt:v.optional(v.number()),
   outputAssetId: v.optional(v.id('assets')),
   sourceUrl: v.optional(v.string()),
-  reviewId:v.optional(v.id('compositionReviews')),snapshotId:v.optional(v.id('frameSnapshots')),previewVersion:v.optional(v.number()),requiredProcessorVersion:v.optional(v.number()),
+  reviewId:v.optional(v.id('compositionReviews')),snapshotId:v.optional(v.id('frameSnapshots')),cutoutId:v.optional(v.id('cutouts')),previewVersion:v.optional(v.number()),requiredProcessorVersion:v.optional(v.number()),
   frameRequest: v.optional(frameRequestValidator), frameInspection: v.optional(frameInspectionValidator),
   videoRequest: v.optional(videoRequestValidator), videoInspection: v.optional(videoInspectionValidator),
   leaseToken: v.optional(v.string()), leaseExpiresAt: v.optional(v.number()), attemptStartedAt: v.optional(v.number()),
@@ -222,6 +224,8 @@ export default defineSchema({
     grantId: v.string(), clientId: v.optional(v.string()), label: v.string(),
     createdAt: v.number(), expiresAt: v.optional(v.number()), lastUsedAt: v.optional(v.number()), revokedAt: v.optional(v.number()),
   }).index("by_tokenHash", ["tokenHash"]).index("by_owner", ["ownerId"]).index("by_grant", ["grantId"]).index("by_grant_revoked", ["grantId", "revokedAt"]).index("by_clientId", ["clientId"]).index("by_revokedAt", ["revokedAt"]),
+  // Background removal for one clip's source range, run by fal.ai through the media worker.
+  cutouts: defineTable({ ownerId: v.string(), projectId: v.id("projects"), clipId: v.string(), sourceAssetId: v.id("assets"), start: v.number(), end: v.number(), status: v.union(v.literal("queued"), v.literal("completed"), v.literal("failed")), taskId: v.optional(v.id("mediaTasks")), outputAssetId: v.optional(v.id("assets")), placed: v.optional(v.boolean()), error: v.optional(v.string()), createdAt: v.number() }).index("by_project", ["projectId"]),
   // Rendered timeline frames an MCP client asked to see; deleted once read.
   frameSnapshots: defineTable({ projectId: v.id("projects"), ownerId: v.string(), revision: v.number(), times: v.array(v.number()), taskId: v.optional(v.id("mediaTasks")), status: v.union(v.literal("queued"), v.literal("completed"), v.literal("failed")), frames: v.optional(v.array(v.object({ time: v.number(), image: v.string() }))), error: v.optional(v.string()), createdAt: v.number() }).index("by_project", ["projectId"]),
   // Per-minute counters keyed by owner (tool calls) or "register:<ip>" (client registration).

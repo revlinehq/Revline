@@ -51,7 +51,7 @@ export const authorize = internalQuery({ args: { projectId: v.id('projects'), jo
   const ownerId = task?.ownerId ?? await requireOwner(ctx); await projectIdentity(ctx, args.projectId, ownerId);
   if (!task && !args.jobId) await requireEditorAccess(ctx, ownerId);
   await previewSource(ctx,args,task);
-  if (task && (task.projectId !== args.projectId || !['extract', 'preview', 'render', 'import'].includes(task.kind) || (task.kind === 'import' && (args.jobId || args.kind !== 'video' || args.contentType !== 'video/mp4')) || (task.kind === 'extract' && (args.jobId || args.kind !== 'audio' || args.contentType !== 'audio/mp4')) || (task.kind === 'render' && (args.jobId !== task.renderJobId || args.kind !== 'video' || args.contentType !== 'video/mp4')))) throw new ConvexError('This task cannot upload that media');
+  if (task && (task.projectId !== args.projectId || !['extract', 'preview', 'render', 'import', 'cutout'].includes(task.kind) || (task.kind === 'import' && (args.jobId || args.kind !== 'video' || args.contentType !== 'video/mp4')) || (task.kind === 'cutout' && (args.jobId || args.kind !== 'video' || args.contentType !== 'video/webm')) || (task.kind === 'extract' && (args.jobId || args.kind !== 'audio' || args.contentType !== 'audio/mp4')) || (task.kind === 'render' && (args.jobId !== task.renderJobId || args.kind !== 'video' || args.contentType !== 'video/mp4')))) throw new ConvexError('This task cannot upload that media');
   if (args.jobId && !task) {
     if (!process.env.RENDER_WORKER_SECRET || args.workerSecret !== process.env.RENDER_WORKER_SECRET) throw new ConvexError('Render worker authentication required');
     const job = await ctx.db.get(args.jobId);

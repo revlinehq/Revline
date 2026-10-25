@@ -5,6 +5,7 @@ import { api } from '../../convex/_generated/api';
 import { processMediaTask } from '../../lib/server/media-task-runner';
 import { isMediaLeaseLost, isRetryableAnalysisError, MEDIA_TASK_LEASE_MS } from '../../lib/media-analysis/errors';
 import type { MediaTaskActivity } from '../../lib/media-analysis/activity';
+import { MEDIA_PROCESSOR_VERSION } from '../../lib/media-analysis/processor-version';
 
 const convexUrl = process.env.NEXT_PUBLIC_CONVEX_URL;
 const workerSecret = process.env.RENDER_WORKER_SECRET;
@@ -28,14 +29,14 @@ const subscriptions = new ConvexClient(convexUrl);
 let revision = 0, ready = false, activeTasks = 0, draining = false, lastWorkAt = Date.now();
 const waiters = new Set<() => void>();
 const wake = () => { for (const resolve of waiters) resolve(); };
-const unsubscribe = subscriptions.onUpdate(api.mediaTasks.ready, { workerSecret,processorVersion:6,...lane }, value => {
+const unsubscribe = subscriptions.onUpdate(api.mediaTasks.ready, { workerSecret,processorVersion:MEDIA_PROCESSOR_VERSION,...lane }, value => {
   revision++; ready = !!value;
   if (ready) { lastWorkAt = Date.now(); wake(); }
 });
 const server = createServer((request, response) => {
   if (request.method === 'GET' && request.url === '/health') {
     response.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' });
-    response.end(JSON.stringify({ healthy: true, activeTasks, draining, processorVersion:6 })); return;
+    response.end(JSON.stringify({ healthy: true, activeTasks, draining, processorVersion:MEDIA_PROCESSOR_VERSION })); return;
   }
   if (request.method === 'POST' && request.url === '/drain') {
     const actual = Buffer.from(request.headers.authorization ?? ''), expected = Buffer.from(`Bearer ${workerSecret}`);
@@ -65,7 +66,7 @@ async function runSlot() {
     try {
       const observed = revision;
       const claimedAt = Date.now();
-      const task = await client.mutation(api.mediaTasks.claim, { workerSecret: workerSecret!, compact:true,processorVersion:6,...lane });
+      const task = await client.mutation(api.mediaTasks.claim, { workerSecret: workerSecret!, compact:true,processorVersion:MEDIA_PROCESSOR_VERSION,...lane });
       if (!task) { await waitForWork(observed); continue; }
       activeTasks++; lastWorkAt = Date.now();
       const controller = new AbortController();

@@ -126,7 +126,7 @@ async function callEditorTool(ctx: ActionCtx, ownerId: string, name: string, raw
   const watch = setInterval(() => { void ctx.runQuery(internal.assistant.isRunActive, run).then(active => { if (!active) controller.abort(); }).catch(() => controller.abort()); }, 2000);
   try {
     const { project, assets } = await ctx.runQuery(internal.assistant.getRun, run);
-    const { toolkit, tools } = editorTools(ctx, { run, project, assets, recovering: false, initialPlans: [], selectedClipIds: [], abortSignal, budget });
+    const { toolkit, tools } = editorTools(ctx, { run, project, assets, recovering: false, initialPlans: [], selectedClipIds: [], abortSignal, budget, planlessEffects: true });
     const tool = tools[name];
     const output = await tool.execute.call({ ...tool, ctx }, parsed.data, { toolCallId: crypto.randomUUID(), messages: [], abortSignal });
     // A destructive edit is staged privately; publish it as this call's one saved edit.

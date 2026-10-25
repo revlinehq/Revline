@@ -21,6 +21,7 @@ import { uploadMediaFile } from './upload-media-file';
 import { preparePreviewVideo,probePreviewVideo,type PreviewVideoMetadata } from './preview-video';
 import { runRenderWorker } from './render-worker';
 import { importVideoLink } from './import-video-link';
+import { removeBackground } from './remove-background';
 import { prepareComposition,writeComposition } from './prepare-composition';
 import { renderPlainExport } from './plain-export-render';
 import { plainExportPlan } from '@/lib/editor/plain-export';
@@ -165,6 +166,14 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
       onProgress(98);return {};
     }
     const media = await runPhase('Reading media information',()=>probeMedia(source, signal));
+    if (task.kind === 'cutout') {
+      if (task.outputAssetId) return {};
+      if (!task.cutout || !media.hasVideo) throw new AnalysisError('The background removal request is unavailable.', 400);
+      const output = await runPhase('Removing background', () => removeBackground(source, directory, task.cutout!, signal, onProgress));
+      await runPhase('Saving cut-out', () => uploadMediaFile(output.path, { ...credentials, projectId: task.projectId, fileName: `${asset.fileName.replace(/\.[^.]+$/, '').slice(0, 200)} (background removed).webm`, duration: output.duration, width: output.width, height: output.height, kind: 'video', contentType: 'video/webm' }, uploadContext, signal));
+      onProgress(98);
+      return {};
+    }
     if (task.kind === 'frames') {
       if (!media.hasVideo || !task.frameRequest) throw new AnalysisError('Frame inspection needs a video window and a question.', 400);
       const key = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
