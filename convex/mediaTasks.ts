@@ -2,7 +2,7 @@ import { compositionReviewResult,effectPlanValidator } from './lib/effect_plan';
 import { hydrateAsset } from './lib/asset_analysis';
 import { createProject,readProject,projectIdentity,projectRun } from './lib/project_data';
 import { requireEditorAccess } from './lib/billing_access';
-import { ConvexError, v, type Infer } from 'convex/values';
+import { ConvexError, v, type Infer, type ObjectType } from 'convex/values';
 import { vResultValidator, vWorkflowId, type WorkflowId } from '@convex-dev/workflow';
 import { internal } from './_generated/api';
 import { internalMutation, mutation, query, type MutationCtx, type QueryCtx } from './_generated/server';
@@ -33,17 +33,19 @@ const FAIR_RUNNING_PER_OWNER = 1, FAIR_CLAIM_SCAN = 64;
 const eventResult = v.object({ success: v.boolean(), retryable: v.boolean(), error: v.optional(v.string()) });
 const taskState = v.object({ _id: v.id('mediaTasks'), kind: mediaTaskKind, status: mediaTaskStatus, progress: v.number(), attempt: v.number(), error: v.optional(v.string()), assetId: v.optional(v.id('assets')),activity:v.optional(mediaTaskActivity),activityStartedAt:v.optional(v.number()) });
 const renderSnapshot = v.object({ timeline: timelineValidator, assets: v.array(assetWithUrl), resolution: v.number(), fps: v.number(), quality: v.string() });
+const timelineFrames=v.object({timeline:timelineValidator,assets:v.array(assetWithUrl),times:v.array(v.number())});
 const reviewSnapshot=v.object({timeline:timelineValidator,reference:timelineValidator,plans:v.array(effectPlanValidator),assets:v.array(assetWithUrl),revision:v.number(),start:v.number(),end:v.number()});
-const workItem = v.object({review:v.optional(reviewSnapshot), ...mediaTaskCredentials, projectId: v.id('projects'), aiRunId:v.optional(v.string()), kind: mediaTaskKind, sourceUrl: v.optional(v.string()), frameRequest: v.optional(frameRequestValidator), videoRequest: v.optional(videoRequestValidator), asset: v.optional(assetWithUrl), transcriptionAsset: v.optional(assetWithUrl), outputAssetId: v.optional(v.id('assets')), outputStored: v.optional(v.boolean()), render: v.optional(renderSnapshot), renderJobId: v.optional(v.id('renderJobs')) });
+const workItem = v.object({review:v.optional(reviewSnapshot),snapshot:v.optional(timelineFrames), ...mediaTaskCredentials, projectId: v.id('projects'), aiRunId:v.optional(v.string()), kind: mediaTaskKind, sourceUrl: v.optional(v.string()), frameRequest: v.optional(frameRequestValidator), videoRequest: v.optional(videoRequestValidator), asset: v.optional(assetWithUrl), transcriptionAsset: v.optional(assetWithUrl), outputAssetId: v.optional(v.id('assets')), outputStored: v.optional(v.boolean()), render: v.optional(renderSnapshot), renderJobId: v.optional(v.id('renderJobs')) });
 export type MediaWorkItem = Infer<typeof workItem>;
-export const taskResult = v.object({review:v.optional(compositionReviewResult), analysis: v.optional(analysisValidator), frameInspection: v.optional(frameInspectionValidator), videoInspection: v.optional(videoInspectionValidator), audioAssetId: v.optional(v.id('assets')), waveform: v.optional(waveformValidator) });
+export const taskResult = v.object({review:v.optional(compositionReviewResult),snapshot:v.optional(v.object({frames:v.array(v.object({time:v.number(),image:v.string()}))})), analysis: v.optional(analysisValidator), frameInspection: v.optional(frameInspectionValidator), videoInspection: v.optional(videoInspectionValidator), audioAssetId: v.optional(v.id('assets')), waveform: v.optional(waveformValidator) });
 export type MediaTaskResult = Infer<typeof taskResult>;
 
-export async function enqueueMediaTask(ctx: MutationCtx, input: Pick<Doc<'mediaTasks'>, 'ownerId' | 'projectId' | 'kind'> & Partial<Pick<Doc<'mediaTasks'>, 'assetId' | 'renderJobId' | 'analysisRequestId' | 'sourceUrl' | 'frameRequest' | 'videoRequest' | 'reviewId' | 'requiredProcessorVersion'|'previewVersion'|'lane'>>, beforeEnqueue?:()=>Promise<void>): Promise<Id<'mediaTasks'>> {
+export async function enqueueMediaTask(ctx: MutationCtx, input: Pick<Doc<'mediaTasks'>, 'ownerId' | 'projectId' | 'kind'> & Partial<Pick<Doc<'mediaTasks'>, 'assetId' | 'renderJobId' | 'analysisRequestId' | 'sourceUrl' | 'frameRequest' | 'videoRequest' | 'reviewId' | 'snapshotId' | 'requiredProcessorVersion'|'previewVersion'|'lane'>>, beforeEnqueue?:()=>Promise<void>): Promise<Id<'mediaTasks'>> {
   if(input.kind==='preview')input={...input,previewVersion:PREVIEW_VERSION,requiredProcessorVersion:Math.max(5,input.requiredProcessorVersion??0)};
   if(input.assetId&&input.kind==='preview'){const asset=await ctx.db.get(input.assetId);if(asset?.ownerId===input.ownerId&&asset.projectId===input.projectId&&hasPreview(asset)){const now=Date.now();return ctx.db.insert('mediaTasks',{...input,status:'completed',attempt:0,progress:100,createdAt:now,updatedAt:now});}}
   if (input.kind === 'transcribe') input = { ...input, requiredProcessorVersion: Math.max(3, input.requiredProcessorVersion ?? 0) };
   if (input.kind === 'frames') input = { ...input, requiredProcessorVersion: Math.max(4, input.requiredProcessorVersion ?? 0) };
+  if (input.kind === 'snapshot') input = { ...input, requiredProcessorVersion: Math.max(6, input.requiredProcessorVersion ?? 0) };
   if (input.assetId && input.kind === 'beats') {
     const asset = await ctx.db.get(input.assetId);
     const beats=asset?(await hydrateAsset(ctx,asset)).analysis?.beats:undefined;
@@ -146,6 +148,7 @@ async function markTerminal(ctx: MutationCtx, taskId: Id<'mediaTasks'>, status: 
     if (job && job.status !== 'completed' && job.status !== 'cancelled') await ctx.db.patch(job._id, { status: status==='cancelled'?'cancelled':'failed', error: status==='cancelled'?undefined:error.slice(0, 1000), updatedAt: Date.now() });
   }
   if(task.reviewId){const review=await ctx.db.get(task.reviewId);if(review)await ctx.db.patch(review._id,{status:'failed',error:error.slice(0,1000)});}
+  if(task.snapshotId){const snapshot=await ctx.db.get(task.snapshotId);if(snapshot&&snapshot.status==='queued')await ctx.db.patch(snapshot._id,{status:'failed',error:error.slice(0,1000)});}
   if (task.analysisRequestId) {
     const request = await ctx.db.get(task.analysisRequestId);
     if (request) await ctx.db.patch(request._id, { status: 'failed', error: error.slice(0, 1000) });
@@ -170,8 +173,9 @@ export const start = mutation({ args: { projectId: v.id('projects'), assetId: v.
   // Reused or already-active work needs no new capacity.
   return enqueueMediaTask(ctx, { ...args, ownerId }, () => requireMediaTaskCapacity(ctx, ownerId, 1));
 }});
-export const importVideo = mutation({ args: { projectId: v.optional(v.id('projects')), url: v.string() }, returns: v.object({ projectId: v.id('projects'), taskId: v.id('mediaTasks') }), handler: async (ctx, args) => {
-  const ownerId = await requireOwner(ctx); await requireEditorAccess(ctx, ownerId);
+const importVideoForArgs = { projectId: v.optional(v.id('projects')), url: v.string() };
+export async function importVideoFor(ctx: MutationCtx, ownerId: string, args: ObjectType<typeof importVideoForArgs>) {
+  await requireEditorAccess(ctx, ownerId);
   let sourceUrl: string;
   try { sourceUrl = parseVideoLink(args.url).url; } catch (error) { throw new ConvexError((error as Error).message); }
   // A new edit and its durable import are created atomically.
@@ -186,7 +190,8 @@ export const importVideo = mutation({ args: { projectId: v.optional(v.id('projec
   await consumeVideoImport(ctx, ownerId, !args.projectId); await requireMediaTaskCapacity(ctx, ownerId, 1);
   const taskId = await enqueueMediaTask(ctx, { ownerId, projectId, kind: 'import', sourceUrl });
   return { projectId, taskId };
-}});
+}
+export const importVideo = mutation({ args: importVideoForArgs, returns: v.object({ projectId: v.id('projects'), taskId: v.id('mediaTasks') }), handler: async (ctx, args) => importVideoFor(ctx, await requireOwner(ctx), args) });
 export const get = query({ args: { taskId: v.id('mediaTasks') }, returns: taskState, handler: async (ctx, args) => {
   const ownerId = await requireOwner(ctx), task = await ctx.db.get(args.taskId);
   if (!task || task.ownerId !== ownerId) throw new ConvexError('Media task not found.');
@@ -261,7 +266,7 @@ export const pruneFinished=internalMutation({args:{},returns:v.null(),handler:as
 }});
 export const processorContract = query({ args: { workerSecret: v.string() }, returns: v.object({ processorVersion: v.number() }), handler: (_ctx, args) => {
   requireMediaWorker(args.workerSecret);
-  return { processorVersion: 5 };
+  return { processorVersion: 6 };
 } });
 
 export const ready = query({ args: { workerSecret: v.string(),processorVersion:v.optional(v.number()),lane:v.optional(v.union(v.literal('ultra'),v.literal('any'))) }, returns: v.string(), handler: async (ctx, args) => {
@@ -270,6 +275,7 @@ export const ready = query({ args: { workerSecret: v.string(),processorVersion:v
 }});
 
 async function analysisStillActive(ctx:import('./_generated/server').QueryCtx|MutationCtx,task:Doc<'mediaTasks'>) {
+  if(task.snapshotId){const snapshot=await ctx.db.get(task.snapshotId);return !!snapshot&&snapshot.ownerId===task.ownerId&&snapshot.projectId===task.projectId&&snapshot.status==='queued'&&snapshot.createdAt+180000>Date.now();}
   if(task.reviewId){const review=await ctx.db.get(task.reviewId);if(!review||review.ownerId!==task.ownerId||review.projectId!==task.projectId||review.status!=='queued'||review.createdAt+180000<=Date.now())return false;const run=await projectRun(ctx,task.projectId,task.ownerId);return !!run.aiRunning&&run.aiRunId===review.runId;}
   if(!task.analysisRequestId)return true;
   const request=await ctx.db.get(task.analysisRequestId);
@@ -289,6 +295,14 @@ async function loadWork(ctx:import('./_generated/server').QueryCtx|MutationCtx,t
     const assets=await Promise.all(saved.assetIds.map(async id=>{const asset=await ctx.db.get(id);if(!asset||asset.ownerId!==task.ownerId||asset.projectId!==task.projectId)throw new ConvexError('Review source is unavailable.');return {...asset,url:await mediaUrl(ctx,asset)};}));
     review={timeline:saved.timeline,reference:saved.reference,plans:saved.plans,assets,revision:saved.revision,start:saved.start,end:saved.end};
   }
+  let snapshot:Infer<typeof timelineFrames>|undefined;
+  if(task.snapshotId){
+    const saved=await ctx.db.get(task.snapshotId);if(!saved||saved.ownerId!==task.ownerId||saved.projectId!==task.projectId)throw new ConvexError('The frame request is unavailable.');
+    const project=await requireProject(ctx,task.projectId,task.ownerId,false),timeline=currentTimeline(project);
+    const ids=[...new Set(timeline.clips.flatMap(clip=>clip.assetId?[clip.assetId]:[]))];
+    const assets=await Promise.all(ids.map(async raw=>{const id=ctx.db.normalizeId('assets',raw),asset=id?await ctx.db.get(id):null;if(!asset||asset.ownerId!==task.ownerId||asset.projectId!==task.projectId)throw new ConvexError('Frame source media is unavailable.');return {...asset,url:await mediaUrl(ctx,asset)};}));
+    snapshot={timeline,assets,times:saved.times};
+  }
   let render: Infer<typeof renderSnapshot> | undefined, outputStored = false;
   if (task.renderJobId) {
     const job = await ctx.db.get(task.renderJobId);
@@ -302,7 +316,7 @@ async function loadWork(ctx:import('./_generated/server').QueryCtx|MutationCtx,t
     render = { timeline: job.timeline, assets: assets as Infer<typeof assetWithUrl>[], resolution: job.resolution ?? 1080, fps: job.fps ?? job.timeline.fps, quality: job.quality ?? 'high' };
   }
   const analysisRun=task.analysisRequestId?await ctx.db.get(task.analysisRequestId):null;
-  return { ...(analysisRun?{aiRunId:analysisRun.aiRunId}:{}),...(review?{review}:{}),taskId: task._id, leaseToken: task.leaseToken!, projectId: task.projectId, kind: task.kind, ...(task.sourceUrl ? { sourceUrl: task.sourceUrl } : {}), ...(task.frameRequest ? { frameRequest: task.frameRequest } : {}), ...(task.videoRequest ? { videoRequest: task.videoRequest } : {}), ...(asset ? { asset: { ...await hydrateAsset(ctx,asset), url: await mediaUrl(ctx, asset), ...await previewUrl(ctx, asset) } } : {}), ...(transcriptionAsset?{transcriptionAsset}:{}), ...(render ? { render, outputStored } : {}), ...(task.renderJobId ? { renderJobId: task.renderJobId } : {}), ...(task.outputAssetId ? { outputAssetId: task.outputAssetId } : {}) };
+  return { ...(analysisRun?{aiRunId:analysisRun.aiRunId}:{}),...(review?{review}:{}),...(snapshot?{snapshot}:{}),taskId: task._id, leaseToken: task.leaseToken!, projectId: task.projectId, kind: task.kind, ...(task.sourceUrl ? { sourceUrl: task.sourceUrl } : {}), ...(task.frameRequest ? { frameRequest: task.frameRequest } : {}), ...(task.videoRequest ? { videoRequest: task.videoRequest } : {}), ...(asset ? { asset: { ...await hydrateAsset(ctx,asset), url: await mediaUrl(ctx, asset), ...await previewUrl(ctx, asset) } } : {}), ...(transcriptionAsset?{transcriptionAsset}:{}), ...(render ? { render, outputStored } : {}), ...(task.renderJobId ? { renderJobId: task.renderJobId } : {}), ...(task.outputAssetId ? { outputAssetId: task.outputAssetId } : {}) };
 }
 export const claim = mutation({ args: { workerSecret: v.string(),compact:v.optional(v.boolean()),processorVersion:v.optional(v.number()),lane:v.optional(v.union(v.literal('ultra'),v.literal('any'))) }, returns: v.union(workItem, v.null()), handler: async (ctx, args): Promise<MediaWorkItem | null> => {
   requireMediaWorker(args.workerSecret);
@@ -383,6 +397,12 @@ export const complete = mutation({ args: { ...mediaTaskCredentials, result: task
     if(result.revision!==review.revision||result.sampleTimes.length<1||result.sampleTimes.length>12||result.sampleTimes.some(time=>!Number.isFinite(time)||time<review.start-1/review.timeline.fps||time>review.end)||result.checks.length!==ids.size||result.observations.length!==ids.size||new Set(result.checks.map(check=>check.planId)).size!==ids.size||new Set(result.observations.map(check=>check.planId)).size!==ids.size||result.checks.some(check=>!ids.has(check.planId)||!Number.isFinite(check.peakPixelChange)||check.peakPixelChange<0||check.peakPixelChange>1)||result.observations.some(check=>!ids.has(check.planId)||check.evidence.length>2000)||result.uncertainty.length>2000)throw new ConvexError('Review evidence does not match this rendered snapshot.');
     await ctx.db.patch(review._id,{status:'completed',result});
   }else if(task.kind==='review')throw new ConvexError('Review completed without rendered evidence.');
+  if(args.result.snapshot){
+    if(task.kind!=='snapshot'||!task.snapshotId||!await analysisStillActive(ctx,task))throw new ConvexError('The frame request is no longer active.');
+    const snapshot=(await ctx.db.get(task.snapshotId))!,frames=args.result.snapshot.frames;
+    if(frames.length!==snapshot.times.length||frames.some((frame,index)=>!Number.isFinite(frame.time)||Math.abs(frame.time-snapshot.times[index])>1||!/^[A-Za-z0-9+/]+=*$/.test(frame.image))||frames.reduce((sum,frame)=>sum+frame.image.length,0)>900_000)throw new ConvexError('Rendered frames do not match the request.');
+    await ctx.db.patch(snapshot._id,{status:'completed',frames});
+  }else if(task.kind==='snapshot')throw new ConvexError('Frame capture completed without images.');
   const asset = task.assetId ? await ctx.db.get(task.assetId) : null;
   if (args.result.frameInspection && task.kind !== 'frames') throw new ConvexError('Frame evidence belongs to a frame inspection task.');
   if (args.result.videoInspection && task.kind !== 'video') throw new ConvexError('Native video evidence belongs to its question task.');
@@ -402,7 +422,7 @@ export const complete = mutation({ args: { ...mediaTaskCredentials, result: task
     await enqueueMediaTask(ctx, { ownerId: task.ownerId, projectId: task.projectId, assetId: output._id, kind: 'extract' });
     await enqueueMediaTask(ctx,{ownerId:task.ownerId,projectId:task.projectId,assetId:output._id,kind:'preview'});
     await enqueueMediaTask(ctx, { ownerId: task.ownerId, projectId: task.projectId, assetId: output._id, kind: 'understand' });
-  } else if(task.kind!=='review') {
+  } else if(task.kind!=='review'&&task.kind!=='snapshot') {
     if (!asset || asset.ownerId !== task.ownerId || asset.projectId !== task.projectId) throw new ConvexError('Source media was removed.');
     if (task.kind === 'video') {
       if (!task.videoRequest || !args.result.videoInspection || asset.kind !== 'video' || !asset.duration) throw new ConvexError('Native video evidence is missing.');

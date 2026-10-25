@@ -24,7 +24,7 @@ import { importVideoLink } from './import-video-link';
 import { prepareComposition,writeComposition } from './prepare-composition';
 import { renderPlainExport } from './plain-export-render';
 import { plainExportPlan } from '@/lib/editor/plain-export';
-import { reviewComposition } from './review-composition';
+import { captureTimelineFrames, reviewComposition } from './review-composition';
 import { extractInspectionFrames } from './inspect-video-frames';
 import { MEDIA_ACTIVITY_LABELS, type MediaTaskActivity, type ReportMediaActivity } from '@/lib/media-analysis/activity';
 
@@ -99,6 +99,7 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
       return {};
     }
     if(task.kind==='review'){if(!task.review)throw new AnalysisError('Review snapshot is unavailable.',400);return {review:await reviewComposition(task.review,directory,convexUrl,signal,onProgress)};}
+    if(task.kind==='snapshot'){if(!task.snapshot)throw new AnalysisError('The frame request is unavailable.',400);return {snapshot:await captureTimelineFrames(task.snapshot,directory,convexUrl,signal,onProgress)};}
     const asset = task.asset;
     if (!asset?.url) throw new AnalysisError('The source media is unavailable.', 400);
     if(task.kind==='preview'&&asset.kind==='video'&&asset.previewVersion===1&&asset.previewR2Key&&[asset.previewSize,asset.previewWidth,asset.previewHeight,asset.previewFps].every(value=>typeof value==='number'&&Number.isFinite(value)&&value>0))return {};

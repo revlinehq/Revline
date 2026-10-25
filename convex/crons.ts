@@ -5,4 +5,5 @@ crons.daily('Prune finished media task history',{hourUTC:9,minuteUTC:15},interna
 crons.daily('Prune rendered review snapshots',{hourUTC:9,minuteUTC:20},internal.compositionReview.prune,{});
 crons.daily('Prune delivered Discord alert receipts',{hourUTC:9,minuteUTC:25},internal.discordAlerts.prune,{});
 crons.interval('Fail stalled exports',{minutes:10},internal.renders.failStalled,{});
+crons.daily('Prune MCP tokens, codes and unused clients',{hourUTC:9,minuteUTC:30},internal.mcpAuth.prune,{});
 export default crons;

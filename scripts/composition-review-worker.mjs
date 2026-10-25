@@ -13,8 +13,11 @@ try{
   // Keep the capture bounded while accepting that numerical round-off only.
   const tolerance=1e-7;
   if(!directory||!Number.isInteger(settings.width)||!Number.isInteger(settings.height)||![24,30,60].includes(settings.fps)||!Number.isFinite(settings.start)||!Number.isFinite(settings.end)||settings.start<0||settings.end<=settings.start||!Array.isArray(settings.times)||!settings.times.length||settings.times.length>12||settings.times.some(t=>!Number.isFinite(t)||t<settings.start-tolerance||t>settings.end+tolerance)||settings.end-settings.start>3.00001)throw new Error('Invalid bounded review settings.');
+  // Timeline snapshots render the edited composition only.
+  const variants=settings.variants===undefined?['edited','reference']:settings.variants;
+  if(!Array.isArray(variants)||!variants.length||variants.some(variant=>variant!=='edited'&&variant!=='reference'))throw new Error('Invalid capture variants.');
   const safe=[];
-  for(const variant of ['edited','reference']){
+  for(const variant of variants){
     const dir=join(root,variant),html=await readFile(join(dir,'index.html'),'utf8');
     const videos=parseVideoElements(html).filter(video=>video.start<settings.end&&video.end>settings.start).map(video=>{
       const start=Math.max(settings.start,video.start),end=Math.min(settings.end,video.end);

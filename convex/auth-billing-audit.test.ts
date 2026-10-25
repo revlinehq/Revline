@@ -574,7 +574,7 @@ async function savePreview(f:Awaited<ReturnType<typeof previewFixture>>) {
 }
 test('preview tasks require project ownership, deduplicate and cannot be claimed by older processors',async()=>{
   const f=await fixture();
-  expect(await f.t.query(api.mediaTasks.processorContract,{workerSecret:'audit-worker-secret'})).toEqual({processorVersion:5});
+  expect(await f.t.query(api.mediaTasks.processorContract,{workerSecret:'audit-worker-secret'})).toEqual({processorVersion:6});
   await expect(f.other.mutation(api.mediaTasks.start,{projectId:f.projectId,assetId:f.assetId,kind:'preview'})).rejects.toThrow();
   const taskId=await f.owner.mutation(api.mediaTasks.start,{projectId:f.projectId,assetId:f.assetId,kind:'preview'});
   expect(await f.owner.mutation(api.mediaTasks.start,{projectId:f.projectId,assetId:f.assetId,kind:'preview'})).toBe(taskId);

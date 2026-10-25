@@ -81,7 +81,7 @@ export class MediaProcessor extends DurableObject<Bindings> {
       }
     } else {
       const client = new ConvexHttpClient(this.env.NEXT_PUBLIC_CONVEX_URL);
-      const ready = await client.query(readyQuery, { workerSecret: this.env.RENDER_WORKER_SECRET,processorVersion:5,...(ultra?{lane:'ultra' as const}:{}) });
+      const ready = await client.query(readyQuery, { workerSecret: this.env.RENDER_WORKER_SECRET,processorVersion:6,...(ultra?{lane:'ultra' as const}:{}) });
       if (!ready || await this.ctx.storage.get('retired')) return;
       container.start({ image: container.images.processor, instance: ultra ? ULTRA_INSTANCE_TYPE : INSTANCE_TYPE, labels: { profile }, enableInternet: true, env: {
         // Three capture workers and FFmpeg slots use the Ultra slot's four vCPUs.

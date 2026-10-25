@@ -135,7 +135,7 @@ export const userFields = {
   createdAt: v.number(), updatedAt: v.number(),
 };
 export const userDocument = v.object({ _id: v.id("users"), _creationTime: v.number(), ...userFields });
-export const mediaTaskKind = v.union(analysisMode, v.literal('extract'), v.literal('preview'), v.literal('waveform'), v.literal('render'), v.literal('import'), v.literal('review'));
+export const mediaTaskKind = v.union(analysisMode, v.literal('extract'), v.literal('preview'), v.literal('waveform'), v.literal('render'), v.literal('import'), v.literal('review'), v.literal('snapshot'));
 export const mediaTaskStatus = v.union(v.literal('queued'), v.literal('running'), v.literal('retrying'), v.literal('completed'), v.literal('failed'), v.literal('cancelled'));
 export const mediaTaskActivity = v.union(v.literal('downloading'), v.literal('preparing-analysis'), v.literal('sending-gemini'), v.literal('preparing-gemini'), v.literal('analyzing'), v.literal('retrying-analysis'));
 export const mediaTaskFields = {
@@ -147,7 +147,7 @@ export const mediaTaskFields = {
   activity:v.optional(mediaTaskActivity),activityStartedAt:v.optional(v.number()),
   outputAssetId: v.optional(v.id('assets')),
   sourceUrl: v.optional(v.string()),
-  reviewId:v.optional(v.id('compositionReviews')),previewVersion:v.optional(v.number()),requiredProcessorVersion:v.optional(v.number()),
+  reviewId:v.optional(v.id('compositionReviews')),snapshotId:v.optional(v.id('frameSnapshots')),previewVersion:v.optional(v.number()),requiredProcessorVersion:v.optional(v.number()),
   frameRequest: v.optional(frameRequestValidator), frameInspection: v.optional(frameInspectionValidator),
   videoRequest: v.optional(videoRequestValidator), videoInspection: v.optional(videoInspectionValidator),
   leaseToken: v.optional(v.string()), leaseExpiresAt: v.optional(v.number()), attemptStartedAt: v.optional(v.number()),
@@ -211,4 +211,19 @@ export default defineSchema({
     token: v.string(), ownerId: v.string(), projectId: v.id("projects"), jobId: v.optional(v.id("renderJobs")),
     storageId: v.optional(v.id("_storage")), expiresAt: v.number(), consumed: v.boolean(), receiving: v.optional(v.boolean()),
   }).index("by_token", ["token"]).index("by_storageId", ["storageId"]).index("by_projectId", ["projectId"]),
+  // MCP: OAuth clients registered dynamically (RFC 7591), one-time authorization
+  // codes, and hashed bearer tokens. Token values are never stored.
+  mcpClients: defineTable({ clientId: v.string(), clientName: v.string(), redirectUris: v.array(v.string()), createdAt: v.number() }).index("by_clientId", ["clientId"]).index("by_createdAt", ["createdAt"]),
+  // A redeemed code stays as a tombstone naming its grant, so a replayed code can revoke it.
+  mcpAuthCodes: defineTable({ codeHash: v.string(), clientId: v.string(), ownerId: v.string(), redirectUri: v.string(), codeChallenge: v.string(), resource: v.optional(v.string()), expiresAt: v.number(), redeemedGrantId: v.optional(v.string()) }).index("by_codeHash", ["codeHash"]).index("by_expiresAt", ["expiresAt"]),
+  mcpTokens: defineTable({
+    tokenHash: v.string(), kind: v.union(v.literal("access"), v.literal("refresh"), v.literal("personal")), ownerId: v.string(),
+    // One connection (an approved client, or one personal token) shares a grant.
+    grantId: v.string(), clientId: v.optional(v.string()), label: v.string(),
+    createdAt: v.number(), expiresAt: v.optional(v.number()), lastUsedAt: v.optional(v.number()), revokedAt: v.optional(v.number()),
+  }).index("by_tokenHash", ["tokenHash"]).index("by_owner", ["ownerId"]).index("by_grant", ["grantId"]).index("by_grant_revoked", ["grantId", "revokedAt"]).index("by_clientId", ["clientId"]).index("by_revokedAt", ["revokedAt"]),
+  // Rendered timeline frames an MCP client asked to see; deleted once read.
+  frameSnapshots: defineTable({ projectId: v.id("projects"), ownerId: v.string(), revision: v.number(), times: v.array(v.number()), taskId: v.optional(v.id("mediaTasks")), status: v.union(v.literal("queued"), v.literal("completed"), v.literal("failed")), frames: v.optional(v.array(v.object({ time: v.number(), image: v.string() }))), error: v.optional(v.string()), createdAt: v.number() }).index("by_project", ["projectId"]),
+  // Per-minute counters keyed by owner (tool calls) or "register:<ip>" (client registration).
+  mcpUsage: defineTable({ ownerId: v.string(), windowStart: v.number(), calls: v.number() }).index("by_owner", ["ownerId"]),
 });

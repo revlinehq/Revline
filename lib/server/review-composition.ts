@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import sharp from 'sharp';
 import type { MediaWorkItem,MediaTaskResult } from '../../convex/mediaTasks';
 import type { MediaAsset } from '../editor/types';
-import { dimensions } from '../editor/types';
+import { dimensions, timelineDuration } from '../editor/types';
 import { checkPlanTiming } from '../ai/edit-plan';
 import { compositionSampleTimes,pixelDifference } from '../ai/composition-review';
 import { inspectCompositionFrames } from '../media-analysis/gemini';
@@ -37,4 +37,29 @@ export async function reviewComposition(snapshot:NonNullable<MediaWorkItem['revi
   });
   const observed=await inspectCompositionFrames(pairs,snapshot.plans,key,signal);onProgress(95);
   return {revision:snapshot.revision,sampleTimes:times,checks,...observed,uncertainty:`${observed.uncertainty} Sparse visual samples; timing checks compare clip ranges with the plan. Pixel change measures edited/reference difference, not a measured zoom scale or an exact impact. Text safety measures sampled bounds, not contrast. No audio judgement.`.slice(0,2000)};
+}
+
+/** Frames of the saved timeline exactly as export draws them, for an MCP client to look at. */
+export async function captureTimelineFrames(snapshot:NonNullable<MediaWorkItem['snapshot']>,directory:string,convexUrl:string,signal:AbortSignal,onProgress:(n:number)=>void):Promise<NonNullable<MediaTaskResult['snapshot']>> {
+  const {timeline,times}=snapshot,frame=1/timeline.fps,last=Math.max(0,timelineDuration(timeline)-frame);
+  const assets=snapshot.assets.filter(asset=>timeline.clips.some(clip=>clip.assetId===asset._id)) as (MediaAsset & {size:number})[];
+  const {assetUrls,audioSourceOffsets}=await prepareComposition(directory,timeline,assets,convexUrl,signal);
+  const path=join(directory,'edited');await mkdir(path);await linkCompositionResources(directory,path,assetUrls);
+  await writeComposition(path,timeline,assets,assetUrls,720,timeline.fps as 24|30|60,'./',signal,audioSourceOffsets);
+  onProgress(20);
+  const frames:NonNullable<MediaTaskResult['snapshot']>['frames']=[];
+  // One frame-sized window per time keeps decoding bounded however far apart the times are.
+  for(const [index,requested] of times.entries()){
+    const time=Math.round(Math.min(Math.max(0,requested),last)*timeline.fps)/timeline.fps;
+    await runCompositionCapture(directory,{...dimensions(timeline.aspectRatio,720),fps:timeline.fps,times:[time],start:time,end:time+frame,variants:['edited']},signal);
+    frames.push({time,image:(await readFile(join(path,'sample-0.png'))).toString('base64')});
+    onProgress(20+Math.round(75*(index+1)/times.length));
+  }
+  // Results travel in one Convex document (1 MiB); shrink until every frame fits.
+  const pngs=frames.map(frame=>Buffer.from(frame.image,'base64'));
+  for(const [size,quality] of [[768,70],[640,60],[512,50],[384,45]] as const){
+    const images=await Promise.all(pngs.map(png=>sharp(png).resize(size,size,{fit:'inside'}).jpeg({quality}).toBuffer().then(buffer=>buffer.toString('base64'))));
+    if(images.reduce((sum,image)=>sum+image.length,0)<=700_000)return {frames:frames.map((frame,index)=>({time:frame.time,image:images[index]}))};
+  }
+  throw new AnalysisError('Rendered frames are too detailed to return. Ask for fewer times.',400);
 }

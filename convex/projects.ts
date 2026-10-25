@@ -3,9 +3,9 @@ import { writeProject,createProject,readProject,projectIdentity } from './lib/pr
 import { recordAssetStorage } from './lib/storage_accounting';
 import { requireEditorAccess } from './lib/billing_access';
 import { mediaUrl } from './lib/media_storage';
-import { ConvexError, v } from "convex/values";
+import { ConvexError, v, type Infer, type ObjectType } from "convex/values";
 import { internal } from "./_generated/api";
-import { mutation, query, type QueryCtx } from "./_generated/server";
+import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 import { listLimit, requireOwner, requireProject } from "./lib/auth";
 import { commitTimeline, currentTimeline, HISTORY_LIMIT, serializedBytes, validateTimeline } from "./lib/timeline";
 import { addMediaClip, patchClip } from '../lib/editor/operations';
@@ -16,8 +16,9 @@ import { editingWorkflowActive } from './lib/assistant_workflow';
 import { equalTimelineValue } from '../lib/editor/timeline-equality';
 import { LOCAL_UNDO_LIMIT, timelineHistoryKey } from '../lib/editor/timeline-history-key';
 function projectTitle(value: string) { const title = value.trim(); if (!title || title.length > 120) throw new ConvexError("Title must contain between 1 and 120 characters"); return title; }
-export const create = mutation({ args: { title: v.string(), aspectRatio, assetIds: v.optional(v.array(v.id('assets'))) }, returns: v.id("projects"), handler: async (ctx, args) => {
-  const ownerId = await requireOwner(ctx); await requireEditorAccess(ctx, ownerId); const now = Date.now();
+const createProjectForArgs = { title: v.string(), aspectRatio, assetIds: v.optional(v.array(v.id('assets'))) };
+export async function createProjectFor(ctx: MutationCtx, ownerId: string, args: ObjectType<typeof createProjectForArgs>) {
+  await requireEditorAccess(ctx, ownerId); const now = Date.now();
   if ((args.assetIds?.length ?? 0) > 200) throw new ConvexError('Choose up to 200 uploads');
   const sources = await Promise.all([...new Set(args.assetIds ?? [])].map(id => ctx.db.get(id)));
   if (sources.some(asset => !asset || asset.ownerId !== ownerId || (!asset.r2Key && !asset.storageId))) throw new ConvexError('Saved footage is unavailable or belongs to another account');
@@ -68,7 +69,8 @@ export const create = mutation({ args: { title: v.string(), aspectRatio, assetId
     await writeProject(ctx,projectId, { timeline });
   }
   return projectId;
-}});
+}
+export const create = mutation({ args: createProjectForArgs, returns: v.id("projects"), handler: async (ctx, args) => createProjectFor(ctx, await requireOwner(ctx), args) });
 // Editor URLs are user input: a malformed id is the same typed not-found as a
 // deleted or foreign project, never a redacted argument validation error.
 function routeProjectId(ctx:QueryCtx,projectId:string){const id=ctx.db.normalizeId('projects',projectId);if(!id)throw new ConvexError('Project not found');return id;}
@@ -85,16 +87,18 @@ export const history=query({args:{projectId:v.string()},returns:v.array(timeline
   // Old projects are readable before the bounded migration reaches them.
   const legacy=await ctx.db.get(projectId);return legacy?.history?.map(normalizeTimeline)??[];
 }});
-export const list = query({ args: { limit: v.optional(v.number()) }, returns: v.array(v.object({ _id: v.id('projects'), title: v.string(), createdAt: v.number(), updatedAt: v.number(), aspectRatio, clipCount: v.number(), aiRunning: v.boolean(), coverUrl: v.union(v.string(), v.null()), coverKind: v.union(v.literal("video"), v.literal("image"), v.null()) })), handler: async (ctx, args) => {
+export const projectListItem = v.object({ _id: v.id('projects'), title: v.string(), createdAt: v.number(), updatedAt: v.number(), aspectRatio, clipCount: v.number(), aiRunning: v.boolean(), coverUrl: v.union(v.string(), v.null()), coverKind: v.union(v.literal("video"), v.literal("image"), v.null()) });
+export async function listProjectsFor(ctx: QueryCtx, ownerId: string, args: { limit?: number }): Promise<Infer<typeof projectListItem>[]> {
   const migration=await ctx.db.query('projectDataMigration').withIndex('by_key',q=>q.eq('key','project-data-v1')).unique();
-  if(migration?.completed){const ownerId=await requireOwner(ctx),rows=await ctx.db.query('projectCatalog').withIndex('by_owner_updated',q=>q.eq('ownerId',ownerId)).filter(q=>q.neq(q.field('deleting'),true)).order('desc').take(listLimit(args.limit));return Promise.all(rows.map(async row=>({_id:row.projectId,title:row.title,createdAt:row.createdAt,updatedAt:row.updatedAt,aspectRatio:row.aspectRatio,clipCount:row.clipCount,aiRunning:row.aiRunning,coverUrl:await mediaUrl(ctx,{storageId:row.coverStorageId,r2Key:row.coverR2Key}),coverKind:row.coverStorageId||row.coverR2Key?'image' as const:null})));}
-  const ownerId = await requireOwner(ctx); const projects = await ctx.db.query("projects").withIndex("by_ownerId_updatedAt", q => q.eq("ownerId", ownerId)).filter(q=>q.neq(q.field("deleting"),true)).order("desc").take(listLimit(args.limit));
+  if(migration?.completed){const rows=await ctx.db.query('projectCatalog').withIndex('by_owner_updated',q=>q.eq('ownerId',ownerId)).filter(q=>q.neq(q.field('deleting'),true)).order('desc').take(listLimit(args.limit));return Promise.all(rows.map(async row=>({_id:row.projectId,title:row.title,createdAt:row.createdAt,updatedAt:row.updatedAt,aspectRatio:row.aspectRatio,clipCount:row.clipCount,aiRunning:row.aiRunning,coverUrl:await mediaUrl(ctx,{storageId:row.coverStorageId,r2Key:row.coverR2Key}),coverKind:row.coverStorageId||row.coverR2Key?'image' as const:null})));}
+  const projects = await ctx.db.query("projects").withIndex("by_ownerId_updatedAt", q => q.eq("ownerId", ownerId)).filter(q=>q.neq(q.field("deleting"),true)).order("desc").take(listLimit(args.limit));
   return await Promise.all(projects.map(async project => {
     const media = await ctx.db.query("assets").withIndex("by_ownerId_projectId", q => q.eq("ownerId", ownerId).eq("projectId", project._id)).order("desc").take(5);
     const cover = media.find(asset => asset.kind === "video" || asset.kind === "image");
     return { _id: project._id, title: project.title, createdAt: project.createdAt, updatedAt: project.updatedAt, aspectRatio: project.aspectRatio, clipCount: project.timeline?.clips.length ?? 0, aiRunning: !!project.aiRunning, coverUrl: cover ? await mediaUrl(ctx, cover) : null, coverKind: cover ? cover.kind as "video" | "image" : null };
   }));
-}});
+}
+export const list = query({ args: { limit: v.optional(v.number()) }, returns: v.array(projectListItem), handler: async (ctx, args) => listProjectsFor(ctx, await requireOwner(ctx), args) });
 export const update = mutation({ args: { projectId: v.id("projects"), title: v.optional(v.string()), aspectRatio: v.optional(aspectRatio) }, returns: v.null(), handler: async (ctx, args) => {
   const project = await requireProject(ctx, args.projectId, await requireOwner(ctx), false); await requireEditorAccess(ctx, project.ownerId);
   if (args.aspectRatio !== undefined && args.aspectRatio !== currentTimeline(project).aspectRatio) {

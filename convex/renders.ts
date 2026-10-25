@@ -4,7 +4,7 @@ import { recordStorageObject, forgetStorageObject } from './lib/storage_accounti
 import { internal } from './_generated/api';
 import { hasUltraPlan, requireEditorAccess } from './lib/billing_access';
 import { mediaDownloadUrl, mediaUrl } from './lib/media_storage';
-import { ConvexError, v } from "convex/values";
+import { ConvexError, v, type ObjectType } from "convex/values";
 import { action, internalQuery, mutation, internalMutation, query, type MutationCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { listLimit, requireOwner, requireProject } from "./lib/auth";
@@ -24,8 +24,9 @@ async function requireJob(ctx: MutationCtx, jobId: Id<"renderJobs">, workerSecre
   if (!job || job.ownerId !== ownerId) throw new ConvexError("Render not found");
   await requireProject(ctx, job.projectId, ownerId); return job;
 }
-export const start = mutation({ args: { projectId: v.id("projects"), resolution: v.number(), fps: v.number(), quality: v.string(), clipId:v.optional(v.string()) }, returns: v.id("renderJobs"), handler: async (ctx, args) => {
-  const ownerId = await requireOwner(ctx); await requireEditorAccess(ctx, ownerId); const project = await requireProject(ctx, args.projectId, ownerId);
+const startRenderForArgs = { projectId: v.id("projects"), resolution: v.number(), fps: v.number(), quality: v.string(), clipId:v.optional(v.string()) };
+export async function startRenderFor(ctx: MutationCtx, ownerId: string, args: ObjectType<typeof startRenderForArgs>) {
+  await requireEditorAccess(ctx, ownerId); const project = await requireProject(ctx, args.projectId, ownerId);
   const ultra = await hasUltraPlan(ctx, ownerId);
   if (![720, 1080, ...(ultra ? [2160] : [])].includes(args.resolution) || ![24, 30, 60].includes(args.fps) || !["draft", "standard", "high"].includes(args.quality)) throw new ConvexError(args.resolution === 2160 ? "4K export is part of the Ultra plan." : "Invalid export settings");
   const saved=currentTimeline(project);
@@ -49,7 +50,8 @@ export const start = mutation({ args: { projectId: v.id("projects"), resolution:
   const taskId = await enqueueMediaTask(ctx, { ownerId, projectId: project._id, kind: 'render', renderJobId: jobId, ...(ultra ? { lane: 'ultra' as const } : {}) });
   await ctx.db.patch(jobId, { taskId });
   return jobId;
-}});
+}
+export const start = mutation({ args: startRenderForArgs, returns: v.id("renderJobs"), handler: async (ctx, args) => startRenderFor(ctx, await requireOwner(ctx), args) });
 export const claim = internalMutation({ args: workerArgs, returns: v.object({ projectId: v.id("projects"), timeline: timelineValidator, assets: v.array(assetWithUrl), resolution: v.number(), fps: v.number(), quality: v.string() }), handler: async (ctx, args) => {
   const job = await requireJob(ctx, args.jobId, args.workerSecret);
   if (job.status !== "queued" || !job.timeline) throw new ConvexError("Render cannot be claimed");
