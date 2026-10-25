@@ -341,8 +341,8 @@ export function EditorShell(p: EditorShellProps) {
         const direction = e.key === '<' || e.key === ',' ? -1 : 1;
         seek(frameSeekTime(readPlaybackTime(), timeline.fps, duration) + direction / timeline.fps);
       }
-      else if (e.key.toLowerCase() === 'b' && !e.metaKey && !e.ctrlKey && !e.altKey) { e.preventDefault(); if (!e.repeat && !editLock.current) store.setState({ tool: store.getState().tool === 'blade' ? 'select' : 'blade' }); }
-      else if (e.key.toLowerCase() === 'v' && !e.metaKey && !e.ctrlKey && !e.altKey) { e.preventDefault(); store.setState({ tool: 'select' }); }
+      else if (e.key.toLowerCase() === 'b' && !e.metaKey && !e.ctrlKey && !e.altKey) { e.preventDefault(); if (!editLock.current) store.setState({ tool: 'blade' }); }
+      else if (e.key.toLowerCase() === 'a' && !e.metaKey && !e.ctrlKey && !e.altKey) { e.preventDefault(); store.setState({ tool: 'select' }); }
       else if (e.key.toLowerCase() === 'm' && !e.metaKey && !e.ctrlKey && !e.altKey) { e.preventDefault(); if (!e.repeat) addMarker(); }
       else if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); doDelete(); }
       else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'a') { e.preventDefault(); if(editLock.current)return; store.setState({selectedIds:timeline.clips.map(c=>c.id),selectedId:selected??timeline.clips[0]?.id??null}); }
