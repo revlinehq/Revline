@@ -1,6 +1,6 @@
 'use client';
 
-import { ChevronDown, Monitor } from 'lucide-react';
+import { ChevronDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { dimensions, type AspectRatio } from '@/lib/editor/types';
@@ -22,7 +22,6 @@ export function AspectRatioControl({ value, onChange }: { value: AspectRatio; on
   return <DropdownMenu>
     <DropdownMenuTrigger asChild>
       <Button variant="ghost" className="aspect-ratio-trigger" aria-label={`Aspect ratio: ${ratio}`}>
-        <Monitor className="aspect-ratio-icon" size={14} strokeWidth={1.75} aria-hidden="true"/>
         <span className="aspect-ratio-value">{ratio}</span>
         <ChevronDown size={12} aria-hidden="true" />
       </Button>

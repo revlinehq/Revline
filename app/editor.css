@@ -215,7 +215,7 @@ html[data-workspace-theme=dark] .conversation-editor .floating-tools-rail button
 html[data-workspace-theme=dark] .conversation-editor .floating-tools-rail button:hover{background:var(--ed-surface-2);color:var(--ed-text)}
 html[data-workspace-theme=dark] .conversation-editor .floating-tools-rail button[aria-pressed=true]{background:#7c3aed33;color:#a78bfa}
 html[data-workspace-theme=dark] .conversation-editor .floating-tools-rail-divider{background:var(--ed-border)}
-html[data-workspace-theme=dark] .conversation-editor .aspect-ratio-trigger{height:28px;gap:8px;padding:0 10px;border:1px solid var(--ed-border);border-radius:6px;background:var(--ed-surface);color:var(--ed-text);font-size:12px}
+html[data-workspace-theme=dark] .conversation-editor .aspect-ratio-trigger{height:28px;gap:6px;padding:0 8px;border:0;border-radius:6px;background:transparent;color:var(--ed-text);font-size:12px}
 html[data-workspace-theme=dark] .conversation-editor .aspect-ratio-trigger:hover,html[data-workspace-theme=dark] .conversation-editor .aspect-ratio-trigger[data-state=open]{background:var(--ed-surface-2)}
 /* Share is a text button in the design. */
 html[data-workspace-theme=dark] .conversation-editor .workspace-nav-secondary[aria-label="Share timeline"]{border-color:transparent}
@@ -224,10 +224,10 @@ html[data-workspace-theme=dark] .conversation-editor .workspace-nav-secondary[ar
 .conversation-editor .stage-center{position:relative}
 .conversation-editor :is(.preview-frame-above,.preview-frame-below){position:absolute;z-index:6}
 .conversation-editor .preview-frame-below{pointer-events:none}
+.conversation-editor .preview-frame-above .aspect-ratio-trigger{margin-left:-8px}
 .conversation-editor .preview-meta{display:flex;justify-content:space-between;gap:12px;font-size:11px;line-height:14px;color:var(--ws-muted);pointer-events:none}
 .conversation-editor .preview-meta>span:first-child{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .conversation-editor .preview-meta>span:last-child{flex-shrink:0;color:var(--ed-text-3,var(--ws-faint));font-variant-numeric:tabular-nums}
-html[data-workspace-theme=dark] .conversation-editor .aspect-ratio-icon{color:#a1a3ab}
 html[data-workspace-theme=dark] .conversation-editor .aspect-ratio-trigger svg:last-child{color:var(--ed-text-3)}
 /* Timeline "More" menu trigger, matching the other transport icon buttons. */
 .custom-timeline .timeline-toolbar .timeline-more-trigger{display:grid;place-items:center;width:28px;height:28px;padding:0;border:0;border-radius:6px;background:transparent;color:var(--ws-muted);cursor:pointer}
