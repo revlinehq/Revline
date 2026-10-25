@@ -35,11 +35,9 @@
 .assistant-model-controls{display:flex;flex-wrap:wrap;align-items:center;gap:2px;min-width:0;max-width:100%;flex:1 1 auto}
 .assistant-model-controls>.assistant-model-picker{flex:0 1 auto;min-width:0}
 .assistant-model-controls>.assistant-reasoning-picker{flex:0 0 auto;max-width:90px}
-.inspector-select-menu[aria-label="AI reasoning effort options"] .inspector-select-option{font-size:13px}
 
 .assistant-model-controls>.assistant-speed-picker{flex:0 0 auto;max-width:95px}
 .conversation-editor .assistant-content .manual-editor-composer:has(.assistant-speed-picker) .edit-composer-actions{height:auto;min-height:32px;align-items:flex-end}
-.inspector-select-menu[aria-label="AI speed mode options"] .inspector-select-option{font-size:13px}
 @media(pointer:coarse){.conversation-editor .assistant-content .manual-editor-composer:has(.assistant-speed-picker) .edit-composer-actions{min-height:44px}}
 
 .assistant-model-controls :is(.assistant-reasoning-picker,.assistant-speed-picker) .inspector-select-trigger{padding-inline:3px;gap:2px}
