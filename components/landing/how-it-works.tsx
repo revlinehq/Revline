@@ -32,7 +32,7 @@ export function LandingHowItWorks() {
       <div className="landing-bento-row landing-bento-row-top">
         <Card className="landing-bento-upload" title="Drop in anything" description="Raw files, a whole folder of b-roll, or a YouTube link. Hours of footage is fine.">
           <div className="landing-drop" aria-hidden="true">
-            <ul className="landing-panel landing-upload-panel">{uploads.map(({ name, meta, icon: Icon, progress }) => <li key={name}>
+            <ul className="landing-upload-panel">{uploads.map(({ name, meta, icon: Icon, progress }) => <li key={name}>
               <span className="landing-upload-icon"><Icon size={16} /></span>
               <div><div className="landing-upload-top"><strong>{name}</strong><span>{meta}</span></div><span className="landing-progress" data-progress={progress}><span /></span></div>
             </li>)}</ul>
