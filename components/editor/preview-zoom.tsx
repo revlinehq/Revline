@@ -258,7 +258,7 @@ export function PreviewFrameOverlay({ above, below }: { above?: ReactNode; below
   if (!frame) return null;
   const left = Math.max(0, frame.left), right = Math.min(viewport.width, frame.right);
   return <>
-    {above && <div className="preview-frame-above" style={{ left, top: Math.max(0, frame.top - 36) }}>{above}</div>}
+    {above && <div className="preview-frame-above" style={{ left, top: Math.max(0, frame.top - 32) }}>{above}</div>}
     {below && <div className="preview-frame-below" style={{ left, top: Math.min(viewport.height - 16, frame.bottom + 6), width: Math.max(0, right - left) }}>{below}</div>}
   </>;
 }
