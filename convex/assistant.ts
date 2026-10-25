@@ -389,7 +389,10 @@ export const startQueued=internalMutation({args:{projectId:v.id('projects'),owne
   const row=await ctx.db.query('assistantQueue').withIndex('by_project',q=>q.eq('projectId',args.projectId)).first();
   if(!row||row._id!==args.id||row.ownerId!==args.ownerId)return null;
     await requireEditorAccess(ctx,args.ownerId);
-    const pinnedModel=validatePinnedClaudeModel(row.pinnedModel);assertEditorModelConfigured(pinnedModel);
+    // Choices queued under Ultra fall back to the default once Ultra no longer applies.
+    const queued=validatePinnedClaudeModel(row.pinnedModel);
+    const chosen=queued.modelChoice!==undefined||queued.reasoningEffort!==undefined||queued.speedMode!==undefined;
+    const pinnedModel=chosen&&!await canChooseEditorModel(ctx,args.ownerId)?enforceClaudeModelPolicy(resolveClaudeModel()):queued;assertEditorModelConfigured(pinnedModel);
     enforceClaudeModelPolicy(pinnedModel);
     for(const id of row.attachedAssetIds??[]){const asset=await ctx.db.get(id);if(!asset||asset.projectId!==project._id||asset.ownerId!==args.ownerId)throw new ConvexError('Attached footage is no longer available. Remove this queued message and send an updated request.');}
     const ids=new Set(currentTimeline(project).clips.map(clip=>clip.id));

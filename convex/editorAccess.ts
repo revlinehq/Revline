@@ -13,7 +13,8 @@ export const grantComplimentary = internalMutation({
     const now = Date.now();
     if (expiresAt !== undefined && (!Number.isFinite(expiresAt) || expiresAt <= now)) throw new ConvexError('Expiration must be in the future');
     const previous = await ctx.db.query('editorEntitlements').withIndex('by_owner', q => q.eq('ownerId', ownerId)).unique();
-    const fields = { ownerId, reason: reason.trim(), grantedAt: now, updatedAt: now, ...(expiresAt !== undefined ? { expiresAt } : {}) };
+    // A renewed grant keeps its plan; setPlan alone changes Ultra.
+    const fields = { ownerId, reason: reason.trim(), grantedAt: now, updatedAt: now, ...(expiresAt !== undefined ? { expiresAt } : {}), ...(previous?.plan ? { plan: previous.plan } : {}) };
     if (previous) {
       await ctx.db.replace(previous._id, fields);
       return previous._id;
@@ -52,10 +53,10 @@ export const hasComplimentary = internalQuery({
 
 export const complimentaryStatus = internalQuery({
   args: { ownerId: v.string() },
-  returns: v.union(v.object({ active: v.boolean(), grantedAt: v.number(), expiresAt: v.optional(v.number()), revokedAt: v.optional(v.number()), reason: v.string() }), v.null()),
+  returns: v.union(v.object({ active: v.boolean(), grantedAt: v.number(), expiresAt: v.optional(v.number()), revokedAt: v.optional(v.number()), reason: v.string(), plan: v.optional(v.literal('ultra')) }), v.null()),
   handler: async (ctx, { ownerId }) => {
     const entitlement = await ctx.db.query('editorEntitlements').withIndex('by_owner', q => q.eq('ownerId', ownerId)).unique();
     if (!entitlement) return null;
-    return { active: await hasComplimentaryEditorAccess(ctx, ownerId), grantedAt: entitlement.grantedAt, reason: entitlement.reason, ...(entitlement.expiresAt !== undefined ? { expiresAt: entitlement.expiresAt } : {}), ...(entitlement.revokedAt !== undefined ? { revokedAt: entitlement.revokedAt } : {}) };
+    return { active: await hasComplimentaryEditorAccess(ctx, ownerId), grantedAt: entitlement.grantedAt, reason: entitlement.reason, ...(entitlement.plan ? { plan: entitlement.plan } : {}), ...(entitlement.expiresAt !== undefined ? { expiresAt: entitlement.expiresAt } : {}), ...(entitlement.revokedAt !== undefined ? { revokedAt: entitlement.revokedAt } : {}) };
   },
 });

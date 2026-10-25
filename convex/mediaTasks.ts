@@ -107,13 +107,27 @@ export const process = mediaWorkflow.define({
     return null;
   },
 });
+/** How long an Ultra export waits for the 4-vCPU slot before any slot may take it. */
+const ULTRA_FALLBACK_MS = 120_000;
 export const prepareAttempt = internalMutation({ args: { taskId: v.id('mediaTasks'), attempt: v.number() }, returns: v.boolean(), handler: async (ctx, args) => {
   const task = await ctx.db.get(args.taskId);
   if (!task || ['completed', 'cancelled', 'failed'].includes(task.status)) return false;
   await ctx.db.patch(task._id, { status: 'queued', claimable:true, attempt: args.attempt, progress:0,activity:undefined,activityStartedAt:undefined,leaseToken: undefined, leaseExpiresAt: undefined, attemptStartedAt: undefined, updatedAt: Date.now() });
   // Wake only after this attempt is claimable, including retries after backoff.
   if (globalThis.process.env.MEDIA_PROCESSOR_WAKE_URL) await ctx.scheduler.runAfter(0, internal.mediaProcessor.wake, {});
+  // Each Ultra attempt gets the 4-vCPU slot first, then any slot.
+  if (task.lane === 'ultra') await ctx.scheduler.runAfter(ULTRA_FALLBACK_MS, internal.mediaTasks.releaseUltraLane, { taskId: task._id, attempt: args.attempt });
   return true;
+}});
+/** An Ultra export still waiting after its head start leaves the Ultra lane, so a
+ * regular slot takes it if the 4-vCPU container cannot start. Changing the row
+ * re-runs every ready subscription; a clock check inside the query would not. */
+export const releaseUltraLane = internalMutation({ args: { taskId: v.id('mediaTasks'), attempt: v.number() }, returns: v.null(), handler: async (ctx, args) => {
+  const task = await ctx.db.get(args.taskId);
+  if (!task || task.lane !== 'ultra' || task.status !== 'queued' || task.attempt !== args.attempt) return null;
+  await ctx.db.patch(task._id, { lane: undefined, updatedAt: Date.now() });
+  if (globalThis.process.env.MEDIA_PROCESSOR_WAKE_URL) await ctx.scheduler.runAfter(0, internal.mediaProcessor.wake, {});
+  return null;
 }});
 async function signalResult(ctx: MutationCtx, task: Doc<'mediaTasks'>, value: Infer<typeof eventResult>) {
   if (task.workflowId) await mediaWorkflow.sendEvent(ctx, { workflowId: task.workflowId as WorkflowId, name: `attempt-${task.attempt}`, validator: eventResult, value });
@@ -218,16 +232,13 @@ async function fairest(ctx:MutationCtx|QueryCtx,candidates:Doc<'mediaTasks'>[]) 
   }
   return candidates[0];
 }
-/** An Ultra export waiting this long is taken by a regular slot, so a stalled
- * 4-vCPU container delays it instead of blocking it. */
-const ULTRA_FALLBACK_MS = 120_000;
 async function firstClaimable(ctx:MutationCtx|QueryCtx,processorVersion=1,lane?:'ultra'|'any') {
   const versioned=(q:import('convex/server').FilterBuilder<import('convex/server').GenericTableInfo>)=>q.or(q.eq(q.field('requiredProcessorVersion'),undefined),q.lte(q.field('requiredProcessorVersion'),processorVersion));
   // The Ultra slot only runs Ultra exports; regular slots leave them to it unless they wait too long.
   if(lane==='ultra')return fairest(ctx,await ctx.db.query('mediaTasks').withIndex('by_status_claimable_kind_created',q=>q.eq('status','queued').eq('claimable',true).eq('kind','render')).filter(q=>q.and(q.eq(q.field('lane'),'ultra'),versioned(q))).take(FAIR_CLAIM_SCAN));
-  const stale=Date.now()-ULTRA_FALLBACK_MS;
-  // A local development worker has no Ultra slot and runs every lane at once.
-  const laneOk=(q:import('convex/server').FilterBuilder<import('convex/server').GenericTableInfo>)=>lane==='any'?versioned(q):q.and(versioned(q),q.or(q.eq(q.field('lane'),undefined),q.lt(q.field('createdAt'),stale)));
+  // Regular slots leave Ultra exports to the Ultra slot until releaseUltraLane
+  // clears the lane. A local development worker has no Ultra slot and runs every lane.
+  const laneOk=(q:import('convex/server').FilterBuilder<import('convex/server').GenericTableInfo>)=>lane==='any'?versioned(q):q.and(versioned(q),q.eq(q.field('lane'),undefined));
   // Exports are interactive; claim them before long queued analysis work.
   const renders=await ctx.db.query('mediaTasks').withIndex('by_status_claimable_kind_created',q=>q.eq('status','queued').eq('claimable',true).eq('kind','render')).filter(laneOk).take(FAIR_CLAIM_SCAN);
   if(renders.length)return fairest(ctx,renders);

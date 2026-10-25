@@ -6,7 +6,7 @@ export const PRODUCTION_CLAUDE_MODEL_CHOICES = ['gpt-6.1-sol', 'gpt-6-astra', 'g
 /** Claude editing models, offered when ANTHROPIC_API_KEY is configured. */
 export const ANTHROPIC_EDIT_CHOICES = ['sonnet', 'opus'] as const;
 const ANTHROPIC_EDIT_MODEL_IDS = ['claude-sonnet-5-5', 'claude-opus-5-5'];
-export const GPT_ONLY_EDITING_ERROR = 'Revline editing supports GPT-6.1 Sol, GPT-6 Astra, Sonnet 5.5 and Opus 5.5. Choose a supported model.';
+export const GPT_ONLY_EDITING_ERROR = 'Revline editing supports GPT-6.1 Sol, GPT-6 Astra, GPT-5.4 mini, Sonnet 5.5 and Opus 5.5. Choose a supported model.';
 
 export function allowedClaudeModelChoices(env: ModelPolicyEnvironment = process.env): readonly ((typeof PRODUCTION_CLAUDE_MODEL_CHOICES)[number] | (typeof ANTHROPIC_EDIT_CHOICES)[number])[] {
   return env.ANTHROPIC_API_KEY?.trim() ? [...PRODUCTION_CLAUDE_MODEL_CHOICES, ...ANTHROPIC_EDIT_CHOICES] : PRODUCTION_CLAUDE_MODEL_CHOICES;
