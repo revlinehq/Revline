@@ -173,7 +173,7 @@
 .conversation-editor{--ws-muted:#777;--font-ui:var(--font-inter);--background:var(--ws-bg);--foreground:var(--ws-text);--card:var(--ws-surface);--card-foreground:var(--ws-text);--secondary:var(--ws-hover);--secondary-foreground:var(--ws-text);--muted:var(--ws-hover);--muted-foreground:var(--ws-muted);--accent:var(--ws-hover);--accent-foreground:var(--ws-text);--border:var(--ws-artifact-border);--input:var(--ws-input);--primary:var(--revline-accent);--primary-foreground:#fff;background:var(--ws-bg);color:var(--ws-text);font-family:var(--font-inter),Inter,sans-serif}
 html[data-workspace-theme=dark] .conversation-editor{--ws-muted:#969696}
 /* Dark editor palette from the Pen design "Revline — Editor" (node jR3JS): backgrounds, panels, borders and tracks. Clips keep their own colors. */
-html[data-workspace-theme=dark] .editor-app:not(.landing-product-demo){--ed-bg:#0b0c0e;--ed-panel:#111215;--ed-surface:#17181c;--ed-surface-2:#1f2126;--ed-border:#25272d;--ed-tick:#3a3c43;--ed-text:#ededef;--ed-text-3:#666872;--ed-primary:linear-gradient(315deg,#7c3aed,#a876ff);--ed-primary-edge:#ffffff59;--ed-primary-glow:inset 0 0 1px #6d28d9;--ws-bg:var(--ed-bg);--ws-preview:var(--ed-bg);--ws-surface:var(--ed-surface-2);--ws-hover:var(--ed-surface-2);--ws-input:var(--ed-surface);--ws-artifact-border:var(--ed-border);--ws-border:var(--ed-border)}
+html[data-workspace-theme=dark] .editor-app:not(.landing-product-demo){--ed-bg:#0b0c0e;--ed-panel:#111215;--ed-surface:#17181c;--ed-surface-2:#1f2126;--ed-border:#25272d;--ed-tick:#3a3c43;--ed-text:#ededef;--ed-text-3:#666872;--ws-bg:var(--ed-bg);--ws-preview:var(--ed-bg);--ws-surface:var(--ed-surface-2);--ws-hover:var(--ed-surface-2);--ws-input:var(--ed-surface);--ws-artifact-border:var(--ed-border);--ws-border:var(--ed-border)}
 html[data-workspace-theme=dark] .editor-app:not(.landing-product-demo) :is(.editor-sidebar,.custom-timeline){--ws-bg:var(--ed-panel)}
 /* The editor UI uses Geist from the design; rules that name --font-inter pick it up too. */
 html[data-workspace-theme=dark] .editor-app:not(.landing-product-demo){--font-inter:var(--font-geist);--font-ui:var(--font-geist);font-family:var(--font-geist),sans-serif}
@@ -184,10 +184,8 @@ html[data-workspace-theme=dark] .conversation-editor .workspace-nav-actions{gap:
 html[data-workspace-theme=dark] .conversation-editor .workspace-nav-history{margin-right:6px}
 html[data-workspace-theme=dark] .conversation-editor .workspace-nav-secondary{height:33px;padding:0 10px;border:1px solid var(--ed-border);border-radius:8px;background:transparent;color:#a1a3ab;font-size:13px;font-weight:500}
 html[data-workspace-theme=dark] .conversation-editor .workspace-nav-secondary:hover:not(:disabled){background:var(--ed-surface);color:var(--ed-text);filter:none}
-/* Export and Send share the landing page's primary gradient. */
-html[data-workspace-theme=dark] .conversation-editor :is(.workspace-nav .revline-primary,.manual-composer-dock>.edit-composer .composer-submit)[data-slot=button]{border:1px solid var(--ed-primary-edge);background:var(--ed-primary);box-shadow:var(--ed-primary-glow);color:#fff}
-html[data-workspace-theme=dark] .conversation-editor :is(.workspace-nav .revline-primary,.manual-composer-dock>.edit-composer .composer-submit)[data-slot=button]:hover:not(:disabled){filter:brightness(1.08)}
-html[data-workspace-theme=dark] .conversation-editor .workspace-nav .revline-primary[data-slot=button]{height:33px;padding:0 14px;gap:6px;border-radius:8px;font-size:13px;font-weight:600}
+html[data-workspace-theme=dark] .conversation-editor .workspace-nav .revline-primary[data-slot=button]{height:33px;padding:0 14px;gap:6px;border-radius:8px;background:#7c3aed;color:#fff;font-size:13px;font-weight:600}
+html[data-workspace-theme=dark] .conversation-editor .workspace-nav .revline-primary[data-slot=button]:hover:not(:disabled){background:#8b4cf0}
 html[data-workspace-theme=dark] .conversation-editor .editor-mode-switch{gap:4px;padding:0;border-color:var(--ed-border);border-radius:6px;background:transparent}
 html[data-workspace-theme=dark] .conversation-editor .editor-mode-switch>[role=tab]{min-height:28px;border-radius:6px;color:var(--ed-text-3);font-size:12px}
 html[data-workspace-theme=dark] .conversation-editor .editor-mode-switch>[role=tab][aria-selected=true]{background:var(--ed-surface-2);box-shadow:none;color:var(--ed-text)}
@@ -202,7 +200,7 @@ html[data-workspace-theme=dark] .conversation-editor .manual-composer-dock>.edit
 html[data-workspace-theme=dark] .conversation-editor .manual-composer-dock>.edit-composer textarea{padding:0 2px;font-size:14px}
 html[data-workspace-theme=dark] .conversation-editor .manual-composer-dock>.edit-composer textarea::placeholder{color:var(--ed-text-3)}
 html[data-workspace-theme=dark] .conversation-editor .manual-composer-dock>.edit-composer .composer-add{color:var(--ed-text-3)}
-html[data-workspace-theme=dark] .conversation-editor .manual-composer-dock>.edit-composer .composer-submit[data-slot=button]{width:28px;height:28px;border-radius:6px}
+html[data-workspace-theme=dark] .conversation-editor .manual-composer-dock>.edit-composer .composer-submit[data-slot=button]{width:28px;height:28px;border-radius:6px;background:#7c3aed;color:#fff}
 /* Preview: floating tool rail and aspect ratio chip. */
 html[data-workspace-theme=dark] .conversation-editor .floating-tools-rail{width:48px}
 html[data-workspace-theme=dark] .conversation-editor .floating-tools-rail-list{width:48px;background:var(--ed-surface);box-shadow:inset 0 0 0 1px var(--ed-border),0 6px 20px #00000040}
