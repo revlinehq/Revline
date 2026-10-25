@@ -148,6 +148,8 @@
 @media(max-width:600px){.conversation-editor .track-headers{width:72px}.conversation-editor .track-label{padding:6px}.conversation-editor .timeline-toolbar{padding:0 8px}.timeline-toolbar input[type=range]{width:36px}.conversation-editor>.editor-header{padding:0 8px;gap:6px}.conversation-editor .editor-title{width:88px;font-size:10px}.timeline-playback-time{margin:0;font-size:9px}}
 .preview-player{height:100%;width:100%;display:flex;flex-direction:column;min-height:0;gap:12px}
 .conversation-editor .stage-center{container-type:size;overflow:clip}
+/* The fitted preview leaves room above and below the frame for the ratio chip and the clip caption. */
+.conversation-editor .stage-center[data-ratio-on-frame] .preview-viewport{--preview-viewport-padding:40px}
 .conversation-editor .stage-center .preview-canvas{width:min(calc(100cqw - 36px),calc((100cqh - 36px) * var(--preview-ratio)));height:auto;aspect-ratio:var(--preview-ratio);max-height:calc(100% - 36px);max-width:none;flex-shrink:0}
 @media(max-width:900px){.conversation-editor .canvas-toolbar{height:28px;min-height:28px}.conversation-editor .editor-stage{padding:6px 12px 8px}.conversation-editor .preview-player{gap:8px}.conversation-editor .stage-center .preview-canvas{width:min(calc(100cqw - 24px),calc((100cqh - 24px) * var(--preview-ratio)));max-height:calc(100% - 24px)}}
 .preview-playback{height:30px;min-height:30px;display:flex;align-items:center;justify-content:center;gap:6px;color:#BDBDBD}
@@ -213,14 +215,16 @@ html[data-workspace-theme=dark] .conversation-editor .floating-tools-rail button
 html[data-workspace-theme=dark] .conversation-editor .floating-tools-rail button:hover{background:var(--ed-surface-2);color:var(--ed-text)}
 html[data-workspace-theme=dark] .conversation-editor .floating-tools-rail button[aria-pressed=true]{background:#7c3aed33;color:#a78bfa}
 html[data-workspace-theme=dark] .conversation-editor .floating-tools-rail-divider{background:var(--ed-border)}
-html[data-workspace-theme=dark] .conversation-editor .canvas-toolbar .aspect-ratio-trigger{height:28px;gap:8px;padding:0 10px;border:1px solid var(--ed-border);border-radius:6px;background:var(--ed-surface);color:var(--ed-text);font-size:12px}
-html[data-workspace-theme=dark] .conversation-editor .canvas-toolbar .aspect-ratio-trigger:hover,html[data-workspace-theme=dark] .conversation-editor .canvas-toolbar .aspect-ratio-trigger[data-state=open]{background:var(--ed-surface-2)}
+html[data-workspace-theme=dark] .conversation-editor .aspect-ratio-trigger{height:28px;gap:8px;padding:0 10px;border:1px solid var(--ed-border);border-radius:6px;background:var(--ed-surface);color:var(--ed-text);font-size:12px}
+html[data-workspace-theme=dark] .conversation-editor .aspect-ratio-trigger:hover,html[data-workspace-theme=dark] .conversation-editor .aspect-ratio-trigger[data-state=open]{background:var(--ed-surface-2)}
 /* Share is a text button in the design. */
 html[data-workspace-theme=dark] .conversation-editor .workspace-nav-secondary[aria-label="Share timeline"]{border-color:transparent}
 html[data-workspace-theme=dark] .conversation-editor .workspace-nav-secondary[aria-label="Share timeline"] svg{display:none}
 /* Under the preview: the clip name and the output size. */
 .conversation-editor .stage-center{position:relative}
-.conversation-editor .preview-meta{--preview-width:min(calc(100cqw - 36px),calc((100cqh - 36px) * var(--preview-ratio)));position:absolute;left:50%;top:calc(50% + var(--preview-width) / var(--preview-ratio) / 2 + 3px);width:var(--preview-width);translate:-50% 0;display:flex;justify-content:space-between;gap:12px;font-size:11px;line-height:14px;color:var(--ws-muted);pointer-events:none}
+.conversation-editor :is(.preview-frame-above,.preview-frame-below){position:absolute;z-index:6}
+.conversation-editor .preview-frame-below{pointer-events:none}
+.conversation-editor .preview-meta{display:flex;justify-content:space-between;gap:12px;font-size:11px;line-height:14px;color:var(--ws-muted);pointer-events:none}
 .conversation-editor .preview-meta>span:first-child{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .conversation-editor .preview-meta>span:last-child{flex-shrink:0;color:var(--ed-text-3,var(--ws-faint));font-variant-numeric:tabular-nums}
 html[data-workspace-theme=dark] .conversation-editor .aspect-ratio-icon{color:#a1a3ab}
