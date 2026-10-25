@@ -1,6 +1,8 @@
 'use client';
 
-import { EDITOR_MODELS, type ClaudeModelChoice } from '@/lib/ai/claude-model';
+import { ChevronDown, Zap } from 'lucide-react';
+import { EDITOR_MODELS, OPENAI_REASONING_EFFORTS, type ClaudeModelChoice, type OpenAIReasoningEffort, type OpenAISpeedMode } from '@/lib/ai/claude-model';
+import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { InspectorSelect } from './inspector-select';
 import './assistant-model-picker.css';
 
@@ -15,4 +17,27 @@ export function AssistantModelPicker({ value, onChange, disabled, allowedModels 
 }) {
   const options = EDITOR_MODELS.filter(model => allowedModels.includes(model.id)).map(model => ({ value: model.id, label: model.label, description: descriptions[model.id] }));
   return <div className="assistant-model-picker"><InspectorSelect label="AI editing model" value={value} options={options} onChange={onChange} disabled={disabled}/></div>;
+}
+
+const effortLabels: Record<OpenAIReasoningEffort, string> = { low: 'Low', medium: 'Medium', high: 'High', xhigh: 'X-high', max: 'Max' };
+
+/** Reasoning effort and Fast mode share one menu; the trigger shows a bolt while Fast mode is on. */
+export function AssistantReasoningPicker({ effort, speed, onEffortChange, onSpeedChange, disabled }: {
+  effort: OpenAIReasoningEffort;
+  speed: OpenAISpeedMode;
+  onEffortChange: (value: OpenAIReasoningEffort) => void;
+  onSpeedChange: (value: OpenAISpeedMode) => void;
+  disabled: boolean;
+}) {
+  const fast = speed === 'fast';
+  return <div className="assistant-model-picker assistant-reasoning-picker"><DropdownMenu><DropdownMenuTrigger asChild><button type="button" className="inspector-select-trigger" aria-label="AI reasoning effort" aria-description={fast ? 'Fast mode on' : undefined} disabled={disabled}>{fast && <Zap size={12} className="assistant-fast-icon" aria-hidden="true"/>}<span className="inspector-select-value">{effortLabels[effort]}</span><ChevronDown size={13}/></button></DropdownMenuTrigger>
+    <DropdownMenuContent className="workspace-menu inspector-select-menu" aria-label="AI reasoning effort options" sideOffset={5}>
+      <DropdownMenuRadioGroup value={effort} onValueChange={next => { const value = OPENAI_REASONING_EFFORTS.find(option => option === next); if (value) onEffortChange(value); }}>
+        {OPENAI_REASONING_EFFORTS.map(value => <DropdownMenuRadioItem key={value} value={value} data-value={value} className="workspace-menu-item inspector-select-option"><span className="inspector-select-option-copy"><span className="inspector-select-value">{effortLabels[value]}</span></span></DropdownMenuRadioItem>)}
+      </DropdownMenuRadioGroup>
+      <DropdownMenuSeparator className="assistant-reasoning-separator"/>
+      {/* Toggling speed keeps the menu open so the new state is visible. */}
+      <DropdownMenuCheckboxItem checked={fast} onCheckedChange={checked => onSpeedChange(checked ? 'fast' : 'standard')} onSelect={event => event.preventDefault()} data-value="fast" className="workspace-menu-item inspector-select-option assistant-fast-option"><Zap size={14} className="assistant-fast-icon" aria-hidden="true"/><span className="inspector-select-option-copy"><span className="inspector-select-value">Fast mode</span><small>Faster replies · 2× token cost</small></span></DropdownMenuCheckboxItem>
+    </DropdownMenuContent>
+  </DropdownMenu></div>;
 }
