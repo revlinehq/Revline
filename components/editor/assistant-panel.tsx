@@ -5,7 +5,7 @@ import { NEW_PROJECT_PATH } from '@/lib/workspace-routes';
 
 import { PRODUCTION_CLAUDE_MODEL_CHOICES } from '@/lib/ai/claude-model-policy';
 import { Fragment, memo, useCallback, useState, useEffect, useLayoutEffect, useMemo, useRef, type ComponentProps } from 'react';
-import { Check, ArrowUpRight, RotateCcw, X } from 'lucide-react';
+import { Check, ArrowUpRight, Lightbulb, RotateCcw, X } from 'lucide-react';
 import { AssistantModelPicker } from './assistant-model-picker';
 import {EDITOR_MODELS,OPENAI_EDIT_MODELS,OPENAI_REASONING_EFFORTS,OPENAI_SPEED_MODES,type ClaudeModelChoice,type OpenAIReasoningEffort,type OpenAISpeedMode} from '@/lib/ai/claude-model';
 import {InspectorSelect} from './inspector-select';
@@ -212,7 +212,7 @@ function AssistantPanelBody({ messages, running, editing:editingTimeline=running
       })}
       {!groups.length && waiting && <div className="assistant-reply"><AssistantReplyHeader loading label={stopState==='stopping'?'Stopping…':'Working'} startedAt={activityStartedAt}/></div>}
       {!waiting && stopState==='stopped'  && <AssistantActivity label="Stopped." detail="Your existing edit is still here." state="stopped"/>}
-      {showSuggestions && suggestions?.items.length && onSuggestion && configured ? <div data-chat-follow className="assistant-source-suggestions" aria-label="Suggested edits from this footage"><span title={suggestions.sourceName}>Ideas for {suggestions.sourceName}</span>{suggestions.items.map((suggestion, index) => <button key={`${suggestions.clipId}-${index}`} type="button" disabled={composerBusy || sending || !!pendingReply} onClick={() => void chooseSuggestion(suggestion)}><span>{suggestion.label}</span><ArrowUpRight size={14} aria-hidden="true" /></button>)}</div> : null}
+      {showSuggestions && suggestions?.items.length && onSuggestion && configured ? <div data-chat-follow className="assistant-source-suggestions" aria-label="Suggested edits from this footage"><span title={suggestions.sourceName}><Lightbulb size={12} aria-hidden="true" />Ideas for {suggestions.sourceName}</span>{suggestions.items.map((suggestion, index) => <button key={`${suggestions.clipId}-${index}`} type="button" disabled={composerBusy || sending || !!pendingReply} onClick={() => void chooseSuggestion(suggestion)}><span>{suggestion.label}</span><ArrowUpRight size={14} aria-hidden="true" /></button>)}</div> : null}
       {visibleError && <div data-chat-follow><AssistantActivity className="chat-error" label="Needs attention" detail={assistantErrorDetail(visibleError)} state="error"/></div>}
       {!!messages.length && !demo && !configured && <div className="assistant-demo-note">AI editing is temporarily unavailable. Your footage, preview, and timeline are ready.</div>}
       </div>

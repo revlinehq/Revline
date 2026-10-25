@@ -243,3 +243,22 @@ export function PreviewViewport({ children }: { children: ReactNode }) {
     </div>
   </div>;
 }
+
+/** Places content just above and below the rendered preview frame (fitted, zoomed or panned), clamped inside the viewport. */
+export function PreviewFrameOverlay({ above, below }: { above?: ReactNode; below?: ReactNode }) {
+  const { geometry, viewport, viewportRef } = usePreviewZoom();
+  const [frame, setFrame] = useState<{ left: number; top: number; right: number; bottom: number } | null>(null);
+  useLayoutEffect(() => {
+    // The frame snaps to whole aspect units, so measure it rather than recomputing its size.
+    const element = viewportRef.current, node = element?.querySelector<HTMLElement>('.preview-viewport-frame');
+    if (!element || !node) { setFrame(null); return; }
+    const outer = element.getBoundingClientRect(), rect = node.getBoundingClientRect();
+    setFrame(previous => previous && previous.left === rect.left - outer.left && previous.top === rect.top - outer.top && previous.right === rect.right - outer.left && previous.bottom === rect.bottom - outer.top ? previous : { left: rect.left - outer.left, top: rect.top - outer.top, right: rect.right - outer.left, bottom: rect.bottom - outer.top });
+  }, [viewportRef, geometry.left, geometry.top, geometry.width, geometry.height, viewport.width, viewport.height]);
+  if (!frame) return null;
+  const left = Math.max(0, frame.left), right = Math.min(viewport.width, frame.right);
+  return <>
+    {above && <div className="preview-frame-above" style={{ left, top: Math.max(0, frame.top - 36) }}>{above}</div>}
+    {below && <div className="preview-frame-below" style={{ left, top: Math.min(viewport.height - 16, frame.bottom + 6), width: Math.max(0, right - left) }}>{below}</div>}
+  </>;
+}

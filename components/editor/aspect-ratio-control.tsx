@@ -22,7 +22,6 @@ export function AspectRatioControl({ value, onChange }: { value: AspectRatio; on
   return <DropdownMenu>
     <DropdownMenuTrigger asChild>
       <Button variant="ghost" className="aspect-ratio-trigger" aria-label={`Aspect ratio: ${ratio}`}>
-        <span className="aspect-ratio-label">Aspect ratio</span>
         <span className="aspect-ratio-value">{ratio}</span>
         <ChevronDown size={12} aria-hidden="true" />
       </Button>

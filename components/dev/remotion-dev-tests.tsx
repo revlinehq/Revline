@@ -1,5 +1,6 @@
 'use client';
 
+import { NEW_PROJECT_PATH } from '@/lib/workspace-routes';
 import { useEffect, useId, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { ArrowLeft, ArrowUpRight, AudioLines, Check, Download, ExternalLink, FileJson, FlaskConical, Layers3, Pause, Play, RotateCcw, Save, Settings2, Sparkles, Upload, X } from 'lucide-react';
 import { ColorControl } from '@/components/editor/color-control';
@@ -261,7 +262,7 @@ export function RemotionDevTests({ embedded = false, query = '' }: { embedded?: 
   const tabs = [{ id: 'content', label: 'Content' }, { id: 'speech', label: 'Speech cues' }, { id: 'style', label: 'Style' }, { id: 'motion', label: 'Motion' }] as const;
 
   return <section className={`rmlab ${embedded ? 'rmlab-embedded' : 'rmlab-workspace'}`} aria-label="Remotion development lab">
-    {!embedded ? <header className="rmlab-app-header"><a href="/dev/editor" className="rmlab-back"><ArrowLeft size={15}/>Back to editor</a><a href="/dev/editor" className="rmlab-wordmark">revline<span>®</span></a><span className="rmlab-dev-badge"><FlaskConical size={12}/>DEVELOPMENT</span></header> : null}
+    {!embedded ? <header className="rmlab-app-header"><a href={NEW_PROJECT_PATH} className="rmlab-back"><ArrowLeft size={15}/>Back to editor</a><a href={NEW_PROJECT_PATH} className="rmlab-wordmark">revline<span>®</span></a><span className="rmlab-dev-badge"><FlaskConical size={12}/>DEVELOPMENT</span></header> : null}
     <div className="rmlab-shell">
       <header className="rmlab-heading"><div><span className="rmlab-kicker"><span className="rmlab-live-dot"/>REMOTION / DEV TESTS</span><h1>Ideas, in motion<span>.</span></h1>{!embedded ? <p>Six ways to make the story easier to see. Play, edit, and find your style.</p> : <p>Try six motion tools. Every preview is editable.</p>}</div>{embedded ? <a className="rmlab-expand" href="/remotion-dev-tests" target="_blank" rel="noopener noreferrer" title="Open full Remotion playground"><ExternalLink size={15}/><span>Full lab</span></a> : <span className="rmlab-heading-note">AN EXPLORATION SPACE<br/>FOR YOUR NEXT GREAT EDIT</span>}</header>
       <nav className="rmlab-categories" aria-label="Motion experiments">{categories.map((item, index) => <button type="button" key={item.id} aria-pressed={visibleCategory === item.id} onClick={() => selectCategory(item.id)}><span>{String(LAB_CATEGORIES.findIndex(value => value.id === item.id) + 1).padStart(2, '0')}</span>{item.label}{!embedded && index === 0 ? <i>START HERE</i> : null}</button>)}</nav>

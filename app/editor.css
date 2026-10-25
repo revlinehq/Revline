@@ -148,6 +148,8 @@
 @media(max-width:600px){.conversation-editor .track-headers{width:72px}.conversation-editor .track-label{padding:6px}.conversation-editor .timeline-toolbar{padding:0 8px}.timeline-toolbar input[type=range]{width:36px}.conversation-editor>.editor-header{padding:0 8px;gap:6px}.conversation-editor .editor-title{width:88px;font-size:10px}.timeline-playback-time{margin:0;font-size:9px}}
 .preview-player{height:100%;width:100%;display:flex;flex-direction:column;min-height:0;gap:12px}
 .conversation-editor .stage-center{container-type:size;overflow:clip}
+/* The fitted preview leaves room above and below the frame for the ratio chip and the clip caption. */
+.conversation-editor .stage-center[data-ratio-on-frame] .preview-viewport{--preview-viewport-padding:40px}
 .conversation-editor .stage-center .preview-canvas{width:min(calc(100cqw - 36px),calc((100cqh - 36px) * var(--preview-ratio)));height:auto;aspect-ratio:var(--preview-ratio);max-height:calc(100% - 36px);max-width:none;flex-shrink:0}
 @media(max-width:900px){.conversation-editor .canvas-toolbar{height:28px;min-height:28px}.conversation-editor .editor-stage{padding:6px 12px 8px}.conversation-editor .preview-player{gap:8px}.conversation-editor .stage-center .preview-canvas{width:min(calc(100cqw - 24px),calc((100cqh - 24px) * var(--preview-ratio)));max-height:calc(100% - 24px)}}
 .preview-playback{height:30px;min-height:30px;display:flex;align-items:center;justify-content:center;gap:6px;color:#BDBDBD}
@@ -172,10 +174,82 @@
 /* The manual workspace shares the conversation's light and dark palette. */
 .conversation-editor{--ws-muted:#777;--font-ui:var(--font-inter);--background:var(--ws-bg);--foreground:var(--ws-text);--card:var(--ws-surface);--card-foreground:var(--ws-text);--secondary:var(--ws-hover);--secondary-foreground:var(--ws-text);--muted:var(--ws-hover);--muted-foreground:var(--ws-muted);--accent:var(--ws-hover);--accent-foreground:var(--ws-text);--border:var(--ws-artifact-border);--input:var(--ws-input);--primary:var(--revline-accent);--primary-foreground:#fff;background:var(--ws-bg);color:var(--ws-text);font-family:var(--font-inter),Inter,sans-serif}
 html[data-workspace-theme=dark] .conversation-editor{--ws-muted:#969696}
-html[data-workspace-theme=dark] .editor-app:not(.landing-product-demo){--ws-artifact-border:#242424;--ws-border:#242424}
-html[data-workspace-theme=dark] .editor-app:not(.landing-product-demo) .ruler-tick{border-left-color:#2b2b2b}
+/* Dark editor palette from the Pen design "Revline — Editor" (node jR3JS): backgrounds, panels, borders and tracks. Clips keep their own colors. */
+html[data-workspace-theme=dark] .editor-app:not(.landing-product-demo){--ed-bg:#0b0c0e;--ed-panel:#111215;--ed-surface:#17181c;--ed-surface-2:#1f2126;--ed-border:#25272d;--ed-tick:#3a3c43;--ed-text:#ededef;--ed-text-3:#666872;--ws-bg:var(--ed-bg);--ws-preview:var(--ed-bg);--ws-surface:var(--ed-surface-2);--ws-hover:var(--ed-surface-2);--ws-input:var(--ed-surface);--ws-artifact-border:var(--ed-border);--ws-border:var(--ed-border)}
+html[data-workspace-theme=dark] .editor-app:not(.landing-product-demo) :is(.editor-sidebar,.custom-timeline){--ws-bg:var(--ed-panel)}
+/* The editor UI uses Geist from the design; rules that name --font-inter pick it up too. */
+html[data-workspace-theme=dark] .editor-app:not(.landing-product-demo){--font-inter:var(--font-geist);--font-ui:var(--font-geist);font-family:var(--font-geist),sans-serif}
+html[data-workspace-theme=dark] .conversation-editor .workspace-nav{padding:0 16px 0 20px;background:var(--ed-bg);border-bottom-color:var(--ed-border)}
+html[data-workspace-theme=dark] .conversation-editor .workspace-chat-trigger{font-size:14px;font-weight:500;color:var(--ed-text)}
+html[data-workspace-theme=dark] .conversation-editor .workspace-chat-trigger svg,html[data-workspace-theme=dark] .conversation-editor .workspace-nav-icon{color:var(--ed-text-3)}
+html[data-workspace-theme=dark] .conversation-editor .workspace-nav-actions{gap:6px}
+html[data-workspace-theme=dark] .conversation-editor .workspace-nav-history{margin-right:6px}
+html[data-workspace-theme=dark] .conversation-editor .workspace-nav-secondary{height:33px;padding:0 10px;border:1px solid var(--ed-border);border-radius:8px;background:transparent;color:#a1a3ab;font-size:13px;font-weight:500}
+html[data-workspace-theme=dark] .conversation-editor .workspace-nav-secondary:hover:not(:disabled){background:var(--ed-surface);color:var(--ed-text);filter:none}
+html[data-workspace-theme=dark] .conversation-editor .workspace-nav .revline-primary[data-slot=button]{height:33px;padding:0 14px;gap:6px;border-radius:8px;background:#7c3aed;color:#fff;font-size:13px;font-weight:600}
+html[data-workspace-theme=dark] .conversation-editor .workspace-nav .revline-primary[data-slot=button]:hover:not(:disabled){background:#8b4cf0}
+html[data-workspace-theme=dark] .conversation-editor .editor-mode-switch{gap:4px;padding:0;border-color:var(--ed-border);border-radius:6px;background:transparent}
+html[data-workspace-theme=dark] .conversation-editor .editor-mode-switch>[role=tab]{min-height:28px;border-radius:6px;color:var(--ed-text-3);font-size:12px}
+html[data-workspace-theme=dark] .conversation-editor .editor-mode-switch>[role=tab][aria-selected=true]{background:var(--ed-surface-2);box-shadow:none;color:var(--ed-text)}
+/* Chat panel: suggestion cards and the prompt box. */
+html[data-workspace-theme=dark] .conversation-editor .assistant-source-suggestions{gap:8px}
+html[data-workspace-theme=dark] .conversation-editor .assistant-source-suggestions>span{display:flex;align-items:center;gap:6px;padding:0 2px 4px;margin:0;font-size:12px;color:var(--ed-text-3)}
+html[data-workspace-theme=dark] .conversation-editor .assistant-source-suggestions>span>svg{flex:none;color:#f2c94c}
+html[data-workspace-theme=dark] .conversation-editor .assistant-source-suggestions button{padding:11px 12px;border-color:var(--ed-border);border-radius:8px;background:var(--ed-surface);font-size:13px;color:var(--ed-text)}
+html[data-workspace-theme=dark] .conversation-editor .assistant-source-suggestions button>svg{color:var(--ed-text-3)}
+html[data-workspace-theme=dark] .conversation-editor .assistant-source-suggestions button:hover:not(:disabled){background:var(--ed-surface-2)}
+html[data-workspace-theme=dark] .conversation-editor .manual-composer-dock>.edit-composer{padding:12px 10px 10px 12px;border-radius:8px;background:#2a2a2a;box-shadow:inset 0 0 0 1px #363636}
+html[data-workspace-theme=dark] .conversation-editor .manual-composer-dock>.edit-composer textarea{padding:0 2px;font-size:14px}
+html[data-workspace-theme=dark] .conversation-editor .manual-composer-dock>.edit-composer textarea::placeholder{color:var(--ed-text-3)}
+html[data-workspace-theme=dark] .conversation-editor .manual-composer-dock>.edit-composer .composer-add{color:var(--ed-text-3)}
+html[data-workspace-theme=dark] .conversation-editor .manual-composer-dock>.edit-composer .composer-submit[data-slot=button]{width:28px;height:28px;border-radius:6px;background:#7c3aed;color:#fff}
+/* Preview: floating tool rail and aspect ratio chip. */
+html[data-workspace-theme=dark] .conversation-editor .floating-tools-rail{width:48px}
+html[data-workspace-theme=dark] .conversation-editor .floating-tools-rail-list{width:48px;background:var(--ed-surface);box-shadow:inset 0 0 0 1px var(--ed-border),0 6px 20px #00000040}
+html[data-workspace-theme=dark] .conversation-editor .floating-tools-rail button{width:36px;height:36px;border-radius:8px;color:#a1a3ab}
+html[data-workspace-theme=dark] .conversation-editor .floating-tools-rail button:hover{background:var(--ed-surface-2);color:var(--ed-text)}
+html[data-workspace-theme=dark] .conversation-editor .floating-tools-rail button[aria-pressed=true]{background:#7c3aed33;color:#a78bfa}
+html[data-workspace-theme=dark] .conversation-editor .floating-tools-rail-divider{background:var(--ed-border)}
+html[data-workspace-theme=dark] .conversation-editor .aspect-ratio-trigger{height:28px;gap:6px;padding:0 8px;border:0;border-radius:6px;background:transparent;color:var(--ed-text);font-size:12px}
+html[data-workspace-theme=dark] .conversation-editor .aspect-ratio-trigger:hover,html[data-workspace-theme=dark] .conversation-editor .aspect-ratio-trigger[data-state=open]{background:var(--ed-surface-2)}
+/* Share is a text button in the design. */
+html[data-workspace-theme=dark] .conversation-editor .workspace-nav-secondary[aria-label="Share timeline"]{border-color:transparent}
+html[data-workspace-theme=dark] .conversation-editor .workspace-nav-secondary[aria-label="Share timeline"] svg{display:none}
+/* Under the preview: the clip name and the output size. */
+.conversation-editor .stage-center{position:relative}
+.conversation-editor :is(.preview-frame-above,.preview-frame-below){position:absolute;z-index:6}
+.conversation-editor .preview-frame-below{pointer-events:none}
+.conversation-editor .preview-frame-above .aspect-ratio-trigger{margin-left:-8px}
+.conversation-editor .preview-meta{display:flex;justify-content:space-between;gap:12px;font-size:11px;line-height:14px;color:var(--ws-muted);pointer-events:none}
+.conversation-editor .preview-meta>span:first-child{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.conversation-editor .preview-meta>span:last-child{flex-shrink:0;color:var(--ed-text-3,var(--ws-faint));font-variant-numeric:tabular-nums}
+html[data-workspace-theme=dark] .conversation-editor .aspect-ratio-trigger svg:last-child{color:var(--ed-text-3)}
+/* Timeline "More" menu trigger, matching the other transport icon buttons. */
+.custom-timeline .timeline-toolbar .timeline-more-trigger{display:grid;place-items:center;width:28px;height:28px;padding:0;border:0;border-radius:6px;background:transparent;color:var(--ws-muted);cursor:pointer}
+.custom-timeline .timeline-toolbar .timeline-more-trigger:hover,.custom-timeline .timeline-toolbar .timeline-more-trigger[data-state=open]{background:var(--ws-hover);color:var(--ws-text)}
+/* Timeline chrome: transport bar, timecode, ruler labels, track names and the playhead. Clips are untouched. */
+html[data-workspace-theme=dark] .conversation-editor .custom-timeline .timeline-toolbar{min-height:48px}
+html[data-workspace-theme=dark] .conversation-editor .custom-timeline:not(.timeline-collapsed) .timeline-toolbar{border-bottom:1px solid var(--ed-border)}
+html[data-workspace-theme=dark] .conversation-editor .custom-timeline .timeline-toolbar button{border-radius:6px}
+html[data-workspace-theme=dark] .conversation-editor .custom-timeline .preview-playback>button{width:28px;height:28px}
+html[data-workspace-theme=dark] .conversation-editor .custom-timeline .preview-playback>button:nth-child(2){width:32px;height:32px;background:var(--ed-surface-2);color:var(--ed-text)}
+html[data-workspace-theme=dark] .conversation-editor .custom-timeline .timeline-playback-controls .preview-time{margin-left:14px;font-size:13px;font-weight:500;color:var(--ed-text)}
+html[data-workspace-theme=dark] .conversation-editor .custom-timeline .timeline-playback-controls .preview-time>span{font-weight:400;color:var(--ed-text-3)}
+html[data-workspace-theme=dark] .conversation-editor .custom-timeline .time-ruler span{font-size:10px}
+html[data-workspace-theme=dark] .conversation-editor .custom-timeline .track-label-name{gap:8px;font-size:12px;font-weight:500}
+html[data-workspace-theme=dark] .conversation-editor .custom-timeline .track-dot{width:6px;height:6px}
+html[data-workspace-theme=dark] .conversation-editor .custom-timeline .playhead{width:2px;margin-left:-.5px;background:#7c3aed}
+html[data-workspace-theme=dark] .conversation-editor .custom-timeline :is(.track-label,.timeline-track){border-bottom-color:transparent}
+@media(min-width:901px){html[data-workspace-theme=dark] .conversation-editor .custom-timeline .track-headers{width:168px}}
+html[data-workspace-theme=dark] .conversation-editor .custom-timeline .timeline-playhead-cap{color:#7c3aed}
+html[data-workspace-theme=dark] .conversation-editor .custom-timeline .timeline-playhead-cap:hover{color:#8b5cf6}
+html[data-workspace-theme=dark] .editor-app:not(.landing-product-demo) .ruler-tick{border-left-color:var(--ed-tick)}
+html[data-workspace-theme=dark] .editor-app:not(.landing-product-demo) .custom-timeline .ruler-ticks path{stroke:var(--ed-tick)}
+html[data-workspace-theme=dark] .editor-app:not(.landing-product-demo) .custom-timeline .time-ruler span{color:var(--ed-text-3)}
+html[data-workspace-theme=dark] .editor-app:not(.landing-product-demo) .custom-timeline .track-label-name{color:var(--ed-text)}
+html[data-workspace-theme=dark] .editor-app:not(.landing-product-demo) .custom-timeline .track-headers{border-right-color:var(--ed-border)}
 html[data-workspace-theme=dark] .editor-app:not(.landing-product-demo) :is(.chat-resize-handle,.timeline-resize-handle,.inspector-resize-handle):hover{background:#393939!important}
-html[data-workspace-theme=dark] .editor-app:not(.landing-product-demo) .preview-viewport:not(:focus-visible) .preview-viewport-frame:after{border-color:#242424}
+html[data-workspace-theme=dark] .editor-app:not(.landing-product-demo) .preview-viewport:not(:focus-visible) .preview-viewport-frame:after{border-color:var(--ed-border)}
 .conversation-editor .editor-sidebar,.conversation-editor .preview-inspector,.conversation-editor .mobile-panel-controls,.conversation-editor .timeline-panel,.conversation-editor .timeline-toolbar{background:var(--ws-bg);color:var(--ws-text)}
 .conversation-editor .editor-stage,.conversation-editor .preview-workspace,.conversation-editor .editor-canvas-panels{background:var(--ws-preview)}
 .conversation-editor .chat-user{width:fit-content;max-width:min(388px,calc(100% - 20px));margin-left:auto;background:var(--ws-bubble);color:var(--ws-text)}

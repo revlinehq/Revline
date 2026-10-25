@@ -13,7 +13,7 @@ npm run dev -- --port 3001
 npm run worker
 ```
 
-Open http://localhost:3001. `/chat` starts a new project; creating or reopening a project opens `/editor/[projectId]` with its conversation, preview, and editable timeline together. Existing `/chat/[projectId]` links redirect to the matching editor. The retired `/editor/demo` and `/chat/demo` routes return 404; editor smoke checks use `/dev/editor`, which is available only in local development. `/chats` shows your saved conversations, `/profile` is the account page, and `/projects` redirects to `/chat`. Saved projects and their data require Clerk sign-in and ownership checks.
+Open http://localhost:3001. `/chat` starts a new project; creating or reopening a project opens `/editor/[projectId]` with its conversation, preview, and editable timeline together. Existing `/chat/[projectId]` links redirect to the matching editor. The retired `/editor/demo` and `/chat/demo` routes return 404. `/chats` shows your saved conversations, `/profile` is the account page, and `/projects` redirects to `/chat`. Saved projects and their data require Clerk sign-in and ownership checks.
 
 Internal routes share an authenticated `(dashboard)` layout. `/sign-in` and `/sign-up` use one custom Google or email-code flow, including new accounts; verified Clerk identities sync to private Convex profiles. A temporary, tab-scoped IndexedDB draft preserves attached footage through authentication and clears each file after its successful import. An incomplete initial import keeps the request saved instead of starting the AI edit.
 
