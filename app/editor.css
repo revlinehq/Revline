@@ -210,6 +210,19 @@ html[data-workspace-theme=dark] .conversation-editor .floating-tools-rail button
 html[data-workspace-theme=dark] .conversation-editor .floating-tools-rail-divider{background:var(--ed-border)}
 html[data-workspace-theme=dark] .conversation-editor .canvas-toolbar .aspect-ratio-trigger{height:28px;gap:8px;padding:0 10px;border:1px solid var(--ed-border);border-radius:6px;background:var(--ed-surface);color:var(--ed-text);font-size:12px}
 html[data-workspace-theme=dark] .conversation-editor .canvas-toolbar .aspect-ratio-trigger:hover,html[data-workspace-theme=dark] .conversation-editor .canvas-toolbar .aspect-ratio-trigger[data-state=open]{background:var(--ed-surface-2)}
+/* Timeline chrome: transport bar, timecode, ruler labels, track names and the playhead. Clips are untouched. */
+html[data-workspace-theme=dark] .conversation-editor .custom-timeline .timeline-toolbar{min-height:48px;border-bottom:1px solid var(--ed-border)}
+html[data-workspace-theme=dark] .conversation-editor .custom-timeline .timeline-toolbar button{border-radius:6px}
+html[data-workspace-theme=dark] .conversation-editor .custom-timeline .preview-playback>button{width:28px;height:28px}
+html[data-workspace-theme=dark] .conversation-editor .custom-timeline .preview-playback>button:nth-child(2){width:32px;height:32px;background:var(--ed-surface-2);color:var(--ed-text)}
+html[data-workspace-theme=dark] .conversation-editor .custom-timeline .timeline-playback-controls .preview-time{margin-left:14px;font-size:13px;font-weight:500;color:var(--ed-text)}
+html[data-workspace-theme=dark] .conversation-editor .custom-timeline .timeline-playback-controls .preview-time>span{font-weight:400;color:var(--ed-text-3)}
+html[data-workspace-theme=dark] .conversation-editor .custom-timeline .time-ruler span{font-size:10px}
+html[data-workspace-theme=dark] .conversation-editor .custom-timeline .track-label-name{gap:8px;font-size:12px;font-weight:500}
+html[data-workspace-theme=dark] .conversation-editor .custom-timeline .track-dot{width:6px;height:6px}
+html[data-workspace-theme=dark] .conversation-editor .custom-timeline .playhead{width:2px;margin-left:-.5px;background:#7c3aed}
+html[data-workspace-theme=dark] .conversation-editor .custom-timeline .timeline-playhead-cap{color:#7c3aed}
+html[data-workspace-theme=dark] .conversation-editor .custom-timeline .timeline-playhead-cap:hover{color:#8b5cf6}
 html[data-workspace-theme=dark] .editor-app:not(.landing-product-demo) .ruler-tick{border-left-color:var(--ed-tick)}
 html[data-workspace-theme=dark] .editor-app:not(.landing-product-demo) .custom-timeline .ruler-ticks path{stroke:var(--ed-tick)}
 html[data-workspace-theme=dark] .editor-app:not(.landing-product-demo) .custom-timeline .time-ruler span{color:var(--ed-text-3)}
