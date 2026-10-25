@@ -61,7 +61,8 @@ body:has(>.landing),body:has(main.landing){background:#fff}
 .landing-hero h1{font-family:var(--l-head);font-size:64px;font-weight:400;letter-spacing:-1.6px;line-height:1.06}
 .landing-hero-copy>p{width:720px;max-width:100%;font-size:18px;line-height:1.55;color:var(--l-fg-2)}
 .landing-hero-actions{display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:12px;padding-top:8px}
-.landing-product-window{display:block;width:100%;height:auto;aspect-ratio:2560/1307;border:1px solid #26262e;border-radius:10px;background:#0b0c0e;box-shadow:0 24px 64px #3b1a8a1f}
+.landing-product-frame{padding:12px;border:1px solid #12121214;border-radius:22px;background:#1212120a;box-shadow:0 24px 64px #3b1a8a1f}
+.landing-product-window{display:block;width:100%;height:auto;aspect-ratio:2560/1307;border:1px solid #26262e;border-radius:10px;background:#0b0c0e}
 
 /* Logos */
 .landing-logos{display:flex;flex-direction:column;align-items:center;gap:28px;padding-block:24px 88px}
@@ -251,6 +252,8 @@ body:has(>.landing),body:has(main.landing){background:#fff}
   .landing-hero h1{font-size:40px;letter-spacing:-1px}
   .landing-hero h1 br,.landing-hero-copy>p br{display:none}
   .landing-hero-copy>p{font-size:16px}
+  .landing-product-frame{padding:6px;border-radius:14px}
+  .landing-product-window{border-radius:8px}
   .landing-logos{padding-bottom:56px}
   .landing-logos ul{gap:16px 36px}
   .landing-logos li{font-size:18px}

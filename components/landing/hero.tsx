@@ -10,6 +10,6 @@ export function LandingHero() {
         <LandingStartButton />
       </div>
     </div>
-    <img className="landing-product-window" src="/landing/product-window.webp" width={2560} height={1307} alt="The Revline editor with its conversation, preview, and timeline" fetchPriority="high" />
+    <div className="landing-product-frame"><img className="landing-product-window" src="/landing/product-window.webp" width={2560} height={1307} alt="The Revline editor with its conversation, preview, and timeline" fetchPriority="high" /></div>
   </LandingSection>;
 }
