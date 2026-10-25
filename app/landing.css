@@ -97,10 +97,11 @@ body:has(>.landing),body:has(main.landing){background:#fff}
 .landing-bento-text{display:flex;flex-direction:column;gap:6px;padding:16px 28px 28px}
 .landing-bento-text h3{font:500 22px/1.25 var(--l-head);letter-spacing:-.3px;color:var(--l-fg)}
 .landing-bento-text p{font-size:15px;line-height:1.5;color:var(--l-fg-2)}
-.landing-upload-panel{width:520px;max-width:100%;display:flex;flex-direction:column;gap:10px}
-.landing-upload-panel li{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:8px;background:var(--l-bg-subtle)}
+.landing-upload-panel{width:520px;max-width:100%;display:flex;flex-direction:column;padding-block:4px}
+.landing-upload-panel li{display:flex;align-items:center;gap:12px;padding:12px 2px}
+.landing-upload-panel li+li{border-top:1px solid var(--l-border)}
 .landing-upload-panel li>div{flex:1;min-width:0;display:flex;flex-direction:column;gap:6px}
-.landing-upload-icon{display:grid;place-items:center;width:32px;height:32px;flex-shrink:0;background:#fff;border:1px solid var(--l-border);border-radius:6px;color:var(--l-brand)}
+.landing-upload-icon{display:grid;place-items:center;width:32px;height:32px;flex-shrink:0;border-radius:8px;background:var(--l-brand-tint);color:var(--l-brand)}
 .landing-upload-top{display:flex;justify-content:space-between;gap:12px;font-size:13px}
 .landing-upload-top strong{font-weight:500;color:var(--l-fg);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .landing-upload-top span{font-size:12px;color:var(--l-fg-3);white-space:nowrap}
