@@ -44,7 +44,7 @@ export function ProfilePage({ checkoutReturn }: { checkoutReturn?: CheckoutRetur
         <BillingSection checkoutReturn={checkoutReturn} />
         <McpConnectorSection />
         <DevAiCosts />
-        <section className="workspace-profile-section"><div className="workspace-section-label"><h2>Account</h2><p>Your current session.</p></div><div className="workspace-section-content workspace-account-actions">{isSignedIn ? <button className="workspace-signout-button" onClick={() => void signOut()} disabled={signingOut}>{signingOut ? <LoaderCircle size={14} className="animate-spin" /> : <LogOut size={14} />}Sign out</button> : <Link href="/sign-in" className="workspace-outline-button">Sign in</Link>}</div></section>
+        <section className="workspace-profile-section"><div className="workspace-section-label"><h2>Account</h2></div><div className="workspace-section-content workspace-account-actions">{isSignedIn ? <button className="workspace-signout-button" onClick={() => void signOut()} disabled={signingOut}>{signingOut ? <LoaderCircle size={14} className="animate-spin" /> : <LogOut size={14} />}Sign out</button> : <Link href="/sign-in" className="workspace-outline-button">Sign in</Link>}</div></section>
       </>}{error && <p className="workspace-inline-error" role="alert">{error}</p>}
     </main>
   </div>;
