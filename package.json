@@ -19,7 +19,8 @@
     "build:cloudflare": "node scripts/cloudflare-frontend.mjs build",
     "preview:cloudflare": "node scripts/cloudflare-frontend.mjs preview",
     "deploy:frontend": "node scripts/cloudflare-frontend.mjs deploy",
-    "deploy:frontend:ci": "wrangler deploy --config dist/server/wrangler.json"
+    "deploy:frontend:ci": "wrangler deploy --config dist/server/wrangler.json",
+    "deploy:fly-exports": "node scripts/deploy-fly-exports.mjs"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^4.0.78",

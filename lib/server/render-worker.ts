@@ -21,8 +21,9 @@ function runRendererProcess(script:string,args:string[],onProgress:(render:{prog
     let stderr = '';
     let forceStop: ReturnType<typeof setTimeout> | undefined;
     // Drain diagnostics without buffering large compiler/browser logs into Next.
-    worker.stdout?.resume();
-    worker.stderr?.on('data', (chunk: Buffer) => { stderr = (stderr + chunk.toString()).slice(-2000); });
+    // REVLINE_RENDER_LOG_LEVEL (export machines) forwards the renderer's own stage log.
+    if (process.env.REVLINE_RENDER_LOG_LEVEL) worker.stdout?.pipe(process.stdout); else worker.stdout?.resume();
+    worker.stderr?.on('data', (chunk: Buffer) => { stderr = (stderr + chunk.toString()).slice(-2000); if (process.env.REVLINE_RENDER_LOG_LEVEL) process.stderr.write(chunk); });
     const cancel = () => {
       worker.kill('SIGTERM');
       forceStop = setTimeout(() => worker.kill('SIGKILL'), 10_000);

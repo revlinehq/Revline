@@ -26,8 +26,14 @@ try {
   // The low-memory profile forces one worker and per-frame screenshots. Keep it
   // for small hosts; PRODUCER_LOW_MEMORY_MODE still overrides this choice.
   const lowMemory = process.env.PRODUCER_LOW_MEMORY_MODE ? {} : { lowMemoryMode: resources.lowMemory };
-  const producerConfig = resolveConfig({ concurrency: resources.workers, ...lowMemory, frameDataUriCacheBytesLimitMb: 128 });
-  const job = createRenderJob({ producerConfig, fps: settings.fps, quality: settings.quality, workers: resources.workers, strictness: 'strict', logger: createConsoleLogger('error') });
+  // Servers render with software GL, where HyperFrames otherwise forces per-frame
+  // screenshots. BeginFrame capture (Linux) streams frames into the encoder instead:
+  // measured 2.6-3x faster capture with SSIM >= 0.997 against screenshot output, and no
+  // captured-frame files on disk (a 4K60 export needed ~16 GB of them). Other platforms
+  // keep screenshots automatically. PRODUCER_FORCE_SCREENSHOT=true restores the old path.
+  const forceScreenshot = process.env.PRODUCER_FORCE_SCREENSHOT === 'true';
+  const producerConfig = resolveConfig({ concurrency: resources.workers, ...lowMemory, frameDataUriCacheBytesLimitMb: 128, forceScreenshot });
+  const job = createRenderJob({ producerConfig, fps: settings.fps, quality: settings.quality, workers: resources.workers, strictness: 'strict', logger: createConsoleLogger(['debug', 'info', 'warn', 'error'].includes(process.env.REVLINE_RENDER_LOG_LEVEL) ? process.env.REVLINE_RENDER_LOG_LEVEL : 'error') });
   await executeRenderJob(job, directory, output, progress => report({ type: 'progress', progress: progress.progress }), controller.signal);
   if (job.status !== 'complete') throw new Error('The render did not finish.');
   report({ type: 'complete', warnings: job.warnings.length });

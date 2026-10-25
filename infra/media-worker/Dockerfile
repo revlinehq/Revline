@@ -1,4 +1,4 @@
-FROM node:22.21.1-trixie-slim@sha256:c3bf4cf764467f1bf9789fde549971a2cf8e720196df6cf3f95bafa590e5f4af
+FROM node:22.21.1-trixie-slim@sha256:c3bf4cf764467f1bf9789fde549971a2cf8e720196df6cf3f95bafa590e5f4af AS runtime
 
 ENV NODE_ENV=production \
     PUPPETEER_CACHE_DIR=/opt/chrome \
@@ -29,6 +29,26 @@ RUN npm ci --include=dev --ignore-scripts \
     && npm cache clean --force \
     && rm -rf /var/lib/apt/lists/*
 
+# Fly.io export machines (`--target exports`): exports only, so no Python
+# trackers or models. Their scratch volume is root-owned, so fly-entry.sh
+# prepares it as root and then runs the consumer as `node`.
+FROM runtime AS exports
+COPY tsconfig.json ./
+COPY convex ./convex
+COPY lib ./lib
+COPY scripts ./scripts
+COPY public ./public
+COPY infra/media-worker ./infra/media-worker
+RUN node scripts/copy-vendor.mjs \
+    && REVLINE_RUNTIME_CHECK=exports node infra/media-worker/runtime-check.mjs \
+    && mkdir -p /tmp/revline && chown node:node /tmp/revline
+EXPOSE 8080
+STOPSIGNAL SIGTERM
+ENTRYPOINT ["/usr/bin/tini", "--"]
+CMD ["sh", "infra/media-worker/fly-entry.sh"]
+
+# The default image: every media task kind (Cloudflare processors).
+FROM runtime
 COPY scripts/beat-tracking-requirements.txt scripts/scene-detection-requirements.txt scripts/video-import-requirements.txt /opt/requirements/
 RUN python3 -m venv /opt/beat-tracking \
     && /opt/beat-tracking/bin/pip install --no-cache-dir -r /opt/requirements/beat-tracking-requirements.txt \

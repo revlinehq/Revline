@@ -13,10 +13,14 @@ execFileSync(process.execPath,['--import','tsx','--input-type=module','-e',`
   const {AnalysisError,isRetryableAnalysisError}=await import('./lib/media-analysis/errors.ts');
   if(!isRetryableAnalysisError(new AnalysisError('temporary',429,true))||isRetryableAnalysisError(new AnalysisError('quota',429,false)))throw new Error('Media retry policy is invalid.');
 `],{stdio:'inherit'});
-execFileSync(process.env.BEAT_TRACK_PYTHON, ['-c', 'import beat_this, torch, numpy, soxr; assert not torch.cuda.is_available()'], { stdio: 'inherit' });
-execFileSync(process.env.SCENE_DETECT_PYTHON, ['-c', 'import scenedetect, cv2'], { stdio: 'inherit' });
-execFileSync(process.env.YT_DLP_PATH, ['--version'], { stdio: 'ignore' });
-if (!existsSync(process.env.BEAT_TRACK_MODEL_PATH)) throw new Error('Pinned beat model is missing.');
+// The Fly exports image renders only; its Python trackers and models are left out.
+const exportsOnly = process.env.REVLINE_RUNTIME_CHECK === 'exports';
+if (!exportsOnly) {
+  execFileSync(process.env.BEAT_TRACK_PYTHON, ['-c', 'import beat_this, torch, numpy, soxr; assert not torch.cuda.is_available()'], { stdio: 'inherit' });
+  execFileSync(process.env.SCENE_DETECT_PYTHON, ['-c', 'import scenedetect, cv2'], { stdio: 'inherit' });
+  execFileSync(process.env.YT_DLP_PATH, ['--version'], { stdio: 'ignore' });
+  if (!existsSync(process.env.BEAT_TRACK_MODEL_PATH)) throw new Error('Pinned beat model is missing.');
+}
 if (!existsSync(await puppeteer.executablePath())) throw new Error('Chromium is missing.');
 for (const path of ['public/vendor/remotion-runtime.js', 'public/vendor/remotion-text.js', 'public/vendor/remotion-transitions.js', 'public/vendor/visual-effects.js', 'public/vendor/scene-runtime.js', 'public/vendor/blaze-face.tflite', 'public/vendor/mediapipe/vision_wasm_internal.wasm']) {
   if (!existsSync(path)) throw new Error(`Required preview/export asset is missing: ${path}`);
@@ -27,4 +31,4 @@ try {
   await page.setContent('<p>Media runtime check</p>');
   if (await page.$eval('p', element => element.textContent) !== 'Media runtime check') throw new Error('Chromium could not render.');
 } finally { await browser.close(); }
-console.log('Media runtime: server imports, retry policy, FFmpeg, Python trackers, pinned model, Chromium and export assets verified.');
+console.log(exportsOnly ? 'Export runtime: server imports, retry policy, FFmpeg, Chromium and export assets verified.' : 'Media runtime: server imports, retry policy, FFmpeg, Python trackers, pinned model, Chromium and export assets verified.');
