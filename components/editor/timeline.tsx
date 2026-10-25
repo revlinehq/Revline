@@ -30,7 +30,7 @@ import { timelineGestureFrame } from '@/lib/editor/timeline-gesture-frame';
 import { applyTimelineEdit } from '@/lib/editor/timeline-sync';
 import { minimumTimelineZoom, timelineZoomPosition, timelineZoomAtPosition, TIMELINE_BASE_PX, TIMELINE_MAX_ZOOM } from '@/lib/editor/timeline-zoom';
 import './custom-timeline.css';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger, DropdownMenuItem } from '@/components/ui/dropdown-menu';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger, DropdownMenuItem, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger } from '@/components/ui/dropdown-menu';
 import { ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem, ContextMenuLabel, ContextMenuSeparator } from '@/components/ui/context-menu';
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -608,19 +608,29 @@ export function TimelinePanel(p:Props){
     <TimelinePlayheadClock playing={p.playing} readTime={p.readPlaybackTime} px={px} duration={end} origin={origin} viewport={scroll} head={head} cap={cap} scrubbing={scrubRef} followPausedUntil={followPausedUntil}/>
     <div className="timeline-toolbar"><div className="timeline-edit-actions">{!p.playbackControls&&<EditorPlaybackTime className="timeline-playback-time" time={time} duration={end} fps={timeline.fps} playing={p.playing} readTime={p.readPlaybackTime}/>}
       {p.readOnly&&<span>Timeline</span>}
-      {!p.readOnly&&<select className="timeline-frame-rate" aria-label="Timeline frame rate" title="Timeline frame rate" value={timeline.fps} disabled={editingDisabled} onChange={event=>{const fps=Number(event.target.value);if(fps===24||fps===30||fps===60){if(timeline.clips.some(clip=>clip.duration<1/fps)){report(new Error(`Some clips are shorter than one frame at ${fps} fps. Extend those clips before changing the frame rate.`));return;}onChange({...timeline,fps});}}}>{[24,30,60].map(fps=><option key={fps} value={fps}>{fps} fps</option>)}</select>}
-      {!p.readOnly&&p.onUndo&&<IconButton label="Undo" disabled={!p.canUndo} onClick={p.onUndo}><Undo2 size={14}/></IconButton>}
-      {!p.readOnly&&p.onRedo&&<IconButton label="Redo" disabled={!p.canRedo} onClick={p.onRedo}><Redo2 size={14}/></IconButton>}
+      {!p.readOnly&&<IconButton label="Split selected clip" disabled={editingDisabled||!selected} onClick={p.onSplit}><Scissors size={14}/></IconButton>}
+      {!p.readOnly&&<IconButton label="Delete selected clips" disabled={editingDisabled||!selected} onClick={p.onDelete}><Trash2 size={14}/></IconButton>}
     </div>{p.playbackControls&&<div className="timeline-playback-controls">{p.playbackControls}</div>}<div className="timeline-view-actions">
-      {!p.readOnly&&<IconButton label="Unlink video and audio" disabled={editingDisabled||!timeline.clips.find(c=>c.id===selected)?.linkedClipId} onClick={()=>{if(selected)onChange(unlinkClips(timeline,selected));}}><Unlink size={14}/></IconButton>}
-      {!p.readOnly&&<IconButton label="Close gaps" disabled={p.editingLocked||!timeline.clips.some(clip=>clip.kind==='video'||clip.kind==='image')} onClick={closeGaps}><FoldHorizontal size={14}/></IconButton>}
-      {!p.readOnly&&<button type="button" aria-label="Merge clips" title={p.editingLocked?'Wait for the AI edit to finish.':'Merge adjacent split pieces from the same source. Select two pieces, or one next to its split neighbor.'} disabled={p.editingLocked} onClick={mergeClips}><Combine size={14}/><span>Merge clips</span></button>}
-      <IconButton label={p.muted?"Unmute preview":"Mute preview"} onClick={p.onToggleMute}>{p.muted?<VolumeX size={14}/>:<Volume2 size={14}/>}</IconButton>
-      <IconButton label={dense?'Expand track rows':'Compact track rows'} onClick={()=>store.setState({compactTracks:!dense})}><Rows3 size={14}/></IconButton>
-      {!p.readOnly&&<><DropdownMenu><DropdownMenuTrigger aria-label="Add timeline layer" disabled={editingDisabled}><Plus size={14}/><span>Layer</span></DropdownMenuTrigger><DropdownMenuContent>{([['effects','Effect track'],['visual','Visual layer'],['audio','Audio layer']] as const).map(([group,label])=><DropdownMenuItem key={group} disabled={editingDisabled} onSelect={()=>addLayer(group)}>{label}</DropdownMenuItem>)}</DropdownMenuContent></DropdownMenu>
-      <IconButton label="Remove empty tracks" disabled={editingDisabled||cleanedTimeline===timeline} onClick={()=>onChange(cleanedTimeline)}><ListMinus size={14}/></IconButton>
-      <button aria-label="Toggle snapping" onClick={()=>store.setState({snapping:!snap})} aria-pressed={snap} className={snap?'snap-active':''}><Magnet size={14}/></button></>}
-      <IconButton label="Zoom out" onClick={()=>changeZoom(zoom/1.3)}><Minus size={14}/></IconButton><input aria-label="Timeline zoom" type="range" min="0" max="100" step="any" value={timelineZoomPosition(zoom,minimumZoom)} aria-valuetext={`${Math.round(zoom*100)}%`} onChange={e=>changeZoom(timelineZoomAtPosition(Number(e.target.value),minimumZoom))}/><IconButton label="Zoom in" onClick={()=>changeZoom(zoom*1.3)}><Plus size={14}/></IconButton>
+      {!p.readOnly&&<button aria-label="Toggle snapping" onClick={()=>store.setState({snapping:!snap})} aria-pressed={snap} className={snap?'snap-active':''}><Magnet size={14}/></button>}
+      <input aria-label="Timeline zoom" type="range" min="0" max="100" step="any" value={timelineZoomPosition(zoom,minimumZoom)} aria-valuetext={`${Math.round(zoom*100)}%`} onChange={e=>changeZoom(timelineZoomAtPosition(Number(e.target.value),minimumZoom))}/>
+      <DropdownMenu><DropdownMenuTrigger className="timeline-more-trigger" aria-label="More timeline tools" title="More timeline tools"><MoreHorizontal size={15}/></DropdownMenuTrigger><DropdownMenuContent align="end" className="timeline-more-menu">
+        {!p.readOnly&&<><DropdownMenuSub><DropdownMenuSubTrigger disabled={editingDisabled}>Frame rate · {timeline.fps} fps</DropdownMenuSubTrigger><DropdownMenuSubContent><DropdownMenuRadioGroup value={String(timeline.fps)} onValueChange={value=>{const fps=Number(value);if(fps===24||fps===30||fps===60){if(timeline.clips.some(clip=>clip.duration<1/fps)){report(new Error(`Some clips are shorter than one frame at ${fps} fps. Extend those clips before changing the frame rate.`));return;}onChange({...timeline,fps});}}}>{[24,30,60].map(fps=><DropdownMenuRadioItem key={fps} value={String(fps)}>{fps} fps</DropdownMenuRadioItem>)}</DropdownMenuRadioGroup></DropdownMenuSubContent></DropdownMenuSub>
+        {p.onUndo&&<DropdownMenuItem disabled={!p.canUndo} onSelect={p.onUndo}><Undo2/>Undo</DropdownMenuItem>}
+        {p.onRedo&&<DropdownMenuItem disabled={!p.canRedo} onSelect={p.onRedo}><Redo2/>Redo</DropdownMenuItem>}
+        <DropdownMenuSeparator/>
+        <DropdownMenuItem disabled={editingDisabled||!timeline.clips.find(c=>c.id===selected)?.linkedClipId} onSelect={()=>{if(selected)onChange(unlinkClips(timeline,selected));}}><Unlink/>Unlink video and audio</DropdownMenuItem>
+        <DropdownMenuItem disabled={p.editingLocked||!timeline.clips.some(clip=>clip.kind==='video'||clip.kind==='image')} onSelect={closeGaps}><FoldHorizontal/>Close gaps</DropdownMenuItem>
+        <DropdownMenuItem disabled={p.editingLocked} title="Merge adjacent split pieces from the same source. Select two pieces, or one next to its split neighbor." onSelect={mergeClips}><Combine/>Merge clips</DropdownMenuItem>
+        <DropdownMenuSeparator/></>}
+        <DropdownMenuItem onSelect={p.onToggleMute}>{p.muted?<VolumeX/>:<Volume2/>}{p.muted?'Unmute preview':'Mute preview'}</DropdownMenuItem>
+        <DropdownMenuItem onSelect={()=>store.setState({compactTracks:!dense})}><Rows3/>{dense?'Expand track rows':'Compact track rows'}</DropdownMenuItem>
+        {!p.readOnly&&<><DropdownMenuSeparator/>
+        {([['effects','Add effect track'],['visual','Add visual layer'],['audio','Add audio layer']] as const).map(([group,label])=><DropdownMenuItem key={group} disabled={editingDisabled} onSelect={()=>addLayer(group)}><Plus/>{label}</DropdownMenuItem>)}
+        <DropdownMenuItem disabled={editingDisabled||cleanedTimeline===timeline} onSelect={()=>onChange(cleanedTimeline)}><ListMinus/>Remove empty tracks</DropdownMenuItem></>}
+        <DropdownMenuSeparator/>
+        <DropdownMenuItem onSelect={event=>{event.preventDefault();changeZoom(zoom*1.3);}}><Plus/>Zoom in</DropdownMenuItem>
+        <DropdownMenuItem onSelect={event=>{event.preventDefault();changeZoom(zoom/1.3);}}><Minus/>Zoom out</DropdownMenuItem>
+      </DropdownMenuContent></DropdownMenu>
       <IconButton label={p.collapsed?'Expand timeline':'Collapse timeline'} onClick={p.onToggleCollapse}>{p.collapsed?<ChevronUp size={14}/>:<ChevronDown size={14}/>}</IconButton>
     </div></div>
     <div className="timeline-body"><div className="track-headers" ref={labels} style={{marginBottom:scrollbarHeight}} onScroll={e=>{const viewport=scroll.current;if(viewport&&viewport.scrollTop!==e.currentTarget.scrollTop)viewport.scrollTop=e.currentTarget.scrollTop;}}><div className="track-ruler-label"/><div className="timeline-top-space" aria-hidden="true" style={{height:TIMELINE_TOP_SPACE}}/>{tracks.map(track=>{

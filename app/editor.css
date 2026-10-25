@@ -223,6 +223,11 @@ html[data-workspace-theme=dark] .conversation-editor .workspace-nav-secondary[ar
 .conversation-editor .preview-meta{--preview-width:min(calc(100cqw - 36px),calc((100cqh - 36px) * var(--preview-ratio)));position:absolute;left:50%;top:calc(50% + var(--preview-width) / var(--preview-ratio) / 2 + 3px);width:var(--preview-width);translate:-50% 0;display:flex;justify-content:space-between;gap:12px;font-size:11px;line-height:14px;color:var(--ws-muted);pointer-events:none}
 .conversation-editor .preview-meta>span:first-child{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .conversation-editor .preview-meta>span:last-child{flex-shrink:0;color:var(--ed-text-3,var(--ws-faint));font-variant-numeric:tabular-nums}
+html[data-workspace-theme=dark] .conversation-editor .aspect-ratio-icon{color:#a1a3ab}
+html[data-workspace-theme=dark] .conversation-editor .aspect-ratio-trigger svg:last-child{color:var(--ed-text-3)}
+/* Timeline "More" menu trigger, matching the other transport icon buttons. */
+.custom-timeline .timeline-toolbar .timeline-more-trigger{display:grid;place-items:center;width:28px;height:28px;padding:0;border:0;border-radius:6px;background:transparent;color:var(--ws-muted);cursor:pointer}
+.custom-timeline .timeline-toolbar .timeline-more-trigger:hover,.custom-timeline .timeline-toolbar .timeline-more-trigger[data-state=open]{background:var(--ws-hover);color:var(--ws-text)}
 /* Timeline chrome: transport bar, timecode, ruler labels, track names and the playhead. Clips are untouched. */
 html[data-workspace-theme=dark] .conversation-editor .custom-timeline .timeline-toolbar{min-height:48px}
 html[data-workspace-theme=dark] .conversation-editor .custom-timeline:not(.timeline-collapsed) .timeline-toolbar{border-bottom:1px solid var(--ed-border)}
