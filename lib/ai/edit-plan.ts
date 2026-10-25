@@ -60,7 +60,9 @@ export function effectReviewBindings(plans:EffectPlan[],timeline:Timeline,bindin
     const clip=timeline.clips.find(clip=>clip.id===clipId);
     if(!clip)throw new Error('Identify the actual planned output clip before review. Pass its clip ID in previewRender bindings; keep the effect plan unchanged.');
     if(!timed&&(plan.outputClipId??plan.targetClipId)&&clip.id!==(plan.outputClipId??plan.targetClipId))throw new Error('Review the planned target clip; a different object cannot verify this expectation.');
-    if(timed&&!checkPlanTiming({...plan,outputClipId:clip.id},timeline).pass)throw new Error('A timed review plan must match one FX clip and its full range. Use a separate plan for each pulse.');
+    if(timed&&!checkPlanTiming({...plan,outputClipId:clip.id},timeline).pass)throw new Error(clip.kind==='effect'
+      ?'A timed review plan must match one FX clip and its full range. Use a separate plan for each pulse.'
+      :`Plan kind ${plan.kind} reviews an FX clip, but ${clip.id} is a ${clip.kind} clip. Re-plan this expectation with kind visual and targetClipId ${clip.id}, keeping its wording and window.`);
     if(plan.kind==='text'&&clip.kind!=='caption'&&clip.kind!=='graphic')throw new Error('Bind a text review to its actual text clip.');
     if(plan.kind==='visual'&&plan.effect!=='motion'&&clip.kind!=='video'&&clip.kind!=='image')throw new Error('Bind a footage effect review to its actual video or image clip.');
     return {planId:plan.id,clipId:clip.id};
@@ -87,8 +89,10 @@ export function validateEffectPlan(plans: EffectPlan[], timeline: Timeline, evid
       if (!marker || Math.abs(marker.time - plan.anchor.time) > tolerance) throw new Error('Read the current marker before planning its effect.');
     }
     if (plan.anchor.kind === 'cut') {
+      // Either side of a cut names it: the clip ending there or the one starting there.
       const clip = timeline.clips.find(clip => clip.id === plan.anchor.clipId);
-      if (!clip || Math.abs(clip.start + clip.duration - plan.anchor.time) > tolerance) throw new Error('Read the current cut before planning its effect.');
+      if (!clip) throw new Error(`The cut anchor clip ${plan.anchor.clipId} is not in the current timeline.`);
+      if (Math.abs(clip.start + clip.duration - plan.anchor.time) > tolerance && Math.abs(clip.start - plan.anchor.time) > tolerance) throw new Error(`Clip ${clip.id} spans ${clip.start.toFixed(3)}–${(clip.start + clip.duration).toFixed(3)}s, so it does not end or start at the anchored cut ${plan.anchor.time.toFixed(3)}s. Anchor the cut with a clip that ends or starts there.`);
     }
     if (plan.anchor.kind === 'observed-event') {
       const observed = plan.anchor.evidenceId ? evidence.get(plan.anchor.evidenceId) : undefined;
