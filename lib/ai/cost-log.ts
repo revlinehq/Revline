@@ -1,6 +1,6 @@
 import {EDITOR_SOFT_STEPS,EDITOR_HARD_STEPS,EDITOR_PROGRESS_WINDOW,editStepStopReason,hasRecentEditProgress} from './edit-progress';
 import type { LanguageModelUsage, ProviderMetadata } from 'ai';
-import { OPENAI_EDIT_MODELS, type OpenAIReasoningEffort, type OpenAISpeedMode } from './claude-model';
+import { OPENAI_EDIT_MODELS, type EditorReasoningEffort, type EditorSpeedMode } from './claude-model';
 import { hasRepeatedToolFailures } from './tool-failures';
 
 const count = (value: unknown): value is number => typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
@@ -49,14 +49,14 @@ export class AssistantCostLog {
   private finished = false;
   private model: string | null = null;
   private provider: string | null = null;
-  private reasoningEffort?: OpenAIReasoningEffort;
-  private speedMode?: OpenAISpeedMode;
+  private reasoningEffort?: EditorReasoningEffort;
+  private speedMode?: EditorSpeedMode;
   private toolNames = new Set<string>();
   private repeated = new Map<string, { count: number; revision: number }>();
   private steps: Step[] = [];
   constructor(private identity: { projectId: string; runId: string }, private emit: (event: LogRecord) => void = event => console.log(`[ai-cost] ${JSON.stringify(event)}`), private now = () => new Date().toISOString()) {}
   private log(event: LogRecord) { this.emit({ timestamp: this.now(), ...this.identity, ...(this.reasoningEffort ? { reasoningEffort: this.reasoningEffort } : {}), ...(this.speedMode ? { speedMode: this.speedMode } : {}), ...event }); }
-  selectModel(model: string, provider: string, reasoningEffort?: OpenAIReasoningEffort, speedMode?: OpenAISpeedMode) { this.model = model; this.provider = provider; this.reasoningEffort = reasoningEffort; this.speedMode = speedMode; }
+  selectModel(model: string, provider: string, reasoningEffort?: EditorReasoningEffort, speedMode?: EditorSpeedMode) { this.model = model; this.provider = provider; this.reasoningEffort = reasoningEffort; this.speedMode = speedMode; }
 
   modelCall(event: ModelCall, progress: Progress) {
     const key = `${event.callId}:${event.stepNumber}`;

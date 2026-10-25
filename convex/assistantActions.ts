@@ -115,7 +115,7 @@ export const respond = internalAction({
     try {
       const selection = validatePinnedClaudeModel(args.pinnedModel ?? resolveClaudeModel());
       selectedProvider = selection.provider;
-      costLog.selectModel(selection.modelId, selection.provider, selection.provider === 'openai' ? selection.reasoningEffort ?? 'medium' : undefined, selection.provider === 'openai' ? selection.speedMode ?? 'standard' : undefined);
+      costLog.selectModel(selection.modelId, selection.provider, selection.reasoningEffort ?? 'medium', selection.speedMode ?? 'standard');
       assertEditorModelConfigured(selection);
       const { project, assets } = await ctx.runQuery(internal.assistant.getRun, { projectId: args.projectId, ownerId: args.ownerId, runId: args.runId });
       if(args.attachedAssetIds&&(args.attachedAssetIds.length>20||new Set(args.attachedAssetIds).size!==args.attachedAssetIds.length||args.attachedAssetIds.some(id=>!assets.some(asset=>asset._id===id))))throw new Error('Attached media is unavailable in this project.');

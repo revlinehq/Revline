@@ -30,7 +30,7 @@ import { EditorPlaybackControls } from './playback-controls';
 import { TimelinePanel } from './timeline';
 import type { VideoImportState } from './video-link-import';
 import type { UploadProgress } from './footage-panel';
-import type { ClaudeModelChoice,OpenAIReasoningEffort,OpenAISpeedMode } from '@/lib/ai/claude-model';
+import type { ClaudeModelChoice,EditorReasoningEffort,EditorSpeedMode } from '@/lib/ai/claude-model';
 import { AssistantPanel, type ChatMessage } from './assistant-panel';
 import type { ComposerAttachment } from '@/components/workspace/edit-composer';
 import type { AssistantEditSnapshot } from './assistant-results';
@@ -60,7 +60,7 @@ function ClockedPreviewInspector(props: React.ComponentProps<typeof PreviewInspe
   const time = useInspectorPlaybackTime();
   return <PreviewInspector {...props} time={time}/>;
 }
-export type EditContext = { selectedClipId?: string; selectedClipIds?:string[]; playhead: number; modelChoice?: ClaudeModelChoice; reasoningEffort?: OpenAIReasoningEffort; speedMode?: OpenAISpeedMode; retry?: boolean };
+export type EditContext = { selectedClipId?: string; selectedClipIds?:string[]; playhead: number; modelChoice?: ClaudeModelChoice; reasoningEffort?: EditorReasoningEffort; speedMode?: EditorSpeedMode; retry?: boolean };
 export type EditorShellProps = {
   title: string; timeline: Timeline; assets: MediaAsset[]; onChange: (t: Timeline) => void;
   onTitle: (title: string) => void; onUpload: (files: File[]) => Promise<void>;

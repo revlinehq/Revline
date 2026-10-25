@@ -22,13 +22,19 @@ export const OPENAI_EDIT_MODELS = [
   { id: 'gpt-5.4-mini', label: 'GPT-5.4 mini', modelId: 'gpt-5.4-mini', pricing: { input: .75, cacheRead: .075, cacheWrite: .9375, output: 4.5 }, legacyOptions: true },
 ] as const;
 export const EDITOR_MODELS = [...OPENAI_EDIT_MODELS, CLAUDE_EDIT_MODELS[1], CLAUDE_EDIT_MODELS[2]] as const;
-export const OPENAI_REASONING_EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'] as const;
-export type OpenAIReasoningEffort = typeof OPENAI_REASONING_EFFORTS[number];
-export const OPENAI_SPEED_MODES = ['standard', 'fast'] as const;
-export type OpenAISpeedMode = typeof OPENAI_SPEED_MODES[number];
+export const EDITOR_REASONING_EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'] as const;
+export type EditorReasoningEffort = typeof EDITOR_REASONING_EFFORTS[number];
+export const EDITOR_SPEED_MODES = ['standard', 'fast'] as const;
+export type EditorSpeedMode = typeof EDITOR_SPEED_MODES[number];
+// Every editor model takes an effort level; Fast mode is OpenAI-only here.
+// Sonnet 5.5 rejects `speed`, and Opus 5.5 fast mode is a research preview
+// this Anthropic org has no rate limit for (0 tokens/min, 2026-10-25).
+export function editorModelSupportsFast(selection: Pick<ClaudeModelSelection, 'provider'>) {
+  return selection.provider === 'openai';
+}
 // Legacy IDs remain decodable for historical records and stale queued requests.
 export type ClaudeModelChoice = typeof OPENAI_EDIT_MODELS[number]['id'] | typeof CLAUDE_EDIT_MODELS[number]['id'];
-export type ClaudeModelSelection = { provider: 'anthropic' | 'gateway' | 'openai'; modelId: string; modelChoice?: ClaudeModelChoice; reasoningEffort?: OpenAIReasoningEffort; speedMode?: OpenAISpeedMode };
+export type ClaudeModelSelection = { provider: 'anthropic' | 'gateway' | 'openai'; modelId: string; modelChoice?: ClaudeModelChoice; reasoningEffort?: EditorReasoningEffort; speedMode?: EditorSpeedMode };
 type ClaudeModelEnvironment = Readonly<Record<string, string | undefined>>;
 
 export function claudeModelSwitcherEnabled(env: ClaudeModelEnvironment = process.env) {
@@ -52,38 +58,34 @@ export function defaultEditorModelChoice(env:ClaudeModelEnvironment=process.env)
 
 export function validatePinnedClaudeModel(selection: ClaudeModelSelection, env: ClaudeModelEnvironment = process.env): ClaudeModelSelection {
   enforceClaudeModelPolicy(selection, env);
-  if (selection.provider !== 'openai') {
-    if (selection.reasoningEffort !== undefined || selection.speedMode !== undefined) throw new Error('Reasoning and speed controls apply to OpenAI models only.');
-    if (selection.modelChoice !== undefined && CLAUDE_EDIT_MODELS.find(model => model.id === selection.modelChoice)?.modelId !== selection.modelId) throw new Error('Pinned editor model does not match its selection.');
-    return selection;
-  }
-  if (selection.reasoningEffort !== undefined && !OPENAI_REASONING_EFFORTS.includes(selection.reasoningEffort)) throw new Error('Choose a supported OpenAI reasoning effort.');
-  if (selection.speedMode !== undefined && !OPENAI_SPEED_MODES.includes(selection.speedMode)) throw new Error('Choose a supported OpenAI speed mode.');
-  if (selection.modelChoice !== undefined && selection.modelChoice !== selection.modelId) throw new Error('Pinned editor model does not match its selection.');
+  if (selection.reasoningEffort !== undefined && !EDITOR_REASONING_EFFORTS.includes(selection.reasoningEffort)) throw new Error('Choose a supported reasoning effort.');
+  if (selection.speedMode !== undefined && (!EDITOR_SPEED_MODES.includes(selection.speedMode) || (selection.speedMode === 'fast' && !editorModelSupportsFast(selection)))) throw new Error('Fast mode is not available for this model.');
+  const pinned = selection.provider === 'openai' ? selection.modelChoice : CLAUDE_EDIT_MODELS.find(model => model.id === selection.modelChoice)?.modelId;
+  if (selection.modelChoice !== undefined && pinned !== selection.modelId) throw new Error('Pinned editor model does not match its selection.');
   return selection;
 }
 
 /** Capture manual effort with the model so a queued run cannot change settings. */
-export function withEditorReasoning(selection: ClaudeModelSelection, effort?: OpenAIReasoningEffort, env: ClaudeModelEnvironment = process.env): ClaudeModelSelection {
+export function withEditorReasoning(selection: ClaudeModelSelection, effort?: EditorReasoningEffort, env: ClaudeModelEnvironment = process.env): ClaudeModelSelection {
   if (effort === undefined) return selection;
   if (!claudeModelSwitcherEnabled(env)) throw new Error('Manual reasoning selection is currently disabled.');
-  if (selection.provider !== 'openai' || !OPENAI_REASONING_EFFORTS.includes(effort)) throw new Error('Choose a supported OpenAI reasoning effort.');
+  if (!EDITOR_REASONING_EFFORTS.includes(effort)) throw new Error('Choose a supported reasoning effort.');
   return { ...selection, reasoningEffort: effort };
 }
 
-export function withEditorSpeed(selection: ClaudeModelSelection, speedMode?: OpenAISpeedMode, env: ClaudeModelEnvironment = process.env): ClaudeModelSelection {
+export function withEditorSpeed(selection: ClaudeModelSelection, speedMode?: EditorSpeedMode, env: ClaudeModelEnvironment = process.env): ClaudeModelSelection {
   if (speedMode === undefined) return selection;
   if (!claudeModelSwitcherEnabled(env)) throw new Error('Manual speed selection is currently disabled.');
-  if (selection.provider !== 'openai' || !OPENAI_SPEED_MODES.includes(speedMode)) throw new Error('Choose a supported OpenAI speed mode.');
+  if (!EDITOR_SPEED_MODES.includes(speedMode) || (speedMode === 'fast' && !editorModelSupportsFast(selection))) throw new Error('Fast mode is not available for this model.');
   return { ...selection, speedMode };
 }
 
 /** Anthropic request options for the Claude editing models. */
-export function claudeProviderOptions(modelId: string) {
+export function claudeProviderOptions(modelId: string, effort: EditorReasoningEffort = 'medium') {
   if (!/^(?:anthropic\/)?claude-(?:haiku|sonnet|opus)-5[.-]5$/.test(modelId)) return undefined;
   const anthropic = {
     cacheControl: { type: 'ephemeral', ttl: '5m' },
-    effort: 'medium',
+    effort,
     thinking: { type: 'adaptive', blockBinding: { prefixMismatchBehavior: 'drop_block' } },
     ...(modelId==='claude-sonnet-5-5'?{serviceTier:'standard_only',inferenceGeo:'global'} as const:{}),
   } satisfies AnthropicProviderOptions;
@@ -91,7 +93,7 @@ export function claudeProviderOptions(modelId: string) {
 }
 
 export function editorProviderOptions(selection: ClaudeModelSelection, cacheKey?: string) {
-  if (selection.provider !== 'openai') { const options = claudeProviderOptions(selection.modelId); if (!options) throw new Error(GPT_ONLY_EDITING_ERROR); return options; }
+  if (selection.provider !== 'openai') { const options = claudeProviderOptions(selection.modelId, selection.reasoningEffort); if (!options) throw new Error(GPT_ONLY_EDITING_ERROR); return options; }
   // GPT-6 models take reasoning modes, cache retention and every effort; older
   // models reject those request fields outright.
   const legacy = OPENAI_EDIT_MODELS.some(model => model.modelId === selection.modelId && 'legacyOptions' in model);
