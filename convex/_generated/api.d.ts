@@ -44,6 +44,7 @@ import type * as lib_media_task_auth from "../lib/media_task_auth.js";
 import type * as lib_project_data from "../lib/project_data.js";
 import type * as lib_publicationReceipt from "../lib/publicationReceipt.js";
 import type * as lib_render_seats from "../lib/render_seats.js";
+import type * as lib_run_ids from "../lib/run_ids.js";
 import type * as lib_share_chat from "../lib/share_chat.js";
 import type * as lib_shared_media from "../lib/shared_media.js";
 import type * as lib_storage_accounting from "../lib/storage_accounting.js";
@@ -113,6 +114,7 @@ declare const fullApi: ApiFromModules<{
   "lib/project_data": typeof lib_project_data;
   "lib/publicationReceipt": typeof lib_publicationReceipt;
   "lib/render_seats": typeof lib_render_seats;
+  "lib/run_ids": typeof lib_run_ids;
   "lib/share_chat": typeof lib_share_chat;
   "lib/shared_media": typeof lib_shared_media;
   "lib/storage_accounting": typeof lib_storage_accounting;

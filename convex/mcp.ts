@@ -34,6 +34,12 @@ async function clearLivePreview(ctx: MutationCtx, projectId: Id<'projects'>) {
 const MCP_RUN_LIMIT = 11 * 60_000;
 const mcpRunStarted = (runId?: string) => runId?.startsWith('mcp-') ? Number(runId.split('-')[1]) : undefined;
 
+/** Access check for read-only tools, which run alongside edits instead of taking the project lock. */
+export const readRun = internalQuery({ args: { ownerId: v.string(), projectId: v.string() }, returns: v.id('projects'), handler: async (ctx, args) => {
+  await requireEditorAccess(ctx, args.ownerId);
+  return (await requireProject(ctx, projectIdOf(ctx, args.projectId), args.ownerId, false))._id;
+}});
+
 export const beginRun = internalMutation({ args: { ownerId: v.string(), projectId: v.string() }, returns: v.object({ projectId: v.id('projects'), runId: v.string() }), handler: async (ctx, args) => {
   await requireEditorAccess(ctx, args.ownerId);
   const project = await requireProject(ctx, projectIdOf(ctx, args.projectId), args.ownerId, false);

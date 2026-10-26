@@ -1,4 +1,5 @@
 import {validatePinnedClaudeModel,type ClaudeModelSelection} from '../lib/ai/claude-model';
+import { READ_ONLY_RUN_PREFIX } from './lib/run_ids';
 import type {MutationCtx, QueryCtx} from './_generated/server';
 import type {Doc} from './_generated/dataModel';
 import {mediaWorkflow} from './lib/workflows';
@@ -172,7 +173,7 @@ export const isRunActive = internalQuery({ args: runArgs, returns: v.boolean(), 
   return !!project && project.ownerId === args.ownerId && project.aiRunId === args.runId && project.aiRunning === true;
 }});
 export const getRun = internalQuery({args:runArgs,returns:v.object({project:projectDocument,assets:v.array(assetDocument)}),handler:async(ctx,args)=>{
-  const run=await projectRun(ctx,args.projectId,args.ownerId);if(run.aiRunId!==args.runId||!run.aiRunning)throw new ConvexError('AI run is no longer active');
+  const run=await projectRun(ctx,args.projectId,args.ownerId);if(!args.runId.startsWith(READ_ONLY_RUN_PREFIX)&&(run.aiRunId!==args.runId||!run.aiRunning))throw new ConvexError('AI run is no longer active');
   const project=(await ctx.db.get(args.projectId))!;
   const assets=await ctx.db.query('assets').withIndex('by_ownerId_projectId',q=>q.eq('ownerId',args.ownerId).eq('projectId',args.projectId)).take(200);
   return {project:{...project,...run,timeline:currentTimeline(project)},assets};

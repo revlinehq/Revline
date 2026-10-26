@@ -7,6 +7,7 @@ import type { Doc, Id } from './_generated/dataModel';
 import { createEditorToolkit } from './lib/editorToolkit';
 import { mediaDownloadUrl } from './lib/media_storage';
 import { AssistantRunBudget } from '../lib/ai/run-budget';
+import { READ_ONLY_RUN_PREFIX } from './lib/run_ids';
 
 // The editor's own AI tools, exposed over MCP. planEffects/previewRender keep
 // review plans for the length of one in-app turn, which an MCP call does not have.
@@ -108,6 +109,26 @@ async function callProjectTool(ctx: ActionCtx, ownerId: string, name: ProjectToo
   }
 }
 
+// Pure reads: they neither stage edits nor start analysis, so they skip the project lock and
+// run alongside in-app or MCP edits. inspectAssetAnalysis can refresh a transcript and
+// inspectVideo/inspectFrames bill analysis to a run, so they still take the lock.
+const READ_ONLY_TOOLS = new Set(['inspectTimeline', 'inspectClip', 'readSkill']);
+
+async function readEditorTool(ctx: ActionCtx, ownerId: string, rawProjectId: string, name: string, input: unknown): Promise<CallResult> {
+  try {
+    const projectId = await ctx.runQuery(internal.mcp.readRun, { ownerId, projectId: rawProjectId });
+    const run = { projectId, ownerId, runId: `${READ_ONLY_RUN_PREFIX}${crypto.randomUUID()}` };
+    const { project, assets } = await ctx.runQuery(internal.assistant.getRun, run);
+    const budget = new AssistantRunBudget();
+    try {
+      const { tools } = editorTools(ctx, { run, project, assets, recovering: false, initialPlans: [], selectedClipIds: [], abortSignal: budget.signal, budget, planlessEffects: true });
+      const tool = tools[name];
+      const output = await tool.execute.call({ ...tool, ctx }, input, { toolCallId: crypto.randomUUID(), messages: [], abortSignal: budget.signal });
+      return result(output, failed(output));
+    } finally { budget.dispose(); }
+  } catch (error) { return result(message(error), true); }
+}
+
 async function callEditorTool(ctx: ActionCtx, ownerId: string, name: string, raw: Record<string, unknown>): Promise<CallResult> {
   const { projectId: rawProjectId, ...rawInput } = raw;
   if (typeof rawProjectId !== 'string' || !rawProjectId) return result('projectId is required. Call listProjects to find it.', true);
@@ -118,6 +139,7 @@ async function callEditorTool(ctx: ActionCtx, ownerId: string, name: string, raw
   const parsed = known.inputSchema.safeParse(rawInput);
   if (!parsed.success) return result(`Invalid arguments: ${z.prettifyError(parsed.error)}`, true);
 
+  if (READ_ONLY_TOOLS.has(name)) return readEditorTool(ctx, ownerId, rawProjectId, name, parsed.data);
   const { projectId, runId } = await ctx.runMutation(internal.mcp.beginRun, { ownerId, projectId: rawProjectId });
   const run = { projectId, ownerId, runId };
   const controller = new AbortController(), budget = new AssistantRunBudget();
