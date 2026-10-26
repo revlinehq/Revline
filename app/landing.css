@@ -183,6 +183,8 @@ div.landing-reveal,div.landing-reveal>.landing-reveal-content{display:inline-blo
 .landing-mcp-apps [data-app=claude]{background:#d97757;transform:rotate(-8deg)}
 .landing-mcp-apps [data-app=codex]{background:#fff;transform:rotate(-2deg);z-index:1}
 .landing-mcp-apps [data-app=cursor]{background:#14120b;color:#edecec;transform:rotate(7deg);z-index:2}
+.landing-mcp .landing-mcp-button{background:#ececec;border-color:#ffffff40;color:#161616}
+.landing-mcp .landing-mcp-button:hover{background:#fff}
 .landing-mcp-copy{width:520px;flex-shrink:0;display:flex;flex-direction:column;align-items:flex-start;gap:24px}
 .landing-mcp .landing-heading{gap:24px}
 .landing-mcp .landing-heading h2{color:#fff;letter-spacing:-1.3px;line-height:1.08}

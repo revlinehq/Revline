@@ -25,7 +25,7 @@ export function LandingMcp() {
         <span data-app="cursor"><CursorLogo width={26} height={26} /></span>
       </div>
       <LandingHeading id="landing-mcp-heading" tone="inverse" size="lg" title="Edit videos from any AI agent with MCP" description="Connect any MCP client and edit videos straight from your agent." />
-      <LandingButton href="/profile" variant="inverse" size="md"><McpLogo width={16} height={16} aria-hidden="true" />Connect Revline<ArrowRight size={16} aria-hidden="true" /></LandingButton>
+      <LandingButton href="/profile" variant="inverse" size="md" className="landing-mcp-button"><McpLogo width={16} height={16} aria-hidden="true" />Connect Revline<ArrowRight size={16} aria-hidden="true" /></LandingButton>
     </div>
     <figure className="landing-mcp-code">
       <figcaption><Braces size={15} aria-hidden="true" />mcp.json</figcaption>
