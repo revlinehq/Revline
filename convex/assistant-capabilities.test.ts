@@ -15,7 +15,8 @@ import type { Timeline } from '../lib/editor/types';
 import { TRANSITION_PRESETS } from '../lib/editor/clip-transitions';
 import { addEffectClip, addTransitionClip, patchClip } from '../lib/editor/operations';
 import { EFFECT_CATALOG,OFFERED_TIMED_EFFECT_PRESETS } from '../lib/editor/clip-effects';
-import { editorCapabilities } from '../lib/ai/editor-capabilities';
+import { editorCapabilities, editorCapabilityIndex } from '../lib/ai/editor-capabilities';
+import { editorSkill } from '../lib/ai/skills';
 import { resolvedTextAppearance } from '../lib/editor/text-style';
 import type { EffectPlan } from '../lib/ai/edit-plan';
 import { AUDIO_ROLES,audioSettings,audioVolumeEnvelope,audioFadeGain,audioFadeAttributes } from '../lib/editor/audio-settings';
@@ -234,7 +235,11 @@ test('a plain greeting completion creates no edits or analysis requests and pres
   expect(result.calls).toEqual(['assistant:getRun','assistant:currentPrompt','assistant:finish']);
   expect(sdk.options!.instructions).toContain('Greetings, small talk, and questions about your abilities do not request footage analysis or editing');
   expect(sdk.options!.instructions).toContain('short Markdown bullet list with bold capability names');
-  expect(sdk.options!.instructions).toContain(JSON.stringify(editorCapabilities()));
+  // The prompt carries the names-only index; full guidance is in the effects-and-styling skill.
+  expect(sdk.options!.instructions).toContain(JSON.stringify(editorCapabilityIndex()));
+  expect(sdk.options!.instructions).not.toContain(JSON.stringify(editorCapabilities()));
+  expect(editorSkill('effects-and-styling').body).toContain(JSON.stringify(editorCapabilities().timedFX));
+  expect(editorSkill('sound-design').body).toContain('## Library');
 });
 
 

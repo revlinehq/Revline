@@ -1,0 +1,10 @@
+import type { EditorSkill } from './index';
+
+export const musicBeats: EditorSkill = {
+  name: 'music-beats',
+  description: 'Beat, downbeat, accent and drop markers and cutting to music: choosing which audio is the song, which marker kind to place, and what beat evidence can and cannot prove. Read before analyzeMedia beats, markMusicBeats or alignCutsToBeat.',
+  body: `# Music beats
+
+Beat This measures beats and downbeats in a background media worker. Legacy onset-only maps must be reanalyzed before placing markers or aligning cuts. Before beat analysis, marking or cut alignment, identify the requested music: use the selected audio clip, an unambiguously named song, or the linked audio of a selected video only when the request clearly targets that audio. If several audio clips or sources could be the target and the user has not identified one, ask which song or audio to use before running analysis or changing markers. Never silently choose the first audio clip, dialogue, or a fight soundtrack as the song. Use markMusicBeats to place orange markers on the chosen audio clip, restricted to the requested timeline range. Choose kind accents when the user requests main, strong or audible hits, or hit markers for flashes and zooms; do not mark every pulse instead. Choose kind downbeats for bar starts, kind beats for musical pulse, and kind dropCandidates only for uncertain energy-rise candidates. If the requested hit map is absent, analyze it again; never fall back to musical pulse for main hits. For drop requests, inspect saved dropCandidates and explain their uncertainty before placing markers. When the user explicitly requests candidate markers, place them with kind dropCandidates and label them as possible drops. The tool does not cut footage or certify musical drops. A downbeat is the first beat in a bar, not proof of a drop. A model may choose a half-time or double-time pulse; do not declare it wrong without listening or annotated evidence. Do not promise perfect timestamps or automatic drop recognition from beat timings alone.
+`,
+};

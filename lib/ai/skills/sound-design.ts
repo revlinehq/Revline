@@ -1,6 +1,9 @@
 import { SOUND_PRESETS } from '../../audio/presets';
 import { SOUND_RECIPE_LIMITS } from '../../audio/sound-recipe';
+import { STOCK_AUDIO_CATALOG } from '../../editor/stock-audio';
 import type { EditorSkill } from './index';
+
+const library = STOCK_AUDIO_CATALOG.map(sound => `- \`${sound.id}\` (${sound.category}): ${sound.name}, ${sound.duration.toFixed(2)} s [${sound.tags.join(' ')}]`).join('\n');
 
 const presetTable = Object.entries(SOUND_PRESETS).map(([name, spec]) => `| \`${name}\` | ${spec.description} | ${Object.keys(spec.params.shape).join(', ') || '—'} |`).join('\n');
 
@@ -11,7 +14,7 @@ export const soundDesign: EditorSkill = {
 
 Sound effects make edits feel deliberate: each one marks a visual event the viewer already sees. **Generate every sound by default** with \`generateSound\`, timed to the exact beats of the motion: a whoosh as long as a slide-in, one pop per card, a counter while a number counts, a riser that ends on a reveal. Change one with \`editSound\`. Generated sounds are rendered from a recipe, contain no samples, and are safe to publish.
 
-The recorded library (\`soundEffects.library\`, placed with \`addSoundEffect\`) is **only** for when the user explicitly asks for a realistic or recorded sound, such as a camera shutter, a phone vibrating, a clock ticking, a lock, water or bubbles, or ambience like a city, the ocean or a server room, or names a library sound. Never add a library sound on your own initiative, and never mix library sounds into motion-graphics sound design. If the user asks for a recording the library does not have (for example keyboard typing), say there is no recorded one and generate the closest sound, labeled as synthesized.
+The recorded library (listed under Library at the end of this skill, placed with \`addSoundEffect\`) is **only** for when the user explicitly asks for a realistic or recorded sound, such as a camera shutter, a phone vibrating, a clock ticking, a lock, water or bubbles, or ambience like a city, the ocean or a server room, or names a library sound. Never add a library sound on your own initiative, and never mix library sounds into motion-graphics sound design. If the user asks for a recording the library does not have (for example keyboard typing), say there is no recorded one and generate the closest sound, labeled as synthesized.
 
 ## Scenes
 
@@ -87,7 +90,7 @@ Generated and library sounds both peak near -3 dBFS, so the tool's \`gain\` (cli
 
 ## Library sounds on request
 
-\`addSoundEffect({ effect, at, gain? })\` places a recorded library sound by id from \`soundEffects.library\` at its full length. Use it only for an explicit request as above, at the user's time or the moment they describe. Pick the match by name and tags (shutter, phone, clock, lock, water, city, ocean, server room) and say which sound you used; when nothing matches, follow the rule above instead of substituting an unrelated recording. Ambience beds (category Ambience) have faded ends: trim them to the scene instead of looping.
+\`addSoundEffect({ effect, at, gain? })\` places a recorded library sound by id from the Library list below at its full length. Use it only for an explicit request as above, at the user's time or the moment they describe. Pick the match by name and tags (shutter, phone, clock, lock, water, city, ocean, server room) and say which sound you used; when nothing matches, follow the rule above instead of substituting an unrelated recording. Ambience beds (category Ambience) have faded ends: trim them to the scene instead of looping.
 
 ## Editing
 
@@ -96,5 +99,11 @@ Generated and library sounds both peak near -3 dBFS, so the tool's \`gain\` (cli
 ## Check
 
 After placing, compare each layer's timeline time (\`clip.start + layer.at\`) with the beats you listed, and report the sounds and times. Say the result was synthesized and not listened to.
+
+## Library
+
+Recorded sounds for \`addSoundEffect\` (id, category, name, length, tags). Only for explicit requests:
+
+${library}
 `,
 };

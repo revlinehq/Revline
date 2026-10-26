@@ -33,3 +33,24 @@ export function editorCapabilities(){
     solidColor:'Independent V color frame/rectangle; put below footage for a background or above it for an overlay. Editable color, normalized width/height/x/y and opacity; saved legacy FX solids remain valid until explicitly converted',
   };
 }
+
+/** What the model sees on every turn: names only. Guidance, controls and the sound library live in
+ *  the effects-and-styling and sound-design skills, read on demand with readSkill. */
+export function editorCapabilityIndex(){
+  const catalog=editorCapabilities();
+  return {
+    skills:catalog.skills,
+    details:'Names only. Read the effects-and-styling skill before applying effects, timed FX, text looks, text animations or templates, layouts, camera or object motion, or any creative styling; read sound-design before adding sounds.',
+    soundEffects:{skill:catalog.soundEffects.skill,rule:catalog.soundEffects.rule,generated:catalog.soundEffects.generated,libraryTool:catalog.soundEffects.libraryTool},
+    scenes:catalog.scenes,
+    stylePlaybooks:Object.keys(catalog.stylePlaybooks),
+    editing:catalog.editing,
+    effects:catalog.effects.map(group=>({category:group.category,items:group.items.map(item=>item.name)})),
+    timedFX:catalog.timedFX.map(({preset,name})=>({preset,name})),
+    visual:Object.keys(catalog.visual),
+    objectMotion:{tool:catalog.objectMotion.tool},
+    cameraMotion:{tool:catalog.cameraMotion.tool},
+    text:{animations:catalog.text.animations.map(({preset,name})=>({preset,name})),looks:catalog.text.looks.map(({id,name})=>({id,name})),fonts:catalog.text.fonts.map(({id,name})=>({id,name}))},
+    captions:catalog.captions,markers:catalog.markers,audio:catalog.audio,solidColor:catalog.solidColor,
+  };
+}
