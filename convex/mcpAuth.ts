@@ -3,6 +3,7 @@ import { internalMutation, internalQuery, mutation, query, type MutationCtx, typ
 import type { Doc } from './_generated/dataModel';
 import { requireOwner } from './lib/auth';
 import { hasUltraPlan, requireEditorAccess } from './lib/billing_access';
+import { mcpOrigins, publicMcpOrigin } from './lib/mcp_origin';
 
 // OAuth 2.1 for the MCP connector: public clients, PKCE S256 only, hashed tokens.
 const CODE_TTL = 10 * 60_000, ACCESS_TTL = 60 * 60_000, REFRESH_TTL = 60 * 24 * 60 * 60_000;
@@ -161,13 +162,14 @@ export const approve = mutation({ args: { clientId: v.string(), redirectUri: v.s
   await clientFor(ctx, args.clientId, args.redirectUri);
   if (args.codeChallengeMethod !== 'S256' || !/^[A-Za-z0-9_-]{43}$/.test(args.codeChallenge)) throw new ConvexError('This app must use PKCE (S256).');
   const resource = args.resource === undefined ? undefined : args.resource.replace(/\/$/, '');
-  if (resource !== undefined && resource !== `${process.env.CONVEX_SITE_URL}/mcp`) throw new ConvexError('This authorization is for a different server.');
+  if (resource !== undefined && !mcpOrigins().some(origin => resource === `${origin}/mcp`)) throw new ConvexError('This authorization is for a different server.');
   const code = randomValue('rvl_code_');
   await ctx.db.insert('mcpAuthCodes', { codeHash: await sha256(code), clientId: args.clientId, ownerId, redirectUri: args.redirectUri, codeChallenge: args.codeChallenge, ...(resource ? { resource } : {}), expiresAt: Date.now() + CODE_TTL });
   const redirect = new URL(args.redirectUri);
   redirect.searchParams.set('code', code);
   if (args.state !== undefined) redirect.searchParams.set('state', args.state);
-  redirect.searchParams.set('iss', process.env.CONVEX_SITE_URL ?? '');
+  // The issuer is the address the client discovered us at, which its resource names.
+  redirect.searchParams.set('iss', resource ? resource.replace(/\/mcp$/, '') : publicMcpOrigin());
   return { redirectTo: redirect.toString() };
 }});
 
@@ -181,7 +183,7 @@ export const connector = query({ args: {}, returns: v.object({ mcpUrl: v.string(
     const lastUsedAt = Math.max(current?.lastUsedAt ?? 0, token.lastUsedAt ?? 0) || undefined;
     grants.set(token.grantId, { grantId: token.grantId, label: token.label, kind: token.kind === 'personal' ? 'personal' : 'app', createdAt: Math.min(current?.createdAt ?? token.createdAt, token.createdAt), ...(lastUsedAt ? { lastUsedAt } : {}) });
   }
-  return { mcpUrl: `${process.env.CONVEX_SITE_URL}/mcp`, allowed, connections: [...grants.values()].sort((a, b) => b.createdAt - a.createdAt) };
+  return { mcpUrl: `${publicMcpOrigin()}/mcp`, allowed, connections: [...grants.values()].sort((a, b) => b.createdAt - a.createdAt) };
 }});
 
 export const createPersonalToken = mutation({ args: { label: v.string() }, returns: v.object({ token: v.string() }), handler: async (ctx, args) => {
