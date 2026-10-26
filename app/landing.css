@@ -175,17 +175,17 @@ div.landing-reveal,div.landing-reveal>.landing-reveal-content{display:inline-blo
 
 /* MCP */
 .landing-mcp{padding-bottom:96px}
-.landing-mcp-card{display:flex;align-items:center;gap:24px;padding:20px 20px 20px 22px;background:#212121;border:1px solid #2e2e2e;border-radius:10px;color:#f2f2f2}
+.landing-mcp-card{display:flex;align-items:center;gap:32px;padding:32px 36px;background:#212121;border:1px solid #2e2e2e;border-radius:14px;color:#f2f2f2}
 .landing-mcp-apps{display:flex;flex-shrink:0;padding-inline:4px}
-.landing-mcp-apps span{display:grid;place-items:center;width:52px;height:52px;overflow:hidden;border-radius:12px;border:1px solid #ffffff24;box-shadow:0 6px 16px #0006}
-.landing-mcp-apps span+span{margin-left:-14px}
+.landing-mcp-apps span{display:grid;place-items:center;width:68px;height:68px;overflow:hidden;border-radius:16px;border:1px solid #ffffff24;box-shadow:0 6px 16px #0006}
+.landing-mcp-apps span+span{margin-left:-18px}
 .landing-mcp-apps [data-app=claude]{background:#d97757;transform:rotate(-8deg)}
 .landing-mcp-apps [data-app=codex]{background:#fff;transform:rotate(-2deg);z-index:1}
 .landing-mcp-apps [data-app=cursor]{background:#14120b;color:#edecec;transform:rotate(7deg);z-index:2}
-.landing-mcp-copy{flex:1;min-width:0;display:flex;flex-direction:column;gap:6px}
-.landing-mcp-copy h2{font:500 17px/1.3 var(--l-body);letter-spacing:-.1px;color:#fff}
-.landing-mcp-copy p{font-size:14px;line-height:1.45;color:#b4b4b4}
-.landing .landing-mcp-button{flex-shrink:0;height:38px;gap:8px;padding-inline:14px;border-radius:7px;background:#ececec;border-color:#ffffff40;color:#161616;font-size:14px;font-weight:500}
+.landing-mcp-copy{flex:1;min-width:0;display:flex;flex-direction:column;gap:8px}
+.landing-mcp-copy h2{font:500 22px/1.25 var(--l-head);letter-spacing:-.3px;color:#fff}
+.landing-mcp-copy p{font-size:16px;line-height:1.5;color:#b4b4b4}
+.landing .landing-mcp-button{flex-shrink:0;height:44px;gap:8px;padding-inline:18px;border-radius:8px;background:#ececec;border-color:#ffffff40;color:#161616;font-size:15px;font-weight:500}
 .landing .landing-mcp-button:hover{background:#fff}
 
 /* Final CTA */
