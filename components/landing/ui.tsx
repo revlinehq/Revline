@@ -4,7 +4,7 @@ import { cn } from '@/lib/utils';
 
 /* Shared landing primitives. Their styles live in the "Shared UI" block of app/landing.css. */
 
-export type LandingButtonVariant = 'primary' | 'secondary' | 'neutral' | 'dark' | 'brand' | 'inverse-outline';
+export type LandingButtonVariant = 'primary' | 'secondary' | 'neutral' | 'dark' | 'brand' | 'inverse' | 'inverse-outline';
 export type LandingButtonSize = 'sm' | 'md' | 'lg';
 type ButtonStyle = { variant?: LandingButtonVariant; size?: LandingButtonSize; block?: boolean; className?: string };
 type LinkButtonProps = ButtonStyle & Omit<ComponentProps<typeof Link>, 'className'>;
@@ -19,8 +19,8 @@ export function LandingButton({ variant = 'primary', size = 'md', block = false,
 }
 
 /** Section title with an optional supporting line. */
-export function LandingHeading({ id, title, description, align = 'start', size = 'md', className }: { id: string; title: ReactNode; description?: ReactNode; align?: 'start' | 'center'; size?: 'md' | 'lg'; className?: string }) {
-  return <header className={cn('landing-heading', className)} data-align={align} data-size={size}>
+export function LandingHeading({ id, title, description, align = 'start', tone = 'default', size = 'md', className }: { id: string; title: ReactNode; description?: ReactNode; align?: 'start' | 'center'; tone?: 'default' | 'inverse'; size?: 'md' | 'lg'; className?: string }) {
+  return <header className={cn('landing-heading', className)} data-align={align} data-tone={tone} data-size={size}>
     <h2 id={id}>{title}</h2>
     {description && <p>{description}</p>}
   </header>;
@@ -33,7 +33,7 @@ export function LandingSection({ headingId, className, ...props }: ComponentProp
 
 /** Small rounded label, used on use-case tiles and timeline edit notes. */
 export function LandingChip({ tone = 'light', className, ...props }: ComponentProps<'span'> & { tone?: 'light' | 'cut' | 'caption' | 'zoom' }) {
-  return <span {...props} className={cn('landing-chip', className)} />;
+  return <span {...props} className={cn('landing-chip', className)} data-tone={tone} />;
 }
 
 /** Intro reveal: an outline draws around the content, a shimmer sweeps it, and the content sharpens in. `order` staggers siblings. */
