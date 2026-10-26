@@ -149,11 +149,15 @@ export const undo = mutation({ args: { projectId: v.id("projects") }, returns: v
 }});
 export const remove = mutation({ args: { projectId: v.id('projects') }, returns: v.null(), handler: async (ctx, args) => {
   const ownerId=await requireOwner(ctx),project=await requireProject(ctx,args.projectId,ownerId);
+  await beginProjectDeletion(ctx,ownerId,project);
+  return null;
+}});
+/** Hides a project at once and reclaims its data in background batches. */
+export async function beginProjectDeletion(ctx:MutationCtx,ownerId:string,project:import('./_generated/dataModel').Doc<'projects'>) {
   const rendering=await ctx.db.query('renderJobs').withIndex('by_owner_project_status',q=>q.eq('ownerId',ownerId).eq('projectId',project._id).eq('status','rendering')).first();
   if(rendering||project.aiRunning)throw new ConvexError('Wait for the active render or AI edit before deleting the project');
   await writeProject(ctx,project._id,{deleting:true});
   const shares=await ctx.db.query('timelineShares').withIndex('by_project',q=>q.eq('projectId',project._id)).take(2);
   for(const share of shares)await ctx.db.patch(share._id,{published:false});
   await ctx.scheduler.runAfter(0,internal.projectDeletion.batch,{projectId:project._id,ownerId});
-  return null;
-}});
+}

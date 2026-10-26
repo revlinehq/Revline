@@ -6,12 +6,14 @@ import type { Doc,Id } from './_generated/dataModel';
 import { requireOwner } from './lib/auth';
 import { accountingReady,activeExportGroups,emptyStorage,ownedObjectReferences,storageAccount,storageLimit,usedByActiveExport } from './lib/storage_accounting';
 import { removeOwnedAsset } from './assets';
+import { beginProjectDeletion } from './projects';
+import { removeMediaAttachment,removeShareAssets } from './lib/shared_media';
 import { removeOwnedExport } from './renders';
 import { mediaUrl } from './lib/media_storage';
 
 const kind=v.union(v.literal('video'),v.literal('audio'),v.literal('image'),v.literal('export'));
 const workspace=v.object({id:v.id('projects'),title:v.string()});
-const item=v.object({id:v.id('storageObjects'),fileName:v.string(),kind,size:v.number(),createdAt:v.number(),workspaces:v.array(workspace),canDelete:v.boolean(),protectedReason:v.union(v.string(),v.null()),thumbnailUrl:v.union(v.string(),v.null())});
+const item=v.object({id:v.id('storageObjects'),fileName:v.string(),kind,size:v.number(),createdAt:v.number(),workspaces:v.array(workspace),inUse:v.boolean(),canDelete:v.boolean(),protectedReason:v.union(v.string(),v.null()),thumbnailUrl:v.union(v.string(),v.null())});
 export const summary=query({args:{},returns:v.object({usedBytes:v.number(),reservedBytes:v.number(),videoBytes:v.number(),audioBytes:v.number(),imageBytes:v.number(),exportBytes:v.number(),fileCount:v.number(),limitBytes:v.number(),ready:v.boolean()}),handler:async ctx=>{
   const ownerId=await requireOwner(ctx),[account,ready]=await Promise.all([storageAccount(ctx,ownerId),accountingReady(ctx)]);
   const values=Object.fromEntries(Object.keys(emptyStorage).map(key=>[key,account?.[key as keyof typeof emptyStorage]??0])) as typeof emptyStorage;
@@ -38,7 +40,7 @@ function listingReads(ctx:QueryCtx):DescriptionReads {
   };
 }
 async function describe(ctx:QueryCtx|MutationCtx,row:Doc<'storageObjects'>,reads?:DescriptionReads) {
-  const result={id:row._id,fileName:row.fileName,kind:row.kind,size:row.size,createdAt:row.createdAt,workspaces:[] as {id:Doc<'projects'>['_id'];title:string}[],canDelete:false,protectedReason:null as string|null,thumbnailUrl:null as string|null};
+  const result={id:row._id,fileName:row.fileName,kind:row.kind,size:row.size,createdAt:row.createdAt,workspaces:[] as {id:Doc<'projects'>['_id'];title:string}[],inUse:false,canDelete:false,protectedReason:null as string|null,thumbnailUrl:null as string|null};
   if(row.kind==='export') {
     const job=row.jobId?await ctx.db.get(row.jobId):null;
     if(!job||job.ownerId!==row.ownerId){result.protectedReason='This export is unavailable';return result;}
@@ -50,7 +52,8 @@ async function describe(ctx:QueryCtx|MutationCtx,row:Doc<'storageObjects'>,reads
   const thumbnail=row.kind==='video'||row.kind==='image'?refs.attachments.find(asset=>asset.thumbnailStorageId)?.thumbnailStorageId:undefined;
   result.thumbnailUrl=thumbnail?await ctx.storage.getUrl(thumbnail):row.kind==='image'?await mediaUrl(ctx,row):null;
   if(refs.tooMany){result.protectedReason='Remove this media from its workspaces first';return result;}
-  if(refs.shares.length)result.protectedReason='Used by a shared timeline';
+  // Deleting media also deletes the projects whose edit uses it and any shared timeline pinning it.
+  if(refs.shares.length)result.inUse=true;
   const projectIds=[...new Set(refs.attachments.map(asset=>asset.projectId))];
   for(const projectId of projectIds) {
     const project=await(reads?reads.project(projectId):ctx.db.get(projectId));if(!project||project.ownerId!==row.ownerId)continue;
@@ -63,7 +66,7 @@ async function describe(ctx:QueryCtx|MutationCtx,row:Doc<'storageObjects'>,reads
       const videos=new Set(linked.flat().filter(asset=>asset.projectId===projectId).map(asset=>String(asset._id)));
       used=project.timeline?.clips.some(clip=>clip.assetId&&videos.has(clip.assetId));
     }
-    if(used) {result.workspaces.push({id:project._id,title:project.title});result.protectedReason='Used in an edit';}
+    if(used) {result.workspaces.push({id:project._id,title:project.title});result.inUse=true;}
     if((await(reads?reads.run(projectId,row.ownerId):projectRun(ctx,projectId,row.ownerId))).aiRunning)result.protectedReason='AI editing in progress';
     if(await(reads?reads.activeExport(row.ownerId,projectId,ids):usedByActiveExport(ctx,row.ownerId,projectId,ids)))result.protectedReason='Used by an active export';
   }
@@ -78,7 +81,7 @@ export const files=query({args:{paginationOpts:paginationOptsValidator,kind:v.op
     : base.withIndex(args.sort==='largest'?'by_owner_visible_size':'by_owner_visible_created',q=>q.eq('ownerId',ownerId).eq('auxiliary',false).eq('pending',false)).order('desc');
   const page=await listing.paginate(args.paginationOpts);
   const reads=listingReads(ctx),rows=await Promise.all(page.page.map(row=>describe(ctx,row,reads)));
-  return {...page,page:args.unused?rows.filter(row=>row.canDelete):rows};
+  return {...page,page:args.unused?rows.filter(row=>row.canDelete&&!row.inUse):rows};
 }});
 export const remove=mutation({args:{fileIds:v.array(v.id('storageObjects'))},returns:v.null(),handler:async(ctx,{fileIds})=>{
   const ownerId=await requireOwner(ctx);if(!fileIds.length||fileIds.length>20)throw new ConvexError('Delete between 1 and 20 files');
@@ -90,7 +93,13 @@ export const remove=mutation({args:{fileIds:v.array(v.id('storageObjects'))},ret
   // Revalidation and removal are atomic; a concurrently changed edit cannot lose its source.
   for(const row of rows) {
     if(row!.kind==='export')await removeOwnedExport(ctx,ownerId,row!.jobId!);
-    else {const refs=await ownedObjectReferences(ctx,ownerId,row!);for(const asset of refs.attachments)await removeOwnedAsset(ctx,ownerId,asset._id);}
+    else {
+      const info=await describe(ctx,row!),doomed=new Set(info.workspaces.map(workspace=>String(workspace.id)));
+      for(const workspace of info.workspaces){const project=await ctx.db.get(workspace.id);if(project&&!project.deleting)await beginProjectDeletion(ctx,ownerId,project);}
+      const refs=await ownedObjectReferences(ctx,ownerId,row!);
+      for(const asset of refs.attachments){if(doomed.has(String(asset.projectId)))await removeMediaAttachment(ctx,asset);else await removeOwnedAsset(ctx,ownerId,asset._id);}
+      for(const shareId of new Set(refs.shares.map(pin=>pin.shareId))){await removeShareAssets(ctx,shareId);await ctx.db.delete(shareId);}
+    }
   }
   return null;
 }});
