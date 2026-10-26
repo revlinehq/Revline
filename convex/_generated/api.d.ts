@@ -18,6 +18,7 @@ import type * as billing from "../billing.js";
 import type * as compositionReview from "../compositionReview.js";
 import type * as crons from "../crons.js";
 import type * as cutouts from "../cutouts.js";
+import type * as deploymentSetup from "../deploymentSetup.js";
 import type * as discordAlerts from "../discordAlerts.js";
 import type * as editorAccess from "../editorAccess.js";
 import type * as flyRender from "../flyRender.js";
@@ -88,6 +89,7 @@ declare const fullApi: ApiFromModules<{
   compositionReview: typeof compositionReview;
   crons: typeof crons;
   cutouts: typeof cutouts;
+  deploymentSetup: typeof deploymentSetup;
   discordAlerts: typeof discordAlerts;
   editorAccess: typeof editorAccess;
   flyRender: typeof flyRender;
