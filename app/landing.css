@@ -103,7 +103,7 @@ div.landing-reveal,div.landing-reveal>.landing-reveal-content{display:inline-blo
 @keyframes landing-marquee{to{transform:translateX(-50%)}}
 
 /* How it works */
-.landing-how{display:flex;flex-direction:column;gap:48px;padding-block:96px}
+.landing-how{display:flex;flex-direction:column;gap:48px;padding-block:96px;margin-bottom:64px}
 .landing-steps{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px}
 .landing-step{display:flex;flex-direction:column;gap:24px;min-width:0;padding:28px;background:#fff;border:1px solid #ebebee;border-radius:20px}
 .landing-step-word{display:flex;align-items:flex-end;gap:12px;font:400 56px/1 var(--l-head);letter-spacing:-1.5px;color:#121212}
@@ -243,6 +243,7 @@ div.landing-reveal,div.landing-reveal>.landing-reveal-content{display:inline-blo
   .landing-use-cases,.landing-how,.landing-pricing,.landing-faq,.landing-mcp{padding-block:64px}
   .landing-mcp-code pre{font-size:12px}
   .landing-use-cases,.landing-how{gap:32px}
+  .landing-how{margin-bottom:32px}
   .landing-tile{height:180px;width:102px}
   .landing-tile-wide{width:320px}
   .landing-testimonial{padding-block:72px}
