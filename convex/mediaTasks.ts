@@ -43,14 +43,15 @@ export type MediaWorkItem = Infer<typeof workItem>;
 export const taskResult = v.object({review:v.optional(compositionReviewResult),snapshot:v.optional(v.object({frames:v.array(v.object({time:v.number(),image:v.string()}))})), analysis: v.optional(analysisValidator), frameInspection: v.optional(frameInspectionValidator), videoInspection: v.optional(videoInspectionValidator), audioAssetId: v.optional(v.id('assets')), waveform: v.optional(waveformValidator) });
 export type MediaTaskResult = Infer<typeof taskResult>;
 
+/** The oldest media processor that can run each kind; older processors leave these tasks queued. */
+const MIN_PROCESSOR_VERSION: Partial<Record<Doc<'mediaTasks'>['kind'], number>> = { transcribe: 3, frames: 4, preview: 5, snapshot: 6, cutout: 7 };
+
 export async function enqueueMediaTask(ctx: MutationCtx, input: Pick<Doc<'mediaTasks'>, 'ownerId' | 'projectId' | 'kind'> & Partial<Pick<Doc<'mediaTasks'>, 'assetId' | 'renderJobId' | 'analysisRequestId' | 'sourceUrl' | 'frameRequest' | 'videoRequest' | 'reviewId' | 'snapshotId' | 'cutoutId' | 'requiredProcessorVersion'|'previewVersion'|'lane'>>, beforeEnqueue?:()=>Promise<void>): Promise<Id<'mediaTasks'>> {
-  if(input.kind==='preview')input={...input,previewVersion:PREVIEW_VERSION,requiredProcessorVersion:Math.max(5,input.requiredProcessorVersion??0)};
+  const minimum = MIN_PROCESSOR_VERSION[input.kind];
+  if (minimum) input = { ...input, requiredProcessorVersion: Math.max(minimum, input.requiredProcessorVersion ?? 0) };
+  if(input.kind==='preview')input={...input,previewVersion:PREVIEW_VERSION};
   if(input.assetId&&input.kind==='preview'){const asset=await ctx.db.get(input.assetId);// A cut-out plays its own VP9 alpha file; an H.264 proxy would drop the transparency.
   if(asset?.ownerId===input.ownerId&&asset.projectId===input.projectId&&(hasPreview(asset)||asset.cutoutOf)){const now=Date.now();return ctx.db.insert('mediaTasks',{...input,status:'completed',attempt:0,progress:100,createdAt:now,updatedAt:now});}}
-  if (input.kind === 'transcribe') input = { ...input, requiredProcessorVersion: Math.max(3, input.requiredProcessorVersion ?? 0) };
-  if (input.kind === 'frames') input = { ...input, requiredProcessorVersion: Math.max(4, input.requiredProcessorVersion ?? 0) };
-  if (input.kind === 'snapshot') input = { ...input, requiredProcessorVersion: Math.max(6, input.requiredProcessorVersion ?? 0) };
-  if (input.kind === 'cutout') input = { ...input, requiredProcessorVersion: Math.max(7, input.requiredProcessorVersion ?? 0) };
   if (input.assetId && input.kind === 'beats') {
     const asset = await ctx.db.get(input.assetId);
     const beats=asset?(await hydrateAsset(ctx,asset)).analysis?.beats:undefined;
@@ -407,30 +408,48 @@ export const placeImport = internalMutation({ args: { taskId: v.id('mediaTasks')
   await placeImportedVideo(ctx, project, task._id, { ...output, duration: output.duration });
   return null;
 }});
-export const complete = mutation({ args: { ...mediaTaskCredentials, result: taskResult }, returns: v.null(), handler: async (ctx, args) => {
-  const saved = await ctx.db.get(args.taskId);
-  if (saved?.status === 'completed' && saved.leaseToken === args.leaseToken) return null;
-  const task = await requireMediaTask(ctx, args.taskId, args.leaseToken);
-  if(args.result.review){
-    if(task.kind!=='review'||!task.reviewId||!await analysisStillActive(ctx,task))throw new ConvexError('The composition review is no longer active.');
-    const review=(await ctx.db.get(task.reviewId))!,result=args.result.review,ids=new Set(review.plans.map(plan=>plan.id));
-    if(result.revision!==review.revision||result.sampleTimes.length<1||result.sampleTimes.length>12||result.sampleTimes.some(time=>!Number.isFinite(time)||time<review.start-1/review.timeline.fps||time>review.end)||result.checks.length!==ids.size||result.observations.length!==ids.size||new Set(result.checks.map(check=>check.planId)).size!==ids.size||new Set(result.observations.map(check=>check.planId)).size!==ids.size||result.checks.some(check=>!ids.has(check.planId)||!Number.isFinite(check.peakPixelChange)||check.peakPixelChange<0||check.peakPixelChange>1)||result.observations.some(check=>!ids.has(check.planId)||check.evidence.length>2000)||result.uncertainty.length>2000)throw new ConvexError('Review evidence does not match this rendered snapshot.');
-    await ctx.db.patch(review._id,{status:'completed',result});
-  }else if(task.kind==='review')throw new ConvexError('Review completed without rendered evidence.');
-  if(args.result.snapshot){
-    if(task.kind!=='snapshot'||!task.snapshotId||!await analysisStillActive(ctx,task))throw new ConvexError('The frame request is no longer active.');
-    const snapshot=(await ctx.db.get(task.snapshotId))!,frames=args.result.snapshot.frames;
-    if(frames.length!==snapshot.times.length||frames.some((frame,index)=>!Number.isFinite(frame.time)||Math.abs(frame.time-snapshot.times[index])>1||!/^[A-Za-z0-9+/]+=*$/.test(frame.image))||frames.reduce((sum,frame)=>sum+frame.image.length,0)>900_000)throw new ConvexError('Rendered frames do not match the request.');
-    await ctx.db.patch(snapshot._id,{status:'completed',frames});
-  }else if(task.kind==='snapshot')throw new ConvexError('Frame capture completed without images.');
+type TaskResult = Infer<typeof taskResult>;
+type ResultHandler = (ctx: MutationCtx, task: Doc<'mediaTasks'>, result: TaskResult) => Promise<void>;
+
+/** The task's source must still belong to its project. */
+async function ownedSource(ctx: MutationCtx, task: Doc<'mediaTasks'>) {
   const asset = task.assetId ? await ctx.db.get(task.assetId) : null;
-  if (args.result.frameInspection && task.kind !== 'frames') throw new ConvexError('Frame evidence belongs to a frame inspection task.');
-  if (args.result.videoInspection && task.kind !== 'video') throw new ConvexError('Native video evidence belongs to its question task.');
-  if (task.kind === 'render') {
+  if (!asset || asset.ownerId !== task.ownerId || asset.projectId !== task.projectId) throw new ConvexError('Source media was removed.');
+  return asset;
+}
+
+/** Saved analysis (transcript, scenes, shots, beats, tracking) lands on the source asset. */
+const saveAnalysisResult: ResultHandler = async (ctx, task, result) => {
+  const asset = await ownedSource(ctx, task);
+  const key = task.kind === 'transcribe' ? 'transcript' : task.kind === 'understand' ? 'understanding' : task.kind === 'track' ? 'focus' : task.kind;
+  if (!result.analysis?.[key as keyof typeof result.analysis]) throw new ConvexError('The requested analysis result is missing.');
+  if (task.kind === 'transcribe' && (task.requiredProcessorVersion ?? 1) >= 3 && !result.analysis.audioActivity) throw new ConvexError('The requested audio activity measurements are missing.');
+  if (task.kind === 'beats' && result.analysis.beats?.engine !== BEAT_ANALYSIS_ENGINE) throw new ConvexError('The requested result must use dedicated beat tracking. Analyze this source again with the updated media worker.');
+  await saveAssetAnalysis(ctx, asset, result.analysis);
+};
+
+/** What finishing each kind of task means. Record keeps this exhaustive: a new kind needs a handler. */
+const RESULT_HANDLERS: Record<Doc<'mediaTasks'>['kind'], ResultHandler> = {
+  review: async (ctx, task, result) => {
+    if (!result.review) throw new ConvexError('Review completed without rendered evidence.');
+    if (!task.reviewId || !await analysisStillActive(ctx, task)) throw new ConvexError('The composition review is no longer active.');
+    const review = (await ctx.db.get(task.reviewId))!, evidence = result.review, ids = new Set(review.plans.map(plan => plan.id));
+    if (evidence.revision !== review.revision || evidence.sampleTimes.length < 1 || evidence.sampleTimes.length > 12 || evidence.sampleTimes.some(time => !Number.isFinite(time) || time < review.start - 1 / review.timeline.fps || time > review.end) || evidence.checks.length !== ids.size || evidence.observations.length !== ids.size || new Set(evidence.checks.map(check => check.planId)).size !== ids.size || new Set(evidence.observations.map(check => check.planId)).size !== ids.size || evidence.checks.some(check => !ids.has(check.planId) || !Number.isFinite(check.peakPixelChange) || check.peakPixelChange < 0 || check.peakPixelChange > 1) || evidence.observations.some(check => !ids.has(check.planId) || check.evidence.length > 2000) || evidence.uncertainty.length > 2000) throw new ConvexError('Review evidence does not match this rendered snapshot.');
+    await ctx.db.patch(review._id, { status: 'completed', result: evidence });
+  },
+  snapshot: async (ctx, task, result) => {
+    if (!result.snapshot) throw new ConvexError('Frame capture completed without images.');
+    if (!task.snapshotId || !await analysisStillActive(ctx, task)) throw new ConvexError('The frame request is no longer active.');
+    const snapshot = (await ctx.db.get(task.snapshotId))!, frames = result.snapshot.frames;
+    if (frames.length !== snapshot.times.length || frames.some((frame, index) => !Number.isFinite(frame.time) || Math.abs(frame.time - snapshot.times[index]) > 1 || !/^[A-Za-z0-9+/]+=*$/.test(frame.image)) || frames.reduce((sum, frame) => sum + frame.image.length, 0) > 900_000) throw new ConvexError('Rendered frames do not match the request.');
+    await ctx.db.patch(snapshot._id, { status: 'completed', frames });
+  },
+  render: async (ctx, task) => {
     const job = task.renderJobId ? await ctx.db.get(task.renderJobId) : null;
     if (!job?.outputR2Key) throw new ConvexError('Export has not stored its MP4 yet.');
     await ctx.db.patch(job._id, { status: 'completed', progress: 100, error: undefined, updatedAt: Date.now() });
-  } else if (task.kind === 'import') {
+  },
+  import: async (ctx, task) => {
     const output = task.outputAssetId ? await ctx.db.get(task.outputAssetId) : null;
     if (!output || output.ownerId !== task.ownerId || output.projectId !== task.projectId || output.kind !== 'video' || !output.duration) throw new ConvexError('The imported video has not been stored yet.');
     const project = await requireProject(ctx, task.projectId, task.ownerId, false);
@@ -440,9 +459,10 @@ export const complete = mutation({ args: { ...mediaTaskCredentials, result: task
     if (await editingWorkflowActive(ctx, project)) await ctx.scheduler.runAfter(IMPORT_PLACEMENT_DELAY_MS, internal.mediaTasks.placeImport, { taskId: task._id, attempt: 1 });
     else await placeImportedVideo(ctx, project, task._id, { ...output, duration: output.duration });
     await enqueueMediaTask(ctx, { ownerId: task.ownerId, projectId: task.projectId, assetId: output._id, kind: 'extract' });
-    await enqueueMediaTask(ctx,{ownerId:task.ownerId,projectId:task.projectId,assetId:output._id,kind:'preview'});
+    await enqueueMediaTask(ctx, { ownerId: task.ownerId, projectId: task.projectId, assetId: output._id, kind: 'preview' });
     await enqueueMediaTask(ctx, { ownerId: task.ownerId, projectId: task.projectId, assetId: output._id, kind: 'understand' });
-  } else if (task.kind === 'cutout') {
+  },
+  cutout: async (ctx, task) => {
     const cutout = task.cutoutId ? await ctx.db.get(task.cutoutId) : null;
     const output = task.outputAssetId ? await ctx.db.get(task.outputAssetId) : null;
     if (!cutout || cutout.status !== 'queued') throw new ConvexError('The background removal request is no longer active.');
@@ -453,54 +473,68 @@ export const complete = mutation({ args: { ...mediaTaskCredentials, result: task
     await ctx.db.patch(output._id, { cutoutOf: cutout.sourceAssetId, cutoutStart: cutout.start, audioExtracted: true, ...(source?.audioAssetId ? { audioAssetId: source.audioAssetId } : {}) });
     await ctx.db.patch(cutout._id, { status: 'completed', outputAssetId: output._id });
     await placeCutout(ctx, { ...cutout, status: 'completed', outputAssetId: output._id }, { ...output, cutoutOf: cutout.sourceAssetId, cutoutStart: cutout.start });
-  } else if(task.kind!=='review'&&task.kind!=='snapshot') {
-    if (!asset || asset.ownerId !== task.ownerId || asset.projectId !== task.projectId) throw new ConvexError('Source media was removed.');
-    if (task.kind === 'video') {
-      if (!task.videoRequest || !args.result.videoInspection || asset.kind !== 'video' || !asset.duration) throw new ConvexError('Native video evidence is missing.');
-      if (args.result.analysis || args.result.frameInspection || args.result.audioAssetId || args.result.waveform) throw new ConvexError('Video question tasks return video evidence only.');
-      const request = task.analysisRequestId ? await ctx.db.get(task.analysisRequestId) : null;
-      const project = await readProject(ctx,task.projectId);
-      // Older timeout handlers deleted the request without detaching the task.
-      // A valid, uncancelled lease may still save evidence; it cannot edit a timeline.
-      if(request&&(request.ownerId !== task.ownerId || request.projectId !== task.projectId || request.assetId !== asset._id || request.mode !== 'video' || !project?.aiRunning || project.aiRunId !== request.aiRunId)) throw new ConvexError('AI video request is no longer active.');
-      try { validateVideoInspectionResult(args.result.videoInspection, task.videoRequest, asset.duration); } catch (error) { throw new ConvexError((error as Error).message); }
-      await ctx.db.patch(task._id, { videoInspection: args.result.videoInspection });
-      if(request)await ctx.db.patch(request._id, { videoInspection: args.result.videoInspection });
-    } else if (task.kind === 'frames') {
-      if (!task.frameRequest || !args.result.frameInspection || asset.kind !== 'video') throw new ConvexError('Frame inspection evidence is missing.');
-      if ((task.requiredProcessorVersion ?? 1) >= 4 && (!args.result.frameInspection.geometry || !Array.isArray(args.result.frameInspection.targets))) throw new ConvexError('The frame worker must return source geometry and localized targets. Update the media worker before retrying.');
-      if (args.result.analysis || args.result.audioAssetId || args.result.waveform) throw new ConvexError('Frame inspections return visual evidence only.');
-      const request = task.analysisRequestId ? await ctx.db.get(task.analysisRequestId) : null;
-      const project = request ? await readProject(ctx, task.projectId) : null;
-      if(request&&(request.ownerId !== task.ownerId || request.projectId !== task.projectId || request.assetId !== asset._id || request.mode !== 'frames' || !project?.aiRunning || project.aiRunId !== request.aiRunId)) throw new ConvexError('AI frame request is no longer active.');
-      try { validateFrameInspectionResult(args.result.frameInspection, task.frameRequest); } catch (error) { throw new ConvexError((error as Error).message); }
-      await ctx.db.patch(task._id, { frameInspection: args.result.frameInspection });
-      if(request)await ctx.db.patch(request._id, { frameInspection: args.result.frameInspection });
-    } else if(task.kind==='preview'){
-      if(asset.kind!=='video'||!hasPreview(asset)||args.result.audioAssetId||args.result.analysis||args.result.waveform||args.result.frameInspection||args.result.videoInspection)throw new ConvexError('The playback preview has not been stored for this source.');
-    } else if (task.kind === 'extract') {
-      if (asset.audioExtracted) {
-        if (args.result.audioAssetId !== asset.audioAssetId) throw new ConvexError('Audio output does not match the prepared source.');
-      } else if (args.result.audioAssetId !== task.outputAssetId) throw new ConvexError('Extracted audio must be the output of this task.');
-      const audioId=task.outputAssetId??asset.audioAssetId;
-      const audio = audioId ? await ctx.db.get(audioId) : null;
-      if (audio && (audio.kind !== 'audio' || audio.projectId !== task.projectId || audio.ownerId !== task.ownerId)) throw new ConvexError('Invalid extracted audio.');
-      if (args.result.waveform) { validateWaveform(args.result.waveform); if (!audio) throw new ConvexError('Audio is required for a waveform.'); await ctx.db.patch(audio._id, { waveform: args.result.waveform }); }
-      await ctx.db.patch(asset._id, { audioExtracted: true, ...(audio ? { audioAssetId: audio._id } : {}) });
-      // Listening follows verified extraction; silent footage never queues a
-      // doomed transcription, and evidence remains attached to the video.
-      if(audio)await enqueueMediaTask(ctx,{ownerId:task.ownerId,projectId:task.projectId,assetId:asset._id,kind:'transcribe'});
-    } else if (task.kind === 'waveform') {
-      if (!args.result.waveform) throw new ConvexError('No waveform was returned.');
-      validateWaveform(args.result.waveform); await ctx.db.patch(asset._id, { waveform: args.result.waveform });
-    } else {
-      const key = task.kind === 'transcribe' ? 'transcript' : task.kind === 'understand' ? 'understanding' : task.kind === 'track' ? 'focus' : task.kind;
-      if (!args.result.analysis?.[key]) throw new ConvexError('The requested analysis result is missing.');
-      if (task.kind === 'transcribe' && (task.requiredProcessorVersion ?? 1) >= 3 && !args.result.analysis.audioActivity) throw new ConvexError('The requested audio activity measurements are missing.');
-      if (task.kind === 'beats' && args.result.analysis.beats?.engine !== BEAT_ANALYSIS_ENGINE) throw new ConvexError('The requested result must use dedicated beat tracking. Analyze this source again with the updated media worker.');
-      await saveAssetAnalysis(ctx, asset, args.result.analysis);
-    }
-  }
+  },
+  video: async (ctx, task, result) => {
+    const asset = await ownedSource(ctx, task);
+    if (!task.videoRequest || !result.videoInspection || asset.kind !== 'video' || !asset.duration) throw new ConvexError('Native video evidence is missing.');
+    if (result.analysis || result.frameInspection || result.audioAssetId || result.waveform) throw new ConvexError('Video question tasks return video evidence only.');
+    const request = task.analysisRequestId ? await ctx.db.get(task.analysisRequestId) : null;
+    const project = await readProject(ctx, task.projectId);
+    // Older timeout handlers deleted the request without detaching the task.
+    // A valid, uncancelled lease may still save evidence; it cannot edit a timeline.
+    if (request && (request.ownerId !== task.ownerId || request.projectId !== task.projectId || request.assetId !== asset._id || request.mode !== 'video' || !project?.aiRunning || project.aiRunId !== request.aiRunId)) throw new ConvexError('AI video request is no longer active.');
+    try { validateVideoInspectionResult(result.videoInspection, task.videoRequest, asset.duration); } catch (error) { throw new ConvexError((error as Error).message); }
+    await ctx.db.patch(task._id, { videoInspection: result.videoInspection });
+    if (request) await ctx.db.patch(request._id, { videoInspection: result.videoInspection });
+  },
+  frames: async (ctx, task, result) => {
+    const asset = await ownedSource(ctx, task);
+    if (!task.frameRequest || !result.frameInspection || asset.kind !== 'video') throw new ConvexError('Frame inspection evidence is missing.');
+    if ((task.requiredProcessorVersion ?? 1) >= 4 && (!result.frameInspection.geometry || !Array.isArray(result.frameInspection.targets))) throw new ConvexError('The frame worker must return source geometry and localized targets. Update the media worker before retrying.');
+    if (result.analysis || result.audioAssetId || result.waveform) throw new ConvexError('Frame inspections return visual evidence only.');
+    const request = task.analysisRequestId ? await ctx.db.get(task.analysisRequestId) : null;
+    const project = request ? await readProject(ctx, task.projectId) : null;
+    if (request && (request.ownerId !== task.ownerId || request.projectId !== task.projectId || request.assetId !== asset._id || request.mode !== 'frames' || !project?.aiRunning || project.aiRunId !== request.aiRunId)) throw new ConvexError('AI frame request is no longer active.');
+    try { validateFrameInspectionResult(result.frameInspection, task.frameRequest); } catch (error) { throw new ConvexError((error as Error).message); }
+    await ctx.db.patch(task._id, { frameInspection: result.frameInspection });
+    if (request) await ctx.db.patch(request._id, { frameInspection: result.frameInspection });
+  },
+  preview: async (ctx, task, result) => {
+    const asset = await ownedSource(ctx, task);
+    if (asset.kind !== 'video' || !hasPreview(asset) || result.audioAssetId || result.analysis || result.waveform || result.frameInspection || result.videoInspection) throw new ConvexError('The playback preview has not been stored for this source.');
+  },
+  extract: async (ctx, task, result) => {
+    const asset = await ownedSource(ctx, task);
+    if (asset.audioExtracted) {
+      if (result.audioAssetId !== asset.audioAssetId) throw new ConvexError('Audio output does not match the prepared source.');
+    } else if (result.audioAssetId !== task.outputAssetId) throw new ConvexError('Extracted audio must be the output of this task.');
+    const audioId = task.outputAssetId ?? asset.audioAssetId;
+    const audio = audioId ? await ctx.db.get(audioId) : null;
+    if (audio && (audio.kind !== 'audio' || audio.projectId !== task.projectId || audio.ownerId !== task.ownerId)) throw new ConvexError('Invalid extracted audio.');
+    if (result.waveform) { validateWaveform(result.waveform); if (!audio) throw new ConvexError('Audio is required for a waveform.'); await ctx.db.patch(audio._id, { waveform: result.waveform }); }
+    await ctx.db.patch(asset._id, { audioExtracted: true, ...(audio ? { audioAssetId: audio._id } : {}) });
+    // Listening follows verified extraction; silent footage never queues a
+    // doomed transcription, and evidence remains attached to the video.
+    if (audio) await enqueueMediaTask(ctx, { ownerId: task.ownerId, projectId: task.projectId, assetId: asset._id, kind: 'transcribe' });
+  },
+  waveform: async (ctx, task, result) => {
+    const asset = await ownedSource(ctx, task);
+    if (!result.waveform) throw new ConvexError('No waveform was returned.');
+    validateWaveform(result.waveform); await ctx.db.patch(asset._id, { waveform: result.waveform });
+  },
+  transcribe: saveAnalysisResult, understand: saveAnalysisResult, shots: saveAnalysisResult, beats: saveAnalysisResult, track: saveAnalysisResult,
+};
+
+export const complete = mutation({ args: { ...mediaTaskCredentials, result: taskResult }, returns: v.null(), handler: async (ctx, args) => {
+  const saved = await ctx.db.get(args.taskId);
+  if (saved?.status === 'completed' && saved.leaseToken === args.leaseToken) return null;
+  const task = await requireMediaTask(ctx, args.taskId, args.leaseToken);
+  // Evidence only counts for the task kind that asked for it.
+  if (args.result.review && task.kind !== 'review') throw new ConvexError('The composition review is no longer active.');
+  if (args.result.snapshot && task.kind !== 'snapshot') throw new ConvexError('The frame request is no longer active.');
+  if (args.result.frameInspection && task.kind !== 'frames') throw new ConvexError('Frame evidence belongs to a frame inspection task.');
+  if (args.result.videoInspection && task.kind !== 'video') throw new ConvexError('Native video evidence belongs to its question task.');
+  await RESULT_HANDLERS[task.kind](ctx, task, args.result);
   if (task.analysisRequestId && await ctx.db.get(task.analysisRequestId)) await ctx.db.patch(task.analysisRequestId, { status: 'completed', error: undefined });
   await ctx.db.patch(task._id, { status: 'completed', progress: 100, error: undefined, leaseExpiresAt: undefined, updatedAt: Date.now() });
   await signalResult(ctx, task, { success: true, retryable: false });
