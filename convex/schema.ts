@@ -205,6 +205,8 @@ export default defineSchema({
   billingSubscriptionSync: defineTable({ stripeSubscriptionId: v.string(), token: v.string(), lastEventId: v.optional(v.string()) }).index('by_subscription', ['stripeSubscriptionId']),
   discordAlerts: defineTable({ ...alertFields, status: v.union(v.literal('queued'), v.literal('delivering'), v.literal('sent'), v.literal('failed')), attempts: v.number(), leaseUntil: v.optional(v.number()), lastError: v.optional(v.string()), createdAt: v.number(), updatedAt: v.number() }).index('by_source_event', ['source', 'eventId']).index('by_status_updated', ['status', 'updatedAt']),
   mediaTasks: defineTable(mediaTaskFields).index('by_status_createdAt', ['status', 'createdAt']).index('by_status_claimable_created',['status','claimable','createdAt']).index('by_status_claimable_kind_created',['status','claimable','kind','createdAt']).index('by_status_updated',['status','updatedAt']).index('by_asset_kind', ['assetId', 'kind']).index('by_project_createdAt', ['projectId', 'createdAt']).index('by_project_kind_status',['projectId','kind','status']).index('by_owner_status',['ownerId','status']),
+  // One row: serializes Fly export dispatch so concurrent runs cannot both create a warm machine.
+  flyDispatchLocks: defineTable({ name: v.string(), lockedUntil: v.number(), pending: v.boolean() }).index('by_name', ['name']),
   accountRateLimits:defineTable({ownerId:v.string(),name:v.string(),period:v.number(),windowStart:v.number(),count:v.number()}).index('by_owner_name_period',['ownerId','name','period']),
   users: defineTable(userFields).index("by_clerk_id", ["clerkId"]),
   projects: defineTable(projectFields).index("by_ownerId_updatedAt", ["ownerId", "updatedAt"]),

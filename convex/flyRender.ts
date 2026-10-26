@@ -1,5 +1,5 @@
 import { v } from 'convex/values';
-import { internalAction, internalQuery } from './_generated/server';
+import { internalAction, internalMutation, internalQuery } from './_generated/server';
 import { internal } from './_generated/api';
 import { MEDIA_PROCESSOR_VERSION } from '../lib/media-analysis/processor-version';
 import { accountLimit } from './lib/account_limits';
@@ -110,12 +110,30 @@ export const demand = internalQuery({ args: {}, returns: v.object({ ultra: v.obj
   return result;
 }});
 
+const DISPATCH_LOCK_MS = 120_000;
+/** Only one dispatch runs at a time. A dispatch requested meanwhile marks the lock pending,
+ *  and the running one dispatches again when it finishes, so no export waits for the cron. */
+export const acquireDispatch = internalMutation({ args: {}, returns: v.boolean(), handler: async ctx => {
+  const row = await ctx.db.query('flyDispatchLocks').withIndex('by_name', q => q.eq('name', 'dispatch')).unique(), now = Date.now();
+  if (row && row.lockedUntil > now) { await ctx.db.patch(row._id, { pending: true }); return false; }
+  if (row) await ctx.db.patch(row._id, { lockedUntil: now + DISPATCH_LOCK_MS, pending: false });
+  else await ctx.db.insert('flyDispatchLocks', { name: 'dispatch', lockedUntil: now + DISPATCH_LOCK_MS, pending: false });
+  return true;
+}});
+export const releaseDispatch = internalMutation({ args: {}, returns: v.null(), handler: async ctx => {
+  const row = await ctx.db.query('flyDispatchLocks').withIndex('by_name', q => q.eq('name', 'dispatch')).unique();
+  if (!row) return null;
+  await ctx.db.patch(row._id, { lockedUntil: 0, pending: false });
+  if (row.pending) await ctx.scheduler.runAfter(0, internal.flyRender.dispatch, {});
+  return null;
+}});
+
 /** Bring up enough Fly machines for the exports that may start: stopped warm machines first
  * (image and volume already on their host, so they boot in seconds), then new warm machines
  * up to the pool size, then burst machines that are destroyed after their export. */
 export const dispatch = internalAction({ args: {}, returns: v.null(), handler: async ctx => {
   const config = flyConfig();
-  if (!config) return null;
+  if (!config || !await ctx.runMutation(internal.flyRender.acquireDispatch, {})) return null;
   try {
     const [wanted, machines] = await Promise.all([ctx.runQuery(internal.flyRender.demand, {}), fly<FlyMachine[]>(config, 'GET', '/machines')]);
     for (const lane of LANES) {
@@ -146,6 +164,8 @@ export const dispatch = internalAction({ args: {}, returns: v.null(), handler: a
   } catch (error) {
     // The once-a-minute cron retries; the export stays queued meanwhile.
     console.error('Fly export dispatch failed:', error instanceof Error ? error.message : error);
+  } finally {
+    await ctx.runMutation(internal.flyRender.releaseDispatch, {});
   }
   return null;
 }});
