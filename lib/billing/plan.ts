@@ -9,7 +9,7 @@ export const EDITOR_PLAN = {
 export const PRO_FEATURES = [
   'Edit by prompting: cuts, captions and effects',
   'Motion design, animated subtitles and effects',
-  'Edit from Claude, Codex or Cursor with MCP',
+  'Unlimited MCP access: edit from Claude, Codex or Cursor',
   '1080p export in any format, no watermark',
   'Unlimited projects, 50 GB storage',
 ] as const;
