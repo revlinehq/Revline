@@ -8,6 +8,7 @@ import { createEditorToolkit } from './lib/editorToolkit';
 import { mediaDownloadUrl } from './lib/media_storage';
 import { AssistantRunBudget } from '../lib/ai/run-budget';
 import { READ_ONLY_RUN_PREFIX } from './lib/run_ids';
+import { completeUpload, openUpload, signPartUrl } from './r2';
 
 // The editor's own AI tools, exposed over MCP. planEffects/previewRender keep
 // review plans for the length of one in-app turn, which an MCP call does not have.
@@ -17,8 +18,10 @@ const projectIdField = z.string().min(1).describe('Revline project ID from listP
 const PROJECT_TOOLS = {
   listProjects: { description: 'List your Revline video projects, newest first, with their IDs and editor links. Start here to find the project to edit.', inputSchema: z.object({ limit: z.number().int().min(1).max(50).optional() }) },
   getProject: { description: 'Overview of one project: aspect ratio, duration, revision, editor link and its media (asset IDs, kinds, durations, which analyses are saved). Then call inspectTimeline with the same projectId to read clips before editing.', inputSchema: z.object({ projectId: projectIdField }) },
-  createProject: { description: 'Create an empty project. Add footage with importVideoLink, or upload in the editor.', inputSchema: z.object({ title: z.string().min(1).max(120), aspectRatio: z.enum(['landscape', 'vertical', 'square']) }) },
+  createProject: { description: 'Create an empty project. Add footage with uploadMedia (a local file) or importVideoLink.', inputSchema: z.object({ title: z.string().min(1).max(120), aspectRatio: z.enum(['landscape', 'vertical', 'square']) }) },
   importVideoLink: { description: 'Import a video from a link (YouTube and other supported sites) into a project, or into a new project when projectId is omitted. Returns a taskId to poll with getMediaTask.', inputSchema: z.object({ url: z.string().url(), projectId: projectIdField.optional() }) },
+  uploadMedia: { description: 'Upload a local video, image or audio file into a project. Read its exact byte size, and for video/image its pixel width and height and for video/audio its duration in seconds (e.g. ffprobe). Returns a shell script: run it in a terminal and pass the JSON it prints as parts to finishUpload. The upload URLs last one hour.', inputSchema: z.object({ projectId: projectIdField, filePath: z.string().min(1).describe('Local path of the file, used only to write the upload script.'), fileName: z.string().min(1).max(255), contentType: z.string().regex(/^(video|image|audio)\/[\w.+-]+$/).describe('MIME type, e.g. video/mp4, video/quicktime, image/png, audio/mpeg.'), size: z.number().int().positive().describe('Exact file size in bytes.'), width: z.number().int().positive().optional(), height: z.number().int().positive().optional(), duration: z.number().positive().optional() }) },
+  finishUpload: { description: 'Finish an uploadMedia upload with the parts JSON its script printed. Adds the file to the project media and starts processing; place it on the timeline with addMedia.', inputSchema: z.object({ uploadId: z.string().min(1), parts: z.array(z.object({ partNumber: z.number().int().positive(), etag: z.string().min(1) })).min(1) }) },
   getMediaTask: { description: 'Status and progress of an import or media-processing task.', inputSchema: z.object({ taskId: z.string().min(1) }) },
   exportVideo: { description: 'Render the saved timeline to MP4. 2160 (4K) needs the Ultra plan. Returns a jobId to poll with getExport.', inputSchema: z.object({ projectId: projectIdField, resolution: z.union([z.literal(720), z.literal(1080), z.literal(2160)]).optional(), fps: z.union([z.literal(24), z.literal(30), z.literal(60)]).optional(), quality: z.enum(['draft', 'standard', 'high']).optional() }) },
   getFrames: { description: 'Look at the edit: render 1 to 6 frames of the saved timeline at the given timeline seconds, composited exactly as the export draws them (footage, text, effects). Use it to check framing, captions and effects after editing. Takes about 10-30 seconds.', inputSchema: z.object({ projectId: projectIdField, times: z.array(z.number().min(0)).min(1).max(6) }) },
@@ -84,6 +87,13 @@ async function callProjectTool(ctx: ActionCtx, ownerId: string, name: ProjectToo
     case 'getProject': return result(await ctx.runQuery(internal.mcp.projectOverview, { ownerId, projectId: input.projectId }));
     case 'createProject': return result(await ctx.runMutation(internal.mcp.createProject, { ownerId, title: input.title, aspectRatio: input.aspectRatio }));
     case 'importVideoLink': return result(await ctx.runMutation(internal.mcp.importVideo, { ownerId, url: input.url, ...(input.projectId ? { projectId: input.projectId } : {}) }));
+    case 'uploadMedia': return result(await startUpload(ctx, ownerId, input as unknown as z.infer<typeof PROJECT_TOOLS.uploadMedia.inputSchema>));
+    case 'finishUpload': {
+      const uploadId = input.uploadId as string;
+      const lease = await ctx.runQuery(internal.r2.getLease, { uploadId: uploadId as Id<'r2Uploads'>, ownerId });
+      const assetId = await completeUpload(ctx, lease, [...(input.parts as { partNumber: number; etag: string }[])].sort((a, b) => a.partNumber - b.partNumber));
+      return result({ assetId, projectId: lease.projectId, note: lease.kind === 'image' ? 'The image is ready. Place it with addMedia.' : 'Processing has started. Place it with addMedia now; getProject shows when its analysis is saved.' });
+    }
     case 'getMediaTask': return result(await ctx.runQuery(internal.mcp.mediaTask, { ownerId, taskId: input.taskId }));
     case 'exportVideo': return result(await ctx.runMutation(internal.mcp.startExport, { ownerId, projectId: input.projectId, resolution: input.resolution ?? 1080, fps: input.fps ?? 30, quality: input.quality ?? 'high' }));
     case 'getFrames': {
@@ -107,6 +117,28 @@ async function callProjectTool(ctx: ActionCtx, ownerId: string, name: ProjectToo
       return result({ ...job, ...(downloadUrl ? { downloadUrl } : {}) });
     }
   }
+}
+
+const MAX_MCP_UPLOAD_PARTS = 200;
+const shellQuote = (value: string) => `'${value.replaceAll("'", `'\\''`)}'`;
+
+/** Opens the same multipart upload the editor uses and writes a script that PUTs each part and prints the parts JSON. */
+async function startUpload(ctx: ActionCtx, ownerId: string, input: z.infer<typeof PROJECT_TOOLS.uploadMedia.inputSchema>) {
+  const kind = input.contentType.split('/')[0] as 'video' | 'image' | 'audio';
+  if (kind !== 'audio' && (!input.width || !input.height)) throw new Error('width and height are required for video and image files.');
+  if (kind !== 'image' && !input.duration) throw new Error('duration is required for video and audio files.');
+  const upload = await openUpload(ctx, { projectId: input.projectId as Id<'projects'>, fileName: input.fileName, contentType: input.contentType, kind, size: input.size, ...(input.duration ? { duration: input.duration } : {}), ...(kind !== 'audio' ? { width: input.width, height: input.height } : {}) }, ownerId);
+  if (upload.partCount > MAX_MCP_UPLOAD_PARTS) throw new Error(`Files over ${MAX_MCP_UPLOAD_PARTS * upload.partSize / 2 ** 30} GB must be uploaded in the editor.`);
+  const lease = await ctx.runQuery(internal.r2.getLease, { uploadId: upload.uploadId, ownerId });
+  const lines = ['#!/bin/sh', 'set -e', `f=${shellQuote(input.filePath)}`, 'echo "["'];
+  for (let partNumber = 1; partNumber <= upload.partCount; partNumber++) {
+    const offset = (partNumber - 1) * upload.partSize, length = Math.min(upload.partSize, input.size - offset);
+    const url = await signPartUrl(lease, partNumber);
+    lines.push(`tail -c +${offset + 1} "$f" | head -c ${length} | curl -sS --fail -X PUT -H 'Content-Type: application/octet-stream' --data-binary @- ${shellQuote(url)}`);
+    if (partNumber < upload.partCount) lines.push('echo ","');
+  }
+  lines.push('echo "]"');
+  return { uploadId: upload.uploadId, partCount: upload.partCount, script: lines.join('\n'), next: 'Run the script with sh, then call finishUpload with this uploadId and the JSON array it printed as parts.' };
 }
 
 // Pure reads: they neither stage edits nor start analysis, so they skip the project lock and
