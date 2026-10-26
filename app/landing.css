@@ -176,9 +176,9 @@ div.landing-reveal,div.landing-reveal>.landing-reveal-content{display:inline-blo
 .landing-faq details p{width:680px;max-width:100%;margin-top:12px;font-size:15px;line-height:1.6;color:var(--l-fg-2)}
 
 /* MCP */
-.landing-mcp{display:flex;align-items:center;gap:80px;padding-block:112px;background:#212121}
+.landing-mcp{display:flex;align-items:center;gap:80px;padding-block:112px;background:linear-gradient(315deg,#7c3aed,#a876ff)}
 .landing-mcp-apps{display:flex;padding-inline:4px}
-.landing-mcp-apps span{display:grid;place-items:center;width:54px;height:54px;overflow:hidden;border-radius:13px;border:1px solid #ffffff3d;box-shadow:0 8px 20px #0006}
+.landing-mcp-apps span{display:grid;place-items:center;width:54px;height:54px;overflow:hidden;border-radius:13px;border:1px solid #ffffff3d;box-shadow:0 8px 20px #2e106559}
 .landing-mcp-apps span+span{margin-left:-12px}
 .landing-mcp-apps [data-app=claude]{background:#d97757;transform:rotate(-8deg)}
 .landing-mcp-apps [data-app=codex]{background:#fff;transform:rotate(-2deg);z-index:1}
@@ -189,7 +189,7 @@ div.landing-reveal,div.landing-reveal>.landing-reveal-content{display:inline-blo
 .landing-mcp .landing-heading{gap:24px}
 .landing-mcp .landing-heading h2{color:#fff;letter-spacing:-1.3px;line-height:1.08}
 .landing-mcp .landing-heading p{font-size:17px;color:#ffffffcc}
-.landing-mcp-code{flex:1;min-width:0;overflow:hidden;background:#0b0c0e;border:1px solid #ffffff1f;border-radius:14px;box-shadow:0 24px 60px #00000080}
+.landing-mcp-code{flex:1;min-width:0;overflow:hidden;background:#0b0c0e;border:1px solid #ffffff1f;border-radius:14px;box-shadow:0 24px 60px #2e106566}
 .landing-mcp-code figcaption{display:flex;align-items:center;gap:8px;padding:14px 20px;border-bottom:1px solid #25272d;font:13px var(--l-mono);color:#a1a3ab}
 .landing-mcp-code pre{margin:0;padding:22px 20px 26px;overflow-x:auto;font:14px/22px var(--l-mono);color:#666872;counter-reset:line}
 .landing-mcp-code code>span{counter-increment:line;white-space:pre}
