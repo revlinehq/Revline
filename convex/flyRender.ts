@@ -28,7 +28,7 @@ const PROFILES: Record<Lane, Profile> = {
 };
 // A machine whose worker found no export for this long exits; Fly then stops it and CPU billing stops.
 const IDLE_MS = '60000';
-// A burst machine's volume outlives the destroyed machine; delete it once clearly orphaned.
+// A destroyed machine's volume, or one left by a failed create, is deleted once clearly orphaned.
 const ORPHAN_VOLUME_MS = 10 * 60_000;
 const ACTIVE_STATES = new Set(['created', 'starting', 'started', 'replacing', 'updating']);
 type Mount = { volume: string; path: string };
@@ -38,10 +38,10 @@ type FlyVolume = { id: string; name: string; state: string; attached_machine_id?
 type Config = NonNullable<ReturnType<typeof flyConfig>>;
 
 function flyConfig() {
-  const token = process.env.FLY_API_TOKEN, app = process.env.FLY_RENDER_APP, image = process.env.FLY_RENDER_IMAGE;
-  if (!flyRendersEnabled() || !token || !app || !image) return null;
+  const token = process.env.FLY_API_TOKEN, app = process.env.FLY_RENDER_APP, image = process.env.FLY_RENDER_IMAGE, exportsKey = process.env.MEDIA_WORKER_SECRET_EXPORTS;
+  if (!flyRendersEnabled() || !token || !app || !image || !exportsKey) return null;
   return {
-    token, app, image, region: process.env.FLY_RENDER_REGION || 'iad',
+    token, app, image, exportsKey, region: process.env.FLY_RENDER_REGION || 'iad',
     max: { ultra: accountLimit('FLY_RENDER_MAX_ULTRA', 10, 0, 100), standard: accountLimit('FLY_RENDER_MAX_STANDARD', 10, 0, 100) } as Record<Lane, number>,
     // Warm machines keep their volume and image between exports; the rest are created per burst.
     warm: { ultra: accountLimit('FLY_RENDER_WARM_ULTRA', 1, 0, 20), standard: accountLimit('FLY_RENDER_WARM_STANDARD', 1, 0, 20) } as Record<Lane, number>,
@@ -68,7 +68,10 @@ function machineConfig(config: Config, lane: Lane, pool: Pool, mounts: Mount[]) 
   const profile = PROFILES[lane];
   const base = {
     image: config.image, guest: profile.guest, restart: { policy: 'no' }, auto_destroy: pool === 'burst',
-    env: { ...profile.env, ...(distributedExports() ? profile.distributed : {}), MEDIA_RENDERS_ONLY: 'true', MEDIA_WORKER_CONCURRENCY: '1', MEDIA_WORKER_IDLE_MS: IDLE_MS, MEDIA_TASK_DEADLINE_MS: String(45 * 60_000) },
+    // The export-only worker key comes from Convex rather than a Fly app secret: Fly only applies
+    // app secrets when a machine is created, while a config update reaches stopped machines too.
+    // It is part of the fingerprint, so rotating MEDIA_WORKER_SECRET_EXPORTS refreshes every machine.
+    env: { ...profile.env, ...(distributedExports() ? profile.distributed : {}), RENDER_WORKER_SECRET: config.exportsKey, MEDIA_RENDERS_ONLY: 'true', MEDIA_WORKER_CONCURRENCY: '1', MEDIA_WORKER_IDLE_MS: IDLE_MS, MEDIA_TASK_DEADLINE_MS: String(45 * 60_000) },
   };
   return { ...base, mounts, metadata: { revline_lane: lane, revline_pool: pool, revline_config: fingerprint(base) } };
 }
@@ -137,7 +140,8 @@ export const dispatch = internalAction({ args: {}, returns: v.null(), handler: a
     const volumes = await fly<FlyVolume[]>(config, 'GET', '/volumes');
     for (const volume of volumes) {
       const age = Date.now() - Date.parse(volume.created_at ?? '');
-      if (volume.name === 'scratch_burst' && !volume.attached_machine_id && volume.state !== 'destroyed' && age > ORPHAN_VOLUME_MS) await fly(config, 'DELETE', `/volumes/${volume.id}`).catch(() => {});
+      // Every scratch volume belongs to one machine; an unattached one outlived a destroyed machine or a failed create.
+      if (volume.name.startsWith('scratch_') && !volume.attached_machine_id && volume.state !== 'destroyed' && age > ORPHAN_VOLUME_MS) await fly(config, 'DELETE', `/volumes/${volume.id}`).catch(() => {});
     }
   } catch (error) {
     // The once-a-minute cron retries; the export stays queued meanwhile.
