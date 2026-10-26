@@ -145,12 +145,14 @@ export const dispatch = internalAction({ args: {}, returns: v.null(), handler: a
       const warm = mine.filter(machine => machine.config?.metadata?.revline_pool === 'warm');
       for (const machine of warm) {
         if (machine.state !== 'stopped') continue;
-        // A stopped machine with an old image or settings is refreshed even without demand, so the
-        // next export only pays the ~2 s start rather than the update as well.
-        const state = current(config, lane, machine) ? 'stopped' : await refreshStopped(config, lane, machine);
-        if (need <= 0) continue;
+        // A stopped machine with an old image or settings is refreshed even without demand, and
+        // started once so Fly pulls the new image now; with no export to claim it exits after
+        // IDLE_MS. The next export then only pays the ~2 s start.
+        const stale = !current(config, lane, machine);
+        const state = stale ? await refreshStopped(config, lane, machine) : 'stopped';
+        if (need <= 0 && !stale) continue;
         if (state !== 'started') await fly(config, 'POST', `/machines/${machine.id}/start`);
-        need--;
+        if (need > 0) need--;
       }
       for (let count = warm.length; need > 0 && count < config.warm[lane]; count++, need--) await createMachine(config, lane, 'warm');
       for (; need > 0; need--) await createMachine(config, lane, 'burst');
