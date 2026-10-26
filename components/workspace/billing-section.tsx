@@ -8,6 +8,7 @@ import { LoaderCircle } from 'lucide-react';
 import { api } from '@/convex/_generated/api';
 import { EDITOR_PLAN, ULTRA_PLAN } from '@/lib/billing/plan';
 import { PrimaryButton } from './primary-button';
+import { UltraPlanCard } from './ultra-plan-card';
 import './billing-section.css';
 
 export type CheckoutReturn = 'success' | 'canceled' | undefined;
@@ -47,7 +48,7 @@ export function BillingSection({ checkoutReturn }: { checkoutReturn?: CheckoutRe
   const ultra = status?.plan === 'ultra';
   const plan = ultra ? ULTRA_PLAN : EDITOR_PLAN;
   // Upgrades apply once Stripe's webhook syncs the new price.
-  const canUpgrade = !!status?.ultraAvailable && status.subscribed && !ultra && !status.complimentary && !upgrading;
+  const offerUltra = !!status?.ultraAvailable && active && !ultra && !status.complimentary && !status.needsPayment && !upgrading;
 
   return <section id="billing" className="workspace-profile-section workspace-billing-section" aria-labelledby="profile-billing-title">
     <div className="workspace-section-label"><h2 id="profile-billing-title">Membership & billing</h2><p>Your plan, payments, and invoices.</p></div>
@@ -60,10 +61,12 @@ export function BillingSection({ checkoutReturn }: { checkoutReturn?: CheckoutRe
         {!status.complimentary && <p className="workspace-membership-description">{status.subscribed ? 'Manage your subscription, payment method, and invoices securely through Stripe.' : status.trialEligible ? `Try it free for ${EDITOR_PLAN.trialDays} days, then $${EDITOR_PLAN.monthlyPrice}/month. Cancel anytime.` : `$${EDITOR_PLAN.monthlyPrice}/month. Cancel anytime. Your free trial has already been used.`}</p>}
         {!status.complimentary && <div className="workspace-billing-actions">
           <PrimaryButton size="compact" disabled={!active || !!busy} onClick={() => void openBilling()}>{busy === 'pro' && <LoaderCircle size={14} className="animate-spin" />}{!active ? 'Coming soon' : status.subscribed || status.needsPayment ? 'Manage subscription' : status.trialEligible ? `Start ${EDITOR_PLAN.trialDays}-day free trial` : 'Subscribe to Pro'}</PrimaryButton>
-          {status.ultraAvailable && !status.subscribed && !status.needsPayment && <button type="button" className="workspace-outline-button" disabled={!!busy} onClick={() => void openBilling('ultra')}>{busy === 'ultra' && <LoaderCircle size={13} className="animate-spin" />}Get Ultra · ${ULTRA_PLAN.monthlyPrice}/month</button>}
-          {canUpgrade && <button type="button" className="workspace-outline-button" disabled={!!busy} onClick={() => confirmUpgrade ? void upgradeToUltra() : setConfirmUpgrade(true)}>{busy === 'upgrade' && <LoaderCircle size={13} className="animate-spin" />}{confirmUpgrade ? 'Confirm upgrade' : 'Upgrade to Ultra'}</button>}
         </div>}
-        {canUpgrade && confirmUpgrade && <p className="workspace-billing-trial-note">Ultra is ${ULTRA_PLAN.monthlyPrice}/month. You&apos;ll be charged the prorated difference today, and any remaining trial ends.</p>}
+        {offerUltra && <div className="workspace-billing-ultra"><UltraPlanCard note={status.subscribed ? confirmUpgrade ? 'You\'ll be charged the prorated difference today, and any remaining trial ends.' : 'Pay only the prorated difference today.' : 'Billed today. Cancel anytime.'}>
+          {status.subscribed
+            ? <button type="button" className="ultra-plan-button" disabled={!!busy} onClick={() => confirmUpgrade ? void upgradeToUltra() : setConfirmUpgrade(true)}>{busy === 'upgrade' && <LoaderCircle size={14} className="animate-spin" />}{confirmUpgrade ? 'Confirm upgrade' : 'Upgrade to Ultra'}</button>
+            : <button type="button" className="ultra-plan-button" disabled={!!busy} onClick={() => void openBilling('ultra')}>{busy === 'ultra' && <LoaderCircle size={14} className="animate-spin" />}Get Ultra</button>}
+        </UltraPlanCard></div>}
         {active && !status.subscribed && !status.complimentary && status.trialEligible && <p className="workspace-billing-trial-note">A payment method is required. Your first charge follows the trial unless you cancel.</p>}
         {error && <p className="workspace-inline-error" role="alert">{error}</p>}
       </>}

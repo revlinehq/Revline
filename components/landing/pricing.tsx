@@ -1,5 +1,5 @@
 import { Check } from 'lucide-react';
-import { EDITOR_PLAN, ULTRA_PLAN } from '@/lib/billing/plan';
+import { EDITOR_PLAN, ULTRA_FEATURES, ULTRA_PLAN } from '@/lib/billing/plan';
 import { LandingStartButton } from './start-button';
 import { LandingHeading, LandingSection } from './ui';
 
@@ -8,9 +8,7 @@ const plans = [
   { name: 'Revline Pro', description: 'For creators editing every week.', price: EDITOR_PLAN.monthlyPrice, features: [
     'AI trims and cuts', 'Animated subtitles', 'Text effects', 'Motion design', 'Export in 9:16, 1:1 and 16:9', '1080p export, no watermark', 'Unlimited projects, 50 GB storage',
   ], cta: 'Start free trial', note: `${EDITOR_PLAN.trialDays} days free, then $${EDITOR_PLAN.monthlyPrice}/month` },
-  { name: 'Revline Ultra', description: 'For power users.', price: ULTRA_PLAN.monthlyPrice, lead: 'Everything in Pro, plus', features: [
-    'Frontier models', 'MCP access for any AI agent', 'Fast mode', 'Pick the model for every edit', 'Background removal and masking', '4K render', '500 GB storage',
-  ], cta: 'Get Ultra', note: 'Cancel anytime', ultra: true },
+  { name: 'Revline Ultra', description: 'For power users.', price: ULTRA_PLAN.monthlyPrice, lead: 'Everything in Pro, plus', features: ULTRA_FEATURES, cta: 'Get Ultra', note: 'Cancel anytime', ultra: true },
 ] as const;
 
 export function LandingPricing() {

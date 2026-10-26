@@ -7,8 +7,9 @@ import Link from 'next/link';
 import { useAction, useConvexAuth, useQuery } from 'convex/react';
 import { Check, LoaderCircle } from 'lucide-react';
 import { api } from '@/convex/_generated/api';
-import { EDITOR_PLAN, ULTRA_PLAN } from '@/lib/billing/plan';
+import { EDITOR_PLAN } from '@/lib/billing/plan';
 import { PrimaryButton } from './primary-button';
+import { UltraPlanCard } from './ultra-plan-card';
 import { WorkspaceNav } from './workspace-nav';
 import './shared.css';
 import './editor-access-gate.css';
@@ -47,13 +48,15 @@ export function EditorAccessGate({ children, loading, checkoutPending = false }:
     }
   }
 
+  // A member whose payment failed fixes it first; everyone else picks a plan.
+  const offerUltra = status.ultraAvailable && !status.needsPayment;
   return <div className="workspace-page editor-access-page">
     <WorkspaceNav title={NEW_WORKSPACE_LABEL} />
-    <main className="editor-access-main">
+    <main className="editor-access-main" data-plans={offerUltra || undefined}>
       <section className="editor-access-card" aria-labelledby="editor-access-title">
         <header className="editor-access-heading">
-          <h1 id="editor-access-title">{status.needsPayment ? 'Update your payment method' : 'Continue with Revline'}</h1>
-          {status.needsPayment && <p>Update your payment method to restore editor access.</p>}
+          <h1 id="editor-access-title">{status.needsPayment ? 'Update your payment method' : offerUltra ? 'Revline Pro' : 'Continue with Revline'}</h1>
+          {status.needsPayment ? <p>Update your payment method to restore editor access.</p> : offerUltra && <p>For creators editing every week.</p>}
         </header>
         <div className="editor-access-offer">
           <div className="editor-access-price"><strong>${EDITOR_PLAN.monthlyPrice}</strong><span>/ month · {EDITOR_PLAN.currency}</span></div>
@@ -64,7 +67,8 @@ export function EditorAccessGate({ children, loading, checkoutPending = false }:
           <li><Check size={16} strokeWidth={1.5} aria-hidden="true" />Custom fonts, colors &amp; text styles</li>
           <li><Check size={16} strokeWidth={1.5} aria-hidden="true" />Video effects &amp; smooth transitions</li>
           <li><Check size={16} strokeWidth={1.5} aria-hidden="true" />Audio FX &amp; precise timeline controls</li>
-          <li><Check size={16} strokeWidth={1.5} aria-hidden="true" />Private uploads &amp; MP4 exports</li>
+          <li><Check size={16} strokeWidth={1.5} aria-hidden="true" />Private uploads &amp; 1080p MP4 exports</li>
+          <li><Check size={16} strokeWidth={1.5} aria-hidden="true" />50 GB storage</li>
         </ul>
         {!status.configured && <p role="status">Billing is temporarily unavailable. Please try again shortly.</p>}
         <div className="editor-access-action">
@@ -72,11 +76,13 @@ export function EditorAccessGate({ children, loading, checkoutPending = false }:
             {busy === 'pro' && <LoaderCircle size={14} className="animate-spin" />}
             {status.needsPayment ? 'Update payment method' : trial ? `Start ${EDITOR_PLAN.trialDays}-day free trial` : 'Start creating'}
           </PrimaryButton>
-          {status.ultraAvailable && !status.needsPayment && <button type="button" className="workspace-outline-button editor-access-ultra" disabled={!!busy} onClick={() => void openCheckout('ultra')}>{busy === 'ultra' && <LoaderCircle size={13} className="animate-spin" />}Get Ultra instead · ${ULTRA_PLAN.monthlyPrice}/month</button>}
           <small>{trial ? 'Payment method required. Cancel before your trial ends to avoid a charge.' : 'Cancel anytime in billing.'}</small>
         </div>
         {error && <p className="editor-access-error" role="alert">{error}</p>}
       </section>
+      {offerUltra && <UltraPlanCard note="Billed today. Cancel anytime in billing.">
+        <button type="button" className="ultra-plan-button" disabled={!!busy || !status.configured} onClick={() => void openCheckout('ultra')}>{busy === 'ultra' && <LoaderCircle size={14} className="animate-spin" />}Get Ultra</button>
+      </UltraPlanCard>}
     </main>
   </div>;
 }
