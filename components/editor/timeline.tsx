@@ -5,7 +5,7 @@ import { userError } from '@/lib/user-error';
 import { STOCK_AUDIO_DRAG_TYPE } from '@/lib/editor/stock-audio-drag';
 import { useState, useRef, useCallback, useLayoutEffect, useEffect, useMemo } from 'react';
 import { EffectIcon } from './effect-icon';
-import { Scissors, Copy, ClipboardPaste, Trash2, Magnet, Minus, Plus, Type, Layers, Volume2, VolumeX, ChevronDown, ChevronUp, MoreHorizontal, Rows3, ListMinus, Unlink, Flag, Pencil, FoldHorizontal, Combine, Undo2, Redo2, ChevronsRightLeft } from 'lucide-react';
+import { Scissors, Copy, ClipboardPaste, Trash2, Magnet, Plus, Type, Layers, Volume2, VolumeX, ChevronDown, ChevronUp, MoreHorizontal, Rows3, ListMinus, Unlink, Flag, Pencil, FoldHorizontal, Combine, Undo2, Redo2, ChevronsRightLeft } from 'lucide-react';
 import { IconButton } from './primitives';
 import { TimelineRulerTicks } from './timeline-ruler';
 import { EditorPlaybackTime } from './playback-time';
@@ -632,28 +632,21 @@ export function TimelinePanel(p:Props){
       {p.readOnly&&<span>Timeline</span>}
       {!p.readOnly&&<IconButton label={blade?'Blade on · click a clip to cut · A to select':'Blade tool (B)'} aria-pressed={blade} data-active={blade||undefined} disabled={editingDisabled} onClick={()=>store.setState({tool:blade?'select':'blade'})}><Scissors size={14}/></IconButton>}
       {!p.readOnly&&<IconButton label="Delete selected clips" disabled={editingDisabled||!selected} onClick={p.onDelete}><Trash2 size={14}/></IconButton>}
+      {!p.readOnly&&p.onUndo&&<IconButton label="Undo (⌘Z)" disabled={!p.canUndo} onClick={p.onUndo}><Undo2 size={14}/></IconButton>}
+      {!p.readOnly&&p.onRedo&&<IconButton label="Redo (⇧⌘Z)" disabled={!p.canRedo} onClick={p.onRedo}><Redo2 size={14}/></IconButton>}
       {(p.aiWorking||p.editingLocked)&&!p.readOnly&&<span className="timeline-ai-badge" role="status"><span className="timeline-ai-badge-dot" aria-hidden="true"/>AI editing</span>}
     </div>{p.playbackControls&&<div className="timeline-playback-controls">{p.playbackControls}</div>}<div className="timeline-view-actions">
       {!p.readOnly&&<Tooltip><TooltipTrigger asChild><button aria-label="Auto-join when trimming" onClick={()=>{store.setState({ripple:!ripple});setRipplePreference(!ripple);}} aria-pressed={ripple} className={ripple?'snap-active':''}><ChevronsRightLeft size={14}/></button></TooltipTrigger><TooltipContent>{ripple?'Auto-join on: trims pull later clips along':'Auto-join off: trims leave gaps'}</TooltipContent></Tooltip>}
       {!p.readOnly&&<button aria-label="Toggle snapping" onClick={()=>store.setState({snapping:!snap})} aria-pressed={snap} className={snap?'snap-active':''}><Magnet size={14}/></button>}
       <input aria-label="Timeline zoom" type="range" min="0" max="100" step="any" value={timelineZoomPosition(zoom,minimumZoom)} aria-valuetext={`${Math.round(zoom*100)}%`} onChange={e=>changeZoom(timelineZoomAtPosition(Number(e.target.value),minimumZoom))}/>
       <DropdownMenu><DropdownMenuTrigger className="timeline-more-trigger" aria-label="More timeline tools" title="More timeline tools"><MoreHorizontal size={15}/></DropdownMenuTrigger><DropdownMenuContent align="end" className="timeline-more-menu">
-        {!p.readOnly&&<><DropdownMenuSub><DropdownMenuSubTrigger disabled={editingDisabled}>Frame rate · {timeline.fps} fps</DropdownMenuSubTrigger><DropdownMenuSubContent><DropdownMenuRadioGroup value={String(timeline.fps)} onValueChange={value=>{const fps=Number(value);if(fps===24||fps===30||fps===60){if(timeline.clips.some(clip=>clip.duration<1/fps)){report(new Error(`Some clips are shorter than one frame at ${fps} fps. Extend those clips before changing the frame rate.`));return;}onChange({...timeline,fps});}}}>{[24,30,60].map(fps=><DropdownMenuRadioItem key={fps} value={String(fps)}>{fps} fps</DropdownMenuRadioItem>)}</DropdownMenuRadioGroup></DropdownMenuSubContent></DropdownMenuSub>
-        {p.onUndo&&<DropdownMenuItem disabled={!p.canUndo} onSelect={p.onUndo}><Undo2/>Undo</DropdownMenuItem>}
-        {p.onRedo&&<DropdownMenuItem disabled={!p.canRedo} onSelect={p.onRedo}><Redo2/>Redo</DropdownMenuItem>}
-        <DropdownMenuSeparator/>
-        <DropdownMenuItem disabled={editingDisabled||!timeline.clips.find(c=>c.id===selected)?.linkedClipId} onSelect={()=>{if(selected)onChange(unlinkClips(timeline,selected));}}><Unlink/>Unlink video and audio</DropdownMenuItem>
-        <DropdownMenuItem disabled={p.editingLocked||!timeline.clips.some(clip=>clip.kind==='video'||clip.kind==='image')} onSelect={closeGaps}><FoldHorizontal/>Close gaps</DropdownMenuItem>
+        {/* Only what has no other home: undo/redo sit in the toolbar, zoom on the slider, tracks and unlink in the right-click menu. */}
+        {!p.readOnly&&<><DropdownMenuItem disabled={p.editingLocked||!timeline.clips.some(clip=>clip.kind==='video'||clip.kind==='image')} onSelect={closeGaps}><FoldHorizontal/>Close gaps</DropdownMenuItem>
         <DropdownMenuItem disabled={p.editingLocked} title="Merge adjacent split pieces from the same source. Select two pieces, or one next to its split neighbor." onSelect={mergeClips}><Combine/>Merge clips</DropdownMenuItem>
         <DropdownMenuSeparator/></>}
         <DropdownMenuItem onSelect={p.onToggleMute}>{p.muted?<VolumeX/>:<Volume2/>}{p.muted?'Unmute preview':'Mute preview'}</DropdownMenuItem>
         <DropdownMenuItem onSelect={()=>store.setState({compactTracks:!dense})}><Rows3/>{dense?'Expand track rows':'Compact track rows'}</DropdownMenuItem>
-        {!p.readOnly&&<><DropdownMenuSeparator/>
-        {([['effects','Add effect track'],['visual','Add visual layer'],['audio','Add audio layer']] as const).map(([group,label])=><DropdownMenuItem key={group} disabled={editingDisabled} onSelect={()=>addLayer(group)}><Plus/>{label}</DropdownMenuItem>)}
-        <DropdownMenuItem disabled={editingDisabled||cleanedTimeline===timeline} onSelect={()=>onChange(cleanedTimeline)}><ListMinus/>Remove empty tracks</DropdownMenuItem></>}
-        <DropdownMenuSeparator/>
-        <DropdownMenuItem onSelect={event=>{event.preventDefault();changeZoom(zoom*1.3);}}><Plus/>Zoom in</DropdownMenuItem>
-        <DropdownMenuItem onSelect={event=>{event.preventDefault();changeZoom(zoom/1.3);}}><Minus/>Zoom out</DropdownMenuItem>
+        {!p.readOnly&&<><DropdownMenuSeparator/><DropdownMenuSub><DropdownMenuSubTrigger disabled={editingDisabled}>Frame rate · {timeline.fps} fps</DropdownMenuSubTrigger><DropdownMenuSubContent><DropdownMenuRadioGroup value={String(timeline.fps)} onValueChange={value=>{const fps=Number(value);if(fps===24||fps===30||fps===60){if(timeline.clips.some(clip=>clip.duration<1/fps)){report(new Error(`Some clips are shorter than one frame at ${fps} fps. Extend those clips before changing the frame rate.`));return;}onChange({...timeline,fps});}}}>{[24,30,60].map(fps=><DropdownMenuRadioItem key={fps} value={String(fps)}>{fps} fps</DropdownMenuRadioItem>)}</DropdownMenuRadioGroup></DropdownMenuSubContent></DropdownMenuSub></>}
       </DropdownMenuContent></DropdownMenu>
       <IconButton label={p.collapsed?'Expand timeline':'Collapse timeline'} onClick={p.onToggleCollapse}>{p.collapsed?<ChevronUp size={14}/>:<ChevronDown size={14}/>}</IconButton>
     </div></div>
