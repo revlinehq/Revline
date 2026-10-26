@@ -6,4 +6,7 @@ const app = defineApp();
 app.use(agent);
 app.use(stripe);
 app.use(workflow);
+// AI turns hold a step for a whole model call, so they get their own pool and cannot
+// starve the short media-task steps that drive uploads and exports.
+app.use(workflow, { name: 'aiWorkflow' });
 export default app;

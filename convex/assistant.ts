@@ -2,7 +2,8 @@ import {validatePinnedClaudeModel,type ClaudeModelSelection} from '../lib/ai/cla
 import { READ_ONLY_RUN_PREFIX } from './lib/run_ids';
 import type {MutationCtx, QueryCtx} from './_generated/server';
 import type {Doc} from './_generated/dataModel';
-import {mediaWorkflow} from './lib/workflows';
+import {aiWorkflow} from './lib/workflows';
+import {cancelTurn} from './assistantWorkflow';
 import type {WorkflowId} from '@convex-dev/workflow';
 import { describeLiveEdit } from '../lib/editor/live-edit';
 import { equalTimelineValue } from '../lib/editor/timeline-equality';
@@ -115,7 +116,7 @@ async function beginRequest(ctx:MutationCtx,project:Doc<'projects'>,prompt:strin
   const runId = `${Date.now()}-${Math.random()}`;
   await clearLivePreview(ctx,project._id);
   await writeProject(ctx,project._id, { threadId, aiQueuePaused:false, aiRunning: true, aiEditing: false, aiError: undefined, aiRunId: runId, aiAnalysisUsage:{runId,enqueued:0}, aiUndoRecorded: false, aiCheckpointRevision: undefined, aiRequest:{prompt,messageId,startedRevision:project.revision??0}, aiRecovery:recovery });
-  const workflowId=await mediaWorkflow.start(ctx, internal.assistantWorkflow.run, { projectId: project._id, ownerId, runId, threadId, promptMessageId: messageId, pinnedModel,...(request.attachedAssetIds?{attachedAssetIds:request.attachedAssetIds}:{}), ...(recovery?{recovery}:{}), ...(request.selectedClipId ? { selectedClipId: request.selectedClipId } : {}), ...(request.selectedClipIds ? { selectedClipIds: request.selectedClipIds } : {}), ...(request.playhead !== undefined ? { playhead: request.playhead } : {}) },{startAsync:true,onComplete:internal.assistantWorkflow.settle,context:{projectId:project._id,ownerId,runId}});
+  const workflowId=await aiWorkflow.start(ctx, internal.assistantWorkflow.runTurn, { projectId: project._id, ownerId, runId, threadId, promptMessageId: messageId, pinnedModel,...(request.attachedAssetIds?{attachedAssetIds:request.attachedAssetIds}:{}), ...(recovery?{recovery}:{}), ...(request.selectedClipId ? { selectedClipId: request.selectedClipId } : {}), ...(request.selectedClipIds ? { selectedClipIds: request.selectedClipIds } : {}), ...(request.playhead !== undefined ? { playhead: request.playhead } : {}) },{startAsync:true,onComplete:internal.assistantWorkflow.settle,context:{projectId:project._id,ownerId,runId}});
   await writeProject(ctx,project._id,{aiWorkflowId:workflowId}); return null;
 }
 
@@ -149,7 +150,7 @@ export const stop = mutation({ args: { projectId: v.id('projects') }, returns: v
   for(const review of reviews)if(review.runId===project.aiRunId&&review.status==='queued'){if(review.taskId)await cancelMediaTask(ctx,review.taskId);await ctx.db.patch(review._id,{status:'failed',error:'Stopped by the user.'});}
   await clearLivePreview(ctx,project._id);
   // Already-saved edits remain undoable; invalidating the run blocks every later checkpoint.
-  if(project.aiWorkflowId)await mediaWorkflow.cancel(ctx,project.aiWorkflowId as WorkflowId);
+  if(project.aiWorkflowId)await cancelTurn(ctx,project.aiWorkflowId as WorkflowId);
   await writeProject(ctx,project._id, { aiRunning: false, aiEditing: false, aiRunId: undefined, aiWorkflowId:undefined, aiQueuePaused:true, aiError: undefined, aiRecovery:assistantRecovery(project,'stopped','Stopped by the user. Saved edits remain.'),aiRequest:undefined });
   return null;
 }});

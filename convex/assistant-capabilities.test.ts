@@ -1,5 +1,5 @@
 import workflowTest from '@convex-dev/workflow/test';
-import {mediaWorkflow} from './lib/workflows';
+import {aiWorkflow} from './lib/workflows';
 import {AssistantBudgetError} from '../lib/ai/run-budget';
 import { writeProject } from './lib/project_data';
 /// <reference types="vite/client" />
@@ -850,7 +850,7 @@ test('automatic continuation is bounded and leaves recovery when its final segme
 test('the durable workflow executes checkpointed actions serially and settles the same request',async()=>{
   vi.useFakeTimers();
   try{
-    const b=await memoryBackend(initial);workflowTest.register(b.t);
+    const b=await memoryBackend(initial);workflowTest.register(b.t);workflowTest.register(b.t,'aiWorkflow');workflowTest.register(b.t,'aiWorkflow');
     let segments=0;
     sdk.plan=async()=>{
       const tools=sdk.options!.tools;
@@ -859,7 +859,7 @@ test('the durable workflow executes checkpointed actions serially and settles th
       if(segments===1){await execute(tools,'trim',{clipId:'from',duration:1.5});throw new AssistantBudgetError('total');}
       await execute(tools,'editText',{clipId:'title',text:'Finished after continuation'});
     };
-    const workflowId=await b.t.run(ctx=>mediaWorkflow.start(ctx,internal.assistantWorkflow.run,{...b.runArgs,threadId:b.threadId,promptMessageId:b.promptMessageId},{startAsync:true,onComplete:internal.assistantWorkflow.settle,context:b.runArgs}));
+    const workflowId=await b.t.run(ctx=>aiWorkflow.start(ctx,internal.assistantWorkflow.runTurn,{...b.runArgs,threadId:b.threadId,promptMessageId:b.promptMessageId},{startAsync:true,onComplete:internal.assistantWorkflow.settle,context:b.runArgs}));
     await b.t.run(ctx=>writeProject(ctx,b.projectId,{aiWorkflowId:workflowId}));
     for(let i=0;i<50;i++){
       vi.advanceTimersByTime(250);

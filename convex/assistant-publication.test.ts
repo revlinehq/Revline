@@ -143,7 +143,7 @@ test('a stale preview is hidden after a revision change and a published edit rem
 });
 
 test('finishing footage analysis keeps tracks locked through planning until the run finishes',async()=>{
-  const x=await setup();workflowTest.register(x.t);
+  const x=await setup();workflowTest.register(x.t);workflowTest.register(x.t,'aiWorkflow');
   const assetId=await x.t.run(ctx=>ctx.db.insert('assets',{ownerId:'owner',projectId:x.projectId,kind:'video',fileName:'Source.mp4',contentType:'video/mp4',size:1,duration:10,createdAt:Date.now()}));
   const requestId=await x.t.mutation(internal.assistant.requestAnalysis,{...x.run,assetId,mode:'understand'});
   expect((await x.owner.query(api.assistant.status,{projectId:x.projectId})).workflowActive).toBe(true);
@@ -156,7 +156,7 @@ test('finishing footage analysis keeps tracks locked through planning until the 
 });
 
 test('analysis capacity survives clearing completed requests and continuing the original run',async()=>{
-  const x=await setup();workflowTest.register(x.t);
+  const x=await setup();workflowTest.register(x.t);workflowTest.register(x.t,'aiWorkflow');
   const assetId=await x.t.run(ctx=>ctx.db.insert('assets',{ownerId:'owner',projectId:x.projectId,kind:'video',fileName:'Source.mp4',contentType:'video/mp4',size:1,duration:10,createdAt:Date.now()}));
   const request=(index:number)=>x.t.mutation(internal.assistant.requestAnalysis,{...x.run,assetId,mode:'frames',frameRequest:{start:0,end:1,question:`Inspect distinct detail ${index}`}});
   for(let index=0;index<15;index++){
@@ -179,7 +179,7 @@ test('analysis capacity survives clearing completed requests and continuing the 
 });
 
 test('saved analysis and active task reuse remain available when the original run reaches capacity',async()=>{
-  const x=await setup();workflowTest.register(x.t);
+  const x=await setup();workflowTest.register(x.t);workflowTest.register(x.t,'aiWorkflow');
   const assetId=await x.t.run(ctx=>ctx.db.insert('assets',{ownerId:'owner',projectId:x.projectId,kind:'video',fileName:'Source.mp4',contentType:'video/mp4',size:1,duration:10,createdAt:Date.now()}));
   const frameRequest={start:0,end:1,question:'Cached source detail'};
   const cachedTask=await x.t.run(async ctx=>{
@@ -238,7 +238,7 @@ test.each([
 
 
 test('queued messages survive reload, respect ownership and start in order after the active request',async()=>{
-  const x=await setup();workflowTest.register(x.t);
+  const x=await setup();workflowTest.register(x.t);workflowTest.register(x.t,'aiWorkflow');
   vi.stubEnv('OPENAI_API_KEY','fixture-only');vi.stubEnv('EDITOR_DEFAULT_MODEL','gpt-6.1-sol');vi.stubEnv('AI_GATEWAY_ENABLED','false');
   await x.owner.mutation(api.assistant.send,{projectId:x.projectId,prompt:'First queued request'});
   await x.owner.mutation(api.assistant.send,{projectId:x.projectId,prompt:'Second queued request'});

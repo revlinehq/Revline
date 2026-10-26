@@ -105,7 +105,7 @@ test('latest completed judgment per plan wins over an older pass and stays scope
 
 test('targeted visible correction can be reviewed after old judgments without rerendering unchanged evidence',async()=>{
   const x=await persistedReviews();
-  const {default:workflowTest}=await import('@convex-dev/workflow/test');workflowTest.register(x.t);
+  const {default:workflowTest}=await import('@convex-dev/workflow/test');workflowTest.register(x.t);workflowTest.register(x.t,'aiWorkflow');
   await x.record(['a'],x.timeline,'fail');await x.record(['a']);
   await x.t.run(async ctx=>{const saved=await ctx.db.query('assistantPlans').withIndex('by_project',q=>q.eq('projectId',x.projectId)).unique();await ctx.db.patch(saved!._id,{reviews:2});});
   await expect(x.t.mutation(x.internal.compositionReview.request,{...x.run,expectedRevision:0,timeline:x.timeline,planIds:['a'],bindings:[]})).rejects.toThrow('review limit');

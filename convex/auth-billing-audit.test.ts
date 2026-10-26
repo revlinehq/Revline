@@ -37,7 +37,7 @@ beforeEach(() => {
 afterEach(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 async function fixture(granted = true) {
-  const t = convexTest(schema, modules); stripeTest.register(t); workflowTest.register(t);
+  const t = convexTest(schema, modules); stripeTest.register(t); workflowTest.register(t);workflowTest.register(t,'aiWorkflow');
   const owner = t.withIdentity(identity(ownerId)), other = t.withIdentity(identity(otherId));
   if (granted) await t.mutation(internal.editorAccess.grantComplimentary, { ownerId, reason: 'Owned audit fixture' });
   const data = await t.run(async ctx => {

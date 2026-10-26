@@ -172,4 +172,5 @@ export declare const components: {
   agent: import("@convex-dev/agent/_generated/component.js").ComponentApi<"agent">;
   stripe: import("@convex-dev/stripe/_generated/component.js").ComponentApi<"stripe">;
   workflow: import("@convex-dev/workflow/_generated/component.js").ComponentApi<"workflow">;
+  aiWorkflow: import("@convex-dev/workflow/_generated/component.js").ComponentApi<"aiWorkflow">;
 };
