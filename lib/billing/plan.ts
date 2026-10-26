@@ -4,3 +4,9 @@ export const EDITOR_PLAN = {
   currency: 'USD',
   trialDays: 3,
 } as const;
+
+export const ULTRA_PLAN = {
+  name: 'Revline Ultra',
+  monthlyPrice: 199,
+  currency: 'USD',
+} as const;

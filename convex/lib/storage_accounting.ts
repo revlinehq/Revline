@@ -4,14 +4,18 @@ import { ConvexError } from 'convex/values';
 import type { Doc, Id } from '../_generated/dataModel';
 import type { MutationCtx, QueryCtx } from '../_generated/server';
 import { isStockAudioKey } from '../../lib/editor/stock-audio';
+import { hasUltraPlan } from './billing_access';
 
 type StoredObject = { r2Key?:string; storageId?:Id<'_storage'> };
 type ObjectDetails = StoredObject & { ownerId:string; fileName:string; kind:'video'|'audio'|'image'|'export'; size:number; createdAt:number; auxiliary?:boolean; pending?:boolean; jobId?:Id<'renderJobs'> };
 type Context = MutationCtx | QueryCtx;
-export const STORAGE_LIMIT_BYTES = 15_000_000_000;
-export function storageLimit() {
-  const value = process.env.ACCOUNT_STORAGE_LIMIT_BYTES;
-  const limit = value ? Number(value) : STORAGE_LIMIT_BYTES;
+export const STORAGE_LIMIT_BYTES = 50_000_000_000;
+export const ULTRA_STORAGE_LIMIT_BYTES = 500_000_000_000;
+/** Pro and Ultra allowances; ACCOUNT_/ULTRA_STORAGE_LIMIT_BYTES override them per deployment. */
+export async function storageLimit(ctx:Context,ownerId:string) {
+  const ultra = await hasUltraPlan(ctx,ownerId);
+  const value = ultra ? process.env.ULTRA_STORAGE_LIMIT_BYTES : process.env.ACCOUNT_STORAGE_LIMIT_BYTES;
+  const limit = value ? Number(value) : ultra ? ULTRA_STORAGE_LIMIT_BYTES : STORAGE_LIMIT_BYTES;
   if (!Number.isSafeInteger(limit) || limit <= 0) throw new Error('Invalid account storage allowance');
   return limit;
 }
@@ -43,7 +47,7 @@ export async function recordStorageObject(ctx:MutationCtx,source:ObjectDetails,b
   // Reserving bytes and inserting the lease share one transaction, so concurrent uploads cannot overbook.
   if(!existing&&!backfill&&await accountingReady(ctx)) {
     const account=await storageAccount(ctx,source.ownerId);
-    if((account?.usedBytes??0)+(account?.reservedBytes??0)+source.size>storageLimit()) throw new ConvexError('Your cloud storage is full. Delete unused media or old exports before uploading.');
+    if((account?.usedBytes??0)+(account?.reservedBytes??0)+source.size>await storageLimit(ctx,source.ownerId)) throw new ConvexError('Your cloud storage is full. Delete unused media or old exports before uploading.');
   }
   if(existing)await adjust(ctx,source.ownerId,existing,-1);
   const next={ownerId:source.ownerId,fileName:source.fileName,kind:source.kind,size:source.size,createdAt:source.createdAt,objectKey:key,pending,auxiliary,...(source.r2Key?{r2Key:source.r2Key}:{}),...(source.storageId?{storageId:source.storageId}:{}),...(source.jobId?{jobId:source.jobId}:{})};

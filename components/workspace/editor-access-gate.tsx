@@ -7,7 +7,7 @@ import Link from 'next/link';
 import { useAction, useConvexAuth, useQuery } from 'convex/react';
 import { Check, LoaderCircle } from 'lucide-react';
 import { api } from '@/convex/_generated/api';
-import { EDITOR_PLAN } from '@/lib/billing/plan';
+import { EDITOR_PLAN, ULTRA_PLAN } from '@/lib/billing/plan';
 import { PrimaryButton } from './primary-button';
 import { WorkspaceNav } from './workspace-nav';
 import './shared.css';
@@ -18,7 +18,7 @@ export function EditorAccessGate({ children, loading, checkoutPending = false }:
   const status = useQuery(api.billing.status, isAuthenticated ? {} : 'skip');
   const checkout = useAction(api.billing.createCheckout);
   const portal = useAction(api.billing.createPortal);
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState<'' | 'pro' | 'ultra'>('');
   const [error, setError] = useState('');
   const inFlight = useRef(false);
 
@@ -34,16 +34,16 @@ export function EditorAccessGate({ children, loading, checkoutPending = false }:
   </div>;
   const trial = status.trialEligible && !status.needsPayment;
 
-  async function openCheckout() {
+  async function openCheckout(plan: 'pro' | 'ultra' = 'pro') {
     if (!status?.configured || inFlight.current) return;
-    inFlight.current = true; setBusy(true); setError('');
+    inFlight.current = true; setBusy(plan); setError('');
     try {
-      const result = status.needsPayment ? await portal({}) : await checkout({ plan: 'pro' });
+      const result = status.needsPayment ? await portal({}) : await checkout({ plan });
       if (!result.url) throw new Error('Could not open checkout. Please try again.');
       window.location.assign(result.url);
     } catch (cause) {
       setError(userError(cause, 'Could not open billing. Please try again.'));
-      inFlight.current = false; setBusy(false);
+      inFlight.current = false; setBusy('');
     }
   }
 
@@ -68,10 +68,11 @@ export function EditorAccessGate({ children, loading, checkoutPending = false }:
         </ul>
         {!status.configured && <p role="status">Billing is temporarily unavailable. Please try again shortly.</p>}
         <div className="editor-access-action">
-          <PrimaryButton className="editor-access-start" disabled={busy || !status.configured} onClick={() => void openCheckout()}>
-            {busy && <LoaderCircle size={14} className="animate-spin" />}
+          <PrimaryButton className="editor-access-start" disabled={!!busy || !status.configured} onClick={() => void openCheckout()}>
+            {busy === 'pro' && <LoaderCircle size={14} className="animate-spin" />}
             {status.needsPayment ? 'Update payment method' : trial ? `Start ${EDITOR_PLAN.trialDays}-day free trial` : 'Start creating'}
           </PrimaryButton>
+          {status.ultraAvailable && !status.needsPayment && <button type="button" className="workspace-outline-button editor-access-ultra" disabled={!!busy} onClick={() => void openCheckout('ultra')}>{busy === 'ultra' && <LoaderCircle size={13} className="animate-spin" />}Get Ultra instead · ${ULTRA_PLAN.monthlyPrice}/month</button>}
           <small>{trial ? 'Payment method required. Cancel before your trial ends to avoid a charge.' : 'Cancel anytime in billing.'}</small>
         </div>
         {error && <p className="editor-access-error" role="alert">{error}</p>}

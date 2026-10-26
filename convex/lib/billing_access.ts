@@ -4,7 +4,9 @@ import type { ActionCtx, MutationCtx, QueryCtx } from '../_generated/server';
 
 export const billingEnabled = () => process.env.BILLING_ENABLED === 'true';
 export const billingConfigured = () => !!process.env.STRIPE_SECRET_KEY && !!process.env.STRIPE_WEBHOOK_SECRET && !!process.env.STRIPE_PRO_PRICE_ID && !!process.env.APP_ORIGIN;
-export const isEditorSubscription = (sub: { priceId: string; metadata?: Record<string, unknown> }) => sub.priceId === process.env.STRIPE_PRO_PRICE_ID || sub.metadata?.app === 'revline-editor';
+export const ultraBillingConfigured = () => billingConfigured() && !!process.env.STRIPE_ULTRA_PRICE_ID;
+export const isUltraSubscription = (sub: { priceId: string }) => !!process.env.STRIPE_ULTRA_PRICE_ID && sub.priceId === process.env.STRIPE_ULTRA_PRICE_ID;
+export const isEditorSubscription = (sub: { priceId: string; metadata?: Record<string, unknown> }) => sub.priceId === process.env.STRIPE_PRO_PRICE_ID || isUltraSubscription(sub) || sub.metadata?.app === 'revline-editor';
 export const hasEditorAccess = (sub: { status: string; currentPeriodEnd: number }) => (sub.status === 'active' || sub.status === 'trialing') && sub.currentPeriodEnd > Date.now() / 1000;
 
 export async function editorSubscriptions(ctx: QueryCtx | MutationCtx | ActionCtx, userId: string) {
@@ -16,10 +18,12 @@ export async function hasComplimentaryEditorAccess(ctx: QueryCtx | MutationCtx, 
   return !!entitlement && entitlement.revokedAt === undefined && (entitlement.expiresAt === undefined || entitlement.expiresAt > Date.now());
 }
 
-/** Ultra is an operator grant on an active complimentary entitlement; nothing sells it yet. */
+/** Ultra comes from an active Ultra subscription, or an operator grant on an active complimentary entitlement. */
 export async function hasUltraPlan(ctx: QueryCtx | MutationCtx, ownerId: string) {
   const entitlement = await ctx.db.query('editorEntitlements').withIndex('by_owner', q => q.eq('ownerId', ownerId)).unique();
-  return !!entitlement && entitlement.plan === 'ultra' && entitlement.revokedAt === undefined && (entitlement.expiresAt === undefined || entitlement.expiresAt > Date.now());
+  if (!!entitlement && entitlement.plan === 'ultra' && entitlement.revokedAt === undefined && (entitlement.expiresAt === undefined || entitlement.expiresAt > Date.now())) return true;
+  if (!billingEnabled() || !ultraBillingConfigured()) return false;
+  return (await editorSubscriptions(ctx, ownerId)).some(sub => isUltraSubscription(sub) && hasEditorAccess(sub));
 }
 
 export async function requireEditorAccess(ctx: QueryCtx | MutationCtx, ownerId: string) {
