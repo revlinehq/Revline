@@ -6,4 +6,4 @@
 .workspace-billing-actions { display:flex; flex-wrap:wrap; gap:8px; }
 .ultra-plan-dialog { width:min(420px,calc(100vw - 32px)); max-width:none; padding:0; border:0; background:transparent; box-shadow:none; }
 .ultra-plan-dialog .ultra-plan-card { box-shadow:0 24px 60px #0000004d; }
-.workspace-billing-actions .workspace-outline-button { height:36px; }
+.workspace-billing-actions .workspace-outline-button { height:36px; padding:0 16px; }
