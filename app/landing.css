@@ -176,7 +176,7 @@ div.landing-reveal,div.landing-reveal>.landing-reveal-content{display:inline-blo
 .landing-faq details p{width:680px;max-width:100%;margin-top:12px;font-size:15px;line-height:1.6;color:var(--l-fg-2)}
 
 /* MCP */
-.landing-mcp{display:flex;align-items:center;gap:80px;padding-block:112px;background:linear-gradient(315deg,#7c3aed,#a876ff)}
+.landing-mcp{display:flex;align-items:center;gap:80px;padding-block:112px;background:var(--l-brand)}
 .landing-mcp-apps{display:flex;padding-inline:4px}
 .landing-mcp-apps span{display:grid;place-items:center;width:54px;height:54px;overflow:hidden;border-radius:13px;border:1px solid #ffffff3d;box-shadow:0 8px 20px #2e106559}
 .landing-mcp-apps span+span{margin-left:-12px}
