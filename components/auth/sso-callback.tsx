@@ -3,7 +3,7 @@
 import { HandleSSOCallback } from '@clerk/nextjs';
 import { useSearchParams } from 'next/navigation';
 import { LoaderCircle } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { AuthFrame } from './auth-frame';
 import { safeAuthRedirect } from './email-auth-flow';
 import { AuthRecovery } from './auth-recovery';
@@ -11,6 +11,10 @@ import { AuthRecovery } from './auth-recovery';
 export function SsoCallback() {
   const params = useSearchParams();
   const [error, setError] = useState('');
+  // window only exists in the browser: the callbacks run there, and the fallback link
+  // gains its redirect after hydration so server and client render the same markup.
+  const [origin, setOrigin] = useState<string>();
+  useEffect(() => setOrigin(window.location.origin), []);
   const target = () => safeAuthRedirect(params.get('redirect_url'), window.location.origin);
   const signInUrl = () => `/sign-in?redirect_url=${encodeURIComponent(target())}`;
 
@@ -19,7 +23,7 @@ export function SsoCallback() {
     // A document navigation also refreshes server auth after the new session is created.
     window.location.replace(decorateUrl(target()));
   }} navigateToSignIn={() => window.location.replace(signInUrl())} navigateToSignUp={() => window.location.replace(signInUrl())} />
-    <div className="auth-callback-recovery"><a href={signInUrl()}>Back to sign-in</a></div>
+    <div className="auth-callback-recovery"><a href={origin ? signInUrl() : '/sign-in'}>Back to sign-in</a></div>
     {!error && <AuthRecovery />}
   </div></AuthFrame>;
 }
