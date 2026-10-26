@@ -105,7 +105,7 @@ div.landing-reveal,div.landing-reveal>.landing-reveal-content{display:inline-blo
 
 /* How it works */
 .landing-how{display:flex;flex-direction:column;gap:48px;padding-block:96px}
-.landing-features{display:flex;flex-direction:column;gap:56px;padding-block:96px}
+.landing-features{display:flex;flex-direction:column;gap:56px;padding-block:96px;margin-bottom:64px}
 .landing .landing-feature-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:48px 40px}
 .landing-feature-grid li{display:flex;flex-direction:column;gap:10px;padding-top:24px;border-top:1px solid var(--l-border)}
 .landing-feature-grid svg{margin-bottom:16px;color:var(--l-brand)}
@@ -269,6 +269,7 @@ div.landing-reveal,div.landing-reveal>.landing-reveal-content{display:inline-blo
   .landing-use-cases,.landing-how,.landing-features,.landing-pricing,.landing-faq,.landing-mcp{padding-block:64px}
   .landing-mcp-code pre{font-size:12px}
   .landing-use-cases,.landing-how,.landing-features{gap:32px}
+  .landing-features{margin-bottom:32px}
   .landing .landing-feature-grid{grid-template-columns:minmax(0,1fr);gap:32px}
   .landing-tile{height:180px;width:102px}
   .landing-tile-wide{width:320px}
