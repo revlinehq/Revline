@@ -9,6 +9,7 @@ import { api } from '@/convex/_generated/api';
 import { EDITOR_PLAN, ULTRA_PLAN } from '@/lib/billing/plan';
 import { PrimaryButton } from './primary-button';
 import { UltraPlanCard } from './ultra-plan-card';
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
 import './billing-section.css';
 
 export type CheckoutReturn = 'success' | 'canceled' | undefined;
@@ -21,6 +22,7 @@ export function BillingSection({ checkoutReturn }: { checkoutReturn?: CheckoutRe
   const upgrade = useAction(api.billing.upgradeToUltra);
   const [busy, setBusy] = useState<'' | 'pro' | 'ultra' | 'upgrade'>('');
   const [confirmUpgrade, setConfirmUpgrade] = useState(false);
+  const [ultraOpen, setUltraOpen] = useState(false);
   const [upgrading, setUpgrading] = useState(false);
   const [error, setError] = useState('');
   const inFlight = useRef(false);
@@ -41,7 +43,7 @@ export function BillingSection({ checkoutReturn }: { checkoutReturn?: CheckoutRe
   async function upgradeToUltra() {
     if (inFlight.current) return;
     inFlight.current = true; setBusy('upgrade'); setError('');
-    try { await upgrade({}); setUpgrading(true); setConfirmUpgrade(false); }
+    try { await upgrade({}); setUpgrading(true); setConfirmUpgrade(false); setUltraOpen(false); }
     catch (cause) { setError(userError(cause, 'Could not upgrade to Ultra. Please try again.')); }
     finally { inFlight.current = false; setBusy(''); }
   }
@@ -61,12 +63,19 @@ export function BillingSection({ checkoutReturn }: { checkoutReturn?: CheckoutRe
         {!status.complimentary && <p className="workspace-membership-description">{status.subscribed ? 'Manage your subscription, payment method, and invoices securely through Stripe.' : status.trialEligible ? `Try it free for ${EDITOR_PLAN.trialDays} days, then $${EDITOR_PLAN.monthlyPrice}/month. Cancel anytime.` : `$${EDITOR_PLAN.monthlyPrice}/month. Cancel anytime. Your free trial has already been used.`}</p>}
         {!status.complimentary && <div className="workspace-billing-actions">
           <PrimaryButton size="compact" disabled={!active || !!busy} onClick={() => void openBilling()}>{busy === 'pro' && <LoaderCircle size={14} className="animate-spin" />}{!active ? 'Coming soon' : status.subscribed || status.needsPayment ? 'Manage subscription' : status.trialEligible ? `Start ${EDITOR_PLAN.trialDays}-day free trial` : 'Subscribe to Pro'}</PrimaryButton>
+          {offerUltra && <button type="button" className="workspace-outline-button" onClick={() => setUltraOpen(true)}>{status.subscribed ? 'Upgrade to Ultra' : 'See Ultra'}</button>}
         </div>}
-        {offerUltra && <div className="workspace-billing-ultra"><UltraPlanCard note={status.subscribed && confirmUpgrade ? 'You\'ll be charged the prorated difference today, and any remaining trial ends.' : undefined}>
+        <Dialog open={offerUltra && ultraOpen} onOpenChange={open => { setUltraOpen(open); if (!open) setConfirmUpgrade(false); }}>
+          <DialogContent className="ultra-plan-dialog">
+            <DialogTitle className="sr-only">Revline Ultra</DialogTitle>
+            <DialogDescription className="sr-only">What Ultra adds to Pro, and how to get it.</DialogDescription>
+            <UltraPlanCard note={status.subscribed && confirmUpgrade ? 'You\'ll be charged the prorated difference today, and any remaining trial ends.' : undefined}>
           {status.subscribed
             ? <PrimaryButton disabled={!!busy} onClick={() => confirmUpgrade ? void upgradeToUltra() : setConfirmUpgrade(true)}>{busy === 'upgrade' && <LoaderCircle size={14} className="animate-spin" />}{confirmUpgrade ? 'Confirm upgrade' : 'Upgrade to Ultra'}</PrimaryButton>
             : <PrimaryButton disabled={!!busy} onClick={() => void openBilling('ultra')}>{busy === 'ultra' && <LoaderCircle size={14} className="animate-spin" />}Get Ultra</PrimaryButton>}
-        </UltraPlanCard></div>}
+        </UltraPlanCard>
+          </DialogContent>
+        </Dialog>
         {error && <p className="workspace-inline-error" role="alert">{error}</p>}
       </>}
     </div>
