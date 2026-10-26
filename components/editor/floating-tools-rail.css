@@ -3,8 +3,6 @@
 .floating-tools-rail-list::-webkit-scrollbar{display:none}
 .floating-tools-rail button{display:grid;place-items:center;flex:none;width:40px;height:40px;padding:0;border:0;border-radius:6px;background:transparent;color:var(--ws-muted,#858585);cursor:pointer;pointer-events:auto}
 .floating-tools-rail button:hover{background:var(--ws-hover,#f4f4f4);color:var(--ws-text,#292929)}
-.floating-tools-rail button[aria-pressed=true]{background:var(--revline-accent,#8b5cf6);color:#fff}
 .floating-tools-rail button:focus-visible{outline:2px solid var(--revline-accent,#8b5cf6);outline-offset:-3px}
-.floating-tools-rail-divider{height:1px;min-height:1px;margin:3px 5px;background:var(--ws-artifact-border,#e5e5e5)}
 .floating-tools-tooltip{padding:7px 10px;border:1px solid var(--ws-artifact-border,#e5e5e5);border-radius:6px;background:var(--ws-surface,#fff);color:var(--ws-text,#292929);font:12px/1.3 var(--font-inter,Arial),sans-serif;box-shadow:0 4px 12px #00000014;pointer-events:none}
 .floating-tools-tooltip svg{fill:var(--ws-surface,#fff);background:var(--ws-surface,#fff)}

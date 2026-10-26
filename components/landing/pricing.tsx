@@ -13,7 +13,7 @@ const plans = [
 export function LandingPricing() {
   return <LandingSection id="pricing" className="landing-pricing" headingId="landing-pricing-heading">
     <LandingHeading id="landing-pricing-heading" align="center" title="Cheaper than an editor. Faster too." description={`Try it free for ${EDITOR_PLAN.trialDays} days. Cancel anytime.`} />
-    <div className="landing-plans">{plans.map(plan => <article key={plan.name} className="landing-plan" data-ultra={'ultra' in plan || undefined}>
+    <div className="landing-plans">{plans.map(plan => <article key={plan.name} className="landing-plan">
       <header>
         <h3>{plan.name}</h3>
         <p>{plan.description}</p>
@@ -24,7 +24,7 @@ export function LandingPricing() {
         {plan.features.map(feature => <li key={feature}><Check size={16} aria-hidden="true" />{feature}</li>)}
       </ul>
       <footer>
-        {'ultra' in plan ? <LandingStartButton label={plan.cta} variant="inverse" size="lg" block signedInHref="/profile#billing" /> : <LandingStartButton label={plan.cta} variant="secondary" size="lg" block />}
+        {'ultra' in plan ? <LandingStartButton label={plan.cta} variant="primary" size="lg" block signedInHref="/profile#billing" /> : <LandingStartButton label={plan.cta} variant="secondary" size="lg" block />}
         <small>{plan.note}</small>
       </footer>
     </article>)}</div>

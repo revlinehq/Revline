@@ -1,7 +1,9 @@
 .assistant-model-picker{min-width:0;max-width:150px}
-.assistant-model-picker .inspector-select-trigger{width:auto;max-width:100%;height:26px;padding:0 6px;gap:4px;border:0;background:transparent;color:var(--ws-muted);font-size:13px;line-height:20px}
+.assistant-model-picker .inspector-select-trigger{width:auto;max-width:100%;height:28px;padding:0 10px;gap:5px;border-radius:8px;border:0;background:transparent;color:var(--ws-muted);font-size:13px;line-height:20px}
 .assistant-model-picker .inspector-select-value{font-size:13px;line-height:20px}
 .assistant-model-picker .inspector-select-trigger:hover,.assistant-model-picker .inspector-select-trigger[data-state=open]{background:var(--ws-hover);color:var(--ws-text)}
+/* Focus returns here after a menu closes: a soft fill and hairline instead of the 2px accent outline. */
+.editor-app .assistant-model-picker .inspector-select-trigger:focus-visible{outline:none;background:var(--ws-hover);box-shadow:0 0 0 1px var(--ws-border);color:var(--ws-text)}
 .assistant-model-picker .inspector-select-trigger:disabled{opacity:.5;cursor:default}
 .inspector-select-menu.workspace-menu[aria-label="AI editing model options"]{width:220px}
 /* The reasoning menu fits its options; composer rows get a roomier hover highlight than inspector selects. */

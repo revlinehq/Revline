@@ -34,11 +34,10 @@
 
 .assistant-model-controls{display:flex;flex-wrap:wrap;align-items:center;gap:2px;min-width:0;max-width:100%;flex:1 1 auto}
 .assistant-model-controls>.assistant-model-picker{flex:0 1 auto;min-width:0}
-.assistant-model-controls>.assistant-reasoning-picker{flex:0 0 auto;max-width:100px}
+.assistant-model-controls>.assistant-reasoning-picker{flex:0 0 auto;max-width:120px}
 .conversation-editor .assistant-content .manual-editor-composer:has(.assistant-reasoning-picker) .edit-composer-actions{height:auto;min-height:32px;align-items:flex-end}
 @media(pointer:coarse){.conversation-editor .assistant-content .manual-editor-composer:has(.assistant-reasoning-picker) .edit-composer-actions{min-height:44px}}
 
-.assistant-model-controls .assistant-reasoning-picker .inspector-select-trigger{padding-inline:3px;gap:2px}
 
 .conversation-editor .assistant-content .chat-assistant,.conversation-editor .assistant-content .chat-assistant :is(p,li,h3){font-size:14px;line-height:1.55}
 
