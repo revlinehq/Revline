@@ -8,13 +8,15 @@ export const MAX_PREVIEW_BYTES = 64 * 1024 * 1024;
 const MAX_LOCAL_COPY_BYTES = 192 * 1024 * 1024;
 const MAX_SESSION_BYTES = 384 * 1024 * 1024;
 type PreviewAsset = MediaAsset & { previewUrl?: string | null; previewVersion?: string | number | null; previewSize?: number | null };
-// Aborting an in-flight download on close is expected; the browser can still surface
-// its own internal fetch/body promise as unhandled with our reason. Only those exact
-// reason objects are silenced, in capture phase so dev overlays never see them.
+// Stopping a download on close is expected. Chrome (notably with DevTools inspecting the
+// response) can still report its own copy of the abort as unhandled, so the cache's own
+// reasons, matched by object or by their distinctive message, are silenced in capture phase.
 const ownAborts = new WeakSet<object>();
-const ownAbort = (message: string, name = 'AbortError') => { const reason = new DOMException(message, name); ownAborts.add(reason); return reason; };
+const ownMessages = new Set<string>();
+const ownAbort = (message: string, name = 'AbortError') => { const reason = new DOMException(message, name); ownAborts.add(reason); ownMessages.add(message); return reason; };
 if (typeof window !== 'undefined') window.addEventListener('unhandledrejection', event => {
-  if (event.reason && typeof event.reason === 'object' && ownAborts.has(event.reason)) { event.preventDefault(); event.stopImmediatePropagation(); }
+  const reason = event.reason;
+  if (reason && typeof reason === 'object' && (ownAborts.has(reason) || (reason as { name?: unknown }).name === 'AbortError' && ownMessages.has(String((reason as { message?: unknown }).message)))) { event.preventDefault(); event.stopImmediatePropagation(); }
 }, { capture: true });
 type Entry = { controller: AbortController; consumers: Set<symbol>; promise: Promise<string>; expectedBytes: number; url?: string };
 
@@ -49,17 +51,21 @@ export function createPreviewSourceCache() {
     const { signal } = controller, file = source(asset)!;
     let idle: ReturnType<typeof setTimeout>, reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
     const progress = () => { clearTimeout(idle); idle = setTimeout(() => controller.abort(ownAbort('Preview preparation stalled.', 'TimeoutError')), 30_000); };
-    // The request signal only covers the wait for headers. Aborting it mid-body
-    // errors the browser's own body promises, which surface as unhandled aborts
-    // on unmount; cancelling the reader ends the transfer quietly instead.
+    // Once a response exists, stopping never aborts the request: Chrome reports an aborted
+    // fetch's internal body promise as unhandled (with DevTools open). Its body is cancelled
+    // instead. Before headers there is no body, so that wait is still aborted; after them,
+    // the request abort is only a backstop for a stream whose cancel never settles.
     const request = new AbortController();
-    let cancelling: Promise<boolean> | undefined;
+    let cancelling: Promise<boolean> | undefined, responded = false;
     const cancel = () => (cancelling ??= (async () => { await reader!.cancel(); return true; })().catch(() => true));
-    const stop = () => { if (reader) void cancel(); else request.abort(abortReason(signal)); };
+    const stop = () => { if (reader) void cancel(); else if (!responded) request.abort(abortReason(signal)); };
     signal.addEventListener('abort', stop, { once: true });
     progress();
     try {
-      const response = await abortable(fetch(file.url, { signal: request.signal }), signal);
+      const pending = fetch(file.url, { signal: request.signal });
+      void pending.then(() => { responded = true; }, () => {});
+      signal.addEventListener('abort', () => { void pending.then(late => { if (!late.bodyUsed && !late.body?.locked) return late.body?.cancel(); }).catch(() => {}); }, { once: true });
+      const response = await abortable(pending, signal);
       if (!response.ok) throw new Error('Preview download failed.');
       const declared = Number(response.headers.get('content-length'));
       if (Number.isFinite(declared) && declared > MAX_LOCAL_COPY_BYTES) throw new Error('Preview exceeds the local playback limit.');
