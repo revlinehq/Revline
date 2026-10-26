@@ -8,6 +8,14 @@ export const MAX_PREVIEW_BYTES = 64 * 1024 * 1024;
 const MAX_LOCAL_COPY_BYTES = 192 * 1024 * 1024;
 const MAX_SESSION_BYTES = 384 * 1024 * 1024;
 type PreviewAsset = MediaAsset & { previewUrl?: string | null; previewVersion?: string | number | null; previewSize?: number | null };
+// Aborting an in-flight download on close is expected; the browser can still surface
+// its own internal fetch/body promise as unhandled with our reason. Only those exact
+// reason objects are silenced, in capture phase so dev overlays never see them.
+const ownAborts = new WeakSet<object>();
+const ownAbort = (message: string, name = 'AbortError') => { const reason = new DOMException(message, name); ownAborts.add(reason); return reason; };
+if (typeof window !== 'undefined') window.addEventListener('unhandledrejection', event => {
+  if (event.reason && typeof event.reason === 'object' && ownAborts.has(event.reason)) { event.preventDefault(); event.stopImmediatePropagation(); }
+}, { capture: true });
 type Entry = { controller: AbortController; consumers: Set<symbol>; promise: Promise<string>; expectedBytes: number; url?: string };
 
 /** One bounded, immutable preview download shared by every cut of an asset. */
@@ -23,7 +31,7 @@ export function createPreviewSourceCache() {
   const keyFor = (asset: PreviewAsset) => `${asset._id}|${asset.previewVersion ?? ''}|${source(asset)?.size ?? ''}`;
   const playable = (asset: PreviewAsset, url: string): MediaAsset => asset.url === url ? asset : { ...asset, url };
   const preview = (asset: PreviewAsset) => source(asset)?.url ?? null;
-  const abortReason = (signal: AbortSignal) => signal.reason ?? new DOMException('Preview replaced.', 'AbortError');
+  const abortReason = (signal: AbortSignal) => signal.reason ?? ownAbort('Preview replaced.');
   function nativeAsset(asset: PreviewAsset) {
     const url = preview(asset);
     return url ? playable(asset, entries.get(keyFor(asset))?.url ?? url) : asset;
@@ -40,7 +48,7 @@ export function createPreviewSourceCache() {
   async function download(asset: PreviewAsset, controller: AbortController) {
     const { signal } = controller, file = source(asset)!;
     let idle: ReturnType<typeof setTimeout>, reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
-    const progress = () => { clearTimeout(idle); idle = setTimeout(() => controller.abort(new DOMException('Preview preparation stalled.', 'TimeoutError')), 30_000); };
+    const progress = () => { clearTimeout(idle); idle = setTimeout(() => controller.abort(ownAbort('Preview preparation stalled.', 'TimeoutError')), 30_000); };
     // The request signal only covers the wait for headers. Aborting it mid-body
     // errors the browser's own body promises, which surface as unhandled aborts
     // on unmount; cancelling the reader ends the transfer quietly instead.
@@ -76,7 +84,7 @@ export function createPreviewSourceCache() {
       if (!size || size !== file.size) throw new Error('Preview download was incomplete.');
       return URL.createObjectURL(new Blob(chunks, { type: response.headers.get('content-type') || file.type }));
     } catch (cause) {
-      controller.abort();
+      controller.abort(ownAbort('Preview download stopped.'));
       if (reader) {
         // A broken stream's cancel promise must not keep fallback playback stuck;
         // aborting the request then still stops its transfer.
@@ -109,7 +117,7 @@ export function createPreviewSourceCache() {
     const created: Entry = { controller, consumers: new Set(), promise: Promise.resolve(''), expectedBytes: bytes };
     entries.set(key, created);
     created.promise = download(asset, controller).then(url => {
-      if (disposed || controller.signal.aborted) { URL.revokeObjectURL(url); throw new DOMException('Preview replaced.', 'AbortError'); }
+      if (disposed || controller.signal.aborted) { URL.revokeObjectURL(url); throw ownAbort('Preview replaced.'); }
       created.url = url;
       return url;
     }).catch(error => {
@@ -147,28 +155,28 @@ export function createPreviewSourceCache() {
       return playable(asset, resolved);
     } catch (error) {
       if (signal.aborted) throw abortReason(signal);
-      if (disposed) throw new DOMException('Preview disposed.', 'AbortError');
+      if (disposed) throw ownAbort('Preview disposed.');
       // A cache failure still leaves the private derivative available to native
       // byte-range playback; it never substitutes a partial downloaded Blob.
       return playable(asset, url);
     } finally {
       if (abort) signal.removeEventListener('abort', abort);
       entry.consumers.delete(consumer);
-      if (!entry.url && entry.consumers.size === 0) entry.controller.abort(new DOMException('Preview no longer needed.', 'AbortError'));
+      if (!entry.url && entry.consumers.size === 0) entry.controller.abort(ownAbort('Preview no longer needed.'));
     }
   }
   return {
     /** Local copies for derivatives up to `maxBytes`; larger ones keep their native range URL. */
     async prepare(assets: MediaAsset[], signal: AbortSignal, maxBytes = MAX_LOCAL_COPY_BYTES): Promise<MediaAsset[]> {
       signal.throwIfAborted();
-      if (disposed) throw new DOMException('Preview disposed.', 'AbortError');
+      if (disposed) throw ownAbort('Preview disposed.');
       return Promise.all(assets.map(asset => prepareAsset(asset, signal, Math.min(maxBytes, MAX_LOCAL_COPY_BYTES))));
     },
     cachedAssets(assets: MediaAsset[]): MediaAsset[] { return assets.map(nativeAsset); },
     dispose() {
       if (disposed) return;
       disposed = true;
-      const closed = new DOMException('Preview closed.', 'AbortError');
+      const closed = ownAbort('Preview closed.');
       for (const entry of entries.values()) { entry.controller.abort(closed); if (entry.url) URL.revokeObjectURL(entry.url); }
       entries.clear();
       failures.clear();
