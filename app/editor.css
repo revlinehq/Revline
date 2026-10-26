@@ -288,6 +288,6 @@ body:has(.conversation-editor) :is(.visual-number,.visual-control-note){color:va
 .editor-error-notice{position:fixed;z-index:100;right:20px;bottom:20px;display:flex;align-items:center;gap:10px;width:max-content;max-width:min(420px,calc(100vw - 40px));padding:12px 12px 12px 14px;border:1px solid var(--ws-artifact-border,var(--border));border-radius:10px;background:var(--ws-bg,var(--background));color:var(--ws-text,var(--foreground));box-shadow:0 6px 24px #00000014;font-family:var(--font-inter),Inter,sans-serif;font-size:12px;line-height:1.5}.editor-error-notice>svg{flex-shrink:0;color:#c77730}.editor-error-notice>span{overflow-wrap:anywhere}.editor-error-notice>button{display:grid;place-items:center;flex-shrink:0;width:28px;height:28px;border-radius:5px;color:var(--ws-muted,var(--muted-foreground))}.editor-error-notice>button:hover{background:var(--ws-surface,var(--secondary))}
 /* The media panel slides open and closed by animating panel widths only while it toggles. */
 .preview-layout[data-inspector-motion]>[data-panel]{transition:flex-grow 320ms cubic-bezier(.32,.72,0,1)}
-.preview-layout>[data-panel]:has(>.inspector-panel){overflow:hidden!important}
+.preview-layout>[data-panel]:has(>.inspector-panel),.inspector-panel{overflow:hidden!important}
 .inspector-panel>.preview-inspector{min-width:320px}
 @media(prefers-reduced-motion:reduce){.preview-layout[data-inspector-motion]>[data-panel]{transition:none}}
