@@ -67,7 +67,7 @@ The 2026-10-13 text update is deployed as controller version `4b832ecc-17b5-4b72
 
 The processor uses three secret values:
 
-- `RENDER_WORKER_SECRET`: the existing production media worker credential, matching Convex production.
+- `RENDER_WORKER_SECRET`: the media processor's worker credential, matching Convex `RENDER_WORKER_SECRET`. Fly export machines use a separate export-only key (`MEDIA_WORKER_SECRET_EXPORTS` in Convex, passed into each machine's config by `convex/flyRender.ts`); they cannot claim uploads or analysis. To rotate this one without stalling running containers, set Convex `RENDER_WORKER_SECRET_PREVIOUS` to the old value first, then the new value in Convex, here and in the GitHub `production` environment, and unset the previous value once containers have restarted.
 - `GOOGLE_GENERATIVE_AI_API_KEY`: the production Gemini provider credential used for native video understanding and inspection.
 - `OPENAI_API_KEY`: the production OpenAI credential used by Whisper for word-timed speech transcription. Audio is compressed to 32 kbps mono MP3; uploads exceeding 24 MB are split into source windows and their measured word times are offset back into source time. The stored transcript supports up to 5,000 words and 500 overview segments; overview compaction preserves every measured word.
 
