@@ -1,4 +1,5 @@
 import { ArrowRight, Braces } from 'lucide-react';
+import { ClaudeLogo, CodexAppIcon, CursorLogo } from '@/components/workspace/ai-app-logos';
 import { LandingButton, LandingHeading, LandingSection } from './ui';
 
 type Token = [text: string, tone?: 'key' | 'string'];
@@ -18,6 +19,11 @@ const config: Token[][] = [
 export function LandingMcp() {
   return <LandingSection id="mcp" className="landing-mcp" headingId="landing-mcp-heading">
     <div className="landing-mcp-copy">
+      <div className="landing-mcp-apps" role="img" aria-label="Works with Claude, Codex and Cursor">
+        <span data-app="claude"><ClaudeLogo width={28} height={28} fill="#fff" /></span>
+        <span data-app="codex"><CodexAppIcon width={54} height={54} /></span>
+        <span data-app="cursor"><CursorLogo width={26} height={26} /></span>
+      </div>
       <LandingHeading id="landing-mcp-heading" tone="inverse" size="lg" title="Edit videos from any AI agent with MCP" description="Connect any MCP client and edit videos straight from your agent." />
       <LandingButton href="/profile" variant="inverse" size="md">Connect Revline<ArrowRight size={16} aria-hidden="true" /></LandingButton>
     </div>

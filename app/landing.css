@@ -177,6 +177,12 @@ div.landing-reveal,div.landing-reveal>.landing-reveal-content{display:inline-blo
 
 /* MCP */
 .landing-mcp{display:flex;align-items:center;gap:80px;padding-block:112px;background:var(--l-brand)}
+.landing-mcp-apps{display:flex;padding-inline:4px}
+.landing-mcp-apps span{display:grid;place-items:center;width:54px;height:54px;overflow:hidden;border-radius:13px;border:1px solid #ffffff3d;box-shadow:0 8px 20px #2e106559}
+.landing-mcp-apps span+span{margin-left:-12px}
+.landing-mcp-apps [data-app=claude]{background:#d97757;transform:rotate(-8deg)}
+.landing-mcp-apps [data-app=codex]{background:#fff;transform:rotate(-2deg);z-index:1}
+.landing-mcp-apps [data-app=cursor]{background:#14120b;color:#edecec;transform:rotate(7deg);z-index:2}
 .landing-mcp-copy{width:520px;flex-shrink:0;display:flex;flex-direction:column;align-items:flex-start;gap:24px}
 .landing-mcp .landing-heading{gap:24px}
 .landing-mcp .landing-heading h2{color:#fff;letter-spacing:-1.3px;line-height:1.08}
