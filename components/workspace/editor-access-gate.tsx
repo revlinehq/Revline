@@ -4,19 +4,19 @@ import { userError } from '@/lib/user-error';
 import { NEW_WORKSPACE_LABEL } from '@/lib/editor/workspace-labels';
 import { useRef, useState, type ReactNode } from 'react';
 import Link from 'next/link';
-import { useAction, useConvexAuth, useQuery } from 'convex/react';
+import { useAction } from 'convex/react';
 import { Check, LoaderCircle } from 'lucide-react';
 import { api } from '@/convex/_generated/api';
 import { EDITOR_PLAN } from '@/lib/billing/plan';
 import { PrimaryButton } from './primary-button';
+import { usePlanStatus } from './use-plan-status';
 import { UltraPlanCard } from './ultra-plan-card';
 import { WorkspaceNav } from './workspace-nav';
 import './shared.css';
 import './editor-access-gate.css';
 
 export function EditorAccessGate({ children, loading, checkoutPending = false }: { children: ReactNode; loading?: ReactNode; checkoutPending?: boolean }) {
-  const { isAuthenticated } = useConvexAuth();
-  const status = useQuery(api.billing.status, isAuthenticated ? {} : 'skip');
+  const status = usePlanStatus();
   const checkout = useAction(api.billing.createCheckout);
   const portal = useAction(api.billing.createPortal);
   const [busy, setBusy] = useState<'' | 'pro' | 'ultra'>('');

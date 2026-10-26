@@ -3,11 +3,12 @@ import { userError } from '@/lib/user-error';
 
 import { useRef, useState } from 'react';
 import Link from 'next/link';
-import { useAction, useConvexAuth, useQuery } from 'convex/react';
+import { useAction, useConvexAuth } from 'convex/react';
 import { LoaderCircle } from 'lucide-react';
 import { api } from '@/convex/_generated/api';
 import { EDITOR_PLAN, ULTRA_PLAN } from '@/lib/billing/plan';
 import { PrimaryButton } from './primary-button';
+import { usePlanStatus } from './use-plan-status';
 import { UltraPlanCard } from './ultra-plan-card';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
 import './billing-section.css';
@@ -16,7 +17,7 @@ export type CheckoutReturn = 'success' | 'canceled' | undefined;
 
 export function BillingSection({ checkoutReturn }: { checkoutReturn?: CheckoutReturn }) {
   const { isAuthenticated, isLoading } = useConvexAuth();
-  const status = useQuery(api.billing.status, isAuthenticated ? {} : 'skip');
+  const status = usePlanStatus();
   const checkout = useAction(api.billing.createCheckout);
   const portal = useAction(api.billing.createPortal);
   const upgrade = useAction(api.billing.upgradeToUltra);
