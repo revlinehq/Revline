@@ -41,9 +41,17 @@ export function createPreviewSourceCache() {
     const { signal } = controller, file = source(asset)!;
     let idle: ReturnType<typeof setTimeout>, reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
     const progress = () => { clearTimeout(idle); idle = setTimeout(() => controller.abort(new DOMException('Preview preparation stalled.', 'TimeoutError')), 30_000); };
+    // The request signal only covers the wait for headers. Aborting it mid-body
+    // errors the browser's own body promises, which surface as unhandled aborts
+    // on unmount; cancelling the reader ends the transfer quietly instead.
+    const request = new AbortController();
+    let cancelling: Promise<boolean> | undefined;
+    const cancel = () => (cancelling ??= (async () => { await reader!.cancel(); return true; })().catch(() => true));
+    const stop = () => { if (reader) void cancel(); else request.abort(abortReason(signal)); };
+    signal.addEventListener('abort', stop, { once: true });
     progress();
     try {
-      const response = await abortable(fetch(file.url, { signal }), signal);
+      const response = await abortable(fetch(file.url, { signal: request.signal }), signal);
       if (!response.ok) throw new Error('Preview download failed.');
       const declared = Number(response.headers.get('content-length'));
       if (Number.isFinite(declared) && declared > MAX_LOCAL_COPY_BYTES) throw new Error('Preview exceeds the local playback limit.');
@@ -70,15 +78,17 @@ export function createPreviewSourceCache() {
     } catch (cause) {
       controller.abort();
       if (reader) {
-        // A broken stream's cancel promise must not keep fallback playback stuck.
+        // A broken stream's cancel promise must not keep fallback playback stuck;
+        // aborting the request then still stops its transfer.
         let cleanupTimer: ReturnType<typeof setTimeout> | undefined;
-        try { await Promise.race([Promise.resolve(reader.cancel()).catch(() => {}), new Promise<void>(resolve => { cleanupTimer = setTimeout(resolve, 1000); })]); }
-        catch { /* A detached reader can already be closed. */ }
-        finally { if (cleanupTimer !== undefined) clearTimeout(cleanupTimer); }
+        const settled = await Promise.race([cancel(), new Promise<boolean>(resolve => { cleanupTimer = setTimeout(() => resolve(false), 1000); })]);
+        if (cleanupTimer !== undefined) clearTimeout(cleanupTimer);
+        if (!settled) request.abort(abortReason(signal));
       }
       throw cause;
     } finally {
       clearTimeout(idle!);
+      signal.removeEventListener('abort', stop);
       try { reader?.releaseLock(); } catch { /* The aborted fetch releases a pending read. */ }
     }
   }
@@ -144,7 +154,7 @@ export function createPreviewSourceCache() {
     } finally {
       if (abort) signal.removeEventListener('abort', abort);
       entry.consumers.delete(consumer);
-      if (!entry.url && entry.consumers.size === 0) entry.controller.abort();
+      if (!entry.url && entry.consumers.size === 0) entry.controller.abort(new DOMException('Preview no longer needed.', 'AbortError'));
     }
   }
   return {
@@ -158,7 +168,8 @@ export function createPreviewSourceCache() {
     dispose() {
       if (disposed) return;
       disposed = true;
-      for (const entry of entries.values()) { entry.controller.abort(); if (entry.url) URL.revokeObjectURL(entry.url); }
+      const closed = new DOMException('Preview closed.', 'AbortError');
+      for (const entry of entries.values()) { entry.controller.abort(closed); if (entry.url) URL.revokeObjectURL(entry.url); }
       entries.clear();
       failures.clear();
     },
