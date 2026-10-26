@@ -105,12 +105,6 @@ div.landing-reveal,div.landing-reveal>.landing-reveal-content{display:inline-blo
 
 /* How it works */
 .landing-how{display:flex;flex-direction:column;gap:48px;padding-block:96px}
-.landing-features{display:flex;flex-direction:column;gap:56px;padding-block:96px;margin-bottom:64px}
-.landing .landing-feature-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:48px 40px}
-.landing-feature-grid li{display:flex;flex-direction:column;gap:10px;padding-top:24px;border-top:1px solid var(--l-border)}
-.landing-feature-grid svg{margin-bottom:16px;color:var(--l-brand)}
-.landing-feature-grid h3{font:400 19px/1.25 var(--l-head);letter-spacing:-.2px;color:var(--l-fg)}
-.landing-feature-grid p{font-size:14px;line-height:1.5;color:var(--l-fg-2)}
 .landing-steps{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px}
 .landing-step{display:flex;flex-direction:column;min-width:0;background:var(--l-bg-subtle);border-radius:12px;overflow:hidden}
 .landing-step-visual{height:280px;display:flex;flex-direction:column;justify-content:center;padding:28px 20px 0}
@@ -201,18 +195,19 @@ div.landing-reveal,div.landing-reveal>.landing-reveal-content{display:inline-blo
 .landing-faq details p{width:680px;max-width:100%;margin-top:12px;font-size:15px;line-height:1.6;color:var(--l-fg-2)}
 
 /* MCP */
-.landing-mcp{display:flex;align-items:center;gap:80px;padding-block:112px;background:var(--l-brand)}
-.landing-mcp-copy{width:520px;flex-shrink:0;display:flex;flex-direction:column;align-items:flex-start;gap:24px}
-.landing-mcp .landing-heading{gap:24px}
-.landing-mcp .landing-heading h2{color:#fff;letter-spacing:-1.3px;line-height:1.08}
-.landing-mcp .landing-heading p{font-size:17px;color:#ffffffcc}
-.landing-mcp-code{flex:1;min-width:0;overflow:hidden;background:#0b0c0e;border:1px solid #ffffff1f;border-radius:14px;box-shadow:0 24px 60px #2e106566}
-.landing-mcp-code figcaption{display:flex;align-items:center;gap:8px;padding:14px 20px;border-bottom:1px solid #25272d;font:13px var(--l-mono);color:#a1a3ab}
-.landing-mcp-code pre{margin:0;padding:22px 20px 26px;overflow-x:auto;font:14px/22px var(--l-mono);color:#666872;counter-reset:line}
-.landing-mcp-code code>span{counter-increment:line;white-space:pre}
-.landing-mcp-code code>span:before{content:counter(line);display:inline-block;width:16px;margin-right:20px;text-align:right;color:#666872}
-.landing-mcp-code [data-tone=key]{color:#c4b5fd}
-.landing-mcp-code [data-tone=string]{color:#86efac}
+.landing-mcp{padding-bottom:96px}
+.landing-mcp-card{display:flex;align-items:center;gap:24px;padding:20px 20px 20px 22px;background:#212121;border:1px solid #2e2e2e;border-radius:10px;color:#f2f2f2}
+.landing-mcp-apps{display:flex;flex-shrink:0;padding-inline:4px}
+.landing-mcp-apps span{display:grid;place-items:center;width:52px;height:52px;overflow:hidden;border-radius:12px;border:1px solid #ffffff24;box-shadow:0 6px 16px #0006}
+.landing-mcp-apps span+span{margin-left:-14px}
+.landing-mcp-apps [data-app=claude]{background:#d97757;transform:rotate(-8deg)}
+.landing-mcp-apps [data-app=codex]{background:#fff;transform:rotate(-2deg);z-index:1}
+.landing-mcp-apps [data-app=cursor]{background:#14120b;color:#edecec;transform:rotate(7deg);z-index:2}
+.landing-mcp-copy{flex:1;min-width:0;display:flex;flex-direction:column;gap:6px}
+.landing-mcp-copy h2{font:500 17px/1.3 var(--l-body);letter-spacing:-.1px;color:#fff}
+.landing-mcp-copy p{font-size:14px;line-height:1.45;color:#b4b4b4}
+.landing .landing-mcp-button{flex-shrink:0;height:38px;gap:8px;padding-inline:14px;border-radius:7px;background:#ececec;border-color:#ffffff40;color:#161616;font-size:14px;font-weight:500}
+.landing .landing-mcp-button:hover{background:#fff}
 
 /* Final CTA */
 .landing-final{padding-bottom:40px}
@@ -243,13 +238,12 @@ div.landing-reveal,div.landing-reveal>.landing-reveal-content{display:inline-blo
   .landing-nav-links{gap:20px}
   .landing-hero h1{font-size:56px}
   .landing-steps{grid-template-columns:minmax(0,1fr)}
-  .landing .landing-feature-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
   .landing-testimonial{padding-block:96px}
   .landing-faq{flex-direction:column;gap:32px}
   .landing-faq .landing-heading{width:100%}
   .landing-plans{flex-direction:column;align-items:center}
-  .landing-mcp{flex-direction:column;align-items:stretch;gap:48px}
-  .landing-mcp-copy{width:auto}
+  .landing-mcp-card{flex-wrap:wrap}
+  .landing-mcp-copy{flex-basis:calc(100% - 200px)}
 }
 @media(max-width:760px){
   .landing{--l-gutter:20px}
@@ -266,11 +260,10 @@ div.landing-reveal,div.landing-reveal>.landing-reveal-content{display:inline-blo
   .landing-logos{padding-bottom:56px}
   .landing-logos ul{gap:16px 36px}
   .landing-logos li{font-size:18px}
-  .landing-use-cases,.landing-how,.landing-features,.landing-pricing,.landing-faq,.landing-mcp{padding-block:64px}
-  .landing-mcp-code pre{font-size:12px}
-  .landing-use-cases,.landing-how,.landing-features{gap:32px}
-  .landing-features{margin-bottom:32px}
-  .landing .landing-feature-grid{grid-template-columns:minmax(0,1fr);gap:32px}
+  .landing-use-cases,.landing-how,.landing-pricing,.landing-faq{padding-block:64px}
+  .landing-mcp-card{flex-direction:column;align-items:flex-start;gap:16px}
+  .landing-mcp-copy{flex-basis:auto}
+  .landing-use-cases,.landing-how{gap:32px}
   .landing-tile{height:180px;width:102px}
   .landing-tile-wide{width:320px}
   .landing-step-visual{padding:20px 16px 0}

@@ -5,7 +5,6 @@ import { LandingLogos } from '@/components/landing/logos';
 // Hidden until there is enough footage to show each use case.
 // import { LandingUseCases } from '@/components/landing/use-cases';
 import { LandingHowItWorks } from '@/components/landing/how-it-works';
-import { LandingFeatures } from '@/components/landing/features';
 import { LandingMcp } from '@/components/landing/mcp';
 import { LandingTestimonial } from '@/components/landing/testimonial';
 import { LandingPricing } from '@/components/landing/pricing';
@@ -25,7 +24,6 @@ export default function Home() {
     <LandingLogos />
     {/* <LandingUseCases /> */}
     <LandingHowItWorks />
-    <LandingFeatures />
     <LandingMcp />
     <LandingTestimonial />
     <LandingPricing />
