@@ -19,7 +19,7 @@
     "build:cloudflare": "node scripts/cloudflare-frontend.mjs build",
     "preview:cloudflare": "node scripts/cloudflare-frontend.mjs preview",
     "deploy:frontend": "node scripts/cloudflare-frontend.mjs deploy",
-    "deploy:frontend:ci": "wrangler deploy --config dist/server/wrangler.json",
+    "deploy:frontend:ci": "npm run build:cloudflare && wrangler deploy --config dist/server/wrangler.json",
     "deploy:fly-exports": "node scripts/deploy-fly-exports.mjs"
   },
   "dependencies": {

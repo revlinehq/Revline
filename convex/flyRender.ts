@@ -11,7 +11,8 @@ const LANES: Lane[] = ['ultra', 'standard'];
 // Ultra exports get a 16-vCPU machine; regular exports 4 vCPUs. With BeginFrame capture, 8 workers
 // saturate 16 vCPUs (16 measured no faster). Frames stream into the encoder, so the scratch volume
 // (Fly's root filesystem is ~8 GB and slow) only holds sources and the output: a 98 s 4K60 export peaked under 0.4 GB.
-/** Each export is split into up to `chunks` slices rendered at once on short-lived machines of `guest` size. */
+/** Each export is split into up to `chunks` slices rendered at once on short-lived machines of `guest` size.
+ *  Off unless a deployment sets FLY_DISTRIBUTED_EXPORTS=true: measured no faster than one machine so far. */
 // HyperFrames' distributed path forces screenshot capture under software GL unless the
 // environment opts out, so planner and chunk machines both set PRODUCER_FORCE_SCREENSHOT=false.
 const distributed = (chunks: number, guest: { cpu_kind: 'performance'; cpus: number; memory_mb: number }, env: Record<string, string>) => ({
@@ -19,9 +20,11 @@ const distributed = (chunks: number, guest: { cpu_kind: 'performance'; cpus: num
   REVLINE_DISTRIBUTED_EXPORT: 'true', PRODUCER_FORCE_SCREENSHOT: 'false', REVLINE_RENDER_LOG_LEVEL: 'info', REVLINE_EXPORT_MAX_CHUNKS: String(chunks), REVLINE_EXPORT_CHUNK_GUEST: JSON.stringify(guest),
   REVLINE_EXPORT_CHUNK_ENV: JSON.stringify({ ...env, PRODUCER_FORCE_SCREENSHOT: 'false' }),
 });
-const PROFILES: Record<Lane, { guest: { cpu_kind: 'performance'; cpus: number; memory_mb: number }; scratchGb: number; env: Record<string, string> }> = {
-  ultra: { guest: { cpu_kind: 'performance', cpus: 16, memory_mb: 32768 }, scratchGb: 20, env: { MEDIA_LANE: 'ultra', REVLINE_RENDER_WORKERS: '8', REVLINE_RENDER_FFMPEG_SLOTS: '4', REVLINE_RENDER_ENCODE_THREADS: '16', ...distributed(16, { cpu_kind: 'performance', cpus: 8, memory_mb: 16384 }, { REVLINE_RENDER_WORKERS: '4', REVLINE_RENDER_FFMPEG_SLOTS: '4', REVLINE_RENDER_ENCODE_THREADS: '8' }) } },
-  standard: { guest: { cpu_kind: 'performance', cpus: 4, memory_mb: 8192 }, scratchGb: 10, env: { REVLINE_RENDER_WORKERS: '3', REVLINE_RENDER_FFMPEG_SLOTS: '2', REVLINE_RENDER_ENCODE_THREADS: '4', ...distributed(4, { cpu_kind: 'performance', cpus: 4, memory_mb: 8192 }, { REVLINE_RENDER_WORKERS: '3', REVLINE_RENDER_FFMPEG_SLOTS: '2', REVLINE_RENDER_ENCODE_THREADS: '4' }) } },
+const distributedExports = () => process.env.FLY_DISTRIBUTED_EXPORTS === 'true';
+type Profile = { guest: { cpu_kind: 'performance'; cpus: number; memory_mb: number }; scratchGb: number; env: Record<string, string>; distributed: Record<string, string> };
+const PROFILES: Record<Lane, Profile> = {
+  ultra: { guest: { cpu_kind: 'performance', cpus: 16, memory_mb: 32768 }, scratchGb: 20, env: { MEDIA_LANE: 'ultra', REVLINE_RENDER_WORKERS: '8', REVLINE_RENDER_FFMPEG_SLOTS: '4', REVLINE_RENDER_ENCODE_THREADS: '16' }, distributed: distributed(16, { cpu_kind: 'performance', cpus: 8, memory_mb: 16384 }, { REVLINE_RENDER_WORKERS: '4', REVLINE_RENDER_FFMPEG_SLOTS: '4', REVLINE_RENDER_ENCODE_THREADS: '8' }) },
+  standard: { guest: { cpu_kind: 'performance', cpus: 4, memory_mb: 8192 }, scratchGb: 10, env: { REVLINE_RENDER_WORKERS: '3', REVLINE_RENDER_FFMPEG_SLOTS: '2', REVLINE_RENDER_ENCODE_THREADS: '4' }, distributed: distributed(4, { cpu_kind: 'performance', cpus: 4, memory_mb: 8192 }, { REVLINE_RENDER_WORKERS: '3', REVLINE_RENDER_FFMPEG_SLOTS: '2', REVLINE_RENDER_ENCODE_THREADS: '4' }) },
 };
 // A machine whose worker found no export for this long exits; Fly then stops it and CPU billing stops.
 const IDLE_MS = '60000';
@@ -30,6 +33,7 @@ const ORPHAN_VOLUME_MS = 10 * 60_000;
 const ACTIVE_STATES = new Set(['created', 'starting', 'started', 'replacing', 'updating']);
 type Mount = { volume: string; path: string };
 type FlyMachine = { id: string; state: string; config?: { image?: string; mounts?: Mount[]; metadata?: Record<string, string> } };
+const current = (config: Config, lane: Lane, machine: FlyMachine) => machine.config?.metadata?.revline_config === machineConfig(config, lane, 'warm', []).metadata.revline_config;
 type FlyVolume = { id: string; name: string; state: string; attached_machine_id?: string | null; created_at?: string };
 type Config = NonNullable<ReturnType<typeof flyConfig>>;
 
@@ -53,12 +57,32 @@ async function fly<T>(config: Config, method: string, path: string, body?: unkno
   return (text ? JSON.parse(text) : undefined) as T;
 }
 
+/** A short stable hash of everything but the mounts, so a stopped machine is refreshed when its image or settings change. */
+function fingerprint(value: unknown) {
+  let hash = 5381;
+  for (const char of JSON.stringify(value)) hash = (hash * 33 + char.charCodeAt(0)) >>> 0;
+  return hash.toString(36);
+}
+
 function machineConfig(config: Config, lane: Lane, pool: Pool, mounts: Mount[]) {
   const profile = PROFILES[lane];
-  return {
-    image: config.image, guest: profile.guest, mounts, restart: { policy: 'no' }, auto_destroy: pool === 'burst', metadata: { revline_lane: lane, revline_pool: pool },
-    env: { ...profile.env, MEDIA_RENDERS_ONLY: 'true', MEDIA_WORKER_CONCURRENCY: '1', MEDIA_WORKER_IDLE_MS: IDLE_MS, MEDIA_TASK_DEADLINE_MS: String(45 * 60_000) },
+  const base = {
+    image: config.image, guest: profile.guest, restart: { policy: 'no' }, auto_destroy: pool === 'burst',
+    env: { ...profile.env, ...(distributedExports() ? profile.distributed : {}), MEDIA_RENDERS_ONLY: 'true', MEDIA_WORKER_CONCURRENCY: '1', MEDIA_WORKER_IDLE_MS: IDLE_MS, MEDIA_TASK_DEADLINE_MS: String(45 * 60_000) },
   };
+  return { ...base, mounts, metadata: { revline_lane: lane, revline_pool: pool, revline_config: fingerprint(base) } };
+}
+
+const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+/** Updating a stopped machine leaves it stopped, so wait for the update to settle before starting it. */
+async function refreshStopped(config: Config, lane: Lane, machine: FlyMachine) {
+  await fly(config, 'POST', `/machines/${machine.id}`, { config: machineConfig(config, lane, 'warm', machine.config?.mounts ?? []) });
+  for (let attempt = 0; attempt < 60; attempt++) {
+    const state = (await fly<FlyMachine>(config, 'GET', `/machines/${machine.id}`)).state;
+    if (state === 'stopped' || state === 'started') return state;
+    await wait(500);
+  }
+  return 'unknown';
 }
 
 async function createMachine(config: Config, lane: Lane, pool: Pool) {
@@ -99,11 +123,12 @@ export const dispatch = internalAction({ args: {}, returns: v.null(), handler: a
       let need = Math.min(wanted[lane].waiting - idle, config.max[lane] - active);
       const warm = mine.filter(machine => machine.config?.metadata?.revline_pool === 'warm');
       for (const machine of warm) {
-        if (need <= 0) break;
         if (machine.state !== 'stopped') continue;
-        // Updating a stopped machine launches it; this also moves it to the current image.
-        if (machine.config?.image === config.image) await fly(config, 'POST', `/machines/${machine.id}/start`);
-        else await fly(config, 'POST', `/machines/${machine.id}`, { config: machineConfig(config, lane, 'warm', machine.config?.mounts ?? []) });
+        // A stopped machine with an old image or settings is refreshed even without demand, so the
+        // next export only pays the ~2 s start rather than the update as well.
+        const state = current(config, lane, machine) ? 'stopped' : await refreshStopped(config, lane, machine);
+        if (need <= 0) continue;
+        if (state !== 'started') await fly(config, 'POST', `/machines/${machine.id}/start`);
         need--;
       }
       for (let count = warm.length; need > 0 && count < config.warm[lane]; count++, need--) await createMachine(config, lane, 'warm');
