@@ -20,8 +20,7 @@ const DevRemotionTests = process.env.NODE_ENV === 'development' ? lazy(() => imp
 const DevCutoutEffectsLab = process.env.NODE_ENV === 'development' ? lazy(() => import('../dev/cutout-effects-lab').then(module => ({ default: module.CutoutEffectsLab }))) : null;
 const AudioFxLibrary = lazy(() => import('./sfx-library').then(module => ({ default: module.SfxLibrary })));
 export type LibraryVisualEffect = keyof VisualEffects;
-export type LibraryShortcutCategory = EffectLibraryCategory | 'text' | 'audio-fx';
-export type LibraryCategoryRequest = { category: LibraryShortcutCategory; requestId: number };
+type LibraryShortcutCategory = EffectLibraryCategory | 'text' | 'audio-fx';
 type LibraryCategory = LibraryShortcutCategory | 'sam-dev' | 'remotion-dev';
 
 function LibraryEntry({ entry, disabled, reason, draggable, onApply }: { entry: LibraryEntryData; disabled: boolean; reason?: string; draggable: boolean; onApply: () => void }) {
@@ -32,12 +31,11 @@ function LibraryEntry({ entry, disabled, reason, draggable, onApply }: { entry: 
   }}><EffectIcon name={entry.id} size={18}/><span>{entry.label}</span>{entry.action ? <ChevronRight size={12} aria-hidden="true"/> : <Plus size={12} aria-hidden="true"/>}</button>;
 }
 
-export function EffectLibrary({ cutoutLab, clip, timeline, time = 0, assets, onMedia, onVisualEffect, onColorLook, onAddEffect, onAddTransition, onTextLook, onSpeed, onAddSound, onAddStockAudio, onUploadSound, uploading = false, categoryRequest, onCategoryChange }: {
+export function EffectLibrary({ cutoutLab, clip, timeline, time = 0, assets, onMedia, onVisualEffect, onColorLook, onAddEffect, onAddTransition, onTextLook, onSpeed, onAddSound, onAddStockAudio, onUploadSound, uploading = false }: {
   clip?: Clip; timeline?: Timeline; time?: number; assets: readonly MediaAsset[];
   /** Development-only cut-out effects lab; set when the project may use cut-outs. */
   cutoutLab?: { projectId: import('@/convex/_generated/dataModel').Id<'projects'> };
-  categoryRequest?: LibraryCategoryRequest; onCategoryChange?: (category: LibraryShortcutCategory) => void;
-  onMedia?: () => void; onVisualEffect: (effect: LibraryVisualEffect) => void;
+    onMedia?: () => void; onVisualEffect: (effect: LibraryVisualEffect) => void;
   onColorLook?: (look: ColorLookId) => void;
   onAddEffect?: (preset: EffectPreset) => void;
   onAddTransition?: (preset: TransitionPreset) => void;
@@ -45,10 +43,9 @@ export function EffectLibrary({ cutoutLab, clip, timeline, time = 0, assets, onM
   onSpeed?: () => void;
   onAddSound?: (asset: MediaAsset) => void; onAddStockAudio?: (catalogId: string) => Promise<void>; onUploadSound?: () => void; uploading?: boolean;
 }) {
-  const [category, setCategory] = useState<LibraryCategory>(categoryRequest?.category ?? 'texture');
+  const [category, setCategory] = useState<LibraryCategory>('texture');
   const [search, setSearch] = useState('');
   const id = useId();
-  useEffect(() => { if (categoryRequest) { setCategory(categoryRequest.category); setSearch(''); } }, [categoryRequest]);
   const visual = clip?.kind === 'video' || clip?.kind === 'image';
   const text = clip?.kind === 'caption' || clip?.kind === 'graphic';
   const query = search.trim().toLowerCase();
@@ -75,7 +72,7 @@ export function EffectLibrary({ cutoutLab, clip, timeline, time = 0, assets, onM
     else if (entry.preset) onAddEffect?.(entry.preset);
     else onSpeed?.();
   }
-  function selectCategory(next: LibraryCategory) { setCategory(next); setSearch(''); if (next === 'text' || next === 'audio-fx' || EFFECT_LIBRARY_CATEGORIES.some(item => item.id === next)) onCategoryChange?.(next as LibraryShortcutCategory); }
+  function selectCategory(next: LibraryCategory) { setCategory(next); setSearch(''); }
   return <div className="effect-library" aria-label="Effect library">
     {onMedia && <button type="button" className="library-media-access" onClick={onMedia}><FolderOpen size={14}/><span>Your media</span><ChevronRight size={14}/></button>}
     <label className="library-search"><Search size={13}/><input aria-label="Search effects" placeholder="Search tools" value={search} onChange={event => setSearch(event.target.value)}/></label>

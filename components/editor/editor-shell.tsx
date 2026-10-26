@@ -24,8 +24,7 @@ import { CanvasSettings } from './canvas-settings';
 import { AspectRatioControl } from './aspect-ratio-control';
 import { MediaImportDialog } from './media-import-dialog';
 import { PreviewInspector } from './preview-inspector';
-import { FloatingToolsRail } from './floating-tools-rail';
-import type { LibraryCategoryRequest, LibraryShortcutCategory } from './effect-library';
+import { MediaTab } from './media-tab';
 import { EditorPlaybackControls } from './playback-controls';
 import { TimelinePanel } from './timeline';
 import type { VideoImportState } from './video-link-import';
@@ -145,11 +144,6 @@ export function EditorShell(p: EditorShellProps) {
   const inspectorRequest = useRef(params.get('panel') === 'footage' ? 1 : 0);
   const [sourceRequest, setSourceRequest] = useState(inspectorRequest.current);
   const [editRequest, setEditRequest] = useState(0);
-  const [libraryCategory, setLibraryCategory] = useState<LibraryShortcutCategory>('texture');
-  const [libraryRequest, setLibraryRequest] = useState<LibraryCategoryRequest>();
-  function openLibraryCategory(category: LibraryShortcutCategory) {
-    setLibraryCategory(category); setLibraryRequest({ category, requestId: ++inspectorRequest.current }); setInspectorOpen(true);
-  }
   const fileDrop = useMediaFileDrop({ busy: !!p.upload, onUpload: files => { setSourceRequest(++inspectorRequest.current); setInspectorOpen(true); return p.onDropUpload(files); }, onError });
   const editorRoot = useRef<HTMLElement>(null);
   const bodyRef = useRef<HTMLElement>(null);
@@ -431,7 +425,7 @@ export function EditorShell(p: EditorShellProps) {
   const browseSources=()=>{setImportDestination('sources');setImportOpen(true);};
   const browseComposer=()=>{setImportDestination('composer');setImportOpen(true);};
 
-  const inspector = <ClockedPreviewInspector backgroundRemoval={p.projectId && !p.demo ? { projectId: p.projectId as import('@/convex/_generated/dataModel').Id<'projects'> } : undefined} onClose={compact ? undefined : () => setInspectorOpen(false)} readOnly={editing} timeline={timeline} time={time} onSeek={seek} onAddTransition={addEffect} onRemoveAsset={p.onRemoveAsset} usedAssetIds={usedAssetIds} sourceRequest={sourceRequest} editRequest={editRequest} libraryRequest={libraryRequest} onLibraryCategoryChange={setLibraryCategory} onAddTextLook={addLibraryText} captionActions={captionActions} videoImports={p.videoImports} assets={assets} upload={p.upload} onUpload={browseSources} onAdd={addAsset} onAddSound={addSound} onAddStockAudio={p.onRegisterStockAudio ? catalogId=>addStockAudio(catalogId,readPlaybackTime()) : undefined} clip={clip} audioClip={clip?.kind==='video'?timeline.clips.find(c=>c.id===clip.linkedClipId):undefined} asset={assets.find(a => a._id === clip?.assetId)} onChange={patch => { if (clip) changeClip(clip.id, patch); }} onPreviewEffects={patch => { if (clip && (patch === null || !editLock.current)) preview.current?.clipEffects(clip.id, patch); }} onAddEffect={addEffect} onConvertSolidColor={() => { if (clip) onChange(convertSolidColorToVisual(timeline,clip.id)); }} onPlaybackRateChange={changeSpeed} onCrop={cropVisual} cropping={cropping}/>;
+  const inspector = <ClockedPreviewInspector backgroundRemoval={p.projectId && !p.demo ? { projectId: p.projectId as import('@/convex/_generated/dataModel').Id<'projects'> } : undefined} onClose={compact ? undefined : () => setInspectorOpen(false)} readOnly={editing} timeline={timeline} time={time} onSeek={seek} onAddTransition={addEffect} onRemoveAsset={p.onRemoveAsset} usedAssetIds={usedAssetIds} sourceRequest={sourceRequest} editRequest={editRequest} onAddTextLook={addLibraryText} captionActions={captionActions} videoImports={p.videoImports} assets={assets} upload={p.upload} onUpload={browseSources} onAdd={addAsset} onAddSound={addSound} onAddStockAudio={p.onRegisterStockAudio ? catalogId=>addStockAudio(catalogId,readPlaybackTime()) : undefined} clip={clip} audioClip={clip?.kind==='video'?timeline.clips.find(c=>c.id===clip.linkedClipId):undefined} asset={assets.find(a => a._id === clip?.assetId)} onChange={patch => { if (clip) changeClip(clip.id, patch); }} onPreviewEffects={patch => { if (clip && (patch === null || !editLock.current)) preview.current?.clipEffects(clip.id, patch); }} onAddEffect={addEffect} onConvertSolidColor={() => { if (clip) onChange(convertSolidColorToVisual(timeline,clip.id)); }} onPlaybackRateChange={changeSpeed} onCrop={cropVisual} cropping={cropping}/>;
 
   // On desktop the ratio chip sits on the preview frame's top-left corner, as in the design.
   const ratioOnFrame = !compact && !!previewTimeline.clips.length;
@@ -454,7 +448,7 @@ export function EditorShell(p: EditorShellProps) {
       <ResizablePanel id="workspace" minSize={compact?0:320}><div className="editor-workspace">
         <ResizablePanelGroup orientation="horizontal" className="preview-layout"><ResizablePanel id="canvas" minSize={220}><PreviewZoomProvider canvas={dimensions(timeline.aspectRatio)}><div className="preview-workspace"><CanvasSettings onShowChat={!compact && !p.workspaceOnly && chatCollapsed ? () => chatPanel.current?.expand() : undefined}>{!ratioOnFrame && ratioControl}</CanvasSettings>
         <div className="editor-stage">
-          {!compact && !inspectorOpen && <FloatingToolsRail onExpand={() => openLibraryCategory(libraryCategory)}/>}
+          {!compact && !inspectorOpen && <MediaTab onOpen={() => { setSourceRequest(++inspectorRequest.current); setInspectorOpen(true); }}/>}
 
           <div className="preview-player"><div className="stage-center" data-ratio-on-frame={ratioOnFrame || undefined} style={{'--preview-ratio': dimensions(timeline.aspectRatio).width / dimensions(timeline.aspectRatio).height} as React.CSSProperties}>{previewTimeline.clips.length ? <><PreviewViewport><Preview onPlaybackAssets={onPlaybackAssets} onSlowLoad={onSlowLoad} onReady={onPlaybackReady} onThumbnail={onLoadingThumbnail} debugId={p.projectId} ref={preview} timeline={previewTimeline} assets={assets} time={time} onTime={setTime} onPlaying={setPlaying} onError={previewError} onRefreshMedia={p.onRefreshMedia} muted={muted} selectedClip={editing ? undefined : clip} cropping={cropping && !editing} onCropCancel={() => setCroppingClip(null)} onCropCommit={(id,crop) => { if (id === croppingClip && id === selected) { changeClip(id,{crop}); setCroppingClip(null); } }} onSelectClip={selectClip} onEditClip={openClipSettings} onEditText={editText} onClipChange={changeClip} onVisualChange={patch=>{if(clip)changeClip(clip.id,patch);}} /></PreviewViewport><PreviewFrameOverlay above={ratioOnFrame ? ratioControl : undefined}/></> : editing ? <div className="empty-upload" role="status"><LoaderCircle size={22} className="animate-spin"/><p>Updating your edit…</p></div> : <div className="empty-upload"><div className="upload-circle"><Upload size={25} /></div><h2>Start with a moment.</h2><p>Drop your footage here,<br />then tell Revline what you have in mind.</p><Button onClick={e => { e.stopPropagation(); browse(); }} disabled={!!p.upload}>{p.upload && <LoaderCircle size={14} className="animate-spin" />}Choose files</Button><small>MP4 · MOV · WebM · JPG · PNG · Audio</small>{p.upload && <progress max="100" value={p.upload.percent} />}</div>}</div>{cropping ? <div className="preview-playback source-crop-actions" role="group" aria-label="Crop controls"><span className="source-crop-label">Crop</span><Button type="button" variant="ghost" size="sm" onClick={() => preview.current?.resetCrop()}><RotateCcw size={12}/>Reset</Button><Button type="button" variant="ghost" size="sm" onClick={() => { preview.current?.finishCrop(true); setCroppingClip(null); }}>Cancel</Button><Button type="button" size="sm" onClick={() => preview.current?.finishCrop()}>Done</Button></div> : null}</div>
 
