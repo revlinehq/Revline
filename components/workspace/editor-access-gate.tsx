@@ -76,11 +76,10 @@ export function EditorAccessGate({ children, loading, checkoutPending = false }:
             {busy === 'pro' && <LoaderCircle size={14} className="animate-spin" />}
             {status.needsPayment ? 'Update payment method' : trial ? `Start ${EDITOR_PLAN.trialDays}-day free trial` : 'Start creating'}
           </PrimaryButton>
-          <small>{trial ? 'Payment method required. Cancel before your trial ends to avoid a charge.' : 'Cancel anytime in billing.'}</small>
         </div>
         {error && <p className="editor-access-error" role="alert">{error}</p>}
       </section>
-      {offerUltra && <UltraPlanCard note="Billed today. Cancel anytime in billing.">
+      {offerUltra && <UltraPlanCard>
         <PrimaryButton disabled={!!busy || !status.configured} onClick={() => void openCheckout('ultra')}>{busy === 'ultra' && <LoaderCircle size={14} className="animate-spin" />}Get Ultra</PrimaryButton>
       </UltraPlanCard>}
     </main>

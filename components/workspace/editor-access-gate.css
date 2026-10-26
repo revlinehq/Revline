@@ -2,8 +2,6 @@
 .editor-access-main{width:min(420px,calc(100% - 32px));margin:40px auto}
 .editor-access-main[data-plans]{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-items:stretch;gap:16px;width:min(856px,calc(100% - 32px))}
 .editor-access-main[data-plans] .editor-access-action{margin-top:auto}
-/* Notes reserve two lines so both plan buttons sit on the same line. */
-.editor-access-main[data-plans] :is(.editor-access-action,.ultra-plan-action) small{min-height:3em}
 .editor-access-main[data-plans] .editor-access-features{padding-top:18px;border-top:1px solid var(--ws-border)}
 .editor-access-card{display:flex;flex-direction:column;gap:22px;padding:24px;border:1px solid var(--ws-border);border-radius:14px;background:var(--ws-bg);color:var(--ws-text)}
 .editor-access-heading{display:flex;flex-direction:column;gap:10px}
@@ -20,6 +18,5 @@
 .editor-access-features svg{flex-shrink:0;margin-top:2px;color:var(--revline-accent)}
 .editor-access-action{display:flex;flex-direction:column;gap:10px}
 .editor-access-card .editor-access-start{width:100%;justify-content:center}
-.editor-access-action small{display:block;text-align:center;color:var(--ws-text);font-size:11px;line-height:1.5}
 @media(max-width:760px){.editor-access-main[data-plans]{grid-template-columns:minmax(0,1fr);width:min(420px,calc(100% - 32px))}}
 @media(max-width:600px){.editor-access-main{margin:24px auto}.editor-access-card{padding:20px;gap:20px}}

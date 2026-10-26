@@ -62,12 +62,11 @@ export function BillingSection({ checkoutReturn }: { checkoutReturn?: CheckoutRe
         {!status.complimentary && <div className="workspace-billing-actions">
           <PrimaryButton size="compact" disabled={!active || !!busy} onClick={() => void openBilling()}>{busy === 'pro' && <LoaderCircle size={14} className="animate-spin" />}{!active ? 'Coming soon' : status.subscribed || status.needsPayment ? 'Manage subscription' : status.trialEligible ? `Start ${EDITOR_PLAN.trialDays}-day free trial` : 'Subscribe to Pro'}</PrimaryButton>
         </div>}
-        {offerUltra && <div className="workspace-billing-ultra"><UltraPlanCard note={status.subscribed ? confirmUpgrade ? 'You\'ll be charged the prorated difference today, and any remaining trial ends.' : 'Pay only the prorated difference today.' : 'Billed today. Cancel anytime.'}>
+        {offerUltra && <div className="workspace-billing-ultra"><UltraPlanCard note={status.subscribed && confirmUpgrade ? 'You\'ll be charged the prorated difference today, and any remaining trial ends.' : undefined}>
           {status.subscribed
             ? <PrimaryButton disabled={!!busy} onClick={() => confirmUpgrade ? void upgradeToUltra() : setConfirmUpgrade(true)}>{busy === 'upgrade' && <LoaderCircle size={14} className="animate-spin" />}{confirmUpgrade ? 'Confirm upgrade' : 'Upgrade to Ultra'}</PrimaryButton>
             : <PrimaryButton disabled={!!busy} onClick={() => void openBilling('ultra')}>{busy === 'ultra' && <LoaderCircle size={14} className="animate-spin" />}Get Ultra</PrimaryButton>}
         </UltraPlanCard></div>}
-        {active && !status.subscribed && !status.complimentary && status.trialEligible && <p className="workspace-billing-trial-note">A payment method is required. Your first charge follows the trial unless you cancel.</p>}
         {error && <p className="workspace-inline-error" role="alert">{error}</p>}
       </>}
     </div>

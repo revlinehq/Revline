@@ -3,6 +3,5 @@
 .workspace-billing-loading { display:flex; align-items:center; gap:8px; color:var(--ws-muted); font-size:13px; }
 .workspace-billing-notice { margin:0; padding:12px 14px; border:1px solid var(--ws-border); border-radius:9px; background:var(--ws-input); color:var(--ws-muted); font-size:12px; line-height:1.5; }
 .workspace-billing-section .workspace-membership-description { line-height:1.6; }
-.workspace-billing-trial-note { max-width:460px; margin:0; color:var(--ws-faint); font-size:11px; line-height:1.5; }
 .workspace-billing-actions { display:flex; flex-wrap:wrap; gap:8px; }
 .workspace-billing-ultra { max-width:420px; }
