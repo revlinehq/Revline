@@ -5,6 +5,15 @@ export const EDITOR_PLAN = {
   trialDays: 3,
 } as const;
 
+/** Pro's headline features, shared by the landing pricing card and the in-app paywall. */
+export const PRO_FEATURES = [
+  'Edit by prompting: cuts, captions and effects',
+  'Motion design, animated subtitles and effects',
+  'Edit from Claude, Codex or Cursor with MCP',
+  '1080p export in any format, no watermark',
+  'Unlimited projects, 50 GB storage',
+] as const;
+
 /** Ultra is paused: Pro includes MCP. Its code and Stripe price stay for a later relaunch. */
 export const ULTRA_OFFERED = false;
 

@@ -1,12 +1,10 @@
 import { Check } from 'lucide-react';
-import { EDITOR_PLAN, ULTRA_FEATURES, ULTRA_OFFERED, ULTRA_PLAN } from '@/lib/billing/plan';
+import { EDITOR_PLAN, PRO_FEATURES, ULTRA_FEATURES, ULTRA_OFFERED, ULTRA_PLAN } from '@/lib/billing/plan';
 import { LandingStartButton } from './start-button';
 import { LandingHeading, LandingSection } from './ui';
 
 const plans = [
-  { name: 'Revline Pro', description: 'For creators editing every week.', price: EDITOR_PLAN.monthlyPrice, features: [
-    'Edit by prompting: cuts, captions and effects', 'Motion design, animated subtitles and effects', 'Edit from Claude, Codex or Cursor with MCP', '1080p export in any format, no watermark', 'Unlimited projects, 50 GB storage',
-  ], cta: 'Start free trial', note: `${EDITOR_PLAN.trialDays} days free, then $${EDITOR_PLAN.monthlyPrice}/month` },
+  { name: 'Revline Pro', description: 'For creators editing every week.', price: EDITOR_PLAN.monthlyPrice, features: PRO_FEATURES, cta: 'Start free trial', note: `${EDITOR_PLAN.trialDays} days free, then $${EDITOR_PLAN.monthlyPrice}/month` },
   { name: 'Revline Ultra', description: 'For power users.', price: ULTRA_PLAN.monthlyPrice, lead: 'Everything in Pro, plus', features: ULTRA_FEATURES, cta: 'Get Ultra', note: 'Cancel anytime', ultra: true },
 ].filter(plan => ULTRA_OFFERED || !('ultra' in plan));
 

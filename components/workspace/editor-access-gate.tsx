@@ -7,7 +7,7 @@ import Link from 'next/link';
 import { useAction } from 'convex/react';
 import { Check, LoaderCircle } from 'lucide-react';
 import { api } from '@/convex/_generated/api';
-import { EDITOR_PLAN } from '@/lib/billing/plan';
+import { EDITOR_PLAN, PRO_FEATURES } from '@/lib/billing/plan';
 import { PrimaryButton } from './primary-button';
 import { usePlanStatus } from './use-plan-status';
 import { UltraPlanCard } from './ultra-plan-card';
@@ -62,14 +62,7 @@ export function EditorAccessGate({ children, loading, checkoutPending = false }:
           <div className="editor-access-price"><strong>${EDITOR_PLAN.monthlyPrice}</strong><span>/ month · {EDITOR_PLAN.currency}</span></div>
         </div>
         <ul className="editor-access-features" aria-label="Included features">
-          <li><Check size={16} strokeWidth={1.5} aria-hidden="true" />AI editing in chat</li>
-          <li><Check size={16} strokeWidth={1.5} aria-hidden="true" />Automatic captions &amp; animated text</li>
-          <li><Check size={16} strokeWidth={1.5} aria-hidden="true" />Custom fonts, colors &amp; text styles</li>
-          <li><Check size={16} strokeWidth={1.5} aria-hidden="true" />Video effects &amp; smooth transitions</li>
-          <li><Check size={16} strokeWidth={1.5} aria-hidden="true" />Background removal &amp; masking</li>
-          <li><Check size={16} strokeWidth={1.5} aria-hidden="true" />Audio FX &amp; precise timeline controls</li>
-          <li><Check size={16} strokeWidth={1.5} aria-hidden="true" />Private uploads &amp; 1080p MP4 exports</li>
-          <li><Check size={16} strokeWidth={1.5} aria-hidden="true" />50 GB storage</li>
+          {PRO_FEATURES.map(feature => <li key={feature}><Check size={16} strokeWidth={1.5} aria-hidden="true" />{feature}</li>)}
         </ul>
         {!status.configured && <p role="status">Billing is temporarily unavailable. Please try again shortly.</p>}
         <div className="editor-access-action">
