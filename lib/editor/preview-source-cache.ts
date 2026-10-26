@@ -15,9 +15,14 @@ export function createPreviewSourceCache() {
   const entries = new Map<string, Entry>();
   const failures = new Map<string, { url: string; retryAt: number }>();
   let disposed = false;
-  const keyFor = (asset: PreviewAsset) => `${asset._id}|${asset.previewVersion ?? ''}|${asset.previewSize ?? ''}`;
+  // Video plays its preview derivative; audio (each cut's linked sound and music) plays its own
+  // file. Both are copied whole: a byte-range stream makes every cut seek over the network.
+  const source = (asset: PreviewAsset): { url: string; size?: number | null; type: string } | null =>
+    asset.kind === 'video' && asset.previewUrl ? { url: asset.previewUrl, size: asset.previewSize, type: 'video/mp4' }
+      : asset.kind === 'audio' && asset.url ? { url: asset.url, size: asset.size, type: 'audio/mp4' } : null;
+  const keyFor = (asset: PreviewAsset) => `${asset._id}|${asset.previewVersion ?? ''}|${source(asset)?.size ?? ''}`;
   const playable = (asset: PreviewAsset, url: string): MediaAsset => asset.url === url ? asset : { ...asset, url };
-  const preview = (asset: PreviewAsset) => asset.kind === 'video' && asset.previewUrl ? asset.previewUrl : null;
+  const preview = (asset: PreviewAsset) => source(asset)?.url ?? null;
   const abortReason = (signal: AbortSignal) => signal.reason ?? new DOMException('Preview replaced.', 'AbortError');
   function nativeAsset(asset: PreviewAsset) {
     const url = preview(asset);
@@ -33,12 +38,12 @@ export function createPreviewSourceCache() {
     });
   }
   async function download(asset: PreviewAsset, controller: AbortController) {
-    const { signal } = controller;
+    const { signal } = controller, file = source(asset)!;
     let idle: ReturnType<typeof setTimeout>, reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
     const progress = () => { clearTimeout(idle); idle = setTimeout(() => controller.abort(new DOMException('Preview preparation stalled.', 'TimeoutError')), 30_000); };
     progress();
     try {
-      const response = await abortable(fetch(asset.previewUrl!, { signal }), signal);
+      const response = await abortable(fetch(file.url, { signal }), signal);
       if (!response.ok) throw new Error('Preview download failed.');
       const declared = Number(response.headers.get('content-length'));
       if (Number.isFinite(declared) && declared > MAX_LOCAL_COPY_BYTES) throw new Error('Preview exceeds the local playback limit.');
@@ -60,8 +65,8 @@ export function createPreviewSourceCache() {
         chunks.push(new Uint8Array(value));
       }
       signal.throwIfAborted();
-      if (!size || size !== asset.previewSize) throw new Error('Preview download was incomplete.');
-      return URL.createObjectURL(new Blob(chunks, { type: 'video/mp4' }));
+      if (!size || size !== file.size) throw new Error('Preview download was incomplete.');
+      return URL.createObjectURL(new Blob(chunks, { type: response.headers.get('content-type') || file.type }));
     } catch (cause) {
       controller.abort();
       if (reader) {
@@ -80,7 +85,7 @@ export function createPreviewSourceCache() {
   function entryFor(asset: PreviewAsset) {
     const key = keyFor(asset);
     const failed = failures.get(key);
-    if (failed && failed.url === asset.previewUrl && Date.now() < failed.retryAt) return undefined;
+    if (failed && failed.url === preview(asset) && Date.now() < failed.retryAt) return undefined;
     if (failed) failures.delete(key);
     let entry = entries.get(key);
     if (entry?.controller.signal.aborted) { entries.delete(key); entry = undefined; }
@@ -88,9 +93,10 @@ export function createPreviewSourceCache() {
     // Reserve pending bytes too. Never revoke a Blob still used by a displayed
     // player merely to make room; later derivatives retain native range URLs.
     const reserved = Array.from(entries.values()).reduce((sum, item) => sum + item.expectedBytes, 0);
-    if (reserved + asset.previewSize! > MAX_SESSION_BYTES) return undefined;
+    const bytes = source(asset)!.size!;
+    if (reserved + bytes > MAX_SESSION_BYTES) return undefined;
     const controller = new AbortController();
-    const created: Entry = { controller, consumers: new Set(), promise: Promise.resolve(''), expectedBytes: asset.previewSize! };
+    const created: Entry = { controller, consumers: new Set(), promise: Promise.resolve(''), expectedBytes: bytes };
     entries.set(key, created);
     created.promise = download(asset, controller).then(url => {
       if (disposed || controller.signal.aborted) { URL.revokeObjectURL(url); throw new DOMException('Preview replaced.', 'AbortError'); }
@@ -100,7 +106,7 @@ export function createPreviewSourceCache() {
       // A native fallback must not restart the same failed full download on
       // every timeline edit. A renewed URL can retry immediately; user-driven
       // cancellation never enters this short failure backoff.
-      if (!disposed && created.consumers.size) failures.set(key, { url: asset.previewUrl!, retryAt: Date.now() + 60_000 });
+      if (!disposed && created.consumers.size) failures.set(key, { url: preview(asset)!, retryAt: Date.now() + 60_000 });
       if (entries.get(key) === created) entries.delete(key);
       throw error;
     });
@@ -111,8 +117,8 @@ export function createPreviewSourceCache() {
   }
   async function prepareAsset(asset: PreviewAsset, signal: AbortSignal, maxBytes: number): Promise<MediaAsset> {
     const url = preview(asset);
-    if (!url) return asset; // Never download or copy the original source.
-    const size = asset.previewSize;
+    if (!url) return asset; // Never download or copy an original video source.
+    const size = source(asset)!.size;
     if (typeof size !== 'number' || !Number.isFinite(size) || size <= 0 || size > maxBytes || typeof URL.createObjectURL !== 'function') return nativeAsset(asset);
     const entry = entryFor(asset);
     if (!entry) return nativeAsset(asset);
