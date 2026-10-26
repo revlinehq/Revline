@@ -111,7 +111,10 @@ export function intersectsSelection(a:SelectionBounds,b:SelectionBounds){return 
 export function shouldCommitClipGesture(mode:'move'|'left'|'right',pointer:{x:number;y:number},viewport:SelectionBounds){
   // A trim is one-dimensional and its timing is already clamped. Releasing past
   // zero must keep that preview; only moving a clip needs an inside drop target.
-  return mode!=='move'||pointer.x>=viewport.left&&pointer.x<viewport.left+viewport.width&&pointer.y>=viewport.top&&pointer.y<viewport.top+viewport.height;
+  // Dropping onto a new top or bottom row means releasing just past the lanes
+  // (over the ruler), so that margin still commits; farther away cancels.
+  const margin=96;
+  return mode!=='move'||pointer.x>=viewport.left&&pointer.x<viewport.left+viewport.width&&pointer.y>=viewport.top-margin&&pointer.y<viewport.top+viewport.height+margin;
 }
 export function minimumClipMoveDelta(members: Clip[], fps: number) {
   const clip = members[0];
@@ -223,9 +226,12 @@ export function moveSelectionToNewLayers(timeline:Timeline,ids:string[],timeDelt
   }
   const next={...timeline,tracks:counts,clips};
   let placed=placeMovedClips(next,clips.filter(clip=>selected.has(clip.id)),edge,anchorGroup==='visual'?'linked-audio':false);
-  // Moving a row's only clips to a new row must not leave the old row behind.
-  for(const row of vacated.sort((a,b)=>b.track-a.track))if(!placed.clips.some(clip=>layerGroup(clip.kind)===row.group&&trackOf(clip)===row.track))placed=deleteEmptyLayer(placed,row.group,row.track);
-  return reconcileTransitionEdits(timeline,placed);
+  // Moving a row's only clips to a new row must not leave the old row behind,
+  // unless removing it would land them back on the same row and undo the move.
+  let pruned=placed;
+  for(const row of vacated.sort((a,b)=>b.track-a.track))if(!pruned.clips.some(clip=>layerGroup(clip.kind)===row.group&&trackOf(clip)===row.track))pruned=deleteEmptyLayer(pruned,row.group,row.track);
+  const undone=members.filter(clip=>explicit.has(clip.id)).every(clip=>trackOf(pruned.clips.find(item=>item.id===clip.id)!)===trackOf(clip))&&JSON.stringify(deriveTrackCounts(pruned))===JSON.stringify(deriveTrackCounts(timeline));
+  return reconcileTransitionEdits(timeline,undone?placed:pruned);
 }
 
 export type LayerDropTarget={edge:'above'|'below'}|{track:number;direction:'above'|'below';insert?:true};
