@@ -581,6 +581,10 @@ test('preview tasks require project ownership, deduplicate and cannot be claimed
   expect(await f.owner.mutation(api.mediaTasks.start,{projectId:f.projectId,assetId:f.assetId,kind:'preview'})).toBe(taskId);
   await f.t.run(ctx=>ctx.db.patch(taskId,{claimable:true}));
   expect(await f.t.mutation(api.mediaTasks.claim,{workerSecret:'audit-worker-secret',processorVersion:4,compact:true})).toBeNull();
+  // The export machines' key only ever claims exports, even when asked for anything.
+  vi.stubEnv('MEDIA_WORKER_SECRET_EXPORTS','audit-export-secret');
+  expect(await f.t.mutation(api.mediaTasks.claim,{workerSecret:'audit-export-secret',processorVersion:5,compact:true})).toBeNull();
+  await expect(f.t.mutation(api.mediaTasks.claim,{workerSecret:'wrong-secret',processorVersion:5,compact:true})).rejects.toThrow('authentication');
   const task=await f.t.mutation(api.mediaTasks.claim,{workerSecret:'audit-worker-secret',processorVersion:5,compact:true});
   expect(task).toMatchObject({taskId,kind:'preview'});
 });

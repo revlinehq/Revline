@@ -287,8 +287,8 @@ export const processorContract = query({ args: { workerSecret: v.string() }, ret
 } });
 
 export const ready = query({ args: { workerSecret: v.string(),processorVersion:v.optional(v.number()),lane:v.optional(v.union(v.literal('ultra'),v.literal('any'))),rendersOnly:v.optional(v.boolean()) }, returns: v.string(), handler: async (ctx, args) => {
-  requireMediaWorker(args.workerSecret);
-  const task=await firstClaimable(ctx,args.processorVersion,args.lane,args.rendersOnly);return task?`${task._id}:${task.attempt}`:'';
+  const role=requireMediaWorker(args.workerSecret);
+  const task=await firstClaimable(ctx,args.processorVersion,args.lane,args.rendersOnly||role==='exports');return task?`${task._id}:${task.attempt}`:'';
 }});
 
 async function analysisStillActive(ctx:import('./_generated/server').QueryCtx|MutationCtx,task:Doc<'mediaTasks'>) {
@@ -339,8 +339,8 @@ async function loadWork(ctx:import('./_generated/server').QueryCtx|MutationCtx,t
   return { ...(analysisRun?{aiRunId:analysisRun.aiRunId}:{}),...(review?{review}:{}),...(snapshot?{snapshot}:{}),...(cutoutRow?{cutout:{start:cutoutRow.start,end:cutoutRow.end,...(cutoutRow.fps?{fps:cutoutRow.fps}:{}),...(cutoutRow.subject?{subject:cutoutRow.subject}:{})}}:{}),taskId: task._id, leaseToken: task.leaseToken!, projectId: task.projectId, kind: task.kind, ...(task.sourceUrl ? { sourceUrl: task.sourceUrl } : {}), ...(task.frameRequest ? { frameRequest: task.frameRequest } : {}), ...(task.videoRequest ? { videoRequest: task.videoRequest } : {}), ...(asset ? { asset: { ...await hydrateAsset(ctx,asset), url: await mediaUrl(ctx, asset), ...await previewUrl(ctx, asset) } } : {}), ...(transcriptionAsset?{transcriptionAsset}:{}), ...(render ? { render, outputStored } : {}), ...(task.renderJobId ? { renderJobId: task.renderJobId } : {}), ...(task.outputAssetId ? { outputAssetId: task.outputAssetId } : {}) };
 }
 export const claim = mutation({ args: { workerSecret: v.string(),compact:v.optional(v.boolean()),processorVersion:v.optional(v.number()),lane:v.optional(v.union(v.literal('ultra'),v.literal('any'))),rendersOnly:v.optional(v.boolean()) }, returns: v.union(workItem, v.null()), handler: async (ctx, args): Promise<MediaWorkItem | null> => {
-  requireMediaWorker(args.workerSecret);
-  const task=await firstClaimable(ctx,args.processorVersion,args.lane,args.rendersOnly);if(!task)return null;
+  const role=requireMediaWorker(args.workerSecret);
+  const task=await firstClaimable(ctx,args.processorVersion,args.lane,args.rendersOnly||role==='exports');if(!task)return null;
   try {await projectIdentity(ctx,task.projectId,task.ownerId);}catch{await failTask(ctx,task,'The project was removed.',false);return null;}
   if(!await analysisStillActive(ctx,task)){await markTerminal(ctx,task._id,'cancelled','The AI analysis request is no longer active.');await signalResult(ctx,task,{success:false,retryable:false,error:'The AI run stopped.'});return null;}
   const leaseToken=crypto.randomUUID(),now=Date.now();
