@@ -31,7 +31,7 @@ const APPS = {
 } as const;
 type AppId = keyof typeof APPS;
 
-/** Ultra: connect Claude or ChatGPT to edit projects with the editor's own tools. */
+/** Pro: connect Claude or ChatGPT to edit projects with the editor's own tools. */
 export function McpConnectorSection() {
   const { isAuthenticated } = useConvexAuth();
   const connector = useQuery(api.mcpAuth.connector, isAuthenticated ? {} : 'skip');

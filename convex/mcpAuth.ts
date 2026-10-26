@@ -2,13 +2,13 @@ import { ConvexError, v } from 'convex/values';
 import { internalMutation, internalQuery, mutation, query, type MutationCtx, type QueryCtx } from './_generated/server';
 import type { Doc } from './_generated/dataModel';
 import { requireOwner } from './lib/auth';
-import { hasUltraPlan, requireEditorAccess } from './lib/billing_access';
+import { requireEditorAccess } from './lib/billing_access';
 import { mcpOrigins, publicMcpOrigin } from './lib/mcp_origin';
 
 // OAuth 2.1 for the MCP connector: public clients, PKCE S256 only, hashed tokens.
 const CODE_TTL = 10 * 60_000, ACCESS_TTL = 60 * 60_000, REFRESH_TTL = 60 * 24 * 60 * 60_000;
 const CALLS_PER_MINUTE = 120, REFRESH_RETRY_GRACE = 30_000;
-export const MCP_PLAN_ERROR = 'The Revline MCP connector is part of the Ultra plan.';
+export const MCP_PLAN_ERROR = 'The Revline MCP connector needs an active Revline plan.';
 
 const encoder = new TextEncoder();
 const base64url = (bytes: Uint8Array) => btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
@@ -37,8 +37,8 @@ function trustedRedirect(value: string) {
 }
 
 async function requireConnectorAccess(ctx: QueryCtx | MutationCtx, ownerId: string) {
+  // MCP is included with Pro; editor access is the only requirement.
   await requireEditorAccess(ctx, ownerId);
-  if (!await hasUltraPlan(ctx, ownerId)) throw new ConvexError(MCP_PLAN_ERROR);
 }
 
 async function clientFor(ctx: QueryCtx | MutationCtx, clientId: string, redirectUri: string) {

@@ -3,7 +3,7 @@ import Stripe from 'stripe';
 import { ConvexError, v } from "convex/values";
 import { components, internal } from "./_generated/api";
 import { action, internalMutation, query } from "./_generated/server";
-import { EDITOR_PLAN, ULTRA_PLAN } from "../lib/billing/plan";
+import { EDITOR_PLAN, ULTRA_OFFERED, ULTRA_PLAN } from "../lib/billing/plan";
 import { NEW_PROJECT_PATH } from '../lib/workspace-routes';
 import { billingConfigured, billingEnabled, editorSubscriptions, hasComplimentaryEditorAccess, hasEditorAccess, hasUltraPlan, isEditorSubscription, ultraBillingConfigured } from './lib/billing_access';
 
@@ -11,7 +11,7 @@ const hasAccess = hasEditorAccess;
 function ready() { return billingEnabled() && billingConfigured(); }
 function requireBilling(plan: 'pro' | 'ultra' = 'pro') {
   if (!ready()) throw new ConvexError("Billing is not active");
-  if (plan === 'ultra' && !process.env.STRIPE_ULTRA_PRICE_ID?.startsWith("price_")) throw new ConvexError("Ultra is not available yet");
+  if (plan === 'ultra' && (!ULTRA_OFFERED || !process.env.STRIPE_ULTRA_PRICE_ID?.startsWith("price_"))) throw new ConvexError("Ultra is not available yet");
   const origin = new URL(process.env.APP_ORIGIN!);
   if (origin.username || origin.password || origin.pathname !== "/" || origin.search || origin.hash || (origin.protocol !== "https:" && !(origin.protocol === "http:" && ["localhost", "127.0.0.1"].includes(origin.hostname)))) throw new ConvexError("Billing origin is invalid");
   if (!process.env.STRIPE_PRO_PRICE_ID!.startsWith("price_")) throw new ConvexError("Billing price is not configured");

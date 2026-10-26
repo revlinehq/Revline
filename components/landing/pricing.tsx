@@ -1,14 +1,14 @@
 import { Check } from 'lucide-react';
-import { EDITOR_PLAN, ULTRA_FEATURES, ULTRA_PLAN } from '@/lib/billing/plan';
+import { EDITOR_PLAN, ULTRA_FEATURES, ULTRA_OFFERED, ULTRA_PLAN } from '@/lib/billing/plan';
 import { LandingStartButton } from './start-button';
 import { LandingHeading, LandingSection } from './ui';
 
 const plans = [
   { name: 'Revline Pro', description: 'For creators editing every week.', price: EDITOR_PLAN.monthlyPrice, features: [
-    'AI trims and cuts', 'Animated subtitles', 'Text effects', 'Background removal', 'Motion design and masking', 'Export in 9:16, 1:1 and 16:9', '1080p export, no watermark', 'Unlimited projects, 50 GB storage',
+    'AI trims and cuts', 'Animated subtitles', 'Text effects', 'Background removal', 'Motion design and masking', 'Export in 9:16, 1:1 and 16:9', '1080p export, no watermark', 'Unlimited MCP access for any AI agent', 'Unlimited projects, 50 GB storage',
   ], cta: 'Start free trial', note: `${EDITOR_PLAN.trialDays} days free, then $${EDITOR_PLAN.monthlyPrice}/month` },
   { name: 'Revline Ultra', description: 'For power users.', price: ULTRA_PLAN.monthlyPrice, lead: 'Everything in Pro, plus', features: ULTRA_FEATURES, cta: 'Get Ultra', note: 'Cancel anytime', ultra: true },
-] as const;
+].filter(plan => ULTRA_OFFERED || !('ultra' in plan));
 
 export function LandingPricing() {
   return <LandingSection id="pricing" className="landing-pricing" headingId="landing-pricing-heading">
@@ -24,7 +24,7 @@ export function LandingPricing() {
         {plan.features.map(feature => <li key={feature}><Check size={16} aria-hidden="true" />{feature}</li>)}
       </ul>
       <footer>
-        {'ultra' in plan ? <LandingStartButton label={plan.cta} variant="primary" size="lg" block signedInHref="/profile#billing" /> : <LandingStartButton label={plan.cta} variant="secondary" size="lg" block />}
+        {'ultra' in plan ? <LandingStartButton label={plan.cta} variant="primary" size="lg" block signedInHref="/profile#billing" /> : <LandingStartButton label={plan.cta} variant={ULTRA_OFFERED ? 'secondary' : 'primary'} size="lg" block />}
         <small>{plan.note}</small>
       </footer>
     </article>)}</div>
