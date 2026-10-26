@@ -38,6 +38,7 @@ import type * as lib_editSessionRebase from "../lib/editSessionRebase.js";
 import type * as lib_editorToolkit from "../lib/editorToolkit.js";
 import type * as lib_effect_plan from "../lib/effect_plan.js";
 import type * as lib_inspectTimeline from "../lib/inspectTimeline.js";
+import type * as lib_mcp_origin from "../lib/mcp_origin.js";
 import type * as lib_media_storage from "../lib/media_storage.js";
 import type * as lib_media_task_auth from "../lib/media_task_auth.js";
 import type * as lib_project_data from "../lib/project_data.js";
@@ -106,6 +107,7 @@ declare const fullApi: ApiFromModules<{
   "lib/editorToolkit": typeof lib_editorToolkit;
   "lib/effect_plan": typeof lib_effect_plan;
   "lib/inspectTimeline": typeof lib_inspectTimeline;
+  "lib/mcp_origin": typeof lib_mcp_origin;
   "lib/media_storage": typeof lib_media_storage;
   "lib/media_task_auth": typeof lib_media_task_auth;
   "lib/project_data": typeof lib_project_data;
