@@ -3,7 +3,7 @@ import { Check } from 'lucide-react';
 import { ULTRA_FEATURES, ULTRA_PLAN } from '@/lib/billing/plan';
 import './ultra-plan-card.css';
 
-/** The Ultra offer in the brand gradient. `children` is the call to action. */
+/** The Ultra offer, outlined like the Pro card. `children` is the call to action. */
 export function UltraPlanCard({ children, note }: { children: ReactNode; note?: ReactNode }) {
   return <section className="ultra-plan-card" aria-labelledby="ultra-plan-title">
     <header>

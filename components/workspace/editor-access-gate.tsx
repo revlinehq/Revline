@@ -81,7 +81,7 @@ export function EditorAccessGate({ children, loading, checkoutPending = false }:
         {error && <p className="editor-access-error" role="alert">{error}</p>}
       </section>
       {offerUltra && <UltraPlanCard note="Billed today. Cancel anytime in billing.">
-        <button type="button" className="ultra-plan-button" disabled={!!busy || !status.configured} onClick={() => void openCheckout('ultra')}>{busy === 'ultra' && <LoaderCircle size={14} className="animate-spin" />}Get Ultra</button>
+        <PrimaryButton disabled={!!busy || !status.configured} onClick={() => void openCheckout('ultra')}>{busy === 'ultra' && <LoaderCircle size={14} className="animate-spin" />}Get Ultra</PrimaryButton>
       </UltraPlanCard>}
     </main>
   </div>;
