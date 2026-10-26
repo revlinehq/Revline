@@ -274,9 +274,9 @@ test('queued requests can be removed and the queue has a bounded size',async()=>
   expect((await x.owner.query(api.assistant.queued,{projectId:x.projectId})).messages.map(row=>row.prompt)).not.toContain('Queued 4');
 });
 
-test('AI submissions are rate limited per account by minute and day, and a refusal is not charged',async()=>{
+test('AI submissions are rate limited per account by minute with no daily cap, and a refusal is not charged',async()=>{
   const x=await setup();vi.stubEnv('OPENAI_API_KEY','fixture-only');vi.stubEnv('EDITOR_DEFAULT_MODEL','gpt-6.1-sol');vi.stubEnv('AI_GATEWAY_ENABLED','false');
-  vi.stubEnv('AI_REQUESTS_PER_MINUTE_PER_ACCOUNT','2');vi.stubEnv('AI_REQUESTS_PER_DAY_PER_ACCOUNT','3');
+  vi.stubEnv('AI_REQUESTS_PER_MINUTE_PER_ACCOUNT','2');
   // Ten seconds into a minute at midday UTC near real time: away from both resets.
   const now=Date.now(),start=now-now%86_400_000+43_210_000,time=vi.spyOn(Date,'now').mockReturnValue(start);
   try{
@@ -284,8 +284,7 @@ test('AI submissions are rate limited per account by minute and day, and a refus
     await send('One');await send('Two');
     await expect(send('Too fast')).rejects.toThrow('too quickly');
     time.mockReturnValue(start+60_000);await send('Three');
-    time.mockReturnValue(start+120_000);await expect(send('Over the day')).rejects.toThrow("today's limit of 3 AI requests");
-    expect((await x.owner.query(api.assistant.queued,{projectId:x.projectId})).messages.map(row=>row.prompt)).toEqual(['One','Two','Three']);
-    time.mockReturnValue(start+86_400_000);await expect(send('Tomorrow')).resolves.toBeNull();
+    time.mockReturnValue(start+120_000);await send('Four');await send('Five');
+    expect((await x.owner.query(api.assistant.queued,{projectId:x.projectId})).messages.map(row=>row.prompt)).toEqual(['One','Two','Three','Four','Five']);
   }finally{time.mockRestore();}
 });

@@ -774,21 +774,21 @@ test('user-initiated media work respects the account task limit while reuse and 
   await expect(f.owner.action(api.r2.complete, { uploadId: a.uploadId, parts: [{ partNumber: 1, etag: 'a' }] })).resolves.toBeTruthy();
 });
 
-test('video-link imports and new edits from links have separate daily account quotas', async () => {
-  vi.stubEnv('VIDEO_IMPORTS_PER_DAY_PER_ACCOUNT', '2'); vi.stubEnv('IMPORT_PROJECTS_PER_DAY_PER_ACCOUNT', '1');
+test('video-link imports and new edits from links have separate per-minute burst limits', async () => {
+  vi.stubEnv('VIDEO_IMPORTS_PER_MINUTE_PER_ACCOUNT', '2'); vi.stubEnv('IMPORT_PROJECTS_PER_MINUTE_PER_ACCOUNT', '1');
   // Midday UTC near real time keeps scheduled work in range and away from a reset.
   const now = Date.now(), midday = now - now % 86_400_000 + 43_200_000;
   const f = await fixture(), time = vi.spyOn(Date, 'now').mockReturnValue(midday);
   try {
     const projects = () => f.t.run(async ctx => (await ctx.db.query('projects').withIndex('by_ownerId_updatedAt', q => q.eq('ownerId', ownerId)).collect()).length);
     await f.owner.mutation(api.mediaTasks.importVideo, { url: 'https://cdn.example.com/one.mp4' });
-    await expect(f.owner.mutation(api.mediaTasks.importVideo, { url: 'https://cdn.example.com/two.mp4' })).rejects.toThrow('new edits from video links');
+    await expect(f.owner.mutation(api.mediaTasks.importVideo, { url: 'https://cdn.example.com/two.mp4' })).rejects.toThrow('creating edits from video links too quickly');
     expect(await projects()).toBe(2);
     const existing = await f.owner.mutation(api.mediaTasks.importVideo, { projectId: f.projectId, url: 'https://cdn.example.com/two.mp4' });
     // A repeated pending link is the same import and is not charged again.
     expect(await f.owner.mutation(api.mediaTasks.importVideo, { projectId: f.projectId, url: 'https://cdn.example.com/two.mp4' })).toEqual(existing);
-    await expect(f.owner.mutation(api.mediaTasks.importVideo, { projectId: f.projectId, url: 'https://cdn.example.com/three.mp4' })).rejects.toThrow('2 video-link imports');
-    time.mockReturnValue(midday + 86_400_000);
+    await expect(f.owner.mutation(api.mediaTasks.importVideo, { projectId: f.projectId, url: 'https://cdn.example.com/three.mp4' })).rejects.toThrow('importing video links too quickly');
+    time.mockReturnValue(midday + 60_000);
     await expect(f.owner.mutation(api.mediaTasks.importVideo, { projectId: f.projectId, url: 'https://cdn.example.com/three.mp4' })).resolves.toBeTruthy();
   } finally { time.mockRestore(); }
 });
