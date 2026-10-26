@@ -5,7 +5,7 @@ import { LandingHeading, LandingSection } from './ui';
 
 const plans = [
   { name: 'Revline Pro', description: 'For creators editing every week.', price: EDITOR_PLAN.monthlyPrice, features: [
-    'AI trims and cuts', 'Animated subtitles', 'Text effects', 'Background removal', 'Motion design and masking', 'Export in 9:16, 1:1 and 16:9', '1080p export, no watermark', 'Unlimited MCP access for any AI agent', 'Unlimited projects, 50 GB storage',
+    'Edit by prompting: cuts, captions and effects', 'Animated subtitles and text effects', 'Edit from Claude, Codex or Cursor with MCP', '1080p export in any format, no watermark', 'Unlimited projects, 50 GB storage',
   ], cta: 'Start free trial', note: `${EDITOR_PLAN.trialDays} days free, then $${EDITOR_PLAN.monthlyPrice}/month` },
   { name: 'Revline Ultra', description: 'For power users.', price: ULTRA_PLAN.monthlyPrice, lead: 'Everything in Pro, plus', features: ULTRA_FEATURES, cta: 'Get Ultra', note: 'Cancel anytime', ultra: true },
 ].filter(plan => ULTRA_OFFERED || !('ultra' in plan));
