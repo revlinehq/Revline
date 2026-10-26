@@ -14,7 +14,7 @@ const playingMedia = 'J=(r.tagName==="VIDEO"||r.tagName==="AUDIO"&&a&&!e.forceSy
 const nativeVolume = 'r.volume=M,cl.set(r,M),e.onElementVolume?.(r,M,O),(t||e.isWebAudioOwned?.(r))';
 const audibleVolume = 'r.volume=M,cl.set(r,M),e.onElementVolume?.(r,M,O);if(r.tagName==="AUDIO"&&M===0){r.paused||r.pause();ml(r);cl.set(r,M);continue}(t||e.isWebAudioOwned?.(r))';
 const nativeAlignment = 'V=d&&ne>.001||r.ended&&h&&ne>.001||j||ne>pl&&(G||Y||U),';
-const resumedAlignment = 'V=r.tagName==="AUDIO"&&r.paused&&e.playing&&ne>.001||d&&ne>.001||r.ended&&h&&ne>.001||j||ne>pl&&(G||Y||U),';
+const resumedAlignment = 'V=r.tagName==="AUDIO"&&r.paused&&e.playing&&ne>.06||d&&ne>.001||r.ended&&h&&ne>.001||j||ne>pl&&(G||Y||U),';
 const nativePreload = 'Qy=(c,p,y)=>{let S=d.isPlaying();';
 const managedPreload = 'Qy=(c,p,y)=>{if(document.documentElement.dataset.revlineMediaLoading==="managed")return;let S=d.isPlaying();';
 
@@ -39,7 +39,10 @@ export function patchHyperframesPlaybackRuntime(source, version) {
   // Effective zero-gain audio needs no native decoder work. Evaluate automation
   // and the WebAudio gain callback first, then pause it and clear timing history.
   // Retain the last gain so live unmute can resolve its authored volume; align
-  // the paused source exactly before any positive-gain playback resumes.
+  // the paused source before positive-gain playback resumes, but only when it is more
+  // than 60ms off: a cut's preloaded audio is always a few ms behind the clock when it
+  // starts, and hard-seeking it at every cut dropped ~50ms of sound. Rate correction
+  // absorbs that small offset, as it does for video.
   // Revline's bounded warmup owns preview source preparation. Native visibility
   // deferral otherwise promotes extra streams and discards already prepared cuts.
   // Keep the studio marker for first-frame readiness and lazy image behavior.
