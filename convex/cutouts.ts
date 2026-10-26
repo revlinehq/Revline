@@ -3,7 +3,7 @@ import { internalMutation, mutation, query, type MutationCtx } from './_generate
 import type { Doc, Id } from './_generated/dataModel';
 import { internal } from './_generated/api';
 import { requireOwner, requireProject } from './lib/auth';
-import { hasUltraPlan, requireEditorAccess } from './lib/billing_access';
+import { requireEditorAccess } from './lib/billing_access';
 import { requireMediaTaskCapacity } from './lib/account_limits';
 import { readProject } from './lib/project_data';
 import { commitTimeline, currentTimeline } from './lib/timeline';
@@ -17,7 +17,6 @@ import { cutoutEffectValidator } from './lib/cutout_effect_validator';
 // SAM 3 object masks $0.005 per 16 frames. The worker sends at most the project's frame rate.
 const USD_PER_FRAME = { person: 0.0225 / 30, object: 0.005 / 16 }, HANDLE_SECONDS = 0.25, MAX_SECONDS = 120, MAX_SUBJECT_LENGTH = 60;
 const PLACEMENT_DELAY_MS = 10_000, PLACEMENT_ATTEMPTS = 360;
-export const CUTOUT_PLAN_ERROR = 'Background removal is part of the Ultra plan.';
 
 /** Queue background removal for the source range one video clip uses; the clip switches when it finishes.
  * Without a subject the person is kept; with one (e.g. "phone") only that object is.
@@ -29,7 +28,6 @@ export async function startCutoutFor(ctx: MutationCtx, ownerId: string, projectI
   const subject = rawSubject?.trim().replace(/\s+/g, ' ').toLowerCase() || (target?.target === 'object' ? target.defaultSubject : undefined);
   if (subject && subject.length > MAX_SUBJECT_LENGTH) throw new ConvexError(`Name the object in ${MAX_SUBJECT_LENGTH} characters or fewer.`);
   await requireEditorAccess(ctx, ownerId);
-  if (!await hasUltraPlan(ctx, ownerId)) throw new ConvexError(CUTOUT_PLAN_ERROR);
   const project = await requireProject(ctx, projectId, ownerId, false);
   const clip = currentTimeline(project).clips.find(item => item.id === clipId);
   if (!clip || clip.kind !== 'video' || !clip.assetId) throw new ConvexError('Choose a video clip to remove its background.');

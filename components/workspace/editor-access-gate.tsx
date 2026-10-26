@@ -66,6 +66,7 @@ export function EditorAccessGate({ children, loading, checkoutPending = false }:
           <li><Check size={16} strokeWidth={1.5} aria-hidden="true" />Automatic captions &amp; animated text</li>
           <li><Check size={16} strokeWidth={1.5} aria-hidden="true" />Custom fonts, colors &amp; text styles</li>
           <li><Check size={16} strokeWidth={1.5} aria-hidden="true" />Video effects &amp; smooth transitions</li>
+          <li><Check size={16} strokeWidth={1.5} aria-hidden="true" />Background removal &amp; masking</li>
           <li><Check size={16} strokeWidth={1.5} aria-hidden="true" />Audio FX &amp; precise timeline controls</li>
           <li><Check size={16} strokeWidth={1.5} aria-hidden="true" />Private uploads &amp; 1080p MP4 exports</li>
           <li><Check size={16} strokeWidth={1.5} aria-hidden="true" />50 GB storage</li>

@@ -17,7 +17,6 @@ export const ULTRA_FEATURES = [
   'MCP access for any AI agent',
   'Fast mode',
   'Pick the model for every edit',
-  'Background removal and masking',
   '4K render',
   'Faster, parallel exports',
   '500 GB storage',

@@ -9,7 +9,7 @@ import type { Id } from '@/convex/_generated/dataModel';
 import type { Clip, MediaAsset } from '@/lib/editor/types';
 import './background-removal-control.css';
 
-/** Ultra: replace a video clip's background with transparency (fal.ai), so layers below show through.
+/** Replace a video clip's background with transparency (fal.ai), so layers below show through.
  * The person is kept by default; naming an object keeps only that object (SAM 3). */
 export function BackgroundRemovalControl({ projectId, clip, asset, readOnly }: { projectId: Id<'projects'>; clip: Clip; asset?: MediaAsset; readOnly?: boolean }) {
   const cutouts = useQuery(api.cutouts.forProject, { projectId });
