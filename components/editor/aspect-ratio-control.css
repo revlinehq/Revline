@@ -17,3 +17,6 @@
 .aspect-ratio-name{font-size:11px;white-space:nowrap;color:var(--ws-muted,var(--muted-foreground))}
 .aspect-ratio-menu [role=menuitemradio]:focus{background:var(--ws-hover,var(--accent));color:var(--ws-text,var(--foreground))}
 @media(max-width:600px){.aspect-ratio-label{display:none}}
+.safe-area-menu-label{padding:6px 8px 4px;color:var(--ws-muted,#a1a3ab);font-size:11px;font-weight:500}
+.safe-area-options{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px}
+.safe-area-options [role=menuitemradio]{justify-content:center;font-size:12px;white-space:nowrap}

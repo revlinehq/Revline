@@ -1,0 +1,4 @@
+.safe-area-overlay{position:absolute;inset:0;z-index:30;pointer-events:none}
+.safe-area-covered{position:absolute;background:#0000006b}
+.safe-area-frame{position:absolute;border:1px dashed #ffffffb3;border-radius:2px}
+.safe-area-label{position:absolute;top:4px;left:6px;padding:1px 6px;border-radius:4px;background:#000000a6;color:#fff;font:500 10px/16px var(--font-inter),Inter,sans-serif;white-space:nowrap}

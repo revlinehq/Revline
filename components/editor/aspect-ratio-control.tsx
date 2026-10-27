@@ -2,7 +2,8 @@
 
 import { ChevronDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuLabel, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { SAFE_AREAS, type SafeAreaPlatform } from '@/lib/editor/safe-areas';
 import { dimensions, type AspectRatio } from '@/lib/editor/types';
 import './aspect-ratio-control.css';
 
@@ -16,7 +17,7 @@ const RATIOS: Record<AspectRatio, string> = {
   vertical: '9:16', 'portrait-feed': '4:5', square: '1:1', classic: '4:3', landscape: '16:9',
 };
 
-export function AspectRatioControl({ value, onChange }: { value: AspectRatio; onChange: (value: AspectRatio) => void }) {
+export function AspectRatioControl({ value, onChange, safeArea = null, onSafeAreaChange }: { value: AspectRatio; onChange: (value: AspectRatio) => void; safeArea?: SafeAreaPlatform | null; onSafeAreaChange?: (value: SafeAreaPlatform | null) => void }) {
   const ratio = RATIOS[value];
 
   return <DropdownMenu>
@@ -42,6 +43,14 @@ export function AspectRatioControl({ value, onChange }: { value: AspectRatio; on
           </DropdownMenuRadioItem>;
         })}
       </DropdownMenuRadioGroup>
+      {value === 'vertical' && onSafeAreaChange && <>
+        <DropdownMenuSeparator />
+        <DropdownMenuLabel className="safe-area-menu-label">Safe area preview</DropdownMenuLabel>
+        <DropdownMenuRadioGroup className="safe-area-options" value={safeArea ?? 'off'} onValueChange={next => onSafeAreaChange(next === 'off' ? null : next as SafeAreaPlatform)}>
+          <DropdownMenuRadioItem value="off">Off</DropdownMenuRadioItem>
+          {(Object.keys(SAFE_AREAS) as SafeAreaPlatform[]).map(platform => <DropdownMenuRadioItem key={platform} value={platform}>{SAFE_AREAS[platform].label}</DropdownMenuRadioItem>)}
+        </DropdownMenuRadioGroup>
+      </>}
     </DropdownMenuContent>
   </DropdownMenu>;
 }
