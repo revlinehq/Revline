@@ -71,7 +71,7 @@ function ProjectEditor({project}: {project:Doc<'projects'>}) {
   const [agentClock,setAgentClock]=useState(()=>Date.now());
   useEffect(()=>{if(!agent||agent.running)return;const wait=agent.until-Date.now();if(wait<=0)return;const timer=setTimeout(()=>setAgentClock(Date.now()),wait+50);return()=>clearTimeout(timer);},[agent]);
   useEffect(()=>{setAgentClock(Date.now());},[agent?.until,agent?.running]);
-  const externalAgent=agent&&(agent.running||agent.until>agentClock)?agent.name:null;
+  const externalAgent=agent&&(agent.running||agent.until>agentClock)?agent.name.replace(/\s*\([^)]*\)\s*$/,'')||agent.name:null;
   const tabSnapshots=useQuery(api.timelineTabs.snapshots,{projectId});
   // A clicked tab shows at once from its snapshot; editing waits until the server has switched.
   const [pendingTab,setPendingTab]=useState<{id:string;timeline:Timeline}|null>(null);

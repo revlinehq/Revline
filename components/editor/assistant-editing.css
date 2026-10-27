@@ -12,6 +12,4 @@
 /* A connected MCP agent working on this project: centered, not a chat reply. */
 .assistant-agent-notice{display:flex;flex-direction:column;align-items:center;gap:4px;margin:18px auto 6px;text-align:center;font-size:12px;line-height:1.4}
 .assistant-agent-notice span{color:var(--ws-muted,#777)}
-.assistant-agent-shimmer{font-weight:500;background:linear-gradient(90deg,var(--ws-text,#ededef) 0%,var(--ws-text,#ededef) 35%,#c4b5fd 50%,var(--ws-text,#ededef) 65%,var(--ws-text,#ededef) 100%) 0 0/250% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;animation:assistant-agent-shimmer 2s linear infinite}
-@keyframes assistant-agent-shimmer{from{background-position:100% 0}to{background-position:-150% 0}}
-@media(prefers-reduced-motion:reduce){.assistant-agent-shimmer{animation:none;background:none;color:var(--ws-text,#ededef)}}
+.assistant-agent-notice strong{font-weight:500;color:var(--ws-text,#ededef)}

@@ -1,6 +1,6 @@
 'use client';
 import type { LiveEditChange } from '@/lib/editor/live-edit';
-import { Check, Download, Minus, MoveHorizontal } from 'lucide-react';
+import { Download, Minus, MoveHorizontal } from 'lucide-react';
 import { userError } from '@/lib/user-error';
 import { STOCK_AUDIO_DRAG_TYPE } from '@/lib/editor/stock-audio-drag';
 import { useState, useRef, useCallback, useLayoutEffect, useEffect, useMemo } from 'react';
@@ -640,7 +640,7 @@ export function TimelinePanel(p:Props){
       {!p.readOnly&&<IconButton label="Delete selected clips" disabled={editingDisabled||!selected} onClick={p.onDelete}><Trash2 size={14}/></IconButton>}
       {!p.readOnly&&p.onUndo&&<IconButton label="Undo (⌘Z)" disabled={!p.canUndo} onClick={p.onUndo}><Undo2 size={14}/></IconButton>}
       {!p.readOnly&&p.onRedo&&<IconButton label="Redo (⇧⌘Z)" disabled={!p.canRedo} onClick={p.onRedo}><Redo2 size={14}/></IconButton>}
-      {p.aiWorking&&!p.readOnly&&<span className="timeline-ai-badge" role="status"><span className="timeline-ai-shimmer">AI editing</span></span>}
+      {p.aiWorking&&!p.readOnly&&<span className="timeline-ai-badge" role="status">{ai.working&&ai.steps.length?`AI editing · ${ai.steps[ai.steps.length-1]}`:'AI editing'}</span>}
     </div>{p.playbackControls&&<div className="timeline-playback-controls">{p.playbackControls}</div>}<div className="timeline-view-actions">
       {!p.readOnly&&<Tooltip><TooltipTrigger asChild><button aria-label="Auto-join when trimming" onClick={()=>{store.setState({ripple:!ripple});setRipplePreference(!ripple);}} aria-pressed={ripple} className={ripple?'snap-active':''}><ChevronsRightLeft size={14}/></button></TooltipTrigger><TooltipContent>{ripple?'Auto-join on: trims pull later clips along':'Auto-join off: trims leave gaps'}</TooltipContent></Tooltip>}
       {!p.readOnly&&<button aria-label="Toggle snapping" onClick={()=>store.setState({snapping:!snap})} aria-pressed={snap} className={snap?'snap-active':''}><Magnet size={14}/></button>}
@@ -698,7 +698,6 @@ export function TimelinePanel(p:Props){
       </div>
       <div ref={cap} className="timeline-playhead-cap" onPointerDown={startScrub} aria-disabled={p.editingLocked||undefined} aria-label="Drag timeline playhead"><svg width="14" height="20" viewBox="0 0 14 20" aria-hidden="true"><path d="M3 0H11Q14 0 14 3V12Q14 13 13 14L8.5 18.5Q7 20 5.5 18.5L1 14Q0 13 0 12V3Q0 0 3 0Z"/></svg></div>
     </div>
-    {ai.active&&ai.steps.length>0&&<div className="timeline-ai-steps" role="status" aria-live="polite" data-done={!ai.working||undefined}><span className="timeline-ai-progress" aria-hidden="true"><i/></span><ol>{ai.steps.map((step,index)=>{const current=ai.working&&index===ai.steps.length-1;return <li key={`${index}:${step}`} data-current={current||undefined}>{current?<span className="timeline-ai-shimmer">{step}</span>:<><Check size={12} aria-hidden="true"/>{step}</>}</li>;})}{!ai.working&&<li data-current><Check size={12} aria-hidden="true"/>Done</li>}</ol></div>}
   </section></ContextMenuTrigger>{!p.readOnly&&<>{context&&!p.editingLocked&&<ContextMenuContent aria-label="Timeline actions">
     {contextMarker?<><ContextMenuLabel>{contextMarker.label||'Beat marker'}</ContextMenuLabel><ContextMenuItem disabled={p.editingLocked} onSelect={()=>onSeek(contextMarker.time)}><Flag/>Go to marker</ContextMenuItem><ContextMenuItem disabled={editingDisabled} onSelect={()=>setEditingMarker({id:contextMarker.id,label:contextMarker.label??''})}><Pencil/>Rename marker</ContextMenuItem><ContextMenuItem disabled={editingDisabled} onSelect={()=>onChange(removeTimelineMarker(timeline,contextMarker.id))}><Trash2/>Delete marker</ContextMenuItem></>:<><ContextMenuLabel>{contextClip?isTransitionClip(contextClip)?'Transition':'Clip':context?.track?`${context.group==='effects'?'FX':context.group==='audio'?'A':'V'}${context.track}`:'Timeline'}</ContextMenuLabel>
     {contextClip&&p.onExportClip&&(contextClip.kind==='video'||contextClip.kind==='image')&&<ContextMenuItem disabled={editingDisabled} onSelect={()=>p.onExportClip?.(contextClip.id)}><Download/>Export this clip</ContextMenuItem>}
