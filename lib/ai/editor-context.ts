@@ -36,7 +36,7 @@ export function modelTimeline(timeline: Timeline, selectedClipIds: readonly stri
 
 /** Keep verbal/visual evidence. Dense numerical maps can be read by source range. */
 export function modelAssetAnalysis(analysis: NonNullable<MediaAsset['analysis']>, window?: { start: number; end: number }) {
-  const { focus, beats, transcript, audioActivity, shots, ...observations } = analysis;
+  const { focus, beats, transcript, audioActivity, shots, speechCleanup, ...observations } = analysis;
   const inRange = (time: number) => !window || (time >= window.start && time <= window.end);
   const denseRead = (count: number) => ({ sampleCount: count, detailsOmitted: true, readTool: 'inspectAssetAnalysis with start/end SOURCE seconds' });
   return { ...observations,
@@ -53,6 +53,8 @@ export function modelAssetAnalysis(analysis: NonNullable<MediaAsset['analysis']>
       ...(window ? { quiet: audioActivity.quiet.filter(interval => interval.end >= window.start && interval.start <= window.end) }
         : { quietSummary: denseRead(audioActivity.quiet.length) }),
     } } : {}),
+    // Speech cuts apply the cleanup map themselves; the model only needs to know it exists.
+    ...(speechCleanup ? { speechCleanup: { measured: true, cutCount: speechCleanup.cuts.length, appliedBy: 'retainSourceRanges with tightenSilence:true, or cleanSpeech' } } : {}),
     ...(shots ? { shots } : {}),
     ...(focus ? window ? { focus: focus.filter(sample => inRange(sample.time)) } : { focusSummary: denseRead(focus.length) } : {}),
     ...(beats ? { beats: { bpm: beats.bpm, confidence: beats.confidence, engine: beats.engine,
