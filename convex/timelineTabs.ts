@@ -1,5 +1,5 @@
 import { ConvexError, v, type ObjectType } from 'convex/values';
-import { internalMutation, mutation, query, type MutationCtx, type QueryCtx } from './_generated/server';
+import { internalMutation, internalQuery, mutation, query, type MutationCtx, type QueryCtx } from './_generated/server';
 import { internal } from './_generated/api';
 import type { Doc, Id } from './_generated/dataModel';
 import { requireOwner, requireProject } from './lib/auth';
@@ -159,4 +159,36 @@ export const backfillTabSummaries = internalMutation({ args: { cursor: v.optiona
   }
   if (!page.isDone) await ctx.scheduler.runAfter(0, internal.timelineTabs.backfillTabSummaries, { cursor: page.continueCursor });
   return null;
+} });
+
+/** Admin export (CLI only): a project's tabs with their full timelines and the media they use, for
+ * copying an edit between deployments. */
+export const exportTabs = internalQuery({ args: { projectId: v.id('projects') }, returns: v.any(), handler: async (ctx, { projectId }) => {
+  const project = await ctx.db.get(projectId);
+  if (!project) throw new ConvexError('Project not found');
+  const active = activeTabOf(project);
+  const tabs = await Promise.all(tabsOf(project).map(async tab => ({ name: tab.name, active: tab.id === active, timeline: tab.id === active ? currentTimeline(project) : (await stashedRow(ctx, projectId, tab.id))?.timeline ?? null })));
+  const ids = new Set(tabs.flatMap(tab => tab.timeline?.clips.flatMap(clip => clip.assetId ? [clip.assetId] : []) ?? []));
+  const assets = (await Promise.all([...ids].map(async id => { const asset = await ctx.db.get(id as Id<'assets'>); return asset ? { _id: asset._id, kind: asset.kind, fileName: asset.fileName, r2Key: asset.r2Key ?? null } : null; }))).filter(Boolean);
+  return { tabs, assets };
+} });
+
+/** Admin import (CLI only): add a tab to a project from an exported timeline, mapping every media ID
+ * through `assetMap`. Every mapped asset must belong to the target project. The open tab is untouched. */
+export const importTab = internalMutation({ args: { projectId: v.id('projects'), name: v.string(), timeline: timelineValidator, assetMap: v.record(v.string(), v.id('assets')) }, returns: v.string(), handler: async (ctx, args) => {
+  const project = await ctx.db.get(args.projectId);
+  if (!project) throw new ConvexError('Project not found');
+  const tabs = tabsOf(project);
+  if (tabs.length >= MAX_TIMELINE_TABS) throw new ConvexError(`A project holds up to ${MAX_TIMELINE_TABS} timelines`);
+  for (const id of new Set(Object.values(args.assetMap))) {
+    const asset = await ctx.db.get(id);
+    if (!asset || asset.projectId !== project._id || asset.ownerId !== project.ownerId) throw new ConvexError(`Media ${id} is not in the target project`);
+  }
+  const missing = args.timeline.clips.filter(clip => clip.assetId && !args.assetMap[clip.assetId]);
+  if (missing.length) throw new ConvexError(`No mapping for media ${[...new Set(missing.map(clip => clip.assetId))].join(', ')}`);
+  const timeline = { ...args.timeline, clips: args.timeline.clips.map(clip => clip.assetId ? { ...clip, assetId: args.assetMap[clip.assetId] } : clip) };
+  const timelineId = crypto.randomUUID(), name = tabName(args.name);
+  await ctx.db.insert('projectTimelines', { projectId: project._id, ownerId: project.ownerId, timelineId, timeline, history: [] });
+  await writeProject(ctx, project._id, { timelineTabs: [...tabs, { id: timelineId, name, ...summaryOf(timeline) }], activeTimelineId: activeTabOf(project), updatedAt: Date.now() });
+  return timelineId;
 } });
