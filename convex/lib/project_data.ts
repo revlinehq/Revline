@@ -55,7 +55,12 @@ async function writeHistory(ctx:MutationCtx,project:Doc<'projects'>,plan:History
 export async function syncProjectCatalog(ctx:MutationCtx,project:Doc<'projects'>) {
   const existing=await ctx.db.query('projectCatalog').withIndex('by_project',q=>q.eq('projectId',project._id)).unique();
   const values={projectId:project._id,ownerId:project.ownerId,title:project.title,aspectRatio:project.aspectRatio,createdAt:project.createdAt,updatedAt:project.updatedAt,clipCount:project.timeline?.clips.length??0,aiRunning:!!project.aiRunning,deleting:project.deleting};
-  if(existing)await ctx.db.patch(existing._id,values);else await ctx.db.insert('projectCatalog',values);
+  if(!existing){await ctx.db.insert('projectCatalog',values);return;}
+  // Every open project list re-runs when a catalog row changes. Write only when something the list
+  // shows changed; a newer updatedAt alone is written at most once a minute.
+  const shown=(['title','aspectRatio','clipCount','aiRunning','deleting'] as const).some(key=>existing[key]!==values[key]);
+  const stale=values.updatedAt!==existing.updatedAt&&(values.updatedAt??0)-(existing.updatedAt??0)>=60_000;
+  if(shown||stale||values.ownerId!==existing.ownerId)await ctx.db.patch(existing._id,values);
 }
 /** One write seam separates run state/history while preserving the public project shape.
  * `planHistory` derives the next history from the stored one without a second read. */
