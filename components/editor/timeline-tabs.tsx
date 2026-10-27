@@ -45,7 +45,7 @@ export function TimelineTabs({ tabs, working, agentName, locked, onError, ...act
   return <div className="timeline-tabs" role="tablist" aria-label="Timelines">
     {tabs.map(tab => { const isShown = tab.id === shown; return <div key={tab.id} className="timeline-tab" role="tab" aria-selected={isShown} data-active={isShown || undefined} data-working={tab.id === workingId || undefined} data-done={tab.id === doneId && tab.id !== workingId || undefined}>
       <button type="button" className="timeline-tab-main" disabled={!tab.active && blocked} title={!tab.active && locked ? 'Wait for the AI edit to finish before switching' : tab.name} onClick={() => { if (!tab.active && !busy) { setOpening(tab.id); void run(() => actions.onOpen(tab.id)).finally(() => setOpening(null)); } }} onDoubleClick={() => { if (tab.active && !locked) setDialog({ mode: 'rename', id: tab.id, name: tab.name }); }}>
-        <span className="timeline-tab-agent" aria-hidden="true">{tab.id === workingId && <AgentLogo name={agentName} />}</span>
+        {tab.id === workingId && <span className="timeline-tab-agent" aria-hidden="true"><AgentLogo name={agentName} /></span>}
         <span className="timeline-tab-name">{tab.name}</span>
         <span className="timeline-tab-length">{length(tab.duration)}</span>
       </button>
