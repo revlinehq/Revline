@@ -11,6 +11,7 @@ import type { FlashSettings, PunchSettings, ShakeSettings, PopSettings } from '.
 import type { SmoothZoomSettings } from './smooth-zoom-settings';
 import type { CameraMotionSettings } from './camera-motion-settings';
 import type { EffectKeyframeLane } from './effect-keyframes';
+import type { RampPoint } from './speed-ramp';
 import type { SceneSource } from './scene-layers';
 import type { ClipOutline } from './clip-outline';
 export type AspectRatio = 'vertical' | 'portrait-feed' | 'square' | 'classic' | 'landscape';
@@ -58,6 +59,8 @@ export type Clip = {
   effectKeyframes?: EffectKeyframeLane[];
   /** 0..1: blur keyframed movement by its speed (directional for slides, radial for scale pops). */
   motionBlur?: number;
+  /** Speed ramp: playback rate over clip-local seconds (linked video and audio share it). */
+  speedRamp?: RampPoint[];
   smoothZoom?: SmoothZoomSettings;
   cameraMotion?: CameraMotionSettings;
   effectPreset?: EffectPreset | 'none';

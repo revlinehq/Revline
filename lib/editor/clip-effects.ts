@@ -13,6 +13,7 @@ import { CAMERA_ZOOM_RANGE, validateSmoothZoom } from './smooth-zoom-settings';
 import { validateCameraMotion } from './camera-motion-settings';
 import { NEUTRAL_MOTION, motionAt, type MotionKeyframe } from './motion-path';
 import { validateEffectKeyframes } from './effect-keyframes';
+import { shiftSpeedRamp } from './speed-ramp';
 export { NEUTRAL_MOTION, motionAt, type MotionKeyframe } from './motion-path';
 
 export const BLEND_MODES = ['normal', 'screen', 'multiply', 'overlay', 'plus-lighter', 'difference'] as const;
@@ -189,7 +190,7 @@ export function motionPreset(clip: Clip, preset: MotionPreset | EffectPreset): P
 }
 
 export function offsetClipMotion(clip: Clip, delta: number): Partial<Clip> {
-  return { ...(clip.motion?.length || clip.effectKeyframes?.length ? { motionOffset: (clip.motionOffset ?? 0) + delta } : {}), ...textTemplateTimingPatch(clip, delta),...textGradientTimingPatch(clip,delta),...textAnimationTimingPatch(clip,delta),...audioFadeTimingPatch(clip,delta),...visualFadeTimingPatch(clip,delta) };
+  return { ...(clip.speedRamp?.length ? { speedRamp: shiftSpeedRamp(clip.speedRamp, delta) } : {}), ...(clip.motion?.length || clip.effectKeyframes?.length ? { motionOffset: (clip.motionOffset ?? 0) + delta } : {}), ...textTemplateTimingPatch(clip, delta),...textGradientTimingPatch(clip,delta),...textAnimationTimingPatch(clip,delta),...audioFadeTimingPatch(clip,delta),...visualFadeTimingPatch(clip,delta) };
 }
 
 /** Effect handles stretch the currently visible pulse, including a previously split segment. */

@@ -191,7 +191,7 @@ export function generateComposition(timeline: Timeline, assets: MediaAsset[], op
     }
     const volume = bounded(clip.volume, 1, 0, MAX_CLIP_VOLUME);
     const sound=audioFadeAttributes(clip);
-    const audioAttrs=clip.kind==='video'||clip.kind==='audio'?` data-fade-in="${sound.fadeIn}" data-fade-out="${sound.fadeOut}" data-automation="${escapeHtml(audioVolumeEnvelope(timeline,clip,volume))}"`:'';
+    const audioAttrs=clip.kind==='video'||clip.kind==='audio'?` data-fade-in="${sound.fadeIn}" data-fade-out="${sound.fadeOut}" data-automation="${escapeHtml(withSpeedRamp(audioVolumeEnvelope(timeline,clip,volume),clip))}"`:'';
     const attrs = `${timing} data-media-start="${attrTime(clip.sourceStart)}" data-volume="${volume}"${clip.kind === 'video' || clip.kind === 'audio' ? ` data-playback-rate="${playbackRateOf(clip)}"` : ''}${audioAttrs}`;
     const outline = outlineFilter(clip.outline, scale);
     const frame = (media: string) => {
@@ -268,4 +268,11 @@ ${sceneRuntimeScript(sceneLayerSources(timeline, resolution), sceneFonts(rawFont
 ${transitions.length ? `if(window.__revlineRemotionTransitions)window.__revlineRemotionTransitions.installTransitions(${JSON.stringify(transitions).replace(/</g, '\\u003c')},${timeline.fps});else throw new Error('Transition renderer failed to load.');` : ''}
 document.querySelectorAll('video,audio').forEach(media=>{media.volume=Math.min(1,Number(media.dataset.volume));media.preservesPitch=true;});
 </script></body></html>`;
+}
+
+/** Adds the clip's speed ramp as the engine's `rate` lane, beside its volume lane, for preview and export alike. */
+function withSpeedRamp(automation:string,clip:Clip){
+  if(!clip.speedRamp?.length)return automation;
+  const parsed=JSON.parse(automation) as {version:number;lanes:{target:string;points:{t:number;v:number}[]}[]};
+  return JSON.stringify({...parsed,lanes:[...parsed.lanes,{target:'rate',points:clip.speedRamp.map(point=>({t:point.t,v:point.v}))}]});
 }

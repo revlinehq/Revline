@@ -7,6 +7,7 @@ import {textGradientPatch} from '../../lib/editor/text-gradient';
 import {animateObjects} from '../../lib/ai/object-motion';
 import {EFFECT_KEYFRAME_CONTROLS,effectKeyframesPatch} from '../../lib/editor/effect-keyframes';
 import {MOTION_EASINGS} from '../../lib/editor/motion-path';
+import {SPEED_RAMP_PRESET_IDS,presetAnchors,type SpeedRampPreset} from '../../lib/editor/speed-ramp';
 import {CAMERA_ZOOM_RANGE,SMOOTH_ZOOM_EASINGS} from '../../lib/editor/smooth-zoom-settings';
 import { modelTimeline, modelAssetAnalysis, modelAssetAnalysisWindows } from "../../lib/ai/editor-context";
 import { closeFootageGaps } from "../../lib/editor/close-gaps";
@@ -20,7 +21,7 @@ import { addBeatMarkers } from "../../lib/editor/beat-markers";
 import { addTimelineMarker,moveTimelineMarker,removeTimelineMarker, removeTimelineMarkers } from "../../lib/editor/timeline-markers";
 import { dimensions, deriveTrackCounts, deriveTracks, maxTrackCount, timelineDuration, trackOf } from "../../lib/editor/types";
 import {VISUAL_INPUT_UNITS,transformInputPatch,cropInputPatch} from '../../lib/editor/visual-inputs';
-import { addMediaClip, addEffectClip, convertSolidColorToVisual, setClipPlaybackRate, deleteClip, focusForClip, newLayerOverlaps, patchClip, placeOnFreeLayer, splitClip,trimClip,unlinkClips,setClipBlendMode } from "../../lib/editor/operations";
+import { addMediaClip, addEffectClip, convertSolidColorToVisual, setClipPlaybackRate, setClipSpeedRamp, deleteClip, focusForClip, newLayerOverlaps, patchClip, placeOnFreeLayer, splitClip,trimClip,unlinkClips,setClipBlendMode } from "../../lib/editor/operations";
 import { TimelineGestureRejection } from '../../lib/editor/timeline-edit-errors';
 import { summarizeTimeline } from "./inspectTimeline";
 import { EditSession } from "./editSession";
@@ -582,6 +583,11 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       let next=t;
       for(const id of clipIds??[clipId!])next=patchClip(next,id,visualEffectsPatch(find(next,id),changes));
       return next;
+    }) }),
+    setSpeedRamp: createTool({ description: "Speed-ramp one video or audio clip (its linked partner follows): the same source footage plays, but speed changes over the clip, and the clip's length becomes source length / average speed (it can grow, so leave room after it). Presets: montage (slow-fast-slow), hero (fast, slow-mo hit, fast), bullet (fast, near-freeze at the middle, fast), flash-in (slow then whips in), flash-out (whips then slows), ramp-in (half speed easing to normal), ramp-out (normal easing to half), slowmo-middle (normal, slow-mo through the middle, normal). Or give 2–12 anchors {x: 0..1 fraction of the clip, rate: 0.1..10, easing?} for a custom curve; segments ease-in-out by default (named easing or cubic-bézier). Align the slow part with the moment that matters (inspect it first). clear:true restores normal speed. Rendered by the playback engine in preview and export; replaces any constant setPlaybackRate speed. Saves immediately.", inputSchema: z.object({ clipId: z.string().min(1), preset: z.enum(SPEED_RAMP_PRESET_IDS as [SpeedRampPreset, ...SpeedRampPreset[]]).optional(), anchors: z.array(z.object({ x: z.number().min(0).max(1), rate: z.number().min(.1).max(10), easing: motionEasingInput.optional() }).strict()).min(2).max(12).optional(), clear: z.boolean().optional() }).strict(), execute: async (_ctx, input) => checkpoint(t => {
+      const clip = find(t, input.clipId);
+      if ([input.preset, input.anchors, input.clear || undefined].filter(value => value !== undefined).length !== 1) throw new Error('Give exactly one of preset, anchors or clear:true.');
+      return setClipSpeedRamp(t, clip.id, input.clear ? null : input.preset ? presetAnchors(input.preset) : input.anchors!);
     }) }),
     setPlaybackRate: createTool({ description: "Change a video or audio clip’s constant playback speed from 0.25× to 4×. Preserve its retained source footage; adjust timeline duration and linked sound together. Slowing down refuses overlaps, so make room first rather than moving unrelated clips. This is constant speed, not a speed ramp.", inputSchema: z.object({ clipId: z.string(), rate: z.number().min(.25).max(4) }), execute: async (_ctx, input) => checkpoint(t => setClipPlaybackRate(t, input.clipId, input.rate)) }),
     resetVisualEffect:createTool({description:"Reset one requested footage effect group to defaults (retain its enabled state) or remove that group. Preserve every other group, clip and audio.",inputSchema:z.object({clipId:z.string(),effect:z.enum(OFFERED_VISUAL_EFFECT_GROUPS),action:z.enum(['reset','remove'])}),execute:async(_ctx,{clipId,effect,action})=>checkpoint(t=>patchClip(t,clipId,visualEffectActionPatch(find(t,clipId),effect,action)))}),

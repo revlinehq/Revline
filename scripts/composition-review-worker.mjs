@@ -4,6 +4,7 @@ import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { resolve, join } from 'node:path';
 import { createCaptureSession, initializeSession, closeCaptureSession, captureFrameToBuffer, createVideoFrameInjector,createFileServer } from '@hyperframes/producer';
 import { parseVideoElements, extractAllVideoFrames, createFrameLookupTable } from '@hyperframes/engine';
+import { shiftRateLane, sourceTimeAt } from '@hyperframes/core';
 const [directory,serialized]=process.argv.slice(2),settings=JSON.parse(serialized);
 const root=resolve(directory),controller=new AbortController();
 process.on('SIGTERM',()=>controller.abort());process.on('disconnect',()=>controller.abort());
@@ -21,8 +22,9 @@ try{
     const dir=join(root,variant),html=await readFile(join(dir,'index.html'),'utf8');
     const videos=parseVideoElements(html).filter(video=>video.start<settings.end&&video.end>settings.start).map(video=>{
       const start=Math.max(settings.start,video.start),end=Math.min(settings.end,video.end);
-      if(typeof video.playbackRate!=='number'&&video.playbackRate!==undefined)throw new Error('Variable video rates are not supported in short review.');
-      return {...video,start,end,mediaStart:video.mediaStart+(start-video.start)*(video.playbackRate??1)};
+      // A speed ramp (a rate lane) is cut to the window with the engine's own source-time mapping.
+      const rate=video.playbackRate??1,skipped=start-video.start;
+      return {...video,start,end,mediaStart:video.mediaStart+sourceTimeAt(rate,skipped),playbackRate:typeof rate==='number'?rate:shiftRateLane(rate,skipped)};
     });
     const extracted=await extractAllVideoFrames(videos,dir,{fps:{num:settings.fps,den:1},outputDir:join(dir,'frames'),format:'png',toneMapHdrToSdr:true,timelineEnd:settings.end},controller.signal);
     if(extracted.errors?.length)throw new Error('Video frames could not be decoded for review.');

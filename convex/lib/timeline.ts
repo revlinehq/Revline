@@ -77,7 +77,7 @@ export async function validateTimeline(ctx: MutationCtx | QueryCtx, project: Doc
       const video = clip.kind === 'video' ? clip : pair;
       if (!video.audioSeparated || video.volume !== 0) throw new ConvexError('Linked video must use its separate audio clip');
       if (['start', 'duration', 'sourceStart'].some(key => Math.abs(clip[key as 'start'] - pair[key as 'start']) > 1e-7)) throw new ConvexError('Linked video and audio must stay synchronized');
-      if (Math.abs(playbackRateOf(clip) - playbackRateOf(pair)) > 1e-7) throw new ConvexError('Linked video and audio must stay synchronized');
+      if (Math.abs(playbackRateOf(clip) - playbackRateOf(pair)) > 1e-7 || JSON.stringify(clip.speedRamp ?? null) !== JSON.stringify(pair.speedRamp ?? null)) throw new ConvexError('Linked video and audio must stay synchronized');
     }
     const track = trackOf(clip);
     const group = layerGroup(clip.kind);

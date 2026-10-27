@@ -105,6 +105,7 @@ export function plainExportPlan(timeline: Timeline, assets: MediaAsset[], resolu
     if (clip.effectPreset !== undefined && clip.effectPreset !== 'none') return no('a clip uses an effect preset');
     if (clip.motion?.length) return no('a clip has motion keyframes');
     if (clip.effectKeyframes?.length) return no('a clip has keyframed effects');
+    if (clip.speedRamp?.length) return no('a clip has a speed ramp');
     if (!clip.assetId) return no('a clip has no media');
     const asset = assetMap.get(clip.assetId);
     if (clip.kind === 'video') {

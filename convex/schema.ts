@@ -46,6 +46,7 @@ export const clipValidator = v.object({
   blendMode: v.optional(v.union(v.literal("normal"), v.literal("screen"), v.literal("multiply"), v.literal("overlay"), v.literal("plus-lighter"), v.literal("difference"))),
   motion: v.optional(v.array(motionKeyframeValidator)), motionOffset: v.optional(v.number()),
   motionBlur: v.optional(v.number()),
+  speedRamp: v.optional(v.array(v.object({ t: v.number(), v: v.number() }))),
   effectKeyframes: v.optional(v.array(v.object({ control: v.string(), keys: v.array(v.object({ time: v.number(), value: v.number() })) }))),
   smoothZoom: v.optional(smoothZoomValidator), cameraMotion:v.optional(cameraMotionValidator),
   colorGrade: v.optional(colorGradeValidator), zoomBlur: v.optional(zoomBlurValidator), glitch: v.optional(glitchValidator), invert: v.optional(invertValidator), dither: v.optional(ditherValidator),

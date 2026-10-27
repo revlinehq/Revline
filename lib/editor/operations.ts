@@ -7,6 +7,7 @@ import { visualFadeTimingPatch } from './visual-fades';
 import { rescaleSmoothZoom } from './smooth-zoom-settings';
 import { rescaleCameraMotion } from './camera-motion-settings';
 import { playbackRateOf, sourceDurationOf, sourceEndOf, validatePlaybackRate } from './playback-rate';
+import { bakeSpeedRamp, meanRampRate, rampSpan, MAX_RAMP_RATE, MIN_RAMP_RATE, type RampAnchor } from './speed-ramp';
 import { boundedTransitionRange, DEFAULT_TRANSITION_DIRECTION, findTransitionPlacement, isTransitionClip, isTransitionPreset, reconcileTransitionEdits, transitionPair, transitionSources, type ClipTransition, type TransitionDirection, type TransitionPreset } from './clip-transitions';
 import { Clip, Timeline, timelineDuration, layerGroup, trackOf, deriveTrackCounts, normalizeTimeline, maxTrackCount } from './types';
 export function snapTime(time: number, fps: number) { return Math.round(Math.max(0, time) * fps) / fps; }
@@ -102,14 +103,21 @@ export function setClipPlaybackRate(timeline: Timeline, id: string, playbackRate
   if (playbackRateOf(clip) === playbackRate) return timeline;
   const duration = sourceDurationOf(clip) / playbackRate;
   if (!Number.isFinite(duration) || duration < 1 / timeline.fps) throw new Error('This speed would make the clip shorter than one frame.');
+  const ids = retimeRoom(timeline, clip, id, duration);
+  return retimeLinked(patchClip(timeline, id, { playbackRate, duration }), ids, duration / clip.duration);
+}
+/** The linked clips of `id`, after checking a new duration would not overlap other clips on their layers. */
+function retimeRoom(timeline: Timeline, clip: Clip, id: string, duration: number) {
   const ids = new Set(linkedClipIds(timeline, [id]));
   if (duration > clip.duration && timeline.clips.some(member => ids.has(member.id) && timeline.clips.some(other => !ids.has(other.id)
     && layerGroup(member.kind) === layerGroup(other.kind) && trackOf(member) === trackOf(other)
     && other.start < member.start + duration - 1e-6 && member.start < other.start + other.duration - 1e-6))) {
     throw new Error('The slower clip would overlap another clip. Move it or make room before changing speed.');
   }
-  const ratio = duration / clip.duration;
-  const next = patchClip(timeline, id, { playbackRate, duration });
+  return ids;
+}
+/** Stretch motion, camera, fades and timing of linked clips by `ratio` after a speed change. */
+function retimeLinked(next: Timeline, ids: Set<string>, ratio: number): Timeline {
   return { ...next, clips: next.clips.map(member => {
     if(!ids.has(member.id))return member;
     let changed=member.motion?.length?{...member,motion:member.motion.map(key=>({...key,time:key.time*ratio})),motionOffset:(member.motionOffset??0)*ratio}:member;
@@ -119,6 +127,31 @@ export function setClipPlaybackRate(timeline: Timeline, id: string, playbackRate
     if((member.kind==='video'||member.kind==='image')&&member.visualFadeTiming)changed={...changed,visualFade:member.visualFade?{fadeIn:member.visualFade.fadeIn*ratio,fadeOut:member.visualFade.fadeOut*ratio}:undefined,visualFadeTiming:{duration:member.visualFadeTiming.duration*ratio,offset:member.visualFadeTiming.offset*ratio}};
     return changed;
   }) };
+}
+/**
+ * Apply a speed ramp (normalized anchors over the clip, x 0..1) or remove it (null). The same source
+ * footage plays; the clip's length becomes source length / average rate, and linked audio follows.
+ */
+export function setClipSpeedRamp(timeline: Timeline, id: string, anchors: RampAnchor[] | null): Timeline {
+  timeline = normalizeTimeline(timeline);
+  const clip = timeline.clips.find(c => c.id === id);
+  if (!clip || (clip.kind !== 'video' && clip.kind !== 'audio')) throw new Error('Choose a video or audio clip to ramp its speed.');
+  const source = sourceDurationOf(clip);
+  if (anchors === null) {
+    if (!clip.speedRamp?.length) return timeline;
+    const ids = retimeRoom(timeline, clip, id, source);
+    const next = { ...timeline, clips: timeline.clips.map(member => ids.has(member.id) ? { ...member, speedRamp: undefined, playbackRate: undefined, duration: source } : member) };
+    return retimeLinked(next, ids, source / clip.duration);
+  }
+  const duration = source / meanRampRate(anchors);
+  if (!Number.isFinite(duration) || duration < 1 / timeline.fps) throw new Error('This ramp would make the clip shorter than one frame.');
+  const ids = retimeRoom(timeline, clip, id, duration);
+  // Bake over the new length, then nudge the last point so the ramp consumes exactly the same footage.
+  let speedRamp = bakeSpeedRamp(anchors, duration);
+  const scale = source / rampSpan(speedRamp, duration);
+  speedRamp = speedRamp.map(point => ({ t: point.t, v: Math.min(MAX_RAMP_RATE, Math.max(MIN_RAMP_RATE, point.v * scale)) }));
+  const next = { ...timeline, clips: timeline.clips.map(member => ids.has(member.id) ? { ...member, speedRamp, playbackRate: undefined, duration } : member) };
+  return retimeLinked(next, ids, duration / clip.duration);
 }
 export function deleteClip(timeline: Timeline, id: string): Timeline { timeline = normalizeTimeline(timeline); const ids = new Set(linkedClipIds(timeline, [id])); return reconcileTransitionEdits(timeline, { ...timeline, clips: timeline.clips.filter(c => !ids.has(c.id)) }); }
 export function addMediaClip(timeline: Timeline, asset: { _id: string; kind: Clip['kind']; duration?: number; audioAssetId?: string; preparation?: {message:string} }, id: string, at?: number, track = 1): Timeline {
