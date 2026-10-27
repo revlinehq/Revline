@@ -7,9 +7,9 @@
 .timeline-tab-main:disabled{cursor:not-allowed;opacity:.55}
 .timeline-tab-name{max-width:160px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
 .timeline-tab-length{font:10px var(--font-geist-mono,ui-monospace),monospace;color:var(--ws-muted,#666872);opacity:.8}
-.timeline-tab-ratio{flex:none;width:13px;height:8px;border:1.25px solid currentColor;border-radius:1.5px;opacity:.7}
-.timeline-tab-ratio[data-ratio=vertical]{width:7px;height:12px}
-.timeline-tab-ratio[data-ratio=square]{width:10px;height:10px}
+.timeline-tab-agent{display:grid;place-items:center;flex:none;width:14px;height:14px}
+.timeline-tab-agent>*{width:13px;height:13px}
+.timeline-tab-agent .revline-mark{width:14px;height:14px}
 .timeline-tab-menu{display:grid;place-items:center;width:22px;height:22px;margin-right:6px;border:0;border-radius:5px;background:none;color:var(--ws-muted,#a1a3ab);cursor:pointer}
 .timeline-tab-menu:hover{background:var(--ws-hover,#ffffff0f);color:var(--ws-text,#ededef)}
 .timeline-tab-add{display:grid;place-items:center;flex:none;width:28px;height:28px;margin-left:2px;border:0;border-radius:6px;background:#ffffff0a;color:var(--ws-muted,#a1a3ab);cursor:pointer}
@@ -19,9 +19,10 @@
 .editor-app:has(.timeline-tabs) .timeline-resize-handle{background:transparent}
 /* Every tab keeps the menu button's room, so switching never resizes tabs. */
 .timeline-tab:not([data-active]) .timeline-tab-menu{visibility:hidden}
-/* The tab an agent is editing: a light sweeps across its background. Finished: a green border for two seconds. */
-.timeline-tab[data-working]{background:linear-gradient(90deg,#ffffff17 0%,#ffffff17 35%,#a78bfa38 50%,#ffffff17 65%,#ffffff17 100%) 0 0/250% 100%;animation:timeline-tab-shimmer 2s linear infinite}
-@keyframes timeline-tab-shimmer{from{background-position:100% 0}to{background-position:-150% 0}}
+/* The tab an agent is editing: a soft light slides across it. Finished: a green border for two seconds. */
+.timeline-tab[data-working]{overflow:hidden}
+.timeline-tab[data-working]::after{content:'';position:absolute;inset:0;pointer-events:none;background:linear-gradient(90deg,transparent 0%,#a78bfa2e 50%,transparent 100%);transform:translateX(-100%);animation:timeline-tab-shimmer 2.8s ease-in-out infinite}
+@keyframes timeline-tab-shimmer{from{transform:translateX(-100%)}to{transform:translateX(100%)}}
 .timeline-tab[data-done]::before{content:'';position:absolute;inset:0;border-radius:inherit;box-shadow:inset 0 0 0 1px #22c55e;pointer-events:none;animation:timeline-tab-done 2s ease-out forwards}
 @keyframes timeline-tab-done{0%,70%{opacity:1}100%{opacity:0}}
-@media(prefers-reduced-motion:reduce){.timeline-tab[data-working]{animation:none}}
+@media(prefers-reduced-motion:reduce){.timeline-tab[data-working]::after{animation:none;transform:none;background:#a78bfa14}}

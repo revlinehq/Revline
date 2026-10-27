@@ -6,6 +6,7 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/compone
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import type { AspectRatio } from '@/lib/editor/types';
+import { AgentLogo } from '@/components/workspace/agent-logo';
 import './timeline-tabs.css';
 
 export type TimelineTab = { id: string; name: string; aspectRatio: AspectRatio; duration: number; active: boolean };
@@ -20,7 +21,7 @@ export type TimelineTabActions = {
 const length = (seconds: number) => { const total = Math.round(seconds); return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`; };
 
 /** Spreadsheet-style tabs on top of the timeline: each is its own video in this project. */
-export function TimelineTabs({ tabs, working, locked, onError, ...actions }: { tabs: TimelineTab[]; working: boolean; locked: boolean; onError: (error: unknown) => void } & TimelineTabActions) {
+export function TimelineTabs({ tabs, working, agentName, locked, onError, ...actions }: { tabs: TimelineTab[]; working: boolean; /** The MCP app editing, or null for Revline's own AI. */ agentName?: string | null; locked: boolean; onError: (error: unknown) => void } & TimelineTabActions) {
   const [busy, setBusy] = useState(false);
   // The clicked tab highlights on the next frame; the timeline it opens follows.
   const [opening, setOpening] = useState<string | null>(null);
@@ -44,7 +45,7 @@ export function TimelineTabs({ tabs, working, locked, onError, ...actions }: { t
   return <div className="timeline-tabs" role="tablist" aria-label="Timelines">
     {tabs.map(tab => { const isShown = tab.id === shown; return <div key={tab.id} className="timeline-tab" role="tab" aria-selected={isShown} data-active={isShown || undefined} data-working={tab.id === workingId || undefined} data-done={tab.id === doneId && tab.id !== workingId || undefined}>
       <button type="button" className="timeline-tab-main" disabled={!tab.active && blocked} title={!tab.active && locked ? 'Wait for the AI edit to finish before switching' : tab.name} onClick={() => { if (!tab.active && !busy) { setOpening(tab.id); void run(() => actions.onOpen(tab.id)).finally(() => setOpening(null)); } }} onDoubleClick={() => { if (tab.active && !locked) setDialog({ mode: 'rename', id: tab.id, name: tab.name }); }}>
-        <span className="timeline-tab-ratio" data-ratio={tab.aspectRatio} aria-hidden="true"/>
+        <span className="timeline-tab-agent" aria-hidden="true">{tab.id === workingId && <AgentLogo name={agentName} />}</span>
         <span className="timeline-tab-name">{tab.name}</span>
         <span className="timeline-tab-length">{length(tab.duration)}</span>
       </button>
