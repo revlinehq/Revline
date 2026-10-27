@@ -41,9 +41,12 @@ export async function removeShareAssets(ctx:MutationCtx,shareId:Id<'timelineShar
   for(const pin of pins)await ctx.db.delete(pin._id);
   for(const pin of pins){await releaseMediaObjects(ctx,pin);if(share){await releaseAccountStorage(ctx,share.ownerId,pin);if(pin.previewR2Key)await releaseAccountStorage(ctx,share.ownerId,{r2Key:pin.previewR2Key},'preview');if(pin.thumbnailStorageId)await releaseAccountStorage(ctx,share.ownerId,{storageId:pin.thumbnailStorageId},true);}}
 }
+export async function removeShareTabs(ctx:MutationCtx,shareId:Id<'timelineShares'>){
+  for(const row of await ctx.db.query('shareTimelines').withIndex('by_share',q=>q.eq('shareId',shareId)).take(20))await ctx.db.delete(row._id);
+}
 export async function removeProjectShares(ctx:MutationCtx,projectId:Id<'projects'>){
   const shares=await ctx.db.query('timelineShares').withIndex('by_project',q=>q.eq('projectId',projectId)).take(2);
-  for(const share of shares){await removeShareAssets(ctx,share._id);await ctx.db.delete(share._id);}
+  for(const share of shares){await removeShareAssets(ctx,share._id);await removeShareTabs(ctx,share._id);await ctx.db.delete(share._id);}
 }
 
 /** The playback fields a shared timeline copies from one source asset; its analysis stays with the source. */
