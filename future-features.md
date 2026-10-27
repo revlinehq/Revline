@@ -111,3 +111,14 @@ AI-created motion designs should remain editable through the same controls as ma
 - Seeking, restarting, and exporting produce consistent animation states.
 - Preview and exported video agree on framing, timing, text, and appearance.
 - Real motion-design projects pass playback, export, and agent-tool tests before release.
+
+## Edit recommendations
+
+The agent watches the current edit and proposes the next edits, so users do not have to guess what to ask for.
+
+- Analyze pacing, dead air, framing, color, captions and sound, and rank a few concrete suggestions (for example "speed-ramp into the reveal at 0:12", "warm the grade on the B-roll", "add a light leak on the beat drop").
+- Each suggestion applies in one click as a normal, undoable edit, using the existing AI tools (effect keyframes, speed ramps, motion blur, transitions, color).
+
+## 2.5D parallax from stills
+
+Turn a photo into a short depth move: estimate depth, separate foreground and background layers, and animate a camera push or orbit with parallax. Output stays an editable clip with the same keyframe and motion-blur controls.
