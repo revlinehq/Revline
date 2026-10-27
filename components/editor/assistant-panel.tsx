@@ -80,11 +80,11 @@ function AssistantResponseText({ text, streaming }: { text: string; streaming: b
   return <ChatProse text={text} animate={receivedLive || streaming} />;
 }
 
-function AssistantPanelBody({ messages, running, editing:editingTimeline=running, configured, error, onSend, onRetry, onStop, hasClips, demo, onLoadMore, canLoadMore, onAttach, activity, activitySource, activityStartedAt, budgetUsed, draftKey, suggestions, onSuggestion, editSnapshot, canResumeEdit=false, defaultModelChoice, modelSwitcher = false, allowedModels = PRODUCTION_CLAUDE_MODEL_CHOICES, attachments, onRemoveAttachment, composerBusy = false, requireMedia = false, conversationStarted = false, queued=[],queuePaused=false,onRemoveQueued,onResumeQueue,externalAgent }: {
+function AssistantPanelBody({ messages, running, editing:editingTimeline=running, configured, error, onSend, onRetry, onStop, hasClips, demo, onLoadMore, canLoadMore, onAttach, activity, activitySource, activityStartedAt, budgetUsed, draftKey, suggestions, onSuggestion, editSnapshot, canResumeEdit=false, defaultModelChoice, defaultReasoningEffort, modelSwitcher = false, allowedModels = PRODUCTION_CLAUDE_MODEL_CHOICES, attachments, onRemoveAttachment, composerBusy = false, requireMedia = false, conversationStarted = false, queued=[],queuePaused=false,onRemoveQueued,onResumeQueue,externalAgent }: {
   externalAgent?: string | null;
   messages: ChatMessage[]; running: boolean; editing?:boolean; configured: boolean; error?: string | null;
   modelSwitcher?: boolean;
-  defaultModelChoice?:ClaudeModelChoice;
+  defaultModelChoice?:ClaudeModelChoice; defaultReasoningEffort?:EditorReasoningEffort;
   allowedModels?: readonly ClaudeModelChoice[];
   onSend: (text: string, modelChoice?: ClaudeModelChoice, reasoningEffort?: EditorReasoningEffort, speedMode?: EditorSpeedMode) => Promise<void>; hasClips: boolean; demo: boolean;
   onRetry?: (text: string, modelChoice?: ClaudeModelChoice, reasoningEffort?: EditorReasoningEffort, speedMode?: EditorSpeedMode) => Promise<void>;
@@ -106,7 +106,9 @@ function AssistantPanelBody({ messages, running, editing:editingTimeline=running
   const sendInFlight=useRef(false);
   const currentDraftKey=useRef(draftKey);currentDraftKey.current=draftKey;
   const [modelChoice, setModelChoice] = useState<ClaudeModelChoice>();
-  const [reasoningEffort,setReasoningEffort]=useState<EditorReasoningEffort>('medium');
+  // Follows the deployment's default until the user picks an effort themselves.
+  const [chosenEffort,setReasoningEffort]=useState<EditorReasoningEffort>();
+  const reasoningEffort=chosenEffort??defaultReasoningEffort??'medium';
   const [speedMode,setSpeedMode]=useState<EditorSpeedMode>('standard');
   const supportedModels=allowedModels.filter(choice=>EDITOR_MODELS.some(model=>model.id===choice));
   const availableModels=supportedModels.length?supportedModels:PRODUCTION_CLAUDE_MODEL_CHOICES;

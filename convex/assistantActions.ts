@@ -13,7 +13,7 @@ import { editorRepairContext, modelTimeline, EDITOR_CONTEXT_NOTICE, EDITOR_CONTE
 import { assistantFailureReason } from "../lib/ai/assistant-error";
 import { openai } from "@ai-sdk/openai";
 import { anthropic } from "@ai-sdk/anthropic";
-import { assertEditorModelConfigured, resolveClaudeModel, validatePinnedClaudeModel, editorProviderOptions, editorMaxOutputTokens, type ClaudeModelSelection } from "../lib/ai/claude-model";
+import { assertEditorModelConfigured, resolveClaudeModel, validatePinnedClaudeModel, editorProviderOptions, editorMaxOutputTokens, defaultEditorReasoningEffort, type ClaudeModelSelection } from "../lib/ai/claude-model";
 import { Agent, saveMessage } from "@convex-dev/agent";
 import { v, type Infer } from "convex/values";
 import { components, internal } from "./_generated/api";
@@ -60,7 +60,7 @@ export const respond = internalAction({
     try {
       const selection = validatePinnedClaudeModel(args.pinnedModel ?? resolveClaudeModel());
       selectedProvider = selection.provider;
-      costLog.selectModel(selection.modelId, selection.provider, selection.reasoningEffort ?? 'medium', selection.speedMode ?? 'standard');
+      costLog.selectModel(selection.modelId, selection.provider, selection.reasoningEffort ?? defaultEditorReasoningEffort(), selection.speedMode ?? 'standard');
       assertEditorModelConfigured(selection);
       const { project, assets } = await ctx.runQuery(internal.assistant.getRun, { projectId: args.projectId, ownerId: args.ownerId, runId: args.runId });
       if(args.attachedAssetIds&&(args.attachedAssetIds.length>20||new Set(args.attachedAssetIds).size!==args.attachedAssetIds.length||args.attachedAssetIds.some(id=>!assets.some(asset=>asset._id===id))))throw new Error('Attached media is unavailable in this project.');

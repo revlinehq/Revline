@@ -54,6 +54,12 @@ export function resolveClaudeModel(modelChoice?: ClaudeModelChoice, env: ClaudeM
   return enforceClaudeModelPolicy({ provider: 'anthropic', modelId: claude.modelId, modelChoice: claude.id }, env);
 }
 
+/** The effort used when a request names none; EDITOR_DEFAULT_EFFORT sets it per deployment. */
+export function defaultEditorReasoningEffort(env: ClaudeModelEnvironment = process.env): EditorReasoningEffort {
+  const effort = env.EDITOR_DEFAULT_EFFORT?.trim();
+  return EDITOR_REASONING_EFFORTS.find(item => item === effort) ?? 'medium';
+}
+
 export function defaultEditorModelChoice(env:ClaudeModelEnvironment=process.env):typeof EDITOR_MODELS[number]['id']|undefined {
   const selected=resolveClaudeModel(undefined,env);
   return EDITOR_MODELS.find(model=>model.modelId===selected.modelId)?.id;
@@ -100,7 +106,7 @@ export function editorProviderOptions(selection: ClaudeModelSelection, cacheKey?
   // GPT-6 models take reasoning modes, cache retention and every effort; older
   // models reject those request fields outright.
   const legacy = OPENAI_EDIT_MODELS.some(model => model.modelId === selection.modelId && 'legacyOptions' in model);
-  const effort = selection.reasoningEffort ?? 'medium';
+  const effort = selection.reasoningEffort ?? defaultEditorReasoningEffort();
   const openai = {
     reasoningEffort: legacy && effort === 'max' ? 'xhigh' : effort, ...(legacy ? {} : { reasoningMode: 'standard' as const }), serviceTier: selection.speedMode === 'fast' ? 'fast' : 'default',
     // History is managed by the existing Agent thread; retain encrypted reasoning
@@ -117,7 +123,7 @@ export function editorProviderOptions(selection: ClaudeModelSelection, cacheKey?
 export function editorMaxOutputTokens(selection: ClaudeModelSelection) {
   // A full-size scene module is ~6k tokens of tool input.
   if (selection.provider !== 'openai') return 8192;
-  return { low: 8192, medium: 8192, high: 16384, xhigh: 24576, max: 32768 }[selection.reasoningEffort ?? 'medium'];
+  return { low: 8192, medium: 8192, high: 16384, xhigh: 24576, max: 32768 }[selection.reasoningEffort ?? defaultEditorReasoningEffort()];
 }
 
 export function assertEditorModelConfigured(selection: ClaudeModelSelection, env: ClaudeModelEnvironment = process.env) {
