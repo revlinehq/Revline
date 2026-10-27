@@ -3,7 +3,7 @@ import { mutation, query, type MutationCtx, type QueryCtx } from './_generated/s
 import type { Doc, Id } from './_generated/dataModel';
 import { requireOwner, requireProject } from './lib/auth';
 import { requireEditorAccess } from './lib/billing_access';
-import { writeProject } from './lib/project_data';
+import { projectIdentity, writeProject } from './lib/project_data';
 import { currentTimeline, serializedBytes } from './lib/timeline';
 import { editingWorkflowActive } from './lib/assistant_workflow';
 import { TIMELINE_LOCKED } from '../lib/editor/timeline-sync';
@@ -12,7 +12,10 @@ import { aspectRatio, timelineValidator } from './schema';
 
 export const MAX_TIMELINE_TABS = 10;
 const STASHED_BYTES = 800_000;
-type Tab = { id: string; name: string };
+/** A stored tab carries its own summary, so listing tabs never reads the (large) stored timelines. */
+type Tab = { id: string; name: string; aspectRatio?: Timeline['aspectRatio']; duration?: number; clipCount?: number };
+const summaryOf = (timeline: Timeline) => ({ aspectRatio: timeline.aspectRatio, duration: timelineDuration(timeline), clipCount: timeline.clips.length });
+const withSummary = (tabs: Tab[], id: string, timeline: Timeline) => tabs.map(tab => tab.id === id ? { ...tab, ...summaryOf(timeline) } : tab);
 
 /** Projects made before tabs have one implicit tab. */
 export const tabsOf = (project: Pick<Doc<'projects'>, 'timelineTabs'>): Tab[] => project.timelineTabs?.length ? project.timelineTabs : [{ id: 'main', name: 'Timeline 1' }];
@@ -48,6 +51,7 @@ async function stashActive(ctx: MutationCtx, project: Doc<'projects'>) {
   const existing = await stashedRow(ctx, project._id, timelineId);
   const row = { projectId: project._id, ownerId: project.ownerId, timelineId, timeline, history };
   if (existing) await ctx.db.replace(existing._id, row); else await ctx.db.insert('projectTimelines', row);
+  return { timelineId, timeline };
 }
 
 /** Open a tab: its timeline becomes the project's, minus clips whose media was deleted meanwhile. */
@@ -63,20 +67,21 @@ export const list = query({ args: { projectId: v.id('projects') }, returns: v.ar
 export async function listTabsFor(ctx: QueryCtx, ownerId: string, projectId: Id<'projects'>) {
   const project = await requireProject(ctx, projectId, ownerId, false);
   const active = activeTabOf(project);
-  const rows = new Map((await ctx.db.query('projectTimelines').withIndex('by_project_timeline', q => q.eq('projectId', project._id)).take(MAX_TIMELINE_TABS)).map(row => [row.timelineId, row.timeline]));
-  return tabsOf(project).map(tab => {
-    const timeline = tab.id === active ? currentTimeline(project) : rows.get(tab.id) ?? { clips: [], fps: 30, aspectRatio: project.aspectRatio };
-    return { ...tab, aspectRatio: timeline.aspectRatio, duration: timelineDuration(timeline), clipCount: timeline.clips.length, active: tab.id === active };
-  });
+  // Stored tabs carry a summary; only tabs stashed before summaries existed read their stored timeline.
+  return Promise.all(tabsOf(project).map(async tab => {
+    const summary = tab.id === active ? summaryOf(currentTimeline(project)) : tab.duration !== undefined && tab.clipCount !== undefined && tab.aspectRatio ? { aspectRatio: tab.aspectRatio, duration: tab.duration, clipCount: tab.clipCount } : summaryOf((await stashedRow(ctx, project._id, tab.id))?.timeline ?? { clips: [], fps: 30, aspectRatio: project.aspectRatio });
+    return { id: tab.id, name: tab.name, ...summary, active: tab.id === active };
+  }));
 }
 
 const createArgs = { projectId: v.id('projects'), name: v.optional(v.string()), from: v.union(v.literal('blank'), v.literal('duplicate')), aspectRatio: v.optional(aspectRatio) };
 /** The other tabs' timelines, so the editor can show one the moment it is clicked. */
 export const snapshots = query({ args: { projectId: v.id('projects') }, returns: v.array(v.object({ id: v.string(), timeline: timelineValidator })), handler: async (ctx, args) => {
-  const project = await requireProject(ctx, args.projectId, await requireOwner(ctx), false);
-  const tabs = new Set(tabsOf(project).map(tab => tab.id));
-  const rows = await ctx.db.query('projectTimelines').withIndex('by_project_timeline', q => q.eq('projectId', project._id)).take(MAX_TIMELINE_TABS);
-  return rows.filter(row => tabs.has(row.timelineId)).map(row => ({ id: row.timelineId, timeline: row.timeline }));
+  // Ownership from the small access record, not the project: this query then re-runs only when a
+  // stored tab changes (on a switch), not on every edit of the open timeline.
+  await projectIdentity(ctx, args.projectId, await requireOwner(ctx));
+  const rows = await ctx.db.query('projectTimelines').withIndex('by_project_timeline', q => q.eq('projectId', args.projectId)).take(MAX_TIMELINE_TABS);
+  return rows.map(row => ({ id: row.timelineId, timeline: row.timeline }));
 }});
 
 export const create = mutation({ args: createArgs, returns: v.string(), handler: async (ctx, args) => createTabFor(ctx, await requireOwner(ctx), args) });
@@ -89,8 +94,8 @@ export async function createTabFor(ctx: MutationCtx, ownerId: string, args: Obje
   let name = args.name !== undefined ? tabName(args.name) : args.from === 'duplicate' && active ? `${active.name} copy` : `Timeline ${tabs.length + 1}`;
   for (let n = 2; names.has(name); n++) name = `${args.name?.trim() || (args.from === 'duplicate' && active ? `${active.name} copy` : 'Timeline')} ${n}`;
   const timeline: Timeline = args.from === 'duplicate' ? { ...current, ...(args.aspectRatio ? { aspectRatio: args.aspectRatio } : {}) } : { clips: [], fps: current.fps, aspectRatio: args.aspectRatio ?? current.aspectRatio };
-  await stashActive(ctx, project);
-  await openTab(ctx, project, [...tabs, { id, name }], id, timeline, []);
+  const stashed = await stashActive(ctx, project);
+  await openTab(ctx, project, withSummary([...tabs, { id, name }], stashed.timelineId, stashed.timeline), id, timeline, []);
   return id;
 }
 
@@ -100,8 +105,8 @@ export async function openTabFor(ctx: MutationCtx, ownerId: string, args: { proj
   if (args.timelineId === activeTabOf(project)) return null;
   const row = tabs.some(tab => tab.id === args.timelineId) ? await stashedRow(ctx, project._id, args.timelineId) : null;
   if (!row) throw new ConvexError('That timeline no longer exists');
-  await stashActive(ctx, project);
-  await openTab(ctx, project, tabs, args.timelineId, row.timeline, row.history ?? []);
+  const stashed = await stashActive(ctx, project);
+  await openTab(ctx, project, withSummary(tabs, stashed.timelineId, stashed.timeline), args.timelineId, row.timeline, row.history ?? []);
   await ctx.db.delete(row._id);
   return null;
 }
