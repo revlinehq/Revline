@@ -7,10 +7,10 @@ import { writeProject } from './lib/project_data';
 import { currentTimeline } from './lib/timeline';
 import { timelineDuration } from '../lib/editor/types';
 import { aspectRatio } from './schema';
-import { createProjectFor, listProjectsFor } from './projects';
+import { beginProjectDeletion, createProjectFor, duplicateProjectFor, listProjectsFor, renameProjectFor } from './projects';
 import { importVideoFor } from './mediaTasks';
 import { exportFileName, startRenderFor } from './renders';
-import { createTabFor, listTabsFor, openTabFor } from './timelineTabs';
+import { createTabFor, listTabsFor, openTabFor, removeTabFor, renameTabFor } from './timelineTabs';
 import { enqueueMediaTask } from './mediaTasks';
 import { requireMediaTaskCapacity } from './lib/account_limits';
 import { internal } from './_generated/api';
@@ -92,6 +92,28 @@ export const openTimeline = internalMutation({ args: { ownerId: v.string(), proj
 export const createTimeline = internalMutation({ args: { ownerId: v.string(), projectId: v.string(), name: v.optional(v.string()), from: v.union(v.literal('blank'), v.literal('duplicate')), aspectRatio: v.optional(v.union(v.literal('landscape'), v.literal('vertical'), v.literal('square'))) }, returns: v.any(), handler: async (ctx, { ownerId, projectId, ...rest }) => {
   const timelineId = await createTabFor(ctx, ownerId, { projectId: projectIdOf(ctx, projectId), ...rest });
   return { timelineId, opened: true, note: 'The new timeline is open; editing tools act on it.' };
+}});
+
+export const renameProject = internalMutation({ args: { ownerId: v.string(), projectId: v.string(), title: v.string() }, returns: v.any(), handler: async (ctx, args) => {
+  await renameProjectFor(ctx, args.ownerId, projectIdOf(ctx, args.projectId), args.title);
+  return { renamed: true, title: args.title.trim() };
+}});
+export const duplicateProject = internalMutation({ args: { ownerId: v.string(), projectId: v.string(), title: v.optional(v.string()) }, returns: v.any(), handler: async (ctx, args) => {
+  const projectId = await duplicateProjectFor(ctx, args.ownerId, projectIdOf(ctx, args.projectId), args.title);
+  return { projectId, editorUrl: editorUrl(projectId), note: 'A full copy with every timeline tab and its media. Edits to it never change the original.' };
+}});
+export const deleteProject = internalMutation({ args: { ownerId: v.string(), projectId: v.string() }, returns: v.any(), handler: async (ctx, args) => {
+  const project = await requireProject(ctx, projectIdOf(ctx, args.projectId), args.ownerId, false);
+  await beginProjectDeletion(ctx, args.ownerId, project);
+  return { deleted: true, title: project.title };
+}});
+export const renameTimeline = internalMutation({ args: { ownerId: v.string(), projectId: v.string(), timelineId: v.string(), name: v.string() }, returns: v.any(), handler: async (ctx, args) => {
+  await renameTabFor(ctx, args.ownerId, { projectId: projectIdOf(ctx, args.projectId), timelineId: args.timelineId, name: args.name });
+  return { renamed: true, name: args.name.trim() };
+}});
+export const deleteTimeline = internalMutation({ args: { ownerId: v.string(), projectId: v.string(), timelineId: v.string() }, returns: v.any(), handler: async (ctx, args) => {
+  await removeTabFor(ctx, args.ownerId, { projectId: projectIdOf(ctx, args.projectId), timelineId: args.timelineId });
+  return { deleted: true, note: 'If it was open, the neighbouring timeline is now open.' };
 }});
 
 export const mediaTask = internalQuery({ args: { ownerId: v.string(), taskId: v.string() }, returns: v.any(), handler: async (ctx, args) => {

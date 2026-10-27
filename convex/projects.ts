@@ -6,6 +6,7 @@ import { mediaUrl } from './lib/media_storage';
 import { ConvexError, v, type Infer, type ObjectType } from "convex/values";
 import { internal } from "./_generated/api";
 import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
+import type { Id } from "./_generated/dataModel";
 import { listLimit, requireOwner, requireProject } from "./lib/auth";
 import { commitTimeline, currentTimeline, HISTORY_LIMIT, serializedBytes, validateTimeline } from "./lib/timeline";
 import { addMediaClip, patchClip } from '../lib/editor/operations';
@@ -69,6 +70,38 @@ export async function createProjectFor(ctx: MutationCtx, ownerId: string, args: 
     await writeProject(ctx,projectId, { timeline });
   }
   return projectId;
+}
+/** A full copy of a project: every timeline tab and its media, sharing the stored files. */
+export async function duplicateProjectFor(ctx: MutationCtx, ownerId: string, projectId: Id<'projects'>, title?: string) {
+  const project = await requireProject(ctx, projectId, ownerId, false);
+  await requireEditorAccess(ctx, ownerId);
+  if (await editingWorkflowActive(ctx, project)) throw new ConvexError(TIMELINE_LOCKED);
+  const assets = await ctx.db.query('assets').withIndex('by_ownerId_projectId', q => q.eq('ownerId', ownerId).eq('projectId', project._id)).take(201);
+  if (assets.length > 200) throw new ConvexError('A project supports up to 200 media files');
+  const now = Date.now(), timeline = currentTimeline(project);
+  const copyId = await createProject(ctx, { title: projectTitle(title ?? `${project.title} copy`), aspectRatio: project.aspectRatio, ownerId, createdAt: now, updatedAt: now, timeline: normalizeTimeline({ clips: [], fps: timeline.fps, aspectRatio: timeline.aspectRatio }), revision: 0, history: [] });
+  const ids = new Map<string, Id<'assets'>>();
+  for (const asset of assets) {
+    const { _id, _creationTime, audioAssetId: _audio, cutoutOf: _cutout, ...metadata } = await shareAnalysis(ctx, asset);
+    ids.set(String(_id), await ctx.db.insert('assets', { ...metadata, projectId: copyId, createdAt: now }));
+  }
+  // Links between media (extracted audio, background-removed cutouts) point at the copies.
+  for (const asset of assets) {
+    const link = (id?: Id<'assets'>) => id ? ids.get(String(id)) : undefined;
+    const audioAssetId = link(asset.audioAssetId), cutoutOf = link(asset.cutoutOf);
+    if (audioAssetId || cutoutOf) await ctx.db.patch(ids.get(String(asset._id))!, { ...(audioAssetId ? { audioAssetId } : {}), ...(cutoutOf ? { cutoutOf } : {}) });
+  }
+  for (const id of ids.values()) await recordAssetStorage(ctx, (await ctx.db.get(id))!);
+  const remap = (item: Timeline): Timeline => ({ ...item, clips: item.clips.map(clip => clip.assetId && ids.has(clip.assetId) ? { ...clip, assetId: ids.get(clip.assetId)! } : clip) });
+  const tabs = await ctx.db.query('projectTimelines').withIndex('by_project_timeline', q => q.eq('projectId', project._id)).take(10);
+  for (const row of tabs) await ctx.db.insert('projectTimelines', { projectId: copyId, ownerId, timelineId: row.timelineId, timeline: remap(row.timeline), history: [] });
+  await writeProject(ctx, copyId, { timeline: remap(timeline), aspectRatio: timeline.aspectRatio, ...(project.timelineTabs ? { timelineTabs: project.timelineTabs, activeTimelineId: project.activeTimelineId } : {}) });
+  return copyId;
+}
+export async function renameProjectFor(ctx: MutationCtx, ownerId: string, projectId: Id<'projects'>, title: string) {
+  const project = await requireProject(ctx, projectId, ownerId, false);
+  await requireEditorAccess(ctx, ownerId);
+  await writeProject(ctx, project._id, { title: projectTitle(title), updatedAt: Date.now() });
 }
 export const create = mutation({ args: createProjectForArgs, returns: v.id("projects"), handler: async (ctx, args) => createProjectFor(ctx, await requireOwner(ctx), args) });
 // Editor URLs are user input: a malformed id is the same typed not-found as a

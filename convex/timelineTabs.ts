@@ -106,17 +106,19 @@ export async function openTabFor(ctx: MutationCtx, ownerId: string, args: { proj
   return null;
 }
 
-export const rename = mutation({ args: { projectId: v.id('projects'), timelineId: v.string(), name: v.string() }, returns: v.null(), handler: async (ctx, args) => {
-  const project = await requireProject(ctx, args.projectId, await requireOwner(ctx), false);
+export const rename = mutation({ args: { projectId: v.id('projects'), timelineId: v.string(), name: v.string() }, returns: v.null(), handler: async (ctx, args) => renameTabFor(ctx, await requireOwner(ctx), args) });
+export async function renameTabFor(ctx: MutationCtx, ownerId: string, args: { projectId: Id<'projects'>; timelineId: string; name: string }) {
+  const project = await requireProject(ctx, args.projectId, ownerId, false);
   await requireEditorAccess(ctx, project.ownerId);
   const tabs = tabsOf(project);
   if (!tabs.some(tab => tab.id === args.timelineId)) throw new ConvexError('That timeline no longer exists');
   await writeProject(ctx, project._id, { timelineTabs: tabs.map(tab => tab.id === args.timelineId ? { ...tab, name: tabName(args.name) } : tab), activeTimelineId: activeTabOf(project), updatedAt: Date.now() });
   return null;
-}});
+}
 
-export const remove = mutation({ args: { projectId: v.id('projects'), timelineId: v.string() }, returns: v.null(), handler: async (ctx, args) => {
-  const project = await openProject(ctx, args.projectId, await requireOwner(ctx)), tabs = tabsOf(project);
+export const remove = mutation({ args: { projectId: v.id('projects'), timelineId: v.string() }, returns: v.null(), handler: async (ctx, args) => removeTabFor(ctx, await requireOwner(ctx), args) });
+export async function removeTabFor(ctx: MutationCtx, ownerId: string, args: { projectId: Id<'projects'>; timelineId: string }) {
+  const project = await openProject(ctx, args.projectId, ownerId), tabs = tabsOf(project);
   const index = tabs.findIndex(tab => tab.id === args.timelineId);
   if (index < 0) throw new ConvexError('That timeline no longer exists');
   if (tabs.length <= 1) throw new ConvexError('A project keeps at least one timeline');
@@ -132,4 +134,4 @@ export const remove = mutation({ args: { projectId: v.id('projects'), timelineId
   await openTab(ctx, project, rest, next.id, row?.timeline ?? { clips: [], fps: currentTimeline(project).fps, aspectRatio: project.aspectRatio }, row?.history ?? []);
   if (row) await ctx.db.delete(row._id);
   return null;
-}});
+}
