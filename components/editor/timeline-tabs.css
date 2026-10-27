@@ -15,8 +15,6 @@
 .timeline-tab-add{display:grid;place-items:center;flex:none;width:28px;height:28px;margin-left:2px;border:0;border-radius:6px;background:#ffffff0a;color:var(--ws-muted,#a1a3ab);cursor:pointer}
 .timeline-tab-add:hover{background:#ffffff14;color:var(--ws-text,#ededef)}
 .timeline-tab-add:disabled{cursor:not-allowed;opacity:.5}
-.timeline-tab[data-working] .timeline-tab-name{background:linear-gradient(90deg,var(--ws-muted,#a1a3ab) 0%,var(--ws-muted,#a1a3ab) 35%,#e9e3ff 50%,var(--ws-muted,#a1a3ab) 65%,var(--ws-muted,#a1a3ab) 100%) 0 0/250% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;animation:timeline-ai-shimmer 2s linear infinite}
-@media(prefers-reduced-motion:reduce){.timeline-tab[data-working] .timeline-tab-name{animation:none;background:none;color:inherit}}
 /* No divider line above the tabs: the preview/timeline handle shows its line only on hover. */
 .editor-app:has(.timeline-tabs) .timeline-resize-handle{background:transparent}
 /* Every tab keeps the menu button's room, so switching never resizes tabs. */
