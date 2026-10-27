@@ -1,4 +1,4 @@
-import { cameraGlideBlurAt, type CameraGlideBlurSource } from './camera-motion-blur';
+import { cameraGlideBlurAt, motionZoomBlurAt, type CameraGlideBlurSource } from './camera-motion-blur';
 import type { VisualEffects } from './visual-effects';
 import { trackOf, type Clip } from './types';
 import { adjustmentFrame } from './adjustment-layers';
@@ -41,6 +41,8 @@ export function installVisualEffects(sources: VisualEffectSource[], fps: number,
     const composition=base.cameraGlideBlur?document.getElementById('composition'):null;
     const cameraBlur=!base.cameraGlideBlur||preview&&clock.paused?.()===true?undefined:cameraGlideBlurAt(base.cameraGlideBlur,time,Number(composition?.dataset.width)*1080/resolution,Number(composition?.dataset.height)*1080/resolution);
     if(cameraBlur)passes.push({directionalBlur:cameraBlur});
+    const scaleBlur=!base.cameraGlideBlur||preview&&clock.paused?.()===true?undefined:motionZoomBlurAt(base.cameraGlideBlur,time);
+    if(scaleBlur)passes.push({zoomBlur:scaleBlur});
     if(enabled(other))passes.push(other);
     for(const clip of timedEffects){
       if(!clip.zoomBlur?.enabled||time<clip.start||time>=clip.start+clip.duration)continue;

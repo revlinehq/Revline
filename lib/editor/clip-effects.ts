@@ -100,6 +100,7 @@ export function validateClipEffects(clip: Clip) {
   validatePlaybackRate(clip);
   validateVisualEffects(clip);
   validateEffectKeyframes(clip.effectKeyframes);
+  if (clip.motionBlur !== undefined && (!Number.isFinite(clip.motionBlur) || clip.motionBlur < 0 || clip.motionBlur > 1)) throw new Error('Motion blur must be between 0 and 1.');
   if (clip.effectKeyframes?.length && clip.kind !== 'video' && clip.kind !== 'image') throw new Error('Effect keyframes apply to video or image clips.');
   validateRemotionTextTemplate(clip);
   validateTextStyle(clip);

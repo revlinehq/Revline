@@ -1,3 +1,4 @@
+import { cssMotionBlur } from './camera-motion-blur';
 import { motionAt, NEUTRAL_MOTION, solidColorSettings, visibleMotion } from './clip-effects';
 import { trackOf, type Clip } from './types';
 
@@ -29,7 +30,8 @@ export function installSolidColorLayers(initial:SolidColorSource[]):SolidColorCo
       rectangle.style.left=`${settings.x*100}%`;rectangle.style.top=`${settings.y*100}%`;
       rectangle.style.width=`${settings.width*100}%`;rectangle.style.height=`${settings.height*100}%`;
       rectangle.style.opacity=String(settings.opacity*motion.opacity);
-      rectangle.style.filter=`brightness(${motion.brightness})`;
+      const blur=keys.length?cssMotionBlur(keys,Math.max(0,time-clip.start),clip.motionBlur,width,height):0;
+      rectangle.style.filter=`brightness(${motion.brightness})${blur>.05?` blur(${blur.toFixed(2)}px)`:''}`;
       rectangle.style.transform=`translate(-50%,-50%) translate(${motion.x*width}px,${motion.y*height}px) rotate(${motion.rotation}deg) scale(${motion.scale})`;
     }
   }

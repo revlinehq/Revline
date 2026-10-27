@@ -1,4 +1,5 @@
 import { motionAt, NEUTRAL_MOTION } from './clip-effects';
+import { cssMotionBlur } from './camera-motion-blur';
 import { textStyle } from './text-style';
 import type { Clip } from './types';
 
@@ -22,5 +23,6 @@ export function textLayerFrame(source: TextLayerSource, time: number, width: num
     style: textStyle(clip, resolution), visible: local >= 0 && local < clip.duration,
     transform: `translate(${motion.x * width}px,${motion.y * height}px) rotate(${motion.rotation}deg) scale(${motion.scale})`,
     opacity: motion.opacity * opacity, lift, brightness: motion.brightness,
+    blur: clip.motion?.length ? cssMotionBlur(clip.motion, local + (clip.motionOffset ?? 0), clip.motionBlur, width, height) * resolution / 1080 : 0,
   };
 }

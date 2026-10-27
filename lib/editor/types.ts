@@ -56,6 +56,8 @@ export type Clip = {
   motionOffset?: number;
   /** Keyframed visual-effect controls (colorGrade.saturation, softBlur.amount, ...), in motion path time. */
   effectKeyframes?: EffectKeyframeLane[];
+  /** 0..1: blur keyframed movement by its speed (directional for slides, radial for scale pops). */
+  motionBlur?: number;
   smoothZoom?: SmoothZoomSettings;
   cameraMotion?: CameraMotionSettings;
   effectPreset?: EffectPreset | 'none';

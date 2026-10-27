@@ -107,7 +107,7 @@ export function installTextLayers(initial: TextLayerSource[]): TextLayerControll
         applied.set(node, source);
       }
       const motion = node.querySelector<HTMLElement>('.text-motion')!, content = node.querySelector<HTMLElement>('.text-content')!;
-      Object.assign(motion.style, { transform: frame.transform, opacity: String(frame.opacity), filter: frame.brightness === 1 ? '' : `brightness(${frame.brightness})` });
+      Object.assign(motion.style, { transform: frame.transform, opacity: String(frame.opacity), filter: [frame.brightness === 1 ? '' : `brightness(${frame.brightness})`, frame.blur > .05 ? `blur(${frame.blur.toFixed(2)}px)` : ''].filter(Boolean).join(' ') });
       const appearance = clip.textStyle || clip.textGradient ? textAppearance({textStyle:resolvedTextAppearance(clip)}, source.resolution) : {WebkitTextStroke:'',paintOrder:'',textShadow:''};
       Object.assign(content.style, { ...appearance, background: style.background, padding: `${style.paddingY}px ${style.paddingX}px`, borderRadius: `${style.borderRadius}px`, transform: `translateY(${frame.lift}px)` });
       const props = remotionTextProps(clip, clock.time(), source.fps, source.resolution);
