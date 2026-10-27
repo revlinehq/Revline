@@ -1,5 +1,6 @@
 import { ConvexError, v, type ObjectType } from 'convex/values';
-import { mutation, query, type MutationCtx, type QueryCtx } from './_generated/server';
+import { internalMutation, mutation, query, type MutationCtx, type QueryCtx } from './_generated/server';
+import { internal } from './_generated/api';
 import type { Doc, Id } from './_generated/dataModel';
 import { requireOwner, requireProject } from './lib/auth';
 import { requireEditorAccess } from './lib/billing_access';
@@ -140,3 +141,22 @@ export async function removeTabFor(ctx: MutationCtx, ownerId: string, args: { pr
   if (row) await ctx.db.delete(row._id);
   return null;
 }
+
+/** One-time backfill: give tabs stashed before summaries existed their summary, so listing tabs
+ * stops reading their stored timelines. Runs a page of projects at a time and schedules the next. */
+export const backfillTabSummaries = internalMutation({ args: { cursor: v.optional(v.union(v.string(), v.null())) }, returns: v.null(), handler: async (ctx, args) => {
+  const page = await ctx.db.query('projects').paginate({ cursor: args.cursor ?? null, numItems: 5 });
+  for (const project of page.page) {
+    if (!project.timelineTabs?.length || project.deleting) continue;
+    const active = activeTabOf(project);
+    if (project.timelineTabs.every(tab => tab.id === active || tab.duration !== undefined)) continue;
+    const tabs = await Promise.all(project.timelineTabs.map(async tab => {
+      if (tab.id === active || tab.duration !== undefined) return tab;
+      const row = await stashedRow(ctx, project._id, tab.id);
+      return row ? { ...tab, ...summaryOf(row.timeline) } : tab;
+    }));
+    await ctx.db.patch(project._id, { timelineTabs: tabs });
+  }
+  if (!page.isDone) await ctx.scheduler.runAfter(0, internal.timelineTabs.backfillTabSummaries, { cursor: page.continueCursor });
+  return null;
+} });
