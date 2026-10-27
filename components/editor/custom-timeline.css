@@ -135,3 +135,8 @@ html[data-workspace-theme=dark] .editor-app .custom-timeline .timeline-insert-in
 .custom-timeline[data-tool=blade] .audio-clip-volume{display:none}
 .custom-timeline .timeline-edit-actions [data-active]{background:var(--ws-hover);color:var(--ws-text)}
 
+/* Compact rows: headers keep the layer name and kind; per-track audio controls and the layer menu return when rows expand. */
+[data-compact-tracks] .track-label{gap:6px;font-size:9px}
+[data-compact-tracks] .track-label :is(.track-audio-controls,.layer-options){display:none}
+[data-compact-tracks] .timeline-clip:is(.clip-caption,.clip-graphic)>span{height:100%;align-items:center;padding:0 6px;font-size:9px}
+[data-compact-tracks] .audio-clip-volume{display:none}

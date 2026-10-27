@@ -97,7 +97,7 @@ function TimelinePlayheadClock(props: Omit<Parameters<typeof useTimelinePlayhead
 
 export function TimelinePanel(p:Props){
   const {timeline,assets,selected,onSelect,time}=p;
-  const store=useEditorStore();const zoom=useEditorState(s=>s.zoom);const snap=useEditorState(s=>s.snapping);const ripple=useEditorState(s=>s.ripple);const blade=useEditorState(s=>s.tool==='blade')&&!p.readOnly;const dense=useEditorState(s=>s.compactTracks);const RULER_HEIGHT=TIMELINE_RULER_HEIGHT;const origin=TIMELINE_ORIGIN;
+  const store=useEditorStore();const zoom=useEditorState(s=>s.zoom);const snap=useEditorState(s=>s.snapping);const ripple=useEditorState(s=>s.ripple);const blade=useEditorState(s=>s.tool==='blade')&&!p.readOnly;const compactPreference=useEditorState(s=>s.compactTracks);const RULER_HEIGHT=TIMELINE_RULER_HEIGHT;const origin=TIMELINE_ORIGIN;
   const editingDisabled=!!(p.readOnly||p.editingLocked);
   const liveIds=useMemo(()=>new Set(p.liveEdit?.changedClipIds??[]),[p.liveEdit?.changedClipIds]);
   const editingLock=useRef(editingDisabled);
@@ -109,7 +109,10 @@ export function TimelinePanel(p:Props){
   const selectedIds=useEditorState(s=>s.selectedIds);const selectionBox=useRef<HTMLDivElement>(null);const [selecting,setSelecting]=useState(false);
   const linkedSelection=useMemo(()=>new Set(linkedClipIds(timeline,selectedIds.length?selectedIds:selected?[selected]:[])),[timeline,selectedIds,selected]);
   const [drag,setDrag]=useState<Clip|null>(null);const [layerDrop,setLayerDrop]=useState<string|null>(null);const [movingLayer,setMovingLayer]=useState<string|null>(null);const [scrubbing,setScrubbing]=useState(false);
-  const [viewportHeight,setViewportHeight]=useState(0);const [viewportWidth,setViewportWidth]=useState(0);const [scrollbarHeight,setScrollbarHeight]=useState(0);
+  const [viewportHeight,setViewportHeight]=useState(0);
+  // Auto compacts when the full-size rows would overflow the timeline; judged on the full-size layout so it cannot flip back and forth.
+  const fullHeight=useMemo(()=>timelineLayout(timeline,false).height,[timeline]);
+  const dense=compactPreference===true||(compactPreference==='auto'&&viewportHeight>0&&fullHeight>viewportHeight);const [viewportWidth,setViewportWidth]=useState(0);const [scrollbarHeight,setScrollbarHeight]=useState(0);
   const [context,setContext]=useState<{clipId?:string;markerId?:string;group?:LayerGroup;track?:number;time:number}|null>(null);
   const [editingMarker,setEditingMarker]=useState<{id:string;label:string}|null>(null);
   const [draggingMarker,setDraggingMarker]=useState(false);
@@ -631,7 +634,7 @@ export function TimelinePanel(p:Props){
     if(!editingLock.current)p.onEditClip?.(clip.id);
   };
 
-  return <ContextMenu onOpenChange={open=>{if(!open)setContext(null);}}><ContextMenuTrigger asChild disabled={editingDisabled}><section tabIndex={-1} onContextMenu={openContext} data-read-only={p.readOnly||undefined} data-tool={blade&&!editingDisabled?'blade':undefined} data-editing-locked={p.editingLocked||undefined} data-ai-working={p.aiWorking||undefined} data-live-edit={!!p.liveEdit||undefined} aria-busy={p.aiWorking||undefined} className={`timeline-panel custom-timeline ${p.playbackControls?'timeline-with-playback':''} ${p.collapsed?'timeline-collapsed':''} ${dense?'tracks-compact':''}`} aria-label={p.readOnly?'Shared video timeline':'Video timeline'}>
+  return <ContextMenu onOpenChange={open=>{if(!open)setContext(null);}}><ContextMenuTrigger asChild disabled={editingDisabled}><section tabIndex={-1} onContextMenu={openContext} data-read-only={p.readOnly||undefined} data-compact-tracks={dense||undefined} data-tool={blade&&!editingDisabled?'blade':undefined} data-editing-locked={p.editingLocked||undefined} data-ai-working={p.aiWorking||undefined} data-live-edit={!!p.liveEdit||undefined} aria-busy={p.aiWorking||undefined} className={`timeline-panel custom-timeline ${p.playbackControls?'timeline-with-playback':''} ${p.collapsed?'timeline-collapsed':''} ${dense?'tracks-compact':''}`} aria-label={p.readOnly?'Shared video timeline':'Video timeline'}>
     {!p.readOnly&&p.tabs&&p.tabActions&&<TimelineTabs agentName={p.workingAgent} tabs={p.tabs.map(tab=>tab.active?{...tab,aspectRatio:timeline.aspectRatio,duration:end}:tab)} working={!!p.aiWorking} locked={!!(p.aiWorking||p.editingLocked)} onError={report} {...p.tabActions}/>}
     <TimelinePlayheadClock playing={p.playing} readTime={p.readPlaybackTime} px={px} duration={end} origin={origin} viewport={scroll} head={head} cap={cap} scrubbing={scrubRef} followPausedUntil={followPausedUntil}/>
     <div className="timeline-toolbar"><div className="timeline-edit-actions">{!p.playbackControls&&<EditorPlaybackTime className="timeline-playback-time" time={time} duration={end} fps={timeline.fps} playing={p.playing} readTime={p.readPlaybackTime}/>}
@@ -642,6 +645,7 @@ export function TimelinePanel(p:Props){
       {!p.readOnly&&p.onRedo&&<IconButton label="Redo (⇧⌘Z)" disabled={!p.canRedo} onClick={p.onRedo}><Redo2 size={14}/></IconButton>}
     </div>{p.playbackControls&&<div className="timeline-playback-controls">{p.playbackControls}</div>}<div className="timeline-view-actions">
       {!p.readOnly&&<button aria-label="Auto-join when trimming" onClick={()=>{store.setState({ripple:!ripple});setRipplePreference(!ripple);}} aria-pressed={ripple} className={ripple?'snap-active':''}><ChevronsRightLeft size={14}/></button>}
+      <button aria-label="Compact track rows" onClick={()=>store.setState({compactTracks:!dense})} aria-pressed={dense} className={dense?'snap-active':''}><Rows3 size={14}/><span>Compact</span></button>
       {!p.readOnly&&<button aria-label="Toggle snapping" onClick={()=>store.setState({snapping:!snap})} aria-pressed={snap} className={snap?'snap-active':''}><Magnet size={14}/></button>}
       <input aria-label="Timeline zoom" type="range" min="0" max="100" step="any" value={timelineZoomPosition(zoom,minimumZoom)} aria-valuetext={`${Math.round(zoom*100)}%`} onChange={e=>changeZoom(timelineZoomAtPosition(Number(e.target.value),minimumZoom))}/>
       <DropdownMenu><DropdownMenuTrigger className="timeline-more-trigger" aria-label="More timeline tools"><MoreHorizontal size={15}/></DropdownMenuTrigger><DropdownMenuContent align="end" className="timeline-more-menu">
@@ -650,7 +654,6 @@ export function TimelinePanel(p:Props){
         <DropdownMenuItem disabled={p.editingLocked} onSelect={mergeClips}><Combine/>Merge clips</DropdownMenuItem>
         <DropdownMenuSeparator/></>}
         <DropdownMenuItem onSelect={p.onToggleMute}>{p.muted?<VolumeX/>:<Volume2/>}{p.muted?'Unmute preview':'Mute preview'}</DropdownMenuItem>
-        <DropdownMenuItem onSelect={()=>store.setState({compactTracks:!dense})}><Rows3/>{dense?'Expand track rows':'Compact track rows'}</DropdownMenuItem>
         {!p.readOnly&&<><DropdownMenuSeparator/><DropdownMenuSub><DropdownMenuSubTrigger disabled={editingDisabled}>Frame rate · {timeline.fps} fps</DropdownMenuSubTrigger><DropdownMenuSubContent><DropdownMenuRadioGroup value={String(timeline.fps)} onValueChange={value=>{const fps=Number(value);if(fps===24||fps===30||fps===60){if(timeline.clips.some(clip=>clip.duration<1/fps)){report(new Error(`Some clips are shorter than one frame at ${fps} fps. Extend those clips before changing the frame rate.`));return;}onChange({...timeline,fps});}}}>{[24,30,60].map(fps=><DropdownMenuRadioItem key={fps} value={String(fps)}>{fps} fps</DropdownMenuRadioItem>)}</DropdownMenuRadioGroup></DropdownMenuSubContent></DropdownMenuSub></>}
       </DropdownMenuContent></DropdownMenu>
       <IconButton label={p.collapsed?'Expand timeline':'Collapse timeline'} onClick={p.onToggleCollapse}>{p.collapsed?<ChevronUp size={14}/>:<ChevronDown size={14}/>}</IconButton>
