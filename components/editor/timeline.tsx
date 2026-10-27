@@ -35,6 +35,7 @@ import { splitAtPlayhead } from '@/lib/editor/split-at-playhead';
 import { minimumTimelineZoom, timelineZoomPosition, timelineZoomAtPosition, TIMELINE_BASE_PX, TIMELINE_MAX_ZOOM } from '@/lib/editor/timeline-zoom';
 import './custom-timeline.css';
 import { useAiActivity } from './use-ai-activity';
+import { TimelineTabs, type TimelineTab, type TimelineTabActions } from './timeline-tabs';
 import type { AiClipChange } from '@/lib/editor/ai-activity';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger, DropdownMenuItem, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger } from '@/components/ui/dropdown-menu';
 import { ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem, ContextMenuLabel, ContextMenuSeparator } from '@/components/ui/context-menu';
@@ -60,6 +61,7 @@ type Props={
   liveEdit?:LiveEditChange & {sequence:number;runId:string};
   onExportClip?:(clipId:string)=>void;
   onExportSection?:(sectionId:string)=>void;
+  tabs?:TimelineTab[];tabActions?:TimelineTabActions;
 };
 
 function watchCancellation(cancel: () => void) {
@@ -642,6 +644,7 @@ export function TimelinePanel(p:Props){
   };
 
   return <ContextMenu onOpenChange={open=>{if(!open)setContext(null);}}><ContextMenuTrigger asChild disabled={editingDisabled}><section tabIndex={-1} onContextMenu={openContext} data-read-only={p.readOnly||undefined} data-tool={blade&&!editingDisabled?'blade':undefined} data-editing-locked={p.editingLocked||undefined} data-ai-working={p.aiWorking||p.editingLocked||undefined} data-live-edit={!!p.liveEdit||undefined} aria-busy={p.aiWorking||p.editingLocked||undefined} className={`timeline-panel custom-timeline ${p.playbackControls?'timeline-with-playback':''} ${p.collapsed?'timeline-collapsed':''} ${dense?'tracks-compact':''}`} aria-label={p.readOnly?'Shared video timeline':'Video timeline'}>
+    {!p.readOnly&&p.tabs&&p.tabActions&&<TimelineTabs tabs={p.tabs.map(tab=>tab.active?{...tab,aspectRatio:timeline.aspectRatio,duration:end}:tab)} working={!!p.aiWorking} locked={!!(p.aiWorking||p.editingLocked)} onError={report} {...p.tabActions}/>}
     <TimelinePlayheadClock playing={p.playing} readTime={p.readPlaybackTime} px={px} duration={end} origin={origin} viewport={scroll} head={head} cap={cap} scrubbing={scrubRef} followPausedUntil={followPausedUntil}/>
     <div className="timeline-toolbar"><div className="timeline-edit-actions">{!p.playbackControls&&<EditorPlaybackTime className="timeline-playback-time" time={time} duration={end} fps={timeline.fps} playing={p.playing} readTime={p.readPlaybackTime}/>}
       {p.readOnly&&<span>Timeline</span>}

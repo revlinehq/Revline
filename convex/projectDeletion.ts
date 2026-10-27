@@ -26,6 +26,8 @@ export const batch=internalMutation({args:{projectId:v.id('projects'),ownerId:v.
   for(const table of ['compositionReviews','assistantPlans','assistantQueue'] as const){const rows=await ctx.db.query(table).withIndex('by_project',q=>q.eq('projectId',project._id)).take(20);if(rows.length){for(const row of rows)await ctx.db.delete(row._id);await again();return null;}}
   const uploads=await ctx.db.query('r2Uploads').withIndex('by_projectId_completed',q=>q.eq('projectId',project._id).eq('completed',false)).filter(q=>q.neq(q.field('cleanupScheduled'),true)).take(20);
   if(uploads.length){for(const upload of uploads){await ctx.db.patch(upload._id,{cleanupScheduled:true});await ctx.scheduler.runAfter(0,internal.r2.cleanupLease,{uploadId:upload._id});}await again();return null;}
+  const tabs=await ctx.db.query('projectTimelines').withIndex('by_project_timeline',q=>q.eq('projectId',project._id)).take(10);
+  if(tabs.length){for(const row of tabs)await ctx.db.delete(row._id);await again();return null;}
   if(project.threadId)await ctx.runMutation(components.agent.threads.deleteAllForThreadIdAsync,{threadId:project.threadId});
   for(const table of ['timelineRevisions','aiRuns','aiTimelinePreviews','projectAccess','projectCatalog'] as const){const rows=table==='timelineRevisions'?await ctx.db.query(table).withIndex('by_project_sequence',q=>q.eq('projectId',project._id)).take(HISTORY_LIMIT+1):await ctx.db.query(table).withIndex('by_project',q=>q.eq('projectId',project._id)).take(1);for(const row of rows)await ctx.db.delete(row._id);}
   await ctx.db.delete(project._id);return null;

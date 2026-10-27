@@ -10,6 +10,7 @@ import { beginProjectDeletion } from './projects';
 import { removeMediaAttachment,removeShareAssets } from './lib/shared_media';
 import { removeOwnedExport } from './renders';
 import { mediaUrl } from './lib/media_storage';
+import { allTabTimelines } from './timelineTabs';
 
 const kind=v.union(v.literal('video'),v.literal('audio'),v.literal('image'),v.literal('export'));
 const workspace=v.object({id:v.id('projects'),title:v.string()});
@@ -59,12 +60,13 @@ async function describe(ctx:QueryCtx|MutationCtx,row:Doc<'storageObjects'>,reads
     const project=await(reads?reads.project(projectId):ctx.db.get(projectId));if(!project||project.ownerId!==row.ownerId)continue;
     const sources=refs.attachments.filter(asset=>asset.projectId===projectId);
     const ids=new Set(sources.map(asset=>String(asset._id)));
-    let used=project.timeline?.clips.some(clip=>clip.assetId&&ids.has(clip.assetId));
+    const timelines=await allTabTimelines(ctx,project);
+    let used=timelines.some(timeline=>timeline.clips.some(clip=>clip.assetId&&ids.has(clip.assetId)));
     // Extracted audio is retained while a video using that linked source remains in the edit.
     if(!used&&sources.some(asset=>asset.kind==='audio')) {
       const linked=await Promise.all(sources.filter(asset=>asset.kind==='audio').map(asset=>ctx.db.query('assets').withIndex('by_owner_audio',q=>q.eq('ownerId',row.ownerId).eq('audioAssetId',asset._id)).take(201)));
       const videos=new Set(linked.flat().filter(asset=>asset.projectId===projectId).map(asset=>String(asset._id)));
-      used=project.timeline?.clips.some(clip=>clip.assetId&&videos.has(clip.assetId));
+      used=timelines.some(timeline=>timeline.clips.some(clip=>clip.assetId&&videos.has(clip.assetId)));
     }
     if(used) {result.workspaces.push({id:project._id,title:project.title});result.inUse=true;}
     if((await(reads?reads.run(projectId,row.ownerId):projectRun(ctx,projectId,row.ownerId))).aiRunning)result.protectedReason='AI editing in progress';

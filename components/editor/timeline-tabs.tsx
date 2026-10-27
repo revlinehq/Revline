@@ -1,0 +1,58 @@
+'use client';
+import { useState } from 'react';
+import { ChevronDown, Copy, Download, FilePlus, Pencil, Plus, Trash2 } from 'lucide-react';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import type { AspectRatio } from '@/lib/editor/types';
+import './timeline-tabs.css';
+
+export type TimelineTab = { id: string; name: string; aspectRatio: AspectRatio; duration: number; active: boolean };
+export type TimelineTabActions = {
+  onOpen: (id: string) => Promise<void>;
+  onCreate: (from: 'blank' | 'duplicate') => Promise<void>;
+  onRename: (id: string, name: string) => Promise<void>;
+  onRemove: (id: string) => Promise<void>;
+  onExport?: (id: string) => void;
+};
+
+const length = (seconds: number) => { const total = Math.round(seconds); return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`; };
+
+/** Spreadsheet-style tabs on top of the timeline: each is its own video in this project. */
+export function TimelineTabs({ tabs, working, locked, onError, ...actions }: { tabs: TimelineTab[]; working: boolean; locked: boolean; onError: (error: unknown) => void } & TimelineTabActions) {
+  const [busy, setBusy] = useState(false);
+  const [dialog, setDialog] = useState<{ mode: 'rename' | 'remove'; id: string; name: string } | null>(null);
+  const run = async (action: () => Promise<void>) => { if (busy) return; setBusy(true); try { await action(); } catch (error) { onError(error); } finally { setBusy(false); } };
+  const active = tabs.find(tab => tab.active);
+  const blocked = locked || busy;
+  return <div className="timeline-tabs" role="tablist" aria-label="Timelines">
+    {tabs.map(tab => <div key={tab.id} className="timeline-tab" role="tab" aria-selected={tab.active} data-active={tab.active || undefined} data-working={tab.active && working || undefined}>
+      <button type="button" className="timeline-tab-main" disabled={!tab.active && blocked} title={!tab.active && locked ? 'Wait for the AI edit to finish before switching' : tab.name} onClick={() => { if (!tab.active) void run(() => actions.onOpen(tab.id)); }} onDoubleClick={() => { if (tab.active && !locked) setDialog({ mode: 'rename', id: tab.id, name: tab.name }); }}>
+        <span className="timeline-tab-ratio" data-ratio={tab.aspectRatio} aria-hidden="true"/>
+        <span className="timeline-tab-name">{tab.name}</span>
+        <span className="timeline-tab-length">{length(tab.duration)}</span>
+      </button>
+      {tab.active && <DropdownMenu><DropdownMenuTrigger className="timeline-tab-menu" aria-label={`Options for ${tab.name}`}><ChevronDown size={12}/></DropdownMenuTrigger><DropdownMenuContent align="start" className="timeline-tab-options">
+        <DropdownMenuItem disabled={locked} onSelect={() => setDialog({ mode: 'rename', id: tab.id, name: tab.name })}><Pencil/>Rename</DropdownMenuItem>
+        <DropdownMenuItem disabled={blocked} onSelect={() => void run(() => actions.onCreate('duplicate'))}><Copy/>Duplicate</DropdownMenuItem>
+        {actions.onExport && <DropdownMenuItem onSelect={() => actions.onExport?.(tab.id)}><Download/>Export this video</DropdownMenuItem>}
+        <DropdownMenuSeparator/>
+        <DropdownMenuItem variant="destructive" disabled={blocked || tabs.length <= 1} onSelect={() => setDialog({ mode: 'remove', id: tab.id, name: tab.name })}><Trash2/>Delete timeline</DropdownMenuItem>
+      </DropdownMenuContent></DropdownMenu>}
+    </div>)}
+    <DropdownMenu><DropdownMenuTrigger className="timeline-tab-add" aria-label="New timeline" title="New timeline" disabled={blocked}><Plus size={14}/></DropdownMenuTrigger><DropdownMenuContent align="start" className="timeline-tab-options">
+      <DropdownMenuItem onSelect={() => void run(() => actions.onCreate('blank'))}><FilePlus/>Blank timeline</DropdownMenuItem>
+      {active && <DropdownMenuItem onSelect={() => void run(() => actions.onCreate('duplicate'))}><Copy/>Duplicate {active.name}</DropdownMenuItem>}
+    </DropdownMenuContent></DropdownMenu>
+    <Dialog open={!!dialog} onOpenChange={open => { if (!open) setDialog(null); }}><DialogContent>
+      {dialog?.mode === 'remove' ? <>
+        <DialogTitle>Delete {dialog.name}?</DialogTitle><DialogDescription>This timeline and its undo history go away. Media stays in the project and other timelines are unchanged.</DialogDescription>
+        <div className="flex justify-end gap-2"><Button variant="secondary" onClick={() => setDialog(null)}>Cancel</Button><Button variant="destructive" disabled={busy} onClick={() => { const id = dialog.id; setDialog(null); void run(() => actions.onRemove(id)); }}>Delete timeline</Button></div>
+      </> : <>
+        <DialogTitle>Rename timeline</DialogTitle><DialogDescription>The name labels this video and its exported file.</DialogDescription>
+        <form className="flex flex-col gap-4" onSubmit={event => { event.preventDefault(); if (!dialog?.name.trim()) return; const { id, name } = dialog; setDialog(null); void run(() => actions.onRename(id, name)); }}><Input aria-label="Timeline name" autoFocus maxLength={60} value={dialog?.name ?? ''} onChange={event => setDialog(current => current ? { ...current, name: event.target.value } : null)}/><Button type="submit" disabled={!dialog?.name.trim()}>Save name</Button></form>
+      </>}
+    </DialogContent></Dialog>
+  </div>;
+}

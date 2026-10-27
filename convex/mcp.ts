@@ -10,6 +10,7 @@ import { aspectRatio } from './schema';
 import { createProjectFor, listProjectsFor } from './projects';
 import { importVideoFor } from './mediaTasks';
 import { exportFileName, startRenderFor } from './renders';
+import { createTabFor, listTabsFor, openTabFor } from './timelineTabs';
 import { enqueueMediaTask } from './mediaTasks';
 import { requireMediaTaskCapacity } from './lib/account_limits';
 import { internal } from './_generated/api';
@@ -80,6 +81,17 @@ export const importVideo = internalMutation({ args: { ownerId: v.string(), proje
   return { projectId, taskId, editorUrl: editorUrl(projectId), note: 'Poll getMediaTask with taskId until it completes; the media then appears in getProject.' };
 }});
 
+/** Timeline tabs: separate videos in one project. Editing tools act on the open one. */
+export const listTimelines = internalQuery({ args: { ownerId: v.string(), projectId: v.string() }, returns: v.any(), handler: async (ctx, args) => listTabsFor(ctx, args.ownerId, projectIdOf(ctx, args.projectId)) });
+export const openTimeline = internalMutation({ args: { ownerId: v.string(), projectId: v.string(), timelineId: v.string() }, returns: v.any(), handler: async (ctx, args) => {
+  await openTabFor(ctx, args.ownerId, { projectId: projectIdOf(ctx, args.projectId), timelineId: args.timelineId });
+  return { opened: args.timelineId, note: 'Editing tools now act on this timeline; call inspectTimeline before editing.' };
+}});
+export const createTimeline = internalMutation({ args: { ownerId: v.string(), projectId: v.string(), name: v.optional(v.string()), from: v.union(v.literal('blank'), v.literal('duplicate')), aspectRatio: v.optional(v.union(v.literal('landscape'), v.literal('vertical'), v.literal('square'))) }, returns: v.any(), handler: async (ctx, { ownerId, projectId, ...rest }) => {
+  const timelineId = await createTabFor(ctx, ownerId, { projectId: projectIdOf(ctx, projectId), ...rest });
+  return { timelineId, opened: true, note: 'The new timeline is open; editing tools act on it.' };
+}});
+
 export const mediaTask = internalQuery({ args: { ownerId: v.string(), taskId: v.string() }, returns: v.any(), handler: async (ctx, args) => {
   const id = ctx.db.normalizeId('mediaTasks', args.taskId), task = id ? await ctx.db.get(id) : null;
   if (!task || task.ownerId !== args.ownerId) throw new ConvexError('Media task not found.');
@@ -87,8 +99,8 @@ export const mediaTask = internalQuery({ args: { ownerId: v.string(), taskId: v.
   return { taskId: task._id, kind: task.kind, status: task.status, progress: task.progress, ...(task.error ? { error: task.error } : {}), ...(task.assetId ? { assetId: task.assetId } : {}) };
 }});
 
-export const startExport = internalMutation({ args: { ownerId: v.string(), projectId: v.string(), resolution: v.number(), fps: v.number(), quality: v.string(), sectionId: v.optional(v.string()) }, returns: v.any(), handler: async (ctx, args) => {
-  const jobId = await startRenderFor(ctx, args.ownerId, { projectId: projectIdOf(ctx, args.projectId), resolution: args.resolution, fps: args.fps, quality: args.quality, ...(args.sectionId ? { sectionId: args.sectionId } : {}) });
+export const startExport = internalMutation({ args: { ownerId: v.string(), projectId: v.string(), resolution: v.number(), fps: v.number(), quality: v.string(), sectionId: v.optional(v.string()), timelineId: v.optional(v.string()) }, returns: v.any(), handler: async (ctx, args) => {
+  const jobId = await startRenderFor(ctx, args.ownerId, { projectId: projectIdOf(ctx, args.projectId), resolution: args.resolution, fps: args.fps, quality: args.quality, ...(args.sectionId ? { sectionId: args.sectionId } : {}), ...(args.timelineId ? { timelineId: args.timelineId } : {}) });
   return { jobId, note: 'Poll getExport with jobId; a completed export returns a download link.' };
 }});
 

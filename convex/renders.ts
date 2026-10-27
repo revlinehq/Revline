@@ -1,4 +1,5 @@
 import { clipExportTimeline, sectionExportTimeline } from '../lib/editor/clip-export';
+import { activeTabOf, storedTabTimeline, tabsOf } from './timelineTabs';
 import { flyRendersEnabled, queuedExportLimit } from './lib/render_seats';
 import { projectIdentity } from './lib/project_data';
 import { forgetStorageObject } from './lib/storage_accounting';
@@ -16,12 +17,17 @@ import { timelineDuration } from '../lib/editor/types';
 import { cancelMediaTask, enqueueMediaTask, failMediaTask } from './mediaTasks';
 import { accountLimit } from './lib/account_limits';
 const activeExportLimit = () => accountLimit('MAX_ACTIVE_EXPORTS_PER_ACCOUNT', 2, 1, 10);
-const startRenderForArgs = { projectId: v.id("projects"), resolution: v.number(), fps: v.number(), quality: v.string(), clipId:v.optional(v.string()), sectionId:v.optional(v.string()) };
+const startRenderForArgs = { projectId: v.id("projects"), resolution: v.number(), fps: v.number(), quality: v.string(), clipId:v.optional(v.string()), sectionId:v.optional(v.string()), timelineId:v.optional(v.string()) };
 export async function startRenderFor(ctx: MutationCtx, ownerId: string, args: ObjectType<typeof startRenderForArgs>) {
   await requireEditorAccess(ctx, ownerId); const project = await requireProject(ctx, args.projectId, ownerId);
   const ultra = await hasUltraPlan(ctx, ownerId);
   if (![720, 1080, ...(ultra ? [2160] : [])].includes(args.resolution) || ![24, 30, 60].includes(args.fps) || !["draft", "standard", "high"].includes(args.quality)) throw new ConvexError(args.resolution === 2160 ? "4K export is part of the Ultra plan." : "Invalid export settings");
-  const saved=currentTimeline(project);
+  // A tab that is not open exports from its stored timeline.
+  const tabs=tabsOf(project),tab=args.timelineId!==undefined?tabs.find(item=>item.id===args.timelineId):undefined;
+  if(args.timelineId!==undefined&&!tab)throw new ConvexError('That timeline no longer exists.');
+  const saved=tab?await storedTabTimeline(ctx,project,tab.id):currentTimeline(project);
+  if(!saved)throw new ConvexError('That timeline no longer exists.');
+  const timelineLabel=tabs.length>1?(tab??tabs.find(item=>item.id===activeTabOf(project)))?.name:undefined;
   if(args.clipId!==undefined&&project.aiRunning)throw new ConvexError('Wait for the current AI edit to finish before exporting this clip.');
   if(args.clipId!==undefined&&args.sectionId!==undefined)throw new ConvexError('Export a clip or a section, not both.');
   let snapshot=saved;const section=args.sectionId!==undefined?saved.sections?.find(item=>item.id===args.sectionId):undefined;
@@ -38,7 +44,7 @@ export async function startRenderFor(ctx: MutationCtx, ownerId: string, args: Ob
   const assetIds: Id<"assets">[] = [];
   for (const clip of timeline.clips) if (clip.assetId) { const id = ctx.db.normalizeId("assets", clip.assetId)!; if (!assetIds.includes(id)) assetIds.push(id); }
   const now = Date.now();
-  const jobId = await ctx.db.insert("renderJobs", { ownerId, projectId: project._id, sourceRevision:project.revision??0, ...(args.clipId!==undefined?{sourceClipId:args.clipId}:{}), ...(section?{sourceSectionId:section.id,label:section.name}:{}), timeline, assetIds, resolution: args.resolution, fps: args.fps, quality: args.quality, status: "queued", progress: 0, createdAt: now, updatedAt: now });
+  const jobId = await ctx.db.insert("renderJobs", { ownerId, projectId: project._id, sourceRevision:project.revision??0, ...(args.clipId!==undefined?{sourceClipId:args.clipId}:{}), ...(section?{sourceSectionId:section.id}:{}), sourceTimelineId:tab?.id??activeTabOf(project), ...(section||timelineLabel?{label:[timelineLabel,section?.name].filter(Boolean).join(' · ')}:{}), timeline, assetIds, resolution: args.resolution, fps: args.fps, quality: args.quality, status: "queued", progress: 0, createdAt: now, updatedAt: now });
   // Ultra exports take the Ultra lane: the large Fly machines, or the 4-vCPU Cloudflare slot.
   const taskId = await enqueueMediaTask(ctx, { ownerId, projectId: project._id, kind: 'render', renderJobId: jobId, ...(ultra ? { lane: 'ultra' as const } : {}) });
   await ctx.db.patch(jobId, { taskId });

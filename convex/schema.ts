@@ -83,6 +83,8 @@ export const projectFields = {
   deleting:v.optional(v.boolean()), title: v.string(), ownerId: v.string(), aspectRatio, createdAt: v.number(), updatedAt: v.number(),
   timeline: v.optional(timelineValidator), revision: v.optional(v.number()), history: v.optional(v.array(timelineValidator)),
   threadId:v.optional(v.string()), ...aiStateFields,
+  // Timeline tabs: the open tab's timeline is `timeline`; the others live in projectTimelines.
+  timelineTabs:v.optional(v.array(v.object({id:v.string(),name:v.string()}))), activeTimelineId:v.optional(v.string()),
 };
 export const projectDocument = v.object({ _id: v.id("projects"), _creationTime: v.number(), ...projectFields });
 export const timedText = v.object({ start: v.number(), end: v.number(), text: v.string() });
@@ -123,7 +125,7 @@ export const renderFields = {
   ownerId: v.string(), projectId: v.id("projects"),
   status: v.union(v.literal("queued"), v.literal("rendering"), v.literal("completed"), v.literal("failed"), v.literal("cancelled")),
   outputStorageId: v.optional(v.id("_storage")), outputR2Key: v.optional(v.string()), outputSize: v.optional(v.number()), error: v.optional(v.string()), createdAt: v.number(), updatedAt: v.number(),
-  sourceRevision:v.optional(v.number()), sourceClipId:v.optional(v.string()), sourceSectionId:v.optional(v.string()), label:v.optional(v.string()), timeline: v.optional(timelineValidator), resolution: v.optional(v.number()), fps: v.optional(v.number()), quality: v.optional(v.string()),
+  sourceRevision:v.optional(v.number()), sourceClipId:v.optional(v.string()), sourceSectionId:v.optional(v.string()), sourceTimelineId:v.optional(v.string()), label:v.optional(v.string()), timeline: v.optional(timelineValidator), resolution: v.optional(v.number()), fps: v.optional(v.number()), quality: v.optional(v.string()),
   progress: v.optional(v.number()), assetIds: v.optional(v.array(v.id("assets"))), taskId: v.optional(v.id('mediaTasks')),
 };
 export const renderDocument = v.object({ _id: v.id("renderJobs"), _creationTime: v.number(), ...renderFields, url: v.union(v.string(), v.null()) });
@@ -190,6 +192,7 @@ export default defineSchema({
   aiTimelinePreviews:defineTable({projectId:v.id('projects'),ownerId:v.string(),runId:v.string(),baseRevision:v.number(),timeline:timelineValidator,label:v.string(),changedClipIds:v.array(v.string()),removedClips:v.array(clipValidator),at:v.number(),sequence:v.number(),updatedAt:v.number()}).index('by_project',['projectId']),
   assistantQueue:defineTable({projectId:v.id('projects'),ownerId:v.string(),prompt:v.string(),pinnedModel:pinnedClaudeModelValidator,attachedAssetIds:v.optional(v.array(v.id('assets'))),selectedClipId:v.optional(v.string()),selectedClipIds:v.optional(v.array(v.string())),playhead:v.optional(v.number()),error:v.optional(v.string()),createdAt:v.number()}).index('by_project',['projectId']),
   aiRuns:defineTable({projectId:v.id('projects'),ownerId:v.string(),...aiStateFields}).index('by_project',['projectId']),
+  projectTimelines:defineTable({projectId:v.id('projects'),ownerId:v.string(),timelineId:v.string(),timeline:timelineValidator,history:v.optional(v.array(timelineValidator))}).index('by_project_timeline',['projectId','timelineId']),
   timelineRevisions:defineTable({projectId:v.id('projects'),ownerId:v.string(),sequence:v.number(),timeline:timelineValidator,key:v.optional(v.string()),keyVersion:v.optional(v.number())}).index('by_project_sequence',['projectId','sequence']),
   projectCatalog:defineTable({projectId:v.id('projects'),ownerId:v.string(),title:v.string(),aspectRatio,createdAt:v.number(),updatedAt:v.number(),clipCount:v.number(),aiRunning:v.boolean(),deleting:v.optional(v.boolean()),coverKind:v.optional(assetKind),coverStorageId:v.optional(v.id('_storage')),coverR2Key:v.optional(v.string())}).index('by_project',['projectId']).index('by_owner_updated',['ownerId','updatedAt']),
   projectDataMigration:defineTable({key:v.string(),cursor:v.union(v.string(),v.null()),completed:v.boolean()}).index('by_key',['key']),

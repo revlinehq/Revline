@@ -69,6 +69,7 @@ import type * as renders from "../renders.js";
 import type * as storage from "../storage.js";
 import type * as storageMigration from "../storageMigration.js";
 import type * as timelineShares from "../timelineShares.js";
+import type * as timelineTabs from "../timelineTabs.js";
 import type * as uploads from "../uploads.js";
 import type * as users from "../users.js";
 
@@ -140,6 +141,7 @@ declare const fullApi: ApiFromModules<{
   storage: typeof storage;
   storageMigration: typeof storageMigration;
   timelineShares: typeof timelineShares;
+  timelineTabs: typeof timelineTabs;
   uploads: typeof uploads;
   users: typeof users;
 }>;
