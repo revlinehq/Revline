@@ -24,3 +24,11 @@ export type CleanupOptions = {
 };
 
 export const DEFAULT_CLEANUP_OPTIONS: CleanupOptions = { minPause: .35, pad: .06, restartWindow: 8 };
+
+/** Bump when detection changes enough that saved maps should be measured again. */
+export const SPEECH_CLEANUP_VERSION = 1;
+export const MAX_CLEANUP_CUTS = 2000;
+export const MAX_CLEANUP_DETAIL = 200;
+
+/** A source's saved cleanup map, stored with its transcript. */
+export type SpeechCleanup = { version: number; cuts: CleanupCut[] };

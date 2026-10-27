@@ -1,7 +1,7 @@
 import { acousticCuts } from './acoustic';
 import { analyzeFrames } from './frames';
 import { fillerWordCuts, restartCuts } from './restarts';
-import { DEFAULT_CLEANUP_OPTIONS, type CleanupCut, type CleanupOptions, type SpeechWord } from './types';
+import { DEFAULT_CLEANUP_OPTIONS, SPEECH_CLEANUP_VERSION, type CleanupCut, type CleanupOptions, type SpeechWord } from './types';
 
 export * from './types';
 export { analyzeFrames } from './frames';
@@ -48,3 +48,6 @@ export function keptRanges(start: number, end: number, cuts: CleanupCut[], minCo
   if (cursor < end) ranges.push({ start: cursor, end });
   return ranges.filter(range => range.end - range.start >= 1 / 30);
 }
+
+/** A saved map from the current detection, safe to reuse without measuring again. */
+export const currentSpeechCleanup = (cleanup?: { version?: number } | null) => cleanup?.version === SPEECH_CLEANUP_VERSION;

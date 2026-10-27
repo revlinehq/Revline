@@ -6,12 +6,14 @@ import type { ConvexHttpClient } from 'convex/browser';
 import type { MediaWorkItem } from '../../convex/mediaTasks';
 import { AnalysisError,isRetryableAnalysisError } from '../media-analysis/errors';
 import { TRANSCRIPT_VERSION } from '../media-analysis/transcript';
+import { SPEECH_CLEANUP_VERSION } from '../speech-cleanup/types';
 const mocks = vi.hoisted(() => ({ extractVideoWindow: vi.fn(), prepareComposition: vi.fn(), writeComposition: vi.fn(), runRenderWorker: vi.fn(), renderPlainExport: vi.fn(), detectShots: vi.fn(), understandVideo: vi.fn(), inspectVideo: vi.fn(), prepareVideo: vi.fn(), preparePreviewVideo:vi.fn(),probePreviewVideo:vi.fn(), downloadOwnedMedia: vi.fn(), extractTranscriptionAudio: vi.fn(), transcribeWithDeepgram: vi.fn(), probeMedia: vi.fn(), extractSourceAudio: vi.fn(), measureAudioWaveform: vi.fn(), measureAudioActivity: vi.fn(), uploadMediaFile: vi.fn() }));
 vi.mock('../media-analysis/detect-shots', () => ({ detectShots: mocks.detectShots }));
 vi.mock('../media-analysis/gemini', async importOriginal => ({ ...await importOriginal<typeof import('../media-analysis/gemini')>(), understandVideo: mocks.understandVideo, inspectVideo: mocks.inspectVideo }));
 vi.mock('../media-analysis/deepgram', () => ({ transcribeWithDeepgram: mocks.transcribeWithDeepgram }));
 vi.mock('../media-analysis/io', async importOriginal => ({ ...await importOriginal<typeof import('../media-analysis/io')>(), downloadOwnedMedia: mocks.downloadOwnedMedia, extractVideoWindow: mocks.extractVideoWindow, extractTranscriptionAudio: mocks.extractTranscriptionAudio, prepareVideo: mocks.prepareVideo, probeMedia: mocks.probeMedia }));
 vi.mock('./extract-audio', () => ({ extractSourceAudio: mocks.extractSourceAudio }));
+vi.mock('./speech-cleanup-analysis', () => ({ measureSpeechCleanup: async () => undefined }));
 vi.mock('./audio-waveform', () => ({ measureAudioWaveform: mocks.measureAudioWaveform }));
 vi.mock('./measure-audio-activity', () => ({ measureAudioActivity: mocks.measureAudioActivity }));
 vi.mock('./upload-media-file', () => ({ uploadMediaFile: mocks.uploadMediaFile }));
@@ -163,10 +165,11 @@ test('transcription uses Deepgram and compressed audio without requiring Gemini'
   expect(mocks.understandVideo).not.toHaveBeenCalled();
 });
 
-test('a saved transcript and audio activity return without downloading or calling a provider again', async () => {
+test('a saved transcript, audio activity and cleanup map return without downloading or calling a provider again', async () => {
   const task = work('transcribe'), transcript = { words: [], segments: [], version: TRANSCRIPT_VERSION };
-  task.asset!.analysis = { transcript, audioActivity };
-  expect(await processMediaTask(task, {} as ConvexHttpClient, 'https://fixture.convex.cloud', AbortSignal.timeout(5000), () => {})).toEqual({ analysis: { transcript, audioActivity } });
+  const speechCleanup = { version: SPEECH_CLEANUP_VERSION, cuts: [] };
+  task.asset!.analysis = { transcript, audioActivity, speechCleanup };
+  expect(await processMediaTask(task, {} as ConvexHttpClient, 'https://fixture.convex.cloud', AbortSignal.timeout(5000), () => {})).toEqual({ analysis: { transcript, audioActivity, speechCleanup } });
   expect(mocks.downloadOwnedMedia).not.toHaveBeenCalled();
   expect(mocks.transcribeWithDeepgram).not.toHaveBeenCalled();
   expect(mocks.measureAudioActivity).not.toHaveBeenCalled();

@@ -8,7 +8,7 @@ import { dimensions, timelineDuration, type MediaAsset } from '@/lib/editor/type
 import { downloadOwnedMedia, extractTranscriptionAudio, extractVideoWindow, needsAnalysisVideoProxy, prepareVideo, probeMedia } from '@/lib/media-analysis/io';
 import { inspectVideo, inspectVideoFrames, understandVideo } from '@/lib/media-analysis/gemini';
 import { transcribeWithDeepgram } from '@/lib/media-analysis/deepgram';
-import { currentTranscript } from '@/lib/media-analysis/transcript';
+import { currentTranscript, type Transcript } from '@/lib/media-analysis/transcript';
 import { detectShots } from '@/lib/media-analysis/detect-shots';
 import { detectMusicBeats } from '@/lib/media-analysis/music-beats';
 import { AnalysisError } from '@/lib/media-analysis/errors';
@@ -27,6 +27,8 @@ import { renderPlainExport } from './plain-export-render';
 import { plainExportPlan } from '@/lib/editor/plain-export';
 import { captureTimelineFrames, reviewComposition } from './review-composition';
 import { extractInspectionFrames } from './inspect-video-frames';
+import { measureSpeechCleanup } from './speech-cleanup-analysis';
+import { currentSpeechCleanup } from '@/lib/speech-cleanup';
 import { MEDIA_ACTIVITY_LABELS, type MediaTaskActivity, type ReportMediaActivity } from '@/lib/media-analysis/activity';
 
 export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpClient, convexUrl: string, signal: AbortSignal, onProgress: (percent: number) => void, onActivity?: ReportMediaActivity): Promise<MediaTaskResult> {
@@ -109,7 +111,7 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
     if(task.kind==='preview'&&asset.kind==='video'&&asset.previewVersion===1&&asset.previewR2Key&&[asset.previewSize,asset.previewWidth,asset.previewHeight,asset.previewFps].every(value=>typeof value==='number'&&Number.isFinite(value)&&value>0))return {};
     if (task.kind === 'extract' && asset.audioExtracted) return asset.audioAssetId ? { audioAssetId: asset.audioAssetId } : {};
     if (task.kind === 'waveform' && asset.waveform) return { waveform: asset.waveform };
-    if (task.kind === 'transcribe' && currentTranscript(asset.analysis?.transcript) && asset.analysis?.audioActivity) return { analysis: { transcript: asset.analysis.transcript, audioActivity: asset.analysis.audioActivity } };
+    if (task.kind === 'transcribe' && currentTranscript(asset.analysis?.transcript) && asset.analysis?.audioActivity && currentSpeechCleanup(asset.analysis.speechCleanup)) return { analysis: { transcript: asset.analysis.transcript, audioActivity: asset.analysis.audioActivity, speechCleanup: asset.analysis.speechCleanup } };
     if (task.kind === 'understand' && asset.analysis?.understanding) return { analysis: { understanding: asset.analysis.understanding } };
     const sourceAsset = task.kind === 'transcribe' ? task.transcriptionAsset ?? asset : asset;
     if (!sourceAsset.url) throw new AnalysisError('The prepared source media is unavailable.', 400);
@@ -191,14 +193,20 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
       if (!media.hasAudio) throw new AnalysisError('This source has no audio to transcribe.', 400);
       // Older whole-file transcripts lost retakes; only a current one is reused.
       const savedTranscript = currentTranscript(asset.analysis?.transcript) ? asset.analysis?.transcript : undefined;
-      if (savedTranscript) return { analysis: { transcript: savedTranscript, audioActivity: await runPhase('Measuring quiet audio', () => measureAudioActivity(source, signal, savedTranscript)) } };
+      // The cleanup map is measured from the same source audio as the quiet intervals.
+      const measure = async (transcript: Transcript) => {
+        const audioActivity = await runPhase('Measuring quiet audio', () => measureAudioActivity(source, signal, transcript));
+        const speechCleanup = await runPhase('Finding fillers, pauses and retakes', () => measureSpeechCleanup(source, asset.duration ?? media.duration, transcript, signal));
+        return { analysis: { transcript, audioActivity, ...(speechCleanup ? { speechCleanup } : {}) } };
+      };
+      if (savedTranscript) return measure(savedTranscript);
       const key = process.env.DEEPGRAM_API_KEY;
       if (!key) throw new AnalysisError('Deepgram transcription is not configured on the media worker.', 503);
       const audio = join(directory, 'speech.mp3');
       await runPhase('Preparing transcription audio',()=>extractTranscriptionAudio(source, audio, signal));
       onProgress(30);
       const transcript = await runPhase('Transcribing speech',()=>transcribeWithDeepgram(audio, asset.duration ?? media.duration, key, signal));
-      return { analysis: { transcript, audioActivity: await runPhase('Measuring quiet audio', () => measureAudioActivity(source, signal, transcript)) } };
+      return measure(transcript);
     }
     if (task.kind === 'beats') {
       if (!media.hasAudio) throw new AnalysisError('This source has no audio to measure.', 400);
