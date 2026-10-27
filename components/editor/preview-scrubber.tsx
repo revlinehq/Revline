@@ -14,17 +14,22 @@ export function PreviewScrubber({ time, duration, fps, onSeek, controls, playing
   if (pending.current && pending.current.from !== time) pending.current = null;
   const fill = useRef<HTMLSpanElement>(null), thumb = useRef<HTMLSpanElement>(null);
   const progress = duration > 0 ? Math.min(1, Math.max(0, time / duration)) : 0;
-  // While playing the editor does not re-render every frame; follow the live clock directly.
+  // While playing the editor does not re-render every frame; follow the live clock directly. The
+  // clock advances in video-frame steps, so glide at real-time speed between them and re-sync on
+  // each new reading: the bar moves smoothly at the display's frame rate.
   useEffect(() => {
     if (!playing || !readTime || duration <= 0) return;
-    let raf = 0;
-    const tick = () => {
-      const at = `${Math.min(1, Math.max(0, readTime() / duration)) * 100}%`;
-      if (fill.current) fill.current.style.width = at;
-      if (thumb.current) thumb.current.style.left = at;
+    let raf = 0, anchor = readTime(), wall = performance.now();
+    const tick = (now: number) => {
+      const clock = readTime();
+      if (clock !== anchor) { anchor = clock; wall = now; }
+      const shown = Math.min(duration, anchor + Math.min(0.25, (now - wall) / 1000));
+      const at = Math.min(1, Math.max(0, shown / duration));
+      if (fill.current) fill.current.style.transform = `scaleX(${at})`;
+      if (thumb.current) thumb.current.style.left = `${at * 100}%`;
       raf = requestAnimationFrame(tick);
     };
-    tick();
+    raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
   }, [playing, readTime, duration]);
   const seekAt = (clientX: number) => {
@@ -47,7 +52,7 @@ export function PreviewScrubber({ time, duration, fps, onSeek, controls, playing
           pending.current = { from: time, to: target }; onSeek(target);
         }
       }}>
-      <span ref={fill} className="preview-scrubber-fill" style={{ width: `${progress * 100}%` }} />
+      <span ref={fill} className="preview-scrubber-fill" style={{ transform: `scaleX(${progress})` }} />
       <span ref={thumb} className="preview-scrubber-thumb" style={{ left: `${progress * 100}%` }} />
     </div>
     {!controls && <span className="preview-scrubber-time">{clock(time)} / {clock(duration)}</span>}

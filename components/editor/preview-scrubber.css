@@ -2,8 +2,8 @@
 .preview-scrubber{display:flex;align-items:center;gap:10px;width:max(100%,380px);margin-left:min(0px,calc((100% - 380px) / 2));pointer-events:auto}
 .preview-scrubber-bar{position:relative;flex:1;height:18px;cursor:pointer;touch-action:none;outline:none}
 .preview-scrubber-bar::before{content:'';position:absolute;left:0;right:0;top:50%;height:4px;margin-top:-2px;border-radius:2px;background:#ffffff26}
-.preview-scrubber-fill{position:absolute;left:0;top:50%;height:4px;margin-top:-2px;border-radius:2px;background:var(--revline-accent,#7c3aed)}
-.preview-scrubber-thumb{position:absolute;top:50%;width:12px;height:12px;margin:-6px 0 0 -6px;border-radius:50%;background:#fff;box-shadow:0 1px 4px #0008;transition:transform .12s ease}
+.preview-scrubber-fill{position:absolute;left:0;right:0;top:50%;height:4px;margin-top:-2px;border-radius:2px;background:var(--revline-accent,#7c3aed);transform-origin:left center;will-change:transform}
+.preview-scrubber-thumb{position:absolute;top:50%;will-change:left;width:12px;height:12px;margin:-6px 0 0 -6px;border-radius:50%;background:#fff;box-shadow:0 1px 4px #0008;transition:transform .12s ease}
 .preview-scrubber-bar:hover .preview-scrubber-thumb,.preview-scrubber-bar:focus-visible .preview-scrubber-thumb{transform:scale(1.25)}
 .preview-scrubber-bar:focus-visible::before{box-shadow:0 0 0 2px var(--revline-accent,#7c3aed)}
 .preview-scrubber-time{flex:none;color:var(--ws-muted,#a1a3ab);font:500 11px/1 var(--font-inter),Inter,sans-serif;font-variant-numeric:tabular-nums}

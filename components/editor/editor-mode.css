@@ -21,3 +21,6 @@
   .conversation-editor .mobile-panel-controls{height:46px;align-items:center;padding:5px 16px}
   .conversation-editor .mobile-panel-controls .editor-mode-switch{width:184px}
 }
+/* A hidden chat leaves nothing behind: its content and resize handle go, the workspace takes the width. */
+.conversation-editor .editor-body[data-chat-collapsed] .editor-sidebar,.conversation-editor .editor-body[data-chat-collapsed] .chat-resize-handle{display:none!important}
+.conversation-editor .editor-body[data-chat-collapsed] .editor-chat-panel{flex-basis:0!important;min-width:0!important;width:0!important;overflow:hidden!important}
