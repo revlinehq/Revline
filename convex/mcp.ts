@@ -9,7 +9,7 @@ import { timelineDuration } from '../lib/editor/types';
 import { aspectRatio } from './schema';
 import { createProjectFor, listProjectsFor } from './projects';
 import { importVideoFor } from './mediaTasks';
-import { startRenderFor } from './renders';
+import { exportFileName, startRenderFor } from './renders';
 import { enqueueMediaTask } from './mediaTasks';
 import { requireMediaTaskCapacity } from './lib/account_limits';
 import { internal } from './_generated/api';
@@ -87,8 +87,8 @@ export const mediaTask = internalQuery({ args: { ownerId: v.string(), taskId: v.
   return { taskId: task._id, kind: task.kind, status: task.status, progress: task.progress, ...(task.error ? { error: task.error } : {}), ...(task.assetId ? { assetId: task.assetId } : {}) };
 }});
 
-export const startExport = internalMutation({ args: { ownerId: v.string(), projectId: v.string(), resolution: v.number(), fps: v.number(), quality: v.string() }, returns: v.any(), handler: async (ctx, args) => {
-  const jobId = await startRenderFor(ctx, args.ownerId, { projectId: projectIdOf(ctx, args.projectId), resolution: args.resolution, fps: args.fps, quality: args.quality });
+export const startExport = internalMutation({ args: { ownerId: v.string(), projectId: v.string(), resolution: v.number(), fps: v.number(), quality: v.string(), sectionId: v.optional(v.string()) }, returns: v.any(), handler: async (ctx, args) => {
+  const jobId = await startRenderFor(ctx, args.ownerId, { projectId: projectIdOf(ctx, args.projectId), resolution: args.resolution, fps: args.fps, quality: args.quality, ...(args.sectionId ? { sectionId: args.sectionId } : {}) });
   return { jobId, note: 'Poll getExport with jobId; a completed export returns a download link.' };
 }});
 
@@ -96,7 +96,7 @@ export const exportJob = internalQuery({ args: { ownerId: v.string(), jobId: v.s
   const id = ctx.db.normalizeId('renderJobs', args.jobId), job = id ? await ctx.db.get(id) : null;
   if (!job || job.ownerId !== args.ownerId) throw new ConvexError('Export not found.');
   const project = await requireProject(ctx, job.projectId, args.ownerId, false);
-  return { jobId: job._id, status: job.status, progress: job.progress, resolution: job.resolution, fps: job.fps, ...(job.error ? { error: job.error } : {}), output: job.status === 'completed' ? { storageId: job.outputStorageId, r2Key: job.outputR2Key, fileName: `${project.title.replace(/\.mp4$/i, '')}.mp4` } : null };
+  return { jobId: job._id, status: job.status, progress: job.progress, resolution: job.resolution, fps: job.fps, ...(job.label ? { section: job.label } : {}), ...(job.error ? { error: job.error } : {}), output: job.status === 'completed' ? { storageId: job.outputStorageId, r2Key: job.outputR2Key, fileName: exportFileName(project.title, job.label) } : null };
 }});
 
 /** Render up to six timeline frames as export would; the worker answers within seconds. */

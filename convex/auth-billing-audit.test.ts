@@ -749,7 +749,8 @@ test('simultaneous exports in separate projects share one account limit and canc
   await f.owner.mutation(api.renders.cancel, { jobId: accepted[0] });
   await expect(f.owner.mutation(api.renders.start, { projectId: projectIds[refusedIndex], resolution: 720, fps: 30, quality: 'draft' })).resolves.toBeTruthy();
   const occupied = await f.t.run(ctx => ctx.db.get(accepted[1]));
-  await expect(f.owner.mutation(api.renders.start, { projectId: occupied!.projectId, resolution: 720, fps: 30, quality: 'draft' })).rejects.toThrow('already in progress');
+  // A project may queue several exports; only the account limit refuses this one.
+  await expect(f.owner.mutation(api.renders.start, { projectId: occupied!.projectId, resolution: 720, fps: 30, quality: 'draft' })).rejects.toThrow('exports in progress');
   await f.t.mutation(internal.editorAccess.grantComplimentary, { ownerId: otherId, reason: 'Independent export allowance' });
   const otherProject = await f.other.mutation(api.projects.create, { title: 'Other owner', aspectRatio: 'vertical' });
   await f.other.mutation(api.projects.saveTimeline, { projectId: otherProject, expectedRevision: 0, timeline: { fps: 30, aspectRatio: 'vertical', clips: [{ id: 'other-title', kind: 'graphic', start: 0, duration: 1, sourceStart: 0, text: 'Independent export' }] } });

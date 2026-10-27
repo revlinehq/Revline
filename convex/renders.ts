@@ -1,4 +1,4 @@
-import { clipExportTimeline } from '../lib/editor/clip-export';
+import { clipExportTimeline, sectionExportTimeline } from '../lib/editor/clip-export';
 import { flyRendersEnabled, queuedExportLimit } from './lib/render_seats';
 import { projectIdentity } from './lib/project_data';
 import { forgetStorageObject } from './lib/storage_accounting';
@@ -16,19 +16,19 @@ import { timelineDuration } from '../lib/editor/types';
 import { cancelMediaTask, enqueueMediaTask, failMediaTask } from './mediaTasks';
 import { accountLimit } from './lib/account_limits';
 const activeExportLimit = () => accountLimit('MAX_ACTIVE_EXPORTS_PER_ACCOUNT', 2, 1, 10);
-const startRenderForArgs = { projectId: v.id("projects"), resolution: v.number(), fps: v.number(), quality: v.string(), clipId:v.optional(v.string()) };
+const startRenderForArgs = { projectId: v.id("projects"), resolution: v.number(), fps: v.number(), quality: v.string(), clipId:v.optional(v.string()), sectionId:v.optional(v.string()) };
 export async function startRenderFor(ctx: MutationCtx, ownerId: string, args: ObjectType<typeof startRenderForArgs>) {
   await requireEditorAccess(ctx, ownerId); const project = await requireProject(ctx, args.projectId, ownerId);
   const ultra = await hasUltraPlan(ctx, ownerId);
   if (![720, 1080, ...(ultra ? [2160] : [])].includes(args.resolution) || ![24, 30, 60].includes(args.fps) || !["draft", "standard", "high"].includes(args.quality)) throw new ConvexError(args.resolution === 2160 ? "4K export is part of the Ultra plan." : "Invalid export settings");
   const saved=currentTimeline(project);
   if(args.clipId!==undefined&&project.aiRunning)throw new ConvexError('Wait for the current AI edit to finish before exporting this clip.');
-  let snapshot=saved;
-  if(args.clipId!==undefined){try{snapshot=clipExportTimeline(saved,args.clipId);}catch(error){throw new ConvexError((error as Error).message);}}
+  if(args.clipId!==undefined&&args.sectionId!==undefined)throw new ConvexError('Export a clip or a section, not both.');
+  let snapshot=saved;const section=args.sectionId!==undefined?saved.sections?.find(item=>item.id===args.sectionId):undefined;
+  if(args.sectionId!==undefined&&!section)throw new ConvexError('That section no longer exists. Pick another one to export.');
+  try{if(args.clipId!==undefined)snapshot=clipExportTimeline(saved,args.clipId);else if(section)snapshot=sectionExportTimeline(saved,section.id);}catch(error){throw new ConvexError((error as Error).message);}
   const timeline = await validateTimeline(ctx, project, snapshot); if (!timeline.clips.length) throw new ConvexError("Add a clip before exporting");
   if (timelineDuration(timeline) > MAX_EXPORT_SECONDS) throw new ConvexError("Exports currently support up to five minutes. Shorten the final edit before exporting; your full arrangement remains saved.");
-  const active=await Promise.all((['queued','rendering'] as const).map(status=>ctx.db.query('renderJobs').withIndex('by_owner_project_status',q=>q.eq('ownerId',ownerId).eq('projectId',project._id).eq('status',status)).first()));
-  if(active.some(Boolean))throw new ConvexError('A render is already in progress');
   // With Fly, seats bound concurrent renders; beyond them exports wait in a longer queue.
   const limit = flyRendersEnabled() ? queuedExportLimit(ultra) : activeExportLimit();
   // The indexed reads and insert share one transaction, so separate projects
@@ -38,7 +38,7 @@ export async function startRenderFor(ctx: MutationCtx, ownerId: string, args: Ob
   const assetIds: Id<"assets">[] = [];
   for (const clip of timeline.clips) if (clip.assetId) { const id = ctx.db.normalizeId("assets", clip.assetId)!; if (!assetIds.includes(id)) assetIds.push(id); }
   const now = Date.now();
-  const jobId = await ctx.db.insert("renderJobs", { ownerId, projectId: project._id, sourceRevision:project.revision??0, ...(args.clipId!==undefined?{sourceClipId:args.clipId}:{}), timeline, assetIds, resolution: args.resolution, fps: args.fps, quality: args.quality, status: "queued", progress: 0, createdAt: now, updatedAt: now });
+  const jobId = await ctx.db.insert("renderJobs", { ownerId, projectId: project._id, sourceRevision:project.revision??0, ...(args.clipId!==undefined?{sourceClipId:args.clipId}:{}), ...(section?{sourceSectionId:section.id,label:section.name}:{}), timeline, assetIds, resolution: args.resolution, fps: args.fps, quality: args.quality, status: "queued", progress: 0, createdAt: now, updatedAt: now });
   // Ultra exports take the Ultra lane: the large Fly machines, or the 4-vCPU Cloudflare slot.
   const taskId = await enqueueMediaTask(ctx, { ownerId, projectId: project._id, kind: 'render', renderJobId: jobId, ...(ultra ? { lane: 'ultra' as const } : {}) });
   await ctx.db.patch(jobId, { taskId });
@@ -91,7 +91,7 @@ export const downloadSource = internalQuery({
     if (!job || job.ownerId !== ownerId || job.status !== 'completed' || !job.outputStorageId && !job.outputR2Key) throw new ConvexError('Completed export not found');
     const project = await projectIdentity(ctx, job.projectId, ownerId);
     const saved = await ctx.db.get(project._id);
-    return { storageId: job.outputStorageId, r2Key: job.outputR2Key, fileName: `${saved!.title.replace(/\.mp4$/i, '')}.mp4` };
+    return { storageId: job.outputStorageId, r2Key: job.outputR2Key, fileName: exportFileName(saved!.title, job.label) };
   },
 });
 export const download = action({
@@ -108,6 +108,12 @@ export const list = query({ args: { projectId: v.id("projects"), limit: v.option
   const jobs = await ctx.db.query("renderJobs").withIndex("by_ownerId_projectId", q => q.eq("ownerId", ownerId).eq("projectId", args.projectId)).order("desc").take(listLimit(args.limit));
   return await Promise.all(jobs.map(async job => {const {timeline:_timeline,...summary}=job;return { ...summary, url: await mediaUrl(ctx, { storageId: job.outputStorageId, r2Key: job.outputR2Key }) };}));
 }});
+
+/** The download name: the project title, plus the section name for a section export. */
+export function exportFileName(title: string, label?: string) {
+  const base = title.replace(/\.mp4$/i, '');
+  return `${label ? `${base} - ${label}` : base}.mp4`;
+}
 
 export async function removeOwnedExport(ctx:MutationCtx,ownerId:string,jobId:Id<'renderJobs'>) {
   const job=await ctx.db.get(jobId);
