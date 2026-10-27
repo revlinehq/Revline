@@ -223,7 +223,7 @@ function ProjectEditor({project}: {project:Doc<'projects'>}) {
     if(requireAll&&cancellation.signal.aborted)throw new Error('Upload cancelled. Your request is still saved; add your footage when you’re ready to start the edit.');
     if(requireAll&&incomplete)throw new Error('Some footage could not be imported. Your request is still saved; retry the missing files before starting the edit.');
   }
-  async function exportVideo(settings:ExportSettings){await saves.wait();const id=await renderStart({projectId,...settings});setJobId(id);}
+  async function exportVideo(settings:ExportSettings){await saves.wait();const id=await renderStart({projectId,...settings});setJobId(id);return id as string;}
   const latestExport=job??jobs?.[0]??null;
   // Unsaved edits land in the open tab before another one opens.
   const tabActions=useMemo(()=>({

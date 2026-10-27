@@ -68,7 +68,7 @@ export type EditorShellProps = {
   canResumeEdit?:boolean;
   assistantEditSnapshot?:AssistantEditSnapshot;
   assistantPanel?: ReactNode;
-  onExport: (settings: ExportSettings) => Promise<void>; onDownloadExport?: (jobId:string)=>Promise<void>; onCancelExport?: (jobId:string)=>Promise<void>; exportState: ExportState; exports?: NonNullable<ExportState>[]; timelineTabs?: TimelineTab[]; timelineTabActions?: TimelineTabActions; demo?: boolean; ultra?: boolean; embedded?: boolean;
+  onExport: (settings: ExportSettings) => Promise<string | void>; onDownloadExport?: (jobId:string)=>Promise<void>; onCancelExport?: (jobId:string)=>Promise<void>; exportState: ExportState; exports?: NonNullable<ExportState>[]; timelineTabs?: TimelineTab[]; timelineTabActions?: TimelineTabActions; demo?: boolean; ultra?: boolean; embedded?: boolean;
   analysisBusy?: string | null; analysisSource?: string | null; analysisProgress?: number | null; analysisStartedAt?:number|null; assistantBudgetUsed?:number; preparationActivity?:string; onLoadMore?: () => void; canLoadMore?: boolean;
   projectId?: string; workspaceOnly?: boolean; onImportVideo?: (url:string)=>Promise<void>; videoImports?: VideoImportState[];
   onRefreshMedia?:RefreshPlaybackMedia;
@@ -152,11 +152,14 @@ export function EditorShell(p: EditorShellProps) {
     const latest=[p.exportState,...p.exports??[]].filter((job):job is NonNullable<ExportState>=>!!job&&matches(job)).sort((a,b)=>(b.createdAt??0)-(a.createdAt??0))[0];
     return latest??null;
   },[p.exportState,p.exports,target,exportClipId,exportSection,onlyOpenTab,activeTabId]);
-  const startExports=async(settings:ExportSettings)=>{
-    if(!onlyOpenTab){for(const timelineId of exportTabs)await p.onExport({...settings,timelineId});return;}
-    if(exportClipId)return p.onExport({...settings,clipId:exportClipId});
-    if(target==='all'){for(const section of sections)await p.onExport({...settings,sectionId:section.id});return;}
-    return p.onExport({...settings,...(exportSection?{sectionId:exportSection.id}:{})});
+  // Returns the started job ids so the dialog can follow a batch of several videos.
+  const startExports=async(settings:ExportSettings):Promise<string[]>=>{
+    const started:string[]=[],start=async(next:ExportSettings)=>{const id=await p.onExport(next);if(id)started.push(id);};
+    if(!onlyOpenTab){for(const timelineId of exportTabs)await start({...settings,timelineId});}
+    else if(exportClipId)await start({...settings,clipId:exportClipId});
+    else if(target==='all'){for(const section of sections)await start({...settings,sectionId:section.id});}
+    else await start({...settings,...(exportSection?{sectionId:exportSection.id}:{})});
+    return started;
   };
   const [desktopMode, setDesktopMode] = useEditorModePreference();
   const [mobileConversation, setMobileChat] = useState(true);
@@ -457,6 +460,6 @@ export function EditorShell(p: EditorShellProps) {
     {preparing&&<ProjectImportStage importTask={p.videoImports?.find(task=>!['completed','cancelled'].includes(task.status))} upload={p.upload} onBrowse={browse} onUpload={p.onUpload}/>}
     {compact && inspectorOpen && <Sheet open={inspectorOpen} onOpenChange={setInspectorOpen}><SheetContent className="preview-inspector-sheet" showCloseButton={false}><div className="mobile-inspector-header"><SheetTitle>My media</SheetTitle><Button type="button" variant="ghost" size="icon" aria-label="Close editing panel" onClick={() => setInspectorOpen(false)}><X size={18}/></Button></div><SheetDescription>Add media to your timeline.</SheetDescription>{inspector}</SheetContent></Sheet>}
     <MediaImportDialog open={importOpen} onOpenChange={setImportOpen} onUpload={files=>{void (importDestination==='composer'?p.onAttachUpload??p.onDropUpload:editLock.current||importDestination==='sources'?p.onDropUpload:p.onUpload)(files);}} onImportVideo={editing?undefined:p.onImportVideo} disabled={!!p.upload}/>
-    <ExportDialog ultra={p.ultra} open={exportOpen} onOpenChange={setExportOpen} title={exportClipId?`${p.title} clip`:!onlyOpenTab?`${p.title} · ${exportTabs.length} ${exportTabs.length===1?'video':'videos'}`:target==='all'?`${p.title} · all videos`:exportSection?exportSection.name:p.title} timeline={exportTimeline} clipOnly={!!exportClipId} coverUrl={assets.find(a => a.kind === 'image')?.url} onExport={startExports} onCancel={p.onCancelExport} onDownload={p.onDownloadExport} state={exportState} demo={!!p.demo} targets={sections.map(section=>({id:section.id,label:`${section.name} · ${formatTime(section.end-section.start)}`}))} target={target==='clip'?'timeline':target} onTarget={setExportTarget} videoCount={!onlyOpenTab?Math.max(1,exportTabs.length):target==='all'?sections.length:1} totalSeconds={!onlyOpenTab?tabs.filter(tab=>exportTabs.includes(tab.id)).reduce((sum,tab)=>sum+(tab.active?timelineDuration(timeline):tab.duration),0):target==='all'?sections.reduce((sum,section)=>sum+section.end-section.start,0):undefined} timelines={multiTab?tabs.map(tab=>({id:tab.id,name:tab.name,aspectRatio:tab.active?timeline.aspectRatio:tab.aspectRatio,duration:tab.active?timelineDuration(timeline):tab.duration})):[]} selectedTimelines={exportTabs} onSelectTimelines={setExportTabs} exports={(p.exports??[]).map(job=>({id:job.requestId!,status:job.status,progress:job.progress,label:job.label,createdAt:job.createdAt??0,resolution:job.resolution,sourceClipId:job.sourceClipId}))} />
+    <ExportDialog ultra={p.ultra} open={exportOpen} onOpenChange={setExportOpen} title={exportClipId?`${p.title} clip`:!onlyOpenTab?`${p.title} · ${exportTabs.length} ${exportTabs.length===1?'video':'videos'}`:target==='all'?`${p.title} · all videos`:exportSection?exportSection.name:p.title} timeline={exportTimeline} clipOnly={!!exportClipId} coverUrl={assets.find(a => a.kind === 'image')?.url} onExport={startExports} onCancel={p.onCancelExport} onDownload={p.onDownloadExport} state={exportState} demo={!!p.demo} targets={sections.map(section=>({id:section.id,label:`${section.name} · ${formatTime(section.end-section.start)}`}))} target={target==='clip'?'timeline':target} onTarget={setExportTarget} videoCount={!onlyOpenTab?Math.max(1,exportTabs.length):target==='all'?sections.length:1} totalSeconds={!onlyOpenTab?tabs.filter(tab=>exportTabs.includes(tab.id)).reduce((sum,tab)=>sum+(tab.active?timelineDuration(timeline):tab.duration),0):target==='all'?sections.reduce((sum,section)=>sum+section.end-section.start,0):undefined} timelines={multiTab?tabs.map(tab=>({id:tab.id,name:tab.name,aspectRatio:tab.active?timeline.aspectRatio:tab.aspectRatio,duration:tab.active?timelineDuration(timeline):tab.duration})):[]} selectedTimelines={exportTabs} onSelectTimelines={setExportTabs} exports={(p.exports??[]).map(job=>({id:job.requestId!,status:job.status,progress:job.progress,label:job.label,createdAt:job.createdAt??0,resolution:job.resolution,sourceClipId:job.sourceClipId,aspectRatio:job.sourceTimelineId===activeTabId?timeline.aspectRatio:tabs.find(tab=>tab.id===job.sourceTimelineId)?.aspectRatio}))} />
   </main>;
 }
