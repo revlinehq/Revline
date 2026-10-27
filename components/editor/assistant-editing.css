@@ -12,4 +12,5 @@
 /* A connected MCP agent working on this project: centered, not a chat reply. */
 .assistant-agent-notice{display:flex;flex-direction:column;align-items:center;gap:4px;margin:18px auto 6px;text-align:center;font-size:12px;line-height:1.4}
 .assistant-agent-notice span{color:var(--ws-muted,#777)}
-.assistant-agent-notice strong{font-weight:500;color:var(--ws-text,#ededef)}
+.assistant-agent-notice strong{display:inline-flex;align-items:center;gap:6px;font-weight:500;color:var(--ws-text,#ededef)}
+.assistant-agent-logo{width:14px;height:14px;flex-shrink:0}

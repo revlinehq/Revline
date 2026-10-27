@@ -9,6 +9,7 @@ import { Check, ArrowUpRight, Lightbulb, RotateCcw, X } from 'lucide-react';
 import { AssistantModelPicker, AssistantReasoningPicker } from './assistant-model-picker';
 import {EDITOR_MODELS,OPENAI_EDIT_MODELS,editorModelSupportsFast,type ClaudeModelChoice,type EditorReasoningEffort,type EditorSpeedMode} from '@/lib/ai/claude-model';
 import { EditComposer, type ComposerAttachment } from '@/components/workspace/edit-composer';
+import { ClaudeLogo, OpenAILogo } from '@/components/workspace/ai-app-logos';
 import {useQuery,useMutation} from 'convex/react';
 import { useUIMessages } from '@convex-dev/agent/react';
 import { api } from '@/convex/_generated/api';
@@ -76,6 +77,13 @@ function AssistantResponseText({ text, streaming }: { text: string; streaming: b
   // Keep the last received chunks fading after Convex marks the message complete.
   // A historical message mounts with this off, so opening a chat never replays it.
   return <ChatProse text={text} animate={receivedLive || streaming} />;
+}
+
+/** The connected app's mark: Claude apps get Claude's, ChatGPT and Codex get OpenAI's. */
+function AgentLogo({ name }: { name: string }) {
+  if (/claude|anthropic/i.test(name)) return <ClaudeLogo className="assistant-agent-logo" />;
+  if (/gpt|openai|codex/i.test(name)) return <OpenAILogo className="assistant-agent-logo" />;
+  return null;
 }
 
 function AssistantPanelBody({ messages, running, editing:editingTimeline=running, configured, error, onSend, onRetry, onStop, hasClips, demo, onLoadMore, canLoadMore, onAttach, activity, activitySource, activityStartedAt, budgetUsed, draftKey, suggestions, onSuggestion, editSnapshot, canResumeEdit=false, defaultModelChoice, modelSwitcher = false, allowedModels = PRODUCTION_CLAUDE_MODEL_CHOICES, attachments, onRemoveAttachment, composerBusy = false, requireMedia = false, conversationStarted = false, queued=[],queuePaused=false,onRemoveQueued,onResumeQueue,externalAgent }: {
@@ -217,7 +225,7 @@ function AssistantPanelBody({ messages, running, editing:editingTimeline=running
         </div>;
       })}
       {!groups.length && waiting && <div className="assistant-reply"><AssistantReplyHeader loading label={stopState==='stopping'?'Stopping…':'Working'} startedAt={activityStartedAt}/></div>}
-      {externalAgent && <div data-chat-follow className="assistant-agent-notice" role="status"><span>Connected through MCP</span><strong>{externalAgent} is working</strong></div>}
+      {externalAgent && <div data-chat-follow className="assistant-agent-notice" role="status"><span>Connected through MCP</span><strong><AgentLogo name={externalAgent}/>{externalAgent} is working</strong></div>}
       {!waiting && stopState==='stopped'  && <AssistantActivity label="Stopped." detail="Your existing edit is still here." state="stopped"/>}
       {showSuggestions && suggestions?.items.length && onSuggestion && configured ? <div data-chat-follow className="assistant-source-suggestions" aria-label="Suggested edits from this footage"><span title={suggestions.sourceName}><Lightbulb size={12} aria-hidden="true" />Ideas for {suggestions.sourceName}</span>{suggestions.items.map((suggestion, index) => <button key={`${suggestions.clipId}-${index}`} type="button" disabled={composerBusy || sending || !!pendingReply} onClick={() => void chooseSuggestion(suggestion)}><span>{suggestion.label}</span><ArrowUpRight size={14} aria-hidden="true" /></button>)}</div> : null}
       {visibleError && <div data-chat-follow><AssistantActivity className="chat-error" label="Needs attention" detail={assistantErrorDetail(visibleError)} state="error"/></div>}
