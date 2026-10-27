@@ -6,10 +6,10 @@ import type { ConvexHttpClient } from 'convex/browser';
 import type { MediaWorkItem } from '../../convex/mediaTasks';
 import { AnalysisError,isRetryableAnalysisError } from '../media-analysis/errors';
 import { TRANSCRIPT_VERSION } from '../media-analysis/transcript';
-const mocks = vi.hoisted(() => ({ extractVideoWindow: vi.fn(), prepareComposition: vi.fn(), writeComposition: vi.fn(), runRenderWorker: vi.fn(), renderPlainExport: vi.fn(), detectShots: vi.fn(), understandVideo: vi.fn(), inspectVideo: vi.fn(), prepareVideo: vi.fn(), preparePreviewVideo:vi.fn(),probePreviewVideo:vi.fn(), downloadOwnedMedia: vi.fn(), extractTranscriptionAudio: vi.fn(), transcribeWithWhisper: vi.fn(), probeMedia: vi.fn(), extractSourceAudio: vi.fn(), measureAudioWaveform: vi.fn(), measureAudioActivity: vi.fn(), uploadMediaFile: vi.fn() }));
+const mocks = vi.hoisted(() => ({ extractVideoWindow: vi.fn(), prepareComposition: vi.fn(), writeComposition: vi.fn(), runRenderWorker: vi.fn(), renderPlainExport: vi.fn(), detectShots: vi.fn(), understandVideo: vi.fn(), inspectVideo: vi.fn(), prepareVideo: vi.fn(), preparePreviewVideo:vi.fn(),probePreviewVideo:vi.fn(), downloadOwnedMedia: vi.fn(), extractTranscriptionAudio: vi.fn(), transcribeWithDeepgram: vi.fn(), probeMedia: vi.fn(), extractSourceAudio: vi.fn(), measureAudioWaveform: vi.fn(), measureAudioActivity: vi.fn(), uploadMediaFile: vi.fn() }));
 vi.mock('../media-analysis/detect-shots', () => ({ detectShots: mocks.detectShots }));
 vi.mock('../media-analysis/gemini', async importOriginal => ({ ...await importOriginal<typeof import('../media-analysis/gemini')>(), understandVideo: mocks.understandVideo, inspectVideo: mocks.inspectVideo }));
-vi.mock('../media-analysis/whisper', () => ({ transcribeWithWhisper: mocks.transcribeWithWhisper }));
+vi.mock('../media-analysis/deepgram', () => ({ transcribeWithDeepgram: mocks.transcribeWithDeepgram }));
 vi.mock('../media-analysis/io', async importOriginal => ({ ...await importOriginal<typeof import('../media-analysis/io')>(), downloadOwnedMedia: mocks.downloadOwnedMedia, extractVideoWindow: mocks.extractVideoWindow, extractTranscriptionAudio: mocks.extractTranscriptionAudio, prepareVideo: mocks.prepareVideo, probeMedia: mocks.probeMedia }));
 vi.mock('./extract-audio', () => ({ extractSourceAudio: mocks.extractSourceAudio }));
 vi.mock('./audio-waveform', () => ({ measureAudioWaveform: mocks.measureAudioWaveform }));
@@ -40,7 +40,7 @@ test('playback preview uploads a parent-attached variant without creating an ext
   expect(await processMediaTask(task,{} as ConvexHttpClient,'https://fixture.convex.cloud',signal,()=>{})).toEqual({});
   expect(mocks.preparePreviewVideo).toHaveBeenCalledWith(expect.stringMatching(/source$/),expect.stringMatching(/preview\.mp4$/),signal);
   expect(mocks.uploadMediaFile).toHaveBeenCalledWith(expect.stringMatching(/preview\.mp4$/),expect.objectContaining({taskId:'task',leaseToken:'lease',projectId:'project',purpose:'preview',sourceAssetId:'asset',previewVersion:1,previewFps:59.94,kind:'video',contentType:'video/mp4',duration:3,width:1080,height:1920}),expect.any(Object),signal);
-  expect(mocks.understandVideo).not.toHaveBeenCalled();expect(mocks.transcribeWithWhisper).not.toHaveBeenCalled();expect(mocks.extractSourceAudio).not.toHaveBeenCalled();
+  expect(mocks.understandVideo).not.toHaveBeenCalled();expect(mocks.transcribeWithDeepgram).not.toHaveBeenCalled();expect(mocks.extractSourceAudio).not.toHaveBeenCalled();
 });
 
 test('a preview retry reuses both the immutable original and prepared playback copy',async()=>{
@@ -151,14 +151,14 @@ test('native video understanding does not depend on running a local shot inspect
   await expect(processMediaTask(work('understand'), {} as ConvexHttpClient, 'https://fixture.convex.cloud', controller.signal, () => {})).resolves.toEqual({ analysis: { understanding: semantic } });
 });
 
-test('transcription uses Whisper and compressed audio without requiring Gemini', async () => {
-  vi.stubEnv('OPENAI_API_KEY', 'fixture-openai-key'); vi.stubEnv('GOOGLE_GENERATIVE_AI_API_KEY', '');
+test('transcription uses Deepgram and compressed audio without requiring Gemini', async () => {
+  vi.stubEnv('DEEPGRAM_API_KEY', 'fixture-deepgram-key'); vi.stubEnv('GOOGLE_GENERATIVE_AI_API_KEY', '');
   const transcript = { words: [{ text: 'Hello.', start: .1, end: .8 }], segments: [{ text: 'Hello.', start: .1, end: .8 }] };
-  mocks.transcribeWithWhisper.mockResolvedValue(transcript);
+  mocks.transcribeWithDeepgram.mockResolvedValue(transcript);
   const signal = AbortSignal.timeout(5000);
   expect(await processMediaTask(work('transcribe'), {} as ConvexHttpClient, 'https://fixture.convex.cloud', signal, () => {})).toEqual({ analysis: { transcript, audioActivity } });
   expect(mocks.extractTranscriptionAudio).toHaveBeenCalledWith(expect.stringMatching(/source$/), expect.stringMatching(/speech\.mp3$/), signal);
-  expect(mocks.transcribeWithWhisper).toHaveBeenCalledWith(expect.stringMatching(/speech\.mp3$/), 3, 'fixture-openai-key', signal);
+  expect(mocks.transcribeWithDeepgram).toHaveBeenCalledWith(expect.stringMatching(/speech\.mp3$/), 3, 'fixture-deepgram-key', signal);
   expect(mocks.measureAudioActivity).toHaveBeenCalledWith(expect.stringMatching(/source$/), signal, transcript);
   expect(mocks.understandVideo).not.toHaveBeenCalled();
 });
@@ -168,12 +168,12 @@ test('a saved transcript and audio activity return without downloading or callin
   task.asset!.analysis = { transcript, audioActivity };
   expect(await processMediaTask(task, {} as ConvexHttpClient, 'https://fixture.convex.cloud', AbortSignal.timeout(5000), () => {})).toEqual({ analysis: { transcript, audioActivity } });
   expect(mocks.downloadOwnedMedia).not.toHaveBeenCalled();
-  expect(mocks.transcribeWithWhisper).not.toHaveBeenCalled();
+  expect(mocks.transcribeWithDeepgram).not.toHaveBeenCalled();
   expect(mocks.measureAudioActivity).not.toHaveBeenCalled();
 });
 
 test('cached transcription backfills only local audio measurements from the prepared audio without provider keys', async () => {
-  vi.stubEnv('OPENAI_API_KEY', ''); vi.stubEnv('GOOGLE_GENERATIVE_AI_API_KEY', '');
+  vi.stubEnv('DEEPGRAM_API_KEY', ''); vi.stubEnv('GOOGLE_GENERATIVE_AI_API_KEY', '');
   const task = work('transcribe'), signal = AbortSignal.timeout(5000);
   const transcript = { words: [{ text: 'Goodbye.', start: .2, end: 2.9 }], segments: [{ text: 'Goodbye.', start: .2, end: 2.9 }], version: TRANSCRIPT_VERSION };
   task.asset!.analysis = { transcript };
@@ -185,15 +185,15 @@ test('cached transcription backfills only local audio measurements from the prep
   expect(mocks.downloadOwnedMedia).toHaveBeenCalledWith('https://media.example.com/prepared-audio', expect.any(String), 'https://fixture.convex.cloud', 5_000_000, signal, expect.any(Object));
   expect(mocks.measureAudioActivity).toHaveBeenCalledWith(expect.stringMatching(/source$/), signal, transcript);
   expect(mocks.extractTranscriptionAudio).not.toHaveBeenCalled();
-  expect(mocks.transcribeWithWhisper).not.toHaveBeenCalled();
+  expect(mocks.transcribeWithDeepgram).not.toHaveBeenCalled();
   expect(mocks.understandVideo).not.toHaveBeenCalled();
   expect(mocks.inspectVideo).not.toHaveBeenCalled();
 });
 
 test('wordless and uncertain audio measurements retain the actual empty transcription', async () => {
-  vi.stubEnv('OPENAI_API_KEY', 'fixture-openai-key');
+  vi.stubEnv('DEEPGRAM_API_KEY', 'fixture-deepgram-key');
   const transcript = { words: [], segments: [] }, uncertain = { ...audioActivity, quiet: [], reliable: false };
-  mocks.transcribeWithWhisper.mockResolvedValue(transcript);
+  mocks.transcribeWithDeepgram.mockResolvedValue(transcript);
   mocks.measureAudioActivity.mockResolvedValue(uncertain);
   expect(await processMediaTask(work('transcribe'), {} as ConvexHttpClient, 'https://fixture.convex.cloud', AbortSignal.timeout(5000), () => {})).toEqual({ analysis: { transcript, audioActivity: uncertain } });
 });
@@ -207,29 +207,29 @@ test('a saved overview returns immediately without downloading or calling Gemini
 });
 
 test('Listening downloads prepared small audio while keeping the original video time bounds',async()=>{
-  vi.stubEnv('OPENAI_API_KEY','fixture-openai-key');
+  vi.stubEnv('DEEPGRAM_API_KEY','fixture-deepgram-key');
   const task=work('transcribe');
   task.transcriptionAsset={...task.asset!,kind:'audio',url:'https://media.example.com/prepared-audio',size:200,duration:3.02};
   mocks.probeMedia.mockResolvedValue({duration:3.02,hasAudio:true,hasVideo:false});
-  mocks.transcribeWithWhisper.mockResolvedValue({words:[],segments:[]});
+  mocks.transcribeWithDeepgram.mockResolvedValue({words:[],segments:[]});
   const signal=AbortSignal.timeout(5000);
   await processMediaTask(task,{} as ConvexHttpClient,'https://fixture.convex.cloud',signal,()=>{});
   expect(mocks.downloadOwnedMedia).toHaveBeenCalledWith('https://media.example.com/prepared-audio',expect.any(String),'https://fixture.convex.cloud',200,signal,expect.any(Object));
-  expect(mocks.transcribeWithWhisper).toHaveBeenCalledWith(expect.any(String),3,'fixture-openai-key',signal);
+  expect(mocks.transcribeWithDeepgram).toHaveBeenCalledWith(expect.any(String),3,'fixture-deepgram-key',signal);
 });
 
 test('transcription reports its own missing provider configuration accurately', async () => {
-  vi.stubEnv('OPENAI_API_KEY', ''); vi.stubEnv('GOOGLE_GENERATIVE_AI_API_KEY', 'fixture-google-key');
-  await expect(processMediaTask(work('transcribe'), {} as ConvexHttpClient, 'https://fixture.convex.cloud', AbortSignal.timeout(5000), () => {})).rejects.toMatchObject({ status: 503, message: expect.stringContaining('OpenAI Whisper') });
+  vi.stubEnv('DEEPGRAM_API_KEY', ''); vi.stubEnv('GOOGLE_GENERATIVE_AI_API_KEY', 'fixture-google-key');
+  await expect(processMediaTask(work('transcribe'), {} as ConvexHttpClient, 'https://fixture.convex.cloud', AbortSignal.timeout(5000), () => {})).rejects.toMatchObject({ status: 503, message: expect.stringContaining('Deepgram') });
   expect(mocks.extractTranscriptionAudio).not.toHaveBeenCalled();
-  expect(mocks.transcribeWithWhisper).not.toHaveBeenCalled();
+  expect(mocks.transcribeWithDeepgram).not.toHaveBeenCalled();
 });
 
 test('a source without audio fails before submitting a transcription', async () => {
-  vi.stubEnv('OPENAI_API_KEY', 'fixture-key');
+  vi.stubEnv('DEEPGRAM_API_KEY', 'fixture-key');
   mocks.probeMedia.mockResolvedValue({ duration: 3, hasAudio: false, hasVideo: true });
   await expect(processMediaTask(work('transcribe'), {} as ConvexHttpClient, 'https://fixture.convex.cloud', AbortSignal.timeout(5000), () => {})).rejects.toMatchObject({ status: 400 });
-  expect(mocks.transcribeWithWhisper).not.toHaveBeenCalled();
+  expect(mocks.transcribeWithDeepgram).not.toHaveBeenCalled();
 });
 
 test('audio upload starts while waveform processing is pending and survives until both finish', async () => {

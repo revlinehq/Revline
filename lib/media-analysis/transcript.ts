@@ -3,9 +3,10 @@ import { z } from 'zod';
 export type TranscriptWord = { start: number; end: number; text: string };
 export type Transcript = { words: TranscriptWord[]; segments: TranscriptWord[]; version?: number };
 export const MAX_TRANSCRIPT_WORDS = 5000;
-/** 2: Whisper runs on short pause-cut windows. Whole-file Whisper (unversioned)
- * merged repeated takes and dropped speech, so those transcripts are redone. */
-export const TRANSCRIPT_VERSION = 2;
+/** 3: Deepgram Nova-3 on the whole file, with tight word times and filler words.
+ * Whisper transcripts (1, 2) stretched word times over fillers and pauses, so cuts
+ * landed mid-word; those transcripts are redone. */
+export const TRANSCRIPT_VERSION = 3;
 export const currentTranscript = (transcript?: { version?: number } | null) => transcript?.version === TRANSCRIPT_VERSION;
 const contentSchema = z.object({ text: z.string().optional(), annotations: z.array(z.unknown()).optional() });
 const interactionSchema = z.object({ output_text: z.string().optional(), outputs: z.array(contentSchema).optional(), steps: z.array(z.object({ type: z.string().optional(), content: z.array(contentSchema).optional() })).optional() });

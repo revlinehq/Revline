@@ -7,7 +7,7 @@ import type { MediaWorkItem, MediaTaskResult } from '@/convex/mediaTasks';
 import { dimensions, timelineDuration, type MediaAsset } from '@/lib/editor/types';
 import { downloadOwnedMedia, extractTranscriptionAudio, extractVideoWindow, needsAnalysisVideoProxy, prepareVideo, probeMedia } from '@/lib/media-analysis/io';
 import { inspectVideo, inspectVideoFrames, understandVideo } from '@/lib/media-analysis/gemini';
-import { transcribeWithWhisper } from '@/lib/media-analysis/whisper';
+import { transcribeWithDeepgram } from '@/lib/media-analysis/deepgram';
 import { currentTranscript } from '@/lib/media-analysis/transcript';
 import { detectShots } from '@/lib/media-analysis/detect-shots';
 import { detectMusicBeats } from '@/lib/media-analysis/music-beats';
@@ -192,12 +192,12 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
       // Older whole-file transcripts lost retakes; only a current one is reused.
       const savedTranscript = currentTranscript(asset.analysis?.transcript) ? asset.analysis?.transcript : undefined;
       if (savedTranscript) return { analysis: { transcript: savedTranscript, audioActivity: await runPhase('Measuring quiet audio', () => measureAudioActivity(source, signal, savedTranscript)) } };
-      const key = process.env.OPENAI_API_KEY;
-      if (!key) throw new AnalysisError('OpenAI Whisper transcription is not configured on the media worker.', 503);
+      const key = process.env.DEEPGRAM_API_KEY;
+      if (!key) throw new AnalysisError('Deepgram transcription is not configured on the media worker.', 503);
       const audio = join(directory, 'speech.mp3');
       await runPhase('Preparing transcription audio',()=>extractTranscriptionAudio(source, audio, signal));
       onProgress(30);
-      const transcript = await runPhase('Transcribing speech',()=>transcribeWithWhisper(audio, asset.duration ?? media.duration, key, signal));
+      const transcript = await runPhase('Transcribing speech',()=>transcribeWithDeepgram(audio, asset.duration ?? media.duration, key, signal));
       return { analysis: { transcript, audioActivity: await runPhase('Measuring quiet audio', () => measureAudioActivity(source, signal, transcript)) } };
     }
     if (task.kind === 'beats') {

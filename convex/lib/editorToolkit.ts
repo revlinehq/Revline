@@ -172,7 +172,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
     });
     let next = await request();
     // An already running pre-upgrade task may finish with transcript only.
-    // One local backfill upgrades that evidence without repeating Whisper.
+    // One local backfill upgrades that evidence without repeating transcription.
     if (requireAudioActivity && next.analysis?.transcript && next.analysis.audioActivity?.version !== AUDIO_ACTIVITY_VERSION) next = await request();
     if (requireAudioActivity && (!next.analysis?.transcript || next.analysis.audioActivity?.version !== AUDIO_ACTIVITY_VERSION)) throw new AnalysisStepError('Audio boundary measurement is unavailable. No unverified speech trims were applied.');
     return next;

@@ -65,11 +65,11 @@ Verification recorded on 2026-10-13:
 
 The 2026-10-13 text update is deployed as controller version `4b832ecc-17b5-4b72-be5e-382d32771961`, using processor image digest `sha256:ea8c8836619f475bf849bdf7740efbb5b4c8fba3c43591be367c5bf7dbfa89fc`. It includes editable text rotation and the Neon echo, Lyric slam and Kinetic stack presets. The frozen image rendered all three presets and rotated text roots in an isolated, network-disabled check. A synthetic MP4 render separately verified entrance/hold/exit frames, split timing and preview/export agreement. Image comparisons use bounded pixel statistics instead of large Buffer assertion diffs, which exhausted local RAM on failures; local verification runs use a capped Node heap.
 
-The processor uses three secret values:
+The processor uses these secret values:
 
 - `RENDER_WORKER_SECRET`: the media processor's worker credential, matching Convex `RENDER_WORKER_SECRET`. Fly export machines use a separate export-only key (`MEDIA_WORKER_SECRET_EXPORTS` in Convex, passed into each machine's config by `convex/flyRender.ts`); they cannot claim uploads or analysis. To rotate this one without stalling running containers, set Convex `RENDER_WORKER_SECRET_PREVIOUS` to the old value first, then the new value in Convex, here and in the GitHub `production` environment, and unset the previous value once containers have restarted.
 - `GOOGLE_GENERATIVE_AI_API_KEY`: the production Gemini provider credential used for native video understanding and inspection.
-- `OPENAI_API_KEY`: the production OpenAI credential used by Whisper for word-timed speech transcription. Audio is compressed to 32 kbps mono MP3; uploads exceeding 24 MB are split into source windows and their measured word times are offset back into source time. The stored transcript supports up to 5,000 words and 500 overview segments; overview compaction preserves every measured word.
+- `DEEPGRAM_API_KEY`: the production Deepgram credential used by Nova-3 for word-timed speech transcription. The whole source's audio is compressed to 32 kbps mono MP3 and sent in one request; filler words are kept with their own times. The stored transcript supports up to 5,000 words and 500 overview segments; overview compaction preserves every measured word.
 
 Non-secret backend/media URLs and the Gemini video model are declared in the edge Wrangler configuration. There is no Clerk secret, Anthropic secret, Convex deploy key or Cloudflare token inside the image. Workers secrets are passed into the process at container startup; no secret is passed as a Docker build argument or baked into a layer.
 

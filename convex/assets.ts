@@ -207,7 +207,7 @@ export async function saveAssetAnalysis(ctx: MutationCtx, asset: Doc<"assets">, 
   if (changes.transcript) {
     if (changes.transcript.segments.length > 500 || changes.transcript.words.length > 5000) throw new ConvexError("Transcript is too large");
     for (const item of changes.transcript.segments) if (!validRange(item.start, item.end) || !item.text.trim() || item.text.length > 2000) throw new ConvexError("Invalid transcript timing or text");
-    // Whisper can measure an instantaneous word. Preserve its timing rather
+    // A transcriber can measure an instantaneous word. Preserve its timing rather
     // than assigning an invented duration; rendered segments remain positive.
     for (const item of changes.transcript.words) if (!Number.isFinite(item.start) || !Number.isFinite(item.end) || item.start < 0 || item.start > duration || item.end < item.start || item.end > duration + 0.5 || !item.text.trim() || item.text.length > 2000) throw new ConvexError("Invalid transcript timing or text");
   }

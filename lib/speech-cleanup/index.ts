@@ -10,7 +10,7 @@ export { analyzeFrames } from './frames';
  * Speech cleanup engine: finds what to cut from a talking recording, in three layers.
  * 1. Filler words a verbatim transcript kept ("um", "uh").
  * 2. Acoustic gaps and stretched words: pauses, breaths and held fillers measured in 10ms frames,
- *    which catches what a clean-text transcriber (Whisper) leaves out of its words.
+ *    which catches what a clean-text transcriber leaves out of its words.
  * 3. Restarts: repeated phrases, keeping only the final take.
  * Returns merged, time-ordered cuts in SOURCE seconds; nothing here edits a timeline.
  */

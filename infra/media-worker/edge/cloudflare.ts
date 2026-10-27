@@ -3,7 +3,7 @@ import { ConvexHttpClient } from 'convex/browser';
 import { makeFunctionReference } from 'convex/server';
 import { MEDIA_PROCESSOR_VERSION } from '../../../lib/media-analysis/processor-version';
 
-type ProcessorSecrets = { RENDER_WORKER_SECRET: string; GOOGLE_GENERATIVE_AI_API_KEY: string; OPENAI_API_KEY?: string; FAL_KEY?: string };
+type ProcessorSecrets = { RENDER_WORKER_SECRET: string; GOOGLE_GENERATIVE_AI_API_KEY: string; DEEPGRAM_API_KEY?: string; FAL_KEY?: string };
 type Bindings = ProcessorEnv & ProcessorSecrets;
 const TIMEOUT_MS = 5 * 60_000;
 const INSTANCE_TYPE = 'standard-3';
@@ -91,7 +91,7 @@ export class MediaProcessor extends DurableObject<Bindings> {
         MEDIA_WORKER_URL: this.env.MEDIA_WORKER_URL,
         RENDER_WORKER_SECRET: this.env.RENDER_WORKER_SECRET,
         GOOGLE_GENERATIVE_AI_API_KEY: this.env.GOOGLE_GENERATIVE_AI_API_KEY,
-        ...(this.env.OPENAI_API_KEY ? { OPENAI_API_KEY: this.env.OPENAI_API_KEY } : {}),
+        ...(this.env.DEEPGRAM_API_KEY ? { DEEPGRAM_API_KEY: this.env.DEEPGRAM_API_KEY } : {}),
         // Background removal (fal.ai); without it cut-out tasks fail with a clear message.
         ...(this.env.FAL_KEY ? { FAL_KEY: this.env.FAL_KEY } : {}),
         GEMINI_VIDEO_MODEL: this.env.GEMINI_VIDEO_MODEL,
