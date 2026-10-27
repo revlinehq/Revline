@@ -108,7 +108,7 @@ Keep this file factual. Update the status when something ships, and do not promo
 
 - **74 structured editing tools** act on the real timeline. The preview updates after every saved edit, and every AI edit can be undone.
 - **Models:**
-  - GPT-6.1 Sol (default), GPT-6 Astra and GPT-5.4 mini.
+  - GPT-6.1 Sol, GPT-6 Astra and GPT-6.1 Terra (default in production).
   - Claude Sonnet 5.5 and Opus 5.5 when they are configured.
   - Reasoning levels from low to max.
 - **Queueing:** messages sent while an edit runs are queued, and Stop cancels without losing saved work.

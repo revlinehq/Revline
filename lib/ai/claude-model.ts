@@ -13,10 +13,13 @@ export const CLAUDE_EDIT_MODELS = [
 // Native OpenAI Standard rates, USD / 1M tokens, verified 2026-10-15.
 // https://developers.openai.com/api/docs/models/gpt-6.1-sol
 // https://developers.openai.com/api/docs/models/gpt-6-astra
+// https://openai.com/index/introducing-gpt-6-1-terra/ (verified 2026-10-27)
 // Above 272K input tokens the full request uses 2x input/cache and 1.5x output.
 export const OPENAI_EDIT_MODELS = [
   { id: 'gpt-6.1-sol', label: 'GPT-6.1 Sol', modelId: 'gpt-6.1-sol', pricing: { input: 2, cacheRead: .10, cacheWrite: 2.50, output: 10 } },
   { id: 'gpt-6-astra', label: 'GPT-6 Astra', modelId: 'gpt-6-astra', pricing: { input: 10, cacheRead: 1, cacheWrite: 12.50, output: 50 } },
+  { id: 'gpt-6.1-terra', label: 'GPT-6.1 Terra', modelId: 'gpt-6.1-terra', pricing: { input: 1, cacheRead: .05, cacheWrite: 1.25, output: 5 } },
+  // No longer offered (Terra replaced it); kept so past costs and stale queued requests still resolve.
   // Cheaper agent model (third-party price trackers, Oct 2026); cache rates assume Sol's ratios.
   // Rejects prompt_cache_options and the 'max' effort (OpenAI API, Oct 2026); reasoning modes are GPT-6 only.
   { id: 'gpt-5.4-mini', label: 'GPT-5.4 mini', modelId: 'gpt-5.4-mini', pricing: { input: .75, cacheRead: .075, cacheWrite: .9375, output: 4.5 }, legacyOptions: true },
