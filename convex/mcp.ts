@@ -92,6 +92,13 @@ export const startExport = internalMutation({ args: { ownerId: v.string(), proje
   return { jobId, note: 'Poll getExport with jobId; a completed export returns a download link.' };
 }});
 
+/** The project's recent exports, newest first: the queue plus finished files. */
+export const listExports = internalQuery({ args: { ownerId: v.string(), projectId: v.string(), limit: v.number() }, returns: v.any(), handler: async (ctx, args) => {
+  const project = await requireProject(ctx, projectIdOf(ctx, args.projectId), args.ownerId, false);
+  const jobs = await ctx.db.query('renderJobs').withIndex('by_ownerId_projectId', q => q.eq('ownerId', args.ownerId).eq('projectId', project._id)).order('desc').take(args.limit);
+  return jobs.map(job => ({ jobId: job._id, status: job.status, progress: job.progress, resolution: job.resolution, fps: job.fps, createdAt: new Date(job.createdAt).toISOString(), current: job.sourceRevision === (project.revision ?? 0), ...(job.label ? { section: job.label, sectionId: job.sourceSectionId } : job.sourceClipId ? { clipId: job.sourceClipId } : {}), ...(job.error ? { error: job.error } : {}), output: job.status === 'completed' ? { storageId: job.outputStorageId, r2Key: job.outputR2Key, fileName: exportFileName(project.title, job.label) } : null }));
+}});
+
 export const exportJob = internalQuery({ args: { ownerId: v.string(), jobId: v.string() }, returns: v.any(), handler: async (ctx, args) => {
   const id = ctx.db.normalizeId('renderJobs', args.jobId), job = id ? await ctx.db.get(id) : null;
   if (!job || job.ownerId !== args.ownerId) throw new ConvexError('Export not found.');

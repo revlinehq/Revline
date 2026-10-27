@@ -21,7 +21,8 @@ export const MCP_INSTRUCTIONS = `Revline is a video editor. These tools edit the
 
 Workflow: listProjects -> getProject -> inspectTimeline (same projectId) -> edit -> inspectTimeline again to confirm. Use getFrames to see the composited result at a few timeline seconds after visual changes (captions, framing, effects). Every editing tool needs projectId. Clip IDs, asset IDs and times come only from inspectTimeline, inspectClip, getProject and inspectAssetAnalysis; never invent them. Timeline times are seconds on the timeline; tools that say SOURCE seconds mean time inside the original media.
 Before speech cuts, captions or take selection, read the transcript with inspectAssetAnalysis (run analyzeMedia mode "transcribe" first if no transcript is saved). Use readSkill for detailed guidance on a kind of edit. One call edits one thing; a failed call saves nothing. If another edit is running on the project, wait and retry.
-Share the editorUrl from getProject so the user can watch. Export with exportVideo and poll getExport for the download link.
+Bring in footage with uploadMedia (a local file: run the script it returns, then finishUpload) or importVideoLink (a URL).
+Share the editorUrl from getProject so the user can watch. Export with exportVideo and poll getExport for the download link. To make several separate videos from one timeline, mark each with addSection and export each by sectionId; exports queue, and listExports shows them all.
 
 Editing quality rules:
 ${EDITOR_STYLE_RULES}`;

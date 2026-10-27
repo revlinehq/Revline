@@ -25,6 +25,7 @@ const PROJECT_TOOLS = {
   getMediaTask: { description: 'Status and progress of an import or media-processing task.', inputSchema: z.object({ taskId: z.string().min(1) }) },
   exportVideo: { description: 'Render the saved timeline to MP4, or only one section with sectionId (sections are listed by inspectTimeline). Call once per section to export several; they queue and render in turn. 2160 (4K) needs the Ultra plan. Returns a jobId to poll with getExport.', inputSchema: z.object({ projectId: projectIdField, sectionId: z.string().min(1).optional(), resolution: z.union([z.literal(720), z.literal(1080), z.literal(2160)]).optional(), fps: z.union([z.literal(24), z.literal(30), z.literal(60)]).optional(), quality: z.enum(['draft', 'standard', 'high']).optional() }) },
   getFrames: { description: 'Look at the edit: render 1 to 6 frames of the saved timeline at the given timeline seconds, composited exactly as the export draws them (footage, text, effects). Use it to check framing, captions and effects after editing. Takes about 10-30 seconds.', inputSchema: z.object({ projectId: projectIdField, times: z.array(z.number().min(0)).min(1).max(6) }) },
+  listExports: { description: 'Recent exports of a project, newest first: queued and rendering ones with progress, and finished ones with a temporary download link. current is false when the timeline changed after the export started.', inputSchema: z.object({ projectId: projectIdField, limit: z.number().int().min(1).max(20).optional() }) },
   getExport: { description: 'Status of an export; a completed export includes a temporary download link.', inputSchema: z.object({ jobId: z.string().min(1) }) },
 } as const;
 type ProjectToolName = keyof typeof PROJECT_TOOLS;
@@ -110,6 +111,10 @@ async function callProjectTool(ctx: ActionCtx, ownerId: string, name: ProjectToo
         await new Promise(resolve => setTimeout(resolve, 1500));
       }
       return result('Rendering frames is taking longer than expected. Try again in a minute.', true);
+    }
+    case 'listExports': {
+      const jobs = await ctx.runQuery(internal.mcp.listExports, { ownerId, projectId: input.projectId, limit: input.limit ?? 10 }) as { output: { storageId?: Id<'_storage'>; r2Key?: string; fileName: string } | null }[];
+      return result(await Promise.all(jobs.map(async ({ output, ...job }) => { const downloadUrl = output ? await mediaDownloadUrl(ctx, { storageId: output.storageId, r2Key: output.r2Key }, output.fileName) : null; return { ...job, ...(downloadUrl ? { downloadUrl } : {}) }; })));
     }
     case 'getExport': {
       const { output, ...job } = await ctx.runQuery(internal.mcp.exportJob, { ownerId, jobId: input.jobId });
