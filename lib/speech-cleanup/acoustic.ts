@@ -1,5 +1,6 @@
 import { frameAt, timeAt, type Frames } from './frames';
 import type { CleanupCut, CleanupOptions, SpeechWord } from './types';
+import type { WordEdge } from './edges';
 
 type FrameClass = 'silence' | 'breath' | 'hold' | 'speech';
 
@@ -55,7 +56,7 @@ const KIND_LABEL = { silence: 'pause', breath: 'breath', hold: 'filler' } as con
 
 /** Acoustic cuts: non-speech between words, and fillers or pauses hidden inside words whose
  * timestamps a clean-text transcriber stretched over them. */
-export function acousticCuts(words: SpeechWord[], frames: Frames, options: CleanupOptions): CleanupCut[] {
+export function acousticCuts(words: SpeechWord[], frames: Frames, options: CleanupOptions, edges: WordEdge[] = []): CleanupCut[] {
   const labels = classify(frames), cuts: CleanupCut[] = [];
   const pad = frameAt(options.pad);
   const push = (kind: CleanupCut['kind'], from: number, to: number, confidence: number, detail: string) => {
@@ -91,9 +92,12 @@ export function acousticCuts(words: SpeechWord[], frames: Frames, options: Clean
   }
   // 3. Silence anywhere, whatever the transcript says: transcribers pad word times and let
   // neighbouring words touch, so a quiet stretch can sit inside or between "words".
+  // A word with its own measured sound (a quiet "it") splits the silence around it and is never cut.
+  const spans = edges.map(edge => [frameAt(edge.start), frameAt(edge.end)] as const).filter(([from, to]) => to - from >= 3);
   for (const run of smooth(runs(labels, 0, labels.length), 'silence', 2)) {
-    if (timeAt(run.to - run.from) < options.minPause) continue;
-    push('pause', run.from, run.to, .8, `${timeAt(run.to - run.from).toFixed(2)}s silence`);
+    let pieces = [[run.from, run.to]];
+    for (const [from, to] of spans) pieces = pieces.flatMap(([a, b]) => to <= a || from >= b ? [[a, b]] : [[a, from], [to, b]].filter(([x, y]) => y > x));
+    for (const [a, b] of pieces) if (timeAt(b - a) >= options.minPause) push('pause', a, b, .8, `${timeAt(b - a).toFixed(2)}s silence`);
   }
   return cuts;
 }

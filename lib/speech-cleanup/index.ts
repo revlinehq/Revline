@@ -1,6 +1,6 @@
 import { acousticCuts } from './acoustic';
 import { analyzeFrames } from './frames';
-import { speechEdges } from './edges';
+import { speechEdges, type WordEdge } from './edges';
 import { fillerWordCuts, restartCuts, retakeCuts } from './restarts';
 import { DEFAULT_CLEANUP_OPTIONS, SPEECH_CLEANUP_VERSION, type CleanupCut, type CleanupOptions, type SpeechWord } from './types';
 
@@ -23,15 +23,16 @@ export function findSpeechCleanup(words: SpeechWord[], samples: Float32Array, sa
 /** The cleanup cuts plus each word's measured edges (in the given word order), from one pass over the audio. */
 export function analyzeSpeech(words: SpeechWord[], samples: Float32Array, sampleRate: number, options: Partial<CleanupOptions> = {}) {
   const frames = analyzeFrames(samples, sampleRate);
-  return { cuts: cleanupCuts(words, frames, { ...DEFAULT_CLEANUP_OPTIONS, ...options }), edges: speechEdges(words, frames) };
+  const edges = speechEdges(words, frames);
+  return { cuts: cleanupCuts(words, edges, frames, { ...DEFAULT_CLEANUP_OPTIONS, ...options }), edges };
 }
 
-function cleanupCuts(words: SpeechWord[], frames: ReturnType<typeof analyzeFrames>, settings: CleanupOptions): CleanupCut[] {
+function cleanupCuts(words: SpeechWord[], edges: WordEdge[], frames: ReturnType<typeof analyzeFrames>, settings: CleanupOptions): CleanupCut[] {
   const sorted = [...words].sort((a, b) => a.start - b.start);
   const restarts = restartCuts(sorted, settings), fillers = fillerWordCuts(sorted);
   // Sentences are compared without their stutters and fillers, so two takes of a line match.
   const spoken = sorted.filter(word => ![...restarts, ...fillers].some(cut => word.start >= cut.start - 1e-6 && word.start < cut.end));
-  const cuts = mergeCuts([...fillers, ...restarts, ...retakeCuts(spoken, settings), ...acousticCuts(sorted, frames, settings)]);
+  const cuts = mergeCuts([...fillers, ...restarts, ...retakeCuts(spoken, settings), ...acousticCuts(sorted, frames, settings, edges)]);
   return joinWordless(cuts, sorted);
 }
 
@@ -39,12 +40,14 @@ function cleanupCuts(words: SpeechWord[], frames: ReturnType<typeof analyzeFrame
  * first word's sound (at most 80ms earlier, for soft onsets like "th") and ends just after the last
  * word's decay. A join then carries neither room tone nor a detached breath, and never a clipped word. */
 export function snapToSpeech(range: { start: number; end: number }, words: SpeechWord[], edges: number[], lead = .03, tail = .05) {
+  if (edges.length !== words.length * 2) return range;
   let first = -1, last = -1;
   for (let index = 0; index < words.length; index++) {
-    const middle = (words[index].start + words[index].end) / 2;
+    // Membership by the word's measured sound, not its padded transcript span.
+    const middle = (edges[index * 2] + edges[index * 2 + 1]) / 2;
     if (middle > range.start && middle < range.end) { if (first < 0) first = index; last = index; }
   }
-  if (first < 0 || edges.length !== words.length * 2) return range;
+  if (first < 0) return range;
   const onset = edges[first * 2];
   const start = Math.max(range.start, Math.min(onset - lead, Math.max(words[first].start, onset - .08)));
   const end = Math.min(range.end, edges[last * 2 + 1] + tail);
