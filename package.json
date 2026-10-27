@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "deploy:production": "node scripts/deploy-production.mjs",
+    "predev": "node scripts/copy-vendor.mjs",
     "dev": "node scripts/dev.mjs",
     "dev:frontend": "next dev --hostname localhost --port 3001",
     "build": "next build",

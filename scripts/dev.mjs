@@ -2,11 +2,8 @@ import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { createInterface } from 'node:readline';
 import { aiCostLines } from './ai-cost-log-filter.mjs';
-import { execFileSync } from 'node:child_process';
 
 const directory = fileURLToPath(new URL('..', import.meta.url));
-// The editor and media worker load the vendor runtimes from public/vendor; rebuild them from source on every start.
-execFileSync(process.execPath, ['scripts/copy-vendor.mjs'], { cwd: directory, stdio: 'inherit' });
 const args = process.argv.slice(2);
 const hasPort = args.some(arg => arg === '--port' || arg === '-p' || arg.startsWith('--port='));
 const port = process.env.PORT || '3001';
