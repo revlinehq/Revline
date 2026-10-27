@@ -146,6 +146,17 @@ Keep this file factual. Update the status when something ships, and do not promo
 - **Canvas:** on-canvas move and resize, plus crop, fit or fill, rotation and opacity.
 - **Aspect ratios:** 9:16, 1:1 and 16:9 in the menu (4:5 and 4:3 are also supported).
 
+### J and L cuts
+
+**Pitch:** Cuts that feel edited by a pro. Let a line's sound lead into the next shot, or carry over it.
+
+- **J cut:** the next line's sound starts while the previous picture is still on screen, then the picture follows.
+- **L cut:** the sound carries over while the picture changes early.
+- **Sound never moves.** Only the picture edit point slides, using the footage beside each piece, so speech cleanup, millisecond edges and captions stay exactly in place.
+- One request can set J/L cuts on every cut in a video ("add J and L cuts", "smoother cuts").
+
+**Status:** Built. Running locally; production follows the next release.
+
 ### Timeline tabs
 
 **Pitch:** Many videos, one project. Cut the short, the teaser and the long version side by side from the same footage.
