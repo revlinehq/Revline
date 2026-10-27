@@ -4,7 +4,7 @@ import type { Clip, Timeline } from './types';
 import { validateVisualEffects, visualEffectsOf } from './visual-effects';
 import type { VisualEffectsController } from './visual-effects-runtime';
 
-const effects = (clip:Clip)=>({...visualEffectsOf(clip),cameraGlideBlur:cameraGlideBlurSource(clip)});
+const effects = (clip:Clip)=>({...visualEffectsOf(clip),cameraGlideBlur:cameraGlideBlurSource(clip),effectKeyframes:clip.effectKeyframes,motionOffset:clip.motionOffset});
 
 export function previewVisualEffects(document: Document, clip: Clip, index: number, patch: Partial<Clip> | null): boolean {
   const controller = (document.defaultView as (Window & { __revlineEffects?: VisualEffectsController }) | null)?.__revlineEffects;

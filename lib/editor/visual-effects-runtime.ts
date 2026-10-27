@@ -8,11 +8,12 @@ import { NEON_EDGES_GLSL } from './neon-edges-shader';
 import { DEFAULT_NEON_EDGES } from './neon-edges';
 import { TEXTURE_OVERLAYS_GLSL } from './texture-overlays-shader';
 import { MOTION_LIGHT_GLSL } from './motion-light-shader';
+import { effectsAt, type EffectKeyframeLane } from './effect-keyframes';
 export { installAdjustmentLayers } from './adjustment-layers';
 export { installSolidColorLayers } from './solid-color-layers';
 export { installVisualFades } from './visual-fades-runtime';
 
-export type VisualEffectInput = VisualEffects & { cameraGlideBlur?:CameraGlideBlurSource };
+export type VisualEffectInput = VisualEffects & { cameraGlideBlur?:CameraGlideBlurSource; effectKeyframes?:EffectKeyframeLane[]; motionOffset?:number };
 export type VisualEffectSource = VisualEffectInput & { id: string };
 export type VisualEffectsController = { set(id: string, effects: VisualEffectInput): void; setTimedEffects(clips:Clip[]):void; redraw(): void; dispose(): void };
 
@@ -273,7 +274,9 @@ void main(){
       entry.failed=true;release(entry);report(new Error('WebGL context was lost. Reload the preview to restore these effects.'));return;
     }
     const time = clock.time(), start = Number(entry.source.dataset.start), end = start + Number(entry.source.dataset.duration);
-    const passes=effectPasses(entry.effects,time);
+    // Keyframed controls are evaluated in the clip's motion path time, the same clock as its movement.
+    const animated=entry.effects.effectKeyframes?.length?{...entry.effects,...effectsAt(entry.effects,entry.effects.effectKeyframes,time-start+(entry.effects.motionOffset??0))}:entry.effects;
+    const passes=effectPasses(animated,time);
     if(nativeCorners(entry,passes))return;
     if (!passes.length || !entry.source.hasAttribute('data-revline-transition-visible') && (time < start - 1e-6 || time >= end - 1e-6)) { if (entry.canvas) release(entry); return; }
     const renderId = entry.source.getAttribute('data-hf-render-id') || entry.source.id;
@@ -297,7 +300,7 @@ void main(){
     // CSS motion can run between decoded frames. Wait for the next video
     // frame before redrawing its bitmap; paused transforms still redraw now.
     const playingVideo = source instanceof HTMLVideoElement && !source.paused && !!source.requestVideoFrameCallback;
-    const stableFrame=!(entry.effects.glitch?.enabled||entry.effects.filmOverlay?.enabled||entry.effects.vhs?.enabled&&entry.effects.vhs.speed>0||entry.effects.lightLeak?.enabled&&entry.effects.lightLeak.speed>0||entry.effects.turbulentDisplace?.enabled&&entry.effects.turbulentDisplace.speed>0||entry.effects.lightSweep?.enabled&&entry.effects.lightSweep.speed>0)||playingVideo||entry.lastFrame===frame;
+    const stableFrame=!(!!entry.effects.effectKeyframes?.length||entry.effects.glitch?.enabled||entry.effects.filmOverlay?.enabled||entry.effects.vhs?.enabled&&entry.effects.vhs.speed>0||entry.effects.lightLeak?.enabled&&entry.effects.lightLeak.speed>0||entry.effects.turbulentDisplace?.enabled&&entry.effects.turbulentDisplace.speed>0||entry.effects.lightSweep?.enabled&&entry.effects.lightSweep.speed>0)||playingVideo||entry.lastFrame===frame;
     const stablePasses=playingVideo?entry.lastPassCount===passes.length:entry.lastPassKey===passKey;
     if (!force && !entry.dirty && stableFrame && stablePasses && entry.lastSource === sourceKey && (playingVideo || entry.lastTransform === transformKey)) return;
     try {
@@ -416,7 +419,7 @@ void main(){
   function set(id: string, effects: VisualEffectInput) {
     baseEffects.set(id,effects);
     const previous = entries.get(id);
-    if (!enabled(effects)&&!(effects.cameraGlideBlur?.amount&&effects.cameraGlideBlur.amount>0)&&!timedEffects.some(clip=>clip.zoomBlur?.enabled&&clip.zoomBlur.amount>0)) { remove(id); return; }
+    if (!enabled(effects)&&!effects.effectKeyframes?.length&&!(effects.cameraGlideBlur?.amount&&effects.cameraGlideBlur.amount>0)&&!timedEffects.some(clip=>clip.zoomBlur?.enabled&&clip.zoomBlur.amount>0)) { remove(id); return; }
     const source = document.getElementById(id);
     if (!(source instanceof HTMLVideoElement || source instanceof HTMLImageElement)) return;
     const entry = previous ?? { source, effects, dirty: true };

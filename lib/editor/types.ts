@@ -10,6 +10,7 @@ import type { TextFontId } from './text-fonts';
 import type { FlashSettings, PunchSettings, ShakeSettings, PopSettings } from './motion-effect-settings';
 import type { SmoothZoomSettings } from './smooth-zoom-settings';
 import type { CameraMotionSettings } from './camera-motion-settings';
+import type { EffectKeyframeLane } from './effect-keyframes';
 import type { SceneSource } from './scene-layers';
 import type { ClipOutline } from './clip-outline';
 export type AspectRatio = 'vertical' | 'portrait-feed' | 'square' | 'classic' | 'landscape';
@@ -53,6 +54,8 @@ export type Clip = {
   blendMode?: BlendMode;
   motion?: MotionKeyframe[];
   motionOffset?: number;
+  /** Keyframed visual-effect controls (colorGrade.saturation, softBlur.amount, ...), in motion path time. */
+  effectKeyframes?: EffectKeyframeLane[];
   smoothZoom?: SmoothZoomSettings;
   cameraMotion?: CameraMotionSettings;
   effectPreset?: EffectPreset | 'none';

@@ -19,6 +19,8 @@ const publicVars=Object.fromEntries(Object.entries(production).filter(([key])=>k
 const secrets={...(production.CLERK_SECRET_KEY?{CLERK_SECRET_KEY:production.CLERK_SECRET_KEY}:{}),...(production.SENTRY_DSN?{SENTRY_DSN:production.SENTRY_DSN}:{})};
 const env={...process.env,...publicVars,...secrets,NODE_ENV:'production',WRANGLER_LOG_PATH:process.env.WRANGLER_LOG_PATH??'/tmp/revline-web-wrangler.log'};
 function run(command,args){return new Promise((resolve,reject)=>{const child=spawn(command,args,{env,stdio:'inherit'});child.on('error',reject);child.on('exit',code=>code===0?resolve():reject(new Error(`${command} exited with status ${code}`)));});}
+// Preview loads public/vendor runtimes (visual effects, text); rebuild them so a deploy never ships stale ones.
+await run(process.execPath,['scripts/copy-vendor.mjs']);
 await run(process.execPath,['node_modules/vite/bin/vite.js','build']);
 const configPath='dist/server/wrangler.json',config=JSON.parse(await readFile(configPath,'utf8'));
 config.vars={...config.vars,...publicVars};

@@ -45,6 +45,7 @@ export const clipValidator = v.object({
   linkedClipId: v.optional(v.string()), audioSeparated: v.optional(v.boolean()),
   blendMode: v.optional(v.union(v.literal("normal"), v.literal("screen"), v.literal("multiply"), v.literal("overlay"), v.literal("plus-lighter"), v.literal("difference"))),
   motion: v.optional(v.array(motionKeyframeValidator)), motionOffset: v.optional(v.number()),
+  effectKeyframes: v.optional(v.array(v.object({ control: v.string(), keys: v.array(v.object({ time: v.number(), value: v.number() })) }))),
   smoothZoom: v.optional(smoothZoomValidator), cameraMotion:v.optional(cameraMotionValidator),
   colorGrade: v.optional(colorGradeValidator), zoomBlur: v.optional(zoomBlurValidator), glitch: v.optional(glitchValidator), invert: v.optional(invertValidator), dither: v.optional(ditherValidator),
   neonEdges:v.optional(v.object({enabled:v.boolean(),amount:v.number(),color:v.string(),detail:v.number(),threshold:v.number(),glow:v.number()})),

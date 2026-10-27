@@ -3,10 +3,27 @@ export type MotionKeyframe = { time: number; x: number; y: number; scale: number
 export const NEUTRAL_MOTION = { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, brightness: 1 };
 export const MOTION_PROPERTIES = ['x', 'y', 'scale', 'rotation', 'opacity', 'brightness'] as const;
 export const MOTION_EASINGS = ['linear', 'ease-in-out', 'ease-out', 'focused-spring'] as const;
-export type MotionEasing = typeof MOTION_EASINGS[number];
+export type NamedMotionEasing = typeof MOTION_EASINGS[number];
+/** A CSS-style cubic-bézier [x1, y1, x2, y2]: x within 0..1, y may overshoot (-1..2) for anticipation or bounce. */
+export type CubicBezier = [number, number, number, number];
+export type MotionEasing = NamedMotionEasing | CubicBezier;
+export const isCubicBezier = (easing: unknown): easing is CubicBezier => Array.isArray(easing) && easing.length === 4 && easing.every(Number.isFinite) && easing[0] >= 0 && easing[0] <= 1 && easing[2] >= 0 && easing[2] <= 1 && easing[1] >= -1 && easing[1] <= 2 && easing[3] >= -1 && easing[3] <= 2;
+export const isMotionEasing = (easing: unknown): easing is MotionEasing => MOTION_EASINGS.includes(easing as NamedMotionEasing) || isCubicBezier(easing);
+
+/** y for a given x on a cubic-bézier curve: Newton steps on x(t), bisection fallback. */
+function cubicBezierAt([x1, y1, x2, y2]: CubicBezier, x: number) {
+  const bez = (t: number, a: number, b: number) => 3 * a * t * (1 - t) ** 2 + 3 * b * t * t * (1 - t) + t ** 3;
+  const slope = (t: number, a: number, b: number) => 3 * a * (1 - t) ** 2 + 6 * (b - a) * t * (1 - t) + 3 * (1 - b) * t * t;
+  let t = x;
+  for (let i = 0; i < 8; i++) { const dx = bez(t, x1, x2) - x, d = slope(t, x1, x2); if (Math.abs(dx) < 1e-7) return bez(t, y1, y2); if (Math.abs(d) < 1e-6) break; t -= dx / d; }
+  let low = 0, high = 1; t = x;
+  for (let i = 0; i < 40; i++) { const value = bez(t, x1, x2); if (Math.abs(value - x) < 1e-7) break; if (value < x) low = t; else high = t; t = (low + high) / 2; }
+  return bez(t, y1, y2);
+}
 
 export function motionEase(progress: number, easing: MotionEasing) {
   const p = Math.max(0, Math.min(1, progress));
+  if (Array.isArray(easing)) return p === 0 || p === 1 ? p : cubicBezierAt(easing, p);
   if (easing === 'focused-spring') {
     // Critically damped spring: fast response, smooth braking, no overshoot.
     // Normalize its finite window so preview/export land exactly on the target.
@@ -33,7 +50,7 @@ export function sampleMotionAnchors(anchors: EasedMotionAnchor[], duration: numb
   if (!Number.isFinite(duration) || duration < anchors.at(-1)!.time - 1e-6) throw new Error('Motion anchors must fit inside the clip.');
   for (const [index, anchor] of anchors.entries()) {
     if (!Number.isFinite(anchor.time) || anchor.time < 0 || index > 0 && anchor.time <= anchors[index - 1].time) throw new Error('Motion anchors need finite, increasing nonnegative times.');
-    if (!MOTION_EASINGS.includes(anchor.easing)) throw new Error('Choose a supported motion easing.');
+    if (!isMotionEasing(anchor.easing)) throw new Error('Choose a supported motion easing, or a cubic-bézier [x1, y1, x2, y2] with x1/x2 in 0..1.');
     if (Object.keys(NEUTRAL_MOTION).some(property => !Number.isFinite(anchor[property as keyof typeof NEUTRAL_MOTION]))) throw new Error('Motion anchor values must be finite.');
   }
   const { easing: _firstEasing, ...first } = anchors[0];
