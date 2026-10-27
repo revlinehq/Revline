@@ -23,9 +23,12 @@ function withoutDiagnostics<T extends { providerOptions?: LanguageModelV4Prompt[
 /** A read-only model projection; the edit session retains every source sample. */
 export function modelTimeline(timeline: Timeline, selectedClipIds: readonly string[] = []) {
   const selected = new Set(selectedClipIds);
+  // Name the videos (sections) each clip plays in, so "the music in Video 2" needs no time math.
+  const inSections = (start: number, end: number) => (timeline.sections ?? []).filter(section => Math.min(end, section.end) - Math.max(start, section.start) > 1e-6).map(section => section.name);
   return { ...timeline, clips: timeline.clips.map(clip => {
     const { motion, focus, scene, ...settings } = clip;
-    return { ...settings,
+    const sections = inSections(clip.start, clip.start + clip.duration);
+    return { ...settings, ...(sections.length ? { sections } : {}),
       ...(motion ? selected.has(clip.id) || motion.length <= 16 ? { motion } : { motionSummary: { sampleCount: motion.length, detailsOmitted: true, readTool: 'inspectClip' } } : {}),
       ...(focus ? { focusSummary: { sampleCount: focus.length, detailsOmitted: true, readTool: 'inspectClip' } } : {}),
       // Compacted history can hold timelines whose scene code was already summarized.
