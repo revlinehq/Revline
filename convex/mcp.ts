@@ -67,6 +67,8 @@ export const projectOverview = internalQuery({ args: { ownerId: v.string(), proj
   return {
     projectId: project._id, title: project.title, aspectRatio: project.aspectRatio, revision: project.revision ?? 0,
     duration: Math.round(timelineDuration(timeline) * 1000) / 1000, clipCount: timeline.clips.length, aiRunning: !!project.aiRunning, editorUrl: editorUrl(project._id),
+    // Every timeline tab; duration, clipCount and editing tools refer to the open one.
+    timelines: (await listTabsFor(ctx, args.ownerId, project._id)).map(tab => ({ timelineId: tab.id, name: tab.name, open: tab.active, aspectRatio: tab.aspectRatio, duration: Math.round(tab.duration * 1000) / 1000, clipCount: tab.clipCount })),
     media: assets.map(asset => ({ assetId: asset._id, fileName: asset.fileName, kind: asset.kind, duration: asset.duration, width: asset.width, height: asset.height, analysis: asset.analysisKinds ?? [], ...(asset.audioAssetId ? { audioAssetId: asset.audioAssetId } : {}) })),
   };
 }});
