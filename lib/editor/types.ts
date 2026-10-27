@@ -89,9 +89,7 @@ export type Clip = {
   fit?: 'cover' | 'contain';
 };
 export type TimelineMarker = { id: string; time: number; label?: string };
-/** A named time range that exports as its own video, so one timeline can hold several cuts. */
-export type TimelineSection = { id: string; name: string; start: number; end: number };
-export type Timeline = { clips: Clip[]; fps: number; aspectRatio: AspectRatio; tracks?: TrackCounts; markers?: TimelineMarker[]; sections?: TimelineSection[] };
+export type Timeline = { clips: Clip[]; fps: number; aspectRatio: AspectRatio; tracks?: TrackCounts; markers?: TimelineMarker[] };
 export type AudioWaveform = { peaks: string; samplesPerSecond: number };
 export type MediaAsset = {
   _id: string; fileName: string; kind: 'video' | 'image' | 'audio';

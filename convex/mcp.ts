@@ -99,8 +99,8 @@ export const mediaTask = internalQuery({ args: { ownerId: v.string(), taskId: v.
   return { taskId: task._id, kind: task.kind, status: task.status, progress: task.progress, ...(task.error ? { error: task.error } : {}), ...(task.assetId ? { assetId: task.assetId } : {}) };
 }});
 
-export const startExport = internalMutation({ args: { ownerId: v.string(), projectId: v.string(), resolution: v.number(), fps: v.number(), quality: v.string(), sectionId: v.optional(v.string()), timelineId: v.optional(v.string()) }, returns: v.any(), handler: async (ctx, args) => {
-  const jobId = await startRenderFor(ctx, args.ownerId, { projectId: projectIdOf(ctx, args.projectId), resolution: args.resolution, fps: args.fps, quality: args.quality, ...(args.sectionId ? { sectionId: args.sectionId } : {}), ...(args.timelineId ? { timelineId: args.timelineId } : {}) });
+export const startExport = internalMutation({ args: { ownerId: v.string(), projectId: v.string(), resolution: v.number(), fps: v.number(), quality: v.string(), timelineId: v.optional(v.string()) }, returns: v.any(), handler: async (ctx, args) => {
+  const jobId = await startRenderFor(ctx, args.ownerId, { projectId: projectIdOf(ctx, args.projectId), resolution: args.resolution, fps: args.fps, quality: args.quality, ...(args.timelineId ? { timelineId: args.timelineId } : {}) });
   return { jobId, note: 'Poll getExport with jobId; a completed export returns a download link.' };
 }});
 
@@ -108,14 +108,14 @@ export const startExport = internalMutation({ args: { ownerId: v.string(), proje
 export const listExports = internalQuery({ args: { ownerId: v.string(), projectId: v.string(), limit: v.number() }, returns: v.any(), handler: async (ctx, args) => {
   const project = await requireProject(ctx, projectIdOf(ctx, args.projectId), args.ownerId, false);
   const jobs = await ctx.db.query('renderJobs').withIndex('by_ownerId_projectId', q => q.eq('ownerId', args.ownerId).eq('projectId', project._id)).order('desc').take(args.limit);
-  return jobs.map(job => ({ jobId: job._id, status: job.status, progress: job.progress, resolution: job.resolution, fps: job.fps, createdAt: new Date(job.createdAt).toISOString(), current: job.sourceRevision === (project.revision ?? 0), ...(job.label ? { section: job.label, sectionId: job.sourceSectionId } : job.sourceClipId ? { clipId: job.sourceClipId } : {}), ...(job.error ? { error: job.error } : {}), output: job.status === 'completed' ? { storageId: job.outputStorageId, r2Key: job.outputR2Key, fileName: exportFileName(project.title, job.label) } : null }));
+  return jobs.map(job => ({ jobId: job._id, status: job.status, progress: job.progress, resolution: job.resolution, fps: job.fps, createdAt: new Date(job.createdAt).toISOString(), current: job.sourceRevision === (project.revision ?? 0), ...(job.label ? { timeline: job.label } : {}), ...(job.sourceClipId ? { clipId: job.sourceClipId } : {}), ...(job.error ? { error: job.error } : {}), output: job.status === 'completed' ? { storageId: job.outputStorageId, r2Key: job.outputR2Key, fileName: exportFileName(project.title, job.label) } : null }));
 }});
 
 export const exportJob = internalQuery({ args: { ownerId: v.string(), jobId: v.string() }, returns: v.any(), handler: async (ctx, args) => {
   const id = ctx.db.normalizeId('renderJobs', args.jobId), job = id ? await ctx.db.get(id) : null;
   if (!job || job.ownerId !== args.ownerId) throw new ConvexError('Export not found.');
   const project = await requireProject(ctx, job.projectId, args.ownerId, false);
-  return { jobId: job._id, status: job.status, progress: job.progress, resolution: job.resolution, fps: job.fps, ...(job.label ? { section: job.label } : {}), ...(job.error ? { error: job.error } : {}), output: job.status === 'completed' ? { storageId: job.outputStorageId, r2Key: job.outputR2Key, fileName: exportFileName(project.title, job.label) } : null };
+  return { jobId: job._id, status: job.status, progress: job.progress, resolution: job.resolution, fps: job.fps, ...(job.label ? { timeline: job.label } : {}), ...(job.error ? { error: job.error } : {}), output: job.status === 'completed' ? { storageId: job.outputStorageId, r2Key: job.outputR2Key, fileName: exportFileName(project.title, job.label) } : null };
 }});
 
 /** Render up to six timeline frames as export would; the worker answers within seconds. */

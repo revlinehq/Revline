@@ -64,21 +64,6 @@ export function applyTimelineEdit(base: Timeline, next: Timeline, current: Timel
     });
     merged.markers.push(...(next.markers ?? []).filter(marker => !beforeMarkers.has(marker.id) && !currentIds.has(marker.id)));
   }
-  if (!equal(base.sections, next.sections)) {
-    // A section is small; the side that changed it wins whole.
-    const before = new Map((base.sections ?? []).map(section => [section.id, section]));
-    const after = new Map((next.sections ?? []).map(section => [section.id, section]));
-    const currentIds = new Set((current.sections ?? []).map(section => section.id));
-    merged.sections = [
-      ...(current.sections ?? []).flatMap(section => {
-        const old = before.get(section.id), edited = after.get(section.id);
-        if (!old) return [section];
-        if (!edited) return [];
-        return [equal(old, edited) ? section : edited];
-      }),
-      ...(next.sections ?? []).filter(section => !before.has(section.id) && !currentIds.has(section.id)),
-    ].sort((a, b) => a.start - b.start);
-  }
   const baseCounts = deriveTrackCounts(base), nextCounts = deriveTrackCounts(next), counts = deriveTrackCounts(current);
   for (const group of TIMELINE_LAYER_GROUPS) {
     if (nextCounts[group] !== baseCounts[group]) counts[group] = nextCounts[group] > baseCounts[group] ? Math.max(counts[group], nextCounts[group]) : nextCounts[group];

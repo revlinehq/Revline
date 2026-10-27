@@ -7,7 +7,6 @@ import { validateVisualFade } from '../../lib/editor/visual-fades';
 import { validateAudioTimeline } from '../../lib/editor/audio-settings';
 import { validateScene } from '../../lib/editor/scene-layers';
 import { ConvexError } from "convex/values";
-import { MAX_TIMELINE_SECTIONS } from '../../lib/editor/timeline-sections';
 import { layerGroup, maxTrackCount, normalizeTimeline, trackOf, type Timeline } from "../../lib/editor/types";
 import { equalTimelineValue } from '../../lib/editor/timeline-equality';
 import { timelineHistoryKey } from '../../lib/editor/timeline-history-key';
@@ -45,14 +44,6 @@ export async function validateTimeline(ctx: MutationCtx | QueryCtx, project: Doc
     if (!Number.isFinite(marker.time) || marker.time < 0) throw new ConvexError('Marker time must be finite and nonnegative');
     if ((marker.label?.length ?? 0) > 120) throw new ConvexError('Marker labels support up to 120 characters');
     markerIds.add(marker.id);
-  }
-  const sectionIds = new Set<string>();
-  if ((timeline.sections?.length ?? 0) > MAX_TIMELINE_SECTIONS) throw new ConvexError(`A timeline supports up to ${MAX_TIMELINE_SECTIONS} sections`);
-  for (const section of timeline.sections ?? []) {
-    if (!section.id || section.id.length > 100 || sectionIds.has(section.id)) throw new ConvexError('Section IDs must be unique and nonempty');
-    if (!section.name.trim() || section.name.length > 120) throw new ConvexError('Section names support 1–120 characters');
-    if (!Number.isFinite(section.start) || !Number.isFinite(section.end) || section.start < 0 || section.end - section.start < 1 / timeline.fps) throw new ConvexError('A section must start at or after 0 and last at least one frame');
-    sectionIds.add(section.id);
   }
   // Validate the input before conversion so inferred counts cannot repair an
   // out-of-range clip or a clip outside its declared legacy group.
@@ -120,7 +111,9 @@ export async function validateTimeline(ctx: MutationCtx | QueryCtx, project: Doc
   }
   try { transitionSources(timeline.clips,timeline.fps); } catch(error) { throw new ConvexError((error as Error).message); }
   try { validateAudioTimeline(timeline); } catch(error) { throw new ConvexError((error as Error).message); }
-  return timeline;
+  // Sections were removed; drop any a saved timeline still carries.
+  const { sections: _sections, ...kept } = timeline as Timeline & { sections?: unknown };
+  return kept;
 }
 /** Assistant writes may not add same-layer collisions. This stays out of
  * validateTimeline: saved, imported and history snapshots can already contain

@@ -71,7 +71,8 @@ export const clipValidator = v.object({
   textAnimationTiming:v.optional(v.object({duration:v.number(),offset:v.number()})),
 });
 export const timelineMarkerValidator = v.object({ id: v.string(), time: v.number(), label: v.optional(v.string()) });
-export const timelineSectionValidator = v.object({ id: v.string(), name: v.string(), start: v.number(), end: v.number() });
+// Legacy: timelines saved while sections existed may still hold them; saving drops them.
+const timelineSectionValidator = v.object({ id: v.string(), name: v.string(), start: v.number(), end: v.number() });
 export const timelineValidator = v.object({ clips: v.array(clipValidator), fps: v.number(), aspectRatio, tracks: v.optional(v.object({ visual: v.number(), overlay: v.number(), audio: v.number(), effects: v.optional(v.number()) })), markers: v.optional(v.array(timelineMarkerValidator)), sections: v.optional(v.array(timelineSectionValidator)) });
 export const assistantRecoveryValidator = v.object({requests:v.array(v.string()),runId:v.string(),revision:v.number(),savedEdits:v.optional(v.number()),reason:v.string(),status:v.union(v.literal('failed'),v.literal('stopped')),updatedAt:v.number()});
 export const aiStateFields = {
