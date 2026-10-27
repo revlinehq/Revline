@@ -193,20 +193,21 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
       if (!media.hasAudio) throw new AnalysisError('This source has no audio to transcribe.', 400);
       // Older whole-file transcripts lost retakes; only a current one is reused.
       const savedTranscript = currentTranscript(asset.analysis?.transcript) ? asset.analysis?.transcript : undefined;
-      // The cleanup map is measured from the same source audio as the quiet intervals.
+      // The cleanup map is measured from the same source audio as the quiet intervals. Await it:
+      // the task directory holding that audio is removed once this function returns.
       const measure = async (transcript: Transcript) => {
         const audioActivity = await runPhase('Measuring quiet audio', () => measureAudioActivity(source, signal, transcript));
         const speechCleanup = await runPhase('Finding fillers, pauses and retakes', () => measureSpeechCleanup(source, asset.duration ?? media.duration, transcript, signal));
         return { analysis: { transcript, audioActivity, ...(speechCleanup ? { speechCleanup } : {}) } };
       };
-      if (savedTranscript) return measure(savedTranscript);
+      if (savedTranscript) return await measure(savedTranscript);
       const key = process.env.DEEPGRAM_API_KEY;
       if (!key) throw new AnalysisError('Deepgram transcription is not configured on the media worker.', 503);
       const audio = join(directory, 'speech.mp3');
       await runPhase('Preparing transcription audio',()=>extractTranscriptionAudio(source, audio, signal));
       onProgress(30);
       const transcript = await runPhase('Transcribing speech',()=>transcribeWithDeepgram(audio, asset.duration ?? media.duration, key, signal));
-      return measure(transcript);
+      return await measure(transcript);
     }
     if (task.kind === 'beats') {
       if (!media.hasAudio) throw new AnalysisError('This source has no audio to measure.', 400);

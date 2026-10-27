@@ -418,7 +418,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       return { assetId: asset._id, ...read, ...(transcriptNote ? { transcriptNote } : {}) };
     } }),
     closeGaps: createTool({ description: "Join footage after cuts: close every gap between video/image clips on each visual layer in ONE saved change, moving later clips earlier with their linked audio. Retained source ranges, speed and styling are unchanged. Optional clipIds (two or more) limits it to those clips. Use this instead of moving clips one at a time.", inputSchema: z.object({ clipIds: clipIdsInput.optional() }), execute: async (_ctx, input) => checkpoint(t => closeFootageGaps(t, input.clipIds ?? [])) }),
-    retainSourceRanges: createTool({ description: "Keep ordered measured SOURCE-time ranges from one existing video/audio clip and compact them at that clip's timeline start in one change. For speech cleanup use tightenSilence:true: reuse or locally measure source audio energy, conservatively tighten each requested outer quiet edge with 80ms padding, and leave internal pauses untouched. Unclear/noisy evidence leaves edges unchanged. Omit it for exact user-requested timestamp cuts. Every requested range must fit the current retained source; never restore removed footage. Preserve speed, styling, motion/fade phase and linked audio. Round outward to project frames; sub-frame gaps merge conservatively. Other clips/tracks/markers keep their positions; no global ripple. Refuses transition-connected sources. Inspect actual retained ranges before adding subtitles.", inputSchema: z.object({ clipId: z.string().min(1).max(100), ranges: z.array(z.object({ start: z.number().min(0), end: z.number().positive() }).strict()).min(1).max(100), tightenSilence: z.boolean().optional() }), execute: async (_ctx, input) => {
+    retainSourceRanges: createTool({ description: "Keep ordered measured SOURCE-time ranges from one existing video/audio clip and compact them at that clip's timeline start in one change. For speech cleanup use tightenSilence:true: reuse or locally measure source audio energy, conservatively tighten each requested outer quiet edge with 80ms padding, and leave internal pauses untouched. Unclear/noisy evidence leaves edges unchanged. Omit it for exact user-requested timestamp cuts. Every requested range must fit the current retained source; never restore removed footage. Preserve speed, styling, motion/fade phase and linked audio. Round outward to project frames (sub-frame gaps merge conservatively), unless exactEdges:true keeps measured edges to the millisecond for speech cuts. Other clips/tracks/markers keep their positions; no global ripple. Refuses transition-connected sources. Inspect actual retained ranges before adding subtitles.", inputSchema: z.object({ clipId: z.string().min(1).max(100), ranges: z.array(z.object({ start: z.number().min(0), end: z.number().positive() }).strict()).min(1).max(100), tightenSilence: z.boolean().optional(), exactEdges: z.boolean().optional() }), execute: async (_ctx, input) => {
       let evidence: (typeof assets)[number] | undefined;
       if (input.tightenSilence) {
         await editSession.wait();
@@ -433,7 +433,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       let tightened = false;
       const result = await checkpoint(t => {
         // Validate the original request before any measured adjustment.
-        let retained = retainSourceRanges(t, input.clipId, input.ranges);
+        let retained = retainSourceRanges(t, input.clipId, input.ranges, undefined, input.exactEdges);
         if (evidence?.analysis?.transcript && evidence.analysis.audioActivity) {
           const clip = find(t, input.clipId), pair = t.clips.find(member => member.id === clip.linkedClipId && member.assetId === evidence._id);
           const offset = clip.assetId === evidence._id ? 0 : pair ? pair.sourceStart - clip.sourceStart : undefined;
@@ -444,7 +444,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
             return (next.end - next.start) / playbackRateOf(clip) >= 1 / t.fps - 1e-7 ? next : range;
           });
           tightened = refined.some((range, index) => range.start !== input.ranges[index].start || range.end !== input.ranges[index].end);
-          if (tightened) retained = retainSourceRanges(t, input.clipId, refined);
+          if (tightened) retained = retainSourceRanges(t, input.clipId, refined, undefined, input.exactEdges);
         }
         ranges = retained.ranges; return retained.timeline;
       });
@@ -487,7 +487,8 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       if (!ranges.length) throw new Error('Cleanup would remove the whole clip; raise minConfidence or limit kinds.');
       if (ranges.length > 100) throw new Error(`Cleanup would split this clip into ${ranges.length} pieces; clean a shorter clip, raise minConfidence or limit kinds.`);
       let retainedRanges: RetainedRangeSummary[] = [];
-      const result = await checkpoint(t => { const retained = retainSourceRanges(t, input.clipId, ranges); retainedRanges = retained.ranges; return retained.timeline; });
+      // Speech edges are measured to the millisecond; rounding them to frames would add back up to 33 ms of air per edge.
+      const result = await checkpoint(t => { const retained = retainSourceRanges(t, input.clipId, ranges, undefined, true); retainedRanges = retained.ranges; return retained.timeline; });
       return { ...result, ...summary, retainedRanges };
     } }),
     split: createTool({ description: "Split an existing clip at a timeline time in seconds. Source edits remain staged until the request completes. For a speech cut with several retained source ranges, prefer retainSourceRanges instead of a split/trim/delete chain.", inputSchema: z.object({ clipId: z.string(), time: z.number().min(0) }), execute: async (_ctx, input) => checkpoint(t => splitClip(t, input.clipId, input.time, crypto.randomUUID())) }),

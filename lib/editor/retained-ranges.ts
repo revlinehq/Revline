@@ -7,8 +7,10 @@ export type RetainedSourceRange = { start: number; end: number };
 export type RetainedRangeSummary = { clipId: string; linkedClipId?: string; sourceStart: number; sourceEnd: number; start: number; duration: number };
 const epsilon = 1e-7;
 
-/** Compact only this clip's retained source, keeping linked sound and authored phase. */
-export function retainSourceRanges(timeline: Timeline, clipId: string, ranges: RetainedSourceRange[], newId: () => string = () => crypto.randomUUID()) {
+/** Compact only this clip's retained source, keeping linked sound and authored phase. By default edges
+ * round outward to frames; `exact` keeps measured edges to the millisecond, as speech cleanup needs:
+ * export trims audio by sample and each video frame shows whichever piece covers that instant. */
+export function retainSourceRanges(timeline: Timeline, clipId: string, ranges: RetainedSourceRange[], newId: () => string = () => crypto.randomUUID(), exact = false) {
   const clip = timeline.clips.find(member => member.id === clipId);
   if (!clip || (clip.kind !== 'video' && clip.kind !== 'audio')) throw new Error('Choose an existing video or audio clip.');
   if (!Number.isFinite(timeline.fps) || timeline.fps <= 0) throw new Error('The timeline frame rate is invalid.');
@@ -26,12 +28,13 @@ export function retainSourceRanges(timeline: Timeline, clipId: string, ranges: R
     if (![range.start, range.end].every(Number.isFinite) || range.start < clip.sourceStart - epsilon || range.end > sourceEnd + epsilon
       || range.start < previousEnd - epsilon || (range.end - range.start) / rate < frame - epsilon) throw new Error('Source ranges must be ordered, non-overlapping, at least one timeline frame long and inside this clip’s retained source.');
     previousEnd = range.end;
-    // Expand to frame boundaries so exact word evidence is not clipped away.
-    const start = Math.max(0, Math.floor((range.start - clip.sourceStart) / rate * timeline.fps + epsilon) / timeline.fps);
-    const end = Math.min(clip.duration, Math.ceil((range.end - clip.sourceStart) / rate * timeline.fps - epsilon) / timeline.fps);
+    // Frame mode expands to frame boundaries so exact word evidence is not clipped away.
+    const ms = (value: number) => Math.round(value * 1000) / 1000;
+    const start = exact ? Math.max(0, ms((range.start - clip.sourceStart) / rate)) : Math.max(0, Math.floor((range.start - clip.sourceStart) / rate * timeline.fps + epsilon) / timeline.fps);
+    const end = exact ? Math.min(clip.duration, ms((range.end - clip.sourceStart) / rate)) : Math.min(clip.duration, Math.ceil((range.end - clip.sourceStart) / rate * timeline.fps - epsilon) / timeline.fps);
     const previous = offsets.at(-1);
-    // Sub-frame gaps cannot survive outward quantization; retain them rather than words.
-    if (previous && start <= previous.end + epsilon) previous.end = Math.max(previous.end, end);
+    // Gaps that cannot survive (sub-frame after rounding, sub-millisecond when exact) are retained rather than words.
+    if (previous && start <= previous.end + (exact ? .001 : epsilon)) previous.end = Math.max(previous.end, end);
     else offsets.push({ start, end });
   }
   if (offsets.length === 1 && offsets[0].start === 0 && offsets[0].end === clip.duration) return { timeline, ranges: [{ clipId: clip.id, ...(pair ? { linkedClipId: pair.id } : {}), sourceStart: clip.sourceStart, sourceEnd, start: clip.start, duration: clip.duration }] };
