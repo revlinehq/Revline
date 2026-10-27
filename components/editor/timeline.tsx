@@ -13,7 +13,6 @@ import { MediaFilmstrip } from './media-filmstrip';
 import { AudioWaveform } from './audio-waveform';
 import { useEditorState, useEditorStore, usePausedPlaybackTime } from './editor-state';
 import { setRipplePreference } from '@/lib/editor/store';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { paintPlayhead, useTimelinePlayhead, useEdgeAutoScroll } from './use-timeline-playhead';
 import { deriveTrackCounts, layerGroup, trackOf, clipColor, timelineDuration, formatTime, maxTrackCount, type Timeline, type MediaAsset, type Clip, type LayerGroup, type TimelineMarker } from '@/lib/editor/types';
 import { moveTimelineMarker, removeTimelineMarker } from '@/lib/editor/timeline-markers';
@@ -642,13 +641,13 @@ export function TimelinePanel(p:Props){
       {!p.readOnly&&p.onUndo&&<IconButton label="Undo (⌘Z)" disabled={!p.canUndo} onClick={p.onUndo}><Undo2 size={14}/></IconButton>}
       {!p.readOnly&&p.onRedo&&<IconButton label="Redo (⇧⌘Z)" disabled={!p.canRedo} onClick={p.onRedo}><Redo2 size={14}/></IconButton>}
     </div>{p.playbackControls&&<div className="timeline-playback-controls">{p.playbackControls}</div>}<div className="timeline-view-actions">
-      {!p.readOnly&&<Tooltip><TooltipTrigger asChild><button aria-label="Auto-join when trimming" onClick={()=>{store.setState({ripple:!ripple});setRipplePreference(!ripple);}} aria-pressed={ripple} className={ripple?'snap-active':''}><ChevronsRightLeft size={14}/></button></TooltipTrigger><TooltipContent>{ripple?'Auto-join on: trims pull later clips along':'Auto-join off: trims leave gaps'}</TooltipContent></Tooltip>}
+      {!p.readOnly&&<button aria-label="Auto-join when trimming" onClick={()=>{store.setState({ripple:!ripple});setRipplePreference(!ripple);}} aria-pressed={ripple} className={ripple?'snap-active':''}><ChevronsRightLeft size={14}/></button>}
       {!p.readOnly&&<button aria-label="Toggle snapping" onClick={()=>store.setState({snapping:!snap})} aria-pressed={snap} className={snap?'snap-active':''}><Magnet size={14}/></button>}
       <input aria-label="Timeline zoom" type="range" min="0" max="100" step="any" value={timelineZoomPosition(zoom,minimumZoom)} aria-valuetext={`${Math.round(zoom*100)}%`} onChange={e=>changeZoom(timelineZoomAtPosition(Number(e.target.value),minimumZoom))}/>
-      <DropdownMenu><DropdownMenuTrigger className="timeline-more-trigger" aria-label="More timeline tools" title="More timeline tools"><MoreHorizontal size={15}/></DropdownMenuTrigger><DropdownMenuContent align="end" className="timeline-more-menu">
+      <DropdownMenu><DropdownMenuTrigger className="timeline-more-trigger" aria-label="More timeline tools"><MoreHorizontal size={15}/></DropdownMenuTrigger><DropdownMenuContent align="end" className="timeline-more-menu">
         {/* Only what has no other home: undo/redo sit in the toolbar, zoom on the slider, tracks and unlink in the right-click menu. */}
         {!p.readOnly&&<><DropdownMenuItem disabled={p.editingLocked||!timeline.clips.some(clip=>clip.kind==='video'||clip.kind==='image')} onSelect={closeGaps}><FoldHorizontal/>Close gaps</DropdownMenuItem>
-        <DropdownMenuItem disabled={p.editingLocked} title="Merge adjacent split pieces from the same source. Select two pieces, or one next to its split neighbor." onSelect={mergeClips}><Combine/>Merge clips</DropdownMenuItem>
+        <DropdownMenuItem disabled={p.editingLocked} onSelect={mergeClips}><Combine/>Merge clips</DropdownMenuItem>
         <DropdownMenuSeparator/></>}
         <DropdownMenuItem onSelect={p.onToggleMute}>{p.muted?<VolumeX/>:<Volume2/>}{p.muted?'Unmute preview':'Mute preview'}</DropdownMenuItem>
         <DropdownMenuItem onSelect={()=>store.setState({compactTracks:!dense})}><Rows3/>{dense?'Expand track rows':'Compact track rows'}</DropdownMenuItem>
