@@ -229,9 +229,12 @@ export function EditorShell(p: EditorShellProps) {
   useLayoutEffect(() => {
     const toolbar=bodyRef.current?.querySelector<HTMLElement>('.timeline-toolbar');
     if(!toolbar)return;
-    const measure=()=>setCollapsedTimelineHeight(Math.max(1,Math.ceil(toolbar.getBoundingClientRect().height)));
+    // Collapsed, the timeline still shows its tab row above the toolbar; keep both on screen so the
+    // expand button stays reachable.
+    const tabs=()=>toolbar.parentElement?.querySelector<HTMLElement>('.timeline-tabs')??null;
+    const measure=()=>{const row=tabs(),bottom=toolbar.getBoundingClientRect().bottom,top=row?Math.min(row.getBoundingClientRect().top,toolbar.getBoundingClientRect().top):toolbar.getBoundingClientRect().top;setCollapsedTimelineHeight(Math.max(1,Math.ceil(bottom-top)));};
     const observer=new ResizeObserver(measure);
-    measure();observer.observe(toolbar);
+    measure();observer.observe(toolbar);const row=tabs();if(row)observer.observe(row);
     return()=>observer.disconnect();
   },[preparing]);
   useLayoutEffect(()=>{
