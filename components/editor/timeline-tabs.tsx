@@ -36,7 +36,7 @@ export function TimelineTabs({ tabs, working, locked, onError, ...actions }: { t
         <span className="timeline-tab-name">{tab.name}</span>
         <span className="timeline-tab-length">{length(tab.duration)}</span>
       </button>
-      {tab.active && <DropdownMenu><DropdownMenuTrigger className="timeline-tab-menu" aria-label={`Options for ${tab.name}`}><ChevronDown size={12}/></DropdownMenuTrigger><DropdownMenuContent align="start" className="timeline-tab-options">
+      {<DropdownMenu><DropdownMenuTrigger className="timeline-tab-menu" aria-label={`Options for ${tab.name}`} tabIndex={isShown ? 0 : -1} aria-hidden={!isShown || undefined} disabled={!isShown}><ChevronDown size={12}/></DropdownMenuTrigger><DropdownMenuContent align="start" className="timeline-tab-options">
         <DropdownMenuItem disabled={locked} onSelect={() => setDialog({ mode: 'rename', id: tab.id, name: tab.name })}><Pencil/>Rename</DropdownMenuItem>
         <DropdownMenuItem disabled={blocked} onSelect={() => void run(() => actions.onCreate('duplicate'))}><Copy/>Duplicate</DropdownMenuItem>
         {actions.onExport && <DropdownMenuItem onSelect={() => actions.onExport?.(tab.id)}><Download/>Export this video</DropdownMenuItem>}
