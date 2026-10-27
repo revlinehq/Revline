@@ -1,0 +1,200 @@
+# Revline features
+
+Source material for the marketing page. Each feature has a short pitch, what it actually does, and a status:
+
+- **Live**: shipped and available to users today.
+- **Built, not exposed**: the engine exists in the code but users cannot reach it yet.
+- **In progress**: works, but needs corrections before we promote it.
+- **Paused**: implemented behind a plan or flag that is switched off.
+
+Keep this file factual. Update the status when something ships, and do not promote anything below "Live" as available.
+
+---
+
+## Flagship engines
+
+### Speech cleanup engine
+
+**Pitch:** Cut the ums, breaths and retakes in one pass, at the millisecond. Every cut lands between words, never inside one.
+
+**What it does** (`lib/speech-cleanup/`):
+
+- **Three layers of detection**, each in source time:
+  1. **Filler words** from a verbatim transcript ("um", "uh", "erm", "hmm"), cut by their own timestamps.
+  2. **Acoustic analysis** of the audio in 10 ms frames: loudness, voicing, pitch, zero-crossing rate and spectral change. It labels each frame as silence, breath, held sound ("uhhh", "mmm") or speech, so it finds hesitations a transcript leaves out.
+  3. **Restart detection**: when a phrase is started again ("but this is not we- / but this is not the type of views"), it keeps only the final take. A retake must repeat at least half of the abandoned attempt, so a new sentence that reuses two words is left alone.
+- **Confidence on every cut.** Each cut carries a 0–1 confidence and a reason (pause, breath, filler, restart), so an editor or the AI can skip uncertain ones.
+- **Tuning knobs:** a minimum pause (0.35 s) so natural rhythm stays, padding (60 ms) so speech never sounds clipped, and a restart window (8 s).
+
+**Status:** Built, not exposed. It was proven on a real 5-minute talking-head recording; next it needs a media-worker task and a `cleanSpeech` tool for the chat editor and MCP.
+
+**Marketing angles:**
+
+- "Your best take, automatically."
+- Clean cuts that do not sound cut.
+
+### Deepgram transcription
+
+**Pitch:** Word-perfect captions and cuts, timed to the millisecond.
+
+**What it does** (`lib/media-analysis/deepgram.ts`):
+
+- **Model:** Deepgram Nova-3 transcribes the whole source in one request, with smart formatting, punctuation and automatic language detection.
+- **Keeps every retake** and gives each word tight start and end times, so captions and speech cuts line up with the audio.
+- **Keeps filler words** with their own times, which feeds the speech cleanup engine.
+- **Replaces Whisper.** Whisper stretched word times over pauses and fillers, and that put cuts mid-word. Older transcripts are redone with Deepgram on their next use.
+- **Limits:** up to 5,000 words per source. Saved per asset and reused, so the same footage is never transcribed twice.
+
+**Status:** Live in development. Production switches over with the next media-processor release.
+
+### Frame understanding engine
+
+**Pitch:** Revline watches your footage. Ask what happens and where, and it finds the moment and the object.
+
+**What it does** (`lib/media-analysis/`, `lib/server/media-task-runner.ts`; Gemini 3.7 Flash):
+
+- **Footage overview:** a summary plus up to 100 scored scenes. "Use the strongest moment" picks the best one.
+- **Video questions:** ask about the footage and get an answer with matching time windows mapped onto the timeline, plus how sure it is.
+- **Frame inspection:** looks at up to 12 frames from a 3-second window and returns labelled targets with confidence and a bounding box. Zoom and camera tools can then aim at that exact object ("zoom into the laptop screen").
+- **Render review:** after an effect is applied, the AI renders the result and checks it against its plan before it reports back.
+- **Supporting analysis:**
+  - Shot detection with PySceneDetect.
+  - Face tracking with MediaPipe for follow-the-subject framing.
+  - Music beat detection with the beat_this model.
+
+**Status:** In progress. It works end to end, but localisation and timing answers need corrections before we promote precision claims.
+
+### Motion design
+
+**Pitch:** Motion graphics from a sentence. Animated titles, kinetic captions and smooth camera moves, all editable on the timeline.
+
+**What it does:**
+
+- **18 text animations** (`lib/editor/text-effects.ts`, `lib/editor/remotion-text.ts`):
+  - Basic: none, fade, rise, pop.
+  - Templates: Word reveal, Pop-in words, Sliding title, Karaoke (follows spoken word timing), Neon echo, Lyric slam, Kinetic stack, Chromatic split, Outline trails, Cinematic focus, Character scramble, Spotlight sweep, Ink write-on, Echo tunnel.
+  - The expressive ones have strength, reveal duration and stagger controls.
+- **Typography:**
+  - 18 fonts, including Inter, Anton, Bebas Neue, TikTok Sans, Montserrat, Playfair Display and Caveat.
+  - 6 text looks: Default, Bold, Boxed, Highlight, Difference, Neon Echo.
+  - Stroke, shadow and glow, plus gradient fills (2–5 colours, any angle, optionally animated).
+  - One caption's style can be copied to all captions.
+- **Keyframe animation** for text, images and solid colours: position, scale, opacity, rotation and brightness. Easings are linear, ease-in-out, ease-out and focused-spring. Manual editor: `components/editor/motion-keyframe-editor.tsx`.
+- **Camera moves:**
+  - Smooth zooms: zoom in, hold, return.
+  - Keyframed camera paths, from 2 to 8 points, in glide or follow mode, with optional motion blur.
+  - Subject-following crop.
+  - Subtle punch-ins between cuts.
+- **Explainer scenes:** the AI writes animated React scenes up to 120 s long, compiled and played inside the editor (`addScene`).
+- **Layout and blending:**
+  - Two-row split-screen layout.
+  - 6 blend modes: normal, screen, multiply, overlay, add light, difference.
+
+**Status:** Live. Per-user style generation is planned (see [future features](future-features.md)).
+
+---
+
+## AI editing
+
+### Chat editor
+
+**Pitch:** Describe the edit; watch it happen.
+
+- **74 structured editing tools** act on the real timeline. The preview updates after every saved edit, and every AI edit can be undone.
+- **Models:**
+  - GPT-6.1 Sol (default), GPT-6 Astra and GPT-5.4 mini.
+  - Claude Sonnet 5.5 and Opus 5.5 when they are configured.
+  - Reasoning levels from low to max.
+- **Queueing:** messages sent while an edit runs are queued, and Stop cancels without losing saved work.
+- **Effect review loop:** the AI plans an effect, renders it, and checks the result before it reports back.
+- **Skills:** effects and styling, explainer scenes, music beats, sound design, visual inspection.
+
+**Status:** Live. Manual model choice and Fast mode are Paused (Ultra).
+
+### Edit from Claude, ChatGPT, Codex or Cursor (MCP)
+
+**Pitch:** Your AI assistant can now edit video. Connect Revline to Claude Code, Claude, ChatGPT, Codex or Cursor and let it cut, caption and export for you.
+
+- **Remote MCP server** with OAuth 2.1 sign-in (PKCE, dynamic client registration), so no keys are pasted anywhere.
+- **About 90 tools:**
+  - Projects: create, rename, duplicate, delete.
+  - Uploads, plus import from YouTube links.
+  - Timeline tabs.
+  - Every editing tool.
+  - Frame previews with `getFrames`.
+  - Exports and the export queue.
+- **Live status in the editor:** a calm "Connected through MCP" notice shows the agent's logo (Claude or OpenAI) and the MCP mark, for as long as the agent is working. Your own chat input stays locked so you do not edit over each other, and the edits appear live in any open tab.
+
+**Status:** Live (Pro plan).
+
+---
+
+## Editing
+
+### Timeline
+
+- **Layers:** a custom multi-layer timeline with up to 24 visual layers and 12 audio layers.
+- **Selection and editing:** clip and marquee selection, multi-clip moves, trims, frame-snapped splits, and copy and paste with linked audio.
+- **Markers:** beat and timeline markers that clips snap to.
+- **Undo:** application undo, shared between manual and AI edits.
+- **Canvas:** on-canvas move and resize, plus crop, fit or fill, rotation and opacity.
+- **Aspect ratios:** 9:16, 1:1 and 16:9 in the menu (4:5 and 4:3 are also supported).
+
+### Timeline tabs
+
+**Pitch:** Many videos, one project. Cut the short, the teaser and the long version side by side from the same footage.
+
+- **Each tab is its own timeline**, and switching is instant.
+- **Batch export:** export several tabs in one go and follow their progress together.
+
+**Status:** Live.
+
+### Captions and subtitles
+
+- **Automatic subtitles:** generated from word-timed transcripts in phrases of up to six words.
+- **Speech-synced highlights**, including karaoke.
+- **Styling:** fully styleable (font, weight, colour, background, stroke and position), and caption timing can be adjusted per line.
+
+**Status:** Live.
+
+### Effects and colour
+
+- **Colour grading:** exposure, contrast, saturation, temperature, tint and vibrance. 5 colour looks: Warm Film, Cool Cinema, Golden Hour, Muted Film, Noir, each with a strength setting.
+- **Texture effects:** Film overlay, VHS overlay, Digital glitch, plus blur, zoom blur, invert and rounded corners.
+- **Timed effects:** punch, quick zoom in, quick zoom out, and solid colour flashes.
+- **Transitions:** crossfades and visual fades.
+- **Background removal:** cut out a person, or keep a named object.
+
+**Status:** Live. Background removal is Paused (Ultra).
+
+### Audio
+
+- **Sound effects:** a library of 70 CC0 sounds in 8 categories (hits, clicks, pops, textures, whooshes, ambience, transitions, risers).
+- **Generated sound effects:** 34 designs (whoosh, riser, sub-drop, impact, glitch, and more) rendered by Revline's own synth, with no outside provider.
+- **Beat detection:** finds beats, downbeats, accents and possible drops, and can snap cuts to the beat.
+- **Mixing:** fades, voice and music roles, music ducking under voice, volume up to 200%, and waveforms.
+
+**Status:** Live.
+
+---
+
+## Import and export
+
+- **Import:**
+  - Large uploads in 32 MB parts with no 100 MB cap.
+  - Sources up to 24 hours long.
+  - YouTube links (videos, Shorts, embeds) and direct MP4 URLs.
+- **Export:**
+  - MP4 at 720p or 1080p, 24, 30 or 60 fps, and standard or high quality.
+  - Up to 5 minutes per export.
+  - Renders run on dedicated cloud machines with a queue, so several exports can wait their turn.
+  - The export preview uses the first shot of the exported video.
+  - 4K export is Paused (Ultra).
+- **Sharing:** share a timeline with an optional chat preview, which others can copy into their own project.
+
+---
+
+## Plans
+
+- **Revline Editor Pro:** $39/month with a 3-day trial. Includes MCP, 1080p with no watermark, unlimited projects and 50 GB storage.
+- **Revline Ultra:** $199/month, currently paused. Would add frontier models, Fast mode, model choice, 4K export, parallel exports and 500 GB storage.
