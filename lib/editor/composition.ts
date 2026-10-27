@@ -4,6 +4,7 @@ import { calculateVisualRect } from './visual-source-geometry';
 import { NEUTRAL_MOTION, cinematicBarSettings, validateClipEffects, visibleMotion, type MotionKeyframe } from './clip-effects';
 import { adjustmentSources } from './adjustment-layers';
 import { solidColorSources } from './solid-color-layers';
+import { maskSources } from './masks';
 import { isTransitionClip, transitionSources } from './clip-transitions';
 import { validateVisualFade } from './visual-fades';
 import { audioFadeAttributes, audioVolumeEnvelope, validateAudioTimeline } from './audio-settings';
@@ -262,6 +263,7 @@ window.__timelines=window.__timelines||{};window.__timelines.revline=timeline;
 ${visualEffectsRuntimeScript(timeline.clips.flatMap((clip, index) => clip.kind === 'video' || clip.kind === 'image' ? [{ id: `clip-${index}`, ...visualEffectsOf(clip), cameraGlideBlur:cameraGlideBlurSource(clip), effectKeyframes:clip.effectKeyframes, motionOffset:clip.motionOffset }] : []), fps, resolution)}
 window.__revlineVisualEffects.installAdjustmentLayers(${JSON.stringify(adjustmentSources(timeline.clips)).replace(/</g, '\\u003c')});
 window.__revlineVisualEffects.installSolidColorLayers(${JSON.stringify(solidColorSources(timeline.clips)).replace(/</g, '\\u003c')});
+window.__revlineVisualEffects.installClipMasks(${JSON.stringify(maskSources(timeline.clips)).replace(/</g, '\\u003c')});
 if(window.__revlineVisualEffects.installVisualFades)window.__revlineVisualEffects.installVisualFades(${JSON.stringify(timeline.clips.filter(clip=>clip.kind==='video'||clip.kind==='image').map(({id,kind,start,duration,visualFade,visualFadeTiming})=>({id,kind,start,duration,sourceStart:0,visualFade,visualFadeTiming}))).replace(/</g, '\\u003c')},${timeline.fps});${timeline.clips.some(clip=>(clip.visualFade?.fadeIn??0)>0||(clip.visualFade?.fadeOut??0)>0)?"else throw new Error('Visual fade renderer failed to load.');":''}
 if(window.__revlineRemotionText)window.__revlineTextLayerController=window.__revlineRemotionText.installTextLayers(${textSources});${hasText?"else throw new Error('Text renderer failed to load.');":''}
 ${sceneRuntimeScript(sceneLayerSources(timeline, resolution), sceneFonts(rawFontUrls), sceneRuntimeUrl)}

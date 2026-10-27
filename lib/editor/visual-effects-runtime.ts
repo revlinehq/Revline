@@ -11,6 +11,7 @@ import { MOTION_LIGHT_GLSL } from './motion-light-shader';
 import { effectsAt, type EffectKeyframeLane } from './effect-keyframes';
 export { installAdjustmentLayers } from './adjustment-layers';
 export { installSolidColorLayers } from './solid-color-layers';
+export { installClipMasks } from './masks';
 export { installVisualFades } from './visual-fades-runtime';
 
 export type VisualEffectInput = VisualEffects & { cameraGlideBlur?:CameraGlideBlurSource; effectKeyframes?:EffectKeyframeLane[]; motionOffset?:number };

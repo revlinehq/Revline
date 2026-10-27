@@ -14,6 +14,7 @@ import { validateCameraMotion } from './camera-motion-settings';
 import { NEUTRAL_MOTION, motionAt, type MotionKeyframe } from './motion-path';
 import { validateEffectKeyframes } from './effect-keyframes';
 import { shiftSpeedRamp } from './speed-ramp';
+import { validateMask } from './masks';
 export { NEUTRAL_MOTION, motionAt, type MotionKeyframe } from './motion-path';
 
 export const BLEND_MODES = ['normal', 'screen', 'multiply', 'overlay', 'plus-lighter', 'difference'] as const;
@@ -101,6 +102,7 @@ export function validateClipEffects(clip: Clip) {
   validatePlaybackRate(clip);
   validateVisualEffects(clip);
   validateEffectKeyframes(clip.effectKeyframes);
+  validateMask(clip);
   if (clip.motionBlur !== undefined && (!Number.isFinite(clip.motionBlur) || clip.motionBlur < 0 || clip.motionBlur > 1)) throw new Error('Motion blur must be between 0 and 1.');
   if (clip.effectKeyframes?.length && clip.kind !== 'video' && clip.kind !== 'image') throw new Error('Effect keyframes apply to video or image clips.');
   validateRemotionTextTemplate(clip);
@@ -190,7 +192,7 @@ export function motionPreset(clip: Clip, preset: MotionPreset | EffectPreset): P
 }
 
 export function offsetClipMotion(clip: Clip, delta: number): Partial<Clip> {
-  return { ...(clip.speedRamp?.length ? { speedRamp: shiftSpeedRamp(clip.speedRamp, delta) } : {}), ...(clip.motion?.length || clip.effectKeyframes?.length ? { motionOffset: (clip.motionOffset ?? 0) + delta } : {}), ...textTemplateTimingPatch(clip, delta),...textGradientTimingPatch(clip,delta),...textAnimationTimingPatch(clip,delta),...audioFadeTimingPatch(clip,delta),...visualFadeTimingPatch(clip,delta) };
+  return { ...(clip.speedRamp?.length ? { speedRamp: shiftSpeedRamp(clip.speedRamp, delta) } : {}), ...(clip.motion?.length || clip.effectKeyframes?.length || clip.mask ? { motionOffset: (clip.motionOffset ?? 0) + delta } : {}), ...textTemplateTimingPatch(clip, delta),...textGradientTimingPatch(clip,delta),...textAnimationTimingPatch(clip,delta),...audioFadeTimingPatch(clip,delta),...visualFadeTimingPatch(clip,delta) };
 }
 
 /** Effect handles stretch the currently visible pulse, including a previously split segment. */

@@ -8,6 +8,8 @@ import {animateObjects} from '../../lib/ai/object-motion';
 import {EFFECT_KEYFRAME_CONTROLS,effectKeyframesPatch} from '../../lib/editor/effect-keyframes';
 import {MOTION_EASINGS} from '../../lib/editor/motion-path';
 import {SPEED_RAMP_PRESET_IDS,presetAnchors,type SpeedRampPreset} from '../../lib/editor/speed-ramp';
+import {MASK_SHAPES} from '../../lib/editor/masks';
+import {attachMaskPatch,attachOverlayPatch,bakeMaskAnchors,pointsToSamples} from '../../lib/editor/tracking-attach';
 import {CAMERA_ZOOM_RANGE,SMOOTH_ZOOM_EASINGS} from '../../lib/editor/smooth-zoom-settings';
 import { modelTimeline, modelAssetAnalysis, modelAssetAnalysisWindows } from "../../lib/ai/editor-context";
 import { closeFootageGaps } from "../../lib/editor/close-gaps";
@@ -570,6 +572,30 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       if (!input.clear && !input.keyframes?.length) throw new Error('Give 1 to 9 keyframes, or clear:true to remove this control\'s keyframes.');
       return patchClip(t, clip.id, effectKeyframesPatch(clip, input.control, input.clear ? null : input.keyframes!));
     }) }),
+    setMask: createTool({ description: "Mask a VIDEO or IMAGE clip so only a shape shows (or, with invert, everything except it): rectangle (optional corner radius 0..0.5), ellipse, polygon (3–64 points [x,y] within 0..1 of its box, for freehand shapes) or text (1–40 characters filling its box; the footage shows through the letters). Geometry is canvas fractions of the clip's frame: x/y center, width/height, rotation degrees, feather = soft edge in px at 1080p (0 hard, 20–60 soft). keyframes: 1–9 anchors in CLIP-LOCAL seconds with optional easing (named or cubic-bézier); e.g. a box that grows from the center, an oval vignette that tightens on a punchline, a diagonal wipe, text that reveals B-roll. Use invert with a blurred copy above the footage to blur everything but one area. Replaces this clip's mask; clear:true removes it. Saves immediately.", inputSchema: z.object({ clipId: z.string().min(1), shape: z.enum(MASK_SHAPES).optional(), invert: z.boolean().optional(), radius: z.number().min(0).max(.5).optional(), points: z.array(z.tuple([z.number().min(0).max(1), z.number().min(0).max(1)])).min(3).max(64).optional(), text: z.string().min(1).max(40).optional(), keyframes: z.array(z.object({ time: z.number().min(0), x: z.number().min(-1).max(2), y: z.number().min(-1).max(2), width: z.number().min(.005).max(4), height: z.number().min(.005).max(4), rotation: z.number().min(-360).max(360).optional(), feather: z.number().min(0).max(200).optional(), easing: motionEasingInput.optional() }).strict()).min(1).max(9).optional(), clear: z.boolean().optional() }).strict(), execute: async (_ctx, input) => checkpoint(t => {
+      const clip = find(t, input.clipId);
+      if (input.clear) return patchClip(t, clip.id, { mask: undefined });
+      if (!input.shape || !input.keyframes?.length) throw new Error('Give a shape and 1 to 9 keyframes, or clear:true.');
+      if (input.keyframes.some(key => key.time > clip.duration + 1e-6)) throw new Error('Mask keyframes must fit inside the clip, in clip-local seconds.');
+      const keys = bakeMaskAnchors(input.keyframes.map(key => ({ ...key, rotation: key.rotation ?? 0, feather: key.feather ?? 0 })), clip.motionOffset ?? 0);
+      return patchClip(t, clip.id, { mask: { shape: input.shape, ...(input.invert ? { invert: true } : {}), ...(input.radius !== undefined ? { radius: input.radius } : {}), ...(input.points ? { points: input.points } : {}), ...(input.text ? { text: input.text } : {}), keys } });
+    }) }),
+    attachToTrack: createTool({ description: "Make something follow a moving subject in a footage clip (a video with fixed framing: no camera motion, subject-follow crop or keyframes). target 'subject' uses Revline's subject tracker on the footage (runs it in the background first if needed); or give points: 2–120 {time: TIMELINE seconds, x, y: fractions 0..1 of the source frame} read from inspectFrames boxes for any other object (a license plate, a laptop, a ball). mode 'move' (default): clipId is an overlay (text, image, arrow/emoji graphic, solid, or video) whose center follows the target, plus offsetX/offsetY canvas fractions (e.g. offsetY -0.18 to sit above a head); replaces its motion. mode 'mask': clipId is the footage itself or a copy of it on a higher V layer; it gets a mask (mask.shape/width/height/feather/invert) centered on the target as it moves, e.g. duplicate the footage, setVisualEffects softBlur on the copy, then attach an ellipse mask to blur only a face or plate; or invert on a dimmed copy for a tracking spotlight. Saves immediately.", inputSchema: z.object({ clipId: z.string().min(1), footageClipId: z.string().min(1), target: z.union([z.literal('subject'), z.object({ points: z.array(z.object({ time: z.number().min(0), x: z.number().min(0).max(1), y: z.number().min(0).max(1) }).strict()).min(2).max(120) }).strict()]), mode: z.enum(['move', 'mask']).optional(), offsetX: z.number().min(-1).max(1).optional(), offsetY: z.number().min(-1).max(1).optional(), mask: z.object({ shape: z.enum(MASK_SHAPES), width: z.number().min(.005).max(4), height: z.number().min(.005).max(4), feather: z.number().min(0).max(200).optional(), invert: z.boolean().optional(), radius: z.number().min(0).max(.5).optional(), text: z.string().min(1).max(40).optional() }).strict().optional() }).strict(), execute: async (_ctx, input) => {
+      const selected = find(editSession.timeline, input.footageClipId), source = selected.assetId ? await loadAsset(selected.assetId) : undefined;
+      if (!source) throw new Error('Choose an uploaded footage clip to track.');
+      if (input.target === 'subject' && !source.analysis?.focus?.length) await analyze(source._id, 'track');
+      return checkpoint(t => {
+        const footage = find(t, input.footageClipId), clip = find(t, input.clipId), asset = assets.find(item => item._id === footage.assetId);
+        if (!asset) throw new Error('The footage media is unavailable.');
+        const samples = input.target === 'subject' ? asset.analysis?.focus ?? [] : pointsToSamples(footage, input.target.points);
+        if (!samples.length) throw new Error('No moving subject was detected in this footage. Give points from inspectFrames instead.');
+        if ((input.mode ?? 'move') === 'mask') {
+          if (!input.mask) throw new Error('Mask mode needs mask: {shape, width, height}.');
+          return patchClip(t, clip.id, attachMaskPatch(clip, footage, asset, t.aspectRatio, samples, input.mask));
+        }
+        return patchClip(t, clip.id, attachOverlayPatch(clip, footage, asset, t.aspectRatio, samples, { x: input.offsetX ?? 0, y: input.offsetY ?? 0 }));
+      });
+    } }),
     setMotionBlur: createTool({ description: "Set motion blur on keyframed movement (animateClip paths on video, image, text or solid clips; camera paths keep their own blurAmount). amount 0..1 (0 off; .5 natural; 1 strong): slides and pans get directional blur along the motion, scale pops and punch-ins get radial blur, both scaled by speed so held frames stay sharp. Use for premium-feeling pop-ins, slides and whip moves. Saves immediately.", inputSchema: z.object({ clipIds: clipIdsInput, amount: z.number().min(0).max(1) }).strict(), execute: async (_ctx, input) => checkpoint(t => {
       let next = t;
       for (const id of input.clipIds) {
