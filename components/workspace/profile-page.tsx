@@ -4,6 +4,7 @@ import { userError } from '@/lib/user-error';
 import { useRef, useState } from 'react';
 import Link from 'next/link';
 import { useClerk, useUser } from '@clerk/nextjs';
+import { signOutToSignIn } from '@/lib/auth/sign-out';
 import { LoaderCircle, LockKeyhole, LogOut } from 'lucide-react';
 import { BillingSection, type CheckoutReturn } from './billing-section';
 import { DevAiCosts } from './dev-ai-costs';
@@ -33,7 +34,7 @@ export function ProfilePage({ checkoutReturn }: { checkoutReturn?: CheckoutRetur
   }
   async function signOut() {
     setSigningOut(true); setError('');
-    try { await clerk.signOut({ redirectUrl: '/' }); }
+    try { await signOutToSignIn(clerk); }
     catch { setError('Could not sign out. Please try again.'); setSigningOut(false); }
   }
   return <div className="workspace-page workspace-profile-page">

@@ -7,6 +7,7 @@ import { useRef, useState, type ReactNode, type MouseEvent } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useClerk, useUser } from '@clerk/nextjs';
+import { signOutToSignIn } from '@/lib/auth/sign-out';
 import { useConvexAuth, useQuery } from 'convex/react';
 import { Check, ChevronDown, CircleAlert, Cloud, Copy, CreditCard, Database, Download, Film, History, LoaderCircle, LogOut, PanelsTopLeft, Pencil, Plus, Redo2, Share2, UserRound, Undo2 } from 'lucide-react';
 import { api } from '@/convex/_generated/api';
@@ -88,7 +89,7 @@ export function WorkspaceNav({ title = NEW_WORKSPACE_LABEL, editorHref, active =
   const initial = (user?.firstName ?? user?.primaryEmailAddress?.emailAddress ?? 'D').slice(0, 1).toUpperCase();
   async function signOut() {
     setSigningOut(true); setAccountError('');
-    try { await clerk.signOut({ redirectUrl: '/' }); }
+    try { await signOutToSignIn(clerk); }
     catch { setAccountError('Could not sign out. Please try again.'); setSigningOut(false); }
   }
   async function rename() {
