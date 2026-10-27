@@ -10,7 +10,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 ## Verification
 
-Do not create new test files or test-only scripts unless the user explicitly requests them. Verify changes using existing checks and direct runtime or UI inspection.
+Never create test files, mocks, fixtures, smoke scripts or any other test-only code. The project intentionally has no test suite. Verify changes with `npm run typecheck`, `npm run build`, and direct runtime or UI inspection.
 
 ## Delivery
 

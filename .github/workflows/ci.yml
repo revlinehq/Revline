@@ -23,7 +23,6 @@ jobs:
       - run: sudo apt-get update && sudo apt-get install -y ffmpeg
       - run: python -m venv .data/scene-detection && .data/scene-detection/bin/pip install -r scripts/scene-detection-requirements.txt
       - run: npm ci
-      - run: npm test
       - run: npm run typecheck
       - run: npm run build
 

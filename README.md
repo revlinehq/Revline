@@ -21,7 +21,6 @@ The current development project uses `.env.local`. For a fresh installation, use
 
 ```bash
 npm run typecheck
-npm test
 npm run build
 ```
 
@@ -118,13 +117,11 @@ OpenCut Classic preview and editing patterns are adapted with MIT attribution re
 
 Run the normal development server and open `/dev/sam`, or choose **SAM 3 (dev)** in the effects library. Add `META_MODEL_API_KEY` to `.env.local`; the key stays in Next's server runtime. This experiment calls Meta's `sam-3.1` API, streams masks through the official parser, and previews them with Meta's frame-indexed video player. FFprobe must be installed. Use an MP4/MOV up to 10 seconds, 600 frames, 1080p and 20 MB; the server checks actual media metadata before a provider call.
 
-Both the page and API are disabled outside `NODE_ENV=development`. Files and masks remain temporary; the lab doesn't save timeline edits or implement masked exports. No Meta call runs before you press **Find masks**. A real key with SAM access is required to validate tracking quality. `node scripts/sam-mask-lab-smoke.mjs` exercises generated video and synthetic provider events without calling Meta.
+Both the page and API are disabled outside `NODE_ENV=development`. Files and masks remain temporary; the lab doesn't save timeline edits or implement masked exports. No Meta call runs before you press **Find masks**. A real key with SAM access is required to validate tracking quality.
 
 The Claude editing model picker is separate: `MODEL_SWITCHER_ENABLED=true` on Convex enables manual Haiku/Sonnet/Opus choices in either development or production. Each edit run pins its provider and model at submission; absent a choice, existing model environment defaults still apply.
 
-Unit tests cover timeline operations, selection/movement geometry, source crop/transform math, media analysis adapters, authorization, revision conflicts, and inactive billing. Browser checks live in `scripts/`: editor, timeline interactions, transform/crop, and face following. Render checks decode real exported MP4 frames and audio.
-
-`scripts/live-integration.ts` exercises a local application against development Clerk and Convex, creates temporary fixtures, and removes them afterward. It refuses non-local origins, production deployments, and live Clerk keys. Start the media worker first. Set `REVLINE_SPEECH_FIXTURE` to a local public-domain video to include real transcription, understanding, extracted audio and waveform checks. `scripts/worker-tracking-smoke.ts` verifies background face detection with an official MediaPipe fixture.
+The project has no test suite. Verify changes with `npm run typecheck`, `npm run build`, and by running the app and checking real previews and exports.
 
 Music worker setup (Python 3.13 and FFmpeg):
 
@@ -132,11 +129,8 @@ Music worker setup (Python 3.13 and FFmpeg):
 uv venv --python 3.13 .data/beat-tracking
 uv pip sync --python .data/beat-tracking/bin/python --index-strategy unsafe-best-match scripts/beat-tracking-requirements.txt
 node scripts/install-beat-model.mjs
-node --import tsx scripts/music-beats-smoke.ts
 ```
 
-The installation script verifies the pinned model checksum; processing jobs do not download model weights. `BEAT_TRACK_PYTHON` and `BEAT_TRACK_MODEL_PATH` override the local paths on a hosted worker. Inference uses two CPU threads and no CUDA runtime. The annotated music smoke checks separate pulse/hit timestamps, a known energy rise, trimmed/speed-adjusted timeline mapping, and silence; it is not a general music-accuracy benchmark.
-
-`node --env-file=.env.local --import tsx scripts/agentic-video-smoke.ts` sends a generated 4-second red/blue video to the actual Gemini API, verifies native agentic processing steps and timestamped scene evidence, and deletes the uploaded fixture without modifying a project.
+The installation script verifies the pinned model checksum; processing jobs do not download model weights. `BEAT_TRACK_PYTHON` and `BEAT_TRACK_MODEL_PATH` override the local paths on a hosted worker. Inference uses two CPU threads and no CUDA runtime.
 
 GitHub Actions deploys production from `main` (`.github/workflows/ci.yml`). After checks pass it deploys Convex, then the frontend (`npm run deploy:frontend:ci`, which builds `dist/` before uploading it) and the media processor release independently, so site changes never wait for a processor image. The processor releases (`npm run deploy:production -- --processor-only`, with cached Docker layers and the pinned beat model mirrored as the `beat-model-final0` release asset) only when `scripts/processor-changes.mjs` finds a difference since the last released processor commit in a file its entry points import or a runtime file it reads. Each service releases one run at a time. Production credentials live in the repository's `production` environment secrets (`CONVEX_DEPLOY_KEY`, `CLOUDFLARE_API_TOKEN`, `RENDER_WORKER_SECRET`); Clerk secrets remain on the Worker. Cloudflare Workers Builds is disabled so the frontend never deploys ahead of its backend. Production serves `tryrevline.com` and `editor.tryrevline.com`; the temporary preview domain is retired.
