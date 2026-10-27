@@ -179,6 +179,49 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
     if (requireAudioActivity && (!next.analysis?.transcript || next.analysis.audioActivity?.version !== AUDIO_ACTIVITY_VERSION)) throw new AnalysisStepError('Audio boundary measurement is unavailable. No unverified speech trims were applied.');
     return next;
   };
+  // Speech cuts share one path: the source's cleanup map removes pauses, breaths and fillers between
+  // words, and every kept piece snaps to its words' measured sound to the millisecond.
+  const speechEvidence = async (clipId: string) => {
+    await editSession.wait();
+    const clip = find(editSession.timeline, clipId);
+    if (clip.kind !== 'video' && clip.kind !== 'audio') throw new Error('Choose a video or audio clip with speech.');
+    // Upload preparation stores speech evidence on the video source.
+    const pair = clip.kind === 'audio' && clip.linkedClipId ? editSession.timeline.clips.find(member => member.id === clip.linkedClipId && member.linkedClipId === clip.id && member.kind === 'video') : undefined;
+    const assetId = pair?.assetId ?? clip.assetId;
+    if (!assetId) throw new Error('Choose uploaded speech media.');
+    let evidence = await analyze(assetId, 'transcribe', true);
+    // A source transcribed before cleanup maps existed is measured once more.
+    if (!currentSpeechCleanup(evidence.analysis?.speechCleanup)) evidence = await analyzeOnce(assetId, 'transcribe', true, true).catch(() => evidence);
+    const cleanup = currentSpeechCleanup(evidence.analysis?.speechCleanup) && evidence.analysis?.transcript ? evidence.analysis.speechCleanup : undefined;
+    const offset = clip.assetId === evidence._id ? 0 : pair ? pair.sourceStart - clip.sourceStart : undefined;
+    if (offset === undefined) throw new Error('The speech evidence no longer matches this linked source.');
+    return { clip, evidence, cleanup, offset, sourceEnd: clip.sourceStart + clip.duration * playbackRateOf(clip) };
+  };
+  const applySpeechCut = async (clipId: string, speech: Awaited<ReturnType<typeof speechEvidence>>, chosenRanges: { start: number; end: number }[], kinds: Set<string>, minConfidence: number, preview = false) => {
+    const { clip, evidence, offset, sourceEnd } = speech, cleanup = speech.cleanup!;
+    const chosen = chosenRanges.map(range => ({ start: Math.max(clip.sourceStart, range.start), end: Math.min(sourceEnd, range.end) })).filter(range => range.end > range.start);
+    if (!chosen.length) throw new Error('None of the ranges is inside this clip’s retained source.');
+    const inside = (cut: { start: number; end: number }) => chosen.some(range => cut.end > range.start && cut.start < range.end);
+    // Cuts in this clip's source time, only where the kept ranges are.
+    const cuts: CleanupCut[] = cleanup.cuts.filter(cut => kinds.has(cut.kind) && cut.confidence >= minConfidence).map(cut => ({ ...cut, start: cut.start - offset, end: cut.end - offset })).filter(inside);
+    const transcript = evidence.analysis!.transcript!, activity = evidence.analysis!.audioActivity;
+    const ranges = chosen.flatMap(range => keptRanges(range.start, range.end, cuts)).map(range => {
+      const source = { start: range.start + offset, end: range.end + offset };
+      const measured = cleanup.edges?.length === transcript.words.length * 2 ? snapToSpeech(source, transcript.words, cleanup.edges) : activity ? refineAudioRangeEdges(source, transcript, activity) : source;
+      return { start: Math.max(range.start, measured.start - offset), end: Math.min(range.end, measured.end - offset) };
+    }).filter(range => (range.end - range.start) / playbackRateOf(clip) >= 1 / editSession.timeline.fps);
+    const chosenLength = chosen.reduce((total, range) => total + range.end - range.start, 0), keptLength = ranges.reduce((total, range) => total + range.end - range.start, 0);
+    const count = (kind: string) => cuts.filter(cut => cut.kind === kind).length;
+    // What the user is told: the edit removed these, on top of the ranges that were chosen.
+    const speechCleanup = { pauses: count('pause'), breaths: count('breath'), fillers: count('filler'), retakes: count('restart'), removedSeconds: Math.round(Math.max(0, chosenLength - keptLength) * 100) / 100, keptPieces: ranges.length, edges: 'measured word sound, millisecond-exact' };
+    if (preview) return { preview: true, speechCleanup, cuts: cuts.slice(0, 200).map(cut => ({ kind: cut.kind, start: cut.start, end: cut.end, confidence: cut.confidence, detail: cut.detail })), keptRanges: ranges };
+    if (!ranges.length) throw new Error('Cleanup would remove everything chosen; raise minConfidence or limit kinds.');
+    if (ranges.length > 100) throw new Error(`Cleanup would split this clip into ${ranges.length} pieces; clean a shorter clip, raise minConfidence or limit kinds.`);
+    let retainedRanges: RetainedRangeSummary[] = [];
+    // Speech edges are measured to the millisecond; rounding them to frames would add back up to 33 ms of air per edge.
+    const result = await checkpoint(t => { const retained = retainSourceRanges(t, clipId, ranges, undefined, true); retainedRanges = retained.ranges; return retained.timeline; });
+    return { ...result, speechCleanup, retainedRanges };
+  };
   const transformFields={units:z.enum(VISUAL_INPUT_UNITS).optional(),x:z.number().optional(),y:z.number().optional(),scale:z.number().min(.1).max(5).optional(),rotation:z.number().min(-360).max(360).optional(),opacity:z.number().min(0).max(1).optional()};
   // Library and generated sound effects share one A layer above dialogue and music when it is free.
   const isEffectSound = (clip: Timeline['clips'][number]) => clip.kind === 'audio' && assets.some(item => item._id === clip.assetId && (isStockAudioKey(item.r2Key) || item.soundRecipe !== undefined));
@@ -418,16 +461,16 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       return { assetId: asset._id, ...read, ...(transcriptNote ? { transcriptNote } : {}) };
     } }),
     closeGaps: createTool({ description: "Join footage after cuts: close every gap between video/image clips on each visual layer in ONE saved change, moving later clips earlier with their linked audio. Retained source ranges, speed and styling are unchanged. Optional clipIds (two or more) limits it to those clips. Use this instead of moving clips one at a time.", inputSchema: z.object({ clipIds: clipIdsInput.optional() }), execute: async (_ctx, input) => checkpoint(t => closeFootageGaps(t, input.clipIds ?? [])) }),
-    retainSourceRanges: createTool({ description: "Keep ordered measured SOURCE-time ranges from one existing video/audio clip and compact them at that clip's timeline start in one change. For speech cleanup use tightenSilence:true: reuse or locally measure source audio energy, conservatively tighten each requested outer quiet edge with 80ms padding, and leave internal pauses untouched. Unclear/noisy evidence leaves edges unchanged. Omit it for exact user-requested timestamp cuts. Every requested range must fit the current retained source; never restore removed footage. Preserve speed, styling, motion/fade phase and linked audio. Round outward to project frames (sub-frame gaps merge conservatively), unless exactEdges:true keeps measured edges to the millisecond for speech cuts. Other clips/tracks/markers keep their positions; no global ripple. Refuses transition-connected sources. Inspect actual retained ranges before adding subtitles.", inputSchema: z.object({ clipId: z.string().min(1).max(100), ranges: z.array(z.object({ start: z.number().min(0), end: z.number().positive() }).strict()).min(1).max(100), tightenSilence: z.boolean().optional(), exactEdges: z.boolean().optional() }), execute: async (_ctx, input) => {
+    retainSourceRanges: createTool({ description: "Keep ordered SOURCE-time ranges from one existing video/audio clip and compact them at that clip's timeline start in one change. For any speech cut use tightenSilence:true: the source's measured speech cleanup then runs automatically inside the kept ranges (pauses, breaths and filler words removed between words) and every edge snaps to the measured sound of its words, to the millisecond; report its speechCleanup summary to the user. keepPauses:true keeps natural pauses and fillers (only edges are tightened) when the user asks for that. Without a cleanup map, outer quiet edges are tightened with 80ms padding. Omit tightenSilence for exact user-requested timestamp cuts. Every requested range must fit the current retained source; never restore removed footage. Preserve speed, styling, motion/fade phase and linked audio. Without tightenSilence edges round outward to project frames unless exactEdges:true. Other clips/tracks/markers keep their positions; no global ripple. Refuses transition-connected sources. Inspect actual retained ranges before adding subtitles.", inputSchema: z.object({ clipId: z.string().min(1).max(100), ranges: z.array(z.object({ start: z.number().min(0), end: z.number().positive() }).strict()).min(1).max(100), tightenSilence: z.boolean().optional(), keepPauses: z.boolean().optional(), exactEdges: z.boolean().optional() }), execute: async (_ctx, input) => {
       let evidence: (typeof assets)[number] | undefined;
       if (input.tightenSilence) {
-        await editSession.wait();
-        const clip = find(editSession.timeline, input.clipId);
-        // Upload preparation stores speech evidence on the video source.
-        const pair = clip.kind === 'audio' && clip.linkedClipId ? editSession.timeline.clips.find(member => member.id === clip.linkedClipId && member.linkedClipId === clip.id && member.kind === 'video') : undefined;
-        const assetId = pair?.assetId ?? clip.assetId;
-        if (!assetId) throw new Error('Choose uploaded speech media for audio boundary refinement.');
-        evidence = await analyze(assetId, 'transcribe', true);
+        const speech = await speechEvidence(input.clipId);
+        if (speech.cleanup) {
+          // Validate the request as asked before measured adjustment.
+          retainSourceRanges(editSession.timeline, input.clipId, input.ranges, undefined, true);
+          return applySpeechCut(input.clipId, speech, input.ranges, input.keepPauses ? new Set() : new Set(['pause', 'breath', 'filler']), .6);
+        }
+        evidence = speech.evidence;
       }
       let ranges: RetainedRangeSummary[] = [];
       let tightened = false;
@@ -450,46 +493,13 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       });
       return { ...result, retainedRanges: ranges, ...(evidence ? { silenceRefinement: { status: tightened ? 'applied' : evidence.analysis?.audioActivity?.reliable ? 'unchanged' : 'unreliable', evidenceAssetId: evidence._id, paddingSeconds: AUDIO_QUIET_EDGE_PAD } } : {}) };
     } }),
-    cleanSpeech: createTool({ description: "Remove filler words, breaths, long pauses and abandoned retakes from one existing video/audio clip in ONE change, using the source's measured speech cleanup map (verbatim word timings plus 10ms acoustic frames). Each cut sits between words, never inside one, and a retake keeps only its final attempt. Cuts below minConfidence (default 0.6) are kept; kinds limits what is removed (default all). preview:true returns the proposed cuts without editing. To assemble chosen takes, pass keep: the ordered SOURCE ranges of the sentences to keep (roughly bounded; the engine sets exact edges), and only pause/breath/filler cuts apply inside them by default. Kept pieces compact at the clip's timeline start with linked audio, speed and styling preserved; other clips keep their positions, so close gaps afterwards when needed. Use this for 'remove ums', 'cut the pauses', 'clean up the retakes'; inspect retained ranges before adding subtitles.", inputSchema: z.object({ clipId: z.string().min(1).max(100), minConfidence: z.number().min(0).max(1).optional(), kinds: z.array(z.enum(['pause', 'breath', 'filler', 'restart'])).min(1).max(4).optional(), preview: z.boolean().optional(), keep: z.array(z.object({ start: z.number().min(0), end: z.number().positive() }).strict()).min(1).max(100).optional() }), execute: async (_ctx, input) => {
-      await editSession.wait();
+    cleanSpeech: createTool({ description: "Remove filler words, breaths, pauses and abandoned retakes from one existing video/audio clip in ONE change, using the source's measured speech cleanup map. Each cut sits between words, never inside one; a retake keeps only its final attempt; every edge snaps to measured word sound, to the millisecond. Cuts below minConfidence (default 0.6) are kept; kinds limits what is removed (default all). preview:true returns the proposed cuts without editing. To assemble chosen takes prefer retainSourceRanges with tightenSilence:true, which applies the same cleanup inside the kept ranges; keep here does the same. Kept pieces compact at the clip's timeline start with linked audio, speed and styling preserved; other clips keep their positions, so close gaps afterwards when needed. Use for 'remove ums', 'cut the pauses', 'clean up the retakes' on a clip as a whole; report its speechCleanup summary.", inputSchema: z.object({ clipId: z.string().min(1).max(100), minConfidence: z.number().min(0).max(1).optional(), kinds: z.array(z.enum(['pause', 'breath', 'filler', 'restart'])).min(1).max(4).optional(), preview: z.boolean().optional(), keep: z.array(z.object({ start: z.number().min(0), end: z.number().positive() }).strict()).min(1).max(100).optional() }), execute: async (_ctx, input) => {
       if (input.keep?.some((range, index) => range.end <= range.start || (index > 0 && range.start < input.keep![index - 1].end))) throw new Error('keep ranges must be ordered and non-overlapping.');
-      const clip = find(editSession.timeline, input.clipId);
-      if (clip.kind !== 'video' && clip.kind !== 'audio') throw new Error('Choose a video or audio clip with speech.');
-      // Upload preparation stores speech evidence on the video source.
-      const pair = clip.kind === 'audio' && clip.linkedClipId ? editSession.timeline.clips.find(member => member.id === clip.linkedClipId && member.linkedClipId === clip.id && member.kind === 'video') : undefined;
-      const assetId = pair?.assetId ?? clip.assetId;
-      if (!assetId) throw new Error('Choose uploaded speech media to clean.');
-      let evidence = await analyze(assetId, 'transcribe', true);
-      if (!currentSpeechCleanup(evidence.analysis?.speechCleanup)) evidence = await analyzeOnce(assetId, 'transcribe', true, true);
-      const cleanup = evidence.analysis?.speechCleanup;
-      if (!cleanup || !currentSpeechCleanup(cleanup)) throw new Error('Speech cleanup measurements are unavailable for this source. The media processor has not measured it yet; trim with retainSourceRanges instead.');
-      const minConfidence = input.minConfidence ?? .6, kinds = new Set(input.kinds ?? (input.keep ? ['pause', 'breath', 'filler'] : ['pause', 'breath', 'filler', 'restart']));
-      const offset = clip.assetId === evidence._id ? 0 : pair ? pair.sourceStart - clip.sourceStart : undefined;
-      if (offset === undefined) throw new Error('The speech evidence no longer matches this linked source.');
-      const sourceEnd = clip.sourceStart + clip.duration * playbackRateOf(clip);
-      // Cuts in this clip's source time, clipped to what it still retains.
-      const cuts: CleanupCut[] = cleanup.cuts.filter(cut => kinds.has(cut.kind) && cut.confidence >= minConfidence).map(cut => ({ ...cut, start: cut.start - offset, end: cut.end - offset })).filter(cut => cut.end > clip.sourceStart && cut.start < sourceEnd);
-      // Each kept piece becomes a join: snap it to its words' measured sound edges, so two short
-      // silences or a detached breath never add up to an audible gap. Ranges stay in this clip's source time.
-      const transcript = evidence.analysis!.transcript!, activity = evidence.analysis!.audioActivity;
-      const chosen = input.keep ? input.keep.map(range => ({ start: Math.max(clip.sourceStart, range.start), end: Math.min(sourceEnd, range.end) })).filter(range => range.end > range.start) : [{ start: clip.sourceStart, end: sourceEnd }];
-      if (!chosen.length) throw new Error('None of the keep ranges is inside this clip’s retained source.');
-      const ranges = chosen.flatMap(range => keptRanges(range.start, range.end, cuts)).map(range => {
-        const source = { start: range.start + offset, end: range.end + offset };
-        const measured = cleanup.edges?.length === transcript.words.length * 2 ? snapToSpeech(source, transcript.words, cleanup.edges) : activity ? refineAudioRangeEdges(source, transcript, activity) : source;
-        return { start: Math.max(range.start, measured.start - offset), end: Math.min(range.end, measured.end - offset) };
-      }).filter(range => (range.end - range.start) / playbackRateOf(clip) >= 1 / editSession.timeline.fps);
-      const removed = sourceEnd - clip.sourceStart - ranges.reduce((total, range) => total + range.end - range.start, 0);
-      const counts = Object.fromEntries(['pause', 'breath', 'filler', 'restart'].map(kind => [kind, cuts.filter(cut => cut.kind === kind).length]));
-      const summary = { cutCount: cuts.length, counts, removedSeconds: Math.round(removed * 100) / 100, keptPieces: ranges.length };
-      if (input.preview) return { preview: true, ...summary, cuts: cuts.slice(0, 200).map(cut => ({ kind: cut.kind, start: cut.start, end: cut.end, confidence: cut.confidence, detail: cut.detail })), keptRanges: ranges };
-      if (!cuts.length && !input.keep) return { applied: false, ...summary, reason: 'No cuts at this confidence inside the clip.' };
-      if (!ranges.length) throw new Error('Cleanup would remove the whole clip; raise minConfidence or limit kinds.');
-      if (ranges.length > 100) throw new Error(`Cleanup would split this clip into ${ranges.length} pieces; clean a shorter clip, raise minConfidence or limit kinds.`);
-      let retainedRanges: RetainedRangeSummary[] = [];
-      // Speech edges are measured to the millisecond; rounding them to frames would add back up to 33 ms of air per edge.
-      const result = await checkpoint(t => { const retained = retainSourceRanges(t, input.clipId, ranges, undefined, true); retainedRanges = retained.ranges; return retained.timeline; });
-      return { ...result, ...summary, retainedRanges };
+      const speech = await speechEvidence(input.clipId);
+      if (!speech.cleanup) throw new Error('Speech cleanup measurements are unavailable for this source. The media processor has not measured it yet; trim with retainSourceRanges instead.');
+      const kinds = new Set<string>(input.kinds ?? (input.keep ? ['pause', 'breath', 'filler'] : ['pause', 'breath', 'filler', 'restart']));
+      const chosen = input.keep ?? [{ start: speech.clip.sourceStart, end: speech.sourceEnd }];
+      return applySpeechCut(input.clipId, speech, chosen, kinds, input.minConfidence ?? .6, input.preview);
     } }),
     split: createTool({ description: "Split an existing clip at a timeline time in seconds. Source edits remain staged until the request completes. For a speech cut with several retained source ranges, prefer retainSourceRanges instead of a split/trim/delete chain.", inputSchema: z.object({ clipId: z.string(), time: z.number().min(0) }), execute: async (_ctx, input) => checkpoint(t => splitClip(t, input.clipId, input.time, crypto.randomUUID())) }),
     trim: createTool({ description: "Change duration and optional SOURCE trim start, in seconds. Use clipId/duration/sourceStart for one clip, OR edits:[{clipId,duration,sourceStart?}] for several independently specified trims in ONE validated operation. Prefer edits when several trim ranges are already known. Never supply both forms; target each linked pair only once because its audio stays synchronized automatically. Media source edits remain staged until completion. Effect clips have no source trim: duration stretches their animation. A duration that would run into the next clip on the same layer is refused with the room available.", inputSchema: z.object({ clipId:z.string().min(1).optional(),duration:z.number().positive().optional(),sourceStart:z.number().min(0).optional(),edits:z.array(trimChangeInput).min(1).max(200).refine(edits=>new Set(edits.map(edit=>edit.clipId)).size===edits.length,{message:'Choose unique clip IDs.'}).optional() }).strict().refine(input=>input.edits!==undefined?input.clipId===undefined&&input.duration===undefined&&input.sourceStart===undefined:input.clipId!==undefined&&input.duration!==undefined,{message:'Specify one clipId/duration or an edits array.'}), execute: async (_ctx, input) => checkpoint(t => {

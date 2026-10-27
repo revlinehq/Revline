@@ -26,6 +26,7 @@ Keep this file factual. Update the status when something ships, and do not promo
   4. **Retakes across sentences**: a line re-recorded up to a minute later, even reworded slightly, keeps only the last full take. False starts ("In a short time, / in a short time, you're getting…") and lines cut off mid-sentence are dropped too.
 - **Joins that sound continuous.** It measures where each word's sound starts and where its decay ends. Every kept piece is snapped to those edges, about 30 ms before the first word and 50 ms after the last, so a cut never carries room tone or a detached breath, and never clips a word's tail.
 - **Confidence on every cut.** Each cut carries a 0–1 confidence and a reason (pause, breath, filler, restart), so an editor or the AI can skip uncertain ones.
+- **Automatic.** Every speech cut Revline makes runs the cleanup inside the kept sentences and snaps edges to measured word sound, to the millisecond. Nobody has to ask for it; the chat says what it removed ("removed 31 pauses, 12.5 s"). Saying "keep my natural pauses" turns it off for that edit.
 - **Two ways to use it:**
   - Clean a whole clip in one call.
   - Pass the sentences the AI chose to keep; the engine then sets every boundary. Choosing between differently worded takes stays an editorial decision for the AI.
