@@ -4,3 +4,27 @@
 @keyframes live-clip-remove{0%{opacity:1}100%{opacity:0;transform:scaleX(.96)}}
 @media(prefers-reduced-motion:reduce){.timeline-panel[data-live-edit] .timeline-clip{transition:none}.timeline-live-removed{animation:none;opacity:0}}
 .custom-timeline[data-ai-working] .timeline-body::after{display:none}
+/* AI run: the span being edited lights up and the rest steps back; changed clips carry chips. */
+.timeline-ai-dim{position:absolute;top:0;bottom:0;z-index:6;background:color-mix(in srgb,var(--ws-bg,#0b0c0e) 62%,transparent);pointer-events:none;transition:left .42s cubic-bezier(.22,1,.36,1),width .42s cubic-bezier(.22,1,.36,1)}
+.timeline-ai-range{position:absolute;top:0;bottom:0;z-index:6;overflow:hidden;border-inline:1px solid var(--revline-accent);background:linear-gradient(180deg,color-mix(in srgb,var(--revline-accent) 18%,transparent),color-mix(in srgb,var(--revline-accent) 4%,transparent));pointer-events:none;transition:left .42s cubic-bezier(.22,1,.36,1),width .42s cubic-bezier(.22,1,.36,1)}
+.timeline-ai-cursor{position:absolute;top:0;bottom:0;left:0;width:12px;margin-left:-6px;background:linear-gradient(90deg,transparent,#a78bfa55,transparent);animation:timeline-ai-sweep 2.4s ease-in-out infinite alternate}
+.timeline-ai-cursor::after{content:'';position:absolute;top:0;bottom:0;left:5px;width:2px;background:#c4b5fd}
+@keyframes timeline-ai-sweep{from{left:0}to{left:100%}}
+.custom-timeline .time-ruler .timeline-ai-range-chip{position:absolute;top:5px;z-index:2;display:inline-flex;align-items:center;gap:5px;height:18px;padding:0 7px;margin-left:4px;border-radius:4px;background:var(--revline-accent);color:#fff;font-size:10px;font-weight:600;line-height:1;white-space:nowrap;transform:none;pointer-events:none}
+.timeline-clip[data-ai-change]{outline:1.5px solid #a78bfa;outline-offset:-1px}
+.timeline-clip[data-ai-change=new]{outline-color:#86efac;box-shadow:0 0 10px #86efac40}
+.timeline-ai-chip{position:absolute;top:3px;right:4px;z-index:3;display:inline-flex;align-items:center;gap:3px;height:15px;padding:0 5px;border-radius:3px;background:var(--revline-accent);color:#fff;font-size:9px;font-weight:600;line-height:1;white-space:nowrap;pointer-events:none}
+.timeline-ai-chip[data-kind=new]{background:#14532d;color:#bbf7d0}
+.timeline-ai-chip[data-kind=removed]{background:#3f1d1d;color:#fca5a5}
+.timeline-ai-removed{position:absolute;top:3px;z-index:3;border:1px solid #f8717199;border-radius:5px;background:#f8717114;pointer-events:none}
+.timeline-ai-steps{display:flex;align-items:center;gap:16px;min-height:34px;padding:0 14px;border-top:1px solid var(--timeline-divider,#25272d);background:color-mix(in srgb,var(--revline-accent) 5%,transparent);font-size:11px;color:var(--ws-muted,#a1a3ab);overflow:hidden}
+.timeline-ai-steps ol{display:flex;align-items:center;gap:16px;min-width:0;list-style:none;margin:0;padding:0}
+.timeline-ai-steps li{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.timeline-ai-steps li svg{color:#a78bfa}
+.timeline-ai-steps li[data-current]{color:var(--ws-text,#ededef);font-weight:600}
+.timeline-ai-step-dot{width:7px;height:7px;border-radius:50%;background:#a78bfa;box-shadow:0 0 8px #a78bfaaa;animation:timeline-ai-badge-pulse 1.6s ease-in-out infinite}
+.timeline-ai-progress{position:relative;flex:none;width:96px;height:3px;border-radius:2px;background:#ffffff14;overflow:hidden}
+.timeline-ai-progress i{position:absolute;inset:0 auto 0 0;width:40%;border-radius:2px;background:#8b5cf6;animation:timeline-ai-indeterminate 1.4s ease-in-out infinite}
+.timeline-ai-steps[data-done] .timeline-ai-progress i{width:100%;animation:none}
+@keyframes timeline-ai-indeterminate{from{left:-40%}to{left:100%}}
+@media(prefers-reduced-motion:reduce){.timeline-ai-cursor,.timeline-ai-step-dot,.timeline-ai-progress i{animation:none}.timeline-ai-cursor{left:50%}.timeline-ai-dim,.timeline-ai-range{transition:none}}
