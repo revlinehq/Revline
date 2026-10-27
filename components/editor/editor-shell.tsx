@@ -68,7 +68,7 @@ export type EditorShellProps = {
   canResumeEdit?:boolean;
   assistantEditSnapshot?:AssistantEditSnapshot;
   assistantPanel?: ReactNode;
-  onExport: (settings: ExportSettings) => Promise<string | void>; onDownloadExport?: (jobId:string)=>Promise<void>; onCancelExport?: (jobId:string)=>Promise<void>; exportState: ExportState; exports?: NonNullable<ExportState>[]; timelineTabs?: TimelineTab[]; timelineTabActions?: TimelineTabActions; demo?: boolean; ultra?: boolean; embedded?: boolean;
+  onExport: (settings: ExportSettings) => Promise<string | void>; onDownloadExport?: (jobId:string)=>Promise<void>; onCancelExport?: (jobId:string)=>Promise<void>; exportState: ExportState; exports?: NonNullable<ExportState>[]; timelineTabs?: TimelineTab[]; timelineTabActions?: TimelineTabActions; switchingTimeline?: boolean; demo?: boolean; ultra?: boolean; embedded?: boolean;
   analysisBusy?: string | null; analysisSource?: string | null; analysisProgress?: number | null; analysisStartedAt?:number|null; assistantBudgetUsed?:number; preparationActivity?:string; onLoadMore?: () => void; canLoadMore?: boolean;
   projectId?: string; workspaceOnly?: boolean; onImportVideo?: (url:string)=>Promise<void>; videoImports?: VideoImportState[];
   onRefreshMedia?:RefreshPlaybackMedia;
@@ -91,7 +91,7 @@ export function EditorShell(p: EditorShellProps) {
   // Status fields can arrive before the workflow flag updates. Any positive
   // run-scoped editing/analysis evidence locks interactions; a plain reply has none.
   const scriptedWorkflow = !!p.demo && p.aiWorkflowActive === undefined && p.aiEditing === undefined;
-  const editing = p.aiRunning && (p.aiWorkflowActive === true || p.aiEditing === true || !!p.analysisBusy || scriptedWorkflow);
+  const editing = p.switchingTimeline === true || p.aiRunning && (p.aiWorkflowActive === true || p.aiEditing === true || !!p.analysisBusy || scriptedWorkflow);
   const editLock = useRef(editing);
   const manualSession = useMemo(() => Symbol('manual-edit-session'), [editing]);
   const currentManualSession = useRef(manualSession);

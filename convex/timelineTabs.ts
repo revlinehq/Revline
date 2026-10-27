@@ -8,7 +8,7 @@ import { currentTimeline, serializedBytes } from './lib/timeline';
 import { editingWorkflowActive } from './lib/assistant_workflow';
 import { TIMELINE_LOCKED } from '../lib/editor/timeline-sync';
 import { timelineDuration, type Timeline } from '../lib/editor/types';
-import { aspectRatio } from './schema';
+import { aspectRatio, timelineValidator } from './schema';
 
 export const MAX_TIMELINE_TABS = 10;
 const STASHED_BYTES = 800_000;
@@ -71,6 +71,14 @@ export async function listTabsFor(ctx: QueryCtx, ownerId: string, projectId: Id<
 }
 
 const createArgs = { projectId: v.id('projects'), name: v.optional(v.string()), from: v.union(v.literal('blank'), v.literal('duplicate')), aspectRatio: v.optional(aspectRatio) };
+/** The other tabs' timelines, so the editor can show one the moment it is clicked. */
+export const snapshots = query({ args: { projectId: v.id('projects') }, returns: v.array(v.object({ id: v.string(), timeline: timelineValidator })), handler: async (ctx, args) => {
+  const project = await requireProject(ctx, args.projectId, await requireOwner(ctx), false);
+  const tabs = new Set(tabsOf(project).map(tab => tab.id));
+  const rows = await ctx.db.query('projectTimelines').withIndex('by_project_timeline', q => q.eq('projectId', project._id)).take(MAX_TIMELINE_TABS);
+  return rows.filter(row => tabs.has(row.timelineId)).map(row => ({ id: row.timelineId, timeline: row.timeline }));
+}});
+
 export const create = mutation({ args: createArgs, returns: v.string(), handler: async (ctx, args) => createTabFor(ctx, await requireOwner(ctx), args) });
 export async function createTabFor(ctx: MutationCtx, ownerId: string, args: ObjectType<typeof createArgs>) {
   const project = await openProject(ctx, args.projectId, ownerId), tabs = tabsOf(project);
