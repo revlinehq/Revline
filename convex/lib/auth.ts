@@ -15,7 +15,8 @@ export async function requireProject(
   ctx: DatabaseContext,
   projectId: Id<"projects">,
   ownerId: string,
-  includeHistory = true,
+  /** Undo history is up to 10 full timelines; load it only where it is read. */
+  includeHistory = false,
 ) {
   const project = await readProject(ctx,projectId,includeHistory);
   if (!project || project.deleting || project.ownerId !== ownerId) {

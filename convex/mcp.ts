@@ -3,7 +3,7 @@ import { internalMutation, internalQuery, type MutationCtx, type QueryCtx } from
 import type { Id } from './_generated/dataModel';
 import { requireProject } from './lib/auth';
 import { requireEditorAccess } from './lib/billing_access';
-import { writeProject } from './lib/project_data';
+import { projectIdentity, writeProject } from './lib/project_data';
 import { currentTimeline } from './lib/timeline';
 import { timelineDuration } from '../lib/editor/types';
 import { aspectRatio } from './schema';
@@ -44,11 +44,17 @@ export const readRun = internalQuery({ args: { ownerId: v.string(), projectId: v
 /** How long the editor keeps showing an MCP agent as working after its last call. Agents
  * think between calls; per-call status would flicker on and off during one request. */
 export const AGENT_ACTIVE_MS = 60_000;
+/** Runs on every MCP tool call, so it reads only the small access and run rows, never the project document,
+ * and rewrites the marker only once it is half spent. */
 export const touchAgent = internalMutation({ args: { ownerId: v.string(), projectId: v.string(), agentName: v.optional(v.string()) }, returns: v.null(), handler: async (ctx, args) => {
   const id = ctx.db.normalizeId('projects', args.projectId);
-  const project = id ? await ctx.db.get(id) : null;
-  if (!project || project.ownerId !== args.ownerId || project.deleting) return null;
-  await writeProject(ctx, project._id, { aiAgentName: args.agentName?.slice(0, 60) || 'AI agent', aiAgentActiveUntil: Date.now() + AGENT_ACTIVE_MS });
+  if (!id) return null;
+  try { await projectIdentity(ctx, id, args.ownerId); } catch { return null; }
+  const name = args.agentName?.slice(0, 60) || 'AI agent', now = Date.now();
+  const run = await ctx.db.query('aiRuns').withIndex('by_project', q => q.eq('projectId', id)).unique();
+  if (run && run.aiAgentName === name && (run.aiAgentActiveUntil ?? 0) > now + AGENT_ACTIVE_MS / 2) return null;
+  if (run) await ctx.db.patch(run._id, { aiAgentName: name, aiAgentActiveUntil: now + AGENT_ACTIVE_MS });
+  else await writeProject(ctx, id, { aiAgentName: name, aiAgentActiveUntil: now + AGENT_ACTIVE_MS });
   return null;
 }});
 

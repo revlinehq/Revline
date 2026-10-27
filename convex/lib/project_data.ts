@@ -72,10 +72,14 @@ export async function writeProject(ctx:MutationCtx,projectId:Id<'projects'>,patc
   if(!existing)await ctx.db.insert('aiRuns',{projectId,ownerId:raw.ownerId,...aiFields(next)});else if(aiKeys.some(key=>Object.hasOwn(patch,key)||Object.hasOwn(raw,key)))await ctx.db.patch(existing._id,aiPatch);
   if(planHistory||Object.hasOwn(patch,'history')||raw.history!==undefined)await writeHistory(ctx,raw,planHistory??replaceHistory(patch.history??raw.history??[]));
   const plain={...patch,history:undefined,...Object.fromEntries(aiKeys.map(key=>[key,undefined]))};
-  await ctx.db.patch(projectId,plain);
+  // Every write to the project document re-runs each open editor's project queries; skip no-op patches
+  // (AI state alone lives on aiRuns) unless legacy fields still need clearing from the document.
+  const changes=Object.entries(plain).filter(([key,value])=>value!==undefined||Object.hasOwn(raw,key));
+  if(changes.length)await ctx.db.patch(projectId,Object.fromEntries(changes));
   const access=await ctx.db.query('projectAccess').withIndex('by_project',q=>q.eq('projectId',projectId)).unique();
-  const identity={projectId,ownerId:raw.ownerId,historyStored:true,threadId:next.threadId,deleting:next.deleting};
-  if(access){if(!access.historyStored||access.threadId!==next.threadId||access.deleting!==next.deleting)await ctx.db.patch(access._id,identity);}else await ctx.db.insert('projectAccess',identity);
+  const identity={projectId,ownerId:raw.ownerId,historyStored:true,threadId:next.threadId,deleting:next.deleting,timelineTabs:next.timelineTabs??[],activeTimelineId:next.activeTimelineId};
+  const tabsChanged=JSON.stringify(access?.timelineTabs)!==JSON.stringify(identity.timelineTabs)||access?.activeTimelineId!==identity.activeTimelineId;
+  if(access){if(!access.historyStored||access.threadId!==next.threadId||access.deleting!==next.deleting||tabsChanged)await ctx.db.patch(access._id,identity);}else await ctx.db.insert('projectAccess',identity);
   await syncProjectCatalog(ctx,next);
 }
 export async function createProject(ctx:MutationCtx,fields:Omit<Doc<'projects'>,'_id'|'_creationTime'>) {

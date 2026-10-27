@@ -232,7 +232,7 @@ export const apply = internalMutation({ args: { ...runArgs, expectedRevision: v.
 }});
 /** Undo only stored history before this model turn publishes its own checkpoints. */
 export const undoLatestEdit=internalMutation({args:{...runArgs,expectedRevision:v.number()},returns:v.object({undone:v.boolean(),revision:v.number(),timeline:timelineValidator}),handler:async(ctx,args)=>{
-  const project=await requireProject(ctx,args.projectId,args.ownerId);
+  const project=await requireProject(ctx,args.projectId,args.ownerId,true);
   if(project.aiRunId!==args.runId||!project.aiRunning)throw new ConvexError('AI run is no longer active');
   if(project.aiUndoRecorded)throw new ConvexError('Undo the latest saved edit before making changes in this turn.');
   if((project.revision??0)!==args.expectedRevision)throw new ConvexError('The timeline changed elsewhere. Inspect it before undoing.');
@@ -351,7 +351,7 @@ export const currentPrompt = internalQuery({
 
 
 export const queued=query({args:{projectId:v.id('projects')},returns:v.object({paused:v.boolean(),messages:v.array(v.object({id:v.id('assistantQueue'),prompt:v.string(),error:v.optional(v.string())}))}),handler:async(ctx,{projectId})=>{
-  const project=await requireProject(ctx,projectId,await requireOwner(ctx));
+  const project=await projectRun(ctx,projectId,await requireOwner(ctx));
   const rows=await ctx.db.query('assistantQueue').withIndex('by_project',q=>q.eq('projectId',projectId)).take(10);
   return {paused:!!project.aiQueuePaused,messages:rows.map(row=>({id:row._id,prompt:row.prompt,...(row.error?{error:row.error}:{})}))};
 }});

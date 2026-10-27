@@ -94,7 +94,7 @@ export async function duplicateProjectFor(ctx: MutationCtx, ownerId: string, pro
   for (const id of ids.values()) await recordAssetStorage(ctx, (await ctx.db.get(id))!);
   const remap = (item: Timeline): Timeline => ({ ...item, clips: item.clips.map(clip => clip.assetId && ids.has(clip.assetId) ? { ...clip, assetId: ids.get(clip.assetId)! } : clip) });
   const tabs = await ctx.db.query('projectTimelines').withIndex('by_project_timeline', q => q.eq('projectId', project._id)).take(10);
-  for (const row of tabs) await ctx.db.insert('projectTimelines', { projectId: copyId, ownerId, timelineId: row.timelineId, timeline: remap(row.timeline), history: [] });
+  for (const row of tabs) await ctx.db.insert('projectTimelines', { projectId: copyId, ownerId, timelineId: row.timelineId, timeline: remap(row.timeline) });
   await writeProject(ctx, copyId, { timeline: remap(timeline), aspectRatio: timeline.aspectRatio, ...(project.timelineTabs ? { timelineTabs: project.timelineTabs, activeTimelineId: project.activeTimelineId } : {}) });
   return copyId;
 }
@@ -174,7 +174,7 @@ export const saveTimeline = mutation({ args: { projectId: v.id("projects"), time
   return { revision, timeline: normalizeTimeline(timeline) };
 }});
 export const undo = mutation({ args: { projectId: v.id("projects") }, returns: v.number(), handler: async (ctx, args) => {
-  const project = await requireProject(ctx, args.projectId, await requireOwner(ctx)); await requireEditorAccess(ctx, project.ownerId);
+  const project = await requireProject(ctx, args.projectId, await requireOwner(ctx), true); await requireEditorAccess(ctx, project.ownerId);
   if (await editingWorkflowActive(ctx, project)) throw new ConvexError(TIMELINE_LOCKED);
   const history = (project.history ?? []).map(normalizeTimeline); const previous = history.pop();
   if (!previous) throw new ConvexError("No edits to undo"); const revision = (project.revision ?? 0) + 1;

@@ -35,7 +35,9 @@ export function ConnectedTimelineShareDialog({ projectId, onBeforePublish, ...pr
   const status = useQuery(api.timelineShares.status, props.open ? { projectId } : 'skip');
   const tabs = useQuery(api.timelineTabs.list, props.open ? { projectId } : 'skip');
   const publish = useMutation(api.timelineShares.publish), revoke = useMutation(api.timelineShares.revoke);
-  return <TimelineShareDialog {...props} tabs={tabs} status={status} chatPreview={chatPreview} onChatPreviewChange={setPreviewEnabled} onPublish={async (chat, timelineIds) => { await onBeforePublish(); return publish({ projectId, ...(chat ? { chat } : {}), ...(timelineIds ? { timelineIds } : {}) }); }} onRevoke={() => revoke({ projectId })}/>;
+  // The tab list does not track the open tab's live length; this dialog has the timeline itself.
+  const live = tabs?.map(tab => tab.active ? { ...tab, duration: timelineDuration(props.timeline) } : tab);
+  return <TimelineShareDialog {...props} tabs={live} status={status} chatPreview={chatPreview} onChatPreviewChange={setPreviewEnabled} onPublish={async (chat, timelineIds) => { await onBeforePublish(); return publish({ projectId, ...(chat ? { chat } : {}), ...(timelineIds ? { timelineIds } : {}) }); }} onRevoke={() => revoke({ projectId })}/>;
 }
 
 export function TimelineShareDialog({ open, onOpenChange, title, timeline, assets, status, onPublish, onRevoke, publishDisabled, chatPreview, onChatPreviewChange, tabs }: Props) {

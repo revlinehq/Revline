@@ -120,7 +120,7 @@ export const selected = query({
 export async function removeOwnedAsset(ctx:MutationCtx,ownerId:string,assetId:Id<'assets'>) {
   const asset = await ctx.db.get(assetId);
   if (!asset || asset.ownerId !== ownerId) throw new ConvexError("Media not found");
-  const project = await requireProject(ctx, asset.projectId, ownerId);
+  const project = await requireProject(ctx, asset.projectId, ownerId, true);
   if (project.aiRunning) throw new ConvexError("Wait for the current AI edit before deleting media");
   if (project.timeline?.clips.some(clip => clip.assetId === asset._id)) throw new ConvexError("Remove this media from the timeline first");
   if(await usedByActiveExport(ctx,ownerId,asset.projectId,new Set([String(asset._id)])))throw new ConvexError('This media is part of an active render');
