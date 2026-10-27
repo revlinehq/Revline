@@ -9,7 +9,7 @@ type Context=MutationCtx|QueryCtx;
 /** A history snapshot; `id` marks a stored row that can be kept as-is. */
 export type HistoryEntry={timeline:Timeline;id?:Id<'timelineRevisions'>;key?:string};
 type HistoryPlan=(previous:HistoryEntry[])=>Promise<HistoryEntry[]>;
-const aiKeys=['aiQueuePaused','aiWorkflowId','aiRunning','aiEditing','aiError','aiRunId','aiUndoRecorded','aiCheckpointRevision','aiAnalysisUsage','aiRequest','aiRecovery'] as const;
+const aiKeys=['aiQueuePaused','aiWorkflowId','aiRunning','aiEditing','aiError','aiRunId','aiUndoRecorded','aiCheckpointRevision','aiAnalysisUsage','aiRequest','aiRecovery','aiAgentName','aiAgentActiveUntil'] as const;
 type AI=Pick<Doc<'projects'>,typeof aiKeys[number]>;
 function aiFields(project:AI):AI {return Object.fromEntries(aiKeys.filter(key=>project[key]!==undefined).map(key=>[key,project[key]]));}
 

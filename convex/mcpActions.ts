@@ -79,12 +79,17 @@ const message = (error: unknown) => {
   return (typeof data === 'string' ? data : data && typeof data === 'object' && typeof (data as { message?: unknown }).message === 'string' ? (data as { message: string }).message : error instanceof Error ? error.message : String(error)).slice(0, 2000);
 };
 
-export const callTool = internalAction({ args: { ownerId: v.string(), name: v.string(), arguments: v.any() }, returns: callResult, handler: async (ctx, args): Promise<CallResult> => {
+export const callTool = internalAction({ args: { ownerId: v.string(), agentName: v.optional(v.string()), name: v.string(), arguments: v.any() }, returns: callResult, handler: async (ctx, args): Promise<CallResult> => {
   const input = args.arguments && typeof args.arguments === 'object' ? args.arguments as Record<string, unknown> : {};
+  // The editor shows the agent as working across its whole request, not only during each call.
+  const projectId = typeof input.projectId === 'string' && args.name !== 'deleteProject' ? input.projectId : undefined;
+  const touch = () => projectId ? ctx.runMutation(internal.mcp.touchAgent, { ownerId: args.ownerId, projectId, ...(args.agentName ? { agentName: args.agentName } : {}) }).catch(() => null) : null;
+  await touch();
   try {
     if (args.name in PROJECT_TOOLS) return await callProjectTool(ctx, args.ownerId, args.name as ProjectToolName, input);
-    return await callEditorTool(ctx, args.ownerId, args.name, input);
+    return await callEditorTool(ctx, args.ownerId, args.name, input, args.agentName);
   } catch (error) { return result(message(error), true); }
+  finally { await touch(); }
 }});
 
 async function callProjectTool(ctx: ActionCtx, ownerId: string, name: ProjectToolName, raw: Record<string, unknown>): Promise<CallResult> {
@@ -182,7 +187,7 @@ async function readEditorTool(ctx: ActionCtx, ownerId: string, rawProjectId: str
   } catch (error) { return result(message(error), true); }
 }
 
-async function callEditorTool(ctx: ActionCtx, ownerId: string, name: string, raw: Record<string, unknown>): Promise<CallResult> {
+async function callEditorTool(ctx: ActionCtx, ownerId: string, name: string, raw: Record<string, unknown>, agentName?: string): Promise<CallResult> {
   const { projectId: rawProjectId, ...rawInput } = raw;
   if (typeof rawProjectId !== 'string' || !rawProjectId) return result('projectId is required. Call listProjects to find it.', true);
   // Validate before locking the project, against the same schema the run will use.
@@ -193,7 +198,7 @@ async function callEditorTool(ctx: ActionCtx, ownerId: string, name: string, raw
   if (!parsed.success) return result(`Invalid arguments: ${z.prettifyError(parsed.error)}`, true);
 
   if (READ_ONLY_TOOLS.has(name)) return readEditorTool(ctx, ownerId, rawProjectId, name, parsed.data);
-  const { projectId, runId } = await ctx.runMutation(internal.mcp.beginRun, { ownerId, projectId: rawProjectId });
+  const { projectId, runId } = await ctx.runMutation(internal.mcp.beginRun, { ownerId, projectId: rawProjectId, ...(agentName ? { agentName } : {}) });
   const run = { projectId, ownerId, runId };
   const controller = new AbortController(), budget = new AssistantRunBudget();
   const abortSignal = AbortSignal.any([controller.signal, budget.signal]);

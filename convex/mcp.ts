@@ -41,7 +41,18 @@ export const readRun = internalQuery({ args: { ownerId: v.string(), projectId: v
   return (await requireProject(ctx, projectIdOf(ctx, args.projectId), args.ownerId, false))._id;
 }});
 
-export const beginRun = internalMutation({ args: { ownerId: v.string(), projectId: v.string() }, returns: v.object({ projectId: v.id('projects'), runId: v.string() }), handler: async (ctx, args) => {
+/** How long the editor keeps showing an MCP agent as working after its last call. Agents
+ * think between calls; per-call status would flicker on and off during one request. */
+export const AGENT_ACTIVE_MS = 60_000;
+export const touchAgent = internalMutation({ args: { ownerId: v.string(), projectId: v.string(), agentName: v.optional(v.string()) }, returns: v.null(), handler: async (ctx, args) => {
+  const id = ctx.db.normalizeId('projects', args.projectId);
+  const project = id ? await ctx.db.get(id) : null;
+  if (!project || project.ownerId !== args.ownerId || project.deleting) return null;
+  await writeProject(ctx, project._id, { aiAgentName: args.agentName?.slice(0, 60) || 'AI agent', aiAgentActiveUntil: Date.now() + AGENT_ACTIVE_MS });
+  return null;
+}});
+
+export const beginRun = internalMutation({ args: { ownerId: v.string(), projectId: v.string(), agentName: v.optional(v.string()) }, returns: v.object({ projectId: v.id('projects'), runId: v.string() }), handler: async (ctx, args) => {
   await requireEditorAccess(ctx, args.ownerId);
   const project = await requireProject(ctx, projectIdOf(ctx, args.projectId), args.ownerId, false);
   // An MCP call outlives its 10-minute action limit only if its action died; take its lock over.
@@ -49,7 +60,7 @@ export const beginRun = internalMutation({ args: { ownerId: v.string(), projectI
   if (project.aiRunning && !stale) throw new ConvexError(project.aiRunId?.startsWith('mcp-') ? 'Another MCP edit is still running on this project. Wait for it to finish.' : 'The in-app AI is editing this project. Wait for it to finish, or stop it in the editor.');
   const runId = `mcp-${Date.now()}-${crypto.randomUUID()}`;
   await clearLivePreview(ctx, project._id);
-  await writeProject(ctx, project._id, { aiRunning: true, aiEditing: false, aiRunId: runId, aiAnalysisUsage: { runId, enqueued: 0 }, aiUndoRecorded: false, aiCheckpointRevision: undefined });
+  await writeProject(ctx, project._id, { aiRunning: true, aiEditing: false, aiRunId: runId, aiAgentName: args.agentName?.slice(0, 60) || 'AI agent', aiAnalysisUsage: { runId, enqueued: 0 }, aiUndoRecorded: false, aiCheckpointRevision: undefined });
   // Releases the lock even if the action is killed; finish ignores a run that already ended.
   await ctx.scheduler.runAfter(MCP_RUN_LIMIT, internal.assistant.finish, { projectId: project._id, ownerId: args.ownerId, runId });
   return { projectId: project._id, runId };

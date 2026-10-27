@@ -135,14 +135,14 @@ async function withinLimit(ctx: MutationCtx, key: string, limit: number, count =
 }
 
 /** Resolve a bearer token to its owner; counts tool calls against a per-minute limit. */
-export const authenticate = internalMutation({ args: { token: v.string(), calls: v.number() }, returns: v.union(v.object({ ownerId: v.string() }), v.object({ error: v.union(v.literal('invalid_token'), v.literal('plan'), v.literal('rate_limited')) })), handler: async (ctx, args) => {
+export const authenticate = internalMutation({ args: { token: v.string(), calls: v.number() }, returns: v.union(v.object({ ownerId: v.string(), clientName: v.string() }), v.object({ error: v.union(v.literal('invalid_token'), v.literal('plan'), v.literal('rate_limited')) })), handler: async (ctx, args) => {
   const hash = await sha256(args.token), now = Date.now();
   const token = await ctx.db.query('mcpTokens').withIndex('by_tokenHash', q => q.eq('tokenHash', hash)).unique();
   if (!token || token.kind === 'refresh' || token.revokedAt !== undefined || (token.expiresAt !== undefined && token.expiresAt < now)) return { error: 'invalid_token' as const };
   try { await requireConnectorAccess(ctx, token.ownerId); } catch { return { error: 'plan' as const }; }
   if (token.lastUsedAt === undefined || now - token.lastUsedAt > 60_000) await ctx.db.patch(token._id, { lastUsedAt: now });
   if (args.calls > 0 && !await withinLimit(ctx, token.ownerId, CALLS_PER_MINUTE, args.calls)) return { error: 'rate_limited' as const };
-  return { ownerId: token.ownerId };
+  return { ownerId: token.ownerId, clientName: token.label };
 }});
 
 // Signed-in pages: the consent screen and the profile's connector settings.

@@ -78,7 +78,8 @@ function AssistantResponseText({ text, streaming }: { text: string; streaming: b
   return <ChatProse text={text} animate={receivedLive || streaming} />;
 }
 
-function AssistantPanelBody({ messages, running, editing:editingTimeline=running, configured, error, onSend, onRetry, onStop, hasClips, demo, onLoadMore, canLoadMore, onAttach, activity, activitySource, activityStartedAt, budgetUsed, draftKey, suggestions, onSuggestion, editSnapshot, canResumeEdit=false, defaultModelChoice, modelSwitcher = false, allowedModels = PRODUCTION_CLAUDE_MODEL_CHOICES, attachments, onRemoveAttachment, composerBusy = false, requireMedia = false, conversationStarted = false, queued=[],queuePaused=false,onRemoveQueued,onResumeQueue }: {
+function AssistantPanelBody({ messages, running, editing:editingTimeline=running, configured, error, onSend, onRetry, onStop, hasClips, demo, onLoadMore, canLoadMore, onAttach, activity, activitySource, activityStartedAt, budgetUsed, draftKey, suggestions, onSuggestion, editSnapshot, canResumeEdit=false, defaultModelChoice, modelSwitcher = false, allowedModels = PRODUCTION_CLAUDE_MODEL_CHOICES, attachments, onRemoveAttachment, composerBusy = false, requireMedia = false, conversationStarted = false, queued=[],queuePaused=false,onRemoveQueued,onResumeQueue,externalAgent }: {
+  externalAgent?: string | null;
   messages: ChatMessage[]; running: boolean; editing?:boolean; configured: boolean; error?: string | null;
   modelSwitcher?: boolean;
   defaultModelChoice?:ClaudeModelChoice;
@@ -117,8 +118,9 @@ function AssistantPanelBody({ messages, running, editing:editingTimeline=running
   const [localError, setLocalError] = useState('');
   const [stopState,setStopState]=useState<'stopping'|'stopped'|null>(null);
   const [pendingReply, setPendingReply] = useState<PendingReply | null>(null);
-  const answering = running || sending || !!pendingReply;
-  const waiting = answering || !!activity;
+  // An MCP agent's work is not a reply in this chat; it shows as one centered notice instead.
+  const answering = (running && !externalAgent) || sending || !!pendingReply;
+  const waiting = answering || (!externalAgent && !!activity);
   const latestUser = messages.findLast(message => message.role === 'user');
   const replyLabel = editingTimeline ? 'Editing…' : 'Replying…';
   const optimisticRequest = pendingReply && latestUser?.id === pendingReply.previousUserId ? pendingReply : null;
@@ -215,6 +217,7 @@ function AssistantPanelBody({ messages, running, editing:editingTimeline=running
         </div>;
       })}
       {!groups.length && waiting && <div className="assistant-reply"><AssistantReplyHeader loading label={stopState==='stopping'?'Stopping…':'Working'} startedAt={activityStartedAt}/></div>}
+      {externalAgent && <div data-chat-follow className="assistant-agent-notice" role="status"><span>Connected through MCP</span><strong className="assistant-agent-shimmer">{externalAgent} is working</strong></div>}
       {!waiting && stopState==='stopped'  && <AssistantActivity label="Stopped." detail="Your existing edit is still here." state="stopped"/>}
       {showSuggestions && suggestions?.items.length && onSuggestion && configured ? <div data-chat-follow className="assistant-source-suggestions" aria-label="Suggested edits from this footage"><span title={suggestions.sourceName}><Lightbulb size={12} aria-hidden="true" />Ideas for {suggestions.sourceName}</span>{suggestions.items.map((suggestion, index) => <button key={`${suggestions.clipId}-${index}`} type="button" disabled={composerBusy || sending || !!pendingReply} onClick={() => void chooseSuggestion(suggestion)}><span>{suggestion.label}</span><ArrowUpRight size={14} aria-hidden="true" /></button>)}</div> : null}
       {visibleError && <div data-chat-follow><AssistantActivity className="chat-error" label="Needs attention" detail={assistantErrorDetail(visibleError)} state="error"/></div>}

@@ -38,14 +38,14 @@ let toolCatalog: Promise<Tool[]> | undefined;
 const withCors = (response: Response) => { const headers = new Headers(response.headers); for (const [key, value] of Object.entries(cors)) headers.set(key, value); return new Response(response.body, { status: response.status, statusText: response.statusText, headers }); };
 
 /** The official MCP SDK speaks the protocol; Revline supplies auth, the tool list and tool calls. */
-function revlineServer(ctx: ActionCtx, ownerId: string) {
+function revlineServer(ctx: ActionCtx, ownerId: string, agentName: string) {
   const server = new Server({ name: 'revline', title: 'Revline', version: '1.0.0' }, { capabilities: { tools: { listChanged: false } }, instructions: MCP_INSTRUCTIONS });
   server.setRequestHandler(ListToolsRequestSchema, async () => {
     toolCatalog ??= ctx.runAction(internal.mcpActions.listTools, {}).then(tools => tools as Tool[]).catch(error => { toolCatalog = undefined; throw error; });
     return { tools: await toolCatalog };
   });
   server.setRequestHandler(CallToolRequestSchema, async request => {
-    const outcome = await ctx.runAction(internal.mcpActions.callTool, { ownerId, name: request.params.name, arguments: request.params.arguments ?? {} });
+    const outcome = await ctx.runAction(internal.mcpActions.callTool, { ownerId, agentName, name: request.params.name, arguments: request.params.arguments ?? {} });
     return { content: [{ type: 'text' as const, text: outcome.text }, ...(outcome.images ?? []).map(image => ({ type: 'image' as const, data: image.data, mimeType: image.mimeType }))], isError: outcome.isError };
   });
   return server;
@@ -67,7 +67,7 @@ const mcpHandler = httpAction(async (ctx, request) => {
     return json({ jsonrpc: '2.0', id: null, error: { code: -32003, message: 'The Revline MCP connector is part of the Ultra plan.' } }, 403);
   }
   // Stateless: a fresh server and transport per request, answering with JSON rather than an event stream.
-  const server = revlineServer(ctx, auth.ownerId);
+  const server = revlineServer(ctx, auth.ownerId, auth.clientName);
   const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
   try {
     await server.connect(transport);
