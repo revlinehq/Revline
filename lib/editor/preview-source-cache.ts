@@ -51,19 +51,18 @@ export function createPreviewSourceCache() {
     const { signal } = controller, file = source(asset)!;
     let idle: ReturnType<typeof setTimeout>, reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
     const progress = () => { clearTimeout(idle); idle = setTimeout(() => controller.abort(ownAbort('Preview preparation stalled.', 'TimeoutError')), 30_000); };
-    // Once a response exists, stopping never aborts the request: Chrome reports an aborted
-    // fetch's internal body promise as unhandled (with DevTools open). Its body is cancelled
-    // instead. Before headers there is no body, so that wait is still aborted; after them,
-    // the request abort is only a backstop for a stream whose cancel never settles.
-    const request = new AbortController();
-    let cancelling: Promise<boolean> | undefined, responded = false;
+    // The request itself is never aborted. Chrome reports an aborted fetch's internal
+    // promises as unhandled rejections carrying our reason (seen in a real window, notably
+    // with DevTools or an embedded preview inspecting it), which the dev overlay shows as
+    // "AbortError: Preview closed.". Stopping instead stops waiting and cancels the body:
+    // the stream once it is being read, or the response as soon as it arrives.
+    let cancelling: Promise<boolean> | undefined;
     const cancel = () => (cancelling ??= (async () => { await reader!.cancel(); return true; })().catch(() => true));
-    const stop = () => { if (reader) void cancel(); else if (!responded) request.abort(abortReason(signal)); };
+    const stop = () => { if (reader) void cancel(); };
     signal.addEventListener('abort', stop, { once: true });
     progress();
     try {
-      const pending = fetch(file.url, { signal: request.signal });
-      void pending.then(() => { responded = true; }, () => {});
+      const pending = fetch(file.url);
       signal.addEventListener('abort', () => { void pending.then(late => { if (!late.bodyUsed && !late.body?.locked) return late.body?.cancel(); }).catch(() => {}); }, { once: true });
       const response = await abortable(pending, signal);
       if (!response.ok) throw new Error('Preview download failed.');
@@ -92,12 +91,10 @@ export function createPreviewSourceCache() {
     } catch (cause) {
       controller.abort(ownAbort('Preview download stopped.'));
       if (reader) {
-        // A broken stream's cancel promise must not keep fallback playback stuck;
-        // aborting the request then still stops its transfer.
+        // A broken stream's cancel promise must not keep fallback playback stuck.
         let cleanupTimer: ReturnType<typeof setTimeout> | undefined;
-        const settled = await Promise.race([cancel(), new Promise<boolean>(resolve => { cleanupTimer = setTimeout(() => resolve(false), 1000); })]);
+        await Promise.race([cancel(), new Promise<boolean>(resolve => { cleanupTimer = setTimeout(() => resolve(false), 1000); })]);
         if (cleanupTimer !== undefined) clearTimeout(cleanupTimer);
-        if (!settled) request.abort(abortReason(signal));
       }
       throw cause;
     } finally {

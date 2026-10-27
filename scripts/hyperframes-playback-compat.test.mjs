@@ -267,25 +267,28 @@ test('all cuts and repeated preparations share one derivative Blob without mutat
 });
 
 test('cancelling one preview preparation keeps a shared download alive for another caller',async()=>{
-  const originalFetch=globalThis.fetch;let release,fetchSignal,calls=0;
-  globalThis.fetch=(_url,{signal})=>{calls++;fetchSignal=signal;return new Promise(resolve=>{release=()=>resolve(new Response(new Uint8Array([1,2,3,4])))})};
+  const originalFetch=globalThis.fetch;let release,fetchOptions,calls=0;
+  globalThis.fetch=(_url,options)=>{calls++;fetchOptions=options;return new Promise(resolve=>{release=()=>resolve(new Response(new Uint8Array([1,2,3,4])))})};
   const create=vi.spyOn(URL,'createObjectURL').mockReturnValue('blob:shared-cancel'),revoke=vi.spyOn(URL,'revokeObjectURL').mockImplementation(()=>{});
   const cache=createPreviewSourceCache(),first=new AbortController(),second=new AbortController();
   try{
     const a=cache.prepare([proxyAsset()],first.signal),b=cache.prepare([proxyAsset()],second.signal);
     const rejected=assert.rejects(a,error=>error.name==='AbortError');first.abort();await rejected;
-    assert.equal(fetchSignal.aborted,false);release();assert.equal((await b)[0].url,'blob:shared-cancel');assert.equal(calls,1);
+    assert.equal(fetchOptions?.signal,undefined);release();assert.equal((await b)[0].url,'blob:shared-cancel');assert.equal(calls,1);
   }finally{cache.dispose();globalThis.fetch=originalFetch;create.mockRestore();revoke.mockRestore()}
 });
 
-test('an abandoned derivative fetch is aborted and a replacement preparation starts cleanly',async()=>{
-  const originalFetch=globalThis.fetch;let calls=0,firstSignal;
-  globalThis.fetch=(_url,{signal})=>{calls++;if(calls>1)return Promise.resolve(new Response(new Uint8Array([1,2,3,4])));firstSignal=signal;return new Promise((_resolve,reject)=>signal.addEventListener('abort',()=>reject(new DOMException('Cancelled','AbortError')),{once:true}))};
+// The request is never aborted (Chrome reports aborted fetches' internal promises as
+// unhandled rejections); a response arriving after abandonment has its body cancelled.
+test('an abandoned derivative fetch has its late body cancelled and a replacement preparation starts cleanly',async()=>{
+  const originalFetch=globalThis.fetch;let calls=0,resolveFirst,bodyCancelled=false;
+  globalThis.fetch=()=>{calls++;if(calls>1)return Promise.resolve(new Response(new Uint8Array([1,2,3,4])));return new Promise(resolve=>{resolveFirst=resolve})};
   const create=vi.spyOn(URL,'createObjectURL').mockReturnValue('blob:replacement'),revoke=vi.spyOn(URL,'revokeObjectURL').mockImplementation(()=>{});
   const cache=createPreviewSourceCache(),first=new AbortController();
   try{
     const pending=cache.prepare([proxyAsset()],first.signal),rejected=assert.rejects(pending,error=>error.name==='AbortError');first.abort();await rejected;
-    assert.equal(firstSignal.aborted,true);
+    resolveFirst(new Response(new ReadableStream({cancel(){bodyCancelled=true}})));await new Promise(resolve=>setTimeout(resolve,0));
+    assert.equal(bodyCancelled,true);
     assert.equal((await cache.prepare([proxyAsset()],new AbortController().signal))[0].url,'blob:replacement');assert.equal(calls,2);
   }finally{cache.dispose();globalThis.fetch=originalFetch;create.mockRestore();revoke.mockRestore()}
 });
@@ -368,14 +371,14 @@ test('session refresh uses the fresh preferred-preview URL from playback.refresh
 });
 
 test('a stalled derivative read falls back after byte-idle timeout even when stream cancellation also hangs',async()=>{
-  vi.useFakeTimers();const originalFetch=globalThis.fetch;let fetchSignal,cancelled=0;
-  globalThis.fetch=async(_url,{signal})=>{fetchSignal=signal;return {ok:true,status:200,headers:new Headers(),body:{getReader:()=>({read:()=>new Promise(()=>{}),cancel:()=>{cancelled++;return new Promise(()=>{})},releaseLock(){}})}}};
+  vi.useFakeTimers();const originalFetch=globalThis.fetch;let cancelled=0;
+  globalThis.fetch=async()=>{return {ok:true,status:200,headers:new Headers(),body:{getReader:()=>({read:()=>new Promise(()=>{}),cancel:()=>{cancelled++;return new Promise(()=>{})},releaseLock(){}})}}};
   const cache=createPreviewSourceCache(),asset=proxyAsset();
   try{
     let settled=false;const pending=cache.prepare([asset],new AbortController().signal).then(assets=>{settled=true;return assets});
     await vi.advanceTimersByTimeAsync(29_999);assert.equal(settled,false);
     await vi.advanceTimersByTimeAsync(1002);const prepared=await pending;
-    assert.equal(prepared[0].url,asset.previewUrl);assert.equal(fetchSignal.aborted,true);assert.equal(cancelled,1);
+    assert.equal(prepared[0].url,asset.previewUrl);assert.equal(cancelled,1);
   }finally{cache.dispose();globalThis.fetch=originalFetch;vi.useRealTimers()}
 });
 
