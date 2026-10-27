@@ -25,7 +25,7 @@ export type CleanupOptions = {
   retakeWindow: number;
 };
 
-export const DEFAULT_CLEANUP_OPTIONS: CleanupOptions = { minPause: .35, pad: .06, restartWindow: 8, retakeWindow: 60 };
+export const DEFAULT_CLEANUP_OPTIONS: CleanupOptions = { minPause: .15, pad: .05, restartWindow: 8, retakeWindow: 60 };
 
 /** Bump when detection changes enough that saved maps should be measured again. */
 export const SPEECH_CLEANUP_VERSION = 1;

@@ -8,8 +8,9 @@ export function levels(frames: Frames) {
   const sorted = Array.from(frames.db).filter(Number.isFinite).sort((a, b) => a - b);
   const at = (fraction: number) => sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * fraction))] ?? -90;
   const floor = at(.1), speech = at(.9);
-  // Silence sits near the floor; with a noisy room never above the midpoint to speech.
-  return { floor, speech, silence: Math.min(floor + 8, (floor + speech) / 2) };
+  // Room tone, hiss and soft breath between words sit 25 dB or more under speech even when they are
+  // well above the floor; a listener hears them as empty air. Never above the midpoint to speech.
+  return { floor, speech, silence: Math.min(Math.max(floor + 8, speech - 25), (floor + speech) / 2) };
 }
 
 /** Labels each 10ms frame. Breath is audible but unpitched and hissy; a hold is a steady pitched
@@ -87,6 +88,12 @@ export function acousticCuts(words: SpeechWord[], frames: Frames, options: Clean
         push(KIND_LABEL[kind], run.from, run.to, .6, `${KIND_LABEL[kind]} inside "${word.text}"`);
       }
     }
+  }
+  // 3. Silence anywhere, whatever the transcript says: transcribers pad word times and let
+  // neighbouring words touch, so a quiet stretch can sit inside or between "words".
+  for (const run of smooth(runs(labels, 0, labels.length), 'silence', 2)) {
+    if (timeAt(run.to - run.from) < options.minPause) continue;
+    push('pause', run.from, run.to, .8, `${timeAt(run.to - run.from).toFixed(2)}s silence`);
   }
   return cuts;
 }

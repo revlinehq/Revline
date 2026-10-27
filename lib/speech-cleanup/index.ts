@@ -36,7 +36,7 @@ function cleanupCuts(words: SpeechWord[], frames: ReturnType<typeof analyzeFrame
 }
 
 /** Snap a kept source range to the measured edges of the words inside it: it starts just before the
- * first word's sound (never later than the word's transcript start) and ends just after the last
+ * first word's sound (at most 80ms earlier, for soft onsets like "th") and ends just after the last
  * word's decay. A join then carries neither room tone nor a detached breath, and never a clipped word. */
 export function snapToSpeech(range: { start: number; end: number }, words: SpeechWord[], edges: number[], lead = .03, tail = .05) {
   let first = -1, last = -1;
@@ -45,20 +45,20 @@ export function snapToSpeech(range: { start: number; end: number }, words: Speec
     if (middle > range.start && middle < range.end) { if (first < 0) first = index; last = index; }
   }
   if (first < 0 || edges.length !== words.length * 2) return range;
-  const start = Math.max(range.start, Math.min(edges[first * 2] - lead, words[first].start));
+  const onset = edges[first * 2];
+  const start = Math.max(range.start, Math.min(onset - lead, Math.max(words[first].start, onset - .08)));
   const end = Math.min(range.end, edges[last * 2 + 1] + tail);
   return end > start ? { start, end } : range;
 }
 
-/** Overlapping cuts become one; a restart wins the label because it explains the most. */
+/** Overlapping cuts of the same kind become one. Different kinds stay separate (and may overlap),
+ * so a caller that keeps restarts still removes the pauses inside them. Sorted by start. */
 export function mergeCuts(cuts: CleanupCut[]): CleanupCut[] {
-  const rank = { restart: 3, filler: 2, breath: 1, pause: 0 } as const;
   const out: CleanupCut[] = [];
   for (const cut of [...cuts].sort((a, b) => a.start - b.start)) {
-    const last = out[out.length - 1];
+    const last = [...out].reverse().find(item => item.kind === cut.kind);
     if (last && cut.start <= last.end + .02) {
       last.end = Math.max(last.end, cut.end);
-      if (rank[cut.kind] > rank[last.kind]) { last.kind = cut.kind; last.detail = cut.detail; }
       last.confidence = Math.max(last.confidence, cut.confidence);
     } else out.push({ ...cut });
   }

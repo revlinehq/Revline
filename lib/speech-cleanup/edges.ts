@@ -22,8 +22,11 @@ export function speechEdges(words: SpeechWord[], frames: Frames): WordEdge[] {
     while (!audible(onset) && onset < frameAt(word.start + .15)) onset++;
     while (onset - 1 >= floor && audible(onset - 1)) onset--;
     // Decay: forward from the word's last stretch while it is still audible.
+    // Transcribers often end a word well after its sound stops: start from the word's last audible
+    // frame, then follow any decay past the transcript end.
     const ceiling = frameAt(Math.min(next, word.end + MAX_REACH));
-    let decay = frameAt(Math.max(word.start, word.end - .1));
+    let decay = frameAt(word.end);
+    while (decay > onset && !audible(decay - 1)) decay--;
     while (decay < ceiling && audible(decay)) decay++;
     const start = Math.max(0, timeAt(onset));
     return { start, end: Math.max(start + .01, timeAt(decay)) };
