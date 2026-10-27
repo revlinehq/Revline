@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process';
 import type { Transcript } from '@/lib/media-analysis/transcript';
-import { findSpeechCleanup, MAX_CLEANUP_CUTS, MAX_CLEANUP_DETAIL, SPEECH_CLEANUP_VERSION, type SpeechCleanup } from '@/lib/speech-cleanup';
+import { analyzeSpeech, MAX_CLEANUP_CUTS, MAX_CLEANUP_DETAIL, SPEECH_CLEANUP_VERSION, type SpeechCleanup } from '@/lib/speech-cleanup';
 
 const SAMPLE_RATE = 16_000;
 /** Mono float PCM for an hour is about 230 MB; longer sources skip the acoustic map. */
@@ -10,8 +10,11 @@ export const MAX_SPEECH_CLEANUP_SECONDS = 3600;
 export async function measureSpeechCleanup(input: string, duration: number, transcript: Transcript, signal: AbortSignal): Promise<SpeechCleanup | undefined> {
   if (!transcript.words.length || !Number.isFinite(duration) || duration <= 0 || duration > MAX_SPEECH_CLEANUP_SECONDS) return undefined;
   const samples = await decodeMono(input, duration, signal);
-  const cuts = findSpeechCleanup(transcript.words, samples, SAMPLE_RATE).slice(0, MAX_CLEANUP_CUTS);
-  return { version: SPEECH_CLEANUP_VERSION, cuts: cuts.map(cut => ({ ...cut, start: Math.max(0, cut.start), end: Math.min(duration, cut.end), detail: cut.detail.slice(0, MAX_CLEANUP_DETAIL) })).filter(cut => cut.end > cut.start) };
+  const measured = analyzeSpeech(transcript.words, samples, SAMPLE_RATE);
+  const cuts = measured.cuts.slice(0, MAX_CLEANUP_CUTS).map(cut => ({ ...cut, start: Math.max(0, cut.start), end: Math.min(duration, cut.end), detail: cut.detail.slice(0, MAX_CLEANUP_DETAIL) })).filter(cut => cut.end > cut.start);
+  // Millisecond precision keeps the saved edges small: two numbers per transcript word.
+  const edges = measured.edges.flatMap(edge => [Math.round(edge.start * 1000) / 1000, Math.round(Math.min(duration, edge.end) * 1000) / 1000]);
+  return { version: SPEECH_CLEANUP_VERSION, cuts, edges };
 }
 
 /** Source-time aligned mono PCM, the same timing basis as the transcript and audio activity. */

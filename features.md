@@ -17,16 +17,21 @@ Keep this file factual. Update the status when something ships, and do not promo
 
 **Pitch:** Cut the ums, breaths and retakes in one pass, at the millisecond. Every cut lands between words, never inside one.
 
-**What it does** (`lib/speech-cleanup/`):
+**What it does** (`lib/speech-cleanup/`, tool `cleanSpeech`):
 
-- **Three layers of detection**, each in source time:
+- **Layers of detection**, each in source time:
   1. **Filler words** from a verbatim transcript ("um", "uh", "erm", "hmm"), cut by their own timestamps.
   2. **Acoustic analysis** of the audio in 10 ms frames: loudness, voicing, pitch, zero-crossing rate and spectral change. It labels each frame as silence, breath, held sound ("uhhh", "mmm") or speech, so it finds hesitations a transcript leaves out.
-  3. **Restart detection**: when a phrase is started again ("but this is not we- / but this is not the type of views"), it keeps only the final take. A retake must repeat at least half of the abandoned attempt, so a new sentence that reuses two words is left alone.
+  3. **Stutters**: "in the short, in the short term" keeps only the final attempt. The repeat must cover at least 75% of the abandoned words, so "low effort content attracts low effort viewers" is left alone.
+  4. **Retakes across sentences**: a line re-recorded up to a minute later, even reworded slightly, keeps only the last full take. False starts ("In a short time, / in a short time, you're getting…") and lines cut off mid-sentence are dropped too.
+- **Joins that sound continuous.** It measures where each word's sound starts and where its decay ends. Every kept piece is snapped to those edges, about 30 ms before the first word and 50 ms after the last, so a cut never carries room tone or a detached breath, and never clips a word's tail.
 - **Confidence on every cut.** Each cut carries a 0–1 confidence and a reason (pause, breath, filler, restart), so an editor or the AI can skip uncertain ones.
-- **Tuning knobs:** a minimum pause (0.35 s) so natural rhythm stays, padding (60 ms) so speech never sounds clipped, and a restart window (8 s).
+- **Two ways to use it:**
+  - Clean a whole clip in one call.
+  - Pass the sentences the AI chose to keep; the engine then sets every boundary. Choosing between differently worded takes stays an editorial decision for the AI.
+- **Fast:** about 2 seconds for 5 minutes of speech. Measured once per source and saved with the transcript.
 
-**Status:** Built, not exposed. It was proven on a real 5-minute talking-head recording; next it needs a media-worker task and a `cleanSpeech` tool for the chat editor and MCP.
+**Status:** Built. It runs in the development media worker and is exposed as `cleanSpeech` to the chat editor and MCP. Production follows the next media-processor release.
 
 **Marketing angles:**
 

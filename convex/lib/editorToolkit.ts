@@ -50,7 +50,7 @@ import { frameEvidenceOnClip, frameInspectionCoverage, assertConsecutiveInspecti
 import { shotAlignedRange } from '../../lib/media-analysis/shots';
 import { playbackRateOf } from '../../lib/editor/playback-rate';
 import { retainSourceRanges, type RetainedRangeSummary } from '../../lib/editor/retained-ranges';
-import { currentSpeechCleanup, keptRanges } from '../../lib/speech-cleanup';
+import { currentSpeechCleanup, keptRanges, snapToSpeech } from '../../lib/speech-cleanup';
 import type { CleanupCut } from '../../lib/speech-cleanup/types';
 import { AUDIO_ACTIVITY_VERSION, AUDIO_QUIET_EDGE_PAD, refineAudioRangeEdges, refineTranscriptWithAudioActivity } from '../../lib/media-analysis/audio-activity';
 import { REMOTION_TEXT_PRESETS } from '../../lib/editor/remotion-text';
@@ -450,8 +450,9 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       });
       return { ...result, retainedRanges: ranges, ...(evidence ? { silenceRefinement: { status: tightened ? 'applied' : evidence.analysis?.audioActivity?.reliable ? 'unchanged' : 'unreliable', evidenceAssetId: evidence._id, paddingSeconds: AUDIO_QUIET_EDGE_PAD } } : {}) };
     } }),
-    cleanSpeech: createTool({ description: "Remove filler words, breaths, long pauses and abandoned retakes from one existing video/audio clip in ONE change, using the source's measured speech cleanup map (verbatim word timings plus 10ms acoustic frames). Each cut sits between words, never inside one, and a retake keeps only its final attempt. Cuts below minConfidence (default 0.6) are kept; kinds limits what is removed (default all). preview:true returns the proposed cuts without editing. Kept pieces compact at the clip's timeline start with linked audio, speed and styling preserved; other clips keep their positions, so close gaps afterwards when needed. Use this for 'remove ums', 'cut the pauses', 'clean up the retakes'; inspect retained ranges before adding subtitles.", inputSchema: z.object({ clipId: z.string().min(1).max(100), minConfidence: z.number().min(0).max(1).optional(), kinds: z.array(z.enum(['pause', 'breath', 'filler', 'restart'])).min(1).max(4).optional(), preview: z.boolean().optional() }), execute: async (_ctx, input) => {
+    cleanSpeech: createTool({ description: "Remove filler words, breaths, long pauses and abandoned retakes from one existing video/audio clip in ONE change, using the source's measured speech cleanup map (verbatim word timings plus 10ms acoustic frames). Each cut sits between words, never inside one, and a retake keeps only its final attempt. Cuts below minConfidence (default 0.6) are kept; kinds limits what is removed (default all). preview:true returns the proposed cuts without editing. To assemble chosen takes, pass keep: the ordered SOURCE ranges of the sentences to keep (roughly bounded; the engine sets exact edges), and only pause/breath/filler cuts apply inside them by default. Kept pieces compact at the clip's timeline start with linked audio, speed and styling preserved; other clips keep their positions, so close gaps afterwards when needed. Use this for 'remove ums', 'cut the pauses', 'clean up the retakes'; inspect retained ranges before adding subtitles.", inputSchema: z.object({ clipId: z.string().min(1).max(100), minConfidence: z.number().min(0).max(1).optional(), kinds: z.array(z.enum(['pause', 'breath', 'filler', 'restart'])).min(1).max(4).optional(), preview: z.boolean().optional(), keep: z.array(z.object({ start: z.number().min(0), end: z.number().positive() }).strict()).min(1).max(100).optional() }), execute: async (_ctx, input) => {
       await editSession.wait();
+      if (input.keep?.some((range, index) => range.end <= range.start || (index > 0 && range.start < input.keep![index - 1].end))) throw new Error('keep ranges must be ordered and non-overlapping.');
       const clip = find(editSession.timeline, input.clipId);
       if (clip.kind !== 'video' && clip.kind !== 'audio') throw new Error('Choose a video or audio clip with speech.');
       // Upload preparation stores speech evidence on the video source.
@@ -462,18 +463,27 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       if (!currentSpeechCleanup(evidence.analysis?.speechCleanup)) evidence = await analyzeOnce(assetId, 'transcribe', true, true);
       const cleanup = evidence.analysis?.speechCleanup;
       if (!cleanup || !currentSpeechCleanup(cleanup)) throw new Error('Speech cleanup measurements are unavailable for this source. The media processor has not measured it yet; trim with retainSourceRanges instead.');
-      const minConfidence = input.minConfidence ?? .6, kinds = new Set(input.kinds ?? ['pause', 'breath', 'filler', 'restart']);
+      const minConfidence = input.minConfidence ?? .6, kinds = new Set(input.kinds ?? (input.keep ? ['pause', 'breath', 'filler'] : ['pause', 'breath', 'filler', 'restart']));
       const offset = clip.assetId === evidence._id ? 0 : pair ? pair.sourceStart - clip.sourceStart : undefined;
       if (offset === undefined) throw new Error('The speech evidence no longer matches this linked source.');
       const sourceEnd = clip.sourceStart + clip.duration * playbackRateOf(clip);
       // Cuts in this clip's source time, clipped to what it still retains.
       const cuts: CleanupCut[] = cleanup.cuts.filter(cut => kinds.has(cut.kind) && cut.confidence >= minConfidence).map(cut => ({ ...cut, start: cut.start - offset, end: cut.end - offset })).filter(cut => cut.end > clip.sourceStart && cut.start < sourceEnd);
-      const ranges = keptRanges(clip.sourceStart, sourceEnd, cuts);
-      const removed = cuts.reduce((total, cut) => total + Math.min(cut.end, sourceEnd) - Math.max(cut.start, clip.sourceStart), 0);
+      // Each kept piece becomes a join: snap it to its words' measured sound edges, so two short
+      // silences or a detached breath never add up to an audible gap. Ranges stay in this clip's source time.
+      const transcript = evidence.analysis!.transcript!, activity = evidence.analysis!.audioActivity;
+      const chosen = input.keep ? input.keep.map(range => ({ start: Math.max(clip.sourceStart, range.start), end: Math.min(sourceEnd, range.end) })).filter(range => range.end > range.start) : [{ start: clip.sourceStart, end: sourceEnd }];
+      if (!chosen.length) throw new Error('None of the keep ranges is inside this clip’s retained source.');
+      const ranges = chosen.flatMap(range => keptRanges(range.start, range.end, cuts)).map(range => {
+        const source = { start: range.start + offset, end: range.end + offset };
+        const measured = cleanup.edges?.length === transcript.words.length * 2 ? snapToSpeech(source, transcript.words, cleanup.edges) : activity ? refineAudioRangeEdges(source, transcript, activity) : source;
+        return { start: Math.max(range.start, measured.start - offset), end: Math.min(range.end, measured.end - offset) };
+      }).filter(range => (range.end - range.start) / playbackRateOf(clip) >= 1 / editSession.timeline.fps);
+      const removed = sourceEnd - clip.sourceStart - ranges.reduce((total, range) => total + range.end - range.start, 0);
       const counts = Object.fromEntries(['pause', 'breath', 'filler', 'restart'].map(kind => [kind, cuts.filter(cut => cut.kind === kind).length]));
       const summary = { cutCount: cuts.length, counts, removedSeconds: Math.round(removed * 100) / 100, keptPieces: ranges.length };
-      if (input.preview) return { preview: true, ...summary, cuts: cuts.slice(0, 200).map(cut => ({ kind: cut.kind, start: cut.start, end: cut.end, confidence: cut.confidence, detail: cut.detail })) };
-      if (!cuts.length) return { applied: false, ...summary, reason: 'No cuts at this confidence inside the clip.' };
+      if (input.preview) return { preview: true, ...summary, cuts: cuts.slice(0, 200).map(cut => ({ kind: cut.kind, start: cut.start, end: cut.end, confidence: cut.confidence, detail: cut.detail })), keptRanges: ranges };
+      if (!cuts.length && !input.keep) return { applied: false, ...summary, reason: 'No cuts at this confidence inside the clip.' };
       if (!ranges.length) throw new Error('Cleanup would remove the whole clip; raise minConfidence or limit kinds.');
       if (ranges.length > 100) throw new Error(`Cleanup would split this clip into ${ranges.length} pieces; clean a shorter clip, raise minConfidence or limit kinds.`);
       let retainedRanges: RetainedRangeSummary[] = [];

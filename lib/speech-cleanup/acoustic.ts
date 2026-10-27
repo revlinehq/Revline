@@ -4,7 +4,7 @@ import type { CleanupCut, CleanupOptions, SpeechWord } from './types';
 type FrameClass = 'silence' | 'breath' | 'hold' | 'speech';
 
 /** The recording's own levels: quiet floor and typical speech, from loudness percentiles. */
-function levels(frames: Frames) {
+export function levels(frames: Frames) {
   const sorted = Array.from(frames.db).filter(Number.isFinite).sort((a, b) => a - b);
   const at = (fraction: number) => sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * fraction))] ?? -90;
   const floor = at(.1), speech = at(.9);

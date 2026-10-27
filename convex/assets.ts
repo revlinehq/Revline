@@ -218,7 +218,8 @@ export async function saveAssetAnalysis(ctx: MutationCtx, asset: Doc<"assets">, 
   }
   if (changes.speechCleanup) {
     const cuts = changes.speechCleanup.cuts;
-    if (cuts.length > MAX_CLEANUP_CUTS || cuts.some((cut, index) => !validRange(cut.start, cut.end) || !Number.isFinite(cut.confidence) || cut.confidence < 0 || cut.confidence > 1 || cut.detail.length > MAX_CLEANUP_DETAIL || (index > 0 && cut.start < cuts[index - 1].start))) throw new ConvexError('Invalid speech cleanup measurements');
+    const edges = changes.speechCleanup.edges;
+    if ((edges && (edges.length > 10_000 || edges.some(value => !Number.isFinite(value) || value < 0 || value > duration + .5))) || cuts.length > MAX_CLEANUP_CUTS || cuts.some((cut, index) => !validRange(cut.start, cut.end) || !Number.isFinite(cut.confidence) || cut.confidence < 0 || cut.confidence > 1 || cut.detail.length > MAX_CLEANUP_DETAIL || (index > 0 && cut.start < cuts[index - 1].start))) throw new ConvexError('Invalid speech cleanup measurements');
   }
   if (changes.understanding) {
     if (changes.understanding.summary.length > 8000 || changes.understanding.scenes.length > 100) throw new ConvexError("Scene analysis is too large");
