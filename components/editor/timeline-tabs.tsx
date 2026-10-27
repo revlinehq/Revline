@@ -1,6 +1,6 @@
 'use client';
 import { useState } from 'react';
-import { ChevronDown, Copy, Download, FilePlus, Pencil, Plus, Trash2 } from 'lucide-react';
+import { ChevronDown, Copy, Download, Pencil, Plus, Trash2 } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -24,7 +24,6 @@ export function TimelineTabs({ tabs, working, locked, onError, ...actions }: { t
   const [busy, setBusy] = useState(false);
   const [dialog, setDialog] = useState<{ mode: 'rename' | 'remove'; id: string; name: string } | null>(null);
   const run = async (action: () => Promise<void>) => { if (busy) return; setBusy(true); try { await action(); } catch (error) { onError(error); } finally { setBusy(false); } };
-  const active = tabs.find(tab => tab.active);
   const blocked = locked || busy;
   return <div className="timeline-tabs" role="tablist" aria-label="Timelines">
     {tabs.map(tab => <div key={tab.id} className="timeline-tab" role="tab" aria-selected={tab.active} data-active={tab.active || undefined} data-working={tab.active && working || undefined}>
@@ -41,10 +40,7 @@ export function TimelineTabs({ tabs, working, locked, onError, ...actions }: { t
         <DropdownMenuItem variant="destructive" disabled={blocked || tabs.length <= 1} onSelect={() => setDialog({ mode: 'remove', id: tab.id, name: tab.name })}><Trash2/>Delete timeline</DropdownMenuItem>
       </DropdownMenuContent></DropdownMenu>}
     </div>)}
-    <DropdownMenu><DropdownMenuTrigger className="timeline-tab-add" aria-label="New timeline" title="New timeline" disabled={blocked}><Plus size={14}/></DropdownMenuTrigger><DropdownMenuContent align="start" className="timeline-tab-options">
-      <DropdownMenuItem onSelect={() => void run(() => actions.onCreate('blank'))}><FilePlus/>Blank timeline</DropdownMenuItem>
-      {active && <DropdownMenuItem onSelect={() => void run(() => actions.onCreate('duplicate'))}><Copy/>Duplicate {active.name}</DropdownMenuItem>}
-    </DropdownMenuContent></DropdownMenu>
+    <button type="button" className="timeline-tab-add" aria-label="New blank timeline" title="New blank timeline" disabled={blocked} onClick={() => void run(() => actions.onCreate('blank'))}><Plus size={14}/></button>
     <Dialog open={!!dialog} onOpenChange={open => { if (!open) setDialog(null); }}><DialogContent>
       {dialog?.mode === 'remove' ? <>
         <DialogTitle>Delete {dialog.name}?</DialogTitle><DialogDescription>This timeline and its undo history go away. Media stays in the project and other timelines are unchanged.</DialogDescription>
