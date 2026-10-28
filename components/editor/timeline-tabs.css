@@ -15,8 +15,9 @@
 .timeline-tab-add{display:grid;place-items:center;flex:none;width:28px;height:28px;margin-left:2px;border:0;border-radius:6px;background:#ffffff0a;color:var(--ws-muted,#a1a3ab);cursor:pointer}
 .timeline-tab-add:hover{background:#ffffff14;color:var(--ws-text,#ededef)}
 .timeline-tab-add:disabled{cursor:not-allowed;opacity:.5}
-/* No divider line above the tabs: the preview/timeline handle shows its line only on hover. */
-.editor-app:has(.timeline-tabs) .timeline-resize-handle{background:transparent}
+/* The preview/timeline handle sits on the tabs' bottom divider, so the line under the tabs resizes the tracks. */
+.editor-app:has(.timeline-tabs) .timeline-resize-handle{background:transparent!important;transform:translateY(38px);z-index:30;cursor:row-resize}
+.editor-app:has(.timeline-tabs) .timeline-resize-handle:is(:hover,[data-separator=active],[data-resize-handle-state=drag]){background:#757A82!important}
 /* Every tab keeps the menu button's room, so switching never resizes tabs. */
 .timeline-tab:not([data-active]) .timeline-tab-menu{visibility:hidden}
 /* The tab an agent is editing: a soft light slides across it. Finished: a green border for two seconds. */
