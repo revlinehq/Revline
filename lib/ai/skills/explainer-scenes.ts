@@ -37,7 +37,7 @@ A scene is one beat of an explainer: a React component rendered full-frame on it
 
 ## Sound
 
-Every scene you create, or whose choreography you substantially change, gets matching sound in the same turn without being asked. Read the sound-design skill, then:
+Every scene you create, or whose choreography you substantially change, gets matching sound in the same turn without being asked. Read the music-and-sound skill, then:
 
 - After addScene, call generateSound once for that scene: one clip at the scene's start, layers keyed to its key beats (enter, draw, pop and Show times). Only the key beats, not every element.
 - After editScene changes timing or motion, update that scene's existing generated sound with editSound (find it by start time and inspectClip's soundRecipe) instead of adding a second clip. Leave sounds alone for scenes whose motion did not change, and for text-only or color edits.

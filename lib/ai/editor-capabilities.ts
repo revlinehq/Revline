@@ -17,7 +17,7 @@ import {SOUND_PRESET_NAMES} from '../audio/presets';
 export function editorCapabilities(){
   return {
     skills:editorSkillIndex(),
-    soundEffects:{skill:'sound-design',rule:'Generate every sound by default with generateSound/editSound, timed to the motion. Every scene you add or rework gets one matching generated sound clip in the same turn unless the user wants silence or speech/music plays under it. Use library recordings with addSoundEffect only when the user explicitly asks for a realistic or recorded sound the library has (shutter, phone, clock, ambience) or names one; never on your own initiative. If none matches, say so and generate the closest sound. Use a time the user gives exactly.',generated:{tools:['generateSound','editSound'],presets:SOUND_PRESET_NAMES},libraryTool:'addSoundEffect',library:STOCK_AUDIO_CATALOG.reduce<Record<string,string[]>>((groups,sound)=>({...groups,[sound.category]:[...groups[sound.category]??[],`${sound.id}: ${sound.name}, ${sound.duration.toFixed(2)} s [${sound.tags.join(' ')}]`]}),{})},
+    soundEffects:{skill:'music-and-sound',rule:'Generate every sound by default with generateSound/editSound, timed to the motion. Every scene you add or rework gets one matching generated sound clip in the same turn unless the user wants silence or speech/music plays under it. Use library recordings with addSoundEffect only when the user explicitly asks for a realistic or recorded sound the library has (shutter, phone, clock, ambience) or names one; never on your own initiative. If none matches, say so and generate the closest sound. Use a time the user gives exactly.',generated:{tools:['generateSound','editSound'],presets:SOUND_PRESET_NAMES},libraryTool:'addSoundEffect',library:STOCK_AUDIO_CATALOG.reduce<Record<string,string[]>>((groups,sound)=>({...groups,[sound.category]:[...groups[sound.category]??[],`${sound.id}: ${sound.name}, ${sound.duration.toFixed(2)} s [${sound.tags.join(' ')}]`]}),{})},
     scenes:{tools:['addScene','editScene'],skill:'explainer-scenes',description:'Animated explainer visuals (titles, diagrams, charts, UI walkthroughs, kinetic type) written as React components and rendered frame by frame on their own V layer, over or between footage. Read the explainer-scenes skill before writing one. Each new or reworked scene also gets a matching generated sound (generateSound/editSound).'},
     stylePlaybooks:STYLE_PLAYBOOKS,
     editing:{controls:['undo the latest saved edit before this turn changes anything','unlink a video/audio pair without losing either source or changing timing','trim, split, move or delete only the chosen unlinked clip','duplicate/copy an identified group to a requested time with linked pairs and transitions','move/edge-trim a group with the manual source/collision limits','reorder whole V/A/FX layers','blend exact visual clip IDs atomically','disable subject-follow without analysis'],undo:'Uses actual saved history; later changes share a new undo group',clientOnly:['playback/seek/view zoom/snapping/selection','browser clipboard storage','redo future stack'],appWorkflows:['media upload/import','export','sharing']},
@@ -46,12 +46,12 @@ masks:{tool:'setMask',shapes:['rectangle (corner radius)','ellipse','polygon (fr
 }
 
 /** What the model sees on every turn: names only. Guidance, controls and the sound library live in
- *  the effects-and-styling and sound-design skills, read on demand with readSkill. */
+ *  the effects-and-styling and music-and-sound skills, read on demand with readSkill. */
 export function editorCapabilityIndex(){
   const catalog=editorCapabilities();
   return {
     skills:catalog.skills,
-    details:'Names only. Read the effects-and-styling skill before applying effects, timed FX, text looks, text animations or templates, layouts, camera or object motion, or any creative styling; read sound-design before adding sounds.',
+    details:'Names only. Read the effects-and-styling skill before applying effects, timed FX, text looks, text animations or templates, layouts, camera or object motion, or any creative styling; read music-and-sound before adding sounds.',
     soundEffects:{skill:catalog.soundEffects.skill,rule:catalog.soundEffects.rule,generated:catalog.soundEffects.generated,libraryTool:catalog.soundEffects.libraryTool},
     scenes:catalog.scenes,
     stylePlaybooks:Object.keys(catalog.stylePlaybooks),
