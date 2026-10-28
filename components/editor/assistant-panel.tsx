@@ -73,7 +73,7 @@ export function AssistantPanel(props:PanelProps) {
   // optimistic message, composer DOM, or scroll position while history loads.
   return <>
     {props.conversation&&<ConnectedConversation conversation={props.conversation} onUpdate={setConversationState}/>}
-    <AssistantTurnCostsProvider conversation={props.conversation} messages={visibleMessages} demo={props.demo}><MessageScrollerProvider autoScroll defaultScrollPosition="last-anchor"><AssistantPanelBody {...props} queued={current?.queued??props.queued} queuePaused={current?.queuePaused??props.queuePaused} onRemoveQueued={current?.onRemoveQueued??props.onRemoveQueued} onResumeQueue={current?.onResumeQueue??props.onResumeQueue} conversationStarted={!!props.conversation} messages={visibleMessages} canLoadMore={props.conversation?current?.canLoadMore:props.canLoadMore} onLoadMore={props.conversation?current?.onLoadMore:props.onLoadMore}/></MessageScrollerProvider></AssistantTurnCostsProvider>
+    <AssistantTurnCostsProvider conversation={props.conversation} messages={visibleMessages} demo={props.demo}><MessageScrollerProvider autoScroll defaultScrollPosition="last-anchor" scrollPreviousItemPeek={0}><AssistantPanelBody {...props} queued={current?.queued??props.queued} queuePaused={current?.queuePaused??props.queuePaused} onRemoveQueued={current?.onRemoveQueued??props.onRemoveQueued} onResumeQueue={current?.onResumeQueue??props.onResumeQueue} conversationStarted={!!props.conversation} messages={visibleMessages} canLoadMore={props.conversation?current?.canLoadMore:props.canLoadMore} onLoadMore={props.conversation?current?.onLoadMore:props.onLoadMore}/></MessageScrollerProvider></AssistantTurnCostsProvider>
   </>;
 }
 
@@ -203,7 +203,7 @@ function AssistantPanelBody({ messages, running, editing:editingTimeline=running
     if (!draft.trim() || sendInFlight.current || sending || (!conversationStarted&&running) || pendingReply) return;
     const key=draftKey;sendInFlight.current=true;
     if (!retry) changePrompt('');
-    setStopState(null); setSending(true); if(!running&&!queued.length)setPendingReply({ id: `pending-${crypto.randomUUID()}`, text: draft.trim(), previousUserId: latestUser?.id, previousError: error }); setLocalError(''); scroller.scrollToEnd({ behavior: 'smooth' });
+    setStopState(null); setSending(true); if(!running&&!queued.length)setPendingReply({ id: `pending-${crypto.randomUUID()}`, text: draft.trim(), previousUserId: latestUser?.id, previousError: error }); setLocalError('');
     try { await (retry && onRetry ? onRetry : onSend)(draft.trim(), canChooseModel ? selectedModelChoice : undefined, canChooseReasoning ? reasoningEffort : undefined, canChooseReasoning ? effectiveSpeedMode : undefined); }
     catch (e) { if(currentDraftKey.current===key){if(!retry)changePrompt(draft);setPendingReply(null);setLocalError(userError(e, 'Could not send message'));} }
     finally { sendInFlight.current=false;setSending(false); }
@@ -213,7 +213,7 @@ function AssistantPanelBody({ messages, running, editing:editingTimeline=running
   async function chooseSuggestion(suggestion: SourceEditSuggestion) {
     if (!suggestions || !onSuggestion || sendInFlight.current || sending || running || pendingReply || !configured) return;
     const request = `${suggestion.prompt}\n\nUse the selected clip from “${suggestions.sourceName}”, source ${suggestion.start.toFixed(2)}–${suggestion.end.toFixed(2)} seconds.`;
-    sendInFlight.current=true;setStopState(null); setSending(true); setPendingReply({ id: `pending-${crypto.randomUUID()}`, text: request, previousUserId: latestUser?.id, previousError: error }); setLocalError(''); scroller.scrollToEnd({ behavior: 'smooth' });
+    sendInFlight.current=true;setStopState(null); setSending(true); setPendingReply({ id: `pending-${crypto.randomUUID()}`, text: request, previousUserId: latestUser?.id, previousError: error }); setLocalError('');
     try { await onSuggestion(request, suggestions.clipId, canChooseModel ? selectedModelChoice : undefined, canChooseReasoning ? reasoningEffort : undefined, canChooseReasoning ? effectiveSpeedMode : undefined); }
     catch (e) { setPendingReply(null); setLocalError(userError(e, 'Could not start this edit.')); }
     finally { sendInFlight.current=false;setSending(false); }
