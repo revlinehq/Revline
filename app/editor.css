@@ -177,8 +177,6 @@ html[data-workspace-theme=dark] .conversation-editor .workspace-nav-history{marg
 html[data-workspace-theme=dark] .conversation-editor .workspace-nav-secondary{height:33px;padding:0 10px;border:1px solid var(--ed-border);border-radius:8px;background:transparent;color:#a1a3ab;font-size:13px;font-weight:500}
 html[data-workspace-theme=dark] .conversation-editor .workspace-nav-secondary:hover:not(:disabled){background:var(--ed-surface);color:var(--ed-text);filter:none}
 html[data-workspace-theme=dark] .conversation-editor .workspace-nav .revline-primary[data-slot=button]{background:#7c3aed;color:#fff}
-/* Export and the MCP status: one size from .workspace-nav-button, the editor's 8px corners. */
-html[data-workspace-theme=dark] .conversation-editor .workspace-nav-actions .workspace-nav-button[data-slot=button]{border-radius:8px}
 html[data-workspace-theme=dark] .conversation-editor .workspace-nav .revline-primary[data-slot=button]:hover:not(:disabled){background:#8b4cf0}
 html[data-workspace-theme=dark] .conversation-editor .editor-mode-switch{gap:4px;padding:0;border-color:var(--ed-border);border-radius:6px;background:transparent}
 html[data-workspace-theme=dark] .conversation-editor .editor-mode-switch>[role=tab]{min-height:28px;border-radius:6px;color:var(--ed-text-3);font-size:12px}

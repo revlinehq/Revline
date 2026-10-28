@@ -25,10 +25,9 @@ html[data-workspace-theme="dark"] {
 .workspace-nav-icon { width:28px; height:30px; display:grid; place-items:center; border:0; border-radius:7px; color:var(--ws-muted); background:transparent; cursor:pointer; }
 .workspace-nav button:disabled { opacity:.45; cursor:default; }
 .workspace-nav-secondary { display:flex; align-items:center; justify-content:center; gap:6px; height:32px; padding:0 10px; border:0; border-radius:7px; background:var(--ws-hover); color:var(--ws-text); text-decoration:none; font-size:13px; font-weight:500; cursor:pointer; }
-/* Editor bar buttons (shadcn Button: Export and the MCP status) share one compact size and icon size. */
-.workspace-nav-actions .workspace-nav-button[data-slot=button] { height:28px; min-height:28px; padding:0 11px; gap:6px; font-size:12px; font-weight:500; border-radius:var(--revline-button-radius); }
-.workspace-nav-actions .workspace-nav-button[data-slot=button] svg { width:14px; height:14px; }
-.workspace-nav-mcp[data-slot=button] { background:var(--ws-hover); color:var(--ws-text); } .workspace-nav-mcp[data-slot=button]:hover { filter:brightness(.96); } .workspace-nav-mcp-apps { display:flex; align-items:center; gap:4px; }
+/* Editor bar buttons are shadcn Buttons (size sm); only their colors change here. */
+.workspace-nav-export { --primary:var(--revline-primary-background); --primary-foreground:#fff; } .workspace-nav-mcp { --secondary:var(--ws-hover); --secondary-foreground:var(--ws-text); }
+.workspace-nav-mcp-apps { display:flex; align-items:center; gap:4px; }
 .workspace-nav-secondary:hover { filter:brightness(.96); }
 .workspace-nav-unsaved svg { color:#c77730; }
 .workspace-nav-save { display:flex; align-items:center; gap:5px; color:var(--ws-muted); font-size:12px; }
