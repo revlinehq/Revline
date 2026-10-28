@@ -1,18 +1,10 @@
 'use client';
 
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type PointerEvent } from 'react';
-import { Input } from '@/components/ui/input';
 import { type Clip, type VisualTransform } from '@/lib/editor/types';
 import { moveVisualTransform, resizeVisualTransform, sameVisualTransform, snapVisualMove, snapVisualResize, visualResizeCursor, visualTransform, type VisualCorner, type VisualRect, type VisualSnapLine } from '@/lib/editor/visual-transforms';
 import { visibleVisualBounds } from '@/lib/editor/preview-viewport';
 import './visual-controls.css';
-
-export function NumberControl({label,value,min,max,step=1,unit,disabled=false,onCommit}:{label:string;value:number;min:number;max:number;step?:number;unit?:string;disabled?:boolean;onCommit:(value:number)=>void}) {
-  const [draft,setDraft]=useState(String(Math.round(value*100)/100));const cancelled=useRef(false);
-  useEffect(()=>setDraft(String(Math.round(value*100)/100)),[value]);
-  function commit(){if(cancelled.current){cancelled.current=false;setDraft(String(Math.round(value*100)/100));return;}const next=Number(draft);if(draft.trim()&&Number.isFinite(next)){const clamped=Math.max(min,Math.min(max,next));if(clamped!==Math.round(value*100)/100)onCommit(clamped);setDraft(String(clamped));}else setDraft(String(Math.round(value*100)/100));}
-  return <label className="visual-number"><span>{label}</span><div><Input aria-label={label} type="number" disabled={disabled} min={min} max={max} step={step} value={draft} onChange={e=>setDraft(e.target.value)} onBlur={commit} onKeyDown={e=>{if(e.key==='Enter')e.currentTarget.blur();if(e.key==='Escape'){cancelled.current=true;e.currentTarget.blur();}}}/>{unit&&<span>{unit}</span>}</div></label>;
-}
 
 type Gesture={pointer:number;target:HTMLElement;x:number;y:number;width:number;height:number;canvas:{width:number;height:number};contentRect:VisualRect;initial:VisualTransform;corner?:VisualCorner;current:VisualTransform};
 const corners=[['nw','top left'],['ne','top right'],['sw','bottom left'],['se','bottom right']] as const;

@@ -1,7 +1,6 @@
 import type { Clip } from './types';
 import { rampSpan, rampTimeAtSpan, validateSpeedRamp } from './speed-ramp';
 
-export const PLAYBACK_RATES = [.25, .5, 1, 1.5, 2, 4] as const;
 export function validatePlaybackRate(clip: Pick<Clip, 'kind' | 'playbackRate'> & { duration?: number; speedRamp?: Clip['speedRamp'] }) {
   if (clip.speedRamp !== undefined) validateSpeedRamp({ ...clip, duration: clip.duration ?? 0 });
   if (clip.playbackRate === undefined) return;

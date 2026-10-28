@@ -16,6 +16,3 @@ export function stockAudioAsset(id: string): MediaAsset {
   if (!sound) throw new Error('Unknown Audio FX sound.');
   return { _id: `stock-audio-${id}`, kind: 'audio', fileName: `${sound.name}.ogg`, url: `/api/audio-fx/${id}`, duration: sound.duration, waveform: sound.waveform };
 }
-export function isStockAudioAsset(asset: MediaAsset): boolean {
-  return !!stockAudio(asset._id.replace(/^stock-audio-/, '')) || ('r2Key' in asset && typeof asset.r2Key === 'string' && isStockAudioKey(asset.r2Key));
-}

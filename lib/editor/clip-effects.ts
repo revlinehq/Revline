@@ -50,8 +50,6 @@ export const FRAME_SHRINK_LIMITS = { size: [0, .45], speed: [.25, 4] } as const;
 export type ZoomSettings = { direction: 'in' | 'out'; amount: number; speed: number; centerX: number; centerY: number };
 export const ZOOM_LIMITS = { amount: [1, 3], speed: [.25, 4], centerX: [0, 1], centerY: [0, 1] } as const;
 export function isZoomPreset(preset: unknown): preset is 'quick-zoom-in' | 'quick-zoom-out' { return preset === 'quick-zoom-in' || preset === 'quick-zoom-out'; }
-/** Inspector family only: Punch keeps its original saved ID and pulse settings. */
-export function isZoomFamilyPreset(preset: unknown): preset is 'quick-zoom-in' | 'quick-zoom-out' | 'punch' { return isZoomPreset(preset) || preset === 'punch'; }
 export function zoomSettings(clip: Pick<Clip, 'effectPreset' | 'zoom' | 'motion'>): ZoomSettings {
   return clip.zoom ?? { direction: clip.effectPreset === 'quick-zoom-out' ? 'out' : 'in', amount: isZoomPreset(clip.effectPreset) && clip.motion?.length ? Math.max(1, ...clip.motion.map(frame => frame.scale)) : 1.2, speed: 1, centerX: .5, centerY: .5 };
 }

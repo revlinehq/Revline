@@ -25,11 +25,3 @@ export function usePausedPlaybackTime() {
   return paused.current;
 }
 
-/** Inspector controls settle once after a scrub instead of rendering each tick. */
-export function useInspectorPlaybackTime() {
-  const store=useEditorStore();
-  const time=useStore(store,state=>state.playing||state.scrubbing?null:state.playhead);
-  const settled=useRef(store.getState().playhead);
-  if(time!==null)settled.current=time;
-  return settled.current;
-}

@@ -46,14 +46,6 @@ export function placeTransitionAt(input: Timeline, id: string, preset: Transitio
   return { ...next, clips: next.clips.map(clip => clip.id === id ? { ...previous, ...clip, transition: { ...previous.transition!, ...clip.transition! } } : clip) };
 }
 
-/** Availability uses the exact same operation as a click; drag remains usable away from the playhead. */
-export function transitionAvailabilityAt(timeline: Timeline, at: number, options: PlacementOptions = {}) {
-  let id = 'transition-placement';
-  while (timeline.clips.some(clip => clip.id === id)) id += '-';
-  try { placeTransitionAt(timeline, id, 'crossfade', at, options); return { available: true as const }; }
-  catch (error) { return { available: false as const, reason: error instanceof Error ? error.message : 'Drop the transition inside footage or onto a cut.' }; }
-}
-
 export function moveTransitionAt(timeline: Timeline, id: string, at: number, track: number) {
   const clip = timeline.clips.find(member => member.id === id);
   if (!clip || !isTransitionClip(clip)) throw new Error('Choose a transition clip to move.');

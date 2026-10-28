@@ -8,18 +8,6 @@ export * from './types';
 export { analyzeFrames } from './frames';
 export { speechEdges, type WordEdge } from './edges';
 
-/**
- * Speech cleanup engine: finds what to cut from a talking recording, in three layers.
- * 1. Filler words a verbatim transcript kept ("um", "uh").
- * 2. Acoustic gaps and stretched words: pauses, breaths and held fillers measured in 10ms frames,
- *    which catches what a clean-text transcriber leaves out of its words.
- * 3. Restarts and retakes: repeated phrases and re-recorded sentences, keeping only the final take.
- * Returns merged, time-ordered cuts in SOURCE seconds; nothing here edits a timeline.
- */
-export function findSpeechCleanup(words: SpeechWord[], samples: Float32Array, sampleRate: number, options: Partial<CleanupOptions> = {}): CleanupCut[] {
-  return analyzeSpeech(words, samples, sampleRate, options).cuts;
-}
-
 /** The cleanup cuts plus each word's measured edges (in the given word order), from one pass over the audio. */
 export function analyzeSpeech(words: SpeechWord[], samples: Float32Array, sampleRate: number, options: Partial<CleanupOptions> = {}) {
   const frames = analyzeFrames(samples, sampleRate);

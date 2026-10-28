@@ -36,10 +36,6 @@ export function textAnimationPatch(clip: Clip, preset: TextAnimationPreset): Par
     : { ...textEffectPatch(clip, preset as TextEffectPreset), textStyle: resolvedTextAppearance(clip), textTemplate: undefined };
 }
 
-export function selectedTextAnimation(clip: Clip): TextAnimationPreset | null {
-  return clip.textTemplate?.preset ?? selectedTextEffect(clip);
-}
-
 export function selectedTextEffect(clip: Clip): TextEffectPreset | null {
   if (!clip.motion?.length) return clip.animation ?? 'none';
   return !clip.motionOffset && JSON.stringify(clip.motion) === JSON.stringify(motionPreset(clip, 'pop').motion) ? 'pop' : null;
