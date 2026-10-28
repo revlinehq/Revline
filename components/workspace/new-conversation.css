@@ -17,13 +17,6 @@
 .new-conversation-motion.edit-composer{padding:12px 12px 10px;border-radius:12px;gap:4px}
 .new-conversation-motion textarea{font-size:15px}
 .new-conversation-motion .composer-add{display:none}
-/* Suggested product prompts under the composer; placeholders read as soft blanks to fill in. */
-.new-conversation-prompts{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
-.new-conversation-prompts button{max-width:100%;padding:7px 12px;border:1px solid var(--ws-border,#e9e9e9);border-radius:var(--revline-button-radius);background:transparent;color:#657080;font:inherit;font-size:13px;line-height:1.45;text-align:left;cursor:pointer;transition:background-color 120ms,color 120ms}
-@media(hover:hover) and (pointer:fine){.new-conversation-prompts button:not(:disabled):hover{background:#f7f8fb;color:#394557}}
-.new-conversation-prompts button:disabled{cursor:wait;opacity:.6}
-.new-conversation-prompts button:focus-visible{outline:2px solid var(--revline-accent);outline-offset:2px}
-.new-conversation-placeholder{padding:1px 5px;border-radius:5px;background:#eef0f4;color:#394557}
 .footage-start-card{width:100%;height:168px;border:0;border-radius:12px;background:#f7f8fb;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;gap:8px;text-align:center;cursor:pointer;transition:background-color 120ms,box-shadow 120ms}
 .footage-start-card strong{color:#394557;font-size:14px;line-height:1.6;font-weight:500}
 .footage-start-helper{color:#657080;font-size:13px;line-height:1.6}
@@ -43,13 +36,10 @@ html[data-workspace-theme=dark] .footage-start-card strong{color:#d9dfeb}
 html[data-workspace-theme=dark] .footage-start-helper{color:#a9b2c4}
 @media(hover:hover) and (pointer:fine){html[data-workspace-theme=dark] .footage-start-card:not(:disabled):hover{background:#232936;box-shadow:inset 0 0 0 1px #394255}}
 html[data-workspace-theme=dark] .new-conversation-modes{background:#1c202a}
-html[data-workspace-theme=dark] .new-conversation-prompts button{color:#a9b2c4}
-@media(hover:hover) and (pointer:fine){html[data-workspace-theme=dark] .new-conversation-prompts button:not(:disabled):hover{background:#1c202a;color:#d9dfeb}}
-html[data-workspace-theme=dark] .new-conversation-placeholder{background:#262b36;color:#d9dfeb}
 html[data-workspace-theme=dark] .new-conversation-modes button{color:#a9b2c4}
 html[data-workspace-theme=dark] .new-conversation-modes::before{background:#2c313c;box-shadow:none}
 html[data-workspace-theme=dark] .new-conversation-modes button[aria-selected=true]{color:#f2f2f2}
 @media(hover:hover) and (pointer:fine){html[data-workspace-theme=dark] .new-conversation-modes button[aria-selected=false]:hover{color:#d9dfeb}}
 @media(max-width:600px){.new-conversation-main{width:calc(100% - 32px);gap:28px}.new-conversation-start{margin-top:40px;gap:28px}.new-conversation-intro h1{font-size:34px}.new-conversation-intro p{font-size:14px}.new-conversation-drop-note{bottom:20px;max-width:calc(100% - 32px);white-space:nowrap}}
 @media(max-width:320px){.new-conversation-intro h1{font-size:28px}.footage-start-card{height:auto;min-height:168px}}
-@media(prefers-reduced-motion:reduce){.footage-start-card,.footage-start-icon,.new-conversation-modes button,.new-conversation-modes::before,.new-conversation-prompts button{transition:none}}
+@media(prefers-reduced-motion:reduce){.footage-start-card,.footage-start-icon,.new-conversation-modes button,.new-conversation-modes::before{transition:none}}

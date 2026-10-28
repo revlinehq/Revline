@@ -36,18 +36,6 @@ const START_MODES: { id: StartMode; label: string; intro: string }[] = [
   { id: 'motion', label: 'Product Edit', intro: 'No footage needed. Describe your product video and Revline designs and animates it from scratch.' },
 ];
 type Processing = Omit<ProjectImportProgress, 'phase'> & { phase: FootageProcessingPhase };
-/** Product edit starters; [bracketed] words are placeholders the user replaces. */
-const PRODUCT_PROMPTS = [
-  'A 45 second launch video for [product], ending on the logo',
-  'Announce [feature] and show how it works in [product]',
-  'Walk through [product] in 3 steps: [step 1], [step 2], [step 3]',
-  'Recap this month in [product]: [update 1], [update 2], [update 3]',
-];
-const PLACEHOLDER = /\[[^\]]+\]/;
-
-function PromptText({ text }: { text: string }) {
-  return <>{text.split(/(\[[^\]]+\])/).map((part, index) => PLACEHOLDER.test(part) ? <span key={index} className="new-conversation-placeholder">{part.slice(1, -1)}</span> : part)}</>;
-}
 
 export function NewConversation() {
   const router = useRouter();
@@ -252,17 +240,6 @@ export function NewConversation() {
     try { sessionStorage.removeItem(briefKey); sessionStorage.removeItem(cloudKey); } catch { /* The current selection is cleared in memory. */ }
     void stashFiles([]);
   }
-  /** Fill the composer with a starter and select its first placeholder, ready to type over. */
-  function applySuggestedPrompt(prompt: string) {
-    setMotionBrief(prompt);
-    requestAnimationFrame(() => {
-      const field = document.querySelector<HTMLTextAreaElement>('.new-conversation-motion textarea');
-      if (!field) return;
-      const match = PLACEHOLDER.exec(prompt);
-      field.focus();
-      if (match) field.setSelectionRange(match.index, match.index + match[0].length);
-    });
-  }
   /** Product edits start from a prompt alone: an empty landscape project whose editor sends the brief on open. */
   async function startMotionDesign() {
     const prompt = motionBrief.trim();
@@ -315,9 +292,6 @@ export function NewConversation() {
           {mode === 'motion'
             ? <EditComposer className="new-conversation-motion" value={motionBrief} onChange={setMotionBrief} onSubmit={startMotionDesign} placeholder="Describe your product or feature idea…" disabled={!draftReady} />
             : <FootageStartCard onAttach={() => picker.current?.click()} disabled={!draftReady} dragging={dragging}/>}
-          {mode === 'motion' && <div className="new-conversation-prompts" aria-label="Suggested prompts">
-            {PRODUCT_PROMPTS.map(prompt => <button key={prompt} type="button" disabled={!draftReady} onClick={() => applySuggestedPrompt(prompt)}><PromptText text={prompt} /></button>)}
-          </div>}
           <input ref={picker} type="file" accept="video/*,audio/*,image/*" multiple className="sr-only" tabIndex={-1} aria-label="Choose media to upload" onChange={event => { const files = Array.from(event.target.files ?? []); event.target.value = ''; if (files.length) attach(files); }}/>
           {error && <p className="new-conversation-error" role="alert">{error}</p>}
         </div>
