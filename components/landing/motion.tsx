@@ -4,22 +4,22 @@ import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 're
 import { Diamond, MousePointer2 } from 'lucide-react';
 import { LandingSection } from './ui';
 
-type Kind = { id: string; label: string; description: string; image: string; beats: string[]; overlay: ReactNode };
+type Kind = { id: string; label: string; image: string; beats: string[]; overlay: ReactNode };
 
 // Each segment swaps the preview: its footage, its motion overlay and the timeline beats that drive it.
 const kinds: Kind[] = [
   {
-    id: 'launch', label: 'Launch videos', description: 'A real product launch, cut and animated entirely in Revline.', image: 'vlog',
+    id: 'launch', label: 'Launch videos', image: 'vlog',
     beats: ['Every', 'word', 'lands', 'on time.'],
     overlay: <p className="landing-motion-title">Every word<br /><b>lands</b> <span>on time.</span></p>,
   },
   {
-    id: 'explainers', label: 'Explainers', description: 'Voiceover, diagrams and callouts, edited end to end with Claude.', image: 'code-screen',
+    id: 'explainers', label: 'Explainers', image: 'code-screen',
     beats: ['Voiceover', 'Diagram', 'Callout', 'Outro'],
     overlay: <p className="landing-motion-title">Complex ideas,<br /><b>made simple.</b></p>,
   },
   {
-    id: 'elements', label: 'Motion elements', description: 'You on camera, with titles and graphics popping in as you talk.', image: 'talking-head',
+    id: 'elements', label: 'Motion elements', image: 'talking-head',
     beats: ['Lower third', 'Sticker', 'Zoom', 'Caption'],
     overlay: <div className="landing-motion-elements">
       <span className="landing-motion-sticker">New feature</span>
@@ -27,7 +27,7 @@ const kinds: Kind[] = [
     </div>,
   },
   {
-    id: 'demos', label: 'Product demos', description: 'Screen recordings where the camera follows every click.', image: 'product-window',
+    id: 'demos', label: 'Product demos', image: 'product-window',
     beats: ['Click', 'Zoom in', 'Type', 'Zoom out'],
     overlay: <div className="landing-motion-demo">
       <span className="landing-motion-focus"><MousePointer2 size={22} /></span>
@@ -85,7 +85,6 @@ export function LandingMotion() {
             setActive(next); tabs.current[next]?.focus();
           }}>{item.label}</button>)}
       </div>
-      <p key={kind.id} className="landing-motion-description">{kind.description}</p>
     </div>
     <div id="landing-motion-panel" role="tabpanel" aria-labelledby={`landing-motion-tab-${kind.id}`} className="landing-motion-preview">
       {kinds.map((item, index) => <div key={item.id} className="landing-motion-scene" data-active={index === active || undefined} style={{ backgroundImage: `url(/landing/${item.image}.webp)` }} aria-hidden={index !== active}>
