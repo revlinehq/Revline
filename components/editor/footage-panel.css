@@ -3,11 +3,8 @@
 .footage-content-inspector .footage-heading p{font-size:11px;color:var(--ws-muted);margin:0}
 .footage-content-inspector .footage-heading button{width:28px;height:28px;border-radius:6px;flex-shrink:0}
 .source-filters{display:flex;flex-direction:column;gap:8px;margin-bottom:16px}
-.source-search{display:flex;align-items:center;gap:7px;height:32px;padding:0 9px;background:var(--ws-surface,#f5f5f5);border-radius:6px;color:var(--ws-muted)}
-.source-search input{width:100%;min-width:0;border:0;outline:0;background:transparent;color:var(--ws-text);font:400 12px/1.5 var(--font-inter),Inter,sans-serif}
-.source-search:focus-within{outline:2px solid var(--revline-accent);outline-offset:2px}
-.conversation-editor .preview-inspector .source-search input{padding:0;border:0;border-radius:0;background:transparent;font-size:12px;line-height:1.5}
-.source-filters select{height:30px;padding:0 7px;border:1px solid var(--ws-border,#e5e5e5);border-radius:6px;background:var(--ws-bg,#fff);color:var(--ws-text);font:400 11px var(--font-inter),Inter,sans-serif}
+
+
 .source-no-results{font-size:12px;color:var(--ws-muted);padding:12px 0}
 .footage-content-inspector .asset-card{min-width:0;text-align:left;border:0;background:none;padding:0;color:var(--ws-text);cursor:pointer}
 .source-media-list{display:flex;flex-direction:column;gap:6px}.footage-content-inspector .source-media-row{display:flex;align-items:center;gap:8px;width:100%;min-height:46px;padding:5px 9px 5px 5px;border:1px solid var(--ws-artifact-border);border-radius:5px;background:var(--ws-input)}
@@ -27,9 +24,8 @@
 .preview-inspector-sheet .inspector-tabs{border-bottom-color:var(--ws-artifact-border)}
 .preview-inspector-sheet .inspector-tabs>button{color:var(--ws-muted)}
 .preview-inspector-sheet .inspector-tabs>button[aria-selected=true]{color:var(--ws-text);border-bottom-color:var(--ws-text)}
-.preview-inspector-sheet .preview-inspector input,.preview-inspector-sheet .preview-inspector textarea,.preview-inspector-sheet .preview-inspector [data-slot=button]{color:var(--ws-text);background:var(--ws-surface);border-color:var(--ws-artifact-border)}
+.preview-inspector-sheet .preview-inspector input:not([data-slot]),.preview-inspector-sheet .preview-inspector textarea{color:var(--ws-text);background:var(--ws-surface);border-color:var(--ws-artifact-border)}
 .preview-inspector-sheet .preview-inspector [aria-pressed=true]{color:var(--ws-text);background:var(--ws-hover);border-color:var(--ws-muted)}
-.preview-inspector-sheet .preview-inspector .source-search input{padding:0;border:0;border-radius:0;background:transparent;font-size:12px;line-height:1.5}
 
 .inspector-content{--inspector-scroll-thumb:color-mix(in srgb,var(--ws-text) 40%,var(--ws-bg));overflow-y:scroll;scrollbar-gutter:stable;scrollbar-width:thin;scrollbar-color:var(--inspector-scroll-thumb) var(--ws-bg)}
 .inspector-content::-webkit-scrollbar{width:8px;height:8px}
@@ -45,8 +41,8 @@
 
 .source-asset{position:relative;min-width:0}.source-asset-inspector{display:flex;align-items:center;gap:2px;padding-right:4px;border:1px solid var(--ws-artifact-border);border-radius:5px;background:var(--ws-input)}
 .footage-content-inspector .source-asset-inspector .source-media-row{flex:1;min-width:0;border:0;background:transparent}
-.source-asset-menu{display:grid;place-items:center;flex:none;width:28px;height:28px;border:0;border-radius:4px;background:transparent;color:var(--ws-muted);cursor:pointer}
-.source-asset-menu:hover{color:var(--ws-text);background:var(--ws-hover)}.source-asset-menu:focus-visible{outline:2px solid var(--revline-accent);outline-offset:2px}
+.source-asset-menu{flex:none;color:var(--ws-muted)}
+.source-asset-menu:hover{color:var(--ws-text);background:var(--ws-hover)}
 .source-asset-sheet .source-asset-menu{position:absolute;top:5px;right:5px;background:var(--ws-bg)}
 .source-remove-actions{display:flex;justify-content:flex-end;gap:8px}.source-remove-error{font-size:12px;color:var(--destructive)}
 
@@ -54,14 +50,13 @@
 .preview-inspector .footage-content-library button.source-import-files{display:flex;align-items:center;justify-content:center;gap:6px;flex-shrink:0;width:100%;height:34px;background:var(--revline-accent);border-color:transparent;color:#fff}
 .preview-inspector .footage-content-library button.source-import-files:hover:not(:disabled){background:var(--revline-accent)}
 .footage-content-library .source-filters{gap:6px;margin:0}
-.footage-content-library .source-search{height:30px;padding:0 8px;background:var(--ws-input)}
-.preview-inspector .footage-content-library .source-search input{padding:0;border:0;border-radius:0;background:transparent;font-size:11px}
-.footage-content-library .source-filters select{width:100%;min-width:0;height:28px}
+
+.footage-content-library 
 .footage-content-library .source-media-row>.media-thumbnail{flex-basis:36px;height:30px}
 .footage-content-library .source-media-row{gap:6px;padding-right:2px}
 .footage-content-library .source-media-row .source-add-icon{display:none}
 .footage-content-library .source-media-details small{font-size:9px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.footage-content-library .source-asset-menu{width:24px;height:28px}
+
 .footage-content-library .footage-empty{padding:18px 0}
 .footage-content-library .footage-empty p{margin:0;line-height:1.6;font-size:11px}
 
@@ -90,6 +85,6 @@
 .source-tile-card[data-preparing]{opacity:1;cursor:progress}
 @media(hover:hover){.source-tile-card:not(:disabled):hover::after{box-shadow:inset 0 0 0 2px var(--revline-accent)}}
 .source-tile-card:focus-visible{outline:2px solid var(--revline-accent);outline-offset:2px}
-.footage-content-library .source-tile .source-asset-menu{position:absolute;top:4px;right:4px;width:22px;height:22px;border-radius:5px;background:#000000a6;color:#fff;opacity:0;transition:opacity 120ms}
+.footage-content-library .source-tile .source-asset-menu{position:absolute;top:4px;right:4px;background:#000000a6;color:#fff;opacity:0;transition:opacity 120ms}
 .source-tile:is(:hover,:focus-within) .source-asset-menu,.source-tile .source-asset-menu[data-state=open]{opacity:1}
 .footage-content-library .source-tile .source-asset-menu:hover{background:#000000d9;color:#fff}
