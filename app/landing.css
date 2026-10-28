@@ -18,7 +18,7 @@ body:has(>.landing),body:has(main.landing){background:#fff}
 .landing-button[data-size=lg]{height:44px;padding-inline:16px;font-size:16px}
 .landing-button[data-block]{width:100%}
 .landing-button:disabled{cursor:default;opacity:.7}
-.landing-button[data-variant=primary]{background:linear-gradient(315deg,#7c3aed,#a876ff);border-color:#ffffff59;color:#fff;box-shadow:inset 0 0 1px #6d28d9}
+.landing-button[data-variant=primary]{background:linear-gradient(315deg,#7c3aed,#a876ff) border-box;border-color:#ffffff59;color:#fff;box-shadow:inset 0 0 1px #6d28d9}
 .landing-button[data-variant=secondary]{border-color:var(--l-brand-ring);color:var(--l-brand)}
 .landing-button[data-variant=neutral]{background:#fcfcfc;border-color:#0000000d;color:var(--l-fg)}
 .landing-button[data-variant=dark]{background:#141414;border-color:#ffffff26;box-shadow:inset 0 0 1px #000;color:#fff}
@@ -224,6 +224,8 @@ div.landing-hero-buttons>.landing-reveal-content{display:flex;align-items:center
 .landing-plan .landing-plan-lead{font-size:14px;color:#ffffffa6}
 .landing-plan footer{display:flex;flex-direction:column;align-items:center;gap:12px}
 .landing-plan footer small{font-size:13px;color:#ffffff73}
+/* On the dark card the gradient stands alone: no light ring around it. */
+.landing-plan .landing-button[data-variant=primary]{border-color:transparent;box-shadow:none}
 
 /* FAQ: dark. */
 .landing-faq{display:flex;gap:80px;padding-block:96px;background:#0b0b0d}
