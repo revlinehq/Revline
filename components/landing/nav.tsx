@@ -1,8 +1,8 @@
-import Link from 'next/link';
 import { Brand } from '@/components/workspace/brand';
 import { LandingStartButton } from './start-button';
 import { LandingButton } from './ui';
 import { LandingNavTone } from './nav-tone';
+import { LandingHomeLink } from './home-link';
 
 const links = [
   { label: 'Product', href: '#how-it-works' },
@@ -13,7 +13,7 @@ const links = [
 
 export function LandingNav() {
   return <nav className="landing-nav" aria-label="Main navigation">
-    <Link className="landing-brand" href="/" aria-label="Revline home"><Brand /></Link>
+    <LandingHomeLink><Brand /></LandingHomeLink>
     <div className="landing-nav-links">{links.map(({ label, href }) => <a key={label} href={href}>{label}</a>)}</div>
     <div className="landing-nav-right">
       <LandingButton className="landing-nav-login" href="/sign-in" variant="neutral" size="sm">Log in</LandingButton>
