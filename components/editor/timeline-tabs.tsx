@@ -1,6 +1,5 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
-import Link from 'next/link';
 import { ChevronDown, Copy, Download, Pencil, Plus, Trash2 } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
@@ -8,7 +7,6 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import type { AspectRatio } from '@/lib/editor/types';
 import { AgentLogo } from '@/components/workspace/agent-logo';
-import { ClaudeLogo, CursorLogo, OpenAILogo } from '@/components/workspace/ai-app-logos';
 import './timeline-tabs.css';
 
 export type TimelineTab = { id: string; name: string; aspectRatio: AspectRatio; duration: number; active: boolean };
@@ -23,7 +21,7 @@ export type TimelineTabActions = {
 const length = (seconds: number) => { const total = Math.round(seconds); return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`; };
 
 /** Spreadsheet-style tabs on top of the timeline: each is its own video in this project. */
-export function TimelineTabs({ tabs, working, agentName, mcpConnection, locked, onError, ...actions }: { tabs: TimelineTab[]; working: boolean; /** The MCP app editing, or null for Revline's own AI. */ agentName?: string | null; /** The app connected over MCP, null when none is, undefined while loading. */ mcpConnection?: string | null; locked: boolean; onError: (error: unknown) => void } & TimelineTabActions) {
+export function TimelineTabs({ tabs, working, agentName, locked, onError, ...actions }: { tabs: TimelineTab[]; working: boolean; /** The MCP app editing, or null for Revline's own AI. */ agentName?: string | null; locked: boolean; onError: (error: unknown) => void } & TimelineTabActions) {
   const [busy, setBusy] = useState(false);
   // The clicked tab highlights on the next frame; the timeline it opens follows.
   const [opening, setOpening] = useState<string | null>(null);
@@ -60,8 +58,6 @@ export function TimelineTabs({ tabs, working, agentName, mcpConnection, locked, 
       </DropdownMenuContent></DropdownMenu>}
     </div>; })}
     <button type="button" className="timeline-tab-add" aria-label="New blank timeline" title="New blank timeline" disabled={blocked} onClick={() => void run(() => actions.onCreate('blank'))}><Plus size={14}/></button>
-    {mcpConnection ? <Link href="/profile#mcp" className="timeline-mcp"><AgentLogo name={mcpConnection} className="timeline-mcp-logo"/>MCP connected</Link>
-      : mcpConnection === null && <Link href="/profile#mcp" className="timeline-mcp" data-connect><span className="timeline-mcp-apps" aria-hidden="true"><ClaudeLogo/><OpenAILogo/><CursorLogo/></span>Connect MCP</Link>}
     <Dialog open={!!dialog} onOpenChange={open => { if (!open) setDialog(null); }}><DialogContent>
       {dialog?.mode === 'remove' ? <>
         <DialogTitle>Delete {dialog.name}?</DialogTitle><DialogDescription>This timeline and its undo history go away. Media stays in the project and other timelines are unchanged.</DialogDescription>

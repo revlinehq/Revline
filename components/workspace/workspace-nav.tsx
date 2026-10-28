@@ -9,10 +9,12 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useClerk, useUser } from '@clerk/nextjs';
 import { signOutToSignIn } from '@/lib/auth/sign-out';
 import { useConvexAuth, useQuery } from 'convex/react';
-import { Check, ChevronDown, CircleAlert, Cloud, Copy, CreditCard, Database, Download, Film, History, LoaderCircle, LogOut, PanelsTopLeft, Pencil, Plus, Redo2, Share2, UserRound, Undo2 } from 'lucide-react';
+import { Check, ChevronDown, CircleAlert, Cloud, Copy, CreditCard, Database, Download, Film, History, LoaderCircle, LogOut, PanelsTopLeft, Pencil, Plus, Redo2, UserRound, Undo2 } from 'lucide-react';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
 import { Brand } from './brand';
+import { AgentLogo } from './agent-logo';
+import { ClaudeLogo, CursorLogo, OpenAILogo } from './ai-app-logos';
 import { ProjectCover } from './project-cover';
 import { startNewWorkspace } from './start-new-workspace';
 import { PrimaryButton } from './primary-button';
@@ -59,8 +61,8 @@ export interface WorkspaceNavProps {
   onRedo?: () => void;
   onFootage?: () => void;
   onExport?: () => void;
-  onShare?: () => void;
-  shareDisabled?: boolean;
+  /** The app connected over MCP: its name, null when none is (shows Connect MCP), undefined to hide. */
+  mcpConnection?: string | null;
   exportDisabled?: boolean;
   /** Explains a disabled export or its limit before the dialog opens. */
   exportHint?: string;
@@ -69,7 +71,7 @@ export interface WorkspaceNavProps {
   editorControls?: ReactNode;
 }
 
-export function WorkspaceNav({ title = NEW_WORKSPACE_LABEL, editorHref, active = 'chat', demo = false, saving, saveFailed, onRetrySave, canUndo, canRedo, onUndo, onRedo, onFootage, onExport, onShare, shareDisabled, exportDisabled, exportHint, onRename, chatId, editorControls }: WorkspaceNavProps) {
+export function WorkspaceNav({ title = NEW_WORKSPACE_LABEL, editorHref, active = 'chat', demo = false, saving, saveFailed, onRetrySave, canUndo, canRedo, onUndo, onRedo, onFootage, onExport, mcpConnection, exportDisabled, exportHint, onRename, chatId, editorControls }: WorkspaceNavProps) {
   const pathname = usePathname();
   const router = useRouter();
   const startingWorkspace = useRef(false);
@@ -136,7 +138,7 @@ export function WorkspaceNav({ title = NEW_WORKSPACE_LABEL, editorHref, active =
       {saveFailed && onRetrySave && <button type="button" className="workspace-nav-secondary workspace-nav-unsaved" aria-label="Unsaved changes. Retry saving" title="Unsaved changes. Retry saving" onClick={onRetrySave}><CircleAlert size={14} aria-hidden="true" /><span>Unsaved changes — Retry</span></button>}
       {(onUndo || onRedo) && <div className="workspace-nav-history"><button className="workspace-nav-icon" aria-label="Undo" title="Undo" disabled={!canUndo} onClick={onUndo}><Undo2 size={15} /></button><button className="workspace-nav-icon" aria-label="Redo" title="Redo" disabled={!canRedo} onClick={onRedo}><Redo2 size={15} /></button></div>}
       {onFootage && <button className="workspace-nav-secondary" aria-label="Footage" onClick={onFootage}><Film size={14} /><span>Footage</span></button>}
-      {onShare && <button type="button" className="workspace-nav-secondary" aria-label="Share timeline" onClick={onShare} disabled={shareDisabled}><Share2 size={14}/><span>Share</span></button>}
+      {mcpConnection !== undefined && <Link href="/profile#mcp" className="workspace-nav-secondary workspace-nav-mcp">{mcpConnection ? <><AgentLogo name={mcpConnection} className="workspace-nav-mcp-logo"/><span>MCP connected</span></> : <><span className="workspace-nav-mcp-apps" aria-hidden="true"><ClaudeLogo/><OpenAILogo/><CursorLogo/></span><span>Connect MCP</span></>}</Link>}
       {onExport && !demo && <span className="workspace-nav-action-hint" title={exportHint}><PrimaryButton size="compact" onClick={onExport} disabled={exportDisabled} aria-description={exportHint}>Export<Download size={13} /></PrimaryButton></span>}
       {editorHref && <Link href={editorHref} className="workspace-nav-secondary workspace-editor-link" aria-label="Editor"><PanelsTopLeft size={14} /><span>Editor</span></Link>}
       <DropdownMenu><DropdownMenuTrigger asChild><button className="workspace-account-trigger" aria-label="Open account menu" disabled={!isLoaded}>{user?.imageUrl ? <img src={user.imageUrl} alt="" /> : initial}</button></DropdownMenuTrigger>

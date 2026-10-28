@@ -58,8 +58,6 @@ type Props={
   workingLabel?:string;
   /** The MCP app editing (null: Revline's own AI), shown on the tab it edits. */
   workingAgent?:string|null;
-  /** The app connected over MCP, null when none is, undefined while loading. */
-  mcpConnection?:string|null;
   liveEdit?:LiveEditChange & {sequence:number;runId:string};
   onExportClip?:(clipId:string)=>void;
   tabs?:TimelineTab[];tabActions?:TimelineTabActions;
@@ -637,7 +635,7 @@ export function TimelinePanel(p:Props){
   };
 
   return <ContextMenu onOpenChange={open=>{if(!open)setContext(null);}}><ContextMenuTrigger asChild disabled={editingDisabled}><section tabIndex={-1} onContextMenu={openContext} data-read-only={p.readOnly||undefined} data-compact-tracks={dense||undefined} data-tool={blade&&!editingDisabled?'blade':undefined} data-editing-locked={p.editingLocked||undefined} data-ai-working={p.aiWorking||undefined} data-live-edit={!!p.liveEdit||undefined} aria-busy={p.aiWorking||undefined} className={`timeline-panel custom-timeline ${p.playbackControls?'timeline-with-playback':''} ${p.collapsed?'timeline-collapsed':''} ${dense?'tracks-compact':''}`} aria-label={p.readOnly?'Shared video timeline':'Video timeline'}>
-    {!p.readOnly&&p.tabs&&p.tabActions&&<TimelineTabs agentName={p.workingAgent} mcpConnection={p.mcpConnection} tabs={p.tabs.map(tab=>tab.active?{...tab,aspectRatio:timeline.aspectRatio,duration:end}:tab)} working={!!p.aiWorking} locked={!!(p.aiWorking||p.editingLocked)} onError={report} {...p.tabActions}/>}
+    {!p.readOnly&&p.tabs&&p.tabActions&&<TimelineTabs agentName={p.workingAgent} tabs={p.tabs.map(tab=>tab.active?{...tab,aspectRatio:timeline.aspectRatio,duration:end}:tab)} working={!!p.aiWorking} locked={!!(p.aiWorking||p.editingLocked)} onError={report} {...p.tabActions}/>}
     <TimelinePlayheadClock playing={p.playing} readTime={p.readPlaybackTime} px={px} duration={end} origin={origin} viewport={scroll} head={head} cap={cap} scrubbing={scrubRef} followPausedUntil={followPausedUntil}/>
     <div className="timeline-toolbar"><div className="timeline-edit-actions">{!p.playbackControls&&<EditorPlaybackTime className="timeline-playback-time" time={time} duration={end} fps={timeline.fps} playing={p.playing} readTime={p.readPlaybackTime}/>}
       {p.readOnly&&<span>Timeline</span>}
