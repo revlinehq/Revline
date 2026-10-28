@@ -5,6 +5,13 @@
 .new-conversation-intro h1{margin:0;font-size:40px;font-weight:500;line-height:1.25;letter-spacing:0;color:#151515}
 .new-conversation-intro p{margin:0;font-size:15px;font-weight:400;line-height:1.6;color:#777}
 .new-conversation-entry{position:relative;min-width:0}
+/* Video Editing / Motion Design switch: neutral segmented control under the greeting. */
+.new-conversation-modes{display:inline-flex;gap:2px;padding:3px;border-radius:10px;background:#f2f3f6}
+.new-conversation-modes button{height:32px;padding:0 14px;border:0;border-radius:8px;background:transparent;color:#6b7280;font:inherit;font-size:14px;font-weight:500;cursor:pointer;transition:background-color 120ms,color 120ms,box-shadow 120ms}
+.new-conversation-modes button[aria-selected=true]{background:#fff;color:#151515;box-shadow:0 1px 2px #0000001a,0 0 0 1px #0000000a}
+@media(hover:hover) and (pointer:fine){.new-conversation-modes button[aria-selected=false]:hover{color:#151515}}
+.new-conversation-modes button:focus-visible{outline:2px solid var(--revline-accent);outline-offset:2px}
+.new-conversation-motion .composer-add{display:none}
 .footage-start-card{width:100%;height:168px;border:0;border-radius:12px;background:#f7f8fb;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;gap:8px;text-align:center;cursor:pointer;transition:background-color 120ms,box-shadow 120ms}
 .footage-start-card strong{color:#394557;font-size:14px;line-height:1.6;font-weight:500}
 .footage-start-helper{color:#657080;font-size:13px;line-height:1.6}
@@ -23,6 +30,10 @@ html[data-workspace-theme=dark] .footage-start-card strong{color:#d9dfeb}
 html[data-workspace-theme=dark] .footage-start-helper{color:#a9b2c4}
 @media(hover:hover) and (pointer:fine){html[data-workspace-theme=dark] .footage-start-card:not(:disabled):hover{background:#232936;box-shadow:inset 0 0 0 1px #394255}}
 html[data-workspace-theme=dark] .new-conversation-error{color:#edaaaa}
+html[data-workspace-theme=dark] .new-conversation-modes{background:#1c202a}
+html[data-workspace-theme=dark] .new-conversation-modes button{color:#a9b2c4}
+html[data-workspace-theme=dark] .new-conversation-modes button[aria-selected=true]{background:#2a303d;color:#f2f2f2;box-shadow:none}
+@media(hover:hover) and (pointer:fine){html[data-workspace-theme=dark] .new-conversation-modes button[aria-selected=false]:hover{color:#f2f2f2}}
 @media(max-width:600px){.new-conversation-main{width:calc(100% - 32px);gap:28px}.new-conversation-start{margin-top:40px;gap:28px}.new-conversation-intro h1{font-size:34px}.new-conversation-intro p{font-size:14px}.new-conversation-drop-note{bottom:20px;max-width:calc(100% - 32px);white-space:nowrap}}
 @media(max-width:320px){.new-conversation-intro h1{font-size:28px}.footage-start-card{height:auto;min-height:168px}}
-@media(prefers-reduced-motion:reduce){.footage-start-card,.footage-start-icon{transition:none}}
+@media(prefers-reduced-motion:reduce){.footage-start-card,.footage-start-icon,.new-conversation-modes button{transition:none}}

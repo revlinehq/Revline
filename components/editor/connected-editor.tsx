@@ -259,6 +259,9 @@ function ProjectEditor({project}: {project:Doc<'projects'>}) {
       await waitForSave();
       const prompt=sessionStorage.getItem('revline:brief:'+projectId);
       if(prompt&&timelineRef.current.clips.length&&!saves.busy){await sendRequest(prompt);sessionStorage.removeItem('revline:brief:'+projectId);}
+      // Motion design projects start empty: their brief goes out without footage.
+      const motionBrief=sessionStorage.getItem('revline:motion-brief:'+projectId);
+      if(motionBrief&&!saves.busy){await sendRequest(motionBrief);sessionStorage.removeItem('revline:motion-brief:'+projectId);}
     })().catch(e=>setError(userError(e, 'Could not start this edit.')));
   },[media,projectId,send]);
   if(media===undefined)return editorLoading(projectId);
