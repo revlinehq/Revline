@@ -1,3 +1,4 @@
+import { deleteRenderSnapshot, saveRenderSnapshot } from './lib/render_snapshots';
 import { clipExportTimeline } from '../lib/editor/clip-export';
 import { activeTabOf, storedTabTimeline, tabsOf } from './timelineTabs';
 import { flyRendersEnabled, queuedExportLimit } from './lib/render_seats';
@@ -42,7 +43,7 @@ export async function startRenderFor(ctx: MutationCtx, ownerId: string, args: Ob
   const assetIds: Id<"assets">[] = [];
   for (const clip of timeline.clips) if (clip.assetId) { const id = ctx.db.normalizeId("assets", clip.assetId)!; if (!assetIds.includes(id)) assetIds.push(id); }
   const now = Date.now();
-  const jobId = await ctx.db.insert("renderJobs", { ownerId, projectId: project._id, sourceRevision:project.revision??0, ...(args.clipId!==undefined?{sourceClipId:args.clipId}:{}), sourceTimelineId:tab?.id??activeTabOf(project), ...(timelineLabel?{label:timelineLabel}:{}), timeline, assetIds, resolution: args.resolution, fps: args.fps, quality: args.quality, status: "queued", progress: 0, createdAt: now, updatedAt: now });
+  const jobId = await ctx.db.insert("renderJobs", { ownerId, projectId: project._id, sourceRevision:project.revision??0, ...(args.clipId!==undefined?{sourceClipId:args.clipId}:{}), sourceTimelineId:tab?.id??activeTabOf(project), ...(timelineLabel?{label:timelineLabel}:{}), assetIds, resolution: args.resolution, fps: args.fps, quality: args.quality, status: "queued", progress: 0, createdAt: now, updatedAt: now }); await saveRenderSnapshot(ctx, jobId, timeline);
   // Ultra exports take the Ultra lane: the large Fly machines, or the 4-vCPU Cloudflare slot.
   const taskId = await enqueueMediaTask(ctx, { ownerId, projectId: project._id, kind: 'render', renderJobId: jobId, ...(ultra ? { lane: 'ultra' as const } : {}) });
   await ctx.db.patch(jobId, { taskId });
@@ -126,5 +127,5 @@ export async function removeOwnedExport(ctx:MutationCtx,ownerId:string,jobId:Id<
   if(job.outputStorageId)await ctx.storage.delete(job.outputStorageId);
   if(job.outputR2Key)await ctx.scheduler.runAfter(0,internal.r2.deleteObject,{key:job.outputR2Key});
   await forgetStorageObject(ctx,ownerId,{storageId:job.outputStorageId,r2Key:job.outputR2Key});
-  await ctx.db.delete(job._id);return null;
+  await deleteRenderSnapshot(ctx,job._id);await ctx.db.delete(job._id);return null;
 }

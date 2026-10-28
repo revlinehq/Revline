@@ -1,3 +1,4 @@
+import { saveRenderSnapshot } from './lib/render_snapshots';
 import { writeProject,createProject } from './lib/project_data';
 import { recordAssetStorage } from './lib/storage_accounting';
 import { v } from 'convex/values';
@@ -25,7 +26,7 @@ export const createExportFixture = internalMutation({
     ] };
     const timeline = await validateTimeline(ctx, (await ctx.db.get(projectId))!, source);
     await writeProject(ctx,projectId, { timeline });
-    const jobId = await ctx.db.insert('renderJobs', { ownerId, projectId, timeline, assetIds: [], resolution: args.ultra ? 2160 : 720, fps: 24, quality: 'draft', status: 'queued', progress: 0, createdAt: now, updatedAt: now });
+    const jobId = await ctx.db.insert('renderJobs', { ownerId, projectId, assetIds: [], resolution: args.ultra ? 2160 : 720, fps: 24, quality: 'draft', status: 'queued', progress: 0, createdAt: now, updatedAt: now }); await saveRenderSnapshot(ctx, jobId, timeline);
     const taskId = await enqueueMediaTask(ctx, { ownerId, projectId, kind: 'render', renderJobId: jobId, ...(args.ultra ? { lane: 'ultra' as const } : {}) });
     await ctx.db.patch(jobId, { taskId });
     return { ownerId, projectId, jobId, taskId };
@@ -62,7 +63,7 @@ export const createStackedEffectsProject = internalMutation({
     ] };
     const timeline = await validateTimeline(ctx, (await ctx.db.get(projectId))!, source);
     await writeProject(ctx,projectId, { timeline });
-    const jobId = await ctx.db.insert('renderJobs', { ownerId, projectId, timeline, assetIds: [assetId], resolution: 720, fps: 24, quality: 'draft', status: 'queued', progress: 0, createdAt: now, updatedAt: now });
+    const jobId = await ctx.db.insert('renderJobs', { ownerId, projectId, assetIds: [assetId], resolution: 720, fps: 24, quality: 'draft', status: 'queued', progress: 0, createdAt: now, updatedAt: now }); await saveRenderSnapshot(ctx, jobId, timeline);
     const taskId = await enqueueMediaTask(ctx, { ownerId, projectId, kind: 'render', renderJobId: jobId });
     await ctx.db.patch(jobId, { taskId });
     return { ownerId, projectId, jobId, taskId };

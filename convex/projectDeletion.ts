@@ -1,3 +1,4 @@
+import { deleteRenderSnapshot } from './lib/render_snapshots';
 import { v } from 'convex/values';
 import { internalMutation } from './_generated/server';
 import { components,internal } from './_generated/api';
@@ -18,7 +19,7 @@ export const batch=internalMutation({args:{projectId:v.id('projects'),ownerId:v.
   const assets=await ctx.db.query('assets').withIndex('by_ownerId_projectId',q=>q.eq('ownerId',args.ownerId).eq('projectId',project._id)).take(20);
   if(assets.length){for(const asset of assets)await removeMediaAttachment(ctx,asset);await again();return null;}
   const jobs=await ctx.db.query('renderJobs').withIndex('by_ownerId_projectId',q=>q.eq('ownerId',args.ownerId).eq('projectId',project._id)).take(20);
-  if(jobs.length){for(const job of jobs){await forgetStorageObject(ctx,args.ownerId,{r2Key:job.outputR2Key,storageId:job.outputStorageId});if(job.outputStorageId)await ctx.storage.delete(job.outputStorageId);if(job.outputR2Key)await ctx.scheduler.runAfter(0,internal.r2.deleteObject,{key:job.outputR2Key});await ctx.db.delete(job._id);}await again();return null;}
+  if(jobs.length){for(const job of jobs){await forgetStorageObject(ctx,args.ownerId,{r2Key:job.outputR2Key,storageId:job.outputStorageId});await deleteRenderSnapshot(ctx,job._id);if(job.outputStorageId)await ctx.storage.delete(job.outputStorageId);if(job.outputR2Key)await ctx.scheduler.runAfter(0,internal.r2.deleteObject,{key:job.outputR2Key});await ctx.db.delete(job._id);}await again();return null;}
   const tickets=await ctx.db.query('uploadTickets').withIndex('by_projectId',q=>q.eq('projectId',project._id)).take(50);
   if(tickets.length){for(const ticket of tickets){if(ticket.storageId&&!ticket.consumed){await ctx.storage.delete(ticket.storageId);await forgetStorageObject(ctx,args.ownerId,{storageId:ticket.storageId});}await ctx.db.delete(ticket._id);}await again();return null;}
   const requests=await ctx.db.query('analysisRequests').withIndex('by_projectId',q=>q.eq('projectId',project._id)).take(50);
