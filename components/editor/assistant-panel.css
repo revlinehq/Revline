@@ -8,20 +8,14 @@
 .assistant-content .assistant-result-cards{gap:2px;margin:8px 0 10px}
 .assistant-content .assistant-result-card{min-height:25px;padding:3px 0;gap:8px;border:0;border-radius:0;background:transparent;font-size:12px}
 .assistant-content .assistant-result-card small{font-size:11px;margin-top:1px}
-.assistant-content .assistant-result-card:has(.assistant-retry){flex-wrap:wrap}
-.assistant-content .assistant-result-card:has(.assistant-retry)>.assistant-activity{flex:1 1 100%}
-.assistant-retry{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:32px;padding:5px 10px;border:1px solid var(--border);border-radius:6px;background:transparent;color:var(--foreground);font-size:12px;line-height:20px;cursor:pointer}
-.assistant-retry:hover:not(:disabled){background:var(--secondary)}
-.assistant-retry:focus-visible{outline:2px solid var(--ring);outline-offset:2px}
-.assistant-retry:disabled{opacity:.45;cursor:default}
-@media(pointer:coarse){.assistant-retry{min-height:44px}}
+
 
 .conversation-editor .assistant-content .manual-editor-composer .composer-edit-fields{display:flex;flex-direction:column;gap:12px;min-width:0}
 
 
 
 .assistant-content .manual-composer-dock{flex:none}
-.assistant-activity-elapsed{flex:none;margin-top:2px;color:var(--muted-foreground);font-size:11px;font-variant-numeric:tabular-nums}
+
 .assistant-content :is(.chat-message,.composer-error){overflow-wrap:anywhere}
 @media(pointer:coarse){
   .conversation-editor .assistant-content .composer-attachment{height:44px}
