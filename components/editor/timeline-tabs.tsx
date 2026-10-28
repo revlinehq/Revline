@@ -9,7 +9,7 @@ import type { AspectRatio } from '@/lib/editor/types';
 import { AgentLogo } from '@/components/workspace/agent-logo';
 import './timeline-tabs.css';
 
-export type TimelineTab = { id: string; name: string; aspectRatio: AspectRatio; duration: number; active: boolean };
+export type TimelineTab = { id: string; name: string; aspectRatio: AspectRatio; duration: number; active: boolean; /** Its first shot, for the export picker. */ cover?: string | null };
 export type TimelineTabActions = {
   onOpen: (id: string) => Promise<void>;
   onCreate: (from: 'blank' | 'duplicate') => Promise<void>;

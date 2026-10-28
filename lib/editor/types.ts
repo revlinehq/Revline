@@ -148,6 +148,12 @@ function validTrack(value: number, maximum = 24) {
   return value;
 }
 export function trackOf(clip: Pick<Clip, 'kind' | 'track'>) { return validTrack(clip.track ?? (clip.kind === 'caption' ? 2 : 1), maxTrackCount(layerGroup(clip.kind))); }
+/** A timeline's preview: the thumbnail of its first shot (the earliest video or image, top layer first). */
+export function timelineCover(timeline: Pick<Timeline, 'clips'>, assets: readonly Pick<MediaAsset, '_id' | 'kind' | 'url' | 'thumbnailUrl'>[]) {
+  const first = timeline.clips.filter(clip => clip.kind === 'video' || clip.kind === 'image').sort((a, b) => a.start - b.start || trackOf(b) - trackOf(a))[0];
+  const asset = first && assets.find(item => item._id === first.assetId);
+  return asset ? asset.thumbnailUrl ?? (asset.kind === 'image' ? asset.url : null) : null;
+}
 /** Zero legacy overlay rows marks the shared V-track model, without a schema migration. */
 export function normalizeTimeline(timeline: Timeline): Timeline {
   if (timeline.tracks?.overlay === 0) return timeline;

@@ -39,7 +39,7 @@ import type { AssistantEditSnapshot } from './assistant-results';
 import { ExportDialog, type ExportSettings, type ExportState } from './export-dialog';
 import type { TimelineTab, TimelineTabActions } from './timeline-tabs';
 import { EditorErrorNotice } from './error-notice';
-import { type Timeline, type MediaAsset, type AspectRatio, type Clip, timelineDuration, formatTime, dimensions, trackOf } from '@/lib/editor/types';
+import { type Timeline, type MediaAsset, type AspectRatio, type Clip, timelineDuration, formatTime, dimensions, timelineCover } from '@/lib/editor/types';
 import { addMediaClip, addTextClip, patchClip, frameSeekTime, linkedClipIds } from '@/lib/editor/operations';
 import { textLookPatch, type TextLookId } from '@/lib/editor/text-looks';
 import { copyTimelineClips, pasteTimelineClips } from '@/lib/editor/clipboard';
@@ -153,11 +153,7 @@ export function EditorShell(p: EditorShellProps) {
     return latest??null;
   },[p.exportState,p.exports,exportClipId,onlyOpenTab,activeTabId]);
   // The export preview is the first shot of the video being exported.
-  const exportCover=useMemo(()=>{
-    const first=exportTimeline.clips.filter(clip=>clip.kind==='video'||clip.kind==='image').sort((a,b)=>a.start-b.start||trackOf(b)-trackOf(a))[0];
-    const asset=first&&assets.find(item=>item._id===first.assetId);
-    return asset?asset.thumbnailUrl??(asset.kind==='image'?asset.url:null):null;
-  },[exportTimeline,assets]);
+  const exportCover=useMemo(()=>timelineCover(exportTimeline,assets),[exportTimeline,assets]);
   // Returns the started job ids so the dialog can follow a batch of several videos.
   const startExports=async(settings:ExportSettings):Promise<string[]>=>{
     const started:string[]=[],start=async(next:ExportSettings)=>{const id=await p.onExport(next);if(id)started.push(id);};
@@ -478,6 +474,6 @@ export function EditorShell(p: EditorShellProps) {
     {preparing&&<ProjectImportStage importTask={p.videoImports?.find(task=>!['completed','cancelled'].includes(task.status))} upload={p.upload} onBrowse={browse} onUpload={p.onUpload}/>}
     {compact && inspectorOpen && <Sheet open={inspectorOpen} onOpenChange={setInspectorOpen}><SheetContent className="preview-inspector-sheet" showCloseButton={false}><div className="mobile-inspector-header"><SheetTitle>My media</SheetTitle><Button type="button" variant="ghost" size="icon" aria-label="Close editing panel" onClick={() => setInspectorOpen(false)}><X size={18}/></Button></div><SheetDescription>Add media to your timeline.</SheetDescription>{inspector}</SheetContent></Sheet>}
     <MediaImportDialog open={importOpen} onOpenChange={setImportOpen} onUpload={files=>{void (importDestination==='composer'?p.onAttachUpload??p.onDropUpload:editLock.current||importDestination==='sources'?p.onDropUpload:p.onUpload)(files);}} onImportVideo={editing?undefined:p.onImportVideo} disabled={!!p.upload}/>
-    <ExportDialog ultra={p.ultra} open={exportOpen} onOpenChange={setExportOpen} title={exportClipId?`${p.title} clip`:!onlyOpenTab?`${p.title} · ${exportTabs.length} ${exportTabs.length===1?'video':'videos'}`:p.title} timeline={exportTimeline} clipOnly={!!exportClipId} coverUrl={exportCover} onExport={startExports} onCancel={p.onCancelExport} onDownload={p.onDownloadExport} state={exportState} demo={!!p.demo} videoCount={!onlyOpenTab?Math.max(1,exportTabs.length):1} totalSeconds={!onlyOpenTab?tabs.filter(tab=>exportTabs.includes(tab.id)).reduce((sum,tab)=>sum+(tab.active?timelineDuration(timeline):tab.duration),0):undefined} timelines={multiTab?tabs.map(tab=>({id:tab.id,name:tab.name,aspectRatio:tab.active?timeline.aspectRatio:tab.aspectRatio,duration:tab.active?timelineDuration(timeline):tab.duration})):[]} selectedTimelines={exportTabs} onSelectTimelines={setExportTabs} exports={(p.exports??[]).map(job=>({id:job.requestId!,status:job.status,progress:job.progress,label:job.label,createdAt:job.createdAt??0,resolution:job.resolution,sourceClipId:job.sourceClipId,aspectRatio:job.sourceTimelineId===activeTabId?timeline.aspectRatio:tabs.find(tab=>tab.id===job.sourceTimelineId)?.aspectRatio}))} />
+    <ExportDialog ultra={p.ultra} open={exportOpen} onOpenChange={setExportOpen} title={exportClipId?`${p.title} clip`:!onlyOpenTab?`${p.title} · ${exportTabs.length} ${exportTabs.length===1?'video':'videos'}`:p.title} timeline={exportTimeline} clipOnly={!!exportClipId} coverUrl={exportCover} onExport={startExports} onCancel={p.onCancelExport} onDownload={p.onDownloadExport} state={exportState} demo={!!p.demo} videoCount={!onlyOpenTab?Math.max(1,exportTabs.length):1} timelines={multiTab?tabs.map(tab=>({id:tab.id,name:tab.name,aspectRatio:tab.active?timeline.aspectRatio:tab.aspectRatio,duration:tab.active?timelineDuration(timeline):tab.duration,cover:tab.active?exportCover:tab.cover})):[]} selectedTimelines={exportTabs} onSelectTimelines={setExportTabs} exports={(p.exports??[]).map(job=>({id:job.requestId!,status:job.status,progress:job.progress,label:job.label,createdAt:job.createdAt??0,resolution:job.resolution,sourceClipId:job.sourceClipId,aspectRatio:job.sourceTimelineId===activeTabId?timeline.aspectRatio:tabs.find(tab=>tab.id===job.sourceTimelineId)?.aspectRatio}))} />
   </main>;
 }
