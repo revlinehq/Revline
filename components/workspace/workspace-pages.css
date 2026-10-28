@@ -25,8 +25,8 @@ html[data-workspace-theme="dark"] {
 .workspace-nav-icon { width:28px; height:30px; display:grid; place-items:center; border:0; border-radius:7px; color:var(--ws-muted); background:transparent; cursor:pointer; }
 .workspace-nav button:disabled { opacity:.45; cursor:default; }
 .workspace-nav-secondary { display:flex; align-items:center; justify-content:center; gap:6px; height:32px; padding:0 10px; border:0; border-radius:7px; background:var(--ws-hover); color:var(--ws-text); text-decoration:none; font-size:13px; font-weight:500; cursor:pointer; }
-/* MCP status in the editor bar: a plain link (no fill), connected app or an invitation to connect. */
-.workspace-nav-mcp { padding:0 4px; background:none; color:var(--ws-muted); font-size:12px; } .workspace-nav-mcp:hover { color:var(--ws-text); }
+/* MCP status in the editor bar, sized like the Export button beside it: the connected app or an invitation to connect. */
+.workspace-nav-mcp { height:32px; padding:0 15px; border-radius:var(--revline-button-radius); gap:7px; }
 .workspace-nav-mcp-logo, .workspace-nav-mcp-apps>svg { width:13px; height:13px; } .workspace-nav-mcp-apps { display:flex; align-items:center; gap:4px; }
 .workspace-nav-secondary:hover { filter:brightness(.96); }
 .workspace-nav-unsaved svg { color:#c77730; }
