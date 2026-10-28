@@ -290,7 +290,7 @@ export function NewConversation() {
         </div>
         <div className="new-conversation-entry" data-dragging={dragging || undefined} aria-busy={busy}>
           {mode === 'motion'
-            ? <EditComposer className="new-conversation-motion" value={motionBrief} onChange={setMotionBrief} onSubmit={startMotionDesign} placeholder="Describe your product video…" disabled={!draftReady} submitLabel="Create" />
+            ? <EditComposer className="new-conversation-motion" value={motionBrief} onChange={setMotionBrief} onSubmit={startMotionDesign} placeholder="Describe your product video…" disabled={!draftReady} />
             : <FootageStartCard onAttach={() => picker.current?.click()} disabled={!draftReady} dragging={dragging}/>}
           <input ref={picker} type="file" accept="video/*,audio/*,image/*" multiple className="sr-only" tabIndex={-1} aria-label="Choose media to upload" onChange={event => { const files = Array.from(event.target.files ?? []); event.target.value = ''; if (files.length) attach(files); }}/>
           {error && <p className="new-conversation-error" role="alert">{error}</p>}
