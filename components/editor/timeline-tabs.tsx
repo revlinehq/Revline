@@ -60,7 +60,7 @@ export function TimelineTabs({ tabs, working, agentName, mcpConnection, locked, 
       </DropdownMenuContent></DropdownMenu>}
     </div>; })}
     <button type="button" className="timeline-tab-add" aria-label="New blank timeline" title="New blank timeline" disabled={blocked} onClick={() => void run(() => actions.onCreate('blank'))}><Plus size={14}/></button>
-    {mcpConnection ? <Link href="/profile#mcp" className="timeline-mcp"><span className="timeline-mcp-dot" aria-hidden="true"/><AgentLogo name={mcpConnection} className="timeline-mcp-logo"/>MCP connected</Link>
+    {mcpConnection ? <Link href="/profile#mcp" className="timeline-mcp"><AgentLogo name={mcpConnection} className="timeline-mcp-logo"/>MCP connected</Link>
       : mcpConnection === null && <Link href="/profile#mcp" className="timeline-mcp" data-connect><span className="timeline-mcp-apps" aria-hidden="true"><ClaudeLogo/><OpenAILogo/><CursorLogo/></span>Connect MCP</Link>}
     <Dialog open={!!dialog} onOpenChange={open => { if (!open) setDialog(null); }}><DialogContent>
       {dialog?.mode === 'remove' ? <>
