@@ -30,6 +30,21 @@ function presentation(preset:TransitionPreset,direction:TransitionDirection,prog
     const sign=direction==='counter-clockwise'?-1:1;
     exitStyle.transform=`rotate(${sign*18*progress}deg) scale(${1+.55*progress})`;
     enterStyle.transform=`rotate(${-sign*18*(1-progress)}deg) scale(${1+.55*(1-progress)})`;
+  }else if(preset==='whip-pan'){
+    // Both shots travel together like one fast pan; blur peaks mid-move, as a real whip smears.
+    const eased=progress<.5?4*progress**3:1-(-2*progress+2)**3/2,horizontal=settings.wipeDirection==='left'||settings.wipeDirection==='right',sign=settings.wipeDirection==='right'||settings.wipeDirection==='down'?1:-1;
+    const axis=horizontal?'translateX':'translateY',blur=Math.sin(Math.PI*progress)*28*outputHeight/1080;
+    exitStyle.transform=`${axis}(${sign*eased*100}%)`;enterStyle.transform=`${axis}(${sign*(eased-1)*100}%)`;
+    exitStyle.filter=enterStyle.filter=`blur(${blur.toFixed(2)}px)`;
+    exitStyle.opacity=progress===1?0:1;enterStyle.opacity=progress===0?0:1;
+  }else if(preset==='zoom-through'){
+    const blur=Math.sin(Math.PI*progress)*14*outputHeight/1080;
+    exitStyle.transform=`scale(${1+3*progress**2.2})`;enterStyle.transform=`scale(${.35+.65*(1-(1-progress)**2.2)})`;
+    exitStyle.filter=enterStyle.filter=`blur(${blur.toFixed(2)}px)`;
+  }else if(preset==='film-burn'){
+    // Burn toward warm overexposure at the cut, then develop the incoming shot back.
+    const burn=(amount:number)=>`brightness(${(1+5*amount**1.4).toFixed(3)}) sepia(${(.7*amount).toFixed(3)}) saturate(${(1+2.2*amount).toFixed(3)}) hue-rotate(${(-12*amount).toFixed(2)}deg) contrast(${(1+.25*amount).toFixed(3)})`;
+    exitStyle.filter=burn(Math.min(1,progress*1.6));enterStyle.filter=burn(Math.min(1,(1-progress)*1.6));
   }else if(preset==='blur-dissolve'){
     const blur=20*outputHeight/1080;
     exitStyle.filter=`blur(${blur*progress}px)`;

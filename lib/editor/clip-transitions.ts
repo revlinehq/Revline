@@ -2,8 +2,10 @@ import type { Clip, Timeline } from './types';
 import { trackOf } from './types';
 import { playbackRateOf } from './playback-rate';
 
-export const TRANSITION_PRESETS = ['crossfade', 'spin-zoom', 'blur-dissolve', 'gradient-wipe', 'iris-wipe'] as const;
+export const TRANSITION_PRESETS = ['crossfade', 'spin-zoom', 'blur-dissolve', 'gradient-wipe', 'iris-wipe', 'whip-pan', 'zoom-through', 'film-burn'] as const;
 export type TransitionPreset = typeof TRANSITION_PRESETS[number];
+/** Offered in the timeline's transition menu; the rest are applied by the AI editor. */
+export const MANUAL_TRANSITION_PRESETS: readonly TransitionPreset[] = ['crossfade', 'spin-zoom', 'blur-dissolve', 'gradient-wipe', 'iris-wipe'];
 export const TRANSITION_DIRECTIONS = ['clockwise', 'counter-clockwise'] as const;
 export type TransitionDirection = typeof TRANSITION_DIRECTIONS[number];
 export const WIPE_DIRECTIONS = ['left', 'right', 'up', 'down'] as const;

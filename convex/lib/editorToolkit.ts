@@ -23,7 +23,8 @@ import { addBeatMarkers } from "../../lib/editor/beat-markers";
 import { addTimelineMarker,moveTimelineMarker,removeTimelineMarker, removeTimelineMarkers } from "../../lib/editor/timeline-markers";
 import { dimensions, deriveTrackCounts, deriveTracks, maxTrackCount, timelineDuration, trackOf } from "../../lib/editor/types";
 import {VISUAL_INPUT_UNITS,transformInputPatch,cropInputPatch} from '../../lib/editor/visual-inputs';
-import { addMediaClip, addEffectClip, convertSolidColorToVisual, setClipPlaybackRate, setClipSpeedRamp, deleteClip, focusForClip, newLayerOverlaps, patchClip, placeOnFreeLayer, splitClip,trimClip,unlinkClips,setClipBlendMode } from "../../lib/editor/operations";
+import { addMediaClip, addEffectClip, convertSolidColorToVisual, setClipPlaybackRate, setClipSpeedRamp, deleteClip, focusForClip, newLayerOverlaps, patchClip, placeOnFreeLayer, splitClip,trimClip,unlinkClips,setClipBlendMode, addTransitionClip } from "../../lib/editor/operations";
+import { IRIS_SHAPES, TRANSITION_DIRECTIONS, TRANSITION_PRESETS, WIPE_DIRECTIONS } from '../../lib/editor/clip-transitions';
 import { TimelineGestureRejection } from '../../lib/editor/timeline-edit-errors';
 import { summarizeTimeline } from "./inspectTimeline";
 import { EditSession } from "./editSession";
@@ -742,6 +743,11 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       const used = new Set(next.clips.flatMap(clip => clip.lut?.look.startsWith('custom:') ? [clip.lut.look.slice(7)] : []));
       return next.luts ? { ...next, luts: next.luts.filter(lut => used.has(lut.id)) } : next;
     }) }),
+    addTransition: createTool({ description: `Add a transition across the cut between two touching video/image clips on the same V layer (fromClipId ends exactly where toClipId starts). Presets: ${TRANSITION_PRESETS.map(preset => `${preset} (${EFFECT_CATALOG[preset].description})`).join(' ')} duration in seconds (whip-pan .3-.5, zoom-through .4-.6, film-burn .6-1, others about .6), limited by the footage around the cut. direction applies to spin-zoom; wipeDirection to gradient-wipe and whip-pan (left/right/up/down); centerX/centerY/shape/softness to iris and gradient wipes. Returns transitionClipId.`, inputSchema: z.object({ fromClipId: z.string().min(1), toClipId: z.string().min(1), preset: z.enum(TRANSITION_PRESETS), duration: z.number().min(.1).max(3).optional(), direction: z.enum(TRANSITION_DIRECTIONS).optional(), wipeDirection: z.enum(WIPE_DIRECTIONS).optional(), softness: z.number().min(0).max(1).optional(), centerX: z.number().min(0).max(1).optional(), centerY: z.number().min(0).max(1).optional(), shape: z.enum(IRIS_SHAPES).optional() }).strict(), execute: async (_ctx, { fromClipId, toClipId, preset, ...options }) => {
+      const transitionClipId = crypto.randomUUID();
+      const saved = await checkpoint(t => addTransitionClip(t, transitionClipId, preset, fromClipId, toClipId, { ...options, ...(preset === 'whip-pan' && !options.wipeDirection ? { wipeDirection: 'left' as const } : {}) }));
+      return { ...saved, transitionClipId };
+    } }),
     freezeFrame: createTool({ description: "Freeze one video clip's picture at a timeline moment, as a still that keeps the clip's framing, crop and look. mode insert (default): the timeline grows by `duration`; everything from that moment on (all layers, markers) moves later, then the clip resumes. mode hold: the picture holds for `duration` while the clip's sound plays on, then the video resumes in sync (skipping the held footage). Classic uses: freeze on a reaction or punchline and add a caption, label or zoom on the still (it is an image clip; animateClip, setVisualEffects and text work on it). Takes a few seconds. Returns stillClipId.", inputSchema: z.object({ clipId: z.string().min(1), at: z.number().min(0).describe('Timeline seconds inside the clip'), duration: z.number().min(MIN_FREEZE_SECONDS).max(MAX_FREEZE_SECONDS), mode: z.enum(FREEZE_MODES).optional() }).strict(), execute: async (_ctx, input) => reportAnalysisFailure(async () => {
       await editSession.wait();
       const clip = find(editSession.timeline, input.clipId);

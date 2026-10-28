@@ -5,7 +5,7 @@ import { SlidersHorizontal, Trash2 } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { addTransitionClip, deleteClip, patchClip } from '@/lib/editor/operations';
 import { EFFECT_CATALOG } from '@/lib/editor/clip-effects';
-import { boundedTransitionRange, transitionDurationLimit, TRANSITION_PRESETS, isTransitionPreset, type TransitionPreset } from '@/lib/editor/clip-transitions';
+import { boundedTransitionRange, transitionDurationLimit, MANUAL_TRANSITION_PRESETS, isTransitionPreset, type TransitionPreset } from '@/lib/editor/clip-transitions';
 import { EFFECT_DRAG_TYPE, readEffectDrag } from '@/lib/editor/effect-drag';
 import type { Clip, Timeline } from '@/lib/editor/types';
 import { EffectIcon } from './effect-icon';
@@ -76,7 +76,7 @@ export function TimelineCutTransition({ timeline, from, to, clip, px, origin, se
     {clip && <DropdownMenu><DropdownMenuTrigger className="timeline-transition-badge" disabled={readOnly} aria-label={`${label} at ${cut.toFixed(2)}s`} title={`${label} · ${clip.duration.toFixed(2)} s · Click to replace, right-click for actions`} onClick={() => { onSelect(clip.id); onEdit?.(clip.id); }}>
       <EffectIcon name={clip.effectPreset as TransitionPreset} size={14}/>
     </DropdownMenuTrigger><DropdownMenuContent className="timeline-transition-menu" align="center" aria-label="Choose transition" onPointerDown={event => event.stopPropagation()}>
-      {TRANSITION_PRESETS.map(preset => <DropdownMenuItem key={preset} disabled={readOnly} onSelect={() => apply(preset)}><EffectIcon name={preset} size={14}/>{EFFECT_CATALOG[preset].label}</DropdownMenuItem>)}
+      {MANUAL_TRANSITION_PRESETS.map(preset => <DropdownMenuItem key={preset} disabled={readOnly} onSelect={() => apply(preset)}><EffectIcon name={preset} size={14}/>{EFFECT_CATALOG[preset].label}</DropdownMenuItem>)}
       {clip && <><DropdownMenuItem disabled={readOnly} onSelect={() => { onSelect(clip.id); onEdit?.(clip.id); }}><SlidersHorizontal size={14}/>Transition settings</DropdownMenuItem><DropdownMenuItem disabled={readOnly} onSelect={() => { onChange(deleteClip(timeline, clip.id)); onSelect(null); }}><Trash2 size={14}/>Remove transition</DropdownMenuItem></>}
     </DropdownMenuContent></DropdownMenu>}
   </div>;

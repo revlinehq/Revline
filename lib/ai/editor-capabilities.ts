@@ -30,6 +30,7 @@ masks:{tool:'setMask',shapes:['rectangle (corner radius)','ellipse','polygon (fr
     speed:{rampTool:'setSpeedRamp',presets:['montage','hero','bullet','flash-in','flash-out','ramp-in','ramp-out','slowmo-middle'],custom:'2–12 eased anchors over the clip',note:'same footage, clip length becomes source / average speed'},
     audioReactive:{tool:'setAudioReactive',modes:['beats','downbeats','accents','energy'],targets:['scale','shake','rotate','any effect control (glitch.intensity, colorGrade.exposure, zoomBlur.amount, ...)'],note:'footage, images, text and solids pulse with the music'},
     color:{analyze:'analyzeColor (measured exposure, cast, dominant colors, suggested grade)',match:'matchColor (shot matching by RGB curves)',curves:'setColorCurves',hsl:'setHSL (8 hue bands)',lut:'applyLut (built-in looks or a .cube file)',bloom:'setVisualEffects bloom'},
+    transitions:{tool:'addTransition',presets:['crossfade','spin-zoom','blur-dissolve','gradient-wipe','iris-wipe','whip-pan','zoom-through','film-burn']},
     freezeFrames:{tool:'freezeFrame',modes:{insert:'timeline grows, everything after moves later',hold:'picture holds while the sound plays on'},note:'the still is an image clip: add text, zoom or effects on it'},
     smoothSlowMotion:{tool:'smoothSlowMotion',how:'AI frame interpolation (up to 8x frames) for slowed or ramped clips',runs:'in the background, fal.ai credit'},
     upscale:{tool:'upscaleClip',targets:[1080,1440,2160],for:'low-res video (up to 60s) or images',runs:'in the background, fal.ai credit'},
