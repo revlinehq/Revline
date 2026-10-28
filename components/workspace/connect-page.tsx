@@ -10,6 +10,7 @@ import { Brand } from './brand';
 import { PrimaryButton } from './primary-button';
 import './workspace-pages.css';
 import './connect-page.css';
+import { Button } from '@/components/ui/button';
 
 export type ConnectRequest = { clientId?: string; redirectUri?: string; codeChallenge?: string; codeChallengeMethod?: string; state?: string; resource?: string };
 
@@ -59,7 +60,7 @@ export function ConnectPage({ request }: { request: ConnectRequest }) {
     <p className="connect-note">Revoke access any time in your profile.</p>
     {error && <p className="workspace-inline-error" role="alert">{error}</p>}
     <div className="connect-actions">
-      <button type="button" className="workspace-outline-button" disabled={!!busy} onClick={cancel}>Cancel</button>
+      <Button variant="outline" size="md" type="button" disabled={!!busy} onClick={cancel}>Cancel</Button>
       {details.allowed && <PrimaryButton size="compact" disabled={!!busy} onClick={() => void allow()}>{busy === 'approve' && <LoaderCircle size={13} className="animate-spin" />}Allow access</PrimaryButton>}
     </div>
   </>;

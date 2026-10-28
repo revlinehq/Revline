@@ -1,13 +1,8 @@
 .mcp-apps { display:flex; flex-wrap:wrap; gap:8px; }
-.mcp-app-button { display:inline-flex; align-items:center; gap:9px; height:40px; padding:0 14px; border:1px solid var(--ws-border); border-radius:10px; background:var(--ws-input); color:var(--ws-text); font:inherit; font-size:13px; font-weight:500; cursor:pointer; transition:border-color .15s, background .15s; }
-.mcp-app-button:hover { border-color:var(--ws-faint); }
-.mcp-app-button:focus-visible { outline:2px solid var(--revline-accent); outline-offset:2px; }
-.mcp-app-button > svg { flex-shrink:0; }
-.mcp-app-button > small { display:inline-flex; align-items:center; gap:3px; margin-left:2px; font-size:11px; font-weight:400; color:var(--ws-faint); }
+.mcp-apps [data-slot=button] > small { display:inline-flex; align-items:center; gap:3px; margin-left:2px; font-size:11px; font-weight:400; color:var(--ws-faint); }
 .mcp-copy-field { display:flex; align-items:center; gap:8px; min-width:0; }
 .mcp-copy-field > code { flex:1; min-width:0; padding:8px 10px; border:1px solid var(--ws-border); border-radius:8px; background:var(--ws-input); font-family:var(--font-mono, ui-monospace, monospace); font-size:11px; overflow-x:auto; white-space:nowrap; scrollbar-width:none; }
 .mcp-copy-field > code::-webkit-scrollbar { display:none; }
-.mcp-copy-field > button { flex-shrink:0; }
 .mcp-connections { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; }
 .mcp-connections li { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:10px 0; border-top:1px solid var(--ws-border); }
 .mcp-connections li:first-child { border-top:0; }
@@ -25,9 +20,8 @@
 .mcp-dialog-steps > li { position:relative; display:flex; flex-direction:column; gap:8px; padding-left:30px; counter-increment:mcp-step; }
 .mcp-dialog-steps > li::before { content:counter(mcp-step); position:absolute; left:0; top:0; display:grid; place-items:center; width:20px; height:20px; border-radius:50%; background:var(--ws-input); border:1px solid var(--ws-border); font-size:11px; color:var(--ws-faint); }
 .mcp-dialog-steps strong { font-size:13px; font-weight:500; }
-.mcp-open-link { align-self:flex-start; display:inline-flex; align-items:center; gap:6px; text-decoration:none; }
+.mcp-open-link { align-self:flex-start; }
 .mcp-dialog .mcp-advanced { margin-top:4px; }
-.mcp-dialog-back { display:grid; place-items:center; width:28px; height:28px; margin-left:-6px; border:0; border-radius:7px; background:none; color:var(--ws-faint); cursor:pointer; } .mcp-dialog-back:hover { background:var(--ws-hover); color:var(--ws-text); }
 .mcp-dialog .mcp-apps { margin-top:4px; }
 .mcp-dialog-loading { color:var(--ws-faint); }
 .mcp-dialog-locked { margin:0; font-size:13px; color:var(--ws-faint); } .mcp-dialog-locked a { color:var(--ws-text); }

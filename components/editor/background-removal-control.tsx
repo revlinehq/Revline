@@ -8,6 +8,7 @@ import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
 import type { Clip, MediaAsset } from '@/lib/editor/types';
 import './background-removal-control.css';
+import { Button } from '@/components/ui/button';
 
 /** Replace a video clip's background with transparency (fal.ai), so layers below show through.
  * The person is kept by default; naming an object keeps only that object (SAM 3). */
@@ -36,12 +37,12 @@ export function BackgroundRemovalControl({ projectId, clip, asset, readOnly }: {
     <div className="background-removal-row">
       <div><strong>Background</strong><small>{removed ? (kept ? `Only the ${kept} is kept. Layers below show through.` : 'Removed. Layers below now show through.') : running ? `${latest?.subject ? `Cutting out the ${latest.subject}` : 'Removing'}… ${latest?.progress ? `${Math.round(latest.progress)}%` : 'queued'}` : 'Cut yourself out and put visuals on a lower layer.'}</small></div>
       {removed
-        ? <button type="button" className="workspace-outline-button" disabled={!!busy || readOnly} onClick={() => { setBusy('person'); void act(async () => { await restore({ projectId, clipId: clip.id }); }); }}>{busy ? <LoaderCircle size={13} className="animate-spin" /> : <Undo2 size={13} />}Restore</button>
-        : <button type="button" className="workspace-outline-button" disabled={!!busy || running || readOnly} onClick={() => void begin()}>{working === 'person' ? <LoaderCircle size={13} className="animate-spin" /> : <UserRoundX size={13} />}Remove</button>}
+        ? <Button variant="outline" size="md" type="button" disabled={!!busy || readOnly} onClick={() => { setBusy('person'); void act(async () => { await restore({ projectId, clipId: clip.id }); }); }}>{busy ? <LoaderCircle size={13} className="animate-spin" /> : <Undo2 size={13} />}Restore</Button>
+        : <Button variant="outline" size="md" type="button" disabled={!!busy || running || readOnly} onClick={() => void begin()}>{working === 'person' ? <LoaderCircle size={13} className="animate-spin" /> : <UserRoundX size={13} />}Remove</Button>}
     </div>
     {!removed && <form className="background-removal-object" onSubmit={event => { event.preventDefault(); if (subject.trim()) void begin(subject); }}>
       <input value={subject} maxLength={60} placeholder="Or keep only an object, e.g. phone" aria-label="Object to keep" disabled={!!busy || running || readOnly} onChange={event => setSubject(event.target.value)} />
-      <button type="submit" className="workspace-outline-button" disabled={!!busy || running || readOnly || !subject.trim()}>{working === 'object' ? <LoaderCircle size={13} className="animate-spin" /> : <Scissors size={13} />}Cut out</button>
+      <Button variant="outline" size="md" type="submit" disabled={!!busy || running || readOnly || !subject.trim()}>{working === 'object' ? <LoaderCircle size={13} className="animate-spin" /> : <Scissors size={13} />}Cut out</Button>
     </form>}
     {notice && running && <p className="background-removal-note">{notice}</p>}
     {latest?.status === 'failed' && !removed && <p className="workspace-inline-error" role="alert">{latest.error ?? 'Background removal failed.'}</p>}

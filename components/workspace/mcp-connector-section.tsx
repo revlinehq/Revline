@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/compone
 import { PrimaryButton } from './primary-button';
 import { ClaudeLogo, OpenAILogo } from './ai-app-logos';
 import './mcp-connector-section.css';
+import { Button } from '@/components/ui/button';
 
 function CopyField({ label, value }: { label: string; value: string }) {
   const [copied, setCopied] = useState(false);
@@ -18,7 +19,7 @@ function CopyField({ label, value }: { label: string; value: string }) {
     await navigator.clipboard.writeText(value);
     setCopied(true); setTimeout(() => setCopied(false), 1500);
   }
-  return <div className="mcp-copy-field"><code aria-label={label}>{value}</code><button type="button" className="workspace-outline-button" onClick={() => void copy()} aria-label={`Copy ${label}`}>{copied ? <Check size={13} /> : <Copy size={13} />}{copied ? 'Copied' : 'Copy'}</button></div>;
+  return <div className="mcp-copy-field"><code aria-label={label}>{value}</code><Button variant="outline" size="md" type="button" onClick={() => void copy()} aria-label={`Copy ${label}`}>{copied ? <Check size={13} /> : <Copy size={13} />}{copied ? 'Copied' : 'Copy'}</Button></div>;
 }
 
 const when = (time?: number) => time ? new Date(time).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : 'Never';
@@ -52,12 +53,12 @@ function ConnectorBody({ connector, onPick }: { connector: Connector; onPick: (a
     <div className="mcp-apps">
       {(Object.keys(APPS) as AppId[]).map(id => {
         const { name, Logo } = APPS[id];
-        return <button key={id} type="button" className="mcp-app-button" onClick={() => onPick(id)}><Logo width={18} height={18} /><span>Connect {name}</span>{connected(id) && <small><Check size={12} />Connected</small>}</button>;
+        return <Button variant="outline" size="lg" key={id} type="button" onClick={() => onPick(id)}><Logo width={18} height={18} /><span>Connect {name}</span>{connected(id) && <small><Check size={12} />Connected</small>}</Button>;
       })}
     </div>
     {connector.connections.length > 0 && <ul className="mcp-connections">
       {connector.connections.map(connection => <li key={connection.grantId}><div><span>{connection.label}</span><small>{connection.kind === 'personal' ? 'Personal token' : 'App'} · added {when(connection.createdAt)} · last used {when(connection.lastUsedAt)}</small></div>
-        <button type="button" className="workspace-outline-button" disabled={!!busy} onClick={() => void run(connection.grantId, async () => { await revoke({ grantId: connection.grantId }); })}>{busy === connection.grantId && <LoaderCircle size={12} className="animate-spin" />}Revoke</button></li>)}
+        <Button variant="outline" size="md" type="button" disabled={!!busy} onClick={() => void run(connection.grantId, async () => { await revoke({ grantId: connection.grantId }); })}>{busy === connection.grantId && <LoaderCircle size={12} className="animate-spin" />}Revoke</Button></li>)}
     </ul>}
     <details className="mcp-advanced"><summary>Other apps and scripts</summary>
       <p>Any MCP client can use this link and sign in to Revline. Scripts can use a personal token as <code>Authorization: Bearer &lt;token&gt;</code>.</p>
@@ -77,7 +78,7 @@ function AppSteps({ id, mcpUrl }: { id: AppId; mcpUrl: string }) {
     <ol className="mcp-dialog-steps">
       <li><strong>Copy your Revline link</strong><CopyField label="Revline MCP link" value={mcpUrl} /></li>
       <li><strong>Add it in {app.name}</strong><p>{app.steps}</p>
-        <a className="workspace-outline-button mcp-open-link" href={app.settingsUrl} target="_blank" rel="noreferrer">{app.settingsLabel}<ExternalLink size={13} /></a></li>
+        <Button asChild variant="outline" size="md"><a className="mcp-open-link" href={app.settingsUrl} target="_blank" rel="noreferrer">{app.settingsLabel}<ExternalLink size={13} /></a></Button></li>
     </ol>
     {id === 'claude' && <details className="mcp-advanced"><summary>Using Claude Code?</summary><CopyField label="Claude Code command" value={`claude mcp add --transport http revline ${mcpUrl}`} /><p>Then run <code>/mcp</code> in Claude Code to sign in.</p></details>}
   </>;
@@ -85,7 +86,7 @@ function AppSteps({ id, mcpUrl }: { id: AppId; mcpUrl: string }) {
 
 function AppTitle({ id, onBack }: { id: AppId; onBack?: () => void }) {
   const { name, Logo } = APPS[id];
-  return <div className="mcp-dialog-title">{onBack && <button type="button" className="mcp-dialog-back" aria-label="Back to apps" onClick={onBack}><ArrowLeft size={15} /></button>}<Logo width={22} height={22} /><DialogTitle>Connect {name}</DialogTitle></div>;
+  return <div className="mcp-dialog-title">{onBack && <Button type="button" variant="ghost" size="icon-sm" aria-label="Back to apps" onClick={onBack}><ArrowLeft size={15} /></Button>}<Logo width={22} height={22} /><DialogTitle>Connect {name}</DialogTitle></div>;
 }
 
 /** Pro: connect Claude or ChatGPT to edit projects with the editor's own tools. */

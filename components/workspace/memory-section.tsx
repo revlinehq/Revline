@@ -3,6 +3,7 @@ import { useConvexAuth, useMutation, useQuery } from 'convex/react';
 import { X } from 'lucide-react';
 import { api } from '@/convex/_generated/api';
 import './memory-section.css';
+import { Button } from '@/components/ui/button';
 
 /** What the editing AI remembers about you: lasting preferences and styles it reuses across projects. */
 export function MemorySection() {
@@ -19,7 +20,7 @@ export function MemorySection() {
             <span>{item.text}</span>
             {(item.project || item.uses > 0) && <small>{[item.project && `Only in ${item.project}`, item.uses > 0 && `Used ${item.uses}×`].filter(Boolean).join(' · ')}</small>}
           </div>
-          <button type="button" className="memory-remove" aria-label={`Forget ${item.name ?? item.text}`} onClick={() => void remove({ memoryId: item.memoryId })}><X size={14} /></button>
+          <Button variant="ghost" size="icon-sm" type="button" aria-label={`Forget ${item.name ?? item.text}`} onClick={() => void remove({ memoryId: item.memoryId })}><X size={14} /></Button>
         </li>)}</ul>}
     </div>
   </section>;

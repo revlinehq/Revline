@@ -12,6 +12,7 @@ import { usePlanStatus } from './use-plan-status';
 import { UltraPlanCard } from './ultra-plan-card';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
 import './billing-section.css';
+import { Button } from '@/components/ui/button';
 
 export type CheckoutReturn = 'success' | 'canceled' | undefined;
 
@@ -56,7 +57,7 @@ export function BillingSection({ checkoutReturn }: { checkoutReturn?: CheckoutRe
   return <section id="billing" className="workspace-profile-section workspace-billing-section" aria-labelledby="profile-billing-title">
     <div className="workspace-section-label"><h2 id="profile-billing-title">Membership & billing</h2><p>Your plan, payments, and invoices.</p></div>
     <div className="workspace-section-content">
-      {!isAuthenticated && !isLoading ? <><p className="workspace-membership-description">Sign in to view your membership and billing.</p><div><Link className="workspace-outline-button" href="/sign-in">Sign in</Link></div></> : !status ? <div className="workspace-billing-loading" role="status"><LoaderCircle size={15} className="animate-spin" />Loading your plan…</div> : !active && !status.complimentary && !status.subscribed && !status.needsPayment && !checkoutReturn ? <p className="workspace-billing-notice">Membership is coming soon. No payment is required.</p> : <>
+      {!isAuthenticated && !isLoading ? <><p className="workspace-membership-description">Sign in to view your membership and billing.</p><div><Button asChild variant="outline" size="md"><Link href="/sign-in">Sign in</Link></Button></div></> : !status ? <div className="workspace-billing-loading" role="status"><LoaderCircle size={15} className="animate-spin" />Loading your plan…</div> : !active && !status.complimentary && !status.subscribed && !status.needsPayment && !checkoutReturn ? <p className="workspace-billing-notice">Membership is coming soon. No payment is required.</p> : <>
         <div className="workspace-membership-line"><strong>{status.plan === 'ultra' ? 'Revline Ultra' : 'Revline Pro'}</strong><span>{status.complimentary ? 'Complimentary membership' : `$${plan.monthlyPrice} / month · ${plan.currency}`}</span></div>
         <p className="workspace-billing-status">{status.complimentary ? status.complimentaryExpiresAt ? `Free access until ${new Date(status.complimentaryExpiresAt).toLocaleDateString()}` : 'Free access forever' : status.subscribed ? 'Your current plan' : 'No active plan'}</p>
         {upgrading && !ultra && <p className="workspace-billing-notice" role="status">Upgrading to Ultra. This takes a few seconds…</p>}
@@ -64,7 +65,7 @@ export function BillingSection({ checkoutReturn }: { checkoutReturn?: CheckoutRe
         {!status.complimentary && <p className="workspace-membership-description">{status.subscribed ? 'Manage your subscription, payment method, and invoices securely through Stripe.' : status.trialEligible ? `Try it free for ${EDITOR_PLAN.trialDays} days, then $${EDITOR_PLAN.monthlyPrice}/month. Cancel anytime.` : `$${EDITOR_PLAN.monthlyPrice}/month. Cancel anytime. Your free trial has already been used.`}</p>}
         {!status.complimentary && <div className="workspace-billing-actions">
           <PrimaryButton disabled={!active || !!busy} onClick={() => void openBilling()}>{busy === 'pro' && <LoaderCircle size={14} className="animate-spin" />}{!active ? 'Coming soon' : status.subscribed || status.needsPayment ? 'Manage subscription' : status.trialEligible ? `Start ${EDITOR_PLAN.trialDays}-day free trial` : 'Subscribe to Pro'}</PrimaryButton>
-          {offerUltra && <button type="button" className="workspace-outline-button" onClick={() => setUltraOpen(true)}>{status.subscribed ? 'Upgrade to Ultra' : 'See Ultra'}</button>}
+          {offerUltra && <Button variant="outline" size="md" type="button" onClick={() => setUltraOpen(true)}>{status.subscribed ? 'Upgrade to Ultra' : 'See Ultra'}</Button>}
         </div>}
         <Dialog open={offerUltra && ultraOpen} onOpenChange={open => { setUltraOpen(open); if (!open) setConfirmUpgrade(false); }}>
           <DialogContent className="ultra-plan-dialog">

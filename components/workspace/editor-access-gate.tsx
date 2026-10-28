@@ -14,6 +14,7 @@ import { UltraPlanCard } from './ultra-plan-card';
 import { WorkspaceNav } from './workspace-nav';
 import './shared.css';
 import './editor-access-gate.css';
+import { Button } from '@/components/ui/button';
 
 export function EditorAccessGate({ children, loading, checkoutPending = false }: { children: ReactNode; loading?: ReactNode; checkoutPending?: boolean }) {
   const status = usePlanStatus();
@@ -30,7 +31,7 @@ export function EditorAccessGate({ children, loading, checkoutPending = false }:
     <main className="editor-access-main"><section className="editor-access-card" aria-labelledby="editor-access-title">
       <h1 id="editor-access-title">Confirming your subscription…</h1>
       <p role="status">Waiting for payment confirmation. Your new project will open automatically.</p>
-      <div><Link className="workspace-outline-button" href="/profile#billing">View billing</Link></div>
+      <div><Button asChild variant="outline" size="md"><Link href="/profile#billing">View billing</Link></Button></div>
     </section></main>
   </div>;
   const trial = status.trialEligible && !status.needsPayment;

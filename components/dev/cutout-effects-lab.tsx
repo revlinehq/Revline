@@ -9,6 +9,7 @@ import type { Id } from '@/convex/_generated/dataModel';
 import { CUTOUT_EFFECTS, CUTOUT_EFFECT_INFO, type CutoutEffectKind } from '@/lib/editor/cutout-effects';
 import type { Clip, MediaAsset } from '@/lib/editor/types';
 import './cutout-effects-lab.css';
+import { Button } from '@/components/ui/button';
 
 /** Development only: run each cut-out effect for real (fal person matting or SAM 3) with
  * fixed settings and no AI, to see exactly what the assistant's tools will produce. */
@@ -50,7 +51,7 @@ export function CutoutEffectsLab({ projectId, clip, asset }: { projectId: Id<'pr
         </div>
         <div className="cutout-lab-row">
           {field && <input value={inputs[kind] ?? ''} maxLength={kind === 'text-behind' ? 80 : 60} placeholder={kind === 'text-behind' ? `Text, e.g. ${field}` : `Object, e.g. ${field}`} aria-label={`${info.label} ${kind === 'text-behind' ? 'text' : 'object'}`} onChange={event => setInputs(current => ({ ...current, [kind]: event.target.value }))} />}
-          <button type="button" className="workspace-outline-button" disabled={!!busy || running} onClick={() => void run(kind)}>{busy === kind || (running && latest?.effect === kind) ? <LoaderCircle size={13} className="animate-spin" /> : <Play size={13} />}Run</button>
+          <Button variant="outline" size="md" type="button" disabled={!!busy || running} onClick={() => void run(kind)}>{busy === kind || (running && latest?.effect === kind) ? <LoaderCircle size={13} className="animate-spin" /> : <Play size={13} />}Run</Button>
         </div>
       </div>;
     })}
