@@ -2,7 +2,7 @@ import type { ActionCtx } from '../_generated/server';
 import type { Id } from '../_generated/dataModel';
 import { internal } from '../_generated/api';
 import { BRAND_LIMITS, isBrandColor, type BrandColor, type BrandCopy, type BrandFontRole, type SceneBrand } from '../../lib/editor/brand-kit';
-import { cleanSvg, pickColors, pickFaces, pickFonts, scanCss, scanPage, type CssScan } from '../../lib/brand/scrape';
+import { cleanSvg, emptyCssScan, pickColors, pickFaces, pickFonts, scanCss, scanPage, type CssScan } from '../../lib/brand/scrape';
 
 /** Fetching a brand: the landing page, its CSS, its font files and logo. Font files go to storage. */
 const BROWSER = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36';
@@ -44,7 +44,7 @@ async function storeFaces(ctx: ActionCtx, scan: CssScan, picks: { family: string
 
 /** Loads Google Fonts families by name, e.g. a theme the user describes. */
 export async function googleFonts(ctx: ActionCtx, families: { family: string; role: BrandFontRole }[]) {
-  const scan: CssScan = { faces: [], usage: new Map(), colors: new Map(), namedColors: [] };
+  const scan: CssScan = emptyCssScan();
   const missing: string[] = [];
   for (const { family } of families) {
     const url = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(family).replace(/%20/g, '+')}:wght@400;500;600;700&display=swap`;

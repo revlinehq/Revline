@@ -46,9 +46,11 @@ export function readableFamily(family: string) {
 function firstFamily(value: string) { return value.split(',')[0]?.trim().replace(/^["']|["']$/g, ''); }
 const genericFamilies = /^(serif|sans-serif|monospace|cursive|fantasy|system-ui|ui-\w+|inherit|initial|unset|var\(.*|-apple-system|blinkmacsystemfont|arial|helvetica|helvetica neue|segoe ui|roboto fallback)$/i;
 
-export type CssScan = { faces: FontFaceCandidate[]; usage: Map<string, { count: number; heading: number }>; colors: Map<string, number>; namedColors: BrandColor[] };
+/** Font uses keep their raw value: sites often set fonts through variables defined in another file. */
+export type CssScan = { faces: FontFaceCandidate[]; fontUses: { value: string; heading: boolean }[]; vars: Map<string, string>; colors: Map<string, number>; namedColors: BrandColor[] };
+export const emptyCssScan = (): CssScan => ({ faces: [], fontUses: [], vars: new Map(), colors: new Map(), namedColors: [] });
 
-export function scanCss(css: string, cssUrl: string, into: CssScan = { faces: [], usage: new Map(), colors: new Map(), namedColors: [] }): CssScan {
+export function scanCss(css: string, cssUrl: string, into: CssScan = emptyCssScan()): CssScan {
   const clean = css.replace(/\/\*[\s\S]*?\*\//g, '');
   for (const match of clean.matchAll(/@font-face\s*{([^}]*)}/gi)) {
     const body = match[1], family = body.match(/font-family\s*:\s*([^;]+)/i)?.[1];
@@ -59,12 +61,10 @@ export function scanCss(css: string, cssUrl: string, into: CssScan = { faces: []
   }
   for (const rule of clean.matchAll(/([^{}@]+){([^{}]*)}/g)) {
     const selector = rule[1], body = rule[2];
-    for (const declaration of body.matchAll(/(?:^|;)\s*(font-family|--[\w-]*font[\w-]*)\s*:\s*([^;]+)/gi)) {
-      const family = firstFamily(declaration[2]);
-      if (!family || genericFamilies.test(family)) continue;
-      const name = readableFamily(family), entry = into.usage.get(name) ?? { count: 0, heading: 0 };
-      entry.count++; if (/\bh[1-3]\b|head|title|display|hero/i.test(selector)) entry.heading++;
-      into.usage.set(name, entry);
+    for (const declaration of body.matchAll(/(?:^|;)\s*(--[\w-]+)\s*:\s*([^;]+)/g)) if (!into.vars.has(declaration[1])) into.vars.set(declaration[1], declaration[2].trim());
+    for (const declaration of body.matchAll(/(?:^|;)\s*(font-family|font|--[\w-]*(?:font|head|body|display|sans|serif)[\w-]*)\s*:\s*([^;]+)/gi)) {
+      const value = declaration[1].toLowerCase() === 'font' ? declaration[2].replace(/^.*?\d[\w.%/ ]*\s+(?=["'\w-]+(?:,|$)|var\()/, '') : declaration[2];
+      into.fontUses.push({ value: value.trim(), heading: /\bh[1-3]\b|head|title|display|hero/i.test(`${selector} ${declaration[1]} ${value}`) });
     }
     for (const declaration of body.matchAll(/(?:^|;)\s*(--[\w-]+|color|background|background-color|fill|stroke|border-color)\s*:\s*([^;]+)/gi)) {
       const property = declaration[1].toLowerCase(), value = declaration[2].trim().replace(/\s*!important$/, '');
@@ -94,9 +94,32 @@ export function normalizeColor(color: string) {
 }
 
 /** Ranks the page's families: the most used is body, the one headings use (if different) is heading. */
+/** Follows var(--x, fallback) chains to the family a declaration really uses. */
+function resolveFamily(value: string, vars: Map<string, string>) {
+  for (let depth = 0; depth < 6; depth++) {
+    const ref = value.trim().match(/^var\(\s*(--[\w-]+)\s*(?:,\s*(.+))?\)/);
+    if (!ref) break;
+    value = vars.get(ref[1]) ?? ref[2] ?? '';
+  }
+  const family = firstFamily(value);
+  return family && !genericFamilies.test(family) ? readableFamily(family) : undefined;
+}
+
+function fontUsage(scan: CssScan) {
+  const usage = new Map<string, { count: number; heading: number }>();
+  for (const use of scan.fontUses) {
+    const family = resolveFamily(use.value, scan.vars);
+    if (!family) continue;
+    const entry = usage.get(family) ?? { count: 0, heading: 0 };
+    entry.count++; if (use.heading) entry.heading++;
+    usage.set(family, entry);
+  }
+  return usage;
+}
+
 export function pickFonts(scan: CssScan): { family: string; role: BrandFontRole }[] {
   const available = new Set(scan.faces.map(face => face.family));
-  const ranked = [...scan.usage.entries()].filter(([family]) => available.has(family)).sort((a, b) => b[1].count - a[1].count);
+  const ranked = [...fontUsage(scan).entries()].filter(([family]) => available.has(family)).sort((a, b) => b[1].count - a[1].count);
   const body = ranked[0]?.[0] ?? scan.faces[0]?.family;
   if (!body) return [];
   const heading = [...ranked].sort((a, b) => b[1].heading - a[1].heading)[0];
