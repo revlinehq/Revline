@@ -27,3 +27,6 @@
 .timeline-tab[data-done]::before{content:'';position:absolute;inset:0;border-radius:inherit;box-shadow:inset 0 0 0 1px #22c55e;pointer-events:none;animation:timeline-tab-done 2s ease-out forwards}
 @keyframes timeline-tab-done{0%,70%{opacity:1}100%{opacity:0}}
 @media(prefers-reduced-motion:reduce){.timeline-tab[data-working]::after{animation:none;transform:none;background:#a78bfa14}}
+/* Carries the media panel's divider down through the tab row to the timeline toolbar. */
+.timeline-tabs{position:relative}
+.timeline-tabs::after{content:'';position:absolute;top:0;bottom:0;right:var(--editor-media-width,0px);width:var(--editor-media-divider,0px);background:var(--ed-border,var(--border));pointer-events:none}
