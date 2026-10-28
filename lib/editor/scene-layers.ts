@@ -1,7 +1,7 @@
 import { dimensions, trackOf, type Clip, type Timeline } from './types';
 import { TEXT_FONTS } from './text-fonts';
 
-/** A React component module rendered as a function of clip-local time. */
+/** A TypeScript module that builds HTML once and animates it on a GSAP timeline; the composition seeks it to clip-local time. */
 export type SceneSource = { title: string; code: string };
 export const SCENE_LIMITS = { title: 80, code: 20_000 } as const;
 
@@ -117,23 +117,22 @@ setSources(initial);nextFrame(watch);
 export const SCENE_FONT_FAMILIES = TEXT_FONTS.map(font => font.family);
 
 /** A complete starter scene: a title card that builds, holds and settles. */
-export const STARTER_SCENE_CODE = `import { useScene, useMotion } from 'revline';
+export const STARTER_SCENE_CODE = `import { SplitText } from 'gsap/SplitText';
 
-export default function Scene() {
-  const { t, width, height, duration } = useScene();
-  const { enter, draw, pop } = useMotion();
-  const push = 1 + 0.05 * draw(0, duration);
-  const title = enter(0.2, 0.7);
-  const rule = draw(0.6, 0.8);
-  const badge = pop(1.2);
-  return (
-    <div style={{ position: 'absolute', inset: 0, background: '#141413', transform: \`scale(\${push})\` }}>
-      <div style={{ position: 'absolute', left: width * 0.1, right: width * 0.1, top: height * 0.38, opacity: title, transform: \`translateY(\${60 * (1 - title)}px)\` }}>
-        <div style={{ fontSize: 112, fontWeight: 700, lineHeight: 1.05, letterSpacing: -2 }}>Your idea,<br/>explained.</div>
-        <div style={{ marginTop: 36, height: 8, width: '60%', borderRadius: 4, background: '#D97757', transformOrigin: 'left', transform: \`scaleX(\${rule})\` }}/>
-        <div style={{ marginTop: 40, display: 'inline-block', padding: '14px 26px', borderRadius: 999, background: '#F4F4F0', color: '#141413', fontSize: 40, fontWeight: 700, opacity: Math.min(1, badge), transform: \`scale(\${badge})\` }}>Scene {Math.floor(t) + 1}</div>
+export default function scene({ root, tl, duration }) {
+  root.innerHTML = \`
+    <div class="stage" style="position:absolute;inset:0;background:#141413">
+      <div style="position:absolute;left:10%;right:10%;top:38%">
+        <h1 class="title" style="margin:0;font-size:112px;font-weight:700;line-height:1.05;letter-spacing:-2px">Your idea,<br>explained.</h1>
+        <div class="rule" style="margin-top:36px;height:8px;width:60%;border-radius:4px;background:#D97757;transform-origin:left"></div>
+        <div class="badge" style="margin-top:40px;display:inline-block;padding:14px 26px;border-radius:999px;background:#F4F4F0;color:#141413;font-size:40px;font-weight:700">Scene 1</div>
       </div>
-    </div>
-  );
+    </div>\`;
+  const title = new SplitText(root.querySelector('.title'), { type: 'words' });
+
+  tl.to(root.querySelector('.stage'), { scale: 1.05, duration, ease: 'none' }, 0)
+    .from(title.words, { yPercent: 60, opacity: 0, duration: 0.7, ease: 'expo.out', stagger: 0.08 }, 0.2)
+    .from(root.querySelector('.rule'), { scaleX: 0, duration: 0.8, ease: 'power3.inOut' }, 0.6)
+    .from(root.querySelector('.badge'), { scale: 0, opacity: 0, duration: 0.45, ease: 'back.out(1.7)' }, 1.2);
 }
 `;

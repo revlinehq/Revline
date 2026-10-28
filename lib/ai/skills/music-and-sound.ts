@@ -52,14 +52,14 @@ Motion design comes with sound. When you add a scene, or change a scene's choreo
 
 ### Find the beats
 
-Read the scene clip's code (inspectClip). Times inside a scene are clip-local seconds, so a beat at local \`t\` is at timeline \`clip.start + t\`.
+Read the scene clip's code (inspectClip). A scene's GSAP timeline starts at the clip's first frame, so a tween at position \`t\` happens at timeline \`clip.start + t\`. Resolve relative positions (\`'<0.2'\`, \`'-=0.3'\`, labels) to absolute times first.
 
-- \`enter(start, duration = .6)\` eases out (fastest at its start): the motion is mostly done in the first third. Start a whoosh at \`start\` with \`duration\` equal to the enter duration and \`peak\` about 0.25.
-- \`draw(start, duration = .8)\` eases in and out (fastest midway): a whoosh or riser spanning the draw, \`peak\` 0.5.
-- \`pop(start, duration = .45)\` overshoots: put a \`pop\` or \`blip\` at \`start\`; the element appears then.
-- \`<Show from={a} to={b}>\` is a hard cut: a \`tick\`, \`pop\` or \`thud\` exactly at \`a\`.
-- \`interpolate(t, [t0, t1, ...], ...)\` keyframes: sounds land on the keyframe times where motion starts or stops.
-- Staggered items (\`i * .12\` offsets) need one short sound per item, at each item's own time. Vary pitch slightly (\`frequency\` or \`note\`) instead of repeating the identical sound.
+- \`expo.out\` / \`power*.out\` entrances are fastest at their start: the motion is mostly done in the first third. Start a whoosh at the tween's start with \`duration\` equal to the tween's and \`peak\` about 0.25.
+- \`*.inOut\` moves and draws (DrawSVG, scaleX wipes) are fastest midway: a whoosh or riser spanning the tween, \`peak\` 0.5.
+- \`back.out\` and \`elastic\` pops overshoot: put a \`pop\` or \`blip\` at the tween's start; the element appears then.
+- \`tl.set(...)\` and zero-duration changes are hard cuts: a \`tick\`, \`pop\` or \`thud\` exactly then.
+- Text being typed or scrambled (TextPlugin, ScrambleText) gets soft ticks across the tween; counting numbers get a riser or ticks across the count.
+- \`stagger\` items need one short sound per item, at each item's own time (start + index * stagger). Vary pitch slightly (\`frequency\` or \`note\`) instead of repeating the identical sound.
 
 Prefer one generateSound per scene beat group: the whole scene's sounds in one recipe with \`at\` set to the scene's start, so layer times equal scene-local beat times. Keep separate clips only when sounds need separate gains or later edits.
 

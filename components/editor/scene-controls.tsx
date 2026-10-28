@@ -4,7 +4,7 @@ import { useState } from 'react';
 import type { Clip } from '@/lib/editor/types';
 import { SCENE_LIMITS, validateScene } from '@/lib/editor/scene-layers';
 
-/** Title and code for a scene clip. Code applies on demand so half-typed JSX never reaches the preview. */
+/** Title and code for a scene clip. Code applies on demand so half-typed code never reaches the preview. */
 export function SceneControls({ clip, onChange, readOnly = false }: { clip: Clip; onChange: (patch: Partial<Clip>) => void; readOnly?: boolean }) {
   const scene = clip.scene ?? { title: 'Scene', code: '' };
   const [title, setTitle] = useState(scene.title);
@@ -25,6 +25,6 @@ export function SceneControls({ clip, onChange, readOnly = false }: { clip: Clip
       <button type="button" className="effect-color-reset" disabled={readOnly || !dirty} onClick={apply}>Apply code</button>
       <button type="button" className="effect-color-reset" disabled={readOnly || !dirty} onClick={() => { setTitle(scene.title); setCode(scene.code); setError(null); }}>Revert</button>
     </div>
-    <p className="visual-control-note">A React component drawn from the scene&apos;s clock. Ask the assistant to change it, or edit the code here. Trim the clip to change its length; render errors appear as preview errors.</p>
+    <p className="visual-control-note">A TypeScript module that builds the scene&apos;s HTML and animates it on a GSAP timeline. Ask the assistant to change it, or edit the code here. Trim the clip to change its length; render errors appear as preview errors.</p>
   </div>;
 }

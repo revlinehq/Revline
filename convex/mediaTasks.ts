@@ -46,7 +46,8 @@ export const taskResult = v.object({colorStats:v.optional(v.array(v.any())),revi
 export type MediaTaskResult = Infer<typeof taskResult>;
 
 /** The oldest media processor that can run each kind; older processors leave these tasks queued. */
-const MIN_PROCESSOR_VERSION: Partial<Record<Doc<'mediaTasks'>['kind'], number>> = { transcribe: 3, frames: 4, preview: 5, snapshot: 6, cutout: 7, derive: 9 };
+// 10: scenes are GSAP modules, so every task that renders a composition needs the new scene runtime.
+const MIN_PROCESSOR_VERSION: Partial<Record<Doc<'mediaTasks'>['kind'], number>> = { transcribe: 3, frames: 4, preview: 5, cutout: 7, derive: 9, render: 10, review: 10, snapshot: 10 };
 
 export async function enqueueMediaTask(ctx: MutationCtx, input: Pick<Doc<'mediaTasks'>, 'ownerId' | 'projectId' | 'kind'> & Partial<Pick<Doc<'mediaTasks'>, 'assetId' | 'renderJobId' | 'analysisRequestId' | 'sourceUrl' | 'frameRequest' | 'videoRequest' | 'reviewId' | 'snapshotId' | 'cutoutId' | 'derivationId' | 'requiredProcessorVersion'|'previewVersion'|'lane'>>, beforeEnqueue?:()=>Promise<void>): Promise<Id<'mediaTasks'>> {
   const minimum = MIN_PROCESSOR_VERSION[input.kind];

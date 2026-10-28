@@ -1,28 +1,33 @@
 import { SCENE_FONT_FAMILIES, STARTER_SCENE_CODE } from '../../editor/scene-layers';
+import { SCENE_GSAP_PLUGINS } from '../../editor/scene-modules';
 import type { EditorSkill } from './index';
 
 export const explainerScenes: EditorSkill = {
   name: 'explainer-scenes',
-  description: 'Write or rewrite scene clips: animated explainer visuals (titles, diagrams, charts, UI walkthroughs, kinetic type) authored as React components and rendered frame by frame. Read before addScene or editScene. Scenes come with matching generated sound (see Sound).',
+  description: 'Write or rewrite scene clips: animated visuals (titles, diagrams, charts, UI walkthroughs, kinetic type, product and launch films) written as TypeScript modules that build HTML and animate it with GSAP, rendered frame by frame. Read before addScene or editScene. Scenes come with matching generated sound (see Sound).',
   body: `# Explainer scenes
 
-A scene is one beat of an explainer: a React component rendered full-frame on its own V layer. Footage below shows through transparent areas, so leave the background transparent when the scene is an overlay.
+A scene is one beat of a video: a TypeScript module that builds plain HTML once and choreographs it on a GSAP timeline, rendered full-frame on its own V layer. Footage below shows through transparent areas, so leave the background transparent when the scene is an overlay.
 
 ## Contract
 
-- Write \`export default function Scene()\`. Import only from \`react\` and \`revline\`.
-- The module runs in a sandbox with no network, timers or storage. \`Date\` and \`Math.random\` must not drive visuals.
-- \`useScene()\` returns \`{ t, frame, fps, duration, width, height, progress }\`. \`t\` is clip-local seconds.
-- Compute every visible value from \`t\` during render. Never animate with effects, state, refs or CSS transitions: each frame is rendered on its own when seeking and exporting.
-- Author on the fixed canvas from \`useScene()\` (1080-based pixels). Position with absolute px or percentages inside the full-frame root.
+- Write \`export default function scene({ root, tl, gsap, width, height, duration, fps })\`. It runs once, before the first frame.
+- \`root\` is the full-frame container on the 1080-based canvas (\`width\` x \`height\` px). Build inside it with \`root.innerHTML\` or \`document.createElement\`; never restyle \`root\` itself. Position with absolute px or percentages.
+- \`tl\` is the scene's GSAP timeline. Time 0 is the clip's first frame, in seconds. Put every animation on it with a position parameter: \`tl.from(el, { y: 40, opacity: 0, duration: .8, ease: 'expo.out' }, 1.2)\`.
+- The editor seeks the timeline to each frame, so the whole film is scrubbable and exports frame-exact. Animate only with GSAP. CSS transitions and keyframes, requestAnimationFrame, timers, Date, video and audio do not follow the clock.
+- Plain TypeScript, not JSX. Imports: \`gsap\` and its plugins (${SCENE_GSAP_PLUGINS.join(', ')}, plus EasePack), each from \`gsap/<Name>\` or all from \`gsap\`. They are registered already. Nothing else loads: no network, no other packages.
+- Math.random is seeded, so scatter and noise come out the same in preview and export.
 
-## API (from \`revline\`)
+## GSAP craft
 
-- \`useMotion()\` returns the three motion helpers \`enter(start, duration = .6)\`, \`draw(start, duration = .8)\` and \`pop(start, duration = .45)\`. Each gives 0→1 eased progress at the current time. Use only these for movement so a whole video reads as one piece.
-- \`interpolate(value, inputRange, outputRange, { easing, clamp = true })\` maps values across keyframes. \`Easing\` has \`linear\`, \`inOutCubic\`, \`outExpo\`, \`outBack\` and \`enter\`/\`draw\`/\`pop\`.
-- \`<Show from={a} to={b}>\` is a hard cut: children stay mounted and are visible over [a, b).
-- \`<Captions items={[{ at, until?, text }]} />\` shows one caption line at a time.
-- \`random(seed)\` returns a deterministic number in [0, 1) for scatter or noise.
+- Choreograph with the position parameter: absolute times (\`2.4\`), relative to the previous step (\`'<0.2'\`, \`'-=0.3'\`), or labels (\`tl.addLabel('reveal', 3)\`, then \`'reveal+=0.4'\`).
+- One motion vocabulary per video so it reads as one piece: entrances \`expo.out\` (0.6 to 0.9 s), moves between states \`power3.inOut\`, pops \`back.out(1.7)\` (0.45 s), slow camera drifts \`none\` or \`sine.inOut\`. A brand curve is one line: \`CustomEase.create('brand', 'M0,0 C0.2,0 0,1 1,1')\`.
+- \`stagger\` builds lists, grids, words and characters: \`tl.from(items, { y: 20, opacity: 0, stagger: 0.06 }, 1)\`.
+- Text: \`new SplitText(el, { type: 'lines,words,chars' })\` splits for line, word or character reveals; ScrambleTextPlugin decodes text; TextPlugin types it.
+- Lines and shapes: DrawSVGPlugin draws strokes (\`drawSVG: '0%'\` to \`'100%'\`), MorphSVGPlugin morphs one path into another, MotionPathPlugin moves along a path.
+- Counting numbers: tween a plain object and write it out in \`onUpdate\`: \`tl.to(n, { value: 10000, duration: 1.4, onUpdate: () => el.textContent = Math.round(n.value).toLocaleString() }, 2)\`.
+- Loops: \`repeat: -1\` with \`yoyo: true\` for drifts, pulses and backgrounds; they stay frame-exact.
+- Rebuild product UI as real HTML (cards, rows, buttons, charts) rather than describing it; it stays sharp at any resolution and every part can move.
 
 ## Craft
 
@@ -39,23 +44,23 @@ A scene is one beat of an explainer: a React component rendered full-frame on it
 
 Every scene you create, or whose choreography you substantially change, gets matching sound in the same turn without being asked. Read the music-and-sound skill, then:
 
-- After addScene, call generateSound once for that scene: one clip at the scene's start, layers keyed to its key beats (enter, draw, pop and Show times). Only the key beats, not every element.
+- After addScene, call generateSound once for that scene: one clip at the scene's start, layers keyed to its key beats (the times of its main tweens and labels). Only the key beats, not every element.
 - After editScene changes timing or motion, update that scene's existing generated sound with editSound (find it by start time and inspectClip's soundRecipe) instead of adding a second clip. Leave sounds alone for scenes whose motion did not change, and for text-only or color edits.
 - Skip sound when the user asked for no sound or a silent edit, or when speech (transcript words) or a music-role clip plays under the scene; say that you skipped it and why.
 
 ## Verifying a scene
 
 - Scenes are not effects: never call planEffects or previewRender for a scene clip. They cannot review scenes.
-- Check your own code instead: walk through the key times (start, each beat, the end) and confirm what is on screen at each, that text stays inside the frame, and that nothing pops at the cut.
+- Check your own code instead: walk through the timeline's key times (start, each beat, the end) and confirm what is on screen at each, that text stays inside the frame, and that nothing pops at the cut.
 - If the user asks to check a scene visually, do that walk-through and say they can scrub it in the preview.
 
 ## Fonts
 
-\`fontFamily\` may be any of: ${SCENE_FONT_FAMILIES.join(', ')}. Images must be inline SVG or data: URIs.
+\`font-family\` may be any of: ${SCENE_FONT_FAMILIES.join(', ')}. Images must be inline SVG or data: URIs.
 
 ## Example
 
-\`\`\`tsx
+\`\`\`ts
 ${STARTER_SCENE_CODE}\`\`\`
 `,
 };

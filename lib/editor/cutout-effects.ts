@@ -74,27 +74,25 @@ export function applyCutoutEffect(input: Timeline, clipId: string, cutoutAssetId
 }
 
 /** Slow drifting colour fields; cheap radial gradients rather than CSS blur filters. */
-export const BACKDROP_SCENE = `import { useScene } from 'revline';
+export const BACKDROP_SCENE = `const FIELDS = [
+  ['#ff4d8d', 0.2, 0.25, 0.8, 3.1, 2.6],
+  ['#5b6cff', 0.8, 0.3, 0.9, 2.5, 3.4],
+  ['#22d3ee', 0.35, 0.8, 0.85, 3.7, 2.3],
+  ['#ffb347', 0.85, 0.85, 0.7, 2.8, 3.0],
+] as const;
 
-const FIELDS = [
-  ['#ff4d8d', 0.2, 0.25, 0.8, 0.35, 0],
-  ['#5b6cff', 0.8, 0.3, 0.9, 0.28, 2],
-  ['#22d3ee', 0.35, 0.8, 0.85, 0.31, 4],
-  ['#ffb347', 0.85, 0.85, 0.7, 0.4, 1],
-];
-
-export default function Scene() {
-  const { t, width, height } = useScene();
+export default function scene({ root, tl, width, height }) {
   const size = Math.max(width, height);
-  return (
-    <div style={{ position: 'absolute', inset: 0, background: '#0b0b14', overflow: 'hidden' }}>
-      {FIELDS.map(([color, x, y, radius, speed, phase], index) => {
-        const cx = width * (x + 0.12 * Math.sin(t * speed * 2 + phase));
-        const cy = height * (y + 0.1 * Math.cos(t * speed * 2.3 + phase));
-        const diameter = size * radius;
-        return <div key={index} style={{ position: 'absolute', left: cx - diameter / 2, top: cy - diameter / 2, width: diameter, height: diameter, borderRadius: '50%', background: \`radial-gradient(circle, \${color} 0%, transparent 65%)\`, opacity: 0.85 }} />;
-      })}
-    </div>
-  );
+  const stage = document.createElement('div');
+  stage.style.cssText = 'position:absolute;inset:0;background:#0b0b14;overflow:hidden';
+  root.appendChild(stage);
+  for (const [color, x, y, radius, driftX, driftY] of FIELDS) {
+    const diameter = size * radius;
+    const field = document.createElement('div');
+    field.style.cssText = \`position:absolute;left:\${width * x - diameter / 2}px;top:\${height * y - diameter / 2}px;width:\${diameter}px;height:\${diameter}px;border-radius:50%;background:radial-gradient(circle, \${color} 0%, transparent 65%);opacity:0.85\`;
+    stage.appendChild(field);
+    tl.fromTo(field, { x: -0.12 * width }, { x: 0.12 * width, duration: driftX, ease: 'sine.inOut', repeat: -1, yoyo: true }, 0)
+      .fromTo(field, { y: 0.1 * height }, { y: -0.1 * height, duration: driftY, ease: 'sine.inOut', repeat: -1, yoyo: true }, 0);
+  }
 }
 `;
