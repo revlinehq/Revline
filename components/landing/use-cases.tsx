@@ -30,7 +30,7 @@ function TileSet({ tiles, hidden = false }: { tiles: Tile[]; hidden?: boolean })
 
 export function LandingUseCases() {
   return <LandingSection id="use-cases" className="landing-use-cases" headingId="landing-use-cases-heading">
-    <LandingHeading id="landing-use-cases-heading" title="Edited with AI in Revline" description="Real creator videos, cut from raw footage by one prompt." />
+    <LandingHeading id="landing-use-cases-heading" title="Edited with Revline" description="Real creator videos, cut from raw footage by one prompt." />
     <div className="landing-carousel">{rows.map((tiles, index) => <div key={index} className="landing-marquee" data-direction={index ? 'right' : 'left'}>
       <div className="landing-marquee-track"><TileSet tiles={tiles} /><TileSet tiles={tiles} hidden /></div>
     </div>)}</div>
