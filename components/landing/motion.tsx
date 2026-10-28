@@ -39,7 +39,8 @@ const AUTO_ADVANCE_MS = 6000;
 
 export function LandingMotion() {
   const [active, setActive] = useState(0);
-  const [touched, setTouched] = useState(false);
+  const [visible, setVisible] = useState(false);
+  const section = useRef<HTMLDivElement>(null);
   const tabs = useRef<(HTMLButtonElement | null)[]>([]);
   const [indicator, setIndicator] = useState<{ left: number; width: number } | null>(null);
 
@@ -51,12 +52,21 @@ export function LandingMotion() {
     return () => removeEventListener('resize', measure);
   }, [active]);
 
-  // Cycle through the segments until the visitor picks one; reduced motion keeps it still.
+  // Advance only while the section is on screen, so visitors arrive at the first segment.
   useEffect(() => {
-    if (touched || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const node = section.current;
+    if (!node) return;
+    const observer = new IntersectionObserver(([entry]) => setVisible(entry.isIntersecting), { threshold: .35 });
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
+
+  // Always cycling: picking a segment restarts the timer from it. Reduced motion keeps the switching but drops the fades (CSS).
+  useEffect(() => {
+    if (!visible) return;
     const timer = setTimeout(() => setActive(index => (index + 1) % kinds.length), AUTO_ADVANCE_MS);
     return () => clearTimeout(timer);
-  }, [active, touched]);
+  }, [active, visible]);
 
   const kind = kinds[active];
   return <LandingSection id="motion" className="landing-motion" headingId="landing-motion-heading" data-nav-tone="dark">
@@ -64,15 +74,15 @@ export function LandingMotion() {
       <h2 id="landing-motion-heading">Motion that keeps them watching.</h2>
       <p>Launch videos, explainers and motion that pops in as you talk, all edited in Revline.</p>
     </header>
-    <div className="landing-motion-switcher">
+    <div ref={section} className="landing-motion-switcher">
       <div className="landing-segments" role="tablist" aria-label="Kinds of motion">
         {indicator && <span className="landing-segments-pill" style={{ left: indicator.left, width: indicator.width }} aria-hidden="true" />}
         {kinds.map((item, index) => <button key={item.id} ref={node => { tabs.current[index] = node; }} type="button" role="tab" id={`landing-motion-tab-${item.id}`} aria-selected={index === active} aria-controls="landing-motion-panel" tabIndex={index === active ? 0 : -1}
-          onClick={() => { setTouched(true); setActive(index); }}
+          onClick={() => setActive(index)}
           onKeyDown={event => {
             if (event.key !== 'ArrowRight' && event.key !== 'ArrowLeft') return;
             const next = (active + (event.key === 'ArrowRight' ? 1 : kinds.length - 1)) % kinds.length;
-            setTouched(true); setActive(next); tabs.current[next]?.focus();
+            setActive(next); tabs.current[next]?.focus();
           }}>{item.label}</button>)}
       </div>
       <p key={kind.id} className="landing-motion-description">{kind.description}</p>
