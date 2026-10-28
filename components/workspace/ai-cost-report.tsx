@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import './ai-cost-report.css';
 
 export type AiCostReport = {
@@ -37,7 +38,7 @@ export function AiCostReportView({ report, days, onDaysChange, loading = false }
   return <section className="workspace-profile-section ai-cost-section" aria-labelledby="ai-cost-title">
     <div className="workspace-section-label"><h2 id="ai-cost-title">Editor AI costs <span className="ai-cost-dev-label">Development</span></h2><p>Recorded usage by model and mode.</p></div>
     <div className="workspace-section-content ai-cost-report" aria-busy={loading}>
-      <div className="ai-cost-toolbar"><span>Estimated API spend · USD</span><div className="ai-cost-period" role="group" aria-label="Cost reporting period">{([7, 30] as const).map(period => <button key={period} type="button" aria-pressed={period === days} onClick={() => { setSelectedDate(null); onDaysChange(period); }}>{period} days</button>)}</div></div>
+      <div className="ai-cost-toolbar"><span>Estimated API spend · USD</span><Tabs value={String(days)} onValueChange={value => { setSelectedDate(null); onDaysChange(Number(value) as 7 | 30); }}><TabsList aria-label="Cost reporting period">{([7, 30] as const).map(period => <TabsTrigger key={period} value={String(period)}>{period} days</TabsTrigger>)}</TabsList></Tabs></div>
       {loading || report === undefined ? <p className="ai-cost-notice" role="status">Loading recorded costs…</p> : report === null ? <p className="ai-cost-notice">Cost tracking is unavailable in this environment.</p> : <>
         <div className="ai-cost-totals"><div><strong>{formatAiCost(report.summary.knownEstimatedUsd)}</strong><span>Known estimated cost</span></div><div><strong>{count(report.summary.callCount)}</strong><span>Model calls</span></div><div><strong>{count(report.summary.inputTokens + report.summary.outputTokens)}</strong><span>Recorded tokens</span></div></div>
         {report.summary.callCount > 0 ? <>

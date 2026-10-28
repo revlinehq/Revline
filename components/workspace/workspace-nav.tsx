@@ -121,7 +121,7 @@ export function WorkspaceNav({ title = NEW_WORKSPACE_LABEL, editorHref, active =
   return <><header className="workspace-nav">
     <Link href={NEW_PROJECT_PATH} onClick={newWorkspace} className="workspace-nav-brand" aria-label="Revline home"><Brand /></Link>
     <span className="workspace-nav-divider" aria-hidden="true" />
-    <DropdownMenu onOpenChange={open => { setHistoryOpen(open); if (open) { setCopiedId(false); setCopyError(''); } }}><DropdownMenuTrigger asChild><button ref={historyTrigger} className="workspace-chat-trigger" aria-label="Open chat menu"><span>{title}</span><ChevronDown size={13} /></button></DropdownMenuTrigger>
+    <DropdownMenu onOpenChange={open => { setHistoryOpen(open); if (open) { setCopiedId(false); setCopyError(''); } }}><DropdownMenuTrigger asChild><Button ref={historyTrigger} variant="ghost" size="md" className="workspace-chat-trigger" aria-label="Open chat menu"><span>{title}</span><ChevronDown size={13} /></Button></DropdownMenuTrigger>
       <DropdownMenuContent align="start" sideOffset={10} className="workspace-menu workspace-history-menu" onCloseAutoFocus={event => { if (renameOpen) event.preventDefault(); }}>
         <DropdownMenuItem asChild className="workspace-menu-item"><Link href={NEW_PROJECT_PATH} onClick={newWorkspace}><Plus size={16} />{NEW_WORKSPACE_LABEL}</Link></DropdownMenuItem>
         {onRename && <DropdownMenuItem className="workspace-menu-item" onSelect={() => { setNewTitle(title); setRenameError(''); setRenameOpen(true); }}><Pencil size={15} />Rename chat</DropdownMenuItem>}
