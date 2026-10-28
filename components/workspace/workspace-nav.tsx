@@ -15,6 +15,7 @@ import type { Id } from '@/convex/_generated/dataModel';
 import { Brand } from './brand';
 import { AgentLogo } from './agent-logo';
 import { ClaudeLogo, CursorLogo, OpenAILogo } from './ai-app-logos';
+import { McpConnectorDialog } from './mcp-connector-section';
 import { ProjectCover } from './project-cover';
 import { startNewWorkspace } from './start-new-workspace';
 import { PrimaryButton } from './primary-button';
@@ -76,6 +77,7 @@ export function WorkspaceNav({ title = NEW_WORKSPACE_LABEL, editorHref, active =
   const router = useRouter();
   const startingWorkspace = useRef(false);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [mcpOpen, setMcpOpen] = useState(false);
   const { chats, loading } = useWorkspaceChats(demo, historyOpen, 4);
   const { user, isSignedIn, isLoaded } = useUser();
   const clerk = useClerk();
@@ -138,7 +140,7 @@ export function WorkspaceNav({ title = NEW_WORKSPACE_LABEL, editorHref, active =
       {saveFailed && onRetrySave && <button type="button" className="workspace-nav-secondary workspace-nav-unsaved" aria-label="Unsaved changes. Retry saving" title="Unsaved changes. Retry saving" onClick={onRetrySave}><CircleAlert size={14} aria-hidden="true" /><span>Unsaved changes — Retry</span></button>}
       {(onUndo || onRedo) && <div className="workspace-nav-history"><button className="workspace-nav-icon" aria-label="Undo" title="Undo" disabled={!canUndo} onClick={onUndo}><Undo2 size={15} /></button><button className="workspace-nav-icon" aria-label="Redo" title="Redo" disabled={!canRedo} onClick={onRedo}><Redo2 size={15} /></button></div>}
       {onFootage && <button className="workspace-nav-secondary" aria-label="Footage" onClick={onFootage}><Film size={14} /><span>Footage</span></button>}
-      {mcpConnection !== undefined && <Link href="/profile#mcp" className="workspace-nav-secondary workspace-nav-mcp">{mcpConnection ? <><AgentLogo name={mcpConnection} className="workspace-nav-mcp-logo"/><span>MCP connected</span></> : <><span className="workspace-nav-mcp-apps" aria-hidden="true"><ClaudeLogo/><OpenAILogo/><CursorLogo/></span><span>Connect MCP</span></>}</Link>}
+      {mcpConnection !== undefined && <button type="button" className="workspace-nav-secondary workspace-nav-mcp" onClick={() => setMcpOpen(true)}>{mcpConnection ? <><AgentLogo name={mcpConnection} className="workspace-nav-mcp-logo"/><span>MCP connected</span></> : <><span className="workspace-nav-mcp-apps" aria-hidden="true"><ClaudeLogo/><OpenAILogo/><CursorLogo/></span><span>Connect MCP</span></>}</button>}
       {onExport && !demo && <span className="workspace-nav-action-hint" title={exportHint}><PrimaryButton size="compact" className="workspace-nav-export" onClick={onExport} disabled={exportDisabled} aria-description={exportHint}>Export<Download size={13} /></PrimaryButton></span>}
       {editorHref && <Link href={editorHref} className="workspace-nav-secondary workspace-editor-link" aria-label="Editor"><PanelsTopLeft size={14} /><span>Editor</span></Link>}
       <DropdownMenu><DropdownMenuTrigger asChild><button className="workspace-account-trigger" aria-label="Open account menu" disabled={!isLoaded}>{user?.imageUrl ? <img src={user.imageUrl} alt="" /> : initial}</button></DropdownMenuTrigger>
@@ -154,5 +156,5 @@ export function WorkspaceNav({ title = NEW_WORKSPACE_LABEL, editorHref, active =
         </DropdownMenuContent>
       </DropdownMenu>
     </div>
-  </header><Dialog open={renameOpen} onOpenChange={open => { if (!renameBusy) setRenameOpen(open); }}><DialogContent className="workspace-dialog" onCloseAutoFocus={event => { event.preventDefault(); historyTrigger.current?.focus(); }}><DialogTitle>Rename chat</DialogTitle><DialogDescription>Give this conversation a name you can find later.</DialogDescription><form onSubmit={event => { event.preventDefault(); void rename(); }}><label className="workspace-form-field">Chat name<input autoFocus value={newTitle} maxLength={120} onChange={event => setNewTitle(event.target.value)} /></label>{renameError && <p className="workspace-inline-error" role="alert">{renameError}</p>}<div className="workspace-dialog-actions"><button type="button" className="workspace-outline-button" onClick={() => setRenameOpen(false)} disabled={renameBusy}>Cancel</button><PrimaryButton type="submit" disabled={renameBusy || !newTitle.trim()}>{renameBusy && <LoaderCircle size={14} className="animate-spin" />}Save name</PrimaryButton></div></form></DialogContent></Dialog></>;
+  </header>{mcpConnection !== undefined && <McpConnectorDialog open={mcpOpen} onOpenChange={setMcpOpen} />}<Dialog open={renameOpen} onOpenChange={open => { if (!renameBusy) setRenameOpen(open); }}><DialogContent className="workspace-dialog" onCloseAutoFocus={event => { event.preventDefault(); historyTrigger.current?.focus(); }}><DialogTitle>Rename chat</DialogTitle><DialogDescription>Give this conversation a name you can find later.</DialogDescription><form onSubmit={event => { event.preventDefault(); void rename(); }}><label className="workspace-form-field">Chat name<input autoFocus value={newTitle} maxLength={120} onChange={event => setNewTitle(event.target.value)} /></label>{renameError && <p className="workspace-inline-error" role="alert">{renameError}</p>}<div className="workspace-dialog-actions"><button type="button" className="workspace-outline-button" onClick={() => setRenameOpen(false)} disabled={renameBusy}>Cancel</button><PrimaryButton type="submit" disabled={renameBusy || !newTitle.trim()}>{renameBusy && <LoaderCircle size={14} className="animate-spin" />}Save name</PrimaryButton></div></form></DialogContent></Dialog></>;
 }

@@ -27,3 +27,7 @@
 .mcp-dialog-steps strong { font-size:13px; font-weight:500; }
 .mcp-open-link { align-self:flex-start; display:inline-flex; align-items:center; gap:6px; text-decoration:none; }
 .mcp-dialog .mcp-advanced { margin-top:4px; }
+.mcp-dialog-back { display:grid; place-items:center; width:28px; height:28px; margin-left:-6px; border:0; border-radius:7px; background:none; color:var(--ws-faint); cursor:pointer; } .mcp-dialog-back:hover { background:var(--ws-hover); color:var(--ws-text); }
+.mcp-dialog .mcp-apps { margin-top:4px; }
+.mcp-dialog-loading { color:var(--ws-faint); }
+.mcp-dialog-locked { margin:0; font-size:13px; color:var(--ws-faint); } .mcp-dialog-locked a { color:var(--ws-text); }

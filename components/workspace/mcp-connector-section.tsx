@@ -1,9 +1,11 @@
 'use client';
 import { userError } from '@/lib/user-error';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import Link from 'next/link';
+import type { FunctionReturnType } from 'convex/server';
 import { useConvexAuth, useMutation, useQuery } from 'convex/react';
-import { Check, Copy, ExternalLink, LoaderCircle } from 'lucide-react';
+import { ArrowLeft, Check, Copy, ExternalLink, LoaderCircle } from 'lucide-react';
 import { api } from '@/convex/_generated/api';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
 import { PrimaryButton } from './primary-button';
@@ -31,57 +33,88 @@ const APPS = {
 } as const;
 type AppId = keyof typeof APPS;
 
-/** Pro: connect Claude or ChatGPT to edit projects with the editor's own tools. */
-export function McpConnectorSection() {
-  const { isAuthenticated } = useConvexAuth();
-  const connector = useQuery(api.mcpAuth.connector, isAuthenticated ? {} : 'skip');
+type Connector = FunctionReturnType<typeof api.mcpAuth.connector>;
+
+/** The connect buttons, live connections and the link for other apps: shared by the profile section and the dialog. */
+function ConnectorBody({ connector, onPick }: { connector: Connector; onPick: (app: AppId) => void }) {
   const createToken = useMutation(api.mcpAuth.createPersonalToken);
   const revoke = useMutation(api.mcpAuth.revokeConnection);
-  const [open, setOpen] = useState<AppId | null>(null);
   const [token, setToken] = useState('');
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
-  if (!connector?.allowed) return null;
-
   async function run(key: string, work: () => Promise<void>) {
     setBusy(key); setError('');
     try { await work(); } catch (cause) { setError(userError(cause, 'Could not update the connection. Please try again.')); }
     finally { setBusy(''); }
   }
   const connected = (app: AppId) => connector.connections.some(connection => connection.kind !== 'personal' && APPS[app].match.test(connection.label));
-  const app = open ? APPS[open] : null;
-
-  return <section id="mcp" className="workspace-profile-section mcp-connector"><div className="workspace-section-label"><h2>Connect AI apps</h2></div>
-    <div className="workspace-section-content">
-      <div className="mcp-apps">
-        {(Object.keys(APPS) as AppId[]).map(id => {
-          const { name, Logo } = APPS[id];
-          return <button key={id} type="button" className="mcp-app-button" onClick={() => setOpen(id)}><Logo width={18} height={18} /><span>Connect {name}</span>{connected(id) && <small><Check size={12} />Connected</small>}</button>;
-        })}
-      </div>
-      {connector.connections.length > 0 && <ul className="mcp-connections">
-        {connector.connections.map(connection => <li key={connection.grantId}><div><span>{connection.label}</span><small>{connection.kind === 'personal' ? 'Personal token' : 'App'} · added {when(connection.createdAt)} · last used {when(connection.lastUsedAt)}</small></div>
-          <button type="button" className="workspace-outline-button" disabled={!!busy} onClick={() => void run(connection.grantId, async () => { await revoke({ grantId: connection.grantId }); })}>{busy === connection.grantId && <LoaderCircle size={12} className="animate-spin" />}Revoke</button></li>)}
-      </ul>}
-      <details className="mcp-advanced"><summary>Other apps and scripts</summary>
-        <p>Any MCP client can use this link and sign in to Revline. Scripts can use a personal token as <code>Authorization: Bearer &lt;token&gt;</code>.</p>
-        <CopyField label="MCP server URL" value={connector.mcpUrl} />
-        {token ? <><CopyField label="New personal token" value={token} /><p>Copy it now; it won&apos;t be shown again.</p></>
-          : <PrimaryButton size="compact" disabled={!!busy} onClick={() => void run('create', async () => setToken((await createToken({ label: 'Personal token' })).token))}>{busy === 'create' && <LoaderCircle size={13} className="animate-spin" />}Create personal token</PrimaryButton>}
-      </details>
-      {error && <p className="workspace-inline-error" role="alert">{error}</p>}
+  return <>
+    <div className="mcp-apps">
+      {(Object.keys(APPS) as AppId[]).map(id => {
+        const { name, Logo } = APPS[id];
+        return <button key={id} type="button" className="mcp-app-button" onClick={() => onPick(id)}><Logo width={18} height={18} /><span>Connect {name}</span>{connected(id) && <small><Check size={12} />Connected</small>}</button>;
+      })}
     </div>
-    <Dialog open={!!app} onOpenChange={next => { if (!next) setOpen(null); }}>
-      {app && <DialogContent className="workspace-dialog mcp-dialog">
-        <div className="mcp-dialog-title"><app.Logo width={22} height={22} /><DialogTitle>Connect {app.name}</DialogTitle></div>
-        <DialogDescription>Two steps, once. After that {app.name} can open and edit your Revline projects.</DialogDescription>
-        <ol className="mcp-dialog-steps">
-          <li><strong>Copy your Revline link</strong><CopyField label="Revline MCP link" value={connector.mcpUrl} /></li>
-          <li><strong>Add it in {app.name}</strong><p>{app.steps}</p>
-            <a className="workspace-outline-button mcp-open-link" href={app.settingsUrl} target="_blank" rel="noreferrer">{app.settingsLabel}<ExternalLink size={13} /></a></li>
-        </ol>
-        {open === 'claude' && <details className="mcp-advanced"><summary>Using Claude Code?</summary><CopyField label="Claude Code command" value={`claude mcp add --transport http revline ${connector.mcpUrl}`} /><p>Then run <code>/mcp</code> in Claude Code to sign in.</p></details>}
-      </DialogContent>}
+    {connector.connections.length > 0 && <ul className="mcp-connections">
+      {connector.connections.map(connection => <li key={connection.grantId}><div><span>{connection.label}</span><small>{connection.kind === 'personal' ? 'Personal token' : 'App'} · added {when(connection.createdAt)} · last used {when(connection.lastUsedAt)}</small></div>
+        <button type="button" className="workspace-outline-button" disabled={!!busy} onClick={() => void run(connection.grantId, async () => { await revoke({ grantId: connection.grantId }); })}>{busy === connection.grantId && <LoaderCircle size={12} className="animate-spin" />}Revoke</button></li>)}
+    </ul>}
+    <details className="mcp-advanced"><summary>Other apps and scripts</summary>
+      <p>Any MCP client can use this link and sign in to Revline. Scripts can use a personal token as <code>Authorization: Bearer &lt;token&gt;</code>.</p>
+      <CopyField label="MCP server URL" value={connector.mcpUrl} />
+      {token ? <><CopyField label="New personal token" value={token} /><p>Copy it now; it won&apos;t be shown again.</p></>
+        : <PrimaryButton size="compact" disabled={!!busy} onClick={() => void run('create', async () => setToken((await createToken({ label: 'Personal token' })).token))}>{busy === 'create' && <LoaderCircle size={13} className="animate-spin" />}Create personal token</PrimaryButton>}
+    </details>
+    {error && <p className="workspace-inline-error" role="alert">{error}</p>}
+  </>;
+}
+
+/** How to add Revline to one app: copy the link, then paste it in that app's settings. */
+function AppSteps({ id, mcpUrl }: { id: AppId; mcpUrl: string }) {
+  const app = APPS[id];
+  return <>
+    <DialogDescription>Two steps, once. After that {app.name} can open and edit your Revline projects.</DialogDescription>
+    <ol className="mcp-dialog-steps">
+      <li><strong>Copy your Revline link</strong><CopyField label="Revline MCP link" value={mcpUrl} /></li>
+      <li><strong>Add it in {app.name}</strong><p>{app.steps}</p>
+        <a className="workspace-outline-button mcp-open-link" href={app.settingsUrl} target="_blank" rel="noreferrer">{app.settingsLabel}<ExternalLink size={13} /></a></li>
+    </ol>
+    {id === 'claude' && <details className="mcp-advanced"><summary>Using Claude Code?</summary><CopyField label="Claude Code command" value={`claude mcp add --transport http revline ${mcpUrl}`} /><p>Then run <code>/mcp</code> in Claude Code to sign in.</p></details>}
+  </>;
+}
+
+function AppTitle({ id, onBack }: { id: AppId; onBack?: () => void }) {
+  const { name, Logo } = APPS[id];
+  return <div className="mcp-dialog-title">{onBack && <button type="button" className="mcp-dialog-back" aria-label="Back to apps" onClick={onBack}><ArrowLeft size={15} /></button>}<Logo width={22} height={22} /><DialogTitle>Connect {name}</DialogTitle></div>;
+}
+
+/** Pro: connect Claude or ChatGPT to edit projects with the editor's own tools. */
+export function McpConnectorSection() {
+  const { isAuthenticated } = useConvexAuth();
+  const connector = useQuery(api.mcpAuth.connector, isAuthenticated ? {} : 'skip');
+  const [open, setOpen] = useState<AppId | null>(null);
+  if (!connector?.allowed) return null;
+  return <section id="mcp" className="workspace-profile-section mcp-connector"><div className="workspace-section-label"><h2>Connect AI apps</h2></div>
+    <div className="workspace-section-content"><ConnectorBody connector={connector} onPick={setOpen} /></div>
+    <Dialog open={!!open} onOpenChange={next => { if (!next) setOpen(null); }}>
+      {open && <DialogContent className="workspace-dialog mcp-dialog"><AppTitle id={open} /><AppSteps id={open} mcpUrl={connector.mcpUrl} /></DialogContent>}
     </Dialog>
   </section>;
+}
+
+/** The same connector as a dialog, opened from anywhere (the editor bar's MCP button): picking an app shows its steps in place. */
+export function McpConnectorDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
+  const { isAuthenticated } = useConvexAuth();
+  const connector = useQuery(api.mcpAuth.connector, isAuthenticated && open ? {} : 'skip');
+  const [app, setApp] = useState<AppId | null>(null);
+  useEffect(() => { if (!open) setApp(null); }, [open]);
+  return <Dialog open={open} onOpenChange={onOpenChange}><DialogContent className="workspace-dialog mcp-dialog">
+    {app && connector?.allowed ? <><AppTitle id={app} onBack={() => setApp(null)} /><AppSteps id={app} mcpUrl={connector.mcpUrl} /></> : <>
+      <DialogTitle>Connect AI apps</DialogTitle>
+      <DialogDescription>Bring your own agent: edit your Revline projects from Claude, ChatGPT or any MCP app.</DialogDescription>
+      {connector === undefined ? <LoaderCircle size={16} className="animate-spin mcp-dialog-loading" />
+        : connector.allowed ? <ConnectorBody connector={connector} onPick={setApp} />
+        : <p className="mcp-dialog-locked">Connecting AI apps is included with Pro. <Link href="/billing" onClick={() => onOpenChange(false)}>See plans</Link></p>}
+    </>}
+  </DialogContent></Dialog>;
 }
