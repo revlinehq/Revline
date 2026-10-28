@@ -46,12 +46,12 @@ masks:{tool:'setMask',shapes:['rectangle (corner radius)','ellipse','polygon (fr
 }
 
 /** What the model sees on every turn: names only. Guidance, controls and the sound library live in
- *  the effects-and-styling and music-and-sound skills, read on demand with readSkill. */
+ *  the effects, vfx-recipes, text-styling, color-grading and music-and-sound skills, read on demand with readSkill. */
 export function editorCapabilityIndex(){
   const catalog=editorCapabilities();
   return {
     skills:catalog.skills,
-    details:'Names only. Read the effects-and-styling skill before applying effects, timed FX, text looks, text animations or templates, layouts, camera or object motion, or any creative styling; read music-and-sound before adding sounds.',
+    details:'Names only. Read the effects skill before applying effects, timed FX, transitions, layouts, camera or object motion; vfx-recipes for creative styling and effect combinations; text-styling before adding or styling text and captions; color-grading for any color work; music-and-sound before music or sounds.',
     soundEffects:{skill:catalog.soundEffects.skill,rule:catalog.soundEffects.rule,generated:catalog.soundEffects.generated,libraryTool:catalog.soundEffects.libraryTool},
     scenes:catalog.scenes,
     stylePlaybooks:Object.keys(catalog.stylePlaybooks),
