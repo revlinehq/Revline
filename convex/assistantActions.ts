@@ -1,3 +1,4 @@
+import { compactEditorHistory } from '../lib/ai/history-compaction';
 "use node";
 import {assistantRunArgs,continuationValidator,MAX_ASSISTANT_SEGMENTS} from './lib/assistant_run';
 import { type EffectPlan } from '../lib/ai/edit-plan';
@@ -111,7 +112,7 @@ You edit the user's video timeline using structured tools. Greetings, small talk
           onLanguageModelCallEnd: event => costLog.modelCall({ ...event, stepNumber: currentStep }, progress()),
           onStepEnd: event => costLog.toolsFinished(event),
           onError: ({ error }) => { streamError = error; },
-        }, { saveStreamDeltas: { throttleMs: 300 },...(repairFeedback?{contextHandler:async(_ctx,{allMessages})=>editorRepairContext(allMessages,repairFeedback!)}:{}) });
+        }, { saveStreamDeltas: { throttleMs: 300 },contextHandler:async(_ctx,{search,recent,inputMessages,inputPrompt,existingResponses})=>{const messages=[...search,...compactEditorHistory(recent),...inputMessages,...inputPrompt,...existingResponses];return repairFeedback?editorRepairContext(messages,repairFeedback):messages;} });
         const [reason, completed] = await Promise.all([result.finishReason, result.steps]);
         finishReason = reason;
         steps.push(...completed);
@@ -163,5 +164,14 @@ You edit the user's video timeline using structured tools. Greetings, small talk
 /** What the AI remembers about this user and project: rules to follow and styles to reuse, most-used first. */
 function memorySection(memories: { memoryId: string; scope: 'user' | 'project'; kind: 'preference' | 'style'; name?: string; text: string; hasRecipe: boolean; source?: string; uses: number }[]) {
   const line = (item: typeof memories[number]) => `- [${item.memoryId}] ${item.kind === 'style' ? `style "${item.name}"` : 'preference'}${item.scope === 'project' ? ' (this project)' : ''}: ${item.text}${item.source ? ` (from ${JSON.stringify(item.source)})` : ''}${item.uses ? `, used ${item.uses}x` : ''}`;
-  return `# Memory\nWhat this user has taught you across sessions. Follow preferences unless the current request says otherwise. For styles, load the recipe with recallMemory before reapplying one. When the user likes an edit or repeats a pattern, save it with remember; update or forget memories that change.\n${memories.map(line).join('\n') || '(nothing remembered yet)'}\n`;
+  return `# Memory\nWhat this user has taught you across sessions. Follow preferences unless the current request says otherwise. For styles, load the recipe with recallMemory before reapplying one. When the user likes an edit or repeats a pattern, save it with remember; update or forget memories that change.\n${memoryLines(memories.map(line))}\n`;
+}
+
+/** At most about 1,000 tokens of memory in context; the most-used memories come first. */
+function memoryLines(lines: string[], budget = 4000) {
+  const kept: string[] = [];
+  let used = 0;
+  for (const line of lines) { if (used + line.length > budget) break; kept.push(line); used += line.length + 1; }
+  if (!lines.length) return '(nothing remembered yet)';
+  return kept.join('\n') + (kept.length < lines.length ? `\n(${lines.length - kept.length} less-used memories not shown.)` : '');
 }
