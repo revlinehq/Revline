@@ -4,8 +4,9 @@ import type { Clip, Timeline } from './types';
 import { validateVisualEffects, visualEffectsOf } from './visual-effects';
 import type { VisualEffectsController } from './visual-effects-runtime';
 import { maskSources, type MaskController } from './masks';
+import { audioReactiveSources, hasReactiveEffects, type AudioReactiveController } from './audio-reactive';
 
-const effects = (clip:Clip)=>({...visualEffectsOf(clip),cameraGlideBlur:cameraGlideBlurSource(clip),effectKeyframes:clip.effectKeyframes,motionOffset:clip.motionOffset});
+const effects = (clip:Clip)=>({...visualEffectsOf(clip),cameraGlideBlur:cameraGlideBlurSource(clip),effectKeyframes:clip.effectKeyframes,motionOffset:clip.motionOffset,...(hasReactiveEffects(clip.audioReactive)?{audioReactive:clip.audioReactive}:{})});
 
 export function previewVisualEffects(document: Document, clip: Clip, index: number, patch: Partial<Clip> | null): boolean {
   const controller = (document.defaultView as (Window & { __revlineEffects?: VisualEffectsController }) | null)?.__revlineEffects;
@@ -26,6 +27,10 @@ export function updateLiveVisualEffects(document: Document, previous: Timeline, 
     if (!previewVisualEffects(document, clip, index, null)) return false;
   }
   // Masks repaint on the shared clock; hand them the new timeline (rebuild if the runtime is missing).
+  const reactive = (document.defaultView as (Window & { __revlineAudioReactive?: AudioReactiveController }) | null)?.__revlineAudioReactive;
+  const reactiveSources = audioReactiveSources(next.clips);
+  if (!reactive && reactiveSources.length) return false;
+  reactive?.setSources(reactiveSources);
   const masks = (document.defaultView as (Window & { __revlineMaskController?: MaskController }) | null)?.__revlineMaskController;
   const sources = maskSources(next.clips);
   if (!masks) return !sources.length;

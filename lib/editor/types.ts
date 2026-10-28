@@ -12,6 +12,7 @@ import type { SmoothZoomSettings } from './smooth-zoom-settings';
 import type { CameraMotionSettings } from './camera-motion-settings';
 import type { EffectKeyframeLane } from './effect-keyframes';
 import type { RampPoint } from './speed-ramp';
+import type { AudioReactive } from './audio-reactive';
 import type { ClipMask } from './masks';
 import type { SceneSource } from './scene-layers';
 import type { ClipOutline } from './clip-outline';
@@ -64,6 +65,8 @@ export type Clip = {
   speedRamp?: RampPoint[];
   /** Shape/text mask with feathered edge, keyed in motion path time. */
   mask?: ClipMask;
+  /** Scale/shake/rotate or effect controls driven by a music level curve (timeline seconds). */
+  audioReactive?: AudioReactive;
   smoothZoom?: SmoothZoomSettings;
   cameraMotion?: CameraMotionSettings;
   effectPreset?: EffectPreset | 'none';

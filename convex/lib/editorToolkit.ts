@@ -53,7 +53,8 @@ import { MAX_INSPECTION_QUESTION, validateVideoInspectionInput, videoMatchesOnCl
 import { currentTranscript } from '../../lib/media-analysis/transcript';
 import { frameEvidenceOnClip, frameInspectionCoverage, assertConsecutiveInspection, validateFrameInspectionInput, type FrameInspectionInput } from '../../lib/media-analysis/frame-inspection';
 import { shotAlignedRange } from '../../lib/media-analysis/shots';
-import { playbackRateOf, sourceEndOf, sourceTimeAt } from '../../lib/editor/playback-rate';
+import { playbackRateOf, sourceEndOf, sourceTimeAt, timelineTimeAtSource } from '../../lib/editor/playback-rate';
+import { CSS_REACTIVE_TARGETS, MAX_REACTIVE_SAMPLES, REACTIVE_RATE, decodeLevels, encodeLevels, energyLevels, pulseLevels, reactiveAmountRange } from '../../lib/editor/audio-reactive';
 import { FREEZE_MODES, MAX_FREEZE_SECONDS, MIN_FREEZE_SECONDS, insertFreezeFrame } from '../../lib/editor/freeze-frame';
 import { retainSourceRanges, type RetainedRangeSummary } from '../../lib/editor/retained-ranges';
 import { currentSpeechCleanup, keptRanges, snapToSpeech } from '../../lib/speech-cleanup';
@@ -449,6 +450,45 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
         return markers.timeline;
       });
       return { ...result, kind, added: markers.added, skipped: markers.skipped, confidence: markers.confidence, status: markers.status, message: markers.message };
+    } }),
+    setAudioReactive: createTool({ description: "Make clips react to music: a level curve from one song's detected beats (pulse on each hit, instant attack, `decay` release) or its loudness (energy) drives up to 4 targets per clip. CSS targets work on footage, images, text and solids: scale (amount -0.5..0.5, e.g. 0.06 = 6% bump), shake (0..0.1 of the frame, e.g. 0.01), rotate (-20..20 degrees). Effect controls work on video/image: any keyframeable control such as colorGrade.exposure (0.3), glitch.intensity (0.6), zoomBlur.amount (0.4), lightLeak.amount, softBlur.amount, lensDistortion.amount; the amount is added at full level and is 0 in silence. Modes: beats, downbeats (bar starts), accents (strong hits), energy (follows loudness; sensitivity 0..1). Subtle defaults read best: scale 0.04-0.08 on beats, glitch on accents. Covers each clip's own time span (up to 4 minutes). clear:true removes it. Rendered identically in preview and export.", inputSchema: z.object({ clipIds: clipIdsInput, musicClipId: z.string().min(1).optional().describe('The audio clip whose sound drives the reaction; omit when clear'), mode: z.enum(['beats', 'downbeats', 'accents', 'energy']).optional(), targets: z.array(z.object({ property: z.string().min(1).max(60).describe(`${CSS_REACTIVE_TARGETS.join(', ')} or group.control`), amount: z.number() }).strict()).min(1).max(4).optional(), sensitivity: z.number().min(0).max(1).optional(), decay: z.number().min(.03).max(1.5).optional(), clear: z.boolean().optional() }).strict(), execute: async (_ctx, input) => {
+      if (input.clear) return checkpoint(t => { let next = t; for (const id of input.clipIds) next = patchClip(next, find(next, id).id, { audioReactive: undefined }); return next; });
+      if (!input.musicClipId || !input.targets) throw new Error('Give musicClipId and targets, or clear:true.');
+      for (const target of input.targets) { const range = reactiveAmountRange(target.property); if (!range) throw new Error(`${target.property} cannot react to audio. Use ${CSS_REACTIVE_TARGETS.join(', ')} or an effect control such as glitch.intensity.`); if (target.amount < range[0] || target.amount > range[1]) throw new Error(`${target.property} amount must be between ${range[0]} and ${range[1]}.`); }
+      await editSession.wait();
+      let music = find(editSession.timeline, input.musicClipId);
+      // A video's sound lives on its linked audio clip.
+      if (music.kind === 'video' && music.linkedClipId) music = find(editSession.timeline, music.linkedClipId);
+      if (music.kind !== 'audio' || !music.assetId) throw new Error('Choose the song’s audio clip as musicClipId.');
+      const mode = input.mode ?? 'beats', decay = input.decay ?? (mode === 'energy' ? .12 : .22);
+      let asset = await loadAsset(music.assetId);
+      let sampleAt: ((time: number) => number | undefined) | undefined, hits: { time: number; strength: number }[] = [];
+      const musicEnd = music.start + music.duration;
+      if (mode === 'energy') {
+        if (!asset.waveform) throw new Error('This audio’s waveform is still being measured. Try again shortly.');
+        const peaks = decodeLevels(asset.waveform.peaks), rate = asset.waveform.samplesPerSecond;
+        sampleAt = time => { if (time < music.start || time >= musicEnd) return undefined; const index = Math.floor(sourceTimeAt(music, time) * rate); return index >= 0 && index < peaks.length ? peaks[index] / 255 : undefined; };
+      } else {
+        const kind = mode === 'downbeats' ? 'downbeats' : mode === 'accents' ? 'accents' : 'beats';
+        if (asset.analysis?.beats?.engine !== BEAT_ANALYSIS_ENGINE || asset.analysis.beats[kind] === undefined) asset = await analyze(asset._id, 'beats');
+        const map = asset.analysis?.beats;
+        const raw = kind === 'accents' ? map?.accents ?? [] : (kind === 'downbeats' ? map?.downbeats ?? [] : map?.beats ?? []).map(time => ({ time, strength: kind === 'beats' && map?.downbeats?.some(down => Math.abs(down - time) < .03) ? 1 : kind === 'beats' ? .75 : 1 }));
+        hits = raw.map(hit => ({ time: timelineTimeAtSource(music, hit.time), strength: Math.min(1, Math.max(.2, hit.strength)) })).filter(hit => hit.time >= music.start - 1e-6 && hit.time < musicEnd);
+        if (!hits.length) throw new Error(`No ${kind} were detected in this song's clip.`);
+      }
+      const reacted: { clipId: string; peaks: number }[] = [];
+      const saved = await checkpoint(t => {
+        let next = t;
+        for (const id of input.clipIds) {
+          const clip = find(next, id), start = clip.start, end = clip.start + clip.duration;
+          if (end - start > MAX_REACTIVE_SAMPLES / REACTIVE_RATE) throw new Error(`Clip ${id} is longer than ${MAX_REACTIVE_SAMPLES / REACTIVE_RATE / 60} minutes. Split it first.`);
+          const values = sampleAt ? energyLevels(sampleAt, start, end, input.sensitivity ?? .6, decay) : pulseLevels(hits, start, end, decay);
+          reacted.push({ clipId: id, peaks: hits.filter(hit => hit.time >= start && hit.time < end).length });
+          next = patchClip(next, clip.id, { audioReactive: { rate: REACTIVE_RATE, start, levels: encodeLevels(values), targets: input.targets! } });
+        }
+        return next;
+      });
+      return { ...saved, mode, reacted: mode === 'energy' ? reacted.map(item => item.clipId) : reacted };
     } }),
     addMarker:createTool({description:"Add an explicitly requested ordinary timeline cue at user-provided seconds, snapped to project frames, with an optional user-provided label. Preserve clips and existing cues; an occupied frame adds no duplicate. This does not analyze audio or claim a measured beat/hit. For measured musical markers use markMusicBeats instead.",inputSchema:z.object({time:z.number().min(0),label:z.string().min(1).max(120).optional()}),execute:async(_ctx,{time,label})=>checkpoint(t=>addTimelineMarker(t,time,crypto.randomUUID(),label??null))}),
     moveMarker:createTool({description:"Move one existing ordinary or measured cue by exact markerId from inspectTimeline to explicitly requested timeline seconds, snapped to frames. Preserve its ID/label and every other cue/clip. This manual move does not analyze music or assert a new measured beat.",inputSchema:z.object({markerId:z.string().min(1).max(100),time:z.number().min(0)}),execute:async(_ctx,{markerId,time})=>checkpoint(t=>{if(!t.markers?.some(marker=>marker.id===markerId))throw new Error('Choose an existing timeline marker ID.');return moveTimelineMarker(t,markerId,time)})}),

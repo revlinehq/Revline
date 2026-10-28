@@ -12,9 +12,11 @@ import { effectsAt, type EffectKeyframeLane } from './effect-keyframes';
 export { installAdjustmentLayers } from './adjustment-layers';
 export { installSolidColorLayers } from './solid-color-layers';
 export { installClipMasks } from './masks';
+export { installAudioReactive } from './audio-reactive';
+import { decodeLevels, hasReactiveEffects, reactiveEffectsAt, type AudioReactive } from './audio-reactive';
 export { installVisualFades } from './visual-fades-runtime';
 
-export type VisualEffectInput = VisualEffects & { cameraGlideBlur?:CameraGlideBlurSource; effectKeyframes?:EffectKeyframeLane[]; motionOffset?:number };
+export type VisualEffectInput = VisualEffects & { cameraGlideBlur?:CameraGlideBlurSource; effectKeyframes?:EffectKeyframeLane[]; motionOffset?:number; audioReactive?:AudioReactive };
 export type VisualEffectSource = VisualEffectInput & { id: string };
 export type VisualEffectsController = { set(id: string, effects: VisualEffectInput): void; setTimedEffects(clips:Clip[]):void; redraw(): void; dispose(): void };
 
@@ -25,7 +27,7 @@ export function installVisualEffects(sources: VisualEffectSource[], fps: number,
   const host = window as unknown as RuntimeWindow;
   const preview = !!document.querySelector('meta[name="hyperframes-studio-preview"]');
   const clock = host.__timelines.revline.__hfReal ?? host.__timelines.revline;
-  type Entry = { source: HTMLVideoElement | HTMLImageElement; effects: VisualEffectInput; nativeCorners?: { node:HTMLElement; originalRadius:string }; neonColor?: number; canvas?: HTMLCanvasElement; gl?: WebGLRenderingContext; program?: WebGLProgram; gradeOnly?: boolean; texture?: WebGLTexture; buffer?: WebGLBuffer; uniforms?: Record<string, WebGLUniformLocation | null>; passTextures?: WebGLTexture[]; framebuffer?: WebGLFramebuffer; passWidth?: number; passHeight?: number; nominalWidth?: number; nominalHeight?: number; detailWidth?: number; detailHeight?: number; lastPassKey?: string; lastPassCount?: number; lastFrame?: number; lastSource?: string | number; lastTransform?: string; dirty: boolean; injected?: HTMLImageElement; failed?: boolean; videoCallback?: number; decodedFrame?: number; decodedListener?: () => void; uploadCanvas?: HTMLCanvasElement };
+  type Entry = { source: HTMLVideoElement | HTMLImageElement; effects: VisualEffectInput; levels?: Uint8Array; nativeCorners?: { node:HTMLElement; originalRadius:string }; neonColor?: number; canvas?: HTMLCanvasElement; gl?: WebGLRenderingContext; program?: WebGLProgram; gradeOnly?: boolean; texture?: WebGLTexture; buffer?: WebGLBuffer; uniforms?: Record<string, WebGLUniformLocation | null>; passTextures?: WebGLTexture[]; framebuffer?: WebGLFramebuffer; passWidth?: number; passHeight?: number; nominalWidth?: number; nominalHeight?: number; detailWidth?: number; detailHeight?: number; lastPassKey?: string; lastPassCount?: number; lastFrame?: number; lastSource?: string | number; lastTransform?: string; dirty: boolean; injected?: HTMLImageElement; failed?: boolean; videoCallback?: number; decodedFrame?: number; decodedListener?: () => void; uploadCanvas?: HTMLCanvasElement };
   type Resources = Pick<Entry, 'canvas' | 'gl' | 'program' | 'texture' | 'buffer' | 'uniforms' | 'passTextures' | 'framebuffer' | 'passWidth' | 'passHeight'>;
   const entries = new Map<string, Entry>();
   const available: Resources[] = [];
@@ -279,7 +281,8 @@ void main(){
     const time = clock.time(), start = Number(entry.source.dataset.start), end = start + Number(entry.source.dataset.duration);
     // Keyframed controls are evaluated in the clip's motion path time, the same clock as its movement.
     const animated=entry.effects.effectKeyframes?.length?{...entry.effects,...effectsAt(entry.effects,entry.effects.effectKeyframes,time-start+(entry.effects.motionOffset??0))}:entry.effects;
-    const passes=effectPasses(animated,time);
+    const reactive=entry.effects.audioReactive,levels=reactive?(entry.levels??=decodeLevels(reactive.levels)):undefined;
+    const passes=effectPasses(reactiveEffectsAt(animated,reactive,levels,time),time);
     if(nativeCorners(entry,passes))return;
     if (!passes.length || !entry.source.hasAttribute('data-revline-transition-visible') && (time < start - 1e-6 || time >= end - 1e-6)) { if (entry.canvas) release(entry); return; }
     const renderId = entry.source.getAttribute('data-hf-render-id') || entry.source.id;
@@ -303,7 +306,7 @@ void main(){
     // CSS motion can run between decoded frames. Wait for the next video
     // frame before redrawing its bitmap; paused transforms still redraw now.
     const playingVideo = source instanceof HTMLVideoElement && !source.paused && !!source.requestVideoFrameCallback;
-    const stableFrame=!(!!entry.effects.effectKeyframes?.length||entry.effects.glitch?.enabled||entry.effects.filmOverlay?.enabled||entry.effects.vhs?.enabled&&entry.effects.vhs.speed>0||entry.effects.lightLeak?.enabled&&entry.effects.lightLeak.speed>0||entry.effects.turbulentDisplace?.enabled&&entry.effects.turbulentDisplace.speed>0||entry.effects.lightSweep?.enabled&&entry.effects.lightSweep.speed>0)||playingVideo||entry.lastFrame===frame;
+    const stableFrame=!(!!entry.effects.effectKeyframes?.length||hasReactiveEffects(entry.effects.audioReactive)||entry.effects.glitch?.enabled||entry.effects.filmOverlay?.enabled||entry.effects.vhs?.enabled&&entry.effects.vhs.speed>0||entry.effects.lightLeak?.enabled&&entry.effects.lightLeak.speed>0||entry.effects.turbulentDisplace?.enabled&&entry.effects.turbulentDisplace.speed>0||entry.effects.lightSweep?.enabled&&entry.effects.lightSweep.speed>0)||playingVideo||entry.lastFrame===frame;
     const stablePasses=playingVideo?entry.lastPassCount===passes.length:entry.lastPassKey===passKey;
     if (!force && !entry.dirty && stableFrame && stablePasses && entry.lastSource === sourceKey && (playingVideo || entry.lastTransform === transformKey)) return;
     try {
@@ -422,11 +425,11 @@ void main(){
   function set(id: string, effects: VisualEffectInput) {
     baseEffects.set(id,effects);
     const previous = entries.get(id);
-    if (!enabled(effects)&&!effects.effectKeyframes?.length&&!(effects.cameraGlideBlur?.amount&&effects.cameraGlideBlur.amount>0)&&!timedEffects.some(clip=>clip.zoomBlur?.enabled&&clip.zoomBlur.amount>0)) { remove(id); return; }
+    if (!enabled(effects)&&!effects.effectKeyframes?.length&&!hasReactiveEffects(effects.audioReactive)&&!(effects.cameraGlideBlur?.amount&&effects.cameraGlideBlur.amount>0)&&!timedEffects.some(clip=>clip.zoomBlur?.enabled&&clip.zoomBlur.amount>0)) { remove(id); return; }
     const source = document.getElementById(id);
     if (!(source instanceof HTMLVideoElement || source instanceof HTMLImageElement)) return;
     const entry = previous ?? { source, effects, dirty: true };
-    entry.effects = effects; entry.neonColor = effects.neonEdges ? Number.parseInt(effects.neonEdges.color.slice(1),16) : defaultNeonColor; entry.dirty = true; entry.failed = false; entries.set(id, entry);
+    entry.effects = effects; entry.levels = undefined; entry.neonColor = effects.neonEdges ? Number.parseInt(effects.neonEdges.color.slice(1),16) : defaultNeonColor; entry.dirty = true; entry.failed = false; entries.set(id, entry);
     if (!previous) {
       decoded(entry);
       if(source instanceof HTMLImageElement)source.addEventListener('load',()=>{if(!disposed&&entries.get(id)===entry){entry.dirty=true;draw(entry,true);}},{once:true});

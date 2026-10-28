@@ -47,6 +47,7 @@ export const clipValidator = v.object({
   motion: v.optional(v.array(motionKeyframeValidator)), motionOffset: v.optional(v.number()),
   motionBlur: v.optional(v.number()),
   mask: v.optional(v.object({ shape: v.union(v.literal('rectangle'), v.literal('ellipse'), v.literal('polygon'), v.literal('text')), invert: v.optional(v.boolean()), radius: v.optional(v.number()), points: v.optional(v.array(v.array(v.number()))), text: v.optional(v.string()), keys: v.array(v.object({ time: v.number(), x: v.number(), y: v.number(), width: v.number(), height: v.number(), rotation: v.number(), feather: v.number() })) })),
+  audioReactive: v.optional(v.object({ rate: v.number(), start: v.number(), levels: v.string(), targets: v.array(v.object({ property: v.string(), amount: v.number() })) })),
   speedRamp: v.optional(v.array(v.object({ t: v.number(), v: v.number() }))),
   effectKeyframes: v.optional(v.array(v.object({ control: v.string(), keys: v.array(v.object({ time: v.number(), value: v.number() })) }))),
   smoothZoom: v.optional(smoothZoomValidator), cameraMotion:v.optional(cameraMotionValidator),

@@ -32,7 +32,7 @@ export function insertFreezeFrame(input: Timeline, clipId: string, at: number, d
   if (mode === 'insert') {
     if (at > clip.start + frame / 2 && at < end - frame / 2) timeline = splitClip(timeline, clipId, at, newId());
     // Ripple: everything starting at or after the freeze moves later, keeping sync across layers.
-    const moved = timeline.clips.map(item => item.start >= at - 1e-6 ? { ...item, start: item.start + duration } : item);
+    const moved = timeline.clips.map(item => item.start >= at - 1e-6 ? { ...item, start: item.start + duration, ...(item.audioReactive ? { audioReactive: { ...item.audioReactive, start: item.audioReactive.start + duration } } : {}) } : item);
     const markers = timeline.markers?.map(marker => marker.time >= at - 1e-6 ? { ...marker, time: marker.time + duration } : marker);
     return normalizeTimeline({ ...timeline, ...(markers ? { markers } : {}), clips: [...moved, stillOf(clip, imageAssetId, stillId, at, duration)] });
   }
