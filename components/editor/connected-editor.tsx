@@ -64,8 +64,9 @@ function ProjectEditor({project}: {project:Doc<'projects'>}) {
   const preparePlayback=useMutation(api.playback.prepare);
   const handleRefreshMedia=useCallback((assetIds:string[])=>refreshMedia({projectId,assetIds:assetIds as Id<'assets'>[]}),[refreshMedia,projectId]);
   const mediaTasks=useQuery(api.mediaTasks.list,{projectId});
-  // The app the user connected over MCP most recently, for the timeline's connected pill.
-  const mcpConnection=useQuery(api.mcpAuth.connector,{})?.connections.reduce<{label:string;at:number}|null>((latest,item)=>{const at=item.lastUsedAt??item.createdAt;return !latest||at>latest.at?{label:item.label,at}:latest;},null)?.label??null;
+  // The app the user connected over MCP most recently (null: none yet, undefined: loading), for the timeline's MCP pill.
+  const connector=useQuery(api.mcpAuth.connector,{});
+  const mcpConnection=connector&&(connector.connections.reduce<{label:string;at:number}|null>((latest,item)=>{const at=item.lastUsedAt??item.createdAt;return !latest||at>latest.at?{label:item.label,at}:latest;},null)?.label??null);
   const jobs=useQuery(api.renders.list,{projectId,limit:10});
   const timelineTabs=useQuery(api.timelineTabs.list,{projectId});
   // An MCP agent stays "working" across its whole request; the server sets how long it counts as active.

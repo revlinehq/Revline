@@ -71,7 +71,7 @@ export type EditorShellProps = {
   canResumeEdit?:boolean;
   assistantEditSnapshot?:AssistantEditSnapshot;
   assistantPanel?: ReactNode;
-  onExport: (settings: ExportSettings) => Promise<string | void>; onDownloadExport?: (jobId:string)=>Promise<void>; onCancelExport?: (jobId:string)=>Promise<void>; exportState: ExportState; exports?: NonNullable<ExportState>[]; timelineTabs?: TimelineTab[]; timelineTabActions?: TimelineTabActions; /** The app connected over MCP (its name), or null when none is. */ mcpConnection?: string | null; switchingTimeline?: boolean; demo?: boolean; ultra?: boolean; embedded?: boolean;
+  onExport: (settings: ExportSettings) => Promise<string | void>; onDownloadExport?: (jobId:string)=>Promise<void>; onCancelExport?: (jobId:string)=>Promise<void>; exportState: ExportState; exports?: NonNullable<ExportState>[]; timelineTabs?: TimelineTab[]; timelineTabActions?: TimelineTabActions; /** The app connected over MCP (its name), null when none is, undefined while loading. */ mcpConnection?: string | null; switchingTimeline?: boolean; demo?: boolean; ultra?: boolean; embedded?: boolean;
   analysisBusy?: string | null; analysisSource?: string | null; analysisProgress?: number | null; analysisStartedAt?:number|null; assistantBudgetUsed?:number; preparationActivity?:string; onLoadMore?: () => void; canLoadMore?: boolean;
   projectId?: string; workspaceOnly?: boolean; onImportVideo?: (url:string)=>Promise<void>; videoImports?: VideoImportState[];
   onRefreshMedia?:RefreshPlaybackMedia;

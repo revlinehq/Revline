@@ -58,7 +58,7 @@ type Props={
   workingLabel?:string;
   /** The MCP app editing (null: Revline's own AI), shown on the tab it edits. */
   workingAgent?:string|null;
-  /** The app connected over MCP, or null when none is. */
+  /** The app connected over MCP, null when none is, undefined while loading. */
   mcpConnection?:string|null;
   liveEdit?:LiveEditChange & {sequence:number;runId:string};
   onExportClip?:(clipId:string)=>void;
