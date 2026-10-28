@@ -30,7 +30,6 @@ import './assistant-panel.css';
 import type { SourceEditSuggestion } from '@/lib/editor/types';
 import { processingDetail } from './processing-status';
 import { AssistantActivity } from './assistant-activity';
-import { AssistantTurnCostsProvider, AssistantTurnCostBadge } from './assistant-turn-costs';
 import { AssistantHistoryExpansion } from './assistant-history-pagination';
 export type { ChatTool, ChatMessage } from './assistant-results';
 
@@ -73,17 +72,16 @@ export function AssistantPanel(props:PanelProps) {
   // optimistic message, composer DOM, or scroll position while history loads.
   return <>
     {props.conversation&&<ConnectedConversation conversation={props.conversation} onUpdate={setConversationState}/>}
-    <AssistantTurnCostsProvider conversation={props.conversation} messages={visibleMessages} demo={props.demo}><MessageScrollerProvider autoScroll><AssistantPanelBody {...props} queued={current?.queued??props.queued} queuePaused={current?.queuePaused??props.queuePaused} onRemoveQueued={current?.onRemoveQueued??props.onRemoveQueued} onResumeQueue={current?.onResumeQueue??props.onResumeQueue} conversationStarted={!!props.conversation} messages={visibleMessages} canLoadMore={props.conversation?current?.canLoadMore:props.canLoadMore} onLoadMore={props.conversation?current?.onLoadMore:props.onLoadMore}/></MessageScrollerProvider></AssistantTurnCostsProvider>
+    <MessageScrollerProvider autoScroll><AssistantPanelBody {...props} queued={current?.queued??props.queued} queuePaused={current?.queuePaused??props.queuePaused} onRemoveQueued={current?.onRemoveQueued??props.onRemoveQueued} onResumeQueue={current?.onResumeQueue??props.onResumeQueue} conversationStarted={!!props.conversation} messages={visibleMessages} canLoadMore={props.conversation?current?.canLoadMore:props.canLoadMore} onLoadMore={props.conversation?current?.onLoadMore:props.onLoadMore}/></MessageScrollerProvider>
   </>;
 }
 
 type PendingReply = { id: string; text: string; previousUserId?: string; previousError?: string | null };
 
-function AssistantReplyHeader({ loading, active=loading, label, detail, startedAt, promptMessageId }: { promptMessageId?:string; loading: boolean; active?:boolean; label: string; detail?: string; startedAt?:number|null }) {
-  if (!active && !promptMessageId) return null;
-  return <div className={`assistant-reply-header ${active ? 'is-processing' : 'chat-author'}`}>
-    {active && <AssistantActivity label={loading?label:'Working'} detail={loading?detail:undefined} startedAt={startedAt}/>}
-    {promptMessageId&&<AssistantTurnCostBadge promptMessageId={promptMessageId}/>}
+function AssistantReplyHeader({ loading, active=loading, label, detail, startedAt }: { loading: boolean; active?:boolean; label: string; detail?: string; startedAt?:number|null }) {
+  if (!active) return null;
+  return <div className="assistant-reply-header is-processing">
+    <AssistantActivity label={loading?label:'Working'} detail={loading?detail:undefined} startedAt={startedAt}/>
   </div>;
 }
 
@@ -239,7 +237,7 @@ function AssistantPanelBody({ messages, running, editing:editingTimeline=running
                 <AssistantActivity label={card.title} detail={card.detail} state={card.state==='running'?'working':card.state==='error'?'error':'ready'}/>
                 {card.key==='turn-failure' && group.id===retryTurnId && requestMessage?.text.trim() && !waiting && !demo && onRetry && <Button type="button" variant="outline" size="sm" disabled={composerBusy || !configured || sending || !!pendingReply} onClick={() => void sendRequest(canResumeEdit?'Finish only the remaining work or checks from my unfinished request. Keep the edits already completed.':requestMessage.text, true)}><RotateCcw aria-hidden="true"/>Retry unfinished steps</Button>}
               </div>)}</div>}
-              <AssistantReplyHeader promptMessageId={requestMessage?.sourceId??requestMessage?.id} loading={loading} active={editing} label={stopState==='stopping'?'Stopping…':'Working'} detail={editing&&budgetUsed!==undefined&&budgetUsed>=.7?`Near this request's limit · ${Math.round(budgetUsed*100)}% used`:undefined} startedAt={activityStartedAt}/>
+              <AssistantReplyHeader loading={loading} active={editing} label={stopState==='stopping'?'Stopping…':'Working'} detail={editing&&budgetUsed!==undefined&&budgetUsed>=.7?`Near this request's limit · ${Math.round(budgetUsed*100)}% used`:undefined} startedAt={activityStartedAt}/>
             </MessageContent></Message>
           </MessageScrollerItem>}
         </Fragment>;
