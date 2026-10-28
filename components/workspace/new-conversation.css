@@ -5,7 +5,7 @@
 .new-conversation-intro h1{margin:0;font-size:40px;font-weight:500;line-height:1.25;letter-spacing:0;color:#151515}
 .new-conversation-intro p{margin:0;font-size:15px;font-weight:400;line-height:1.6;color:#777}
 .new-conversation-entry{position:relative;min-width:0}
-/* Video Editing / Motion Design switch: the start card's surface with a brand pill that slides to the chosen side. */
+/* Video Edit / Product Edit switch: the start card's surface with a brand pill that slides to the chosen side. */
 .new-conversation-modes{position:relative;display:inline-grid;grid-template-columns:1fr 1fr;padding:3px;border-radius:var(--revline-button-radius);background:#f7f8fb}
 .new-conversation-modes::before{content:"";position:absolute;top:3px;bottom:3px;left:3px;width:calc(50% - 3px);border-radius:8px;background:var(--revline-primary-background);transition:translate 220ms cubic-bezier(.2,0,0,1)}
 .new-conversation-modes[data-mode=motion]::before{translate:100% 0}
@@ -13,7 +13,7 @@
 .new-conversation-modes button[aria-selected=true]{color:#fff}
 @media(hover:hover) and (pointer:fine){.new-conversation-modes button[aria-selected=false]:hover{color:#394557}}
 .new-conversation-modes button:focus-visible{outline:2px solid var(--revline-accent);outline-offset:2px;border-radius:8px}
-/* Motion design composer: two floors (the brief, then the actions) at the footage card's height, so switching never jumps. */
+/* Product edit composer: two floors (the brief, then the actions) at the footage card's height, so switching never jumps. */
 .new-conversation-motion.edit-composer{min-height:168px;padding:14px 14px 12px;border-radius:12px;gap:8px}
 .new-conversation-motion textarea{flex:1 0 auto;font-size:15px}
 .new-conversation-motion .edit-composer-actions{margin-top:auto}

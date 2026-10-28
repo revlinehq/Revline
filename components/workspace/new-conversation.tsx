@@ -32,8 +32,8 @@ const cloudKey = 'revline:next-cloud-footage';
 const motionKey = 'revline:next-motion-brief';
 type StartMode = 'editing' | 'motion';
 const START_MODES: { id: StartMode; label: string; intro: string }[] = [
-  { id: 'editing', label: 'Video Editing', intro: 'Start your edit. Add your clips, then tell Revline what to make.' },
-  { id: 'motion', label: 'Motion Design', intro: 'No footage needed. Describe the video and Revline designs and animates it from scratch.' },
+  { id: 'editing', label: 'Video Edit', intro: 'Start your edit. Add your clips, then tell Revline what to make.' },
+  { id: 'motion', label: 'Product Edit', intro: 'No footage needed. Describe your product video and Revline designs and animates it from scratch.' },
 ];
 type Processing = Omit<ProjectImportProgress, 'phase'> & { phase: FootageProcessingPhase };
 
@@ -240,7 +240,7 @@ export function NewConversation() {
     try { sessionStorage.removeItem(briefKey); sessionStorage.removeItem(cloudKey); } catch { /* The current selection is cleared in memory. */ }
     void stashFiles([]);
   }
-  /** Motion design starts from a prompt alone: an empty landscape project whose editor sends the brief on open. */
+  /** Product edits start from a prompt alone: an empty landscape project whose editor sends the brief on open. */
   async function startMotionDesign() {
     const prompt = motionBrief.trim();
     if (!prompt || submitting.current || !isLoaded || authLoading) return;
@@ -290,7 +290,7 @@ export function NewConversation() {
         </div>
         <div className="new-conversation-entry" data-dragging={dragging || undefined} aria-busy={busy}>
           {mode === 'motion'
-            ? <EditComposer className="new-conversation-motion" value={motionBrief} onChange={setMotionBrief} onSubmit={startMotionDesign} placeholder="Describe the video you want…" disabled={!draftReady} submitLabel="Create" />
+            ? <EditComposer className="new-conversation-motion" value={motionBrief} onChange={setMotionBrief} onSubmit={startMotionDesign} placeholder="Describe your product video…" disabled={!draftReady} submitLabel="Create" />
             : <FootageStartCard onAttach={() => picker.current?.click()} disabled={!draftReady} dragging={dragging}/>}
           <input ref={picker} type="file" accept="video/*,audio/*,image/*" multiple className="sr-only" tabIndex={-1} aria-label="Choose media to upload" onChange={event => { const files = Array.from(event.target.files ?? []); event.target.value = ''; if (files.length) attach(files); }}/>
           {error && <p className="new-conversation-error" role="alert">{error}</p>}
