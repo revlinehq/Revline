@@ -5,6 +5,18 @@
 .new-conversation-intro h1{margin:0;font-size:40px;font-weight:500;line-height:1.25;letter-spacing:0;color:#151515}
 .new-conversation-intro p{margin:0;font-size:15px;font-weight:400;line-height:1.6;color:#777}
 .new-conversation-entry{position:relative;min-width:0}
+/* Video Edit / Product Edit switch: a white pill slides to the chosen side on a soft gray track. */
+.new-conversation-modes{position:relative;display:inline-grid;grid-template-columns:1fr 1fr;padding:3px;border-radius:var(--revline-button-radius);background:#f1f2f5}
+.new-conversation-modes::before{content:"";position:absolute;top:3px;bottom:3px;left:3px;width:calc(50% - 3px);border-radius:8px;background:#fff;box-shadow:0 1px 2px #0000001a,0 0 0 1px #0000000a;transition:translate 220ms cubic-bezier(.2,0,0,1)}
+.new-conversation-modes[data-mode=motion]::before{translate:100% 0}
+.new-conversation-modes button{position:relative;height:32px;padding:0 16px;border:0;background:transparent;color:#657080;font:inherit;font-size:13px;font-weight:500;white-space:nowrap;cursor:pointer;transition:color 160ms}
+.new-conversation-modes button[aria-selected=true]{color:#151515}
+@media(hover:hover) and (pointer:fine){.new-conversation-modes button[aria-selected=false]:hover{color:#394557}}
+.new-conversation-modes button:focus-visible{outline:2px solid var(--revline-accent);outline-offset:2px;border-radius:8px}
+/* Product edit composer: two floors, the brief then the actions, at its natural height. */
+.new-conversation-motion.edit-composer{padding:12px 12px 10px;border-radius:12px;gap:4px}
+.new-conversation-motion textarea{font-size:15px}
+.new-conversation-motion .composer-add{display:none}
 .footage-start-card{width:100%;height:168px;border:0;border-radius:12px;background:#f7f8fb;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;gap:8px;text-align:center;cursor:pointer;transition:background-color 120ms,box-shadow 120ms}
 .footage-start-card strong{color:#394557;font-size:14px;line-height:1.6;font-weight:500}
 .footage-start-helper{color:#657080;font-size:13px;line-height:1.6}
@@ -18,11 +30,16 @@
 .new-conversation-drop-note{position:fixed;left:50%;bottom:32px;transform:translateX(-50%);padding:12px 18px;border:1px solid var(--ws-border);border-radius:10px;background:var(--ws-bg);color:var(--ws-text);font-size:13px;pointer-events:none;box-shadow:0 4px 20px #0000000d}
 html[data-workspace-theme=dark] .new-conversation-intro h1{color:#f2f2f2}
 html[data-workspace-theme=dark] .new-conversation-intro p{color:#aaa}
+html[data-workspace-theme=dark] .new-conversation-error{color:#edaaaa}
 html[data-workspace-theme=dark] .footage-start-card{background:#1c202a}
 html[data-workspace-theme=dark] .footage-start-card strong{color:#d9dfeb}
 html[data-workspace-theme=dark] .footage-start-helper{color:#a9b2c4}
 @media(hover:hover) and (pointer:fine){html[data-workspace-theme=dark] .footage-start-card:not(:disabled):hover{background:#232936;box-shadow:inset 0 0 0 1px #394255}}
-html[data-workspace-theme=dark] .new-conversation-error{color:#edaaaa}
+html[data-workspace-theme=dark] .new-conversation-modes{background:#1c202a}
+html[data-workspace-theme=dark] .new-conversation-modes button{color:#a9b2c4}
+html[data-workspace-theme=dark] .new-conversation-modes::before{background:#2c313c;box-shadow:none}
+html[data-workspace-theme=dark] .new-conversation-modes button[aria-selected=true]{color:#f2f2f2}
+@media(hover:hover) and (pointer:fine){html[data-workspace-theme=dark] .new-conversation-modes button[aria-selected=false]:hover{color:#d9dfeb}}
 @media(max-width:600px){.new-conversation-main{width:calc(100% - 32px);gap:28px}.new-conversation-start{margin-top:40px;gap:28px}.new-conversation-intro h1{font-size:34px}.new-conversation-intro p{font-size:14px}.new-conversation-drop-note{bottom:20px;max-width:calc(100% - 32px);white-space:nowrap}}
 @media(max-width:320px){.new-conversation-intro h1{font-size:28px}.footage-start-card{height:auto;min-height:168px}}
-@media(prefers-reduced-motion:reduce){.footage-start-card,.footage-start-icon{transition:none}}
+@media(prefers-reduced-motion:reduce){.footage-start-card,.footage-start-icon,.new-conversation-modes button,.new-conversation-modes::before{transition:none}}
