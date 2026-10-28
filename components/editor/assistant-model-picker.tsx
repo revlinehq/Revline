@@ -3,7 +3,8 @@
 import { ChevronDown, Zap } from 'lucide-react';
 import { EDITOR_MODELS, EDITOR_REASONING_EFFORTS, type ClaudeModelChoice, type EditorReasoningEffort, type EditorSpeedMode } from '@/lib/ai/claude-model';
 import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { InputGroupButton } from '@/components/ui/input-group';
+import { InspectorSelect } from './inspector-select';
+import './assistant-model-picker.css';
 
 const descriptions: Record<typeof EDITOR_MODELS[number]['id'], string> = { 'gpt-6.1-sol': 'OpenAI · everyday editing', 'gpt-6-astra': 'OpenAI · complex editing', 'gpt-6.1-terra': 'OpenAI · fast, lower cost', 'gpt-5.4-mini': 'OpenAI · cheaper, simple edits', sonnet: 'Anthropic · everyday editing', opus: 'Anthropic · complex editing' };
 
@@ -14,15 +15,8 @@ export function AssistantModelPicker({ value, onChange, disabled, allowedModels 
   disabled: boolean;
   allowedModels: readonly ClaudeModelChoice[];
 }) {
-  const models = EDITOR_MODELS.filter(model => allowedModels.includes(model.id));
-  const selected = models.find(model => model.id === value) ?? models[0];
-  return <DropdownMenu><DropdownMenuTrigger asChild><InputGroupButton size="sm" aria-label="AI editing model" disabled={disabled}>{selected?.label}<ChevronDown /></InputGroupButton></DropdownMenuTrigger>
-    <DropdownMenuContent align="start" className="w-56" aria-label="AI editing model options">
-      <DropdownMenuRadioGroup value={value} onValueChange={next => { const model = models.find(model => model.id === next); if (model) onChange(model.id); }}>
-        {models.map(model => <DropdownMenuRadioItem key={model.id} value={model.id}><span className="flex flex-col"><span>{model.label}</span><span className="text-xs text-muted-foreground">{descriptions[model.id]}</span></span></DropdownMenuRadioItem>)}
-      </DropdownMenuRadioGroup>
-    </DropdownMenuContent>
-  </DropdownMenu>;
+  const options = EDITOR_MODELS.filter(model => allowedModels.includes(model.id)).map(model => ({ value: model.id, label: model.label, description: descriptions[model.id] }));
+  return <div className="assistant-model-picker"><InspectorSelect label="AI editing model" value={value} options={options} onChange={onChange} disabled={disabled}/></div>;
 }
 
 const effortLabels: Record<EditorReasoningEffort, string> = { low: 'Low', medium: 'Medium', high: 'High', xhigh: 'X-high', max: 'Max' };
@@ -37,15 +31,15 @@ export function AssistantReasoningPicker({ effort, speed, fastAvailable, onEffor
   disabled: boolean;
 }) {
   const fast = fastAvailable && speed === 'fast';
-  return <DropdownMenu><DropdownMenuTrigger asChild><InputGroupButton size="sm" aria-label="AI reasoning effort" aria-description={fast ? 'Fast mode on' : undefined} disabled={disabled}>{fast && <Zap className="fill-current text-[#f5b301]" aria-hidden="true"/>}{effortLabels[effort]}<ChevronDown /></InputGroupButton></DropdownMenuTrigger>
-    <DropdownMenuContent align="start" aria-label="AI reasoning effort options">
+  return <div className="assistant-model-picker assistant-reasoning-picker"><DropdownMenu><DropdownMenuTrigger asChild><button type="button" className="inspector-select-trigger" aria-label="AI reasoning effort" aria-description={fast ? 'Fast mode on' : undefined} disabled={disabled}>{fast && <Zap size={12} className="assistant-fast-icon" aria-hidden="true"/>}<span className="inspector-select-value">{effortLabels[effort]}</span><ChevronDown size={13}/></button></DropdownMenuTrigger>
+    <DropdownMenuContent className="workspace-menu inspector-select-menu" aria-label="AI reasoning effort options" sideOffset={5}>
       <DropdownMenuRadioGroup value={effort} onValueChange={next => { const value = EDITOR_REASONING_EFFORTS.find(option => option === next); if (value) onEffortChange(value); }}>
-        {EDITOR_REASONING_EFFORTS.map(value => <DropdownMenuRadioItem key={value} value={value}>{effortLabels[value]}</DropdownMenuRadioItem>)}
+        {EDITOR_REASONING_EFFORTS.map(value => <DropdownMenuRadioItem key={value} value={value} data-value={value} className="workspace-menu-item inspector-select-option"><span className="inspector-select-option-copy"><span className="inspector-select-value">{effortLabels[value]}</span></span></DropdownMenuRadioItem>)}
       </DropdownMenuRadioGroup>
       {fastAvailable && <>
-      <DropdownMenuSeparator />
+      <DropdownMenuSeparator className="assistant-reasoning-separator"/>
       {/* Toggling speed keeps the menu open so the new state is visible. */}
-      <DropdownMenuCheckboxItem checked={fast} onCheckedChange={checked => onSpeedChange(checked ? 'fast' : 'standard')} onSelect={event => event.preventDefault()}><Zap className={fast ? 'fill-current text-[#f5b301]' : undefined} aria-hidden="true"/><span className="flex flex-col"><span>Fast mode</span><span className="text-xs text-muted-foreground">Faster replies · 2× token cost</span></span></DropdownMenuCheckboxItem></>}
+      <DropdownMenuCheckboxItem checked={fast} onCheckedChange={checked => onSpeedChange(checked ? 'fast' : 'standard')} onSelect={event => event.preventDefault()} data-value="fast" className="workspace-menu-item inspector-select-option assistant-fast-option"><Zap size={14} className="assistant-fast-icon" aria-hidden="true"/><span className="inspector-select-option-copy"><span className="inspector-select-value">Fast mode</span><small>Faster replies · 2× token cost</small></span></DropdownMenuCheckboxItem></>}
     </DropdownMenuContent>
-  </DropdownMenu>;
+  </DropdownMenu></div>;
 }
