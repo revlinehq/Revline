@@ -7,8 +7,8 @@ import { Button } from '@/components/ui/button';
 export function CanvasSettings({ onShowChat, onHideChat, children }: { onShowChat?: () => void; onHideChat?: () => void; children?: React.ReactNode }) {
   if (!onShowChat && !onHideChat && !children) return null;
   return <div className="canvas-toolbar">
-    {onShowChat && <Button variant="ghost" className="canvas-chat-toggle" onClick={onShowChat}><PanelLeft size={15} strokeWidth={1.5}/>Show chat</Button>}
-    {onHideChat && <Button variant="ghost" className="canvas-chat-toggle" onClick={onHideChat}><PanelLeftClose size={15} strokeWidth={1.5}/>Hide chat</Button>}
+    {onShowChat && <Button variant="ghost" size="icon-sm" className="canvas-chat-toggle" aria-label="Show chat" onClick={onShowChat}><PanelLeft size={15} strokeWidth={1.5}/></Button>}
+    {onHideChat && <Button variant="ghost" size="icon-sm" className="canvas-chat-toggle" aria-label="Hide chat" onClick={onHideChat}><PanelLeftClose size={15} strokeWidth={1.5}/></Button>}
     {children}
   </div>;
 }
