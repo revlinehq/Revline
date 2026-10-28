@@ -36,11 +36,14 @@ const kinds: Kind[] = [
   },
 ];
 const AUTO_ADVANCE_MS = 6000;
+// Scroll distance each segment holds the pinned section for, in viewport heights.
+const SCROLL_PER_SEGMENT = .7;
 
 export function LandingMotion() {
   const [active, setActive] = useState(0);
   const [visible, setVisible] = useState(false);
-  const section = useRef<HTMLDivElement>(null);
+  const track = useRef<HTMLElement>(null);
+  const pin = useRef<HTMLDivElement>(null);
   const tabs = useRef<(HTMLButtonElement | null)[]>([]);
   const [indicator, setIndicator] = useState<{ left: number; width: number } | null>(null);
 
@@ -52,9 +55,31 @@ export function LandingMotion() {
     return () => removeEventListener('resize', measure);
   }, [active]);
 
+  // The section pins to the viewport while its tall track scrolls past; scroll position picks the segment.
+  // It only switches when the scroll-picked segment changes, so clicks and the timer still work in between.
+  useEffect(() => {
+    const node = track.current;
+    if (!node) return;
+    let frame = 0;
+    let picked = -1;
+    const update = () => {
+      frame = 0;
+      const box = node.getBoundingClientRect();
+      const range = box.height - innerHeight;
+      const progress = range > 0 ? Math.min(1, Math.max(0, -box.top / range)) : 0;
+      const index = Math.min(kinds.length - 1, Math.floor(progress * kinds.length));
+      if (index !== picked) { picked = index; setActive(index); }
+    };
+    const schedule = () => { if (!frame) frame = requestAnimationFrame(update); };
+    update();
+    addEventListener('scroll', schedule, { passive: true });
+    addEventListener('resize', schedule);
+    return () => { removeEventListener('scroll', schedule); removeEventListener('resize', schedule); cancelAnimationFrame(frame); };
+  }, []);
+
   // Advance only while the section is on screen, so visitors arrive at the first segment.
   useEffect(() => {
-    const node = section.current;
+    const node = pin.current;
     if (!node) return;
     const observer = new IntersectionObserver(([entry]) => setVisible(entry.isIntersecting), { threshold: .35 });
     observer.observe(node);
@@ -69,35 +94,37 @@ export function LandingMotion() {
   }, [active, visible]);
 
   const kind = kinds[active];
-  return <LandingSection id="motion" className="landing-motion" headingId="landing-motion-heading" data-nav-tone="dark">
-    <header className="landing-motion-heading">
-      <h2 id="landing-motion-heading">Motion that keeps them watching.</h2>
-      <p>Launch videos, explainers and motion that pops in as you talk, all edited in Revline.</p>
-    </header>
-    <div ref={section} className="landing-motion-switcher">
-      <div className="landing-segments" role="tablist" aria-label="Kinds of motion">
-        {indicator && <span className="landing-segments-pill" style={{ left: indicator.left, width: indicator.width }} aria-hidden="true" />}
-        {kinds.map((item, index) => <button key={item.id} ref={node => { tabs.current[index] = node; }} type="button" role="tab" id={`landing-motion-tab-${item.id}`} aria-selected={index === active} aria-controls="landing-motion-panel" tabIndex={index === active ? 0 : -1}
-          onClick={() => setActive(index)}
-          onKeyDown={event => {
-            if (event.key !== 'ArrowRight' && event.key !== 'ArrowLeft') return;
-            const next = (active + (event.key === 'ArrowRight' ? 1 : kinds.length - 1)) % kinds.length;
-            setActive(next); tabs.current[next]?.focus();
-          }}>{item.label}</button>)}
-      </div>
-    </div>
-    <div id="landing-motion-panel" role="tabpanel" aria-labelledby={`landing-motion-tab-${kind.id}`} className="landing-motion-preview">
-      {kinds.map((item, index) => <div key={item.id} className="landing-motion-scene" data-active={index === active || undefined} style={{ backgroundImage: `url(/landing/${item.image}.webp)` }} aria-hidden={index !== active}>
-        <div className="landing-motion-shade">
-          <time className="landing-motion-time">00:03:12</time>
-          {item.overlay}
-          <div className="landing-motion-timeline">
-            <div>{item.beats.map(beat => <span key={beat}>{beat}</span>)}</div>
-            <div>{item.beats.map((beat, beatIndex) => <Diamond key={beat} size={12} data-pending={beatIndex === 3 || undefined} />)}</div>
-            <i><b /></i>
-          </div>
+  return <LandingSection ref={track} id="motion" className="landing-motion" headingId="landing-motion-heading" data-nav-tone="dark" style={{ height: `calc(100svh + ${(kinds.length - 1) * SCROLL_PER_SEGMENT * 100}svh)` }}>
+    <div ref={pin} className="landing-motion-pin">
+      <header className="landing-motion-heading">
+        <h2 id="landing-motion-heading">Motion that keeps them watching.</h2>
+        <p>Launch videos, explainers and motion that pops in as you talk, all edited in Revline.</p>
+      </header>
+      <div className="landing-motion-switcher">
+        <div className="landing-segments" role="tablist" aria-label="Kinds of motion">
+          {indicator && <span className="landing-segments-pill" style={{ left: indicator.left, width: indicator.width }} aria-hidden="true" />}
+          {kinds.map((item, index) => <button key={item.id} ref={node => { tabs.current[index] = node; }} type="button" role="tab" id={`landing-motion-tab-${item.id}`} aria-selected={index === active} aria-controls="landing-motion-panel" tabIndex={index === active ? 0 : -1}
+            onClick={() => setActive(index)}
+            onKeyDown={event => {
+              if (event.key !== 'ArrowRight' && event.key !== 'ArrowLeft') return;
+              const next = (active + (event.key === 'ArrowRight' ? 1 : kinds.length - 1)) % kinds.length;
+              setActive(next); tabs.current[next]?.focus();
+            }}>{item.label}</button>)}
         </div>
-      </div>)}
+      </div>
+      <div id="landing-motion-panel" role="tabpanel" aria-labelledby={`landing-motion-tab-${kind.id}`} className="landing-motion-preview">
+        {kinds.map((item, index) => <div key={item.id} className="landing-motion-scene" data-active={index === active || undefined} style={{ backgroundImage: `url(/landing/${item.image}.webp)` }} aria-hidden={index !== active}>
+          <div className="landing-motion-shade">
+            <time className="landing-motion-time">00:03:12</time>
+            {item.overlay}
+            <div className="landing-motion-timeline">
+              <div>{item.beats.map(beat => <span key={beat}>{beat}</span>)}</div>
+              <div>{item.beats.map((beat, beatIndex) => <Diamond key={beat} size={12} data-pending={beatIndex === 3 || undefined} />)}</div>
+              <i><b /></i>
+            </div>
+          </div>
+        </div>)}
+      </div>
     </div>
   </LandingSection>;
 }
