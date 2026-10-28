@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { AlertTriangle, Check, ChevronDown, CircleCheck, CircleStop, LoaderCircle, Minus } from 'lucide-react';
+import { AlertTriangle, Check, CircleCheck, CircleStop, LoaderCircle, Minus } from 'lucide-react';
+import { Trace, TraceCollapsible, TraceCollapsibleContent, TraceCollapsibleTrigger, TraceDescription, TraceIcon, TraceLine, TraceTitle } from '@/components/ui/trace';
 import { READ_ONLY_TOOLS, type ChatTool } from './assistant-results';
 
 type Row = { key: string; tool: string; args: string; state: ChatTool['state']; count: number; span?: [number, number] };
@@ -57,22 +58,27 @@ export function ToolChain({ steps: saved, active = false }: { steps: ChatTool[];
   const count = `${steps.length} ${steps.length === 1 ? 'step' : 'steps'}`;
   const label = running ? `Running ${count}` : stopped ? `Stopped after ${count}` : skill && steps.every(step => step.name === 'readSkill') ? `Read skill ${skill}` : steps.every(step => READ_ONLY_TOOLS.has(step.name)) ? 'Checked your project' : `Ran ${count}`;
   const Status = running ? LoaderCircle : failed ? AlertTriangle : stopped ? CircleStop : CircleCheck;
-  return <div className={`tool-chain${failed ? ' has-error' : ''}`} data-open={open || undefined}>
-    <button type="button" className="tool-chain-root" aria-expanded={open} onClick={() => setOpen(value => !value)}>
-      <Status size={14} className={`tool-chain-status-icon${running ? ' animate-spin' : ''}`} aria-hidden/>
-      <span className="tool-chain-label">{label}</span>
-      <ChevronDown size={13} className="tool-chain-chevron" aria-hidden/>
-    </button>
-    {open && <ol className="tool-chain-rows" aria-label="Assistant steps">
-      {rows.map((row, index) => {
-        const Mark = row.state === 'running' ? LoaderCircle : row.state === 'error' ? AlertTriangle : row.state === 'stopped' ? Minus : Check;
-        return <li key={row.key} className={`tool-chain-row state-${row.state}${index === rows.length - 1 ? ' is-last' : ''}`}>
-          <span className="tool-chain-branch" aria-hidden><span className="tool-chain-stem"/><span className="tool-chain-elbow"/></span>
-          <Mark size={12} className={`tool-chain-mark${row.state === 'running' ? ' animate-spin' : ''}`} aria-label={row.state === 'running' ? 'Running' : row.state === 'error' ? 'Failed' : row.state === 'stopped' ? 'Stopped' : 'Done'}/>
-          <span className="tool-chain-text"><span className="tool-chain-tool">{row.tool}</span>{(row.args || row.count > 1) && <span className="tool-chain-args">{row.args}{row.count > 1 ? `${row.args ? ' ' : ''}×${row.count}` : ''}</span>}</span>
-          {row.state === 'error' && <span className="tool-chain-status">Failed</span>}
-        </li>;
-      })}
-    </ol>}
-  </div>;
+  const tone = running ? 'text-muted-foreground' : failed ? 'text-[#c3853c]' : stopped ? 'text-muted-foreground' : 'text-[#3FB27F]';
+  return <TraceCollapsible className="tool-chain" open={open} onOpenChange={setOpen}>
+    <TraceCollapsibleTrigger>
+      <TraceLine status={running ? 'running' : undefined}>
+        <TraceIcon className={tone}><Status className={running ? 'animate-spin' : undefined}/></TraceIcon>
+        <TraceTitle className="font-medium text-foreground">{label}</TraceTitle>
+      </TraceLine>
+    </TraceCollapsibleTrigger>
+    <TraceCollapsibleContent>
+      <Trace aria-label="Assistant steps">
+        {rows.map(row => {
+          const Mark = row.state === 'running' ? LoaderCircle : row.state === 'error' ? AlertTriangle : row.state === 'stopped' ? Minus : Check;
+          const mark = row.state === 'error' ? 'text-[#d9a15a]' : row.state === 'done' ? 'text-[#3FB27F]' : 'text-muted-foreground';
+          return <TraceLine key={row.key} status={row.state === 'running' ? 'running' : row.state === 'error' ? 'error' : row.state === 'stopped' ? 'pending' : undefined}>
+            <TraceIcon className={mark}><Mark className={`size-3.5${row.state === 'running' ? ' animate-spin' : ''}`} aria-label={row.state === 'running' ? 'Running' : row.state === 'error' ? 'Failed' : row.state === 'stopped' ? 'Stopped' : 'Done'}/></TraceIcon>
+            <TraceTitle className={row.state === 'error' ? undefined : 'text-foreground/85'}>{row.tool}</TraceTitle>
+            {(row.args || row.count > 1) && <TraceDescription>{row.args}{row.count > 1 ? `${row.args ? ' ' : ''}×${row.count}` : ''}</TraceDescription>}
+            {row.state === 'error' && <TraceDescription>Failed</TraceDescription>}
+          </TraceLine>;
+        })}
+      </Trace>
+    </TraceCollapsibleContent>
+  </TraceCollapsible>;
 }
