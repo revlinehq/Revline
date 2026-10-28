@@ -1,4 +1,5 @@
 import { LandingStartButton } from './start-button';
+import { LandingSignInButton } from './sign-in-button';
 import { LandingReveal, LandingSection } from './ui';
 
 export function LandingHero() {
@@ -7,7 +8,7 @@ export function LandingHero() {
       <LandingReveal as="h1" id="landing-hero-heading">The AI video editor that{' '}<br />actually does the editing</LandingReveal>
       <LandingReveal as="p" order={1}>From podcasts and YouTube videos to product demos, ads, and social clips.{' '}<br />Revline cuts, captions, reframes, and polishes every video for you.</LandingReveal>
       <div className="landing-hero-actions">
-        <LandingReveal order={2}><LandingStartButton /></LandingReveal>
+        <LandingReveal order={2} className="landing-hero-buttons"><LandingStartButton /><LandingSignInButton /></LandingReveal>
       </div>
     </div>
     <div className="landing-product-frame"><img className="landing-product-window" src="/landing/product-window.webp" width={2560} height={1307} alt="The Revline editor with its conversation, preview, and timeline" fetchPriority="high" /></div>
