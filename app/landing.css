@@ -71,6 +71,10 @@ div.landing-reveal,div.landing-reveal>.landing-reveal-content{display:inline-blo
 .landing-nav-links a{font-size:14px;font-weight:500;color:var(--l-fg-2);transition:color 140ms ease}
 .landing-nav-links a:hover{color:var(--l-fg)}
 .landing-nav-right{display:flex;align-items:center;justify-self:end;gap:10px}
+/* The nav groups play the hero's reveal just before it; each group's content keeps its row layout. */
+.landing-nav .landing-reveal{--reveal-start:.05s}
+.landing-nav-brand{justify-self:start}
+.landing-nav .landing-reveal>.landing-reveal-content{display:flex;align-items:center;gap:inherit}
 /* Over dark sections the nav turns dark too (components/landing/nav-tone.tsx). */
 .landing-nav{transition:background-color 200ms ease}
 .landing-nav[data-tone=dark]{background:#0b0b0dd9}
@@ -300,7 +304,7 @@ div.landing-hero-buttons>.landing-reveal-content{display:flex;align-items:center
   .landing{--l-gutter:20px}
   .landing-nav .revline-brand{font-size:22px}
   .landing-heading h2{font-size:34px;letter-spacing:-.8px}
-  .landing-nav-links,.landing-nav-login{display:none}
+  .landing-nav .landing-nav-links,.landing-nav-login{display:none}
   .landing-nav{grid-template-columns:1fr auto}
   .landing-hero{gap:40px;padding-block:56px 64px}
   .landing-hero h1{font-size:40px;letter-spacing:-1px}
