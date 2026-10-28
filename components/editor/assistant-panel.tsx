@@ -206,7 +206,7 @@ function AssistantPanelBody({ messages, running, editing:editingTimeline=running
 
   return <div className="assistant-content">
     <MessageScroller><MessageScrollerViewport>
-      <MessageScrollerContent className="gap-6 py-0">
+      <MessageScrollerContent className="gap-6 pt-0 pb-6">
       {canLoadMore && <Button variant="ghost" size="sm" className="load-more" onClick={() => onLoadMore?.()}>Earlier messages</Button>}
       {!messages.length && !waiting && !externalAgent && !suggestions?.items.length && <Empty className="assistant-welcome h-full"><EmptyHeader><EmptyTitle>What are we making?</EmptyTitle><EmptyDescription>{hasClips ? 'A tighter cut, a stronger opening, subtitles. Tell me what you have in mind.' : 'Bring your footage, and tell me the story you want to make.'}</EmptyDescription></EmptyHeader>{!demo&&!configured&&<EmptyContent><p className="assistant-demo-note">AI editing is temporarily unavailable. Your footage, preview, and timeline are ready.</p></EmptyContent>}</Empty>}
       {groups.map(group => {
