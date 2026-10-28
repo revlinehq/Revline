@@ -167,9 +167,13 @@ div.landing-hero-buttons>.landing-reveal-content{display:flex;align-items:center
 .landing-caption-demo span{color:#ffffff66}
 
 /* Motion: dark section with a segmented switcher; each segment swaps the preview scene. */
-.landing-motion{background:#0b0b0d}
-/* The pin holds the whole section on screen while the tall track scrolls; the preview takes what height is left. */
-.landing-motion-pin{position:sticky;top:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:32px;height:100svh;padding-block:96px 40px}
+.landing-motion{--enter:1;padding-inline:0}
+/* The pin holds the whole section on screen while the tall track scrolls; the preview takes what height is left.
+   On the way in, its dark panel grows from an inset rounded card to full bleed and the content rises in with it. */
+.landing-motion-pin{position:sticky;top:0;isolation:isolate;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:32px;height:100svh;padding:96px max(var(--l-gutter),(100% - var(--l-content)) / 2) 40px}
+.landing-motion-pin::before{content:"";position:absolute;z-index:-1;inset:0 calc((1 - var(--enter)) * 56px);border-radius:calc((1 - var(--enter)) * 40px) calc((1 - var(--enter)) * 40px) 0 0;background:#0b0b0d}
+.landing-motion-pin>*{opacity:clamp(0,(var(--enter) - .3) * 2.2,1);translate:0 calc((1 - var(--enter)) * 72px)}
+@media(prefers-reduced-motion:reduce){.landing-motion{--enter:1!important}}
 .landing-motion-heading{display:flex;flex-direction:column;align-items:center;gap:16px;text-align:center}
 .landing-motion-heading h2{width:820px;max-width:100%;font:400 56px/1.05 var(--l-head);letter-spacing:-1.6px;color:#fff}
 .landing-motion-heading p{width:560px;max-width:100%;font-size:17px;line-height:1.5;color:#ffffff8c}

@@ -57,6 +57,7 @@ export function LandingMotion() {
 
   // The section pins to the viewport while its tall track scrolls past; scroll position picks the segment.
   // It only switches when the scroll-picked segment changes, so clicks and the timer still work in between.
+  // --enter (0 to 1) tracks the section rising into view, driving the dark panel's growth to full bleed.
   useEffect(() => {
     const node = track.current;
     if (!node) return;
@@ -65,6 +66,7 @@ export function LandingMotion() {
     const update = () => {
       frame = 0;
       const box = node.getBoundingClientRect();
+      node.style.setProperty('--enter', Math.min(1, Math.max(0, 1 - box.top / innerHeight)).toFixed(3));
       const range = box.height - innerHeight;
       const progress = range > 0 ? Math.min(1, Math.max(0, -box.top / range)) : 0;
       const index = Math.min(kinds.length - 1, Math.floor(progress * kinds.length));
