@@ -263,13 +263,13 @@ body:has(.conversation-editor) :is(.visual-number,.visual-control-note){color:va
 .conversation-editor .assistant-content{position:relative;gap:12px;min-width:0}
 .conversation-editor .assistant-history{overscroll-behavior:contain;scrollbar-width:none;scrollbar-gutter:auto;width:100%;margin-right:0;padding-right:0}
 .conversation-editor .assistant-history::-webkit-scrollbar{display:none}
-.conversation-editor .assistant-turns{width:100%;padding-right:0;padding-bottom:16px}
 
-.conversation-editor .assistant-turns:has(>[data-chat-follow]) .assistant-turn.is-latest-turn{min-height:0}
+
+
 .conversation-editor .manual-composer-dock{position:relative;flex-shrink:0;min-width:0;width:100%}
 
 
-.conversation-editor .assistant-history-empty .assistant-turns{margin:auto}
+
 .conversation-editor .assistant-history-empty .assistant-welcome{margin-inline:auto;width:100%}
 .conversation-editor .assistant-history-empty .assistant-demo-note{max-width:280px;margin-inline:auto;text-align:center}
 

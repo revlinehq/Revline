@@ -1,5 +1,5 @@
-.assistant-reply{padding:0 2px}
-.conversation-editor .assistant-reply .chat-assistant{padding:0}
+
+
 .assistant-source-suggestions{display:grid;gap:6px;margin:12px 2px 0}
 .assistant-source-suggestions>span{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted-foreground);font-size:11px;margin-bottom:3px}
 .assistant-source-suggestions button{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:9px 10px;text-align:left;font-size:12px;line-height:1.45;border:1px solid var(--border);border-radius:6px;background:transparent;color:var(--foreground);transition:background-color 120ms ease}
