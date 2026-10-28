@@ -18,7 +18,6 @@ import { useMediaFileDrop } from '@/components/editor/media-file-drop';
 import { rememberOpeningFootage } from '@/lib/editor/footage-opening';
 import { normalizeMediaFile } from '@/lib/editor/media-file';
 import { FootageStartCard } from './footage-start-card';
-import { EditComposer } from './edit-composer';
 import { FootageProcessingCard, type FootageProcessingFile, type FootageProcessingPhase } from './footage-processing-card';
 import { RecentProjects } from './recent-projects';
 import { WorkspaceNav } from './workspace-nav';
@@ -29,12 +28,6 @@ import './new-conversation.css';
 
 const briefKey = 'revline:next-brief';
 const cloudKey = 'revline:next-cloud-footage';
-const motionKey = 'revline:next-motion-brief';
-type StartMode = 'editing' | 'motion';
-const START_MODES: { id: StartMode; label: string; intro: string }[] = [
-  { id: 'editing', label: 'Video Edit', intro: 'Start your edit. Add your clips, then tell Revline what to make.' },
-  { id: 'motion', label: 'Product Edit', intro: 'No footage needed. Describe your product video and Revline designs and animates it from scratch.' },
-];
 type Processing = Omit<ProjectImportProgress, 'phase'> & { phase: FootageProcessingPhase };
 
 export function NewConversation() {
@@ -70,8 +63,6 @@ export function NewConversation() {
   const cloudMedia = useQuery(api.assets.selected, isAuthenticated && cloudIds.length ? { assetIds: cloudIds } : 'skip');
   const [processing, setProcessing] = useState<Processing | null>(null);
   const [error, setError] = useState('');
-  const [mode, setMode] = useState<StartMode>('editing');
-  const [motionBrief, setMotionBrief] = useState('');
   const hasMedia = files.length + cloudIds.length > 0;
   const busy = processing?.phase !== 'error' && (processing !== null || hasMedia);
 
@@ -85,7 +76,6 @@ export function NewConversation() {
   useEffect(() => {
     if (!isLoaded) return;
     try { brief.current = sessionStorage.getItem(briefKey) ?? ''; } catch { /* Uploads can still start in this page. */ }
-    try { const saved = sessionStorage.getItem(motionKey); if (saved) { setMotionBrief(saved); setMode('motion'); } } catch { /* The brief can be typed again. */ }
     const job = getProjectImportJob(userId ?? undefined);
     if (job) {
       session.current = job.session;
@@ -240,27 +230,6 @@ export function NewConversation() {
     try { sessionStorage.removeItem(briefKey); sessionStorage.removeItem(cloudKey); } catch { /* The current selection is cleared in memory. */ }
     void stashFiles([]);
   }
-  /** Product edits start from a prompt alone: an empty landscape project whose editor sends the brief on open. */
-  async function startMotionDesign() {
-    const prompt = motionBrief.trim();
-    if (!prompt || submitting.current || !isLoaded || authLoading) return;
-    if (!isSignedIn) {
-      try { sessionStorage.setItem(motionKey, prompt); } catch { /* The brief may need typing again after sign-in. */ }
-      router.push(`/sign-in?redirect_url=${encodeURIComponent(NEW_PROJECT_PATH)}`);
-      return;
-    }
-    if (!isAuthenticated) return;
-    submitting.current = true;
-    setError('');
-    try {
-      const projectId = await createProject({ title: prompt.replace(/\s+/g, ' ').slice(0, 80), aspectRatio: 'landscape' });
-      try { sessionStorage.setItem('revline:motion-brief:' + projectId, prompt); sessionStorage.removeItem(motionKey); } catch { throw new Error('Your project is ready, but this browser could not pass on your request. Open it and send the request there.'); }
-      router.push('/editor/' + projectId);
-    } catch (cause) {
-      if (mounted.current) setError(userError(cause, 'Could not start this video. Try again.'));
-      submitting.current = false;
-    }
-  }
   async function openPartialProject() {
     if (!session.current.projectId) return;
     await stashFiles(files.filter(item => !session.current.uploaded.has(item.id)).map(item => item.file));
@@ -281,17 +250,9 @@ export function NewConversation() {
     <WorkspaceNav title={NEW_WORKSPACE_LABEL} />
     {status ? <FootageProcessingCard files={processingFiles} {...status} error={error} onRetry={() => void processFootage()} onReset={reset} onOpen={session.current.projectId ? () => void openPartialProject() : undefined}/> : <main className="new-conversation-main" aria-labelledby="new-conversation-title">
       <div className="new-conversation-start">
-        <div className="new-conversation-intro">
-          <h1 id="new-conversation-title">Welcome{firstName ? `, ${firstName}` : ''}.</h1>
-          <div className="new-conversation-modes" role="tablist" aria-label="What to make" data-mode={mode}>
-            {START_MODES.map(item => <button key={item.id} type="button" role="tab" aria-selected={mode === item.id} onClick={() => { setMode(item.id); setError(''); }}>{item.label}</button>)}
-          </div>
-          <p>{START_MODES.find(item => item.id === mode)!.intro}</p>
-        </div>
+        <div className="new-conversation-intro"><h1 id="new-conversation-title">Welcome{firstName ? `, ${firstName}` : ''}.</h1><p>Start your edit. Add your clips, then tell Revline what to make.</p></div>
         <div className="new-conversation-entry" data-dragging={dragging || undefined} aria-busy={busy}>
-          {mode === 'motion'
-            ? <EditComposer className="new-conversation-motion" value={motionBrief} onChange={setMotionBrief} onSubmit={startMotionDesign} placeholder="Describe your product or feature idea…" disabled={!draftReady} />
-            : <FootageStartCard onAttach={() => picker.current?.click()} disabled={!draftReady} dragging={dragging}/>}
+          <FootageStartCard onAttach={() => picker.current?.click()} disabled={!draftReady} dragging={dragging}/>
           <input ref={picker} type="file" accept="video/*,audio/*,image/*" multiple className="sr-only" tabIndex={-1} aria-label="Choose media to upload" onChange={event => { const files = Array.from(event.target.files ?? []); event.target.value = ''; if (files.length) attach(files); }}/>
           {error && <p className="new-conversation-error" role="alert">{error}</p>}
         </div>
