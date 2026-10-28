@@ -65,7 +65,7 @@ function ExportList({exports,onCancel,onDownload}:{exports:ExportListItem[];onCa
   return <section className="export-list" aria-label="Recent exports"><h4>Recent exports</h4><ul>{exports.map(item=>{
     const active=item.status==='queued'||item.status==='rendering';
     return <li key={item.id} data-status={item.status}><div><strong>{item.label??(item.sourceClipId?'Clip':'Whole timeline')}</strong><span>{EXPORT_STATUS[item.status]}{item.status==='rendering'&&item.progress!==undefined?` · ${Math.round(item.progress)}%`:''}{item.resolution?` · ${item.resolution===2160?'4K':`${item.resolution}p`}`:''}</span></div>
-      {item.status==='completed'&&onDownload&&<Button size="sm" variant="secondary" disabled={busy===item.id} onClick={()=>run(item.id,onDownload)}>{busy===item.id?<LoaderCircle size={14} className="animate-spin"/>:<Download size={14}/>}Download</Button>}
+      {item.status==='completed'&&onDownload&&<Button size="sm" variant="outline" disabled={busy===item.id} onClick={()=>run(item.id,onDownload)}>{busy===item.id?<LoaderCircle size={14} className="animate-spin"/>:<Download size={14}/>}Download</Button>}
       {active&&onCancel&&<Button size="sm" variant="ghost" disabled={busy===item.id} onClick={()=>run(item.id,onCancel)}><Square size={12}/>Stop</Button>}
     </li>;})}</ul></section>;
 }
