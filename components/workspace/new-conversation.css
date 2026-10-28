@@ -13,10 +13,9 @@
 .new-conversation-modes button[aria-selected=true]{color:#151515}
 @media(hover:hover) and (pointer:fine){.new-conversation-modes button[aria-selected=false]:hover{color:#394557}}
 .new-conversation-modes button:focus-visible{outline:2px solid var(--revline-accent);outline-offset:2px;border-radius:8px}
-/* Product edit composer: two floors (the brief, then the actions) at the footage card's height, so switching never jumps. */
-.new-conversation-motion.edit-composer{min-height:168px;padding:14px 14px 12px;border-radius:12px;gap:8px}
-.new-conversation-motion textarea{flex:1 0 auto;font-size:15px}
-.new-conversation-motion .edit-composer-actions{margin-top:auto}
+/* Product edit composer: two floors, the brief then the actions, at its natural height. */
+.new-conversation-motion.edit-composer{padding:12px 12px 10px;border-radius:12px;gap:4px}
+.new-conversation-motion textarea{font-size:15px}
 .new-conversation-motion .composer-add{display:none}
 .footage-start-card{width:100%;height:168px;border:0;border-radius:12px;background:#1b1633 url(/workspace/footage-grain.webp) center/cover no-repeat;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;gap:8px;text-align:center;cursor:pointer;transition:filter 120ms}
 .footage-start-card strong{color:#fff;font-size:14px;line-height:1.6;font-weight:500}
