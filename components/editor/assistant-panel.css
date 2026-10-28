@@ -1,4 +1,4 @@
-.conversation-editor .assistant-content .chat-user{max-width:calc(100% - 46px);margin:0 0 22px auto;padding:10px 14px;border:0;border-radius:14px 14px 4px 14px;background:var(--secondary)}
+
 .conversation-editor .assistant-content .chat-message p{font-size:13px;line-height:1.55;letter-spacing:0}
 .conversation-editor .assistant-content .chat-author{gap:8px;font-size:12px;font-weight:600;color:var(--foreground);margin-bottom:10px}
 .assistant-content .chat-author .revline-mark{width:20px;height:20px}
@@ -29,7 +29,7 @@
   .conversation-editor .assistant-content .manual-editor-composer .composer-add{margin-left:0}
   .conversation-editor .assistant-content .composer-attachment{height:44px}
   .conversation-editor .assistant-content .composer-attachment>button{width:44px;height:44px;min-width:44px}
-  .assistant-source-suggestions button,.assistant-content :is(.composer-more,.load-more,.chat-jump-latest){min-height:44px}
+  .assistant-source-suggestions button,.assistant-content :is(.composer-more,.load-more){min-height:44px}
 }
 
 .assistant-model-controls{display:flex;flex-wrap:wrap;align-items:center;gap:2px;min-width:0;max-width:100%;flex:1 1 auto}

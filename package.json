@@ -40,6 +40,7 @@
     "@modelcontextprotocol/sdk": "^1.32.2",
     "@remotion/transitions": "4.0.535",
     "@sentry/nextjs": "^11.8.0",
+    "@shadcn/react": "^0.3.1",
     "@vinext/cloudflare": "^1.1.1",
     "ai": "^7.0.137",
     "aws4fetch": "^1.0.20",

@@ -18,7 +18,10 @@ import type { Id } from '@/convex/_generated/dataModel';
 import { chatMessageFromUI } from './assistant-results';
 import {assistantTurnPresentation,assistantErrorDetail} from './assistant-turn-presentation';
 import { ChatProse } from './chat-prose';
-import { useConversationScroll } from '@/components/workspace/use-conversation-scroll';
+import { MessageScroller, MessageScrollerButton, MessageScrollerContent, MessageScrollerItem, MessageScrollerProvider, MessageScrollerViewport, useMessageScroller } from '@/components/ui/message-scroller';
+import { Message, MessageContent } from '@/components/ui/message';
+import { Bubble, BubbleContent } from '@/components/ui/bubble';
+import { Button } from '@/components/ui/button';
 import { savedEditComparison, summarizeTools, turnPublicationReceipt, type AssistantEditSnapshot, type ChatMessage } from './assistant-results';
 import './assistant-results.css';
 import './assistant-editing.css';
@@ -40,7 +43,18 @@ const ConnectedConversation = memo(function ConnectedConversation({conversation,
   const onRemoveQueued=useCallback((id:Id<'assistantQueue'>)=>remove({projectId:conversation.projectId,id}),[remove,conversation.projectId]);
   const onResumeQueue=useCallback(()=>resume({projectId:conversation.projectId}),[resume,conversation.projectId]);
   const {results,status,loadMore}=useUIMessages(api.assistant.messages,conversation,{initialNumItems:40,stream:true});
-  const messages=useMemo(()=>results.map(chatMessageFromUI),[results]);
+  // The latest-page query slides forward as messages arrive; keep what was already shown
+  // so the list only grows at the bottom and the chat scroller never sees rows vanish above.
+  const shown=useRef<{threadId:string;messages:ChatMessage[]}>({threadId:conversation.threadId,messages:[]});
+  const messages=useMemo(()=>{
+    const latest=results.map(chatMessageFromUI);
+    const kept=shown.current.threadId===conversation.threadId?shown.current.messages:[];
+    // Rows shown before the page's first message stay above it; a page reaching further back replaces them.
+    const cut=latest.length?kept.findIndex(message=>message.id===latest[0].id):-1;
+    const next=[...(cut>0?kept.slice(0,cut):[]),...latest];
+    shown.current={threadId:conversation.threadId,messages:next};
+    return next;
+  },[results,conversation.threadId]);
   const loadMoreRef=useRef(loadMore);loadMoreRef.current=loadMore;
   const historyExpansion=useRef(new AssistantHistoryExpansion());
   useEffect(()=>{if(historyExpansion.current.next(conversation.threadId,status,messages))loadMoreRef.current(20);},[conversation.threadId,status,messages]);
@@ -58,7 +72,7 @@ export function AssistantPanel(props:PanelProps) {
   // optimistic message, composer DOM, or scroll position while history loads.
   return <>
     {props.conversation&&<ConnectedConversation conversation={props.conversation} onUpdate={setConversationState}/>}
-    <AssistantTurnCostsProvider conversation={props.conversation} messages={visibleMessages} demo={props.demo}><AssistantPanelBody {...props} queued={current?.queued??props.queued} queuePaused={current?.queuePaused??props.queuePaused} onRemoveQueued={current?.onRemoveQueued??props.onRemoveQueued} onResumeQueue={current?.onResumeQueue??props.onResumeQueue} conversationStarted={!!props.conversation} messages={visibleMessages} canLoadMore={props.conversation?current?.canLoadMore:props.canLoadMore} onLoadMore={props.conversation?current?.onLoadMore:props.onLoadMore}/></AssistantTurnCostsProvider>
+    <AssistantTurnCostsProvider conversation={props.conversation} messages={visibleMessages} demo={props.demo}><MessageScrollerProvider autoScroll><AssistantPanelBody {...props} queued={current?.queued??props.queued} queuePaused={current?.queuePaused??props.queuePaused} onRemoveQueued={current?.onRemoveQueued??props.onRemoveQueued} onResumeQueue={current?.onResumeQueue??props.onResumeQueue} conversationStarted={!!props.conversation} messages={visibleMessages} canLoadMore={props.conversation?current?.canLoadMore:props.canLoadMore} onLoadMore={props.conversation?current?.onLoadMore:props.onLoadMore}/></MessageScrollerProvider></AssistantTurnCostsProvider>
   </>;
 }
 
@@ -132,7 +146,12 @@ function AssistantPanelBody({ messages, running, editing:editingTimeline=running
   // The visible assistant-only prefix is still the active turn, not a failed historical edit.
   const turnId = optimisticRequest?.id ?? latestUser?.id ?? messages[0]?.id ?? 'imported';
   const demoNoteMessageId = demo ? messages.findLast(message => message.role === 'assistant')?.id : undefined;
-  const scroll = useConversationScroll(turnId, true, false);
+  const scroller = useMessageScroller();
+  // The sent message shows at once under a placeholder id; when the saved message replaces it,
+  // that turn keeps the placeholder's id so the chat scroller sees one continuous item.
+  const turnKeys = useRef(new Map<string, string>());
+  if (pendingReply && latestUser && latestUser.id !== pendingReply.previousUserId) turnKeys.current.set(latestUser.id, pendingReply.id);
+  const turnKey = (id: string) => turnKeys.current.get(id) ?? id;
   const legacyPublications=useRef(new Map<string,number>());
   const groups=useMemo(()=>{
     const turns:{id:string;messages:ChatMessage[]}[]=[];
@@ -172,7 +191,7 @@ function AssistantPanelBody({ messages, running, editing:editingTimeline=running
     if (!draft.trim() || sendInFlight.current || sending || (!conversationStarted&&running) || pendingReply) return;
     const key=draftKey;sendInFlight.current=true;
     if (!retry) changePrompt('');
-    setStopState(null); setSending(true); if(!running&&!queued.length)setPendingReply({ id: `pending-${crypto.randomUUID()}`, text: draft.trim(), previousUserId: latestUser?.id, previousError: error }); setLocalError(''); scroll.resume();
+    setStopState(null); setSending(true); if(!running&&!queued.length)setPendingReply({ id: `pending-${crypto.randomUUID()}`, text: draft.trim(), previousUserId: latestUser?.id, previousError: error }); setLocalError(''); scroller.scrollToEnd({ behavior: 'smooth' });
     try { await (retry && onRetry ? onRetry : onSend)(draft.trim(), canChooseModel ? selectedModelChoice : undefined, canChooseReasoning ? reasoningEffort : undefined, canChooseReasoning ? effectiveSpeedMode : undefined); }
     catch (e) { if(currentDraftKey.current===key){if(!retry)changePrompt(draft);setPendingReply(null);setLocalError(userError(e, 'Could not send message'));} }
     finally { sendInFlight.current=false;setSending(false); }
@@ -182,16 +201,16 @@ function AssistantPanelBody({ messages, running, editing:editingTimeline=running
   async function chooseSuggestion(suggestion: SourceEditSuggestion) {
     if (!suggestions || !onSuggestion || sendInFlight.current || sending || running || pendingReply || !configured) return;
     const request = `${suggestion.prompt}\n\nUse the selected clip from “${suggestions.sourceName}”, source ${suggestion.start.toFixed(2)}–${suggestion.end.toFixed(2)} seconds.`;
-    sendInFlight.current=true;setStopState(null); setSending(true); setPendingReply({ id: `pending-${crypto.randomUUID()}`, text: request, previousUserId: latestUser?.id, previousError: error }); setLocalError(''); scroll.resume();
+    sendInFlight.current=true;setStopState(null); setSending(true); setPendingReply({ id: `pending-${crypto.randomUUID()}`, text: request, previousUserId: latestUser?.id, previousError: error }); setLocalError(''); scroller.scrollToEnd({ behavior: 'smooth' });
     try { await onSuggestion(request, suggestions.clipId, canChooseModel ? selectedModelChoice : undefined, canChooseReasoning ? reasoningEffort : undefined, canChooseReasoning ? effectiveSpeedMode : undefined); }
     catch (e) { setPendingReply(null); setLocalError(userError(e, 'Could not start this edit.')); }
     finally { sendInFlight.current=false;setSending(false); }
   }
 
   return <div className="assistant-content">
-    <div ref={scroll.viewport} className={`assistant-history ${!messages.length && !waiting ? 'assistant-history-empty' : ''}`}>
-      <div className="assistant-turns" ref={scroll.content}>
-      {canLoadMore && <button className="load-more" onClick={() => { scroll.preserveHistory(); onLoadMore?.(); }}>Earlier messages</button>}
+    <MessageScroller className="assistant-scroller"><MessageScrollerViewport preserveScrollOnPrepend className={`assistant-history ${!messages.length && !waiting ? 'assistant-history-empty' : ''}`}>
+      <MessageScrollerContent className="assistant-turns">
+      {canLoadMore && <Button variant="ghost" size="sm" className="load-more" onClick={() => onLoadMore?.()}>Earlier messages</Button>}
       {!messages.length && !waiting && !externalAgent && !suggestions?.items.length && <div className="assistant-welcome"><h3>What are we making?</h3><p>{hasClips ? 'A tighter cut, a stronger opening, subtitles. Tell me what you have in mind.' : 'Bring your footage, and tell me the story you want to make.'}</p>{!demo&&!configured&&<div className="assistant-demo-note">AI editing is temporarily unavailable. Your footage, preview, and timeline are ready.</div>}</div>}
       {groups.map(group => {
         const groupMessages = group.messages;
@@ -204,21 +223,21 @@ function AssistantPanelBody({ messages, running, editing:editingTimeline=running
         const loading = editing && (!showingReply || stopState === 'stopping');
         const cards = group.cards;
         const requestMessage=groupMessages.find(message=>message.role==='user');
-        return <div className={`assistant-turn ${group.id === turnId ? 'is-latest-turn' : ''}`} data-turn-id={group.id} key={group.id}>
-          {groupMessages.filter(message => message.role === 'user').map(message => <article key={message.id} data-message-id={message.id} data-message-status={message.status} className="chat-message chat-user"><p>{message.text}</p></article>)}
+        return <MessageScrollerItem messageId={turnKey(group.id)} scrollAnchor={group.id === turnId} className={`assistant-turn ${group.id === turnId ? 'is-latest-turn' : ''}`} data-turn-id={group.id} key={turnKey(group.id)}>
+          {groupMessages.filter(message => message.role === 'user').map(message => <Message key={message.id} align="end" data-message-id={message.id} data-message-status={message.status}><MessageContent><Bubble align="end" variant="muted"><BubbleContent className="whitespace-pre-wrap">{message.text}</BubbleContent></Bubble></MessageContent></Message>)}
           {(replies.length > 0 || editing || cards.length > 0) && <div className="assistant-reply">
-            {replies.map(message => <Fragment key={message.id}>{!message.text && !message.tools?.length && !message.blocks?.length && message.id !== demoNoteMessageId ? null : <article data-message-id={message.id} data-message-status={message.status} className="chat-message chat-assistant">
+            {replies.map(message => <Fragment key={message.id}>{!message.text && !message.tools?.length && !message.blocks?.length && message.id !== demoNoteMessageId ? null : <Message data-message-id={message.id} data-message-status={message.status} className="chat-message chat-assistant"><MessageContent><Bubble variant="ghost" className="w-full"><BubbleContent className="w-full">
               {message.blocks ? message.blocks.map((block, index) => block.type === 'tools' ? <ToolChain key={`tools-${index}`} steps={block.steps} active={editing}/> : <AssistantResponseText key={`text-${index}`} text={block.text} streaming={message.status === 'streaming' && index === message.blocks!.length - 1} />) : message.text && <AssistantResponseText text={message.text} streaming={message.status === 'streaming'} />}
               {message.tools?.map((tool, i) => <div className="tool-result" key={`${tool}-${i}`}><Check size={12} />{tool}</div>)}
               {message.id === demoNoteMessageId && <div className="assistant-demo-note">Sample conversation. Explore the timeline, or <a href={NEW_PROJECT_PATH}>start your own project</a>.</div>}
-            </article>}{!message.blocks && !!message.steps?.length && <ToolChain steps={message.steps} active={editing}/>}</Fragment>)}
+            </BubbleContent></Bubble></MessageContent></Message>}{!message.blocks && !!message.steps?.length && <ToolChain steps={message.steps} active={editing}/>}</Fragment>)}
             {cards.some(card=>card.state!=='done'&&card.state!=='running') && <div className="assistant-result-cards" aria-label="Edit results">{cards.filter(card=>card.state!=='done'&&card.state!=='running').map(card => <div key={card.key} className={`assistant-result-card result-${card.state}${card.staged ? ' result-prepared' : ''}`}>
               <AssistantActivity label={card.title} detail={card.detail} state={card.state==='running'?'working':card.state==='error'?'error':'ready'}/>
               {card.key==='turn-failure' && group.id===retryTurnId && requestMessage?.text.trim() && !waiting && !demo && onRetry && <button type="button" className="assistant-retry" disabled={composerBusy || !configured || sending || !!pendingReply} onClick={() => void sendRequest(canResumeEdit?'Finish only the remaining work or checks from my unfinished request. Keep the edits already completed.':requestMessage.text, true)}><RotateCcw size={13} aria-hidden="true"/>Retry unfinished steps</button>}
             </div>)}</div>}
             <AssistantReplyHeader promptMessageId={requestMessage?.sourceId??requestMessage?.id} loading={loading} active={editing} label={stopState==='stopping'?'Stopping…':'Working'} detail={editing&&budgetUsed!==undefined&&budgetUsed>=.7?`Near this request's limit · ${Math.round(budgetUsed*100)}% used`:undefined} startedAt={activityStartedAt}/>
           </div>}
-        </div>;
+        </MessageScrollerItem>;
       })}
       {!groups.length && waiting && <div className="assistant-reply"><AssistantReplyHeader loading label={stopState==='stopping'?'Stopping…':'Working'} startedAt={activityStartedAt}/></div>}
       {externalAgent && <div data-chat-follow className="assistant-agent-notice" role="status"><span>Connected through <McpLogo className="assistant-agent-logo"/> MCP</span><strong><AgentLogo name={externalAgent} className="assistant-agent-logo"/>{externalAgent} is working</strong></div>}
@@ -226,10 +245,9 @@ function AssistantPanelBody({ messages, running, editing:editingTimeline=running
       {showSuggestions && suggestions?.items.length && onSuggestion && configured ? <div data-chat-follow className="assistant-source-suggestions" aria-label="Suggested edits from this footage"><span title={suggestions.sourceName}><Lightbulb size={12} aria-hidden="true" />Ideas for {suggestions.sourceName}</span>{suggestions.items.map((suggestion, index) => <button key={`${suggestions.clipId}-${index}`} type="button" disabled={composerBusy || sending || !!pendingReply} onClick={() => void chooseSuggestion(suggestion)}><span>{suggestion.label}</span><ArrowUpRight size={14} aria-hidden="true" /></button>)}</div> : null}
       {visibleError && <div data-chat-follow><AssistantActivity className="chat-error" label="Needs attention" detail={assistantErrorDetail(visibleError)} state="error"/></div>}
       {!!messages.length && !demo && !configured && <div className="assistant-demo-note">AI editing is temporarily unavailable. Your footage, preview, and timeline are ready.</div>}
-      </div>
-    </div>
-    <div ref={scroll.composer} className="manual-composer-dock">
-    {scroll.latestHidden && <button className="chat-jump-latest" onClick={scroll.resume}>Latest response</button>}
+      </MessageScrollerContent>
+    </MessageScrollerViewport><MessageScrollerButton direction="end" className="chat-jump-latest" /></MessageScroller>
+    <div className="manual-composer-dock">
     {queued.length>0&&<div className="assistant-queue" aria-label="Queued messages"><div className="assistant-queue-heading"><span>{queued.length} queued{queuePaused?' · paused':''}</span>{queuePaused&&onResumeQueue&&<button type="button" onClick={()=>void onResumeQueue().catch(e=>setLocalError(userError(e,'Could not resume the queue.')))}>Resume queue</button>}</div>{queued.map((message,index)=><div className="assistant-queued-message" key={message.id}><span className="assistant-queue-number">{index+1}</span><div><p>{message.prompt}</p>{message.error&&<small>{message.error}</small>}</div><button type="button" aria-label={`Remove queued message ${index+1}`} onClick={()=>void onRemoveQueued?.(message.id).catch(e=>setLocalError(userError(e,'Could not remove queued message.')))}><X size={13}/></button></div>)}</div>}
     <EditComposer allowQueue={conversationStarted&&!demo} attachments={attachments} onRemoveAttachment={onRemoveAttachment} requireMedia={requireMedia} actions={canChooseModel ? <div className="assistant-model-controls"><AssistantModelPicker allowedModels={availableModels} value={effectiveModelChoice} onChange={setModelChoice} disabled={answering}/>{canChooseReasoning&&<AssistantReasoningPicker effort={reasoningEffort} speed={effectiveSpeedMode} fastAvailable={fastAvailable} onEffortChange={setReasoningEffort} onSpeedChange={setSpeedMode} disabled={answering}/>}</div> : undefined} variant="compact" className="manual-editor-composer" value={prompt} onChange={changePrompt} onSubmit={submit} onAttach={onAttach} placeholder="What would you change next?" disabled={composerBusy || sending || !!pendingReply || !!externalAgent} running={running && !externalAgent} onStop={onStop ? stop : undefined} stopping={stopState==='stopping'} />
     </div>
