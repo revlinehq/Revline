@@ -1,3 +1,4 @@
+import { validateColorFinish, validateTimelineLuts } from '../../lib/editor/color-finish';
 import { validateVisualTransform } from '../../lib/editor/visual-inputs';
 import { writeProject, type HistoryEntry } from './project_data';
 import { validateClipEffects } from '../../lib/editor/clip-effects';
@@ -60,6 +61,7 @@ export async function validateTimeline(ctx: MutationCtx | QueryCtx, project: Doc
     const declaredCount = timeline.tracks?.[group];
     if (declaredCount !== undefined && track > declaredCount) throw new ConvexError("Clip layer exceeds the declared layer count");
   }
+  try { validateTimelineLuts(timeline.luts); for (const clip of timeline.clips) validateColorFinish(clip, timeline.luts ?? []); } catch (error) { throw new ConvexError((error as Error).message); }
   timeline = normalizeTimeline(timeline);
   const ids = new Set<string>();
   const clipsById = new Map(timeline.clips.map(clip => [clip.id, clip]));

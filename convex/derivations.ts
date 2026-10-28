@@ -15,14 +15,14 @@ import { sourceEndOf } from '../lib/editor/playback-rate';
  * motion by fal.ai RIFE frame interpolation, or a fal.ai upscale. Video copies keep the source's timeline
  * (black padding before `start`), so a clip switches to one by changing only its media.
  */
-const op = v.union(v.literal('freeze'), v.literal('slowmo'), v.literal('upscale'));
+const op = v.union(v.literal('freeze'), v.literal('slowmo'), v.literal('upscale'), v.literal('stats'));
 export type DerivationOp = Doc<'derivations'>['op'];
 export const MAX_SLOWMO_SECONDS = 30, MAX_UPSCALE_SECONDS = 60, MAX_SLOWMO_FACTOR = 8;
 const HANDLE_SECONDS = .25, PLACEMENT_DELAY_MS = 10_000, PLACEMENT_ATTEMPTS = 360;
 // fal.ai (Oct 2026): video upscaler $0.0008 per output megapixel; RIFE $0.0013 per compute second (about 1.5 s per output second).
 const UPSCALE_USD_PER_MEGAPIXEL = .0008, RIFE_USD_PER_OUTPUT_SECOND = .002;
 
-type StartInput = { ownerId: string; projectId: Id<'projects'>; clipId: string; assetId: string; op: DerivationOp; start: number; end: number; time?: number; factor?: number; scale?: number; target?: number; fps?: number; placeLater: boolean };
+type StartInput = { ownerId: string; projectId: Id<'projects'>; clipId: string; assetId: string; op: DerivationOp; start: number; end: number; time?: number; times?: number[]; factor?: number; scale?: number; target?: number; fps?: number; placeLater: boolean };
 
 /** Queue (or reuse) a processed copy. Window times are source seconds. */
 export async function startDerivation(ctx: MutationCtx, input: StartInput) {
@@ -31,8 +31,16 @@ export async function startDerivation(ctx: MutationCtx, input: StartInput) {
   if (!project || project.ownerId !== input.ownerId || project.deleting) throw new ConvexError('Project not found.');
   const id = ctx.db.normalizeId('assets', input.assetId), asset = id ? await ctx.db.get(id) : null;
   if (!asset || asset.ownerId !== input.ownerId || asset.projectId !== project._id) throw new ConvexError('This clip’s media is unavailable.');
-  if (asset.derivedOf && asset.derivation !== 'freeze') throw new ConvexError(`This clip already uses ${asset.derivation === 'slowmo' ? 'smooth slow-motion' : 'upscaled'} footage. Process the original instead.`);
+  if (input.op !== 'stats' && asset.derivedOf && asset.derivation !== 'freeze') throw new ConvexError(`This clip already uses ${asset.derivation === 'slowmo' ? 'smooth slow-motion' : 'upscaled'} footage. Process the original instead.`);
   if (input.op === 'freeze' && asset.kind !== 'video') throw new ConvexError('Freeze a video clip.');
+  if (input.op === 'stats') {
+    if (asset.kind === 'audio') throw new ConvexError('Measure color on a video or image clip.');
+    if (!input.times?.length || input.times.length > 6) throw new ConvexError('Measure 1 to 6 moments.');
+    await requireMediaTaskCapacity(ctx, input.ownerId, 1);
+    const derivationId = await ctx.db.insert('derivations', { ownerId: input.ownerId, projectId: project._id, clipId: input.clipId, sourceAssetId: asset._id, op: 'stats', start: input.times[0], end: input.times[input.times.length - 1], times: input.times, status: 'queued', createdAt: Date.now() });
+    await ctx.db.patch(derivationId, { taskId: await enqueueMediaTask(ctx, { ownerId: input.ownerId, projectId: project._id, assetId: asset._id, kind: 'derive', derivationId }) });
+    return { derivationId, status: 'queued' as const, estimatedUsd: 0 };
+  }
   if (input.op === 'slowmo' && (asset.kind !== 'video' || asset.cutoutOf)) throw new ConvexError('Smooth slow motion needs original video footage, not a cut-out.');
   if (input.op === 'upscale' && (asset.kind === 'audio' || asset.cutoutOf)) throw new ConvexError('Upscale a video or image clip (not a cut-out).');
   const duration = asset.duration ?? 0;
@@ -72,25 +80,30 @@ async function requireRun(ctx: MutationCtx | import('./_generated/server').Query
 }
 
 export const startFromRun = internalMutation({
-  args: { ...runArgs, clipId: v.string(), assetId: v.string(), op, start: v.number(), end: v.number(), time: v.optional(v.number()), factor: v.optional(v.number()), scale: v.optional(v.number()), target: v.optional(v.number()), fps: v.optional(v.number()), placeLater: v.boolean() },
+  args: { ...runArgs, clipId: v.string(), assetId: v.string(), op, start: v.number(), end: v.number(), time: v.optional(v.number()), times: v.optional(v.array(v.number())), factor: v.optional(v.number()), scale: v.optional(v.number()), target: v.optional(v.number()), fps: v.optional(v.number()), placeLater: v.boolean() },
   returns: v.object({ derivationId: v.id('derivations'), status: v.union(v.literal('queued'), v.literal('completed')), outputAssetId: v.optional(v.id('assets')), estimatedUsd: v.number() }),
   handler: async (ctx, { runId, ...args }) => { await requireRun(ctx, { ...args, runId }); return startDerivation(ctx, args); },
 });
 
 export const runStatus = internalQuery({
   args: { ...runArgs, derivationId: v.id('derivations') },
-  returns: v.object({ status: v.union(v.literal('queued'), v.literal('completed'), v.literal('failed')), outputAssetId: v.optional(v.id('assets')), error: v.optional(v.string()), progress: v.optional(v.number()) }),
+  returns: v.object({ status: v.union(v.literal('queued'), v.literal('completed'), v.literal('failed')), outputAssetId: v.optional(v.id('assets')), stats: v.optional(v.array(v.any())), error: v.optional(v.string()), progress: v.optional(v.number()) }),
   handler: async (ctx, args) => {
     const row = await ctx.db.get(args.derivationId);
     if (!row || row.ownerId !== args.ownerId || row.projectId !== args.projectId) throw new ConvexError('Processing request not found.');
     const task = row.status === 'queued' && row.taskId ? await ctx.db.get(row.taskId) : null;
-    return { status: row.status, ...(row.outputAssetId ? { outputAssetId: row.outputAssetId } : {}), ...(row.error ? { error: row.error } : {}), ...(task ? { progress: task.progress } : {}) };
+    return { status: row.status, ...(row.outputAssetId ? { outputAssetId: row.outputAssetId } : {}), ...(row.stats ? { stats: row.stats } : {}), ...(row.error ? { error: row.error } : {}), ...(task ? { progress: task.progress } : {}) };
   },
 });
 
 /** The worker stored the copy: record its provenance, then switch the clip when it was queued to place itself. */
-export async function completeDerivation(ctx: MutationCtx, task: Doc<'mediaTasks'>) {
+export async function completeDerivation(ctx: MutationCtx, task: Doc<'mediaTasks'>, colorStats?: unknown[]) {
   const row = task.derivationId ? await ctx.db.get(task.derivationId) : null;
+  if (row?.op === 'stats') {
+    if (row.status !== 'queued' || !colorStats?.length || colorStats.length > 6 || JSON.stringify(colorStats).length > 20_000) throw new ConvexError('Color measurement returned no usable result.');
+    await ctx.db.patch(row._id, { status: 'completed', stats: colorStats });
+    return;
+  }
   const output = task.outputAssetId ? await ctx.db.get(task.outputAssetId) : null;
   if (!row || row.status !== 'queued') throw new ConvexError('The processing request is no longer active.');
   if (!output || output.ownerId !== task.ownerId || output.projectId !== task.projectId) throw new ConvexError('The processed media has not been stored yet.');

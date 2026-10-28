@@ -16,6 +16,7 @@ import { validateEffectKeyframes } from './effect-keyframes';
 import { shiftSpeedRamp } from './speed-ramp';
 import { validateMask } from './masks';
 import { validateAudioReactive } from './audio-reactive';
+import { validateColorFinish } from './color-finish';
 export { NEUTRAL_MOTION, motionAt, type MotionKeyframe } from './motion-path';
 
 export const BLEND_MODES = ['normal', 'screen', 'multiply', 'overlay', 'plus-lighter', 'difference'] as const;
@@ -105,6 +106,7 @@ export function validateClipEffects(clip: Clip) {
   validateEffectKeyframes(clip.effectKeyframes);
   validateMask(clip);
   validateAudioReactive(clip);
+  validateColorFinish(clip);
   if (clip.motionBlur !== undefined && (!Number.isFinite(clip.motionBlur) || clip.motionBlur < 0 || clip.motionBlur > 1)) throw new Error('Motion blur must be between 0 and 1.');
   if (clip.effectKeyframes?.length && clip.kind !== 'video' && clip.kind !== 'image') throw new Error('Effect keyframes apply to video or image clips.');
   validateRemotionTextTemplate(clip);

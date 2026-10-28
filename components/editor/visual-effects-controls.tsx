@@ -17,7 +17,7 @@ import './visual-effects-controls.css';
 
 type EffectAccordion = { value: keyof VisualEffects | null; onValueChange: (effect: keyof VisualEffects | null) => void };
 type Props = { accordion?: EffectAccordion; onlyEffect?: keyof VisualEffects; clip: Clip; onChange: (patch: Partial<Clip>) => void; onPreview?: (patch: Partial<Clip> | null) => void; onPlaybackRateChange?: (rate: number) => void; onAddEffect?: (preset: EffectPreset) => void };
-type EffectKey = Exclude<keyof VisualEffects, 'softBlur' | 'frameCorners'>;
+type EffectKey = Exclude<keyof VisualEffects, 'softBlur' | 'frameCorners' | 'bloom'>;
 function EffectCard({ name, effectKey, enabled, onToggle, onReset, onRemove, expanded, onExpandedChange, children }: {
   name: string; effectKey: EffectKey; enabled: boolean; onToggle: () => void; onReset: () => void; onRemove: () => void; expanded?: boolean; onExpandedChange?: (expanded: boolean) => void; children: ReactNode;
 }) {

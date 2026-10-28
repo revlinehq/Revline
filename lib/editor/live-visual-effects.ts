@@ -5,15 +5,16 @@ import { validateVisualEffects, visualEffectsOf } from './visual-effects';
 import type { VisualEffectsController } from './visual-effects-runtime';
 import { maskSources, type MaskController } from './masks';
 import { audioReactiveSources, hasReactiveEffects, type AudioReactiveController } from './audio-reactive';
+import { colorFinishSource, type TimelineLut } from './color-finish';
 
-const effects = (clip:Clip)=>({...visualEffectsOf(clip),cameraGlideBlur:cameraGlideBlurSource(clip),effectKeyframes:clip.effectKeyframes,motionOffset:clip.motionOffset,...(hasReactiveEffects(clip.audioReactive)?{audioReactive:clip.audioReactive}:{})});
+const effects = (clip:Clip,luts?:TimelineLut[])=>({...visualEffectsOf(clip),cameraGlideBlur:cameraGlideBlurSource(clip),effectKeyframes:clip.effectKeyframes,motionOffset:clip.motionOffset,...(hasReactiveEffects(clip.audioReactive)?{audioReactive:clip.audioReactive}:{}),...(colorFinishSource(clip,luts)?{colorFinish:colorFinishSource(clip,luts)}:{})});
 
-export function previewVisualEffects(document: Document, clip: Clip, index: number, patch: Partial<Clip> | null): boolean {
+export function previewVisualEffects(document: Document, clip: Clip, index: number, patch: Partial<Clip> | null, luts?: TimelineLut[]): boolean {
   const controller = (document.defaultView as (Window & { __revlineEffects?: VisualEffectsController }) | null)?.__revlineEffects;
   if (!controller) return false;
   const next = { ...clip, ...patch };
   validateVisualEffects(next);
-  controller.set(`clip-${index}`, effects(next));
+  controller.set(`clip-${index}`, effects(next, luts));
   return true;
 }
 
@@ -23,8 +24,8 @@ export function updateLiveVisualEffects(document: Document, previous: Timeline, 
     const index = compositionIndex(document, clip, position);
     if (clip.kind !== 'video' && clip.kind !== 'image') continue;
     const before = old.get(clip.id);
-    if (JSON.stringify(before && effects(before)) === JSON.stringify(effects(clip))) continue;
-    if (!previewVisualEffects(document, clip, index, null)) return false;
+    if (JSON.stringify(before && effects(before, previous.luts)) === JSON.stringify(effects(clip, next.luts))) continue;
+    if (!previewVisualEffects(document, clip, index, null, next.luts)) return false;
   }
   // Masks repaint on the shared clock; hand them the new timeline (rebuild if the runtime is missing).
   const reactive = (document.defaultView as (Window & { __revlineAudioReactive?: AudioReactiveController }) | null)?.__revlineAudioReactive;

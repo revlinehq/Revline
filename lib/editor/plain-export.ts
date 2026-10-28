@@ -108,6 +108,7 @@ export function plainExportPlan(timeline: Timeline, assets: MediaAsset[], resolu
     if (clip.speedRamp?.length) return no('a clip has a speed ramp');
     if (clip.mask) return no('a clip is masked');
     if (clip.audioReactive) return no('a clip reacts to audio');
+    if (clip.colorCurves || clip.hsl || clip.lut || clip.bloom?.enabled) return no('a clip has color finishing');
     if (!clip.assetId) return no('a clip has no media');
     const asset = assetMap.get(clip.assetId);
     if (clip.kind === 'video') {

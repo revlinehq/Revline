@@ -11,7 +11,7 @@ import { AnalysisError } from '@/lib/media-analysis/errors';
 const run = promisify(execFile);
 const RIFE_ENDPOINT = 'fal-ai/rife/video', VIDEO_UPSCALE_ENDPOINT = 'fal-ai/video-upscaler', IMAGE_UPSCALE_ENDPOINT = 'fal-ai/seedvr/upscale/image';
 const MAX_OUTPUT_BYTES = 4 * 1024 * 1024 * 1024;
-export type DeriveRequest = { op: 'freeze' | 'slowmo' | 'upscale'; start: number; end: number; time?: number; factor?: number; target?: number };
+export type DeriveRequest = { op: 'freeze' | 'slowmo' | 'upscale' | 'stats'; start: number; end: number; time?: number; times?: number[]; factor?: number; target?: number };
 export type DerivedFile = { path: string; kind: 'video' | 'image'; contentType: string; width: number; height: number; duration?: number };
 
 /** Make the requested copy of `source` (a video or image file) in `directory`. */
@@ -130,4 +130,45 @@ async function frameCount(path: string, signal: AbortSignal) {
   const count = Number(stdout.trim());
   if (!Number.isInteger(count) || count < 1) throw new AnalysisError('The processed video has no frames.', 502);
   return count;
+}
+
+export type ColorStats = { time: number; percentiles: { red: number[]; green: number[]; blue: number[]; luma: number[] }; saturation: number; cast: { warmth: number; tint: number }; dominant: { hex: string; share: number }[] };
+export const STAT_PERCENTILES = [.02, .1, .25, .5, .75, .9, .98];
+
+/** Measure color at source times: per-channel percentiles, saturation, neutral cast and dominant colors. */
+export async function measureColor(source: string, kind: 'video' | 'image', times: number[], signal: AbortSignal): Promise<ColorStats[]> {
+  const probe = await videoInfo(source, signal), out: ColorStats[] = [];
+  for (const time of kind === 'image' ? [0] : times) {
+    const seek = Math.max(0, Math.min(time, Math.max(0, probe.duration - .05)));
+    const { stdout } = await run('ffmpeg', ['-v', 'error', ...(kind === 'video' ? ['-ss', seek.toFixed(4)] : []), '-i', source, '-frames:v', '1', '-vf', 'scale=160:-2:flags=area', '-f', 'rawvideo', '-pix_fmt', 'rgb24', '-'], { signal, timeout: 60_000, maxBuffer: 8 * 1024 * 1024, encoding: 'buffer' }) as unknown as { stdout: Buffer };
+    if (stdout.length < 300) throw new AnalysisError('Could not read a frame to measure color.', 422);
+    const count = Math.floor(stdout.length / 3), red: number[] = [], green: number[] = [], blue: number[] = [], luma: number[] = [];
+    let saturation = 0, neutral = 0, neutralR = 0, neutralG = 0, neutralB = 0;
+    const pixels: [number, number, number][] = [];
+    for (let i = 0; i < count; i++) {
+      const r = stdout[i * 3] / 255, g = stdout[i * 3 + 1] / 255, b = stdout[i * 3 + 2] / 255, max = Math.max(r, g, b), min = Math.min(r, g, b), l = .2126 * r + .7152 * g + .0722 * b;
+      red.push(r); green.push(g); blue.push(b); luma.push(l); pixels.push([r, g, b]);
+      const s = max > 0 ? (max - min) / max : 0; saturation += s;
+      // Near-neutral midtones reveal the light's color cast.
+      if (s < .3 && l > .15 && l < .9) { neutral++; neutralR += r; neutralG += g; neutralB += b; }
+    }
+    const pick = (values: number[]) => { const sorted = [...values].sort((a, b) => a - b); return STAT_PERCENTILES.map(p => Math.round(sorted[Math.min(sorted.length - 1, Math.floor(p * sorted.length))] * 1000) / 1000); };
+    const nr = neutral ? neutralR / neutral : 0, ng = neutral ? neutralG / neutral : 0, nb = neutral ? neutralB / neutral : 0;
+    out.push({ time, percentiles: { red: pick(red), green: pick(green), blue: pick(blue), luma: pick(luma) }, saturation: Math.round(saturation / count * 1000) / 1000,
+      cast: { warmth: Math.round((nr - nb) * 1000) / 1000, tint: Math.round((ng - (nr + nb) / 2) * 1000) / 1000 }, dominant: dominantColors(pixels) });
+  }
+  return out;
+}
+
+/** k-means (k=5) over the frame's pixels; returns hex colors with their share of the frame. */
+function dominantColors(pixels: [number, number, number][]) {
+  const k = 5, step = Math.max(1, Math.floor(pixels.length / k));
+  let centers = Array.from({ length: k }, (_, index) => pixels[Math.min(pixels.length - 1, index * step + Math.floor(step / 2))]);
+  let assignment = new Array<number>(pixels.length).fill(0);
+  for (let iteration = 0; iteration < 12; iteration++) {
+    assignment = pixels.map(pixel => { let best = 0, distance = Infinity; centers.forEach((center, index) => { const d = (pixel[0] - center[0]) ** 2 + (pixel[1] - center[1]) ** 2 + (pixel[2] - center[2]) ** 2; if (d < distance) { distance = d; best = index; } }); return best; });
+    centers = centers.map((center, index) => { const members = pixels.filter((_, i) => assignment[i] === index); return members.length ? [0, 1, 2].map(channel => members.reduce((sum, pixel) => sum + pixel[channel], 0) / members.length) as [number, number, number] : center; });
+  }
+  const hex = (color: [number, number, number]) => `#${color.map(value => Math.round(value * 255).toString(16).padStart(2, '0')).join('')}`;
+  return centers.map((center, index) => ({ hex: hex(center), share: Math.round(assignment.filter(value => value === index).length / pixels.length * 1000) / 1000 })).filter(item => item.share > 0).sort((a, b) => b.share - a.share);
 }

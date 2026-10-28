@@ -22,7 +22,7 @@ import { preparePreviewVideo,probePreviewVideo,type PreviewVideoMetadata } from 
 import { runDistributedRender, runRenderWorker } from './render-worker';
 import { importVideoLink } from './import-video-link';
 import { removeBackground } from './remove-background';
-import { deriveMedia } from './derive-media';
+import { deriveMedia, measureColor } from './derive-media';
 import { prepareComposition,writeComposition } from './prepare-composition';
 import { renderPlainExport } from './plain-export-render';
 import { plainExportPlan } from '@/lib/editor/plain-export';
@@ -174,6 +174,7 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
     if (task.kind === 'derive') {
       if (task.outputAssetId) return {};
       if (!task.derive || asset.kind === 'audio') throw new AnalysisError('The processing request is unavailable.', 400);
+      if (task.derive.op === 'stats') return { colorStats: await runPhase('Measuring color', () => measureColor(source, asset.kind as 'video' | 'image', task.derive!.times ?? [task.derive!.start], signal)) };
       const request = task.derive, label = request.op === 'freeze' ? 'Capturing freeze frame' : request.op === 'slowmo' ? 'Interpolating slow motion' : 'Upscaling';
       const output = await runPhase(label, () => deriveMedia(source, asset.kind as 'video' | 'image', directory, request, signal, onProgress));
       const base = asset.fileName.replace(/\.[^.]+$/, '').slice(0, 200), suffix = request.op === 'freeze' ? ` (frame ${(request.time ?? 0).toFixed(2)}s)` : request.op === 'slowmo' ? ` (smooth ${request.factor ?? 2}x)` : ' (upscaled)';

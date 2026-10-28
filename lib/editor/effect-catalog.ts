@@ -1,10 +1,10 @@
 import { EFFECT_CATALOG, type EffectPreset } from './clip-effects';
 import type { VisualEffects } from './visual-effects';
-type EffectIconName = Exclude<keyof VisualEffects, 'frameCorners' | 'lightSweep'> | Exclude<EffectPreset, 'none' | 'zoom-blur'> | 'speed-up';
+type EffectIconName = Exclude<keyof VisualEffects, 'frameCorners' | 'lightSweep' | 'bloom'> | Exclude<EffectPreset, 'none' | 'zoom-blur'> | 'speed-up';
 
 export const EFFECT_LIBRARY_CATEGORIES = [{ id: 'texture', label: 'Texture' }] as const;
 export type EffectLibraryCategory = typeof EFFECT_LIBRARY_CATEGORIES[number]['id'];
-export type EffectLibraryEntry = { id: EffectIconName; label: string; description: string; category: EffectLibraryCategory; visual?: Exclude<keyof VisualEffects, 'lightSweep'>; preset?: EffectPreset; action?: 'speed' };
+export type EffectLibraryEntry = { id: EffectIconName; label: string; description: string; category: EffectLibraryCategory; visual?: Exclude<keyof VisualEffects, 'lightSweep' | 'bloom'>; preset?: EffectPreset; action?: 'speed' };
 
 /** One catalog drives categories, search, icons, click actions, and drag payloads.
  * Retired effects (zoom blur, shake, pop, flash, cinema bars, dither, neon edges,

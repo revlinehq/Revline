@@ -18,7 +18,9 @@ export type LightLeak = { enabled: boolean; amount: number; color: string; posit
 export type DirectionalBlur = { enabled: boolean; amount: number; angle: number };
 export type TurbulentDisplace = { enabled: boolean; amount: number; scale: number; speed: number };
 export type LightSweep = { enabled: boolean; amount: number; color: string; angle: number; position: number; width: number; speed: number };
-export type VisualEffects = { colorGrade?: ColorGrade; zoomBlur?: ZoomBlur; glitch?: Glitch; invert?: InvertColors; dither?: Dither; neonEdges?: NeonEdges; lensDistortion?: LensDistortion; filmOverlay?: FilmOverlay; vhs?: Vhs; lightLeak?: LightLeak; directionalBlur?: DirectionalBlur; turbulentDisplace?: TurbulentDisplace; lightSweep?: LightSweep; softBlur?: SoftBlur; frameDistortion?: FrameDistortion; frameCorners?: FrameCorners };
+/** Glow around highlights: brightness above `threshold` spreads over `radius` pixels (at 1080p). */
+export type Bloom = { enabled: boolean; amount: number; threshold: number; radius: number };
+export type VisualEffects = { bloom?: Bloom; colorGrade?: ColorGrade; zoomBlur?: ZoomBlur; glitch?: Glitch; invert?: InvertColors; dither?: Dither; neonEdges?: NeonEdges; lensDistortion?: LensDistortion; filmOverlay?: FilmOverlay; vhs?: Vhs; lightLeak?: LightLeak; directionalBlur?: DirectionalBlur; turbulentDisplace?: TurbulentDisplace; lightSweep?: LightSweep; softBlur?: SoftBlur; frameDistortion?: FrameDistortion; frameCorners?: FrameCorners };
 export type VisualEffectsPatch = { [K in keyof VisualEffects]?: Partial<NonNullable<VisualEffects[K]>> };
 
 export const DEFAULT_COLOR_GRADE: Readonly<ColorGrade> = Object.freeze({ enabled: false, exposure: 0, contrast: 1, saturation: 1, temperature: 0, tint: 0, vibrance: 0 });
@@ -36,18 +38,20 @@ export const DEFAULT_VHS: Readonly<Vhs> = Object.freeze({ enabled: false, amount
 export const DEFAULT_LIGHT_LEAK: Readonly<LightLeak> = Object.freeze({ enabled: false, amount: .55, color: '#ff934f', position: .1, spread: .45, speed: .5 });
 export const DEFAULT_DIRECTIONAL_BLUR: Readonly<DirectionalBlur> = Object.freeze({ enabled: false, amount: 16, angle: 0 });
 export const DEFAULT_TURBULENT_DISPLACE: Readonly<TurbulentDisplace> = Object.freeze({ enabled: false, amount: 18, scale: 120, speed: .6 });
+export const DEFAULT_BLOOM: Readonly<Bloom> = Object.freeze({ enabled: false, amount: .6, threshold: .65, radius: 24 });
 export const DEFAULT_LIGHT_SWEEP: Readonly<LightSweep> = Object.freeze({ enabled: false, amount: .6, color: '#ffffff', angle: -30, position: .5, width: .22, speed: .5 });
 /** Manual controls, drag/drop and agent tools share these defaults. */
 export const VISUAL_EFFECT_DEFAULTS = Object.freeze({
   frameDistortion: DEFAULT_FRAME_DISTORTION, frameCorners: DEFAULT_FRAME_CORNERS, softBlur: DEFAULT_SOFT_BLUR, colorGrade: DEFAULT_COLOR_GRADE, zoomBlur: DEFAULT_ZOOM_BLUR, glitch: DEFAULT_GLITCH,
   invert: DEFAULT_INVERT, dither: DEFAULT_DITHER, neonEdges: DEFAULT_NEON_EDGES, lensDistortion: DEFAULT_LENS_DISTORTION, filmOverlay: DEFAULT_FILM_OVERLAY, vhs: DEFAULT_VHS, lightLeak: DEFAULT_LIGHT_LEAK,
-  directionalBlur: DEFAULT_DIRECTIONAL_BLUR, turbulentDisplace: DEFAULT_TURBULENT_DISPLACE, lightSweep: DEFAULT_LIGHT_SWEEP,
+  directionalBlur: DEFAULT_DIRECTIONAL_BLUR, turbulentDisplace: DEFAULT_TURBULENT_DISPLACE, lightSweep: DEFAULT_LIGHT_SWEEP, bloom: DEFAULT_BLOOM,
 });
 export const VISUAL_EFFECT_KEYS = Object.freeze(Object.keys(VISUAL_EFFECT_DEFAULTS) as (keyof VisualEffects)[]);
 export const VISUAL_EFFECT_LIMITS = {
   frameDistortion: { horizontal: [-1, 1], vertical: [-1, 1], skew: [-1, 1], bend: [-1, 1] },
   frameCorners: { amount: [0, 1] },
   softBlur: { amount: [0, 40] },
+  bloom: { amount: [0, 2], threshold: [0, .95], radius: [2, 80] },
   neonEdges: NEON_EDGE_LIMITS,
   colorGrade: { exposure: [-2, 2], contrast: [0, 2], saturation: [0, 2], temperature: [-100, 100], tint: [-100, 100], vibrance: [-100, 100] },
   zoomBlur: { amount: [0, 1], centerX: [0, 1], centerY: [0, 1] },

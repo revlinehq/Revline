@@ -1,6 +1,6 @@
 import type { TextGradient } from './text-gradient';
 import type { BlendMode, CinematicBarSettings, EffectPreset, SolidColorSettings, MotionKeyframe, FrameShrinkSettings, ZoomSettings } from './clip-effects';
-import type { ColorGrade, ZoomBlur, Glitch, InvertColors, Dither, NeonEdges, LensDistortion, FilmOverlay, Vhs, LightLeak, DirectionalBlur, TurbulentDisplace, LightSweep, SoftBlur, FrameDistortion, FrameCorners } from './visual-effects';
+import type { ColorGrade, ZoomBlur, Glitch, InvertColors, Dither, NeonEdges, LensDistortion, FilmOverlay, Vhs, LightLeak, DirectionalBlur, TurbulentDisplace, LightSweep, SoftBlur, FrameDistortion, FrameCorners, Bloom } from './visual-effects';
 import type { RemotionTextTemplate } from './remotion-text';
 import type { ClipTransition } from './clip-transitions';
 import type { AudioSettings } from './audio-settings';
@@ -13,6 +13,7 @@ import type { CameraMotionSettings } from './camera-motion-settings';
 import type { EffectKeyframeLane } from './effect-keyframes';
 import type { RampPoint } from './speed-ramp';
 import type { AudioReactive } from './audio-reactive';
+import type { ClipLut, ColorCurves, HslAdjust, TimelineLut } from './color-finish';
 import type { ClipMask } from './masks';
 import type { SceneSource } from './scene-layers';
 import type { ClipOutline } from './clip-outline';
@@ -67,6 +68,11 @@ export type Clip = {
   mask?: ClipMask;
   /** Scale/shake/rotate or effect controls driven by a music level curve (timeline seconds). */
   audioReactive?: AudioReactive;
+  /** Color finishing after the grade: RGB/master curves, 8-band HSL, LUT look. */
+  colorCurves?: ColorCurves;
+  hsl?: HslAdjust;
+  lut?: ClipLut;
+  bloom?: Bloom;
   smoothZoom?: SmoothZoomSettings;
   cameraMotion?: CameraMotionSettings;
   effectPreset?: EffectPreset | 'none';
@@ -103,7 +109,7 @@ export type Clip = {
   fit?: 'cover' | 'contain';
 };
 export type TimelineMarker = { id: string; time: number; label?: string };
-export type Timeline = { clips: Clip[]; fps: number; aspectRatio: AspectRatio; tracks?: TrackCounts; markers?: TimelineMarker[] };
+export type Timeline = { clips: Clip[]; fps: number; aspectRatio: AspectRatio; tracks?: TrackCounts; markers?: TimelineMarker[]; luts?: TimelineLut[] };
 export type AudioWaveform = { peaks: string; samplesPerSecond: number };
 export type MediaAsset = {
   _id: string; fileName: string; kind: 'video' | 'image' | 'audio';

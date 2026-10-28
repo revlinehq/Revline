@@ -14,9 +14,10 @@ export { installSolidColorLayers } from './solid-color-layers';
 export { installClipMasks } from './masks';
 export { installAudioReactive } from './audio-reactive';
 import { decodeLevels, hasReactiveEffects, reactiveEffectsAt, type AudioReactive } from './audio-reactive';
+import { HSL_CENTERS, curvesTexture, customAtlas, hslUniform, lookAtlas, type ColorFinishSource } from './color-finish';
 export { installVisualFades } from './visual-fades-runtime';
 
-export type VisualEffectInput = VisualEffects & { cameraGlideBlur?:CameraGlideBlurSource; effectKeyframes?:EffectKeyframeLane[]; motionOffset?:number; audioReactive?:AudioReactive };
+export type VisualEffectInput = VisualEffects & { cameraGlideBlur?:CameraGlideBlurSource; effectKeyframes?:EffectKeyframeLane[]; motionOffset?:number; audioReactive?:AudioReactive; colorFinish?:ColorFinishSource };
 export type VisualEffectSource = VisualEffectInput & { id: string };
 export type VisualEffectsController = { set(id: string, effects: VisualEffectInput): void; setTimedEffects(clips:Clip[]):void; redraw(): void; dispose(): void };
 
@@ -27,8 +28,8 @@ export function installVisualEffects(sources: VisualEffectSource[], fps: number,
   const host = window as unknown as RuntimeWindow;
   const preview = !!document.querySelector('meta[name="hyperframes-studio-preview"]');
   const clock = host.__timelines.revline.__hfReal ?? host.__timelines.revline;
-  type Entry = { source: HTMLVideoElement | HTMLImageElement; effects: VisualEffectInput; levels?: Uint8Array; nativeCorners?: { node:HTMLElement; originalRadius:string }; neonColor?: number; canvas?: HTMLCanvasElement; gl?: WebGLRenderingContext; program?: WebGLProgram; gradeOnly?: boolean; texture?: WebGLTexture; buffer?: WebGLBuffer; uniforms?: Record<string, WebGLUniformLocation | null>; passTextures?: WebGLTexture[]; framebuffer?: WebGLFramebuffer; passWidth?: number; passHeight?: number; nominalWidth?: number; nominalHeight?: number; detailWidth?: number; detailHeight?: number; lastPassKey?: string; lastPassCount?: number; lastFrame?: number; lastSource?: string | number; lastTransform?: string; dirty: boolean; injected?: HTMLImageElement; failed?: boolean; videoCallback?: number; decodedFrame?: number; decodedListener?: () => void; uploadCanvas?: HTMLCanvasElement };
-  type Resources = Pick<Entry, 'canvas' | 'gl' | 'program' | 'texture' | 'buffer' | 'uniforms' | 'passTextures' | 'framebuffer' | 'passWidth' | 'passHeight'>;
+  type Entry = { source: HTMLVideoElement | HTMLImageElement; effects: VisualEffectInput; levels?: Uint8Array; finishKey?: string; curvesTexture?: WebGLTexture; lutTexture?: WebGLTexture; lutSize?: number; nativeCorners?: { node:HTMLElement; originalRadius:string }; neonColor?: number; canvas?: HTMLCanvasElement; gl?: WebGLRenderingContext; program?: WebGLProgram; gradeOnly?: boolean; texture?: WebGLTexture; buffer?: WebGLBuffer; uniforms?: Record<string, WebGLUniformLocation | null>; passTextures?: WebGLTexture[]; framebuffer?: WebGLFramebuffer; passWidth?: number; passHeight?: number; nominalWidth?: number; nominalHeight?: number; detailWidth?: number; detailHeight?: number; lastPassKey?: string; lastPassCount?: number; lastFrame?: number; lastSource?: string | number; lastTransform?: string; dirty: boolean; injected?: HTMLImageElement; failed?: boolean; videoCallback?: number; decodedFrame?: number; decodedListener?: () => void; uploadCanvas?: HTMLCanvasElement };
+  type Resources = Pick<Entry, 'canvas' | 'gl' | 'program' | 'texture' | 'buffer' | 'uniforms' | 'passTextures' | 'framebuffer' | 'passWidth' | 'passHeight' | 'curvesTexture' | 'lutTexture'>;
   const entries = new Map<string, Entry>();
   const available: Resources[] = [];
   let disposed = false;
@@ -46,7 +47,7 @@ export function installVisualEffects(sources: VisualEffectSource[], fps: number,
     if(cameraBlur)passes.push({directionalBlur:cameraBlur});
     const scaleBlur=!base.cameraGlideBlur||preview&&clock.paused?.()===true?undefined:motionZoomBlurAt(base.cameraGlideBlur,time);
     if(scaleBlur)passes.push({zoomBlur:scaleBlur});
-    if(enabled(other))passes.push(other);
+    if(enabled(other)||other.colorFinish)passes.push(other);
     for(const clip of timedEffects){
       if(!clip.zoomBlur?.enabled||time<clip.start||time>=clip.start+clip.duration)continue;
       const amount=clip.zoomBlur.amount*adjustmentFrame(clip,time).opacity;
@@ -70,11 +71,40 @@ export function installVisualEffects(sources: VisualEffectSource[], fps: number,
 void main(){vec2 p=lens.yz+(uv-lens.yz);vec4 c=texture2D(source,clamp(p,vec2(0.0),vec2(1.0)));${grade}gl_FragColor=vec4(rgb,c.a);}`;
   const fragment = `precision highp float;
 varying vec2 uv;uniform sampler2D source;uniform vec2 size;uniform float frame;
+uniform sampler2D curves;uniform float curvesOn;uniform vec3 hslBands[8];uniform vec2 hslSpan[8];uniform float hslCenter[8];uniform float hslOn;uniform sampler2D lut;uniform vec2 lutInfo;uniform vec4 bloom;
 uniform float softBlur;uniform float frameCorners;uniform vec4 cornerWindow;uniform float invert;uniform vec4 grade;uniform vec3 balance;uniform vec3 zoom;uniform vec3 glitch;uniform vec3 dither;uniform float ditherPalette;uniform vec3 ditherShadow;uniform vec3 ditherHighlight;
 float bayer2(vec2 p){return p.y<1.0?(p.x<1.0?0.0:2.0):(p.x<1.0?3.0:1.0);}
 float bayer4(vec2 p){p=mod(floor(p),4.0);return (4.0*bayer2(mod(p,2.0))+bayer2(floor(p/2.0))+0.5)/16.0;}
 float hash(vec2 p){float n=mod(p.x*73.0+p.y*151.0+19.0,251.0);n=mod(n*n*17.0+n*13.0,65521.0);return mod(n*37.0,1021.0)/1021.0;}
 vec4 sampleSource(vec2 p){return texture2D(source,clamp(p,vec2(0.0),vec2(1.0)));}
+vec3 rgb2hsl(vec3 c){float mx=max(max(c.r,c.g),c.b),mn=min(min(c.r,c.g),c.b),l=(mx+mn)*.5,d=mx-mn,h=0.0,s=0.0;
+  if(d>1e-5){s=l>.5?d/(2.0-mx-mn):d/(mx+mn);if(mx==c.r)h=(c.g-c.b)/d+(c.g<c.b?6.0:0.0);else if(mx==c.g)h=(c.b-c.r)/d+2.0;else h=(c.r-c.g)/d+4.0;h/=6.0;}
+  return vec3(h,s,l);}
+float hue2rgb(float p,float q,float t){t=fract(t);if(t<1.0/6.0)return p+(q-p)*6.0*t;if(t<.5)return q;if(t<2.0/3.0)return p+(q-p)*(2.0/3.0-t)*6.0;return p;}
+vec3 hsl2rgb(vec3 h){if(h.y<=0.0)return vec3(h.z);float q=h.z<.5?h.z*(1.0+h.y):h.z+h.y-h.z*h.y,p=2.0*h.z-q;return vec3(hue2rgb(p,q,h.x+1.0/3.0),hue2rgb(p,q,h.x),hue2rgb(p,q,h.x-1.0/3.0));}
+vec3 hslAdjust(vec3 rgb){
+  vec3 h=rgb2hsl(clamp(rgb,0.0,1.0));vec3 shift=vec3(0.0);
+  for(int i=0;i<8;i++){
+    float d=h.x*360.0-hslCenter[i];d=d-360.0*floor((d+180.0)/360.0);
+    float w=d<0.0?max(0.0,1.0+d/hslSpan[i].x):max(0.0,1.0-d/hslSpan[i].y);
+    shift+=hslBands[i]*w;
+  }
+  // Grays carry no hue: fade the adjustment in with saturation.
+  float k=smoothstep(0.02,0.2,h.y);
+  h.x=fract(h.x+shift.x*k);h.y=clamp(h.y*(1.0+shift.y*k),0.0,1.0);h.z=clamp(h.z+shift.z*k*.35*(1.0-abs(2.0*h.z-1.0)+.2),0.0,1.0);
+  return hsl2rgb(h);}
+vec3 applyLut(vec3 c){
+  float n=lutInfo.x,b=c.b*(n-1.0),b0=floor(b),b1=min(b0+1.0,n-1.0),f=b-b0;
+  float x=c.r*(n-1.0)+.5,y=(c.g*(n-1.0)+.5)/n;
+  return mix(texture2D(lut,vec2((b0*n+x)/(n*n),y)).rgb,texture2D(lut,vec2((b1*n+x)/(n*n),y)).rgb,f);}
+vec3 bloomGlow(vec2 p){
+  vec3 sum=vec3(0.0);
+  for(int i=0;i<24;i++){
+    float a=float(i)*2.39996,r=sqrt((float(i)+.5)/24.0)*bloom.z;
+    vec3 s=sampleSource(p+vec2(cos(a),sin(a))*r/size).rgb;
+    float l=dot(s,vec3(.2126,.7152,.0722));sum+=s*max(l-bloom.y,0.0)/max(1.0-bloom.y,.05);
+  }
+  return sum/24.0;}
 ${NEON_EDGES_GLSL}
 ${LENS_FILM_GLSL}
 ${TEXTURE_OVERLAYS_GLSL}
@@ -125,8 +155,12 @@ void main(){
     c.r=mix(c.r,radial(p-bleed).r,.75);c.b=mix(c.b,radial(p+bleed).b,.75);
   }
   if(lensFringing>0.0){vec2 fringe=(uv-lens.yz)*lensFringing/size;c.r=radial(p+fringe).r;c.b=radial(p-fringe).b;}
+  if(bloom.x>0.0)c.rgb+=bloomGlow(p)*bloom.x*1.6;
   // Exposure in stops, then warm/cool and green/magenta balance.
   ${grade}
+  if(curvesOn>0.5){rgb=clamp(rgb,0.0,1.0)*(255.0/256.0)+.5/256.0;rgb=vec3(texture2D(curves,vec2(rgb.r,.5)).r,texture2D(curves,vec2(rgb.g,.5)).g,texture2D(curves,vec2(rgb.b,.5)).b);rgb=rgb*(255.0/256.0)+.5/256.0;rgb=vec3(texture2D(curves,vec2(rgb.r,.5)).a,texture2D(curves,vec2(rgb.g,.5)).a,texture2D(curves,vec2(rgb.b,.5)).a);}
+  if(hslOn>0.5)rgb=hslAdjust(rgb);
+  if(lutInfo.y>0.0)rgb=mix(rgb,applyLut(clamp(rgb,0.0,1.0)),lutInfo.y);
   rgb=mix(rgb,1.0-rgb,invert);
   rgb=neonEdges(p,rgb);
   if(dither.x>0.0){
@@ -157,7 +191,7 @@ void main(){
 
   function enabled(effects: VisualEffects) {
     const c = effects.colorGrade, z = effects.zoomBlur, g = effects.glitch;
-    return !!(c?.enabled && (c.exposure || c.contrast !== 1 || c.saturation !== 1 || c.temperature || c.tint || c.vibrance) || z?.enabled && z.amount > 0 || g?.enabled && g.intensity > 0 || effects.invert?.enabled && effects.invert.amount > 0 || effects.dither?.enabled && effects.dither.amount > 0 || effects.neonEdges?.enabled && effects.neonEdges.amount > 0 || effects.lensDistortion?.enabled && (effects.lensDistortion.amount !== 0 || effects.lensDistortion.fringing > 0) || effects.filmOverlay?.enabled && effects.filmOverlay.amount > 0 || effects.vhs?.enabled && effects.vhs.amount > 0 || effects.lightLeak?.enabled && effects.lightLeak.amount > 0 || effects.directionalBlur?.enabled && effects.directionalBlur.amount > 0 || effects.turbulentDisplace?.enabled && effects.turbulentDisplace.amount > 0 || effects.lightSweep?.enabled && effects.lightSweep.amount > 0 || effects.softBlur?.enabled && effects.softBlur.amount > 0 || effects.frameCorners?.enabled && effects.frameCorners.amount>0 || effects.frameDistortion?.enabled && (effects.frameDistortion.horizontal !== 0 || effects.frameDistortion.vertical !== 0 || effects.frameDistortion.skew !== 0 || (effects.frameDistortion.bend??0)!==0));
+    return !!(effects.bloom?.enabled && effects.bloom.amount > 0 || c?.enabled && (c.exposure || c.contrast !== 1 || c.saturation !== 1 || c.temperature || c.tint || c.vibrance) || z?.enabled && z.amount > 0 || g?.enabled && g.intensity > 0 || effects.invert?.enabled && effects.invert.amount > 0 || effects.dither?.enabled && effects.dither.amount > 0 || effects.neonEdges?.enabled && effects.neonEdges.amount > 0 || effects.lensDistortion?.enabled && (effects.lensDistortion.amount !== 0 || effects.lensDistortion.fringing > 0) || effects.filmOverlay?.enabled && effects.filmOverlay.amount > 0 || effects.vhs?.enabled && effects.vhs.amount > 0 || effects.lightLeak?.enabled && effects.lightLeak.amount > 0 || effects.directionalBlur?.enabled && effects.directionalBlur.amount > 0 || effects.turbulentDisplace?.enabled && effects.turbulentDisplace.amount > 0 || effects.lightSweep?.enabled && effects.lightSweep.amount > 0 || effects.softBlur?.enabled && effects.softBlur.amount > 0 || effects.frameCorners?.enabled && effects.frameCorners.amount>0 || effects.frameDistortion?.enabled && (effects.frameDistortion.horizontal !== 0 || effects.frameDistortion.vertical !== 0 || effects.frameDistortion.skew !== 0 || (effects.frameDistortion.bend??0)!==0));
   }
   function clearNativeCorners(entry:Entry) {
     if(!entry.nativeCorners)return;
@@ -185,16 +219,16 @@ void main(){
     entry.injected?.removeAttribute('data-revline-effects');
     entry.canvas?.remove();
     if (preview && !disposed && !entry.failed && entry.canvas && entry.gl && !entry.gl.isContextLost()) {
-      const { canvas, gl, program, texture, buffer, uniforms, passTextures, framebuffer, passWidth, passHeight } = entry;
-      available.push({ canvas, gl, program, texture, buffer, uniforms, passTextures, framebuffer, passWidth, passHeight });
+      const { canvas, gl, program, texture, buffer, uniforms, passTextures, framebuffer, passWidth, passHeight, curvesTexture, lutTexture } = entry;
+      available.push({ canvas, gl, program, texture, buffer, uniforms, passTextures, framebuffer, passWidth, passHeight, curvesTexture, lutTexture });
       if (available.length > 1) destroy(available.shift()!);
     } else destroy(entry);
-    entry.gl = undefined; entry.canvas = undefined; entry.program = undefined; entry.uploadCanvas = undefined; entry.passTextures = undefined; entry.framebuffer = undefined; entry.passWidth = undefined; entry.passHeight = undefined; entry.lastSource = undefined; entry.lastFrame = undefined;
+    entry.gl = undefined; entry.canvas = undefined; entry.program = undefined; entry.uploadCanvas = undefined; entry.passTextures = undefined; entry.framebuffer = undefined; entry.passWidth = undefined; entry.passHeight = undefined; entry.lastSource = undefined; entry.lastFrame = undefined; entry.curvesTexture = undefined; entry.lutTexture = undefined; entry.finishKey = undefined;
   }
   function destroy(resources: Resources) {
     const gl = resources.gl; if (!gl) return;
     gl.deleteTexture(resources.texture ?? null); gl.deleteBuffer(resources.buffer ?? null); gl.deleteProgram(resources.program ?? null);
-    for(const texture of resources.passTextures??[])gl.deleteTexture(texture);
+    for(const texture of [...resources.passTextures??[],resources.curvesTexture,resources.lutTexture])if(texture)gl.deleteTexture(texture);
     gl.deleteFramebuffer(resources.framebuffer??null);
     gl.getExtension('WEBGL_lose_context')?.loseContext();
   }
@@ -252,9 +286,27 @@ void main(){
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
-    const uniforms = Object.fromEntries(['source','size','frame','softBlur','frameCorners','cornerWindow','invert','grade','balance','zoom','glitch','dither','ditherPalette','ditherShadow','ditherHighlight','neon','neonColor','neonPixel','lens','lensFringing','film','filmTone','filmPixel','textureTime','textureOutput','vhs','vhsMotion','lightLeak','lightLeakColor','directional','turbulence','sweep','sweepMotion','sweepColor','perspective','perspectiveFit','perspectiveBend'].map(name => [name, gl.getUniformLocation(program, name)]));
+    const uniforms = Object.fromEntries(['source','size','frame','softBlur','frameCorners','cornerWindow','invert','grade','balance','zoom','glitch','dither','ditherPalette','ditherShadow','ditherHighlight','neon','neonColor','neonPixel','lens','lensFringing','film','filmTone','filmPixel','textureTime','textureOutput','vhs','vhsMotion','lightLeak','lightLeakColor','directional','turbulence','sweep','sweepMotion','sweepColor','perspective','perspectiveFit','perspectiveBend','curves','curvesOn','hslBands','hslSpan','hslCenter','hslOn','lut','lutInfo','bloom'].map(name => [name, gl.getUniformLocation(program, name)]));
     Object.assign(entry, { canvas, gl, program, gradeOnly, texture, buffer, uniforms });
     entry.source.parentElement!.appendChild(canvas);
+  }
+  /** Upload a clip's curves, HSL and LUT once per change; textures sit on units 1 and 2. */
+  function bindFinish(entry:Entry,finish:ColorFinishSource){
+    const gl=entry.gl!,u=entry.uniforms!,key=JSON.stringify(finish);
+    const texture=(existing:WebGLTexture|undefined)=>{const created=existing??gl.createTexture()!;gl.bindTexture(gl.TEXTURE_2D,created);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);return created;};
+    if(entry.finishKey!==key){
+      gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,false);
+      gl.activeTexture(gl.TEXTURE1);entry.curvesTexture=texture(entry.curvesTexture);
+      gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,256,1,0,gl.RGBA,gl.UNSIGNED_BYTE,curvesTexture(finish.curves??{}));
+      gl.activeTexture(gl.TEXTURE2);entry.lutTexture=texture(entry.lutTexture);
+      const size=finish.lut?.custom?.size??17,atlas=finish.lut?.custom?customAtlas(finish.lut.custom):lookAtlas(finish.lut?.look??'film-warm',size);
+      gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,size*size,size,0,gl.RGBA,gl.UNSIGNED_BYTE,atlas);entry.lutSize=size;
+      gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,true);
+      const spans=HSL_CENTERS.map((center,index)=>{const previous=HSL_CENTERS[(index+7)%8],next=HSL_CENTERS[(index+1)%8];return [((center-previous)+360)%360||360,((next-center)+360)%360||360];});
+      gl.useProgram(entry.program!);gl.uniform3fv(u.hslBands,hslUniform(finish.hsl??{}));gl.uniform2fv(u.hslSpan,new Float32Array(spans.flat()));gl.uniform1fv(u.hslCenter,new Float32Array(HSL_CENTERS));
+      entry.finishKey=key;
+    }
+    gl.activeTexture(gl.TEXTURE1);gl.bindTexture(gl.TEXTURE_2D,entry.curvesTexture!);gl.activeTexture(gl.TEXTURE2);gl.bindTexture(gl.TEXTURE_2D,entry.lutTexture!);
   }
   /** Reuse GPU-only intermediate pixels; no readback or extra WebGL context. */
   function preparePassTargets(entry:Entry) {
@@ -310,7 +362,7 @@ void main(){
     const stablePasses=playingVideo?entry.lastPassCount===passes.length:entry.lastPassKey===passKey;
     if (!force && !entry.dirty && stableFrame && stablePasses && entry.lastSource === sourceKey && (playingVideo || entry.lastTransform === transformKey)) return;
     try {
-      const gradeOnly=!preview&&passes.length===1&&!!passes[0].colorGrade?.enabled&&!passes[0].frameDistortion?.enabled&&!enabled({...passes[0],colorGrade:undefined})&&!entry.effects.cameraGlideBlur?.amount&&!timedEffects.some(clip=>clip.start<end&&clip.start+clip.duration>start);
+      const gradeOnly=!preview&&passes.length===1&&!(passes[0] as VisualEffectInput).colorFinish&&!!passes[0].colorGrade?.enabled&&!passes[0].frameDistortion?.enabled&&!enabled({...passes[0],colorGrade:undefined})&&!entry.effects.cameraGlideBlur?.amount&&!timedEffects.some(clip=>clip.start<end&&clip.start+clip.duration>start);
       if(entry.canvas&&entry.gradeOnly!==gradeOnly)release(entry);
       if (!entry.canvas) initialize(entry, width, height,passes,gradeOnly);
       else sizeOutput(entry,passes);
@@ -369,6 +421,11 @@ void main(){
         gl.uniform2f(u.sweepMotion,ls?.speed??0,0);
         const sweepColor=color(ls?.color??'#ffffff');gl.uniform3f(u.sweepColor,sweepColor[0],sweepColor[1],sweepColor[2]);
         gl.uniform1f(u.softBlur,b?.enabled?b.amount*pixelScale:0);
+        const bl=effects.bloom;gl.uniform4f(u.bloom,bl?.enabled?bl.amount:0,bl?.threshold??.65,(bl?.radius??24)*pixelScale,0);
+        const finish=(effects as VisualEffectInput).colorFinish;
+        if(finish)bindFinish(entry,finish);
+        gl.uniform1f(u.curvesOn,finish?.curves?1:0);gl.uniform1f(u.hslOn,finish?.hsl?1:0);gl.uniform2f(u.lutInfo,entry.lutSize??17,finish?.lut?finish.lut.amount:0);
+        gl.uniform1i(u.curves,1);gl.uniform1i(u.lut,2);gl.activeTexture(gl.TEXTURE0);
         gl.uniform1f(u.invert,effects.invert?.enabled?effects.invert.amount:0);
         gl.uniform4f(u.grade,c?.enabled?c.exposure:0,c?.enabled?c.contrast:1,c?.enabled?c.saturation:1,0);
         gl.uniform3f(u.balance,c?.enabled?c.temperature/100:0,c?.enabled?c.tint/100:0,c?.enabled?c.vibrance/100:0);
@@ -425,7 +482,7 @@ void main(){
   function set(id: string, effects: VisualEffectInput) {
     baseEffects.set(id,effects);
     const previous = entries.get(id);
-    if (!enabled(effects)&&!effects.effectKeyframes?.length&&!hasReactiveEffects(effects.audioReactive)&&!(effects.cameraGlideBlur?.amount&&effects.cameraGlideBlur.amount>0)&&!timedEffects.some(clip=>clip.zoomBlur?.enabled&&clip.zoomBlur.amount>0)) { remove(id); return; }
+    if (!enabled(effects)&&!effects.colorFinish&&!effects.effectKeyframes?.length&&!hasReactiveEffects(effects.audioReactive)&&!(effects.cameraGlideBlur?.amount&&effects.cameraGlideBlur.amount>0)&&!timedEffects.some(clip=>clip.zoomBlur?.enabled&&clip.zoomBlur.amount>0)) { remove(id); return; }
     const source = document.getElementById(id);
     if (!(source instanceof HTMLVideoElement || source instanceof HTMLImageElement)) return;
     const entry = previous ?? { source, effects, dirty: true };

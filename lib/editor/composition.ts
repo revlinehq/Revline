@@ -6,6 +6,7 @@ import { adjustmentSources } from './adjustment-layers';
 import { solidColorSources } from './solid-color-layers';
 import { maskSources } from './masks';
 import { audioReactiveSources, hasReactiveEffects } from './audio-reactive';
+import { colorFinishSource } from './color-finish';
 import { isTransitionClip, transitionSources } from './clip-transitions';
 import { validateVisualFade } from './visual-fades';
 import { audioFadeAttributes, audioVolumeEnvelope, validateAudioTimeline } from './audio-settings';
@@ -261,7 +262,7 @@ const timeline=gsap.timeline({paused:true});
 ${animation.join('\n')}
 window.__revlineDurationTween=gsap.to({},{duration:${safeDuration},paused:true});timeline.add(window.__revlineDurationTween,0);window.__revlineDurationTween.paused(false);
 window.__timelines=window.__timelines||{};window.__timelines.revline=timeline;
-${visualEffectsRuntimeScript(timeline.clips.flatMap((clip, index) => clip.kind === 'video' || clip.kind === 'image' ? [{ id: `clip-${index}`, ...visualEffectsOf(clip), cameraGlideBlur:cameraGlideBlurSource(clip), effectKeyframes:clip.effectKeyframes, motionOffset:clip.motionOffset, ...(hasReactiveEffects(clip.audioReactive) ? { audioReactive: clip.audioReactive } : {}) }] : []), fps, resolution)}
+${visualEffectsRuntimeScript(timeline.clips.flatMap((clip, index) => clip.kind === 'video' || clip.kind === 'image' ? [{ id: `clip-${index}`, ...visualEffectsOf(clip), cameraGlideBlur:cameraGlideBlurSource(clip), effectKeyframes:clip.effectKeyframes, motionOffset:clip.motionOffset, ...(hasReactiveEffects(clip.audioReactive) ? { audioReactive: clip.audioReactive } : {}), ...(colorFinishSource(clip, timeline.luts) ? { colorFinish: colorFinishSource(clip, timeline.luts) } : {}) }] : []), fps, resolution)}
 window.__revlineVisualEffects.installAdjustmentLayers(${JSON.stringify(adjustmentSources(timeline.clips)).replace(/</g, '\\u003c')});
 window.__revlineVisualEffects.installSolidColorLayers(${JSON.stringify(solidColorSources(timeline.clips)).replace(/</g, '\\u003c')});
 window.__revlineVisualEffects.installClipMasks(${JSON.stringify(maskSources(timeline.clips)).replace(/</g, '\\u003c')});window.__revlineVisualEffects.installAudioReactive(${JSON.stringify(audioReactiveSources(timeline.clips)).replace(/</g, '\\u003c')});
