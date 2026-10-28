@@ -36,7 +36,7 @@ export function AssistantActivity({ label, detail, state = 'working', startedAt,
   return <div className={`assistant-activity processing-status ${className}`} data-state={state} data-phase={phase} role={state === 'error' ? 'alert' : 'status'}>
     <div className="assistant-activity-heading">
       {Icon && <span className="assistant-activity-symbol" aria-hidden="true"><Icon size={15} strokeWidth={1.6}/></span>}
-      <span className="processing-status-label">{title}</span>
+      <span className={`processing-status-label${state === 'working' ? ' shimmer' : ''}`}>{title}</span>
       {SHOW_ELAPSED && state === 'working' && <Elapsed startedAt={startedAt}/>}
     </div>
     {detail && <span className="processing-status-detail">{detail}</span>}

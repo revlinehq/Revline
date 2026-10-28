@@ -11,7 +11,7 @@ export function ProcessingStatus({ label, detail, progress, state = 'working', b
   return <div className={`processing-status ${className}`} data-state={state} role={state === 'error' ? 'alert' : 'status'}>
     {brand && !inlineBrand && <Brand markOnly />}
     <div className="processing-status-copy">
-      {inlineBrand ? <span className="processing-status-heading">{brand && <Brand markOnly />}<span className="processing-status-label">{label}</span></span> : <span className="processing-status-label">{label}</span>}
+      {inlineBrand ? <span className="processing-status-heading">{brand && <Brand markOnly />}<span className={`processing-status-label${state === 'working' ? ' shimmer' : ''}`}>{label}</span></span> : <span className={`processing-status-label${state === 'working' ? ' shimmer' : ''}`}>{label}</span>}
       {detail && <span className="processing-status-detail">{detail}</span>}
       {state === 'working' && (measured
         ? <div className="processing-status-measured"><progress aria-label={label} max={100} value={Math.max(0, Math.min(100, progress))}/><span>{Math.round(Math.max(0, Math.min(100, progress)))}%</span></div>
