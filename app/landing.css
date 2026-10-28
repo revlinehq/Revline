@@ -101,13 +101,13 @@ div.landing-hero-buttons>.landing-reveal-content{display:flex;align-items:center
 
 /* Use cases */
 .landing-use-cases{display:flex;flex-direction:column;gap:40px;padding-block:96px}
-.landing-carousel{display:flex;flex-direction:column;gap:12px;border-radius:16px;overflow:hidden}
+.landing-carousel{display:flex;flex-direction:column;gap:12px;border-radius:8px;overflow:hidden}
 .landing-marquee{overflow:hidden}
 .landing-marquee-track{display:flex;width:max-content;animation:landing-marquee 55s linear infinite}
 .landing-marquee[data-direction=right] .landing-marquee-track{animation-direction:reverse}
 .landing-carousel:hover .landing-marquee-track{animation-play-state:paused}
 .landing-marquee-set{display:flex;gap:16px;padding-right:16px}
-.landing-tile{position:relative;width:124px;height:220px;flex-shrink:0;border-radius:12px;overflow:hidden;background:#17181c}
+.landing-tile{position:relative;width:124px;height:220px;flex-shrink:0;border-radius:8px;overflow:hidden;background:#17181c}
 .landing-tile-wide{width:391px}
 .landing-tile img{width:100%;height:100%;object-fit:cover;display:block}
 .landing-tile .landing-chip{position:absolute;top:10px;left:10px}
@@ -116,22 +116,22 @@ div.landing-hero-buttons>.landing-reveal-content{display:flex;align-items:center
 /* How it works: grainy gradient cards with each visual fully inside, padded on every side. */
 .landing-how{display:flex;flex-direction:column;gap:40px;padding-block:96px}
 .landing-steps{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:24px}
-.landing-step{display:flex;flex-direction:column;align-items:center;gap:20px;min-width:0;padding:36px;overflow:hidden;border-radius:24px;background:#f3f0ff center/cover no-repeat}
+.landing-step{display:flex;flex-direction:column;align-items:center;gap:20px;min-width:0;padding:36px;overflow:hidden;border-radius:12px;background:#f3f0ff center/cover no-repeat}
 .landing-step-text{align-self:stretch;display:flex;flex-direction:column;gap:6px;min-height:88px}
 .landing-step-text h3{font:500 24px/1.26 var(--l-head);letter-spacing:-.4px;color:var(--l-fg)}
 .landing-step-text p{font-size:16px;line-height:1.5;color:var(--l-fg-2)}
-.landing-step-visual{width:100%;aspect-ratio:16/9;border-radius:16px;background:#121212}
+.landing-step-visual{width:100%;aspect-ratio:16/9;border-radius:8px;background:#121212}
 
 /* More from Revline: nested cards, each stage a small mock of its effect. */
 .landing-features{display:flex;flex-direction:column;gap:40px;padding-block:96px}
 .landing-feature-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px}
-.landing-feature{display:flex;flex-direction:column;min-width:0;padding:8px;background:#fff;border:1px solid var(--l-border);border-radius:24px}
-.landing-feature-stage{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;height:280px;overflow:hidden;border-radius:18px;background:var(--l-bg-subtle)}
+.landing-feature{display:flex;flex-direction:column;min-width:0;padding:8px;background:#fff;border:1px solid var(--l-border);border-radius:12px}
+.landing-feature-stage{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;height:280px;overflow:hidden;border-radius:8px;background:var(--l-bg-subtle)}
 .landing-feature-text{display:flex;flex-direction:column;gap:8px;padding:16px 12px 10px}
 .landing-feature-text h3{font:400 20px/1.26 var(--l-head);color:var(--l-fg)}
 .landing-feature-text p{font-size:14px;line-height:1.5;color:var(--l-fg-2)}
 .landing-feature-stage[data-stage=layers]{gap:8px;padding:24px}
-.landing-layer{display:flex;align-items:center;gap:12px;width:100%;padding:8px;background:#fff;border:1px solid var(--l-border);border-radius:12px}
+.landing-layer{display:flex;align-items:center;gap:12px;width:100%;padding:8px;background:#fff;border:1px solid var(--l-border);border-radius:8px}
 .landing-layer[data-active]{background:var(--l-brand-tint);border-color:var(--l-brand)}
 .landing-layer img,.landing-layer>span{flex-shrink:0;width:52px;height:36px;border-radius:7px;object-fit:cover}
 .landing-layer img[data-dim]{opacity:.55}
@@ -144,7 +144,7 @@ div.landing-hero-buttons>.landing-reveal-content{display:flex;align-items:center
 .landing-track-label{position:absolute;left:24.7%;top:44px;display:flex;align-items:center;gap:6px;padding:5px 9px;border-radius:999px;background:var(--l-fg);font-size:12px;font-weight:600;line-height:1.3;color:#fff}
 .landing-track-label i{width:6px;height:6px;border-radius:50%;background:#22c55e}
 .landing-feature-stage[data-stage=ramp]{padding:24px}
-.landing-ramp{display:flex;flex-direction:column;gap:12px;width:100%;padding:16px;background:#fff;border:1px solid var(--l-border);border-radius:14px}
+.landing-ramp{display:flex;flex-direction:column;gap:12px;width:100%;padding:16px;background:#fff;border:1px solid var(--l-border);border-radius:8px}
 .landing-ramp-head{display:flex;align-items:center;justify-content:space-between}
 .landing-ramp-head b{font-size:13px;font-weight:600;color:var(--l-fg)}
 .landing-ramp-head small{font-size:11px;color:var(--l-fg-3)}
@@ -177,7 +177,7 @@ div.landing-hero-buttons>.landing-reveal-content{display:flex;align-items:center
 .landing-segments button{position:relative;flex-shrink:0;padding:10px 20px;border:0;border-radius:999px;background:none;font:500 15px var(--l-body);white-space:nowrap;color:#ffffffa6;transition:color 200ms ease}
 .landing-segments button:hover{color:#fff}
 .landing-segments button[aria-selected=true]{color:#121212}
-.landing-motion-preview{position:relative;width:100%;height:620px;overflow:hidden;border-radius:20px;background:#17181c}
+.landing-motion-preview{position:relative;width:100%;height:620px;overflow:hidden;border-radius:12px;background:#17181c}
 .landing-motion-scene{position:absolute;inset:0;background:#17181c center/cover no-repeat;opacity:0;transition:opacity 450ms ease;pointer-events:none}
 .landing-motion-scene[data-active]{opacity:1}
 .landing-motion-shade{position:absolute;inset:0;display:flex;flex-direction:column;justify-content:flex-end;gap:28px;padding:24px;background:linear-gradient(180deg,#0b0b0d59 0%,#0b0b0d00 25%,#0b0b0d99 55%,#0b0b0df2 100%)}
@@ -193,9 +193,9 @@ div.landing-hero-buttons>.landing-reveal-content{display:flex;align-items:center
 .landing-motion-lower b{font:600 24px var(--l-head);color:#fff}
 .landing-motion-lower span{font-size:14px;color:#ffffffb3}
 .landing-motion-demo{display:contents}
-.landing-motion-focus{position:absolute;top:22%;left:30%;width:34%;height:34%;border:2px solid #fff;border-radius:14px;box-shadow:0 0 0 9999px #0b0b0d66}
+.landing-motion-focus{position:absolute;top:22%;left:30%;width:34%;height:34%;border:2px solid #fff;border-radius:8px;box-shadow:0 0 0 9999px #0b0b0d66}
 .landing-motion-focus svg{position:absolute;right:18%;bottom:22%;fill:#fff;color:#121212}
-.landing-motion-timeline{position:relative;z-index:1;display:flex;flex-direction:column;gap:10px;padding:14px 16px;border-radius:14px;background:#0b0b0db3}
+.landing-motion-timeline{position:relative;z-index:1;display:flex;flex-direction:column;gap:10px;padding:14px 16px;border-radius:8px;background:#0b0b0db3}
 .landing-motion-timeline>div{display:flex;align-items:center;justify-content:space-between}
 .landing-motion-timeline>div:first-child{font:11px var(--l-mono);color:#ffffff80}
 .landing-motion-timeline>div:nth-child(2){height:14px;color:#fff}
@@ -210,7 +210,7 @@ div.landing-hero-buttons>.landing-reveal-content{display:flex;align-items:center
 .landing-pricing .landing-heading h2{letter-spacing:-1.1px;color:#fff}
 .landing-pricing .landing-heading p{color:#ffffff99}
 .landing-plans{display:flex;align-items:stretch;justify-content:center;gap:24px;width:100%}
-.landing-plan{width:440px;max-width:100%;display:flex;flex-direction:column;gap:28px;padding:32px;background:#141418;border:1px solid #ffffff1a;border-radius:16px}
+.landing-plan{width:440px;max-width:100%;display:flex;flex-direction:column;gap:28px;padding:32px;background:#141418;border:1px solid #ffffff1a;border-radius:10px}
 .landing-plan header{display:flex;flex-direction:column;gap:6px}
 .landing-plan h3{font:500 22px/1.2 var(--l-head);letter-spacing:-.3px;color:#fff}
 .landing-plan header p{font-size:14px;color:#ffffffa6}
@@ -255,7 +255,7 @@ div.landing-hero-buttons>.landing-reveal-content{display:flex;align-items:center
 
 /* Final CTA: a grainy violet card on the dark page end. */
 .landing-final{padding-bottom:40px;background:#0b0b0d}
-.landing-final-card{display:flex;flex-direction:column;align-items:center;gap:16px;padding:88px 80px;border-radius:20px;background:#4c1d95 url(/landing/grain/cta.webp) center/cover no-repeat;text-align:center}
+.landing-final-card{display:flex;flex-direction:column;align-items:center;gap:16px;padding:88px 80px;border-radius:12px;background:#4c1d95 url(/landing/grain/cta.webp) center/cover no-repeat;text-align:center}
 .landing-final-card .landing-heading h2{color:#fff}
 .landing-final-card .landing-heading p{width:560px;font-size:18px;line-height:1.3;color:#ffffffcc}
 .landing-signup{width:420px;max-width:100%;display:flex;flex-direction:column;gap:10px;padding-top:16px}
