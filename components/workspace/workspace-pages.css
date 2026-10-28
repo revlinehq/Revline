@@ -126,7 +126,7 @@ html[data-workspace-theme="dark"] {
 @media (max-width:640px) {
   .workspace-nav { gap:8px; } .workspace-nav-divider { display:none; } .workspace-chat-trigger { flex:1; max-width:none; font-size:12px; } .workspace-nav-history { display:none; }
   .workspace-nav:has(.workspace-nav-save) .workspace-nav-brand .revline-brand>span { display:none; }
-  .workspace-nav-secondary span { display:none; } .workspace-nav-secondary { width:30px; padding:0; } .workspace-nav-actions { gap:5px; }
+  .workspace-nav-secondary span { display:none; } .workspace-nav-secondary { width:30px; padding:0; } .workspace-nav-actions .workspace-nav-mcp { width:auto; padding:0 8px; } .workspace-nav-mcp .workspace-nav-mcp-apps { display:flex; } .workspace-nav-actions { gap:5px; }
   .workspace-history-content,.workspace-profile-content { margin:0 20px; padding-top:40px; } .workspace-page-heading h1 { font-size:28px; }
   .workspace-profile-section { grid-template-columns:1fr; gap:20px; } .workspace-history-tools { gap:8px; } .workspace-chat-activity { display:none; } .workspace-chat-row { padding:10px 4px; }
   .workspace-chat-row-link { gap:12px; } .workspace-chat-more { opacity:1; } .workspace-chat-description strong { font-size:14px; } .workspace-chat-description>span { font-size:12px; }
