@@ -26,7 +26,7 @@ html[data-workspace-theme="dark"] {
 .workspace-nav button:disabled { opacity:.45; cursor:default; }
 .workspace-nav-secondary { display:flex; align-items:center; justify-content:center; gap:6px; height:32px; padding:0 10px; border:0; border-radius:7px; background:var(--ws-hover); color:var(--ws-text); text-decoration:none; font-size:13px; font-weight:500; cursor:pointer; }
 /* Editor bar buttons are shadcn Buttons (size md); only their colors change here. */
-.workspace-nav-export { --primary:var(--revline-primary-background); --primary-foreground:#fff; } .workspace-nav-mcp { --secondary:var(--ws-hover); --secondary-foreground:var(--ws-text); }
+.workspace-nav-export { --primary:var(--revline-primary-background); --primary-foreground:#fff; } .workspace-nav-mcp { --border:var(--ed-border, var(--ws-border)); --input:var(--ed-border, var(--ws-border)); --background:transparent; --muted:var(--ws-hover); --foreground:var(--ws-text); color:var(--ws-text); }
 .workspace-nav-mcp-apps { display:flex; align-items:center; gap:4px; }
 .workspace-nav-secondary:hover { filter:brightness(.96); }
 .workspace-nav-unsaved svg { color:#c77730; }
