@@ -11,7 +11,7 @@ A scene is one beat of a video: a TypeScript module that builds plain HTML once 
 
 ## Contract
 
-- Write \`export default function scene({ root, tl, gsap, width, height, duration, fps })\`. It runs once, before the first frame.
+- Write \`export default function scene({ root, tl, gsap, width, height, duration, fps, brand })\`. It runs once, before the first frame. \`brand\` is the attached brand kit (fonts, colors, logo; read the brand-kit skill) or null.
 - \`root\` is the full-frame container on the 1080-based canvas (\`width\` x \`height\` px). Build inside it with \`root.innerHTML\` or \`document.createElement\`; never restyle \`root\` itself. Position with absolute px or percentages.
 - \`tl\` is the scene's GSAP timeline. Time 0 is the clip's first frame, in seconds. Put every animation on it with a position parameter: \`tl.from(el, { y: 40, opacity: 0, duration: .8, ease: 'expo.out' }, 1.2)\`.
 - The editor seeks the timeline to each frame, so the whole film is scrubbable and exports frame-exact. Animate only with GSAP. CSS transitions and keyframes, requestAnimationFrame, timers, Date, video and audio do not follow the clock.

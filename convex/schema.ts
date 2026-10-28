@@ -7,6 +7,11 @@ import { BEAT_ANALYSIS_ENGINE } from '../lib/media-analysis/beat-map';
 import { aiCostRecordFields } from './lib/ai_cost';
 import { alertFields } from './lib/discord_alert';
 
+export const brandColorValidator = v.object({ name: v.string(), value: v.string() });
+export const brandFontValidator = v.object({ family: v.string(), weight: v.string(), role: v.union(v.literal('heading'), v.literal('body'), v.literal('other')), url: v.string() });
+export const brandContextValidator = v.object({ product: v.optional(v.string()), problem: v.optional(v.string()), audience: v.optional(v.string()), features: v.optional(v.array(v.string())), cta: v.optional(v.string()), tone: v.optional(v.string()), notes: v.optional(v.string()) });
+const sceneBrandValidator = v.object({ kitId: v.string(), name: v.string(), colors: v.array(brandColorValidator), fonts: v.array(brandFontValidator), logo: v.optional(v.string()) });
+
 export const aspectRatio = v.union(v.literal("vertical"), v.literal("square"), v.literal("landscape"), v.literal("portrait-feed"), v.literal("classic"));
 export const assetKind = v.union(v.literal("video"), v.literal("audio"), v.literal("image"));
 export const waveformValidator = v.object({ peaks: v.string(), samplesPerSecond: v.number() });
@@ -68,7 +73,7 @@ export const clipValidator = v.object({
   lightSweep:v.optional(v.object({enabled:v.boolean(),amount:v.number(),color:v.string(),angle:v.number(),position:v.number(),width:v.number(),speed:v.number()})),
   vhs:v.optional(v.object({enabled:v.boolean(),amount:v.number(),scanlines:v.number(),noise:v.number(),bleed:v.number(),tracking:v.number(),speed:v.number()})),
   lightLeak:v.optional(v.object({enabled:v.boolean(),amount:v.number(),color:v.string(),position:v.number(),spread:v.number(),speed:v.number()})),
-  scene: v.optional(v.object({ title: v.string(), code: v.string() })),
+  scene: v.optional(v.object({ title: v.string(), code: v.string(), brand: v.optional(sceneBrandValidator) })),
   textTemplate: v.optional(textTemplateValidator),
   textStyle:v.optional(textStyleValidator), textGradient:v.optional(textGradientValidator),
   fontFamily:v.optional(v.union(v.literal('space-grotesk'),v.literal('anton'),v.literal('dm-serif'),v.literal('geist-mono'),v.literal('inter'),v.literal('dm-sans'),v.literal('montserrat'),v.literal('poppins'),v.literal('oswald'),v.literal('bebas-neue'),v.literal('playfair-display'),v.literal('caveat'),v.literal('tiktok-sans'),v.literal('barlow-condensed'),v.literal('ibm-plex-mono'),v.literal('lora'),v.literal('archivo-black'),v.literal('fraunces'))),
@@ -237,6 +242,7 @@ export default defineSchema({
   // One row: serializes Fly export dispatch so concurrent runs cannot both create a warm machine.
   flyDispatchLocks: defineTable({ name: v.string(), lockedUntil: v.number(), pending: v.boolean() }).index('by_name', ['name']),
   accountRateLimits:defineTable({ownerId:v.string(),name:v.string(),period:v.number(),windowStart:v.number(),count:v.number()}).index('by_owner_name_period',['ownerId','name','period']),
+  brandKits: defineTable({ ownerId: v.string(), name: v.string(), sourceUrl: v.optional(v.string()), colors: v.array(brandColorValidator), fonts: v.array(v.object({ family: v.string(), weight: v.string(), role: v.union(v.literal('heading'), v.literal('body'), v.literal('other')), storageId: v.id('_storage') })), logo: v.optional(v.string()), copy: v.optional(v.object({ title: v.optional(v.string()), description: v.optional(v.string()), headings: v.array(v.string()) })), context: v.optional(brandContextValidator), createdAt: v.number(), updatedAt: v.number() }).index('by_ownerId_name', ['ownerId', 'name']),
   users: defineTable(userFields).index("by_clerk_id", ["clerkId"]),
   projects: defineTable(projectFields).index("by_ownerId_updatedAt", ["ownerId", "updatedAt"]),
   assets: defineTable(assetFields).index("by_analysis",["analysisId"]).index("by_ownerId_projectId", ["ownerId", "projectId"]).index('by_owner_project_r2Key',['ownerId','projectId','r2Key']).index("by_ownerId_createdAt", ["ownerId", "createdAt"]).index("by_storageId", ["storageId"]).index("by_r2Key", ["r2Key"]).index('by_previewR2Key',['previewR2Key']).index('by_owner_previewR2Key',['ownerId','previewR2Key']).index('by_thumbnailStorageId',['thumbnailStorageId']).index('by_owner_r2Key',['ownerId','r2Key']).index('by_owner_storageId',['ownerId','storageId']).index('by_owner_thumbnail',['ownerId','thumbnailStorageId']).index('by_owner_audio',['ownerId','audioAssetId']),

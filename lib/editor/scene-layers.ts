@@ -1,8 +1,9 @@
 import { dimensions, trackOf, type Clip, type Timeline } from './types';
 import { TEXT_FONTS } from './text-fonts';
+import { validateSceneBrand, type SceneBrand } from './brand-kit';
 
 /** A TypeScript module that builds HTML once and animates it on a GSAP timeline; the composition seeks it to clip-local time. */
-export type SceneSource = { title: string; code: string };
+export type SceneSource = { title: string; code: string; brand?: SceneBrand };
 export const SCENE_LIMITS = { title: 80, code: 20_000 } as const;
 
 export function validateScene(clip: Pick<Clip, 'kind' | 'scene' | 'assetId'>) {
@@ -13,16 +14,17 @@ export function validateScene(clip: Pick<Clip, 'kind' | 'scene' | 'assetId'>) {
   if (!scene.title.trim() || scene.title.length > SCENE_LIMITS.title) throw new Error(`Scene titles need 1–${SCENE_LIMITS.title} characters.`);
   if (!scene.code.trim()) throw new Error('A scene needs code.');
   if (scene.code.length > SCENE_LIMITS.code) throw new Error(`Scene code supports up to ${SCENE_LIMITS.code} characters.`);
+  if (scene.brand) validateSceneBrand(scene.brand);
 }
 
-export type SceneLayerSource = { clipId: string; title: string; code: string; start: number; duration: number; offset: number; zIndex: number; fps: number; width: number; height: number; scale: number };
+export type SceneLayerSource = { clipId: string; title: string; code: string; brand?: SceneBrand; start: number; duration: number; offset: number; zIndex: number; fps: number; width: number; height: number; scale: number };
 export type SceneFont = { family: string; weight: string; url: string };
 
 /** Scenes are authored on the 1080-based canvas and scaled to the output resolution. */
 export function sceneLayerSources(timeline: Timeline, resolution = 1080): SceneLayerSource[] {
   const { width, height } = dimensions(timeline.aspectRatio, 1080);
   return timeline.clips.flatMap((clip, index) => clip.kind === 'scene' && clip.scene ? [{
-    clipId: clip.id, title: clip.scene.title, code: clip.scene.code, start: clip.start, duration: clip.duration, offset: clip.sourceStart,
+    clipId: clip.id, title: clip.scene.title, code: clip.scene.code, ...(clip.scene.brand ? { brand: clip.scene.brand } : {}), start: clip.start, duration: clip.duration, offset: clip.sourceStart,
     zIndex: trackOf(clip) * 256 + index, fps: timeline.fps, width, height, scale: resolution / 1080,
   }] : []);
 }
@@ -48,11 +50,11 @@ function report(entry,message){var error=new Error('Scene "'+entry.source.title+
 function inner(){var layers=composition.querySelectorAll('.adjustment-layer');for(var i=0;i<layers.length;i++)if(!layers[i].querySelector('.adjustment-layer'))return layers[i];return composition;}
 function find(id){var nodes=composition.querySelectorAll('[data-scene-clip]');for(var i=0;i<nodes.length;i++)if(nodes[i].dataset.sceneClip===id)return nodes[i];return null;}
 function font(item){if(!fontData.has(item.url))fontData.set(item.url,fetch(new URL(item.url,document.baseURI).href).then(function(response){if(!response.ok)throw new Error('font');return response.arrayBuffer();}).then(function(data){return {family:item.family,weight:item.weight,data:data};},function(){return null;}));return fontData.get(item.url);}
-function wantedFonts(code){return Promise.all(fonts.filter(function(item){return item.family==='Space Grotesk'||code.indexOf(item.family)>=0;}).map(font)).then(function(list){return list.filter(Boolean);});}
+function wantedFonts(source){var list=fonts.filter(function(item){return item.family==='Space Grotesk'||source.code.indexOf(item.family)>=0;}).concat(source.brand?source.brand.fonts:[]);return Promise.all(list.map(font)).then(function(list){return list.filter(Boolean);});}
 function frameDocument(source,script){return '<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src \\'none\\'; script-src \\'unsafe-inline\\' \\'unsafe-eval\\'; style-src \\'unsafe-inline\\'; img-src data: blob:; font-src data: blob:"><style>html,body{margin:0;width:'+(source.width+overscan*2)+'px;height:'+(source.height+overscan*2)+'px;overflow:hidden;background:transparent}body{font-family:\\'Space Grotesk\\',Arial,sans-serif;color:#F4F4F0;-webkit-font-smoothing:antialiased}#scene-root{position:absolute;left:'+overscan+'px;top:'+overscan+'px;width:'+source.width+'px;height:'+source.height+'px;overflow:hidden}</style></head><body><div id="scene-root"></div><script>'+script+'</'+'script></body></html>';}
 function send(entry,message){if(entry.frame.contentWindow)entry.frame.contentWindow.postMessage(Object.assign({source:'revline-scene-host'},message),'*');}
 function mount(source){
-  var key=JSON.stringify([source.code,source.width,source.height,source.fps,source.duration]),entry=entries.get(source.clipId);
+  var key=JSON.stringify([source.code,source.brand||null,source.width,source.height,source.fps,source.duration]),entry=entries.get(source.clipId);
   var node=entry?entry.node:find(source.clipId);
   if(!node){node=document.createElement('div');node.className='scene-layer';node.dataset.sceneClip=source.clipId;inner().appendChild(node);}
   node.style.zIndex=String(source.zIndex);
@@ -93,7 +95,7 @@ window.addEventListener('message',function(event){
   var data=event.data;if(!data||data.source!=='revline-scene')return;
   entries.forEach(function(entry){
     if(event.source!==entry.frame.contentWindow)return;
-    if(data.type==='ready')wantedFonts(entry.source.code).then(function(list){send(entry,{type:'init',code:entry.source.code,width:entry.source.width,height:entry.source.height,fps:entry.source.fps,duration:entry.source.duration,fonts:list});});
+    if(data.type==='ready')wantedFonts(entry.source).then(function(list){send(entry,{type:'init',code:entry.source.code,brand:entry.source.brand||null,width:entry.source.width,height:entry.source.height,fps:entry.source.fps,duration:entry.source.duration,fonts:list});});
     else if(data.type==='compiled'){entry.compiled=true;entry.resolve();paint(clock.time());}
     else if(data.type==='painted'){var done=entry.waiters.get(data.seq);if(done){entry.waiters.delete(data.seq);done();}}
     else if(data.type==='error'){report(entry,String(data.message));entry.resolve();entry.waiters.forEach(function(done){done();});entry.waiters.clear();}

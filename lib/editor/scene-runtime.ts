@@ -16,11 +16,12 @@ import { MotionPathPlugin } from 'gsap/MotionPathPlugin';
 import { ScrambleTextPlugin } from 'gsap/ScrambleTextPlugin';
 import { TextPlugin } from 'gsap/TextPlugin';
 import { SCENE_GSAP_PLUGINS, type SceneGsapPlugin } from './scene-modules';
+import { sceneBrandContext, type SceneBrand, type SceneBrandContext } from './brand-kit';
 
-type Init = { type: 'init'; code: string; width: number; height: number; fps: number; duration: number; fonts: { family: string; weight: string; data: ArrayBuffer }[] };
+type Init = { type: 'init'; code: string; brand: SceneBrand | null; width: number; height: number; fps: number; duration: number; fonts: { family: string; weight: string; data: ArrayBuffer }[] };
 type Seek = { type: 'seek'; time: number; seq: number };
 /** What a scene's default export receives. Time 0 on `tl` is the first frame of the clip. */
-export type SceneContext = { root: HTMLElement; tl: gsap.core.Timeline; gsap: typeof gsap; width: number; height: number; duration: number; fps: number };
+export type SceneContext = { root: HTMLElement; tl: gsap.core.Timeline; gsap: typeof gsap; width: number; height: number; duration: number; fps: number; brand: SceneBrandContext | null };
 
 const PLUGINS: Record<SceneGsapPlugin, object> = { CustomEase, CustomWiggle, CustomBounce, SplitText, DrawSVGPlugin, MorphSVGPlugin, MotionPathPlugin, ScrambleTextPlugin, TextPlugin };
 gsap.registerPlugin(...Object.values(PLUGINS), ExpoScaleEase, RoughEase, SlowMo);
@@ -59,7 +60,7 @@ if (typeof window !== 'undefined' && window.parent !== window) {
     for (const font of data.fonts) { const face = new FontFace(font.family, font.data, { weight: font.weight }); await face.load(); document.fonts.add(face); }
     const scene = compileScene(data.code);
     origin = gsap.globalTimeline.time();
-    await scene({ root, tl: gsap.timeline(), gsap, width: data.width, height: data.height, duration: data.duration, fps: data.fps });
+    await scene({ root, tl: gsap.timeline(), gsap, width: data.width, height: data.height, duration: data.duration, fps: data.fps, brand: sceneBrandContext(data.brand ?? undefined) });
     master = gsap.exportRoot({ paused: true });
     master.seek(origin, false);
   };
