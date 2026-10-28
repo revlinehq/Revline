@@ -283,14 +283,14 @@ export function NewConversation() {
       <div className="new-conversation-start">
         <div className="new-conversation-intro">
           <h1 id="new-conversation-title">Welcome{firstName ? `, ${firstName}` : ''}.</h1>
-          <div className="new-conversation-modes" role="tablist" aria-label="What to make">
+          <div className="new-conversation-modes" role="tablist" aria-label="What to make" data-mode={mode}>
             {START_MODES.map(item => <button key={item.id} type="button" role="tab" aria-selected={mode === item.id} onClick={() => { setMode(item.id); setError(''); }}>{item.label}</button>)}
           </div>
           <p>{START_MODES.find(item => item.id === mode)!.intro}</p>
         </div>
         <div className="new-conversation-entry" data-dragging={dragging || undefined} aria-busy={busy}>
           {mode === 'motion'
-            ? <EditComposer className="new-conversation-motion" value={motionBrief} onChange={setMotionBrief} onSubmit={startMotionDesign} placeholder="Describe your video, like a 45 second launch film for our new analytics dashboard" disabled={!draftReady} submitLabel="Create" />
+            ? <EditComposer className="new-conversation-motion" value={motionBrief} onChange={setMotionBrief} onSubmit={startMotionDesign} placeholder="Describe the video you want…" disabled={!draftReady} submitLabel="Create" />
             : <FootageStartCard onAttach={() => picker.current?.click()} disabled={!draftReady} dragging={dragging}/>}
           <input ref={picker} type="file" accept="video/*,audio/*,image/*" multiple className="sr-only" tabIndex={-1} aria-label="Choose media to upload" onChange={event => { const files = Array.from(event.target.files ?? []); event.target.value = ''; if (files.length) attach(files); }}/>
           {error && <p className="new-conversation-error" role="alert">{error}</p>}
