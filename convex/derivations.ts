@@ -1,0 +1,123 @@
+import { ConvexError, v } from 'convex/values';
+import { internalMutation, internalQuery, type MutationCtx } from './_generated/server';
+import type { Doc, Id } from './_generated/dataModel';
+import { internal } from './_generated/api';
+import { requireEditorAccess } from './lib/billing_access';
+import { requireMediaTaskCapacity } from './lib/account_limits';
+import { readProject } from './lib/project_data';
+import { commitTimeline, currentTimeline } from './lib/timeline';
+import { editingWorkflowActive } from './lib/assistant_workflow';
+import { enqueueMediaTask } from './mediaTasks';
+import { sourceEndOf } from '../lib/editor/playback-rate';
+
+/**
+ * Processed copies of a clip's source, made by the media worker: a freeze-frame still (free), smooth slow
+ * motion by fal.ai RIFE frame interpolation, or a fal.ai upscale. Video copies keep the source's timeline
+ * (black padding before `start`), so a clip switches to one by changing only its media.
+ */
+const op = v.union(v.literal('freeze'), v.literal('slowmo'), v.literal('upscale'));
+export type DerivationOp = Doc<'derivations'>['op'];
+export const MAX_SLOWMO_SECONDS = 30, MAX_UPSCALE_SECONDS = 60, MAX_SLOWMO_FACTOR = 8;
+const HANDLE_SECONDS = .25, PLACEMENT_DELAY_MS = 10_000, PLACEMENT_ATTEMPTS = 360;
+// fal.ai (Oct 2026): video upscaler $0.0008 per output megapixel; RIFE $0.0013 per compute second (about 1.5 s per output second).
+const UPSCALE_USD_PER_MEGAPIXEL = .0008, RIFE_USD_PER_OUTPUT_SECOND = .002;
+
+type StartInput = { ownerId: string; projectId: Id<'projects'>; clipId: string; assetId: string; op: DerivationOp; start: number; end: number; time?: number; factor?: number; scale?: number; target?: number; fps?: number; placeLater: boolean };
+
+/** Queue (or reuse) a processed copy. Window times are source seconds. */
+export async function startDerivation(ctx: MutationCtx, input: StartInput) {
+  await requireEditorAccess(ctx, input.ownerId);
+  const project = await readProject(ctx, input.projectId);
+  if (!project || project.ownerId !== input.ownerId || project.deleting) throw new ConvexError('Project not found.');
+  const id = ctx.db.normalizeId('assets', input.assetId), asset = id ? await ctx.db.get(id) : null;
+  if (!asset || asset.ownerId !== input.ownerId || asset.projectId !== project._id) throw new ConvexError('This clip’s media is unavailable.');
+  if (asset.derivedOf && asset.derivation !== 'freeze') throw new ConvexError(`This clip already uses ${asset.derivation === 'slowmo' ? 'smooth slow-motion' : 'upscaled'} footage. Process the original instead.`);
+  if (input.op === 'freeze' && asset.kind !== 'video') throw new ConvexError('Freeze a video clip.');
+  if (input.op === 'slowmo' && (asset.kind !== 'video' || asset.cutoutOf)) throw new ConvexError('Smooth slow motion needs original video footage, not a cut-out.');
+  if (input.op === 'upscale' && (asset.kind === 'audio' || asset.cutoutOf)) throw new ConvexError('Upscale a video or image clip (not a cut-out).');
+  const duration = asset.duration ?? 0;
+  let start = input.start, end = input.end;
+  if (asset.kind === 'video') {
+    if (!(duration > 0)) throw new ConvexError('This video has no recorded length.');
+    start = Math.max(0, start - (input.op === 'freeze' ? 0 : HANDLE_SECONDS)); end = Math.min(duration, end + (input.op === 'freeze' ? 0 : HANDLE_SECONDS));
+    if (!(end >= start)) throw new ConvexError('Choose footage inside the clip.');
+  }
+  const limit = input.op === 'slowmo' ? MAX_SLOWMO_SECONDS : MAX_UPSCALE_SECONDS;
+  if (input.op !== 'freeze' && end - start > limit) throw new ConvexError(`Process up to ${limit} seconds at a time. Split or trim this clip first.`);
+  const same = (row: Doc<'derivations'>) => row.op === input.op && row.sourceAssetId === asset._id && (input.op === 'freeze' ? Math.abs((row.time ?? -1) - (input.time ?? 0)) < 1e-3
+    : row.start <= start + 1e-6 && row.end >= end - 1e-6 && (row.factor ?? 1) >= (input.factor ?? 1) && row.target === input.target);
+  const rows = await ctx.db.query('derivations').withIndex('by_source_op', q => q.eq('sourceAssetId', asset._id).eq('op', input.op)).order('desc').take(30);
+  for (const row of rows) {
+    if (!same(row) || row.ownerId !== input.ownerId || row.status === 'failed') continue;
+    if (row.status === 'queued') return { derivationId: row._id, status: 'queued' as const, estimatedUsd: 0 };
+    const output = row.outputAssetId ? await ctx.db.get(row.outputAssetId) : null;
+    if (output && output.projectId === project._id) return { derivationId: row._id, status: 'completed' as const, outputAssetId: output._id, estimatedUsd: 0 };
+  }
+  await requireMediaTaskCapacity(ctx, input.ownerId, 1);
+  const derivationId = await ctx.db.insert('derivations', { ownerId: input.ownerId, projectId: project._id, clipId: input.clipId, sourceAssetId: asset._id, op: input.op, start, end,
+    ...(input.time !== undefined ? { time: input.time } : {}), ...(input.factor ? { factor: input.factor } : {}), ...(input.scale ? { scale: input.scale } : {}), ...(input.target ? { target: input.target } : {}),
+    ...(input.placeLater ? { placeLater: true } : {}), status: 'queued', createdAt: Date.now() });
+  const taskId = await enqueueMediaTask(ctx, { ownerId: input.ownerId, projectId: project._id, assetId: asset._id, kind: 'derive', derivationId });
+  await ctx.db.patch(derivationId, { taskId });
+  const seconds = end - start, fps = input.fps ?? 30;
+  const estimatedUsd = input.op === 'freeze' ? 0 : input.op === 'slowmo' ? seconds * (input.factor ?? 2) * RIFE_USD_PER_OUTPUT_SECOND
+    : (asset.kind === 'image' ? 1 : seconds * fps) * (asset.width ?? 1920) * (asset.height ?? 1080) * (input.scale ?? 2) ** 2 / 1e6 * UPSCALE_USD_PER_MEGAPIXEL;
+  return { derivationId, status: 'queued' as const, estimatedUsd: Math.max(input.op === 'freeze' ? 0 : .01, Math.round(estimatedUsd * 100) / 100) };
+}
+
+const runArgs = { projectId: v.id('projects'), ownerId: v.string(), runId: v.string() };
+async function requireRun(ctx: MutationCtx | import('./_generated/server').QueryCtx, args: { projectId: Id<'projects'>; ownerId: string; runId: string }) {
+  const project = await readProject(ctx, args.projectId);
+  if (!project || project.ownerId !== args.ownerId || project.aiRunId !== args.runId || !project.aiRunning) throw new ConvexError('AI run is no longer active');
+}
+
+export const startFromRun = internalMutation({
+  args: { ...runArgs, clipId: v.string(), assetId: v.string(), op, start: v.number(), end: v.number(), time: v.optional(v.number()), factor: v.optional(v.number()), scale: v.optional(v.number()), target: v.optional(v.number()), fps: v.optional(v.number()), placeLater: v.boolean() },
+  returns: v.object({ derivationId: v.id('derivations'), status: v.union(v.literal('queued'), v.literal('completed')), outputAssetId: v.optional(v.id('assets')), estimatedUsd: v.number() }),
+  handler: async (ctx, { runId, ...args }) => { await requireRun(ctx, { ...args, runId }); return startDerivation(ctx, args); },
+});
+
+export const runStatus = internalQuery({
+  args: { ...runArgs, derivationId: v.id('derivations') },
+  returns: v.object({ status: v.union(v.literal('queued'), v.literal('completed'), v.literal('failed')), outputAssetId: v.optional(v.id('assets')), error: v.optional(v.string()), progress: v.optional(v.number()) }),
+  handler: async (ctx, args) => {
+    const row = await ctx.db.get(args.derivationId);
+    if (!row || row.ownerId !== args.ownerId || row.projectId !== args.projectId) throw new ConvexError('Processing request not found.');
+    const task = row.status === 'queued' && row.taskId ? await ctx.db.get(row.taskId) : null;
+    return { status: row.status, ...(row.outputAssetId ? { outputAssetId: row.outputAssetId } : {}), ...(row.error ? { error: row.error } : {}), ...(task ? { progress: task.progress } : {}) };
+  },
+});
+
+/** The worker stored the copy: record its provenance, then switch the clip when it was queued to place itself. */
+export async function completeDerivation(ctx: MutationCtx, task: Doc<'mediaTasks'>) {
+  const row = task.derivationId ? await ctx.db.get(task.derivationId) : null;
+  const output = task.outputAssetId ? await ctx.db.get(task.outputAssetId) : null;
+  if (!row || row.status !== 'queued') throw new ConvexError('The processing request is no longer active.');
+  if (!output || output.ownerId !== task.ownerId || output.projectId !== task.projectId) throw new ConvexError('The processed media has not been stored yet.');
+  const source = await ctx.db.get(row.sourceAssetId);
+  // Video copies are picture only on the source's timeline: they share its extracted sound.
+  await ctx.db.patch(output._id, { derivedOf: row.sourceAssetId, derivation: row.op, ...(output.kind === 'video' ? { derivedStart: row.start, audioExtracted: true, ...(source?.audioAssetId ? { audioAssetId: source.audioAssetId } : {}) } : {}) });
+  await ctx.db.patch(row._id, { status: 'completed', outputAssetId: output._id });
+  if (row.placeLater) await placeDerivation(ctx, { ...row, status: 'completed', outputAssetId: output._id }, output);
+}
+
+/** Switch the clip to the processed copy when it still shows the processed source range. */
+export async function placeDerivation(ctx: MutationCtx, row: Doc<'derivations'>, output: Doc<'assets'>, attempt = 0): Promise<void> {
+  const project = await readProject(ctx, row.projectId);
+  if (!project || project.deleting || project.ownerId !== row.ownerId) return;
+  if (await editingWorkflowActive(ctx, project)) {
+    if (attempt < PLACEMENT_ATTEMPTS) await ctx.scheduler.runAfter(PLACEMENT_DELAY_MS, internal.derivations.placeLater, { derivationId: row._id, attempt: attempt + 1 });
+    return;
+  }
+  const timeline = currentTimeline(project), clip = timeline.clips.find(item => item.id === row.clipId);
+  const fits = !!clip && clip.assetId === row.sourceAssetId && (output.kind === 'image'
+    || clip.sourceStart >= row.start - 1e-6 && sourceEndOf(clip) <= Math.min(row.end, output.duration ?? 0) + 1 / timeline.fps);
+  if (fits) await commitTimeline(ctx, project, { ...timeline, clips: timeline.clips.map(item => item.id === clip.id ? { ...item, assetId: output._id } : item) }, project.revision ?? 0);
+  await ctx.db.patch(row._id, { placed: fits });
+}
+
+export const placeLater = internalMutation({ args: { derivationId: v.id('derivations'), attempt: v.number() }, returns: v.null(), handler: async (ctx, args) => {
+  const row = await ctx.db.get(args.derivationId), output = row?.outputAssetId ? await ctx.db.get(row.outputAssetId) : null;
+  if (row?.status === 'completed' && output && row.placed === undefined) await placeDerivation(ctx, row, output, args.attempt);
+  return null;
+}});

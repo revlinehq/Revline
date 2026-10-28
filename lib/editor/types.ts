@@ -109,6 +109,8 @@ export type MediaAsset = {
   audioAssetId?: string; audioExtracted?: boolean;
   /** Set on a background-removed copy (VP9 with alpha) of cutoutOf, on the same source timeline; frames before cutoutStart are transparent. */
   cutoutOf?: string; cutoutStart?: number;
+  /** Set on a processed copy of derivedOf: a freeze still, or slow-motion/upscaled video on the same source timeline. */
+  derivedOf?: string; derivedStart?: number; derivation?: 'freeze' | 'slowmo' | 'upscale';
   analysisKinds?: string[];
   preparation?: {status:'processing'|'failed';message:string};
   waveform?: AudioWaveform;

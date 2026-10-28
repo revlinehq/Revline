@@ -82,14 +82,14 @@ export async function duplicateProjectFor(ctx: MutationCtx, ownerId: string, pro
   const copyId = await createProject(ctx, { title: projectTitle(title ?? `${project.title} copy`), aspectRatio: project.aspectRatio, ownerId, createdAt: now, updatedAt: now, timeline: normalizeTimeline({ clips: [], fps: timeline.fps, aspectRatio: timeline.aspectRatio }), revision: 0, history: [] });
   const ids = new Map<string, Id<'assets'>>();
   for (const asset of assets) {
-    const { _id, _creationTime, audioAssetId: _audio, cutoutOf: _cutout, ...metadata } = await shareAnalysis(ctx, asset);
+    const { _id, _creationTime, audioAssetId: _audio, cutoutOf: _cutout, derivedOf: _derived, ...metadata } = await shareAnalysis(ctx, asset);
     ids.set(String(_id), await ctx.db.insert('assets', { ...metadata, projectId: copyId, createdAt: now }));
   }
   // Links between media (extracted audio, background-removed cutouts) point at the copies.
   for (const asset of assets) {
     const link = (id?: Id<'assets'>) => id ? ids.get(String(id)) : undefined;
-    const audioAssetId = link(asset.audioAssetId), cutoutOf = link(asset.cutoutOf);
-    if (audioAssetId || cutoutOf) await ctx.db.patch(ids.get(String(asset._id))!, { ...(audioAssetId ? { audioAssetId } : {}), ...(cutoutOf ? { cutoutOf } : {}) });
+    const audioAssetId = link(asset.audioAssetId), cutoutOf = link(asset.cutoutOf), derivedOf = link(asset.derivedOf);
+    if (audioAssetId || cutoutOf || derivedOf) await ctx.db.patch(ids.get(String(asset._id))!, { ...(audioAssetId ? { audioAssetId } : {}), ...(cutoutOf ? { cutoutOf } : {}), ...(derivedOf ? { derivedOf } : {}) });
   }
   for (const id of ids.values()) await recordAssetStorage(ctx, (await ctx.db.get(id))!);
   const remap = (item: Timeline): Timeline => ({ ...item, clips: item.clips.map(clip => clip.assetId && ids.has(clip.assetId) ? { ...clip, assetId: ids.get(clip.assetId)! } : clip) });

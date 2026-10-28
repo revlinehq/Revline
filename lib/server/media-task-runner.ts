@@ -22,6 +22,7 @@ import { preparePreviewVideo,probePreviewVideo,type PreviewVideoMetadata } from 
 import { runDistributedRender, runRenderWorker } from './render-worker';
 import { importVideoLink } from './import-video-link';
 import { removeBackground } from './remove-background';
+import { deriveMedia } from './derive-media';
 import { prepareComposition,writeComposition } from './prepare-composition';
 import { renderPlainExport } from './plain-export-render';
 import { plainExportPlan } from '@/lib/editor/plain-export';
@@ -169,6 +170,16 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
       metadata??=await probePreviewVideo(output,signal);onProgress(90);
       await runPhase('Saving playback preview',()=>uploadMediaFile(output,{...credentials,projectId:task.projectId,purpose:'preview',sourceAssetId:asset._id,previewVersion:1,previewFps:metadata!.fps,kind:'video',contentType:'video/mp4',fileName:`${asset.fileName.replace(/\.[^.]+$/,'').slice(0,230)}.preview.mp4`,duration:metadata!.duration,width:metadata!.width,height:metadata!.height},uploadContext,signal));
       onProgress(98);return {};
+    }
+    if (task.kind === 'derive') {
+      if (task.outputAssetId) return {};
+      if (!task.derive || asset.kind === 'audio') throw new AnalysisError('The processing request is unavailable.', 400);
+      const request = task.derive, label = request.op === 'freeze' ? 'Capturing freeze frame' : request.op === 'slowmo' ? 'Interpolating slow motion' : 'Upscaling';
+      const output = await runPhase(label, () => deriveMedia(source, asset.kind as 'video' | 'image', directory, request, signal, onProgress));
+      const base = asset.fileName.replace(/\.[^.]+$/, '').slice(0, 200), suffix = request.op === 'freeze' ? ` (frame ${(request.time ?? 0).toFixed(2)}s)` : request.op === 'slowmo' ? ` (smooth ${request.factor ?? 2}x)` : ' (upscaled)';
+      await runPhase('Saving processed media', () => uploadMediaFile(output.path, { ...credentials, projectId: task.projectId, fileName: `${base}${suffix}.${output.contentType.split('/')[1].replace('jpeg', 'jpg')}`, kind: output.kind, contentType: output.contentType, width: output.width, height: output.height, ...(output.duration ? { duration: output.duration } : {}) }, uploadContext, signal));
+      onProgress(98);
+      return {};
     }
     const media = await runPhase('Reading media information',()=>probeMedia(source, signal));
     if (task.kind === 'cutout') {

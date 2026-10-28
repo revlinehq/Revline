@@ -53,7 +53,8 @@ import { MAX_INSPECTION_QUESTION, validateVideoInspectionInput, videoMatchesOnCl
 import { currentTranscript } from '../../lib/media-analysis/transcript';
 import { frameEvidenceOnClip, frameInspectionCoverage, assertConsecutiveInspection, validateFrameInspectionInput, type FrameInspectionInput } from '../../lib/media-analysis/frame-inspection';
 import { shotAlignedRange } from '../../lib/media-analysis/shots';
-import { playbackRateOf } from '../../lib/editor/playback-rate';
+import { playbackRateOf, sourceEndOf, sourceTimeAt } from '../../lib/editor/playback-rate';
+import { FREEZE_MODES, MAX_FREEZE_SECONDS, MIN_FREEZE_SECONDS, insertFreezeFrame } from '../../lib/editor/freeze-frame';
 import { retainSourceRanges, type RetainedRangeSummary } from '../../lib/editor/retained-ranges';
 import { currentSpeechCleanup, keptRanges, snapToSpeech } from '../../lib/speech-cleanup';
 import { applySplitEdit, MAX_SPLIT_EDIT_SECONDS } from '../../lib/editor/split-edits';
@@ -151,6 +152,24 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
   };
   const loadAsset=async(assetId:string)=>{const asset=await ctx.runQuery(internal.assistant.getRunAsset,{...run,assetId});const index=assets.findIndex(item=>item._id===asset._id);if(index<0)throw new Error('Choose media from this project');assets[index]=asset;return asset;};
   const savedCheckpoint=async(assetId:string,edit:(timeline:Timeline)=>Timeline)=>{await loadAsset(assetId);return checkpoint(edit);};
+  // Processed copies (freeze stills, smooth slow motion, upscales) come from the media worker.
+  type DeriveInput={clipId:string;assetId:string;op:'freeze'|'slowmo'|'upscale';start:number;end:number;time?:number;factor?:number;target?:number;fps?:number;placeLater:boolean};
+  const derive=(input:DeriveInput)=>ctx.runMutation(internal.derivations.startFromRun,{...run,...input});
+  const adoptAsset=async(assetId:string)=>{const asset=await ctx.runQuery(internal.assistant.getRunAsset,{...run,assetId});const index=assets.findIndex(item=>item._id===asset._id);if(index<0)assets.push(asset);else assets[index]=asset;return asset;};
+  const awaitDerivation=async(derivationId:Id<'derivations'>,limitMs:number)=>{
+    budget.pauseForAnalysis();
+    try{
+      const deadline=Date.now()+limitMs;
+      while(true){
+        abortSignal.throwIfAborted();
+        const row=await ctx.runQuery(internal.derivations.runStatus,{...run,derivationId});
+        if(row.status==='failed')throw new AnalysisStepError(row.error??'Media processing failed.');
+        if(row.status==='completed'&&row.outputAssetId)return adoptAsset(row.outputAssetId);
+        if(Date.now()>deadline)throw new AnalysisStepError('Media processing is taking longer than this edit allows. Try again in a minute.');
+        await new Promise(resolve=>setTimeout(resolve,1000));
+      }
+    }finally{budget.resumeAfterAnalysis();}
+  };
   // A media task links to one analysis request. Parallel tool calls for the
   // same source and mode share one request: a second request would relink the
   // task and leave the first waiting until it timed out.
@@ -615,6 +634,41 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       if ([input.preset, input.anchors, input.clear || undefined].filter(value => value !== undefined).length !== 1) throw new Error('Give exactly one of preset, anchors or clear:true.');
       return setClipSpeedRamp(t, clip.id, input.clear ? null : input.preset ? presetAnchors(input.preset) : input.anchors!);
     }) }),
+    freezeFrame: createTool({ description: "Freeze one video clip's picture at a timeline moment, as a still that keeps the clip's framing, crop and look. mode insert (default): the timeline grows by `duration`; everything from that moment on (all layers, markers) moves later, then the clip resumes. mode hold: the picture holds for `duration` while the clip's sound plays on, then the video resumes in sync (skipping the held footage). Classic uses: freeze on a reaction or punchline and add a caption, label or zoom on the still (it is an image clip; animateClip, setVisualEffects and text work on it). Takes a few seconds. Returns stillClipId.", inputSchema: z.object({ clipId: z.string().min(1), at: z.number().min(0).describe('Timeline seconds inside the clip'), duration: z.number().min(MIN_FREEZE_SECONDS).max(MAX_FREEZE_SECONDS), mode: z.enum(FREEZE_MODES).optional() }).strict(), execute: async (_ctx, input) => reportAnalysisFailure(async () => {
+      await editSession.wait();
+      const clip = find(editSession.timeline, input.clipId);
+      if (clip.kind !== 'video' || !clip.assetId) throw new Error('Freeze a video clip.');
+      if (input.at < clip.start - 1e-6 || input.at > clip.start + clip.duration + 1e-6) throw new Error(`Choose a time between ${clip.start.toFixed(2)} and ${(clip.start + clip.duration).toFixed(2)}.`);
+      const frame = 1 / editSession.timeline.fps, time = sourceTimeAt(clip, Math.min(input.at, clip.start + clip.duration - frame));
+      const started = await derive({ clipId: clip.id, assetId: clip.assetId, op: 'freeze', start: time, end: time, time, placeLater: false });
+      const still = started.status === 'completed' && started.outputAssetId ? await adoptAsset(started.outputAssetId) : await awaitDerivation(started.derivationId, 120_000);
+      let stillClipId = '';
+      const saved = await checkpoint(t => insertFreezeFrame(t, input.clipId, input.at, input.duration, input.mode ?? 'insert', still._id, () => { const id = crypto.randomUUID(); if (!stillClipId) stillClipId = id; return id; }));
+      return { ...saved, stillClipId };
+    }) }),
+    smoothSlowMotion: createTool({ description: "Make slow motion smooth: AI frame interpolation (fal.ai RIFE) generates the in-between frames, so a slowed clip plays fluidly instead of stuttering. Optionally set a constant `rate` (0.25..1) in the same call; otherwise it uses the clip's current speed or speed ramp (its slowest point decides how many frames to add, up to 8x). Up to 30 seconds of footage. Runs in the background for about 1-3 minutes and costs the user's fal.ai credit; the clip switches to the smooth footage automatically after this turn's edits are saved. Use when the user asks for smooth or buttery slow-mo, or after a strong slow-down (0.5x or slower) on fast action.", inputSchema: z.object({ clipId: z.string().min(1), rate: z.number().min(.25).max(1).optional() }).strict(), execute: async (_ctx, input) => {
+      let saved: Awaited<ReturnType<typeof checkpoint>> | undefined;
+      if (input.rate !== undefined) saved = await checkpoint(t => setClipPlaybackRate(t, input.clipId, input.rate!));
+      await editSession.wait();
+      const clip = find(editSession.timeline, input.clipId);
+      if (clip.kind !== 'video' || !clip.assetId) throw new Error('Choose a video clip.');
+      const slowest = clip.speedRamp?.length ? Math.min(...clip.speedRamp.map(point => point.v)) : playbackRateOf(clip);
+      if (slowest > .8) throw new Error('This clip plays near normal speed, so it needs no extra frames. Slow it down first (rate, or setSpeedRamp).');
+      const factor = Math.min(8, Math.max(2, Math.ceil(1 / slowest - 1e-6)));
+      const started = await derive({ clipId: clip.id, assetId: clip.assetId, op: 'slowmo', start: clip.sourceStart, end: sourceEndOf(clip), factor, fps: editSession.timeline.fps, placeLater: true });
+      if (started.status === 'completed' && started.outputAssetId) { await adoptAsset(started.outputAssetId); saved = await checkpoint(t => patchClip(t, clip.id, { assetId: started.outputAssetId! })); return { ...saved, applied: true, reusedExisting: true, factor, estimatedUsd: 0 }; }
+      return { ...(saved ?? {}), started: true, factor, estimatedUsd: started.estimatedUsd, note: 'Frame interpolation is processing; the clip switches to the smooth footage automatically when it finishes.' };
+    } }),
+    upscaleClip: createTool({ description: "AI-upscale low-resolution footage or an image (fal.ai) so it stays sharp in a 1080p or 4K export: for small screen recordings, old clips, zoomed-in crops or low-res images. `target` is the short side in pixels (1080 default, 1440 or 2160). Video: up to 60 seconds of the clip's footage, about 2-5 minutes in the background, costs the user's fal.ai credit (quoted as estimatedUsd), and the clip switches automatically after this turn's edits are saved. Images switch the same way. Refuses media that is already at least the target size.", inputSchema: z.object({ clipId: z.string().min(1), target: z.union([z.literal(1080), z.literal(1440), z.literal(2160)]).optional() }).strict(), execute: async (_ctx, input) => {
+      await editSession.wait();
+      const clip = find(editSession.timeline, input.clipId), target = input.target ?? 1080;
+      if ((clip.kind !== 'video' && clip.kind !== 'image') || !clip.assetId) throw new Error('Upscale a video or image clip.');
+      const asset = await loadAsset(clip.assetId);
+      if (asset.width && asset.height && Math.min(asset.width, asset.height) >= target) throw new Error(`This media is already ${asset.width}x${asset.height}, at least ${target}p. It needs no upscale.`);
+      const started = await derive({ clipId: clip.id, assetId: clip.assetId, op: 'upscale', start: clip.kind === 'video' ? clip.sourceStart : 0, end: clip.kind === 'video' ? sourceEndOf(clip) : 0, target, fps: editSession.timeline.fps, placeLater: true });
+      if (started.status === 'completed' && started.outputAssetId) { await adoptAsset(started.outputAssetId); const saved = await checkpoint(t => patchClip(t, clip.id, { assetId: started.outputAssetId! })); return { ...saved, applied: true, reusedExisting: true, estimatedUsd: 0 }; }
+      return { started: true, estimatedUsd: started.estimatedUsd, note: 'Upscaling is processing; the clip switches to the sharper media automatically when it finishes.' };
+    } }),
     setPlaybackRate: createTool({ description: "Change a video or audio clip’s constant playback speed from 0.25× to 4×. Preserve its retained source footage; adjust timeline duration and linked sound together. Slowing down refuses overlaps, so make room first rather than moving unrelated clips. This is constant speed, not a speed ramp.", inputSchema: z.object({ clipId: z.string(), rate: z.number().min(.25).max(4) }), execute: async (_ctx, input) => checkpoint(t => setClipPlaybackRate(t, input.clipId, input.rate)) }),
     resetVisualEffect:createTool({description:"Reset one requested footage effect group to defaults (retain its enabled state) or remove that group. Preserve every other group, clip and audio.",inputSchema:z.object({clipId:z.string(),effect:z.enum(OFFERED_VISUAL_EFFECT_GROUPS),action:z.enum(['reset','remove'])}),execute:async(_ctx,{clipId,effect,action})=>checkpoint(t=>patchClip(t,clipId,visualEffectActionPatch(find(t,clipId),effect,action)))}),
     applyTextTemplate: createTool({ description: "Apply supported Remotion text motion to a caption/graphic while preserving existing words, appearance, font, position, rotation and timing. Word reveal, Pop-in words, Sliding title, Karaoke, Neon Echo, Lyric Slam, Kinetic Stack, Chromatic split (RGB split), Outline trails, Cinematic focus, Character scramble, Spotlight sweep, Ink write-on and Echo tunnel are animations, not styled text presets. Chromatic split adds colored offsets, Outline trails adds echo trails, Cinematic focus brings words into focus, and Character scramble settles temporary display letters into the original words. Spotlight sweep moves accent light across the title; Ink write-on reveals outlines before filled lettering; Echo tunnel brings repeated outlines forward into the title. For a look use applyTextLook. Karaoke preserves saved speech-word timings when present; otherwise it uses even duration progress, not detected syllables or beat sync.", inputSchema: z.object({ clipId: z.string(), preset: z.enum(REMOTION_TEXT_PRESETS) }), execute: async (_ctx, input) => checkpoint(t => { const clip = find(t, input.clipId); return patchClip(t, clip.id, textTemplatePatch(clip, input.preset)); }) }),

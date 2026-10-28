@@ -22,6 +22,7 @@ import { commitTimeline, currentTimeline } from './lib/timeline';
 import { BEAT_ANALYSIS_ENGINE } from '../lib/media-analysis/beat-map';
 import { editingWorkflowActive } from './lib/assistant_workflow';
 import { placeCutout } from './cutouts';
+import { completeDerivation } from './derivations';
 import { flyRendersEnabled, seatedRenders } from './lib/render_seats';
 import { MEDIA_PROCESSOR_VERSION } from '../lib/media-analysis/processor-version';
 import { MEDIA_TASK_LEASE_MS } from '../lib/media-analysis/errors';
@@ -38,20 +39,20 @@ const taskState = v.object({ _id: v.id('mediaTasks'), kind: mediaTaskKind, statu
 const renderSnapshot = v.object({ timeline: timelineValidator, assets: v.array(assetWithUrl), resolution: v.number(), fps: v.number(), quality: v.string() });
 const timelineFrames=v.object({timeline:timelineValidator,assets:v.array(assetWithUrl),times:v.array(v.number())});
 const reviewSnapshot=v.object({timeline:timelineValidator,reference:timelineValidator,plans:v.array(effectPlanValidator),assets:v.array(assetWithUrl),revision:v.number(),start:v.number(),end:v.number()});
-const workItem = v.object({review:v.optional(reviewSnapshot),snapshot:v.optional(timelineFrames),cutout:v.optional(v.object({start:v.number(),end:v.number(),fps:v.optional(v.number()),subject:v.optional(v.string())})), ...mediaTaskCredentials, projectId: v.id('projects'), aiRunId:v.optional(v.string()), kind: mediaTaskKind, sourceUrl: v.optional(v.string()), frameRequest: v.optional(frameRequestValidator), videoRequest: v.optional(videoRequestValidator), asset: v.optional(assetWithUrl), transcriptionAsset: v.optional(assetWithUrl), outputAssetId: v.optional(v.id('assets')), outputStored: v.optional(v.boolean()), render: v.optional(renderSnapshot), renderJobId: v.optional(v.id('renderJobs')) });
+const workItem = v.object({review:v.optional(reviewSnapshot),snapshot:v.optional(timelineFrames),cutout:v.optional(v.object({start:v.number(),end:v.number(),fps:v.optional(v.number()),subject:v.optional(v.string())})),derive:v.optional(v.object({op:v.union(v.literal('freeze'),v.literal('slowmo'),v.literal('upscale')),start:v.number(),end:v.number(),time:v.optional(v.number()),factor:v.optional(v.number()),target:v.optional(v.number())})), ...mediaTaskCredentials, projectId: v.id('projects'), aiRunId:v.optional(v.string()), kind: mediaTaskKind, sourceUrl: v.optional(v.string()), frameRequest: v.optional(frameRequestValidator), videoRequest: v.optional(videoRequestValidator), asset: v.optional(assetWithUrl), transcriptionAsset: v.optional(assetWithUrl), outputAssetId: v.optional(v.id('assets')), outputStored: v.optional(v.boolean()), render: v.optional(renderSnapshot), renderJobId: v.optional(v.id('renderJobs')) });
 export type MediaWorkItem = Infer<typeof workItem>;
 export const taskResult = v.object({review:v.optional(compositionReviewResult),snapshot:v.optional(v.object({frames:v.array(v.object({time:v.number(),image:v.string()}))})), analysis: v.optional(analysisValidator), frameInspection: v.optional(frameInspectionValidator), videoInspection: v.optional(videoInspectionValidator), audioAssetId: v.optional(v.id('assets')), waveform: v.optional(waveformValidator) });
 export type MediaTaskResult = Infer<typeof taskResult>;
 
 /** The oldest media processor that can run each kind; older processors leave these tasks queued. */
-const MIN_PROCESSOR_VERSION: Partial<Record<Doc<'mediaTasks'>['kind'], number>> = { transcribe: 3, frames: 4, preview: 5, snapshot: 6, cutout: 7 };
+const MIN_PROCESSOR_VERSION: Partial<Record<Doc<'mediaTasks'>['kind'], number>> = { transcribe: 3, frames: 4, preview: 5, snapshot: 6, cutout: 7, derive: 9 };
 
-export async function enqueueMediaTask(ctx: MutationCtx, input: Pick<Doc<'mediaTasks'>, 'ownerId' | 'projectId' | 'kind'> & Partial<Pick<Doc<'mediaTasks'>, 'assetId' | 'renderJobId' | 'analysisRequestId' | 'sourceUrl' | 'frameRequest' | 'videoRequest' | 'reviewId' | 'snapshotId' | 'cutoutId' | 'requiredProcessorVersion'|'previewVersion'|'lane'>>, beforeEnqueue?:()=>Promise<void>): Promise<Id<'mediaTasks'>> {
+export async function enqueueMediaTask(ctx: MutationCtx, input: Pick<Doc<'mediaTasks'>, 'ownerId' | 'projectId' | 'kind'> & Partial<Pick<Doc<'mediaTasks'>, 'assetId' | 'renderJobId' | 'analysisRequestId' | 'sourceUrl' | 'frameRequest' | 'videoRequest' | 'reviewId' | 'snapshotId' | 'cutoutId' | 'derivationId' | 'requiredProcessorVersion'|'previewVersion'|'lane'>>, beforeEnqueue?:()=>Promise<void>): Promise<Id<'mediaTasks'>> {
   const minimum = MIN_PROCESSOR_VERSION[input.kind];
   if (minimum) input = { ...input, requiredProcessorVersion: Math.max(minimum, input.requiredProcessorVersion ?? 0) };
   if(input.kind==='preview')input={...input,previewVersion:PREVIEW_VERSION};
   if(input.assetId&&input.kind==='preview'){const asset=await ctx.db.get(input.assetId);// A cut-out plays its own VP9 alpha file; an H.264 proxy would drop the transparency.
-  if(asset?.ownerId===input.ownerId&&asset.projectId===input.projectId&&(hasPreview(asset)||asset.cutoutOf)){const now=Date.now();return ctx.db.insert('mediaTasks',{...input,status:'completed',attempt:0,progress:100,createdAt:now,updatedAt:now});}}
+  if(asset?.ownerId===input.ownerId&&asset.projectId===input.projectId&&(hasPreview(asset)||asset.cutoutOf||asset.derivedOf)){const now=Date.now();return ctx.db.insert('mediaTasks',{...input,status:'completed',attempt:0,progress:100,createdAt:now,updatedAt:now});}}
   if (input.assetId && input.kind === 'beats') {
     const asset = await ctx.db.get(input.assetId);
     const beats=asset?(await hydrateAsset(ctx,asset)).analysis?.beats:undefined;
@@ -62,7 +63,7 @@ export async function enqueueMediaTask(ctx: MutationCtx, input: Pick<Doc<'mediaT
       return taskId;
     }
   }
-  if (input.assetId && input.kind !== 'frames' && input.kind !== 'video' && input.kind !== 'cutout') {
+  if (input.assetId && input.kind !== 'frames' && input.kind !== 'video' && input.kind !== 'cutout' && input.kind !== 'derive') {
     const existing = await ctx.db.query('mediaTasks').withIndex('by_asset_kind', q => q.eq('assetId', input.assetId).eq('kind', input.kind)).order('desc').take(10);
     const active = existing.find(task => (input.kind!=='preview'||task.previewVersion===input.previewVersion)&&['queued','running','retrying'].includes(task.status));
     if (active) { if (input.analysisRequestId) await ctx.db.patch(active._id, { analysisRequestId: input.analysisRequestId }); return active._id; }
@@ -163,6 +164,7 @@ async function markTerminal(ctx: MutationCtx, taskId: Id<'mediaTasks'>, status: 
   if(task.reviewId){const review=await ctx.db.get(task.reviewId);if(review)await ctx.db.patch(review._id,{status:'failed',error:error.slice(0,1000)});}
   if(task.snapshotId){const snapshot=await ctx.db.get(task.snapshotId);if(snapshot&&snapshot.status==='queued')await ctx.db.patch(snapshot._id,{status:'failed',error:error.slice(0,1000)});}
   if(task.cutoutId){const cutout=await ctx.db.get(task.cutoutId);if(cutout&&cutout.status==='queued')await ctx.db.patch(cutout._id,{status:'failed',error:error.slice(0,1000)});}
+  if(task.derivationId){const row=await ctx.db.get(task.derivationId);if(row&&row.status==='queued')await ctx.db.patch(row._id,{status:'failed',error:error.slice(0,1000)});}
   if (task.analysisRequestId) {
     const request = await ctx.db.get(task.analysisRequestId);
     if (request) await ctx.db.patch(request._id, { status: 'failed', error: error.slice(0, 1000) });
@@ -294,6 +296,7 @@ export const ready = query({ args: { workerSecret: v.string(),processorVersion:v
 
 async function analysisStillActive(ctx:import('./_generated/server').QueryCtx|MutationCtx,task:Doc<'mediaTasks'>) {
   if(task.cutoutId){const cutout=await ctx.db.get(task.cutoutId);return !!cutout&&cutout.ownerId===task.ownerId&&cutout.projectId===task.projectId&&cutout.status==='queued';}
+  if(task.derivationId){const row=await ctx.db.get(task.derivationId);return !!row&&row.ownerId===task.ownerId&&row.projectId===task.projectId&&row.status==='queued';}
   if(task.snapshotId){const snapshot=await ctx.db.get(task.snapshotId);return !!snapshot&&snapshot.ownerId===task.ownerId&&snapshot.projectId===task.projectId&&snapshot.status==='queued'&&snapshot.createdAt+180000>Date.now();}
   if(task.reviewId){const review=await ctx.db.get(task.reviewId);if(!review||review.ownerId!==task.ownerId||review.projectId!==task.projectId||review.status!=='queued'||review.createdAt+180000<=Date.now())return false;const run=await projectRun(ctx,task.projectId,task.ownerId);return !!run.aiRunning&&run.aiRunId===review.runId;}
   if(!task.analysisRequestId)return true;
@@ -324,6 +327,8 @@ async function loadWork(ctx:import('./_generated/server').QueryCtx|MutationCtx,t
   }
   const cutoutRow=task.cutoutId?await ctx.db.get(task.cutoutId):null;
   if(task.cutoutId&&(!cutoutRow||cutoutRow.ownerId!==task.ownerId||cutoutRow.projectId!==task.projectId))throw new ConvexError('The background removal request is unavailable.');
+  const deriveRow=task.derivationId?await ctx.db.get(task.derivationId):null;
+  if(task.derivationId&&(!deriveRow||deriveRow.ownerId!==task.ownerId||deriveRow.projectId!==task.projectId))throw new ConvexError('The processing request is unavailable.');
   let render: Infer<typeof renderSnapshot> | undefined, outputStored = false;
   if (task.renderJobId) {
     const job = await ctx.db.get(task.renderJobId);
@@ -337,7 +342,7 @@ async function loadWork(ctx:import('./_generated/server').QueryCtx|MutationCtx,t
     render = { timeline: job.timeline, assets: assets as Infer<typeof assetWithUrl>[], resolution: job.resolution ?? 1080, fps: job.fps ?? job.timeline.fps, quality: job.quality ?? 'high' };
   }
   const analysisRun=task.analysisRequestId?await ctx.db.get(task.analysisRequestId):null;
-  return { ...(analysisRun?{aiRunId:analysisRun.aiRunId}:{}),...(review?{review}:{}),...(snapshot?{snapshot}:{}),...(cutoutRow?{cutout:{start:cutoutRow.start,end:cutoutRow.end,...(cutoutRow.fps?{fps:cutoutRow.fps}:{}),...(cutoutRow.subject?{subject:cutoutRow.subject}:{})}}:{}),taskId: task._id, leaseToken: task.leaseToken!, projectId: task.projectId, kind: task.kind, ...(task.sourceUrl ? { sourceUrl: task.sourceUrl } : {}), ...(task.frameRequest ? { frameRequest: task.frameRequest } : {}), ...(task.videoRequest ? { videoRequest: task.videoRequest } : {}), ...(asset ? { asset: { ...await hydrateAsset(ctx,asset), url: await mediaUrl(ctx, asset), ...await previewUrl(ctx, asset) } } : {}), ...(transcriptionAsset?{transcriptionAsset}:{}), ...(render ? { render, outputStored } : {}), ...(task.renderJobId ? { renderJobId: task.renderJobId } : {}), ...(task.outputAssetId ? { outputAssetId: task.outputAssetId } : {}) };
+  return { ...(analysisRun?{aiRunId:analysisRun.aiRunId}:{}),...(review?{review}:{}),...(snapshot?{snapshot}:{}),...(cutoutRow?{cutout:{start:cutoutRow.start,end:cutoutRow.end,...(cutoutRow.fps?{fps:cutoutRow.fps}:{}),...(cutoutRow.subject?{subject:cutoutRow.subject}:{})}}:{}),...(deriveRow?{derive:{op:deriveRow.op,start:deriveRow.start,end:deriveRow.end,...(deriveRow.time!==undefined?{time:deriveRow.time}:{}),...(deriveRow.factor?{factor:deriveRow.factor}:{}),...(deriveRow.target?{target:deriveRow.target}:{})}}:{}),taskId: task._id, leaseToken: task.leaseToken!, projectId: task.projectId, kind: task.kind, ...(task.sourceUrl ? { sourceUrl: task.sourceUrl } : {}), ...(task.frameRequest ? { frameRequest: task.frameRequest } : {}), ...(task.videoRequest ? { videoRequest: task.videoRequest } : {}), ...(asset ? { asset: { ...await hydrateAsset(ctx,asset), url: await mediaUrl(ctx, asset), ...await previewUrl(ctx, asset) } } : {}), ...(transcriptionAsset?{transcriptionAsset}:{}), ...(render ? { render, outputStored } : {}), ...(task.renderJobId ? { renderJobId: task.renderJobId } : {}), ...(task.outputAssetId ? { outputAssetId: task.outputAssetId } : {}) };
 }
 export const claim = mutation({ args: { workerSecret: v.string(),compact:v.optional(v.boolean()),processorVersion:v.optional(v.number()),lane:v.optional(v.union(v.literal('ultra'),v.literal('any'))),rendersOnly:v.optional(v.boolean()) }, returns: v.union(workItem, v.null()), handler: async (ctx, args): Promise<MediaWorkItem | null> => {
   const role=requireMediaWorker(args.workerSecret);
@@ -474,6 +479,7 @@ const RESULT_HANDLERS: Record<Doc<'mediaTasks'>['kind'], ResultHandler> = {
     await ctx.db.patch(cutout._id, { status: 'completed', outputAssetId: output._id });
     await placeCutout(ctx, { ...cutout, status: 'completed', outputAssetId: output._id }, { ...output, cutoutOf: cutout.sourceAssetId, cutoutStart: cutout.start });
   },
+  derive: async (ctx, task) => completeDerivation(ctx, task),
   video: async (ctx, task, result) => {
     const asset = await ownedSource(ctx, task);
     if (!task.videoRequest || !result.videoInspection || asset.kind !== 'video' || !asset.duration) throw new ConvexError('Native video evidence is missing.');
