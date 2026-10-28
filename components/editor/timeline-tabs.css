@@ -15,6 +15,11 @@
 .timeline-tab-add{display:grid;place-items:center;flex:none;width:28px;height:28px;margin-left:2px;border:0;border-radius:6px;background:#ffffff0a;color:var(--ws-muted,#a1a3ab);cursor:pointer}
 .timeline-tab-add:hover{background:#ffffff14;color:var(--ws-text,#ededef)}
 .timeline-tab-add:disabled{cursor:not-allowed;opacity:.5}
+/* Shown while an AI app is connected over MCP; opens the connection settings. */
+.timeline-mcp{display:flex;align-items:center;gap:7px;flex:none;height:26px;margin-left:auto;padding:0 10px;border-radius:999px;background:#ffffff0a;color:var(--ws-muted,#a1a3ab);font-size:11.5px;font-weight:500;text-decoration:none;white-space:nowrap}
+.timeline-mcp:hover{background:#ffffff14;color:var(--ws-text,#ededef)}
+.timeline-mcp-dot{width:6px;height:6px;border-radius:50%;background:#22c55e;box-shadow:0 0 0 3px #22c55e26}
+.timeline-mcp-logo{width:12px;height:12px}
 /* The preview/timeline handle sits on the tabs' bottom divider, so the line under the tabs resizes the tracks. */
 .editor-app:has(.timeline-tabs) .timeline-resize-handle{background:transparent!important;transform:translateY(38px);z-index:30;cursor:row-resize}
 .editor-app:has(.timeline-tabs) .timeline-resize-handle:is(:hover,[data-separator=active],[data-resize-handle-state=drag]){background:#757A82!important}
