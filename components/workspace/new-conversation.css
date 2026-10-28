@@ -18,14 +18,14 @@
 .new-conversation-motion textarea{flex:1 0 auto;font-size:15px}
 .new-conversation-motion .edit-composer-actions{margin-top:auto}
 .new-conversation-motion .composer-add{display:none}
-.footage-start-card{width:100%;height:168px;border:0;border-radius:12px;background:#17181c;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;gap:8px;text-align:center;cursor:pointer;transition:filter 120ms}
+.footage-start-card{width:100%;height:168px;border:0;border-radius:12px;background:#1b1633 url(/workspace/footage-grain.webp) center/cover no-repeat;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;gap:8px;text-align:center;cursor:pointer;transition:filter 120ms}
 .footage-start-card strong{color:#fff;font-size:14px;line-height:1.6;font-weight:500}
 .footage-start-helper{color:#ffffffb3;font-size:13px;line-height:1.6}
 .footage-start-icon{display:grid;place-items:center;width:36px;height:36px;margin-bottom:4px;border-radius:var(--revline-button-radius);background:#ffffff24;color:#fff;transition:transform 120ms}
 .footage-start-card:focus-visible{outline:2px solid var(--revline-accent);outline-offset:4px}
 .footage-start-card:active .footage-start-icon{transform:scale(.96)}
 .footage-start-card:disabled{cursor:wait;opacity:.6}
-@media(hover:hover) and (pointer:fine){.footage-start-card:not(:disabled):hover{filter:brightness(1.25)}}
+@media(hover:hover) and (pointer:fine){.footage-start-card:not(:disabled):hover{filter:brightness(1.12)}}
 .footage-start-card[data-dragging=true]{outline:2px solid var(--revline-accent);outline-offset:4px}
 .new-conversation-error{margin:12px 16px 0;color:#aa3434;font-size:13px;line-height:1.5}
 .new-conversation-drop-note{position:fixed;left:50%;bottom:32px;transform:translateX(-50%);padding:12px 18px;border:1px solid var(--ws-border);border-radius:10px;background:var(--ws-bg);color:var(--ws-text);font-size:13px;pointer-events:none;box-shadow:0 4px 20px #0000000d}
@@ -36,7 +36,6 @@ html[data-workspace-theme=dark] .new-conversation-modes{background:#1c202a}
 html[data-workspace-theme=dark] .new-conversation-modes button{color:#a9b2c4}
 html[data-workspace-theme=dark] .new-conversation-modes::before{background:#2c313c;box-shadow:none}
 html[data-workspace-theme=dark] .new-conversation-modes button[aria-selected=true]{color:#f2f2f2}
-html[data-workspace-theme=dark] .footage-start-card{background:#262a33}
 @media(hover:hover) and (pointer:fine){html[data-workspace-theme=dark] .new-conversation-modes button[aria-selected=false]:hover{color:#d9dfeb}}
 @media(max-width:600px){.new-conversation-main{width:calc(100% - 32px);gap:28px}.new-conversation-start{margin-top:40px;gap:28px}.new-conversation-intro h1{font-size:34px}.new-conversation-intro p{font-size:14px}.new-conversation-drop-note{bottom:20px;max-width:calc(100% - 32px);white-space:nowrap}}
 @media(max-width:320px){.new-conversation-intro h1{font-size:28px}.footage-start-card{height:auto;min-height:168px}}
