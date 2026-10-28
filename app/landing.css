@@ -1,5 +1,5 @@
 /* Landing page from the Pen design "Revline — Landing" (node fRsMC). Light only; the final CTA card uses the design's dark tokens. */
-.landing{--l-content:1152px;--l-gutter:80px;--l-bg:#fff;--l-bg-subtle:#f7f7f8;--l-fg:#121212;--l-fg-2:#5e5e5e;--l-fg-3:#8a8a8a;--l-border:#ebebee;--l-brand:#7c3aed;--l-brand-ring:#ddd0fb;--l-brand-tint:#f4efff;--l-head:var(--landing-font-head),sans-serif;--l-body:var(--landing-font-body),sans-serif;--l-mono:var(--landing-font-mono),monospace;background:var(--l-bg);color:var(--l-fg);font-family:var(--l-body);color-scheme:light;overflow:clip;-webkit-font-smoothing:antialiased}
+.landing{--l-content:1152px;--l-gutter:80px;--l-bg:#fff;--l-bg-subtle:#f7f7f8;--l-fg:#121212;--l-fg-2:#5e5e5e;--l-fg-3:#8a8a8a;--l-border:#ebebee;--l-brand:#7c3aed;--l-brand-ring:#ddd0fb;--l-brand-tint:#f4efff;--l-head:var(--landing-font-head,'Outfit'),sans-serif;--l-body:var(--font-geist,'Geist'),sans-serif;--l-mono:var(--landing-font-mono,'Geist Mono'),monospace;background:var(--l-bg);color:var(--l-fg);font-family:var(--l-body);color-scheme:light;overflow:clip;-webkit-font-smoothing:antialiased}
 body:has(>.landing),body:has(main.landing){background:#fff}
 .landing *,.landing *::before,.landing *::after{box-sizing:border-box}
 .landing h1,.landing h2,.landing h3,.landing p,.landing figure,.landing blockquote,.landing ul{margin:0}

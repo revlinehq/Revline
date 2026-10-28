@@ -1,4 +1,3 @@
-import { Geist, Geist_Mono, Outfit } from 'next/font/google';
 import { LandingNav } from '@/components/landing/nav';
 import { LandingHero } from '@/components/landing/hero';
 import { LandingLogos } from '@/components/landing/logos';
@@ -13,12 +12,9 @@ import { LandingFinalCta } from '@/components/landing/final-cta';
 import { LandingFooter } from '@/components/landing/footer';
 import './landing.css';
 
-const outfit = Outfit({ subsets: ['latin'], variable: '--landing-font-head' });
-const geist = Geist({ subsets: ['latin'], variable: '--landing-font-body' });
-const geistMono = Geist_Mono({ subsets: ['latin'], variable: '--landing-font-mono' });
 
 export default function Home() {
-  return <main className={`landing ${outfit.variable} ${geist.variable} ${geistMono.variable}`}>
+  return <main className="landing">
     <LandingNav />
     <LandingHero />
     <LandingLogos />
