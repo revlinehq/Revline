@@ -59,6 +59,7 @@ import type * as mcpAuth from "../mcpAuth.js";
 import type * as mcpHttp from "../mcpHttp.js";
 import type * as mediaProcessor from "../mediaProcessor.js";
 import type * as mediaTasks from "../mediaTasks.js";
+import type * as memories from "../memories.js";
 import type * as modelDiagnostics from "../modelDiagnostics.js";
 import type * as playback from "../playback.js";
 import type * as processorDiagnostics from "../processorDiagnostics.js";
@@ -134,6 +135,7 @@ declare const fullApi: ApiFromModules<{
   mcpHttp: typeof mcpHttp;
   mediaProcessor: typeof mediaProcessor;
   mediaTasks: typeof mediaTasks;
+  memories: typeof memories;
   modelDiagnostics: typeof modelDiagnostics;
   playback: typeof playback;
   processorDiagnostics: typeof processorDiagnostics;

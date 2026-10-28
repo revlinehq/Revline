@@ -1,3 +1,4 @@
+import { memoriesFor } from './memories';
 import { ConvexError, v } from 'convex/values';
 import { internalMutation, internalQuery, type MutationCtx, type QueryCtx } from './_generated/server';
 import type { Id } from './_generated/dataModel';
@@ -86,6 +87,8 @@ export const projectOverview = internalQuery({ args: { ownerId: v.string(), proj
     duration: Math.round(timelineDuration(timeline) * 1000) / 1000, clipCount: timeline.clips.length, aiRunning: !!project.aiRunning, editorUrl: editorUrl(project._id),
     // Every timeline tab; duration, clipCount and editing tools refer to the open one.
     timelines: (await listTabsFor(ctx, args.ownerId, project._id)).map(tab => ({ timelineId: tab.id, name: tab.name, open: tab.active, aspectRatio: tab.aspectRatio, duration: Math.round(tab.duration * 1000) / 1000, clipCount: tab.clipCount })),
+    // Lasting preferences the user saved with the editing AI; follow them, and use remember/forget to change them.
+    memories: await memoriesFor(ctx, args.ownerId, project._id),
     media: assets.map(asset => ({ assetId: asset._id, fileName: asset.fileName, kind: asset.kind, duration: asset.duration, width: asset.width, height: asset.height, analysis: asset.analysisKinds ?? [], ...(asset.audioAssetId ? { audioAssetId: asset.audioAssetId } : {}) })),
   };
 }});
