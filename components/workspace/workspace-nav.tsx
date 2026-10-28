@@ -19,6 +19,7 @@ import { McpConnectorDialog } from './mcp-connector-section';
 import { ProjectCover } from './project-cover';
 import { startNewWorkspace } from './start-new-workspace';
 import { PrimaryButton } from './primary-button';
+import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
 import './workspace-pages.css';
@@ -140,8 +141,8 @@ export function WorkspaceNav({ title = NEW_WORKSPACE_LABEL, editorHref, active =
       {saveFailed && onRetrySave && <button type="button" className="workspace-nav-secondary workspace-nav-unsaved" aria-label="Unsaved changes. Retry saving" title="Unsaved changes. Retry saving" onClick={onRetrySave}><CircleAlert size={14} aria-hidden="true" /><span>Unsaved changes — Retry</span></button>}
       {(onUndo || onRedo) && <div className="workspace-nav-history"><button className="workspace-nav-icon" aria-label="Undo" title="Undo" disabled={!canUndo} onClick={onUndo}><Undo2 size={15} /></button><button className="workspace-nav-icon" aria-label="Redo" title="Redo" disabled={!canRedo} onClick={onRedo}><Redo2 size={15} /></button></div>}
       {onFootage && <button className="workspace-nav-secondary" aria-label="Footage" onClick={onFootage}><Film size={14} /><span>Footage</span></button>}
-      {mcpConnection !== undefined && <button type="button" className="workspace-nav-secondary workspace-nav-mcp" onClick={() => setMcpOpen(true)}>{mcpConnection ? <><AgentLogo name={mcpConnection} className="workspace-nav-mcp-logo"/><span>MCP connected</span></> : <><span className="workspace-nav-mcp-apps" aria-hidden="true"><ClaudeLogo/><OpenAILogo/><CursorLogo/></span><span>Connect MCP</span></>}</button>}
-      {onExport && !demo && <span className="workspace-nav-action-hint" title={exportHint}><PrimaryButton size="compact" className="workspace-nav-export" onClick={onExport} disabled={exportDisabled} aria-description={exportHint}>Export<Download size={13} /></PrimaryButton></span>}
+      {mcpConnection !== undefined && <Button type="button" variant="secondary" className="workspace-nav-button workspace-nav-mcp" onClick={() => setMcpOpen(true)}>{mcpConnection ? <><AgentLogo name={mcpConnection} /><span className="workspace-nav-mcp-label">MCP connected</span></> : <><span className="workspace-nav-mcp-apps" aria-hidden="true"><ClaudeLogo/><OpenAILogo/><CursorLogo/></span><span className="workspace-nav-mcp-label">Connect MCP</span></>}</Button>}
+      {onExport && !demo && <span className="workspace-nav-action-hint" title={exportHint}><PrimaryButton size="compact" className="workspace-nav-button" onClick={onExport} disabled={exportDisabled} aria-description={exportHint}>Export<Download size={13} /></PrimaryButton></span>}
       {editorHref && <Link href={editorHref} className="workspace-nav-secondary workspace-editor-link" aria-label="Editor"><PanelsTopLeft size={14} /><span>Editor</span></Link>}
       <DropdownMenu><DropdownMenuTrigger asChild><button className="workspace-account-trigger" aria-label="Open account menu" disabled={!isLoaded}>{user?.imageUrl ? <img src={user.imageUrl} alt="" /> : initial}</button></DropdownMenuTrigger>
         <DropdownMenuContent align="end" sideOffset={12} className="workspace-menu workspace-account-menu">
