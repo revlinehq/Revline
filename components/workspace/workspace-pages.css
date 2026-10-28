@@ -33,8 +33,6 @@ html[data-workspace-theme="dark"] {
 
 .workspace-nav-unsaved svg { color:#c77730; }
 .workspace-nav-save { display:flex; align-items:center; gap:5px; color:var(--ws-muted); font-size:12px; }
-.workspace-account-trigger { display:grid; place-items:center; width:28px; height:28px; border:0; border-radius:50%; overflow:hidden; color:var(--ws-avatar-text); background:var(--ws-avatar-bg); font-size:11px; font-weight:500; cursor:pointer; }
-.workspace-account-trigger img,.workspace-account-avatar img,.workspace-profile-avatar img { width:100%; height:100%; object-fit:cover; }
 .workspace-menu { width:auto; padding:8px; border:1px solid var(--ws-border); border-radius:14px; background:var(--ws-surface); color:var(--ws-text); box-shadow:0 6px 24px #00000014; }
 .workspace-history-menu { width:min(312px,calc(100vw - 24px)); }
 .workspace-account-menu { width:min(280px,calc(100vw - 24px)); }
@@ -50,7 +48,6 @@ html[data-workspace-theme="dark"] {
 .workspace-menu-chat svg { color:var(--ws-muted); }
 .workspace-menu-empty { display:flex; gap:7px; align-items:center; padding:12px 10px; color:var(--ws-muted); font-size:12px; }
 .workspace-account-identity { min-height:72px; padding:8px 10px; display:flex; align-items:center; gap:12px; }
-.workspace-account-avatar { width:36px; height:36px; display:grid; place-items:center; flex-shrink:0; overflow:hidden; border-radius:50%; background:var(--ws-avatar-bg); color:var(--ws-avatar-text); font-size:14px; font-weight:500; }
 .workspace-account-identity>div { min-width:0; display:flex; flex-direction:column; gap:4px; }
 .workspace-account-identity strong { font-size:14px; font-weight:500; overflow:hidden; text-overflow:ellipsis; }
 .workspace-account-identity>div>span { font-size:12px; color:var(--ws-muted); overflow:hidden; text-overflow:ellipsis; }
@@ -85,7 +82,8 @@ html[data-workspace-theme="dark"] {
 .workspace-section-label p { font-size:12px; color:var(--ws-faint); margin:8px 0 0; line-height:1.5; }
 .workspace-section-content { min-width:0; display:flex; flex-direction:column; gap:16px; }
 .workspace-profile-photo { display:flex; align-items:center; gap:14px; margin-bottom:4px; }
-.workspace-profile-avatar { width:56px; height:56px; flex-shrink:0; display:grid; place-items:center; overflow:hidden; border-radius:50%; color:var(--ws-avatar-text); background:var(--ws-avatar-bg); font-size:20px; font-weight:500; }
+.workspace-profile-avatar { width:56px; height:56px; }
+.workspace-profile-avatar [data-slot=avatar-fallback] { font-size:20px; }
 .workspace-profile-photo>div { display:flex; flex-direction:column; align-items:flex-start; gap:6px; }
 .workspace-profile-photo strong { font-size:15px; font-weight:500; }
 .workspace-photo-input { display:none; }

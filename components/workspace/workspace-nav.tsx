@@ -20,6 +20,7 @@ import { ProjectCover } from './project-cover';
 import { startNewWorkspace } from './start-new-workspace';
 import { PrimaryButton } from './primary-button';
 import { Button } from '@/components/ui/button';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Input } from '@/components/ui/input';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
@@ -145,9 +146,9 @@ export function WorkspaceNav({ title = NEW_WORKSPACE_LABEL, editorHref, active =
       {mcpConnection !== undefined && <Button type="button" size="md" variant="outline" className="workspace-nav-mcp" onClick={() => setMcpOpen(true)}>{mcpConnection ? <><AgentLogo name={mcpConnection} /><span className="workspace-nav-mcp-label">MCP connected</span></> : <><span className="workspace-nav-mcp-apps" aria-hidden="true"><ClaudeLogo/><OpenAILogo/><CursorLogo/></span><span className="workspace-nav-mcp-label">Connect MCP</span></>}</Button>}
       {onExport && !demo && <span className="workspace-nav-action-hint"><Button size="md" className="workspace-nav-export" onClick={onExport} disabled={exportDisabled} aria-description={exportHint}>Export<Download size={13} /></Button></span>}
       {editorHref && <Button asChild variant="outline" size="md"><Link href={editorHref} className="workspace-editor-link" aria-label="Editor"><PanelsTopLeft size={14} /><span>Editor</span></Link></Button>}
-      <DropdownMenu><DropdownMenuTrigger asChild><button className="workspace-account-trigger" aria-label="Open account menu" disabled={!isLoaded}>{user?.imageUrl ? <img src={user.imageUrl} alt="" /> : initial}</button></DropdownMenuTrigger>
+      <DropdownMenu><DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="workspace-account-trigger rounded-full p-0" aria-label="Open account menu" disabled={!isLoaded}><Avatar>{user?.imageUrl && <AvatarImage src={user.imageUrl} alt="" />}<AvatarFallback>{initial}</AvatarFallback></Avatar></Button></DropdownMenuTrigger>
         <DropdownMenuContent align="end" sideOffset={12} className="workspace-menu workspace-account-menu">
-          <div className="workspace-account-identity"><span className="workspace-account-avatar">{user?.imageUrl ? <img src={user.imageUrl} alt="" /> : initial}</span><div><strong>{user?.fullName ?? (isSignedIn ? 'Your account' : 'Demo workspace')}</strong><span>{user?.primaryEmailAddress?.emailAddress ?? 'Sign in to save your work'}</span></div></div>
+          <div className="workspace-account-identity"><Avatar size="lg">{user?.imageUrl && <AvatarImage src={user.imageUrl} alt="" />}<AvatarFallback>{initial}</AvatarFallback></Avatar><div><strong>{user?.fullName ?? (isSignedIn ? 'Your account' : 'Demo workspace')}</strong><span>{user?.primaryEmailAddress?.emailAddress ?? 'Sign in to save your work'}</span></div></div>
           <DropdownMenuSeparator className="workspace-menu-divider" />
           <DropdownMenuItem asChild className="workspace-menu-item"><Link href="/profile" aria-current={active === 'profile' ? 'page' : undefined}><UserRound size={16} />Profile</Link></DropdownMenuItem>
           <DropdownMenuItem asChild className="workspace-menu-item"><Link href="/storage" aria-current={active === 'storage' ? 'page' : undefined}><Database size={16} />Cloud storage</Link></DropdownMenuItem>
