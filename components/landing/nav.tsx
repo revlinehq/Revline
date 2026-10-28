@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { Brand } from '@/components/workspace/brand';
 import { LandingStartButton } from './start-button';
 import { LandingButton } from './ui';
+import { LandingNavTone } from './nav-tone';
 
 const links = [
   { label: 'Product', href: '#how-it-works' },
@@ -18,5 +19,6 @@ export function LandingNav() {
       <LandingButton className="landing-nav-login" href="/sign-in" variant="neutral" size="sm">Log in</LandingButton>
       <LandingStartButton label="Start free" variant="dark" size="sm" />
     </div>
+    <LandingNavTone />
   </nav>;
 }

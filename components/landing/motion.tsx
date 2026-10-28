@@ -1,38 +1,94 @@
-import { Diamond } from 'lucide-react';
+'use client';
+
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { Diamond, MousePointer2 } from 'lucide-react';
 import { LandingSection } from './ui';
 
-// The kinds of motion Revline makes; the first is shown in the preview.
-const kinds = [
-  { title: 'Launch videos', description: 'A real product launch, cut and animated entirely in Revline.' },
-  { title: 'Explainers' },
-  { title: 'Motion elements' },
-  { title: 'Product demos' },
+type Kind = { id: string; label: string; description: string; image: string; beats: string[]; overlay: ReactNode };
+
+// Each segment swaps the preview: its footage, its motion overlay and the timeline beats that drive it.
+const kinds: Kind[] = [
+  {
+    id: 'launch', label: 'Launch videos', description: 'A real product launch, cut and animated entirely in Revline.', image: 'vlog',
+    beats: ['Every', 'word', 'lands', 'on time.'],
+    overlay: <p className="landing-motion-title">Every word<br /><b>lands</b> <span>on time.</span></p>,
+  },
+  {
+    id: 'explainers', label: 'Explainers', description: 'Voiceover, diagrams and callouts, edited end to end with Claude.', image: 'code-screen',
+    beats: ['Voiceover', 'Diagram', 'Callout', 'Outro'],
+    overlay: <p className="landing-motion-title">Complex ideas,<br /><b>made simple.</b></p>,
+  },
+  {
+    id: 'elements', label: 'Motion elements', description: 'You on camera, with titles and graphics popping in as you talk.', image: 'talking-head',
+    beats: ['Lower third', 'Sticker', 'Zoom', 'Caption'],
+    overlay: <div className="landing-motion-elements">
+      <span className="landing-motion-sticker">New feature</span>
+      <div className="landing-motion-lower"><b>Zura</b><span>Founder, Revline</span></div>
+    </div>,
+  },
+  {
+    id: 'demos', label: 'Product demos', description: 'Screen recordings where the camera follows every click.', image: 'product-window',
+    beats: ['Click', 'Zoom in', 'Type', 'Zoom out'],
+    overlay: <div className="landing-motion-demo">
+      <span className="landing-motion-focus"><MousePointer2 size={22} /></span>
+      <p className="landing-motion-title">Zoom follows<br /><b>the cursor.</b></p>
+    </div>,
+  },
 ];
-const words = ['Every', 'word', 'lands', 'on time.'];
+const AUTO_ADVANCE_MS = 6000;
 
 export function LandingMotion() {
-  return <LandingSection id="motion" className="landing-motion" headingId="landing-motion-heading">
+  const [active, setActive] = useState(0);
+  const [touched, setTouched] = useState(false);
+  const tabs = useRef<(HTMLButtonElement | null)[]>([]);
+  const [indicator, setIndicator] = useState<{ left: number; width: number } | null>(null);
+
+  // The white pill slides under the active segment.
+  useLayoutEffect(() => {
+    const measure = () => { const tab = tabs.current[active]; if (tab) setIndicator({ left: tab.offsetLeft, width: tab.offsetWidth }); };
+    measure();
+    addEventListener('resize', measure);
+    return () => removeEventListener('resize', measure);
+  }, [active]);
+
+  // Cycle through the segments until the visitor picks one; reduced motion keeps it still.
+  useEffect(() => {
+    if (touched || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const timer = setTimeout(() => setActive(index => (index + 1) % kinds.length), AUTO_ADVANCE_MS);
+    return () => clearTimeout(timer);
+  }, [active, touched]);
+
+  const kind = kinds[active];
+  return <LandingSection id="motion" className="landing-motion" headingId="landing-motion-heading" data-nav-tone="dark">
     <header className="landing-motion-heading">
       <h2 id="landing-motion-heading">Motion that keeps them watching.</h2>
       <p>Launch videos, explainers and motion that pops in as you talk, all edited in Revline.</p>
     </header>
-    <div className="landing-motion-showcase">
-      <ol className="landing-motion-list">{kinds.map((kind, index) => <li key={kind.title} data-active={index === 0 || undefined}>
-        <i><b /></i>
-        <div><span>{String(index + 1).padStart(2, '0')}</span><h3>{kind.title}</h3></div>
-        {index === 0 && kind.description && <p>{kind.description}</p>}
-      </li>)}</ol>
-      <div className="landing-motion-preview" aria-hidden="true">
+    <div className="landing-motion-switcher">
+      <div className="landing-segments" role="tablist" aria-label="Kinds of motion">
+        {indicator && <span className="landing-segments-pill" style={{ left: indicator.left, width: indicator.width }} aria-hidden="true" />}
+        {kinds.map((item, index) => <button key={item.id} ref={node => { tabs.current[index] = node; }} type="button" role="tab" id={`landing-motion-tab-${item.id}`} aria-selected={index === active} aria-controls="landing-motion-panel" tabIndex={index === active ? 0 : -1}
+          onClick={() => { setTouched(true); setActive(index); }}
+          onKeyDown={event => {
+            if (event.key !== 'ArrowRight' && event.key !== 'ArrowLeft') return;
+            const next = (active + (event.key === 'ArrowRight' ? 1 : kinds.length - 1)) % kinds.length;
+            setTouched(true); setActive(next); tabs.current[next]?.focus();
+          }}>{item.label}</button>)}
+      </div>
+      <p key={kind.id} className="landing-motion-description">{kind.description}</p>
+    </div>
+    <div id="landing-motion-panel" role="tabpanel" aria-labelledby={`landing-motion-tab-${kind.id}`} className="landing-motion-preview">
+      {kinds.map((item, index) => <div key={item.id} className="landing-motion-scene" data-active={index === active || undefined} style={{ backgroundImage: `url(/landing/${item.image}.webp)` }} aria-hidden={index !== active}>
         <div className="landing-motion-shade">
-          <div className="landing-motion-top"><span><i />Launch video</span><time>00:03:12</time></div>
-          <p className="landing-motion-title">Every word<br /><b>lands</b> <span>on time.</span></p>
+          <time className="landing-motion-time">00:03:12</time>
+          {item.overlay}
           <div className="landing-motion-timeline">
-            <div>{words.map(word => <span key={word}>{word}</span>)}</div>
-            <div>{words.map((word, index) => <Diamond key={word} size={12} data-pending={index === 3 || undefined} />)}</div>
+            <div>{item.beats.map(beat => <span key={beat}>{beat}</span>)}</div>
+            <div>{item.beats.map((beat, beatIndex) => <Diamond key={beat} size={12} data-pending={beatIndex === 3 || undefined} />)}</div>
             <i><b /></i>
           </div>
         </div>
-      </div>
+      </div>)}
     </div>
   </LandingSection>;
 }

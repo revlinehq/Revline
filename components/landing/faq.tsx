@@ -13,7 +13,7 @@ const questions = [
 ];
 
 export function LandingFaq() {
-  return <LandingSection id="faq" className="landing-faq" headingId="landing-faq-heading">
+  return <LandingSection id="faq" className="landing-faq" headingId="landing-faq-heading" data-nav-tone="dark">
     <LandingHeading id="landing-faq-heading" title="Frequently asked questions" />
     <div className="landing-faq-list">{questions.map(([question, answer], index) => <details name="landing-faq" key={question} open={index === 0}>
       <summary>{question}<Plus className="landing-faq-plus" size={18} aria-hidden="true" /><Minus className="landing-faq-minus" size={18} aria-hidden="true" /></summary>

@@ -11,7 +11,7 @@ const agents = [
 ];
 
 export function LandingMcp() {
-  return <LandingSection id="mcp" className="landing-mcp" headingId="landing-mcp-heading">
+  return <LandingSection id="mcp" className="landing-mcp" headingId="landing-mcp-heading" data-nav-tone="dark">
     <div className="landing-mcp-copy">
       <ul className="landing-mcp-agents" aria-label="Works with Claude, ChatGPT, Codex, Cursor and any MCP client">{agents.map(agent => <li key={agent.file}><img src={`/landing/agents/${agent.file}.webp`} width={40} height={40} alt={agent.name} /></li>)}</ul>
       <LandingHeading id="landing-mcp-heading" align="center" tone="inverse" size="lg" title="Edit videos from any AI agent with MCP" description="Connect any MCP client and edit videos straight from your agent." />

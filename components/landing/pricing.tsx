@@ -12,7 +12,7 @@ const plans = [
 ].filter(plan => ULTRA_OFFERED || !('ultra' in plan));
 
 export function LandingPricing() {
-  return <LandingSection id="pricing" className="landing-pricing" headingId="landing-pricing-heading">
+  return <LandingSection id="pricing" className="landing-pricing" headingId="landing-pricing-heading" data-nav-tone="dark">
     <LandingHeading id="landing-pricing-heading" align="center" title="Cheaper than an editor. Faster too." description={`Try it free for ${EDITOR_PLAN.trialDays} days. Cancel anytime.`} />
     <div className="landing-plans">{plans.map(plan => <article key={plan.name} className="landing-plan">
       <header>
