@@ -104,14 +104,14 @@ div.landing-hero-buttons>.landing-reveal-content{display:flex;align-items:center
 .landing-tile .landing-chip{position:absolute;top:10px;left:10px}
 @keyframes landing-marquee{to{transform:translateX(-50%)}}
 
-/* How it works: grainy gradient cards; each visual rises from the card's bottom edge. */
+/* How it works: grainy gradient cards with each visual fully inside, padded on every side. */
 .landing-how{display:flex;flex-direction:column;gap:40px;padding-block:96px}
 .landing-steps{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:24px}
-.landing-step{display:flex;flex-direction:column;align-items:center;gap:28px;min-width:0;padding:36px 36px 0;overflow:hidden;border-radius:24px;background:#f3f0ff center/cover no-repeat}
+.landing-step{display:flex;flex-direction:column;align-items:center;gap:20px;min-width:0;padding:36px;overflow:hidden;border-radius:24px;background:#f3f0ff center/cover no-repeat}
 .landing-step-text{align-self:stretch;display:flex;flex-direction:column;gap:6px;min-height:88px}
 .landing-step-text h3{font:500 24px/1.26 var(--l-head);letter-spacing:-.4px;color:var(--l-fg)}
 .landing-step-text p{font-size:16px;line-height:1.5;color:var(--l-fg-2)}
-.landing-step-visual{width:480px;max-width:100%;aspect-ratio:16/9;border-radius:16px 16px 0 0;background:#121212}
+.landing-step-visual{width:100%;aspect-ratio:16/9;border-radius:16px;background:#121212}
 
 /* More from Revline: nested cards, each stage a small mock of its effect. */
 .landing-features{display:flex;flex-direction:column;gap:40px;padding-block:96px}
@@ -306,7 +306,7 @@ div.landing-hero-buttons>.landing-reveal-content{display:flex;align-items:center
   .landing-use-cases,.landing-how,.landing-features,.landing-pricing,.landing-faq,.landing-mcp,.landing-motion{padding-block:64px}
   .landing-use-cases,.landing-how,.landing-features{gap:32px}
   .landing-steps,.landing-feature-grid{grid-template-columns:minmax(0,1fr)}
-  .landing-step{padding:24px 20px 0;gap:20px}
+  .landing-step{padding:24px 20px;gap:20px}
   .landing-step-text{min-height:0}
   .landing-motion-heading h2{font-size:36px;letter-spacing:-1px}
   .landing-motion-preview{height:420px}
