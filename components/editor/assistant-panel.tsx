@@ -18,7 +18,7 @@ import type { Id } from '@/convex/_generated/dataModel';
 import { chatMessageFromUI } from './assistant-results';
 import {assistantTurnPresentation,assistantErrorDetail} from './assistant-turn-presentation';
 import { ChatProse } from './chat-prose';
-import { MessageScroller, MessageScrollerButton, MessageScrollerContent, MessageScrollerItem, MessageScrollerProvider, MessageScrollerViewport, useMessageScroller } from '@/components/ui/message-scroller';
+import { MessageScroller, MessageScrollerButton, MessageScrollerContent, MessageScrollerItem, MessageScrollerProvider, MessageScrollerViewport } from '@/components/ui/message-scroller';
 import { Message, MessageContent } from '@/components/ui/message';
 import { Bubble, BubbleContent } from '@/components/ui/bubble';
 import { Button } from '@/components/ui/button';
@@ -73,7 +73,7 @@ export function AssistantPanel(props:PanelProps) {
   // optimistic message, composer DOM, or scroll position while history loads.
   return <>
     {props.conversation&&<ConnectedConversation conversation={props.conversation} onUpdate={setConversationState}/>}
-    <AssistantTurnCostsProvider conversation={props.conversation} messages={visibleMessages} demo={props.demo}><MessageScrollerProvider autoScroll defaultScrollPosition="last-anchor" scrollPreviousItemPeek={0}><AssistantPanelBody {...props} queued={current?.queued??props.queued} queuePaused={current?.queuePaused??props.queuePaused} onRemoveQueued={current?.onRemoveQueued??props.onRemoveQueued} onResumeQueue={current?.onResumeQueue??props.onResumeQueue} conversationStarted={!!props.conversation} messages={visibleMessages} canLoadMore={props.conversation?current?.canLoadMore:props.canLoadMore} onLoadMore={props.conversation?current?.onLoadMore:props.onLoadMore}/></MessageScrollerProvider></AssistantTurnCostsProvider>
+    <AssistantTurnCostsProvider conversation={props.conversation} messages={visibleMessages} demo={props.demo}><MessageScrollerProvider autoScroll><AssistantPanelBody {...props} queued={current?.queued??props.queued} queuePaused={current?.queuePaused??props.queuePaused} onRemoveQueued={current?.onRemoveQueued??props.onRemoveQueued} onResumeQueue={current?.onResumeQueue??props.onResumeQueue} conversationStarted={!!props.conversation} messages={visibleMessages} canLoadMore={props.conversation?current?.canLoadMore:props.canLoadMore} onLoadMore={props.conversation?current?.onLoadMore:props.onLoadMore}/></MessageScrollerProvider></AssistantTurnCostsProvider>
   </>;
 }
 
@@ -147,23 +147,11 @@ function AssistantPanelBody({ messages, running, editing:editingTimeline=running
   // The visible assistant-only prefix is still the active turn, not a failed historical edit.
   const turnId = optimisticRequest?.id ?? latestUser?.id ?? messages[0]?.id ?? 'imported';
   const demoNoteMessageId = demo ? messages.findLast(message => message.role === 'assistant')?.id : undefined;
-  const scroller = useMessageScroller();
   // The sent message shows at once under a placeholder id; when the saved message replaces it,
   // that turn keeps the placeholder's id so the chat scroller sees one continuous item.
   const turnKeys = useRef(new Map<string, string>());
   if (pendingReply && latestUser && latestUser.id !== pendingReply.previousUserId) turnKeys.current.set(latestUser.id, pendingReply.id);
   const turnKey = (id: string) => turnKeys.current.get(id) ?? id;
-  // History arrives after the scroller mounts, so its opening position is applied once it does:
-  // the latest question settles at the top, as it does after sending.
-  const openedThread = useRef<string | null>(null);
-  const scrollerRef = useRef(scroller); scrollerRef.current = scroller;
-  const latestUserKey = latestUser ? turnKey(latestUser.id) : undefined;
-  useEffect(() => {
-    if (!latestUserKey || openedThread.current === draftKey) return;
-    openedThread.current = draftKey ?? '';
-    const settle = () => scrollerRef.current.scrollToMessage(latestUserKey, { align: 'start', behavior: 'auto' });
-    setTimeout(settle, 0); setTimeout(settle, 400);
-  }, [latestUserKey, draftKey]);
   const legacyPublications=useRef(new Map<string,number>());
   const groups=useMemo(()=>{
     const turns:{id:string;messages:ChatMessage[]}[]=[];
@@ -220,7 +208,7 @@ function AssistantPanelBody({ messages, running, editing:editingTimeline=running
   }
 
   return <div className="assistant-content">
-    <MessageScroller className="assistant-scroller"><MessageScrollerViewport preserveScrollOnPrepend className={`assistant-history ${!messages.length && !waiting ? 'assistant-history-empty' : ''}`}>
+    <MessageScroller><MessageScrollerViewport>
       <MessageScrollerContent className="gap-6 py-0">
       {canLoadMore && <Button variant="ghost" size="sm" className="load-more" onClick={() => onLoadMore?.()}>Earlier messages</Button>}
       {!messages.length && !waiting && !externalAgent && !suggestions?.items.length && <Empty className="assistant-welcome h-full"><EmptyHeader><EmptyTitle>What are we making?</EmptyTitle><EmptyDescription>{hasClips ? 'A tighter cut, a stronger opening, subtitles. Tell me what you have in mind.' : 'Bring your footage, and tell me the story you want to make.'}</EmptyDescription></EmptyHeader>{!demo&&!configured&&<EmptyContent><p className="assistant-demo-note">AI editing is temporarily unavailable. Your footage, preview, and timeline are ready.</p></EmptyContent>}</Empty>}
