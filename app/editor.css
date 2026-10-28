@@ -176,7 +176,9 @@ html[data-workspace-theme=dark] .conversation-editor .workspace-nav-actions{gap:
 html[data-workspace-theme=dark] .conversation-editor .workspace-nav-history{margin-right:6px}
 html[data-workspace-theme=dark] .conversation-editor .workspace-nav-secondary{height:33px;padding:0 10px;border:1px solid var(--ed-border);border-radius:8px;background:transparent;color:#a1a3ab;font-size:13px;font-weight:500}
 html[data-workspace-theme=dark] .conversation-editor .workspace-nav-secondary:hover:not(:disabled){background:var(--ed-surface);color:var(--ed-text);filter:none}
-html[data-workspace-theme=dark] .conversation-editor .workspace-nav .revline-primary[data-slot=button]{height:33px;padding:0 14px;gap:6px;border-radius:8px;background:#7c3aed;color:#fff;font-size:13px;font-weight:600}
+html[data-workspace-theme=dark] .conversation-editor .workspace-nav .revline-primary[data-slot=button]{background:#7c3aed;color:#fff}
+/* Export and the MCP status: one size from .workspace-nav-button, the editor's 8px corners. */
+html[data-workspace-theme=dark] .conversation-editor .workspace-nav-actions .workspace-nav-button[data-slot=button]{border-radius:8px}
 html[data-workspace-theme=dark] .conversation-editor .workspace-nav .revline-primary[data-slot=button]:hover:not(:disabled){background:#8b4cf0}
 html[data-workspace-theme=dark] .conversation-editor .editor-mode-switch{gap:4px;padding:0;border-color:var(--ed-border);border-radius:6px;background:transparent}
 html[data-workspace-theme=dark] .conversation-editor .editor-mode-switch>[role=tab]{min-height:28px;border-radius:6px;color:var(--ed-text-3);font-size:12px}
@@ -205,8 +207,6 @@ html[data-workspace-theme=dark] .conversation-editor .floating-tools-rail-divide
 html[data-workspace-theme=dark] .conversation-editor .aspect-ratio-trigger{height:24px;gap:4px;padding:0 6px;border:0;border-radius:5px;background:transparent;color:var(--ed-text-3,var(--ws-muted));font-size:11px;font-weight:500}
 html[data-workspace-theme=dark] .conversation-editor .aspect-ratio-trigger:hover,html[data-workspace-theme=dark] .conversation-editor .aspect-ratio-trigger[data-state=open]{background:var(--ed-surface-2);color:var(--ed-text)}
 /* Share is a text button in the design. */
-html[data-workspace-theme=dark] .conversation-editor .workspace-nav-secondary[aria-label="Share timeline"]{border-color:transparent}
-html[data-workspace-theme=dark] .conversation-editor .workspace-nav-secondary[aria-label="Share timeline"] svg{display:none}
 /* Under the preview: the clip name and the output size. */
 .conversation-editor .stage-center{position:relative}
 .conversation-editor :is(.preview-frame-above,.preview-frame-below){position:absolute;z-index:6}
