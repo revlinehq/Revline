@@ -5,6 +5,7 @@ import type { OpenAiCostReport } from '@/lib/server/openai-costs';
 import { formatAiCost } from './ai-cost-report';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import './dev-openai-costs.css';
 
@@ -58,8 +59,8 @@ export function DevOpenAiCosts({ days, onDaysChange }: { days: 7 | 30; onDaysCha
         <p className="openai-cost-meta">Refreshed {new Date(connected.refreshedAt).toLocaleString()}. Daily totals use UTC. OpenAI reporting may lag recent requests.</p>
       </> : report?.connected === false ? <form className="openai-cost-connect" onSubmit={connect}>
         <p>Connect a Usage read-only Admin API key to show this project’s official costs. The key stays in this computer’s development server.</p>
-        <label>API project ID<input name="projectId" required placeholder="proj_…" autoComplete="off" spellCheck={false} disabled={busy} /></label>
-        <label>Usage read-only Admin key<input type="password" name="adminKey" required placeholder="sk-admin-…" autoComplete="off" spellCheck={false} disabled={busy} /></label>
+        <label>API project ID<Input name="projectId" required placeholder="proj_…" autoComplete="off" spellCheck={false} disabled={busy} /></label>
+        <label>Usage read-only Admin key<Input type="password" name="adminKey" required placeholder="sk-admin-…" autoComplete="off" spellCheck={false} disabled={busy} /></label>
         <Button type="submit" variant="outline" size="md" disabled={busy}>{busy ? 'Connecting…' : 'Connect costs'}</Button>
       </form> : busy ? <p className="openai-cost-meta" role="status">Checking costs connection…</p> : null}
       {error && <div className="openai-cost-error" role="alert"><p>{error}</p>{!connected && <Button type="button" variant="outline" size="md" disabled={busy} onClick={() => void load()}>Retry</Button>}</div>}

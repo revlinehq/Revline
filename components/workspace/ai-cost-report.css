@@ -1,8 +1,7 @@
 .ai-cost-dev-label { display:inline-block; margin-left:5px; color:var(--ws-muted); font-size:10px; font-weight:400; }
 .ai-cost-report { gap:18px; font-size:12px; }
 .ai-cost-toolbar { display:flex; align-items:center; justify-content:space-between; gap:12px; color:var(--ws-muted); }
-.ai-cost-report button:focus-visible,.ai-cost-chart-scroll:focus-visible,.ai-cost-token-details summary:focus-visible { outline:2px solid var(--revline-accent,#7364d9); outline-offset:3px; }
-.ai-cost-totals { display:grid; grid-template-columns:1.2fr 1fr 1fr; gap:12px; }
+.ai-cost-report button:focus-visible,.ai-cost-chart-scroll:focus-visible,.ai-cost-totals { display:grid; grid-template-columns:1.2fr 1fr 1fr; gap:12px; }
 .ai-cost-totals>div { display:flex; min-width:0; flex-direction:column; gap:6px; }
 .ai-cost-totals strong { font-size:23px; line-height:1.25; font-weight:500; font-variant-numeric:tabular-nums; letter-spacing:-.5px; overflow-wrap:anywhere; }
 .ai-cost-totals span { color:var(--ws-muted); font-size:11px; }
@@ -24,7 +23,7 @@
 .ai-cost-model-details span,.ai-cost-model-details small { font-size:11px; color:var(--ws-muted); line-height:1.5; overflow-wrap:anywhere; }
 .ai-cost-model-amount { flex-shrink:0; font-size:13px; font-weight:500; font-variant-numeric:tabular-nums; }
 .ai-cost-token-details { color:var(--ws-muted); font-size:11px; }
-.ai-cost-token-details summary { width:fit-content; cursor:pointer; }
+.ai-cost-token-details [data-slot=collapsible-trigger] { width:fit-content; color:var(--ws-muted); }
 .ai-cost-token-details dl { display:grid; gap:7px; margin:12px 0 0; }
 .ai-cost-token-details dl>div { display:flex; justify-content:space-between; gap:12px; }
 .ai-cost-token-details dd { margin:0; color:var(--ws-text); font-variant-numeric:tabular-nums; }

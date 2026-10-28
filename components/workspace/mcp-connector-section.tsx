@@ -5,13 +5,14 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import type { FunctionReturnType } from 'convex/server';
 import { useConvexAuth, useMutation, useQuery } from 'convex/react';
-import { ArrowLeft, Check, Copy, ExternalLink, LoaderCircle } from 'lucide-react';
+import { ArrowLeft, Check, Copy, ExternalLink, LoaderCircle, ChevronDown } from 'lucide-react';
 import { api } from '@/convex/_generated/api';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
 import { PrimaryButton } from './primary-button';
 import { ClaudeLogo, McpLogo, OpenAILogo } from './ai-app-logos';
 import './mcp-connector-section.css';
 import { Button } from '@/components/ui/button';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 
 function CopyField({ label, value }: { label: string; value: string }) {
   const [copied, setCopied] = useState(false);
@@ -64,12 +65,12 @@ function ConnectorBody({ connector, onPick }: { connector: Connector; onPick: (a
       {connector.connections.map(connection => <li key={connection.grantId}><div><span>{connection.label}</span><small>{connection.kind === 'personal' ? 'Personal token' : 'App'} · added {when(connection.createdAt)} · last used {when(connection.lastUsedAt)}</small></div>
         <Button variant="outline" size="md" type="button" disabled={!!busy} onClick={() => void run(connection.grantId, async () => { await revoke({ grantId: connection.grantId }); })}>{busy === connection.grantId && <LoaderCircle size={12} className="animate-spin" />}Revoke</Button></li>)}
     </ul>}
-    <details className="mcp-advanced"><summary>Other apps and scripts</summary>
+    <Collapsible className="mcp-advanced group/collapsible"><CollapsibleTrigger asChild><Button type="button" variant="ghost" size="sm">Other apps and scripts<ChevronDown className="transition-transform group-data-[state=open]/collapsible:rotate-180" /></Button></CollapsibleTrigger><CollapsibleContent>
       <p>Any MCP client can use this link and sign in to Revline. Scripts can use a personal token as <code>Authorization: Bearer &lt;token&gt;</code>.</p>
       <CopyField label="MCP server URL" value={connector.mcpUrl} />
       {token ? <><CopyField label="New personal token" value={token} /><p>Copy it now; it won&apos;t be shown again.</p></>
         : <PrimaryButton size="compact" disabled={!!busy} onClick={() => void run('create', async () => setToken((await createToken({ label: 'Personal token' })).token))}>{busy === 'create' && <LoaderCircle size={13} className="animate-spin" />}Create personal token</PrimaryButton>}
-    </details>
+    </CollapsibleContent></Collapsible>
     {error && <p className="workspace-inline-error" role="alert">{error}</p>}
   </>;
 }
@@ -84,7 +85,7 @@ function AppSteps({ id, mcpUrl }: { id: AppId; mcpUrl: string }) {
       <li><strong>Add it in {app.owner}</strong><p>{app.steps}</p>
         {app.settingsUrl && <Button asChild variant="outline" size="md"><a className="mcp-open-link" href={app.settingsUrl} target="_blank" rel="noreferrer">{app.settingsLabel}<ExternalLink size={13} /></a></Button>}</li>
     </ol>
-    {id === 'claude' && <details className="mcp-advanced"><summary>Using Claude Code?</summary><CopyField label="Claude Code command" value={`claude mcp add --transport http revline ${mcpUrl}`} /><p>Then run <code>/mcp</code> in Claude Code to sign in.</p></details>}
+    {id === 'claude' && <Collapsible className="mcp-advanced group/collapsible"><CollapsibleTrigger asChild><Button type="button" variant="ghost" size="sm">Using Claude Code?<ChevronDown className="transition-transform group-data-[state=open]/collapsible:rotate-180" /></Button></CollapsibleTrigger><CollapsibleContent><CopyField label="Claude Code command" value={`claude mcp add --transport http revline ${mcpUrl}`} /><p>Then run <code>/mcp</code> in Claude Code to sign in.</p></CollapsibleContent></Collapsible>}
   </>;
 }
 

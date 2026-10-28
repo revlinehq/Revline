@@ -23,7 +23,7 @@ export function RecentProjects() {
       : projects.length ? <ul className="recent-projects-list">{projects.map(project => <li key={project._id}>
         <Link className="workspace-chat-row-link recent-project-link" href={`/editor/${project._id}`}>
           <ProjectCover url={project.coverUrl} kind={project.coverKind} />
-          <span className="workspace-chat-description"><strong title={project.title}>{project.title}</strong><span>{project.clipCount ? `${project.clipCount} ${project.clipCount === 1 ? 'clip' : 'clips'}` : 'Ready for your footage'}</span></span>
+          <span className="workspace-chat-description"><strong>{project.title}</strong><span>{project.clipCount ? `${project.clipCount} ${project.clipCount === 1 ? 'clip' : 'clips'}` : 'Ready for your footage'}</span></span>
           <time dateTime={new Date(project.updatedAt).toISOString()}>{chatRecency(project.updatedAt)}</time>
         </Link>
       </li>)}</ul>
