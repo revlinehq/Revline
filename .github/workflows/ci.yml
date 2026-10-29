@@ -6,7 +6,7 @@ permissions:
   contents: read
 jobs:
   checks:
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     env:
       PUPPETEER_SKIP_DOWNLOAD: 'true'
       NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_test_Y2kuY2xlcmsuYWNjb3VudHMuZGV2JA==
@@ -26,13 +26,14 @@ jobs:
       - run: npm run typecheck
       - run: npm run build
 
+  # Jobs run on Blacksmith runners (native x64, billed to Blacksmith, not GitHub Actions minutes).
   # Production releases run only after checks pass on main. Convex goes first;
   # the frontend and the media processor then release independently, so site
   # changes never wait for a processor image build.
   processor-plan:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: checks
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-2vcpu-ubuntu-2404
     permissions:
       contents: read
       actions: read
@@ -66,7 +67,7 @@ jobs:
   deploy-convex:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: checks
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-2vcpu-ubuntu-2404
     environment: production
     concurrency:
       group: production-convex
@@ -88,7 +89,7 @@ jobs:
 
   deploy-frontend:
     needs: deploy-convex
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     environment: production
     concurrency:
       group: production-frontend
@@ -111,7 +112,7 @@ jobs:
   deploy-processor:
     needs: [processor-plan, deploy-convex]
     if: needs.processor-plan.outputs.changed == 'true'
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-8vcpu-ubuntu-2404
     environment: production
     concurrency:
       group: production-processor
