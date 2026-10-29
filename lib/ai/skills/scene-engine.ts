@@ -17,7 +17,7 @@ A React scene is a TSX module whose default export is a component. It is a React
 
 ## Motion
 - **Simple fades and slides:** compute from time. \`const { time } = useBeat()\` (local to the clip, or to the nearest \`<Beat>\`), then \`progress(time, start, duration, 'expo.out')\` (eased 0..1) and \`mix(from, to, p)\` into style (opacity from \`p\`, a translateY from \`mix(24, 0, p)\`).
-- **Choreography** (staggers, overlaps, word-by-word or letter reveals, SplitText, ScrambleText, DrawSVG, MorphSVG, motion paths): \`useTimeline\`. It builds a paused GSAP timeline once per mount, scoped to the element it returns a ref for, and seeks it to the beat's local time on every frame:
+- **Choreography** (staggers, overlaps, word-by-word or letter reveals, SplitText, ScrambleText, DrawSVG, MorphSVG, motion paths): \`useTimeline\`; for choreography, read the gsap skill (readSkill name "gsap"). It builds a paused GSAP timeline once per mount, scoped to the element it returns a ref for, and seeks it to the beat's local time on every frame:
 \`\`\`tsx
 function Title({ text }: { text: string }) {
   const ref = useTimeline<HTMLHeadingElement>((tl, el) => {
@@ -73,6 +73,8 @@ Launch and feature films use **React scenes** instead: components for structure,
 - Limits: code up to 20,000 characters, clips up to 120 s.
 
 ## GSAP technique
+
+For choreography, read the gsap skill (readSkill name "gsap"): GreenSock's official guidance under Revline's rules for seeked timelines.
 
 - Choreograph with the position parameter: absolute times (\`2.4\`), relative to the previous step (\`'<0.2'\`, \`'-=0.3'\`), or labels (\`tl.addLabel('reveal', 3)\`, then \`'reveal+=0.4'\`).
 - A custom curve is one line: \`CustomEase.create('brand', 'M0,0 C0.4,0 0.2,1 1,1')\`.
