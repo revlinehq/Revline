@@ -88,7 +88,7 @@ export const clipValidator = v.object({
   lightSweep:v.optional(v.object({enabled:v.boolean(),amount:v.number(),color:v.string(),angle:v.number(),position:v.number(),width:v.number(),speed:v.number()})),
   vhs:v.optional(v.object({enabled:v.boolean(),amount:v.number(),scanlines:v.number(),noise:v.number(),bleed:v.number(),tracking:v.number(),speed:v.number()})),
   lightLeak:v.optional(v.object({enabled:v.boolean(),amount:v.number(),color:v.string(),position:v.number(),spread:v.number(),speed:v.number()})),
-  scene: v.optional(v.object({ title: v.string(), code: v.string(), brand: v.optional(sceneBrandValidator), media: v.optional(v.array(v.object({ name: v.string(), assetId: v.string() }))) })),
+  scene: v.optional(v.object({ title: v.string(), code: v.string(), brand: v.optional(sceneBrandValidator), media: v.optional(v.array(v.object({ name: v.string(), assetId: v.string() }))), blueprints: v.optional(v.array(v.object({ name: v.string(), code: v.string() }))) })),
   textTemplate: v.optional(textTemplateValidator),
   textStyle:v.optional(textStyleValidator), textGradient:v.optional(textGradientValidator),
   fontFamily:v.optional(v.union(v.literal('space-grotesk'),v.literal('anton'),v.literal('dm-serif'),v.literal('geist-mono'),v.literal('inter'),v.literal('dm-sans'),v.literal('montserrat'),v.literal('poppins'),v.literal('oswald'),v.literal('bebas-neue'),v.literal('playfair-display'),v.literal('caveat'),v.literal('tiktok-sans'),v.literal('barlow-condensed'),v.literal('ibm-plex-mono'),v.literal('lora'),v.literal('archivo-black'),v.literal('fraunces'))),

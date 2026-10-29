@@ -18,10 +18,10 @@ import { TextPlugin } from 'gsap/TextPlugin';
 import { SCENE_GSAP_PLUGINS, type SceneGsapPlugin } from './scene-modules';
 import { sceneBrandContext, type SceneBrand, type SceneBrandContext } from './brand-kit';
 
-type Init = { type: 'init'; code: string; brand: SceneBrand | null; media?: { name: string; type: string; data: ArrayBuffer }[]; icons?: Record<string, string>; width: number; height: number; fps: number; duration: number; fonts: { family: string; weight: string; data: ArrayBuffer }[] };
+type Init = { type: 'init'; code: string; brand: SceneBrand | null; media?: { name: string; type: string; data: ArrayBuffer }[]; icons?: Record<string, string>; blueprints?: { name: string; code: string }[]; width: number; height: number; fps: number; duration: number; fonts: { family: string; weight: string; data: ArrayBuffer }[] };
 type Seek = { type: 'seek'; time: number; seq: number };
 /** What a scene's default export receives. Time 0 on `tl` is the first frame of the clip. */
-export type SceneContext = { root: HTMLElement; tl: gsap.core.Timeline; gsap: typeof gsap; width: number; height: number; duration: number; fps: number; brand: SceneBrandContext | null; /** Project images and videos by name, as URLs for <img src>, <video src> or CSS backgrounds. */ media: Record<string, string>; /** A Lucide icon as SVG markup, e.g. icon('scissors', { size: 16, color: '#8d8f93' }). */ icon: (name: string, options?: IconOptions) => string };
+export type SceneContext = { root: HTMLElement; tl: gsap.core.Timeline; gsap: typeof gsap; width: number; height: number; duration: number; fps: number; brand: SceneBrandContext | null; /** Project images and videos by name, as URLs for <img src>, <video src> or CSS backgrounds. */ media: Record<string, string>; /** A Lucide icon as SVG markup, e.g. icon('scissors', { size: 16, color: '#8d8f93' }). */ icon: (name: string, options?: IconOptions) => string; /** Builds a brand kit blueprint (its whole UI) inside container at width x height and returns its root; its pieces are [data-part=...] elements to animate. */ blueprint: (name: string, container: HTMLElement, size?: { width: number; height: number }) => HTMLElement };
 export type IconOptions = { size?: number; color?: string; strokeWidth?: number; fill?: string };
 
 const PLUGINS: Record<SceneGsapPlugin, object> = { CustomEase, CustomWiggle, CustomBounce, SplitText, DrawSVGPlugin, MorphSVGPlugin, MotionPathPlugin, ScrambleTextPlugin, TextPlugin };
@@ -87,7 +87,20 @@ if (typeof window !== 'undefined' && window.parent !== window) {
     const media = Object.fromEntries((data.media ?? []).map(item => [item.name, URL.createObjectURL(new Blob([item.data], { type: item.type || 'image/png' }))]));
     const scene = compileScene(data.code);
     origin = gsap.globalTimeline.time();
-    await scene({ root, tl: gsap.timeline(), gsap, width: data.width, height: data.height, duration: data.duration, fps: data.fps, brand: sceneBrandContext(data.brand ?? undefined), media, icon: iconFactory(data.icons ?? {}) });
+    const brand = sceneBrandContext(data.brand ?? undefined), icon = iconFactory(data.icons ?? {});
+    // A blueprint is itself a scene module: built once, statically, into the container the scene gives it.
+    const blueprint = (name: string, container: HTMLElement, size?: { width: number; height: number }) => {
+      const found = (data.blueprints ?? []).find(item => item.name.toLowerCase() === name.trim().toLowerCase());
+      if (!found) throw new Error(`No blueprint "${name}" is attached to this scene. Attach it with blueprints on addScene or editScene.`);
+      const width = size?.width ?? (container.clientWidth || data.width), height = size?.height ?? (container.clientHeight || data.height);
+      const host = document.createElement('div');
+      host.dataset.blueprint = found.name;
+      host.style.cssText = `position:relative;width:${width}px;height:${height}px;overflow:hidden`;
+      container.appendChild(host);
+      void compileScene(found.code)({ root: host, tl: gsap.timeline(), gsap, width, height, duration: data.duration, fps: data.fps, brand, media, icon, blueprint });
+      return host;
+    };
+    await scene({ root, tl: gsap.timeline(), gsap, width: data.width, height: data.height, duration: data.duration, fps: data.fps, brand, media, icon, blueprint });
     master = gsap.exportRoot({ paused: true });
     // gsap.set calls made while building land after the scene's timeline at the same start time,
     // so a first seek into the middle re-applied the starting states over the animation.
