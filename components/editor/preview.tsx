@@ -29,7 +29,10 @@ import { previewVisualEffects, updateLiveVisualEffects } from '@/lib/editor/live
 import { updateLiveVisualGeometry } from '@/lib/editor/live-visual-geometry';
 import type { RefreshPlaybackMedia } from '@/lib/editor/media-source-recovery';
 import { previewAdjustmentEffect, updateLiveAdjustmentEffects } from '@/lib/editor/live-adjustment-effects';
-import { loadPreviewRemotion } from '@/lib/editor/preview-remotion-runtime';
+import { loadPreviewRemotion } from '@/lib/editor/preview-remotion-runtime';import { sceneMediaAssetIds } from '@/lib/editor/scene-layers';
+/** Assets the preview must load: every clip's media plus images and videos shown inside scenes. */
+const usedAssetIds=(timeline:Timeline)=>new Set<string|undefined>([...timeline.clips.map(clip=>clip.assetId),...sceneMediaAssetIds(timeline)]);
+
 function LiveTextControls(props: Omit<React.ComponentProps<typeof TextControls>, 'time'>) {
   const time=usePausedPlaybackTime(),playing=useEditorState(state=>state.playing);
   if(playing)return null;
@@ -121,7 +124,7 @@ export const Preview = forwardRef<PreviewHandle,{/** Platform UI overlay for ver
         renderedTimeline.current=current;renderedAssets.current=resolved;setRevision(value=>value+1);
       }else setReloadRevision(value=>value+1);
     }catch(error){callbacks.current.onError(userError(error,'Could not update the preview.'));}};
-    const used=new Set(current.clips.map(clip=>clip.assetId));
+    const used=usedAssetIds(current);
     const usedAssets=assets.filter(asset=>used.has(asset._id));
     const immediate=cache.cachedAssets(usedAssets).map(asset=>{
       const retained=renderedAssets.current.find(previous=>previous._id===asset._id);
@@ -203,7 +206,7 @@ export const Preview = forwardRef<PreviewHandle,{/** Platform UI overlay for ver
       window.removeEventListener('message',iframeError);if(diagnosticTimer)clearTimeout(diagnosticTimer);
       cancelAnimationFrame(swapFrame);stopTrace?.();session?.dispose();p?.pause();p?.remove();
     };
-    const used=new Set(timeline.clips.map(clip=>clip.assetId));
+    const used=usedAssetIds(timeline);
     void Promise.all([import('@hyperframes/player'),openingAssets(cache,assets.filter(asset=>used.has(asset._id)),preparation.signal)]).then(([,prepared])=>{
       if(cancelled||!container.current)return;
       playbackAssets=prepared;callbacks.current.onPlaybackAssets?.(prepared);p=document.createElement('hyperframes-player') as HyperframesPlayer;
@@ -213,7 +216,7 @@ export const Preview = forwardRef<PreviewHandle,{/** Platform UI overlay for ver
         if(cancelled||!p||swapped||!loaded||waitingForMedia||!session)return;
         waitingForMedia=true;
         void(async()=>{
-          const current=latestTimeline.current,committed=latestCommittedTimeline.current,used=new Set(current.clips.map(clip=>clip.assetId));
+          const current=latestTimeline.current,committed=latestCommittedTimeline.current,used=usedAssetIds(current);
           const prepared=await openingAssets(cache,latestAssets.current.filter(asset=>used.has(asset._id)),preparation.signal);
           if(cancelled||!p||!session)return;
           const doc=p.iframeElement?.contentDocument;if(!doc)return;
