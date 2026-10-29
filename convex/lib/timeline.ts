@@ -1,6 +1,6 @@
 import { validateColorFinish, validateTimelineLuts } from '../../lib/editor/color-finish';
 import { validateVisualTransform } from '../../lib/editor/visual-inputs';
-import { writeProject, type HistoryEntry } from './project_data';
+import { historyTimelines, writeProject, type HistoryEntry } from './project_data';
 import { validateClipEffects } from '../../lib/editor/clip-effects';
 import { playbackRateOf, sourceEndOf } from '../../lib/editor/playback-rate';
 import { transitionSources } from '../../lib/editor/clip-transitions';
@@ -19,17 +19,20 @@ import type { MutationCtx, QueryCtx } from "../_generated/server";
 export function serializedBytes(value: unknown) { return new TextEncoder().encode(JSON.stringify(value)).byteLength; }
 /** Stored undo snapshots: the newest entries within both budgets. */
 export const HISTORY_LIMIT = 10, HISTORY_BYTES = 500_000;
-export function boundedEntries<T extends { timeline: Timeline; id?: unknown }>(entries: T[]): T[] {
+export function boundedEntries<T extends { timeline?: Timeline; id?: unknown; bytes?: number }>(entries: T[]): T[] {
   // Stored rows were normalized when written; only new snapshots need it.
-  const kept = entries.slice(-HISTORY_LIMIT).map(entry => entry.id ? entry : { ...entry, timeline: normalizeTimeline(entry.timeline) });
-  // Serialized array bytes: entries, separating commas, and brackets.
-  const sizes = kept.map(entry => serializedBytes(entry.timeline));
+  const kept = entries.slice(-HISTORY_LIMIT).map(entry => entry.id ? entry : { ...entry, timeline: normalizeTimeline(entry.timeline!) });
+  // Serialized array bytes: entries, separating commas, and brackets. Stored rows carry their size.
+  const sizes = kept.map(entry => entry.bytes ?? serializedBytes(entry.timeline));
   let total = sizes.reduce((sum, size) => sum + size, 0) + Math.max(kept.length - 1, 0) + 2;
   while (kept.length && total > HISTORY_BYTES) { total -= sizes.shift()! + (kept.length > 1 ? 1 : 0); kept.shift(); }
   return kept;
 }
 /** Stored rows carry a current-version fingerprint; others fall back to hashing. */
-export function historyKeys(entries: HistoryEntry[]) { return Promise.all(entries.map(entry => entry.key ?? timelineHistoryKey(entry.timeline))); }
+export async function historyKeys(ctx: MutationCtx, entries: HistoryEntry[]) {
+  const loaded = entries.every(entry => entry.key || entry.timeline) ? entries : await historyTimelines(ctx, entries);
+  return Promise.all(loaded.map(entry => entry.key ?? timelineHistoryKey(entry.timeline!)));
+}
 export function currentTimeline(project: Doc<"projects">): Timeline {
   return normalizeTimeline(project.timeline ?? { clips: [], fps: 30, aspectRatio: project.aspectRatio });
 }
@@ -160,15 +163,16 @@ export async function commitTimeline(ctx: MutationCtx, project: Doc<"projects">,
     let history: HistoryEntry[];
     if (undoHistoryKeys === undefined) {
       // Keep earlier clients compatible during the backend-first rollout.
-      const keys = undoTargetKey ? await historyKeys(previous) : undefined;
+      const keys = undoTargetKey ? await historyKeys(ctx, previous) : undefined;
+      const snapshots = keys ? undefined : await historyTimelines(ctx, previous);
       let index = -1;
       for (let candidate = previous.length - 1; candidate >= 0; candidate--) {
-        if (keys ? keys[candidate] === undoTargetKey : equalTimelineValue(normalizeTimeline(previous[candidate].timeline), target)) { index = candidate; break; }
+        if (keys ? keys[candidate] === undoTargetKey : equalTimelineValue(normalizeTimeline(snapshots![candidate].timeline), target)) { index = candidate; break; }
       }
       history = index < 0 ? [] : previous.slice(0, index);
       if (index >= 0 && !equalTimelineValue(timeline, target)) history.push({ timeline: await validateTimeline(ctx, project, target) });
     } else {
-      const matched = matchedUndoHistory(await historyKeys(previous), undoHistoryKeys, undoTargetKey ?? await timelineHistoryKey(target));
+      const matched = matchedUndoHistory(await historyKeys(ctx, previous), undoHistoryKeys, undoTargetKey ?? await timelineHistoryKey(target));
       // Unsaved intermediate gestures have no exact server snapshot. Their
       // preceding local fingerprints still identify the valid persisted past.
       history = matched.map(index => previous[index]);

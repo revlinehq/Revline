@@ -1,5 +1,5 @@
 import { shareAnalysis } from './lib/asset_analysis';
-import { writeProject,createProject,readProject,projectIdentity } from './lib/project_data';
+import { writeProject,createProject,readProject,projectIdentity,readHistoryIndex } from './lib/project_data';
 import { recordAssetStorage } from './lib/storage_accounting';
 import { requireEditorAccess } from './lib/billing_access';
 import { mediaUrl } from './lib/media_storage';
@@ -119,6 +119,23 @@ export const history=query({args:{projectId:v.string()},returns:v.array(timeline
   const access=await ctx.db.query('projectAccess').withIndex('by_project',q=>q.eq('projectId',projectId)).unique();if(access?.historyStored)return [];
   // Old projects are readable before the bounded migration reaches them.
   const legacy=await ctx.db.get(projectId);return legacy?.history?.map(normalizeTimeline)??[];
+}});
+/** The undo snapshot ids in order. The editor subscribes to this small row and loads each snapshot once
+ * with `historySnapshot` (stored snapshots never change), instead of re-reading all of them per edit. */
+export const historyIndex=query({args:{projectId:v.string()},returns:v.array(v.id('timelineRevisions')),handler:async(ctx,args)=>{
+  const projectId=routeProjectId(ctx,args.projectId);
+  await projectIdentity(ctx,projectId,await requireOwner(ctx));
+  const index=await readHistoryIndex(ctx,projectId);
+  if(index)return index.entries.slice(-HISTORY_LIMIT).map(entry=>entry.id);
+  // Projects not edited since the index shipped list their rows until their next write.
+  const rows=await ctx.db.query('timelineRevisions').withIndex('by_project_sequence',q=>q.eq('projectId',projectId)).order('desc').take(HISTORY_LIMIT);
+  return rows.reverse().map(row=>row._id);
+}});
+export const historySnapshot=query({args:{projectId:v.string(),id:v.string()},returns:v.union(timelineValidator,v.null()),handler:async(ctx,args)=>{
+  const projectId=routeProjectId(ctx,args.projectId);
+  await projectIdentity(ctx,projectId,await requireOwner(ctx));
+  const id=ctx.db.normalizeId('timelineRevisions',args.id),row=id&&await ctx.db.get(id);
+  return row&&row.projectId===projectId?normalizeTimeline(row.timeline):null;
 }});
 export const projectListItem = v.object({ _id: v.id('projects'), title: v.string(), createdAt: v.number(), updatedAt: v.number(), aspectRatio, clipCount: v.number(), aiRunning: v.boolean(), coverUrl: v.union(v.string(), v.null()), coverKind: v.union(v.literal("video"), v.literal("image"), v.null()) });
 export async function listProjectsFor(ctx: QueryCtx, ownerId: string, args: { limit?: number }): Promise<Infer<typeof projectListItem>[]> {

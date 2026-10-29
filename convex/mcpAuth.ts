@@ -177,7 +177,8 @@ export const connector = query({ args: {}, returns: v.object({ mcpUrl: v.string(
   const ownerId = await requireOwner(ctx);
   const allowed = await requireConnectorAccess(ctx, ownerId).then(() => true, () => false);
   const now = Date.now(), grants = new Map<string, { grantId: string; label: string; kind: 'app' | 'personal'; createdAt: number; lastUsedAt?: number }>();
-  for (const token of await ctx.db.query('mcpTokens').withIndex('by_owner', q => q.eq('ownerId', ownerId)).order('desc').take(500)) {
+  // Revoked tokens stay 30 days for refresh reuse detection; read only the live ones.
+  for (const token of await ctx.db.query('mcpTokens').withIndex('by_owner_revoked', q => q.eq('ownerId', ownerId).eq('revokedAt', undefined)).order('desc').take(500)) {
     if (token.revokedAt !== undefined || (token.expiresAt !== undefined && token.expiresAt < now)) continue;
     const current = grants.get(token.grantId);
     const lastUsedAt = Math.max(current?.lastUsedAt ?? 0, token.lastUsedAt ?? 0) || undefined;
@@ -189,7 +190,7 @@ export const connector = query({ args: {}, returns: v.object({ mcpUrl: v.string(
 export const createPersonalToken = mutation({ args: { label: v.string() }, returns: v.object({ token: v.string() }), handler: async (ctx, args) => {
   const ownerId = await requireOwner(ctx);
   await requireConnectorAccess(ctx, ownerId);
-  const active = (await ctx.db.query('mcpTokens').withIndex('by_owner', q => q.eq('ownerId', ownerId)).take(500)).filter(token => token.kind === 'personal' && token.revokedAt === undefined);
+  const active = (await ctx.db.query('mcpTokens').withIndex('by_owner_revoked', q => q.eq('ownerId', ownerId).eq('revokedAt', undefined)).take(500)).filter(token => token.kind === 'personal');
   if (active.length >= 10) throw new ConvexError('Revoke an existing token before creating another (10 maximum).');
   const token = randomValue('rvl_pat_');
   await ctx.db.insert('mcpTokens', { tokenHash: await sha256(token), kind: 'personal', ownerId, grantId: randomValue('grant_'), label: args.label.trim().slice(0, 60) || 'Personal token', createdAt: Date.now() });

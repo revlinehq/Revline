@@ -6,7 +6,7 @@ import { useStore } from 'zustand';
 import { createEditorStore } from '@/lib/editor/store';
 import { createTimelineSaveQueue } from '@/lib/editor/timeline-sync';
 import { EditorStateProvider } from './editor-state';
-import { useConvex, useConvexAuth, useMutation, useQuery, useAction } from 'convex/react';
+import { useConvex, useConvexAuth, useMutation, useQueries, useQuery, useAction } from 'convex/react';
 import { openingFootage } from '@/lib/editor/footage-opening';
 import { WorkspaceNav } from '@/components/workspace/workspace-nav';
 import { FootagePreparation } from './footage-preparation';
@@ -38,9 +38,18 @@ function editorLoading(projectId: string) {
 export function ConnectedEditor({projectId}: {projectId:string}) {
   const {isAuthenticated}=useConvexAuth();
   const project=useQuery(api.projects.get,isAuthenticated?{projectId:projectId as Id<'projects'>,includeHistory:false}:'skip');
-  const history=useQuery(api.projects.history,isAuthenticated?{projectId:projectId as Id<'projects'>}:'skip');
-  if(!project||history===undefined)return editorLoading(projectId);
-  return <EditorAccessGate loading={editorLoading(projectId)}><ProjectEditor key={projectId} project={{...project,history}}/></EditorAccessGate>;
+  // Undo history is up to 10 full timelines. Subscribe to its small index and read each stored snapshot once:
+  // snapshots never change, so their queries stay cached while they remain in history.
+  const historyIds=useQuery(api.projects.historyIndex,isAuthenticated?{projectId}:'skip');
+  const snapshots=useQueries(useMemo(()=>Object.fromEntries((historyIds??[]).map(id=>[id,{query:api.projects.historySnapshot,args:{projectId,id}}])),[historyIds,projectId]));
+  const complete=historyIds!==undefined&&historyIds.every(id=>snapshots[id]!==undefined);
+  // The project and its index change together; a new revision shows once its new snapshot has loaded.
+  const loaded=useMemo(()=>project&&historyIds&&complete?{...project,history:historyIds.flatMap(id=>{const timeline=snapshots[id];return timeline&&!(timeline instanceof Error)?[timeline as Timeline]:[];})}:null,[project,historyIds,complete]);// eslint-disable-line react-hooks/exhaustive-deps
+  const [shown,setShown]=useState<Doc<'projects'>|null>(null);
+  if(loaded&&loaded!==shown)setShown(loaded);
+  const current=loaded??(shown?._id===projectId?shown:null);
+  if(!current)return editorLoading(projectId);
+  return <EditorAccessGate loading={editorLoading(projectId)}><ProjectEditor key={projectId} project={current}/></EditorAccessGate>;
 }
 function ProjectEditor({project}: {project:Doc<'projects'>}) {
   const [shareOpen,setShareOpen]=useState(false);

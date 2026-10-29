@@ -242,6 +242,8 @@ export default defineSchema({
   projectTimelineHistories:defineTable({projectId:v.id('projects'),timelineId:v.string(),history:v.array(timelineValidator)}).index('by_project_timeline',['projectId','timelineId']),
   projectTimelines:defineTable({projectId:v.id('projects'),ownerId:v.string(),timelineId:v.string(),timeline:timelineValidator,history:v.optional(v.array(timelineValidator))}).index('by_project_timeline',['projectId','timelineId']),
   timelineRevisions:defineTable({projectId:v.id('projects'),ownerId:v.string(),sequence:v.number(),timeline:timelineValidator,key:v.optional(v.string()),keyVersion:v.optional(v.number())}).index('by_project_sequence',['projectId','sequence']),
+  // The stored undo snapshots in order (id, fingerprint, serialized size), so edits and the editor read this row instead of every snapshot.
+  timelineHistoryIndex:defineTable({projectId:v.id('projects'),keyVersion:v.number(),entries:v.array(v.object({id:v.id('timelineRevisions'),sequence:v.number(),key:v.string(),bytes:v.number()}))}).index('by_project',['projectId']),
   projectCatalog:defineTable({projectId:v.id('projects'),ownerId:v.string(),title:v.string(),aspectRatio,createdAt:v.number(),updatedAt:v.number(),clipCount:v.number(),aiRunning:v.boolean(),deleting:v.optional(v.boolean()),coverKind:v.optional(assetKind),coverStorageId:v.optional(v.id('_storage')),coverR2Key:v.optional(v.string())}).index('by_project',['projectId']).index('by_owner_updated',['ownerId','updatedAt']),
   projectDataMigration:defineTable({key:v.string(),cursor:v.union(v.string(),v.null()),completed:v.boolean()}).index('by_key',['key']),
   storageAccounts: defineTable({ ownerId:v.string(), usedBytes:v.number(), reservedBytes:v.number(), videoBytes:v.number(), audioBytes:v.number(), imageBytes:v.number(), exportBytes:v.number(), fileCount:v.number() }).index('by_owner',['ownerId']),
@@ -289,7 +291,7 @@ export default defineSchema({
     // One connection (an approved client, or one personal token) shares a grant.
     grantId: v.string(), clientId: v.optional(v.string()), label: v.string(),
     createdAt: v.number(), expiresAt: v.optional(v.number()), lastUsedAt: v.optional(v.number()), revokedAt: v.optional(v.number()),
-  }).index("by_tokenHash", ["tokenHash"]).index("by_owner", ["ownerId"]).index("by_grant", ["grantId"]).index("by_grant_revoked", ["grantId", "revokedAt"]).index("by_clientId", ["clientId"]).index("by_revokedAt", ["revokedAt"]),
+  }).index("by_tokenHash", ["tokenHash"]).index("by_owner", ["ownerId"]).index("by_owner_revoked", ["ownerId", "revokedAt"]).index("by_grant", ["grantId"]).index("by_grant_revoked", ["grantId", "revokedAt"]).index("by_clientId", ["clientId"]).index("by_revokedAt", ["revokedAt"]),
   // Background removal for one clip's source range, run by fal.ai through the media worker.
   cutouts: defineTable({ ownerId: v.string(), projectId: v.id("projects"), clipId: v.string(), sourceAssetId: v.id("assets"), start: v.number(), end: v.number(), fps: v.optional(v.number()), subject: v.optional(v.string()), effect: v.optional(cutoutEffectValidator), status: v.union(v.literal("queued"), v.literal("completed"), v.literal("failed")), taskId: v.optional(v.id("mediaTasks")), outputAssetId: v.optional(v.id("assets")), placed: v.optional(v.boolean()), error: v.optional(v.string()), createdAt: v.number() }).index("by_project", ["projectId"]),
   // Processed copies of one clip's source made by the media worker: a freeze-frame still, smooth slow motion

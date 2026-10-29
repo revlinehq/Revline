@@ -1,4 +1,5 @@
 import { compactEditorHistory } from '../../lib/ai/history-compaction';
+import { mergeToolInputDeltas } from '../../lib/ai/stream-deltas';
 import {assistantRunArgs,continuationValidator} from './assistant_run';
 import { type EffectPlan } from '../../lib/ai/edit-plan';
 import { EDITOR_STYLE_RULES, editorDisclosureRules } from "../../lib/ai/editor-style";
@@ -120,7 +121,7 @@ You edit the user's video timeline using structured tools. Greetings, small talk
       if (pass > 0 && autoEffort && effort === 'low') raiseEffort();
       const passEffort = effort;
       const result = await agent.streamText(ctx, { threadId: args.threadId, userId: args.ownerId }, {
-        promptMessageId: args.promptMessageId, abortSignal, providerOptions: editorProviderOptions(withEffort(passEffort), cacheKey), maxOutputTokens: editorMaxOutputTokens(withEffort(passEffort)),
+        promptMessageId: args.promptMessageId, abortSignal, experimental_transform: mergeToolInputDeltas(), providerOptions: editorProviderOptions(withEffort(passEffort), cacheKey), maxOutputTokens: editorMaxOutputTokens(withEffort(passEffort)),
         prepareStep: ({ steps: current }) => {
           if (autoEffort && effort === 'low' && stepsNeedHighEffort([...steps, ...current])) raiseEffort();
           return effort === passEffort ? undefined : { providerOptions: editorProviderOptions(withEffort(effort), cacheKey), maxOutputTokens: editorMaxOutputTokens(withEffort(effort)) };
