@@ -5,8 +5,8 @@ import { ClaudeLogo, OpenAILogo } from '@/components/workspace/ai-app-logos';
 import { LandingInstallAgents } from './install-agents';
 
 // The Blueprint launch film, made in Revline from screenshots. Swap the export in here.
-const FILM_SRC = '/landing/blueprint-launch.mp4';
-const FILM_POSTER = '/landing/blueprint-launch-poster.webp';
+const FILM_SRC = '/landing/blueprint-launch-final.mp4';
+const FILM_POSTER = '/landing/blueprint-launch-final-poster.webp';
 const FILM_SECONDS = 37.9;
 
 // Beat starts in film seconds, from the Blueprint launch markers. The first seven are Revline's story, the rest T3 Code's film.
