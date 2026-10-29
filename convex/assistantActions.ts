@@ -14,6 +14,7 @@ import { editorRepairContext, modelTimeline, EDITOR_CONTEXT_NOTICE, EDITOR_CONTE
 import { assistantFailureReason } from "../lib/ai/assistant-error";
 import { activeOpenAIKey, editorOpenAI } from "../lib/ai/openai-keys";
 import { anthropic } from "@ai-sdk/anthropic";
+import { google } from '@ai-sdk/google';
 import { assertEditorModelConfigured, resolveClaudeModel, validatePinnedClaudeModel, editorProviderOptions, editorMaxOutputTokens, defaultEditorReasoningEffort, type ClaudeModelSelection } from "../lib/ai/claude-model";
 import { Agent, saveMessage } from "@convex-dev/agent";
 import { v, type Infer } from "convex/values";
@@ -87,7 +88,7 @@ export const respond = internalAction({
         if(provider==='openai'&&activeOpenAIKey())countInput=openAITokenCounter(modelId,activeOpenAIKey(),measurement=>console.log(`[ai-budget] ${JSON.stringify({timestamp:new Date().toISOString(),projectId:args.projectId,runId:args.runId,model:modelId,...measurement})}`));
       }
       console.log(`[ai-budget] ${JSON.stringify({timestamp:new Date().toISOString(),projectId:args.projectId,runId:args.runId,enforced:enforceTokenBudget})}`);
-      const model = wrapLanguageModel({ model: provider === 'anthropic' ? anthropic(modelId) : editorOpenAI().responses(modelId), middleware: [...(provider === 'openai' ? [openAIEditorImages] : []), tokenBudget.middleware(args.selectedClipIds ?? (args.selectedClipId ? [args.selectedClipId] : []), editSession.revision,countInput,enforceTokenBudget)] });
+      const model = wrapLanguageModel({ model: provider === 'anthropic' ? anthropic(modelId) : provider === 'google' ? google(modelId) : editorOpenAI().responses(modelId), middleware: [...(provider === 'openai' ? [openAIEditorImages] : []), tokenBudget.middleware(args.selectedClipIds ?? (args.selectedClipId ? [args.selectedClipId] : []), editSession.revision,countInput,enforceTokenBudget)] });
       const providerOptions = editorProviderOptions(selection, `revline-thread-${args.threadId}`);
       const agent = new Agent(components.agent, { name: "Revline", languageModel: model, tools, contextOptions: { recentMessages: 100, excludeToolMessages: false }, stopWhen: [({steps})=>shouldStopEditingSteps(steps), ({ steps }) => hasRepeatedToolFailures(steps)], instructions: `${EDITOR_STYLE_RULES}
 ${editorDisclosureRules(process.env.EDITOR_INTERNAL_DETAILS_ENABLED === "true")}

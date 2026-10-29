@@ -3,12 +3,12 @@
 import { ChevronDown, Zap } from 'lucide-react';
 import { EDITOR_MODELS, EDITOR_REASONING_EFFORTS, type ClaudeModelChoice, type EditorReasoningEffort, type EditorSpeedMode } from '@/lib/ai/claude-model';
 import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { ClaudeLogo, OpenAILogo } from '@/components/workspace/ai-app-logos';
+import { ClaudeLogo, GoogleLogo, OpenAILogo } from '@/components/workspace/ai-app-logos';
 import { InspectorSelect } from './inspector-select';
 import './assistant-model-picker.css';
 
 /** The provider's mark beside each model. */
-const providerLogo = (id: ClaudeModelChoice) => id.startsWith('gpt') ? <OpenAILogo className="assistant-model-logo" /> : <ClaudeLogo className="assistant-model-logo" />;
+const providerLogo = (id: ClaudeModelChoice) => id.startsWith('gpt') ? <OpenAILogo className="assistant-model-logo" /> : id.startsWith('gemini') ? <GoogleLogo className="assistant-model-logo" /> : <ClaudeLogo className="assistant-model-logo" />;
 
 
 export function AssistantModelPicker({ value, onChange, disabled, allowedModels }: {

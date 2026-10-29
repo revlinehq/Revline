@@ -1,4 +1,5 @@
 import type { AnthropicProviderOptions } from '@ai-sdk/anthropic';
+import type { GoogleGenerativeAIProviderOptions } from '@ai-sdk/google';
 import type { OpenAIResponsesProviderOptions } from '@ai-sdk/openai';
 import { enforceClaudeModelPolicy, GPT_ONLY_EDITING_ERROR } from './claude-model-policy';
 
@@ -24,7 +25,12 @@ export const OPENAI_EDIT_MODELS = [
   // Rejects prompt_cache_options and the 'max' effort (OpenAI API, Oct 2026); reasoning modes are GPT-6 only.
   { id: 'gpt-5.4-mini', label: 'GPT-5.4 mini', modelId: 'gpt-5.4-mini', pricing: { input: .75, cacheRead: .075, cacheWrite: .9375, output: 4.5 }, legacyOptions: true },
 ] as const;
-export const EDITOR_MODELS = [...OPENAI_EDIT_MODELS, CLAUDE_EDIT_MODELS[1], CLAUDE_EDIT_MODELS[2]] as const;
+// Google rates, USD / 1M tokens, from ai.google.dev/gemini-api/docs/pricing (2026-10-29): $2 input,
+// $10 output, $0.10 implicit cache reads until 2026-11-30; $4 / $20 / $0.20 from 2026-12-01.
+export const GOOGLE_EDIT_MODELS = [
+  { id: 'gemini-4-argon', label: 'Gemini 4 Argon', modelId: 'gemini-4-argon' },
+] as const;
+export const EDITOR_MODELS = [...OPENAI_EDIT_MODELS, CLAUDE_EDIT_MODELS[1], CLAUDE_EDIT_MODELS[2], ...GOOGLE_EDIT_MODELS] as const;
 export const EDITOR_REASONING_EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'] as const;
 export type EditorReasoningEffort = typeof EDITOR_REASONING_EFFORTS[number];
 export const EDITOR_SPEED_MODES = ['standard', 'fast'] as const;
@@ -36,8 +42,8 @@ export function editorModelSupportsFast(selection: Pick<ClaudeModelSelection, 'p
   return selection.provider === 'openai';
 }
 // Legacy IDs remain decodable for historical records and stale queued requests.
-export type ClaudeModelChoice = typeof OPENAI_EDIT_MODELS[number]['id'] | typeof CLAUDE_EDIT_MODELS[number]['id'];
-export type ClaudeModelSelection = { provider: 'anthropic' | 'gateway' | 'openai'; modelId: string; modelChoice?: ClaudeModelChoice; reasoningEffort?: EditorReasoningEffort; speedMode?: EditorSpeedMode };
+export type ClaudeModelChoice = typeof OPENAI_EDIT_MODELS[number]['id'] | typeof CLAUDE_EDIT_MODELS[number]['id'] | typeof GOOGLE_EDIT_MODELS[number]['id'];
+export type ClaudeModelSelection = { provider: 'anthropic' | 'gateway' | 'google' | 'openai'; modelId: string; modelChoice?: ClaudeModelChoice; reasoningEffort?: EditorReasoningEffort; speedMode?: EditorSpeedMode };
 type ClaudeModelEnvironment = Readonly<Record<string, string | undefined>>;
 
 export function claudeModelSwitcherEnabled(env: ClaudeModelEnvironment = process.env) {
@@ -49,7 +55,9 @@ export function resolveClaudeModel(modelChoice?: ClaudeModelChoice, env: ClaudeM
   const choice = modelChoice ?? (env.EDITOR_DEFAULT_MODEL?.trim() || 'gpt-6.1-sol');
   const selected = OPENAI_EDIT_MODELS.find(model => model.id === choice);
   if (selected) return enforceClaudeModelPolicy({ provider: 'openai', modelId: selected.modelId, modelChoice: selected.id }, env);
-  const claude = EDITOR_MODELS.find(model => model.id === choice && !OPENAI_EDIT_MODELS.some(item => item.id === model.id));
+  const gemini = GOOGLE_EDIT_MODELS.find(model => model.id === choice);
+  if (gemini) return enforceClaudeModelPolicy({ provider: 'google', modelId: gemini.modelId, modelChoice: gemini.id }, env);
+  const claude = CLAUDE_EDIT_MODELS.find(model => model.id === choice && EDITOR_MODELS.some(item => item.id === model.id));
   if (!claude) throw new Error(GPT_ONLY_EDITING_ERROR);
   return enforceClaudeModelPolicy({ provider: 'anthropic', modelId: claude.modelId, modelChoice: claude.id }, env);
 }
@@ -69,7 +77,7 @@ export function validatePinnedClaudeModel(selection: ClaudeModelSelection, env: 
   enforceClaudeModelPolicy(selection, env);
   if (selection.reasoningEffort !== undefined && !EDITOR_REASONING_EFFORTS.includes(selection.reasoningEffort)) throw new Error('Choose a supported reasoning effort.');
   if (selection.speedMode !== undefined && (!EDITOR_SPEED_MODES.includes(selection.speedMode) || (selection.speedMode === 'fast' && !editorModelSupportsFast(selection)))) throw new Error('Fast mode is not available for this model.');
-  const pinned = selection.provider === 'openai' ? selection.modelChoice : CLAUDE_EDIT_MODELS.find(model => model.id === selection.modelChoice)?.modelId;
+  const pinned = selection.provider === 'openai' || selection.provider === 'google' ? selection.modelChoice : CLAUDE_EDIT_MODELS.find(model => model.id === selection.modelChoice)?.modelId;
   if (selection.modelChoice !== undefined && pinned !== selection.modelId) throw new Error('Pinned editor model does not match its selection.');
   return selection;
 }
@@ -101,7 +109,14 @@ export function claudeProviderOptions(modelId: string, effort: EditorReasoningEf
   return { anthropic };
 }
 
+/** Gemini thinks at low, medium or high; the higher editor efforts map to high. */
+export function googleProviderOptions(effort: EditorReasoningEffort = 'medium') {
+  const google = { thinkingConfig: { thinkingLevel: effort === 'low' || effort === 'medium' ? effort : 'high' } } satisfies GoogleGenerativeAIProviderOptions;
+  return { google };
+}
+
 export function editorProviderOptions(selection: ClaudeModelSelection, cacheKey?: string) {
+  if (selection.provider === 'google') return googleProviderOptions(selection.reasoningEffort ?? defaultEditorReasoningEffort());
   if (selection.provider !== 'openai') { const options = claudeProviderOptions(selection.modelId, selection.reasoningEffort); if (!options) throw new Error(GPT_ONLY_EDITING_ERROR); return options; }
   // GPT-6 models take reasoning modes, cache retention and every effort; older
   // models reject those request fields outright.
@@ -122,7 +137,7 @@ export function editorProviderOptions(selection: ClaudeModelSelection, cacheKey?
 /** Higher effort shares its output allowance with hidden reasoning tokens. */
 export function editorMaxOutputTokens(selection: ClaudeModelSelection) {
   // A full-size scene module is ~6k tokens of tool input.
-  if (selection.provider !== 'openai') return 8192;
+  if (selection.provider === 'anthropic') return 8192;
   return { low: 8192, medium: 8192, high: 16384, xhigh: 24576, max: 32768 }[selection.reasoningEffort ?? defaultEditorReasoningEffort()];
 }
 

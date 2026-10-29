@@ -7,7 +7,7 @@ export const legacyCompatibleModelChoiceValidator = v.union(claudeModelChoiceVal
 export const editorReasoningEffortValidator = v.union(...EDITOR_REASONING_EFFORTS.map(effort => v.literal(effort)));
 export const editorSpeedModeValidator = v.union(...EDITOR_SPEED_MODES.map(mode => v.literal(mode)));
 export const pinnedClaudeModelValidator = v.object({
-  provider: v.union(v.literal('anthropic'), v.literal('gateway'), v.literal('openai')),
+  provider: v.union(v.literal('anthropic'), v.literal('gateway'), v.literal('google'), v.literal('openai')),
   modelId: v.string(),
   modelChoice: v.optional(legacyCompatibleModelChoiceValidator),
   reasoningEffort: v.optional(editorReasoningEffortValidator),
