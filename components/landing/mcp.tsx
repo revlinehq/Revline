@@ -1,5 +1,6 @@
 import { Braces } from 'lucide-react';
 import { ClaudeLogo, CodexAppIcon, CursorLogo, McpLogo } from '@/components/workspace/ai-app-logos';
+import { PUBLIC_MCP_URL } from '@/components/workspace/mcp-apps';
 import { LandingButton, LandingHeading, LandingSection } from './ui';
 
 type Token = [text: string, tone?: 'key' | 'string'];
@@ -10,7 +11,7 @@ const config: Token[][] = [
   [['  '], ['"mcpServers"', 'key'], [': {']],
   [['    '], ['"revline"', 'key'], [': {']],
   [['      '], ['"type"', 'key'], [': '], ['"http"', 'string'], [',']],
-  [['      '], ['"url"', 'key'], [': '], ['"https://tryrevline.com/mcp"', 'string']],
+  [['      '], ['"url"', 'key'], [': '], [`"${PUBLIC_MCP_URL}"`, 'string']],
   [['    }']],
   [['  }']],
   [['}']],

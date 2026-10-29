@@ -9,7 +9,7 @@ import { ArrowLeft, Check, Copy, ExternalLink, LoaderCircle, ChevronDown } from 
 import { api } from '@/convex/_generated/api';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
 import { PrimaryButton } from './primary-button';
-import { ClaudeLogo, McpLogo, OpenAILogo } from './ai-app-logos';
+import { claudeCodeCommand, MCP_APPS, type McpAppId } from './mcp-apps';
 import './mcp-connector-section.css';
 import { Button } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
@@ -25,18 +25,8 @@ function CopyField({ label, value }: { label: string; value: string }) {
 
 const when = (time?: number) => time ? new Date(time).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : 'Never';
 
-// Claude and ChatGPT only add custom MCP servers from their own settings, so each needs the link pasted once;
-// sign-in then runs through Revline's OAuth consent page automatically. Any other MCP client takes the same link.
-type AppId = 'claude' | 'chatgpt' | 'agent';
-type App = { name: string; owner: string; Logo: typeof ClaudeLogo; match?: RegExp; settingsUrl?: string; settingsLabel?: string; steps: string };
-const APPS: Record<AppId, App> = {
-  claude: { name: 'Claude', owner: 'Claude', Logo: ClaudeLogo, match: /claude/i, settingsUrl: 'https://claude.ai/settings/connectors', settingsLabel: 'Open Claude connectors',
-    steps: 'Choose Add custom connector, paste the link, then sign in to Revline when asked.' },
-  chatgpt: { name: 'ChatGPT', owner: 'ChatGPT', Logo: OpenAILogo, match: /chatgpt|openai/i, settingsUrl: 'https://chatgpt.com/#settings/Connectors', settingsLabel: 'Open ChatGPT settings',
-    steps: 'Turn on Developer mode under Advanced, choose Create, paste the link and pick OAuth. Then sign in to Revline when asked. Needs a ChatGPT plan with Developer mode.' },
-  agent: { name: 'any agent', owner: 'your agent', Logo: McpLogo,
-    steps: 'Open your agent\'s MCP or connector settings, add a remote (HTTP) MCP server and paste the link. Then sign in to Revline when asked.' },
-};
+type AppId = McpAppId;
+const APPS = MCP_APPS;
 
 type Connector = FunctionReturnType<typeof api.mcpAuth.connector>;
 
@@ -85,7 +75,7 @@ function AppSteps({ id, mcpUrl }: { id: AppId; mcpUrl: string }) {
       <li><strong>Add it in {app.owner}</strong><p>{app.steps}</p>
         {app.settingsUrl && <Button asChild variant="outline" size="md"><a className="mcp-open-link" href={app.settingsUrl} target="_blank" rel="noreferrer">{app.settingsLabel}<ExternalLink size={13} /></a></Button>}</li>
     </ol>
-    {id === 'claude' && <Collapsible className="mcp-advanced group/collapsible"><CollapsibleTrigger asChild><Button type="button" variant="ghost" size="sm">Using Claude Code?<ChevronDown className="transition-transform group-data-[state=open]/collapsible:rotate-180" /></Button></CollapsibleTrigger><CollapsibleContent><CopyField label="Claude Code command" value={`claude mcp add --transport http revline ${mcpUrl}`} /><p>Then run <code>/mcp</code> in Claude Code to sign in.</p></CollapsibleContent></Collapsible>}
+    {id === 'claude' && <Collapsible className="mcp-advanced group/collapsible"><CollapsibleTrigger asChild><Button type="button" variant="ghost" size="sm">Using Claude Code?<ChevronDown className="transition-transform group-data-[state=open]/collapsible:rotate-180" /></Button></CollapsibleTrigger><CollapsibleContent><CopyField label="Claude Code command" value={claudeCodeCommand(mcpUrl)} /><p>Then run <code>/mcp</code> in Claude Code to sign in.</p></CollapsibleContent></Collapsible>}
   </>;
 }
 

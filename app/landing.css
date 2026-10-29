@@ -80,7 +80,64 @@ div.landing-reveal,div.landing-reveal>.landing-reveal-content{display:inline-blo
 .landing-product-frame{padding:12px;border:1px solid #12121214;border-radius:22px;background:#1212120a;box-shadow:0 24px 64px #3b1a8a1f}
 @media(prefers-reduced-motion:no-preference){.landing-product-frame{animation:landing-settle-media 1.1s cubic-bezier(.32,.72,0,1) 1.05s backwards}}
 @keyframes landing-settle-media{from{opacity:.01;translate:0 32px;scale:.97}}
-.landing-product-window{display:block;width:100%;height:auto;aspect-ratio:2560/1307;border:1px solid #26262e;border-radius:10px;background:#0b0c0e}
+/* Hero demo: components/landing/hero-demo.tsx. Panels and bar contents stack in one grid cell and crossfade, so switching never changes the height. */
+.landing-demo{display:flex;flex-direction:column;align-items:center;gap:20px}
+.landing-demo>.landing-product-frame{width:100%}
+.landing-demo-window{overflow:hidden;border:1px solid #e4e4e8;border-radius:10px;background:#fff}
+.landing-demo-stage,.landing-demo-bar{display:grid}
+.landing-demo-stage>*,.landing-demo-bar>*{grid-area:1/1}
+.landing-demo-stage{aspect-ratio:16/9;background:#0b0c0e}
+.landing-demo-panel,.landing-demo-bar>*{opacity:0;visibility:hidden;transition:opacity 320ms cubic-bezier(.32,.72,0,1),scale 420ms cubic-bezier(.32,.72,0,1),visibility 0s linear 320ms}
+.landing-demo-panel{scale:.985;min-width:0;min-height:0}
+.landing-demo-panel[data-active],.landing-demo-bar>[data-active]{opacity:1;visibility:visible;scale:1;transition-delay:0s}
+.landing-demo-film,.landing-demo-shot{display:block;width:100%;height:100%;object-fit:cover}
+.landing-demo-standin{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;height:100%;padding:24px;background:radial-gradient(120% 90% at 50% 0%,#fafafa,#ececef);color:#121212;text-align:center}
+.landing-demo-standin-prompt{max-width:420px;padding:12px 16px;border:1px solid #e4e4e8;border-radius:14px;background:#fff;font-size:15px;line-height:1.45;box-shadow:0 6px 16px #1212120d}
+.landing-demo-standin-note{font-size:13px;color:var(--l-fg-3)}
+.landing-demo-bar{border-top:1px solid #ededf0}
+.landing-demo-caption{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px;font-size:13px;color:var(--l-fg-2)}
+.landing-film-timeline{display:flex;flex-direction:column;gap:8px;padding:10px 14px 12px}
+.landing-film-meta{display:flex;align-items:center;gap:10px;min-width:0;font-size:13px;line-height:20px}
+.landing-film-icon{display:grid;place-items:center;width:28px;height:28px;flex-shrink:0;border:1px solid #ebebee;border-radius:6px;background:#fcfcfc;color:var(--l-fg);transition:background-color 140ms ease}
+.landing-film-icon:hover{background:#f4f4f5}
+.landing-film-beat{overflow:hidden;font-weight:500;color:var(--l-fg);white-space:nowrap;text-overflow:ellipsis}
+.landing-film-act{color:var(--l-fg-3);white-space:nowrap}
+.landing-film-clock{margin-left:auto;font:12px var(--l-mono);color:var(--l-fg-3);font-variant-numeric:tabular-nums;white-space:nowrap}
+.landing-film-beats{display:flex;gap:3px}
+.landing-film-beats button{--fill:0;position:relative;flex-basis:0;min-width:6px;height:20px;padding:7px 0;border:0;background:none}
+.landing-film-beats i{display:block;height:6px;border-radius:3px;background:linear-gradient(90deg,#121212 calc(var(--fill) * 100%),#e6e6ea 0);transition:height 160ms ease,translate 160ms ease}
+.landing-film-beats button[data-act=t3] i{background:linear-gradient(90deg,#5e5e66 calc(var(--fill) * 100%),#ededf0 0)}
+.landing-film-beats button:hover i{height:8px;translate:0 -1px}
+.landing-film-beats button::after{content:attr(data-label);position:absolute;bottom:calc(100% + 6px);left:50%;translate:-50% 2px;padding:4px 8px;border-radius:6px;background:#121212;font-size:11px;line-height:14px;color:#fff;white-space:nowrap;opacity:0;pointer-events:none;transition:opacity 140ms ease,translate 140ms ease}
+.landing-film-beats button:hover::after,.landing-film-beats button:focus-visible::after{opacity:1;translate:-50% 0}
+.landing-film-beats button:first-child::after{left:0;translate:0 2px}
+.landing-film-beats button:first-child:is(:hover,:focus-visible)::after{translate:0 0}
+.landing-film-beats button:last-child::after{left:auto;right:0;translate:0 2px}
+.landing-film-beats button:last-child:is(:hover,:focus-visible)::after{translate:0 0}
+.landing .landing-film-beats button:focus-visible{outline-offset:0}
+/* Revline | Claude | ChatGPT: equal columns, so the pill slides by its own width. */
+.landing-demo-switch{position:relative;display:grid;grid-template-columns:repeat(3,96px);padding:3px;border:1px solid #ebebee;border-radius:9px;background:#f4f4f5}
+.landing-demo-switch-pill{position:absolute;top:3px;bottom:3px;left:3px;width:96px;border-radius:6px;background:#fff;box-shadow:0 1px 2px #1212121a,0 0 0 1px #12121208;translate:calc(var(--switch-index) * 100%) 0;transition:translate 380ms cubic-bezier(.32,.72,0,1)}
+.landing-demo-switch button{position:relative;height:30px;border:0;background:none;font-size:13px;font-weight:500;color:var(--l-fg-2);transition:color 200ms ease}
+.landing-demo-switch button[aria-selected=true]{color:var(--l-fg)}
+/* Install on your agents: components/landing/install-agents.tsx */
+.landing-install-dialog{background:#fff;color:#121212;color-scheme:light;gap:18px;padding:20px}
+.landing-install-dialog>*{min-width:0}
+.landing-install-dialog [data-slot=dialog-description]{color:#737373;line-height:1.55}
+.landing-install-tabs{display:flex;gap:4px;padding:3px;border:1px solid #ebebee;border-radius:9px;background:#f4f4f5}
+.landing-install-tabs button{display:inline-flex;flex:1;align-items:center;justify-content:center;gap:6px;height:30px;border:0;border-radius:6px;background:none;font-size:13px;font-weight:500;color:#5e5e5e;cursor:pointer;transition:background-color 200ms ease,color 200ms ease}
+.landing-install-tabs button[aria-selected=true]{background:#fff;color:#121212;box-shadow:0 1px 2px #1212121a}
+.landing-install-steps{display:flex;flex-direction:column;gap:16px;margin:0;padding-left:20px;font-size:14px;line-height:1.5}
+.landing-install-steps li{display:flex;flex-direction:column;align-items:flex-start;gap:8px;min-width:0}
+.landing-install-steps li::marker{color:#8a8a8a}
+.landing-install-steps strong{font-weight:500}
+.landing-install-steps p{color:#5e5e5e}
+.landing-install-steps p code{font-size:13px}
+.landing-install-copy{display:flex;align-items:center;gap:8px;width:100%;padding:4px 4px 4px 10px;border:1px solid #ebebee;border-radius:8px;background:#f7f7f8}
+.landing-install-copy code{flex:1;min-width:0;overflow:auto;font:12.5px/1.4 var(--landing-font-mono,'Geist Mono'),monospace;white-space:nowrap;scrollbar-width:none}
+.landing-install-copy button{display:inline-flex;align-items:center;gap:6px;height:28px;padding-inline:10px;border:1px solid #ebebee;border-radius:6px;background:#fff;font-size:12.5px;color:#121212;cursor:pointer}
+.landing-install-copy button:hover{background:#f4f4f5}
+.landing-install-open{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:500;color:#121212;text-decoration:underline;text-decoration-color:#d4d4d8;text-underline-offset:3px}
 
 /* Logos */
 .landing-logos{display:flex;flex-direction:column;align-items:center;gap:28px;padding-block:24px 88px}
@@ -244,7 +301,18 @@ div.landing-reveal,div.landing-reveal>.landing-reveal-content{display:inline-blo
   .landing-hero h1 br,.landing-hero-copy>p br{display:none}
   .landing-hero-copy>p{font-size:16px}
   .landing-product-frame{padding:6px;border-radius:14px}
-  .landing-product-window{border-radius:8px}
+  .landing-demo-window{border-radius:8px}
+  .landing-film-timeline{padding:8px 10px 10px}
+  .landing-film-act{display:none}
+  .landing-film-beats{gap:2px}
+  .landing-film-beats button{min-width:4px;height:24px;padding-block:9px}
+  .landing-film-beats button::after{display:none}
+  .landing-demo-caption{padding:10px}
+  .landing-demo-standin{gap:10px;padding:16px}
+  .landing-demo-standin-prompt{font-size:13px;padding:8px 12px}
+  .landing-demo-standin-note{display:none}
+  .landing-demo-switch{grid-template-columns:repeat(3,88px)}
+  .landing-demo-switch-pill{width:88px}
   .landing-logos{padding-bottom:56px}
   .landing-logos ul{gap:16px 36px}
   .landing-logos li{font-size:18px}
@@ -265,4 +333,5 @@ div.landing-reveal,div.landing-reveal>.landing-reveal-content{display:inline-blo
 }
 @media(prefers-reduced-motion:reduce){
   .landing-marquee-track{animation:none}
+  .landing-demo-panel,.landing-demo-bar>*,.landing-demo-switch-pill{transition-duration:0s}
 }
