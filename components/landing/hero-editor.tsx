@@ -7,6 +7,7 @@ import { normalizeTimeline, type Clip, type MediaAsset, type Timeline } from '@/
 import { AssistantPanel, type ChatMessage } from '@/components/editor/assistant-panel';
 import { EditorStateProvider } from '@/components/editor/editor-state';
 import { EditorShell } from '@/components/editor/editor-shell';
+import { ChatGPTChat, ClaudeChat } from './agent-chats';
 import type { PreviewHandle } from '@/components/editor/preview';
 import waveform from '@/public/landing/blueprint-launch-v2.waveform.json';
 import '@/app/editor.css';
@@ -78,17 +79,19 @@ function scopeWorkspaceDarkTheme() {
 }
 
 /** Revline's real editor, with the launch film on its timeline: local state only, no account or backend. */
-export default function LandingHeroEditor({ url, poster, onPreviewReady }: { url: string; poster: string; onPreviewReady: (preview: PreviewHandle) => void }) {
+export type HeroChat = 'revline' | 'claude' | 'chatgpt';
+
+export default function LandingHeroEditor({ url, poster, chat, onPreviewReady }: { url: string; poster: string; chat: HeroChat; onPreviewReady: (preview: PreviewHandle) => void }) {
   // Muted, so the film may start on its own when the hero comes into view.
   const [store] = useState(() => { const store = createEditorStore(filmTimeline()); store.setState({ muted: true }); return store; });
   const [assets] = useState(() => filmAssets(url, poster));
   const [title, setTitle] = useState('Blueprint launch');
   const [error, setError] = useState('');
   useEffect(scopeWorkspaceDarkTheme, []);
-  return <div className={`dark ${DARK_SCOPE}`}><EditorStateProvider store={store}><Shell store={store} assets={assets} title={title} onTitle={setTitle} error={error} onError={setError} onPreviewReady={onPreviewReady} /></EditorStateProvider></div>;
+  return <div className={`dark ${DARK_SCOPE}`}><EditorStateProvider store={store}><Shell store={store} assets={assets} title={title} onTitle={setTitle} error={error} onError={setError} chat={chat} onPreviewReady={onPreviewReady} /></EditorStateProvider></div>;
 }
 
-function Shell({ store, assets, title, onTitle, error, onError, onPreviewReady }: { store: ReturnType<typeof createEditorStore>; assets: MediaAsset[]; title: string; onTitle: (title: string) => void; error: string; onError: (message: string) => void; onPreviewReady: (preview: PreviewHandle) => void }) {
+function Shell({ store, assets, title, onTitle, error, onError, chat: variant, onPreviewReady }: { store: ReturnType<typeof createEditorStore>; assets: MediaAsset[]; title: string; onTitle: (title: string) => void; error: string; onError: (message: string) => void; chat: HeroChat; onPreviewReady: (preview: PreviewHandle) => void }) {
   const timeline = useStore(store, state => state.timeline);
   // Open with the whole film in view, as a finished edit would be reviewed.
   // The panels settle after mount, so refit whenever the timeline's width changes.
@@ -102,8 +105,10 @@ function Shell({ store, assets, title, onTitle, error, onError, onPreviewReady }
     });
     return () => { cancelAnimationFrame(frame); observer?.disconnect(); };
   }, [store]);
-  const chat = <AssistantPanel messages={MESSAGES} running={false} configured demo hasClips onSend={nothing} onStop={nothing} onAttach={noop} attachments={[]} requireMedia={false} />;
-  return <EditorShell embedded demo onPreviewReady={onPreviewReady} title={title} onTitle={onTitle} timeline={timeline} assets={assets} assistantPanel={chat}
+  // Only the side chat changes between Revline, Claude and ChatGPT; the preview and timeline stay the same edit.
+  const chat = variant === 'claude' ? <ClaudeChat /> : variant === 'chatgpt' ? <ChatGPTChat />
+    : <AssistantPanel messages={MESSAGES} running={false} configured demo hasClips onSend={nothing} onStop={nothing} onAttach={noop} attachments={[]} requireMedia={false} />;
+  return <EditorShell embedded demo conversationRequest={variant} onPreviewReady={onPreviewReady} title={title} onTitle={onTitle} timeline={timeline} assets={assets} assistantPanel={chat}
     onChange={next => store.getState().edit(next)} saving={false} upload={null} error={error} onError={onError}
     onUndo={() => store.getState().undo()} onRedo={() => store.getState().redo()} canUndo={false} canRedo={false}
     onUpload={nothing} onDropUpload={nothing} messages={MESSAGES} aiRunning={false} aiConfigured={false} onSend={nothing} onStop={nothing} onExport={nothing} exportState={null} />;
