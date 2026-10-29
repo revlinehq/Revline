@@ -16,9 +16,21 @@ export const get = internalQuery({
     const id = ctx.db.normalizeId('brandKits', kitId);
     const kit = id && await ctx.db.get(id);
     if (!kit || kit.ownerId !== ownerId) return null;
-    return { ...kit, fontUrls: await Promise.all(kit.fonts.map(font => ctx.storage.getUrl(font.storageId))) };
+    return { ...kit, fontUrls: kit.fonts.map(font => fontUrl(font.storageId)) };
   },
 });
+
+/** Only stored font files are served by the brand-font route. */
+export const isFontFile = internalQuery({
+  args: { storageId: v.string() },
+  handler: async (ctx, { storageId }) => {
+    const id = ctx.db.system.normalizeId('_storage', storageId);
+    const file = id && await ctx.db.system.get(id);
+    return file && file.contentType?.startsWith('font/') ? file._id : null;
+  },
+});
+
+const fontUrl = (storageId: string) => `${process.env.CONVEX_SITE_URL}/brand-font?id=${storageId}`;
 
 export const byName = internalQuery({
   args: { ownerId: v.string(), name: v.string() },
