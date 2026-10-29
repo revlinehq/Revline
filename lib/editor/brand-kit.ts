@@ -2,7 +2,8 @@
 export type BrandColor = { name: string; value: string };
 export type BrandFontRole = 'heading' | 'body' | 'other';
 export type BrandFontFace = { family: string; weight: string; role: BrandFontRole; url: string };
-export type BrandContext = { product?: string; problem?: string; audience?: string; features?: string[]; notes?: string };
+/** Everything about the product in one text: what it is, the problem it solves, the features worth showing. */
+export type BrandContext = { product?: string };
 export type BrandCopy = { title?: string; description?: string; headings: string[] };
 
 /** A product screenshot saved with the kit, named the way scenes read it from `media`. */
@@ -10,7 +11,7 @@ export type BrandScreen = { name: string; url: string };
 /** The part of a kit a scene carries with it, so preview and export never look the kit up. */
 export type SceneBrand = { kitId: string; name: string; colors: BrandColor[]; fonts: BrandFontFace[]; logo?: string; screens?: BrandScreen[] };
 
-export const BRAND_LIMITS = { screens: 8, screenBytes: 8_000_000, name: 60, colors: 16, colorValue: 80, fonts: 8, fontBytes: 600_000, logo: 24_000, contextText: 600, features: 8, headings: 12 } as const;
+export const BRAND_LIMITS = { screens: 8, screenBytes: 8_000_000, name: 60, colors: 16, colorValue: 80, fonts: 8, fontBytes: 600_000, logo: 24_000, contextText: 2000, headings: 12 } as const;
 
 /** What a scene receives as `brand`: named colors, a family per role, and the logo ready for <img> and as inline SVG. */
 export type SceneBrandContext = {

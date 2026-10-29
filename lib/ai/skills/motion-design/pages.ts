@@ -3,10 +3,10 @@ import type { EditorSkillPage } from '../index';
 /** Step 1: nothing is designed before the brand is known. */
 export const brandPage: EditorSkillPage = {
   name: 'brand-kit',
-  description: 'Step 1. Find, create and confirm the brand kit (fonts, colors, logo, screens, brand context, motion identity), and how scenes use it.',
+  description: 'Step 1. Find, create and confirm the brand kit (fonts, colors, logo, screens, product text, motion identity), and how scenes use it.',
   body: `# Brand kit
 
-A brand kit is a named, saved brand for this user: colors, font files, a logo, the landing-page copy, the brand context (what the product is, the problem it solves, who it is for, key features), saved product screens and a motion identity. Scenes attach it with \`brandKitId\` and receive it as \`brand\`.
+A brand kit is a named, saved brand for this user: colors, font files, a logo, the landing-page copy, the product text (what it is, the problem it solves, the features worth showing), saved product screens and a motion identity. Scenes attach it with \`brandKitId\` and receive it as \`brand\`.
 
 ## Workflow
 1. **Check first.** listBrandKits.
@@ -15,7 +15,7 @@ A brand kit is a named, saved brand for this user: colors, font files, a logo, t
    - None: ask for the website URL, or for a theme (colors, Google Fonts names, logo SVG) if there is no site.
 2. **Create.** createBrandKit with the URL (and any theme values the user gave; those win). Name it after the brand.
 3. **Show what was found.** Fonts by role, the main colors, whether a logo was found, and every note. Ask the user to correct anything wrong; fix it with updateBrandKit. Never pretend a missing piece was found.
-4. **Confirm the brand context.** Draft it from the scraped copy, then ask, in one short message, only what the copy does not answer: what it is (one sentence), the problem, who it is for, 3 to 5 features worth showing. Save the confirmed version with updateBrandKit context. Never build on an unconfirmed context.
+4. **Confirm the product.** Draft one product text from the scraped copy: what it is, the problem it solves and the 3 to 5 features worth showing (features as short lines). Show it and ask the user to correct it, asking only about what the copy does not answer. Save the confirmed text with updateBrandKit context.product. Never build on an unconfirmed product text.
 5. **Screens.** Product screenshots belong to the brand, not one project. Check the kit's screens (getBrandKit). When the user gives screenshots, offer to save them to the kit (updateBrandKit addScreens, named like editor, dashboard, settings, with a short note) so every later video reuses them without re-uploading.
 6. **Motion identity.** Once a style is chosen, propose one in a line: personality (premium, corporate, energetic, playful), a signature ease used for ~80% of motion, three durations (short, medium, long) and the one entrance pattern. Use the style's personality and the craft page's table. Save it with updateBrandKit motion when the user agrees; later videos for this brand start from it.
 7. **Use.** Pass \`brandKitId\` to addScene (or editScene to attach or refresh). A scene keeps the kit as it was when saved.
@@ -41,6 +41,7 @@ Ask these together, once, after the brand kit is settled. Offer sensible default
 - **Format and platform:** 16:9 for X, YouTube, a site hero; 9:16 for Reels, TikTok, Shorts; 1:1 for feeds.
 - **Length:** teaser 10 to 15 s, feature 15 to 30 s, product 30 to 60 s.
 - **Reference:** a film they like, or a feel in their words. It drives the style choice.
+- **Audience:** who this video is for, when it changes what to show or say. Infer it from the product text and the brief otherwise.
 - **Call to action:** what viewers should do at the end, and the URL. It belongs to this video, not the brand.
 - **Music:** do they have a track? If not, offer to find royalty-free options.
 - **Product screens:** ask for screenshots or short screen recordings of the screens the film should show (uploaded to the project, or already in its media). Real screens make the film; without them the product is shown as simplified mockups or abstract visuals. Never skip this question for a product or feature launch.`,
@@ -51,7 +52,7 @@ export const storyPage: EditorSkillPage = {
   description: 'Step 3. Story structures for product launches, feature launches and teasers, and why they work.',
   body: `# Story
 
-Pick the structure for the type; adapt timings to the length. Facts on screen come only from the confirmed brand context or the user.
+Pick the structure for the type; adapt timings to the length. Facts on screen come only from the confirmed product text or the user.
 
 ## Product launch (30 to 60 s)
 1. **Hook, 0 to 3 s:** a pattern interrupt: bold type slamming in, a product shape snapping into focus, a fast scale-in. No logo yet.
@@ -88,13 +89,13 @@ export const scriptPage: EditorSkillPage = {
 On-screen words carry the story; the motion shows each line happening. Write them together, before any timing or code, and get them approved.
 
 ## Facts versus words
-Facts must be true and come from the confirmed brand context or the user: what the product does, names, numbers, claims, the URL. The wording is yours to write. Never paste website headings or section labels as captions just because they are true; rewrite them for film.
+Facts must be true and come from the confirmed product text or the user: what the product does, names, numbers, claims, the URL. The wording is yours to write. Never paste website headings or section labels as captions just because they are true; rewrite them for film.
 
 ## How to write it
 1. Write the whole film's words as one list, top to bottom, one line per card. Nothing else.
 2. Read it aloud in order, without visuals. It should tell the story on its own and sound like one voice. If it sounds like a feature list or a website menu, rewrite it.
 3. Give it a through-line: a word, rhythm or idea that returns and pays off at the lockup (for example a word that appears in the hook and comes back in the final line).
-4. Decide the voice for this film from the brand's own site copy, the confirmed context and the user's direction, and keep every line in it. Say it in one line above the script (e.g. "plain, confident, a little dry").
+4. Decide the voice for this film from the brand's own site copy, the confirmed product text and the user's direction, and keep every line in it. Say it in one line above the script (e.g. "plain, confident, a little dry").
 
 ## Rules for lines
 - One thought per card. 2 to 6 words for most cards; a headline at most about 8.
@@ -212,5 +213,5 @@ export const processPage: EditorSkillPage = {
 
 ## Product UI
 Real screenshots and screen recordings beat mockups: they show the actual product and build trust. First use the brand kit's screens (getBrandKit); they reach every scene with the kit attached as \`media.<name>\`. Otherwise ask the user for screenshots or short recordings of the screens the script shows (or offer to use ones already in the project's media), upload them, and attach them to scenes as \`media\` (scene-engine, Project media). A recording shows a real interaction; a screenshot with animated HTML on top shows a controlled one. Crop and magnify the part that matters, move a camera over them, tilt them, and layer animated HTML on top (a typed prompt, a highlight, a cursor) to show the action.
-Without screenshots, build the UI as HTML mockups in the brand's fonts and colors: windows, inputs, cards, lists, timelines. Show only what the brand context describes, with generic sample content.`,
+Without screenshots, build the UI as HTML mockups in the brand's fonts and colors: windows, inputs, cards, lists, timelines. Show only what the product text describes, with generic sample content.`,
 };

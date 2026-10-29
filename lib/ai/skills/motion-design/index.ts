@@ -11,7 +11,7 @@ export const motionDesign: EditorSkill = {
 A launch film makes one product or one feature feel simple, real and worth trying, in 15 to 60 seconds. Scenes are built with the scene engine (read scene-engine). Work through the steps in order; each names the page to load with readSkill name "motion-design" and page.
 
 ## Steps
-1. **Brand** (\`brand-kit\`): find or create the brand kit and confirm the brand context. Nothing is designed before the brand is known.
+1. **Brand** (\`brand-kit\`): find or create the brand kit and confirm its product text. Nothing is designed before the brand is known.
 2. **Intake** (\`intake\`): type, format, length, platform, reference, music.
 3. **Story** (\`story\`): pick the structure for the type.
 4. **Script** (\`script\`): write every on-screen word as one piece, in a voice that fits the brand; get it approved.
@@ -20,7 +20,7 @@ A launch film makes one product or one feature feel simple, real and worth tryin
 7. **Feedback** at any point (\`techniques\`).
 
 ## Never speculate
-Every fact on screen comes from the confirmed brand context or the user: names, features, numbers, claims, prices, dates, availability, the URL. Missing? Ask. Never invent a statistic, customer, feature or UI the product does not have.
+Every fact on screen comes from the confirmed product text or the user: names, features, numbers, claims, prices, dates, availability, the URL. Missing? Ask. Never invent a statistic, customer, feature or UI the product does not have.
 
 ## Style direction
 There are no presets. Each film gets its own short direction, fitted to the brand and the story, written as five labeled lines (never one summary sentence): **look** (canvas, palette use, texture), **type** (how words enter and hold), **product UI** (how it is framed and shown), **motion** (personality, signature ease, camera), **pacing** (shot lengths, holds, cutting). Put it at the top of the beat sheet with the films it borrows from.

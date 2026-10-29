@@ -41,15 +41,7 @@ function Editable({ title, editing, onEdit, onCancel, onSave, children, form }: 
   </section>;
 }
 
-/** An editable list of short text rows with add and remove. */
-function ListEditor({ values, onChange, placeholder, max }: { values: string[]; onChange: (values: string[]) => void; placeholder: string; max: number }) {
-  return <div className="brand-kit-list-editor">
-    {values.map((value, index) => <div key={index} className="brand-kit-row"><Input value={value} placeholder={placeholder} onChange={event => onChange(values.map((item, at) => at === index ? event.target.value : item))} /><Button type="button" variant="ghost" size="icon-xs" aria-label="Remove" onClick={() => onChange(values.filter((_, at) => at !== index))}><X /></Button></div>)}
-    {values.length < max && <Button type="button" variant="ghost" size="sm" className="brand-kit-add" onClick={() => onChange([...values, ''])}><Plus />Add</Button>}
-  </div>;
-}
-
-const contextOf = (kit: Kit) => ({ product: kit.context?.product ?? '', problem: kit.context?.problem ?? '', audience: kit.context?.audience ?? '', features: kit.context?.features ?? [] });
+const contextOf = (kit: Kit) => ({ product: kit.context?.product ?? '' });
 
 function BrandKitCard({ kit }: { kit: Kit }) {
   const update = useMutation(api.brandKits.updateKit), removeScreen = useMutation(api.brandKits.removeScreen);
@@ -77,14 +69,9 @@ function BrandKitCard({ kit }: { kit: Kit }) {
       <section className="brand-kit-section"><div className="brand-kit-section-head"><h3>Fonts</h3></div>
         <ul className="brand-kit-fonts">{kit.fonts.map(font => <li key={`${font.family}:${font.role}`}><span className="brand-kit-font-sample">{font.family}</span><span>{font.role} · {font.weights.join(', ')}</span></li>)}</ul>
       </section>
-      <Editable title="Brand context" editing={editing === 'context'} onEdit={() => open('context')} onCancel={close} onSave={async () => { await update({ kitId, context }); close(); }}
-        form={<div className="brand-kit-fields"><label>Product<Textarea value={context.product} onChange={event => setContext({ ...context, product: event.target.value })} /></label><label>Problem<Textarea value={context.problem} onChange={event => setContext({ ...context, problem: event.target.value })} /></label><label>Audience<Input value={context.audience} onChange={event => setContext({ ...context, audience: event.target.value })} /></label><div className="brand-kit-field">Features<ListEditor values={context.features} max={8} placeholder="A feature worth showing" onChange={features => setContext({ ...context, features })} /></div></div>}>
-        {kit.context ? <dl className="brand-kit-facts">
-          {kit.context.product && <><dt>Product</dt><dd>{kit.context.product}</dd></>}
-          {kit.context.problem && <><dt>Problem</dt><dd>{kit.context.problem}</dd></>}
-          {kit.context.audience && <><dt>Audience</dt><dd>{kit.context.audience}</dd></>}
-          {kit.context.features?.length ? <><dt>Features</dt><dd><ul className="brand-kit-features">{kit.context.features.map(feature => <li key={feature}>{feature}</li>)}</ul></dd></> : null}
-        </dl> : <p className="brand-kit-muted">Not confirmed yet. The assistant drafts it from your site before the first launch video, or add it here.</p>}
+      <Editable title="Product" editing={editing === 'context'} onEdit={() => open('context')} onCancel={close} onSave={async () => { await update({ kitId, context }); close(); }}
+        form={<Textarea className="brand-kit-product-input" value={context.product} placeholder="What it is, the problem it solves, the features worth showing." onChange={event => setContext({ product: event.target.value })} />}>
+        {kit.context?.product ? <p className="brand-kit-product">{kit.context.product}</p> : <p className="brand-kit-muted">Not confirmed yet. The assistant drafts it from your site before the first launch video, or write it here.</p>}
       </Editable>
       <Editable title="Motion" editing={editing === 'motion'} onEdit={() => open('motion')} onCancel={close} onSave={async () => { await update({ kitId, motion }); close(); }}
         form={<div className="brand-kit-fields"><label>Personality<Select value={motion.personality} onValueChange={value => setMotion({ ...motion, personality: value as Motion['personality'] })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{PERSONALITIES.map(item => <SelectItem key={item} value={item}>{item}</SelectItem>)}</SelectContent></Select></label><label>Signature ease<Input value={motion.ease} onChange={event => setMotion({ ...motion, ease: event.target.value })} /></label><div className="brand-kit-field">Durations (seconds)<div className="brand-kit-row">{(['short', 'medium', 'long'] as const).map(key => <Input key={key} type="number" step="0.05" min="0.1" aria-label={`${key} duration`} value={motion.durations[key]} onChange={event => setMotion({ ...motion, durations: { ...motion.durations, [key]: Number(event.target.value) } })} />)}</div></div><label>Entrance<Input value={motion.entrance} onChange={event => setMotion({ ...motion, entrance: event.target.value })} /></label></div>}>

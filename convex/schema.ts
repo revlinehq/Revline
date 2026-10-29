@@ -10,7 +10,7 @@ import { alertFields } from './lib/discord_alert';
 export const brandColorValidator = v.object({ name: v.string(), value: v.string() });
 export const brandFontValidator = v.object({ family: v.string(), weight: v.string(), role: v.union(v.literal('heading'), v.literal('body'), v.literal('other')), url: v.string() });
 export const brandMotionValidator = v.object({ personality: v.union(v.literal('premium'), v.literal('corporate'), v.literal('energetic'), v.literal('playful')), ease: v.string(), durations: v.object({ short: v.number(), medium: v.number(), long: v.number() }), entrance: v.string() });
-export const brandContextValidator = v.object({ product: v.optional(v.string()), problem: v.optional(v.string()), audience: v.optional(v.string()), features: v.optional(v.array(v.string())), notes: v.optional(v.string()) });
+export const brandContextValidator = v.object({ product: v.optional(v.string()) });
 const sceneBrandValidator = v.object({ kitId: v.string(), name: v.string(), colors: v.array(brandColorValidator), fonts: v.array(brandFontValidator), logo: v.optional(v.string()), screens: v.optional(v.array(v.object({ name: v.string(), url: v.string() }))) });
 export const brandScreenValidator = v.object({ name: v.string(), storageId: v.id('_storage'), width: v.optional(v.number()), height: v.optional(v.number()), note: v.optional(v.string()) });
 

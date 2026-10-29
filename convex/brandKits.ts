@@ -89,9 +89,9 @@ export const updateKit = mutation({
     if (name && name !== kit.name && await ctx.db.query('brandKits').withIndex('by_ownerId_name', q => q.eq('ownerId', ownerId).eq('name', name)).unique()) throw new ConvexError(`A brand kit named "${name}" already exists.`);
     const colors = patch.colors?.map(color => ({ name: color.name.trim(), value: color.value.trim() })).filter(color => color.name && color.value);
     if (colors && (colors.length > BRAND_LIMITS.colors || colors.some(color => color.name.length > 40 || !isBrandColor(color.value)))) throw new ConvexError('Colors need a short name and a CSS color such as #7c3aed.');
-    const text = (value: string | undefined, max: number = BRAND_LIMITS.contextText) => { const clean = value?.trim(); if (clean && clean.length > max) throw new ConvexError(`Keep each field under ${max} characters.`); return clean || undefined; };
-    const list = (values: string[] | undefined, max: number, length: number) => { const clean = (values ?? []).map(value => value.trim()).filter(Boolean); if (clean.length > max || clean.some(value => value.length > length)) throw new ConvexError(`Keep up to ${max} entries, each under ${length} characters.`); return clean; };
-    const context = patch.context && Object.fromEntries(Object.entries({ product: text(patch.context.product), problem: text(patch.context.problem), audience: text(patch.context.audience), features: list(patch.context.features, BRAND_LIMITS.features, 200), notes: text(patch.context.notes) }).filter(([, value]) => value !== undefined));
+    const product = patch.context?.product?.trim();
+    if (product && product.length > BRAND_LIMITS.contextText) throw new ConvexError(`Keep the product text under ${BRAND_LIMITS.contextText} characters.`);
+    const context = patch.context && (product ? { product } : {});
     await ctx.db.patch(kitId, { ...(name ? { name } : {}), ...(colors ? { colors } : {}), ...(context ? { context } : {}), ...(patch.motion ? { motion: patch.motion } : {}), updatedAt: Date.now() });
   },
 });
@@ -120,6 +120,22 @@ export const dropRetiredFields = internalMutation({
       const retired = kit as typeof kit & { voice?: unknown };
       if (retired.voice === undefined && _cta === undefined && _tone === undefined) continue;
       await ctx.db.replace(kit._id, { ...Object.fromEntries(Object.entries(kit).filter(([key]) => key !== 'voice' && key !== '_id' && key !== '_creationTime')), ...(kit.context ? { context: context as typeof kit.context } : {}) } as typeof kit);
+      changed++;
+    }
+    return changed;
+  },
+});
+
+/** One-off: the context becomes one product text (what it is, the problem, the features); audience is asked per video. */
+export const mergeContextFields = internalMutation({
+  args: {},
+  handler: async ctx => {
+    let changed = 0;
+    for await (const kit of ctx.db.query('brandKits')) {
+      const context = kit.context as { product?: string; problem?: string; audience?: string; features?: string[]; notes?: string } | undefined;
+      if (!context || Object.keys(context).every(key => key === 'product')) continue;
+      const lines = [[context.product, context.problem].filter(Boolean).join(' ').trim(), ...(context.features ?? []).map(feature => `- ${feature}`), context.notes ?? ''].filter(Boolean);
+      await ctx.db.patch(kit._id, { context: (lines.length ? { product: lines.join('\n') } : {}) as typeof kit.context });
       changed++;
     }
     return changed;

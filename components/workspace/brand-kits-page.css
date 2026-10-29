@@ -49,3 +49,5 @@
 .brand-kit-screen:hover .brand-kit-screen-remove,.brand-kit-screen-remove:focus-visible{opacity:1}
 .workspace-breadcrumb{padding:0 8px;font-size:14px}
 .brand-kit-section-head h3{font-size:12px;font-weight:500;color:var(--ws-muted)}
+.brand-kit-product{margin:0;font-size:13px;line-height:1.55;white-space:pre-line}
+.brand-kit-product-input{min-height:150px;font-size:13px;line-height:1.5}
