@@ -74,8 +74,9 @@ export const respond = internalAction({
       const autoEffort = selection.reasoningEffort === undefined;
       let effort = selection.reasoningEffort ?? autoEditorReasoningEffort(currentPrompt, { recovering });
       const withEffort = (value: EditorReasoningEffort) => ({ ...selection, reasoningEffort: value });
-      const raiseEffort = () => { effort = 'high'; costLog.selectModel(selection.modelId, selection.provider, effort, selection.speedMode ?? 'standard'); };
-      costLog.selectModel(selection.modelId, selection.provider, effort, selection.speedMode ?? 'standard');
+      const showEffort = () => { costLog.selectModel(selection.modelId, selection.provider, effort, selection.speedMode ?? 'standard'); void ctx.runMutation(internal.assistant.recordEffort, { ...run, effort }).catch(() => {}); };
+      const raiseEffort = () => { effort = 'high'; showEffort(); };
+      showEffort();
       const toolkit = createEditorToolkit(ctx, { run, project, assets, recovering, initialPlans: args.continuation ? await ctx.runQuery(internal.compositionReview.readPlan, run) : [], selectedClipIds: args.selectedClipIds ?? (args.selectedClipId ? [args.selectedClipId] : []), playhead: args.playhead, publication: { threadId: args.threadId, promptMessageId: args.promptMessageId }, abortSignal, budget });
       const { tools, editSession } = toolkit;
       session = editSession;

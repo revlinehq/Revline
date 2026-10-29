@@ -1,6 +1,6 @@
 'use client';
 
-import { EDITOR_MODELS, type ClaudeModelChoice } from '@/lib/ai/claude-model';
+import { EDITOR_MODELS, EDITOR_REASONING_EFFORTS, type ClaudeModelChoice, type EditorReasoningEffort } from '@/lib/ai/claude-model';
 import { ClaudeLogo, GoogleLogo, OpenAILogo } from '@/components/workspace/ai-app-logos';
 import { InspectorSelect } from './inspector-select';
 import './assistant-model-picker.css';
@@ -17,4 +17,17 @@ export function AssistantModelPicker({ value, onChange, disabled, allowedModels 
 }) {
   const options = EDITOR_MODELS.filter(model => allowedModels.includes(model.id)).map(model => ({ value: model.id, label: model.label, icon: providerLogo(model.id) }));
   return <div className="assistant-model-picker"><InspectorSelect label="AI editing model" value={value} options={options} onChange={onChange} disabled={disabled}/></div>;
+}
+
+const effortLabels: Record<EditorReasoningEffort, string> = { low: 'Low', medium: 'Medium', high: 'High', xhigh: 'X-high', max: 'Max' };
+
+/** Development only: Auto lets the editor pick per request and shows its live pick while a run works. */
+export function AssistantEffortPicker({ value, live, onChange, disabled }: {
+  value?: EditorReasoningEffort;
+  live?: EditorReasoningEffort;
+  onChange: (value: EditorReasoningEffort | undefined) => void;
+  disabled: boolean;
+}) {
+  const options = [{ value: 'auto' as const, label: live ? `Auto · ${effortLabels[live]}` : 'Auto' }, ...EDITOR_REASONING_EFFORTS.map(effort => ({ value: effort, label: effortLabels[effort] }))];
+  return <div className="assistant-model-picker"><InspectorSelect label="AI reasoning effort" value={value ?? 'auto'} options={options} onChange={next => onChange(next === 'auto' ? undefined : next)} disabled={disabled}/></div>;
 }

@@ -1,4 +1,4 @@
-import {pinnedClaudeModelValidator} from './lib/claude_model';
+import {editorReasoningEffortValidator, pinnedClaudeModelValidator} from './lib/claude_model';
 import { effectPlanValidator, compositionReviewResult } from './lib/effect_plan';
 import { cutoutEffectValidator } from './lib/cutout_effect_validator';
 import { defineSchema, defineTable } from "convex/server";
@@ -215,7 +215,7 @@ export default defineSchema({
     // Mirror of the project's tab list, so listing tabs never reads the (large) project document.
     timelineTabs:projectFields.timelineTabs,activeTimelineId:projectFields.activeTimelineId}).index('by_project',['projectId']),
   // Share of the per-request token cap the active run has used, 0–1.
-  aiBudgets:defineTable({projectId:v.id('projects'),runId:v.string(),used:v.number(),updatedAt:v.number()}).index('by_project',['projectId']),
+  aiBudgets:defineTable({projectId:v.id('projects'),runId:v.string(),used:v.number(),effort:v.optional(editorReasoningEffortValidator),updatedAt:v.number()}).index('by_project',['projectId']),
   aiTimelinePreviews:defineTable({projectId:v.id('projects'),ownerId:v.string(),runId:v.string(),baseRevision:v.number(),timeline:timelineValidator,label:v.string(),changedClipIds:v.array(v.string()),removedClips:v.array(clipValidator),at:v.number(),sequence:v.number(),updatedAt:v.number()}).index('by_project',['projectId']),
   assistantQueue:defineTable({projectId:v.id('projects'),ownerId:v.string(),prompt:v.string(),pinnedModel:pinnedClaudeModelValidator,attachedAssetIds:v.optional(v.array(v.id('assets'))),selectedClipId:v.optional(v.string()),selectedClipIds:v.optional(v.array(v.string())),playhead:v.optional(v.number()),error:v.optional(v.string()),createdAt:v.number()}).index('by_project',['projectId']),
   aiRuns:defineTable({projectId:v.id('projects'),ownerId:v.string(),...aiStateFields}).index('by_project',['projectId']),

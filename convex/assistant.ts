@@ -43,7 +43,7 @@ function configured() {
 async function canChooseEditorModel(ctx: QueryCtx | MutationCtx, ownerId: string) {
   return claudeModelSwitcherEnabled() && (process.env.EDITOR_MODEL_CHOICE_OPEN === 'true' || await hasUltraPlan(ctx, ownerId));
 }
-export const status = query({ args: { projectId: v.id("projects") }, returns: v.object({ configured: v.boolean(), modelSwitcher: v.optional(v.boolean()), allowedModels: v.optional(v.array(claudeModelChoiceValidator)), defaultModelChoice:v.optional(claudeModelChoiceValidator), defaultReasoningEffort:v.optional(editorReasoningEffortValidator), running: v.boolean(), externalAgent: v.union(v.object({ name: v.string(), until: v.number(), running: v.boolean() }), v.null()), editing: v.boolean(), workflowActive: v.boolean(), error: v.union(v.string(), v.null()), reason: v.union(v.string(), v.null()), activity: v.union(v.string(), v.null()), activitySource: v.union(v.string(), v.null()), activityProgress: v.union(v.number(), v.null()), activityStartedAt: v.union(v.number(), v.null()), budgetUsed: v.optional(v.number()) }), handler: async (ctx, args) => {
+export const status = query({ args: { projectId: v.id("projects") }, returns: v.object({ configured: v.boolean(), modelSwitcher: v.optional(v.boolean()), allowedModels: v.optional(v.array(claudeModelChoiceValidator)), defaultModelChoice:v.optional(claudeModelChoiceValidator), defaultReasoningEffort:v.optional(editorReasoningEffortValidator), running: v.boolean(), externalAgent: v.union(v.object({ name: v.string(), until: v.number(), running: v.boolean() }), v.null()), editing: v.boolean(), workflowActive: v.boolean(), error: v.union(v.string(), v.null()), reason: v.union(v.string(), v.null()), activity: v.union(v.string(), v.null()), activitySource: v.union(v.string(), v.null()), activityProgress: v.union(v.number(), v.null()), activityStartedAt: v.union(v.number(), v.null()), budgetUsed: v.optional(v.number()), effortSwitcher: v.optional(v.boolean()), liveEffort: v.optional(editorReasoningEffortValidator) }), handler: async (ctx, args) => {
   const ownerId = await requireOwner(ctx), project = await projectRun(ctx,args.projectId,ownerId);
   const requests = project.aiRunning && project.aiRunId ? await ctx.db.query('analysisRequests').withIndex('by_projectId_runId', q => q.eq('projectId', project._id).eq('aiRunId', project.aiRunId!)).take(16) : [];
   const active = requests.find(request => request.status === 'pending' || request.status === 'running');
@@ -56,9 +56,11 @@ export const status = query({ args: { projectId: v.id("projects") }, returns: v.
   // Run-scoped analysis remains evidence of the editing workflow while the
   // model plans its next step; a plain reply never acquires this workflow lock.
   const workflowActive=await editingWorkflowActive(ctx,project,requests.length>0);
-  const budget=project.aiRunning&&project.aiRunId?await ctx.db.query('aiBudgets').withIndex('by_project',q=>q.eq('projectId',project._id)).unique():null;
+  // The row outlives its run so the development effort switcher can show the last pick.
+  const budgetRow=await ctx.db.query('aiBudgets').withIndex('by_project',q=>q.eq('projectId',project._id)).unique();
+  const budget=project.aiRunning&&project.aiRunId?budgetRow:null;
   const activity=active?task?.status==='retrying'||task?.status==='queued'&&(task.attempt>1)?'Retrying analysis…':task?.status==='queued'?'Queued for analysis…':task?.activity?MEDIA_ACTIVITY_LABELS[task.activity]:labels[active.mode]:editing?'Applying edits…':null;
-  return { configured: ready, ...(defaultModelChoice?{defaultModelChoice}:{}), defaultReasoningEffort: defaultEditorReasoningEffort(), ...(await canChooseEditorModel(ctx, ownerId) ? { modelSwitcher: true, allowedModels: [...allowedClaudeModelChoices()] } : {}), running: project.aiRunning ?? false, externalAgent: project.aiAgentName && (project.aiRunning && project.aiRunId?.startsWith('mcp-') || (project.aiAgentActiveUntil ?? 0) > Date.now()) ? { name: project.aiAgentName, until: project.aiAgentActiveUntil ?? 0, running: !!project.aiRunning && !!project.aiRunId?.startsWith('mcp-') } : null, editing, workflowActive, error: project.aiError ?? null, reason: ready ? null : providerReason, activity, activityProgress: null, activityStartedAt: active ? task?.activityStartedAt ?? task?.attemptStartedAt ?? active.createdAt : null, activitySource: source?.ownerId === project.ownerId && source.projectId === project._id ? source.fileName : null, ...(budget&&budget.runId===project.aiRunId?{budgetUsed:budget.used}:{}) };
+  return { configured: ready, ...(defaultModelChoice?{defaultModelChoice}:{}), defaultReasoningEffort: defaultEditorReasoningEffort(), ...(await canChooseEditorModel(ctx, ownerId) ? { modelSwitcher: true, allowedModels: [...allowedClaudeModelChoices()] } : {}), running: project.aiRunning ?? false, externalAgent: project.aiAgentName && (project.aiRunning && project.aiRunId?.startsWith('mcp-') || (project.aiAgentActiveUntil ?? 0) > Date.now()) ? { name: project.aiAgentName, until: project.aiAgentActiveUntil ?? 0, running: !!project.aiRunning && !!project.aiRunId?.startsWith('mcp-') } : null, editing, workflowActive, error: project.aiError ?? null, reason: ready ? null : providerReason, activity, activityProgress: null, activityStartedAt: active ? task?.activityStartedAt ?? task?.attemptStartedAt ?? active.createdAt : null, activitySource: source?.ownerId === project.ownerId && source.projectId === project._id ? source.fileName : null, ...(budget&&budget.runId===project.aiRunId?{budgetUsed:budget.used}:{}), ...(budgetRow?.effort?{liveEffort:budgetRow.effort}:{}), ...(process.env.EDITOR_EFFORT_SWITCHER==='true'&&await canChooseEditorModel(ctx, ownerId)?{effortSwitcher:true}:{}) };
 }});
 const livePreviewValidator = v.object({runId:v.string(),baseRevision:v.number(),timeline:timelineValidator,label:v.string(),changedClipIds:v.array(v.string()),removedClips:v.array(clipValidator),at:v.number(),sequence:v.number(),updatedAt:v.number()});
 export const livePreview = query({args:{projectId:v.id('projects')},returns:v.union(v.null(),livePreviewValidator),handler:async(ctx,{projectId})=>{
@@ -155,6 +157,15 @@ export const stop = mutation({ args: { projectId: v.id('projects') }, returns: v
   return null;
 }});
 /** Begin the timeline lock only when a mutating tool has a real change to make. */
+/** The effort the run is thinking at right now, for the development effort switcher. */
+export const recordEffort = internalMutation({ args: { ...runArgs, effort: editorReasoningEffortValidator }, returns: v.null(), handler: async (ctx, args) => {
+  const project = await projectRun(ctx,args.projectId,args.ownerId);
+  if (!project.aiRunning || project.aiRunId !== args.runId) return null;
+  const row = await ctx.db.query('aiBudgets').withIndex('by_project', q => q.eq('projectId', args.projectId)).unique();
+  if (row) await ctx.db.patch(row._id, { runId: args.runId, ...(row.runId === args.runId ? {} : { used: 0 }), effort: args.effort, updatedAt: Date.now() });
+  else await ctx.db.insert('aiBudgets', { projectId: args.projectId, runId: args.runId, used: 0, effort: args.effort, updatedAt: Date.now() });
+  return null;
+}});
 export const recordBudget = internalMutation({ args: { ...runArgs, used: v.number() }, returns: v.null(), handler: async (ctx, args) => {
   const project = await projectRun(ctx,args.projectId,args.ownerId);
   if (!project.aiRunning || project.aiRunId !== args.runId || !Number.isFinite(args.used)) return null;

@@ -12,3 +12,6 @@
 /* Composer menu rows get a roomier hover highlight than inspector selects. */
 .inspector-select-menu[aria-label="AI editing model options"] .inspector-select-option{min-height:38px;padding:8px 32px 8px 12px;font-size:13px}
 .inspector-select-menu[aria-label="AI editing model options"] [data-slot$=item-indicator]{right:11px}
+.inspector-select-menu.workspace-menu[aria-label="AI reasoning effort options"]{width:max-content;min-width:var(--radix-dropdown-menu-trigger-width)}
+.inspector-select-menu[aria-label="AI reasoning effort options"] .inspector-select-option{min-height:38px;padding:8px 32px 8px 12px;font-size:13px}
+.inspector-select-menu[aria-label="AI reasoning effort options"] [data-slot$=item-indicator]{right:11px}
