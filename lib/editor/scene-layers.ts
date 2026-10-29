@@ -87,7 +87,9 @@ function mount(source){
   entry.source=source;entry.frame.style.width=(source.width+overscan*2)+'px';entry.frame.style.height=(source.height+overscan*2)+'px';entry.frame.style.left=entry.frame.style.top=(-overscan*source.scale)+'px';entry.frame.style.transform='scale('+source.scale+')';
   entries.set(source.clipId,entry);
 }
-function localTime(entry,time){return Math.max(0,time-entry.source.start+entry.source.offset);}
+// Snapped to the scene's frames: the playback clock moves continuously and repaints are asked for far more
+// often than frames change, so unsnapped times flooded the scene with seeks and left it no time to draw.
+function localTime(entry,time){var fps=entry.source.fps||30;return Math.max(0,Math.round((time-entry.source.start+entry.source.offset)*fps)/fps);}
 function visibleAt(entry,time){var local=time-entry.source.start;return local>=0&&local<entry.source.duration;}
 function seek(entry,time){entry.seq++;entry.posted=time;entry.inflight=entry.seq;entry.sentAt=Date.now();entry.queued=undefined;send(entry,{type:'seek',time:time,seq:entry.seq});return entry.seq;}
 // Playback asks for a frame every animation frame. A scene slower than that would queue stale seeks and
@@ -105,7 +107,9 @@ function whenReady(time){
     if(!visibleAt(entry,time))return;
     pending.push(entry.ready.then(function(){
       if(entry.error)throw entry.error;
-      return new Promise(function(resolve,reject){var seq=seek(entry,localTime(entry,time));entry.waiters.set(seq,resolve);later(function(){if(entry.waiters.delete(seq))reject(new Error('Scene "'+entry.source.title+'" did not finish drawing.'));},15000);});
+      // HyperFrames calls this on every runtime tick; a frame the scene already drew needs no new seek.
+      var at=localTime(entry,time);if(entry.drawn===at&&!entry.inflight)return;
+      return new Promise(function(resolve,reject){var seq=entry.inflight&&entry.posted===at?entry.inflight:seek(entry,at),before=entry.waiters.get(seq);entry.waiters.set(seq,before?function(){before();resolve();}:resolve);later(function(){if(entry.waiters.delete(seq))reject(new Error('Scene "'+entry.source.title+'" did not finish drawing.'));},15000);});
     }));
   });
   return Promise.all(pending).then(function(){});
@@ -117,7 +121,7 @@ window.addEventListener('message',function(event){
     if(event.source!==entry.frame.contentWindow)return;
     if(data.type==='ready')Promise.all([wantedFonts(entry.source),wantedMedia(entry.source),wantedIcons(entry.source)]).then(function(found){send(entry,{type:'init',code:entry.source.code,brand:entry.source.brand||null,blueprints:entry.source.blueprints||[],media:found[1],icons:found[2],width:entry.source.width,height:entry.source.height,fps:entry.source.fps,duration:entry.source.duration,fonts:found[0]});});
     else if(data.type==='compiled'){entry.compiled=true;entry.resolve();paint(clock.time());}
-    else if(data.type==='painted'){var done=entry.waiters.get(data.seq);if(done){entry.waiters.delete(data.seq);done();}if(data.seq===entry.inflight){entry.inflight=0;if(entry.queued!==undefined&&entry.queued!==entry.posted)seek(entry,entry.queued);entry.queued=undefined;}}
+    else if(data.type==='painted'){var done=entry.waiters.get(data.seq);if(done){entry.waiters.delete(data.seq);done();}if(data.seq===entry.seq)entry.drawn=entry.posted;if(data.seq===entry.inflight){entry.inflight=0;if(entry.queued!==undefined&&entry.queued!==entry.posted)seek(entry,entry.queued);entry.queued=undefined;}}
     else if(data.type==='error'){report(entry,String(data.message));entry.resolve();entry.waiters.forEach(function(done){done();});entry.waiters.clear();}
   });
 });
