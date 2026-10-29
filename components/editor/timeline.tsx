@@ -5,7 +5,7 @@ import { userError } from '@/lib/user-error';
 import { STOCK_AUDIO_DRAG_TYPE } from '@/lib/editor/stock-audio-drag';
 import { useState, useRef, useCallback, useLayoutEffect, useEffect, useMemo } from 'react';
 import { EffectIcon } from './effect-icon';
-import { Scissors, Copy, ClipboardPaste, Trash2, Magnet, Plus, Type, Layers, Volume2, VolumeX, ChevronDown, ChevronUp, MoreHorizontal, Rows3, ListMinus, Unlink, Flag, Pencil, FoldHorizontal, Combine, Undo2, Redo2, ChevronsRightLeft, Braces, Check } from 'lucide-react';
+import { Scissors, Copy, ClipboardPaste, Trash2, Magnet, Plus, Type, Layers, Volume2, VolumeX, ChevronDown, ChevronUp, MoreHorizontal, Rows3, ListMinus, Unlink, Flag, Pencil, FoldHorizontal, Combine, Undo2, Redo2, ChevronsRightLeft, Braces } from 'lucide-react';
 import { IconButton } from './primitives';
 import { TimelineRulerTicks } from './timeline-ruler';
 import { EditorPlaybackTime } from './playback-time';
@@ -38,6 +38,7 @@ import { ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem, C
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { SceneCodeDialog } from './scene-code-dialog';
 
 type Props={
   timeline:Timeline;assets:MediaAsset[];selected:string|null;onSelect:(id:string|null)=>void;
@@ -117,7 +118,7 @@ export function TimelinePanel(p:Props){
   const dense=compactPreference===true||(compactPreference==='auto'&&viewportHeight>0&&fullHeight>viewportHeight);const [viewportWidth,setViewportWidth]=useState(0);const [scrollbarHeight,setScrollbarHeight]=useState(0);
   const [context,setContext]=useState<{clipId?:string;markerId?:string;group?:LayerGroup;track?:number;time:number}|null>(null);
   const [editingMarker,setEditingMarker]=useState<{id:string;label:string}|null>(null);
-  const [codeClipId,setCodeClipId]=useState<string|null>(null);const [codeCopied,setCodeCopied]=useState(false);
+  const [codeClipId,setCodeClipId]=useState<string|null>(null);
   const codeClip=timeline.clips.find(clip=>clip.id===codeClipId&&clip.kind==='scene');
   const [draggingMarker,setDraggingMarker]=useState(false);
   const scroll=useRef<HTMLDivElement>(null);const labels=useRef<HTMLDivElement>(null);const head=useRef<HTMLDivElement>(null);const cap=useRef<HTMLDivElement>(null);
@@ -713,7 +714,7 @@ export function TimelinePanel(p:Props){
       {TRANSITION_PRESETS.map(preset=><ContextMenuItem key={preset} disabled={editingDisabled||preset===contextClip.effectPreset} onSelect={()=>runContext(()=>onChange(patchClip(timeline,contextClip.id,{effectPreset:preset})))}><EffectIcon name={preset}/>{effectClipLabel({...contextClip,effectPreset:preset})}</ContextMenuItem>)}
       <ContextMenuItem disabled={editingDisabled} onSelect={p.onDelete}><Trash2/>Remove transition</ContextMenuItem><ContextMenuSeparator/>
     </>:contextClip?<>
-      {p.ultra&&contextClip.kind==='scene'&&<ContextMenuItem onSelect={()=>{setCodeCopied(false);setCodeClipId(contextClip.id);}}><Braces/>View code</ContextMenuItem>}
+      {p.ultra&&contextClip.kind==='scene'&&<ContextMenuItem onSelect={()=>setCodeClipId(contextClip.id)}><Braces/>View code</ContextMenuItem>}
       {(contextClip.kind==='caption'||contextClip.kind==='graphic')&&<ContextMenuItem disabled={editingDisabled} onSelect={()=>p.onEditText?.(contextClip.id)}><Type/>Edit text</ContextMenuItem>}
       <ContextMenuItem disabled={editingDisabled||contextTime<contextClip.start+1/timeline.fps||contextTime>contextClip.start+contextClip.duration-1/timeline.fps} onSelect={()=>runContext(()=>{onSeek(contextTime);onChange(splitClip(timeline,contextClip.id,contextTime,crypto.randomUUID()));})}><Scissors/>Split here</ContextMenuItem>
       <ContextMenuItem disabled={editingDisabled} onSelect={p.onDuplicate}><Copy/>Duplicate</ContextMenuItem>
@@ -729,6 +730,6 @@ export function TimelinePanel(p:Props){
     <ContextMenuItem disabled={editingDisabled||deriveTrackCounts(timeline).visual>=maxTrackCount('visual')} onSelect={()=>addLayer('visual')}><Plus/>Add visual track</ContextMenuItem>
     <ContextMenuItem disabled={editingDisabled||deriveTrackCounts(timeline).audio>=maxTrackCount('audio')} onSelect={()=>addLayer('audio')}><Plus/>Add audio track</ContextMenuItem>
     <ContextMenuItem disabled={editingDisabled||cleanedTimeline===timeline} onSelect={()=>onChange(cleanedTimeline)}><ListMinus/>Remove empty tracks</ContextMenuItem>
-  </>}</ContextMenuContent>}<Dialog open={!!editingMarker} onOpenChange={open=>{if(!open)setEditingMarker(null);}}><DialogContent><DialogTitle>Rename marker</DialogTitle><DialogDescription>Label this beat or moment in your edit.</DialogDescription><form className="flex flex-col gap-4" onSubmit={event=>{event.preventDefault();if(!editingMarker||editingLock.current)return;onChange({...timeline,markers:timeline.markers?.map(marker=>marker.id===editingMarker.id?{...marker,label:editingMarker.label.trim()}:marker)});setEditingMarker(null);}}><Input aria-label="Marker name" autoFocus maxLength={120} value={editingMarker?.label??''} onChange={event=>setEditingMarker(current=>current?{...current,label:event.target.value}:null)}/><Button type="submit">Save marker</Button></form></DialogContent></Dialog></>}<Dialog open={!!codeClip} onOpenChange={open=>{if(!open)setCodeClipId(null);}}><DialogContent className="sm:max-w-3xl"><DialogTitle>{codeClip?.scene?.title||'Scene'}</DialogTitle><DialogDescription>GSAP scene code, {codeClip?.scene?.code.length.toLocaleString()} characters. Ask the assistant to change it.</DialogDescription><pre className="max-h-[60vh] min-w-0 overflow-auto rounded-lg bg-black/40 p-3 font-mono text-xs leading-relaxed whitespace-pre text-foreground/90"><code>{codeClip?.scene?.code}</code></pre><Button variant="outline" size="sm" className="justify-self-end" onClick={()=>{void navigator.clipboard.writeText(codeClip?.scene?.code??'').then(()=>setCodeCopied(true));}}>{codeCopied?<Check/>:<Copy/>}{codeCopied?'Copied':'Copy code'}</Button></DialogContent></Dialog></ContextMenu>;
+  </>}</ContextMenuContent>}<Dialog open={!!editingMarker} onOpenChange={open=>{if(!open)setEditingMarker(null);}}><DialogContent><DialogTitle>Rename marker</DialogTitle><DialogDescription>Label this beat or moment in your edit.</DialogDescription><form className="flex flex-col gap-4" onSubmit={event=>{event.preventDefault();if(!editingMarker||editingLock.current)return;onChange({...timeline,markers:timeline.markers?.map(marker=>marker.id===editingMarker.id?{...marker,label:editingMarker.label.trim()}:marker)});setEditingMarker(null);}}><Input aria-label="Marker name" autoFocus maxLength={120} value={editingMarker?.label??''} onChange={event=>setEditingMarker(current=>current?{...current,label:event.target.value}:null)}/><Button type="submit">Save marker</Button></form></DialogContent></Dialog></>}<SceneCodeDialog scene={codeClip?.scene} onClose={()=>setCodeClipId(null)}/></ContextMenu>;
 }
 
