@@ -18,6 +18,14 @@ type TurnCheckpoint = RunStart & { steps: number; savedEdits: number };
 const HEARTBEAT_MS = 30_000;
 
 export class EditorTurn extends Agent<Env> {
+  /** Convex's signed start and stop requests for this run, each accepted once: a replay is refused. */
+  firstUse(nonce: string): boolean {
+    this.sql`CREATE TABLE IF NOT EXISTS runner_nonces (nonce TEXT PRIMARY KEY, at INTEGER NOT NULL)`;
+    if (this.sql`SELECT nonce FROM runner_nonces WHERE nonce = ${nonce}`.length) return false;
+    this.sql`INSERT INTO runner_nonces (nonce, at) VALUES (${nonce}, ${Date.now()})`;
+    return true;
+  }
+
   /** Accept a run and return at once; a repeated start for the same run is not run twice. */
   async begin(start: RunStart): Promise<{ accepted: boolean }> {
     const { runId } = jsonToConvex(start.args) as EditorTurnArgs;
@@ -78,14 +86,15 @@ export default {
     if (request.method === 'GET' && path === '/health') return Response.json({ ok: true });
     if (request.method !== 'POST' || (path !== '/runs' && path !== '/runs/stop')) return new Response('Not found', { status: 404 });
     const body = await request.arrayBuffer();
-    // Starting and stopping are idempotent per run, so a replay inside the signature window changes nothing.
-    if (!await verifyRunnerRequest(env.AGENT_RUNNER_SECRET, request, body)) return new Response('Unauthorized', { status: 401 });
+    const nonce = await verifyRunnerRequest(env.AGENT_RUNNER_SECRET, request, body);
+    if (!nonce) return new Response('Unauthorized', { status: 401 });
     let params: { runId?: unknown; args?: { runId?: unknown }; runToken?: unknown } | null = null;
     try { params = JSON.parse(new TextDecoder().decode(body)); } catch { /* answered below */ }
     const runId = path === '/runs/stop' ? params?.runId : params?.args?.runId;
     if (typeof runId !== 'string' || !/^[\w.-]{1,100}$/.test(runId)) return Response.json({ error: 'Missing runId.' }, { status: 400 });
     // One agent per run, reached only through this signed Worker route: there is no routeAgentRequest.
     const agent = await getAgentByName(env.EDITOR_TURN, runId);
+    if (!await agent.firstUse(nonce)) return new Response('Unauthorized', { status: 401 });
     if (path === '/runs/stop') return Response.json({ stopped: await agent.stop() });
     if (typeof params?.runToken !== 'string') return Response.json({ error: 'Missing run token.' }, { status: 400 });
     return Response.json(await agent.begin({ args: params.args as JSONValue, runToken: params.runToken }), { status: 202 });
