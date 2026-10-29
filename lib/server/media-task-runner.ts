@@ -13,6 +13,7 @@ import { detectShots } from '@/lib/media-analysis/detect-shots';
 import { detectMusicBeats } from '@/lib/media-analysis/music-beats';
 import { AnalysisError } from '@/lib/media-analysis/errors';
 import { trackSourceFace } from './track-source-face';
+import { runBlueprintCheck } from './blueprint-check';
 import { extractSourceAudio } from './extract-audio';
 import { measureAudioWaveform } from './audio-waveform';
 import { measureAudioActivity } from './measure-audio-activity';
@@ -106,6 +107,7 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
       return {};
     }
     if(task.kind==='review'){if(!task.review)throw new AnalysisError('Review snapshot is unavailable.',400);return {review:await reviewComposition(task.review,directory,convexUrl,signal,onProgress)};}
+    if(task.kind==='blueprint'){if(!task.blueprint)throw new AnalysisError('The blueprint check is unavailable.',400);return {blueprint:await runBlueprintCheck(task.blueprint,signal,onProgress)};}
     if(task.kind==='snapshot'){if(!task.snapshot)throw new AnalysisError('The frame request is unavailable.',400);return {snapshot:await captureTimelineFrames(task.snapshot,directory,convexUrl,signal,onProgress)};}
     const asset = task.asset;
     if (!asset?.url) throw new AnalysisError('The source media is unavailable.', 400);

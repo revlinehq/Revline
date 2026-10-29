@@ -170,7 +170,14 @@ async function startUpload(ctx: ActionCtx, ownerId: string, input: z.infer<typeo
 // Pure reads: they neither stage edits nor start analysis, so they skip the project lock and
 // run alongside in-app or MCP edits. inspectAssetAnalysis can refresh a transcript and
 // inspectVideo/inspectFrames bill analysis to a run, so they still take the lock.
-const READ_ONLY_TOOLS = new Set(['inspectTimeline', 'inspectClip', 'readSkill']);
+// Blueprint tools never touch the timeline, so they skip the project lock while the worker renders.
+const READ_ONLY_TOOLS = new Set(['inspectTimeline', 'inspectClip', 'readSkill', 'measureScreen', 'compareScreen', 'saveBlueprint', 'listBlueprints', 'getBlueprint']);
+/** A tool output's labeled images become MCP image content after the text. */
+function withImages(output: unknown, isError: boolean): CallResult {
+  if (!output || typeof output !== 'object' || !Array.isArray((output as { images?: unknown }).images)) return result(output, isError);
+  const { images, ...rest } = output as { images: { label: string; data: string; mimeType: string }[] };
+  return { ...result({ ...rest, images: images.map(image => image.label) }, isError), images: images.map(image => ({ data: image.data, mimeType: image.mimeType })) };
+}
 
 async function readEditorTool(ctx: ActionCtx, ownerId: string, rawProjectId: string, name: string, input: unknown): Promise<CallResult> {
   try {
@@ -182,7 +189,7 @@ async function readEditorTool(ctx: ActionCtx, ownerId: string, rawProjectId: str
       const { tools } = editorTools(ctx, { run, project, assets, recovering: false, initialPlans: [], selectedClipIds: [], abortSignal: budget.signal, budget, planlessEffects: true });
       const tool = tools[name];
       const output = await tool.execute.call({ ...tool, ctx }, input, { toolCallId: crypto.randomUUID(), messages: [], abortSignal: budget.signal });
-      return result(output, failed(output));
+      return withImages(output, failed(output));
     } finally { budget.dispose(); }
   } catch (error) { return result(message(error), true); }
 }

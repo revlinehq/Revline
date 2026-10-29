@@ -8,7 +8,7 @@ import { vResultValidator, vWorkflowId, type WorkflowId } from '@convex-dev/work
 import { internal } from './_generated/api';
 import { internalMutation, mutation, query, type MutationCtx, type QueryCtx } from './_generated/server';
 import type { Doc, Id } from './_generated/dataModel';
-import { analysisValidator, assetWithUrl, frameInspectionValidator, frameRequestValidator, videoInspectionValidator, videoRequestValidator, mediaTaskKind, mediaTaskStatus, mediaTaskActivity, timelineValidator, waveformValidator } from './schema';
+import { analysisValidator, assetWithUrl, frameInspectionValidator, frameRequestValidator, videoInspectionValidator, videoRequestValidator, mediaTaskKind, mediaTaskStatus, mediaTaskActivity, timelineValidator, waveformValidator, blueprintCheckResultValidator, blueprintLineValidator, blueprintPointValidator } from './schema';
 import { validateFrameInspectionResult } from '../lib/media-analysis/frame-inspection';
 import { validateVideoInspectionResult } from '../lib/media-analysis/video-inspection';
 import { requireOwner, requireProject } from './lib/auth';
@@ -26,6 +26,7 @@ import { placeCutout } from './cutouts';
 import { completeDerivation } from './derivations';
 import { flyRendersEnabled, seatedRenders } from './lib/render_seats';
 import { MEDIA_PROCESSOR_VERSION } from '../lib/media-analysis/processor-version';
+import { brandFileUrl, fontUrl } from './brandKits';
 import { MEDIA_TASK_LEASE_MS } from '../lib/media-analysis/errors';
 import { consumeVideoImport, requireMediaTaskCapacity } from './lib/account_limits';import { sceneMediaAssetIds } from '../lib/editor/scene-layers';
 
@@ -41,16 +42,18 @@ const taskState = v.object({ _id: v.id('mediaTasks'), kind: mediaTaskKind, statu
 const renderSnapshot = v.object({ timeline: timelineValidator, assets: v.array(assetWithUrl), resolution: v.number(), fps: v.number(), quality: v.string() });
 const timelineFrames=v.object({timeline:timelineValidator,assets:v.array(assetWithUrl),times:v.array(v.number())});
 const reviewSnapshot=v.object({timeline:timelineValidator,reference:timelineValidator,plans:v.array(effectPlanValidator),assets:v.array(assetWithUrl),revision:v.number(),start:v.number(),end:v.number()});
-const workItem = v.object({review:v.optional(reviewSnapshot),snapshot:v.optional(timelineFrames),cutout:v.optional(v.object({start:v.number(),end:v.number(),fps:v.optional(v.number()),subject:v.optional(v.string())})),derive:v.optional(v.object({op:v.union(v.literal('freeze'),v.literal('slowmo'),v.literal('upscale'),v.literal('stats')),start:v.number(),end:v.number(),time:v.optional(v.number()),times:v.optional(v.array(v.number())),factor:v.optional(v.number()),target:v.optional(v.number())})), ...mediaTaskCredentials, projectId: v.id('projects'), aiRunId:v.optional(v.string()), kind: mediaTaskKind, sourceUrl: v.optional(v.string()), frameRequest: v.optional(frameRequestValidator), videoRequest: v.optional(videoRequestValidator), asset: v.optional(assetWithUrl), transcriptionAsset: v.optional(assetWithUrl), outputAssetId: v.optional(v.id('assets')), outputStored: v.optional(v.boolean()), render: v.optional(renderSnapshot), renderJobId: v.optional(v.id('renderJobs')) });
+// A blueprint check: render scene code at an exact size, read pixels, or diff against a kit screen.
+const blueprintWork = v.object({ mode: v.union(v.literal('measure'), v.literal('compare'), v.literal('render')), width: v.number(), height: v.number(), code: v.optional(v.string()), brand: v.any(), screenUrl: v.optional(v.string()), points: v.optional(v.array(blueprintPointValidator)), lines: v.optional(v.array(blueprintLineValidator)) });
+const workItem = v.object({review:v.optional(reviewSnapshot),snapshot:v.optional(timelineFrames),blueprint:v.optional(blueprintWork),cutout:v.optional(v.object({start:v.number(),end:v.number(),fps:v.optional(v.number()),subject:v.optional(v.string())})),derive:v.optional(v.object({op:v.union(v.literal('freeze'),v.literal('slowmo'),v.literal('upscale'),v.literal('stats')),start:v.number(),end:v.number(),time:v.optional(v.number()),times:v.optional(v.array(v.number())),factor:v.optional(v.number()),target:v.optional(v.number())})), ...mediaTaskCredentials, projectId: v.id('projects'), aiRunId:v.optional(v.string()), kind: mediaTaskKind, sourceUrl: v.optional(v.string()), frameRequest: v.optional(frameRequestValidator), videoRequest: v.optional(videoRequestValidator), asset: v.optional(assetWithUrl), transcriptionAsset: v.optional(assetWithUrl), outputAssetId: v.optional(v.id('assets')), outputStored: v.optional(v.boolean()), render: v.optional(renderSnapshot), renderJobId: v.optional(v.id('renderJobs')) });
 export type MediaWorkItem = Infer<typeof workItem>;
-export const taskResult = v.object({colorStats:v.optional(v.array(v.any())),review:v.optional(compositionReviewResult),snapshot:v.optional(v.object({frames:v.array(v.object({time:v.number(),image:v.string()}))})), analysis: v.optional(analysisValidator), frameInspection: v.optional(frameInspectionValidator), videoInspection: v.optional(videoInspectionValidator), audioAssetId: v.optional(v.id('assets')), waveform: v.optional(waveformValidator) });
+export const taskResult = v.object({blueprint:v.optional(blueprintCheckResultValidator),colorStats:v.optional(v.array(v.any())),review:v.optional(compositionReviewResult),snapshot:v.optional(v.object({frames:v.array(v.object({time:v.number(),image:v.string()}))})), analysis: v.optional(analysisValidator), frameInspection: v.optional(frameInspectionValidator), videoInspection: v.optional(videoInspectionValidator), audioAssetId: v.optional(v.id('assets')), waveform: v.optional(waveformValidator) });
 export type MediaTaskResult = Infer<typeof taskResult>;
 
 /** The oldest media processor that can run each kind; older processors leave these tasks queued. */
 // 10: scenes are GSAP modules, so every task that renders a composition needs the new scene runtime.
-const MIN_PROCESSOR_VERSION: Partial<Record<Doc<'mediaTasks'>['kind'], number>> = { transcribe: 3, frames: 4, preview: 5, cutout: 7, derive: 9, render: 10, review: 10, snapshot: 10 };
+const MIN_PROCESSOR_VERSION: Partial<Record<Doc<'mediaTasks'>['kind'], number>> = { transcribe: 3, frames: 4, preview: 5, cutout: 7, derive: 9, render: 10, review: 10, snapshot: 10, blueprint: 11 };
 
-export async function enqueueMediaTask(ctx: MutationCtx, input: Pick<Doc<'mediaTasks'>, 'ownerId' | 'projectId' | 'kind'> & Partial<Pick<Doc<'mediaTasks'>, 'assetId' | 'renderJobId' | 'analysisRequestId' | 'sourceUrl' | 'frameRequest' | 'videoRequest' | 'reviewId' | 'snapshotId' | 'cutoutId' | 'derivationId' | 'requiredProcessorVersion'|'previewVersion'|'lane'>>, beforeEnqueue?:()=>Promise<void>): Promise<Id<'mediaTasks'>> {
+export async function enqueueMediaTask(ctx: MutationCtx, input: Pick<Doc<'mediaTasks'>, 'ownerId' | 'projectId' | 'kind'> & Partial<Pick<Doc<'mediaTasks'>, 'assetId' | 'renderJobId' | 'analysisRequestId' | 'sourceUrl' | 'frameRequest' | 'videoRequest' | 'reviewId' | 'snapshotId' | 'blueprintCheckId' | 'cutoutId' | 'derivationId' | 'requiredProcessorVersion'|'previewVersion'|'lane'>>, beforeEnqueue?:()=>Promise<void>): Promise<Id<'mediaTasks'>> {
   const minimum = MIN_PROCESSOR_VERSION[input.kind];
   if (minimum) input = { ...input, requiredProcessorVersion: Math.max(minimum, input.requiredProcessorVersion ?? 0) };
   if(input.kind==='preview')input={...input,previewVersion:PREVIEW_VERSION};
@@ -166,6 +169,7 @@ async function markTerminal(ctx: MutationCtx, taskId: Id<'mediaTasks'>, status: 
   }
   if(task.reviewId){const review=await ctx.db.get(task.reviewId);if(review)await ctx.db.patch(review._id,{status:'failed',error:error.slice(0,1000)});}
   if(task.snapshotId){const snapshot=await ctx.db.get(task.snapshotId);if(snapshot&&snapshot.status==='queued')await ctx.db.patch(snapshot._id,{status:'failed',error:error.slice(0,1000)});}
+  if(task.blueprintCheckId){const check=await ctx.db.get(task.blueprintCheckId);if(check&&check.status==='queued')await ctx.db.patch(check._id,{status:'failed',error:error.slice(0,1000)});}
   if(task.cutoutId){const cutout=await ctx.db.get(task.cutoutId);if(cutout&&cutout.status==='queued')await ctx.db.patch(cutout._id,{status:'failed',error:error.slice(0,1000)});}
   if(task.derivationId){const row=await ctx.db.get(task.derivationId);if(row&&row.status==='queued')await ctx.db.patch(row._id,{status:'failed',error:error.slice(0,1000)});}
   if (task.analysisRequestId) {
@@ -301,6 +305,7 @@ async function analysisStillActive(ctx:import('./_generated/server').QueryCtx|Mu
   if(task.cutoutId){const cutout=await ctx.db.get(task.cutoutId);return !!cutout&&cutout.ownerId===task.ownerId&&cutout.projectId===task.projectId&&cutout.status==='queued';}
   if(task.derivationId){const row=await ctx.db.get(task.derivationId);return !!row&&row.ownerId===task.ownerId&&row.projectId===task.projectId&&row.status==='queued';}
   if(task.snapshotId){const snapshot=await ctx.db.get(task.snapshotId);return !!snapshot&&snapshot.ownerId===task.ownerId&&snapshot.projectId===task.projectId&&snapshot.status==='queued'&&snapshot.createdAt+180000>Date.now();}
+  if(task.blueprintCheckId){const check=await ctx.db.get(task.blueprintCheckId);return !!check&&check.ownerId===task.ownerId&&check.projectId===task.projectId&&check.status==='queued'&&check.createdAt+180000>Date.now();}
   if(task.reviewId){const review=await ctx.db.get(task.reviewId);if(!review||review.ownerId!==task.ownerId||review.projectId!==task.projectId||review.status!=='queued'||review.createdAt+180000<=Date.now())return false;const run=await projectRun(ctx,task.projectId,task.ownerId);return !!run.aiRunning&&run.aiRunId===review.runId;}
   if(!task.analysisRequestId)return true;
   const request=await ctx.db.get(task.analysisRequestId);
@@ -328,6 +333,16 @@ async function loadWork(ctx:import('./_generated/server').QueryCtx|MutationCtx,t
     const assets=await Promise.all(ids.map(async raw=>{const id=ctx.db.normalizeId('assets',raw),asset=id?await ctx.db.get(id):null;if(!asset||asset.ownerId!==task.ownerId||asset.projectId!==task.projectId)throw new ConvexError('Frame source media is unavailable.');return {...asset,url:await mediaUrl(ctx,asset)};}));
     snapshot={timeline,assets,times:saved.times};
   }
+  let blueprint:Infer<typeof blueprintWork>|undefined;
+  if(task.blueprintCheckId){
+    const check=await ctx.db.get(task.blueprintCheckId),kit=check&&await ctx.db.get(check.kitId);
+    if(!check||!kit||check.ownerId!==task.ownerId||kit.ownerId!==task.ownerId)throw new ConvexError('The blueprint check is unavailable.');
+    const screens=(kit.screens??[]).map(screen=>({name:screen.name,url:brandFileUrl(screen.storageId)}));
+    // The same brand snapshot a scene gets: fonts, colors, logo and the kit's screens as media.
+    const brand={kitId:kit._id,name:kit.name,colors:kit.colors,fonts:kit.fonts.map(font=>({family:font.family,weight:font.weight,role:font.role,url:fontUrl(font.storageId)})),...(kit.logo?{logo:kit.logo}:{}),...(screens.length?{screens}:{})};
+    const screenUrl=check.screen?screens.find(screen=>screen.name===check.screen)?.url:undefined;
+    blueprint={mode:check.mode,width:check.width,height:check.height,brand,...(check.code?{code:check.code}:{}),...(screenUrl?{screenUrl}:{}),...(check.points?{points:check.points}:{}),...(check.lines?{lines:check.lines}:{})};
+  }
   const cutoutRow=task.cutoutId?await ctx.db.get(task.cutoutId):null;
   if(task.cutoutId&&(!cutoutRow||cutoutRow.ownerId!==task.ownerId||cutoutRow.projectId!==task.projectId))throw new ConvexError('The background removal request is unavailable.');
   const deriveRow=task.derivationId?await ctx.db.get(task.derivationId):null;
@@ -346,7 +361,7 @@ async function loadWork(ctx:import('./_generated/server').QueryCtx|MutationCtx,t
     render = { timeline: snapshot, assets: assets as Infer<typeof assetWithUrl>[], resolution: job.resolution ?? 1080, fps: job.fps ?? snapshot.fps, quality: job.quality ?? 'high' };
   }
   const analysisRun=task.analysisRequestId?await ctx.db.get(task.analysisRequestId):null;
-  return { ...(analysisRun?{aiRunId:analysisRun.aiRunId}:{}),...(review?{review}:{}),...(snapshot?{snapshot}:{}),...(cutoutRow?{cutout:{start:cutoutRow.start,end:cutoutRow.end,...(cutoutRow.fps?{fps:cutoutRow.fps}:{}),...(cutoutRow.subject?{subject:cutoutRow.subject}:{})}}:{}),...(deriveRow?{derive:{op:deriveRow.op,start:deriveRow.start,end:deriveRow.end,...(deriveRow.time!==undefined?{time:deriveRow.time}:{}),...(deriveRow.times?{times:deriveRow.times}:{}),...(deriveRow.factor?{factor:deriveRow.factor}:{}),...(deriveRow.target?{target:deriveRow.target}:{})}}:{}),taskId: task._id, leaseToken: task.leaseToken!, projectId: task.projectId, kind: task.kind, ...(task.sourceUrl ? { sourceUrl: task.sourceUrl } : {}), ...(task.frameRequest ? { frameRequest: task.frameRequest } : {}), ...(task.videoRequest ? { videoRequest: task.videoRequest } : {}), ...(asset ? { asset: { ...await hydrateAsset(ctx,asset), url: await mediaUrl(ctx, asset), ...await previewUrl(ctx, asset) } } : {}), ...(transcriptionAsset?{transcriptionAsset}:{}), ...(render ? { render, outputStored } : {}), ...(task.renderJobId ? { renderJobId: task.renderJobId } : {}), ...(task.outputAssetId ? { outputAssetId: task.outputAssetId } : {}) };
+  return { ...(analysisRun?{aiRunId:analysisRun.aiRunId}:{}),...(review?{review}:{}),...(snapshot?{snapshot}:{}),...(blueprint?{blueprint}:{}),...(cutoutRow?{cutout:{start:cutoutRow.start,end:cutoutRow.end,...(cutoutRow.fps?{fps:cutoutRow.fps}:{}),...(cutoutRow.subject?{subject:cutoutRow.subject}:{})}}:{}),...(deriveRow?{derive:{op:deriveRow.op,start:deriveRow.start,end:deriveRow.end,...(deriveRow.time!==undefined?{time:deriveRow.time}:{}),...(deriveRow.times?{times:deriveRow.times}:{}),...(deriveRow.factor?{factor:deriveRow.factor}:{}),...(deriveRow.target?{target:deriveRow.target}:{})}}:{}),taskId: task._id, leaseToken: task.leaseToken!, projectId: task.projectId, kind: task.kind, ...(task.sourceUrl ? { sourceUrl: task.sourceUrl } : {}), ...(task.frameRequest ? { frameRequest: task.frameRequest } : {}), ...(task.videoRequest ? { videoRequest: task.videoRequest } : {}), ...(asset ? { asset: { ...await hydrateAsset(ctx,asset), url: await mediaUrl(ctx, asset), ...await previewUrl(ctx, asset) } } : {}), ...(transcriptionAsset?{transcriptionAsset}:{}), ...(render ? { render, outputStored } : {}), ...(task.renderJobId ? { renderJobId: task.renderJobId } : {}), ...(task.outputAssetId ? { outputAssetId: task.outputAssetId } : {}) };
 }
 export const claim = mutation({ args: { workerSecret: v.string(),compact:v.optional(v.boolean()),processorVersion:v.optional(v.number()),lane:v.optional(v.union(v.literal('ultra'),v.literal('any'))),rendersOnly:v.optional(v.boolean()) }, returns: v.union(workItem, v.null()), handler: async (ctx, args): Promise<MediaWorkItem | null> => {
   const role=requireMediaWorker(args.workerSecret);
@@ -445,6 +460,13 @@ const RESULT_HANDLERS: Record<Doc<'mediaTasks'>['kind'], ResultHandler> = {
     const review = (await ctx.db.get(task.reviewId))!, evidence = result.review, ids = new Set(review.plans.map(plan => plan.id));
     if (evidence.revision !== review.revision || evidence.sampleTimes.length < 1 || evidence.sampleTimes.length > 12 || evidence.sampleTimes.some(time => !Number.isFinite(time) || time < review.start - 1 / review.timeline.fps || time > review.end) || evidence.checks.length !== ids.size || evidence.observations.length !== ids.size || new Set(evidence.checks.map(check => check.planId)).size !== ids.size || new Set(evidence.observations.map(check => check.planId)).size !== ids.size || evidence.checks.some(check => !ids.has(check.planId) || !Number.isFinite(check.peakPixelChange) || check.peakPixelChange < 0 || check.peakPixelChange > 1) || evidence.observations.some(check => !ids.has(check.planId) || check.evidence.length > 2000) || evidence.uncertainty.length > 2000) throw new ConvexError('Review evidence does not match this rendered snapshot.');
     await ctx.db.patch(review._id, { status: 'completed', result: evidence });
+  },
+  blueprint: async (ctx, task, result) => {
+    if (!result.blueprint) throw new ConvexError('The blueprint check completed without a result.');
+    if (!task.blueprintCheckId || !await analysisStillActive(ctx, task)) throw new ConvexError('The blueprint check is no longer active.');
+    const images = [result.blueprint.image, result.blueprint.diff].filter(Boolean) as string[];
+    if (images.some(image => !/^[A-Za-z0-9+/]+=*$/.test(image)) || images.reduce((sum, image) => sum + image.length, 0) > 800_000) throw new ConvexError('The blueprint images are too large to return.');
+    await ctx.db.patch(task.blueprintCheckId, { status: 'completed', result: result.blueprint });
   },
   snapshot: async (ctx, task, result) => {
     if (!result.snapshot) throw new ConvexError('Frame capture completed without images.');

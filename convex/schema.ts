@@ -14,6 +14,17 @@ const sceneBrandValidator = v.object({ kitId: v.string(), name: v.string(), colo
 export const blueprintPartValidator = v.object({ name: v.string(), x: v.number(), y: v.number(), width: v.number(), height: v.number(), score: v.optional(v.number()) });
 /** One size the blueprint was rendered at and compared with a real screenshot of that size. */
 export const blueprintCheckValidator = v.object({ width: v.number(), height: v.number(), score: v.number(), meanDiff: v.number(), at: v.number() });
+/** What a blueprint check returns: a render, its diff against the screen, scores, measured colors and edges. */
+export const blueprintCheckResultValidator = v.object({
+  width: v.number(), height: v.number(),
+  image: v.optional(v.string()), diff: v.optional(v.string()), score: v.optional(v.number()), meanDiff: v.optional(v.number()),
+  parts: v.optional(v.array(blueprintPartValidator)),
+  regions: v.optional(v.array(v.object({ x: v.number(), y: v.number(), width: v.number(), height: v.number(), score: v.number() }))),
+  colors: v.optional(v.array(v.object({ x: v.number(), y: v.number(), hex: v.string(), label: v.optional(v.string()) }))),
+  edges: v.optional(v.array(v.object({ axis: v.union(v.literal('x'), v.literal('y')), at: v.number(), from: v.number(), to: v.number(), label: v.optional(v.string()), changes: v.array(v.object({ at: v.number(), before: v.string(), after: v.string() })) }))),
+});
+export const blueprintPointValidator = v.object({ x: v.number(), y: v.number(), label: v.optional(v.string()) });
+export const blueprintLineValidator = v.object({ axis: v.union(v.literal('x'), v.literal('y')), at: v.number(), from: v.number(), to: v.number(), label: v.optional(v.string()) });
 export const brandScreenValidator = v.object({ name: v.string(), storageId: v.id('_storage'), width: v.optional(v.number()), height: v.optional(v.number()), note: v.optional(v.string()) });
 
 export const aspectRatio = v.union(v.literal("vertical"), v.literal("square"), v.literal("landscape"), v.literal("portrait-feed"), v.literal("classic"));
@@ -171,7 +182,7 @@ export const userFields = {
   createdAt: v.number(), updatedAt: v.number(),
 };
 export const userDocument = v.object({ _id: v.id("users"), _creationTime: v.number(), ...userFields });
-export const mediaTaskKind = v.union(analysisMode, v.literal('extract'), v.literal('preview'), v.literal('waveform'), v.literal('render'), v.literal('import'), v.literal('review'), v.literal('snapshot'), v.literal('cutout'), v.literal('derive'));
+export const mediaTaskKind = v.union(analysisMode, v.literal('extract'), v.literal('preview'), v.literal('waveform'), v.literal('render'), v.literal('import'), v.literal('review'), v.literal('snapshot'), v.literal('cutout'), v.literal('derive'), v.literal('blueprint'));
 export const mediaTaskStatus = v.union(v.literal('queued'), v.literal('running'), v.literal('retrying'), v.literal('completed'), v.literal('failed'), v.literal('cancelled'));
 export const mediaTaskActivity = v.union(v.literal('downloading'), v.literal('preparing-analysis'), v.literal('sending-gemini'), v.literal('preparing-gemini'), v.literal('analyzing'), v.literal('retrying-analysis'));
 export const mediaTaskFields = {
@@ -183,7 +194,7 @@ export const mediaTaskFields = {
   activity:v.optional(mediaTaskActivity),activityStartedAt:v.optional(v.number()),
   outputAssetId: v.optional(v.id('assets')),
   sourceUrl: v.optional(v.string()),
-  reviewId:v.optional(v.id('compositionReviews')),snapshotId:v.optional(v.id('frameSnapshots')),cutoutId:v.optional(v.id('cutouts')),derivationId:v.optional(v.id('derivations')),previewVersion:v.optional(v.number()),requiredProcessorVersion:v.optional(v.number()),
+  reviewId:v.optional(v.id('compositionReviews')),snapshotId:v.optional(v.id('frameSnapshots')),blueprintCheckId:v.optional(v.id('blueprintChecks')),cutoutId:v.optional(v.id('cutouts')),derivationId:v.optional(v.id('derivations')),previewVersion:v.optional(v.number()),requiredProcessorVersion:v.optional(v.number()),
   frameRequest: v.optional(frameRequestValidator), frameInspection: v.optional(frameInspectionValidator),
   videoRequest: v.optional(videoRequestValidator), videoInspection: v.optional(videoInspectionValidator),
   leaseToken: v.optional(v.string()), leaseExpiresAt: v.optional(v.number()), attemptStartedAt: v.optional(v.number()),
@@ -246,6 +257,8 @@ export default defineSchema({
   // One row: serializes Fly export dispatch so concurrent runs cannot both create a warm machine.
   flyDispatchLocks: defineTable({ name: v.string(), lockedUntil: v.number(), pending: v.boolean() }).index('by_name', ['name']),
   accountRateLimits:defineTable({ownerId:v.string(),name:v.string(),period:v.number(),windowStart:v.number(),count:v.number()}).index('by_owner_name_period',['ownerId','name','period']),
+  // One measure, compare or render request for the blueprint tools, done by the media worker.
+  blueprintChecks: defineTable({ ownerId: v.string(), projectId: v.id("projects"), kitId: v.id("brandKits"), mode: v.union(v.literal("measure"), v.literal("compare"), v.literal("render")), screen: v.optional(v.string()), code: v.optional(v.string()), width: v.number(), height: v.number(), points: v.optional(v.array(blueprintPointValidator)), lines: v.optional(v.array(blueprintLineValidator)), status: v.union(v.literal("queued"), v.literal("completed"), v.literal("failed")), result: v.optional(blueprintCheckResultValidator), error: v.optional(v.string()), taskId: v.optional(v.id("mediaTasks")), createdAt: v.number() }).index("by_owner", ["ownerId"]),
   // A brand's UI rebuilt from one of its kit screens: scene code with named parts, scored against the screen.
   blueprints: defineTable({ ownerId: v.string(), kitId: v.id("brandKits"), name: v.string(), screen: v.string(), code: v.string(), width: v.number(), height: v.number(), parts: v.array(blueprintPartValidator), checks: v.array(blueprintCheckValidator), colors: v.array(v.object({ label: v.string(), hex: v.string(), x: v.number(), y: v.number() })), edges: v.array(v.object({ label: v.string(), axis: v.union(v.literal("x"), v.literal("y")), at: v.number() })), createdAt: v.number(), updatedAt: v.number() }).index("by_kit_name", ["kitId", "name"]).index("by_owner", ["ownerId"]),
   brandKits: defineTable({ ownerId: v.string(), name: v.string(), sourceUrl: v.optional(v.string()), colors: v.array(brandColorValidator), fonts: v.array(v.object({ family: v.string(), weight: v.string(), role: v.union(v.literal('heading'), v.literal('body'), v.literal('other')), storageId: v.id('_storage') })), logo: v.optional(v.string()), copy: v.optional(v.object({ title: v.optional(v.string()), description: v.optional(v.string()), headings: v.array(v.string()) })), context: v.optional(brandContextValidator), screens: v.optional(v.array(brandScreenValidator)), createdAt: v.number(), updatedAt: v.number() }).index('by_ownerId_name', ['ownerId', 'name']),
