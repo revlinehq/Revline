@@ -1,17 +1,18 @@
 'use client';
 import { ToolChain } from './tool-chain';
+import { ChoiceCard, choiceOf } from './choice-card';
 import { userError } from '@/lib/user-error';
 import { NEW_PROJECT_PATH } from '@/lib/workspace-routes';
 
 import { PRODUCTION_CLAUDE_MODEL_CHOICES } from '@/lib/ai/claude-model-policy';
 import { Fragment, memo, useCallback, useState, useEffect, useLayoutEffect, useMemo, useRef, type ComponentProps } from 'react';
 import { Check, ArrowUpRight, Lightbulb, RotateCcw, X } from 'lucide-react';
-import { AssistantEffortPicker, AssistantModelPicker, BlueprintPicker } from './assistant-model-picker';
+import { AssistantEffortPicker, AssistantModelPicker } from './assistant-model-picker';
 import { EDITOR_MODELS, type ClaudeModelChoice, type EditorReasoningEffort, type EditorSpeedMode } from '@/lib/ai/claude-model';
 import { EditComposer, type ComposerAttachment } from '@/components/workspace/edit-composer';
 import { McpLogo } from '@/components/workspace/ai-app-logos';
 import { AgentLogo } from '@/components/workspace/agent-logo';
-import { useConvexAuth, useQuery, useMutation } from 'convex/react';
+import { useQuery, useMutation } from 'convex/react';
 import { useUIMessages } from '@convex-dev/agent/react';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
@@ -100,7 +101,7 @@ function AssistantPanelBody({ messages, running, editing:editingTimeline=running
   effortSwitcher?: boolean; liveEffort?: EditorReasoningEffort;
   defaultModelChoice?:ClaudeModelChoice;
   allowedModels?: readonly ClaudeModelChoice[];
-  onSend: (text: string, modelChoice?: ClaudeModelChoice, reasoningEffort?: EditorReasoningEffort, speedMode?: EditorSpeedMode, blueprints?: string[]) => Promise<void>; hasClips: boolean; demo: boolean;
+  onSend: (text: string, modelChoice?: ClaudeModelChoice, reasoningEffort?: EditorReasoningEffort, speedMode?: EditorSpeedMode) => Promise<void>; hasClips: boolean; demo: boolean;
   onRetry?: (text: string, modelChoice?: ClaudeModelChoice, reasoningEffort?: EditorReasoningEffort, speedMode?: EditorSpeedMode) => Promise<void>;
   onLoadMore?: () => void; canLoadMore?: boolean; onAttach?: () => void;
   attachments?: ComposerAttachment[]; onRemoveAttachment?: (id: string) => void; composerBusy?: boolean; requireMedia?: boolean;
@@ -120,12 +121,6 @@ function AssistantPanelBody({ messages, running, editing:editingTimeline=running
   const sendInFlight=useRef(false);
   const currentDraftKey=useRef(draftKey);currentDraftKey.current=draftKey;
   const [modelChoice, setModelChoice] = useState<ClaudeModelChoice>();
-  // Blueprints attached to the next message; they show as chips with the media.
-  const [blueprintChoice, setBlueprintChoice] = useState<string[]>([]);
-  const { isAuthenticated } = useConvexAuth();
-  const blueprintNames = useQuery(api.blueprints.names, isAuthenticated && !demo ? {} : 'skip');
-  const composerAttachments = useMemo(() => [...(attachments ?? []), ...blueprintChoice.map(name => ({ id: `blueprint:${name}`, name, kind: 'blueprint' as const }))], [attachments, blueprintChoice]);
-  const removeAttachment = (id: string) => { if (id.startsWith('blueprint:')) setBlueprintChoice(list => list.filter(name => `blueprint:${name}` !== id)); else onRemoveAttachment?.(id); };
   // Undefined is Auto: the editor picks the effort per request.
   const [effortChoice, setEffortChoice] = useState<EditorReasoningEffort>();
   const chosenEffort = effortSwitcher ? effortChoice : undefined;
@@ -192,7 +187,7 @@ function AssistantPanelBody({ messages, running, editing:editingTimeline=running
     const key=draftKey;sendInFlight.current=true;
     if (!retry) changePrompt('');
     setStopState(null); setSending(true); if(!running&&!queued.length)setPendingReply({ id: `pending-${crypto.randomUUID()}`, text: draft.trim(), previousUserId: latestUser?.id, previousError: error }); setLocalError('');
-    try { if (retry && onRetry) await onRetry(draft.trim(), canChooseModel ? selectedModelChoice : undefined, chosenEffort); else { await onSend(draft.trim(), canChooseModel ? selectedModelChoice : undefined, chosenEffort, undefined, blueprintChoice.length ? blueprintChoice : undefined); setBlueprintChoice([]); } }
+    try { await (retry && onRetry ? onRetry : onSend)(draft.trim(), canChooseModel ? selectedModelChoice : undefined, chosenEffort); }
     catch (e) { if(currentDraftKey.current===key){if(!retry)changePrompt(draft);setPendingReply(null);setLocalError(userError(e, 'Could not send message'));} }
     finally { sendInFlight.current=false;setSending(false); }
   }
@@ -233,6 +228,7 @@ function AssistantPanelBody({ messages, running, editing:editingTimeline=running
               {replies.map(message => <Fragment key={message.id}>
                 {message.blocks ? message.blocks.map((block, index) => block.type === 'tools' ? <ToolChain key={`tools-${index}`} steps={block.steps} active={editing}/> : <AssistantResponseText key={`text-${index}`} text={block.text} streaming={message.status === 'streaming' && index === message.blocks!.length - 1} />) : <>{message.text && <AssistantResponseText text={message.text} streaming={message.status === 'streaming'} />}{!!message.steps?.length && <ToolChain steps={message.steps} active={editing}/>}</>}
                 {message.tools?.map((tool, i) => <div className="tool-result" key={`${tool}-${i}`}><Check size={12} />{tool}</div>)}
+                {(message.steps ?? []).flatMap(step => { const ask = choiceOf(step); return ask ? [<ChoiceCard key={step.id ?? step.name} question={ask.question} choices={ask.choices} disabled={running || sending || !!pendingReply} onChoose={group === groups.at(-1) && !running ? reply => void sendRequest(reply) : undefined}/>] : []; })}
                 {message.id === demoNoteMessageId && <div className="assistant-demo-note">Sample conversation. Explore the timeline, or <a href={NEW_PROJECT_PATH}>start your own project</a>.</div>}
               </Fragment>)}
               {cards.some(card=>card.state!=='done'&&card.state!=='running') && <div className="assistant-result-cards" aria-label="Edit results">{cards.filter(card=>card.state!=='done'&&card.state!=='running').map(card => <div key={card.key} className={`assistant-result-card result-${card.state}${card.staged ? ' result-prepared' : ''}`}>
@@ -254,7 +250,7 @@ function AssistantPanelBody({ messages, running, editing:editingTimeline=running
     </MessageScrollerViewport><MessageScrollerButton /></MessageScroller>
     <div className="manual-composer-dock">
     {queued.length>0&&<div className="assistant-queue" aria-label="Queued messages"><div className="assistant-queue-heading"><span>{queued.length} queued{queuePaused?' · paused':''}</span>{queuePaused&&onResumeQueue&&<button type="button" onClick={()=>void onResumeQueue().catch(e=>setLocalError(userError(e,'Could not resume the queue.')))}>Resume queue</button>}</div>{queued.map((message,index)=><div className="assistant-queued-message" key={message.id}><span className="assistant-queue-number">{index+1}</span><div><p>{message.prompt}</p>{message.error&&<small>{message.error}</small>}</div><button type="button" aria-label={`Remove queued message ${index+1}`} onClick={()=>void onRemoveQueued?.(message.id).catch(e=>setLocalError(userError(e,'Could not remove queued message.')))}><X size={13}/></button></div>)}</div>}
-    <EditComposer allowQueue={conversationStarted&&!demo} attachments={composerAttachments} onRemoveAttachment={removeAttachment} requireMedia={requireMedia} actions={canChooseModel || blueprintNames?.length ? <div className="assistant-model-controls">{blueprintNames && blueprintNames.length > 0 && <BlueprintPicker items={blueprintNames} chosen={blueprintChoice} onChange={setBlueprintChoice} disabled={answering}/>}{canChooseModel && <><AssistantModelPicker allowedModels={availableModels} value={effectiveModelChoice} onChange={setModelChoice} disabled={answering}/>{effortSwitcher&&<AssistantEffortPicker value={effortChoice} live={liveEffort} onChange={setEffortChoice} disabled={answering}/>}</>}</div> : undefined} variant="compact" className="manual-editor-composer" value={prompt} onChange={changePrompt} onSubmit={submit} onAttach={onAttach} placeholder="What would you change next?" disabled={composerBusy || sending || !!pendingReply || !!externalAgent} running={running && !externalAgent} onStop={onStop ? stop : undefined} stopping={stopState==='stopping'} />
+    <EditComposer allowQueue={conversationStarted&&!demo} attachments={attachments} onRemoveAttachment={onRemoveAttachment} requireMedia={requireMedia} actions={canChooseModel ? <div className="assistant-model-controls"><AssistantModelPicker allowedModels={availableModels} value={effectiveModelChoice} onChange={setModelChoice} disabled={answering}/>{effortSwitcher&&<AssistantEffortPicker value={effortChoice} live={liveEffort} onChange={setEffortChoice} disabled={answering}/>}</div> : undefined} variant="compact" className="manual-editor-composer" value={prompt} onChange={changePrompt} onSubmit={submit} onAttach={onAttach} placeholder="What would you change next?" disabled={composerBusy || sending || !!pendingReply || !!externalAgent} running={running && !externalAgent} onStop={onStop ? stop : undefined} stopping={stopState==='stopping'} />
     </div>
   </div>;
 }

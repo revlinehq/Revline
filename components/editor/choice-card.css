@@ -1,0 +1,5 @@
+/* The assistant's questions as shadcn choice cards, sized to the chat column. */
+.choice-card{max-width:420px;gap:10px}
+.choice-card [data-slot=radio-group]{gap:6px}
+.choice-card-logo{flex:none;width:22px;height:22px;background:currentColor;mask-size:contain;mask-repeat:no-repeat;mask-position:center;-webkit-mask-size:contain;-webkit-mask-repeat:no-repeat;-webkit-mask-position:center}
+.choice-card-send{align-self:flex-start}

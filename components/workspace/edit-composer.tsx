@@ -3,12 +3,12 @@ import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupText, InputGro
 import { userError } from '@/lib/user-error';
 
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
-import { ArrowUp, Film, LayoutTemplate, LoaderCircle, Music2, Plus, Square, X } from 'lucide-react';
+import { ArrowUp, Film, LoaderCircle, Music2, Plus, Square, X } from 'lucide-react';
 import { Sheet, SheetContent, SheetTitle, SheetDescription } from '@/components/ui/sheet';
 import { cn } from '@/lib/utils';
 import './composer-upload-swap.css';
 
-export type ComposerAttachment = { id: string; name: string; url?: string; kind?: 'video' | 'image' | 'audio' | 'blueprint'; progress?: number; error?: string };
+export type ComposerAttachment = { id: string; name: string; url?: string; kind?: 'video' | 'image' | 'audio'; progress?: number; error?: string };
 export type EditComposerProps = {
   value: string; onChange: (value: string) => void; onSubmit: () => void | Promise<void>;
   onAttach?: () => void; attachments?: ComposerAttachment[]; onRemoveAttachment?: (id: string) => void;
@@ -93,7 +93,7 @@ export function EditComposer({ value, onChange, onSubmit, onAttach, attachments 
     try { await onSubmit(); } catch (e) { setError(userError(e, 'Could not send your edit.')); } finally { sendInFlight.current=false;setSending(false); }
   }
   function chip(attachment: ComposerAttachment) {
-    return <div className="composer-attachment" key={attachment.id} data-error={!!attachment.error || undefined}>{attachment.url && attachment.kind !== 'audio' ? attachment.kind === 'video' ? <video src={attachment.url} muted preload="metadata" aria-hidden="true" /> : <img src={attachment.url} alt="" /> : attachment.kind === 'audio' ? <Music2 size={17} /> : attachment.kind === 'blueprint' ? <LayoutTemplate size={17} /> : <Film size={17} />}<span>{attachment.name}</span>{attachment.progress !== undefined && <progress aria-label={`Uploading ${attachment.name}`} max={100} value={attachment.progress} />}{onRemoveAttachment && <InputGroupButton size="icon-xs" onClick={() => onRemoveAttachment(attachment.id)} aria-label={`Remove ${attachment.name}`} disabled={busy || (running&&!allowQueue)}><X /></InputGroupButton>}</div>;
+    return <div className="composer-attachment" key={attachment.id} data-error={!!attachment.error || undefined}>{attachment.url && attachment.kind !== 'audio' ? attachment.kind === 'video' ? <video src={attachment.url} muted preload="metadata" aria-hidden="true" /> : <img src={attachment.url} alt="" /> : attachment.kind === 'audio' ? <Music2 size={17} /> : <Film size={17} />}<span>{attachment.name}</span>{attachment.progress !== undefined && <progress aria-label={`Uploading ${attachment.name}`} max={100} value={attachment.progress} />}{onRemoveAttachment && <InputGroupButton size="icon-xs" onClick={() => onRemoveAttachment(attachment.id)} aria-label={`Remove ${attachment.name}`} disabled={busy || (running&&!allowQueue)}><X /></InputGroupButton>}</div>;
   }
   const editFields = <>
     <InputGroup className="composer-input-group border-[#363636] bg-[#2a2a2a]">

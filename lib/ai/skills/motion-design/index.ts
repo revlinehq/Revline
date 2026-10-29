@@ -1,6 +1,6 @@
 import type { EditorSkill } from '../index';
 import { STYLE_PAGES, TECHNIQUES } from './styles';
-import { brandPage, craftPage, intakePage, processPage, scriptPage, storyPage } from './pages';
+import { blueprintsPage, brandPage, craftPage, intakePage, processPage, scriptPage, storyPage } from './pages';
 
 export const motionDesign: EditorSkill = {
   name: 'motion-design',
@@ -15,7 +15,7 @@ A launch film makes one product or one feature feel simple, real and worth tryin
 3. **Story** (\`story\`): pick the structure for the type.
 4. **Script** (\`script\`): write every on-screen word as one piece, in a voice that fits the brand; get it approved.
 5. **Style direction:** write the film's own direction (see below), drawing on the example directions and techniques.
-6. **Beat sheet, animatic, polish, sound, review** (\`process\`), using \`craft\` for timing and easing.
+6. **Beat sheet, animatic, polish, sound, review** (\`process\`), using \`craft\` for timing and easing. In the beat sheet, decide each shot's product UI: the kit's screenshot when the UI moves as a whole, its blueprint when something inside it moves (\`blueprints\`).
 7. **Feedback** at any point (\`techniques\`).
 
 ## Never speculate
@@ -45,5 +45,5 @@ How much to follow it:
 - Still holds are normal while something happens in the UI.
 
 Borrow a reference's style only: never its copy, product, logo, characters or exact compositions.`,
-  pages: [brandPage, intakePage, storyPage, scriptPage, craftPage, processPage, ...STYLE_PAGES, TECHNIQUES],
+  pages: [brandPage, intakePage, storyPage, scriptPage, craftPage, processPage, blueprintsPage, ...STYLE_PAGES, TECHNIQUES],
 };

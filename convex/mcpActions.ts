@@ -12,7 +12,8 @@ import { completeUpload, openUpload, signPartUrl } from './r2';
 
 // The editor's own AI tools, exposed over MCP. planEffects/previewRender keep
 // review plans for the length of one in-app turn, which an MCP call does not have.
-const RUN_SCOPED_TOOLS = new Set(['planEffects', 'previewRender', 'getFrames']);
+// Choice cards only exist in the editor's chat; MCP clients ask in their own way.
+const RUN_SCOPED_TOOLS = new Set(['planEffects', 'previewRender', 'getFrames', 'askUser', 'askBrandKit']);
 const projectIdField = z.string().min(1).describe('Revline project ID from listProjects or getProject.');
 
 const PROJECT_TOOLS = {

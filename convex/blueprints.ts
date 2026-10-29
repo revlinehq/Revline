@@ -16,15 +16,6 @@ import { SCENE_LIMITS } from '../lib/editor/scene-layers';
  */
 const measured = { parts: v.array(blueprintPartValidator), checks: v.array(blueprintCheckValidator), colors: v.array(v.object({ label: v.string(), hex: v.string(), x: v.number(), y: v.number() })), edges: v.array(v.object({ label: v.string(), axis: v.union(v.literal('x'), v.literal('y')), at: v.number() })) };
 
-/** Blueprint names for the composer's picker: which ones a request can be built from. */
-export const names = query({ args: {}, handler: async ctx => {
-  const ownerId = await requireOwner(ctx);
-  const rows = await ctx.db.query('blueprints').withIndex('by_owner', q => q.eq('ownerId', ownerId)).take(100);
-  const kits = new Map<string, string>();
-  for (const row of rows) if (!kits.has(row.kitId)) kits.set(row.kitId, (await ctx.db.get(row.kitId))?.name ?? '');
-  return rows.map(row => ({ name: row.name, kit: kits.get(row.kitId) ?? '', score: row.checks.at(-1)?.score ?? null }));
-}});
-
 /** The signed-in user's blueprints, each with the brand snapshot a scene frame needs to render it. */
 export const mine = query({ args: {}, handler: async ctx => {
   const ownerId = await requireOwner(ctx);

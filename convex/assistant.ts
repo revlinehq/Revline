@@ -76,7 +76,7 @@ async function clearLivePreview(ctx:import('./_generated/server').MutationCtx,pr
   const preview=await ctx.db.query('aiTimelinePreviews').withIndex('by_project',q=>q.eq('projectId',projectId)).unique();
   if(preview)await ctx.db.delete(preview._id);
 }
-export const send = mutation({ args: { projectId: v.id("projects"), prompt: v.string(), blueprints: v.optional(v.array(v.string())), modelChoice: v.optional(legacyCompatibleModelChoiceValidator), reasoningEffort: v.optional(editorReasoningEffortValidator), speedMode: v.optional(editorSpeedModeValidator), attachedAssetIds:v.optional(v.array(v.id('assets'))), selectedClipId: v.optional(v.string()), selectedClipIds: v.optional(v.array(v.string())), playhead: v.optional(v.number()) }, returns: v.null(), handler: async (ctx, args) => {
+export const send = mutation({ args: { projectId: v.id("projects"), prompt: v.string(), modelChoice: v.optional(legacyCompatibleModelChoiceValidator), reasoningEffort: v.optional(editorReasoningEffortValidator), speedMode: v.optional(editorSpeedModeValidator), attachedAssetIds:v.optional(v.array(v.id('assets'))), selectedClipId: v.optional(v.string()), selectedClipIds: v.optional(v.array(v.string())), playhead: v.optional(v.number()) }, returns: v.null(), handler: async (ctx, args) => {
   const ownerId = await requireOwner(ctx); await requireEditorAccess(ctx, ownerId); const project = await requireProject(ctx, args.projectId, ownerId);
   if ((args.modelChoice !== undefined || args.reasoningEffort !== undefined || args.speedMode !== undefined) && !await canChooseEditorModel(ctx, ownerId)) throw new ConvexError('Choosing the AI model is part of the Ultra plan.');
   let pinnedModel;
@@ -84,12 +84,6 @@ export const send = mutation({ args: { projectId: v.id("projects"), prompt: v.st
   if(args.attachedAssetIds){
     if(args.attachedAssetIds.length>20||new Set(args.attachedAssetIds).size!==args.attachedAssetIds.length)throw new ConvexError('Attach up to 20 unique media files.');
     for(const id of args.attachedAssetIds){const asset=await ctx.db.get(id);if(!asset||asset.ownerId!==ownerId||asset.projectId!==project._id)throw new ConvexError('Attached media does not belong to this project.');}
-  }
-  // Blueprints the user attached in the composer: names of their saved blueprints, for this request.
-  if(args.blueprints){
-    if(args.blueprints.length>4||new Set(args.blueprints).size!==args.blueprints.length)throw new ConvexError('Attach up to 4 different blueprints.');
-    const saved=new Set((await ctx.db.query('blueprints').withIndex('by_owner',q=>q.eq('ownerId',ownerId)).take(100)).map(row=>row.name.toLowerCase()));
-    if(args.blueprints.some(name=>!saved.has(name.toLowerCase())))throw new ConvexError('An attached blueprint is no longer in your brand kits.');
   }
   const clipIds = new Set(currentTimeline(project).clips.map(clip => clip.id));
   if(project.aiRunning){const preview=await ctx.db.query('aiTimelinePreviews').withIndex('by_project',q=>q.eq('projectId',project._id)).unique();if(preview?.ownerId===ownerId&&preview.runId===project.aiRunId)for(const clip of preview.timeline.clips)clipIds.add(clip.id);}
@@ -115,7 +109,7 @@ export const send = mutation({ args: { projectId: v.id("projects"), prompt: v.st
   await consumeAssistantRequest(ctx,ownerId);
   return beginRequest(ctx,project,prompt,pinnedModel,args);
 }});
-type QueuedContext=Pick<Doc<'assistantQueue'>,'attachedAssetIds'|'blueprints'|'selectedClipId'|'selectedClipIds'|'playhead'>;
+type QueuedContext=Pick<Doc<'assistantQueue'>,'attachedAssetIds'|'selectedClipId'|'selectedClipIds'|'playhead'>;
 async function beginRequest(ctx:MutationCtx,project:Doc<'projects'>,prompt:string,pinnedModel:ClaudeModelSelection,request:QueuedContext):Promise<null>{
   const ownerId=project.ownerId;
   const threadId = project.threadId ?? await createThread(ctx, components.agent, { userId: ownerId, title: project.title });
@@ -124,7 +118,7 @@ async function beginRequest(ctx:MutationCtx,project:Doc<'projects'>,prompt:strin
   const runId = `${Date.now()}-${Math.random()}`;
   await clearLivePreview(ctx,project._id);
   await writeProject(ctx,project._id, { threadId, aiQueuePaused:false, aiRunning: true, aiEditing: false, aiError: undefined, aiRunId: runId, aiAnalysisUsage:{runId,enqueued:0}, aiUndoRecorded: false, aiCheckpointRevision: undefined, aiRequest:{prompt,messageId,startedRevision:project.revision??0}, aiRecovery:recovery });
-  const workflowId=await aiWorkflow.start(ctx, internal.assistantWorkflow.runTurn, { projectId: project._id, ownerId, runId, threadId, promptMessageId: messageId, pinnedModel,...(request.attachedAssetIds?{attachedAssetIds:request.attachedAssetIds}:{}),...(request.blueprints?.length?{blueprints:request.blueprints}:{}), ...(recovery?{recovery}:{}), ...(request.selectedClipId ? { selectedClipId: request.selectedClipId } : {}), ...(request.selectedClipIds ? { selectedClipIds: request.selectedClipIds } : {}), ...(request.playhead !== undefined ? { playhead: request.playhead } : {}) },{startAsync:true,onComplete:internal.assistantWorkflow.settle,context:{projectId:project._id,ownerId,runId}});
+  const workflowId=await aiWorkflow.start(ctx, internal.assistantWorkflow.runTurn, { projectId: project._id, ownerId, runId, threadId, promptMessageId: messageId, pinnedModel,...(request.attachedAssetIds?{attachedAssetIds:request.attachedAssetIds}:{}), ...(recovery?{recovery}:{}), ...(request.selectedClipId ? { selectedClipId: request.selectedClipId } : {}), ...(request.selectedClipIds ? { selectedClipIds: request.selectedClipIds } : {}), ...(request.playhead !== undefined ? { playhead: request.playhead } : {}) },{startAsync:true,onComplete:internal.assistantWorkflow.settle,context:{projectId:project._id,ownerId,runId}});
   await writeProject(ctx,project._id,{aiWorkflowId:workflowId}); return null;
 }
 

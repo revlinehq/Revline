@@ -11,10 +11,12 @@ A scene is a TypeScript module that builds plain HTML once and choreographs it o
 
 ## Contract
 
-- Write \`export default function scene({ root, tl, gsap, width, height, duration, fps, brand, media })\`. It runs once, before the first frame.
+- Write \`export default function scene({ root, tl, gsap, width, height, duration, fps, brand, media, icon, blueprint })\`. It runs once, before the first frame.
 - \`root\` is the full-frame container on the 1080-based canvas (\`width\` x \`height\` px). Build inside it with \`root.innerHTML\` or \`document.createElement\`; never restyle \`root\` itself. Position with absolute px or percentages.
 - \`tl\` is the scene's GSAP timeline. Time 0 is the clip's first frame, in seconds. Put every animation on it with a position parameter: \`tl.from(el, { y: 40, opacity: 0, duration: .8, ease: 'expo.out' }, 1.2)\`.
 - \`media\` holds the project images attached with addScene/editScene \`media\` (see Project media), by name.
+- \`icon('scissors', { size: 16, color: '#8d8f93', strokeWidth: 2 })\` returns a Lucide icon as SVG markup (kebab-case names, as on lucide.dev). Use it for every UI icon instead of drawing one.
+- \`blueprint('Editor', container, { width, height })\` builds a brand kit blueprint attached with \`blueprints\` inside \`container\` and returns its root; animate its \`[data-part=...]\` pieces (motion-design, blueprints page).
 - \`brand\` is the brand kit attached with brandKitId (fonts already loaded, named colors, logo), or null. See motion-design's \`brand-kit\` page.
 - The editor seeks the timeline to each frame, so the film is scrubbable and exports frame-exact. Animate only with GSAP. CSS transitions and keyframes, requestAnimationFrame, timers, Date, video and audio do not follow the clock.
 - Plain TypeScript, not JSX. Imports: \`gsap\` and its plugins (${SCENE_GSAP_PLUGINS.join(', ')}, plus EasePack), each from \`gsap/<Name>\` or all from \`gsap\`. They are registered already. Nothing else loads: no network, no other packages.
