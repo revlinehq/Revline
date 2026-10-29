@@ -6,8 +6,8 @@ import { ClaudeLogo, OpenAILogo } from '@/components/workspace/ai-app-logos';
 import { LandingInstallAgents } from './install-agents';
 
 // The Blueprint launch film, made in Revline from screenshots. Swap the export in here.
-const FILM_SRC = '/landing/blueprint-launch-final.mp4';
-const FILM_POSTER = '/landing/blueprint-launch-final-poster.webp';
+const FILM_SRC = '/landing/blueprint-launch-v2.mp4';
+const FILM_POSTER = '/landing/blueprint-launch-v2-poster.webp';
 const FILM_SECONDS = 37.92;
 
 // Beat starts in film seconds, from the Blueprint launch markers. From "Meet T3 Code" on it is T3 Code's own film.
@@ -23,8 +23,8 @@ const T3_FROM = 18.5;
 
 // The chat that made the film: the user's two screenshots and prompt, then the agent's work.
 const SCREENSHOTS = [
-  { src: '/landing/editor/screenshot-threads.webp', alt: 'T3 Code screenshot: threads and chat' },
-  { src: '/landing/editor/screenshot-code.webp', alt: 'T3 Code screenshot: code view' },
+  { src: '/landing/editor/t3-new-thread.webp', alt: 'T3 Code screenshot: a new thread' },
+  { src: '/landing/editor/t3-working.webp', alt: 'T3 Code screenshot: the agent working' },
 ];
 const REPLIES: { kind: 'step' | 'text'; text: string }[] = [
   { kind: 'step', text: 'Read 2 screenshots' }, { kind: 'text', text: 'Breaking each screen into parts. 🫡' },
@@ -71,7 +71,7 @@ function Chat() {
     <div className="landing-editor-chat-head">Launch film from screenshots</div>
     <div className="landing-editor-messages">
       <div className="landing-editor-user" style={{ '--line': 0 } as CSSProperties}>
-        <div className="landing-editor-shots">{SCREENSHOTS.map(shot => <img key={shot.src} src={shot.src} alt={shot.alt} width={480} height={300} loading="lazy" decoding="async" />)}</div>
+        <div className="landing-editor-shots">{SCREENSHOTS.map(shot => <img key={shot.src} src={shot.src} alt={shot.alt} width={480} height={260} loading="lazy" decoding="async" />)}</div>
         <p>Make these a launch film</p>
       </div>
       {REPLIES.map((reply, index) => reply.kind === 'step'
