@@ -21,7 +21,7 @@ import { sceneBrandContext, type SceneBrand, type SceneBrandContext } from './br
 type Init = { type: 'init'; code: string; brand: SceneBrand | null; media?: { name: string; type: string; data: ArrayBuffer }[]; width: number; height: number; fps: number; duration: number; fonts: { family: string; weight: string; data: ArrayBuffer }[] };
 type Seek = { type: 'seek'; time: number; seq: number };
 /** What a scene's default export receives. Time 0 on `tl` is the first frame of the clip. */
-export type SceneContext = { root: HTMLElement; tl: gsap.core.Timeline; gsap: typeof gsap; width: number; height: number; duration: number; fps: number; brand: SceneBrandContext | null; /** Project images by name, as URLs for <img src> or CSS backgrounds. */ media: Record<string, string> };
+export type SceneContext = { root: HTMLElement; tl: gsap.core.Timeline; gsap: typeof gsap; width: number; height: number; duration: number; fps: number; brand: SceneBrandContext | null; /** Project images and videos by name, as URLs for <img src>, <video src> or CSS backgrounds. */ media: Record<string, string> };
 
 const PLUGINS: Record<SceneGsapPlugin, object> = { CustomEase, CustomWiggle, CustomBounce, SplitText, DrawSVGPlugin, MorphSVGPlugin, MotionPathPlugin, ScrambleTextPlugin, TextPlugin };
 gsap.registerPlugin(...Object.values(PLUGINS), ExpoScaleEase, RoughEase, SlowMo);
@@ -45,9 +45,24 @@ export function compileScene(code: string): (context: SceneContext) => unknown {
   return scene as (context: SceneContext) => unknown;
 }
 
+/** Videos in a scene follow the scene clock: data-start (scene seconds it begins), data-offset (source seconds), data-rate, data-loop. */
+function syncVideos(time: number, fps: number) {
+  return Array.from(document.querySelectorAll('video')).map(video => {
+    video.muted = true; video.pause();
+    const ready = video.readyState >= 1 ? Promise.resolve() : new Promise<void>(resolve => video.addEventListener('loadedmetadata', () => resolve(), { once: true }));
+    return ready.then(() => {
+      const length = video.duration || 0, rate = Number(video.dataset.rate) || 1;
+      let target = Math.max(0, time - (Number(video.dataset.start) || 0)) * rate + (Number(video.dataset.offset) || 0);
+      if (length > 0) target = video.hasAttribute('data-loop') ? target % length : Math.min(target, Math.max(0, length - 0.5 / fps));
+      if (Math.abs(video.currentTime - target) < 0.25 / fps && video.readyState >= 2) return;
+      return new Promise<void>(resolve => { const done = () => resolve(); video.addEventListener('seeked', done, { once: true }); setTimeout(done, 5000); video.currentTime = target; });
+    }).catch(() => undefined);
+  });
+}
+
 if (typeof window !== 'undefined' && window.parent !== window) {
   const root = document.getElementById('scene-root')!;
-  let master: gsap.core.Timeline | null = null, origin = 0, failed = false;
+  let master: gsap.core.Timeline | null = null, origin = 0, failed = false, fps = 30;
   const fail = (message: string) => { if (failed) return; failed = true; post({ type: 'error', message }); };
   // Math.random would differ between preview and export; seed it before the scene builds.
   let state = 1;
@@ -58,6 +73,7 @@ if (typeof window !== 'undefined' && window.parent !== window) {
   gsap.globalTimeline.pause();
   const build = async (data: Init) => {
     for (const font of data.fonts) { const face = new FontFace(font.family, font.data, { weight: font.weight }); await face.load(); document.fonts.add(face); }
+    fps = data.fps;
     const media = Object.fromEntries((data.media ?? []).map(item => [item.name, URL.createObjectURL(new Blob([item.data], { type: item.type || 'image/png' }))]));
     const scene = compileScene(data.code);
     origin = gsap.globalTimeline.time();
@@ -77,7 +93,7 @@ if (typeof window !== 'undefined' && window.parent !== window) {
     } else if (data.type === 'seek') {
       try { master?.seek(origin + data.time, false); } catch (error) { fail(error instanceof Error ? error.message : String(error)); }
       const images = Array.from(document.images).filter(image => !image.complete).map(image => image.decode().catch(() => undefined));
-      void Promise.all([document.fonts.ready, ...images]).then(() => post({ type: 'painted', seq: data.seq }));
+      void Promise.all([document.fonts.ready, ...images, ...syncVideos(data.time, fps)]).then(() => post({ type: 'painted', seq: data.seq }));
     }
   });
   post({ type: 'ready' });

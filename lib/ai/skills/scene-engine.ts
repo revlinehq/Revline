@@ -40,12 +40,13 @@ A scene is a TypeScript module that builds plain HTML once and choreographs it o
 - Images must be inline SVG or data: URIs. The brand logo arrives as \`brand.logo\` (data URL) and \`brand.logoSvg\` (markup when vector).
 
 ## Project media
-Real screenshots, photos and logos from the project's media can appear inside a scene:
-- Upload the image to the project (uploadMedia) or find it with getProject; only images work (png, jpg, webp), not video.
-- Attach it by name: addScene or editScene with \`media: [{ name: 'editor', assetId: '…' }]\` (up to 8).
-- In code, \`media.editor\` is a URL: \`<img src="\${media.editor}">\` or \`background-image:url(\${media.editor})\`. It is undefined if the file is missing, so keep a fallback.
-- Treat it like any element: crop it with a wrapper and \`overflow:hidden\`, zoom with scale and transform-origin, tilt it with perspective, mask it, blur it, stack copies.
-- The image is loaded before the first frame, in preview and in exports.
+Real screenshots, screen recordings, photos and logos from the project's media can appear inside a scene:
+- Upload them to the project (uploadMedia) or find them with getProject. Images (png, jpg, webp) and videos up to 2 minutes.
+- Attach them by name: addScene or editScene with \`media: [{ name: 'editor', assetId: '…' }]\` (up to 8).
+- In code, \`media.editor\` is a URL: \`<img src="\${media.editor}">\`, \`<video src="\${media.demo}">\` or \`background-image:url(\${media.editor})\`. It is undefined if the file is missing, so keep a fallback.
+- Videos follow the scene clock, frame-exact, and are always muted (sound belongs on audio clips): \`data-start\` is the scene second the video begins (default 0), \`data-offset\` the source second it starts from, \`data-rate\` its speed, \`data-loop\` loops it. Do not call play(); the engine seeks it.
+- Treat media like any element: crop it with a wrapper and \`overflow:hidden\`, zoom with scale and transform-origin, tilt it with perspective, mask it, blur it, stack copies.
+- Media is loaded before the first frame, in preview and in exports.
 
 ## Checking a scene
 

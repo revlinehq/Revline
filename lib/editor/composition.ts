@@ -240,7 +240,7 @@ export function generateComposition(timeline: Timeline, assets: MediaAsset[], op
   // Scene media resolves like image clips: the export's local copy, else the asset's own URL. A missing file leaves the name unset.
   const sceneMediaUrls = Object.fromEntries(sceneMediaAssetIds(timeline).flatMap(id => {
     const exportSource = options.assetUrls?.[id], source = exportSource ?? assetMap.get(id)?.url;
-    if (!source || assetMap.get(id)?.kind !== 'image') return [];
+    if (!source || !['image', 'video'].includes(assetMap.get(id)?.kind ?? '')) return [];
     mediaUrl(source, exportSource !== undefined);
     return [[id, source]];
   }));

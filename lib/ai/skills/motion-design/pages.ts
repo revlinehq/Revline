@@ -204,6 +204,6 @@ export const processPage: EditorSkillPage = {
 7. **Learn.** When the user approves a change in direction (a different ease, pacing, a technique), offer to save it: to the brand's motion identity with updateBrandKit, or to memory with remember. The next film for this brand starts from it.
 
 ## Product UI
-Real screenshots beat mockups: they show the actual product and build trust. Ask the user for screenshots of the screens the script shows (or offer to use ones already in the project's media), upload them, and attach them to scenes as \`media\` (scene-engine, Project media). Crop and magnify the part that matters, move a camera over them, tilt them, and layer animated HTML on top (a typed prompt, a highlight, a cursor) to show the action.
+Real screenshots and screen recordings beat mockups: they show the actual product and build trust. Ask the user for screenshots or short recordings of the screens the script shows (or offer to use ones already in the project's media), upload them, and attach them to scenes as \`media\` (scene-engine, Project media). A recording shows a real interaction; a screenshot with animated HTML on top shows a controlled one. Crop and magnify the part that matters, move a camera over them, tilt them, and layer animated HTML on top (a typed prompt, a highlight, a cursor) to show the action.
 Without screenshots, build the UI as HTML mockups in the brand's fonts and colors: windows, inputs, cards, lists, timelines. Show only what the brand context describes, with generic sample content.`,
 };

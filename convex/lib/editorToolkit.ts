@@ -125,10 +125,10 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
     const result = await checkpoint(edit);
     return { ...result, removed: result.removedMarkerIds.length };
   };
-  const sceneMediaInput = z.array(z.object({ name: z.string().regex(/^[a-zA-Z][\w-]{0,30}$/).describe('How the scene code reads it: media.<name>.'), assetId: z.string().describe('An image in this project, from getProject media.') })).max(SCENE_MEDIA_LIMIT).describe('Project images the scene shows (screenshots, logos, photos). The scene receives them as media.<name> URLs for <img src> or CSS backgrounds.');
+  const sceneMediaInput = z.array(z.object({ name: z.string().regex(/^[a-zA-Z][\w-]{0,30}$/).describe('How the scene code reads it: media.<name>.'), assetId: z.string().describe('An image or video in this project, from getProject media.') })).max(SCENE_MEDIA_LIMIT).describe('Project images and short videos the scene shows (screenshots, screen recordings, logos, photos). The scene receives them as media.<name> URLs for <img src>, <video src> or CSS backgrounds.');
   const sceneMedia = (items: { name: string; assetId: string }[]) => {
     if (new Set(items.map(item => item.name)).size !== items.length) throw new Error('Give each scene image a different name.');
-    for (const item of items) { const asset = assets.find(entry => entry._id === item.assetId); if (!asset || asset.kind !== 'image') throw new Error(`${item.assetId} is not an image in this project. Upload screenshots first (uploadMedia), then use their assetId.`); }
+    for (const item of items) { const asset = assets.find(entry => entry._id === item.assetId); if (!asset || (asset.kind !== 'image' && asset.kind !== 'video')) throw new Error(`${item.assetId} is not an image or video in this project. Upload screenshots or recordings first (uploadMedia), then use their assetId.`); if (asset.kind === 'video' && (asset.duration ?? 0) > 120) throw new Error('Scene videos can be up to 2 minutes; trim the recording or use it as a video clip instead.'); }
     return items;
   };
   const find = (timeline: Timeline, id: string) => { const clip = timeline.clips.find(c => c.id === id); if (!clip) throw new Error("Clip not found"); return clip; };
