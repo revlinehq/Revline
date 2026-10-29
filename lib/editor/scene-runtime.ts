@@ -20,8 +20,10 @@ import type { FrameAdapter } from '@hyperframes/core';
 import type * as SceneReact from './scene-react-runtime';
 import { sceneBrandContext, type SceneBrand, type SceneBrandContext } from './brand-kit';
 
-type Init = { type: 'init'; code: string; brand: SceneBrand | null; media?: { name: string; type: string; data: ArrayBuffer }[]; icons?: Record<string, string>; blueprints?: { name: string; code: string }[]; width: number; height: number; fps: number; duration: number; fonts: { family: string; weight: string; data: ArrayBuffer }[] };
+type Init = { type: 'init'; code: string; brand: SceneBrand | null; media?: { name: string; type: string; data: ArrayBuffer }[]; icons?: Record<string, string>; blueprints?: { name: string; code: string }[]; neighbours?: Neighbour[]; width: number; height: number; fps: number; duration: number; fonts: { family: string; weight: string; data: ArrayBuffer }[] };
 type Seek = { type: 'seek'; time: number; seq: number };
+/** For a React transition clip: a beat clip it joins, with its own blueprints. `start` is in the transition's seconds. */
+type Neighbour = { role: 'from' | 'to'; code: string; blueprints?: { name: string; code: string }[]; start: number; duration: number };
 /** What a scene's default export receives. Time 0 on `tl` is the first frame of the clip. */
 export type SceneContext = { root: HTMLElement; tl: gsap.core.Timeline; gsap: typeof gsap; width: number; height: number; duration: number; fps: number; brand: SceneBrandContext | null; /** Project images and videos by name, as URLs for <img src>, <video src> or CSS backgrounds. */ media: Record<string, string>; /** A Lucide icon as SVG markup, e.g. icon('scissors', { size: 16, color: '#8d8f93' }). */ icon: (name: string, options?: IconOptions) => string; /** Builds a brand kit blueprint (its whole UI) inside container at width x height and returns its root; its pieces are [data-part=...] elements to animate. */ blueprint: (name: string, container: HTMLElement, size?: { width: number; height: number }) => HTMLElement };
 export type IconOptions = { size?: number; color?: string; strokeWidth?: number; fill?: string };
@@ -49,16 +51,33 @@ function post(message: Record<string, unknown>) { window.parent.postMessage({ so
 /** The React scene runtime, present only in frames whose scene imports 'revline' (see scene-react-runtime). */
 const sceneReact = () => (window as unknown as { __revlineSceneReact?: typeof SceneReact }).__revlineSceneReact;
 
-/** Compile a scene module. GSAP scenes import only gsap and its plugins; React scenes also revline and react. */
-export function compileScene(code: string): (context: SceneContext) => unknown {
+/** Run a module and return its exports. React modules may import a React blueprint attached to the
+ * scene as 'blueprint:<name>': a component kit that several beat clips share. */
+function runModule(code: string, blueprints: { name: string; code: string }[], kits = new Map<string, Record<string, unknown>>()): Record<string, unknown> {
   const react = isReactScene(code), runtime = react ? sceneReact() : undefined;
   if (react && !runtime) throw new Error('The React scene runtime did not load.');
   const compiled = transform(code, sceneTransformOptions(code)).code;
   const module = { exports: {} as Record<string, unknown> };
   const modules: Record<string, unknown> = runtime ? { ...MODULES, ...runtime.modules } : MODULES;
-  const require = (name: string) => { if (!(name in modules)) throw new Error(react ? `React scenes can import only revline, react and gsap, not "${name}".` : `Scenes can import only gsap and its plugins, not "${name}".`); return modules[name]; };
+  const require = (name: string) => {
+    if (react && name.startsWith('blueprint:')) {
+      const wanted = name.slice(10).trim().toLowerCase(), found = blueprints.find(item => item.name.toLowerCase() === wanted);
+      if (!found) throw new Error(`No blueprint "${name.slice(10)}" is attached to this scene. Attach it with blueprints on addScene or editScene.`);
+      if (!isReactScene(found.code)) throw new Error(`Blueprint "${found.name}" is not a React module; mount it with <Blueprint name="${found.name}">.`);
+      if (!kits.has(wanted)) { kits.set(wanted, {}); kits.set(wanted, runModule(found.code, blueprints, kits)); }
+      return kits.get(wanted);
+    }
+    if (!(name in modules)) throw new Error(react ? `React scenes can import only revline, react, gsap and blueprint:<name>, not "${name}".` : `Scenes can import only gsap and its plugins, not "${name}".`);
+    return modules[name];
+  };
   new Function('require', 'module', 'exports', compiled)(require, module, module.exports);
-  const scene = module.exports.default;
+  return module.exports;
+}
+
+/** Compile a scene module. GSAP scenes import only gsap and its plugins; React scenes also revline, react and React blueprints. */
+export function compileScene(code: string, blueprints: { name: string; code: string }[] = []): (context: SceneContext) => unknown {
+  const react = isReactScene(code);
+  const scene = runModule(code, blueprints).default;
   if (typeof scene !== 'function') throw new Error(react ? 'A React scene must export default its component.' : 'A scene must export default a function that builds it.');
   return scene as (context: SceneContext) => unknown;
 }
@@ -94,7 +113,7 @@ if (typeof window !== 'undefined' && window.parent !== window) {
     for (const font of data.fonts) { const face = new FontFace(font.family, font.data, { weight: font.weight }); await face.load(); document.fonts.add(face); }
     fps = data.fps;
     const media = Object.fromEntries((data.media ?? []).map(item => [item.name, URL.createObjectURL(new Blob([item.data], { type: item.type || 'image/png' }))]));
-    const scene = compileScene(data.code);
+    const scene = compileScene(data.code, data.blueprints);
     origin = gsap.globalTimeline.time();
     const brand = sceneBrandContext(data.brand ?? undefined), icon = iconFactory(data.icons ?? {});
     // A blueprint is itself a scene module: built once, statically, into the container the scene gives it.
@@ -110,7 +129,8 @@ if (typeof window !== 'undefined' && window.parent !== window) {
       return host;
     };
     if (isReactScene(data.code)) {
-      adapter = sceneReact()!.createReactSceneAdapter({ root, Scene: scene as never, width: data.width, height: data.height, duration: data.duration, fps: data.fps, brand, media, icons: data.icons ?? {}, blueprint, parseEase: name => gsap.parseEase(name) as (progress: number) => number });
+      const neighbours = (data.neighbours ?? []).map(item => ({ role: item.role, start: item.start, duration: item.duration, Scene: compileScene(item.code, item.blueprints) as never }));
+      adapter = sceneReact()!.createReactSceneAdapter({ root, Scene: scene as never, neighbours, width: data.width, height: data.height, duration: data.duration, fps: data.fps, brand, media, icons: data.icons ?? {}, blueprint, parseEase: name => gsap.parseEase(name) as (progress: number) => number });
       await adapter.init?.({ compositionId: 'revline-scene', fps: data.fps, width: data.width, height: data.height, rootElement: root });
       return;
     }

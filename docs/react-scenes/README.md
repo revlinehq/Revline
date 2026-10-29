@@ -33,6 +33,58 @@ The original handled its time with a remap function (`D(o)` adds 1.85 s, adds 1.
 
 At 1.9 s, 4.4 s and 6.4 s, the React and GSAP frames match visually in the dev preview: dev project "React scene prototype (bench)" (`j975gr3qjmc2ckwkhxfqe05xp98h7z22`), tab "React scene prototype". The tab holds the original film (at 0 s), the GSAP beat trimmed to the same window (at 20 s) and the React beat (at 29 s).
 
+## Beat clips and transition clips
+
+The timeline can show the film's structure: each beat is its own scene clip, and each transition is its own clip between two beats. `clips/` holds the T3 port split this way:
+
+| Clip | Track | Time | What it is |
+| --- | --- | --- | --- |
+| `t3-code-kit.tsx` | (blueprint "T3 Code") | — | T3 Code's app as components: `T3App`, `Window`, `Sidebar`, `ThreadHeader`, `ComposerControls`, `ComposerFooter`, `DiffHeader`, `DiffHunk`, `Caption`… |
+| `beat-assembly.tsx` | V2 | 0 – 3.75 s | The title blows away, the dashboard builds, then everything but the composer clears |
+| `transition-zoom-into-composer.tsx` | V3 | 2.85 – 3.75 s | `<Transition kind="zoom-into" target="composer" …/>` |
+| `beat-chat.tsx` | V2 | 3.75 – 8.15 s | Typing, send, pull back to the reply |
+
+This is in the dev bench project, tab "React beat clips". The transition's last frame and the chat beat's first frame are pixel-identical (mean difference 0.004/255).
+
+### Shared components: React blueprints
+
+A beat imports components from a blueprint attached to its clip: `import { Window, Caption } from 'blueprint:T3 Code'`. Blueprints are the existing per-scene attachment (up to 4, stored once by hash), so a kit shared by every beat of a film is stored once. Editing a kit component changes every beat that uses it. Editing a beat clip changes only that beat.
+
+### Transition clips render both neighbours
+
+A transition clip is a React scene that draws `<Transition>` (or `<Neighbour>` directly). When the composition builds its sources (`sceneNeighbours` in `scene-layers.ts`), it gives the transition its neighbours, each with its code, blueprints and timing:
+- **from:** the React beat clip playing (or last played) when the transition starts;
+- **to:** the one playing (or next to play) when it ends.
+
+Any track works; the transition usually sits on the layer above, across the cut.
+
+Inside the frame:
+- **Own clocks:** `<Neighbour role="from" | "to">` mounts that beat's component on its own clock. Its time maps from the transition's clock, and it holds its first or last frame outside its own range.
+- **Live outgoing beat:** an overlapping transition keeps the outgoing beat playing underneath. Here, the assembly's own fades continue under the camera move.
+- **Transition kinds:** `crossfade`, `blur-through`, `zoom-into` and `pull-back`.
+  - The camera moves are computed from the beats themselves. Each frame, the transition measures the `target` element (`[data-anchor="composer"]`) where the beat draws it at that moment.
+  - It then moves the beat's `[data-camera]` element so that point lands at `at` with `zoom`. Overlays outside `data-camera`, such as captions, stay put.
+  - `origin`, `at`, `zoom`, `fade` and `ease` tune it.
+- **Cost:** a transition frame mounts both beats (650 elements here) and costs 0.68 ms of JS per frame, against 0.34 ms for the chat beat alone.
+
+### Component metadata per clip
+
+`sceneComponents(scene)` in `scene-modules.ts` reads the clip's code statically, so nothing needs rendering. It lists:
+- the components the clip declares;
+- every exported blueprint component it reaches (a kit's internal helpers are walked, not listed);
+- `Transition` or `Neighbour`.
+
+`inspectClip` returns it as `components`, and the timeline's scene code dialog ("View code") shows it as chips. For the chat beat, the list is Window, T3App, Sidebar, ThreadHeader, ChangedFiles, ComposerControls, ComposerFooter, DiffHeader, DiffHunk, Chat, Caption.
+
+The list is static: it shows what a clip can draw, not what is on screen at a given time. The chat beat lists `Sidebar` even though it never shows it. An exact list would need a render pass that records mounted components per frame.
+
+### Limits of this prototype
+
+- Transition detection reads the code (`<Transition` or `<Neighbour`), and neighbours are chosen by time. A real version should store `scene.transition = { from, to }` clip ids on the clip, so moving clips keeps the pairing explicit.
+- `checkSceneCode` accepts `blueprint:<name>` imports. But `saveBlueprint` and blueprint checks (`blueprint-check.ts`) still assume GSAP blueprints, so React kits were attached directly for this test.
+- `TIMELINE_SCENE_CODE_LIMIT` counts a blueprint once per clip that attaches it. With five beats sharing a 26 KB kit, that is 130 KB of the 180 KB budget, so it should count each hash once.
+- The "Typing here…" caption now starts with the chat beat (3.75 s), 0.2 s later than the original, because it no longer lives in the transition window.
+
 ## Measurements
 
 The method: each scene runs through the real frame protocol (`init`, `seek`, `painted`) using the built `scene-runtime.js` and `scene-react.js`, in headless Chrome at 1920×1080 with 30 fps and the same fonts and icons. The window is the beat's 245 frames.
@@ -98,9 +150,16 @@ Keep React scenes as an opt-in format, and use them for UI-heavy launch-film bea
 
 They are also faster to mount, and faster to export on a slow CPU. The costs are 228 KB loaded per React scene frame, about 1 ms more JS per frame, and slower scrubbing across beat boundaries.
 
+For film structure, build each beat as its own React scene clip, with the film's UI in one React blueprint kit. Make each transition its own clip drawing `<Transition>`, as in the T3 split above.
+
 Before making React the default:
 
 1. Teach the format in the scene-engine skill (contract, `revline` API, beat grammar) and have the agent author one launch film in it.
 2. Cut per-frame re-renders. Selector-based `useBeat` already does this; use it in hot components, and consider a `<Animated style={t => ...}>` primitive that writes styles straight to its node without reconciling.
 3. Pre-mount the next beat one beat ahead (or default to `keep` for short films) to flatten the scrub p95.
 4. Measure inside the visible editor preview on a slower machine, and run a full producer export of a React-scene timeline.
+5. Make film structure first-class:
+   - store transition pairing on the clip (`scene.transition`);
+   - let `saveBlueprint` hold React kits;
+   - count shared blueprint code once per timeline;
+   - add an `addTransition`-style tool that drops a transition clip on a cut between two beat clips.

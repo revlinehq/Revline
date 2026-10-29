@@ -17,9 +17,13 @@ export type Ease = string | ((progress: number) => number);
 export type SceneProps = { width: number; height: number; duration: number; fps: number; brand: SceneBrandContext | null; media: Record<string, string> };
 /** Time inside the nearest beat (or the scene): seconds, frames and 0..1 progress. */
 export type BeatTime = { time: number; frame: number; fps: number; start: number; duration: number; progress: number };
+/** A beat clip next to a transition clip, compiled in the transition's frame. `start` is in the transition's seconds. */
+export type SceneNeighbour = { role: 'from' | 'to'; Scene: React.ComponentType<SceneProps>; start: number; duration: number };
 export type ReactSceneOptions = SceneProps & {
   root: HTMLElement;
   Scene: React.ComponentType<SceneProps>;
+  /** Set for a transition clip: the beat clips it joins. */
+  neighbours?: SceneNeighbour[];
   icons: Record<string, string>;
   blueprint: (name: string, container: HTMLElement, size?: { width: number; height: number }) => HTMLElement;
   parseEase: (name: string) => (progress: number) => number;
@@ -34,9 +38,11 @@ class Clock {
   set(frame: number) { this.frame = frame; this.listeners.forEach(listener => listener()); }
 }
 
-type SceneState = SceneProps & { clock: Clock; icons: Record<string, string>; blueprint: ReactSceneOptions['blueprint'] };
-/** A beat's window on the scene clock, plus where its child beats record theirs for relative starts. */
-type BeatWindow = { start: number; duration: number; beats: Map<string, { start: number; duration: number }> };
+type SceneState = SceneProps & { clock: Clock; icons: Record<string, string>; blueprint: ReactSceneOptions['blueprint']; neighbours: SceneNeighbour[] };
+/** A beat's window on the scene clock, plus where its child beats record theirs for relative starts.
+ * `frame` maps the scene clock to this subtree's clock: identity, except inside a neighbour clip. */
+type BeatWindow = { start: number; duration: number; frame: (clock: number) => number; beats: Map<string, { start: number; duration: number }> };
+const same = (frame: number) => frame;
 const SceneContext = createContext<SceneState | null>(null);
 const BeatContext = createContext<BeatWindow | null>(null);
 
@@ -67,7 +73,7 @@ export function useBeat<T>(select?: (time: BeatTime) => T): T | BeatTime {
   const read = () => {
     const cached = cache.current;
     if (cached && cached.frame === clock.frame && cached.beat === beat) return cached.value;
-    const time = clock.frame / fps - beat.start;
+    const time = beat.frame(clock.frame) / fps - beat.start;
     const now: BeatTime = { time, frame: Math.round(time * fps), fps, start: beat.start, duration: beat.duration, progress: beat.duration > 0 ? Math.min(1, Math.max(0, time / beat.duration)) : 1 };
     const value = select ? select(now) : now;
     // A selected value that did not change keeps its identity, so React skips the re-render.
@@ -114,9 +120,9 @@ export function Beat({ id, start = 0, duration, track = 0, keep = false, style, 
   const length = Math.max(0, duration ?? parent.duration - local);
   if (id) parent.beats.set(id, { start: local, duration: length });
   const absolute = parent.start + local;
-  const window = useMemo<BeatWindow>(() => ({ start: absolute, duration: length, beats: new Map() }), [absolute, length]);
+  const window = useMemo<BeatWindow>(() => ({ start: absolute, duration: length, frame: parent.frame, beats: new Map() }), [absolute, length, parent.frame]);
   const from = Math.round(absolute * fps), to = Math.round((absolute + length) * fps);
-  const active = useSyncExternalStore(clock.subscribe, () => clock.frame >= from && clock.frame < to);
+  const active = useSyncExternalStore(clock.subscribe, () => { const frame = parent.frame(clock.frame); return frame >= from && frame < to; });
   if (!active && !keep) return null;
   return (
     <BeatContext.Provider value={window}>
@@ -127,8 +133,8 @@ export function Beat({ id, start = 0, duration, track = 0, keep = false, style, 
 }
 
 /** A full-frame layer: an absolutely positioned box covering the scene. */
-export function Layer({ style, children, ...rest }: React.HTMLAttributes<HTMLDivElement>) {
-  return <div {...rest} style={{ position: 'absolute', inset: 0, ...style }}>{children}</div>;
+export function Layer({ style, children, ref, ...rest }: React.HTMLAttributes<HTMLDivElement> & { ref?: React.Ref<HTMLDivElement> }) {
+  return <div {...rest} ref={ref} style={{ position: 'absolute', inset: 0, ...style }}>{children}</div>;
 }
 
 /** Children rendered once and never again, whatever re-renders around them. */
@@ -146,6 +152,69 @@ export function Blueprint({ name, width, height, style }: { name: string; width:
   const { blueprint } = useSceneState(), box = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => { const host = blueprint(name, box.current!, { width, height }); return () => { host.remove(); }; }, [blueprint, name, width, height]);
   return <div ref={box} style={{ position: 'absolute', width, height, ...style }} />;
+}
+
+/**
+ * A neighbouring beat clip, drawn on its own clock inside a transition clip. Before it starts it holds
+ * its first frame; after it ends, its last. The rest of the scene is untouched.
+ */
+export function Neighbour({ role }: { role: 'from' | 'to' }) {
+  const scene = useSceneState();
+  const neighbour = scene.neighbours.find(item => item.role === role);
+  const offset = neighbour ? Math.round(neighbour.start * scene.fps) : 0, last = neighbour ? Math.max(0, Math.round(neighbour.duration * scene.fps) - 1) : 0;
+  const window = useMemo<BeatWindow>(() => ({ start: 0, duration: neighbour?.duration ?? 0, frame: frame => Math.min(last, Math.max(0, frame - offset)), beats: new Map() }), [neighbour, offset, last]);
+  const state = useMemo<SceneState>(() => ({ ...scene, duration: neighbour?.duration ?? 0 }), [scene, neighbour]);
+  if (!neighbour) throw new Error(`This transition has no "${role}" beat clip next to it. Place it between two React scene clips.`);
+  const { Scene } = neighbour, { clock: _clock, icons: _icons, blueprint: _blueprint, neighbours: _neighbours, ...props } = state;
+  return <SceneContext.Provider value={state}><BeatContext.Provider value={window}><Scene {...props} /></BeatContext.Provider></SceneContext.Provider>;
+}
+
+export type TransitionKind = 'crossfade' | 'blur-through' | 'zoom-into' | 'pull-back';
+type TransitionProps = {
+  kind?: TransitionKind;
+  /** zoom-into / pull-back: the [data-anchor] the camera flies into (in the outgoing beat) or out of (in the incoming one). */
+  target?: string;
+  /** The point inside the target that lands on `at`, as fractions of its box. */
+  origin?: [number, number];
+  /** Where on screen that point ends up, as fractions of the frame. */
+  at?: [number, number];
+  zoom?: number;
+  /** The crossfade window, as fractions of the transition. */
+  fade?: [number, number];
+  ease?: Ease;
+};
+
+/**
+ * Joins the beat clips on either side, computed from both: a crossfade, a blur through, or a camera
+ * move into an anchor of the outgoing beat (zoom-into) or out of one in the incoming beat (pull-back).
+ */
+export function Transition({ kind = 'crossfade', target, origin = [.5, .5], at = [.5, .5], zoom = 2, fade, ease: curve = 'power3.inOut' }: TransitionProps) {
+  const { width, height } = useScene(), { time, duration } = useBeat();
+  const camera = kind === 'zoom-into' || kind === 'pull-back';
+  const [fadeFrom, fadeTo] = fade ?? (camera ? [.1, .6] : [0, 1]);
+  const move = progress(time, 0, duration, curve), mixAmount = progress(time, duration * fadeFrom, duration * (fadeTo - fadeFrom), 'power2.inOut');
+  const outgoing = useRef<HTMLDivElement>(null), incoming = useRef<HTMLDivElement>(null);
+  // The camera aims at where the anchor is drawn this frame, so the move follows a beat that is still animating.
+  useLayoutEffect(() => {
+    const layer = kind === 'zoom-into' ? outgoing.current : kind === 'pull-back' ? incoming.current : null;
+    if (!layer) return;
+    const amount = kind === 'zoom-into' ? move : 1 - move;
+    // The camera moves the beat's [data-camera] element (overlays such as captions stay put), or the whole beat.
+    const camera = layer.querySelector<HTMLElement>('[data-camera]') ?? layer;
+    camera.style.transform = 'none';
+    const screen = layer.getBoundingClientRect(), frame = camera.getBoundingClientRect(), anchor = target ? camera.querySelector(`[data-anchor="${CSS.escape(target)}"]`) : null;
+    if (target && !anchor) throw new Error(`No element with data-anchor="${target}" in the ${kind === 'zoom-into' ? 'outgoing' : 'incoming'} beat.`);
+    const box = anchor?.getBoundingClientRect() ?? frame;
+    const x = box.left - frame.left + box.width * origin[0], y = box.top - frame.top + box.height * origin[1], scale = mix(1, zoom, amount);
+    const toX = at[0] * width - (frame.left - screen.left), toY = at[1] * height - (frame.top - screen.top);
+    camera.style.transformOrigin = '0 0';
+    camera.style.transform = `translate(${mix(x, toX, amount) - x * scale}px,${mix(y, toY, amount) - y * scale}px) scale(${scale})`;
+  });
+  const blur = kind === 'blur-through' ? 16 : 0;
+  return <>
+    <Layer ref={incoming} style={{ filter: blur ? `blur(${blur * (1 - mixAmount)}px)` : undefined }}><Neighbour role="to" /></Layer>
+    <Layer ref={outgoing} style={{ opacity: 1 - mixAmount, filter: blur ? `blur(${blur * mixAmount}px)` : undefined }}><Neighbour role="from" /></Layer>
+  </>;
 }
 
 /** An easing curve by GSAP name ('expo.out', 'power3.inOut', 'back.out(1.7)', 'steps(4)') or a function. */
@@ -197,15 +266,15 @@ export function waitFor<T>(promise: Promise<T>): Promise<T> {
 }
 
 /** What `import ... from 'revline'` gives a scene. */
-export const revline = { useScene, useBeat, Beat, Layer, Still, Icon, Blueprint, ease, progress, mix, ramp, spring, waitFor };
+export const revline = { useScene, useBeat, Beat, Layer, Still, Icon, Blueprint, Neighbour, Transition, ease, progress, mix, ramp, spring, waitFor };
 
 /** A HyperFrames frame adapter that draws a React scene: seekFrame commits the tree for that frame. */
 export function createReactSceneAdapter(options: ReactSceneOptions): FrameAdapter & { settle(): Promise<void> } {
   const clock = new Clock();
   parseEase = options.parseEase;
-  const { Scene, root: container, icons, blueprint, parseEase: _ease, ...props } = options;
-  const state: SceneState = { ...props, clock, icons, blueprint };
-  const scene: BeatWindow = { start: 0, duration: props.duration, beats: new Map() };
+  const { Scene, root: container, icons, blueprint, neighbours = [], parseEase: _ease, ...props } = options;
+  const state: SceneState = { ...props, clock, icons, blueprint, neighbours };
+  const scene: BeatWindow = { start: 0, duration: props.duration, frame: same, beats: new Map() };
   let root: Root | null = null, failure: unknown = null;
   const commit = (work: () => void) => {
     failure = null;

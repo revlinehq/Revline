@@ -9,7 +9,61 @@ export const SCENE_MODULES = new Set<string>(['gsap', 'gsap/all', 'gsap/EasePack
 export const REACT_SCENE_MODULES = new Set<string>(['revline', 'react', 'react/jsx-runtime']);
 export const REACT_SCENE_PATTERN = /\bfrom\s*['"](?:revline|react)['"]/;
 export const isReactScene = (code: string) => REACT_SCENE_PATTERN.test(code);
+/** A React scene that joins the beat clips on either side of it (it draws <Transition> or <Neighbour>). */
+export const isSceneTransition = (code: string) => isReactScene(code) && /<(?:Transition|Neighbour)\b/.test(code);
 /** Sucrase options for a scene: React scenes compile as TSX with the automatic JSX runtime. */
 export const sceneTransformOptions = (code: string) => isReactScene(code)
   ? { transforms: ['typescript', 'jsx', 'imports'] as ('typescript' | 'jsx' | 'imports')[], jsxRuntime: 'automatic' as const, production: true }
   : { transforms: ['typescript', 'imports'] as ('typescript' | 'jsx' | 'imports')[], production: true };
+
+const REVLINE_COMPONENTS = new Set(['Beat', 'Layer', 'Still', 'Icon', 'Blueprint', 'Fragment']);
+/** Each capitalised top-level component in a module, with the source of its declaration. */
+function declarations(code: string) {
+  const found = [...code.matchAll(/^(?:export\s+)?(?:default\s+)?(?:const|function)\s+([A-Z]\w*)/gm)];
+  return new Map(found.map((match, index) => [match[1], code.slice(match.index, found[index + 1]?.index ?? code.length)]));
+}
+const jsxTags = (code: string) => [...new Set([...code.matchAll(/<([A-Z]\w*)/g)].map(match => match[1]))];
+
+/**
+ * The components a React scene clip draws, for the inspector: those it declares, plus every exported
+ * component of its React blueprints that it reaches (a kit's internal helpers are walked, not listed).
+ * Static: read from the code, so it works without rendering. Empty for GSAP scenes.
+ */
+export function sceneComponents(scene: { code: string; blueprints?: { name: string; code: string }[] }): string[] {
+  if (!isReactScene(scene.code)) return [];
+  const local = declarations(scene.code), defaultName = /export\s+default\s+function\s+([A-Z]\w*)/.exec(scene.code)?.[1];
+  const kits = new Map((scene.blueprints ?? []).filter(item => isReactScene(item.code)).map(item => [item.name.toLowerCase(), item.code]));
+  // Imported kit name -> where it is declared and whether the kit exports it.
+  const imported = new Map<string, { body?: string; listed: boolean; kit: Map<string, string>; exported: Set<string> }>();
+  const kitInfo = (code: string) => ({ kit: declarations(code), exported: new Set([...code.matchAll(/^export\s+(?:const|function)\s+([A-Z]\w*)/gm)].map(match => match[1])) });
+  for (const match of scene.code.matchAll(/import\s*\{([^}]*)\}\s*from\s*['"]blueprint:([^'"]+)['"]/g)) {
+    const code = kits.get(match[2].trim().toLowerCase());
+    if (!code) continue;
+    const info = kitInfo(code);
+    for (const part of match[1].split(',')) {
+      const [name, alias = name] = part.trim().split(/\s+as\s+/);
+      if (/^[A-Z]/.test(name)) imported.set(alias.trim(), { body: info.kit.get(name.trim()), listed: true, ...info });
+    }
+  }
+  const listed: string[] = [], seen = new Set<string>();
+  const visit = (name: string, scope: { kit: Map<string, string>; exported: Set<string> } | null) => {
+    const key = `${scope ? 'kit' : 'clip'}:${name}`;
+    if (seen.has(key) || REVLINE_COMPONENTS.has(name)) return;
+    seen.add(key);
+    if (scope) {
+      const body = scope.kit.get(name);
+      if (body === undefined) return;
+      if (scope.exported.has(name) && !listed.includes(name)) listed.push(name);
+      for (const tag of jsxTags(body)) visit(tag, scope);
+    } else if (imported.has(name)) {
+      const item = imported.get(name)!;
+      if (!listed.includes(name)) listed.push(name);
+      for (const tag of jsxTags(item.body ?? '')) visit(tag, item);
+    } else if (local.has(name)) {
+      if (name !== defaultName && !listed.includes(name)) listed.push(name);
+      for (const tag of jsxTags(local.get(name)!)) visit(tag, null);
+    } else if (name === 'Transition' || name === 'Neighbour') listed.push(name);
+  };
+  for (const tag of jsxTags(scene.code)) visit(tag, null);
+  return listed;
+}
