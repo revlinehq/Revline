@@ -178,14 +178,95 @@ Feels: fast, practical, confident: "here it is working". Cards: ${cardsFor('cris
   },
 ];
 
+const TECHNIQUES: EditorSkillPage = {
+    name: 'techniques',
+    description: 'Feedback and direction mapped to techniques the analysed films use, with the card to read for exact timings. Use when the user says what feels wrong or what they want more of.',
+    body: `# Techniques by feedback
+
+Find the user's words, read the named card, apply its recipe in the brand's fonts and colors. Name the source film when you propose it.
+
+## "More premium", "calmer", "more expensive"
+- Longer holds (3 to 8s) and fewer moves; still frames while UI works. Cards: \`card-linear-7752\`, \`card-notion-8397\`.
+- Blur-in type and a blur dissolve between UI and captions (blur 12px plus fade, ~0.7s): \`card-linear-7752\`.
+- Generous empty space, one accent, no grain: warm-editorial style.
+- A quiet lockup: mark alone held ~4s: \`card-linear-8467\`.
+
+## "More energy", "snappier", "faster"
+- Cut titles every 1 to 2s and flash new words in the accent for ~0.2s: \`card-figma-9940\`, \`card-figma-9864\`.
+- Snap zooms (0.3 to 0.4s, power3.inOut, motion blur) to the action, then hold: \`card-notion-9437\`.
+- Instant component swaps with small pops instead of tweens: \`card-firecrawl-9157\`.
+- A sub-second roll-call of feature names before the lockup: \`card-notion-2887\`.
+
+## "More depth", "more 3D", "feels flat"
+- Put the UI on a tilted plane with focus falloff and a drifting camera: dimensional-ui, \`card-linear-8467\`.
+- Stack windows like a deck, receding behind the new one: \`card-notion-8397\`.
+- A rotating 3D drum of capability chips: \`card-elevenlabs-8568\`.
+
+## "Text is boring", "headlines feel static"
+- Letters rising into place one by one: \`card-notion-2887\`.
+- Words popping in place, centred, hard cut out: \`card-notion-8397\`.
+- Grey-to-ink word reveal with the product name in the accent: \`card-firecrawl-9157\`.
+- Typed text that glows in the accent, then settles to white: \`card-elevenlabs-8568\`.
+- Dot-matrix letters assembling in random order: \`card-base-4529\`.
+
+## "Transitions feel cheap", "cuts are jarring"
+- Morph one object into the next (chips into a window, an image into a card): \`card-elevenlabs-8568\`.
+- Zoom-out bridges that reveal context (scale ~3 to 1, expo.out): \`card-figma-3230\`.
+- Blur dissolve from UI to caption: \`card-linear-7752\`.
+- Hard cuts between drifting camera setups, never wipes: \`card-linear-8467\`.
+- Layout changes by moving elements (icons snapping from a ring into a grid), no cut: \`card-notion-8020\`.
+
+## "The UI looks fake", "show the product better"
+- Crop and magnify one control to fill the frame, with a big cursor: \`card-figma-3230\`.
+- Keep full, dense UI and let the screen fill up as work happens: \`card-okara-8657\`.
+- One simplified component centred on a flat pastel: \`card-notion-2887\`.
+- Content that decodes in row by row: \`card-linear-8467\`.
+
+## "Show the AI working", "show it's agentic"
+- Type the prompt in real time, then results land: \`card-linear-7752\`, \`card-elevenlabs-8568\`.
+- A status card with a thin progress bar and changing status lines: \`card-motion-2677\`.
+- A self-typing agent log while the dashboard fills: \`card-okara-8657\`.
+- A shimmering status word while chips append: \`card-firecrawl-9157\`.
+
+## "Show integrations", "works with everything"
+- A logo wall that punches in, then isolates the launch: \`card-firecrawl-9157\`.
+- Partner icons that snap from a ring into a grid around one headline: \`card-notion-8020\`.
+- Windows of each app stacking as a deck: \`card-notion-8397\`.
+
+## "The ending is weak", "the logo needs more"
+- Wordmark blurs in, an accent sweeps across it, the tagline wipes in, then the mark alone: \`card-linear-8467\`.
+- Glitch: characters swap to symbols, then collapse into the logo: \`card-figma-9940\`.
+- Colored shapes converge into the mark: \`card-figma-3230\`.
+- Pixel blocks resolve into the wordmark: \`card-base-4529\`.
+- A left-aligned URL card with the logo on the right: \`card-motion-2677\`.
+
+## "Too busy", "too much going on"
+- One idea per shot; never text over UI (every film).
+- Hold still while one thing happens: \`card-notion-9437\`, \`card-okara-8657\`.
+- Remove motion that does not show a relationship, an action or a hierarchy.
+
+## "More playful", "more personality"
+- A mascot made from the logo shape, animated with pose swaps and blinks: \`card-base-4529\`.
+- Handwritten notes with drawn arrows on a headline: \`card-notion-2887\`.
+- Named multiplayer cursors drifting as ambient motion: \`card-figma-9940\`.
+- Stepped 12 fps motion for a hand-made feel: \`card-figma-3230\`.`,
+  };
+
 export const launchStyles: EditorSkill = {
   name: 'launch-styles',
-  description: 'Pick and apply a visual style for a launch or feature film, from a library built by analysing 14 recent launch films frame by frame (Linear, Notion, Figma, ElevenLabs, Firecrawl, Base, Motion, Okara). Read after launch-films, before the beat sheet. Pages hold each of the five styles and each film\'s card.',
+  description: 'Style guidance for launch and feature films, from 14 recent launch films analysed frame by frame (Linear, Notion, Figma, ElevenLabs, Firecrawl, Base, Motion, Okara). Read before the beat sheet, and again whenever the user gives design feedback or direction ("more premium", "transitions feel cheap", "like Linear"): look up how these films solved it instead of guessing. Pages: five styles, a technique index, and each film\'s card.',
   body: `# Launch styles
 
 Styles come from measured launch films, not taste. Each style page gives look, type, UI treatment, motion and pacing; each card page describes one real film in detail, with durations and eases.
 
-## Choosing
+## Three ways to use this library
+1. **No styling from the user: default.** Pick a style below and follow it.
+2. **Vague or partial direction, or feedback** ("more premium", "snappier", "the ending is weak", "more depth"): open the \`techniques\` page, find how the films solved it, read the named card, and apply that technique. Tell the user which film the technique comes from ("using Linear's blur-in lockup") so they can say yes or no.
+3. **Exact direction** (they describe precisely what they want): do exactly that. Use the library only for what they left open (durations, eases, holds). Never override the user with the library.
+
+Mixing: keep one base style for the whole film; borrow single techniques from other styles when feedback calls for them.
+
+## Choosing a default
 1. User named a reference film or brand: use the matching card page (or the closest one) and its style page.
 2. Otherwise match the confirmed brand tone and product:
    - Serious, precise, developer or AI tool, dark brand: \`dark-cinematic\` (flat UI, feature films) or \`dimensional-ui\` (UI as a tilted 3D object, flagship launches).
@@ -207,5 +288,5 @@ Styles come from measured launch films, not taste. Each style page gives look, t
 
 ## Do not copy
 Use a card for style only: never its copy, product, logo, characters or exact compositions.`,
-  pages: [...styles, ...STYLE_CARDS.map(({ style: _style, ...card }) => card)],
+  pages: [...styles, TECHNIQUES, ...STYLE_CARDS.map(({ style: _style, ...card }) => card)],
 };

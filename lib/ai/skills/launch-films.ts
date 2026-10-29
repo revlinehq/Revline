@@ -67,9 +67,10 @@ Problem then solution works because the viewer has to feel the gap before the pr
 
 1. **Beat sheet.** A table: time, music bar, what is on screen, on-screen words, motion, sound. Send it and wait for approval or changes. Cheap to change, so get it right here.
 2. **Animatic.** Rough scenes at the approved timing: grey boxes, plain text in the brand font, simple moves, with the music. Say it is rough and ask the user to watch for story and pacing.
-3. **Polish.** Replace each rough scene at the same timing with the finished one (editScene keeps timing). Attach the brand kit to every scene.
-4. **Sound.** One generateSound per scene keyed to its motion, under the music.
-5. **Review.** getFrames at each beat time and at each scene's midpoint. Check that text is readable, nothing overlaps or clips, the brand fonts and colors show, and the lockup holds. Fix before telling the user it is done, and say what you checked.
+3. **Feedback.** Whenever the user reacts to the beat sheet, the animatic or the polish ("feels cheap", "more energy", "the ending is weak"), read the launch-styles \`techniques\` page, apply the matching technique, and say which film it comes from.
+4. **Polish.** Replace each rough scene at the same timing with the finished one (editScene keeps timing). Attach the brand kit to every scene.
+5. **Sound.** One generateSound per scene keyed to its motion, under the music.
+6. **Review.** getFrames at each beat time and at each scene's midpoint. Check that text is readable, nothing overlaps or clips, the brand fonts and colors show, and the lockup holds. Fix before telling the user it is done, and say what you checked.
 
 ## 6. Product UI without screenshots
 
