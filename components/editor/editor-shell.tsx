@@ -162,7 +162,8 @@ export function EditorShell(p: EditorShellProps) {
     return started;
   };
   const [, setDesktopMode] = useEditorModePreference();
-  const [mobileConversation, setMobileChat] = useState(true);
+  // An embedded editor (the landing hero) opens on the preview; the app opens on the conversation.
+  const [mobileConversation, setMobileChat] = useState(!p.embedded);
   const mobileChat = compact && mobileConversation;
   // The media panel stays mounted so it can slide open and closed; widths animate only during a toggle, never while dragging.
   const inspectorPanel=usePanelRef();const inspectorWidth=useRef(480);const [inspectorMotion,setInspectorMotion]=useState(false);const inspectorMoving=useRef(false);inspectorMoving.current=inspectorMotion;
