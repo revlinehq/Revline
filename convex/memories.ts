@@ -11,15 +11,17 @@ import { projectRun } from './lib/project_data';
  *   can reapply them in any project ("my podcast captions", "the teal grade from the travel vlog").
  * User memories apply everywhere; project memories to one project. Summaries ride in the AI's context each
  * turn, most-used first; a style's full recipe loads on demand (recallMemory) and counts as a use.
+ * A topic files each memory into the user's Personal kit: captions, the platforms they post to, or general editing.
  */
 export const MAX_USER_MEMORIES = 60, MAX_PROJECT_MEMORIES = 20, MAX_MEMORY_LENGTH = 280, MAX_RECIPE_LENGTH = 6000;
 const kind = v.union(v.literal('preference'), v.literal('style'));
-const summary = v.object({ memoryId: v.id('agentMemories'), scope: v.union(v.literal('user'), v.literal('project')), kind, name: v.optional(v.string()), text: v.string(), hasRecipe: v.boolean(), source: v.optional(v.string()), uses: v.number() });
+const topic = v.union(v.literal('captions'), v.literal('platforms'), v.literal('editing'));
+const summary = v.object({ memoryId: v.id('agentMemories'), scope: v.union(v.literal('user'), v.literal('project')), kind, topic: v.optional(topic), name: v.optional(v.string()), text: v.string(), hasRecipe: v.boolean(), source: v.optional(v.string()), uses: v.number() });
 const runArgs = { projectId: v.id('projects'), ownerId: v.string(), runId: v.string() };
 
 async function view(ctx: QueryCtx, row: Doc<'agentMemories'>) {
   const source = row.sourceProjectId ? (await ctx.db.get(row.sourceProjectId))?.title : undefined;
-  return { memoryId: row._id, scope: row.projectId ? 'project' as const : 'user' as const, kind: row.kind ?? 'preference' as const, ...(row.name ? { name: row.name } : {}), text: row.text, hasRecipe: !!row.recipe, ...(source ? { source } : {}), uses: row.uses ?? 0 };
+  return { memoryId: row._id, scope: row.projectId ? 'project' as const : 'user' as const, kind: row.kind ?? 'preference' as const, ...(row.topic ? { topic: row.topic } : {}), ...(row.name ? { name: row.name } : {}), text: row.text, hasRecipe: !!row.recipe, ...(source ? { source } : {}), uses: row.uses ?? 0 };
 }
 export async function memoriesFor(ctx: QueryCtx, ownerId: string, projectId?: Id<'projects'>) {
   const user = await ctx.db.query('agentMemories').withIndex('by_owner_project', q => q.eq('ownerId', ownerId).eq('projectId', undefined)).take(MAX_USER_MEMORIES);
@@ -27,6 +29,11 @@ export async function memoriesFor(ctx: QueryCtx, ownerId: string, projectId?: Id
   // Project rules first, then the user's most-used styles and preferences.
   const rank = (row: Doc<'agentMemories'>) => (row.uses ?? 0) * 1e13 + (row.lastUsedAt ?? row.updatedAt);
   return Promise.all([...project.sort((a, b) => rank(b) - rank(a)), ...user.sort((a, b) => rank(b) - rank(a))].map(row => view(ctx, row)));
+}
+function memoryText(value: string) {
+  const text = value.trim().replace(/\s+/g, ' ');
+  if (text.length < 3 || text.length > MAX_MEMORY_LENGTH) throw new ConvexError(`Keep it between 3 and ${MAX_MEMORY_LENGTH} characters.`);
+  return text;
 }
 async function requireRun(ctx: QueryCtx | MutationCtx, args: { projectId: Id<'projects'>; ownerId: string; runId: string }) {
   const run = await projectRun(ctx, args.projectId, args.ownerId);
@@ -42,16 +49,15 @@ export const forRun = internalQuery({ args: runArgs, returns: v.array(summary), 
 
 /** Save a preference or style (or, with memoryId, rewrite one). An identical text updates nothing. */
 export const remember = internalMutation({
-  args: { ...runArgs, text: v.string(), scope: v.union(v.literal('user'), v.literal('project')), kind, name: v.optional(v.string()), recipe: v.optional(v.string()), memoryId: v.optional(v.string()) },
+  args: { ...runArgs, text: v.string(), scope: v.union(v.literal('user'), v.literal('project')), kind, topic: v.optional(topic), name: v.optional(v.string()), recipe: v.optional(v.string()), memoryId: v.optional(v.string()) },
   returns: summary,
   handler: async (ctx, args) => {
     await requireRun(ctx, args);
-    const text = args.text.trim().replace(/\s+/g, ' '), name = args.name?.trim().slice(0, 60) || undefined, recipe = args.recipe?.trim() || undefined;
-    if (text.length < 3 || text.length > MAX_MEMORY_LENGTH) throw new ConvexError(`Keep the summary between 3 and ${MAX_MEMORY_LENGTH} characters.`);
+    const text = memoryText(args.text), name = args.name?.trim().slice(0, 60) || undefined, recipe = args.recipe?.trim() || undefined;
     if (recipe && recipe.length > MAX_RECIPE_LENGTH) throw new ConvexError(`Keep the recipe under ${MAX_RECIPE_LENGTH} characters: the settings that make the look, not whole clips.`);
     if (args.kind === 'style' && (!name || !recipe)) throw new ConvexError('A style needs a short name and its recipe (the exact tools and settings).');
     const projectId = args.scope === 'project' ? args.projectId : undefined, now = Date.now();
-    const fields = { text, kind: args.kind, ...(name ? { name } : {}), ...(recipe ? { recipe } : {}), projectId, updatedAt: now };
+    const fields = { text, kind: args.kind, ...(args.topic ? { topic: args.topic } : {}), ...(name ? { name } : {}), ...(recipe ? { recipe } : {}), projectId, updatedAt: now };
     if (args.memoryId) {
       const row = await owned(ctx, args.ownerId, args.memoryId);
       await ctx.db.patch(row._id, { ...fields, name, recipe: recipe ?? row.recipe });
@@ -87,15 +93,30 @@ export async function deleteProjectMemories(ctx: MutationCtx, ownerId: string, p
   for (const row of rows) await ctx.db.delete(row._id);
 }
 
-/** The profile page: everything the AI remembers about the signed-in user. */
-export const list = query({ args: {}, returns: v.array(v.object({ memoryId: v.id('agentMemories'), kind, name: v.optional(v.string()), text: v.string(), project: v.optional(v.string()), uses: v.number() })), handler: async ctx => {
+/** The Personal kit page: everything the AI remembers about the signed-in user. */
+export const list = query({ args: {}, returns: v.array(v.object({ memoryId: v.id('agentMemories'), kind, topic: v.optional(topic), name: v.optional(v.string()), text: v.string(), recipe: v.optional(v.string()), project: v.optional(v.string()), uses: v.number() })), handler: async ctx => {
   const ownerId = await requireOwner(ctx);
   const rows = await ctx.db.query('agentMemories').withIndex('by_owner_project', q => q.eq('ownerId', ownerId)).take(500);
   const items = await Promise.all(rows.map(async row => {
     const project = row.projectId ? (await ctx.db.get(row.projectId))?.title : undefined;
-    return { memoryId: row._id, kind: row.kind ?? 'preference' as const, ...(row.name ? { name: row.name } : {}), text: row.text, ...(project ? { project } : {}), uses: row.uses ?? 0, at: row.lastUsedAt ?? row.updatedAt };
+    return { memoryId: row._id, kind: row.kind ?? 'preference' as const, ...(row.topic ? { topic: row.topic } : {}), ...(row.name ? { name: row.name } : {}), text: row.text, ...(row.recipe ? { recipe: row.recipe } : {}), ...(project ? { project } : {}), uses: row.uses ?? 0, at: row.createdAt };
   }));
-  return items.sort((a, b) => b.at - a.at).map(({ at: _at, ...item }) => item);
+  return items.sort((a, b) => a.at - b.at).map(({ at: _at, ...item }) => item);
+}});
+/** A preference the user writes in their Personal kit; it applies to every project. */
+export const add = mutation({ args: { topic, text: v.string() }, returns: v.id('agentMemories'), handler: async (ctx, args) => {
+  const ownerId = await requireOwner(ctx), text = memoryText(args.text), now = Date.now();
+  const rows = await ctx.db.query('agentMemories').withIndex('by_owner_project', q => q.eq('ownerId', ownerId).eq('projectId', undefined)).take(MAX_USER_MEMORIES);
+  if (rows.length >= MAX_USER_MEMORIES) throw new ConvexError('Your kit is full. Remove something outdated first.');
+  return ctx.db.insert('agentMemories', { ownerId, kind: 'preference', topic: args.topic, text, uses: 0, createdAt: now, updatedAt: now });
+}});
+/** Rewrite a memory's text (and a style's name) from the Personal kit. */
+export const edit = mutation({ args: { memoryId: v.id('agentMemories'), text: v.string(), name: v.optional(v.string()) }, returns: v.null(), handler: async (ctx, args) => {
+  const ownerId = await requireOwner(ctx), row = await ctx.db.get(args.memoryId);
+  if (!row || row.ownerId !== ownerId) throw new ConvexError('Memory not found.');
+  const name = args.name?.trim().slice(0, 60);
+  await ctx.db.patch(row._id, { text: memoryText(args.text), ...(row.kind === 'style' && name ? { name } : {}), updatedAt: Date.now() });
+  return null;
 }});
 export const remove = mutation({ args: { memoryId: v.id('agentMemories') }, returns: v.null(), handler: async (ctx, args) => {
   const ownerId = await requireOwner(ctx), row = await ctx.db.get(args.memoryId);

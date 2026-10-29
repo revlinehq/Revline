@@ -9,7 +9,6 @@ import { LoaderCircle, LockKeyhole, LogOut } from 'lucide-react';
 import { BillingSection, type CheckoutReturn } from './billing-section';
 import { DevAiCosts } from './dev-ai-costs';
 import { McpConnectorSection } from './mcp-connector-section';
-import { MemorySection } from './memory-section';
 import { WorkspaceNav } from './workspace-nav';
 import './workspace-pages.css';
 import { Button } from '@/components/ui/button';
@@ -48,7 +47,6 @@ export function ProfilePage({ checkoutReturn }: { checkoutReturn?: CheckoutRetur
         <section className="workspace-profile-section"><div className="workspace-section-label"><h2>Personal details</h2><p>How you appear in Revline.</p></div><div className="workspace-section-content"><div className="workspace-profile-photo"><Avatar className="workspace-profile-avatar">{user?.imageUrl && <AvatarImage src={user.imageUrl} alt="Your profile" />}<AvatarFallback>{initial}</AvatarFallback></Avatar><div><strong>{name}</strong>{isSignedIn ? <Button variant="outline" size="md" className="workspace-photo-button" disabled={photoBusy} onClick={() => fileInput.current?.click()}>{photoBusy && <LoaderCircle size={12} className="animate-spin" />}{photoBusy ? 'Updating…' : 'Change photo'}</Button> : <Button asChild variant="outline" size="md"><Link className="workspace-photo-button" href="/sign-in">Sign in</Link></Button>}<input className="workspace-photo-input" type="file" accept="image/*" ref={fileInput} aria-label="Choose a profile photo" onChange={event => void changePhoto(event.target.files?.[0])} /></div></div>{photoError && <p className="workspace-inline-error" role="alert">{photoError}</p>}<div className="workspace-profile-email"><label htmlFor="profile-email">Email address</label><div className="relative"><Input id="profile-email" className="pr-8" readOnly value={user?.primaryEmailAddress?.emailAddress ?? ''} placeholder="Sign in to view your email" /><LockKeyhole size={13} className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" /></div><p>Your sign-in email.</p></div></div></section>
         <BillingSection checkoutReturn={checkoutReturn} />
         <McpConnectorSection />
-        <MemorySection />
         <DevAiCosts />
         <section className="workspace-profile-section"><div className="workspace-section-label"><h2>Account</h2></div><div className="workspace-section-content workspace-account-actions">{isSignedIn ? <Button variant="outline" size="md" onClick={() => void signOut()} disabled={signingOut}>{signingOut ? <LoaderCircle size={14} className="animate-spin" /> : <LogOut size={14} />}Sign out</Button> : <Button asChild variant="outline" size="md"><Link href="/sign-in">Sign in</Link></Button>}</div></section>
       </>}{error && <p className="workspace-inline-error" role="alert">{error}</p>}

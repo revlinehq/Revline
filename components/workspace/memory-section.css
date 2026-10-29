@@ -1,9 +1,0 @@
-.memory-empty{margin:0;font-size:13px;color:var(--ws-muted,#8a8a8a)}
-.memory-list{display:flex;flex-direction:column;margin:0;padding:0;list-style:none}
-.memory-list li{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:12px 0;border-bottom:1px solid var(--ws-artifact-border,#25272d)}
-.memory-list li:last-child{border-bottom:0}
-.memory-text{display:flex;flex-direction:column;gap:3px;min-width:0;font-size:13px;line-height:1.45;color:var(--ws-text,#ededef)}
-.memory-text strong{font-weight:600}
-.memory-text small{font-size:11px;color:var(--ws-muted,#8a8a8a)}
-
-
