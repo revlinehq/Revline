@@ -55,6 +55,17 @@ export async function prepareComposition(directory:string,timeline:Timeline,asse
   if(timeline.clips.some(clip=>clip.kind==='graphic'||clip.kind==='caption'||isTransitionClip(clip)))await copyFile(join(process.cwd(),'public/vendor/remotion-runtime.js'),join(directory,'remotion-runtime.js'));
   if(timeline.clips.some(clip=>clip.kind==='scene'))await copyFile(join(process.cwd(),'public/vendor/scene-runtime.js'),join(directory,'scene-runtime.js'));
   for(const font of TEXT_FONTS)await copyFile(join(process.cwd(),'public/fonts',font.fileName),join(directory,font.fileName));
+  // Brand-kit fonts render from local copies, like media: the renderer never depends on the network.
+  const brandFonts=[...new Set(timeline.clips.flatMap(clip=>clip.kind==='scene'?clip.scene?.brand?.fonts.map(font=>font.url)??[]:[]))];
+  for(const [index,url] of brandFonts.entries()){
+    try{
+      const response=await fetch(url,{signal});
+      if(!response.ok)continue;
+      const type=response.headers.get('content-type')??'',name=`brand-font-${index}.${/woff2/.test(type)?'woff2':/woff/.test(type)?'woff':/otf|opentype/.test(type)?'otf':'ttf'}`;
+      await writeFile(join(directory,name),Buffer.from(await response.arrayBuffer()));
+      assetUrls[url]=`./${name}`;
+    }catch(error){if(signal.aborted)throw error;}
+  }
   return {assetUrls,audioSourceOffsets};
 }
 export async function linkCompositionResources(root:string,directory:string,assetUrls:Record<string,string>){

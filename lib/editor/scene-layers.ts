@@ -48,8 +48,9 @@ export function sceneMediaAssetIds(timeline: Timeline) {
   return [...new Set(timeline.clips.flatMap(clip => clip.kind === 'scene' ? clip.scene?.media?.map(item => item.assetId) ?? [] : []))];
 }
 
-export function sceneRuntimeScript(sources: SceneLayerSource[], fonts: SceneFont[], runtimeUrl: string, mediaUrls: Record<string, string> = {}) {
-  return `(function(initial,fonts,runtimeUrl,mediaUrls){
+/** fileUrls maps remote file URLs (brand fonts) to the copies an export wrote beside the composition. */
+export function sceneRuntimeScript(sources: SceneLayerSource[], fonts: SceneFont[], runtimeUrl: string, mediaUrls: Record<string, string> = {}, fileUrls: Record<string, string> = {}) {
+  return `(function(initial,fonts,runtimeUrl,mediaUrls,fileUrls){
 var host=window,clock=host.__timelines.revline.__hfReal||host.__timelines.revline,composition=document.getElementById('composition'),entries=new Map(),fontData=new Map(),unregister;
 var virtual=host.__HF_VIRTUAL_TIME__,later=virtual&&virtual.originalSetTimeout?virtual.originalSetTimeout:setTimeout.bind(window),nextFrame=virtual&&virtual.originalRequestAnimationFrame?virtual.originalRequestAnimationFrame:requestAnimationFrame.bind(window);
 var runtimeSource=null,overscan=16;
@@ -58,7 +59,7 @@ var anchor=document.createElement('span');anchor.dataset.sceneFrameSource='';anc
 function report(entry,message){var error=new Error('Scene "'+entry.source.title+'": '+message);entry.error=error;window.dispatchEvent(new ErrorEvent('error',{error:error,message:error.message}));}
 function inner(){var layers=composition.querySelectorAll('.adjustment-layer');for(var i=0;i<layers.length;i++)if(!layers[i].querySelector('.adjustment-layer'))return layers[i];return composition;}
 function find(id){var nodes=composition.querySelectorAll('[data-scene-clip]');for(var i=0;i<nodes.length;i++)if(nodes[i].dataset.sceneClip===id)return nodes[i];return null;}
-function font(item){if(!fontData.has(item.url))fontData.set(item.url,fetch(new URL(item.url,document.baseURI).href).then(function(response){if(!response.ok)throw new Error('font');return response.arrayBuffer();}).then(function(data){return {family:item.family,weight:item.weight,data:data};},function(){return null;}));return fontData.get(item.url);}
+function font(item){if(!fontData.has(item.url))fontData.set(item.url,fetch(new URL(fileUrls[item.url]||item.url,document.baseURI).href).then(function(response){if(!response.ok)throw new Error('font');return response.arrayBuffer();}).then(function(data){return {family:item.family,weight:item.weight,data:data};},function(){return null;}));return fontData.get(item.url);}
 var mediaData=new Map();
 function file(url){if(!mediaData.has(url))mediaData.set(url,fetch(new URL(url,document.baseURI).href).then(function(response){if(!response.ok)throw new Error('media');return response.blob();}).then(function(blob){return blob.arrayBuffer().then(function(data){return {type:blob.type,data:data};});},function(){return null;}));return mediaData.get(url);}
 function wantedMedia(source){return Promise.all((source.media||[]).map(function(item){var url=mediaUrls[item.assetId];return url?file(url).then(function(found){return found&&{name:item.name,type:found.type,data:found.data};}):Promise.resolve(null);})).then(function(list){return list.filter(Boolean);});}
@@ -125,7 +126,7 @@ clock.eventCallback('onUpdate',function(){if(previousUpdate)previousUpdate.call(
 window.addEventListener('hf-seek',function(event){var detail=event.detail;if(detail&&typeof detail.waitUntil==='function')detail.waitUntil(whenReady(detail.time));});
 host.__revlineSceneController={setSources:setSources,whenReady:whenReady,hasMedia:function(id){return !!mediaUrls[id];}};
 setSources(initial);nextFrame(watch);
-})(${JSON.stringify(sources).replace(/</g, '\\u003c')},${JSON.stringify(fonts).replace(/</g, '\\u003c')},${JSON.stringify(runtimeUrl).replace(/</g, '\\u003c')},${JSON.stringify(mediaUrls).replace(/</g, '\\u003c')});`;
+})(${JSON.stringify(sources).replace(/</g, '\\u003c')},${JSON.stringify(fonts).replace(/</g, '\\u003c')},${JSON.stringify(runtimeUrl).replace(/</g, '\\u003c')},${JSON.stringify(mediaUrls).replace(/</g, '\\u003c')},${JSON.stringify(fileUrls).replace(/</g, '\\u003c')});`;
 }
 
 export const SCENE_FONT_FAMILIES = TEXT_FONTS.map(font => font.family);
