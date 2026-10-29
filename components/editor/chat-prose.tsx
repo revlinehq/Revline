@@ -2,12 +2,16 @@
 
 import { memo, type ReactNode } from "react";
 import { FlowTokenText } from "@/components/core/flowtoken";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
 type ListType = "bullets" | "steps";
 type ProseBlock =
   | { type: "paragraph"; text: string }
   | { type: "heading"; text: string }
-  | { type: ListType; items: string[] };
+  | { type: ListType; items: string[] }
+  | { type: "table"; head: string[]; rows: string[][] };
+
+const tableCells = (line: string) => line.replace(/^\|/, "").replace(/\|$/, "").split("|").map(cell => cell.trim());
 
 function parseBlocks(text: string): ProseBlock[] {
   const blocks: ProseBlock[] = [];
@@ -29,8 +33,20 @@ function parseBlocks(text: string): ProseBlock[] {
     }
   };
 
-  for (const rawLine of text.replace(/\r\n?/g, "\n").split("\n")) {
-    const line = rawLine.trim();
+  const lines = text.replace(/\r\n?/g, "\n").split("\n");
+  for (let index = 0; index < lines.length; index++) {
+    const line = lines[index].trim();
+    // A markdown table: a | header | row, a |---| separator, then | rows |.
+    if (line.startsWith("|") && /^\|?\s*:?-{2,}/.test(lines[index + 1]?.trim() ?? "")) {
+      flushParagraph();
+      flushList();
+      const head = tableCells(line), rows: string[][] = [];
+      index += 2;
+      while (index < lines.length && lines[index].trim().startsWith("|")) rows.push(tableCells(lines[index++].trim()));
+      index--;
+      blocks.push({ type: "table", head, rows });
+      continue;
+    }
     if (!line) {
       flushParagraph();
       flushList();
@@ -120,6 +136,14 @@ export const ChatProse = memo(function ChatProse({
             <h3 key={blockIndex} className="pt-0.5 font-semibold leading-snug">
               <InlineMarkup text={block.text} animate={animate} />
             </h3>
+          );
+        }
+        if (block.type === "table") {
+          return (
+            <Table key={blockIndex} className="text-xs">
+              <TableHeader><TableRow>{block.head.map((cell, cellIndex) => <TableHead key={cellIndex}><InlineMarkup text={cell} animate={animate} /></TableHead>)}</TableRow></TableHeader>
+              <TableBody>{block.rows.map((row, rowIndex) => <TableRow key={rowIndex}>{row.map((cell, cellIndex) => <TableCell key={cellIndex} className="whitespace-normal align-top"><InlineMarkup text={cell} animate={animate} /></TableCell>)}</TableRow>)}</TableBody>
+            </Table>
           );
         }
         if (block.type === "paragraph") {

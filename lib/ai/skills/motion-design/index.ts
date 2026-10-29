@@ -23,7 +23,7 @@ A launch film makes one product or one feature feel simple, real and worth tryin
 Every fact on screen comes from the confirmed brand context or the user: names, features, numbers, claims, prices, dates, availability, the URL. Missing? Ask. Never invent a statistic, customer, feature or UI the product does not have.
 
 ## Style direction
-There are no presets. Each film gets its own short direction, fitted to the brand and the story, in five lines: **look** (canvas, palette use, texture), **type** (how words enter and hold), **product UI** (how it is framed and shown), **motion** (personality, signature ease, camera), **pacing** (shot lengths, holds, cutting). Put it at the top of the beat sheet with the films it borrows from.
+There are no presets. Each film gets its own short direction, fitted to the brand and the story, written as five labeled lines (never one summary sentence): **look** (canvas, palette use, texture), **type** (how words enter and hold), **product UI** (how it is framed and shown), **motion** (personality, signature ease, camera), **pacing** (shot lengths, holds, cutting). Put it at the top of the beat sheet with the films it borrows from.
 
 Build it from the library, which is knowledge, not a menu:
 - The **example directions** (\`dark-cinematic\`, \`dimensional-ui\`, \`warm-editorial\`, \`bold-graphic\`, \`crisp-demo\`) show what a coherent direction looks like and which films share it. Start from the closest one, or combine them.

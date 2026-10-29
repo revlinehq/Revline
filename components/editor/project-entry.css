@@ -6,3 +6,6 @@
 .editor-app .import-progress-card progress,.editor-app .import-progress-card progress::-webkit-progress-bar { background:var(--ws-border,var(--border)); accent-color:var(--primary); }
 .editor-app .import-progress-card progress::-webkit-progress-value { background:var(--primary); }
 .import-progress-card .import-cancel{margin-top:12px}
+
+.import-prompt-start{display:flex;flex-direction:column;align-items:center;gap:8px;margin-top:20px}
+.import-prompt-start p{margin:0;font-size:12px;color:var(--ws-muted,#8a8d92)}

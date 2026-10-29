@@ -40,7 +40,8 @@ Ask these together, once, after the brand kit is settled. Offer sensible default
 - **Format and platform:** 16:9 for X, YouTube, a site hero; 9:16 for Reels, TikTok, Shorts; 1:1 for feeds.
 - **Length:** teaser 10 to 15 s, feature 15 to 30 s, product 30 to 60 s.
 - **Reference:** a film they like, or a feel in their words. It drives the style choice.
-- **Music:** do they have a track? If not, offer to find royalty-free options.`,
+- **Music:** do they have a track? If not, offer to find royalty-free options.
+- **Product screens:** ask for screenshots or short screen recordings of the screens the film should show (uploaded to the project, or already in its media). Real screens make the film; without them the product is shown as simplified mockups or abstract visuals. Never skip this question for a product or feature launch.`,
 };
 
 export const storyPage: EditorSkillPage = {
@@ -120,6 +121,10 @@ Film scale: full-screen 1080p, 30 fps. Three kinds of guidance: **Must** are rea
 - Text holds at least 1 s plus 0.3 s per word after it lands.
 - Overshoot stays within budget; past 25% looks broken.
 - An important change is never a fade alone: pair opacity with a move, scale or blur.
+- Scale: the hero of each shot fills 40 to 70% of the frame's width or height. A small graphic floating in empty space reads as unfinished; crop in, scale up, or move the camera closer.
+- Accent: the brand accent colors only small things (a caret, a send button, a playhead, an underline, one highlighted word, a thin outline). Never fill bars, cards, nodes, frames or backgrounds with it; use the brand's neutrals for those.
+- No eyebrow or kicker labels (a small caps word such as the brand name above a headline). The headline stands alone.
+- A headline and the product visual get separate moments or clearly separate zones; never a caption pinned to the top of every shot with a small visual underneath.
 
 ## Default: durations
 | Element | Duration |
