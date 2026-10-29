@@ -72,7 +72,7 @@ function BrandKitCard({ kit }: { kit: Kit }) {
     </div>
     <section className="brand-kit-section">
       <div className="brand-kit-section-head"><h3>Screens{kit.screens.length ? ` (${kit.screens.length})` : ''}</h3></div>
-      {kit.screens.length ? <ul className="brand-kit-screens">{kit.screens.map(screen => <li key={screen.name}><div className="brand-kit-screen"><img src={screen.url} alt={screen.note ?? screen.name} loading="lazy" /><Button type="button" variant="secondary" size="icon-xs" className="brand-kit-screen-remove" aria-label={`Remove ${screen.name}`} onClick={() => void removeScreen({ kitId, name: screen.name })}><X /></Button></div><strong>{screen.name}</strong>{screen.note && <span>{screen.note}</span>}</li>)}</ul>
+      {kit.screens.length ? <ul className="brand-kit-screens">{kit.screens.map(screen => <li key={screen.name}><strong>{screen.name}</strong><div className="brand-kit-screen"><img src={screen.url} alt={screen.note ?? screen.name} loading="lazy" /><Button type="button" variant="secondary" size="icon-xs" className="brand-kit-screen-remove" aria-label={`Remove ${screen.name}`} onClick={() => void removeScreen({ kitId, name: screen.name })}><X /></Button></div></li>)}</ul>
         : <p className="brand-kit-muted">No product screens saved. Give the assistant screenshots of your product and ask it to save them to this kit; every later video for {kit.name} can use them.</p>}
     </section>
   </article>;

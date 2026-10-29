@@ -53,7 +53,7 @@ export async function prepareComposition(directory:string,timeline:Timeline,asse
   await copyFile(join(process.cwd(),'public/vendor/gsap.min.js'),join(directory,'gsap.min.js'));
   await copyFile(join(process.cwd(),'public/vendor/visual-effects.js'),join(directory,'visual-effects.js'));
   if(timeline.clips.some(clip=>clip.kind==='graphic'||clip.kind==='caption'||isTransitionClip(clip)))await copyFile(join(process.cwd(),'public/vendor/remotion-runtime.js'),join(directory,'remotion-runtime.js'));
-  if(timeline.clips.some(clip=>clip.kind==='scene'))await copyFile(join(process.cwd(),'public/vendor/scene-runtime.js'),join(directory,'scene-runtime.js'));
+  if(timeline.clips.some(clip=>clip.kind==='scene')){await copyFile(join(process.cwd(),'public/vendor/scene-runtime.js'),join(directory,'scene-runtime.js'));await copyFile(join(process.cwd(),'public/vendor/lucide-icons.json'),join(directory,'lucide-icons.json'));}
   for(const font of TEXT_FONTS)await copyFile(join(process.cwd(),'public/fonts',font.fileName),join(directory,font.fileName));
   // Brand-kit fonts and screens render from local copies, like media: the renderer never depends on the network.
   const brandFonts=[...new Set(timeline.clips.flatMap(clip=>clip.kind==='scene'?[...clip.scene?.brand?.fonts.map(font=>font.url)??[],...clip.scene?.brand?.screens?.map(screen=>screen.url)??[]]:[]))];
@@ -69,7 +69,7 @@ export async function prepareComposition(directory:string,timeline:Timeline,asse
   return {assetUrls,audioSourceOffsets};
 }
 export async function linkCompositionResources(root:string,directory:string,assetUrls:Record<string,string>){
-  for(const name of [...Object.values(assetUrls).map(url=>url.slice(2)),'gsap.min.js','visual-effects.js','remotion-runtime.js','scene-runtime.js',...TEXT_FONTS.map(font=>font.fileName)]){
+  for(const name of [...Object.values(assetUrls).map(url=>url.slice(2)),'gsap.min.js','visual-effects.js','remotion-runtime.js','scene-runtime.js','lucide-icons.json',...TEXT_FONTS.map(font=>font.fileName)]){
     try{await access(join(root,name));}catch{continue;}
     await link(join(root,name),join(directory,name));
   }

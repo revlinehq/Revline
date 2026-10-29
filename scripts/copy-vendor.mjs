@@ -1,4 +1,5 @@
-import { copyFileSync, mkdirSync, cpSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { copyFileSync, mkdirSync, cpSync, existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { build } from 'esbuild';
 import { patchHyperframesPlaybackRuntime } from './hyperframes-playback-compat.mjs';
 mkdirSync('public/vendor', { recursive: true });
@@ -11,6 +12,17 @@ copyFileSync('node_modules/remotion/LICENSE.md', 'public/vendor/remotion-LICENSE
 await build({ entryPoints: ['lib/editor/visual-effects-runtime.ts'], outfile: 'public/vendor/visual-effects.js', bundle: true, minify: true, platform: 'browser', target: 'es2020', format: 'iife', globalName: '__revlineVisualEffects', legalComments: 'none' });
 
 await build({ entryPoints: ['lib/editor/remotion-transitions-runtime.ts'], outfile: 'public/vendor/remotion-transitions.js', bundle: true, minify: true, platform: 'browser', target: 'es2020', format: 'iife', globalName: '__revlineRemotionTransitions', jsx: 'automatic', define: { 'process.env.NODE_ENV': '"production"' }, legalComments: 'linked' });
+// Lucide's icons for scenes as {name: svg children}, sent to a scene frame only when its code calls icon('name').
+{
+  const dir='node_modules/lucide-react/dist/esm/icons',icons={};
+  const attrs=props=>Object.entries(props).filter(([key])=>key!=='key').map(([key,value])=>`${key}="${String(value).replace(/"/g,'&quot;')}"`).join(' ');
+  for(const file of readdirSync(dir).filter(name=>name.endsWith('.js'))){
+    const match=/const __iconNode = (\[[\s\S]*?\]);\n/.exec(readFileSync(join(dir,file),'utf8'));
+    if(match)icons[file.slice(0,-3)]=new Function(`return ${match[1]}`)().map(([tag,props])=>`<${tag} ${attrs(props)}/>`).join('');
+  }
+  writeFileSync('public/vendor/lucide-icons.json',JSON.stringify(icons));
+  copyFileSync('node_modules/lucide-react/LICENSE','public/vendor/lucide-LICENSE');
+}
 // Scene frames run author TypeScript (compiled in the frame by sucrase) against GSAP and its plugins.
 await build({ entryPoints: ['lib/editor/scene-runtime.ts'], outfile: 'public/vendor/scene-runtime.js', bundle: true, minify: true, platform: 'browser', target: 'es2020', format: 'iife', globalName: '__revlineSceneRuntime', legalComments: 'linked' });
 await build({ entryPoints: ['lib/editor/remotion-runtime.ts'], outfile: 'public/vendor/remotion-runtime.js', bundle: true, minify: true, platform: 'browser', target: 'es2020', format: 'iife', globalName: '__revlineRemotion', jsx: 'automatic', define: { 'process.env.NODE_ENV': '"production"' }, legalComments: 'linked' });
