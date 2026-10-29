@@ -1,6 +1,6 @@
 /** Continue a larger edit only while tools keep producing verified changes. */
-export const EDITOR_SOFT_STEPS = 15;
-export const EDITOR_HARD_STEPS = 30;
+export const EDITOR_SOFT_STEPS = 50;
+export const EDITOR_HARD_STEPS = 100;
 export const EDITOR_PROGRESS_WINDOW = 5;
 export const EDITOR_VERIFICATION_STEPS = 8;
 type Steps = readonly { content: readonly unknown[] }[];

@@ -9,6 +9,10 @@ export const sceneEngine: EditorSkill = {
 
 A scene is a TypeScript module that builds plain HTML once and choreographs it on a GSAP timeline. It renders full-frame on its own V layer, inside a sandbox, and the editor renders it frame by frame for preview and export. Transparent areas show the layers below.
 
+## Writing scenes
+- Plan the film as a short outline (a few lines per scene: time range, what moves, the words). Never draft scene code while thinking; write it in the addScene call. A turn has one output budget for thinking and the call together, and a long draft in thinking leaves nothing for the scene.
+- Build a long film as several scenes, one addScene per call, and check each before writing the next. Keep each module well under the code limit.
+
 ## Contract
 
 - Write \`export default function scene({ root, tl, gsap, width, height, duration, fps, brand, media, icon, blueprint })\`. It runs once, before the first frame.

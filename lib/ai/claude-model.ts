@@ -127,7 +127,8 @@ export function claudeProviderOptions(modelId: string, effort: EditorReasoningEf
   const anthropic = {
     cacheControl: { type: 'ephemeral', ttl: '5m' },
     effort,
-    thinking: { type: 'adaptive', blockBinding: { prefixMismatchBehavior: 'drop_block' } },
+    // Summarized, so the chat can show what Claude is thinking about instead of a silent wait.
+    thinking: { type: 'adaptive', display: 'summarized', blockBinding: { prefixMismatchBehavior: 'drop_block' } },
     ...(modelId==='claude-sonnet-5-5'?{serviceTier:'standard_only',inferenceGeo:'global'} as const:{}),
   } satisfies AnthropicProviderOptions;
   return { anthropic };
@@ -160,9 +161,9 @@ export function editorProviderOptions(selection: ClaudeModelSelection, cacheKey?
 
 /** Higher effort shares its output allowance with hidden reasoning tokens. */
 export function editorMaxOutputTokens(selection: ClaudeModelSelection) {
-  // A full-size scene module is ~6k tokens of tool input, written after the thinking that shares this
-  // budget; Claude's adaptive thinking at high effort can spend 8k on its own before a scene starts.
-  if (selection.provider === 'anthropic') return { low: 16384, medium: 16384, high: 32768, xhigh: 32768, max: 32768 }[selection.reasoningEffort ?? defaultEditorReasoningEffort()];
+  // Claude gets its model maximum: thinking and the scene share this allowance, and a lower cap cut runs off
+  // after they had already paid for the thinking.
+  if (selection.provider === 'anthropic') return 128_000;
   return { low: 8192, medium: 8192, high: 16384, xhigh: 24576, max: 32768 }[selection.reasoningEffort ?? defaultEditorReasoningEffort()];
 }
 

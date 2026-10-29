@@ -122,10 +122,10 @@ You edit the user's video timeline using structured tools. Greetings, small talk
           ...(repairFeedback ? {
             stopWhen: [({steps: current}) => current.length >= 8 || hasRepeatedToolFailures([...steps, ...current])],
           } : {}),
-          onStepStart: event => { currentStep = offset + event.stepNumber; },
+          onStepStart: event => { currentStep = offset + event.stepNumber; budget.stepStarted(); },
           // Provider usage arrives before potentially slow analysis/tool execution.
           onLanguageModelCallEnd: event => costLog.modelCall({ ...event, stepNumber: currentStep }, progress()),
-          onStepEnd: event => costLog.toolsFinished(event),
+          onStepEnd: event => { costLog.toolsFinished(event); budget.stepEnded(); },
           onError: ({ error }) => { streamError = error; },
         }, { saveStreamDeltas: { throttleMs: 300 },contextHandler:async(_ctx,{search,recent,inputMessages,inputPrompt,existingResponses})=>{const messages=[...search,...compactEditorHistory(recent),...inputMessages,...inputPrompt,...existingResponses];return repairFeedback?editorRepairContext(messages,repairFeedback):messages;} });
         const [reason, completed] = await Promise.all([result.finishReason, result.steps]);
