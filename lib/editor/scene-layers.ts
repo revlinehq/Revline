@@ -14,7 +14,7 @@ export const SCENE_MEDIA_LIMIT = 8, SCENE_BLUEPRINT_LIMIT = 4;
 export const SCENE_LIMITS = { title: 80, code: 120_000 } as const;
 /** All scene and blueprint code in one timeline. Exports, reviews, stashed tabs and shares still copy
  * timelines with their code, and a review row holds two, so this keeps those rows under 1 MiB. */
-export const TIMELINE_SCENE_CODE_LIMIT = 180_000;
+export const TIMELINE_SCENE_CODE_LIMIT = 400_000;
 
 export function validateScene(clip: Pick<Clip, 'kind' | 'scene' | 'assetId'>) {
   if (clip.kind !== 'scene') { if (clip.scene) throw new Error('Only scene clips can hold scene code.'); return; }

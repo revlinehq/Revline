@@ -66,7 +66,10 @@ export async function withoutSceneCode<T extends Pick<Timeline, 'clips'>>(timeli
 export function storedTimelineBytes(timeline: unknown) {
   return new TextEncoder().encode(JSON.stringify(timeline, (key, value) => key === 'code' && typeof value === 'string' && value.length > 64 ? '#'.repeat(64) : value)).byteLength;
 }
-/** Characters of scene and blueprint code a timeline carries inline. */
+/** Characters of distinct scene and blueprint code in a timeline. Code is stored by hash, so code shared by several
+ * clips (a blueprint mounted in each beat, or one film split into beat clips) counts once. */
 export function sceneCodeCharacters(timeline: Pick<Timeline, 'clips'>) {
-  return timeline.clips.reduce((sum, clip) => sum + (clip.scene ? clip.scene.code.length + (clip.scene.blueprints ?? []).reduce((total, item) => total + item.code.length, 0) : 0), 0);
+  const codes = new Set<string>();
+  for (const clip of timeline.clips) if (clip.scene) { codes.add(clip.scene.code); for (const item of clip.scene.blueprints ?? []) codes.add(item.code); }
+  return [...codes].reduce((sum, code) => sum + code.length, 0);
 }
