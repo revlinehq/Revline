@@ -112,77 +112,24 @@ Send the script as a numbered list with the beat each line belongs to (hook, pro
 
 export const craftPage: EditorSkillPage = {
   name: 'craft',
-  description: 'Motion craft at film scale: the few hard rules, then defaults for durations, easing, staggers, layers, attention and holds, with when to break them, and fixes for common complaints.',
+  description: 'Motion craft at film scale: the hard rules every film follows; timing is tuned from feedback.',
   body: `# Motion craft
 
-Film scale: full-screen 1080p, 30 fps. Three kinds of guidance: **Must** are real failures; **Default** is what to do unless the film's style direction or the user says otherwise (say when you deviate); **Fix** maps complaints to causes.
+Film scale: full-screen 1080p, 30 fps. These are real failures to avoid.
 
 ## Must
 - Nothing that travels across the frame moves linearly. Linear is for progress bars, rotation loops and slow continuous camera drifts that span a whole shot.
-- One hero move at a time (see Attention).
+- One hero move at a time; dim what is not the hero when the frame is busy.
 - Text holds at least 1 s plus 0.3 s per word after it lands.
-- Overshoot stays within budget; past 25% looks broken.
+- Overshoot past 25% looks broken.
 - An important change is never a fade alone: pair opacity with a move, scale or blur.
 - Scale: the hero of each shot fills 40 to 70% of the frame's width or height. A small graphic floating in empty space reads as unfinished; crop in, scale up, or move the camera closer.
 - Accent: the brand accent colors only small things (a caret, a send button, a playhead, an underline, one highlighted word, a thin outline). Never fill bars, cards, nodes, frames or backgrounds with it; use the brand's neutrals for those.
 - No eyebrow or kicker labels (a small caps word such as the brand name above a headline). The headline stands alone.
 - A headline and the product visual get separate moments or clearly separate zones; never a caption pinned to the top of every shot with a small visual underneath.
 
-## Default: durations
-| Element | Duration |
-|---|---|
-| Small element (icon, chip, word) | 0.3 to 0.5 s |
-| Card, panel, text line | 0.45 to 0.7 s |
-| Window or large UI move, camera push | 0.6 to 1.0 s |
-| Hero or logo reveal | 0.9 to 1.8 s |
-| Full-frame transition | 0.5 to 0.9 s |
-| Ambient loop | 3 to 20 s |
-
-- Exits take 65 to 75% of the entrance time.
-- Longer travel takes longer: a move of 5% of frame height x0.8, 15% x1.0, 30% x1.3, 50% x1.5, the full frame x1.8 to 2.0.
-- Slide offsets 3 to 8% of frame height: smaller for calm films, larger for energetic ones.
-
-## Default: easing direction
-Entering: an ease-out (decelerates into place). Leaving: an ease-in (accelerates away). Moving on screen: an in-out. Loops: sine.inOut. Overshoot budget: premium 0%, a confirmation 2 to 5%, a success moment 5 to 10%, a celebration 15 to 25%.
-
-## Default: three layers
-Every moment has up to three kinds of motion:
-- **Hero:** the one thing to look at (the logo scaling in).
-- **Secondary:** supporting moves that start 2 to 4 frames after the hero, move 30 to 50% as far, and use a different ease (the tagline rising a little under the logo, a glow settling behind it).
-- **Ambient:** background life barely noticed, 10 to 20% of the hero's movement (a gradient drifting, a slow push). Ambient never pulls focus; past about 5% scale or 2% of frame height it does.
-When a frame feels flat or like a slide, a layer is missing. Calm styles may drop ambient and hold still on purpose.
-
-## Default: attention
-- At most 2 to 3 things move at once, and one of them is clearly the hero; ambient does not count.
-- With 3 or more elements entering, about a third move at a time: the first settles as the third starts.
-- Dim what is not the hero to 40 to 60% (optionally 2 to 4 px blur) when the frame is busy.
-
-## Default: beat shape
-Each beat has three parts: **setup** (show where we are before anything happens), **action** (the change) and **resolution** (hold the result still so it registers). Roughly 25%, 35% and 40% of the beat: for a 5 s beat, about 1.3 s, 1.7 s and 2 s. Never cut away the moment the action ends.
-
-## Default: staggers and continuity
-- Words, cards, list items: 2 to 4 frames apart (0.06 to 0.13 s); the whole stagger under about 1 s, or locked to the music. Lists top to bottom, horizontal sets left to right, heroes from the centre out, exits in reverse.
-- An exit ends near where the next entrance starts, overlapping by 4 to 8 frames, so the eye has a path.
-
-## Default: depth and physics
-- Parallax: foreground 1.0x, midground 0.5x, background 0.2x of the camera move. A background may counter-move at 20 to 30%.
-- Anticipation: a small move the other way (10 to 20% of the main move) before a big one; skip it for moves under 0.3 s and for premium.
-- Follow-through: children trail the parent by 2 to 5 frames.
-- Arcs: a natural path bows a little (3 to 5% of frame height) instead of a straight line.
-- Ambient floats: different periods so nothing syncs (about 3.5 s, 4 s, 5.5 s), drift of 1% of frame height; breathing scale 0.98 to 1.02 over 3 to 4 s; gradient drift over 8 to 20 s.
-
-## Fix
-| Complaint | Usual cause | Fix |
-|---|---|---|
-| Robotic | linear eases, equal durations, everything synced | durations by size, ease-out entrances, staggers, secondary layer |
-| Cheap or flat | only the hero moves, opacity-only changes | add secondary and ambient layers, pair fades with movement |
-| Too slow | long eases on small things, holds with nothing happening | durations from the table, cut dead holds |
-| Jarring | exits and entrances far apart, overshoot on big elements | the continuity rule, overshoot only on small things |
-| Busy or distracting | several heroes at once | one hero, dim the rest, the one-third rule |
-| Inconsistent | mixed eases and durations | one main ease for most of the motion, one set of durations |
-For style-level complaints ("more premium", "the ending is weak"), use the techniques page.
-
-Adapted in part from LottieFiles' motion-design skill (MIT), rescaled from interface timing to full-screen film.`,
+## Timing
+No fixed duration, hold or beat-length tables. Keep each shot only as long as its action plus reading time, cut dead holds, and tune pacing from the user's feedback (save approved pacing with remember).`,
 };
 
 export const processPage: EditorSkillPage = {
