@@ -15,7 +15,7 @@ import { assistantFailureReason } from "../lib/ai/assistant-error";
 import { activeOpenAIKey, editorOpenAI } from "../lib/ai/openai-keys";
 import { anthropic } from "@ai-sdk/anthropic";
 import { google } from '@ai-sdk/google';
-import { assertEditorModelConfigured, resolveClaudeModel, validatePinnedClaudeModel, editorProviderOptions, editorMaxOutputTokens, defaultEditorReasoningEffort, type ClaudeModelSelection } from "../lib/ai/claude-model";
+import { assertEditorModelConfigured, resolveClaudeModel, validatePinnedClaudeModel, editorProviderOptions, editorMaxOutputTokens, defaultEditorReasoningEffort, autoEditorReasoningEffort, stepsNeedHighEffort, type ClaudeModelSelection, type EditorReasoningEffort } from "../lib/ai/claude-model";
 import { Agent, saveMessage } from "@convex-dev/agent";
 import { v, type Infer } from "convex/values";
 import { components, internal } from "./_generated/api";
@@ -70,6 +70,12 @@ export const respond = internalAction({
       const currentPrompt = await ctx.runQuery(internal.assistant.currentPrompt, { ...run, threadId: args.threadId, promptMessageId: args.promptMessageId });
       const recovery = args.recovery ?? project.aiRecovery;
       const recovering = recovery !== undefined || !!args.continuation;
+      // A chosen effort is kept. Otherwise the request sets it, and scene work or a repair pass raises it to high.
+      const autoEffort = selection.reasoningEffort === undefined;
+      let effort = selection.reasoningEffort ?? autoEditorReasoningEffort(currentPrompt, { recovering });
+      const withEffort = (value: EditorReasoningEffort) => ({ ...selection, reasoningEffort: value });
+      const raiseEffort = () => { effort = 'high'; costLog.selectModel(selection.modelId, selection.provider, effort, selection.speedMode ?? 'standard'); };
+      costLog.selectModel(selection.modelId, selection.provider, effort, selection.speedMode ?? 'standard');
       const toolkit = createEditorToolkit(ctx, { run, project, assets, recovering, initialPlans: args.continuation ? await ctx.runQuery(internal.compositionReview.readPlan, run) : [], selectedClipIds: args.selectedClipIds ?? (args.selectedClipId ? [args.selectedClipId] : []), playhead: args.playhead, publication: { threadId: args.threadId, promptMessageId: args.promptMessageId }, abortSignal, budget });
       const { tools, editSession } = toolkit;
       session = editSession;
@@ -89,7 +95,7 @@ export const respond = internalAction({
       }
       console.log(`[ai-budget] ${JSON.stringify({timestamp:new Date().toISOString(),projectId:args.projectId,runId:args.runId,enforced:enforceTokenBudget})}`);
       const model = wrapLanguageModel({ model: provider === 'anthropic' ? anthropic(modelId) : provider === 'google' ? google(modelId) : editorOpenAI().responses(modelId), middleware: [...(provider === 'openai' ? [openAIEditorImages] : []), tokenBudget.middleware(args.selectedClipIds ?? (args.selectedClipId ? [args.selectedClipId] : []), editSession.revision,countInput,enforceTokenBudget)] });
-      const providerOptions = editorProviderOptions(selection, `revline-thread-${args.threadId}`);
+      const cacheKey = `revline-thread-${args.threadId}`;
       const agent = new Agent(components.agent, { name: "Revline", languageModel: model, tools, contextOptions: { recentMessages: 100, excludeToolMessages: false }, stopWhen: [({steps})=>shouldStopEditingSteps(steps), ({ steps }) => hasRepeatedToolFailures(steps)], instructions: `${EDITOR_STYLE_RULES}
 ${editorDisclosureRules(process.env.EDITOR_INTERNAL_DETAILS_ENABLED === "true")}
 # Editing rules
@@ -103,8 +109,14 @@ You edit the user's video timeline using structured tools. Greetings, small talk
         abortSignal.throwIfAborted();
         if (pass > 0 && !await ctx.runQuery(internal.assistant.isRunActive, run)) return null;
         const offset = steps.length;
+        if (pass > 0 && autoEffort && effort !== 'high') raiseEffort();
+        const passEffort = effort;
         const result = await agent.streamText(ctx, { threadId: args.threadId, userId: args.ownerId }, {
-          promptMessageId: args.promptMessageId, abortSignal, providerOptions, maxOutputTokens: editorMaxOutputTokens(selection),
+          promptMessageId: args.promptMessageId, abortSignal, providerOptions: editorProviderOptions(withEffort(passEffort), cacheKey), maxOutputTokens: editorMaxOutputTokens(withEffort(passEffort)),
+          prepareStep: ({ steps: current }) => {
+            if (autoEffort && effort !== 'high' && stepsNeedHighEffort([...steps, ...current])) raiseEffort();
+            return effort === passEffort ? undefined : { providerOptions: editorProviderOptions(withEffort(effort), cacheKey), maxOutputTokens: editorMaxOutputTokens(withEffort(effort)) };
+          },
           ...(repairFeedback ? {
             stopWhen: [({steps: current}) => current.length >= 8 || hasRepeatedToolFailures([...steps, ...current])],
           } : {}),
@@ -165,7 +177,7 @@ You edit the user's video timeline using structured tools. Greetings, small talk
 /** What the AI remembers about this user and project: rules to follow and styles to reuse, most-used first. */
 function memorySection(memories: { memoryId: string; scope: 'user' | 'project'; kind: 'preference' | 'style'; topic?: string; name?: string; text: string; hasRecipe: boolean; source?: string; uses: number }[]) {
   const line = (item: typeof memories[number]) => `- [${item.memoryId}] ${item.kind === 'style' ? `style "${item.name}"` : 'preference'}${item.topic ? ` (${item.topic})` : ''}${item.scope === 'project' ? ' (this project)' : ''}: ${item.text}${item.source ? ` (from ${JSON.stringify(item.source)})` : ''}${item.uses ? `, used ${item.uses}x` : ''}`;
-  return `# Memory\nThe user's Personal kit: what they taught you across sessions or wrote themselves (captions, the platforms they post to, general editing). Follow preferences unless the current request says otherwise. For styles, load the recipe with recallMemory before reapplying one. When the user likes an edit or repeats a pattern, save it with remember; update or forget memories that change.\n${memoryLines(memories.map(line))}\n`;
+  return `# Memory\nThe user's Personal kit: what they taught you across sessions or wrote themselves. Follow preferences unless the current request says otherwise. For styles, load the recipe with recallMemory before reapplying one. When the user likes an edit or repeats a pattern, save it with remember; update or forget memories that change.\n${memoryLines(memories.map(line))}\n`;
 }
 
 /** At most about 1,000 tokens of memory in context; the most-used memories come first. */

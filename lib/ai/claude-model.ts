@@ -68,6 +68,30 @@ export function defaultEditorReasoningEffort(env: ClaudeModelEnvironment = proce
   return EDITOR_REASONING_EFFORTS.find(item => item === effort) ?? 'medium';
 }
 
+// The editor chooses effort per request; nobody picks it. High for films, scenes and retries,
+// low for one quick tweak, the deployment default (medium) for everything else.
+const HIGH_EFFORT_WORK = /\b(launch|film|teaser|trailer|announce\w*|motion[- ]design|scenes?|explainer|intro|outro|animat\w*|storyboard|beat sheet)\b/i;
+const QUICK_TWEAK = /\b(trim|delete|move|mute|unmute|volume|louder|quieter|bigger|smaller|font|colou?r|bold|rename|speed|faster|slower|split|duplicate|crop|fade|white|black|red|yellow|blue|green|orange|pink)\b/i;
+const SMALL_TALK = /^(hi|hey|hello|thanks|thank you|ok|okay|cool|nice|great)\b[\s!.]*$/i;
+const HIGH_EFFORT_SKILLS = ['scene-engine', 'motion-design', 'explainer-scenes'];
+
+/** The effort a request starts at when none was chosen. */
+export function autoEditorReasoningEffort(prompt: string, { recovering = false } = {}, env: ClaudeModelEnvironment = process.env): EditorReasoningEffort {
+  if (recovering || HIGH_EFFORT_WORK.test(prompt)) return 'high';
+  if (SMALL_TALK.test(prompt.trim())) return 'low';
+  const words = prompt.trim().split(/\s+/).length;
+  if (words <= 12 && QUICK_TWEAK.test(prompt) && !/\b(and|then|also)\b|[,;]/i.test(prompt)) return 'low';
+  return defaultEditorReasoningEffort(env);
+}
+
+/** Scene work raises a run to high: once it reads a scene skill or writes a scene, the next steps write code. */
+export function stepsNeedHighEffort(steps: readonly { content: readonly unknown[] }[]) {
+  return steps.some(step => step.content.some(part => {
+    const call = part as { type?: string; toolName?: string; input?: { name?: unknown } };
+    return call.type === 'tool-call' && (call.toolName === 'addScene' || call.toolName === 'editScene' || (call.toolName === 'readSkill' && HIGH_EFFORT_SKILLS.includes(String(call.input?.name))));
+  }));
+}
+
 export function defaultEditorModelChoice(env:ClaudeModelEnvironment=process.env):typeof EDITOR_MODELS[number]['id']|undefined {
   const selected=resolveClaudeModel(undefined,env);
   return EDITOR_MODELS.find(model=>model.modelId===selected.modelId)?.id;

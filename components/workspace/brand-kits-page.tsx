@@ -22,7 +22,7 @@ export function BrandKitsPage() {
   const kits = useQuery(api.brandKits.mine, isAuthenticated ? {} : 'skip');
   return <div className="workspace-page brand-kits-page"><WorkspaceNav title="Brand kits" active="brand-kits" />
     <main className="brand-kits-content">
-      <header className="brand-kits-heading"><h1>Brand kits</h1><p>What the AI works with when it makes videos for your brands. Edit anything here; the next video uses it.</p></header>
+      <header className="brand-kits-heading"><h1>Brand kits</h1><p>What the AI works with when it makes videos for your brands.</p></header>
       {kits === undefined ? <Skeleton className="brand-kit-skeleton" /> : kits.length === 0 ? <section className="brand-kit-empty"><h2>No brand kits yet</h2><p>Ask the assistant for a launch or feature video and give it your website. It builds a kit from your site and saves it here.</p></section> : kits.map(kit => <BrandKitCard key={kit.id} kit={kit} />)}
     </main>
   </div>;

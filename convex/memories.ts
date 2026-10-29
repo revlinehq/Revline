@@ -11,7 +11,6 @@ import { projectRun } from './lib/project_data';
  *   can reapply them in any project ("my podcast captions", "the teal grade from the travel vlog").
  * User memories apply everywhere; project memories to one project. Summaries ride in the AI's context each
  * turn, most-used first; a style's full recipe loads on demand (recallMemory) and counts as a use.
- * A topic files each memory into the user's Personal kit: captions, the platforms they post to, or general editing.
  */
 export const MAX_USER_MEMORIES = 60, MAX_PROJECT_MEMORIES = 20, MAX_MEMORY_LENGTH = 280, MAX_RECIPE_LENGTH = 6000;
 const kind = v.union(v.literal('preference'), v.literal('style'));
@@ -104,11 +103,12 @@ export const list = query({ args: {}, returns: v.array(v.object({ memoryId: v.id
   return items.sort((a, b) => a.at - b.at).map(({ at: _at, ...item }) => item);
 }});
 /** A preference the user writes in their Personal kit; it applies to every project. */
-export const add = mutation({ args: { topic, text: v.string() }, returns: v.id('agentMemories'), handler: async (ctx, args) => {
+// topic is still accepted from older clients and ignored.
+export const add = mutation({ args: { text: v.string(), topic: v.optional(topic) }, returns: v.id('agentMemories'), handler: async (ctx, args) => {
   const ownerId = await requireOwner(ctx), text = memoryText(args.text), now = Date.now();
   const rows = await ctx.db.query('agentMemories').withIndex('by_owner_project', q => q.eq('ownerId', ownerId).eq('projectId', undefined)).take(MAX_USER_MEMORIES);
   if (rows.length >= MAX_USER_MEMORIES) throw new ConvexError('Your kit is full. Remove something outdated first.');
-  return ctx.db.insert('agentMemories', { ownerId, kind: 'preference', topic: args.topic, text, uses: 0, createdAt: now, updatedAt: now });
+  return ctx.db.insert('agentMemories', { ownerId, kind: 'preference', text, uses: 0, createdAt: now, updatedAt: now });
 }});
 /** Rewrite a memory's text (and a style's name) from the Personal kit. */
 export const edit = mutation({ args: { memoryId: v.id('agentMemories'), text: v.string(), name: v.optional(v.string()) }, returns: v.null(), handler: async (ctx, args) => {

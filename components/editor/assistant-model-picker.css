@@ -6,16 +6,9 @@
 .editor-app .assistant-model-picker .inspector-select-trigger:focus-visible{outline:none;background:var(--ws-hover);box-shadow:0 0 0 1px var(--ws-border);color:var(--ws-text)}
 .assistant-model-picker .inspector-select-trigger:disabled{opacity:.5;cursor:default}
 .inspector-select-menu.workspace-menu[aria-label="AI editing model options"]{width:220px}
-/* The reasoning menu fits its options; composer rows get a roomier hover highlight than inspector selects. */
-.inspector-select-menu.workspace-menu[aria-label="AI reasoning effort options"]{width:max-content;min-width:var(--radix-dropdown-menu-trigger-width)}
-.inspector-select-menu:is([aria-label="AI editing model options"],[aria-label="AI reasoning effort options"]) .inspector-select-option{min-height:38px;padding:8px 32px 8px 12px;font-size:13px}
-.inspector-select-menu:is([aria-label="AI editing model options"],[aria-label="AI reasoning effort options"]) [data-slot$=item-indicator]{right:11px}
-:is(.assistant-model-picker,.assistant-fast-option) svg.assistant-fast-icon{flex-shrink:0;color:#f5b301;fill:currentColor}
-.assistant-reasoning-separator{height:1px;margin:5px 4px;background:var(--ws-border)}
-.inspector-select-option.assistant-fast-option{gap:9px}
-.assistant-fast-option:not([data-state=checked]) svg.assistant-fast-icon{color:var(--ws-muted);fill:none}
-.assistant-fast-option [data-slot=dropdown-menu-checkbox-item-indicator]{position:absolute;right:9px;display:grid;place-items:center;color:var(--revline-accent)}
-.assistant-fast-option [data-slot=dropdown-menu-checkbox-item-indicator] svg{width:13px;height:13px}
 @media(pointer:coarse){.assistant-model-picker .inspector-select-trigger{height:44px;min-height:44px}}
 .assistant-model-logo{flex-shrink:0;width:14px;height:14px}
 .inspector-select-menu.workspace-menu[aria-label="AI editing model options"] .inspector-select-option{gap:9px}
+/* Composer menu rows get a roomier hover highlight than inspector selects. */
+.inspector-select-menu[aria-label="AI editing model options"] .inspector-select-option{min-height:38px;padding:8px 32px 8px 12px;font-size:13px}
+.inspector-select-menu[aria-label="AI editing model options"] [data-slot$=item-indicator]{right:11px}
