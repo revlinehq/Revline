@@ -122,3 +122,12 @@ The agent watches the current edit and proposes the next edits, so users do not 
 ## 2.5D parallax from stills
 
 Turn a photo into a short depth move: estimate depth, separate foreground and background layers, and animate a camera push or orbit with parallax. Output stays an editable clip with the same keyframe and motion-blur controls.
+
+## Shaders in scenes
+
+Let scenes use GLSL shaders for pixel-level looks such as grainy gradients, film grain, light sweeps, glows and noise dissolves. Clip effects already run as WebGL shaders (`lib/editor/visual-effects-runtime.ts`); this extends shaders to scene code.
+
+- A `<Shader>` component in the React scene runtime that takes GLSL plus a few safe inputs: time from the frame (`useBeat()`), resolution, brand colors and the clip image. It is seeked per frame like GSAP, so preview and export match.
+- A small library of tested presets the agent applies and tunes by name, with custom GLSL only when the user asks for something specific.
+- A shaders skill page: write simple GLSL, keep it light, and render and inspect one frame after every shader change.
+- Export render machines have no GPU, so WebGL runs on the CPU there. Benchmark export time before shipping heavy full-screen shaders. VFX-JS-style libraries fit if their clock is driven by the frame.
