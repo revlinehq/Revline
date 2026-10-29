@@ -11,6 +11,9 @@ export const brandColorValidator = v.object({ name: v.string(), value: v.string(
 export const brandFontValidator = v.object({ family: v.string(), weight: v.string(), role: v.union(v.literal('heading'), v.literal('body'), v.literal('other')), url: v.string() });
 export const brandContextValidator = v.object({ product: v.optional(v.string()) });
 const sceneBrandValidator = v.object({ kitId: v.string(), name: v.string(), colors: v.array(brandColorValidator), fonts: v.array(brandFontValidator), logo: v.optional(v.string()), screens: v.optional(v.array(v.object({ name: v.string(), url: v.string() }))) });
+export const blueprintPartValidator = v.object({ name: v.string(), x: v.number(), y: v.number(), width: v.number(), height: v.number(), score: v.optional(v.number()) });
+/** One size the blueprint was rendered at and compared with a real screenshot of that size. */
+export const blueprintCheckValidator = v.object({ width: v.number(), height: v.number(), score: v.number(), meanDiff: v.number(), at: v.number() });
 export const brandScreenValidator = v.object({ name: v.string(), storageId: v.id('_storage'), width: v.optional(v.number()), height: v.optional(v.number()), note: v.optional(v.string()) });
 
 export const aspectRatio = v.union(v.literal("vertical"), v.literal("square"), v.literal("landscape"), v.literal("portrait-feed"), v.literal("classic"));
@@ -243,6 +246,8 @@ export default defineSchema({
   // One row: serializes Fly export dispatch so concurrent runs cannot both create a warm machine.
   flyDispatchLocks: defineTable({ name: v.string(), lockedUntil: v.number(), pending: v.boolean() }).index('by_name', ['name']),
   accountRateLimits:defineTable({ownerId:v.string(),name:v.string(),period:v.number(),windowStart:v.number(),count:v.number()}).index('by_owner_name_period',['ownerId','name','period']),
+  // A brand's UI rebuilt from one of its kit screens: scene code with named parts, scored against the screen.
+  blueprints: defineTable({ ownerId: v.string(), kitId: v.id("brandKits"), name: v.string(), screen: v.string(), code: v.string(), width: v.number(), height: v.number(), parts: v.array(blueprintPartValidator), checks: v.array(blueprintCheckValidator), colors: v.array(v.object({ label: v.string(), hex: v.string(), x: v.number(), y: v.number() })), edges: v.array(v.object({ label: v.string(), axis: v.union(v.literal("x"), v.literal("y")), at: v.number() })), createdAt: v.number(), updatedAt: v.number() }).index("by_kit_name", ["kitId", "name"]).index("by_owner", ["ownerId"]),
   brandKits: defineTable({ ownerId: v.string(), name: v.string(), sourceUrl: v.optional(v.string()), colors: v.array(brandColorValidator), fonts: v.array(v.object({ family: v.string(), weight: v.string(), role: v.union(v.literal('heading'), v.literal('body'), v.literal('other')), storageId: v.id('_storage') })), logo: v.optional(v.string()), copy: v.optional(v.object({ title: v.optional(v.string()), description: v.optional(v.string()), headings: v.array(v.string()) })), context: v.optional(brandContextValidator), screens: v.optional(v.array(brandScreenValidator)), createdAt: v.number(), updatedAt: v.number() }).index('by_ownerId_name', ['ownerId', 'name']),
   users: defineTable(userFields).index("by_clerk_id", ["clerkId"]),
   projects: defineTable(projectFields).index("by_ownerId_updatedAt", ["ownerId", "updatedAt"]),

@@ -33,7 +33,7 @@ export const isFontFile = internalQuery({
   },
 });
 
-const fontUrl = (storageId: string) => `${process.env.CONVEX_SITE_URL}/brand-font?id=${storageId}`;
+export const fontUrl = (storageId: string) => `${process.env.CONVEX_SITE_URL}/brand-font?id=${storageId}`;
 export const brandFileUrl = (storageId: string) => `${process.env.CONVEX_SITE_URL}/brand-file?id=${storageId}`;
 
 export const byName = internalQuery({

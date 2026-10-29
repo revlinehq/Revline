@@ -12,18 +12,21 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Skeleton } from '@/components/ui/skeleton';
 import { WorkspaceNav } from './workspace-nav';
+import { Blueprints } from './blueprints';
 import './brand-kits-page.css';
 
 type Kit = FunctionReturnType<typeof api.brandKits.mine>[number];
+type Blueprint = FunctionReturnType<typeof api.blueprints.mine>[number];
 
 /** What the AI works with for each brand; every section is editable in place. */
 export function BrandKitsPage() {
   const { isAuthenticated } = useConvexAuth();
   const kits = useQuery(api.brandKits.mine, isAuthenticated ? {} : 'skip');
+  const blueprints = useQuery(api.blueprints.mine, isAuthenticated ? {} : 'skip');
   return <div className="workspace-page brand-kits-page"><WorkspaceNav title="Brand kits" active="brand-kits" />
     <main className="brand-kits-content">
       <header className="brand-kits-heading"><h1>Brand kits</h1><p>What the AI works with when it makes videos for your brands.</p></header>
-      {kits === undefined ? <Skeleton className="brand-kit-skeleton" /> : kits.length === 0 ? <section className="brand-kit-empty"><h2>No brand kits yet</h2><p>Ask the assistant for a launch or feature video and give it your website. It builds a kit from your site and saves it here.</p></section> : kits.map(kit => <BrandKitCard key={kit.id} kit={kit} />)}
+      {kits === undefined ? <Skeleton className="brand-kit-skeleton" /> : kits.length === 0 ? <section className="brand-kit-empty"><h2>No brand kits yet</h2><p>Ask the assistant for a launch or feature video and give it your website. It builds a kit from your site and saves it here.</p></section> : kits.map(kit => <BrandKitCard key={kit.id} kit={kit} blueprints={(blueprints ?? []).filter(item => item.kitId === kit.id)} />)}
     </main>
   </div>;
 }
@@ -40,7 +43,7 @@ function Editable({ title, editing, onEdit, onCancel, onSave, children, form }: 
 
 const contextOf = (kit: Kit) => ({ product: kit.context?.product ?? '' });
 
-function BrandKitCard({ kit }: { kit: Kit }) {
+function BrandKitCard({ kit, blueprints }: { kit: Kit; blueprints: Blueprint[] }) {
   const update = useMutation(api.brandKits.updateKit), removeScreen = useMutation(api.brandKits.removeScreen);
   const kitId = kit.id as Id<'brandKits'>;
   const [editing, setEditing] = useState<'name' | 'colors' | 'context' | null>(null);
@@ -75,5 +78,6 @@ function BrandKitCard({ kit }: { kit: Kit }) {
       {kit.screens.length ? <ul className="brand-kit-screens">{kit.screens.map(screen => <li key={screen.name}><strong>{screen.name}</strong><div className="brand-kit-screen"><img src={screen.url} alt={screen.note ?? screen.name} loading="lazy" /><Button type="button" variant="secondary" size="icon-xs" className="brand-kit-screen-remove" aria-label={`Remove ${screen.name}`} onClick={() => void removeScreen({ kitId, name: screen.name })}><X /></Button></div></li>)}</ul>
         : <p className="brand-kit-muted">No product screens saved. Give the assistant screenshots of your product and ask it to save them to this kit; every later video for {kit.name} can use them.</p>}
     </section>
+    <Blueprints items={blueprints} />
   </article>;
 }

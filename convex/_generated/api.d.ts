@@ -15,6 +15,7 @@ import type * as assistant from "../assistant.js";
 import type * as assistantActions from "../assistantActions.js";
 import type * as assistantWorkflow from "../assistantWorkflow.js";
 import type * as billing from "../billing.js";
+import type * as blueprints from "../blueprints.js";
 import type * as brandKits from "../brandKits.js";
 import type * as compositionReview from "../compositionReview.js";
 import type * as crons from "../crons.js";
@@ -93,6 +94,7 @@ declare const fullApi: ApiFromModules<{
   assistantActions: typeof assistantActions;
   assistantWorkflow: typeof assistantWorkflow;
   billing: typeof billing;
+  blueprints: typeof blueprints;
   brandKits: typeof brandKits;
   compositionReview: typeof compositionReview;
   crons: typeof crons;
