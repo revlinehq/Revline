@@ -2,8 +2,6 @@
 export type BrandColor = { name: string; value: string };
 export type BrandFontRole = 'heading' | 'body' | 'other';
 export type BrandFontFace = { family: string; weight: string; role: BrandFontRole; url: string };
-/** Everything about the product in one text: what it is, the problem it solves, the features worth showing. */
-export type BrandContext = { product?: string };
 export type BrandCopy = { title?: string; description?: string; headings: string[] };
 
 /** A product screenshot saved with the kit, named the way scenes read it from `media`. */

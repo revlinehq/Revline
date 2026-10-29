@@ -91,7 +91,7 @@ Keep this file factual. Update the status when something ships, and do not promo
   - Keyframed camera paths, from 2 to 8 points, in glide or follow mode, with optional motion blur.
   - Subject-following crop.
   - Subtle punch-ins between cuts.
-- **Explainer scenes:** the AI writes animated React scenes up to 120 s long, compiled and played inside the editor (`addScene`).
+- **Scenes:** the AI writes TypeScript modules that build HTML and animate it on a GSAP timeline, up to 120 s long, for explainers, overlays and launch films, compiled and played inside the editor (`addScene`, `editScene`).
 - **Layout and blending:**
   - Two-row split-screen layout.
   - 6 blend modes: normal, screen, multiply, overlay, add light, difference.
