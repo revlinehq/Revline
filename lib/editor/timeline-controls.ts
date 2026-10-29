@@ -1,7 +1,6 @@
 import { offsetClipMotion, resizeEffectMotion } from './clip-effects';
 import { textAnimationTimingPatch } from './text-animation-timing';
-import { audioFadeTimingPatch } from './audio-settings';
-import { visualFadeTimingPatch } from './visual-fades';
+import { anchoredFadeTimingPatch } from './fade-clock';
 import { textTemplateTimingPatch } from './remotion-text';
 // Adapted from OpenCut Classic's playhead, zoom, and edge-scroll controllers.
 // Copyright 2025–2026 OpenCut. MIT: third-party/OpenCut-LICENSE.
@@ -341,7 +340,7 @@ export function resizeSelectedClips(timeline:Timeline,assets:MediaAsset[],ids:st
     const tolerance=Number.EPSILON*Math.max(1,clip.duration,Math.abs(dt))*8;
     const duration=Math.abs(rawDuration-frame)<=tolerance?frame:rawDuration;
     if(clip.kind==='effect')return {...clip,...resizeEffectMotion(clip,duration),start:side==='left'?clip.start+dt:clip.start,duration};
-    return side==='right'?{...clip,...textTemplateTimingPatch(clip),...textAnimationTimingPatch(clip),...audioFadeTimingPatch(clip),...visualFadeTimingPatch(clip),duration}:{...clip,...offsetClipMotion(clip,dt),start:clip.start+dt,duration,sourceStart:clip.kind==='video'||clip.kind==='audio'||clip.kind==='scene'?clip.sourceStart+dt*playbackRateOf(clip):clip.sourceStart};
+    return side==='right'?{...clip,...textTemplateTimingPatch(clip),...textAnimationTimingPatch(clip),...anchoredFadeTimingPatch(clip,{start:clip.start,duration}),duration}:{...clip,...offsetClipMotion(clip,dt),...anchoredFadeTimingPatch(clip,{start:clip.start+dt,duration}),start:clip.start+dt,duration,sourceStart:clip.kind==='video'||clip.kind==='audio'||clip.kind==='scene'?clip.sourceStart+dt*playbackRateOf(clip):clip.sourceStart};
   });
   if(!rippling)return reconcileTransitionEdits(timeline,{...timeline,clips});
   // A lane without room for the ripple keeps the ordinary, neighbor-bounded trim.

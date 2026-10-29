@@ -4,6 +4,7 @@ import { textTemplateTimingPatch } from './remotion-text';
 import { textAnimationTimingPatch } from './text-animation-timing';
 import { audioFadeTimingPatch } from './audio-settings';
 import { visualFadeTimingPatch } from './visual-fades';
+import { anchoredFadeTimingPatch } from './fade-clock';
 import { rescaleSmoothZoom } from './smooth-zoom-settings';
 import { rescaleCameraMotion } from './camera-motion-settings';
 import { playbackRateOf, sourceDurationOf, sourceEndOf, validatePlaybackRate } from './playback-rate';
@@ -296,7 +297,10 @@ export function trimClip(timeline: Timeline, id: string, duration: number, sourc
   timeline = normalizeTimeline(timeline);
   const clip = timeline.clips.find(c => c.id === id);
   if (!clip) throw new Error('Choose a clip to trim.');
-  const next = clip.kind === 'effect' ? patchClip(timeline, id, { ...resizeEffectMotion(clip, duration), duration }) : patchClip(timeline, id, { duration, sourceStart: sourceStart ?? clip.sourceStart });
+  const patched = clip.kind === 'effect' ? patchClip(timeline, id, { ...resizeEffectMotion(clip, duration), duration }) : patchClip(timeline, id, { duration, sourceStart: sourceStart ?? clip.sourceStart });
+  // Edge fades follow the trimmed end (and its linked sound), instead of staying pinned to the old length.
+  const before = new Map(timeline.clips.filter(c => c.id === id || c.id === clip.linkedClipId).map(c => [c.id, c]));
+  const next = { ...patched, clips: patched.clips.map(c => { const old = before.get(c.id); return old ? { ...c, ...anchoredFadeTimingPatch(old, c) } : c; }) };
   const collision = newLayerOverlaps(timeline, next)[0];
   if (collision) {
     // A pure refusal: the draft is unchanged, so the assistant can retry with the room available.
