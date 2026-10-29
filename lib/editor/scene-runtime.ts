@@ -63,6 +63,10 @@ if (typeof window !== 'undefined' && window.parent !== window) {
     origin = gsap.globalTimeline.time();
     await scene({ root, tl: gsap.timeline(), gsap, width: data.width, height: data.height, duration: data.duration, fps: data.fps, brand: sceneBrandContext(data.brand ?? undefined), media });
     master = gsap.exportRoot({ paused: true });
+    // gsap.set calls made while building land after the scene's timeline at the same start time,
+    // so a first seek into the middle re-applied the starting states over the animation.
+    // Re-adding every timed child puts those instant sets first; order among the rest is kept.
+    for (const child of master.getChildren(false, true, true)) if (child.duration() > 0) { const at = child.startTime(); master.remove(child); master.add(child, at); }
     master.seek(origin, false);
   };
   window.addEventListener('message', event => {
