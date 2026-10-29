@@ -4,6 +4,7 @@ import { Download } from 'lucide-react';
 import { userError } from '@/lib/user-error';
 import { STOCK_AUDIO_DRAG_TYPE } from '@/lib/editor/stock-audio-drag';
 import { useState, useRef, useCallback, useLayoutEffect, useEffect, useMemo } from 'react';
+import { sceneComponents } from '@/lib/editor/scene-modules';
 import { EffectIcon } from './effect-icon';
 import { Scissors, Copy, ClipboardPaste, Trash2, Magnet, Plus, Type, Layers, Volume2, VolumeX, ChevronDown, ChevronUp, MoreHorizontal, Rows3, ListMinus, Unlink, Flag, Pencil, FoldHorizontal, Combine, Undo2, Redo2, ChevronsRightLeft, Braces } from 'lucide-react';
 import { IconButton } from './primitives';
@@ -120,6 +121,7 @@ export function TimelinePanel(p:Props){
   const [editingMarker,setEditingMarker]=useState<{id:string;label:string}|null>(null);
   const [codeClipId,setCodeClipId]=useState<string|null>(null);
   const codeClip=timeline.clips.find(clip=>clip.id===codeClipId&&clip.kind==='scene');
+  const codeComponents=useMemo(()=>codeClip?.scene?sceneComponents(codeClip.scene):[],[codeClip?.scene]);
   const [draggingMarker,setDraggingMarker]=useState(false);
   const scroll=useRef<HTMLDivElement>(null);const labels=useRef<HTMLDivElement>(null);const head=useRef<HTMLDivElement>(null);const cap=useRef<HTMLDivElement>(null);
   useEffect(()=>{
@@ -730,6 +732,6 @@ export function TimelinePanel(p:Props){
     <ContextMenuItem disabled={editingDisabled||deriveTrackCounts(timeline).visual>=maxTrackCount('visual')} onSelect={()=>addLayer('visual')}><Plus/>Add visual track</ContextMenuItem>
     <ContextMenuItem disabled={editingDisabled||deriveTrackCounts(timeline).audio>=maxTrackCount('audio')} onSelect={()=>addLayer('audio')}><Plus/>Add audio track</ContextMenuItem>
     <ContextMenuItem disabled={editingDisabled||cleanedTimeline===timeline} onSelect={()=>onChange(cleanedTimeline)}><ListMinus/>Remove empty tracks</ContextMenuItem>
-  </>}</ContextMenuContent>}<Dialog open={!!editingMarker} onOpenChange={open=>{if(!open)setEditingMarker(null);}}><DialogContent><DialogTitle>Rename marker</DialogTitle><DialogDescription>Label this beat or moment in your edit.</DialogDescription><form className="flex flex-col gap-4" onSubmit={event=>{event.preventDefault();if(!editingMarker||editingLock.current)return;onChange({...timeline,markers:timeline.markers?.map(marker=>marker.id===editingMarker.id?{...marker,label:editingMarker.label.trim()}:marker)});setEditingMarker(null);}}><Input aria-label="Marker name" autoFocus maxLength={120} value={editingMarker?.label??''} onChange={event=>setEditingMarker(current=>current?{...current,label:event.target.value}:null)}/><Button type="submit">Save marker</Button></form></DialogContent></Dialog></>}<SceneCodeDialog scene={codeClip?.scene} onClose={()=>setCodeClipId(null)}/></ContextMenu>;
+  </>}</ContextMenuContent>}<Dialog open={!!editingMarker} onOpenChange={open=>{if(!open)setEditingMarker(null);}}><DialogContent><DialogTitle>Rename marker</DialogTitle><DialogDescription>Label this beat or moment in your edit.</DialogDescription><form className="flex flex-col gap-4" onSubmit={event=>{event.preventDefault();if(!editingMarker||editingLock.current)return;onChange({...timeline,markers:timeline.markers?.map(marker=>marker.id===editingMarker.id?{...marker,label:editingMarker.label.trim()}:marker)});setEditingMarker(null);}}><Input aria-label="Marker name" autoFocus maxLength={120} value={editingMarker?.label??''} onChange={event=>setEditingMarker(current=>current?{...current,label:event.target.value}:null)}/><Button type="submit">Save marker</Button></form></DialogContent></Dialog></>}<SceneCodeDialog scene={codeClip?.scene} components={codeComponents} onClose={()=>setCodeClipId(null)}/></ContextMenu>;
 }
 

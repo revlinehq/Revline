@@ -25,6 +25,12 @@
     "paths": {
       "@/*": [
         "./*"
+      ],
+      "revline": [
+        "./lib/editor/scene-react-runtime.tsx"
+      ],
+      "blueprint:T3 Code": [
+        "./docs/react-scenes/clips/t3-code-kit.tsx"
       ]
     }
   },

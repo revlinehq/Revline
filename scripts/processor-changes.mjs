@@ -8,7 +8,7 @@ import { build } from 'esbuild';
 
 const ENTRIES = ['infra/media-worker/consumer.ts', 'infra/media-worker/edge/cloudflare.ts',
   // Browser runtimes copy-vendor.mjs bundles into public/vendor for exports.
-  'lib/editor/remotion-text-runtime.tsx', 'lib/editor/remotion-transitions-runtime.ts', 'lib/editor/remotion-runtime.ts', 'lib/editor/visual-effects-runtime.ts', 'lib/editor/scene-runtime.ts'];
+  'lib/editor/remotion-text-runtime.tsx', 'lib/editor/remotion-transitions-runtime.ts', 'lib/editor/remotion-runtime.ts', 'lib/editor/visual-effects-runtime.ts', 'lib/editor/scene-runtime.ts', 'lib/editor/scene-react-runtime.tsx'];
 // Read, spawned or copied into the image without a static import.
 const RUNTIME_PREFIXES = [
   'infra/media-worker/', 'models/', 'public/vendor/', 'public/fonts/',

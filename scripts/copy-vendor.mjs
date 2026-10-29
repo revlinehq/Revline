@@ -25,4 +25,6 @@ await build({ entryPoints: ['lib/editor/remotion-transitions-runtime.ts'], outfi
 }
 // Scene frames run author TypeScript (compiled in the frame by sucrase) against GSAP and its plugins.
 await build({ entryPoints: ['lib/editor/scene-runtime.ts'], outfile: 'public/vendor/scene-runtime.js', bundle: true, minify: true, platform: 'browser', target: 'es2020', format: 'iife', globalName: '__revlineSceneRuntime', legalComments: 'linked' });
+// React scenes (opt-in) load React and their frame adapter from a second file, so GSAP scene frames stay as small as before.
+await build({ entryPoints: ['lib/editor/scene-react-runtime.tsx'], outfile: 'public/vendor/scene-react.js', bundle: true, minify: true, platform: 'browser', target: 'es2020', format: 'iife', globalName: '__revlineSceneReact', jsx: 'automatic', define: { 'process.env.NODE_ENV': '"production"' }, legalComments: 'linked' });
 await build({ entryPoints: ['lib/editor/remotion-runtime.ts'], outfile: 'public/vendor/remotion-runtime.js', bundle: true, minify: true, platform: 'browser', target: 'es2020', format: 'iife', globalName: '__revlineRemotion', jsx: 'automatic', define: { 'process.env.NODE_ENV': '"production"' }, legalComments: 'linked' });
