@@ -15,7 +15,7 @@ A launch film makes one product or one feature feel simple, real and worth tryin
 2. **Intake** (\`intake\`): type, format, length, platform, reference, music.
 3. **Story** (\`story\`): pick the structure for the type.
 4. **Script** (\`script\`): write every on-screen word as one piece, in a voice that fits the brand; get it approved.
-5. **Style direction:** write the film's own direction (see below), drawing on the films and example directions. Propose the brand's motion identity (\`brand-kit\`).
+5. **Style direction:** write the film's own direction (see below), drawing on the films and example directions.
 6. **Beat sheet, animatic, polish, sound, review** (\`process\`), using \`craft\` for timing and easing.
 7. **Feedback** at any point (\`techniques\`).
 
@@ -35,7 +35,7 @@ How much to follow it:
 - **A reference** ("like Linear", a film they like): the matching card leads the direction.
 - **Vague direction or feedback** ("more premium", "snappier", "the ending is weak"): find it on \`techniques\`, apply the technique, and say which film it comes from so the user can accept or refuse.
 - **Nothing given:** choose from the brand's site, context and product, e.g. a serious dark developer tool leans toward the dark or dimensional examples, a friendly light workspace toward warm-editorial, a creative or consumer brand toward bold-graphic, a data or agent product toward crisp-demo.
-- Keep the direction consistent across the film; borrow single moments from elsewhere on purpose. The brand kit's fonts, colors and motion identity always win over example values.
+- Keep the direction consistent across the film; borrow single moments from elsewhere on purpose. The brand kit's fonts and colors always win over example values.
 
 ## What all 14 films share
 - One idea per shot. Headlines and UI almost never share a frame.

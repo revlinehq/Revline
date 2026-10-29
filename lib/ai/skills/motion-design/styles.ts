@@ -11,7 +11,7 @@ export const STYLE_PAGES: EditorSkillPage[] = [
 
 An example of a coherent direction, measured from real films. Start from it, combine it with others, or depart from it when the brand or story calls for it.
 
-Personality: premium. Feels: focused, premium, serious. Cards: ${cardsFor('dark-cinematic')}.
+Feels: focused, premium, serious. Cards: ${cardsFor('dark-cinematic')}.
 
 ## Look
 - Stage near-black (#000 to #181818) with a vignette. Surfaces #15171a to #262624, 1px borders a step lighter. Text #e3e4e6, muted #6b7076 to #8a8d92.
@@ -45,7 +45,7 @@ Personality: premium. Feels: focused, premium, serious. Cards: ${cardsFor('dark-
 
 An example of a coherent direction, measured from real films. Start from it, combine it with others, or depart from it when the brand or story calls for it.
 
-Personality: premium. Feels: cinematic, precise, expensive; the software becomes a physical object you fly over. Card: ${cardsFor('dimensional-ui')} (read it for exact timings).
+Feels: cinematic, precise, expensive; the software becomes a physical object you fly over. Card: ${cardsFor('dimensional-ui')} (read it for exact timings).
 
 ## Look
 - Pure black surround (#000) with a heavy vignette. UI surfaces #15171a to #1e2124, raised panels #24282c, 1px borders ~#2e3236. Text #e8e8e8, muted #6b7076.
@@ -85,7 +85,7 @@ Personality: premium. Feels: cinematic, precise, expensive; the software becomes
 
 An example of a coherent direction, measured from real films. Start from it, combine it with others, or depart from it when the brand or story calls for it.
 
-Personality: corporate, calm end. Feels: calm, clear, friendly, trustworthy. Cards: ${cardsFor('warm-editorial')}.
+Feels: calm, clear, friendly, trustworthy. Cards: ${cardsFor('warm-editorial')}.
 
 ## Look
 - One warm off-white for the film (#F6F5F1) or pure white text cards (#FFFFFF). Feature sections may sit on one flat pastel each (light blue #CFE3F5, peach #F9E7DD, butter #F8E3A8) or a soft diagonal gradient.
@@ -121,7 +121,7 @@ Personality: corporate, calm end. Feels: calm, clear, friendly, trustworthy. Car
 
 An example of a coherent direction, measured from real films. Start from it, combine it with others, or depart from it when the brand or story calls for it.
 
-Personality: energetic, with playful moments. Feels: energetic, crafted, playful, loud. Cards: ${cardsFor('bold-graphic')}.
+Feels: energetic, crafted, playful, loud. Cards: ${cardsFor('bold-graphic')}.
 
 ## Look
 - Black (#000) title cards between demo stages. Each feature owns one flat saturated background (lime, purple, orange, slate blue, forest) or a textured backdrop (painted grain, scanlined navy glass).
@@ -158,7 +158,7 @@ Personality: energetic, with playful moments. Feels: energetic, crafted, playful
 
 An example of a coherent direction, measured from real films. Start from it, combine it with others, or depart from it when the brand or story calls for it.
 
-Personality: energetic. Feels: fast, practical, confident: "here it is working". Cards: ${cardsFor('crisp-demo')}.
+Feels: fast, practical, confident: "here it is working". Cards: ${cardsFor('crisp-demo')}.
 
 ## Look
 - White #fff or warm light grey (#f7f6f2 to #E7E5E0). One accent color (e.g. the brand orange) for the product name and key UI. Text #151515.

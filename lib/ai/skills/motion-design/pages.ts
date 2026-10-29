@@ -3,10 +3,10 @@ import type { EditorSkillPage } from '../index';
 /** Step 1: nothing is designed before the brand is known. */
 export const brandPage: EditorSkillPage = {
   name: 'brand-kit',
-  description: 'Step 1. Find, create and confirm the brand kit (fonts, colors, logo, screens, product text, motion identity), and how scenes use it.',
+  description: 'Step 1. Find, create and confirm the brand kit (fonts, colors, logo, screens, product text), and how scenes use it.',
   body: `# Brand kit
 
-A brand kit is a named, saved brand for this user: colors, font files, a logo, the landing-page copy, the product text (what it is, the problem it solves, the features worth showing), saved product screens and a motion identity. Scenes attach it with \`brandKitId\` and receive it as \`brand\`.
+A brand kit is a named, saved brand for this user: colors, font files, a logo, the landing-page copy, the product text (what it is, the problem it solves, the features worth showing), and saved product screens. Scenes attach it with \`brandKitId\` and receive it as \`brand\`.
 
 ## Workflow
 1. **Check first.** listBrandKits.
@@ -17,8 +17,7 @@ A brand kit is a named, saved brand for this user: colors, font files, a logo, t
 3. **Show what was found.** Fonts by role, the main colors, whether a logo was found, and every note. Ask the user to correct anything wrong; fix it with updateBrandKit. Never pretend a missing piece was found.
 4. **Confirm the product.** Draft one product text from the scraped copy: what it is, the problem it solves and the 3 to 5 features worth showing (features as short lines). Show it and ask the user to correct it, asking only about what the copy does not answer. Save the confirmed text with updateBrandKit context.product. Never build on an unconfirmed product text.
 5. **Screens.** Product screenshots belong to the brand, not one project. Check the kit's screens (getBrandKit). When the user gives screenshots, offer to save them to the kit (updateBrandKit addScreens, named like editor, dashboard, settings, with a short note) so every later video reuses them without re-uploading.
-6. **Motion identity.** Once a style is chosen, propose one in a line: personality (premium, corporate, energetic, playful), a signature ease used for ~80% of motion, three durations (short, medium, long) and the one entrance pattern. Use the style's personality and the craft page's table. Save it with updateBrandKit motion when the user agrees; later videos for this brand start from it.
-7. **Use.** Pass \`brandKitId\` to addScene (or editScene to attach or refresh). A scene keeps the kit as it was when saved.
+6. **Use.** Pass \`brandKitId\` to addScene (or editScene to attach or refresh). A scene keeps the kit as it was when saved.
 
 ## In scene code
 \`brand\` is null without a kit. With one:
@@ -116,7 +115,7 @@ export const craftPage: EditorSkillPage = {
   description: 'Motion craft at film scale: the few hard rules, then defaults for durations, easing, staggers, layers, attention and holds, with when to break them, and fixes for common complaints.',
   body: `# Motion craft
 
-Film scale: full-screen 1080p, 30 fps. Three kinds of guidance: **Must** are real failures; **Default** is what to do unless the style, the brand's motion identity or the user says otherwise (say when you deviate); **Fix** maps complaints to causes.
+Film scale: full-screen 1080p, 30 fps. Three kinds of guidance: **Must** are real failures; **Default** is what to do unless the film's style direction or the user says otherwise (say when you deviate); **Fix** maps complaints to causes.
 
 ## Must
 - Nothing that travels across the frame moves linearly. Linear is for progress bars, rotation loops and slow continuous camera drifts that span a whole shot.
@@ -141,19 +140,7 @@ Film scale: full-screen 1080p, 30 fps. Three kinds of guidance: **Must** are rea
 
 - Exits take 65 to 75% of the entrance time.
 - Longer travel takes longer: a move of 5% of frame height x0.8, 15% x1.0, 30% x1.3, 50% x1.5, the full frame x1.8 to 2.0.
-- Slide offsets 3 to 8% of frame height (premium 2 to 3%, energetic 6 to 10%).
-
-## Default: personality
-The film's style direction names one; the brand's motion identity overrides it. Use one personality for about 90% of the film and borrow another only for a single moment.
-
-| Personality | Short / medium / long | Signature ease | Overshoot | Entrance |
-|---|---|---|---|---|
-| Premium | 0.6 / 0.9 / 1.4 s | CustomEase 'M0,0 C0.4,0 0.2,1 1,1' or power2.out | 0% | fade + scale 0.98 to 1, or blur-in |
-| Corporate | 0.4 / 0.6 / 0.9 s | CustomEase 'M0,0 C0.2,0 0,1 1,1' or power3.out | 0 to 3% | slide 3 to 5% + fade |
-| Energetic | 0.25 / 0.4 / 0.7 s | expo.out | 15 to 30% on small things | snap in from an edge, hard cuts |
-| Playful | 0.3 / 0.5 / 0.8 s | back.out(1.7) | 10 to 20% | pop with overshoot, pose swaps |
-
-Failure modes: premium too subtle becomes invisible; energetic everywhere means nothing stands out; playful made short and bouncy looks glitchy.
+- Slide offsets 3 to 8% of frame height: smaller for calm films, larger for energetic ones.
 
 ## Default: easing direction
 Entering: an ease-out (decelerates into place). Leaving: an ease-in (accelerates away). Moving on screen: an in-out. Loops: sine.inOut. Overshoot budget: premium 0%, a confirmation 2 to 5%, a success moment 5 to 10%, a celebration 15 to 25%.
@@ -192,7 +179,7 @@ Each beat has three parts: **setup** (show where we are before anything happens)
 | Too slow | long eases on small things, holds with nothing happening | durations from the table, cut dead holds |
 | Jarring | exits and entrances far apart, overshoot on big elements | the continuity rule, overshoot only on small things |
 | Busy or distracting | several heroes at once | one hero, dim the rest, the one-third rule |
-| No personality | mixed eases | one signature ease for 80% of motion |
+| Inconsistent | mixed eases and durations | one main ease for most of the motion, one set of durations |
 For style-level complaints ("more premium", "the ending is weak"), use the techniques page.
 
 Adapted in part from LottieFiles' motion-design skill (MIT), rescaled from interface timing to full-screen film.`,
@@ -209,7 +196,7 @@ export const processPage: EditorSkillPage = {
 4. **Polish.** Replace each rough scene at the same timing with the finished one (editScene keeps timing). Attach the brand kit to every scene. Follow the film's style direction and the craft page.
 5. **Music and sound.** Place the track first and mark its beats. Let the story set the cuts (top launch films land only 0 to 30% of cuts on beats); put key entrances and sound hits on accents and the peak on the drop. Then one generateSound per scene keyed to its motion, under the music (read music-and-sound).
 6. **Review.** getFrames at each beat and each scene's midpoint. Check that text is readable, nothing overlaps or clips, the brand fonts, colors and logo show, and the lockup holds. Fix before saying it is done; say what you checked.
-7. **Learn.** When the user approves a change in direction (a different ease, pacing, a technique), offer to save it: to the brand's motion identity with updateBrandKit, or to memory with remember. The next film for this brand starts from it.
+7. **Learn.** When the user approves a change in direction (a different ease, pacing, a technique), offer to save it to memory with remember, so the next film for this brand starts from it.
 
 ## Product UI
 Real screenshots and screen recordings beat mockups: they show the actual product and build trust. First use the brand kit's screens (getBrandKit); they reach every scene with the kit attached as \`media.<name>\`. Otherwise ask the user for screenshots or short recordings of the screens the script shows (or offer to use ones already in the project's media), upload them, and attach them to scenes as \`media\` (scene-engine, Project media). A recording shows a real interaction; a screenshot with animated HTML on top shows a controlled one. Crop and magnify the part that matters, move a camera over them, tilt them, and layer animated HTML on top (a typed prompt, a highlight, a cursor) to show the action.

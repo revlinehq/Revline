@@ -10,14 +10,11 @@ import { userError } from '@/lib/user-error';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { WorkspaceNav } from './workspace-nav';
 import './brand-kits-page.css';
 
 type Kit = FunctionReturnType<typeof api.brandKits.mine>[number];
-type Motion = NonNullable<Kit['motion']>;
-const PERSONALITIES = ['premium', 'corporate', 'energetic', 'playful'] as const;
 
 /** What the AI works with for each brand; every section is editable in place. */
 export function BrandKitsPage() {
@@ -46,12 +43,11 @@ const contextOf = (kit: Kit) => ({ product: kit.context?.product ?? '' });
 function BrandKitCard({ kit }: { kit: Kit }) {
   const update = useMutation(api.brandKits.updateKit), removeScreen = useMutation(api.brandKits.removeScreen);
   const kitId = kit.id as Id<'brandKits'>;
-  const [editing, setEditing] = useState<'name' | 'colors' | 'context' | 'motion' | null>(null);
+  const [editing, setEditing] = useState<'name' | 'colors' | 'context' | null>(null);
   const [name, setName] = useState(kit.name);
   const [colors, setColors] = useState(kit.colors);
   const [context, setContext] = useState(contextOf(kit));
-  const [motion, setMotion] = useState<Motion>(kit.motion ?? { personality: 'premium', ease: 'power2.out', durations: { short: 0.6, medium: 0.9, long: 1.4 }, entrance: '' });
-  const open = (section: NonNullable<typeof editing>) => { setName(kit.name); setColors(kit.colors); setContext(contextOf(kit)); if (kit.motion) setMotion(kit.motion); setEditing(section); };
+  const open = (section: NonNullable<typeof editing>) => { setName(kit.name); setColors(kit.colors); setContext(contextOf(kit)); setEditing(section); };
   const close = () => setEditing(null);
   const logo = kit.logo ? (kit.logo.startsWith('<svg') ? `data:image/svg+xml;utf8,${encodeURIComponent(standaloneSvg(kit.logo))}` : kit.logo) : null;
   return <article className="brand-kit">
@@ -72,11 +68,6 @@ function BrandKitCard({ kit }: { kit: Kit }) {
       <Editable title="Product" editing={editing === 'context'} onEdit={() => open('context')} onCancel={close} onSave={async () => { await update({ kitId, context }); close(); }}
         form={<Textarea className="brand-kit-product-input" value={context.product} placeholder="What it is, the problem it solves, the features worth showing." onChange={event => setContext({ product: event.target.value })} />}>
         {kit.context?.product ? <p className="brand-kit-product">{kit.context.product}</p> : <p className="brand-kit-muted">Not confirmed yet. The assistant drafts it from your site before the first launch video, or write it here.</p>}
-      </Editable>
-      <Editable title="Motion" editing={editing === 'motion'} onEdit={() => open('motion')} onCancel={close} onSave={async () => { await update({ kitId, motion }); close(); }}
-        form={<div className="brand-kit-fields"><label>Personality<Select value={motion.personality} onValueChange={value => setMotion({ ...motion, personality: value as Motion['personality'] })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{PERSONALITIES.map(item => <SelectItem key={item} value={item}>{item}</SelectItem>)}</SelectContent></Select></label><label>Signature ease<Input value={motion.ease} onChange={event => setMotion({ ...motion, ease: event.target.value })} /></label><div className="brand-kit-field">Durations (seconds)<div className="brand-kit-row">{(['short', 'medium', 'long'] as const).map(key => <Input key={key} type="number" step="0.05" min="0.1" aria-label={`${key} duration`} value={motion.durations[key]} onChange={event => setMotion({ ...motion, durations: { ...motion.durations, [key]: Number(event.target.value) } })} />)}</div></div><label>Entrance<Input value={motion.entrance} onChange={event => setMotion({ ...motion, entrance: event.target.value })} /></label></div>}>
-        {kit.motion ? <dl className="brand-kit-facts"><dt>Personality</dt><dd>{kit.motion.personality}</dd><dt>Signature ease</dt><dd><code>{kit.motion.ease}</code></dd><dt>Durations</dt><dd>{kit.motion.durations.short}s · {kit.motion.durations.medium}s · {kit.motion.durations.long}s</dd><dt>Entrance</dt><dd>{kit.motion.entrance}</dd></dl>
-          : <p className="brand-kit-muted">Not set. The assistant proposes one with your first film's style, or set it here.</p>}
       </Editable>
     </div>
     <section className="brand-kit-section">

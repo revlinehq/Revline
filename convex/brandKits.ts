@@ -3,7 +3,7 @@ import { ConvexError } from 'convex/values';
 import { internalMutation, internalQuery, mutation, query } from './_generated/server';
 import { requireOwner } from './lib/auth';
 import { BRAND_LIMITS, isBrandColor } from '../lib/editor/brand-kit';
-import { brandColorValidator, brandContextValidator, brandMotionValidator, brandScreenValidator } from './schema';
+import { brandColorValidator, brandContextValidator, brandScreenValidator } from './schema';
 
 const fontRow = v.object({ family: v.string(), weight: v.string(), role: v.union(v.literal('heading'), v.literal('body'), v.literal('other')), storageId: v.id('_storage') });
 const copyValidator = v.object({ title: v.optional(v.string()), description: v.optional(v.string()), headings: v.array(v.string()) });
@@ -51,7 +51,7 @@ export const create = internalMutation({
 });
 
 export const update = internalMutation({
-  args: { ownerId: v.string(), kitId: v.id('brandKits'), name: v.optional(v.string()), colors: v.optional(v.array(brandColorValidator)), fonts: v.optional(v.array(fontRow)), logo: v.optional(v.string()), context: v.optional(brandContextValidator), motion: v.optional(brandMotionValidator), screens: v.optional(v.array(brandScreenValidator)) },
+  args: { ownerId: v.string(), kitId: v.id('brandKits'), name: v.optional(v.string()), colors: v.optional(v.array(brandColorValidator)), fonts: v.optional(v.array(fontRow)), logo: v.optional(v.string()), context: v.optional(brandContextValidator), screens: v.optional(v.array(brandScreenValidator)) },
   handler: async (ctx, { ownerId, kitId, ...patch }) => {
     const kit = await ctx.db.get(kitId);
     if (!kit || kit.ownerId !== ownerId) throw new Error('Brand kit not found.');
@@ -71,15 +71,15 @@ export const mine = query({
     return kits.map(kit => ({
       id: kit._id, name: kit.name, sourceUrl: kit.sourceUrl ?? null, updatedAt: kit.updatedAt, colors: kit.colors,
       fonts: [...new Map(kit.fonts.map(font => [`${font.family}:${font.role}`, { family: font.family, role: font.role, weights: kit.fonts.filter(item => item.family === font.family && item.role === font.role).map(item => item.weight) }])).values()],
-      logo: kit.logo ?? null, context: kit.context ?? null, motion: kit.motion ?? null,
+      logo: kit.logo ?? null, context: kit.context ?? null,
       screens: (kit.screens ?? []).map(screen => ({ name: screen.name, note: screen.note ?? null, width: screen.width ?? null, height: screen.height ?? null, url: brandFileUrl(screen.storageId) })),
     }));
   },
 });
 
-/** Inline edits from the Brand kits page: any of name, colors, context or motion. */
+/** Inline edits from the Brand kits page: any of name, colors or the product text. */
 export const updateKit = mutation({
-  args: { kitId: v.id('brandKits'), name: v.optional(v.string()), colors: v.optional(v.array(brandColorValidator)), context: v.optional(brandContextValidator), motion: v.optional(brandMotionValidator) },
+  args: { kitId: v.id('brandKits'), name: v.optional(v.string()), colors: v.optional(v.array(brandColorValidator)), context: v.optional(brandContextValidator) },
   handler: async (ctx, { kitId, ...patch }) => {
     const ownerId = await requireOwner(ctx);
     const kit = await ctx.db.get(kitId);
@@ -92,7 +92,7 @@ export const updateKit = mutation({
     const product = patch.context?.product?.trim();
     if (product && product.length > BRAND_LIMITS.contextText) throw new ConvexError(`Keep the product text under ${BRAND_LIMITS.contextText} characters.`);
     const context = patch.context && (product ? { product } : {});
-    await ctx.db.patch(kitId, { ...(name ? { name } : {}), ...(colors ? { colors } : {}), ...(context ? { context } : {}), ...(patch.motion ? { motion: patch.motion } : {}), updatedAt: Date.now() });
+    await ctx.db.patch(kitId, { ...(name ? { name } : {}), ...(colors ? { colors } : {}), ...(context ? { context } : {}), updatedAt: Date.now() });
   },
 });
 
