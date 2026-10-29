@@ -64,6 +64,8 @@ export function turnPublicationReceipt(messages:readonly ChatMessage[]):Timeline
 }
 const errorMessage = (value: unknown) => typeof value === 'string' ? value : typeof record(value)?.message === 'string' ? String(record(value)!.message) : 'This step could not finish.';
 function unpack(value: unknown): { output?: Record<string, unknown>; error?: string } {
+  // Tools that return images (getFrames, compareScreen) store the model content: a list of text and image parts.
+  if (Array.isArray(value)) return { output: { type: 'content', value } };
   const wrapped = record(value);
   if (wrapped && (wrapped.type === 'error-text' || wrapped.type === 'error-json')) return { error: errorMessage(wrapped.value) };
   if (wrapped && (wrapped.type === 'json' || wrapped.type === 'text')) return unpack(wrapped.value);
@@ -81,6 +83,25 @@ export function chatToolFromPart(value: unknown): ChatTool | null {
   const { output, error } = unpack(part.output);
   const failed = part.state === 'output-error' || part.state === 'output-denied' || !!part.errorText || !!error || (part.state === 'output-available' && !output);
   return { id: typeof part.toolCallId === 'string' ? part.toolCallId : undefined, name: part.type.slice(5), state: failed ? 'error' : part.state === 'output-available' ? 'done' : 'running', staged: output?.staged === true, ...(record(part.input)?{input:record(part.input)}:{}), output, ...(failed ? { detail: assistantErrorDetail(String(part.errorText || error || 'This step could not finish.')).slice(0, 240) } : {}) };
+}
+
+/** Images a step returned (frames, blueprint renders and diffs), from its raw output or the content sent to the model. */
+export function toolImages(step: ChatTool): { label: string; src: string }[] {
+  const output = step.output, base64 = (value: unknown): value is string => typeof value === 'string' && value.length > 100 && /^[A-Za-z0-9+/]+=*$/.test(value.slice(0, 200));
+  if (!output) return [];
+  if (Array.isArray(output.images)) return output.images.flatMap(image => { const item = record(image); return item && base64(item.data) ? [{ label: typeof item.label === 'string' ? item.label : '', src: `data:${typeof item.mimeType === 'string' ? item.mimeType : 'image/jpeg'};base64,${item.data}` }] : []; });
+  if (Array.isArray(output.frames)) return output.frames.flatMap(frame => { const item = record(frame); return item && base64(item.image) ? [{ label: typeof item.time === 'number' ? `${item.time}s` : '', src: `data:image/jpeg;base64,${item.image}` }] : []; });
+  if (output.type === 'content' && Array.isArray(output.value)) {
+    const images: { label: string; src: string }[] = []; let label = '';
+    for (const part of output.value.map(record)) {
+      if (part?.type === 'text' && typeof part.text === 'string' && part.text.length < 80) label = part.text;
+      // Small images stay inline; the agent moves large ones to file storage and keeps their URL.
+      const data = record(part?.data), stored = typeof data?.url === 'string' && /^https:\/\//.test(data.url) ? data.url : undefined;
+      if (part?.type === 'file' && data && (base64(data.data) || stored)) { images.push({ label, src: stored ?? `data:${typeof part.mediaType === 'string' ? part.mediaType : 'image/jpeg'};base64,${data.data}` }); label = ''; }
+    }
+    return images;
+  }
+  return [];
 }
 
 export const TOOL_LABELS: Record<string, [string, string]> = {
@@ -102,12 +123,12 @@ export const TOOL_LABELS: Record<string, [string, string]> = {
   useStrongestMoment: ['Choosing a moment', 'Added selected moment'], applyMotionPreset: ['Animating text', 'Animated text'], animateClip: ['Animating object', 'Animated object'], setVisualEffects: ['Adjusting visual effects', 'Adjusted visual effects'],
   setPlaybackRate: ['Changing speed', 'Changed speed'], applyTextTemplate: ['Animating text', 'Animated text'], addTimedEffect: ['Adding an effect', 'Added an effect'],
   planEffects:['Planning effects','Planned effects'],previewRender:['Reviewing rendered edit','Reviewed rendered samples'],
-  readSkill: ['Reading editing guide', 'Read editing guide'], createBrandKit: ['Building brand kit', 'Saved brand kit'], remember: ['Saving to memory', 'Saved to memory'], forget: ['Removing from memory', 'Removed from memory'], updateBrandKit: ['Updating brand kit', 'Updated brand kit'], addScene: ['Adding scene', 'Added scene'], editScene: ['Updating scene', 'Updated scene'],
+  readSkill: ['Reading editing guide', 'Read editing guide'], measureScreen: ['Measuring screen', 'Measured screen'], compareScreen: ['Comparing with screen', 'Compared with screen'], saveBlueprint: ['Saving blueprint', 'Saved blueprint'], listBlueprints: ['Checking blueprints', 'Checked blueprints'], getBlueprint: ['Loading blueprint', 'Loaded blueprint'], createBrandKit: ['Building brand kit', 'Saved brand kit'], remember: ['Saving to memory', 'Saved to memory'], forget: ['Removing from memory', 'Removed from memory'], updateBrandKit: ['Updating brand kit', 'Updated brand kit'], addScene: ['Adding scene', 'Added scene'], editScene: ['Updating scene', 'Updated scene'],
   inspectTimeline: ['Checking timeline', 'Checked timeline'], inspectClip: ['Checking clip', 'Checked clip'], inspectAssetAnalysis: ['Reading footage notes', 'Read footage notes'], analyzeMedia: ['Analyzing footage', 'Analyzed footage'], inspectVideo: ['Finding moments', 'Reviewed footage'], inspectFrames: ['Inspecting frames', 'Inspected frames'], inspectVideoFrames: ['Inspecting frames', 'Inspected frames'],
 };
-export const READ_ONLY_TOOLS = new Set(['readSkill','recallMemory','analyzeColor','listBrandKits','getBrandKit','planEffects','previewRender','inspectTimeline', 'inspectClip', 'inspectAssetAnalysis', 'analyzeMedia', 'inspectVideo', 'inspectFrames', 'inspectVideoFrames']);
+export const READ_ONLY_TOOLS = new Set(['measureScreen','compareScreen','listBlueprints','getBlueprint','getFrames','readSkill','recallMemory','analyzeColor','listBrandKits','getBrandKit','planEffects','previewRender','inspectTimeline', 'inspectClip', 'inspectAssetAnalysis', 'analyzeMedia', 'inspectVideo', 'inspectFrames', 'inspectVideoFrames']);
 /** These save outside the timeline (memory, brand kits); their own result is the confirmation. */
-const SAVED_ELSEWHERE = new Set(['remember', 'forget', 'createBrandKit', 'updateBrandKit']);
+const SAVED_ELSEWHERE = new Set(['remember', 'forget', 'createBrandKit', 'updateBrandKit', 'saveBlueprint']);
 const count = (value: unknown) => typeof value === 'number' && Number.isInteger(value) && value >= 0 ? value : undefined;
 const isId = (value: unknown): value is string => typeof value === 'string' && value.length > 0;
 const noun = (n: number, singular: string, plural = `${singular}s`) => `${n} ${n === 1 ? singular : plural}`;

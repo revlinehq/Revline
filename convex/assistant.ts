@@ -122,6 +122,15 @@ async function beginRequest(ctx:MutationCtx,project:Doc<'projects'>,prompt:strin
   await writeProject(ctx,project._id,{aiWorkflowId:workflowId}); return null;
 }
 
+/** The agent stores large tool images in file storage and leaves a URL object behind, which a query cannot
+ * return; send its address as text instead. */
+function plainValues<T>(value: T): T {
+  if (value instanceof URL) return value.href as T;
+  if (Array.isArray(value)) return value.map(plainValues) as T;
+  if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, plainValues(item)])) as T;
+  return value;
+}
+
 export const messages = query({
   args: { projectId: v.id("projects"), threadId: v.string(), paginationOpts: paginationOptsValidator, streamArgs: vStreamArgs },
   // AI SDK UI parts are polymorphic; agent validates and converts their stored representation.
@@ -133,7 +142,7 @@ export const messages = query({
     if (!project.threadId) return { page: [], isDone: true, continueCursor: "", streams: args.streamArgs?.kind === "deltas" ? { kind: "deltas" as const, deltas: [] } : { kind: "list" as const, messages: [] } };
     const page = args.paginationOpts.numItems === 0 ? { page: [], isDone: true, continueCursor: "" } : await listUIMessages(ctx, components.agent, { threadId: project.threadId, paginationOpts: args.paginationOpts });
     const streams = await syncStreams(ctx, components.agent, { threadId: project.threadId, streamArgs: args.streamArgs });
-    return { ...page, streams: streams ?? { kind: "list" as const, messages: [] } };
+    return { ...page, page: plainValues(page.page), streams: streams ?? { kind: "list" as const, messages: [] } };
   },
 });
 const runArgs = { projectId: v.id("projects"), ownerId: v.string(), runId: v.string() };

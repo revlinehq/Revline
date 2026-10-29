@@ -1,11 +1,12 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import { AlertTriangle, Check, CircleCheck, CircleStop, LoaderCircle, Minus } from 'lucide-react';
 import { Trace, TraceCollapsible, TraceCollapsibleContent, TraceCollapsibleTrigger, TraceDescription, TraceIcon, TraceLine, TraceTitle } from '@/components/ui/trace';
-import { READ_ONLY_TOOLS, type ChatTool } from './assistant-results';
+import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
+import { READ_ONLY_TOOLS, toolImages, type ChatTool } from './assistant-results';
 
-type Row = { key: string; tool: string; args: string; state: ChatTool['state']; count: number; span?: [number, number] };
+type Row = { key: string; tool: string; args: string; state: ChatTool['state']; count: number; span?: [number, number]; images: { label: string; src: string }[] };
 
 const short = (value: string, length = 32) => value.length > length ? `${value.slice(0, length - 1)}…` : value;
 const seconds = (value: unknown) => typeof value === 'number' && Number.isFinite(value) ? `${Number(value.toFixed(2))}s` : undefined;
@@ -32,16 +33,32 @@ export function toolChainRows(steps: ChatTool[]): Row[] {
   const rows: Row[] = [];
   steps.forEach((step, index) => {
     const args = argumentsOf(step), previous = rows.at(-1), time = timeOf(step);
-    if (previous && previous.tool === step.name && previous.state === 'done' && step.state === 'done') {
+    const images = toolImages(step);
+    // Steps with images stay their own row, so every render and diff shows where it was made.
+    if (previous && previous.tool === step.name && previous.state === 'done' && step.state === 'done' && !images.length && !previous.images.length) {
       previous.count++;
       if (previous.args !== args) previous.args = '';
       previous.span = previous.span && time ? [Math.min(previous.span[0], time[0]), Math.max(previous.span[1], time[1])] : undefined;
       return;
     }
     // Raw tool errors can carry backend internals; the turn's failure card explains them.
-    rows.push({ key: step.id ?? `${step.name}-${index}`, tool: step.name, args, state: step.state, count: 1, ...(time ? { span: time } : {}) });
+    rows.push({ key: step.id ?? `${step.name}-${index}`, tool: step.name, args, state: step.state, count: 1, images, ...(time ? { span: time } : {}) });
   });
   return rows.map(row => row.count > 1 && !row.args && row.span ? { ...row, args: `${seconds(row.span[0])}–${seconds(row.span[1])}` } : row);
+}
+
+/** What a step rendered (frames, a blueprint render and its diff), small under the step; click for full size. */
+function StepImages({ images }: { images: { label: string; src: string }[] }) {
+  const [open, setOpen] = useState<{ label: string; src: string } | null>(null);
+  return <div className="tool-chain-images">
+    {images.map((image, index) => <button key={index} type="button" className="tool-chain-image" onClick={() => setOpen(image)} aria-label={`Open ${image.label || 'image'}`}>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={image.src} alt={image.label}/>{image.label && <span>{image.label}</span>}
+    </button>)}
+    <Dialog open={!!open} onOpenChange={value => { if (!value) setOpen(null); }}>
+      <DialogContent className="tool-chain-image-dialog"><DialogTitle>{open?.label || 'Image'}</DialogTitle>{open && <img src={open.src} alt={open.label}/>}</DialogContent>
+    </Dialog>
+  </div>;
 }
 
 /** One group of tool calls, shown where it ran. Open while its turn streams; collapses when the turn ends. */
@@ -71,12 +88,12 @@ export function ToolChain({ steps: saved, active = false }: { steps: ChatTool[];
         {rows.map(row => {
           const Mark = row.state === 'running' ? LoaderCircle : row.state === 'error' ? AlertTriangle : row.state === 'stopped' ? Minus : Check;
           const mark = row.state === 'error' ? 'text-[#d9a15a]' : row.state === 'done' ? 'text-[#3FB27F]' : 'text-muted-foreground';
-          return <TraceLine key={row.key} status={row.state === 'running' ? 'running' : row.state === 'error' ? 'error' : row.state === 'stopped' ? 'pending' : undefined}>
+          return <Fragment key={row.key}><TraceLine status={row.state === 'running' ? 'running' : row.state === 'error' ? 'error' : row.state === 'stopped' ? 'pending' : undefined}>
             <TraceIcon className={mark}><Mark className={`size-3.5${row.state === 'running' ? ' animate-spin' : ''}`} aria-label={row.state === 'running' ? 'Running' : row.state === 'error' ? 'Failed' : row.state === 'stopped' ? 'Stopped' : 'Done'}/></TraceIcon>
             <TraceTitle className={row.state === 'error' ? undefined : 'text-foreground/85'}>{row.tool}</TraceTitle>
             {(row.args || row.count > 1) && <TraceDescription>{row.args}{row.count > 1 ? `${row.args ? ' ' : ''}×${row.count}` : ''}</TraceDescription>}
             {row.state === 'error' && <TraceDescription>Failed</TraceDescription>}
-          </TraceLine>;
+          </TraceLine>{row.images.length > 0 && <StepImages images={row.images}/>}</Fragment>;
         })}
       </Trace>
     </TraceCollapsibleContent>
