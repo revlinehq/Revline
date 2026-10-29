@@ -5,7 +5,7 @@ import { type EffectPlan } from '../lib/ai/edit-plan';
 import { EDITOR_STYLE_RULES, editorDisclosureRules } from "../lib/ai/editor-style";
 import { wrapLanguageModel } from "ai";
 import { openAIEditorImages } from "../lib/ai/openai-editor-images";
-import { googleEditorRequests } from "../lib/ai/google-editor-requests";
+import { googleEditorRequests, leadingSystemMessages } from "../lib/ai/google-editor-requests";
 import { openAITokenCounter } from '../lib/ai/openai-token-count';
 import { AssistantTokenBudget, AssistantTokenBudgetError, editorTokenBudgetEnabled } from "../lib/ai/token-budget";
 import {shouldStopEditingSteps} from '../lib/ai/edit-progress';
@@ -96,7 +96,7 @@ export const respond = internalAction({
         if(provider==='openai'&&activeOpenAIKey())countInput=openAITokenCounter(modelId,activeOpenAIKey(),measurement=>console.log(`[ai-budget] ${JSON.stringify({timestamp:new Date().toISOString(),projectId:args.projectId,runId:args.runId,model:modelId,...measurement})}`));
       }
       console.log(`[ai-budget] ${JSON.stringify({timestamp:new Date().toISOString(),projectId:args.projectId,runId:args.runId,enforced:enforceTokenBudget})}`);
-      const model = wrapLanguageModel({ model: provider === 'anthropic' ? anthropic(modelId) : provider === 'google' ? google(modelId) : editorOpenAI().responses(modelId), middleware: [...(provider === 'openai' ? [openAIEditorImages] : []), tokenBudget.middleware(args.selectedClipIds ?? (args.selectedClipId ? [args.selectedClipId] : []), editSession.revision,countInput,enforceTokenBudget), ...(provider === 'google' ? [googleEditorRequests] : [])] });
+      const model = wrapLanguageModel({ model: provider === 'anthropic' ? anthropic(modelId) : provider === 'google' ? google(modelId) : editorOpenAI().responses(modelId), middleware: [...(provider === 'openai' ? [openAIEditorImages] : []), tokenBudget.middleware(args.selectedClipIds ?? (args.selectedClipId ? [args.selectedClipId] : []), editSession.revision,countInput,enforceTokenBudget), ...(provider === 'google' ? [googleEditorRequests] : []), ...(provider === 'openai' ? [] : [leadingSystemMessages])] });
       const cacheKey = `revline-thread-${args.threadId}`;
       const agent = new Agent(components.agent, { name: "Revline", languageModel: model, tools, contextOptions: { recentMessages: 100, excludeToolMessages: false }, stopWhen: [({steps})=>shouldStopEditingSteps(steps), ({steps})=>askedUser(steps), ({ steps }) => hasRepeatedToolFailures(steps)], instructions: `${EDITOR_STYLE_RULES}
 ${editorDisclosureRules(process.env.EDITOR_INTERNAL_DETAILS_ENABLED === "true")}

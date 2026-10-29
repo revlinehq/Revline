@@ -160,8 +160,9 @@ export function editorProviderOptions(selection: ClaudeModelSelection, cacheKey?
 
 /** Higher effort shares its output allowance with hidden reasoning tokens. */
 export function editorMaxOutputTokens(selection: ClaudeModelSelection) {
-  // A full-size scene module is ~6k tokens of tool input.
-  if (selection.provider === 'anthropic') return 8192;
+  // A full-size scene module is ~6k tokens of tool input, written after the thinking that shares this
+  // budget; Claude's adaptive thinking at high effort can spend 8k on its own before a scene starts.
+  if (selection.provider === 'anthropic') return { low: 16384, medium: 16384, high: 32768, xhigh: 32768, max: 32768 }[selection.reasoningEffort ?? defaultEditorReasoningEffort()];
   return { low: 8192, medium: 8192, high: 16384, xhigh: 24576, max: 32768 }[selection.reasoningEffort ?? defaultEditorReasoningEffort()];
 }
 

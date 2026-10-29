@@ -4,7 +4,7 @@ import { compactEditorPrompt } from './editor-context';
 
 // An anomaly backstop, not a work limit: a three-scene explainer (13 calls)
 // used ~10% of these ceilings. Only runaway tool loops should reach them.
-export const EDITOR_TOKEN_LIMITS = { requestBytes: 450_000, transportBytes: 24_000_000, inputTokens: 2_000_000, outputTokens: 150_000, outputPerCall: 8192 } as const;
+export const EDITOR_TOKEN_LIMITS = { requestBytes: 450_000, transportBytes: 24_000_000, inputTokens: 2_000_000, outputTokens: 150_000, outputPerCall: 32_768 } as const;
 export const EDITOR_RAW_INPUT_LIMIT = 7_000_000;
 type TokenLimits = { [K in keyof typeof EDITOR_TOKEN_LIMITS]: number };
 type NativeCacheModel = 'anthropic' | 'openai';

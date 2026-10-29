@@ -13,11 +13,10 @@ function geminiSchema(value: unknown): unknown {
   return Object.fromEntries(Object.entries(node).map(([key, child]) => [key, geminiSchema(child)]));
 }
 
-/** Requests Gemini accepts from an editor thread other models also wrote:
- * - system messages only at the start, so later context notes (the edit context, history and
- *   repair notes) become user text;
- * - tool schemas in Gemini's JSON Schema subset. */
-export const googleEditorRequests: LanguageModelMiddleware = {
+/** System messages only at the start of the prompt: later context notes (the edit context, history and
+ * repair notes) become user text. Gemini rejects them anywhere else, and Claude rejects them after an
+ * assistant turn. */
+export const leadingSystemMessages: LanguageModelMiddleware = {
   transformParams: async ({ params }) => {
     const lead = params.prompt.findIndex(message => message.role !== 'system');
     return {
@@ -25,7 +24,14 @@ export const googleEditorRequests: LanguageModelMiddleware = {
       prompt: params.prompt.map((message, index) => lead >= 0 && index > lead && message.role === 'system'
         ? { role: 'user' as const, content: [{ type: 'text' as const, text: message.content }] }
         : message),
-      ...(params.tools ? { tools: params.tools.map(item => item.type === 'function' ? { ...item, inputSchema: geminiSchema(item.inputSchema) as typeof item.inputSchema } : item) } : {}),
     };
   },
+};
+
+/** Tool schemas in Gemini's JSON Schema subset. */
+export const googleEditorRequests: LanguageModelMiddleware = {
+  transformParams: async ({ params }) => ({
+    ...params,
+    ...(params.tools ? { tools: params.tools.map(item => item.type === 'function' ? { ...item, inputSchema: geminiSchema(item.inputSchema) as typeof item.inputSchema } : item) } : {}),
+  }),
 };
