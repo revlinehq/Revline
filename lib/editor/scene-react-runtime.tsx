@@ -7,6 +7,7 @@ import * as ReactJSXRuntime from 'react/jsx-runtime';
 import { flushSync } from 'react-dom';
 import { createRoot, type Root } from 'react-dom/client';
 import type { FrameAdapter } from '@hyperframes/core';
+import type { gsap as Gsap } from 'gsap';
 import { parseStartExpression } from '@hyperframes/core/runtime/start-expression';
 import type { SceneBrandContext } from './brand-kit';
 
@@ -27,6 +28,8 @@ export type ReactSceneOptions = SceneProps & {
   icons: Record<string, string>;
   blueprint: (name: string, container: HTMLElement, size?: { width: number; height: number }) => HTMLElement;
   parseEase: (name: string) => (progress: number) => number;
+  /** The frame's GSAP, with its plugins registered, for useTimeline. */
+  gsap: typeof Gsap;
 };
 
 /** The frame clock. Components subscribe to it instead of receiving time through props, so a seek
@@ -48,6 +51,7 @@ const BeatContext = createContext<BeatWindow | null>(null);
 
 let parseEase: ReactSceneOptions['parseEase'] = () => progress => progress;
 let pending: Promise<unknown>[] = [];
+let gsap: typeof Gsap | null = null;
 
 function useSceneState() {
   const scene = useContext(SceneContext);
@@ -130,6 +134,42 @@ export function Beat({ id, start = 0, duration, track = 0, keep = false, style, 
         style={{ position: 'absolute', inset: 0, zIndex: track, ...(active ? null : { visibility: 'hidden' }), ...style }}>{children}</div>
     </BeatContext.Provider>
   );
+}
+
+/**
+ * GSAP choreography on the beat's clock: staggers, overlaps, word reveals, SplitText, MorphSVG.
+ * `build(tl, el)` runs once per mount, inside a gsap.context scoped to the returned ref's element,
+ * so selector strings ('.word') find only this component's nodes and everything it made (tweens,
+ * SplitText) is reverted on unmount. The timeline is paused and never ticks: every frame seeks it to
+ * the beat's local time, so preview, scrubbing and export draw the same frame. It is seeked to the
+ * current frame where it is built, before the frame is captured, so starting states never flash.
+ * Animate only nodes React does not restyle on every render (React would overwrite what GSAP set).
+ *
+ *   const ref = useTimeline((tl, el) => {
+ *     const words = new SplitText(el, { type: 'words' }).words;
+ *     tl.from(words, { opacity: 0, filter: 'blur(12px)', y: 20, stagger: .08, duration: .7, ease: 'expo.out' }, .2);
+ *   });
+ *   return <h1 ref={ref}>Every thread, in reach.</h1>;
+ */
+export function useTimeline<T extends HTMLElement = HTMLDivElement>(build: (tl: gsap.core.Timeline, el: T) => void, deps: React.DependencyList = []): React.RefObject<T | null> {
+  const { clock, fps } = useSceneState(), beat = useContext(BeatContext)!;
+  const ref = useRef<T>(null), latest = useRef(build);
+  latest.current = build;
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) throw new Error('useTimeline needs its ref on an element: <div ref={ref}>.');
+    if (!gsap) throw new Error('GSAP is not loaded in this scene.');
+    const engine = gsap;
+    let tl!: gsap.core.Timeline;
+    const context = engine.context(() => { tl = engine.timeline({ paused: true }); latest.current(tl, el); }, el);
+    // Seeked straight from the clock, outside React: the component itself never re-renders per frame.
+    const seek = () => { tl.seek(Math.max(0, beat.frame(clock.frame) / fps - beat.start), false); };
+    seek();
+    const unsubscribe = clock.subscribe(seek);
+    return () => { unsubscribe(); context.revert(); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clock, fps, beat, ...deps]);
+  return ref;
 }
 
 /** A full-frame layer: an absolutely positioned box covering the scene. */
@@ -266,13 +306,14 @@ export function waitFor<T>(promise: Promise<T>): Promise<T> {
 }
 
 /** What `import ... from 'revline'` gives a scene. */
-export const revline = { useScene, useBeat, Beat, Layer, Still, Icon, Blueprint, Neighbour, Transition, ease, progress, mix, ramp, spring, waitFor };
+export const revline = { useScene, useBeat, useTimeline, Beat, Layer, Still, Icon, Blueprint, Neighbour, Transition, ease, progress, mix, ramp, spring, waitFor };
 
 /** A HyperFrames frame adapter that draws a React scene: seekFrame commits the tree for that frame. */
 export function createReactSceneAdapter(options: ReactSceneOptions): FrameAdapter & { settle(): Promise<void> } {
   const clock = new Clock();
   parseEase = options.parseEase;
-  const { Scene, root: container, icons, blueprint, neighbours = [], parseEase: _ease, ...props } = options;
+  gsap = options.gsap;
+  const { Scene, root: container, icons, blueprint, neighbours = [], parseEase: _ease, gsap: _gsap, ...props } = options;
   const state: SceneState = { ...props, clock, icons, blueprint, neighbours };
   const scene: BeatWindow = { start: 0, duration: props.duration, frame: same, beats: new Map() };
   let root: Root | null = null, failure: unknown = null;

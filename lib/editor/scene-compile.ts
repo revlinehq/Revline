@@ -9,7 +9,7 @@ export function checkSceneCode(code: string) {
     compiled = transform(code, sceneTransformOptions(code)).code;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    throw new Error(`Scene code does not compile: ${message}${!react && /<[A-Za-z]/.test(code) ? ' Scenes are plain TypeScript, not JSX: build HTML with innerHTML or document.createElement.' : ''}`);
+    throw new Error(`Scene code does not compile: ${message}${!react && /<[A-Za-z]/.test(code) ? ' GSAP scenes are plain TypeScript, not JSX: build HTML with innerHTML or document.createElement, or import from "revline" to write a React scene.' : ''}`);
   }
   for (const match of compiled.matchAll(/require\(\s*['"]([^'"]+)['"]\s*\)/g)) {
     if (!SCENE_MODULES.has(match[1]) && !(react && (REACT_SCENE_MODULES.has(match[1]) || match[1].startsWith('blueprint:')))) throw new Error(react ? `React scenes can import only revline, react, gsap and blueprint:<name>, not "${match[1]}".` : `Scenes can import only gsap and its plugins, not "${match[1]}".`);

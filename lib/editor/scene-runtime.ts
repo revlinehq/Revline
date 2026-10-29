@@ -133,7 +133,7 @@ if (typeof window !== 'undefined' && window.parent !== window) {
     };
     if (isReactScene(data.code)) {
       const neighbours = (data.neighbours ?? []).map(item => ({ role: item.role, start: item.start, duration: item.duration, Scene: compileScene(item.code, item.blueprints) as never }));
-      adapter = sceneReact()!.createReactSceneAdapter({ root, Scene: scene as never, neighbours, width: data.width, height: data.height, duration: data.duration, fps: data.fps, brand, media, icons: data.icons ?? {}, blueprint, parseEase: name => gsap.parseEase(name) as (progress: number) => number });
+      adapter = sceneReact()!.createReactSceneAdapter({ root, Scene: scene as never, neighbours, width: data.width, height: data.height, duration: data.duration, fps: data.fps, brand, media, icons: data.icons ?? {}, blueprint, gsap, parseEase: name => gsap.parseEase(name) as (progress: number) => number });
       await adapter.init?.({ compositionId: 'revline-scene', fps: data.fps, width: data.width, height: data.height, rootElement: root });
       return;
     }

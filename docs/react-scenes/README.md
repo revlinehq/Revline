@@ -17,6 +17,7 @@ The format is Revline's own, built on HyperFrames. It uses no Remotion code, API
 | Export | What it does |
 | --- | --- |
 | `useBeat()` / `useBeat(select)` | Local `{ time, frame, fps, start, duration, progress }`. With `select`, the component re-renders only when the selected value changes. |
+| `useTimeline((tl, el) => …, deps?)` | GSAP choreography on the beat clock. Builds a paused timeline once per mount inside a `gsap.context` scoped to the returned ref's element, seeks it to the beat's local time on every frame (from the clock, without re-rendering the component), and reverts it on unmount. Start states apply where it is built, so nothing flashes. |
 | `useScene()` | `{ width, height, fps, duration, brand, media }` (also the scene component's props). |
 | `Beat`, `Layer`, `Still` | A timed section with its own clock; a full-frame box; children rendered once. |
 | `Icon`, `Blueprint` | A Lucide icon as an SVG element; a brand kit blueprint built once into a box. |
@@ -139,6 +140,16 @@ The readable React beat is about the size of the minified GSAP one. Minified, it
 - **Playback:** all three held 30 fps here. The editor's preview lag is not from the scene seek itself, which stays in single-digit milliseconds. It comes from the size of the live DOM, which React keeps smaller because offscreen beats do not exist.
 
 These numbers come from headless Chrome. The editor pane was hidden during this session, so frame timing there would have been throttled and was not used.
+
+## Decision (2026-10-29)
+
+Films use GSAP for motion and React for structure:
+- **Structure:** components, one per part, in one clip per beat, with transition clips between beats.
+- **Motion:** simple fades and slides use `progress()`/`mix()`; choreography uses `useTimeline`.
+
+The agent learns this from the scene-engine skill's `react-scenes` page and the motion-design skill.
+
+A word-by-word blur-in title built with `useTimeline` draws byte-identical frames in playback order and in shuffled scrub order (96 of 96). Its first frame and the next beat's first frame show only the background.
 
 ## Recommendation
 

@@ -7,7 +7,13 @@ export const motionDesign: EditorSkill = {
   description: 'Launch and feature films made from scratch (motion design, no footage needed): the ordered workflow from brand kit to finished film, with pages for brand, intake, story, script, example style directions measured from real launch films, techniques by feedback with timings, motion craft, and process. Read before any launch, announcement, teaser or feature video, and again on design feedback. Explainers and overlays on footage use explainer-scenes. Scenes themselves: scene-engine.',
   body: `# Motion design: launch and feature films
 
-A launch film makes one product or one feature feel simple, real and worth trying, in 15 to 60 seconds. Scenes are built with the scene engine (read scene-engine). Work through the steps in order; each names the page to load with readSkill name "motion-design" and page.
+A launch film makes one product or one feature feel simple, real and worth trying, in 15 to 60 seconds. Work through the steps in order; each names the page to load with readSkill name "motion-design" and page.
+
+## How films are built
+Films are React scenes (readSkill name "scene-engine" page "react-scenes"):
+- **Structure is React.** One scene clip per beat, back to back on V2, so feedback on one beat edits one clip. The product UI is components, one per part (\`Sidebar\`, \`Composer\`, \`DiffPanel\`), with the identical component code in every beat that shows them. Camera moves and crossfades between beats are their own transition clips on V3 over the cut (\`<Transition kind="zoom-into" target="composer">\`).
+- **Motion is GSAP on the frame clock.** Simple fades and slides: \`progress()\` and \`mix()\` from \`useBeat()\` time. Choreography (staggers, overlaps, word-by-word reveals, SplitText, MorphSVG, DrawSVG): \`useTimeline\`.
+- **Never** \`gsap.to\` outside a seeked timeline, CSS transitions or animations, timers, or state that changes over time: they do not follow the clock, so preview, scrubbing and export disagree.
 
 ## Steps
 1. **Brand** (\`brand-kit\`): find or create the brand kit and confirm its product text. Nothing is designed before the brand is known.
@@ -42,8 +48,8 @@ How much to follow it:
 - Interaction is shown by typing in real time far more often than by a cursor.
 - Real product UI, rebuilt and strictly close to the product: measure colors, positions and sizes from the screenshots (\`measureScreen\`), use the product's own icons and labels, and check the build side by side against the screenshot (\`compareScreen\`) before it goes in a shot. Build it once and reuse that one build in every shot, cropped and magnified to the part that matters.
 - By default, titles are small and calm, and their copy is creative and specific (a default, not a rule: when the user asks for a different title style or size, follow them): each one says what the shot shows in a fresh way (for example "Every thread, in reach." over a sidebar of threads), never a generic slogan ("Just ask.", "It just gets it done."). Write three options for each title and keep the most specific one.
-- Keep the preview fast: once a part is done or hidden, take it out of the page (\`display: none\`, not only opacity 0), and never mount heavy UI where it can't be seen (a whole app inside a tiny thumbnail).
-- No flash frames: anything that is not visible at the scene's first frame starts hidden where it is built (inline \`opacity:0\` or \`gsap.set\` right after creating it), never only through a timeline tween at 0; a frame can be captured before the first seek, and a built-but-unhidden part flashes for one frame at the cut. Before handing a scene back, look at its first two frames and the frames on both sides of every cut (\`getFrames\` at the clip start, start + 1/60 s, and each cut ± 1/60 s), and fix anything that appears for a single frame.
+- Keep the preview fast: once a part is done or hidden, take it out of the page (render nothing, or \`display: none\`, not only opacity 0), and never mount heavy UI where it can't be seen (a whole app inside a tiny thumbnail).
+- No flash frames: anything that is not visible at the scene's first frame starts hidden where it is built (style computed from time 0, or a useTimeline \`from\`/\`fromTo\`, which applies its start state when the timeline is built), never only through a tween that starts later; a frame can be captured before the first seek, and a built-but-unhidden part flashes for one frame at the cut. Before handing a scene back, look at its first two frames and the frames on both sides of every cut (\`getFrames\` at the clip start, start + 1/60 s, and each cut ± 1/60 s), and fix anything that appears for a single frame.
 - One accent color; status colors stay small.
 - The lockup is held 2 to 4.5 s on a calm frame, often ending on the mark alone.
 - Still holds are normal while something happens in the UI.

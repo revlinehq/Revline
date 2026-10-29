@@ -1,6 +1,49 @@
 import { SCENE_FONT_FAMILIES, STARTER_SCENE_CODE } from '../../editor/scene-layers';
 import { SCENE_GSAP_PLUGINS } from '../../editor/scene-modules';
-import type { EditorSkill } from './index';
+import type { EditorSkill, EditorSkillPage } from './index';
+
+const reactScenesPage: EditorSkillPage = {
+  name: 'react-scenes',
+  description: 'React scenes: the format for launch and feature films. Components for structure (one per part, one clip per beat), GSAP for motion through useTimeline, transition clips between beats, the revline module.',
+  body: `# React scenes
+
+A React scene is a TSX module whose default export is a component. It is a React scene because it imports from \`'revline'\`. Structure is React (components, one clip per beat); motion is GSAP, seeked by the frame clock. The engine renders the tree for each frame, so preview, scrubbing and export draw the same frames.
+
+## Structure
+- **One clip per beat.** Each beat of the film (the dashboard building, the composer, the threads, the lockup) is its own scene clip on V2, so feedback on one beat edits one clip. Beat clips sit back to back.
+- **One component per part.** Rebuild the product UI as components named for what they are (\`Sidebar\`, \`Composer\`, \`ThreadList\`, \`DiffPanel\`), composed by an app component. The inspector lists the components each clip draws, so names matter. Write the components once and use the identical code in every beat clip that shows them.
+- **Anchors.** Mark parts a transition may fly into with \`data-anchor="composer"\`, and the element the camera moves (the app window, not the titles over it) with \`data-camera\`.
+- **Transitions are clips.** A camera move or crossfade between two beats is its own clip on the layer above the cut (V3), drawing \`<Transition>\`: \`kind\` is \`zoom-into\` (into an anchor of the outgoing beat), \`pull-back\` (out of an anchor of the incoming beat), \`crossfade\` or \`blur-through\`; \`target\` names the anchor; \`zoom\`, \`at\` (where the anchor lands, as fractions of the frame), \`origin\` (point in the anchor), \`fade\` (crossfade window, fractions) and \`ease\` tune it. It draws both neighbouring beat clips on their own clocks; give the incoming beat a first frame that matches where the camera ends.
+
+## Motion
+- **Simple fades and slides:** compute from time. \`const { time } = useBeat()\` (local to the clip, or to the nearest \`<Beat>\`), then \`progress(time, start, duration, 'expo.out')\` (eased 0..1) and \`mix(from, to, p)\` into style (opacity from \`p\`, a translateY from \`mix(24, 0, p)\`).
+- **Choreography** (staggers, overlaps, word-by-word or letter reveals, SplitText, ScrambleText, DrawSVG, MorphSVG, motion paths): \`useTimeline\`. It builds a paused GSAP timeline once per mount, scoped to the element it returns a ref for, and seeks it to the beat's local time on every frame:
+\`\`\`tsx
+function Title({ text }: { text: string }) {
+  const ref = useTimeline<HTMLHeadingElement>((tl, el) => {
+    const { words } = new SplitText(el, { type: 'words' });
+    tl.from(words, { opacity: 0, filter: 'blur(14px)', y: 18, duration: .8, ease: 'expo.out', stagger: .07 }, .2);
+  });
+  return <h1 ref={ref} style={{ margin: 0, font: '600 84px/1.05 Outfit' }}>{text}</h1>;
+}
+\`\`\`
+  Selector strings inside \`build\` (\`tl.from('.row', …)\`) find only that component's nodes. Let GSAP animate nodes whose style React does not set every render; keep React-computed style and GSAP on different elements.
+- **Never** \`gsap.to\`, \`gsap.from\` or \`gsap.set\` outside a useTimeline build, CSS transitions or keyframe animations, timers, requestAnimationFrame, Date or component state that changes over time. None of them follow the frame clock, so they differ between preview, scrubbing and export.
+- **No flash frames:** a part hidden at its first frame starts hidden through its timeline (\`tl.from\`/\`tl.fromTo\` apply their start state where the timeline is built) or through computed style at time 0. Beats unmount what is outside their window, so build hidden parts where they first appear.
+
+## The revline module
+- \`useBeat()\`: \`{ time, frame, fps, start, duration, progress }\` local to the nearest beat. \`useBeat(t => …)\` re-renders only when the selected value changes (\`useBeat(t => t.time > 2)\`).
+- \`useScene()\`: \`{ width, height, fps, duration, brand, media }\`; also the scene component's props.
+- \`useTimeline((tl, el) => …, deps?)\`: GSAP choreography on the beat clock; returns the ref.
+- \`<Beat id start duration track keep>\`: a stretch with its own clock inside one clip. \`start\` is seconds or a reference to an earlier sibling: \`"intro"\`, \`"intro + 0.5"\`, \`"intro - 0.3"\`. Outside its window it renders nothing (\`keep\` keeps it mounted, hidden).
+- \`<Layer>\`: full-frame box. \`<Still>\`: children rendered once. \`<Icon name size color strokeWidth>\`: a Lucide icon.
+- \`progress\`, \`mix\`, \`ramp(t, times, values, ease)\`, \`spring(t, { from, to, stiffness, damping })\`, \`ease(name)\`: eases use GSAP names.
+- \`<Transition>\` and \`<Neighbour role="from" | "to">\` for transition clips. \`waitFor(promise)\` holds a frame until it settles.
+- Imports: \`revline\`, \`react\` and \`gsap\` with its plugins (\`gsap/SplitText\` etc.). Fonts, media, icons and the brand work as in GSAP scenes.
+
+## Performance
+Only components that read time re-render; static parts render once. A useTimeline component does not re-render per frame. Keep heavy static UI in components that never call useBeat, wrap big static subtrees in \`<Still>\`, and prefer \`useBeat(select)\` in hot components.`,
+};
 
 export const sceneEngine: EditorSkill = {
   name: 'scene-engine',
@@ -8,6 +51,8 @@ export const sceneEngine: EditorSkill = {
   body: `# Scene engine
 
 A scene is a TypeScript module that builds plain HTML once and choreographs it on a GSAP timeline. It renders full-frame on its own V layer, inside a sandbox, and the editor renders it frame by frame for preview and export. Transparent areas show the layers below.
+
+Launch and feature films use **React scenes** instead: components for structure, one clip per beat, GSAP motion seeked through useTimeline (page \`react-scenes\`). The rest of this page describes GSAP scenes, used for explainers and overlays on footage.
 
 ## Writing scenes
 - Plan the film as a short outline (a few lines per scene: time range, what moves, the words). Never draft scene code while thinking; write it in the addScene call. A turn has one output budget for thinking and the call together, and a long draft in thinking leaves nothing for the scene.
@@ -23,7 +68,7 @@ A scene is a TypeScript module that builds plain HTML once and choreographs it o
 - \`blueprint('Editor', container, { width, height })\` builds a brand kit blueprint attached with \`blueprints\` inside \`container\` and returns its root; animate its \`[data-part=...]\` pieces (motion-design, blueprints page).
 - \`brand\` is the brand kit attached with brandKitId (fonts already loaded, named colors, logo), or null. See motion-design's \`brand-kit\` page.
 - The editor seeks the timeline to each frame, so the film is scrubbable and exports frame-exact. Animate only with GSAP. CSS transitions and keyframes, requestAnimationFrame, timers, Date, video and audio do not follow the clock.
-- Plain TypeScript, not JSX. Imports: \`gsap\` and its plugins (${SCENE_GSAP_PLUGINS.join(', ')}, plus EasePack), each from \`gsap/<Name>\` or all from \`gsap\`. They are registered already. Nothing else loads: no network, no other packages.
+- GSAP scenes are plain TypeScript, not JSX (React scenes, page \`react-scenes\`, are TSX). Imports: \`gsap\` and its plugins (${SCENE_GSAP_PLUGINS.join(', ')}, plus EasePack), each from \`gsap/<Name>\` or all from \`gsap\`. They are registered already. Nothing else loads: no network, no other packages.
 - Math.random is seeded, so scatter and noise come out the same in preview and export.
 - Limits: code up to 20,000 characters, clips up to 120 s.
 
@@ -65,4 +110,5 @@ Real screenshots, screen recordings, photos and logos from the project's media c
 \`\`\`ts
 ${STARTER_SCENE_CODE}\`\`\`
 `,
+  pages: [reactScenesPage],
 };
