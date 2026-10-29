@@ -29,8 +29,6 @@ html[data-workspace-theme="dark"] {
 :is(.workspace-page, .workspace-nav, .workspace-dialog) [data-slot=button]:is([data-variant=outline], [data-variant=ghost]) { --border:var(--ed-border, var(--ws-border)); --input:var(--ed-border, var(--ws-border)); --background:transparent; --muted:var(--ws-hover); --foreground:var(--ws-text); color:var(--ws-text); }
 :is(.workspace-page, .workspace-nav, .workspace-dialog) [data-slot=button][data-variant=ghost] { color:var(--ws-muted); }
 .workspace-nav-export { --primary:var(--revline-primary-background); --primary-foreground:#fff; }
-.workspace-nav-mcp-apps { display:flex; align-items:center; gap:4px; }
-
 .workspace-nav-unsaved svg { color:#c77730; }
 .workspace-nav-save { display:flex; align-items:center; gap:5px; color:var(--ws-muted); font-size:12px; }
 .workspace-menu { width:auto; padding:8px; border:1px solid var(--ws-border); border-radius:14px; background:var(--ws-surface); color:var(--ws-text); box-shadow:0 6px 24px #00000014; }
@@ -110,8 +108,7 @@ html[data-workspace-theme="dark"] {
 @media (max-width:900px) { .workspace-profile-content { margin:0 32px; } .workspace-nav { gap:12px; padding:0 16px; } .workspace-nav-actions { gap:8px; } }
 @media (max-width:640px) {
   .workspace-nav { gap:8px; } .workspace-nav-divider { display:none; } .workspace-chat-trigger { flex:1; max-width:none; font-size:12px; } .workspace-nav-history { display:none; }
-  .workspace-nav:has(.workspace-nav-save) .workspace-nav-brand .revline-brand>span { display:none; }
-  .workspace-nav-actions [data-slot=button] > span:not(.workspace-nav-mcp-apps) { display:none; } .workspace-nav-actions { gap:5px; }
+  .workspace-nav:has(.workspace-nav-save) .workspace-nav-brand .revline-brand>span { display:none; } .workspace-nav-actions { gap:5px; }
   .workspace-history-content,.workspace-profile-content { margin:0 20px; padding-top:40px; } .workspace-page-heading h1 { font-size:28px; }
   .workspace-profile-section { grid-template-columns:1fr; gap:20px; } .workspace-history-tools { gap:8px; } .workspace-chat-activity { display:none; } .workspace-chat-row { padding:10px 4px; }
   .workspace-chat-row-link { gap:12px; } .workspace-chat-description strong { font-size:14px; } .workspace-chat-description>span { font-size:12px; }
