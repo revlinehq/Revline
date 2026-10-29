@@ -265,7 +265,7 @@ export const Preview = forwardRef<PreviewHandle,{/** Platform UI overlay for ver
     ? calculateVisualRect(asset.width,asset.height,canvas.width,canvas.height,selectedClip.crop,undefined,selectedClip.fit).window
     : {left:0,top:0,width:canvas.width,height:canvas.height};
   const cropActive=cropping&&ready&&selectedClip&&(selectedClip.kind==='image'||selectedClip.kind==='video')&&asset?.width&&asset?.height&&onCropCommit&&onCropCancel;
-  return <div className={`preview-canvas aspect-${timeline.aspectRatio}`} data-testid="preview"><div ref={container} className="hyperframes-host"/>{ready&&!cropActive&&onSelectClip&&<button type="button" className="preview-hit-surface" aria-label="Select footage in preview" title="Double-click for Clip settings · Alt-click to select overlapping layers" onClick={event=>{
+  return <div className={`preview-canvas aspect-${timeline.aspectRatio}`} data-testid="preview"><div ref={container} className="hyperframes-host"/>{ready&&!cropActive&&onSelectClip&&<button type="button" className="preview-hit-surface" aria-label="Select footage in preview" onClick={event=>{
     event.stopPropagation();const rect=event.currentTarget.getBoundingClientRect();
     const point=event.detail===0?{x:canvas.width/2,y:canvas.height/2}:{x:(event.clientX-rect.left)/rect.width*canvas.width,y:(event.clientY-rect.top)/rect.height*canvas.height};
     const doc=player.current?.iframeElement?.contentDocument,composition=doc?.getElementById('composition')?.getBoundingClientRect();
