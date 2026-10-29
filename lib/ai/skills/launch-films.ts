@@ -18,6 +18,7 @@ Every fact on screen comes from the confirmed brand context or from the user: pr
 - Length: teaser 10 to 15 s, feature 15 to 30 s, product 30 to 60 s.
 - A reference film they like, if any.
 - Brand: run the brand-kit workflow. The brand context must be confirmed before writing the beat sheet.
+- Style: read launch-styles and pick one (or the card matching their reference). It decides look, motion and pacing; this skill decides the story.
 
 ## 2. Structure
 
@@ -57,10 +58,10 @@ Problem then solution works because the viewer has to feel the gap before the pr
 
 - One idea per shot. Shots 1.5 to 4 s.
 - Reading: on-screen text holds at least 1 s plus 0.3 s per word after it lands. Headlines 2 to 6 words. Never two text blocks entering at once.
-- Easing: choose three for the whole film and use nothing else: an entrance (expo.out or power3.out, 0.5 to 0.9 s), a move (power2.inOut or power3.inOut), an exit (power2.in, 0.25 to 0.4 s). back.out only on small elements.
+- Easing: the chosen style sets it. Otherwise choose three for the whole film and use nothing else: an entrance (expo.out or power3.out, 0.5 to 0.9 s), a move (power2.inOut or power3.inOut), an exit (power2.in, 0.25 to 0.4 s). back.out only on small elements.
 - Staggers 0.03 to 0.08 s. Hold every important state still for at least 0.4 s.
-- Music: place the track first, mark beats and downbeats, and cut on downbeats. Put entrances and sound hits on beats; the peak on the drop or the biggest accent.
-- Something always moves: a slow push (scale 1 to 1.04 over the shot) under held frames.
+- Music: place the track first and mark beats. Let the story set the cuts (top launch films land only 0 to 30% of cuts on beats); put sound hits and key entrances on accents, and the peak on the drop or the biggest accent.
+- Holds: a still hold is fine while something happens in the UI. Add a slow push (scale 1 to 1.04) only when a frame would otherwise sit dead.
 
 ## 5. Process: approve before building
 
