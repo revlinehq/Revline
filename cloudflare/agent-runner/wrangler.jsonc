@@ -1,0 +1,18 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  // Development runner for the dev Convex deployment (majestic-alpaca-541). Production: wrangler.production.jsonc.
+  "name": "revline-agent-runner-dev",
+  "main": "worker.ts",
+  "account_id": "701645e913477e567db69b11343f59d8",
+  "compatibility_date": "2026-10-19",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "preview_urls": false,
+  // A turn's CPU is small next to its waiting; stream deltas and Convex calls are each one subrequest.
+  "limits": { "cpu_ms": 300000, "subrequests": 1000000 },
+  // One Agents SDK agent (a SQLite Durable Object) per chat turn.
+  "durable_objects": { "bindings": [{ "name": "EDITOR_TURN", "class_name": "EditorTurn" }] },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["EditorTurn"] }],
+  "vars": { "CONVEX_SITE_URL": "https://majestic-alpaca-541.convex.site" },
+  "observability": { "enabled": true, "logs": { "enabled": true, "invocation_logs": false }, "traces": { "enabled": true, "head_sampling_rate": 1, "persist": true } }
+}

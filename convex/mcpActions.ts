@@ -6,13 +6,14 @@ import { internalAction, type ActionCtx } from './_generated/server';
 import type { Doc, Id } from './_generated/dataModel';
 import { createEditorToolkit } from './lib/editorToolkit';
 import { mediaDownloadUrl } from './lib/media_storage';
-import { AssistantRunBudget } from '../lib/ai/run-budget';
 import { READ_ONLY_RUN_PREFIX } from './lib/run_ids';
 import { completeUpload, openUpload, signPartUrl } from './r2';
 
 // The editor's own AI tools, exposed over MCP. planEffects/previewRender keep
 // review plans for the length of one in-app turn, which an MCP call does not have.
 // Choice cards only exist in the editor's chat; MCP clients ask in their own way.
+// An MCP call still runs in one Convex action; stop before its ten-minute limit with a clear message.
+const CALL_LIMIT_MS = 9 * 60_000;
 const RUN_SCOPED_TOOLS = new Set(['planEffects', 'previewRender', 'getFrames', 'askUser', 'askBrandKit']);
 const projectIdField = z.string().min(1).describe('Revline project ID from listProjects or getProject.');
 
@@ -57,18 +58,16 @@ function editorTools(ctx: ActionCtx, options: Parameters<typeof createEditorTool
 const catalogOptions = (): Parameters<typeof createEditorToolkit>[1] => ({
   run: { projectId: 'catalog' as Id<'projects'>, ownerId: 'catalog', runId: 'catalog' },
   project: { timeline: { clips: [], fps: 30, aspectRatio: 'landscape' }, revision: 0, aspectRatio: 'landscape' } as unknown as Doc<'projects'>,
-  assets: [], recovering: false, initialPlans: [], selectedClipIds: [], abortSignal: new AbortController().signal, budget: new AssistantRunBudget(),
+  assets: [], recovering: false, initialPlans: [], selectedClipIds: [], abortSignal: new AbortController().signal,
 });
 
 export const listTools = internalAction({ args: {}, returns: v.array(v.object({ name: v.string(), description: v.string(), inputSchema: v.any() })), handler: async (ctx): Promise<{ name: string; description: string; inputSchema: unknown }[]> => {
   const options = catalogOptions();
-  try {
-    const { tools } = editorTools(ctx, options);
-    return [
-      ...Object.entries(PROJECT_TOOLS).map(([name, tool]) => ({ name, description: tool.description, inputSchema: toJsonSchema(tool.inputSchema) })),
-      ...Object.entries(tools).map(([name, tool]) => ({ name, description: tool.description ?? name, inputSchema: withProjectId(toJsonSchema(tool.inputSchema)) })),
-    ];
-  } finally { options.budget.dispose(); }
+  const { tools } = editorTools(ctx, options);
+  return [
+    ...Object.entries(PROJECT_TOOLS).map(([name, tool]) => ({ name, description: tool.description, inputSchema: toJsonSchema(tool.inputSchema) })),
+    ...Object.entries(tools).map(([name, tool]) => ({ name, description: tool.description ?? name, inputSchema: withProjectId(toJsonSchema(tool.inputSchema)) })),
+  ];
 }});
 
 const callResult = v.object({ text: v.string(), isError: v.boolean(), images: v.optional(v.array(v.object({ data: v.string(), mimeType: v.string() }))) });
@@ -185,13 +184,11 @@ async function readEditorTool(ctx: ActionCtx, ownerId: string, rawProjectId: str
     const projectId = await ctx.runQuery(internal.mcp.readRun, { ownerId, projectId: rawProjectId });
     const run = { projectId, ownerId, runId: `${READ_ONLY_RUN_PREFIX}${crypto.randomUUID()}` };
     const { project, assets } = await ctx.runQuery(internal.assistant.getRun, run);
-    const budget = new AssistantRunBudget();
-    try {
-      const { tools } = editorTools(ctx, { run, project, assets, recovering: false, initialPlans: [], selectedClipIds: [], abortSignal: budget.signal, budget, planlessEffects: true });
-      const tool = tools[name];
-      const output = await tool.execute.call({ ...tool, ctx }, input, { toolCallId: crypto.randomUUID(), messages: [], abortSignal: budget.signal });
-      return withImages(output, failed(output));
-    } finally { budget.dispose(); }
+    const abortSignal = AbortSignal.timeout(CALL_LIMIT_MS);
+    const { tools } = editorTools(ctx, { run, project, assets, recovering: false, initialPlans: [], selectedClipIds: [], abortSignal, planlessEffects: true });
+    const tool = tools[name];
+    const output = await tool.execute.call({ ...tool, ctx }, input, { toolCallId: crypto.randomUUID(), messages: [], abortSignal });
+    return withImages(output, failed(output));
   } catch (error) { return result(message(error), true); }
 }
 
@@ -199,8 +196,7 @@ async function callEditorTool(ctx: ActionCtx, ownerId: string, name: string, raw
   const { projectId: rawProjectId, ...rawInput } = raw;
   if (typeof rawProjectId !== 'string' || !rawProjectId) return result('projectId is required. Call listProjects to find it.', true);
   // Validate before locking the project, against the same schema the run will use.
-  const catalog = catalogOptions(), known = editorTools(ctx, catalog).tools[name];
-  catalog.budget.dispose();
+  const known = editorTools(ctx, catalogOptions()).tools[name];
   if (!known) return result(`Unknown tool ${name}.`, true);
   const parsed = known.inputSchema.safeParse(rawInput);
   if (!parsed.success) return result(`Invalid arguments: ${z.prettifyError(parsed.error)}`, true);
@@ -208,22 +204,22 @@ async function callEditorTool(ctx: ActionCtx, ownerId: string, name: string, raw
   if (READ_ONLY_TOOLS.has(name)) return readEditorTool(ctx, ownerId, rawProjectId, name, parsed.data);
   const { projectId, runId } = await ctx.runMutation(internal.mcp.beginRun, { ownerId, projectId: rawProjectId, ...(agentName ? { agentName } : {}) });
   const run = { projectId, ownerId, runId };
-  const controller = new AbortController(), budget = new AssistantRunBudget();
-  const abortSignal = AbortSignal.any([controller.signal, budget.signal]);
+  const controller = new AbortController(), deadline = AbortSignal.timeout(CALL_LIMIT_MS);
+  const abortSignal = AbortSignal.any([controller.signal, deadline]);
   // Stop in the editor ends the run; abort promptly like an in-app turn.
   const watch = setInterval(() => { void ctx.runQuery(internal.assistant.isRunActive, run).then(active => { if (!active) controller.abort(); }).catch(() => controller.abort()); }, 2000);
   try {
     const { project, assets } = await ctx.runQuery(internal.assistant.getRun, run);
-    const { toolkit, tools } = editorTools(ctx, { run, project, assets, recovering: false, initialPlans: [], selectedClipIds: [], abortSignal, budget, planlessEffects: true });
+    const { toolkit, tools } = editorTools(ctx, { run, project, assets, recovering: false, initialPlans: [], selectedClipIds: [], abortSignal, planlessEffects: true });
     const tool = tools[name];
     const output = await tool.execute.call({ ...tool, ctx }, parsed.data, { toolCallId: crypto.randomUUID(), messages: [], abortSignal });
     // A destructive edit is staged privately; publish it as this call's one saved edit.
     const published = failed(output) ? false : await toolkit.editSession.complete('stop');
     return result(published && output && typeof output === 'object' ? { ...output, applied: true, saved: true, staged: false, revision: toolkit.editSession.revision } : output, failed(output));
   } catch (error) {
-    return result(abortSignal.aborted && !budget.signal.aborted ? 'Stopped in the editor before this edit finished. Saved edits remain.' : message(error), true);
+    return result(abortSignal.aborted && !deadline.aborted ? 'Stopped in the editor before this edit finished. Saved edits remain.' : message(error), true);
   } finally {
-    clearInterval(watch); budget.dispose();
+    clearInterval(watch);
     await ctx.runMutation(internal.assistant.finish, run);
   }
 }

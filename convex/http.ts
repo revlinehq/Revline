@@ -5,10 +5,12 @@ import Stripe from 'stripe';
 import { components, internal } from "./_generated/api";
 import { registerAlertWebhooks } from './alertWebhooks';
 import { registerMcpRoutes } from './mcpHttp';
+import { registerAgentRunnerRoutes } from './agentRunnerHttp';
 import { discordWebhookUrl } from './lib/discord_alert';
 const http = httpRouter();
 registerAlertWebhooks(http);
 registerMcpRoutes(http);
+registerAgentRunnerRoutes(http);
 const headers = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "POST, OPTIONS", "Access-Control-Allow-Headers": "Content-Type", "Content-Type": "application/json" };
 http.route({ path: "/uploads", method: "OPTIONS", handler: httpAction(async () => new Response(null, { status: 204, headers })) });
 http.route({ path: "/uploads", method: "POST", handler: httpAction(async (ctx, request) => {

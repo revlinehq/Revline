@@ -41,6 +41,7 @@
     "node_modules",
     ".wrangler",
     ".data",
-    "infra/media-worker/edge"
+    "infra/media-worker/edge",
+    "cloudflare/agent-runner"
   ]
 }

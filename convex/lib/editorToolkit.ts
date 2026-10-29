@@ -28,7 +28,6 @@ import { IRIS_SHAPES, TRANSITION_DIRECTIONS, TRANSITION_PRESETS, WIPE_DIRECTIONS
 import { TimelineGestureRejection } from '../../lib/editor/timeline-edit-errors';
 import { summarizeTimeline } from "./inspectTimeline";
 import { EditSession } from "./editSession";
-import { AssistantRunBudget } from "../../lib/ai/run-budget";
 import { BLEND_MODES, ZOOM_LIMITS, isZoomPreset, EFFECT_CATALOG,SOLID_COLOR_LIMITS, OFFERED_TIMED_EFFECT_PRESETS,configureTimedEffectPatch, solidColorPatch } from '../../lib/editor/clip-effects';
 import { PUNCH_LIMITS } from '../../lib/editor/motion-effect-settings';
 import { EDITOR_SKILL_NAMES, editorSkillInstructions } from '../../lib/ai/skills';
@@ -92,7 +91,6 @@ export type EditorToolkitOptions = {
   /** The chat turn a destructive replacement is published to, when there is one. */
   publication?: { threadId: string; promptMessageId: string };
   abortSignal: AbortSignal;
-  budget: AssistantRunBudget;
   /** MCP clients review their own work (getFrames); effects need no in-turn plan there. */
   planlessEffects?: boolean;
 };
@@ -105,7 +103,7 @@ function blueprintImages(output: unknown) {
 }
 
 export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOptions) {
-  const { run, project, assets, recovering, selectedClipIds, abortSignal, budget } = options;
+  const { run, project, assets, recovering, selectedClipIds, abortSignal } = options;
   let inspected = false;
   let effectPlans:EffectPlan[]=options.initialPlans;
   // Once this environment reports no review service, later reviews answer at once.
@@ -172,8 +170,6 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
   const solidColorInput=z.object({color:z.string().regex(/^#[\da-f]{6}$/i).optional(),width:z.number().min(SOLID_COLOR_LIMITS.width[0]).max(SOLID_COLOR_LIMITS.width[1]).optional(),height:z.number().min(SOLID_COLOR_LIMITS.height[0]).max(SOLID_COLOR_LIMITS.height[1]).optional(),x:z.number().min(0).max(1).optional(),y:z.number().min(0).max(1).optional(),opacity:z.number().min(0).max(1).optional()});
   const textInput = z.object({ text: z.string().min(1).max(2000), track: z.number().int().min(1).max(24).optional(), start: z.number().min(0), duration: z.number().positive(), fontSize: z.number().min(8).max(300).optional(),fontFamily:fontFamily.optional(), color: textColor.optional(), background: textColor.optional(), blendMode: z.enum(BLEND_MODES).optional(), x: z.number().min(0).max(1).optional(), y: z.number().min(0).max(1).optional(), animation: z.enum(["none", "fade", "rise"]).optional(),textStyle:textStyleInput.optional() });
   const withAnalysis = async <T,>(assetId: string, mode: "transcribe" | "understand" | "shots" | "beats" | "track" | "video" | "frames", read: (request: Doc<"analysisRequests">) => Promise<T>, inspection?: { videoRequest?: VideoInspectionInput; frameRequest?: FrameInspectionInput }) => {
-    budget.pauseForAnalysis();
-    try {
     const requestId = await ctx.runMutation(internal.assistant.requestAnalysis, { ...run, assetId, mode, ...inspection });
     try {
       while (true) {
@@ -185,7 +181,6 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
         await new Promise(resolve => setTimeout(resolve, 1000));
       }
     } finally { await ctx.runMutation(internal.assistant.clearAnalysis, { ...run, requestId }); }
-    } finally { budget.resumeAfterAnalysis(); }
   };
   const loadAsset=async(assetId:string)=>{const asset=await ctx.runQuery(internal.assistant.getRunAsset,{...run,assetId});const index=assets.findIndex(item=>item._id===asset._id);if(index<0)throw new Error('Choose media from this project');assets[index]=asset;return asset;};
   const savedCheckpoint=async(assetId:string,edit:(timeline:Timeline)=>Timeline)=>{await loadAsset(assetId);return checkpoint(edit);};
@@ -199,33 +194,27 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
     const end=clip.start+clip.duration-1/editSession.timeline.fps,moments=(times?.length?times:[.15,.5,.85].map(fraction=>clip.start+clip.duration*fraction)).map(time=>Math.min(end,Math.max(clip.start,time)));
     const sourceTimes=clip.kind==='image'?[0]:moments.map(time=>sourceTimeAt(clip,time));
     const started=await derive({clipId:clip.id,assetId:clip.assetId,op:'stats',start:sourceTimes[0],end:sourceTimes[sourceTimes.length-1],times:sourceTimes,placeLater:false});
-    budget.pauseForAnalysis();
-    try{
-      const deadline=Date.now()+90_000;
-      while(true){
-        abortSignal.throwIfAborted();
-        const row=await ctx.runQuery(internal.derivations.runStatus,{...run,derivationId:started.derivationId});
-        if(row.status==='failed')throw new AnalysisStepError(row.error??'Color measurement failed.');
-        if(row.status==='completed'&&row.stats)return row.stats as ColorStats[];
-        if(Date.now()>deadline)throw new AnalysisStepError('Color measurement is taking too long. Try again in a minute.');
-        await new Promise(resolve=>setTimeout(resolve,700));
-      }
-    }finally{budget.resumeAfterAnalysis();}
+    const deadline=Date.now()+90_000;
+    while(true){
+      abortSignal.throwIfAborted();
+      const row=await ctx.runQuery(internal.derivations.runStatus,{...run,derivationId:started.derivationId});
+      if(row.status==='failed')throw new AnalysisStepError(row.error??'Color measurement failed.');
+      if(row.status==='completed'&&row.stats)return row.stats as ColorStats[];
+      if(Date.now()>deadline)throw new AnalysisStepError('Color measurement is taking too long. Try again in a minute.');
+      await new Promise(resolve=>setTimeout(resolve,700));
+    }
   };
   const curveInput=z.array(z.tuple([z.number().min(0).max(1),z.number().min(0).max(1)])).min(2).max(16);
   const awaitDerivation=async(derivationId:Id<'derivations'>,limitMs:number)=>{
-    budget.pauseForAnalysis();
-    try{
-      const deadline=Date.now()+limitMs;
-      while(true){
-        abortSignal.throwIfAborted();
-        const row=await ctx.runQuery(internal.derivations.runStatus,{...run,derivationId});
-        if(row.status==='failed')throw new AnalysisStepError(row.error??'Media processing failed.');
-        if(row.status==='completed'&&row.outputAssetId)return adoptAsset(row.outputAssetId);
-        if(Date.now()>deadline)throw new AnalysisStepError('Media processing is taking longer than this edit allows. Try again in a minute.');
-        await new Promise(resolve=>setTimeout(resolve,1000));
-      }
-    }finally{budget.resumeAfterAnalysis();}
+    const deadline=Date.now()+limitMs;
+    while(true){
+      abortSignal.throwIfAborted();
+      const row=await ctx.runQuery(internal.derivations.runStatus,{...run,derivationId});
+      if(row.status==='failed')throw new AnalysisStepError(row.error??'Media processing failed.');
+      if(row.status==='completed'&&row.outputAssetId)return adoptAsset(row.outputAssetId);
+      if(Date.now()>deadline)throw new AnalysisStepError('Media processing is taking longer than this edit allows. Try again in a minute.');
+      await new Promise(resolve=>setTimeout(resolve,1000));
+    }
   };
   // A media task links to one analysis request. Parallel tool calls for the
   // same source and mode share one request: a second request would relink the
@@ -356,7 +345,6 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       if(explicitBindings&&(new Set(explicitBindings.map(binding=>binding.planId)).size!==explicitBindings.length||explicitBindings.some(binding=>!planIds.includes(binding.planId))))throw new Error('Bind each selected review plan at most once.');
       const known=planIds.flatMap(planId=>{const clipId=explicitBindings?.find(binding=>binding.planId===planId)?.clipId??planBindings.get(planId);return clipId?[{planId,clipId}]:[];});
       const bindings=effectReviewBindings(selected as EffectPlan[],editSession.timeline,known);
-      budget.pauseForAnalysis();
       let reviewId:Id<'compositionReviews'>|undefined;
       try{
         reviewId=await ctx.runMutation(internal.compositionReview.request,{...run,expectedRevision:editSession.revision,timeline:editSession.timeline,planIds,bindings});
@@ -369,7 +357,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
           if(Date.now()>deadline)throw new AnalysisStepError('Rendered review exceeded its three-minute limit. Saved edits remain.');
           await new Promise(resolve=>setTimeout(resolve,1000));
         }
-      }finally{try{if(reviewId)await ctx.runMutation(internal.compositionReview.cancel,{...run,reviewId});}finally{budget.resumeAfterAnalysis();}}
+      }finally{if(reviewId)await ctx.runMutation(internal.compositionReview.cancel,{...run,reviewId});}
     })}),
     duplicateClips:createTool({description:"Copy explicitly identified existing clips to requested timeline seconds, or duplicate immediately after the latest selected end when at is omitted. Preserve source ranges, relative timing, appearance, audio settings and linked pairs. Copy both neighboring sources together with a selected transition to remap its pair correctly. Uses the same free-layer placement as the editor; never reads the browser clipboard or invents media.",inputSchema:z.object({clipIds:clipIdsInput,at:z.number().min(0).optional()}),execute:async(_ctx,{clipIds,at})=>{
       let newClipIds:string[]=[];

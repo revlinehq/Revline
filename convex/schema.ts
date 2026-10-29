@@ -229,6 +229,11 @@ export default defineSchema({
     // Mirror of the project's tab list, so listing tabs never reads the (large) project document.
     timelineTabs:projectFields.timelineTabs,activeTimelineId:projectFields.activeTimelineId}).index('by_project',['projectId']),
   // Share of the per-request token cap the active run has used, 0–1.
+  // A turn running on the Cloudflare agent runner: the attempt that claimed it, its last sign of life (for the
+  // watchdog) and the storage files it may read back.
+  agentRunnerTurns:defineTable({runId:v.string(),projectId:v.id('projects'),ownerId:v.string(),attempts:v.number(),claimId:v.optional(v.string()),seenAt:v.number(),storageIds:v.optional(v.array(v.string()))}).index('by_runId',['runId']),
+  // Request nonces the agent runner bridge has accepted, kept for the signature window so a replay is refused.
+  agentRunnerNonces:defineTable({nonce:v.string(),expiresAt:v.number()}).index('by_nonce',['nonce']).index('by_expiresAt',['expiresAt']),
   aiBudgets:defineTable({projectId:v.id('projects'),runId:v.string(),used:v.number(),effort:v.optional(editorReasoningEffortValidator),updatedAt:v.number()}).index('by_project',['projectId']),
   aiTimelinePreviews:defineTable({projectId:v.id('projects'),ownerId:v.string(),runId:v.string(),baseRevision:v.number(),timeline:timelineValidator,label:v.string(),changedClipIds:v.array(v.string()),removedClips:v.array(clipValidator),at:v.number(),sequence:v.number(),updatedAt:v.number()}).index('by_project',['projectId']),
   assistantQueue:defineTable({projectId:v.id('projects'),ownerId:v.string(),prompt:v.string(),pinnedModel:pinnedClaudeModelValidator,attachedAssetIds:v.optional(v.array(v.id('assets'))),selectedClipId:v.optional(v.string()),selectedClipIds:v.optional(v.array(v.string())),playhead:v.optional(v.number()),error:v.optional(v.string()),createdAt:v.number()}).index('by_project',['projectId']),

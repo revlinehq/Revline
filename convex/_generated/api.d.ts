@@ -8,6 +8,8 @@
  * @module
  */
 
+import type * as agentRunner from "../agentRunner.js";
+import type * as agentRunnerHttp from "../agentRunnerHttp.js";
 import type * as aiCosts from "../aiCosts.js";
 import type * as alertWebhooks from "../alertWebhooks.js";
 import type * as assets from "../assets.js";
@@ -41,6 +43,7 @@ import type * as lib_discord_alert from "../lib/discord_alert.js";
 import type * as lib_editSession from "../lib/editSession.js";
 import type * as lib_editSessionRebase from "../lib/editSessionRebase.js";
 import type * as lib_editorToolkit from "../lib/editorToolkit.js";
+import type * as lib_editorTurn from "../lib/editorTurn.js";
 import type * as lib_effect_plan from "../lib/effect_plan.js";
 import type * as lib_inspectTimeline from "../lib/inspectTimeline.js";
 import type * as lib_mcp_origin from "../lib/mcp_origin.js";
@@ -51,6 +54,7 @@ import type * as lib_publicationReceipt from "../lib/publicationReceipt.js";
 import type * as lib_render_seats from "../lib/render_seats.js";
 import type * as lib_render_snapshots from "../lib/render_snapshots.js";
 import type * as lib_run_ids from "../lib/run_ids.js";
+import type * as lib_runner_auth from "../lib/runner_auth.js";
 import type * as lib_share_chat from "../lib/share_chat.js";
 import type * as lib_shared_media from "../lib/shared_media.js";
 import type * as lib_storage_accounting from "../lib/storage_accounting.js";
@@ -87,6 +91,8 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  agentRunner: typeof agentRunner;
+  agentRunnerHttp: typeof agentRunnerHttp;
   aiCosts: typeof aiCosts;
   alertWebhooks: typeof alertWebhooks;
   assets: typeof assets;
@@ -120,6 +126,7 @@ declare const fullApi: ApiFromModules<{
   "lib/editSession": typeof lib_editSession;
   "lib/editSessionRebase": typeof lib_editSessionRebase;
   "lib/editorToolkit": typeof lib_editorToolkit;
+  "lib/editorTurn": typeof lib_editorTurn;
   "lib/effect_plan": typeof lib_effect_plan;
   "lib/inspectTimeline": typeof lib_inspectTimeline;
   "lib/mcp_origin": typeof lib_mcp_origin;
@@ -130,6 +137,7 @@ declare const fullApi: ApiFromModules<{
   "lib/render_seats": typeof lib_render_seats;
   "lib/render_snapshots": typeof lib_render_snapshots;
   "lib/run_ids": typeof lib_run_ids;
+  "lib/runner_auth": typeof lib_runner_auth;
   "lib/share_chat": typeof lib_share_chat;
   "lib/shared_media": typeof lib_shared_media;
   "lib/storage_accounting": typeof lib_storage_accounting;

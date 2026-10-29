@@ -20,7 +20,11 @@
     "deploy:frontend": "node scripts/cloudflare-frontend.mjs deploy",
     "check:setup": "node scripts/check-setup.mjs",
     "deploy:frontend:ci": "npm run build:cloudflare && wrangler deploy --config dist/server/wrangler.json",
-    "deploy:fly-exports": "node scripts/deploy-fly-exports.mjs"
+    "deploy:fly-exports": "node scripts/deploy-fly-exports.mjs",
+    "agent-runner:install": "npm ci --prefix cloudflare/agent-runner --legacy-peer-deps --no-audit --no-fund",
+    "typecheck:agent-runner": "tsc -p cloudflare/agent-runner/tsconfig.json",
+    "deploy:agent-runner": "npm run agent-runner:install && npm run typecheck:agent-runner && wrangler deploy --config cloudflare/agent-runner/wrangler.jsonc",
+    "deploy:agent-runner:production": "npm run agent-runner:install && npm run typecheck:agent-runner && wrangler deploy --config cloudflare/agent-runner/wrangler.production.jsonc"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^4.0.78",

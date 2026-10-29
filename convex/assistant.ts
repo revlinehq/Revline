@@ -4,6 +4,7 @@ import type {MutationCtx, QueryCtx} from './_generated/server';
 import type {Doc} from './_generated/dataModel';
 import {aiWorkflow} from './lib/workflows';
 import {cancelTurn} from './assistantWorkflow';
+import {agentRunnerConfigured,startRunnerTurn,stopRunnerTurn} from './agentRunner';
 import type {WorkflowId} from '@convex-dev/workflow';
 import { describeLiveEdit } from '../lib/editor/live-edit';
 import { equalTimelineValue } from '../lib/editor/timeline-equality';
@@ -118,7 +119,10 @@ async function beginRequest(ctx:MutationCtx,project:Doc<'projects'>,prompt:strin
   const runId = `${Date.now()}-${Math.random()}`;
   await clearLivePreview(ctx,project._id);
   await writeProject(ctx,project._id, { threadId, aiQueuePaused:false, aiRunning: true, aiEditing: false, aiError: undefined, aiRunId: runId, aiAnalysisUsage:{runId,enqueued:0}, aiUndoRecorded: false, aiCheckpointRevision: undefined, aiRequest:{prompt,messageId,startedRevision:project.revision??0}, aiRecovery:recovery });
-  const workflowId=await aiWorkflow.start(ctx, internal.assistantWorkflow.runTurn, { projectId: project._id, ownerId, runId, threadId, promptMessageId: messageId, pinnedModel,...(request.attachedAssetIds?{attachedAssetIds:request.attachedAssetIds}:{}), ...(recovery?{recovery}:{}), ...(request.selectedClipId ? { selectedClipId: request.selectedClipId } : {}), ...(request.selectedClipIds ? { selectedClipIds: request.selectedClipIds } : {}), ...(request.playhead !== undefined ? { playhead: request.playhead } : {}) },{startAsync:true,onComplete:internal.assistantWorkflow.settle,context:{projectId:project._id,ownerId,runId}});
+  const turn = { projectId: project._id, ownerId, runId, threadId, promptMessageId: messageId, pinnedModel,...(request.attachedAssetIds?{attachedAssetIds:request.attachedAssetIds}:{}), ...(recovery?{recovery}:{}), ...(request.selectedClipId ? { selectedClipId: request.selectedClipId } : {}), ...(request.selectedClipIds ? { selectedClipIds: request.selectedClipIds } : {}), ...(request.playhead !== undefined ? { playhead: request.playhead } : {}) };
+  // Long turns run on the Cloudflare agent runner; without one, inside Convex's ten-minute action limit.
+  if (agentRunnerConfigured()) { await startRunnerTurn(ctx, turn); return null; }
+  const workflowId=await aiWorkflow.start(ctx, internal.assistantWorkflow.runTurn, turn,{startAsync:true,onComplete:internal.assistantWorkflow.settle,context:{projectId:project._id,ownerId,runId}});
   await writeProject(ctx,project._id,{aiWorkflowId:workflowId}); return null;
 }
 
@@ -162,6 +166,7 @@ export const stop = mutation({ args: { projectId: v.id('projects') }, returns: v
   await clearLivePreview(ctx,project._id);
   // Already-saved edits remain undoable; invalidating the run blocks every later checkpoint.
   if(project.aiWorkflowId)await cancelTurn(ctx,project.aiWorkflowId as WorkflowId);
+  if(project.aiRunId)await stopRunnerTurn(ctx,project.aiRunId);
   await writeProject(ctx,project._id, { aiRunning: false, aiEditing: false, aiRunId: undefined, aiWorkflowId:undefined, aiQueuePaused:true, aiError: undefined, aiRecovery:assistantRecovery(project,'stopped','Stopped by the user. Saved edits remain.'),aiRequest:undefined });
   return null;
 }});

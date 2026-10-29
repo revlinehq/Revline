@@ -1,0 +1,9 @@
+{
+  "name": "revline-agent-runner",
+  "private": true,
+  "description": "Cloudflare Agents SDK runner for editor turns. ai, zod and convex resolve from the app's root node_modules.",
+  "dependencies": {
+    "@modelcontextprotocol/client": "2.3.1",
+    "agents": "0.31.0"
+  }
+}

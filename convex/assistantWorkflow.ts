@@ -3,19 +3,13 @@ import {vResultValidator,vWorkflowId,type WorkflowCtx,type WorkflowId} from '@co
 import {internal} from './_generated/api';
 import {internalMutation,type MutationCtx} from './_generated/server';
 import {aiWorkflow,mediaWorkflow} from './lib/workflows';
-import {assistantRunArgs,MAX_ASSISTANT_SEGMENTS} from './lib/assistant_run';
+import {assistantRunArgs} from './lib/assistant_run';
 import {projectRun,writeProject} from './lib/project_data';
 
-/** Journal each completed action. Paid generation steps are never retried. */
+/** A turn inside Convex when no agent runner is configured. Paid generation steps are never retried. */
 const turn=async(step:WorkflowCtx,args:ObjectType<typeof assistantRunArgs>):Promise<null>=>{
-  let continuation:{segment:number;savedEdits:number}|undefined;
-  for(let segment=0;segment<MAX_ASSISTANT_SEGMENTS;segment++){
-    const active:boolean=await step.runQuery(internal.assistant.isRunActive,{projectId:args.projectId,ownerId:args.ownerId,runId:args.runId});
-    if(!active)return null;
-    const next:{segment:number;savedEdits:number}|null=await step.runAction(internal.assistantActions.respond,{...args,durable:true,...(continuation?{continuation}:{})},{retry:false});
-    if(!next)return null;
-    continuation=next;
-  }
+  const active:boolean=await step.runQuery(internal.assistant.isRunActive,{projectId:args.projectId,ownerId:args.ownerId,runId:args.runId});
+  if(active)await step.runAction(internal.assistantActions.respond,args,{retry:false});
   return null;
 };
 export const runTurn=aiWorkflow.define({args:assistantRunArgs,returns:v.null(),handler:turn});
