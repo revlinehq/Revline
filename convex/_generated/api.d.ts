@@ -55,6 +55,7 @@ import type * as lib_render_seats from "../lib/render_seats.js";
 import type * as lib_render_snapshots from "../lib/render_snapshots.js";
 import type * as lib_run_ids from "../lib/run_ids.js";
 import type * as lib_runner_auth from "../lib/runner_auth.js";
+import type * as lib_scene_code from "../lib/scene_code.js";
 import type * as lib_share_chat from "../lib/share_chat.js";
 import type * as lib_shared_media from "../lib/shared_media.js";
 import type * as lib_storage_accounting from "../lib/storage_accounting.js";
@@ -138,6 +139,7 @@ declare const fullApi: ApiFromModules<{
   "lib/render_snapshots": typeof lib_render_snapshots;
   "lib/run_ids": typeof lib_run_ids;
   "lib/runner_auth": typeof lib_runner_auth;
+  "lib/scene_code": typeof lib_scene_code;
   "lib/share_chat": typeof lib_share_chat;
   "lib/shared_media": typeof lib_shared_media;
   "lib/storage_accounting": typeof lib_storage_accounting;
