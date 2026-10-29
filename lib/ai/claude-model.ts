@@ -28,7 +28,7 @@ export const OPENAI_EDIT_MODELS = [
 // Google rates, USD / 1M tokens, from ai.google.dev/gemini-api/docs/pricing (2026-10-29): $2 input,
 // $10 output, $0.10 implicit cache reads until 2026-11-30; $4 / $20 / $0.20 from 2026-12-01.
 export const GOOGLE_EDIT_MODELS = [
-  { id: 'gemini-4-argon', label: 'Gemini 4 Argon', shortLabel: 'Argon', modelId: 'gemini-4-argon' },
+  { id: 'gemini-4-argon', label: 'Gemini 4 Argon', shortLabel: 'Argon 4', modelId: 'gemini-4-argon' },
 ] as const;
 export const EDITOR_MODELS = [...OPENAI_EDIT_MODELS, CLAUDE_EDIT_MODELS[1], CLAUDE_EDIT_MODELS[2], ...GOOGLE_EDIT_MODELS] as const;
 export const EDITOR_REASONING_EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'] as const;
