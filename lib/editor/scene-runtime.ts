@@ -114,7 +114,10 @@ if (typeof window !== 'undefined' && window.parent !== window) {
     fps = data.fps;
     const media = Object.fromEntries((data.media ?? []).map(item => [item.name, URL.createObjectURL(new Blob([item.data], { type: item.type || 'image/png' }))]));
     const scene = compileScene(data.code, data.blueprints);
-    origin = gsap.globalTimeline.time();
+    // Exactly on a zero-duration tween GSAP picks its before or after state from the direction of travel, so a
+    // first seek to a clip's first frame reverted the scene's build-time gsap.set calls and showed every hidden
+    // part (an export's first frame of a clip mid-timeline). Seeks land a tenth of a millisecond after it.
+    origin = gsap.globalTimeline.time() + 1e-4;
     const brand = sceneBrandContext(data.brand ?? undefined), icon = iconFactory(data.icons ?? {});
     // A blueprint is itself a scene module: built once, statically, into the container the scene gives it.
     const blueprint = (name: string, container: HTMLElement, size?: { width: number; height: number }) => {

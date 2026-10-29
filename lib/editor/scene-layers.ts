@@ -104,7 +104,7 @@ function mount(source){
   node.dataset.start=String(source.start);node.dataset.duration=String(source.duration);node.dataset.end=String(source.start+source.duration);delete node.dataset.hfAutostamped;
   if(!entry||entry.key!==key){
     if(entry)entry.frame.remove();
-    var frame=document.createElement('iframe');frame.className='scene-frame';frame.setAttribute('sandbox','allow-scripts');frame.setAttribute('tabindex','-1');frame.setAttribute('aria-hidden','true');frame.style.visibility='visible';frame.style.opacity='0';
+    var frame=document.createElement('iframe');frame.className='scene-frame';frame.setAttribute('sandbox','allow-scripts');frame.setAttribute('tabindex','-1');frame.setAttribute('aria-hidden','true');
     entry={node:node,frame:frame,key:key,source:source,seq:0,waiters:new Map(),compiled:false,error:null};
     var current=entry;current.ready=new Promise(function(resolve){current.resolve=resolve;});
     node.appendChild(frame);Promise.all([runtimeScript(),isReact(source)?reactScript():'']).then(function(scripts){if(entries.get(source.clipId)===current)frame.srcdoc=frameDocument(source,scripts[0],scripts[1]);},function(error){report(current,error.message);current.resolve();});
@@ -120,12 +120,9 @@ function seek(entry,time){entry.seq++;entry.posted=time;entry.inflight=entry.seq
 // Playback asks for a frame every animation frame. A scene slower than that would queue stale seeks and
 // keep replaying them after a pause, so while one is drawing only the newest time waits for the next.
 function follow(entry,time){if(entry.inflight&&Date.now()-entry.sentAt<1000)entry.queued=time;else seek(entry,time);}
-// The frame hides with opacity, not its layer's visibility: Chrome stops drawing hidden cross-origin frames, so the
-// first frame shown again composited whatever the scene last drew (an export's self-check seeks deep into clips
-// before capture). Off screen a scene keeps drawing, parked on its first frame, ready for the frame it reappears on.
 function paint(time){
   bindExport();
-  entries.forEach(function(entry){try{var visible=visibleAt(entry,time),state=visible?'visible':'hidden',opacity=visible?'':'0',at=localTime(entry,visible?time:entry.source.start);if(entry.node.style.visibility!==state)entry.node.style.visibility=state;if(entry.frame.style.opacity!==opacity)entry.frame.style.opacity=opacity;if(entry.compiled&&entry.posted!==at)follow(entry,at);}catch(error){report(entry,error&&error.message||String(error));}});
+  entries.forEach(function(entry){try{var visible=visibleAt(entry,time),state=visible?'visible':'hidden';if(entry.node.style.visibility!==state)entry.node.style.visibility=state;if(visible&&entry.compiled&&entry.posted!==localTime(entry,time))follow(entry,localTime(entry,time));}catch(error){report(entry,error&&error.message||String(error));}});
 }
 // Some clock moves (player swaps, end-of-playback resets) bypass render and onUpdate.
 function watch(){if(entries.size)paint(clock.time());nextFrame(watch);}
