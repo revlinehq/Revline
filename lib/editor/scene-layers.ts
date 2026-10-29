@@ -3,7 +3,10 @@ import { TEXT_FONTS } from './text-fonts';
 import { validateSceneBrand, type SceneBrand } from './brand-kit';
 
 /** A TypeScript module that builds HTML once and animates it on a GSAP timeline; the composition seeks it to clip-local time. */
-export type SceneSource = { title: string; code: string; brand?: SceneBrand };
+/** A project image a scene uses, by the name its code reads from `media`. */
+export type SceneMedia = { name: string; assetId: string };
+export type SceneSource = { title: string; code: string; brand?: SceneBrand; media?: SceneMedia[] };
+export const SCENE_MEDIA_LIMIT = 8;
 export const SCENE_LIMITS = { title: 80, code: 20_000 } as const;
 
 export function validateScene(clip: Pick<Clip, 'kind' | 'scene' | 'assetId'>) {
@@ -15,16 +18,17 @@ export function validateScene(clip: Pick<Clip, 'kind' | 'scene' | 'assetId'>) {
   if (!scene.code.trim()) throw new Error('A scene needs code.');
   if (scene.code.length > SCENE_LIMITS.code) throw new Error(`Scene code supports up to ${SCENE_LIMITS.code} characters.`);
   if (scene.brand) validateSceneBrand(scene.brand);
+  if (scene.media && (scene.media.length > SCENE_MEDIA_LIMIT || scene.media.some(item => !/^[a-zA-Z][\w-]{0,30}$/.test(item.name) || !item.assetId) || new Set(scene.media.map(item => item.name)).size !== scene.media.length)) throw new Error(`Scene media needs up to ${SCENE_MEDIA_LIMIT} images with unique names (letters, digits, - or _).`);
 }
 
-export type SceneLayerSource = { clipId: string; title: string; code: string; brand?: SceneBrand; start: number; duration: number; offset: number; zIndex: number; fps: number; width: number; height: number; scale: number };
+export type SceneLayerSource = { clipId: string; title: string; code: string; brand?: SceneBrand; media?: SceneMedia[]; start: number; duration: number; offset: number; zIndex: number; fps: number; width: number; height: number; scale: number };
 export type SceneFont = { family: string; weight: string; url: string };
 
 /** Scenes are authored on the 1080-based canvas and scaled to the output resolution. */
 export function sceneLayerSources(timeline: Timeline, resolution = 1080): SceneLayerSource[] {
   const { width, height } = dimensions(timeline.aspectRatio, 1080);
   return timeline.clips.flatMap((clip, index) => clip.kind === 'scene' && clip.scene ? [{
-    clipId: clip.id, title: clip.scene.title, code: clip.scene.code, ...(clip.scene.brand ? { brand: clip.scene.brand } : {}), start: clip.start, duration: clip.duration, offset: clip.sourceStart,
+    clipId: clip.id, title: clip.scene.title, code: clip.scene.code, ...(clip.scene.brand ? { brand: clip.scene.brand } : {}), ...(clip.scene.media?.length ? { media: clip.scene.media } : {}), start: clip.start, duration: clip.duration, offset: clip.sourceStart,
     zIndex: trackOf(clip) * 256 + index, fps: timeline.fps, width, height, scale: resolution / 1080,
   }] : []);
 }
@@ -39,8 +43,13 @@ export function sceneFonts(urls: Partial<Record<string, string>>): SceneFont[] {
  * The composition posts clip-local times; exports wait for the frame's
  * "painted" acknowledgement before HyperFrames captures each frame.
  */
-export function sceneRuntimeScript(sources: SceneLayerSource[], fonts: SceneFont[], runtimeUrl: string) {
-  return `(function(initial,fonts,runtimeUrl){
+/** Asset ids every scene clip shows as media, so exports and shares carry those files. */
+export function sceneMediaAssetIds(timeline: Timeline) {
+  return [...new Set(timeline.clips.flatMap(clip => clip.kind === 'scene' ? clip.scene?.media?.map(item => item.assetId) ?? [] : []))];
+}
+
+export function sceneRuntimeScript(sources: SceneLayerSource[], fonts: SceneFont[], runtimeUrl: string, mediaUrls: Record<string, string> = {}) {
+  return `(function(initial,fonts,runtimeUrl,mediaUrls){
 var host=window,clock=host.__timelines.revline.__hfReal||host.__timelines.revline,composition=document.getElementById('composition'),entries=new Map(),fontData=new Map(),unregister;
 var virtual=host.__HF_VIRTUAL_TIME__,later=virtual&&virtual.originalSetTimeout?virtual.originalSetTimeout:setTimeout.bind(window),nextFrame=virtual&&virtual.originalRequestAnimationFrame?virtual.originalRequestAnimationFrame:requestAnimationFrame.bind(window);
 var runtimeSource=null,overscan=16;
@@ -50,11 +59,14 @@ function report(entry,message){var error=new Error('Scene "'+entry.source.title+
 function inner(){var layers=composition.querySelectorAll('.adjustment-layer');for(var i=0;i<layers.length;i++)if(!layers[i].querySelector('.adjustment-layer'))return layers[i];return composition;}
 function find(id){var nodes=composition.querySelectorAll('[data-scene-clip]');for(var i=0;i<nodes.length;i++)if(nodes[i].dataset.sceneClip===id)return nodes[i];return null;}
 function font(item){if(!fontData.has(item.url))fontData.set(item.url,fetch(new URL(item.url,document.baseURI).href).then(function(response){if(!response.ok)throw new Error('font');return response.arrayBuffer();}).then(function(data){return {family:item.family,weight:item.weight,data:data};},function(){return null;}));return fontData.get(item.url);}
+var mediaData=new Map();
+function file(url){if(!mediaData.has(url))mediaData.set(url,fetch(new URL(url,document.baseURI).href).then(function(response){if(!response.ok)throw new Error('media');return response.blob();}).then(function(blob){return blob.arrayBuffer().then(function(data){return {type:blob.type,data:data};});},function(){return null;}));return mediaData.get(url);}
+function wantedMedia(source){return Promise.all((source.media||[]).map(function(item){var url=mediaUrls[item.assetId];return url?file(url).then(function(found){return found&&{name:item.name,type:found.type,data:found.data};}):Promise.resolve(null);})).then(function(list){return list.filter(Boolean);});}
 function wantedFonts(source){var list=fonts.filter(function(item){return item.family==='Space Grotesk'||source.code.indexOf(item.family)>=0;}).concat(source.brand?source.brand.fonts:[]);return Promise.all(list.map(font)).then(function(list){return list.filter(Boolean);});}
 function frameDocument(source,script){return '<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src \\'none\\'; script-src \\'unsafe-inline\\' \\'unsafe-eval\\'; style-src \\'unsafe-inline\\'; img-src data: blob:; font-src data: blob:"><style>html,body{margin:0;width:'+(source.width+overscan*2)+'px;height:'+(source.height+overscan*2)+'px;overflow:hidden;background:transparent}body{font-family:\\'Space Grotesk\\',Arial,sans-serif;color:#F4F4F0;-webkit-font-smoothing:antialiased}#scene-root{position:absolute;left:'+overscan+'px;top:'+overscan+'px;width:'+source.width+'px;height:'+source.height+'px;overflow:hidden}</style></head><body><div id="scene-root"></div><script>'+script+'</'+'script></body></html>';}
 function send(entry,message){if(entry.frame.contentWindow)entry.frame.contentWindow.postMessage(Object.assign({source:'revline-scene-host'},message),'*');}
 function mount(source){
-  var key=JSON.stringify([source.code,source.brand||null,source.width,source.height,source.fps,source.duration]),entry=entries.get(source.clipId);
+  var key=JSON.stringify([source.code,source.brand||null,source.media||null,source.width,source.height,source.fps,source.duration]),entry=entries.get(source.clipId);
   var node=entry?entry.node:find(source.clipId);
   if(!node){node=document.createElement('div');node.className='scene-layer';node.dataset.sceneClip=source.clipId;inner().appendChild(node);}
   node.style.zIndex=String(source.zIndex);
@@ -95,7 +107,7 @@ window.addEventListener('message',function(event){
   var data=event.data;if(!data||data.source!=='revline-scene')return;
   entries.forEach(function(entry){
     if(event.source!==entry.frame.contentWindow)return;
-    if(data.type==='ready')wantedFonts(entry.source).then(function(list){send(entry,{type:'init',code:entry.source.code,brand:entry.source.brand||null,width:entry.source.width,height:entry.source.height,fps:entry.source.fps,duration:entry.source.duration,fonts:list});});
+    if(data.type==='ready')Promise.all([wantedFonts(entry.source),wantedMedia(entry.source)]).then(function(found){send(entry,{type:'init',code:entry.source.code,brand:entry.source.brand||null,media:found[1],width:entry.source.width,height:entry.source.height,fps:entry.source.fps,duration:entry.source.duration,fonts:found[0]});});
     else if(data.type==='compiled'){entry.compiled=true;entry.resolve();paint(clock.time());}
     else if(data.type==='painted'){var done=entry.waiters.get(data.seq);if(done){entry.waiters.delete(data.seq);done();}}
     else if(data.type==='error'){report(entry,String(data.message));entry.resolve();entry.waiters.forEach(function(done){done();});entry.waiters.clear();}
@@ -111,9 +123,9 @@ var previousRender=clock.render,previousUpdate=clock.eventCallback('onUpdate');
 clock.render=function(){var result=previousRender.apply(clock,arguments);paint(clock.time());return result;};
 clock.eventCallback('onUpdate',function(){if(previousUpdate)previousUpdate.call(clock);paint(clock.time());});
 window.addEventListener('hf-seek',function(event){var detail=event.detail;if(detail&&typeof detail.waitUntil==='function')detail.waitUntil(whenReady(detail.time));});
-host.__revlineSceneController={setSources:setSources,whenReady:whenReady};
+host.__revlineSceneController={setSources:setSources,whenReady:whenReady,hasMedia:function(id){return !!mediaUrls[id];}};
 setSources(initial);nextFrame(watch);
-})(${JSON.stringify(sources).replace(/</g, '\\u003c')},${JSON.stringify(fonts).replace(/</g, '\\u003c')},${JSON.stringify(runtimeUrl).replace(/</g, '\\u003c')});`;
+})(${JSON.stringify(sources).replace(/</g, '\\u003c')},${JSON.stringify(fonts).replace(/</g, '\\u003c')},${JSON.stringify(runtimeUrl).replace(/</g, '\\u003c')},${JSON.stringify(mediaUrls).replace(/</g, '\\u003c')});`;
 }
 
 export const SCENE_FONT_FAMILIES = TEXT_FONTS.map(font => font.family);

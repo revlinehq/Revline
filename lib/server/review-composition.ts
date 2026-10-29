@@ -8,6 +8,7 @@ import { checkPlanTiming } from '../ai/edit-plan';
 import { compositionSampleTimes,pixelDifference } from '../ai/composition-review';
 import { inspectCompositionFrames } from '../media-analysis/gemini';
 import { AnalysisError } from '../media-analysis/errors';
+import { sceneMediaAssetIds } from '../editor/scene-layers';
 import { prepareComposition,writeComposition,reviewWindowTimeline,linkCompositionResources } from './prepare-composition';
 import { runCompositionCapture } from './render-worker';
 export async function reviewComposition(snapshot:NonNullable<MediaWorkItem['review']>,directory:string,convexUrl:string,signal:AbortSignal,onProgress:(n:number)=>void):Promise<NonNullable<MediaTaskResult['review']>> {
@@ -42,7 +43,8 @@ export async function reviewComposition(snapshot:NonNullable<MediaWorkItem['revi
 /** Frames of the saved timeline exactly as export draws them, for an MCP client to look at. */
 export async function captureTimelineFrames(snapshot:NonNullable<MediaWorkItem['snapshot']>,directory:string,convexUrl:string,signal:AbortSignal,onProgress:(n:number)=>void):Promise<NonNullable<MediaTaskResult['snapshot']>> {
   const {timeline,times}=snapshot,frame=1/timeline.fps,last=Math.max(0,timelineDuration(timeline)-frame);
-  const assets=snapshot.assets.filter(asset=>timeline.clips.some(clip=>clip.assetId===asset._id)) as (MediaAsset & {size:number})[];
+  const sceneMedia=new Set(sceneMediaAssetIds(timeline));
+  const assets=snapshot.assets.filter(asset=>sceneMedia.has(asset._id)||timeline.clips.some(clip=>clip.assetId===asset._id)) as (MediaAsset & {size:number})[];
   const {assetUrls,audioSourceOffsets}=await prepareComposition(directory,timeline,assets,convexUrl,signal);
   const path=join(directory,'edited');await mkdir(path);await linkCompositionResources(directory,path,assetUrls);
   await writeComposition(path,timeline,assets,assetUrls,720,timeline.fps as 24|30|60,'./',signal,audioSourceOffsets);

@@ -192,7 +192,7 @@ Adapted in part from LottieFiles' motion-design skill (MIT), rescaled from inter
 
 export const processPage: EditorSkillPage = {
   name: 'process',
-  description: 'Steps 5 to 9: beat sheet, animatic, feedback, polish, sound and review; plus building product UI without screenshots.',
+  description: 'Beat sheet, animatic, feedback, polish, sound and review; plus showing the product with real screenshots or mockups.',
   body: `# Process: approve before building
 
 1. **Beat sheet.** Built from the approved script. Start with the film's style direction (five lines) and the films it borrows from, then a table: time, music bar, what is on screen, on-screen words (from the script, unchanged), motion, sound. Send it and wait for approval or changes.
@@ -203,6 +203,7 @@ export const processPage: EditorSkillPage = {
 6. **Review.** getFrames at each beat and each scene's midpoint. Check that text is readable, nothing overlaps or clips, the brand fonts, colors and logo show, and the lockup holds. Fix before saying it is done; say what you checked.
 7. **Learn.** When the user approves a change in direction (a different ease, pacing, a technique), offer to save it: to the brand's motion identity with updateBrandKit, or to memory with remember. The next film for this brand starts from it.
 
-## Product UI without screenshots
-Until scenes can show project media, build product UI as HTML mockups in the brand's fonts and colors: windows, inputs, cards, lists, timelines. Crop and magnify the part that matters. Show only what the brand context describes, with generic sample content.`,
+## Product UI
+Real screenshots beat mockups: they show the actual product and build trust. Ask the user for screenshots of the screens the script shows (or offer to use ones already in the project's media), upload them, and attach them to scenes as \`media\` (scene-engine, Project media). Crop and magnify the part that matters, move a camera over them, tilt them, and layer animated HTML on top (a typed prompt, a highlight, a cursor) to show the action.
+Without screenshots, build the UI as HTML mockups in the brand's fonts and colors: windows, inputs, cards, lists, timelines. Show only what the brand context describes, with generic sample content.`,
 };

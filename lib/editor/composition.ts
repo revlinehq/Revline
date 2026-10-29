@@ -16,7 +16,7 @@ import { cameraGlideBlurSource } from './camera-motion-blur';
 import { outlineFilter, validateOutline } from './clip-outline';
 import { visualEffectsRuntimeScript } from './visual-effects-runtime';
 import { textLayerSources } from './text-layers';
-import { sceneFonts, sceneLayerSources, sceneRuntimeScript, validateScene } from './scene-layers';
+import { sceneFonts, sceneLayerSources, sceneMediaAssetIds, sceneRuntimeScript, validateScene } from './scene-layers';
 import { textStyle, textAppearance } from './text-style';
 import { TEXT_FONTS, textFontFaceCss, type TextFontId } from './text-fonts';
 import { playbackRateOf, sourceEndOf, timelineTimeAtSource, validatePlaybackRate } from './playback-rate';
@@ -237,6 +237,13 @@ export function generateComposition(timeline: Timeline, assets: MediaAsset[], op
   const defaultFontUrl = /^https?:/i.test(options.gsapUrl ?? '') ? new URL('/fonts/space-grotesk-latin.woff2', options.gsapUrl).href : '/fonts/space-grotesk-latin.woff2';
   const fontUrl = mediaUrl(options.fontUrl ?? defaultFontUrl);
   const fontUrls = Object.fromEntries(TEXT_FONTS.map(font => [font.id, mediaUrl(options.fontUrls?.[font.id] ?? (font.id === 'space-grotesk' ? fontUrl : /^https?:/i.test(options.gsapUrl ?? '') ? new URL(`/fonts/${font.fileName}`,options.gsapUrl).href : `/fonts/${font.fileName}`))]));
+  // Scene media resolves like image clips: the export's local copy, else the asset's own URL. A missing file leaves the name unset.
+  const sceneMediaUrls = Object.fromEntries(sceneMediaAssetIds(timeline).flatMap(id => {
+    const exportSource = options.assetUrls?.[id], source = exportSource ?? assetMap.get(id)?.url;
+    if (!source || assetMap.get(id)?.kind !== 'image') return [];
+    mediaUrl(source, exportSource !== undefined);
+    return [[id, source]];
+  }));
   const rawFontUrls = Object.fromEntries(TEXT_FONTS.map(font => [font.id, options.fontUrls?.[font.id] ?? (font.id === 'space-grotesk' ? options.fontUrl ?? defaultFontUrl : /^https?:/i.test(options.gsapUrl ?? '') ? new URL(`/fonts/${font.fileName}`, options.gsapUrl).href : `/fonts/${font.fileName}`)]));
   const sceneRuntimeUrl = options.sceneRuntimeUrl ?? (/^https?:/i.test(options.gsapUrl ?? '') ? new URL('/vendor/scene-runtime.js', options.gsapUrl).href : '/vendor/scene-runtime.js');
   mediaUrl(sceneRuntimeUrl);
@@ -268,7 +275,7 @@ window.__revlineVisualEffects.installSolidColorLayers(${JSON.stringify(solidColo
 window.__revlineVisualEffects.installClipMasks(${JSON.stringify(maskSources(timeline.clips)).replace(/</g, '\\u003c')});window.__revlineVisualEffects.installAudioReactive(${JSON.stringify(audioReactiveSources(timeline.clips)).replace(/</g, '\\u003c')});
 if(window.__revlineVisualEffects.installVisualFades)window.__revlineVisualEffects.installVisualFades(${JSON.stringify(timeline.clips.filter(clip=>clip.kind==='video'||clip.kind==='image').map(({id,kind,start,duration,visualFade,visualFadeTiming})=>({id,kind,start,duration,sourceStart:0,visualFade,visualFadeTiming}))).replace(/</g, '\\u003c')},${timeline.fps});${timeline.clips.some(clip=>(clip.visualFade?.fadeIn??0)>0||(clip.visualFade?.fadeOut??0)>0)?"else throw new Error('Visual fade renderer failed to load.');":''}
 if(window.__revlineRemotionText)window.__revlineTextLayerController=window.__revlineRemotionText.installTextLayers(${textSources});${hasText?"else throw new Error('Text renderer failed to load.');":''}
-${sceneRuntimeScript(sceneLayerSources(timeline, resolution), sceneFonts(rawFontUrls), sceneRuntimeUrl)}
+${sceneRuntimeScript(sceneLayerSources(timeline, resolution), sceneFonts(rawFontUrls), sceneRuntimeUrl, sceneMediaUrls)}
 ${transitions.length ? `if(window.__revlineRemotionTransitions)window.__revlineRemotionTransitions.installTransitions(${JSON.stringify(transitions).replace(/</g, '\\u003c')},${timeline.fps});else throw new Error('Transition renderer failed to load.');` : ''}
 document.querySelectorAll('video,audio').forEach(media=>{media.volume=Math.min(1,Number(media.dataset.volume));media.preservesPitch=true;});
 </script></body></html>`;

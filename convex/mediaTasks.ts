@@ -27,7 +27,8 @@ import { completeDerivation } from './derivations';
 import { flyRendersEnabled, seatedRenders } from './lib/render_seats';
 import { MEDIA_PROCESSOR_VERSION } from '../lib/media-analysis/processor-version';
 import { MEDIA_TASK_LEASE_MS } from '../lib/media-analysis/errors';
-import { consumeVideoImport, requireMediaTaskCapacity } from './lib/account_limits';
+import { consumeVideoImport, requireMediaTaskCapacity } from './lib/account_limits';import { sceneMediaAssetIds } from '../lib/editor/scene-layers';
+
 
 const LEASE_MS = MEDIA_TASK_LEASE_MS;
 const MAX_ATTEMPTS = 3;
@@ -323,7 +324,7 @@ async function loadWork(ctx:import('./_generated/server').QueryCtx|MutationCtx,t
   if(task.snapshotId){
     const saved=await ctx.db.get(task.snapshotId);if(!saved||saved.ownerId!==task.ownerId||saved.projectId!==task.projectId)throw new ConvexError('The frame request is unavailable.');
     const project=await requireProject(ctx,task.projectId,task.ownerId,false),timeline=currentTimeline(project);
-    const ids=[...new Set(timeline.clips.flatMap(clip=>clip.assetId?[clip.assetId]:[]))];
+    const ids=[...new Set([...timeline.clips.flatMap(clip=>clip.assetId?[clip.assetId]:[]),...sceneMediaAssetIds(timeline)])];
     const assets=await Promise.all(ids.map(async raw=>{const id=ctx.db.normalizeId('assets',raw),asset=id?await ctx.db.get(id):null;if(!asset||asset.ownerId!==task.ownerId||asset.projectId!==task.projectId)throw new ConvexError('Frame source media is unavailable.');return {...asset,url:await mediaUrl(ctx,asset)};}));
     snapshot={timeline,assets,times:saved.times};
   }

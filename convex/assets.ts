@@ -19,7 +19,8 @@ import { consumeUpload, issueUpload } from "./uploads";
 import { enqueueMediaTask } from './mediaTasks';
 import { requireMediaTaskCapacity, uploadPreparationTasks } from './lib/account_limits';
 import { stockAudio } from '../lib/editor/stock-audio';
-import { signMediaToken } from '../lib/storage/media-tokens';
+import { signMediaToken } from '../lib/storage/media-tokens';import { sceneMediaAssetIds } from '../lib/editor/scene-layers';
+
 /** Public playback is restricted to immutable CC0 catalog IDs, never arbitrary stored keys. */
 export const catalogAudioUrl = action({ args: { catalogId: v.string() }, returns: v.string(), handler: async (_ctx, args) => {
   const entry = stockAudio(args.catalogId);
@@ -122,7 +123,7 @@ export async function removeOwnedAsset(ctx:MutationCtx,ownerId:string,assetId:Id
   if (!asset || asset.ownerId !== ownerId) throw new ConvexError("Media not found");
   const project = await requireProject(ctx, asset.projectId, ownerId, true);
   if (project.aiRunning) throw new ConvexError("Wait for the current AI edit before deleting media");
-  if (project.timeline?.clips.some(clip => clip.assetId === asset._id)) throw new ConvexError("Remove this media from the timeline first");
+  if (project.timeline?.clips.some(clip => clip.assetId === asset._id) || (project.timeline && sceneMediaAssetIds(project.timeline).includes(asset._id))) throw new ConvexError("Remove this media from the timeline first");
   if(await usedByActiveExport(ctx,ownerId,asset.projectId,new Set([String(asset._id)])))throw new ConvexError('This media is part of an active render');
   await writeProject(ctx,project._id, { history: project.history?.filter(t => !t.clips.some(clip => clip.assetId === asset._id)), updatedAt: Date.now() });
   await removeMediaAttachment(ctx, asset); return null;
