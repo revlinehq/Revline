@@ -125,6 +125,28 @@ export function LandingHeroDemo() {
     return () => observer.disconnect();
   }, [view]);
 
+  // The hosted assets answer without byte ranges, so a streamed film can't seek past what it has buffered.
+  // Once it first plays, fetch the whole file and continue from an in-memory copy, which seeks anywhere.
+  useEffect(() => {
+    const element = video.current;
+    if (!element) return;
+    let url = '';
+    const controller = new AbortController();
+    const load = () => {
+      element.removeEventListener('play', load);
+      void fetch(FILM_SRC, { signal: controller.signal }).then(response => response.ok ? response.blob() : null).then(blob => {
+        if (!blob) return;
+        url = URL.createObjectURL(blob);
+        const at = element.currentTime, playing = !element.paused;
+        element.src = url;
+        element.currentTime = at;
+        if (playing) void element.play().catch(() => {});
+      }).catch(() => {});
+    };
+    element.addEventListener('play', load);
+    return () => { element.removeEventListener('play', load); controller.abort(); if (url) URL.revokeObjectURL(url); };
+  }, []);
+
   function pick(next: View) {
     setView(next);
     const element = video.current;
