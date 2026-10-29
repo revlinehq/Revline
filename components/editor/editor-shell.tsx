@@ -329,6 +329,16 @@ export function EditorShell(p: EditorShellProps) {
     if (playing) preview.current?.pause();
     else { if (readPlaybackTime() >= duration) seek(0); preview.current?.play(); }
   }, [cropping, playing, readPlaybackTime, duration, seek]);
+  // Each timeline keeps its own playhead: switching tabs pauses and resumes the next tab where it was left (0 the first time).
+  const tabTimes = useRef(new Map<string, number>()), shownTab = useRef(activeTabId);
+  useEffect(() => {
+    const previous = shownTab.current;
+    if (previous === activeTabId) return;
+    if (previous) tabTimes.current.set(previous, readPlaybackTime());
+    shownTab.current = activeTabId;
+    preview.current?.pause();
+    seek(activeTabId ? tabTimes.current.get(activeTabId) ?? 0 : 0);
+  }, [activeTabId, readPlaybackTime, seek]);
   const jumpCut = (direction: -1 | 1) => {
     preview.current?.pause();
     const current = readPlaybackTime();

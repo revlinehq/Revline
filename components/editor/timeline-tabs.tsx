@@ -9,7 +9,7 @@ import type { AspectRatio } from '@/lib/editor/types';
 import { AgentLogo } from '@/components/workspace/agent-logo';
 import './timeline-tabs.css';
 
-export type TimelineTab = { id: string; name: string; aspectRatio: AspectRatio; duration: number; active: boolean; /** Its first shot, for the export picker. */ cover?: string | null };
+export type TimelineTab = { id: string; name: string; aspectRatio: AspectRatio; duration: number; active: boolean; /** The tab the AI is editing while another one is only viewed. */ editing?: boolean; /** Its first shot, for the export picker. */ cover?: string | null };
 export type TimelineTabActions = {
   onOpen: (id: string) => Promise<void>;
   onCreate: (from: 'blank' | 'duplicate') => Promise<void>;
@@ -31,7 +31,7 @@ export function TimelineTabs({ tabs, working, agentName, locked, onError, ...act
   const run = async (action: () => Promise<void>) => { if (busy) return; setBusy(true); try { await action(); } catch (error) { onError(error); } finally { setBusy(false); } };
   const blocked = locked || busy;
   // The tab an agent was editing glows green for two seconds once it stops (or moves to another tab).
-  const workingId = working ? tabs.find(tab => tab.active)?.id ?? null : null;
+  const workingId = working ? (tabs.find(tab => tab.editing) ?? tabs.find(tab => tab.active))?.id ?? null : null;
   const [doneId, setDoneId] = useState<string | null>(null);
   const lastWorking = useRef<string | null>(null), doneTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   useEffect(() => {
@@ -44,7 +44,7 @@ export function TimelineTabs({ tabs, working, agentName, locked, onError, ...act
   useEffect(() => () => clearTimeout(doneTimer.current), []);
   return <div className="timeline-tabs" role="tablist" aria-label="Timelines">
     {tabs.map(tab => { const isShown = tab.id === shown; return <div key={tab.id} className="timeline-tab" role="tab" aria-selected={isShown} data-active={isShown || undefined} data-working={tab.id === workingId || undefined} data-done={tab.id === doneId && tab.id !== workingId || undefined}>
-      <button type="button" className="timeline-tab-main" disabled={!tab.active && blocked} title={!tab.active && locked ? 'Wait for the AI edit to finish before switching' : tab.name} onClick={() => { if (!tab.active && !busy) { setOpening(tab.id); void run(() => actions.onOpen(tab.id)).finally(() => setOpening(null)); } }} onDoubleClick={() => { if (tab.active && !locked) setDialog({ mode: 'rename', id: tab.id, name: tab.name }); }}>
+      <button type="button" className="timeline-tab-main" disabled={!tab.active && busy} title={!tab.active && locked ? `View ${tab.name} while the AI edits; it opens for editing when the edit finishes` : tab.name} onClick={() => { if (!tab.active && !busy) { setOpening(tab.id); void run(() => actions.onOpen(tab.id)).finally(() => setOpening(null)); } }} onDoubleClick={() => { if (tab.active && !locked) setDialog({ mode: 'rename', id: tab.id, name: tab.name }); }}>
         {tab.id === workingId && <span className="timeline-tab-agent" aria-hidden="true"><AgentLogo name={agentName} /></span>}
         <span className="timeline-tab-name">{tab.name}</span>
         <span className="timeline-tab-length">{length(tab.duration)}</span>
