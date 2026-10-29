@@ -37,12 +37,16 @@ type Conversation = {projectId:Id<'projects'>;threadId:string};
 type PanelProps = ComponentProps<typeof AssistantPanelBody> & {conversation?:Conversation};
 type QueuedMessage={id:Id<'assistantQueue'>;prompt:string;error?:string};
 type ConversationState = {queued:QueuedMessage[];queuePaused:boolean;onRemoveQueued:(id:Id<'assistantQueue'>)=>Promise<unknown>;onResumeQueue:()=>Promise<unknown>;threadId:string;messages:ChatMessage[];canLoadMore:boolean;onLoadMore:()=>void};
+const LIVE_PAGE_MESSAGES=12,OPENING_MESSAGES=40;
 const ConnectedConversation = memo(function ConnectedConversation({conversation,onUpdate}:{conversation:Conversation;onUpdate:(state:ConversationState)=>void}) {
   const queue=useQuery(api.assistant.queued,{projectId:conversation.projectId});
   const remove=useMutation(api.assistant.removeQueued),resume=useMutation(api.assistant.resumeQueue);
   const onRemoveQueued=useCallback((id:Id<'assistantQueue'>)=>remove({projectId:conversation.projectId,id}),[remove,conversation.projectId]);
   const onResumeQueue=useCallback(()=>resume({projectId:conversation.projectId}),[resume,conversation.projectId]);
-  const {results,status,loadMore}=useUIMessages(api.assistant.messages,conversation,{initialNumItems:40,stream:true});
+  // Only the newest page re-runs (and re-reads every message in it) as a turn adds steps, and the
+  // pagination splits it whenever it outgrows initialNumItems. Keep it small and fill the opening view
+  // with one older page, so the chat still opens with the latest 40 messages.
+  const {results,status,loadMore}=useUIMessages(api.assistant.messages,conversation,{initialNumItems:LIVE_PAGE_MESSAGES,stream:true});
   // The latest-page query slides forward as messages arrive; keep what was already shown
   // so the list only grows at the bottom and the chat scroller never sees rows vanish above.
   const shown=useRef<{threadId:string;messages:ChatMessage[]}>({threadId:conversation.threadId,messages:[]});
@@ -57,6 +61,8 @@ const ConnectedConversation = memo(function ConnectedConversation({conversation,
   },[results,conversation.threadId]);
   const loadMoreRef=useRef(loadMore);loadMoreRef.current=loadMore;
   const historyExpansion=useRef(new AssistantHistoryExpansion());
+  const filled=useRef<string|null>(null);
+  useEffect(()=>{if(status==='CanLoadMore'&&filled.current!==conversation.threadId){filled.current=conversation.threadId;loadMoreRef.current(OPENING_MESSAGES-LIVE_PAGE_MESSAGES);}},[conversation.threadId,status]);
   useEffect(()=>{if(historyExpansion.current.next(conversation.threadId,status,messages))loadMoreRef.current(20);},[conversation.threadId,status,messages]);
   const onLoadMore=useCallback(()=>loadMoreRef.current(20),[]);
   const state=useMemo(()=>({queued:queue?.messages??[],queuePaused:queue?.paused??false,onRemoveQueued,onResumeQueue,threadId:conversation.threadId,messages,canLoadMore:status==='CanLoadMore',onLoadMore}),[conversation.threadId,messages,status,onLoadMore,queue,onRemoveQueued,onResumeQueue]);

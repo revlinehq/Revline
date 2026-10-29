@@ -88,7 +88,8 @@ export const clipValidator = v.object({
   lightSweep:v.optional(v.object({enabled:v.boolean(),amount:v.number(),color:v.string(),angle:v.number(),position:v.number(),width:v.number(),speed:v.number()})),
   vhs:v.optional(v.object({enabled:v.boolean(),amount:v.number(),scanlines:v.number(),noise:v.number(),bleed:v.number(),tracking:v.number(),speed:v.number()})),
   lightLeak:v.optional(v.object({enabled:v.boolean(),amount:v.number(),color:v.string(),position:v.number(),spread:v.number(),speed:v.number()})),
-  scene: v.optional(v.object({ title: v.string(), code: v.string(), brand: v.optional(sceneBrandValidator), media: v.optional(v.array(v.object({ name: v.string(), assetId: v.string() }))), blueprints: v.optional(v.array(v.object({ name: v.string(), code: v.string() }))) })),
+  // Stored timelines keep scene and blueprint code in sceneCode rows: `code` is empty and `codeRef` its hash.
+  scene: v.optional(v.object({ title: v.string(), code: v.string(), codeRef: v.optional(v.string()), brand: v.optional(sceneBrandValidator), media: v.optional(v.array(v.object({ name: v.string(), assetId: v.string() }))), blueprints: v.optional(v.array(v.object({ name: v.string(), code: v.string(), codeRef: v.optional(v.string()) }))) })),
   textTemplate: v.optional(textTemplateValidator),
   textStyle:v.optional(textStyleValidator), textGradient:v.optional(textGradientValidator),
   fontFamily:v.optional(v.union(v.literal('space-grotesk'),v.literal('anton'),v.literal('dm-serif'),v.literal('geist-mono'),v.literal('inter'),v.literal('dm-sans'),v.literal('montserrat'),v.literal('poppins'),v.literal('oswald'),v.literal('bebas-neue'),v.literal('playfair-display'),v.literal('caveat'),v.literal('tiktok-sans'),v.literal('barlow-condensed'),v.literal('ibm-plex-mono'),v.literal('lora'),v.literal('archivo-black'),v.literal('fraunces'))),
@@ -243,6 +244,8 @@ export default defineSchema({
   projectTimelines:defineTable({projectId:v.id('projects'),ownerId:v.string(),timelineId:v.string(),timeline:timelineValidator,history:v.optional(v.array(timelineValidator))}).index('by_project_timeline',['projectId','timelineId']),
   timelineRevisions:defineTable({projectId:v.id('projects'),ownerId:v.string(),sequence:v.number(),timeline:timelineValidator,key:v.optional(v.string()),keyVersion:v.optional(v.number())}).index('by_project_sequence',['projectId','sequence']),
   // The stored undo snapshots in order (id, fingerprint, serialized size), so edits and the editor read this row instead of every snapshot.
+  // Scene and blueprint code by SHA-256 of its text. Rows never change, so editors load each one once.
+  sceneCode:defineTable({hash:v.string(),code:v.string()}).index('by_hash',['hash']),
   timelineHistoryIndex:defineTable({projectId:v.id('projects'),keyVersion:v.number(),entries:v.array(v.object({id:v.id('timelineRevisions'),sequence:v.number(),key:v.string(),bytes:v.number()}))}).index('by_project',['projectId']),
   projectCatalog:defineTable({projectId:v.id('projects'),ownerId:v.string(),title:v.string(),aspectRatio,createdAt:v.number(),updatedAt:v.number(),clipCount:v.number(),aiRunning:v.boolean(),deleting:v.optional(v.boolean()),coverKind:v.optional(assetKind),coverStorageId:v.optional(v.id('_storage')),coverR2Key:v.optional(v.string())}).index('by_project',['projectId']).index('by_owner_updated',['ownerId','updatedAt']),
   projectDataMigration:defineTable({key:v.string(),cursor:v.union(v.string(),v.null()),completed:v.boolean()}).index('by_key',['key']),

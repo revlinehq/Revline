@@ -17,8 +17,14 @@ const topic = v.union(v.literal('captions'), v.literal('platforms'), v.literal('
 const summary = v.object({ memoryId: v.id('agentMemories'), scope: v.union(v.literal('user'), v.literal('project')), kind, topic: v.optional(topic), name: v.optional(v.string()), text: v.string(), hasRecipe: v.boolean(), source: v.optional(v.string()), uses: v.number() });
 const runArgs = { projectId: v.id('projects'), ownerId: v.string(), runId: v.string() };
 
+/** A source project's title from its catalog row; the project document carries the whole timeline. */
+async function sourceTitle(ctx: QueryCtx, projectId: Id<'projects'> | undefined) {
+  if (!projectId) return undefined;
+  const catalog = await ctx.db.query('projectCatalog').withIndex('by_project', q => q.eq('projectId', projectId)).unique();
+  return catalog ? catalog.title : (await ctx.db.get(projectId))?.title;
+}
 async function view(ctx: QueryCtx, row: Doc<'agentMemories'>) {
-  const source = row.sourceProjectId ? (await ctx.db.get(row.sourceProjectId))?.title : undefined;
+  const source = await sourceTitle(ctx, row.sourceProjectId);
   return { memoryId: row._id, scope: row.projectId ? 'project' as const : 'user' as const, kind: row.kind ?? 'preference' as const, ...(row.topic ? { topic: row.topic } : {}), ...(row.name ? { name: row.name } : {}), text: row.text, hasRecipe: !!row.recipe, ...(source ? { source } : {}), uses: row.uses ?? 0 };
 }
 export async function memoriesFor(ctx: QueryCtx, ownerId: string, projectId?: Id<'projects'>) {
@@ -75,7 +81,7 @@ export const recall = internalMutation({ args: { ...runArgs, memoryId: v.string(
   await requireRun(ctx, args);
   const row = await owned(ctx, args.ownerId, args.memoryId);
   await ctx.db.patch(row._id, { uses: (row.uses ?? 0) + 1, lastUsedAt: Date.now() });
-  const source = row.sourceProjectId ? (await ctx.db.get(row.sourceProjectId))?.title : undefined;
+  const source = await sourceTitle(ctx, row.sourceProjectId);
   return { memoryId: row._id, ...(row.name ? { name: row.name } : {}), text: row.text, ...(row.recipe ? { recipe: row.recipe } : {}), ...(source ? { source } : {}) };
 }});
 

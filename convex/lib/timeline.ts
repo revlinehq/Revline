@@ -6,7 +6,8 @@ import { playbackRateOf, sourceEndOf } from '../../lib/editor/playback-rate';
 import { transitionSources } from '../../lib/editor/clip-transitions';
 import { validateVisualFade } from '../../lib/editor/visual-fades';
 import { validateAudioTimeline } from '../../lib/editor/audio-settings';
-import { validateScene } from '../../lib/editor/scene-layers';
+import { TIMELINE_SCENE_CODE_LIMIT, validateScene } from '../../lib/editor/scene-layers';
+import { sceneCodeCharacters, storedTimelineBytes } from '../../lib/editor/scene-code';
 import { ConvexError } from "convex/values";
 import { layerGroup, maxTrackCount, normalizeTimeline, trackOf, type Timeline } from "../../lib/editor/types";
 import { equalTimelineValue } from '../../lib/editor/timeline-equality';
@@ -40,7 +41,9 @@ export function validateFocus(focus: { time: number; x: number; y: number }[], d
   if (focus.length > 1500 || focus.some((sample, i) => !Number.isFinite(sample.time) || sample.time < 0 || sample.time > duration + 0.5 || !Number.isFinite(sample.x) || !Number.isFinite(sample.y) || sample.x < 0 || sample.x > 1 || sample.y < 0 || sample.y > 1 || (i > 0 && sample.time <= focus[i - 1].time))) throw new ConvexError("Invalid subject tracking samples");
 }
 export async function validateTimeline(ctx: MutationCtx | QueryCtx, project: Doc<"projects">, timeline: Timeline) {
-  if (serializedBytes(timeline) > 300_000) throw new ConvexError("Timeline is too large. Shorten text or scenes, or reduce subject tracking samples.");
+  // Scene code is stored by hash, so the record limit counts it as one; its own total is capped separately.
+  if (storedTimelineBytes(timeline) > 300_000) throw new ConvexError("Timeline is too large. Shorten text or scenes, or reduce subject tracking samples.");
+  if (sceneCodeCharacters(timeline) > TIMELINE_SCENE_CODE_LIMIT) throw new ConvexError(`Scenes in one timeline support up to ${TIMELINE_SCENE_CODE_LIMIT.toLocaleString('en-US')} characters of code.`);
   if (![24, 30, 60].includes(timeline.fps)) throw new ConvexError("Choose 24, 30, or 60 fps");
   const markerIds = new Set<string>();
   for (const marker of timeline.markers ?? []) {

@@ -6,10 +6,14 @@ import { validateSceneBrand, type SceneBrand } from './brand-kit';
 /** A project image a scene uses, by the name its code reads from `media`. */
 export type SceneMedia = { name: string; assetId: string };
 /** A brand's UI rebuilt as a scene module with named parts, mounted inside a scene with blueprint(name, container). */
-export type SceneBlueprint = { name: string; code: string };
-export type SceneSource = { title: string; code: string; brand?: SceneBrand; media?: SceneMedia[]; blueprints?: SceneBlueprint[] };
+export type SceneBlueprint = { name: string; code: string; codeRef?: string };
+export type SceneSource = { title: string; code: string; codeRef?: string; brand?: SceneBrand; media?: SceneMedia[]; blueprints?: SceneBlueprint[] };
 export const SCENE_MEDIA_LIMIT = 8, SCENE_BLUEPRINT_LIMIT = 4;
-export const SCENE_LIMITS = { title: 80, code: 40_000 } as const;
+// Stored timelines keep code in sceneCode rows (lib/editor/scene-code), so it no longer weighs on every edit.
+export const SCENE_LIMITS = { title: 80, code: 120_000 } as const;
+/** All scene and blueprint code in one timeline. Exports, reviews, stashed tabs and shares still copy
+ * timelines with their code, and a review row holds two, so this keeps those rows under 1 MiB. */
+export const TIMELINE_SCENE_CODE_LIMIT = 180_000;
 
 export function validateScene(clip: Pick<Clip, 'kind' | 'scene' | 'assetId'>) {
   if (clip.kind !== 'scene') { if (clip.scene) throw new Error('Only scene clips can hold scene code.'); return; }

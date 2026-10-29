@@ -1,4 +1,5 @@
 import { sharedAssetFields } from './lib/shared_media';
+import { storedTimelineBytes } from '../lib/editor/scene-code';
 import { createThread, saveMessages } from '@convex-dev/agent';
 import { ConvexError, v, type Infer } from 'convex/values';
 import { components } from './_generated/api';
@@ -74,7 +75,7 @@ function validateSnapshot(args: Snapshot) {
     if (media.kind !== 'video' || mediaById.get(media.audioSourceId)?.kind !== 'audio') throw new ConvexError('Linked audio must identify an imported audio source for a video');
   }
   for (const timeline of [args.timeline, ...args.history]) {
-    if (serializedBytes(timeline) > 150_000) throw new ConvexError('Transferred timeline is too large');
+    if (storedTimelineBytes(timeline) > 150_000) throw new ConvexError('Transferred timeline is too large');
     for (const clip of timeline.clips) if (clip.assetId && !ids.has(clip.assetId)) throw new ConvexError('A timeline references media outside the transfer');
   }
 }

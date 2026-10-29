@@ -1,4 +1,5 @@
 import { ConvexError, v, type ObjectType } from 'convex/values';
+import { loadSceneCode } from './lib/scene_code';
 import { internalMutation, internalQuery, mutation, query, type MutationCtx, type QueryCtx } from './_generated/server';
 import { internal } from './_generated/api';
 import type { Doc, Id } from './_generated/dataModel';
@@ -188,7 +189,7 @@ export const exportTabs = internalQuery({ args: { projectId: v.id('projects') },
   const project = await ctx.db.get(projectId);
   if (!project) throw new ConvexError('Project not found');
   const active = activeTabOf(project);
-  const tabs = await Promise.all(tabsOf(project).map(async tab => ({ name: tab.name, active: tab.id === active, timeline: tab.id === active ? currentTimeline(project) : (await stashedRow(ctx, projectId, tab.id))?.timeline ?? null })));
+  const tabs = await Promise.all(tabsOf(project).map(async tab => ({ name: tab.name, active: tab.id === active, timeline: tab.id === active ? await loadSceneCode(ctx, currentTimeline(project)) : (await stashedRow(ctx, projectId, tab.id))?.timeline ?? null })));
   const ids = new Set(tabs.flatMap(tab => tab.timeline?.clips.flatMap(clip => clip.assetId ? [clip.assetId] : []) ?? []));
   const assets = (await Promise.all([...ids].map(async id => { const asset = await ctx.db.get(id as Id<'assets'>); return asset ? { _id: asset._id, kind: asset.kind, fileName: asset.fileName, r2Key: asset.r2Key ?? null } : null; }))).filter(Boolean);
   return { tabs, assets };

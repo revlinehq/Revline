@@ -6,6 +6,7 @@ import { useStore } from 'zustand';
 import { createEditorStore } from '@/lib/editor/store';
 import { createTimelineSaveQueue } from '@/lib/editor/timeline-sync';
 import { EditorStateProvider } from './editor-state';
+import { useSceneCode } from './use-scene-code';
 import { useConvex, useConvexAuth, useMutation, useQueries, useQuery, useAction } from 'convex/react';
 import { openingFootage } from '@/lib/editor/footage-opening';
 import { WorkspaceNav } from '@/components/workspace/workspace-nav';
@@ -37,14 +38,17 @@ function editorLoading(projectId: string) {
 }
 export function ConnectedEditor({projectId}: {projectId:string}) {
   const {isAuthenticated}=useConvexAuth();
-  const project=useQuery(api.projects.get,isAuthenticated?{projectId:projectId as Id<'projects'>,includeHistory:false}:'skip');
+  const project=useQuery(api.projects.get,isAuthenticated?{projectId:projectId as Id<'projects'>,includeHistory:false,sceneCode:'refs'}:'skip');
   // Undo history is up to 10 full timelines. Subscribe to its small index and read each stored snapshot once:
   // snapshots never change, so their queries stay cached while they remain in history.
   const historyIds=useQuery(api.projects.historyIndex,isAuthenticated?{projectId}:'skip');
-  const snapshots=useQueries(useMemo(()=>Object.fromEntries((historyIds??[]).map(id=>[id,{query:api.projects.historySnapshot,args:{projectId,id}}])),[historyIds,projectId]));
+  const snapshots=useQueries(useMemo(()=>Object.fromEntries((historyIds??[]).map(id=>[id,{query:api.projects.historySnapshot,args:{projectId,id,sceneCode:'refs'}}])),[historyIds,projectId]));
   const complete=historyIds!==undefined&&historyIds.every(id=>snapshots[id]!==undefined);
-  // The project and its index change together; a new revision shows once its new snapshot has loaded.
-  const loaded=useMemo(()=>project&&historyIds&&complete?{...project,history:historyIds.flatMap(id=>{const timeline=snapshots[id];return timeline&&!(timeline instanceof Error)?[timeline as Timeline]:[];})}:null,[project,historyIds,complete]);// eslint-disable-line react-hooks/exhaustive-deps
+  const stored=useMemo(()=>historyIds&&complete?historyIds.flatMap(id=>{const timeline=snapshots[id];return timeline&&!(timeline instanceof Error)?[timeline as Timeline]:[];}):null,[historyIds,complete]);// eslint-disable-line react-hooks/exhaustive-deps
+  // Scene code arrives by hash and is loaded once per code; it never changes, so edits do not re-read it.
+  const restore=useSceneCode(projectId,[project?.timeline,...stored??[]]);
+  // The project and its index change together; a new revision shows once its new snapshot and code have loaded.
+  const loaded=useMemo(()=>project&&stored&&restore?{...project,...(project.timeline?{timeline:restore(project.timeline)}:{}),history:stored.map(restore)}:null,[project,stored,restore]);
   const [shown,setShown]=useState<Doc<'projects'>|null>(null);
   if(loaded&&loaded!==shown)setShown(loaded);
   const current=loaded??(shown?._id===projectId?shown:null);
@@ -54,7 +58,9 @@ export function ConnectedEditor({projectId}: {projectId:string}) {
 function ProjectEditor({project}: {project:Doc<'projects'>}) {
   const [shareOpen,setShareOpen]=useState(false);
   const projectId=project._id;const convex=useConvex();const media=useQuery(api.assets.list,{projectId,limit:200});const plan=useQuery(api.billing.status,{})?.plan;const ai=useQuery(api.assistant.status,{projectId});
-  const livePreview=useQuery(api.assistant.livePreview,ai?.running?{projectId}:'skip');
+  const storedPreview=useQuery(api.assistant.livePreview,ai?.running?{projectId,sceneCode:'refs'}:'skip');
+  const restorePreview=useSceneCode(projectId,[storedPreview?.timeline,storedPreview&&{clips:storedPreview.removedClips}]);
+  const livePreview=useMemo(()=>storedPreview&&restorePreview?{...storedPreview,timeline:restorePreview(storedPreview.timeline),removedClips:restorePreview({clips:storedPreview.removedClips}).clips}:storedPreview===null?null:undefined,[storedPreview,restorePreview]);
   const activePreview=ai?.running&&livePreview?.runId===project.aiRunId&&livePreview?.baseRevision===(project.revision??0)?livePreview:null;
   const save=useMutation(api.projects.saveTimeline);const update=useMutation(api.projects.update);const startUpload=useAction(api.r2.start);const partUrl=useAction(api.r2.partUrl);const finishUpload=useAction(api.r2.complete);const abortUpload=useAction(api.r2.abort);const send=useMutation(api.assistant.send);const stop=useMutation(api.assistant.stop);const renderStart=useMutation(api.renders.start);const renderCancel=useMutation(api.renders.cancel);const downloadExport=useAction(api.renders.download);
   const importVideo=useMutation(api.mediaTasks.importVideo);

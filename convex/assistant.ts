@@ -12,6 +12,8 @@ import { hydrateAsset } from './lib/asset_analysis';
 import { attachStockAudio, validateWaveform } from './assets';
 import { recordAssetStorage } from './lib/storage_accounting';
 import { writeProject,readProject,projectIdentity,projectRun } from './lib/project_data';
+import { loadSceneCode, storeSceneCode, storedSceneCode } from './lib/scene_code';
+import { withoutSceneCode } from '../lib/editor/scene-code';
 import { hasUltraPlan, requireEditorAccess } from './lib/billing_access';
 import { abortStream, createThread, listStreams, listUIMessages, saveMessage, syncStreams, vPaginationResult, vStreamArgs } from "@convex-dev/agent";
 import { vStreamDelta, vStreamMessage } from "@convex-dev/agent/validators";
@@ -64,14 +66,16 @@ export const status = query({ args: { projectId: v.id("projects") }, returns: v.
   return { configured: ready, ...(defaultModelChoice?{defaultModelChoice}:{}), defaultReasoningEffort: defaultEditorReasoningEffort(), ...(await canChooseEditorModel(ctx, ownerId) ? { modelSwitcher: true, allowedModels: [...allowedClaudeModelChoices()] } : {}), running: project.aiRunning ?? false, externalAgent: project.aiAgentName && (project.aiRunning && project.aiRunId?.startsWith('mcp-') || (project.aiAgentActiveUntil ?? 0) > Date.now()) ? { name: project.aiAgentName, until: project.aiAgentActiveUntil ?? 0, running: !!project.aiRunning && !!project.aiRunId?.startsWith('mcp-') } : null, editing, workflowActive, error: project.aiError ?? null, reason: ready ? null : providerReason, activity, activityProgress: null, activityStartedAt: active ? task?.activityStartedAt ?? task?.attemptStartedAt ?? active.createdAt : null, activitySource: source?.ownerId === project.ownerId && source.projectId === project._id ? source.fileName : null, ...(budget&&budget.runId===project.aiRunId?{budgetUsed:budget.used}:{}), ...(budgetRow?.effort?{liveEffort:budgetRow.effort}:{}), ...(process.env.EDITOR_EFFORT_SWITCHER==='true'&&await canChooseEditorModel(ctx, ownerId)?{effortSwitcher:true}:{}) };
 }});
 const livePreviewValidator = v.object({runId:v.string(),baseRevision:v.number(),timeline:timelineValidator,label:v.string(),changedClipIds:v.array(v.string()),removedClips:v.array(clipValidator),at:v.number(),sequence:v.number(),updatedAt:v.number()});
-export const livePreview = query({args:{projectId:v.id('projects')},returns:v.union(v.null(),livePreviewValidator),handler:async(ctx,{projectId})=>{
+/** `sceneCode: 'refs'` keeps scene code by hash for editors that load each code once. */
+export const livePreview = query({args:{projectId:v.id('projects'),sceneCode:v.optional(v.literal('refs'))},returns:v.union(v.null(),livePreviewValidator),handler:async(ctx,{projectId,sceneCode})=>{
   const run=await projectRun(ctx,projectId,await requireOwner(ctx));
   if(!run.aiRunning)return null;
   const project=(await ctx.db.get(projectId))!;
   const preview=await ctx.db.query('aiTimelinePreviews').withIndex('by_project',q=>q.eq('projectId',projectId)).unique();
   if(!preview||preview.ownerId!==project.ownerId||preview.runId!==run.aiRunId||preview.baseRevision!==(project.revision??0))return null;
   const {_id,_creationTime,ownerId,projectId:_,...result}=preview;
-  return result;
+  if(sceneCode==='refs')return result;
+  return {...result,timeline:await loadSceneCode(ctx,result.timeline),removedClips:(await loadSceneCode(ctx,{clips:result.removedClips})).clips};
 }});
 async function clearLivePreview(ctx:import('./_generated/server').MutationCtx,projectId:import('./_generated/dataModel').Id<'projects'>){
   const preview=await ctx.db.query('aiTimelinePreviews').withIndex('by_project',q=>q.eq('projectId',projectId)).unique();
@@ -202,11 +206,11 @@ export const getRun = internalQuery({args:runArgs,returns:v.object({project:proj
   const run=await projectRun(ctx,args.projectId,args.ownerId);if(!args.runId.startsWith(READ_ONLY_RUN_PREFIX)&&(run.aiRunId!==args.runId||!run.aiRunning))throw new ConvexError('AI run is no longer active');
   const project=(await ctx.db.get(args.projectId))!;
   const assets=await ctx.db.query('assets').withIndex('by_ownerId_projectId',q=>q.eq('ownerId',args.ownerId).eq('projectId',args.projectId)).take(200);
-  return {project:{...project,...run,timeline:currentTimeline(project)},assets};
+  return {project:{...project,...run,timeline:await loadSceneCode(ctx,currentTimeline(project))},assets};
 }});
 export const getRunTimeline=internalQuery({args:runArgs,returns:v.object({timeline:timelineValidator,revision:v.number()}),handler:async(ctx,args)=>{
   const run=await projectRun(ctx,args.projectId,args.ownerId);if(run.aiRunId!==args.runId||!run.aiRunning)throw new ConvexError('AI run is no longer active');
-  const project=(await ctx.db.get(args.projectId))!;return {timeline:currentTimeline(project),revision:project.revision??0};
+  const project=(await ctx.db.get(args.projectId))!;return {timeline:await loadSceneCode(ctx,currentTimeline(project)),revision:project.revision??0};
 }});
 export const getRunAsset=internalQuery({args:{...runArgs,assetId:v.string()},returns:assetDocument,handler:async(ctx,args)=>{
   const run=await projectRun(ctx,args.projectId,args.ownerId);if(run.aiRunId!==args.runId||!run.aiRunning)throw new ConvexError('AI run is no longer active');
@@ -238,9 +242,10 @@ export const apply = internalMutation({ args: { ...runArgs, expectedRevision: v.
   if((project.revision??0)===args.expectedRevision)rejectNewLayerOverlaps(currentTimeline(project),args.timeline);
   const receipt=async(revision:number)=>{
     const previous=await ctx.db.query('aiTimelinePreviews').withIndex('by_project',q=>q.eq('projectId',project._id)).unique();
-    const timeline=normalizeTimeline(args.timeline);
+    // The preview stores scene code by hash like the project; compare and describe in that form.
+    const timeline=await storeSceneCode(ctx,normalizeTimeline(args.timeline),storedSceneCode(previous?.timeline));
     const unchanged=previous?.runId===args.runId&&equalTimelineValue(previous.timeline,timeline);
-    const change=unchanged?{label:previous.label,changedClipIds:previous.changedClipIds,removedClips:previous.removedClips,at:previous.at}:describeLiveEdit(previous?.runId===args.runId?previous.timeline:currentTimeline(project),timeline);
+    const change=unchanged?{label:previous.label,changedClipIds:previous.changedClipIds,removedClips:previous.removedClips,at:previous.at}:describeLiveEdit(previous?.runId===args.runId?previous.timeline:(await withoutSceneCode(currentTimeline(project))).timeline,timeline);
     const values={projectId:project._id,ownerId:args.ownerId,runId:args.runId,baseRevision:revision,timeline,...change,sequence:(previous?.runId===args.runId?previous.sequence:0)+(unchanged?0:1),updatedAt:Date.now()};
     if(previous)await ctx.db.replace(previous._id,values);else await ctx.db.insert('aiTimelinePreviews',values);
     if(args.publication)await savePublicationReceipt(ctx,args.ownerId,{version:1,kind:'timeline-publication',status:'saved',...args.publication,runId:args.runId,stagedRevision:args.expectedRevision,revision});
@@ -286,8 +291,9 @@ export const previewDraft = internalMutation({args:{...runArgs,expectedRevision:
   rejectNewLayerOverlaps(currentTimeline(project),timeline);
   const previous=await ctx.db.query('aiTimelinePreviews').withIndex('by_project',q=>q.eq('projectId',project._id)).unique();
   const current=previous?.runId===args.runId&&previous.baseRevision===args.expectedRevision?previous:null;
-  if(current&&equalTimelineValue(current.timeline,timeline))return null;
-  const values={projectId:project._id,ownerId:args.ownerId,runId:args.runId,baseRevision:args.expectedRevision,timeline,...describeLiveEdit(current?.timeline??currentTimeline(project),timeline),sequence:(current?.sequence??0)+1,updatedAt:Date.now()};
+  const stored=await storeSceneCode(ctx,timeline,storedSceneCode(previous?.timeline));
+  if(current&&equalTimelineValue(current.timeline,stored))return null;
+  const values={projectId:project._id,ownerId:args.ownerId,runId:args.runId,baseRevision:args.expectedRevision,timeline:stored,...describeLiveEdit(current?.timeline??(await withoutSceneCode(currentTimeline(project))).timeline,stored),sequence:(current?.sequence??0)+1,updatedAt:Date.now()};
   if(previous)await ctx.db.replace(previous._id,values);else await ctx.db.insert('aiTimelinePreviews',values);
   return null;
 }});

@@ -1,5 +1,7 @@
 import { shareAnalysis } from './lib/asset_analysis';
 import { writeProject,createProject,readProject,projectIdentity,readHistoryIndex } from './lib/project_data';
+import { loadSceneCode, sceneCodeText } from './lib/scene_code';
+import { storedTimelineBytes } from '../lib/editor/scene-code';
 import { recordAssetStorage } from './lib/storage_accounting';
 import { requireEditorAccess } from './lib/billing_access';
 import { mediaUrl } from './lib/media_storage';
@@ -107,15 +109,17 @@ export const create = mutation({ args: createProjectForArgs, returns: v.id("proj
 // Editor URLs are user input: a malformed id is the same typed not-found as a
 // deleted or foreign project, never a redacted argument validation error.
 function routeProjectId(ctx:QueryCtx,projectId:string){const id=ctx.db.normalizeId('projects',projectId);if(!id)throw new ConvexError('Project not found');return id;}
-export const get = query({ args: { projectId: v.string(),includeHistory:v.optional(v.boolean()) }, returns: projectDocument, handler: async (ctx, args) => {
+/** `sceneCode: 'refs'` returns scene code by hash (load it with `sceneCode`); otherwise timelines carry their code. */
+const sceneCodeMode=v.optional(v.literal('refs'));
+export const get = query({ args: { projectId: v.string(),includeHistory:v.optional(v.boolean()),sceneCode:sceneCodeMode }, returns: projectDocument, handler: async (ctx, args) => {
   const projectId=routeProjectId(ctx,args.projectId);
-  await projectIdentity(ctx,projectId,await requireOwner(ctx));const project=(await readProject(ctx,projectId,args.includeHistory!==false))!; return { ...project, timeline: currentTimeline(project), ...(project.history ? { history: project.history.map(normalizeTimeline) } : {}), revision: project.revision ?? 0 };
+  await projectIdentity(ctx,projectId,await requireOwner(ctx));const project=(await readProject(ctx,projectId,args.includeHistory!==false,args.sceneCode!=='refs'))!; return { ...project, timeline: currentTimeline(project), ...(project.history ? { history: project.history.map(normalizeTimeline) } : {}), revision: project.revision ?? 0 };
 }});
 export const history=query({args:{projectId:v.string()},returns:v.array(timelineValidator),handler:async(ctx,args)=>{
   const projectId=routeProjectId(ctx,args.projectId);
   await projectIdentity(ctx,projectId,await requireOwner(ctx));
   const rows=await ctx.db.query('timelineRevisions').withIndex('by_project_sequence',q=>q.eq('projectId',projectId)).order('desc').take(HISTORY_LIMIT);
-  if(rows.length)return rows.reverse().map(row=>normalizeTimeline(row.timeline));
+  if(rows.length)return Promise.all(rows.reverse().map(async row=>normalizeTimeline(await loadSceneCode(ctx,row.timeline))));
   const access=await ctx.db.query('projectAccess').withIndex('by_project',q=>q.eq('projectId',projectId)).unique();if(access?.historyStored)return [];
   // Old projects are readable before the bounded migration reaches them.
   const legacy=await ctx.db.get(projectId);return legacy?.history?.map(normalizeTimeline)??[];
@@ -131,11 +135,18 @@ export const historyIndex=query({args:{projectId:v.string()},returns:v.array(v.i
   const rows=await ctx.db.query('timelineRevisions').withIndex('by_project_sequence',q=>q.eq('projectId',projectId)).order('desc').take(HISTORY_LIMIT);
   return rows.reverse().map(row=>row._id);
 }});
-export const historySnapshot=query({args:{projectId:v.string(),id:v.string()},returns:v.union(timelineValidator,v.null()),handler:async(ctx,args)=>{
+export const historySnapshot=query({args:{projectId:v.string(),id:v.string(),sceneCode:sceneCodeMode},returns:v.union(timelineValidator,v.null()),handler:async(ctx,args)=>{
   const projectId=routeProjectId(ctx,args.projectId);
   await projectIdentity(ctx,projectId,await requireOwner(ctx));
   const id=ctx.db.normalizeId('timelineRevisions',args.id),row=id&&await ctx.db.get(id);
-  return row&&row.projectId===projectId?normalizeTimeline(row.timeline):null;
+  if(!row||row.projectId!==projectId)return null;
+  return normalizeTimeline(args.sceneCode==='refs'?row.timeline:await loadSceneCode(ctx,row.timeline));
+}});
+/** One scene's code by its hash. Code is stored by content, so a hash only reaches someone who has that code. */
+export const sceneCode=query({args:{projectId:v.string(),hash:v.string()},returns:v.union(v.string(),v.null()),handler:async(ctx,args)=>{
+  const projectId=routeProjectId(ctx,args.projectId);
+  await projectIdentity(ctx,projectId,await requireOwner(ctx));
+  return /^[a-f0-9]{64}$/.test(args.hash)?await sceneCodeText(ctx,args.hash):null;
 }});
 export const projectListItem = v.object({ _id: v.id('projects'), title: v.string(), createdAt: v.number(), updatedAt: v.number(), aspectRatio, clipCount: v.number(), aiRunning: v.boolean(), coverUrl: v.union(v.string(), v.null()), coverKind: v.union(v.literal("video"), v.literal("image"), v.null()) });
 export async function listProjectsFor(ctx: QueryCtx, ownerId: string, args: { limit?: number }): Promise<Infer<typeof projectListItem>[]> {
@@ -161,15 +172,17 @@ export const update = mutation({ args: { projectId: v.id("projects"), title: v.o
 export const saveTimeline = mutation({ args: { projectId: v.id("projects"), timeline: timelineValidator, baseTimeline: v.optional(timelineValidator), undoTo: v.optional(timelineValidator), undoHistoryKeys: v.optional(v.array(v.string())), undoTargetKey: v.optional(v.string()), expectedRevision: v.number() }, returns: v.object({ revision: v.number(), timeline: timelineValidator }), handler: async (ctx, args) => {
   // commitTimeline reads stored history itself; skip hydrating it here.
   const project = await requireProject(ctx, args.projectId, await requireOwner(ctx), false); await requireEditorAccess(ctx, project.ownerId);
+  // Editors send full scene code; any scene still referencing stored code by hash gets it restored.
+  args = { ...args, timeline: await loadSceneCode(ctx, args.timeline), ...(args.baseTimeline ? { baseTimeline: await loadSceneCode(ctx, args.baseTimeline) } : {}), ...(args.undoTo ? { undoTo: await loadSceneCode(ctx, args.undoTo) } : {}) };
   let timeline = args.timeline;
   let undoTo = args.undoTo, undoTargetKey = args.undoTargetKey;
   let expectedRevision = args.expectedRevision;
-  if (args.undoTo && serializedBytes(args.undoTo) > 150_000) throw new ConvexError('Timeline is too large');
+  if (args.undoTo && storedTimelineBytes(args.undoTo) > 150_000) throw new ConvexError('Timeline is too large');
   if (args.undoHistoryKeys && (!args.undoTo || args.undoHistoryKeys.length > LOCAL_UNDO_LIMIT || args.undoHistoryKeys.some(key => !/^[a-f0-9]{64}$/.test(key)))) throw new ConvexError('Invalid undo history');
   if (undoTargetKey !== undefined && (!undoTo || !/^[a-f0-9]{64}$/.test(undoTargetKey))) throw new ConvexError('Invalid undo target');
   if (args.baseTimeline) {
     timeline = await validateTimeline(ctx, project, timeline);
-    if (serializedBytes(args.baseTimeline) > 150_000) throw new ConvexError('Timeline is too large');
+    if (storedTimelineBytes(args.baseTimeline) > 150_000) throw new ConvexError('Timeline is too large');
     if (!Number.isInteger(expectedRevision) || expectedRevision < 0 || expectedRevision > (project.revision ?? 0)) throw new ConvexError('Invalid timeline revision');
     const current = currentTimeline(project);
     timeline = applyTimelineEdit(args.baseTimeline, timeline, current);
