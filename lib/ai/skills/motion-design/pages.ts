@@ -3,10 +3,10 @@ import type { EditorSkillPage } from '../index';
 /** Step 1: nothing is designed before the brand is known. */
 export const brandPage: EditorSkillPage = {
   name: 'brand-kit',
-  description: 'Step 1. Find, create and confirm the brand kit (fonts, colors, logo, brand context, voice, motion identity), and how scenes use it.',
+  description: 'Step 1. Find, create and confirm the brand kit (fonts, colors, logo, screens, brand context, motion identity), and how scenes use it.',
   body: `# Brand kit
 
-A brand kit is a named, saved brand for this user: colors, font files, a logo, the landing-page copy, the brand context (what the product is, the problem it solves, who it is for, key features, call to action, tone) and a motion identity. Scenes attach it with \`brandKitId\` and receive it as \`brand\`.
+A brand kit is a named, saved brand for this user: colors, font files, a logo, the landing-page copy, the brand context (what the product is, the problem it solves, who it is for, key features), saved product screens and a motion identity. Scenes attach it with \`brandKitId\` and receive it as \`brand\`.
 
 ## Workflow
 1. **Check first.** listBrandKits.
@@ -15,8 +15,8 @@ A brand kit is a named, saved brand for this user: colors, font files, a logo, t
    - None: ask for the website URL, or for a theme (colors, Google Fonts names, logo SVG) if there is no site.
 2. **Create.** createBrandKit with the URL (and any theme values the user gave; those win). Name it after the brand.
 3. **Show what was found.** Fonts by role, the main colors, whether a logo was found, and every note. Ask the user to correct anything wrong; fix it with updateBrandKit. Never pretend a missing piece was found.
-4. **Confirm the brand context.** Draft it from the scraped copy, then ask, in one short message, only what the copy does not answer: what it is (one sentence), the problem, who it is for, 3 to 5 features worth showing, the call to action and URL, the tone. Save the confirmed version with updateBrandKit context. Never build on an unconfirmed context.
-5. **Voice.** Draft how the brand sounds and confirm it in one line each: 2 to 4 tone words (e.g. plain, confident, dry), 2 or 3 sample lines (the brand's own best lines from its site, or ones the user writes), and words to avoid. Save it with updateBrandKit voice. The script follows it.
+4. **Confirm the brand context.** Draft it from the scraped copy, then ask, in one short message, only what the copy does not answer: what it is (one sentence), the problem, who it is for, 3 to 5 features worth showing. Save the confirmed version with updateBrandKit context. Never build on an unconfirmed context.
+5. **Screens.** Product screenshots belong to the brand, not one project. Check the kit's screens (getBrandKit). When the user gives screenshots, offer to save them to the kit (updateBrandKit addScreens, named like editor, dashboard, settings, with a short note) so every later video reuses them without re-uploading.
 6. **Motion identity.** Once a style is chosen, propose one in a line: personality (premium, corporate, energetic, playful), a signature ease used for ~80% of motion, three durations (short, medium, long) and the one entrance pattern. Use the style's personality and the craft page's table. Save it with updateBrandKit motion when the user agrees; later videos for this brand start from it.
 7. **Use.** Pass \`brandKitId\` to addScene (or editScene to attach or refresh). A scene keeps the kit as it was when saved.
 
@@ -24,6 +24,7 @@ A brand kit is a named, saved brand for this user: colors, font files, a logo, t
 \`brand\` is null without a kit. With one:
 - \`brand.fonts.heading\`, \`brand.fonts.body\`: loaded family names. \`font-family:'\${brand.fonts.heading}'\`.
 - \`brand.colors\`: named colors (read the names with getBrandKit first and fall back when one is missing). \`brand.palette\` lists them in order.
+- Kit screens arrive in \`media\` by their names (\`media.editor\`), loaded like project media; a project image attached with the same name wins.
 - \`brand.logo\`: data URL for \`<img src>\`. \`brand.logoSvg\`: the SVG markup when vector; insert it to animate its paths.
 
 Scraped colors are candidates, not a system: pick one background, one text color and one accent, and keep to them. Keep the accent for small things.`,
@@ -40,6 +41,7 @@ Ask these together, once, after the brand kit is settled. Offer sensible default
 - **Format and platform:** 16:9 for X, YouTube, a site hero; 9:16 for Reels, TikTok, Shorts; 1:1 for feeds.
 - **Length:** teaser 10 to 15 s, feature 15 to 30 s, product 30 to 60 s.
 - **Reference:** a film they like, or a feel in their words. It drives the style choice.
+- **Call to action:** what viewers should do at the end, and the URL. It belongs to this video, not the brand.
 - **Music:** do they have a track? If not, offer to find royalty-free options.
 - **Product screens:** ask for screenshots or short screen recordings of the screens the film should show (uploaded to the project, or already in its media). Real screens make the film; without them the product is shown as simplified mockups or abstract visuals. Never skip this question for a product or feature launch.`,
 };
@@ -80,7 +82,7 @@ Hook, one striking product moment, lockup with a date or "coming soon".
 
 export const scriptPage: EditorSkillPage = {
   name: 'script',
-  description: 'Step 4. Write every on-screen word as one piece, in the brand voice, and get it approved before the beat sheet.',
+  description: 'Step 4. Write every on-screen word as one piece, in a voice that fits the brand, and get it approved before the beat sheet.',
   body: `# Script
 
 On-screen words carry the story; the motion shows each line happening. Write them together, before any timing or code, and get them approved.
@@ -92,7 +94,7 @@ Facts must be true and come from the confirmed brand context or the user: what t
 1. Write the whole film's words as one list, top to bottom, one line per card. Nothing else.
 2. Read it aloud in order, without visuals. It should tell the story on its own and sound like one voice. If it sounds like a feature list or a website menu, rewrite it.
 3. Give it a through-line: a word, rhythm or idea that returns and pays off at the lockup (for example a word that appears in the hook and comes back in the final line).
-4. Check every line against the brand voice: its tone words, its sample lines, its words to avoid.
+4. Decide the voice for this film from the brand's own site copy, the confirmed context and the user's direction, and keep every line in it. Say it in one line above the script (e.g. "plain, confident, a little dry").
 
 ## Rules for lines
 - One thought per card. 2 to 6 words for most cards; a headline at most about 8.
@@ -101,11 +103,11 @@ Facts must be true and come from the confirmed brand context or the user: what t
 - Never a section label as a caption ("Post it anywhere", "Key features", "How it works"). Turn labels into outcomes or actions.
 - Rhythm: short lines build speed, a longer line lands the point. Vary them on purpose.
 - Sentence case. A period ends a statement and makes it land; no exclamation marks.
-- Avoid filler and hype: seamless, revolutionize, powerful, unlock, supercharge, game-changing, next-level, effortless, "AI-powered" as decoration, and questions as hooks unless the voice uses them.
+- Avoid filler and hype: seamless, revolutionize, powerful, unlock, supercharge, game-changing, next-level, effortless, "AI-powered" as decoration, and questions as hooks unless the brand's own copy uses them.
 - UI sample text inside mockups stays plain and generic and never repeats the captions.
 
 ## Before the beat sheet
-Send the script as a numbered list with the beat each line belongs to (hook, problem, reveal, proof, peak, lockup) and wait for approval or edits. Changes here are cheap; after the animatic they are not. When the user approves lines they like, offer to add the best ones to the brand voice's sample lines.`,
+Send the script as a numbered list with the beat each line belongs to (hook, problem, reveal, proof, peak, lockup) and wait for approval or edits. Changes here are cheap; after the animatic they are not.`,
 };
 
 export const craftPage: EditorSkillPage = {
@@ -209,6 +211,6 @@ export const processPage: EditorSkillPage = {
 7. **Learn.** When the user approves a change in direction (a different ease, pacing, a technique), offer to save it: to the brand's motion identity with updateBrandKit, or to memory with remember. The next film for this brand starts from it.
 
 ## Product UI
-Real screenshots and screen recordings beat mockups: they show the actual product and build trust. Ask the user for screenshots or short recordings of the screens the script shows (or offer to use ones already in the project's media), upload them, and attach them to scenes as \`media\` (scene-engine, Project media). A recording shows a real interaction; a screenshot with animated HTML on top shows a controlled one. Crop and magnify the part that matters, move a camera over them, tilt them, and layer animated HTML on top (a typed prompt, a highlight, a cursor) to show the action.
+Real screenshots and screen recordings beat mockups: they show the actual product and build trust. First use the brand kit's screens (getBrandKit); they reach every scene with the kit attached as \`media.<name>\`. Otherwise ask the user for screenshots or short recordings of the screens the script shows (or offer to use ones already in the project's media), upload them, and attach them to scenes as \`media\` (scene-engine, Project media). A recording shows a real interaction; a screenshot with animated HTML on top shows a controlled one. Crop and magnify the part that matters, move a camera over them, tilt them, and layer animated HTML on top (a typed prompt, a highlight, a cursor) to show the action.
 Without screenshots, build the UI as HTML mockups in the brand's fonts and colors: windows, inputs, cards, lists, timelines. Show only what the brand context describes, with generic sample content.`,
 };

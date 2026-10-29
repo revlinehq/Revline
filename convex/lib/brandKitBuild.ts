@@ -101,5 +101,5 @@ export function cleanColors(colors: BrandColor[]) {
 export async function sceneBrandSnapshot(ctx: ActionCtx, ownerId: string, kitId: string): Promise<SceneBrand> {
   const kit = await ctx.runQuery(internal.brandKits.get, { ownerId, kitId });
   if (!kit) throw new Error('Brand kit not found. List kits with listBrandKits.');
-  return { kitId: kit._id, name: kit.name, colors: kit.colors, fonts: kit.fonts.flatMap((font, index) => kit.fontUrls[index] ? [{ family: font.family, weight: font.weight, role: font.role, url: kit.fontUrls[index]! }] : []), ...(kit.logo ? { logo: kit.logo } : {}) };
+  return { kitId: kit._id, name: kit.name, colors: kit.colors, fonts: kit.fonts.flatMap((font, index) => kit.fontUrls[index] ? [{ family: font.family, weight: font.weight, role: font.role, url: kit.fontUrls[index]! }] : []), ...(kit.logo ? { logo: kit.logo } : {}), ...(kit.screens?.length ? { screens: kit.screens.slice(0, BRAND_LIMITS.screens).map((screen, index) => ({ name: screen.name, url: kit.screenUrls[index] })) } : {}) };
 }

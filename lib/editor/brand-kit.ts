@@ -2,13 +2,15 @@
 export type BrandColor = { name: string; value: string };
 export type BrandFontRole = 'heading' | 'body' | 'other';
 export type BrandFontFace = { family: string; weight: string; role: BrandFontRole; url: string };
-export type BrandContext = { product?: string; problem?: string; audience?: string; features?: string[]; cta?: string; tone?: string; notes?: string };
+export type BrandContext = { product?: string; problem?: string; audience?: string; features?: string[]; notes?: string };
 export type BrandCopy = { title?: string; description?: string; headings: string[] };
 
+/** A product screenshot saved with the kit, named the way scenes read it from `media`. */
+export type BrandScreen = { name: string; url: string };
 /** The part of a kit a scene carries with it, so preview and export never look the kit up. */
-export type SceneBrand = { kitId: string; name: string; colors: BrandColor[]; fonts: BrandFontFace[]; logo?: string };
+export type SceneBrand = { kitId: string; name: string; colors: BrandColor[]; fonts: BrandFontFace[]; logo?: string; screens?: BrandScreen[] };
 
-export const BRAND_LIMITS = { name: 60, colors: 16, colorValue: 80, fonts: 8, fontBytes: 600_000, logo: 24_000, contextText: 600, features: 8, headings: 12 } as const;
+export const BRAND_LIMITS = { screens: 8, screenBytes: 8_000_000, name: 60, colors: 16, colorValue: 80, fonts: 8, fontBytes: 600_000, logo: 24_000, contextText: 600, features: 8, headings: 12 } as const;
 
 /** What a scene receives as `brand`: named colors, a family per role, and the logo ready for <img> and as inline SVG. */
 export type SceneBrandContext = {
@@ -26,10 +28,14 @@ export function validateSceneBrand(brand: SceneBrand) {
   if (!brand.kitId || !brand.name || brand.name.length > BRAND_LIMITS.name) throw new Error('A scene brand needs its kit id and name.');
   if (brand.colors.length > BRAND_LIMITS.colors || brand.colors.some(color => !colorPattern.test(color.value) || !color.name || color.name.length > 40)) throw new Error('Scene brand colors are invalid.');
   if (brand.fonts.length > BRAND_LIMITS.fonts || brand.fonts.some(font => !/^https:\/\//.test(font.url) || !font.family || font.family.length > 80 || !/^[\d ]{1,9}$/.test(font.weight))) throw new Error('Scene brand fonts are invalid.');
+  if (brand.screens && (brand.screens.length > BRAND_LIMITS.screens || brand.screens.some(screen => !/^[a-zA-Z][\w-]{0,30}$/.test(screen.name) || !/^https:\/\//.test(screen.url)))) throw new Error('Scene brand screens are invalid.');
   if (brand.logo !== undefined && (brand.logo.length > BRAND_LIMITS.logo || !(brand.logo.startsWith('<svg') || /^data:image\/(png|jpeg|webp|svg\+xml);base64,/.test(brand.logo)))) throw new Error('Scene brand logo is invalid.');
 }
 
 export function isBrandColor(value: string) { return colorPattern.test(value.trim()); }
+
+/** Inline SVG copied from a page often lacks xmlns; as an image file it then renders nothing. */
+export function standaloneSvg(svg: string) { return /^<svg\b[^>]*\sxmlns=/i.test(svg) ? svg : svg.replace(/^<svg\b/i, '<svg xmlns="http://www.w3.org/2000/svg"'); }
 
 function base64(text: string) {
   const bytes = new TextEncoder().encode(text); let binary = '';
@@ -48,6 +54,6 @@ export function sceneBrandContext(brand: SceneBrand | undefined): SceneBrandCont
   return {
     name: brand.name, colors, palette: brand.colors.map(color => color.value),
     fonts: { ...(heading ? { heading } : {}), ...(body ? { body } : {}), families },
-    logo: svg ? `data:image/svg+xml;base64,${base64(svg)}` : brand.logo ?? null, logoSvg: svg,
+    logo: svg ? `data:image/svg+xml;base64,${base64(standaloneSvg(svg))}` : brand.logo ?? null, logoSvg: svg,
   };
 }
