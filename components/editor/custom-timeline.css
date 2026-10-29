@@ -114,7 +114,6 @@ html[data-workspace-theme=dark] .editor-app .custom-timeline .timeline-insert-in
 .custom-timeline .timeline-clip.clip-effect.selected{background:var(--revline-accent)}
 .custom-timeline .timeline-clip.clip-effect>span{color:#dde3ed;text-shadow:none}
 .custom-timeline .timeline-clip.clip-effect.selected>span{color:#fff}
-.custom-timeline .track-label[data-group=effects] .track-dot{background:#657daf!important}
 
 .timeline-track.library-effect-drop{box-shadow:inset 0 0 0 1px var(--ws-accent,var(--revline-accent));background:color-mix(in srgb,var(--ws-accent,var(--revline-accent)) 8%,transparent)}
 

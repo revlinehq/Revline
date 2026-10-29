@@ -215,17 +215,18 @@ html[data-workspace-theme=dark] .conversation-editor .custom-timeline .preview-p
 html[data-workspace-theme=dark] .conversation-editor .custom-timeline .timeline-playback-controls .preview-time{margin-left:14px;font-size:13px;font-weight:500;color:var(--ed-text)}
 html[data-workspace-theme=dark] .conversation-editor .custom-timeline .timeline-playback-controls .preview-time>span{font-weight:400;color:var(--ed-text-3)}
 html[data-workspace-theme=dark] .conversation-editor .custom-timeline .time-ruler span{font-size:10px}
-html[data-workspace-theme=dark] .conversation-editor .custom-timeline .track-label-name{gap:8px;font-size:12px;font-weight:500}
+html[data-workspace-theme=dark] .conversation-editor .custom-timeline .track-label-name{gap:8px;font-size:12px;font-weight:400}
 html[data-workspace-theme=dark] .conversation-editor .custom-timeline .track-dot{width:6px;height:6px}
 html[data-workspace-theme=dark] .conversation-editor .custom-timeline{--playhead-width:2px}html[data-workspace-theme=dark] .conversation-editor .custom-timeline .playhead{width:var(--playhead-width);background:#7c3aed}
-html[data-workspace-theme=dark] .conversation-editor .custom-timeline :is(.track-label,.timeline-track){border-bottom-color:transparent}
+/* Faint row dividers that blend into the dark timeline. */
+html[data-workspace-theme=dark] .conversation-editor .custom-timeline :is(.track-label,.timeline-track){border-bottom-color:#FFFFFF0A}
 @media(min-width:901px){html[data-workspace-theme=dark] .conversation-editor .custom-timeline .track-headers{width:168px}}
 html[data-workspace-theme=dark] .conversation-editor .custom-timeline .timeline-playhead-cap{color:#7c3aed}
 html[data-workspace-theme=dark] .conversation-editor .custom-timeline .timeline-playhead-cap:hover{color:#8b5cf6}
 html[data-workspace-theme=dark] .editor-app .ruler-tick{border-left-color:var(--ed-tick)}
 html[data-workspace-theme=dark] .editor-app .custom-timeline .ruler-ticks path{stroke:var(--ed-tick)}
 html[data-workspace-theme=dark] .editor-app .custom-timeline .time-ruler span{color:var(--ed-text-3)}
-html[data-workspace-theme=dark] .editor-app .custom-timeline .track-label-name{color:var(--ed-text)}
+html[data-workspace-theme=dark] .editor-app .custom-timeline .track-label-name{color:var(--ws-muted)}
 html[data-workspace-theme=dark] .editor-app .custom-timeline .track-headers{border-right-color:var(--ed-border)}
 html[data-workspace-theme=dark] .editor-app :is(.chat-resize-handle,.timeline-resize-handle,.inspector-resize-handle):hover{background:#393939!important}
 html[data-workspace-theme=dark] .editor-app .preview-viewport:not(:focus-visible) .preview-viewport-frame:after{border-color:var(--ed-border)}
