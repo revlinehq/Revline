@@ -1,6 +1,6 @@
 'use client';
 
-import { Fragment, useEffect, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import { AlertTriangle, Brain, Check, CircleCheck, CircleStop, LoaderCircle, Minus } from 'lucide-react';
 import { Trace, TraceCollapsible, TraceCollapsibleContent, TraceCollapsibleTrigger, TraceDescription, TraceIcon, TraceLine, TraceTitle } from '@/components/ui/trace';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
@@ -103,15 +103,23 @@ export function ToolChain({ steps: saved, active = false }: { steps: ChatTool[];
 /** The model's summarized thinking, folded into one row like the steps; open it to read all of it. */
 export function ThinkingBlock({ text, active }: { text: string; active: boolean }) {
   const [open, setOpen] = useState(false);
+  // While it thinks, the newest lines show under the row; opening it shows everything.
+  const lines = text.replace(/[*_#`]/g, '').split(/\n+/).map(line => line.trim()).filter(Boolean).slice(-3).join('\n');
+  const latest = lines.length > 360 ? lines.slice(-360).replace(/^\S*\s+/, '…') : lines;
+  // Opened, it stays on the newest line as the thinking streams.
+  const pane = useRef<HTMLParagraphElement>(null);
+  const follow = (node: HTMLParagraphElement | null) => { pane.current = node; if (node) node.scrollTop = node.scrollHeight; };
+  useEffect(() => { const node = pane.current; if (node) node.scrollTop = node.scrollHeight; }, [text, open]);
   return <TraceCollapsible className="tool-chain thinking-block" open={open} onOpenChange={setOpen}>
     <TraceCollapsibleTrigger>
       <TraceLine status={active ? 'running' : undefined}>
         <TraceIcon className="text-muted-foreground"><Brain/></TraceIcon>
-        <TraceTitle className="font-medium text-foreground">{active ? 'Thinking' : 'Thought'}</TraceTitle>
+        <TraceTitle className={active ? 'font-medium' : 'font-medium text-foreground'}>{active ? 'Thinking' : 'Thought'}</TraceTitle>
       </TraceLine>
     </TraceCollapsibleTrigger>
+    {active && !open && latest && <p className="thinking-latest">{latest}</p>}
     <TraceCollapsibleContent>
-      <p className="thinking-text">{text}</p>
+      <p className="thinking-text" ref={follow}>{text}</p>
     </TraceCollapsibleContent>
   </TraceCollapsible>;
 }

@@ -6,7 +6,7 @@ export type { TimelinePublicationReceipt } from '@/lib/ai/publication-receipt';
 
 export type ChatTool = { id?: string; name: string; state: 'running' | 'done' | 'error' | 'stopped'; detail?: string; staged?: boolean; input?: Record<string, unknown>; output?: Record<string, unknown> };
 export type ChatBlock = { type:'text'; text:string } | { type:'tools'; steps:ChatTool[] } | { type:'thinking'; text:string };
-export type ChatMessage = { id:string;sourceId?:string;threadId?:string;role:string;text:string;status?:string;tools?:string[];steps?:ChatTool[];blocks?:ChatBlock[];thinking?:string;publicationReceipt?:TimelinePublicationReceipt };
+export type ChatMessage = { id:string;sourceId?:string;threadId?:string;role:string;text:string;status?:string;tools?:string[];steps?:ChatTool[];blocks?:ChatBlock[];publicationReceipt?:TimelinePublicationReceipt };
 export type ResultCard = { key: string; title: string; detail?: string; state: ChatTool['state']; staged?: boolean };
 export const chatMessageKey = (message: { id: string; key?: string }) => message.key ?? message.id;
 export type AssistantEditSnapshot = { before:Timeline;after:Timeline;revision:number;canUndo:boolean;publishedDraft:boolean };
@@ -53,9 +53,7 @@ export function chatMessageFromUI(message:{id:string;key?:string;threadId?:strin
     if(!text.trim())continue;
     if(last?.type==='text')last.text+=`\n\n${text}`;else blocks.push({type:'text',text});
   }
-  // The latest thought summary, shown as the live status while a step is still thinking.
-  const lastPart=record(message.parts.at(-1)),thought=lastPart?.type==='reasoning'?String(lastPart.text??'').replace(/[*_#`]/g,'').trim().split(/\n+/).filter(Boolean).slice(-3).join('\n'):undefined;
-  return {id:chatMessageKey(message),sourceId:message.id,...(thought?{thinking:thought.length>360?thought.slice(-360).replace(/^\S*\s+/,'…'):thought}:{}),threadId:message.threadId,role:message.role,status:message.status,blocks,text:message.parts.filter(part=>record(part)?.type==='text').map(part=>String(record(part)?.text??'')).join('\n\n'),steps:message.parts.flatMap(part=>{const step=chatToolFromPart(part);return step?[step]:[];}),...(publicationReceipt?{publicationReceipt}:{})};
+  return {id:chatMessageKey(message),sourceId:message.id,threadId:message.threadId,role:message.role,status:message.status,blocks,text:message.parts.filter(part=>record(part)?.type==='text').map(part=>String(record(part)?.text??'')).join('\n\n'),steps:message.parts.flatMap(part=>{const step=chatToolFromPart(part);return step?[step]:[];}),...(publicationReceipt?{publicationReceipt}:{})};
 }
 
 /** The receipt stays with its original request, including a paginated partial turn. */

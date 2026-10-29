@@ -235,7 +235,7 @@ function AssistantPanelBody({ messages, running, editing:editingTimeline=running
                 <AssistantActivity label={card.title} detail={card.detail} state={card.state==='running'?'working':card.state==='error'?'error':'ready'}/>
                 {card.key==='turn-failure' && group.id===retryTurnId && requestMessage?.text.trim() && !waiting && !demo && onRetry && <Button type="button" variant="outline" size="sm" disabled={composerBusy || !configured || sending || !!pendingReply} onClick={() => void sendRequest(canResumeEdit?'Finish only the remaining work or checks from my unfinished request. Keep the edits already completed.':requestMessage.text, true)}><RotateCcw aria-hidden="true"/>Retry unfinished steps</Button>}
               </div>)}</div>}
-              <AssistantReplyHeader loading={loading} active={editing} label={stopState==='stopping'?'Stopping…':'Working'} detail={editing&&budgetUsed!==undefined&&budgetUsed>=.7?`Near this request's limit · ${Math.round(budgetUsed*100)}% used`:editing?currentReply?.thinking:undefined} startedAt={activityStartedAt}/>
+              <AssistantReplyHeader loading={loading} active={editing} label={stopState==='stopping'?'Stopping…':'Working'} detail={editing&&budgetUsed!==undefined&&budgetUsed>=.7?`Near this request's limit · ${Math.round(budgetUsed*100)}% used`:undefined} startedAt={activityStartedAt}/>
             </MessageContent></Message>
           </MessageScrollerItem>}
         </Fragment>;
