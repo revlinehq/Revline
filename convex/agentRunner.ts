@@ -70,9 +70,9 @@ export const claim = internalMutation({ args: { ...runArgs, claimId: v.string() 
   return { attempt: row.attempts, maxAttempts: MAX_ATTEMPTS };
 }});
 
-/** A bridge request's nonce, once: false when it was already used. Each use clears a few that have expired. */
+/** A bridge request's nonce, once: false when it was already used. It touches only its own nonce, so parallel
+ * calls never conflict; the heartbeat clears expired ones. */
 export const useNonce = internalMutation({ args: { nonce: v.string() }, returns: v.boolean(), handler: async (ctx, { nonce }) => {
-  for (const stale of await ctx.db.query('agentRunnerNonces').withIndex('by_expiresAt', q => q.lt('expiresAt', Date.now())).take(20)) await ctx.db.delete(stale._id);
   if (await ctx.db.query('agentRunnerNonces').withIndex('by_nonce', q => q.eq('nonce', nonce)).first()) return false;
   await ctx.db.insert('agentRunnerNonces', { nonce, expiresAt: Date.now() + 2 * RUNNER_REQUEST_WINDOW_MS });
   return true;
@@ -106,6 +106,7 @@ export const release = internalMutation({ args: runArgs, returns: v.null(), hand
 }});
 
 export const heartbeat = internalMutation({ args: runArgs, returns: v.boolean(), handler: async (ctx, args) => {
+  for (const stale of await ctx.db.query('agentRunnerNonces').withIndex('by_expiresAt', q => q.lt('expiresAt', Date.now())).take(500)) await ctx.db.delete(stale._id);
   const row = await turnRow(ctx, args.runId);
   if (!row) return false;
   await ctx.db.patch(row._id, { seenAt: Date.now() });

@@ -60,6 +60,8 @@ const fileStorageIds = (value: unknown): string[] => !value || typeof value !== 
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 const unauthorized = () => new Response('Unauthorized', { status: 401 });
+/** Checking the request failed in Convex before the call ran: the runner may send it again, even a write. */
+const notRun = () => new Response('Try again', { status: 503 });
 const forbidden = (label: string, runId: string) => {
   console.warn(`[agent-runner] ${JSON.stringify({ event: 'call-refused', function: label.slice(0, 120), runId })}`);
   return json({ error: { message: 'The agent runner cannot make that call for this run.' } }, 403);
@@ -71,7 +73,9 @@ export function registerAgentRunnerRoutes(http: HttpRouter) {
     const body = await request.arrayBuffer();
     let call: Call;
     try { call = JSON.parse(new TextDecoder().decode(body)); } catch { return unauthorized(); }
-    const run = await authorizedRun(ctx, request, body, call?.kind !== 'storage' && call?.address?.name === 'agentRunner:claim');
+    let run: Run | null;
+    try { run = await authorizedRun(ctx, request, body, call?.kind !== 'storage' && call?.address?.name === 'agentRunner:claim'); }
+    catch { return notRun(); }
     if (!run) return unauthorized();
     try {
       if (call.kind === 'storage') {
@@ -93,7 +97,9 @@ export function registerAgentRunnerRoutes(http: HttpRouter) {
     } catch (error) { return failure(error); }
   }) });
   http.route({ path: '/agent-runner/storage', method: 'POST', handler: httpAction(async (ctx, request) => {
-    const body = await request.arrayBuffer(), run = await authorizedRun(ctx, request, body);
+    const body = await request.arrayBuffer();
+    let run: Run | null;
+    try { run = await authorizedRun(ctx, request, body); } catch { return notRun(); }
     if (!run) return unauthorized();
     try {
       const storageId = await ctx.storage.store(new Blob([body], { type: request.headers.get('content-type') ?? 'application/octet-stream' }));

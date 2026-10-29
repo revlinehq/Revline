@@ -20,7 +20,8 @@ export function convexBridge(env: BridgeEnv, grant: RunGrant) {
       // Signed per attempt: a retry is a new request, not a replay.
       try { response = await fetch(`${base}${path}`, { ...init, headers: { ...init.headers, ...runHeaders, ...await runnerSignature(env.AGENT_RUNNER_SECRET, init.method ?? 'GET', `${base}${path}`, init.body) } }); }
       catch (error) { if (attempt < attempts) { await new Promise(resolve => setTimeout(resolve, 500 * attempt)); continue; } throw error; }
-      if (response.status >= 500 && attempt < attempts) { await response.body?.cancel(); await new Promise(resolve => setTimeout(resolve, 500 * attempt)); continue; }
+      // 503 means Convex refused before running the call, so even a write is safe to send again.
+      if ((response.status === 503 && attempt < 4) || (response.status >= 500 && attempt < attempts)) { await response.body?.cancel(); await new Promise(resolve => setTimeout(resolve, 500 * attempt)); continue; }
       if (!response.ok) throw new Error(`Convex answered ${response.status} on ${path}: ${(await response.text()).slice(0, 300)}`);
       const reply = await response.json() as Reply;
       if (reply.error) {
