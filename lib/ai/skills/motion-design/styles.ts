@@ -1,7 +1,5 @@
 import type { EditorSkillPage } from '../index';
-import { STYLE_CARDS } from './cards';
 
-const cardsFor = (style: string) => STYLE_CARDS.filter(card => card.style === style).map(card => `\`${card.name}\` (${card.description.split('. ')[0]})`).join(', ');
 
 export const STYLE_PAGES: EditorSkillPage[] = [
   {
@@ -11,7 +9,7 @@ export const STYLE_PAGES: EditorSkillPage[] = [
 
 An example of a coherent direction, measured from real films. Start from it, combine it with others, or depart from it when the brand or story calls for it.
 
-Feels: focused, premium, serious. Cards: ${cardsFor('dark-cinematic')}.
+Feels: focused, premium, serious.
 
 ## Look
 - Stage near-black (#000 to #181818) with a vignette. Surfaces #15171a to #262624, 1px borders a step lighter. Text #e3e4e6, muted #6b7076 to #8a8d92.
@@ -45,7 +43,7 @@ Feels: focused, premium, serious. Cards: ${cardsFor('dark-cinematic')}.
 
 An example of a coherent direction, measured from real films. Start from it, combine it with others, or depart from it when the brand or story calls for it.
 
-Feels: cinematic, precise, expensive; the software becomes a physical object you fly over. Card: ${cardsFor('dimensional-ui')} (read it for exact timings).
+Feels: cinematic, precise, expensive; the software becomes a physical object you fly over.
 
 ## Look
 - Pure black surround (#000) with a heavy vignette. UI surfaces #15171a to #1e2124, raised panels #24282c, 1px borders ~#2e3236. Text #e8e8e8, muted #6b7076.
@@ -85,7 +83,7 @@ Feels: cinematic, precise, expensive; the software becomes a physical object you
 
 An example of a coherent direction, measured from real films. Start from it, combine it with others, or depart from it when the brand or story calls for it.
 
-Feels: calm, clear, friendly, trustworthy. Cards: ${cardsFor('warm-editorial')}.
+Feels: calm, clear, friendly, trustworthy.
 
 ## Look
 - One warm off-white for the film (#F6F5F1) or pure white text cards (#FFFFFF). Feature sections may sit on one flat pastel each (light blue #CFE3F5, peach #F9E7DD, butter #F8E3A8) or a soft diagonal gradient.
@@ -121,7 +119,7 @@ Feels: calm, clear, friendly, trustworthy. Cards: ${cardsFor('warm-editorial')}.
 
 An example of a coherent direction, measured from real films. Start from it, combine it with others, or depart from it when the brand or story calls for it.
 
-Feels: energetic, crafted, playful, loud. Cards: ${cardsFor('bold-graphic')}.
+Feels: energetic, crafted, playful, loud.
 
 ## Look
 - Black (#000) title cards between demo stages. Each feature owns one flat saturated background (lime, purple, orange, slate blue, forest) or a textured backdrop (painted grain, scanlined navy glass).
@@ -158,7 +156,7 @@ Feels: energetic, crafted, playful, loud. Cards: ${cardsFor('bold-graphic')}.
 
 An example of a coherent direction, measured from real films. Start from it, combine it with others, or depart from it when the brand or story calls for it.
 
-Feels: fast, practical, confident: "here it is working". Cards: ${cardsFor('crisp-demo')}.
+Feels: fast, practical, confident: "here it is working".
 
 ## Look
 - White #fff or warm light grey (#f7f6f2 to #E7E5E0). One accent color (e.g. the brand orange) for the product name and key UI. Text #151515.
@@ -190,74 +188,79 @@ Feels: fast, practical, confident: "here it is working". Cards: ${cardsFor('cris
 
 export const TECHNIQUES: EditorSkillPage = {
     name: 'techniques',
-    description: 'Feedback and direction mapped to techniques the analysed films use, with the card to read for exact timings. Use when the user says what feels wrong or what they want more of.',
+    description: 'Feedback and direction mapped to concrete techniques with their timings and eases, measured from real launch films. Use when the user says what feels wrong or what they want more of.',
     body: `# Techniques by feedback
 
-Find the user's words, read the named card, apply its recipe in the brand's fonts and colors. Name the source film when you propose it.
+Find the user's words, pick the technique that fits the story, and build it in the brand's fonts and colors. Times are in seconds; adjust them to the beat, never past the craft rules. Tell the user which technique you used so they can accept or refuse it.
 
 ## "More premium", "calmer", "more expensive"
-- Longer holds (3 to 8s) and fewer moves; still frames while UI works. Cards: \`card-linear-7752\`, \`card-notion-8397\`.
-- Blur-in type and a blur dissolve between UI and captions (blur 12px plus fade, ~0.7s): \`card-linear-7752\`.
-- Generous empty space, one accent, no grain: warm-editorial style.
-- A quiet lockup: mark alone held ~4s: \`card-linear-8467\`.
+- Longer holds (3 to 8s), fewer moves, still frames while the UI works.
+- Blur dissolve between UI and caption: the UI layer goes to blur(12px) and opacity 0 over 0.7s, then the caption fades in from blur(6px) over 0.35s.
+- Generous empty space, one accent, no grain.
+- Quiet lockup: centered mark and wordmark fade in over 0.25s and hold ~4s; or the mark alone at ~6% of frame height for ~1s, then the wordmark beside it, hold ~2s, cut to black.
 
 ## "More energy", "snappier", "faster"
-- Cut titles every 1 to 2s and flash new words in the accent for ~0.2s: \`card-figma-9940\`, \`card-figma-9864\`.
-- Snap zooms (0.3 to 0.4s, power3.inOut, motion blur) to the action, then hold: \`card-notion-9437\`.
-- Instant component swaps with small pops instead of tweens: \`card-firecrawl-9157\`.
-- A sub-second roll-call of feature names before the lockup: \`card-notion-2887\`.
+- Cut titles every 1 to 2s. Accent-settle reveal with no tweens, only tl.set steps: line 1 appears in the accent; 0.17 to 0.25s later it turns to the text color and line 2 appears in the accent; then all settle.
+- Snap zoom to the action: a camera wrapper tweens to scale ~2 on the focus rect over 0.3s, power3.inOut, with blur 0 to 6px to 0 peaking mid-tween as motion blur; then hold still while the UI acts. Several focus rects keyed to times make a cursor-follow reframe (0.35s, power2.inOut each).
+- Instant component swaps with small pops (back.out(1.7), 0.2s) instead of long tweens.
+- Roll-call before the lockup: 5 or 6 one-line feature names, hard-cut every 0.4 to 0.6s, the last held ~1s with a slow 4% scale-down.
 
 ## "More depth", "more 3D", "feels flat"
-- Put the UI on a tilted plane with focus falloff and a drifting camera: dimensional-ui, \`card-linear-8467\`.
-- Stack windows like a deck, receding behind the new one: \`card-notion-8397\`.
-- A rotating 3D drum of capability chips: \`card-elevenlabs-8568\`.
+- Tilted UI plane: build the UI as one large panel in a parent with perspective 1800px, rotateX(48deg) rotateZ(-16deg). Mask a blurred copy to the near and far edges so only a diagonal band is sharp, with a radial vignette to the background. Drift the plane 5 to 10% of the frame over each shot, ease none, and hard-cut to a new transform for the next setup.
+- Window deck: when the next window arrives, the current one tweens to scale 0.65, yPercent -32 over 0.6s, power2.out, and stays peeking above; the new window fades in at full size on top.
+- Capability drum: 4 or 5 chips on a rotateX cylinder (perspective 800px), stepping one item every ~0.35s, power3.inOut; inactive chips at opacity 0.4, scale 0.85.
 
 ## "Text is boring", "headlines feel static"
-- Letters rising into place one by one: \`card-notion-2887\`.
-- Words popping in place, centred, hard cut out: \`card-notion-8397\`.
-- Grey-to-ink word reveal with the product name in the accent: \`card-firecrawl-9157\`.
-- Typed text that glows in the accent, then settles to white: \`card-elevenlabs-8568\`.
-- Dot-matrix letters assembling in random order: \`card-base-4529\`.
+- Rising letters: split into chars, from yPercent 35 and opacity 0, 0.12s each, power2.out, stagger 0.04. Two centered lines, then hold 1 to 1.5s and hard-cut.
+- In-place word pop: every word in a span at opacity 0, tl.to(words, { opacity: 1, duration: 0.03, stagger: 0.1, ease: 'none' }), hold 1.5s, hard cut.
+- Muted-to-ink reveal: word spans start in a light grey at opacity 0, then go to opacity 1 and the text color (the product name in the accent), 0.2s each, stagger 0.13.
+- Typed text with a glowing tail: ~18 characters per second, the newest ~6 characters in the accent fading to the text color over 0.5s, the camera following the caret.
+- Dot-matrix letters: each letter on a 5x7 grid of small squares, letters revealed in shuffled order (or dots flying in from random offsets) over 0.4 to 0.6s.
+- Blur-then-sweep: the word goes from blur(16px) and opacity 0 to sharp over 0.5s, power2.out, then a gradient sweeps across it (background-clip text, background-position -100% to 200% over ~1s, ease none).
 
 ## "Transitions feel cheap", "cuts are jarring"
-- Morph one object into the next (chips into a window, an image into a card): \`card-elevenlabs-8568\`.
-- Zoom-out bridges that reveal context (scale ~3 to 1, expo.out): \`card-figma-3230\`.
-- Blur dissolve from UI to caption: \`card-linear-7752\`.
-- Hard cuts between drifting camera setups, never wipes: \`card-linear-8467\`.
-- Layout changes by moving elements (icons snapping from a ring into a grid), no cut: \`card-notion-8020\`.
+- Morph one object into the next: a stack of chips collapses into a small card that grows into the window (~1.4s, power2.out) while its headline types.
+- Zoom-out bridge: start on a full-bleed detail and scale the container from ~3 to 1 over 0.8s, expo.out, to reveal where it lives; cut on landing.
+- Output drop-in: cut to the result full-bleed at scale 1.15 with a tinted overlay, then tween to scale 0.85 with 24px corners and the overlay gone over 0.8s, expo.out; a slow 1.0 to 1.03 push during the hold.
+- Hard cuts between drifting camera setups, never wipes.
+- Layout changes by moving elements, no cut: icons tween from a scatter to a grid in 0.3s, power3.out, with 0 to 0.05s random delays; hide the headline on the frame they converge and show it on the frame they part, so they seem to cover it.
 
 ## "The UI looks fake", "show the product better"
-- Crop and magnify one control to fill the frame, with a big cursor: \`card-figma-3230\`.
-- Keep full, dense UI and let the screen fill up as work happens: \`card-okara-8657\`.
-- One simplified component centred on a flat pastel: \`card-notion-2887\`.
-- Content that decodes in row by row: \`card-linear-8467\`.
+- Macro UI: one component at 60 to 70% of the frame width on a flat color, driven by a big cursor (black fill, 3px white stroke).
+- Window fade-up then push: the window enters from opacity 0, yPercent 2 over 0.6s, power2.out, then the stage scales to ~1.6 toward the detail over 0.45s, power3.inOut.
+- Dense real UI that fills up as work happens: new columns snap in by layout change with no tween; a drawer slides in from x 100% over 0.13s, expo.out, with a 0.7 overlay, and exits over 0.15s, power2.in.
+- One simplified component centered on a flat pastel, entering from scale 0.8 over 0.5s, power3.out, then typed into.
+- Rows decode in: each row starts as random glyphs that swap to the final characters over ~0.5s, rows staggered 0.25s.
+- Row insert proof: existing rows move down one row height over 0.3s, power2.out, the new row fades in on top, then a quick push onto it.
 
 ## "Show the AI working", "show it's agentic"
-- Type the prompt in real time, then results land: \`card-linear-7752\`, \`card-elevenlabs-8568\`.
-- A status card with a thin progress bar and changing status lines: \`card-motion-2677\`.
-- A self-typing agent log while the dashboard fills: \`card-okara-8657\`.
-- A shimmering status word while chips append: \`card-firecrawl-9157\`.
+- Real-time composer: step a character index at ~13 characters per second with a blinking caret; a mention turns into a chip once complete. On send the composer fades in 0.1s and the message mounts with its parts staggered 0.05s (opacity, y 4px).
+- Scrolling thread: on each new message the column moves up by its height over 0.4s, power2.out, while the message fades in from blur(4px).
+- Progress card: a rounded card with a status line that swaps every ~1.7s and a 2px bar filling linearly over the whole sequence, under a very slow camera push.
+- Agent log: a dark strip of monospace lines, one appended every 0.4 to 0.8s, typed at ~30 characters per second with steps(), the newest line at the bottom, a blinking caret.
+- Working shimmer: the status word has a moving grey gradient (background-clip text, background-position over 1s, repeating) while result chips append below, staggered 0.2s.
+- Placeholder to wireframe to UI: panels start as grey sheen blocks, crossfade to thin outline boxes at +0.3s and to the real UI at +0.6s, staggered ~0.3s per panel.
 
 ## "Show integrations", "works with everything"
-- A logo wall that punches in, then isolates the launch: \`card-firecrawl-9157\`.
-- Partner icons that snap from a ring into a grid around one headline: \`card-notion-8020\`.
-- Windows of each app stacking as a deck: \`card-notion-8397\`.
+- Logo wall punch-in: a large grid of logo-and-name chips scales 0.35 to 1 over 0.6s, expo.out; the hero chip pops into one slot (back.out(1.4)) and every other chip fades out over 0.3s.
+- Ring to grid: partner icons drift 5 to 10px toward the center over 2s (sine.inOut), then snap from a scattered ring into a grid around the headline (0.3s, power3.out).
+- Windows of each app stack as a deck (see "More depth").
 
 ## "The ending is weak", "the logo needs more"
-- Wordmark blurs in, an accent sweeps across it, the tagline wipes in, then the mark alone: \`card-linear-8467\`.
-- Glitch: characters swap to symbols, then collapse into the logo: \`card-figma-9940\`.
-- Colored shapes converge into the mark: \`card-figma-3230\`.
-- Pixel blocks resolve into the wordmark: \`card-base-4529\`.
-- A left-aligned URL card with the logo on the right: \`card-motion-2677\`.
+- Wordmark blurs in, an accent gradient sweeps across it, the tagline wipes in with a soft mask (~15% feather, left to right over ~0.7s, power1.inOut), then the mark alone.
+- Glitch: for ~0.8s random characters swap to symbols like <>/{}#, then colored blocks gather and scale into the mark over ~0.5s; cut to the clean logo and hold 2.5s.
+- Shapes converge: 5 colored circles or pills drift and converge into the mark over ~1.2s, then hold.
+- Pixel blocks: a bar splits into blocks matching the letter widths, each swaps to its real letter with a one-frame flash, then the mark pops.
+- URL card: small title line, big URL, the mark far right on the same band, built in 3 steps ~0.5s apart, held ~1.7s, then black.
 
 ## "Too busy", "too much going on"
-- One idea per shot; never text over UI (every film).
-- Hold still while one thing happens: \`card-notion-9437\`, \`card-okara-8657\`.
+- One idea per shot; never text over UI.
+- Hold still while one thing happens.
 - Remove motion that does not show a relationship, an action or a hierarchy.
 
 ## "More playful", "more personality"
-- A mascot made from the logo shape, animated with pose swaps and blinks: \`card-base-4529\`.
-- Handwritten notes with drawn arrows on a headline: \`card-notion-2887\`.
-- Named multiplayer cursors drifting as ambient motion: \`card-figma-9940\`.
-- Stepped 12 fps motion for a hand-made feel: \`card-figma-3230\`.`,
+- A mascot made from the logo shape: pose swaps every 0.2s, blinks by scaling the eye height to 0.1 for 3 frames, pops with back.out(1.7).
+- Handwritten notes with drawn arrows on a headline: the note rotated about -5deg, the arrow path drawn over ~0.3s.
+- Named cursors with colored name pills drifting on slow loops (3 to 4s, sine.inOut) as ambient motion.
+- Stepped 12 fps motion for a hand-made feel: ease 'steps(n)' or snap times to 1/12s.`,
   };

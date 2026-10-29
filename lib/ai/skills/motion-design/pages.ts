@@ -190,7 +190,7 @@ export const processPage: EditorSkillPage = {
   description: 'Beat sheet, animatic, feedback, polish, sound and review; plus showing the product with real screenshots or mockups.',
   body: `# Process: approve before building
 
-1. **Beat sheet.** Built from the approved script. Start with the film's style direction (five lines) and the films it borrows from, then a table: time, music bar, what is on screen, on-screen words (from the script, unchanged), motion, sound. Send it and wait for approval or changes.
+1. **Beat sheet.** Built from the approved script. Start with the film's style direction (five lines), then a table: time, music bar, what is on screen, on-screen words (from the script, unchanged), motion, sound. Send it and wait for approval or changes.
 2. **Animatic.** Rough scenes at the approved timing: grey boxes, plain text in the brand font, simple moves, with the music. Say it is rough; ask the user to watch story and pacing.
 3. **Feedback.** Whenever the user reacts ("feels cheap", "more energy", "the ending is weak"), read the techniques page, apply the matching technique, and say which film it comes from. Exact instructions from the user are followed as given.
 4. **Polish.** Replace each rough scene at the same timing with the finished one (editScene keeps timing). Attach the brand kit to every scene. Follow the film's style direction and the craft page.

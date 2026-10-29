@@ -37,11 +37,11 @@ A scene is a TypeScript module that builds plain HTML once and choreographs it o
 ## Fonts and images
 
 - \`font-family\` may be any of: ${SCENE_FONT_FAMILIES.join(', ')}, or the brand kit's families when one is attached.
-- Images must be inline SVG or data: URIs. The brand logo arrives as \`brand.logo\` (data URL) and \`brand.logoSvg\` (markup when vector).
+- Images come from \`media\` (see Project media) or are inline SVG or data: URIs; nothing loads from the network. The brand logo arrives as \`brand.logo\` (data URL) and \`brand.logoSvg\` (markup when vector).
 
 ## Project media
 Real screenshots, screen recordings, photos and logos from the project's media can appear inside a scene:
-- Upload them to the project (uploadMedia) or find them with getProject. Images (png, jpg, webp) and videos up to 2 minutes.
+- Use the project's media (the user adds files in the editor; over MCP, uploadMedia adds them and getProject lists them). Images (png, jpg, webp) and videos up to 2 minutes.
 - Attach them by name: addScene or editScene with \`media: [{ name: 'editor', assetId: '…' }]\` (up to 8). A brand kit's saved screens also arrive in \`media\` when the kit is attached; a project item with the same name wins.
 - In code, \`media.editor\` is a URL: \`<img src="\${media.editor}">\`, \`<video src="\${media.demo}">\` or \`background-image:url(\${media.editor})\`. It is undefined if the file is missing, so keep a fallback.
 - Videos follow the scene clock, frame-exact, and are always muted (sound belongs on audio clips): \`data-start\` is the scene second the video begins (default 0), \`data-offset\` the source second it starts from, \`data-rate\` its speed, \`data-loop\` loops it. Do not call play(); the engine seeks it.
