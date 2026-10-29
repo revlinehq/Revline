@@ -52,7 +52,7 @@ export const status = query({ args: { projectId: v.id("projects") }, returns: v.
   const active = requests.find(request => request.status === 'pending' || request.status === 'running');
   const task = active?.taskId ? await ctx.db.get(active.taskId) : null;
   const source = active ? await ctx.db.get(active.assetId) : null;
-  const labels = { transcribe: 'Listening to your footage…', understand: 'Analyzing footage…', shots: 'Finding shot changes…', beats: 'Finding the rhythm…', track: 'Following the subject…', frames: 'Inspecting the moment…', video: 'Analyzing footage…' };
+  const labels = { transcribe: 'Listening to your footage…', understand: 'Analyzing footage…', shots: 'Finding shot changes…', beats: 'Finding the rhythm…', track: 'Following the subject…', reference: 'Breaking down the reference…', frames: 'Inspecting the moment…', video: 'Analyzing footage…' };
   let defaultModelChoice;try{defaultModelChoice=defaultEditorModelChoice();}catch{}
   const ready=configured();
   const editing=!!project.aiRunning&&(project.aiEditing??project.aiUndoRecorded??false);
@@ -320,7 +320,7 @@ export const requestAnalysis = internalMutation({ args: { ...runArgs, assetId: v
   const project = await requireProject(ctx, args.projectId, args.ownerId);
   if (!project.aiRunning || project.aiRunId !== args.runId) throw new ConvexError("AI run is no longer active");
   const assetId = ctx.db.normalizeId("assets", args.assetId); const asset = assetId ? await ctx.db.get(assetId) : null;
-  if (!asset || asset.ownerId !== args.ownerId || asset.projectId !== args.projectId || asset.kind === "image" || ((args.mode === "understand" || args.mode === "shots" || args.mode === "track" || args.mode === 'frames' || args.mode === 'video') && asset.kind !== "video")) throw new ConvexError("Choose suitable media from this project");
+  if (!asset || asset.ownerId !== args.ownerId || asset.projectId !== args.projectId || asset.kind === "image" || ((args.mode === "understand" || args.mode === 'reference' || args.mode === "shots" || args.mode === "track" || args.mode === 'frames' || args.mode === 'video') && asset.kind !== "video")) throw new ConvexError("Choose suitable media from this project");
   if (args.mode === 'frames') {
     if (!args.frameRequest || !asset.duration) throw new ConvexError('Choose a video window and a focused visual question.');
     try { validateFrameInspectionInput(args.frameRequest, asset.duration); } catch (error) { throw new ConvexError((error as Error).message); }
@@ -339,7 +339,7 @@ export const requestAnalysis = internalMutation({ args: { ...runArgs, assetId: v
     });
     if(repeated)return repeated._id;
   }
-  const requestId = await ctx.db.insert("analysisRequests", { ownerId: args.ownerId, projectId: project._id, assetId: asset._id, aiRunId: args.runId, mode: args.mode, ...(args.frameRequest ? { frameRequest: args.frameRequest } : {}), ...(args.videoRequest ? { videoRequest: args.videoRequest } : {}), status: "pending", createdAt: Date.now(), expiresAt: Date.now() + 240_000 });
+  const requestId = await ctx.db.insert("analysisRequests", { ownerId: args.ownerId, projectId: project._id, assetId: asset._id, aiRunId: args.runId, mode: args.mode, ...(args.frameRequest ? { frameRequest: args.frameRequest } : {}), ...(args.videoRequest ? { videoRequest: args.videoRequest } : {}), status: "pending", createdAt: Date.now(), expiresAt: Date.now() + (args.mode === 'reference' ? 480_000 : 240_000) });
   const taskId = await enqueueMediaTask(ctx, { ownerId: args.ownerId, projectId: project._id, assetId: asset._id, kind: args.mode, analysisRequestId: requestId, ...(args.frameRequest ? { frameRequest: args.frameRequest } : {}), ...(args.videoRequest ? { videoRequest: args.videoRequest } : {}) },async()=>{
     // Rows are deleted when callers finish, but the original run's capacity
     // must survive that cleanup and every durable continuation segment.

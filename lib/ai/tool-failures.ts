@@ -176,7 +176,7 @@ export function unresolvedToolFailureIds(steps: ToolSteps) {
 /** Failed inspection is not evidence of an unsaved timeline mutation. */
 export function hasOnlyUnresolvedInspectionFailures(steps: ToolSteps) {
   const failures=[...unresolvedFailures(steps,true).keys()];
-  const inspections=new Set(['inspectTimeline','inspectClip','inspectAssetAnalysis','analyzeMedia','inspectVideo','inspectFrames']);
+  const inspections=new Set(['inspectTimeline','inspectClip','inspectAssetAnalysis','analyzeMedia','inspectVideo','inspectFrames','inspectReference']);
   return failures.length>0&&failures.every(key=>inspections.has(key.slice(0,key.indexOf(':'))));
 }
 export class AssistantInspectionError extends Error {

@@ -56,6 +56,7 @@ import { MAX_INSPECTION_QUESTION, validateVideoInspectionInput, videoMatchesOnCl
 import { currentTranscript } from '../../lib/media-analysis/transcript';
 import { frameEvidenceOnClip, frameInspectionCoverage, assertConsecutiveInspection, validateFrameInspectionInput, type FrameInspectionInput } from '../../lib/media-analysis/frame-inspection';
 import { shotAlignedRange } from '../../lib/media-analysis/shots';
+import { REFERENCE_PARTS, readReference, referenceOutline } from '../../lib/media-analysis/reference';
 import { playbackRateOf, sourceEndOf, sourceTimeAt, timelineTimeAtSource } from '../../lib/editor/playback-rate';
 import { CSS_REACTIVE_TARGETS, MAX_REACTIVE_SAMPLES, REACTIVE_RATE, decodeLevels, encodeLevels, energyLevels, pulseLevels, reactiveAmountRange } from '../../lib/editor/audio-reactive';
 import { HSL_BANDS, LUT_LOOKS, MAX_TIMELINE_LUTS, parseCube, type HslAdjust } from '../../lib/editor/color-finish';
@@ -97,6 +98,13 @@ export type EditorToolkitOptions = {
 
 /** The editor's AI tools bound to one active run: the in-app assistant and MCP share them. */
 /** Tool output with labeled images: the text without image data, then each image after its label. */
+/** What the agent reads first about a reference: enough to describe it shot by shot and choose what to borrow. */
+function referenceSummary(asset: { _id: string; fileName: string; analysis?: { reference?: string } }) {
+  const reference = readReference(asset.analysis?.reference);
+  if (!reference) throw new Error('The reference breakdown did not save. Analyze this video again.');
+  return { assetId: asset._id, fileName: asset.fileName, genre: reference.genre, summary: reference.summary, duration: reference.duration, shotCount: reference.shots.length, rhythm: reference.rhythm, direction: reference.direction, signatures: reference.signatures, shots: referenceOutline(reference), uncertainty: reference.uncertainty };
+}
+
 function blueprintImages(output: unknown) {
   const { images = [], ...rest } = output as { images?: { label: string; data: string; mimeType: string }[] };
   return { type: 'content' as const, value: [{ type: 'text' as const, text: JSON.stringify(rest) }, ...images.flatMap(image => [{ type: 'text' as const, text: image.label }, { type: 'file' as const, data: { type: 'data' as const, data: image.data }, mediaType: image.mimeType }])] };
@@ -169,7 +177,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
   const zoomInput=z.object({direction:z.enum(['in','out']).optional(),amount:z.number().min(ZOOM_LIMITS.amount[0]).max(ZOOM_LIMITS.amount[1]).optional(),speed:z.number().min(ZOOM_LIMITS.speed[0]).max(ZOOM_LIMITS.speed[1]).optional(),centerX:z.number().min(0).max(1).optional(),centerY:z.number().min(0).max(1).optional()});
   const solidColorInput=z.object({color:z.string().regex(/^#[\da-f]{6}$/i).optional(),width:z.number().min(SOLID_COLOR_LIMITS.width[0]).max(SOLID_COLOR_LIMITS.width[1]).optional(),height:z.number().min(SOLID_COLOR_LIMITS.height[0]).max(SOLID_COLOR_LIMITS.height[1]).optional(),x:z.number().min(0).max(1).optional(),y:z.number().min(0).max(1).optional(),opacity:z.number().min(0).max(1).optional()});
   const textInput = z.object({ text: z.string().min(1).max(2000), track: z.number().int().min(1).max(24).optional(), start: z.number().min(0), duration: z.number().positive(), fontSize: z.number().min(8).max(300).optional(),fontFamily:fontFamily.optional(), color: textColor.optional(), background: textColor.optional(), blendMode: z.enum(BLEND_MODES).optional(), x: z.number().min(0).max(1).optional(), y: z.number().min(0).max(1).optional(), animation: z.enum(["none", "fade", "rise"]).optional(),textStyle:textStyleInput.optional() });
-  const withAnalysis = async <T,>(assetId: string, mode: "transcribe" | "understand" | "shots" | "beats" | "track" | "video" | "frames", read: (request: Doc<"analysisRequests">) => Promise<T>, inspection?: { videoRequest?: VideoInspectionInput; frameRequest?: FrameInspectionInput }) => {
+  const withAnalysis = async <T,>(assetId: string, mode: "transcribe" | "understand" | "shots" | "beats" | "track" | "video" | "frames" | "reference", read: (request: Doc<"analysisRequests">) => Promise<T>, inspection?: { videoRequest?: VideoInspectionInput; frameRequest?: FrameInspectionInput }) => {
     const requestId = await ctx.runMutation(internal.assistant.requestAnalysis, { ...run, assetId, mode, ...inspection });
     try {
       while (true) {
@@ -221,7 +229,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
   // task and leave the first waiting until it timed out.
   const sharedAnalyses = new Map<string, ReturnType<typeof analyzeOnce>>();
   const transcriptRefreshFailures = new Map<string, string>();
-  const analyze = async (assetId: string, mode: "transcribe" | "understand" | "shots" | "beats" | "track", requireAudioActivity = false) => {
+  const analyze = async (assetId: string, mode: "transcribe" | "understand" | "shots" | "beats" | "track" | "reference", requireAudioActivity = false) => {
     const key = `${assetId}:${mode}`;
     const shared = sharedAnalyses.get(key);
     if (shared) {
@@ -233,10 +241,10 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
     sharedAnalyses.set(key, pending);
     return pending;
   };
-  const analyzeOnce = async (assetId: string, mode: "transcribe" | "understand" | "shots" | "beats" | "track", requireAudioActivity = false, remeasure = false) => {
-    if (!remeasure && (mode === 'understand' || mode === 'transcribe')) {
+  const analyzeOnce = async (assetId: string, mode: "transcribe" | "understand" | "shots" | "beats" | "track" | "reference", requireAudioActivity = false, remeasure = false) => {
+    if (!remeasure && (mode === 'understand' || mode === 'transcribe' || mode === 'reference')) {
       const saved = await loadAsset(assetId);
-      if (mode === 'understand' ? saved.analysis?.understanding : currentTranscript(saved.analysis?.transcript) && (!requireAudioActivity || saved.analysis?.audioActivity?.version === AUDIO_ACTIVITY_VERSION)) return saved;
+      if (mode === 'reference' ? readReference(saved.analysis?.reference) : mode === 'understand' ? saved.analysis?.understanding : currentTranscript(saved.analysis?.transcript) && (!requireAudioActivity || saved.analysis?.audioActivity?.version === AUDIO_ACTIVITY_VERSION)) return saved;
     }
     const request = () => withAnalysis(assetId, mode, async () => {
       const next=await ctx.runQuery(internal.assistant.getRunAsset,{...run,assetId});
@@ -405,11 +413,23 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       return { ...snapshot, openTimeline: { timelineId: openTab.id, name: openTab.name, otherTimelines: tabs.filter(tab => tab !== openTab).map(tab => tab.name) }, captionedAssetIds, timeline: modelTimeline(snapshot.timeline, selectedClipIds), layers: deriveTracks(snapshot.timeline), summary: summarizeTimeline(snapshot.timeline, assets) };
     } }),
     inspectClip: createTool({ description: "Read one exact current clip including all motion/focus samples and settings omitted from the compact timeline. Uses the working edit session; no edits. Read inspectTimeline first when fresh saved state is needed.", inputSchema: z.object({ clipId: z.string() }), execute: async (_ctx, input) => { await editSession.wait(); const clip = find(editSession.timeline, input.clipId), soundRecipe = assets.find(item => item._id === clip.assetId)?.soundRecipe; return { clip, ...(soundRecipe ? { soundRecipe: JSON.parse(soundRecipe) } : {}), revision: editSession.revision, staged: editSession.staged }; } }),
-    analyzeMedia: createTool({ description: "Request real analysis of this project's uploaded media through durable background jobs. Transcribe word-timed speech, create a native Gemini video overview, measure music beats, or track a visible face. mode track uses face detection only; for a can or other object use inspectFrames and configureCameraMotion mode follow. Use inspectVideo with the actual user question to find specific visual moments; a generic overview is not an answer to every editing question. Saved results are usable immediately; never invent unavailable results.", inputSchema: z.object({ assetId: z.string(), mode: z.enum(["transcribe", "understand", "beats", "track"]) }), execute: async (_ctx, input) => {
+    analyzeMedia: createTool({ description: "Request real analysis of this project's uploaded media through durable background jobs. Transcribe word-timed speech, create a native Gemini video overview, measure music beats, track a visible face, or break down a reference video (mode reference: measured cuts and beats, every shot split into its parts, transitions, camera, title styles and the style worth borrowing; use it when the user shares footage to remake or to take style from, and read the reference-footage skill first). mode track uses face detection only; for a can or other object use inspectFrames and configureCameraMotion mode follow. Use inspectVideo with the actual user question to find specific visual moments; a generic overview is not an answer to every editing question. Saved results are usable immediately; never invent unavailable results.", inputSchema: z.object({ assetId: z.string(), mode: z.enum(["transcribe", "understand", "beats", "track", "reference"]) }), execute: async (_ctx, input) => {
       return reportAnalysisFailure(async () => {
       const asset = await analyze(input.assetId, input.mode);
-      return { analyzed: true, assetId: asset._id, mode: input.mode, ...(input.mode === "transcribe" ? { segmentCount: asset.analysis?.transcript?.segments.length, wordCount: asset.analysis?.transcript?.words.length } : {}), ...(input.mode === "understand" ? { summary: asset.analysis?.understanding?.summary, sceneCount: asset.analysis?.understanding?.scenes.length } : {}), ...(input.mode === "beats" ? { bpm: asset.analysis?.beats?.bpm, beatCount: asset.analysis?.beats?.beats.length, downbeatCount: asset.analysis?.beats?.downbeats?.length ?? 0, accentCount: asset.analysis?.beats?.accents?.length ?? 0, dropCandidateCount: asset.analysis?.beats?.dropCandidates?.length ?? 0, engine: asset.analysis?.beats?.engine, confidence: asset.analysis?.beats?.confidence } : {}), ...(input.mode === "track" ? { sampleCount: asset.analysis?.focus?.length } : {}) };
+      return { analyzed: true, assetId: asset._id, mode: input.mode, ...(input.mode === "transcribe" ? { segmentCount: asset.analysis?.transcript?.segments.length, wordCount: asset.analysis?.transcript?.words.length } : {}), ...(input.mode === "understand" ? { summary: asset.analysis?.understanding?.summary, sceneCount: asset.analysis?.understanding?.scenes.length } : {}), ...(input.mode === "beats" ? { bpm: asset.analysis?.beats?.bpm, beatCount: asset.analysis?.beats?.beats.length, downbeatCount: asset.analysis?.beats?.downbeats?.length ?? 0, accentCount: asset.analysis?.beats?.accents?.length ?? 0, dropCandidateCount: asset.analysis?.beats?.dropCandidates?.length ?? 0, engine: asset.analysis?.beats?.engine, confidence: asset.analysis?.beats?.confidence } : {}), ...(input.mode === "track" ? { sampleCount: asset.analysis?.focus?.length } : {}), ...(input.mode === "reference" ? referenceSummary(asset) : {}) };
       });
+    } }),
+    inspectReference: createTool({ description: "Read a saved reference breakdown (analyzeMedia mode reference). Without selectors it returns the overview: genre, rhythm, the five-line style direction, signatures and one line per shot. Select what the user pointed at by shot ids (S4), part ids (S4.title), signature ids (T2), a SOURCE time (the shot playing then) or a part kind (every title) to get full detail: transition, camera, look, each part with its box and motion, and title styles. Resolve phrases like 'the second transition' or 'the title at 0:07' here before building. No timeline changes.", inputSchema: z.object({ assetId: z.string(), shotIds: z.array(z.string()).max(40).optional(), partIds: z.array(z.string()).max(40).optional(), signatureIds: z.array(z.string()).max(8).optional(), time: z.number().min(0).optional(), partKind: z.enum(REFERENCE_PARTS).optional() }), execute: async (_ctx, input) => {
+      const asset = await loadAsset(input.assetId), reference = readReference(asset.analysis?.reference);
+      if (!reference) throw new Error('This video has no reference breakdown yet. Run analyzeMedia with mode reference first.');
+      const wanted = new Set([...(input.shotIds ?? []), ...(input.partIds ?? []).map(id => id.split('.')[0])].map(id => id.trim().toUpperCase()));
+      const signatures = reference.signatures.filter(signature => input.signatureIds?.some(id => id.trim().toUpperCase() === signature.id));
+      for (const signature of signatures) for (const id of signature.shotIds) wanted.add(id);
+      if (input.time !== undefined) { const shot = reference.shots.find(item => input.time! >= item.start && input.time! < item.end) ?? reference.shots.at(-1)!; wanted.add(shot.id); }
+      const parts = new Set((input.partIds ?? []).map(id => id.trim().toUpperCase()));
+      const shots = reference.shots.filter(shot => wanted.has(shot.id) || (input.partKind && shot.parts.some(part => part.kind === input.partKind)));
+      if (!shots.length && !input.partKind && !wanted.size && !signatures.length) return referenceSummary(asset);
+      return { assetId: asset._id, ...(signatures.length ? { signatures } : {}), shots: shots.map(shot => { const named = shot.parts.filter(part => parts.has(part.id.toUpperCase())); return { ...shot, parts: (named.length ? named : shot.parts).filter(part => !input.partKind || part.kind === input.partKind) }; }), missing: [...wanted].filter(id => !reference.shots.some(shot => shot.id === id)) };
     } }),
     inspectVideo: createTool({ description: "Ask Gemini to dynamically inspect this uploaded native video for the user's actual visual question, such as finding fights, a reaction, a punch or an object. Never use it for trims, cuts, take selection or removing repeats and pauses unless the user explicitly asked for a visual check (watching the footage, eyes-to-camera, awkward look-ups). Optional start/end are SOURCE seconds and default to the whole source; only that window is uploaded, so ask about a window of up to about 60 seconds around the candidate moments (one question per line or take). Whole-source questions on long footage are slow and can outlast this edit. Use the transcript, not this tool, to find which words were said and where. Returns relevant source-time windows, an answer, honest uncertainty, and matches mapped onto retained timeline clips. Zero matches is valid. No timeline changes. Times are approximate visual evidence, never invented frame indices or sample counts.", inputSchema: z.object({ assetId: z.string(), question: z.string().min(1).max(MAX_INSPECTION_QUESTION), start: z.number().min(0).optional(), end: z.number().positive().optional() }), execute: async (_ctx, input) => {
       const asset = assets.find(item => item._id === input.assetId);

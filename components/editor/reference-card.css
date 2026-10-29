@@ -1,0 +1,20 @@
+/* A reference breakdown in the chat: player, proportional shot strip, the picked shot's parts. Neutral colors only. */
+.reference-card{display:grid;gap:10px;max-width:440px;padding:12px;border:1px solid var(--border);border-radius:10px;font-size:12px;line-height:1.45;color:var(--foreground)}
+.reference-card-head{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 10px}
+.reference-card-head strong{font-weight:600}
+.reference-card-head span{color:var(--muted-foreground)}
+.reference-card-video{width:100%;max-height:240px;border-radius:6px;background:#000;object-fit:contain}
+.reference-strip{display:flex;gap:2px;height:26px}
+.reference-shot{flex-basis:0;min-width:4px;overflow:hidden;padding:0 4px;border:0;border-radius:3px;background:color-mix(in srgb,var(--foreground) 9%,transparent);color:var(--muted-foreground);font-size:10px;text-align:left;cursor:pointer}
+.reference-shot span{white-space:nowrap}
+.reference-shot:hover{background:color-mix(in srgb,var(--foreground) 16%,transparent)}
+.reference-shot.is-playing{box-shadow:inset 0 -2px 0 color-mix(in srgb,var(--foreground) 45%,transparent)}
+.reference-shot[aria-selected=true]{background:var(--foreground);color:var(--background)}
+.reference-detail{display:grid;gap:4px}
+.reference-detail p{margin:0}
+.reference-detail-meta{color:var(--muted-foreground)}
+.reference-chips{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px}
+.reference-chip{padding:2px 8px;border:1px solid var(--border);border-radius:999px;background:transparent;color:var(--foreground);font-size:11px;cursor:pointer}
+.reference-chip:hover:not(:disabled){background:color-mix(in srgb,var(--foreground) 8%,transparent)}
+.reference-chip:disabled{cursor:default;opacity:.7}
+.reference-signatures{padding-top:8px;border-top:1px solid var(--border)}
