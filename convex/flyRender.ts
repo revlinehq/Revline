@@ -24,7 +24,8 @@ const distributedExports = () => process.env.FLY_DISTRIBUTED_EXPORTS === 'true';
 type Profile = { guest: { cpu_kind: 'performance'; cpus: number; memory_mb: number }; scratchGb: number; env: Record<string, string>; distributed: Record<string, string> };
 const PROFILES: Record<Lane, Profile> = {
   ultra: { guest: { cpu_kind: 'performance', cpus: 16, memory_mb: 32768 }, scratchGb: 20, env: { MEDIA_LANE: 'ultra', REVLINE_RENDER_WORKERS: '8', REVLINE_RENDER_FFMPEG_SLOTS: '4', REVLINE_RENDER_ENCODE_THREADS: '16' }, distributed: distributed(16, { cpu_kind: 'performance', cpus: 8, memory_mb: 16384 }, { REVLINE_RENDER_WORKERS: '4', REVLINE_RENDER_FFMPEG_SLOTS: '4', REVLINE_RENDER_ENCODE_THREADS: '8' }) },
-  standard: { guest: { cpu_kind: 'performance', cpus: 4, memory_mb: 8192 }, scratchGb: 10, env: { REVLINE_RENDER_WORKERS: '3', REVLINE_RENDER_FFMPEG_SLOTS: '2', REVLINE_RENDER_ENCODE_THREADS: '4' }, distributed: distributed(4, { cpu_kind: 'performance', cpus: 4, memory_mb: 8192 }, { REVLINE_RENDER_WORKERS: '3', REVLINE_RENDER_FFMPEG_SLOTS: '2', REVLINE_RENDER_ENCODE_THREADS: '4' }) },
+  // Every plan renders on the same 16-CPU machine as Ultra; the lanes only differ in seats and queue limits.
+  standard: { guest: { cpu_kind: 'performance', cpus: 16, memory_mb: 32768 }, scratchGb: 20, env: { REVLINE_RENDER_WORKERS: '8', REVLINE_RENDER_FFMPEG_SLOTS: '4', REVLINE_RENDER_ENCODE_THREADS: '16' }, distributed: distributed(16, { cpu_kind: 'performance', cpus: 8, memory_mb: 16384 }, { REVLINE_RENDER_WORKERS: '4', REVLINE_RENDER_FFMPEG_SLOTS: '4', REVLINE_RENDER_ENCODE_THREADS: '8' }) },
 };
 // A machine whose worker found no export for this long exits; Fly then stops it and CPU billing stops.
 const IDLE_MS = '60000';
