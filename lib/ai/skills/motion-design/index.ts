@@ -1,7 +1,7 @@
 import type { EditorSkill } from '../index';
 import { STYLE_CARDS } from './cards';
 import { STYLE_PAGES, TECHNIQUES } from './styles';
-import { brandPage, craftPage, intakePage, processPage, storyPage } from './pages';
+import { brandPage, craftPage, intakePage, processPage, scriptPage, storyPage } from './pages';
 
 export const motionDesign: EditorSkill = {
   name: 'motion-design',
@@ -14,9 +14,10 @@ A launch film makes one product or one feature feel simple, real and worth tryin
 1. **Brand** (\`brand-kit\`): find or create the brand kit and confirm the brand context. Nothing is designed before the brand is known.
 2. **Intake** (\`intake\`): type, format, length, platform, reference, music.
 3. **Story** (\`story\`): pick the structure for the type.
-4. **Style:** pick a style below; read its page and one or two of its cards. Propose the brand's motion identity (\`brand-kit\`, step 5).
-5. **Beat sheet, animatic, polish, sound, review** (\`process\`), using \`craft\` for timing and easing.
-6. **Feedback** at any point (\`techniques\`).
+4. **Script** (\`script\`): write every on-screen word as one piece in the brand voice; get it approved.
+5. **Style:** pick a style below; read its page and one or two of its cards. Propose the brand's motion identity (\`brand-kit\`).
+6. **Beat sheet, animatic, polish, sound, review** (\`process\`), using \`craft\` for timing and easing.
+7. **Feedback** at any point (\`techniques\`).
 
 ## Never speculate
 Every fact on screen comes from the confirmed brand context or the user: names, features, numbers, claims, prices, dates, availability, the URL. Missing? Ask. Never invent a statistic, customer, feature or UI the product does not have.
@@ -47,5 +48,5 @@ The styles, cards and techniques come from measured launch films. They are a str
 - Still holds are normal while something happens in the UI.
 
 Use a card for its style only: never its copy, product, logo, characters or exact compositions.`,
-  pages: [brandPage, intakePage, storyPage, craftPage, processPage, ...STYLE_PAGES, TECHNIQUES, ...STYLE_CARDS.map(({ style: _style, ...card }) => card)],
+  pages: [brandPage, intakePage, storyPage, scriptPage, craftPage, processPage, ...STYLE_PAGES, TECHNIQUES, ...STYLE_CARDS.map(({ style: _style, ...card }) => card)],
 };

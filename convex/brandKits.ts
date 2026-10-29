@@ -1,6 +1,6 @@
 import { v } from 'convex/values';
 import { internalMutation, internalQuery } from './_generated/server';
-import { brandColorValidator, brandContextValidator, brandMotionValidator } from './schema';
+import { brandColorValidator, brandContextValidator, brandMotionValidator, brandVoiceValidator } from './schema';
 
 const fontRow = v.object({ family: v.string(), weight: v.string(), role: v.union(v.literal('heading'), v.literal('body'), v.literal('other')), storageId: v.id('_storage') });
 const copyValidator = v.object({ title: v.optional(v.string()), description: v.optional(v.string()), headings: v.array(v.string()) });
@@ -47,7 +47,7 @@ export const create = internalMutation({
 });
 
 export const update = internalMutation({
-  args: { ownerId: v.string(), kitId: v.id('brandKits'), name: v.optional(v.string()), colors: v.optional(v.array(brandColorValidator)), fonts: v.optional(v.array(fontRow)), logo: v.optional(v.string()), context: v.optional(brandContextValidator), motion: v.optional(brandMotionValidator) },
+  args: { ownerId: v.string(), kitId: v.id('brandKits'), name: v.optional(v.string()), colors: v.optional(v.array(brandColorValidator)), fonts: v.optional(v.array(fontRow)), logo: v.optional(v.string()), context: v.optional(brandContextValidator), motion: v.optional(brandMotionValidator), voice: v.optional(brandVoiceValidator) },
   handler: async (ctx, { ownerId, kitId, ...patch }) => {
     const kit = await ctx.db.get(kitId);
     if (!kit || kit.ownerId !== ownerId) throw new Error('Brand kit not found.');

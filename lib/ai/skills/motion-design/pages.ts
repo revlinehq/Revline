@@ -3,7 +3,7 @@ import type { EditorSkillPage } from '../index';
 /** Step 1: nothing is designed before the brand is known. */
 export const brandPage: EditorSkillPage = {
   name: 'brand-kit',
-  description: 'Step 1. Find, create and confirm the brand kit (fonts, colors, logo, brand context, motion identity), and how scenes use it.',
+  description: 'Step 1. Find, create and confirm the brand kit (fonts, colors, logo, brand context, voice, motion identity), and how scenes use it.',
   body: `# Brand kit
 
 A brand kit is a named, saved brand for this user: colors, font files, a logo, the landing-page copy, the brand context (what the product is, the problem it solves, who it is for, key features, call to action, tone) and a motion identity. Scenes attach it with \`brandKitId\` and receive it as \`brand\`.
@@ -16,8 +16,9 @@ A brand kit is a named, saved brand for this user: colors, font files, a logo, t
 2. **Create.** createBrandKit with the URL (and any theme values the user gave; those win). Name it after the brand.
 3. **Show what was found.** Fonts by role, the main colors, whether a logo was found, and every note. Ask the user to correct anything wrong; fix it with updateBrandKit. Never pretend a missing piece was found.
 4. **Confirm the brand context.** Draft it from the scraped copy, then ask, in one short message, only what the copy does not answer: what it is (one sentence), the problem, who it is for, 3 to 5 features worth showing, the call to action and URL, the tone. Save the confirmed version with updateBrandKit context. Never build on an unconfirmed context.
-5. **Motion identity.** Once a style is chosen, propose one in a line: personality (premium, corporate, energetic, playful), a signature ease used for ~80% of motion, three durations (short, medium, long) and the one entrance pattern. Use the style's personality and the craft page's table. Save it with updateBrandKit motion when the user agrees; later videos for this brand start from it.
-6. **Use.** Pass \`brandKitId\` to addScene (or editScene to attach or refresh). A scene keeps the kit as it was when saved.
+5. **Voice.** Draft how the brand sounds and confirm it in one line each: 2 to 4 tone words (e.g. plain, confident, dry), 2 or 3 sample lines (the brand's own best lines from its site, or ones the user writes), and words to avoid. Save it with updateBrandKit voice. The script follows it.
+6. **Motion identity.** Once a style is chosen, propose one in a line: personality (premium, corporate, energetic, playful), a signature ease used for ~80% of motion, three durations (short, medium, long) and the one entrance pattern. Use the style's personality and the craft page's table. Save it with updateBrandKit motion when the user agrees; later videos for this brand start from it.
+7. **Use.** Pass \`brandKitId\` to addScene (or editScene to attach or refresh). A scene keeps the kit as it was when saved.
 
 ## In scene code
 \`brand\` is null without a kit. With one:
@@ -74,6 +75,36 @@ Hook, one striking product moment, lockup with a date or "coming soon".
 - **Motion as metaphor:** connecting lines for integration, stacking for organising, handing a card across for collaboration or agents, zoom for "this matters", assembly for "it all comes together". A move that shows no relationship, action or hierarchy gets cut.
 - **Peak and end:** viewers remember the best moment and the last one. Build to one peak; end on a held lockup.
 - **Craft is trust:** precise timing and consistent easing read as a careful product.`,
+};
+
+export const scriptPage: EditorSkillPage = {
+  name: 'script',
+  description: 'Step 4. Write every on-screen word as one piece, in the brand voice, and get it approved before the beat sheet.',
+  body: `# Script
+
+On-screen words carry the story; the motion shows each line happening. Write them together, before any timing or code, and get them approved.
+
+## Facts versus words
+Facts must be true and come from the confirmed brand context or the user: what the product does, names, numbers, claims, the URL. The wording is yours to write. Never paste website headings or section labels as captions just because they are true; rewrite them for film.
+
+## How to write it
+1. Write the whole film's words as one list, top to bottom, one line per card. Nothing else.
+2. Read it aloud in order, without visuals. It should tell the story on its own and sound like one voice. If it sounds like a feature list or a website menu, rewrite it.
+3. Give it a through-line: a word, rhythm or idea that returns and pays off at the lockup (for example a word that appears in the hook and comes back in the final line).
+4. Check every line against the brand voice: its tone words, its sample lines, its words to avoid.
+
+## Rules for lines
+- One thought per card. 2 to 6 words for most cards; a headline at most about 8.
+- Concrete verbs and nouns of what happens on screen ("Cut.", "Captioned.") beat abstract benefits ("Effortless editing").
+- The visual makes the claim; the line names it. Do not describe what the viewer can already see in more words.
+- Never a section label as a caption ("Post it anywhere", "Key features", "How it works"). Turn labels into outcomes or actions.
+- Rhythm: short lines build speed, a longer line lands the point. Vary them on purpose.
+- Sentence case. A period ends a statement and makes it land; no exclamation marks.
+- Avoid filler and hype: seamless, revolutionize, powerful, unlock, supercharge, game-changing, next-level, effortless, "AI-powered" as decoration, and questions as hooks unless the voice uses them.
+- UI sample text inside mockups stays plain and generic and never repeats the captions.
+
+## Before the beat sheet
+Send the script as a numbered list with the beat each line belongs to (hook, problem, reveal, proof, peak, lockup) and wait for approval or edits. Changes here are cheap; after the animatic they are not. When the user approves lines they like, offer to add the best ones to the brand voice's sample lines.`,
 };
 
 export const craftPage: EditorSkillPage = {
@@ -164,7 +195,7 @@ export const processPage: EditorSkillPage = {
   description: 'Steps 5 to 9: beat sheet, animatic, feedback, polish, sound and review; plus building product UI without screenshots.',
   body: `# Process: approve before building
 
-1. **Beat sheet.** A table: time, music bar, what is on screen, on-screen words, motion, sound. Name the style and why in one line. Send it and wait for approval or changes.
+1. **Beat sheet.** Built from the approved script. A table: time, music bar, what is on screen, on-screen words (from the script, unchanged), motion, sound. Name the style and why in one line. Send it and wait for approval or changes.
 2. **Animatic.** Rough scenes at the approved timing: grey boxes, plain text in the brand font, simple moves, with the music. Say it is rough; ask the user to watch story and pacing.
 3. **Feedback.** Whenever the user reacts ("feels cheap", "more energy", "the ending is weak"), read the techniques page, apply the matching technique, and say which film it comes from. Exact instructions from the user are followed as given.
 4. **Polish.** Replace each rough scene at the same timing with the finished one (editScene keeps timing). Attach the brand kit to every scene. Follow the style page and the craft page.
