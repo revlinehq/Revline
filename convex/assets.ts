@@ -14,6 +14,7 @@ import { MAX_CLEANUP_CUTS, MAX_CLEANUP_DETAIL } from "../lib/speech-cleanup/type
 import { assetWithUrl, assetKind, transcriptValidator, audioActivityValidator, understandingValidator, shotsValidator, beatsValidator, focusValidator, waveformValidator, analysisValidator } from "./schema";
 import { MAX_AUDIO_ACTIVITY_QUIET_INTERVALS, MIN_AUDIO_QUIET_SECONDS } from '../lib/media-analysis/audio-activity';
 import { parseShots } from '../lib/media-analysis/shots';
+import { validateReference } from '../lib/media-analysis/reference';
 import { serializedBytes, validateFocus } from "./lib/timeline";
 import { consumeUpload, issueUpload } from "./uploads";
 import { enqueueMediaTask } from './mediaTasks';
@@ -236,7 +237,11 @@ export async function saveAssetAnalysis(ctx: MutationCtx, asset: Doc<"assets">, 
   for (const hits of [changes.beats?.accents, changes.beats?.dropCandidates]) {
     if (hits && (hits.length > 1000 || hits.some((hit, i) => !Number.isFinite(hit.time) || hit.time < 0 || hit.time > duration + 0.5 || !Number.isFinite(hit.strength) || hit.strength < 0 || hit.strength > 1 || (i > 0 && hit.time <= hits[i - 1].time)))) throw new ConvexError('Invalid beat analysis');
   }
-  const analysis = { ...asset.analysis, ...(changes.transcript ? { transcript: changes.transcript } : {}), ...(changes.audioActivity ? { audioActivity: changes.audioActivity } : {}), ...(changes.speechCleanup ? { speechCleanup: changes.speechCleanup } : {}), ...(changes.understanding ? { understanding: changes.understanding } : {}), ...(changes.shots ? { shots: changes.shots } : {}), ...(changes.beats ? { beats: changes.beats } : {}), ...(changes.focus ? { focus: changes.focus } : {}) };
+  if (changes.reference) {
+    if (asset.kind !== 'video' || !asset.duration) throw new ConvexError('A reference breakdown requires a video with a known duration');
+    try { validateReference(changes.reference, asset.duration); } catch { throw new ConvexError('Invalid reference breakdown'); }
+  }
+  const analysis = { ...asset.analysis, ...(changes.transcript ? { transcript: changes.transcript } : {}), ...(changes.audioActivity ? { audioActivity: changes.audioActivity } : {}), ...(changes.speechCleanup ? { speechCleanup: changes.speechCleanup } : {}), ...(changes.understanding ? { understanding: changes.understanding } : {}), ...(changes.shots ? { shots: changes.shots } : {}), ...(changes.beats ? { beats: changes.beats } : {}), ...(changes.focus ? { focus: changes.focus } : {}), ...(changes.reference ? { reference: changes.reference } : {}) };
   if (serializedBytes(analysis) > 500_000) throw new ConvexError("Media analysis is too large to save");
   const now = Date.now();
   const analysisCompletedAt = { ...asset.analysisCompletedAt, ...(changes.transcript ? { transcribe: now } : {}), ...(changes.understanding ? { understand: now } : {}), ...(changes.shots ? { shots: now } : {}), ...(changes.beats ? { beats: now } : {}), ...(changes.focus ? { track: now } : {}) };

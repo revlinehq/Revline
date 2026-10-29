@@ -51,7 +51,7 @@ export type MediaTaskResult = Infer<typeof taskResult>;
 
 /** The oldest media processor that can run each kind; older processors leave these tasks queued. */
 // 10: scenes are GSAP modules, so every task that renders a composition needs the new scene runtime.
-const MIN_PROCESSOR_VERSION: Partial<Record<Doc<'mediaTasks'>['kind'], number>> = { transcribe: 3, frames: 4, preview: 5, cutout: 7, derive: 9, render: 10, review: 10, snapshot: 10, blueprint: 11 };
+const MIN_PROCESSOR_VERSION: Partial<Record<Doc<'mediaTasks'>['kind'], number>> = { transcribe: 3, frames: 4, preview: 5, cutout: 7, derive: 9, render: 10, review: 10, snapshot: 10, blueprint: 11, reference: 12 };
 
 export async function enqueueMediaTask(ctx: MutationCtx, input: Pick<Doc<'mediaTasks'>, 'ownerId' | 'projectId' | 'kind'> & Partial<Pick<Doc<'mediaTasks'>, 'assetId' | 'renderJobId' | 'analysisRequestId' | 'sourceUrl' | 'frameRequest' | 'videoRequest' | 'reviewId' | 'snapshotId' | 'blueprintCheckId' | 'cutoutId' | 'derivationId' | 'requiredProcessorVersion'|'previewVersion'|'lane'>>, beforeEnqueue?:()=>Promise<void>): Promise<Id<'mediaTasks'>> {
   const minimum = MIN_PROCESSOR_VERSION[input.kind];
@@ -191,7 +191,7 @@ export const start = mutation({ args: { projectId: v.id('projects'), assetId: v.
   if (!asset || asset.ownerId !== ownerId || asset.projectId !== args.projectId || asset.kind === 'image' || args.kind === 'render' || args.kind === 'import' || args.kind === 'review') throw new ConvexError('Choose media from this project.');
   if (args.kind === 'frames') throw new ConvexError('Frame inspection requires a scoped AI question and source window.');
   if (args.kind === 'video') throw new ConvexError('Native video inspection requires a scoped AI question and source window.');
-  if (['extract', 'preview', 'shots', 'understand', 'track'].includes(args.kind) && asset.kind !== 'video') throw new ConvexError('This operation requires a video.');
+  if (['extract', 'preview', 'shots', 'understand', 'track', 'reference'].includes(args.kind) && asset.kind !== 'video') throw new ConvexError('This operation requires a video.');
   if (args.kind === 'waveform' && asset.kind !== 'audio') throw new ConvexError('Waveforms require an audio source.');
   // Reused or already-active work needs no new capacity.
   return enqueueMediaTask(ctx, { ...args, ownerId }, () => requireMediaTaskCapacity(ctx, ownerId, 1));
@@ -554,7 +554,7 @@ const RESULT_HANDLERS: Record<Doc<'mediaTasks'>['kind'], ResultHandler> = {
     if (!result.waveform) throw new ConvexError('No waveform was returned.');
     validateWaveform(result.waveform); await ctx.db.patch(asset._id, { waveform: result.waveform });
   },
-  transcribe: saveAnalysisResult, understand: saveAnalysisResult, shots: saveAnalysisResult, beats: saveAnalysisResult, track: saveAnalysisResult,
+  transcribe: saveAnalysisResult, understand: saveAnalysisResult, shots: saveAnalysisResult, beats: saveAnalysisResult, track: saveAnalysisResult, reference: saveAnalysisResult,
 };
 
 export const complete = mutation({ args: { ...mediaTaskCredentials, result: taskResult }, returns: v.null(), handler: async (ctx, args) => {

@@ -2,7 +2,7 @@ import { ConvexError } from 'convex/values';
 import type { Doc } from '../_generated/dataModel';
 import type { MutationCtx,QueryCtx } from '../_generated/server';
 const sourceKey=(asset:Doc<'assets'>)=>asset.r2Key??asset.storageId??asset._id;
-const modes={transcript:'transcribe',understanding:'understand',shots:'shots',beats:'beats',focus:'track'} as const;
+const modes={transcript:'transcribe',understanding:'understand',shots:'shots',beats:'beats',focus:'track',reference:'reference'} as const;
 export async function hydrateAsset(ctx:MutationCtx|QueryCtx,asset:Doc<'assets'>):Promise<Doc<'assets'>> {
   if(asset.analysis||!asset.analysisId)return asset;
   const saved=await ctx.db.get(asset.analysisId);

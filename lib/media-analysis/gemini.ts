@@ -7,6 +7,9 @@ import { parseUnderstanding, understandingJsonSchema, understandingPrompt, type 
 import { frameInspectionCoverage, frameInspectionJsonSchema, parseFrameInspection, type FrameInspectionInput, type FrameSample, type FrameGeometry } from './frame-inspection';
 import { parseVideoInspection, validateVideoInspectionInput, videoInspectionJsonSchema, videoInspectionPrompt, VideoInspectionValidationError, type VideoInspectionInput } from './video-inspection';
 import type { ReportMediaActivity } from './activity';
+import { parseReference, referenceJsonSchema, referencePrompt, type ReferenceKeyframe } from './reference';
+import type { ShotDetection } from './shots';
+import type { BeatMap } from './beat-map';
 
 const BASE = 'https://generativelanguage.googleapis.com';
 const fileSchema = z.object({ name: z.string(), uri: z.string(), state: z.string().optional() });
@@ -157,6 +160,28 @@ export async function understandVideo(path: string, duration: number, key: strin
       processingCalls: stepCount('processing_call'), processingResults: stepCount('processing_result'),
     });
   }
+}
+
+/** One pass over the native video plus labeled keyframes; measured cuts and beats stay authoritative. */
+export async function breakDownReference(path: string, duration: number, detection: ShotDetection, keyframes: (ReferenceKeyframe & { data: string })[], beats: BeatMap | undefined, key: string, signal: AbortSignal, mimeType = 'video/mp4', onActivity?: ReportMediaActivity) {
+  const file = await uploadFile(path, mimeType, key, signal, onActivity);
+  try {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      onActivity?.(attempt ? 'retrying-analysis' : 'analyzing');
+      const result = await interaction({
+        model: process.env.GEMINI_VIDEO_MODEL || 'gemini-3.7-flash',
+        input: [
+          { type: 'video', uri: file.uri, mime_type: mimeType, processing: duration <= 300 ? 'static' : 'agentic' },
+          { type: 'text', text: referencePrompt(detection, duration) },
+          ...keyframes.flatMap(frame => [{ type: 'text', text: `${frame.shotId} keyframe at ${frame.time.toFixed(3)} s` }, { type: 'image', mime_type: 'image/jpeg', data: frame.data }]),
+        ],
+        response_format: { type: 'text', mime_type: 'application/json', schema: referenceJsonSchema },
+      }, key, signal);
+      try { return parseReference(interactionText(result), detection, duration, beats); }
+      catch (error) { if (attempt) throw error; }
+    }
+    throw new AnalysisError('The reference breakdown could not be completed.', 502);
+  } finally { await deleteFile(file.name, key); }
 }
 
 /** Query-aware native video inspection; timestamp windows are bounded, never invented frame positions. */

@@ -7,13 +7,14 @@ import { visualInspection } from './visual-inspection';
 import { colorGrading } from './color-grading';
 import { sceneEngine } from './scene-engine';
 import { motionDesign } from './motion-design';
+import { referenceFootage } from './reference-footage';
 
 /** Format-specific instructions the assistant loads on demand with readSkill. */
 /** Long skills keep a short main body and load deeper pages only when a job needs them. */
 export type EditorSkillPage = { name: string; description: string; body: string };
 export type EditorSkill = { name: string; description: string; body: string; pages?: EditorSkillPage[] };
 
-export const EDITOR_SKILLS: EditorSkill[] = [effects, vfxRecipes, textStyling, colorGrading, sceneEngine, explainerScenes, motionDesign, musicAndSound, visualInspection];
+export const EDITOR_SKILLS: EditorSkill[] = [effects, vfxRecipes, textStyling, colorGrading, sceneEngine, explainerScenes, motionDesign, referenceFootage, musicAndSound, visualInspection];
 export const EDITOR_SKILL_NAMES = EDITOR_SKILLS.map(skill => skill.name) as [string, ...string[]];
 
 /** The always-visible index: names and when to read each skill. */

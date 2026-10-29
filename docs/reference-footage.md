@@ -1,4 +1,4 @@
-# Reference footage (first draft, for approval)
+# Reference footage
 
 Drop any video into the editor chat (an edited video, raw footage, someone's launch film). The agent breaks it down shot by shot and part by part, then either **remakes** it or **borrows its style** for parts you point at ("this transition, this title style, this pacing").
 
@@ -102,8 +102,18 @@ The reference file never goes on the timeline. It stays in project media and is 
 4. Chat breakdown card with shot strip, part chips and composer tokens.
 5. Verify in the dev editor: drop a launch film, read the breakdown, run a remake and a single-part style borrow, check with `getFrames`.
 
-## Open questions
+## Decisions (from review)
 
-- **🫡** What should the salute emoji mean here? My guess is the agent's short acknowledgement when it accepts a reference ("🫡 Got it: 9 shots, whip cuts on downbeats, blur-in titles."). Or do you mean emoji/sticker parts inside a shot should be detected and rebuilt?
-- Remake with no footage: build every shot as a scene (needs a brand kit), or ask first?
-- Card: is a shot strip with part chips the right way to point, or would you rather mark moments by scrubbing the reference in the main preview?
+- No salute emoji. It was not part of this feature.
+- A remake depends on what the reference is. References are already-edited videos (Instagram edits, motivation videos, brand launch films), so the breakdown classifies a genre and the `reference-footage` skill has a page for each: `social-edit` (the user's footage cut to their music on the reference's rhythm), `motivation` (the user's voice and footage, the reference's caption style and pacing), `launch-film` (motion-design scenes for the user's brand), plus `borrow` for single parts.
+- When a remake needs material the project does not have, the agent lists what each shot needs and asks.
+- Pointing at moments: the chat card's shot strip, part chips and "this moment" chip, plus plain words resolved by `inspectReference`.
+
+## As built
+
+- `lib/media-analysis/reference.ts`: keyframe sampling, prompt and schema, parsing, and rhythm measured from shots and beats.
+- `lib/media-analysis/gemini.ts` `breakDownReference`; `lib/server/media-task-runner.ts` `reference` task (shots, beats, keyframes, one Gemini pass).
+- Stored as `analysis.reference` (validated JSON) next to `shots` and `beats`.
+- Tools: `analyzeMedia` mode `reference`, `inspectReference`.
+- Skill: `lib/ai/skills/reference-footage.ts`.
+- Card: `components/editor/reference-card.tsx`.
