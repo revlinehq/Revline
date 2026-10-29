@@ -15,7 +15,7 @@ A launch film makes one product or one feature feel simple, real and worth tryin
 3. **Story** (\`story\`): pick the structure for the type.
 4. **Script** (\`script\`): write every on-screen word as one piece, in a voice that fits the brand; get it approved.
 5. **Style direction:** write the film's own direction (see below), drawing on the example directions and techniques.
-6. **Beat sheet, animatic, polish, sound, review** (\`process\`), following the \`craft\` rules. In the beat sheet, decide each shot's product UI: the kit's screenshot when the UI moves as a whole, its blueprint when something inside it moves (\`blueprints\`).
+6. **Beat sheet, animatic, polish, sound, review** (\`process\`), following the \`craft\` rules. In the beat sheet, plan each shot's product UI as real UI: always the kit's blueprint (\`blueprints\`), never a screenshot shown as the product. A screenshot appears only as what it is in the story (a file being dropped in, a thumbnail).
 7. **Feedback** at any point (\`techniques\`).
 
 ## Never speculate
@@ -40,7 +40,9 @@ How much to follow it:
 - One idea per shot. Headlines and UI almost never share a frame.
 - Type builds in place (word or letter reveals, typing, blur-in); it rarely slides across the screen.
 - Interaction is shown by typing in real time far more often than by a cursor.
-- Real product UI, cropped and magnified to the part that matters.
+- Real product UI, rebuilt and strictly close to the product: measure colors, positions and sizes from the screenshots (\`measureScreen\`), use the product's own icons and labels, and check the build side by side against the screenshot (\`compareScreen\`) before it goes in a shot. Build it once and reuse that one build in every shot, cropped and magnified to the part that matters.
+- Titles are small and calm, and their copy is creative and specific: each one says what the shot shows in a fresh way (for example "Every thread, in reach." over a sidebar of threads), never a generic slogan ("Just ask.", "It just gets it done."). Write three options for each title and keep the most specific one.
+- Keep the preview fast: once a part is done or hidden, take it out of the page (\`display: none\`, not only opacity 0), and never mount heavy UI where it can't be seen (a whole app inside a tiny thumbnail).
 - One accent color; status colors stay small.
 - The lockup is held 2 to 4.5 s on a calm frame, often ending on the mark alone.
 - Still holds are normal while something happens in the UI.
