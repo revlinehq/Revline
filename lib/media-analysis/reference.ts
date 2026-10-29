@@ -18,23 +18,25 @@ export const REFERENCE_CAMERA = ['static', 'push-in', 'pull-out', 'pan', 'tilt',
 export const REFERENCE_PARTS = ['background', 'footage', 'ui', 'title', 'caption', 'logo', 'product', 'person', 'cursor', 'shape', 'emoji', 'overlay', 'other'] as const;
 export const REFERENCE_SIGNATURES = ['transition', 'title', 'camera', 'pacing', 'look', 'effect'] as const;
 
-const text = (max: number) => z.string().trim().max(max);
+// Model text is trimmed to size, never rejected for running long.
+const text = (max: number) => z.string().transform(value => value.trim().slice(0, max));
+const list = <T extends z.ZodTypeAny>(item: T, max: number) => z.array(item).transform(items => items.slice(0, max));
 const oneOf = <T extends readonly [string, ...string[]]>(values: T) => z.string().transform(value => (values as readonly string[]).includes(value.trim().toLowerCase()) ? value.trim().toLowerCase() as T[number] : 'other' as T[number]);
 const box = z.object({ left: z.number().min(0).max(1), top: z.number().min(0).max(1), right: z.number().min(0).max(1), bottom: z.number().min(0).max(1) }).refine(value => value.right > value.left && value.bottom > value.top);
 const partSchema = z.object({ kind: oneOf(REFERENCE_PARTS), description: text(400), motion: text(300), box: box.optional().catch(undefined) });
 const titleSchema = z.object({ text: text(200), role: text(40), sizePercent: z.number().min(0).max(100).optional().catch(undefined), weight: text(40), letterCase: text(40), fontClass: text(60), position: text(80), enter: text(200), exit: text(200) });
 const shotSchema = z.object({
   id: z.string(), description: text(600),
-  transitionIn: z.object({ kind: oneOf(REFERENCE_TRANSITIONS), direction: text(20).optional(), seconds: z.number().min(0).max(5).optional().catch(undefined) }),
-  camera: z.object({ move: oneOf(REFERENCE_CAMERA), speed: text(40), ease: text(60) }),
-  look: z.object({ background: text(200), palette: z.array(z.string().regex(/^#[\da-f]{6}$/i)).max(6).catch([]), texture: text(120) }),
-  parts: z.array(partSchema).max(12), titles: z.array(titleSchema).max(6),
+  transitionIn: z.object({ kind: oneOf(REFERENCE_TRANSITIONS), direction: text(20).optional(), seconds: z.number().min(0).max(5).optional().catch(undefined) }).catch({ kind: 'cut' as const }),
+  camera: z.object({ move: oneOf(REFERENCE_CAMERA), speed: text(40).catch(''), ease: text(60).catch('') }).catch({ move: 'other' as const, speed: '', ease: '' }),
+  look: z.object({ background: text(200).catch(''), palette: z.array(z.string()).transform(colors => colors.map(color => color.trim()).filter(color => /^#[\da-f]{6}$/i.test(color)).slice(0, 6)).catch([]), texture: text(120).catch('') }).catch({ background: '', palette: [], texture: '' }),
+  parts: list(partSchema, 12).catch([]), titles: list(titleSchema, 6).catch([]),
 });
 const responseSchema = z.object({
   genre: oneOf(REFERENCE_GENRES), summary: text(1200), uncertainty: text(800),
-  shots: z.array(shotSchema).min(1).max(MAX_REFERENCE_SHOTS),
+  shots: list(shotSchema, MAX_REFERENCE_SHOTS),
   direction: z.object({ look: text(400), type: text(400), productUi: text(400), motion: text(400), pacing: text(400) }),
-  signatures: z.array(z.object({ kind: oneOf(REFERENCE_SIGNATURES), label: text(80), shotIds: z.array(z.string()).min(1).max(MAX_REFERENCE_SHOTS), recipe: text(500) })).max(8),
+  signatures: list(z.object({ kind: oneOf(REFERENCE_SIGNATURES), label: text(80), shotIds: z.array(z.string()), recipe: text(500) }), 8).catch([]),
 });
 
 export type ReferencePart = z.infer<typeof partSchema> & { id: string };
@@ -106,8 +108,12 @@ Report only what is visible or audible. Keep timings approximate and say so. On-
 /** Measured numbers come from the shot list and beat map; the model only labels them. */
 export function parseReference(textValue: string, detection: ShotDetection, duration: number, beats?: BeatMap): ReferenceBreakdown {
   let response: z.infer<typeof responseSchema>;
-  try { response = responseSchema.parse(JSON.parse(textValue)); }
-  catch { throw new AnalysisError('The reference breakdown could not be read. Please retry.', 502); }
+  let json: unknown;
+  try { json = JSON.parse(textValue); } catch { throw new AnalysisError('The reference breakdown was not valid JSON. Please retry.', 502); }
+  const parsed = responseSchema.safeParse(json);
+  // Field paths only; never the provider's text.
+  if (!parsed.success) { console.warn('[media-analysis] Reference breakdown rejected', parsed.error.issues.slice(0, 5).map(issue => ({ path: issue.path.join('.'), code: issue.code }))); throw new AnalysisError('The reference breakdown could not be read. Please retry.', 502); }
+  response = parsed.data;
   const measured = detection.shots.slice(0, MAX_REFERENCE_SHOTS);
   const described = new Map(response.shots.map(shot => [shot.id.trim().toUpperCase(), shot]));
   const beatTimes = beats?.beats ?? [];

@@ -51,6 +51,7 @@ export function ReferenceCard({ view, media, onPick }: { view: ReferenceView; me
         {shot.transition !== 'cut' && chip(`${shot.id} transition`, `transition: ${shot.transition}`)}
         {shot.camera !== 'static' && shot.camera !== 'other' && chip(`${shot.id} camera`, `camera: ${shot.camera}`)}
         {shot.parts.map(part => chip(part))}
+        {!!shot.titles?.length && !shot.parts.some(part => part.startsWith(`${shot.id}.title`)) && chip(`${shot.id} title`, 'title')}
         {source && chip(`${view.shots[playing]?.id ?? shot.id} @ ${time.toFixed(1)}s`, 'this moment')}
       </div>
     </div>
