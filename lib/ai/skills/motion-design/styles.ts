@@ -1,15 +1,15 @@
-import type { EditorSkill, EditorSkillPage } from '../index';
+import type { EditorSkillPage } from '../index';
 import { STYLE_CARDS } from './cards';
 
 const cardsFor = (style: string) => STYLE_CARDS.filter(card => card.style === style).map(card => `\`${card.name}\` (${card.description.split('. ')[0]})`).join(', ');
 
-const styles: EditorSkillPage[] = [
+export const STYLE_PAGES: EditorSkillPage[] = [
   {
     name: 'dark-cinematic',
     description: 'Near-black stage, flat front-on UI as the only light; typed prompts in real time, blur reveals and dissolves, long holds, a quiet centered lockup. For serious, precise, developer and AI tools.',
     body: `# Dark cinematic
 
-Feels: focused, premium, serious. Cards: ${cardsFor('dark-cinematic')}.
+Personality: premium. Feels: focused, premium, serious. Cards: ${cardsFor('dark-cinematic')}.
 
 ## Look
 - Stage near-black (#000 to #181818) with a vignette. Surfaces #15171a to #262624, 1px borders a step lighter. Text #e3e4e6, muted #6b7076 to #8a8d92.
@@ -41,7 +41,7 @@ Feels: focused, premium, serious. Cards: ${cardsFor('dark-cinematic')}.
     description: 'The product UI on a tilted 3D plane in near-black space: shallow focus, slow camera drifts cut between setups, typed prompts, rows that decode in, a blur-in wordmark lockup. For flagship launches of serious software where the product itself should feel like an object.',
     body: `# Dimensional UI
 
-Feels: cinematic, precise, expensive; the software becomes a physical object you fly over. Card: ${cardsFor('dimensional-ui')} (read it for exact timings).
+Personality: premium. Feels: cinematic, precise, expensive; the software becomes a physical object you fly over. Card: ${cardsFor('dimensional-ui')} (read it for exact timings).
 
 ## Look
 - Pure black surround (#000) with a heavy vignette. UI surfaces #15171a to #1e2124, raised panels #24282c, 1px borders ~#2e3236. Text #e8e8e8, muted #6b7076.
@@ -79,7 +79,7 @@ Feels: cinematic, precise, expensive; the software becomes a physical object you
     description: 'Warm off-white or white canvas, headlines built in place word by word or letter by letter, real windows with soft shadows, one flat pastel per section, calm 1.5-3s beats. For friendly productivity and workspace products.',
     body: `# Warm editorial
 
-Feels: calm, clear, friendly, trustworthy. Cards: ${cardsFor('warm-editorial')}.
+Personality: corporate, calm end. Feels: calm, clear, friendly, trustworthy. Cards: ${cardsFor('warm-editorial')}.
 
 ## Look
 - One warm off-white for the film (#F6F5F1) or pure white text cards (#FFFFFF). Feature sections may sit on one flat pastel each (light blue #CFE3F5, peach #F9E7DD, butter #F8E3A8) or a soft diagonal gradient.
@@ -113,7 +113,7 @@ Feels: calm, clear, friendly, trustworthy. Cards: ${cardsFor('warm-editorial')}.
     description: 'Flat saturated color fields and black title cards, words cut on hard with a yellow flash, magnified UI with a giant cursor, 1-2s cuts, stepped or glitchy motion, logo built from shapes. For design tools, consumer and crypto brands, event keynotes.',
     body: `# Bold graphic
 
-Feels: energetic, crafted, playful, loud. Cards: ${cardsFor('bold-graphic')}.
+Personality: energetic, with playful moments. Feels: energetic, crafted, playful, loud. Cards: ${cardsFor('bold-graphic')}.
 
 ## Look
 - Black (#000) title cards between demo stages. Each feature owns one flat saturated background (lime, purple, orange, slate blue, forest) or a textured backdrop (painted grain, scanlined navy glass).
@@ -148,7 +148,7 @@ Feels: energetic, crafted, playful, loud. Cards: ${cardsFor('bold-graphic')}.
     description: 'White or light canvas, product first with few or no titles, instant component swaps, snappy cursor-following zooms or a fixed recording, beats of 3.5s or less. For data, API, agent and dashboard products where the working product is the pitch.',
     body: `# Crisp demo
 
-Feels: fast, practical, confident: "here it is working". Cards: ${cardsFor('crisp-demo')}.
+Personality: energetic. Feels: fast, practical, confident: "here it is working". Cards: ${cardsFor('crisp-demo')}.
 
 ## Look
 - White #fff or warm light grey (#f7f6f2 to #E7E5E0). One accent color (e.g. the brand orange) for the product name and key UI. Text #151515.
@@ -178,7 +178,7 @@ Feels: fast, practical, confident: "here it is working". Cards: ${cardsFor('cris
   },
 ];
 
-const TECHNIQUES: EditorSkillPage = {
+export const TECHNIQUES: EditorSkillPage = {
     name: 'techniques',
     description: 'Feedback and direction mapped to techniques the analysed films use, with the card to read for exact timings. Use when the user says what feels wrong or what they want more of.',
     body: `# Techniques by feedback
@@ -251,42 +251,3 @@ Find the user's words, read the named card, apply its recipe in the brand's font
 - Named multiplayer cursors drifting as ambient motion: \`card-figma-9940\`.
 - Stepped 12 fps motion for a hand-made feel: \`card-figma-3230\`.`,
   };
-
-export const launchStyles: EditorSkill = {
-  name: 'launch-styles',
-  description: 'Style guidance for launch and feature films, from 14 recent launch films analysed frame by frame (Linear, Notion, Figma, ElevenLabs, Firecrawl, Base, Motion, Okara). Read before the beat sheet, and again whenever the user gives design feedback or direction ("more premium", "transitions feel cheap", "like Linear"): look up how these films solved it instead of guessing. Pages: five styles, a technique index, and each film\'s card.',
-  body: `# Launch styles
-
-Styles come from measured launch films, not taste. Each style page gives look, type, UI treatment, motion and pacing; each card page describes one real film in detail, with durations and eases.
-
-## Three ways to use this library
-1. **No styling from the user: default.** Pick a style below and follow it.
-2. **Vague or partial direction, or feedback** ("more premium", "snappier", "the ending is weak", "more depth"): open the \`techniques\` page, find how the films solved it, read the named card, and apply that technique. Tell the user which film the technique comes from ("using Linear's blur-in lockup") so they can say yes or no.
-3. **Exact direction** (they describe precisely what they want): do exactly that. Use the library only for what they left open (durations, eases, holds). Never override the user with the library.
-
-Mixing: keep one base style for the whole film; borrow single techniques from other styles when feedback calls for them.
-
-## Choosing a default
-1. User named a reference film or brand: use the matching card page (or the closest one) and its style page.
-2. Otherwise match the confirmed brand tone and product:
-   - Serious, precise, developer or AI tool, dark brand: \`dark-cinematic\` (flat UI, feature films) or \`dimensional-ui\` (UI as a tilted 3D object, flagship launches).
-   - Friendly workspace or productivity, light brand: \`warm-editorial\`.
-   - Design, creative, consumer, crypto, keynote energy: \`bold-graphic\`.
-   - API, data, agents, dashboards, "see it work": \`crisp-demo\`.
-3. Say which style you picked and why in one line in the beat sheet. The brand kit's fonts and colors replace the style's example values; the style decides structure, motion and pacing.
-4. Read the style page, then one or two of its cards for exact durations and eases.
-
-## What all 14 films share
-- One idea per shot. Headlines and UI almost never share a frame.
-- Type builds in place (word or letter reveals, typing, blur-in). It rarely slides across the screen.
-- Interaction is shown by typing in real time far more often than by a cursor.
-- Show the real product UI, cropped and magnified to the part that matters. No floating generic shapes standing in for the product.
-- One accent color. Status colors stay small.
-- The lockup is held: 2 to 4.5s on a calm frame, often the mark alone at the very end.
-- Cuts rarely land on musical beats (measured 0 to 30% of cuts). Music sets energy; the story sets the cuts. Put sound hits on reveals, not every cut.
-- Still holds are normal while something happens in the UI; a slow drift is optional, not required.
-
-## Do not copy
-Use a card for style only: never its copy, product, logo, characters or exact compositions.`,
-  pages: [...styles, TECHNIQUES, ...STYLE_CARDS.map(({ style: _style, ...card }) => card)],
-};

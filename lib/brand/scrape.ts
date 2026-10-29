@@ -10,6 +10,18 @@ const attr = (tag: string, name: string) => tag.match(new RegExp(`\\s${name}\\s*
 const meta = (html: string, key: string) => { for (const tag of html.match(/<meta\b[^>]*>/gi) ?? []) if ((attr(tag, 'name') ?? attr(tag, 'property'))?.toLowerCase() === key) return attr(tag, 'content'); };
 const absolute = (href: string, base: string) => { try { return new URL(decode(href), base).href; } catch { return undefined; } };
 
+/** The first whole <svg> element in html, nested <svg> children included. */
+export function firstSvg(html: string) {
+  const start = html.search(/<svg\b/i);
+  if (start < 0) return undefined;
+  const tags = /<svg\b|<\/svg\s*>/gi; tags.lastIndex = start;
+  let depth = 0;
+  for (let match = tags.exec(html); match; match = tags.exec(html)) {
+    depth += match[0][1] === '/' ? -1 : 1;
+    if (depth === 0) return html.slice(start, match.index + match[0].length);
+  }
+}
+
 /** Removes anything executable or external from an inline SVG and lets the scene size it. */
 export function cleanSvg(svg: string) {
   return svg.replace(/<script[\s\S]*?<\/script>/gi, '').replace(/<foreignObject[\s\S]*?<\/foreignObject>/gi, '').replace(/\son\w+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, '')
@@ -28,7 +40,7 @@ export function scanPage(html: string, baseUrl: string): PageScan {
   // The logo is usually the first SVG in the header or nav, or in a link home.
   const regions = [...html.matchAll(/<(header|nav)\b[\s\S]*?<\/\1>/gi)].map(match => match[0]);
   const homeLinks = [...html.matchAll(/<a\b[^>]*href=["'](?:\/|\.\/|https?:\/\/[^"']*\/?)["'][^>]*>[\s\S]*?<\/a>/gi)].map(match => match[0]);
-  const svg = [...regions, ...homeLinks].map(block => block.match(/<svg\b[\s\S]*?<\/svg>/i)?.[0]).find(found => found && found.length > 120 && found.length < BRAND_LIMITS.logo * 2);
+  const svg = [...regions, ...homeLinks].map(block => firstSvg(block)).find(found => found && found.length > 120 && found.length < BRAND_LIMITS.logo * 2);
   const images = (html.match(/<img\b[^>]*>/gi) ?? []).filter(tag => /logo|brand/i.test(`${attr(tag, 'src')} ${attr(tag, 'alt')} ${attr(tag, 'class')}`));
   const icons = links.filter(tag => /icon/i.test(attr(tag, 'rel') ?? '')).sort((a, b) => Number(/svg/i.test(attr(b, 'type') ?? attr(b, 'href') ?? '')) - Number(/svg/i.test(attr(a, 'type') ?? attr(a, 'href') ?? '')) || Number(/apple/i.test(attr(b, 'rel') ?? '')) - Number(/apple/i.test(attr(a, 'rel') ?? '')));
   const logoUrls = [...images.map(tag => attr(tag, 'src')), ...icons.map(tag => attr(tag, 'href'))].map(href => href && absolute(href, baseUrl)).filter((url): url is string => !!url && !url.startsWith('data:'));

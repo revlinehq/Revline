@@ -5,16 +5,15 @@ import { textStyling } from './text-styling';
 import { vfxRecipes } from './vfx-recipes';
 import { visualInspection } from './visual-inspection';
 import { colorGrading } from './color-grading';
-import { brandKit } from './brand-kit';
-import { launchFilms } from './launch-films';
-import { launchStyles } from './launch-styles';
+import { sceneEngine } from './scene-engine';
+import { motionDesign } from './motion-design';
 
 /** Format-specific instructions the assistant loads on demand with readSkill. */
 /** Long skills keep a short main body and load deeper pages only when a job needs them. */
 export type EditorSkillPage = { name: string; description: string; body: string };
 export type EditorSkill = { name: string; description: string; body: string; pages?: EditorSkillPage[] };
 
-export const EDITOR_SKILLS: EditorSkill[] = [effects, vfxRecipes, textStyling, colorGrading, explainerScenes, launchFilms, launchStyles, brandKit, musicAndSound, visualInspection];
+export const EDITOR_SKILLS: EditorSkill[] = [effects, vfxRecipes, textStyling, colorGrading, sceneEngine, explainerScenes, motionDesign, musicAndSound, visualInspection];
 export const EDITOR_SKILL_NAMES = EDITOR_SKILLS.map(skill => skill.name) as [string, ...string[]];
 
 /** The always-visible index: names and when to read each skill. */

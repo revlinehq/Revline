@@ -2,7 +2,7 @@ import type { ActionCtx } from '../_generated/server';
 import type { Id } from '../_generated/dataModel';
 import { internal } from '../_generated/api';
 import { BRAND_LIMITS, isBrandColor, type BrandColor, type BrandCopy, type BrandFontRole, type SceneBrand } from '../../lib/editor/brand-kit';
-import { cleanSvg, emptyCssScan, pickColors, pickFaces, pickFonts, scanCss, scanPage, type CssScan } from '../../lib/brand/scrape';
+import { cleanSvg, emptyCssScan, firstSvg, pickColors, pickFaces, pickFonts, scanCss, scanPage, type CssScan } from '../../lib/brand/scrape';
 
 /** Fetching a brand: the landing page, its CSS, its font files and logo. Font files go to storage. */
 const BROWSER = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36';
@@ -62,7 +62,7 @@ async function logoFrom(urls: string[], referer: string) {
   for (const url of urls.slice(0, 6)) {
     try {
       const file = await get(url, referer, 400_000);
-      if (/svg/i.test(file.type) || /\.svg(\?|$)/i.test(url)) { const svg = cleanSvg(text(file.data).match(/<svg\b[\s\S]*<\/svg>/i)?.[0] ?? ''); if (svg && svg.length <= BRAND_LIMITS.logo) return svg; continue; }
+      if (/svg/i.test(file.type) || /\.svg(\?|$)/i.test(url)) { const svg = cleanSvg(firstSvg(text(file.data)) ?? ''); if (svg && svg.length <= BRAND_LIMITS.logo) return svg; continue; }
       const kind = file.type.match(/image\/(png|jpeg|webp)/i)?.[1]?.toLowerCase();
       const encoded = kind ? `data:image/${kind};base64,${base64(file.data)}` : '';
       if (encoded && encoded.length <= BRAND_LIMITS.logo) return encoded;
