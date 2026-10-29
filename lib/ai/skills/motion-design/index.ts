@@ -41,7 +41,7 @@ How much to follow it:
 - Type builds in place (word or letter reveals, typing, blur-in); it rarely slides across the screen.
 - Interaction is shown by typing in real time far more often than by a cursor.
 - Real product UI, rebuilt and strictly close to the product: measure colors, positions and sizes from the screenshots (\`measureScreen\`), use the product's own icons and labels, and check the build side by side against the screenshot (\`compareScreen\`) before it goes in a shot. Build it once and reuse that one build in every shot, cropped and magnified to the part that matters.
-- Titles are small and calm, and their copy is creative and specific: each one says what the shot shows in a fresh way (for example "Every thread, in reach." over a sidebar of threads), never a generic slogan ("Just ask.", "It just gets it done."). Write three options for each title and keep the most specific one.
+- By default, titles are small and calm, and their copy is creative and specific (a default, not a rule: when the user asks for a different title style or size, follow them): each one says what the shot shows in a fresh way (for example "Every thread, in reach." over a sidebar of threads), never a generic slogan ("Just ask.", "It just gets it done."). Write three options for each title and keep the most specific one.
 - Keep the preview fast: once a part is done or hidden, take it out of the page (\`display: none\`, not only opacity 0), and never mount heavy UI where it can't be seen (a whole app inside a tiny thumbnail).
 - One accent color; status colors stay small.
 - The lockup is held 2 to 4.5 s on a calm frame, often ending on the mark alone.
