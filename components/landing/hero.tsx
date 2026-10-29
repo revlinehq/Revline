@@ -1,3 +1,5 @@
+import { LandingHeroDemo } from './hero-demo';
+import { LandingInstallAgents } from './install-agents';
 import { LandingStartButton } from './start-button';
 import { LandingReveal, LandingSection } from './ui';
 
@@ -8,8 +10,9 @@ export function LandingHero() {
       <LandingReveal as="p" order={1}>From podcasts and YouTube videos to product demos, ads, and social clips.{' '}<br />Revline cuts, captions, reframes, and polishes every video for you.</LandingReveal>
       <div className="landing-hero-actions">
         <LandingReveal order={2}><LandingStartButton /></LandingReveal>
+        <LandingReveal order={3}><LandingInstallAgents /></LandingReveal>
       </div>
     </div>
-    <div className="landing-product-frame"><img className="landing-product-window" src="/landing/product-window.webp" width={2560} height={1307} alt="The Revline editor with its conversation, preview, and timeline" fetchPriority="high" /></div>
+    <LandingHeroDemo />
   </LandingSection>;
 }
