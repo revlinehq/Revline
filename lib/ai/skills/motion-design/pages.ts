@@ -136,7 +136,7 @@ Film scale: full-screen 1080p, 30 fps. Three kinds of guidance: **Must** are rea
 - Slide offsets 3 to 8% of frame height (premium 2 to 3%, energetic 6 to 10%).
 
 ## Default: personality
-The style page names one; the brand's motion identity overrides it. Use one personality for about 90% of the film and borrow another only for a single moment.
+The film's style direction names one; the brand's motion identity overrides it. Use one personality for about 90% of the film and borrow another only for a single moment.
 
 | Personality | Short / medium / long | Signature ease | Overshoot | Entrance |
 |---|---|---|---|---|
@@ -195,10 +195,10 @@ export const processPage: EditorSkillPage = {
   description: 'Steps 5 to 9: beat sheet, animatic, feedback, polish, sound and review; plus building product UI without screenshots.',
   body: `# Process: approve before building
 
-1. **Beat sheet.** Built from the approved script. A table: time, music bar, what is on screen, on-screen words (from the script, unchanged), motion, sound. Name the style and why in one line. Send it and wait for approval or changes.
+1. **Beat sheet.** Built from the approved script. Start with the film's style direction (five lines) and the films it borrows from, then a table: time, music bar, what is on screen, on-screen words (from the script, unchanged), motion, sound. Send it and wait for approval or changes.
 2. **Animatic.** Rough scenes at the approved timing: grey boxes, plain text in the brand font, simple moves, with the music. Say it is rough; ask the user to watch story and pacing.
 3. **Feedback.** Whenever the user reacts ("feels cheap", "more energy", "the ending is weak"), read the techniques page, apply the matching technique, and say which film it comes from. Exact instructions from the user are followed as given.
-4. **Polish.** Replace each rough scene at the same timing with the finished one (editScene keeps timing). Attach the brand kit to every scene. Follow the style page and the craft page.
+4. **Polish.** Replace each rough scene at the same timing with the finished one (editScene keeps timing). Attach the brand kit to every scene. Follow the film's style direction and the craft page.
 5. **Music and sound.** Place the track first and mark its beats. Let the story set the cuts (top launch films land only 0 to 30% of cuts on beats); put key entrances and sound hits on accents and the peak on the drop. Then one generateSound per scene keyed to its motion, under the music (read music-and-sound).
 6. **Review.** getFrames at each beat and each scene's midpoint. Check that text is readable, nothing overlaps or clips, the brand fonts, colors and logo show, and the lockup holds. Fix before saying it is done; say what you checked.
 7. **Learn.** When the user approves a change in direction (a different ease, pacing, a technique), offer to save it: to the brand's motion identity with updateBrandKit, or to memory with remember. The next film for this brand starts from it.

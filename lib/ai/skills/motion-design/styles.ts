@@ -7,7 +7,9 @@ export const STYLE_PAGES: EditorSkillPage[] = [
   {
     name: 'dark-cinematic',
     description: 'Near-black stage, flat front-on UI as the only light; typed prompts in real time, blur reveals and dissolves, long holds, a quiet centered lockup. For serious, precise, developer and AI tools.',
-    body: `# Dark cinematic
+    body: `# Dark cinematic (example direction)
+
+An example of a coherent direction, measured from real films. Start from it, combine it with others, or depart from it when the brand or story calls for it.
 
 Personality: premium. Feels: focused, premium, serious. Cards: ${cardsFor('dark-cinematic')}.
 
@@ -39,7 +41,9 @@ Personality: premium. Feels: focused, premium, serious. Cards: ${cardsFor('dark-
   {
     name: 'dimensional-ui',
     description: 'The product UI on a tilted 3D plane in near-black space: shallow focus, slow camera drifts cut between setups, typed prompts, rows that decode in, a blur-in wordmark lockup. For flagship launches of serious software where the product itself should feel like an object.',
-    body: `# Dimensional UI
+    body: `# Dimensional UI (example direction)
+
+An example of a coherent direction, measured from real films. Start from it, combine it with others, or depart from it when the brand or story calls for it.
 
 Personality: premium. Feels: cinematic, precise, expensive; the software becomes a physical object you fly over. Card: ${cardsFor('dimensional-ui')} (read it for exact timings).
 
@@ -77,7 +81,9 @@ Personality: premium. Feels: cinematic, precise, expensive; the software becomes
   {
     name: 'warm-editorial',
     description: 'Warm off-white or white canvas, headlines built in place word by word or letter by letter, real windows with soft shadows, one flat pastel per section, calm 1.5-3s beats. For friendly productivity and workspace products.',
-    body: `# Warm editorial
+    body: `# Warm editorial (example direction)
+
+An example of a coherent direction, measured from real films. Start from it, combine it with others, or depart from it when the brand or story calls for it.
 
 Personality: corporate, calm end. Feels: calm, clear, friendly, trustworthy. Cards: ${cardsFor('warm-editorial')}.
 
@@ -111,7 +117,9 @@ Personality: corporate, calm end. Feels: calm, clear, friendly, trustworthy. Car
   {
     name: 'bold-graphic',
     description: 'Flat saturated color fields and black title cards, words cut on hard with a yellow flash, magnified UI with a giant cursor, 1-2s cuts, stepped or glitchy motion, logo built from shapes. For design tools, consumer and crypto brands, event keynotes.',
-    body: `# Bold graphic
+    body: `# Bold graphic (example direction)
+
+An example of a coherent direction, measured from real films. Start from it, combine it with others, or depart from it when the brand or story calls for it.
 
 Personality: energetic, with playful moments. Feels: energetic, crafted, playful, loud. Cards: ${cardsFor('bold-graphic')}.
 
@@ -146,7 +154,9 @@ Personality: energetic, with playful moments. Feels: energetic, crafted, playful
   {
     name: 'crisp-demo',
     description: 'White or light canvas, product first with few or no titles, instant component swaps, snappy cursor-following zooms or a fixed recording, beats of 3.5s or less. For data, API, agent and dashboard products where the working product is the pitch.',
-    body: `# Crisp demo
+    body: `# Crisp demo (example direction)
+
+An example of a coherent direction, measured from real films. Start from it, combine it with others, or depart from it when the brand or story calls for it.
 
 Personality: energetic. Feels: fast, practical, confident: "here it is working". Cards: ${cardsFor('crisp-demo')}.
 

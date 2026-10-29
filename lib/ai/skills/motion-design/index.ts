@@ -5,7 +5,7 @@ import { brandPage, craftPage, intakePage, processPage, scriptPage, storyPage } 
 
 export const motionDesign: EditorSkill = {
   name: 'motion-design',
-  description: 'Launch and feature films made from scratch (motion design, no footage needed): the ordered workflow from brand kit to finished film, with pages for brand, intake, story, styles from 14 analysed launch films, techniques by feedback, motion craft, and process. Read before any launch, announcement, teaser or feature video, and again on design feedback. Explainers and overlays on footage use explainer-scenes. Scenes themselves: scene-engine.',
+  description: 'Launch and feature films made from scratch (motion design, no footage needed): the ordered workflow from brand kit to finished film, with pages for brand, intake, story, script, example style directions and film cards from 14 analysed launch films, techniques by feedback, motion craft, and process. Read before any launch, announcement, teaser or feature video, and again on design feedback. Explainers and overlays on footage use explainer-scenes. Scenes themselves: scene-engine.',
   body: `# Motion design: launch and feature films
 
 A launch film makes one product or one feature feel simple, real and worth trying, in 15 to 60 seconds. Scenes are built with the scene engine (read scene-engine). Work through the steps in order; each names the page to load with readSkill name "motion-design" and page.
@@ -15,28 +15,27 @@ A launch film makes one product or one feature feel simple, real and worth tryin
 2. **Intake** (\`intake\`): type, format, length, platform, reference, music.
 3. **Story** (\`story\`): pick the structure for the type.
 4. **Script** (\`script\`): write every on-screen word as one piece in the brand voice; get it approved.
-5. **Style:** pick a style below; read its page and one or two of its cards. Propose the brand's motion identity (\`brand-kit\`).
+5. **Style direction:** write the film's own direction (see below), drawing on the films and example directions. Propose the brand's motion identity (\`brand-kit\`).
 6. **Beat sheet, animatic, polish, sound, review** (\`process\`), using \`craft\` for timing and easing.
 7. **Feedback** at any point (\`techniques\`).
 
 ## Never speculate
 Every fact on screen comes from the confirmed brand context or the user: names, features, numbers, claims, prices, dates, availability, the URL. Missing? Ask. Never invent a statistic, customer, feature or UI the product does not have.
 
-## How much to follow the library
-The styles, cards and techniques come from measured launch films. They are a strong starting point, not a rulebook:
-- **No styling from the user:** pick a style and follow it.
-- **Vague direction or feedback** ("more premium", "snappier", "the ending is weak"): find it on \`techniques\`, read the named card, apply it, and say which film it comes from so the user can accept or refuse.
-- **Exact direction:** do exactly that. Use the library only for what the user left open (durations, eases, holds). Never override the user.
-- You may deviate from a style or default when the brand, the content or the user calls for it; say what you changed and why. Keep one base style; borrow single techniques from others.
+## Style direction
+There are no presets. Each film gets its own short direction, fitted to the brand and the story, in five lines: **look** (canvas, palette use, texture), **type** (how words enter and hold), **product UI** (how it is framed and shown), **motion** (personality, signature ease, camera), **pacing** (shot lengths, holds, cutting). Put it at the top of the beat sheet with the films it borrows from.
 
-## Choosing a style
-1. The user named a reference film or brand: the matching card and its style.
-2. Otherwise match the confirmed tone and product:
-   - Serious, precise, developer or AI tool, dark brand: \`dark-cinematic\` (flat UI, feature films) or \`dimensional-ui\` (the UI as a tilted 3D object, flagship launches).
-   - Friendly workspace or productivity, light brand: \`warm-editorial\`.
-   - Design, creative, consumer, crypto, keynote energy: \`bold-graphic\`.
-   - API, data, agents, dashboards, "see it work": \`crisp-demo\`.
-3. The brand kit's fonts and colors replace the style's example values; the style decides look, motion and pacing.
+Build it from the library, which is knowledge, not a menu:
+- The **example directions** (\`dark-cinematic\`, \`dimensional-ui\`, \`warm-editorial\`, \`bold-graphic\`, \`crisp-demo\`) show what a coherent direction looks like and which films share it. Start from the closest one, or combine them.
+- The **film cards** give exact durations, eases and recipes for any single technique.
+- The **techniques** page maps feedback to the films that solve it.
+
+How much to follow it:
+- **Exact direction from the user:** do exactly that; use the library only for what they left open (durations, eases, holds). Never override the user.
+- **A reference** ("like Linear", a film they like): the matching card leads the direction.
+- **Vague direction or feedback** ("more premium", "snappier", "the ending is weak"): find it on \`techniques\`, apply the technique, and say which film it comes from so the user can accept or refuse.
+- **Nothing given:** choose from the brand's tone and product, e.g. a serious dark developer tool leans toward the dark or dimensional examples, a friendly light workspace toward warm-editorial, a creative or consumer brand toward bold-graphic, a data or agent product toward crisp-demo.
+- Keep the direction consistent across the film; borrow single moments from elsewhere on purpose. The brand kit's fonts, colors and motion identity always win over example values.
 
 ## What all 14 films share
 - One idea per shot. Headlines and UI almost never share a frame.
