@@ -9,7 +9,7 @@ export type SceneMedia = { name: string; assetId: string };
 export type SceneBlueprint = { name: string; code: string };
 export type SceneSource = { title: string; code: string; brand?: SceneBrand; media?: SceneMedia[]; blueprints?: SceneBlueprint[] };
 export const SCENE_MEDIA_LIMIT = 8, SCENE_BLUEPRINT_LIMIT = 4;
-export const SCENE_LIMITS = { title: 80, code: 20_000 } as const;
+export const SCENE_LIMITS = { title: 80, code: 40_000 } as const;
 
 export function validateScene(clip: Pick<Clip, 'kind' | 'scene' | 'assetId'>) {
   if (clip.kind !== 'scene') { if (clip.scene) throw new Error('Only scene clips can hold scene code.'); return; }
