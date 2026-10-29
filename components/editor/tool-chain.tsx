@@ -1,7 +1,7 @@
 'use client';
 
 import { Fragment, useEffect, useState } from 'react';
-import { AlertTriangle, Check, CircleCheck, CircleStop, LoaderCircle, Minus } from 'lucide-react';
+import { AlertTriangle, Brain, Check, CircleCheck, CircleStop, LoaderCircle, Minus } from 'lucide-react';
 import { Trace, TraceCollapsible, TraceCollapsibleContent, TraceCollapsibleTrigger, TraceDescription, TraceIcon, TraceLine, TraceTitle } from '@/components/ui/trace';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { READ_ONLY_TOOLS, toolImages, type ChatTool } from './assistant-results';
@@ -96,6 +96,22 @@ export function ToolChain({ steps: saved, active = false }: { steps: ChatTool[];
           </TraceLine>{row.images.length > 0 && <StepImages images={row.images}/>}</Fragment>;
         })}
       </Trace>
+    </TraceCollapsibleContent>
+  </TraceCollapsible>;
+}
+
+/** The model's summarized thinking, folded into one row like the steps; open it to read all of it. */
+export function ThinkingBlock({ text, active }: { text: string; active: boolean }) {
+  const [open, setOpen] = useState(false);
+  return <TraceCollapsible className="tool-chain thinking-block" open={open} onOpenChange={setOpen}>
+    <TraceCollapsibleTrigger>
+      <TraceLine status={active ? 'running' : undefined}>
+        <TraceIcon className="text-muted-foreground"><Brain/></TraceIcon>
+        <TraceTitle className="font-medium text-foreground">{active ? 'Thinking' : 'Thought'}</TraceTitle>
+      </TraceLine>
+    </TraceCollapsibleTrigger>
+    <TraceCollapsibleContent>
+      <p className="thinking-text">{text}</p>
     </TraceCollapsibleContent>
   </TraceCollapsible>;
 }

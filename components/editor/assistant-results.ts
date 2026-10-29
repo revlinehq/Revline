@@ -5,7 +5,7 @@ import { unresolvedToolFailureIds } from '@/lib/ai/tool-failures';
 export type { TimelinePublicationReceipt } from '@/lib/ai/publication-receipt';
 
 export type ChatTool = { id?: string; name: string; state: 'running' | 'done' | 'error' | 'stopped'; detail?: string; staged?: boolean; input?: Record<string, unknown>; output?: Record<string, unknown> };
-export type ChatBlock = { type:'text'; text:string } | { type:'tools'; steps:ChatTool[] };
+export type ChatBlock = { type:'text'; text:string } | { type:'tools'; steps:ChatTool[] } | { type:'thinking'; text:string };
 export type ChatMessage = { id:string;sourceId?:string;threadId?:string;role:string;text:string;status?:string;tools?:string[];steps?:ChatTool[];blocks?:ChatBlock[];thinking?:string;publicationReceipt?:TimelinePublicationReceipt };
 export type ResultCard = { key: string; title: string; detail?: string; state: ChatTool['state']; staged?: boolean };
 export const chatMessageKey = (message: { id: string; key?: string }) => message.key ?? message.id;
@@ -47,13 +47,15 @@ export function chatMessageFromUI(message:{id:string;key?:string;threadId?:strin
   for(const part of message.parts){
     const step=chatToolFromPart(part),last=blocks.at(-1);
     if(step){if(last?.type==='tools')last.steps.push(step);else blocks.push({type:'tools',steps:[step]});continue;}
+    // Claude's summarized thinking, kept in order so the chat can fold it into a Thinking row.
+    if(record(part)?.type==='reasoning'){const thought=String(record(part)?.text??'').trim();if(thought){if(last?.type==='thinking')last.text+=`\n\n${thought}`;else blocks.push({type:'thinking',text:thought});}continue;}
     const text=record(part)?.type==='text'?String(record(part)?.text??''):'';
     if(!text.trim())continue;
     if(last?.type==='text')last.text+=`\n\n${text}`;else blocks.push({type:'text',text});
   }
   // The latest thought summary, shown as the live status while a step is still thinking.
-  const lastPart=record(message.parts.at(-1)),thought=lastPart?.type==='reasoning'?String(lastPart.text??'').trim().split(/\n+/).filter(Boolean).at(-1):undefined;
-  return {id:chatMessageKey(message),sourceId:message.id,...(thought?{thinking:thought.replace(/[*_#`]/g,'').slice(0,140)}:{}),threadId:message.threadId,role:message.role,status:message.status,blocks,text:message.parts.filter(part=>record(part)?.type==='text').map(part=>String(record(part)?.text??'')).join('\n\n'),steps:message.parts.flatMap(part=>{const step=chatToolFromPart(part);return step?[step]:[];}),...(publicationReceipt?{publicationReceipt}:{})};
+  const lastPart=record(message.parts.at(-1)),thought=lastPart?.type==='reasoning'?String(lastPart.text??'').replace(/[*_#`]/g,'').trim().split(/\n+/).filter(Boolean).slice(-3).join('\n'):undefined;
+  return {id:chatMessageKey(message),sourceId:message.id,...(thought?{thinking:thought.length>360?thought.slice(-360).replace(/^\S*\s+/,'…'):thought}:{}),threadId:message.threadId,role:message.role,status:message.status,blocks,text:message.parts.filter(part=>record(part)?.type==='text').map(part=>String(record(part)?.text??'')).join('\n\n'),steps:message.parts.flatMap(part=>{const step=chatToolFromPart(part);return step?[step]:[];}),...(publicationReceipt?{publicationReceipt}:{})};
 }
 
 /** The receipt stays with its original request, including a paginated partial turn. */

@@ -41,6 +41,6 @@ export function AssistantActivity({ label, detail, state = 'working', startedAt,
       <TraceTitle className="font-medium">{title}</TraceTitle>
       {SHOW_ELAPSED && state === 'working' && <TraceDescription><Elapsed startedAt={startedAt}/></TraceDescription>}
     </TraceLine>
-    {detail && <p className="pl-6 text-xs text-muted-foreground">{detail}</p>}
+    {detail && <p className="pl-6 text-xs text-muted-foreground whitespace-pre-line line-clamp-3">{detail}</p>}
   </Trace>;
 }
