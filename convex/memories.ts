@@ -1,7 +1,6 @@
 import { ConvexError, v } from 'convex/values';
-import { internalMutation, internalQuery, mutation, query, type MutationCtx, type QueryCtx } from './_generated/server';
+import { internalMutation, internalQuery, type MutationCtx, type QueryCtx } from './_generated/server';
 import type { Doc, Id } from './_generated/dataModel';
-import { requireOwner } from './lib/auth';
 import { projectRun } from './lib/project_data';
 
 /**
@@ -91,35 +90,3 @@ export async function deleteProjectMemories(ctx: MutationCtx, ownerId: string, p
   const rows = await ctx.db.query('agentMemories').withIndex('by_owner_project', q => q.eq('ownerId', ownerId).eq('projectId', projectId)).take(MAX_PROJECT_MEMORIES + 5);
   for (const row of rows) await ctx.db.delete(row._id);
 }
-
-/** The Personal kit page: everything the AI remembers about the signed-in user. */
-export const list = query({ args: {}, returns: v.array(v.object({ memoryId: v.id('agentMemories'), kind, topic: v.optional(topic), name: v.optional(v.string()), text: v.string(), recipe: v.optional(v.string()), project: v.optional(v.string()), uses: v.number() })), handler: async ctx => {
-  const ownerId = await requireOwner(ctx);
-  const rows = await ctx.db.query('agentMemories').withIndex('by_owner_project', q => q.eq('ownerId', ownerId)).take(500);
-  const items = await Promise.all(rows.map(async row => {
-    const project = row.projectId ? (await ctx.db.get(row.projectId))?.title : undefined;
-    return { memoryId: row._id, kind: row.kind ?? 'preference' as const, ...(row.topic ? { topic: row.topic } : {}), ...(row.name ? { name: row.name } : {}), text: row.text, ...(row.recipe ? { recipe: row.recipe } : {}), ...(project ? { project } : {}), uses: row.uses ?? 0, at: row.createdAt };
-  }));
-  return items.sort((a, b) => a.at - b.at).map(({ at: _at, ...item }) => item);
-}});
-/** A preference the user writes in their Personal kit; it applies to every project. */
-// topic is still accepted from older clients and ignored.
-export const add = mutation({ args: { text: v.string(), topic: v.optional(topic) }, returns: v.id('agentMemories'), handler: async (ctx, args) => {
-  const ownerId = await requireOwner(ctx), text = memoryText(args.text), now = Date.now();
-  const rows = await ctx.db.query('agentMemories').withIndex('by_owner_project', q => q.eq('ownerId', ownerId).eq('projectId', undefined)).take(MAX_USER_MEMORIES);
-  if (rows.length >= MAX_USER_MEMORIES) throw new ConvexError('Your kit is full. Remove something outdated first.');
-  return ctx.db.insert('agentMemories', { ownerId, kind: 'preference', text, uses: 0, createdAt: now, updatedAt: now });
-}});
-/** Rewrite a memory's text (and a style's name) from the Personal kit. */
-export const edit = mutation({ args: { memoryId: v.id('agentMemories'), text: v.string(), name: v.optional(v.string()) }, returns: v.null(), handler: async (ctx, args) => {
-  const ownerId = await requireOwner(ctx), row = await ctx.db.get(args.memoryId);
-  if (!row || row.ownerId !== ownerId) throw new ConvexError('Memory not found.');
-  const name = args.name?.trim().slice(0, 60);
-  await ctx.db.patch(row._id, { text: memoryText(args.text), ...(row.kind === 'style' && name ? { name } : {}), updatedAt: Date.now() });
-  return null;
-}});
-export const remove = mutation({ args: { memoryId: v.id('agentMemories') }, returns: v.null(), handler: async (ctx, args) => {
-  const ownerId = await requireOwner(ctx), row = await ctx.db.get(args.memoryId);
-  if (row && row.ownerId === ownerId) await ctx.db.delete(row._id);
-  return null;
-}});

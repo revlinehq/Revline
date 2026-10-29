@@ -9,7 +9,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useClerk, useUser } from '@clerk/nextjs';
 import { signOutToSignIn } from '@/lib/auth/sign-out';
 import { useConvexAuth, useQuery } from 'convex/react';
-import { Check, ChevronDown, CircleAlert, Copy, Database, Download, Film, History, LoaderCircle, LogOut, Palette, PanelsTopLeft, Pencil, Plus, Redo2, SlidersHorizontal, UserRound, Undo2 } from 'lucide-react';
+import { Check, ChevronDown, CircleAlert, Copy, Database, Download, Film, History, LoaderCircle, LogOut, Palette, PanelsTopLeft, Pencil, Plus, Redo2, UserRound, Undo2 } from 'lucide-react';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
 import { Brand } from './brand';
@@ -53,7 +53,7 @@ export function chatRecency(timestamp: number) {
 export interface WorkspaceNavProps {
   title?: string;
   editorHref?: string;
-  active?: 'chat' | 'chats' | 'profile' | 'storage' | 'brand-kits' | 'personal-kit';
+  active?: 'chat' | 'chats' | 'profile' | 'storage' | 'brand-kits';
   demo?: boolean;
   saving?: boolean;
   saveFailed?: boolean;
@@ -85,7 +85,7 @@ export function WorkspaceNav({ title = NEW_WORKSPACE_LABEL, editorHref, active =
   const [renameOpen, setRenameOpen] = useState(false);
   const [newTitle, setNewTitle] = useState(title);
   // Account pages sit under the workspace; they show where you are, not the chat menu.
-  const settingsPage = active === 'profile' || active === 'storage' || active === 'brand-kits' || active === 'personal-kit';
+  const settingsPage = active === 'profile' || active === 'storage' || active === 'brand-kits';
   const [renameBusy, setRenameBusy] = useState(false);
   const [renameError, setRenameError] = useState('');
   const [copiedId, setCopiedId] = useState(false);
@@ -150,7 +150,6 @@ export function WorkspaceNav({ title = NEW_WORKSPACE_LABEL, editorHref, active =
           <DropdownMenuItem asChild className="workspace-menu-item"><Link href="/profile" aria-current={active === 'profile' ? 'page' : undefined}><UserRound size={16} />Profile</Link></DropdownMenuItem>
           <DropdownMenuItem asChild className="workspace-menu-item"><Link href="/storage" aria-current={active === 'storage' ? 'page' : undefined}><Database size={16} />Cloud storage</Link></DropdownMenuItem>
           <DropdownMenuItem asChild className="workspace-menu-item"><Link href="/brand-kits" aria-current={active === 'brand-kits' ? 'page' : undefined}><Palette size={16} />Brand kits</Link></DropdownMenuItem>
-          <DropdownMenuItem asChild className="workspace-menu-item"><Link href="/personal-kit" aria-current={active === 'personal-kit' ? 'page' : undefined}><SlidersHorizontal size={16} />Personal kit</Link></DropdownMenuItem>
           <DropdownMenuSeparator className="workspace-menu-divider" />
           {isSignedIn ? <DropdownMenuItem className="workspace-menu-item" disabled={signingOut} onSelect={event => { event.preventDefault(); void signOut(); }}>{signingOut ? <LoaderCircle size={16} className="animate-spin" /> : <LogOut size={16} />}Sign out</DropdownMenuItem> : <DropdownMenuItem asChild className="workspace-menu-item"><Link href="/sign-in"><LogOut size={16} />Sign in</Link></DropdownMenuItem>}
           {accountError && <p className="workspace-inline-error" role="alert">{accountError}</p>}

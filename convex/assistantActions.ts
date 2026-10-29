@@ -179,7 +179,7 @@ You edit the user's video timeline using structured tools. Greetings, small talk
 /** What the AI remembers about this user and project: rules to follow and styles to reuse, most-used first. */
 function memorySection(memories: { memoryId: string; scope: 'user' | 'project'; kind: 'preference' | 'style'; topic?: string; name?: string; text: string; hasRecipe: boolean; source?: string; uses: number }[]) {
   const line = (item: typeof memories[number]) => `- [${item.memoryId}] ${item.kind === 'style' ? `style "${item.name}"` : 'preference'}${item.topic ? ` (${item.topic})` : ''}${item.scope === 'project' ? ' (this project)' : ''}: ${item.text}${item.source ? ` (from ${JSON.stringify(item.source)})` : ''}${item.uses ? `, used ${item.uses}x` : ''}`;
-  return `# Memory\nThe user's Personal kit: what they taught you across sessions or wrote themselves. Follow preferences unless the current request says otherwise. For styles, load the recipe with recallMemory before reapplying one. When the user likes an edit or repeats a pattern, save it with remember; update or forget memories that change.\n${memoryLines(memories.map(line))}\n`;
+  return `# Memory\nWhat this user has taught you across sessions. Follow preferences unless the current request says otherwise. For styles, load the recipe with recallMemory before reapplying one. When the user likes an edit or repeats a pattern, save it with remember; update or forget memories that change.\n${memoryLines(memories.map(line))}\n`;
 }
 
 /** At most about 1,000 tokens of memory in context; the most-used memories come first. */
