@@ -6,7 +6,7 @@ const cardsFor = (style: string) => STYLE_CARDS.filter(card => card.style === st
 const styles: EditorSkillPage[] = [
   {
     name: 'dark-cinematic',
-    description: 'Near-black stage, the product UI is the only light; typed prompts, blur and decode reveals, slow drifts, long holds, a quiet centered lockup. For serious, precise, developer and AI tools.',
+    description: 'Near-black stage, flat front-on UI as the only light; typed prompts in real time, blur reveals and dissolves, long holds, a quiet centered lockup. For serious, precise, developer and AI tools.',
     body: `# Dark cinematic
 
 Feels: focused, premium, serious. Cards: ${cardsFor('dark-cinematic')}.
@@ -21,9 +21,9 @@ Feels: focused, premium, serious. Cards: ${cardsFor('dark-cinematic')}.
 - Text enters by typing (10 to 18 chars/s, caret visible) or blur-in (blur 6 to 16px to 0, 0.35 to 0.5s, power2.out). Freshly typed characters may glow in the brand accent, then settle to white over ~0.5s.
 
 ## UI
-- Real-looking product UI, large and cropped to the area that matters.
-- Two treatments: flat and front-on with no camera moves (calm feature film), or on a tilted 3D plane (perspective ~1800px, rotateX ~45deg, rotateZ ~-15deg) with focus falloff and a slow drift (hero launch).
-- No cursor. Interaction is typing; generated content reveals row by row by decode (scrambled glyphs resolving, ~0.5s per row, stagger 0.25s) or blur-to-sharp (~0.8s, stagger 0.3s).
+- Real-looking product UI, flat and front-on, large and cropped to the area that matters. The camera barely moves; a thread scrolls or results drop in instead.
+- No cursor. Interaction is typing; results land by fading in with a slight blur (0.3 to 0.4s) or scale down from full-bleed into rounded cards on the dark stage (0.8s, expo.out).
+- For UI on a tilted 3D plane with focus falloff, use dimensional-ui instead.
 
 ## Pacing
 - Beats 3 to 8s. Typing plays in real time. Hard cuts between camera setups; no wipes.
@@ -35,6 +35,44 @@ Feels: focused, premium, serious. Cards: ${cardsFor('dark-cinematic')}.
 - Show the feature by doing it (typing, sending, results landing), never by describing it.
 - Hold long enough to read; this style never rushes.
 - End quietly: plain centered type, then the mark alone.`,
+  },
+  {
+    name: 'dimensional-ui',
+    description: 'The product UI on a tilted 3D plane in near-black space: shallow focus, slow camera drifts cut between setups, typed prompts, rows that decode in, a blur-in wordmark lockup. For flagship launches of serious software where the product itself should feel like an object.',
+    body: `# Dimensional UI
+
+Feels: cinematic, precise, expensive; the software becomes a physical object you fly over. Card: ${cardsFor('dimensional-ui')} (read it for exact timings).
+
+## Look
+- Pure black surround (#000) with a heavy vignette. UI surfaces #15171a to #1e2124, raised panels #24282c, 1px borders ~#2e3236. Text #e8e8e8, muted #6b7076.
+- Color only in tiny status icons and one accent on the lockup. No grain.
+- Shallow depth of field: only a diagonal band of the plane is sharp; near and far edges fall into blur and darkness.
+
+## The plane
+- Build the product UI as one large DOM panel (a full app window: sidebar, document, panels). Make it detailed and real: this style lives on fidelity.
+- Wrap it in a parent with perspective ~1800px and tilt it: rotateX ~45 to 55deg, rotateZ ~-12 to -20deg, so it recedes to the upper right.
+- Focus falloff: a mask gradient plus a blurred copy behind the sharp band, or blurred overlays at the near and far edges; then a radial vignette to black.
+
+## Camera
+- A setup is one framing of the plane: a corner, the composer, a list, a wide view. Each lasts ~3 to 8s.
+- Inside a setup the camera always drifts slowly: tween the plane's x, y (and z) by ~5 to 10% of the frame over the whole setup, ease none.
+- Change setups with hard cuts to a new plane transform. No wipes, no whip pans. One wide shot shows the whole app small in frame.
+
+## Content
+- Interaction is typing in a composer: ~10 to 12 chars/s with a bar caret; a panel grows to make room (~0.6s, power2.out).
+- Generated content decodes: each row starts as scrambled glyphs and resolves over ~0.5s, rows stagger ~0.25s, top to bottom. Or blur-to-sharp: blur ~10px to 0 with opacity 0.3 to 1, ~0.8s, power2.out, stagger ~0.3s.
+- Diagrams draw in: lines scale from 0 (~0.4s, power2.out), labels brighten from grey to white in sequence.
+
+## Lockup
+- Black. Centered wordmark blurs in (blur 16px to 0, 0.5s, power2.out); an accent highlight sweeps across the letters (~1s, ease none); a short tagline wipes in left to right with a feathered mask (~0.7s).
+- Then a hard cut to the mark alone, held ~4s.
+
+## Rules
+- Never show the UI flat; always on the tilted plane with focus falloff.
+- The camera never stops drifting; angles change only with hard cuts.
+- Show work by typing and by content decoding in, not by cursors.
+- Hold each setup long enough to read (4 to 8s); the pace is even and unhurried.
+- Scenes are separate clips: keep the same plane build and tilt in every scene so cuts feel like one continuous world.`,
   },
   {
     name: 'warm-editorial',
@@ -142,7 +180,7 @@ Feels: fast, practical, confident: "here it is working". Cards: ${cardsFor('cris
 
 export const launchStyles: EditorSkill = {
   name: 'launch-styles',
-  description: 'Pick and apply a visual style for a launch or feature film, from a library built by analysing 14 recent launch films frame by frame (Linear, Notion, Figma, ElevenLabs, Firecrawl, Base, Motion, Okara). Read after launch-films, before the beat sheet. Pages hold each style and each film\'s card.',
+  description: 'Pick and apply a visual style for a launch or feature film, from a library built by analysing 14 recent launch films frame by frame (Linear, Notion, Figma, ElevenLabs, Firecrawl, Base, Motion, Okara). Read after launch-films, before the beat sheet. Pages hold each of the five styles and each film\'s card.',
   body: `# Launch styles
 
 Styles come from measured launch films, not taste. Each style page gives look, type, UI treatment, motion and pacing; each card page describes one real film in detail, with durations and eases.
@@ -150,7 +188,7 @@ Styles come from measured launch films, not taste. Each style page gives look, t
 ## Choosing
 1. User named a reference film or brand: use the matching card page (or the closest one) and its style page.
 2. Otherwise match the confirmed brand tone and product:
-   - Serious, precise, developer or AI tool, dark brand: \`dark-cinematic\`.
+   - Serious, precise, developer or AI tool, dark brand: \`dark-cinematic\` (flat UI, feature films) or \`dimensional-ui\` (UI as a tilted 3D object, flagship launches).
    - Friendly workspace or productivity, light brand: \`warm-editorial\`.
    - Design, creative, consumer, crypto, keynote energy: \`bold-graphic\`.
    - API, data, agents, dashboards, "see it work": \`crisp-demo\`.
