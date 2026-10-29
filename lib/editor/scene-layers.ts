@@ -1,6 +1,7 @@
 import { dimensions, trackOf, type Clip, type Timeline } from './types';
 import { TEXT_FONTS } from './text-fonts';
 import { validateSceneBrand, type SceneBrand } from './brand-kit';
+import { REACT_SCENE_PATTERN } from './scene-modules';
 
 /** A TypeScript module that builds HTML once and animates it on a GSAP timeline; the composition seeks it to clip-local time. */
 /** A project image a scene uses, by the name its code reads from `media`. */
@@ -60,8 +61,12 @@ export function sceneRuntimeScript(sources: SceneLayerSource[], fonts: SceneFont
   return `(function(initial,fonts,runtimeUrl,mediaUrls,fileUrls){
 var host=window,clock=host.__timelines.revline.__hfReal||host.__timelines.revline,composition=document.getElementById('composition'),entries=new Map(),fontData=new Map(),unregister;
 var virtual=host.__HF_VIRTUAL_TIME__,later=virtual&&virtual.originalSetTimeout?virtual.originalSetTimeout:setTimeout.bind(window),nextFrame=virtual&&virtual.originalRequestAnimationFrame?virtual.originalRequestAnimationFrame:requestAnimationFrame.bind(window);
-var runtimeSource=null,iconSource=null,overscan=16;
-function runtimeScript(){if(!runtimeSource)runtimeSource=fetch(new URL(runtimeUrl,document.baseURI).href).then(function(response){if(!response.ok)throw new Error('The scene renderer could not load.');return response.text();}).then(function(text){return text.replace(/<\\/script/gi,'<\\\\/script');});return runtimeSource;}
+var runtimeSource=null,reactSource=null,iconSource=null,overscan=16;
+function vendorScript(url,what){return fetch(url).then(function(response){if(!response.ok)throw new Error('The '+what+' could not load.');return response.text();}).then(function(text){return text.replace(/<\\/script/gi,'<\\\\/script');});}
+function runtimeScript(){if(!runtimeSource)runtimeSource=vendorScript(new URL(runtimeUrl,document.baseURI).href,'scene renderer');return runtimeSource;}
+// React scenes (opt-in: they import from 'revline') also get React and the scene adapter, loaded once per composition.
+function isReact(source){return /${REACT_SCENE_PATTERN.source}/.test(source.code);}
+function reactScript(){if(!reactSource)reactSource=vendorScript(new URL('scene-react.js',new URL(runtimeUrl,document.baseURI)).href,'React scene renderer');return reactSource;}
 var anchor=document.createElement('span');anchor.dataset.sceneFrameSource='';anchor.style.cssText='position:absolute;width:0;height:0;pointer-events:none';composition.appendChild(anchor);
 function report(entry,message){var error=new Error('Scene "'+entry.source.title+'": '+message);entry.error=error;window.dispatchEvent(new ErrorEvent('error',{error:error,message:error.message}));}
 function inner(){var layers=composition.querySelectorAll('.adjustment-layer');for(var i=0;i<layers.length;i++)if(!layers[i].querySelector('.adjustment-layer'))return layers[i];return composition;}
@@ -72,7 +77,7 @@ function file(url){if(!mediaData.has(url))mediaData.set(url,fetch(new URL(url,do
 function wantedMedia(source){var screens=(source.brand&&source.brand.screens||[]).map(function(item){return {name:item.name,url:fileUrls[item.url]||item.url};});var media=(source.media||[]).map(function(item){return {name:item.name,url:mediaUrls[item.assetId]};});return Promise.all(screens.concat(media).map(function(item){return item.url?file(item.url).then(function(found){return found&&{name:item.name,type:found.type,data:found.data};}):Promise.resolve(null);})).then(function(list){return list.filter(Boolean);});}
 function wantedIcons(source){/* Every quoted kebab-case name that is a Lucide icon, so wrappers like ic('x') or icon(name) work too; blueprints count. */var names=[],pattern=/['"\`]([a-z0-9]+(?:-[a-z0-9]+)*)['"\`]/g,match,code=[source.code].concat((source.blueprints||[]).map(function(item){return item.code;})).join('\\n');while((match=pattern.exec(code)))if(names.indexOf(match[1])<0)names.push(match[1]);if(!names.length)return Promise.resolve({});if(!iconSource)iconSource=fetch(new URL('lucide-icons.json',new URL(runtimeUrl,document.baseURI)).href).then(function(response){if(!response.ok)throw new Error('icons');return response.json();}).catch(function(){iconSource=null;return {};});return iconSource.then(function(all){var picked={};names.forEach(function(name){if(all[name]!==undefined)picked[name]=all[name];});return picked;});}
 function wantedFonts(source){var list=fonts.filter(function(item){return item.family==='Space Grotesk'||source.code.indexOf(item.family)>=0;}).concat(source.brand?source.brand.fonts:[]);return Promise.all(list.map(font)).then(function(list){return list.filter(Boolean);});}
-function frameDocument(source,script){return '<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src \\'none\\'; script-src \\'unsafe-inline\\' \\'unsafe-eval\\'; style-src \\'unsafe-inline\\'; img-src data: blob:; media-src data: blob:; font-src data: blob:"><style>html,body{margin:0;width:'+(source.width+overscan*2)+'px;height:'+(source.height+overscan*2)+'px;overflow:hidden;background:transparent}body{font-family:\\'Space Grotesk\\',Arial,sans-serif;color:#F4F4F0;-webkit-font-smoothing:antialiased}#scene-root{position:absolute;left:'+overscan+'px;top:'+overscan+'px;width:'+source.width+'px;height:'+source.height+'px;overflow:hidden}</style></head><body><div id="scene-root"></div><script>'+script+'</'+'script></body></html>';}
+function frameDocument(source,script,react){return '<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src \\'none\\'; script-src \\'unsafe-inline\\' \\'unsafe-eval\\'; style-src \\'unsafe-inline\\'; img-src data: blob:; media-src data: blob:; font-src data: blob:"><style>html,body{margin:0;width:'+(source.width+overscan*2)+'px;height:'+(source.height+overscan*2)+'px;overflow:hidden;background:transparent}body{font-family:\\'Space Grotesk\\',Arial,sans-serif;color:#F4F4F0;-webkit-font-smoothing:antialiased}#scene-root{position:absolute;left:'+overscan+'px;top:'+overscan+'px;width:'+source.width+'px;height:'+source.height+'px;overflow:hidden}</style></head><body><div id="scene-root"></div>'+(react?'<script>'+react+'</'+'script>':'')+'<script>'+script+'</'+'script></body></html>';}
 function send(entry,message){if(entry.frame.contentWindow)entry.frame.contentWindow.postMessage(Object.assign({source:'revline-scene-host'},message),'*');}
 function mount(source){
   var key=JSON.stringify([source.code,source.brand||null,source.media||null,source.blueprints||null,source.width,source.height,source.fps,source.duration]),entry=entries.get(source.clipId);
@@ -86,7 +91,7 @@ function mount(source){
     var frame=document.createElement('iframe');frame.className='scene-frame';frame.setAttribute('sandbox','allow-scripts');frame.setAttribute('tabindex','-1');frame.setAttribute('aria-hidden','true');
     entry={node:node,frame:frame,key:key,source:source,seq:0,waiters:new Map(),compiled:false,error:null};
     var current=entry;current.ready=new Promise(function(resolve){current.resolve=resolve;});
-    node.appendChild(frame);runtimeScript().then(function(script){if(entries.get(source.clipId)===current)frame.srcdoc=frameDocument(source,script);},function(error){report(current,error.message);current.resolve();});
+    node.appendChild(frame);Promise.all([runtimeScript(),isReact(source)?reactScript():'']).then(function(scripts){if(entries.get(source.clipId)===current)frame.srcdoc=frameDocument(source,scripts[0],scripts[1]);},function(error){report(current,error.message);current.resolve();});
   }
   entry.source=source;entry.frame.style.width=(source.width+overscan*2)+'px';entry.frame.style.height=(source.height+overscan*2)+'px';entry.frame.style.left=entry.frame.style.top=(-overscan*source.scale)+'px';entry.frame.style.transform='scale('+source.scale+')';
   entries.set(source.clipId,entry);

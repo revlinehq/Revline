@@ -15,7 +15,9 @@ import { MorphSVGPlugin } from 'gsap/MorphSVGPlugin';
 import { MotionPathPlugin } from 'gsap/MotionPathPlugin';
 import { ScrambleTextPlugin } from 'gsap/ScrambleTextPlugin';
 import { TextPlugin } from 'gsap/TextPlugin';
-import { SCENE_GSAP_PLUGINS, type SceneGsapPlugin } from './scene-modules';
+import { isReactScene, SCENE_GSAP_PLUGINS, sceneTransformOptions, type SceneGsapPlugin } from './scene-modules';
+import type { FrameAdapter } from '@hyperframes/core';
+import type * as SceneReact from './scene-react-runtime';
 import { sceneBrandContext, type SceneBrand, type SceneBrandContext } from './brand-kit';
 
 type Init = { type: 'init'; code: string; brand: SceneBrand | null; media?: { name: string; type: string; data: ArrayBuffer }[]; icons?: Record<string, string>; blueprints?: { name: string; code: string }[]; width: number; height: number; fps: number; duration: number; fonts: { family: string; weight: string; data: ArrayBuffer }[] };
@@ -44,14 +46,20 @@ function iconFactory(icons: Record<string, string>) {
 
 function post(message: Record<string, unknown>) { window.parent.postMessage({ source: 'revline-scene', ...message }, '*'); }
 
-/** Compile a scene module. It may import only gsap and its bundled plugins. */
+/** The React scene runtime, present only in frames whose scene imports 'revline' (see scene-react-runtime). */
+const sceneReact = () => (window as unknown as { __revlineSceneReact?: typeof SceneReact }).__revlineSceneReact;
+
+/** Compile a scene module. GSAP scenes import only gsap and its plugins; React scenes also revline and react. */
 export function compileScene(code: string): (context: SceneContext) => unknown {
-  const compiled = transform(code, { transforms: ['typescript', 'imports'], production: true }).code;
+  const react = isReactScene(code), runtime = react ? sceneReact() : undefined;
+  if (react && !runtime) throw new Error('The React scene runtime did not load.');
+  const compiled = transform(code, sceneTransformOptions(code)).code;
   const module = { exports: {} as Record<string, unknown> };
-  const require = (name: string) => { if (!(name in MODULES)) throw new Error(`Scenes can import only gsap and its plugins, not "${name}".`); return MODULES[name]; };
+  const modules: Record<string, unknown> = runtime ? { ...MODULES, ...runtime.modules } : MODULES;
+  const require = (name: string) => { if (!(name in modules)) throw new Error(react ? `React scenes can import only revline, react and gsap, not "${name}".` : `Scenes can import only gsap and its plugins, not "${name}".`); return modules[name]; };
   new Function('require', 'module', 'exports', compiled)(require, module, module.exports);
   const scene = module.exports.default;
-  if (typeof scene !== 'function') throw new Error('A scene must export default a function that builds it.');
+  if (typeof scene !== 'function') throw new Error(react ? 'A React scene must export default its component.' : 'A scene must export default a function that builds it.');
   return scene as (context: SceneContext) => unknown;
 }
 
@@ -72,7 +80,8 @@ function syncVideos(time: number, fps: number) {
 
 if (typeof window !== 'undefined' && window.parent !== window) {
   const root = document.getElementById('scene-root')!;
-  let master: gsap.core.Timeline | null = null, origin = 0, failed = false, fps = 30;
+  // A GSAP scene seeks one master timeline; a React scene seeks its frame adapter.
+  let master: gsap.core.Timeline | null = null, adapter: (FrameAdapter & { settle(): Promise<void> }) | null = null, origin = 0, failed = false, fps = 30;
   const fail = (message: string) => { if (failed) return; failed = true; post({ type: 'error', message }); };
   // Math.random would differ between preview and export; seed it before the scene builds.
   let state = 1;
@@ -100,6 +109,11 @@ if (typeof window !== 'undefined' && window.parent !== window) {
       void compileScene(found.code)({ root: host, tl: gsap.timeline(), gsap, width, height, duration: data.duration, fps: data.fps, brand, media, icon, blueprint });
       return host;
     };
+    if (isReactScene(data.code)) {
+      adapter = sceneReact()!.createReactSceneAdapter({ root, Scene: scene as never, width: data.width, height: data.height, duration: data.duration, fps: data.fps, brand, media, icons: data.icons ?? {}, blueprint, parseEase: name => gsap.parseEase(name) as (progress: number) => number });
+      await adapter.init?.({ compositionId: 'revline-scene', fps: data.fps, width: data.width, height: data.height, rootElement: root });
+      return;
+    }
     await scene({ root, tl: gsap.timeline(), gsap, width: data.width, height: data.height, duration: data.duration, fps: data.fps, brand, media, icon, blueprint });
     master = gsap.exportRoot({ paused: true });
     // gsap.set calls made while building land after the scene's timeline at the same start time,
@@ -114,9 +128,9 @@ if (typeof window !== 'undefined' && window.parent !== window) {
     if (data.type === 'init') {
       void build(data).then(() => post({ type: 'compiled' }), error => fail(error instanceof Error ? error.message : String(error)));
     } else if (data.type === 'seek') {
-      try { master?.seek(origin + data.time, false); } catch (error) { fail(error instanceof Error ? error.message : String(error)); }
+      try { if (adapter) void adapter.seekFrame(Math.round(data.time * fps)); else master?.seek(origin + data.time, false); } catch (error) { fail(error instanceof Error ? error.message : String(error)); }
       const images = Array.from(document.images).filter(image => !image.complete).map(image => image.decode().catch(() => undefined));
-      void Promise.all([document.fonts.ready, ...images, ...syncVideos(data.time, fps)]).then(() => post({ type: 'painted', seq: data.seq }));
+      void Promise.all([document.fonts.ready, ...images, ...syncVideos(data.time, fps), adapter?.settle()]).then(() => post({ type: 'painted', seq: data.seq }));
     }
   });
   post({ type: 'ready' });

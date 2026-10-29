@@ -25,6 +25,9 @@
     "paths": {
       "@/*": [
         "./*"
+      ],
+      "revline": [
+        "./lib/editor/scene-react-runtime.tsx"
       ]
     }
   },
