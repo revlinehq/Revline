@@ -5,7 +5,7 @@ import { ChevronDown } from 'lucide-react';
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuRadioGroup, DropdownMenuRadioItem } from '@/components/ui/dropdown-menu';
 import './inspector-select.css';
 
-type InspectorOption<Value extends string> = { value: Value; label: string; description?: string; icon?: ReactNode; style?: CSSProperties };
+type InspectorOption<Value extends string> = { value: Value; label: string; /** Shown on the closed menu instead of label. */ shortLabel?: string; description?: string; icon?: ReactNode; style?: CSSProperties };
 
 /** Inspector choices share the editor's accessible menu behavior. */
 export function InspectorSelect<Value extends string>({ label, value, options, onChange, disabled = false }: {
@@ -16,7 +16,7 @@ export function InspectorSelect<Value extends string>({ label, value, options, o
   onChange: (value: Value) => void;
 }) {
   const selected = options.find(option => option.value === value) ?? options[0];
-  return <DropdownMenu><DropdownMenuTrigger asChild><button type="button" className="inspector-select-trigger" aria-label={label} disabled={disabled}>{selected?.icon}<span className="inspector-select-value" style={selected?.style}>{selected?.label}</span><ChevronDown size={13}/></button></DropdownMenuTrigger>
+  return <DropdownMenu><DropdownMenuTrigger asChild><button type="button" className="inspector-select-trigger" aria-label={label} disabled={disabled}>{selected?.icon}<span className="inspector-select-value" style={selected?.style}>{selected?.shortLabel ?? selected?.label}</span><ChevronDown size={13}/></button></DropdownMenuTrigger>
     <DropdownMenuContent className="workspace-menu inspector-select-menu" aria-label={`${label} options`} sideOffset={5}>
       <DropdownMenuRadioGroup value={value} onValueChange={next => { const option = options.find(option => option.value === next); if (option) onChange(option.value); }}>
         {options.map(option => <DropdownMenuRadioItem key={option.value} value={option.value} data-value={option.value} className="workspace-menu-item inspector-select-option">{option.icon}<span className="inspector-select-option-copy"><span className="inspector-select-value" style={option.style}>{option.label}</span>{option.description && <small>{option.description}</small>}</span></DropdownMenuRadioItem>)}

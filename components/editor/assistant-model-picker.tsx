@@ -15,7 +15,7 @@ export function AssistantModelPicker({ value, onChange, disabled, allowedModels 
   disabled: boolean;
   allowedModels: readonly ClaudeModelChoice[];
 }) {
-  const options = EDITOR_MODELS.filter(model => allowedModels.includes(model.id)).map(model => ({ value: model.id, label: model.label, icon: providerLogo(model.id) }));
+  const options = EDITOR_MODELS.filter(model => allowedModels.includes(model.id)).map(model => ({ value: model.id, label: model.label, ...('shortLabel' in model ? { shortLabel: model.shortLabel } : {}), icon: providerLogo(model.id) }));
   return <div className="assistant-model-picker"><InspectorSelect label="AI editing model" value={value} options={options} onChange={onChange} disabled={disabled}/></div>;
 }
 
