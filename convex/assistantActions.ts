@@ -71,12 +71,14 @@ export const respond = internalAction({
       const currentPrompt = await ctx.runQuery(internal.assistant.currentPrompt, { ...run, threadId: args.threadId, promptMessageId: args.promptMessageId });
       const recovery = args.recovery ?? project.aiRecovery;
       const recovering = recovery !== undefined || !!args.continuation;
-      // A chosen effort is kept. Otherwise the request sets it, and scene work or a repair pass raises it to high.
+      // A chosen effort is kept (only the dev switcher offers one). Auto never goes above medium, Opus 5.5's own
+      // default: high cost about a quarter more for a few points. Scene work or a repair pass raises it to medium.
       const autoEffort = selection.reasoningEffort === undefined;
-      let effort = selection.reasoningEffort ?? autoEditorReasoningEffort(currentPrompt, { recovering });
+      const requested = autoEditorReasoningEffort(currentPrompt, { recovering });
+      let effort: EditorReasoningEffort = selection.reasoningEffort ?? (requested === 'low' ? 'low' : 'medium');
       const withEffort = (value: EditorReasoningEffort) => ({ ...selection, reasoningEffort: value });
       const showEffort = () => { costLog.selectModel(selection.modelId, selection.provider, effort, selection.speedMode ?? 'standard'); void ctx.runMutation(internal.assistant.recordEffort, { ...run, effort }).catch(() => {}); };
-      const raiseEffort = () => { effort = 'high'; showEffort(); };
+      const raiseEffort = () => { effort = 'medium'; showEffort(); };
       showEffort();
       const toolkit = createEditorToolkit(ctx, { run, project, assets, recovering, initialPlans: args.continuation ? await ctx.runQuery(internal.compositionReview.readPlan, run) : [], selectedClipIds: args.selectedClipIds ?? (args.selectedClipId ? [args.selectedClipId] : []), playhead: args.playhead, publication: { threadId: args.threadId, promptMessageId: args.promptMessageId }, abortSignal, budget });
       const { tools, editSession } = toolkit;
@@ -111,12 +113,12 @@ You edit the user's video timeline using structured tools. Greetings, small talk
         abortSignal.throwIfAborted();
         if (pass > 0 && !await ctx.runQuery(internal.assistant.isRunActive, run)) return null;
         const offset = steps.length;
-        if (pass > 0 && autoEffort && effort !== 'high') raiseEffort();
+        if (pass > 0 && autoEffort && effort === 'low') raiseEffort();
         const passEffort = effort;
         const result = await agent.streamText(ctx, { threadId: args.threadId, userId: args.ownerId }, {
           promptMessageId: args.promptMessageId, abortSignal, providerOptions: editorProviderOptions(withEffort(passEffort), cacheKey), maxOutputTokens: editorMaxOutputTokens(withEffort(passEffort)),
           prepareStep: ({ steps: current }) => {
-            if (autoEffort && effort !== 'high' && stepsNeedHighEffort([...steps, ...current])) raiseEffort();
+            if (autoEffort && effort === 'low' && stepsNeedHighEffort([...steps, ...current])) raiseEffort();
             return effort === passEffort ? undefined : { providerOptions: editorProviderOptions(withEffort(effort), cacheKey), maxOutputTokens: editorMaxOutputTokens(withEffort(effort)) };
           },
           ...(repairFeedback ? {
