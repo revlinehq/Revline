@@ -89,10 +89,13 @@ function mount(source){
 }
 function localTime(entry,time){return Math.max(0,time-entry.source.start+entry.source.offset);}
 function visibleAt(entry,time){var local=time-entry.source.start;return local>=0&&local<entry.source.duration;}
-function seek(entry,time){entry.seq++;entry.posted=time;send(entry,{type:'seek',time:time,seq:entry.seq});return entry.seq;}
+function seek(entry,time){entry.seq++;entry.posted=time;entry.inflight=entry.seq;entry.sentAt=Date.now();entry.queued=undefined;send(entry,{type:'seek',time:time,seq:entry.seq});return entry.seq;}
+// Playback asks for a frame every animation frame. A scene slower than that would queue stale seeks and
+// keep replaying them after a pause, so while one is drawing only the newest time waits for the next.
+function follow(entry,time){if(entry.inflight&&Date.now()-entry.sentAt<1000)entry.queued=time;else seek(entry,time);}
 function paint(time){
   bindExport();
-  entries.forEach(function(entry){try{var visible=visibleAt(entry,time),state=visible?'visible':'hidden';if(entry.node.style.visibility!==state)entry.node.style.visibility=state;if(visible&&entry.compiled&&entry.posted!==localTime(entry,time))seek(entry,localTime(entry,time));}catch(error){report(entry,error&&error.message||String(error));}});
+  entries.forEach(function(entry){try{var visible=visibleAt(entry,time),state=visible?'visible':'hidden';if(entry.node.style.visibility!==state)entry.node.style.visibility=state;if(visible&&entry.compiled&&entry.posted!==localTime(entry,time))follow(entry,localTime(entry,time));}catch(error){report(entry,error&&error.message||String(error));}});
 }
 // Some clock moves (player swaps, end-of-playback resets) bypass render and onUpdate.
 function watch(){if(entries.size)paint(clock.time());nextFrame(watch);}
@@ -114,7 +117,7 @@ window.addEventListener('message',function(event){
     if(event.source!==entry.frame.contentWindow)return;
     if(data.type==='ready')Promise.all([wantedFonts(entry.source),wantedMedia(entry.source),wantedIcons(entry.source)]).then(function(found){send(entry,{type:'init',code:entry.source.code,brand:entry.source.brand||null,blueprints:entry.source.blueprints||[],media:found[1],icons:found[2],width:entry.source.width,height:entry.source.height,fps:entry.source.fps,duration:entry.source.duration,fonts:found[0]});});
     else if(data.type==='compiled'){entry.compiled=true;entry.resolve();paint(clock.time());}
-    else if(data.type==='painted'){var done=entry.waiters.get(data.seq);if(done){entry.waiters.delete(data.seq);done();}}
+    else if(data.type==='painted'){var done=entry.waiters.get(data.seq);if(done){entry.waiters.delete(data.seq);done();}if(data.seq===entry.inflight){entry.inflight=0;if(entry.queued!==undefined&&entry.queued!==entry.posted)seek(entry,entry.queued);entry.queued=undefined;}}
     else if(data.type==='error'){report(entry,String(data.message));entry.resolve();entry.waiters.forEach(function(done){done();});entry.waiters.clear();}
   });
 });
