@@ -3,10 +3,12 @@
 import { ChevronDown, Zap } from 'lucide-react';
 import { EDITOR_MODELS, EDITOR_REASONING_EFFORTS, type ClaudeModelChoice, type EditorReasoningEffort, type EditorSpeedMode } from '@/lib/ai/claude-model';
 import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { ClaudeLogo, OpenAILogo } from '@/components/workspace/ai-app-logos';
 import { InspectorSelect } from './inspector-select';
 import './assistant-model-picker.css';
 
-const descriptions: Record<typeof EDITOR_MODELS[number]['id'], string> = { 'gpt-6.1-sol': 'OpenAI · everyday editing', 'gpt-6-astra': 'OpenAI · complex editing', 'gpt-6.1-terra': 'OpenAI · fast, lower cost', 'gpt-5.4-mini': 'OpenAI · cheaper, simple edits', sonnet: 'Anthropic · everyday editing', opus: 'Anthropic · complex editing' };
+/** The provider's mark beside each model. */
+const providerLogo = (id: ClaudeModelChoice) => id.startsWith('gpt') ? <OpenAILogo className="assistant-model-logo" /> : <ClaudeLogo className="assistant-model-logo" />;
 
 
 export function AssistantModelPicker({ value, onChange, disabled, allowedModels }: {
@@ -15,7 +17,7 @@ export function AssistantModelPicker({ value, onChange, disabled, allowedModels 
   disabled: boolean;
   allowedModels: readonly ClaudeModelChoice[];
 }) {
-  const options = EDITOR_MODELS.filter(model => allowedModels.includes(model.id)).map(model => ({ value: model.id, label: model.label, description: descriptions[model.id] }));
+  const options = EDITOR_MODELS.filter(model => allowedModels.includes(model.id)).map(model => ({ value: model.id, label: model.label, icon: providerLogo(model.id) }));
   return <div className="assistant-model-picker"><InspectorSelect label="AI editing model" value={value} options={options} onChange={onChange} disabled={disabled}/></div>;
 }
 
