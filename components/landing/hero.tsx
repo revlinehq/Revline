@@ -1,4 +1,3 @@
-import { LandingHeroVideo } from './hero-video';
 import { LandingStartButton } from './start-button';
 import { LandingSignInButton } from './sign-in-button';
 import { LandingReveal, LandingSection } from './ui';
@@ -12,6 +11,6 @@ export function LandingHero() {
         <LandingReveal order={2} className="landing-hero-buttons"><LandingStartButton /><LandingSignInButton /></LandingReveal>
       </div>
     </div>
-    <div className="landing-product-frame"><LandingHeroVideo /></div>
+    <div className="landing-product-frame"><img className="landing-product-window" src="/landing/product-window.webp" width={2560} height={1307} alt="The Revline editor with its conversation, preview, and timeline" fetchPriority="high" /></div>
   </LandingSection>;
 }
