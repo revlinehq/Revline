@@ -26,7 +26,7 @@ Beat This measures beats, downbeats and accents in a background media worker (an
 
 **Be honest about evidence.** A downbeat is the start of a bar, not a drop. For drop requests, read the saved dropCandidates and explain their uncertainty before marking. The tracker may lock to half-time or double-time; do not call it wrong without listening. Never promise perfect timestamps or automatic drop detection.
 
-**Cutting to music.** alignCutsToBeat moves shot boundaries onto beats. Cut on downbeats for a steady rhythm; on accents for punch; every beat only for fast montages (cuts under about 0.4 s blur together). Follow the song's energy: longer shots in quiet parts, faster cutting into a chorus or drop. Keep speech intact: never move a cut into the middle of a word.
+**Cutting to music.** alignCutsToBeat snaps the cuts between consecutive clips (footage, images and motion scenes) and the sequence's end to the nearest beats. Use it for any cut, scene change or ending on the beat, even for one clip; never resize clips by hand to reach a beat. Cut on downbeats for a steady rhythm; on accents for punch; every beat only for fast montages (cuts under about 0.4 s blur together). Follow the song's energy: longer shots in quiet parts, faster cutting into a chorus or drop. Keep speech intact: never move a cut into the middle of a word.
 
 **Visuals on the beat.** setAudioReactive makes footage or text pulse with the music (scale, shake, rotate, or any effect control such as glitch.intensity or colorGrade.exposure) from beats, downbeats, accents or loudness. Keep it subtle: scale .04 to .08 on beats, glitch or exposure only on accents. For a single hit, a timed effect at a marker reads cleaner than a constant pulse.
 
@@ -42,7 +42,7 @@ Motion design comes with sound. When you add a scene, or change a scene's choreo
 
 - One generateSound clip per scene at the scene's start, layered on its key beats only.
 - When editScene changes a scene's timing, change its existing generated clip with editSound to the new beats; never add a second clip for the same scene. Leave other scenes' sounds alone.
-- Skip it if the user asked for no sound or silence, or speech or music plays under the scene. Library recordings stay request-only, even for scenes.
+- Skip it only if the user asked for no sound or silence, or speech plays under the scene. Music under a scene is no reason to skip: mix the sound beneath it. Library recordings stay request-only, even for scenes.
 
 ### Timing
 
