@@ -4,19 +4,17 @@ import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 're
 import { MousePointer2 } from 'lucide-react';
 import { LandingSection } from './ui';
 
-type Kind = { id: string; label: string; image: string; overlay: ReactNode; film?: Film; weight?: number };
-// A segment can show a real film instead of a still. It never plays on its own: scroll position scrubs it.
-// The scrub copy is 720p30 with a keyframe every 6 frames, so seeking stays smooth.
-type Film = { src: string; poster: string; duration: number };
+type Kind = { id: string; label: string; image: string; overlay: ReactNode; film?: Film };
+// A segment can show a real film instead of a still; it plays on its own, muted and looping, while its tab shows.
+type Film = { src: string; poster: string };
 
 // Each segment swaps the preview: its footage and its motion overlay.
 const kinds: Kind[] = [
   {
     // Revline's own launch film, made in Revline from two screenshots; its titles are in the film, so no overlay.
-    // Scrolling through this segment scrubs the film, so it gets more scroll room than the stills.
-    id: 'launch', label: 'Launch videos', image: 'vlog', weight: 4,
+    id: 'launch', label: 'Launch videos', image: 'vlog',
     overlay: null,
-    film: { src: '/landing/revline-launch-scrub.mp4', poster: '/landing/revline-launch-poster.webp', duration: 37.92 },
+    film: { src: '/landing/revline-launch.mp4', poster: '/landing/revline-launch-poster.webp' },
   },
   {
     id: 'explainers', label: 'Explainers', image: 'code-screen',
@@ -37,39 +35,27 @@ const kinds: Kind[] = [
     </div>,
   },
 ];
-// Scroll distance one unit of segment weight holds the pinned section for, in viewport heights.
-const SCROLL_PER_UNIT = .7;
-const units = kinds.map(kind => kind.weight ?? 1), totalUnits = units.reduce((sum, unit) => sum + unit, 0);
+// Scroll distance each segment holds the pinned section for, in viewport heights.
+const SCROLL_PER_SEGMENT = .7;
 
-/** The film behind a segment, held on the frame that the scroll position picks. */
-function FilmScene({ film, time }: { film: Film; time: number }) {
+/** The film behind a segment: plays at normal speed, muted and looping, while its tab shows and the section is on screen. */
+function FilmScene({ film, playing }: { film: Film; playing: boolean }) {
   const video = useRef<HTMLVideoElement>(null);
-  const [src, setSrc] = useState<string | null>(null);
-  const wanted = useRef(time);
-  // The hosted assets answer without byte ranges, so seek within an in-memory copy fetched once.
   useEffect(() => {
-    let url = '';
-    const controller = new AbortController();
-    void fetch(film.src, { signal: controller.signal }).then(response => response.ok ? response.blob() : null)
-      .then(blob => { url = blob ? URL.createObjectURL(blob) : film.src; setSrc(url); })
-      .catch(() => { if (!controller.signal.aborted) setSrc(film.src); });
-    return () => { controller.abort(); if (url.startsWith('blob:')) URL.revokeObjectURL(url); };
-  }, [film.src]);
-  // One seek at a time; the latest scroll position wins once the current seek lands.
-  useEffect(() => {
-    wanted.current = time;
     const element = video.current;
-    if (element && !element.seeking && element.readyState >= 1) element.currentTime = time;
-  }, [time, src]);
-  return <video ref={video} className="landing-motion-film" src={src ?? undefined} poster={film.poster} muted playsInline preload="auto"
-    onLoadedMetadata={event => { event.currentTarget.currentTime = wanted.current; }}
-    onSeeked={event => { if (Math.abs(event.currentTarget.currentTime - wanted.current) > .02) event.currentTarget.currentTime = wanted.current; }} />;
+    if (!element) return;
+    // Server-rendered HTML can't carry `muted`, so set it before asking to play.
+    element.muted = true;
+    if (playing) void element.play().catch(() => {}); else element.pause();
+  }, [playing]);
+  return <video ref={video} className="landing-motion-film" src={film.src} poster={film.poster} muted loop playsInline preload="metadata" />;
 }
 
 export function LandingMotion() {
   const [active, setActive] = useState(0);
-  const [filmTime, setFilmTime] = useState(0);
+  const [onScreen, setOnScreen] = useState(false);
   const track = useRef<HTMLElement>(null);
+  const pin = useRef<HTMLDivElement>(null);
   const tabs = useRef<(HTMLButtonElement | null)[]>([]);
   const [indicator, setIndicator] = useState<{ left: number; width: number } | null>(null);
 
@@ -81,9 +67,9 @@ export function LandingMotion() {
     return () => removeEventListener('resize', measure);
   }, [active]);
 
-  // The section pins to the viewport while its tall track scrolls past; scroll position picks the segment and
-  // scrubs the film. Nothing moves on its own: it only switches when the scroll-picked segment changes, so a
-  // clicked tab stays put until the visitor scrolls into another segment.
+  // The section pins to the viewport while its tall track scrolls past; scroll position picks the segment.
+  // There is no timer: it only switches when the scroll-picked segment changes, so a clicked tab stays put
+  // until the visitor scrolls into another segment.
   // --enter (0 to 1) tracks the section rising into view, driving the dark panel's growth to full bleed.
   useEffect(() => {
     const node = track.current;
@@ -96,10 +82,7 @@ export function LandingMotion() {
       node.style.setProperty('--enter', Math.min(1, Math.max(0, 1 - box.top / innerHeight)).toFixed(3));
       const range = box.height - innerHeight;
       const progress = range > 0 ? Math.min(1, Math.max(0, -box.top / range)) : 0;
-      let at = progress * totalUnits, index = 0;
-      while (index < kinds.length - 1 && at >= units[index]) { at -= units[index]; index++; }
-      const film = kinds[index].film;
-      if (film) setFilmTime(Math.min(1, at / units[index]) * (film.duration - .05));
+      const index = Math.min(kinds.length - 1, Math.floor(progress * kinds.length));
       if (index !== picked) { picked = index; setActive(index); }
     };
     const schedule = () => { if (!frame) frame = requestAnimationFrame(update); };
@@ -109,9 +92,18 @@ export function LandingMotion() {
     return () => { removeEventListener('scroll', schedule); removeEventListener('resize', schedule); cancelAnimationFrame(frame); };
   }, []);
 
+  // Films play only while the section is on screen.
+  useEffect(() => {
+    const node = pin.current;
+    if (!node) return;
+    const observer = new IntersectionObserver(([entry]) => setOnScreen(entry.isIntersecting), { threshold: .25 });
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
+
   const kind = kinds[active];
-  return <LandingSection ref={track} id="motion" className="landing-motion" headingId="landing-motion-heading" data-nav-tone="dark" style={{ height: `calc(100svh + ${(totalUnits - 1) * SCROLL_PER_UNIT * 100}svh)` }}>
-    <div className="landing-motion-pin">
+  return <LandingSection ref={track} id="motion" className="landing-motion" headingId="landing-motion-heading" data-nav-tone="dark" style={{ height: `calc(100svh + ${(kinds.length - 1) * SCROLL_PER_SEGMENT * 100}svh)` }}>
+    <div ref={pin} className="landing-motion-pin">
       <header className="landing-motion-heading">
         <h2 id="landing-motion-heading">Motion that keeps them watching.</h2>
         <p>Launch videos, explainers and motion that pops in as you talk, all edited in Revline.</p>
@@ -130,7 +122,7 @@ export function LandingMotion() {
       </div>
       <div id="landing-motion-panel" role="tabpanel" aria-labelledby={`landing-motion-tab-${kind.id}`} className="landing-motion-preview">
         {kinds.map((item, index) => <div key={item.id} className="landing-motion-scene" data-active={index === active || undefined} style={item.film ? undefined : { backgroundImage: `url(/landing/${item.image}.webp)` }} aria-hidden={index !== active}>
-          {item.film ? <FilmScene film={item.film} time={filmTime} /> : <div className="landing-motion-shade">{item.overlay}</div>}
+          {item.film ? <FilmScene film={item.film} playing={index === active && onScreen} /> : <div className="landing-motion-shade">{item.overlay}</div>}
         </div>)}
       </div>
     </div>
