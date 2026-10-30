@@ -113,14 +113,16 @@ div.landing-hero-buttons>.landing-reveal-content{display:flex;align-items:center
 .landing-marquee-set{display:flex;gap:16px;padding-right:16px}
 .landing-tile{position:relative;width:124px;height:220px;flex-shrink:0;border-radius:8px;overflow:hidden;background:#17181c}
 .landing-tile-wide{width:391px}
+.landing-tile-classic{width:293px}
+.landing-tile-credit{position:absolute;left:10px;bottom:8px;padding:2px 6px;border-radius:4px;background:#0b0b0d8c;font-size:10px;line-height:14px;color:#ffffffd9;pointer-events:none}
 .landing-tile :is(img,video){width:100%;height:100%;object-fit:cover;display:block}
 .landing-tile .landing-chip{position:absolute;top:10px;left:10px}
 .landing-tile-play{display:block;width:100%;height:100%;padding:0;border:0;background:none;cursor:pointer}
 .landing-tile-play .landing-chip,.landing-tile:has(.landing-tile-play) .landing-chip{pointer-events:none}
 /* Video modal (components/landing/tile-video.tsx): the film larger, sized to its 16:9 frame, no border or shadow. */
 [data-slot=dialog-overlay]:has(+ .landing-video-modal){background:#0b0b0dd9}
-.landing-video-modal.landing-video-modal{width:min(1200px,calc(100vw - 32px),calc((100dvh - 96px) * 16 / 9));max-width:none;padding:0;gap:0;border:0;border-radius:10px;background:#000;box-shadow:none;--tw-ring-shadow:0 0 #0000;overflow:hidden}
-.landing-video-modal video{display:block;width:100%;aspect-ratio:16/9;background:#000}
+.landing-video-modal.landing-video-modal{width:min(1200px,calc(100vw - 32px),calc((100dvh - 96px) * var(--video-ratio,16 / 9)));max-width:none;padding:0;gap:0;border:0;border-radius:10px;background:#000;box-shadow:none;--tw-ring-shadow:0 0 #0000;overflow:hidden}
+.landing-video-modal video{display:block;width:100%;aspect-ratio:var(--video-ratio,16 / 9);background:#000}
 .landing-video-modal [data-slot=dialog-close]{top:10px;right:10px;z-index:1;border-radius:999px;background:#0b0b0d99;color:#fff}
 .landing-video-modal [data-slot=dialog-close]:hover{background:#0b0b0dcc;color:#fff}
 @keyframes landing-marquee{to{transform:translateX(-50%)}}
@@ -329,6 +331,7 @@ div.landing-hero-buttons>.landing-reveal-content{display:flex;align-items:center
   .landing-mcp-agents img{width:34px;height:34px}
   .landing-tile{height:180px;width:102px}
   .landing-tile-wide{width:320px}
+  .landing-tile-classic{width:240px}
   .landing-testimonial{padding-block:72px}
   .landing-testimonial blockquote{font-size:24px}
   .landing-plan{padding:24px}
