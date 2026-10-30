@@ -7,6 +7,7 @@ type Tile = { label: string; image?: string; video?: { src: string; poster: stri
 const rows: Tile[][] = [
   [
     { label: 'Launch film', video: { src: '/landing/kinetic-launch.mp4', poster: '/landing/kinetic-launch-poster.webp' }, wide: true },
+    { label: 'Voice typing', video: { src: '/landing/voice-typing.mp4', poster: '/landing/voice-typing-poster.webp' }, wide: true },
     { label: 'Podcast clip', image: 'podcast' },
     { label: 'Product demo', image: 'code-screen', wide: true },
     { label: 'Vlog', image: 'vlog', wide: true },
