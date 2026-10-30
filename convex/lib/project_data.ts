@@ -12,7 +12,7 @@ type Context=MutationCtx|QueryCtx;
 export type HistoryEntry={timeline?:Timeline;id?:Id<'timelineRevisions'>;key?:string;bytes?:number};
 type HistoryPlan=(previous:HistoryEntry[])=>Promise<HistoryEntry[]>;
 type IndexedRevision=Doc<'timelineHistoryIndex'>['entries'][number];
-const aiKeys=['aiQueuePaused','aiWorkflowId','aiRunning','aiEditing','aiError','aiRunId','aiUndoRecorded','aiCheckpointRevision','aiAnalysisUsage','aiRequest','aiRecovery','aiAgentName','aiAgentActiveUntil'] as const;
+const aiKeys=['aiQueuePaused','aiWorkflowId','aiRunning','aiEditing','aiError','aiRunId','aiUndoRecorded','aiCheckpointRevision','aiAnalysisUsage','aiRequest','aiRecovery','aiAgentName','aiAgentActiveUntil','aiReturnTimelineId'] as const;
 type AI=Pick<Doc<'projects'>,typeof aiKeys[number]>;
 function aiFields(project:AI):AI {return Object.fromEntries(aiKeys.filter(key=>project[key]!==undefined).map(key=>[key,project[key]]));}
 

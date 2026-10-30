@@ -112,6 +112,8 @@ export const aiStateFields = {
   aiAgentName:v.optional(v.string()),
   // An MCP agent counts as working until this time; every tool call on the project extends it.
   aiAgentActiveUntil:v.optional(v.number()),
+  // An MCP call on another tab borrows it for the call; the tab open before it reopens when the run ends.
+  aiReturnTimelineId:v.optional(v.string()),
   aiRequest:v.optional(v.object({prompt:v.string(),messageId:v.string(),startedRevision:v.number()})),aiRecovery:v.optional(assistantRecoveryValidator),
 };
 export const projectFields = {

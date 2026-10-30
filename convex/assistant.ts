@@ -326,7 +326,10 @@ export const finish = internalMutation({ args: { ...runArgs, error: v.optional(v
     // receipts, not the assistant's prose, to retire the unfinished status.
     const reviews=!args.error&&project.aiRecovery&&!project.aiUndoRecorded?(await ctx.db.query('compositionReviews').withIndex('by_project',q=>q.eq('projectId',project._id)).order('desc').take(8)).filter(review=>review.ownerId===project.ownerId&&review.runId===args.runId&&review.revision===(project.revision??0)&&review.status==='completed'):[];
     const recoveryChecked=reviews.length>0&&reviews.every(review=>review.result?.revision===(project.revision??0)&&review.result.observations.length>0&&review.result.observations.every(observation=>observation.verdict==='pass')&&review.result.checks.every(check=>check.timingPass&&check.pixelPass!==false&&check.returnPass!==false&&check.textSafe!==false));
-    await writeProject(ctx,project._id, { aiRunning: false, aiEditing: false, aiError: args.error?.slice(0, 1000), aiRecovery:args.error?assistantRecovery(project,'failed',args.error,args.savedEdits):project.aiUndoRecorded||recoveryChecked?undefined:project.aiRecovery,aiRequest:undefined });
+    await writeProject(ctx,project._id, { aiRunning: false, aiEditing: false, aiReturnTimelineId: undefined, aiError: args.error?.slice(0, 1000), aiRecovery:args.error?assistantRecovery(project,'failed',args.error,args.savedEdits):project.aiUndoRecorded||recoveryChecked?undefined:project.aiRecovery,aiRequest:undefined });
+    // An MCP call that borrowed another tab hands the user's tab back.
+    const returnTo=project.aiReturnTimelineId;
+    if(returnTo&&returnTo!==activeTabOf(project)&&tabsOf(project).some(tab=>tab.id===returnTo))await openTabFor(ctx,project.ownerId,{projectId:project._id,timelineId:returnTo});
     if(!project.aiQueuePaused)await ctx.scheduler.runAfter(0,internal.assistant.drainQueue,{projectId:project._id,ownerId:project.ownerId});
   }
   return null;
