@@ -4,7 +4,7 @@ import { blueprintsPage, brandPage, craftPage, intakePage, processPage, scriptPa
 
 export const motionDesign: EditorSkill = {
   name: 'motion-design',
-  description: 'Launch and feature films made from scratch (motion design, no footage needed): the ordered workflow from brand kit to finished film, with pages for brand, intake, story, script, example style directions measured from real launch films, techniques by feedback with timings, motion craft, and process. Read before any launch, announcement, teaser or feature video, and again on design feedback. Explainers and overlays on footage use explainer-scenes. Scenes themselves: scene-engine.',
+  description: 'Motion design made from scratch, with no footage on screen: launch and feature films, teasers, and any standalone motion scene, including motion rebuilt from a reference video. the ordered workflow from brand kit to finished film, with pages for brand, intake, story, script, example style directions measured from real launch films, techniques by feedback with timings, motion craft, and process. Read before any launch, announcement, teaser, feature video or standalone motion scene, and again on design feedback. Explainers and overlays on footage use explainer-scenes. Scenes themselves: scene-engine.',
   body: `# Motion design: launch and feature films
 
 A launch film makes one product or one feature feel simple, real and worth trying, in 15 to 60 seconds. Work through the steps in order; each names the page to load with readSkill name "motion-design" and page.

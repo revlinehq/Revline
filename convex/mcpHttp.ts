@@ -26,7 +26,7 @@ Bring in footage with uploadMedia (a local file: run the script it returns, then
 Use Revline's tools, not your own scripts. Never run ffmpeg, Python or other code of your own to look at, measure or time video or audio: every script means a Revline tool was skipped, and its result never reaches the project.
 - Recreating or learning from a reference video: uploadMedia it into the project (it need not go on the timeline), then readFrames (the whole video in 16 frames, then short windows around each move, then crops to read type and icons), trackReference for each moving object (it returns each move as a GSAP tween with its timing and ease), and measureFrame for exact colors, sizes and edges.
 - Music and timing: markMusicBeats for beats, downbeats and drops, and alignCutsToBeat to cut on them. Sound effects: generateSound, keyed to the motion.
-- Before building motion, readSkill the matching skill (motion-design for launch and feature films, explainer-scenes for explainers, scene-engine for any scene) and follow it. Check your work with getFrames.
+- Before building motion, readSkill the matching skill (motion-design for launch films and any standalone motion scene, explainer-scenes for explainers over footage, scene-engine for any scene) and follow it. Check your work with getFrames.
 Share the editorUrl from getProject so the user can watch. Export with exportVideo and poll getExport for the download link. For several separate videos in one project, use timeline tabs (listTimelines, createTimeline, openTimeline; editing tools act on the open tab) and export each with exportVideo timelineId. Exports queue, and listExports shows them all.
 
 Editing quality rules:

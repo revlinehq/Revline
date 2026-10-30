@@ -65,7 +65,7 @@ Only components that read time re-render; static parts render once. A useTimelin
 
 export const sceneEngine: EditorSkill = {
   name: 'scene-engine',
-  description: 'How scene clips work, for every kind of scene: the module contract, what loads, how frames are rendered, GSAP technique, fonts, images and the brand parameter. Read before the first addScene or editScene, together with the skill for the job (motion-design for launch and feature films, explainer-scenes for explainers and overlays on footage).',
+  description: 'How scene clips work, for every kind of scene: the module contract, what loads, how frames are rendered, GSAP technique, fonts, images and the brand parameter. Read before the first addScene or editScene, together with the skill for the job (motion-design for launch films and any standalone motion scene, explainer-scenes for explainers and overlays on footage).',
   body: `# Scene engine
 
 A scene is a TypeScript module that builds plain HTML once and choreographs it on a GSAP timeline. It renders full-frame on its own V layer, inside a sandbox, and the editor renders it frame by frame for preview and export. Transparent areas show the layers below.
