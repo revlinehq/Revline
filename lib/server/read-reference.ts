@@ -31,8 +31,13 @@ async function probe(path: string, signal: AbortSignal): Promise<Source> {
 /** One frame at a source second, full resolution or cropped to a box, as PNG. */
 async function frameAt(path: string, directory: string, time: number, crop: Box | undefined, name: string, signal: AbortSignal) {
   const output = join(directory, `${name}.png`);
-  await run('ffmpeg', ['-v', 'error', '-ss', time.toFixed(3), '-i', path, '-map', '0:v:0', '-frames:v', '1', ...(crop ? ['-vf', `crop=${crop.w}:${crop.h}:${crop.x}:${crop.y}`] : []), '-y', output], { signal, timeout: 30_000 });
-  return readFile(output);
+  // A seek at or near the very end can decode nothing (the container runs a little longer than the video).
+  // Step back until a real frame comes out, so a whole-length read never fails on its last frame.
+  for (const back of [0, .05, .15, .3, .6, 1, 2]) {
+    await run('ffmpeg', ['-v', 'error', '-ss', Math.max(0, time - back).toFixed(3), '-i', path, '-map', '0:v:0', '-frames:v', '1', ...(crop ? ['-vf', `crop=${crop.w}:${crop.h}:${crop.x}:${crop.y}`] : []), '-y', output], { signal, timeout: 30_000 });
+    try { return await readFile(output); } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
+  }
+  throw new AnalysisError(`No video frame could be decoded near ${time.toFixed(2)} s.`, 400);
 }
 
 const clampBox = (box: Box, source: Source): Box => {
@@ -40,7 +45,8 @@ const clampBox = (box: Box, source: Source): Box => {
   return { x, y, w: Math.max(2, Math.min(source.width - x, Math.round(box.w))), h: Math.max(2, Math.min(source.height - y, Math.round(box.h))) };
 };
 const timesIn = (start: number, end: number, count: number, source: Source) => {
-  const last = Math.max(0, source.duration - 1 / source.fps), from = Math.min(start, last), to = Math.min(Math.max(end, from), last);
+  // Times past the end read the last frames instead of failing.
+  const last = Math.max(0, source.duration - 2 / source.fps), from = Math.min(start, last), to = Math.min(Math.max(end, from), last);
   return Array.from({ length: count }, (_, index) => round(count === 1 ? from : from + (to - from) * index / (count - 1), 3));
 };
 const escape = (text: string) => text.replace(/[<>&]/g, char => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' })[char]!);
