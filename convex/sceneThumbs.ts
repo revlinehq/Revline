@@ -32,7 +32,7 @@ export const forProject = query({ args: { projectId: v.id('projects') }, returns
     const row = await latest(ctx, project._id, sceneKey(clip, timeline));
     if (row?.status === 'completed' && row.frames) { frames[clip.id] = row.frames; continue; }
     // While a changed clip renders again (or if that render failed), keep showing its last frames.
-    const previous = await ctx.db.query('frameSnapshots').withIndex('by_project', q => q.eq('projectId', project._id)).filter(q => q.and(q.eq(q.field('clipId'), clip.id), q.eq(q.field('status'), 'completed'))).order('desc').first();
+    const previous = (await ctx.db.query('frameSnapshots').withIndex('by_project_clip', q => q.eq('projectId', project._id).eq('clipId', clip.id)).order('desc').take(3)).find(row => row.status === 'completed');
     if (previous?.frames) frames[clip.id] = previous.frames;
   }
   return frames;
@@ -46,7 +46,7 @@ export const ensure = mutation({ args: { projectId: v.id('projects') }, returns:
   let started = 0;
   for (const clip of sceneClips(timeline)) {
     const key = sceneKey(clip, timeline), row = await latest(ctx, project._id, key);
-    const others = await ctx.db.query('frameSnapshots').withIndex('by_project', q => q.eq('projectId', project._id)).filter(q => q.eq(q.field('clipId'), clip.id)).take(20);
+    const others = await ctx.db.query('frameSnapshots').withIndex('by_project_clip', q => q.eq('projectId', project._id).eq('clipId', clip.id)).take(6);
     // Current frames are in: older versions of this clip can go.
     if (row?.status === 'completed') { for (const old of others) if (old._id !== row._id) await ctx.db.delete(old._id); continue; }
     if (row && row.status === 'queued' && row.createdAt > Date.now() - STALE_MS) continue;
