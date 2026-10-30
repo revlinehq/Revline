@@ -17,6 +17,7 @@ import type { ClipLut, ColorCurves, HslAdjust, TimelineLut } from './color-finis
 import type { ClipMask } from './masks';
 import type { SceneSource } from './scene-layers';
 import type { ClipOutline } from './clip-outline';
+import { scenePlaceholderCover } from './scene-placeholder';
 export type AspectRatio = 'vertical' | 'portrait-feed' | 'square' | 'classic' | 'landscape';
 export type ClipKind = 'video' | 'image' | 'audio' | 'caption' | 'graphic' | 'solid' | 'scene' | 'effect';
 export type LayerGroup = 'visual' | 'overlay' | 'audio' | 'effects';
@@ -154,7 +155,10 @@ export function timelineCover(timeline: Pick<Timeline, 'clips'>, assets: readonl
   const first = timeline.clips.filter(clip => clip.kind === 'video' || clip.kind === 'image' || (clip.kind === 'scene' && sceneThumbs?.[clip.id]?.length)).sort((a, b) => a.start - b.start || trackOf(b) - trackOf(a))[0];
   if (first?.kind === 'scene') { const frames = sceneThumbs![first.id]; return `data:image/jpeg;base64,${frames[Math.floor(frames.length / 2)].image}`; }
   const asset = first && assets.find(item => item._id === first.assetId);
-  return asset ? asset.thumbnailUrl ?? (asset.kind === 'image' ? asset.url : null) : null;
+  if (asset) return asset.thumbnailUrl ?? (asset.kind === 'image' ? asset.url : null);
+  // Motion clips whose frames are still coming get their placeholder, not a blank cover.
+  const scene = !first && timeline.clips.filter(clip => clip.kind === 'scene').sort((a, b) => a.start - b.start)[0];
+  return scene ? scenePlaceholderCover(scene.scene?.title || 'Scene') : null;
 }
 /** Zero legacy overlay rows marks the shared V-track model, without a schema migration. */
 export function normalizeTimeline(timeline: Timeline): Timeline {

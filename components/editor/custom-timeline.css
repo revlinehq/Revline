@@ -140,6 +140,6 @@ html[data-workspace-theme=dark] .editor-app .custom-timeline .timeline-insert-in
 [data-compact-tracks] .timeline-clip:is(.clip-caption,.clip-graphic)>span{height:100%;align-items:center;padding:0 6px;font-size:9px}
 [data-compact-tracks] .audio-clip-volume{display:none}
 /* Ultra: GSAP motion scenes read as code-driven clips, not media. */
-.custom-timeline .timeline-clip.clip-motion{background:repeating-linear-gradient(90deg,#ffffff0d 0 1px,transparent 1px 8px),linear-gradient(180deg,#ffffff0f,transparent 60%),linear-gradient(135deg,#1d2b3a 0%,#262338 100%);box-shadow:inset 0 0 0 1px #ffffff1f}
+.custom-timeline .timeline-clip.clip-motion{background:#24262b;box-shadow:inset 0 0 0 1px #ffffff1f}
 .custom-timeline .timeline-clip.clip-motion>span{gap:5px;color:#e4e8f0;font-family:var(--font-mono,ui-monospace),ui-monospace,monospace;font-size:10px;letter-spacing:.01em}
 .custom-timeline .timeline-clip.clip-motion>span svg{flex-shrink:0;opacity:.7}

@@ -16,3 +16,11 @@ export function useSceneThumbs<N extends Name>(name: N, args: FunctionArgs<(type
   const result = useQueries(queries).thumbs;
   return result instanceof Error ? undefined : result as SceneThumbs | undefined;
 }
+
+const NONE: string[] = [];
+/** Motion clips whose frames are rendering now; empty when the backend cannot say. */
+export function useSceneRendering(projectId: string): readonly string[] {
+  const queries = useMemo((): RequestForQueries => ({ rendering: { query: makeFunctionReference<'query'>('sceneThumbs:renderingForProject'), args: { projectId } } }), [projectId]);
+  const result = useQueries(queries).rendering;
+  return Array.isArray(result) ? result as string[] : NONE;
+}

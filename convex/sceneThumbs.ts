@@ -38,6 +38,17 @@ export const forProject = query({ args: { projectId: v.id('projects') }, returns
   return frames;
 }});
 
+/** Motion clips whose current frames are queued or rendering, so their placeholder can show that frames are on the way. */
+export const renderingForProject = query({ args: { projectId: v.id('projects') }, returns: v.array(v.string()), handler: async (ctx, args) => {
+  const ownerId = await requireOwner(ctx), project = await requireProject(ctx, args.projectId, ownerId, false), timeline = currentTimeline(project);
+  const rendering: string[] = [];
+  for (const clip of sceneClips(timeline)) {
+    const row = await latest(ctx, project._id, sceneKey(clip, timeline));
+    if (row?.status === 'queued' && row.createdAt > Date.now() - STALE_MS) rendering.push(clip.id);
+  }
+  return rendering;
+}});
+
 /** Queue frames for motion clips that have none for their current version, a couple at a time. */
 export const ensure = mutation({ args: { projectId: v.id('projects') }, returns: v.null(), handler: async (ctx, args) => {
   const ownerId = await requireOwner(ctx);
