@@ -5,6 +5,7 @@ import { promisify } from 'node:util';
 import sharp from 'sharp';
 import type { MediaTaskResult, MediaWorkItem } from '@/convex/mediaTasks';
 import { AnalysisError } from '@/lib/media-analysis/errors';
+import { fitMotion } from '@/lib/media-analysis/fit-motion';
 import { measure } from './blueprint-check';
 import { forEachLimited } from './run-limited';
 
@@ -159,7 +160,7 @@ async function readTrack(path: string, directory: string, source: Source, work: 
     return { image: images[order], label: `${index + 1}  ${item.time.toFixed(2)}s  ${item.rotation}°  ×${item.scale}  conf ${item.confidence}`, overlay: boxOverlay(item, source) };
   });
   const result = await sheet(tiles, source.width / source.height);
-  return { ...result, sourceWidth: source.width, sourceHeight: source.height, fps: round(source.fps, 3), frames: picks.map(index => ({ time: track[index].time })), track };
+  return { ...result, sourceWidth: source.width, sourceHeight: source.height, fps: round(source.fps, 3), frames: picks.map(index => ({ time: track[index].time })), track, moves: fitMotion(track, source) };
 }
 
 /** A rotated box outline in tile coordinates ({w} and {h} are the tile size). */
