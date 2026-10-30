@@ -19,7 +19,7 @@ Not for recreating a video the user gave: a clone takes its brand from the video
 3. **Show what was found.** Fonts by role, the main colors, whether a logo was found, and every note. Ask the user to correct anything wrong; fix it with updateBrandKit. Never pretend a missing piece was found.
 4. **Confirm the product.** Draft one product text from the scraped copy: what it is, the problem it solves and the 3 to 5 features worth showing (features as short lines). Show it and ask the user to correct it, asking only about what the copy does not answer. Save the confirmed text with updateBrandKit context.product. Never build on an unconfirmed product text.
 5. **Screens.** Product screenshots belong to the brand, not one project. Check the kit's screens (getBrandKit). When the user gives screenshots, offer to save them to the kit (updateBrandKit addScreens, named like editor, dashboard, settings, with a short note) so every later video reuses them without re-uploading.
-6. **Use.** Pass \`brandKitId\` to addFilm or addScene (or editScene to attach or refresh; on a film it reaches every beat). A scene keeps the kit as it was when saved.
+6. **Use.** Pass \`brandKitId\` to addFilm or addScene (or editScene to attach or refresh). A scene keeps the kit as it was when saved.
 
 ## In scene code
 \`brand\` is null without a kit. With one:
@@ -140,10 +140,10 @@ export const processPage: EditorSkillPage = {
   body: `# Process: approve before building
 
 1. **Beat sheet.** Built from the approved script. Start with the film's style direction (five lines), then a table: time, music bar, what is on screen, on-screen words (from the script, unchanged), motion, sound. Send it and wait for approval or changes.
-2. **Animatic.** The film as one addFilm call at the approved timing, cut at the beats: grey boxes, plain text in the brand font, simple moves, with the music. Say it is rough; ask the user to watch story and pacing.
+2. **Animatic.** The film as one addFilm clip at the approved timing, with a section marker per beat: grey boxes, plain text in the brand font, simple moves, with the music. Say it is rough; ask the user to watch story and pacing.
 3. **Feedback.** Whenever the user reacts ("feels cheap", "more energy", "the ending is weak"), read the techniques page, apply the matching technique, and say which film it comes from. Exact instructions from the user are followed as given.
-4. **Polish.** Refine the film in place, beat by beat, with patchScene (one call can replace a whole \`<Beat>\` block or a component); every beat clip gets each change. Attach the brand kit with editScene brandKitId (the film's beats share it). Follow the film's style direction and the craft page.
-5. **Music and sound.** Place the track first and mark its beats. Let the story set the cuts (top launch films land only 0 to 30% of cuts on beats); put key entrances and sound hits on accents and the peak on the drop. Then one generateSound per beat clip keyed to its motion (a film's beats show film time, so key each to its window), under the music (read music-and-sound).
+4. **Polish.** Refine the film in place, beat by beat, with patchScene (one call can replace a whole \`<Beat>\` block or a component); Attach the brand kit with editScene brandKitId. Follow the film's style direction and the craft page.
+5. **Music and sound.** Place the track first and mark its beats. Let the story set the cuts (top launch films land only 0 to 30% of cuts on beats); put key entrances and sound hits on accents and the peak on the drop. Then one generateSound per section keyed to its motion, under the music (read music-and-sound).
 6. **Review.** getFrames at each beat and each scene's midpoint. Check that text is readable, nothing overlaps or clips, the brand fonts, colors and logo show, and the lockup holds. Fix before saying it is done; say what you checked.
 7. **Learn.** When the user approves a change in direction (a different ease, pacing, a technique), offer to save it to memory with remember, so the next film for this brand starts from it.
 
