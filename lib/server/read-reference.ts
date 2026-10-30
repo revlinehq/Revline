@@ -117,28 +117,42 @@ async function readMoments(path: string, source: Source, work: Work, signal: Abo
 async function findMoments(path: string, start: number, end: number, source: Source, area: Box, signal: AbortSignal, limit = 12) {
   const from = Math.max(0, Math.min(start, source.duration)), to = Math.min(Math.max(end, from), source.duration), rate = 10;
   if (to - from < .2) return { moments: [], holds: [], changed: false };
-  const width = 96, height = Math.max(2, Math.round(width * area.h / area.w) & ~1);
+  // A window up to 30 s is read wide enough that an app icon or one key is several pixels, not one; long maps stay small.
+  const width = to - from <= 30 ? 256 : 96, height = Math.max(2, Math.round(width * area.h / area.w) & ~1);
   const { stdout } = await run('ffmpeg', ['-v', 'error', '-ss', from.toFixed(3), '-t', (to - from).toFixed(3), '-i', path, '-map', '0:v:0', '-vf', `fps=${rate},crop=${area.w}:${area.h}:${area.x}:${area.y},scale=${width}:${height},format=gray`, '-f', 'rawvideo', '-'], { signal, timeout: Math.max(120_000, (to - from) * 1000), encoding: 'buffer', maxBuffer: 512 * 1024 * 1024 });
   const size = width * height, total = Math.floor(stdout.length / size), factor = area.w / width;
   if (total < 2) return { moments: [], holds: [], changed: false };
+  const frame = (index: number) => stdout.subarray(index * size, (index + 1) * size);
+  // Pixels that change in most steps (a looping waveform, a ticking counter) are the video's idle motion: left out of
+  // the counts, so an icon swapping or a word typing elsewhere still stands out.
+  const counts = new Uint16Array(size);
+  for (let index = 0; index < total - 1; index++) { const a = frame(index), b = frame(index + 1); for (let i = 0; i < size; i++) if (Math.abs(b[i] - a[i]) > CHANGE) counts[i]++; }
+  const busy = counts.map(count => total > 6 && count > (total - 1) * .5 ? 1 : 0);
   const steps = Array.from({ length: total - 1 }, (_, index) => {
-    const a = stdout.subarray(index * size, (index + 1) * size), b = stdout.subarray((index + 1) * size, (index + 2) * size);
+    const a = frame(index), b = frame(index + 1);
     let sum = 0, moved = 0, left = width, top = height, right = -1, bottom = -1;
-    for (let i = 0; i < size; i++) { const delta = Math.abs(b[i] - a[i]); sum += delta; if (delta > CHANGE) { moved++; const x = i % width, y = (i / width) | 0; if (x < left) left = x; if (x > right) right = x; if (y < top) top = y; if (y > bottom) bottom = y; } }
+    for (let i = 0; i < size; i++) { const delta = Math.abs(b[i] - a[i]); sum += delta; if (delta > CHANGE && !busy[i]) { moved++; const x = i % width, y = (i / width) | 0; if (x < left) left = x; if (x > right) right = x; if (y < top) top = y; if (y > bottom) bottom = y; } }
     return { change: sum / (size * 255), moved: moved / size, box: right < 0 ? null : { left, top, right, bottom } };
   });
   // Share of the picture that differs between two frames: a small key or a thin stroke moving is a few pixels, not a big mean change.
-  const differs = (a: number, b: number) => { const x = stdout.subarray(a * size, (a + 1) * size), y = stdout.subarray(b * size, (b + 1) * size); let moved = 0; for (let i = 0; i < size; i++) if (Math.abs(x[i] - y[i]) > CHANGE) moved++; return moved / size; };
+  const differs = (a: number, b: number) => { const x = frame(a), y = frame(b); let moved = 0; for (let i = 0; i < size; i++) if (Math.abs(x[i] - y[i]) > CHANGE && !busy[i]) moved++; return moved / size; };
   // A moment is a run of steps clearly above this video's own resting level; one-step jumps are cuts.
-  const sorted = steps.map(step => step.change).sort((a, b) => a - b), resting = sorted[Math.floor(sorted.length / 2)];
-  const movedSorted = steps.map(step => step.moved).sort((a, b) => a - b), restingMoved = movedSorted[Math.floor(movedSorted.length / 2)];
+  // Resting is the quiet end of this video (its 20th percentile), not its middle: in a busy film the median is already motion.
+  const quiet = (values: number[]) => [...values].sort((a, b) => a - b)[Math.floor(values.length * .2)];
+  const sorted = steps.map(step => step.change).sort((a, b) => a - b), resting = quiet(sorted);
+  const restingMoved = quiet(steps.map(step => step.moved));
   // A short window (an fps read of one transition) may be motion from end to end, so its own median is no baseline: fixed floors only there.
-  const short = to - from <= 3.5, threshold = short ? .012 : Math.max(.012, resting * 3), movedFloor = short ? .004 : Math.max(.004, restingMoved * 3);
-  const active = (step: { change: number; moved: number }) => step.change >= threshold || step.moved >= movedFloor;
+  // A dozen changed pixels is something (an icon at this width); the idle motion is already left out of the count.
+  const minimum = 12 / size, short = to - from <= 3.5, threshold = short ? .012 : Math.max(.012, resting * 3), movedFloor = short ? Math.max(minimum, .002) : Math.max(minimum, restingMoved * 3);
+  // Fades and slow slides change each pixel only a little per frame: compare every frame with the one half a second
+  // earlier too, against that lag's own resting level, so a slow change is a moment as well.
+  const lag = Math.min(5, steps.length), lagged = steps.map((_, index) => differs(Math.max(0, index + 1 - lag), index + 1));
+  const lagFloor = Math.max(minimum * 2, short ? .003 : quiet(lagged) * 3);
+  const activeAt = (index: number) => steps[index].change >= threshold || steps[index].moved >= movedFloor || lagged[index] >= lagFloor;
   const moments: { start: number; end: number; peak: number; kind: 'cut' | 'motion'; region?: Box }[] = [];
   for (let index = 0; index < steps.length; index++) {
-    if (!active(steps[index])) continue;
-    let last = index; while (last + 1 < steps.length && (active(steps[last + 1]) || (last + 2 < steps.length && active(steps[last + 2])))) last++;
+    if (!activeAt(index)) continue;
+    let last = index; while (last + 1 < steps.length && (activeAt(last + 1) || (last + 2 < steps.length && activeAt(last + 2)))) last++;
     const run = steps.slice(index, last + 1), peak = Math.max(...run.map(step => step.change));
     const boxes = run.flatMap(step => step.box ? [step.box] : []);
     const region = boxes.length ? { x: Math.round(area.x + Math.min(...boxes.map(b => b.left)) * factor), y: Math.round(area.y + Math.min(...boxes.map(b => b.top)) * factor), w: Math.round((Math.max(...boxes.map(b => b.right)) - Math.min(...boxes.map(b => b.left)) + 1) * factor), h: Math.round((Math.max(...boxes.map(b => b.bottom)) - Math.min(...boxes.map(b => b.top)) + 1) * factor) } : undefined;
@@ -148,14 +162,14 @@ async function findMoments(path: string, start: number, end: number, source: Sou
   // Holds: a second or more where the picture all but stops, well under this video's resting level (a frozen face, a held still).
   const still = Math.max(.0015, resting * .35), holds: { start: number; end: number }[] = [];
   for (let index = 0; index < steps.length; index++) {
-    if (steps[index].change >= still || steps[index].moved >= .004) continue;
-    let last = index; while (last + 1 < steps.length && steps[last + 1].change < still && steps[last + 1].moved < .004) last++;
+    if (steps[index].change >= still || steps[index].moved >= movedFloor) continue;
+    let last = index; while (last + 1 < steps.length && steps[last + 1].change < still && steps[last + 1].moved < movedFloor) last++;
     // Slow drift adds up: a stretch whose first and last frames differ is moving, however small each step.
-    if (last - index + 1 >= rate && differs(index, last + 1) < .004) holds.push({ start: round(from + index / rate, 2), end: round(from + (last + 1) / rate, 2) });
+    if (last - index + 1 >= rate && differs(index, last + 1) < movedFloor) holds.push({ start: round(from + index / rate, 2), end: round(from + (last + 1) / rate, 2) });
     index = last;
   }
   // The strongest ones, in time order.
-  return { moments: moments.sort((a, b) => b.peak - a.peak).slice(0, limit).sort((a, b) => a.start - b.start), holds: holds.slice(0, limit), changed: differs(0, total - 1) >= .004 };
+  return { moments: moments.sort((a, b) => b.peak - a.peak).slice(0, limit).sort((a, b) => a.start - b.start), holds: holds.slice(0, limit), changed: differs(0, total - 1) >= movedFloor };
 }
 
 /** Exact colors at points and color edges along lines, in source pixels of one frame. */
