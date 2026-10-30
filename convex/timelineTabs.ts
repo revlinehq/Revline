@@ -50,7 +50,9 @@ export async function allTabTimelines(ctx: QueryCtx, project: Doc<'projects'>): 
 async function openProject(ctx: MutationCtx, projectId: Id<'projects'>, ownerId: string) {
   const project = await requireProject(ctx, projectId, ownerId, true);
   await requireEditorAccess(ctx, project.ownerId);
-  if (await editingWorkflowActive(ctx, project)) throw new ConvexError(TIMELINE_LOCKED);
+  // An in-app turn works on the tab it was sent from, so no tab opens under it until it ends, even before it edits.
+  // MCP runs are single calls; their own tab switch happens as the run takes the lock.
+  if (project.aiRunning && !project.aiRunId?.startsWith('mcp-') || await editingWorkflowActive(ctx, project)) throw new ConvexError(TIMELINE_LOCKED);
   return project;
 }
 

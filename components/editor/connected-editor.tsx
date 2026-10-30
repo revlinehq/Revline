@@ -206,11 +206,13 @@ function ProjectEditor({project}: {project:Doc<'projects'>}) {
   },[media,assets,timeline,ai?.running,upload,audioBusy,convex,projectId,change,saves]);
   const titleChange=async(value:string)=>{await update({projectId,title:value});setTitle(value);};
   const waitForSave=()=>saves.wait();
+  // The turn works on the tab on screen, even if another agent opens a different tab meanwhile.
+  const shownTab=viewTab??pendingTab?.id??project.activeTimelineId;
   const sendRequest=async(prompt:string,context:Omit<Parameters<typeof send>[0],'projectId'|'prompt'>&{retry?:boolean}={})=>{
     aiStarting.current=true;
     const {retry,...requestContext}=context;
     const attached=retry?[]:[...composerAssetIds];
-    try{if(!ai?.running&&!isCasualChat(prompt)){await preparingAudio.current;await waitForSave();}await send({projectId,prompt,...requestContext,...(attached.length?{attachedAssetIds:attached as Id<'assets'>[]}: {})});setComposerAssetIds(previous=>previous.filter(id=>!attached.includes(id)));}
+    try{if(!ai?.running&&!isCasualChat(prompt)){await preparingAudio.current;await waitForSave();}await send({projectId,prompt,...requestContext,...(shownTab?{timelineId:shownTab}:{}),...(attached.length?{attachedAssetIds:attached as Id<'assets'>[]}: {})});setComposerAssetIds(previous=>previous.filter(id=>!attached.includes(id)));}
     finally{aiStarting.current=false;}
   };
 

@@ -13,7 +13,7 @@ import { attachStockAudio, validateWaveform } from './assets';
 import { recordAssetStorage } from './lib/storage_accounting';
 import { writeProject,readProject,projectIdentity,projectRun } from './lib/project_data';
 import { loadSceneCode, storeSceneCode, storedSceneCode } from './lib/scene_code';
-import { activeTabOf, storedTabTimeline } from './timelineTabs';
+import { activeTabOf, openTabFor, storedTabTimeline, tabsOf } from './timelineTabs';
 import { withoutSceneCode } from '../lib/editor/scene-code';
 import { hasUltraPlan, onFreeTrial, requireEditorAccess } from './lib/billing_access';
 import { abortStream, createThread, listStreams, listUIMessages, saveMessage, syncStreams, vPaginationResult, vStreamArgs } from "@convex-dev/agent";
@@ -82,7 +82,7 @@ async function clearLivePreview(ctx:import('./_generated/server').MutationCtx,pr
   const preview=await ctx.db.query('aiTimelinePreviews').withIndex('by_project',q=>q.eq('projectId',projectId)).unique();
   if(preview)await ctx.db.delete(preview._id);
 }
-export const send = mutation({ args: { projectId: v.id("projects"), prompt: v.string(), modelChoice: v.optional(legacyCompatibleModelChoiceValidator), reasoningEffort: v.optional(editorReasoningEffortValidator), speedMode: v.optional(editorSpeedModeValidator), attachedAssetIds:v.optional(v.array(v.id('assets'))), selectedClipId: v.optional(v.string()), selectedClipIds: v.optional(v.array(v.string())), playhead: v.optional(v.number()) }, returns: v.null(), handler: async (ctx, args) => {
+export const send = mutation({ args: { projectId: v.id("projects"), prompt: v.string(), modelChoice: v.optional(legacyCompatibleModelChoiceValidator), reasoningEffort: v.optional(editorReasoningEffortValidator), speedMode: v.optional(editorSpeedModeValidator), attachedAssetIds:v.optional(v.array(v.id('assets'))), selectedClipId: v.optional(v.string()), selectedClipIds: v.optional(v.array(v.string())), playhead: v.optional(v.number()), timelineId: v.optional(v.string()) }, returns: v.null(), handler: async (ctx, args) => {
   const ownerId = await requireOwner(ctx); await requireEditorAccess(ctx, ownerId); const project = await requireProject(ctx, args.projectId, ownerId);
   if ((args.modelChoice !== undefined || args.reasoningEffort !== undefined || args.speedMode !== undefined) && !await canChooseEditorModel(ctx, ownerId)) throw new ConvexError('Choosing the AI model is part of the Ultra plan.');
   let pinnedModel;
@@ -91,8 +91,8 @@ export const send = mutation({ args: { projectId: v.id("projects"), prompt: v.st
     if(args.attachedAssetIds.length>20||new Set(args.attachedAssetIds).size!==args.attachedAssetIds.length)throw new ConvexError('Attach up to 20 unique media files.');
     for(const id of args.attachedAssetIds){const asset=await ctx.db.get(id);if(!asset||asset.ownerId!==ownerId||asset.projectId!==project._id)throw new ConvexError('Attached media does not belong to this project.');}
   }
-  const clipIds = new Set(currentTimeline(project).clips.map(clip => clip.id));
-  if(project.aiRunning){const preview=await ctx.db.query('aiTimelinePreviews').withIndex('by_project',q=>q.eq('projectId',project._id)).unique();if(preview?.ownerId===ownerId&&preview.runId===project.aiRunId)for(const clip of preview.timeline.clips)clipIds.add(clip.id);}
+  const clipIds = new Set((await requestTimeline(ctx, project, args.timelineId)).clips.map(clip => clip.id));
+  if(project.aiRunning&&!sentFromOtherTab(project,args.timelineId)){const preview=await ctx.db.query('aiTimelinePreviews').withIndex('by_project',q=>q.eq('projectId',project._id)).unique();if(preview?.ownerId===ownerId&&preview.runId===project.aiRunId)for(const clip of preview.timeline.clips)clipIds.add(clip.id);}
   if (args.selectedClipId !== undefined && !clipIds.has(args.selectedClipId)) throw new ConvexError("Selected clip does not belong to this project");
   if (args.selectedClipIds) {
     if (args.selectedClipIds.length > 200) throw new ConvexError("Select at most 200 clips");
@@ -115,8 +115,20 @@ export const send = mutation({ args: { projectId: v.id("projects"), prompt: v.st
   await consumeAssistantRequest(ctx,ownerId);
   return beginRequest(ctx,project,prompt,pinnedModel,args);
 }});
-type QueuedContext=Pick<Doc<'assistantQueue'>,'attachedAssetIds'|'selectedClipId'|'selectedClipIds'|'playhead'>;
-async function beginRequest(ctx:MutationCtx,project:Doc<'projects'>,prompt:string,pinnedModel:ClaudeModelSelection,request:QueuedContext):Promise<null>{
+type QueuedContext=Pick<Doc<'assistantQueue'>,'attachedAssetIds'|'selectedClipId'|'selectedClipIds'|'playhead'|'timelineId'>;
+const sentFromOtherTab=(project:Doc<'projects'>,timelineId?:string)=>!!timelineId&&timelineId!==activeTabOf(project);
+/** The timeline of the tab a request was sent from: the open tab, or another one the user was looking at. */
+async function requestTimeline(ctx:MutationCtx,project:Doc<'projects'>,timelineId?:string){
+  if(!sentFromOtherTab(project,timelineId))return currentTimeline(project);
+  if(!tabsOf(project).some(tab=>tab.id===timelineId))throw new ConvexError('That timeline no longer exists. Open a timeline tab and send again.');
+  return await storedTabTimeline(ctx,project,timelineId!)??currentTimeline(project);
+}
+async function beginRequest(ctx:MutationCtx,sent:Doc<'projects'>,prompt:string,pinnedModel:ClaudeModelSelection,request:QueuedContext):Promise<null>{
+  // The turn works on the tab the user sent from. It opens here, in the transaction that takes the run lock,
+  // and no other tab can open until the turn ends, whatever another agent or editor does meanwhile.
+  const switching=sentFromOtherTab(sent,request.timelineId)&&tabsOf(sent).some(tab=>tab.id===request.timelineId);
+  if(switching)await openTabFor(ctx,sent.ownerId,{projectId:sent._id,timelineId:request.timelineId!});
+  const project=switching?(await readProject(ctx,sent._id))!:sent;
   const ownerId=project.ownerId;
   const threadId = project.threadId ?? await createThread(ctx, components.agent, { userId: ownerId, title: project.title });
   const { messageId } = await saveMessage(ctx, components.agent, { threadId, userId: ownerId, prompt });
@@ -432,7 +444,7 @@ export const startQueued=internalMutation({args:{projectId:v.id('projects'),owne
     const pinnedModel=chosen&&!await canChooseEditorModel(ctx,args.ownerId)?enforceClaudeModelPolicy(resolveClaudeModel()):queued;assertEditorModelConfigured(pinnedModel);
     enforceClaudeModelPolicy(pinnedModel);
     for(const id of row.attachedAssetIds??[]){const asset=await ctx.db.get(id);if(!asset||asset.projectId!==project._id||asset.ownerId!==args.ownerId)throw new ConvexError('Attached footage is no longer available. Remove this queued message and send an updated request.');}
-    const ids=new Set(currentTimeline(project).clips.map(clip=>clip.id));
+    const ids=new Set((await requestTimeline(ctx,project,row.timelineId).catch(()=>currentTimeline(project))).clips.map(clip=>clip.id));
     const selectedClipIds=row.selectedClipIds?.filter(id=>ids.has(id));
     await beginRequest(ctx,project,row.prompt,pinnedModel,{...row,selectedClipId:row.selectedClipId&&ids.has(row.selectedClipId)?row.selectedClipId:undefined,selectedClipIds});
     await ctx.db.delete(row._id);
