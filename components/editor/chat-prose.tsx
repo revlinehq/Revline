@@ -9,7 +9,8 @@ type ProseBlock =
   | { type: "paragraph"; text: string }
   | { type: "heading"; text: string }
   | { type: ListType; items: string[] }
-  | { type: "table"; head: string[]; rows: string[][] };
+  | { type: "table"; head: string[]; rows: string[][] }
+  | { type: "code"; text: string };
 
 const tableCells = (line: string) => line.replace(/^\|/, "").replace(/\|$/, "").split("|").map(cell => cell.trim());
 
@@ -36,6 +37,15 @@ function parseBlocks(text: string): ProseBlock[] {
   const lines = text.replace(/\r\n?/g, "\n").split("\n");
   for (let index = 0; index < lines.length; index++) {
     const line = lines[index].trim();
+    // A fenced code block keeps its lines and indentation as written.
+    if (line.startsWith("```")) {
+      flushParagraph();
+      flushList();
+      const code: string[] = [];
+      while (++index < lines.length && !lines[index].trim().startsWith("```")) code.push(lines[index]);
+      blocks.push({ type: "code", text: code.join("\n") });
+      continue;
+    }
     // A markdown table: a | header | row, a |---| separator, then | rows |.
     if (line.startsWith("|") && /^\|?\s*:?-{2,}/.test(lines[index + 1]?.trim() ?? "")) {
       flushParagraph();
@@ -91,10 +101,14 @@ function InlineMarkup({ text, animate }: { text: string; animate: boolean }) {
   let bold = false;
   const words: ReactNode[] = [];
 
-  for (const match of text.matchAll(/\*\*|[^*]+|\*/g)) {
+  for (const match of text.matchAll(/\*\*|`[^`]+`|[^*`]+|\*|`/g)) {
     const word = match[0];
     if (word === "**") {
       bold = !bold;
+      continue;
+    }
+    if (word.length > 2 && word.startsWith("`") && word.endsWith("`")) {
+      words.push(<code key={match.index} className="rounded bg-muted px-1 py-px font-mono text-[0.92em]">{word.slice(1, -1)}</code>);
       continue;
     }
     if (word === "*" && match.index === text.length - 1) continue;
@@ -144,6 +158,13 @@ export const ChatProse = memo(function ChatProse({
               <TableHeader><TableRow>{block.head.map((cell, cellIndex) => <TableHead key={cellIndex}><InlineMarkup text={cell} animate={animate} /></TableHead>)}</TableRow></TableHeader>
               <TableBody>{block.rows.map((row, rowIndex) => <TableRow key={rowIndex}>{row.map((cell, cellIndex) => <TableCell key={cellIndex} className="whitespace-normal align-top"><InlineMarkup text={cell} animate={animate} /></TableCell>)}</TableRow>)}</TableBody>
             </Table>
+          );
+        }
+        if (block.type === "code") {
+          return (
+            <pre key={blockIndex} className="overflow-x-auto whitespace-pre rounded-md bg-muted px-3 py-2 font-mono text-xs leading-relaxed">
+              <code>{block.text}</code>
+            </pre>
           );
         }
         if (block.type === "paragraph") {
