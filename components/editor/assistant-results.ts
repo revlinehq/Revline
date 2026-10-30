@@ -158,7 +158,7 @@ export function summarizeTools(steps: ChatTool[], evidence:{publishedRevision?:n
   const unresolved=unresolvedToolFailureIds([{content:[...unique].filter(([,step])=>step.state!=='running').map(([id,step])=>({type:step.state==='error'?'tool-error':'tool-result',toolCallId:id,toolName:step.name,input:step.input,output:step.output,error:step.detail}))}]);
   const groups = new Map<string, ChatTool[]>();
   for (const [id, step] of unique) {
-    if(step.state==='error'&&!unresolved.has(id))continue;
+    if((step.state==='error'||step.output?.success===false)&&!unresolved.has(id))continue;
     if (step.state === 'done' && READ_ONLY_TOOLS.has(step.name)) continue;
     const staged = (step.staged === true || step.output?.staged === true)&&!published(step.output);
     const savedEvidence = staged ? 'prepared' : SAVED_ELSEWHERE.has(step.name) || step.output?.saved === true || step.output?.unchanged === true || published(step.output) ? 'saved' : 'unconfirmed';

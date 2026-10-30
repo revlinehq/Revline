@@ -1169,7 +1169,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
         args = [input, ...args.slice(1)] as never[];
         const ranges = sceneRanges(name, input);
         const checks = readReason ? [] : ranges.map(range => coverage.sceneCheck(range.start, range.end)).filter(check => !!check);
-        if (checks.length) return { saved: false, refused: 'reads', readCheck: `Nothing was built. ${checks.map(check => check.readCheck).join(' ')} Then call ${name} again. Pass readReason only if a flagged moment truly cannot be read.`, ...readLists(checks) };
+        if (checks.length) return { success: false, saved: false, refused: 'reads', readCheck: `Nothing was built. ${checks.map(check => check.readCheck).join(' ')} Then call ${name} again. Pass readReason only if a flagged moment truly cannot be read.`, ...readLists(checks) };
       }
       const output = await execute.apply(this ?? tool, args) as Record<string, unknown>;
       const ids = new Set<string>([...(Array.isArray(output?.changedClips) ? output.changedClips : []).map(clip => String((clip as { id?: unknown }).id)), ...(Array.isArray(output?.scenes) ? output.scenes : []).map(scene => String((scene as { clipId?: unknown }).clipId))]);
