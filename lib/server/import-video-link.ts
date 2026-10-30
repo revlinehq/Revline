@@ -85,7 +85,7 @@ export async function importVideoLink(value: string, directory: string, signal: 
   if (maxBytes < 64 * 1024 * 1024) throw new AnalysisError('The media worker needs more free disk space before importing a video.', 503);
   const source = join(directory, 'download.mp4');
   let title = 'Imported video';
-  if (link.kind === 'youtube' || link.kind === 'social') {
+  if (link.kind === 'youtube') {
     const bundled = join(process.cwd(), '.data/video-import/bin/yt-dlp');
     const executable = process.env.YT_DLP_PATH || (existsSync(bundled) ? bundled : 'yt-dlp');
     try {
@@ -94,7 +94,7 @@ export async function importVideoLink(value: string, directory: string, signal: 
     } catch (error) {
       if (signal.aborted) throw error;
       const stderr = String((error as { stderr?: string }).stderr ?? '');
-      if (/sign in|confirm.*bot|private video|not available|unavailable|copyright|age.restricted/i.test(stderr)) throw new AnalysisError((link.kind === 'social' ? 'The site blocked this download (it may need a login).' : 'YouTube blocked this download.') + ' Use a public MP4 link or upload the video file instead.', 400);
+      if (/sign in|confirm.*bot|private video|not available|unavailable|copyright|age.restricted/i.test(stderr)) throw new AnalysisError('YouTube blocked this download. Use a public MP4 link or upload the video file instead.', 400);
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') throw new AnalysisError('YouTube import is unavailable on this media worker. Install yt-dlp first.', 503);
       throw new AnalysisError('Could not download this YouTube video. Try another public video or an MP4 link.', 400);
     }
