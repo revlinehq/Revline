@@ -53,21 +53,8 @@ export function ExportDialog({open,onOpenChange,title,timeline,coverUrl,onExport
     {activeJob?.requestId&&onCancel&&<Button variant="secondary" disabled={stopping||retrying} onClick={stopExport}><Square size={14}/>{stopping?'Stopping export…':'Stop export'}</Button>}
     {state?.status==='cancelled'&&<ProcessingStatus state="stopped" label="Export stopped." detail="Your saved edit is unchanged."/>}
     {state?.current&&state.status==='completed'&&state.url&&!working?<><ProcessingStatus state="ready" label="Your video is ready."/>{onDownload&&state.requestId?<Button className="export-main" disabled={downloading} onClick={downloadVideo}>{downloading?<LoaderCircle size={16} className="animate-spin"/>:<Download size={16}/>}Download</Button>:<Button asChild className="export-main"><a href={state.url} target="_blank" rel="noopener noreferrer" download={`${title}.mp4`}><Download size={16}/>Download</a></Button>}<Button variant="secondary" onClick={startExport} disabled={demo||working||tooLong}>Export a new version</Button></>:<Button className="export-main" disabled={working||!timeline.clips.length||demo||tooLong||timelines.length>1&&!selectedTimelines.length} onClick={startExport}>{working?<LoaderCircle size={16} className="animate-spin"/>:<Download size={16}/>}{many?`Export ${videoCount} videos`:'Export MP4'}</Button>}
-    {(error||(state?.current&&state?.error))&&<ProcessingStatus state="error" label="Couldn’t export this video." detail={error||(state?.current?state.error:null)}/ >}{exports.length>1&&<ExportList exports={exports} onCancel={onCancel} onDownload={onDownload}/>}{demo?<p className="export-demo">Create a project with your own footage to export a video.</p>:!timeline.clips.length&&!working&&<p role="status" className="export-demo">Add a clip to export.</p>}
+    {(error||(state?.current&&state?.error))&&<ProcessingStatus state="error" label="Couldn’t export this video." detail={error||(state?.current?state.error:null)}/ >}{demo?<p className="export-demo">Create a project with your own footage to export a video.</p>:!timeline.clips.length&&!working&&<p role="status" className="export-demo">Add a clip to export.</p>}
   </DialogContent></Dialog>;
-}
-
-const EXPORT_STATUS={queued:'Waiting',rendering:'Rendering',completed:'Ready',failed:'Failed',cancelled:'Stopped'} as const;
-/** Recent exports of this project: what is still rendering, waiting, or ready to download. */
-function ExportList({exports,onCancel,onDownload}:{exports:ExportListItem[];onCancel?:(jobId:string)=>Promise<void>;onDownload?:(jobId:string)=>Promise<void>}){
-  const [busy,setBusy]=useState<string|null>(null);
-  const run=async(id:string,action?:(jobId:string)=>Promise<void>)=>{if(!action||busy)return;setBusy(id);try{await action(id);}catch{/* The row's status stays the source of truth. */}finally{setBusy(null);}};
-  return <section className="export-list" aria-label="Recent exports"><h4>Recent exports</h4><ul>{exports.map(item=>{
-    const active=item.status==='queued'||item.status==='rendering';
-    return <li key={item.id} data-status={item.status}><div><strong>{item.label??(item.sourceClipId?'Clip':'Whole timeline')}</strong><span>{EXPORT_STATUS[item.status]}{item.status==='rendering'&&item.progress!==undefined?` · ${Math.round(item.progress)}%`:''}{item.resolution?` · ${item.resolution===2160?'4K':`${item.resolution}p`}`:''}</span></div>
-      {item.status==='completed'&&onDownload&&<Button size="sm" variant="outline" disabled={busy===item.id} onClick={()=>run(item.id,onDownload)}>{busy===item.id?<LoaderCircle size={14} className="animate-spin"/>:<Download size={14}/>}Download</Button>}
-      {active&&onCancel&&<Button size="sm" variant="ghost" disabled={busy===item.id} onClick={()=>run(item.id,onCancel)}><Square size={12}/>Stop</Button>}
-    </li>;})}</ul></section>;
 }
 
 /** Pick the timelines to export: each row is its preview and name, and each exports as its own video. */
