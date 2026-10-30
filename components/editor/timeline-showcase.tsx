@@ -7,6 +7,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@clerk/nextjs';
 import { useConvexAuth, useMutation, useQuery } from 'convex/react';
+import { useSceneThumbs } from '@/lib/editor/scene-thumbs-query';
 import { ArrowUpRight, Film, LoaderCircle, RectangleHorizontal } from 'lucide-react';
 import { api } from '@/convex/_generated/api';
 import { createEditorStore } from '@/lib/editor/store';
@@ -33,7 +34,7 @@ export function TimelineShowcase({ shareId }: { shareId: string }) {
   const router = useRouter();
   const { isLoaded, isSignedIn } = useAuth(), { isAuthenticated } = useConvexAuth();
   const share = useQuery(api.timelineShares.get, { shareId });
-  const sceneThumbs = useQuery(api.sceneThumbs.forShare, { shareId });
+  const sceneThumbs = useSceneThumbs('forShare', { shareId });
   const copy = useMutation(api.timelineShares.useTimeline);
   const [tabId, setTabId] = useState<string>();
   if (share === undefined) return <div className="timeline-showcase"><ShowcaseHeader/><div className="timeline-showcase-loading" role="status"><LoaderCircle size={22} className="animate-spin"/><span>Loading timeline…</span></div></div>;

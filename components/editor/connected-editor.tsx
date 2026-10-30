@@ -8,6 +8,7 @@ import { createTimelineSaveQueue } from '@/lib/editor/timeline-sync';
 import { EditorStateProvider } from './editor-state';
 import { useSceneCode } from './use-scene-code';
 import { useConvex, useConvexAuth, useMutation, useQueries, useQuery, useAction } from 'convex/react';
+import { useSceneThumbs } from '@/lib/editor/scene-thumbs-query';
 import { openingFootage } from '@/lib/editor/footage-opening';
 import { WorkspaceNav } from '@/components/workspace/workspace-nav';
 import { FootagePreparation } from './footage-preparation';
@@ -57,7 +58,7 @@ export function ConnectedEditor({projectId}: {projectId:string}) {
 }
 function ProjectEditor({project}: {project:Doc<'projects'>}) {
   // Real frames for motion clips on the timeline, rendered in the background after each saved change.
-  const sceneThumbs=useQuery(api.sceneThumbs.forProject,{projectId:project._id});
+  const sceneThumbs=useSceneThumbs('forProject',{projectId:project._id});
   const ensureSceneThumbs=useMutation(api.sceneThumbs.ensure);
   // Two clips render at a time; each finished batch asks for the next until every motion clip has frames.
   const thumbCount=Object.keys(sceneThumbs??{}).length;
@@ -148,7 +149,7 @@ function ProjectEditor({project}: {project:Doc<'projects'>}) {
   // Each stored tab's first shot, shown in the export picker.
   // Motion-only tabs are previewed by their first scene's rendered frame.
   const tabSceneIds=useMemo(()=>(tabSnapshots??[]).flatMap(item=>item.timeline.clips.filter(clip=>clip.kind==='scene').sort((a,b)=>a.start-b.start).slice(0,1).map(clip=>clip.id)),[tabSnapshots]);
-  const tabSceneThumbs=useQuery(api.sceneThumbs.forClips,tabSceneIds.length?{projectId:project._id,clipIds:tabSceneIds}:'skip');
+  const tabSceneThumbs=useSceneThumbs('forClips',tabSceneIds.length?{projectId:project._id,clipIds:tabSceneIds}:'skip');
   const tabCovers=useMemo(()=>new Map(tabSnapshots?.map(item=>[item.id,timelineCover(normalizeTimeline(item.timeline),assets,tabSceneThumbs)])),[tabSnapshots,assets,tabSceneThumbs]);
   const requestedPreviews=useRef(new Set<string>());
   const [previewPreparationError,setPreviewPreparationError]=useState('');
