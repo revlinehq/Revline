@@ -72,7 +72,8 @@ export async function enqueueMediaTask(ctx: MutationCtx, input: Pick<Doc<'mediaT
       return taskId;
     }
   }
-  if (input.assetId && input.kind !== 'frames' && input.kind !== 'video' && input.kind !== 'cutout' && input.kind !== 'derive') {
+  // Each frame read, cut-out and derivation is its own request with its own result row: parallel ones on one asset each get a task.
+  if (input.assetId && input.kind !== 'frames' && input.kind !== 'video' && input.kind !== 'cutout' && input.kind !== 'derive' && input.kind !== 'read') {
     const existing = await ctx.db.query('mediaTasks').withIndex('by_asset_kind', q => q.eq('assetId', input.assetId).eq('kind', input.kind)).order('desc').take(10);
     const active = existing.find(task => (input.kind!=='preview'||task.previewVersion===input.previewVersion)&&['queued','running','retrying'].includes(task.status));
     if (active) { if (input.analysisRequestId) await ctx.db.patch(active._id, { analysisRequestId: input.analysisRequestId }); return active._id; }
