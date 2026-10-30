@@ -9,6 +9,8 @@ type Window = { start: number; end: number };
 /** Frames a second at which a read shows a transition frame by frame. */
 export const DENSE_FPS = 8;
 const EPSILON = .05;
+/** The longest change that is one transition rather than a stretch of several beats. */
+const SPLIT_MAX = 1.5;
 const label = (moment: Window) => `${moment.start}-${moment.end}s`;
 
 export class ReadCoverage {
@@ -33,8 +35,11 @@ export class ReadCoverage {
     return moments.filter(moment => moment.kind !== 'cut' && cuts.some(cut => cut > moment.start + EPSILON && cut < moment.end - EPSILON));
   }
 
+  /** Read when dense reads together cover it end to end: a long moment is usually read in several windows. */
   private read(assetId: string, moment: Window) {
-    return (this.dense.get(assetId) ?? []).some(window => window.start <= moment.start + EPSILON && window.end >= moment.end - EPSILON);
+    let reached = moment.start + EPSILON;
+    for (const window of [...this.dense.get(assetId) ?? []].sort((a, b) => a.start - b.start)) if (window.start <= reached && window.end > reached) reached = window.end;
+    return reached >= moment.end - EPSILON;
   }
 
   /** What a scene placed over [start, end] of the timeline still owes: unread moments there (the reference plays on the
@@ -45,8 +50,9 @@ export class ReadCoverage {
     const [assetId, moments] = mapped[0];
     const inside = moments.filter(moment => moment.end > start + EPSILON && moment.start < end - EPSILON);
     const unread = inside.filter(moment => !this.read(assetId, moment));
-    // A scene edge inside a moment cuts one continuous change in two.
-    const split = inside.filter(moment => [start, end].some(edge => edge > moment.start + EPSILON && edge < moment.end - EPSILON));
+    // A scene edge inside a transition cuts one continuous change in two. Long stretches of motion are many beats, and
+    // scenes rightly end inside them, so only a short change (a transition) counts as split.
+    const split = inside.filter(moment => moment.end - moment.start <= SPLIT_MAX && [start, end].some(edge => edge > moment.start + EPSILON && edge < moment.end - EPSILON));
     if (!unread.length && !split.length) return undefined;
     return {
       ...(unread.length ? { unreadMoments: unread.map(label) } : {}),

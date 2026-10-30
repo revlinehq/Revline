@@ -21,10 +21,12 @@ async function difference(a: Buffer, b: Buffer) {
     return mask;
   };
   const [first, second] = [content(x), content(y)];
+  // Overlap allows a pixel of drift (about 20 px at 1080p), so a lockup a hair off its place still counts as matching.
+  const near = (mask: Uint8Array, pixel: number) => { const column = pixel % 96, row = (pixel / 96) | 0; for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) { const c = column + dx, r = row + dy; if (c >= 0 && c < 96 && r >= 0 && r < 54 && mask[r * 96 + c]) return true; } return false; };
   let both = 0, either = 0, colors = 0;
   for (let pixel = 0; pixel < first.length; pixel++) {
     if (!first[pixel] && !second[pixel]) continue;
-    either++; if (first[pixel] && second[pixel]) both++;
+    either++; if (first[pixel] ? near(second, pixel) : near(first, pixel)) both++;
     colors += (Math.abs(x[pixel * 3] - y[pixel * 3]) + Math.abs(x[pixel * 3 + 1] - y[pixel * 3 + 1]) + Math.abs(x[pixel * 3 + 2] - y[pixel * 3 + 2])) / (3 * 255);
   }
   if (!either) return 0;
