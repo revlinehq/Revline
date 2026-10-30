@@ -23,7 +23,7 @@ import { components, internal } from "../_generated/api";
 import type { ActionCtx } from "../_generated/server";
 import { EditSession, IncompleteEditError } from "./editSession";
 import { AnalysisStepError, createEditorToolkit } from "./editorToolkit";
-import { completionRepairFeedback, AssistantToolRetryError, AssistantRenderReviewError, AssistantInspectionError, hasOnlyUnresolvedInspectionFailures, hasFailedRenderChecks, hasRepeatedToolFailures, hasUnresolvedToolFailures } from "../../lib/ai/tool-failures";
+import { completionRepairFeedback, AssistantToolRetryError, AssistantRenderReviewError, hasFailedRenderChecks, hasRepeatedToolFailures, hasUnresolvedToolFailures } from "../../lib/ai/tool-failures";
 import { editorCapabilityIndex } from '../../lib/ai/editor-capabilities';
 import { BEAT_ANALYSIS_ENGINE } from '../../lib/media-analysis/beat-map';
 export const editorTurnArgs={...assistantRunArgs,continuation:v.optional(continuationValidator)};
@@ -151,7 +151,6 @@ You edit the user's video timeline using structured tools. Greetings, small talk
     if (hasRepeatedToolFailures(steps)) throw new AssistantToolRetryError();
     if (streamError) throw streamError;
     if (hasFailedRenderChecks(steps, reviewRequirements)) throw new AssistantRenderReviewError();
-    if(!editSession.savedEdits&&!editSession.staged&&hasOnlyUnresolvedInspectionFailures(steps))throw new AssistantInspectionError();
     const toolFailed = hasUnresolvedToolFailures(steps);
     const correctedToolError = steps.some(step => step.content.some(value => value && typeof value === 'object' && 'type' in value && value.type === 'tool-error'));
     if (finishReason === 'stop' && !toolFailed && correctedToolError) await editSession.confirmRepairs();
@@ -169,7 +168,7 @@ You edit the user's video timeline using structured tools. Greetings, small talk
     try { partialSaved = await session?.savePartial() ?? false; }
     catch (saveError) { cause = saveError; }
     costLog.finish(cause instanceof IncompleteEditError ? cause.reason : cause instanceof AssistantTokenBudgetError ? 'token_budget' : cause instanceof AssistantToolRetryError ? 'repeated_tool_failure' : 'provider_or_tool_error', progress(), !(cause instanceof IncompleteEditError));
-    const failureReason = (cause instanceof IncompleteEditError || cause instanceof AssistantTokenBudgetError || cause instanceof AssistantToolRetryError || cause instanceof AssistantRenderReviewError || cause instanceof AssistantInspectionError || cause instanceof AnalysisStepError) ? cause.message : cause instanceof Error && /timeline changed elsewhere|Source trim|Clip timing|Clip media|replacement was not saved|requested changes were not saved|Inspect the current timeline|^(?:OpenAI editing requires OPENAI_API_KEY in this Convex environment\.|Revline editing supports GPT-)/.test(cause.message) ? cause.message : assistantFailureReason(cause, selectedProvider) ?? "The assistant could not finish this request. Check the model configuration and try again.";
+    const failureReason = (cause instanceof IncompleteEditError || cause instanceof AssistantTokenBudgetError || cause instanceof AssistantToolRetryError || cause instanceof AssistantRenderReviewError || cause instanceof AnalysisStepError) ? cause.message : cause instanceof Error && /timeline changed elsewhere|Source trim|Clip timing|Clip media|replacement was not saved|requested changes were not saved|Inspect the current timeline|^(?:OpenAI editing requires OPENAI_API_KEY in this Convex environment\.|Revline editing supports GPT-)/.test(cause.message) ? cause.message : assistantFailureReason(cause, selectedProvider) ?? "The assistant could not finish this request. Check the model configuration and try again.";
     const reason = partialSaved ? `${failureReason.replace(/\s*The pending replacement was not saved\./g, '')} The latest valid partial edit was saved. Continue the unfinished part from the current timeline.` : failureReason;
     const edits = progress().savedEdits;
     try { await saveMessage(ctx, components.agent, { threadId: args.threadId, userId: args.ownerId,promptMessageId:args.promptMessageId, message: { role: "assistant", content: edits ? `${edits} edits were saved before the assistant stopped. Undo restores the state before the latest consecutive group of AI edits. ${reason}` : `No timeline changes were saved. ${reason}` } }); } catch { /* Status remains the recovery path if the message service is unavailable. */ }

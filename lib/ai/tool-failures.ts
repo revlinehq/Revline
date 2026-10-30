@@ -1,5 +1,6 @@
 import { isOverlapPlacementRejection } from '../editor/timeline-edit-errors';
 import type { EffectPlan } from './edit-plan';
+import { isPassiveRead } from './read-only-tools';
 
 function stable(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(stable).join(',')}]`;
@@ -163,24 +164,19 @@ function unresolvedFailures(steps: ToolSteps, recoverPlacements = false) {
 }
 
 /** Exact retries resolve errors. A typed no-write placement rejection also
- * resolves after a successful same-target correction and clean draft inspection. */
+ * resolves after a successful same-target correction and clean draft inspection.
+ * A failed read changes nothing, so it never holds the turn open: the reply says what could not be read. */
+function unresolvedEdits(steps: ToolSteps) {
+  return [...unresolvedFailures(steps, true)].filter(([key]) => !isPassiveRead(key.slice(0, key.indexOf(':'))));
+}
+
 export function hasUnresolvedToolFailures(steps: ToolSteps) {
-  return unresolvedFailures(steps, true).size > 0;
+  return unresolvedEdits(steps).length > 0;
 }
 
 /** Presentation uses the same exact-retry accounting as the agent guard. */
 export function unresolvedToolFailureIds(steps: ToolSteps) {
-  return new Set([...unresolvedFailures(steps, true).values()].flatMap(failure => failure.ids));
-}
-
-/** Failed inspection is not evidence of an unsaved timeline mutation. */
-export function hasOnlyUnresolvedInspectionFailures(steps: ToolSteps) {
-  const failures=[...unresolvedFailures(steps,true).keys()];
-  const inspections=new Set(['inspectTimeline','inspectClip','inspectAssetAnalysis','analyzeMedia','inspectVideo','inspectFrames','inspectReference']);
-  return failures.length>0&&failures.every(key=>inspections.has(key.slice(0,key.indexOf(':'))));
-}
-export class AssistantInspectionError extends Error {
-  constructor(){super('Some footage checks could not complete. Your timeline was not changed.');this.name='AssistantInspectionError';}
+  return new Set(unresolvedEdits(steps).flatMap(([, failure]) => failure.ids));
 }
 
 export function hasRepeatedToolFailures(steps: ToolSteps) {

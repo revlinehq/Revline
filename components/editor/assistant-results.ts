@@ -2,6 +2,7 @@ import { normalizeTimeline, type Timeline } from '@/lib/editor/types';
 import {assistantErrorDetail} from './assistant-turn-presentation';
 import type { TimelinePublicationReceipt } from '@/lib/ai/publication-receipt';
 import { unresolvedToolFailureIds } from '@/lib/ai/tool-failures';
+import { READ_ONLY_TOOLS } from '@/lib/ai/read-only-tools';
 export type { TimelinePublicationReceipt } from '@/lib/ai/publication-receipt';
 
 export type ChatTool = { id?: string; name: string; state: 'running' | 'done' | 'error' | 'stopped'; detail?: string; staged?: boolean; input?: Record<string, unknown>; output?: Record<string, unknown> };
@@ -128,7 +129,7 @@ export const TOOL_LABELS: Record<string, [string, string]> = {
   readSkill: ['Reading editing guide', 'Read editing guide'], askUser: ['Asking you', 'Asked you'], askBrandKit: ['Asking which brand', 'Asked which brand'], measureScreen: ['Measuring screen', 'Measured screen'], readFrames: ['Reading frames', 'Read frames'], trackReference: ['Tracking motion', 'Tracked motion'], measureFrame: ['Measuring frame', 'Measured frame'], compareScreen: ['Comparing with screen', 'Compared with screen'], saveBlueprint: ['Saving blueprint', 'Saved blueprint'], listBlueprints: ['Checking blueprints', 'Checked blueprints'], getBlueprint: ['Loading blueprint', 'Loaded blueprint'], createBrandKit: ['Building brand kit', 'Saved brand kit'], remember: ['Saving to memory', 'Saved to memory'], forget: ['Removing from memory', 'Removed from memory'], updateBrandKit: ['Updating brand kit', 'Updated brand kit'], addScene: ['Adding scene', 'Added scene'], editScene: ['Updating scene', 'Updated scene'],
   inspectTimeline: ['Checking timeline', 'Checked timeline'], inspectClip: ['Checking clip', 'Checked clip'], inspectAssetAnalysis: ['Reading footage notes', 'Read footage notes'], analyzeMedia: ['Analyzing footage', 'Analyzed footage'], inspectVideo: ['Finding moments', 'Reviewed footage'], inspectFrames: ['Inspecting frames', 'Inspected frames'], inspectVideoFrames: ['Inspecting frames', 'Inspected frames'],
 };
-export const READ_ONLY_TOOLS = new Set(['askUser','askBrandKit','readFrames','trackReference','measureFrame','measureScreen','compareScreen','listBlueprints','getBlueprint','getFrames','readSkill','recallMemory','analyzeColor','listBrandKits','getBrandKit','planEffects','previewRender','inspectTimeline', 'inspectClip', 'inspectAssetAnalysis', 'analyzeMedia', 'inspectVideo', 'inspectFrames', 'inspectVideoFrames', 'inspectReference']);
+export { READ_ONLY_TOOLS };
 /** These save outside the timeline (memory, brand kits); their own result is the confirmation. */
 const SAVED_ELSEWHERE = new Set(['remember', 'forget', 'createBrandKit', 'updateBrandKit', 'saveBlueprint']);
 const count = (value: unknown) => typeof value === 'number' && Number.isInteger(value) && value >= 0 ? value : undefined;
