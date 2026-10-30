@@ -1,14 +1,16 @@
+import type { CSSProperties } from 'react';
 import { LandingTileVideo } from './tile-video';
 import { LandingChip, LandingHeading, LandingSection } from './ui';
 
 // A tile shows a still, or a real film made in Revline (`video`, served from public/landing with its poster).
-// `classic` tiles are 4:3; `credit` adds a small attribution line on the tile.
-type Tile = { label: string; image?: string; video?: { src: string; poster: string }; wide?: boolean; classic?: boolean; credit?: string };
+// A video's `ratio` is its real frame (width / height); its tile is that shape at the row's height, so no film is cropped.
+// `credit` adds a small attribution line on the tile.
+type Tile = { label: string; image?: string; video?: { src: string; poster: string; ratio: number }; wide?: boolean; credit?: string };
 
 const rows: Tile[][] = [
   [
-    { label: 'Launch film', video: { src: '/landing/kinetic-launch.mp4', poster: '/landing/kinetic-launch-poster.webp' }, wide: true },
-    { label: 'Voice typing', video: { src: '/landing/voice-typing.mp4', poster: '/landing/voice-typing-poster.webp' }, wide: true },
+    { label: 'Launch film', video: { src: '/landing/kinetic-launch.mp4', poster: '/landing/kinetic-launch-poster.webp', ratio: 16 / 9 } },
+    { label: 'Voice typing', video: { src: '/landing/voice-typing.mp4', poster: '/landing/voice-typing-poster.webp', ratio: 16 / 9 } },
     { label: 'Podcast clip', image: 'podcast' },
     { label: 'Product demo', image: 'code-screen', wide: true },
     { label: 'Vlog', image: 'vlog', wide: true },
@@ -17,7 +19,7 @@ const rows: Tile[][] = [
     { label: 'Ad', image: 'beauty' },
   ],
   [
-    { label: 'Save Reminders', video: { src: '/landing/save-reminders.mp4', poster: '/landing/save-reminders-poster.webp' }, classic: true, credit: 'Concept inspired by @mosycreate' },
+    { label: 'Save Reminders', video: { src: '/landing/save-reminders.mp4', poster: '/landing/save-reminders-poster.webp', ratio: 4 / 3 }, credit: 'Concept inspired by @mosycreate' },
     { label: 'Talking head', image: 'talking-head' },
     { label: 'Walkthrough', image: 'podcast' },
     { label: 'UGC ad', image: 'classroom', wide: true },
@@ -28,8 +30,8 @@ const rows: Tile[][] = [
 ];
 
 function TileSet({ tiles, hidden = false }: { tiles: Tile[]; hidden?: boolean }) {
-  return <ul className="landing-marquee-set" aria-hidden={hidden || undefined}>{tiles.map(({ label, image, video, wide, classic, credit }) => <li key={label} className={wide ? 'landing-tile landing-tile-wide' : classic ? 'landing-tile landing-tile-classic' : 'landing-tile'}>
-    {video ? <LandingTileVideo src={video.src} poster={video.poster} label={label} ratio={classic ? 4 / 3 : 16 / 9} hidden={hidden} /> : <img src={`/landing/${image}.webp`} alt="" loading="lazy" decoding="async" />}
+  return <ul className="landing-marquee-set" aria-hidden={hidden || undefined}>{tiles.map(({ label, image, video, wide, credit }) => <li key={label} className={wide ? 'landing-tile landing-tile-wide' : 'landing-tile'} style={video ? { '--tile-ratio': video.ratio } as CSSProperties : undefined} data-video={video ? '' : undefined}>
+    {video ? <LandingTileVideo src={video.src} poster={video.poster} label={label} ratio={video.ratio} hidden={hidden} /> : <img src={`/landing/${image}.webp`} alt="" loading="lazy" decoding="async" />}
     {credit && <small className="landing-tile-credit">{credit}</small>}
     <LandingChip>{label}</LandingChip>
   </li>)}</ul>;

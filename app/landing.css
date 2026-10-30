@@ -105,15 +105,16 @@ div.landing-hero-buttons>.landing-reveal-content{display:flex;align-items:center
 
 /* Use cases */
 .landing-use-cases{display:flex;flex-direction:column;gap:40px;padding-block:96px}
-.landing-carousel{display:flex;flex-direction:column;gap:12px;border-radius:8px;overflow:hidden}
+.landing-carousel{display:flex;flex-direction:column;gap:16px;border-radius:8px;overflow:hidden}
 .landing-marquee{overflow:hidden}
 .landing-marquee-track{display:flex;width:max-content;animation:landing-marquee 55s linear infinite}
 .landing-marquee[data-direction=right] .landing-marquee-track{animation-direction:reverse}
 .landing-carousel:hover .landing-marquee-track{animation-play-state:paused}
-.landing-marquee-set{display:flex;gap:16px;padding-right:16px}
-.landing-tile{position:relative;width:124px;height:220px;flex-shrink:0;border-radius:8px;overflow:hidden;background:#17181c}
+/* `.landing ul` resets padding, so the seam between a set and its looped copy needs the more specific selector. */
+.landing .landing-marquee-set{display:flex;gap:16px;padding-right:16px}
+.landing-tile{--tile-h:220px;position:relative;width:124px;height:var(--tile-h);flex-shrink:0;border-radius:8px;overflow:hidden;background:#17181c}
 .landing-tile-wide{width:391px}
-.landing-tile-classic{width:293px}
+.landing-tile[data-video]{width:calc(var(--tile-h,220px) * var(--tile-ratio))}
 .landing-tile-credit{position:absolute;left:10px;bottom:8px;padding:2px 6px;border-radius:4px;background:#0b0b0d8c;font-size:10px;line-height:14px;color:#ffffffd9;pointer-events:none}
 .landing-tile :is(img,video){width:100%;height:100%;object-fit:cover;display:block}
 .landing-tile .landing-chip{position:absolute;top:10px;left:10px}
@@ -329,9 +330,8 @@ div.landing-hero-buttons>.landing-reveal-content{display:flex;align-items:center
   .landing-mcp-agents{gap:8px}
   .landing-mcp-agents li{width:48px;height:48px;border-radius:14px}
   .landing-mcp-agents img{width:34px;height:34px}
-  .landing-tile{height:180px;width:102px}
+  .landing-tile{--tile-h:180px;width:102px}
   .landing-tile-wide{width:320px}
-  .landing-tile-classic{width:240px}
   .landing-testimonial{padding-block:72px}
   .landing-testimonial blockquote{font-size:24px}
   .landing-plan{padding:24px}

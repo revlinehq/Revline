@@ -7,6 +7,8 @@ import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 export function LandingTileVideo({ src, poster, label, ratio = 16 / 9, hidden = false }: { src: string; poster: string; label: string; ratio?: number; hidden?: boolean }) {
   const video = useRef<HTMLVideoElement>(null);
   const [open, setOpen] = useState(false);
+  // The modal sizes to the film's real frame once its metadata loads; `ratio` only covers the first paint.
+  const [frame, setFrame] = useState(ratio);
   useEffect(() => {
     const element = video.current;
     if (!element) return;
@@ -23,9 +25,9 @@ export function LandingTileVideo({ src, poster, label, ratio = 16 / 9, hidden = 
     <button type="button" className="landing-tile-play" onClick={() => setOpen(true)} tabIndex={hidden ? -1 : undefined} aria-label={`Play ${label}`}>
       <video ref={video} src={src} poster={poster} muted loop playsInline preload="metadata" />
     </button>
-    <DialogContent className="landing-video-modal" style={{ '--video-ratio': ratio } as CSSProperties}>
+    <DialogContent className="landing-video-modal" style={{ '--video-ratio': frame } as CSSProperties}>
       <DialogTitle className="sr-only">{label}</DialogTitle>
-      <video src={src} poster={poster} muted autoPlay controls playsInline />
+      <video src={src} poster={poster} muted autoPlay controls playsInline onLoadedMetadata={event => { const { videoWidth, videoHeight } = event.currentTarget; if (videoWidth && videoHeight) setFrame(videoWidth / videoHeight); }} />
     </DialogContent>
   </Dialog>;
 }
