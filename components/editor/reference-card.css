@@ -6,10 +6,10 @@
 .reference-card-video{width:100%;max-height:240px;border-radius:6px;background:#000;object-fit:contain}
 .reference-strip{display:flex;gap:2px;height:26px}
 .reference-bar{position:relative}
-/* Moment marks ride the bottom of the shot strip; they ignore the pointer except on the mark itself. */
-.reference-moments{position:absolute;inset:auto 0 3px;height:8px;pointer-events:none}
-.reference-moment{position:absolute;bottom:0;min-width:3px;height:calc(8px * var(--strength));padding:0;border:0;border-radius:2px;background:color-mix(in srgb,var(--foreground) 55%,transparent);box-shadow:0 0 0 1px color-mix(in srgb,var(--background) 70%,transparent);cursor:pointer;pointer-events:auto;transform:translateX(-1px)}
-.reference-moment.is-cut{width:2px!important;min-width:2px}
+/* Moments sit on their own thin row under the shots, aligned to the same time: small ticks, never drawn over a shot. */
+.reference-moments{position:relative;height:6px;margin-top:4px}
+.reference-moment{position:absolute;top:0;min-width:2px;height:calc(2px + 4px * var(--strength));padding:0;border:0;border-radius:1px;background:color-mix(in srgb,var(--foreground) 32%,transparent);cursor:pointer}
+.reference-moment.is-cut{width:2px!important;min-width:2px;background:color-mix(in srgb,var(--foreground) 55%,transparent)}
 .reference-moment:hover{background:var(--foreground)}
 .reference-shot{flex-basis:0;min-width:4px;overflow:hidden;padding:0 4px;border:0;border-radius:3px;background:color-mix(in srgb,var(--foreground) 9%,transparent);color:var(--muted-foreground);font-size:10px;text-align:left;cursor:pointer}
 .reference-shot span{white-space:nowrap}
