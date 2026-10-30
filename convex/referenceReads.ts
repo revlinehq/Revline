@@ -61,7 +61,19 @@ export async function runRead(ctx: ActionCtx, ownerId: string, projectId: Id<'pr
   const mode = name === 'readFrames' ? 'sheet' : name === 'trackReference' ? 'track' : 'measure';
   const { assetId, time, ...rest } = READ_TOOL_INPUTS[name].parse(input) as { assetId: string; time?: number; start?: number; end?: number };
   const start = time ?? rest.start!, end = time ?? rest.end!;
-  const readId = await ctx.runMutation(internal.referenceReads.request, { ownerId, projectId, assetId, mode, ...rest, start, end });
+  // Many reads started at once contend with the worker claiming and heartbeating media tasks; a write conflict is retried, not returned.
+  // A full account queue (other edits' renders) frees up in seconds: wait for a slot instead of failing the read.
+  let readId: Id<'referenceReads'> | undefined;
+  const queueDeadline = Date.now() + 120_000;
+  for (let attempt = 0; !readId; attempt++) {
+    try { readId = await ctx.runMutation(internal.referenceReads.request, { ownerId, projectId, assetId, mode, ...rest, start, end }); }
+    catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (/too many media jobs processing/i.test(message) && Date.now() < queueDeadline && !signal?.aborted) { await new Promise(resolve => setTimeout(resolve, 3000 + Math.random() * 2000)); continue; }
+      if (attempt >= 5 || !/changed while this mutation was being run/i.test(message)) throw error;
+      await new Promise(resolve => setTimeout(resolve, 300 * 2 ** attempt + Math.random() * 300));
+    }
+  }
   // A reading queued behind other work waits for its turn rather than failing; the worker takes readings first.
   const deadline = Date.now() + 540_000;
   let started = false;

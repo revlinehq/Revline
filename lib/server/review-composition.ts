@@ -50,9 +50,22 @@ export async function captureTimelineFrames(snapshot:NonNullable<MediaWorkItem['
   await writeComposition(path,timeline,assets,assetUrls,720,timeline.fps as 24|30|60,'./',signal,audioSourceOffsets);
   onProgress(20);
   const frames:NonNullable<MediaTaskResult['snapshot']>['frames']=[];
-  // One frame-sized window per time keeps decoding bounded however far apart the times are.
-  for(const [index,requested] of times.entries()){
-    const time=Math.round(Math.min(Math.max(0,requested),last)*timeline.fps)/timeline.fps;
+  const at=times.map(requested=>Math.round(Math.min(Math.max(0,requested),last)*timeline.fps)/timeline.fps);
+  if(!timeline.clips.some(clip=>clip.kind==='video')){
+    // Nothing to decode (scenes, text, images): the times within each 3 s span (the capture's limit) share one capture
+    // session, instead of a browser start per frame.
+    const order=at.map((time,index)=>({time,index})).sort((a,b)=>a.time-b.time),images=new Array<string>(at.length);
+    for(let first=0;first<order.length;){
+      let next=first;while(next+1<order.length&&order[next+1].time+frame-order[first].time<=3)next++;
+      const group=order.slice(first,next+1);
+      await runCompositionCapture(directory,{...dimensions(timeline.aspectRatio,720),fps:timeline.fps,times:group.map(item=>item.time),start:group[0].time,end:group[group.length-1].time+frame,variants:['edited']},signal);
+      for(const [sample,item] of group.entries())images[item.index]=(await readFile(join(path,`sample-${sample}.png`))).toString('base64');
+      first=next+1;onProgress(20+Math.round(75*first/order.length));
+    }
+    for(const [index,time] of at.entries())frames.push({time,image:images[index]});
+  }
+  // With footage, one frame-sized window per time keeps decoding bounded however far apart the times are.
+  else for(const [index,time] of at.entries()){
     await runCompositionCapture(directory,{...dimensions(timeline.aspectRatio,720),fps:timeline.fps,times:[time],start:time,end:time+frame,variants:['edited']},signal);
     frames.push({time,image:(await readFile(join(path,'sample-0.png'))).toString('base64')});
     onProgress(20+Math.round(75*(index+1)/times.length));
