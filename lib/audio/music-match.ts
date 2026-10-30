@@ -2,6 +2,7 @@ import type { BeatMap } from '../media-analysis/beat-map';
 import type { AudioWaveform } from '../editor/types';
 import { decodeWaveform } from '../editor/audio-waveform';
 import type { MusicFeel } from './music-bed';
+import { STOCK_MUSIC_CATALOG, type StockMusic } from '../editor/stock-music';
 
 // Measuring a reference's music to match it: tempo and beat grid from its beat map, an energy curve from its
 // waveform, a feel from both; then the phase that puts a new track's downbeats on the film's main moments.
@@ -32,7 +33,12 @@ export function feelOf(bpm: number, energy: number[]): MusicFeel {
 /** The reference's grid: beat period from the median beat interval, first downbeat, and its bpm. */
 export function beatGrid(beats: BeatMap) {
   const intervals = beats.beats.slice(1).map((time, index) => time - beats.beats[index]).filter(value => value > .2 && value < 2);
-  const period = intervals.length ? median(intervals) : 60 / beats.bpm;
+  let period = intervals.length ? median(intervals) : 60 / beats.bpm;
+  // The tracker's frames are 20 ms, so one interval is quantized: fit one period through every beat (counting skipped ones).
+  const first = beats.beats[0] ?? 0, index = beats.beats.map(time => Math.round((time - first) / period));
+  const meanIndex = index.reduce((sum, value) => sum + value, 0) / Math.max(1, index.length), meanTime = beats.beats.reduce((sum, value) => sum + value, 0) / Math.max(1, beats.beats.length);
+  const spread = index.reduce((sum, value) => sum + (value - meanIndex) ** 2, 0);
+  if (spread > 0) period = index.reduce((sum, value, i) => sum + (value - meanIndex) * (beats.beats[i] - meanTime), 0) / spread;
   const bar = period * 4;
   // The phase that best fits the measured downbeats (or beats, every 4th) on a constant grid.
   const anchors = beats.downbeats?.length ? beats.downbeats : beats.beats.filter((_, index) => index % 4 === 0);
@@ -66,4 +72,47 @@ export function phaseForMoments(moments: number[], period: number) {
 export function momentFit(moments: number[], period: number, phase: number) {
   const bar = period * 4, off = (time: number, cycle: number) => round(((time - phase) % cycle + cycle * 1.5) % cycle - cycle / 2, 3);
   return moments.map(time => ({ time, fromDownbeat: off(time, bar), fromBeat: off(time, period) }));
+}
+
+/** Library tracks ranked for a reference: tempo first (allowing half and double time, up to 8% of speed change),
+ * then the same feel from tempo and energy, then genre and mood words. */
+export function rankStockMusic(target: { bpm: number; energy: number[]; level?: number; style?: string; trackId?: string }) {
+  const words = (target.style ?? '').toLowerCase().split(/[^a-z0-9&-]+/).filter(word => word.length > 2);
+  const feel = feelOf(target.bpm, target.energy), feels: MusicFeel[] = ['calm', 'warm', 'upbeat', 'driving'];
+  const tracks = target.trackId ? STOCK_MUSIC_CATALOG.filter(track => track.id === target.trackId) : STOCK_MUSIC_CATALOG;
+  return tracks.map(track => {
+    const rate = [1, 2, .5].map(multiple => target.bpm / (track.bpm * multiple)).reduce((best, value) => Math.abs(Math.log(value)) < Math.abs(Math.log(best)) ? value : best);
+    const tempo = Math.exp(-Math.abs(Math.log(rate)) / .03);
+    const trackFeel = feelOf(track.bpm, energyCurve(track.waveform, track.duration, 1).values);
+    const sameFeel = 1 - Math.abs(feels.indexOf(trackFeel) - feels.indexOf(feel)) / 3;
+    const haystack = [track.genre, ...track.tags].join(' ').toLowerCase();
+    const style = words.length ? words.filter(word => haystack.includes(word)).length / words.length : .5;
+    return { track, rate: Math.round(rate * 10000) / 10000, fits: Math.abs(rate - 1) <= .08, score: round(.55 * tempo + .25 * sameFeel + .2 * style, 3) };
+  }).sort((a, b) => Number(b.fits) - Number(a.fits) || b.score - a.score);
+}
+
+/** Where in a track to start so its downbeat lands on the reference's first downbeat (phase, reference seconds), at the
+ * playback rate that locks the tempo: the downbeat whose following stretch best follows the reference's energy. */
+export function placeStockMusic(track: StockMusic, rate: number, phase: number, duration: number, energy: number[]) {
+  const trackEnergy = energyCurve(track.waveform, track.duration, 1).values;
+  const downbeats = track.downbeats.length ? track.downbeats : track.beats.filter((_, index) => index % 4 === 0);
+  let best = { sourceStart: 0, score: -Infinity };
+  for (const downbeat of downbeats) {
+    const sourceStart = downbeat - phase * rate;
+    if (sourceStart < 0) continue;
+    const room = Math.min(1, (track.duration - sourceStart) / (duration * rate));
+    const seconds = Math.max(1, Math.floor(duration));
+    const a = Array.from({ length: seconds }, (_, t) => trackEnergy[Math.min(trackEnergy.length - 1, Math.floor(sourceStart + t * rate))] ?? 0);
+    const b = Array.from({ length: seconds }, (_, t) => energy[t] ?? energy.at(-1) ?? .5);
+    const score = (energy.length ? correlation(a, b) : 0) + 2 * (room - 1) - .15 * sourceStart / track.duration;
+    if (score > best.score) best = { sourceStart, score };
+  }
+  return { sourceStart: round(best.sourceStart), rate: Math.abs(rate - 1) < .004 ? 1 : rate };
+}
+
+function correlation(a: number[], b: number[]) {
+  const ma = a.reduce((sum, value) => sum + value, 0) / a.length, mb = b.reduce((sum, value) => sum + value, 0) / b.length;
+  let num = 0, da = 0, db = 0;
+  for (let i = 0; i < a.length; i++) { num += (a[i] - ma) * (b[i] - mb); da += (a[i] - ma) ** 2; db += (b[i] - mb) ** 2; }
+  return da && db ? num / Math.sqrt(da * db) : 0;
 }

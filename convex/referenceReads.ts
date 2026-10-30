@@ -6,7 +6,7 @@ import { internal } from './_generated/api';
 import { requireProject } from './lib/auth';
 import { requireEditorAccess } from './lib/billing_access';
 import { requireMediaTaskCapacity } from './lib/account_limits';
-import { enqueueMediaTask, TRACE_PROCESSOR_VERSION } from './mediaTasks';
+import { enqueueMediaTask, FONT_PROCESSOR_VERSION, TRACE_PROCESSOR_VERSION } from './mediaTasks';
 import { blueprintLineValidator, blueprintPointValidator, referenceBox, referenceReadResult } from './schema';
 
 // Reading a source video for an agent: the worker cuts frames into one labeled sheet image the model looks at,

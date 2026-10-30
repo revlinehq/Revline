@@ -97,7 +97,7 @@ async function rasterize(d: string, width: number, height: number, fill = '#000'
 }
 
 /** Ink coverage 0..1 from a gray image of dark-on-light ink. */
-async function inkMask(image: sharp.Sharp, width: number, height: number): Promise<Mask> {
+async function inkMask(image: ReturnType<typeof sharp>, width: number, height: number): Promise<Mask> {
   const { data } = await image.resize(width, height, { fit: 'fill' }).grayscale().raw().toBuffer({ resolveWithObject: true });
   const mask = new Float32Array(width * height);
   for (let i = 0; i < mask.length; i++) mask[i] = 1 - data[i] / 255;

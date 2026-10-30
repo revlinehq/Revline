@@ -1,9 +1,12 @@
 import { SOUND_PRESETS } from '../../audio/presets';
 import { SOUND_RECIPE_LIMITS } from '../../audio/sound-recipe';
 import { STOCK_AUDIO_CATALOG } from '../../editor/stock-audio';
+import { MIXKIT_LICENSE, STOCK_MUSIC_CATALOG } from '../../editor/stock-music';
 import type { EditorSkill } from './index';
 
 const library = STOCK_AUDIO_CATALOG.map(sound => `- \`${sound.id}\` (${sound.category}): ${sound.name}, ${sound.duration.toFixed(2)} s [${sound.tags.join(' ')}]`).join('\n');
+
+const musicLibrary = STOCK_MUSIC_CATALOG.map(track => `- \`${track.id}\`: ${track.title}, ${track.artist} (${track.genre}, ${track.bpm} BPM, ${Math.round(track.duration)} s) [${track.tags.slice(0, 5).join(' ')}]`).join('\n');
 
 const presetTable = Object.entries(SOUND_PRESETS).map(([name, spec]) => `| \`${name}\` | ${spec.description} | ${Object.keys(spec.params.shape).join(', ') || '—'} |`).join('\n');
 
@@ -28,7 +31,7 @@ Beat This measures beats, downbeats and accents in a background media worker (an
 
 **Cutting to music.** alignCutsToBeat snaps the cuts between consecutive clips (footage, images and motion scenes) and the sequence's end to the nearest beats. Use it for any cut, scene change or ending on the beat, even for one clip; never resize clips by hand to reach a beat. Cut on downbeats for a steady rhythm; on accents for punch; every beat only for fast montages (cuts under about 0.4 s blur together). Follow the song's energy: longer shots in quiet parts, faster cutting into a chorus or drop. Keep speech intact: never move a cut into the middle of a word.
 
-**Matching a reference's music** (a recreation, a remake, "music like this"). Never put the reference's own audio in the edit. Call \`matchMusic\` with the reference video: it measures the reference's tempo and beat grid (Beat This) and its energy curve, picks a feel (calm, warm, upbeat or driving) from both, and renders a new music bed at that tempo, phased so its downbeats land on the reference's downbeats and each bar's density follows the reference's energy (sparse where it is quiet, full drums where it is loud). Pass \`moments\` (the main hits from your motion log, reference seconds) when the downbeats should sit on those instead; \`momentFit\` in the result says how far each moment is from its nearest downbeat and beat. The bed is saved with its own beat map: call \`alignCutsToBeat\` with its \`musicAssetId\` when cuts should land on the beat (a recreation that copies the reference's timing usually already does; check momentFit first). Then key the generated effects to the motion as usual, 0.2 to 0.3 louder than the bed. Say the bed was synthesized at the reference's tempo and not listened to.
+**Matching a reference's music** (a recreation, a remake, "music like this"). Never put the reference's own audio in the edit. Call \`matchMusic\` with the reference video: it measures the reference's tempo, beat grid (Beat This) and energy curve, then picks the closest track from the Mixkit library below by tempo (half and double time count; up to 8% of speed change, pitch kept), feel and any \`style\` words you pass (the genre or mood you hear, from inspectVideo or the tags). It starts the track at the downbeat whose stretch best follows the reference's energy, so its downbeats land on the reference's downbeats (or on the main \`moments\` you pass, reference seconds; \`momentFit\` says how far each moment is from its nearest downbeat). The track is copied into the project with its measured beat map and its credit in the clip name; \`alternatives\` lists the next best, and \`trackId\` swaps to one. Only when no track is within reach does it render a synthesized bed at the reference's tempo (or ask for one with \`synth: true\`). Then call \`alignCutsToBeat\` with its \`musicAssetId\` when cuts should land on the beat (a recreation that copies the reference's timing usually already does; check momentFit first), and key the generated effects to the motion as usual, 0.2 to 0.3 louder than the music. Name the track and artist when you report, and say it was picked by measurement, not listened to.
 
 **Visuals on the beat.** setAudioReactive makes footage or text pulse with the music (scale, shake, rotate, or any effect control such as glitch.intensity or colorGrade.exposure) from beats, downbeats, accents or loudness. Keep it subtle: scale .04 to .08 on beats, glitch or exposure only on accents. For a single hit, a timed effect at a marker reads cleaner than a constant pulse.
 
@@ -127,5 +130,11 @@ After placing, compare each layer's timeline time (\`clip.start + layer.at\`) wi
 Recorded sounds for \`addSoundEffect\` (id, category, name, length, tags). Only for explicit requests:
 
 ${library}
+
+### Music library
+
+Mixkit tracks for matchMusic (id, title, artist, genre, measured BPM, length, tags), under the ${MIXKIT_LICENSE.name}. matchMusic picks among them; pass a \`trackId\` to choose one yourself.
+
+${musicLibrary}
 `,
 };
