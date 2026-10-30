@@ -6,6 +6,7 @@ import sharp from 'sharp';
 import type { MediaTaskResult, MediaWorkItem } from '@/convex/mediaTasks';
 import { AnalysisError } from '@/lib/media-analysis/errors';
 import { fitMotion } from '@/lib/media-analysis/fit-motion';
+import { followBox } from '@/lib/media-analysis/follow-box';
 import { measure } from './blueprint-check';
 import { forEachLimited } from './run-limited';
 
@@ -152,21 +153,6 @@ function strongEdges(changes: { at: number; before: string; after: string }[]) {
   return kept.length > 12 ? [...kept].sort((a, b) => jump(b) - jump(a)).slice(0, 12).sort((a, b) => a.at - b.at) : kept;
 }
 
-/** Normalized cross-correlation of the template against the frame, sampled through a scaled and rotated grid. */
-function score(frame: Uint8Array, width: number, height: number, template: Float32Array, size: number, cx: number, cy: number, w: number, h: number, angle: number) {
-  const cos = Math.cos(angle), sin = Math.sin(angle);
-  let sum = 0, sumSq = 0, cross = 0, count = 0;
-  for (let j = 0; j < size; j++) for (let i = 0; i < size; i++) {
-    const u = (i + .5) / size - .5, v = (j + .5) / size - .5, x = cx + u * w * cos - v * h * sin, y = cy + u * w * sin + v * h * cos;
-    if (x < 0 || y < 0 || x >= width - 1 || y >= height - 1) return -1;
-    const value = frame[(y | 0) * width + (x | 0)], t = template[j * size + i];
-    sum += value; sumSq += value * value; cross += value * t; count++;
-  }
-  const mean = sum / count, variance = sumSq / count - mean * mean;
-  // The template is zero-mean and unit-norm, so this is the correlation in -1..1.
-  return variance < 1 ? 0 : cross / Math.sqrt(variance * count);
-}
-
 /** Follow one box from the first frame: position, size, scale and rotation per frame, plus a sheet with the box drawn. */
 async function readTrack(path: string, directory: string, source: Source, work: Work, signal: AbortSignal, onProgress: (percent: number) => void): Promise<Result> {
   if (!work.box) throw new AnalysisError('Tracking needs a box around the object in the first frame.', 400);
@@ -176,36 +162,13 @@ async function readTrack(path: string, directory: string, source: Source, work: 
   const frameSize = width * height, frameCount = Math.floor(stdout.length / frameSize);
   if (!frameCount) throw new AnalysisError('No frames could be read in that window.', 400);
   const frames = Array.from({ length: frameCount }, (_, index) => stdout.subarray(index * frameSize, (index + 1) * frameSize));
-  // The template: the first frame's box on a fixed grid, zero-mean and unit-norm, so scores are correlations in -1..1.
-  const size = 32, template = new Float32Array(size * size);
-  const w0 = box.w * k, h0 = box.h * k;
-  let cx = (box.x + box.w / 2) * k, cy = (box.y + box.h / 2) * k, scale = 1, angle = 0;
-  for (let j = 0; j < size; j++) for (let i = 0; i < size; i++) template[j * size + i] = frames[0][Math.min(height - 1, Math.round(cy + ((j + .5) / size - .5) * h0)) * width + Math.min(width - 1, Math.round(cx + ((i + .5) / size - .5) * w0))];
-  const mean = template.reduce((sum, value) => sum + value, 0) / template.length;
-  let norm = 0; for (let index = 0; index < template.length; index++) { template[index] -= mean; norm += template[index] ** 2; }
-  norm = Math.sqrt(norm) || 1; for (let index = 0; index < template.length; index++) template[index] /= norm;
-  const track: NonNullable<Result['track']> = [];
   // A box under about 40 px holds too little texture to tell a turn or a resize from noise: follow its position only.
-  const rigid = Math.min(box.w, box.h) < 40, scales = rigid ? [1] : [.94, .97, 1, 1.03, 1.06], turns = rigid ? [0] : [-6, -3, 0, 3, 6];
-  for (let index = 0; index < frameCount; index++) {
-    const frame = frames[index], at = (x: number, y: number, s: number, a: number) => score(frame, width, height, template, size, x, y, w0 * s, h0 * s, a);
-    let best = { x: cx, y: cy, s: scale, a: angle, value: at(cx, cy, scale, angle) };
-    // A scale or rotation change must earn its keep: without this, a tiny better match each frame shrinks and spins the box off the object.
-    const cost = (s: number, a: number) => .5 * Math.abs(Math.log(s / scale)) + .2 * Math.abs(a - angle);
-    if (index) {
-      // Coarse: position only, around the last position. Fine: scale and rotation at the best position, then a 1px nudge.
-      const reach = Math.max(8, Math.round(Math.max(w0, h0) * scale * .6));
-      for (let dy = -reach; dy <= reach; dy += 2) for (let dx = -reach; dx <= reach; dx += 2) { const value = at(cx + dx, cy + dy, scale, angle); if (value > best.value) best = { x: cx + dx, y: cy + dy, s: scale, a: angle, value }; }
-      for (const ds of scales) for (const da of turns) for (const [dx, dy] of [[0, 0], [-1, 0], [1, 0], [0, -1], [0, 1]]) {
-        const s = Math.min(2, Math.max(.5, best.s * ds)), a = best.a + da * Math.PI / 180, value = at(best.x + dx, best.y + dy, s, a);
-        if (value - cost(s, a) > best.value - cost(best.s, best.a)) best = { x: best.x + dx, y: best.y + dy, s, a, value };
-      }
-      ({ x: cx, y: cy, s: scale, a: angle } = best);
-    }
-    const w = w0 * scale / k, h = h0 * scale / k;
-    track.push({ time: round(start + index * step, 3), x: Math.round(cx / k - w / 2), y: Math.round(cy / k - h / 2), w: Math.round(w), h: Math.round(h), scale: round(scale, 3), rotation: round(angle * 180 / Math.PI, 1), confidence: round(Math.max(0, best.value), 2) });
-    if (index % 10 === 0) onProgress(10 + 60 * index / frameCount);
-  }
+  const w0 = box.w * k, h0 = box.h * k, rigid = Math.min(box.w, box.h) < 40;
+  const poses = followBox({ frames, width, height }, { x: (box.x + box.w / 2) * k, y: (box.y + box.h / 2) * k, w: w0, h: h0 }, rigid, index => { if (index % 10 === 0) onProgress(10 + 60 * index / frameCount); });
+  const track: NonNullable<Result['track']> = poses.map((pose, index) => {
+    const w = w0 * pose.s / k, h = h0 * pose.s / k;
+    return { time: round(start + index * step, 3), x: Math.round(pose.x / k - w / 2), y: Math.round(pose.y / k - h / 2), w: Math.round(w), h: Math.round(h), scale: round(pose.s, 3), rotation: round(pose.a * 180 / Math.PI, 1), confidence: round(Math.max(0, pose.value), 2) };
+  });
   // The sheet: up to 8 tracked frames in color with the box drawn where it was found.
   const picks = [...new Set(Array.from({ length: Math.min(8, track.length) }, (_, index) => Math.round(index * (track.length - 1) / Math.max(1, Math.min(8, track.length) - 1))))];
   const images = await Promise.all(picks.map(index => frameAt(path, directory, track[index].time, undefined, `track-${index}`, signal)));
