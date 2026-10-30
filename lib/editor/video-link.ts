@@ -1,4 +1,4 @@
-export type VideoLink = { kind: 'youtube' | 'file'; url: string };
+export type VideoLink = { kind: 'youtube' | 'social' | 'file'; url: string };
 
 /** Share validation between the form, queue and downloader. DNS is checked by the worker. */
 export function parseVideoLink(value: string): VideoLink {
@@ -14,5 +14,8 @@ export function parseVideoLink(value: string): VideoLink {
     if (!id || !/^[a-zA-Z0-9_-]{11}$/.test(id)) throw new Error('Paste a link to one YouTube video.');
     return { kind: 'youtube', url: `https://www.youtube.com/watch?v=${id}` };
   }
+  // Posts on X, Instagram and TikTok are fetched through yt-dlp like YouTube; public posts only.
+  const social = ['x.com', 'twitter.com', 'instagram.com', 'tiktok.com', 'vm.tiktok.com'];
+  if (social.some(site => host === site || host.endsWith(`.${site}`))) return { kind: 'social', url: url.toString() };
   return { kind: 'file', url: url.toString() };
 }
