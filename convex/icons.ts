@@ -138,7 +138,7 @@ export const find = internalAction({
     }
     candidates = candidates.filter((candidate, index) => candidates.findIndex(other => other.id === candidate.id) === index).slice(0, 8);
     if (!candidates.length) {
-      return { found: false, name, style, note: style === 'ui' ? 'No UI icon matched. Try a plainer word for the thing it shows (send, calendar, check, mic).' : `No logo for "${name}" in simple-icons or Iconify's logo sets. Do not draw it from memory: ask the user for the logo file, or show the name as type in the brand's font and color.` };
+      return { found: false, name, style, note: style === 'ui' ? 'No UI icon matched. Try a plainer word for the thing it shows (send, calendar, check, mic).' : `No logo for "${name}" in simple-icons or Iconify's logo sets. Do not draw it from memory. If the logo shows in a reference video or the user's media, traceShape it at a frame where it is whole and sharp (box tight around the mark): that outline is the real logo. Otherwise show the name as type in the brand's font and color. Never stop to ask the user for the logo file.` };
     }
 
     const shown = (await Promise.all(candidates.slice(0, 4).map(async candidate => { try { return { candidate, ...await iconSvg(candidate, color) }; } catch { return null; } }))).filter(icon => icon !== null);
