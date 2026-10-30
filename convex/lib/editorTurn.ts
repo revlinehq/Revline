@@ -12,7 +12,7 @@ import {shouldStopEditingSteps} from '../../lib/ai/edit-progress';
 import { AssistantCostLog } from '../../lib/ai/cost-log';
 import { CostHistoryWriter, costRecordingEnabled, costHistoryRecord } from '../../lib/ai/cost-history';
 import { editorRepairContext, modelTimeline, EDITOR_CONTEXT_NOTICE, EDITOR_CONTEXT_BOUNDARY } from "../../lib/ai/editor-context";
-import { assistantFailureReason } from "../../lib/ai/assistant-error";
+import { assistantFailureReason, providerErrorText } from "../../lib/ai/assistant-error";
 import { activeOpenAIKey, editorOpenAI } from "../../lib/ai/openai-keys";
 import { anthropic } from "@ai-sdk/anthropic";
 import { google } from '@ai-sdk/google';
@@ -169,7 +169,8 @@ You edit the user's video timeline using structured tools. Greetings, small talk
     try { partialSaved = await session?.savePartial() ?? false; }
     catch (saveError) { cause = saveError; }
     costLog.finish(cause instanceof IncompleteEditError ? cause.reason : cause instanceof AssistantTokenBudgetError ? 'token_budget' : cause instanceof AssistantToolRetryError ? 'repeated_tool_failure' : 'provider_or_tool_error', progress(), !(cause instanceof IncompleteEditError));
-    const failureReason = (cause instanceof IncompleteEditError || cause instanceof AssistantTokenBudgetError || cause instanceof AssistantToolRetryError || cause instanceof AssistantRenderReviewError || cause instanceof AnalysisStepError) ? cause.message : cause instanceof Error && /timeline changed elsewhere|Source trim|Clip timing|Clip media|replacement was not saved|requested changes were not saved|Inspect the current timeline|^(?:OpenAI editing requires OPENAI_API_KEY in this Convex environment\.|Revline editing supports GPT-)/.test(cause.message) ? cause.message : assistantFailureReason(cause, selectedProvider) ?? "The assistant could not finish this request. Check the model configuration and try again.";
+    const failureReason = (cause instanceof IncompleteEditError || cause instanceof AssistantTokenBudgetError || cause instanceof AssistantToolRetryError || cause instanceof AssistantRenderReviewError || cause instanceof AnalysisStepError) ? cause.message : cause instanceof Error && /timeline changed elsewhere|Source trim|Clip timing|Clip media|replacement was not saved|requested changes were not saved|Inspect the current timeline|^(?:OpenAI editing requires OPENAI_API_KEY in this Convex environment\.|Revline editing supports GPT-)/.test(cause.message) ? cause.message : assistantFailureReason(cause, selectedProvider) ?? providerErrorText(cause, selectedProvider) ?? "The assistant could not finish this request. Check the model configuration and try again.";
+    console.error(`[ai-error] ${JSON.stringify({ runId: args.runId, provider: selectedProvider, reason: failureReason.slice(0, 400) })}`);
     const reason = partialSaved ? `${failureReason.replace(/\s*The pending replacement was not saved\./g, '')} The latest valid partial edit was saved. Continue the unfinished part from the current timeline.` : failureReason;
     const edits = progress().savedEdits;
     try { await saveMessage(ctx, components.agent, { threadId: args.threadId, userId: args.ownerId,promptMessageId:args.promptMessageId, message: { role: "assistant", content: edits ? `${edits} edits were saved before the assistant stopped. Undo restores the state before the latest consecutive group of AI edits. ${reason}` : `No timeline changes were saved. ${reason}` } }); } catch { /* Status remains the recovery path if the message service is unavailable. */ }
