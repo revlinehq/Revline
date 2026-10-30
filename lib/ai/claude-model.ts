@@ -164,7 +164,9 @@ export function editorMaxOutputTokens(selection: ClaudeModelSelection) {
   // Claude gets its model maximum: thinking and the scene share this allowance, and a lower cap cut runs off
   // after they had already paid for the thinking.
   if (selection.provider === 'anthropic') return 128_000;
-  return { low: 8192, medium: 8192, high: 16384, xhigh: 24576, max: 32768 }[selection.reasoningEffort ?? defaultEditorReasoningEffort()];
+  // GPT and Gemini need room for a whole scene (about 10k tokens of code) plus their reasoning in one step; a lower cap
+  // cut scenes off mid-write ("reached the model output limit") or pushed models to shorten them. Billing is per token used.
+  return { low: 32_768, medium: 49_152, high: 65_536, xhigh: 65_536, max: 65_536 }[selection.reasoningEffort ?? defaultEditorReasoningEffort()];
 }
 
 export function assertEditorModelConfigured(selection: ClaudeModelSelection, env: ClaudeModelEnvironment = process.env) {
