@@ -90,6 +90,7 @@ The user shares a finished video and wants either a **remake** (the same edit ma
 
 ## 1. Break it down
 - Run analyzeMedia with mode reference on the shared video. It measures the cuts and beats, then splits every shot into parts: transition in, camera, look, the screen's parts (background, footage, ui, title, caption, logo, product, person, cursor, shape, emoji, overlay) and title styles. It also writes the five-line style direction and the signatures (the moves that define the style).
+- Measure at full resolution. Read positions, sizes and type from full-size frames (inspectFrames or getFrames at the source size), never from a downscaled contact sheet: a shrunk sheet makes type and objects look about half their real size.
 - The reference stays off the timeline. Never place it there unless the user asks for it. A file dropped into an empty project lands on the timeline by itself: before building a remake, delete that reference clip from the timeline (it stays in media).
 
 ## 2. Describe it

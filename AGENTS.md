@@ -19,3 +19,10 @@ Start local development with `npm run dev`, which runs the frontend and developm
 Commit and push every completed change automatically in coherent, verified batches. Push each finished batch while continuing larger tasks. The user explicitly requested this as the standing default; honor any later instruction to keep work local.
 
 Deploy every completed Convex change to its intended environment and verify the deployment succeeds. Local development uses the development deployment; the hosted production app uses the production deployment and its own credentials. Identify and announce the target before deploying. Never point production at the development backend. Keep environment files and deployment credentials separate.
+
+## Motion films from a coding session
+
+When building or copying a motion film from here (scene code pushed to a Revline project):
+- Work on the development deployment, and pass the timeline tab explicitly instead of switching the project's open tab; other sessions may be editing another tab of the same project.
+- Measure at full resolution, never from downscaled contact sheets.
+- For device mockups, logos and other reusable assets, check the asset-library skill first and record each asset's license before searching the web.
