@@ -61,7 +61,9 @@ function ProjectEditor({project}: {project:Doc<'projects'>}) {
   const ensureSceneThumbs=useMutation(api.sceneThumbs.ensure);
   // Two clips render at a time; each finished batch asks for the next until every motion clip has frames.
   const thumbCount=Object.keys(sceneThumbs??{}).length;
-  useEffect(()=>{const timer=setTimeout(()=>{void ensureSceneThumbs({projectId:project._id}).catch(()=>{});},2500);return()=>clearTimeout(timer);},[project.revision,project._id,ensureSceneThumbs,thumbCount]);
+  // Requests are skipped while the render queue is busy, so keep asking every 20 s until every motion clip has frames.
+  const missingThumbs=(project.timeline?.clips??[]).filter(clip=>clip.kind==='scene'&&!sceneThumbs?.[clip.id]).length;
+  useEffect(()=>{const ask=()=>{void ensureSceneThumbs({projectId:project._id}).catch(()=>{});};const timer=setTimeout(ask,2500);const retry=missingThumbs?setInterval(ask,20_000):undefined;return()=>{clearTimeout(timer);if(retry)clearInterval(retry);};},[project.revision,project._id,ensureSceneThumbs,thumbCount,missingThumbs]);
   const [shareOpen,setShareOpen]=useState(false);
   const projectId=project._id;const convex=useConvex();const media=useQuery(api.assets.list,{projectId,limit:200});const plan=useQuery(api.billing.status,{})?.plan;const ai=useQuery(api.assistant.status,{projectId});
   const storedPreview=useQuery(api.assistant.livePreview,ai?.running?{projectId,sceneCode:'refs'}:'skip');
