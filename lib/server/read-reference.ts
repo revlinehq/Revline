@@ -53,9 +53,9 @@ const timesIn = (start: number, end: number, count: number, source: Source) => {
 const escape = (text: string) => text.replace(/[<>&]/g, char => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' })[char]!);
 
 /** Tiles in a grid, each labeled under it, as one JPEG small enough to hand to a model. */
-export async function sheet(tiles: { image: Buffer; label: string; overlay?: string }[], aspect: number) {
+export async function sheet(tiles: { image: Buffer; label: string; overlay?: string }[], aspect: number, across?: number, limit = MAX_IMAGE) {
   // Up to 4 across for a few frames; dense 10 fps reads (up to 30 frames) go 6 across so motion reads left to right.
-  const columns = tiles.length <= 4 ? tiles.length : tiles.length <= 16 ? Math.min(4, Math.ceil(Math.sqrt(tiles.length))) : 6;
+  const columns = across ?? (tiles.length <= 4 ? tiles.length : tiles.length <= 16 ? Math.min(4, Math.ceil(Math.sqrt(tiles.length))) : 6);
   const rows = Math.ceil(tiles.length / columns);
   let tileWidth = Math.floor((SHEET_WIDTH - GAP * (columns + 1)) / columns), quality = 82;
   for (;;) {
@@ -68,7 +68,7 @@ export async function sheet(tiles: { image: Buffer; label: string; overlay?: str
       return [{ input: await image.png().toBuffer(), left, top }, { input: label, left, top: top + tileHeight }];
     }));
     const data = (await sharp({ create: { width, height, channels: 3, background: '#161616' } }).composite(composites.flat()).jpeg({ quality }).toBuffer()).toString('base64');
-    if (data.length <= MAX_IMAGE) return { image: data, width, height };
+    if (data.length <= limit) return { image: data, width, height };
     if (quality > 60) quality -= 10; else tileWidth = Math.floor(tileWidth * .8);
   }
 }

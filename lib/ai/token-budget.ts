@@ -5,6 +5,12 @@ import { compactEditorPrompt } from './editor-context';
 // An anomaly backstop, not a work limit: a three-scene explainer (13 calls)
 // used ~10% of these ceilings. Only runaway tool loops should reach them.
 export const EDITOR_TOKEN_LIMITS = { requestBytes: 450_000, transportBytes: 24_000_000, inputTokens: 2_000_000, outputTokens: 150_000, outputPerCall: 128_000 } as const;
+/** Models with a 1M-token context hold a whole film's reads, logs and scene code: give their requests room before
+ * anything is compacted or left out. Others keep the default ceiling. */
+const LONG_CONTEXT_MODELS = new Set(['claude-opus-5-5', 'claude-sonnet-5-5', 'gemini-4-argon']);
+export function editorTokenLimits(modelId?: string): TokenLimits {
+  return modelId && LONG_CONTEXT_MODELS.has(modelId) ? { ...EDITOR_TOKEN_LIMITS, requestBytes: 2_000_000 } : { ...EDITOR_TOKEN_LIMITS };
+}
 export const EDITOR_RAW_INPUT_LIMIT = 7_000_000;
 type TokenLimits = { [K in keyof typeof EDITOR_TOKEN_LIMITS]: number };
 type NativeCacheModel = 'anthropic' | 'openai';
@@ -87,23 +93,66 @@ export function editorPromptBytes(prompt: LanguageModelV4CallOptions['prompt']) 
   }) }))).length;
 }
 
-/** A long conversation must not make every request fail. Drop whole earlier
- * turns, oldest first, until the request fits with room left for this run's
- * own steps. The current turn and every system message are always kept, and
- * a tool call always leaves with its result because both belong to one turn. */
-export function fitEditorPrompt(prompt: LanguageModelV4CallOptions['prompt'], overheadBytes: number, targetBytes: number, minimumDropped = 0) {
-  const users = prompt.flatMap((message, index) => message.role === 'user' ? [index] : []);
-  const withoutTurns = (count: number) => {
-    if (count <= 0) return prompt;
-    const cut = users[count];
-    const kept = prompt.filter((message, index) => message.role === 'system' || index >= cut);
+type Prompt = LanguageModelV4CallOptions['prompt'];
+type Part = Exclude<Prompt[number], { role: 'system' }>['content'][number];
+const outputValue = (part: { output: unknown }) => { const output = record(part.output); return output.type === 'json' ? record(output.value) : output; };
+
+/** Earlier turns (already answered) keep one copy of each skill page and each frame-sheet window, the newest; older
+ * copies say they were read before. Only earlier turns are compared, so this run's history stays append-only. */
+function compactEarlierTurns(prompt: Prompt): Prompt {
+  const lastUser = prompt.map(message => message.role).lastIndexOf('user');
+  const inputs = new Map<string, unknown>();
+  for (const message of prompt) if (message.role !== 'system') for (const part of message.content as Part[]) if (part.type === 'tool-call') inputs.set(part.toolCallId, part.input);
+  const key = (part: Extract<Part, { type: 'tool-result' }>) => part.toolName === 'readSkill' ? `skill:${outputValue(part).name}:${outputValue(part).page ?? ''}` : part.toolName === 'readFrames' && part.output.type === 'content' ? `frames:${JSON.stringify(inputs.get(part.toolCallId))}` : undefined;
+  const newest = new Map<string, string>();
+  prompt.forEach((message, index) => { if (index < lastUser && message.role !== 'system') for (const part of message.content as Part[]) if (part.type === 'tool-result') { const k = key(part); if (k) newest.set(k, part.toolCallId); } });
+  return prompt.map((message, index) => index >= lastUser || message.role === 'system' ? message : { ...message, content: (message.content as Part[]).map(part => {
+    if (part.type !== 'tool-result') return part;
+    const k = key(part);
+    if (!k || newest.get(k) === part.toolCallId) return part;
+    if (part.toolName === 'readSkill') return { ...part, output: { type: 'json', value: { name: outputValue(part).name, ...(outputValue(part).page ? { page: outputValue(part).page } : {}), instructions: 'Read earlier in this conversation; a newer copy is below. readSkill again if you need it.' } } };
+    if (part.output.type === 'content') return { ...part, output: { ...part.output, value: [...part.output.value.filter(item => item.type === 'text'), { type: 'text', text: 'Frame sheet left out: a newer read of the same window is below.' }] } };
+    return part;
+  }) } as typeof message);
+}
+
+/** A thinned turn keeps what was said (the request, the agent's motion log and replies) and drops its tool calls and results. */
+function thinTurns(prompt: Prompt, count: number, users: number[]): Prompt {
+  if (count <= 0) return prompt;
+  const cut = users[count];
+  return prompt.flatMap(message => {
+    const index = prompt.indexOf(message);
+    if (index >= cut || message.role === 'system' || message.role === 'user') return [message];
+    if (message.role === 'tool') return [];
+    const content = (message.content as Part[]).filter(part => part.type === 'text');
+    return content.length ? [{ ...message, content } as typeof message] : [];
+  });
+}
+
+/** A long conversation must not make every request fail. Before anything is left out, earlier turns drop repeat copies
+ * of skill pages and frame sheets; then the oldest turns are thinned to their words, keeping the motion log and every
+ * request; only then are whole earlier turns dropped, oldest first. The current turn and every system message are
+ * always kept, and a tool call always leaves with its result. Each stage only escalates within a run. */
+export function fitEditorPrompt(prompt: Prompt, overheadBytes: number, targetBytes: number, minimum: { compact?: boolean; thinned?: number; dropped?: number } | number = 0) {
+  const floor = typeof minimum === 'number' ? { dropped: minimum } : minimum;
+  const fits = (candidate: Prompt) => editorPromptBytes(candidate) + overheadBytes <= targetBytes;
+  let compact = !!floor.compact || !fits(prompt);
+  const base = compact ? compactEarlierTurns(prompt) : prompt;
+  const users = base.flatMap((message, index) => message.role === 'user' ? [index] : []);
+  const withoutTurns = (from: Prompt, count: number) => {
+    if (count <= 0) return from;
+    const turnStarts = from.flatMap((message, index) => message.role === 'user' ? [index] : []), cut = turnStarts[count];
+    const kept = from.filter((message, index) => message.role === 'system' || index >= cut);
     const leading = kept.findIndex(message => message.role !== 'system');
     return [...kept.slice(0, leading), { role: 'system' as const, content: OMITTED_HISTORY_NOTE }, ...kept.slice(leading)];
   };
-  let dropped = Math.min(Math.max(0, minimumDropped), Math.max(0, users.length - 1));
-  let fitted = withoutTurns(dropped);
-  while (dropped < users.length - 1 && editorPromptBytes(fitted) + overheadBytes > targetBytes) fitted = withoutTurns(++dropped);
-  return { prompt: fitted, dropped };
+  const most = Math.max(0, users.length - 1);
+  let thinned = Math.min(Math.max(0, floor.thinned ?? 0), most), dropped = Math.min(Math.max(0, floor.dropped ?? 0), most);
+  let fitted = withoutTurns(thinTurns(base, thinned, users), dropped);
+  while (thinned < most && !fits(fitted)) fitted = withoutTurns(thinTurns(base, ++thinned, users), dropped);
+  while (dropped < most && !fits(fitted)) fitted = withoutTurns(thinTurns(base, thinned, users), ++dropped);
+  compact ||= thinned > 0 || dropped > 0;
+  return { prompt: fitted, compact, thinned, dropped };
 }
 
 /** Reserve full next input at worst cache-write cost; credit only verified usage.
@@ -118,8 +167,8 @@ export class AssistantTokenBudget {
   private rawInput = 0;
   private output = 0;
   private blocked = false;
-  /** Earlier turns dropped to fit; only grows within a run so its prefix stays stable. */
-  private droppedTurns = 0;
+  /** How far this run has had to fit its history; only grows within a run so its prefix stays stable. */
+  private fitted: { compact: boolean; thinned: number; dropped: number } = { compact: false, thinned: 0, dropped: 0 };
   constructor(private limits: TokenLimits = EDITOR_TOKEN_LIMITS, private onUsage?: (fraction: number) => void) {}
   get usage() { return { inputTokens: this.rawInput, outputTokens: this.output }; }
   /** The largest share of any ceiling this request has used, 0–1. */
@@ -186,9 +235,9 @@ export class AssistantTokenBudget {
           exposedResults.set(part.toolCallId, part); return part;
         }) } as typeof message);
         const overhead = new TextEncoder().encode(JSON.stringify({ tools: params.tools, responseFormat: params.responseFormat })).length;
-        const fitted = fitEditorPrompt(prompt, overhead, this.limits.requestBytes * .8, this.droppedTurns);
-        if (fitted.dropped > this.droppedTurns) console.log(`[ai-context] ${JSON.stringify({ droppedTurns: fitted.dropped, requestBytes: editorPromptBytes(fitted.prompt) + overhead, toolBytes: overhead })}`);
-        this.droppedTurns = fitted.dropped;
+        const fitted = fitEditorPrompt(prompt, overhead, this.limits.requestBytes * .8, this.fitted);
+        if (fitted.compact !== this.fitted.compact || fitted.thinned > this.fitted.thinned || fitted.dropped > this.fitted.dropped) console.log(`[ai-context] ${JSON.stringify({ compacted: fitted.compact, thinnedTurns: fitted.thinned, droppedTurns: fitted.dropped, requestBytes: editorPromptBytes(fitted.prompt) + overhead, toolBytes: overhead })}`);
+        this.fitted = { compact: fitted.compact, thinned: fitted.thinned, dropped: fitted.dropped };
         const maxOutputTokens = params.maxOutputTokens ?? this.limits.outputPerCall;
         return { ...params, prompt: fitted.prompt, maxOutputTokens: enforce ? Math.min(maxOutputTokens, this.limits.outputPerCall) : maxOutputTokens };
       },

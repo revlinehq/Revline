@@ -686,23 +686,31 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       await ctx.runMutation(internal.memories.forget, { ...run, memoryId: input.memoryId });
       return { forgotten: input.memoryId };
     } }),
-    compareReference: createTool({ description: "Check a recreation against its reference, moment by moment: renders your saved timeline at the reference's moments and lays each reference frame beside yours in one image, with a difference score per moment (0 identical, 100 nothing alike). Use it after building or changing scenes of a recreation, at every transition you rebuilt (the moments map from readFrames), and fix the moments with the highest scores first, then compare again. times are REFERENCE seconds; offset is how far the recreation sits from the reference on the timeline (timeline = reference + offset, default 0).", inputSchema: z.object({ assetId: z.string().min(1), times: z.array(z.number().min(0)).min(1).max(6), offset: z.number().optional() }).strict(), execute: async (_ctx, input) => {
+    compareReference: createTool({ description: "Check a recreation against its reference, moment by moment: renders your saved timeline (or this turn's staged changes) at the reference's moments and lays each reference frame beside yours, one moment per row at half-frame size, with a difference score per moment (0 identical, 100 nothing alike). Use it after building or changing scenes of a recreation, at every transition you rebuilt (the moments map from readFrames), up to 12 moments a call, and fix the moments with the highest scores first, then compare again. times are REFERENCE seconds; offset is how far the recreation sits from the reference on the timeline (timeline = reference + offset, default 0).", inputSchema: z.object({ assetId: z.string().min(1), times: z.array(z.number().min(0)).min(1).max(12), offset: z.number().optional() }).strict(), execute: async (_ctx, input) => {
       await editSession.wait();
       const offset = input.offset ?? 0;
-      const snapshotId = await ctx.runMutation(internal.mcp.requestFrames, { ownerId: run.ownerId, projectId: run.projectId, ...(editSession.staged ? { runId: run.runId } : {}), times: input.times.map(time => Math.max(0, time + offset)) });
-      try {
-        const deadline = Date.now() + 280_000;
-        for (let state = await ctx.runQuery(internal.mcp.frames, { ownerId: run.ownerId, snapshotId }); state.status !== 'completed'; state = await ctx.runQuery(internal.mcp.frames, { ownerId: run.ownerId, snapshotId })) {
-          if (abortSignal.aborted) throw new Error('Stopped.');
-          if (state.status === 'failed') throw new Error(`Your timeline could not be rendered for the comparison: ${state.error ?? 'unknown error'}`);
-          if (Date.now() > deadline) throw new Error(state.started ? 'Rendering your timeline for the comparison took too long. Compare fewer moments.' : 'Your timeline frames never started rendering: the media worker stayed busy with other renders. Try again shortly.');
-          await new Promise(resolve => setTimeout(resolve, 1500));
-        }
-        const result = await runCompare(ctx, run.ownerId, run.projectId, input.assetId, input.times, snapshotId, abortSignal);
-        const scores = (result.scores ?? []).map(score => ({ time: score.time, difference: Math.round(score.difference * 100) }));
-        const worst = [...scores].sort((a, b) => b.difference - a.difference);
-        return { note: `Reference (left) beside your timeline (right) at ${scores.map(score => `${score.time}s`).join(', ')}. Differences: ${scores.map(score => `${score.time}s ${score.difference}`).join(', ')}. Fix the worst first (${worst.slice(0, 2).map(score => `${score.time}s`).join(', ')}): read that moment of the reference with fps 10 if you have not, correct the scene, then compare again.`, scores, images: result.image ? [{ label: 'Reference beside your timeline', data: result.image, mimeType: 'image/jpeg' }] : [] };
-      } finally { await ctx.runMutation(internal.mcp.discardFrames, { snapshotId }); }
+      // A frame request holds up to 6 times: compare in groups of 6, one after another so the groups do not queue behind each other.
+      const groups: number[][] = [];
+      for (let first = 0; first < input.times.length; first += 6) groups.push(input.times.slice(first, first + 6));
+      const scores: { time: number; difference: number }[] = [], images: { label: string; data: string; mimeType: string }[] = [];
+      for (const times of groups) {
+        const snapshotId = await ctx.runMutation(internal.mcp.requestFrames, { ownerId: run.ownerId, projectId: run.projectId, ...(editSession.staged ? { runId: run.runId } : {}), times: times.map(time => Math.max(0, time + offset)) });
+        try {
+          // A busy worker queue (exports, other agents' checks) can hold frames for a while; wait it out rather than fail the check.
+          const deadline = Date.now() + 280_000;
+          for (let state = await ctx.runQuery(internal.mcp.frames, { ownerId: run.ownerId, snapshotId }); state.status !== 'completed'; state = await ctx.runQuery(internal.mcp.frames, { ownerId: run.ownerId, snapshotId })) {
+            if (abortSignal.aborted) throw new Error('Stopped.');
+            if (state.status === 'failed') throw new Error(`Your timeline could not be rendered for the comparison: ${state.error ?? 'unknown error'}`);
+            if (Date.now() > deadline) throw new Error(state.started ? 'Rendering your timeline for the comparison took too long. Compare fewer moments.' : 'Your timeline frames never started rendering: the media worker stayed busy with other renders. Try again shortly.');
+            await new Promise(resolve => setTimeout(resolve, 1500));
+          }
+          const result = await runCompare(ctx, run.ownerId, run.projectId, input.assetId, times, snapshotId, abortSignal);
+          scores.push(...(result.scores ?? []).map(score => ({ time: score.time, difference: Math.round(score.difference * 100) })));
+          for (const data of [result.image, ...(result.extraImages ?? [])]) if (data) images.push({ label: `Reference (left) beside your timeline (right), ${images.length + 1}`, data, mimeType: 'image/jpeg' });
+        } finally { await ctx.runMutation(internal.mcp.discardFrames, { snapshotId }); }
+      }
+      const worst = [...scores].sort((a, b) => b.difference - a.difference);
+      return { note: `Reference (left) beside your timeline (right), one moment per row, at ${scores.map(score => `${score.time}s`).join(', ')}. Differences: ${scores.map(score => `${score.time}s ${score.difference}`).join(', ')}. Fix the worst first (${worst.slice(0, 3).map(score => `${score.time}s`).join(', ')}): read that moment of the reference with fps 10 if you have not, correct the scene, then compare again.`, scores, images };
     }, toModelOutput: (_ctx, options) => blueprintImages(options.output) }),
     getFrames: createTool({ description: "Look at your work: render 1 to 4 frames of the saved timeline at timeline seconds, composited exactly as the export draws them (scenes, footage, text, effects), and see them as images. Use it after building or changing scenes or visuals, at each key beat, to check that text is readable, nothing overflows or clips, brand fonts, colors and logo show, and frames are not empty; fix what is wrong before saying it is done. Each call takes 10 to 30 seconds; pick the moments that matter.", inputSchema: z.object({ times: z.array(z.number().min(0)).min(1).max(4).describe('Timeline seconds, inside the timeline.') }), execute: async (_ctx, { times }) => {
       await editSession.wait();

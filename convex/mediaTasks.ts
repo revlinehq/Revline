@@ -500,7 +500,8 @@ const RESULT_HANDLERS: Record<Doc<'mediaTasks'>['kind'], ResultHandler> = {
   read: async (ctx, task, result) => {
     if (!result.read) throw new ConvexError('The frame reading completed without a result.');
     if (!task.readId || !await analysisStillActive(ctx, task)) throw new ConvexError('The frame reading is no longer active.');
-    if (result.read.image && (!/^[A-Za-z0-9+/]+=*$/.test(result.read.image) || result.read.image.length > 900_000)) throw new ConvexError('The frame sheet is too large to return.');
+    const images = [result.read.image, ...(result.read.extraImages ?? [])].filter((image): image is string => !!image);
+    if (images.some(image => !/^[A-Za-z0-9+/]+=*$/.test(image)) || images.reduce((sum, image) => sum + image.length, 0) > 900_000) throw new ConvexError('The frame sheet is too large to return.');
     await ctx.db.patch(task.readId, { status: 'completed', result: result.read });
   },
   snapshot: async (ctx, task, result) => {

@@ -7,7 +7,7 @@ import { wrapLanguageModel } from "ai";
 import { openAIEditorImages } from "../../lib/ai/openai-editor-images";
 import { googleEditorRequests, leadingSystemMessages } from "../../lib/ai/google-editor-requests";
 import { openAITokenCounter } from '../../lib/ai/openai-token-count';
-import { AssistantTokenBudget, AssistantTokenBudgetError, editorTokenBudgetEnabled } from "../../lib/ai/token-budget";
+import { AssistantTokenBudget, editorTokenLimits, AssistantTokenBudgetError, editorTokenBudgetEnabled } from "../../lib/ai/token-budget";
 import {shouldStopEditingSteps} from '../../lib/ai/edit-progress';
 import { AssistantCostLog } from '../../lib/ai/cost-log';
 import { CostHistoryWriter, costRecordingEnabled, costHistoryRecord } from '../../lib/ai/cost-history';
@@ -76,14 +76,15 @@ export async function runEditorTurn(ctx: ActionCtx, args: EditorTurnArgs, hooks:
     const currentPrompt = await ctx.runQuery(internal.assistant.currentPrompt, { ...run, threadId: args.threadId, promptMessageId: args.promptMessageId });
     const recovery = args.recovery ?? project.aiRecovery;
     const recovering = recovery !== undefined || !!args.continuation;
-    // A chosen effort is kept (only the dev switcher offers one). Auto never goes above medium, Opus 5.5's own
-    // default: high cost about a quarter more for a few points. Scene work or a repair pass raises it to medium.
+    // A chosen effort is kept (only the dev switcher offers one). On Auto, building a film (scenes, a launch film, a
+    // recreation) runs at high: the scene code and the timing are the work. Everything else stays at medium or low,
+    // and a repair pass raises low to medium.
     const autoEffort = selection.reasoningEffort === undefined;
     const requested = autoEditorReasoningEffort(currentPrompt, { recovering });
-    let effort: EditorReasoningEffort = selection.reasoningEffort ?? (requested === 'low' ? 'low' : 'medium');
+    let effort: EditorReasoningEffort = selection.reasoningEffort ?? (requested === 'high' ? 'high' : requested === 'low' ? 'low' : 'medium');
     const withEffort = (value: EditorReasoningEffort) => ({ ...selection, reasoningEffort: value });
     const showEffort = () => { costLog.selectModel(selection.modelId, selection.provider, effort, selection.speedMode ?? 'standard'); void ctx.runMutation(internal.assistant.recordEffort, { ...run, effort }).catch(() => {}); };
-    const raiseEffort = () => { effort = 'medium'; showEffort(); };
+    const raiseEffort = (value: EditorReasoningEffort = 'medium') => { effort = value; showEffort(); };
     showEffort();
     const toolkit = createEditorToolkit(ctx, { run, project, assets, recovering, initialPlans: args.continuation ? await ctx.runQuery(internal.compositionReview.readPlan, run) : [], selectedClipIds: args.selectedClipIds ?? (args.selectedClipId ? [args.selectedClipId] : []), playhead: args.playhead, publication: { threadId: args.threadId, promptMessageId: args.promptMessageId }, abortSignal });
     const { tools, editSession } = toolkit;
@@ -92,7 +93,7 @@ export async function runEditorTurn(ctx: ActionCtx, args: EditorTurnArgs, hooks:
     const enforceTokenBudget=editorTokenBudgetEnabled();
     // Report the cap's use in 5% steps so the chat can warn before a long request stops.
     let reportedBudget=0;
-    const tokenBudget = new AssistantTokenBudget(undefined, fraction => {
+    const tokenBudget = new AssistantTokenBudget(editorTokenLimits(modelId), fraction => {
       budgetUsed=Math.round(fraction*1000)/1000;
       if(fraction-reportedBudget<.05)return;
       reportedBudget=fraction;
@@ -123,7 +124,7 @@ You edit the user's video timeline using structured tools. Greetings, small talk
       const result = await agent.streamText(ctx, { threadId: args.threadId, userId: args.ownerId }, {
         promptMessageId: args.promptMessageId, abortSignal, experimental_transform: mergeToolInputDeltas(), providerOptions: editorProviderOptions(withEffort(passEffort), cacheKey), maxOutputTokens: editorMaxOutputTokens(withEffort(passEffort)),
         prepareStep: ({ steps: current }) => {
-          if (autoEffort && effort === 'low' && stepsNeedHighEffort([...steps, ...current])) raiseEffort();
+          if (autoEffort && effort !== 'high' && stepsNeedHighEffort([...steps, ...current])) raiseEffort('high');
           return effort === passEffort ? undefined : { providerOptions: editorProviderOptions(withEffort(effort), cacheKey), maxOutputTokens: editorMaxOutputTokens(withEffort(effort)) };
         },
         ...(repairFeedback ? {

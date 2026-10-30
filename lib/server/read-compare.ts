@@ -48,6 +48,11 @@ export async function readCompare(path: string, directory: string, work: Work, s
     tiles.push({ image: reference, label: `${index + 1}  ${time.toFixed(2)}s  reference` }, { image: yours, label: `${index + 1}  yours  diff ${Math.round(score * 100)}%` });
     onProgress(10 + Math.round(70 * (index + 1) / times.length));
   }
-  const result = await sheet(tiles, source.width / source.height);
-  return { ...result, sourceWidth: source.width, sourceHeight: source.height, fps: round(source.fps), frames: times.map(time => ({ time: round(time) })), scores };
+  // Big enough to compare type and edges: each moment is one row, the reference and yours side by side at half the
+  // sheet's width, three moments to an image.
+  const sheets = [];
+  // The sheets travel in one stored result, so they share one image budget.
+  const count = Math.ceil(tiles.length / 6), budget = Math.floor(880_000 / count);
+  for (let first = 0; first < tiles.length; first += 6) sheets.push(await sheet(tiles.slice(first, first + 6), source.width / source.height, 2, budget));
+  return { ...sheets[0], ...(sheets.length > 1 ? { extraImages: sheets.slice(1).map(item => item.image) } : {}), sourceWidth: source.width, sourceHeight: source.height, fps: round(source.fps), frames: times.map(time => ({ time: round(time) })), scores };
 }
