@@ -1,4 +1,5 @@
 import { activeTabOf, storedTabTimeline } from './timelineTabs';
+import { loadSceneCode } from './lib/scene_code';
 import { renderSnapshot as loadRenderSnapshot } from './lib/render_snapshots';
 import { compositionReviewResult,effectPlanValidator } from './lib/effect_plan';
 import { hydrateAsset } from './lib/asset_analysis';
@@ -345,6 +346,8 @@ async function loadWork(ctx:import('./_generated/server').QueryCtx|MutationCtx,t
     const project=await requireProject(ctx,task.projectId,task.ownerId,false);let timeline=currentTimeline(project);
     // Frames of a tab that is not open come from its stored timeline.
     if(saved.timelineId&&saved.timelineId!==activeTabOf(project)){const stored=await storedTabTimeline(ctx,project,saved.timelineId);if(!stored)throw new ConvexError('That timeline no longer exists.');timeline=stored;}
+    // A turn's staged draft, when the frames were asked for while its changes wait to be saved.
+    if(saved.runId){const draft=await ctx.db.query('aiTimelinePreviews').withIndex('by_project',q=>q.eq('projectId',project._id)).unique();if(!draft||draft.runId!==saved.runId)throw new ConvexError('The draft these frames were for is no longer pending.');timeline=await loadSceneCode(ctx,draft.timeline);}
     // A share card: the published timeline, as people who open the link will see it.
     let card:{title:string}|undefined;
     if(saved.shareId){const share=await ctx.db.get(saved.shareId);if(!share?.published)throw new ConvexError('The share is no longer published.');timeline=share.timeline;card={title:share.cardTitle??share.title};}

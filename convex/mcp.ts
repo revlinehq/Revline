@@ -178,18 +178,21 @@ export const exportJob = internalQuery({ args: { ownerId: v.string(), jobId: v.s
 }});
 
 /** Render up to six timeline frames as export would; the worker answers within seconds. */
-export const requestFrames = internalMutation({ args: { ownerId: v.string(), projectId: v.string(), times: v.array(v.number()), timelineId: v.optional(v.string()) }, returns: v.id('frameSnapshots'), handler: async (ctx, args) => {
+export const requestFrames = internalMutation({ args: { ownerId: v.string(), projectId: v.string(), times: v.array(v.number()), timelineId: v.optional(v.string()), runId: v.optional(v.string()) }, returns: v.id('frameSnapshots'), handler: async (ctx, args) => {
   await requireEditorAccess(ctx, args.ownerId);
   const project = await requireProject(ctx, projectIdOf(ctx, args.projectId), args.ownerId, false);
   const other = args.timelineId && args.timelineId !== activeTabOf(project) ? args.timelineId : undefined;
   const stored = other ? await storedTabTimeline(ctx, project, other) : null;
   if (other && !stored) throw new ConvexError('That timeline no longer exists.');
-  const timeline = stored ?? currentTimeline(project), duration = timelineDuration(timeline);
+  // A turn with staged changes (after a delete, every later edit waits until the turn ends) looks at its draft, not the saved timeline.
+  const draft = args.runId ? await ctx.db.query('aiTimelinePreviews').withIndex('by_project', q => q.eq('projectId', project._id)).unique() : null;
+  const drafted = draft && draft.runId === args.runId && !other ? draft.timeline : null;
+  const timeline = drafted ?? stored ?? currentTimeline(project), duration = timelineDuration(timeline);
   if (!timeline.clips.length) throw new ConvexError('The timeline is empty; there is nothing to look at yet.');
   if (!args.times.length || args.times.length > 6 || args.times.some(time => !Number.isFinite(time) || time < 0 || time > duration)) throw new ConvexError(`Choose 1 to 6 times between 0 and ${Math.round(duration * 100) / 100} seconds.`);
   await requireMediaTaskCapacity(ctx, args.ownerId, 1);
   // The worker renders the project's saved timeline; only the request is stored here.
-  const snapshotId = await ctx.db.insert('frameSnapshots', { projectId: project._id, ownerId: args.ownerId, revision: project.revision ?? 0, times: args.times, status: 'queued', createdAt: Date.now(), ...(other ? { timelineId: other } : {}) });
+  const snapshotId = await ctx.db.insert('frameSnapshots', { projectId: project._id, ownerId: args.ownerId, revision: project.revision ?? 0, times: args.times, status: 'queued', createdAt: Date.now(), ...(other ? { timelineId: other } : {}), ...(drafted ? { runId: args.runId } : {}) });
   const taskId = await enqueueMediaTask(ctx, { ownerId: args.ownerId, projectId: project._id, kind: 'snapshot', snapshotId });
   await ctx.db.patch(snapshotId, { taskId });
   // Frames are read once; anything unread is removed shortly after.

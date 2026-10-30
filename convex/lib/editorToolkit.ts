@@ -689,7 +689,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
     compareReference: createTool({ description: "Check a recreation against its reference, moment by moment: renders your saved timeline at the reference's moments and lays each reference frame beside yours in one image, with a difference score per moment (0 identical, 100 nothing alike). Use it after building or changing scenes of a recreation, at every transition you rebuilt (the moments map from readFrames), and fix the moments with the highest scores first, then compare again. times are REFERENCE seconds; offset is how far the recreation sits from the reference on the timeline (timeline = reference + offset, default 0).", inputSchema: z.object({ assetId: z.string().min(1), times: z.array(z.number().min(0)).min(1).max(6), offset: z.number().optional() }).strict(), execute: async (_ctx, input) => {
       await editSession.wait();
       const offset = input.offset ?? 0;
-      const snapshotId = await ctx.runMutation(internal.mcp.requestFrames, { ownerId: run.ownerId, projectId: run.projectId, times: input.times.map(time => Math.max(0, time + offset)) });
+      const snapshotId = await ctx.runMutation(internal.mcp.requestFrames, { ownerId: run.ownerId, projectId: run.projectId, ...(editSession.staged ? { runId: run.runId } : {}), times: input.times.map(time => Math.max(0, time + offset)) });
       try {
         const deadline = Date.now() + 280_000;
         for (let state = await ctx.runQuery(internal.mcp.frames, { ownerId: run.ownerId, snapshotId }); state.status !== 'completed'; state = await ctx.runQuery(internal.mcp.frames, { ownerId: run.ownerId, snapshotId })) {
@@ -706,7 +706,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
     }, toModelOutput: (_ctx, options) => blueprintImages(options.output) }),
     getFrames: createTool({ description: "Look at your work: render 1 to 4 frames of the saved timeline at timeline seconds, composited exactly as the export draws them (scenes, footage, text, effects), and see them as images. Use it after building or changing scenes or visuals, at each key beat, to check that text is readable, nothing overflows or clips, brand fonts, colors and logo show, and frames are not empty; fix what is wrong before saying it is done. Each call takes 10 to 30 seconds; pick the moments that matter.", inputSchema: z.object({ times: z.array(z.number().min(0)).min(1).max(4).describe('Timeline seconds, inside the timeline.') }), execute: async (_ctx, { times }) => {
       await editSession.wait();
-      const snapshotId = await ctx.runMutation(internal.mcp.requestFrames, { ownerId: run.ownerId, projectId: run.projectId, times });
+      const snapshotId = await ctx.runMutation(internal.mcp.requestFrames, { ownerId: run.ownerId, projectId: run.projectId, ...(editSession.staged ? { runId: run.runId } : {}), times });
       const deadline = Date.now() + 280_000;
       let started = false;
       while (Date.now() < deadline) {
