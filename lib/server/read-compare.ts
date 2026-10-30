@@ -6,14 +6,29 @@ import { frameAt, probe, sheet } from './read-reference';
 type Work = NonNullable<MediaWorkItem['read']>;
 const round = (value: number, places = 3) => Math.round(value * 10 ** places) / 10 ** places;
 
-/** How different two pictures are, 0 (the same) to 1: the mean color difference at one small common size, so layout,
- * position, size and color all count, and fine grain does not. */
+/** How different two pictures are, 0 (the same) to 1. Most of a motion frame is plain background, so a whole-frame
+ * average says "nearly identical" while the keys sit in the wrong place: compare the content instead. Each frame's
+ * content is what stands off its own background; half the score is how little the two contents overlap (position,
+ * size, shape), half is how far their colors are apart where either has content. */
 async function difference(a: Buffer, b: Buffer) {
   const small = (image: Buffer) => sharp(image).resize(96, 54, { fit: 'fill' }).removeAlpha().raw().toBuffer();
   const [x, y] = await Promise.all([small(a), small(b)]);
-  let sum = 0;
-  for (let index = 0; index < x.length; index++) sum += Math.abs(x[index] - y[index]);
-  return sum / (x.length * 255);
+  const content = (pixels: Buffer) => {
+    // The background is the most common color: the median of each channel over the frame.
+    const median = [0, 1, 2].map(channel => { const values: number[] = []; for (let index = channel; index < pixels.length; index += 3) values.push(pixels[index]); values.sort((p, q) => p - q); return values[values.length >> 1]; });
+    const mask = new Uint8Array(pixels.length / 3);
+    for (let pixel = 0; pixel < mask.length; pixel++) mask[pixel] = Math.abs(pixels[pixel * 3] - median[0]) + Math.abs(pixels[pixel * 3 + 1] - median[1]) + Math.abs(pixels[pixel * 3 + 2] - median[2]) > 60 ? 1 : 0;
+    return mask;
+  };
+  const [first, second] = [content(x), content(y)];
+  let both = 0, either = 0, colors = 0;
+  for (let pixel = 0; pixel < first.length; pixel++) {
+    if (!first[pixel] && !second[pixel]) continue;
+    either++; if (first[pixel] && second[pixel]) both++;
+    colors += (Math.abs(x[pixel * 3] - y[pixel * 3]) + Math.abs(x[pixel * 3 + 1] - y[pixel * 3 + 1]) + Math.abs(x[pixel * 3 + 2] - y[pixel * 3 + 2])) / (3 * 255);
+  }
+  if (!either) return 0;
+  return .5 * (1 - both / either) + .5 * colors / either;
 }
 
 /** The reference beside the recreation at the same moments, each pair labeled with how far apart it is. */
