@@ -2,7 +2,7 @@ import { httpRouter } from "convex/server";
 import { httpAction } from "./_generated/server";
 import { processEvent } from "@convex-dev/stripe";
 import Stripe from 'stripe';
-import { components, internal } from "./_generated/api";
+import { api, components, internal } from "./_generated/api";
 import { registerAlertWebhooks } from './alertWebhooks';
 import { registerMcpRoutes } from './mcpHttp';
 import { registerAgentRunnerRoutes } from './agentRunnerHttp';
@@ -12,6 +12,14 @@ registerAlertWebhooks(http);
 registerMcpRoutes(http);
 registerAgentRunnerRoutes(http);
 const headers = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "POST, OPTIONS", "Access-Control-Allow-Headers": "Content-Type", "Content-Type": "application/json" };
+// A shared timeline's link preview image (Open Graph / X card), 1200x630 JPEG.
+http.route({ path: "/share-card", method: "GET", handler: httpAction(async (ctx, request) => {
+  const shareId = new URL(request.url).searchParams.get("share") ?? "";
+  const image = shareId ? await ctx.runQuery(api.timelineShares.cardImage, { shareId }) : null;
+  if (!image) return new Response("Not found", { status: 404 });
+  const bytes = Uint8Array.from(atob(image), c => c.charCodeAt(0));
+  return new Response(bytes, { headers: { "Content-Type": "image/jpeg", "Cache-Control": "public, max-age=300" } });
+}) });
 http.route({ path: "/uploads", method: "OPTIONS", handler: httpAction(async () => new Response(null, { status: 204, headers })) });
 http.route({ path: "/uploads", method: "POST", handler: httpAction(async (ctx, request) => {
   const token = new URL(request.url).searchParams.get("ticket");

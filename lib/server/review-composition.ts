@@ -57,6 +57,7 @@ export async function captureTimelineFrames(snapshot:NonNullable<MediaWorkItem['
     frames.push({time,image:(await readFile(join(path,'sample-0.png'))).toString('base64')});
     onProgress(20+Math.round(75*(index+1)/times.length));
   }
+  if(snapshot.card)return {frames:[{time:frames[0].time,image:(await shareCard(Buffer.from(frames[0].image,'base64'),snapshot.card.title)).toString('base64')}]};
   // Results travel in one Convex document (1 MiB); shrink until every frame fits.
   const pngs=frames.map(frame=>Buffer.from(frame.image,'base64'));
   for(const [size,quality] of [[768,70],[640,60],[512,50],[384,45]] as const){
@@ -64,4 +65,19 @@ export async function captureTimelineFrames(snapshot:NonNullable<MediaWorkItem['
     if(images.reduce((sum,image)=>sum+image.length,0)<=700_000)return {frames:frames.map((frame,index)=>({time:frame.time,image:images[index]}))};
   }
   throw new AnalysisError('Rendered frames are too detailed to return. Ask for fewer times.',400);
+}
+
+const escapeXml=(text:string)=>text.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&apos;'}[c]!));
+/** A link preview card, 1200x630: the frame full-bleed, a play button, and a strip with the timeline name and the Revline mark. */
+async function shareCard(png:Buffer,title:string){
+  const W=1200,H=630,STRIP=96,name=escapeXml(title.length>48?`${title.slice(0,47)}…`:title);
+  const mark='<path d="M80.29961 2.30981l-64.85001 27.64999c-19.025 8.7-20.025 23.60001-5.5 26.475 31.85001 6.32501 51.425 10.5 61.97501 14.6 9.375 3.675 15.27499 10.30001 17.24998 17.00001l-3.29999-17.22501c-0.60001-3.49999-3.42501-8.12499-11.89998-11.27499l-20.82501-7.725c-8.1-3.75-5.05-10.875 0.15-12.675l15.45-5.475c19.425-7.175 18.275-35.94999 10.6-31.35z" transform="scale(.32)"/>';
+  const overlay=`<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}">
+<rect x="0" y="${H-STRIP}" width="${W}" height="${STRIP}" fill="#0b0c0e" fill-opacity="0.82"/>
+<circle cx="${W/2}" cy="${(H-STRIP)/2}" r="54" fill="#ffffff" fill-opacity="0.92"/>
+<path d="M${W/2-16} ${(H-STRIP)/2-24} L${W/2+26} ${(H-STRIP)/2} L${W/2-16} ${(H-STRIP)/2+24} Z" fill="#0b0c0e"/>
+<text x="40" y="${H-STRIP/2+12}" font-family="Liberation Sans, Arial, sans-serif" font-size="34" font-weight="700" fill="#f4f4f0">${name}</text>
+<g transform="translate(${W-188} ${H-STRIP/2-16})" fill="#f4f4f0">${mark}<text x="44" y="26" font-family="Liberation Sans, Arial, sans-serif" font-size="30" font-weight="700" letter-spacing="-1">revline</text></g>
+</svg>`;
+  return sharp(png).resize(W,H,{fit:'cover'}).composite([{input:Buffer.from(overlay),top:0,left:0}]).jpeg({quality:84}).toBuffer();
 }

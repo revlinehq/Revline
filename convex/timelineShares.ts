@@ -1,7 +1,10 @@
 import { writeProject,createProject } from './lib/project_data';
 import { recordAssetStorage } from './lib/storage_accounting';
 import { ConvexError,v } from 'convex/values';
-import { mutation,query } from './_generated/server';
+import { internalMutation,mutation,query } from './_generated/server';
+import { internal } from './_generated/api';
+import { enqueueMediaTask } from './mediaTasks';
+import { timelineDuration } from '../lib/editor/types';
 import type { Id,Doc } from './_generated/dataModel';
 import { requireOwner,requireProject } from './lib/auth';
 import { requireEditorAccess } from './lib/billing_access';
@@ -52,7 +55,33 @@ export const publish=mutation({args:{projectId:v.id('projects'),chat:v.optional(
   if(existing){await removeShareAssets(ctx,shareId);await removeShareTabs(ctx,shareId);await ctx.db.patch(shareId,{title:project.title,timeline,tabCount,openTimelineId,chat:chat?.length?chat:undefined,published:true,updatedAt:now});}
   if(tabCount)for(const [position,tab] of tabs.entries())await ctx.db.insert('shareTimelines',{shareId,timelineId:tab.id,name:tab.name,position,timeline:tab.timeline});
   for(const asset of assets.values())await ctx.db.insert('shareAssets',{shareId,ownerId,...sharedAssetFields(asset)});
+  // The link's preview card: the timeline's name and a frame of it, rendered in the background.
+  await ctx.db.patch(shareId,{cardTitle:primary.name});
+  await ctx.scheduler.runAfter(0,internal.timelineShares.requestCard,{shareId});
   return shareId;
+}});
+
+/** Render the share card: one frame about a third of the way in, composed by the media worker with the name. */
+export const requestCard=internalMutation({args:{shareId:v.id('timelineShares')},returns:v.null(),handler:async(ctx,{shareId})=>{
+  const share=await ctx.db.get(shareId);if(!share?.published)return null;
+  const fps=share.timeline.fps,time=Math.round(timelineDuration(share.timeline)*.35*fps)/fps;
+  const snapshotId=await ctx.db.insert('frameSnapshots',{projectId:share.projectId,ownerId:share.ownerId,revision:0,times:[time],status:'queued',createdAt:Date.now(),shareId});
+  const taskId=await enqueueMediaTask(ctx,{ownerId:share.ownerId,projectId:share.projectId,kind:'snapshot',snapshotId});
+  await ctx.db.patch(snapshotId,{taskId});
+  return null;
+}});
+
+/** What a link preview needs: the timeline name and whether a card image exists. Public, like the share itself. */
+export const card=query({args:{shareId:v.string()},returns:v.union(v.object({title:v.string(),hasImage:v.boolean(),updatedAt:v.number()}),v.null()),handler:async(ctx,{shareId})=>{
+  const id=ctx.db.normalizeId('timelineShares',shareId),share=id?await ctx.db.get(id):null;
+  if(!share?.published)return null;
+  return {title:share.cardTitle??share.title,hasImage:!!share.cardImage,updatedAt:share.cardUpdatedAt??share.updatedAt};
+}});
+
+/** The card image itself, served by the share-card HTTP route. */
+export const cardImage=query({args:{shareId:v.string()},returns:v.union(v.string(),v.null()),handler:async(ctx,{shareId})=>{
+  const id=ctx.db.normalizeId('timelineShares',shareId),share=id?await ctx.db.get(id):null;
+  return share?.published&&share.cardImage?share.cardImage:null;
 }});
 export const revoke=mutation({args:{projectId:v.id('projects')},returns:v.null(),handler:async(ctx,{projectId})=>{
   await requireProject(ctx,projectId,await requireOwner(ctx));const share=await ctx.db.query('timelineShares').withIndex('by_project',q=>q.eq('projectId',projectId)).unique();

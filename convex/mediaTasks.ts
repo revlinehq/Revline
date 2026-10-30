@@ -41,7 +41,7 @@ const FAIR_RUNNING_PER_OWNER = 1, FAIR_CLAIM_SCAN = 64;
 const eventResult = v.object({ success: v.boolean(), retryable: v.boolean(), error: v.optional(v.string()) });
 const taskState = v.object({ _id: v.id('mediaTasks'), kind: mediaTaskKind, status: mediaTaskStatus, progress: v.number(), attempt: v.number(), error: v.optional(v.string()), assetId: v.optional(v.id('assets')),activity:v.optional(mediaTaskActivity),activityStartedAt:v.optional(v.number()) });
 const renderSnapshot = v.object({ timeline: timelineValidator, assets: v.array(assetWithUrl), resolution: v.number(), fps: v.number(), quality: v.string() });
-const timelineFrames=v.object({timeline:timelineValidator,assets:v.array(assetWithUrl),times:v.array(v.number())});
+const timelineFrames=v.object({timeline:timelineValidator,assets:v.array(assetWithUrl),times:v.array(v.number()),card:v.optional(v.object({title:v.string()}))});
 const reviewSnapshot=v.object({timeline:timelineValidator,reference:timelineValidator,plans:v.array(effectPlanValidator),assets:v.array(assetWithUrl),revision:v.number(),start:v.number(),end:v.number()});
 // A blueprint check: render scene code at an exact size, read pixels, or diff against a kit screen.
 const blueprintWork = v.object({ mode: v.union(v.literal('measure'), v.literal('compare'), v.literal('render')), width: v.number(), height: v.number(), code: v.optional(v.string()), brand: v.any(), screenUrl: v.optional(v.string()), points: v.optional(v.array(blueprintPointValidator)), lines: v.optional(v.array(blueprintLineValidator)) });
@@ -332,11 +332,14 @@ async function loadWork(ctx:import('./_generated/server').QueryCtx|MutationCtx,t
     const project=await requireProject(ctx,task.projectId,task.ownerId,false);let timeline=currentTimeline(project);
     // Frames of a tab that is not open come from its stored timeline.
     if(saved.timelineId&&saved.timelineId!==activeTabOf(project)){const stored=await storedTabTimeline(ctx,project,saved.timelineId);if(!stored)throw new ConvexError('That timeline no longer exists.');timeline=stored;}
+    // A share card: the published timeline, as people who open the link will see it.
+    let card:{title:string}|undefined;
+    if(saved.shareId){const share=await ctx.db.get(saved.shareId);if(!share?.published)throw new ConvexError('The share is no longer published.');timeline=share.timeline;card={title:share.cardTitle??share.title};}
     // A scene clip's own filmstrip: that clip alone, from its first frame.
     if(saved.clipId){const clip=timeline.clips.find(item=>item.id===saved.clipId);if(!clip)throw new ConvexError('The clip for these frames is gone.');timeline={...timeline,clips:[{...clip,start:0}],markers:[]};}
     const ids=[...new Set([...timeline.clips.flatMap(clip=>clip.assetId?[clip.assetId]:[]),...sceneMediaAssetIds(timeline)])];
     const assets=await Promise.all(ids.map(async raw=>{const id=ctx.db.normalizeId('assets',raw),asset=id?await ctx.db.get(id):null;if(!asset||asset.ownerId!==task.ownerId||asset.projectId!==task.projectId)throw new ConvexError('Frame source media is unavailable.');return {...asset,url:await mediaUrl(ctx,asset)};}));
-    snapshot={timeline,assets,times:saved.times};
+    snapshot={timeline,assets,times:saved.times,...(card?{card}:{})};
   }
   let blueprint:Infer<typeof blueprintWork>|undefined;
   if(task.blueprintCheckId){
@@ -479,6 +482,8 @@ const RESULT_HANDLERS: Record<Doc<'mediaTasks'>['kind'], ResultHandler> = {
     const snapshot = (await ctx.db.get(task.snapshotId))!, frames = result.snapshot.frames;
     if (frames.length !== snapshot.times.length || frames.some((frame, index) => !Number.isFinite(frame.time) || Math.abs(frame.time - snapshot.times[index]) > 1 || !/^[A-Za-z0-9+/]+=*$/.test(frame.image)) || frames.reduce((sum, frame) => sum + frame.image.length, 0) > 900_000) throw new ConvexError('Rendered frames do not match the request.');
     await ctx.db.patch(snapshot._id, { status: 'completed', frames });
+    // A share card goes onto its share; the request itself is not kept.
+    if (snapshot.shareId && frames[0]) { const share = await ctx.db.get(snapshot.shareId); if (share?.published) await ctx.db.patch(share._id, { cardImage: frames[0].image, cardUpdatedAt: Date.now() }); await ctx.db.delete(snapshot._id); }
   },
   render: async (ctx, task) => {
     const job = task.renderJobId ? await ctx.db.get(task.renderJobId) : null;
