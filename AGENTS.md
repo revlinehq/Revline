@@ -23,6 +23,7 @@ Deploy every completed Convex change to its intended environment and verify the 
 ## Motion films from a coding session
 
 When building or copying a motion film from here (scene code pushed to a Revline project):
+- Read the editor agent's skills first, the same ones Revline's own agent follows: `lib/ai/skills/motion-design/`, `lib/ai/skills/gsap/` (its `revline` rules page first), `lib/ai/skills/scene-engine.ts` (React scenes) and, when copying a video, `lib/ai/skills/reference-footage.ts`.
 - Work on the development deployment, and pass the timeline tab explicitly instead of switching the project's open tab; other sessions may be editing another tab of the same project.
 - Measure at full resolution, never from downscaled contact sheets.
 - For device mockups, logos and other reusable assets, check the asset-library skill first and record each asset's license before searching the web.
