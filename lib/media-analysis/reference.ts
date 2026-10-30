@@ -48,7 +48,10 @@ export type ReferenceBreakdown = {
   rhythm: { medianShot: number; shortestShot: number; longestShot: number; cutsPerMinute: number; bpm?: number; onBeatRatio?: number };
   direction: z.infer<typeof responseSchema>['direction'];
   signatures: (z.infer<typeof responseSchema>['signatures'][number] & { id: string })[];
+  /** Where the picture changes, measured at 10 fps across the whole video: hard cuts and motion inside shots. Older breakdowns have none. */
+  moments?: ReferenceMoment[];
 };
+export type ReferenceMoment = { start: number; end: number; peak: number; kind: 'cut' | 'motion'; box?: { left: number; top: number; right: number; bottom: number } };
 export type ReferenceKeyframe = { shotId: string; time: number };
 
 const round = (value: number) => Math.round(value * 1000) / 1000;
@@ -165,5 +168,12 @@ export function referenceOutline(reference: ReferenceBreakdown) {
     id: shot.id, start: shot.start, end: shot.end, duration: shot.duration,
     transition: shot.transitionIn.kind, camera: shot.camera.move, ...(shot.onBeat !== undefined ? { onBeat: shot.onBeat } : {}),
     description: shot.description, parts: shot.parts.map(part => part.id), ...(shot.titles.length ? { titles: shot.titles.map(title => title.text).filter(Boolean) } : {}),
+  }));
+}
+
+/** The measured moments with ids and the shot each starts in, for the agent and the chat card. */
+export function referenceMoments(reference: ReferenceBreakdown) {
+  return (reference.moments ?? []).map((moment, index) => ({
+    id: `M${index + 1}`, ...moment, shotId: (reference.shots.find(shot => moment.start >= shot.start && moment.start < shot.end) ?? reference.shots.at(-1)!).id,
   }));
 }

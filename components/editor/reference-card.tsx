@@ -5,7 +5,8 @@ import './reference-card.css';
 
 type Shot = { id: string; start: number; end: number; duration: number; transition: string; camera: string; onBeat?: boolean; description: string; parts: string[]; titles?: string[] };
 type Signature = { id: string; kind: string; label: string; shotIds: string[] };
-export type ReferenceView = { assetId: string; fileName: string; genre: string; duration: number; shots: Shot[]; signatures: Signature[]; rhythm: { medianShot: number; cutsPerMinute: number; bpm?: number; onBeatRatio?: number } };
+type Moment = { id: string; start: number; end: number; peak: number; kind: 'cut' | 'motion'; shotId: string };
+export type ReferenceView = { assetId: string; fileName: string; genre: string; duration: number; shots: Shot[]; signatures: Signature[]; moments?: Moment[]; rhythm: { medianShot: number; cutsPerMinute: number; bpm?: number; onBeatRatio?: number } };
 export type ReferenceMedia = { url: string | null; previewUrl?: string | null };
 
 /** A finished reference breakdown (analyzeMedia mode reference); null for any other step. */
@@ -30,7 +31,9 @@ export function ReferenceCard({ view, media, onPick }: { view: ReferenceView; me
     setSelected(index);
     if (video.current) { video.current.currentTime = view.shots[index].start + Math.min(.05, view.shots[index].duration / 2); setTime(video.current.currentTime); }
   };
-  const rhythm = [`${view.shots.length} shots`, `${seconds(view.rhythm.medianShot)} median`, view.rhythm.bpm ? `${view.rhythm.bpm} bpm` : '', view.rhythm.onBeatRatio !== undefined ? `${Math.round(view.rhythm.onBeatRatio * 100)}% cuts on the beat` : ''].filter(Boolean).join(' · ');
+  const moments = view.moments ?? [], strongest = Math.max(...moments.map(item => item.peak), .01);
+  const seek = (at: number) => { if (video.current) { video.current.currentTime = at; setTime(at); } };
+  const rhythm = [`${view.shots.length} shots`, moments.length ? `${moments.length} moments` : '', `${seconds(view.rhythm.medianShot)} median`, view.rhythm.bpm ? `${view.rhythm.bpm} bpm` : '', view.rhythm.onBeatRatio !== undefined ? `${Math.round(view.rhythm.onBeatRatio * 100)}% cuts on the beat` : ''].filter(Boolean).join(' · ');
   const chip = (token: string, label = token) => <button key={token} type="button" className="reference-chip" disabled={!onPick} onClick={() => onPick?.(token)}>{label}</button>;
   return <section className="reference-card" aria-label={`Reference breakdown of ${view.fileName}`}>
     <header className="reference-card-head">
@@ -38,10 +41,16 @@ export function ReferenceCard({ view, media, onPick }: { view: ReferenceView; me
       <span>{rhythm}</span>
     </header>
     {source && <video ref={video} className="reference-card-video" src={source} muted playsInline controls preload="metadata" onTimeUpdate={event => setTime(event.currentTarget.currentTime)} onSeeked={event => { const now = event.currentTarget.currentTime, index = view.shots.findIndex(item => now >= item.start && now < item.end); setTime(now); if (index >= 0) setSelected(index); }} />}
+    <div className="reference-bar">
     <div className="reference-strip" role="listbox" aria-label="Shots">
       {view.shots.map((item, index) => <button key={item.id} type="button" role="option" aria-selected={index === selected} className={`reference-shot${index === playing ? ' is-playing' : ''}`} style={{ flexGrow: item.duration }} onClick={() => choose(index)} aria-label={`${item.id}, ${seconds(item.start)} to ${seconds(item.end)}`}>
         <span>{item.id}</span>
       </button>)}
+    </div>
+    {/* Moments over the shots: everything that changes, motion inside a shot as well as cuts. Taller marks moved more. */}
+    {moments.length > 0 && <div className="reference-moments" aria-label="Moments">
+      {moments.map(item => <button key={item.id} type="button" className={`reference-moment is-${item.kind}`} title={`${item.id} · ${item.kind} · ${seconds(item.start)} to ${seconds(item.end)}`} aria-label={`${item.id}, ${item.kind}, ${seconds(item.start)} to ${seconds(item.end)}`} style={{ left: `${item.start / view.duration * 100}%`, width: `${Math.max(0, item.end - item.start) / view.duration * 100}%`, '--strength': .35 + .65 * item.peak / strongest } as React.CSSProperties} onClick={() => { const index = view.shots.findIndex(shot => shot.id === item.shotId); if (index >= 0) setSelected(index); seek(item.start); }}/>)}
+    </div>}
     </div>
     <div className="reference-detail">
       <p className="reference-detail-meta">{shot.id} · {seconds(shot.start)} to {seconds(shot.end)} · {shot.transition === 'cut' ? 'hard cut in' : `${shot.transition} in`} · {shot.camera}{shot.onBeat ? ' · on the beat' : ''}</p>
@@ -52,6 +61,7 @@ export function ReferenceCard({ view, media, onPick }: { view: ReferenceView; me
         {shot.camera !== 'static' && shot.camera !== 'other' && chip(`${shot.id} camera`, `camera: ${shot.camera}`)}
         {shot.parts.map(part => chip(part))}
         {!!shot.titles?.length && !shot.parts.some(part => part.startsWith(`${shot.id}.title`)) && chip(`${shot.id} title`, 'title')}
+        {moments.filter(item => item.shotId === shot.id).map(item => chip(`${shot.id} @ ${item.start.toFixed(1)}s`, `${item.id} ${item.kind} ${seconds(item.start)}`))}
         {source && chip(`${view.shots[playing]?.id ?? shot.id} @ ${time.toFixed(1)}s`, 'this moment')}
       </div>
     </div>
