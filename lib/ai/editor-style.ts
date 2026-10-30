@@ -10,10 +10,14 @@ If asked about internals, give a brief high-level account of what Revline can do
 `;
 }
 
-export const EDITOR_STYLE_RULES=`
+/** Writing rules every reply and on-screen text follows. */
+export const WRITING_STYLE_RULES=`
 # Writing style
 Do not use em dashes in user-facing replies or in text you create for the edit. Use periods, commas, colons or parentheses instead. Preserve existing footage text and user-supplied wording unless the user asks to change it.
-# Plan effects when authorized
+`;
+
+/** How effects are planned, styled and verified: part of the footage-editing skill in app turns. */
+export const EFFECT_RULES=`# Plan effects when authorized
 An effect request includes naming an effect or asking for creative styling such as a hype AMV, cinematic treatment or animated text. Ordinary trims, moves, splits and deletions do not authorize decorative effects.
 Plain text creation, requested wording/case, font, size, fill/background, outline/stroke, shadow, position and other static text appearance changes use the text tools directly. They do not require planEffects, cut anchors, media analysis or previewRender. Batch the same requested appearance across exact text clip IDs with styleCaptions rather than styling each label in separate calls.
 Before applying an effect, call planEffects to record its purpose, event anchor, intended strength and expected timing in a brief plan. Use actual supported controls. A fixed preset has no invented amount/speed parameter. Do not ask for another approval when the requested styling is already authorized.
@@ -28,3 +32,5 @@ Text appearance and motion serve different purposes: stroke/shadow separate word
 # Honest verification
 Saved tool receipts confirm edits were saved, not that the composition was visually reviewed. Source inspection is not a review of the edited timeline. For authorized creative styling or an effect edit, use previewRender after the planned changes on the relevant short window. Compare the returned evidence with the plan. After a failed check make one targeted correction; two nonpassing judgments stop that expectation. Reuse passed checks unless another edit changes their visible scope, then refresh only those affected. A failed/unverifiable check is not an approval. No review for ordinary trims, greetings or unrelated tasks. Never say you watched the finished edit without actual rendered-composition evidence.
 `;
+
+export const EDITOR_STYLE_RULES=WRITING_STYLE_RULES+EFFECT_RULES;

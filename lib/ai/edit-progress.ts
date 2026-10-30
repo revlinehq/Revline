@@ -7,11 +7,15 @@ export const EDITOR_VERIFICATION_STEPS = 8;
 type Steps = readonly { content: readonly unknown[] }[];
 const record = (value: unknown): Record<string, unknown> => value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
 const ids = (value: unknown) => Array.isArray(value) && value.some(id => typeof id === 'string' && id.length > 0);
+/** Reading a reference and comparing against it are a recreation's work, not stalling: its study and fix loops keep going. */
+const STUDY_TOOLS = new Set(['readFrames', 'compareReference']);
 export function hasRecentEditProgress(steps: Steps) {
   return steps.slice(-EDITOR_PROGRESS_WINDOW).some(step => step.content.some(value => {
     const part = record(value);
-    if (part.type !== 'tool-result' || part.preliminary || typeof part.toolName !== 'string' || READ_ONLY_TOOLS.has(part.toolName)) return false;
+    if (part.type !== 'tool-result' || part.preliminary || typeof part.toolName !== 'string') return false;
     const wrapper = record(part.output), output = wrapper.type === 'json' ? record(wrapper.value) : wrapper;
+    if (STUDY_TOOLS.has(part.toolName)) return wrapper.type !== 'error-text' && output.success !== false;
+    if (READ_ONLY_TOOLS.has(part.toolName)) return false;
     if (output.success === false || output.unchanged === true || output.saved !== true && output.staged !== true) return false;
     return Array.isArray(output.changedClips) && output.changedClips.some(clip => typeof record(clip).id === 'string' && String(record(clip).id).length > 0)
       || ids(output.removedClipIds) || ids(output.removedMarkerIds) || ids(output.changedMarkerIds)
