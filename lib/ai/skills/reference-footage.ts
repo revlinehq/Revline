@@ -17,7 +17,7 @@ The reference is footage cut to a song. What makes it is the rhythm: where cuts 
 
 ## Shot by shot
 - Length: the reference shot's length in beats (from rhythm.bpm), not in seconds, unless the reference has no music.
-- transitionIn: cut is a hard cut. whip becomes addTransition whip-pan (0.3 to 0.5 s) with its direction. zoom becomes zoom-through. dissolve or blur becomes crossfade or blur-dissolve. flash becomes a short white flash on the cut. spin becomes spin-zoom. light-leak becomes film-burn.
+- transitionIn: cut is a hard cut; every other kind maps to an addTransition preset as on page \`borrow\` (Mapping), at the reference's measured length and direction.
 - camera speed-ramp becomes setSpeedRamp into the hit. shake on a hit becomes a short shake effect at that beat. push-in becomes configureSmoothZoom or a zoom effect over the shot.
 - Titles and captions: rebuild their style (size, weight, case, enter) with the text tools, with the user's words.
 - Look: match the grade the reference describes (applyLut, setColorCurves, grain), using the user's footage as the base.
@@ -46,21 +46,6 @@ The reference is footage under a voice (a speech, a quote, a narrator), with lar
 `,
 };
 
-const launchFilm: EditorSkillPage = {
-  name: 'launch-film',
-  description: 'Remaking a product, brand or feature launch made with motion design: rebuilt as scenes for the user\'s product.',
-  body: `# Remake: launch film
-
-The reference is a motion-design launch. Remake it with the motion-design skill (read it), for the user's brand and product. Never the reference's product, UI, logo or copy.
-
-- The reference's direction (look, type, productUi, motion, pacing) replaces the example direction in motion-design step 5. Brand-kit fonts and colors still win over the reference palette.
-- Each reference shot becomes one beat in the beat sheet, with the same length, transition and camera move. Shots that share a UI build share one scene with internal beats.
-- Parts map to scene code: ui becomes the user's product UI, rebuilt from their brand-kit blueprint. title keeps the measured size, enter, ease and hold, with copy written for the user's product. background follows the look line in the brand's colors. cursor stays only if the reference shows one.
-- Titles stay small and calm unless the reference's own titles are large; then match them.
-- After building, render each beat with getFrames and compare it with the reference shot's keyframe (inspectFrames on the reference at that time).
-`,
-};
-
 const borrow: EditorSkillPage = {
   name: 'borrow',
   description: 'Borrowing one part of a reference (a transition, a title style, the pacing, the look) for the current edit, and how each part maps onto controls.',
@@ -72,7 +57,7 @@ Change only what the user named. Every other clip, title, timing, color and soun
 The message names shots and parts by id (S4, S4.title, T2) or in words ("the second transition", "the title at 0:07", "that zoom"). Resolve both with inspectReference before building, and say what you understood by id ("S4's whip right, 0.35 s"). When a part is unclear in the breakdown, look at it with readFrames fps 10 on the reference around that shot's time.
 
 ## Mapping
-- A transition: addTransition with the closest preset and the measured seconds, on the cut the user named, or on every cut if they said so. whip is whip-pan, zoom is zoom-through, dissolve is crossfade, blur is blur-dissolve, spin is spin-zoom, wipe is gradient-wipe (or iris-wipe for a circle), light-leak is film-burn.
+- A transition: addTransition with the closest preset and the measured seconds, on the cut the user named, or on every cut if they said so. whip is whip-pan, zoom is zoom-through, dissolve is crossfade, blur is blur-dissolve, spin is spin-zoom, wipe is gradient-wipe (or iris-wipe for a circle), light-leak is film-burn, flash is a short white flash on the cut.
 - A title style: text clips get setTextStyle, setTextAnimation or applyTextLook with the measured size, weight, case and enter; captions get styleCaptions. Titles inside scenes change with editScene: only the title's CSS and GSAP, nothing else in the scene.
 - A camera move: configureCameraMotion or configureSmoothZoom on footage; the scene's camera timeline inside scenes.
 - Pacing: keep the order of the user's shots and move their cuts toward the reference's shot lengths (and onto beats when onBeatRatio is high), with trim and alignCutsToBeat. Say how many cuts moved.
@@ -83,7 +68,7 @@ The message names shots and parts by id (S4, S4.title, T2) or in words ("the sec
 
 export const referenceFootage: EditorSkill = {
   name: 'reference-footage',
-  description: 'The user shares a video to remake or to take style from (an edit, a motivation video, someone\'s launch film, anything) and points at parts of it ("this transition, this title, this pacing"). Read before analyzing a reference, before a remake, and before borrowing any part of one.',
+  description: 'The user shares a video to remake or to take style from (an edit, a motivation video, anything; recreating a launch or motion film is motion-design) and points at parts of it ("this transition, this title, this pacing"). Read before analyzing a reference, before a remake, and before borrowing any part of one.',
   body: `# Reference footage
 
 The user shares a finished video and wants either a **remake** (the same edit made with their own material) or a **style borrow** (one or more parts of it applied to their edit).
@@ -102,12 +87,12 @@ The chat shows the breakdown as a card where the user can click shots and parts 
 Then ask, only if the message did not already say: remake it, or borrow which parts?
 
 ## 3. Remake or borrow
-- **Remake:** load the page for the genre: \`social-edit\`, \`motivation\` or \`launch-film\`. For ad, music-video, vlog or tutorial use the closest one (an ad of footage is social-edit; an ad made with motion design is launch-film). Say what will come from the reference (structure, timing, transitions, type behaviour) and what will be the user's (footage, music, words, brand). If the remake needs material the project does not have, list it per shot and ask before building.
+- **Remake:** load the page for the genre: \`social-edit\` or \`motivation\`; for ad, music-video, vlog or tutorial use the closest one (an ad of footage is social-edit). A launch film or anything made with motion design is recreated with motion-design ("Recreating a video"), not here. Say what will come from the reference (structure, timing, transitions, type behaviour) and what will be the user's (footage, music, words, brand). If the remake needs material the project does not have, list it per shot and ask before building.
 - **Borrow:** load \`borrow\`. Change only the named parts.
 
 ## Rules
 - Copy the edit, never the content: no reference copy, logo, product, people, voiceover or song lifted into the user's video unless the user owns it and asks for it. Title text in the breakdown is there only to recognise the shot.
 - Measured numbers (shot lengths, cut times, beats, onBeatRatio) are exact. Transition kinds, camera moves and title styles are the model's reading: when one decides the result, check it with readFrames fps 10 on the reference before building.
 - After building, go through scene-engine page \`checklist\` for scenes, and look at the result with getFrames at the shots that matter.`,
-  pages: [socialEdit, motivation, launchFilm, borrow],
+  pages: [socialEdit, motivation, borrow],
 };

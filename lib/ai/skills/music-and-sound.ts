@@ -96,14 +96,14 @@ Synth examples: a soft tap \`{ "source": "sine", "length": 0.08, "frequency": { 
 | --- | --- | --- |
 ${presetTable}
 
-Notes are names like \`F5\` or Hz. Keep pitched sounds in one key across a video (the defaults sit in F minor) so pops, chimes and blips feel related.
+Notes are names like \`F5\` or Hz.
 
 ### Restraint
 
 - One sound per beat. Never stack two sounds on the same moment; pick the one that fits.
 - Leave space. Skip small beats quicker than about 0.5 s apart, or the edit sounds busy. Not every cut needs a whoosh: use them for topic or scene changes, not every jump cut inside one shot.
 - Nothing under speech. Check transcript word times (inspectAssetAnalysis) and place sounds in pauses, before the first word or after a sentence ends. If a tool result's \`overlapsAudio\` lists a voice clip with a word spoken there, move the sound to the nearest pause or drop it.
-- Match the tone. A calm explainer gets soft pops, ticks and chimes at low gain; hits, booms and fast whooshes are for energetic edits. Deep sounds below about 120 Hz barely play on phone speakers: pair a sub-drop with a brighter layer.
+- Deep sounds below about 120 Hz barely play on phone speakers: pair a sub-drop with a brighter layer.
 - Add sounds when the user asks for sound, authorizes creative styling, or asks for motion design: every scene you create or rework gets one generated clip for its key beats in the same turn (see Scenes). Otherwise do not decorate. Say which sounds you placed and where.
 
 ### Gain

@@ -6,7 +6,7 @@ export const effects: EditorSkill = {
   name: 'effects',
   description: 'Reference for every footage effect, timed FX, transition, keyframe, mask, tracking, speed, freeze, slow-motion, upscale, audio-reactive and motion-blur control, plus camera and object motion, with strength and timing guidance. Read before applying any visual effect, transition, camera move or object animation. For combinations read vfx-recipes; for color read color-grading.',
   get body() {
-    const { skills: _skills, soundEffects: _sound, text: _text, captions: _captions, stylePlaybooks: _playbooks, ...catalog } = editorCapabilities();
+    const { skills: _skills, soundEffects: _sound, text: _text, captions: _captions, ...catalog } = editorCapabilities();
     return `# Effects
 
 Effects serve a moment the viewer already sees: a reaction, an impact, a reveal, a beat. Inspect the footage first, use the gentlest strength that reads, and keep faces and text readable. For proven combinations (freeze callouts, ramps, text behind a person, tracked labels, beat pulses, choosing transitions) read vfx-recipes; for any color work read color-grading.

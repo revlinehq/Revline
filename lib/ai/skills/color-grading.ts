@@ -3,7 +3,7 @@ import type { EditorSkill } from './index';
 
 export const colorGrading: EditorSkill = {
   name: 'color-grading',
-  description: 'Color correction and looks: measuring footage (analyzeColor), matching shots (matchColor), the base grade, curves, HSL, LUT looks and bloom, in the right order, with looks by genre and how to keep skin tones natural. Read before any color, grade, look, LUT or "make it cinematic/warmer/cooler" request.',
+  description: 'Color correction and looks: measuring footage (analyzeColor), matching shots (matchColor), the base grade, curves, HSL, LUT looks and bloom, in the right order, and how to keep skin tones natural. Read before any color, grade, look, LUT or "make it cinematic/warmer/cooler" request.',
   body: `# Color grading
 
 Color is two jobs, always in this order: **correct** (make shots look right and match each other), then **style** (the look). Never style uncorrected footage, and never correct after the look; a look on a mismatched edit makes the mismatch louder.
@@ -31,19 +31,6 @@ Faces are the first thing viewers judge, and skin lives almost entirely in the *
 - teal-orange and golden-hour push skin warmer; cap them at .7 on close-ups of people.
 - Mono and bleach-bypass looks remove or crush skin color on purpose; only use them when the user wants that drama.
 - After any look, check a close-up face with getFrames. Skin should read as skin, not orange, gray or pink.
-
-## Looks by genre
-
-| Content | Correction focus | Look |
-|---|---|---|
-| Talking head, podcast, tutorial | Neutral white balance, exposure to a .45 median, contrast 1.05 to 1.1 | film-warm at .3 to .4, or none |
-| Vlog, travel, lifestyle | Match all shots first; vibrance +10 to +20 | golden-hour .5 to .7 |
-| Cinematic, hype, trailer | Contrast via a master S-curve | teal-orange .6 to .8, bloom .3 on lights |
-| Tech, product, SaaS | Clean neutral, slightly cool (temperature -5 to -15) | none, or cool-night at .3 |
-| Night, city, neon | Keep blacks deep; never lift shadows | cool-night .5 to .7, bloom .5 to .8 |
-| Retro, memory, flashback | Lower contrast | vintage-fade .6 to .8, plus filmOverlay |
-| Moody, dramatic, serious | Lower saturation .8 | bleach-bypass .4 to .6, or mono-contrast |
-| Beauty, fashion, soft | Soft contrast, protect skin | pastel .4 to .6 |
 
 ## Rules
 

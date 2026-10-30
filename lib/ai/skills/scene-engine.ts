@@ -10,14 +10,14 @@ const checklistPage: EditorSkillPage = {
 
 Run every item after building a scene or film and after every change. Render frames with getFrames (up to six per call) and look at them; never report a film as done from the code alone.
 
-1. **First frames.** The clip's first frame and the next one (start and start + 1/fps). Nothing shows that should still be hidden. A part hidden at its first frame starts hidden where it is built (page \`react-scenes\`, Motion; for GSAP specifics, the gsap skill's \`revline\` page).
+1. **First frames.** The clip's first frame and the next one (start and start + 1/fps). Nothing shows that should still be hidden. A part hidden at its first frame starts hidden where it is built (page \`react-scenes\`, Motion; for GSAP specifics, the gsap skill).
 2. **Every cut.** Each cut minus one frame, on the cut, and plus one frame. No flash, no jump; where the beats are meant to connect, the two sides match.
 3. **Every beat.** One frame at each beat's key moment. Text sits inside the frame and is readable at the platform's size (a phone for vertical and feed formats); nothing overlaps by accident; one idea per shot.
 4. **Measurements.** Product UI compared with its screenshot at full size (compareScreen), and every reference measured on full-resolution frames, never a downscaled contact sheet (it makes everything look about half its size).
 5. **Only what was asked.** On feedback, everything outside the named part is unchanged: same shots, titles, timings, moves, colors and sound. Say what else had to move.
 6. **Limits.** Each scene under 120,000 characters and the timeline under 400,000 (shared code counts once), clips up to 120 s.
 7. **Preview speed.** Parts that are done or hidden render nothing or \`display: none\`, not only opacity 0; no heavy UI mounted where it cannot be seen.
-8. **Sound.** The film has the sound its skill asks for (motion-design page \`process\`, explainer-scenes for explainers), timed to the beats you just checked.
+8. **Sound.** The film has the generated sound music-and-sound asks for (section Scenes), timed to the moments you just checked.
 9. **Recreations match.** A recreation is not finished while any moment compareReference scored is over 35: fix it and compare again.`,
 };
 
@@ -77,7 +77,7 @@ Launch and feature films use **React scenes** instead: one film, one clip, built
 
 ## Writing scenes
 - Plan the film as a short outline (a few lines per scene: time range, what moves, the words). Never draft scene code while thinking; write it in the addFilm or addScene call. A turn has one output budget for thinking and the call together, and a long draft in thinking leaves nothing for the scene.
-- A film of beats (React scenes): write the whole film once with addFilm (page \`react-scenes\`), check every cut with getFrames, then fix with patchScene edits, never by retyping it. An explainer of GSAP scenes: one addScene per call, checking each before writing the next. Keep each module well under the code limit.
+- A film (React scenes): write it with addFilm as one clip (page \`react-scenes\`), check every section and the moves between them with getFrames, then fix with patchScene edits, never by retyping it. An explainer of GSAP scenes: one addScene per call, checking each before writing the next. Keep each module well under the code limit.
 - Changing any existing scene or film: patchScene with exact snippets from inspectClip. editScene replaces whole code, so use it only to swap a standalone scene for a new one or to attach a brand kit or media.
 
 ## Contract

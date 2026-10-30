@@ -1,12 +1,9 @@
-import { editorCapabilities } from '../editor-capabilities';
 import type { EditorSkill } from './index';
 
-// Built on read: the catalog module imports the skill index, so this must not run at import time.
 export const vfxRecipes: EditorSkill = {
   name: 'vfx-recipes',
-  description: 'Proven combinations of the VFX tools: freeze-frame callouts, speed ramps into smooth slow motion, text behind a person, footage through text, tracked labels, tracked spotlights and blurs, beat pulses, mask reveals, motion-blurred pop-ins, and which transition fits which cut, plus the style playbooks (AMV, hype, cinematic, vlog). Read for any creative styling, "make it pop", a named effect combo, or before placing transitions.',
+  description: 'Proven combinations of the VFX tools: freeze-frame callouts, speed ramps into smooth slow motion, text behind a person, footage through text, tracked labels, tracked spotlights and blurs, beat pulses, mask reveals, and which transition fits which cut. Read for any creative styling, "make it pop", a named effect combo, or before placing transitions.',
   get body() {
-    const { stylePlaybooks } = editorCapabilities();
     return `# VFX recipes
 
 Each recipe is a sequence of tools. Inspect the footage first (inspectAssetAnalysis, readFrames) so every effect lands on a real moment, then check the result with getFrames. One hero effect per moment; a stack of effects reads as noise.
@@ -58,9 +55,6 @@ Visuals that breathe with music (music-and-sound skill for finding the song).
 - Iris to a subject: ellipse keyframed from small at the subject to beyond the frame.
 - Picture in picture that grows: rectangle with radius .08, keyframed from a corner box to full frame.
 
-## Pop-ins that feel premium
-- animateClip with an overshoot easing (focused-spring, or a cubic-bézier like [.34,1.56,.64,1]) for scale 0 to 1, then setMotionBlur .5 on the same clips so fast moves smear like a real camera.
-
 ## Which transition fits which cut
 Most cuts need no transition. Use one for a change of place, time or topic, at most about one every 5 to 8 seconds, and keep one family per video. Never on jump cuts inside one talking-head shot.
 
@@ -75,10 +69,6 @@ Most cuts need no transition. Use one for a change of place, time or topic, at m
 | Clean section change in tutorials | gradient-wipe |
 
 Place a transition's middle on the beat when music plays (addTransition is centered on the cut).
-
-## Style playbooks
-
-${Object.entries(stylePlaybooks).map(([name, rule]) => `- **${name}**: ${rule}`).join('\n')}
 `;
   },
 };
