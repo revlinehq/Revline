@@ -104,7 +104,16 @@ async function readSheet(path: string, directory: string, source: Source, work: 
 async function readMeasure(path: string, directory: string, source: Source, work: Work, signal: AbortSignal): Promise<Result> {
   const [time] = timesIn(work.start, work.start, 1, source);
   const { data, info } = await sharp(await frameAt(path, directory, time, undefined, 'measure', signal)).removeAlpha().raw().toBuffer({ resolveWithObject: true });
-  return { width: info.width, height: info.height, sourceWidth: source.width, sourceHeight: source.height, fps: round(source.fps, 3), frames: [{ time }], ...measure({ data, width: info.width, height: info.height }, work) };
+  const { colors, edges } = measure({ data, width: info.width, height: info.height }, work);
+  return { width: info.width, height: info.height, sourceWidth: source.width, sourceHeight: source.height, fps: round(source.fps, 3), frames: [{ time }], colors, edges: edges?.map(edge => ({ ...edge, changes: strongEdges(edge.changes) })) };
+}
+
+/** Footage is textured: every grain of concrete is a small color step. Keep the jumps that stand out along the line, in order. */
+function strongEdges(changes: { at: number; before: string; after: string }[]) {
+  const jump = (change: { before: string; after: string }) => [1, 3, 5].reduce((sum, offset) => sum + Math.abs(parseInt(change.after.slice(offset, offset + 2), 16) - parseInt(change.before.slice(offset, offset + 2), 16)), 0);
+  const strongest = Math.max(0, ...changes.map(jump));
+  const kept = changes.filter(change => jump(change) >= Math.max(48, strongest * .4));
+  return kept.length > 12 ? [...kept].sort((a, b) => jump(b) - jump(a)).slice(0, 12).sort((a, b) => a.at - b.at) : kept;
 }
 
 /** Normalized cross-correlation of the template against the frame, sampled through a scaled and rotated grid. */
@@ -143,13 +152,15 @@ async function readTrack(path: string, directory: string, source: Source, work: 
   for (let index = 0; index < frameCount; index++) {
     const frame = frames[index], at = (x: number, y: number, s: number, a: number) => score(frame, width, height, template, size, x, y, w0 * s, h0 * s, a);
     let best = { x: cx, y: cy, s: scale, a: angle, value: at(cx, cy, scale, angle) };
+    // A scale or rotation change must earn its keep: without this, a tiny better match each frame shrinks and spins the box off the object.
+    const cost = (s: number, a: number) => .5 * Math.abs(Math.log(s / scale)) + .2 * Math.abs(a - angle);
     if (index) {
       // Coarse: position only, around the last position. Fine: scale and rotation at the best position, then a 1px nudge.
       const reach = Math.max(8, Math.round(Math.max(w0, h0) * scale * .6));
       for (let dy = -reach; dy <= reach; dy += 2) for (let dx = -reach; dx <= reach; dx += 2) { const value = at(cx + dx, cy + dy, scale, angle); if (value > best.value) best = { x: cx + dx, y: cy + dy, s: scale, a: angle, value }; }
       for (const ds of [.94, .97, 1, 1.03, 1.06]) for (const da of [-6, -3, 0, 3, 6]) for (const [dx, dy] of [[0, 0], [-1, 0], [1, 0], [0, -1], [0, 1]]) {
         const s = best.s * ds, a = best.a + da * Math.PI / 180, value = at(best.x + dx, best.y + dy, s, a);
-        if (value > best.value) best = { x: best.x + dx, y: best.y + dy, s, a, value };
+        if (value - cost(s, a) > best.value - cost(best.s, best.a)) best = { x: best.x + dx, y: best.y + dy, s, a, value };
       }
       ({ x: cx, y: cy, s: scale, a: angle } = best);
     }

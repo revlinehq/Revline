@@ -48,8 +48,11 @@ export function fitMotion(track: TrackSample[], size: { width: number; height: n
       const error = Math.sqrt(points.reduce((sum, point) => sum + (ease(point.u) - point.p) ** 2, 0) / points.length);
       if (error < best.error) best = { name, error };
     }
+    // A good ease match on a poorly tracked object is still a poor measurement, so fit carries the tracker's confidence across the move.
+    const covered = track.filter(sample => sample.time >= from.time && sample.time <= to.time);
+    const confidence = covered.reduce((sum, sample) => sum + sample.confidence, 0) / covered.length;
     const a = pose(from), b = pose(to), fields = (p: Pose) => `x: ${p.x}, y: ${p.y}${a.scale !== b.scale ? `, scale: ${p.scale}` : ''}${a.rotation !== b.rotation ? `, rotation: ${p.rotation}` : ''}`;
-    moves.push({ start: round(from.time), end: round(to.time), duration: round(duration), from: a, to: b, ease: best.name, fit: round(1 - best.error, 2), gsap: `tl.fromTo(el, { ${fields(a)} }, { ${fields(b)}, duration: ${round(duration)}, ease: '${best.name}' }, ${round(from.time)})` });
+    moves.push({ start: round(from.time), end: round(to.time), duration: round(duration), from: a, to: b, ease: best.name, fit: round(Math.max(0, 1 - best.error) * confidence, 2), gsap: `tl.fromTo(el, { ${fields(a)} }, { ${fields(b)}, duration: ${round(duration)}, ease: '${best.name}' }, ${round(from.time)})` });
   }
   return moves;
 }
