@@ -92,7 +92,7 @@ function timelineOutput(output: LanguageModelV4ToolResultOutput): Record<string,
  * Applying this at the provider boundary also covers tool results in this run.
  */
 /** Earlier turns keep a scene's title and size; inspectClip returns its current code. */
-const SCENE_TOOLS = new Set(['addScene', 'addScenes', 'editScene']);
+const SCENE_TOOLS = new Set(['addScene', 'addScenes', 'addFilm', 'editScene']);
 function sceneCodeNote(code: string) { return `[${code.length} characters of earlier scene code omitted; inspectClip returns the current code]`; }
 /** A scene call's input with its code, film kit and each batched scene's code reduced to their sizes. */
 function withoutInputCode(input: Record<string, unknown>): Record<string, unknown> {

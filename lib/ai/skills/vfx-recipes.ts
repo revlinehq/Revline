@@ -9,7 +9,7 @@ export const vfxRecipes: EditorSkill = {
     const { stylePlaybooks } = editorCapabilities();
     return `# VFX recipes
 
-Each recipe is a sequence of tools. Inspect the footage first (inspectAssetAnalysis, inspectFrames) so every effect lands on a real moment, then check the result with getFrames. One hero effect per moment; a stack of effects reads as noise.
+Each recipe is a sequence of tools. Inspect the footage first (inspectAssetAnalysis, readFrames) so every effect lands on a real moment, then check the result with getFrames. One hero effect per moment; a stack of effects reads as noise.
 
 ## Freeze-frame callout
 The classic "that's me" or punchline beat.
@@ -20,7 +20,7 @@ The classic "that's me" or punchline beat.
 
 ## Speed ramp into smooth slow motion
 For action: a jump, a trick, a pour, a punch.
-1. Find the peak moment in the source (inspectFrames).
+1. Find the peak moment in the source (readFrames momentsOnly, then fps 10 over the candidate).
 2. setSpeedRamp with preset hero (fast, slow at the middle, fast) or bullet (near freeze at the middle), or custom anchors so the slowest point sits on the peak. Leave room after the clip: a ramp can make it longer.
 3. smoothSlowMotion on the same clip when its slowest point is .5x or slower on fast motion, so the slow part plays fluidly. It runs in the background and switches the clip after the turn.
 4. Optional: a whoosh into the slow part and a hit at the peak; setMotionBlur is not needed on footage.

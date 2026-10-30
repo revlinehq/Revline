@@ -16,7 +16,7 @@ const frame = v.object({ time: v.number(), image: v.string() });
 /** What a clip's frames depend on, hashed (FNV-1a): code is stored by hash, so its ref stands in for it. */
 function sceneKey(clip: Clip, timeline: Timeline) {
   const scene = clip.scene!, ref = (item: { code: string; codeRef?: string }) => item.codeRef ?? item.code;
-  const text = JSON.stringify([ref(scene), (scene.blueprints ?? []).map(ref), scene.media, scene.brand, clip.duration, clip.sourceStart, timeline.aspectRatio, timeline.fps]);
+  const text = JSON.stringify([ref(scene), (scene.blueprints ?? []).map(ref), scene.media, scene.brand, scene.film, clip.duration, clip.sourceStart, timeline.aspectRatio, timeline.fps]);
   let hash = 0x811c9dc5;
   for (let i = 0; i < text.length; i++) { hash ^= text.charCodeAt(i); hash = Math.imul(hash, 0x01000193); }
   return `${clip.id}:${(hash >>> 0).toString(36)}`;

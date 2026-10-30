@@ -69,7 +69,7 @@ const borrow: EditorSkillPage = {
 Change only what the user named. Every other clip, title, timing, color and sound stays exactly as it was.
 
 ## Find what they pointed at
-The message names shots and parts by id (S4, S4.title, T2) or in words ("the second transition", "the title at 0:07", "that zoom"). Resolve both with inspectReference before building, and say what you understood by id ("S4's whip right, 0.35 s"). When a part is unclear in the breakdown, look at it with inspectFrames on the reference at that shot's time.
+The message names shots and parts by id (S4, S4.title, T2) or in words ("the second transition", "the title at 0:07", "that zoom"). Resolve both with inspectReference before building, and say what you understood by id ("S4's whip right, 0.35 s"). When a part is unclear in the breakdown, look at it with readFrames fps 10 on the reference around that shot's time.
 
 ## Mapping
 - A transition: addTransition with the closest preset and the measured seconds, on the cut the user named, or on every cut if they said so. whip is whip-pan, zoom is zoom-through, dissolve is crossfade, blur is blur-dissolve, spin is spin-zoom, wipe is gradient-wipe (or iris-wipe for a circle), light-leak is film-burn.
@@ -90,7 +90,7 @@ The user shares a finished video and wants either a **remake** (the same edit ma
 
 ## 1. Break it down
 - Run analyzeMedia with mode reference on the shared video. It measures the cuts and beats, then splits every shot into parts: transition in, camera, look, the screen's parts (background, footage, ui, title, caption, logo, product, person, cursor, shape, emoji, overlay) and title styles. It also writes the five-line style direction and the signatures (the moves that define the style).
-- Measure at full resolution. Read positions, sizes and type from full-size frames (inspectFrames or getFrames at the source size), never from a downscaled contact sheet: a shrunk sheet makes type and objects look about half their real size.
+- Measure at full resolution. Read positions, sizes and type from full-size frames (readFrames with crop, and measureFrame for exact colors and edges), never from a downscaled contact sheet: a shrunk sheet makes type and objects look about half their real size.
 - The reference stays off the timeline. Never place it there unless the user asks for it. A file dropped into an empty project lands on the timeline by itself: before building a remake, delete that reference clip from the timeline (it stays in media).
 
 ## 2. Describe it
@@ -107,7 +107,7 @@ Then ask, only if the message did not already say: remake it, or borrow which pa
 
 ## Rules
 - Copy the edit, never the content: no reference copy, logo, product, people, voiceover or song lifted into the user's video unless the user owns it and asks for it. Title text in the breakdown is there only to recognise the shot.
-- Measured numbers (shot lengths, cut times, beats, onBeatRatio) are exact. Transition kinds, camera moves and title styles are the model's reading: when one decides the result, check it with inspectFrames on the reference before building.
+- Measured numbers (shot lengths, cut times, beats, onBeatRatio) are exact. Transition kinds, camera moves and title styles are the model's reading: when one decides the result, check it with readFrames fps 10 on the reference before building.
 - After building, go through scene-engine page \`checklist\` for scenes, and look at the result with getFrames at the shots that matter.`,
   pages: [socialEdit, motivation, launchFilm, borrow],
 };

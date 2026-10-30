@@ -30,7 +30,7 @@ An explainer scene is one beat of a video that already has a story, usually some
 Every scene you create, or whose choreography you substantially change, gets matching sound in the same turn without being asked. Read the music-and-sound skill, then:
 
 - After addScene, call generateSound once for that scene: one clip at the scene's start, layers keyed to its key beats (the times of its main tweens and labels). Only the key beats, not every element.
-- After editScene changes timing or motion, update that scene's existing generated sound with editSound (find it by start time and inspectClip's soundRecipe) instead of adding a second clip. Leave sounds alone for scenes whose motion did not change, and for text-only or color edits.
+- After patchScene or editScene changes timing or motion, update that scene's existing generated sound with editSound (find it by start time and inspectClip's soundRecipe) instead of adding a second clip. Leave sounds alone for scenes whose motion did not change, and for text-only or color edits.
 - Skip sound when the user asked for no sound or a silent edit, or when speech (transcript words) or a music-role clip plays under the scene; say that you skipped it and why.
 
 ## Verifying

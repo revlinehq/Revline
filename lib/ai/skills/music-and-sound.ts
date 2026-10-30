@@ -38,10 +38,10 @@ The recorded library (listed under Library at the end of this skill, placed with
 
 ### Scenes
 
-Motion design comes with sound. When you add a scene, or change a scene's choreography with editScene, generate its sound in the same turn without being asked:
+Motion design comes with sound. When you add a scene, or change a scene's choreography with patchScene or editScene, generate its sound in the same turn without being asked:
 
 - One generateSound clip per scene at the scene's start, layered on its key beats only.
-- When editScene changes a scene's timing, change its existing generated clip with editSound to the new beats; never add a second clip for the same scene. Leave other scenes' sounds alone.
+- When patchScene or editScene changes a scene's timing, change its existing generated clip with editSound to the new beats; never add a second clip for the same scene. Leave other scenes' sounds alone.
 - Skip it only if the user asked for no sound or silence, or speech plays under the scene. Music under a scene is no reason to skip: mix the sound beneath it. Library recordings stay request-only, even for scenes.
 
 ### Timing
@@ -114,7 +114,7 @@ Generated and library sounds both peak near -3 dBFS, so the tool's \`gain\` (cli
 
 ### Editing
 
-\`inspectClip\` on a generated clip returns its \`soundRecipe\`. Change the recipe and call \`editSound\` with the whole new recipe; the clip keeps its start, layer and volume. When the scene's timing changes (editScene), re-time its sounds the same turn. To move or re-level a sound use \`move\` or \`setVolume\`; to remove it use \`delete\`.
+\`inspectClip\` on a generated clip returns its \`soundRecipe\`. Change the recipe and call \`editSound\` with the whole new recipe; the clip keeps its start, layer and volume. When the scene's timing changes (patchScene or editScene), re-time its sounds the same turn. To move or re-level a sound use \`move\` or \`setVolume\`; to remove it use \`delete\`.
 
 ### Check
 

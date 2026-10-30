@@ -22,18 +22,17 @@ Run every item after building a scene or film and after every change. Render fra
 
 const reactScenesPage: EditorSkillPage = {
   name: 'react-scenes',
-  description: 'React scenes: the format for launch and feature films. Components for structure (one per part, one clip per beat), GSAP for motion through useTimeline, transition clips between beats, the revline module.',
+  description: 'React scenes: the format for launch and feature films. One film file on one timeline, cut into beat clips that are windows onto it (addFilm), changed with patchScene; components for structure, GSAP motion through useTimeline, the revline module.',
   body: `# React scenes
 
-A React scene is a TSX module whose default export is a component. It is a React scene because it imports from \`'revline'\`. Structure is React (components, one clip per beat); motion is GSAP, seeked by the frame clock. The engine renders the tree for each frame, so preview, scrubbing and export draw the same frames.
+A React scene is a TSX module whose default export is a component. It is a React scene because it imports from \`'revline'\`. Structure is React (components, one film file); motion is GSAP, seeked by the frame clock. The engine renders the tree for each frame, so preview, scrubbing and export draw the same frames.
 
 ## Structure
-- **One clip per beat.** Each beat of the film (the dashboard building, the composer, the threads, the lockup) is its own scene clip on V2, so feedback on one beat edits one clip. Beat clips sit back to back.
-- **One component per part.** Rebuild the product UI as components named for what they are (\`Sidebar\`, \`Composer\`, \`ThreadList\`, \`DiffPanel\`), composed by an app component. The inspector lists the components each clip draws, so names matter.
-- **The film kit holds everything shared, written once.** The product UI components, type helpers (\`Title\`, \`Caption\`), the stage (background, frame, \`AppWindow\`), palette and eases go in one React module, the film kit, exported by name. Every beat imports what it needs: \`import { Stage, AppWindow, Title } from 'blueprint:film'\`. A beat clip is then only its own beat: its timing, words and motion, usually under 6,000 characters. Never copy a component into a beat; add it to the kit.
-- **Build all beats in one call.** addScenes takes the kit once and every beat (title, code, start, duration, track 2), saved together; each beat saves or fails on its own. Later addScene and editScene calls reuse the kit on the timeline; change shared UI once with editScene \`kit\` (the whole new kit) and every beat gets it.
-- **Anchors.** Mark parts a transition may fly into with \`data-anchor="composer"\`, and the element the camera moves (the app window, not the titles over it) with \`data-camera\`.
-- **Transitions are clips.** A camera move or crossfade between two beats is its own clip on the layer above the cut (V3), drawing \`<Transition>\`: \`kind\` is \`zoom-into\` (into an anchor of the outgoing beat), \`pull-back\` (out of an anchor of the incoming beat), \`crossfade\` or \`blur-through\`; \`target\` names the anchor; \`zoom\`, \`at\` (where the anchor lands, as fractions of the frame), \`origin\` (point in the anchor), \`fade\` (crossfade window, fractions) and \`ease\` tune it. It draws both neighbouring beat clips on their own clocks; give the incoming beat a first frame that matches where the camera ends.
+- **One film file; clips are windows.** A film is ONE module on ONE continuous timeline: its clock counts film seconds from the first frame and \`duration\` is the whole film. addFilm takes that code once plus the beat cuts (a title and the film second each beat starts) and makes one clip per beat on one layer, each showing its window of the film. A move that crosses a cut (an element carried over, a morph, a camera push, a wipe) is one tween in the film's timeline: no transition clip, no per-clip offsets, nothing to line up.
+- **Beats inside the film are \`<Beat>\`s at the cut times.** \`<Beat id="composer" start={4.2} duration={3.1}>\` for each section, matching the cuts you pass to addFilm. Whatever crosses a cut lives outside those Beats (or in a Beat spanning both sides), driven by a timeline on film time.
+- **One component per part.** Rebuild the product UI as components named for what they are (\`Sidebar\`, \`Composer\`, \`ThreadList\`, \`DiffPanel\`), composed by an app component, all in the film file. The inspector lists the components each clip draws, so names matter.
+- **Edit with patchScene; never retype the film.** After the first build, every change is a patchScene call: exact snippets copied from inspectClip, each replaced in place (several edits per call), and every beat clip of the film gets it. Retime a tween by patching its numbers, restyle by patching one style object. Never resend the whole film through editScene, and never rebuild one beat as a separate scene: that splits the film and breaks the moves across its cuts.
+- **Standalone scenes** (a title card, an overlay, one beat on its own) use addScene, or addScenes for several. Older films made of separate beat clips with a film kit (\`blueprint:film\`) and \`<Transition>\` clips on V3 still render and edit as before; build new films with addFilm.
 
 ## Motion
 - **Simple fades and slides:** compute from time. \`const { time } = useBeat()\` (local to the clip, or to the nearest \`<Beat>\`), then \`progress(time, start, duration, 'expo.out')\` (eased 0..1) and \`mix(from, to, p)\` into style (opacity from \`p\`, a translateY from \`mix(24, 0, p)\`).
@@ -52,13 +51,13 @@ function Title({ text }: { text: string }) {
 - **No flash frames:** a part hidden at its first frame starts hidden through its timeline (\`tl.from\`/\`tl.fromTo\` apply their start state where the timeline is built) or through computed style at time 0. Beats unmount what is outside their window, so build hidden parts where they first appear.
 
 ## The revline module
-- \`useBeat()\`: \`{ time, frame, fps, start, duration, progress }\` local to the nearest beat. \`useBeat(t => …)\` re-renders only when the selected value changes (\`useBeat(t => t.time > 2)\`).
+- \`useBeat()\`: \`{ time, frame, fps, start, duration, progress }\` local to the nearest beat; at the top of a film it is film time, on every beat clip. \`useBeat(t => …)\` re-renders only when the selected value changes (\`useBeat(t => t.time > 2)\`).
 - \`useScene()\`: \`{ width, height, fps, duration, brand, media }\`; also the scene component's props.
 - \`useTimeline((tl, el) => …, deps?)\`: GSAP choreography on the beat clock; returns the ref.
 - \`<Beat id start duration track keep>\`: a stretch with its own clock inside one clip. \`start\` is seconds or a reference to an earlier sibling: \`"intro"\`, \`"intro + 0.5"\`, \`"intro - 0.3"\`. Outside its window it renders nothing (\`keep\` keeps it mounted, hidden).
 - \`<Layer>\`: full-frame box. \`<Still>\`: children rendered once. \`<Icon name size color strokeWidth>\`: a Lucide icon.
 - \`progress\`, \`mix\`, \`ramp(t, times, values, ease)\`, \`spring(t, { from, to, stiffness, damping })\`, \`ease(name)\`: eases use GSAP names.
-- \`<Transition>\` and \`<Neighbour role="from" | "to">\` for transition clips. \`waitFor(promise)\` holds a frame until it settles.
+- \`<Transition>\` and \`<Neighbour role="from" | "to">\` for transition clips between standalone scenes (inside a film, a move across a cut is just a tween). \`waitFor(promise)\` holds a frame until it settles.
 - Imports: \`revline\`, \`react\` and \`gsap\` with its plugins (\`gsap/SplitText\` etc.). Fonts, media, icons and the brand work as in GSAP scenes.
 
 ## Performance
@@ -72,11 +71,12 @@ export const sceneEngine: EditorSkill = {
 
 A scene is a TypeScript module that builds plain HTML once and choreographs it on a GSAP timeline. It renders full-frame on its own V layer, inside a sandbox, and the editor renders it frame by frame for preview and export. Transparent areas show the layers below.
 
-Launch and feature films use **React scenes** instead: components for structure, one clip per beat, GSAP motion seeked through useTimeline (page \`react-scenes\`). The rest of this page describes GSAP scenes, used for explainers and overlays on footage.
+Launch and feature films use **React scenes** instead: one film file cut into beat clips with addFilm, components for structure, GSAP motion seeked through useTimeline (page \`react-scenes\`). The rest of this page describes GSAP scenes, used for explainers and overlays on footage.
 
 ## Writing scenes
-- Plan the film as a short outline (a few lines per scene: time range, what moves, the words). Never draft scene code while thinking; write it in the addScene call. A turn has one output budget for thinking and the call together, and a long draft in thinking leaves nothing for the scene.
-- A film of beats (React scenes): write the film kit and every beat in one addScenes call (page \`react-scenes\`), then check them all with getFrames. An explainer of GSAP scenes: one addScene per call, checking each before writing the next. Keep each module well under the code limit.
+- Plan the film as a short outline (a few lines per scene: time range, what moves, the words). Never draft scene code while thinking; write it in the addFilm or addScene call. A turn has one output budget for thinking and the call together, and a long draft in thinking leaves nothing for the scene.
+- A film of beats (React scenes): write the whole film once with addFilm (page \`react-scenes\`), check every cut with getFrames, then fix with patchScene edits, never by retyping it. An explainer of GSAP scenes: one addScene per call, checking each before writing the next. Keep each module well under the code limit.
+- Changing any existing scene or film: patchScene with exact snippets from inspectClip. editScene replaces whole code, so use it only to swap a standalone scene for a new one or to attach a brand kit or media.
 
 ## Contract
 

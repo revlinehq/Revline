@@ -8,7 +8,13 @@ import { isReactScene, isSceneTransition, REACT_SCENE_PATTERN } from './scene-mo
 export type SceneMedia = { name: string; assetId: string };
 /** A brand's UI rebuilt as a scene module with named parts, mounted inside a scene with blueprint(name, container). */
 export type SceneBlueprint = { name: string; code: string; codeRef?: string };
-export type SceneSource = { title: string; code: string; codeRef?: string; brand?: SceneBrand; media?: SceneMedia[]; blueprints?: SceneBlueprint[] };
+/**
+ * A film is one scene module whose animation runs on film time; its beat clips share that code and each shows
+ * its own window: `sourceStart` is where the clip starts in the film, and every clip gets the film's whole
+ * duration. So motion flows across clip edges, and an edit to the code changes every beat at once.
+ */
+export type SceneFilm = { duration: number };
+export type SceneSource = { title: string; code: string; codeRef?: string; brand?: SceneBrand; media?: SceneMedia[]; blueprints?: SceneBlueprint[]; film?: SceneFilm };
 export const SCENE_MEDIA_LIMIT = 8, SCENE_BLUEPRINT_LIMIT = 4;
 // Stored timelines keep code in sceneCode rows (lib/editor/scene-code), so it no longer weighs on every edit.
 export const SCENE_LIMITS = { title: 80, code: 120_000 } as const;
@@ -25,20 +31,22 @@ export function validateScene(clip: Pick<Clip, 'kind' | 'scene' | 'assetId'>) {
   if (!scene.code.trim()) throw new Error('A scene needs code.');
   if (scene.code.length > SCENE_LIMITS.code) throw new Error(`Scene code supports up to ${SCENE_LIMITS.code} characters.`);
   if (scene.brand) validateSceneBrand(scene.brand);
+  if (scene.film && !(Number.isFinite(scene.film.duration) && scene.film.duration > 0 && scene.film.duration <= 600)) throw new Error('A film runs 0 to 600 seconds.');
   if (scene.blueprints && (scene.blueprints.length > SCENE_BLUEPRINT_LIMIT || scene.blueprints.some(item => !item.name?.trim() || item.name.length > 60 || typeof item.code !== 'string' || !item.code.trim() || item.code.length > SCENE_LIMITS.code))) throw new Error(`A scene can mount up to ${SCENE_BLUEPRINT_LIMIT} blueprints.`);
   if (scene.media && (scene.media.length > SCENE_MEDIA_LIMIT || scene.media.some(item => !/^[a-zA-Z][\w-]{0,30}$/.test(item.name) || !item.assetId) || new Set(scene.media.map(item => item.name)).size !== scene.media.length)) throw new Error(`Scene media needs up to ${SCENE_MEDIA_LIMIT} images with unique names (letters, digits, - or _).`);
 }
 
 /** A beat clip next to a transition clip; `start` is in the transition's own seconds. */
 export type SceneNeighbourSource = { role: 'from' | 'to'; code: string; blueprints?: SceneBlueprint[]; start: number; duration: number };
-export type SceneLayerSource = { clipId: string; title: string; code: string; brand?: SceneBrand; media?: SceneMedia[]; blueprints?: SceneBlueprint[]; neighbours?: SceneNeighbourSource[]; start: number; duration: number; offset: number; zIndex: number; fps: number; width: number; height: number; scale: number };
+/** `duration` is the clip's own; `filmDuration`, for a beat clip of a film, is what the scene module receives as its duration. */
+export type SceneLayerSource = { clipId: string; title: string; code: string; brand?: SceneBrand; media?: SceneMedia[]; blueprints?: SceneBlueprint[]; neighbours?: SceneNeighbourSource[]; start: number; duration: number; filmDuration?: number; offset: number; zIndex: number; fps: number; width: number; height: number; scale: number };
 export type SceneFont = { family: string; weight: string; url: string };
 
 /** Scenes are authored on the 1080-based canvas and scaled to the output resolution. */
 export function sceneLayerSources(timeline: Timeline, resolution = 1080): SceneLayerSource[] {
   const { width, height } = dimensions(timeline.aspectRatio, 1080);
   return timeline.clips.flatMap((clip, index) => clip.kind === 'scene' && clip.scene ? [{
-    clipId: clip.id, title: clip.scene.title, code: clip.scene.code, ...(clip.scene.brand ? { brand: clip.scene.brand } : {}), ...(clip.scene.media?.length ? { media: clip.scene.media } : {}), ...(clip.scene.blueprints?.length ? { blueprints: clip.scene.blueprints } : {}), ...(isSceneTransition(clip.scene.code) ? { neighbours: sceneNeighbours(timeline, clip) } : {}), start: clip.start, duration: clip.duration, offset: clip.sourceStart,
+    clipId: clip.id, title: clip.scene.title, code: clip.scene.code, ...(clip.scene.brand ? { brand: clip.scene.brand } : {}), ...(clip.scene.media?.length ? { media: clip.scene.media } : {}), ...(clip.scene.blueprints?.length ? { blueprints: clip.scene.blueprints } : {}), ...(isSceneTransition(clip.scene.code) ? { neighbours: sceneNeighbours(timeline, clip) } : {}), start: clip.start, duration: clip.duration, ...(clip.scene.film ? { filmDuration: clip.scene.film.duration } : {}), offset: clip.sourceStart,
     zIndex: trackOf(clip) * 256 + index, fps: timeline.fps, width, height, scale: resolution / 1080,
   }] : []);
 }
@@ -96,7 +104,7 @@ function allCode(source){var parts=[source.code];(source.blueprints||[]).concat(
 function frameDocument(source,script,react){return '<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src \\'none\\'; script-src \\'unsafe-inline\\' \\'unsafe-eval\\'; style-src \\'unsafe-inline\\'; img-src data: blob:; media-src data: blob:; font-src data: blob:"><style>html,body{margin:0;width:'+(source.width+overscan*2)+'px;height:'+(source.height+overscan*2)+'px;overflow:hidden;background:transparent}body{font-family:\\'Space Grotesk\\',Arial,sans-serif;color:#F4F4F0;-webkit-font-smoothing:antialiased}#scene-root{position:absolute;left:'+overscan+'px;top:'+overscan+'px;width:'+source.width+'px;height:'+source.height+'px;overflow:hidden}</style></head><body><div id="scene-root"></div>'+(react?'<script>'+react+'</'+'script>':'')+'<script>'+script+'</'+'script></body></html>';}
 function send(entry,message){if(entry.frame.contentWindow)entry.frame.contentWindow.postMessage(Object.assign({source:'revline-scene-host'},message),'*');}
 function mount(source){
-  var key=JSON.stringify([source.code,source.brand||null,source.media||null,source.blueprints||null,source.neighbours||null,source.width,source.height,source.fps,source.duration]),entry=entries.get(source.clipId);
+  var key=JSON.stringify([source.code,source.brand||null,source.media||null,source.blueprints||null,source.neighbours||null,source.width,source.height,source.fps,source.filmDuration||source.duration]),entry=entries.get(source.clipId);
   var node=entry?entry.node:find(source.clipId);
   if(!node){node=document.createElement('div');node.className='scene-layer';node.dataset.sceneClip=source.clipId;inner().appendChild(node);}
   node.style.zIndex=String(source.zIndex);
@@ -144,7 +152,7 @@ window.addEventListener('message',function(event){
   var data=event.data;if(!data||data.source!=='revline-scene')return;
   entries.forEach(function(entry){
     if(event.source!==entry.frame.contentWindow)return;
-    if(data.type==='ready')Promise.all([wantedFonts(entry.source),wantedMedia(entry.source),wantedIcons(entry.source)]).then(function(found){send(entry,{type:'init',code:entry.source.code,brand:entry.source.brand||null,blueprints:entry.source.blueprints||[],neighbours:entry.source.neighbours||[],media:found[1],icons:found[2],width:entry.source.width,height:entry.source.height,fps:entry.source.fps,duration:entry.source.duration,fonts:found[0]});});
+    if(data.type==='ready')Promise.all([wantedFonts(entry.source),wantedMedia(entry.source),wantedIcons(entry.source)]).then(function(found){send(entry,{type:'init',code:entry.source.code,brand:entry.source.brand||null,blueprints:entry.source.blueprints||[],neighbours:entry.source.neighbours||[],media:found[1],icons:found[2],width:entry.source.width,height:entry.source.height,fps:entry.source.fps,duration:entry.source.filmDuration||entry.source.duration,fonts:found[0]});});
     else if(data.type==='compiled'){entry.compiled=true;entry.resolve();paint(clock.time());}
     else if(data.type==='painted'){var done=entry.waiters.get(data.seq);if(done){entry.waiters.delete(data.seq);done();}if(data.seq===entry.seq)entry.drawn=entry.posted;if(data.seq===entry.inflight){entry.inflight=0;if(entry.queued!==undefined&&entry.queued!==entry.posted)seek(entry,entry.queued);entry.queued=undefined;}}
     else if(data.type==='error'){report(entry,String(data.message));entry.resolve();entry.waiters.forEach(function(done){done();});entry.waiters.clear();}
