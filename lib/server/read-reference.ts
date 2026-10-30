@@ -149,6 +149,8 @@ async function readTrack(path: string, directory: string, source: Source, work: 
   let norm = 0; for (let index = 0; index < template.length; index++) { template[index] -= mean; norm += template[index] ** 2; }
   norm = Math.sqrt(norm) || 1; for (let index = 0; index < template.length; index++) template[index] /= norm;
   const track: NonNullable<Result['track']> = [];
+  // A box under about 40 px holds too little texture to tell a turn or a resize from noise: follow its position only.
+  const rigid = Math.min(box.w, box.h) < 40, scales = rigid ? [1] : [.94, .97, 1, 1.03, 1.06], turns = rigid ? [0] : [-6, -3, 0, 3, 6];
   for (let index = 0; index < frameCount; index++) {
     const frame = frames[index], at = (x: number, y: number, s: number, a: number) => score(frame, width, height, template, size, x, y, w0 * s, h0 * s, a);
     let best = { x: cx, y: cy, s: scale, a: angle, value: at(cx, cy, scale, angle) };
@@ -158,8 +160,8 @@ async function readTrack(path: string, directory: string, source: Source, work: 
       // Coarse: position only, around the last position. Fine: scale and rotation at the best position, then a 1px nudge.
       const reach = Math.max(8, Math.round(Math.max(w0, h0) * scale * .6));
       for (let dy = -reach; dy <= reach; dy += 2) for (let dx = -reach; dx <= reach; dx += 2) { const value = at(cx + dx, cy + dy, scale, angle); if (value > best.value) best = { x: cx + dx, y: cy + dy, s: scale, a: angle, value }; }
-      for (const ds of [.94, .97, 1, 1.03, 1.06]) for (const da of [-6, -3, 0, 3, 6]) for (const [dx, dy] of [[0, 0], [-1, 0], [1, 0], [0, -1], [0, 1]]) {
-        const s = best.s * ds, a = best.a + da * Math.PI / 180, value = at(best.x + dx, best.y + dy, s, a);
+      for (const ds of scales) for (const da of turns) for (const [dx, dy] of [[0, 0], [-1, 0], [1, 0], [0, -1], [0, 1]]) {
+        const s = Math.min(2, Math.max(.5, best.s * ds)), a = best.a + da * Math.PI / 180, value = at(best.x + dx, best.y + dy, s, a);
         if (value - cost(s, a) > best.value - cost(best.s, best.a)) best = { x: best.x + dx, y: best.y + dy, s, a, value };
       }
       ({ x: cx, y: cy, s: scale, a: angle } = best);
