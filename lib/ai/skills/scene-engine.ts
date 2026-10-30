@@ -29,7 +29,9 @@ A React scene is a TSX module whose default export is a component. It is a React
 
 ## Structure
 - **One clip per beat.** Each beat of the film (the dashboard building, the composer, the threads, the lockup) is its own scene clip on V2, so feedback on one beat edits one clip. Beat clips sit back to back.
-- **One component per part.** Rebuild the product UI as components named for what they are (\`Sidebar\`, \`Composer\`, \`ThreadList\`, \`DiffPanel\`), composed by an app component. The inspector lists the components each clip draws, so names matter. Write the components once and use the identical code in every beat clip that shows them.
+- **One component per part.** Rebuild the product UI as components named for what they are (\`Sidebar\`, \`Composer\`, \`ThreadList\`, \`DiffPanel\`), composed by an app component. The inspector lists the components each clip draws, so names matter.
+- **The film kit holds everything shared, written once.** The product UI components, type helpers (\`Title\`, \`Caption\`), the stage (background, frame, \`AppWindow\`), palette and eases go in one React module, the film kit, exported by name. Every beat imports what it needs: \`import { Stage, AppWindow, Title } from 'blueprint:film'\`. A beat clip is then only its own beat: its timing, words and motion, usually under 6,000 characters. Never copy a component into a beat; add it to the kit.
+- **Build all beats in one call.** addScenes takes the kit once and every beat (title, code, start, duration, track 2), saved together; each beat saves or fails on its own. Later addScene and editScene calls reuse the kit on the timeline; change shared UI once with editScene \`kit\` (the whole new kit) and every beat gets it.
 - **Anchors.** Mark parts a transition may fly into with \`data-anchor="composer"\`, and the element the camera moves (the app window, not the titles over it) with \`data-camera\`.
 - **Transitions are clips.** A camera move or crossfade between two beats is its own clip on the layer above the cut (V3), drawing \`<Transition>\`: \`kind\` is \`zoom-into\` (into an anchor of the outgoing beat), \`pull-back\` (out of an anchor of the incoming beat), \`crossfade\` or \`blur-through\`; \`target\` names the anchor; \`zoom\`, \`at\` (where the anchor lands, as fractions of the frame), \`origin\` (point in the anchor), \`fade\` (crossfade window, fractions) and \`ease\` tune it. It draws both neighbouring beat clips on their own clocks; give the incoming beat a first frame that matches where the camera ends.
 
@@ -74,7 +76,7 @@ Launch and feature films use **React scenes** instead: components for structure,
 
 ## Writing scenes
 - Plan the film as a short outline (a few lines per scene: time range, what moves, the words). Never draft scene code while thinking; write it in the addScene call. A turn has one output budget for thinking and the call together, and a long draft in thinking leaves nothing for the scene.
-- Build a long film as several scenes, one addScene per call, and check each before writing the next. Keep each module well under the code limit.
+- A film of beats (React scenes): write the film kit and every beat in one addScenes call (page \`react-scenes\`), then check them all with getFrames. An explainer of GSAP scenes: one addScene per call, checking each before writing the next. Keep each module well under the code limit.
 
 ## Contract
 

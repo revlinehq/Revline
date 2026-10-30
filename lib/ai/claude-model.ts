@@ -88,7 +88,7 @@ export function autoEditorReasoningEffort(prompt: string, { recovering = false }
 export function stepsNeedHighEffort(steps: readonly { content: readonly unknown[] }[]) {
   return steps.some(step => step.content.some(part => {
     const call = part as { type?: string; toolName?: string; input?: { name?: unknown } };
-    return call.type === 'tool-call' && (call.toolName === 'addScene' || call.toolName === 'editScene' || (call.toolName === 'readSkill' && HIGH_EFFORT_SKILLS.includes(String(call.input?.name))));
+    return call.type === 'tool-call' && (call.toolName === 'addScene' || call.toolName === 'addScenes' || call.toolName === 'editScene' || (call.toolName === 'readSkill' && HIGH_EFFORT_SKILLS.includes(String(call.input?.name))));
   }));
 }
 

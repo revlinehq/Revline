@@ -92,8 +92,14 @@ function timelineOutput(output: LanguageModelV4ToolResultOutput): Record<string,
  * Applying this at the provider boundary also covers tool results in this run.
  */
 /** Earlier turns keep a scene's title and size; inspectClip returns its current code. */
-const SCENE_TOOLS = new Set(['addScene', 'editScene']);
+const SCENE_TOOLS = new Set(['addScene', 'addScenes', 'editScene']);
 function sceneCodeNote(code: string) { return `[${code.length} characters of earlier scene code omitted; inspectClip returns the current code]`; }
+/** A scene call's input with its code, film kit and each batched scene's code reduced to their sizes. */
+function withoutInputCode(input: Record<string, unknown>): Record<string, unknown> {
+  const code = (value: unknown) => typeof value === 'string' ? sceneCodeNote(value) : value;
+  if (typeof input.code !== 'string' && typeof input.kit !== 'string' && !Array.isArray(input.scenes)) return input;
+  return { ...input, ...(input.code !== undefined ? { code: code(input.code) } : {}), ...(input.kit !== undefined ? { kit: code(input.kit) } : {}), ...(Array.isArray(input.scenes) ? { scenes: input.scenes.map(scene => object(scene) ? { ...scene, code: code(scene.code) } : scene) } : {}) };
+}
 function withoutSceneCode(clip: unknown): unknown {
   if (!object(clip) || !object(clip.scene) || typeof clip.scene.code !== 'string') return clip;
   return { ...clip, scene: { ...clip.scene, code: sceneCodeNote(clip.scene.code) } };
@@ -143,7 +149,7 @@ export function compactEditorPrompt(prompt: LanguageModelV4Prompt, selectedClipI
     if (!content.length) return [];
     return { ...message, content: content.map(original => {
       const part = withoutDiagnostics(original);
-      if (part.type === 'tool-call' && index < lastUser && SCENE_TOOLS.has(part.toolName) && object(part.input) && typeof part.input.code === 'string') return { ...part, input: { ...part.input, code: sceneCodeNote(part.input.code) } };
+      if (part.type === 'tool-call' && index < lastUser && SCENE_TOOLS.has(part.toolName) && object(part.input)) { const compacted = withoutInputCode(part.input); if (compacted !== part.input) return { ...part, input: compacted }; }
       if (part.type !== 'tool-result') return part;
       const value = timelineOutput(part.output);
       if (!value) return part;

@@ -11,7 +11,8 @@ A launch film makes one product or one feature feel simple, real and worth tryin
 
 ## How films are built
 Films are React scenes (readSkill name "scene-engine" page "react-scenes"):
-- **Structure is React.** One scene clip per beat, back to back on V2, so feedback on one beat edits one clip. The product UI is components, one per part (\`Sidebar\`, \`Composer\`, \`DiffPanel\`), with the identical component code in every beat that shows them. Camera moves and crossfades between beats are their own transition clips on V3 over the cut (\`<Transition kind="zoom-into" target="composer">\`).
+- **Structure is React.** One scene clip per beat, back to back on V2, so feedback on one beat edits one clip. The product UI is components, one per part (\`Sidebar\`, \`Composer\`, \`DiffPanel\`).
+- **Shared code is written once, in the film kit.** Components, type helpers, the stage and palette live in one module every beat imports (\`import { AppWindow, Title } from 'blueprint:film'\`); each beat clip holds only its own beat. Build the film with one addScenes call: the kit plus every beat. Shared changes go in editScene \`kit\`, once. Camera moves and crossfades between beats are their own transition clips on V3 over the cut (\`<Transition kind="zoom-into" target="composer">\`).
 - **Motion is GSAP on the frame clock.** Simple fades and slides: \`progress()\` and \`mix()\` from \`useBeat()\` time. Choreography (staggers, overlaps, word-by-word reveals, SplitText, MorphSVG, DrawSVG): \`useTimeline\`; for choreography, read the gsap skill (readSkill name "gsap").
 - **Correctness lives in scene-engine:** the frame clock, flash frames and preview speed (page \`react-scenes\`). This skill decides what to make; scene-engine decides how it renders correctly.
 
