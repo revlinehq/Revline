@@ -1,3 +1,4 @@
+import { activeTabOf, storedTabTimeline } from './timelineTabs';
 import { renderSnapshot as loadRenderSnapshot } from './lib/render_snapshots';
 import { compositionReviewResult,effectPlanValidator } from './lib/effect_plan';
 import { hydrateAsset } from './lib/asset_analysis';
@@ -329,6 +330,8 @@ async function loadWork(ctx:import('./_generated/server').QueryCtx|MutationCtx,t
   if(task.snapshotId){
     const saved=await ctx.db.get(task.snapshotId);if(!saved||saved.ownerId!==task.ownerId||saved.projectId!==task.projectId)throw new ConvexError('The frame request is unavailable.');
     const project=await requireProject(ctx,task.projectId,task.ownerId,false);let timeline=currentTimeline(project);
+    // Frames of a tab that is not open come from its stored timeline.
+    if(saved.timelineId&&saved.timelineId!==activeTabOf(project)){const stored=await storedTabTimeline(ctx,project,saved.timelineId);if(!stored)throw new ConvexError('That timeline no longer exists.');timeline=stored;}
     // A scene clip's own filmstrip: that clip alone, from its first frame.
     if(saved.clipId){const clip=timeline.clips.find(item=>item.id===saved.clipId);if(!clip)throw new ConvexError('The clip for these frames is gone.');timeline={...timeline,clips:[{...clip,start:0}],markers:[]};}
     const ids=[...new Set([...timeline.clips.flatMap(clip=>clip.assetId?[clip.assetId]:[]),...sceneMediaAssetIds(timeline)])];

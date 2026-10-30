@@ -34,7 +34,7 @@ const PROJECT_TOOLS = {
   deleteTimeline: { description: 'Delete a timeline tab and its undo history; media stays in the project. A project keeps at least one timeline. Only when the user asks.', inputSchema: z.object({ projectId: projectIdField, timelineId: z.string().min(1) }) },
   getMediaTask: { description: 'Status and progress of an import or media-processing task.', inputSchema: z.object({ taskId: z.string().min(1) }) },
   exportVideo: { description: 'Render the saved timeline to MP4: the open tab, or another tab with timelineId (from listTimelines). Call once per timeline to export several; they queue and render in turn. 2160 (4K) needs the Ultra plan. Returns a jobId to poll with getExport.', inputSchema: z.object({ projectId: projectIdField, timelineId: z.string().min(1).optional(), resolution: z.union([z.literal(720), z.literal(1080), z.literal(2160)]).optional(), fps: z.union([z.literal(24), z.literal(30), z.literal(60)]).optional(), quality: z.enum(['draft', 'standard', 'high']).optional() }) },
-  getFrames: { description: 'Look at the edit: render 1 to 6 frames of the saved timeline at the given timeline seconds, composited exactly as the export draws them (footage, text, effects). Use it to check framing, captions and effects after editing. Takes about 10-30 seconds.', inputSchema: z.object({ projectId: projectIdField, times: z.array(z.number().min(0)).min(1).max(6) }) },
+  getFrames: { description: 'Look at the edit: render 1 to 6 frames of the saved timeline at the given timeline seconds, composited exactly as the export draws them (footage, text, effects). Use it to check framing, captions and effects after editing. Takes about 10-30 seconds.', inputSchema: z.object({ projectId: projectIdField, timelineId: z.string().min(1).optional().describe('The timeline tab to render (from listTimelines); without it, the open tab.'), times: z.array(z.number().min(0)).min(1).max(6) }) },
   listExports: { description: 'Recent exports of a project, newest first: queued and rendering ones with progress, and finished ones with a temporary download link. current is false when the timeline changed after the export started.', inputSchema: z.object({ projectId: projectIdField, limit: z.number().int().min(1).max(20).optional() }) },
   getExport: { description: 'Status of an export; a completed export includes a temporary download link.', inputSchema: z.object({ jobId: z.string().min(1) }) },
 } as const;
@@ -45,8 +45,10 @@ const toJsonSchema = (schema: z.ZodType) => { const { $schema: _, ...json } = z.
 
 /** Editing tools act on one project, so each gains a required projectId. */
 function withProjectId(schema: JsonSchema): JsonSchema {
-  return { ...schema, type: 'object', properties: { projectId: toJsonSchema(projectIdField), ...(schema.properties ?? {}) }, required: ['projectId', ...(schema.required ?? []).filter(name => name !== 'projectId')] };
+  return { ...schema, type: 'object', properties: { projectId: toJsonSchema(projectIdField), timelineId: toJsonSchema(timelineIdField), ...(schema.properties ?? {}) }, required: ['projectId', ...(schema.required ?? []).filter(name => name !== 'projectId')] };
 }
+/** Which timeline tab a call works on. Without it, the call uses the project's open tab, which other agents may switch. */
+const timelineIdField = z.string().min(1).optional().describe('The timeline tab to work on (from listTimelines). Pass it whenever several agents may edit this project: the edit then always lands in this tab, whichever tab is open. Without it, the call acts on the open tab.');
 
 type EditorTool = { description?: string; inputSchema: z.ZodType; execute: (input: unknown, options: unknown) => Promise<unknown> };
 // Tool definitions are pure closures; only their execution touches ctx or the run.
@@ -119,7 +121,7 @@ async function callProjectTool(ctx: ActionCtx, ownerId: string, name: ProjectToo
     case 'getMediaTask': return result(await ctx.runQuery(internal.mcp.mediaTask, { ownerId, taskId: input.taskId }));
     case 'exportVideo': return result(await ctx.runMutation(internal.mcp.startExport, { ownerId, projectId: input.projectId, ...(input.timelineId ? { timelineId: input.timelineId } : {}), resolution: input.resolution ?? 1080, fps: input.fps ?? 30, quality: input.quality ?? 'high' }));
     case 'getFrames': {
-      const snapshotId = await ctx.runMutation(internal.mcp.requestFrames, { ownerId, projectId: input.projectId, times: input.times });
+      const snapshotId = await ctx.runMutation(internal.mcp.requestFrames, { ownerId, projectId: input.projectId, times: input.times, ...(input.timelineId ? { timelineId: input.timelineId } : {}) });
       const deadline = Date.now() + 170_000;
       while (Date.now() < deadline) {
         const state = await ctx.runQuery(internal.mcp.frames, { ownerId, snapshotId });
@@ -179,11 +181,13 @@ function withImages(output: unknown, isError: boolean): CallResult {
   return { ...result({ ...rest, images: images.map(image => image.label) }, isError), images: images.map(image => ({ data: image.data, mimeType: image.mimeType })) };
 }
 
-async function readEditorTool(ctx: ActionCtx, ownerId: string, rawProjectId: string, name: string, input: unknown): Promise<CallResult> {
+async function readEditorTool(ctx: ActionCtx, ownerId: string, rawProjectId: string, name: string, input: unknown, timelineId?: string): Promise<CallResult> {
   try {
     const projectId = await ctx.runQuery(internal.mcp.readRun, { ownerId, projectId: rawProjectId });
     const run = { projectId, ownerId, runId: `${READ_ONLY_RUN_PREFIX}${crypto.randomUUID()}` };
-    const { project, assets } = await ctx.runQuery(internal.assistant.getRun, run);
+    const loaded = await ctx.runQuery(internal.assistant.getRun, run), assets = loaded.assets;
+    // A named tab is read from its stored timeline; the open tab stays as it is.
+    const project = timelineId ? { ...loaded.project, timeline: await ctx.runQuery(internal.mcp.tabTimeline, { ownerId, projectId: rawProjectId, timelineId }), activeTimelineId: timelineId } : loaded.project;
     const abortSignal = AbortSignal.timeout(CALL_LIMIT_MS);
     const { tools } = editorTools(ctx, { run, project, assets, recovering: false, initialPlans: [], selectedClipIds: [], abortSignal, planlessEffects: true });
     const tool = tools[name];
@@ -193,16 +197,19 @@ async function readEditorTool(ctx: ActionCtx, ownerId: string, rawProjectId: str
 }
 
 async function callEditorTool(ctx: ActionCtx, ownerId: string, name: string, raw: Record<string, unknown>, agentName?: string): Promise<CallResult> {
-  const { projectId: rawProjectId, ...rawInput } = raw;
+  const { projectId: rawProjectId, timelineId: rawTimelineId, ...rawInput } = raw;
   if (typeof rawProjectId !== 'string' || !rawProjectId) return result('projectId is required. Call listProjects to find it.', true);
+  if (rawTimelineId !== undefined && (typeof rawTimelineId !== 'string' || !rawTimelineId)) return result('timelineId must be a timeline id from listTimelines.', true);
+  const timelineId = rawTimelineId as string | undefined;
   // Validate before locking the project, against the same schema the run will use.
   const known = editorTools(ctx, catalogOptions()).tools[name];
   if (!known) return result(`Unknown tool ${name}.`, true);
   const parsed = known.inputSchema.safeParse(rawInput);
   if (!parsed.success) return result(`Invalid arguments: ${z.prettifyError(parsed.error)}`, true);
 
-  if (READ_ONLY_TOOLS.has(name)) return readEditorTool(ctx, ownerId, rawProjectId, name, parsed.data);
-  const { projectId, runId } = await ctx.runMutation(internal.mcp.beginRun, { ownerId, projectId: rawProjectId, ...(agentName ? { agentName } : {}) });
+  if (READ_ONLY_TOOLS.has(name)) return readEditorTool(ctx, ownerId, rawProjectId, name, parsed.data, timelineId);
+  // The tab switch and the edit lock happen in one transaction, so no other agent's tab switch can land in between.
+  const { projectId, runId } = await ctx.runMutation(internal.mcp.beginRun, { ownerId, projectId: rawProjectId, ...(agentName ? { agentName } : {}), ...(timelineId ? { timelineId } : {}) });
   const run = { projectId, ownerId, runId };
   const controller = new AbortController(), deadline = AbortSignal.timeout(CALL_LIMIT_MS);
   const abortSignal = AbortSignal.any([controller.signal, deadline]);

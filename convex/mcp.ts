@@ -11,7 +11,8 @@ import { aspectRatio } from './schema';
 import { beginProjectDeletion, createProjectFor, duplicateProjectFor, listProjectsFor, renameProjectFor } from './projects';
 import { importVideoFor } from './mediaTasks';
 import { exportFileName, startRenderFor } from './renders';
-import { createTabFor, listTabsFor, openTabFor, removeTabFor, renameTabFor } from './timelineTabs';
+import { activeTabOf, createTabFor, listTabsFor, openTabFor, removeTabFor, renameTabFor, storedTabTimeline } from './timelineTabs';
+import { loadSceneCode } from './lib/scene_code';
 import { enqueueMediaTask } from './mediaTasks';
 import { requireMediaTaskCapacity } from './lib/account_limits';
 import { internal } from './_generated/api';
@@ -37,6 +38,14 @@ const MCP_RUN_LIMIT = 11 * 60_000;
 const mcpRunStarted = (runId?: string) => runId?.startsWith('mcp-') ? Number(runId.split('-')[1]) : undefined;
 
 /** Access check for read-only tools, which run alongside edits instead of taking the project lock. */
+/** A tab's saved timeline with its scene code, for reading a tab without opening it. */
+export const tabTimeline = internalQuery({ args: { ownerId: v.string(), projectId: v.string(), timelineId: v.string() }, returns: v.any(), handler: async (ctx, args) => {
+  const project = await requireProject(ctx, projectIdOf(ctx, args.projectId), args.ownerId, false);
+  const timeline = args.timelineId === activeTabOf(project) ? currentTimeline(project) : await storedTabTimeline(ctx, project, args.timelineId);
+  if (!timeline) throw new ConvexError('That timeline no longer exists.');
+  return loadSceneCode(ctx, timeline);
+}});
+
 export const readRun = internalQuery({ args: { ownerId: v.string(), projectId: v.string() }, returns: v.id('projects'), handler: async (ctx, args) => {
   await requireEditorAccess(ctx, args.ownerId);
   return (await requireProject(ctx, projectIdOf(ctx, args.projectId), args.ownerId, false))._id;
@@ -59,12 +68,14 @@ export const touchAgent = internalMutation({ args: { ownerId: v.string(), projec
   return null;
 }});
 
-export const beginRun = internalMutation({ args: { ownerId: v.string(), projectId: v.string(), agentName: v.optional(v.string()) }, returns: v.object({ projectId: v.id('projects'), runId: v.string() }), handler: async (ctx, args) => {
+export const beginRun = internalMutation({ args: { ownerId: v.string(), projectId: v.string(), agentName: v.optional(v.string()), timelineId: v.optional(v.string()) }, returns: v.object({ projectId: v.id('projects'), runId: v.string() }), handler: async (ctx, args) => {
   await requireEditorAccess(ctx, args.ownerId);
   const project = await requireProject(ctx, projectIdOf(ctx, args.projectId), args.ownerId, false);
   // An MCP call outlives its 10-minute action limit only if its action died; take its lock over.
   const started = mcpRunStarted(project.aiRunId), stale = started !== undefined && Date.now() - started > MCP_RUN_LIMIT;
   if (project.aiRunning && !stale) throw new ConvexError(project.aiRunId?.startsWith('mcp-') ? 'Another MCP edit is still running on this project. Wait for it to finish.' : 'The in-app AI is editing this project. Wait for it to finish, or stop it in the editor.');
+  // Work on the requested tab: switched here, in the same transaction that takes the lock.
+  if (args.timelineId && args.timelineId !== activeTabOf(project)) await openTabFor(ctx, args.ownerId, { projectId: project._id, timelineId: args.timelineId });
   const runId = `mcp-${Date.now()}-${crypto.randomUUID()}`;
   await clearLivePreview(ctx, project._id);
   await writeProject(ctx, project._id, { aiRunning: true, aiEditing: false, aiRunId: runId, aiAgentName: args.agentName?.slice(0, 60) || 'AI agent', aiAnalysisUsage: { runId, enqueued: 0 }, aiUndoRecorded: false, aiCheckpointRevision: undefined });
@@ -163,15 +174,18 @@ export const exportJob = internalQuery({ args: { ownerId: v.string(), jobId: v.s
 }});
 
 /** Render up to six timeline frames as export would; the worker answers within seconds. */
-export const requestFrames = internalMutation({ args: { ownerId: v.string(), projectId: v.string(), times: v.array(v.number()) }, returns: v.id('frameSnapshots'), handler: async (ctx, args) => {
+export const requestFrames = internalMutation({ args: { ownerId: v.string(), projectId: v.string(), times: v.array(v.number()), timelineId: v.optional(v.string()) }, returns: v.id('frameSnapshots'), handler: async (ctx, args) => {
   await requireEditorAccess(ctx, args.ownerId);
   const project = await requireProject(ctx, projectIdOf(ctx, args.projectId), args.ownerId, false);
-  const timeline = currentTimeline(project), duration = timelineDuration(timeline);
+  const other = args.timelineId && args.timelineId !== activeTabOf(project) ? args.timelineId : undefined;
+  const stored = other ? await storedTabTimeline(ctx, project, other) : null;
+  if (other && !stored) throw new ConvexError('That timeline no longer exists.');
+  const timeline = stored ?? currentTimeline(project), duration = timelineDuration(timeline);
   if (!timeline.clips.length) throw new ConvexError('The timeline is empty; there is nothing to look at yet.');
   if (!args.times.length || args.times.length > 6 || args.times.some(time => !Number.isFinite(time) || time < 0 || time > duration)) throw new ConvexError(`Choose 1 to 6 times between 0 and ${Math.round(duration * 100) / 100} seconds.`);
   await requireMediaTaskCapacity(ctx, args.ownerId, 1);
   // The worker renders the project's saved timeline; only the request is stored here.
-  const snapshotId = await ctx.db.insert('frameSnapshots', { projectId: project._id, ownerId: args.ownerId, revision: project.revision ?? 0, times: args.times, status: 'queued', createdAt: Date.now() });
+  const snapshotId = await ctx.db.insert('frameSnapshots', { projectId: project._id, ownerId: args.ownerId, revision: project.revision ?? 0, times: args.times, status: 'queued', createdAt: Date.now(), ...(other ? { timelineId: other } : {}) });
   const taskId = await enqueueMediaTask(ctx, { ownerId: args.ownerId, projectId: project._id, kind: 'snapshot', snapshotId });
   await ctx.db.patch(snapshotId, { taskId });
   // Frames are read once; anything unread is removed shortly after.
