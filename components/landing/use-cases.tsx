@@ -26,7 +26,7 @@ const rows: Tile[][] = [
 
 function TileSet({ tiles, hidden = false }: { tiles: Tile[]; hidden?: boolean }) {
   return <ul className="landing-marquee-set" aria-hidden={hidden || undefined}>{tiles.map(({ label, image, video, wide }) => <li key={label} className={wide ? 'landing-tile landing-tile-wide' : 'landing-tile'}>
-    {video ? <LandingTileVideo src={video.src} poster={video.poster} /> : <img src={`/landing/${image}.webp`} alt="" loading="lazy" decoding="async" />}
+    {video ? <LandingTileVideo src={video.src} poster={video.poster} label={label} hidden={hidden} /> : <img src={`/landing/${image}.webp`} alt="" loading="lazy" decoding="async" />}
     <LandingChip>{label}</LandingChip>
   </li>)}</ul>;
 }
