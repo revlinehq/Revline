@@ -15,7 +15,7 @@ type Box = { x: number; y: number; w: number; h: number };
 type Source = { width: number; height: number; fps: number; duration: number };
 
 const run = promisify(execFile);
-const SHEET_WIDTH = 1600, GAP = 8, LABEL = 30, MAX_IMAGE = 880_000;
+const SHEET_WIDTH = 1600, GAP = 8, LABEL = 30, MAX_IMAGE = 880_000, MAX_FRAMES = 30;
 /** A pixel counts as changed between frames when its gray level moves more than this (of 255). */
 const CHANGE = 24;
 const round = (value: number, places = 2) => Math.round(value * 10 ** places) / 10 ** places;
@@ -53,7 +53,8 @@ const escape = (text: string) => text.replace(/[<>&]/g, char => ({ '<': '&lt;', 
 
 /** Tiles in a grid, each labeled under it, as one JPEG small enough to hand to a model. */
 async function sheet(tiles: { image: Buffer; label: string; overlay?: string }[], aspect: number) {
-  const columns = Math.min(4, tiles.length <= 4 ? tiles.length : Math.ceil(Math.sqrt(tiles.length)));
+  // Up to 4 across for a few frames; dense 10 fps reads (up to 30 frames) go 6 across so motion reads left to right.
+  const columns = tiles.length <= 4 ? tiles.length : tiles.length <= 16 ? Math.min(4, Math.ceil(Math.sqrt(tiles.length))) : 6;
   const rows = Math.ceil(tiles.length / columns);
   let tileWidth = Math.floor((SHEET_WIDTH - GAP * (columns + 1)) / columns), quality = 82;
   for (;;) {
@@ -73,7 +74,9 @@ async function sheet(tiles: { image: Buffer; label: string; overlay?: string }[]
 
 /** Frames across a window, or a crop of them magnified, with how much each one changed from the frame before. */
 async function readSheet(path: string, directory: string, source: Source, work: Work, signal: AbortSignal, onProgress: (percent: number) => void): Promise<Result> {
-  const crop = work.crop ? clampBox(work.crop, source) : undefined, times = timesIn(work.start, work.end, Math.max(1, Math.min(16, work.count ?? 8)), source);
+  // fps reads consecutive moments (a transition at 10 fps); count spreads frames evenly across the window.
+  const span = Math.max(0, work.end - work.start), count = work.fps ? Math.max(2, Math.min(MAX_FRAMES, Math.floor(span * work.fps) + 1)) : Math.max(1, Math.min(MAX_FRAMES, work.count ?? 8));
+  const crop = work.crop ? clampBox(work.crop, source) : undefined, times = work.fps ? timesIn(work.start, work.start + (count - 1) / work.fps, count, source) : timesIn(work.start, work.end, count, source);
   const images: Buffer[] = new Array(times.length);
   let done = 0;
   await forEachLimited(times.map((time, index) => ({ time, index })), 4, async ({ time, index }, stop) => {
@@ -97,7 +100,40 @@ async function readSheet(path: string, directory: string, source: Source, work: 
   onProgress(80);
   const tiles = images.map((image, index) => ({ image, label: `${index + 1}  ${times[index].toFixed(2)}s${frames[index].change !== undefined ? `  change ${Math.round(frames[index].change! * 100)}%` : ''}` }));
   const result = await sheet(tiles, area.w / area.h);
-  return { ...result, sourceWidth: source.width, sourceHeight: source.height, fps: round(source.fps, 3), frames };
+  const moments = await findMoments(path, work.start, work.end, source, area, signal).catch(error => { if (signal.aborted) throw error; return []; });
+  return { ...result, sourceWidth: source.width, sourceHeight: source.height, fps: round(source.fps, 3), frames, moments };
+}
+
+/** Where the picture changes in a window, from every frame at 10 fps (cheap: small gray frames, no images for the model):
+ * each moment's start, end, how strong it was, the region that moved, and whether it was a hard cut or motion. */
+async function findMoments(path: string, start: number, end: number, source: Source, area: Box, signal: AbortSignal) {
+  const from = Math.max(0, Math.min(start, source.duration)), to = Math.min(Math.max(end, from), source.duration), rate = 10;
+  if (to - from < .2) return [];
+  const width = 96, height = Math.max(2, Math.round(width * area.h / area.w) & ~1);
+  const { stdout } = await run('ffmpeg', ['-v', 'error', '-ss', from.toFixed(3), '-t', (to - from).toFixed(3), '-i', path, '-map', '0:v:0', '-vf', `fps=${rate},crop=${area.w}:${area.h}:${area.x}:${area.y},scale=${width}:${height},format=gray`, '-f', 'rawvideo', '-'], { signal, timeout: 120_000, encoding: 'buffer', maxBuffer: 256 * 1024 * 1024 });
+  const size = width * height, total = Math.floor(stdout.length / size), factor = area.w / width;
+  if (total < 2) return [];
+  const steps = Array.from({ length: total - 1 }, (_, index) => {
+    const a = stdout.subarray(index * size, (index + 1) * size), b = stdout.subarray((index + 1) * size, (index + 2) * size);
+    let sum = 0, left = width, top = height, right = -1, bottom = -1;
+    for (let i = 0; i < size; i++) { const delta = Math.abs(b[i] - a[i]); sum += delta; if (delta > CHANGE) { const x = i % width, y = (i / width) | 0; if (x < left) left = x; if (x > right) right = x; if (y < top) top = y; if (y > bottom) bottom = y; } }
+    return { change: sum / (size * 255), box: right < 0 ? null : { left, top, right, bottom } };
+  });
+  // A moment is a run of steps clearly above this video's own resting level; one-step jumps are cuts.
+  const sorted = steps.map(step => step.change).sort((a, b) => a - b), resting = sorted[Math.floor(sorted.length / 2)];
+  const threshold = Math.max(.012, resting * 3);
+  const moments: { start: number; end: number; peak: number; kind: 'cut' | 'motion'; region?: Box }[] = [];
+  for (let index = 0; index < steps.length; index++) {
+    if (steps[index].change < threshold) continue;
+    let last = index; while (last + 1 < steps.length && (steps[last + 1].change >= threshold || (last + 2 < steps.length && steps[last + 2].change >= threshold))) last++;
+    const run = steps.slice(index, last + 1), peak = Math.max(...run.map(step => step.change));
+    const boxes = run.flatMap(step => step.box ? [step.box] : []);
+    const region = boxes.length ? { x: Math.round(area.x + Math.min(...boxes.map(b => b.left)) * factor), y: Math.round(area.y + Math.min(...boxes.map(b => b.top)) * factor), w: Math.round((Math.max(...boxes.map(b => b.right)) - Math.min(...boxes.map(b => b.left)) + 1) * factor), h: Math.round((Math.max(...boxes.map(b => b.bottom)) - Math.min(...boxes.map(b => b.top)) + 1) * factor) } : undefined;
+    moments.push({ start: round(from + index / rate, 2), end: round(from + (last + 1) / rate, 2), peak: round(peak, 3), kind: run.length === 1 && peak > .25 ? 'cut' : 'motion', ...(region ? { region } : {}) });
+    index = last;
+  }
+  // The strongest dozen, in time order.
+  return moments.sort((a, b) => b.peak - a.peak).slice(0, 12).sort((a, b) => a.start - b.start);
 }
 
 /** Exact colors at points and color edges along lines, in source pixels of one frame. */
