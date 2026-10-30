@@ -17,7 +17,8 @@ Run every item after building a scene or film and after every change. Render fra
 5. **Only what was asked.** On feedback, everything outside the named part is unchanged: same shots, titles, timings, moves, colors and sound. Say what else had to move.
 6. **Limits.** Each scene under 120,000 characters and the timeline under 400,000 (shared code counts once), clips up to 120 s.
 7. **Preview speed.** Parts that are done or hidden render nothing or \`display: none\`, not only opacity 0; no heavy UI mounted where it cannot be seen.
-8. **Sound.** The film has the sound its skill asks for (motion-design page \`process\`, explainer-scenes for explainers), timed to the beats you just checked.`,
+8. **Sound.** The film has the sound its skill asks for (motion-design page \`process\`, explainer-scenes for explainers), timed to the beats you just checked.
+9. **Recreations match.** A recreation is not finished while any moment compareReference scored is over 35: fix it and compare again.`,
 };
 
 const reactScenesPage: EditorSkillPage = {
@@ -32,7 +33,6 @@ A React scene is a TSX module whose default export is a component. It is a React
 - **Beats inside the film are \`<Beat>\`s at the cut times.** \`<Beat id="composer" start={4.2} duration={3.1}>\` for each section, matching the cuts you pass to addFilm. Whatever crosses a cut lives outside those Beats (or in a Beat spanning both sides), driven by a timeline on film time.
 - **One component per part.** Rebuild the product UI as components named for what they are (\`Sidebar\`, \`Composer\`, \`ThreadList\`, \`DiffPanel\`), composed by an app component, all in the film file. The inspector lists the components each clip draws, so names matter.
 - **Edit with patchScene; never retype the film.** After the first build, every change is a patchScene call: exact snippets copied from inspectClip, each replaced in place (several edits per call), and every beat clip of the film gets it. Retime a tween by patching its numbers, restyle by patching one style object. Never resend the whole film through editScene, and never rebuild one beat as a separate scene: that splits the film and breaks the moves across its cuts.
-- **Long films are written in parts.** Keep every call under about 20k tokens (60,000 characters) of code. addFilm gets all the beat cuts and the first part, with markers where the rest goes: \`{/* more beats */}\` where the next \`<Beat>\` belongs and \`/* more parts */\` where the next components belong. Each later part is a patchScene edit that finds the marker with \`insert: 'before'\`, so the marker stays for the next part and the film compiles after every call. Beats not written yet show the stage until their part lands.
 - **Standalone scenes** (a title card, an overlay, one beat on its own) use addScene, or addScenes for several. Older films made of separate beat clips with a film kit (\`blueprint:film\`) and \`<Transition>\` clips on V3 still render and edit as before; build new films with addFilm.
 
 ## Motion
