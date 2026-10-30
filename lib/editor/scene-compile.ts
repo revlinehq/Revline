@@ -1,12 +1,12 @@
 import { transform } from 'sucrase';
-import { isReactScene, REACT_SCENE_MODULES, SCENE_MODULES, sceneTransformOptions } from './scene-modules';
+import { isReactScene, REACT_SCENE_MODULES, SCENE_MODULES, sceneTransformOptions, splitExportDeclarations } from './scene-modules';
 
 /** Catch syntax and import mistakes before a scene is saved; build and render errors surface in the preview. */
 export function checkSceneCode(code: string) {
   let compiled: string;
   const react = isReactScene(code);
   try {
-    compiled = transform(code, sceneTransformOptions(code)).code;
+    compiled = transform(splitExportDeclarations(code), sceneTransformOptions(code)).code;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     throw new Error(`Scene code does not compile: ${message}${near(code, message)}${!react && /<[A-Za-z]/.test(code) ? ' GSAP scenes are plain TypeScript, not JSX: build HTML with innerHTML or document.createElement, or import from "revline" to write a React scene.' : ''}`);

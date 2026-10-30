@@ -15,7 +15,7 @@ import { MorphSVGPlugin } from 'gsap/MorphSVGPlugin';
 import { MotionPathPlugin } from 'gsap/MotionPathPlugin';
 import { ScrambleTextPlugin } from 'gsap/ScrambleTextPlugin';
 import { TextPlugin } from 'gsap/TextPlugin';
-import { isReactScene, SCENE_GSAP_PLUGINS, sceneTransformOptions, type SceneGsapPlugin } from './scene-modules';
+import { isReactScene, SCENE_GSAP_PLUGINS, sceneTransformOptions, splitExportDeclarations, type SceneGsapPlugin } from './scene-modules';
 import type { FrameAdapter } from '@hyperframes/core';
 import type * as SceneReact from './scene-react-runtime';
 import { sceneBrandContext, type SceneBrand, type SceneBrandContext } from './brand-kit';
@@ -56,7 +56,7 @@ const sceneReact = () => (window as unknown as { __revlineSceneReact?: typeof Sc
 function runModule(code: string, blueprints: { name: string; code: string }[], kits = new Map<string, Record<string, unknown>>()): Record<string, unknown> {
   const react = isReactScene(code), runtime = react ? sceneReact() : undefined;
   if (react && !runtime) throw new Error('The React scene runtime did not load.');
-  const compiled = transform(code, sceneTransformOptions(code)).code;
+  const compiled = transform(splitExportDeclarations(code), sceneTransformOptions(code)).code;
   const module = { exports: {} as Record<string, unknown> };
   const modules: Record<string, unknown> = runtime ? { ...MODULES, ...runtime.modules } : MODULES;
   const require = (name: string) => {

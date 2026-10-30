@@ -1,6 +1,6 @@
 import type { Clip, Timeline } from './types';
 import { checkSceneCode } from './scene-compile';
-import { isReactScene } from './scene-modules';
+import { isReactScene, splitExportDeclarations } from './scene-modules';
 import type { SceneBlueprint } from './scene-layers';
 
 /**
@@ -32,7 +32,8 @@ export function prepareFilmKit(code: string) {
 }
 
 /** Names a module exports, or null when it re-exports in a way this cannot read. */
-function exportedNames(code: string): Set<string> | null {
+function exportedNames(source: string): Set<string> | null {
+  const code = splitExportDeclarations(source);
   if (/\bexport\s*\*|\bexport\s+(?:const|let|var)\s*[{[]/.test(code)) return null;
   const names = new Set([...code.matchAll(/\bexport\s+(?:async\s+)?(?:const|let|var|function\*?|class|enum)\s+([A-Za-z_$][\w$]*)/g)].map(match => match[1]));
   for (const list of code.matchAll(/\bexport\s*\{([^}]*)\}/g)) for (const part of list[1].split(',')) { const name = part.trim().split(/\s+as\s+/).pop()?.trim(); if (name) names.add(name); }
