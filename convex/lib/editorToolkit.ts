@@ -275,7 +275,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
   const analyzeOnce = async (assetId: string, mode: "transcribe" | "understand" | "shots" | "beats" | "track" | "reference", requireAudioActivity = false, remeasure = false) => {
     if (!remeasure && (mode === 'understand' || mode === 'transcribe' || mode === 'reference')) {
       const saved = await loadAsset(assetId);
-      if (mode === 'reference' ? readReference(saved.analysis?.reference) : mode === 'understand' ? saved.analysis?.understanding : currentTranscript(saved.analysis?.transcript) && (!requireAudioActivity || saved.analysis?.audioActivity?.version === AUDIO_ACTIVITY_VERSION)) return saved;
+      if (mode === 'reference' ? readReference(saved.analysis?.reference)?.moments : mode === 'understand' ? saved.analysis?.understanding : currentTranscript(saved.analysis?.transcript) && (!requireAudioActivity || saved.analysis?.audioActivity?.version === AUDIO_ACTIVITY_VERSION)) return saved;
     }
     const request = () => withAnalysis(assetId, mode, async () => {
       const next=await ctx.runQuery(internal.assistant.getRunAsset,{...run,assetId});

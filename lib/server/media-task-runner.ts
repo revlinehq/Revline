@@ -7,14 +7,14 @@ import type { MediaWorkItem, MediaTaskResult } from '@/convex/mediaTasks';
 import { dimensions, timelineDuration, type MediaAsset } from '@/lib/editor/types';
 import { downloadOwnedMedia, extractTranscriptionAudio, extractVideoWindow, needsAnalysisVideoProxy, prepareVideo, probeMedia } from '@/lib/media-analysis/io';
 import { breakDownReference, inspectVideo, inspectVideoFrames, understandVideo } from '@/lib/media-analysis/gemini';
-import { MAX_REFERENCE_SECONDS, MAX_REFERENCE_SHOTS, referenceKeyframes } from '@/lib/media-analysis/reference';
+import { MAX_REFERENCE_SECONDS, MAX_REFERENCE_SHOTS, readReference as readBreakdown, referenceKeyframes } from '@/lib/media-analysis/reference';
 import { transcribeWithDeepgram } from '@/lib/media-analysis/deepgram';
 import { currentTranscript, type Transcript } from '@/lib/media-analysis/transcript';
 import { detectShots } from '@/lib/media-analysis/detect-shots';
 import { detectMusicBeats } from '@/lib/media-analysis/music-beats';
 import { AnalysisError } from '@/lib/media-analysis/errors';
 import { trackSourceFace } from './track-source-face';
-import { readReference } from './read-reference';
+import { readReference, videoMoments } from './read-reference';
 import { runBlueprintCheck } from './blueprint-check';
 import { extractSourceAudio } from './extract-audio';
 import { measureAudioWaveform } from './audio-waveform';
@@ -119,7 +119,8 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
     if (task.kind === 'waveform' && asset.waveform) return { waveform: asset.waveform };
     if (task.kind === 'transcribe' && currentTranscript(asset.analysis?.transcript) && asset.analysis?.audioActivity && currentSpeechCleanup(asset.analysis.speechCleanup)) return { analysis: { transcript: asset.analysis.transcript, audioActivity: asset.analysis.audioActivity, speechCleanup: asset.analysis.speechCleanup } };
     if (task.kind === 'understand' && asset.analysis?.understanding) return { analysis: { understanding: asset.analysis.understanding } };
-    if (task.kind === 'reference' && asset.analysis?.reference) return { analysis: { reference: asset.analysis.reference } };
+    // A breakdown saved before moments were measured only needs its moments; the model pass stays.
+    if (task.kind === 'reference' && readBreakdown(asset.analysis?.reference)?.moments) return { analysis: { reference: asset.analysis!.reference } };
     const sourceAsset = task.kind === 'transcribe' ? task.transcriptionAsset ?? asset : asset;
     if (!sourceAsset.url) throw new AnalysisError('The prepared source media is unavailable.', 400);
     // Footage questions read the stored 1280px playback preview when it exists:
@@ -266,6 +267,10 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
     onProgress(30);
     if (task.kind === 'reference') {
       if (media.duration > MAX_REFERENCE_SECONDS + .5) throw new AnalysisError(`Reference breakdowns cover up to ${MAX_REFERENCE_SECONDS / 60} minutes. Trim the reference to the part that matters.`, 400);
+      // Moments: motion inside shots as well as cuts, so a film with few cuts still shows everything that happens.
+      const moments = () => runPhase('Finding moments', () => videoMoments(source, signal)).catch(error => { if (signal.aborted) throw error; return []; });
+      const saved = readBreakdown(asset.analysis?.reference);
+      if (saved) return { analysis: { reference: JSON.stringify({ ...saved, moments: await moments() }) } };
       // Cuts and beats are measured first; the model only labels the measured shots.
       const shots = asset.analysis?.shots ?? await runPhase('Detecting shots', () => detectShots(source, media.duration, signal));
       if (shots.shots.length > MAX_REFERENCE_SHOTS) throw new AnalysisError(`This reference has more than ${MAX_REFERENCE_SHOTS} shots. Trim it to the part that matters.`, 400);
@@ -276,8 +281,8 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
       onActivity?.('preparing-analysis');
       const keyframes = await runPhase('Sampling shot keyframes', () => extractReferenceKeyframes(source, directory, referenceKeyframes(shots), signal));
       onProgress(70);
-      const reference = await runPhase('Breaking down reference', () => breakDownReference(video, media.duration, shots, keyframes, beats, key, signal, videoMimeType, reportGeminiActivity));
-      return { analysis: { shots, ...(beats ? { beats } : {}), reference: JSON.stringify(reference) } };
+      const [reference, found] = await Promise.all([runPhase('Breaking down reference', () => breakDownReference(video, media.duration, shots, keyframes, beats, key, signal, videoMimeType, reportGeminiActivity)), moments()]);
+      return { analysis: { shots, ...(beats ? { beats } : {}), reference: JSON.stringify({ ...reference, moments: found }) } };
     }
     if (request) {
       // A preview can end milliseconds before the original; requests use source time.

@@ -231,3 +231,11 @@ export async function readReference(path: string, directory: string, work: Work,
   if (work.momentsOnly) return readMoments(path, source, work, signal);
   return readSheet(path, directory, source, work, signal, onProgress);
 }
+
+/** Every moment across a whole video, for the reference breakdown; regions as 0..1 boxes of the frame. */
+export async function videoMoments(path: string, signal: AbortSignal) {
+  const source = await probe(path, signal);
+  const { moments } = await findMoments(path, 0, source.duration, source, { x: 0, y: 0, w: source.width, h: source.height }, signal, 40);
+  const share = (value: number, total: number) => round(Math.min(1, value / total), 3);
+  return moments.map(({ region, ...moment }) => ({ ...moment, ...(region ? { box: { left: share(region.x, source.width), top: share(region.y, source.height), right: share(region.x + region.w, source.width), bottom: share(region.y + region.h, source.height) } } : {}) }));
+}
