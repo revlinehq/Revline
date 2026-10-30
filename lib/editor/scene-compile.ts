@@ -15,6 +15,16 @@ export function checkSceneCode(code: string) {
     if (!SCENE_MODULES.has(match[1]) && !(react && (REACT_SCENE_MODULES.has(match[1]) || match[1].startsWith('blueprint:')))) throw new Error(react ? `React scenes can import only revline, react, gsap and blueprint:<name>, not "${match[1]}".` : `Scenes can import only gsap and its plugins, not "${match[1]}".`);
   }
   if (!/exports\.default\s*=|exports,\s*["']default["']/.test(compiled)) throw new Error(react ? 'A React scene must export default its component.' : 'A scene must export default a function that builds it.');
+  if (react) {
+    const missing = undefinedComponents(code);
+    if (missing.length) throw new Error(`${missing.map(name => `<${name}>`).join(', ')} ${missing.length === 1 ? 'is' : 'are'} used but never defined or imported in this scene, so the preview would crash. Define ${missing.length === 1 ? 'it' : 'them'} in the same call, or remove the tag.`);
+  }
+}
+
+/** A component used only as a JSX tag (not a type argument like useState<Clip>) and never named anywhere else (declared, imported, passed in) is a ReferenceError at render. */
+function undefinedComponents(code: string) {
+  const tags = new Set([...code.matchAll(/(?<![A-Za-z0-9_$)\]])<\/?([A-Z][A-Za-z0-9_$]*)/g)].map(match => match[1]));
+  return [...tags].filter(name => ![...code.matchAll(new RegExp(`(?<![A-Za-z0-9_$.])${name.replace(/\$/g, '\\$')}(?![A-Za-z0-9_$])`, 'g'))].some(match => !/<\/?\s*$/.test(code.slice(Math.max(0, match.index! - 2), match.index))));
 }
 
 /** Scenes are often written as a few very long lines, so a line and column alone do not find the mistake: quote the code around it. */
