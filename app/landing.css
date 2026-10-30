@@ -113,7 +113,7 @@ div.landing-hero-buttons>.landing-reveal-content{display:flex;align-items:center
 .landing-marquee-set{display:flex;gap:16px;padding-right:16px}
 .landing-tile{position:relative;width:124px;height:220px;flex-shrink:0;border-radius:8px;overflow:hidden;background:#17181c}
 .landing-tile-wide{width:391px}
-.landing-tile img{width:100%;height:100%;object-fit:cover;display:block}
+.landing-tile :is(img,video){width:100%;height:100%;object-fit:cover;display:block}
 .landing-tile .landing-chip{position:absolute;top:10px;left:10px}
 @keyframes landing-marquee{to{transform:translateX(-50%)}}
 
