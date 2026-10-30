@@ -293,3 +293,22 @@ body:has(.conversation-editor) :is(.visual-number,.visual-control-note){color:va
 .scene-filmstrip{border-radius:inherit}
 .scene-filmstrip::after{content:'';position:absolute;inset:0;border-radius:inherit;box-shadow:inset 0 0 0 1px rgba(0,0,0,.9),inset 0 0 0 2px rgba(255,255,255,.55);pointer-events:none}
 .scene-filmstrip .filmstrip-frame{border-right-color:rgba(0,0,0,.18)}
+/* A motion clip before its frames render: muted grain gradient tinted per scene, a slow shimmer only while frames are on the way. */
+.scene-placeholder{position:absolute;inset:0;border-radius:inherit;overflow:hidden;pointer-events:none;background:radial-gradient(120% 140% at 18% 20%,hsl(var(--scene-hue) 22% 44% / .5),transparent 62%),linear-gradient(115deg,hsl(var(--scene-hue) 16% 21%),hsl(calc(var(--scene-hue) + 38) 12% 14%))}
+.scene-placeholder::before{content:'';position:absolute;inset:0;background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 .5 0'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");background-size:160px;opacity:.22;mix-blend-mode:overlay}
+.scene-placeholder::after{content:'';position:absolute;inset:0;border-radius:inherit;box-shadow:inset 0 0 0 1px #ffffff17}
+.scene-placeholder>i{position:absolute;inset:0;background:linear-gradient(100deg,transparent 30%,#ffffff13 50%,transparent 70%);transform:translateX(-100%);animation:scene-placeholder-shimmer 2.6s cubic-bezier(.45,0,.55,1) infinite}
+@keyframes scene-placeholder-shimmer{to{transform:translateX(100%)}}
+@media (prefers-reduced-motion:reduce){.scene-placeholder>i{animation:none;opacity:0}}
+.timeline-clip.clip-scene>span,.timeline-clip.clip-motion>span{color:#ECEAE6;text-shadow:0 1px 2px #0006}
+
+/* An empty timeline: the frame itself, in the timeline's shape, in the same muted grain as a motion clip waiting for frames. */
+.empty-canvas{position:relative;aspect-ratio:var(--preview-ratio,16/9);width:min(100%,calc((100vh - 260px) * var(--preview-ratio,1.78)));max-height:100%;border-radius:14px;overflow:hidden;display:grid;place-items:center;isolation:isolate}
+.empty-canvas>.scene-placeholder{z-index:-1}
+.empty-canvas-copy{display:grid;justify-items:center;gap:10px;padding:24px;text-align:center;color:#f4f4f0}
+.empty-canvas-copy h2{font-size:clamp(18px,2.4vw,26px);font-weight:500;letter-spacing:-.01em}
+.empty-canvas-copy p{font-size:13px;color:#f4f4f0b3;max-width:46ch}
+.empty-canvas-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-top:6px}
+.empty-canvas-actions button{border-radius:999px!important}
+.empty-canvas-copy small{font-size:10.5px;color:#f4f4f080;margin-top:4px}
+.empty-canvas-copy progress{width:180px;height:3px}
