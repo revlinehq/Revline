@@ -101,19 +101,26 @@ async function readSheet(path: string, directory: string, source: Source, work: 
   onProgress(80);
   const tiles = images.map((image, index) => ({ image, label: `${index + 1}  ${times[index].toFixed(2)}s${frames[index].change !== undefined ? `  change ${Math.round(frames[index].change! * 100)}%` : ''}` }));
   const result = await sheet(tiles, area.w / area.h);
-  const moments = await findMoments(path, work.start, work.end, source, area, signal).catch(error => { if (signal.aborted) throw error; return []; });
+  const { moments } = await findMoments(path, work.start, work.end, source, area, signal).catch(error => { if (signal.aborted) throw error; return { moments: [] }; });
   return { ...result, sourceWidth: source.width, sourceHeight: source.height, fps: round(source.fps, 3), frames, moments };
+}
+
+/** Only the map of a long window: every moment and every hold, no frames and no image (cheap on a long talking-head clip). */
+async function readMoments(path: string, source: Source, work: Work, signal: AbortSignal): Promise<Result> {
+  const area = work.crop ? clampBox(work.crop, source) : { x: 0, y: 0, w: source.width, h: source.height };
+  const { moments, holds } = await findMoments(path, work.start, work.end, source, area, signal, 80);
+  return { width: 0, height: 0, sourceWidth: source.width, sourceHeight: source.height, fps: round(source.fps, 3), frames: [], moments, holds };
 }
 
 /** Where the picture changes in a window, from every frame at 10 fps (cheap: small gray frames, no images for the model):
  * each moment's start, end, how strong it was, the region that moved, and whether it was a hard cut or motion. */
-async function findMoments(path: string, start: number, end: number, source: Source, area: Box, signal: AbortSignal) {
+async function findMoments(path: string, start: number, end: number, source: Source, area: Box, signal: AbortSignal, limit = 12) {
   const from = Math.max(0, Math.min(start, source.duration)), to = Math.min(Math.max(end, from), source.duration), rate = 10;
-  if (to - from < .2) return [];
+  if (to - from < .2) return { moments: [], holds: [] };
   const width = 96, height = Math.max(2, Math.round(width * area.h / area.w) & ~1);
-  const { stdout } = await run('ffmpeg', ['-v', 'error', '-ss', from.toFixed(3), '-t', (to - from).toFixed(3), '-i', path, '-map', '0:v:0', '-vf', `fps=${rate},crop=${area.w}:${area.h}:${area.x}:${area.y},scale=${width}:${height},format=gray`, '-f', 'rawvideo', '-'], { signal, timeout: 120_000, encoding: 'buffer', maxBuffer: 256 * 1024 * 1024 });
+  const { stdout } = await run('ffmpeg', ['-v', 'error', '-ss', from.toFixed(3), '-t', (to - from).toFixed(3), '-i', path, '-map', '0:v:0', '-vf', `fps=${rate},crop=${area.w}:${area.h}:${area.x}:${area.y},scale=${width}:${height},format=gray`, '-f', 'rawvideo', '-'], { signal, timeout: Math.max(120_000, (to - from) * 1000), encoding: 'buffer', maxBuffer: 512 * 1024 * 1024 });
   const size = width * height, total = Math.floor(stdout.length / size), factor = area.w / width;
-  if (total < 2) return [];
+  if (total < 2) return { moments: [], holds: [] };
   const steps = Array.from({ length: total - 1 }, (_, index) => {
     const a = stdout.subarray(index * size, (index + 1) * size), b = stdout.subarray((index + 1) * size, (index + 2) * size);
     let sum = 0, left = width, top = height, right = -1, bottom = -1;
@@ -133,8 +140,16 @@ async function findMoments(path: string, start: number, end: number, source: Sou
     moments.push({ start: round(from + index / rate, 2), end: round(from + (last + 1) / rate, 2), peak: round(peak, 3), kind: run.length === 1 && peak > .25 ? 'cut' : 'motion', ...(region ? { region } : {}) });
     index = last;
   }
-  // The strongest dozen, in time order.
-  return moments.sort((a, b) => b.peak - a.peak).slice(0, 12).sort((a, b) => a.start - b.start);
+  // Holds: a second or more where the picture all but stops, well under this video's resting level (a frozen face, a held still).
+  const still = Math.max(.0015, resting * .35), holds: { start: number; end: number }[] = [];
+  for (let index = 0; index < steps.length; index++) {
+    if (steps[index].change >= still) continue;
+    let last = index; while (last + 1 < steps.length && steps[last + 1].change < still) last++;
+    if (last - index + 1 >= rate) holds.push({ start: round(from + index / rate, 2), end: round(from + (last + 1) / rate, 2) });
+    index = last;
+  }
+  // The strongest ones, in time order.
+  return { moments: moments.sort((a, b) => b.peak - a.peak).slice(0, limit).sort((a, b) => a.start - b.start), holds: holds.slice(0, limit) };
 }
 
 /** Exact colors at points and color edges along lines, in source pixels of one frame. */
@@ -193,5 +208,6 @@ export async function readReference(path: string, directory: string, work: Work,
   onProgress(5);
   if (work.mode === 'measure') return readMeasure(path, directory, source, work, signal);
   if (work.mode === 'track') return readTrack(path, directory, source, work, signal, onProgress);
+  if (work.momentsOnly) return readMoments(path, source, work, signal);
   return readSheet(path, directory, source, work, signal, onProgress);
 }
