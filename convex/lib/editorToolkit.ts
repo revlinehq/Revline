@@ -28,6 +28,7 @@ import { IRIS_SHAPES, TRANSITION_DIRECTIONS, TRANSITION_PRESETS, WIPE_DIRECTIONS
 import { TimelineGestureRejection } from '../../lib/editor/timeline-edit-errors';
 import { summarizeTimeline } from "./inspectTimeline";
 import { EditSession } from "./editSession";
+import { READ_TOOL_DESCRIPTIONS, READ_TOOL_INPUTS, readSummary, runRead, type ReadToolName } from "../referenceReads";
 import { BLEND_MODES, ZOOM_LIMITS, isZoomPreset, EFFECT_CATALOG,SOLID_COLOR_LIMITS, OFFERED_TIMED_EFFECT_PRESETS,configureTimedEffectPatch, solidColorPatch } from '../../lib/editor/clip-effects';
 import { PUNCH_LIMITS } from '../../lib/editor/motion-effect-settings';
 import { EDITOR_SKILL_NAMES, editorSkillInstructions } from '../../lib/ai/skills';
@@ -113,6 +114,10 @@ function blueprintImages(output: unknown) {
 
 export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOptions) {
   const { run, project, assets, recovering, selectedClipIds, abortSignal } = options;
+  const readTool = async (name: ReadToolName, input: object) => {
+    const result = await runRead(ctx, run.ownerId, run.projectId, name, input, abortSignal);
+    return { ...readSummary(name, result), images: result.image ? [{ label: name === 'trackReference' ? 'Tracked frames, box drawn' : 'Frame sheet', data: result.image, mimeType: 'image/jpeg' }] : [] };
+  };
   let inspected = false;
   let effectPlans:EffectPlan[]=options.initialPlans;
   // Once this environment reports no review service, later reviews answer at once.
@@ -690,6 +695,10 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       const parts = [...(result.parts ?? [])].sort((a, b) => (a.score ?? 100) - (b.score ?? 100));
       return { checkId, size: `${result.width}x${result.height}`, score: result.score, meanDiff: result.meanDiff, worstParts: parts.slice(0, 15), partCount: parts.length, regions: result.regions ?? [], images: [{ label: 'Render', data: result.image, mimeType: 'image/jpeg' }, ...(result.diff ? [{ label: 'Differences in red', data: result.diff, mimeType: 'image/jpeg' }] : [])] };
     }, toModelOutput: (_ctx, options) => blueprintImages(options.output) }),
+    // Frame readings of a video: a labeled sheet the model looks at, an object tracked frame by frame, exact pixels.
+    readFrames: createTool({ description: READ_TOOL_DESCRIPTIONS.readFrames, inputSchema: READ_TOOL_INPUTS.readFrames, execute: async (_ctx, input) => readTool('readFrames', input), toModelOutput: (_ctx, options) => blueprintImages(options.output) }),
+    trackReference: createTool({ description: READ_TOOL_DESCRIPTIONS.trackReference, inputSchema: READ_TOOL_INPUTS.trackReference, execute: async (_ctx, input) => readTool('trackReference', input), toModelOutput: (_ctx, options) => blueprintImages(options.output) }),
+    measureFrame: createTool({ description: READ_TOOL_DESCRIPTIONS.measureFrame, inputSchema: READ_TOOL_INPUTS.measureFrame, execute: async (_ctx, input) => readTool('measureFrame', input), toModelOutput: (_ctx, options) => blueprintImages(options.output) }),
     saveBlueprint: createTool({ description: "Save the code a finished compareScreen scored as a blueprint in its brand kit, under a short name ('Editor', 'Dashboard'). Its parts and score come from that compare; pass the colors and edges you measured with labels, so the kit shows how it was built. Saving a name again replaces it.", inputSchema: z.object({ checkId: z.string().min(1), name: z.string().trim().min(1).max(60), colors: z.array(z.object({ label: z.string().max(60), hex: z.string().regex(/^#[0-9a-fA-F]{6}$/), x: z.number(), y: z.number() })).max(60).optional(), edges: z.array(z.object({ label: z.string().max(60), axis: z.enum(['x', 'y']), at: z.number() })).max(60).optional() }).strict(), execute: async (_ctx, input) => ctx.runMutation(internal.blueprints.saveFromCheck, { ownerId: run.ownerId, checkId: input.checkId, name: input.name, colors: input.colors ?? [], edges: input.edges ?? [] }) }),
     listBlueprints: createTool({ description: "List the user's blueprints (brand UI rebuilt as live scene code with named parts), optionally for one kit: name, source screen, size, match score and part names.", inputSchema: z.object({ kitId: z.string().optional() }).strict(), execute: async (_ctx, input) => ({ blueprints: await ctx.runQuery(internal.blueprints.listForTools, { ownerId: run.ownerId, ...input }) }) }),
     getBlueprint: createTool({ description: "Load one blueprint's code and parts to mount it in a scene: render the whole UI, or reach in for named parts ([data-part=composer]) to animate, replace or transition them. Pass preview (a size) to see it rendered.", inputSchema: z.object({ kitId: z.string().min(1), name: z.string().min(1), preview: z.object({ width: z.number().int().min(200).max(2560), height: z.number().int().min(200).max(2560) }).optional() }).strict(), execute: async (_ctx, input) => {

@@ -7,7 +7,7 @@ import { AnalysisError } from '@/lib/media-analysis/errors';
 
 type Work = NonNullable<MediaWorkItem['blueprint']>;
 type Result = NonNullable<MediaTaskResult['blueprint']>;
-type Pixels = { data: Buffer; width: number; height: number };
+export type Pixels = { data: Buffer; width: number; height: number };
 
 /** A pixel "matches" when its luminance difference is at most this (of 255): invisible at a glance. */
 const TOLERANCE = 24;
@@ -24,7 +24,7 @@ const pixelsOf = async (image: Buffer, width?: number, height?: number): Promise
 };
 
 /** Exact colors at points, and where the color changes along lines (anti-aliased runs merged into one edge). */
-function measure(screen: Pixels, work: Work): Pick<Result, 'colors' | 'edges'> {
+export function measure(screen: Pixels, work: Pick<Work, 'points' | 'lines'>): Pick<Result, 'colors' | 'edges'> {
   const inside = (x: number, y: number) => x >= 0 && y >= 0 && x < screen.width && y < screen.height;
   const colors = (work.points ?? []).filter(point => inside(Math.round(point.x), Math.round(point.y))).map(point => ({ x: Math.round(point.x), y: Math.round(point.y), hex: hex(screen, Math.round(point.x), Math.round(point.y)), ...(point.label ? { label: point.label } : {}) }));
   const edges = (work.lines ?? []).map(line => {

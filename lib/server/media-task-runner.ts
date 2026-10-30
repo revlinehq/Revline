@@ -14,6 +14,7 @@ import { detectShots } from '@/lib/media-analysis/detect-shots';
 import { detectMusicBeats } from '@/lib/media-analysis/music-beats';
 import { AnalysisError } from '@/lib/media-analysis/errors';
 import { trackSourceFace } from './track-source-face';
+import { readReference } from './read-reference';
 import { runBlueprintCheck } from './blueprint-check';
 import { extractSourceAudio } from './extract-audio';
 import { measureAudioWaveform } from './audio-waveform';
@@ -187,6 +188,10 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
       return {};
     }
     const media = await runPhase('Reading media information',()=>probeMedia(source, signal));
+    if (task.kind === 'read') {
+      if (!media.hasVideo || !task.read) throw new AnalysisError('Reading frames needs a video and a window.', 400);
+      return { read: await runPhase('Reading frames', () => readReference(source, directory, task.read!, signal, onProgress)) };
+    }
     if (task.kind === 'cutout') {
       if (task.outputAssetId) return {};
       if (!task.cutout || !media.hasVideo) throw new AnalysisError('The background removal request is unavailable.', 400);

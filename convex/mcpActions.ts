@@ -173,7 +173,8 @@ async function startUpload(ctx: ActionCtx, ownerId: string, input: z.infer<typeo
 // run alongside in-app or MCP edits. inspectAssetAnalysis can refresh a transcript and
 // inspectVideo/inspectFrames bill analysis to a run, so they still take the lock.
 // Blueprint tools never touch the timeline, so they skip the project lock while the worker renders.
-const READ_ONLY_TOOLS = new Set(['inspectTimeline', 'inspectClip', 'readSkill', 'measureScreen', 'compareScreen', 'saveBlueprint', 'listBlueprints', 'getBlueprint']);
+// Frame readings look at source media only, so they skip the lock too.
+const READ_ONLY_TOOLS = new Set(['inspectTimeline', 'inspectClip', 'readSkill', 'readFrames', 'trackReference', 'measureFrame', 'measureScreen', 'compareScreen', 'saveBlueprint', 'listBlueprints', 'getBlueprint']);
 /** A tool output's labeled images become MCP image content after the text. */
 function withImages(output: unknown, isError: boolean): CallResult {
   if (!output || typeof output !== 'object' || !Array.isArray((output as { images?: unknown }).images)) return result(output, isError);
