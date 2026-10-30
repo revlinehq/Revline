@@ -209,6 +209,12 @@ export function dimensions(ratio: AspectRatio, resolution = 1080) {
   if (ratio === 'classic') return { width: even(resolution * 4 / 3), height: resolution };
   return { width: resolution, height: resolution };
 }
+/** The project frame closest to a source's shape, so new footage fills the frame it was shot for. */
+export function aspectRatioForSize(width: number, height: number): AspectRatio {
+  const shapes: [AspectRatio, number][] = [['vertical', 9 / 16], ['portrait-feed', 4 / 5], ['square', 1], ['classic', 4 / 3], ['landscape', 16 / 9]];
+  const ratio = width / height;
+  return shapes.reduce((best, shape) => Math.abs(Math.log(shape[1] / ratio)) < Math.abs(Math.log(best[1] / ratio)) ? shape : best)[0];
+}
 export function formatTime(time: number, frames = false, fps = 30) {
   // The composition clock rounds seconds to seven decimals. Tolerate that
   // precision at frame boundaries so 1.0333333 displays frame 01 at 30 fps.

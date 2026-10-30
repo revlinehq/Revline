@@ -9,6 +9,7 @@ import { useAuth, useUser } from '@clerk/nextjs';
 import { useAction, useConvex, useConvexAuth, useMutation, useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
+import { aspectRatioForSize } from '@/lib/editor/types';
 import { createProjectImportSession, type ImportFile, type ProjectImportProgress } from '@/lib/editor/project-import';
 import { clearProjectImportJob, getOrCreateProjectImportJob, getProjectImportJob } from '@/lib/editor/project-import-job';
 import { uploadSourceFile } from '@/lib/editor/upload-source';
@@ -63,6 +64,9 @@ export function NewConversation() {
   const cloudMedia = useQuery(api.assets.selected, isAuthenticated && cloudIds.length ? { assetIds: cloudIds } : 'skip');
   const [processing, setProcessing] = useState<Processing | null>(null);
   const [error, setError] = useState('');
+  // A video to recreate is a reference: it stays in the project's media, off the timeline.
+  const [referenceOnly, setReferenceOnly] = useState(false);
+  const [startingBlank, setStartingBlank] = useState(false);
   const hasMedia = files.length + cloudIds.length > 0;
   const busy = processing?.phase !== 'error' && (processing !== null || hasMedia);
 
@@ -76,6 +80,7 @@ export function NewConversation() {
   useEffect(() => {
     if (!isLoaded) return;
     try { brief.current = sessionStorage.getItem(briefKey) ?? ''; } catch { /* Uploads can still start in this page. */ }
+    if (/\b(recreat|remake|reference|clone|copy this|like this)/i.test(brief.current)) setReferenceOnly(true);
     const job = getProjectImportJob(userId ?? undefined);
     if (job) {
       session.current = job.session;
@@ -161,7 +166,7 @@ export function NewConversation() {
       const prompt = brief.current.trim();
       const sourceName = files[0]?.file.name ?? cloudMedia?.[0]?.fileName ?? 'New video';
       const title = (prompt ? prompt.replace(/\s+/g, ' ') : sourceName.replace(/\.[^.]+$/, '')).slice(0, 80) || 'New video';
-      job ??= getOrCreateProjectImportJob(userId, session.current, { title, files, assetIds: cloudIds });
+      job ??= getOrCreateProjectImportJob(userId, session.current, { title, files, assetIds: cloudIds, placeOnTimeline: !referenceOnly });
       session.current = job.session;
       const activeJob = job;
       unsubscribe.current?.();
@@ -171,7 +176,7 @@ export function NewConversation() {
       setProcessing(activeJob.progress);
       const projectId = await activeJob.start({
         stage: stashFiles,
-        create: (value, assetIds) => createProject({ title: value, aspectRatio: 'vertical', ...(assetIds.length ? { assetIds } : {}) }),
+        create: (value, assetIds) => { const picture = cloudMedia?.find(asset => (asset.kind === 'video' || asset.kind === 'image') && asset.width && asset.height); return createProject({ title: value, aspectRatio: picture ? aspectRatioForSize(picture.width!, picture.height!) : 'vertical', ...(assetIds.length ? { assetIds } : {}), ...(activeJob.input.placeOnTimeline === false ? { placeOnTimeline: false } : {}) }); },
         project: async projectId => { const project = await convex.query(api.projects.get, { projectId }); return { timeline: project.timeline, revision: project.revision ?? 0 }; },
         upload: (projectId, file, progress) => uploadSourceFile(file, {
           start: metadata => startUpload({ projectId, fileName: file.name, contentType: file.type, size: file.size, ...metadata }),
@@ -197,6 +202,7 @@ export function NewConversation() {
       if (!mounted.current || draftEpoch.current !== epoch) return;
       try {
         if (prompt) sessionStorage.setItem('revline:brief:' + projectId, prompt);
+        if (activeJob.input.placeOnTimeline === false) sessionStorage.setItem('revline:brief-reference:' + projectId, '1');
         sessionStorage.removeItem(briefKey);
         sessionStorage.removeItem(cloudKey);
       } catch { if (prompt) throw new Error('Your footage is saved, but this browser could not preserve your request. Open the editor to continue.'); }
@@ -230,6 +236,16 @@ export function NewConversation() {
     try { sessionStorage.removeItem(briefKey); sessionStorage.removeItem(cloudKey); } catch { /* The current selection is cleared in memory. */ }
     void stashFiles([]);
   }
+  async function startBlank() {
+    if (startingBlank) return;
+    setStartingBlank(true); setError('');
+    try {
+      const prompt = brief.current.trim();
+      const projectId = await createProject({ title: (prompt.replace(/\s+/g, ' ').slice(0, 80)) || 'New video', aspectRatio: 'landscape' });
+      try { if (prompt) sessionStorage.setItem('revline:brief:' + projectId, prompt); sessionStorage.removeItem(briefKey); } catch { /* The editor opens without the saved request. */ }
+      router.push('/editor/' + projectId);
+    } catch (cause) { setError(userError(cause, 'Could not create the project.')); setStartingBlank(false); }
+  }
   async function openPartialProject() {
     if (!session.current.projectId) return;
     await stashFiles(files.filter(item => !session.current.uploaded.has(item.id)).map(item => item.file));
@@ -254,6 +270,10 @@ export function NewConversation() {
         <div className="new-conversation-entry" data-dragging={dragging || undefined} aria-busy={busy}>
           <FootageStartCard onAttach={() => picker.current?.click()} disabled={!draftReady} dragging={dragging}/>
           <input ref={picker} type="file" accept="video/*,audio/*,image/*" multiple className="sr-only" tabIndex={-1} aria-label="Choose media to upload" onChange={event => { const files = Array.from(event.target.files ?? []); event.target.value = ''; if (files.length) attach(files); }}/>
+          <div className="new-conversation-options">
+            <label><input type="checkbox" checked={referenceOnly} onChange={event => setReferenceOnly(event.target.checked)} disabled={!draftReady}/> Use as a reference to recreate (keep it off the timeline)</label>
+            <button type="button" onClick={() => void startBlank()} disabled={!draftReady || startingBlank}>Start without footage</button>
+          </div>
           {error && <p className="new-conversation-error" role="alert">{error}</p>}
         </div>
       </div>

@@ -19,7 +19,7 @@ import { editingWorkflowActive } from './lib/assistant_workflow';
 import { equalTimelineValue } from '../lib/editor/timeline-equality';
 import { LOCAL_UNDO_LIMIT, timelineHistoryKey } from '../lib/editor/timeline-history-key';
 function projectTitle(value: string) { const title = value.trim(); if (!title || title.length > 120) throw new ConvexError("Title must contain between 1 and 120 characters"); return title; }
-const createProjectForArgs = { title: v.string(), aspectRatio, assetIds: v.optional(v.array(v.id('assets'))) };
+const createProjectForArgs = { title: v.string(), aspectRatio, assetIds: v.optional(v.array(v.id('assets'))), placeOnTimeline: v.optional(v.boolean()) };
 export async function createProjectFor(ctx: MutationCtx, ownerId: string, args: ObjectType<typeof createProjectForArgs>) {
   await requireEditorAccess(ctx, ownerId); const now = Date.now();
   if ((args.assetIds?.length ?? 0) > 200) throw new ConvexError('Choose up to 200 uploads');
@@ -52,7 +52,8 @@ export async function createProjectFor(ctx: MutationCtx, ownerId: string, args: 
     await ctx.db.patch(copies.get(source._id)!, { audioAssetId: audioId });
   }
   if (stored.size > 200) throw new ConvexError('Choose fewer sources: a project supports 200 video and audio files');
-  for (const source of sources) {
+  // References to recreate stay in the project's media, off the timeline.
+  for (const source of args.placeOnTimeline === false ? [] : sources) {
     if (!source) continue;
     const key = source.r2Key ?? source.storageId!;
     if (used.has(key)) continue;

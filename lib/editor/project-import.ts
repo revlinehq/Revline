@@ -1,6 +1,6 @@
 import type { Id } from '@/convex/_generated/dataModel';
 import { addMediaClip, patchClip, separateVideoClips } from './operations';
-import { layerGroup, timelineDuration, type MediaAsset, type Timeline } from './types';
+import { aspectRatioForSize, layerGroup, timelineDuration, type MediaAsset, type Timeline } from './types';
 import type { SourceUploadPhase } from './upload-source';
 import type { EditingPreparationActivity } from './prepare-media-for-editing';
 
@@ -22,7 +22,7 @@ type ImportDependencies = {
 
 export async function importProjectSources(
   session: ProjectImportSession,
-  input: { title: string; files: ImportFile[]; assetIds: Id<'assets'>[] },
+  input: { title: string; files: ImportFile[]; assetIds: Id<'assets'>[]; placeOnTimeline?: boolean },
   dependencies: ImportDependencies,
   onProgress: (progress: ProjectImportProgress) => void,
 ) {
@@ -75,7 +75,12 @@ export async function importProjectSources(
     }
     report(100, 'saving');
     const asset = await dependencies.asset(projectId, assetId);
-    if (!timeline.clips.some(clip => clip.assetId === assetId)) {
+    // The project takes the first picture's shape while nothing visual is placed yet.
+    if ((asset.kind === 'video' || asset.kind === 'image') && asset.width && asset.height && !timeline.clips.some(clip => layerGroup(clip.kind) === 'visual')) {
+      const aspectRatio = aspectRatioForSize(asset.width, asset.height);
+      if (aspectRatio !== timeline.aspectRatio) { const next = { ...timeline, aspectRatio }; revision = await dependencies.save(projectId, next, revision); timeline = next; }
+    }
+    if (input.placeOnTimeline !== false && !timeline.clips.some(clip => clip.assetId === assetId)) {
       const group = layerGroup(asset.kind);
       const end = timelineDuration({ ...timeline, clips: timeline.clips.filter(clip => layerGroup(clip.kind) === group) });
       const duration = asset.kind === 'image' ? 5 : asset.duration ?? 5;

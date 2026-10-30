@@ -298,7 +298,10 @@ function ProjectEditor({project}: {project:Doc<'projects'>}) {
       if(files.length)await handleUpload(files,{requireAll:true});
       await waitForSave();
       const prompt=sessionStorage.getItem('revline:brief:'+projectId);
-      if(prompt&&timelineRef.current.clips.length&&!saves.busy){await sendRequest(prompt);sessionStorage.removeItem('revline:brief:'+projectId);}
+      // A reference to recreate stays off the timeline; the brief goes out with it attached.
+      const reference=sessionStorage.getItem('revline:brief-reference:'+projectId)==='1';
+      const references=reference?(media??[]).filter(asset=>asset.kind==='video'||asset.kind==='image').map(asset=>asset._id as Id<'assets'>):[];
+      if(prompt&&(timelineRef.current.clips.length||reference)&&!saves.busy){await sendRequest(prompt,references.length?{attachedAssetIds:references}:{});sessionStorage.removeItem('revline:brief:'+projectId);sessionStorage.removeItem('revline:brief-reference:'+projectId);}
     })().catch(e=>setError(userError(e, 'Could not start this edit.')));
   },[media,projectId,send]);
   if(media===undefined)return editorLoading(projectId);

@@ -26,3 +26,9 @@ html[data-workspace-theme=dark] .new-conversation-error{color:#edaaaa}
 @media(max-width:600px){.new-conversation-main{width:calc(100% - 32px);gap:28px}.new-conversation-start{margin-top:40px;gap:28px}.new-conversation-intro h1{font-size:34px}.new-conversation-intro p{font-size:14px}.new-conversation-drop-note{bottom:20px;max-width:calc(100% - 32px);white-space:nowrap}}
 @media(max-width:320px){.new-conversation-intro h1{font-size:28px}.footage-start-card{height:auto;min-height:168px}}
 @media(prefers-reduced-motion:reduce){.footage-start-card,.footage-start-icon{transition:none}}
+.new-conversation-options{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px 16px;margin-top:12px;color:var(--ws-muted,#9a9a9a);font-size:13px}
+.new-conversation-options label{display:flex;align-items:center;gap:8px;cursor:pointer}
+.new-conversation-options input{accent-color:currentColor}
+.new-conversation-options button{padding:6px 10px;border:1px solid #ffffff1f;border-radius:8px;background:none;color:inherit;font:inherit;cursor:pointer}
+.new-conversation-options button:hover:not(:disabled){color:var(--ws-text,#f4f4f4);border-color:#ffffff40}
+.new-conversation-options :disabled{opacity:.5;cursor:default}
