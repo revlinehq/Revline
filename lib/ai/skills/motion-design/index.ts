@@ -4,10 +4,10 @@ import { blueprintsPage, brandPage, craftPage, intakePage, processPage, scriptPa
 
 export const motionDesign: EditorSkill = {
   name: 'motion-design',
-  description: 'Motion design made from scratch, with no footage on screen: launch and feature films, teasers, and any standalone motion scene, including motion rebuilt from a reference video. the ordered workflow from brand kit to finished film, with pages for brand, intake, story, script, example style directions measured from real launch films, techniques by feedback with timings, motion craft, and process. Read before any launch, announcement, teaser, feature video or standalone motion scene, and again on design feedback. Explainers and overlays on footage use explainer-scenes. Scenes themselves: scene-engine.',
+  description: 'Motion design made from scratch, with no footage on screen: launch and feature films, product and feature reels, teasers, any standalone motion scene, and recreating any motion film or reference video the user gives (copied shot for shot from its own frames, with no brand questions). The ordered workflow from brand kit to finished film, with pages for brand, intake, story, script, example style directions measured from real launch films, techniques by feedback with timings, motion craft, and process. Read before any launch, announcement, teaser, feature video or standalone motion scene, and again on design feedback. Explainers and overlays on footage use explainer-scenes. Scenes themselves: scene-engine.',
   body: `# Motion design: launch and feature films
 
-A launch film makes one product or one feature feel simple, real and worth trying, in 15 to 60 seconds. Work through the steps in order; each names the page to load with readSkill name "motion-design" and page.
+A launch film makes one product or one feature feel simple, real and worth trying, in 15 to 60 seconds. Follow the user's request first. A video to recreate goes through "Recreating a video" below; a new film for the user's own brand goes through the steps in order, each naming the page to load with readSkill name "motion-design" and page.
 
 ## How films are built
 Films are React scenes (readSkill name "scene-engine" page "react-scenes"):
@@ -15,7 +15,16 @@ Films are React scenes (readSkill name "scene-engine" page "react-scenes"):
 - **Motion is GSAP on the frame clock.** Simple fades and slides: \`progress()\` and \`mix()\` from \`useBeat()\` time. Choreography (staggers, overlaps, word-by-word reveals, SplitText, MorphSVG, DrawSVG): \`useTimeline\`; for choreography, read the gsap skill (readSkill name "gsap").
 - **Correctness lives in scene-engine:** the frame clock, flash frames and preview speed (page \`react-scenes\`). This skill decides what to make; scene-engine decides how it renders correctly.
 
-## Steps
+## Recreating a video (clone, remake, copy, "shot for shot")
+When the user gives a video and asks to recreate, clone, remake or copy it, the video IS the brief and the user's request is the instruction. Skip the steps below and never ask about brand, product, brand kit, website, screenshots or permission: the user supplied the video and asked for the copy.
+- **Everything comes from the video:** its words (copied exactly, letter for letter), its logos and product UI (rebuilt from the frames as components), its colors (measureFrame), its fonts (the closest Google Font by eye), its timing, cuts and motion. Its brand is the brand. Never swap in another brand or invent a product.
+- **Read it coarse to fine:** readFrames over the whole video (16 frames), then 8 to 16 frames around each move or cut, then crops to read small type and icons. Read one window at a time and note every shot, on-screen word and move with its time.
+- **Measure, don't guess:** trackReference on each moving element gives the move's start, duration and GSAP ease; measureFrame gives exact colors and sizes. Scale source pixels to the scene size.
+- **Build** one scene clip per shot or beat with the same layout, words, timing and motion; add music that matches its feel and generateSound effects on the moves. Never put the reference video itself in the edit.
+- **Check** with getFrames at the same moments as your readFrames sheets, fix differences until they match, then run the scene-engine checklist.
+Only ask what the video cannot answer, for example a different length or format.
+
+## Steps (a new film for the user's own brand)
 1. **Brand** (\`brand-kit\`): find or create the brand kit and confirm its product text. Nothing is designed before the brand is known.
 2. **Intake** (\`intake\`): type, format, length, platform, reference, music.
 3. **Story** (\`story\`): pick the structure for the type.
@@ -26,7 +35,7 @@ Films are React scenes (readSkill name "scene-engine" page "react-scenes"):
 8. **Check before handing back** (readSkill name "scene-engine" page "checklist"): after building the film, and after every change.
 
 ## Never speculate
-Every fact on screen comes from the confirmed product text or the user: names, features, numbers, claims, prices, dates, availability, the URL. Missing? Ask. Never invent a statistic, customer, feature or UI the product does not have.
+In a new film, every fact on screen comes from the confirmed product text or the user (in a recreation, from the video): names, features, numbers, claims, prices, dates, availability, the URL. Missing? Ask. Never invent a statistic, customer, feature or UI the product does not have.
 
 ## Style direction
 There are no presets. Each film gets its own short direction, fitted to the brand and the story, written as five labeled lines (never one summary sentence): **look** (canvas, palette use, texture), **type** (how words enter and hold), **product UI** (how it is framed and shown), **motion** (personality, signature ease, camera), **pacing** (shot lengths, holds, cutting). Put it at the top of the beat sheet.

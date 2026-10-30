@@ -275,6 +275,9 @@ async function firstClaimable(ctx:MutationCtx|QueryCtx,processorVersion=1,lane?:
   // Regular slots leave Ultra exports to the Ultra slot until releaseUltraLane
   // clears the lane. A local development worker has no Ultra slot and runs every lane.
   const laneOk=(q:import('convex/server').FilterBuilder<import('convex/server').GenericTableInfo>)=>{const base=lane==='any'?versioned(q):q.and(versioned(q),q.eq(q.field('lane'),undefined));return fly?q.and(base,q.neq(q.field('kind'),'render')):base;};
+  // Frame readings, timeline frames and blueprint checks take seconds and an agent waits on each: they go before
+  // exports and long analysis, so a turn never stalls behind a minutes-long job.
+  for(const kind of ['read','snapshot','blueprint'] as const){const quick=await fairest(ctx,await ctx.db.query('mediaTasks').withIndex('by_status_claimable_kind_created',q=>q.eq('status','queued').eq('claimable',true).eq('kind',kind)).filter(laneOk).take(FAIR_CLAIM_SCAN));if(quick)return quick;}
   // Exports are interactive; claim them before long queued analysis work.
   const renders=fly?[]:await ctx.db.query('mediaTasks').withIndex('by_status_claimable_kind_created',q=>q.eq('status','queued').eq('claimable',true).eq('kind','render')).filter(laneOk).take(FAIR_CLAIM_SCAN);
   if(renders.length)return fairest(ctx,renders);

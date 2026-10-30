@@ -62,7 +62,8 @@ export async function runRead(ctx: ActionCtx, ownerId: string, projectId: Id<'pr
   const { assetId, time, ...rest } = READ_TOOL_INPUTS[name].parse(input) as { assetId: string; time?: number; start?: number; end?: number };
   const start = time ?? rest.start!, end = time ?? rest.end!;
   const readId = await ctx.runMutation(internal.referenceReads.request, { ownerId, projectId, assetId, mode, ...rest, start, end });
-  const deadline = Date.now() + 240_000;
+  // A reading queued behind other work waits for its turn rather than failing; the worker takes readings first.
+  const deadline = Date.now() + 540_000;
   try {
     while (Date.now() < deadline) {
       if (signal?.aborted) throw new Error('Stopped.');
