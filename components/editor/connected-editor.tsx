@@ -59,7 +59,9 @@ function ProjectEditor({project}: {project:Doc<'projects'>}) {
   // Real frames for motion clips on the timeline, rendered in the background after each saved change.
   const sceneThumbs=useQuery(api.sceneThumbs.forProject,{projectId:project._id});
   const ensureSceneThumbs=useMutation(api.sceneThumbs.ensure);
-  useEffect(()=>{const timer=setTimeout(()=>{void ensureSceneThumbs({projectId:project._id}).catch(()=>{});},2500);return()=>clearTimeout(timer);},[project.revision,project._id,ensureSceneThumbs]);
+  // Two clips render at a time; each finished batch asks for the next until every motion clip has frames.
+  const thumbCount=Object.keys(sceneThumbs??{}).length;
+  useEffect(()=>{const timer=setTimeout(()=>{void ensureSceneThumbs({projectId:project._id}).catch(()=>{});},2500);return()=>clearTimeout(timer);},[project.revision,project._id,ensureSceneThumbs,thumbCount]);
   const [shareOpen,setShareOpen]=useState(false);
   const projectId=project._id;const convex=useConvex();const media=useQuery(api.assets.list,{projectId,limit:200});const plan=useQuery(api.billing.status,{})?.plan;const ai=useQuery(api.assistant.status,{projectId});
   const storedPreview=useQuery(api.assistant.livePreview,ai?.running?{projectId,sceneCode:'refs'}:'skip');
