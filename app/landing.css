@@ -79,7 +79,7 @@ div.landing-reveal,div.landing-reveal>.landing-reveal-content{display:inline-blo
 .landing-product-frame{padding:12px;border:1px solid #12121214;border-radius:22px;background:#1212120a;box-shadow:0 24px 64px #3b1a8a1f}
 @media(prefers-reduced-motion:no-preference){.landing-product-frame{animation:landing-settle-media 1.1s cubic-bezier(.32,.72,0,1) 1.05s backwards}}
 @keyframes landing-settle-media{from{opacity:.01;translate:0 32px;scale:.97}}
-.landing-product-window{display:block;width:100%;height:auto;aspect-ratio:2560/1307;border:1px solid #26262e;border-radius:10px;background:#0b0c0e}
+.landing-product-window{display:block;width:100%;height:auto;aspect-ratio:16/9;object-fit:cover;border:1px solid #26262e;border-radius:10px;background:#0b0c0e}
 
 /* Logos */
 .landing-logos{display:flex;flex-direction:column;align-items:center;gap:28px;padding-block:24px 88px}
