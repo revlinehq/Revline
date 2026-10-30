@@ -3,10 +3,12 @@ import type { EditorSkillPage } from '../index';
 /** Step 1: nothing is designed before the brand is known. */
 export const brandPage: EditorSkillPage = {
   name: 'brand-kit',
-  description: 'Step 1. Find, create and confirm the brand kit (fonts, colors, logo, screens, product text), and how scenes use it.',
+  description: 'Step 1 of a new film for the user\'s own brand: find, create and confirm the brand kit (fonts, colors, logo, screens, product text), and how scenes use it. Not used when recreating a given video.',
   body: `# Brand kit
 
 A brand kit is a named, saved brand for this user: colors, font files, a logo, the landing-page copy, the product text (what it is, the problem it solves, the features worth showing), and saved product screens. Scenes attach it with \`brandKitId\` and receive it as \`brand\`.
+
+Not for recreating a video the user gave: a clone takes its brand from the video's own frames, with no kit and no questions (motion-design, "Recreating a video").
 
 ## Workflow
 1. **Check first.** listBrandKits.
