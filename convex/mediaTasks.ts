@@ -328,7 +328,9 @@ async function loadWork(ctx:import('./_generated/server').QueryCtx|MutationCtx,t
   let snapshot:Infer<typeof timelineFrames>|undefined;
   if(task.snapshotId){
     const saved=await ctx.db.get(task.snapshotId);if(!saved||saved.ownerId!==task.ownerId||saved.projectId!==task.projectId)throw new ConvexError('The frame request is unavailable.');
-    const project=await requireProject(ctx,task.projectId,task.ownerId,false),timeline=currentTimeline(project);
+    const project=await requireProject(ctx,task.projectId,task.ownerId,false);let timeline=currentTimeline(project);
+    // A scene clip's own filmstrip: that clip alone, from its first frame.
+    if(saved.clipId){const clip=timeline.clips.find(item=>item.id===saved.clipId);if(!clip)throw new ConvexError('The clip for these frames is gone.');timeline={...timeline,clips:[{...clip,start:0}],markers:[]};}
     const ids=[...new Set([...timeline.clips.flatMap(clip=>clip.assetId?[clip.assetId]:[]),...sceneMediaAssetIds(timeline)])];
     const assets=await Promise.all(ids.map(async raw=>{const id=ctx.db.normalizeId('assets',raw),asset=id?await ctx.db.get(id):null;if(!asset||asset.ownerId!==task.ownerId||asset.projectId!==task.projectId)throw new ConvexError('Frame source media is unavailable.');return {...asset,url:await mediaUrl(ctx,asset)};}));
     snapshot={timeline,assets,times:saved.times};

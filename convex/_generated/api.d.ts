@@ -78,6 +78,7 @@ import type * as projects from "../projects.js";
 import type * as r2 from "../r2.js";
 import type * as renderSnapshotMigration from "../renderSnapshotMigration.js";
 import type * as renders from "../renders.js";
+import type * as sceneThumbs from "../sceneThumbs.js";
 import type * as storage from "../storage.js";
 import type * as storageMigration from "../storageMigration.js";
 import type * as timelineShares from "../timelineShares.js";
@@ -162,6 +163,7 @@ declare const fullApi: ApiFromModules<{
   r2: typeof r2;
   renderSnapshotMigration: typeof renderSnapshotMigration;
   renders: typeof renders;
+  sceneThumbs: typeof sceneThumbs;
   storage: typeof storage;
   storageMigration: typeof storageMigration;
   timelineShares: typeof timelineShares;
