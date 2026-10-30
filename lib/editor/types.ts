@@ -157,7 +157,8 @@ export function timelineCover(timeline: Pick<Timeline, 'clips'>, assets: readonl
   const asset = first && assets.find(item => item._id === first.assetId);
   if (asset) return asset.thumbnailUrl ?? (asset.kind === 'image' ? asset.url : null);
   // Motion clips whose frames are still coming get their placeholder, not a blank cover.
-  const scene = !first && timeline.clips.filter(clip => clip.kind === 'scene').sort((a, b) => a.start - b.start)[0];
+  if (first) return null;
+  const scene = timeline.clips.filter(clip => clip.kind === 'scene').sort((a, b) => a.start - b.start)[0] as Clip | undefined;
   return scene ? scenePlaceholderCover(scene.scene?.title || 'Scene') : null;
 }
 /** Zero legacy overlay rows marks the shared V-track model, without a schema migration. */
