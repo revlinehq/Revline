@@ -17,7 +17,8 @@ Run every item after building a scene or film and after every change. Render fra
 5. **Only what was asked.** On feedback, everything outside the named part is unchanged: same shots, titles, timings, moves, colors and sound. Say what else had to move.
 6. **Limits.** Each scene under 120,000 characters and the timeline under 400,000 (shared code counts once), clips up to 120 s.
 7. **Preview speed.** Parts that are done or hidden render nothing or \`display: none\`, not only opacity 0; no heavy UI mounted where it cannot be seen.
-8. **Sound.** The film has the sound its skill asks for (motion-design page \`process\`, explainer-scenes for explainers), timed to the beats you just checked.`,
+8. **Sound.** The film has the sound its skill asks for (motion-design page \`process\`, explainer-scenes for explainers), timed to the beats you just checked.
+9. **Recreations match.** A recreation is not finished while any moment compareReference scored is over 35: fix it and compare again.`,
 };
 
 const reactScenesPage: EditorSkillPage = {

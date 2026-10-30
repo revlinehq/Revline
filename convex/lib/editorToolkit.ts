@@ -76,7 +76,7 @@ import { AUDIO_ACTIVITY_VERSION, AUDIO_QUIET_EDGE_PAD, refineAudioRangeEdges, re
 import { REMOTION_TEXT_PRESETS } from '../../lib/editor/remotion-text';
 import { resolvedTextAppearance, TEXT_APPEARANCE_LIMITS, TEXT_TYPOGRAPHY_LIMITS } from '../../lib/editor/text-style';
 import { BEAT_ANALYSIS_ENGINE } from '../../lib/media-analysis/beat-map';
-import { ReadCoverage } from '../../lib/ai/read-coverage';
+import { CLOSE_UP_FRAMES, ReadCoverage } from '../../lib/ai/read-coverage';
 import { runCompare } from '../referenceReads';
 import type { ActionCtx } from "../_generated/server";
 
@@ -120,18 +120,32 @@ function blueprintImages(output: unknown) {
   return { type: 'content' as const, value: [{ type: 'text' as const, text: JSON.stringify(rest) }, ...images.flatMap(image => [{ type: 'text' as const, text: image.label }, { type: 'file' as const, data: { type: 'data' as const, data: image.data }, mediaType: image.mimeType }])] };
 }
 
+/** A compared moment at or under this difference matches; over the finished line, the recreation is not done. */
+const COMPARE_GOOD = 25, COMPARE_FINISHED = 35, COMPARE_PASSES = 3;
+
+/** The timeline windows a scene build covers. A film's beats are cuts of one continuous animation, so it is one window. */
+function sceneRanges(name: string, input: Record<string, unknown>) {
+  const span = (value: unknown) => { const item = value as { start?: unknown; duration?: unknown }; return typeof item?.start === 'number' && typeof item.duration === 'number' ? [{ start: item.start, end: item.start + item.duration }] : []; };
+  return name === 'addScenes' && Array.isArray(input.scenes) ? input.scenes.flatMap(span) : span(input);
+}
+const readLists = (checks: NonNullable<ReturnType<ReadCoverage['sceneCheck']>>[]) => Object.fromEntries((['unreadMoments', 'unseenMoments', 'splitMoments'] as const).map(key => [key, [...new Set(checks.flatMap(check => check[key] ?? []))]]).filter(([, list]) => list.length));
+
 export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOptions) {
   const { run, project, assets, recovering, selectedClipIds, abortSignal } = options;
   // What this turn has read of a reference, so scenes built over unread moments say so (lib/ai/read-coverage.ts).
   const coverage = new ReadCoverage();
+  // compareReference passes this turn and the moments the last one left over the finished threshold.
+  const compare = { passes: 0, over: [] as number[] };
   const readTool = async (name: ReadToolName, input: object) => {
     const result = await runRead(ctx, run.ownerId, run.projectId, name, input, abortSignal);
     let acrossCuts: string[] = [];
     if (name === 'readFrames') {
-      const args = input as { assetId: string; start: number; end: number; fps?: number; count?: number };
+      const args = input as { assetId: string; start: number; end: number; fps?: number; count?: number; crop?: object; momentsOnly?: boolean };
       const shots = readReference(assets.find(asset => asset._id === args.assetId)?.analysis?.reference)?.shots ?? [];
       coverage.noteCuts(args.assetId, shots.slice(1).map(shot => shot.start));
-      coverage.noteRead(args.assetId, { start: args.start, end: args.end }, args.fps ?? (args.count ?? 8) / Math.max(.001, args.end - args.start), result.moments ?? []);
+      // A map has no frames to look at; a crop or a sheet of one or two frames is a full-size look at its frames.
+      const shown = args.momentsOnly ? [] : result.frames.map(frame => frame.time);
+      coverage.noteRead(args.assetId, { start: args.start, end: args.end }, args.momentsOnly ? 0 : args.fps ?? (args.count ?? 8) / Math.max(.001, args.end - args.start), result.moments ?? [], args.crop || shown.length <= CLOSE_UP_FRAMES ? shown : []);
       acrossCuts = coverage.acrossCuts(args.assetId, result.moments ?? []).map(moment => `${moment.start}-${moment.end}s`);
     }
     const summary = readSummary(name, result);
@@ -744,8 +758,12 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
           for (const data of [result.image, ...(result.extraImages ?? [])]) if (data) images.push({ label: `Reference (left) beside your timeline (right), ${images.length + 1}`, data, mimeType: 'image/jpeg' });
         } finally { await ctx.runMutation(internal.mcp.discardFrames, { snapshotId }); }
       }
-      const worst = [...scores].sort((a, b) => b.difference - a.difference);
-      return { note: `Reference (left) beside your timeline (right), one moment per row, at ${scores.map(score => `${score.time}s`).join(', ')}. Differences: ${scores.map(score => `${score.time}s ${score.difference}`).join(', ')}. Fix the worst first (${worst.slice(0, 3).map(score => `${score.time}s`).join(', ')}): read that moment of the reference with fps 10 if you have not, correct the scene, then compare again.`, scores, images };
+      const worst = [...scores].sort((a, b) => b.difference - a.difference), pass = ++compare.passes;
+      compare.over = worst.filter(score => score.difference > COMPARE_FINISHED).map(score => score.time);
+      const fix = worst.filter(score => score.difference > COMPARE_GOOD).slice(0, 2).map(score => `${score.time}s`);
+      // Good films come from build, render, fix loops: each compare names the next fix until the scores settle.
+      const next = !fix.length ? 'Every moment scores 25 or less: this check is done.' : pass >= COMPARE_PASSES ? `That was pass ${pass} of ${COMPARE_PASSES}: stop fixing and say which moments still differ (${fix.join(', ')}).` : `Pass ${pass} of ${COMPARE_PASSES}. Fix the 2 worst moments now (${fix.join(', ')}) with patchScene or editScene: read that moment with fps 10 if you have not, correct it, then compare again. Done when every moment scores 25 or less, or after ${COMPARE_PASSES} passes.`;
+      return { note: `Reference (left) beside your timeline (right), one moment per row, at ${scores.map(score => `${score.time}s`).join(', ')}. Differences: ${scores.map(score => `${score.time}s ${score.difference}`).join(', ')}.`, next, pass, scores, images };
     }, toModelOutput: (_ctx, options) => blueprintImages(options.output) }),
     getFrames: createTool({ description: "Look at your work: render 1 to 4 frames of the saved timeline at timeline seconds, composited exactly as the export draws them (scenes, footage, text, effects), and see them as images. Use it after building or changing scenes or visuals, at each key beat, to check that text is readable, nothing overflows or clips, brand fonts, colors and logo show, and frames are not empty; fix what is wrong before saying it is done. Each call takes 10 to 30 seconds; pick the moments that matter.", inputSchema: z.object({ times: z.array(z.number().min(0)).min(1).max(4).describe('Timeline seconds, inside the timeline.') }), execute: async (_ctx, { times }) => {
       await editSession.wait();
@@ -800,7 +818,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
     readSkill: createTool({ description: "Load the full instructions for one format-specific editing skill listed under skills in the catalog. Read a skill once per conversation, before first using the tools it names; an earlier read stays in the conversation, so do not read it again unless that earlier result was shortened. it returns Markdown rules, the API and an example. No timeline changes.", inputSchema: z.object({ name: z.enum(EDITOR_SKILL_NAMES), page: z.string().max(80).optional().describe('A page listed at the end of the skill, for its deeper material.') }), execute: async (_ctx, { name, page }) => ({ name, ...(page ? { page } : {}), instructions: editorSkillInstructions(name, page) }) }),
     addScene: createTool({ description: "Add one animated scene: a TypeScript module (code) that builds plain HTML and animates it on a GSAP timeline, rendered full-frame on a free V layer for start..start+duration timeline seconds. Read scene-engine first, plus motion-design for launch and feature films or explainer-scenes for explainers and overlays on footage. Then give it matching sound as that skill says (explainers: one generateSound keyed to its beats in the same turn, right after building it, unless the user wants no sound or speech plays under it; music under the scene is no reason to skip). For a film (a launch film, a recreation, anything longer than one idea), use addFilm instead: one clip, one timeline, sections as markers. Returns compile errors for invalid code; save immediately.", inputSchema: z.object({ title: z.string().trim().min(1).max(SCENE_LIMITS.title), code: z.string().min(1).max(SCENE_LIMITS.code), start: z.number().min(0), duration: z.number().positive().max(120), track: z.number().int().min(1).max(24).optional(), brandKitId: z.string().optional().describe('Brand kit whose fonts, colors and logo the scene receives as `brand`.'), media: sceneMediaInput.optional(), blueprints: sceneBlueprintInput.optional(), kit: filmKitInput.optional() }), execute: async (_ctx, { title, code, brandKitId, media, blueprints, kit, ...timing }) => { checkSceneCode(code); const kitCode = kit === undefined ? undefined : prepareFilmKit(kit); const brand = brandKitId ? await sceneBrandSnapshot(ctx, run.ownerId, brandKitId) : undefined; const images = media ? sceneMedia(media) : undefined; const mounted = blueprints?.length ? await sceneBlueprints(brandKitId, blueprints) : undefined; return checkpoint(t => placeScene(kitCode ? withFilmKit(t, kitCode).timeline : t, { title, code, ...timing, brand, media: images, blueprints: mounted }, kitCode)); } }),
     editScene: createTool({ description: "Replace an existing scene clip's code and/or title, or attach or refresh its brand kit, preserving its timing and layer. Read scene-engine (and motion-design or explainer-scenes, whichever made it) and inspectClip for the current code first. If the edit changes the scene's timing or motion, update its existing generated sound with editSound in the same turn (or generate one if it has none). A change to the film kit's shared code goes in kit, once, not into each beat. For a change to part of a film or scene, use patchScene instead of retyping the code; new code on a film's beat clip replaces the whole film in all its beats. Returns compile errors for invalid code; save immediately.", inputSchema: z.object({ clipId: z.string(), title: z.string().trim().min(1).max(SCENE_LIMITS.title).optional(), code: z.string().min(1).max(SCENE_LIMITS.code).optional(), brandKitId: z.string().nullable().optional().describe('Attach or refresh a brand kit on the scene; null removes it.'), media: sceneMediaInput.nullable().optional().describe('Replace the scene\'s images; null removes them all.'), blueprints: sceneBlueprintInput.nullable().optional().describe('Replace the mounted blueprints (refreshing their code from the kit); null removes them.'), kit: filmKitInput.optional().describe("The film kit's whole new code: replaces the shared module in every clip of the film, so a change to shared UI is made once.") }).refine(input => input.title !== undefined || input.code !== undefined || input.brandKitId !== undefined || input.media !== undefined || input.blueprints !== undefined || input.kit !== undefined, { message: 'Specify a title, code, brandKitId, media, blueprints or kit.' }), execute: async (_ctx, { clipId, title, code, brandKitId, media, blueprints, kit }) => { if (code !== undefined) checkSceneCode(code); const kitCode = kit === undefined ? undefined : prepareFilmKit(kit); const brand = brandKitId ? await sceneBrandSnapshot(ctx, run.ownerId, brandKitId) : undefined; const images = media ? sceneMedia(media) : undefined; const kitId = brandKitId ?? find(editSession.timeline, clipId).scene?.brand?.kitId; const mounted = blueprints?.length ? await sceneBlueprints(kitId, blueprints) : undefined; return checkpoint(timeline => { const t = kitCode ? withFilmKit(timeline, kitCode).timeline : timeline; const clip = find(t, clipId); if (clip.kind !== 'scene' || !clip.scene) throw new Error('Choose a scene clip.'); const { brand: current, media: currentMedia, blueprints: currentBlueprints, ...scene } = clip.scene; const next = brandKitId === null ? undefined : brand ?? current; const nextMedia = media === null ? undefined : images ?? currentMedia; const nextCode = code ?? scene.code, nextBlueprints = mountFilmKit(nextCode, blueprints === null ? undefined : mounted ?? currentBlueprints, kitCode, timelineFilmKit(t)); const shown = (other: Clip['scene'] & {}, own: boolean) => ({ ...(({ brand: _b, media: _m, blueprints: _p, ...rest }) => rest)(other), title: own ? title ?? other.title : other.title, code: nextCode, ...(next ? { brand: next } : {}), ...(nextMedia?.length ? { media: nextMedia } : {}), ...(nextBlueprints?.length ? { blueprints: nextBlueprints } : {}) }); /* A film's beats share one code: its code, brand, media and blueprints change in every beat. */ if (scene.film) return { ...t, clips: t.clips.map(other => other.kind === 'scene' && other.scene?.code === scene.code ? { ...other, scene: shown(other.scene, other.id === clipId) } : other) }; return patchClip(t, clipId, { scene: shown(clip.scene, true) }); }); } }),
-    addScenes: createTool({ description: "Add several separate scene clips in one call, saved together. For a film whose motion runs from beat to beat (launch films, recreations), use addFilm instead. Keep one call under about 20k tokens (60,000 characters) of code; split more scenes over several calls. kit is the film's shared code, written once: one React module exporting the product UI components, type helpers, stage and palette, which every beat imports with `import { AppWindow, Title } from 'blueprint:film'`. Each scene is then only its own beat (usually under 6,000 characters). Later addScene and editScene calls reuse the kit already on the timeline; change it with editScene kit. Each scene saves or fails on its own: fix a failed one with addScene. Read scene-engine page react-scenes and motion-design first.", inputSchema: z.object({ kit: filmKitInput.optional(), brandKitId: z.string().optional().describe('Brand kit whose fonts, colors and logo every scene receives as `brand`.'), scenes: z.array(z.object({ title: z.string().trim().min(1).max(SCENE_LIMITS.title), code: z.string().min(1).max(SCENE_LIMITS.code), start: z.number().min(0), duration: z.number().positive().max(120), track: z.number().int().min(1).max(24).optional(), media: sceneMediaInput.optional(), blueprints: sceneBlueprintInput.optional() })).min(1).max(8) }), execute: async (_ctx, { kit, brandKitId, scenes }) => {
+    addScenes: createTool({ description: "Add several separate scene clips in one call, saved together. For a film whose motion runs from beat to beat (launch films, recreations), use addFilm instead. kit is the film's shared code, written once: one React module exporting the product UI components, type helpers, stage and palette, which every beat imports with `import { AppWindow, Title } from 'blueprint:film'`. Each scene is then only its own beat (usually under 6,000 characters). Later addScene and editScene calls reuse the kit already on the timeline; change it with editScene kit. Each scene saves or fails on its own: fix a failed one with addScene. Read scene-engine page react-scenes and motion-design first.", inputSchema: z.object({ kit: filmKitInput.optional(), brandKitId: z.string().optional().describe('Brand kit whose fonts, colors and logo every scene receives as `brand`.'), scenes: z.array(z.object({ title: z.string().trim().min(1).max(SCENE_LIMITS.title), code: z.string().min(1).max(SCENE_LIMITS.code), start: z.number().min(0), duration: z.number().positive().max(120), track: z.number().int().min(1).max(24).optional(), media: sceneMediaInput.optional(), blueprints: sceneBlueprintInput.optional() })).min(1).max(8) }), execute: async (_ctx, { kit, brandKitId, scenes }) => {
       const kitCode = kit === undefined ? undefined : prepareFilmKit(kit), brand = brandKitId ? await sceneBrandSnapshot(ctx, run.ownerId, brandKitId) : undefined;
       // Check every scene before saving, so one mistake does not cost the rest of the film.
       const ready = await Promise.all(scenes.map(async ({ media, blueprints, ...scene }) => { try { checkSceneCode(scene.code); return { ...scene, brand, media: media ? sceneMedia(media) : undefined, blueprints: blueprints?.length ? await sceneBlueprints(brandKitId, blueprints) : undefined }; } catch (error) { return { title: scene.title, error: error instanceof Error ? error.message : String(error) }; } }));
@@ -1109,17 +1127,29 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
     } }),
   };
   // Scenes report what they cover but were never read: a recreation reads every moment before building over it.
-  for (const name of ['addScene', 'addScenes', 'addFilm', 'patchScene', 'editScene'] as const) {
-    const tool = (tools as Record<string, { execute?: (...args: never[]) => Promise<unknown> }>)[name];
+  // Building is refused while the range still owes reads, unless the call says why it goes ahead (readReason).
+  const building = { addScene: true, addScenes: true, addFilm: true, patchScene: false, editScene: false } as const;
+  for (const [name, refuses] of Object.entries(building)) {
+    const tool = (tools as Record<string, { execute?: (...args: never[]) => Promise<unknown>; inputSchema?: unknown }>)[name];
     const execute = tool?.execute;
     if (!tool || !execute) continue;
+    if (refuses && tool.inputSchema instanceof z.ZodObject) tool.inputSchema = tool.inputSchema.extend({ readReason: z.string().trim().min(1).max(300).optional().describe('Only when building over reference moments the read check flagged: why it cannot wait for those reads.') });
     // createTool's execute reads its ctx from \`this\` (the tool), so call it as a method of the tool.
     tool.execute = async function (this: unknown, ...args: never[]) {
+      if (refuses) {
+        const { readReason, ...input } = (args[0] ?? {}) as Record<string, unknown> & { readReason?: string };
+        args = [input, ...args.slice(1)] as never[];
+        const ranges = sceneRanges(name, input);
+        const checks = readReason ? [] : ranges.map(range => coverage.sceneCheck(range.start, range.end)).filter(check => !!check);
+        if (checks.length) return { saved: false, refused: 'reads', readCheck: `Nothing was built. ${checks.map(check => check.readCheck).join(' ')} Then call ${name} again. Pass readReason only if a flagged moment truly cannot be read.`, ...readLists(checks) };
+      }
       const output = await execute.apply(this ?? tool, args) as Record<string, unknown>;
       const ids = new Set<string>([...(Array.isArray(output?.changedClips) ? output.changedClips : []).map(clip => String((clip as { id?: unknown }).id)), ...(Array.isArray(output?.scenes) ? output.scenes : []).map(scene => String((scene as { clipId?: unknown }).clipId))]);
       const checks = editSession.timeline.clips.filter(clip => clip.kind === 'scene' && ids.has(clip.id)).map(clip => coverage.sceneCheck(clip.start, clip.start + clip.duration)).filter(check => !!check);
-      return checks.length ? { ...output, readCheck: checks.map(check => check.readCheck).join(' '), unreadMoments: [...new Set(checks.flatMap(check => check.unreadMoments ?? []))], splitMoments: [...new Set(checks.flatMap(check => check.splitMoments ?? []))] } : output;
+      return checks.length ? { ...output, readCheck: checks.map(check => check.readCheck).join(' '), ...readLists(checks) } : output;
     };
   }
-  return { tools, editSession, plans: () => effectPlans };
+  /** What a turn that stops now still owes its recreation: moments the last compare left over the finished line, while passes remain. */
+  const compareFeedback = () => compare.over.length && compare.passes < COMPARE_PASSES ? `The last compareReference left ${compare.over.map(time => `${time}s`).join(', ')} over ${COMPARE_FINISHED}: a recreation is not finished while a compared moment is over ${COMPARE_FINISHED}. Fix the 2 worst with patchScene or editScene, then compareReference again (pass ${compare.passes + 1} of ${COMPARE_PASSES}).` : undefined;
+  return { tools, editSession, plans: () => effectPlans, compareFeedback };
 }
