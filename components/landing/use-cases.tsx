@@ -19,7 +19,7 @@ const rows: Tile[][] = [
     { label: 'Ad', image: 'beauty' },
   ],
   [
-    { label: 'Save Reminders', video: { src: '/landing/save-reminders.mp4', poster: '/landing/save-reminders-poster.webp', ratio: 4 / 3 }, credit: 'Concept inspired by @mosycreate' },
+    { label: 'Save Reminders', video: { src: '/landing/save-reminders.mp4', poster: '/landing/save-reminders-poster.webp', ratio: 16 / 9 }, credit: 'Concept inspired by @mosycreate' },
     { label: 'Talking head', image: 'talking-head' },
     { label: 'Walkthrough', image: 'podcast' },
     { label: 'UGC ad', image: 'classroom', wide: true },
