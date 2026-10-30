@@ -323,7 +323,7 @@ async function analysisStillActive(ctx:import('./_generated/server').QueryCtx|Mu
   if(task.cutoutId){const cutout=await ctx.db.get(task.cutoutId);return !!cutout&&cutout.ownerId===task.ownerId&&cutout.projectId===task.projectId&&cutout.status==='queued';}
   if(task.derivationId){const row=await ctx.db.get(task.derivationId);return !!row&&row.ownerId===task.ownerId&&row.projectId===task.projectId&&row.status==='queued';}
   if(task.readId){const read=await ctx.db.get(task.readId);return !!read&&read.ownerId===task.ownerId&&read.projectId===task.projectId&&read.status==='queued'&&read.createdAt+300000>Date.now();}
-  if(task.snapshotId){const snapshot=await ctx.db.get(task.snapshotId);return !!snapshot&&snapshot.ownerId===task.ownerId&&snapshot.projectId===task.projectId&&snapshot.status==='queued'&&snapshot.createdAt+180000>Date.now();}
+  if(task.snapshotId){const snapshot=await ctx.db.get(task.snapshotId);return !!snapshot&&snapshot.ownerId===task.ownerId&&snapshot.projectId===task.projectId&&snapshot.status==='queued'&&snapshot.createdAt+300000>Date.now();}
   if(task.blueprintCheckId){const check=await ctx.db.get(task.blueprintCheckId);return !!check&&check.ownerId===task.ownerId&&check.projectId===task.projectId&&check.status==='queued'&&check.createdAt+180000>Date.now();}
   if(task.reviewId){const review=await ctx.db.get(task.reviewId);if(!review||review.ownerId!==task.ownerId||review.projectId!==task.projectId||review.status!=='queued'||review.createdAt+180000<=Date.now())return false;const run=await projectRun(ctx,task.projectId,task.ownerId);return !!run.aiRunning&&run.aiRunId===review.runId;}
   if(!task.analysisRequestId)return true;
