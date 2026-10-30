@@ -2,6 +2,8 @@
 
 import { EDITOR_MODELS, EDITOR_REASONING_EFFORTS, type ClaudeModelChoice, type EditorReasoningEffort } from '@/lib/ai/claude-model';
 import { ClaudeLogo, GoogleLogo, McpLogo, OpenAILogo } from '@/components/workspace/ai-app-logos';
+import { McpConnectorDialog } from '@/components/workspace/mcp-connector-section';
+import { useState } from 'react';
 import { InspectorSelect } from './inspector-select';
 import './assistant-model-picker.css';
 
@@ -9,7 +11,7 @@ import './assistant-model-picker.css';
 const providerLogo = (id: ClaudeModelChoice) => id.startsWith('gpt') ? <OpenAILogo className="assistant-model-logo" /> : id.startsWith('gemini') ? <GoogleLogo className="assistant-model-logo" /> : <ClaudeLogo className="assistant-model-logo" />;
 
 
-/** On a free trial these run only through MCP (Claude Code, Claude Desktop), not in the editor chat. */
+/** On a free trial these run only through MCP (Claude Code, Claude Desktop), not in the editor chat: picking one opens the MCP connector instead. */
 const MCP_ONLY_ON_TRIAL: readonly ClaudeModelChoice[] = ['opus', 'sonnet'];
 
 export function AssistantModelPicker({ value, onChange, disabled, allowedModels, freeTrial = false }: {
@@ -19,10 +21,12 @@ export function AssistantModelPicker({ value, onChange, disabled, allowedModels,
   allowedModels: readonly ClaudeModelChoice[];
   freeTrial?: boolean;
 }) {
-  const options = EDITOR_MODELS.filter(model => allowedModels.includes(model.id) || freeTrial && MCP_ONLY_ON_TRIAL.includes(model.id)).map(model => freeTrial && MCP_ONLY_ON_TRIAL.includes(model.id)
-    ? { value: model.id, label: model.label, icon: <McpLogo className="assistant-model-logo" />, description: 'Free trial: available only through MCP', disabled: true }
+  const [mcpOpen, setMcpOpen] = useState(false);
+  const mcpOnly = (id: ClaudeModelChoice) => freeTrial && MCP_ONLY_ON_TRIAL.includes(id);
+  const options = EDITOR_MODELS.filter(model => allowedModels.includes(model.id) || mcpOnly(model.id)).map(model => mcpOnly(model.id)
+    ? { value: model.id, label: model.label, icon: <McpLogo className="assistant-model-logo" />, description: 'Free trial: use it through MCP' }
     : { value: model.id, label: model.label, ...('shortLabel' in model ? { shortLabel: model.shortLabel } : {}), icon: providerLogo(model.id) });
-  return <div className="assistant-model-picker"><InspectorSelect label="AI editing model" value={value} options={options} onChange={onChange} disabled={disabled}/></div>;
+  return <div className="assistant-model-picker"><InspectorSelect label="AI editing model" value={value} options={options} onChange={next => mcpOnly(next) ? setMcpOpen(true) : onChange(next)} disabled={disabled}/><McpConnectorDialog open={mcpOpen} onOpenChange={setMcpOpen}/></div>;
 }
 
 const effortLabels: Record<EditorReasoningEffort, string> = { low: 'Low', medium: 'Medium', high: 'High', xhigh: 'X-high', max: 'Max' };
