@@ -100,8 +100,17 @@ export function renderReviewUnavailable(steps: ToolSteps) {
   return steps.some(step => step.content.some(value => { const part = record(value); return (part.type === 'tool-error' || part.type === 'tool-result') && reviewUnavailable(part); }));
 }
 
+/** What an edit acts on: its clip, clips or media, so a corrected retry is matched to the call it corrects. */
+function editTarget(input: unknown) {
+  const args = record(input);
+  if (typeof args.clipId === 'string') return `clip:${args.clipId}`;
+  if (Array.isArray(args.clipIds)) return `clips:${[...args.clipIds].map(String).sort().join(',')}`;
+  if (typeof args.assetId === 'string') return `asset:${args.assetId}`;
+  return '';
+}
+
 function unresolvedFailures(steps: ToolSteps, recoverPlacements = false) {
-  const calls = new Map<string, { key: string; input: unknown }>(), pending = new Map<string, { count: number; ids: string[]; placement?: string; plan?:string[]; zoom?:string; zoomEvidence?:string; corrected?: boolean; review?:Map<string,string>; reviewed?:Set<string>; reviewEpoch?:number; reviewRevision?:number; captionAssetId?:string; manualCaptions?:boolean; frameRefinement?:FrameRefinement }>();
+  const calls = new Map<string, { key: string; input: unknown }>(), pending = new Map<string, { count: number; ids: string[]; tool?: string; target?: string; placement?: string; plan?:string[]; zoom?:string; zoomEvidence?:string; corrected?: boolean; review?:Map<string,string>; reviewed?:Set<string>; reviewEpoch?:number; reviewRevision?:number; captionAssetId?:string; manualCaptions?:boolean; frameRefinement?:FrameRefinement }>();
   let revision:number|undefined,editEpoch=0;
   const plans=new Map<string,string>();
   for (const step of steps) for (const value of step.content) {
@@ -116,9 +125,11 @@ function unresolvedFailures(steps: ToolSteps, recoverPlacements = false) {
     else if ((part.type === 'tool-error' || (part.type === 'tool-result' && (output.success === false || record(part.output).type === 'error-text'))) && !reviewUnavailable(part)) {
       const failure=part.error??output.error??record(part.output).value;
       const rejectedPlans=record(input).plans;
-      pending.set(key, { count: (pending.get(key)?.count ?? 0) + 1, ids: [...pending.get(key)?.ids ?? [], id], ...(recoverPlacements&&part.toolName==='inspectFrames'?{frameRefinement:frameRefinement(input,output)}:{}), ...(recoverPlacements && isOverlapPlacementRejection(part.error) ? { placement: placementTarget(part.toolName, input) } : {}),...(recoverPlacements&&part.toolName==='planEffects'&&planPreflightRejection(failure)&&Array.isArray(rejectedPlans)&&rejectedPlans.length&&rejectedPlans.every(item=>typeof record(item).id==='string')?{plan:rejectedPlans.map(item=>record(item).id as string)}:{}),...(recoverPlacements&&zoomMotionRejection(failure)?{zoom:zoomTarget(part.toolName,input)}:{}),...(recoverPlacements&&zoomEvidenceRejection(failure)?{zoomEvidence:zoomEvidenceTarget(part.toolName,input)}:{}),...(recoverPlacements&&part.toolName==='previewRender'&&reviewWindowRejection(failure)?{review:reviewScope(input,plans)}:{}),...(recoverPlacements&&part.toolName==='addSubtitlesFromTranscript'&&typeof record(input).assetId==='string'&&/Clip timing must be finite, nonnegative, and at least one frame long/.test(String(failure))?{captionAssetId:record(input).assetId as string}:{}) });
+      pending.set(key, { count: (pending.get(key)?.count ?? 0) + 1, ids: [...pending.get(key)?.ids ?? [], id], tool: part.toolName, target: editTarget(input), ...(recoverPlacements&&part.toolName==='inspectFrames'?{frameRefinement:frameRefinement(input,output)}:{}), ...(recoverPlacements && isOverlapPlacementRejection(part.error) ? { placement: placementTarget(part.toolName, input) } : {}),...(recoverPlacements&&part.toolName==='planEffects'&&planPreflightRejection(failure)&&Array.isArray(rejectedPlans)&&rejectedPlans.length&&rejectedPlans.every(item=>typeof record(item).id==='string')?{plan:rejectedPlans.map(item=>record(item).id as string)}:{}),...(recoverPlacements&&zoomMotionRejection(failure)?{zoom:zoomTarget(part.toolName,input)}:{}),...(recoverPlacements&&zoomEvidenceRejection(failure)?{zoomEvidence:zoomEvidenceTarget(part.toolName,input)}:{}),...(recoverPlacements&&part.toolName==='previewRender'&&reviewWindowRejection(failure)?{review:reviewScope(input,plans)}:{}),...(recoverPlacements&&part.toolName==='addSubtitlesFromTranscript'&&typeof record(input).assetId==='string'&&/Clip timing must be finite, nonnegative, and at least one frame long/.test(String(failure))?{captionAssetId:record(input).assetId as string}:{}) });
     } else if (part.type === 'tool-result') {
       if(!pending.get(key)?.review)pending.delete(key);
+      // A corrected call (new scene code, fixed arguments) that saves a change on the same target recovers a plain failure.
+      if(output.success!==false&&(output.saved===true||output.staged===true||output.applied===true)){const target=editTarget(input);for(const [failedKey,failure]of pending)if(failure.tool===part.toolName&&failure.target===target&&!failure.placement&&!failure.plan&&!failure.zoom&&!failure.zoomEvidence&&!failure.review&&!failure.captionAssetId&&!failure.frameRefinement)pending.delete(failedKey);}
       if (recoverPlacements) {
         if(part.toolName!=='previewRender'&&Number.isInteger(output.revision))revision=output.revision as number;
         if(changedDraft(output))editEpoch++;

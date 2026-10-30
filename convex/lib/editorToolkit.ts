@@ -665,15 +665,18 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       await editSession.wait();
       const snapshotId = await ctx.runMutation(internal.mcp.requestFrames, { ownerId: run.ownerId, projectId: run.projectId, times });
       const deadline = Date.now() + 170_000;
+      let started = false;
       while (Date.now() < deadline) {
         if (abortSignal.aborted) { await ctx.runMutation(internal.mcp.discardFrames, { snapshotId }); throw new Error('Stopped.'); }
         const state = await ctx.runQuery(internal.mcp.frames, { ownerId: run.ownerId, snapshotId });
+        if (state.started) started = true;
         if (state.status === 'failed') { await ctx.runMutation(internal.mcp.discardFrames, { snapshotId }); throw new Error(`Frames could not be rendered: ${state.error ?? 'unknown error'}`); }
         if (state.status === 'completed') { await ctx.runMutation(internal.mcp.discardFrames, { snapshotId }); return { revision: state.revision as number, frames: (state.frames as { time: number; image: string }[]).map(frame => ({ time: frame.time, image: frame.image })) }; }
         await new Promise(resolve => setTimeout(resolve, 1500));
       }
       await ctx.runMutation(internal.mcp.discardFrames, { snapshotId });
-      throw new Error('Frames took too long to render. Try fewer times.');
+      // Say which wait it was: frames that never started were queued behind other renders, not too many.
+      throw new Error(started ? 'Frames took too long to render. Try fewer times.' : 'These frames never started rendering: the media worker stayed busy with other renders. Try again shortly; the number of times was not the problem.');
     }, toModelOutput: (_ctx, options) => { const output = options.output as { revision: number; frames: { time: number; image: string }[] }; return { type: 'content' as const, value: [
       { type: 'text' as const, text: `720p frames of the saved timeline (revision ${output.revision}) at ${output.frames.map(frame => `${frame.time}s`).join(', ')}, in that order.` },
       ...output.frames.map(frame => ({ type: 'file' as const, data: { type: 'data' as const, data: frame.image }, mediaType: 'image/jpeg' })),

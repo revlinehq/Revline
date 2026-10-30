@@ -33,7 +33,7 @@ The reference is footage under a voice (a speech, a quote, a narrator), with lar
 
 ## Voice and words
 - The words come from the user: their own voiceover, a speech they have the rights to, or a script they approve. Never reuse the reference's voiceover or its quote as the remake.
-- Transcribe the voice (analyzeMedia transcribe) and key every caption and cut to its words.
+- Transcribe the voice (analyzeMedia transcribe) and key every caption and cut to its words. Speech counts only once the transcript has it: a video description (inspectVideo, understand) can invent a voiceover.
 
 ## Captions
 - Rebuild the reference's caption style from its titles: size, weight, case, font class, position, and how words appear (word by word, a pop, one key word in a color). Apply it with addSubtitlesFromTranscript and styleCaptions, or with applyCaptionStyle.

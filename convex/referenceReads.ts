@@ -64,15 +64,18 @@ export async function runRead(ctx: ActionCtx, ownerId: string, projectId: Id<'pr
   const readId = await ctx.runMutation(internal.referenceReads.request, { ownerId, projectId, assetId, mode, ...rest, start, end });
   // A reading queued behind other work waits for its turn rather than failing; the worker takes readings first.
   const deadline = Date.now() + 540_000;
+  let started = false;
   try {
     while (Date.now() < deadline) {
       if (signal?.aborted) throw new Error('Stopped.');
       const state = await ctx.runQuery(internal.referenceReads.get, { ownerId, readId });
+      if (state.status !== 'queued') started = true;
       if (state.status === 'failed') throw new Error(`The frames could not be read: ${state.error ?? 'unknown error'}`);
       if (state.status === 'completed') return state.result as ReadResult;
       await new Promise(resolve => setTimeout(resolve, 1500));
     }
-    throw new Error('Reading frames took too long. Try a shorter window or fewer frames.');
+    // Say which wait it was: a read that never started was stuck behind other media work, not too big.
+    throw new Error(started ? 'Reading frames took too long. Try a shorter window or fewer frames.' : 'This read never started: the media worker stayed busy with other jobs for 9 minutes. Try again shortly; the window and frame count were not the problem.');
   } finally { await ctx.runMutation(internal.referenceReads.discard, { readId }); }
 }
 

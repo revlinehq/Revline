@@ -278,7 +278,12 @@ async function firstClaimable(ctx:MutationCtx|QueryCtx,processorVersion=1,lane?:
   const laneOk=(q:import('convex/server').FilterBuilder<import('convex/server').GenericTableInfo>)=>{const base=lane==='any'?versioned(q):q.and(versioned(q),q.eq(q.field('lane'),undefined));return fly?q.and(base,q.neq(q.field('kind'),'render')):base;};
   // Frame readings, timeline frames and blueprint checks take seconds and an agent waits on each: they go before
   // exports and long analysis, so a turn never stalls behind a minutes-long job.
-  for(const kind of ['read','snapshot','blueprint'] as const){const quick=await fairest(ctx,await ctx.db.query('mediaTasks').withIndex('by_status_claimable_kind_created',q=>q.eq('status','queued').eq('claimable',true).eq('kind',kind)).filter(laneOk).take(FAIR_CLAIM_SCAN));if(quick)return quick;}
+  for(const kind of ['read','snapshot','blueprint'] as const){
+    let rows=await ctx.db.query('mediaTasks').withIndex('by_status_claimable_kind_created',q=>q.eq('status','queued').eq('claimable',true).eq('kind',kind)).filter(laneOk).take(FAIR_CLAIM_SCAN);
+    // A frame check an agent waits on goes before scene thumbnails and share covers, which nobody is waiting for.
+    if(kind==='snapshot'){const asked=[];for(const row of rows){const snapshot=row.snapshotId?await ctx.db.get(row.snapshotId):null;if(snapshot&&!snapshot.clipId&&!snapshot.shareId)asked.push(row);}if(asked.length)rows=asked;}
+    const quick=await fairest(ctx,rows);if(quick)return quick;
+  }
   // Exports are interactive; claim them before long queued analysis work.
   const renders=fly?[]:await ctx.db.query('mediaTasks').withIndex('by_status_claimable_kind_created',q=>q.eq('status','queued').eq('claimable',true).eq('kind','render')).filter(laneOk).take(FAIR_CLAIM_SCAN);
   if(renders.length)return fairest(ctx,renders);

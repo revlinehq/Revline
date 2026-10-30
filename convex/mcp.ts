@@ -200,7 +200,8 @@ export const requestFrames = internalMutation({ args: { ownerId: v.string(), pro
 export const frames = internalQuery({ args: { ownerId: v.string(), snapshotId: v.id('frameSnapshots') }, returns: v.any(), handler: async (ctx, args) => {
   const snapshot = await ctx.db.get(args.snapshotId);
   if (!snapshot || snapshot.ownerId !== args.ownerId) throw new ConvexError('Frame request not found.');
-  return { status: snapshot.status, revision: snapshot.revision, ...(snapshot.error ? { error: snapshot.error } : {}), ...(snapshot.frames ? { frames: snapshot.frames } : {}) };
+  const task = snapshot.status === 'queued' && snapshot.taskId ? await ctx.db.get(snapshot.taskId) : null;
+  return { status: snapshot.status, started: snapshot.status !== 'queued' || (!!task && task.status !== 'queued'), revision: snapshot.revision, ...(snapshot.error ? { error: snapshot.error } : {}), ...(snapshot.frames ? { frames: snapshot.frames } : {}) };
 }});
 
 export const discardFrames = internalMutation({ args: { snapshotId: v.id('frameSnapshots') }, returns: v.null(), handler: async (ctx, args) => {

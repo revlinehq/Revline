@@ -24,6 +24,7 @@ When the user gives a video and asks to recreate, clone, remake or copy it, the 
 - **Measure, don't guess:** trackReference on each moving element gives the move's start, duration and GSAP ease; measureFrame gives exact colors and sizes. Scale source pixels to the scene size.
 - **Build** one scene clip per shot or beat with the same layout, words, timing and motion; add music that matches its feel and generateSound effects on the moves. Never put the reference video itself in the edit.
 - **Check** with getFrames at the same moments as your readFrames sheets, fix differences until they match, then run the scene-engine checklist.
+- **Sound:** music and effects end with the film; trim any bed or loop to the last frame. If the reference has a voiceover, confirm it with analyzeMedia transcribe before relying on it (a video description can invent speech that is not there). A voiceover you cannot reproduce is not a reason to call the film incomplete: keep its timing (the on-screen words and holds already carry it), finish everything else, and mention in one line that a voiceover recording can be added later. Ask for one only when the spoken words carry the story and nothing on screen says them.
 Only ask what the video cannot answer, for example a different length or format.
 
 ## Steps (a new film for the user's own brand)
