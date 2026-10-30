@@ -73,6 +73,8 @@ import { AUDIO_ACTIVITY_VERSION, AUDIO_QUIET_EDGE_PAD, refineAudioRangeEdges, re
 import { REMOTION_TEXT_PRESETS } from '../../lib/editor/remotion-text';
 import { resolvedTextAppearance, TEXT_APPEARANCE_LIMITS, TEXT_TYPOGRAPHY_LIMITS } from '../../lib/editor/text-style';
 import { BEAT_ANALYSIS_ENGINE } from '../../lib/media-analysis/beat-map';
+import { ReadCoverage } from '../../lib/ai/read-coverage';
+import { runCompare } from '../referenceReads';
 import type { ActionCtx } from "../_generated/server";
 
 export class AnalysisStepError extends Error {}
@@ -117,9 +119,22 @@ function blueprintImages(output: unknown) {
 
 export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOptions) {
   const { run, project, assets, recovering, selectedClipIds, abortSignal } = options;
+  // What this turn has read of a reference, so scenes built over unread moments say so (lib/ai/read-coverage.ts).
+  const coverage = new ReadCoverage();
   const readTool = async (name: ReadToolName, input: object) => {
     const result = await runRead(ctx, run.ownerId, run.projectId, name, input, abortSignal);
-    return { ...readSummary(name, result), images: result.image ? [{ label: name === 'trackReference' ? 'Tracked frames, box drawn' : 'Frame sheet', data: result.image, mimeType: 'image/jpeg' }] : [] };
+    let acrossCuts: string[] = [];
+    if (name === 'readFrames') {
+      const args = input as { assetId: string; start: number; end: number; fps?: number; count?: number };
+      const shots = readReference(assets.find(asset => asset._id === args.assetId)?.analysis?.reference)?.shots ?? [];
+      coverage.noteCuts(args.assetId, shots.slice(1).map(shot => shot.start));
+      coverage.noteRead(args.assetId, { start: args.start, end: args.end }, args.fps ?? (args.count ?? 8) / Math.max(.001, args.end - args.start), result.moments ?? []);
+      acrossCuts = coverage.acrossCuts(args.assetId, result.moments ?? []).map(moment => `${moment.start}-${moment.end}s`);
+    }
+    const summary = readSummary(name, result);
+    // A change that runs across a hard cut is one continuous move (a morph, an element carried over the cut): never split it between scenes.
+    if (acrossCuts.length) Object.assign(summary, { momentsAcrossCuts: acrossCuts, note: `${summary.note} Moments ${acrossCuts.join(', ')} run across a detected cut: they are one continuous change, so keep each inside one scene or build it as a transition clip; never cut scenes at that shot boundary.` });
+    return { ...summary, images: result.image ? [{ label: name === 'trackReference' ? 'Tracked frames, box drawn' : 'Frame sheet', data: result.image, mimeType: 'image/jpeg' }] : [] };
   };
   let inspected = false;
   let effectPlans:EffectPlan[]=options.initialPlans;
@@ -671,10 +686,28 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       await ctx.runMutation(internal.memories.forget, { ...run, memoryId: input.memoryId });
       return { forgotten: input.memoryId };
     } }),
+    compareReference: createTool({ description: "Check a recreation against its reference, moment by moment: renders your saved timeline at the reference's moments and lays each reference frame beside yours in one image, with a difference score per moment (0 identical, 100 nothing alike). Use it after building or changing scenes of a recreation, at every transition you rebuilt (the moments map from readFrames), and fix the moments with the highest scores first, then compare again. times are REFERENCE seconds; offset is how far the recreation sits from the reference on the timeline (timeline = reference + offset, default 0).", inputSchema: z.object({ assetId: z.string().min(1), times: z.array(z.number().min(0)).min(1).max(6), offset: z.number().optional() }).strict(), execute: async (_ctx, input) => {
+      await editSession.wait();
+      const offset = input.offset ?? 0;
+      const snapshotId = await ctx.runMutation(internal.mcp.requestFrames, { ownerId: run.ownerId, projectId: run.projectId, times: input.times.map(time => Math.max(0, time + offset)) });
+      try {
+        const deadline = Date.now() + 280_000;
+        for (let state = await ctx.runQuery(internal.mcp.frames, { ownerId: run.ownerId, snapshotId }); state.status !== 'completed'; state = await ctx.runQuery(internal.mcp.frames, { ownerId: run.ownerId, snapshotId })) {
+          if (abortSignal.aborted) throw new Error('Stopped.');
+          if (state.status === 'failed') throw new Error(`Your timeline could not be rendered for the comparison: ${state.error ?? 'unknown error'}`);
+          if (Date.now() > deadline) throw new Error(state.started ? 'Rendering your timeline for the comparison took too long. Compare fewer moments.' : 'Your timeline frames never started rendering: the media worker stayed busy with other renders. Try again shortly.');
+          await new Promise(resolve => setTimeout(resolve, 1500));
+        }
+        const result = await runCompare(ctx, run.ownerId, run.projectId, input.assetId, input.times, snapshotId, abortSignal);
+        const scores = (result.scores ?? []).map(score => ({ time: score.time, difference: Math.round(score.difference * 100) }));
+        const worst = [...scores].sort((a, b) => b.difference - a.difference);
+        return { note: `Reference (left) beside your timeline (right) at ${scores.map(score => `${score.time}s`).join(', ')}. Differences: ${scores.map(score => `${score.time}s ${score.difference}`).join(', ')}. Fix the worst first (${worst.slice(0, 2).map(score => `${score.time}s`).join(', ')}): read that moment of the reference with fps 10 if you have not, correct the scene, then compare again.`, scores, images: result.image ? [{ label: 'Reference beside your timeline', data: result.image, mimeType: 'image/jpeg' }] : [] };
+      } finally { await ctx.runMutation(internal.mcp.discardFrames, { snapshotId }); }
+    }, toModelOutput: (_ctx, options) => blueprintImages(options.output) }),
     getFrames: createTool({ description: "Look at your work: render 1 to 4 frames of the saved timeline at timeline seconds, composited exactly as the export draws them (scenes, footage, text, effects), and see them as images. Use it after building or changing scenes or visuals, at each key beat, to check that text is readable, nothing overflows or clips, brand fonts, colors and logo show, and frames are not empty; fix what is wrong before saying it is done. Each call takes 10 to 30 seconds; pick the moments that matter.", inputSchema: z.object({ times: z.array(z.number().min(0)).min(1).max(4).describe('Timeline seconds, inside the timeline.') }), execute: async (_ctx, { times }) => {
       await editSession.wait();
       const snapshotId = await ctx.runMutation(internal.mcp.requestFrames, { ownerId: run.ownerId, projectId: run.projectId, times });
-      const deadline = Date.now() + 170_000;
+      const deadline = Date.now() + 280_000;
       let started = false;
       while (Date.now() < deadline) {
         if (abortSignal.aborted) { await ctx.runMutation(internal.mcp.discardFrames, { snapshotId }); throw new Error('Stopped.'); }
@@ -996,5 +1029,17 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       return result.reused ? { applied: true, reusedExistingCutOut: true, estimatedUsd: 0, note: 'An existing cut-out of this footage was applied; the background is already removed. Visuals belong on a lower V layer.' } : { started: !result.alreadyRunning, alreadyRunning: result.alreadyRunning, estimatedUsd: result.estimatedUsd, note: 'Background removal is processing; the clip switches to the cut-out automatically when it finishes. Visuals belong on a lower V layer.' };
     } }),
   };
+  // Scenes report what they cover but were never read: a recreation reads every moment before building over it.
+  for (const name of ['addScene', 'addScenes', 'editScene'] as const) {
+    const tool = (tools as Record<string, { execute?: (...args: never[]) => Promise<unknown> }>)[name];
+    const execute = tool?.execute;
+    if (!tool || !execute) continue;
+    tool.execute = async (...args: never[]) => {
+      const output = await execute(...args) as Record<string, unknown>;
+      const ids = new Set<string>([...(Array.isArray(output?.changedClips) ? output.changedClips : []).map(clip => String((clip as { id?: unknown }).id)), ...(Array.isArray(output?.scenes) ? output.scenes : []).map(scene => String((scene as { clipId?: unknown }).clipId))]);
+      const checks = editSession.timeline.clips.filter(clip => clip.kind === 'scene' && ids.has(clip.id)).map(clip => coverage.sceneCheck(clip.start, clip.start + clip.duration)).filter(check => !!check);
+      return checks.length ? { ...output, readCheck: checks.map(check => check.readCheck).join(' '), unreadMoments: [...new Set(checks.flatMap(check => check.unreadMoments ?? []))], splitMoments: [...new Set(checks.flatMap(check => check.splitMoments ?? []))] } : output;
+    };
+  }
   return { tools, editSession, plans: () => effectPlans };
 }

@@ -1,5 +1,5 @@
 /** Tools that look at the project, the footage or the user's answers and never change the timeline. */
-export const READ_ONLY_TOOLS = new Set(['askUser','askBrandKit','readFrames','trackReference','measureFrame','measureScreen','compareScreen','listBlueprints','getBlueprint','getFrames','readSkill','recallMemory','analyzeColor','listBrandKits','getBrandKit','planEffects','previewRender','inspectTimeline', 'inspectClip', 'inspectAssetAnalysis', 'analyzeMedia', 'inspectVideo', 'inspectFrames', 'inspectVideoFrames', 'inspectReference']);
+export const READ_ONLY_TOOLS = new Set(['askUser','askBrandKit','readFrames','trackReference','measureFrame','compareReference','measureScreen','compareScreen','listBlueprints','getBlueprint','getFrames','readSkill','recallMemory','analyzeColor','listBrandKits','getBrandKit','planEffects','previewRender','inspectTimeline', 'inspectClip', 'inspectAssetAnalysis', 'analyzeMedia', 'inspectVideo', 'inspectFrames', 'inspectVideoFrames', 'inspectReference']);
 
 /** Effect plans and render reviews guard an edit's quality, so their failures still hold the turn open. */
 export const isPassiveRead = (name: unknown) => typeof name === 'string' && READ_ONLY_TOOLS.has(name) && name !== 'planEffects' && name !== 'previewRender';

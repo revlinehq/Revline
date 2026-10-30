@@ -30,6 +30,7 @@ import { prepareComposition,writeComposition } from './prepare-composition';
 import { renderPlainExport } from './plain-export-render';
 import { plainExportPlan } from '@/lib/editor/plain-export';
 import { captureTimelineFrames, reviewComposition } from './review-composition';
+import { readCompare } from './read-compare';
 import { extractInspectionFrames, extractReferenceKeyframes } from './inspect-video-frames';
 import { measureSpeechCleanup } from './speech-cleanup-analysis';
 import { currentSpeechCleanup } from '@/lib/speech-cleanup';
@@ -190,6 +191,7 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
     const media = await runPhase('Reading media information',()=>probeMedia(source, signal));
     if (task.kind === 'read') {
       if (!media.hasVideo || !task.read) throw new AnalysisError('Reading frames needs a video and a window.', 400);
+      if (task.read.mode === 'compare') return { read: await runPhase('Comparing with the reference', () => readCompare(source, directory, task.read!, signal, onProgress)) };
       return { read: await runPhase('Reading frames', () => readReference(source, directory, task.read!, signal, onProgress)) };
     }
     if (task.kind === 'cutout') {

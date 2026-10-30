@@ -21,7 +21,7 @@ const SHEET_WIDTH = 1600, GAP = 8, LABEL = 30, MAX_IMAGE = 880_000, MAX_FRAMES =
 const CHANGE = 24;
 const round = (value: number, places = 2) => Math.round(value * 10 ** places) / 10 ** places;
 
-async function probe(path: string, signal: AbortSignal): Promise<Source> {
+export async function probe(path: string, signal: AbortSignal): Promise<Source> {
   const { stdout } = await run('ffprobe', ['-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=width,height,r_frame_rate:format=duration', '-of', 'json', path], { signal, timeout: 30_000 });
   const value = JSON.parse(stdout) as { streams?: { width?: number; height?: number; r_frame_rate?: string }[]; format?: { duration?: string } };
   const stream = value.streams?.[0], [num, den] = (stream?.r_frame_rate ?? '30/1').split('/').map(Number);
@@ -30,7 +30,7 @@ async function probe(path: string, signal: AbortSignal): Promise<Source> {
 }
 
 /** One frame at a source second, full resolution or cropped to a box, as PNG. */
-async function frameAt(path: string, directory: string, time: number, crop: Box | undefined, name: string, signal: AbortSignal) {
+export async function frameAt(path: string, directory: string, time: number, crop: Box | undefined, name: string, signal: AbortSignal) {
   const output = join(directory, `${name}.png`);
   // A seek at or near the very end can decode nothing (the container runs a little longer than the video).
   // Step back until a real frame comes out, so a whole-length read never fails on its last frame.
@@ -53,7 +53,7 @@ const timesIn = (start: number, end: number, count: number, source: Source) => {
 const escape = (text: string) => text.replace(/[<>&]/g, char => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' })[char]!);
 
 /** Tiles in a grid, each labeled under it, as one JPEG small enough to hand to a model. */
-async function sheet(tiles: { image: Buffer; label: string; overlay?: string }[], aspect: number) {
+export async function sheet(tiles: { image: Buffer; label: string; overlay?: string }[], aspect: number) {
   // Up to 4 across for a few frames; dense 10 fps reads (up to 30 frames) go 6 across so motion reads left to right.
   const columns = tiles.length <= 4 ? tiles.length : tiles.length <= 16 ? Math.min(4, Math.ceil(Math.sqrt(tiles.length))) : 6;
   const rows = Math.ceil(tiles.length / columns);
@@ -116,24 +116,29 @@ async function readMoments(path: string, source: Source, work: Work, signal: Abo
  * each moment's start, end, how strong it was, the region that moved, and whether it was a hard cut or motion. */
 async function findMoments(path: string, start: number, end: number, source: Source, area: Box, signal: AbortSignal, limit = 12) {
   const from = Math.max(0, Math.min(start, source.duration)), to = Math.min(Math.max(end, from), source.duration), rate = 10;
-  if (to - from < .2) return { moments: [], holds: [] };
+  if (to - from < .2) return { moments: [], holds: [], changed: false };
   const width = 96, height = Math.max(2, Math.round(width * area.h / area.w) & ~1);
   const { stdout } = await run('ffmpeg', ['-v', 'error', '-ss', from.toFixed(3), '-t', (to - from).toFixed(3), '-i', path, '-map', '0:v:0', '-vf', `fps=${rate},crop=${area.w}:${area.h}:${area.x}:${area.y},scale=${width}:${height},format=gray`, '-f', 'rawvideo', '-'], { signal, timeout: Math.max(120_000, (to - from) * 1000), encoding: 'buffer', maxBuffer: 512 * 1024 * 1024 });
   const size = width * height, total = Math.floor(stdout.length / size), factor = area.w / width;
-  if (total < 2) return { moments: [], holds: [] };
+  if (total < 2) return { moments: [], holds: [], changed: false };
   const steps = Array.from({ length: total - 1 }, (_, index) => {
     const a = stdout.subarray(index * size, (index + 1) * size), b = stdout.subarray((index + 1) * size, (index + 2) * size);
-    let sum = 0, left = width, top = height, right = -1, bottom = -1;
-    for (let i = 0; i < size; i++) { const delta = Math.abs(b[i] - a[i]); sum += delta; if (delta > CHANGE) { const x = i % width, y = (i / width) | 0; if (x < left) left = x; if (x > right) right = x; if (y < top) top = y; if (y > bottom) bottom = y; } }
-    return { change: sum / (size * 255), box: right < 0 ? null : { left, top, right, bottom } };
+    let sum = 0, moved = 0, left = width, top = height, right = -1, bottom = -1;
+    for (let i = 0; i < size; i++) { const delta = Math.abs(b[i] - a[i]); sum += delta; if (delta > CHANGE) { moved++; const x = i % width, y = (i / width) | 0; if (x < left) left = x; if (x > right) right = x; if (y < top) top = y; if (y > bottom) bottom = y; } }
+    return { change: sum / (size * 255), moved: moved / size, box: right < 0 ? null : { left, top, right, bottom } };
   });
+  // Share of the picture that differs between two frames: a small key or a thin stroke moving is a few pixels, not a big mean change.
+  const differs = (a: number, b: number) => { const x = stdout.subarray(a * size, (a + 1) * size), y = stdout.subarray(b * size, (b + 1) * size); let moved = 0; for (let i = 0; i < size; i++) if (Math.abs(x[i] - y[i]) > CHANGE) moved++; return moved / size; };
   // A moment is a run of steps clearly above this video's own resting level; one-step jumps are cuts.
   const sorted = steps.map(step => step.change).sort((a, b) => a - b), resting = sorted[Math.floor(sorted.length / 2)];
-  const threshold = Math.max(.012, resting * 3);
+  const movedSorted = steps.map(step => step.moved).sort((a, b) => a - b), restingMoved = movedSorted[Math.floor(movedSorted.length / 2)];
+  // A short window (an fps read of one transition) may be motion from end to end, so its own median is no baseline: fixed floors only there.
+  const short = to - from <= 3.5, threshold = short ? .012 : Math.max(.012, resting * 3), movedFloor = short ? .004 : Math.max(.004, restingMoved * 3);
+  const active = (step: { change: number; moved: number }) => step.change >= threshold || step.moved >= movedFloor;
   const moments: { start: number; end: number; peak: number; kind: 'cut' | 'motion'; region?: Box }[] = [];
   for (let index = 0; index < steps.length; index++) {
-    if (steps[index].change < threshold) continue;
-    let last = index; while (last + 1 < steps.length && (steps[last + 1].change >= threshold || (last + 2 < steps.length && steps[last + 2].change >= threshold))) last++;
+    if (!active(steps[index])) continue;
+    let last = index; while (last + 1 < steps.length && (active(steps[last + 1]) || (last + 2 < steps.length && active(steps[last + 2])))) last++;
     const run = steps.slice(index, last + 1), peak = Math.max(...run.map(step => step.change));
     const boxes = run.flatMap(step => step.box ? [step.box] : []);
     const region = boxes.length ? { x: Math.round(area.x + Math.min(...boxes.map(b => b.left)) * factor), y: Math.round(area.y + Math.min(...boxes.map(b => b.top)) * factor), w: Math.round((Math.max(...boxes.map(b => b.right)) - Math.min(...boxes.map(b => b.left)) + 1) * factor), h: Math.round((Math.max(...boxes.map(b => b.bottom)) - Math.min(...boxes.map(b => b.top)) + 1) * factor) } : undefined;
@@ -143,13 +148,14 @@ async function findMoments(path: string, start: number, end: number, source: Sou
   // Holds: a second or more where the picture all but stops, well under this video's resting level (a frozen face, a held still).
   const still = Math.max(.0015, resting * .35), holds: { start: number; end: number }[] = [];
   for (let index = 0; index < steps.length; index++) {
-    if (steps[index].change >= still) continue;
-    let last = index; while (last + 1 < steps.length && steps[last + 1].change < still) last++;
-    if (last - index + 1 >= rate) holds.push({ start: round(from + index / rate, 2), end: round(from + (last + 1) / rate, 2) });
+    if (steps[index].change >= still || steps[index].moved >= .004) continue;
+    let last = index; while (last + 1 < steps.length && steps[last + 1].change < still && steps[last + 1].moved < .004) last++;
+    // Slow drift adds up: a stretch whose first and last frames differ is moving, however small each step.
+    if (last - index + 1 >= rate && differs(index, last + 1) < .004) holds.push({ start: round(from + index / rate, 2), end: round(from + (last + 1) / rate, 2) });
     index = last;
   }
   // The strongest ones, in time order.
-  return { moments: moments.sort((a, b) => b.peak - a.peak).slice(0, limit).sort((a, b) => a.start - b.start), holds: holds.slice(0, limit) };
+  return { moments: moments.sort((a, b) => b.peak - a.peak).slice(0, limit).sort((a, b) => a.start - b.start), holds: holds.slice(0, limit), changed: differs(0, total - 1) >= .004 };
 }
 
 /** Exact colors at points and color edges along lines, in source pixels of one frame. */

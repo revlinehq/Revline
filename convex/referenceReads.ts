@@ -27,7 +27,7 @@ export const READ_TOOL_DESCRIPTIONS = {
 export type ReadToolName = keyof typeof READ_TOOL_INPUTS;
 type ReadResult = Infer<typeof referenceReadResult>;
 
-export const request = internalMutation({ args: { ownerId: v.string(), projectId: v.id('projects'), assetId: v.string(), mode: v.union(v.literal('sheet'), v.literal('track'), v.literal('measure')), start: v.number(), end: v.number(), count: v.optional(v.number()), fps: v.optional(v.number()), momentsOnly: v.optional(v.boolean()), crop: v.optional(referenceBox), box: v.optional(referenceBox), points: v.optional(v.array(blueprintPointValidator)), lines: v.optional(v.array(blueprintLineValidator)) }, returns: v.id('referenceReads'), handler: async (ctx, { ownerId, projectId, assetId: rawAssetId, ...args }) => {
+export const request = internalMutation({ args: { ownerId: v.string(), projectId: v.id('projects'), assetId: v.string(), mode: v.union(v.literal('sheet'), v.literal('track'), v.literal('measure'), v.literal('compare')), start: v.number(), end: v.number(), times: v.optional(v.array(v.number())), snapshotId: v.optional(v.id('frameSnapshots')), count: v.optional(v.number()), fps: v.optional(v.number()), momentsOnly: v.optional(v.boolean()), crop: v.optional(referenceBox), box: v.optional(referenceBox), points: v.optional(v.array(blueprintPointValidator)), lines: v.optional(v.array(blueprintLineValidator)) }, returns: v.id('referenceReads'), handler: async (ctx, { ownerId, projectId, assetId: rawAssetId, ...args }) => {
   await requireEditorAccess(ctx, ownerId);
   const project = await requireProject(ctx, projectId, ownerId, false);
   const assetId = ctx.db.normalizeId('assets', rawAssetId), asset = assetId ? await ctx.db.get(assetId) : null;
@@ -98,4 +98,21 @@ export function readSummary(name: ReadToolName, result: ReadResult) {
   const holds = result.holds ?? [];
   const note = name === 'readFrames' && !result.image ? `Map only, no image. ${moments.length} moments (${moments.map(m => `${m.start}-${m.end}s ${m.kind}`).join(', ') || 'none'}) and ${holds.length} holds (${holds.map(h => `${h.start}-${h.end}s`).join(', ') || 'none'}). Read each candidate with fps 10 before cutting it.` : name === 'readFrames' ? `Sheet of ${result.frames.length} frames (${result.width}x${result.height}), in order left to right, top to bottom. Source is ${result.sourceWidth}x${result.sourceHeight} at ${result.fps} fps; boxes are source pixels.${moments.length ? ` ${moments.length} moments where the picture changes: ${moments.map(m => `${m.start}-${m.end}s ${m.kind}`).join(', ')}. Read each one you have not yet seen frame by frame with fps 10 (start a little before it, end a little after, up to 3 s) before rebuilding it.` : result.frames.some(frame => (frame.change ?? 0) >= .01) ? ` No strong moment measured, but the frames differ (up to ${Math.round(Math.max(...result.frames.map(frame => frame.change ?? 0)) * 100)}% between frames): something small or slow moves here, so read the sheet frame by frame; it is not a hold.` : ' No changes in this window: it is a hold; note its length.'}` : name === 'trackReference' ? `Tracked ${result.track?.length ?? 0} frames; the sheet shows ${result.frames.length} of them with the box drawn. Boxes are source pixels.` : `Frame ${result.width}x${result.height}.`;
   return { note, ...rest };
+}
+
+/** The reference beside the timeline at the same moments: snapshotId holds the timeline frames already rendered at
+ * those moments (plus any offset), times are the reference's seconds. One grid image, a difference score per moment. */
+export async function runCompare(ctx: ActionCtx, ownerId: string, projectId: Id<'projects'>, assetId: string, times: number[], snapshotId: Id<'frameSnapshots'>, signal?: AbortSignal): Promise<ReadResult> {
+  const readId = await ctx.runMutation(internal.referenceReads.request, { ownerId, projectId, assetId, mode: 'compare', start: Math.min(...times), end: Math.max(...times), times, snapshotId });
+  const deadline = Date.now() + 300_000;
+  try {
+    while (Date.now() < deadline) {
+      if (signal?.aborted) throw new Error('Stopped.');
+      const state = await ctx.runQuery(internal.referenceReads.get, { ownerId, readId });
+      if (state.status === 'failed') throw new Error(`The comparison could not be made: ${state.error ?? 'unknown error'}`);
+      if (state.status === 'completed') return state.result as ReadResult;
+      await new Promise(resolve => setTimeout(resolve, 1500));
+    }
+    throw new Error('The comparison took too long. Try fewer moments.');
+  } finally { await ctx.runMutation(internal.referenceReads.discard, { readId }); }
 }
