@@ -64,3 +64,25 @@ export const ensure = mutation({ args: { projectId: v.id('projects') }, returns:
   }
   return null;
 }});
+
+/** The newest finished frames of one clip, whichever version of it they show. */
+const clipFrames = async (ctx: QueryCtx, projectId: Id<'projects'>, clipId: string) => (await ctx.db.query('frameSnapshots').withIndex('by_project_clip', q => q.eq('projectId', projectId).eq('clipId', clipId)).order('desc').take(3)).find(row => row.status === 'completed' && row.frames?.length)?.frames;
+
+/** Frames for motion clips of any timeline tab, by clip id: tab previews use the first one. */
+export const forClips = query({ args: { projectId: v.id('projects'), clipIds: v.array(v.string()) }, returns: v.record(v.string(), v.array(frame)), handler: async (ctx, args) => {
+  const ownerId = await requireOwner(ctx), project = await requireProject(ctx, args.projectId, ownerId, false);
+  const frames: Record<string, { time: number; image: string }[]> = {};
+  for (const clipId of [...new Set(args.clipIds)].slice(0, 24)) { const found = await clipFrames(ctx, project._id, clipId); if (found) frames[clipId] = found; }
+  return frames;
+}});
+
+/** Frames for the motion clips of a published share, so people opening the link see them on its timeline. */
+export const forShare = query({ args: { shareId: v.string() }, returns: v.record(v.string(), v.array(frame)), handler: async (ctx, args) => {
+  const id = ctx.db.normalizeId('timelineShares', args.shareId), share = id ? await ctx.db.get(id) : null;
+  if (!share?.published) return {};
+  const rows = share.tabCount ? await ctx.db.query('shareTimelines').withIndex('by_share', q => q.eq('shareId', share._id)).take(20) : [];
+  const ids = [...new Set([share.timeline, ...rows.map(row => row.timeline)].flatMap(timeline => sceneClips(timeline).map(clip => clip.id)))].slice(0, 60);
+  const frames: Record<string, { time: number; image: string }[]> = {};
+  for (const clipId of ids) { const found = await clipFrames(ctx, share.projectId, clipId); if (found) frames[clipId] = found; }
+  return frames;
+}});

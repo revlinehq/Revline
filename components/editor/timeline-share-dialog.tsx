@@ -8,7 +8,7 @@ import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
 import { PrimaryButton } from '@/components/workspace/primary-button';
-import { formatTime, timelineDuration, type MediaAsset, type Timeline } from '@/lib/editor/types';
+import { formatTime, timelineCover, timelineDuration, type MediaAsset, type Timeline } from '@/lib/editor/types';
 import type { ShareChatPreview, ShareChatPreviewMessage } from '@/lib/editor/shared-chat';
 import { SharedChatMessages } from './shared-chat-messages';
 import './timeline-sharing.css';
@@ -17,17 +17,13 @@ type ShareStatus = { _id: string; title: string; published: boolean; updatedAt: 
 export type ShareableTab = { id: string; name: string; active: boolean; duration: number };
 type Props = {
   open: boolean; onOpenChange: (open: boolean) => void;
-  title: string; timeline: Timeline; assets: MediaAsset[]; status: ShareStatus | undefined;
+  title: string; timeline: Timeline; assets: MediaAsset[]; sceneThumbs?: Record<string, { time: number; image: string }[]>; status: ShareStatus | undefined;
   onPublish: (chat?: ShareChatPreviewMessage[], timelineIds?: string[]) => Promise<string>; tabs?: ShareableTab[]; onRevoke: () => Promise<unknown>; publishDisabled?: boolean;
   chatPreview?: ShareChatPreview; onChatPreviewChange?: (enabled: boolean) => void;
 };
 const ratios = { landscape: '16:9', vertical: '9:16', square: '1:1', classic: '4:3', 'portrait-feed': '4:5' };
 export function timelineSharePath(shareId: string) { return `/editor/showcase/${encodeURIComponent(shareId)}`; }
-export function timelineShareCover(timeline: Timeline, assets: MediaAsset[]) {
-  const clip = timeline.clips.find(clip => clip.kind === 'video' || clip.kind === 'image');
-  const asset = assets.find(asset => asset._id === clip?.assetId);
-  return asset?.thumbnailUrl ?? (asset?.kind === 'image' ? asset.url : null);
-}
+export function timelineShareCover(timeline: Timeline, assets: MediaAsset[], sceneThumbs?: Record<string, { time: number; image: string }[]>) { return timelineCover(timeline, assets, sceneThumbs); }
 
 export function ConnectedTimelineShareDialog({ projectId, onBeforePublish, ...props }: Omit<Props, 'status' | 'onPublish' | 'onRevoke'> & { projectId: Id<'projects'>; onBeforePublish: () => Promise<void> }) {
   const [previewEnabled, setPreviewEnabled] = useState(false);
@@ -40,7 +36,7 @@ export function ConnectedTimelineShareDialog({ projectId, onBeforePublish, ...pr
   return <TimelineShareDialog {...props} tabs={live} status={status} chatPreview={chatPreview} onChatPreviewChange={setPreviewEnabled} onPublish={async (chat, timelineIds) => { await onBeforePublish(); return publish({ projectId, ...(chat ? { chat } : {}), ...(timelineIds ? { timelineIds } : {}) }); }} onRevoke={() => revoke({ projectId })}/>;
 }
 
-export function TimelineShareDialog({ open, onOpenChange, title, timeline, assets, status, onPublish, onRevoke, publishDisabled, chatPreview, onChatPreviewChange, tabs }: Props) {
+export function TimelineShareDialog({ open, onOpenChange, title, timeline, assets, sceneThumbs, status, onPublish, onRevoke, publishDisabled, chatPreview, onChatPreviewChange, tabs }: Props) {
   const [busy, setBusy] = useState<'publish' | 'revoke' | null>(null);
   const [error, setError] = useState(''), [copied, setCopied] = useState(false), [origin, setOrigin] = useState('');
   const [localId, setLocalId] = useState<string | null | undefined>();
@@ -57,7 +53,7 @@ export function TimelineShareDialog({ open, onOpenChange, title, timeline, asset
   function toggleTab(id: string, on: boolean) { setPicked((tabs ?? []).filter(tab => tab.id === id ? on : selected.includes(tab.id)).map(tab => tab.id)); setCopied(false); }
   const shareId = localId !== undefined ? localId : status?.published ? status._id : null;
   const url = shareId ? `${origin}${timelineSharePath(shareId)}` : '';
-  const cover = timelineShareCover(timeline, assets);
+  const cover = timelineShareCover(timeline, assets, sceneThumbs);
   const chatPending = includeChat && chatPreview === undefined, noTabs = multiTab && !selected.length;
   function toggleChat(enabled: boolean) { setIncludeChat(enabled); onChatPreviewChange?.(enabled); setCopied(false); }
   async function publish() {

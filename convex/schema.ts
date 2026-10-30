@@ -199,7 +199,7 @@ export const mediaTaskFields = {
   activity:v.optional(mediaTaskActivity),activityStartedAt:v.optional(v.number()),
   outputAssetId: v.optional(v.id('assets')),
   sourceUrl: v.optional(v.string()),
-  reviewId:v.optional(v.id('compositionReviews')),snapshotId:v.optional(v.id('frameSnapshots')),readId:v.optional(v.id('referenceReads')),referenceImport:v.optional(v.boolean()),blueprintCheckId:v.optional(v.id('blueprintChecks')),cutoutId:v.optional(v.id('cutouts')),derivationId:v.optional(v.id('derivations')),previewVersion:v.optional(v.number()),requiredProcessorVersion:v.optional(v.number()),
+  reviewId:v.optional(v.id('compositionReviews')),snapshotId:v.optional(v.id('frameSnapshots')),readId:v.optional(v.id('referenceReads')),blueprintCheckId:v.optional(v.id('blueprintChecks')),cutoutId:v.optional(v.id('cutouts')),derivationId:v.optional(v.id('derivations')),previewVersion:v.optional(v.number()),requiredProcessorVersion:v.optional(v.number()),
   frameRequest: v.optional(frameRequestValidator), frameInspection: v.optional(frameInspectionValidator),
   videoRequest: v.optional(videoRequestValidator), videoInspection: v.optional(videoInspectionValidator),
   leaseToken: v.optional(v.string()), leaseExpiresAt: v.optional(v.number()), attemptStartedAt: v.optional(v.number()),
