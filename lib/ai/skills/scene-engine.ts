@@ -2,6 +2,24 @@ import { SCENE_FONT_FAMILIES, STARTER_SCENE_CODE } from '../../editor/scene-laye
 import { SCENE_GSAP_PLUGINS } from '../../editor/scene-modules';
 import type { EditorSkill, EditorSkillPage } from './index';
 
+/** The one list of checks before a scene or film goes back to the user. Other skills point here. */
+const checklistPage: EditorSkillPage = {
+  name: 'checklist',
+  description: 'Before handing a scene or film back, and after every change: first frames, every cut, every beat, measurements, what changed, limits, preview speed.',
+  body: `# Checklist: before you hand it back
+
+Run every item after building a scene or film and after every change. Render frames with getFrames (up to six per call) and look at them; never report a film as done from the code alone.
+
+1. **First frames.** The clip's first frame and the next one (start and start + 1/fps). Nothing shows that should still be hidden. A part hidden at its first frame starts hidden where it is built (page \`react-scenes\`, Motion; for GSAP specifics, the gsap skill's \`revline\` page).
+2. **Every cut.** Each cut minus one frame, on the cut, and plus one frame. No flash, no jump; where the beats are meant to connect, the two sides match.
+3. **Every beat.** One frame at each beat's key moment. Text sits inside the frame and is readable at the platform's size (a phone for vertical and feed formats); nothing overlaps by accident; one idea per shot.
+4. **Measurements.** Product UI compared with its screenshot at full size (compareScreen), and every reference measured on full-resolution frames, never a downscaled contact sheet (it makes everything look about half its size).
+5. **Only what was asked.** On feedback, everything outside the named part is unchanged: same shots, titles, timings, moves, colors and sound. Say what else had to move.
+6. **Limits.** Each scene under 120,000 characters and the timeline under 400,000 (shared code counts once), clips up to 120 s.
+7. **Preview speed.** Parts that are done or hidden render nothing or \`display: none\`, not only opacity 0; no heavy UI mounted where it cannot be seen.
+8. **Sound.** The film has the sound its skill asks for (motion-design page \`process\`, explainer-scenes for explainers), timed to the beats you just checked.`,
+};
+
 const reactScenesPage: EditorSkillPage = {
   name: 'react-scenes',
   description: 'React scenes: the format for launch and feature films. Components for structure (one per part, one clip per beat), GSAP for motion through useTimeline, transition clips between beats, the revline module.',
@@ -70,7 +88,7 @@ Launch and feature films use **React scenes** instead: components for structure,
 - The editor seeks the timeline to each frame, so the film is scrubbable and exports frame-exact. Animate only with GSAP. CSS transitions and keyframes, requestAnimationFrame, timers, Date, video and audio do not follow the clock.
 - GSAP scenes are plain TypeScript, not JSX (React scenes, page \`react-scenes\`, are TSX). Imports: \`gsap\` and its plugins (${SCENE_GSAP_PLUGINS.join(', ')}, plus EasePack), each from \`gsap/<Name>\` or all from \`gsap\`. They are registered already. Nothing else loads: no network, no other packages.
 - Math.random is seeded, so scatter and noise come out the same in preview and export.
-- Limits: code up to 20,000 characters, clips up to 120 s.
+- Limits: code up to 120,000 characters per scene and 400,000 per timeline (code shared by several clips counts once), clips up to 120 s.
 
 ## GSAP technique
 
@@ -104,13 +122,12 @@ Real screenshots, screen recordings, photos and logos from the project's media c
 ## Checking a scene
 
 - Scenes are not effects: never call planEffects or previewRender for a scene clip.
-- Walk through the timeline's key times in your code (start, each beat, the end): what is on screen at each, that text stays inside the frame, that nothing pops at a cut.
-- Over MCP, getFrames renders the saved timeline at chosen times: use it to look at your scenes.
+- Before handing a scene or film back, go through page \`checklist\`. Over MCP, getFrames renders the saved timeline at chosen times.
 
 ## Example
 
 \`\`\`ts
 ${STARTER_SCENE_CODE}\`\`\`
 `,
-  pages: [reactScenesPage],
+  pages: [reactScenesPage, checklistPage],
 };

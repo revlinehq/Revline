@@ -108,6 +108,6 @@ Then ask, only if the message did not already say: remake it, or borrow which pa
 ## Rules
 - Copy the edit, never the content: no reference copy, logo, product, people, voiceover or song lifted into the user's video unless the user owns it and asks for it. Title text in the breakdown is there only to recognise the shot.
 - Measured numbers (shot lengths, cut times, beats, onBeatRatio) are exact. Transition kinds, camera moves and title styles are the model's reading: when one decides the result, check it with inspectFrames on the reference before building.
-- After building, look at the result with getFrames at the shots that matter.`,
+- After building, go through scene-engine page \`checklist\` for scenes, and look at the result with getFrames at the shots that matter.`,
   pages: [socialEdit, motivation, launchFilm, borrow],
 };

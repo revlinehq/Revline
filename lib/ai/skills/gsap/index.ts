@@ -8,6 +8,7 @@ const RULES = `# GSAP in Revline scenes
 GSAP choreographs scene motion: staggers, overlaps, word and letter reveals, SplitText, MorphSVG, DrawSVG, motion paths. The pages after this one are GreenSock's official skills, unchanged (MIT, github.com/greensock/gsap-skills). Read them for the API and its best practices. Where they disagree with this page, this page wins: Revline renders every frame by seeking, never by playing.
 
 ## Rules
+The general rules (frame clock, flash frames, preview speed) live in scene-engine (page \`react-scenes\`); the checks before handing back are its page \`checklist\`. This page is how GSAP meets them.
 - **Timelines are always paused and seeked to the frame.** The engine seeks each scene's timeline to the frame being drawn, for preview, scrubbing and export alike. Never play(), restart(), reverse(), change timeScale, or rely on a tween playing in real time.
 - **React scenes:** build every timeline with \`useTimeline((tl, el) => { … })\` (scene-engine page \`react-scenes\`). It is Revline's useGSAP: it scopes selector strings to the component's element, reverts everything on unmount, and seeks to the beat's local time. Do not import @gsap/react or call useGSAP, gsap.context, useEffect or useLayoutEffect for animation.
 - **GSAP scenes:** put everything on the scene's \`tl\` with a position parameter.
