@@ -3,7 +3,8 @@ import { placeOnFreeLayer } from './operations';
 
 type Scene = NonNullable<Clip['scene']>;
 export type FilmBeat = { title: string; at: number };
-export type SceneEdit = { find: string; replace: string; all?: boolean };
+/** `insert` keeps the found snippet and puts `replace` before or after it: how a film grows part by part at a marker. */
+export type SceneEdit = { find: string; replace: string; all?: boolean; insert?: 'before' | 'after' };
 
 /**
  * A film's beat clips: one scene module cut into windows. Each clip starts `at` seconds into the film
@@ -27,7 +28,8 @@ export function placeFilm(timeline: Timeline, { start, duration, beats, track, s
 
 /** Apply exact find/replace edits in order. A snippet that is missing, or appears more than once without `all`, fails the whole call. */
 export function patchCode(code: string, edits: SceneEdit[]) {
-  return edits.reduce((text, { find, replace, all }, index) => {
+  return edits.reduce((text, { find, replace: given, all, insert }, index) => {
+    const replace = insert === 'before' ? given + find : insert === 'after' ? find + given : given;
     const label = edits.length > 1 ? `Edit ${index + 1}: ` : '';
     const count = find ? text.split(find).length - 1 : 0;
     if (!count) throw new Error(`${label}the snippet was not found. Copy it exactly from the current code (inspectClip), whitespace and quotes included${closest(text, find)}. Nothing was changed.`);

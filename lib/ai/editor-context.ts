@@ -92,13 +92,13 @@ function timelineOutput(output: LanguageModelV4ToolResultOutput): Record<string,
  * Applying this at the provider boundary also covers tool results in this run.
  */
 /** Earlier turns keep a scene's title and size; inspectClip returns its current code. */
-const SCENE_TOOLS = new Set(['addScene', 'addScenes', 'addFilm', 'editScene']);
+const SCENE_TOOLS = new Set(['addScene', 'addScenes', 'addFilm', 'patchScene', 'editScene']);
 function sceneCodeNote(code: string) { return `[${code.length} characters of earlier scene code omitted; inspectClip returns the current code]`; }
 /** A scene call's input with its code, film kit and each batched scene's code reduced to their sizes. */
 function withoutInputCode(input: Record<string, unknown>): Record<string, unknown> {
   const code = (value: unknown) => typeof value === 'string' ? sceneCodeNote(value) : value;
-  if (typeof input.code !== 'string' && typeof input.kit !== 'string' && !Array.isArray(input.scenes)) return input;
-  return { ...input, ...(input.code !== undefined ? { code: code(input.code) } : {}), ...(input.kit !== undefined ? { kit: code(input.kit) } : {}), ...(Array.isArray(input.scenes) ? { scenes: input.scenes.map(scene => object(scene) ? { ...scene, code: code(scene.code) } : scene) } : {}) };
+  if (typeof input.code !== 'string' && typeof input.kit !== 'string' && !Array.isArray(input.scenes) && !Array.isArray(input.edits)) return input;
+  return { ...input, ...(Array.isArray(input.edits) ? { edits: input.edits.map(edit => object(edit) && typeof edit.replace === 'string' && edit.replace.length > 400 ? { ...edit, replace: code(edit.replace) } : edit) } : {}), ...(input.code !== undefined ? { code: code(input.code) } : {}), ...(input.kit !== undefined ? { kit: code(input.kit) } : {}), ...(Array.isArray(input.scenes) ? { scenes: input.scenes.map(scene => object(scene) ? { ...scene, code: code(scene.code) } : scene) } : {}) };
 }
 function withoutSceneCode(clip: unknown): unknown {
   if (!object(clip) || !object(clip.scene) || typeof clip.scene.code !== 'string') return clip;
