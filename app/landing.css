@@ -191,13 +191,8 @@ div.landing-hero-buttons>.landing-reveal-content{display:flex;align-items:center
 .landing-motion-scene{position:absolute;inset:0;background:#17181c center/cover no-repeat;opacity:0;transition:opacity 450ms ease;pointer-events:none}
 .landing-motion-scene[data-active]{opacity:1}
 .landing-motion-film{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#09090b}
-/* Over a film the shade only darkens the bottom, so the film's own titles stay clear. */
-.landing-motion-film+.landing-motion-shade{background:linear-gradient(180deg,#0b0b0d00 60%,#0b0b0dcc 100%)}
-.landing-motion-film~.landing-motion-shade .landing-motion-timeline>i b{width:0}
 .landing-motion-shade{position:absolute;inset:0;display:flex;flex-direction:column;justify-content:flex-end;gap:28px;padding:24px;background:linear-gradient(180deg,#0b0b0d59 0%,#0b0b0d00 25%,#0b0b0d99 55%,#0b0b0df2 100%)}
-.landing-motion-scene[data-active] .landing-motion-shade>*:not(.landing-motion-time){animation:landing-motion-in 600ms cubic-bezier(.16,1,.3,1) backwards}
-.landing-motion-scene[data-active] .landing-motion-timeline{animation-delay:120ms}
-.landing-motion-time{position:absolute;z-index:1;top:24px;right:24px;font:12px var(--l-mono);color:#ffffffb3}
+.landing-motion-scene[data-active] .landing-motion-shade>*{animation:landing-motion-in 600ms cubic-bezier(.16,1,.3,1) backwards}
 .landing-motion-title{position:relative;z-index:1;padding-inline:8px;font:600 64px/1 var(--l-head);letter-spacing:-2.2px;color:#fff}
 .landing-motion-title b{font-weight:600;color:#a78bfa}
 .landing-motion-title span{margin-left:4px;color:#ffffff59}
@@ -209,13 +204,6 @@ div.landing-hero-buttons>.landing-reveal-content{display:flex;align-items:center
 .landing-motion-demo{display:contents}
 .landing-motion-focus{position:absolute;top:22%;left:30%;width:34%;height:34%;border:2px solid #fff;border-radius:8px;box-shadow:0 0 0 9999px #0b0b0d66}
 .landing-motion-focus svg{position:absolute;right:18%;bottom:22%;fill:#fff;color:#121212}
-.landing-motion-timeline{position:relative;z-index:1;display:flex;flex-direction:column;gap:10px;padding:14px 16px;border-radius:8px;background:#0b0b0db3}
-.landing-motion-timeline>div{display:flex;align-items:center;justify-content:space-between}
-.landing-motion-timeline>div:first-child{font:11px var(--l-mono);color:#ffffff80}
-.landing-motion-timeline>div:nth-child(2){height:14px;color:#fff}
-.landing-motion-timeline svg[data-pending]{color:#ffffff4d}
-.landing-motion-timeline>i{display:block;height:3px;border-radius:2px;background:#ffffff1f}
-.landing-motion-timeline>i b{display:block;width:68%;height:100%;border-radius:2px;background:#a78bfa}
 @keyframes landing-motion-in{from{opacity:0;translate:0 10px}}
 @media(prefers-reduced-motion:reduce){.landing-motion-scene,.landing-segments-pill{transition:none}.landing-motion-scene[data-active] .landing-motion-shade>*{animation:none}}
 
