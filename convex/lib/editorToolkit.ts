@@ -50,6 +50,8 @@ import { cleanColors, googleFonts, sceneBrandSnapshot, scrapeBrand } from './bra
 import { mediaUrl } from './media_storage';
 import { renderSound, encodeWav, soundWaveform } from '../../lib/audio/render-sound';
 import { SR } from '../../lib/audio/dsp';
+import { MUSIC_BED_LIMITS, renderMusicBed } from '../../lib/audio/music-bed';
+import { beatGrid, energyCurve, feelOf, momentFit, phaseForMoments } from '../../lib/audio/music-match';
 import { putMediaObject, storageControl } from './media_storage';
 import {configureVisualFade,VISUAL_FADE_MAX_SECONDS} from '../../lib/editor/visual-fades';
 import { OFFERED_VISUAL_EFFECT_GROUPS,visualEffectActionPatch } from '../../lib/editor/visual-effect-actions';
@@ -604,6 +606,38 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       const start = existing?.start ?? timelineDuration(t);
       const duration = Math.min(range.end - range.start, (asset.duration ?? range.end) - range.start) / (existing ? playbackRateOf(existing) : 1);
       if (duration < 1 / t.fps) throw new Error("The strongest scene is shorter than one frame");
+    matchMusic: createTool({ description: "Give a recreation music that matches the reference's: measures the reference video's tempo, beat grid and energy curve (never uses its audio), then renders a new music bed at that tempo with a matching feel, phased so its downbeats land on the reference's downbeats (or on the main moments you pass), with each bar's density following the reference's energy. Places it on a free A track and saves it with its own beat map, so alignCutsToBeat with the returned musicAssetId works right away. Synthesized (pads, bass, drums, a pluck), safe to publish. Read the music-and-sound skill first.", inputSchema: z.object({ referenceAssetId: z.string().describe('The reference video (or its audio) from getProject.'), moments: z.array(z.number().min(0)).max(40).optional().describe("The film's main moments in reference SOURCE seconds (the big hits of the motion log). Default: the reference's own downbeats."), at: z.number().min(0).optional().describe('Timeline seconds where reference second 0 sits (default 0).'), duration: z.number().positive().max(MUSIC_BED_LIMITS.duration).optional().describe('Bed length in seconds; default: to the end of the visuals on the timeline.'), feel: z.enum(['calm', 'warm', 'upbeat', 'driving']).optional().describe("Override the measured feel."), key: z.enum(['F minor', 'A minor', 'D minor', 'C major', 'G major']).optional(), gain: z.number().min(0).max(1.2).optional().describe('Clip volume (default 0.45, under the motion sounds).') }), execute: async (_ctx, input) => {
+      let reference = await loadAsset(input.referenceAssetId);
+      if (reference.kind !== 'video' && reference.kind !== 'audio') throw new Error('Choose the reference video or its audio.');
+      const source = reference.kind === 'video' && reference.audioAssetId ? await loadAsset(reference.audioAssetId) : reference;
+      if (source.analysis?.beats?.engine !== BEAT_ANALYSIS_ENGINE) reference = await analyze(source._id, 'beats'); else reference = source;
+      const beats = reference.analysis?.beats;
+      if (!beats || beats.beats.length < 8) throw new Error('The reference has too few clear beats to match its tempo. Pick a feel and tempo by ear instead.');
+      const grid = beatGrid(beats), at = input.at ?? 0;
+      await editSession.wait();
+      const visualEnd = Math.max(0, ...editSession.timeline.clips.filter(clip => clip.kind !== 'audio' && clip.kind !== 'effect').map(clip => clip.start + clip.duration));
+      const duration = Math.min(MUSIC_BED_LIMITS.duration, input.duration ?? (visualEnd > at ? visualEnd - at : (reference.duration ?? 30)));
+      const phase = input.moments?.length ? phaseForMoments(input.moments, grid.period) : grid.phase;
+      const firstBar = Math.floor(-phase / grid.bar), waveform = reference.waveform;
+      const perBar = waveform ? energyCurve(waveform, Math.max(reference.duration ?? duration, duration), grid.bar, phase + firstBar * grid.bar).values : undefined;
+      const curve = waveform ? energyCurve(waveform, reference.duration ?? duration, 1) : undefined;
+      const feel = input.feel ?? feelOf(grid.bpm, curve?.values ?? []);
+      const bed = renderMusicBed({ duration, bpm: grid.bpm, feel, phase, key: input.key, energy: perBar });
+      const key = `media/${run.ownerId}/${run.projectId}/${crypto.randomUUID()}`, size = await putMediaObject(key, encodeWav(bed.samples), 'audio/wav');
+      let asset;
+      try { asset = await ctx.runMutation(internal.assistant.saveGeneratedSound, { ...run, r2Key: key, fileName: `Music bed ${Math.round(bed.bpm)} BPM ${feel}.wav`, size, duration: bed.samples[0].length / SR, waveform: soundWaveform(bed.samples), beats: { beats: bed.beats, bpm: bed.bpm, confidence: 1, engine: BEAT_ANALYSIS_ENGINE, downbeats: bed.downbeats, accents: [], dropCandidates: [] } }); }
+      catch (error) { await storageControl({ action: 'delete', key }).catch(() => {}); throw error; }
+      assets.push(asset);
+      const clipId = crypto.randomUUID(), gain = input.gain ?? .45;
+      const result = await checkpoint(t => {
+        const start = Math.round(at * t.fps) / t.fps, end = start + asset.duration!;
+        const busy = new Set(t.clips.filter(clip => clip.kind === 'audio' && clip.start < end && start < clip.start + clip.duration).map(trackOf));
+        let track = 1; while (busy.has(track) && track < maxTrackCount('audio')) track++;
+        return patchClip(addMediaClip(t, { _id: asset._id, kind: 'audio', duration: asset.duration! }, clipId, start, track), clipId, { volume: gain });
+      });
+      const moments = input.moments ?? beats.downbeats?.slice(0, 8) ?? [];
+      return { ...result, clipId, musicAssetId: asset._id, bpm: bed.bpm, referenceBpm: beats.bpm, feel, key: input.key ?? 'F minor', bars: Math.ceil(duration / grid.bar), firstDownbeat: Math.round((at + (bed.downbeats[0] ?? 0)) * 1000) / 1000, energyPerSecond: curve?.values, momentFit: momentFit(moments, grid.period, phase).map(item => ({ ...item, time: Math.round((at + item.time) * 1000) / 1000 })), note: 'Synthesized at the reference tempo; never listened to. Next: alignCutsToBeat with this musicAssetId if cuts should land on its beats, and keep generated effects 0.2 to 0.3 above this bed.' };
+    } }),
       const id = existing?.id ?? crypto.randomUUID();
       const next = existing ? t : addMediaClip(t, { ...asset, duration }, id, start);
       const shot = find(next, id);

@@ -1,6 +1,7 @@
 import type { EditorSkill, EditorSkillPage } from '../index';
 import { SCENE_GSAP_PLUGINS } from '../../../editor/scene-modules';
 import { GREENSOCK_PAGES } from './pages';
+import { TRANSITION_RECIPE_PAGES } from './recipes';
 
 /** Revline's rules for GSAP in scenes. They come first and win over anything in GreenSock's pages. */
 const RULES = `# GSAP in Revline scenes
@@ -20,6 +21,9 @@ The general rules (frame clock, flash frames, preview speed) live in scene-engin
 - **No responsive or reduced-motion branches.** gsap.matchMedia does not apply: the canvas has a fixed size and every frame is rendered.
 - **Plugins:** ${SCENE_GSAP_PLUGINS.join(', ')} and EasePack are loaded and registered; import them from \`gsap/<Name>\` (registering again is harmless). No other plugin loads.
 
+## Transition recipes
+Launch films and remakes are built from a handful of transitions: letter reveal, write-on and draw-on, mask wipe, blur-in and motion blur, morph, typing with a colored highlight, fly-off. Page \`transitions\` maps the words of a motion log to each one; each \`recipe-*\` page is a short useTimeline snippet with its usual durations and eases. Name the transition type of every moment, then build it from its recipe with the reference's measured timing.
+
 ## What to take from GreenSock's pages
 - \`gsap-timeline\`: the position parameter (absolute, \`<\`, \`>\`, \`-=0.2\`), labels, timeline defaults and nesting. Sequence with these instead of chained delays.
 - \`gsap-core\`: tween vars, eases, stagger (each, amount, from, grid), function-based and relative values.
@@ -32,7 +36,7 @@ const rulesPage: EditorSkillPage = { name: 'revline', description: 'Read first: 
 
 export const gsapSkill: EditorSkill = {
   name: 'gsap',
-  description: 'GSAP choreography for scenes: GreenSock\'s official skills (timeline, core, plugins, React, performance, utils) under Revline\'s rules for paused, frame-seeked timelines. Read before writing staggers, word reveals, SplitText, MorphSVG or any multi-step motion in a scene.',
+  description: 'GSAP choreography for scenes: GreenSock\'s official skills (timeline, core, plugins, React, performance, utils) under Revline\'s rules for paused, frame-seeked timelines. Also transition recipes (letter reveal, write-on, mask wipe, blur-in and motion blur, morph, typing, fly-off). Read before writing staggers, word reveals, SplitText, MorphSVG or any multi-step motion in a scene.',
   body: RULES,
-  pages: [rulesPage, ...GREENSOCK_PAGES],
+  pages: [rulesPage, ...TRANSITION_RECIPE_PAGES, ...GREENSOCK_PAGES],
 };
