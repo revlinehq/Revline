@@ -1034,8 +1034,9 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
     const tool = (tools as Record<string, { execute?: (...args: never[]) => Promise<unknown> }>)[name];
     const execute = tool?.execute;
     if (!tool || !execute) continue;
-    tool.execute = async (...args: never[]) => {
-      const output = await execute(...args) as Record<string, unknown>;
+    // createTool's execute reads its ctx from \`this\` (the tool), so call it as a method of the tool.
+    tool.execute = async function (this: unknown, ...args: never[]) {
+      const output = await execute.apply(this ?? tool, args) as Record<string, unknown>;
       const ids = new Set<string>([...(Array.isArray(output?.changedClips) ? output.changedClips : []).map(clip => String((clip as { id?: unknown }).id)), ...(Array.isArray(output?.scenes) ? output.scenes : []).map(scene => String((scene as { clipId?: unknown }).clipId))]);
       const checks = editSession.timeline.clips.filter(clip => clip.kind === 'scene' && ids.has(clip.id)).map(clip => coverage.sceneCheck(clip.start, clip.start + clip.duration)).filter(check => !!check);
       return checks.length ? { ...output, readCheck: checks.map(check => check.readCheck).join(' '), unreadMoments: [...new Set(checks.flatMap(check => check.unreadMoments ?? []))], splitMoments: [...new Set(checks.flatMap(check => check.splitMoments ?? []))] } : output;
