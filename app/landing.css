@@ -80,7 +80,7 @@ div.landing-reveal,div.landing-reveal>.landing-reveal-content{display:inline-blo
 .landing-product-frame{padding:12px;border:1px solid #12121214;border-radius:22px;background:#1212120a;box-shadow:0 24px 64px #3b1a8a1f}
 @media(prefers-reduced-motion:no-preference){.landing-product-frame{animation:landing-settle-media 1.1s cubic-bezier(.32,.72,0,1) 1.05s backwards}}
 @keyframes landing-settle-media{from{opacity:.01;translate:0 32px;scale:.97}}
-/* Hero demo: components/landing/hero-demo.tsx. Panels stack in one grid cell and crossfade, so switching never changes the height. */
+/* Hero demo: components/landing/hero-demo.tsx. */
 .landing-demo{display:flex;flex-direction:column;align-items:center;gap:20px}
 .landing-demo>.landing-product-frame{width:100%;padding:0;border:0;border-radius:10px;background:none}
 .landing-demo-stage{overflow:hidden;border:1px solid #ffffff14;border-radius:10px;background:#0b0c0e}
@@ -90,17 +90,6 @@ div.landing-reveal,div.landing-reveal>.landing-reveal-content{display:inline-blo
 .landing-demo-editor>.landing-editor-dark{height:100%;color-scheme:dark}
 .landing-demo-editor main{height:100%;min-height:0}
 .landing-demo-poster{display:block;width:100%;height:100%;object-fit:contain;background:#101010}
-/* Revline | Claude | ChatGPT: equal columns, so the pill slides by its own width. */
-.landing-demo-switch{position:relative;display:grid;grid-template-columns:repeat(3,112px);padding:3px;border:1px solid #ebebee;border-radius:9px;background:#f4f4f5}
-.landing-demo-switch-pill{position:absolute;top:3px;bottom:3px;left:3px;width:112px;border-radius:6px;background:#fff;box-shadow:0 1px 2px #1212121a,0 0 0 1px #12121208;translate:calc(var(--switch-index) * 100%) 0;transition:translate 380ms cubic-bezier(.32,.72,0,1)}
-.landing-demo-switch button{position:relative;height:30px;border:0;background:none;font-size:13px;font-weight:500;color:var(--l-fg-2);transition:color 200ms ease}
-.landing-demo-switch button[aria-selected=true]{color:var(--l-fg)}
-.landing-demo-switch button{display:inline-flex;align-items:center;justify-content:center;gap:7px}
-/* Logos sit neutral until their segment is chosen, then show their own colors. */
-.landing-demo-switch-logo{width:14px;height:14px;flex-shrink:0;filter:grayscale(1);opacity:.55;transition:filter 200ms ease,opacity 200ms ease}
-.landing-demo-switch button[aria-selected=true] .landing-demo-switch-logo{filter:none;opacity:1}
-.landing-demo-switch .revline-brand{display:inline-flex}
-.landing-demo-switch .revline-mark{width:14px;height:14px;color:var(--l-fg)}
 /* Install on your agents: components/landing/install-agents.tsx */
 .landing-install-dialog{background:#fff;color:#121212;color-scheme:light;gap:18px;padding:20px}
 .landing-install-dialog>*{min-width:0}
@@ -283,8 +272,6 @@ div.landing-reveal,div.landing-reveal>.landing-reveal-content{display:inline-blo
   .landing-hero-copy>p{font-size:16px}
   .landing-product-frame{padding:6px;border-radius:14px}
   .landing-demo-stage{border-radius:8px}
-  .landing-demo-switch{grid-template-columns:repeat(3,104px)}
-  .landing-demo-switch-pill{width:104px}
   .landing-logos{padding-bottom:56px}
   .landing-logos ul{gap:16px 36px}
   .landing-logos li{font-size:18px}
@@ -305,5 +292,4 @@ div.landing-reveal,div.landing-reveal>.landing-reveal-content{display:inline-blo
 }
 @media(prefers-reduced-motion:reduce){
   .landing-marquee-track{animation:none}
-  .landing-demo-switch-pill,.landing-demo-switch-logo{transition-duration:0s}
 }

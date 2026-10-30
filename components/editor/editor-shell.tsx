@@ -80,8 +80,6 @@ export type EditorShellProps = {
   onRemoveAsset?: (asset:MediaAsset)=>Promise<void>;
   onSaveThumbnail?: (assetId:string,url:string)=>void;
   onPreviewReady?: (controller:PreviewHandle)=>void;
-  /** Embedded only: a new value opens the conversation on a phone, e.g. when the host swaps the chat it shows. */
-  conversationRequest?: string;
   onRegisterStockAudio?: (catalogId:string)=>Promise<MediaAsset>;
   onShare?: () => void;
 };
@@ -168,8 +166,6 @@ export function EditorShell(p: EditorShellProps) {
   const [, setDesktopMode] = useEditorModePreference();
   // An embedded editor (the landing hero) opens on the preview; the app opens on the conversation.
   const [mobileConversation, setMobileChat] = useState(!p.embedded);
-  const shownRequest = useRef(p.conversationRequest);
-  useEffect(() => { if (p.conversationRequest !== shownRequest.current) { shownRequest.current = p.conversationRequest; setMobileChat(true); } }, [p.conversationRequest]);
   const mobileChat = compact && mobileConversation;
   // The media panel stays mounted so it can slide open and closed; widths animate only during a toggle, never while dragging.
   const inspectorPanel=usePanelRef();const inspectorWidth=useRef(480);const [inspectorMotion,setInspectorMotion]=useState(false);const inspectorMoving=useRef(false);inspectorMoving.current=inspectorMotion;

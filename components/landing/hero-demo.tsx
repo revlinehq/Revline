@@ -1,10 +1,7 @@
 'use client';
-import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import type { PreviewHandle } from '@/components/editor/preview';
-import { Brand } from '@/components/workspace/brand';
-import { ClaudeLogo, OpenAILogo } from '@/components/workspace/ai-app-logos';
-import type { HeroChat } from './hero-editor';
 
 // The Blueprint launch film, made in Revline from screenshots. Swap the export in here (and its waveform in hero-editor.tsx).
 const FILM_SRC = '/landing/blueprint-launch-v2.mp4';
@@ -13,17 +10,10 @@ const FILM_POSTER = '/landing/blueprint-launch-v2-poster.webp';
 // The real editor is large, so it loads only once the hero is close to the screen.
 const LandingHeroEditor = dynamic(() => import('./hero-editor'), { ssr: false });
 
-const VIEWS: { id: HeroChat; label: string; Logo: (props: { className?: string }) => React.ReactNode }[] = [
-  { id: 'revline', label: 'Revline', Logo: ({ className }) => <Brand markOnly className={className} /> },
-  { id: 'claude', label: 'Claude', Logo: ({ className }) => <ClaudeLogo className={className} width={14} height={14} /> },
-  { id: 'chatgpt', label: 'ChatGPT', Logo: ({ className }) => <OpenAILogo className={className} width={14} height={14} /> },
-];
-
-/** Hero demo: the launch film playing in Revline's real editor, driven from Revline's own chat, Claude or ChatGPT. */
+/** Hero demo: the launch film playing in Revline's real editor, next to the chat that made it. */
 export function LandingHeroDemo() {
   const root = useRef<HTMLDivElement>(null);
   const preview = useRef<PreviewHandle | null>(null);
-  const [view, setView] = useState<HeroChat>('revline');
   const [film, setFilm] = useState<string | null>(null);
   const visible = useRef(false);
 
@@ -67,19 +57,14 @@ export function LandingHeroDemo() {
     if (first) autoplay();
   }
 
-  const index = VIEWS.findIndex(item => item.id === view);
   return <div ref={root} className="landing-demo">
     <div className="landing-product-frame">
       <div className="landing-demo-stage">
         <div className="landing-demo-editor">
-          {film ? <LandingHeroEditor url={film} poster={FILM_POSTER} chat={view} onPreviewReady={onPreviewReady} />
+          {film ? <LandingHeroEditor url={film} poster={FILM_POSTER} onPreviewReady={onPreviewReady} />
             : <img className="landing-demo-poster" src={FILM_POSTER} alt="" width={1600} height={900} />}
         </div>
       </div>
-    </div>
-    <div className="landing-demo-switch" role="tablist" aria-label="Who drives the edit" style={{ '--switch-index': index } as CSSProperties}>
-      <span className="landing-demo-switch-pill" aria-hidden="true" />
-      {VIEWS.map(({ id, label, Logo }) => <button key={id} type="button" role="tab" aria-selected={view === id} onClick={() => setView(id)}><Logo className="landing-demo-switch-logo" />{label}</button>)}
     </div>
   </div>;
 }
