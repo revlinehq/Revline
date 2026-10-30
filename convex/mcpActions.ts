@@ -6,7 +6,7 @@ import { internalAction, type ActionCtx } from './_generated/server';
 import type { Doc, Id } from './_generated/dataModel';
 import { createEditorToolkit } from './lib/editorToolkit';
 import { mediaDownloadUrl } from './lib/media_storage';
-import { READ_ONLY_RUN_PREFIX } from './lib/run_ids';
+import { readRunId } from './lib/run_ids';
 import { completeUpload, openUpload, signPartUrl } from './r2';
 
 // The editor's own AI tools, exposed over MCP. planEffects/previewRender keep
@@ -184,10 +184,9 @@ function withImages(output: unknown, isError: boolean): CallResult {
 async function readEditorTool(ctx: ActionCtx, ownerId: string, rawProjectId: string, name: string, input: unknown, timelineId?: string): Promise<CallResult> {
   try {
     const projectId = await ctx.runQuery(internal.mcp.readRun, { ownerId, projectId: rawProjectId });
-    const run = { projectId, ownerId, runId: `${READ_ONLY_RUN_PREFIX}${crypto.randomUUID()}` };
-    const loaded = await ctx.runQuery(internal.assistant.getRun, run), assets = loaded.assets;
-    // A named tab is read from its stored timeline; the open tab stays as it is.
-    const project = timelineId ? { ...loaded.project, timeline: await ctx.runQuery(internal.mcp.tabTimeline, { ownerId, projectId: rawProjectId, timelineId }), activeTimelineId: timelineId } : loaded.project;
+    // A named tab is read from its stored timeline, on every reload the tool makes; the open tab stays as it is.
+    const run = { projectId, ownerId, runId: readRunId(timelineId) };
+    const { project, assets } = await ctx.runQuery(internal.assistant.getRun, run);
     const abortSignal = AbortSignal.timeout(CALL_LIMIT_MS);
     const { tools } = editorTools(ctx, { run, project, assets, recovering: false, initialPlans: [], selectedClipIds: [], abortSignal, planlessEffects: true });
     const tool = tools[name];

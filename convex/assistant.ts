@@ -1,5 +1,5 @@
 import {validatePinnedClaudeModel,type ClaudeModelSelection} from '../lib/ai/claude-model';
-import { READ_ONLY_RUN_PREFIX } from './lib/run_ids';
+import { READ_ONLY_RUN_PREFIX, readRunTab } from './lib/run_ids';
 import type {MutationCtx, QueryCtx} from './_generated/server';
 import type {Doc} from './_generated/dataModel';
 import {aiWorkflow} from './lib/workflows';
@@ -13,6 +13,7 @@ import { attachStockAudio, validateWaveform } from './assets';
 import { recordAssetStorage } from './lib/storage_accounting';
 import { writeProject,readProject,projectIdentity,projectRun } from './lib/project_data';
 import { loadSceneCode, storeSceneCode, storedSceneCode } from './lib/scene_code';
+import { activeTabOf, storedTabTimeline } from './timelineTabs';
 import { withoutSceneCode } from '../lib/editor/scene-code';
 import { hasUltraPlan, requireEditorAccess } from './lib/billing_access';
 import { abortStream, createThread, listStreams, listUIMessages, saveMessage, syncStreams, vPaginationResult, vStreamArgs } from "@convex-dev/agent";
@@ -206,6 +207,9 @@ export const getRun = internalQuery({args:runArgs,returns:v.object({project:proj
   const run=await projectRun(ctx,args.projectId,args.ownerId);if(!args.runId.startsWith(READ_ONLY_RUN_PREFIX)&&(run.aiRunId!==args.runId||!run.aiRunning))throw new ConvexError('AI run is no longer active');
   const project=(await ctx.db.get(args.projectId))!;
   const assets=await ctx.db.query('assets').withIndex('by_ownerId_projectId',q=>q.eq('ownerId',args.ownerId).eq('projectId',args.projectId)).take(200);
+  // A read of a named tab (MCP timelineId) serves that tab's stored timeline without opening it.
+  const tab=args.runId.startsWith(READ_ONLY_RUN_PREFIX)?readRunTab(args.runId):undefined;
+  if(tab&&tab!==activeTabOf(project)){const stored=await storedTabTimeline(ctx,project,tab);if(!stored)throw new ConvexError('That timeline no longer exists.');return {project:{...project,...run,activeTimelineId:tab,timeline:await loadSceneCode(ctx,stored)},assets};}
   return {project:{...project,...run,timeline:await loadSceneCode(ctx,currentTimeline(project))},assets};
 }});
 export const getRunTimeline=internalQuery({args:runArgs,returns:v.object({timeline:timelineValidator,revision:v.number()}),handler:async(ctx,args)=>{
