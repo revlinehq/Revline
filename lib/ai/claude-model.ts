@@ -166,7 +166,9 @@ export function editorMaxOutputTokens(selection: ClaudeModelSelection) {
   if (selection.provider === 'anthropic') return 128_000;
   // GPT and Gemini need room for a whole scene (about 10k tokens of code) plus their reasoning in one step; a lower cap
   // cut scenes off mid-write ("reached the model output limit") or pushed models to shorten them. Billing is per token used.
-  return { low: 32_768, medium: 49_152, high: 65_536, xhigh: 65_536, max: 65_536 }[selection.reasoningEffort ?? defaultEditorReasoningEffort()];
+  const cap = { low: 32_768, medium: 49_152, high: 65_536, xhigh: 65_536, max: 65_536 }[selection.reasoningEffort ?? defaultEditorReasoningEffort()];
+  // Gemini 4 Argon's documented outputTokenLimit is 32,768; asking for more can fail mid-turn.
+  return selection.provider === 'google' ? Math.min(cap, 32_768) : cap;
 }
 
 export function assertEditorModelConfigured(selection: ClaudeModelSelection, env: ClaudeModelEnvironment = process.env) {
