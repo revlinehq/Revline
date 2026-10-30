@@ -5,11 +5,15 @@ import { useRef, useState } from 'react';
 import { Upload, Link2 } from 'lucide-react';
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { VideoLinkImport } from './video-link-import';
+import { MediaThumbnail } from './media-thumbnail';
+import type { MediaAsset } from '@/lib/editor/types';
 import './media-import-dialog.css';
 
-export function MediaImportDialog({ open, onOpenChange, onUpload, onImportVideo, disabled=false }: {
+export function MediaImportDialog({ open, onOpenChange, onUpload, onImportVideo, disabled=false, projectMedia=[], onPickProjectMedia }: {
   open:boolean; onOpenChange:(open:boolean)=>void; onUpload:(files:File[])=>void;
   onImportVideo?:(url:string)=>Promise<void>; disabled?:boolean;
+  /** Media already in the project that can go out with the message instead of uploading it again. */
+  projectMedia?:MediaAsset[]; onPickProjectMedia?:(asset:MediaAsset)=>void;
 }) {
   const input=useRef<HTMLInputElement>(null);
   const [dragging,setDragging]=useState(false);
@@ -30,7 +34,8 @@ export function MediaImportDialog({ open, onOpenChange, onUpload, onImportVideo,
       event.preventDefault();event.stopPropagation();setDragging(false);attach(Array.from(event.dataTransfer.files));
     }}>
       <DialogTitle>Add media</DialogTitle>
-      <DialogDescription>Upload your clips or import a video link.</DialogDescription>
+      <DialogDescription>{onPickProjectMedia&&projectMedia.length?'Attach media from this project, upload clips or import a video link.':'Upload your clips or import a video link.'}</DialogDescription>
+      {onPickProjectMedia&&projectMedia.length>0&&<div className="media-import-project" role="list" aria-label="Media in this project">{projectMedia.map(asset=><button key={asset._id} type="button" role="listitem" className="media-import-project-item" disabled={busy} title={asset.fileName} aria-label={`Attach ${asset.fileName}`} onClick={()=>{onOpenChange(false);onPickProjectMedia(asset);}}><MediaThumbnail asset={asset}/><span>{asset.fileName}</span></button>)}</div>}
       <button type="button" className={`media-import-drop ${dragging?'is-dragging':''}`} disabled={busy} onClick={()=>input.current?.click()}>
         <Upload size={24} strokeWidth={1.5}/><strong>{dragging?'Drop your media here':'Drag and drop your media'}</strong><span>or click to choose files</span><small>Video, images & audio</small>
       </button>

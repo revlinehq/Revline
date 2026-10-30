@@ -10,3 +10,9 @@
 .media-import-divider:before,.media-import-divider:after{content:'';height:1px;flex:1;background:var(--ws-artifact-border,#ddd)}
 .media-import-dialog .video-link-import{margin:4px 0 0}
 .media-import-link{display:flex;justify-content:center;align-items:center;gap:8px;min-height:42px;border:1px solid var(--ws-artifact-border,#ddd);border-radius:8px;color:var(--ws-text,#171717);font-size:13px;text-decoration:none}
+.media-import-project{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:8px;max-height:176px;overflow-y:auto;margin-top:6px}
+.media-import-project-item{display:flex;flex-direction:column;gap:4px;min-width:0;padding:0;border:0;background:none;color:var(--ws-text,#171717);font:inherit;text-align:left;cursor:pointer}
+.media-import-project-item>:first-child{width:100%;aspect-ratio:16/10;border:1px solid var(--ws-artifact-border,#ddd);border-radius:6px;overflow:hidden;object-fit:cover;background:var(--ws-surface,#f5f5f5)}
+.media-import-project-item:hover>:first-child,.media-import-project-item:focus-visible>:first-child{border-color:var(--ws-text,#171717)}
+.media-import-project-item:focus-visible{outline:none}
+.media-import-project-item span{overflow:hidden;font-size:11px;color:var(--ws-muted,#777);text-overflow:ellipsis;white-space:nowrap}

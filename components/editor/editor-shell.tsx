@@ -81,6 +81,8 @@ export type EditorShellProps = {
   projectId?: string; workspaceOnly?: boolean; onImportVideo?: (url:string)=>Promise<void>; videoImports?: VideoImportState[];
   onRefreshMedia?:RefreshPlaybackMedia;
   onRemoveAsset?: (asset:MediaAsset)=>Promise<void>;
+  /** Sends media already in the project with the next chat message. */
+  onAttachAsset?: (assetId:string)=>void;
   onSaveThumbnail?: (assetId:string,url:string)=>void;
   onPreviewReady?: (controller:PreviewHandle)=>void;
   onRegisterStockAudio?: (catalogId:string)=>Promise<MediaAsset>;
@@ -455,7 +457,7 @@ export function EditorShell(p: EditorShellProps) {
   const browseSources=()=>{setImportDestination('sources');setImportOpen(true);};
   const browseComposer=()=>{setImportDestination('composer');setImportOpen(true);};
 
-  const inspector = <PreviewInspector onRemoveAsset={p.onRemoveAsset} usedAssetIds={usedAssetIds} sourceRequest={sourceRequest} videoImports={p.videoImports} assets={assets} upload={p.upload} onUpload={browseSources} onAdd={addAsset}/>;
+  const inspector = <PreviewInspector onRemoveAsset={p.onRemoveAsset} onAttachAsset={p.onAttachAsset&&(asset=>p.onAttachAsset!(asset._id))} usedAssetIds={usedAssetIds} sourceRequest={sourceRequest} videoImports={p.videoImports} assets={assets} upload={p.upload} onUpload={browseSources} onAdd={addAsset}/>;
 
   // On desktop the ratio chip sits on the preview frame's top-left corner, as in the design.
   const ratioOnFrame = !compact && !!previewTimeline.clips.length;
@@ -491,7 +493,7 @@ export function EditorShell(p: EditorShellProps) {
     {opening&&<FootagePreparation thumbnail={firstVisualAsset?.thumbnailUrl||(firstVisualAsset?.kind==='image'?firstVisualAsset.url:null)||openingFootage(p.projectId)?.thumbnail||loadingThumbnail} fileName={openingFootage(p.projectId)?.fileName} label={!playbackReady?'Loading footage…':!audioPrepared?'Preparing audio…':initialAnalysis||'Preparing timeline thumbnails…'} detail={playbackSlow&&!playbackReady?'Still loading the video. The editor will open when it is ready.':playbackReady&&audioPrepared&&!initialAnalysis&&thumbnailProgress.total?`${thumbnailProgress.ready} of ${thumbnailProgress.total} visible thumbnails loaded.`:undefined} error={playbackError} onRetry={()=>{setPlaybackError('');setPlaybackSlow(false);onError('');setOpeningAttempt(value=>value+1);preview.current?.retry();}}/>}
     {preparing&&<ProjectImportStage importTask={p.videoImports?.find(task=>!['completed','cancelled'].includes(task.status))} upload={p.upload} onBrowse={browse} onUpload={p.onUpload} onStartFromPrompt={p.demo?undefined:()=>setPromptStart(p.projectId??null)}/>}
     {compact && inspectorOpen && <Sheet open={inspectorOpen} onOpenChange={setInspectorOpen}><SheetContent className="preview-inspector-sheet" showCloseButton={false}><div className="mobile-inspector-header"><SheetTitle>My media</SheetTitle><Button type="button" variant="ghost" size="icon" aria-label="Close editing panel" onClick={() => setInspectorOpen(false)}><X size={18}/></Button></div><SheetDescription>Add media to your timeline.</SheetDescription>{inspector}</SheetContent></Sheet>}
-    <MediaImportDialog open={importOpen} onOpenChange={setImportOpen} onUpload={files=>{void (importDestination==='composer'?p.onAttachUpload??p.onDropUpload:editLock.current||importDestination==='sources'?p.onDropUpload:p.onUpload)(files);}} onImportVideo={editing?undefined:p.onImportVideo} disabled={!!p.upload}/>
+    <MediaImportDialog open={importOpen} onOpenChange={setImportOpen} onUpload={files=>{void (importDestination==='composer'?p.onAttachUpload??p.onDropUpload:editLock.current||importDestination==='sources'?p.onDropUpload:p.onUpload)(files);}} onImportVideo={editing?undefined:p.onImportVideo} disabled={!!p.upload} {...(importDestination==='composer'&&p.onAttachAsset?{projectMedia:assets.filter(asset=>asset.url&&!asset.preparation&&!assets.some(video=>video.audioAssetId===asset._id)&&!p.composerAttachments?.some(item=>item.id===asset._id)).sort((a,b)=>Number(a.kind==='audio')-Number(b.kind==='audio')),onPickProjectMedia:(asset:MediaAsset)=>p.onAttachAsset!(asset._id)}:{})}/>
     <ExportDialog ultra={p.ultra} open={exportOpen} onOpenChange={setExportOpen} title={exportClipId?`${p.title} clip`:!onlyOpenTab?`${p.title} · ${exportTabs.length} ${exportTabs.length===1?'video':'videos'}`:p.title} timeline={exportTimeline} clipOnly={!!exportClipId} coverUrl={exportCover} onExport={startExports} onCancel={p.onCancelExport} onDownload={p.onDownloadExport} state={exportState} demo={!!p.demo} videoCount={!onlyOpenTab?Math.max(1,exportTabs.length):1} timelines={multiTab?tabs.map(tab=>({id:tab.id,name:tab.name,aspectRatio:tab.active?timeline.aspectRatio:tab.aspectRatio,duration:tab.active?timelineDuration(timeline):tab.duration,cover:tab.active?exportCover:tab.cover})):[]} selectedTimelines={exportTabs} onSelectTimelines={setExportTabs} exports={(p.exports??[]).map(job=>({id:job.requestId!,status:job.status,progress:job.progress,label:job.label,createdAt:job.createdAt??0,resolution:job.resolution,sourceClipId:job.sourceClipId,aspectRatio:job.sourceTimelineId===activeTabId?timeline.aspectRatio:tabs.find(tab=>tab.id===job.sourceTimelineId)?.aspectRatio}))} />
   </main>;
 }
