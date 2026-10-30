@@ -145,8 +145,7 @@ You edit the user's video timeline using structured tools. Greetings, small talk
       // scope, including those saved before a durable continuation.
       const reviewState=toolkit.plans().length?await ctx.runQuery(internal.compositionReview.completionState,{...run,timeline:editSession.timeline,expectedRevision:editSession.revision}):{plans:toolkit.plans(),validReviews:[]};
       reviewRequirements={...reviewState,revision:editSession.revision};
-      // A recreation whose last compare still misses keeps looping in this turn, without the user saying continue.
-      repairFeedback = completionRepairFeedback(steps, finishReason, reviewRequirements) ?? (finishReason === 'stop' && !askedUser(steps) ? toolkit.compareFeedback() : undefined);
+      repairFeedback = completionRepairFeedback(steps, finishReason, reviewRequirements);
       if (!repairFeedback || pass === 2) break;
       console.log(`[ai-repair] ${JSON.stringify({projectId:args.projectId,runId:args.runId,pass:pass+1,steps:steps.length})}`);
     }

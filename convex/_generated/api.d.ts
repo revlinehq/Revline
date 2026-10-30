@@ -28,6 +28,8 @@ import type * as discordAlerts from "../discordAlerts.js";
 import type * as editorAccess from "../editorAccess.js";
 import type * as flyRender from "../flyRender.js";
 import type * as http from "../http.js";
+import type * as iconCache from "../iconCache.js";
+import type * as icons from "../icons.js";
 import type * as lib_account_limits from "../lib/account_limits.js";
 import type * as lib_ai_cost from "../lib/ai_cost.js";
 import type * as lib_asset_analysis from "../lib/asset_analysis.js";
@@ -114,6 +116,8 @@ declare const fullApi: ApiFromModules<{
   editorAccess: typeof editorAccess;
   flyRender: typeof flyRender;
   http: typeof http;
+  iconCache: typeof iconCache;
+  icons: typeof icons;
   "lib/account_limits": typeof lib_account_limits;
   "lib/ai_cost": typeof lib_ai_cost;
   "lib/asset_analysis": typeof lib_asset_analysis;

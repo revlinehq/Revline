@@ -9,6 +9,7 @@ import { fitMotion } from '@/lib/media-analysis/fit-motion';
 import { followBox } from '@/lib/media-analysis/follow-box';
 import { measure } from './blueprint-check';
 import { forEachLimited } from './run-limited';
+import { traceShape } from './trace-shape';
 
 type Work = NonNullable<MediaWorkItem['read']>;
 type Result = NonNullable<MediaTaskResult['read']>;
@@ -180,6 +181,21 @@ async function readMeasure(path: string, directory: string, source: Source, work
   return { width: info.width, height: info.height, sourceWidth: source.width, sourceHeight: source.height, fps: round(source.fps, 3), frames: [{ time }], colors, edges: edges?.map(edge => ({ ...edge, changes: strongEdges(edge.changes) })) };
 }
 
+/** One shape in a box traced to SVG paths; the sheet sets the crop beside the trace drawn over the background. */
+async function readTrace(path: string, directory: string, source: Source, work: Work, signal: AbortSignal): Promise<Result> {
+  if (!work.box) throw new AnalysisError('Tracing needs a box around the shape.', 400);
+  const box = clampBox(work.box, source), [time] = timesIn(work.start, work.start, 1, source);
+  const crop = await frameAt(path, directory, time, box, 'trace', signal);
+  let traced: Awaited<ReturnType<typeof traceShape>>;
+  try { traced = await traceShape(crop, { ...(work.color ? { color: work.color } : {}), ...(work.tolerance ? { tolerance: work.tolerance } : {}) }); }
+  catch (error) { throw new AnalysisError((error as Error).message, 400); }
+  const { width, height, ...trace } = traced;
+  const spine = trace.centerline ? `<path d="${trace.centerline.d}" fill="none" stroke="#ff3b30" stroke-width="${Math.max(2, width / 200)}"/>` : '';
+  const drawn = await sharp(Buffer.from(trace.svg.replace('<svg ', `<svg width="${width}" height="${height}" `).replace('>', `><rect width="${width}" height="${height}" fill="${trace.background}"/>`).replace('</svg>', `${spine}</svg>`))).png().toBuffer();
+  const result = await sheet([{ image: crop, label: `crop ${time.toFixed(2)}s` }, { image: drawn, label: `trace ${trace.paths.length} paths, spine in red` }], width / height, 2);
+  return { ...result, sourceWidth: source.width, sourceHeight: source.height, fps: round(source.fps, 3), frames: [{ time }], trace: { box, ...trace } };
+}
+
 /** Footage is textured: every grain of concrete is a small color step. Keep the jumps that stand out along the line, in order. */
 function strongEdges(changes: { at: number; before: string; after: string }[]) {
   const jump = (change: { before: string; after: string }) => [1, 3, 5].reduce((sum, offset) => sum + Math.abs(parseInt(change.after.slice(offset, offset + 2), 16) - parseInt(change.before.slice(offset, offset + 2), 16)), 0);
@@ -228,6 +244,7 @@ export async function readReference(path: string, directory: string, work: Work,
   onProgress(5);
   if (work.mode === 'measure') return readMeasure(path, directory, source, work, signal);
   if (work.mode === 'track') return readTrack(path, directory, source, work, signal, onProgress);
+  if (work.mode === 'trace') return readTrace(path, directory, source, work, signal);
   if (work.momentsOnly) return readMoments(path, source, work, signal);
   return readSheet(path, directory, source, work, signal, onProgress);
 }
