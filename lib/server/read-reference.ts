@@ -10,6 +10,7 @@ import { followBox } from '@/lib/media-analysis/follow-box';
 import { measure } from './blueprint-check';
 import { forEachLimited } from './run-limited';
 import { traceShape } from './trace-shape';
+import { matchFont, type FontCategory } from './match-font';
 
 type Work = NonNullable<MediaWorkItem['read']>;
 type Result = NonNullable<MediaTaskResult['read']>;
@@ -181,6 +182,16 @@ async function readMeasure(path: string, directory: string, source: Source, work
   return { width: info.width, height: info.height, sourceWidth: source.width, sourceHeight: source.height, fps: round(source.fps, 3), frames: [{ time }], colors, edges: edges?.map(edge => ({ ...edge, changes: strongEdges(edge.changes) })) };
 }
 
+/** The Google Fonts closest to the type in a crop, with the crop above each candidate drawn in the crop's colors. */
+async function readFont(path: string, directory: string, source: Source, work: Work, signal: AbortSignal, onProgress: (percent: number) => void): Promise<Result> {
+  if (!work.crop || !work.text) throw new AnalysisError('Matching a font needs a crop around the text and the text itself.', 400);
+  const box = clampBox(work.crop, source), [time] = timesIn(work.start, work.start, 1, source);
+  const crop = await frameAt(path, directory, time, box, 'font', signal);
+  const found = await matchFont(crop, work.text, { categories: work.categories as FontCategory[] | undefined, signal, onProgress });
+  const result = await sheet(found.tiles, found.aspect, 1);
+  return { ...result, sourceWidth: source.width, sourceHeight: source.height, fps: round(source.fps, 3), frames: [{ time }], fonts: found.matches, fontColors: { ink: found.inkColor, background: found.background } };
+}
+
 /** One shape in a box traced to SVG paths; the sheet sets the crop beside the trace drawn over the background. */
 async function readTrace(path: string, directory: string, source: Source, work: Work, signal: AbortSignal): Promise<Result> {
   if (!work.box) throw new AnalysisError('Tracing needs a box around the shape.', 400);
@@ -245,6 +256,7 @@ export async function readReference(path: string, directory: string, work: Work,
   if (work.mode === 'measure') return readMeasure(path, directory, source, work, signal);
   if (work.mode === 'track') return readTrack(path, directory, source, work, signal, onProgress);
   if (work.mode === 'trace') return readTrace(path, directory, source, work, signal);
+  if (work.mode === 'font') return readFont(path, directory, source, work, signal, onProgress);
   if (work.momentsOnly) return readMoments(path, source, work, signal);
   return readSheet(path, directory, source, work, signal, onProgress);
 }
