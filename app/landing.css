@@ -190,6 +190,10 @@ div.landing-hero-buttons>.landing-reveal-content{display:flex;align-items:center
 .landing-motion-preview{position:relative;flex:0 1 620px;width:100%;min-height:0;overflow:hidden;border-radius:12px;background:#17181c}
 .landing-motion-scene{position:absolute;inset:0;background:#17181c center/cover no-repeat;opacity:0;transition:opacity 450ms ease;pointer-events:none}
 .landing-motion-scene[data-active]{opacity:1}
+.landing-motion-film{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#09090b}
+/* Over a film the shade only darkens the bottom, so the film's own titles stay clear. */
+.landing-motion-film+.landing-motion-shade{background:linear-gradient(180deg,#0b0b0d00 60%,#0b0b0dcc 100%)}
+.landing-motion-film~.landing-motion-shade .landing-motion-timeline>i b{width:0}
 .landing-motion-shade{position:absolute;inset:0;display:flex;flex-direction:column;justify-content:flex-end;gap:28px;padding:24px;background:linear-gradient(180deg,#0b0b0d59 0%,#0b0b0d00 25%,#0b0b0d99 55%,#0b0b0df2 100%)}
 .landing-motion-scene[data-active] .landing-motion-shade>*:not(.landing-motion-time){animation:landing-motion-in 600ms cubic-bezier(.16,1,.3,1) backwards}
 .landing-motion-scene[data-active] .landing-motion-timeline{animation-delay:120ms}

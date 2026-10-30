@@ -4,14 +4,18 @@ import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 're
 import { Diamond, MousePointer2 } from 'lucide-react';
 import { LandingSection } from './ui';
 
-type Kind = { id: string; label: string; image: string; beats: string[]; overlay: ReactNode };
+type Kind = { id: string; label: string; image: string; beats: string[]; overlay: ReactNode; film?: Film };
+// A segment can play a real film instead of a still; its markers light up as the film passes each beat (seconds).
+type Film = { src: string; poster: string; duration: number; beatTimes: number[] };
 
 // Each segment swaps the preview: its footage, its motion overlay and the timeline beats that drive it.
 const kinds: Kind[] = [
   {
+    // Revline's own launch film, made in Revline from two screenshots; its titles are in the film, so no overlay.
     id: 'launch', label: 'Launch videos', image: 'vlog',
-    beats: ['Every', 'word', 'lands', 'on time.'],
-    overlay: <p className="landing-motion-title">Every word<br /><b>lands</b> <span>on time.</span></p>,
+    beats: ['Screenshots', 'Parts', 'Timeline', 'Meet T3 Code'],
+    overlay: null,
+    film: { src: '/landing/revline-launch.mp4', poster: '/landing/revline-launch-poster.webp', duration: 37.92, beatTimes: [0, 8.9, 12.5, 18.5] },
   },
   {
     id: 'explainers', label: 'Explainers', image: 'code-screen',
@@ -38,6 +42,49 @@ const kinds: Kind[] = [
 const AUTO_ADVANCE_MS = 6000;
 // Scroll distance each segment holds the pinned section for, in viewport heights.
 const SCROLL_PER_SEGMENT = .7;
+
+const timecode = (seconds: number) => [Math.floor(seconds / 60), Math.floor(seconds % 60), Math.floor((seconds % 1) * 30)].map(part => String(part).padStart(2, '0')).join(':');
+
+/** The film behind a segment, with the section's own player UI following it: timecode, beat markers and progress. */
+function FilmScene({ kind, playing }: { kind: Kind & { film: Film }; playing: boolean }) {
+  const video = useRef<HTMLVideoElement>(null);
+  const time = useRef<HTMLTimeElement>(null), progress = useRef<HTMLElement>(null);
+  const [passed, setPassed] = useState(1);
+  useEffect(() => {
+    const element = video.current;
+    if (!element) return;
+    // Server-rendered HTML can't carry `muted`, so set it before asking to play.
+    element.muted = true;
+    if (playing && !matchMedia('(prefers-reduced-motion: reduce)').matches) void element.play().catch(() => {}); else element.pause();
+  }, [playing]);
+  useEffect(() => {
+    const element = video.current;
+    if (!element) return;
+    let frame = 0;
+    const paint = () => {
+      const now = element.currentTime;
+      if (time.current) time.current.textContent = timecode(now);
+      progress.current?.style.setProperty('width', `${(now / kind.film.duration) * 100}%`);
+      setPassed(kind.film.beatTimes.filter(at => at <= now + .01).length);
+      if (!element.paused) frame = requestAnimationFrame(paint);
+    };
+    const sync = () => { cancelAnimationFrame(frame); paint(); };
+    const events = ['play', 'pause', 'seeked', 'timeupdate'] as const;
+    events.forEach(name => element.addEventListener(name, sync));
+    return () => { cancelAnimationFrame(frame); events.forEach(name => element.removeEventListener(name, sync)); };
+  }, [kind.film]);
+  return <>
+    <video ref={video} className="landing-motion-film" src={kind.film.src} poster={kind.film.poster} muted loop playsInline preload="metadata" />
+    <div className="landing-motion-shade">
+      <time ref={time} className="landing-motion-time">00:00:00</time>
+      <div className="landing-motion-timeline">
+        <div>{kind.beats.map(beat => <span key={beat}>{beat}</span>)}</div>
+        <div>{kind.beats.map((beat, beatIndex) => <Diamond key={beat} size={12} data-pending={beatIndex >= passed || undefined} />)}</div>
+        <i><b ref={progress} /></i>
+      </div>
+    </div>
+  </>;
+}
 
 export function LandingMotion() {
   const [active, setActive] = useState(0);
@@ -115,7 +162,9 @@ export function LandingMotion() {
         </div>
       </div>
       <div id="landing-motion-panel" role="tabpanel" aria-labelledby={`landing-motion-tab-${kind.id}`} className="landing-motion-preview">
-        {kinds.map((item, index) => <div key={item.id} className="landing-motion-scene" data-active={index === active || undefined} style={{ backgroundImage: `url(/landing/${item.image}.webp)` }} aria-hidden={index !== active}>
+        {kinds.map((item, index) => item.film ? <div key={item.id} className="landing-motion-scene" data-active={index === active || undefined} aria-hidden={index !== active}>
+          <FilmScene kind={item as Kind & { film: Film }} playing={index === active && visible} />
+        </div> : <div key={item.id} className="landing-motion-scene" data-active={index === active || undefined} style={{ backgroundImage: `url(/landing/${item.image}.webp)` }} aria-hidden={index !== active}>
           <div className="landing-motion-shade">
             <time className="landing-motion-time">00:03:12</time>
             {item.overlay}
