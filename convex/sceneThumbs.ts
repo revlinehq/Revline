@@ -30,7 +30,10 @@ export const forProject = query({ args: { projectId: v.id('projects') }, returns
   const frames: Record<string, Doc<'frameSnapshots'>['frames'] & {}> = {};
   for (const clip of sceneClips(timeline)) {
     const row = await latest(ctx, project._id, sceneKey(clip, timeline));
-    if (row?.status === 'completed' && row.frames) frames[clip.id] = row.frames;
+    if (row?.status === 'completed' && row.frames) { frames[clip.id] = row.frames; continue; }
+    // While a changed clip renders again (or if that render failed), keep showing its last frames.
+    const previous = await ctx.db.query('frameSnapshots').withIndex('by_project', q => q.eq('projectId', project._id)).filter(q => q.and(q.eq(q.field('clipId'), clip.id), q.eq(q.field('status'), 'completed'))).order('desc').first();
+    if (previous?.frames) frames[clip.id] = previous.frames;
   }
   return frames;
 }});
@@ -43,12 +46,16 @@ export const ensure = mutation({ args: { projectId: v.id('projects') }, returns:
   let started = 0;
   for (const clip of sceneClips(timeline)) {
     const key = sceneKey(clip, timeline), row = await latest(ctx, project._id, key);
-    if (row && (row.status === 'completed' || row.status === 'queued' && row.createdAt > Date.now() - STALE_MS)) continue;
+    const others = await ctx.db.query('frameSnapshots').withIndex('by_project', q => q.eq('projectId', project._id)).filter(q => q.eq(q.field('clipId'), clip.id)).take(20);
+    // Current frames are in: older versions of this clip can go.
+    if (row?.status === 'completed') { for (const old of others) if (old._id !== row._id) await ctx.db.delete(old._id); continue; }
+    if (row && row.status === 'queued' && row.createdAt > Date.now() - STALE_MS) continue;
     if (started >= STARTS_PER_CALL) break;
     // Previews never take a slot the user's own work needs.
     try { await requireMediaTaskCapacity(ctx, ownerId, 1); } catch { break; }
-    // Older frames of this clip (other versions, or a stale request) go.
-    for (const old of await ctx.db.query('frameSnapshots').withIndex('by_project', q => q.eq('projectId', project._id)).filter(q => q.eq(q.field('clipId'), clip.id)).take(20)) await ctx.db.delete(old._id);
+    // Stale or failed requests go; the newest finished frames stay on screen until the new ones land.
+    const keep = others.filter(old => old.status === 'completed').sort((a, b) => b.createdAt - a.createdAt)[0];
+    for (const old of others) if (old !== keep) await ctx.db.delete(old._id);
     const times = Array.from({ length: FRAMES }, (_, i) => Math.round((i + .5) / FRAMES * clip.duration * timeline.fps) / timeline.fps);
     const snapshotId = await ctx.db.insert('frameSnapshots', { projectId: project._id, ownerId, revision: project.revision ?? 0, times, status: 'queued', createdAt: Date.now(), clipId: clip.id, key });
     const taskId = await enqueueMediaTask(ctx, { ownerId, projectId: project._id, kind: 'snapshot', snapshotId });
