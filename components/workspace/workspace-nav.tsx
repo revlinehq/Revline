@@ -9,7 +9,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useClerk, useUser } from '@clerk/nextjs';
 import { signOutToSignIn } from '@/lib/auth/sign-out';
 import { useConvexAuth, useQuery } from 'convex/react';
-import { Check, ChevronDown, CircleAlert, Copy, Database, Download, Film, History, LoaderCircle, LogOut, Palette, PanelsTopLeft, Pencil, Plus, Redo2, UserRound, Undo2 } from 'lucide-react';
+import { Check, ChevronDown, CircleAlert, Copy, Database, Download, Film, History, Link2, LoaderCircle, LogOut, Palette, PanelsTopLeft, Pencil, Plus, Redo2, UserRound, Undo2 } from 'lucide-react';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
 import { Brand } from './brand';
@@ -64,6 +64,9 @@ export interface WorkspaceNavProps {
   onRedo?: () => void;
   onFootage?: () => void;
   onExport?: () => void;
+  /** Opens the share dialog: a public link to the timeline, with a preview card. */
+  onShare?: () => void;
+  shareDisabled?: boolean;
   exportDisabled?: boolean;
   /** Explains a disabled export or its limit before the dialog opens. */
   exportHint?: string;
@@ -72,7 +75,7 @@ export interface WorkspaceNavProps {
   editorControls?: ReactNode;
 }
 
-export function WorkspaceNav({ title = NEW_WORKSPACE_LABEL, editorHref, active = 'chat', demo = false, saving, saveFailed, onRetrySave, canUndo, canRedo, onUndo, onRedo, onFootage, onExport, exportDisabled, exportHint, onRename, chatId, editorControls }: WorkspaceNavProps) {
+export function WorkspaceNav({ title = NEW_WORKSPACE_LABEL, editorHref, active = 'chat', demo = false, saving, saveFailed, onRetrySave, canUndo, canRedo, onUndo, onRedo, onFootage, onExport, onShare, shareDisabled, exportDisabled, exportHint, onRename, chatId, editorControls }: WorkspaceNavProps) {
   const pathname = usePathname();
   const router = useRouter();
   const startingWorkspace = useRef(false);
@@ -141,6 +144,7 @@ export function WorkspaceNav({ title = NEW_WORKSPACE_LABEL, editorHref, active =
       {saveFailed && onRetrySave && <Button variant="outline" size="md" type="button" className="workspace-nav-unsaved" aria-label="Unsaved changes. Retry saving" onClick={onRetrySave}><CircleAlert size={14} aria-hidden="true" /><span>Unsaved changes — Retry</span></Button>}
       {(onUndo || onRedo) && <div className="workspace-nav-history"><Button variant="ghost" size="icon-sm" aria-label="Undo" disabled={!canUndo} onClick={onUndo}><Undo2 size={15} /></Button><Button variant="ghost" size="icon-sm" aria-label="Redo" disabled={!canRedo} onClick={onRedo}><Redo2 size={15} /></Button></div>}
       {onFootage && <Button variant="outline" size="md" aria-label="Footage" onClick={onFootage}><Film size={14} /><span>Footage</span></Button>}
+      {onShare && !demo && <Button variant="outline" size="md" className="workspace-nav-share" onClick={onShare} disabled={shareDisabled} aria-description={shareDisabled ? 'Add a clip to share' : 'Share a link to this timeline'}><Link2 size={14} /><span>Share</span></Button>}
       {onExport && !demo && <span className="workspace-nav-action-hint"><Button size="md" className="workspace-nav-export" onClick={onExport} disabled={exportDisabled} aria-description={exportHint}>Export<Download size={13} /></Button></span>}
       {editorHref && <Button asChild variant="outline" size="md"><Link href={editorHref} className="workspace-editor-link" aria-label="Editor"><PanelsTopLeft size={14} /><span>Editor</span></Link></Button>}
       <DropdownMenu><DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="workspace-account-trigger rounded-full p-0" aria-label="Open account menu" disabled={!isLoaded}><Avatar>{user?.imageUrl && <AvatarImage src={user.imageUrl} alt="" />}<AvatarFallback>{initial}</AvatarFallback></Avatar></Button></DropdownMenuTrigger>
