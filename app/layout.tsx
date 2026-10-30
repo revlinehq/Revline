@@ -15,9 +15,15 @@ const geist = Geist({ subsets: ["latin"], variable: "--font-geist" });
 const outfit = Outfit({ subsets: ["latin"], variable: "--landing-font-head" });
 const geistMono = Geist_Mono({ subsets: ["latin"], variable: "--landing-font-mono" });
 
+const shareTitle = "Revline: the AI video editor that actually does the editing";
+const shareDescription = "From podcasts and YouTube videos to product demos, ads, and social clips. Revline cuts, captions, reframes, and polishes every video for you.";
 export const metadata: Metadata = {
+  metadataBase: new URL("https://tryrevline.com"),
   title: "Revline AI video editor",
   description: "Edit your videos in conversation. Make every cut your own.",
+  // Link previews (iMessage, X, Slack) show this card; without it they keep an old cached one.
+  openGraph: { type: "website", url: "/", siteName: "Revline", title: shareTitle, description: shareDescription, images: [{ url: "/og-image.png", width: 1200, height: 630, alt: "Revline AI video editor" }] },
+  twitter: { card: "summary_large_image", title: shareTitle, description: shareDescription, images: ["/og-image.png"] },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
