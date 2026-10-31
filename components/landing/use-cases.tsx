@@ -7,27 +7,14 @@ import { LandingChip, LandingHeading, LandingSection } from './ui';
 // `credit` adds a small attribution line on the tile.
 type Tile = { label: string; image?: string; video?: { src: string; poster: string; ratio: number }; wide?: boolean; credit?: string };
 
+// Only real films for now; one row keeps a seamless loop until there are enough for a second.
 const rows: Tile[][] = [
   [
     { label: 'Launch film', video: { src: '/landing/kinetic-launch.mp4', poster: '/landing/kinetic-launch-poster.webp', ratio: 16 / 9 } },
+    { label: 'Save Reminders', video: { src: '/landing/save-reminders.mp4', poster: '/landing/save-reminders-poster.webp', ratio: 16 / 9 }, credit: 'Concept inspired by @mosycreate' },
     { label: 'Motion', video: { src: '/landing/jensen-motion-vertical.mp4', poster: '/landing/jensen-motion-vertical-poster.webp', ratio: 608 / 1080 } },
     { label: 'Voice typing', video: { src: '/landing/voice-typing.mp4', poster: '/landing/voice-typing-poster.webp', ratio: 16 / 9 } },
-    { label: 'Podcast clip', image: 'podcast' },
-    { label: 'Product demo', image: 'code-screen', wide: true },
-    { label: 'Vlog', image: 'vlog', wide: true },
-    { label: 'Social video', image: 'talking-head' },
-    { label: 'Tutorial', image: 'classroom', wide: true },
-    { label: 'Ad', image: 'beauty' },
-  ],
-  [
-    { label: 'Save Reminders', video: { src: '/landing/save-reminders.mp4', poster: '/landing/save-reminders-poster.webp', ratio: 16 / 9 }, credit: 'Concept inspired by @mosycreate' },
     { label: 'Explainer', video: { src: '/landing/how-servers-work-tile.mp4', poster: '/landing/how-servers-work-poster.webp', ratio: 16 / 9 } },
-    { label: 'Talking head', image: 'talking-head' },
-    { label: 'Walkthrough', image: 'podcast' },
-    { label: 'UGC ad', image: 'classroom', wide: true },
-    { label: 'Highlight reel', image: 'code-screen', wide: true },
-    { label: 'Course lesson', image: 'beauty' },
-    { label: 'Short', image: 'vlog', wide: true },
   ],
 ];
 
