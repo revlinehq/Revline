@@ -21,7 +21,7 @@ const rows: Tile[][] = [
   ],
   [
     { label: 'Save Reminders', video: { src: '/landing/save-reminders.mp4', poster: '/landing/save-reminders-poster.webp', ratio: 16 / 9 }, credit: 'Concept inspired by @mosycreate' },
-    { label: 'Explainer', video: { src: '/landing/how-servers-work.mp4', poster: '/landing/how-servers-work-poster.webp', ratio: 16 / 9 } },
+    { label: 'Explainer', video: { src: '/landing/how-servers-work-tile.mp4', poster: '/landing/how-servers-work-poster.webp', ratio: 16 / 9 } },
     { label: 'Talking head', image: 'talking-head' },
     { label: 'Walkthrough', image: 'podcast' },
     { label: 'UGC ad', image: 'classroom', wide: true },

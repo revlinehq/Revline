@@ -15,11 +15,22 @@ export function LandingTileVideo({ src, poster, label, ratio = 16 / 9, hidden = 
     // Server-rendered HTML can't carry `muted`, so set it before asking to play.
     element.muted = true;
     if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    // The browser can leave a film "playing" with its clock stuck; a small seek wakes it, as in the Motion section.
+    let watch = 0;
+    const stop = () => { clearInterval(watch); watch = 0; element.pause(); };
     const observer = new IntersectionObserver(([entry]) => {
-      if (entry.isIntersecting && !open) void element.play().catch(() => {}); else element.pause();
+      if (!entry.isIntersecting || open) { stop(); return; }
+      void element.play().catch(() => {});
+      if (watch) return;
+      let last = -1;
+      watch = window.setInterval(() => {
+        if (element.paused) void element.play().catch(() => {});
+        else if (element.currentTime === last) element.currentTime = last + .01;
+        last = element.currentTime;
+      }, 1000);
     });
     observer.observe(element);
-    return () => observer.disconnect();
+    return () => { observer.disconnect(); clearInterval(watch); };
   }, [open]);
   return <Dialog open={open} onOpenChange={setOpen}>
     <button type="button" className="landing-tile-play" onClick={() => setOpen(true)} tabIndex={hidden ? -1 : undefined} aria-label={`Play ${label}`}>
