@@ -48,12 +48,19 @@ export default function scene({ root, tl, gsap }) {
 - **Counter**: a Geist Mono number tweened on an object with onUpdate, power3.out, landing on the spoken value.
 - **Structure / house**: uprights and roof lines as separate paths drawn on in order (front edges #F5F5F5, back edges #888), so the drawing builds like a sketch.`;
 
-export const explainerStylings: EditorSkill = {
-  name: 'explainer-stylings',
-  description: 'The user\'s house look for diagrams, charts and motion graphics, with exact colors, line weights, type, motion and a working code example (page "example"). Default: isometric line diagram (thin white outlined 3D blocks, hatching, one accent edge, dimension lines, few words). Read before drawing diagrams, charts or callouts in an explainer over footage, a motion elements piece, or a diagram beat in a launch or motion-design film, unless the user asks for a different look.',
-  body: `# Explainer stylings
+export const overallStyling: EditorSkill = {
+  name: 'overall-styling',
+  description: 'The user\'s house look for everything Revline makes: launch films, motion-design, explainers over footage and motion elements. Product UI stays restrained (near-black, hairlines, one accent, minimal text, no grids, scan lines, shadows or bright purple fills); diagrams, charts and technical graphics use the isometric line diagram (thin white outlined 3D blocks, hatching, one accent edge, dimension lines, few words), with a working code example (page "example"). Read before designing any film, scene or graphic, unless the user asks for a different look.'',
+  body: `# Overall styling
 
-How diagrams and motion graphics look, in explainers over footage, motion elements and diagram beats of motion-design films. explainer-scenes and motion-design say what to show and when; this skill says how it looks. Use the default unless the user names another look. The page "example" is a complete scene in this style to adapt.
+How everything looks: launch films, motion-design films, explainers over footage and motion elements. explainer-scenes and motion-design say what to show and when; this skill says how it looks.
+
+## Everywhere
+
+- Restrained: near-black surfaces, thin hairlines, muted text, one accent per piece. No grids, scan lines, drop shadows or bright purple fills.
+- The picture carries the eye: few words on screen, never the spoken words repeated as titles.
+- One product look: the Revline editor appears the same in every section of a film (one shared kit or blueprint, not copies).
+- Something always moves; eased, never abrupt. Use the default unless the user names another look. The page "example" is a complete scene in this style to adapt.
 
 ## Isometric line diagram (default)
 
