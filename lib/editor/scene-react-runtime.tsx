@@ -37,14 +37,30 @@ export type ReactSceneOptions = SceneProps & {
 class Clock {
   frame = 0;
   private listeners = new Set<() => void>();
+  private seekers = new Set<() => void>();
   subscribe = (listener: () => void) => { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; };
-  set(frame: number) { this.frame = frame; this.listeners.forEach(listener => listener()); }
+  /** GSAP timelines seek after React has drawn the frame, so they read beat starts that moved in it. */
+  follow = (seeker: () => void) => { this.seekers.add(seeker); return () => { this.seekers.delete(seeker); }; };
+  set(frame: number) { this.frame = frame; this.notify(); }
+  notify() { this.listeners.forEach(listener => listener()); }
+  seek() { this.seekers.forEach(seeker => seeker()); }
 }
 
 type SceneState = SceneProps & { clock: Clock; icons: Record<string, string>; blueprint: ReactSceneOptions['blueprint']; neighbours: SceneNeighbour[] };
 /** A beat's window on the scene clock, plus where its child beats record theirs for relative starts.
  * `frame` maps the scene clock to this subtree's clock: identity, except inside a neighbour clip. */
-type BeatWindow = { start: number; duration: number; frame: (clock: number) => number; beats: Map<string, { start: number; duration: number }> };
+type BeatWindow = { readonly start: number; duration: number; frame: (clock: number) => number; beats: Map<string, { start: number; duration: number }> };
+/** A Beat's window. One per mounted beat: a start that moves every frame (a remapped source clock)
+ * changes its numbers, never its identity, so the timelines below it stay built. Its start reads
+ * through its parents, so nested beats follow a moving ancestor without re-rendering. */
+class BeatSpan implements BeatWindow {
+  local = 0;
+  duration = 0;
+  beats = new Map<string, { start: number; duration: number }>();
+  frame: (clock: number) => number;
+  constructor(private parent: BeatWindow) { this.frame = parent.frame; }
+  get start() { return this.parent.start + this.local; }
+}
 const same = (frame: number) => frame;
 const SceneContext = createContext<SceneState | null>(null);
 const BeatContext = createContext<BeatWindow | null>(null);
@@ -73,15 +89,15 @@ export function useBeat(): BeatTime;
 export function useBeat<T>(select: (time: BeatTime) => T): T;
 export function useBeat<T>(select?: (time: BeatTime) => T): T | BeatTime {
   const { clock, fps } = useSceneState(), beat = useContext(BeatContext)!;
-  const cache = useRef<{ frame: number; beat: BeatWindow; value: T | BeatTime } | null>(null);
+  const cache = useRef<{ frame: number; beat: BeatWindow; start: number; duration: number; value: T | BeatTime } | null>(null);
   const read = () => {
     const cached = cache.current;
-    if (cached && cached.frame === clock.frame && cached.beat === beat) return cached.value;
+    if (cached && cached.frame === clock.frame && cached.beat === beat && cached.start === beat.start && cached.duration === beat.duration) return cached.value;
     const time = beat.frame(clock.frame) / fps - beat.start;
     const now: BeatTime = { time, frame: Math.round(time * fps), fps, start: beat.start, duration: beat.duration, progress: beat.duration > 0 ? Math.min(1, Math.max(0, time / beat.duration)) : 1 };
     const value = select ? select(now) : now;
     // A selected value that did not change keeps its identity, so React skips the re-render.
-    cache.current = { frame: clock.frame, beat, value: select && cached && cached.beat === beat && Object.is(cached.value, value) ? cached.value : value };
+    cache.current = { frame: clock.frame, beat, start: beat.start, duration: beat.duration, value: select && cached && cached.beat === beat && Object.is(cached.value, value) ? cached.value : value };
     return cache.current.value;
   };
   return useSyncExternalStore(clock.subscribe, read, read);
@@ -124,10 +140,10 @@ export function Beat({ id, start = 0, duration, track = 0, keep = false, style, 
   }
   const length = Math.max(0, duration ?? parent.duration - local);
   if (id) parent.beats.set(id, { start: local, duration: length });
-  const absolute = parent.start + local;
-  const window = useMemo<BeatWindow>(() => ({ start: absolute, duration: length, frame: parent.frame, beats: new Map() }), [absolute, length, parent.frame]);
-  const from = Math.round(absolute * fps), to = Math.round((absolute + length) * fps);
-  const active = useSyncExternalStore(clock.subscribe, () => { const frame = parent.frame(clock.frame); return frame >= from && frame < to; });
+  const window = useMemo(() => new BeatSpan(parent), [parent]);
+  window.local = local;
+  window.duration = length;
+  const active = useSyncExternalStore(clock.subscribe, () => { const frame = parent.frame(clock.frame); return frame >= Math.round(window.start * fps) && frame < Math.round((window.start + window.duration) * fps); });
   if (!active && !keep) return null;
   const body = (
     <BeatContext.Provider value={window}>
@@ -169,7 +185,7 @@ export function useTimeline<T extends HTMLElement = HTMLDivElement>(build: (tl: 
     // Seeked straight from the clock, outside React: the component itself never re-renders per frame.
     const seek = () => { tl.seek(Math.max(0, beat.frame(clock.frame) / fps - beat.start), false); };
     seek();
-    const unsubscribe = clock.subscribe(seek);
+    const unsubscribe = clock.follow(seek);
     return () => { unsubscribe(); context.revert(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clock, fps, beat, ...deps]);
@@ -335,7 +351,13 @@ export function createReactSceneAdapter(options: ReactSceneOptions): FrameAdapte
       ));
     },
     getDurationFrames: () => Math.round(props.duration * props.fps),
-    seekFrame: frame => commit(() => clock.set(Math.max(0, Math.round(frame)))),
+    seekFrame: frame => {
+      commit(() => clock.set(Math.max(0, Math.round(frame))));
+      // A beat whose start moved in that render shifts the beats nested in it, which did not re-render:
+      // asking again lets them catch up in this frame. Unchanged reads are cached, so this pass is cheap.
+      commit(() => clock.notify());
+      clock.seek();
+    },
     settle: () => { const waiting = pending; pending = []; return Promise.all(waiting).then(() => undefined); },
     destroy: () => { root?.unmount(); root = null; },
   };
