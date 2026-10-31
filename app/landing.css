@@ -70,6 +70,15 @@ div.landing-reveal,div.landing-reveal>.landing-reveal-content{display:inline-blo
 .landing-nav-links{display:flex;align-items:center;gap:28px}
 .landing-nav-links a{font-size:14px;font-weight:500;color:var(--l-fg-2);transition:color 140ms ease}
 .landing-nav-links a:hover{color:var(--l-fg)}
+.landing-nav-menu{display:inline-flex;align-items:center;gap:4px;padding:0;border:0;background:none;font-size:14px;font-weight:500;color:var(--l-fg-2);transition:color 140ms ease}
+.landing-nav-menu:hover,.landing-nav-menu[data-state=open]{color:var(--l-fg)}
+.landing-nav-menu svg{transition:rotate 160ms ease}
+.landing-nav-menu[data-state=open] svg{rotate:180deg}
+.landing-nav[data-tone=dark] .landing-nav-menu{color:#ffffffa6}
+.landing-nav[data-tone=dark] .landing-nav-menu:is(:hover,[data-state=open]){color:#fff}
+.landing-product-menu-label{display:inline-flex;align-items:center;gap:8px;font-size:14px;font-weight:500;color:#121212}
+.landing-product-menu-note{font-size:12.5px;color:#8a8a8a}
+.landing-product-menu-new{padding:1px 6px;border:1px solid #e4e4e7;border-radius:999px;font-size:11px;font-weight:500;color:#5e5e5e}
 .landing-nav-right{display:flex;align-items:center;justify-self:end;gap:10px}
 /* The nav groups play the hero's reveal just before it; each group's content keeps its row layout. */
 .landing-nav .landing-reveal{--reveal-start:.05s}
@@ -295,8 +304,8 @@ div.landing-hero-buttons>.landing-reveal-content{display:flex;align-items:center
 
 /* Inspo Motion: components/landing/inspo.tsx */
 .landing-inspo{display:flex;flex-direction:column;align-items:center;gap:32px;padding-block:120px;background:#0b0b0d;position:relative}
-/* A hairline across the content width separates it from the Motion section above. */
-.landing-inspo::before{content:"";position:absolute;top:0;inset-inline:max(var(--l-gutter),(100% - var(--l-content)) / 2);height:1px;background:#ffffff1f}
+/* A full-width hairline separates it from the Motion section above. */
+.landing-inspo::before{content:"";position:absolute;top:0;inset-inline:0;height:1px;background:#ffffff1f}
 .landing-inspo .landing-heading h2{width:760px;letter-spacing:-1.6px}
 .landing-inspo .landing-heading h2 b{font-weight:400;color:#a78bfa}
 .landing-inspo .landing-heading p{width:600px;max-width:100%}
