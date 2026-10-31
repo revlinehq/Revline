@@ -110,6 +110,20 @@ export const removeScreen = mutation({
   },
 });
 
+/** Deletes a whole kit from the Brand kits page: its fonts, screens and blueprints go with it. */
+export const remove = mutation({
+  args: { kitId: v.id('brandKits') },
+  handler: async (ctx, { kitId }) => {
+    const ownerId = await requireOwner(ctx);
+    const kit = await ctx.db.get(kitId);
+    if (!kit || kit.ownerId !== ownerId) throw new ConvexError('Brand kit not found.');
+    for (const file of [...kit.fonts, ...(kit.screens ?? [])]) await ctx.storage.delete(file.storageId);
+    for (const blueprint of await ctx.db.query('blueprints').withIndex('by_kit_name', q => q.eq('kitId', kitId)).take(200)) await ctx.db.delete(blueprint._id);
+    for (const check of await ctx.db.query('blueprintChecks').withIndex('by_owner', q => q.eq('ownerId', ownerId)).take(500)) if (check.kitId === kitId) await ctx.db.delete(check._id);
+    await ctx.db.delete(kitId);
+  },
+});
+
 /** Clears fields retired from brand kits (voice, and the context's call to action and tone). */
 export const dropRetiredFields = internalMutation({
   args: {},

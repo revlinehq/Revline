@@ -103,7 +103,7 @@ html[data-workspace-theme="dark"] {
 .workspace-form-field { display:flex; flex-direction:column; gap:8px; font-size:12px; color:var(--ws-muted); }
 .workspace-dialog-actions { display:flex; justify-content:flex-end; gap:10px; }
 .workspace-inline-error { margin:0; padding:8px 10px; color:#b5553d; font-size:12px; line-height:1.5; overflow-wrap:anywhere; }
-.workspace-page :is(button,a,input):not([data-slot]):focus-visible,.workspace-menu :is(button,a):not([role^=menuitem]):not([data-slot]):focus-visible { outline:2px solid var(--revline-accent); outline-offset:3px; }
+.workspace-page :is(button,a,input):not([data-slot]):focus-visible,.workspace-menu :is(button,a):not([role^=menuitem]):not([data-slot]):focus-visible { outline:none; outline-offset:3px; }
 @media (max-width:1150px) { .workspace-history-content { margin:0 32px; } .workspace-nav-save { display:none; } }
 @media (max-width:900px) { .workspace-profile-content { margin:0 32px; } .workspace-nav { gap:12px; padding:0 16px; } .workspace-nav-actions { gap:8px; } }
 @media (max-width:640px) {

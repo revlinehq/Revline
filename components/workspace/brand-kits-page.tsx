@@ -2,7 +2,7 @@
 import { useState, type ReactNode } from 'react';
 import { useConvexAuth, useMutation, useQuery } from 'convex/react';
 import type { FunctionReturnType } from 'convex/server';
-import { ArrowUpRight, Pencil, Plus, X } from 'lucide-react';
+import { ArrowUpRight, Pencil, Plus, Trash2, X } from 'lucide-react';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
 import { standaloneSvg } from '@/lib/editor/brand-kit';
@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { WorkspaceNav } from './workspace-nav';
 import './brand-kits-page.css';
 
@@ -56,6 +57,7 @@ function BrandKitCard({ kit }: { kit: Kit }) {
       {editing === 'name' ? <div className="brand-kit-name-edit"><Input value={name} onChange={event => setName(event.target.value)} aria-label="Kit name" /><Button type="button" variant="ghost" size="sm" onClick={close}>Cancel</Button><Button type="button" size="sm" onClick={() => void update({ kitId, name }).then(close)}>Save</Button></div>
         : <div><div className="brand-kit-title"><h2>{kit.name}</h2><Button type="button" variant="ghost" size="icon-xs" aria-label="Rename kit" onClick={() => open('name')}><Pencil /></Button></div>{kit.sourceUrl && <a href={kit.sourceUrl} target="_blank" rel="noreferrer">{new URL(kit.sourceUrl).host}<ArrowUpRight size={12} /></a>}</div>}
       <span className="brand-kit-updated">Updated {new Date(kit.updatedAt).toLocaleDateString()}</span>
+      <DeleteKit kitId={kitId} name={kit.name} />
     </header>
     <div className="brand-kit-grid">
       <Editable title="Colors" editing={editing === 'colors'} onEdit={() => open('colors')} onCancel={close} onSave={async () => { await update({ kitId, colors }); close(); }}
@@ -76,4 +78,19 @@ function BrandKitCard({ kit }: { kit: Kit }) {
         : <p className="brand-kit-muted">No product screens saved. Give the assistant screenshots of your product and ask it to save them to this kit; every later video for {kit.name} can use them.</p>}
     </section>
   </article>;
+}
+
+/** The bin in a kit's corner; asks once before the kit and its files are gone. */
+function DeleteKit({ kitId, name }: { kitId: Id<'brandKits'>; name: string }) {
+  const remove = useMutation(api.brandKits.remove);
+  const [open, setOpen] = useState(false), [deleting, setDeleting] = useState(false), [error, setError] = useState('');
+  const confirm = async () => { setDeleting(true); setError(''); try { await remove({ kitId }); setOpen(false); } catch (failure) { setError(userError(failure, 'Could not delete the kit.')); } finally { setDeleting(false); } };
+  return <>
+    <Button type="button" variant="ghost" size="icon-xs" aria-label={`Delete ${name}`} onClick={() => setOpen(true)}><Trash2 /></Button>
+    <Dialog open={open} onOpenChange={open => { if (!deleting) setOpen(open); }}><DialogContent className="workspace-dialog">
+      <DialogHeader><DialogTitle>Delete {name}?</DialogTitle><DialogDescription>Its colors, fonts, screens and blueprints are deleted. Videos already made keep their look.</DialogDescription></DialogHeader>
+      {error && <p className="brand-kit-error" role="alert">{error}</p>}
+      <DialogFooter><DialogClose asChild><Button type="button" variant="ghost" disabled={deleting}>Cancel</Button></DialogClose><Button type="button" variant="destructive" onClick={() => void confirm()} disabled={deleting}>{deleting ? 'Deleting…' : 'Delete kit'}</Button></DialogFooter>
+    </DialogContent></Dialog>
+  </>;
 }

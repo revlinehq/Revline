@@ -3,10 +3,9 @@ import { NEW_PROJECT_PATH } from '@/lib/workspace-routes';
 import { userError } from '@/lib/user-error';
 
 import { NEW_WORKSPACE_LABEL } from '@/lib/editor/workspace-labels';
-import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth, useUser } from '@clerk/nextjs';
-import { ArrowUp, LoaderCircle } from 'lucide-react';
 import { useAction, useConvex, useConvexAuth, useMutation, useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
@@ -20,6 +19,8 @@ import { useMediaFileDrop } from '@/components/editor/media-file-drop';
 import { rememberOpeningFootage } from '@/lib/editor/footage-opening';
 import { normalizeMediaFile } from '@/lib/editor/media-file';
 import { FootageStartCard } from './footage-start-card';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { EditComposer } from './edit-composer';
 import { FootageProcessingCard, type FootageProcessingFile, type FootageProcessingPhase } from './footage-processing-card';
 import { RecentProjects } from './recent-projects';
 import { WorkspaceNav } from './workspace-nav';
@@ -66,7 +67,7 @@ export function NewConversation() {
   const [processing, setProcessing] = useState<Processing | null>(null);
   const [error, setError] = useState('');
   // A video to recreate is a reference: it stays in the project's media, off the timeline.
-  const [referenceOnly, setReferenceOnly] = useState(false);
+  const [referenceOnly, setReferenceOnly] = useState(false); // Set from the brief's wording.
   const [startingBlank, setStartingBlank] = useState(false);
   // Prompt mode starts a blank project; the typed request opens the editor's chat.
   const [mode, setMode] = useState<'upload' | 'prompt'>('upload');
@@ -245,10 +246,6 @@ export function NewConversation() {
     setDraft(value); brief.current = value;
     try { if (value) sessionStorage.setItem(briefKey, value); else sessionStorage.removeItem(briefKey); } catch { /* The draft stays in this page. */ }
   }
-  function draftKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
-    if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing) return;
-    event.preventDefault(); void startBlank();
-  }
   async function startBlank() {
     const prompt = brief.current.trim();
     if (startingBlank || !prompt) return;
@@ -281,19 +278,15 @@ export function NewConversation() {
       <div className="new-conversation-start">
         <div className="new-conversation-intro"><h1 id="new-conversation-title">Welcome{firstName ? `, ${firstName}` : ''}.</h1><p>{mode === 'upload' ? 'Start your edit. Add your clips, then tell Revline what to make.' : 'Start from a prompt. Describe the video and Revline builds it, no footage needed.'}</p></div>
         <div className="new-conversation-entry" data-dragging={dragging || undefined} aria-busy={busy}>
-          <div className="new-conversation-modes" role="tablist" aria-label="How to start">
-            {(['upload', 'prompt'] as const).map(value => <button key={value} type="button" role="tab" id={`new-conversation-tab-${value}`} aria-controls="new-conversation-panel" aria-selected={mode === value} tabIndex={mode === value ? 0 : -1} onClick={() => setMode(value)} onKeyDown={event => { if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') { const next = value === 'upload' ? 'prompt' : 'upload'; setMode(next); document.getElementById(`new-conversation-tab-${next}`)?.focus(); } }}>{value === 'upload' ? 'Upload' : 'Prompt'}</button>)}
-          </div>
-          <div id="new-conversation-panel" role="tabpanel" aria-labelledby={`new-conversation-tab-${mode}`}>
-          {mode === 'upload' ? <FootageStartCard onAttach={() => picker.current?.click()} disabled={!draftReady} dragging={dragging}/> : <form className="new-conversation-prompt" onSubmit={event => { event.preventDefault(); void startBlank(); }}>
-            <textarea autoFocus aria-label="Describe your video" placeholder="Describe the video you want to make…" value={draft} maxLength={2000} onChange={event => changeDraft(event.target.value)} onKeyDown={draftKeyDown} readOnly={startingBlank}/>
-            <button type="submit" aria-label="Start editing" disabled={!draftReady || startingBlank || !draft.trim()}>{startingBlank ? <LoaderCircle size={16} className="animate-spin" aria-hidden="true"/> : <ArrowUp size={16} aria-hidden="true"/>}</button>
-          </form>}
-          </div>
+          <Tabs value={mode} onValueChange={value => setMode(value as 'upload' | 'prompt')} className="gap-0">
+          <TabsList className="new-conversation-modes" aria-label="How to start">
+            <TabsTrigger value="upload">Upload</TabsTrigger>
+            <TabsTrigger value="prompt">Prompt</TabsTrigger>
+          </TabsList>
+          <TabsContent value="upload"><FootageStartCard onAttach={() => picker.current?.click()} disabled={!draftReady} dragging={dragging}/></TabsContent>
+          <TabsContent value="prompt"><EditComposer value={draft} onChange={changeDraft} onSubmit={startBlank} onAttach={() => picker.current?.click()} disabled={!draftReady || startingBlank} placeholder="Describe the video you want to make…" submitLabel="Start editing"/></TabsContent>
+          </Tabs>
           <input ref={picker} type="file" accept="video/*,audio/*,image/*" multiple className="sr-only" tabIndex={-1} aria-label="Choose media to upload" onChange={event => { const files = Array.from(event.target.files ?? []); event.target.value = ''; if (files.length) attach(files); }}/>
-          {mode === 'upload' && <div className="new-conversation-options">
-            <label><input type="checkbox" checked={referenceOnly} onChange={event => setReferenceOnly(event.target.checked)} disabled={!draftReady}/> Use as a reference to recreate (keep it off the timeline)</label>
-          </div>}
           {error && <p className="new-conversation-error" role="alert">{error}</p>}
         </div>
       </div>

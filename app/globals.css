@@ -132,6 +132,12 @@ html { scroll-behavior: smooth; }
   html {
     @apply font-sans;
     }
+  /* No focus outlines or rings anywhere: hover states mark what is interactive. */
+  :focus, :focus-visible, :focus-within {
+    outline: none !important;
+    --tw-ring-shadow: 0 0 #0000 !important;
+    --tw-ring-offset-shadow: 0 0 #0000 !important;
+    }
 }
 /* Shared Revline design tokens; product screens are designed in Pencil first. */
 .dark {
