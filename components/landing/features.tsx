@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { Bell } from 'lucide-react';
 import { LandingHeading, LandingSection } from './ui';
 import { LandingSoundStage } from './sound-stage';
+import { LandingFeatureVideo } from './feature-video';
 
 // The speed ramp's rate over the clip: fast, a slow-mo dip on the jump, fast again (bar heights in px).
 const ramp = [62, 70, 80, 90, 92, 82, 62, 42, 27, 25, 25, 27, 42, 62, 82, 92, 90, 80, 70, 62];
@@ -48,8 +49,8 @@ export function LandingFeatures() {
         <div className="landing-blur-trail">{[.12, .25, .5, 1].map(opacity => <span key={opacity} style={{ opacity }}><Bell size={14} />Subscribe</span>)}</div>
         <span className="landing-blur-chip">motion blur 0.5</span>
       </Feature>
-      <Feature title="Animated captions" description="Word-by-word, styled to your brand." stage="captions">
-        <p className="landing-caption-demo">this is <b>INSANE</b> <span>right?</span></p>
+      <Feature title="Animated captions" description="Word-by-word, styled to your brand." stage="film">
+        <LandingFeatureVideo src="/landing/animated-captions.mp4" poster="/landing/animated-captions-poster.webp" />
       </Feature>
       <Feature title="Sound effects, generated" description="Describe a sound and Revline makes it, then lands it on the exact frame of the move it scores." stage="sound" wide interactive>
         <LandingSoundStage />
