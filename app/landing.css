@@ -149,7 +149,7 @@ div.landing-hero-buttons>.landing-reveal-content{display:flex;align-items:center
 .landing-how{display:flex;flex-direction:column;gap:40px;padding-block:96px}
 .landing-steps{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:24px}
 .landing-step{display:flex;flex-direction:column;gap:16px;min-width:0}
-.landing-step-title{font:500 24px/1.26 var(--l-head);letter-spacing:-.4px;color:var(--l-fg)}
+.landing-step-title{font:500 24px/1.26 var(--l-head);letter-spacing:-.4px;color:var(--l-fg-2)}
 .landing-step-visual{width:100%;aspect-ratio:16/9;border-radius:12px;background:#121212;overflow:hidden}
 .landing-step-visual video{display:block;width:100%;height:100%;object-fit:cover}
 
