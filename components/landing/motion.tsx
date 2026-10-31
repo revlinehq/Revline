@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
-import { MousePointer2 } from 'lucide-react';
 import { LandingSection } from './ui';
 
 type Kind = { id: string; label: string; image: string; overlay: ReactNode; film?: Film };
@@ -25,13 +24,6 @@ const kinds: Kind[] = [
     overlay: <div className="landing-motion-elements">
       <span className="landing-motion-sticker">New feature</span>
       <div className="landing-motion-lower"><b>Zura</b><span>Founder, Revline</span></div>
-    </div>,
-  },
-  {
-    id: 'demos', label: 'Product demos', image: 'product-window',
-    overlay: <div className="landing-motion-demo">
-      <span className="landing-motion-focus"><MousePointer2 size={22} /></span>
-      <p className="landing-motion-title">Zoom follows<br /><b>the cursor.</b></p>
     </div>,
   },
 ];
