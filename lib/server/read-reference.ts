@@ -7,6 +7,8 @@ import type { MediaTaskResult, MediaWorkItem } from '@/convex/mediaTasks';
 import { AnalysisError } from '@/lib/media-analysis/errors';
 import { fitMotion } from '@/lib/media-analysis/fit-motion';
 import { followBox } from '@/lib/media-analysis/follow-box';
+import { describeSounds } from '@/lib/media-analysis/gemini';
+import { detectOnsets, SOUND_RATE, visualHits } from '@/lib/media-analysis/sound';
 import { measure } from './blueprint-check';
 import { forEachLimited } from './run-limited';
 import { traceShape } from './trace-shape';
@@ -243,6 +245,46 @@ async function readTrack(path: string, directory: string, source: Source, work: 
   return { ...result, sourceWidth: source.width, sourceHeight: source.height, fps: round(source.fps, 3), frames: picks.map(index => ({ time: track[index].time })), track, moves: fitMotion(track, source) };
 }
 
+/** Hear a reference: every sound effect's measured onset, length and level, the picture change it lands on, and what it
+ *  sounds like with a prompt to regenerate it (Gemini listens; the timing is measured, never guessed). */
+async function readSounds(path: string, directory: string, source: Source, work: Work, signal: AbortSignal, onProgress: (percent: number) => void): Promise<Result> {
+  const from = Math.max(0, Math.min(work.start, source.duration)), to = Math.min(Math.max(work.end, from), source.duration), length = to - from;
+  if (length < .3) throw new AnalysisError('Listen to at least 0.3 s.', 400);
+  if (length > 60) throw new AnalysisError('Listen to at most 60 s at a time.', 400);
+  const window = ['-ss', from.toFixed(3), '-t', length.toFixed(3), '-i', path];
+  const audio = await run('ffmpeg', ['-v', 'error', ...window, '-map', '0:a:0', '-ac', '1', '-ar', String(SOUND_RATE), '-f', 'f32le', '-'], { signal, timeout: 120_000, encoding: 'buffer', maxBuffer: 64 * 1024 * 1024 }).catch(() => null);
+  if (!audio?.stdout.length) throw new AnalysisError('This video has no sound to listen to.', 400);
+  const bytes = audio.stdout as Buffer, mono = new Float32Array(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.length - bytes.length % 4));
+  onProgress(25);
+  // Each onset lasts until it falls 24 dB under its peak or the next one starts.
+  const onsets = detectOnsets(mono).slice(0, 40), hop = Math.round(SOUND_RATE / 100);
+  const level = (at: number) => { let peak = 0; for (let i = at; i < Math.min(mono.length, at + hop); i++) peak = Math.max(peak, Math.abs(mono[i])); return peak; };
+  const measured = onsets.map((onset, index) => {
+    const first = Math.round(onset.time * SOUND_RATE), stop = Math.round((onsets[index + 1]?.time ?? length) * SOUND_RATE), floor = 10 ** ((onset.level - 24) / 20);
+    let at = first + hop; while (at < stop && level(at) > floor) at += hop;
+    return { time: onset.time, end: Math.min(at, stop) / SOUND_RATE, level: onset.level };
+  });
+  // The picture changes at 30 fps, as checkSound measures them, so each sound names the hit it lands on.
+  const fps = 30, width = 160, height = Math.max(2, Math.round(width * source.height / source.width) & ~1);
+  const { stdout: pixels } = await run('ffmpeg', ['-v', 'error', ...window, '-map', '0:v:0', '-vf', `fps=${fps},scale=${width}:${height},format=gray`, '-f', 'rawvideo', '-'], { signal, timeout: 120_000, encoding: 'buffer', maxBuffer: 256 * 1024 * 1024 });
+  const size = width * height, frames = Array.from({ length: Math.floor(pixels.length / size) }, (_, index) => new Uint8Array(pixels.buffer, pixels.byteOffset + index * size, size));
+  const hits = visualHits(frames, 0, fps);
+  onProgress(50);
+  // Gemini hears the window as a small clip with its picture, so it can say what each sound accompanies.
+  const clip = join(directory, 'listen.mp4');
+  await run('ffmpeg', ['-v', 'error', '-y', ...window, '-vf', 'scale=-2:360', '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '30', '-c:a', 'aac', '-b:a', '128k', clip], { signal, timeout: 180_000 });
+  const key = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+  // The timing stands on its own: when listening fails, the sounds come back measured but undescribed.
+  const heard = key ? await describeSounds(clip, measured.map(sound => sound.time), key, signal).catch(error => { console.warn('[listenReference] describing failed', error instanceof Error ? error.message : error); return undefined; }) : undefined;
+  onProgress(90);
+  const sounds = measured.map(sound => {
+    const hit = hits.reduce<typeof hits[number] | undefined>((best, item) => Math.abs(item.time - sound.time) <= .15 && (!best || Math.abs(item.time - sound.time) < Math.abs(best.time - sound.time)) ? item : best, undefined);
+    const described = heard?.sounds.reduce<typeof heard.sounds[number] | undefined>((best, item) => !best || Math.abs(item.time - sound.time) < Math.abs(best.time - sound.time) ? item : best, undefined);
+    return { time: round(from + sound.time, 3), end: round(from + sound.end, 3), level: round(sound.level, 1), ...(hit ? { hit: round(from + hit.time, 3) } : {}), ...(described && Math.abs(described.time - sound.time) <= .25 ? { kind: described.kind, description: described.description, prompt: described.prompt, onScreen: described.onScreen } : {}) };
+  });
+  return { width: 0, height: 0, sourceWidth: source.width, sourceHeight: source.height, fps: round(source.fps, 3), frames: [], sounds, ...(heard ? { music: heard.music } : {}), silentHits: hits.filter(hit => !measured.some(sound => Math.abs(sound.time - hit.time) <= .15)).map(hit => round(from + hit.time, 3)) };
+}
+
 /** A rotated box outline in tile coordinates ({w} and {h} are the tile size). */
 function boxOverlay(item: { x: number; y: number; w: number; h: number; rotation: number }, source: Source) {
   const cx = item.x + item.w / 2, cy = item.y + item.h / 2;
@@ -257,6 +299,7 @@ export async function readReference(path: string, directory: string, work: Work,
   if (work.mode === 'track') return readTrack(path, directory, source, work, signal, onProgress);
   if (work.mode === 'trace') return readTrace(path, directory, source, work, signal);
   if (work.mode === 'font') return readFont(path, directory, source, work, signal, onProgress);
+  if (work.mode === 'sounds') return readSounds(path, directory, source, work, signal, onProgress);
   if (work.momentsOnly) return readMoments(path, source, work, signal);
   return readSheet(path, directory, source, work, signal, onProgress);
 }
