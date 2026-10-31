@@ -234,6 +234,19 @@ export function EditorShell(p: EditorShellProps) {
     // A chat first opened at width 0 (MCP mode) expands to its minimum; give it the usual width.
     if (panel && panel.getSize().inPixels < 310) panel.resize(p.embedded ? 356 : 400);
   }, [compact, conversationVisible, preparing, chatPanel]);
+  // While an outside agent edits over MCP, the chat stays closed if the user closed it last time.
+  const mcpChatReady=useRef(false);
+  useLayoutEffect(()=>{
+    mcpChatReady.current=false;
+    if(!p.externalAgent||compact)return;
+    if(localStorage.getItem('revline.mcpChatClosed')==='1'){chatPanel.current?.collapse();}
+    const settle=requestAnimationFrame(()=>{if(localStorage.getItem('revline.mcpChatClosed')==='1')chatPanel.current?.collapse();requestAnimationFrame(()=>{mcpChatReady.current=true;});});
+    return ()=>cancelAnimationFrame(settle);
+  },[p.externalAgent,compact,conversationVisible,preparing,chatPanel]);
+  useEffect(()=>{
+    if(!p.externalAgent||compact||!mcpChatReady.current)return;
+    if(chatCollapsed)localStorage.setItem('revline.mcpChatClosed','1');else localStorage.removeItem('revline.mcpChatClosed');
+  },[chatCollapsed,p.externalAgent,compact]);
   useLayoutEffect(() => {
     const body = bodyRef.current;
     if (!body) return;
