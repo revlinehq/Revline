@@ -51,6 +51,7 @@ import type * as lib_inspectTimeline from "../lib/inspectTimeline.js";
 import type * as lib_mcp_origin from "../lib/mcp_origin.js";
 import type * as lib_media_storage from "../lib/media_storage.js";
 import type * as lib_media_task_auth from "../lib/media_task_auth.js";
+import type * as lib_pacing_validator from "../lib/pacing_validator.js";
 import type * as lib_project_data from "../lib/project_data.js";
 import type * as lib_publicationReceipt from "../lib/publicationReceipt.js";
 import type * as lib_render_seats from "../lib/render_seats.js";
@@ -139,6 +140,7 @@ declare const fullApi: ApiFromModules<{
   "lib/mcp_origin": typeof lib_mcp_origin;
   "lib/media_storage": typeof lib_media_storage;
   "lib/media_task_auth": typeof lib_media_task_auth;
+  "lib/pacing_validator": typeof lib_pacing_validator;
   "lib/project_data": typeof lib_project_data;
   "lib/publicationReceipt": typeof lib_publicationReceipt;
   "lib/render_seats": typeof lib_render_seats;
