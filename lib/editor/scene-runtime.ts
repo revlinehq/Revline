@@ -98,6 +98,22 @@ function mediaEvent(video: HTMLVideoElement, names: string[], ms: number) {
 const stillFrames = new Map<HTMLVideoElement, HTMLCanvasElement>();
 const STILL_STYLE = 'video[data-revline-still]{visibility:hidden!important}';
 
+// A seeked event can precede the decoded frame being available to drawImage.
+// Register before seeking so paused videos cannot deliver that frame first.
+function decodedVideoFrame(video: HTMLVideoElement, target: number, fps: number) {
+  if (!video.requestVideoFrameCallback) return Promise.resolve();
+  return new Promise<void>(resolve => {
+    let callback = 0;
+    const done = () => { clearTimeout(timer); video.cancelVideoFrameCallback(callback); resolve(); };
+    const timer = setTimeout(done, 4000);
+    const frame: VideoFrameRequestCallback = (_now, metadata) => {
+      if (!video.seeking && Math.abs(metadata.mediaTime - target) <= Math.max(1 / fps, 1 / 24) + .001) done();
+      else callback = video.requestVideoFrameCallback(frame);
+    };
+    callback = video.requestVideoFrameCallback(frame);
+  });
+}
+
 function objectFitBox(fit: string, position: string, source: { width: number; height: number }, box: { width: number; height: number }) {
   let scaleX = box.width / source.width, scaleY = box.height / source.height;
   if (fit === 'cover') scaleX = scaleY = Math.max(scaleX, scaleY);
@@ -153,8 +169,9 @@ function syncVideos(time: number, fps: number) {
       if (length > 0) target = video.hasAttribute('data-loop') ? target % length : Math.min(target, Math.max(0, length - 0.5 / fps));
       if (Math.abs(video.currentTime - target) >= 0.25 / fps || video.seeking) {
         const seeked = mediaEvent(video, ['seeked', 'error'], 4000);
+        const decoded = decodedVideoFrame(video, target, fps);
         video.currentTime = target;
-        await seeked;
+        await Promise.all([seeked, decoded]);
       }
       // Seeked can land before the frame at the new time is decoded.
       if (video.readyState < 2 && !video.error) await mediaEvent(video, ['loadeddata', 'canplay', 'error'], 4000);
