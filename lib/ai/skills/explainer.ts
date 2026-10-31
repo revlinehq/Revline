@@ -28,7 +28,7 @@ Then askUser: "Use this script?" with options such as "Use this script", "Shorte
 
 ### 2. Voice
 
-Pick 3 or 4 voices from listVoices that fit the script's tone and audience (a calm British storyteller, a bright educator, a warm narrator), varied enough to be a real choice. Call listVoices once with sampleText set to the approved script's first line and those voiceIds. Then askUser "Which voice?" with one option per voice: label the voice's name, description what it sounds like, audio its sample URL exactly as returned.
+Pick 3 or 4 voices from listVoices that fit the script's tone and audience (a calm British storyteller, a bright educator, a warm narrator), varied enough to be a real choice. Call listVoices once with sampleText set to the approved script's first line and those voiceIds. Then askUser "Which voice?" with one option per voice: label the voice's name, description what it sounds like, audio its sample URL exactly as returned. Every option must carry its audio: the card plays each sample with its own play button. Your reply is one short line introducing the choice; never write that samples are "above", list their links or ask whether they play. If a sample failed, call listVoices again for that voice before asking.
 After the pick, call generateVoice once with the whole approved script, joined into one text in beat order, at timeline second 0.5 (a short breath before the first word). Speak it as one take so the delivery flows; never one call per line. Keep the returned words list: it is the clock for the whole film. If the user wants a line changed later, regenerate the whole narration and retime.
 
 ### 3. Visual style
@@ -38,7 +38,7 @@ Build 3 or 4 short style previews in code: the same first beat (its words, its i
 - bold dark: near-black ground, high-contrast sans, one saturated accent used sparingly;
 - soft gradient: a muted grainy gradient field, rounded cards, gentle depth;
 - diagram: line drawings and labels building on a grid, like a whiteboard.
-Pick looks that suit the subject; follow the user's brand kit when there is one (askBrandKit if unclear). Each preview is about 3 seconds with real motion, placed one after another on the timeline after the narration (for example at 0, 3, 6 and 9 seconds past its end), with addScene or one addFilm whose sections are the looks. Check each with getFrames, then askUser "Which style?" with one option per look: preview.time set to the second where that look's frame is fully built (not its first frame), label naming the look, description one line about it. After the pick, delete the previews before building the film.
+Pick looks that suit the subject; follow the user's brand kit when there is one (askBrandKit if unclear). Each preview is about 3 seconds with real motion, placed one after another on the timeline after the narration (for example at 0, 3, 6 and 9 seconds past its end), with addScene or one addFilm whose sections are the looks. Check each with getFrames, then askUser "Which style?" with one option per look: preview.time set to the second where that look's frame is fully built (not its first frame), label naming the look, description one line about it. Every option must carry its preview: the card shows each look as a large picture, so the user judges the real frames, not your words. Never ask about styles in prose or without previews. After the pick, delete the previews before building the film.
 
 ### 4. The film
 

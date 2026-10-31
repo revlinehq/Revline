@@ -1,10 +1,10 @@
 /* The assistant's questions as shadcn choice cards, sized to the chat column. */
-.choice-card{max-width:420px;gap:10px}
+.choice-card{width:100%;max-width:420px;min-width:0;gap:10px}
+.choice-card [data-slot=field]{min-width:0}
 .choice-card [data-slot=radio-group]{gap:6px}
 .choice-card-logo{flex:none;width:22px;height:22px;background:currentColor;mask-size:contain;mask-repeat:no-repeat;mask-position:center;-webkit-mask-size:contain;-webkit-mask-repeat:no-repeat;-webkit-mask-position:center}
 .choice-card-send{align-self:flex-start}
-/* Options with pictures (style previews, rendered frames) sit two to a row, the picture above the label. */
-.choice-card[data-pictures] [data-slot=radio-group]{grid-template-columns:repeat(2,minmax(0,1fr))}
+/* Options with pictures (style previews, rendered frames) take the full chat width, the picture above the label, big enough to judge. */
 .choice-card [data-slot=field-label]:has(.choice-card-image){gap:0;overflow:hidden}
 .choice-card-image{background:#2a2a2a}
 .choice-card-image img{width:100%;height:100%;object-fit:contain;display:block}
