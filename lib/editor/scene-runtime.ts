@@ -31,10 +31,11 @@ export type IconOptions = { size?: number; color?: string; strokeWidth?: number;
 const PLUGINS: Record<SceneGsapPlugin, object> = { CustomEase, CustomWiggle, CustomBounce, SplitText, DrawSVGPlugin, MorphSVGPlugin, MotionPathPlugin, ScrambleTextPlugin, TextPlugin };
 gsap.registerPlugin(...Object.values(PLUGINS), ExpoScaleEase, RoughEase, SlowMo);
 
-const gsapModule = { gsap, default: gsap, ...PLUGINS, ExpoScaleEase, RoughEase, SlowMo };
+// Marked as ES modules so a compiled `import gsap from 'gsap'` reads `default` (gsap itself), not the whole module.
+const gsapModule = { __esModule: true, gsap, default: gsap, ...PLUGINS, ExpoScaleEase, RoughEase, SlowMo };
 const MODULES: Record<string, unknown> = {
   gsap: gsapModule, 'gsap/all': gsapModule, 'gsap/EasePack': { ExpoScaleEase, RoughEase, SlowMo },
-  ...Object.fromEntries(SCENE_GSAP_PLUGINS.map(name => [`gsap/${name}`, { [name]: PLUGINS[name], default: PLUGINS[name] }])),
+  ...Object.fromEntries(SCENE_GSAP_PLUGINS.map(name => [`gsap/${name}`, { __esModule: true, [name]: PLUGINS[name], default: PLUGINS[name] }])),
 };
 
 /** Lucide icons render like lucide-react: a 24-unit stroked SVG at the requested size. */
