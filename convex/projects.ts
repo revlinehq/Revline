@@ -95,7 +95,13 @@ export async function duplicateProjectFor(ctx: MutationCtx, ownerId: string, pro
     if (audioAssetId || cutoutOf || derivedOf) await ctx.db.patch(ids.get(String(asset._id))!, { ...(audioAssetId ? { audioAssetId } : {}), ...(cutoutOf ? { cutoutOf } : {}), ...(derivedOf ? { derivedOf } : {}) });
   }
   for (const id of ids.values()) await recordAssetStorage(ctx, (await ctx.db.get(id))!);
-  const remap = (item: Timeline): Timeline => ({ ...item, clips: item.clips.map(clip => clip.assetId && ids.has(clip.assetId) ? { ...clip, assetId: ids.get(clip.assetId)! } : clip) });
+  // Clips and the images a scene draws both point at the copies, so the new project never reads the original's media.
+  const copied = (id: string) => ids.get(id) ?? id;
+  const remap = (item: Timeline): Timeline => ({ ...item, clips: item.clips.map(clip => ({
+    ...clip,
+    ...(clip.assetId ? { assetId: copied(clip.assetId) } : {}),
+    ...(clip.scene?.media ? { scene: { ...clip.scene, media: clip.scene.media.map(entry => ({ ...entry, assetId: copied(entry.assetId) })) } } : {}),
+  })) });
   const tabs = await ctx.db.query('projectTimelines').withIndex('by_project_timeline', q => q.eq('projectId', project._id)).take(10);
   for (const row of tabs) await ctx.db.insert('projectTimelines', { projectId: copyId, ownerId, timelineId: row.timelineId, timeline: remap(row.timeline) });
   await writeProject(ctx, copyId, { timeline: remap(timeline), aspectRatio: timeline.aspectRatio, ...(project.timelineTabs ? { timelineTabs: project.timelineTabs, activeTimelineId: project.activeTimelineId } : {}) });
