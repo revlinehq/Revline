@@ -1,5 +1,4 @@
 import type { ReactNode } from 'react';
-import { Bell } from 'lucide-react';
 import { LandingHeading, LandingSection } from './ui';
 import { LandingFeatureVideo } from './feature-video';
 
@@ -26,9 +25,8 @@ export function LandingFeatures() {
       <Feature title="Masks" description="Reveal through shapes, text, or a moving spotlight." stage="film">
         <LandingFeatureVideo src="/landing/masks.mp4" poster="/landing/masks-poster.webp" />
       </Feature>
-      <Feature title="Motion blur" description="Every move feels shot, not keyframed." stage="blur">
-        <div className="landing-blur-trail">{[.12, .25, .5, 1].map(opacity => <span key={opacity} style={{ opacity }}><Bell size={14} />Subscribe</span>)}</div>
-        <span className="landing-blur-chip">motion blur 0.5</span>
+      <Feature title="Split screen" description="Two-up, three-up or stacked for vertical." stage="film">
+        <LandingFeatureVideo src="/landing/split-screen.mp4" poster="/landing/split-screen-poster.webp" />
       </Feature>
       <Feature title="Animated captions" description="Word-by-word, styled to your brand." stage="film">
         <LandingFeatureVideo src="/landing/animated-captions.mp4" poster="/landing/animated-captions-poster.webp" />
