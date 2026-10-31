@@ -32,9 +32,8 @@ export function LandingFeatures() {
           <div className="landing-ramp-axis"><span>1.6×</span><span>0.25×</span><span>1.6×</span></div>
         </div>
       </Feature>
-      <Feature title="Masks" description="Reveal through shapes, text, or a moving spotlight." stage="mask">
-        <span className="landing-mask-ring"><img src="/landing/podcast.webp" alt="" /></span>
-        <span className="landing-mask-chip">Ellipse mask · soft edge</span>
+      <Feature title="Masks" description="Reveal through shapes, text, or a moving spotlight." stage="film">
+        <LandingFeatureVideo src="/landing/masks.mp4" poster="/landing/masks-poster.webp" />
       </Feature>
       <Feature title="Motion blur" description="Every move feels shot, not keyframed." stage="blur">
         <div className="landing-blur-trail">{[.12, .25, .5, 1].map(opacity => <span key={opacity} style={{ opacity }}><Bell size={14} />Subscribe</span>)}</div>
