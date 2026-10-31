@@ -106,8 +106,9 @@ div.landing-reveal,div.landing-reveal>.landing-reveal-content{display:inline-blo
 div.landing-hero-buttons>.landing-reveal-content{display:flex;align-items:center;gap:12px}
 .landing-agent-button{gap:10px}
 .landing-agent-logos{display:flex}
-.landing-agent-logos{gap:6px}
 .landing-agent-logos img{display:block;width:18px;height:18px;object-fit:contain}
+/* Bare marks stacked: each overlaps the one before it. */
+.landing-agent-logos img+img{margin-left:-5px}
 .landing-hero-actions{display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:12px;padding-top:8px}
 .landing-product-frame{border-radius:10px;box-shadow:0 0 0 1px #12121214,0 12px 32px -8px #1212122e}
 @media(prefers-reduced-motion:no-preference){.landing-product-frame{animation:landing-settle-media 1.1s cubic-bezier(.32,.72,0,1) 1.05s backwards}}
