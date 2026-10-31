@@ -3,7 +3,7 @@
   "projectName": "Engine test A: GSAP (RightNow rebuild)",
   "editor": "http://localhost:3001/editor/j970eespkq2j4crma0yhj5mpc18haer6",
   "timelineId": "main",
-  "revision": 16,
+  "revision": 17,
   "sceneClipId": "5b49332a-bc9f-4fc8-a8cd-383e406bf6a1",
   "duration": 30.966667,
   "fps": 60,
@@ -43,69 +43,37 @@
     ]
   },
   "compareReference": {
-    "targetMaximumDifference": 25,
-    "allCheckedMomentsPass": true,
+    "revision": 17,
     "scores": [
       {
-        "time": 1,
-        "difference": 18
-      },
-      {
         "time": 4.6,
-        "difference": 25
-      },
-      {
-        "time": 6.9,
-        "difference": 13
-      },
-      {
-        "time": 7.4,
-        "difference": 13
-      },
-      {
-        "time": 10.5,
-        "difference": 8
+        "difference": 32
       },
       {
         "time": 11.5,
-        "difference": 20
+        "difference": 35
       },
       {
         "time": 12.4,
-        "difference": 15
-      },
-      {
-        "time": 13.3,
-        "difference": 18
-      },
-      {
-        "time": 14.5,
-        "difference": 15
-      },
-      {
-        "time": 16.5,
-        "difference": 7
+        "difference": 32
       },
       {
         "time": 18.3,
-        "difference": 13
+        "difference": 12
       },
       {
         "time": 23.5,
-        "difference": 14
-      },
-      {
-        "time": 26.9,
-        "difference": 10
+        "difference": 12
       },
       {
         "time": 29.5,
-        "difference": 16
+        "difference": 17
       }
     ],
-    "primaryRevision": 14,
-    "latestWindowRevision": 16,
-    "note": "Final scoped edits affect only 10.8–15.9 s; Revline patch guard verified other locked sections unchanged. Latest 13.3 s sample supersedes earlier score."
+    "targetMaximumDifference": 25,
+    "allCheckedMomentsPass": false,
+    "maximumDifference": 35,
+    "retainedReason": "User explicitly supplied Windows XP Bliss for the actual background. The image replacement changes sky/hill composition and dither response; existing choreography and source remain unchanged. Higher differences in background-heavy moments are recorded rather than changing the requested image."
   },
   "motionMap": {
     "windows": [
@@ -1605,41 +1573,29 @@
       }
     ],
     "totalRemainingDifferences": 30,
-    "interpretation": "These are measured residual differences, not an exact-match claim. Fitted camera tracks also respond to original background texture and moving foreground geometry. Content-triggered movements are preserved, but several fitted eases, phase boundaries and amplitudes differ."
+    "interpretation": "These are measured residual differences, not an exact-match claim. Fitted camera tracks also respond to original background texture and moving foreground geometry. Content-triggered movements are preserved, but several fitted eases, phase boundaries and amplitudes differ.",
+    "appliesToRevision": 16,
+    "backgroundUpdateNote": "Historical baseline measured before the user-supplied Bliss replacement. Motion code and all timings are identical at revision 17; motionMap has not been remeasured with the changed image."
   },
   "pacing": {
-    "revision": 14,
+    "revision": 17,
     "range": "0-30.9s",
+    "samples": "310 at 10 fps",
     "flags": [
       {
         "at": "0-6.4s",
         "kind": "short-hold",
-        "reason": "64% of the frame changes by 4.9s, then it holds only 0.2 s before the next change: give each new picture about 1 s to be read."
+        "reason": "73% of the frame changes by 4.9s, then it holds only 0.2 s before the next change: give each new picture about 1 s to be read."
       },
       {
-        "at": "0.9-1.9s",
-        "kind": "no-ease-in",
-        "reason": "The zoom at 0.9s starts at full speed: ease it in (power2.inOut or similar)."
-      },
-      {
-        "at": "0.9-1.9s",
-        "kind": "no-ease-out",
-        "reason": "The zoom ending at 1.9s stops dead: ease it out."
-      },
-      {
-        "at": "2-2.5s",
-        "kind": "no-ease-in",
-        "reason": "The zoom at 2s starts at full speed: ease it in (power2.inOut or similar)."
-      },
-      {
-        "at": "2-2.5s",
+        "at": "0.5-2.5s",
         "kind": "too-fast",
-        "reason": "A zoom of 72% in 0.5 s, peaking at 150% of the frame per second: too fast to follow. Make it longer."
+        "reason": "A zoom of 94% in 2 s, peaking at 150% of the frame per second: too fast to follow. Make it longer."
       },
       {
-        "at": "4.7-5.4s",
+        "at": "4.8-5.4s",
         "kind": "scattered",
-        "reason": "3 changes start in different parts of the frame within 0.5 s from 4.7s: the eye follows one place at a time. Stage them one after another, each with time to read."
+        "reason": "3 changes start in different parts of the frame within 0.4 s from 4.8s: the eye follows one place at a time. Stage them one after another, each with time to read."
       },
       {
         "at": "8.4-17.6s",
@@ -1647,24 +1603,29 @@
         "reason": "99% of the frame changes by 13.2s, then it holds only 0.7 s before the next change: give each new picture about 1 s to be read."
       },
       {
-        "at": "10.4-10.7s",
+        "at": "10.5-10.8s",
         "kind": "no-ease-in",
-        "reason": "The zoom at 10.4s starts at full speed: ease it in (power2.inOut or similar)."
+        "reason": "The zoom at 10.5s starts at full speed: ease it in (power2.inOut or similar)."
       },
       {
-        "at": "10.4-10.7s",
-        "kind": "no-ease-out",
-        "reason": "The zoom ending at 10.7s stops dead: ease it out."
-      },
-      {
-        "at": "10.4-10.7s",
+        "at": "10.5-10.8s",
         "kind": "too-fast",
-        "reason": "A zoom of 48% in 0.3 s, peaking at 150% of the frame per second: too fast to follow. Make it longer."
+        "reason": "A zoom of 37% in 0.3 s, peaking at 144% of the frame per second: too fast to follow. Make it longer."
       },
       {
-        "at": "12.7-12.9s",
+        "at": "11.5-11.6s",
+        "kind": "jump",
+        "reason": "The camera jumps 19% in one sample at 11.5s: animate it over at least 0.4 s."
+      },
+      {
+        "at": "11.5-11.6s",
         "kind": "too-fast",
-        "reason": "A zoom of 37% in 0.2 s, peaking at 170% of the frame per second: too fast to follow. Make it longer."
+        "reason": "A zoom of 19% in 0.1 s, peaking at 170% of the frame per second: too fast to follow. Make it longer."
+      },
+      {
+        "at": "12.7-12.8s",
+        "kind": "too-fast",
+        "reason": "A zoom of 15% in 0.1 s, peaking at 142% of the frame per second: too fast to follow. Make it longer."
       },
       {
         "at": "14.7-16.2s",
@@ -1675,6 +1636,11 @@
         "at": "15.6-15.9s",
         "kind": "zoom-cut",
         "reason": "The zoom is cut off at full speed by a cut at 15.9s: let it settle before the cut, or start the next shot on the same motion."
+      },
+      {
+        "at": "19.1-20.2s",
+        "kind": "scattered",
+        "reason": "3 changes start in different parts of the frame within 1 s from 19.1s: the eye follows one place at a time. Stage them one after another, each with time to read."
       },
       {
         "at": "25.7-26s",
@@ -1690,35 +1656,9 @@
         "at": "26.9-27s",
         "kind": "too-fast",
         "reason": "A zoom of 16% in 0.1 s, peaking at 150% of the frame per second: too fast to follow. Make it longer."
-      },
-      {
-        "at": "29.6-30.6s",
-        "kind": "scattered",
-        "reason": "3 changes start in different parts of the frame within 0.9 s from 29.6s: the eye follows one place at a time. Stage them one after another, each with time to read."
       }
     ],
-    "latestWindow": {
-      "revision": 16,
-      "range": "10.8-13.5s",
-      "flags": [
-        {
-          "at": "11.5-11.6s",
-          "kind": "jump",
-          "reason": "The camera jumps 19% in one sample at 11.5s: animate it over at least 0.4 s."
-        },
-        {
-          "at": "11.5-11.6s",
-          "kind": "too-fast",
-          "reason": "A zoom of 19% in 0.1 s, peaking at 170% of the frame per second: too fast to follow. Make it longer."
-        },
-        {
-          "at": "12.7-12.9s",
-          "kind": "too-fast",
-          "reason": "A zoom of 36% in 0.2 s, peaking at 170% of the frame per second: too fast to follow. Make it longer."
-        }
-      ]
-    },
-    "retainedReason": "Reference-accurate fast reveals and short holds are intentional. Generic longer holds would change the requested structure and timing."
+    "retainedReason": "Asset replacement only. Existing GSAP motion, cut timing and reference-style fast reveals/short holds remain intentionally unchanged. Image content changes optical movement detection."
   },
   "sound": {
     "loudness": "-17.2 LUFS integrated, peak -3.6 dBFS",
@@ -1943,5 +1883,231 @@
     "deployed": true,
     "productionChanged": false
   },
-  "otherProjectsChanged": false
+  "otherProjectsChanged": false,
+  "previousCompareReference": {
+    "targetMaximumDifference": 25,
+    "allCheckedMomentsPass": true,
+    "scores": [
+      {
+        "time": 1,
+        "difference": 18
+      },
+      {
+        "time": 4.6,
+        "difference": 25
+      },
+      {
+        "time": 6.9,
+        "difference": 13
+      },
+      {
+        "time": 7.4,
+        "difference": 13
+      },
+      {
+        "time": 10.5,
+        "difference": 8
+      },
+      {
+        "time": 11.5,
+        "difference": 20
+      },
+      {
+        "time": 12.4,
+        "difference": 15
+      },
+      {
+        "time": 13.3,
+        "difference": 18
+      },
+      {
+        "time": 14.5,
+        "difference": 15
+      },
+      {
+        "time": 16.5,
+        "difference": 7
+      },
+      {
+        "time": 18.3,
+        "difference": 13
+      },
+      {
+        "time": 23.5,
+        "difference": 14
+      },
+      {
+        "time": 26.9,
+        "difference": 10
+      },
+      {
+        "time": 29.5,
+        "difference": 16
+      }
+    ],
+    "primaryRevision": 14,
+    "latestWindowRevision": 16,
+    "note": "Final scoped edits affect only 10.8–15.9 s; Revline patch guard verified other locked sections unchanged. Latest 13.3 s sample supersedes earlier score.",
+    "appliesToRevision": 16
+  },
+  "previousPacing": {
+    "revision": 14,
+    "range": "0-30.9s",
+    "flags": [
+      {
+        "at": "0-6.4s",
+        "kind": "short-hold",
+        "reason": "64% of the frame changes by 4.9s, then it holds only 0.2 s before the next change: give each new picture about 1 s to be read."
+      },
+      {
+        "at": "0.9-1.9s",
+        "kind": "no-ease-in",
+        "reason": "The zoom at 0.9s starts at full speed: ease it in (power2.inOut or similar)."
+      },
+      {
+        "at": "0.9-1.9s",
+        "kind": "no-ease-out",
+        "reason": "The zoom ending at 1.9s stops dead: ease it out."
+      },
+      {
+        "at": "2-2.5s",
+        "kind": "no-ease-in",
+        "reason": "The zoom at 2s starts at full speed: ease it in (power2.inOut or similar)."
+      },
+      {
+        "at": "2-2.5s",
+        "kind": "too-fast",
+        "reason": "A zoom of 72% in 0.5 s, peaking at 150% of the frame per second: too fast to follow. Make it longer."
+      },
+      {
+        "at": "4.7-5.4s",
+        "kind": "scattered",
+        "reason": "3 changes start in different parts of the frame within 0.5 s from 4.7s: the eye follows one place at a time. Stage them one after another, each with time to read."
+      },
+      {
+        "at": "8.4-17.6s",
+        "kind": "short-hold",
+        "reason": "99% of the frame changes by 13.2s, then it holds only 0.7 s before the next change: give each new picture about 1 s to be read."
+      },
+      {
+        "at": "10.4-10.7s",
+        "kind": "no-ease-in",
+        "reason": "The zoom at 10.4s starts at full speed: ease it in (power2.inOut or similar)."
+      },
+      {
+        "at": "10.4-10.7s",
+        "kind": "no-ease-out",
+        "reason": "The zoom ending at 10.7s stops dead: ease it out."
+      },
+      {
+        "at": "10.4-10.7s",
+        "kind": "too-fast",
+        "reason": "A zoom of 48% in 0.3 s, peaking at 150% of the frame per second: too fast to follow. Make it longer."
+      },
+      {
+        "at": "12.7-12.9s",
+        "kind": "too-fast",
+        "reason": "A zoom of 37% in 0.2 s, peaking at 170% of the frame per second: too fast to follow. Make it longer."
+      },
+      {
+        "at": "14.7-16.2s",
+        "kind": "scattered",
+        "reason": "3 changes start in different parts of the frame within 1.4 s from 14.7s: the eye follows one place at a time. Stage them one after another, each with time to read."
+      },
+      {
+        "at": "15.6-15.9s",
+        "kind": "zoom-cut",
+        "reason": "The zoom is cut off at full speed by a cut at 15.9s: let it settle before the cut, or start the next shot on the same motion."
+      },
+      {
+        "at": "25.7-26s",
+        "kind": "zoom-cut",
+        "reason": "The zoom is cut off at full speed by a cut at 26s: let it settle before the cut, or start the next shot on the same motion."
+      },
+      {
+        "at": "26.9-27s",
+        "kind": "jump",
+        "reason": "The camera jumps 16% in one sample at 26.9s: animate it over at least 0.4 s."
+      },
+      {
+        "at": "26.9-27s",
+        "kind": "too-fast",
+        "reason": "A zoom of 16% in 0.1 s, peaking at 150% of the frame per second: too fast to follow. Make it longer."
+      },
+      {
+        "at": "29.6-30.6s",
+        "kind": "scattered",
+        "reason": "3 changes start in different parts of the frame within 0.9 s from 29.6s: the eye follows one place at a time. Stage them one after another, each with time to read."
+      }
+    ],
+    "latestWindow": {
+      "revision": 16,
+      "range": "10.8-13.5s",
+      "flags": [
+        {
+          "at": "11.5-11.6s",
+          "kind": "jump",
+          "reason": "The camera jumps 19% in one sample at 11.5s: animate it over at least 0.4 s."
+        },
+        {
+          "at": "11.5-11.6s",
+          "kind": "too-fast",
+          "reason": "A zoom of 19% in 0.1 s, peaking at 170% of the frame per second: too fast to follow. Make it longer."
+        },
+        {
+          "at": "12.7-12.9s",
+          "kind": "too-fast",
+          "reason": "A zoom of 36% in 0.2 s, peaking at 170% of the frame per second: too fast to follow. Make it longer."
+        }
+      ]
+    },
+    "retainedReason": "Reference-accurate fast reveals and short holds are intentional. Generic longer holds would change the requested structure and timing."
+  },
+  "backgroundUpdate": {
+    "revision": 17,
+    "userRequest": "Use /Users/zuramakaradze/Downloads/windows-xp-bliss.jpg as the actual background. Do not export.",
+    "assetId": "j577gcgk078t1p1b8ddafa78958hb53p",
+    "mediaBinding": "landscape",
+    "file": "windows-xp-bliss.jpg",
+    "sha256": "f0af711eb1252ec02ba1d48ea2ed327438cc344fb4c4471922507d015c45a3b9",
+    "dimensions": [
+      2560,
+      1707
+    ],
+    "sourceBytes": 631544,
+    "sections": [
+      "intro",
+      "upload-terminal",
+      "proof",
+      "available"
+    ],
+    "mutation": "editScene media binding only; no code replacement",
+    "scopeGuard": {
+      "passed": true,
+      "checked": [
+        6.3,
+        7.217,
+        8.15
+      ],
+      "note": "Code outside the scope changed; the 1 locked section(s) it reaches render the same, so it was saved."
+    },
+    "sourceCodeUnchanged": true,
+    "timingMarkersBrandAudioUnchanged": true,
+    "renderedAndInspectedTimes": [
+      0,
+      0.016666666666666666,
+      1,
+      10.5,
+      20.4,
+      30.5
+    ],
+    "detailsInspected": [
+      "Intro hidden first-frame type and full-bleed image",
+      "Upload menu edges and cursor against Bliss",
+      "Proof mesh/window borders and readable text against sky/grass",
+      "CTA button/cursor edges and full-bleed blurred Bliss"
+    ],
+    "missingAssetRefs": [],
+    "exported": false
+  }
 }

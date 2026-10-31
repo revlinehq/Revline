@@ -8,10 +8,15 @@
   "referenceAudioOnTimeline": false,
   "exported": false,
   "background": {
-    "file": "original-rolling-hills.png",
-    "assetId": "j575r36jt8c8mvrxt9vahyac9s8ha0pb",
-    "generator": "built-in image_gen",
-    "prompt": "Generate a single original photorealistic landscape background plate, ultra wide 16:9 composition 1920x1080. Brilliant clear saturated cobalt blue sky with soft white cumulus cloud clusters particularly across upper right and a smaller one upper left. Rolling vivid spring green grassy hills, one broad smooth hill ridge running from left at 48 percent height downward toward right at 68 percent height. Grass has fine natural texture, no trees, no flowers, no buildings, no roads, no people. Familiar optimistic early 2000s desktop wallpaper feeling but an original landscape photo, midday sunshine, slightly soft analog digital camera atmosphere. Sky covers upper 55%, green grass covers lower45%. No text, no logo, no interface, no borders. Flat full bleed. This will be a still photographic background for a motion-design film; leave center unoccupied."
+    "file": "windows-xp-bliss.jpg",
+    "assetId": "j577gcgk078t1p1b8ddafa78958hb53p",
+    "source": "User-supplied file",
+    "sourcePath": "/Users/zuramakaradze/Downloads/windows-xp-bliss.jpg",
+    "width": 2560,
+    "height": 1707,
+    "bytes": 631544,
+    "sha256": "f0af711eb1252ec02ba1d48ea2ed327438cc344fb4c4471922507d015c45a3b9",
+    "usage": "Actual shared landscape image in intro, upload/terminal, proof and CTA; native cover crop and existing GSAP transforms/effects retained."
   },
   "graphics": {
     "logo": "Vector outline from Revline traceShape, source time 8 s",
@@ -51,12 +56,21 @@
     "change": "Preserve requested motion range in frame snapshots"
   },
   "priority": "User requested reference structure and timing take precedence over generic one-second holds, no grids, and quiet house styling.",
-  "revision": 16,
+  "revision": 17,
   "verificationFile": "verification.json",
   "sourceFile": "film.tsx.txt",
   "soundEffects": {
     "provider": "ElevenLabs via Revline generateSound",
     "count": 5,
     "method": "Generated for visual events; measured, not listened to"
-  }
+  },
+  "backgroundHistory": [
+    {
+      "file": "original-rolling-hills.png",
+      "assetId": "j575r36jt8c8mvrxt9vahyac9s8ha0pb",
+      "generator": "built-in image_gen",
+      "prompt": "Generate a single original photorealistic landscape background plate, ultra wide 16:9 composition 1920x1080. Brilliant clear saturated cobalt blue sky with soft white cumulus cloud clusters particularly across upper right and a smaller one upper left. Rolling vivid spring green grassy hills, one broad smooth hill ridge running from left at 48 percent height downward toward right at 68 percent height. Grass has fine natural texture, no trees, no flowers, no buildings, no roads, no people. Familiar optimistic early 2000s desktop wallpaper feeling but an original landscape photo, midday sunshine, slightly soft analog digital camera atmosphere. Sky covers upper 55%, green grass covers lower45%. No text, no logo, no interface, no borders. Flat full bleed. This will be a still photographic background for a motion-design film; leave center unoccupied.",
+      "status": "Superseded by the user-supplied Windows XP Bliss image at revision 17"
+    }
+  ]
 }
