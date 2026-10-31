@@ -1,6 +1,7 @@
 import type { Doc, Id } from '../_generated/dataModel';
 import type { MutationCtx, QueryCtx } from '../_generated/server';
 import type { Clip, Timeline } from '../../lib/editor/types';
+import { equalTimelineValue } from '../../lib/editor/timeline-equality';
 import { loadSceneCode } from './scene_code';
 
 /** Revisions kept per project. Each row is small (scene code is stored by hash), so this covers weeks of editing. */
@@ -14,7 +15,8 @@ export type RevisionNote = { tool?: string };
 type Change = { clipId: string; before: Clip | null; index?: number; rest?: Timeline };
 
 const restOf = (timeline: Timeline): Timeline => ({ ...timeline, clips: [] });
-const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+// Stored documents come back with their keys reordered, so compare by value.
+const same = equalTimelineValue;
 
 function clipLabel(clip: Clip) {
   const name = clip.scene?.title ?? (clip.text ? clip.text.replace(/\s+/g, ' ').slice(0, 40) : undefined);
@@ -28,10 +30,10 @@ function changedFields(before: Clip, after: Clip) {
     const a = before[key as keyof Clip], b = after[key as keyof Clip];
     if (same(a, b)) continue;
     if (key === 'scene' && a && b && typeof a === 'object' && typeof b === 'object') {
-      for (const part of new Set([...Object.keys(a), ...Object.keys(b)])) if (!same((a as Record<string, unknown>)[part], (b as Record<string, unknown>)[part])) fields.push(part === 'code' ? 'scene code' : `scene ${part}`);
+      for (const part of new Set([...Object.keys(a), ...Object.keys(b)])) if (!same((a as Record<string, unknown>)[part], (b as Record<string, unknown>)[part])) fields.push(part === 'code' || part === 'codeRef' ? 'scene code' : `scene ${part}`);
     } else fields.push(key);
   }
-  return fields;
+  return [...new Set(fields)];
 }
 
 function describe(changes: Change[], next: Timeline) {

@@ -56,6 +56,7 @@ import type * as lib_project_data from "../lib/project_data.js";
 import type * as lib_publicationReceipt from "../lib/publicationReceipt.js";
 import type * as lib_render_seats from "../lib/render_seats.js";
 import type * as lib_render_snapshots from "../lib/render_snapshots.js";
+import type * as lib_revision_log from "../lib/revision_log.js";
 import type * as lib_run_ids from "../lib/run_ids.js";
 import type * as lib_runner_auth from "../lib/runner_auth.js";
 import type * as lib_scene_code from "../lib/scene_code.js";
@@ -145,6 +146,7 @@ declare const fullApi: ApiFromModules<{
   "lib/publicationReceipt": typeof lib_publicationReceipt;
   "lib/render_seats": typeof lib_render_seats;
   "lib/render_snapshots": typeof lib_render_snapshots;
+  "lib/revision_log": typeof lib_revision_log;
   "lib/run_ids": typeof lib_run_ids;
   "lib/runner_auth": typeof lib_runner_auth;
   "lib/scene_code": typeof lib_scene_code;
