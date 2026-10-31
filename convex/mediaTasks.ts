@@ -74,7 +74,7 @@ export const REFERENCE_SOUND_PROCESSOR_VERSION = 19;
 /** The visual guard (a proposed scene change rendered beside the saved timeline) came after reference listening. */
 export const GUARD_PROCESSOR_VERSION = 20;
 /** Reading how a film moves (motionMap: camera, transitions, elements, content) came after the visual guard. */
-export const MOTION_PROCESSOR_VERSION = 21;
+export const MOTION_PROCESSOR_VERSION = 22;
 
 export async function enqueueMediaTask(ctx: MutationCtx, input: Pick<Doc<'mediaTasks'>, 'ownerId' | 'projectId' | 'kind'> & Partial<Pick<Doc<'mediaTasks'>, 'assetId' | 'renderJobId' | 'analysisRequestId' | 'sourceUrl' | 'importRange' | 'frameRequest' | 'videoRequest' | 'reviewId' | 'snapshotId' | 'readId' | 'blueprintCheckId' | 'cutoutId' | 'derivationId' | 'requiredProcessorVersion'|'previewVersion'|'lane'>>, beforeEnqueue?:()=>Promise<void>): Promise<Id<'mediaTasks'>> {
   const minimum = MIN_PROCESSOR_VERSION[input.kind];

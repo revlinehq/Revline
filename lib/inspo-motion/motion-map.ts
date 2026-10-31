@@ -110,7 +110,16 @@ export function mapMotion(frames: Frame[], width: number, height: number, start:
       if (match && match.cost < CHANGED * 1.5) points.push({ px, py, qx: px + match.dx, qy: py + match.dy });
     });
     const solved = points.length >= 6 ? fitSimilarity(points) : null;
-    const step = solved && solved.inliers >= .35 ? solved.fit : null;
+    // The camera moves the whole view: agreeing blocks bunched in one region are an element (a growing pill, typing text), not the camera.
+    const agreeing = solved ? points.filter((_, i) => solved.kept[i]) : [];
+    const spread = (pick: (p: typeof points[number]) => number, span: number) => agreeing.length ? (Math.max(...agreeing.map(pick)) - Math.min(...agreeing.map(pick))) / span : 0;
+    const wide = agreeing.length >= 8 && (spread(p => p.px, width) >= .5 || spread(p => p.py, height) >= .5);
+    let step = solved && solved.inliers >= .35 && wide ? solved.fit : null;
+    // A real camera does not jump: one frame of more than 1.5 degrees, 6% zoom or 8% shift is a misread (dither, pixel reveals).
+    if (step) {
+      const jump = compose(invert(cumulative[t - 1]), compose(cumulative[anchor], step));
+      if (Math.abs(Math.atan2(jump.b, jump.a)) > 1.5 * Math.PI / 180 || Math.abs(Math.log(Math.hypot(jump.a, jump.b))) > .06 || Math.hypot(jump.tx / width, jump.ty / height) > .08) step = null;
+    }
     const next = step ? compose(cumulative[anchor], step) : cumulative[t - 1];
     velocity = step ? compose(invert(fromAnchor), step) : IDENTITY;
     if (step) fromAnchor = step;
@@ -253,7 +262,8 @@ export function mapMotion(frames: Frame[], width: number, height: number, start:
     const named = bestEase(points), custom = named.error > .08 ? customCurve(points) : null;
     const from = poseOf(cumulative[a], width, height), to = poseOf(cumulative[b], width, height), duration = round((b - a) / fps, 2);
     const dz = Math.log(to.scale / from.scale), dx = to.x - from.x, dy = to.y - from.y, dr = to.rotation - from.rotation;
-    const parts = [Math.abs(dz) > .01 ? (dz > 0 ? `zoom in ${Math.round((Math.exp(dz) - 1) * 100)}%` : `zoom out ${Math.round((1 - Math.exp(dz)) * 100)}%`) : '', Math.abs(dx) > .8 ? `pan ${dx > 0 ? 'right' : 'left'} ${Math.abs(round(dx, 1))}%` : '', Math.abs(dy) > .8 ? `tilt ${dy > 0 ? 'down' : 'up'} ${Math.abs(round(dy, 1))}%` : '', Math.abs(dr) > .5 ? `rotate ${round(dr, 1)}°` : ''].filter(Boolean);
+    // Named the way the camera turns: the picture slides the other way (picture moving down = the camera tilting up).
+    const parts = [Math.abs(dz) > .01 ? (dz > 0 ? `zoom in ${Math.round((Math.exp(dz) - 1) * 100)}%` : `zoom out ${Math.round((1 - Math.exp(dz)) * 100)}%`) : '', Math.abs(dx) > .8 ? `pan ${dx > 0 ? 'left' : 'right'} ${Math.abs(round(dx, 1))}%` : '', Math.abs(dy) > .8 ? `tilt ${dy > 0 ? 'up' : 'down'} ${Math.abs(round(dy, 1))}%` : '', Math.abs(dr) > .5 ? `rotate ${round(dr, 1)}°` : ''].filter(Boolean);
     const ease = custom ? `CustomEase.create("measured", "M0,0 C${custom[0]},${custom[1]} ${custom[2]},${custom[3]} 1,1")` : named.name;
     const pose = (p: Pose) => `scale: ${p.scale}, xPercent: ${p.x}, yPercent: ${p.y}${from.rotation !== to.rotation ? `, rotation: ${p.rotation}` : ''}`;
     camera.push({ start: at(a), end: at(b), duration, kind: parts.join(' + ') || 'drift', from, to, ease: custom ? `custom (closest named: ${named.name})` : named.name, fit: round(Math.max(0, 1 - Math.min(named.error, custom?.[4] ?? 1)), 2), gsap: `tl.fromTo(camera, { ${pose(from)} }, { ${pose(to)}, duration: ${duration}, ease: ${custom ? ease : `'${ease}'`} }, ${at(a)})` });
