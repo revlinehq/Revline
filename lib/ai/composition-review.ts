@@ -89,3 +89,9 @@ export function pixelDifference(actual:Uint8Array,reference:Uint8Array) {
   let sum=0;for(let i=0;i<actual.length;i++)sum+=Math.abs(actual[i]-reference[i]);
   return sum/(actual.length*255);
 }
+/** Share of pixels (raw RGB) where any channel moved by more than `threshold`: a small changed area still counts, unlike the mean. */
+export function changedShare(actual:Uint8Array,reference:Uint8Array,threshold=24) {
+  if(actual.length!==reference.length||!actual.length||actual.length%3)throw new Error('Compare equal-sized RGB samples.');
+  let changed=0;for(let i=0;i<actual.length;i+=3)if(Math.abs(actual[i]-reference[i])>threshold||Math.abs(actual[i+1]-reference[i+1])>threshold||Math.abs(actual[i+2]-reference[i+2])>threshold)changed++;
+  return changed/(actual.length/3);
+}

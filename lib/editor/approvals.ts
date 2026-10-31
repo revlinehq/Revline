@@ -77,11 +77,11 @@ export function approvedWork(timeline: Timeline) {
 // ---- Which code an approved section owns -------------------------------------------------------
 
 /** Each top-level declaration of a module (any name), with its source up to the next one. */
-function declarations(code: string) {
+export function declarations(code: string) {
   const found = [...code.matchAll(/^(?:export\s+)?(?:default\s+)?(?:async\s+)?(?:const|let|var|function|class)\s+([A-Za-z_$][\w$]*)/gm)];
   return new Map(found.map((match, index) => [match[1], code.slice(match.index, found[index + 1]?.index ?? code.length)]));
 }
-const identifiers = (code: string) => new Set(code.match(/[A-Za-z_$][\w$]*/g) ?? []);
+export const identifiers = (code: string) => new Set(code.match(/[A-Za-z_$][\w$]*/g) ?? []);
 
 /** End of a JSX open tag starting at `from` (the `<`), skipping `>` inside braces and strings. */
 function openTagEnd(code: string, from: number) {
@@ -97,9 +97,9 @@ function openTagEnd(code: string, from: number) {
   return -1;
 }
 
-/** Every <Beat> in a film's code with its literal start and duration, and the full text of the element. */
-function beats(code: string) {
-  const found: { start?: number; duration?: number; text: string }[] = [];
+/** Every <Beat> in a film's code with its literal start and duration, and the full text of the element (from..to). */
+export function filmBeats(code: string) {
+  const found: { start?: number; duration?: number; text: string; from: number; to: number }[] = [];
   for (const match of code.matchAll(/<Beat\b/g)) {
     const from = match.index, close = openTagEnd(code, from);
     if (close < 0) continue;
@@ -114,7 +114,7 @@ function beats(code: string) {
         else { const inner = openTagEnd(code, next.index); if (inner > 0 && code[inner - 1] !== '/') depth++; }
       }
     }
-    found.push({ start: number('start'), duration: number('duration'), text: code.slice(from, end) });
+    found.push({ start: number('start'), duration: number('duration'), text: code.slice(from, end), from, to: end });
   }
   return found;
 }
@@ -126,19 +126,42 @@ function beats(code: string) {
  * has no <Beat> with literal timing over the section, so the whole film counts.
  */
 export function sectionCode(scene: NonNullable<Clip['scene']>, section: { start: number; end: number }) {
-  const owned = beats(scene.code).filter(beat => beat.start !== undefined && beat.duration !== undefined && beat.start < section.end - EPSILON && beat.start + beat.duration > section.start + EPSILON);
+  const owned = filmSections(scene).filter(beat => beat.start !== undefined && beat.duration !== undefined && beat.start < section.end - EPSILON && beat.start + beat.duration > section.start + EPSILON);
   if (!owned.length) return undefined;
+  return reach(scene, owned.map(beat => beat.text)).parts.join('\n\u0000\n');
+}
+
+/**
+ * The <Beat>s that time the film itself, with literal start and duration. A Beat inside a component that a timed
+ * Beat renders (a section's own inner clock) counts in that component's local time, so it is part of its section.
+ */
+export function filmSections(scene: NonNullable<Clip['scene']>) {
+  const timed = filmBeats(scene.code).filter((beat): beat is ReturnType<typeof filmBeats>[number] & { start: number; duration: number } => beat.start !== undefined && beat.duration !== undefined);
+  const spans = [...declarations(scene.code)].map(([name, body]) => { const from = scene.code.indexOf(body); return { name, from, to: from + body.length }; });
+  const container = new Map(timed.map(beat => [beat, spans.find(span => span.from <= beat.from && span.to >= beat.to)?.name]));
+  let kept = timed;
+  for (let round = 0; round < 6; round++) {
+    const inner = reach(scene, kept.map(beat => beat.text)).names, next = timed.filter(beat => { const name = container.get(beat); return !name || !inner.has(name); });
+    if (next.length === kept.length) break;
+    kept = next;
+  }
+  return kept;
+}
+
+/** Code and the top-level names it reaches, walked through the film's own declarations and its film kit. The root component is never walked into. */
+export function reach(scene: NonNullable<Clip['scene']>, texts: string[]) {
   const scopes = [declarations(scene.code), ...(scene.blueprints ?? []).map(item => declarations(item.code))];
   // The film's root component holds the Beats themselves; only the Beats count, not its other children.
-  const root = /export\s+default\s+function\s+([A-Za-z_$][\w$]*)/.exec(scene.code)?.[1];
-  const parts = owned.map(beat => beat.text), seen = new Set<string>(root ? [root] : []);
+  const root = rootName(scene.code);
+  const parts = [...texts], seen = new Set<string>(root ? [root] : []), names = new Set<string>();
   for (let index = 0; index < parts.length; index++) for (const name of identifiers(parts[index])) {
     if (seen.has(name)) continue;
     seen.add(name);
-    for (const scope of scopes) { const body = scope.get(name); if (body !== undefined) parts.push(`${name}:${body}`); }
+    for (const scope of scopes) { const body = scope.get(name); if (body !== undefined) { parts.push(`${name}:${body}`); names.add(name); } }
   }
-  return parts.join('\n\u0000\n');
+  return { parts, names };
 }
+export const rootName = (code: string) => /export\s+default\s+function\s+([A-Za-z_$][\w$]*)/.exec(code)?.[1];
 
 // ---- The guard ---------------------------------------------------------------------------------
 

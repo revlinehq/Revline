@@ -133,3 +133,10 @@ export function placeClip(timeline: Timeline, clip: Clip, index?: number): Timel
   clips.splice(Math.min(index ?? clips.length, clips.length), 0, clip);
   return { ...timeline, clips };
 }
+
+/** A tab as it was at a revision: its timeline now with every later change taken back, as restoreTimeline does. Null when too much changed since. */
+export async function timelineAtRevision(ctx: QueryCtx, projectId: Id<'projects'>, timelineId: string, current: Timeline, revision: number) {
+  const changes = await tabChangesAfter(ctx, projectId, timelineId, revision);
+  if (!changes) return null;
+  return [...changes].sort((a, b) => (a.index ?? Infinity) - (b.index ?? Infinity)).reduce<Timeline>((next, change) => change.clipId === TIMELINE_ROW ? (change.rest ? { ...change.rest, clips: next.clips } : next) : change.before ? placeClip(next, change.before, change.index) : { ...next, clips: next.clips.filter(clip => clip.id !== change.clipId) }, current);
+}

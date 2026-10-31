@@ -34,7 +34,7 @@ const PROJECT_TOOLS = {
   deleteTimeline: { description: 'Delete a timeline tab and its undo history; media stays in the project. A project keeps at least one timeline. Only when the user asks.', inputSchema: z.object({ projectId: projectIdField, timelineId: z.string().min(1) }) },
   getMediaTask: { description: 'Status and progress of an import or media-processing task.', inputSchema: z.object({ taskId: z.string().min(1) }) },
   exportVideo: { description: 'Render the saved timeline to MP4: the open tab, or another tab with timelineId (from listTimelines). Call once per timeline to export several; they queue and render in turn. 2160 (4K) needs the Ultra plan. Returns a jobId to poll with getExport.', inputSchema: z.object({ projectId: projectIdField, timelineId: z.string().min(1).optional(), resolution: z.union([z.literal(720), z.literal(1080), z.literal(2160)]).optional(), fps: z.union([z.literal(24), z.literal(30), z.literal(60)]).optional(), quality: z.enum(['draft', 'standard', 'high']).optional() }) },
-  getFrames: { description: 'Look at the edit: render 1 to 6 frames of the saved timeline at the given timeline seconds, composited exactly as the export draws them (footage, text, effects). Use it to check framing, captions and effects after editing. Takes about 10-30 seconds.', inputSchema: z.object({ projectId: projectIdField, timelineId: z.string().min(1).optional().describe('The timeline tab to render (from listTimelines); without it, the open tab.'), times: z.array(z.number().min(0)).min(1).max(6) }) },
+  getFrames: { description: 'Look at the edit: render 1 to 6 frames of the saved timeline at the given timeline seconds, composited exactly as the export draws them (footage, text, effects). Use it to check framing, captions and effects after editing. Takes about 10-30 seconds. With revision (from listRevisions), it renders the timeline as it was at that saved revision: look at an earlier version the user refers to before bringing it back with restoreSection or restoreClip.', inputSchema: z.object({ projectId: projectIdField, timelineId: z.string().min(1).optional().describe('The timeline tab to render (from listTimelines); without it, the open tab.'), times: z.array(z.number().min(0)).min(1).max(6), revision: z.number().int().min(0).optional().describe('A saved revision from listRevisions to render instead of the current timeline.') }) },
   listExports: { description: 'Recent exports of a project, newest first: queued and rendering ones with progress, and finished ones with a temporary download link. current is false when the timeline changed after the export started.', inputSchema: z.object({ projectId: projectIdField, limit: z.number().int().min(1).max(20).optional() }) },
   getExport: { description: 'Status of an export; a completed export includes a temporary download link.', inputSchema: z.object({ jobId: z.string().min(1) }) },
 } as const;
@@ -121,7 +121,7 @@ async function callProjectTool(ctx: ActionCtx, ownerId: string, name: ProjectToo
     case 'getMediaTask': return result(await ctx.runQuery(internal.mcp.mediaTask, { ownerId, taskId: input.taskId }));
     case 'exportVideo': return result(await ctx.runMutation(internal.mcp.startExport, { ownerId, projectId: input.projectId, ...(input.timelineId ? { timelineId: input.timelineId } : {}), resolution: input.resolution ?? 1080, fps: input.fps ?? 30, quality: input.quality ?? 'high' }));
     case 'getFrames': {
-      const snapshotId = await ctx.runMutation(internal.mcp.requestFrames, { ownerId, projectId: input.projectId, times: input.times, ...(input.timelineId ? { timelineId: input.timelineId } : {}) });
+      const snapshotId = await ctx.runMutation(internal.mcp.requestFrames, { ownerId, projectId: input.projectId, times: input.times, ...(input.timelineId ? { timelineId: input.timelineId } : {}), ...(input.revision !== undefined ? { revision: input.revision } : {}) });
       const deadline = Date.now() + 170_000;
       while (Date.now() < deadline) {
         const state = await ctx.runMutation(internal.mcp.takeFrames, { ownerId, snapshotId });
@@ -129,7 +129,7 @@ async function callProjectTool(ctx: ActionCtx, ownerId: string, name: ProjectToo
         if (state.status === 'completed') {
           await ctx.runMutation(internal.mcp.discardFrames, { snapshotId });
           const frames = state.frames as { time: number; image: string }[];
-          return { ...result({ revision: state.revision, frames: frames.map(frame => ({ time: frame.time })), note: 'Images follow in time order, 720p composited frames of the saved timeline.' }), images: frames.map(frame => ({ data: frame.image, mimeType: 'image/jpeg' })) };
+          return { ...result({ revision: state.revision, ...(state.atRevision !== undefined ? { atRevision: state.atRevision } : {}), frames: frames.map(frame => ({ time: frame.time })), note: `Images follow in time order, 720p composited frames of ${state.atRevision !== undefined ? `the timeline as it was at revision ${state.atRevision}` : 'the saved timeline'}.` }), images: frames.map(frame => ({ data: frame.image, mimeType: 'image/jpeg' })) };
         }
         await new Promise(resolve => setTimeout(resolve, 1500));
       }
@@ -172,7 +172,7 @@ async function startUpload(ctx: ActionCtx, ownerId: string, input: z.infer<typeo
 // inspectVideo/inspectFrames bill analysis to a run, so they still take the lock.
 // Blueprint tools never touch the timeline, so they skip the project lock while the worker renders.
 // Frame readings look at source media only, so they skip the lock too.
-const READ_ONLY_TOOLS = new Set(['checkPacing', 'getSound', 'checkSound', 'inspectTimeline', 'inspectClip', 'listRevisions', 'readSkill', 'listVoices', 'readFrames', 'listenReference', 'trackReference', 'measureFrame', 'traceShape', 'matchFont', 'findIcon', 'measureScreen', 'compareScreen', 'saveBlueprint', 'listBlueprints', 'getBlueprint']);
+const READ_ONLY_TOOLS = new Set(['checkPacing', 'getSound', 'checkSound', 'inspectTimeline', 'inspectClip', 'listRevisions', 'readBrief', 'readSkill', 'listVoices', 'readFrames', 'listenReference', 'trackReference', 'measureFrame', 'traceShape', 'matchFont', 'findIcon', 'measureScreen', 'compareScreen', 'saveBlueprint', 'listBlueprints', 'getBlueprint']);
 /** A tool output's labeled images become MCP image content after the text. */
 function withImages(output: unknown, isError: boolean): CallResult {
   if (!output || typeof output !== 'object' || !Array.isArray((output as { images?: unknown }).images)) return result(output, isError);
@@ -220,7 +220,7 @@ async function callEditorTool(ctx: ActionCtx, ownerId: string, name: string, raw
     const output = await tool.execute.call({ ...tool, ctx }, parsed.data, { toolCallId: crypto.randomUUID(), messages: [], abortSignal });
     // A destructive edit is staged privately; publish it as this call's one saved edit.
     const published = failed(output) ? false : await toolkit.editSession.complete('stop');
-    return result(published && output && typeof output === 'object' ? { ...output, applied: true, saved: true, staged: false, revision: toolkit.editSession.revision } : output, failed(output));
+    return withImages(published && output && typeof output === 'object' ? { ...output, applied: true, saved: true, staged: false, revision: toolkit.editSession.revision } : output, failed(output));
   } catch (error) {
     return result(abortSignal.aborted && !deadline.aborted ? 'Stopped in the editor before this edit finished. Saved edits remain.' : message(error), true);
   } finally {

@@ -8,6 +8,8 @@ export const motionDesign: EditorSkill = {
 
 Follow the user's request first. A video to recreate goes through "Recreating a video" below; a new film for the user's own brand goes through "A new film" below.
 
+**Project brief first.** Read the project's brief (getProject, inspectTimeline or readBrief) before changing anything, and follow it. When the user gives direction that should last (what to keep, what to avoid, style), update the brief with updateBrief in their own words, replacing the rule it supersedes.
+
 ## How films are built
 Films are React scenes (readSkill name "scene-engine" page "react-scenes"):
 - **One film = one scene clip.** The whole film is ONE React module on one continuous timeline (film seconds from its first frame), placed as ONE clip for its whole length with one addFilm call. Its sections are named timeline markers (\`sections\` on addFilm), not separate clips, so moves between sections (an element carried over, a morph, a camera push) are just tweens that run through. Split a film into clips only when the user asks. The product UI is components, one per part (\`Sidebar\`, \`Composer\`, \`DiffPanel\`), in that file.

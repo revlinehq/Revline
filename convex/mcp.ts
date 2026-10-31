@@ -1,19 +1,21 @@
 import { memoriesFor } from './memories';
 import { ConvexError, v } from 'convex/values';
 import { internalMutation, internalQuery, type MutationCtx, type QueryCtx } from './_generated/server';
-import type { Id } from './_generated/dataModel';
+import type { Doc, Id } from './_generated/dataModel';
 import { requireProject } from './lib/auth';
 import { requireEditorAccess } from './lib/billing_access';
-import { projectIdentity, writeProject } from './lib/project_data';
+import { projectIdentity, projectRun, writeProject } from './lib/project_data';
 import { currentTimeline } from './lib/timeline';
-import { timelineDuration } from '../lib/editor/types';
+import { timelineDuration, type Timeline } from '../lib/editor/types';
 import { aspectRatio } from './schema';
 import { beginProjectDeletion, createProjectFor, duplicateProjectFor, listProjectsFor, renameProjectFor } from './projects';
 import { importVideoFor } from './mediaTasks';
 import { exportFileName, startRenderFor } from './renders';
 import { activeTabOf, createTabFor, listTabsFor, openTabFor, removeTabFor, renameTabFor, storedTabTimeline } from './timelineTabs';
-import { loadSceneCode } from './lib/scene_code';
-import { enqueueMediaTask, PACING_PROCESSOR_VERSION, SOUND_PROCESSOR_VERSION } from './mediaTasks';
+import { loadSceneCode, storeSceneCode } from './lib/scene_code';
+import { historyStart, timelineAtRevision } from './lib/revision_log';
+import { briefFor } from './briefs';
+import { enqueueMediaTask, GUARD_PROCESSOR_VERSION, PACING_PROCESSOR_VERSION, SOUND_PROCESSOR_VERSION } from './mediaTasks';
 import { soundRequestValidator } from './lib/sound_validator';
 import { pacingRequestValidator } from './lib/pacing_validator';
 import { requireMediaTaskCapacity } from './lib/account_limits';
@@ -105,6 +107,8 @@ export const projectOverview = internalQuery({ args: { ownerId: v.string(), proj
     duration: Math.round(timelineDuration(timeline) * 1000) / 1000, clipCount: timeline.clips.length, aiRunning: !!project.aiRunning, editorUrl: editorUrl(project._id),
     // Every timeline tab; duration, clipCount and editing tools refer to the open one.
     timelines: (await listTabsFor(ctx, args.ownerId, project._id)).map(tab => ({ timelineId: tab.id, name: tab.name, open: tab.active, aspectRatio: tab.aspectRatio, duration: Math.round(tab.duration * 1000) / 1000, clipCount: tab.clipCount })),
+    // The user's direction for this project, in their own words: read it before editing; keep it current with updateBrief.
+    brief: await briefFor(ctx, project._id),
     // Lasting preferences the user saved with the editing AI; follow them, and use remember/forget to change them.
     memories: await memoriesFor(ctx, args.ownerId, project._id),
     media: assets.map(asset => ({ assetId: asset._id, fileName: asset.fileName, kind: asset.kind, duration: asset.duration, width: asset.width, height: asset.height, analysis: asset.analysisKinds ?? [], ...(asset.audioAssetId ? { audioAssetId: asset.audioAssetId } : {}) })),
@@ -183,7 +187,7 @@ export const exportJob = internalQuery({ args: { ownerId: v.string(), jobId: v.s
 /** Render up to six timeline frames as export would; the worker answers within seconds. With pacing, it instead
  * samples the range at pacing.fps and returns measurements of its motion (checkPacing), not images; with sound, it
  * decodes the range's mix (getSound) and, for a check, matches its sound effects to picture changes (checkSound). */
-export const requestFrames = internalMutation({ args: { ownerId: v.string(), projectId: v.string(), times: v.array(v.number()), timelineId: v.optional(v.string()), runId: v.optional(v.string()), pacing: v.optional(pacingRequestValidator), sound: v.optional(soundRequestValidator) }, returns: v.id('frameSnapshots'), handler: async (ctx, args) => {
+export const requestFrames = internalMutation({ args: { ownerId: v.string(), projectId: v.string(), times: v.array(v.number()), timelineId: v.optional(v.string()), runId: v.optional(v.string()), pacing: v.optional(pacingRequestValidator), sound: v.optional(soundRequestValidator), revision: v.optional(v.number()) }, returns: v.id('frameSnapshots'), handler: async (ctx, args) => {
   await requireEditorAccess(ctx, args.ownerId);
   const project = await requireProject(ctx, projectIdOf(ctx, args.projectId), args.ownerId, false);
   const other = args.timelineId && args.timelineId !== activeTabOf(project) ? args.timelineId : undefined;
@@ -192,7 +196,10 @@ export const requestFrames = internalMutation({ args: { ownerId: v.string(), pro
   // A turn with staged changes (after a delete, every later edit waits until the turn ends) looks at its draft, not the saved timeline.
   const draft = args.runId ? await ctx.db.query('aiTimelinePreviews').withIndex('by_project', q => q.eq('projectId', project._id)).unique() : null;
   const drafted = draft && draft.runId === args.runId && !other ? draft.timeline : null;
-  const timeline = drafted ?? stored ?? currentTimeline(project), duration = timelineDuration(timeline);
+  const now = drafted ?? stored ?? currentTimeline(project), revision = args.revision;
+  // An earlier saved revision, rebuilt from the revision log: the tab as it looked then.
+  const past = revision === undefined ? null : await pastTimeline(ctx, project, other ?? activeTabOf(project), stored ?? currentTimeline(project), revision);
+  const timeline = past ?? now, duration = timelineDuration(timeline);
   if (!timeline.clips.length) throw new ConvexError('The timeline is empty; there is nothing to look at yet.');
   const pacing = args.pacing && { ...args.pacing, end: Math.min(args.pacing.end, duration) };
   if (pacing && (!Number.isFinite(pacing.start) || pacing.start < 0 || pacing.end - pacing.start < .3 || !(pacing.fps >= 2 && pacing.fps <= timeline.fps))) throw new ConvexError(`Check pacing over at least 0.3 s between 0 and ${Math.round(duration * 100) / 100} seconds, at 2 to ${timeline.fps} samples a second.`);
@@ -201,7 +208,7 @@ export const requestFrames = internalMutation({ args: { ownerId: v.string(), pro
   if (!pacing && !sound && (!args.times.length || args.times.length > 6 || args.times.some(time => !Number.isFinite(time) || time < 0 || time > duration))) throw new ConvexError(`Choose 1 to 6 times between 0 and ${Math.round(duration * 100) / 100} seconds.`);
   await requireMediaTaskCapacity(ctx, args.ownerId, 1);
   // The worker renders the project's saved timeline; only the request is stored here.
-  const snapshotId = await ctx.db.insert('frameSnapshots', { projectId: project._id, ownerId: args.ownerId, revision: project.revision ?? 0, times: pacing || sound ? [] : args.times, status: 'queued', createdAt: Date.now(), ...(other ? { timelineId: other } : {}), ...(drafted ? { runId: args.runId } : {}), ...(pacing ? { pacing } : {}), ...(sound ? { sound } : {}) });
+  const snapshotId = await ctx.db.insert('frameSnapshots', { projectId: project._id, ownerId: args.ownerId, revision: project.revision ?? 0, times: pacing || sound ? [] : args.times, status: 'queued', createdAt: Date.now(), ...(other ? { timelineId: other } : {}), ...(drafted && !past ? { runId: args.runId } : {}), ...(pacing ? { pacing } : {}), ...(sound ? { sound } : {}), ...(past ? { atRevision: revision } : {}) });
   const taskId = await enqueueMediaTask(ctx, { ownerId: args.ownerId, projectId: project._id, kind: 'snapshot', snapshotId, ...(pacing ? { requiredProcessorVersion: PACING_PROCESSOR_VERSION } : {}), ...(sound ? { requiredProcessorVersion: SOUND_PROCESSOR_VERSION } : {}) });
   await ctx.db.patch(snapshotId, { taskId });
   // Frames are read once; anything unread is removed shortly after.
@@ -209,11 +216,33 @@ export const requestFrames = internalMutation({ args: { ownerId: v.string(), pro
   return snapshotId;
 }});
 
+async function pastTimeline(ctx: MutationCtx, project: Doc<'projects'>, timelineId: string, current: Timeline, revision: number) {
+  const latest = project.revision ?? 0, start = await historyStart(ctx, project._id, latest);
+  if (!Number.isInteger(revision) || revision > latest) throw new ConvexError(`Revision ${revision} does not exist yet; the project is at revision ${latest}. Call listRevisions for revision numbers.`);
+  if (revision < start) throw new ConvexError(`Revision history for this project starts at revision ${start}; revision ${revision} is older and cannot be shown.`);
+  const past = await timelineAtRevision(ctx, project._id, timelineId, await loadSceneCode(ctx, current), revision);
+  if (!past) throw new ConvexError(`Too much changed since revision ${revision} to rebuild that timeline in one read.`);
+  return past;
+}
+
+/** The visual guard: render times of a proposed timeline beside the one it would replace, both kept by scene-code hash. */
+export const requestGuard = internalMutation({ args: { ownerId: v.string(), projectId: v.id('projects'), runId: v.string(), baseline: v.any(), candidate: v.any(), times: v.array(v.number()) }, returns: v.id('frameSnapshots'), handler: async (ctx, args) => {
+  const project = await requireProject(ctx, args.projectId, args.ownerId, false), run = await projectRun(ctx, project._id, args.ownerId);
+  if (run.aiRunId !== args.runId || !run.aiRunning) throw new ConvexError('AI run is no longer active');
+  if (!args.times.length || args.times.length > 24 || args.times.some(time => !Number.isFinite(time) || time < 0)) throw new ConvexError('The guard renders 1 to 24 times.');
+  const baseline = await storeSceneCode(ctx, args.baseline as Timeline), candidate = await storeSceneCode(ctx, args.candidate as Timeline);
+  const snapshotId = await ctx.db.insert('frameSnapshots', { projectId: project._id, ownerId: args.ownerId, revision: project.revision ?? 0, times: args.times, status: 'queued', createdAt: Date.now(), guard: { baseline, candidate } });
+  const taskId = await enqueueMediaTask(ctx, { ownerId: args.ownerId, projectId: project._id, kind: 'snapshot', snapshotId, requiredProcessorVersion: GUARD_PROCESSOR_VERSION });
+  await ctx.db.patch(snapshotId, { taskId });
+  await ctx.scheduler.runAfter(15 * 60_000, internal.mcp.discardFrames, { snapshotId });
+  return snapshotId;
+}});
+
 export const frames = internalQuery({ args: { ownerId: v.string(), snapshotId: v.id('frameSnapshots') }, returns: v.any(), handler: async (ctx, args) => {
   const snapshot = await ctx.db.get(args.snapshotId);
   if (!snapshot || snapshot.ownerId !== args.ownerId) throw new ConvexError('Frame request not found.');
   const task = snapshot.status === 'queued' && snapshot.taskId ? await ctx.db.get(snapshot.taskId) : null;
-  return { status: snapshot.status, started: snapshot.status !== 'queued' || (!!task && task.status !== 'queued'), revision: snapshot.revision, ...(snapshot.error ? { error: snapshot.error } : {}), ...(snapshot.frames ? { frames: snapshot.frames } : {}), ...(snapshot.pacingResult ? { pacing: snapshot.pacingResult } : {}), ...(snapshot.soundResult ? { sound: snapshot.soundResult } : {}) };
+  return { status: snapshot.status, started: snapshot.status !== 'queued' || (!!task && task.status !== 'queued'), revision: snapshot.revision, ...(snapshot.error ? { error: snapshot.error } : {}), ...(snapshot.frames ? { frames: snapshot.frames } : {}), ...(snapshot.differences ? { differences: snapshot.differences, times: snapshot.times } : {}), ...(snapshot.atRevision !== undefined ? { atRevision: snapshot.atRevision } : {}), ...(snapshot.pacingResult ? { pacing: snapshot.pacingResult } : {}), ...(snapshot.soundResult ? { sound: snapshot.soundResult } : {}) };
 }});
 
 /** frames, for a caller that is done once it has the result: a finished or failed request is deleted as it is read,
@@ -223,7 +252,7 @@ export const takeFrames = internalMutation({ args: { ownerId: v.string(), snapsh
   if (!snapshot || snapshot.ownerId !== args.ownerId) throw new ConvexError('Frame request not found.');
   const task = snapshot.status === 'queued' && snapshot.taskId ? await ctx.db.get(snapshot.taskId) : null;
   if (snapshot.status !== 'queued') await ctx.db.delete(snapshot._id);
-  return { status: snapshot.status, started: snapshot.status !== 'queued' || (!!task && task.status !== 'queued'), revision: snapshot.revision, ...(snapshot.error ? { error: snapshot.error } : {}), ...(snapshot.frames ? { frames: snapshot.frames } : {}), ...(snapshot.pacingResult ? { pacing: snapshot.pacingResult } : {}), ...(snapshot.soundResult ? { sound: snapshot.soundResult } : {}) };
+  return { status: snapshot.status, started: snapshot.status !== 'queued' || (!!task && task.status !== 'queued'), revision: snapshot.revision, ...(snapshot.error ? { error: snapshot.error } : {}), ...(snapshot.frames ? { frames: snapshot.frames } : {}), ...(snapshot.differences ? { differences: snapshot.differences, times: snapshot.times } : {}), ...(snapshot.atRevision !== undefined ? { atRevision: snapshot.atRevision } : {}), ...(snapshot.pacingResult ? { pacing: snapshot.pacingResult } : {}), ...(snapshot.soundResult ? { sound: snapshot.soundResult } : {}) };
 }});
 
 export const discardFrames = internalMutation({ args: { snapshotId: v.id('frameSnapshots') }, returns: v.null(), handler: async (ctx, args) => {
