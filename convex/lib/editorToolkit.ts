@@ -1340,9 +1340,11 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
   for (const [name, tool] of Object.entries(tools as Record<string, { execute?: (...args: never[]) => Promise<unknown>; inputSchema?: unknown }>)) {
     const execute = tool.execute;
     if (APPROVAL_FREE_TOOLS.has(name) || !execute || !(tool.inputSchema instanceof z.ZodObject)) continue;
-    tool.inputSchema = tool.inputSchema.extend({ overrideApproved: z.boolean().optional().describe('Only when the user asked for this exact change to approved work: edit it anyway. Needs overrideReason.'), overrideReason: z.string().trim().min(3).max(300).optional().describe("What the user asked, quoted, when overrideApproved is true.") });
+    tool.inputSchema = tool.inputSchema.extend({ overrideApproved: z.union([z.boolean(), z.enum(['true', 'false'])]).optional().describe('Only when the user asked for this exact change to approved work: edit it anyway. Needs overrideReason.'), overrideReason: z.string().trim().min(3).max(300).optional().describe("What the user asked, quoted, when overrideApproved is true.") });
     tool.execute = async function (this: unknown, ...args: never[]) {
-      const { overrideApproved, overrideReason, ...input } = (args[0] ?? {}) as Record<string, unknown> & { overrideApproved?: boolean; overrideReason?: string };
+      // Clients holding an older tool list send the flag as a string.
+      const { overrideApproved: flag, overrideReason, ...input } = (args[0] ?? {}) as Record<string, unknown> & { overrideApproved?: boolean | string; overrideReason?: string };
+      const overrideApproved = flag === true || flag === 'true';
       args = [input, ...args.slice(1)] as never[];
       if (overrideApproved && !overrideReason) throw new Error('overrideApproved needs overrideReason: quote what the user asked. Nothing was changed.');
       if (!overrideApproved && appliedLater.has(name) && typeof input.clipId === 'string') {
