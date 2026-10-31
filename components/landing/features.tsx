@@ -14,21 +14,12 @@ function Feature({ title, description, stage, wide, interactive, children }: { t
   </article>;
 }
 
-function Layer({ name, kind, thumb, active }: { name: string; kind: string; thumb?: string; active?: boolean }) {
-  return <div className="landing-layer" data-active={active || undefined}>
-    {thumb ? <img src={`/landing/${thumb}.webp`} alt="" data-dim={kind === 'Background' || undefined} /> : <span>Aa</span>}
-    <div><b>{name}</b><small>{kind}</small></div>
-  </div>;
-}
-
 export function LandingFeatures() {
   return <LandingSection id="features" className="landing-features" headingId="landing-features-heading">
     <LandingHeading id="landing-features-heading" title="More from Revline" description="Effects that used to need After Effects, done by asking." />
     <div className="landing-feature-grid">
-      <Feature title="Text behind you" description="Words sit between you and the background." stage="layers">
-        <Layer name="You" kind="Cut-out" thumb="talking-head" />
-        <Layer name="LEGEND" kind="Text" active />
-        <Layer name="Original footage" kind="Background" thumb="talking-head" />
+      <Feature title="Text behind you" description="Words sit between you and the background." stage="film">
+        <LandingFeatureVideo src="/landing/text-behind-you.mp4" poster="/landing/text-behind-you-poster.webp" />
       </Feature>
       <Feature title="Tracked labels" description="Captions and stickers follow what moves." stage="tracking">
         <span className="landing-track-box" />

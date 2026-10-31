@@ -146,10 +146,10 @@ div.landing-hero-buttons>.landing-reveal-content{display:flex;align-items:center
 .landing-video-modal [data-slot=dialog-close]:hover{background:#0b0b0dcc;color:#fff}
 @keyframes landing-marquee{to{transform:translateX(-50%)}}
 
-/* How it works: grainy gradient cards with each visual fully inside, padded on every side. */
+/* How it works: plain cards with each visual fully inside, padded on every side. */
 .landing-how{display:flex;flex-direction:column;gap:40px;padding-block:96px}
 .landing-steps{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:24px}
-.landing-step{display:flex;flex-direction:column;gap:20px;min-width:0;padding:32px 28px 28px;border-radius:12px;background:#f3f0ff center/cover no-repeat;overflow:hidden}
+.landing-step{display:flex;flex-direction:column;gap:20px;min-width:0;padding:32px 28px 28px;border-radius:12px;background:var(--l-bg-subtle);overflow:hidden}
 .landing-step-title{font:500 24px/1.26 var(--l-head);letter-spacing:-.4px;color:var(--l-fg-2)}
 .landing-step-visual{width:100%}
 .landing-step-visual video{display:block;width:100%;aspect-ratio:16/9;border-radius:6px;background:#121212;object-fit:cover}
@@ -185,15 +185,6 @@ div.landing-hero-buttons>.landing-reveal-content{display:flex;align-items:center
 .landing-sound-wave-played svg{fill:#1c1c1c}
 .landing-sound-cue{position:absolute;top:16px;bottom:-4px;width:1px;background:#1212122e;pointer-events:none}
 .landing-sound-playhead{position:absolute;top:-8px;bottom:-8px;width:2px;margin-left:-1px;border-radius:1px;background:#1c1c1c;pointer-events:none}
-.landing-feature-stage[data-stage=layers]{gap:8px;padding:24px}
-.landing-layer{display:flex;align-items:center;gap:12px;width:100%;padding:8px;background:#fff;border:1px solid var(--l-border);border-radius:8px}
-.landing-layer[data-active]{background:var(--l-brand-tint);border-color:var(--l-brand)}
-.landing-layer img,.landing-layer>span{flex-shrink:0;width:52px;height:36px;border-radius:7px;object-fit:cover}
-.landing-layer img[data-dim]{opacity:.55}
-.landing-layer>span{display:grid;place-items:center;background:var(--l-fg);font:700 13px var(--l-head);color:#fff}
-.landing-layer div{display:flex;flex-direction:column;gap:2px}
-.landing-layer b{font-size:13px;font-weight:600;color:var(--l-fg)}
-.landing-layer small{font-size:11px;color:var(--l-fg-3)}
 .landing-feature-stage[data-stage=tracking]{display:block;background:#17181c url(/landing/vlog.webp) center/cover no-repeat}
 .landing-track-box{position:absolute;left:24.7%;top:80px;width:134px;height:106px;border:1.5px solid #fff;border-radius:8px}
 .landing-track-label{position:absolute;left:24.7%;top:44px;display:flex;align-items:center;gap:6px;padding:5px 9px;border-radius:999px;background:var(--l-fg);font-size:12px;font-weight:600;line-height:1.3;color:#fff}
