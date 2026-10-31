@@ -1,0 +1,8 @@
+{
+  "projectId": "j97a6znt9yea2kge4xf3dg9rv98hb5zg",
+  "assetId": "j5782qyf8qt4hbjdbvxw3vrv398hbbjc",
+  "file": "landscape.png",
+  "generator": "built-in image_gen",
+  "prompt": "Use case: photorealistic-natural. Asset type: original wide 16:9 background plate for a retro computer motion-design film. Create an original photograph of a smooth vivid chartreuse-green grassy rolling hill, a classic early-2000s desktop wallpaper feeling. Low gently curved hill crest at 61 percent of image height, higher on left, dipping to right; close emerald grass foreground with fine mowing-like textured bands. The top 60 percent is saturated rich cobalt blue sky with several soft white cumulus cloud groups, strongest at upper right and mid-left. Summer sunlight, bright clean nostalgic digital photograph, slightly soft consumer-camera lens, fine natural grass texture. Wide straight camera, no objects, trees, buildings, people, text, logos, UI or watermark. Return only the landscape.",
+  "note": "Original static plate. No reference video pixels or audio are used in the film. Motion is computed from useBeat time without GSAP."
+}
