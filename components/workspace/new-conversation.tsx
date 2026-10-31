@@ -3,9 +3,10 @@ import { NEW_PROJECT_PATH } from '@/lib/workspace-routes';
 import { userError } from '@/lib/user-error';
 
 import { NEW_WORKSPACE_LABEL } from '@/lib/editor/workspace-labels';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth, useUser } from '@clerk/nextjs';
+import { ArrowUp, LoaderCircle } from 'lucide-react';
 import { useAction, useConvex, useConvexAuth, useMutation, useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
@@ -67,6 +68,9 @@ export function NewConversation() {
   // A video to recreate is a reference: it stays in the project's media, off the timeline.
   const [referenceOnly, setReferenceOnly] = useState(false);
   const [startingBlank, setStartingBlank] = useState(false);
+  // Prompt mode starts a blank project; the typed request opens the editor's chat.
+  const [mode, setMode] = useState<'upload' | 'prompt'>('upload');
+  const [draft, setDraft] = useState('');
   const hasMedia = files.length + cloudIds.length > 0;
   const busy = processing?.phase !== 'error' && (processing !== null || hasMedia);
 
@@ -80,6 +84,7 @@ export function NewConversation() {
   useEffect(() => {
     if (!isLoaded) return;
     try { brief.current = sessionStorage.getItem(briefKey) ?? ''; } catch { /* Uploads can still start in this page. */ }
+    setDraft(brief.current);
     if (/\b(recreat|remake|reference|clone|copy this|like this)/i.test(brief.current)) setReferenceOnly(true);
     const job = getProjectImportJob(userId ?? undefined);
     if (job) {
@@ -232,15 +237,23 @@ export function NewConversation() {
     session.current = createProjectImportSession();
     draftEpoch.current++;
     setFiles([]); setCloudIds([]); setProcessing(null); setError('');
-    brief.current = '';
+    brief.current = ''; setDraft('');
     try { sessionStorage.removeItem(briefKey); sessionStorage.removeItem(cloudKey); } catch { /* The current selection is cleared in memory. */ }
     void stashFiles([]);
   }
+  function changeDraft(value: string) {
+    setDraft(value); brief.current = value;
+    try { if (value) sessionStorage.setItem(briefKey, value); else sessionStorage.removeItem(briefKey); } catch { /* The draft stays in this page. */ }
+  }
+  function draftKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+    if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing) return;
+    event.preventDefault(); void startBlank();
+  }
   async function startBlank() {
-    if (startingBlank) return;
+    const prompt = brief.current.trim();
+    if (startingBlank || !prompt) return;
     setStartingBlank(true); setError('');
     try {
-      const prompt = brief.current.trim();
       const projectId = await createProject({ title: (prompt.replace(/\s+/g, ' ').slice(0, 80)) || 'New video', aspectRatio: 'landscape' });
       try { if (prompt) sessionStorage.setItem('revline:brief:' + projectId, prompt); sessionStorage.removeItem(briefKey); } catch { /* The editor opens without the saved request. */ }
       router.push('/editor/' + projectId);
@@ -266,14 +279,21 @@ export function NewConversation() {
     <WorkspaceNav title={NEW_WORKSPACE_LABEL} />
     {status ? <FootageProcessingCard files={processingFiles} {...status} error={error} onRetry={() => void processFootage()} onReset={reset} onOpen={session.current.projectId ? () => void openPartialProject() : undefined}/> : <main className="new-conversation-main" aria-labelledby="new-conversation-title">
       <div className="new-conversation-start">
-        <div className="new-conversation-intro"><h1 id="new-conversation-title">Welcome{firstName ? `, ${firstName}` : ''}.</h1><p>Start your edit. Add your clips, then tell Revline what to make.</p></div>
+        <div className="new-conversation-intro"><h1 id="new-conversation-title">Welcome{firstName ? `, ${firstName}` : ''}.</h1><p>{mode === 'upload' ? 'Start your edit. Add your clips, then tell Revline what to make.' : 'Start from a prompt. Describe the video and Revline builds it, no footage needed.'}</p></div>
         <div className="new-conversation-entry" data-dragging={dragging || undefined} aria-busy={busy}>
-          <FootageStartCard onAttach={() => picker.current?.click()} disabled={!draftReady} dragging={dragging}/>
-          <input ref={picker} type="file" accept="video/*,audio/*,image/*" multiple className="sr-only" tabIndex={-1} aria-label="Choose media to upload" onChange={event => { const files = Array.from(event.target.files ?? []); event.target.value = ''; if (files.length) attach(files); }}/>
-          <div className="new-conversation-options">
-            <label><input type="checkbox" checked={referenceOnly} onChange={event => setReferenceOnly(event.target.checked)} disabled={!draftReady}/> Use as a reference to recreate (keep it off the timeline)</label>
-            <button type="button" onClick={() => void startBlank()} disabled={!draftReady || startingBlank}>Start without footage</button>
+          <div className="new-conversation-modes" role="tablist" aria-label="How to start">
+            {(['upload', 'prompt'] as const).map(value => <button key={value} type="button" role="tab" id={`new-conversation-tab-${value}`} aria-controls="new-conversation-panel" aria-selected={mode === value} tabIndex={mode === value ? 0 : -1} onClick={() => setMode(value)} onKeyDown={event => { if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') { const next = value === 'upload' ? 'prompt' : 'upload'; setMode(next); document.getElementById(`new-conversation-tab-${next}`)?.focus(); } }}>{value === 'upload' ? 'Upload' : 'Prompt'}</button>)}
           </div>
+          <div id="new-conversation-panel" role="tabpanel" aria-labelledby={`new-conversation-tab-${mode}`}>
+          {mode === 'upload' ? <FootageStartCard onAttach={() => picker.current?.click()} disabled={!draftReady} dragging={dragging}/> : <form className="new-conversation-prompt" onSubmit={event => { event.preventDefault(); void startBlank(); }}>
+            <textarea autoFocus aria-label="Describe your video" placeholder="Describe the video you want to make…" value={draft} maxLength={2000} onChange={event => changeDraft(event.target.value)} onKeyDown={draftKeyDown} readOnly={startingBlank}/>
+            <button type="submit" aria-label="Start editing" disabled={!draftReady || startingBlank || !draft.trim()}>{startingBlank ? <LoaderCircle size={16} className="animate-spin" aria-hidden="true"/> : <ArrowUp size={16} aria-hidden="true"/>}</button>
+          </form>}
+          </div>
+          <input ref={picker} type="file" accept="video/*,audio/*,image/*" multiple className="sr-only" tabIndex={-1} aria-label="Choose media to upload" onChange={event => { const files = Array.from(event.target.files ?? []); event.target.value = ''; if (files.length) attach(files); }}/>
+          {mode === 'upload' && <div className="new-conversation-options">
+            <label><input type="checkbox" checked={referenceOnly} onChange={event => setReferenceOnly(event.target.checked)} disabled={!draftReady}/> Use as a reference to recreate (keep it off the timeline)</label>
+          </div>}
           {error && <p className="new-conversation-error" role="alert">{error}</p>}
         </div>
       </div>

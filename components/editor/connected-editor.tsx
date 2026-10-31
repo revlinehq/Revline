@@ -305,7 +305,9 @@ function ProjectEditor({project}: {project:Doc<'projects'>}) {
       // A reference to recreate stays off the timeline; the brief goes out with it attached.
       const reference=sessionStorage.getItem('revline:brief-reference:'+projectId)==='1';
       const references=reference?(media??[]).filter(asset=>asset.kind==='video'||asset.kind==='image').map(asset=>asset._id as Id<'assets'>):[];
-      if(prompt&&(timelineRef.current.clips.length||reference)&&!saves.busy){await sendRequest(prompt,references.length?{attachedAssetIds:references}:{});sessionStorage.removeItem('revline:brief:'+projectId);sessionStorage.removeItem('revline:brief-reference:'+projectId);}
+      // A project started from a prompt has no footage; its brief goes out as the first request.
+      const blank=!files.length&&!(media??[]).length;
+      if(prompt&&(timelineRef.current.clips.length||reference||blank)&&!saves.busy){await sendRequest(prompt,references.length?{attachedAssetIds:references}:{});sessionStorage.removeItem('revline:brief:'+projectId);sessionStorage.removeItem('revline:brief-reference:'+projectId);}
     })().catch(e=>setError(userError(e, 'Could not start this edit.')));
   },[media,projectId,send]);
   if(media===undefined)return editorLoading(projectId);
