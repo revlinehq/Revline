@@ -114,8 +114,8 @@ export const createProject = internalMutation({ args: { ownerId: v.string(), tit
   return { projectId, editorUrl: editorUrl(projectId) };
 }});
 
-export const importVideo = internalMutation({ args: { ownerId: v.string(), projectId: v.optional(v.string()), url: v.string() }, returns: v.any(), handler: async (ctx, args) => {
-  const { projectId, taskId } = await importVideoFor(ctx, args.ownerId, { url: args.url, ...(args.projectId ? { projectId: projectIdOf(ctx, args.projectId) } : {}) });
+export const importVideo = internalMutation({ args: { ownerId: v.string(), projectId: v.optional(v.string()), url: v.string(), start: v.optional(v.number()), end: v.optional(v.number()) }, returns: v.any(), handler: async (ctx, args) => {
+  const { projectId, taskId } = await importVideoFor(ctx, args.ownerId, { url: args.url, ...(args.start !== undefined ? { start: args.start } : {}), ...(args.end !== undefined ? { end: args.end } : {}), ...(args.projectId ? { projectId: projectIdOf(ctx, args.projectId) } : {}) });
   return { projectId, taskId, editorUrl: editorUrl(projectId), note: 'Poll getMediaTask with taskId until it completes; the media then appears in getProject.' };
 }});
 

@@ -201,6 +201,8 @@ export const mediaTaskFields = {
   activity:v.optional(mediaTaskActivity),activityStartedAt:v.optional(v.number()),
   outputAssetId: v.optional(v.id('assets')),
   sourceUrl: v.optional(v.string()),
+  // A link import keeps only this source window (seconds), so long videos fit the 5 minute cap.
+  importRange: v.optional(v.object({ start: v.number(), end: v.number() })),
   reviewId:v.optional(v.id('compositionReviews')),snapshotId:v.optional(v.id('frameSnapshots')),readId:v.optional(v.id('referenceReads')),referenceImport:v.optional(v.boolean()),blueprintCheckId:v.optional(v.id('blueprintChecks')),cutoutId:v.optional(v.id('cutouts')),derivationId:v.optional(v.id('derivations')),previewVersion:v.optional(v.number()),requiredProcessorVersion:v.optional(v.number()),
   frameRequest: v.optional(frameRequestValidator), frameInspection: v.optional(frameInspectionValidator),
   videoRequest: v.optional(videoRequestValidator), videoInspection: v.optional(videoInspectionValidator),

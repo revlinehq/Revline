@@ -74,12 +74,18 @@ async function downloadMp4(url: string, path: string, signal: AbortSignal, onPro
   if (!received || (expected > 0 && expected !== received)) throw new Error('The video download was incomplete.');
 }
 
-export function youtubeArguments(url: string, path: string, maxBytes: number) {
-  return ['--ignore-config', '--no-plugin-dirs', '--no-playlist', '--no-warnings', '--socket-timeout', '30', '--retries', '2', '--max-filesize', String(maxBytes), '--match-filters', 'duration <= 300 & !is_live', '--js-runtimes', 'node', '-f', 'bv*[height<=1080][ext=mp4]+ba[ext=m4a]/b[height<=1080][ext=mp4]', '--merge-output-format', 'mp4', '--remux-video', 'mp4', '--print', 'after_move:%(title)s', '-o', path, '--', url];
+export type ImportRange = { start: number; end: number };
+const MAX_IMPORT_SECONDS = 300;
+
+/** With a range, only that window downloads (cut on exact frames), so the 5 minute cap applies to the range, not the whole video. */
+export function youtubeArguments(url: string, path: string, maxBytes: number, range?: ImportRange) {
+  const window = range ? ['--download-sections', `*${range.start}-${range.end}`, '--force-keyframes-at-cuts'] : [];
+  return ['--ignore-config', '--no-plugin-dirs', '--no-playlist', '--no-warnings', '--socket-timeout', '30', '--retries', '2', '--max-filesize', String(maxBytes), '--match-filters', range ? `duration > ${range.start} & !is_live` : `duration <= ${MAX_IMPORT_SECONDS} & !is_live`, ...window, '--js-runtimes', 'node', '-f', 'bv*[height<=1080][ext=mp4]+ba[ext=m4a]/b[height<=1080][ext=mp4]', '--merge-output-format', 'mp4', '--remux-video', 'mp4', '--print', 'after_move:%(title)s', '-o', path, '--', url];
 }
 
-export async function importVideoLink(value: string, directory: string, signal: AbortSignal, onProgress: (percent: number) => void) {
+export async function importVideoLink(value: string, directory: string, signal: AbortSignal, onProgress: (percent: number) => void, range?: ImportRange) {
   const link = parseVideoLink(value);
+  if (range && (!(range.start >= 0) || !(range.end > range.start) || range.end - range.start > MAX_IMPORT_SECONDS)) throw new AnalysisError('An imported range must run forward and be up to 5 minutes long.', 400);
   const disk = await statfs(directory);
   const maxBytes = Math.floor(disk.bavail * disk.bsize / DISK_PER_IMPORT_BYTE);
   if (maxBytes < 64 * 1024 * 1024) throw new AnalysisError('The media worker needs more free disk space before importing a video.', 503);
@@ -89,7 +95,7 @@ export async function importVideoLink(value: string, directory: string, signal: 
     const bundled = join(process.cwd(), '.data/video-import/bin/yt-dlp');
     const executable = process.env.YT_DLP_PATH || (existsSync(bundled) ? bundled : 'yt-dlp');
     try {
-      const { stdout } = await run(executable, youtubeArguments(link.url, source, maxBytes), { signal, timeout: 600_000, maxBuffer: 2 * 1024 * 1024 });
+      const { stdout } = await run(executable, youtubeArguments(link.url, source, maxBytes, range), { signal, timeout: 600_000, maxBuffer: 2 * 1024 * 1024 });
       title = stdout.trim().split('\n').at(-1) || title;
     } catch (error) {
       if (signal.aborted) throw error;
@@ -102,19 +108,23 @@ export async function importVideoLink(value: string, directory: string, signal: 
     await downloadMp4(link.url, source, signal, onProgress, maxBytes);
     try { title = decodeURIComponent(new URL(link.url).pathname.split('/').at(-1) || title).replace(/\.mp4$/i, ''); } catch { /* A safe default name works too. */ }
   }
-  if (!existsSync(source)) throw new AnalysisError('This video-link import did not produce a file. Links must be public, up to 5 minutes, and not livestreams. Upload longer footage directly as a file.', 400);
+  if (!existsSync(source)) throw new AnalysisError(range ? 'This video-link import did not produce a file. The link must be public, not a livestream, and longer than the range start.' : 'This video-link import did not produce a file. Links must be public, up to 5 minutes, and not livestreams. For a longer video, import a start to end range of up to 5 minutes.', 400);
   if ((await stat(source)).size > maxBytes) throw tooLarge();
   onProgress(65);
   const { stdout } = await run('ffprobe', ['-v', 'error', '-show_entries', 'format=duration:stream=codec_type,codec_name,width,height,pix_fmt', '-of', 'json', source], { signal, timeout: 30_000, maxBuffer: 1024 * 1024 }).catch(() => { throw new AnalysisError('The link did not contain a readable MP4 video.', 400); });
   const metadata = JSON.parse(stdout) as { format?: { duration?: string }; streams?: { codec_type: string; codec_name: string; width?: number; height?: number; pix_fmt?: string }[] };
   const video = metadata.streams?.find(stream => stream.codec_type === 'video');
   const audio = metadata.streams?.find(stream => stream.codec_type === 'audio');
-  const duration = Number(metadata.format?.duration);
-  if (!video?.width || !video.height || video.width > 16384 || video.height > 16384 || !Number.isFinite(duration) || duration <= 0 || duration > 300) throw new AnalysisError('Video links must contain a readable video up to 5 minutes long. Upload longer footage directly as a file.', 400);
+  // A direct MP4 arrives whole, so its range is cut here; YouTube already downloaded only the range.
+  const cut = range && link.kind !== 'youtube' ? range : undefined;
+  const fullDuration = Number(metadata.format?.duration);
+  const duration = cut ? Math.min(fullDuration, cut.end) - cut.start : fullDuration;
+  if (cut && fullDuration <= cut.start) throw new AnalysisError('The import range starts after the end of this video.', 400);
+  if (!video?.width || !video.height || video.width > 16384 || video.height > 16384 || !Number.isFinite(duration) || duration <= 0 || duration > MAX_IMPORT_SECONDS + 1) throw new AnalysisError('Video links must contain a readable video up to 5 minutes long. For a longer video, import a start to end range of up to 5 minutes.', 400);
   const path = join(directory, 'video.mp4');
-  const copyVideo = video.codec_name === 'h264' && video.pix_fmt === 'yuv420p';
-  // Keep supported streams intact; convert other codecs for browser preview and export.
-  await run('ffmpeg', ['-v', 'error', '-i', source, '-map', '0:v:0', '-map', '0:a:0?', ...(copyVideo ? ['-c:v', 'copy'] : ['-vf', 'scale=trunc(iw/2)*2:trunc(ih/2)*2', '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '20', '-pix_fmt', 'yuv420p']), '-c:a', audio?.codec_name === 'aac' ? 'copy' : 'aac', '-movflags', '+faststart', '-y', path], { signal, timeout: 600_000, maxBuffer: 1024 * 1024 });
+  const copyVideo = !cut && video.codec_name === 'h264' && video.pix_fmt === 'yuv420p';
+  // Keep supported streams intact; convert other codecs for browser preview and export. A cut re-encodes so it lands on exact frames.
+  await run('ffmpeg', ['-v', 'error', ...(cut ? ['-ss', String(cut.start), '-to', String(cut.end)] : []), '-i', source, '-map', '0:v:0', '-map', '0:a:0?', ...(copyVideo ? ['-c:v', 'copy'] : ['-vf', 'scale=trunc(iw/2)*2:trunc(ih/2)*2', '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '20', '-pix_fmt', 'yuv420p']), '-c:a', audio?.codec_name === 'aac' ? 'copy' : 'aac', '-movflags', '+faststart', '-y', path], { signal, timeout: 600_000, maxBuffer: 1024 * 1024 });
   onProgress(80);
   const fileName = `${title.replace(/[\x00-\x1f/\\]/g, '').trim().slice(0, 180) || 'Imported video'}.mp4`;
   return { path, fileName, duration, width: copyVideo ? video.width : Math.floor(video.width / 2) * 2, height: copyVideo ? video.height : Math.floor(video.height / 2) * 2 };

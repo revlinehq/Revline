@@ -69,7 +69,7 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
     if (task.kind === 'import') {
       if (task.outputAssetId) return {};
       if (!task.sourceUrl) throw new AnalysisError('The video link is missing.', 400);
-      const { path, ...metadata } = await importVideoLink(task.sourceUrl, directory, signal, onProgress);
+      const { path, ...metadata } = await importVideoLink(task.sourceUrl, directory, signal, onProgress, task.importRange);
       await uploadMediaFile(path, { ...credentials, projectId: task.projectId, ...metadata, kind: 'video', contentType: 'video/mp4' }, uploadContext, signal);
       onProgress(98);
       return {};
