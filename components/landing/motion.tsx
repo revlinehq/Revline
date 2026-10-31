@@ -29,7 +29,7 @@ const kinds: Kind[] = [
 // Scroll distance each segment holds the pinned section for, in viewport heights.
 const SCROLL_PER_SEGMENT = .7;
 
-/** The film behind a segment: plays at normal speed, muted and looping, while its tab shows and the section is on screen. */
+/** The film behind a segment: plays from the start, muted and looping, while its tab shows and the section is on screen. */
 function FilmScene({ film, playing }: { film: Film; playing: boolean }) {
   const video = useRef<HTMLVideoElement>(null);
   useEffect(() => {
@@ -37,7 +37,10 @@ function FilmScene({ film, playing }: { film: Film; playing: boolean }) {
     if (!element) return;
     // Server-rendered HTML can't carry `muted`, so set it before asking to play.
     element.muted = true;
-    if (playing) void element.play().catch(() => {}); else element.pause();
+    if (!playing) { element.pause(); return; }
+    // Each time its tab opens the film starts over; a fresh seek also wakes a video the browser left stalled while it was invisible.
+    element.currentTime = 0;
+    void element.play().catch(() => {});
   }, [playing]);
   return <video ref={video} className="landing-motion-film" src={film.src} poster={film.poster} muted loop playsInline preload="metadata" />;
 }
