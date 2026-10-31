@@ -344,6 +344,6 @@ div.landing-hero-buttons>.landing-reveal-content{display:flex;align-items:center
 @media(prefers-reduced-motion:reduce){
   .landing-marquee-track{animation:none}
 }
-/* An app named in running text, with its logo at text height. */
-.landing-app-name{display:inline-flex;align-items:center;gap:.3em;white-space:nowrap}
-.landing-app-name img{width:1.1em;height:1.1em;flex:none}
+/* Apps named in running text by their logos alone, at text height. */
+.landing-app-logos{display:inline-flex;align-items:center;gap:.3em;vertical-align:-.2em}
+.landing-app-logos img{width:1.2em;height:1.2em;flex:none}
