@@ -11,6 +11,7 @@ import { AnalysisError } from '../media-analysis/errors';
 import { sceneMediaAssetIds } from '../editor/scene-layers';
 import { prepareComposition,writeComposition,reviewWindowTimeline,linkCompositionResources } from './prepare-composition';
 import { runCompositionCapture } from './render-worker';
+import { measurePacing } from '../media-analysis/pacing';
 export async function reviewComposition(snapshot:NonNullable<MediaWorkItem['review']>,directory:string,convexUrl:string,signal:AbortSignal,onProgress:(n:number)=>void):Promise<NonNullable<MediaTaskResult['review']>> {
   const key=process.env.GOOGLE_GENERATIVE_AI_API_KEY;if(!key)throw new AnalysisError('Gemini composition review is not configured.',503);
   const edited=reviewWindowTimeline(snapshot.timeline,snapshot.start,snapshot.end),reference=reviewWindowTimeline(snapshot.reference,snapshot.start,snapshot.end);
@@ -49,6 +50,17 @@ export async function captureTimelineFrames(snapshot:NonNullable<MediaWorkItem['
   const path=join(directory,'edited');await mkdir(path);await linkCompositionResources(directory,path,assetUrls);
   await writeComposition(path,timeline,assets,assetUrls,720,timeline.fps as 24|30|60,'./',signal,audioSourceOffsets);
   onProgress(20);
+  if(snapshot.pacing){
+    // One capture session over the whole range at the sampling rate, read back as small grayscale frames.
+    const {fps}=snapshot.pacing,start=Math.round(Math.min(snapshot.pacing.start,last)*timeline.fps)/timeline.fps,end=Math.min(snapshot.pacing.end,last);
+    const times=Array.from({length:Math.floor((end-start)*fps+1e-6)+1},(_,index)=>Math.round((start+index/fps)*timeline.fps)/timeline.fps);
+    if(times.length<3)throw new AnalysisError('Check pacing over at least 0.3 s.',400);
+    const width=160,size=dimensions(timeline.aspectRatio,720),height=Math.max(2,Math.round(width*size.height/size.width));
+    await runCompositionCapture(directory,{...size,fps:timeline.fps,times,start:times[0],end:times[times.length-1]+frame,variants:['edited'],pacing:{width}},signal);
+    onProgress(85);
+    const bytes=await readFile(join(directory,'pacing.bin')),frames=times.map((_,index)=>new Uint8Array(bytes.buffer,bytes.byteOffset+index*width*height,width*height));
+    return {frames:[],pacing:measurePacing(frames,width,height,times[0],fps)};
+  }
   const frames:NonNullable<MediaTaskResult['snapshot']>['frames']=[];
   const at=times.map(requested=>Math.round(Math.min(Math.max(0,requested),last)*timeline.fps)/timeline.fps);
   if(!timeline.clips.some(clip=>clip.kind==='video')){

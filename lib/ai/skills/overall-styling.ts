@@ -60,6 +60,7 @@ How everything looks: launch films, motion-design films, explainers over footage
 - Restrained: near-black surfaces, thin hairlines, muted text, one accent per piece. No grids, scan lines, drop shadows or bright purple fills.
 - The picture carries the eye: few words on screen, never the spoken words repeated as titles.
 - One product look: the Revline editor appears the same in every section of a film (one shared kit or blueprint, not copies).
+- Tip: when a film shows the same product UI in several sections, build it once (a blueprint, or one component in the film) and reuse it, changing only its state and framing. Take it from the real app's look: getBlueprint for the kit's blueprint, or measureScreen and compareScreen against the kit's screen of the real app. A version invented per section drifts: one launch film ended up with three different-looking Revline editors.
 - Something always moves; eased, never abrupt. Use the default unless the user names another look. The page "example" is a complete scene in this style to adapt.
 
 ## Isometric line diagram (default)

@@ -25,6 +25,7 @@ Motion has weight: things open, settle and follow through. A shape that just fad
 - **Follow-through and overlap.** Separate items in a group (list rows, cards, words in a line) stagger 40 to 90 ms apart, each starting before the previous one has fully settled. Only a soft secondary (a shadow, a glow) may trail its element by a few frames.
 - **Guides and frame lines are alive.** Camera frame lines, crop corners, selection boxes and scan lines track the element they mark on the same timeline (same start, same ease), and keep moving while it does. Never leave them as a static overlay.
 - **Anticipation on big moves.** Before a large move, a short wind-up (a 2 to 4 percent counter move over 0.1 to 0.15 s) makes it read as intentional.
+- **Pacing is measured, not guessed.** getFrames shows stills, so speed problems slip past it: a picture that changes before it can be read, a zoom with no ease, a click that lingers, a zoom cut off by the next shot. After building or changing motion, run checkPacing on the changed range alongside getFrames and fix what it flags (longer holds, eased moves, fewer changes per second), then run it again.
 - **Nothing dead still.** Between beats something always moves: a slow camera push (1 to 3 percent over the hold), a drift, a cursor, a build. A truly frozen frame reads as a bug unless it is a deliberate held beat.
 - Recipes for each of these (eases, masks, morphs, staggers): readSkill name "gsap" page "transitions".
 
@@ -46,7 +47,9 @@ Only ask what the video cannot answer, for example a different length or format.
 ## A new film for the user's own brand
 1. **Brand first** (page \`brand-kit\`): find or create the brand kit and confirm its product text. Nothing is designed before the brand is known.
 2. **Product UI is real UI:** the kit's blueprint (page \`blueprints\`) or its screens, rebuilt strictly close to the product: measure colors, positions and sizes from the screenshots at full size (\`measureScreen\`), use the product's own icons and labels (findIcon for any brand logo or app icon, never drawn by hand), and check the build side by side (\`compareScreen\`). A screenshot appears only as what it is in the story (a file being dropped in, a thumbnail), never shown as the product.
-3. **Check before handing back** (readSkill name "scene-engine" page "checklist"): after building the film, and after every change.
+3. **Check before handing back** (readSkill name "scene-engine" page "checklist"): after building the film, and after every change, with getFrames for how it looks and checkPacing for how it moves.
+
+**Tip: one product UI, built once.** When the film shows the same product UI in several sections (for example the Revline editor), build it once as a component in the film (or the kit's blueprint) and reuse it in every section, changing only its state and framing. Base it on the real app's look: the kit's blueprint (getBlueprint), or the kit screen measured and checked with measureScreen and compareScreen. Inventing a fresh version per section gives a film with several different-looking copies of one product.
 
 ## Never speculate
 In a new film, every fact on screen comes from the confirmed product text or the user (in a recreation, from the video): names, features, numbers, claims, prices, dates, availability, the URL. Missing? Ask. Never invent a statistic, customer, feature or UI the product does not have. The wording around the facts is yours to write; never paste website headings or section labels as captions just because they are true.

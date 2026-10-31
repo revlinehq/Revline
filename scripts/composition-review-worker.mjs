@@ -5,6 +5,7 @@ import { resolve, join } from 'node:path';
 import { createCaptureSession, initializeSession, closeCaptureSession, captureFrameToBuffer, createVideoFrameInjector,createFileServer } from '@hyperframes/producer';
 import { parseVideoElements, extractAllVideoFrames, createFrameLookupTable } from '@hyperframes/engine';
 import { shiftRateLane, sourceTimeAt } from '@hyperframes/core';
+import sharp from 'sharp';
 const [directory,serialized]=process.argv.slice(2),settings=JSON.parse(serialized);
 const root=resolve(directory),controller=new AbortController();
 process.on('SIGTERM',()=>controller.abort());process.on('disconnect',()=>controller.abort());
@@ -13,10 +14,12 @@ try{
   // Frame snapping can differ from an equivalent window bound by a few ULPs.
   // Keep the capture bounded while accepting that numerical round-off only.
   const tolerance=1e-7;
-  if(!directory||!Number.isInteger(settings.width)||!Number.isInteger(settings.height)||![24,30,60].includes(settings.fps)||!Number.isFinite(settings.start)||!Number.isFinite(settings.end)||settings.start<0||settings.end<=settings.start||!Array.isArray(settings.times)||!settings.times.length||settings.times.length>12||settings.times.some(t=>!Number.isFinite(t)||t<settings.start-tolerance||t>settings.end+tolerance)||settings.end-settings.start>3.00001)throw new Error('Invalid bounded review settings.');
+  if(!directory||!Number.isInteger(settings.width)||!Number.isInteger(settings.height)||![24,30,60].includes(settings.fps)||!Number.isFinite(settings.start)||!Number.isFinite(settings.end)||settings.start<0||settings.end<=settings.start||!Array.isArray(settings.times)||!settings.times.length||settings.times.some(t=>!Number.isFinite(t)||t<settings.start-tolerance||t>settings.end+tolerance)||!settings.pacing&&(settings.times.length>12||settings.end-settings.start>3.00001))throw new Error('Invalid bounded review settings.');
   // Timeline snapshots render the edited composition only.
   const variants=settings.variants===undefined?['edited','reference']:settings.variants;
   if(!Array.isArray(variants)||!variants.length||variants.some(variant=>variant!=='edited'&&variant!=='reference'))throw new Error('Invalid capture variants.');
+  // Pacing reads every sample as a small grayscale frame, all in one file, instead of a PNG each.
+  const pacing=settings.pacing?{width:settings.pacing.width,height:Math.max(2,Math.round(settings.pacing.width*settings.height/settings.width)),frames:[]}:undefined;
   const safe=[];
   for(const variant of variants){
     const dir=join(root,variant),html=await readFile(join(dir,'index.html'),'utf8');
@@ -40,6 +43,7 @@ try{
       for(const [index,time] of settings.times.entries()){
         controller.signal.throwIfAborted();
         const frame=await captureFrameToBuffer(session,Math.round(time*settings.fps),time);
+        if(pacing){pacing.frames.push(await sharp(frame.buffer).resize(pacing.width,pacing.height,{fit:'fill'}).removeAlpha().grayscale().raw().toBuffer());continue;}
         await writeFile(join(dir,`sample-${index}.png`),frame.buffer);
         if(variant==='edited')safe.push(await session.page.evaluate(()=>{
           const container=document.getElementById('composition').getBoundingClientRect();
@@ -53,6 +57,7 @@ try{
       }
     }finally{try{if(session)await closeCaptureSession(session);}finally{server.close();}}
   }
+  if(pacing)await writeFile(join(root,'pacing.bin'),Buffer.concat(pacing.frames));
   await writeFile(join(root,'text-safe.json'),JSON.stringify(safe));report({type:'complete',warnings:0});
 }catch(error){report({type:'error',message:error instanceof Error?error.message.slice(0,800):'Composition capture failed.'});process.exitCode=1;}
 finally{if(process.connected)process.disconnect();}

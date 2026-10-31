@@ -28,6 +28,8 @@ import { IRIS_SHAPES, TRANSITION_DIRECTIONS, TRANSITION_PRESETS, WIPE_DIRECTIONS
 import { TimelineGestureRejection } from '../../lib/editor/timeline-edit-errors';
 import { summarizeTimeline } from "./inspectTimeline";
 import { EditSession } from "./editSession";
+import { readRunTab } from "./run_ids";
+import type { PacingResult } from "../../lib/media-analysis/pacing";
 import { READ_TOOL_DESCRIPTIONS, READ_TOOL_INPUTS, readSummary, runRead, type ReadToolName } from "../referenceReads";
 import { BLEND_MODES, ZOOM_LIMITS, isZoomPreset, EFFECT_CATALOG,SOLID_COLOR_LIMITS, OFFERED_TIMED_EFFECT_PRESETS,configureTimedEffectPatch, solidColorPatch } from '../../lib/editor/clip-effects';
 import { PUNCH_LIMITS } from '../../lib/editor/motion-effect-settings';
@@ -402,6 +404,26 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
     await ctx.runMutation(internal.mcp.discardFrames, { snapshotId });
     // Say which wait it was: frames that never started were queued behind other renders, not too many.
     throw new Error(started ? 'Frames took too long to render. Try fewer times.' : 'These frames never started rendering: the media worker stayed busy with other renders. Try again shortly; the number of times was not the problem.');
+  };
+  // Pacing renders the whole range on the media worker and returns measurements only, so it may take minutes.
+  const checkPacing = async (input: { start?: number; end?: number; fps?: number }) => {
+    await editSession.wait();
+    const duration = timelineDuration(editSession.timeline), start = input.start ?? 0, end = input.end ?? duration, timelineId = readRunTab(run.runId);
+    const snapshotId = await ctx.runMutation(internal.mcp.requestFrames, { ownerId: run.ownerId, projectId: run.projectId, ...(editSession.staged ? { runId: run.runId } : {}), ...(timelineId ? { timelineId } : {}), times: [], pacing: { start, end, fps: input.fps ?? 10 } });
+    try {
+      const deadline = Date.now() + 540_000;
+      for (let state = await ctx.runQuery(internal.mcp.frames, { ownerId: run.ownerId, snapshotId }); ; state = await ctx.runQuery(internal.mcp.frames, { ownerId: run.ownerId, snapshotId })) {
+        if (abortSignal.aborted) throw new Error('Stopped.');
+        if (state.status === 'failed') throw new Error(`The pacing check could not render the range: ${state.error ?? 'unknown error'}`);
+        if (state.status === 'completed') {
+          const result = state.pacing as PacingResult, shown = result.flags.slice(0, 30);
+          return { revision: state.revision as number, range: `${result.start}-${result.end}s`, samples: `${result.samples} at ${result.fps} fps`, changePerSecond: result.changePerSecond.map((value, second) => `${Math.round(result.start) + second}s ${value}%`).join(', '), cuts: result.cuts, cameraMoves: result.moves, flags: shown.map(flag => ({ at: `${flag.start}-${flag.end}s`, kind: flag.kind, reason: flag.reason })), ...(result.flags.length > shown.length ? { moreFlags: result.flags.length - shown.length } : {}),
+            next: result.flags.length ? 'Fix the flagged moments in the scene code (longer holds, eased moves, fewer changes per second), then run checkPacing on that range again. A flag you keep on purpose (a deliberate snap or flash) needs a reason you can name.' : 'No pacing problems found in this range.' };
+        }
+        if (Date.now() > deadline) throw new Error(state.started ? 'The pacing check took too long. Check a shorter range.' : 'The pacing check never started: the media worker stayed busy with other renders. Try again shortly.');
+        await new Promise(resolve => setTimeout(resolve, 2000));
+      }
+    } finally { await ctx.runMutation(internal.mcp.discardFrames, { snapshotId }); }
   };
   const trimChangeInput=z.object({clipId:z.string().min(1),duration:z.number().positive(),sourceStart:z.number().min(0).optional()});
   const tools = {
@@ -823,6 +845,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       { type: 'text' as const, text: `720p frames of the saved timeline (revision ${output.revision}) at ${output.frames.map(frame => `${frame.time}s`).join(', ')}, in that order.` },
       ...output.frames.map(frame => ({ type: 'file' as const, data: { type: 'data' as const, data: frame.image }, mediaType: 'image/jpeg' })),
     ] }; } }),
+    checkPacing: createTool({ description: "Check how the motion reads over time, which still frames cannot show: renders the timeline range at 10 samples a second (fps) and measures how much of the frame changes each second, how long each new picture holds before the next change, how zooms and pans speed up and slow down, and where cuts and single-frame flashes land. Returns the change per second and flagged moments with reasons: a big change followed by under about 1 s of hold, 3 or more big changes within 1 s, a zoom or pan that starts or stops at full speed or is cut off mid-move, a camera move too fast to follow, a one-sample jump, a flash, or a still hold of 3 s or more. Run it on the changed range after building or changing motion, alongside getFrames, and fix what it flags. It takes about as long as the range plays, up to a few minutes.", inputSchema: z.object({ start: z.number().min(0).optional().describe('Timeline second to start at (default 0).'), end: z.number().positive().optional().describe('Timeline second to end at (default the end of the timeline).'), fps: z.number().min(2).max(30).optional().describe('Samples a second (default 10).') }).strict(), execute: async (_ctx, input) => checkPacing(input) }),
     askUser: createTool({ description: "Ask the user to choose between 2 to 6 options, shown as a choice card in the chat, instead of listing the options in text: a direction, a style, a length, which of several clips. Then end your turn; their choice arrives as their next message. Ask only what you cannot decide from the request, the project or memory. An option can show what it means: preview.time renders the timeline at that second as a picture in the card (build each look on the timeline first, for example style previews, then point each option at its moment); audio is a sample URL from listVoices, played in the card.", inputSchema: z.object({ question: z.string().trim().min(3).max(200), options: z.array(z.object({ label: z.string().trim().min(1).max(60), description: z.string().trim().max(140).optional(), preview: z.object({ time: z.number().min(0).describe('Timeline second to show as this option\'s picture.') }).strict().optional(), audio: z.string().url().optional().describe('A voice sample URL exactly as listVoices returned it.') }).strict()).min(2).max(6) }).strict(), execute: async (_ctx, input) => {
       if (input.options.some(option => option.audio && !option.audio.startsWith(`${mediaConfig().url}/read?`))) throw new Error('audio must be a sample URL from listVoices.');
       const times = input.options.flatMap(option => option.preview ? [option.preview.time] : []);

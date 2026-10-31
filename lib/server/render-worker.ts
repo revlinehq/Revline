@@ -2,7 +2,7 @@ import { fork } from 'node:child_process';
 import { join } from 'node:path';
 
 type Settings = { fps: number; quality: 'draft' | 'standard' | 'high' };
-export type ReviewCaptureSettings={width:number;height:number;fps:number;times:number[];start:number;end:number;variants?:('edited'|'reference')[]};
+export type ReviewCaptureSettings={width:number;height:number;fps:number;times:number[];start:number;end:number;variants?:('edited'|'reference')[];pacing?:{width:number}};
 
 /** A dedicated process owns renderer globals and ends with its task signal. */
 export function runRenderWorker(directory: string, output: string, settings: Settings, onProgress: (render: { progress: number }) => void, signal: AbortSignal): Promise<{ warnings: number }> {

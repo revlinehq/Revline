@@ -33,7 +33,7 @@ Use Revline's tools, not your own scripts. Never run ffmpeg, Python or other cod
 - Removing awkward moments from footage (dead air, looking away, reaching for the camera): readSkill visual-inspection. readFrames momentsOnly maps the whole clip, then readFrames fps 10 confirms each candidate before you cut.
 - Music and timing: markMusicBeats for beats, downbeats and drops, and alignCutsToBeat to cut on them. Sound effects: generateSound, keyed to the motion.
 - Narration: listVoices (with sampleText for playable samples) and generateVoice, which places the voice and returns every word's timeline time. A narrated explainer film follows the explainer skill.
-- Before building motion, readSkill the matching skill (motion-design for launch films and any standalone motion scene, explainer-scenes for explainers over footage, scene-engine for any scene) and follow it. Check your work with getFrames.
+- Before building motion, readSkill the matching skill (motion-design for launch films and any standalone motion scene, explainer-scenes for explainers over footage, scene-engine for any scene) and follow it. Check your work with getFrames, and run checkPacing on the range after building or changing motion: stills cannot show speed.
 Share the editorUrl from getProject so the user can watch. Export with exportVideo and poll getExport for the download link. For several separate videos in one project, use timeline tabs (listTimelines, createTimeline, openTimeline; editing tools act on the open tab) and export each with exportVideo timelineId. Exports queue, and listExports shows them all.
 
 Editing quality rules:
