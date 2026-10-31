@@ -5,80 +5,17 @@ import { AudioLines, Play, Square } from 'lucide-react';
 
 // Seconds of timeline the stage shows.
 const LENGTH = 5;
-const SAMPLE_RATE = 44100;
+// A clip is drawn at least this long so its name fits; its waveform still spans the real sound.
+const MIN_WIDTH = .62;
 
-type Sound = { name: string; at: number; duration: number; build: (ctx: OfflineAudioContext, noise: AudioBuffer) => void };
-
-/** Seeded white noise, so every visitor hears and sees the same sounds. */
-function makeNoise(ctx: BaseAudioContext, seconds: number) {
-  const buffer = ctx.createBuffer(1, Math.ceil(seconds * ctx.sampleRate), ctx.sampleRate);
-  const data = buffer.getChannelData(0);
-  let seed = 7;
-  for (let index = 0; index < data.length; index++) {
-    seed = (seed * 16807) % 2147483647;
-    data[index] = seed / 1073741823.5 - 1;
-  }
-  return buffer;
-}
-
-function playNoise(ctx: OfflineAudioContext, noise: AudioBuffer) {
-  const source = ctx.createBufferSource();
-  source.buffer = noise;
-  source.start(0);
-  return source;
-}
-
-// Each effect sits on the move it scores, synthesized in the browser so its waveform is the real sound.
-const sounds: Sound[] = [
-  { name: 'Soft whoosh', at: .2, duration: .9, build: (ctx, noise) => {
-    const filter = new BiquadFilterNode(ctx, { type: 'bandpass', Q: 1.1 });
-    filter.frequency.setValueAtTime(250, 0);
-    filter.frequency.exponentialRampToValueAtTime(2800, .5);
-    filter.frequency.exponentialRampToValueAtTime(450, .9);
-    const gain = new GainNode(ctx);
-    gain.gain.setValueAtTime(.001, 0);
-    gain.gain.exponentialRampToValueAtTime(1.6, .48);
-    gain.gain.exponentialRampToValueAtTime(.001, .9);
-    playNoise(ctx, noise).connect(filter).connect(gain).connect(ctx.destination);
-  } },
-  { name: 'Glass tick', at: 1.7, duration: .35, build: ctx => {
-    for (const [frequency, level] of [[2200, .5], [3310, .3], [5400, .12]]) {
-      const tone = new OscillatorNode(ctx, { frequency });
-      const gain = new GainNode(ctx);
-      gain.gain.setValueAtTime(level, 0);
-      gain.gain.exponentialRampToValueAtTime(.0005, .34);
-      tone.connect(gain).connect(ctx.destination);
-      tone.start(0);
-    }
-  } },
-  { name: 'Paper rip', at: 2.45, duration: .65, build: (ctx, noise) => {
-    const filter = new BiquadFilterNode(ctx, { type: 'highpass', frequency: 1400 });
-    const gain = new GainNode(ctx);
-    let seed = 3;
-    for (let step = 0; step < 48; step++) {
-      seed = (seed * 16807) % 2147483647;
-      const time = step * .65 / 48;
-      const envelope = Math.min(1, step / 6) * (1 - step / 52);
-      gain.gain.setValueAtTime(envelope * (.25 + .9 * seed / 2147483647), time);
-    }
-    gain.gain.setValueAtTime(0, .65);
-    playNoise(ctx, noise).connect(filter).connect(gain).connect(ctx.destination);
-  } },
-  { name: 'Deep boom', at: 3.45, duration: 1.4, build: (ctx, noise) => {
-    const tone = new OscillatorNode(ctx, { frequency: 120 });
-    tone.frequency.exponentialRampToValueAtTime(36, 1.1);
-    const body = new GainNode(ctx);
-    body.gain.setValueAtTime(1, 0);
-    body.gain.exponentialRampToValueAtTime(.001, 1.4);
-    tone.connect(body).connect(ctx.destination);
-    tone.start(0);
-    const thump = new BiquadFilterNode(ctx, { type: 'lowpass', frequency: 260 });
-    const hit = new GainNode(ctx);
-    hit.gain.setValueAtTime(1.2, 0);
-    hit.gain.exponentialRampToValueAtTime(.001, .18);
-    playNoise(ctx, noise).connect(thump).connect(hit).connect(ctx.destination);
-  } },
+// Sound effects Revline generated (ElevenLabs), each placed on the move it scores.
+const sounds = [
+  { name: 'Soft whoosh', file: 'whoosh', at: .2 },
+  { name: 'Glass tick', file: 'tick', at: 1.45 },
+  { name: 'Paper rip', file: 'rip', at: 2.35 },
+  { name: 'Deep boom', file: 'boom', at: 3.15 },
 ];
+type Sound = typeof sounds[number];
 
 /** Bar heights (0 to 1) from the rendered audio: the loudest sample in each slice. */
 function peaksOf(buffer: AudioBuffer, bars: number) {
@@ -109,14 +46,12 @@ export function LandingSoundStage() {
 
   useEffect(() => {
     let cancelled = false;
-    void Promise.all(sounds.map(sound => {
-      const ctx = new OfflineAudioContext(1, Math.ceil(sound.duration * SAMPLE_RATE), SAMPLE_RATE);
-      sound.build(ctx, makeNoise(ctx, sound.duration));
-      return ctx.startRendering();
-    })).then(rendered => {
+    // Decoding needs no output device, so a suspended context is enough until someone presses play.
+    const ctx = audio.current ??= new AudioContext();
+    void Promise.all(sounds.map(sound => fetch(`/landing/sounds/${sound.file}.m4a`).then(response => response.arrayBuffer()).then(data => ctx.decodeAudioData(data)))).then(decoded => {
       if (cancelled) return;
-      buffers.current = rendered;
-      setPeaks(rendered.map((buffer, index) => peaksOf(buffer, Math.round(sounds[index].duration * 56))));
+      buffers.current = decoded;
+      setPeaks(decoded.map(buffer => peaksOf(buffer, Math.round(Math.max(buffer.duration, MIN_WIDTH) * 56))));
     });
     return () => { cancelled = true; stop(); };
   }, []);
@@ -137,7 +72,7 @@ export function LandingSoundStage() {
     const ctx = audio.current ??= new AudioContext();
     void ctx.resume();
     const from = only ? only.at : 0;
-    const to = only ? only.at + only.duration : LENGTH;
+    const to = only ? only.at + buffers.current[sounds.indexOf(only)].duration : LENGTH;
     const start = ctx.currentTime + .05;
     const sources = sounds.flatMap((sound, index) => {
       if (only && sound !== only) return [];
@@ -165,13 +100,12 @@ export function LandingSoundStage() {
       </button>
     </div>
     <div className="landing-sound-tracks">
-      <div className="landing-sound-track" data-kind="video" aria-hidden="true">
-        {[0, 1.2, 2.4, 3.6].map(at => <span key={at} style={{ left: percent(at), width: percent(1.15) }} />)}
-      </div>
-      <div className="landing-sound-track" data-kind="sfx">
+      <div className="landing-sound-ruler" aria-hidden="true">{[0, 1, 2, 3, 4].map(second => <span key={second} style={{ left: percent(second) }}>{second}s</span>)}</div>
+      <div className="landing-sound-track">
         {sounds.map((sound, index) => {
-          const progress = playhead === null ? 0 : Math.min(1, Math.max(0, (playhead - sound.at) / sound.duration));
-          return <button key={sound.name} type="button" className="landing-sound-clip" style={{ left: percent(sound.at), width: percent(sound.duration) }} onClick={() => play(sound)} disabled={!peaks} aria-label={`Play ${sound.name}`}>
+          const duration = buffers.current[index]?.duration ?? MIN_WIDTH;
+          const progress = playhead === null ? 0 : Math.min(1, Math.max(0, (playhead - sound.at) / duration));
+          return <button key={sound.name} type="button" className="landing-sound-clip" style={{ left: percent(sound.at), width: percent(Math.max(duration, MIN_WIDTH)) }} onClick={() => play(sound)} disabled={!peaks} aria-label={`Play ${sound.name}`}>
             <b>{sound.name}</b>
             {peaks && <span className="landing-sound-wave">
               <Wave peaks={peaks[index]} />
