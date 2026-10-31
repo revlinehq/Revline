@@ -56,7 +56,7 @@
     "change": "Preserve requested motion range in frame snapshots"
   },
   "priority": "User requested reference structure and timing take precedence over generic one-second holds, no grids, and quiet house styling.",
-  "revision": 17,
+  "revision": 25,
   "verificationFile": "verification.json",
   "sourceFile": "film.tsx.txt",
   "soundEffects": {
@@ -72,5 +72,35 @@
       "prompt": "Generate a single original photorealistic landscape background plate, ultra wide 16:9 composition 1920x1080. Brilliant clear saturated cobalt blue sky with soft white cumulus cloud clusters particularly across upper right and a smaller one upper left. Rolling vivid spring green grassy hills, one broad smooth hill ridge running from left at 48 percent height downward toward right at 68 percent height. Grass has fine natural texture, no trees, no flowers, no buildings, no roads, no people. Familiar optimistic early 2000s desktop wallpaper feeling but an original landscape photo, midday sunshine, slightly soft analog digital camera atmosphere. Sky covers upper 55%, green grass covers lower45%. No text, no logo, no interface, no borders. Flat full bleed. This will be a still photographic background for a motion-design film; leave center unoccupied.",
       "status": "Superseded by the user-supplied Windows XP Bliss image at revision 17"
     }
-  ]
+  ],
+  "introFocusAndDither": {
+    "blurTarget": "Only the clean background image; the UI remains sharp",
+    "blurBuild": {
+      "start": 2.8,
+      "end": 3.05,
+      "fromPixels": 0,
+      "toPixels": 8,
+      "ease": "power2.inOut"
+    },
+    "blurHold": {
+      "start": 3.05,
+      "end": 4.3
+    },
+    "blurClear": {
+      "start": 4.3,
+      "end": 4.733333,
+      "ease": "sine.inOut"
+    },
+    "ditherBuild": {
+      "start": 4.3,
+      "end": 4.733333,
+      "ease": "sine.inOut"
+    },
+    "engine": "GSAP useTimeline, deterministic seekable filter and opacity tweens"
+  },
+  "currentAudio": {
+    "note": "Existing user soundtrack choice was preserved during this visual-only correction.",
+    "generatedMusicAndCuesMuted": true,
+    "activeAudioAssetId": "j57eeahvakwfy1ntsewb2jm3zh8hb6ee"
+  }
 }

@@ -34,7 +34,11 @@ function Landscape({mode='intro'}:{mode?:'intro'|'upload'|'proof'|'cta'}){
     .to(photo,{scale:1.115,y:74,duration:1.67,ease:CustomEase.create('introReframe','M0,0 C0.3,-0.4 0,0 1,1')},2.47)
     .to(photo,{scale:1.26,y:95,duration:.9,ease:'circ.out'},4.13)
     .to(photo,{scale:1.18,y:82,duration:.43,ease:'sine.in'},5.33);
-   seed(tl,dither,{opacity:.95});tl.to(dither,{opacity:0,duration:.65,ease:'power2.out'},.05).to(dither,{opacity:1,duration:.5,ease:'sine.inOut'},4.3).to('.exitwash',{opacity:.6,duration:.17,ease:'circ.in'},5.55);
+   const cleanPhoto=el.querySelector('.clean-photo');
+   seed(tl,cleanPhoto,{filter:'blur(0px)'});
+   tl.to(cleanPhoto,{filter:'blur(8px)',duration:.25,ease:'power2.inOut'},2.8)
+    .to(cleanPhoto,{filter:'blur(0px)',duration:.433333,ease:'sine.inOut'},4.3);
+   seed(tl,dither,{opacity:.95});tl.to(dither,{opacity:0,duration:.65,ease:'power2.out'},.05).to(dither,{opacity:1,duration:.433333,ease:'sine.inOut'},4.3).to('.exitwash',{opacity:.6,duration:.17,ease:'circ.in'},5.55);
   }else if(mode==='upload'){
    seed(tl,photo,{scale:1.1,y:0,rotation:2.2});tl.to(photo,{scale:1.19,y:35,duration:1.48,ease:'power2.out'},0).to(photo,{scale:1.68,y:-195,rotation:.5,duration:.85,ease:'power2.inOut'},1.68).to(photo,{scale:1.48,y:-300,duration:.9,ease:'power3.out'},2.72);
    seed(tl,dither,{opacity:0});tl.to(dither,{opacity:1,duration:.45,ease:'sine.inOut'},2.7);
@@ -45,7 +49,7 @@ function Landscape({mode='intro'}:{mode?:'intro'|'upload'|'proof'|'cta'}){
    seed(tl,photo,{scale:1.1,y:15,rotation:0,filter:'blur(5px)'});tl.to(photo,{scale:1.165,rotation:1.33,y:25,duration:.27,ease:'sine.inOut'},.05).to(photo,{scale:1.207,x:10,y:30,duration:.73,ease:'sine.out'},.32).to(photo,{scale:1.115,x:20,y:25,duration:.6333,ease:'power2.in'},1.1833).to(photo,{scale:1.055,duration:.1,ease:'sine.out'},1.8166);seed(tl,dither,{display:'none'});
   }
  });
- return <div ref={ref} style={{...FILL,background:'#12180b',overflow:'hidden'}}><div className="photo" style={{...FILL,inset:mode==='proof'?-260:-180,transformOrigin:'50% 50%'}}><img src={media.landscape} style={{...FILL,width:'100%',height:'100%',objectFit:'cover'}}/><div className="dither" style={{...FILL,background:GREEN}}><img src={media.landscape} style={{...FILL,width:'100%',height:'100%',objectFit:'cover',filter:'grayscale(1) contrast(5) brightness(.72)',mixBlendMode:'multiply'}}/><div style={{...FILL,backgroundImage:'radial-gradient(#050800 1.15px,transparent 1.45px)',backgroundSize:'5px 5px',mixBlendMode:'multiply'}}/></div><div className="exitwash" style={{...FILL,background:GREEN,opacity:0}}/></div></div>;
+ return <div ref={ref} style={{...FILL,background:'#12180b',overflow:'hidden'}}><div className="photo" style={{...FILL,inset:mode==='proof'?-260:-180,transformOrigin:'50% 50%'}}><img className="clean-photo" src={media.landscape} style={{...FILL,width:'100%',height:'100%',objectFit:'cover'}}/><div className="dither" style={{...FILL,background:GREEN}}><img src={media.landscape} style={{...FILL,width:'100%',height:'100%',objectFit:'cover',filter:'grayscale(1) contrast(5) brightness(.72)',mixBlendMode:'multiply'}}/><div style={{...FILL,backgroundImage:'radial-gradient(#050800 1.15px,transparent 1.45px)',backgroundSize:'5px 5px',mixBlendMode:'multiply'}}/></div><div className="exitwash" style={{...FILL,background:GREEN,opacity:0}}/></div></div>;
 }
 function Intro(){
  const ref=useTimeline<HTMLDivElement>((tl,el)=>{

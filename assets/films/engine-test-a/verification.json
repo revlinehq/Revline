@@ -3,18 +3,18 @@
   "projectName": "Engine test A: GSAP (RightNow rebuild)",
   "editor": "http://localhost:3001/editor/j970eespkq2j4crma0yhj5mpc18haer6",
   "timelineId": "main",
-  "revision": 17,
+  "revision": 25,
   "sceneClipId": "5b49332a-bc9f-4fc8-a8cd-383e406bf6a1",
   "duration": 30.966667,
   "fps": 60,
   "visualSceneCount": 1,
   "animation": "All motion is GSAP through Revline useTimeline. No manual frame clock or CSS animations.",
   "sourceFile": "film.tsx.txt",
-  "sourceSHA256": "c133374920b314b31fa407eea7540b7005cf5525fb442a1355650dac558cc72f",
+  "sourceSHA256": "ac768b9f6edf9d040c55e7a86d89fc9ce212f08e6d4d2a42e5d947f4b0404591",
   "referenceAssetId": "j5752gm7fepth89axk7m0rt3gn8ha86h",
   "referenceRetainedAsAsset": true,
   "referenceFootageOnTimeline": false,
-  "referenceAudioOnTimeline": false,
+  "referenceAudioOnTimeline": true,
   "exported": false,
   "reading": {
     "wholeVideo": "readFrames 0–30.967 s overview",
@@ -43,37 +43,38 @@
     ]
   },
   "compareReference": {
-    "revision": 17,
+    "revision": 25,
+    "range": "Intro focus and dither handoff",
     "scores": [
       {
-        "time": 4.6,
-        "difference": 32
+        "time": 3.05,
+        "difference": 16
       },
       {
-        "time": 11.5,
-        "difference": 35
-      },
-      {
-        "time": 12.4,
-        "difference": 32
-      },
-      {
-        "time": 18.3,
-        "difference": 12
-      },
-      {
-        "time": 23.5,
-        "difference": 12
-      },
-      {
-        "time": 29.5,
+        "time": 4.2,
         "difference": 17
+      },
+      {
+        "time": 4.3,
+        "difference": 10
+      },
+      {
+        "time": 4.4,
+        "difference": 10
+      },
+      {
+        "time": 4.5,
+        "difference": 26
+      },
+      {
+        "time": 4.733,
+        "difference": 33
       }
     ],
     "targetMaximumDifference": 25,
     "allCheckedMomentsPass": false,
-    "maximumDifference": 35,
-    "retainedReason": "User explicitly supplied Windows XP Bliss for the actual background. The image replacement changes sky/hill composition and dither response; existing choreography and source remain unchanged. Higher differences in background-heavy moments are recorded rather than changing the requested image."
+    "maximumDifference": 33,
+    "remainingDifferences": "The actual user-supplied Bliss photo and existing dither texture differ from the launch film background. The 4.5 s and 4.733 s samples remain above 25 (26 and 33). Focus-before-dither order is now visible and matches the reference read."
   },
   "motionMap": {
     "windows": [
@@ -1860,7 +1861,9 @@
       "Control and execution-window onsets are below whole-frame visual-hit detection thresholds.",
       "Upgrade cue belongs to the label/field swap, before the later background dither peak.",
       "Music carries intentional silent cuts and holds."
-    ]
+    ],
+    "appliesToRevision": 16,
+    "historicalNote": "These loudness measurements precede the current user soundtrack choice. Generated music/cues are now muted, and the reference audio is active; no audio was changed by this correction."
   },
   "runtimeVerification": [
     "Scene rendered by the development media worker",
@@ -2108,6 +2111,190 @@
       "CTA button/cursor edges and full-bleed blurred Bliss"
     ],
     "missingAssetRefs": [],
+    "exported": false
+  },
+  "priorBackgroundCompareReference": {
+    "revision": 17,
+    "scores": [
+      {
+        "time": 4.6,
+        "difference": 32
+      },
+      {
+        "time": 11.5,
+        "difference": 35
+      },
+      {
+        "time": 12.4,
+        "difference": 32
+      },
+      {
+        "time": 18.3,
+        "difference": 12
+      },
+      {
+        "time": 23.5,
+        "difference": 12
+      },
+      {
+        "time": 29.5,
+        "difference": 17
+      }
+    ],
+    "targetMaximumDifference": 25,
+    "allCheckedMomentsPass": false,
+    "maximumDifference": 35,
+    "retainedReason": "User explicitly supplied Windows XP Bliss for the actual background. The image replacement changes sky/hill composition and dither response; existing choreography and source remain unchanged. Higher differences in background-heavy moments are recorded rather than changing the requested image."
+  },
+  "referenceAudioNote": "Present in the existing user-edited timeline at the time of this visual-only correction; preserved without mutation.",
+  "blurDitherCorrection": {
+    "revision": 25,
+    "requestedScope": [
+      0,
+      5.766667
+    ],
+    "referenceReads": {
+      "denseWindows": [
+        {
+          "start": 1.8,
+          "end": 4.4,
+          "fps": 10
+        },
+        {
+          "start": 3.5,
+          "end": 5.766667,
+          "fps": 10
+        }
+      ],
+      "detailFrames": [
+        3,
+        4.2,
+        4.3,
+        4.4,
+        4.5,
+        4.7
+      ],
+      "referenceMotionMapWindow": [
+        3.7,
+        5.766667
+      ],
+      "observedOrder": "Background defocus is established behind the expanded control, stays soft through the system-one/system-zero label swap, then grass dither changes from 4.3–4.57 s and upper-frame dither from 4.37–4.73 s."
+    },
+    "implementation": {
+      "blurTarget": "Only the clean background image; the UI remains sharp",
+      "blurBuild": {
+        "start": 2.8,
+        "end": 3.05,
+        "fromPixels": 0,
+        "toPixels": 8,
+        "ease": "power2.inOut"
+      },
+      "blurHold": {
+        "start": 3.05,
+        "end": 4.3
+      },
+      "blurClear": {
+        "start": 4.3,
+        "end": 4.733333,
+        "ease": "sine.inOut"
+      },
+      "ditherBuild": {
+        "start": 4.3,
+        "end": 4.733333,
+        "ease": "sine.inOut"
+      },
+      "engine": "GSAP useTimeline, deterministic seekable filter and opacity tweens"
+    },
+    "scopeGuard": {
+      "passed": true,
+      "checked": [
+        6.3,
+        7.217,
+        8.15,
+        9.917,
+        12.55,
+        15.167,
+        16.45,
+        17.4,
+        18.35,
+        19.333,
+        22.267,
+        25.217,
+        26.783,
+        28.083,
+        29.383,
+        29.4,
+        30.083,
+        30.767
+      ],
+      "note": "Code outside the scope changed; the 6 locked section(s) it reaches render the same, so it was saved."
+    },
+    "renderedAndInspectedTimes": [
+      0,
+      0.016666666666666666,
+      2.8,
+      3.05,
+      4.2,
+      4.3,
+      4.4,
+      4.5,
+      4.733333,
+      5.75,
+      5.766667,
+      5.783333
+    ],
+    "edgeChecks": [
+      "Control and text remain crisp over soft background",
+      "Background blur resolves without softening the crisp dither layer",
+      "Intro first two frames remain hidden as intended",
+      "Before/on/after identity cut has no unintended flash"
+    ],
+    "sourceTimingMarkersBrandMediaUnchanged": true,
+    "onlySceneChange": "GSAP background blur and shorter dither handoff plus a target class on the existing clean photo",
+    "audioChanged": false,
+    "pacing": {
+      "range": "2.7-5.8s",
+      "flags": [
+        {
+          "at": "2.7-5.1s",
+          "kind": "short-hold",
+          "reason": "95% of the frame changes by 4.9s, then it holds only 0.2 s before the next change: give each new picture about 1 s to be read."
+        },
+        {
+          "at": "4.7-5.4s",
+          "kind": "scattered",
+          "reason": "3 changes start in different parts of the frame within 0.5 s from 4.7s: the eye follows one place at a time. Stage them one after another, each with time to read."
+        }
+      ],
+      "retainedReason": "The short hold and concurrent dither/reveal are intentional reference timing; inserting generic one-second holds would change the requested reveal."
+    },
+    "motionMap": {
+      "start": 3.7,
+      "end": 5.766667,
+      "timelineStart": 3.7,
+      "remainingDifferences": [
+        {
+          "time": 3.7,
+          "issue": "Camera move differs from the reference: bigger (zoom in 8% + tilt up 1.4% vs zoom in 2%); 0.67s long vs 0.37s.",
+          "fix": "tl.fromTo(camera, { scale: 1, xPercent: 0, yPercent: 0, rotation: 0 }, { scale: 1.024, xPercent: -0.02, yPercent: -0.04, rotation: 0.05, duration: 0.37, ease: 'power1.in' }, 3.7)"
+        },
+        {
+          "time": 4.07,
+          "issue": "The reference camera moves here (zoom in 12%, 0.3s, sine.inOut, it starts with an element slides down (middle) at 4s); yours does not.",
+          "fix": "tl.fromTo(camera, { scale: 1.024, xPercent: -0.02, yPercent: -0.04, rotation: 0.05 }, { scale: 1.146, xPercent: 0.08, yPercent: -0.04, rotation: 0.06, duration: 0.3, ease: 'sine.inOut' }, 4.07)"
+        },
+        {
+          "time": 4.37,
+          "issue": "The reference camera moves here (zoom in 4%, 0.83s, power2.out, it starts with content changes (top, 36.8% of the frame) at 4.37s); yours does not.",
+          "fix": "tl.fromTo(camera, { scale: 1.146, xPercent: 0.08, yPercent: -0.04, rotation: 0.06 }, { scale: 1.188, xPercent: 0.07, yPercent: 0.09, rotation: 0.03, duration: 0.83, ease: 'power2.out' }, 4.37)"
+        },
+        {
+          "time": 5.7,
+          "issue": "Transition differs: yours is a fade of 0.07s, the reference a transition of 0.17s."
+        }
+      ],
+      "retainedReason": "The remaining fitted camera amplitudes/phases and outgoing transition predate this visual correction. Camera geometry and cut timing were left unchanged within this blur/dither feedback scope."
+    },
     "exported": false
   }
 }
