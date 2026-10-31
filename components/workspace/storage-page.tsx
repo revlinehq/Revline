@@ -42,16 +42,16 @@ export function StoragePage(){
 export function StorageBrowser({summary,files,filters,onFilters,loading,loadingMore,hasMore,onLoadMore,onDelete}:{summary?:Summary;files:StorageFile[];filters:Filters;onFilters:(value:Filters)=>void;loading:boolean;loadingMore:boolean;hasMore:boolean;onLoadMore:()=>void;onDelete:(files:StorageFile[])=>Promise<void>}){
   const [selected,setSelected]=useState<Set<string>>(()=>new Set()),[confirm,setConfirm]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState('');
   const chosen=files.filter(file=>selected.has(file.id)&&file.canDelete),doomed=[...new Map(chosen.filter(file=>file.kind!=='export').flatMap(file=>file.workspaces).map(project=>[project.id,project])).values()],selectable=files.filter(file=>file.canDelete).slice(0,20);
-  const available=summary?Math.max(0,summary.limitBytes-summary.usedBytes-summary.reservedBytes):0;
   const ready=summary?.ready;
   function changeFilters(patch:Partial<Filters>){setSelected(new Set());onFilters({...filters,...patch});}
   async function deleteFiles(){if(busy||!chosen.length)return;setBusy(true);setError('');try{await onDelete(chosen);setSelected(new Set());setConfirm(false);}catch(reason){setError(userError(reason, 'Could not delete these files. Please retry.'));}finally{setBusy(false);}}
   return <main className="storage-content">
     <div className="storage-heading"><div><h1>Cloud storage</h1><p>Keep your media organized. Make room for your next edit.</p></div><PrimaryButton asChild><Link href={NEW_PROJECT_PATH}>Upload media<Upload size={14}/></Link></PrimaryButton></div>
     <section className="storage-usage" aria-label="Cloud storage usage" aria-busy={!ready}>
-      <div className="storage-usage-top"><div><p>Storage used</p>{ready?<strong>{formatStorageBytes(summary.usedBytes)}<small>of {formatStorageBytes(summary.limitBytes)}</small></strong>:<Skeleton style={{height:28,width:185}}/>}</div>{ready?<span>{formatStorageBytes(available)} available</span>:<Skeleton style={{height:13,width:115}}/>}</div>
-      <div className="storage-meter" role="meter" aria-label="Storage used" aria-valuemin={0} aria-valuemax={summary?.limitBytes??15_000_000_000} aria-valuenow={ready?summary.usedBytes:0}>
-        {breakdown.map(([field],index)=><span key={field} className={`storage-color-${index}`} style={{width:`${ready?Math.min(100,summary[field]/summary.limitBytes*100):0}%`}}/>)}
+      <div className="storage-usage-top"><div><p>Storage used</p>{ready?<strong>{formatStorageBytes(summary.usedBytes)}</strong>:<Skeleton style={{height:28,width:185}}/>}</div>{ready?<span>No storage limit</span>:<Skeleton style={{height:13,width:115}}/>}</div>
+      {/* No allowance to fill, so the bar shows how the used space splits by kind. */}
+      <div className="storage-meter" aria-label="Storage used by kind">
+        {breakdown.map(([field],index)=><span key={field} className={`storage-color-${index}`} style={{width:`${ready&&summary.usedBytes>0?summary[field]/summary.usedBytes*100:0}%`}}/>)}
       </div>
       <div className="storage-breakdown">{breakdown.map(([field,label],index)=><span key={field}><i className={`storage-color-${index}`}/>{label}<b>·</b>{ready?formatStorageBytes(summary[field]):<Skeleton as="span" style={{display:'inline-block',height:11,width:35}}/>}</span>)}</div>
       {ready&&summary.reservedBytes>0&&<p className="storage-reserved">{formatStorageBytes(summary.reservedBytes)} reserved for uploads in progress.</p>}

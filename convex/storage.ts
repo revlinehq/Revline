@@ -4,7 +4,7 @@ import { paginationOptsValidator } from 'convex/server';
 import { query,mutation,type QueryCtx,type MutationCtx } from './_generated/server';
 import type { Doc,Id } from './_generated/dataModel';
 import { requireOwner } from './lib/auth';
-import { accountingReady,activeExportGroups,emptyStorage,ownedObjectReferences,storageAccount,storageLimit,usedByActiveExport } from './lib/storage_accounting';
+import { accountingReady,activeExportGroups,emptyStorage,ownedObjectReferences,storageAccount,usedByActiveExport } from './lib/storage_accounting';
 import { removeOwnedAsset } from './assets';
 import { beginProjectDeletion } from './projects';
 import { removeMediaAttachment,removeShareAssets } from './lib/shared_media';
@@ -15,10 +15,10 @@ import { allTabTimelines } from './timelineTabs';
 const kind=v.union(v.literal('video'),v.literal('audio'),v.literal('image'),v.literal('export'));
 const workspace=v.object({id:v.id('projects'),title:v.string()});
 const item=v.object({id:v.id('storageObjects'),fileName:v.string(),kind,size:v.number(),createdAt:v.number(),workspaces:v.array(workspace),inUse:v.boolean(),canDelete:v.boolean(),protectedReason:v.union(v.string(),v.null()),thumbnailUrl:v.union(v.string(),v.null())});
-export const summary=query({args:{},returns:v.object({usedBytes:v.number(),reservedBytes:v.number(),videoBytes:v.number(),audioBytes:v.number(),imageBytes:v.number(),exportBytes:v.number(),fileCount:v.number(),limitBytes:v.number(),ready:v.boolean()}),handler:async ctx=>{
+export const summary=query({args:{},returns:v.object({usedBytes:v.number(),reservedBytes:v.number(),videoBytes:v.number(),audioBytes:v.number(),imageBytes:v.number(),exportBytes:v.number(),fileCount:v.number(),ready:v.boolean()}),handler:async ctx=>{
   const ownerId=await requireOwner(ctx),[account,ready]=await Promise.all([storageAccount(ctx,ownerId),accountingReady(ctx)]);
   const values=Object.fromEntries(Object.keys(emptyStorage).map(key=>[key,account?.[key as keyof typeof emptyStorage]??0])) as typeof emptyStorage;
-  return {...values,limitBytes:await storageLimit(ctx,ownerId),ready};
+  return {...values,ready};
 }});
 type DescriptionReads={
   project:(id:Id<'projects'>)=>Promise<Doc<'projects'>|null>;

@@ -1,6 +1,6 @@
 import type { Id } from '@/convex/_generated/dataModel';
 import { inspectMedia, uploadMultipart } from './media';
-import { MAX_SOURCE_SECONDS, MAX_UPLOAD_PARTS, UPLOAD_PART_BYTES } from './limits';
+import { uploadPartSize } from './limits';
 
 type SourceMetadata = Awaited<ReturnType<typeof inspectMedia>>;
 type MultipartParts = Awaited<ReturnType<typeof uploadMultipart>>;
@@ -22,8 +22,8 @@ export async function uploadSourceFile(
   onProgress: (percent: number, phase: SourceUploadPhase) => void,
   signal?: AbortSignal,
 ): Promise<Id<'assets'>> {
-  // Match the server's import limits before reading or transferring any bytes.
-  if (file.size > UPLOAD_PART_BYTES * MAX_UPLOAD_PARTS) throw new Error(`“${file.name}” is larger than Revline can import.`);
+  // Match the cloud transport's limits before reading or transferring any bytes.
+  if (!uploadPartSize(file.size)) throw new Error(`“${file.name}” is larger than cloud storage accepts in one upload (about 930 GB). Split it before importing.`);
   let uploadId: Id<'r2Uploads'> | undefined;
   let completed = false;
   let thumbnail:Blob|undefined;
@@ -40,7 +40,6 @@ export async function uploadSourceFile(
     log('Reading media metadata');
     onProgress(0, 'reading');
     const metadata = await inspectMedia(file,transport.saveThumbnail || transport.onThumbnail ? image=>{thumbnail=image;transport.onThumbnail?.(image);saveThumbnail();} : undefined,false);
-    if (metadata.duration !== undefined && metadata.duration > MAX_SOURCE_SECONDS) throw new Error(`“${file.name}” is longer than 24 hours. Trim it before importing.`);
     signal?.throwIfAborted();
     log('Metadata ready; opening cloud upload');
     const upload = await transport.start(metadata);

@@ -209,7 +209,6 @@ export const start = mutation({ args: { projectId: v.id('projects'), assetId: v.
   return enqueueMediaTask(ctx, { ...args, ownerId }, () => requireMediaTaskCapacity(ctx, ownerId, 1));
 }});
 const importVideoForArgs = { projectId: v.optional(v.id('projects')), url: v.string(), start: v.optional(v.number()), end: v.optional(v.number()) };
-const MAX_LINK_IMPORT_SECONDS = 300;
 export async function importVideoFor(ctx: MutationCtx, ownerId: string, args: ObjectType<typeof importVideoForArgs>) {
   await requireEditorAccess(ctx, ownerId);
   let sourceUrl: string;
@@ -219,7 +218,6 @@ export async function importVideoFor(ctx: MutationCtx, ownerId: string, args: Ob
     const start = args.start ?? 0, end = args.end;
     if (end === undefined) throw new ConvexError('Give both start and end to import part of a video.');
     if (!Number.isFinite(start) || !Number.isFinite(end) || start < 0 || end <= start) throw new ConvexError('The import range needs 0 <= start < end, in source seconds.');
-    if (end - start > MAX_LINK_IMPORT_SECONDS) throw new ConvexError(`An imported range can be up to ${MAX_LINK_IMPORT_SECONDS / 60} minutes long.`);
     importRange = { start, end };
   }
   // A new edit and its durable import are created atomically.

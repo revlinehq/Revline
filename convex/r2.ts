@@ -1,4 +1,4 @@
-import { MAX_SOURCE_SECONDS, MAX_UPLOAD_PARTS, UPLOAD_PART_BYTES } from '../lib/editor/limits';
+import { uploadPartSize } from '../lib/editor/limits';
 import { recordStorageObject, recordAssetStorage, forgetStorageObject } from './lib/storage_accounting';
 import { requireEditorAccess } from './lib/billing_access';
 import type { Doc, Id } from './_generated/dataModel';
@@ -107,10 +107,11 @@ export async function openUpload(ctx: ActionCtx, args: ObjectType<typeof startAr
   if (!fileName || fileName.length > 255 || !/^(video|image|audio)\//.test(args.contentType) || args.contentType.length > 128) throw new ConvexError('Choose a supported media file');
   if (!args.contentType.startsWith(`${args.kind}/`) && !(args.kind === 'audio' && /^video\/(mp4|quicktime|webm)$/.test(args.contentType))) throw new ConvexError('File content type does not match the media');
   if (!Number.isSafeInteger(args.size) || args.size < 1) throw new ConvexError('This file is empty or has an invalid size');
-  if (args.duration !== undefined && (!Number.isFinite(args.duration) || args.duration <= 0 || args.duration > MAX_SOURCE_SECONDS)) throw new ConvexError('Invalid media duration');
+  if (args.duration !== undefined && (!Number.isFinite(args.duration) || args.duration <= 0)) throw new ConvexError('Invalid media duration');
   if (args.kind !== 'audio' && (![args.width, args.height].every(n => Number.isInteger(n) && n! > 0 && n! <= 16384))) throw new ConvexError('This media has no readable dimensions');
-  const partSize = UPLOAD_PART_BYTES, partCount = Math.ceil(args.size / partSize);
-  if (partCount > MAX_UPLOAD_PARTS) throw new ConvexError('This file exceeds the multipart transport limit');
+  const partSize = uploadPartSize(args.size);
+  if (!partSize) throw new ConvexError('This file is larger than cloud storage accepts in one upload (about 930 GB). Split it before importing.');
+  const partCount = Math.ceil(args.size / partSize);
   const key = `media/${ownerId}/${args.projectId}/${crypto.randomUUID()}`;
   const created = await storageControl({ action: 'create', key, contentType: args.contentType });
   if (!created.uploadId) throw new ConvexError('Cloudflare did not open the upload');
