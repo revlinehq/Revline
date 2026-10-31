@@ -17,9 +17,8 @@ export function LandingFeatures() {
       <Feature title="Text behind you" description="Words sit between you and the background." stage="film">
         <LandingFeatureVideo src="/landing/text-behind-you.mp4" poster="/landing/text-behind-you-poster.webp" />
       </Feature>
-      <Feature title="Tracked labels" description="Captions and stickers follow what moves." stage="tracking">
-        <span className="landing-track-box" />
-        <span className="landing-track-label"><i />Sony A7 IV</span>
+      <Feature title="Tracked labels" description="Captions and stickers follow what moves." stage="film">
+        <LandingFeatureVideo src="/landing/tracked-labels.mp4" poster="/landing/tracked-labels-poster.webp" />
       </Feature>
       <Feature title="Speed ramps" description="Slow-mo hits on the beat, frame exact." stage="film">
         <LandingFeatureVideo src="/landing/speed-ramps.mp4" poster="/landing/speed-ramps-poster.webp" />

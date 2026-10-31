@@ -155,10 +155,6 @@ div.landing-hero-buttons>.landing-reveal-content{display:flex;align-items:center
 .landing-feature-text{display:flex;flex-direction:column;gap:8px;padding:16px 12px 10px}
 .landing-feature-text h3{font:400 20px/1.26 var(--l-head);color:var(--l-fg)}
 .landing-feature-text p{font-size:14px;line-height:1.5;color:var(--l-fg-2)}
-.landing-feature-stage[data-stage=tracking]{display:block;background:#17181c url(/landing/vlog.webp) center/cover no-repeat}
-.landing-track-box{position:absolute;left:24.7%;top:80px;width:134px;height:106px;border:1.5px solid #fff;border-radius:8px}
-.landing-track-label{position:absolute;left:24.7%;top:44px;display:flex;align-items:center;gap:6px;padding:5px 9px;border-radius:999px;background:var(--l-fg);font-size:12px;font-weight:600;line-height:1.3;color:#fff}
-.landing-track-label i{width:6px;height:6px;border-radius:50%;background:#22c55e}
 .landing-feature-stage[data-stage=blur]{gap:18px}
 .landing-blur-trail{display:flex;align-items:center}
 .landing-blur-trail span{position:relative;display:inline-flex;align-items:center;gap:8px;padding:12px 20px;border-radius:999px;background:var(--l-fg);font-size:14px;font-weight:600;line-height:1.3;color:#fff;white-space:nowrap}
