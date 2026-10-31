@@ -147,7 +147,7 @@ div.landing-hero-buttons>.landing-reveal-content{display:flex;align-items:center
 @keyframes landing-marquee{to{transform:translateX(-50%)}}
 
 
-/* More from Revline: nested cards, each stage a small mock of its effect. */
+/* Revline's Agent is powerful: nested cards, each stage a small mock of its effect. */
 .landing-features{display:flex;flex-direction:column;gap:40px;padding-block:96px}
 .landing-feature-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px}
 .landing-feature{display:flex;flex-direction:column;min-width:0;padding:8px;background:#fff;border:1px solid var(--l-border);border-radius:12px}

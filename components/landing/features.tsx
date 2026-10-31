@@ -12,7 +12,7 @@ function Feature({ title, description, stage, children }: { title: string; descr
 
 export function LandingFeatures() {
   return <LandingSection id="features" className="landing-features" headingId="landing-features-heading">
-    <LandingHeading id="landing-features-heading" title="More from Revline" description="Effects that used to need After Effects, done by asking." />
+    <LandingHeading id="landing-features-heading" title="Revline's Agent is powerful" description="Effects that used to need After Effects, done by asking." />
     <div className="landing-feature-grid">
       <Feature title="Text behind you" description="Words sit between you and the background." stage="film">
         <LandingFeatureVideo src="/landing/text-behind-you.mp4" poster="/landing/text-behind-you-poster.webp" />
