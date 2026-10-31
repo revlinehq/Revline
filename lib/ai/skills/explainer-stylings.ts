@@ -43,7 +43,7 @@ export default function scene({ root, tl, gsap }) {
 \`\`\`
 
 ## Other shapes in the same style
-- **Line chart**: axes \`M56 12V212\` and \`M56 212H500\` (#777, 1.5), grid lines #303030, the value as a 3 px round-capped path drawn with drawSVG while a white dot (r 5) follows it with MotionPathPlugin (\`motionPath:{path, align: path, alignOrigin:[.5,.5]}\`), the end value in Geist Mono.
+- **Line chart**: axes \`M56 12V212\` and \`M56 212H500\` (#777, 1.5), no grid lines, the value as a 3 px round-capped path drawn with drawSVG while a white dot (r 5) follows it with MotionPathPlugin (\`motionPath:{path, align: path, alignOrigin:[.5,.5]}\`), the end value in Geist Mono.
 - **Comparison bars**: outlined rects filled with the hatch pattern, revealed with the left-to-right wipe and staggered .12 to .14 s; one accent bracket measures the biggest.
 - **Counter**: a Geist Mono number tweened on an object with onUpdate, power3.out, landing on the spoken value.
 - **Structure / house**: uprights and roof lines as separate paths drawn on in order (front edges #F5F5F5, back edges #888), so the drawing builds like a sketch.`;
@@ -61,7 +61,7 @@ Technical drawings that build themselves next to the speaker: ideas become outli
 
 ### Palette
 - Panel background #0C0C0C, or transparent with a dark gradient (transparent to rgba(0,0,0,.65 to .85)) where it sits over footage.
-- Lines #D6D6D6 / #BDBDBD for main edges, #777 for axes and secondary posts, #888 for back edges and dimension lines, #303030 to #444 for grid lines.
+- Lines #D6D6D6 / #BDBDBD for main edges, #777 for axes and secondary posts, #888 for back edges and dimension lines. No background grids or grid lines: they are clutter.
 - Text #F5F5F5 for figures and labels, #A6A6A6 for kickers and axis labels, #858585 to #999 for notes and captions.
 - ONE accent, used on one edge or line per graphic: the subject's brand color when it has one (NVIDIA green #76B900 in the Jensen film), otherwise a muted single hue. Never a second accent, never gradients or glows.
 
@@ -71,7 +71,7 @@ Technical drawings that build themselves next to the speaker: ideas become outli
 - The accent sits on one edge, usually the base of the block (stroke 3).
 - Stacked blocks show a relationship ("X carries Y"): the upper block sits on thin support posts (#777, stroke 2) drawn down to the lower one.
 - Dimension lines under or beside a block: a thin line with end ticks (M x y H x2 plus short verticals), #888, stroke 1.5, with a small caption below it.
-- Charts: thin axes (#777, 1.5), faint grid, values as 3 px round-capped lines, a small white dot (r 4 to 5) riding the line as it draws, an end label in mono.
+- Charts: thin axes (#777, 1.5) and no grid lines, values as 3 px round-capped lines, a small white dot (r 4 to 5) riding the line as it draws, an end label in mono.
 - Labels inside blocks: Inter 25 to 27, weight 500, centered. Numbers in Geist Mono with tabular numerals.
 - The drawing carries the eye, not text. No headings, kickers or explanatory notes on the graphic; at most a short label inside a block or at a line's end, plus one short muted caption (18 to 20 px) when the diagram needs it.
 
@@ -80,7 +80,7 @@ Technical drawings that build themselves next to the speaker: ideas become outli
 - A stacked block drops in from about 38 px above while its clip opens (power3.out, 0.8 s).
 - Build in reading order, keyed to the words: base first, then what it carries, then the label, then the dimension line and caption.
 - Panels change by wiping or sliding (x 600 px, power3.inOut, 0.8 s), never by fading everything out.
-- Something always moves: once built, a graphic drifts a few px (sine.inOut, 2 to 4 s), a scan line or dot travels along a measure, or a number counts up.
+- Something always moves: once built, a graphic drifts a few px (sine.inOut, 2 to 4 s), a dot travels along its line, or a number counts up. No scan lines or sweeping bars.
 - Counters animate with power3.out and settle on the spoken value.
 
 ### Subtitles
