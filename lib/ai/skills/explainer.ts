@@ -33,11 +33,10 @@ After the pick, call generateVoice once with the whole approved script, joined i
 
 ### 3. Visual style
 
-Build 3 or 4 short style previews in code: the same first beat (its words, its idea) drawn in clearly different looks, for example
+Build 3 or 4 short style previews in code: the same first beat (its words, its idea) drawn in clearly different looks. The first is always the user's house look from overall-styling (readSkill name "overall-styling", page "example"): the isometric line diagram, thin outlined 3D parts on near-black, hatching on one face, one accent, no grids. The others are clear alternatives, for example
 - clean editorial: off-white paper, one dark ink, one accent, big serif type;
 - bold dark: near-black ground, high-contrast sans, one saturated accent used sparingly;
-- soft gradient: a muted grainy gradient field, rounded cards, gentle depth;
-- diagram: line drawings and labels building on a grid, like a whiteboard.
+- soft gradient: a muted grainy gradient field, rounded cards, gentle depth.
 Pick looks that suit the subject; follow the user's brand kit when there is one (askBrandKit if unclear). Each preview is about 3 seconds with real motion, placed one after another on the timeline after the narration (for example at 0, 3, 6 and 9 seconds past its end), with addScene or one addFilm whose sections are the looks. Check each with getFrames, then askUser "Which style?" with one option per look: preview.time set to the second where that look's frame is fully built (not its first frame), label naming the look, description one line about it. Every option must carry its preview: the card shows each look as a large picture, so the user judges the real frames, not your words. Never ask about styles in prose or without previews. After the pick, delete the previews before building the film.
 
 ### 4. The film
@@ -53,6 +52,7 @@ Build the film in the chosen look with addFilm, following motion-design (one cli
 The words list from generateVoice gives every word's timeline start and end. The film's own clock starts at its clip start, so film second = timeline second minus the film's start (0 when it starts at 0).
 - **Land on the word.** The visual for a word arrives as that word is spoken: its motion settles on the word's start, so it begins about 0.1 to 0.25 s before. A number counts up to finish on the number; a highlight sweeps on the key noun; a diagram arrow draws during the verb that names the move.
 - **One idea on screen.** When a beat ends, its picture leaves or transforms into the next one; never pile beats up. Carry an element across beats when the idea continues (the same card moves, a dot becomes a chart) instead of cutting.
+- **Never a still frame.** Something is always in motion so the eye has something to follow: a part turning, a line drawing, a packet travelling, a slow camera drift or push-in, a number ticking. While the voice explains, the picture keeps working. Holds are for reading, not for stopping: during a hold the picture still drifts or idles (a gentle loop, a slow zoom). A frame that sits frozen for more than about half a second reads as broken and loses the viewer. Check it with getFrames: two frames 0.5 s apart must never be identical.
 - **Pace to the voice.** Pauses in the narration (gaps between words over about 0.4 s) are where big changes happen: a scene change, a camera move, a reveal. Inside a sentence, keep motion small and supportive. Hold the last frame about a second after the last word.
 - **Words on screen are the key words, not the script.** Show the 1 to 4 words that carry the beat (a number, a name, a term), not the sentence the voice is already saying.
 - Write the beat times into the film code as named constants taken from the words list, so a retime is a patchScene to those numbers.
