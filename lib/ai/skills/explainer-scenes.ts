@@ -5,7 +5,7 @@ export const explainerScenes: EditorSkill = {
   description: 'Explainer visuals and overlays on footage: titles, diagrams, charts, UI walkthroughs, kinetic type and animated callouts that support a video someone is talking in. Read with scene-engine before addScene or editScene for these. Standalone motion design with no footage (launch films, product or feature reels, teasers, recreating a motion film or reference) uses motion-design instead. Scenes come with matching generated sound (music-and-sound).',
   body: `# Explainer scenes
 
-An explainer scene is one beat of a video that already has a story, usually someone talking: it shows what they are saying. Read scene-engine for how scenes work; this skill is how to make them explain.
+An explainer scene is one beat of a video that already has a story, usually someone talking: it shows what they are saying. Read scene-engine for how scenes work; this skill is how to make them explain, and explainer-stylings is how they look.
 
 ## Over footage
 
