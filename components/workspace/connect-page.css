@@ -11,3 +11,8 @@
 .connect-actions { display:flex; justify-content:flex-end; gap:8px; }
 .connect-lead strong { color:var(--ws-text); font-weight:500; }
 .connect-warning { margin:0; padding:10px 12px; border:1px solid #d9a441; border-radius:8px; background:color-mix(in srgb, #d9a441 12%, transparent); font-size:12px; line-height:1.5; }
+.connect-done { display:flex; flex-direction:column; gap:12px; }
+.connect-done-icon { color:var(--ws-text); }
+.connect-try { display:flex; flex-direction:column; gap:8px; padding:12px 14px; border:1px solid var(--ws-border); border-radius:10px; font-size:13px; }
+.connect-try span { font-size:12px; color:var(--ws-faint); }
+.connect-try ul { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:6px; color:var(--ws-text); }
