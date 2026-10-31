@@ -1,0 +1,62 @@
+{
+  "projectId": "j970eespkq2j4crma0yhj5mpc18haer6",
+  "timelineId": "main",
+  "sceneClipId": "5b49332a-bc9f-4fc8-a8cd-383e406bf6a1",
+  "engine": "GSAP via revline useTimeline",
+  "referenceAssetId": "j5752gm7fepth89axk7m0rt3gn8ha86h",
+  "referenceOnTimeline": false,
+  "referenceAudioOnTimeline": false,
+  "exported": false,
+  "background": {
+    "file": "original-rolling-hills.png",
+    "assetId": "j575r36jt8c8mvrxt9vahyac9s8ha0pb",
+    "generator": "built-in image_gen",
+    "prompt": "Generate a single original photorealistic landscape background plate, ultra wide 16:9 composition 1920x1080. Brilliant clear saturated cobalt blue sky with soft white cumulus cloud clusters particularly across upper right and a smaller one upper left. Rolling vivid spring green grassy hills, one broad smooth hill ridge running from left at 48 percent height downward toward right at 68 percent height. Grass has fine natural texture, no trees, no flowers, no buildings, no roads, no people. Familiar optimistic early 2000s desktop wallpaper feeling but an original landscape photo, midday sunshine, slightly soft analog digital camera atmosphere. Sky covers upper 55%, green grass covers lower45%. No text, no logo, no interface, no borders. Flat full bleed. This will be a still photographic background for a motion-design film; leave center unoccupied."
+  },
+  "graphics": {
+    "logo": "Vector outline from Revline traceShape, source time 8 s",
+    "mascot": "Vector outline from Revline traceShape, source time 14.8 s",
+    "cursor": {
+      "source": "https://icon-sets.iconify.design/lucide/pointer/",
+      "license": "ISC"
+    }
+  },
+  "music": {
+    "title": "Deep Techno",
+    "artist": "Alejandro Magaña (A. M.)",
+    "library": "Mixkit",
+    "license": "Mixkit Free License",
+    "method": "Measured tempo and energy match, not listened to"
+  },
+  "skills": [
+    "scene-engine/react-scenes",
+    "scene-engine/checklist",
+    "gsap",
+    "gsap/transitions",
+    "gsap/recipe-letter-reveal",
+    "gsap/recipe-mask-wipe",
+    "gsap/recipe-blur-in",
+    "gsap/recipe-morph",
+    "gsap/recipe-typing",
+    "gsap/recipe-fly-off",
+    "motion-design",
+    "reference-footage",
+    "music-and-sound",
+    "overall-styling"
+  ],
+  "toolBridge": "Revline mcpActions:callTool on development, via Convex CLI; all video reads and comparisons used Revline tools",
+  "developmentToolFix": {
+    "commit": "3a1cbee",
+    "deployment": "majestic-alpaca-541",
+    "change": "Preserve requested motion range in frame snapshots"
+  },
+  "priority": "User requested reference structure and timing take precedence over generic one-second holds, no grids, and quiet house styling.",
+  "revision": 16,
+  "verificationFile": "verification.json",
+  "sourceFile": "film.tsx.txt",
+  "soundEffects": {
+    "provider": "ElevenLabs via Revline generateSound",
+    "count": 5,
+    "method": "Generated for visual events; measured, not listened to"
+  }
+}
