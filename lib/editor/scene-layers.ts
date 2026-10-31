@@ -17,10 +17,8 @@ export type SceneFilm = { duration: number };
 export type SceneSource = { title: string; code: string; codeRef?: string; brand?: SceneBrand; media?: SceneMedia[]; blueprints?: SceneBlueprint[]; film?: SceneFilm };
 export const SCENE_MEDIA_LIMIT = 8, SCENE_BLUEPRINT_LIMIT = 4;
 // Stored timelines keep code in sceneCode rows (lib/editor/scene-code), so it no longer weighs on every edit.
-export const SCENE_LIMITS = { title: 80, code: 120_000 } as const;
-/** All scene and blueprint code in one timeline. Exports, reviews, stashed tabs and shares still copy
- * timelines with their code, and a review row holds two, so this keeps those rows under 1 MiB. */
-export const TIMELINE_SCENE_CODE_LIMIT = 400_000;
+// Scene code has no length limit; only titles are capped.
+export const SCENE_LIMITS = { title: 80 } as const;
 
 export function validateScene(clip: Pick<Clip, 'kind' | 'scene' | 'assetId'>) {
   if (clip.kind !== 'scene') { if (clip.scene) throw new Error('Only scene clips can hold scene code.'); return; }
@@ -29,10 +27,9 @@ export function validateScene(clip: Pick<Clip, 'kind' | 'scene' | 'assetId'>) {
   if (clip.assetId) throw new Error('Scenes cannot reference media.');
   if (!scene.title.trim() || scene.title.length > SCENE_LIMITS.title) throw new Error(`Scene titles need 1–${SCENE_LIMITS.title} characters.`);
   if (!scene.code.trim()) throw new Error('A scene needs code.');
-  if (scene.code.length > SCENE_LIMITS.code) throw new Error(`Scene code supports up to ${SCENE_LIMITS.code} characters.`);
   if (scene.brand) validateSceneBrand(scene.brand);
   if (scene.film && !(Number.isFinite(scene.film.duration) && scene.film.duration > 0 && scene.film.duration <= 600)) throw new Error('A film runs 0 to 600 seconds.');
-  if (scene.blueprints && (scene.blueprints.length > SCENE_BLUEPRINT_LIMIT || scene.blueprints.some(item => !item.name?.trim() || item.name.length > 60 || typeof item.code !== 'string' || !item.code.trim() || item.code.length > SCENE_LIMITS.code))) throw new Error(`A scene can mount up to ${SCENE_BLUEPRINT_LIMIT} blueprints.`);
+  if (scene.blueprints && (scene.blueprints.length > SCENE_BLUEPRINT_LIMIT || scene.blueprints.some(item => !item.name?.trim() || item.name.length > 60 || typeof item.code !== 'string' || !item.code.trim()))) throw new Error(`A scene can mount up to ${SCENE_BLUEPRINT_LIMIT} blueprints.`);
   if (scene.media && (scene.media.length > SCENE_MEDIA_LIMIT || scene.media.some(item => !/^[a-zA-Z][\w-]{0,30}$/.test(item.name) || !item.assetId) || new Set(scene.media.map(item => item.name)).size !== scene.media.length)) throw new Error(`Scene media needs up to ${SCENE_MEDIA_LIMIT} images with unique names (letters, digits, - or _).`);
 }
 

@@ -7,7 +7,6 @@ import { requireMediaTaskCapacity } from './lib/account_limits';
 import { requireOwner } from './lib/auth';
 import { brandFileUrl, fontUrl } from './brandKits';
 import { blueprintCheckValidator, blueprintLineValidator, blueprintPartValidator, blueprintPointValidator } from './schema';
-import { SCENE_LIMITS } from '../lib/editor/scene-layers';
 
 /**
  * Blueprints: a brand's UI rebuilt from one of its kit screens as scene code, every piece a named
@@ -42,7 +41,6 @@ async function saveBlueprintRow(ctx: MutationCtx, args: SaveInput) {
   if (!(kit.screens ?? []).some(screen => screen.name === args.screen)) throw new ConvexError(`The kit has no screen named "${args.screen}".`);
   const name = args.name.trim().slice(0, 60);
   if (!name) throw new ConvexError('A blueprint needs a name.');
-  if (args.code.length > SCENE_LIMITS.code) throw new ConvexError(`Keep blueprint code under ${SCENE_LIMITS.code} characters.`);
   const now = Date.now(), fields = { ...args, name, parts: args.parts.slice(0, 300), colors: args.colors.slice(0, 60), edges: args.edges.slice(0, 60), updatedAt: now };
   const existing = await ctx.db.query('blueprints').withIndex('by_kit_name', q => q.eq('kitId', args.kitId).eq('name', name)).unique();
   if (existing) { await ctx.db.patch(existing._id, fields); return existing._id; }
@@ -75,7 +73,6 @@ export const requestCheck = internalMutation({
     const screen = args.screen ? (kit.screens ?? []).find(item => item.name === args.screen) : undefined;
     if (args.mode !== 'render' && !screen) throw new ConvexError(`The kit has no screen named "${args.screen ?? ''}". Screens: ${(kit.screens ?? []).map(item => item.name).join(', ') || 'none'}.`);
     if (args.mode !== 'measure' && !args.code?.trim()) throw new ConvexError('Pass the blueprint code to render.');
-    if ((args.code?.length ?? 0) > SCENE_LIMITS.code) throw new ConvexError(`Keep blueprint code under ${SCENE_LIMITS.code} characters.`);
     if ((args.points?.length ?? 0) > 60 || (args.lines?.length ?? 0) > 20) throw new ConvexError('Measure at most 60 points and 20 lines at a time.');
     // Compare at the screen's own size unless another size is asked for.
     const width = Math.round(args.width ?? screen?.width ?? 1920), height = Math.round(args.height ?? screen?.height ?? 1080);
