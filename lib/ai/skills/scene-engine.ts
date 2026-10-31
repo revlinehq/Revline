@@ -5,7 +5,7 @@ import type { EditorSkill, EditorSkillPage } from './index';
 /** The one list of checks before a scene or film goes back to the user. Other skills point here. */
 const checklistPage: EditorSkillPage = {
   name: 'checklist',
-  description: 'Before handing a scene or film back, and after every change: first frames, every cut, every beat, measurements, what changed, limits, preview speed.',
+  description: 'Before handing a scene or film back, and after every change: first frames, every cut, every beat, details edge by edge (borders, radii, leftovers, contrast), measurements, what changed, limits, preview speed.',
   body: `# Checklist: before you hand it back
 
 Run every item after building a scene or film and after every change. Render frames with getFrames (up to six per call) and look at them; never report a film as done from the code alone.
@@ -13,12 +13,13 @@ Run every item after building a scene or film and after every change. Render fra
 1. **First frames.** The clip's first frame and the next one (start and start + 1/fps). Nothing shows that should still be hidden. A part hidden at its first frame starts hidden where it is built (page \`react-scenes\`, Motion; for GSAP specifics, the gsap skill).
 2. **Every cut.** Each cut minus one frame, on the cut, and plus one frame. No flash, no jump; where the beats are meant to connect, the two sides match.
 3. **Every beat.** One frame at each beat's key moment. Text sits inside the frame and is readable at the platform's size (a phone for vertical and feed formats); nothing overlaps by accident; one idea per shot.
-4. **Measurements.** Product UI compared with its screenshot at full size (compareScreen), and every reference measured on full-resolution frames, never a downscaled contact sheet (it makes everything look about half its size).
-5. **Only what was asked.** On feedback, everything outside the named part is unchanged: same shots, titles, timings, moves, colors and sound. Say what else had to move.
-6. **Limits.** Each scene under 120,000 characters and the timeline under 400,000 (shared code counts once), clips up to 120 s.
-7. **Preview speed.** Parts that are done or hidden render nothing or \`display: none\`, not only opacity 0; no heavy UI mounted where it cannot be seen.
-8. **Sound.** The film has the generated sound music-and-sound asks for (section Scenes), timed to the moments you just checked.
-9. **Recreations match.** A recreation is not finished while any moment compareReference scored is over 35: fix it and compare again.`,
+4. **Details, edge by edge.** For every window, card, button and frame you built or changed, look at a frame mid-move (opening, closing, transition) and one after it settles, and go over its edges: exactly one border (no outer stroke, glow or leftover outline an effect leaves behind, no double border), the same corner radius on every corner, no missing or extra lines (frame corners, dividers), nothing clipped or spilling out of its container, text readable against what is behind it (measureFrame both and compare), and no element still on screen after the thing that owns it has closed. Name each one you checked; a frame that only looks fine at a glance is not checked.
+5. **Measurements.** Product UI compared with its screenshot at full size (compareScreen), and every reference measured on full-resolution frames, never a downscaled contact sheet (it makes everything look about half its size).
+6. **Only what was asked.** On feedback, everything outside the named part is unchanged: same shots, titles, timings, moves, colors and sound. Say what else had to move.
+7. **Limits.** Each scene under 120,000 characters and the timeline under 400,000 (shared code counts once), clips up to 120 s.
+8. **Preview speed.** Parts that are done or hidden render nothing or \`display: none\`, not only opacity 0; no heavy UI mounted where it cannot be seen.
+9. **Sound.** The film has the generated sound music-and-sound asks for (section Scenes), timed to the moments you just checked.
+10. **Recreations match.** A recreation is not finished while any moment compareReference scored is over 35: fix it and compare again.`,
 };
 
 const reactScenesPage: EditorSkillPage = {
