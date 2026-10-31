@@ -38,8 +38,7 @@ A React scene is a TSX module whose default export is a component. It is a React
 - **Standalone scenes** (a title card, an overlay, one beat on its own) use addScene, or addScenes for several. Older films made of beat clips with a film kit (\`blueprint:film\`) and \`<Transition>\` clips on V3 still render and edit as before; build new films with addFilm.
 
 ## Motion
-- **Simple fades and slides:** compute from time. \`const { time } = useBeat()\` (local to the clip, or to the nearest \`<Beat>\`), then \`progress(time, start, duration, 'expo.out')\` (eased 0..1) and \`mix(from, to, p)\` into style (opacity from \`p\`, a translateY from \`mix(24, 0, p)\`).
-- **Choreography** (staggers, overlaps, word-by-word or letter reveals, SplitText, ScrambleText, DrawSVG, MorphSVG, motion paths): \`useTimeline\`; for choreography, read the gsap skill (readSkill name "gsap"). It builds a paused GSAP timeline once per mount, scoped to the element it returns a ref for, and seeks it to the beat's local time on every frame:
+- **All motion is GSAP through \`useTimeline\`**, from a single fade to staggers, overlaps, word or letter reveals, SplitText, ScrambleText, DrawSVG, MorphSVG and motion paths; read the gsap skill (readSkill name "gsap"). Connected parts are one tween, and moves overlap through position parameters, never through seconds typed by hand. Do not animate with \`progress()\` and \`mix()\` from \`useBeat()\` time: separate hand-timed calls freeze between moves, drift out of sync and jump. It builds a paused GSAP timeline once per mount, scoped to the element it returns a ref for, and seeks it to the beat's local time on every frame:
 \`\`\`tsx
 function Title({ text }: { text: string }) {
   const ref = useTimeline<HTMLHeadingElement>((tl, el) => {
