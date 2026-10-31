@@ -12,6 +12,10 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 Never create test files, mocks, fixtures, smoke scripts or any other test-only code. The project intentionally has no test suite. Verify changes with `npm run typecheck`, `npm run build`, and direct runtime or UI inspection.
 
+## UI components
+
+Build every new UI component from shadcn (`components/ui/`): tabs, segments, dialogs, buttons, inputs, selects. Add a missing primitive with the shadcn CLI rather than hand-rolling one. Any prompt or chat input uses the main `EditComposer` (`components/workspace/edit-composer.tsx`), never a new composer. Dark surfaces use neutral greys such as `#2a2a2a`, never blue-tinted ones like `#1D202A`. No focus outlines or rings; hover states mark what is interactive.
+
 ## Delivery
 
 Start local development with `npm run dev`, which runs the frontend and development media worker together. Verify both `[web]` and `[worker]` readiness logs before handing the editor back; keep them running while the user tests media processing. Use the Codex terminal for visible logs when requested.
