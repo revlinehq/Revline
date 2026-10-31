@@ -4,9 +4,6 @@ import { LandingHeading, LandingSection } from './ui';
 import { LandingSoundStage } from './sound-stage';
 import { LandingFeatureVideo } from './feature-video';
 
-// The speed ramp's rate over the clip: fast, a slow-mo dip on the jump, fast again (bar heights in px).
-const ramp = [62, 70, 80, 90, 92, 82, 62, 42, 27, 25, 25, 27, 42, 62, 82, 92, 90, 80, 70, 62];
-
 function Feature({ title, description, stage, wide, interactive, children }: { title: string; description: string; stage: string; wide?: boolean; interactive?: boolean; children: ReactNode }) {
   return <article className="landing-feature" data-wide={wide || undefined}>
     <div className="landing-feature-stage" data-stage={stage} aria-hidden={interactive ? undefined : true}>{children}</div>
@@ -25,12 +22,8 @@ export function LandingFeatures() {
         <span className="landing-track-box" />
         <span className="landing-track-label"><i />Sony A7 IV</span>
       </Feature>
-      <Feature title="Speed ramps" description="Slow-mo hits on the beat, frame exact." stage="ramp">
-        <div className="landing-ramp">
-          <div className="landing-ramp-head"><b>Hero ramp</b><small>slow-mo on the jump</small></div>
-          <div className="landing-ramp-bars">{ramp.map((height, index) => <i key={index} style={{ height }} data-slow={height < 30 || undefined} />)}</div>
-          <div className="landing-ramp-axis"><span>1.6×</span><span>0.25×</span><span>1.6×</span></div>
-        </div>
+      <Feature title="Speed ramps" description="Slow-mo hits on the beat, frame exact." stage="film">
+        <LandingFeatureVideo src="/landing/speed-ramps.mp4" poster="/landing/speed-ramps-poster.webp" />
       </Feature>
       <Feature title="Masks" description="Reveal through shapes, text, or a moving spotlight." stage="film">
         <LandingFeatureVideo src="/landing/masks.mp4" poster="/landing/masks-poster.webp" />

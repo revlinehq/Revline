@@ -182,15 +182,6 @@ div.landing-hero-buttons>.landing-reveal-content{display:flex;align-items:center
 .landing-track-box{position:absolute;left:24.7%;top:80px;width:134px;height:106px;border:1.5px solid #fff;border-radius:8px}
 .landing-track-label{position:absolute;left:24.7%;top:44px;display:flex;align-items:center;gap:6px;padding:5px 9px;border-radius:999px;background:var(--l-fg);font-size:12px;font-weight:600;line-height:1.3;color:#fff}
 .landing-track-label i{width:6px;height:6px;border-radius:50%;background:#22c55e}
-.landing-feature-stage[data-stage=ramp]{padding:24px}
-.landing-ramp{display:flex;flex-direction:column;gap:12px;width:100%;padding:16px;background:#fff;border:1px solid var(--l-border);border-radius:8px}
-.landing-ramp-head{display:flex;align-items:center;justify-content:space-between}
-.landing-ramp-head b{font-size:13px;font-weight:600;color:var(--l-fg)}
-.landing-ramp-head small{font-size:11px;color:var(--l-fg-3)}
-.landing-ramp-bars{display:flex;align-items:flex-end;gap:4px;height:96px}
-.landing-ramp-bars i{flex:1;border-radius:3px;background:var(--l-border)}
-.landing-ramp-bars i[data-slow]{background:var(--l-brand)}
-.landing-ramp-axis{display:flex;justify-content:space-between;font:11px var(--l-mono);color:var(--l-fg-3)}
 .landing-feature-stage[data-stage=blur]{gap:18px}
 .landing-blur-trail{display:flex;align-items:center}
 .landing-blur-trail span{position:relative;display:inline-flex;align-items:center;gap:8px;padding:12px 20px;border-radius:999px;background:var(--l-fg);font-size:14px;font-weight:600;line-height:1.3;color:#fff;white-space:nowrap}
