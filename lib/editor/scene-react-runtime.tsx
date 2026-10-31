@@ -11,7 +11,7 @@ import type { gsap as Gsap } from 'gsap';
 import { parseStartExpression } from '@hyperframes/core/runtime/start-expression';
 import type { SceneBrandContext } from './brand-kit';
 
-const { createContext, memo, useContext, useLayoutEffect, useMemo, useRef, useSyncExternalStore } = React;
+const { Activity, createContext, memo, useContext, useLayoutEffect, useMemo, useRef, useSyncExternalStore } = React;
 
 export type Ease = string | ((progress: number) => number);
 /** What a scene component receives, and what useScene() returns anywhere below it. */
@@ -96,7 +96,8 @@ type BeatProps = {
   duration?: number;
   /** Stacking among sibling beats, like data-track-index: higher draws on top. */
   track?: number;
-  /** Keep the subtree mounted (hidden) outside the window, for heavy parts that come back often. */
+  /** Keep the subtree's DOM (display:none) outside the window, for heavy parts that come back often.
+   *  While hidden it costs nothing per frame: no renders, no GSAP seeks; its timelines rebuild when it returns. */
   keep?: boolean;
   style?: React.CSSProperties;
   className?: string;
@@ -128,12 +129,15 @@ export function Beat({ id, start = 0, duration, track = 0, keep = false, style, 
   const from = Math.round(absolute * fps), to = Math.round((absolute + length) * fps);
   const active = useSyncExternalStore(clock.subscribe, () => { const frame = parent.frame(clock.frame); return frame >= from && frame < to; });
   if (!active && !keep) return null;
-  return (
+  const body = (
     <BeatContext.Provider value={window}>
       <div data-beat={id} data-start={local} data-duration={length} data-track-index={track} className={className}
-        style={{ position: 'absolute', inset: 0, zIndex: track, ...(active ? null : { visibility: 'hidden' }), ...style }}>{children}</div>
+        style={{ position: 'absolute', inset: 0, zIndex: track, ...style }}>{children}</div>
     </BeatContext.Provider>
   );
+  // A hidden Activity drops its effects (clock subscriptions, GSAP timelines) and defers its renders,
+  // so a kept beat off screen no longer re-renders and seeks its whole subtree on every frame.
+  return keep ? <Activity mode={active ? 'visible' : 'hidden'}>{body}</Activity> : body;
 }
 
 /**
