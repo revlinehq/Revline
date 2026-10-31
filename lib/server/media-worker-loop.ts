@@ -68,19 +68,33 @@ export function startMediaWorker(options: MediaWorkerOptions) {
         const startedAt = Date.now(), deadline = AbortSignal.timeout(options.deadlineMs);
         const signal = AbortSignal.any([controller.signal, shutdown, deadline]);
         const credentials = { taskId: task.taskId, leaseToken: task.leaseToken };
-        let progress = 0, reported = -1, activity: MediaTaskActivity | undefined, heartbeats = Promise.resolve(), renewedAt = claimedAt;
+        let progress = 0, reported = -1, activity: MediaTaskActivity | undefined, heartbeats = Promise.resolve(), renewedAt = claimedAt, queued = false, writing = 0;
         // A transient transport failure retries on the next tick. Stop when Convex
         // says the lease ended, or once two renewals were missed: renewedAt is when
         // the last successful request was sent, so the lease then has under one
         // interval left and Convex cannot yet have re-queued the task.
+        // One renewal waits at most: it sends the latest progress when it runs, so a
+        // stalled request cannot release a burst of renewals onto the task row.
         const heartbeat = () => {
-          if (Date.now() - renewedAt >= MEDIA_TASK_LEASE_MS - HEARTBEAT_MS) { controller.abort(); return; }
+          if (!writing && Date.now() - renewedAt >= MEDIA_TASK_LEASE_MS - HEARTBEAT_MS) { controller.abort(); return; }
+          if (queued) return;
+          queued = true;
           heartbeats = heartbeats.then(async () => {
+            queued = false;
             if (signal.aborted) return;
             const next = progress, sentAt = Date.now();
             await client.mutation(api.mediaTasks.heartbeat, { ...credentials, progress: next, ...(activity ? { activity } : {}) });
             reported = next; renewedAt = sentAt;
           }).catch(error => { if (isMediaLeaseLost(error)) controller.abort(); });
+        };
+        // Starting and finishing an upload write the task row too. They take their turn
+        // between renewals instead of racing them: a renewal committing mid-mutation made
+        // finishing an upload conflict on every retry. Convex still expires the lease if
+        // one runs too long, so missed renewals do not stop the task meanwhile.
+        const exclusive = <T,>(run: () => Promise<T>): Promise<T> => {
+          const result = heartbeats.then(async () => { writing++; try { return await run(); } finally { writing--; } });
+          heartbeats = result.then(() => {}, () => {});
+          return result;
         };
         const timer = setInterval(heartbeat, HEARTBEAT_MS);
         // Stop and cancellation end the lease in Convex; check every few seconds
@@ -96,7 +110,7 @@ export function startMediaWorker(options: MediaWorkerOptions) {
           const result = await processMediaTask(snapshot, client, options.convexUrl, signal, percent => {
             progress = Math.max(progress, Math.min(99, percent));
             if (progress - reported >= 10) heartbeat();
-          }, next => { if (activity !== next) { activity = next; heartbeat(); } });
+          }, next => { if (activity !== next) { activity = next; heartbeat(); } }, exclusive);
           clearInterval(timer); clearInterval(cancelled); await heartbeats; signal.throwIfAborted();
           await client.mutation(api.mediaTasks.complete, { ...credentials, result });
           options.log('media-completed', { projectId: task.projectId, runId: snapshot.aiRunId, taskId: task.taskId, kind: task.kind });

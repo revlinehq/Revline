@@ -5,10 +5,17 @@ import type { FunctionArgs } from 'convex/server';
 import { api } from '@/convex/_generated/api';
 import { forEachLimited } from './run-limited';
 
-export async function uploadMediaFile(path: string, metadata: Omit<FunctionArgs<typeof api.r2.start>, 'size'>, context: { convex: ConvexHttpClient; refreshAuth: () => Promise<void> }, signal: AbortSignal) {
+export type UploadContext = {
+  convex: ConvexHttpClient; refreshAuth: () => Promise<void>;
+  /** Runs a call that writes the media task's row so it never overlaps a lease renewal. */
+  exclusive?: <T>(run: () => Promise<T>) => Promise<T>;
+};
+
+export async function uploadMediaFile(path: string, metadata: Omit<FunctionArgs<typeof api.r2.start>, 'size'>, context: UploadContext, signal: AbortSignal) {
   const { size } = await stat(path);
+  const exclusive = context.exclusive ?? (<T,>(run: () => Promise<T>) => run());
   await context.refreshAuth();
-  const upload = await context.convex.action(api.r2.start, { ...metadata, size });
+  const upload = await exclusive(() => context.convex.action(api.r2.start, { ...metadata, size }));
   const taskAuth = metadata.taskId ? { taskId: metadata.taskId, leaseToken: metadata.leaseToken } : {};
   let completed = false;
   try {
@@ -35,11 +42,11 @@ export async function uploadMediaFile(path: string, metadata: Omit<FunctionArgs<
     // Completion requires parts in ascending order.
     parts.sort((a, b) => a.partNumber - b.partNumber);
     await context.refreshAuth();
-    const assetId = await context.convex.action(api.r2.complete, { uploadId: upload.uploadId, parts, ...taskAuth });
+    const assetId = await exclusive(() => context.convex.action(api.r2.complete, { uploadId: upload.uploadId, parts, ...taskAuth }));
     completed = true; return assetId;
   } finally {
     if (!completed) {
-      try { await context.refreshAuth(); await context.convex.action(api.r2.abort, { uploadId: upload.uploadId, ...taskAuth }); }
+      try { await context.refreshAuth(); await exclusive(() => context.convex.action(api.r2.abort, { uploadId: upload.uploadId, ...taskAuth })); }
       catch { /* Expired upload leases also reclaim incomplete media. */ }
     }
   }

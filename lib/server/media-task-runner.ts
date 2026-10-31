@@ -20,7 +20,7 @@ import { extractSourceAudio } from './extract-audio';
 import { measureAudioWaveform } from './audio-waveform';
 import { measureAudioActivity } from './measure-audio-activity';
 import { mediaSourceCacheIdentity, reuseMediaFile } from './media-file-cache';
-import { uploadMediaFile } from './upload-media-file';
+import { uploadMediaFile, type UploadContext } from './upload-media-file';
 import { preparePreviewVideo,probePreviewVideo,type PreviewVideoMetadata } from './preview-video';
 import { runDistributedRender, runRenderWorker } from './render-worker';
 import { importVideoLink } from './import-video-link';
@@ -36,7 +36,7 @@ import { measureSpeechCleanup } from './speech-cleanup-analysis';
 import { currentSpeechCleanup } from '@/lib/speech-cleanup';
 import { MEDIA_ACTIVITY_LABELS, type MediaTaskActivity, type ReportMediaActivity } from '@/lib/media-analysis/activity';
 
-export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpClient, convexUrl: string, signal: AbortSignal, onProgress: (percent: number) => void, onActivity?: ReportMediaActivity): Promise<MediaTaskResult> {
+export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpClient, convexUrl: string, signal: AbortSignal, onProgress: (percent: number) => void, onActivity?: ReportMediaActivity, exclusive?: UploadContext['exclusive']): Promise<MediaTaskResult> {
   const startedAt = Date.now();
   const logPhase = (phase: string, state: string, phaseStartedAt: number, detail = '') => {
     const now = Date.now();
@@ -64,7 +64,7 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
   };
   const directory = await mkdtemp(join(tmpdir(), 'revline-task-'));
   const credentials = { taskId: task.taskId, leaseToken: task.leaseToken };
-  const uploadContext = { convex, refreshAuth: async () => { signal.throwIfAborted(); } };
+  const uploadContext: UploadContext = { convex, refreshAuth: async () => { signal.throwIfAborted(); }, exclusive };
   try {
     if (task.kind === 'import') {
       if (task.outputAssetId) return {};
