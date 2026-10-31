@@ -29,19 +29,29 @@ const kinds: Kind[] = [
 // Scroll distance each segment holds the pinned section for, in viewport heights.
 const SCROLL_PER_SEGMENT = .7;
 
-/** The film behind a segment: plays from the start, muted and looping, while its tab shows and the section is on screen. */
-function FilmScene({ film, playing }: { film: Film; playing: boolean }) {
+/** The film behind a segment: muted and looping, playing while its tab shows and the section is on screen.
+ *  Opening its tab starts it over; scrolling the section off and back on resumes where it was. */
+function FilmScene({ film, active, onScreen }: { film: Film; active: boolean; onScreen: boolean }) {
   const video = useRef<HTMLVideoElement>(null);
+  useEffect(() => {
+    // Server-rendered HTML can't carry `muted`, so set it before asking to play.
+    if (video.current && active) { video.current.muted = true; video.current.currentTime = 0; }
+  }, [active]);
   useEffect(() => {
     const element = video.current;
     if (!element) return;
-    // Server-rendered HTML can't carry `muted`, so set it before asking to play.
     element.muted = true;
-    if (!playing) { element.pause(); return; }
-    // Each time its tab opens the film starts over; a fresh seek also wakes a video the browser left stalled while it was invisible.
-    element.currentTime = 0;
+    if (!active || !onScreen) { element.pause(); return; }
     void element.play().catch(() => {});
-  }, [playing]);
+    // The browser can leave a video that started while faded out "playing" with its clock stuck; a small seek wakes it.
+    let last = -1;
+    const watch = setInterval(() => {
+      if (element.paused) void element.play().catch(() => {});
+      else if (element.currentTime === last) element.currentTime = last + .01;
+      last = element.currentTime;
+    }, 1000);
+    return () => clearInterval(watch);
+  }, [active, onScreen]);
   return <video ref={video} className="landing-motion-film" src={film.src} poster={film.poster} muted loop playsInline preload="metadata" />;
 }
 
@@ -116,7 +126,7 @@ export function LandingMotion() {
       </div>
       <div id="landing-motion-panel" role="tabpanel" aria-labelledby={`landing-motion-tab-${kind.id}`} className="landing-motion-preview">
         {kinds.map((item, index) => <div key={item.id} className="landing-motion-scene" data-active={index === active || undefined} style={item.film ? undefined : { backgroundImage: `url(/landing/${item.image}.webp)` }} aria-hidden={index !== active}>
-          {item.film ? <FilmScene film={item.film} playing={index === active && onScreen} /> : <div className="landing-motion-shade">{item.overlay}</div>}
+          {item.film ? <FilmScene film={item.film} active={index === active} onScreen={onScreen} /> : <div className="landing-motion-shade">{item.overlay}</div>}
         </div>)}
       </div>
     </div>
