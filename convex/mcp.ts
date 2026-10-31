@@ -52,8 +52,9 @@ export const readRun = internalQuery({ args: { ownerId: v.string(), projectId: v
 }});
 
 /** How long the editor keeps showing an MCP agent as working after its last call. Agents
- * think between calls; per-call status would flicker on and off during one request. */
-export const AGENT_ACTIVE_MS = 60_000;
+ * think between calls, and writing a film part for patchScene or addFilm can take several
+ * minutes, so a short window drops the status mid-request and invites the user to edit over it. */
+export const AGENT_ACTIVE_MS = 10 * 60_000;
 /** Runs on every MCP tool call, so it reads only the small access and run rows, never the project document,
  * and rewrites the marker only once it is half spent. */
 export const touchAgent = internalMutation({ args: { ownerId: v.string(), projectId: v.string(), agentName: v.optional(v.string()) }, returns: v.null(), handler: async (ctx, args) => {
