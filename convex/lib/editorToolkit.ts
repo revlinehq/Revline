@@ -31,6 +31,7 @@ import { summarizeTimeline } from "./inspectTimeline";
 import { EditSession } from "./editSession";
 import { readRunTab } from "./run_ids";
 import type { PacingResult } from "../../lib/media-analysis/pacing";
+import type { SoundResult } from "../../lib/media-analysis/sound";
 import { placeClip, TIMELINE_ROW } from "./revision_log";
 import { READ_TOOL_DESCRIPTIONS, READ_TOOL_INPUTS, readSummary, runRead, type ReadToolName } from "../referenceReads";
 import { BLEND_MODES, ZOOM_LIMITS, isZoomPreset, EFFECT_CATALOG,SOLID_COLOR_LIMITS, OFFERED_TIMED_EFFECT_PRESETS,configureTimedEffectPatch, solidColorPatch } from '../../lib/editor/clip-effects';
@@ -132,9 +133,31 @@ const COMPARE_GOOD = 25, COMPARE_FINISHED = 35, COMPARE_PASSES = 3;
 /** Shown with approved work in inspectTimeline and inspectClip. */
 const APPROVED_RULE = 'Approved clips and sections are signed off by the user. Every editing tool refuses to change them. Edit around them; change one only when the user names it, by passing overrideApproved: true with overrideReason quoting the user.';
 /** Tools that never change clips, so they take no approved-work override. */
-const APPROVAL_FREE_TOOLS = new Set(['planEffects', 'previewRender', 'inspectTimeline', 'inspectClip', 'analyzeMedia', 'inspectReference', 'inspectVideo', 'inspectFrames', 'inspectAssetAnalysis', 'markMusicBeats', 'addMarker', 'moveMarker', 'removeMarker', 'removeMarkers', 'remember', 'recallMemory', 'forget', 'compareReference', 'getFrames', 'askUser', 'askBrandKit', 'measureScreen', 'compareScreen', 'readFrames', 'trackReference', 'measureFrame', 'matchFont', 'traceShape', 'findIcon', 'saveBlueprint', 'listBlueprints', 'getBlueprint', 'readSkill', 'listBrandKits', 'getBrandKit', 'createBrandKit', 'updateBrandKit', 'listVoices', 'analyzeColor', 'addLayer', 'approveClip', 'unapproveClip']);
+const APPROVAL_FREE_TOOLS = new Set(['planEffects', 'previewRender', 'inspectTimeline', 'inspectClip', 'analyzeMedia', 'inspectReference', 'inspectVideo', 'inspectFrames', 'inspectAssetAnalysis', 'markMusicBeats', 'addMarker', 'moveMarker', 'removeMarker', 'removeMarkers', 'remember', 'recallMemory', 'forget', 'compareReference', 'getFrames', 'askUser', 'askBrandKit', 'measureScreen', 'compareScreen', 'readFrames', 'trackReference', 'measureFrame', 'matchFont', 'traceShape', 'findIcon', 'saveBlueprint', 'listBlueprints', 'getBlueprint', 'readSkill', 'listBrandKits', 'getBrandKit', 'createBrandKit', 'updateBrandKit', 'listVoices', 'analyzeColor', 'addLayer', 'approveClip', 'unapproveClip', 'getSound', 'checkSound']);
 
 /** The timeline windows a scene build covers. A film's beats are cuts of one continuous animation, so it is one window. */
+/** A getSound or checkSound result as the agent reads it: lists short enough to scan, one line per second of levels. */
+function soundReport(result: SoundResult, check: boolean) {
+  const s = (time: number) => `${Math.round(time * 1000) / 1000}s`, onsets = result.onsets.slice(0, 80), words = result.words.slice(0, 200);
+  const levels = Array.from({ length: Math.ceil(result.levels.length / 10) }, (_, second) => `${Math.round((result.start + second) * 10) / 10}s: ${result.levels.slice(second * 10, second * 10 + 10).join(' ')} (peak ${Math.max(...result.peaks.slice(second * 10, second * 10 + 10))})`);
+  const report = {
+    range: `${result.start}-${result.end}s`,
+    loudness: `${result.loudness.integrated ?? 'silent'} LUFS integrated, peak ${result.loudness.peak} dBFS`,
+    sounds: result.events.map(event => `${event.name} (${event.kind}, clip ${event.clipId}) ${s(event.start)}-${s(event.end)} gain ${event.gain}`),
+    onsets: onsets.map(onset => `${s(onset.time)} ${onset.level} dB ${onset.sources.join(' + ') || 'unknown'}`), ...(result.onsets.length > onsets.length ? { moreOnsets: result.onsets.length - onsets.length } : {}),
+    levels: { note: 'Momentary loudness in LUFS each 0.1 s, then the loudest sample peak in dBFS that second.', seconds: levels },
+    ...(result.silences.length ? { silences: result.silences.map(item => `${s(item.start)}-${s(item.end)}`) } : {}),
+    ...(words.length ? { words: words.map(word => `${word.text} ${s(word.start)}-${s(word.end)}`).join(', '), ...(result.words.length > words.length ? { moreWords: result.words.length - words.length } : {}) } : {}),
+  };
+  if (!check || !result.check) return report;
+  const flags = result.check.flags.slice(0, 40);
+  return { ...report,
+    visualHits: result.check.visualHits.map(hit => `${s(hit.time)} ${Math.round(hit.size * 100)}%`).join(', '),
+    soundEffectOnsets: result.check.effectOnsets.map(onset => `${s(onset.time)} ${onset.name}`).join(', '),
+    flags: flags.map(flag => ({ at: `${flag.start}-${flag.end}s`, kind: flag.kind, reason: flag.reason })), ...(result.check.flags.length > flags.length ? { moreFlags: result.check.flags.length - flags.length } : {}),
+    next: result.check.flags.length ? 'Fix the flagged moments (move each sound effect onto its visual hit, remove extra ones, add missing ones, keep them off spoken words, lower what clips), then run checkSound on that range again. A flag you keep on purpose needs a reason you can name.' : 'Every sound effect lands on its picture change in this range.' };
+}
+
 function sceneRanges(name: string, input: Record<string, unknown>) {
   const span = (value: unknown) => { const item = value as { start?: unknown; duration?: unknown }; return typeof item?.start === 'number' && typeof item.duration === 'number' ? [{ start: item.start, end: item.start + item.duration }] : []; };
   return name === 'addScenes' && Array.isArray(input.scenes) ? input.scenes.flatMap(span) : span(input);
@@ -443,6 +466,22 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
             next: result.flags.length ? 'Fix the flagged moments in the scene code (longer holds, eased moves, fewer changes per second), then run checkPacing on that range again. A flag you keep on purpose (a deliberate snap or flash) needs a reason you can name.' : 'No pacing problems found in this range.' };
         }
         if (Date.now() > deadline) throw new Error(state.started ? 'The pacing check took too long. Check a shorter range.' : 'The pacing check never started: the media worker stayed busy with other renders. Try again shortly.');
+        await new Promise(resolve => setTimeout(resolve, 2000));
+      }
+    } finally { await ctx.runMutation(internal.mcp.discardFrames, { snapshotId }); }
+  };
+  // Listening decodes the range's mix on the media worker (and for a check also samples its picture), so it may take minutes.
+  const listen = async (input: { start?: number; end?: number; fps?: number }, check: boolean) => {
+    await editSession.wait();
+    const duration = timelineDuration(editSession.timeline), start = input.start ?? 0, end = input.end ?? duration, timelineId = readRunTab(run.runId), name = check ? 'checkSound' : 'getSound';
+    const snapshotId = await ctx.runMutation(internal.mcp.requestFrames, { ownerId: run.ownerId, projectId: run.projectId, ...(editSession.staged ? { runId: run.runId } : {}), ...(timelineId ? { timelineId } : {}), times: [], sound: { start, end, check, ...(input.fps ? { fps: input.fps } : {}) } });
+    try {
+      const deadline = Date.now() + 540_000;
+      for (let state = await ctx.runQuery(internal.mcp.frames, { ownerId: run.ownerId, snapshotId }); ; state = await ctx.runQuery(internal.mcp.frames, { ownerId: run.ownerId, snapshotId })) {
+        if (abortSignal.aborted) throw new Error('Stopped.');
+        if (state.status === 'failed') throw new Error(`${name} could not decode the range: ${state.error ?? 'unknown error'}`);
+        if (state.status === 'completed') return { revision: state.revision as number, ...soundReport(state.sound as SoundResult, check) };
+        if (Date.now() > deadline) throw new Error(state.started ? `${name} took too long. Try a shorter range.` : `${name} never started: the media worker stayed busy with other renders. Try again shortly.`);
         await new Promise(resolve => setTimeout(resolve, 2000));
       }
     } finally { await ctx.runMutation(internal.mcp.discardFrames, { snapshotId }); }
@@ -913,6 +952,8 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       ...output.frames.map(frame => ({ type: 'file' as const, data: { type: 'data' as const, data: frame.image }, mediaType: 'image/jpeg' })),
     ] }; } }),
     checkPacing: createTool({ description: "Check how the motion reads over time, which still frames cannot show: renders the timeline range at 10 samples a second (fps) and measures how much of the frame changes each second, how long each new picture holds before the next change, how zooms and pans speed up and slow down, and where cuts and single-frame flashes land. Returns the change per second and flagged moments with reasons: a visible change (a new headline, a panel filling in) followed by under about 1 s of hold, 3 or more changes within 1 s, changes landing in 3 or more different places within 1.5 s, a zoom or pan that starts or stops at full speed or is cut off mid-move, a camera move too fast to follow, a one-sample jump, a flash, or a still hold of 3 s or more. Run it on the changed range after building or changing motion, alongside getFrames, and fix what it flags. It takes about as long as the range plays, up to a few minutes.", inputSchema: z.object({ start: z.number().min(0).optional().describe('Timeline second to start at (default 0).'), end: z.number().positive().optional().describe('Timeline second to end at (default the end of the timeline).'), fps: z.number().min(2).max(30).optional().describe('Samples a second (default 10).') }).strict(), execute: async (_ctx, input) => checkPacing(input) }),
+    getSound: createTool({ description: "Hear a timeline range, which frames cannot show: decodes the range's mix exactly as export mixes it and reports every clip that sounds there (sound effects, voice, music, footage audio) with its time and gain, the moments sounds start (onsets) with their level and which clip made them, momentary loudness (LUFS) and peak each 0.1 s with integrated loudness, silent stretches, and the spoken words with their timeline times. Use it to check what plays where before or after placing sound, music or narration.", inputSchema: z.object({ start: z.number().min(0).optional().describe('Timeline second to start at (default 0).'), end: z.number().positive().optional().describe('Timeline second to end at (default the end of the timeline).') }).strict(), execute: async (_ctx, input) => listen(input, false) }),
+    checkSound: createTool({ description: "Check that sound lands with the picture: samples the range's frames (30 a second by default) to find each visual hit (a click, a pop, a cut, something appearing) and matches every sound effect's onset to it. Flags a sound effect with nothing happening on screen, a strong visual hit with no sound, a sound more than 2 frames early or late (with the time to move it to), a different number of sounds and visual hits in one moment (two clicks shown, three click sounds), a sound effect landing on a spoken word, and clipping in the mix. Also returns everything getSound does. Run it on the range after adding, moving or retiming sound effects, and fix what it flags. It takes about as long as the range plays, up to a few minutes.", inputSchema: z.object({ start: z.number().min(0).optional().describe('Timeline second to start at (default 0).'), end: z.number().positive().optional().describe('Timeline second to end at (default the end of the timeline).'), fps: z.number().min(10).max(60).optional().describe('Picture samples a second (default 30, up to the timeline frame rate).') }).strict(), execute: async (_ctx, input) => listen(input, true) }),
     askUser: createTool({ description: "Ask the user to choose between 2 to 6 options, shown as a choice card in the chat, instead of listing the options in text: a direction, a style, a length, which of several clips. Then end your turn; their choice arrives as their next message. Ask only what you cannot decide from the request, the project or memory. An option can show what it means: preview.time renders the timeline at that second as a picture in the card (build each look on the timeline first, for example style previews, then point each option at its moment); audio is a sample URL from listVoices, played in the card.", inputSchema: z.object({ question: z.string().trim().min(3).max(200), options: z.array(z.object({ label: z.string().trim().min(1).max(60), description: z.string().trim().max(140).optional(), preview: z.object({ time: z.number().min(0).describe('Timeline second to show as this option\'s picture.') }).strict().optional(), audio: z.string().url().optional().describe('A voice sample URL exactly as listVoices returned it.') }).strict()).min(2).max(6) }).strict(), execute: async (_ctx, input) => {
       if (input.options.some(option => option.audio && !option.audio.startsWith(`${mediaConfig().url}/read?`))) throw new Error('audio must be a sample URL from listVoices.');
       const times = input.options.flatMap(option => option.preview ? [option.preview.time] : []);

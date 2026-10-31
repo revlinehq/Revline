@@ -12,6 +12,8 @@ import { sceneMediaAssetIds } from '../editor/scene-layers';
 import { prepareComposition,writeComposition,reviewWindowTimeline,linkCompositionResources } from './prepare-composition';
 import { runCompositionCapture } from './render-worker';
 import { measurePacing } from '../media-analysis/pacing';
+import { visualHits } from '../media-analysis/sound';
+import { measureTimelineSound } from './sound-check';
 export async function reviewComposition(snapshot:NonNullable<MediaWorkItem['review']>,directory:string,convexUrl:string,signal:AbortSignal,onProgress:(n:number)=>void):Promise<NonNullable<MediaTaskResult['review']>> {
   const key=process.env.GOOGLE_GENERATIVE_AI_API_KEY;if(!key)throw new AnalysisError('Gemini composition review is not configured.',503);
   const edited=reviewWindowTimeline(snapshot.timeline,snapshot.start,snapshot.end),reference=reviewWindowTimeline(snapshot.reference,snapshot.start,snapshot.end);
@@ -47,19 +49,30 @@ export async function captureTimelineFrames(snapshot:NonNullable<MediaWorkItem['
   const sceneMedia=new Set(sceneMediaAssetIds(timeline));
   const assets=snapshot.assets.filter(asset=>sceneMedia.has(asset._id)||timeline.clips.some(clip=>clip.assetId===asset._id)) as (MediaAsset & {size:number})[];
   const {assetUrls,audioSourceOffsets}=await prepareComposition(directory,timeline,assets,convexUrl,signal);
+  // Listening to a range needs only its decoded audio, not a page.
+  if(snapshot.sound&&!snapshot.sound.check){onProgress(40);return {frames:[],sound:await measureTimelineSound(snapshot,directory,assetUrls,audioSourceOffsets,{start:snapshot.sound.start,end:Math.min(snapshot.sound.end,timelineDuration(timeline))},signal)};}
   const path=join(directory,'edited');await mkdir(path);await linkCompositionResources(directory,path,assetUrls);
   await writeComposition(path,timeline,assets,assetUrls,720,timeline.fps as 24|30|60,'./',signal,audioSourceOffsets);
   onProgress(20);
-  if(snapshot.pacing){
-    // One capture session over the whole range at the sampling rate, read back as small grayscale frames.
-    const {fps}=snapshot.pacing,start=Math.round(Math.min(snapshot.pacing.start,last)*timeline.fps)/timeline.fps,end=Math.min(snapshot.pacing.end,last);
+  // One capture session over the whole range at the sampling rate, read back as small grayscale frames.
+  const sampled=async(range:{start:number;end:number},fps:number)=>{
+    const start=Math.round(Math.min(range.start,last)*timeline.fps)/timeline.fps,end=Math.min(range.end,last);
     const times=Array.from({length:Math.floor((end-start)*fps+1e-6)+1},(_,index)=>Math.round((start+index/fps)*timeline.fps)/timeline.fps);
-    if(times.length<3)throw new AnalysisError('Check pacing over at least 0.3 s.',400);
+    if(times.length<3)throw new AnalysisError('Check at least 0.3 s.',400);
     const width=320,size=dimensions(timeline.aspectRatio,720),height=Math.max(2,Math.round(width*size.height/size.width));
     await runCompositionCapture(directory,{...size,fps:timeline.fps,times,start:times[0],end:times[times.length-1]+frame,variants:['edited'],pacing:{width}},signal);
     onProgress(85);
-    const bytes=await readFile(join(directory,'pacing.bin')),frames=times.map((_,index)=>new Uint8Array(bytes.buffer,bytes.byteOffset+index*width*height,width*height));
-    return {frames:[],pacing:measurePacing(frames,width,height,times[0],fps)};
+    const bytes=await readFile(join(directory,'pacing.bin'));
+    return {width,height,start:times[0],frames:times.map((_,index)=>new Uint8Array(bytes.buffer,bytes.byteOffset+index*width*height,width*height))};
+  };
+  if(snapshot.pacing){
+    const {width,height,start,frames}=await sampled(snapshot.pacing,snapshot.pacing.fps);
+    return {frames:[],pacing:measurePacing(frames,width,height,start,snapshot.pacing.fps)};
+  }
+  if(snapshot.sound){
+    const fps=snapshot.sound.fps??Math.min(30,timeline.fps),{start,frames}=await sampled(snapshot.sound,fps);
+    const hits=visualHits(frames,start,fps);
+    return {frames:[],sound:await measureTimelineSound(snapshot,directory,assetUrls,audioSourceOffsets,{start:snapshot.sound.start,end:Math.min(snapshot.sound.end,timelineDuration(timeline))},signal,{fps,hits})};
   }
   const frames:NonNullable<MediaTaskResult['snapshot']>['frames']=[];
   const at=times.map(requested=>Math.round(Math.min(Math.max(0,requested),last)*timeline.fps)/timeline.fps);

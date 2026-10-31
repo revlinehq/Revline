@@ -28,7 +28,7 @@ const round = (value: number, digits = 2) => Math.round(value * 10 ** digits) / 
 const at = (seconds: number) => `${round(seconds, 1)}s`;
 
 /** Share of pixels that differ by more than PIXEL_CHANGE. */
-function changed(a: Uint8Array, b: Uint8Array) {
+export function changed(a: Uint8Array, b: Uint8Array) {
   let count = 0;
   for (let i = 0; i < a.length; i++) if (Math.abs(a[i] - b[i]) > PIXEL_CHANGE) count++;
   return count / a.length;
