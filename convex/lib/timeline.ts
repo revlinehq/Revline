@@ -1,6 +1,7 @@
 import { validateColorFinish, validateTimelineLuts } from '../../lib/editor/color-finish';
 import { validateVisualTransform } from '../../lib/editor/visual-inputs';
 import { historyTimelines, writeProject, type HistoryEntry } from './project_data';
+import type { RevisionNote } from './revision_log';
 import { validateClipEffects } from '../../lib/editor/clip-effects';
 import { playbackRateOf, sourceEndOf } from '../../lib/editor/playback-rate';
 import { transitionSources } from '../../lib/editor/clip-transitions';
@@ -152,7 +153,7 @@ function matchedUndoHistory(saved: string[], preceding: string[], target: string
   return retained.reverse();
 }
 
-export async function commitTimeline(ctx: MutationCtx, project: Doc<"projects">, timeline: Timeline, expectedRevision: number, undoTo?: Timeline, undoHistoryKeys?: string[], undoTargetKey?: string) {
+export async function commitTimeline(ctx: MutationCtx, project: Doc<"projects">, timeline: Timeline, expectedRevision: number, undoTo?: Timeline, undoHistoryKeys?: string[], undoTargetKey?: string, note?: RevisionNote) {
   if ((project.revision ?? 0) !== expectedRevision) throw new ConvexError(TIMELINE_CONFLICT);
   timeline = await validateTimeline(ctx, project, timeline);
   const revision = expectedRevision + 1, current = currentTimeline(project);
@@ -181,6 +182,6 @@ export async function commitTimeline(ctx: MutationCtx, project: Doc<"projects">,
       if (!equalTimelineValue(timeline, target)) history.push({ timeline: await validateTimeline(ctx, project, target) });
     }
     return history;
-  });
+  }, note ?? (undoTo ? { tool: 'Undo' } : undefined));
   return revision;
 }

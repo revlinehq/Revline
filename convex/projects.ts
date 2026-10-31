@@ -217,7 +217,7 @@ export const undo = mutation({ args: { projectId: v.id("projects") }, returns: v
   if (await editingWorkflowActive(ctx, project)) throw new ConvexError(TIMELINE_LOCKED);
   const history = (project.history ?? []).map(normalizeTimeline); const previous = history.pop();
   if (!previous) throw new ConvexError("No edits to undo"); const revision = (project.revision ?? 0) + 1;
-  await writeProject(ctx,project._id, { timeline: previous, aspectRatio: previous.aspectRatio, history, revision, updatedAt: Date.now() }); return revision;
+  await writeProject(ctx,project._id, { timeline: previous, aspectRatio: previous.aspectRatio, history, revision, updatedAt: Date.now() }, undefined, { tool: 'Undo' }); return revision;
 }});
 export const remove = mutation({ args: { projectId: v.id('projects') }, returns: v.null(), handler: async (ctx, args) => {
   const ownerId=await requireOwner(ctx),project=await requireProject(ctx,args.projectId,ownerId);

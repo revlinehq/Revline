@@ -6,6 +6,7 @@ import { HISTORY_KEY_VERSION, timelineHistoryKey } from '../../lib/editor/timeli
 import { normalizeTimeline, type Timeline } from '../../lib/editor/types';
 import { boundedEntries, HISTORY_LIMIT, serializedBytes } from './timeline';
 import { loadSceneCode, storeSceneCode, storedSceneCode } from './scene_code';
+import { recordRevision, type RevisionNote } from './revision_log';
 type Context=MutationCtx|QueryCtx;
 /** A history snapshot; `id` marks a stored row that can be kept as-is. Stored entries come from the
  * history index without their timeline (load it with `historyTimelines` where it is compared). */
@@ -107,7 +108,7 @@ export async function syncProjectCatalog(ctx:MutationCtx,project:Doc<'projects'>
 }
 /** One write seam separates run state/history while preserving the public project shape.
  * `planHistory` derives the next history from the stored one without a second read. */
-export async function writeProject(ctx:MutationCtx,projectId:Id<'projects'>,patch:Partial<Omit<Doc<'projects'>,'_id'|'_creationTime'>>,planHistory?:HistoryPlan) {
+export async function writeProject(ctx:MutationCtx,projectId:Id<'projects'>,patch:Partial<Omit<Doc<'projects'>,'_id'|'_creationTime'>>,planHistory?:HistoryPlan,note?:RevisionNote) {
   const raw=await ctx.db.get(projectId);if(!raw)throw new ConvexError('Project not found');
   const existing=await ctx.db.query('aiRuns').withIndex('by_project',q=>q.eq('projectId',projectId)).unique();
   const previous={...raw,...aiFields(existing??{}),...aiFields(raw)},next={...previous,...patch};
@@ -117,6 +118,9 @@ export async function writeProject(ctx:MutationCtx,projectId:Id<'projects'>,patc
   const plain={...patch,...(patch.timeline?{timeline:await storeSceneCode(ctx,patch.timeline,storedSceneCode(raw.timeline))}:{}),history:undefined,...Object.fromEntries(aiKeys.map(key=>[key,undefined]))};
   // Every write to the project document re-runs each open editor's project queries; skip no-op patches
   // (AI state alone lives on aiRuns) unless legacy fields still need clearing from the document.
+  // A new revision of the same tab is an edit; a tab switch (another tab's timeline arriving) is not.
+  const tab=raw.activeTimelineId??raw.timelineTabs?.[0]?.id??'main';
+  if(plain.timeline&&raw.timeline&&patch.revision!==undefined&&patch.revision!==raw.revision&&(next.activeTimelineId??tab)===tab)await recordRevision(ctx,previous,tab,raw.timeline,plain.timeline,patch.revision,note);
   const changes=Object.entries(plain).filter(([key,value])=>value!==undefined||Object.hasOwn(raw,key));
   if(changes.length)await ctx.db.patch(projectId,Object.fromEntries(changes));
   const access=await ctx.db.query('projectAccess').withIndex('by_project',q=>q.eq('projectId',projectId)).unique();

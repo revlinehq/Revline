@@ -30,6 +30,7 @@ import { summarizeTimeline } from "./inspectTimeline";
 import { EditSession } from "./editSession";
 import { readRunTab } from "./run_ids";
 import type { PacingResult } from "../../lib/media-analysis/pacing";
+import { placeClip, TIMELINE_ROW } from "./revision_log";
 import { READ_TOOL_DESCRIPTIONS, READ_TOOL_INPUTS, readSummary, runRead, type ReadToolName } from "../referenceReads";
 import { BLEND_MODES, ZOOM_LIMITS, isZoomPreset, EFFECT_CATALOG,SOLID_COLOR_LIMITS, OFFERED_TIMED_EFFECT_PRESETS,configureTimedEffectPatch, solidColorPatch } from '../../lib/editor/clip-effects';
 import { PUNCH_LIMITS } from '../../lib/editor/motion-effect-settings';
@@ -168,8 +169,16 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
   const planBindings=new Map<string,string>();
   let editingStarted: Promise<null> | undefined;
   const beginEditing = () => editingStarted ??= ctx.runMutation(internal.assistant.beginEditing, run);
+  // Which tools each saved edit came from, for the revision history: those running now, or for a staged
+  // replacement published at the end, every tool that staged part of it.
+  const runningTools = new Map<string, number>(), stagedTools = new Set<string>();
+  const editingTools = (publication?: boolean) => {
+    const names = publication ? [...stagedTools] : [...runningTools.keys()];
+    if (publication) stagedTools.clear();
+    return names.length ? { tool: names.join(', ').slice(0, 120) } : {};
+  };
   const editSession = new EditSession(project.timeline ?? { clips: [], fps: 30, aspectRatio: project.aspectRatio }, project.revision ?? 0, {
-    apply: (timeline, expectedRevision,publication) => ctx.runMutation(internal.assistant.apply, { ...run, timeline, expectedRevision,...(publication&&options.publication?{publication:options.publication}:{}) }),
+    apply: (timeline, expectedRevision,publication) => ctx.runMutation(internal.assistant.apply, { ...run, timeline, expectedRevision,...(publication&&options.publication?{publication:options.publication}:{}), ...editingTools(publication) }),
     validate: (timeline, expectedRevision) => ctx.runMutation(internal.assistant.previewDraft, { ...run, timeline, expectedRevision }),
     refresh: async () => { return await ctx.runQuery(internal.assistant.getRunTimeline,run); },
     beforeChange: beginEditing,
@@ -472,7 +481,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
     moveClips:createTool({description:"Move an explicitly selected clip group by signed timeline timeDelta and/or layerDelta while retaining relative timing and reciprocal linked audio. Same free-layer collision/boundary behavior as a manual group drag. Preserve all source ranges and other clip controls; zero layerDelta preserves the group's layer positions.",inputSchema:z.object({clipIds:clipIdsInput,timeDelta:z.number().optional(),layerDelta:z.number().int().min(-24).max(24).optional()}).refine(input=>input.timeDelta!==undefined||input.layerDelta!==undefined,{message:'Specify a time or layer delta.'}),execute:async(_ctx,{clipIds,timeDelta,layerDelta})=>checkpoint(t=>{for(const id of clipIds)find(t,id);return moveSelectedClips(t,clipIds,timeDelta??0,layerDelta??0)})}),
     resizeClips:createTool({description:"Trim or extend one requested edge of an explicitly selected group by signed timeline delta seconds, snapped to project frames. Use side left or right; retain animation/audio phase and linked timing. Clamp at source bounds, neighboring clips and one-frame minimum exactly as the editor's edge drag; never invent source handles. Read actual resulting ranges from the saved result.",inputSchema:z.object({clipIds:clipIdsInput,side:z.enum(['left','right']),delta:z.number()}),execute:async(_ctx,{clipIds,side,delta})=>checkpoint(t=>{for(const id of clipIds)find(t,id);return resizeSelectedClips(t,assets.map(asset=>({...asset,url:null})),clipIds,side,delta)})}),
     setBlendMode:createTool({description:"Set the requested supported blend mode on exact footage/text clip IDs, preserving all other controls. Apply both sides of an existing transition atomically when changing their common blend; unequal transition blends are refused. Audio and FX clips cannot receive blend modes.",inputSchema:z.object({clipIds:clipIdsInput,blendMode:z.enum(BLEND_MODES)}),execute:async(_ctx,{clipIds,blendMode})=>checkpoint(t=>setClipBlendMode(t,clipIds,blendMode))}),
-    undoLatestEdit:createTool({description:"Undo the latest actually saved edit first, only before this turn has applied or staged any changes. Uses saved history, never a guessed replacement/source extension. Returns undone:false when there is no saved edit. Refreshes the working timeline; subsequent changes can be saved together as a new undo group. Inspect the restored clips before choosing targets.",inputSchema:z.object({}),execute:async()=>{
+    undoLatestEdit:createTool({description:"Undo the latest actually saved edit first, only before this turn has applied or staged any changes. Uses saved history, never a guessed replacement/source extension. Returns undone:false when there is no saved edit. Refreshes the working timeline; subsequent changes can be saved together as a new undo group. Inspect the restored clips before choosing targets. To go back to a known-good version of one clip (or a whole tab) from further back, use listRevisions and restoreClip (or restoreTimeline), not chains of undo: undo steps also take back later edits you may want to keep.",inputSchema:z.object({}),execute:async()=>{
       if (recovering && !inspected) throw new Error('Inspect the current timeline before continuing the saved edit.');
       let undone=false;
       const snapshot=await editSession.inspect(async()=>{
@@ -480,6 +489,35 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
         const result=await ctx.runMutation(internal.assistant.undoLatestEdit,{...run,expectedRevision:editSession.revision});undone=result.undone;return result;
       });
       return {...snapshot,undone,saved:undone,applied:undone,message:undone?'Latest saved edit undone.':'No saved edits to undo.',summary:summarizeTimeline(snapshot.timeline,assets)};
+    }}),
+    listRevisions:createTool({description:"The project's saved revisions, newest first: revision number, time, who made it (the agent's name, Revline agent, or Editor for the user), which tool, the clips it changed and a short summary. Lists every tab's edits, or one tab's when timelineId is given; clipId narrows to one clip's edits in the open tab (or timelineId's). Use it to find the revision where a clip was last right, then restoreClip. historyStartsAt is the oldest revision that can be restored.",inputSchema:z.object({clipId:z.string().min(1).max(100).optional(),limit:z.number().int().min(1).max(100).optional()}),execute:async(_ctx,{clipId,limit})=>{
+      return ctx.runQuery(internal.assistant.revisionHistory,{...run,limit:limit??20,...(clipId?{clipId}:{})});
+    }}),
+    restoreClip:createTool({description:"Put one clip back exactly as it was at an earlier revision (from listRevisions): scene code, media, text, timing, effects, everything. Every other clip stays as it is now. A clip deleted since then comes back. Saves as a new revision and is undoable. Use this, not chains of undoLatestEdit, to return a clip to a known-good version. keepTiming keeps the clip's current start, duration and layer (for when other clips moved into its old place). A video's linked audio is a separate clip: restore it too if its timing changed.",inputSchema:z.object({clipId:z.string().min(1).max(100),revision:z.number().int().min(0),keepTiming:z.boolean().optional()}),execute:async(_ctx,{clipId,revision,keepTiming})=>{
+      await editSession.wait();
+      const {change,timelineId}=await ctx.runQuery(internal.assistant.revisionChanges,{...run,revision,clipId}) as {timelineId:string;change:{changedAt:number;lastChangedAt:number;before:Clip|null;index?:number}|null};
+      const now=editSession.timeline.clips.find(clip=>clip.id===clipId);
+      if(!change){
+        if(!now)throw new Error(`Clip ${clipId} is not on timeline ${timelineId} now and has no saved history there. Check the ID with listRevisions; for a clip in another tab, pass that timelineId.`);
+        return {applied:false,saved:false,unchanged:true,message:`Clip ${clipId} has not changed since revision ${revision}; it already matches.`};
+      }
+      if(!change.before)throw new Error(`Clip ${clipId} did not exist yet at revision ${revision}: it was added at revision ${change.changedAt}. Pick revision ${change.changedAt} or later from listRevisions${now?', or delete the clip if it should go':''}.`);
+      const target=keepTiming&&now?{...change.before,start:now.start,duration:now.duration,track:now.track}:change.before;
+      try{
+        const result=await checkpoint(t=>placeClip(t,target,change.index));
+        return {...result,restored:{clipId,revision,timelineId,...(now?{}:{readded:true,deletedAt:change.lastChangedAt})},message:result.unchanged?`Clip ${clipId} already matches revision ${revision}.`:now?`Clip ${clipId} is back to revision ${revision}.`:`Clip ${clipId} was deleted at revision ${change.lastChangedAt}; it is back as it was at revision ${revision}.`};
+      }catch(error){
+        const text=error instanceof Error?error.message:String(error);
+        throw new Error(/overlap/i.test(text)?`${text} At revision ${revision} the clip sat where another clip is now. Pass keepTiming:true to keep its current place, or move the other clip first.`:text);
+      }
+    }}),
+    restoreTimeline:createTool({description:"Put the whole open timeline tab back to an earlier revision (from listRevisions): every clip and the tab's settings return to that state, clips added since are removed and deleted ones come back. Other tabs are untouched. Saves as a new revision and is undoable. Only when the user wants the whole tab back; for one scene or clip use restoreClip, which keeps later work on the other clips.",inputSchema:z.object({revision:z.number().int().min(0)}),execute:async(_ctx,{revision})=>{
+      await editSession.wait();
+      const {changes,timelineId}=await ctx.runQuery(internal.assistant.revisionChanges,{...run,revision}) as {timelineId:string;changes:{clipId:string;before:Clip|null;index?:number;rest?:Timeline}[]};
+      if(!changes.length)return {applied:false,saved:false,unchanged:true,message:`Timeline ${timelineId} has not changed since revision ${revision}.`};
+      const ordered=[...changes].sort((a,b)=>(a.index??Infinity)-(b.index??Infinity));
+      const result=await checkpoint(t=>ordered.reduce<Timeline>((next,change)=>change.clipId===TIMELINE_ROW?(change.rest?{...change.rest,clips:next.clips}:next):change.before?placeClip(next,change.before,change.index):{...next,clips:next.clips.filter(clip=>clip.id!==change.clipId)},t));
+      return {...result,restored:{revision,timelineId,clipsChanged:changes.filter(change=>change.clipId!==TIMELINE_ROW).length},message:result.unchanged?`Timeline ${timelineId} already matches revision ${revision}.`:`Timeline ${timelineId} is back to revision ${revision}.`};
     }}),
     unlink:createTool({description:"Unlink an identified video/audio pair while keeping both clips, media, source ranges, timing, volume and settings. After unlink, deleting/trimming/splitting only the video leaves its original audio independent. Select either pair member; preserve other clips. Does not enable the muted separated video's duplicate sound.",inputSchema:z.object({clipId:z.string().min(1).max(100)}),execute:async(_ctx,{clipId})=>{
       let clipIds:string[]=[];
@@ -1249,6 +1287,22 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       const ids = new Set<string>([...(Array.isArray(output?.changedClips) ? output.changedClips : []).map(clip => String((clip as { id?: unknown }).id)), ...(Array.isArray(output?.scenes) ? output.scenes : []).map(scene => String((scene as { clipId?: unknown }).clipId))]);
       const checks = editSession.timeline.clips.filter(clip => clip.kind === 'scene' && ids.has(clip.id)).map(clip => coverage.sceneCheck(clip.start, clip.start + clip.duration)).filter(check => !!check);
       return checks.length ? { ...output, readCheck: checks.map(check => check.readCheck).join(' '), ...readLists(checks) } : output;
+    };
+  }
+  // Track which tools are running or staged an edit, for editingTools above. createTool's execute reads its ctx from `this`.
+  for (const [name, tool] of Object.entries(tools) as [string, { execute?: (...args: never[]) => Promise<unknown> }][]) {
+    const execute = tool.execute;
+    if (!execute) continue;
+    tool.execute = async function (this: unknown, ...args: never[]) {
+      runningTools.set(name, (runningTools.get(name) ?? 0) + 1);
+      try {
+        const output = await execute.apply(this ?? tool, args) as { staged?: unknown } | undefined;
+        if (output?.staged === true) stagedTools.add(name);
+        return output;
+      } finally {
+        const left = (runningTools.get(name) ?? 1) - 1;
+        if (left) runningTools.set(name, left); else runningTools.delete(name);
+      }
     };
   }
   /** What a turn that stops now still owes its recreation: moments the last compare left over the finished line, while passes remain. */

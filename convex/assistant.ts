@@ -38,6 +38,7 @@ import { allowedClaudeModelChoices, ANTHROPIC_EDIT_CHOICES, enforceClaudeModelPo
 import { assistantRecovery } from './lib/assistant_recovery';
 import { MEDIA_ACTIVITY_LABELS } from '../lib/media-analysis/activity';
 import { editingWorkflowActive } from './lib/assistant_workflow';
+import { clipChangeAfter, historyStart, listRevisions, tabChangesAfter } from './lib/revision_log';
 const providerReason = "Configure OPENAI_API_KEY (GPT-6.1 Sol, GPT-6 Astra) or ANTHROPIC_API_KEY (Sonnet 5.5, Opus 5.5) in Convex to edit.";
 function configured() {
   try{assertEditorModelConfigured(resolveClaudeModel());return true;}catch{return false;}
@@ -239,6 +240,30 @@ export const getRunTimeline=internalQuery({args:runArgs,returns:v.object({timeli
   const run=await projectRun(ctx,args.projectId,args.ownerId);if(run.aiRunId!==args.runId||!run.aiRunning)throw new ConvexError('AI run is no longer active');
   const project=(await ctx.db.get(args.projectId))!;return {timeline:await loadSceneCode(ctx,currentTimeline(project)),revision:project.revision??0};
 }});
+/** The tab a run works on: a read of a named tab, or the open one. */
+const runTab=(project:Doc<'projects'>,runId:string)=>(runId.startsWith(READ_ONLY_RUN_PREFIX)?readRunTab(runId):undefined)??activeTabOf(project);
+/** listRevisions: recent saved edits, newest first, for one tab or clip. Read-only runs may call it. */
+export const revisionHistory=internalQuery({args:{...runArgs,timelineId:v.optional(v.string()),clipId:v.optional(v.string()),limit:v.number()},returns:v.any(),handler:async(ctx,args)=>{
+  const run=await projectRun(ctx,args.projectId,args.ownerId);if(!args.runId.startsWith(READ_ONLY_RUN_PREFIX)&&(run.aiRunId!==args.runId||!run.aiRunning))throw new ConvexError('AI run is no longer active');
+  const project=(await ctx.db.get(args.projectId))!,current=project.revision??0;
+  const namedTab=args.runId.startsWith(READ_ONLY_RUN_PREFIX)&&readRunTab(args.runId);
+  const timelineId=args.timelineId??(args.clipId||namedTab?runTab(project,args.runId):undefined);
+  const rows=await listRevisions(ctx,project._id,{timelineId,clipId:args.clipId,limit:args.limit});
+  const tabs=new Map(tabsOf(project).map(tab=>[tab.id,tab.name]));
+  return {currentRevision:current,openTimelineId:activeTabOf(project),historyStartsAt:await historyStart(ctx,project._id,current),revisions:rows.map(row=>({revision:row.revision,at:new Date(row.at).toISOString(),timelineId:row.timelineId,timeline:tabs.get(row.timelineId)??'(deleted tab)',by:row.by,...(row.tool?{tool:row.tool}:{}),summary:row.summary,clipIds:row.clipIds.slice(0,12),...(row.clipIds.length>12?{moreClips:row.clipIds.length-12}:{})}))};
+}});
+/** restoreClip/restoreTimeline: each changed clip's state at a revision on the run's tab (one clip, or all). */
+export const revisionChanges=internalQuery({args:{...runArgs,revision:v.number(),clipId:v.optional(v.string())},returns:v.any(),handler:async(ctx,args)=>{
+  const run=await projectRun(ctx,args.projectId,args.ownerId);if(run.aiRunId!==args.runId||!run.aiRunning)throw new ConvexError('AI run is no longer active');
+  const project=(await ctx.db.get(args.projectId))!,current=project.revision??0,timelineId=runTab(project,args.runId);
+  const start=await historyStart(ctx,project._id,current);
+  if(!Number.isInteger(args.revision)||args.revision>current)throw new ConvexError(`Revision ${args.revision} does not exist yet; the project is at revision ${current}. Call listRevisions for revision numbers.`);
+  if(args.revision<start)throw new ConvexError(start===current?`Revision history starts with this project's next saved edit (it is at revision ${current}), so revision ${args.revision} cannot be restored.`:`Revision history for this project starts at revision ${start}; revision ${args.revision} is older and cannot be restored. Call listRevisions to see what is kept.`);
+  if(args.clipId)return {timelineId,currentRevision:current,change:await clipChangeAfter(ctx,project._id,timelineId,args.clipId,args.revision)};
+  const changes=await tabChangesAfter(ctx,project._id,timelineId,args.revision);
+  if(!changes)throw new ConvexError(`Too many edits since revision ${args.revision} to restore the whole timeline in one call. Restore the clips you need with restoreClip.`);
+  return {timelineId,currentRevision:current,changes};
+}});
 export const getRunAsset=internalQuery({args:{...runArgs,assetId:v.string()},returns:assetDocument,handler:async(ctx,args)=>{
   const run=await projectRun(ctx,args.projectId,args.ownerId);if(run.aiRunId!==args.runId||!run.aiRunning)throw new ConvexError('AI run is no longer active');
   const id=ctx.db.normalizeId('assets',args.assetId),asset=id?await ctx.db.get(id):null;
@@ -262,7 +287,8 @@ export const saveGeneratedSound=internalMutation({args:{...runArgs,r2Key:v.strin
   await recordAssetStorage(ctx,asset);
   return hydrateAsset(ctx,asset);
 }});
-export const apply = internalMutation({ args: { ...runArgs, expectedRevision: v.number(), timeline: timelineValidator,publication:v.optional(v.object({threadId:v.string(),promptMessageId:v.string()})) }, returns: v.number(), handler: async (ctx, args) => {
+export const apply = internalMutation({ args: { ...runArgs, expectedRevision: v.number(), timeline: timelineValidator,publication:v.optional(v.object({threadId:v.string(),promptMessageId:v.string()})),tool:v.optional(v.string()) }, returns: v.number(), handler: async (ctx, args) => {
+  const note=args.tool?{tool:args.tool}:undefined;
   const project = await requireProject(ctx, args.projectId, args.ownerId, false);
   if (project.aiRunId !== args.runId || !project.aiRunning) throw new ConvexError("AI run is no longer active");
   if(args.publication&&project.threadId!==args.publication.threadId)throw new ConvexError('Publication conversation does not match this project.');
@@ -283,9 +309,9 @@ export const apply = internalMutation({ args: { ...runArgs, expectedRevision: v.
     if ((project.revision ?? 0) !== args.expectedRevision) throw new ConvexError(TIMELINE_CONFLICT);
     const timeline = await validateTimeline(ctx, project, args.timeline);
     const revision = args.expectedRevision + 1;
-    await writeProject(ctx,project._id, { timeline, aspectRatio: timeline.aspectRatio, revision, aiCheckpointRevision: revision, updatedAt: Date.now() }); return receipt(revision);
+    await writeProject(ctx,project._id, { timeline, aspectRatio: timeline.aspectRatio, revision, aiCheckpointRevision: revision, updatedAt: Date.now() }, undefined, note); return receipt(revision);
   }
-  const revision = await commitTimeline(ctx, project, args.timeline, args.expectedRevision);
+  const revision = await commitTimeline(ctx, project, args.timeline, args.expectedRevision, undefined, undefined, undefined, note);
   await writeProject(ctx,project._id, { aiUndoRecorded: true, aiCheckpointRevision: revision }); return receipt(revision);
 }});
 /** Undo only stored history before this model turn publishes its own checkpoints. */
@@ -297,7 +323,7 @@ export const undoLatestEdit=internalMutation({args:{...runArgs,expectedRevision:
   const history=(project.history??[]).map(normalizeTimeline),previous=history.pop();
   if(!previous)return {undone:false,revision:project.revision??0,timeline:currentTimeline(project)};
   const timeline=await validateTimeline(ctx,project,previous),revision=args.expectedRevision+1;
-  await writeProject(ctx,project._id,{timeline,aspectRatio:timeline.aspectRatio,history,revision,aiEditing:true,aiCheckpointRevision:undefined,updatedAt:Date.now()});
+  await writeProject(ctx,project._id,{timeline,aspectRatio:timeline.aspectRatio,history,revision,aiEditing:true,aiCheckpointRevision:undefined,updatedAt:Date.now()},undefined,{tool:'undoLatestEdit'});
   return {undone:true,revision,timeline};
 }});
 // Destructive turns validate each private draft without exposing intermediate deletions.

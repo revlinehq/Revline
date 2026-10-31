@@ -252,6 +252,11 @@ export default defineSchema({
   projectTimelineHistories:defineTable({projectId:v.id('projects'),timelineId:v.string(),history:v.array(timelineValidator)}).index('by_project_timeline',['projectId','timelineId']),
   projectTimelines:defineTable({projectId:v.id('projects'),ownerId:v.string(),timelineId:v.string(),timeline:timelineValidator,history:v.optional(v.array(timelineValidator))}).index('by_project_timeline',['projectId','timelineId']),
   timelineRevisions:defineTable({projectId:v.id('projects'),ownerId:v.string(),sequence:v.number(),timeline:timelineValidator,key:v.optional(v.string()),keyVersion:v.optional(v.number())}).index('by_project_sequence',['projectId','sequence']),
+  // Revision history for agents (listRevisions, restoreClip): one light row per saved timeline edit, and each changed
+  // clip's state just before it (null when the edit added it). A clip's state at revision N is the `before` of its
+  // first change after N, or its current state. ':timeline' rows hold the tab's other settings (`rest`) the same way.
+  revisionLog:defineTable({projectId:v.id('projects'),timelineId:v.string(),revision:v.number(),at:v.number(),by:v.string(),tool:v.optional(v.string()),summary:v.string(),clipIds:v.array(v.string())}).index('by_project_revision',['projectId','revision']).index('by_project_tab_revision',['projectId','timelineId','revision']),
+  revisionClips:defineTable({projectId:v.id('projects'),timelineId:v.string(),revision:v.number(),clipId:v.string(),before:v.union(clipValidator,v.null()),index:v.optional(v.number()),rest:v.optional(timelineValidator)}).index('by_clip',['projectId','timelineId','clipId','revision']).index('by_project_tab_revision',['projectId','timelineId','revision']).index('by_project_revision',['projectId','revision']),
   // The stored undo snapshots in order (id, fingerprint, serialized size), so edits and the editor read this row instead of every snapshot.
   // Scene and blueprint code by SHA-256 of its text. Rows never change, so editors load each one once.
   sceneCode:defineTable({hash:v.string(),code:v.string()}).index('by_hash',['hash']),

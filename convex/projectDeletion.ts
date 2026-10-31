@@ -7,6 +7,7 @@ import { cancelMediaTask } from './mediaTasks';
 import { forgetStorageObject } from './lib/storage_accounting';
 import { removeMediaAttachment,removeProjectShares } from './lib/shared_media';
 import { HISTORY_LIMIT } from './lib/timeline';
+import { deleteRevisionBatch } from './lib/revision_log';
 
 /** Hiding the project blocks new work; each transaction reclaims a bounded page. */
 export const batch=internalMutation({args:{projectId:v.id('projects'),ownerId:v.string()},returns:v.null(),handler:async(ctx,args)=>{
@@ -29,6 +30,7 @@ export const batch=internalMutation({args:{projectId:v.id('projects'),ownerId:v.
   for(const table of ['compositionReviews','assistantPlans','assistantQueue'] as const){const rows=await ctx.db.query(table).withIndex('by_project',q=>q.eq('projectId',project._id)).take(20);if(rows.length){for(const row of rows)await ctx.db.delete(row._id);await again();return null;}}
   const uploads=await ctx.db.query('r2Uploads').withIndex('by_projectId_completed',q=>q.eq('projectId',project._id).eq('completed',false)).filter(q=>q.neq(q.field('cleanupScheduled'),true)).take(20);
   if(uploads.length){for(const upload of uploads){await ctx.db.patch(upload._id,{cleanupScheduled:true});await ctx.scheduler.runAfter(0,internal.r2.cleanupLease,{uploadId:upload._id});}await again();return null;}
+  if(await deleteRevisionBatch(ctx,project._id)){await again();return null;}
   const tabs=await ctx.db.query('projectTimelines').withIndex('by_project_timeline',q=>q.eq('projectId',project._id)).take(10);
   if(tabs.length){for(const row of tabs)await ctx.db.delete(row._id);await again();return null;}
   const tabHistories=await ctx.db.query('projectTimelineHistories').withIndex('by_project_timeline',q=>q.eq('projectId',project._id)).take(10);
