@@ -149,10 +149,10 @@ div.landing-hero-buttons>.landing-reveal-content{display:flex;align-items:center
 /* How it works: grainy gradient cards with each visual fully inside, padded on every side. */
 .landing-how{display:flex;flex-direction:column;gap:40px;padding-block:96px}
 .landing-steps{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:24px}
-.landing-step{display:flex;flex-direction:column;gap:20px;min-width:0;padding:32px 28px 28px;border-radius:20px;background:#f3f0ff center/cover no-repeat;overflow:hidden}
+.landing-step{display:flex;flex-direction:column;gap:20px;min-width:0;padding:32px 28px 28px;border-radius:12px;background:#f3f0ff center/cover no-repeat;overflow:hidden}
 .landing-step-title{font:500 24px/1.26 var(--l-head);letter-spacing:-.4px;color:var(--l-fg-2)}
 .landing-step-visual{width:100%}
-.landing-step-visual video{display:block;width:100%;aspect-ratio:16/9;border-radius:8px;background:#121212;object-fit:cover}
+.landing-step-visual video{display:block;width:100%;aspect-ratio:16/9;border-radius:6px;background:#121212;object-fit:cover}
 
 /* More from Revline: nested cards, each stage a small mock of its effect. */
 .landing-features{display:flex;flex-direction:column;gap:40px;padding-block:96px}
@@ -380,7 +380,7 @@ div.landing-hero-buttons>.landing-reveal-content{display:flex;align-items:center
   .landing-use-cases,.landing-how,.landing-features,.landing-pricing,.landing-faq,.landing-mcp{padding-block:64px}
   .landing-use-cases,.landing-how,.landing-features{gap:32px}
   .landing-steps,.landing-feature-grid{grid-template-columns:minmax(0,1fr)}
-  .landing-step{gap:16px;padding:22px 18px 18px;border-radius:16px}
+  .landing-step{gap:16px;padding:22px 18px 18px;border-radius:10px}
   .landing-motion-heading h2{font-size:36px;letter-spacing:-1px}
   .landing-motion-pin{gap:20px;padding-block:80px 20px}
   .landing-segments{align-self:stretch}
