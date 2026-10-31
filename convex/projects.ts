@@ -149,15 +149,23 @@ export const sceneCode=query({args:{projectId:v.string(),hash:v.string()},return
   await projectIdentity(ctx,projectId,await requireOwner(ctx));
   return /^[a-f0-9]{64}$/.test(args.hash)?await sceneCodeText(ctx,args.hash):null;
 }});
-export const projectListItem = v.object({ _id: v.id('projects'), title: v.string(), createdAt: v.number(), updatedAt: v.number(), aspectRatio, clipCount: v.number(), aiRunning: v.boolean(), coverUrl: v.union(v.string(), v.null()), coverKind: v.union(v.literal("video"), v.literal("image"), v.null()) });
+export const projectListItem = v.object({ _id: v.id('projects'), title: v.string(), createdAt: v.number(), updatedAt: v.number(), aspectRatio, clipCount: v.number(), aiRunning: v.boolean(), coverUrl: v.union(v.string(), v.null()), coverKind: v.union(v.literal("video"), v.literal("image"), v.null()), agent: v.union(v.object({ name: v.string(), until: v.number(), running: v.boolean() }), v.null()) });
+/** The MCP app working in a project, if any; the client compares `until` against its own clock. */
+async function projectAgent(ctx: QueryCtx, projectId: Id<"projects">, project?: { aiAgentName?: string; aiAgentActiveUntil?: number; aiRunning?: boolean; aiRunId?: string }) {
+  const run = await ctx.db.query("aiRuns").withIndex("by_project", q => q.eq("projectId", projectId)).unique();
+  const state = run ?? project;
+  if (!state?.aiAgentName) return null;
+  const running = !!state.aiRunning && !!state.aiRunId?.startsWith("mcp-");
+  return { name: state.aiAgentName.replace(/\s*\([^)]*\)\s*$/, "") || state.aiAgentName, until: state.aiAgentActiveUntil ?? 0, running };
+}
 export async function listProjectsFor(ctx: QueryCtx, ownerId: string, args: { limit?: number }): Promise<Infer<typeof projectListItem>[]> {
   const migration=await ctx.db.query('projectDataMigration').withIndex('by_key',q=>q.eq('key','project-data-v1')).unique();
-  if(migration?.completed){const rows=await ctx.db.query('projectCatalog').withIndex('by_owner_updated',q=>q.eq('ownerId',ownerId)).filter(q=>q.neq(q.field('deleting'),true)).order('desc').take(listLimit(args.limit));return Promise.all(rows.map(async row=>({_id:row.projectId,title:row.title,createdAt:row.createdAt,updatedAt:row.updatedAt,aspectRatio:row.aspectRatio,clipCount:row.clipCount,aiRunning:row.aiRunning,coverUrl:await mediaUrl(ctx,{storageId:row.coverStorageId,r2Key:row.coverR2Key}),coverKind:row.coverStorageId||row.coverR2Key?'image' as const:null})));}
+  if(migration?.completed){const rows=await ctx.db.query('projectCatalog').withIndex('by_owner_updated',q=>q.eq('ownerId',ownerId)).filter(q=>q.neq(q.field('deleting'),true)).order('desc').take(listLimit(args.limit));return Promise.all(rows.map(async row=>({_id:row.projectId,title:row.title,createdAt:row.createdAt,updatedAt:row.updatedAt,aspectRatio:row.aspectRatio,clipCount:row.clipCount,aiRunning:row.aiRunning,coverUrl:await mediaUrl(ctx,{storageId:row.coverStorageId,r2Key:row.coverR2Key}),coverKind:row.coverKind==='video'&&row.coverR2Key?'video' as const:row.coverStorageId||row.coverR2Key?'image' as const:null,agent:await projectAgent(ctx,row.projectId)})));}
   const projects = await ctx.db.query("projects").withIndex("by_ownerId_updatedAt", q => q.eq("ownerId", ownerId)).filter(q=>q.neq(q.field("deleting"),true)).order("desc").take(listLimit(args.limit));
   return await Promise.all(projects.map(async project => {
     const media = await ctx.db.query("assets").withIndex("by_ownerId_projectId", q => q.eq("ownerId", ownerId).eq("projectId", project._id)).order("desc").take(5);
     const cover = media.find(asset => asset.kind === "video" || asset.kind === "image");
-    return { _id: project._id, title: project.title, createdAt: project.createdAt, updatedAt: project.updatedAt, aspectRatio: project.aspectRatio, clipCount: project.timeline?.clips.length ?? 0, aiRunning: !!project.aiRunning, coverUrl: cover ? await mediaUrl(ctx, cover) : null, coverKind: cover ? cover.kind as "video" | "image" : null };
+    return { _id: project._id, title: project.title, createdAt: project.createdAt, updatedAt: project.updatedAt, aspectRatio: project.aspectRatio, clipCount: project.timeline?.clips.length ?? 0, aiRunning: !!project.aiRunning, coverUrl: cover ? await mediaUrl(ctx, cover) : null, coverKind: cover ? cover.kind as "video" | "image" : null, agent: await projectAgent(ctx, project._id, project) };
   }));
 }
 export const list = query({ args: { limit: v.optional(v.number()) }, returns: v.array(projectListItem), handler: async (ctx, args) => listProjectsFor(ctx, await requireOwner(ctx), args) });

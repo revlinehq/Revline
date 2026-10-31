@@ -128,11 +128,20 @@ export async function writeProject(ctx:MutationCtx,projectId:Id<'projects'>,patc
 export async function createProject(ctx:MutationCtx,fields:Omit<Doc<'projects'>,'_id'|'_creationTime'>) {
   const id=await ctx.db.insert('projects',fields);await writeProject(ctx,id,{});return id;
 }
+/** A cover from one asset: its thumbnail, the image itself, or a video's playable preview (shown at its first frame). */
+export function projectCoverOf(asset:Doc<'assets'>):{coverKind:'video'|'image';coverStorageId?:Id<'_storage'>;coverR2Key?:string}|null {
+  if(asset.thumbnailStorageId)return {coverKind:'image',coverStorageId:asset.thumbnailStorageId,coverR2Key:undefined};
+  if(asset.kind==='image')return asset.storageId||asset.r2Key?{coverKind:'image',coverStorageId:asset.storageId,coverR2Key:asset.r2Key}:null;
+  if(asset.kind==='video'){const key=asset.previewR2Key??asset.r2Key;return key?{coverKind:'video',coverStorageId:undefined,coverR2Key:key}:null;}
+  return null;
+}
 export async function updateProjectCover(ctx:MutationCtx,asset:Doc<'assets'>) {
   if(asset.kind==='audio')return;
   const project=await readProject(ctx,asset.projectId);if(!project||project.deleting)return;
   const existing=await ctx.db.query('projectCatalog').withIndex('by_project',q=>q.eq('projectId',asset.projectId)).unique();
   if(!existing)await syncProjectCatalog(ctx,project);
   const catalog=existing??(await ctx.db.query('projectCatalog').withIndex('by_project',q=>q.eq('projectId',asset.projectId)).unique())!;
-  await ctx.db.patch(catalog._id,{coverKind:asset.kind,coverStorageId:asset.thumbnailStorageId??(asset.kind==='image'?asset.storageId:undefined),coverR2Key:asset.kind==='image'?asset.r2Key:undefined});
+  const cover=projectCoverOf(asset);
+  // Media without a usable picture (a linked video before its thumbnail) keeps the current cover.
+  if(cover)await ctx.db.patch(catalog._id,cover);
 }

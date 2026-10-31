@@ -3,7 +3,7 @@ import { NEW_PROJECT_PATH } from '@/lib/workspace-routes';
 import { userError } from '@/lib/user-error';
 
 import { NEW_WORKSPACE_LABEL } from '@/lib/editor/workspace-labels';
-import { useRef, useState, type ReactNode, type MouseEvent } from 'react';
+import { useEffect, useRef, useState, type ReactNode, type MouseEvent } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useClerk, useUser } from '@clerk/nextjs';
@@ -28,6 +28,8 @@ import './workspace-pages.css';
 export type WorkspaceChat = {
   id: Id<'projects'> | 'demo'; title: string; updatedAt: number; clipCount: number;
   coverUrl: string | null; coverKind: 'video' | 'image' | null; running: boolean;
+  /** The MCP app editing this chat; it counts as working while `running` or until `until`. */
+  agent: { name: string; until: number; running: boolean } | null;
 };
 
 export function useWorkspaceChats(demo = false, enabled = true, limit = 100) {
@@ -38,7 +40,7 @@ export function useWorkspaceChats(demo = false, enabled = true, limit = 100) {
   const chats: WorkspaceChat[] = connected ? (projects ?? []).map(project => ({
     id: project._id, title: project.title, updatedAt: project.updatedAt,
     clipCount: project.clipCount, coverUrl: project.coverUrl,
-    coverKind: project.coverKind, running: !!project.aiRunning,
+    coverKind: project.coverKind, running: !!project.aiRunning, agent: project.agent,
   })) : [];
   return { chats, loading: enabled && (!isLoaded || (!demo && !!isSignedIn && (isLoading || (isAuthenticated && projects === undefined)))), connected };
 }
@@ -80,7 +82,10 @@ export function WorkspaceNav({ title = NEW_WORKSPACE_LABEL, editorHref, active =
   const router = useRouter();
   const startingWorkspace = useRef(false);
   const [historyOpen, setHistoryOpen] = useState(false);
-  const { chats, loading } = useWorkspaceChats(demo, historyOpen, 4);
+  const { chats, loading } = useWorkspaceChats(demo, historyOpen, 6);
+  // Ticks while the menu is open so an agent's working state ends on time.
+  const [clock, setClock] = useState(() => Date.now());
+  useEffect(() => { if (!historyOpen) return; setClock(Date.now()); const timer = setInterval(() => setClock(Date.now()), 5000); return () => clearInterval(timer); }, [historyOpen]);
   const { user, isSignedIn, isLoaded } = useUser();
   const clerk = useClerk();
   const [accountError, setAccountError] = useState('');
@@ -133,7 +138,7 @@ export function WorkspaceNav({ title = NEW_WORKSPACE_LABEL, editorHref, active =
         {copyError && <p className="workspace-inline-error" role="alert">{copyError}</p>}
         <DropdownMenuSeparator className="workspace-menu-divider" />
         <DropdownMenuLabel className="workspace-menu-label">Recent chats</DropdownMenuLabel>
-        {loading ? <div className="workspace-menu-empty"><LoaderCircle size={14} className="animate-spin" />Loading chats…</div> : chats.length ? chats.slice(0, 4).map(chat => <DropdownMenuItem key={chat.id} asChild className="workspace-menu-chat"><Link href={`/editor/${chat.id}`}><ProjectCover url={chat.coverUrl} kind={chat.coverKind}/><span className="workspace-menu-chat-details"><strong>{chat.title}</strong><small>{chatRecency(chat.updatedAt)}</small></span>{pathname === `/editor/${chat.id}` && <Check size={14} />}</Link></DropdownMenuItem>) : <div className="workspace-menu-empty">Your chats will appear here.</div>}
+        {loading ? <div className="workspace-menu-empty"><LoaderCircle size={14} className="animate-spin" />Loading chats…</div> : chats.length ? chats.slice(0, 6).map(chat => { const agent = chat.agent && (chat.agent.running || chat.agent.until > clock) ? chat.agent : null; return <DropdownMenuItem key={chat.id} asChild className="workspace-menu-chat"><Link href={`/editor/${chat.id}`}><ProjectCover url={chat.coverUrl} kind={chat.coverKind}/><span className="workspace-menu-chat-details"><strong className={chat.running || agent ? 'shimmer' : undefined}>{chat.title}</strong><small>{chatRecency(chat.updatedAt)}</small></span>{pathname === `/editor/${chat.id}` && <Check size={14} />}</Link></DropdownMenuItem>; }) : <div className="workspace-menu-empty">Your chats will appear here.</div>}
         <DropdownMenuSeparator className="workspace-menu-divider" />
         <DropdownMenuItem asChild className="workspace-menu-item"><Link href="/chats" aria-current={active === 'chats' ? 'page' : undefined}><History size={15} />See all chats</Link></DropdownMenuItem>
       </DropdownMenuContent>
