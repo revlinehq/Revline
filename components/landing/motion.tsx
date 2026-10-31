@@ -16,8 +16,10 @@ const kinds: Kind[] = [
     film: { src: '/landing/revline-launch.mp4', poster: '/landing/revline-launch-poster.webp' },
   },
   {
+    // "How servers work", an explainer made in Revline; its graphics are in the film.
     id: 'explainers', label: 'Explainers', image: 'code-screen',
-    overlay: <p className="landing-motion-title">Complex ideas,<br /><b>made simple.</b></p>,
+    overlay: null,
+    film: { src: '/landing/how-servers-work.mp4', poster: '/landing/how-servers-work-poster.webp' },
   },
   {
     // A Jensen Huang interview moment with blueprint motion graphics, made in Revline; its graphics are in the film.
