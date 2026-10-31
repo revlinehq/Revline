@@ -533,6 +533,8 @@ const RESULT_HANDLERS: Record<Doc<'mediaTasks'>['kind'], ResultHandler> = {
     if (snapshot.pacing) { if (!result.snapshot.pacing) throw new ConvexError('The pacing check completed without measurements.'); await ctx.db.patch(snapshot._id, { status: 'completed', pacingResult: result.snapshot.pacing }); return; }
     if (frames.length !== snapshot.times.length || frames.some((frame, index) => !Number.isFinite(frame.time) || Math.abs(frame.time - snapshot.times[index]) > 1 || !/^[A-Za-z0-9+/]+=*$/.test(frame.image)) || frames.reduce((sum, frame) => sum + frame.image.length, 0) > 900_000) throw new ConvexError('Rendered frames do not match the request.');
     await ctx.db.patch(snapshot._id, { status: 'completed', frames });
+    // A motion clip's current frames are in: its older versions can go.
+    if (snapshot.clipId && snapshot.key) for (const old of await ctx.db.query('frameSnapshots').withIndex('by_project_clip', q => q.eq('projectId', snapshot.projectId).eq('clipId', snapshot.clipId)).take(6)) if (old._id !== snapshot._id && old.status !== 'queued') await ctx.db.delete(old._id);
     // A share card goes onto its share; the request itself is not kept.
     if (snapshot.shareId && frames[0]) { const share = await ctx.db.get(snapshot.shareId); if (share?.published) await ctx.db.patch(share._id, { cardImage: frames[0].image, cardUpdatedAt: Date.now() }); await ctx.db.delete(snapshot._id); }
   },

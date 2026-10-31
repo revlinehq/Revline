@@ -8,7 +8,7 @@ import { createTimelineSaveQueue } from '@/lib/editor/timeline-sync';
 import { EditorStateProvider } from './editor-state';
 import { useSceneCode } from './use-scene-code';
 import { useConvex, useConvexAuth, useMutation, useQueries, useQuery, useAction } from 'convex/react';
-import { useSceneRendering, useSceneThumbs } from '@/lib/editor/scene-thumbs-query';
+import { useClipSceneThumbs, useSceneThumbs } from '@/lib/editor/scene-thumbs-query';
 import { openingFootage } from '@/lib/editor/footage-opening';
 import { WorkspaceNav } from '@/components/workspace/workspace-nav';
 import { FootagePreparation } from './footage-preparation';
@@ -54,18 +54,16 @@ export function ConnectedEditor({projectId}: {projectId:string}) {
   if(loaded&&loaded!==shown)setShown(loaded);
   const current=loaded??(shown?._id===projectId?shown:null);
   if(!current)return editorLoading(projectId);
-  return <EditorAccessGate loading={editorLoading(projectId)}><ProjectEditor key={projectId} project={current}/></EditorAccessGate>;
+  return <EditorAccessGate loading={editorLoading(projectId)}><ProjectEditor key={projectId} project={current} storedTimeline={project?._id===current._id?project.timeline:undefined}/></EditorAccessGate>;
 }
-function ProjectEditor({project}: {project:Doc<'projects'>}) {
+function ProjectEditor({project,storedTimeline}: {project:Doc<'projects'>;storedTimeline?:Timeline}) {
   // Real frames for motion clips on the timeline, rendered in the background after each saved change.
-  const sceneThumbs=useSceneThumbs('forProject',{projectId:project._id});
-  const sceneRendering=useSceneRendering(project._id);
+  const {thumbs:sceneThumbs,rendering:sceneRendering,missing}=useClipSceneThumbs(project._id,storedTimeline);
   const ensureSceneThumbs=useMutation(api.sceneThumbs.ensure);
-  // Two clips render at a time; each finished batch asks for the next until every motion clip has frames.
-  const thumbCount=Object.keys(sceneThumbs??{}).length;
-  // Requests are skipped while the render queue is busy, so keep asking every 20 s until every motion clip has frames.
-  const missingThumbs=(project.timeline?.clips??[]).filter(clip=>clip.kind==='scene'&&!sceneThumbs?.[clip.id]).length;
-  useEffect(()=>{const ask=()=>{void ensureSceneThumbs({projectId:project._id}).catch(()=>{});};const timer=setTimeout(ask,2500);const retry=missingThumbs?setInterval(ask,20_000):undefined;return()=>{clearTimeout(timer);if(retry)clearInterval(retry);};},[project.revision,project._id,ensureSceneThumbs,thumbCount,missingThumbs]);
+  // Ask only for clips with no current frames and no render under way; two start at a time, and requests are
+  // skipped while the render queue is busy, so keep asking every 20 s until each has frames.
+  const missingKey=missing.join(',');
+  useEffect(()=>{if(!missingKey)return;const ask=()=>{void ensureSceneThumbs({projectId:project._id,clipIds:missingKey.split(',')}).catch(()=>{});};const timer=setTimeout(ask,2500);const retry=setInterval(ask,20_000);return()=>{clearTimeout(timer);clearInterval(retry);};},[missingKey,project._id,ensureSceneThumbs]);
   const [shareOpen,setShareOpen]=useState(false);
   const projectId=project._id;const convex=useConvex();const media=useQuery(api.assets.list,{projectId,limit:200});const plan=useQuery(api.billing.status,{})?.plan;const ai=useQuery(api.assistant.status,{projectId});
   const storedPreview=useQuery(api.assistant.livePreview,ai?.running?{projectId,sceneCode:'refs'}:'skip');
