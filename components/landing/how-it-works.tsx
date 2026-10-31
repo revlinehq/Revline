@@ -5,7 +5,7 @@ import { LandingHeading, LandingSection } from './ui';
 // Films are looping exports of the "Landing: How it works steps" Revline project, one timeline tab per step.
 const steps: { title: string; film?: string }[] = [
   { title: 'Drop in your raw footage', film: 'how-drop' },
-  { title: 'Ask what you want' },
+  { title: 'Ask what you want', film: 'how-ask' },
   { title: 'Tweak anything', film: 'how-tweak' },
   { title: 'Export or share', film: 'how-export' },
 ];
