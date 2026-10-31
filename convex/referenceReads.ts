@@ -6,7 +6,8 @@ import { internal } from './_generated/api';
 import { requireProject } from './lib/auth';
 import { requireEditorAccess } from './lib/billing_access';
 import { requireMediaTaskCapacity } from './lib/account_limits';
-import { enqueueMediaTask, FONT_PROCESSOR_VERSION, REFERENCE_SOUND_PROCESSOR_VERSION, TRACE_PROCESSOR_VERSION } from './mediaTasks';
+import { enqueueMediaTask, FONT_PROCESSOR_VERSION, MOTION_PROCESSOR_VERSION, REFERENCE_SOUND_PROCESSOR_VERSION, TRACE_PROCESSOR_VERSION } from './mediaTasks';
+import type { MotionMap } from '../lib/inspo-motion/motion-map';
 import { blueprintLineValidator, blueprintPointValidator, referenceBox, referenceReadResult } from './schema';
 
 // Reading a source video for an agent: the worker cuts frames into one labeled sheet image the model looks at,
@@ -33,7 +34,7 @@ export const READ_TOOL_DESCRIPTIONS = {
 export type ReadToolName = keyof typeof READ_TOOL_INPUTS;
 type ReadResult = Infer<typeof referenceReadResult>;
 
-export const request = internalMutation({ args: { ownerId: v.string(), projectId: v.id('projects'), assetId: v.string(), mode: v.union(v.literal('sheet'), v.literal('track'), v.literal('measure'), v.literal('compare'), v.literal('trace'), v.literal('font'), v.literal('sounds')), color: v.optional(v.string()), tolerance: v.optional(v.number()), text: v.optional(v.string()), categories: v.optional(v.array(v.string())), start: v.number(), end: v.number(), times: v.optional(v.array(v.number())), snapshotId: v.optional(v.id('frameSnapshots')), count: v.optional(v.number()), fps: v.optional(v.number()), momentsOnly: v.optional(v.boolean()), crop: v.optional(referenceBox), box: v.optional(referenceBox), points: v.optional(v.array(blueprintPointValidator)), lines: v.optional(v.array(blueprintLineValidator)) }, returns: v.id('referenceReads'), handler: async (ctx, { ownerId, projectId, assetId: rawAssetId, ...args }) => {
+export const request = internalMutation({ args: { ownerId: v.string(), projectId: v.id('projects'), assetId: v.string(), mode: v.union(v.literal('sheet'), v.literal('track'), v.literal('measure'), v.literal('compare'), v.literal('trace'), v.literal('font'), v.literal('sounds'), v.literal('motion')), color: v.optional(v.string()), tolerance: v.optional(v.number()), text: v.optional(v.string()), categories: v.optional(v.array(v.string())), start: v.number(), end: v.number(), times: v.optional(v.array(v.number())), snapshotId: v.optional(v.id('frameSnapshots')), count: v.optional(v.number()), fps: v.optional(v.number()), momentsOnly: v.optional(v.boolean()), crop: v.optional(referenceBox), box: v.optional(referenceBox), points: v.optional(v.array(blueprintPointValidator)), lines: v.optional(v.array(blueprintLineValidator)) }, returns: v.id('referenceReads'), handler: async (ctx, { ownerId, projectId, assetId: rawAssetId, ...args }) => {
   await requireEditorAccess(ctx, ownerId);
   const project = await requireProject(ctx, projectId, ownerId, false);
   const assetId = ctx.db.normalizeId('assets', rawAssetId), asset = assetId ? await ctx.db.get(assetId) : null;
@@ -43,7 +44,7 @@ export const request = internalMutation({ args: { ownerId: v.string(), projectId
   if (args.start > duration || args.end < args.start) throw new ConvexError(`Choose a window inside the video (0 to ${Math.round(duration * 100) / 100} source seconds).`);
   await requireMediaTaskCapacity(ctx, ownerId, 1);
   const readId = await ctx.db.insert('referenceReads', { projectId: project._id, ownerId, assetId: asset._id, ...args, status: 'queued', createdAt: Date.now() });
-  const taskId = await enqueueMediaTask(ctx, { ownerId, projectId: project._id, kind: 'read', assetId: asset._id, readId, ...(args.mode === 'trace' ? { requiredProcessorVersion: TRACE_PROCESSOR_VERSION } : args.mode === 'font' ? { requiredProcessorVersion: FONT_PROCESSOR_VERSION } : args.mode === 'sounds' ? { requiredProcessorVersion: REFERENCE_SOUND_PROCESSOR_VERSION } : {}) });
+  const taskId = await enqueueMediaTask(ctx, { ownerId, projectId: project._id, kind: 'read', assetId: asset._id, readId, ...(args.mode === 'trace' ? { requiredProcessorVersion: TRACE_PROCESSOR_VERSION } : args.mode === 'font' ? { requiredProcessorVersion: FONT_PROCESSOR_VERSION } : args.mode === 'sounds' ? { requiredProcessorVersion: REFERENCE_SOUND_PROCESSOR_VERSION } : args.mode === 'motion' ? { requiredProcessorVersion: MOTION_PROCESSOR_VERSION } : {}) });
   await ctx.db.patch(readId, { taskId });
   // Readings are returned once; anything unread is removed shortly after.
   await ctx.scheduler.runAfter(10 * 60_000, internal.referenceReads.discard, { readId });
@@ -102,6 +103,22 @@ export async function runRead(ctx: ActionCtx, ownerId: string, projectId: Id<'pr
     }
     // Say which wait it was: a read that never started was stuck behind other media work, not too big.
     throw new Error(started ? 'Reading frames took too long. Try a shorter window or fewer frames.' : 'This read never started: the media worker stayed busy with other jobs for 9 minutes. Try again shortly; the window and frame count were not the problem.');
+  } finally { await ctx.runMutation(internal.referenceReads.discard, { readId }); }
+}
+
+/** How a reference video moves over SOURCE start to end (motionMap), read on the media worker. */
+export async function runMotionRead(ctx: ActionCtx, ownerId: string, projectId: Id<'projects'>, assetId: string, start: number, end: number, signal?: AbortSignal): Promise<MotionMap> {
+  const readId = await ctx.runMutation(internal.referenceReads.request, { ownerId, projectId, assetId, mode: 'motion', start, end });
+  const deadline = Date.now() + 300_000;
+  try {
+    while (Date.now() < deadline) {
+      if (signal?.aborted) throw new Error('Stopped.');
+      const state = await ctx.runMutation(internal.referenceReads.take, { ownerId, readId });
+      if (state.status === 'failed') throw new Error(`The motion map could not read the reference: ${state.error ?? 'unknown error'}`);
+      if (state.status === 'completed') return (state.result as ReadResult).motion as MotionMap;
+      await new Promise(resolve => setTimeout(resolve, 1500));
+    }
+    throw new Error('Reading the motion took too long. Map a shorter window.');
   } finally { await ctx.runMutation(internal.referenceReads.discard, { readId }); }
 }
 

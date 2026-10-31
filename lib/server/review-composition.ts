@@ -13,6 +13,7 @@ import { prepareComposition,writeComposition,reviewWindowTimeline,linkCompositio
 import { runCompositionCapture } from './render-worker';
 import { measurePacing } from '../media-analysis/pacing';
 import { visualHits } from '../media-analysis/sound';
+import { mapMotion } from '../inspo-motion/motion-map';
 import { measureTimelineSound } from './sound-check';
 export async function reviewComposition(snapshot:NonNullable<MediaWorkItem['review']>,directory:string,convexUrl:string,signal:AbortSignal,onProgress:(n:number)=>void):Promise<NonNullable<MediaTaskResult['review']>> {
   const key=process.env.GOOGLE_GENERATIVE_AI_API_KEY;if(!key)throw new AnalysisError('Gemini composition review is not configured.',503);
@@ -66,6 +67,10 @@ export async function captureTimelineFrames(snapshot:NonNullable<MediaWorkItem['
     const bytes=await readFile(join(directory,'pacing.bin'));
     return {width,height,start:times[0],frames:times.map((_,index)=>new Uint8Array(bytes.buffer,bytes.byteOffset+index*width*height,width*height))};
   };
+  if(snapshot.motion){
+    const fps=Math.min(30,timeline.fps),{width,height,start,frames}=await sampled(snapshot.motion,fps);
+    return {frames:[],motion:mapMotion(frames,width,height,start,fps)};
+  }
   if(snapshot.pacing){
     const {width,height,start,frames}=await sampled(snapshot.pacing,snapshot.pacing.fps);
     return {frames:[],pacing:measurePacing(frames,width,height,start,snapshot.pacing.fps)};

@@ -13,11 +13,21 @@ const sine = (t: number) => 1 - Math.cos(t * Math.PI / 2);
 const circ = (t: number) => 1 - Math.sqrt(1 - t * t);
 const back = (s: number) => (t: number) => t * t * ((s + 1) * t - s);
 /** GSAP's eases by their GSAP names (power1 is quad, power4 is quint). */
-const EASES: Record<string, (t: number) => number> = { none: t => t };
+export const EASES: Record<string, (t: number) => number> = { none: t => t };
 for (const [name, f] of [['power1', power(2)], ['power2', power(3)], ['power3', power(4)], ['power4', power(5)], ['expo', expo], ['sine', sine], ['circ', circ]] as const) {
   EASES[`${name}.in`] = f; EASES[`${name}.out`] = out(f); EASES[`${name}.inOut`] = inOut(f);
 }
 EASES['back.out(1.7)'] = out(back(1.70158)); EASES['back.in(1.7)'] = back(1.70158); EASES['back.inOut(1.7)'] = inOut(back(1.70158 * 1.525));
+
+/** The GSAP ease whose curve is closest to measured progress p at each share u of a move's time, and its RMS error. */
+export function bestEase(points: { u: number; p: number }[]) {
+  let best = { name: 'none', error: Infinity };
+  for (const [name, ease] of Object.entries(EASES)) {
+    const error = Math.sqrt(points.reduce((sum, point) => sum + (ease(point.u) - point.p) ** 2, 0) / points.length);
+    if (error < best.error) best = { name, error };
+  }
+  return best;
+}
 
 const round = (value: number, places = 3) => Math.round(value * 10 ** places) / 10 ** places;
 const pose = (sample: TrackSample): Pose => ({ x: Math.round(sample.x + sample.w / 2), y: Math.round(sample.y + sample.h / 2), scale: round(sample.scale), rotation: round(sample.rotation, 1) });
@@ -43,11 +53,7 @@ export function fitMotion(track: TrackSample[], size: { width: number; height: n
     if (total < .01 || duration <= 0) continue;
     // Progress along the move at each sample, measured as the share of the straight change from start to end.
     const points = samples.map(sample => ({ u: (sample.time - from.time) / duration, p: Math.max(-.2, Math.min(1.2, 1 - change(sample, to) / total)) }));
-    let best = { name: 'none', error: Infinity };
-    for (const [name, ease] of Object.entries(EASES)) {
-      const error = Math.sqrt(points.reduce((sum, point) => sum + (ease(point.u) - point.p) ** 2, 0) / points.length);
-      if (error < best.error) best = { name, error };
-    }
+    const best = bestEase(points);
     // A good ease match on a poorly tracked object is still a poor measurement, so fit carries the tracker's confidence across the move.
     const covered = track.filter(sample => sample.time >= from.time && sample.time <= to.time);
     const confidence = covered.reduce((sum, sample) => sum + sample.confidence, 0) / covered.length;
