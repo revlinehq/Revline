@@ -45,7 +45,7 @@ Build the film in the chosen look with addFilm, following motion-design (one cli
 - Sections: one per beat, each starting where its beat's first word starts (from the words list), so the markers line up with the voice.
 - Sound: generateSound effects on the visual hits that need one (a card landing, a line drawing, a reveal), quiet enough not to fight the voice (gain about 0.3 to 0.5), never on top of a word the viewer must hear. No music unless the user asks.
 - Run the scene-engine checklist (readSkill name "scene-engine" page "checklist") and fix what fails. Check key beats with getFrames at the moment each key word is spoken.
-- Captions only if the user asks: addSubtitlesFromTranscript works on the narration clip, whose words are saved as its transcript.
+- Subtitles always: addSubtitlesFromTranscript on the narration clip (its words are saved as its transcript), styled per overall-styling (Inter 36/500, white, soft shadow, up to 3 words at a time), placed low and clear of the visuals so no subtitle covers a key part of the drawing. Leave them out only if the user asks.
 
 ## Timing to the voice
 
