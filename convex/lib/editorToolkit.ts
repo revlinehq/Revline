@@ -42,12 +42,13 @@ import { TEXT_LOOKS,textLookPatch } from '../../lib/editor/text-looks';
 import { TEXT_FONTS } from '../../lib/editor/text-fonts';
 import { applyCaptionStyle,patchCaptionStyles,patchTextStyles,updateCaptionTiming } from '../../lib/editor/caption-editing';
 import { captionClipsFromTranscript, captionsCoverTranscript } from '../../lib/editor/transcript-captions';
-import { AUDIO_LIMITS,AUDIO_ROLES,audioSettings,configureAudio } from '../../lib/editor/audio-settings';
+import { AUDIO_LIMITS,AUDIO_ROLES,audioSettings,audioSettingsPatch,configureAudio } from '../../lib/editor/audio-settings';
 import { STOCK_AUDIO_IDS,isStockAudioKey,stockAudio } from '../../lib/editor/stock-audio';
 import { generateSoundEffect, soundEffectInput, type SoundEffectRequest } from '../../lib/audio/sound-effect';
+import { NARRATION_VOICES, VOICE_LIMITS, generateNarration, generateVoiceSample, voiceInput } from '../../lib/audio/voice';
 import { BRAND_LIMITS } from '../../lib/editor/brand-kit';
 import { cleanColors, googleFonts, sceneBrandSnapshot, scrapeBrand } from './brandKitBuild';
-import { mediaUrl } from './media_storage';
+import { mediaConfig, mediaUrl } from './media_storage';
 import { encodeWav, soundWaveform } from '../../lib/audio/wav';
 import { SR } from '../../lib/audio/dsp';
 import { MUSIC_BED_LIMITS, renderMusicBed } from '../../lib/audio/music-bed';
@@ -60,7 +61,7 @@ import { VISUAL_EFFECT_LIMITS, visualEffectsPatch } from '../../lib/editor/visua
 import { deleteEmptyLayer, removeEmptyLayers,reorderLayer,moveSelectedClips,moveClipTo,resizeSelectedClips } from '../../lib/editor/timeline-controls';
 import {copyTimelineClips,pasteTimelineClips} from '../../lib/editor/clipboard';
 import { MAX_INSPECTION_QUESTION, validateVideoInspectionInput, videoMatchesOnClip, type VideoInspectionInput } from '../../lib/media-analysis/video-inspection';
-import { currentTranscript } from '../../lib/media-analysis/transcript';
+import { TRANSCRIPT_VERSION, currentTranscript, transcriptFromWords } from '../../lib/media-analysis/transcript';
 import { frameEvidenceOnClip, frameInspectionCoverage, assertConsecutiveInspection, validateFrameInspectionInput, type FrameInspectionInput } from '../../lib/media-analysis/frame-inspection';
 import { shotAlignedRange } from '../../lib/media-analysis/shots';
 import { REFERENCE_PARTS, readReference, referenceMoments, referenceOutline } from '../../lib/media-analysis/reference';
@@ -377,6 +378,30 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       assets.push(asset);
       return asset;
     } catch (error) { await storageControl({ action: 'delete', key }).catch(() => {}); throw error; }
+  };
+  // Choice-card previews (voice samples, rendered stills) live in the project's R2 media without becoming assets; the card reads them through a signed URL.
+  const publishPreview = async (bytes: Uint8Array<ArrayBuffer>, contentType: string) => {
+    const key = `media/${run.ownerId}/${run.projectId}/preview-${crypto.randomUUID()}`;
+    await putMediaObject(key, bytes, contentType);
+    return (await mediaUrl(ctx, { r2Key: key }))!;
+  };
+  // Render frames of the saved (or this turn's staged) timeline as base64 JPEGs, as export draws them.
+  const renderFrames = async (times: number[]) => {
+    await editSession.wait();
+    const snapshotId = await ctx.runMutation(internal.mcp.requestFrames, { ownerId: run.ownerId, projectId: run.projectId, ...(editSession.staged ? { runId: run.runId } : {}), times });
+    const deadline = Date.now() + 280_000;
+    let started = false;
+    while (Date.now() < deadline) {
+      if (abortSignal.aborted) { await ctx.runMutation(internal.mcp.discardFrames, { snapshotId }); throw new Error('Stopped.'); }
+      const state = await ctx.runQuery(internal.mcp.frames, { ownerId: run.ownerId, snapshotId });
+      if (state.started) started = true;
+      if (state.status === 'failed') { await ctx.runMutation(internal.mcp.discardFrames, { snapshotId }); throw new Error(`Frames could not be rendered: ${state.error ?? 'unknown error'}`); }
+      if (state.status === 'completed') { await ctx.runMutation(internal.mcp.discardFrames, { snapshotId }); return { revision: state.revision as number, frames: (state.frames as { time: number; image: string }[]).map(frame => ({ time: frame.time, image: frame.image })) }; }
+      await new Promise(resolve => setTimeout(resolve, 1500));
+    }
+    await ctx.runMutation(internal.mcp.discardFrames, { snapshotId });
+    // Say which wait it was: frames that never started were queued behind other renders, not too many.
+    throw new Error(started ? 'Frames took too long to render. Try fewer times.' : 'These frames never started rendering: the media worker stayed busy with other renders. Try again shortly; the number of times was not the problem.');
   };
   const trimChangeInput=z.object({clipId:z.string().min(1),duration:z.number().positive(),sourceStart:z.number().min(0).optional()});
   const tools = {
@@ -794,27 +819,22 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       const next = !fix.length ? 'Every moment scores 25 or less: this check is done.' : pass >= COMPARE_PASSES ? `That was pass ${pass} of ${COMPARE_PASSES}: stop fixing and say which moments still differ (${fix.join(', ')}).` : `Pass ${pass} of ${COMPARE_PASSES}. Fix the 2 worst moments now (${fix.join(', ')}) with patchScene or editScene: read that moment with fps 10 if you have not, correct it, then compare again. Done when every moment scores 25 or less, or after ${COMPARE_PASSES} passes.`;
       return { note: `Reference (left) beside your timeline (right), one moment per row, at ${scores.map(score => `${score.time}s`).join(', ')}. Differences: ${scores.map(score => `${score.time}s ${score.difference}`).join(', ')}.`, next, pass, scores, images };
     }, toModelOutput: (_ctx, options) => blueprintImages(options.output) }),
-    getFrames: createTool({ description: "Look at your work: render 1 to 4 frames of the saved timeline at timeline seconds, composited exactly as the export draws them (scenes, footage, text, effects), and see them as images. Use it after building or changing scenes or visuals, at each key beat, to check that text is readable, nothing overflows or clips, brand fonts, colors and logo show, and frames are not empty; fix what is wrong before saying it is done. Each call takes 10 to 30 seconds; pick the moments that matter.", inputSchema: z.object({ times: z.array(z.number().min(0)).min(1).max(4).describe('Timeline seconds, inside the timeline.') }), execute: async (_ctx, { times }) => {
-      await editSession.wait();
-      const snapshotId = await ctx.runMutation(internal.mcp.requestFrames, { ownerId: run.ownerId, projectId: run.projectId, ...(editSession.staged ? { runId: run.runId } : {}), times });
-      const deadline = Date.now() + 280_000;
-      let started = false;
-      while (Date.now() < deadline) {
-        if (abortSignal.aborted) { await ctx.runMutation(internal.mcp.discardFrames, { snapshotId }); throw new Error('Stopped.'); }
-        const state = await ctx.runQuery(internal.mcp.frames, { ownerId: run.ownerId, snapshotId });
-        if (state.started) started = true;
-        if (state.status === 'failed') { await ctx.runMutation(internal.mcp.discardFrames, { snapshotId }); throw new Error(`Frames could not be rendered: ${state.error ?? 'unknown error'}`); }
-        if (state.status === 'completed') { await ctx.runMutation(internal.mcp.discardFrames, { snapshotId }); return { revision: state.revision as number, frames: (state.frames as { time: number; image: string }[]).map(frame => ({ time: frame.time, image: frame.image })) }; }
-        await new Promise(resolve => setTimeout(resolve, 1500));
-      }
-      await ctx.runMutation(internal.mcp.discardFrames, { snapshotId });
-      // Say which wait it was: frames that never started were queued behind other renders, not too many.
-      throw new Error(started ? 'Frames took too long to render. Try fewer times.' : 'These frames never started rendering: the media worker stayed busy with other renders. Try again shortly; the number of times was not the problem.');
-    }, toModelOutput: (_ctx, options) => { const output = options.output as { revision: number; frames: { time: number; image: string }[] }; return { type: 'content' as const, value: [
+    getFrames: createTool({ description: "Look at your work: render 1 to 4 frames of the saved timeline at timeline seconds, composited exactly as the export draws them (scenes, footage, text, effects), and see them as images. Use it after building or changing scenes or visuals, at each key beat, to check that text is readable, nothing overflows or clips, brand fonts, colors and logo show, and frames are not empty; fix what is wrong before saying it is done. Each call takes 10 to 30 seconds; pick the moments that matter.", inputSchema: z.object({ times: z.array(z.number().min(0)).min(1).max(4).describe('Timeline seconds, inside the timeline.') }), execute: async (_ctx, { times }) => renderFrames(times), toModelOutput: (_ctx, options) => { const output = options.output as { revision: number; frames: { time: number; image: string }[] }; return { type: 'content' as const, value: [
       { type: 'text' as const, text: `720p frames of the saved timeline (revision ${output.revision}) at ${output.frames.map(frame => `${frame.time}s`).join(', ')}, in that order.` },
       ...output.frames.map(frame => ({ type: 'file' as const, data: { type: 'data' as const, data: frame.image }, mediaType: 'image/jpeg' })),
     ] }; } }),
-    askUser: createTool({ description: "Ask the user to choose between 2 to 6 options, shown as a choice card in the chat, instead of listing the options in text: a direction, a style, a length, which of several clips. Then end your turn; their choice arrives as their next message. Ask only what you cannot decide from the request, the project or memory.", inputSchema: z.object({ question: z.string().trim().min(3).max(200), options: z.array(z.object({ label: z.string().trim().min(1).max(60), description: z.string().trim().max(140).optional() })).min(2).max(6) }).strict(), execute: async (_ctx, input) => ({ ...input, asked: true }) }),
+    askUser: createTool({ description: "Ask the user to choose between 2 to 6 options, shown as a choice card in the chat, instead of listing the options in text: a direction, a style, a length, which of several clips. Then end your turn; their choice arrives as their next message. Ask only what you cannot decide from the request, the project or memory. An option can show what it means: preview.time renders the timeline at that second as a picture in the card (build each look on the timeline first, for example style previews, then point each option at its moment); audio is a sample URL from listVoices, played in the card.", inputSchema: z.object({ question: z.string().trim().min(3).max(200), options: z.array(z.object({ label: z.string().trim().min(1).max(60), description: z.string().trim().max(140).optional(), preview: z.object({ time: z.number().min(0).describe('Timeline second to show as this option\'s picture.') }).strict().optional(), audio: z.string().url().optional().describe('A voice sample URL exactly as listVoices returned it.') }).strict()).min(2).max(6) }).strict(), execute: async (_ctx, input) => {
+      if (input.options.some(option => option.audio && !option.audio.startsWith(`${mediaConfig().url}/read?`))) throw new Error('audio must be a sample URL from listVoices.');
+      const times = input.options.flatMap(option => option.preview ? [option.preview.time] : []);
+      if (!times.length) return { ...input, asked: true };
+      const { frames } = await renderFrames(times);
+      const images = await Promise.all(times.map((time, index) => {
+        const frame = frames.find(item => Math.abs(item.time - time) < 1e-6) ?? frames[index];
+        return publishPreview(Uint8Array.from(atob(frame.image.replace(/^data:[^,]*,/, '')), char => char.charCodeAt(0)), 'image/jpeg');
+      }));
+      let next = 0;
+      return { question: input.question, asked: true, options: input.options.map(option => option.preview ? { ...option, image: images[next++] } : option) };
+    } }),
     askBrandKit: createTool({ description: "Never when the user gave a video to recreate, clone or copy: that video supplies its own brand, words and UI. When a request needs a brand (a launch or feature film, product UI, the brand's colors or screens) and the user has more than one brand kit, or it is unclear which one they mean, show their kits as a choice card. Then end your turn; their pick arrives as their next message, and you use that kit's screens and blueprints yourself. With one kit, just use it; with none, offer to create one.", inputSchema: z.object({ question: z.string().trim().min(3).max(200).optional() }).strict(), execute: async (_ctx, input) => {
       const [kits, blueprints] = await Promise.all([ctx.runQuery(internal.brandKits.list, { ownerId: run.ownerId }), ctx.runQuery(internal.blueprints.listForTools, { ownerId: run.ownerId })]);
       return { question: input.question ?? 'Which brand is this for?', asked: true, kits: kits.map(kit => ({ kitId: kit._id, name: kit.name, ...(kit.sourceUrl ? { site: kit.sourceUrl } : {}), ...(kit.logo && kit.logo.length < 24_000 ? { logo: kit.logo } : {}), screens: (kit.screens ?? []).map(screen => screen.name), blueprints: blueprints.filter(item => item.kitId === kit._id).map(item => item.name) })) };
@@ -943,6 +963,33 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
     generateSound: createTool({ description: "The default way to add any sound effect: describe it in words and ElevenLabs generates it as real sound design, then it is placed on a free A layer at timeline seconds at (frame-snapped), starting on its first audible sample; save immediately. Time it exactly to the motion: a whoosh as long as a slide-in (duration), a pop per card, a riser into a hit. When the user gives a time, use exactly that time. Also call it, unasked, after addScene or a choreography-changing editScene: one sound per beat that needs one. Read the music-and-sound skill first. gain is the clip volume 0..2 (default 0.7); sounds peak at -3 dBFS. If generation fails nothing is placed: say so, never substitute another sound. Returns the clip, its duration and any audible non-effect audio it overlaps.", inputSchema: soundEffectInput.extend({ at: z.number().min(0), gain: z.number().min(0).max(2).optional(), name: z.string().trim().min(1).max(60).optional() }), execute: async (_ctx, { at, gain = .7, name, ...request }) => {
       const asset = await createGeneratedSound(request, name);
       return { ...await placeEffectSound(asset._id, asset.duration!, at, gain), name: asset.fileName, duration: asset.duration };
+    } }),
+    listVoices: createTool({ description: "The narration voices generateVoice can speak with, each with what it sounds like. With sampleText, also speaks that line in each chosen voice (voiceIds, 2 to 6) and returns a playable sample URL per voice: offer them with askUser, one option per voice with its sample as audio, so the user hears the script's own first line before choosing. Samples are not placed on the timeline.", inputSchema: z.object({ sampleText: z.string().trim().min(3).max(VOICE_LIMITS.sample).optional(), voiceIds: z.array(z.string().trim().min(10).max(40)).min(1).max(6).optional().describe('Which voices to sample; voices from the list, or any ElevenLabs voice ID the user names.'), speed: voiceInput.shape.speed }).strict(), execute: async (_ctx, { sampleText, voiceIds, speed }) => {
+      if (!sampleText) return { voices: NARRATION_VOICES };
+      if (!voiceIds?.length) throw new Error('Choose the voiceIds to sample (2 to 6).');
+      const samples = await Promise.all(voiceIds.map(async voiceId => {
+        const known = NARRATION_VOICES.find(voice => voice.voiceId === voiceId);
+        return { voiceId, name: known?.name ?? voiceId, ...(known ? { description: known.description } : {}), sample: await publishPreview(await generateVoiceSample(voiceId, sampleText, { speed }, abortSignal), 'audio/mpeg') };
+      }));
+      return { sampleText, samples };
+    } }),
+    generateVoice: createTool({ description: "Speak a narration script with an ElevenLabs voice (listVoices) and place it as one voice clip on a free A layer at timeline seconds at (frame-snapped); save immediately. The words are saved as the clip's transcript (inspectAssetAnalysis, addSubtitlesFromTranscript). Returns its duration and every word's timeline start and end: time the film's beats to these, so each visual lands on its spoken word. Write the script exactly as it should be read. To change the wording or voice, delete the clip and generate again. If generation fails nothing is placed: say so.", inputSchema: voiceInput.extend({ at: z.number().min(0), gain: z.number().min(0).max(2).optional().describe('Clip volume 0..2, default 1.'), name: z.string().trim().min(1).max(60).optional() }).strict(), execute: async (_ctx, { at, gain = 1, name, ...request }) => {
+      const { samples, rate, words } = await generateNarration(request, abortSignal), duration = samples[0].length / rate;
+      const voice = NARRATION_VOICES.find(item => item.voiceId === request.voiceId)?.name, key = `media/${run.ownerId}/${run.projectId}/${crypto.randomUUID()}`;
+      const size = await putMediaObject(key, encodeWav(samples, rate), 'audio/wav');
+      let asset: (typeof assets)[number];
+      try {
+        asset = await ctx.runMutation(internal.assistant.saveGeneratedSound, { ...run, r2Key: key, fileName: `${(name ?? `Narration${voice ? ` (${voice})` : ''}`).replace(/[\\/:*?"<>|]/g, '')}.wav`, size, duration, waveform: soundWaveform(samples, rate), transcript: { ...transcriptFromWords(words, duration), version: TRANSCRIPT_VERSION } });
+        assets.push(asset);
+      } catch (error) { await storageControl({ action: 'delete', key }).catch(() => {}); throw error; }
+      const id = crypto.randomUUID();
+      let start = at;
+      const result = await checkpoint(t => {
+        start = Math.round(at * t.fps) / t.fps;
+        const placed = addMediaClip(t, { _id: asset._id, kind: 'audio', duration }, id, start, 1);
+        return patchClip(placed, id, { volume: gain, ...audioSettingsPatch(find(placed, id), { role: 'voice' }) });
+      });
+      return { ...result, clipId: id, assetId: asset._id, name: asset.fileName, start, duration, end: start + duration, words: words.map(word => ({ text: word.text, start: Math.round((start + word.start) * 1000) / 1000, end: Math.round((start + word.end) * 1000) / 1000 })) };
     } }),
     editSound: createTool({ description: "Regenerate a generated sound clip from a new prompt (and duration), keeping its start, layer and volume (it moves up a layer only if the new length would overlap). inspectClip shows the current prompt. Library and uploaded audio cannot be regenerated; delete and replace them.", inputSchema: soundEffectInput.extend({ clipId: z.string(), name: z.string().trim().min(1).max(60).optional() }), execute: async (_ctx, { clipId, name, ...request }) => {
       await editSession.wait();

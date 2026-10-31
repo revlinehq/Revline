@@ -25,7 +25,7 @@ import { internalMutation, internalQuery, mutation, query } from "./_generated/s
 import { requireOwner, requireProject } from "./lib/auth";
 import { commitTimeline, currentTimeline, rejectNewLayerOverlaps, validateTimeline } from "./lib/timeline";
 import { TIMELINE_CONFLICT } from "../lib/editor/timeline-sync";
-import { analysisMode, analysisRequestDocument, assetDocument, waveformValidator, beatsValidator, clipValidator, frameRequestValidator, videoRequestValidator, projectDocument, timelineValidator } from "./schema";
+import { analysisMode, analysisRequestDocument, assetDocument, waveformValidator, beatsValidator, transcriptValidator, clipValidator, frameRequestValidator, videoRequestValidator, projectDocument, timelineValidator } from "./schema";
 import { validateFrameInspectionInput } from '../lib/media-analysis/frame-inspection';
 import { validateVideoInspectionInput } from '../lib/media-analysis/video-inspection';
 import { normalizeTimeline } from '../lib/editor/types';
@@ -250,15 +250,15 @@ export const attachRunStockAudio=internalMutation({args:{...runArgs,catalogId:v.
   return hydrateAsset(ctx,await attachStockAudio(ctx,args.ownerId,args.projectId,args.catalogId));
 }});
 /** Register a sound the assistant rendered and uploaded; storage counts like an upload, with no analysis tasks. */
-export const saveGeneratedSound=internalMutation({args:{...runArgs,r2Key:v.string(),fileName:v.string(),size:v.number(),duration:v.number(),waveform:waveformValidator,recipe:v.optional(v.string()),beats:v.optional(beatsValidator),contentType:v.optional(v.union(v.literal('audio/wav'),v.literal('audio/mpeg')))},returns:assetDocument,handler:async(ctx,args)=>{
+export const saveGeneratedSound=internalMutation({args:{...runArgs,r2Key:v.string(),fileName:v.string(),size:v.number(),duration:v.number(),waveform:waveformValidator,recipe:v.optional(v.string()),beats:v.optional(beatsValidator),transcript:v.optional(transcriptValidator),contentType:v.optional(v.union(v.literal('audio/wav'),v.literal('audio/mpeg')))},returns:assetDocument,handler:async(ctx,args)=>{
   const run=await projectRun(ctx,args.projectId,args.ownerId);if(run.aiRunId!==args.runId||!run.aiRunning)throw new ConvexError('AI run is no longer active');
   if(!args.r2Key.startsWith(`media/${args.ownerId}/${args.projectId}/`))throw new ConvexError('Generated sound key is outside this project');
   const count=await ctx.db.query('assets').withIndex('by_ownerId_projectId',q=>q.eq('ownerId',args.ownerId).eq('projectId',args.projectId)).take(200);
   if(count.length>=200)throw new ConvexError('A project supports up to 200 media files');
   validateWaveform(args.waveform);
   const id=await ctx.db.insert('assets',{ownerId:args.ownerId,projectId:args.projectId,kind:'audio',fileName:args.fileName,r2Key:args.r2Key,contentType:args.contentType??'audio/wav',size:args.size,duration:args.duration,waveform:args.waveform,...(args.recipe?{soundRecipe:args.recipe}:{}),createdAt:Date.now()});
-  // A music bed knows its beats exactly: they are saved as its beat map, like a measured one.
-  const asset=args.beats?await storeAnalysis(ctx,(await ctx.db.get(id))!,{beats:args.beats}):(await ctx.db.get(id))!;
+  // A music bed knows its beats exactly, and narration its words: they are saved as its analysis, like measured ones.
+  const asset=args.beats||args.transcript?await storeAnalysis(ctx,(await ctx.db.get(id))!,{...(args.beats?{beats:args.beats}:{}),...(args.transcript?{transcript:args.transcript}:{})}):(await ctx.db.get(id))!;
   await recordAssetStorage(ctx,asset);
   return hydrateAsset(ctx,asset);
 }});

@@ -3,3 +3,8 @@
 .choice-card [data-slot=radio-group]{gap:6px}
 .choice-card-logo{flex:none;width:22px;height:22px;background:currentColor;mask-size:contain;mask-repeat:no-repeat;mask-position:center;-webkit-mask-size:contain;-webkit-mask-repeat:no-repeat;-webkit-mask-position:center}
 .choice-card-send{align-self:flex-start}
+/* Options with pictures (style previews, rendered frames) sit two to a row, the picture above the label. */
+.choice-card[data-pictures] [data-slot=radio-group]{grid-template-columns:repeat(2,minmax(0,1fr))}
+.choice-card [data-slot=field-label]:has(.choice-card-image){gap:0;overflow:hidden}
+.choice-card-image{background:#2a2a2a}
+.choice-card-image img{width:100%;height:100%;object-fit:contain;display:block}
