@@ -55,7 +55,7 @@ export async function captureTimelineFrames(snapshot:NonNullable<MediaWorkItem['
     const {fps}=snapshot.pacing,start=Math.round(Math.min(snapshot.pacing.start,last)*timeline.fps)/timeline.fps,end=Math.min(snapshot.pacing.end,last);
     const times=Array.from({length:Math.floor((end-start)*fps+1e-6)+1},(_,index)=>Math.round((start+index/fps)*timeline.fps)/timeline.fps);
     if(times.length<3)throw new AnalysisError('Check pacing over at least 0.3 s.',400);
-    const width=160,size=dimensions(timeline.aspectRatio,720),height=Math.max(2,Math.round(width*size.height/size.width));
+    const width=320,size=dimensions(timeline.aspectRatio,720),height=Math.max(2,Math.round(width*size.height/size.width));
     await runCompositionCapture(directory,{...size,fps:timeline.fps,times,start:times[0],end:times[times.length-1]+frame,variants:['edited'],pacing:{width}},signal);
     onProgress(85);
     const bytes=await readFile(join(directory,'pacing.bin')),frames=times.map((_,index)=>new Uint8Array(bytes.buffer,bytes.byteOffset+index*width*height,width*height));

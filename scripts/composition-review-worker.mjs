@@ -36,7 +36,7 @@ try{
     const origin=server.url;
     let session;
     try{
-      session=await createCaptureSession(origin,dir,{width:settings.width,height:settings.height,fps:{num:settings.fps,den:1},format:'png',compositionDurationSeconds:settings.end},injector);
+      session=await createCaptureSession(origin,dir,{width:settings.width,height:settings.height,fps:{num:settings.fps,den:1},format:pacing?'jpeg':'png',compositionDurationSeconds:settings.end},injector);
       await session.page.setRequestInterception(true);
       session.page.on('request',request=>request.url().startsWith(origin+'/')||request.url().startsWith('data:')?request.continue():request.abort());
       await initializeSession(session);

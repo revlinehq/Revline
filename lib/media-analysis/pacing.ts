@@ -7,17 +7,18 @@ export type PacingResult = { start: number; end: number; fps: number; samples: n
 
 // A pixel changed when it moved by more than this (of 255) between two samples.
 const PIXEL_CHANGE = 18;
-// A step under this share of changed pixels is still: grain, a cursor, a slow drift.
-const STILL = .004;
+// A step under this share of changed pixels is still: a slow drift, a few pixels of a cursor. UI in a product
+// film is small (a caption chip, a menu row), so this sits low; renders have no noise to rise above.
+const STILL = .001;
 // A change of this much of the frame is something new for the viewer to read: in a product film a new
 // headline or a panel filling in is only a few percent of the frame.
 const KEY_CHANGE = .025;
 // Smaller changes (a cursor, a blinking caret) do not end the time the viewer has to read.
-const ENDS_HOLD = .01;
+const ENDS_HOLD = .004;
 const READABLE_HOLD = 1;
 const BUSY_CHANGE = .025, BUSY_COUNT = 3;
 // The eye follows one place at a time: changes in this many separate places within the window are too many.
-const PLACES = 3, PLACES_WINDOW = 1.5, GRID = { columns: 4, rows: 3 };
+const PLACES = 3, PLACES_WINDOW = 1.5, GRID = { columns: 8, rows: 6 };
 const CUT = .45;
 const LONG_HOLD = 3;
 // Camera speed is in frame fractions per second (zoom as ln(scale), pan as share of the width).
@@ -33,14 +34,14 @@ function changed(a: Uint8Array, b: Uint8Array) {
   return count / a.length;
 }
 
-/** Which cells of a 4x3 grid changed (more than 5% of their pixels) between two frames. */
+/** Which cells of an 8x6 grid changed (more than 1% of their pixels) between two frames. */
 function places(a: Uint8Array, b: Uint8Array, width: number, height: number) {
   const counts = new Array<number>(GRID.columns * GRID.rows).fill(0), sizes = new Array<number>(GRID.columns * GRID.rows).fill(0);
   for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
     const cell = Math.min(GRID.rows - 1, Math.floor(y * GRID.rows / height)) * GRID.columns + Math.min(GRID.columns - 1, Math.floor(x * GRID.columns / width));
     sizes[cell]++; if (Math.abs(a[y * width + x] - b[y * width + x]) > PIXEL_CHANGE) counts[cell]++;
   }
-  return new Set(counts.flatMap((count, cell) => count / sizes[cell] > .05 ? [cell] : []));
+  return new Set(counts.flatMap((count, cell) => count / sizes[cell] > .01 ? [cell] : []));
 }
 
 /** The zoom (scale about the centre) and shift that best map frame a onto frame b, and how well they fit. */
@@ -73,7 +74,15 @@ function cameraStep(a: Uint8Array, b: Uint8Array, width: number, height: number)
   return { zoom: Math.log(best.scale), pan: Math.hypot(best.dx, best.dy) / width, raw, fit: best.error };
 }
 
+/** Half size, each pixel the mean of four: camera motion is estimated on this to keep it fast. */
+function half(frame: Uint8Array, width: number, height: number) {
+  const w = width >> 1, h = height >> 1, out = new Uint8Array(w * h);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) out[y * w + x] = (frame[2 * y * width + 2 * x] + frame[2 * y * width + 2 * x + 1] + frame[(2 * y + 1) * width + 2 * x] + frame[(2 * y + 1) * width + 2 * x + 1]) >> 2;
+  return out;
+}
+
 export function measurePacing(frames: Uint8Array[], width: number, height: number, start: number, fps: number): PacingResult {
+  const small = frames.map(frame => half(frame, width, height)), smallWidth = width >> 1, smallHeight = height >> 1;
   const dt = 1 / fps, steps = frames.length - 1, end = start + steps * dt, time = (index: number) => start + index * dt;
   const change = Array.from({ length: steps }, (_, i) => changed(frames[i], frames[i + 1]));
   const flags: PacingFlag[] = [];
@@ -81,7 +90,7 @@ export function measurePacing(frames: Uint8Array[], width: number, height: numbe
   // Camera motion on the steps that move: a zoom or pan explains the change when it removes most of the difference.
   const camera = change.map((share, i) => {
     if (share < STILL) return null;
-    const step = cameraStep(frames[i], frames[i + 1], width, height);
+    const step = cameraStep(small[i], small[i + 1], smallWidth, smallHeight);
     if (step.fit > step.raw * .6 || step.raw < 1) return null;
     const speed = Math.max(Math.abs(step.zoom), step.pan) * fps;
     return speed >= MOVING ? { ...step, speed } : null;
@@ -93,11 +102,12 @@ export function measurePacing(frames: Uint8Array[], width: number, height: numbe
     flags.push({ start: round(time(i)), end: round(time(i + 1)), kind: 'flash', reason: `A single-frame flash at ${at(time(i))}: one sample differs from both neighbours by ${Math.round(Math.min(change[i - 1], change[i]) * 100)}%. Remove it or hold it long enough to read.` });
 
   // Changes: runs of moving steps, each measured by how much of the frame differs from before it to after it.
-  const changes: { from: number; to: number; size: number; cells: Set<number> }[] = [];
+  const changes: { from: number; to: number; size: number }[] = [];
   for (let i = 0; i < steps;) {
     if (change[i] < STILL) { i++; continue; }
-    let j = i; while (j + 1 < steps && change[j + 1] >= STILL) j++;
-    changes.push({ from: i, to: j + 1, size: changed(frames[i], frames[j + 1]), cells: places(frames[i], frames[j + 1], width, height) });
+    // One still sample inside a move (an overshoot turning back, a settle) is not a hold: it continues the change.
+    let j = i; while (j + 1 < steps && (change[j + 1] >= STILL || j + 2 < steps && change[j + 2] >= STILL)) j++;
+    changes.push({ from: i, to: j + 1, size: changed(frames[i], frames[j + 1]) });
     i = j + 1;
   }
   for (const [index, item] of changes.entries()) {
@@ -112,17 +122,20 @@ export function measurePacing(frames: Uint8Array[], width: number, height: numbe
     if (changes[first].size >= BUSY_CHANGE && big.length >= BUSY_COUNT) flags.push({ start: round(time(changes[first].from)), end: round(time(big[big.length - 1].to)), kind: 'busy', reason: `${big.length} big changes within 1 s from ${at(time(changes[first].from))}: too many for the eye to follow. Spread them out or combine them into one move.` });
   }
 
-  // Changes in separate places close together: each lands where the last one did not, so the eye has to jump.
-  for (let first = 0; first < changes.length; first++) {
-    const seen = new Set<number>(), apart: typeof changes = [];
-    for (const item of changes.slice(first)) {
-      if ((item.from - changes[first].from) * dt >= PLACES_WINDOW) break;
-      // A change over most of the frame (a cut, a whole-frame move) is one place, not many.
-      if (item.size < ENDS_HOLD || item.cells.size > GRID.columns * GRID.rows / 2 || !item.cells.size) continue;
-      if ([...item.cells].every(cell => seen.has(cell))) continue;
-      apart.push(item); for (const cell of item.cells) seen.add(cell);
+  // Changes that start in separate places close together: the eye follows one place at a time. A cell next to
+  // one already changing is the same thing spreading (a panel opening, a card sliding), not a new place.
+  const stepCells = change.map((share, i) => share < STILL || share >= CUT || camera[i] ? new Set<number>() : places(frames[i], frames[i + 1], width, height));
+  const near = (a: number, b: number) => Math.abs(a % GRID.columns - b % GRID.columns) <= 1 && Math.abs(Math.floor(a / GRID.columns) - Math.floor(b / GRID.columns)) <= 1;
+  for (let first = 0; first < steps; first++) {
+    if (!stepCells[first].size || stepCells[first].size > GRID.columns * GRID.rows / 2) continue;
+    const active: number[] = [], onsets: number[] = [];
+    for (let k = first; k < steps && (k - first) * dt < PLACES_WINDOW; k++) {
+      if (stepCells[k].size > GRID.columns * GRID.rows / 2) break;
+      const fresh = [...stepCells[k]].filter(cell => !active.some(other => near(cell, other)));
+      if (fresh.length && (k === first || onsets[onsets.length - 1] !== k)) onsets.push(k);
+      active.push(...stepCells[k]);
     }
-    if (apart.length >= PLACES && apart[0] === changes[first]) flags.push({ start: round(time(changes[first].from)), end: round(time(apart[apart.length - 1].to)), kind: 'scattered', reason: `${apart.length} changes land in different parts of the frame within ${round((apart[apart.length - 1].from - changes[first].from) * dt, 1)} s from ${at(time(changes[first].from))}: the eye follows one place at a time. Stage them one after another, each with time to read.` });
+    if (onsets.length >= PLACES && onsets[0] === first) flags.push({ start: round(time(first)), end: round(time(onsets[onsets.length - 1] + 1)), kind: 'scattered', reason: `${onsets.length} changes start in different parts of the frame within ${round((onsets[onsets.length - 1] - first) * dt, 1)} s from ${at(time(first))}: the eye follows one place at a time. Stage them one after another, each with time to read.` });
   }
 
   // Camera moves: their speed should rise from rest and settle back, and stay slow enough to follow.
