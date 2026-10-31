@@ -19,10 +19,10 @@ export type ExportListItem={id:string;status:NonNullable<ExportState>['status'];
 /** A timeline tab offered in the export checklist. */
 export type ExportTimelineOption={id:string;name:string;aspectRatio:string;duration:number;cover?:string|null};
 export function ExportDialog({open,onOpenChange,title,timeline,coverUrl,onExport,onCancel,onDownload,state,demo,clipOnly=false,ultra=false,videoCount=1,exports=[],timelines=[],selectedTimelines=[],onSelectTimelines}: {timelines?:ExportTimelineOption[];selectedTimelines?:string[];onSelectTimelines?:(ids:string[])=>void;videoCount?:number;exports?:ExportListItem[];ultra?:boolean;open:boolean;onOpenChange:(v:boolean)=>void;title:string;timeline:Timeline;coverUrl?:string|null;onExport:(settings:ExportSettings)=>Promise<string[]|void>;onCancel?:(jobId:string)=>Promise<void>;onDownload?:(jobId:string)=>Promise<void>;state:ExportState;demo:boolean;clipOnly?:boolean}) {
-  const [resolution,setResolution]=useState<720|1080|2160>(1080);const [fps,setFps]=useState<24|30|60>(timeline.fps===24||timeline.fps===60?timeline.fps:30);const [quality,setQuality]=useState<'standard'|'high'>('standard');const [starting,setStarting]=useState(false);const [error,setError]=useState('');const working=starting||state?.status==='queued'||state?.status==='rendering';
+  const [resolution,setResolution]=useState<720|1080|2160>(1080);const [fps,setFps]=useState<24|30|60>(timeline.fps===24||timeline.fps===30?timeline.fps:60);const [quality,setQuality]=useState<'standard'|'high'>('standard');const [starting,setStarting]=useState(false);const [error,setError]=useState('');const working=starting||state?.status==='queued'||state?.status==='rendering';
   const activeJob=state?.status==='queued'||state?.status==='rendering'?state:null;
   const [stopping,setStopping]=useState(false);const [downloading,setDownloading]=useState(false);
-  useEffect(()=>{if(open){setError('');setFps(timeline.fps===24||timeline.fps===60?timeline.fps:30);}},[open,timeline.fps]);
+  useEffect(()=>{if(open){setError('');setFps(timeline.fps===24||timeline.fps===30?timeline.fps:60);}},[open,timeline.fps]);
   const tooLong = timelineDuration(timeline) > MAX_EXPORT_SECONDS;
   // Exports started in this dialog are timed by this browser's clock; ones it
   // finds already queued use the server's creation time.

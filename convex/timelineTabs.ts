@@ -120,7 +120,7 @@ export async function createTabFor(ctx: MutationCtx, ownerId: string, args: Obje
   const names = new Set(tabs.map(tab => tab.name));
   let name = args.name !== undefined ? tabName(args.name) : args.from === 'duplicate' && active ? `${active.name} copy` : `Timeline ${tabs.length + 1}`;
   for (let n = 2; names.has(name); n++) name = `${args.name?.trim() || (args.from === 'duplicate' && active ? `${active.name} copy` : 'Timeline')} ${n}`;
-  const timeline: Timeline = args.from === 'duplicate' ? { ...current, ...(args.aspectRatio ? { aspectRatio: args.aspectRatio } : {}) } : { clips: [], fps: current.fps, aspectRatio: args.aspectRatio ?? current.aspectRatio };
+  const timeline: Timeline = args.from === 'duplicate' ? { ...current, ...(args.aspectRatio ? { aspectRatio: args.aspectRatio } : {}) } : { clips: [], fps: 60, aspectRatio: args.aspectRatio ?? current.aspectRatio };
   const stashed = await stashActive(ctx, project);
   await openTab(ctx, project, withSummary([...tabs, { id, name }], stashed.timelineId, stashed.timeline), id, timeline, []);
   return id;

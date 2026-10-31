@@ -59,7 +59,7 @@ function editorTools(ctx: ActionCtx, options: Parameters<typeof createEditorTool
 
 const catalogOptions = (): Parameters<typeof createEditorToolkit>[1] => ({
   run: { projectId: 'catalog' as Id<'projects'>, ownerId: 'catalog', runId: 'catalog' },
-  project: { timeline: { clips: [], fps: 30, aspectRatio: 'landscape' }, revision: 0, aspectRatio: 'landscape' } as unknown as Doc<'projects'>,
+  project: { timeline: { clips: [], fps: 60, aspectRatio: 'landscape' }, revision: 0, aspectRatio: 'landscape' } as unknown as Doc<'projects'>,
   assets: [], recovering: false, initialPlans: [], selectedClipIds: [], abortSignal: new AbortController().signal,
 });
 

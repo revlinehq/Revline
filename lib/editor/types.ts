@@ -141,7 +141,7 @@ export type MediaAsset = {
   };
 };
 export type SourceEditSuggestion = { label:string;prompt:string;start:number;end:number };
-export const EMPTY_TIMELINE: Timeline = { clips: [], fps: 30, aspectRatio: 'vertical', tracks: { visual: 1, overlay: 0, audio: 1, effects:0 } };
+export const EMPTY_TIMELINE: Timeline = { clips: [], fps: 60, aspectRatio: 'vertical', tracks: { visual: 1, overlay: 0, audio: 1, effects:0 } };
 export function maxTrackCount(group: LayerGroup) { return group === 'visual' || group === 'effects' ? 24 : 12; }
 export function layerGroup(kind: ClipKind): Exclude<LayerGroup,'overlay'> {
   return kind === 'effect' ? 'effects' : kind === 'audio' ? 'audio' : 'visual';

@@ -25,7 +25,7 @@ export async function createProjectFor(ctx: MutationCtx, ownerId: string, args: 
   if ((args.assetIds?.length ?? 0) > 200) throw new ConvexError('Choose up to 200 uploads');
   const sources = await Promise.all([...new Set(args.assetIds ?? [])].map(id => ctx.db.get(id)));
   if (sources.some(asset => !asset || asset.ownerId !== ownerId || (!asset.r2Key && !asset.storageId))) throw new ConvexError('Saved footage is unavailable or belongs to another account');
-  let timeline: Timeline = normalizeTimeline({ clips: [], fps: 30, aspectRatio: args.aspectRatio });
+  let timeline: Timeline = normalizeTimeline({ clips: [], fps: 60, aspectRatio: args.aspectRatio });
   const projectId = await createProject(ctx, { title: projectTitle(args.title), aspectRatio: args.aspectRatio, ownerId, createdAt: now, updatedAt: now, timeline, revision: 0, history: [] });
   const used = new Set<string>();
   const copies = new Map<string, import('./_generated/dataModel').Id<'assets'>>();

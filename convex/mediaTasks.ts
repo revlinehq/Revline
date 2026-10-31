@@ -225,7 +225,7 @@ export async function importVideoFor(ctx: MutationCtx, ownerId: string, args: Ob
   }
   // A new edit and its durable import are created atomically.
   const now = Date.now();
-  const projectId = args.projectId ?? await createProject(ctx, { ownerId, title: 'Video import', aspectRatio: 'vertical', timeline: { fps: 30, aspectRatio: 'vertical', clips: [], tracks: { visual: 1, overlay: 0, audio: 1 } }, revision: 0, history: [], createdAt: now, updatedAt: now });
+  const projectId = args.projectId ?? await createProject(ctx, { ownerId, title: 'Video import', aspectRatio: 'vertical', timeline: { fps: 60, aspectRatio: 'vertical', clips: [], tracks: { visual: 1, overlay: 0, audio: 1 } }, revision: 0, history: [], createdAt: now, updatedAt: now });
   await requireProject(ctx, projectId, ownerId);
   const pending = (await Promise.all((['queued', 'running', 'retrying'] as const).map(status => ctx.db.query('mediaTasks').withIndex('by_project_kind_status', q => q.eq('projectId', projectId).eq('kind', 'import').eq('status', status)).take(3)))).flat();
   const existing = pending.find(task => task.sourceUrl === sourceUrl && task.importRange?.start === importRange?.start && task.importRange?.end === importRange?.end);

@@ -36,7 +36,7 @@ export async function historyKeys(ctx: MutationCtx, entries: HistoryEntry[]) {
   return Promise.all(loaded.map(entry => entry.key ?? timelineHistoryKey(entry.timeline!)));
 }
 export function currentTimeline(project: Doc<"projects">): Timeline {
-  return normalizeTimeline(project.timeline ?? { clips: [], fps: 30, aspectRatio: project.aspectRatio });
+  return normalizeTimeline(project.timeline ?? { clips: [], fps: 60, aspectRatio: project.aspectRatio });
 }
 export function validateFocus(focus: { time: number; x: number; y: number }[], duration = 86400) {
   if (focus.length > 1500 || focus.some((sample, i) => !Number.isFinite(sample.time) || sample.time < 0 || sample.time > duration + 0.5 || !Number.isFinite(sample.x) || !Number.isFinite(sample.y) || sample.x < 0 || sample.x > 1 || sample.y < 0 || sample.y > 1 || (i > 0 && sample.time <= focus[i - 1].time))) throw new ConvexError("Invalid subject tracking samples");

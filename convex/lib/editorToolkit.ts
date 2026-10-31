@@ -183,7 +183,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
     if (publication) stagedTools.clear();
     return names.length ? { tool: names.join(', ').slice(0, 120) } : {};
   };
-  const editSession = new EditSession(project.timeline ?? { clips: [], fps: 30, aspectRatio: project.aspectRatio }, project.revision ?? 0, {
+  const editSession = new EditSession(project.timeline ?? { clips: [], fps: 60, aspectRatio: project.aspectRatio }, project.revision ?? 0, {
     apply: (timeline, expectedRevision,publication) => ctx.runMutation(internal.assistant.apply, { ...run, timeline, expectedRevision,...(publication&&options.publication?{publication:options.publication}:{}), ...editingTools(publication) }),
     validate: (timeline, expectedRevision) => ctx.runMutation(internal.assistant.previewDraft, { ...run, timeline, expectedRevision }),
     refresh: async () => { return await ctx.runQuery(internal.assistant.getRunTimeline,run); },
@@ -562,7 +562,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       const snapshot = await editSession.inspect(async () => {
         const current = await ctx.runQuery(internal.assistant.getRun, run);
         assets.splice(0,assets.length,...current.assets.map(asset=>{const previous=assets.find(item=>item._id===asset._id);return previous?.analysis&&previous.analysisId===asset.analysisId&&previous.analysisUpdatedAt===asset.analysisUpdatedAt?{...asset,analysis:previous.analysis}:asset;}));
-        return { timeline: current.project.timeline ?? { clips: [], fps: 30, aspectRatio: current.project.aspectRatio }, revision: current.project.revision ?? 0 };
+        return { timeline: current.project.timeline ?? { clips: [], fps: 60, aspectRatio: current.project.aspectRatio }, revision: current.project.revision ?? 0 };
       });
       inspected = true;
       const captionedAssetIds=assets.filter(asset=>{
