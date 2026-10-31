@@ -1,6 +1,6 @@
 import { Brand } from '@/components/workspace/brand';
 import { LandingStartButton } from './start-button';
-import { LandingButton, LandingReveal } from './ui';
+import { LandingReveal } from './ui';
 import { LandingNavTone } from './nav-tone';
 import { LandingHomeLink } from './home-link';
 import { LandingProductMenu } from './product-menu';
@@ -16,7 +16,7 @@ export function LandingNav() {
     <LandingReveal className="landing-nav-brand"><LandingHomeLink><Brand /></LandingHomeLink></LandingReveal>
     <LandingReveal order={1} className="landing-nav-links"><LandingProductMenu />{links.map(({ label, href }) => <a key={label} href={href}>{label}</a>)}</LandingReveal>
     <LandingReveal order={2} className="landing-nav-right">
-      <LandingButton className="landing-nav-login" href="/sign-in" variant="neutral" size="sm">Log in</LandingButton>
+      <a className="landing-nav-login" href="/sign-in">Log in</a>
       <LandingStartButton label="Start free" variant="dark" size="sm" />
     </LandingReveal>
     <LandingNavTone />
