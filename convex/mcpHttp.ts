@@ -15,6 +15,11 @@ const cors = {
   'Access-Control-Allow-Headers': 'Authorization, Content-Type, Mcp-Protocol-Version, Mcp-Session-Id, Last-Event-ID',
   'Access-Control-Expose-Headers': 'WWW-Authenticate, Mcp-Session-Id',
 };
+/** Development only: agents testing the harness report how each change was made, so gaps and rule
+ * conflicts show up. Production agents (customers' clients) never see it. */
+const HARNESS_REPORT = `When you hand work back, end with a short "How it was made" note: the skills and pages you read (readSkill name and page), the rules from them that shaped this change, and any step you did outside Revline's tools (a script, a download, a web search) with the Revline tool or option that would have covered it. Also name anything that held you back: a tool limit or missing option that forced a worse result, and any place where the user's request conflicted with a skill, these instructions or a tool's rules (say which rule, and which one you followed).`;
+const isDevelopment = () => process.env.APP_ORIGIN?.startsWith('http://localhost') ?? false;
+
 const json = (body: unknown, status = 200, headers: Record<string, string> = {}) => new Response(JSON.stringify(body), { status, headers: { ...cors, 'Content-Type': 'application/json', 'Cache-Control': 'no-store', ...headers } });
 
 export const MCP_INSTRUCTIONS = `Revline is a video editor. These tools edit the user's real Revline projects; each editing call is saved immediately, appears live in any open editor tab, and is undoable (undoLatestEdit, or Undo in the editor).
@@ -29,7 +34,6 @@ Use Revline's tools, not your own scripts. Never run ffmpeg, Python or other cod
 - Music and timing: markMusicBeats for beats, downbeats and drops, and alignCutsToBeat to cut on them. Sound effects: generateSound, keyed to the motion.
 - Before building motion, readSkill the matching skill (motion-design for launch films and any standalone motion scene, explainer-scenes for explainers over footage, scene-engine for any scene) and follow it. Check your work with getFrames.
 Share the editorUrl from getProject so the user can watch. Export with exportVideo and poll getExport for the download link. For several separate videos in one project, use timeline tabs (listTimelines, createTimeline, openTimeline; editing tools act on the open tab) and export each with exportVideo timelineId. Exports queue, and listExports shows them all.
-When you hand work back, end with a short "How it was made" note: the skills and pages you read (readSkill name and page), the rules from them that shaped this change, and any step you did outside Revline's tools (a script, a download, a web search) with the Revline tool or option that would have covered it. Also name anything that held you back: a tool limit or missing option that forced a worse result, and any place where the user's request conflicted with a skill, these instructions or a tool's rules (say which rule, and which one you followed).
 
 Editing quality rules:
 ${EDITOR_STYLE_RULES}`;
@@ -46,7 +50,7 @@ const withCors = (response: Response) => { const headers = new Headers(response.
 
 /** The official MCP SDK speaks the protocol; Revline supplies auth, the tool list and tool calls. */
 function revlineServer(ctx: ActionCtx, ownerId: string, agentName: string) {
-  const server = new Server({ name: 'revline', title: 'Revline', version: '1.0.0' }, { capabilities: { tools: { listChanged: false } }, instructions: MCP_INSTRUCTIONS });
+  const server = new Server({ name: 'revline', title: 'Revline', version: '1.0.0' }, { capabilities: { tools: { listChanged: false } }, instructions: isDevelopment() ? `${MCP_INSTRUCTIONS}\n\n${HARNESS_REPORT}` : MCP_INSTRUCTIONS });
   server.setRequestHandler(ListToolsRequestSchema, async () => {
     toolCatalog ??= ctx.runAction(internal.mcpActions.listTools, {}).then(tools => tools as Tool[]).catch(error => { toolCatalog = undefined; throw error; });
     return { tools: await toolCatalog };
