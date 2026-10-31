@@ -1,4 +1,5 @@
 import { explainerScenes } from './explainer-scenes';
+import { explainer } from './explainer';
 import { musicAndSound } from './music-and-sound';
 import { effects } from './effects';
 import { textStyling } from './text-styling';
@@ -16,7 +17,7 @@ import { footageEditing } from './footage-editing';
 export type EditorSkillPage = { name: string; description: string; body: string };
 export type EditorSkill = { name: string; description: string; body: string; pages?: EditorSkillPage[] };
 
-export const EDITOR_SKILLS: EditorSkill[] = [footageEditing, effects, vfxRecipes, textStyling, colorGrading, sceneEngine, gsapSkill, explainerScenes, motionDesign, referenceFootage, musicAndSound, visualInspection];
+export const EDITOR_SKILLS: EditorSkill[] = [footageEditing, effects, vfxRecipes, textStyling, colorGrading, sceneEngine, gsapSkill, explainerScenes, explainer, motionDesign, referenceFootage, musicAndSound, visualInspection];
 export const EDITOR_SKILL_NAMES = EDITOR_SKILLS.map(skill => skill.name) as [string, ...string[]];
 
 /** The always-visible index: names and when to read each skill. */

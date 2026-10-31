@@ -73,7 +73,7 @@ export function defaultEditorReasoningEffort(env: ClaudeModelEnvironment = proce
 const HIGH_EFFORT_WORK = /\b(launch|film|teaser|trailer|announce\w*|motion[- ]design|scenes?|explainer|intro|outro|animat\w*|storyboard|beat sheet|recreat\w*|remake|clone|shot for shot)\b/i;
 const QUICK_TWEAK = /\b(trim|delete|move|mute|unmute|volume|louder|quieter|bigger|smaller|font|colou?r|bold|rename|speed|faster|slower|split|duplicate|crop|fade|white|black|red|yellow|blue|green|orange|pink)\b/i;
 const SMALL_TALK = /^(hi|hey|hello|thanks|thank you|ok|okay|cool|nice|great)\b[\s!.]*$/i;
-const HIGH_EFFORT_SKILLS = ['scene-engine', 'gsap', 'motion-design', 'explainer-scenes'];
+const HIGH_EFFORT_SKILLS = ['scene-engine', 'gsap', 'motion-design', 'explainer-scenes', 'explainer'];
 
 /** The effort a request starts at when none was chosen. */
 export function autoEditorReasoningEffort(prompt: string, { recovering = false } = {}, env: ClaudeModelEnvironment = process.env): EditorReasoningEffort {
