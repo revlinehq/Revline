@@ -10,6 +10,7 @@ type Tile = { label: string; image?: string; video?: { src: string; poster: stri
 const rows: Tile[][] = [
   [
     { label: 'Launch film', video: { src: '/landing/kinetic-launch.mp4', poster: '/landing/kinetic-launch-poster.webp', ratio: 16 / 9 } },
+    { label: 'Motion elements', video: { src: '/landing/jensen-motion-vertical.mp4', poster: '/landing/jensen-motion-vertical-poster.webp', ratio: 608 / 1080 } },
     { label: 'Voice typing', video: { src: '/landing/voice-typing.mp4', poster: '/landing/voice-typing-poster.webp', ratio: 16 / 9 } },
     { label: 'Podcast clip', image: 'podcast' },
     { label: 'Product demo', image: 'code-screen', wide: true },

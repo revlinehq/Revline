@@ -20,11 +20,10 @@ const kinds: Kind[] = [
     overlay: <p className="landing-motion-title">Complex ideas,<br /><b>made simple.</b></p>,
   },
   {
+    // A Jensen Huang interview moment with blueprint motion graphics, made in Revline; its graphics are in the film.
     id: 'elements', label: 'Motion elements', image: 'talking-head',
-    overlay: <div className="landing-motion-elements">
-      <span className="landing-motion-sticker">New feature</span>
-      <div className="landing-motion-lower"><b>Zura</b><span>Founder, Revline</span></div>
-    </div>,
+    overlay: null,
+    film: { src: '/landing/jensen-motion.mp4', poster: '/landing/jensen-motion-poster.webp' },
   },
 ];
 // Scroll distance each segment holds the pinned section for, in viewport heights.
