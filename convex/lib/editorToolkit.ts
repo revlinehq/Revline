@@ -967,10 +967,12 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
     listVoices: createTool({ description: "The narration voices generateVoice can speak with, each with what it sounds like. With sampleText, also speaks that line in each chosen voice (voiceIds, 2 to 6) and returns a playable sample URL per voice: offer them with askUser, one option per voice with its sample as audio, so the user hears the script's own first line before choosing. Samples are not placed on the timeline.", inputSchema: z.object({ sampleText: z.string().trim().min(3).max(VOICE_LIMITS.sample).optional(), voiceIds: z.array(z.string().trim().min(10).max(40)).min(1).max(6).optional().describe('Which voices to sample; voices from the list, or any ElevenLabs voice ID the user names.'), speed: voiceInput.shape.speed }).strict(), execute: async (_ctx, { sampleText, voiceIds, speed }) => {
       if (!sampleText) return { voices: NARRATION_VOICES };
       if (!voiceIds?.length) throw new Error('Choose the voiceIds to sample (2 to 6).');
-      const samples = await Promise.all(voiceIds.map(async voiceId => {
+      // One at a time: the ElevenLabs account allows only a few concurrent requests, shared with every other session.
+      const samples = [];
+      for (const voiceId of voiceIds) {
         const known = NARRATION_VOICES.find(voice => voice.voiceId === voiceId);
-        return { voiceId, name: known?.name ?? voiceId, ...(known ? { description: known.description } : {}), sample: await publishPreview(await generateVoiceSample(voiceId, sampleText, { speed }, abortSignal), 'audio/mpeg') };
-      }));
+        samples.push({ voiceId, name: known?.name ?? voiceId, ...(known ? { description: known.description } : {}), sample: await publishPreview(await generateVoiceSample(voiceId, sampleText, { speed }, abortSignal), 'audio/mpeg') });
+      }
       return { sampleText, samples };
     } }),
     generateVoice: createTool({ description: "Speak a narration script with an ElevenLabs voice (listVoices) and place it as one voice clip on a free A layer at timeline seconds at (frame-snapped); save immediately. The words are saved as the clip's transcript (inspectAssetAnalysis, addSubtitlesFromTranscript). Returns its duration and every word's timeline start and end: time the film's beats to these, so each visual lands on its spoken word. Write the script exactly as it should be read. To change the wording or voice, delete the clip and generate again. If generation fails nothing is placed: say so.", inputSchema: voiceInput.extend({ at: z.number().min(0), gain: z.number().min(0).max(2).optional().describe('Clip volume 0..2, default 1.'), name: z.string().trim().min(1).max(60).optional() }).strict(), execute: async (_ctx, { at, gain = 1, name, ...request }) => {
