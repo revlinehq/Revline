@@ -14,8 +14,6 @@ import { Button } from '@/components/ui/button';
 
 export type ConnectRequest = { clientId?: string; redirectUri?: string; codeChallenge?: string; codeChallengeMethod?: string; state?: string; resource?: string };
 
-// What a connected agent can be asked, shown once access is granted.
-const nextSteps = ['“Cut the dead air from my latest project”', '“Add captions and a title card”', '“Score the cuts with sound effects”'];
 /** Apps on this computer (Claude Code, Codex) take the code on a localhost callback page of their own. */
 const loopback = (uri: string) => ['localhost', '127.0.0.1', '[::1]'].includes(new URL(uri).hostname);
 
@@ -65,13 +63,8 @@ export function ConnectPage({ request }: { request: ConnectRequest }) {
   else if (!details.ok) body = <p className="connect-message">{details.message}</p>;
   else if (connected) body = <div className="connect-done" role="status">
     <CircleCheck size={28} strokeWidth={1.5} className="connect-done-icon" aria-hidden="true" />
-    <h1>Connected to {details.clientName}</h1>
-    <p className="connect-lead">{loopback(request.redirectUri!) ? <>Revline is ready in {details.clientName}. Go back there and ask for an edit. You can close this tab.</> : <>Taking you back to {details.clientName}…</>}</p>
-    <div className="connect-try">
-      <span>Try asking</span>
-      <ul>{nextSteps.map(item => <li key={item}>{item}</li>)}</ul>
-    </div>
-    <p className="connect-note">Every edit shows up live in your Revline editor and can be undone. Manage access in your profile.</p>
+    <h1>Connected</h1>
+    <p className="connect-lead">You can close this window.</p>
   </div>;
   else body = <>
     <h1>Connect {details.clientName} to Revline</h1>
