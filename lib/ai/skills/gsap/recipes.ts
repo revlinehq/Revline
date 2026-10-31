@@ -167,42 +167,9 @@ const ref = useTimeline<HTMLDivElement>((tl, el) => {
 - **Timing:** .35 to .6 s, \`power3.in\` or \`expo.in\` (slow start, fast exit). Stagger .03 to .08 s; \`from: 'end'\` so the last item leaves first when they pile up.
 - A fly-off that hands over to the next beat overlaps its entrance by .1 to .2 s: start the next element's fly-in before this exit ends.`);
 
-const zoomThrough = recipe('zoom-through', 'Seamless zoom transition between scenes: the camera slowly pushes in on one scene, then pulls back into the next, one continuous scale move with the swap hidden in it.', `# Seamless zoom transition (push in, pull out)
-
-**Motion-log words:** zooms in then out into the next scene, push-in into pull-out, camera breathes, scale-through, seamless zoom, the scene recedes and the next one is there, Ken Burns into a cut.
-
-One camera wrapper holds the scenes; only the wrapper scales, so the motion never stops. Scene A eases into a slow push, the push turns into a pull-back, and B is swapped in at the turn, already where the camera is, so the cut hides inside the move.
-
-\`\`\`tsx
-function Camera({ a, b, at }: { a: React.ReactNode; b: React.ReactNode; at: number }) {   // at = film second of the swap
-  const ref = useTimeline<HTMLDivElement>((tl, el) => {
-    const cam = el.querySelector('[data-cam]'), sceneA = el.querySelector('[data-a]'), sceneB = el.querySelector('[data-b]');
-    tl.set(sceneB, { autoAlpha: 0 }, 0)
-      .fromTo(cam, { scale: 1 }, { scale: 1.06, duration: 2.4, ease: 'sine.inOut' }, at - 2.4)      // A: slow push in over its hold
-      .to(cam, { scale: 1.12, filter: 'blur(3px)', duration: .35, ease: 'power2.in' }, at - .35)      // push speeds up into the turn
-      .set(sceneA, { autoAlpha: 0 }, at).set(sceneB, { autoAlpha: 1 }, at)                            // swap at peak speed, hidden by the move
-      .to(cam, { scale: 1, filter: 'blur(0px)', duration: .9, ease: 'expo.out' }, at)                 // B: pull back and settle
-      .to(cam, { scale: 1.04, duration: 2.4, ease: 'sine.inOut' }, at + .9);                         // B keeps breathing
-  });
-  return <div ref={ref} style={{ position: 'absolute', inset: 0, overflow: 'hidden' }}>
-    <div data-cam style={{ position: 'absolute', inset: 0, transformOrigin: '50% 50%' }}>
-      <div data-a style={{ position: 'absolute', inset: 0 }}>{a}</div>
-      <div data-b style={{ position: 'absolute', inset: 0 }}>{b}</div>
-    </div>
-  </div>;
-}
-\`\`\`
-
-- **Subtle:** the slow push is 4 to 8 percent over the whole hold; the turn adds 5 to 8 percent more. Past about 1.2 it stops reading as a camera and starts reading as an effect.
-- **Continuous speed:** the push ends fast (\`power2.in\`) and the pull-back starts fast (\`expo.out\`), so the speed on both sides of the swap matches; any pause or ease-out before the swap breaks the seam.
-- **Pull-out variant** (the scene recedes and the next is there): A scales down 1 to .9 while B starts at 1.1 and settles to 1, crossing with a .15 s opacity overlap at the swap.
-- **Aim it:** set \`transformOrigin\` on the element the next scene grows from (a button, a window), so the zoom leads the eye there.
-- A short blur (2 to 4 px) only around the swap sells the speed; keep it under .4 s.
-- Use one camera for the whole film, keyed at every scene change, rather than a wrapper per pair, so each scene's breathing hands straight to the next.`);
-
 const transitionsIndex: EditorSkillPage = {
   name: 'transitions',
-  description: 'Transition recipes for launch films and remakes: which motion-log words map to which recipe page (letter reveal, write-on, mask wipe, blur-in and motion blur, morph, typing, fly-off, seamless zoom between scenes).',
+  description: 'Transition recipes for launch films and remakes: which motion-log words map to which recipe page (letter reveal, write-on, mask wipe, blur-in and motion blur, morph, typing, fly-off).',
   body: `# Transition recipes
 
 Name each moment's transition type in the motion log, then build it with its recipe. Every recipe is a useTimeline snippet on the frame clock with its usual durations and eases; take the exact timing and ease from the reference (readFrames fps 10, trackReference) and keep the recipe's structure.
@@ -216,9 +183,8 @@ Name each moment's transition type in the motion log, then build it with its rec
 | morphs into, turns into, grows into, expands into, shared element across a cut | morph | \`recipe-morph\` |
 | types, typing, dictation, text streams in, cursor, colored newest letters | typing | \`recipe-typing\` |
 | flies off, thrown out, tossed, swept away, scatters, exits fast with a spin | fly-off | \`recipe-fly-off\` |
-| zooms in then out into the next scene, push-in into pull-out, camera breathes, seamless zoom between scenes | zoom-through | \`recipe-zoom-through\` |
 
 A moment can combine types (keys flying in with motion blur, then a morph into a pill): build each part with its recipe on the same timeline, overlapping as the reference does. Moves that only slide, scale or fade need no recipe: a \`tl.from\` with the measured ease.`,
 };
 
-export const TRANSITION_RECIPE_PAGES: EditorSkillPage[] = [transitionsIndex, letterReveal, writeOn, maskWipe, blurIn, morph, typing, flyOff, zoomThrough];
+export const TRANSITION_RECIPE_PAGES: EditorSkillPage[] = [transitionsIndex, letterReveal, writeOn, maskWipe, blurIn, morph, typing, flyOff];

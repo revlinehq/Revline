@@ -26,7 +26,6 @@ Motion has weight: things open, settle and follow through. A shape that just fad
 - **Guides and frame lines are alive.** Camera frame lines, crop corners, selection boxes and scan lines track the element they mark on the same timeline (same start, same ease), and keep moving while it does. Never leave them as a static overlay.
 - **Anticipation on big moves.** Before a large move, a short wind-up (a 2 to 4 percent counter move over 0.1 to 0.15 s) makes it read as intentional.
 - **Nothing dead still.** Between beats something always moves: a slow camera push (1 to 3 percent over the hold), a drift, a cursor, a build. A truly frozen frame reads as a bug unless it is a deliberate held beat.
-- **Scene changes ride the camera.** Moving from one scene to the next, prefer a seamless zoom: the camera's slow push on the old scene speeds into a turn and pulls back to settle on the new one, one continuous scale move with the swap hidden at peak speed (gsap page \`recipe-zoom-through\`). Keep it subtle (under about 1.2 scale) and use it for most scene changes in a launch film, with other transitions as accents.
 - Recipes for each of these (eases, masks, morphs, staggers): readSkill name "gsap" page "transitions".
 
 ## Recreating a video (clone, remake, copy, "shot for shot")
