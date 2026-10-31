@@ -127,7 +127,7 @@ function referenceSummary(asset: { _id: string; fileName: string; analysis?: { r
 async function imagePart(ctx: unknown, data: string, mediaType: string) {
   if (!ctx || typeof ctx !== 'object' || !('storage' in ctx) || !('runMutation' in ctx)) return { type: 'file' as const, data: { type: 'data' as const, data }, mediaType };
   const { file } = await storeFile(ctx as ActionCtx, components.agent, new Blob([Buffer.from(data, 'base64')], { type: mediaType }));
-  return { type: 'file' as const, data: { type: 'url' as const, url: file.url as unknown as URL }, mediaType }; // stored as a string, as the agent stores its own files
+  return { type: 'file' as const, data: { type: 'url' as const, url: new URL(file.url) }, mediaType };
 }
 
 async function blueprintImages(ctx: unknown, output: unknown) {
