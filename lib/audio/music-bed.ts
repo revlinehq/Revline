@@ -1,5 +1,5 @@
 import { SR, TAU, both, each, fade, hp, hz, lp, noise, peakOf, put, reverb, silence, stereo, type Mono, type Stereo } from './dsp';
-import { GENERATED_SOUND_PEAK } from './render-sound';
+import { GENERATED_SOUND_PEAK } from './wav';
 
 // A music bed rendered from scratch at a given tempo and beat phase, so its downbeats land where a reference's do.
 // Deterministic synth (pads, bass, drums, a pluck), one chord per bar, each bar's density following an energy curve.
