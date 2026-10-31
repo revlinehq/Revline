@@ -92,7 +92,7 @@ Generated and library sounds both peak near -3 dBFS, so the tool's \`gain\` (cli
 
 ### Check
 
-After placing, compare each sound's timeline time with the beats you listed, and report the sounds, their prompts and times. Say they were generated and not listened to.
+After placing, compare each sound's timeline time with the beats you listed. Run checkSound after placing sound; fix what it flags. Then report the sounds, their prompts and times. Say they were generated and not listened to.
 
 ### Library
 
