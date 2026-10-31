@@ -28,6 +28,10 @@ export type VisualTransform = { x: number; y: number; scale: number; rotation: n
 export type SourceCrop = { left: number; top: number; right: number; bottom: number };
 export const DEFAULT_TRANSFORM: VisualTransform = { x: 0.5, y: 0.5, scale: 1, rotation: 0, opacity: 1 };
 export const DEFAULT_CROP: SourceCrop = { left: 0, top: 0, right: 0, bottom: 0 };
+/** The user signed off on this work: editing agents refuse to change it unless the user names it. */
+export type ClipApproval = { note?: string; at: number; by: 'user' | 'agent' };
+/** An approved stretch of a film or scene, in film seconds (the scene's own clock), so it holds across moves and splits. */
+export type ApprovedSection = ClipApproval & { id: string; start: number; end: number; label?: string };
 export type Clip = {
   id: string;
   kind: ClipKind;
@@ -108,6 +112,8 @@ export type Clip = {
   transform?: VisualTransform;
   crop?: SourceCrop;
   fit?: 'cover' | 'contain';
+  approval?: ClipApproval;
+  approvedSections?: ApprovedSection[];
 };
 export type TimelineMarker = { id: string; time: number; label?: string };
 export type Timeline = { clips: Clip[]; fps: number; aspectRatio: AspectRatio; tracks?: TrackCounts; markers?: TimelineMarker[]; luts?: TimelineLut[] };

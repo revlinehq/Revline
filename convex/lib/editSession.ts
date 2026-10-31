@@ -1,7 +1,7 @@
 import {EDITOR_SOFT_STEPS,EDITOR_HARD_STEPS} from '../../lib/ai/edit-progress';
 import { normalizeTimeline, type Timeline } from '../../lib/editor/types';
 import { rebaseNonDestructiveEdit } from './editSessionRebase';
-import { isOverlapPlacementRejection, type TimelineGestureRejection } from '../../lib/editor/timeline-edit-errors';
+import { isApprovalRejection, isOverlapPlacementRejection, type TimelineGestureRejection } from '../../lib/editor/timeline-edit-errors';
 
 export const isTimelineConflict = (error: unknown) => /timeline changed elsewhere/i.test(error instanceof Error ? error.message : String(error));
 export class IncompleteEditError extends Error {
@@ -53,9 +53,9 @@ export class EditSession {
       let edited: Timeline;
       try { edited = edit(previous); }
       catch (error) {
-        // Only the pure placement calculation can reject without changing the
+        // Only the pure placement and approval checks can reject without changing the
         // draft. A similarly named storage/validation failure still poisons it.
-        if (isOverlapPlacementRejection(error)) preflightRejection = error;
+        if (isOverlapPlacementRejection(error) || isApprovalRejection(error)) preflightRejection = error;
         throw error;
       }
       let next = normalizeTimeline(edited);

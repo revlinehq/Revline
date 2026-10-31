@@ -26,6 +26,7 @@ import {VISUAL_INPUT_UNITS,transformInputPatch,cropInputPatch} from '../../lib/e
 import { addMediaClip, addEffectClip, convertSolidColorToVisual, setClipPlaybackRate, setClipSpeedRamp, deleteClip, focusForClip, newLayerOverlaps, patchClip, placeOnFreeLayer, splitClip,trimClip,unlinkClips,setClipBlendMode, addTransitionClip } from "../../lib/editor/operations";
 import { IRIS_SHAPES, TRANSITION_DIRECTIONS, TRANSITION_PRESETS, WIPE_DIRECTIONS } from '../../lib/editor/clip-transitions';
 import { TimelineGestureRejection } from '../../lib/editor/timeline-edit-errors';
+import { APPROVAL_NOTE_LIMIT, approvalRefusal, approvalViolations, approveClip, approveSection, approvedWork, isApproved, markerSection, unapproveClip, type ApprovalViolation } from '../../lib/editor/approvals';
 import { summarizeTimeline } from "./inspectTimeline";
 import { EditSession } from "./editSession";
 import { readRunTab } from "./run_ids";
@@ -128,6 +129,11 @@ function blueprintImages(output: unknown) {
 /** A compared moment at or under this difference matches; over the finished line, the recreation is not done. */
 const COMPARE_GOOD = 25, COMPARE_FINISHED = 35, COMPARE_PASSES = 3;
 
+/** Shown with approved work in inspectTimeline and inspectClip. */
+const APPROVED_RULE = 'Approved clips and sections are signed off by the user. Every editing tool refuses to change them. Edit around them; change one only when the user names it, by passing overrideApproved: true with overrideReason quoting the user.';
+/** Tools that never change clips, so they take no approved-work override. */
+const APPROVAL_FREE_TOOLS = new Set(['planEffects', 'previewRender', 'inspectTimeline', 'inspectClip', 'analyzeMedia', 'inspectReference', 'inspectVideo', 'inspectFrames', 'inspectAssetAnalysis', 'markMusicBeats', 'addMarker', 'moveMarker', 'removeMarker', 'removeMarkers', 'remember', 'recallMemory', 'forget', 'compareReference', 'getFrames', 'askUser', 'askBrandKit', 'measureScreen', 'compareScreen', 'readFrames', 'trackReference', 'measureFrame', 'matchFont', 'traceShape', 'findIcon', 'saveBlueprint', 'listBlueprints', 'getBlueprint', 'readSkill', 'listBrandKits', 'getBrandKit', 'createBrandKit', 'updateBrandKit', 'listVoices', 'analyzeColor', 'addLayer', 'approveClip', 'unapproveClip']);
+
 /** The timeline windows a scene build covers. A film's beats are cuts of one continuous animation, so it is one window. */
 function sceneRanges(name: string, input: Record<string, unknown>) {
   const span = (value: unknown) => { const item = value as { start?: unknown; duration?: unknown }; return typeof item?.start === 'number' && typeof item.duration === 'number' ? [{ start: item.start, end: item.start + item.duration }] : []; };
@@ -183,10 +189,16 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
     refresh: async () => { return await ctx.runQuery(internal.assistant.getRunTimeline,run); },
     beforeChange: beginEditing,
   }, abortSignal);
+  // Approved work (lib/editor/approvals.ts) is refused unless the call passes overrideApproved with the user's reason.
+  // The override covers the calls running under it; what it let through is reported back on that call.
+  const approvalOverride = { active: 0, reason: '', overridden: [] as ApprovalViolation[] };
   const checkpoint = (edit: (timeline: Timeline) => Timeline) => editSession.checkpoint(timeline => { if (recovering && !inspected) throw new Error('Inspect the current timeline before continuing the saved edit.');
     const next = edit(timeline), collision = newLayerOverlaps(timeline, next)[0];
     // Refuse before the draft changes; the server repeats this check on every assistant write.
     if (collision) throw new TimelineGestureRejection(`Clips ${collision[0].id} and ${collision[1].id} would overlap on the same layer. Move one to another time or layer first.`, 'overlap');
+    const touched = approvalViolations(timeline, next);
+    if (touched.length && !approvalOverride.active) throw new TimelineGestureRejection(approvalRefusal(touched), 'approved');
+    approvalOverride.overridden.push(...touched);
     return next; });
   // Blueprint checks run on the media worker; wait for one like getFrames waits for frames.
   const blueprintCheck = async (checkId: Id<'blueprintChecks'>) => {
@@ -224,6 +236,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
     return items;
   };
   const find = (timeline: Timeline, id: string) => { const clip = timeline.clips.find(c => c.id === id); if (!clip) throw new Error("Clip not found"); return clip; };
+  const approvedNote = (timeline: Timeline) => { const approved = approvedWork(timeline); return approved.length ? { approved, approvedRule: APPROVED_RULE } : {}; };
   const textColor = z.string().regex(/^(#(?:[\da-f]{3,4}|[\da-f]{6}|[\da-f]{8})|transparent)$/i);
   const appearanceColor=z.string().regex(/^#[\da-f]{6}$/i);
   const textStyleInput=z.object({strokeWidth:z.number().min(TEXT_APPEARANCE_LIMITS.strokeWidth[0]).max(TEXT_APPEARANCE_LIMITS.strokeWidth[1]).optional(),strokeColor:appearanceColor.optional(),shadowBlur:z.number().min(TEXT_APPEARANCE_LIMITS.shadowBlur[0]).max(TEXT_APPEARANCE_LIMITS.shadowBlur[1]).optional(),shadowX:z.number().min(TEXT_APPEARANCE_LIMITS.shadowX[0]).max(TEXT_APPEARANCE_LIMITS.shadowX[1]).optional(),shadowY:z.number().min(TEXT_APPEARANCE_LIMITS.shadowY[0]).max(TEXT_APPEARANCE_LIMITS.shadowY[1]).optional(),shadowColor:appearanceColor.optional(),glowBlur:z.number().min(TEXT_APPEARANCE_LIMITS.glowBlur[0]).max(TEXT_APPEARANCE_LIMITS.glowBlur[1]).optional(),glowColor:appearanceColor.optional(),fontWeight:z.number().int().min(TEXT_TYPOGRAPHY_LIMITS.fontWeight[0]).max(TEXT_TYPOGRAPHY_LIMITS.fontWeight[1]).optional(),italic:z.boolean().optional(),letterSpacing:z.number().min(TEXT_TYPOGRAPHY_LIMITS.letterSpacing[0]).max(TEXT_TYPOGRAPHY_LIMITS.letterSpacing[1]).optional(),lineHeight:z.number().min(TEXT_TYPOGRAPHY_LIMITS.lineHeight[0]).max(TEXT_TYPOGRAPHY_LIMITS.lineHeight[1]).optional(),textAlign:z.enum(['left','center','right']).optional(),paddingX:z.number().min(0).max(200).optional(),paddingY:z.number().min(0).max(200).optional(),borderRadius:z.number().min(0).max(200).optional()});
@@ -486,7 +499,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       let undone=false;
       const snapshot=await editSession.inspect(async()=>{
         if(editSession.savedEdits||editSession.staged)throw new Error('Undo the latest saved edit before making changes in this turn.');
-        const result=await ctx.runMutation(internal.assistant.undoLatestEdit,{...run,expectedRevision:editSession.revision});undone=result.undone;return result;
+        const result=await ctx.runMutation(internal.assistant.undoLatestEdit,{...run,expectedRevision:editSession.revision,overrideApproved:approvalOverride.active>0});undone=result.undone;return result;
       });
       return {...snapshot,undone,saved:undone,applied:undone,message:undone?'Latest saved edit undone.':'No saved edits to undo.',summary:summarizeTimeline(snapshot.timeline,assets)};
     }}),
@@ -529,6 +542,22 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       });
       return {...result,unlinked:clipIds.length>0,clipIds};
     }}),
+    approveClip: createTool({ description: "Mark a clip, or one section of a film or scene, as approved: the user signed off on it, and every editing tool then refuses to change it. Use it when the user says they approve, like, or want to keep a clip or part of a film as it is. A section is a marker's part of a film (markerId: from that marker to the next) or a timeline range (start/end seconds) on a scene clip. note says what was approved, in the user's words (\"user approved the GeForce/CUDA diagrams\"). Approving a video approves its linked audio too.", inputSchema: z.object({ clipId: z.string().min(1), markerId: z.string().min(1).optional().describe('Approve the film section that starts at this marker (to the next marker or the film end).'), start: z.number().min(0).optional().describe('Timeline seconds: approve only start..end of this scene or film clip.'), end: z.number().positive().optional(), note: z.string().trim().max(APPROVAL_NOTE_LIMIT).optional() }).refine(input => (input.start === undefined) === (input.end === undefined) && !(input.markerId && input.start !== undefined) && (input.start === undefined || input.end! > input.start), { message: 'Give markerId, or both start and end (end after start), or neither to approve the whole clip.' }), execute: async (_ctx, { clipId, markerId, start, end, note }) => {
+      let section: { id: string; start: number; end: number; label?: string } | undefined;
+      const saved = await checkpoint(t => {
+        const clip = find(t, clipId);
+        if (markerId === undefined && start === undefined) return approveClip(t, clipId, note, 'agent');
+        const range = markerId ? markerSection(t, clip, markerId) : { start: start!, end: end! };
+        const result = approveSection(t, clipId, range, note, 'agent');
+        section = result.section;
+        return result.timeline;
+      });
+      return { ...saved, approved: approvedWork({ ...editSession.timeline, clips: editSession.timeline.clips.filter(clip => clip.id === clipId) })[0], ...(section ? { sectionId: section.id } : {}) };
+    } }),
+    unapproveClip: createTool({ description: "Remove an approval so the clip (or one approved section, by sectionId from inspectClip) can be edited again. Only when the user asks to unlock or change approved work: reason quotes what they asked.", inputSchema: z.object({ clipId: z.string().min(1), sectionId: z.string().min(1).optional(), reason: z.string().trim().min(3).max(300).describe("What the user asked, in their words.") }), execute: async (_ctx, { clipId, sectionId }) => {
+      const saved = await checkpoint(t => unapproveClip(t, clipId, sectionId));
+      return { ...saved, unapproved: true, clipId, ...(sectionId ? { sectionId } : {}) };
+    } }),
     inspectTimeline: createTool({ description: "Read this active project's current working timeline (the open timeline tab, named in openTimeline) and saved revision. If staged is true, this is a private replacement draft that has not been published yet. Expose each labeled layer with its group and number: FX effects-only, V video/image/text/solid-color, A audio. Timeline clips include their kind and track. Report visual coverage gaps, overlaps within the same group/layer, missing media references and effective text animation labels. Higher stacked layers are intentional and are not overlap errors. This tool does not change the timeline or create an undo entry.", inputSchema: z.object({}), execute: async () => {
       const snapshot = await editSession.inspect(async () => {
         const current = await ctx.runQuery(internal.assistant.getRun, run);
@@ -544,9 +573,9 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       }).map(asset=>asset._id);
       // Tabs cannot change during a run, so the run's project names the open one.
       const tabs = project.timelineTabs?.length ? project.timelineTabs : [{ id: 'main', name: 'Timeline 1' }], openTab = tabs.find(tab => tab.id === (project.activeTimelineId ?? tabs[0].id)) ?? tabs[0];
-      return { ...snapshot, openTimeline: { timelineId: openTab.id, name: openTab.name, otherTimelines: tabs.filter(tab => tab !== openTab).map(tab => tab.name) }, captionedAssetIds, timeline: modelTimeline(snapshot.timeline, selectedClipIds), layers: deriveTracks(snapshot.timeline), summary: summarizeTimeline(snapshot.timeline, assets) };
+      return { ...snapshot, openTimeline: { timelineId: openTab.id, name: openTab.name, otherTimelines: tabs.filter(tab => tab !== openTab).map(tab => tab.name) }, captionedAssetIds, timeline: modelTimeline(snapshot.timeline, selectedClipIds), layers: deriveTracks(snapshot.timeline), summary: summarizeTimeline(snapshot.timeline, assets), ...approvedNote(snapshot.timeline) };
     } }),
-    inspectClip: createTool({ description: "Read one exact current clip including all motion/focus samples and settings omitted from the compact timeline. Uses the working edit session; no edits. Read inspectTimeline first when fresh saved state is needed.", inputSchema: z.object({ clipId: z.string() }), execute: async (_ctx, input) => { await editSession.wait(); const clip = find(editSession.timeline, input.clipId), soundRecipe = assets.find(item => item._id === clip.assetId)?.soundRecipe, components = clip.scene ? sceneComponents(clip.scene) : []; /* A film's beats: every clip showing a window of this one code. */ const filmBeats = clip.scene?.film ? editSession.timeline.clips.filter(other => other.kind === 'scene' && other.scene?.code === clip.scene!.code).sort((a, b) => a.start - b.start).map(other => ({ clipId: other.id, title: other.scene!.title, start: other.start, duration: other.duration, filmTime: other.sourceStart })) : []; return { clip, ...(components.length ? { components } : {}), ...(filmBeats.length ? { filmBeats } : {}), ...(soundRecipe ? { soundRecipe: JSON.parse(soundRecipe) } : {}), revision: editSession.revision, staged: editSession.staged }; } }),
+    inspectClip: createTool({ description: "Read one exact current clip including all motion/focus samples and settings omitted from the compact timeline. Uses the working edit session; no edits. Read inspectTimeline first when fresh saved state is needed.", inputSchema: z.object({ clipId: z.string() }), execute: async (_ctx, input) => { await editSession.wait(); const clip = find(editSession.timeline, input.clipId), soundRecipe = assets.find(item => item._id === clip.assetId)?.soundRecipe, components = clip.scene ? sceneComponents(clip.scene) : []; /* A film's beats: every clip showing a window of this one code. */ const filmBeats = clip.scene?.film ? editSession.timeline.clips.filter(other => other.kind === 'scene' && other.scene?.code === clip.scene!.code).sort((a, b) => a.start - b.start).map(other => ({ clipId: other.id, title: other.scene!.title, start: other.start, duration: other.duration, filmTime: other.sourceStart })) : []; return { clip, ...(isApproved(clip) ? { approved: approvedWork({ ...editSession.timeline, clips: [clip] })[0], approvedRule: APPROVED_RULE } : {}), ...(components.length ? { components } : {}), ...(filmBeats.length ? { filmBeats } : {}), ...(soundRecipe ? { soundRecipe: JSON.parse(soundRecipe) } : {}), revision: editSession.revision, staged: editSession.staged }; } }),
     analyzeMedia: createTool({ description: "Request real analysis of this project's uploaded media through durable background jobs. Transcribe word-timed speech, create a native Gemini video overview, measure music beats, track a visible face, or break down a reference video (mode reference: measured cuts, beats and moments (every change at 10 fps, motion inside a shot too, with M ids and the shot each falls in), every shot split into its parts, transitions, camera, title styles and the style worth borrowing; use it when the user shares footage to remake or to take style from, and read the reference-footage skill first). mode track uses face detection only; for a can or other object use inspectFrames and configureCameraMotion mode follow. Use inspectVideo with the actual user question to find specific visual moments; a generic overview is not an answer to every editing question. Saved results are usable immediately; never invent unavailable results.", inputSchema: z.object({ assetId: z.string(), mode: z.enum(["transcribe", "understand", "beats", "track", "reference"]) }), execute: async (_ctx, input) => {
       return reportAnalysisFailure(async () => {
       const asset = await analyze(input.assetId, input.mode);
@@ -1303,6 +1332,32 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
         const left = (runningTools.get(name) ?? 1) - 1;
         if (left) runningTools.set(name, left); else runningTools.delete(name);
       }
+    };
+  }
+  // Every editing tool takes the approved-work override. Background jobs (cut-outs, upscales, slow motion) apply
+  // later, outside this check, so they refuse an approved clip up front.
+  const appliedLater = new Set(['removeBackground', 'upscaleClip', 'smoothSlowMotion']);
+  for (const [name, tool] of Object.entries(tools as Record<string, { execute?: (...args: never[]) => Promise<unknown>; inputSchema?: unknown }>)) {
+    const execute = tool.execute;
+    if (APPROVAL_FREE_TOOLS.has(name) || !execute || !(tool.inputSchema instanceof z.ZodObject)) continue;
+    tool.inputSchema = tool.inputSchema.extend({ overrideApproved: z.boolean().optional().describe('Only when the user asked for this exact change to approved work: edit it anyway. Needs overrideReason.'), overrideReason: z.string().trim().min(3).max(300).optional().describe("What the user asked, quoted, when overrideApproved is true.") });
+    tool.execute = async function (this: unknown, ...args: never[]) {
+      const { overrideApproved, overrideReason, ...input } = (args[0] ?? {}) as Record<string, unknown> & { overrideApproved?: boolean; overrideReason?: string };
+      args = [input, ...args.slice(1)] as never[];
+      if (overrideApproved && !overrideReason) throw new Error('overrideApproved needs overrideReason: quote what the user asked. Nothing was changed.');
+      if (!overrideApproved && appliedLater.has(name) && typeof input.clipId === 'string') {
+        await editSession.wait();
+        const clip = editSession.timeline.clips.find(item => item.id === input.clipId);
+        if (clip && isApproved(clip)) throw new Error(approvalRefusal([{ clipId: clip.id, name: clip.scene?.title || clip.kind, what: 'replace its media', note: clip.approval?.note ?? clip.approvedSections?.[0]?.note }]));
+      }
+      if (!overrideApproved) return execute.apply(this ?? tool, args);
+      approvalOverride.active++; approvalOverride.reason = overrideReason!;
+      const from = approvalOverride.overridden.length;
+      try {
+        const output = await execute.apply(this ?? tool, args);
+        const overridden = approvalOverride.overridden.slice(from);
+        return overridden.length && output && typeof output === 'object' ? { ...output, approvedOverridden: { reason: overrideReason, clips: overridden.map(item => ({ clipId: item.clipId, name: item.name, change: item.what })) }, note: 'Approved work was changed because the user asked. Say so in your reply; it stays approved.' } : output;
+      } finally { approvalOverride.active--; }
     };
   }
   /** What a turn that stops now still owes its recreation: moments the last compare left over the finished line, while passes remain. */

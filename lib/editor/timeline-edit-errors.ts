@@ -1,6 +1,6 @@
 /** A rejected local gesture is a no-op, rather than an operational failure. */
 export class TimelineGestureRejection extends Error {
-  constructor(message: string, readonly code?: 'overlap') {
+  constructor(message: string, readonly code?: 'overlap' | 'approved') {
     super(message);
     this.name = 'TimelineGestureRejection';
   }
@@ -8,6 +8,11 @@ export class TimelineGestureRejection extends Error {
 
 export function isOverlapPlacementRejection(error: unknown): error is TimelineGestureRejection {
   return error instanceof TimelineGestureRejection && error.code === 'overlap';
+}
+
+/** An edit refused before it changed anything because it touches approved work. */
+export function isApprovalRejection(error: unknown): error is TimelineGestureRejection {
+  return error instanceof TimelineGestureRejection && error.code === 'approved';
 }
 
 export function isTimelineGestureRejection(error: unknown): error is TimelineGestureRejection {

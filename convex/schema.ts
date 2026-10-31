@@ -44,6 +44,7 @@ export const textTemplateValidator = v.object({ preset: v.union(v.literal('word-
 export const textGradientValidator = v.object({colors:v.array(v.string()),angle:v.number(),animation:v.optional(v.object({duration:v.number(),direction:v.union(v.literal('forward'),v.literal('reverse')),loop:v.boolean()})),offset:v.optional(v.number())});
 export const textStyleValidator = v.object({strokeWidth:v.number(),strokeColor:v.string(),shadowBlur:v.number(),shadowX:v.number(),shadowY:v.number(),shadowColor:v.string(),glowBlur:v.number(),glowColor:v.string(),fontWeight:v.optional(v.number()),italic:v.optional(v.boolean()),letterSpacing:v.optional(v.number()),lineHeight:v.optional(v.number()),textAlign:v.optional(v.union(v.literal('left'),v.literal('center'),v.literal('right'))),paddingX:v.optional(v.number()),paddingY:v.optional(v.number()),borderRadius:v.optional(v.number())});
 export const audioSettingsValidator=v.object({role:v.union(v.literal('original'),v.literal('voice'),v.literal('music')),fadeIn:v.number(),fadeOut:v.number(),ducking:v.object({enabled:v.boolean(),amount:v.number(),attack:v.number(),release:v.number()})});
+const clipApprovalValidator = v.object({ note: v.optional(v.string()), at: v.number(), by: v.union(v.literal('user'), v.literal('agent')) });
 export const clipValidator = v.object({
   id: v.string(), kind: v.union(assetKind, v.literal("caption"), v.literal("graphic"), v.literal("solid"), v.literal("scene"), v.literal("effect")),
   assetId: v.optional(v.string()), focus: v.optional(focusValidator), track: v.optional(v.number()), start: v.number(), duration: v.number(), sourceStart: v.number(),
@@ -100,6 +101,8 @@ export const clipValidator = v.object({
   transition:v.optional(v.object({fromClipId:v.string(),toClipId:v.string(),direction:v.union(v.literal('clockwise'),v.literal('counter-clockwise')),wipeDirection:v.optional(v.union(v.literal('left'),v.literal('right'),v.literal('up'),v.literal('down'))),softness:v.optional(v.number()),centerX:v.optional(v.number()),centerY:v.optional(v.number()),shape:v.optional(v.union(v.literal('circle'),v.literal('ellipse')))})),
   animation: v.optional(v.union(v.literal("none"), v.literal("fade"), v.literal("rise"))),
   textAnimationTiming:v.optional(v.object({duration:v.number(),offset:v.number()})),
+  approval:v.optional(clipApprovalValidator),
+  approvedSections:v.optional(v.array(v.object({...clipApprovalValidator.fields,id:v.string(),start:v.number(),end:v.number(),label:v.optional(v.string())}))),
 });
 export const timelineMarkerValidator = v.object({ id: v.string(), time: v.number(), label: v.optional(v.string()) });
 // Legacy: timelines saved while sections existed may still hold them; saving drops them.

@@ -1,5 +1,6 @@
 import {validatePinnedClaudeModel,type ClaudeModelSelection} from '../lib/ai/claude-model';
 import { READ_ONLY_RUN_PREFIX, readRunTab } from './lib/run_ids';
+import { approvalRefusal, approvalViolations, isApproved } from '../lib/editor/approvals';
 import type {MutationCtx, QueryCtx} from './_generated/server';
 import type {Doc} from './_generated/dataModel';
 import {aiWorkflow} from './lib/workflows';
@@ -315,13 +316,20 @@ export const apply = internalMutation({ args: { ...runArgs, expectedRevision: v.
   await writeProject(ctx,project._id, { aiUndoRecorded: true, aiCheckpointRevision: revision }); return receipt(revision);
 }});
 /** Undo only stored history before this model turn publishes its own checkpoints. */
-export const undoLatestEdit=internalMutation({args:{...runArgs,expectedRevision:v.number()},returns:v.object({undone:v.boolean(),revision:v.number(),timeline:timelineValidator}),handler:async(ctx,args)=>{
+export const undoLatestEdit=internalMutation({args:{...runArgs,expectedRevision:v.number(),overrideApproved:v.optional(v.boolean())},returns:v.object({undone:v.boolean(),revision:v.number(),timeline:timelineValidator}),handler:async(ctx,args)=>{
   const project=await requireProject(ctx,args.projectId,args.ownerId,true);
   if(project.aiRunId!==args.runId||!project.aiRunning)throw new ConvexError('AI run is no longer active');
   if(project.aiUndoRecorded)throw new ConvexError('Undo the latest saved edit before making changes in this turn.');
   if((project.revision??0)!==args.expectedRevision)throw new ConvexError('The timeline changed elsewhere. Inspect it before undoing.');
   const history=(project.history??[]).map(normalizeTimeline),previous=history.pop();
   if(!previous)return {undone:false,revision:project.revision??0,timeline:currentTimeline(project)};
+  // Undo is an edit too: it may not take back approved work, or the approval itself, unless the user asked.
+  if(!args.overrideApproved){
+    const current=currentTimeline(project),kept=new Map(previous.clips.map(clip=>[clip.id,clip]));
+    const unmarked=current.clips.filter(clip=>isApproved(clip)&&!isApproved(kept.get(clip.id)??clip)).map(clip=>({clipId:clip.id,name:clip.scene?.title||clip.kind,what:'remove its approval'}));
+    const touched=[...approvalViolations(current,previous),...unmarked];
+    if(touched.length)throw new ConvexError(approvalRefusal(touched));
+  }
   const timeline=await validateTimeline(ctx,project,previous),revision=args.expectedRevision+1;
   await writeProject(ctx,project._id,{timeline,aspectRatio:timeline.aspectRatio,history,revision,aiEditing:true,aiCheckpointRevision:undefined,updatedAt:Date.now()},undefined,{tool:'undoLatestEdit'});
   return {undone:true,revision,timeline};
