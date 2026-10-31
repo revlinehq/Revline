@@ -107,7 +107,7 @@ function decodedVideoFrame(video: HTMLVideoElement, target: number, fps: number)
     const done = () => { clearTimeout(timer); video.cancelVideoFrameCallback(callback); resolve(); };
     const timer = setTimeout(done, 4000);
     const frame: VideoFrameRequestCallback = (_now, metadata) => {
-      if (!video.seeking && Math.abs(metadata.mediaTime - target) <= Math.max(1 / fps, 1 / 24) + .001) done();
+      if (Math.abs(metadata.mediaTime - target) <= Math.max(1 / fps, 1 / 24) + .001) done();
       else callback = video.requestVideoFrameCallback(frame);
     };
     callback = video.requestVideoFrameCallback(frame);
