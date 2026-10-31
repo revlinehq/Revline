@@ -6,8 +6,8 @@ import { LandingReveal, LandingSection } from './ui';
 export function LandingHero() {
   return <LandingSection className="landing-hero" headingId="landing-hero-heading">
     <div className="landing-hero-copy">
-      <LandingReveal as="h1" id="landing-hero-heading">The AI video editor that{' '}<br />actually does the editing</LandingReveal>
-      <LandingReveal as="p" order={1}>From podcasts and YouTube videos to product demos, ads, and social clips.{' '}<br />Revline cuts, captions, reframes, and polishes every video for you.</LandingReveal>
+      <LandingReveal as="h1" id="landing-hero-heading">Describe the edit.{' '}<br />Revline makes it.</LandingReveal>
+      <LandingReveal as="p" order={1}>Say what you want in the chat. Revline cuts the footage, captions it,{' '}<br />adds the motion and sound, and hands back the finished video.</LandingReveal>
       <div className="landing-hero-actions">
         <LandingReveal order={2} className="landing-hero-buttons"><LandingStartButton /><LandingAgentButton /></LandingReveal>
       </div>

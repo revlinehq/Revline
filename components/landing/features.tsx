@@ -1,13 +1,14 @@
 import type { ReactNode } from 'react';
 import { Bell } from 'lucide-react';
 import { LandingHeading, LandingSection } from './ui';
+import { LandingSoundStage } from './sound-stage';
 
 // The speed ramp's rate over the clip: fast, a slow-mo dip on the jump, fast again (bar heights in px).
 const ramp = [62, 70, 80, 90, 92, 82, 62, 42, 27, 25, 25, 27, 42, 62, 82, 92, 90, 80, 70, 62];
 
-function Feature({ title, description, stage, children }: { title: string; description: string; stage: string; children: ReactNode }) {
-  return <article className="landing-feature">
-    <div className="landing-feature-stage" data-stage={stage} aria-hidden="true">{children}</div>
+function Feature({ title, description, stage, wide, interactive, children }: { title: string; description: string; stage: string; wide?: boolean; interactive?: boolean; children: ReactNode }) {
+  return <article className="landing-feature" data-wide={wide || undefined}>
+    <div className="landing-feature-stage" data-stage={stage} aria-hidden={interactive ? undefined : true}>{children}</div>
     <div className="landing-feature-text"><h3>{title}</h3><p>{description}</p></div>
   </article>;
 }
@@ -49,6 +50,9 @@ export function LandingFeatures() {
       </Feature>
       <Feature title="Animated captions" description="Word-by-word, styled to your brand." stage="captions">
         <p className="landing-caption-demo">this is <b>INSANE</b> <span>right?</span></p>
+      </Feature>
+      <Feature title="Sound effects, generated" description="Describe a sound and Revline makes it, then lands it on the exact frame of the move it scores." stage="sound" wide interactive>
+        <LandingSoundStage />
       </Feature>
     </div>
   </LandingSection>;
