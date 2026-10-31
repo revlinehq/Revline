@@ -56,6 +56,14 @@ export const get = internalQuery({ args: { ownerId: v.string(), readId: v.id('re
   return { status: read.status, ...(read.error ? { error: read.error } : {}), ...(read.result ? { result: read.result } : {}) };
 }});
 
+/** get, deleting a finished or failed reading as it is read, so its images are read once instead of again by discard. */
+export const take = internalMutation({ args: { ownerId: v.string(), readId: v.id('referenceReads') }, returns: v.any(), handler: async (ctx, args) => {
+  const read = await ctx.db.get(args.readId);
+  if (!read || read.ownerId !== args.ownerId) throw new ConvexError('Frame reading not found.');
+  if (read.status !== 'queued') await ctx.db.delete(read._id);
+  return { status: read.status, ...(read.error ? { error: read.error } : {}), ...(read.result ? { result: read.result } : {}) };
+}});
+
 export const discard = internalMutation({ args: { readId: v.id('referenceReads') }, returns: v.null(), handler: async (ctx, args) => {
   const read = await ctx.db.get(args.readId);
   if (read) await ctx.db.delete(read._id);
@@ -86,7 +94,7 @@ export async function runRead(ctx: ActionCtx, ownerId: string, projectId: Id<'pr
   try {
     while (Date.now() < deadline) {
       if (signal?.aborted) throw new Error('Stopped.');
-      const state = await ctx.runQuery(internal.referenceReads.get, { ownerId, readId });
+      const state = await ctx.runMutation(internal.referenceReads.take, { ownerId, readId });
       if (state.status !== 'queued') started = true;
       if (state.status === 'failed') throw new Error(`The frames could not be read: ${state.error ?? 'unknown error'}`);
       if (state.status === 'completed') return state.result as ReadResult;
@@ -115,7 +123,7 @@ export async function runCompare(ctx: ActionCtx, ownerId: string, projectId: Id<
   try {
     while (Date.now() < deadline) {
       if (signal?.aborted) throw new Error('Stopped.');
-      const state = await ctx.runQuery(internal.referenceReads.get, { ownerId, readId });
+      const state = await ctx.runMutation(internal.referenceReads.take, { ownerId, readId });
       if (state.status === 'failed') throw new Error(`The comparison could not be made: ${state.error ?? 'unknown error'}`);
       if (state.status === 'completed') return state.result as ReadResult;
       await new Promise(resolve => setTimeout(resolve, 1500));

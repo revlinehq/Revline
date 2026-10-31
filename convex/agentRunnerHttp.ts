@@ -14,8 +14,8 @@ const TURN_FUNCTIONS = new Set([
   'assistant:analysisRequest', 'assistant:apply', 'assistant:attachRunStockAudio', 'assistant:beginEditing', 'assistant:clearAnalysis', 'assistant:currentPrompt', 'assistant:finish', 'assistant:getRun', 'assistant:getRunAsset', 'assistant:getRunTimeline', 'assistant:isRunActive', 'assistant:previewDraft', 'assistant:recordBudget', 'assistant:recordEffort', 'assistant:requestAnalysis', 'assistant:revisionChanges', 'assistant:revisionHistory', 'assistant:saveGeneratedSound', 'assistant:undoLatestEdit',
   'blueprints:checkState', 'blueprints:getForTools', 'blueprints:listForTools', 'blueprints:requestCheck', 'blueprints:saveFromCheck', 'brandKits:create', 'brandKits:get', 'brandKits:list', 'brandKits:update',
   'compositionReview:cancel', 'compositionReview:completionState', 'compositionReview:get', 'compositionReview:readPlan', 'compositionReview:request', 'compositionReview:savePlan',
-  'cutouts:startFromRun', 'derivations:runStatus', 'derivations:startFromRun', 'mcp:discardFrames', 'mcp:frames', 'mcp:requestFrames', 'memories:forRun', 'memories:forget', 'memories:recall', 'memories:remember',
-  'icons:find', 'referenceReads:discard', 'referenceReads:get', 'referenceReads:request',
+  'cutouts:startFromRun', 'derivations:runStatus', 'derivations:startFromRun', 'mcp:discardFrames', 'mcp:frames', 'mcp:requestFrames', 'mcp:takeFrames', 'memories:forRun', 'memories:forget', 'memories:recall', 'memories:remember',
+  'icons:find', 'referenceReads:discard', 'referenceReads:get', 'referenceReads:request', 'referenceReads:take',
 ]);
 /** What streamText and saveMessage use: the chat's messages, its stream deltas and message files. */
 const AGENT_FUNCTIONS = new Set(['files/addFile', 'files/get', 'files/useExistingFile', 'messages/addMessages', 'messages/finalizeMessage', 'messages/getMessagesByIds', 'messages/listMessagesByThreadId', 'messages/updateMessage', 'streams/abort', 'streams/addDelta', 'streams/create', 'streams/finish', 'threads/getThread']);

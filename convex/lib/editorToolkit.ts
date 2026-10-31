@@ -448,7 +448,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
     let started = false;
     while (Date.now() < deadline) {
       if (abortSignal.aborted) { await ctx.runMutation(internal.mcp.discardFrames, { snapshotId }); throw new Error('Stopped.'); }
-      const state = await ctx.runQuery(internal.mcp.frames, { ownerId: run.ownerId, snapshotId });
+      const state = await ctx.runMutation(internal.mcp.takeFrames, { ownerId: run.ownerId, snapshotId });
       if (state.started) started = true;
       if (state.status === 'failed') { await ctx.runMutation(internal.mcp.discardFrames, { snapshotId }); throw new Error(`Frames could not be rendered: ${state.error ?? 'unknown error'}`); }
       if (state.status === 'completed') { await ctx.runMutation(internal.mcp.discardFrames, { snapshotId }); return { revision: state.revision as number, frames: (state.frames as { time: number; image: string }[]).map(frame => ({ time: frame.time, image: frame.image })) }; }
@@ -465,7 +465,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
     const snapshotId = await ctx.runMutation(internal.mcp.requestFrames, { ownerId: run.ownerId, projectId: run.projectId, ...(editSession.staged ? { runId: run.runId } : {}), ...(timelineId ? { timelineId } : {}), times: [], pacing: { start, end, fps: input.fps ?? 10 } });
     try {
       const deadline = Date.now() + 540_000;
-      for (let state = await ctx.runQuery(internal.mcp.frames, { ownerId: run.ownerId, snapshotId }); ; state = await ctx.runQuery(internal.mcp.frames, { ownerId: run.ownerId, snapshotId })) {
+      for (let state = await ctx.runMutation(internal.mcp.takeFrames, { ownerId: run.ownerId, snapshotId }); ; state = await ctx.runMutation(internal.mcp.takeFrames, { ownerId: run.ownerId, snapshotId })) {
         if (abortSignal.aborted) throw new Error('Stopped.');
         if (state.status === 'failed') throw new Error(`The pacing check could not render the range: ${state.error ?? 'unknown error'}`);
         if (state.status === 'completed') {
@@ -485,7 +485,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
     const snapshotId = await ctx.runMutation(internal.mcp.requestFrames, { ownerId: run.ownerId, projectId: run.projectId, ...(editSession.staged ? { runId: run.runId } : {}), ...(timelineId ? { timelineId } : {}), times: [], sound: { start, end, check, ...(input.fps ? { fps: input.fps } : {}) } });
     try {
       const deadline = Date.now() + 540_000;
-      for (let state = await ctx.runQuery(internal.mcp.frames, { ownerId: run.ownerId, snapshotId }); ; state = await ctx.runQuery(internal.mcp.frames, { ownerId: run.ownerId, snapshotId })) {
+      for (let state = await ctx.runMutation(internal.mcp.takeFrames, { ownerId: run.ownerId, snapshotId }); ; state = await ctx.runMutation(internal.mcp.takeFrames, { ownerId: run.ownerId, snapshotId })) {
         if (abortSignal.aborted) throw new Error('Stopped.');
         if (state.status === 'failed') throw new Error(`${name} could not decode the range: ${state.error ?? 'unknown error'}`);
         if (state.status === 'completed') return { revision: state.revision as number, ...soundReport(state.sound as SoundResult, check) };

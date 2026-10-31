@@ -216,6 +216,16 @@ export const frames = internalQuery({ args: { ownerId: v.string(), snapshotId: v
   return { status: snapshot.status, started: snapshot.status !== 'queued' || (!!task && task.status !== 'queued'), revision: snapshot.revision, ...(snapshot.error ? { error: snapshot.error } : {}), ...(snapshot.frames ? { frames: snapshot.frames } : {}), ...(snapshot.pacingResult ? { pacing: snapshot.pacingResult } : {}), ...(snapshot.soundResult ? { sound: snapshot.soundResult } : {}) };
 }});
 
+/** frames, for a caller that is done once it has the result: a finished or failed request is deleted as it is read,
+ *  so its images are read once instead of again by discardFrames. */
+export const takeFrames = internalMutation({ args: { ownerId: v.string(), snapshotId: v.id('frameSnapshots') }, returns: v.any(), handler: async (ctx, args) => {
+  const snapshot = await ctx.db.get(args.snapshotId);
+  if (!snapshot || snapshot.ownerId !== args.ownerId) throw new ConvexError('Frame request not found.');
+  const task = snapshot.status === 'queued' && snapshot.taskId ? await ctx.db.get(snapshot.taskId) : null;
+  if (snapshot.status !== 'queued') await ctx.db.delete(snapshot._id);
+  return { status: snapshot.status, started: snapshot.status !== 'queued' || (!!task && task.status !== 'queued'), revision: snapshot.revision, ...(snapshot.error ? { error: snapshot.error } : {}), ...(snapshot.frames ? { frames: snapshot.frames } : {}), ...(snapshot.pacingResult ? { pacing: snapshot.pacingResult } : {}), ...(snapshot.soundResult ? { sound: snapshot.soundResult } : {}) };
+}});
+
 export const discardFrames = internalMutation({ args: { snapshotId: v.id('frameSnapshots') }, returns: v.null(), handler: async (ctx, args) => {
   const snapshot = await ctx.db.get(args.snapshotId);
   if (snapshot) await ctx.db.delete(snapshot._id);

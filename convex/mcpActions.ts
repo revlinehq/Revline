@@ -124,7 +124,7 @@ async function callProjectTool(ctx: ActionCtx, ownerId: string, name: ProjectToo
       const snapshotId = await ctx.runMutation(internal.mcp.requestFrames, { ownerId, projectId: input.projectId, times: input.times, ...(input.timelineId ? { timelineId: input.timelineId } : {}) });
       const deadline = Date.now() + 170_000;
       while (Date.now() < deadline) {
-        const state = await ctx.runQuery(internal.mcp.frames, { ownerId, snapshotId });
+        const state = await ctx.runMutation(internal.mcp.takeFrames, { ownerId, snapshotId });
         if (state.status === 'failed') { await ctx.runMutation(internal.mcp.discardFrames, { snapshotId }); return result(`Frames could not be rendered: ${state.error ?? 'unknown error'}`, true); }
         if (state.status === 'completed') {
           await ctx.runMutation(internal.mcp.discardFrames, { snapshotId });
