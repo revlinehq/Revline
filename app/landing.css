@@ -344,3 +344,6 @@ div.landing-hero-buttons>.landing-reveal-content{display:flex;align-items:center
 @media(prefers-reduced-motion:reduce){
   .landing-marquee-track{animation:none}
 }
+/* An app named in running text, with its logo at text height. */
+.landing-app-name{display:inline-flex;align-items:center;gap:.3em;white-space:nowrap}
+.landing-app-name img{width:1.1em;height:1.1em;flex:none}
