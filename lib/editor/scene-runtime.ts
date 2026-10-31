@@ -83,17 +83,82 @@ export function compileScene(code: string, blueprints: { name: string; code: str
   return scene as (context: SceneContext) => unknown;
 }
 
+/** Resolves on the first of these media events, or after `ms`. */
+function mediaEvent(video: HTMLVideoElement, names: string[], ms: number) {
+  return new Promise<void>(resolve => {
+    const done = () => { clearTimeout(timer); for (const name of names) video.removeEventListener(name, done); resolve(); };
+    const timer = setTimeout(done, ms);
+    for (const name of names) video.addEventListener(name, done);
+  });
+}
+
+// A <video> composites through its own surface, which an export capture can take before the seeked
+// frame reaches it: those frames showed the scene with an empty footage box. Each seeked frame is
+// drawn into a canvas that stands in for the video, so the frame is part of the scene's own paint.
+const stillFrames = new Map<HTMLVideoElement, HTMLCanvasElement>();
+const STILL_STYLE = 'video[data-revline-still]{visibility:hidden!important}';
+
+function objectFitBox(fit: string, position: string, source: { width: number; height: number }, box: { width: number; height: number }) {
+  let scaleX = box.width / source.width, scaleY = box.height / source.height;
+  if (fit === 'cover') scaleX = scaleY = Math.max(scaleX, scaleY);
+  else if (fit === 'none') scaleX = scaleY = 1;
+  else if (fit === 'scale-down') scaleX = scaleY = Math.min(1, scaleX, scaleY);
+  else if (fit !== 'fill') scaleX = scaleY = Math.min(scaleX, scaleY);
+  const width = source.width * scaleX, height = source.height * scaleY;
+  const [x = '50%', y = '50%'] = position.split(/\s+/);
+  const place = (value: string, free: number) => value.endsWith('%') ? free * Number.parseFloat(value) / 100 : Number.parseFloat(value) || 0;
+  return { x: place(x, box.width - width), y: place(y, box.height - height), width, height };
+}
+
+function drawStill(video: HTMLVideoElement) {
+  if (!video.isConnected || video.readyState < 2 || !video.videoWidth || !video.videoHeight) return;
+  let canvas = stillFrames.get(video);
+  if (!canvas) {
+    canvas = document.createElement('canvas');
+    canvas.dataset.revlineStill = '';
+    stillFrames.set(video, canvas);
+    if (!document.getElementById('revline-still-style')) { const style = document.createElement('style'); style.id = 'revline-still-style'; style.textContent = STILL_STYLE; document.head.appendChild(style); }
+  }
+  if (canvas.previousSibling !== video) video.parentNode?.insertBefore(canvas, video.nextSibling);
+  // The canvas takes the video's place and look: its classes, inline styles (GSAP tweens included) and laid-out size.
+  canvas.className = video.className;
+  canvas.style.cssText = video.style.cssText;
+  canvas.hidden = video.hidden;
+  const width = video.offsetWidth, height = video.offsetHeight;
+  Object.assign(canvas.style, { width: `${width}px`, height: `${height}px`, boxSizing: 'border-box', pointerEvents: 'none' });
+  // Rasterized at the size it is drawn on screen, so a camera zoomed into the scene keeps the footage sharp.
+  const rect = video.getBoundingClientRect(), zoom = Math.max(1, width ? rect.width / width : 1, height ? rect.height / height : 1) * (window.devicePixelRatio || 1);
+  const scale = Math.min(zoom, 4096 / Math.max(1, width, height)), pixelWidth = Math.max(1, Math.round(width * scale)), pixelHeight = Math.max(1, Math.round(height * scale));
+  if (canvas.width !== pixelWidth) canvas.width = pixelWidth;
+  if (canvas.height !== pixelHeight) canvas.height = pixelHeight;
+  const context = canvas.getContext('2d');
+  if (!context) return;
+  const computed = getComputedStyle(video), fit = objectFitBox(computed.objectFit, computed.objectPosition, { width: video.videoWidth, height: video.videoHeight }, { width, height });
+  context.setTransform(scale, 0, 0, scale, 0, 0);
+  context.clearRect(0, 0, width, height);
+  context.drawImage(video, fit.x, fit.y, fit.width, fit.height);
+  video.dataset.revlineStill = '';
+}
+
 /** Videos in a scene follow the scene clock: data-start (scene seconds it begins), data-offset (source seconds), data-rate, data-loop. */
 function syncVideos(time: number, fps: number) {
+  // A video the scene removed takes its stand-in with it.
+  for (const [video, canvas] of stillFrames) if (!video.isConnected) { canvas.remove(); stillFrames.delete(video); }
   return Array.from(document.querySelectorAll('video')).map(video => {
     video.muted = true; video.pause();
-    const ready = video.readyState >= 1 ? Promise.resolve() : new Promise<void>(resolve => video.addEventListener('loadedmetadata', () => resolve(), { once: true }));
-    return ready.then(() => {
+    const ready = video.readyState >= 1 ? Promise.resolve() : mediaEvent(video, ['loadedmetadata', 'error'], 4000);
+    return ready.then(async () => {
       const length = video.duration || 0, rate = Number(video.dataset.rate) || 1;
       let target = Math.max(0, time - (Number(video.dataset.start) || 0)) * rate + (Number(video.dataset.offset) || 0);
       if (length > 0) target = video.hasAttribute('data-loop') ? target % length : Math.min(target, Math.max(0, length - 0.5 / fps));
-      if (Math.abs(video.currentTime - target) < 0.25 / fps && video.readyState >= 2) return;
-      return new Promise<void>(resolve => { const done = () => resolve(); video.addEventListener('seeked', done, { once: true }); setTimeout(done, 5000); video.currentTime = target; });
+      if (Math.abs(video.currentTime - target) >= 0.25 / fps || video.seeking) {
+        const seeked = mediaEvent(video, ['seeked', 'error'], 4000);
+        video.currentTime = target;
+        await seeked;
+      }
+      // Seeked can land before the frame at the new time is decoded.
+      if (video.readyState < 2 && !video.error) await mediaEvent(video, ['loadeddata', 'canplay', 'error'], 4000);
+      drawStill(video);
     }).catch(() => undefined);
   });
 }
