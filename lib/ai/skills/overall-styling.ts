@@ -50,7 +50,7 @@ export default function scene({ root, tl, gsap }) {
 
 export const overallStyling: EditorSkill = {
   name: 'overall-styling',
-  description: 'The user\'s house look for everything Revline makes: launch films, motion-design, explainers over footage and motion elements. Product UI stays restrained (near-black, hairlines, one accent, minimal text, no grids, scan lines, shadows or bright purple fills); diagrams, charts and technical graphics use the isometric line diagram (thin white outlined 3D blocks, hatching, one accent edge, dimension lines, few words), with a working code example (page "example"). Read before designing any film, scene or graphic, unless the user asks for a different look.'',
+  description: 'The user\'s house look for everything Revline makes: launch films, motion-design, explainers over footage and motion elements. Product UI stays restrained (near-black, hairlines, one accent, minimal text, no grids, scan lines, shadows or bright purple fills); diagrams, charts and technical graphics use the isometric line diagram (thin white outlined 3D blocks, hatching, one accent edge, dimension lines, few words), with a working code example (page "example"). Read before designing any film, scene or graphic, unless the user asks for a different look.',
   body: `# Overall styling
 
 How everything looks: launch films, motion-design films, explainers over footage and motion elements. explainer-scenes and motion-design say what to show and when; this skill says how it looks.
