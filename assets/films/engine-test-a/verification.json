@@ -3,10 +3,10 @@
   "projectName": "Engine test A: GSAP (RightNow rebuild)",
   "editor": "http://localhost:3001/editor/j970eespkq2j4crma0yhj5mpc18haer6",
   "timelineId": "main",
-  "revision": 58,
+  "revision": 59,
   "sceneClipId": "5b49332a-bc9f-4fc8-a8cd-383e406bf6a1",
   "sourceFile": "film.tsx.txt",
-  "sourceSHA256": "3ff2b44e52761b9f427cab42e18531a3df6038fdbd0d27e69b3e5f5f1bb482bc",
+  "sourceSHA256": "32efcb540e2c21d48ed72d33391cbe2c1c044520a55c909aa105b9e06c88730f",
   "duration": 30.966667,
   "fps": 60,
   "visualSceneCount": 1,
@@ -189,47 +189,62 @@
     {
       "time": 10.1,
       "difference": 15,
-      "revision": 53
+      "revision": 59
     },
     {
       "time": 10.3,
-      "difference": 9,
-      "revision": 53
-    },
-    {
-      "time": 10.4,
-      "difference": 7,
-      "revision": 53
+      "difference": 10,
+      "revision": 59
     },
     {
       "time": 10.5,
-      "difference": 6,
-      "revision": 53
+      "difference": 10,
+      "revision": 59
     },
     {
-      "time": 10.6,
-      "difference": 20,
-      "revision": 53
+      "time": 10.65,
+      "difference": 28,
+      "revision": 59
+    },
+    {
+      "time": 10.717,
+      "difference": 29,
+      "revision": 59
     },
     {
       "time": 10.75,
+      "difference": 24,
+      "revision": 59
+    },
+    {
+      "time": 10.8,
+      "difference": 21,
+      "revision": 59
+    },
+    {
+      "time": 10.9,
       "difference": 20,
-      "revision": 53
+      "revision": 59
+    },
+    {
+      "time": 11.05,
+      "difference": 19,
+      "revision": 59
     },
     {
       "time": 11.117,
       "difference": 19,
-      "revision": 53
+      "revision": 59
     },
     {
       "time": 11.3,
       "difference": 19,
-      "revision": 53
+      "revision": 59
     },
     {
       "time": 11.5,
       "difference": 16,
-      "revision": 43
+      "revision": 59
     },
     {
       "time": 11.67,
@@ -355,7 +370,8 @@
     "Revision 51 dither speed: native before/after, six reference comparisons all <=21, scoped motionMap/pacing, and preserved closing handoff frames.",
     "Revision 53 upload menu: dense source windows and crops, three measured cursor tracks, native entrance/all-row-hover/click checks, 12 final comparisons all <=20, scoped motionMap and pacing.",
     "Revision 55 menu layers: exact 60 fps reference samples, three independently animated panels, native entrance and downstream interaction checks, 12 comparisons all 14-15/100, motionMap with no differences and pacing with no flags over 9.15-9.85 s.",
-    "Revision 58 thicker pixel rip: native source windows/details and color/edge sampling, before/after renders, 12 final reference comparisons all 9-20/100, two pacing windows with no flags, two motionMap diffs with four retained camera-fit differences."
+    "Revision 58 thicker pixel rip: native source windows/details and color/edge sampling, before/after renders, 12 final reference comparisons all 9-20/100, two pacing windows with no flags, two motionMap diffs with four retained camera-fit differences.",
+    "Revision 59 cursor-first spring: 12 native frames show held camera during the scan, stopped pointer, spring overshoot and settle before click; six locked sections render unchanged. Pacing has no flags. Twelve reference comparisons retain two deliberate late-push differences (28/29); motionMap records the corresponding two timing/ease differences."
   ],
   "development": {
     "web": "Ready and left running on localhost:3001",
@@ -1130,6 +1146,131 @@
       "Four composite camera-fit differences remain over the two reveal windows: proof recession and follow-up ease/magnitude, CTA opening magnitude/ease and later drift timing/ease. Authored camera tracks were preserved for this thickness request; the expanding mask and user-supplied background also contribute to fitted motion.",
       "Exact rip silhouette and fragment layout remain approximations; supplied background geometry differs from the reference."
     ],
+    "detailedAuditFile": "audit.json",
+    "exported": false
+  },
+  "cursorThenSpringZoom": {
+    "revision": 59,
+    "timing": {
+      "cursorScanEnd": 10.716667,
+      "zoomStart": 10.716667,
+      "zoomDuration": 0.333333,
+      "zoomEnd": 11.05,
+      "clickPressStart": 11.066667,
+      "ease": "back.out(1.35)"
+    },
+    "compareReference": {
+      "note": "Reference (left) beside your timeline (right), one moment per row, at 10.1s, 10.3s, 10.5s, 10.65s, 10.717s, 10.75s, 10.8s, 10.9s, 11.05s, 11.117s, 11.3s, 11.5s. Differences: 10.1s 15, 10.3s 10, 10.5s 10, 10.65s 28, 10.717s 29, 10.75s 24, 10.8s 21, 10.9s 20, 11.05s 19, 11.117s 19, 11.3s 19, 11.5s 16.",
+      "next": "Pass 1 of 3. Fix the 2 worst moments now (10.717s, 10.65s) with patchScene or editScene: read that moment with fps 10 if you have not, correct it, then compare again. Done when every moment scores 25 or less, or after 3 passes.",
+      "pass": 1,
+      "scores": [
+        {
+          "time": 10.1,
+          "difference": 15
+        },
+        {
+          "time": 10.3,
+          "difference": 10
+        },
+        {
+          "time": 10.5,
+          "difference": 10
+        },
+        {
+          "time": 10.65,
+          "difference": 28
+        },
+        {
+          "time": 10.717,
+          "difference": 29
+        },
+        {
+          "time": 10.75,
+          "difference": 24
+        },
+        {
+          "time": 10.8,
+          "difference": 21
+        },
+        {
+          "time": 10.9,
+          "difference": 20
+        },
+        {
+          "time": 11.05,
+          "difference": 19
+        },
+        {
+          "time": 11.117,
+          "difference": 19
+        },
+        {
+          "time": 11.3,
+          "difference": 19
+        },
+        {
+          "time": 11.5,
+          "difference": 16
+        }
+      ],
+      "images": [
+        "Reference (left) beside your timeline (right), 1",
+        "Reference (left) beside your timeline (right), 2",
+        "Reference (left) beside your timeline (right), 3",
+        "Reference (left) beside your timeline (right), 4"
+      ]
+    },
+    "pacing": {
+      "revision": 59,
+      "range": "9.85-11.45s",
+      "samples": "17 at 10 fps",
+      "changePerSecond": "10s 91%, 11s 112%",
+      "cuts": [
+        10.85,
+        11.45
+      ],
+      "cameraMoves": 1,
+      "flags": [],
+      "next": "No pacing problems found in this range."
+    },
+    "motionMap": {
+      "range": {
+        "start": 9.85,
+        "end": 11.5
+      },
+      "differences": [
+        {
+          "time": 9.88,
+          "issue": "The reference camera moves here (zoom in 13% + tilt down 4.4%, 0.43s, power2.in, it starts with an element scales up (middle) at 10.08s); yours does not.",
+          "fix": "tl.fromTo(camera, { scale: 1.001, xPercent: -0.03, yPercent: 0, rotation: -0.01 }, { scale: 1.129, xPercent: 0.45, yPercent: -4.42, rotation: -0.07, duration: 0.43, ease: 'power2.in' }, 9.88)"
+        },
+        {
+          "time": 10.65,
+          "issue": "Camera move differs from the reference: ease sine.inOut where the reference uses custom (closest named: circ.in); starts 0.33s late; 0.23s long vs 1.17s.",
+          "fix": "tl.fromTo(camera, { scale: 1.129, xPercent: 0.45, yPercent: -4.42, rotation: -0.07 }, { scale: 1.213, xPercent: 3.4, yPercent: -15.03, rotation: -4.56, duration: 1.17, ease: CustomEase.create(\"measured\", \"M0,0 C0,1 0.8,-0.4 1,1\") }, 10.32)"
+        }
+      ]
+    },
+    "intentionalReferenceDifferences": {
+      "reason": "The latest explicit instruction requires the cursor to finish moving down before the spring. The reference starts pushing earlier; moving the spring earlier to satisfy the similarity score would restore the overlap the user rejected. Preserved the requested wait instead.",
+      "scoresOver25": [
+        {
+          "time": 10.65,
+          "difference": 28
+        },
+        {
+          "time": 10.717,
+          "difference": 29
+        }
+      ],
+      "motionMapDifferences": 2,
+      "otherResiduals": "Exact background geometry, pointer artwork and the existing menu-to-modal dither transition remain approximations."
+    },
+    "lockedSectionGuard": {
+      "passed": true,
+      "sections": 6,
+      "samples": 18
+    },
     "detailedAuditFile": "audit.json",
     "exported": false
   }

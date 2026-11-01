@@ -82,7 +82,7 @@
     "change": "Preserve requested motion range in frame snapshots"
   },
   "priority": "User requested reference structure and timing take precedence over generic one-second holds, no grids, and quiet house styling.",
-  "revision": 58,
+  "revision": 59,
   "verificationFile": "verification.json",
   "sourceFile": "film.tsx.txt",
   "soundEffects": {
@@ -148,7 +148,7 @@
     "generatedMusicAndCuesMuted": true,
     "activeAudioAssetId": "j57eeahvakwfy1ntsewb2jm3zh8hb6ee"
   },
-  "sourceSHA256": "3ff2b44e52761b9f427cab42e18531a3df6038fdbd0d27e69b3e5f5f1bb482bc",
+  "sourceSHA256": "32efcb540e2c21d48ed72d33391cbe2c1c044520a55c909aa105b9e06c88730f",
   "fonts": [
     "JetBrains Mono",
     "Pixelify Sans"
@@ -305,6 +305,29 @@
       "gsap/recipe-fly-off"
     ],
     "sourceSHA256": "3ff2b44e52761b9f427cab42e18531a3df6038fdbd0d27e69b3e5f5f1bb482bc",
+    "verificationFile": "verification.json",
+    "detailedAuditFile": "audit.json",
+    "exported": false
+  },
+  "cursorThenSpringZoom": {
+    "revision": 59,
+    "timing": {
+      "cursorScanEnd": 10.716667,
+      "zoomStart": 10.716667,
+      "zoomDuration": 0.333333,
+      "zoomEnd": 11.05,
+      "clickPressStart": 11.066667,
+      "ease": "back.out(1.35)"
+    },
+    "changes": [
+      "Removed the 0.83 s camera enlargement that overlapped the cursor row scan. The menu, titles and background hold their framing until the final row is reached.",
+      "Removed the residual pointer drift after the last row so the cursor stops before the camera reacts.",
+      "Added a synchronized 0.333333 s spring zoom with overshoot and settle for the menu, both title halves and landscape.",
+      "Set the zoom pivot to the stopped pointer coordinates; compensated translation preserves the previous final menu framing.",
+      "Retained all six row hovers, click deformation, green activation, dither and modal timing, soundtrack, supplied background, thicker pixel rips and all other Beats."
+    ],
+    "priority": "The latest explicit instruction requires the cursor to finish moving down before the spring. The reference starts pushing earlier; moving the spring earlier to satisfy the similarity score would restore the overlap the user rejected. Preserved the requested wait instead.",
+    "sourceSHA256": "32efcb540e2c21d48ed72d33391cbe2c1c044520a55c909aa105b9e06c88730f",
     "verificationFile": "verification.json",
     "detailedAuditFile": "audit.json",
     "exported": false
