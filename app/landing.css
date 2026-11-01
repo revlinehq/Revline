@@ -329,7 +329,7 @@ div.landing-hero-buttons>.landing-reveal-content{display:flex;align-items:center
   .landing-logos ul{gap:16px 36px}
   .landing-logos li{font-size:18px}
   .landing-use-cases,.landing-features,.landing-pricing,.landing-faq,.landing-mcp{padding-block:64px}
-  .landing-use-cases,.landing-features{gap:32px}
+  .landing-use-cases,.landing-features,.landing-clippers{gap:32px}
   .landing-feature-grid{grid-template-columns:minmax(0,1fr)}
   .landing-motion-heading h2{font-size:36px;letter-spacing:-1px}
   .landing-motion-pin{gap:20px;padding-block:80px 20px}
@@ -356,4 +356,5 @@ div.landing-hero-buttons>.landing-reveal-content{display:flex;align-items:center
 /* Apps named in running text by their logos alone, at text height. */
 .landing-app-logos{display:inline-flex;align-items:center;gap:.3em;vertical-align:-.2em}
 .landing-app-logos img{width:1.2em;height:1.2em;flex:none}
+.landing-clippers{display:flex;flex-direction:column;gap:40px;padding-block:96px}
 .landing-clippers-frame{position:relative;width:100%;aspect-ratio:16/9;overflow:hidden;border:1px solid #0000000f;border-radius:12px;background:#17181c}
