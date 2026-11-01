@@ -22,6 +22,22 @@ const partsValidator = v.array(v.object({ partNumber: v.number(), etag: v.string
 const uploadInfo = v.object({ uploadId: v.id('r2Uploads'), partSize: v.number(), partCount: v.number() });
 const taskAuth = { taskId: v.optional(v.id('mediaTasks')), leaseToken: v.optional(v.string()) };
 const previewUpload = { purpose:v.optional(v.literal('preview')),sourceAssetId:v.optional(v.id('assets')),previewFps:v.optional(v.number()),previewVersion:v.optional(v.number()) };
+function uprightDimensions(source:Pick<Doc<'assets'>,'width'|'height'>,width:number,height:number) {
+  if(!source.width||!source.height||source.width===source.height)return null;
+  const swapped=source.height/source.width,displayed=width/height;
+  return (source.width>source.height)!==(width>height)&&Math.abs(swapped/displayed-1)<.01?{width:source.height,height:source.width}:null;
+}
+export const repairPreviewDimensions=internalMutation({args:{projectId:v.id('projects')},returns:v.array(v.id('assets')),handler:async(ctx,args)=>{
+  const project=await ctx.db.get(args.projectId);if(!project)throw new ConvexError('Project not found');
+  const assets=await ctx.db.query('assets').withIndex('by_ownerId_projectId',q=>q.eq('ownerId',project.ownerId).eq('projectId',project._id)).take(200);
+  const repaired:Id<'assets'>[]=[];
+  for(const asset of assets){
+    if(asset.kind!=='video'||!hasPreview(asset)||!asset.previewWidth||!asset.previewHeight)continue;
+    const dimensions=uprightDimensions(asset,asset.previewWidth,asset.previewHeight);
+    if(dimensions){await ctx.db.patch(asset._id,dimensions);repaired.push(asset._id);}
+  }
+  return repaired;
+}});
 type PreviewUploadArgs = { projectId:Id<'projects'>;jobId?:Id<'renderJobs'>;purpose?:'preview';sourceAssetId?:Id<'assets'>;previewFps?:number;previewVersion?:number;kind:'video'|'audio'|'image';contentType:string;duration?:number };
 async function previewSource(ctx:QueryCtx|MutationCtx,args:PreviewUploadArgs,task:Doc<'mediaTasks'>|null) {
   if(!args.purpose){if(args.sourceAssetId!==undefined||args.previewFps!==undefined||args.previewVersion!==undefined||task?.kind==='preview')throw new ConvexError('Preview upload purpose is required');return null;}
@@ -147,6 +163,8 @@ export const finish = internalMutation({ args: { uploadId: v.id('r2Uploads'), si
   const source=await previewSource(ctx,lease,task);
   if(lease.purpose==='preview'&&source){
     if(!lease.duration||!lease.width||!lease.height)throw new ConvexError('Preview metadata is incomplete');
+    const dimensions=uprightDimensions(source,lease.width,lease.height);
+    if(dimensions)await ctx.db.patch(source._id,dimensions);
     if(hasPreview(source)){
       await forgetStorageObject(ctx,lease.ownerId,{r2Key:lease.key});
       await ctx.scheduler.runAfter(0,internal.r2.deleteObject,{key:lease.key});
