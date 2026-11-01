@@ -18,10 +18,10 @@ export default function Home() {
     <LandingNav />
     <LandingHero />
     <LandingUseCases />
+    <LandingClippers />
     <LandingFeatures />
     <LandingMotion />
     <LandingInspo />
-    <LandingClippers />
     <LandingMcp />
     <LandingPricing />
     <LandingFaq />
