@@ -83,7 +83,7 @@
     "change": "Preserve requested motion range in frame snapshots"
   },
   "priority": "User requested reference structure and timing take precedence over generic one-second holds, no grids, and quiet house styling.",
-  "revision": 67,
+  "revision": 69,
   "verificationFile": "verification.json",
   "sourceFile": "film.tsx.txt",
   "soundEffects": {
@@ -149,7 +149,7 @@
     "generatedMusicAndCuesMuted": true,
     "activeAudioAssetId": "j57eeahvakwfy1ntsewb2jm3zh8hb6ee"
   },
-  "sourceSHA256": "25ff4419429daac487341bd9f5e2a77eb0d619327cd4ae5b58e85267f18a7aee",
+  "sourceSHA256": "4ddcfc18d0f7aed01f2b337897911db773f611eb2f9d0e2599a337338b2ebc93",
   "fonts": [
     "JetBrains Mono",
     "Pixelify Sans"
@@ -408,6 +408,45 @@
       "fullGreenPhaseDuration": 0.125
     },
     "sourceSHA256": "25ff4419429daac487341bd9f5e2a77eb0d619327cd4ae5b58e85267f18a7aee",
+    "verificationFile": "verification.json",
+    "detailedAuditFile": "audit.json",
+    "exported": false
+  },
+  "cursorAndTerminalEase": {
+    "revision": 69,
+    "supersedesOnlySpringEasingFromRevisions": [
+      59,
+      60
+    ],
+    "changes": [
+      "Replaced the spring/overshoot easing on the cursor-focused menu/title/any-file zoom with power2.inOut. The synchronized background push uses the same ease.",
+      "Replaced the background spring zoom-out at terminal opening with power2.out, so the pullback begins visibly at opening and decelerates to a stop without overshoot.",
+      "Preserved the wait until the cursor scan finishes, the cursor pivot, all scale/position endpoints, and both move durations/cues. The cursor push runs 10.716667-11.05 s; the background pullback runs 11.416667-12.216667 s.",
+      "Changed only three camera easing values compared with revision 67. Cursor scan, text hovers, click press, three-layer menu entrance, terminal/modal animation, dither, background asset, other scene sections, soundtrack and markers are unchanged.",
+      "Both moves remain GSAP through useTimeline with explicit fromTo and immediateRender:false for deterministic seeking. This supersedes the spring easing requested in revisions 59 and 60."
+    ],
+    "easing": {
+      "cursorAndBackgroundPush": "power2.inOut",
+      "terminalBackgroundPullback": "power2.out",
+      "overshoot": false,
+      "zoomStart": 10.716667,
+      "zoomEnd": 11.05,
+      "pullbackStart": 11.416667,
+      "pullbackEnd": 12.216667,
+      "menuScale": [
+        1,
+        2.47
+      ],
+      "backgroundPushScale": [
+        1.3431,
+        1.68
+      ],
+      "backgroundPullbackScale": [
+        1.68,
+        1.16
+      ]
+    },
+    "sourceSHA256": "4ddcfc18d0f7aed01f2b337897911db773f611eb2f9d0e2599a337338b2ebc93",
     "verificationFile": "verification.json",
     "detailedAuditFile": "audit.json",
     "exported": false
