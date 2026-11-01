@@ -357,4 +357,9 @@ div.landing-hero-buttons>.landing-reveal-content{display:flex;align-items:center
 .landing-app-logos{display:inline-flex;align-items:center;gap:.3em;vertical-align:-.2em}
 .landing-app-logos img{width:1.2em;height:1.2em;flex:none}
 .landing-clippers{display:flex;flex-direction:column;gap:40px;padding-block:96px}
-.landing-clippers-frame{position:relative;width:100%;aspect-ratio:16/9;overflow:hidden;border:1px solid #0000000f;border-radius:12px;background:#17181c}
+.landing-clippers-frame{position:relative;width:100%;aspect-ratio:16/9;overflow:hidden;border:1px solid #0000000f;border-radius:12px;background:#111}
+.landing-clippers-still,.landing-clippers-animation{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;user-select:none}
+.landing-clippers-still{object-fit:contain}
+.landing-clippers-scene{position:absolute;left:0;top:0;width:1920px;height:1080px;transform-origin:0 0;overflow:hidden;background:#111;isolation:isolate}
+.landing-clippers-scene canvas{position:absolute;inset:0;width:1920px;height:1080px}
+.landing-clippers-scene svg{flex-shrink:0}
