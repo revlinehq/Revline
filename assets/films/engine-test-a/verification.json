@@ -3,10 +3,10 @@
   "projectName": "Engine test A: GSAP (RightNow rebuild)",
   "editor": "http://localhost:3001/editor/j970eespkq2j4crma0yhj5mpc18haer6",
   "timelineId": "main",
-  "revision": 75,
+  "revision": 83,
   "sceneClipId": "5b49332a-bc9f-4fc8-a8cd-383e406bf6a1",
   "sourceFile": "film.tsx.txt",
-  "sourceSHA256": "6503550a3b8e67e1caab00c062aaafd88e87a6223956a57787d0ed337840cc40",
+  "sourceSHA256": "e0f7d0c97c2f25b10156c7a268c50e886cd142e798daaf91689976bcb04c6905",
   "duration": 30.966667,
   "fps": 60,
   "visualSceneCount": 1,
@@ -511,14 +511,19 @@
     "Revision 63 identity corners: dense source window and corner track, two rendered inset iterations, exact one-line source comparison, five locked sections unchanged, six final reference comparisons (one 26/100 residual), scoped motionMap with no differences and pacing with no flags.",
     "Revision 73: exact scoped credit change, six native frames through closing cut, five locked sections/15 samples unchanged, motionMap with zero differences, pacing without flags, audio/marker identity check, and exact cloud-source archive.",
     "Revision 74: 16 native frames including all four flashed frames and alternating normals; restored colors checked before/after, exact source insertion, reference comparison, scoped motionMap/pacing, unchanged audio/markers, and cloud-source archive.",
-    "Revision 75: exact two Prompt replacements, six native before/after frames, one-line label fit and preserved first/last glyph timing, scoped motionMap/pacing, unchanged audio/markers, and exact cloud-source archive."
+    "Revision 75: exact two Prompt replacements, six native before/after frames, one-line label fit and preserved first/last glyph timing, scoped motionMap/pacing, unchanged audio/markers, and exact cloud-source archive.",
+    {
+      "revision": 83,
+      "check": "Ending text-only change",
+      "result": "Native compiled save; three composited frames at 27.983333, 28, 28.016667 visibly show Revline without the credit. Saved source retains original ending logo, layout, easing and transforms."
+    }
   ],
   "development": {
     "web": "Ready and left running on localhost:3001",
     "worker": "Ready, 2 slots, left running"
   },
   "exported": false,
-  "lastFullMotionMapRevision": 43,
+  "lastFullMotionMapRevision": 80,
   "systemZeroDitherSync": {
     "cue": 4.3,
     "visibleTogetherAt": 4.35,
@@ -3195,5 +3200,97 @@
     ],
     "engine": "GSAP through useTimeline; existing deterministic Type animation retained.",
     "exported": false
+  },
+  "ballSectionDetailedAudit": {
+    "revision": 81,
+    "scope": {
+      "start": 17.2,
+      "end": 26.35
+    },
+    "acceptedByUser": true,
+    "userWords": "all is good, the face is built well",
+    "changes": [
+      "Closed rounded cube mesh with mascot, lightning bolt and dollar surfaces, forward quarter turns synchronized to token, speed and cost phases",
+      "Continuous pixel-rip growth with photographic fragments and removal of lingering Decision pixels",
+      "Two benchmark-window unfolds, typed and blurred text reveals, timed bar swaps and cost resizes",
+      "Measured background and foreground camera phases and partial closing identity reveal"
+    ],
+    "priorTurnInspection": {
+      "referenceWindows": [
+        [
+          17.3,
+          20.2
+        ],
+        [
+          20.2,
+          23.1
+        ],
+        [
+          23.1,
+          26.05
+        ]
+      ],
+      "fps": 10,
+      "denseReads": "Additional 15 fps crops around rip, 18:39, surface turns and ending; trackReference and measureFrame used",
+      "comparison": "88 paired frames across three adjoining ball-section windows, plus dense handoff comparisons and native iterative previews",
+      "motionMap": {
+        "lastRevision": 80,
+        "range": [
+          17.65,
+          26.05
+        ],
+        "remainingResiduals": 50,
+        "allPass": false,
+        "remaining": "Mesh curvature/tile projection and optical camera/object-growth fits still differ. Supplied Bliss photograph intentionally has different geometry. End-window cut detection is sensitive to 26.05 boundary."
+      },
+      "pacing": {
+        "revision": 80,
+        "flags": [
+          "17.65-22.25 short-hold",
+          "25.85-25.95 zoom-cut"
+        ],
+        "retainedBecause": "Reference uses overlapping metric reframes and accelerating pullback into the white closing identity."
+      }
+    },
+    "evidenceNote": "Prior native result objects were lost when the user interrupted the turn; this records the retained session summary, not recovered raw outputs."
+  },
+  "closingRevlineText": {
+    "projectId": "j970eespkq2j4crma0yhj5mpc18haer6",
+    "timelineId": "main",
+    "revision": 83,
+    "userWords": "just skip all of that and quickly do it. Change System Zero by RightNow at the end to Revline, nothing else.",
+    "scope": {
+      "start": 26.05,
+      "end": 29.016667
+    },
+    "changes": [
+      "Ending title SYSTEM ZERO -> Revline",
+      "Ending by RightNow -> empty string"
+    ],
+    "preserved": [
+      "Original ending logo",
+      "Original layout",
+      "All GSAP timing, easing and transform values",
+      "Approved ball sequence",
+      "Other branding additions",
+      "Background and audio"
+    ],
+    "frames": {
+      "revision": 83,
+      "frames": [
+        {
+          "time": 27.983333333333334
+        },
+        {
+          "time": 28
+        },
+        {
+          "time": 28.016666666666666
+        }
+      ],
+      "note": "Images follow in time order, 720p composited frames of the saved timeline."
+    },
+    "exported": false,
+    "sourceSHA256": "e0f7d0c97c2f25b10156c7a268c50e886cd142e798daaf91689976bcb04c6905"
   }
 }
