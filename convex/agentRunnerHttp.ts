@@ -10,6 +10,7 @@ import { verifyRunToken, verifyRunnerRequest, type RunScope } from './lib/runner
 // the attempt that claimed the run, and must belong to a run the runner is still working on. Its owner, project, run and chat ids must be
 // that run's, and only the functions a turn uses are reachable.
 const TURN_FUNCTIONS = new Set([
+  'assistantMessages:add', 'assistantMessages:finalize', 'assistantMessages:update',
   'agentRunner:claim', 'agentRunner:heartbeat', 'agentRunner:settle', 'agentRunner:release', 'aiCosts:record',
   'assistant:analysisRequest', 'assistant:apply', 'assistant:attachRunStockAudio', 'assistant:beginEditing', 'assistant:clearAnalysis', 'assistant:currentPrompt', 'assistant:finish', 'assistant:getRun', 'assistant:getRunAsset', 'assistant:getRunTimeline', 'assistant:isRunActive', 'assistant:previewDraft', 'assistant:recordBudget', 'assistant:recordEffort', 'assistant:requestAnalysis', 'assistant:revisionChanges', 'assistant:revisionHistory', 'assistant:saveGeneratedSound', 'assistant:undoLatestEdit',
   'blueprints:checkState', 'blueprints:getForTools', 'blueprints:listForTools', 'blueprints:requestCheck', 'blueprints:saveFromCheck', 'brandKits:create', 'brandKits:get', 'brandKits:list', 'brandKits:update',
@@ -31,7 +32,8 @@ function resolve(address: Address | undefined): { ref: unknown; label: string; f
   if (address?.name) return TURN_FUNCTIONS.has(address.name) ? { ref: address.name, label: address.name, files: false } : null;
   const path = address?.reference?.startsWith(AGENT_COMPONENT) ? address.reference.slice(AGENT_COMPONENT.length) : '';
   if (!AGENT_FUNCTIONS.has(path)) return null;
-  return { ref: path.split('/').reduce((ref: Record<string, unknown>, part) => ref[part] as Record<string, unknown>, components.agent as unknown as Record<string, unknown>), label: `agent/${path}`, files: path.startsWith('files/') };
+  const mirror = path === 'messages/addMessages' ? internal.assistantMessages.add : path === 'messages/finalizeMessage' ? internal.assistantMessages.finalize : path === 'messages/updateMessage' ? internal.assistantMessages.update : null;
+  return { ref: mirror ?? path.split('/').reduce((ref: Record<string, unknown>, part) => ref[part] as Record<string, unknown>, components.agent as unknown as Record<string, unknown>), label: `agent/${path}`, files: path.startsWith('files/') };
 }
 
 /** The run this request acts for: signed, carrying Convex's token for it, and still being worked on by the

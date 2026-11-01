@@ -1,3 +1,4 @@
+import { initializeMediaCapacity, insertMediaTask, patchMediaTask, deleteMediaTask } from './lib/media_task_data';
 import { activeTabOf, storedTabTimeline } from './timelineTabs';
 import { loadSceneCode } from './lib/scene_code';
 import { renderSnapshot as loadRenderSnapshot } from './lib/render_snapshots';
@@ -83,13 +84,13 @@ export async function enqueueMediaTask(ctx: MutationCtx, input: Pick<Doc<'mediaT
   if (minimum) input = { ...input, requiredProcessorVersion: Math.max(minimum, input.requiredProcessorVersion ?? 0) };
   if(input.kind==='preview')input={...input,previewVersion:PREVIEW_VERSION};
   if(input.assetId&&input.kind==='preview'){const asset=await ctx.db.get(input.assetId);// A cut-out plays its own VP9 alpha file; an H.264 proxy would drop the transparency.
-  if(asset?.ownerId===input.ownerId&&asset.projectId===input.projectId&&(hasPreview(asset)||asset.cutoutOf||asset.derivedOf)){const now=Date.now();return ctx.db.insert('mediaTasks',{...input,status:'completed',attempt:0,progress:100,createdAt:now,updatedAt:now});}}
+  if(asset?.ownerId===input.ownerId&&asset.projectId===input.projectId&&(hasPreview(asset)||asset.cutoutOf||asset.derivedOf)){const now=Date.now();return insertMediaTask(ctx,{...input,status:'completed',attempt:0,progress:100,createdAt:now,updatedAt:now});}}
   if (input.assetId && input.kind === 'beats') {
     const asset = await ctx.db.get(input.assetId);
     const beats=asset?(await hydrateAsset(ctx,asset)).analysis?.beats:undefined;
     if (asset?.ownerId === input.ownerId && asset.projectId === input.projectId && beats?.engine === BEAT_ANALYSIS_ENGINE && beats.downbeats !== undefined && beats.accents !== undefined && beats.dropCandidates !== undefined) {
       const now = Date.now();
-      const taskId = await ctx.db.insert('mediaTasks', { ...input, status: 'completed', attempt: 0, progress: 100, createdAt: now, updatedAt: now });
+      const taskId = await insertMediaTask(ctx, { ...input, status: 'completed', attempt: 0, progress: 100, createdAt: now, updatedAt: now });
       if (input.analysisRequestId) await ctx.db.patch(input.analysisRequestId, { status: 'completed', error: undefined });
       return taskId;
     }
@@ -125,7 +126,7 @@ export async function enqueueMediaTask(ctx: MutationCtx, input: Pick<Doc<'mediaT
   // only when a fresh task will actually be inserted, in this transaction.
   await beforeEnqueue?.();
   const now = Date.now();
-  const taskId = await ctx.db.insert('mediaTasks', { ...input, status: 'queued', claimable:false, attempt: 0, progress: 0, createdAt: now, updatedAt: now });
+  const taskId = await insertMediaTask(ctx, { ...input, status: 'queued', claimable:false, attempt: 0, progress: 0, createdAt: now, updatedAt: now });
   const workflowId = await mediaWorkflow.start(ctx, internal.mediaTasks.process, { taskId }, { startAsync: true, onComplete: internal.mediaTasks.settle, context: { taskId } });
   await ctx.db.patch(taskId, { workflowId });
   return taskId;
@@ -153,7 +154,7 @@ const ULTRA_FALLBACK_MS = 120_000;
 export const prepareAttempt = internalMutation({ args: { taskId: v.id('mediaTasks'), attempt: v.number() }, returns: v.boolean(), handler: async (ctx, args) => {
   const task = await ctx.db.get(args.taskId);
   if (!task || ['completed', 'cancelled', 'failed'].includes(task.status)) return false;
-  await ctx.db.patch(task._id, { status: 'queued', claimable:true, attempt: args.attempt, progress:0,activity:undefined,activityStartedAt:undefined,leaseToken: undefined, leaseExpiresAt: undefined, attemptStartedAt: undefined, updatedAt: Date.now() });
+  await patchMediaTask(ctx, task, { status: 'queued', claimable:true, attempt: args.attempt, progress:0,activity:undefined,activityStartedAt:undefined,leaseToken: undefined, leaseExpiresAt: undefined, attemptStartedAt: undefined, updatedAt: Date.now() });
   // Wake only after this attempt is claimable, including retries after backoff.
   if (task.kind === 'render' && flyRendersEnabled()) { await ctx.scheduler.runAfter(0, internal.flyRender.dispatch, {}); return true; }
   if (globalThis.process.env.MEDIA_PROCESSOR_WAKE_URL) await ctx.scheduler.runAfter(0, internal.mediaProcessor.wake, {});
@@ -167,7 +168,7 @@ export const prepareAttempt = internalMutation({ args: { taskId: v.id('mediaTask
 export const releaseUltraLane = internalMutation({ args: { taskId: v.id('mediaTasks'), attempt: v.number() }, returns: v.null(), handler: async (ctx, args) => {
   const task = await ctx.db.get(args.taskId);
   if (!task || task.lane !== 'ultra' || task.status !== 'queued' || task.attempt !== args.attempt) return null;
-  await ctx.db.patch(task._id, { lane: undefined, updatedAt: Date.now() });
+  await patchMediaTask(ctx, task, { lane: undefined, updatedAt: Date.now() });
   if (globalThis.process.env.MEDIA_PROCESSOR_WAKE_URL) await ctx.scheduler.runAfter(0, internal.mediaProcessor.wake, {});
   return null;
 }});
@@ -179,7 +180,7 @@ async function releaseRenderSeat(ctx: MutationCtx, task: Doc<'mediaTasks'>) {
   if (task.kind === 'render' && flyRendersEnabled()) await ctx.scheduler.runAfter(0, internal.flyRender.dispatch, {});
 }
 async function failTask(ctx: MutationCtx, task: Doc<'mediaTasks'>, error: string, retryable: boolean) {
-  await ctx.db.patch(task._id, { status: retryable ? 'retrying' : 'failed', error: error.slice(0, 1000), leaseToken: undefined, leaseExpiresAt: undefined, updatedAt: Date.now() });
+  await patchMediaTask(ctx, task, { status: retryable ? 'retrying' : 'failed', error: error.slice(0, 1000), leaseToken: undefined, leaseExpiresAt: undefined, updatedAt: Date.now() });
   await releaseRenderSeat(ctx, task);
   await signalResult(ctx, task, { success: false, retryable, error: error.slice(0, 1000) });
 }
@@ -187,14 +188,14 @@ async function markTerminal(ctx: MutationCtx, taskId: Id<'mediaTasks'>, status: 
   const task = await ctx.db.get(taskId);
   // A workflow cancelled after a permanent failure must not hide its reason.
   if (!task || task.status === 'completed' || task.status === 'cancelled' || (status === 'cancelled' && task.status === 'failed')) return;
-  await ctx.db.patch(taskId, { status, error: error.slice(0, 1000), leaseToken: undefined, leaseExpiresAt: undefined, updatedAt: Date.now() });
+  await patchMediaTask(ctx, task, { status, error: error.slice(0, 1000), leaseToken: undefined, leaseExpiresAt: undefined, updatedAt: Date.now() });
   await releaseRenderSeat(ctx, task);
   if (task.renderJobId) {
     const job = await ctx.db.get(task.renderJobId);
     if (job && job.status !== 'completed' && job.status !== 'cancelled') await ctx.db.patch(job._id, { status: status==='cancelled'?'cancelled':'failed', error: status==='cancelled'?undefined:error.slice(0, 1000), updatedAt: Date.now() });
   }
   if(task.reviewId){const review=await ctx.db.get(task.reviewId);if(review)await ctx.db.patch(review._id,{status:'failed',error:error.slice(0,1000)});}
-  if(task.snapshotId){const snapshot=await ctx.db.get(task.snapshotId);if(snapshot&&snapshot.status==='queued')await ctx.db.patch(snapshot._id,{status:'failed',error:error.slice(0,1000)});}
+  if(task.snapshotId){const thumb=await ctx.db.query('sceneThumbnails').withIndex('by_snapshot',q=>q.eq('snapshotId',task.snapshotId!)).unique();if(thumb&&thumb.status==='queued')await ctx.db.patch(thumb._id,{status:'failed'});const snapshot=await ctx.db.get(task.snapshotId);if(snapshot&&snapshot.status==='queued')await ctx.db.patch(snapshot._id,{status:'failed',error:error.slice(0,1000)});}
   if(task.readId){const read=await ctx.db.get(task.readId);if(read&&read.status==='queued')await ctx.db.patch(read._id,{status:'failed',error:error.slice(0,1000)});}
   if(task.blueprintCheckId){const check=await ctx.db.get(task.blueprintCheckId);if(check&&check.status==='queued')await ctx.db.patch(check._id,{status:'failed',error:error.slice(0,1000)});}
   if(task.cutoutId){const cutout=await ctx.db.get(task.cutoutId);if(cutout&&cutout.status==='queued')await ctx.db.patch(cutout._id,{status:'failed',error:error.slice(0,1000)});}
@@ -239,9 +240,10 @@ export async function importVideoFor(ctx: MutationCtx, ownerId: string, args: Ob
   const now = Date.now();
   const projectId = args.projectId ?? await createProject(ctx, { ownerId, title: 'Video import', aspectRatio: 'vertical', timeline: { fps: 60, aspectRatio: 'vertical', clips: [], tracks: { visual: 1, overlay: 0, audio: 1 } }, revision: 0, history: [], createdAt: now, updatedAt: now });
   await requireProject(ctx, projectId, ownerId);
-  const pending = (await Promise.all((['queued', 'running', 'retrying'] as const).map(status => ctx.db.query('mediaTasks').withIndex('by_project_kind_status', q => q.eq('projectId', projectId).eq('kind', 'import').eq('status', status)).take(3)))).flat();
-  const existing = pending.find(task => task.sourceUrl === sourceUrl && task.importRange?.start === importRange?.start && task.importRange?.end === importRange?.end);
-  if (existing) return { projectId, taskId: existing._id };
+  await initializeMediaCapacity(ctx, ownerId);
+  const existing = await ctx.db.query('mediaTaskSlots').withIndex('by_import', q => q.eq('projectId', projectId).eq('kind', 'import').eq('sourceUrl', sourceUrl).eq('importRange.start', importRange?.start).eq('importRange.end', importRange?.end)).first();
+  if (existing) return { projectId, taskId: existing.taskId };
+  const pending = await ctx.db.query('mediaTaskSlots').withIndex('by_project_kind', q => q.eq('projectId', projectId).eq('kind', 'import')).take(3);
   if (pending.length >= 3) throw new ConvexError('Wait for the current video imports to finish.');
   // Counted only once a fresh import is accepted; a refusal rolls back a new edit with it.
   await consumeVideoImport(ctx, ownerId, !args.projectId); await requireMediaTaskCapacity(ctx, ownerId, 1);
@@ -250,16 +252,23 @@ export async function importVideoFor(ctx: MutationCtx, ownerId: string, args: Ob
 }
 export const importVideo = mutation({ args: importVideoForArgs, returns: v.object({ projectId: v.id('projects'), taskId: v.id('mediaTasks') }), handler: async (ctx, args) => importVideoFor(ctx, await requireOwner(ctx), args) });
 export const get = query({ args: { taskId: v.id('mediaTasks') }, returns: taskState, handler: async (ctx, args) => {
-  const ownerId = await requireOwner(ctx), task = await ctx.db.get(args.taskId);
+  const ownerId = await requireOwner(ctx);
+  const view = await ctx.db.query('mediaTaskViews').withIndex('by_task', q => q.eq('taskId', args.taskId)).unique();
+  const task = view ?? await ctx.db.get(args.taskId);
   if (!task || task.ownerId !== ownerId) throw new ConvexError('Media task not found.');
-  await requireProject(ctx, task.projectId, ownerId);
-  const { _id, kind, status, progress, attempt, error, assetId,activity,activityStartedAt } = task;
-  return { _id, kind, status, progress, attempt, error, assetId,activity,activityStartedAt };
+  await projectIdentity(ctx, task.projectId, ownerId);
+  const { kind, status, progress, attempt, error, assetId,activity,activityStartedAt } = task;
+  return { _id: args.taskId, kind, status, progress, attempt, error, assetId,activity,activityStartedAt };
 }});
 export const list = query({ args: { projectId: v.id('projects') }, returns: v.array(taskState), handler: async (ctx, args) => {
   const ownerId = await requireOwner(ctx); await projectIdentity(ctx,args.projectId,ownerId);
-  const tasks = await ctx.db.query('mediaTasks').withIndex('by_project_createdAt', q => q.eq('projectId', args.projectId)).order('desc').take(40);
-  return tasks.map(({ _id, kind, status, progress, attempt, error, assetId,activity,activityStartedAt }) => ({ _id, kind, status, progress, attempt, error, assetId,activity,activityStartedAt }));
+  const migration = await ctx.db.query('projectDataMigration').withIndex('by_key', q => q.eq('key', 'io-tasks-v1')).unique();
+  if (!migration?.completed) {
+    const tasks = await ctx.db.query('mediaTasks').withIndex('by_project_createdAt', q => q.eq('projectId', args.projectId)).order('desc').take(40);
+    return tasks.map(({ _id, kind, status, progress, attempt, error, assetId, activity, activityStartedAt }) => ({ _id, kind, status, progress, attempt, error, assetId, activity, activityStartedAt }));
+  }
+  const tasks = await ctx.db.query('mediaTaskViews').withIndex('by_project_createdAt', q => q.eq('projectId', args.projectId)).order('desc').take(40);
+  return tasks.map(({ taskId: _id, kind, status, progress, attempt, error, assetId,activity,activityStartedAt }) => ({ _id, kind, status, progress, attempt, error, assetId,activity,activityStartedAt }));
 }});
 /** Fails an unfinished task permanently and stops its workflow. */
 export async function failMediaTask(ctx: MutationCtx, taskId: Id<'mediaTasks'>, error: string) {
@@ -278,7 +287,7 @@ export async function cancelMediaTask(ctx: MutationCtx, taskId: Id<'mediaTasks'>
  * cancels its tasks separately before deleting their requests. */
 export async function detachAnalysisRequest(ctx:MutationCtx,request:Doc<'analysisRequests'>){
   const task=request.taskId?await ctx.db.get(request.taskId):null;
-  if(task?.analysisRequestId===request._id&&task.ownerId===request.ownerId&&task.projectId===request.projectId&&task.assetId===request.assetId&&['queued','running','retrying'].includes(task.status))await ctx.db.patch(task._id,{analysisRequestId:undefined});
+  if(task?.analysisRequestId===request._id&&task.ownerId===request.ownerId&&task.projectId===request.projectId&&task.assetId===request.assetId&&['queued','running','retrying'].includes(task.status))await patchMediaTask(ctx, task,{analysisRequestId:undefined});
   await ctx.db.delete(request._id);
 }
 /** Oldest first, except an owner already running FAIR_RUNNING_PER_OWNER tasks
@@ -328,7 +337,7 @@ export const pruneFinished=internalMutation({args:{},returns:v.null(),handler:as
   const cutoff=Date.now()-7*86400_000;
   for(const status of ['completed','failed','cancelled'] as const){
     const rows=await ctx.db.query('mediaTasks').withIndex('by_status_updated',q=>q.eq('status',status).lt('updatedAt',cutoff)).take(100);
-    for(const task of rows){if(task.workflowId)await mediaWorkflow.cleanup(ctx,task.workflowId as WorkflowId);await ctx.db.delete(task._id);}
+    for(const task of rows){if(task.workflowId)await mediaWorkflow.cleanup(ctx,task.workflowId as WorkflowId);await deleteMediaTask(ctx, task._id);}
     if(rows.length===100)await ctx.scheduler.runAfter(0,internal.mediaTasks.pruneFinished,{});
   }
   return null;
@@ -432,7 +441,7 @@ export const claim = mutation({ args: { workerSecret: v.string(),compact:v.optio
   try {await projectIdentity(ctx,task.projectId,task.ownerId);}catch{await failTask(ctx,task,'The project was removed.',false);return null;}
   if(!await analysisStillActive(ctx,task)){await markTerminal(ctx,task._id,'cancelled','The AI analysis request is no longer active.');await signalResult(ctx,task,{success:false,retryable:false,error:'The AI run stopped.'});return null;}
   const leaseToken=crypto.randomUUID(),now=Date.now();
-  await ctx.db.patch(task._id,{status:'running',claimable:false,leaseToken,leaseExpiresAt:now+LEASE_MS,attemptStartedAt:now,updatedAt:now});
+  await patchMediaTask(ctx, task,{status:'running',claimable:false,leaseToken,leaseExpiresAt:now+LEASE_MS,attemptStartedAt:now,updatedAt:now});
   if(task.analysisRequestId)await ctx.db.patch(task.analysisRequestId,{status:'running'});
   if(task.renderJobId){const job=await ctx.db.get(task.renderJobId);if(job)await ctx.db.patch(job._id,{status:'rendering',error:undefined,updatedAt:now});}
   await ctx.scheduler.runAfter(LEASE_MS,internal.mediaTasks.expire,{taskId:task._id,leaseToken});
@@ -455,7 +464,7 @@ export const heartbeat = mutation({ args: { ...mediaTaskCredentials, progress: v
   if (args.progress !== undefined && (!Number.isFinite(args.progress) || args.progress < 0 || args.progress > 99)) throw new ConvexError('Invalid processing progress.');
   const progress = Math.max(task.progress, args.progress ?? task.progress);
   const now=Date.now();
-  await ctx.db.patch(task._id, { leaseExpiresAt: now + LEASE_MS, progress, updatedAt: now,...(args.activity&&args.activity!==task.activity?{activity:args.activity,activityStartedAt:now}:{}) });
+  await patchMediaTask(ctx, task, { leaseExpiresAt: now + LEASE_MS, progress, updatedAt: now,...(args.activity&&args.activity!==task.activity?{activity:args.activity,activityStartedAt:now}:{}) });
   if (task.renderJobId) await ctx.db.patch(task.renderJobId, { progress, updatedAt: Date.now() });
   return null;
 }});
@@ -552,8 +561,7 @@ const RESULT_HANDLERS: Record<Doc<'mediaTasks'>['kind'], ResultHandler> = {
     }
     if (frames.length !== snapshot.times.length || frames.some((frame, index) => !Number.isFinite(frame.time) || Math.abs(frame.time - snapshot.times[index]) > 1 || !/^[A-Za-z0-9+/]+=*$/.test(frame.image)) || frames.reduce((sum, frame) => sum + frame.image.length, 0) > 900_000) throw new ConvexError('Rendered frames do not match the request.');
     await ctx.db.patch(snapshot._id, { status: 'completed', frames });
-    // A motion clip's current frames are in: its older versions can go.
-    if (snapshot.clipId && snapshot.key) for (const old of await ctx.db.query('frameSnapshots').withIndex('by_project_clip', q => q.eq('projectId', snapshot.projectId).eq('clipId', snapshot.clipId)).take(6)) if (old._id !== snapshot._id && old.status !== 'queued') await ctx.db.delete(old._id);
+    if (snapshot.clipId && snapshot.key) await ctx.scheduler.runAfter(0, internal.sceneThumbs.storeImages, { snapshotId: snapshot._id });
     // A share card goes onto its share; the request itself is not kept.
     if (snapshot.shareId && frames[0]) { const share = await ctx.db.get(snapshot.shareId); if (share?.published) await ctx.db.patch(share._id, { cardImage: frames[0].image, cardUpdatedAt: Date.now() }); await ctx.db.delete(snapshot._id); }
   },
@@ -598,7 +606,7 @@ const RESULT_HANDLERS: Record<Doc<'mediaTasks'>['kind'], ResultHandler> = {
     // A valid, uncancelled lease may still save evidence; it cannot edit a timeline.
     if (request && (request.ownerId !== task.ownerId || request.projectId !== task.projectId || request.assetId !== asset._id || request.mode !== 'video' || !project?.aiRunning || project.aiRunId !== request.aiRunId)) throw new ConvexError('AI video request is no longer active.');
     try { validateVideoInspectionResult(result.videoInspection, task.videoRequest, asset.duration); } catch (error) { throw new ConvexError((error as Error).message); }
-    await ctx.db.patch(task._id, { videoInspection: result.videoInspection });
+    await patchMediaTask(ctx, task, { videoInspection: result.videoInspection });
     if (request) await ctx.db.patch(request._id, { videoInspection: result.videoInspection });
   },
   frames: async (ctx, task, result) => {
@@ -610,7 +618,7 @@ const RESULT_HANDLERS: Record<Doc<'mediaTasks'>['kind'], ResultHandler> = {
     const project = request ? await readProject(ctx, task.projectId) : null;
     if (request && (request.ownerId !== task.ownerId || request.projectId !== task.projectId || request.assetId !== asset._id || request.mode !== 'frames' || !project?.aiRunning || project.aiRunId !== request.aiRunId)) throw new ConvexError('AI frame request is no longer active.');
     try { validateFrameInspectionResult(result.frameInspection, task.frameRequest); } catch (error) { throw new ConvexError((error as Error).message); }
-    await ctx.db.patch(task._id, { frameInspection: result.frameInspection });
+    await patchMediaTask(ctx, task, { frameInspection: result.frameInspection });
     if (request) await ctx.db.patch(request._id, { frameInspection: result.frameInspection });
   },
   preview: async (ctx, task, result) => {
@@ -651,7 +659,7 @@ export const complete = mutation({ args: { ...mediaTaskCredentials, result: task
   if (args.result.videoInspection && task.kind !== 'video') throw new ConvexError('Native video evidence belongs to its question task.');
   await RESULT_HANDLERS[task.kind](ctx, task, args.result);
   if (task.analysisRequestId && await ctx.db.get(task.analysisRequestId)) await ctx.db.patch(task.analysisRequestId, { status: 'completed', error: undefined });
-  await ctx.db.patch(task._id, { status: 'completed', progress: 100, error: undefined, leaseExpiresAt: undefined, updatedAt: Date.now() });
+  await patchMediaTask(ctx, task, { status: 'completed', progress: 100, error: undefined, leaseExpiresAt: undefined, updatedAt: Date.now() });
   await signalResult(ctx, task, { success: true, retryable: false });
   await releaseRenderSeat(ctx, task);
   return null;

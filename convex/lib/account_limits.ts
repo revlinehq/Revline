@@ -1,4 +1,5 @@
 import { ConvexError } from 'convex/values';
+import { initializeMediaCapacity } from './media_task_data';
 import type { MutationCtx, QueryCtx } from '../_generated/server';
 
 const MINUTE_MS = 60_000;
@@ -21,8 +22,7 @@ export const activeMediaTaskLimit = () => accountLimit('MAX_ACTIVE_MEDIA_TASKS_P
 
 /** Outstanding (queued, running, retrying) worker tasks across all of an owner's projects. */
 export async function activeMediaTasks(ctx: QueryCtx | MutationCtx, ownerId: string, cap: number) {
-  const rows = await Promise.all((['queued', 'running', 'retrying'] as const).map(status => ctx.db.query('mediaTasks').withIndex('by_owner_status', q => q.eq('ownerId', ownerId).eq('status', status)).take(cap)));
-  return rows.reduce((count, tasks) => count + tasks.length, 0);
+  return (await ctx.db.query('mediaTaskSlots').withIndex('by_owner', q => q.eq('ownerId', ownerId)).take(cap)).length;
 }
 /** Recent source transfers hold the preparation tasks they will queue, so
  * parallel starts cannot each see an empty account and move their bytes. */
@@ -39,7 +39,9 @@ async function reservedByUploads(ctx: QueryCtx | MutationCtx, ownerId: string, c
 export async function requireMediaTaskCapacity(ctx: QueryCtx | MutationCtx, ownerId: string, incoming: number, { ceiling = 1, countUploads = true }: { ceiling?: number; countUploads?: boolean } = {}) {
   const limit = activeMediaTaskLimit(), allowed = limit * ceiling;
   if (incoming <= 0) return;
-  const used = await activeMediaTasks(ctx, ownerId, allowed) + (countUploads ? await reservedByUploads(ctx, ownerId, allowed) : 0);
+  const initialized = await initializeMediaCapacity(ctx, ownerId);
+  const legacy = initialized ? 0 : (await Promise.all((['queued', 'running', 'retrying'] as const).map(status => ctx.db.query('mediaTasks').withIndex('by_owner_status', q => q.eq('ownerId', ownerId).eq('status', status)).take(allowed)))).reduce((count, tasks) => count + tasks.length, 0);
+  const used = (initialized ? await activeMediaTasks(ctx, ownerId, allowed) : legacy) + (countUploads ? await reservedByUploads(ctx, ownerId, allowed) : 0);
   if (used + incoming > allowed) throw new ConvexError(`Your account has too many media jobs processing (up to ${limit} at once). Wait for some to finish, then try again.`);
 }
 
