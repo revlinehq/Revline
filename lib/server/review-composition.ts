@@ -13,8 +13,9 @@ import { prepareComposition,writeComposition,reviewWindowTimeline,linkCompositio
 import { runCompositionCapture } from './render-worker';
 import { measurePacing } from '../media-analysis/pacing';
 import { visualHits } from '../media-analysis/sound';
-import { mapMotion } from '../inspo-motion/motion-map';
+import { mapMotion, motionWindow } from '../inspo-motion/motion-map';
 import { measureTimelineSound } from './sound-check';
+import { cropBounds } from '../ai/reference-comparison';
 export async function reviewComposition(snapshot:NonNullable<MediaWorkItem['review']>,directory:string,convexUrl:string,signal:AbortSignal,onProgress:(n:number)=>void):Promise<NonNullable<MediaTaskResult['review']>> {
   const key=process.env.GOOGLE_GENERATIVE_AI_API_KEY;if(!key)throw new AnalysisError('Gemini composition review is not configured.',503);
   const edited=reviewWindowTimeline(snapshot.timeline,snapshot.start,snapshot.end),reference=reviewWindowTimeline(snapshot.reference,snapshot.start,snapshot.end);
@@ -53,7 +54,8 @@ export async function captureTimelineFrames(snapshot:NonNullable<MediaWorkItem['
   // Listening to a range needs only its decoded audio, not a page.
   if(snapshot.sound&&!snapshot.sound.check){onProgress(40);return {frames:[],sound:await measureTimelineSound(snapshot,directory,assetUrls,audioSourceOffsets,{start:snapshot.sound.start,end:Math.min(snapshot.sound.end,timelineDuration(timeline))},signal)};}
   const path=join(directory,'edited');await mkdir(path);await linkCompositionResources(directory,path,assetUrls);
-  await writeComposition(path,timeline,assets,assetUrls,720,timeline.fps as 24|30|60,'./',signal,audioSourceOffsets);
+  const resolution=snapshot.comparison&&!snapshot.motion?1080:720,size=dimensions(timeline.aspectRatio,resolution);
+  await writeComposition(path,timeline,assets,assetUrls,resolution,timeline.fps as 24|30|60,'./',signal,audioSourceOffsets);
   onProgress(20);
   if(baseline)return guardFrames(snapshot,baseline,directory,path,assets,assetUrls,audioSourceOffsets,signal,onProgress);
   // One capture session over the whole range at the sampling rate, read back as small grayscale frames.
@@ -61,15 +63,25 @@ export async function captureTimelineFrames(snapshot:NonNullable<MediaWorkItem['
     const start=Math.round(Math.min(range.start,last)*timeline.fps)/timeline.fps,end=Math.min(range.end,last);
     const times=Array.from({length:Math.floor((end-start)*fps+1e-6)+1},(_,index)=>Math.round((start+index/fps)*timeline.fps)/timeline.fps);
     if(times.length<3)throw new AnalysisError('Check at least 0.3 s.',400);
-    const width=320,size=dimensions(timeline.aspectRatio,720),height=Math.max(2,Math.round(width*size.height/size.width));
-    await runCompositionCapture(directory,{...size,fps:timeline.fps,times,start:times[0],end:times[times.length-1]+frame,variants:['edited'],pacing:{width}},signal);
-    onProgress(85);
-    const bytes=await readFile(join(directory,'pacing.bin'));
-    return {width,height,start:times[0],frames:times.map((_,index)=>new Uint8Array(bytes.buffer,bytes.byteOffset+index*width*height,width*height))};
+    const width=320,height=Math.max(2,Math.round(width*size.height/size.width));
+    const frames:Uint8Array[]=[];
+    // Bound video extraction and capture to four seconds, preserving every sample and the original film clock.
+    const perChunk=Math.max(1,Math.floor(4*fps));
+    for(let first=0;first<times.length;first+=perChunk){
+      const group=times.slice(first,first+perChunk);
+      await runCompositionCapture(directory,{...size,fps:timeline.fps,times:group,start:group[0],end:group[group.length-1]+frame,variants:['edited'],pacing:{width,...(snapshot.comparison?.crop?{crop:snapshot.comparison.crop}:{})}},signal);
+      const bytes=await readFile(join(directory,'pacing.bin'));
+      const crop=snapshot.comparison?.crop,smallHeight=crop?Math.max(2,Math.round(width*size.height*crop.h/(size.width*crop.w))):height;
+      if(bytes.length!==group.length*width*smallHeight)throw new AnalysisError('The picture check returned an incomplete frame buffer.',500);
+      frames.push(...group.map((_,index)=>new Uint8Array(bytes.buffer,bytes.byteOffset+index*width*smallHeight,width*smallHeight)));
+      onProgress(20+Math.round(65*Math.min(first+group.length,times.length)/times.length));
+    }
+    const crop=snapshot.comparison?.crop;
+    return {width,height:crop?Math.max(2,Math.round(width*size.height*crop.h/(size.width*crop.w))):height,start:times[0],frames};
   };
   if(snapshot.motion){
-    const fps=Math.min(30,timeline.fps),{width,height,start,frames}=await sampled(snapshot.motion,fps);
-    return {frames:[],motion:mapMotion(frames,width,height,start,fps)};
+    const fps=Math.min(30,timeline.fps),{width,height,start,frames}=await sampled({start:Math.max(0,snapshot.motion.start-.5),end:Math.min(last,snapshot.motion.end+.5)},fps);
+    return {frames:[],motion:motionWindow(mapMotion(frames,width,height,start,fps),snapshot.motion.start,snapshot.motion.end)};
   }
   if(snapshot.pacing){
     const {width,height,start,frames}=await sampled(snapshot.pacing,snapshot.pacing.fps);
@@ -89,7 +101,7 @@ export async function captureTimelineFrames(snapshot:NonNullable<MediaWorkItem['
     for(let first=0;first<order.length;){
       let next=first;while(next+1<order.length&&order[next+1].time+frame-order[first].time<=3)next++;
       const group=order.slice(first,next+1);
-      await runCompositionCapture(directory,{...dimensions(timeline.aspectRatio,720),fps:timeline.fps,times:group.map(item=>item.time),start:group[0].time,end:group[group.length-1].time+frame,variants:['edited']},signal);
+      await runCompositionCapture(directory,{...size,fps:timeline.fps,times:group.map(item=>item.time),start:group[0].time,end:group[group.length-1].time+frame,variants:['edited']},signal);
       for(const [sample,item] of group.entries())images[item.index]=(await readFile(join(path,`sample-${sample}.png`))).toString('base64');
       first=next+1;onProgress(20+Math.round(75*first/order.length));
     }
@@ -97,16 +109,22 @@ export async function captureTimelineFrames(snapshot:NonNullable<MediaWorkItem['
   }
   // With footage, one frame-sized window per time keeps decoding bounded however far apart the times are.
   else for(const [index,time] of at.entries()){
-    await runCompositionCapture(directory,{...dimensions(timeline.aspectRatio,720),fps:timeline.fps,times:[time],start:time,end:time+frame,variants:['edited']},signal);
+    await runCompositionCapture(directory,{...size,fps:timeline.fps,times:[time],start:time,end:time+frame,variants:['edited']},signal);
     frames.push({time,image:(await readFile(join(path,'sample-0.png'))).toString('base64')});
     onProgress(20+Math.round(75*(index+1)/times.length));
   }
   if(snapshot.card)return {frames:[{time:frames[0].time,image:(await shareCard(Buffer.from(frames[0].image,'base64'),snapshot.card.title)).toString('base64')}]};
   // Results travel in one Convex document (1 MiB); shrink until every frame fits.
-  const pngs=frames.map(frame=>Buffer.from(frame.image,'base64'));
-  for(const [size,quality] of [[768,70],[640,60],[512,50],[384,45]] as const){
-    const images=await Promise.all(pngs.map(png=>sharp(png).resize(size,size,{fit:'inside'}).jpeg({quality}).toBuffer().then(buffer=>buffer.toString('base64'))));
-    if(images.reduce((sum,image)=>sum+image.length,0)<=700_000)return {frames:frames.map((frame,index)=>({time:frame.time,image:images[index]}))};
+  const pngs=await Promise.all(frames.map(async frame=>{
+    const image=Buffer.from(frame.image,'base64'),crop=snapshot.comparison?.crop;
+    if(!crop)return image;
+    const meta=await sharp(image).metadata();
+    if(!meta.width||!meta.height)throw new AnalysisError('The comparison frame has no dimensions.',500);
+    return sharp(image).extract(cropBounds(crop,meta.width,meta.height)).png().toBuffer();
+  }));
+  for(const [size,quality] of (snapshot.comparison?[[1920,85],[1280,85],[1080,80],[768,75],[640,65],[512,55],[384,45]]:[[768,70],[640,60],[512,50],[384,45]])){
+    const images=await Promise.all(pngs.map(png=>sharp(png).resize(size,size,{fit:'inside',withoutEnlargement:true}).jpeg({quality}).toBuffer().then(buffer=>buffer.toString('base64'))));
+    if(images.reduce((sum,image)=>sum+image.length,0)<=(snapshot.comparison?600_000:700_000))return {frames:frames.map((frame,index)=>({time:frame.time,image:images[index]}))};
   }
   throw new AnalysisError('Rendered frames are too detailed to return. Ask for fewer times.',400);
 }

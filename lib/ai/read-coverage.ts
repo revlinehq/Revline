@@ -1,5 +1,5 @@
 // What an agent recreating a reference has actually looked at. A whole-video readFrames returns the moments map
-// (every place the picture changes); a moment counts as read once a dense read (8 or more frames a second) covered
+// (every place the picture changes); a moment counts as read once a dense read (10 or more frames a second) covered
 // it. Scenes built over moments nobody read come back with those moments named, so the agent reads them before
 // moving on instead of rebuilding a transition from a guess. Grids show motion but not looks: the strongest moments
 // also need one look up close (a full-size single frame or a crop inside them) before they are built, for exact
@@ -9,7 +9,7 @@ export type CoverageMoment = { start: number; end: number; kind?: string; peak?:
 type Window = { start: number; end: number };
 
 /** Frames a second at which a read shows a transition frame by frame. */
-export const DENSE_FPS = 8;
+export const DENSE_FPS = 10;
 const EPSILON = .05;
 /** The longest change that is one transition rather than a stretch of several beats. */
 const SPLIT_MAX = 1.5;
