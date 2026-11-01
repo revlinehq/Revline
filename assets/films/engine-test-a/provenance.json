@@ -82,7 +82,7 @@
     "change": "Preserve requested motion range in frame snapshots"
   },
   "priority": "User requested reference structure and timing take precedence over generic one-second holds, no grids, and quiet house styling.",
-  "revision": 44,
+  "revision": 47,
   "verificationFile": "verification.json",
   "sourceFile": "film.tsx.txt",
   "soundEffects": {
@@ -143,7 +143,7 @@
     "generatedMusicAndCuesMuted": true,
     "activeAudioAssetId": "j57eeahvakwfy1ntsewb2jm3zh8hb6ee"
   },
-  "sourceSHA256": "aa0d8587a1885244e135c9f86c778af69fe11e0ffc59fd657e7fd2debe6097aa",
+  "sourceSHA256": "d888d3adae00c1069524470a5f0ecdb403cea09f1e4f9bd3447803524fd934be",
   "fonts": [
     "JetBrains Mono",
     "Pixelify Sans"
@@ -167,5 +167,18 @@
       "ease": "sine.out"
     }
   },
-  "detailedAuditFile": "audit.json"
+  "detailedAuditFile": "audit.json",
+  "toolAccess": "Native Revline MCP tools for revision 45-47; earlier revisions used the development mcpActions bridge.",
+  "introGreenAndPixelScatter": {
+    "revision": 47,
+    "changes": [
+      "Separate coarse olive-green opening dither using measured reference colors, fading into the photographed landscape with softer olive shadow grain.",
+      "Enlarged the four opening green squares to 22-24 px and replaced the small upward drift with outward GSAP trajectories.",
+      "Replaced the 64 tiny, early-fading iris specks with 72 square and L-shaped fragments in each proof/CTA reveal, 24-40 px before clustered extensions, with varied outbound speeds and a trailing cohort.",
+      "Introducing text starts at .083333 s to align the first character with the .1 s source frame.",
+      "Preserved the 4.3 s System Zero/dither cue, all authored camera tweens, supplied background asset, audio and other sections."
+    ],
+    "engine": "All animation uses GSAP through useTimeline. SVG filters and inline texture definitions are procedural scene graphics.",
+    "tools": "Reference reads, tracking, measurements, renders, pacing and comparisons all used native Revline tools. Local scripts only archived source and verification metadata and ran git checks."
+  }
 }

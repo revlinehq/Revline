@@ -1,9 +1,9 @@
 {
   "projectId": "j970eespkq2j4crma0yhj5mpc18haer6",
   "timelineId": "main",
-  "revision": 44,
-  "status": "Complete detailed visual audit; residual visual and camera-fit differences recorded",
-  "sourceSHA256": "aa0d8587a1885244e135c9f86c778af69fe11e0ffc59fd657e7fd2debe6097aa",
+  "revision": 47,
+  "status": "Requested green-dither and pixel-scatter correction saved; remaining visual and camera-fit differences recorded",
+  "sourceSHA256": "d888d3adae00c1069524470a5f0ecdb403cea09f1e4f9bd3447803524fd934be",
   "changes": {
     "intro": [
       "GSAP background blur builds 2.8\u20133.05 s, holds through 4.3 s and resolves during the crisp dither handoff by 4.733333 s.",
@@ -96,7 +96,25 @@
     },
     "reason": "The final scoped changes affect the menu entrance, cost-window resize and upward dither wipe. Each changed window is resampled; other sampled state is unchanged.",
     "allReplacementFramesReturned": true,
-    "allReplacementPairsViewed": true
+    "allReplacementPairsViewed": true,
+    "latestScopedDetailRevision": 47,
+    "latestScopedDetailTimes": [
+      0.1,
+      0.3,
+      4.316667,
+      4.35,
+      4.4,
+      17.633333,
+      17.65,
+      17.666667,
+      18.55,
+      18.75,
+      29,
+      29.016667,
+      29.033333,
+      29.75,
+      29.95
+    ]
   },
   "compareReference": {
     "passes": [
@@ -241,13 +259,134 @@
             "difference": 18
           }
         ]
+      },
+      {
+        "revision": 45,
+        "scores": [
+          {
+            "time": 0,
+            "difference": 27
+          },
+          {
+            "time": 0.1,
+            "difference": 43
+          },
+          {
+            "time": 0.3,
+            "difference": 30
+          },
+          {
+            "time": 17.95,
+            "difference": 20
+          },
+          {
+            "time": 18.35,
+            "difference": 13
+          },
+          {
+            "time": 18.55,
+            "difference": 12
+          },
+          {
+            "time": 29.25,
+            "difference": 20
+          },
+          {
+            "time": 29.55,
+            "difference": 16
+          }
+        ]
+      },
+      {
+        "revision": 46,
+        "scores": [
+          {
+            "time": 0,
+            "difference": 27
+          },
+          {
+            "time": 0.1,
+            "difference": 37
+          },
+          {
+            "time": 0.3,
+            "difference": 27
+          },
+          {
+            "time": 17.95,
+            "difference": 16
+          },
+          {
+            "time": 18.35,
+            "difference": 12
+          },
+          {
+            "time": 18.55,
+            "difference": 12
+          },
+          {
+            "time": 29.25,
+            "difference": 17
+          },
+          {
+            "time": 29.55,
+            "difference": 16
+          }
+        ]
+      },
+      {
+        "revision": 47,
+        "scores": [
+          {
+            "time": 0,
+            "difference": 27
+          },
+          {
+            "time": 0.1,
+            "difference": 37
+          },
+          {
+            "time": 0.3,
+            "difference": 28
+          },
+          {
+            "time": 17.95,
+            "difference": 16
+          },
+          {
+            "time": 18.35,
+            "difference": 13
+          },
+          {
+            "time": 18.55,
+            "difference": 12
+          },
+          {
+            "time": 29.25,
+            "difference": 17
+          },
+          {
+            "time": 29.55,
+            "difference": 15
+          }
+        ]
       }
     ],
     "latestApplicableScores": [
       {
+        "time": 0,
+        "difference": 27,
+        "revision": 47
+      },
+      {
+        "time": 0.1,
+        "difference": 37,
+        "revision": 47
+      },
+      {
         "time": 0.3,
         "difference": 28,
-        "revision": 39
+        "revision": 47
       },
       {
         "time": 4.35,
@@ -320,9 +459,19 @@
         "revision": 40
       },
       {
-        "time": 18.3,
-        "difference": 11,
-        "revision": 39
+        "time": 17.95,
+        "difference": 16,
+        "revision": 47
+      },
+      {
+        "time": 18.35,
+        "difference": 13,
+        "revision": 47
+      },
+      {
+        "time": 18.55,
+        "difference": 12,
+        "revision": 47
       },
       {
         "time": 19.2,
@@ -350,13 +499,18 @@
         "revision": 40
       },
       {
-        "time": 29.6,
-        "difference": 13,
-        "revision": 39
+        "time": 29.25,
+        "difference": 17,
+        "revision": 47
+      },
+      {
+        "time": 29.55,
+        "difference": 15,
+        "revision": 47
       }
     ],
     "targetMaximumDifference": 25,
-    "maximumDifference": 28,
+    "maximumDifference": 37,
     "allCheckedMomentsPass": false,
     "worstCorrectedExamples": [
       {
@@ -1259,6 +1413,71 @@
         }
       ],
       "note": "Camera choreography is unchanged; these composite camera-fit residuals remain."
+    },
+    "scopedCorrectionRevision47": {
+      "windows": [
+        {
+          "start": 0,
+          "end": 1.4,
+          "timelineStart": 0,
+          "revision": 47,
+          "differences": [
+            {
+              "time": 0,
+              "issue": "Camera move differs from the reference: bigger (zoom out 5% + pan left 1.1% + tilt up 2.7% + rotate 3\u00b0 vs zoom out 2% + tilt down 0.9% + rotate 1.9\u00b0); 0.63s long vs 0.13s.",
+              "fix": "tl.fromTo(camera, { scale: 1, xPercent: 0, yPercent: 0, rotation: 0 }, { scale: 0.977, xPercent: 0.22, yPercent: -0.93, rotation: 1.88, duration: 0.13, ease: 'sine.in' }, 0)"
+            },
+            {
+              "time": 0.63,
+              "issue": "Your camera moves (zoom in 21% + pan left 8.5% + tilt up 9.8% + rotate 1.8\u00b0, 0.3s) where the reference does not move; no cause: nothing changes in the frame when this move starts or ends."
+            },
+            {
+              "time": 0.93,
+              "issue": "Camera move differs from the reference: ease custom (closest named: sine.inOut) where the reference uses sine.out; starts 0.8s late; smaller (zoom out 6% + tilt up 1.8% vs zoom out 14%); 0.47s long vs 1.23s.",
+              "fix": "tl.fromTo(camera, { scale: 0.977, xPercent: 0.22, yPercent: -0.93, rotation: 1.88 }, { scale: 0.836, xPercent: 0.19, yPercent: -0.72, rotation: 1.87, duration: 1.23, ease: 'sine.out' }, 0.13)"
+            }
+          ]
+        },
+        {
+          "start": 17.65,
+          "end": 18.85,
+          "timelineStart": 17.65,
+          "revision": 47,
+          "differences": [
+            {
+              "time": 17.72,
+              "issue": "Camera move differs from the reference: starts 0.4s early; bigger (zoom in 18% + tilt down 1% vs zoom in 2% + pan left 0.9% + rotate 1\u00b0).",
+              "fix": "tl.fromTo(camera, { scale: 0.978, xPercent: 0.01, yPercent: 0.02, rotation: -0.23 }, { scale: 1.002, xPercent: 0.95, yPercent: 0.61, rotation: 0.81, duration: 0.23, ease: 'sine.in' }, 18.12)"
+            },
+            {
+              "time": 18.02,
+              "issue": "Camera move differs from the reference: ease power2.in where the reference uses none; bigger (zoom out 4% vs zoom out 2%).",
+              "fix": "tl.fromTo(camera, { scale: 0.997, xPercent: 0.03, yPercent: 0.02, rotation: -0.13 }, { scale: 0.978, xPercent: 0.01, yPercent: 0.02, rotation: -0.23, duration: 0.2, ease: 'none' }, 17.92)"
+            }
+          ]
+        },
+        {
+          "start": 29.016667,
+          "end": 30.15,
+          "timelineStart": 29.016667,
+          "revision": 47,
+          "differences": [
+            {
+              "time": 29.22,
+              "issue": "Camera move differs from the reference: ease sine.in where the reference uses sine.inOut; starts 0.17s late; 0.17s long vs 0.27s.",
+              "fix": "tl.fromTo(camera, { scale: 1, xPercent: 0, yPercent: 0, rotation: 0 }, { scale: 1.06, xPercent: -0.6, yPercent: 0.37, rotation: 1.39, duration: 0.27, ease: 'sine.inOut' }, 29.05)"
+            },
+            {
+              "time": 29.48,
+              "issue": "Camera move differs from the reference: ease custom (closest named: power1.inOut) where the reference uses sine.out; starts 0.16s late.",
+              "fix": "tl.fromTo(camera, { scale: 1.06, xPercent: -0.6, yPercent: 0.37, rotation: 1.39 }, { scale: 1.098, xPercent: -0.65, yPercent: 0.32, rotation: 1.38, duration: 0.73, ease: 'sine.out' }, 29.32)"
+            }
+          ]
+        }
+      ],
+      "remainingDifferenceCount": 7,
+      "authoredCameraTweensChanged": false,
+      "note": "Composite optical-flow fits include the photo, iris and fragments. Their camera estimates vary with effect appearance; the seven current fitted residuals are retained explicitly rather than reported as passing."
     }
   },
   "cameraCauses": [
@@ -1406,6 +1625,46 @@
       "revision": 43,
       "range": "11.1-11.9s",
       "flags": []
+    },
+    "greenDitherAndScatterRevision47": {
+      "open": {
+        "revision": 47,
+        "range": "0-1.4s",
+        "samples": "15 at 10 fps",
+        "changePerSecond": "0s 193%, 1s 36%",
+        "cuts": [
+          0.1
+        ],
+        "cameraMoves": 1,
+        "flags": [
+          {
+            "at": "0.5-1.4s",
+            "kind": "no-ease-in",
+            "reason": "The zoom at 0.5s starts at full speed: ease it in (power2.inOut or similar)."
+          }
+        ],
+        "next": "Fix the flagged moments in the scene code (longer holds, eased moves, fewer changes per second), then run checkPacing on that range again. A flag you keep on purpose (a deliberate snap or flash) needs a reason you can name."
+      },
+      "proof": {
+        "revision": 47,
+        "range": "17.65-18.85s",
+        "samples": "13 at 10 fps",
+        "changePerSecond": "18s 211%, 19s 15%",
+        "cuts": [],
+        "cameraMoves": 0,
+        "flags": [],
+        "next": "No pacing problems found in this range."
+      },
+      "cta": {
+        "revision": 47,
+        "range": "29.02-30.12s",
+        "samples": "12 at 10 fps",
+        "changePerSecond": "29s 144%, 30s 0%",
+        "cuts": [],
+        "cameraMoves": 0,
+        "flags": [],
+        "next": "No pacing problems found in this range."
+      }
     }
   },
   "boundaries": {
@@ -1443,7 +1702,19 @@
       26.066667
     ],
     "allViewed": true,
-    "findings": "No unintended blank frames, desktop leak on recession, or broken first/last frames."
+    "findings": "No unintended blank frames, desktop leak on recession, or broken first/last frames.",
+    "pixelScatterRevision47": {
+      "times": [
+        17.633333,
+        17.65,
+        17.666667,
+        29,
+        29.016667,
+        29.033333
+      ],
+      "allViewed": true,
+      "finding": "No unintended blank or flash; the green seed square grows into the iris."
+    }
   },
   "engine": {
     "useTimelineCount": 11,
@@ -1452,7 +1723,7 @@
     "patchesCompiled": true
   },
   "finalTimeline": {
-    "revision": 44,
+    "revision": 47,
     "sceneCount": 1,
     "clipCount": 8,
     "markers": 9,
@@ -1556,5 +1827,452 @@
     },
     "audioChanged": false,
     "exported": false
+  },
+  "introGreenAndPixelScatter": {
+    "revision": 47,
+    "request": "Intro dither should be greenish; several green cube pixel effects scattering out of the scene were missing.",
+    "changes": [
+      "Separate coarse olive-green opening dither using measured reference colors, fading into the photographed landscape with softer olive shadow grain.",
+      "Enlarged the four opening green squares to 22-24 px and replaced the small upward drift with outward GSAP trajectories.",
+      "Replaced the 64 tiny, early-fading iris specks with 72 square and L-shaped fragments in each proof/CTA reveal, 24-40 px before clustered extensions, with varied outbound speeds and a trailing cohort.",
+      "Introducing text starts at .083333 s to align the first character with the .1 s source frame.",
+      "Preserved the 4.3 s System Zero/dither cue, all authored camera tweens, supplied background asset, audio and other sections."
+    ],
+    "engine": "All animation uses GSAP through useTimeline. SVG filters and inline texture definitions are procedural scene graphics.",
+    "referenceReads": [
+      {
+        "start": 0,
+        "end": 30.966667,
+        "count": 16
+      },
+      {
+        "start": 0,
+        "end": 1.4,
+        "fps": 10
+      },
+      {
+        "start": 4.1,
+        "end": 5.766667,
+        "fps": 10
+      },
+      {
+        "start": 5.3,
+        "end": 6.5,
+        "fps": 10
+      },
+      {
+        "start": 8.2,
+        "end": 9.4,
+        "fps": 10
+      },
+      {
+        "start": 15.5,
+        "end": 17.9,
+        "fps": 10
+      },
+      {
+        "start": 17.65,
+        "end": 18.85,
+        "fps": 10
+      },
+      {
+        "start": 28.95,
+        "end": 30.15,
+        "fps": 10
+      },
+      {
+        "start": 18.15,
+        "end": 18.75,
+        "fps": 10,
+        "crop": {
+          "x": 0,
+          "y": 0,
+          "w": 420,
+          "h": 1080
+        }
+      }
+    ],
+    "measurements": {
+      "opening": [
+        {
+          "hex": "#587528",
+          "label": "center",
+          "x": 960,
+          "y": 540
+        },
+        {
+          "hex": "#5b7524",
+          "x": 400,
+          "y": 500
+        },
+        {
+          "hex": "#567127",
+          "x": 700,
+          "y": 800
+        },
+        {
+          "hex": "#536c1e",
+          "x": 100,
+          "y": 200
+        },
+        {
+          "hex": "#4f6429",
+          "x": 1500,
+          "y": 340
+        },
+        {
+          "hex": "#73a326",
+          "x": 1000,
+          "y": 100
+        },
+        {
+          "hex": "#72a32d",
+          "x": 1600,
+          "y": 50
+        },
+        {
+          "hex": "#536c20",
+          "x": 1700,
+          "y": 950
+        }
+      ],
+      "fragment": {
+        "note": "Frame 1920x1080.",
+        "colors": [
+          {
+            "hex": "#76b800",
+            "label": "left detached green cube",
+            "x": 229,
+            "y": 222
+          },
+          {
+            "hex": "#76b800",
+            "label": "top detached green cube",
+            "x": 400,
+            "y": 48
+          },
+          {
+            "hex": "#76b513",
+            "label": "rim green",
+            "x": 100,
+            "y": 300
+          }
+        ],
+        "edges": [
+          {
+            "at": 222,
+            "axis": "y",
+            "changes": [
+              {
+                "after": "#88b1e3",
+                "at": 182,
+                "before": "#85b68d"
+              },
+              {
+                "after": "#79b454",
+                "at": 214,
+                "before": "#7aa9cc"
+              },
+              {
+                "after": "#78bb01",
+                "at": 216,
+                "before": "#79b454"
+              },
+              {
+                "after": "#74a8a8",
+                "at": 248,
+                "before": "#74b716"
+              },
+              {
+                "after": "#74a1ef",
+                "at": 250,
+                "before": "#74a8a8"
+              }
+            ],
+            "from": 180,
+            "label": "green square width",
+            "to": 270
+          },
+          {
+            "at": 229,
+            "axis": "x",
+            "changes": [
+              {
+                "after": "#76ac77",
+                "at": 200,
+                "before": "#73a0ec"
+              },
+              {
+                "after": "#76b70d",
+                "at": 202,
+                "before": "#76ac77"
+              },
+              {
+                "after": "#7bad8d",
+                "at": 234,
+                "before": "#78b81f"
+              },
+              {
+                "after": "#7ba4ef",
+                "at": 236,
+                "before": "#7bad8d"
+              }
+            ],
+            "from": 180,
+            "label": "green square height",
+            "to": 260
+          }
+        ],
+        "fps": 60,
+        "frames": [
+          {
+            "time": 18.35
+          }
+        ],
+        "height": 1080,
+        "sourceHeight": 1080,
+        "sourceWidth": 1920,
+        "width": 1920,
+        "images": []
+      }
+    },
+    "tracking": "trackReference was run on opening and iris cubes. The isolated cube tracks drifted to background after jumps/disappearance, so they were not treated as reliable continuous trajectories. Native reference frames and measured square edges determined the effect sizes and visible windows.",
+    "nativeFramesViewedAtFinalRevision": [
+      0.1,
+      0.3,
+      4.316667,
+      4.35,
+      4.4,
+      17.633333,
+      17.65,
+      17.666667,
+      18.55,
+      18.75,
+      29,
+      29.016667,
+      29.033333,
+      29.75,
+      29.95
+    ],
+    "additionalEarlierRevisionFramesViewed": {
+      "45": [
+        0,
+        0.016667,
+        0.1,
+        0.3,
+        17.95,
+        18.35,
+        18.55,
+        18.75,
+        29.25,
+        29.55,
+        29.85,
+        30.95
+      ],
+      "46": [
+        0,
+        0.016667,
+        0.1,
+        0.3,
+        4.3,
+        4.4,
+        17.95,
+        18.35,
+        18.55,
+        18.75,
+        29.25,
+        29.55
+      ]
+    },
+    "compareReference": [
+      {
+        "time": 0,
+        "difference": 27
+      },
+      {
+        "time": 0.1,
+        "difference": 37
+      },
+      {
+        "time": 0.3,
+        "difference": 28
+      },
+      {
+        "time": 17.95,
+        "difference": 16
+      },
+      {
+        "time": 18.35,
+        "difference": 13
+      },
+      {
+        "time": 18.55,
+        "difference": 12
+      },
+      {
+        "time": 29.25,
+        "difference": 17
+      },
+      {
+        "time": 29.55,
+        "difference": 15
+      }
+    ],
+    "maximumDifference": 37,
+    "allCheckedMomentsAtOrBelow35": false,
+    "remainingVisualDifferences": [
+      "The .1 s moment remains 37/100 after three viewed comparisons. The user-supplied image has a different hill slope, grass detail and clouds from the reference; the coarse opening texture and subsequent grain also remain approximations.",
+      "The opening frame is 27/100 and .3 s is 28/100; checked iris moments range 12-17/100.",
+      "Fragment trajectories, density, edge silhouette and exact offscreen departure frames remain procedural approximations."
+    ],
+    "motionMap": {
+      "windows": [
+        {
+          "start": 0,
+          "end": 1.4,
+          "timelineStart": 0,
+          "revision": 47,
+          "differences": [
+            {
+              "time": 0,
+              "issue": "Camera move differs from the reference: bigger (zoom out 5% + pan left 1.1% + tilt up 2.7% + rotate 3\u00b0 vs zoom out 2% + tilt down 0.9% + rotate 1.9\u00b0); 0.63s long vs 0.13s.",
+              "fix": "tl.fromTo(camera, { scale: 1, xPercent: 0, yPercent: 0, rotation: 0 }, { scale: 0.977, xPercent: 0.22, yPercent: -0.93, rotation: 1.88, duration: 0.13, ease: 'sine.in' }, 0)"
+            },
+            {
+              "time": 0.63,
+              "issue": "Your camera moves (zoom in 21% + pan left 8.5% + tilt up 9.8% + rotate 1.8\u00b0, 0.3s) where the reference does not move; no cause: nothing changes in the frame when this move starts or ends."
+            },
+            {
+              "time": 0.93,
+              "issue": "Camera move differs from the reference: ease custom (closest named: sine.inOut) where the reference uses sine.out; starts 0.8s late; smaller (zoom out 6% + tilt up 1.8% vs zoom out 14%); 0.47s long vs 1.23s.",
+              "fix": "tl.fromTo(camera, { scale: 0.977, xPercent: 0.22, yPercent: -0.93, rotation: 1.88 }, { scale: 0.836, xPercent: 0.19, yPercent: -0.72, rotation: 1.87, duration: 1.23, ease: 'sine.out' }, 0.13)"
+            }
+          ]
+        },
+        {
+          "start": 17.65,
+          "end": 18.85,
+          "timelineStart": 17.65,
+          "revision": 47,
+          "differences": [
+            {
+              "time": 17.72,
+              "issue": "Camera move differs from the reference: starts 0.4s early; bigger (zoom in 18% + tilt down 1% vs zoom in 2% + pan left 0.9% + rotate 1\u00b0).",
+              "fix": "tl.fromTo(camera, { scale: 0.978, xPercent: 0.01, yPercent: 0.02, rotation: -0.23 }, { scale: 1.002, xPercent: 0.95, yPercent: 0.61, rotation: 0.81, duration: 0.23, ease: 'sine.in' }, 18.12)"
+            },
+            {
+              "time": 18.02,
+              "issue": "Camera move differs from the reference: ease power2.in where the reference uses none; bigger (zoom out 4% vs zoom out 2%).",
+              "fix": "tl.fromTo(camera, { scale: 0.997, xPercent: 0.03, yPercent: 0.02, rotation: -0.13 }, { scale: 0.978, xPercent: 0.01, yPercent: 0.02, rotation: -0.23, duration: 0.2, ease: 'none' }, 17.92)"
+            }
+          ]
+        },
+        {
+          "start": 29.016667,
+          "end": 30.15,
+          "timelineStart": 29.016667,
+          "revision": 47,
+          "differences": [
+            {
+              "time": 29.22,
+              "issue": "Camera move differs from the reference: ease sine.in where the reference uses sine.inOut; starts 0.17s late; 0.17s long vs 0.27s.",
+              "fix": "tl.fromTo(camera, { scale: 1, xPercent: 0, yPercent: 0, rotation: 0 }, { scale: 1.06, xPercent: -0.6, yPercent: 0.37, rotation: 1.39, duration: 0.27, ease: 'sine.inOut' }, 29.05)"
+            },
+            {
+              "time": 29.48,
+              "issue": "Camera move differs from the reference: ease custom (closest named: power1.inOut) where the reference uses sine.out; starts 0.16s late.",
+              "fix": "tl.fromTo(camera, { scale: 1.06, xPercent: -0.6, yPercent: 0.37, rotation: 1.39 }, { scale: 1.098, xPercent: -0.65, yPercent: 0.32, rotation: 1.38, duration: 0.73, ease: 'sine.out' }, 29.32)"
+            }
+          ]
+        }
+      ],
+      "remainingDifferenceCount": 7,
+      "authoredCameraTweensChanged": false,
+      "note": "Composite optical-flow fits include the photo, iris and fragments. Their camera estimates vary with effect appearance; the seven current fitted residuals are retained explicitly rather than reported as passing."
+    },
+    "pacing": {
+      "open": {
+        "revision": 47,
+        "range": "0-1.4s",
+        "samples": "15 at 10 fps",
+        "changePerSecond": "0s 193%, 1s 36%",
+        "cuts": [
+          0.1
+        ],
+        "cameraMoves": 1,
+        "flags": [
+          {
+            "at": "0.5-1.4s",
+            "kind": "no-ease-in",
+            "reason": "The zoom at 0.5s starts at full speed: ease it in (power2.inOut or similar)."
+          }
+        ],
+        "next": "Fix the flagged moments in the scene code (longer holds, eased moves, fewer changes per second), then run checkPacing on that range again. A flag you keep on purpose (a deliberate snap or flash) needs a reason you can name."
+      },
+      "proof": {
+        "revision": 47,
+        "range": "17.65-18.85s",
+        "samples": "13 at 10 fps",
+        "changePerSecond": "18s 211%, 19s 15%",
+        "cuts": [],
+        "cameraMoves": 0,
+        "flags": [],
+        "next": "No pacing problems found in this range."
+      },
+      "cta": {
+        "revision": 47,
+        "range": "29.02-30.12s",
+        "samples": "12 at 10 fps",
+        "changePerSecond": "29s 144%, 30s 0%",
+        "cuts": [],
+        "cameraMoves": 0,
+        "flags": [],
+        "next": "No pacing problems found in this range."
+      }
+    },
+    "retainedPacingFlagReason": "The existing linear opening pullback remains unchanged in this effect correction. Its no-ease-in flag at .5-1.4 s is retained; proof and CTA changed ranges have no pacing flags.",
+    "scopeGuards": [
+      {
+        "passed": true,
+        "checked": [
+          6.3,
+          7.217,
+          8.15,
+          9.917,
+          12.55,
+          15.167
+        ],
+        "note": "Code outside the scope changed; the 2 locked section(s) it reaches render the same, so it was saved."
+      },
+      {
+        "passed": true,
+        "checked": [
+          6.3,
+          7.217,
+          8.15,
+          9.917,
+          12.55,
+          15.167
+        ],
+        "note": "Code outside the scope changed; the 2 locked section(s) it reaches render the same, so it was saved."
+      },
+      {
+        "passed": true,
+        "checked": [
+          6.3,
+          7.217,
+          8.15,
+          9.917,
+          12.55,
+          15.167
+        ],
+        "note": "Code outside the scope changed; the 2 locked section(s) it reaches render the same, so it was saved."
+      }
+    ],
+    "audioChanged": false,
+    "otherProjectsChanged": false,
+    "exported": false,
+    "verificationLimit": "The scene checklist comparison threshold of 35 is not met at .1 s. The explicit requirement to retain the supplied background is preserved. This correction does not claim a pixel-identical reference match.",
+    "tools": "Reference reads, tracking, measurements, renders, pacing and comparisons all used native Revline tools. Local scripts only archived source and verification metadata and ran git checks."
   }
 }

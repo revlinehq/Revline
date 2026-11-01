@@ -3,10 +3,10 @@
   "projectName": "Engine test A: GSAP (RightNow rebuild)",
   "editor": "http://localhost:3001/editor/j970eespkq2j4crma0yhj5mpc18haer6",
   "timelineId": "main",
-  "revision": 44,
+  "revision": 47,
   "sceneClipId": "5b49332a-bc9f-4fc8-a8cd-383e406bf6a1",
   "sourceFile": "film.tsx.txt",
-  "sourceSHA256": "aa0d8587a1885244e135c9f86c778af69fe11e0ffc59fd657e7fd2debe6097aa",
+  "sourceSHA256": "d888d3adae00c1069524470a5f0ecdb403cea09f1e4f9bd3447803524fd934be",
   "duration": 30.966667,
   "fps": 60,
   "visualSceneCount": 1,
@@ -22,9 +22,19 @@
   "additionalBoundaryFrameViews": 27,
   "latestApplicableSpotScores": [
     {
+      "time": 0,
+      "difference": 27,
+      "revision": 47
+    },
+    {
+      "time": 0.1,
+      "difference": 37,
+      "revision": 47
+    },
+    {
       "time": 0.3,
       "difference": 28,
-      "revision": 39
+      "revision": 47
     },
     {
       "time": 4.35,
@@ -97,9 +107,19 @@
       "revision": 40
     },
     {
-      "time": 18.3,
-      "difference": 11,
-      "revision": 39
+      "time": 17.95,
+      "difference": 16,
+      "revision": 47
+    },
+    {
+      "time": 18.35,
+      "difference": 13,
+      "revision": 47
+    },
+    {
+      "time": 18.55,
+      "difference": 12,
+      "revision": 47
     },
     {
       "time": 19.2,
@@ -127,12 +147,17 @@
       "revision": 40
     },
     {
-      "time": 29.6,
-      "difference": 13,
-      "revision": 39
+      "time": 29.25,
+      "difference": 17,
+      "revision": 47
+    },
+    {
+      "time": 29.55,
+      "difference": 15,
+      "revision": 47
     }
   ],
-  "maximumSpotDifference": 28,
+  "maximumSpotDifference": 37,
   "allCameraFitsPass": false,
   "remainingMotionMapDifferences": 29,
   "detailedAuditFile": "audit.json",
@@ -144,7 +169,8 @@
     "compareReference plus motionMap across the whole film",
     "Whole-film checkPacing plus final changed ranges",
     "Exact cloud-source archive and single-scene/media/audio checks",
-    "git diff --check"
+    "git diff --check",
+    "Revision 47 green-dither and scatter correction: native details/boundaries, 3 compared iterations, 3 scoped motionMap diffs, and pacing checks; residuals recorded."
   ],
   "development": {
     "web": "Ready and left running on localhost:3001",
@@ -196,5 +222,115 @@
         "difference": 18
       }
     ]
+  },
+  "introGreenAndPixelScatter": {
+    "revision": 47,
+    "compareReference": [
+      {
+        "time": 0,
+        "difference": 27
+      },
+      {
+        "time": 0.1,
+        "difference": 37
+      },
+      {
+        "time": 0.3,
+        "difference": 28
+      },
+      {
+        "time": 17.95,
+        "difference": 16
+      },
+      {
+        "time": 18.35,
+        "difference": 13
+      },
+      {
+        "time": 18.55,
+        "difference": 12
+      },
+      {
+        "time": 29.25,
+        "difference": 17
+      },
+      {
+        "time": 29.55,
+        "difference": 15
+      }
+    ],
+    "maximumDifference": 37,
+    "remainingVisualDifferences": [
+      "The .1 s moment remains 37/100 after three viewed comparisons. The user-supplied image has a different hill slope, grass detail and clouds from the reference; the coarse opening texture and subsequent grain also remain approximations.",
+      "The opening frame is 27/100 and .3 s is 28/100; checked iris moments range 12-17/100.",
+      "Fragment trajectories, density, edge silhouette and exact offscreen departure frames remain procedural approximations."
+    ],
+    "motionMap": {
+      "windows": [
+        {
+          "start": 0,
+          "end": 1.4,
+          "timelineStart": 0,
+          "revision": 47,
+          "differences": [
+            {
+              "time": 0,
+              "issue": "Camera move differs from the reference: bigger (zoom out 5% + pan left 1.1% + tilt up 2.7% + rotate 3\u00b0 vs zoom out 2% + tilt down 0.9% + rotate 1.9\u00b0); 0.63s long vs 0.13s.",
+              "fix": "tl.fromTo(camera, { scale: 1, xPercent: 0, yPercent: 0, rotation: 0 }, { scale: 0.977, xPercent: 0.22, yPercent: -0.93, rotation: 1.88, duration: 0.13, ease: 'sine.in' }, 0)"
+            },
+            {
+              "time": 0.63,
+              "issue": "Your camera moves (zoom in 21% + pan left 8.5% + tilt up 9.8% + rotate 1.8\u00b0, 0.3s) where the reference does not move; no cause: nothing changes in the frame when this move starts or ends."
+            },
+            {
+              "time": 0.93,
+              "issue": "Camera move differs from the reference: ease custom (closest named: sine.inOut) where the reference uses sine.out; starts 0.8s late; smaller (zoom out 6% + tilt up 1.8% vs zoom out 14%); 0.47s long vs 1.23s.",
+              "fix": "tl.fromTo(camera, { scale: 0.977, xPercent: 0.22, yPercent: -0.93, rotation: 1.88 }, { scale: 0.836, xPercent: 0.19, yPercent: -0.72, rotation: 1.87, duration: 1.23, ease: 'sine.out' }, 0.13)"
+            }
+          ]
+        },
+        {
+          "start": 17.65,
+          "end": 18.85,
+          "timelineStart": 17.65,
+          "revision": 47,
+          "differences": [
+            {
+              "time": 17.72,
+              "issue": "Camera move differs from the reference: starts 0.4s early; bigger (zoom in 18% + tilt down 1% vs zoom in 2% + pan left 0.9% + rotate 1\u00b0).",
+              "fix": "tl.fromTo(camera, { scale: 0.978, xPercent: 0.01, yPercent: 0.02, rotation: -0.23 }, { scale: 1.002, xPercent: 0.95, yPercent: 0.61, rotation: 0.81, duration: 0.23, ease: 'sine.in' }, 18.12)"
+            },
+            {
+              "time": 18.02,
+              "issue": "Camera move differs from the reference: ease power2.in where the reference uses none; bigger (zoom out 4% vs zoom out 2%).",
+              "fix": "tl.fromTo(camera, { scale: 0.997, xPercent: 0.03, yPercent: 0.02, rotation: -0.13 }, { scale: 0.978, xPercent: 0.01, yPercent: 0.02, rotation: -0.23, duration: 0.2, ease: 'none' }, 17.92)"
+            }
+          ]
+        },
+        {
+          "start": 29.016667,
+          "end": 30.15,
+          "timelineStart": 29.016667,
+          "revision": 47,
+          "differences": [
+            {
+              "time": 29.22,
+              "issue": "Camera move differs from the reference: ease sine.in where the reference uses sine.inOut; starts 0.17s late; 0.17s long vs 0.27s.",
+              "fix": "tl.fromTo(camera, { scale: 1, xPercent: 0, yPercent: 0, rotation: 0 }, { scale: 1.06, xPercent: -0.6, yPercent: 0.37, rotation: 1.39, duration: 0.27, ease: 'sine.inOut' }, 29.05)"
+            },
+            {
+              "time": 29.48,
+              "issue": "Camera move differs from the reference: ease custom (closest named: power1.inOut) where the reference uses sine.out; starts 0.16s late.",
+              "fix": "tl.fromTo(camera, { scale: 1.06, xPercent: -0.6, yPercent: 0.37, rotation: 1.39 }, { scale: 1.098, xPercent: -0.65, yPercent: 0.32, rotation: 1.38, duration: 0.73, ease: 'sine.out' }, 29.32)"
+            }
+          ]
+        }
+      ],
+      "remainingDifferenceCount": 7,
+      "authoredCameraTweensChanged": false,
+      "note": "Composite optical-flow fits include the photo, iris and fragments. Their camera estimates vary with effect appearance; the seven current fitted residuals are retained explicitly rather than reported as passing."
+    },
+    "retainedPacingFlagReason": "The existing linear opening pullback remains unchanged in this effect correction. Its no-ease-in flag at .5-1.4 s is retained; proof and CTA changed ranges have no pacing flags.",
+    "verificationLimit": "The scene checklist comparison threshold of 35 is not met at .1 s. The explicit requirement to retain the supplied background is preserved. This correction does not claim a pixel-identical reference match."
   }
 }
