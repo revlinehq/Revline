@@ -27,20 +27,35 @@ export function patchCode(code: string, edits: SceneEdit[]) {
     const replace = insert === 'before' ? given + find : insert === 'after' ? find + given : given;
     const label = edits.length > 1 ? `Edit ${index + 1}: ` : '';
     const count = find ? text.split(find).length - 1 : 0;
-    if (!count) throw new Error(`${label}the snippet was not found. Copy it exactly from the current code (inspectClip), whitespace and quotes included${closest(text, find)}. Nothing was changed.`);
+    if (!count) throw new Error(`${label}the snippet was not found. Copy it exactly from the current code (inspectClip), whitespace and quotes included. Nothing was changed.${closestCodeLines(text, find)}${index ? '\nLine numbers above include preceding edits in this failed call. Inspect the saved code before retrying.' : ''}`);
     if (count > 1 && !all) throw new Error(`${label}the snippet appears ${count} times. Add surrounding code so it is unique, or set all: true to replace every one. Nothing was changed.`);
     return all ? text.split(find).join(replace) : text.replace(find, () => replace);
   }, code);
 }
 
-/** The line of the code most like the snippet's first line, so a near miss can be copied right. */
-function closest(code: string, snippet: string) {
-  const first = snippet.split('\n').find(line => line.trim())?.trim();
-  if (!first) return '';
-  const words = new Set(first.split(/\W+/).filter(word => word.length > 2));
-  let best = '', score = 0;
-  for (const line of code.split('\n')) { const found = line.split(/\W+/).filter(word => words.has(word)).length; if (found > score) { best = line.trim(); score = found; } }
-  return score >= Math.min(2, words.size) && best ? `. The closest line is: ${best.length > 160 ? `${best.slice(0, 160)}…` : best}` : '';
+/** Nearby exact source, including indentation, so a failed match can be retried directly. */
+export function closestCodeLines(code: string, snippet: string, startLine = 1, ranges?: { start: number; end: number }[]) {
+  const lines = code.split('\n'), wanted = snippet.split('\n').filter(line => line.trim());
+  const tokens = (line: string) => new Set(line.match(/[\w$]+|[^\s\w]/g) ?? []);
+  // Anchor on the most informative line, rather than a common closing brace in a multiline find.
+  const anchor = [...wanted].sort((a, b) => (b.match(/[\w$]+/g)?.join('').length ?? 0) - (a.match(/[\w$]+/g)?.join('').length ?? 0))[0];
+  if (anchor === undefined) return '';
+  const needle = tokens(anchor);
+  const ranked = lines.map((line, index) => {
+    const words = tokens(line);
+    const score = 2 * [...needle].filter(word => words.has(word)).length / Math.max(1, words.size + needle.size);
+    return { index, score };
+  }).filter(item => !ranges || ranges.some(range => item.index + startLine >= range.start && item.index + startLine <= range.end)).sort((a, b) => b.score - a.score || a.index - b.index);
+  const selected: number[] = [], windows: string[] = [];
+  for (const { index } of ranked) {
+    if (selected.some(other => Math.abs(other - index) < Math.min(12, wanted.length + 3))) continue;
+    selected.push(index);
+    const range = ranges?.find(range => index + startLine >= range.start && index + startLine <= range.end);
+    const from = Math.max(range ? range.start - startLine : 0, index - 1), to = Math.min(range ? range.end - startLine + 1 : lines.length, index + Math.min(10, wanted.length) + 2);
+    windows.push(lines.slice(from, to).map((line, offset) => `${startLine + from + offset}: ${line}`).join('\n'));
+    if (windows.length === 3) break;
+  }
+  return windows.length ? `\nClosest matching lines (copy code without the line-number prefixes):\n${windows.join('\n\n')}` : '';
 }
 
 /** Every scene clip holding this code (a film's beats, or the halves of a split scene) gets the new code. */
