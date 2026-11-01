@@ -1,9 +1,9 @@
 {
   "projectId": "j970eespkq2j4crma0yhj5mpc18haer6",
   "timelineId": "main",
-  "revision": 69,
+  "revision": 70,
   "status": "Identity corner rectangles close before Upload at revision 63; scoped motionMap/pacing clean and overall lockup visual differences recorded",
-  "sourceSHA256": "4ddcfc18d0f7aed01f2b337897911db773f611eb2f9d0e2599a337338b2ebc93",
+  "sourceSHA256": "95ee32799cc8793aed52cbed4b4b82e92a612b4fd5dbe7078763b96f91ce01d1",
   "changes": {
     "intro": [
       "GSAP background blur builds 2.8–3.05 s, holds through 4.3 s and resolves during the crisp dither handoff by 4.733333 s.",
@@ -7557,5 +7557,197 @@
     "engine": "GSAP through useTimeline under scene-engine and GSAP rules.",
     "exported": false,
     "sourceSHA256": "4ddcfc18d0f7aed01f2b337897911db773f611eb2f9d0e2599a337338b2ebc93"
+  },
+  "terminalMascotUpwardTilt": {
+    "revision": 70,
+    "request": "When the face shows up, the mascot face should tilt up.",
+    "interpretedTarget": "The green eyes and smile inside the System Zero terminal, continuing the immediately preceding terminal-opening correction.",
+    "scope": {
+      "start": 8.416667,
+      "end": 15.916667
+    },
+    "changes": [
+      "Grouped the terminal mascot's two green eyes and smile into a dedicated mascot-face element, preserving the original neutral feature positions.",
+      "Added a GSAP useTimeline upward face pitch from rotationX 0 to 26 degrees and y 0 to -20 px over 0.45 s with power2.inOut, beginning at 11.433333 s as the face appears. It settles at 11.883333 s and holds while the surrounding mascot pixels assemble.",
+      "Used transformPerspective 450 and a bottom-center origin to make the face tilt upward independently of the white mascot tiles, with explicit fromTo and immediateRender:false for seek-safe timing.",
+      "Only the face grouping and face tween changed. The revision 69 cursor/background camera easing, terminal window animation, white pixel assembly, prompt, dither, background asset, other scene sections, audio and markers are unchanged."
+    ],
+    "pose": {
+      "start": 11.433333,
+      "end": 11.883333,
+      "duration": 0.45,
+      "ease": "power2.inOut",
+      "rotationX": [
+        0,
+        26
+      ],
+      "y": [
+        0,
+        -20
+      ],
+      "perspective": 450,
+      "origin": "50% 100%",
+      "holdsAfterTilt": true
+    },
+    "verification": {
+      "onlyRequestedFaceEdits": true,
+      "outsideUploadTerminalUnchanged": true,
+      "compiled": true,
+      "sourceCharacters": 63750,
+      "referenceReads": [
+        {
+          "start": 11.4,
+          "end": 14.3,
+          "fps": 10,
+          "crop": {
+            "x": 350,
+            "y": 100,
+            "w": 1250,
+            "h": 870
+          }
+        },
+        {
+          "start": 11.45,
+          "end": 12.45,
+          "fps": 10,
+          "crop": {
+            "x": 700,
+            "y": 425,
+            "w": 520,
+            "h": 400
+          }
+        },
+        {
+          "start": 11.45,
+          "end": 12.65,
+          "fps": 10,
+          "crop": {
+            "x": 860,
+            "y": 485,
+            "w": 230,
+            "h": 185
+          }
+        }
+      ],
+      "exactReferenceDetails": [
+        11.45,
+        12.45
+      ],
+      "trackNote": "Tracked the green face over 11.45-12.55 s. The tiny-feature tracker drifts into the appearing white pixels around 12 s, so its global travel/rotation was not copied into a local face transform. Full/cropped frame reads determined the targeted upward gesture.",
+      "nativeBefore69": [
+        11.5,
+        11.8,
+        12,
+        12.2,
+        12.5,
+        13.3
+      ],
+      "nativeRevision70": [
+        11.433333,
+        11.55,
+        11.7,
+        11.883333,
+        12.45,
+        13.3
+      ],
+      "compareReference": {
+        "note": "Reference (left) beside your timeline (right), one moment per row, at 11.5s, 11.65s, 11.8s, 11.95s, 12.05s, 12.25s, 12.45s, 12.65s, 13.1s, 13.5s. Differences: 11.5s 16, 11.65s 30, 11.8s 26, 11.95s 7, 12.05s 8, 12.25s 5, 12.45s 5, 12.65s 5, 13.1s 14, 13.5s 31.",
+        "next": "Pass 1 of 3. Fix the 2 worst moments now (13.5s, 11.65s) with patchScene or editScene: read that moment with fps 10 if you have not, correct it, then compare again. Done when every moment scores 25 or less, or after 3 passes.",
+        "pass": 1,
+        "scores": [
+          {
+            "time": 11.5,
+            "difference": 16
+          },
+          {
+            "time": 11.65,
+            "difference": 30
+          },
+          {
+            "time": 11.8,
+            "difference": 26
+          },
+          {
+            "time": 11.95,
+            "difference": 7
+          },
+          {
+            "time": 12.05,
+            "difference": 8
+          },
+          {
+            "time": 12.25,
+            "difference": 5
+          },
+          {
+            "time": 12.45,
+            "difference": 5
+          },
+          {
+            "time": 12.65,
+            "difference": 5
+          },
+          {
+            "time": 13.1,
+            "difference": 14
+          },
+          {
+            "time": 13.5,
+            "difference": 31
+          }
+        ],
+        "images": [
+          "Reference (left) beside your timeline (right), 1",
+          "Reference (left) beside your timeline (right), 2",
+          "Reference (left) beside your timeline (right), 3",
+          "Reference (left) beside your timeline (right), 4"
+        ]
+      },
+      "motionMap": {
+        "start": 11.4,
+        "end": 12.6,
+        "differences": [
+          {
+            "time": 11.4,
+            "issue": "Camera move differs from the reference: ease power1.out where the reference uses none; bigger (zoom out 25% + pan right 7.3% + rotate -4.7° vs zoom out 12%); 0.93s long vs 0.17s.",
+            "fix": "tl.fromTo(camera, { scale: 1, xPercent: 0, yPercent: 0, rotation: 0 }, { scale: 0.88, xPercent: -0.5, yPercent: 0.57, rotation: -0.08, duration: 0.17, ease: 'none' }, 11.4)"
+          },
+          {
+            "time": 11.4,
+            "issue": "The reference has a wipe bottom to top here (0.27s, sine.out); yours has none."
+          },
+          {
+            "time": 11.57,
+            "issue": "The reference camera moves here (zoom out 8%, 0.13s, none, it starts with content changes (middle, 30.6% of the frame) at 11.7s); yours does not.",
+            "fix": "tl.fromTo(camera, { scale: 0.88, xPercent: -0.5, yPercent: 0.57, rotation: -0.08 }, { scale: 0.81, xPercent: -0.2, yPercent: 0.99, rotation: 0.15, duration: 0.13, ease: 'none' }, 11.57)"
+          },
+          {
+            "time": 11.7,
+            "issue": "The reference camera moves here (zoom out 11%, 0.87s, power1.out, it starts with content changes (middle, 30.6% of the frame) at 11.7s); yours does not.",
+            "fix": "tl.fromTo(camera, { scale: 0.81, xPercent: -0.2, yPercent: 0.99, rotation: 0.15 }, { scale: 0.717, xPercent: -0.23, yPercent: 0.67, rotation: 0.07, duration: 0.87, ease: 'power1.out' }, 11.7)"
+          }
+        ]
+      },
+      "pacing": {
+        "revision": 70,
+        "range": "11.4-12.6s",
+        "samples": "13 at 10 fps",
+        "changePerSecond": "11s 212%, 12s 1%",
+        "cuts": [
+          11.5
+        ],
+        "cameraMoves": 2,
+        "flags": [],
+        "next": "No pacing problems found in this range."
+      }
+    },
+    "remainingDifferences": [
+      "Four motionMap camera/wipe differences remain over 11.4-12.6 s: reference multi-stage background recession, different fitted ease/magnitude/duration, and a bottom-up wipe. The camera and terminal transition source are unchanged by this face-only correction.",
+      "Three of 10 comparison frames remain above 25/100: 11.65 s 30, 11.8 s 26, and 13.5 s 31. These include existing supplied-background/dither, modal timing and prompt/body alignment differences. The other seven score 5-16/100; no all-pass similarity claim.",
+      "The 26-degree face pitch is a code-built pose for the requested upward glance. Exact perspective, pixel flicker and face motion remain an approximation of the reference."
+    ],
+    "engine": "GSAP through useTimeline under scene-engine and GSAP rules.",
+    "exported": false,
+    "sourceSHA256": "95ee32799cc8793aed52cbed4b4b82e92a612b4fd5dbe7078763b96f91ce01d1"
   }
 }

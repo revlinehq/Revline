@@ -83,7 +83,7 @@
     "change": "Preserve requested motion range in frame snapshots"
   },
   "priority": "User requested reference structure and timing take precedence over generic one-second holds, no grids, and quiet house styling.",
-  "revision": 69,
+  "revision": 70,
   "verificationFile": "verification.json",
   "sourceFile": "film.tsx.txt",
   "soundEffects": {
@@ -149,7 +149,7 @@
     "generatedMusicAndCuesMuted": true,
     "activeAudioAssetId": "j57eeahvakwfy1ntsewb2jm3zh8hb6ee"
   },
-  "sourceSHA256": "4ddcfc18d0f7aed01f2b337897911db773f611eb2f9d0e2599a337338b2ebc93",
+  "sourceSHA256": "95ee32799cc8793aed52cbed4b4b82e92a612b4fd5dbe7078763b96f91ce01d1",
   "fonts": [
     "JetBrains Mono",
     "Pixelify Sans"
@@ -447,6 +447,36 @@
       ]
     },
     "sourceSHA256": "4ddcfc18d0f7aed01f2b337897911db773f611eb2f9d0e2599a337338b2ebc93",
+    "verificationFile": "verification.json",
+    "detailedAuditFile": "audit.json",
+    "exported": false
+  },
+  "terminalMascotUpwardTilt": {
+    "revision": 70,
+    "changes": [
+      "Grouped the terminal mascot's two green eyes and smile into a dedicated mascot-face element, preserving the original neutral feature positions.",
+      "Added a GSAP useTimeline upward face pitch from rotationX 0 to 26 degrees and y 0 to -20 px over 0.45 s with power2.inOut, beginning at 11.433333 s as the face appears. It settles at 11.883333 s and holds while the surrounding mascot pixels assemble.",
+      "Used transformPerspective 450 and a bottom-center origin to make the face tilt upward independently of the white mascot tiles, with explicit fromTo and immediateRender:false for seek-safe timing.",
+      "Only the face grouping and face tween changed. The revision 69 cursor/background camera easing, terminal window animation, white pixel assembly, prompt, dither, background asset, other scene sections, audio and markers are unchanged."
+    ],
+    "pose": {
+      "start": 11.433333,
+      "end": 11.883333,
+      "duration": 0.45,
+      "ease": "power2.inOut",
+      "rotationX": [
+        0,
+        26
+      ],
+      "y": [
+        0,
+        -20
+      ],
+      "perspective": 450,
+      "origin": "50% 100%",
+      "holdsAfterTilt": true
+    },
+    "sourceSHA256": "95ee32799cc8793aed52cbed4b4b82e92a612b4fd5dbe7078763b96f91ce01d1",
     "verificationFile": "verification.json",
     "detailedAuditFile": "audit.json",
     "exported": false
