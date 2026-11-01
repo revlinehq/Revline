@@ -4,7 +4,6 @@ import { Beat, useScene, useTimeline } from 'revline';
 import { gsap } from 'gsap';
 import { CustomEase } from 'gsap/CustomEase';
 
-  if(!ending)tl.fromTo(frame,{scaleX:1,scaleY:1},{scaleX:.95,scaleY:.86,duration:.25,ease:'power2.in',immediateRender:false},2.383333);
 const GREEN = '#76b900';
 const SYSTEM_ZERO_AT = 4.3;
 const MONO = '"JetBrains Mono", monospace';
@@ -97,12 +96,14 @@ function Intro(){
    .to(control,{width:890,height:142,x:-445,y:-71,duration:.5,ease:'power1.out'},2.8)
    .to(control,{width:1008,height:146,x:-504,y:-73,duration:.83,ease:'sine.out'},3.3)
    .to(control,{width:1160,height:170,x:-580,y:-85,duration:.37,ease:'power3.out'},4.13);
-  seed(tl,frame,{opacity:0,width:116,height:100,x:-58,y:-50});
-  tl.to(frame,{opacity:1,duration:.2},2.2).to(frame,{width:1090,height:246,x:-545,y:-123,duration:1.73,ease:'power3.out'},2.8).to(frame,{width:1240,height:270,x:-620,y:-135,duration:.3,ease:'power3.out'},4.13);
+  seed(tl,frame,{opacity:0,width:420,height:240,x:-210,y:-120});
+  seed(tl,'.field-corner',{scale:.7});tl.to('.field-corner',{scale:1,duration:.3,ease:'power3.out'},4.13);
+  tl.to(frame,{opacity:1,duration:.1},2.117).to(frame,{width:720,height:240,x:-360,y:-120,duration:.3,ease:'power2.in'},2.5).to(frame,{width:1160,height:270,x:-580,y:-135,duration:.5,ease:'power1.out'},2.8).to(frame,{width:1360,height:320,x:-680,y:-160,duration:.3,ease:'power3.out'},4.13);
   tl.to(one,{y:200,duration:.2,ease:'power1.in'},4.1);
   seed(tl,zero,{y:-160,transformOrigin:'0 50%'});tl.to(zero,{y:0,duration:.22,ease:'power3.out'},4.19);
   seed(tl,'.zeroWord',{opacity:0,color:GREEN});tl.to('.zeroWord',{opacity:1,duration:.1,ease:'power1.out'},SYSTEM_ZERO_AT).to('.zeroWord',{color:'#000',duration:.16,ease:'power1.out'},4.33);
-  tl.to([frame,arrow],{opacity:0,duration:.27,ease:'power2.in'},5.416667);
+  tl.to(frame,{opacity:0,duration:.27,ease:'power2.in'},5.416667);
+  tl.to(arrow,{opacity:0,duration:.3,ease:'none'},5.266667);
   tl.to(control,{clipPath:'inset(0% 18% 0% 18%)',height:160,y:-80,duration:.333333,ease:'power1.in'},5.416667)
    .fromTo(control,{clipPath:'inset(0% 18% 0% 18%)'},{clipPath:'inset(43% 49.2% 43% 49.2%)',duration:.016667,ease:'power2.in',immediateRender:false},5.75)
    .to(control,{opacity:0,duration:.016667,ease:'power2.in'},5.75);
@@ -110,7 +111,7 @@ function Intro(){
    .fromTo(zero,{x:180,opacity:1},{x:500,opacity:0,duration:.016667,ease:'power2.in',immediateRender:false},5.75);
   tl.to('.intro-landscape',{opacity:0,duration:.016667,ease:'power3.out'},5.75).set('.intro-landscape',{display:'none'},5.783333).set(el,{display:'none'},5.8);
  });
- return <div ref={ref} style={FILL}><div className="intro-landscape" style={FILL}><Landscape/></div>{[{x:968,y:177,s:24},{x:1398,y:165,s:24},{x:1796,y:383,s:22},{x:1618,y:838,s:22}].map((p,i)=><div className="intro-bit" key={i} style={{position:'absolute',left:p.x,top:p.y,width:p.s,height:p.s,background:GREEN}}/>)}<div className="introducing" style={{position:'absolute',left:560,top:478,width:800,textAlign:'center',transformOrigin:'50% 50%'}}><Type text="Introducing" at={.083333} cps={30} ink="#fff" size={106}/><div style={{position:'absolute',left:15,top:-70}}><Corners w={770} h={230}/></div></div><div className="fieldFrame" style={{position:'absolute',left:960,top:540,border:'0px solid transparent'}}><svg width="100%" height="100%" viewBox="0 0 1240 270" preserveAspectRatio="none"><path d="M0 235V270H35 M1205 0H1240V35" fill="none" stroke={GREEN} strokeWidth="4"/></svg></div><div className="control" style={{position:'absolute',left:960,top:540,background:GREEN,overflow:'hidden'}}><div className="one" style={{position:'absolute',left:45,top:24}}><Type text="system one" at={2.9} cps={55} ink="#111b00" highlight="#111b00" size={69} style={{fontWeight:600}}/></div><div className="zero" style={{position:'absolute',left:45,top:38,display:'flex',alignItems:'center',gap:20,whiteSpace:'nowrap'}}><ProductMark size={76} color="#000"/><span style={{fontSize:69,fontWeight:600,color:'#000'}}>system<span className="zeroWord"> zero</span></span></div><div className="arrow" style={{position:'absolute',right:24,top:'50%',transform:'translateY(-50%)',fontSize:64,lineHeight:1,color:'#000'}}>▸</div></div></div>;
+ return <div ref={ref} style={FILL}><div className="intro-landscape" style={FILL}><Landscape/></div>{[{x:968,y:177,s:24},{x:1398,y:165,s:24},{x:1796,y:383,s:22},{x:1618,y:838,s:22}].map((p,i)=><div className="intro-bit" key={i} style={{position:'absolute',left:p.x,top:p.y,width:p.s,height:p.s,background:GREEN}}/>)}<div className="introducing" style={{position:'absolute',left:560,top:478,width:800,textAlign:'center',transformOrigin:'50% 50%'}}><Type text="Introducing" at={.083333} cps={30} ink="#fff" size={106}/><div style={{position:'absolute',left:15,top:-70}}><Corners w={770} h={230}/></div></div><div className="fieldFrame" style={{position:'absolute',left:960,top:540,zIndex:2,pointerEvents:'none'}}><svg className="field-corner" width="52" height="56" viewBox="0 0 52 56" style={{position:'absolute',left:0,bottom:0,display:'block',transformOrigin:'0% 100%'}}><path d="M4 4V52H48" fill="none" stroke={GREEN} strokeWidth="8"/></svg><svg className="field-corner" width="52" height="56" viewBox="0 0 52 56" style={{position:'absolute',right:0,top:0,display:'block',transformOrigin:'100% 0%'}}><path d="M4 4H48V52" fill="none" stroke={GREEN} strokeWidth="8"/></svg></div><div className="control" style={{position:'absolute',left:960,top:540,background:GREEN,overflow:'hidden'}}><div className="one" style={{position:'absolute',left:45,top:24}}><Type text="system one" at={2.9} cps={55} ink="#111b00" highlight="#111b00" size={69} style={{fontWeight:600}}/></div><div className="zero" style={{position:'absolute',left:45,top:38,display:'flex',alignItems:'center',gap:20,whiteSpace:'nowrap'}}><ProductMark size={76} color="#000"/><span style={{fontSize:69,fontWeight:600,color:'#000'}}>system<span className="zeroWord"> zero</span></span></div><svg className="arrow" width="40" height="42" viewBox="0 0 40 42" style={{position:'absolute',right:'8.3%',top:'50%',height:'25%',width:'auto',transform:'translateY(-50%)',display:'block'}}><path d="M0 0L40 21L0 42Z" fill="#000"/></svg></div></div>;
 }
 function BrandLockup({ending=false}:{ending?:boolean}){
  const ref=useTimeline<HTMLDivElement>((tl,el)=>{
@@ -119,6 +120,7 @@ function BrandLockup({ending=false}:{ending?:boolean}){
   seed(tl,frame,{width:ending?265:180,height:ending?265:180,x:ending?-132:-90,y:ending?-132:-90});if(!ending)tl.to(frame,{width:265,height:265,x:-132,y:-132,duration:.28,ease:'power2.out'},.001);tl.to(frame,{width:830,height:330,x:-415,y:-165,duration:ending?.32:.55,ease:'power3.inOut'},.67);
   tl.fromTo('.brandText',{x:280},{x:0,duration:ending?.345:.42,ease:'power3.inOut'},.66);
   seed(tl,by,{opacity:0});tl.to(by,{opacity:1,duration:.25,ease:'power2.out'},1.58);
+  if(!ending)tl.fromTo(frame,{scaleX:1,scaleY:1},{scaleX:.95,scaleY:.86,duration:.25,ease:'power2.in',immediateRender:false},2.383333);
   if(ending)tl.to(el.querySelector('.brandGroup'),{scale:1.1,duration:.3,ease:'power2.in'},2.8);
  });
  return <div ref={ref} style={{...FILL,background:ending?'#fff':'transparent',color:'#000'}}><div className="brandGroup" style={{...FILL,transformOrigin:'50% 50%'}}><div className="brandMark" style={{position:'absolute',left:902,top:476}}><Mark size={116}/></div><div className="brandText" style={{position:'absolute',left:760,top:488}}><Type text="SYSTEM ZERO" at={.83} cps={28} size={72}/></div><div className="by" style={{position:'absolute',left:860,top:617,width:250,textAlign:'center',fontSize:26}}><Type text="by RightNow" at={1.58} cps={75} size={26}/></div><div className="brandCorners" style={{position:'absolute',left:960,top:540}}><svg width="100%" height="100%" viewBox="0 0 830 330" preserveAspectRatio="none" style={{overflow:'visible'}}><path d="M0 292V330H38 M792 0H830V38" fill="none" stroke={GREEN} strokeWidth={ending?5:3} vectorEffect={ending?undefined:'non-scaling-stroke'}/></svg></div></div></div>;

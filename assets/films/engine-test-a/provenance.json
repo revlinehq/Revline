@@ -83,7 +83,7 @@
     "change": "Preserve requested motion range in frame snapshots"
   },
   "priority": "User requested reference structure and timing take precedence over generic one-second holds, no grids, and quiet house styling.",
-  "revision": 63,
+  "revision": 66,
   "verificationFile": "verification.json",
   "sourceFile": "film.tsx.txt",
   "soundEffects": {
@@ -149,7 +149,7 @@
     "generatedMusicAndCuesMuted": true,
     "activeAudioAssetId": "j57eeahvakwfy1ntsewb2jm3zh8hb6ee"
   },
-  "sourceSHA256": "e1c4e4b36c0cd55026eb75469a7b8f74e4857439f3976380dbcd878c2ab375f5",
+  "sourceSHA256": "86ae75252367a51b51132b67f5e8d4326b57109bb982b855f127ce898ac5d780",
   "fonts": [
     "JetBrains Mono",
     "Pixelify Sans"
@@ -367,6 +367,21 @@
       "Logo, text, byline, cut timing and all other source are unchanged. The closing identity at 26.05 s is excluded by the ending branch."
     ],
     "sourceSHA256": "e1c4e4b36c0cd55026eb75469a7b8f74e4857439f3976380dbcd878c2ab375f5",
+    "verificationFile": "verification.json",
+    "detailedAuditFile": "audit.json",
+    "exported": false
+  },
+  "introControlCornersAndChevron": {
+    "revision": 66,
+    "changes": [
+      "Rebuilt intro button corner rectangles as two independent 52x56 px SVG corners with 8 px strokes, above the button (zIndex 2). They no longer stretch their stroke with the frame or clip at its edges.",
+      "Corner enclosure starts at 420x240, expands to 720x240 during 2.5-2.8 s, then 1160x270 during 2.8-3.3 s, and 1360x320 during 4.13-4.43 s. This keeps the rectangles outside the small control and the full System Zero button, including 4:53 (4.883333 s).",
+      "Corner glyphs scale uniformly from 0.7 to 1 during 4.13-4.43 s via GSAP useTimeline; the enclosure is centered at 960,540. Initial appearance completes by 2.217 s.",
+      "Replaced the off-center font glyph with an explicit filled SVG triangle (viewBox 0 0 40 42), vertically centered, height 25% of the button, and inset 8.3% from the right. It scales with the button and uses no font baseline.",
+      "Chevron fades linearly during 5.266667-5.566667 s, matching the read reference frames more closely.",
+      "Only Intro source changed; other components, background/dither/camera, audio, markers, and all other scene sections are byte-for-byte unchanged."
+    ],
+    "sourceSHA256": "86ae75252367a51b51132b67f5e8d4326b57109bb982b855f127ce898ac5d780",
     "verificationFile": "verification.json",
     "detailedAuditFile": "audit.json",
     "exported": false
