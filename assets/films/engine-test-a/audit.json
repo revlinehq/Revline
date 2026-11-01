@@ -1,0 +1,1409 @@
+{
+  "projectId": "j970eespkq2j4crma0yhj5mpc18haer6",
+  "timelineId": "main",
+  "revision": 43,
+  "status": "Complete detailed visual audit; residual visual and camera-fit differences recorded",
+  "sourceSHA256": "d42868cb71e6431db671f4af00a8967535c4c99d9e35925e3dbd3150d9e67176",
+  "changes": {
+    "intro": [
+      "GSAP background blur builds 2.8\u20133.05 s, holds through 4.3 s and resolves during the crisp dither handoff by 4.733333 s.",
+      "Image-tone SVG halftone, threshold and palette transfer replace a flat dotted layer.",
+      "Corrected label swap, typing, control weight/arrow, pixel bits, green-highlight takeover and outgoing control hold.",
+      "Retimed the opening camera phases around the control changes."
+    ],
+    "identity": [
+      "Separated abstract identity logo from the pixel product mascot.",
+      "Corrected stepped logo-color change and byline typing."
+    ],
+    "upload-terminal": [
+      "Rebuilt six classic file icons as native SVG; added Pixelify Sans and underlined any file.",
+      "Corrected translucent green menu opening, row typing, hover states and pixel pointer entrance/path/scale.",
+      "Removed the menu before the modal and added the ground-first dither plus measured upward sky wipe.",
+      "Measured modal dimensions, titlebar, borders, close button and pixel mascot assembly/flicker.",
+      "Retimed fullscreen takeover, moved chrome upward, counter-positioned content and removed the desktop leak.",
+      "Removed prompt/mascot overlap and corrected prompt typing, active arrows and reframe."
+    ],
+    "decision": [
+      "Rebuilt three-stage scatter paths, color flips, percent-only opening and number sequence.",
+      "Aligned settled rows while preserving initial scatter positions."
+    ],
+    "proof": [
+      "Refined mesh silhouette and logo UV scale.",
+      "Rebuilt token/time/cost layouts, values, labels and underlines.",
+      "Preserved progress-bar continuity across phase changes.",
+      "Measured nonuniform window entry and compensated later positions for the new pivot.",
+      "Corrected at once, Decide, units, cost-heading and value timing.",
+      "Cost windows resize before their bars appear; content is clipped to the window."
+    ],
+    "iris-and-cta": [
+      "Replaced diagonal mask spikes with stepped edges and external pixels.",
+      "Lengthened the final iris.",
+      "Reconstructed pixel hand and CTA lettering as native SVG, restored thin strokes and added the bevel.",
+      "Corrected button growth, hold and recession."
+    ]
+  },
+  "reading": {
+    "fps": 10,
+    "frames": 310,
+    "range": [
+      0,
+      30.9
+    ],
+    "method": "Consecutive readFrames reference windows plus six exact endpoint reads omitted by floating-point range endpoints; native detail reads, measureFrame and trackReference.",
+    "detailExamples": [
+      4.6,
+      9.7,
+      10,
+      10.3,
+      12.1,
+      14.8,
+      16,
+      16.2,
+      16.3,
+      18.3,
+      30.3
+    ],
+    "modalMeasuredColors": {
+      "head": "#a2a2a2",
+      "titlebar": "#151515"
+    },
+    "trackingReview": "Drifted pointer/percentage tracks were rejected despite high fit confidence; native frame edges determined those paths."
+  },
+  "sampling": {
+    "baseRevision": 40,
+    "frames": 310,
+    "fps": 10,
+    "allBaseFramesReturned": true,
+    "allPairsViewed": true,
+    "pairedSheets": 11,
+    "replacementChunks": {
+      "41": [
+        15,
+        16
+      ],
+      "42": [
+        38,
+        39
+      ],
+      "43": [
+        18,
+        19
+      ]
+    },
+    "reason": "The final scoped changes affect the menu entrance, cost-window resize and upward dither wipe. Each changed window is resampled; other sampled state is unchanged.",
+    "allReplacementFramesReturned": true,
+    "allReplacementPairsViewed": true
+  },
+  "compareReference": {
+    "passes": [
+      {
+        "revision": 39,
+        "scores": [
+          {
+            "time": 0.3,
+            "difference": 28
+          },
+          {
+            "time": 4.6,
+            "difference": 18
+          },
+          {
+            "time": 9.3,
+            "difference": 21
+          },
+          {
+            "time": 10.5,
+            "difference": 7
+          },
+          {
+            "time": 11.5,
+            "difference": 16
+          },
+          {
+            "time": 12.9,
+            "difference": 8
+          },
+          {
+            "time": 13.1,
+            "difference": 14
+          },
+          {
+            "time": 18.3,
+            "difference": 11
+          },
+          {
+            "time": 19.2,
+            "difference": 11
+          },
+          {
+            "time": 21.3,
+            "difference": 14
+          },
+          {
+            "time": 23.5,
+            "difference": 13
+          },
+          {
+            "time": 29.6,
+            "difference": 13
+          }
+        ]
+      },
+      {
+        "revision": 40,
+        "scores": [
+          {
+            "time": 16.8,
+            "difference": 9
+          },
+          {
+            "time": 21.3,
+            "difference": 14
+          },
+          {
+            "time": 23.5,
+            "difference": 13
+          },
+          {
+            "time": 24.8,
+            "difference": 11
+          }
+        ]
+      },
+      {
+        "revision": 41,
+        "scores": [
+          {
+            "time": 9.3,
+            "difference": 20
+          },
+          {
+            "time": 9.5,
+            "difference": 19
+          },
+          {
+            "time": 9.7,
+            "difference": 15
+          }
+        ]
+      },
+      {
+        "revision": 42,
+        "scores": [
+          {
+            "time": 23.35,
+            "difference": 13
+          },
+          {
+            "time": 23.5,
+            "difference": 13
+          }
+        ]
+      },
+      {
+        "revision": 43,
+        "scores": [
+          {
+            "time": 11.37,
+            "difference": 15
+          },
+          {
+            "time": 11.5,
+            "difference": 16
+          },
+          {
+            "time": 11.67,
+            "difference": 28
+          }
+        ]
+      }
+    ],
+    "latestApplicableScores": [
+      {
+        "time": 0.3,
+        "difference": 28,
+        "revision": 39
+      },
+      {
+        "time": 4.6,
+        "difference": 18,
+        "revision": 39
+      },
+      {
+        "time": 9.3,
+        "difference": 20,
+        "revision": 41
+      },
+      {
+        "time": 9.5,
+        "difference": 19,
+        "revision": 41
+      },
+      {
+        "time": 9.7,
+        "difference": 15,
+        "revision": 41
+      },
+      {
+        "time": 10.5,
+        "difference": 7,
+        "revision": 39
+      },
+      {
+        "time": 11.37,
+        "difference": 15,
+        "revision": 43
+      },
+      {
+        "time": 11.5,
+        "difference": 16,
+        "revision": 43
+      },
+      {
+        "time": 11.67,
+        "difference": 28,
+        "revision": 43
+      },
+      {
+        "time": 12.9,
+        "difference": 8,
+        "revision": 39
+      },
+      {
+        "time": 13.1,
+        "difference": 14,
+        "revision": 39
+      },
+      {
+        "time": 16.8,
+        "difference": 9,
+        "revision": 40
+      },
+      {
+        "time": 18.3,
+        "difference": 11,
+        "revision": 39
+      },
+      {
+        "time": 19.2,
+        "difference": 11,
+        "revision": 39
+      },
+      {
+        "time": 21.3,
+        "difference": 14,
+        "revision": 40
+      },
+      {
+        "time": 23.35,
+        "difference": 13,
+        "revision": 42
+      },
+      {
+        "time": 23.5,
+        "difference": 13,
+        "revision": 42
+      },
+      {
+        "time": 24.8,
+        "difference": 11,
+        "revision": 40
+      },
+      {
+        "time": 29.6,
+        "difference": 13,
+        "revision": 39
+      }
+    ],
+    "targetMaximumDifference": 25,
+    "maximumDifference": 28,
+    "allCheckedMomentsPass": false,
+    "worstCorrectedExamples": [
+      {
+        "time": 12.1,
+        "before": 38,
+        "after": 7
+      },
+      {
+        "time": 13.1,
+        "before": 57,
+        "after": 14
+      },
+      {
+        "time": 16,
+        "before": 46,
+        "after": 8
+      }
+    ],
+    "remainingAboveTarget": [
+      {
+        "time": 0.3,
+        "difference": 28,
+        "revision": 39
+      },
+      {
+        "time": 11.67,
+        "difference": 28,
+        "revision": 43
+      }
+    ],
+    "note": "The 0.3 s and 11.67 s samples remain 28. Background-heavy dither/tone moments remain different with the actual supplied landscape. All other latest sampled moments are 25 or less."
+  },
+  "motionMap": {
+    "allCameraFitsPass": false,
+    "windows": [
+      {
+        "start": 0,
+        "end": 10,
+        "timelineStart": 0,
+        "readAtRevision": 41,
+        "appliesToRevision": 43,
+        "remainingDifferenceCount": 8,
+        "differences": [
+          {
+            "time": 0,
+            "issue": "Camera move differs from the reference: ease none where the reference uses sine.in; bigger (zoom out 22% + tilt up 10.4% + rotate -1\u00b0 vs zoom out 2% + tilt down 0.9% + rotate 1.9\u00b0); 1.97s long vs 0.13s.",
+            "fix": "tl.fromTo(camera, { scale: 1, xPercent: 0, yPercent: 0, rotation: 0 }, { scale: 0.977, xPercent: 0.22, yPercent: -0.93, rotation: 1.88, duration: 0.13, ease: 'sine.in' }, 0)"
+          },
+          {
+            "time": 1.87,
+            "issue": "The reference camera moves here (zoom out 27% + tilt up 12.4%, 0.6s, sine.inOut, it starts with an element scales down (middle) at 1.93s); yours does not.",
+            "fix": "tl.fromTo(camera, { scale: 0.784, xPercent: 0.16, yPercent: 1.43, rotation: 1.85 }, { scale: 0.573, xPercent: -0.38, yPercent: 13.82, rotation: 2.28, duration: 0.6, ease: 'sine.inOut' }, 1.87)"
+          },
+          {
+            "time": 1.97,
+            "issue": "Camera move differs from the reference: starts 1.84s late; bigger (zoom out 23% + tilt up 21.8% vs zoom out 20% + tilt up 2.4%); 0.43s long vs 1.73s.",
+            "fix": "tl.fromTo(camera, { scale: 0.977, xPercent: 0.22, yPercent: -0.93, rotation: 1.88 }, { scale: 0.784, xPercent: 0.16, yPercent: 1.43, rotation: 1.85, duration: 1.73, ease: 'none' }, 0.13)"
+          },
+          {
+            "time": 2.4,
+            "issue": "Camera move differs from the reference: ease custom (closest named: power1.in) where the reference uses custom (closest named: sine.in).",
+            "fix": "tl.fromTo(camera, { scale: 0.573, xPercent: -0.38, yPercent: 13.82 }, { scale: 0.607, xPercent: -0.42, yPercent: 18.08, duration: 1.67, ease: CustomEase.create(\"measured\", \"M0,0 C0.3,-0.4 0,0 1,1\") }, 2.47)"
+          },
+          {
+            "time": 4.33,
+            "issue": "The reference camera moves here (zoom in 4% + tilt up 0.9%, 0.87s, circ.out, it starts with content changes (bottom, 8.3% of the frame) at 4.33s); yours does not.",
+            "fix": "tl.fromTo(camera, { scale: 0.668, xPercent: -0.4, yPercent: 19.99, rotation: 2.25 }, { scale: 0.697, xPercent: -0.28, yPercent: 20.93, rotation: 2.1, duration: 0.87, ease: 'circ.out' }, 4.33)"
+          },
+          {
+            "time": 5.33,
+            "issue": "Camera move differs from the reference: ease sine.inOut where the reference uses sine.in.",
+            "fix": "tl.fromTo(camera, { scale: 0.697, xPercent: -0.28, yPercent: 20.94, rotation: 2.1 }, { scale: 0.655, xPercent: -0.3, yPercent: 19.7, rotation: 2.17, duration: 0.47, ease: 'sine.in' }, 5.33)"
+          },
+          {
+            "time": 5.67,
+            "issue": "Transition differs: yours is a fade of 0.1s, the reference a transition of 0.17s."
+          },
+          {
+            "time": 8.73,
+            "issue": "Camera move differs from the reference: ease sine.out where the reference uses power2.out.",
+            "fix": "tl.fromTo(camera, { scale: 0.724, xPercent: -0.32, yPercent: 21.76 }, { scale: 0.796, xPercent: -0.35, yPercent: 23.89, duration: 1.23, ease: 'power2.out' }, 8.67)"
+          }
+        ],
+        "referenceCamera": [
+          {
+            "cause": "starts with content changes (top, 23.6% of the frame) at 0s",
+            "duration": 0.13,
+            "ease": "sine.in",
+            "end": 0.13,
+            "fit": 0.96,
+            "from": {
+              "rotation": 0,
+              "scale": 1,
+              "x": 0,
+              "y": 0
+            },
+            "gsap": "tl.fromTo(camera, { scale: 1, xPercent: 0, yPercent: 0, rotation: 0 }, { scale: 0.977, xPercent: 0.22, yPercent: -0.93, rotation: 1.88, duration: 0.13, ease: 'sine.in' }, 0)",
+            "kind": "zoom out 2% + tilt down 0.9% + rotate 1.9\u00b0",
+            "start": 0,
+            "to": {
+              "rotation": 1.88,
+              "scale": 0.977,
+              "x": 0.22,
+              "y": -0.93
+            }
+          },
+          {
+            "cause": "starts with content changes (middle, 4.2% of the frame) at 0.1s",
+            "duration": 1.73,
+            "ease": "none",
+            "end": 1.87,
+            "fit": 0.93,
+            "from": {
+              "rotation": 1.88,
+              "scale": 0.977,
+              "x": 0.22,
+              "y": -0.93
+            },
+            "gsap": "tl.fromTo(camera, { scale: 0.977, xPercent: 0.22, yPercent: -0.93, rotation: 1.88 }, { scale: 0.784, xPercent: 0.16, yPercent: 1.43, rotation: 1.85, duration: 1.73, ease: 'none' }, 0.13)",
+            "kind": "zoom out 20% + tilt up 2.4%",
+            "start": 0.13,
+            "to": {
+              "rotation": 1.85,
+              "scale": 0.784,
+              "x": 0.16,
+              "y": 1.43
+            }
+          },
+          {
+            "cause": "starts with an element scales down (middle) at 1.93s",
+            "duration": 0.6,
+            "ease": "sine.inOut",
+            "end": 2.47,
+            "fit": 0.97,
+            "from": {
+              "rotation": 1.85,
+              "scale": 0.784,
+              "x": 0.16,
+              "y": 1.43
+            },
+            "gsap": "tl.fromTo(camera, { scale: 0.784, xPercent: 0.16, yPercent: 1.43, rotation: 1.85 }, { scale: 0.573, xPercent: -0.38, yPercent: 13.82, rotation: 2.28, duration: 0.6, ease: 'sine.inOut' }, 1.87)",
+            "kind": "zoom out 27% + tilt up 12.4%",
+            "start": 1.87,
+            "to": {
+              "rotation": 2.28,
+              "scale": 0.573,
+              "x": -0.38,
+              "y": 13.82
+            }
+          },
+          {
+            "cause": "starts with an element slides right (middle) at 2.3s",
+            "duration": 1.67,
+            "ease": "custom (closest named: sine.in)",
+            "end": 4.13,
+            "fit": 0.89,
+            "from": {
+              "rotation": 2.28,
+              "scale": 0.573,
+              "x": -0.38,
+              "y": 13.82
+            },
+            "gsap": "tl.fromTo(camera, { scale: 0.573, xPercent: -0.38, yPercent: 13.82 }, { scale: 0.607, xPercent: -0.42, yPercent: 18.08, duration: 1.67, ease: CustomEase.create(\"measured\", \"M0,0 C0.3,-0.4 0,0 1,1\") }, 2.47)",
+            "kind": "zoom in 6% + tilt up 4.3%",
+            "start": 2.47,
+            "to": {
+              "rotation": 2.28,
+              "scale": 0.607,
+              "x": -0.42,
+              "y": 18.08
+            }
+          },
+          {
+            "cause": "starts with an element scales down (middle) at 4.23s",
+            "duration": 0.2,
+            "ease": "none",
+            "end": 4.33,
+            "fit": 0.98,
+            "from": {
+              "rotation": 2.28,
+              "scale": 0.607,
+              "x": -0.42,
+              "y": 18.08
+            },
+            "gsap": "tl.fromTo(camera, { scale: 0.607, xPercent: -0.42, yPercent: 18.08, rotation: 2.28 }, { scale: 0.668, xPercent: -0.4, yPercent: 19.99, rotation: 2.25, duration: 0.2, ease: 'none' }, 4.13)",
+            "kind": "zoom in 10% + tilt up 1.9%",
+            "start": 4.13,
+            "to": {
+              "rotation": 2.25,
+              "scale": 0.668,
+              "x": -0.4,
+              "y": 19.99
+            }
+          },
+          {
+            "cause": "starts with content changes (bottom, 8.3% of the frame) at 4.33s",
+            "duration": 0.87,
+            "ease": "circ.out",
+            "end": 5.2,
+            "fit": 0.95,
+            "from": {
+              "rotation": 2.25,
+              "scale": 0.668,
+              "x": -0.4,
+              "y": 19.99
+            },
+            "gsap": "tl.fromTo(camera, { scale: 0.668, xPercent: -0.4, yPercent: 19.99, rotation: 2.25 }, { scale: 0.697, xPercent: -0.28, yPercent: 20.93, rotation: 2.1, duration: 0.87, ease: 'circ.out' }, 4.33)",
+            "kind": "zoom in 4% + tilt up 0.9%",
+            "start": 4.33,
+            "to": {
+              "rotation": 2.1,
+              "scale": 0.697,
+              "x": -0.28,
+              "y": 20.93
+            }
+          },
+          {
+            "cause": "starts with content changes (top, 22.2% of the frame) at 5.43s",
+            "duration": 0.47,
+            "ease": "sine.in",
+            "end": 5.8,
+            "fit": 0.96,
+            "from": {
+              "rotation": 2.1,
+              "scale": 0.697,
+              "x": -0.28,
+              "y": 20.94
+            },
+            "gsap": "tl.fromTo(camera, { scale: 0.697, xPercent: -0.28, yPercent: 20.94, rotation: 2.1 }, { scale: 0.655, xPercent: -0.3, yPercent: 19.7, rotation: 2.17, duration: 0.47, ease: 'sine.in' }, 5.33)",
+            "kind": "zoom out 6% + tilt down 1.2%",
+            "start": 5.33,
+            "to": {
+              "rotation": 2.17,
+              "scale": 0.655,
+              "x": -0.3,
+              "y": 19.7
+            }
+          },
+          {
+            "cause": "starts with an element slides left (middle) at 8.43s",
+            "duration": 0.23,
+            "ease": "none",
+            "end": 8.67,
+            "fit": 0.95,
+            "from": {
+              "rotation": 2.17,
+              "scale": 0.655,
+              "x": -0.3,
+              "y": 19.7
+            },
+            "gsap": "tl.fromTo(camera, { scale: 0.655, xPercent: -0.3, yPercent: 19.7, rotation: 2.17 }, { scale: 0.724, xPercent: -0.32, yPercent: 21.76, rotation: 2.2, duration: 0.23, ease: 'none' }, 8.43)",
+            "kind": "zoom in 11% + tilt up 2.1%",
+            "start": 8.43,
+            "to": {
+              "rotation": 2.2,
+              "scale": 0.724,
+              "x": -0.32,
+              "y": 21.76
+            }
+          },
+          {
+            "cause": "starts with an element slides left (middle) at 8.43s",
+            "duration": 1.23,
+            "ease": "power2.out",
+            "end": 9.9,
+            "fit": 0.95,
+            "from": {
+              "rotation": 2.2,
+              "scale": 0.724,
+              "x": -0.32,
+              "y": 21.76
+            },
+            "gsap": "tl.fromTo(camera, { scale: 0.724, xPercent: -0.32, yPercent: 21.76 }, { scale: 0.796, xPercent: -0.35, yPercent: 23.89, duration: 1.23, ease: 'power2.out' }, 8.67)",
+            "kind": "zoom in 10% + tilt up 2.1%",
+            "start": 8.67,
+            "to": {
+              "rotation": 2.2,
+              "scale": 0.796,
+              "x": -0.35,
+              "y": 23.89
+            }
+          }
+        ]
+      },
+      {
+        "start": 10,
+        "end": 20,
+        "timelineStart": 10,
+        "readAtRevision": 43,
+        "appliesToRevision": 43,
+        "remainingDifferenceCount": 16,
+        "differences": [
+          {
+            "time": 10,
+            "issue": "Camera move differs from the reference: ease power1.inOut where the reference uses power1.in; bigger (zoom in 25% + tilt down 22.3% + rotate -1.3\u00b0 vs zoom in 9% + tilt down 2.9%); 0.9s long vs 0.27s.",
+            "fix": "tl.fromTo(camera, { scale: 1, xPercent: 0, yPercent: 0, rotation: 0 }, { scale: 1.089, xPercent: 0.18, yPercent: -2.95, rotation: -0.08, duration: 0.27, ease: 'power1.in' }, 10)"
+          },
+          {
+            "time": 10.27,
+            "issue": "The reference camera moves here (zoom in 38% + pan left 2.5% + tilt down 19.8% + rotate -1.2\u00b0, 0.4s, none, it starts with an element scales down (middle) at 10.27s); yours does not.",
+            "fix": "tl.fromTo(camera, { scale: 1.089, xPercent: 0.18, yPercent: -2.95, rotation: -0.08 }, { scale: 1.506, xPercent: 2.71, yPercent: -22.71, rotation: -1.29, duration: 0.4, ease: 'none' }, 10.27)"
+          },
+          {
+            "time": 11.4,
+            "issue": "Camera move differs from the reference: ease sine.inOut where the reference uses custom (closest named: back.in(1.7)); starts 0.73s late; 0.27s long vs 0.77s.",
+            "fix": "tl.fromTo(camera, { scale: 1.506, xPercent: 2.71, yPercent: -22.71, rotation: -1.29 }, { scale: 1.385, xPercent: 2.74, yPercent: -22.8, rotation: -1.12, duration: 0.77, ease: CustomEase.create(\"measured\", \"M0,0 C1,-0.4 0.8,-0.4 1,1\") }, 10.67)"
+          },
+          {
+            "time": 11.4,
+            "issue": "Transition differs: yours is a transition of 0.1s, the reference a wipe bottom to top of 0.3s."
+          },
+          {
+            "time": 11.67,
+            "issue": "Camera move differs from the reference: ease custom (closest named: power1.out) where the reference uses none; starts 0.24s late; smaller (zoom out 3% + pan right 1.8% + tilt up 1.3% vs zoom out 10% + pan right 3.7% + tilt up 2.2% + rotate -1\u00b0); 1.07s long vs 0.13s.",
+            "fix": "tl.fromTo(camera, { scale: 1.385, xPercent: 2.74, yPercent: -22.8, rotation: -1.12 }, { scale: 1.253, xPercent: -0.98, yPercent: -20.63, rotation: -2.17, duration: 0.13, ease: 'none' }, 11.43)"
+          },
+          {
+            "time": 12.73,
+            "issue": "Camera move differs from the reference: ease sine.inOut where the reference uses custom (closest named: none); starts 1.16s late; bigger (zoom out 20% + pan right 7.4% + tilt down 1.4% + rotate -3.6\u00b0 vs zoom out 10% + pan right 3.9% + tilt up 2.2% + rotate -1.4\u00b0); 0.3s long vs 1.37s.",
+            "fix": "tl.fromTo(camera, { scale: 1.253, xPercent: -0.98, yPercent: -20.63, rotation: -2.17 }, { scale: 1.128, xPercent: -4.87, yPercent: -18.44, rotation: -3.54, duration: 1.37, ease: CustomEase.create(\"measured\", \"M0,0 C0.2,1.6 0.8,-0.4 1,1\") }, 11.57)"
+          },
+          {
+            "time": 12.93,
+            "issue": "The reference camera moves here (zoom in 8% + pan right 3.3%, 0.17s, sine.out, it starts with an element slides up (middle) at 12.93s); yours does not.",
+            "fix": "tl.fromTo(camera, { scale: 1.128, xPercent: -4.87, yPercent: -18.44, rotation: -3.54 }, { scale: 1.216, xPercent: -8.13, yPercent: -18.54, rotation: -3.92, duration: 0.17, ease: 'sine.out' }, 12.93)"
+          },
+          {
+            "time": 14.4,
+            "issue": "Camera move differs from the reference: ease none where the reference uses sine.out; starts 0.4s early; 0.13s long vs 0.53s.",
+            "fix": "tl.fromTo(camera, { scale: 1.216, xPercent: -8.13, yPercent: -18.54, rotation: -3.92 }, { scale: 1.272, xPercent: -8.44, yPercent: -19.36, rotation: -3.77, duration: 0.53, ease: 'sine.out' }, 14.8)"
+          },
+          {
+            "time": 15.67,
+            "issue": "Camera move differs from the reference: ease none where the reference uses power1.in; starts 0.27s late; 0.13s long vs 0.5s.",
+            "fix": "tl.fromTo(camera, { scale: 1.273, xPercent: -8.44, yPercent: -19.35, rotation: -3.78 }, { scale: 1.164, xPercent: -7.78, yPercent: -17.61, rotation: -3.9, duration: 0.5, ease: 'power1.in' }, 15.4)"
+          },
+          {
+            "time": 15.8,
+            "issue": "Camera move differs from the reference: ease sine.out where the reference uses sine.in; starts 0.33s early; smaller (zoom out 1% vs zoom out 10% + pan left 2.8% + rotate -0.7\u00b0).",
+            "fix": "tl.fromTo(camera, { scale: 1.191, xPercent: -15.52, yPercent: -34.9, rotation: -1.87 }, { scale: 1.077, xPercent: -12.68, yPercent: -34.23, rotation: -2.54, duration: 0.13, ease: 'sine.in' }, 16.13)"
+          },
+          {
+            "time": 15.93,
+            "issue": "Camera move differs from the reference: ease custom (closest named: sine.in) where the reference uses none; 0.57s long vs 0.2s.",
+            "fix": "tl.fromTo(camera, { scale: 1.164, xPercent: -7.78, yPercent: -17.61, rotation: -3.9 }, { scale: 1.191, xPercent: -15.52, yPercent: -34.9, rotation: -1.87, duration: 0.2, ease: 'none' }, 15.93)"
+          },
+          {
+            "time": 16.27,
+            "issue": "The reference camera moves here (zoom out 3% + tilt up 0.9% + rotate -2.5\u00b0, 0.9s, custom (closest named: none), it starts with content changes (middle, 4.2% of the frame) at 16.37s); yours does not.",
+            "fix": "tl.fromTo(camera, { scale: 1.077, xPercent: -12.68, yPercent: -34.23, rotation: -2.54 }, { scale: 1.04, xPercent: -13.26, yPercent: -33.31, rotation: -5.07, duration: 0.9, ease: CustomEase.create(\"measured\", \"M0,0 C0,1 0.4,-0.4 1,1\") }, 16.27)"
+          },
+          {
+            "time": 17.7,
+            "issue": "Camera move differs from the reference: bigger (zoom in 28% + pan right 4.7% + tilt down 12% vs zoom in 6% + pan right 1.3% + tilt down 2%); 0.33s long vs 0.2s.",
+            "fix": "tl.fromTo(camera, { scale: 1.04, xPercent: -13.26, yPercent: -33.31, rotation: -5.07 }, { scale: 1.107, xPercent: -14.57, yPercent: -35.33, rotation: -5.36, duration: 0.2, ease: 'sine.inOut' }, 17.8)"
+          },
+          {
+            "time": 18.03,
+            "issue": "Camera move differs from the reference: ease power3.in where the reference uses none; bigger (zoom out 4% + pan left 0.8% + tilt up 2% vs zoom out 1%).",
+            "fix": "tl.fromTo(camera, { scale: 1.107, xPercent: -14.57, yPercent: -35.33, rotation: -5.36 }, { scale: 1.094, xPercent: -14.42, yPercent: -34.93, rotation: -5.39, duration: 0.13, ease: 'none' }, 18)"
+          },
+          {
+            "time": 18.13,
+            "issue": "The reference camera moves here (zoom in 15% + pan right 3.1% + tilt down 6.5%, 0.3s, sine.in, it starts with an element slides up (middle) at 18.2s); yours does not.",
+            "fix": "tl.fromTo(camera, { scale: 1.094, xPercent: -14.42, yPercent: -34.93, rotation: -5.39 }, { scale: 1.261, xPercent: -17.48, yPercent: -41.39, rotation: -4.89, duration: 0.3, ease: 'sine.in' }, 18.13)"
+          },
+          {
+            "time": 18.17,
+            "issue": "Camera move differs from the reference: starts 0.26s early.",
+            "fix": "tl.fromTo(camera, { scale: 1.261, xPercent: -17.48, yPercent: -41.39, rotation: -4.89 }, { scale: 1.228, xPercent: -17.04, yPercent: -40.32, rotation: -4.88, duration: 1.53, ease: 'none' }, 18.43)"
+          }
+        ],
+        "referenceCamera": [
+          {
+            "cause": "starts with an element slides down (middle right) at 10.1s",
+            "duration": 0.27,
+            "ease": "power1.in",
+            "end": 10.27,
+            "fit": 0.99,
+            "from": {
+              "rotation": 0,
+              "scale": 1,
+              "x": 0,
+              "y": 0
+            },
+            "gsap": "tl.fromTo(camera, { scale: 1, xPercent: 0, yPercent: 0, rotation: 0 }, { scale: 1.089, xPercent: 0.18, yPercent: -2.95, rotation: -0.08, duration: 0.27, ease: 'power1.in' }, 10)",
+            "kind": "zoom in 9% + tilt down 2.9%",
+            "start": 10,
+            "to": {
+              "rotation": -0.08,
+              "scale": 1.089,
+              "x": 0.18,
+              "y": -2.95
+            }
+          },
+          {
+            "cause": "starts with an element scales down (middle) at 10.27s",
+            "duration": 0.4,
+            "ease": "none",
+            "end": 10.67,
+            "fit": 0.96,
+            "from": {
+              "rotation": -0.08,
+              "scale": 1.089,
+              "x": 0.18,
+              "y": -2.95
+            },
+            "gsap": "tl.fromTo(camera, { scale: 1.089, xPercent: 0.18, yPercent: -2.95, rotation: -0.08 }, { scale: 1.506, xPercent: 2.71, yPercent: -22.71, rotation: -1.29, duration: 0.4, ease: 'none' }, 10.27)",
+            "kind": "zoom in 38% + pan left 2.5% + tilt down 19.8% + rotate -1.2\u00b0",
+            "start": 10.27,
+            "to": {
+              "rotation": -1.29,
+              "scale": 1.506,
+              "x": 2.71,
+              "y": -22.71
+            }
+          },
+          {
+            "cause": "starts with an element scales up (middle) at 10.6s",
+            "duration": 0.77,
+            "ease": "custom (closest named: back.in(1.7))",
+            "end": 11.43,
+            "fit": 0.92,
+            "from": {
+              "rotation": -1.29,
+              "scale": 1.506,
+              "x": 2.71,
+              "y": -22.71
+            },
+            "gsap": "tl.fromTo(camera, { scale: 1.506, xPercent: 2.71, yPercent: -22.71, rotation: -1.29 }, { scale: 1.385, xPercent: 2.74, yPercent: -22.8, rotation: -1.12, duration: 0.77, ease: CustomEase.create(\"measured\", \"M0,0 C1,-0.4 0.8,-0.4 1,1\") }, 10.67)",
+            "kind": "zoom out 8%",
+            "start": 10.67,
+            "to": {
+              "rotation": -1.12,
+              "scale": 1.385,
+              "x": 2.74,
+              "y": -22.8
+            }
+          },
+          {
+            "cause": "starts with an element slides left (middle) at 11.43s",
+            "duration": 0.13,
+            "ease": "none",
+            "end": 11.57,
+            "fit": 0.99,
+            "from": {
+              "rotation": -1.12,
+              "scale": 1.385,
+              "x": 2.74,
+              "y": -22.8
+            },
+            "gsap": "tl.fromTo(camera, { scale: 1.385, xPercent: 2.74, yPercent: -22.8, rotation: -1.12 }, { scale: 1.253, xPercent: -0.98, yPercent: -20.63, rotation: -2.17, duration: 0.13, ease: 'none' }, 11.43)",
+            "kind": "zoom out 10% + pan right 3.7% + tilt up 2.2% + rotate -1\u00b0",
+            "start": 11.43,
+            "to": {
+              "rotation": -2.17,
+              "scale": 1.253,
+              "x": -0.98,
+              "y": -20.63
+            }
+          },
+          {
+            "cause": "starts with an element scales up (bottom) at 11.6s",
+            "duration": 1.37,
+            "ease": "custom (closest named: none)",
+            "end": 12.93,
+            "fit": 0.94,
+            "from": {
+              "rotation": -2.17,
+              "scale": 1.253,
+              "x": -0.98,
+              "y": -20.63
+            },
+            "gsap": "tl.fromTo(camera, { scale: 1.253, xPercent: -0.98, yPercent: -20.63, rotation: -2.17 }, { scale: 1.128, xPercent: -4.87, yPercent: -18.44, rotation: -3.54, duration: 1.37, ease: CustomEase.create(\"measured\", \"M0,0 C0.2,1.6 0.8,-0.4 1,1\") }, 11.57)",
+            "kind": "zoom out 10% + pan right 3.9% + tilt up 2.2% + rotate -1.4\u00b0",
+            "start": 11.57,
+            "to": {
+              "rotation": -3.54,
+              "scale": 1.128,
+              "x": -4.87,
+              "y": -18.44
+            }
+          },
+          {
+            "cause": "starts with an element slides up (middle) at 12.93s",
+            "duration": 0.17,
+            "ease": "sine.out",
+            "end": 13.1,
+            "fit": 0.97,
+            "from": {
+              "rotation": -3.54,
+              "scale": 1.128,
+              "x": -4.87,
+              "y": -18.44
+            },
+            "gsap": "tl.fromTo(camera, { scale: 1.128, xPercent: -4.87, yPercent: -18.44, rotation: -3.54 }, { scale: 1.216, xPercent: -8.13, yPercent: -18.54, rotation: -3.92, duration: 0.17, ease: 'sine.out' }, 12.93)",
+            "kind": "zoom in 8% + pan right 3.3%",
+            "start": 12.93,
+            "to": {
+              "rotation": -3.92,
+              "scale": 1.216,
+              "x": -8.13,
+              "y": -18.54
+            }
+          },
+          {
+            "duration": 0.53,
+            "ease": "sine.out",
+            "end": 15.33,
+            "fit": 0.97,
+            "flag": "no cause: nothing changes in the frame when this move starts or ends",
+            "from": {
+              "rotation": -3.92,
+              "scale": 1.216,
+              "x": -8.13,
+              "y": -18.54
+            },
+            "gsap": "tl.fromTo(camera, { scale: 1.216, xPercent: -8.13, yPercent: -18.54, rotation: -3.92 }, { scale: 1.272, xPercent: -8.44, yPercent: -19.36, rotation: -3.77, duration: 0.53, ease: 'sine.out' }, 14.8)",
+            "kind": "zoom in 5% + tilt down 0.8%",
+            "start": 14.8,
+            "to": {
+              "rotation": -3.77,
+              "scale": 1.272,
+              "x": -8.44,
+              "y": -19.36
+            }
+          },
+          {
+            "cause": "lands on a cut at 15.9s",
+            "duration": 0.5,
+            "ease": "power1.in",
+            "end": 15.9,
+            "fit": 0.97,
+            "from": {
+              "rotation": -3.78,
+              "scale": 1.273,
+              "x": -8.44,
+              "y": -19.35
+            },
+            "gsap": "tl.fromTo(camera, { scale: 1.273, xPercent: -8.44, yPercent: -19.35, rotation: -3.78 }, { scale: 1.164, xPercent: -7.78, yPercent: -17.61, rotation: -3.9, duration: 0.5, ease: 'power1.in' }, 15.4)",
+            "kind": "zoom out 9% + tilt up 1.7%",
+            "start": 15.4,
+            "to": {
+              "rotation": -3.9,
+              "scale": 1.164,
+              "x": -7.78,
+              "y": -17.61
+            }
+          },
+          {
+            "cause": "starts with an element scales down (middle) at 15.93s",
+            "duration": 0.2,
+            "ease": "none",
+            "end": 16.13,
+            "fit": 0.95,
+            "from": {
+              "rotation": -3.9,
+              "scale": 1.164,
+              "x": -7.78,
+              "y": -17.61
+            },
+            "gsap": "tl.fromTo(camera, { scale: 1.164, xPercent: -7.78, yPercent: -17.61, rotation: -3.9 }, { scale: 1.191, xPercent: -15.52, yPercent: -34.9, rotation: -1.87, duration: 0.2, ease: 'none' }, 15.93)",
+            "kind": "zoom in 2% + pan right 7.7% + tilt down 17.3% + rotate 2\u00b0",
+            "start": 15.93,
+            "to": {
+              "rotation": -1.87,
+              "scale": 1.191,
+              "x": -15.52,
+              "y": -34.9
+            }
+          },
+          {
+            "cause": "starts with content changes (middle right, 9% of the frame) at 16s",
+            "duration": 0.13,
+            "ease": "sine.in",
+            "end": 16.27,
+            "fit": 0.95,
+            "from": {
+              "rotation": -1.87,
+              "scale": 1.191,
+              "x": -15.52,
+              "y": -34.9
+            },
+            "gsap": "tl.fromTo(camera, { scale: 1.191, xPercent: -15.52, yPercent: -34.9, rotation: -1.87 }, { scale: 1.077, xPercent: -12.68, yPercent: -34.23, rotation: -2.54, duration: 0.13, ease: 'sine.in' }, 16.13)",
+            "kind": "zoom out 10% + pan left 2.8% + rotate -0.7\u00b0",
+            "start": 16.13,
+            "to": {
+              "rotation": -2.54,
+              "scale": 1.077,
+              "x": -12.68,
+              "y": -34.23
+            }
+          },
+          {
+            "cause": "starts with content changes (middle, 4.2% of the frame) at 16.37s",
+            "duration": 0.9,
+            "ease": "custom (closest named: none)",
+            "end": 17.17,
+            "fit": 0.91,
+            "from": {
+              "rotation": -2.54,
+              "scale": 1.077,
+              "x": -12.68,
+              "y": -34.23
+            },
+            "gsap": "tl.fromTo(camera, { scale: 1.077, xPercent: -12.68, yPercent: -34.23, rotation: -2.54 }, { scale: 1.04, xPercent: -13.26, yPercent: -33.31, rotation: -5.07, duration: 0.9, ease: CustomEase.create(\"measured\", \"M0,0 C0,1 0.4,-0.4 1,1\") }, 16.27)",
+            "kind": "zoom out 3% + tilt up 0.9% + rotate -2.5\u00b0",
+            "start": 16.27,
+            "to": {
+              "rotation": -5.07,
+              "scale": 1.04,
+              "x": -13.26,
+              "y": -33.31
+            }
+          },
+          {
+            "cause": "starts with an element scales up (middle) at 17.73s",
+            "duration": 0.2,
+            "ease": "sine.inOut",
+            "end": 18,
+            "fit": 0.96,
+            "from": {
+              "rotation": -5.07,
+              "scale": 1.04,
+              "x": -13.26,
+              "y": -33.31
+            },
+            "gsap": "tl.fromTo(camera, { scale: 1.04, xPercent: -13.26, yPercent: -33.31, rotation: -5.07 }, { scale: 1.107, xPercent: -14.57, yPercent: -35.33, rotation: -5.36, duration: 0.2, ease: 'sine.inOut' }, 17.8)",
+            "kind": "zoom in 6% + pan right 1.3% + tilt down 2%",
+            "start": 17.8,
+            "to": {
+              "rotation": -5.36,
+              "scale": 1.107,
+              "x": -14.57,
+              "y": -35.33
+            }
+          },
+          {
+            "cause": "starts with an element slides up (middle) at 18.2s",
+            "duration": 0.13,
+            "ease": "none",
+            "end": 18.13,
+            "fit": 0.98,
+            "from": {
+              "rotation": -5.36,
+              "scale": 1.107,
+              "x": -14.57,
+              "y": -35.33
+            },
+            "gsap": "tl.fromTo(camera, { scale: 1.107, xPercent: -14.57, yPercent: -35.33, rotation: -5.36 }, { scale: 1.094, xPercent: -14.42, yPercent: -34.93, rotation: -5.39, duration: 0.13, ease: 'none' }, 18)",
+            "kind": "zoom out 1%",
+            "start": 18,
+            "to": {
+              "rotation": -5.39,
+              "scale": 1.094,
+              "x": -14.42,
+              "y": -34.93
+            }
+          },
+          {
+            "cause": "starts with an element slides up (middle) at 18.2s",
+            "duration": 0.3,
+            "ease": "sine.in",
+            "end": 18.43,
+            "fit": 0.93,
+            "from": {
+              "rotation": -5.39,
+              "scale": 1.094,
+              "x": -14.42,
+              "y": -34.93
+            },
+            "gsap": "tl.fromTo(camera, { scale: 1.094, xPercent: -14.42, yPercent: -34.93, rotation: -5.39 }, { scale: 1.261, xPercent: -17.48, yPercent: -41.39, rotation: -4.89, duration: 0.3, ease: 'sine.in' }, 18.13)",
+            "kind": "zoom in 15% + pan right 3.1% + tilt down 6.5%",
+            "start": 18.13,
+            "to": {
+              "rotation": -4.89,
+              "scale": 1.261,
+              "x": -17.48,
+              "y": -41.39
+            }
+          },
+          {
+            "cause": "starts with an element scales up (middle) at 18.53s",
+            "duration": 1.53,
+            "ease": "none",
+            "end": 19.97,
+            "fit": 0.97,
+            "from": {
+              "rotation": -4.89,
+              "scale": 1.261,
+              "x": -17.48,
+              "y": -41.39
+            },
+            "gsap": "tl.fromTo(camera, { scale: 1.261, xPercent: -17.48, yPercent: -41.39, rotation: -4.89 }, { scale: 1.228, xPercent: -17.04, yPercent: -40.32, rotation: -4.88, duration: 1.53, ease: 'none' }, 18.43)",
+            "kind": "zoom out 3% + tilt up 1.1%",
+            "start": 18.43,
+            "to": {
+              "rotation": -4.88,
+              "scale": 1.228,
+              "x": -17.04,
+              "y": -40.32
+            }
+          }
+        ]
+      },
+      {
+        "start": 20,
+        "end": 30.966667,
+        "timelineStart": 20,
+        "readAtRevision": 42,
+        "appliesToRevision": 43,
+        "remainingDifferenceCount": 5,
+        "differences": [
+          {
+            "time": 20.07,
+            "issue": "Camera move differs from the reference: smaller (zoom out 2% vs zoom out 10%); 0.83s long vs 5.57s.",
+            "fix": "tl.fromTo(camera, { scale: 0.999, xPercent: 0, yPercent: -0.01, rotation: 0 }, { scale: 0.899, xPercent: 0.67, yPercent: -0.6, rotation: 0.03, duration: 5.57, ease: 'none' }, 20.07)"
+          },
+          {
+            "time": 29.2,
+            "issue": "Camera move differs from the reference: ease none where the reference uses sine.inOut; 0.17s long vs 0.27s.",
+            "fix": "tl.fromTo(camera, { scale: 0.825, xPercent: 0.48, yPercent: -0.59, rotation: -0.06 }, { scale: 0.874, xPercent: -0.08, yPercent: -0.23, rotation: 1.33, duration: 0.27, ease: 'sine.inOut' }, 29.07)"
+          },
+          {
+            "time": 29.33,
+            "issue": "The reference camera moves here (zoom in 4%, 0.73s, sine.out, it starts with content changes (middle, 5.6% of the frame) at 28.97s); yours does not.",
+            "fix": "tl.fromTo(camera, { scale: 0.874, xPercent: -0.08, yPercent: -0.23, rotation: 1.33 }, { scale: 0.905, xPercent: -0.11, yPercent: -0.3, rotation: 1.31, duration: 0.73, ease: 'sine.out' }, 29.33)"
+          },
+          {
+            "time": 30.27,
+            "issue": "Camera move differs from the reference: bigger (zoom out 12% + pan left 0.9% vs zoom out 8%).",
+            "fix": "tl.fromTo(camera, { scale: 0.906, xPercent: -0.09, yPercent: -0.3, rotation: 1.3 }, { scale: 0.837, xPercent: -0.1, yPercent: -0.23, rotation: 1.27, duration: 0.63, ease: 'power2.in' }, 30.2)"
+          },
+          {
+            "time": 30.83,
+            "issue": "The reference camera moves here (zoom out 5%, 0.1s, sine.out, it starts with an element slides right (bottom right) at 30.57s); yours does not.",
+            "fix": "tl.fromTo(camera, { scale: 0.837, xPercent: -0.1, yPercent: -0.23 }, { scale: 0.792, xPercent: -0.12, yPercent: -0.19, duration: 0.1, ease: 'sine.out' }, 30.83)"
+          }
+        ],
+        "referenceCamera": [
+          {
+            "cause": "starts with content changes (bottom, 4.9% of the frame) at 20.07s",
+            "duration": 5.57,
+            "ease": "none",
+            "end": 25.63,
+            "fit": 0.96,
+            "from": {
+              "rotation": 0,
+              "scale": 0.999,
+              "x": 0,
+              "y": -0.01
+            },
+            "gsap": "tl.fromTo(camera, { scale: 0.999, xPercent: 0, yPercent: -0.01, rotation: 0 }, { scale: 0.899, xPercent: 0.67, yPercent: -0.6, rotation: 0.03, duration: 5.57, ease: 'none' }, 20.07)",
+            "kind": "zoom out 10%",
+            "start": 20.07,
+            "to": {
+              "rotation": 0.03,
+              "scale": 0.899,
+              "x": 0.67,
+              "y": -0.6
+            }
+          },
+          {
+            "cause": "starts with an element scales down (middle) at 25.53s",
+            "duration": 0.4,
+            "ease": "sine.in",
+            "end": 26.03,
+            "fit": 0.98,
+            "from": {
+              "rotation": 0.03,
+              "scale": 0.899,
+              "x": 0.67,
+              "y": -0.6
+            },
+            "gsap": "tl.fromTo(camera, { scale: 0.899, xPercent: 0.67, yPercent: -0.6, rotation: 0.03 }, { scale: 0.825, xPercent: 0.48, yPercent: -0.59, rotation: -0.06, duration: 0.4, ease: 'sine.in' }, 25.63)",
+            "kind": "zoom out 8%",
+            "start": 25.63,
+            "to": {
+              "rotation": -0.06,
+              "scale": 0.825,
+              "x": 0.48,
+              "y": -0.59
+            }
+          },
+          {
+            "cause": "starts with content changes (middle, 5.6% of the frame) at 28.97s",
+            "duration": 0.27,
+            "ease": "sine.inOut",
+            "end": 29.33,
+            "fit": 0.95,
+            "from": {
+              "rotation": -0.06,
+              "scale": 0.825,
+              "x": 0.48,
+              "y": -0.59
+            },
+            "gsap": "tl.fromTo(camera, { scale: 0.825, xPercent: 0.48, yPercent: -0.59, rotation: -0.06 }, { scale: 0.874, xPercent: -0.08, yPercent: -0.23, rotation: 1.33, duration: 0.27, ease: 'sine.inOut' }, 29.07)",
+            "kind": "zoom in 6% + rotate 1.4\u00b0",
+            "start": 29.07,
+            "to": {
+              "rotation": 1.33,
+              "scale": 0.874,
+              "x": -0.08,
+              "y": -0.23
+            }
+          },
+          {
+            "cause": "starts with content changes (middle, 5.6% of the frame) at 28.97s",
+            "duration": 0.73,
+            "ease": "sine.out",
+            "end": 30.07,
+            "fit": 0.95,
+            "from": {
+              "rotation": 1.33,
+              "scale": 0.874,
+              "x": -0.08,
+              "y": -0.23
+            },
+            "gsap": "tl.fromTo(camera, { scale: 0.874, xPercent: -0.08, yPercent: -0.23, rotation: 1.33 }, { scale: 0.905, xPercent: -0.11, yPercent: -0.3, rotation: 1.31, duration: 0.73, ease: 'sine.out' }, 29.33)",
+            "kind": "zoom in 4%",
+            "start": 29.33,
+            "to": {
+              "rotation": 1.31,
+              "scale": 0.905,
+              "x": -0.11,
+              "y": -0.3
+            }
+          },
+          {
+            "cause": "lands on an element slides right (bottom right) at 30.57s",
+            "duration": 0.63,
+            "ease": "power2.in",
+            "end": 30.83,
+            "fit": 0.95,
+            "from": {
+              "rotation": 1.3,
+              "scale": 0.906,
+              "x": -0.09,
+              "y": -0.3
+            },
+            "gsap": "tl.fromTo(camera, { scale: 0.906, xPercent: -0.09, yPercent: -0.3, rotation: 1.3 }, { scale: 0.837, xPercent: -0.1, yPercent: -0.23, rotation: 1.27, duration: 0.63, ease: 'power2.in' }, 30.2)",
+            "kind": "zoom out 8%",
+            "start": 30.2,
+            "to": {
+              "rotation": 1.27,
+              "scale": 0.837,
+              "x": -0.1,
+              "y": -0.23
+            }
+          },
+          {
+            "cause": "starts with an element slides right (bottom right) at 30.57s",
+            "duration": 0.1,
+            "ease": "sine.out",
+            "end": 30.93,
+            "fit": 0.93,
+            "from": {
+              "rotation": 1.27,
+              "scale": 0.837,
+              "x": -0.1,
+              "y": -0.23
+            },
+            "gsap": "tl.fromTo(camera, { scale: 0.837, xPercent: -0.1, yPercent: -0.23 }, { scale: 0.792, xPercent: -0.12, yPercent: -0.19, duration: 0.1, ease: 'sine.out' }, 30.83)",
+            "kind": "zoom out 5%",
+            "start": 30.83,
+            "to": {
+              "rotation": 1.27,
+              "scale": 0.792,
+              "x": -0.12,
+              "y": -0.19
+            }
+          }
+        ]
+      }
+    ],
+    "remainingSummary": [
+      "Opening camera pullback/reframe and dither texture differ; the supplied landscape has different hill/cloud geometry.",
+      "Menu zoom/recession and terminal reframe retain composite motion-fit differences.",
+      "Decision scatter, mesh projection and iris boundaries remain approximations.",
+      "Proof drift and CTA push/recoil retain fitted amplitude, ease or phase differences.",
+      "The upward dither is authored over 11.37\u201311.67 s; the composite fit still classifies a shorter transition around 11.4 s."
+    ],
+    "interpretation": "Rendered-composite fits still report residuals even for some requested tweens present in the source. No unresolved fit is marked as a pass.",
+    "remainingDifferenceCount": 29
+  },
+  "cameraCauses": [
+    {
+      "time": 0,
+      "content": "Introducing / initial dither"
+    },
+    {
+      "time": 1.87,
+      "content": "Introducing leaves; control appears"
+    },
+    {
+      "time": 4.13,
+      "content": "System one becomes system zero"
+    },
+    {
+      "time": 5.33,
+      "content": "Wash into identity"
+    },
+    {
+      "time": 8.433333,
+      "content": "Upload types in"
+    },
+    {
+      "time": 10,
+      "content": "Pointer selection / menu enlargement"
+    },
+    {
+      "time": 11.433333,
+      "content": "File selection opens modal"
+    },
+    {
+      "time": 12.816667,
+      "content": "Ship this update prompt"
+    },
+    {
+      "time": 14.796667,
+      "content": "Final categories / YES-NO confirmation"
+    },
+    {
+      "time": 15.396667,
+      "content": "Decision cut"
+    },
+    {
+      "time": 18.2,
+      "content": "Mesh and benchmark windows enter"
+    },
+    {
+      "time": 20.8,
+      "content": "Token comparison becomes decision time"
+    },
+    {
+      "time": 22.9,
+      "content": "Turn toward cost comparison"
+    },
+    {
+      "time": 25.63,
+      "content": "Proof exits to identity"
+    },
+    {
+      "time": 29.066667,
+      "content": "Available now / pointer arrival"
+    },
+    {
+      "time": 30.2,
+      "content": "CTA settles into final hold"
+    }
+  ],
+  "pacing": {
+    "wholeFilmRevision": 41,
+    "range": "0-30.9s",
+    "samples": "310 at 10 fps",
+    "flags": [
+      {
+        "at": "0.5-2.5s",
+        "kind": "too-fast",
+        "reason": "A zoom of 92% in 2 s, peaking at 150% of the frame per second: too fast to follow. Make it longer."
+      },
+      {
+        "at": "8.4-17.6s",
+        "kind": "short-hold",
+        "reason": "99% of the frame changes by 11s, then it holds only 0.2 s before the next change: give each new picture about 1 s to be read."
+      },
+      {
+        "at": "8.5-8.9s",
+        "kind": "no-ease-in",
+        "reason": "The zoom at 8.5s starts at full speed: ease it in (power2.inOut or similar)."
+      },
+      {
+        "at": "12.9-13.1s",
+        "kind": "too-fast",
+        "reason": "A zoom of 33% in 0.2 s, peaking at 160% of the frame per second: too fast to follow. Make it longer."
+      },
+      {
+        "at": "14.6-16.1s",
+        "kind": "scattered",
+        "reason": "3 changes start in different parts of the frame within 1.4 s from 14.6s: the eye follows one place at a time. Stage them one after another, each with time to read."
+      },
+      {
+        "at": "15.7-15.9s",
+        "kind": "zoom-cut",
+        "reason": "The zoom is cut off at full speed by a cut at 15.9s: let it settle before the cut, or start the next shot on the same motion."
+      },
+      {
+        "at": "16.6-17s",
+        "kind": "scattered",
+        "reason": "3 changes start in different parts of the frame within 0.3 s from 16.6s: the eye follows one place at a time. Stage them one after another, each with time to read."
+      },
+      {
+        "at": "25.3-25.6s",
+        "kind": "scattered",
+        "reason": "3 changes start in different parts of the frame within 0.2 s from 25.3s: the eye follows one place at a time. Stage them one after another, each with time to read."
+      },
+      {
+        "at": "25.8-26s",
+        "kind": "zoom-cut",
+        "reason": "The zoom is cut off at full speed by a cut at 26s: let it settle before the cut, or start the next shot on the same motion."
+      },
+      {
+        "at": "26.9-27s",
+        "kind": "jump",
+        "reason": "The camera jumps 16% in one sample at 26.9s: animate it over at least 0.4 s."
+      },
+      {
+        "at": "26.9-27s",
+        "kind": "too-fast",
+        "reason": "A zoom of 16% in 0.1 s, peaking at 150% of the frame per second: too fast to follow. Make it longer."
+      },
+      {
+        "at": "28.9-30.3s",
+        "kind": "short-hold",
+        "reason": "99% of the frame changes by 29.9s, then it holds only 0.4 s before the next change: give each new picture about 1 s to be read."
+      }
+    ],
+    "retainedReason": "The source uses short holds, concurrent changes and fast zooms into cuts; paired frames and boundary inspection retain the requested 31-second structure.",
+    "finalMenu": {
+      "revision": 41,
+      "flags": []
+    },
+    "finalCost": {
+      "revision": 42,
+      "flags": []
+    },
+    "finalDither": {
+      "revision": 43,
+      "range": "11.1-11.9s",
+      "flags": []
+    }
+  },
+  "boundaries": {
+    "baseRevision": 39,
+    "times": [
+      0,
+      0.016666666666666666,
+      5.75,
+      5.766667,
+      5.783333,
+      8.4,
+      8.416667,
+      8.433333,
+      15.9,
+      15.916667,
+      15.933333,
+      17.633333,
+      17.65,
+      17.666667,
+      26.033333,
+      26.05,
+      26.066667,
+      29,
+      29.016667,
+      29.033333,
+      30.95
+    ],
+    "resampledRevision": 42,
+    "resampledTimes": [
+      17.633333,
+      17.65,
+      17.666667,
+      26.033333,
+      26.05,
+      26.066667
+    ],
+    "allViewed": true,
+    "findings": "No unintended blank frames, desktop leak on recession, or broken first/last frames."
+  },
+  "engine": {
+    "useTimelineCount": 11,
+    "cssAnimation": false,
+    "manualFrameClock": false,
+    "patchesCompiled": true
+  },
+  "finalTimeline": {
+    "revision": 43,
+    "sceneCount": 1,
+    "clipCount": 8,
+    "markers": 9,
+    "fps": 60,
+    "sceneDuration": 30.966667,
+    "referenceRetainedAsAsset": true,
+    "referenceFootageOnTimeline": false,
+    "onlyBoundImageAssetId": "j577gcgk078t1p1b8ddafa78958hb53p",
+    "missingAssetRefs": [],
+    "audioAndMarkersUnchanged": true
+  },
+  "exported": false
+}

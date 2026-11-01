@@ -5,7 +5,7 @@
   "engine": "GSAP via revline useTimeline",
   "referenceAssetId": "j5752gm7fepth89axk7m0rt3gn8ha86h",
   "referenceOnTimeline": false,
-  "referenceAudioOnTimeline": false,
+  "referenceAudioOnTimeline": true,
   "exported": false,
   "background": {
     "file": "windows-xp-bliss.jpg",
@@ -22,16 +22,42 @@
     "logo": "Vector outline from Revline traceShape, source time 8 s",
     "mascot": "Vector outline from Revline traceShape, source time 14.8 s",
     "cursor": {
-      "source": "https://icon-sets.iconify.design/lucide/pointer/",
-      "license": "ISC"
+      "method": "Native SVG outline reconstructed with traceShape",
+      "sourceTime": 30.3,
+      "sourceBox": {
+        "x": 1060,
+        "y": 580,
+        "w": 165,
+        "h": 165
+      },
+      "usage": "GSAP pointer in the upload and CTA sections; replaces the previous smooth library pointer."
+    },
+    "productMark": "Separate native SVG pixel mascot for product UI, intro control, and benchmark windows; identity cards retain the abstract logo.",
+    "menuIcons": {
+      "method": "Native SVG geometry reconstructed from the six classic reference icons; color-grouped horizontal runs are encoded as path coordinates.",
+      "sourceTime": 10,
+      "types": [
+        "video reel",
+        "picture file",
+        "text document",
+        "code folder",
+        "PDF document",
+        "mixed files"
+      ],
+      "referenceRasterBound": false
+    },
+    "ctaLettering": {
+      "method": "Fourteen native vector contours from traceShape, with static SVG morphology to restore thin pixel strokes.",
+      "sourceTime": 30.3
     }
   },
   "music": {
     "title": "Deep Techno",
-    "artist": "Alejandro Magaña (A. M.)",
+    "artist": "Alejandro Maga\u00f1a (A. M.)",
     "library": "Mixkit",
     "license": "Mixkit Free License",
-    "method": "Measured tempo and energy match, not listened to"
+    "method": "Measured tempo and energy match, not listened to",
+    "status": "Retained, muted by the user; active soundtrack choice is in currentAudio."
   },
   "skills": [
     "scene-engine/react-scenes",
@@ -56,13 +82,14 @@
     "change": "Preserve requested motion range in frame snapshots"
   },
   "priority": "User requested reference structure and timing take precedence over generic one-second holds, no grids, and quiet house styling.",
-  "revision": 25,
+  "revision": 43,
   "verificationFile": "verification.json",
   "sourceFile": "film.tsx.txt",
   "soundEffects": {
     "provider": "ElevenLabs via Revline generateSound",
     "count": 5,
-    "method": "Generated for visual events; measured, not listened to"
+    "method": "Generated for visual events; measured, not listened to",
+    "status": "Retained and muted by the user; no audio mutation during this visual audit."
   },
   "backgroundHistory": [
     {
@@ -94,13 +121,39 @@
     "ditherBuild": {
       "start": 4.3,
       "end": 4.733333,
-      "ease": "sine.inOut"
+      "ease": "Threshold: power1.out; focus, tone and palette: sine.inOut"
     },
-    "engine": "GSAP useTimeline, deterministic seekable filter and opacity tweens"
+    "engine": "GSAP useTimeline, deterministic seekable filter and opacity tweens",
+    "paletteEnd": 4.883333
   },
   "currentAudio": {
-    "note": "Existing user soundtrack choice was preserved during this visual-only correction.",
+    "note": "The existing user soundtrack choice was preserved throughout this whole-film visual audit.",
     "generatedMusicAndCuesMuted": true,
     "activeAudioAssetId": "j57eeahvakwfy1ntsewb2jm3zh8hb6ee"
-  }
+  },
+  "sourceSHA256": "d42868cb71e6431db671f4af00a8967535c4c99d9e35925e3dbd3150d9e67176",
+  "fonts": [
+    "JetBrains Mono",
+    "Pixelify Sans"
+  ],
+  "brandKitId": "qn78s5atfpt9zdyhy1352zpkj18hbb3n",
+  "dither": {
+    "method": "Native SVG image-tone halftone: screen, image-weighted threshold, tone and palette transfer. GSAP animates all changing filter attributes, focus and masks.",
+    "introTransition": [
+      4.3,
+      4.733333
+    ],
+    "uploadBuild": [
+      11.116667,
+      11.666667
+    ],
+    "uploadMask": "Ground first, then upward toward sky",
+    "palette": "Black, green, and retained highlights; highlights become green at 4.9\u20135.25 s.",
+    "uploadSkyWipe": {
+      "start": 11.37,
+      "end": 11.67,
+      "ease": "sine.out"
+    }
+  },
+  "detailedAuditFile": "audit.json"
 }
