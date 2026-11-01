@@ -8,7 +8,6 @@ import './assistant-model-picker.css';
 const EDIT_MODES = [
   { value: 'fast', label: 'Fast', description: 'Edits quickly with lighter checks' },
   { value: 'precise', label: 'Precise', description: 'Checks every frame before it reports back' },
-  { value: 'auto', label: 'Auto', description: 'Picks per request' },
 ] as const;
 
 type AssistantEditMode = typeof EDIT_MODES[number]['value'];
@@ -17,13 +16,13 @@ type AssistantEditMode = typeof EDIT_MODES[number]['value'];
 export function useAssistantEditMode() {
   const { userId } = useAuth();
   const storageKey = userId ? `revline:editor-mode:${userId}` : undefined;
-  const [selection, setSelection] = useState<{ storageKey: string | undefined; value: AssistantEditMode }>({ storageKey: undefined, value: 'auto' });
-  const value = selection.storageKey === storageKey ? selection.value : 'auto';
+  const [selection, setSelection] = useState<{ storageKey: string | undefined; value: AssistantEditMode }>({ storageKey: undefined, value: 'precise' });
+  const value = selection.storageKey === storageKey ? selection.value : 'precise';
 
   useEffect(() => {
     let saved: string | null = null;
-    try { if (storageKey) saved = localStorage.getItem(storageKey); } catch { /* Use Auto when storage is unavailable. */ }
-    setSelection({ storageKey, value: EDIT_MODES.find(mode => mode.value === saved)?.value ?? 'auto' });
+    try { if (storageKey) saved = localStorage.getItem(storageKey); } catch { /* Use Precise when storage is unavailable. */ }
+    setSelection({ storageKey, value: EDIT_MODES.find(mode => mode.value === saved)?.value ?? 'precise' });
   }, [storageKey]);
 
   function chooseMode(value: AssistantEditMode) {
