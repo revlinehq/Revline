@@ -44,7 +44,7 @@ function FilmCard({ film, label, note, playing }: { film: Film | null; label: st
 export function LandingInspo() {
   const [ref, onScreen] = useOnScreen<HTMLDivElement>();
   return <LandingSection id="inspo" className="landing-inspo" headingId="landing-inspo-heading" data-nav-tone="dark">
-    <LandingHeading id="landing-inspo-heading" align="center" tone="inverse" size="lg" title={<>Introducing <b>Inspo Motion</b></>} description="Seen a launch video you love? Drop its link in the chat and Revline recreates it, shot for shot, for your launch." />
+    <LandingHeading id="landing-inspo-heading" align="center" tone="inverse" size="lg" title={<>Introducing <b className="landing-glitch" data-text="Inspo Motion">Inspo Motion</b></>} description="Seen a launch video you love? Drop its link in the chat and Revline recreates it, shot for shot, for your launch." />
     <div className="landing-inspo-prompt" aria-label="Example prompt">
       <span className="landing-inspo-link"><Link2 size={15} aria-hidden="true" />x.com/rightnowai_co/status/2116…</span>
       <span className="landing-inspo-ask">Recreate this for our launch</span>

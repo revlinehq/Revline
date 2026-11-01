@@ -1,6 +1,7 @@
 import { LandingNav } from '@/components/landing/nav';
 import { LandingHero } from '@/components/landing/hero';
 import { LandingUseCases } from '@/components/landing/use-cases';
+import { LandingLongToShort } from '@/components/landing/long-to-short';
 import { LandingFeatures } from '@/components/landing/features';
 import { LandingMotion } from '@/components/landing/motion';
 import { LandingInspo } from '@/components/landing/inspo';
@@ -17,6 +18,7 @@ export default function Home() {
     <LandingNav />
     <LandingHero />
     <LandingUseCases />
+    <LandingLongToShort />
     <LandingFeatures />
     <LandingMotion />
     <LandingInspo />

@@ -159,6 +159,28 @@ div.landing-hero-buttons>.landing-reveal-content{display:flex;align-items:center
 .landing-feature-stage[data-stage=film]{background:#121212}
 .landing-feature-film{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
 
+/* Long to short: one wide card, the raw take as a filmstrip with its kept moments lit beside the finished short. */
+.landing-long-to-short{display:flex;flex-direction:column;gap:40px;padding-block:0}
+.landing-lts-card{display:grid;grid-template-columns:minmax(0,1fr) 248px;align-items:center;gap:48px;padding:40px;background:var(--l-bg-subtle);border:1px solid var(--l-border);border-radius:12px}
+.landing-lts-raw{display:flex;flex-direction:column;gap:12px;min-width:0}
+.landing-lts-label{display:flex;justify-content:space-between;gap:12px;font:400 12px/1.4 var(--l-mono);color:var(--l-fg-3)}
+.landing-lts-label span:first-child{color:var(--l-fg-2)}
+.landing-lts-strip{position:relative;aspect-ratio:2400/356;background:#121212 center/100% 100% no-repeat;border-radius:8px;overflow:hidden}
+.landing-lts-cut{position:absolute;inset-block:0;background:#121212c7}
+.landing-lts-keep{position:absolute;inset-block:0;background:#ffffff14;box-shadow:inset 0 0 0 1px #ffffff80;transition:box-shadow .2s}
+.landing-lts-keep[data-on]{box-shadow:inset 0 0 0 2px #fff}
+.landing-lts-head{position:absolute;inset-block:-2px;width:2px;margin-left:-1px;background:#fff;box-shadow:0 0 0 1px #12121266}
+.landing-lts-ticks{display:flex;justify-content:space-between;font:400 10px/1.4 var(--l-mono);color:var(--l-fg-3)}
+.landing-lts-legend{display:flex;flex-wrap:wrap;justify-content:space-between;gap:8px 16px;font-size:12px;line-height:1.4;color:var(--l-fg-3)}
+.landing-lts-legend span:first-child{display:flex;align-items:center;gap:6px;color:var(--l-fg-2)}
+.landing-lts-legend i{width:8px;height:8px;border:1px solid #737373;border-radius:2px}
+.landing-lts-player{position:relative}
+.landing-lts-play.landing-lts-play{position:absolute;right:12px;bottom:12px;border:0;border-radius:999px;background:#121212b3;color:#fff;outline:none;box-shadow:none}
+.landing-lts-play.landing-lts-play:hover{background:#121212e6}
+.landing-lts-play.landing-lts-play:focus-visible{outline:none;box-shadow:none}
+.landing-lts-short{display:flex;flex-direction:column;gap:12px}
+.landing-lts-short video{display:block;width:100%;height:auto;aspect-ratio:9/16;object-fit:cover;border-radius:16px;background:#121212;box-shadow:0 12px 32px -8px #1212122e}
+
 /* Motion: dark section with a segmented switcher; each segment swaps the preview scene. */
 .landing-motion{--enter:1;padding-inline:0}
 /* The pin holds the whole section on screen while the tall track scrolls; the preview takes what height is left.
@@ -276,6 +298,19 @@ div.landing-hero-buttons>.landing-reveal-content{display:flex;align-items:center
 .landing-inspo::before{content:"";position:absolute;top:0;inset-inline:0;height:1px;background:#ffffff1f}
 .landing-inspo .landing-heading h2{width:760px;letter-spacing:-1.6px}
 .landing-inspo .landing-heading h2 b{font-weight:400;color:#a78bfa}
+/* Glitch on "Inspo Motion": two offset copies flicker through thin slices in short bursts. */
+.landing-glitch{position:relative;display:inline-block}
+.landing-glitch::before,.landing-glitch::after{content:attr(data-text);position:absolute;inset:0;clip-path:inset(50% 0 50% 0);pointer-events:none}
+.landing-glitch::before{color:#5eead4;translate:-2px 0}
+.landing-glitch::after{color:#f472b6;translate:2px 0}
+@media(prefers-reduced-motion:no-preference){
+  .landing-glitch{animation:landing-glitch-shake 4s steps(1) infinite}
+  .landing-glitch::before{animation:landing-glitch-a 4s steps(1) infinite}
+  .landing-glitch::after{animation:landing-glitch-b 4s steps(1) infinite}
+}
+@keyframes landing-glitch-shake{0%,86%,100%{translate:0}88%{translate:1px 0}91%{translate:-2px 0}94%{translate:1px 0}}
+@keyframes landing-glitch-a{0%,85%,100%{clip-path:inset(50% 0 50% 0)}86%{clip-path:inset(12% 0 70% 0);translate:-4px 0}89%{clip-path:inset(60% 0 18% 0);translate:3px 0}92%{clip-path:inset(34% 0 52% 0);translate:-3px 0}95%{clip-path:inset(78% 0 6% 0);translate:2px 0}}
+@keyframes landing-glitch-b{0%,85%,100%{clip-path:inset(50% 0 50% 0)}87%{clip-path:inset(70% 0 10% 0);translate:4px 0}90%{clip-path:inset(20% 0 62% 0);translate:-3px 0}93%{clip-path:inset(48% 0 30% 0);translate:3px 0}96%{clip-path:inset(4% 0 84% 0);translate:-2px 0}}
 .landing-inspo .landing-heading p{width:600px;max-width:100%}
 .landing-inspo-prompt{display:flex;align-items:center;gap:10px;width:560px;max-width:100%;padding:8px 8px 8px 10px;border:1px solid #2c2c34;border-radius:14px;background:#2a2a2a;color:#f2f2f4;font-size:15px}
 .landing-inspo-link{display:inline-flex;align-items:center;gap:6px;flex:none;padding:6px 10px;border-radius:8px;background:#3a3a3e;color:#d4d4d8;font-size:13px}
@@ -316,6 +351,9 @@ div.landing-hero-buttons>.landing-reveal-content{display:flex;align-items:center
   .landing-logos ul{gap:16px 36px}
   .landing-logos li{font-size:18px}
   .landing-use-cases,.landing-features,.landing-pricing,.landing-faq,.landing-mcp{padding-block:64px}
+  .landing-long-to-short{gap:32px}
+  .landing-lts-card{grid-template-columns:1fr;gap:28px;padding:20px}
+  .landing-lts-short{width:200px;justify-self:center}
   .landing-use-cases,.landing-features{gap:32px}
   .landing-feature-grid{grid-template-columns:minmax(0,1fr)}
   .landing-motion-heading h2{font-size:36px;letter-spacing:-1px}

@@ -5,7 +5,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 
 // What the product does beyond the basics, in page order.
 const sections = [
-  { label: "Revline's Agent is powerful", note: 'Effects done by asking', href: '#features' },
+  { label: 'Features', note: 'Effects done by asking', href: '#features' },
   { label: 'Inspo Motion', note: 'Recreate a launch video from a link', href: '#inspo', fresh: true },
 ];
 
