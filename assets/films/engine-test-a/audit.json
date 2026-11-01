@@ -1,9 +1,9 @@
 {
   "projectId": "j970eespkq2j4crma0yhj5mpc18haer6",
   "timelineId": "main",
-  "revision": 70,
+  "revision": 71,
   "status": "Identity corner rectangles close before Upload at revision 63; scoped motionMap/pacing clean and overall lockup visual differences recorded",
-  "sourceSHA256": "95ee32799cc8793aed52cbed4b4b82e92a612b4fd5dbe7078763b96f91ce01d1",
+  "sourceSHA256": "d2a9d34418cfc38df1366818873d725c441caeabd5302cb2ff334ba7db2ba59a",
   "changes": {
     "intro": [
       "GSAP background blur builds 2.8–3.05 s, holds through 4.3 s and resolves during the crisp dither handoff by 4.733333 s.",
@@ -7749,5 +7749,195 @@
     "engine": "GSAP through useTimeline under scene-engine and GSAP rules.",
     "exported": false,
     "sourceSHA256": "95ee32799cc8793aed52cbed4b4b82e92a612b4fd5dbe7078763b96f91ce01d1"
+  },
+  "revlineSharinganIntroBranding": {
+    "revision": 71,
+    "request": "Introducing, System One, then a red flash on this green button, glitchy, and it switches to Revline Sharingan. System One -> red glitches -> Revline Sharingan, at 5 s. This is my own addition, it is not in the original. These are little elements I will be adding as branding.",
+    "scope": {
+      "start": 0,
+      "end": 5.9
+    },
+    "intentionalReferenceDeviation": true,
+    "briefRuleId": "cc94f8bf",
+    "changes": [
+      "Kept Introducing, then held system one on the green button until the custom branding glitch instead of replacing it with system zero at 4.3 s.",
+      "Added three short red flash pulses plus five horizontally tearing red/dark bands and stepped text skew/x offsets over 4.8-5.0 s. The effect stays inside the button.",
+      "Switched the label under the final glitch pulse at 4.933333 s, resolving cleanly to the exact Revline logo and lowercase revline sharingan at 5.0 s.",
+      "Used the exact nested SVG geometry from the saved Revline brand kit inline with fill=currentColor and CSS color #000. No redrawn logo or external footage.",
+      "Centered and sized the longer label to remain readable through the existing 5.416667-5.766667 s button close. Made the label's closing tween an explicit fromTo to preserve deterministic seeks after the stepped glitch offsets.",
+      "Added the user's original branding addition to the project brief as rule cc94f8bf, so future reference comparisons retain it as intentional.",
+      "Only Intro source changed. The original background/dither timing, later System Zero scenes, eased cursor/background moves, upward terminal face tilt, audio, markers, clip timing and total film duration are preserved."
+    ],
+    "timing": {
+      "systemOneHoldUntil": 4.8,
+      "glitchStart": 4.8,
+      "labelSwap": 4.933333,
+      "cleanBrandedLabel": 5,
+      "glitchEnd": 5,
+      "buttonCloseStart": 5.416667,
+      "identityStart": 5.766667
+    },
+    "brandLogo": {
+      "kitId": "qn79ws90fw8572v91j2dq0617x8h4mqs",
+      "name": "Revline",
+      "file": "revline-logo.svg",
+      "source": "Saved Revline brand kit",
+      "exactGeometry": true,
+      "inlineFill": "currentColor",
+      "cssColor": "#000",
+      "label": "revline sharingan",
+      "fileSHA256": "d881c65fbaaecf82af2751abef83a978a02222d79ed13181123d591839ce1ca1"
+    },
+    "verification": {
+      "onlyIntroChanged": true,
+      "outsideIntroByteIdentical": true,
+      "compiled": true,
+      "sourceCharacters": 65973,
+      "nativeBefore70": [
+        4.3,
+        4.7,
+        4.8,
+        4.933333,
+        5,
+        5.5
+      ],
+      "nativeRevision71": [
+        4.7,
+        4.8,
+        4.833333,
+        4.866667,
+        4.933333,
+        5,
+        5.05,
+        5.3,
+        5.5,
+        5.7,
+        5.766667,
+        5.85
+      ],
+      "nativeDenseGlitchAndHandoff": [
+        4.783333,
+        4.816667,
+        4.85,
+        4.883333,
+        4.916667,
+        4.95,
+        4.966667,
+        4.983333,
+        5.016667,
+        5.416667,
+        5.733333,
+        5.75
+      ],
+      "allLogoGeometryPreserved": true,
+      "labelFitsDuringClosing": true,
+      "compareReference": {
+        "note": "Reference (left) beside your timeline (right), one moment per row, at 4.3s, 4.7s, 4.8s, 4.883s, 4.933s, 5s, 5.3s, 5.5s, 5.7s, 5.767s, 5.85s, 6.1s. Differences: 4.3s 10, 4.7s 22, 4.8s 23, 4.883s 23, 4.933s 22, 5s 20, 5.3s 17, 5.5s 16, 5.7s 18, 5.767s 6, 5.85s 10, 6.1s 10.",
+        "next": "Every moment scores 25 or less: this check is done.",
+        "pass": 1,
+        "scores": [
+          {
+            "time": 4.3,
+            "difference": 10
+          },
+          {
+            "time": 4.7,
+            "difference": 22
+          },
+          {
+            "time": 4.8,
+            "difference": 23
+          },
+          {
+            "time": 4.883,
+            "difference": 23
+          },
+          {
+            "time": 4.933,
+            "difference": 22
+          },
+          {
+            "time": 5,
+            "difference": 20
+          },
+          {
+            "time": 5.3,
+            "difference": 17
+          },
+          {
+            "time": 5.5,
+            "difference": 16
+          },
+          {
+            "time": 5.7,
+            "difference": 18
+          },
+          {
+            "time": 5.767,
+            "difference": 6
+          },
+          {
+            "time": 5.85,
+            "difference": 10
+          },
+          {
+            "time": 6.1,
+            "difference": 10
+          }
+        ],
+        "images": [
+          "Reference (left) beside your timeline (right), 1",
+          "Reference (left) beside your timeline (right), 2",
+          "Reference (left) beside your timeline (right), 3",
+          "Reference (left) beside your timeline (right), 4"
+        ]
+      },
+      "motionMap": {
+        "start": 4.2,
+        "end": 5.9,
+        "differences": [
+          {
+            "time": 4.2,
+            "issue": "Camera move differs from the reference: ease custom (closest named: sine.out) where the reference uses sine.inOut; 0.83s long vs 0.23s.",
+            "fix": "tl.fromTo(camera, { scale: 1, xPercent: 0, yPercent: 0, rotation: 0 }, { scale: 1.094, xPercent: -0.01, yPercent: -0.05, rotation: 0.02, duration: 0.23, ease: 'sine.inOut' }, 4.2)"
+          },
+          {
+            "time": 4.37,
+            "issue": "Your film has a transition here that the reference does not."
+          },
+          {
+            "time": 4.43,
+            "issue": "The reference camera moves here (zoom in 2%, 0.73s, power1.out, it starts with an element slides down (top) at 4.4s); yours does not.",
+            "fix": "tl.fromTo(camera, { scale: 1.094, xPercent: -0.01, yPercent: -0.05, rotation: 0.02 }, { scale: 1.121, xPercent: 0.07, yPercent: 0.08, rotation: -0.11, duration: 0.73, ease: 'power1.out' }, 4.43)"
+          },
+          {
+            "time": 5.67,
+            "issue": "Transition differs: yours is a fade of 0.1s, the reference a transition of 0.17s."
+          }
+        ]
+      },
+      "pacing": {
+        "revision": 71,
+        "range": "4.5-6.1s",
+        "samples": "17 at 10 fps",
+        "changePerSecond": "5s 103%, 6s 192%",
+        "cuts": [
+          5.7,
+          5.8
+        ],
+        "cameraMoves": 0,
+        "flags": [],
+        "next": "No pacing problems found in this range."
+      },
+      "audioAndMarkersUnchanged": true
+    },
+    "remainingDifferences": [
+      "The System One hold, red glitch, Revline logo and revline sharingan label are intentional original additions requested by the user; their difference from the reference is not a defect.",
+      "Four motionMap differences remain over 4.2-5.9 s: existing early background push ease/duration, the accelerated dither classified as an extra transition near 4.37 s, a missing fitted reference push at 4.43 s, and the 5.67 s handoff duration. Camera/dither and handoff timing were not changed in this branding edit.",
+      "All 12 comparison frames score 6-23/100, including the intentional branding difference. Exact supplied background geometry, dither texture, typography and existing later-scene approximations remain."
+    ],
+    "engine": "All new motion is GSAP through useTimeline: seeked, deterministic frame-positioned sets and explicit closing fromTo. No timers, CSS animation or independent playback.",
+    "exported": false,
+    "sourceSHA256": "d2a9d34418cfc38df1366818873d725c441caeabd5302cb2ff334ba7db2ba59a"
   }
 }

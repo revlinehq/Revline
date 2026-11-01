@@ -3,10 +3,10 @@
   "projectName": "Engine test A: GSAP (RightNow rebuild)",
   "editor": "http://localhost:3001/editor/j970eespkq2j4crma0yhj5mpc18haer6",
   "timelineId": "main",
-  "revision": 70,
+  "revision": 71,
   "sceneClipId": "5b49332a-bc9f-4fc8-a8cd-383e406bf6a1",
   "sourceFile": "film.tsx.txt",
-  "sourceSHA256": "95ee32799cc8793aed52cbed4b4b82e92a612b4fd5dbe7078763b96f91ce01d1",
+  "sourceSHA256": "d2a9d34418cfc38df1366818873d725c441caeabd5302cb2ff334ba7db2ba59a",
   "duration": 30.966667,
   "fps": 60,
   "visualSceneCount": 1,
@@ -59,77 +59,79 @@
     {
       "time": 4.3,
       "difference": 10,
-      "revision": 67
+      "revision": 71,
+      "intentionalBrandingDifference": true
     },
     {
-      "time": 4.35,
-      "difference": 7,
-      "revision": 67
-    },
-    {
-      "time": 4.4,
-      "difference": 12,
-      "revision": 67
-    },
-    {
-      "time": 4.467,
-      "difference": 16,
-      "revision": 67
-    },
-    {
-      "time": 4.533,
-      "difference": 16,
-      "revision": 67
-    },
-    {
-      "time": 4.6,
-      "difference": 19,
-      "revision": 67
-    },
-    {
-      "time": 4.667,
-      "difference": 23,
-      "revision": 67
+      "time": 4.7,
+      "difference": 22,
+      "revision": 71,
+      "intentionalBrandingDifference": true
     },
     {
       "time": 4.8,
-      "difference": 21,
-      "revision": 67
+      "difference": 23,
+      "revision": 71,
+      "intentionalBrandingDifference": true
     },
     {
       "time": 4.883,
-      "difference": 21,
-      "revision": 66
+      "difference": 23,
+      "revision": 71,
+      "intentionalBrandingDifference": true
     },
     {
-      "time": 5.1,
+      "time": 4.933,
+      "difference": 22,
+      "revision": 71,
+      "intentionalBrandingDifference": true
+    },
+    {
+      "time": 5,
+      "difference": 20,
+      "revision": 71,
+      "intentionalBrandingDifference": true
+    },
+    {
+      "time": 5.3,
       "difference": 17,
-      "revision": 66
-    },
-    {
-      "time": 5.4,
-      "difference": 16,
-      "revision": 66
+      "revision": 71,
+      "intentionalBrandingDifference": true
     },
     {
       "time": 5.5,
       "difference": 16,
-      "revision": 66
+      "revision": 71,
+      "intentionalBrandingDifference": true
     },
     {
       "time": 5.7,
       "difference": 18,
-      "revision": 66
+      "revision": 71,
+      "intentionalBrandingDifference": true
+    },
+    {
+      "time": 5.767,
+      "difference": 6,
+      "revision": 71,
+      "intentionalBrandingDifference": true
     },
     {
       "time": 5.85,
       "difference": 10,
-      "revision": 66
+      "revision": 71,
+      "intentionalBrandingDifference": true
     },
     {
       "time": 6,
       "difference": 10,
       "revision": 50
+    },
+    {
+      "time": 6.1,
+      "difference": 10,
+      "revision": 71,
+      "intentionalBrandingDifference": true
     },
     {
       "time": 6.45,
@@ -2260,6 +2262,166 @@
       "Four motionMap camera/wipe differences remain over 11.4-12.6 s: reference multi-stage background recession, different fitted ease/magnitude/duration, and a bottom-up wipe. The camera and terminal transition source are unchanged by this face-only correction.",
       "Three of 10 comparison frames remain above 25/100: 11.65 s 30, 11.8 s 26, and 13.5 s 31. These include existing supplied-background/dither, modal timing and prompt/body alignment differences. The other seven score 5-16/100; no all-pass similarity claim.",
       "The 26-degree face pitch is a code-built pose for the requested upward glance. Exact perspective, pixel flicker and face motion remain an approximation of the reference."
+    ],
+    "detailedAuditFile": "audit.json",
+    "exported": false
+  },
+  "revlineSharinganIntroBranding": {
+    "revision": 71,
+    "intentionalReferenceDeviation": true,
+    "briefRuleId": "cc94f8bf",
+    "onlyIntroChanged": true,
+    "audioAndMarkersUnchanged": true,
+    "timing": {
+      "systemOneHoldUntil": 4.8,
+      "glitchStart": 4.8,
+      "labelSwap": 4.933333,
+      "cleanBrandedLabel": 5,
+      "glitchEnd": 5,
+      "buttonCloseStart": 5.416667,
+      "identityStart": 5.766667
+    },
+    "brandLogo": {
+      "kitId": "qn79ws90fw8572v91j2dq0617x8h4mqs",
+      "name": "Revline",
+      "file": "revline-logo.svg",
+      "source": "Saved Revline brand kit",
+      "exactGeometry": true,
+      "inlineFill": "currentColor",
+      "cssColor": "#000",
+      "label": "revline sharingan",
+      "fileSHA256": "d881c65fbaaecf82af2751abef83a978a02222d79ed13181123d591839ce1ca1"
+    },
+    "nativeFrames": [
+      4.7,
+      4.8,
+      4.833333,
+      4.866667,
+      4.933333,
+      5,
+      5.05,
+      5.3,
+      5.5,
+      5.7,
+      5.766667,
+      5.85
+    ],
+    "nativeDenseGlitchAndHandoff": [
+      4.783333,
+      4.816667,
+      4.85,
+      4.883333,
+      4.916667,
+      4.95,
+      4.966667,
+      4.983333,
+      5.016667,
+      5.416667,
+      5.733333,
+      5.75
+    ],
+    "compareReference": {
+      "note": "Reference (left) beside your timeline (right), one moment per row, at 4.3s, 4.7s, 4.8s, 4.883s, 4.933s, 5s, 5.3s, 5.5s, 5.7s, 5.767s, 5.85s, 6.1s. Differences: 4.3s 10, 4.7s 22, 4.8s 23, 4.883s 23, 4.933s 22, 5s 20, 5.3s 17, 5.5s 16, 5.7s 18, 5.767s 6, 5.85s 10, 6.1s 10.",
+      "next": "Every moment scores 25 or less: this check is done.",
+      "pass": 1,
+      "scores": [
+        {
+          "time": 4.3,
+          "difference": 10
+        },
+        {
+          "time": 4.7,
+          "difference": 22
+        },
+        {
+          "time": 4.8,
+          "difference": 23
+        },
+        {
+          "time": 4.883,
+          "difference": 23
+        },
+        {
+          "time": 4.933,
+          "difference": 22
+        },
+        {
+          "time": 5,
+          "difference": 20
+        },
+        {
+          "time": 5.3,
+          "difference": 17
+        },
+        {
+          "time": 5.5,
+          "difference": 16
+        },
+        {
+          "time": 5.7,
+          "difference": 18
+        },
+        {
+          "time": 5.767,
+          "difference": 6
+        },
+        {
+          "time": 5.85,
+          "difference": 10
+        },
+        {
+          "time": 6.1,
+          "difference": 10
+        }
+      ],
+      "images": [
+        "Reference (left) beside your timeline (right), 1",
+        "Reference (left) beside your timeline (right), 2",
+        "Reference (left) beside your timeline (right), 3",
+        "Reference (left) beside your timeline (right), 4"
+      ]
+    },
+    "motionMap": {
+      "start": 4.2,
+      "end": 5.9,
+      "differences": [
+        {
+          "time": 4.2,
+          "issue": "Camera move differs from the reference: ease custom (closest named: sine.out) where the reference uses sine.inOut; 0.83s long vs 0.23s.",
+          "fix": "tl.fromTo(camera, { scale: 1, xPercent: 0, yPercent: 0, rotation: 0 }, { scale: 1.094, xPercent: -0.01, yPercent: -0.05, rotation: 0.02, duration: 0.23, ease: 'sine.inOut' }, 4.2)"
+        },
+        {
+          "time": 4.37,
+          "issue": "Your film has a transition here that the reference does not."
+        },
+        {
+          "time": 4.43,
+          "issue": "The reference camera moves here (zoom in 2%, 0.73s, power1.out, it starts with an element slides down (top) at 4.4s); yours does not.",
+          "fix": "tl.fromTo(camera, { scale: 1.094, xPercent: -0.01, yPercent: -0.05, rotation: 0.02 }, { scale: 1.121, xPercent: 0.07, yPercent: 0.08, rotation: -0.11, duration: 0.73, ease: 'power1.out' }, 4.43)"
+        },
+        {
+          "time": 5.67,
+          "issue": "Transition differs: yours is a fade of 0.1s, the reference a transition of 0.17s."
+        }
+      ]
+    },
+    "pacing": {
+      "revision": 71,
+      "range": "4.5-6.1s",
+      "samples": "17 at 10 fps",
+      "changePerSecond": "5s 103%, 6s 192%",
+      "cuts": [
+        5.7,
+        5.8
+      ],
+      "cameraMoves": 0,
+      "flags": [],
+      "next": "No pacing problems found in this range."
+    },
+    "remainingDifferences": [
+      "The System One hold, red glitch, Revline logo and revline sharingan label are intentional original additions requested by the user; their difference from the reference is not a defect.",
+      "Four motionMap differences remain over 4.2-5.9 s: existing early background push ease/duration, the accelerated dither classified as an extra transition near 4.37 s, a missing fitted reference push at 4.43 s, and the 5.67 s handoff duration. Camera/dither and handoff timing were not changed in this branding edit.",
+      "All 12 comparison frames score 6-23/100, including the intentional branding difference. Exact supplied background geometry, dither texture, typography and existing later-scene approximations remain."
     ],
     "detailedAuditFile": "audit.json",
     "exported": false

@@ -83,7 +83,7 @@
     "change": "Preserve requested motion range in frame snapshots"
   },
   "priority": "User requested reference structure and timing take precedence over generic one-second holds, no grids, and quiet house styling.",
-  "revision": 70,
+  "revision": 71,
   "verificationFile": "verification.json",
   "sourceFile": "film.tsx.txt",
   "soundEffects": {
@@ -149,7 +149,7 @@
     "generatedMusicAndCuesMuted": true,
     "activeAudioAssetId": "j57eeahvakwfy1ntsewb2jm3zh8hb6ee"
   },
-  "sourceSHA256": "95ee32799cc8793aed52cbed4b4b82e92a612b4fd5dbe7078763b96f91ce01d1",
+  "sourceSHA256": "d2a9d34418cfc38df1366818873d725c441caeabd5302cb2ff334ba7db2ba59a",
   "fonts": [
     "JetBrains Mono",
     "Pixelify Sans"
@@ -477,6 +477,44 @@
       "holdsAfterTilt": true
     },
     "sourceSHA256": "95ee32799cc8793aed52cbed4b4b82e92a612b4fd5dbe7078763b96f91ce01d1",
+    "verificationFile": "verification.json",
+    "detailedAuditFile": "audit.json",
+    "exported": false
+  },
+  "revlineSharinganIntroBranding": {
+    "revision": 71,
+    "intentionalReferenceDeviation": true,
+    "briefRuleId": "cc94f8bf",
+    "changes": [
+      "Kept Introducing, then held system one on the green button until the custom branding glitch instead of replacing it with system zero at 4.3 s.",
+      "Added three short red flash pulses plus five horizontally tearing red/dark bands and stepped text skew/x offsets over 4.8-5.0 s. The effect stays inside the button.",
+      "Switched the label under the final glitch pulse at 4.933333 s, resolving cleanly to the exact Revline logo and lowercase revline sharingan at 5.0 s.",
+      "Used the exact nested SVG geometry from the saved Revline brand kit inline with fill=currentColor and CSS color #000. No redrawn logo or external footage.",
+      "Centered and sized the longer label to remain readable through the existing 5.416667-5.766667 s button close. Made the label's closing tween an explicit fromTo to preserve deterministic seeks after the stepped glitch offsets.",
+      "Added the user's original branding addition to the project brief as rule cc94f8bf, so future reference comparisons retain it as intentional.",
+      "Only Intro source changed. The original background/dither timing, later System Zero scenes, eased cursor/background moves, upward terminal face tilt, audio, markers, clip timing and total film duration are preserved."
+    ],
+    "timing": {
+      "systemOneHoldUntil": 4.8,
+      "glitchStart": 4.8,
+      "labelSwap": 4.933333,
+      "cleanBrandedLabel": 5,
+      "glitchEnd": 5,
+      "buttonCloseStart": 5.416667,
+      "identityStart": 5.766667
+    },
+    "brandLogo": {
+      "kitId": "qn79ws90fw8572v91j2dq0617x8h4mqs",
+      "name": "Revline",
+      "file": "revline-logo.svg",
+      "source": "Saved Revline brand kit",
+      "exactGeometry": true,
+      "inlineFill": "currentColor",
+      "cssColor": "#000",
+      "label": "revline sharingan",
+      "fileSHA256": "d881c65fbaaecf82af2751abef83a978a02222d79ed13181123d591839ce1ca1"
+    },
+    "sourceSHA256": "d2a9d34418cfc38df1366818873d725c441caeabd5302cb2ff334ba7db2ba59a",
     "verificationFile": "verification.json",
     "detailedAuditFile": "audit.json",
     "exported": false
