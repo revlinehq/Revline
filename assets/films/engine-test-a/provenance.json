@@ -53,7 +53,7 @@
   },
   "music": {
     "title": "Deep Techno",
-    "artist": "Alejandro Maga\u00f1a (A. M.)",
+    "artist": "Alejandro Magaña (A. M.)",
     "library": "Mixkit",
     "license": "Mixkit Free License",
     "method": "Measured tempo and energy match, not listened to",
@@ -82,7 +82,7 @@
     "change": "Preserve requested motion range in frame snapshots"
   },
   "priority": "User requested reference structure and timing take precedence over generic one-second holds, no grids, and quiet house styling.",
-  "revision": 53,
+  "revision": 55,
   "verificationFile": "verification.json",
   "sourceFile": "film.tsx.txt",
   "soundEffects": {
@@ -148,7 +148,7 @@
     "generatedMusicAndCuesMuted": true,
     "activeAudioAssetId": "j57eeahvakwfy1ntsewb2jm3zh8hb6ee"
   },
-  "sourceSHA256": "adc569960e6dcd2192f80312dbc4a0be83d3bda0a984274f2de74595bdd0ba62",
+  "sourceSHA256": "142667359787c57852d12bedc7bd03f8e1e5c24c5cf73e3f90f8a6cb4ba9ded5",
   "fonts": [
     "JetBrains Mono",
     "Pixelify Sans"
@@ -165,7 +165,7 @@
       11.666667
     ],
     "uploadMask": "Ground first, then upward toward sky",
-    "palette": "Black, green, and retained highlights; highlights become green at 4.9\u20135.25 s.",
+    "palette": "Black, green, and retained highlights; highlights become green at 4.9–5.25 s.",
     "uploadSkyWipe": {
       "start": 11.37,
       "end": 11.67,
@@ -267,5 +267,28 @@
     },
     "engine": "All motion uses GSAP through useTimeline in the existing single React scene film.",
     "tools": "Native Revline readFrames, measureFrame, trackReference, motionMap, patchScene, getFrames, compareReference and checkPacing. Local scripts archived source and verification metadata, checked service readiness, and ran git."
+  },
+  "uploadMenuLayeredContainers": {
+    "revision": 55,
+    "scope": {
+      "start": 8.416667,
+      "end": 15.916667
+    },
+    "changedWindow": {
+      "start": 9.2,
+      "end": 9.816667
+    },
+    "changes": [
+      "Replaced two rapidly converging rear ghosts plus an opaque menu with three separately animated translucent green panels.",
+      "Authored independent x/y offsets, horizontal and vertical scale changes, alternating overshoots, exposed top/bottom bands, and progressive convergence on the existing GSAP timeline.",
+      "Duplicated green block details inside the panels so the resolving menu has overlapping trails.",
+      "Increased central panel opacity after native comparison, shortened green-layer release to resolve by 9.716667 s, and moved the cursor above the overlays.",
+      "Kept the existing row-hover path, click gesture, downstream camera choreography, modal, soundtrack, supplied background, other Beats and other projects."
+    ],
+    "method": "Native readFrames at 30 fps plus exact 60 fps samples; visual reconstruction of independently changing layer edges. All motion through useTimeline, seeded start states and explicit fromTo phases.",
+    "sourceSHA256": "142667359787c57852d12bedc7bd03f8e1e5c24c5cf73e3f90f8a6cb4ba9ded5",
+    "verificationFile": "verification.json",
+    "detailedAuditFile": "audit.json",
+    "exported": false
   }
 }

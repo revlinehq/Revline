@@ -3,10 +3,10 @@
   "projectName": "Engine test A: GSAP (RightNow rebuild)",
   "editor": "http://localhost:3001/editor/j970eespkq2j4crma0yhj5mpc18haer6",
   "timelineId": "main",
-  "revision": 53,
+  "revision": 55,
   "sceneClipId": "5b49332a-bc9f-4fc8-a8cd-383e406bf6a1",
   "sourceFile": "film.tsx.txt",
-  "sourceSHA256": "adc569960e6dcd2192f80312dbc4a0be83d3bda0a984274f2de74595bdd0ba62",
+  "sourceSHA256": "142667359787c57852d12bedc7bd03f8e1e5c24c5cf73e3f90f8a6cb4ba9ded5",
   "duration": 30.966667,
   "fps": 60,
   "visualSceneCount": 1,
@@ -129,22 +129,62 @@
     {
       "time": 9.217,
       "difference": 15,
-      "revision": 53
+      "revision": 55
     },
     {
-      "time": 9.3,
+      "time": 9.25,
       "difference": 15,
-      "revision": 53
+      "revision": 55
+    },
+    {
+      "time": 9.283,
+      "difference": 15,
+      "revision": 55
+    },
+    {
+      "time": 9.317,
+      "difference": 15,
+      "revision": 55
+    },
+    {
+      "time": 9.35,
+      "difference": 15,
+      "revision": 55
+    },
+    {
+      "time": 9.383,
+      "difference": 14,
+      "revision": 55
+    },
+    {
+      "time": 9.417,
+      "difference": 14,
+      "revision": 55
+    },
+    {
+      "time": 9.45,
+      "difference": 15,
+      "revision": 55
     },
     {
       "time": 9.5,
       "difference": 14,
-      "revision": 53
+      "revision": 55
+    },
+    {
+      "time": 9.6,
+      "difference": 14,
+      "revision": 55
     },
     {
       "time": 9.7,
       "difference": 14,
-      "revision": 53
+      "revision": 55
+    },
+    {
+      "time": 9.817,
+      "difference": 14,
+      "revision": 55
     },
     {
       "time": 10.1,
@@ -278,7 +318,8 @@
     "Revision 47 green-dither and scatter correction: native details/boundaries, 3 compared iterations, 3 scoped motionMap diffs, and pacing checks; residuals recorded.",
     "Revision 50 closing handoff: three rendered iterations, 12 final comparisons, native boundary/detail frames, scoped motionMap, and pacing with no flags.",
     "Revision 51 dither speed: native before/after, six reference comparisons all <=21, scoped motionMap/pacing, and preserved closing handoff frames.",
-    "Revision 53 upload menu: dense source windows and crops, three measured cursor tracks, native entrance/all-row-hover/click checks, 12 final comparisons all <=20, scoped motionMap and pacing."
+    "Revision 53 upload menu: dense source windows and crops, three measured cursor tracks, native entrance/all-row-hover/click checks, 12 final comparisons all <=20, scoped motionMap and pacing.",
+    "Revision 55 menu layers: exact 60 fps reference samples, three independently animated panels, native entrance and downstream interaction checks, 12 comparisons all 14-15/100, motionMap with no differences and pacing with no flags over 9.15-9.85 s."
   ],
   "development": {
     "web": "Ready and left running on localhost:3001",
@@ -383,12 +424,12 @@
           "differences": [
             {
               "time": 0,
-              "issue": "Camera move differs from the reference: bigger (zoom out 5% + pan left 1.1% + tilt up 2.7% + rotate 3\u00b0 vs zoom out 2% + tilt down 0.9% + rotate 1.9\u00b0); 0.63s long vs 0.13s.",
+              "issue": "Camera move differs from the reference: bigger (zoom out 5% + pan left 1.1% + tilt up 2.7% + rotate 3° vs zoom out 2% + tilt down 0.9% + rotate 1.9°); 0.63s long vs 0.13s.",
               "fix": "tl.fromTo(camera, { scale: 1, xPercent: 0, yPercent: 0, rotation: 0 }, { scale: 0.977, xPercent: 0.22, yPercent: -0.93, rotation: 1.88, duration: 0.13, ease: 'sine.in' }, 0)"
             },
             {
               "time": 0.63,
-              "issue": "Your camera moves (zoom in 21% + pan left 8.5% + tilt up 9.8% + rotate 1.8\u00b0, 0.3s) where the reference does not move; no cause: nothing changes in the frame when this move starts or ends."
+              "issue": "Your camera moves (zoom in 21% + pan left 8.5% + tilt up 9.8% + rotate 1.8°, 0.3s) where the reference does not move; no cause: nothing changes in the frame when this move starts or ends."
             },
             {
               "time": 0.93,
@@ -405,7 +446,7 @@
           "differences": [
             {
               "time": 17.72,
-              "issue": "Camera move differs from the reference: starts 0.4s early; bigger (zoom in 18% + tilt down 1% vs zoom in 2% + pan left 0.9% + rotate 1\u00b0).",
+              "issue": "Camera move differs from the reference: starts 0.4s early; bigger (zoom in 18% + tilt down 1% vs zoom in 2% + pan left 0.9% + rotate 1°).",
               "fix": "tl.fromTo(camera, { scale: 0.978, xPercent: 0.01, yPercent: 0.02, rotation: -0.23 }, { scale: 1.002, xPercent: 0.95, yPercent: 0.61, rotation: 0.81, duration: 0.23, ease: 'sine.in' }, 18.12)"
             },
             {
@@ -755,12 +796,12 @@
         },
         {
           "time": 10.48,
-          "issue": "The reference camera moves here (tilt down 2% + rotate -1.8\u00b0, 0.1s, none, it starts with content changes (top, 54.2% of the frame) at 10.32s); yours does not.",
+          "issue": "The reference camera moves here (tilt down 2% + rotate -1.8°, 0.1s, none, it starts with content changes (top, 54.2% of the frame) at 10.32s); yours does not.",
           "fix": "tl.fromTo(camera, { scale: 1.322, xPercent: 1.03, yPercent: -9.88, rotation: -0.41 }, { scale: 1.317, xPercent: 0.98, yPercent: -11.9, rotation: -2.23, duration: 0.1, ease: 'none' }, 10.48)"
         },
         {
           "time": 10.58,
-          "issue": "The reference camera moves here (zoom in 14% + pan left 3.6% + tilt down 5.1% + rotate -2.4\u00b0, 0.23s, none, it starts with an element scales up (middle) at 10.78s); yours does not.",
+          "issue": "The reference camera moves here (zoom in 14% + pan left 3.6% + tilt down 5.1% + rotate -2.4°, 0.23s, none, it starts with an element scales up (middle) at 10.78s); yours does not.",
           "fix": "tl.fromTo(camera, { scale: 1.317, xPercent: 0.98, yPercent: -11.9, rotation: -2.23 }, { scale: 1.5, xPercent: 4.62, yPercent: -16.97, rotation: -4.67, duration: 0.23, ease: 'none' }, 10.58)"
         },
         {
@@ -801,5 +842,125 @@
       "The transition classifier reads the terminal handoff as .07 s starting 11.42 s, against .13 s starting 11.35 s in the reference.",
       "Background geometry, exact translucent block shapes, camera projection and cursor deformation remain approximations."
     ]
+  },
+  "uploadMenuLayeredContainers": {
+    "revision": 55,
+    "scope": {
+      "start": 8.416667,
+      "end": 15.916667
+    },
+    "changedWindow": {
+      "start": 9.2,
+      "end": 9.816667
+    },
+    "nativeFrames": {
+      "revision54": [
+        9.216667,
+        9.25,
+        9.3,
+        9.35,
+        9.416667,
+        9.5
+      ],
+      "revision55": [
+        9.216667,
+        9.3,
+        9.416667,
+        9.6,
+        9.7,
+        9.816667
+      ],
+      "regressions55": [
+        10.3,
+        10.5,
+        10.75,
+        11.1,
+        11.3,
+        11.5
+      ]
+    },
+    "compareReference": {
+      "note": "Reference (left) beside your timeline (right), one moment per row, at 9.217s, 9.25s, 9.283s, 9.317s, 9.35s, 9.383s, 9.417s, 9.45s, 9.5s, 9.6s, 9.7s, 9.817s. Differences: 9.217s 15, 9.25s 15, 9.283s 15, 9.317s 15, 9.35s 15, 9.383s 14, 9.417s 14, 9.45s 15, 9.5s 14, 9.6s 14, 9.7s 14, 9.817s 14.",
+      "next": "Every moment scores 25 or less: this check is done.",
+      "pass": 1,
+      "scores": [
+        {
+          "time": 9.217,
+          "difference": 15
+        },
+        {
+          "time": 9.25,
+          "difference": 15
+        },
+        {
+          "time": 9.283,
+          "difference": 15
+        },
+        {
+          "time": 9.317,
+          "difference": 15
+        },
+        {
+          "time": 9.35,
+          "difference": 15
+        },
+        {
+          "time": 9.383,
+          "difference": 14
+        },
+        {
+          "time": 9.417,
+          "difference": 14
+        },
+        {
+          "time": 9.45,
+          "difference": 15
+        },
+        {
+          "time": 9.5,
+          "difference": 14
+        },
+        {
+          "time": 9.6,
+          "difference": 14
+        },
+        {
+          "time": 9.7,
+          "difference": 14
+        },
+        {
+          "time": 9.817,
+          "difference": 14
+        }
+      ],
+      "images": [
+        "Reference (left) beside your timeline (right), 1",
+        "Reference (left) beside your timeline (right), 2",
+        "Reference (left) beside your timeline (right), 3",
+        "Reference (left) beside your timeline (right), 4"
+      ]
+    },
+    "pacing": {
+      "revision": 55,
+      "range": "9.15-9.85s",
+      "samples": "8 at 10 fps",
+      "changePerSecond": "9s 29%",
+      "cuts": [],
+      "cameraMoves": 0,
+      "flags": [],
+      "next": "No pacing problems found in this range."
+    },
+    "motionMapRange": {
+      "start": 9.15,
+      "end": 9.85
+    },
+    "motionMapDifferences": [],
+    "remainingDifferences": [
+      "No motionMap differences flagged over the changed 9.15-9.85 s entrance window.",
+      "Exact individual panel dimensions, opacity and block trails remain visual approximations; the supplied Windows XP image differs from the reference background.",
+      "Historical camera-fit differences outside this entrance window remain as previously recorded."
+    ],
+    "detailedAuditFile": "audit.json",
+    "exported": false
   }
 }
