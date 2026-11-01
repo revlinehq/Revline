@@ -7,6 +7,8 @@ const editLanesPage: EditorSkillPage = {
   description: 'Start here for edits to an existing scene or film: choose quick or full verification before reading code.',
   body: `# Editing an existing scene or film
 
+Find code with inspectClip search: {query: "text"} (regex: true for a per-line pattern), then read its numbered lines before patching with expectedRevision. Use diffScene with fromRevision and toRevision from listRevisions to review saved code changes. After checking the rendered saved revision, attach what changed and the actual verification evidence with recordFix (clipId, revision, summary, verification); later turns read it in listRevisions.
+
 Classify the request first:
 
 - **Quick lane:** text, label, color, logo, icon or asset swaps and small static style changes where nothing moves differently.

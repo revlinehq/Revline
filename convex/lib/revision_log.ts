@@ -93,7 +93,11 @@ export async function historyStart(ctx: QueryCtx, projectId: Id<'projects'>, cur
   return oldest ? oldest.revision - 1 : currentRevision;
 }
 
-export async function listRevisions(ctx: QueryCtx, projectId: Id<'projects'>, options: { timelineId?: string; clipId?: string; limit: number }) {
+export async function listRevisions(ctx: QueryCtx, projectId: Id<'projects'>, options: { timelineId?: string; clipId?: string; revision?: number; limit: number }) {
+  if (options.revision !== undefined) {
+    const rows = await ctx.db.query('revisionLog').withIndex('by_project_revision', q => q.eq('projectId', projectId).eq('revision', options.revision!)).collect();
+    return rows.filter(row => (!options.timelineId || row.timelineId === options.timelineId) && (!options.clipId || row.clipIds.includes(options.clipId)));
+  }
   if (options.clipId) {
     const { clipId, timelineId } = options;
     const touches = await ctx.db.query('revisionClips').withIndex('by_clip', q => q.eq('projectId', projectId).eq('timelineId', timelineId!).eq('clipId', clipId)).order('desc').take(options.limit);

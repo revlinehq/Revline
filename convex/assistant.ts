@@ -41,6 +41,8 @@ import { assistantRecovery } from './lib/assistant_recovery';
 import { MEDIA_ACTIVITY_LABELS } from '../lib/media-analysis/activity';
 import { editingWorkflowActive } from './lib/assistant_workflow';
 import { clipChangeAfter, historyStart, listRevisions, tabChangesAfter } from './lib/revision_log';
+import { sceneCodeSource } from '../lib/editor/scene-code-edits';
+import { sceneCodeDiff } from '../lib/editor/scene-code-diff';
 const providerReason = "Configure OPENAI_API_KEY (GPT-6.1 Sol, GPT-6 Astra) or ANTHROPIC_API_KEY (Sonnet 5.5, Opus 5.5) in Convex to edit.";
 function configured() {
   try{assertEditorModelConfigured(resolveClaudeModel());return true;}catch{return false;}
@@ -247,15 +249,50 @@ export const getRunTimeline=internalQuery({args:runArgs,returns:v.object({timeli
 }});
 /** The tab a run works on: a read of a named tab, or the open one. */
 const runTab=(project:Doc<'projects'>,runId:string)=>(runId.startsWith(READ_ONLY_RUN_PREFIX)?readRunTab(runId):undefined)??activeTabOf(project);
+/** Diff both saved snapshots in one query, so concurrent edits cannot mix their states. */
+export const diffScene=internalQuery({args:{...runArgs,clipId:v.string(),fromRevision:v.number(),toRevision:v.number(),kit:v.optional(v.boolean()),offset:v.optional(v.number()),limit:v.optional(v.number()),context:v.optional(v.number())},returns:v.any(),handler:async(ctx,args)=>{
+  const run=await projectRun(ctx,args.projectId,args.ownerId);
+  if(!args.runId.startsWith(READ_ONLY_RUN_PREFIX)&&(run.aiRunId!==args.runId||!run.aiRunning))throw new ConvexError('AI run is no longer active');
+  const project=(await ctx.db.get(args.projectId))!,current=project.revision??0,timelineId=runTab(project,args.runId);
+  const start=await historyStart(ctx,project._id,current);
+  for(const revision of [args.fromRevision,args.toRevision])if(!Number.isInteger(revision)||revision<start||revision>current)throw new ConvexError(`Choose a saved revision from ${start} to ${current}. Call listRevisions for revision numbers.`);
+  const timeline=timelineId===activeTabOf(project)?currentTimeline(project):await storedTabTimeline(ctx,project,timelineId);
+  if(!timeline)throw new ConvexError('That timeline no longer exists.');
+  const at=async(revision:number)=>{
+    const change=await clipChangeAfter(ctx,project._id,timelineId,args.clipId,revision);
+    const clip=change?change.before:timeline.clips.find(item=>item.id===args.clipId);
+    if(!clip)throw new ConvexError(`Clip ${args.clipId} did not exist on this tab at revision ${revision}.`);
+    const loaded=(await loadSceneCode(ctx,{clips:[clip]})).clips[0];
+    return sceneCodeSource(loaded,args.kit);
+  };
+  const [before,after]=await Promise.all([at(args.fromRevision),at(args.toRevision)]);
+  return {clipId:args.clipId,timelineId,target:args.kit?'kit':'scene',...sceneCodeDiff(before,after,args.fromRevision,args.toRevision,args)};
+}});
+/** A fix note belongs to a saved edit, not the brief or the next timeline revision. */
+export const recordFix=internalMutation({args:{...runArgs,clipId:v.string(),revision:v.number(),summary:v.string(),verification:v.string()},returns:v.any(),handler:async(ctx,args)=>{
+  const run=await projectRun(ctx,args.projectId,args.ownerId);
+  if(run.aiRunId!==args.runId||!run.aiRunning)throw new ConvexError('AI run is no longer active');
+  const project=(await ctx.db.get(args.projectId))!,timelineId=runTab(project,args.runId);
+  const row=await ctx.db.query('revisionLog').withIndex('by_project_tab_revision',q=>q.eq('projectId',project._id).eq('timelineId',timelineId).eq('revision',args.revision)).first();
+  if(!row||!row.clipIds.includes(args.clipId))throw new ConvexError('That saved revision did not change this clip on this tab, or is no longer retained. Read listRevisions with clipId first.');
+  const summary=args.summary.trim(),verification=args.verification.trim();
+  if(!summary||summary.length>1000||!verification||verification.length>4000)throw new ConvexError('Give what changed (up to 1000 characters) and how it was verified (up to 4000 characters).');
+  const fixes=row.fixes??[],existing=fixes.find(fix=>fix.clipId===args.clipId&&fix.summary===summary&&fix.verification===verification);
+  if(existing)return {revision:row.revision,timelineId,fix:existing};
+  if(fixes.length>=20)throw new ConvexError('This revision already has 20 fix records. Keep further details in the next saved fix.');
+  const fix={id:crypto.randomUUID(),clipId:args.clipId,summary,verification,at:Date.now(),by:run.aiRunId?.startsWith('mcp-')?run.aiAgentName??'AI agent':'Revline agent'};
+  await ctx.db.patch(row._id,{fixes:[...fixes,fix]});
+  return {revision:row.revision,timelineId,fix};
+}});
 /** listRevisions: recent saved edits, newest first, for one tab or clip. Read-only runs may call it. */
-export const revisionHistory=internalQuery({args:{...runArgs,timelineId:v.optional(v.string()),clipId:v.optional(v.string()),limit:v.number()},returns:v.any(),handler:async(ctx,args)=>{
+export const revisionHistory=internalQuery({args:{...runArgs,timelineId:v.optional(v.string()),clipId:v.optional(v.string()),revision:v.optional(v.number()),limit:v.number()},returns:v.any(),handler:async(ctx,args)=>{
   const run=await projectRun(ctx,args.projectId,args.ownerId);if(!args.runId.startsWith(READ_ONLY_RUN_PREFIX)&&(run.aiRunId!==args.runId||!run.aiRunning))throw new ConvexError('AI run is no longer active');
   const project=(await ctx.db.get(args.projectId))!,current=project.revision??0;
   const namedTab=args.runId.startsWith(READ_ONLY_RUN_PREFIX)&&readRunTab(args.runId);
   const timelineId=args.timelineId??(args.clipId||namedTab?runTab(project,args.runId):undefined);
-  const rows=await listRevisions(ctx,project._id,{timelineId,clipId:args.clipId,limit:args.limit});
+  const rows=await listRevisions(ctx,project._id,{timelineId,clipId:args.clipId,revision:args.revision,limit:args.limit});
   const tabs=new Map(tabsOf(project).map(tab=>[tab.id,tab.name]));
-  return {currentRevision:current,openTimelineId:activeTabOf(project),historyStartsAt:await historyStart(ctx,project._id,current),revisions:rows.map(row=>({revision:row.revision,at:new Date(row.at).toISOString(),timelineId:row.timelineId,timeline:tabs.get(row.timelineId)??'(deleted tab)',by:row.by,...(row.tool?{tool:row.tool}:{}),summary:row.summary,clipIds:row.clipIds.slice(0,12),...(row.clipIds.length>12?{moreClips:row.clipIds.length-12}:{})}))};
+  return {currentRevision:current,openTimelineId:activeTabOf(project),historyStartsAt:await historyStart(ctx,project._id,current),revisions:rows.map(row=>({revision:row.revision,at:new Date(row.at).toISOString(),timelineId:row.timelineId,timeline:tabs.get(row.timelineId)??'(deleted tab)',by:row.by,...(row.tool?{tool:row.tool}:{}),summary:row.summary,...(row.fixes?.length?{fixes:row.fixes}:{}),clipIds:row.clipIds.slice(0,12),...(row.clipIds.length>12?{moreClips:row.clipIds.length-12}:{})}))};
 }});
 /** restoreClip/restoreTimeline: each changed clip's state at a revision on the run's tab (one clip, or all). */
 export const revisionChanges=internalQuery({args:{...runArgs,revision:v.number(),clipId:v.optional(v.string())},returns:v.any(),handler:async(ctx,args)=>{

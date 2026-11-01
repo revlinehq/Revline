@@ -36,6 +36,8 @@ Run compareReference with start, end and fps 15 across EVERY transition window, 
 
 Run compareMotion for this section against the reference: check camera path, layer movement, timing, easing, overshoot, settle and cuts. Fix residual differences with patchScene and repeat both checks on the new rendered revision. A motion residual needs a correction; reporting it is not verification. Inspect uncertain layer behavior with trackReference and cropped frame comparisons. Finish and verify the section, including its boundary with the preceding section, before building the next.
 
+Find code with inspectClip search: {query: "text"} (regex: true for a per-line pattern), then read its numbered lines before patching with expectedRevision. Use diffScene with fromRevision and toRevision from listRevisions to review saved code changes. After checking the rendered saved revision, attach what changed and the actual verification evidence with recordFix (clipId, revision, summary, verification); later turns read it in listRevisions.
+
 ## 4. Close out against the inventory
 Mark EVERY numbered item as matched by rendered evidence, or explicitly off with its remaining discrepancy and time. Recheck all section boundaries after the final edits. Fix residual compareMotion differences before claiming a match; if a tool limit prevents a fix, list it as off. Never call a recreation matched because a score falls below a threshold or a fixed number of passes has elapsed. Run the scene-engine checklist; the inventory remains the acceptance list.
 
