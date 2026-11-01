@@ -2,13 +2,26 @@ import { SCENE_FONT_FAMILIES, STARTER_SCENE_CODE } from '../../editor/scene-laye
 import { SCENE_GSAP_PLUGINS } from '../../editor/scene-modules';
 import type { EditorSkill, EditorSkillPage } from './index';
 
+const editLanesPage: EditorSkillPage = {
+  name: 'edit-lanes',
+  description: 'Start here for edits to an existing scene or film: choose quick or full verification before reading code.',
+  body: `# Editing an existing scene or film
+
+Classify the request first:
+
+- **Quick lane:** text, label, color, logo, icon or asset swaps and small static style changes where nothing moves differently.
+- **Full lane:** anything touching motion, timing, camera, transitions, easing or layout over time. Follow the existing implementation skills and scene-engine page \`checklist\`; for recreations, follow reference-footage page \`recreation\`.
+
+For a quick edit, reuse known project context and loaded skills. Read only the affected section's code with inspectClip \`section\` (or \`lines\` without section markers). Make the edit in one patchScene call where possible, with the same section and expectedRevision from the read. Verify with getFrames at the changed moment and one frame on each side (\`t - 1/fps\`, \`t\`, \`t + 1/fps\`, within the clip). Confirm in the patch and frames that everything else is unchanged. Skip compareReference, motionMap and checkPacing when nothing moved differently. If the check shows motion changed, switch to the full lane.`,
+};
+
 /** The one list of checks before a scene or film goes back to the user. Other skills point here. */
 const checklistPage: EditorSkillPage = {
   name: 'checklist',
-  description: 'Before handing a scene or film back, and after every change: first frames, every cut, every beat, pacing (checkPacing), details edge by edge (borders, radii, leftovers, contrast), measurements, what changed, limits, preview speed.',
+  description: 'Full checks for builds and full-lane edits. Existing edits start with edit-lanes. First frames, cuts, beats, pacing, details, measurements, scope, limits and preview speed.',
   body: `# Checklist: before you hand it back
 
-Run every item after building a scene or film and after every change. Render frames with getFrames (up to six per call) and look at them, and run checkPacing on the range you built or changed: stills cannot show speed, so motion that reads fine frame by frame can still be too fast to follow. Never report a film as done from the code alone.
+For an existing scene or film edit, follow page \`edit-lanes\` first. Run every item below for a new build or full-lane edit. Render frames with getFrames (up to six per call) and look at them, and run checkPacing on the range you built or changed: stills cannot show speed, so motion that reads fine frame by frame can still be too fast to follow. Never report a film as done from the code alone.
 
 1. **First frames.** The clip's first frame and the next one (start and start + 1/fps). Nothing shows that should still be hidden. A part hidden at its first frame starts hidden where it is built (page \`react-scenes\`, Motion; for GSAP specifics, the gsap skill).
 2. **Every cut.** Each cut minus one frame, on the cut, and plus one frame. No flash, no jump; where the beats are meant to connect, the two sides match.
@@ -27,6 +40,8 @@ const reactScenesPage: EditorSkillPage = {
   name: 'react-scenes',
   description: 'React scenes: the format for launch and feature films. One film = one scene clip on one timeline (addFilm), sections as markers, changed with patchScene; components for structure, GSAP motion through useTimeline, the revline module.',
   body: `# React scenes
+
+For edits to an existing scene or film, start with page \`edit-lanes\` and follow its workflow.
 
 A React scene is a TSX module whose default export is a component. It is a React scene because it imports from \`'revline'\`. Structure is React (components, one film file); motion is GSAP, seeked by the frame clock. The engine renders the tree for each frame, so preview, scrubbing and export draw the same frames.
 
@@ -72,6 +87,8 @@ export const sceneEngine: EditorSkill = {
   name: 'scene-engine',
   description: 'How scene clips work, for every kind of scene: the module contract, what loads, how frames are rendered, GSAP technique, fonts, images and the brand parameter. Read before the first addScene or editScene, together with the skill for the job (motion-design for launch films and any standalone motion scene, explainer-scenes for explainers and overlays on footage).',
   body: `# Scene engine
+
+For edits to an existing scene or film, start with page \`edit-lanes\` and follow its workflow instead of the build guidance below.
 
 **Project brief first.** Read the project's brief (getProject, inspectTimeline or readBrief) before changing anything, and follow it. When the user gives direction that should last (what to keep, what to avoid, style), update the brief with updateBrief in their own words, replacing the rule it supersedes.
 
@@ -131,12 +148,12 @@ Real screenshots, screen recordings, photos and logos from the project's media c
 ## Checking a scene
 
 - Scenes are not effects: never call planEffects or previewRender for a scene clip.
-- Before handing a scene or film back, go through page \`checklist\`. Over MCP, getFrames renders the saved timeline at chosen times.
+- Before handing a scene or film back, follow page \`edit-lanes\` for existing edits or page \`checklist\` for a new build. Over MCP, getFrames renders the saved timeline at chosen times.
 
 ## Example
 
 \`\`\`ts
 ${STARTER_SCENE_CODE}\`\`\`
 `,
-  pages: [reactScenesPage, checklistPage],
+  pages: [editLanesPage, reactScenesPage, checklistPage],
 };

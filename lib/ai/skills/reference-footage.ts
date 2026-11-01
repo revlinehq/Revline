@@ -2,8 +2,10 @@ import type { EditorSkill, EditorSkillPage } from './index';
 
 const recreation: EditorSkillPage = {
   name: 'recreation',
-  description: 'The recreation workflow: section inventories, exact content, layered camera behavior, rendered transition comparisons and close-out.',
+  description: 'The full recreation workflow: section inventories, exact content, layered camera behavior, rendered transition comparisons and close-out. Existing edits start with scene-engine page edit-lanes.',
   body: `# Recreating a motion film
+
+For edits to an existing recreation, start with scene-engine page \`edit-lanes\`; follow the workflow below only for a new build or full-lane edit.
 
 The supplied video is the brief. Read motion-design and scene-engine for implementation. This page owns the recreation workflow. Take the words, UI, brand, timing and motion from the reference; ask only for something the video cannot answer, such as a different format or length. Keep the reference video itself off the timeline.
 
