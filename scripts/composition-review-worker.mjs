@@ -19,7 +19,8 @@ try{
   const variants=settings.variants===undefined?['edited','reference']:settings.variants;
   if(!Array.isArray(variants)||!variants.length||variants.some(variant=>variant!=='edited'&&variant!=='reference'))throw new Error('Invalid capture variants.');
   // Pacing reads every sample as a small grayscale frame, all in one file, instead of a PNG each.
-  const pacing=settings.pacing?{width:settings.pacing.width,height:Math.max(2,Math.round(settings.pacing.width*settings.height/settings.width)),frames:[]}:undefined;
+  const crop=settings.pacing?.crop;
+  const pacing=settings.pacing?{width:settings.pacing.width,height:Math.max(2,Math.round(settings.pacing.width*settings.height*(crop?.h??1)/(settings.width*(crop?.w??1)))),frames:[]}:undefined;
   const safe=[];
   for(const variant of variants){
     const dir=join(root,variant),html=await readFile(join(dir,'index.html'),'utf8');
@@ -36,14 +37,18 @@ try{
     const origin=server.url;
     let session;
     try{
-      session=await createCaptureSession(origin,dir,{width:settings.width,height:settings.height,fps:{num:settings.fps,den:1},format:pacing?'jpeg':'png',compositionDurationSeconds:settings.end},injector);
+      session=await createCaptureSession(origin,dir,{width:settings.width,height:settings.height,fps:{num:settings.fps,den:1},format:pacing?'jpeg':'png',...(pacing?{deviceScaleFactor:Math.min(1,pacing.width/(settings.width*(crop?.w??1))),quality:75}:{}),compositionDurationSeconds:settings.end},injector);
       await session.page.setRequestInterception(true);
       session.page.on('request',request=>request.url().startsWith(origin+'/')||request.url().startsWith('data:')?request.continue():request.abort());
       await initializeSession(session);
       for(const [index,time] of settings.times.entries()){
         controller.signal.throwIfAborted();
         const frame=await captureFrameToBuffer(session,Math.round(time*settings.fps),time);
-        if(pacing){pacing.frames.push(await sharp(frame.buffer).resize(pacing.width,pacing.height,{fit:'fill'}).removeAlpha().grayscale().raw().toBuffer());continue;}
+        if(pacing){
+          let image=sharp(frame.buffer);
+          if(crop){const meta=await image.metadata(),left=Math.min(meta.width-1,Math.floor(crop.x*meta.width)),top=Math.min(meta.height-1,Math.floor(crop.y*meta.height));image=image.extract({left,top,width:Math.max(1,Math.min(meta.width-left,Math.round(crop.w*meta.width))),height:Math.max(1,Math.min(meta.height-top,Math.round(crop.h*meta.height)))});}
+          pacing.frames.push(await image.resize(pacing.width,pacing.height,{fit:'fill'}).removeAlpha().grayscale().raw().toBuffer());continue;
+        }
         await writeFile(join(dir,`sample-${index}.png`),frame.buffer);
         if(variant==='edited')safe.push(await session.page.evaluate(()=>{
           const container=document.getElementById('composition').getBoundingClientRect();

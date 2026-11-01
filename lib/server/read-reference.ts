@@ -3,13 +3,15 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import sharp from 'sharp';
+import { z } from 'zod';
 import type { MediaTaskResult, MediaWorkItem } from '@/convex/mediaTasks';
 import { AnalysisError } from '@/lib/media-analysis/errors';
 import { fitMotion } from '@/lib/media-analysis/fit-motion';
 import { followBox } from '@/lib/media-analysis/follow-box';
 import { describeSounds } from '@/lib/media-analysis/gemini';
 import { detectOnsets, SOUND_RATE, visualHits } from '@/lib/media-analysis/sound';
-import { mapMotion } from '@/lib/inspo-motion/motion-map';
+import { mapMotion, motionWindow } from '@/lib/inspo-motion/motion-map';
+import { cropBounds } from '@/lib/ai/reference-comparison';
 import { measure } from './blueprint-check';
 import { forEachLimited } from './run-limited';
 import { traceShape } from './trace-shape';
@@ -25,13 +27,16 @@ const SHEET_WIDTH = 1600, GAP = 8, LABEL = 30, MAX_IMAGE = 880_000, MAX_FRAMES =
 /** A pixel counts as changed between frames when its gray level moves more than this (of 255). */
 const CHANGE = 24;
 const round = (value: number, places = 2) => Math.round(value * 10 ** places) / 10 ** places;
+const sourceProbe = z.object({ streams: z.array(z.object({ width: z.number().positive(), height: z.number().positive(), r_frame_rate: z.string().optional(), side_data_list: z.array(z.object({ rotation: z.number().optional() })).optional(), tags: z.object({ rotate: z.string().optional() }).optional() })).optional(), format: z.object({ duration: z.string().optional() }).optional() });
 
 export async function probe(path: string, signal: AbortSignal): Promise<Source> {
-  const { stdout } = await run('ffprobe', ['-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=width,height,r_frame_rate:format=duration', '-of', 'json', path], { signal, timeout: 30_000 });
-  const value = JSON.parse(stdout) as { streams?: { width?: number; height?: number; r_frame_rate?: string }[]; format?: { duration?: string } };
+  const { stdout } = await run('ffprobe', ['-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=width,height,r_frame_rate:stream_side_data=rotation:stream_tags=rotate:format=duration', '-of', 'json', path], { signal, timeout: 30_000 });
+  const value = sourceProbe.parse(JSON.parse(stdout));
   const stream = value.streams?.[0], [num, den] = (stream?.r_frame_rate ?? '30/1').split('/').map(Number);
   if (!stream?.width || !stream.height) throw new AnalysisError('This source has no video frames to read.', 400);
-  return { width: stream.width, height: stream.height, fps: den ? num / den : 30, duration: Number(value.format?.duration ?? 0) };
+  // FFmpeg autorotates decoded frames. Every downstream crop, raw buffer and sheet uses those displayed axes.
+  const rotation = stream.side_data_list?.find(item => item.rotation !== undefined)?.rotation ?? Number(stream.tags?.rotate ?? 0), swapped = Math.abs(Math.round(rotation / 90)) % 2 === 1;
+  return { width: swapped ? stream.height : stream.width, height: swapped ? stream.width : stream.height, fps: den ? num / den : 30, duration: Number(value.format?.duration ?? 0) };
 }
 
 /** One frame at a source second, full resolution or cropped to a box, as PNG. */
@@ -52,7 +57,7 @@ const clampBox = (box: Box, source: Source): Box => {
 };
 const timesIn = (start: number, end: number, count: number, source: Source) => {
   // Times past the end read the last frames instead of failing.
-  const last = Math.max(0, source.duration - 2 / source.fps), from = Math.min(start, last), to = Math.min(Math.max(end, from), last);
+  const last = Math.max(0, source.duration - 1 / source.fps), from = Math.min(start, last), to = Math.min(Math.max(end, from), last);
   return Array.from({ length: count }, (_, index) => round(count === 1 ? from : from + (to - from) * index / (count - 1), 3));
 };
 const escape = (text: string) => text.replace(/[<>&]/g, char => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' })[char]!);
@@ -289,14 +294,16 @@ async function readSounds(path: string, directory: string, source: Source, work:
 /** How a reference moves (motionMap): camera keyframes with eases, transitions, element tweens and content changes,
  *  read from small gray frames at 30 fps. The same reading runs on a rendered timeline range, so the two compare. */
 async function readMotion(path: string, source: Source, work: Work, signal: AbortSignal, onProgress: (percent: number) => void): Promise<Result> {
-  const from = Math.max(0, Math.min(work.start, source.duration)), to = Math.min(Math.max(work.end, from), source.duration, from + 12);
-  if (to - from < .3) throw new AnalysisError('Map at least 0.3 s.', 400);
-  const fps = 30, width = 320, height = Math.max(2, Math.round(width * source.height / source.width) & ~1);
-  const { stdout } = await run('ffmpeg', ['-v', 'error', '-ss', from.toFixed(3), '-t', (to - from).toFixed(3), '-i', path, '-map', '0:v:0', '-vf', `fps=${fps},scale=${width}:${height},format=gray`, '-f', 'rawvideo', '-'], { signal, timeout: 120_000, encoding: 'buffer', maxBuffer: 512 * 1024 * 1024 });
+  if (work.end - work.start < .3 || work.end - work.start > 12) throw new AnalysisError('Map 0.3 to 12 s.', 400);
+  const fps = 30, from = Math.floor(Math.max(0, work.start - .5) * fps) / fps, to = Math.min(work.end + .5, source.duration);
+  const crop = work.compareCrop ? cropBounds(work.compareCrop, source.width, source.height) : undefined;
+  const width = 320, height = Math.max(2, Math.round(width * (crop?.height ?? source.height) / (crop?.width ?? source.width)));
+  const filter = [...(crop ? [`crop=${crop.width}:${crop.height}:${crop.left}:${crop.top}`] : []), `fps=${fps}`, `scale=${width}:${height}`, 'format=gray'].join(',');
+  const { stdout } = await run('ffmpeg', ['-v', 'error', '-ss', from.toFixed(6), '-t', (to - from).toFixed(6), '-i', path, '-map', '0:v:0', '-vf', filter, '-f', 'rawvideo', '-'], { signal, timeout: 120_000, encoding: 'buffer', maxBuffer: 512 * 1024 * 1024 });
   const size = width * height, frames = Array.from({ length: Math.floor(stdout.length / size) }, (_, index) => new Uint8Array(stdout.buffer, stdout.byteOffset + index * size, size));
   if (frames.length < 3) throw new AnalysisError('No frames could be read in that window.', 400);
   onProgress(40);
-  return { width: 0, height: 0, sourceWidth: source.width, sourceHeight: source.height, fps: round(source.fps, 3), frames: [], motion: mapMotion(frames, width, height, from, fps) };
+  return { width: 0, height: 0, sourceWidth: source.width, sourceHeight: source.height, fps: round(source.fps, 3), frames: [], motion: motionWindow(mapMotion(frames, width, height, from, fps), work.start, Math.min(work.end, source.duration)) };
 }
 
 /** A rotated box outline in tile coordinates ({w} and {h} are the tile size). */

@@ -1,5 +1,48 @@
 import type { EditorSkill, EditorSkillPage } from './index';
 
+const recreation: EditorSkillPage = {
+  name: 'recreation',
+  description: 'The full recreation workflow: section inventories, exact content, layered camera behavior, rendered transition comparisons and close-out. Existing edits start with scene-engine page edit-lanes.',
+  body: `# Recreating a motion film
+
+For edits to an existing recreation, start with scene-engine page \`edit-lanes\`; follow the workflow below only for a new build or full-lane edit.
+
+The supplied video is the brief. Read motion-design and scene-engine for implementation. This page owns the recreation workflow. Take the words, UI, brand, timing and motion from the reference; ask only for something the video cannot answer, such as a different format or length. Keep the reference video itself off the timeline.
+
+## 1. Map the film, then inventory one section
+Read the whole reference with readFrames count 16 for its moments and holds. Shots alone miss motion inside a shot. Group related moments into named sections, including their incoming and outgoing transitions.
+
+Before building a section, read every change from a little before its onset through its settle with readFrames at 10 to 15 fps. Each sheet holds at most 30 frames: continue from its last returned time until the entire section is read. Open full-size frames or crops for details. Write a numbered effect inventory in your reply, with one item per visible change, including simultaneous changes on different layers:
+- Time window and what it is, including its first visible frame, end and settle.
+- Layer: background, foreground, cursor or UI; name the object within that layer.
+- Type: cut, continuous zoom, spring, stagger, morph, mask, blur, dither, click, hover, scatter or the specific behavior seen.
+- Count: every container, piece, click and staggered entry, including their order and spacing.
+- Color and thickness: measured colors, strokes and pixel/block sizes.
+- Exact content: every word, logo, icon, face and shape, plus its source crop.
+
+Build only from this inventory. A three-container menu needs three staggered containers. Record scattered cubes, clicks and text hovers during scrolling even when the moments detector does not name them. Crop and read every logo, icon, face and text before implementing it. Use findIcon for an identified icon, traceShape for its actual outline, matchFont for type and measureFrame for colors and edges. Never substitute a guessed logo or symbol for a face or unread detail. Re-read anything uncertain.
+
+## 2. Read camera behavior per layer
+Run motionMap on each section and trackReference separately on the background and foreground objects that move differently. Record what stays fixed. Distinguish following the cursor from waiting for the scroll and then springing. Measure start, path, acceleration, overshoot and settle for each layer. A background can spring zoom out while a terminal stays put. A continuous push into an object must stay continuous across the section boundary. Keep a cut instantaneous. Measured behavior wins over motion-design defaults, including holds and linear motion.
+
+## 3. Build and verify this section before the next
+Use addFilm for one continuous film with section markers. Build the first section, leaving insertion markers for later sections. Set builtThrough to that section's film-second end so addFilm checks reads for the implemented part while keeping the full clip duration. Extend it with patchScene. For corrections, inspectClip with section (marker label or id) or lines {start,end} returns short exact blocks with absolute line numbers. Use patchScene with that section and small find/replace edits, or edits [{lines:{start,end},replace}] without quoting old code; pass expectedRevision from the read. Line edits share one inspected snapshot, must not overlap, and need a new read after saving. A failed find returns nearby numbered lines to copy. Without markers, use whole-scene line ranges. A transition spanning sections belongs on their shared timeline; heed shared-code warnings, include affected sections in scope, and verify both sides of the boundary.
+
+Match the big moves first: every inventory transition, layer, count, order, onset, duration and camera behavior must match before polishing colors or offsets. Do not close a button on the scene-change frame unless the reference does. Keep connected motion continuous through boundaries.
+
+Verify rendered pixels, never code, tween parameters or cue times. An effect scheduled at the right time may remain invisible behind a threshold or mask. Find its first visible rendered frame and compare it with the reference, then its pace, peak and disappearance.
+
+Run compareReference with start, end and fps 15 across EVERY transition window, including padding before onset and after settle. Split long windows into adjoining calls and inspect every returned pair. Sparse times are only for steady stretches. Crop a small effect or detail and score that region on its own; a quiet background can hide a missing click or wrong pixel thickness in a whole-frame score. Scores rank differences, they do not certify a match, even at a low percentage.
+
+Run compareMotion for this section against the reference: check camera path, layer movement, timing, easing, overshoot, settle and cuts. Fix residual differences with patchScene and repeat both checks on the new rendered revision. A motion residual needs a correction; reporting it is not verification. Inspect uncertain layer behavior with trackReference and cropped frame comparisons. Finish and verify the section, including its boundary with the preceding section, before building the next.
+
+## 4. Close out against the inventory
+Mark EVERY numbered item as matched by rendered evidence, or explicitly off with its remaining discrepancy and time. Recheck all section boundaries after the final edits. Fix residual compareMotion differences before claiming a match; if a tool limit prevents a fix, list it as off. Never call a recreation matched because a score falls below a threshold or a fixed number of passes has elapsed. Run the scene-engine checklist; the inventory remains the acceptance list.
+
+Match music with matchMusic using the reference's tempo and main inventory moments. Regenerate its effects with generateSound, place them at the matching visible hits and verify with checkSound. End music and effects with the film. Never copy the reference audio. Confirm any voiceover with a transcript; if it cannot be reproduced, finish the visuals and state the missing recording explicitly.
+`,
+};
+
 const socialEdit: EditorSkillPage = {
   name: 'social-edit',
   description: 'Remaking an edit of footage cut to music (Instagram and TikTok edits, fan edits, velocity edits, sports and car edits).',
@@ -87,12 +130,12 @@ The chat shows the breakdown as a card where the user can click shots and parts 
 Then ask, only if the message did not already say: remake it, or borrow which parts?
 
 ## 3. Remake or borrow
-- **Remake:** load the page for the genre: \`social-edit\` or \`motivation\`; for ad, music-video, vlog or tutorial use the closest one (an ad of footage is social-edit). A launch film or anything made with motion design is recreated with motion-design ("Recreating a video"), not here. Say what will come from the reference (structure, timing, transitions, type behaviour) and what will be the user's (footage, music, words, brand). If the remake needs material the project does not have, list it per shot and ask before building.
+- **Remake:** load the page for the genre: \`social-edit\` or \`motivation\`; for ad, music-video, vlog or tutorial use the closest one (an ad of footage is social-edit). For a launch or motion film, load this skill's \`recreation\` page and motion-design. For a footage edit, say what comes from the reference and what comes from the user's material. If it needs material the project does not have, list it per shot and ask before building.
 - **Borrow:** load \`borrow\`. Change only the named parts.
 
 ## Rules
-- Copy the edit, never the content: no reference copy, logo, product, people, voiceover or song lifted into the user's video unless the user owns it and asks for it. Title text in the breakdown is there only to recognise the shot.
+- For a footage edit or style borrow, copy the edit using the user's material. For an explicitly requested motion-film copy, follow page \`recreation\` for exact visible content.
 - Measured numbers (shot lengths, cut times, beats, onBeatRatio) are exact. Transition kinds, camera moves and title styles are the model's reading: when one decides the result, check it with readFrames fps 10 on the reference before building.
 - After building, go through scene-engine page \`checklist\` for scenes, and look at the result with getFrames at the shots that matter.`,
-  pages: [socialEdit, motivation, borrow],
+  pages: [recreation, socialEdit, motivation, borrow],
 };

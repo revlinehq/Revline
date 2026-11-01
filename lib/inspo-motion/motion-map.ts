@@ -9,7 +9,7 @@ import { bestEase, fitMotion, type TrackSample } from '../media-analysis/fit-mot
 type Pose = { scale: number; x: number; y: number; rotation: number };
 export type CameraMove = { start: number; end: number; duration: number; kind: string; from: Pose; to: Pose; ease: string; fit: number; gsap: string; cause?: string; flag?: string };
 export type MotionTransition = { start: number; end: number; duration: number; kind: 'cut' | 'fade' | 'wipe' | 'transition'; direction?: string; ease?: string; area: number };
-export type ElementMove = { start: number; end: number; duration: number; region: Box; kind: string; ease: string; fit: number; gsap: string };
+export type ElementMove = { start: number; end: number; duration: number; region: Box; kind: string; from: Pose; to: Pose; ease: string; fit: number; gsap: string };
 export type ContentChange = { start: number; end: number; kind: 'appear' | 'disappear' | 'change'; region: Box; area: number };
 export type MotionMap = {
   start: number; end: number; fps: number;
@@ -17,7 +17,7 @@ export type MotionMap = {
   holds: { start: number; end: number }[];
   /** Content changes the camera did not answer with a move (in a reference: held on purpose; in ours: maybe missed). */
   unanswered: { time: number; what: string }[];
-  /** The camera's accumulated pose over the window, a few samples a second. */
+  /** The camera's accumulated pose at every sample, for path and overshoot comparisons. */
   track: (Pose & { time: number })[];
 };
 /** A region as percent of the frame. */
@@ -34,6 +34,10 @@ const apply = (t: Similarity, x: number, y: number) => ({ x: t.a * x - t.b * y +
 const compose = (u: Similarity, v: Similarity): Similarity => ({ a: v.a * u.a - v.b * u.b, b: v.b * u.a + v.a * u.b, tx: v.a * u.tx - v.b * u.ty + v.tx, ty: v.b * u.tx + v.a * u.ty + v.ty });
 const invert = (t: Similarity): Similarity => { const d = t.a * t.a + t.b * t.b, a = t.a / d, b = -t.b / d; return { a, b, tx: -(a * t.tx - b * t.ty), ty: -(b * t.tx + a * t.ty) }; };
 const poseOf = (t: Similarity, width: number, height: number): Pose => ({ scale: round(Math.hypot(t.a, t.b), 3), x: round(t.tx / width * 100, 2), y: round(t.ty / height * 100, 2), rotation: round(Math.atan2(t.b, t.a) * 180 / Math.PI, 2) });
+const relativePose = (pose: Pose, origin: Pose): Pose => {
+  const scale = pose.scale / origin.scale, rotation = pose.rotation - origin.rotation, angle = rotation * Math.PI / 180, a = scale * Math.cos(angle), b = scale * Math.sin(angle);
+  return { x: pose.x - (a * origin.x - b * origin.y), y: pose.y - (b * origin.x + a * origin.y), scale, rotation };
+};
 
 /** Least-squares similarity (scale, rotation, shift) mapping points p to q, refit without outliers. */
 function fitSimilarity(points: { px: number; py: number; qx: number; qy: number }[]) {
@@ -94,38 +98,44 @@ function texture(frame: Frame, width: number, x: number, y: number) {
 /** Read how a window moves. frames are grayscale (width x height), sampled at fps from `start` seconds. */
 export function mapMotion(frames: Frame[], width: number, height: number, start: number, fps: number): MotionMap {
   const { rows, blocks } = grid(width, height), cx = width / 2, cy = height / 2, n = frames.length;
-  const at = (index: number) => round(start + index / fps, 2);
+  const at = (index: number) => round(start + index / fps, 3);
   const textures = frames.map(frame => blocks.map(block => texture(frame, width, block.x, block.y)));
 
-  // 1. Camera: register every frame against an anchor frame, so slow drifts add up to measurable shifts.
-  //    The anchor moves on when too little of it is still matched (things changed, or it left the frame).
+  // A cut is a discontinuity between adjacent frames, even when the following frames are still animating.
+  // Use local neighbours, independent of the requested window's overall activity.
+  const raw = frames.slice(1).map((frame, index) => {
+    let sum = 0, changed = 0;
+    for (let pixel = 0; pixel < frame.length; pixel++) { const delta = Math.abs(frame[pixel] - frames[index][pixel]); sum += delta; if (delta > CHANGED * 2) changed++; }
+    return { mean: sum / (frame.length * 255), share: changed / frame.length };
+  });
+  const hardCuts = new Set(raw.flatMap((step, index) => {
+    const neighbours = raw.slice(Math.max(0, index - 2), index).concat(raw.slice(index + 1, index + 3));
+    const nearby = Math.max(0, ...neighbours.map(item => item.mean));
+    return step.share >= .45 && step.mean >= .08 && step.mean > nearby * 2.5 ? [index] : [];
+  }));
+
+  // 1. Register adjacent frames. A window-dependent anchor can turn the same cut or zoom into different moves.
   const cumulative: Similarity[] = [IDENTITY];
-  let anchor = 0, fromAnchor = IDENTITY, velocity = IDENTITY;
+  const increments: Similarity[] = [];
+  let velocity = IDENTITY;
   for (let t = 1; t < n; t++) {
-    const predicted = compose(fromAnchor, velocity), points: { px: number; py: number; qx: number; qy: number }[] = [];
+    if (hardCuts.has(t - 1)) { cumulative.push(IDENTITY); increments.push(IDENTITY); velocity = IDENTITY; continue; }
+    const points: { px: number; py: number; qx: number; qy: number }[] = [];
     blocks.forEach((block, i) => {
-      if (textures[anchor][i] < TEXTURE) return;
-      const px = block.x - cx, py = block.y - cy, guess = apply(predicted, px, py);
-      const match = matchBlock(frames[anchor], frames[t], width, height, block.x, block.y, guess.x - px, guess.y - py);
+      if (textures[t - 1][i] < TEXTURE) return;
+      const px = block.x - cx, py = block.y - cy, guess = apply(velocity, px, py);
+      const match = matchBlock(frames[t - 1], frames[t], width, height, block.x, block.y, guess.x - px, guess.y - py);
       if (match && match.cost < CHANGED * 1.5) points.push({ px, py, qx: px + match.dx, qy: py + match.dy });
     });
     const solved = points.length >= 6 ? fitSimilarity(points) : null;
-    // The camera moves the whole view: agreeing blocks bunched in one region are an element (a growing pill, typing text), not the camera.
     const agreeing = solved ? points.filter((_, i) => solved.kept[i]) : [];
     const spread = (pick: (p: typeof points[number]) => number, span: number) => agreeing.length ? (Math.max(...agreeing.map(pick)) - Math.min(...agreeing.map(pick))) / span : 0;
     const wide = agreeing.length >= 8 && (spread(p => p.px, width) >= .5 || spread(p => p.py, height) >= .5);
     let step = solved && solved.inliers >= .35 && wide ? solved.fit : null;
-    // A real camera does not jump: one frame of more than 1.5 degrees, 6% zoom or 8% shift is a misread (dither, pixel reveals).
-    if (step) {
-      const jump = compose(invert(cumulative[t - 1]), compose(cumulative[anchor], step));
-      if (Math.abs(Math.atan2(jump.b, jump.a)) > 1.5 * Math.PI / 180 || Math.abs(Math.log(Math.hypot(jump.a, jump.b))) > .06 || Math.hypot(jump.tx / width, jump.ty / height) > .08) step = null;
-    }
-    const next = step ? compose(cumulative[anchor], step) : cumulative[t - 1];
-    velocity = step ? compose(invert(fromAnchor), step) : IDENTITY;
-    if (step) fromAnchor = step;
-    cumulative.push(next);
-    // A new anchor once the match thins out or the view has moved a lot (blocks would leave the search range).
-    if (!step || solved!.inliers < .6 || Math.abs(Math.hypot(step.a, step.b) - 1) > .12 || Math.hypot(step.tx, step.ty) > width * .15) { anchor = t; fromAnchor = IDENTITY; }
+    if (step && (Math.abs(Math.atan2(step.b, step.a)) > 1.5 * Math.PI / 180 || Math.abs(Math.log(Math.hypot(step.a, step.b))) > .06 || Math.hypot(step.tx / width, step.ty / height) > .08)) step = null;
+    cumulative.push(step ? compose(cumulative[t - 1], step) : cumulative[t - 1]);
+    increments.push(step ?? IDENTITY);
+    velocity = step ?? IDENTITY;
   }
 
   // 2. Each step: blocks that moved against the camera (elements) and blocks that changed in place (content).
@@ -156,10 +166,11 @@ export function mapMotion(frames: Frame[], width: number, height: number, start:
   // 3. Transitions: most of the frame changes in place. One step is a cut; a run is a fade, a wipe or another transition.
   const transitions: MotionTransition[] = [];
   for (let t = 0; t < steps.length; t++) {
+    if (hardCuts.has(t)) { transitions.push({ start: at(t + 1), end: at(t + 1), duration: 0, kind: 'cut', area: round(raw[t].share * 100, 0) }); continue; }
     if (steps[t].changedShare < .45) continue;
-    let last = t; while (last + 1 < steps.length && steps[last + 1].changedShare >= .2) last++;
+    let last = t; while (last + 1 < steps.length && !hardCuts.has(last + 1) && steps[last + 1].changedShare >= .2) last++;
     const run = steps.slice(t, last + 1), area = round(Math.max(...run.map(s => s.changedShare)) * 100, 0);
-    if (run.length === 1) transitions.push({ start: at(t), end: at(t + 1), duration: round(1 / fps, 3), kind: 'cut', area });
+    if (run.length === 1) { hardCuts.add(t); transitions.push({ start: at(t + 1), end: at(t + 1), duration: 0, kind: 'cut', area }); }
     else {
       // A wipe's changing band travels across the frame; a fade changes everything a little at once.
       const centers = run.map(s => { const cols = s.changed.map(i => blocks[i].col), rws = s.changed.map(i => blocks[i].row); return { x: cols.reduce((a, b) => a + b, 0) / Math.max(1, cols.length) / COLUMNS, y: rws.reduce((a, b) => a + b, 0) / Math.max(1, rws.length) / rows }; });
@@ -175,7 +186,7 @@ export function mapMotion(frames: Frame[], width: number, height: number, start:
     }
     t = last;
   }
-  const inTransition = (t: number) => transitions.some(tr => at(t) >= tr.start - .01 && at(t) < tr.end + .01);
+  const inTransition = (t: number) => hardCuts.has(t) || transitions.some(tr => tr.kind !== 'cut' && at(t) >= tr.start - .001 && at(t) < tr.end);
 
   // 4. Content changes: connected regions that change in place outside transitions, merged while they overlap.
   const changes: (ContentChange & { first: number; last: number; cells: Set<number> })[] = [];
@@ -209,6 +220,7 @@ export function mapMotion(frames: Frame[], width: number, height: number, start:
   type Track = { cells: Set<number>; samples: TrackSample[]; x: number; y: number; last: number; region: number[] };
   const tracks: Track[] = [];
   for (let t = 0; t < steps.length; t++) {
+    if (inTransition(t)) continue;
     const byCell = new Map(steps[t].moved.map(m => [m.i, m]));
     for (const group of components([...byCell.keys()])) {
       if (group.length < 2) continue;
@@ -229,39 +241,48 @@ export function mapMotion(frames: Frame[], width: number, height: number, start:
     const dx = move.to.x - move.from.x, dy = move.to.y - move.from.y, ds = move.to.scale - move.from.scale;
     const kind = Math.abs(ds) > .08 && Math.abs(ds) * 50 > Math.hypot(dx, dy) ? (ds > 0 ? 'scales up' : 'scales down') : Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'slides right' : 'slides left') : (dy > 0 ? 'slides down' : 'slides up');
     const fields = (p: { x: number; y: number; scale: number }) => `xPercent: ${round(p.x, 1)}, yPercent: ${round(p.y, 1)}${ds ? `, scale: ${p.scale}` : ''}`;
-    return { start: move.start, end: move.end, duration: move.duration, region: boxOf(track.region), kind: `${kind} (${round(Math.hypot(dx, dy), 1)}% of the frame)`, ease: move.ease, fit: move.fit, gsap: `tl.fromTo(el, { ${fields({ ...move.from, x: 0, y: 0 })} }, { ${fields({ ...move.to, x: dx, y: dy })}, duration: ${move.duration}, ease: '${move.ease}' }, ${move.start})` };
+    return { start: move.start, end: move.end, duration: move.duration, region: boxOf(track.region), kind: `${kind} (${round(Math.hypot(dx, dy), 1)}% of the frame)`, from: move.from, to: move.to, ease: move.ease, fit: move.fit, gsap: `tl.fromTo(el, { ${fields({ ...move.from, x: 0, y: 0 })} }, { ${fields({ ...move.to, x: dx, y: dy })}, duration: ${move.duration}, ease: '${move.ease}' }, ${move.start})` };
   })).sort((a, b) => a.start - b.start);
 
   // 6. Camera moves: where the accumulated pose changes, split where its speed jumps (a slow drift that bursts at a change).
-  const poses = cumulative.map(t => ({ ls: Math.log(Math.hypot(t.a, t.b)), x: t.tx / width, y: t.ty / height, r: Math.atan2(t.b, t.a) }));
-  const smooth = poses.map((_, i) => { const window = poses.slice(Math.max(0, i - 2), i + 3); return { ls: window.reduce((s, p) => s + p.ls, 0) / window.length, x: window.reduce((s, p) => s + p.x, 0) / window.length, y: window.reduce((s, p) => s + p.y, 0) / window.length, r: window.reduce((s, p) => s + p.r, 0) / window.length }; });
-  const distance = (a: typeof smooth[number], b: typeof smooth[number]) => Math.abs(b.ls - a.ls) + Math.hypot(b.x - a.x, b.y - a.y) + Math.abs(b.r - a.r) / (Math.PI / 2);
-  const speed = smooth.slice(1).map((pose, i) => distance(smooth[i], pose) * fps);
+  const vector = (t: Similarity) => ({ ls: Math.log(Math.hypot(t.a, t.b)), x: t.tx / width, y: t.ty / height, r: Math.atan2(t.b, t.a) });
+  const deltas = increments.map(vector);
+  const distance = (a: ReturnType<typeof vector>, b: ReturnType<typeof vector>) => Math.abs(b.ls - a.ls) + Math.hypot(b.x - a.x, b.y - a.y) + Math.abs(b.r - a.r) / (Math.PI / 2);
+  const smooth = deltas.map((_, i) => {
+    if (hardCuts.has(i)) return vector(IDENTITY);
+    const window = deltas.slice(Math.max(0, i - 2), i + 3).filter((_, k) => { const j = Math.max(0, i - 2) + k; return ![...hardCuts].some(cut => Math.min(i, j) <= cut && Math.max(i, j) >= cut); });
+    return { ls: window.reduce((s, p) => s + p.ls, 0) / window.length, x: window.reduce((s, p) => s + p.x, 0) / window.length, y: window.reduce((s, p) => s + p.y, 0) / window.length, r: window.reduce((s, p) => s + p.r, 0) / window.length };
+  });
+  const speed = smooth.map(delta => distance(vector(IDENTITY), delta) * fps);
   // Cuts reset the camera: never one move across a cut.
-  const cutAt = new Set(transitions.filter(tr => tr.kind === 'cut').map(tr => Math.round((tr.start - start) * fps)));
+  const cutAt = hardCuts;
   const FLOOR = .008;
   const runs: [number, number][] = [];
   for (let i = 0; i < speed.length; i++) {
     if (speed[i] < FLOOR || cutAt.has(i)) continue;
     let last = i; while (last + 1 < speed.length && !cutAt.has(last + 1) && (speed[last + 1] >= FLOOR || (last + 3 < speed.length && speed[last + 2] >= FLOOR))) last++;
-    // Split a run where it bursts to several times its own resting speed (and where it falls back).
-    const inside = speed.slice(i, last + 1), median = [...inside].sort((a, b) => a - b)[Math.floor(inside.length / 2)];
+    // Split at a local speed jump rather than the whole run's median, which changes with window length.
     let from = i;
     for (let k = i + 1; k <= last; k++) {
-      const fast = (j: number) => speed[j] > median * 3 && speed[j] > .05;
-      if (fast(k) !== fast(k - 1) && k - from >= Math.max(3, fps * .1)) { runs.push([from, k]); from = k; }
+      const a = speed[k - 1], b = speed[k];
+      const before = smooth[k - 1], after = smooth[k];
+      const turn = before.ls * after.ls < 0 && Math.abs(before.ls - after.ls) * fps > FLOOR || before.x * after.x + before.y * after.y < 0 && Math.hypot(before.x - after.x, before.y - after.y) * fps > FLOOR;
+      if ((turn || Math.max(a, b) > .05 && Math.max(a, b) > Math.max(FLOOR, Math.min(a, b)) * 3) && k - from >= Math.max(3, fps * .1)) { runs.push([from, k]); from = k; }
     }
     runs.push([from, last + 1]);
     i = last;
   }
   const camera: CameraMove[] = [];
   for (const [a, b] of runs) {
-    const total = distance(smooth[a], smooth[b]);
+    const path = cumulative.slice(a, b + 1).map(t => vector(compose(invert(cumulative[a]), t)));
+    const total = distance(path[0], path[path.length - 1]);
     if (total < .005 || (b - a) / fps < .1) continue;
-    const points = Array.from({ length: b - a + 1 }, (_, k) => ({ u: k / (b - a), p: Math.max(-.2, Math.min(1.2, 1 - distance(smooth[a + k], smooth[b]) / total)) }));
+    const end = path[path.length - 1], norm = end.ls ** 2 + end.x ** 2 + end.y ** 2 + (end.r / (Math.PI / 2)) ** 2;
+    const points = path.map((pose, k) => ({ u: k / (b - a), p: Math.max(-.5, Math.min(1.5, (pose.ls * end.ls + pose.x * end.x + pose.y * end.y + pose.r * end.r / (Math.PI / 2) ** 2) / norm)) }));
     const named = bestEase(points), custom = named.error > .08 ? customCurve(points) : null;
     const from = poseOf(cumulative[a], width, height), to = poseOf(cumulative[b], width, height), duration = round((b - a) / fps, 2);
-    const dz = Math.log(to.scale / from.scale), dx = to.x - from.x, dy = to.y - from.y, dr = to.rotation - from.rotation;
+    const relative = poseOf(compose(invert(cumulative[a]), cumulative[b]), width, height);
+    const dz = Math.log(relative.scale), dx = relative.x, dy = relative.y, dr = relative.rotation;
     // Named the way the camera turns: the picture slides the other way (picture moving down = the camera tilting up).
     const parts = [Math.abs(dz) > .01 ? (dz > 0 ? `zoom in ${Math.round((Math.exp(dz) - 1) * 100)}%` : `zoom out ${Math.round((1 - Math.exp(dz)) * 100)}%`) : '', Math.abs(dx) > .8 ? `pan ${dx > 0 ? 'left' : 'right'} ${Math.abs(round(dx, 1))}%` : '', Math.abs(dy) > .8 ? `tilt ${dy > 0 ? 'up' : 'down'} ${Math.abs(round(dy, 1))}%` : '', Math.abs(dr) > .5 ? `rotate ${round(dr, 1)}°` : ''].filter(Boolean);
     const ease = custom ? `CustomEase.create("measured", "M0,0 C${custom[0]},${custom[1]} ${custom[2]},${custom[3]} 1,1")` : named.name;
@@ -294,11 +315,10 @@ export function mapMotion(frames: Frame[], width: number, height: number, start:
     i = last;
   }
 
-  const every = Math.max(1, Math.round(fps / 4));
   return {
     start: round(start, 2), end: at(n - 1), fps,
     camera, transitions, elements: elements.slice(0, 40), changes: contentChanges.slice(0, 40), holds, unanswered,
-    track: cumulative.flatMap((t, i) => i % every === 0 || i === n - 1 ? [{ time: at(i), ...poseOf(t, width, height) }] : []),
+    track: cumulative.map((t, i) => ({ time: at(i), ...poseOf(t, width, height) })),
   };
 }
 
@@ -319,18 +339,31 @@ function customCurve(points: { u: number; p: number }[]) {
 
 
 export type MotionDifference = { time: number; issue: string; fix?: string };
+/** Read with neighbouring context, but report only the requested section on its original clock. */
+export function motionWindow(map: MotionMap, start: number, end: number): MotionMap {
+  const overlaps = (item: { start: number; end: number }) => item.end >= start && item.start <= end;
+  return { ...map, start, end, camera: map.camera.filter(overlaps), transitions: map.transitions.filter(overlaps), elements: map.elements.filter(overlaps), changes: map.changes.filter(overlaps), holds: map.holds.filter(overlaps).map(hold => ({ start: Math.max(start, hold.start), end: Math.min(end, hold.end) })), unanswered: map.unanswered.filter(event => event.time >= start && event.time <= end) };
+}
 const easeParts = (ease: string) => { const name = ease.replace(/^custom \(closest named: (.*)\)$/, '$1'), [family, way = 'none'] = name.split('.'); return { family: family.replace(/\(.*$/, ''), way: way.replace(/\(.*$/, '') }; };
 const zoomOf = (move: CameraMove) => Math.log(move.to.scale / move.from.scale);
-const panOf = (move: CameraMove) => ({ x: move.to.x - move.from.x, y: move.to.y - move.from.y });
-const size = (move: CameraMove) => Math.abs(zoomOf(move)) + Math.hypot(panOf(move).x, panOf(move).y) / 100;
+const panOf = (move: CameraMove) => relativePose(move.to, move.from);
+const size = (move: Pick<CameraMove, 'from' | 'to'>) => { const pose = relativePose(move.to, move.from); return Math.abs(Math.log(pose.scale)) + Math.hypot(pose.x, pose.y) / 100 + Math.abs(pose.rotation) / 90; };
 /** What a move mostly does, so a zoom is only compared with a zoom and a pan with a pan the same way. */
-const gist = (move: CameraMove) => { const zoom = zoomOf(move), { x, y } = panOf(move); return Math.abs(zoom) * 100 >= Math.hypot(x, y) ? (zoom > 0 ? 'in' : 'out') : Math.abs(x) >= Math.abs(y) ? (x > 0 ? 'right' : 'left') : (y > 0 ? 'down' : 'up'); };
+const gist = (move: CameraMove) => { const zoom = zoomOf(move), { x, y, rotation } = panOf(move); return Math.abs(rotation) / 90 > Math.abs(zoom) + Math.hypot(x, y) / 100 ? (rotation > 0 ? 'clockwise' : 'counterclockwise') : Math.abs(zoom) * 100 >= Math.hypot(x, y) ? (zoom > 0 ? 'in' : 'out') : Math.abs(x) >= Math.abs(y) ? (x > 0 ? 'right' : 'left') : (y > 0 ? 'down' : 'up'); };
 
 /** Where our film moves differently from the reference over the same stretch: missing or extra camera moves, a different
  *  ease, timing or amount, a missing or different transition, and moves where the reference holds still. ours.start lines up
  *  with reference.start. */
 export function compareMotion(reference: MotionMap, ours: MotionMap): MotionDifference[] {
   const offset = ours.start - reference.start, shift = (time: number) => round(time + offset, 2), found: MotionDifference[] = [];
+  const timing = 2 / Math.min(reference.fps, ours.fps);
+  const poseAt = (map: MotionMap, time: number) => {
+    const next = map.track.findIndex(pose => pose.time >= time);
+    if (next < 0) return map.track[map.track.length - 1];
+    if (!next) return map.track[0];
+    const a = map.track[next - 1], b = map.track[next], u = (time - a.time) / Math.max(.001, b.time - a.time);
+    return { time, x: a.x + (b.x - a.x) * u, y: a.y + (b.y - a.y) * u, scale: a.scale + (b.scale - a.scale) * u, rotation: a.rotation + (b.rotation - a.rotation) * u };
+  };
   const shifted = (move: CameraMove) => move.gsap.replace(/, ([\d.]+)\)$/, (_, time) => `, ${shift(Number(time))})`);
   const used = new Set<CameraMove>();
   for (const move of reference.camera.filter(m => size(m) >= .015)) {
@@ -341,21 +374,50 @@ export function compareMotion(reference: MotionMap, ours: MotionMap): MotionDiff
     used.add(match);
     const r = easeParts(move.ease), o = easeParts(match.ease), notes: string[] = [];
     if (r.way !== o.way || r.family !== o.family) notes.push(`ease ${match.ease} where the reference uses ${move.ease}`);
-    if (Math.abs(match.start - start) > .15) notes.push(`starts ${round(match.start - start, 2) > 0 ? `${round(match.start - start, 2)}s late` : `${round(start - match.start, 2)}s early`}`);
+    if (Math.abs(match.start - start) > timing) notes.push(`starts ${round(match.start - start, 2) > 0 ? `${round(match.start - start, 2)}s late` : `${round(start - match.start, 2)}s early`}`);
     const ratio = size(match) / size(move);
-    if (ratio < .6 || ratio > 1.6) notes.push(`${ratio < 1 ? 'smaller' : 'bigger'} (${match.kind} vs ${move.kind})`);
-    if (match.duration / move.duration < .65 || match.duration / move.duration > 1.5) notes.push(`${match.duration}s long vs ${move.duration}s`);
+    if (ratio < .85 || ratio > 1.15) notes.push(`${ratio < 1 ? 'smaller' : 'bigger'} (${match.kind} vs ${move.kind})`);
+    if (Math.abs(match.duration - move.duration) > Math.max(timing, move.duration * .15)) notes.push(`${match.duration}s long vs ${move.duration}s`);
+    const refOrigin = poseAt(reference, move.start), ourOrigin = poseAt(ours, start);
+    let pathError = 0;
+    if (refOrigin && ourOrigin) for (let sample = 0; sample <= 16; sample++) {
+      const time = move.start + move.duration * sample / 16, r = poseAt(reference, time), o = poseAt(ours, shift(time));
+      if (!r || !o) continue;
+      // Relative similarity poses remove the arbitrary camera origin at the reading's first frame.
+      const rp = relativePose(r, refOrigin), op = relativePose(o, ourOrigin);
+      pathError = Math.max(pathError, Math.hypot(op.x - rp.x, op.y - rp.y) / 100, Math.abs(Math.log(op.scale / rp.scale)), Math.abs(op.rotation - rp.rotation) / 90);
+    }
+    if (pathError > .025) notes.push(`camera path, overshoot or settle differs (peak residual ${round(pathError * 100, 1)}%)`);
     if (notes.length) found.push({ time: match.start, issue: `Camera move differs from the reference: ${notes.join('; ')}.`, fix: shifted(move) });
   }
   for (const move of ours.camera.filter(m => !used.has(m) && size(m) >= .02)) {
     const held = reference.holds.some(h => shift(h.start) <= move.start + .2 && shift(h.end) >= move.end - .2);
-    if (held || move.flag) found.push({ time: move.start, issue: `Your camera moves (${move.kind}, ${move.duration}s) ${held ? 'where the reference holds still' : 'where the reference does not move'}${move.flag ? `; ${move.flag}` : ''}.` });
+    found.push({ time: move.start, issue: `Your camera moves (${move.kind}, ${move.duration}s) ${held ? 'where the reference holds still' : 'where the reference does not move'}${move.flag ? `; ${move.flag}` : ''}.` });
   }
+  const usedTransitions = new Set<MotionTransition>();
   for (const transition of reference.transitions) {
-    const start = shift(transition.start), match = ours.transitions.find(o => Math.abs(o.start - start) <= .3);
+    const start = shift(transition.start), match = ours.transitions.filter(o => !usedTransitions.has(o) && Math.abs(o.start - start) <= .3).sort((a, b) => Math.abs(a.start - start) - Math.abs(b.start - start))[0];
     if (!match) found.push({ time: start, issue: `The reference has a ${transition.kind}${transition.direction ? ` ${transition.direction}` : ''} here (${transition.duration}s${transition.ease ? `, ${transition.ease}` : ''}); yours has none.` });
-    else if (match.kind !== transition.kind || Math.abs(match.duration - transition.duration) > Math.max(.1, transition.duration * .5)) found.push({ time: match.start, issue: `Transition differs: yours is a ${match.kind} of ${match.duration}s, the reference a ${transition.kind}${transition.direction ? ` ${transition.direction}` : ''} of ${transition.duration}s.` });
+    else {
+      usedTransitions.add(match);
+      if (match.kind !== transition.kind || match.direction !== transition.direction || match.ease !== transition.ease || Math.abs(match.start - start) > timing || Math.abs(match.duration - transition.duration) > Math.max(timing, transition.duration * .15)) found.push({ time: match.start, issue: `Transition differs: yours is a ${match.kind} at ${match.start}s of ${match.duration}s (${match.direction ?? 'no direction'}, ${match.ease ?? 'instant'}), the reference a ${transition.kind} at ${start}s of ${transition.duration}s (${transition.direction ?? 'no direction'}, ${transition.ease ?? 'instant'}).` });
+    }
   }
-  for (const transition of ours.transitions) if (!reference.transitions.some(r => Math.abs(shift(r.start) - transition.start) <= .3)) found.push({ time: transition.start, issue: `Your film has a ${transition.kind} here that the reference does not.` });
-  return found.sort((a, b) => a.time - b.time).slice(0, 30);
+  for (const transition of ours.transitions) if (!usedTransitions.has(transition)) found.push({ time: transition.start, issue: `Your film has a ${transition.kind} here that the reference does not.` });
+  const overlaps = (a: Box, b: Box) => {
+    const intersection = Math.max(0, Math.min(a.left + a.width, b.left + b.width) - Math.max(a.left, b.left)) * Math.max(0, Math.min(a.top + a.height, b.top + b.height) - Math.max(a.top, b.top));
+    return intersection / Math.max(1, Math.min(a.width * a.height, b.width * b.height));
+  };
+  const usedElements = new Set<ElementMove>();
+  for (const element of reference.elements) {
+    const start = shift(element.start), match = ours.elements.filter(o => !usedElements.has(o) && Math.abs(o.start - start) <= .3 && overlaps(element.region, o.region) >= .3).sort((a, b) => Math.abs(a.start - start) - Math.abs(b.start - start))[0];
+    if (!match) { found.push({ time: start, issue: `Missing element motion: ${element.kind}, ${element.duration}s, ${element.ease} (${whereRegion(element.region)}).`, fix: element.gsap.replace(/, ([\d.]+)\)$/, `, ${start})`) }); continue; }
+    usedElements.add(match);
+    const ratio = size(match) / Math.max(.001, size(element));
+    if (Math.abs(match.start - start) > timing || Math.abs(match.duration - element.duration) > Math.max(timing, element.duration * .15) || match.ease !== element.ease || match.kind.split(' (')[0] !== element.kind.split(' (')[0] || ratio < .85 || ratio > 1.15) found.push({ time: match.start, issue: `Element motion differs: ${match.kind} at ${match.start}s, ${match.duration}s, ${match.ease}; reference ${element.kind} at ${start}s, ${element.duration}s, ${element.ease} (motion amount ratio ${round(ratio, 2)}).` });
+  }
+  for (const element of ours.elements) if (!usedElements.has(element)) found.push({ time: element.start, issue: `Extra element motion: ${element.kind} (${whereRegion(element.region)}).` });
+  return found.sort((a, b) => a.time - b.time);
 }
+
+const whereRegion = (box: Box) => `${box.left},${box.top} ${box.width}x${box.height}%`;

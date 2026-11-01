@@ -2,31 +2,46 @@ import { SCENE_FONT_FAMILIES, STARTER_SCENE_CODE } from '../../editor/scene-laye
 import { SCENE_GSAP_PLUGINS } from '../../editor/scene-modules';
 import type { EditorSkill, EditorSkillPage } from './index';
 
+const editLanesPage: EditorSkillPage = {
+  name: 'edit-lanes',
+  description: 'Start here for edits to an existing scene or film: choose quick or full verification before reading code.',
+  body: `# Editing an existing scene or film
+
+Classify the request first:
+
+- **Quick lane:** text, label, color, logo, icon or asset swaps and small static style changes where nothing moves differently.
+- **Full lane:** anything touching motion, timing, camera, transitions, easing or layout over time. Follow the existing implementation skills and scene-engine page \`checklist\`; for recreations, follow reference-footage page \`recreation\`.
+
+For a quick edit, reuse known project context and loaded skills. Read only the affected section's code with inspectClip \`section\` (or \`lines\` without section markers). Make the edit in one patchScene call where possible, with the same section and expectedRevision from the read. Verify with getFrames at the changed moment and one frame on each side (\`t - 1/fps\`, \`t\`, \`t + 1/fps\`, within the clip). Confirm in the patch and frames that everything else is unchanged. Skip compareReference, motionMap and checkPacing when nothing moved differently. If the check shows motion changed, switch to the full lane.`,
+};
+
 /** The one list of checks before a scene or film goes back to the user. Other skills point here. */
 const checklistPage: EditorSkillPage = {
   name: 'checklist',
-  description: 'Before handing a scene or film back, and after every change: first frames, every cut, every beat, pacing (checkPacing), details edge by edge (borders, radii, leftovers, contrast), measurements, what changed, limits, preview speed.',
+  description: 'Full checks for builds and full-lane edits. Existing edits start with edit-lanes. First frames, cuts, beats, pacing, details, measurements, scope, limits and preview speed.',
   body: `# Checklist: before you hand it back
 
-Run every item after building a scene or film and after every change. Render frames with getFrames (up to six per call) and look at them, and run checkPacing on the range you built or changed: stills cannot show speed, so motion that reads fine frame by frame can still be too fast to follow. Never report a film as done from the code alone.
+For an existing scene or film edit, follow page \`edit-lanes\` first. Run every item below for a new build or full-lane edit. Render frames with getFrames (up to six per call) and look at them, and run checkPacing on the range you built or changed: stills cannot show speed, so motion that reads fine frame by frame can still be too fast to follow. Never report a film as done from the code alone.
 
 1. **First frames.** The clip's first frame and the next one (start and start + 1/fps). Nothing shows that should still be hidden. A part hidden at its first frame starts hidden where it is built (page \`react-scenes\`, Motion; for GSAP specifics, the gsap skill).
 2. **Every cut.** Each cut minus one frame, on the cut, and plus one frame. No flash, no jump; where the beats are meant to connect, the two sides match.
 3. **Every beat.** One frame at each beat's key moment. Text sits inside the frame and is readable at the platform's size (a phone for vertical and feed formats); nothing overlaps by accident; one idea per shot.
-4. **Pacing.** checkPacing on the changed range, then fix every flag in the code: every visible change (a new headline, a panel filling in, a menu opening) needs about 1 s of hold before the next one, no more than two changes in a second, one place changing at a time (the eye cannot follow a headline, a timeline and a menu changing together), zooms and pans ease in and out and settle before a cut, no one-sample jumps or flashes. Run it again until the range comes back clean; a flag you keep on purpose needs a reason you can name.
+4. **Pacing.** checkPacing on the changed range. For a recreation, preserve measured reference pacing and use compareMotion to resolve flags. For a new film, fix every flag in the code: every visible change (a new headline, a panel filling in, a menu opening) needs about 1 s of hold before the next one, no more than two changes in a second, one place changing at a time (the eye cannot follow a headline, a timeline and a menu changing together), zooms and pans ease in and out and settle before a cut, no one-sample jumps or flashes. Run it again until the range comes back clean; a flag you keep on purpose needs a reason you can name.
 5. **Details, edge by edge.** For every window, card, button and frame you built or changed, look at a frame mid-move (opening, closing, transition) and one after it settles, and go over its edges: exactly one border (no outer stroke, glow or leftover outline an effect leaves behind, no double border), the same corner radius on every corner, no missing or extra lines (frame corners, dividers), nothing clipped or spilling out of its container, text readable against what is behind it (measureFrame both and compare), and no element still on screen after the thing that owns it has closed. Name each one you checked; a frame that only looks fine at a glance is not checked.
 6. **Measurements.** Product UI compared with its screenshot at full size (compareScreen), and every reference measured on full-resolution frames, never a downscaled contact sheet (it makes everything look about half its size).
 7. **Only what was asked.** On feedback, everything outside the named part is unchanged: same shots, titles, timings, moves, colors and sound. Say what else had to move.
 8. **Limits.** Each scene under 120,000 characters and the timeline under 400,000 (shared code counts once), clips up to 120 s.
 9. **Preview speed.** Parts that are done or hidden render nothing or \`display: none\`, not only opacity 0; no heavy UI mounted where it cannot be seen.
 10. **Sound.** The film has the generated sound music-and-sound asks for (section Scenes), timed to the moments you just checked.
-11. **Recreations match.** A recreation is not finished while any moment compareReference scored is over 35: fix it and compare again.`,
+11. **Recreations match.** Follow reference-footage page \`recreation\`: verify every inventory item in rendered pixels, compare every transition at 15 fps, run compareMotion per section and fix its residuals. Close out each item as matched or explicitly off. Scores and pass counts never establish completion.`,
 };
 
 const reactScenesPage: EditorSkillPage = {
   name: 'react-scenes',
   description: 'React scenes: the format for launch and feature films. One film = one scene clip on one timeline (addFilm), sections as markers, changed with patchScene; components for structure, GSAP motion through useTimeline, the revline module.',
   body: `# React scenes
+
+For edits to an existing scene or film, start with page \`edit-lanes\` and follow its workflow.
 
 A React scene is a TSX module whose default export is a component. It is a React scene because it imports from \`'revline'\`. Structure is React (components, one film file); motion is GSAP, seeked by the frame clock. The engine renders the tree for each frame, so preview, scrubbing and export draw the same frames.
 
@@ -36,7 +51,7 @@ A React scene is a TSX module whose default export is a component. It is a React
 - **One component per part.** Rebuild the product UI as components named for what they are (\`Sidebar\`, \`Composer\`, \`ThreadList\`, \`DiffPanel\`), composed by an app component, all in the film file. The inspector lists the components each clip draws, so names matter.
 - **Long films are written in parts.** Keep every call under about 20k tokens (60,000 characters) of code. addFilm gets the whole film's clip and sections and the first part, with markers where the rest goes: \`{/* more beats */}\` where the next \`<Beat>\` belongs and \`/* more parts */\` where the next components belong. Each later part is a patchScene edit that finds the marker with \`insert: 'before'\`, so the marker stays for the next part and the film compiles after every call. Sections not written yet show the stage until their part lands.
 - **Approved sections are off-limits.** An approved film section (\`approved\` in inspectTimeline, with the user's note) owns its \`<Beat>\` and every component, style object and helper that Beat uses: patchScene refuses an edit to any of them, and a change to a shared component counts. Keep each section's look in its own components, give every \`<Beat>\` literal \`start\` and \`duration\` numbers, and change approved work only when the user names it (\`overrideApproved: true\` with \`overrideReason\` quoting them).
-- **Edit with patchScene; never retype the film.** After the first build, every change is a patchScene call: exact snippets copied from inspectClip, each replaced in place (several edits per call). Retime a tween by patching its numbers, restyle by patching one style object. Never resend the whole film through editScene, and never rebuild one section as a separate scene: that splits the film and breaks the moves between sections.
+- **Edit with patchScene; never retype the film.** Read a short block with inspectClip \`section: "Composer"\` or \`lines: {start: 40, end: 65}\`. Its sceneCode.blocks include exact code and absolute, 1-based numberedCode. Patch with the same section and small exact find/replace edits, or \`edits: [{lines: {start: 48, end: 51}, replace: "new lines"}]\` without quoting old code. All line edits in a call use the inspected snapshot; keep ranges separate and pass its revision as expectedRevision. Reinspect after saving. A missing find returns nearby numbered lines for retry. Without section markers, use whole-scene line ranges. Shared-code warnings mean checking transitions on both sides; keep spanning tweens on the shared timeline and use scope covering the affected sections. Never resend the whole film through editScene or rebuild a section as a separate scene.
 - **Standalone scenes** (a title card, an overlay, one beat on its own) use addScene, or addScenes for several. Older films made of beat clips with a film kit (\`blueprint:film\`) and \`<Transition>\` clips on V3 still render and edit as before; build new films with addFilm.
 
 ## Motion
@@ -73,6 +88,8 @@ export const sceneEngine: EditorSkill = {
   description: 'How scene clips work, for every kind of scene: the module contract, what loads, how frames are rendered, GSAP technique, fonts, images and the brand parameter. Read before the first addScene or editScene, together with the skill for the job (motion-design for launch films and any standalone motion scene, explainer-scenes for explainers and overlays on footage).',
   body: `# Scene engine
 
+For edits to an existing scene or film, start with page \`edit-lanes\` and follow its workflow instead of the build guidance below.
+
 **Project brief first.** Read the project's brief (getProject, inspectTimeline or readBrief) before changing anything, and follow it. When the user gives direction that should last (what to keep, what to avoid, style), update the brief with updateBrief in their own words, replacing the rule it supersedes.
 
 A scene is a TypeScript module that builds plain HTML once and choreographs it on a GSAP timeline. It renders full-frame on its own V layer, inside a sandbox, and the editor renders it frame by frame for preview and export. Transparent areas show the layers below.
@@ -82,7 +99,7 @@ Launch and feature films use **React scenes** instead: one film, one clip, built
 ## Writing scenes
 - Plan the film as a short outline (a few lines per scene: time range, what moves, the words). Never draft scene code while thinking; write it in the addFilm or addScene call. A turn has one output budget for thinking and the call together, and a long draft in thinking leaves nothing for the scene.
 - A film (React scenes): write it with addFilm as one clip (page \`react-scenes\`), check every section and the moves between them with getFrames, then fix with patchScene edits, never by retyping it. An explainer of GSAP scenes: one addScene per call, checking each before writing the next. Keep each module well under the code limit.
-- Changing any existing scene or film: patchScene with exact snippets from inspectClip. editScene replaces whole code, so use it only to swap a standalone scene for a new one or to attach a brand kit or media.
+- Changing any existing scene or film: inspectClip with section or lines for a short numbered read, then patchScene with scoped snippets or line edits and expectedRevision (page \`react-scenes\`). Use inspectClip kit: true for the shared film kit. editScene replaces whole code, so use it only to swap a standalone scene for a new one or to attach a brand kit or media.
 - Going back to a version of a scene the user liked: listRevisions (with its clipId) finds the revision, then restoreClip puts that one clip back exactly, leaving every other clip as it is now. Use it, not chains of undoLatestEdit, which also take back later approved work.
 
 ## Contract
@@ -131,12 +148,12 @@ Real screenshots, screen recordings, photos and logos from the project's media c
 ## Checking a scene
 
 - Scenes are not effects: never call planEffects or previewRender for a scene clip.
-- Before handing a scene or film back, go through page \`checklist\`. Over MCP, getFrames renders the saved timeline at chosen times.
+- Before handing a scene or film back, follow page \`edit-lanes\` for existing edits or page \`checklist\` for a new build. Over MCP, getFrames renders the saved timeline at chosen times.
 
 ## Example
 
 \`\`\`ts
 ${STARTER_SCENE_CODE}\`\`\`
 `,
-  pages: [reactScenesPage, checklistPage],
+  pages: [editLanesPage, reactScenesPage, checklistPage],
 };

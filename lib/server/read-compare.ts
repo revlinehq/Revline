@@ -1,6 +1,7 @@
 import sharp from 'sharp';
 import type { MediaTaskResult, MediaWorkItem } from '@/convex/mediaTasks';
 import { AnalysisError } from '@/lib/media-analysis/errors';
+import { cropBounds } from '@/lib/ai/reference-comparison';
 import { frameAt, probe, sheet } from './read-reference';
 
 type Work = NonNullable<MediaWorkItem['read']>;
@@ -8,10 +9,11 @@ const round = (value: number, places = 3) => Math.round(value * 10 ** places) / 
 
 /** How different two pictures are, 0 (the same) to 1. Most of a motion frame is plain background, so a whole-frame
  * average says "nearly identical" while the keys sit in the wrong place: compare the content instead. Each frame's
- * content is what stands off its own background; half the score is how little the two contents overlap (position,
- * size, shape), half is how far their colors are apart where either has content. */
+ * content is what stands off its own background; part of the score is how little the two contents overlap (position,
+ * size, shape), with color differences over content and the background. Crop small details for an independent score. */
 async function difference(a: Buffer, b: Buffer) {
-  const small = (image: Buffer) => sharp(image).resize(96, 54, { fit: 'fill' }).removeAlpha().raw().toBuffer();
+  const meta = await sharp(a).metadata(), width = Math.min(640, meta.width ?? 640), height = Math.max(1, Math.round(width * (meta.height ?? 360) / (meta.width ?? 640)));
+  const small = (image: Buffer) => sharp(image).resize(width, height, { fit: 'fill' }).removeAlpha().toColourspace('srgb').raw().toBuffer();
   const [x, y] = await Promise.all([small(a), small(b)]);
   const content = (pixels: Buffer) => {
     // The background is the most common color: the median of each channel over the frame.
@@ -21,26 +23,29 @@ async function difference(a: Buffer, b: Buffer) {
     return mask;
   };
   const [first, second] = [content(x), content(y)];
-  // Overlap allows a pixel of drift (about 20 px at 1080p), so a lockup a hair off its place still counts as matching.
-  const near = (mask: Uint8Array, pixel: number) => { const column = pixel % 96, row = (pixel / 96) | 0; for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) { const c = column + dx, r = row + dy; if (c >= 0 && c < 96 && r >= 0 && r < 54 && mask[r * 96 + c]) return true; } return false; };
-  let both = 0, either = 0, colors = 0;
+  let both = 0, either = 0, colors = 0, allColors = 0;
   for (let pixel = 0; pixel < first.length; pixel++) {
+    const delta = (Math.abs(x[pixel * 3] - y[pixel * 3]) + Math.abs(x[pixel * 3 + 1] - y[pixel * 3 + 1]) + Math.abs(x[pixel * 3 + 2] - y[pixel * 3 + 2])) / (3 * 255);
+    allColors += delta;
     if (!first[pixel] && !second[pixel]) continue;
-    either++; if (first[pixel] ? near(second, pixel) : near(first, pixel)) both++;
-    colors += (Math.abs(x[pixel * 3] - y[pixel * 3]) + Math.abs(x[pixel * 3 + 1] - y[pixel * 3 + 1]) + Math.abs(x[pixel * 3 + 2] - y[pixel * 3 + 2])) / (3 * 255);
+    either++; if (first[pixel] && second[pixel]) both++;
+    colors += delta;
   }
-  if (!either) return 0;
-  return .5 * (1 - both / either) + .5 * colors / either;
+  const background = allColors / first.length;
+  if (!either) return background;
+  return .4 * (1 - both / either) + .4 * colors / either + .2 * background;
 }
 
 /** The reference beside the recreation at the same moments, each pair labeled with how far apart it is. */
 export async function readCompare(path: string, directory: string, work: Work, signal: AbortSignal, onProgress: (percent: number) => void): Promise<NonNullable<MediaTaskResult['read']>> {
   const rendered = work.rendered ?? [], times = work.times ?? rendered.map(frame => frame.time);
   if (!rendered.length || rendered.length !== times.length) throw new AnalysisError('There are no timeline frames to compare with.', 400);
-  const source = await probe(path, signal), last = Math.max(0, source.duration - 2 / source.fps);
+  const source = await probe(path, signal), last = Math.max(0, source.duration - 1 / source.fps);
   const tiles: { image: Buffer; label: string }[] = [], scores: { time: number; difference: number }[] = [];
   for (const [index, time] of times.entries()) {
-    const reference = await frameAt(path, directory, Math.min(Math.max(0, time), last), undefined, `compare-${index}`, signal);
+    const full = await frameAt(path, directory, Math.min(Math.max(0, time), last), undefined, `compare-${index}`, signal);
+    const reference = work.compareCrop ? await sharp(full).extract(cropBounds(work.compareCrop, source.width, source.height)).png().toBuffer() : full;
+    // Comparison snapshots crop the render before compression; the reference is cropped here on its displayed axes.
     const yours = Buffer.from(rendered[index].image, 'base64');
     const score = round(await difference(reference, yours));
     scores.push({ time: round(time), difference: score });
@@ -53,6 +58,6 @@ export async function readCompare(path: string, directory: string, work: Work, s
   const sheets = [];
   // The sheets travel in one stored result, so they share one image budget.
   const count = Math.ceil(tiles.length / 6), budget = Math.floor(880_000 / count);
-  for (let first = 0; first < tiles.length; first += 6) sheets.push(await sheet(tiles.slice(first, first + 6), source.width / source.height, 2, budget));
+  for (let first = 0; first < tiles.length; first += 6) sheets.push(await sheet(tiles.slice(first, first + 6), (work.compareCrop ? source.width * work.compareCrop.w / (source.height * work.compareCrop.h) : source.width / source.height), 2, budget));
   return { ...sheets[0], ...(sheets.length > 1 ? { extraImages: sheets.slice(1).map(item => item.image) } : {}), sourceWidth: source.width, sourceHeight: source.height, fps: round(source.fps), frames: times.map(time => ({ time: round(time) })), scores };
 }
