@@ -4,17 +4,19 @@ import type { EditorSkill, EditorSkillPage } from './index';
 
 const editLanesPage: EditorSkillPage = {
   name: 'edit-lanes',
-  description: 'Start here for edits to an existing scene or film: choose quick or full verification before reading code.',
-  body: `# Editing an existing scene or film
-
-Find code with inspectClip search: {query: "text"} (regex: true for a per-line pattern), then read its numbered lines before patching with expectedRevision. Use diffScene with fromRevision and toRevision from listRevisions to review saved code changes. After checking the rendered saved revision, attach what changed and the actual verification evidence with recordFix (clipId, revision, summary, verification); later turns read it in listRevisions.
+  description: 'Start here for existing footage, caption, scene or film edits: choose quick or full verification before reading transcript or code.',
+  body: `# Editing existing footage, captions, scenes or films
 
 Classify the request first:
 
-- **Quick lane:** text, label, color, logo, icon or asset swaps and small static style changes where nothing moves differently.
-- **Full lane:** anything touching motion, timing, camera, transitions, easing or layout over time. Follow the existing implementation skills and scene-engine page \`checklist\`; for recreations, follow reference-footage page \`recreation\`.
+- **Quick lane:** text, label, color, logo, icon or asset swaps, small static style changes, cuts or trims of named passages, trimming to a target length, removing lines, false starts or filler, shortening or swapping one b-roll, and caption text or timing fixes.
+- **Full lane:** building a new edit, restructuring the story, reviewing the whole video, or changing scene motion, timing, camera, transitions, easing or layout over time. Follow the matching implementation skills; for scenes use page \`checklist\`, and for recreations use reference-footage page \`recreation\`.
 
-For a quick edit, reuse known project context and loaded skills. Read only the affected section's code with inspectClip \`section\` (or \`lines\` without section markers). Make the edit in one patchScene call where possible, with the same section and expectedRevision from the read. Verify with getFrames at the changed moment and one frame on each side (\`t - 1/fps\`, \`t\`, \`t + 1/fps\`, within the clip). Confirm in the patch and frames that everything else is unchanged. Skip compareReference, motionMap and checkPacing when nothing moved differently. If the check shows motion changed, switch to the full lane.`,
+For quick edits, reuse known project context and loaded skills. Skip whole-video review, re-reading every skill, pacing passes and full frame sweeps.
+
+**Footage and captions:** read only the transcript around the affected SOURCE range with inspectAssetAnalysis start/end or batched windows. Use the fewest calls: batch retained ranges per affected clip with retainSourceRanges, isolating local speech before cleanup. Ripple the actual removed timeline intervals across affected tracks so captions, b-roll and linked audio stay in sync: trim or delete intersecting material and batch moveClips by shared time delta. retainSourceRanges compacts only the linked pair; closeGaps works per layer, so neither alone synchronizes overlays. Preserve unrelated speech and styling. Verify with inspectTimeline: new duration meets the target, no gaps or orphaned captions. Use getFrames at each changed cut point or caption moment and one frame either side (\`t - 1/fps\`, \`t\`, \`t + 1/fps\`, within the timeline).
+
+**Scenes:** find code with inspectClip search, then read only the affected \`section\` (or \`lines\` without section markers). Make one patchScene call where possible, with the same section and expectedRevision. Check getFrames at the changed moment and one frame either side. Confirm everything else is unchanged. Skip compareReference, motionMap and checkPacing; switch to the full lane if scene motion changed. Review saved changes with diffScene using revisions from listRevisions, then attach the actual verification evidence with recordFix.`,
 };
 
 /** The one list of checks before a scene or film goes back to the user. Other skills point here. */
