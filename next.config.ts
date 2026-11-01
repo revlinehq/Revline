@@ -8,10 +8,6 @@ const config: NextConfig = {
   async headers() {
     return [{ source: '/connect', headers: [{ key: 'X-Frame-Options', value: 'DENY' }, { key: 'Content-Security-Policy', value: "frame-ancestors 'none'" }] }];
   },
-  // Launch post link for Revline Sharingan.
-  async redirects() {
-    return [{ source: '/sharingan', destination: '/#inspo', permanent: false }];
-  },
 };
 export default process.env.NEXT_PUBLIC_TELEMETRY_ENABLED === 'true' && process.env.NEXT_PUBLIC_SENTRY_DSN
   ? withSentryConfig(config, { org: process.env.SENTRY_ORG, project: process.env.SENTRY_PROJECT,
