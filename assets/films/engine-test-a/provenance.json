@@ -83,7 +83,7 @@
     "change": "Preserve requested motion range in frame snapshots"
   },
   "priority": "User requested reference structure and timing take precedence over generic one-second holds, no grids, and quiet house styling.",
-  "revision": 71,
+  "revision": 72,
   "verificationFile": "verification.json",
   "sourceFile": "film.tsx.txt",
   "soundEffects": {
@@ -149,7 +149,7 @@
     "generatedMusicAndCuesMuted": true,
     "activeAudioAssetId": "j57eeahvakwfy1ntsewb2jm3zh8hb6ee"
   },
-  "sourceSHA256": "d2a9d34418cfc38df1366818873d725c441caeabd5302cb2ff334ba7db2ba59a",
+  "sourceSHA256": "1f6b0e7575cf63f6b40e7face92689b6780e2b623e1de0ca1934a52c7e72ee07",
   "fonts": [
     "JetBrains Mono",
     "Pixelify Sans"
@@ -515,6 +515,45 @@
       "fileSHA256": "d881c65fbaaecf82af2751abef83a978a02222d79ed13181123d591839ce1ca1"
     },
     "sourceSHA256": "d2a9d34418cfc38df1366818873d725c441caeabd5302cb2ff334ba7db2ba59a",
+    "verificationFile": "verification.json",
+    "detailedAuditFile": "audit.json",
+    "exported": false
+  },
+  "revlineSharinganIdentity": {
+    "revision": 72,
+    "intentionalReferenceDeviation": true,
+    "briefRuleId": "a95098c9",
+    "changes": [
+      "Replaced the first white identity card (5.766667-8.416667 s, around 7 s) with the exact saved Revline logo and revline Sharingan. The Revline wordmark stays lowercase; Sharingan uses a capital S.",
+      "Kept the existing reveal, color-step, slide, frame expansion, corner closing and cut timing. Adjusted the final logo offset from -280 to -300 px and set the longer title at 724,500 with a 58 px font to fit and center it inside the existing brackets.",
+      "Set the longer title's typing rate to 45 chars/s so its 17 characters complete in approximately the same interval as the previous 11-character title at 28 chars/s. It is fully settled around 7.1 s.",
+      "Changed the first card's credit to by revline and centered its container at x=960, keeping the same type/opacity timing.",
+      "Both Revline SVG paths retain fill=currentColor and animate together through the wrapper CSS color. Exact SVG nested geometry comes from Revline brand kit qn79ws90fw8572v91j2dq0617x8h4mqs.",
+      "Added project brief rule a95098c9 marking the identity replacement as an intentional original branding addition, alongside the earlier intro branding.",
+      "The shared ending=true identity branch is preserved, confirmed by the locked-section guard and a native 27.4 s frame. Source outside BrandLockup, intro red glitch, other scenes, audio, markers, and total duration are unchanged."
+    ],
+    "layout": {
+      "logoSize": 116,
+      "logoEndX": -300,
+      "textLeft": 724,
+      "textTop": 500,
+      "textSize": 58,
+      "textCps": 45,
+      "bylineCenterX": 960,
+      "cornerWidth": 830,
+      "cornerHeight": 330
+    },
+    "brandLogo": {
+      "kitId": "qn79ws90fw8572v91j2dq0617x8h4mqs",
+      "name": "Revline",
+      "file": "revline-logo.svg",
+      "exactGeometry": true,
+      "inlineFill": "currentColor",
+      "label": "revline Sharingan",
+      "credit": "by revline",
+      "fileSHA256": "d881c65fbaaecf82af2751abef83a978a02222d79ed13181123d591839ce1ca1"
+    },
+    "sourceSHA256": "1f6b0e7575cf63f6b40e7face92689b6780e2b623e1de0ca1934a52c7e72ee07",
     "verificationFile": "verification.json",
     "detailedAuditFile": "audit.json",
     "exported": false
