@@ -7,8 +7,9 @@ export type CodeLines = { start: number; end: number };
 export type SceneLineEdit = { lines: CodeLines; replace: string; insert?: 'before' | 'after' };
 type Span = { from: number; to: number };
 type CodeSelection = { section?: string; lines?: CodeLines; kit?: boolean };
+export type CodeSearch = { query: string; regex?: boolean; caseSensitive?: boolean; startLine?: number; limit?: number };
 
-function source(clip: Clip, kit?: boolean) {
+export function sceneCodeSource(clip: Clip, kit?: boolean) {
   if (clip.kind !== 'scene' || !clip.scene) throw new Error('Choose a scene clip.');
   if (!kit) return clip.scene.code;
   const code = clip.scene.blueprints?.find(item => item.name.toLowerCase() === FILM_KIT)?.code;
@@ -56,7 +57,7 @@ function sections(timeline: Timeline, clip: Clip, code: string, kit?: boolean) {
 }
 
 function selection(timeline: Timeline, clip: Clip, options: CodeSelection) {
-  const code = source(clip, options.kit), named = sections(timeline, clip, code, options.kit);
+  const code = sceneCodeSource(clip, options.kit), named = sections(timeline, clip, code, options.kit);
   if (options.section && options.kit) throw new Error('The film kit is shared across sections. Read or patch kit lines without section.');
   const wanted = options.section?.trim().toLowerCase();
   const matches = wanted ? named.filter(item => item.id === options.section || item.label.trim().toLowerCase() === wanted) : [];
@@ -90,6 +91,30 @@ export function inspectSceneCode(timeline: Timeline, clip: Clip, options: CodeSe
     warnings,
     note: 'Line numbers are absolute, 1-based and inclusive for this source snapshot. Copy from code, or omit numberedCode prefixes. Reinspect after a successful patch. Line edits in one call all address this snapshot.',
   };
+}
+
+/** Search selected code without returning the whole module; matches keep absolute snapshot coordinates. */
+export function searchSceneCode(timeline: Timeline, clip: Clip, options: CodeSelection, search: CodeSearch) {
+  const { code, section, spans, warnings } = selection(timeline, clip, options);
+  if (options.lines) lineSpan(code, options.lines);
+  const ranges = spans.map(span => spanLines(code, span)), rows = code.split('\n');
+  let pattern: RegExp | undefined;
+  try { if (search.regex) pattern = new RegExp(search.query, search.caseSensitive ? '' : 'i'); }
+  catch { throw new Error('Invalid search regular expression. Use a JavaScript pattern without enclosing slashes.'); }
+  const query = search.caseSensitive ? search.query : search.query.toLowerCase(), limit = search.limit ?? 50;
+  const matches: { line: number; column: number; text: string; textStartColumn: number }[] = [];
+  let nextStartLine: number | undefined;
+  for (let index = Math.max(0, (search.startLine ?? 1) - 1); index < rows.length; index++) {
+    const line = index + 1;
+    if (options.lines && (line < options.lines.start || line > options.lines.end) || !ranges.some(range => line >= range.start && line <= range.end)) continue;
+    const text = rows[index], column = pattern ? pattern.exec(text)?.index ?? -1 : (search.caseSensitive ? text : text.toLowerCase()).indexOf(query);
+    if (column < 0) continue;
+    if (matches.length === limit) { nextStartLine = line; break; }
+    const from = Math.max(0, column - 160);
+    matches.push({ line, column: column + 1, text: text.slice(from, column + 440), textStartColumn: from + 1 });
+  }
+  return { target: options.kit ? 'kit' : 'scene', totalLines: rows.length, ...(section ? { section: section.label } : {}), search, matches, ...(nextStartLine ? { nextStartLine } : {}), warnings,
+    note: 'One result per matching line, with its first matching column. Lines and columns are absolute and 1-based. Text is a bounded preview; use inspectClip lines for exact code before patching. Continue with search.startLine = nextStartLine when present.' };
 }
 
 /** New scoped calls preserve legacy snippet semantics, or replace nonoverlapping snapshot line ranges. */

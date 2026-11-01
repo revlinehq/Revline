@@ -1,5 +1,5 @@
 export type MediaToken = {
-  operation: 'read' | 'download' | 'part' | 'control';
+  operation: 'read' | 'download' | 'part' | 'control' | 'prepareUpload';
   expires: number;
   key?: string;
   uploadId?: string;
@@ -7,6 +7,7 @@ export type MediaToken = {
   size?: number;
   fileName?: string;
   storageUrl?: string;
+  upload?: { ownerId: string; projectId: string; fileName: string; contentType: string };
 };
 const encoder = new TextEncoder();
 export function safeDownloadFileName(value: string) {
