@@ -1,3 +1,5 @@
+import { deleteThumbnail } from './sceneThumbs';
+import { deleteMediaTask } from './lib/media_task_data';
 import { deleteProjectMemories } from './memories';
 import { deleteRenderSnapshot } from './lib/render_snapshots';
 import { v } from 'convex/values';
@@ -15,7 +17,17 @@ export const batch=internalMutation({args:{projectId:v.id('projects'),ownerId:v.
   if(!project||project.ownerId!==args.ownerId||!project.deleting)return null;
   const again=()=>ctx.scheduler.runAfter(0,internal.projectDeletion.batch,args);
   const tasks=await ctx.db.query('mediaTasks').withIndex('by_project_createdAt',q=>q.eq('projectId',project._id)).take(50);
-  if(tasks.length){for(const task of tasks){await cancelMediaTask(ctx,task._id);await ctx.db.delete(task._id);}await again();return null;}
+  if(tasks.length){for(const task of tasks){await cancelMediaTask(ctx,task._id);await deleteMediaTask(ctx,task._id);}await again();return null;}
+  const thumbs=await ctx.db.query('sceneThumbnails').withIndex('by_project',q=>q.eq('projectId',project._id)).take(20);
+  if(thumbs.length){for(const thumb of thumbs)await deleteThumbnail(ctx,thumb);await again();return null;}
+  if(project.threadId){
+    const views=await ctx.db.query('assistantMessageViews').withIndex('by_thread_order',q=>q.eq('threadId',project.threadId!)).take(50);
+    if(views.length){for(const view of views)await ctx.db.delete(view._id);await again();return null;}
+    const files=await ctx.db.query('assistantDisplayFiles').withIndex('by_thread',q=>q.eq('threadId',project.threadId!)).take(20);
+    if(files.length){for(const row of files){for(const id of row.storageIds)await ctx.storage.delete(id);await ctx.db.delete(row._id);}await again();return null;}
+    const thread=await ctx.db.query('assistantMessageThreads').withIndex('by_thread',q=>q.eq('threadId',project.threadId!)).unique();
+    if(thread)await ctx.db.delete(thread._id);
+  }
   const shares=await ctx.db.query('timelineShares').withIndex('by_project',q=>q.eq('projectId',project._id)).take(1);
   if(shares.length){await removeProjectShares(ctx,project._id);await again();return null;}
   const assets=await ctx.db.query('assets').withIndex('by_ownerId_projectId',q=>q.eq('ownerId',args.ownerId).eq('projectId',project._id)).take(20);

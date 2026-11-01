@@ -1,3 +1,4 @@
+import { chatAgent, createMessageHistory } from './lib/chat_data';
 import { sharedAssetFields } from './lib/shared_media';
 import { storedTimelineBytes } from '../lib/editor/scene-code';
 import { createThread, saveMessages } from '@convex-dev/agent';
@@ -124,8 +125,9 @@ export const importSnapshot = internalMutation({
     await validateTimeline(ctx, project, timeline);
     for (const snapshot of history) await validateTimeline(ctx, project, snapshot);
     const threadId = await createThread(ctx, components.agent, { userId: ownerId, title });
+    await createMessageHistory(ctx, threadId);
     for (let offset = 0; offset < args.conversation.length; offset += 100) {
-      await saveMessages(ctx, components.agent, { threadId, userId: ownerId, agentName: 'Revline', messages: args.conversation.slice(offset, offset + 100).map(({ role, text }) => ({ role, content: text })) });
+      await saveMessages(ctx, chatAgent, { threadId, userId: ownerId, agentName: 'Revline', messages: args.conversation.slice(offset, offset + 100).map(({ role, text }) => ({ role, content: text })) });
     }
     await writeProject(ctx, projectId, { timeline, history, threadId });
     const shareId = await ctx.db.insert('timelineShares', { ownerId, projectId, title, timeline, ...(args.publicChat.length ? { chat: args.publicChat } : {}), published: true, createdAt: now, updatedAt: now });

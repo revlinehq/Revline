@@ -13,6 +13,6 @@ export const SceneFilmstrip = memo(function SceneFilmstrip({ frames, width, heig
   return <div className="filmstrip media-filmstrip scene-filmstrip" aria-hidden="true">{Array.from({ length: count }, (_, index) => {
     const time = (index + .5) * tile / width * duration;
     const nearest = frames.reduce((best, frame) => Math.abs(frame.time - time) < Math.abs(best.time - time) ? frame : best, frames[0]);
-    return <div className="filmstrip-frame" key={index} style={{ left: index * tile, width: tile }}><img src={`data:image/jpeg;base64,${nearest.image}`} alt="" draggable={false} /></div>;
+    return <div className="filmstrip-frame" key={index} style={{ left: index * tile, width: tile }}><img src={nearest.image.startsWith('https://') ? nearest.image : `data:image/jpeg;base64,${nearest.image}`} alt="" draggable={false} /></div>;
   })}</div>;
 });

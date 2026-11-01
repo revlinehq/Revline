@@ -1,3 +1,4 @@
+import { chatAgent, createMessageHistory, listMessageViews } from './lib/chat_data';
 import {validatePinnedClaudeModel,type ClaudeModelSelection} from '../lib/ai/claude-model';
 import { READ_ONLY_RUN_PREFIX, readRunTab } from './lib/run_ids';
 import { approvalRefusal, approvalViolations, isApproved } from '../lib/editor/approvals';
@@ -144,7 +145,9 @@ async function beginRequest(ctx:MutationCtx,sent:Doc<'projects'>,prompt:string,p
   const project=switching?(await readProject(ctx,sent._id))!:sent;
   const ownerId=project.ownerId;
   const threadId = project.threadId ?? await createThread(ctx, components.agent, { userId: ownerId, title: project.title });
-  const { messageId } = await saveMessage(ctx, components.agent, { threadId, userId: ownerId, prompt });
+  if (!project.threadId) await createMessageHistory(ctx, threadId);
+  await ctx.scheduler.runAfter(0, internal.assistantMessages.prepare, { threadId });
+  const { messageId } = await saveMessage(ctx, chatAgent, { threadId, userId: ownerId, prompt });
   const recovery = project.aiRecovery ?? (project.aiError ? assistantRecovery(project, 'failed', project.aiError) : undefined);
   const runId = `${Date.now()}-${Math.random()}`;
   await clearLivePreview(ctx,project._id);
@@ -174,7 +177,8 @@ export const messages = query({
     if (args.paginationOpts.numItems < 0 || args.paginationOpts.numItems > 100 || (args.paginationOpts.numItems === 0 && !args.streamArgs)) throw new ConvexError("Message pages must contain between 1 and 100 messages");
     if (project.threadId && args.threadId !== project.threadId) throw new ConvexError("Conversation not found");
     if (!project.threadId) return { page: [], isDone: true, continueCursor: "", streams: args.streamArgs?.kind === "deltas" ? { kind: "deltas" as const, deltas: [] } : { kind: "list" as const, messages: [] } };
-    const page = args.paginationOpts.numItems === 0 ? { page: [], isDone: true, continueCursor: "" } : await listUIMessages(ctx, components.agent, { threadId: project.threadId, paginationOpts: args.paginationOpts });
+    const display = await ctx.db.query('assistantMessageThreads').withIndex('by_thread', q => q.eq('threadId', project.threadId!)).unique();
+    const page = args.paginationOpts.numItems === 0 ? { page: [], isDone: true, continueCursor: "" } : display?.completed && (!args.paginationOpts.cursor || args.paginationOpts.cursor.startsWith('display:')) && (!args.paginationOpts.endCursor || args.paginationOpts.endCursor.startsWith('display:')) ? await listMessageViews(ctx, project.threadId, args.paginationOpts) : await listUIMessages(ctx, components.agent, { threadId: project.threadId, paginationOpts: args.paginationOpts });
     const streams = await syncStreams(ctx, components.agent, { threadId: project.threadId, streamArgs: args.streamArgs });
     return { ...page, page: plainValues(page.page), streams: streams ?? { kind: "list" as const, messages: [] } };
   },
