@@ -83,7 +83,7 @@
     "change": "Preserve requested motion range in frame snapshots"
   },
   "priority": "User requested reference structure and timing take precedence over generic one-second holds, no grids, and quiet house styling.",
-  "revision": 73,
+  "revision": 74,
   "verificationFile": "verification.json",
   "sourceFile": "film.tsx.txt",
   "soundEffects": {
@@ -149,7 +149,7 @@
     "generatedMusicAndCuesMuted": true,
     "activeAudioAssetId": "j57eeahvakwfy1ntsewb2jm3zh8hb6ee"
   },
-  "sourceSHA256": "f9c7b824172beab52658c884520ed505ca69fc5656b6ef1982f79865325d376f",
+  "sourceSHA256": "fca9d54c8a47268b68750ca7deab17d9b3b71da9f8e944300896149ff5246bed",
   "fonts": [
     "JetBrains Mono",
     "Pixelify Sans"
@@ -634,6 +634,223 @@
       "No motionMap differences or pacing flags over 7.3-8.5 s. Custom credit, Revline identity and logo intentionally differ from the reference. Prior film-wide residuals remain as recorded."
     ],
     "engine": "GSAP through useTimeline; existing deterministic Type animation retained.",
+    "exported": false
+  },
+  "mascotPurpleRedFlash": {
+    "revision": 74,
+    "intentionalReferenceDeviation": true,
+    "briefRuleId": "74848b6c",
+    "changes": [
+      "Added four single-frame color flashes starting at 14:03 (14.05 s at 60 fps), each separated by one normal frame.",
+      "During flashed frames only, the mascot cube tiles are purple #9d4eff and both green eyes plus the smile stroke are red #ff2644.",
+      "The normal frames and final restored state use white #fff cube tiles and the existing GREEN face color. Prompt text and arrows retain their original colors.",
+      "Used only timed GSAP tl.set calls within UploadTerminal useTimeline. The cue is 10 microseconds before each exact frame boundary to avoid rounding pushing a set onto the next sampled frame.",
+      "All source outside this local color-step insertion, mascot transforms/tilt, prompt timing, camera motion, other sections, audio, markers and duration are unchanged.",
+      "Recorded the user-requested reference exception in project brief rule 74848b6c."
+    ],
+    "timing": {
+      "fps": 60,
+      "cue": "14:03",
+      "start": 14.05,
+      "flashFrameNumbers": [
+        843,
+        845,
+        847,
+        849
+      ],
+      "flashTimes": [
+        14.05,
+        14.083333333333334,
+        14.116666666666667,
+        14.15
+      ],
+      "normalFrameNumbers": [
+        842,
+        844,
+        846,
+        848,
+        850
+      ],
+      "restoredAt": 14.166666666666666,
+      "flashCount": 4,
+      "flashLengthFrames": 1,
+      "normalGapFrames": 1
+    },
+    "colors": {
+      "cubesNormal": "#fff",
+      "cubesFlash": "#9d4eff",
+      "faceNormal": "existing GREEN",
+      "faceFlash": "#ff2644"
+    },
+    "sourceSHA256": "fca9d54c8a47268b68750ca7deab17d9b3b71da9f8e944300896149ff5246bed",
+    "sourceCharacters": 67508,
+    "verification": {
+      "compiled": true,
+      "exactSourceInsertionOnly": true,
+      "nativeFrameTimes": [
+        14.033333333333333,
+        14.05,
+        14.066666666666666,
+        14.083333333333334,
+        14.1,
+        14.116666666666667,
+        14.133333333333333,
+        14.15,
+        14.166666666666666,
+        14.183333333333334,
+        14.2,
+        14.3,
+        12.45,
+        13.95,
+        14.5,
+        15.5
+      ],
+      "nativeFrameInspection": "Confirmed normal frame 842, alternating flashed/normal 843-850, and restored white/green afterwards. All four flashed frames were inspected at 60 fps.",
+      "compareReference": {
+        "note": "Reference (left) beside your timeline (right), one moment per row, at 13.95s, 14.05s, 14.067s, 14.083s, 14.117s, 14.15s, 14.167s, 14.3s. Differences: 13.95s 31, 14.05s 31, 14.067s 31, 14.083s 31, 14.117s 32, 14.15s 32, 14.167s 30, 14.3s 24.",
+        "next": "Pass 1 of 3. Fix the 2 worst moments now (14.117s, 14.15s) with patchScene or editScene: read that moment with fps 10 if you have not, correct it, then compare again. Done when every moment scores 25 or less, or after 3 passes.",
+        "pass": 1,
+        "scores": [
+          {
+            "time": 13.95,
+            "difference": 31
+          },
+          {
+            "time": 14.05,
+            "difference": 31
+          },
+          {
+            "time": 14.067,
+            "difference": 31
+          },
+          {
+            "time": 14.083,
+            "difference": 31
+          },
+          {
+            "time": 14.117,
+            "difference": 32
+          },
+          {
+            "time": 14.15,
+            "difference": 32
+          },
+          {
+            "time": 14.167,
+            "difference": 30
+          },
+          {
+            "time": 14.3,
+            "difference": 24
+          }
+        ],
+        "images": [
+          "Reference (left) beside your timeline (right), 1",
+          "Reference (left) beside your timeline (right), 2",
+          "Reference (left) beside your timeline (right), 3"
+        ]
+      },
+      "motionMap": {
+        "differences": [
+          {
+            "time": 13.87,
+            "issue": "Your camera moves (zoom in 7% + pan right 0.9% + tilt down 5.3% + rotate -8.6°, 0.63s) where the reference does not move; no cause: nothing changes in the frame when this move starts or ends."
+          }
+        ],
+        "next": "Fix the differences in the scene code (each fix is the reference move as a GSAP tween at your timeline time), then run motionMap with the same windows again. Keep a difference only on purpose, with a reason.",
+        "reference": {
+          "camera": [],
+          "changes": [],
+          "elements": [],
+          "end": 14.47,
+          "fps": 30,
+          "holds": [],
+          "start": 13.8,
+          "transitions": [],
+          "unanswered": []
+        },
+        "timeline": {
+          "camera": [
+            {
+              "duration": 0.63,
+              "ease": "sine.in",
+              "end": 14.5,
+              "fit": 0.95,
+              "flag": "no cause: nothing changes in the frame when this move starts or ends",
+              "from": {
+                "rotation": 0,
+                "scale": 1,
+                "x": 0,
+                "y": 0
+              },
+              "gsap": "tl.fromTo(camera, { scale: 1, xPercent: 0, yPercent: 0, rotation: 0 }, { scale: 1.066, xPercent: -0.93, yPercent: -5.27, rotation: -8.63, duration: 0.63, ease: 'sine.in' }, 13.87)",
+              "kind": "zoom in 7% + pan right 0.9% + tilt down 5.3% + rotate -8.6°",
+              "start": 13.87,
+              "to": {
+                "rotation": -8.63,
+                "scale": 1.066,
+                "x": -0.93,
+                "y": -5.27
+              }
+            }
+          ],
+          "changes": [
+            {
+              "area": 1.4,
+              "end": 14.5,
+              "kind": "change",
+              "region": {
+                "height": 11.1,
+                "left": 31.3,
+                "top": 55.6,
+                "width": 12.5
+              },
+              "start": 14.33
+            }
+          ],
+          "elements": [
+            {
+              "duration": 0.24,
+              "ease": "power3.inOut",
+              "end": 14.37,
+              "fit": 0.85,
+              "gsap": "tl.fromTo(el, { xPercent: 0, yPercent: 0, scale: 1 }, { xPercent: 1, yPercent: -6, scale: 1.002, duration: 0.24, ease: 'power3.inOut' }, 14.13)",
+              "kind": "slides up (6.1% of the frame)",
+              "region": {
+                "height": 33.3,
+                "left": 50,
+                "top": 33.3,
+                "width": 31.3
+              },
+              "start": 14.13
+            }
+          ],
+          "end": 14.5,
+          "fps": 30,
+          "holds": [],
+          "start": 13.8,
+          "transitions": [],
+          "unanswered": []
+        }
+      },
+      "pacing": {
+        "revision": 74,
+        "range": "13.8-14.5s",
+        "samples": "8 at 10 fps",
+        "changePerSecond": "14s 14%",
+        "cuts": [],
+        "cameraMoves": 0,
+        "flags": [],
+        "next": "No pacing problems found in this range."
+      },
+      "audioAndMarkersUnchanged": true
+    },
+    "remainingDifferences": [
+      "One motionMap camera-fit residual over 13.87-14.5 s: a fitted 7% zoom/right/down/rotation versus a reference hold. No camera tween was added or changed by this edit; existing mascot/prompt movement and typography are retained.",
+      "Reference comparison scores are 24-32/100. The original mascot geometry, face pose and prompt layout/timing differ before the flash (13.95 s scores 31) and after it (14.167 s scores 30); the purple/red flash is an intentional user addition. No all-pass image-similarity claim.",
+      "No pacing flags over 13.8-14.5 s at 10 fps. This coarse check can miss single-frame flashes; every alternating frame was separately inspected with native getFrames."
+    ],
+    "engine": "GSAP through useTimeline; timed tl.set color changes only.",
     "exported": false
   }
 }

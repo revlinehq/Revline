@@ -184,6 +184,12 @@ function UploadTerminal(){
   const pixels=el.querySelectorAll('.mascot-pixel');seed(tl,pixels,{opacity:0});
   pixels.forEach((pixel,i)=>{const row=Math.floor(i/16),col=i%16;const at=row<7?3.35+(col%7)*.013:3.50+((row*13+col*7)%7)*.008;tl.to(pixel,{opacity:row<7?.65:col<7?1:.6,duration:.08,ease:'steps(3)'},at).to(pixel,{opacity:1,duration:.10,ease:'steps(3)'},row<7?3.50:col<7?3.60:3.86);});
   const headPixels=Array.from(pixels).filter((_,i)=>Math.floor(i/16)<7);tl.to(headPixels,{opacity:.64,duration:.04,ease:'steps(2)'},3.62).to(headPixels,{opacity:1,duration:.05,ease:'steps(2)'},3.74).to(headPixels,{opacity:.55,duration:.04,ease:'steps(2)'},3.84).to(headPixels,{opacity:1,duration:.10,ease:'steps(3)'},4.0);
+  const brandingFlashAt=14+3/60-8.416667-.00001;
+  const faceEyes=face.querySelectorAll('div'),faceSmile=face.querySelector('path');
+  for(let frame=0;frame<8;frame++){
+   const flashed=frame%2===0,at=brandingFlashAt+frame/60;
+   tl.set(pixels,{fill:flashed?'#9d4eff':'#fff'},at).set(faceEyes,{backgroundColor:flashed?'#ff2644':GREEN},at).set(faceSmile,{stroke:flashed?'#ff2644':GREEN},at);
+  }
   tl.to('.executionChrome',{y:-170,duration:.283333,ease:'power2.in'},4.4).set('.executionChrome',{visibility:'hidden'},4.72).set(win,{borderColor:'#000',boxShadow:'none'},4.73).to(win,{height:815,y:-51,duration:.04,ease:'none'},4.73).to(contents,{y:0,duration:.04,ease:'none'},4.73);
   tl.to(mascot,{x:-200,duration:.35,ease:'power2.out'},4.2).to(mascot,{x:-155,y:20,scale:.6,duration:.283333,ease:'power2.in'},4.4).to(mascot,{x:-180,duration:.9,ease:'sine.inOut'},5.55);
   tl.set([title,any],{display:'none'},2.83);
