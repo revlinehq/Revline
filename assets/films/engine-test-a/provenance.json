@@ -82,7 +82,7 @@
     "change": "Preserve requested motion range in frame snapshots"
   },
   "priority": "User requested reference structure and timing take precedence over generic one-second holds, no grids, and quiet house styling.",
-  "revision": 51,
+  "revision": 53,
   "verificationFile": "verification.json",
   "sourceFile": "film.tsx.txt",
   "soundEffects": {
@@ -148,7 +148,7 @@
     "generatedMusicAndCuesMuted": true,
     "activeAudioAssetId": "j57eeahvakwfy1ntsewb2jm3zh8hb6ee"
   },
-  "sourceSHA256": "0dde55788ca45e5a62b5a8ebba858950b0523d610e33ea39c09ddbb14d5156ae",
+  "sourceSHA256": "adc569960e6dcd2192f80312dbc4a0be83d3bda0a984274f2de74595bdd0ba62",
   "fonts": [
     "JetBrains Mono",
     "Pixelify Sans"
@@ -221,5 +221,51 @@
     "change": "Halved the grain/focus, palette and full-green conversion intervals on the same GSAP clock. The helper palette tail is optional, preserving the upload section default.",
     "engine": "GSAP through useTimeline, one React scene film.",
     "tools": "Native Revline reads, renders, comparisons and pacing checks. Local scripts archived source/metadata and ran git checks."
+  },
+  "uploadMenuInteractions": {
+    "revision": 53,
+    "changes": [
+      "Replaced the top-down menu wipe with a narrow green container entering from the right, two translucent trailing rectangles, horizontal expansion, brief vertical settling, and block placeholders that resolve into the menu content.",
+      "Menu entrance starts at 9.2 s so the layered container is visible at the reference first frame, 9.216667 s.",
+      "Moved the cursor into the menu camera hierarchy so its fingertip follows measured DOM row centers through the zoom; authored all path segments with explicit fromTo states for deterministic seeks.",
+      "Added olive-green text and arrow hovers for all six rows, with a .05 s entrance and .16 s trailing fade.",
+      "Added a bottom-anchored hand press at 11.066667-11.116667 s and release through 11.216667 s, just before the menu turns green and fades.",
+      "Separated menu shell opacity from the cursor so the activation fade does not erase the white hand early; retained the other sections, active soundtrack, background image and camera choreography."
+    ],
+    "container": {
+      "start": 9.2,
+      "initialScaleX": 0.68,
+      "initialWidth": 292.4,
+      "settledWidth": 430,
+      "horizontalExpansionDuration": 0.2,
+      "initialScaleY": 1.07,
+      "ghostOffsets": [
+        -145,
+        -70
+      ],
+      "ghostOvershoot": [
+        65,
+        32
+      ],
+      "veilColor": "#daecbb",
+      "ghostColor": "#d8eab7",
+      "menuBodyColor": "#c0c0c0"
+    },
+    "hoverColors": {
+      "text": "#436001",
+      "arrow": "#395d00"
+    },
+    "click": {
+      "pressStart": 11.066667,
+      "pressEnd": 11.116667,
+      "releaseEnd": 11.216667,
+      "scaleX": 1.015,
+      "scaleY": 0.96,
+      "rotationDegrees": -0.6,
+      "easeIn": "power4.in",
+      "easeOut": "power2.out"
+    },
+    "engine": "All motion uses GSAP through useTimeline in the existing single React scene film.",
+    "tools": "Native Revline readFrames, measureFrame, trackReference, motionMap, patchScene, getFrames, compareReference and checkPacing. Local scripts archived source and verification metadata, checked service readiness, and ran git."
   }
 }

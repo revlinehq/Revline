@@ -3,10 +3,10 @@
   "projectName": "Engine test A: GSAP (RightNow rebuild)",
   "editor": "http://localhost:3001/editor/j970eespkq2j4crma0yhj5mpc18haer6",
   "timelineId": "main",
-  "revision": 51,
+  "revision": 53,
   "sceneClipId": "5b49332a-bc9f-4fc8-a8cd-383e406bf6a1",
   "sourceFile": "film.tsx.txt",
-  "sourceSHA256": "0dde55788ca45e5a62b5a8ebba858950b0523d610e33ea39c09ddbb14d5156ae",
+  "sourceSHA256": "adc569960e6dcd2192f80312dbc4a0be83d3bda0a984274f2de74595bdd0ba62",
   "duration": 30.966667,
   "fps": 60,
   "visualSceneCount": 1,
@@ -127,29 +127,64 @@
       "revision": 50
     },
     {
+      "time": 9.217,
+      "difference": 15,
+      "revision": 53
+    },
+    {
       "time": 9.3,
-      "difference": 20,
-      "revision": 41
+      "difference": 15,
+      "revision": 53
     },
     {
       "time": 9.5,
-      "difference": 19,
-      "revision": 41
+      "difference": 14,
+      "revision": 53
     },
     {
       "time": 9.7,
+      "difference": 14,
+      "revision": 53
+    },
+    {
+      "time": 10.1,
       "difference": 15,
-      "revision": 41
+      "revision": 53
+    },
+    {
+      "time": 10.3,
+      "difference": 9,
+      "revision": 53
+    },
+    {
+      "time": 10.4,
+      "difference": 7,
+      "revision": 53
     },
     {
       "time": 10.5,
-      "difference": 7,
-      "revision": 39
+      "difference": 6,
+      "revision": 53
     },
     {
-      "time": 11.37,
-      "difference": 15,
-      "revision": 43
+      "time": 10.6,
+      "difference": 20,
+      "revision": 53
+    },
+    {
+      "time": 10.75,
+      "difference": 20,
+      "revision": 53
+    },
+    {
+      "time": 11.117,
+      "difference": 19,
+      "revision": 53
+    },
+    {
+      "time": 11.3,
+      "difference": 19,
+      "revision": 53
     },
     {
       "time": 11.5,
@@ -242,7 +277,8 @@
     "git diff --check",
     "Revision 47 green-dither and scatter correction: native details/boundaries, 3 compared iterations, 3 scoped motionMap diffs, and pacing checks; residuals recorded.",
     "Revision 50 closing handoff: three rendered iterations, 12 final comparisons, native boundary/detail frames, scoped motionMap, and pacing with no flags.",
-    "Revision 51 dither speed: native before/after, six reference comparisons all <=21, scoped motionMap/pacing, and preserved closing handoff frames."
+    "Revision 51 dither speed: native before/after, six reference comparisons all <=21, scoped motionMap/pacing, and preserved closing handoff frames.",
+    "Revision 53 upload menu: dense source windows and crops, three measured cursor tracks, native entrance/all-row-hover/click checks, 12 final comparisons all <=20, scoped motionMap and pacing."
   ],
   "development": {
     "web": "Ready and left running on localhost:3001",
@@ -585,5 +621,185 @@
       "note": "The extra measured transition at 4.4 s is the requested faster effect. Composite camera-fit residuals remain; camera tweens are unchanged."
     },
     "closingHandoff": "Frames at 5.65, 5.75 and 5.766667 s inspected at revision 51; previous closing correction is preserved."
+  },
+  "uploadMenuInteractions": {
+    "revision": 53,
+    "container": {
+      "start": 9.2,
+      "initialScaleX": 0.68,
+      "initialWidth": 292.4,
+      "settledWidth": 430,
+      "horizontalExpansionDuration": 0.2,
+      "initialScaleY": 1.07,
+      "ghostOffsets": [
+        -145,
+        -70
+      ],
+      "ghostOvershoot": [
+        65,
+        32
+      ],
+      "veilColor": "#daecbb",
+      "ghostColor": "#d8eab7",
+      "menuBodyColor": "#c0c0c0"
+    },
+    "hovers": [
+      {
+        "label": "Videos",
+        "start": 10.016667,
+        "fullyGreen": 10.066667
+      },
+      {
+        "label": "Images",
+        "start": 10.216667,
+        "fullyGreen": 10.266667
+      },
+      {
+        "label": "Text",
+        "start": 10.35,
+        "fullyGreen": 10.4
+      },
+      {
+        "label": "Codebases",
+        "start": 10.45,
+        "fullyGreen": 10.5
+      },
+      {
+        "label": "PDFs",
+        "start": 10.55,
+        "fullyGreen": 10.6
+      },
+      {
+        "label": "Anything...",
+        "start": 10.666667,
+        "fullyGreen": 10.716667
+      }
+    ],
+    "click": {
+      "pressStart": 11.066667,
+      "pressEnd": 11.116667,
+      "releaseEnd": 11.216667,
+      "scaleX": 1.015,
+      "scaleY": 0.96,
+      "rotationDegrees": -0.6,
+      "easeIn": "power4.in",
+      "easeOut": "power2.out"
+    },
+    "compareReference": [
+      {
+        "time": 9.217,
+        "difference": 15
+      },
+      {
+        "time": 9.3,
+        "difference": 15
+      },
+      {
+        "time": 9.5,
+        "difference": 14
+      },
+      {
+        "time": 9.7,
+        "difference": 14
+      },
+      {
+        "time": 10.1,
+        "difference": 15
+      },
+      {
+        "time": 10.3,
+        "difference": 9
+      },
+      {
+        "time": 10.4,
+        "difference": 7
+      },
+      {
+        "time": 10.5,
+        "difference": 6
+      },
+      {
+        "time": 10.6,
+        "difference": 20
+      },
+      {
+        "time": 10.75,
+        "difference": 20
+      },
+      {
+        "time": 11.117,
+        "difference": 19
+      },
+      {
+        "time": 11.3,
+        "difference": 19
+      }
+    ],
+    "maximumComparisonDifference": 20,
+    "allComparedMomentsAtOrBelow25": true,
+    "retainedPacingReason": "The source scans six rows during the push-in, briefly holds the selected row, then activates the terminal. The generic short-hold flag is retained to preserve that measured sequence.",
+    "motionMap": {
+      "start": 9.15,
+      "end": 11.5,
+      "timelineStart": 9.15,
+      "differences": [
+        {
+          "time": 9.15,
+          "issue": "Camera move differs from the reference: ease power1.out where the reference uses custom (closest named: circ.in); smaller (zoom in 2% vs zoom in 6% + tilt down 1.2%); 0.6s long vs 1s.",
+          "fix": "tl.fromTo(camera, { scale: 1, xPercent: 0, yPercent: 0, rotation: 0 }, { scale: 1.062, xPercent: 0.13, yPercent: -1.24, rotation: 0.03, duration: 1, ease: CustomEase.create(\"measured\", \"M0,0 C0.8,0.6 0.8,0 1,1\") }, 9.15)"
+        },
+        {
+          "time": 9.95,
+          "issue": "Camera move differs from the reference: ease power1.inOut where the reference uses sine.inOut; starts 0.2s early; 1s long vs 0.33s.",
+          "fix": "tl.fromTo(camera, { scale: 1.062, xPercent: 0.13, yPercent: -1.24, rotation: 0.03 }, { scale: 1.322, xPercent: 1.03, yPercent: -9.88, rotation: -0.41, duration: 0.33, ease: 'sine.inOut' }, 10.15)"
+        },
+        {
+          "time": 10.48,
+          "issue": "The reference camera moves here (tilt down 2% + rotate -1.8\u00b0, 0.1s, none, it starts with content changes (top, 54.2% of the frame) at 10.32s); yours does not.",
+          "fix": "tl.fromTo(camera, { scale: 1.322, xPercent: 1.03, yPercent: -9.88, rotation: -0.41 }, { scale: 1.317, xPercent: 0.98, yPercent: -11.9, rotation: -2.23, duration: 0.1, ease: 'none' }, 10.48)"
+        },
+        {
+          "time": 10.58,
+          "issue": "The reference camera moves here (zoom in 14% + pan left 3.6% + tilt down 5.1% + rotate -2.4\u00b0, 0.23s, none, it starts with an element scales up (middle) at 10.78s); yours does not.",
+          "fix": "tl.fromTo(camera, { scale: 1.317, xPercent: 0.98, yPercent: -11.9, rotation: -2.23 }, { scale: 1.5, xPercent: 4.62, yPercent: -16.97, rotation: -4.67, duration: 0.23, ease: 'none' }, 10.58)"
+        },
+        {
+          "time": 11.28,
+          "issue": "The reference camera moves here (zoom out 14% + pan right 1.1% + tilt up 1.9%, 0.2s, none, it starts with content changes (top left, 2.1% of the frame) at 11.28s); yours does not.",
+          "fix": "tl.fromTo(camera, { scale: 1.455, xPercent: 4.54, yPercent: -16.99, rotation: -4.7 }, { scale: 1.248, xPercent: 3.44, yPercent: -15.09, rotation: -4.49, duration: 0.2, ease: 'none' }, 11.28)"
+        },
+        {
+          "time": 11.35,
+          "issue": "Camera move differs from the reference: ease none where the reference uses custom (closest named: back.in(1.7)); starts 0.53s late; 0.13s long vs 0.47s.",
+          "fix": "tl.fromTo(camera, { scale: 1.5, xPercent: 4.62, yPercent: -16.97, rotation: -4.67 }, { scale: 1.455, xPercent: 4.54, yPercent: -16.99, rotation: -4.7, duration: 0.47, ease: CustomEase.create(\"measured\", \"M0,0 C0.6,-0.4 0.9,-0.4 1,1\") }, 10.82)"
+        }
+      ],
+      "remainingDifferenceCount": 6,
+      "referenceTransitions": [
+        {
+          "area": 60,
+          "duration": 0.13,
+          "ease": "sine.inOut",
+          "end": 11.48,
+          "kind": "transition",
+          "start": 11.35
+        }
+      ],
+      "timelineTransitions": [
+        {
+          "area": 56,
+          "duration": 0.07,
+          "ease": "sine.out",
+          "end": 11.48,
+          "kind": "transition",
+          "start": 11.42
+        }
+      ]
+    },
+    "remainingDifferences": [
+      "Six composite camera-fit flags remain for the entrance drift, push timing/ease, later tilts/zoom and exit recession. Camera tweens were retained in this interaction correction.",
+      "The transition classifier reads the terminal handoff as .07 s starting 11.42 s, against .13 s starting 11.35 s in the reference.",
+      "Background geometry, exact translucent block shapes, camera projection and cursor deformation remain approximations."
+    ]
   }
 }
