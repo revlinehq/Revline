@@ -356,3 +356,4 @@ div.landing-hero-buttons>.landing-reveal-content{display:flex;align-items:center
 /* Apps named in running text by their logos alone, at text height. */
 .landing-app-logos{display:inline-flex;align-items:center;gap:.3em;vertical-align:-.2em}
 .landing-app-logos img{width:1.2em;height:1.2em;flex:none}
+.landing-clippers-frame{position:relative;width:100%;aspect-ratio:16/9;overflow:hidden;border:1px solid #0000000f;border-radius:12px;background:#17181c}
