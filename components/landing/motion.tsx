@@ -10,10 +10,10 @@ type Film = { src: string; poster: string };
 // Each segment swaps the preview: its footage and its motion overlay.
 const kinds: Kind[] = [
   {
-    // Revline's own launch film, made in Revline from two screenshots; its titles are in the film, so no overlay.
+    // The first cut of Revline's launch film (the hero plays the latest one); its titles are in the film, so no overlay.
     id: 'launch', label: 'Launch videos', image: 'vlog',
     overlay: null,
-    film: { src: '/landing/revline-launch.mp4', poster: '/landing/revline-launch-poster.webp' },
+    film: { src: '/landing/launch-film-original.mp4', poster: '/landing/launch-film-original-poster.webp' },
   },
   {
     // "How servers work", an explainer made in Revline; its graphics are in the film.
