@@ -3,10 +3,10 @@
   "projectName": "Engine test A: GSAP (RightNow rebuild)",
   "editor": "http://localhost:3001/editor/j970eespkq2j4crma0yhj5mpc18haer6",
   "timelineId": "main",
-  "revision": 74,
+  "revision": 75,
   "sceneClipId": "5b49332a-bc9f-4fc8-a8cd-383e406bf6a1",
   "sourceFile": "film.tsx.txt",
-  "sourceSHA256": "fca9d54c8a47268b68750ca7deab17d9b3b71da9f8e944300896149ff5246bed",
+  "sourceSHA256": "6503550a3b8e67e1caab00c062aaafd88e87a6223956a57787d0ed337840cc40",
   "duration": 30.966667,
   "fps": 60,
   "visualSceneCount": 1,
@@ -510,7 +510,8 @@
     "Revision 61 continuous smiley ball: dense source crop and reference tracking, native adjacent frames through 18:14, later yaw checks, 12 final comparisons all 8-15/100, pacing without flags and two recorded motionMap differences. Exact source comparison confirms all code outside GridSphere unchanged.",
     "Revision 63 identity corners: dense source window and corner track, two rendered inset iterations, exact one-line source comparison, five locked sections unchanged, six final reference comparisons (one 26/100 residual), scoped motionMap with no differences and pacing with no flags.",
     "Revision 73: exact scoped credit change, six native frames through closing cut, five locked sections/15 samples unchanged, motionMap with zero differences, pacing without flags, audio/marker identity check, and exact cloud-source archive.",
-    "Revision 74: 16 native frames including all four flashed frames and alternating normals; restored colors checked before/after, exact source insertion, reference comparison, scoped motionMap/pacing, unchanged audio/markers, and cloud-source archive."
+    "Revision 74: 16 native frames including all four flashed frames and alternating normals; restored colors checked before/after, exact source insertion, reference comparison, scoped motionMap/pacing, unchanged audio/markers, and cloud-source archive.",
+    "Revision 75: exact two Prompt replacements, six native before/after frames, one-line label fit and preserved first/last glyph timing, scoped motionMap/pacing, unchanged audio/markers, and exact cloud-source archive."
   ],
   "development": {
     "web": "Ready and left running on localhost:3001",
@@ -2933,6 +2934,266 @@
       "No pacing flags over 13.8-14.5 s at 10 fps. This coarse check can miss single-frame flashes; every alternating frame was separately inspected with native getFrames."
     ],
     "engine": "GSAP through useTimeline; timed tl.set color changes only.",
+    "exported": false
+  },
+  "revlineSharinganPrompt": {
+    "revision": 75,
+    "intentionalReferenceDeviation": true,
+    "briefRuleId": "ffa2d92c",
+    "changes": [
+      "Changed only the final Ship this update? prompt option from YES/NO to exactly Revline Sharingan, preserving the existing green ink, active arrow, row size and position.",
+      "Changed only the last row typing rate from 34 to 102 chars/s. The original 6-character label and replacement 16-character label both reveal their final glyph 5/34 = 15/102 seconds after their first glyph.",
+      "The final option still starts at local 6.35 s (global 14.766667 s), completes its glyph reveal around 14.913726 s and settles its color around 15.053726 s before the unchanged cut at 15.916667 s.",
+      "All code outside Prompt is byte-identical, including the four purple/red mascot flashes, upward face tilt and camera movement.",
+      "Saved the custom text as a user branding exception in project brief rule ffa2d92c. Audio, markers, assets, other scenes and total duration are unchanged."
+    ],
+    "label": "Revline Sharingan",
+    "timing": {
+      "start": 14.766667,
+      "lastGlyph": 14.913725823529411,
+      "colorSettled": 15.053725823529412,
+      "cps": 102,
+      "originalCps": 34,
+      "sameFirstAndLastGlyphTimes": true
+    },
+    "sourceSHA256": "6503550a3b8e67e1caab00c062aaafd88e87a6223956a57787d0ed337840cc40",
+    "sourceCharacters": 67529,
+    "verification": {
+      "compiled": true,
+      "exactTwoReplacementsOnly": true,
+      "onlyPromptChanged": true,
+      "nativeBefore": [
+        {
+          "time": 14.766666666666667
+        },
+        {
+          "time": 14.9
+        },
+        {
+          "time": 15.1
+        },
+        {
+          "time": 15.4
+        },
+        {
+          "time": 15.8
+        },
+        {
+          "time": 15.9
+        }
+      ],
+      "nativeAfter": [
+        {
+          "time": 14.766666666666667
+        },
+        {
+          "time": 14.85
+        },
+        {
+          "time": 14.933333333333334
+        },
+        {
+          "time": 15.1
+        },
+        {
+          "time": 15.8
+        },
+        {
+          "time": 15.9
+        }
+      ],
+      "nativeResult": "Label fits on one line at full size, is fully typed by 14.933333 s, remains readable through the unchanged outgoing camera move at 15.9 s.",
+      "motionMap": {
+        "differences": [
+          {
+            "time": 14.8,
+            "issue": "The reference camera moves here (zoom in 5%, 0.53s, sine.out); yours does not.",
+            "fix": "tl.fromTo(camera, { scale: 1, xPercent: 0, yPercent: 0, rotation: 0 }, { scale: 1.046, xPercent: 0.05, yPercent: 0.08, rotation: 0.15, duration: 0.53, ease: 'sine.out' }, 14.8)"
+          },
+          {
+            "time": 15.6,
+            "issue": "Camera move differs from the reference: ease none where the reference uses power1.in; starts 0.2s late; 0.27s long vs 0.5s.",
+            "fix": "tl.fromTo(camera, { scale: 1.047, xPercent: 0.05, yPercent: 0.09, rotation: 0.15 }, { scale: 0.958, xPercent: 0.01, yPercent: 0.14, rotation: 0.03, duration: 0.5, ease: 'power1.in' }, 15.4)"
+          }
+        ],
+        "next": "Fix the differences in the scene code (each fix is the reference move as a GSAP tween at your timeline time), then run motionMap with the same windows again. Keep a difference only on purpose, with a reason.",
+        "reference": {
+          "camera": [
+            {
+              "duration": 0.53,
+              "ease": "sine.out",
+              "end": 15.33,
+              "fit": 0.97,
+              "flag": "no cause: nothing changes in the frame when this move starts or ends",
+              "from": {
+                "rotation": 0,
+                "scale": 1,
+                "x": 0,
+                "y": 0
+              },
+              "gsap": "tl.fromTo(camera, { scale: 1, xPercent: 0, yPercent: 0, rotation: 0 }, { scale: 1.046, xPercent: 0.05, yPercent: 0.08, rotation: 0.15, duration: 0.53, ease: 'sine.out' }, 14.8)",
+              "kind": "zoom in 5%",
+              "start": 14.8,
+              "to": {
+                "rotation": 0.15,
+                "scale": 1.046,
+                "x": 0.05,
+                "y": 0.08
+              }
+            },
+            {
+              "cause": "lands on a cut at 15.9s",
+              "duration": 0.5,
+              "ease": "power1.in",
+              "end": 15.9,
+              "fit": 0.97,
+              "from": {
+                "rotation": 0.15,
+                "scale": 1.047,
+                "x": 0.05,
+                "y": 0.09
+              },
+              "gsap": "tl.fromTo(camera, { scale: 1.047, xPercent: 0.05, yPercent: 0.09, rotation: 0.15 }, { scale: 0.958, xPercent: 0.01, yPercent: 0.14, rotation: 0.03, duration: 0.5, ease: 'power1.in' }, 15.4)",
+              "kind": "zoom out 9%",
+              "start": 15.4,
+              "to": {
+                "rotation": 0.03,
+                "scale": 0.958,
+                "x": 0.01,
+                "y": 0.14
+              }
+            }
+          ],
+          "changes": [],
+          "elements": [
+            {
+              "duration": 0.1,
+              "ease": "power1.out",
+              "end": 14.87,
+              "fit": 0.97,
+              "gsap": "tl.fromTo(el, { xPercent: 0, yPercent: 0, scale: 1 }, { xPercent: 1, yPercent: -2, scale: 1.004, duration: 0.1, ease: 'power1.out' }, 14.77)",
+              "kind": "slides up (2.2% of the frame)",
+              "region": {
+                "height": 33.3,
+                "left": 50,
+                "top": 33.3,
+                "width": 25
+              },
+              "start": 14.77
+            }
+          ],
+          "end": 15.93,
+          "fps": 30,
+          "holds": [],
+          "start": 14.7,
+          "transitions": [
+            {
+              "area": 100,
+              "duration": 0.033,
+              "end": 15.93,
+              "kind": "cut",
+              "start": 15.9
+            }
+          ],
+          "unanswered": []
+        },
+        "timeline": {
+          "camera": [
+            {
+              "cause": "starts with content changes (middle, 3.5% of the frame) at 15.6s",
+              "duration": 0.27,
+              "ease": "none",
+              "end": 15.87,
+              "fit": 0.94,
+              "from": {
+                "rotation": 0.03,
+                "scale": 1,
+                "x": 0.01,
+                "y": 0.1
+              },
+              "gsap": "tl.fromTo(camera, { scale: 1, xPercent: 0.01, yPercent: 0.1, rotation: 0.03 }, { scale: 0.927, xPercent: 0.01, yPercent: 1.57, rotation: 0.22, duration: 0.27, ease: 'none' }, 15.6)",
+              "kind": "zoom out 7% + tilt up 1.5%",
+              "start": 15.6,
+              "to": {
+                "rotation": 0.22,
+                "scale": 0.927,
+                "x": 0.01,
+                "y": 1.57
+              }
+            }
+          ],
+          "changes": [
+            {
+              "area": 3.5,
+              "end": 15.9,
+              "kind": "change",
+              "region": {
+                "height": 33.3,
+                "left": 31.3,
+                "top": 33.3,
+                "width": 12.5
+              },
+              "start": 15.6
+            },
+            {
+              "area": 1.4,
+              "end": 15.8,
+              "kind": "change",
+              "region": {
+                "height": 11.1,
+                "left": 25,
+                "top": 55.6,
+                "width": 12.5
+              },
+              "start": 15.63
+            },
+            {
+              "area": 1.4,
+              "end": 15.9,
+              "kind": "change",
+              "region": {
+                "height": 22.2,
+                "left": 56.3,
+                "top": 33.3,
+                "width": 6.3
+              },
+              "start": 15.77
+            }
+          ],
+          "elements": [],
+          "end": 15.93,
+          "fps": 30,
+          "holds": [],
+          "start": 14.7,
+          "transitions": [
+            {
+              "area": 100,
+              "duration": 0.033,
+              "end": 15.93,
+              "kind": "cut",
+              "start": 15.9
+            }
+          ],
+          "unanswered": []
+        }
+      },
+      "pacing": {
+        "revision": 75,
+        "range": "14.7-15.9s",
+        "samples": "13 at 10 fps",
+        "changePerSecond": "15s 17%, 16s 8%",
+        "cuts": [],
+        "cameraMoves": 1,
+        "flags": [],
+        "next": "No pacing problems found in this range."
+      },
+      "audioAndMarkersUnchanged": true
+    },
+    "remainingDifferences": [
+      "Two motionMap camera-fit residuals over 14.7-15.95 s: fitted reference 5% push at 14.8 s is not detected on the timeline, and fitted outgoing move starts 0.2 s later with a shorter/linear fit. No camera tween was changed by this text edit; existing camera source is byte-identical.",
+      "No pacing flags over the checked range. Revline Sharingan replacing YES/NO is an intentional user branding difference."
+    ],
+    "engine": "GSAP through useTimeline; existing deterministic Type animation retained.",
     "exported": false
   }
 }
