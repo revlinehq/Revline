@@ -7,8 +7,7 @@ import { LandingHeading, LandingSection } from './ui';
 type Film = { src: string; poster?: string };
 // The launch film that inspired ours, and Revline's recreation of it from a pasted link.
 const ORIGINAL: Film & { source: string; href: string } = { src: '/landing/inspo-original.mp4', poster: '/landing/inspo-original-poster.webp', source: '@rightnowai_co on X', href: 'https://x.com/rightnowai_co/status/2116311411072835913' };
-// Not exported yet: the card shows a placeholder until this file exists.
-const REMAKE: Film | null = null;
+const REMAKE: Film | null = { src: '/landing/inspo-remake.mp4', poster: '/landing/inspo-remake-poster.jpg' };
 
 /** Both films play together, muted and looping, while the section is on screen. */
 function useOnScreen<T extends Element>() {
