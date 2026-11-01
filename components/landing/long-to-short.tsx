@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Pause, Play } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { LandingHeading, LandingSection } from './ui';
+import { LandingSection } from './ui';
 
 // Source ranges from project j97606nxmxjxpzb0x26fqys0xd8hbdg5, main timeline, revision 216.
 // [start, duration] in playback order; the closing line moves to the end.
@@ -63,8 +63,10 @@ export function LandingLongToShort() {
     else element.pause();
   }
 
-  return <LandingSection id="long-to-short" className="landing-long-to-short" headingId="landing-long-to-short-heading">
-    <LandingHeading id="landing-long-to-short-heading" title="One long take in. A clean short out." description="Revline watched a 3 minute recording, kept the best 40 seconds, and cut every retake and pause." />
+  return <LandingSection id="long-to-short" className="landing-long-to-short" aria-label="Long recording to short video">
+    <div className="landing-heading">
+      <p>Revline watched a 3 minute recording, kept the best 40 seconds, and cut every retake and pause.</p>
+    </div>
     <Card className="landing-lts-card ring-0">
       <div className="landing-lts-raw">
         <div className="landing-lts-label"><span>Raw recording</span><span>3:07</span></div>
