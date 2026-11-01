@@ -3,10 +3,10 @@
   "projectName": "Engine test A: GSAP (RightNow rebuild)",
   "editor": "http://localhost:3001/editor/j970eespkq2j4crma0yhj5mpc18haer6",
   "timelineId": "main",
-  "revision": 72,
+  "revision": 73,
   "sceneClipId": "5b49332a-bc9f-4fc8-a8cd-383e406bf6a1",
   "sourceFile": "film.tsx.txt",
-  "sourceSHA256": "1f6b0e7575cf63f6b40e7face92689b6780e2b623e1de0ca1934a52c7e72ee07",
+  "sourceSHA256": "f9c7b824172beab52658c884520ed505ca69fc5656b6ef1982f79865325d376f",
   "duration": 30.966667,
   "fps": 60,
   "visualSceneCount": 1,
@@ -460,7 +460,8 @@
     "Revision 59 cursor-first spring: 12 native frames show held camera during the scan, stopped pointer, spring overshoot and settle before click; six locked sections render unchanged. Pacing has no flags. Twelve reference comparisons retain two deliberate late-push differences (28/29); motionMap records the corresponding two timing/ease differences.",
     "Revision 60 terminal background: exact one-tween source change, native recession/overshoot/settle and cover inspection, eight reference comparisons, scoped motionMap and pacing. Terminal source is unchanged; six locked sections pass render guard. One 29/100 comparison and two deliberate spring-speed flags retained with reasons.",
     "Revision 61 continuous smiley ball: dense source crop and reference tracking, native adjacent frames through 18:14, later yaw checks, 12 final comparisons all 8-15/100, pacing without flags and two recorded motionMap differences. Exact source comparison confirms all code outside GridSphere unchanged.",
-    "Revision 63 identity corners: dense source window and corner track, two rendered inset iterations, exact one-line source comparison, five locked sections unchanged, six final reference comparisons (one 26/100 residual), scoped motionMap with no differences and pacing with no flags."
+    "Revision 63 identity corners: dense source window and corner track, two rendered inset iterations, exact one-line source comparison, five locked sections unchanged, six final reference comparisons (one 26/100 residual), scoped motionMap with no differences and pacing with no flags.",
+    "Revision 73: exact scoped credit change, six native frames through closing cut, five locked sections/15 samples unchanged, motionMap with zero differences, pacing without flags, audio/marker identity check, and exact cloud-source archive."
   ],
   "development": {
     "web": "Ready and left running on localhost:3001",
@@ -2588,6 +2589,84 @@
       "One pacing heuristic flags a 14% apparent zoom over 6.7-6.8 s during the small logo/text spread and typing. The existing fast spread is retained with the completed title held from about 7.1 s through the 8.416667 s cut."
     ],
     "detailedAuditFile": "audit.json",
+    "exported": false
+  },
+  "clonedFromRightNowCredit": {
+    "revision": 73,
+    "intentionalReferenceDeviation": true,
+    "briefRuleId": "0c0cc574",
+    "changes": [
+      "Changed the first Revline Sharingan identity card's credit to exactly Cloned from RightNow.",
+      "Widened the first credit container from 250 to 400 px and centered it at x=960. Font size stays 26 px and top stays 617 px.",
+      "Adjusted first-card typing to 150 chars/s for 20 characters, retaining the previous credit's approximately 0.13 s typing interval and unchanged GSAP opacity timing.",
+      "The ending identity branch and all code outside this byline element are unchanged.",
+      "Saved this user-requested reference exception in project brief rule 0c0cc574."
+    ],
+    "credit": "Cloned from RightNow",
+    "sourceSHA256": "f9c7b824172beab52658c884520ed505ca69fc5656b6ef1982f79865325d376f",
+    "nativeFrames": [
+      {
+        "time": 7.35
+      },
+      {
+        "time": 7.5
+      },
+      {
+        "time": 7.6
+      },
+      {
+        "time": 8.233333333333333
+      },
+      {
+        "time": 8.4
+      },
+      {
+        "time": 8.433333333333334
+      }
+    ],
+    "lockedSectionGuard": {
+      "passed": true,
+      "checked": [
+        9.917,
+        12.55,
+        15.167,
+        16.45,
+        17.4,
+        18.35,
+        19.333,
+        22.267,
+        25.217,
+        26.783,
+        28.083,
+        29.383,
+        29.4,
+        30.083,
+        30.767
+      ],
+      "note": "Code outside the scope changed; the 5 locked section(s) it reaches render the same, so it was saved."
+    },
+    "motionMap": {
+      "start": 7.3,
+      "end": 8.5,
+      "differences": []
+    },
+    "pacing": {
+      "revision": 73,
+      "range": "7.3-8.5s",
+      "samples": "13 at 10 fps",
+      "changePerSecond": "7s 0%, 8s 98%",
+      "cuts": [
+        8.5
+      ],
+      "cameraMoves": 0,
+      "flags": [],
+      "next": "No pacing problems found in this range."
+    },
+    "audioAndMarkersUnchanged": true,
+    "remainingDifferences": [
+      "No motionMap differences or pacing flags over 7.3-8.5 s. Custom credit, Revline identity and logo intentionally differ from the reference. Prior film-wide residuals remain as recorded."
+    ],
+    "engine": "GSAP through useTimeline; existing deterministic Type animation retained.",
     "exported": false
   }
 }

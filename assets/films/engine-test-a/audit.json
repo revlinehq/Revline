@@ -1,9 +1,9 @@
 {
   "projectId": "j970eespkq2j4crma0yhj5mpc18haer6",
   "timelineId": "main",
-  "revision": 72,
-  "status": "Identity corner rectangles close before Upload at revision 63; scoped motionMap/pacing clean and overall lockup visual differences recorded",
-  "sourceSHA256": "1f6b0e7575cf63f6b40e7face92689b6780e2b623e1de0ca1934a52c7e72ee07",
+  "revision": 73,
+  "status": "Revision 73: first identity credit reads Cloned from RightNow; native frames fit and scoped motionMap/pacing are clean",
+  "sourceSHA256": "f9c7b824172beab52658c884520ed505ca69fc5656b6ef1982f79865325d376f",
   "changes": {
     "intro": [
       "GSAP background blur builds 2.8–3.05 s, holds through 4.3 s and resolves during the crisp dither handoff by 4.733333 s.",
@@ -2285,7 +2285,7 @@
     "patchesCompiled": true
   },
   "finalTimeline": {
-    "revision": 63,
+    "revision": 73,
     "sceneCount": 1,
     "clipCount": 8,
     "markers": 9,
@@ -8128,5 +8128,83 @@
     "engine": "GSAP through useTimeline under scene-engine and GSAP rules; no timers or CSS animation.",
     "exported": false,
     "sourceSHA256": "1f6b0e7575cf63f6b40e7face92689b6780e2b623e1de0ca1934a52c7e72ee07"
+  },
+  "clonedFromRightNowCredit": {
+    "revision": 73,
+    "intentionalReferenceDeviation": true,
+    "briefRuleId": "0c0cc574",
+    "changes": [
+      "Changed the first Revline Sharingan identity card's credit to exactly Cloned from RightNow.",
+      "Widened the first credit container from 250 to 400 px and centered it at x=960. Font size stays 26 px and top stays 617 px.",
+      "Adjusted first-card typing to 150 chars/s for 20 characters, retaining the previous credit's approximately 0.13 s typing interval and unchanged GSAP opacity timing.",
+      "The ending identity branch and all code outside this byline element are unchanged.",
+      "Saved this user-requested reference exception in project brief rule 0c0cc574."
+    ],
+    "credit": "Cloned from RightNow",
+    "sourceSHA256": "f9c7b824172beab52658c884520ed505ca69fc5656b6ef1982f79865325d376f",
+    "nativeFrames": [
+      {
+        "time": 7.35
+      },
+      {
+        "time": 7.5
+      },
+      {
+        "time": 7.6
+      },
+      {
+        "time": 8.233333333333333
+      },
+      {
+        "time": 8.4
+      },
+      {
+        "time": 8.433333333333334
+      }
+    ],
+    "lockedSectionGuard": {
+      "passed": true,
+      "checked": [
+        9.917,
+        12.55,
+        15.167,
+        16.45,
+        17.4,
+        18.35,
+        19.333,
+        22.267,
+        25.217,
+        26.783,
+        28.083,
+        29.383,
+        29.4,
+        30.083,
+        30.767
+      ],
+      "note": "Code outside the scope changed; the 5 locked section(s) it reaches render the same, so it was saved."
+    },
+    "motionMap": {
+      "start": 7.3,
+      "end": 8.5,
+      "differences": []
+    },
+    "pacing": {
+      "revision": 73,
+      "range": "7.3-8.5s",
+      "samples": "13 at 10 fps",
+      "changePerSecond": "7s 0%, 8s 98%",
+      "cuts": [
+        8.5
+      ],
+      "cameraMoves": 0,
+      "flags": [],
+      "next": "No pacing problems found in this range."
+    },
+    "audioAndMarkersUnchanged": true,
+    "remainingDifferences": [
+      "No motionMap differences or pacing flags over 7.3-8.5 s. Custom credit, Revline identity and logo intentionally differ from the reference. Prior film-wide residuals remain as recorded."
+    ],
+    "engine": "GSAP through useTimeline; existing deterministic Type animation retained.",
+    "exported": false
   }
 }
