@@ -82,7 +82,7 @@
     "change": "Preserve requested motion range in frame snapshots"
   },
   "priority": "User requested reference structure and timing take precedence over generic one-second holds, no grids, and quiet house styling.",
-  "revision": 55,
+  "revision": 58,
   "verificationFile": "verification.json",
   "sourceFile": "film.tsx.txt",
   "soundEffects": {
@@ -148,7 +148,7 @@
     "generatedMusicAndCuesMuted": true,
     "activeAudioAssetId": "j57eeahvakwfy1ntsewb2jm3zh8hb6ee"
   },
-  "sourceSHA256": "142667359787c57852d12bedc7bd03f8e1e5c24c5cf73e3f90f8a6cb4ba9ded5",
+  "sourceSHA256": "3ff2b44e52761b9f427cab42e18531a3df6038fdbd0d27e69b3e5f5f1bb482bc",
   "fonts": [
     "JetBrains Mono",
     "Pixelify Sans"
@@ -287,6 +287,24 @@
     ],
     "method": "Native readFrames at 30 fps plus exact 60 fps samples; visual reconstruction of independently changing layer edges. All motion through useTimeline, seeded start states and explicit fromTo phases.",
     "sourceSHA256": "142667359787c57852d12bedc7bd03f8e1e5c24c5cf73e3f90f8a6cb4ba9ded5",
+    "verificationFile": "verification.json",
+    "detailedAuditFile": "audit.json",
+    "exported": false
+  },
+  "thickerPixelRip": {
+    "revision": 58,
+    "changes": [
+      "Enlarged the shared pixel-rip fragments from 24/32/40 px to 40/52/64 px, including extended and L-shaped clusters.",
+      "Increased the green rim from 27 px to a 48 px maximum and coarsened the staircase grid from 24 px to a 40 px maximum.",
+      "Ramped the grid/rim from 16 px with the expanding GSAP radius, keeping the earliest aperture open; fragments grow from scale 0.2 to 1 over 0.25 s with power1.in from local 0.03 s.",
+      "Preserved the 0.95/0.9 s reveal sweeps, all 72 fragment flight paths and travel timing, downstream content, soundtrack, actual supplied background, and other Beats."
+    ],
+    "skills": [
+      "scene-engine/react-scenes",
+      "gsap/recipe-mask-wipe",
+      "gsap/recipe-fly-off"
+    ],
+    "sourceSHA256": "3ff2b44e52761b9f427cab42e18531a3df6038fdbd0d27e69b3e5f5f1bb482bc",
     "verificationFile": "verification.json",
     "detailedAuditFile": "audit.json",
     "exported": false

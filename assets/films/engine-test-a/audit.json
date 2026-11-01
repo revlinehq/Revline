@@ -1,9 +1,9 @@
 {
   "projectId": "j970eespkq2j4crma0yhj5mpc18haer6",
   "timelineId": "main",
-  "revision": 55,
-  "status": "Three-panel green menu entrance rebuilt and verified at revision 55; residual visual approximations and historical camera-fit differences recorded",
-  "sourceSHA256": "142667359787c57852d12bedc7bd03f8e1e5c24c5cf73e3f90f8a6cb4ba9ded5",
+  "revision": 58,
+  "status": "Thicker pixel-rip fragments and rim verified at revision 58; four scoped camera-fit differences and historical residuals recorded",
+  "sourceSHA256": "3ff2b44e52761b9f427cab42e18531a3df6038fdbd0d27e69b3e5f5f1bb482bc",
   "changes": {
     "intro": [
       "GSAP background blur builds 2.8–3.05 s, holds through 4.3 s and resolves during the crisp dither handoff by 4.733333 s.",
@@ -2285,7 +2285,7 @@
     "patchesCompiled": true
   },
   "finalTimeline": {
-    "revision": 55,
+    "revision": 58,
     "sceneCount": 1,
     "clipCount": 8,
     "markers": 9,
@@ -5339,6 +5339,277 @@
     ],
     "evidenceFile": "/Users/zuramakaradze/.codex/scratch/revline-gsap-a/container55-evidence.json",
     "sourceSHA256": "142667359787c57852d12bedc7bd03f8e1e5c24c5cf73e3f90f8a6cb4ba9ded5",
+    "exported": false
+  },
+  "thickerPixelRip": {
+    "revision": 58,
+    "request": "The rip transition should be thicker, the pixel ripping transition pixels themselves thicker.",
+    "scope": [
+      {
+        "start": 17.65,
+        "end": 26.05
+      },
+      {
+        "start": 29.016667,
+        "end": 30.966667
+      }
+    ],
+    "affectedEntrances": [
+      17.65,
+      29.016667
+    ],
+    "changes": [
+      "Enlarged the shared pixel-rip fragments from 24/32/40 px to 40/52/64 px, including extended and L-shaped clusters.",
+      "Increased the green rim from 27 px to a 48 px maximum and coarsened the staircase grid from 24 px to a 40 px maximum.",
+      "Ramped the grid/rim from 16 px with the expanding GSAP radius, keeping the earliest aperture open; fragments grow from scale 0.2 to 1 over 0.25 s with power1.in from local 0.03 s.",
+      "Preserved the 0.95/0.9 s reveal sweeps, all 72 fragment flight paths and travel timing, downstream content, soundtrack, actual supplied background, and other Beats."
+    ],
+    "verification": {
+      "sourceWindows": [
+        {
+          "start": 17.65,
+          "end": 18.85,
+          "fps": 10
+        },
+        {
+          "start": 29.016667,
+          "end": 30.216667,
+          "fps": 10
+        }
+      ],
+      "nativeSourceDetails": [
+        17.95,
+        29.316667
+      ],
+      "sourceMeasurement": {
+        "note": "Frame 1920x1080.",
+        "colors": [
+          {
+            "hex": "#fffdf9",
+            "label": "outside fragment left",
+            "x": 355,
+            "y": 520
+          },
+          {
+            "hex": "#77b800",
+            "label": "fragment left",
+            "x": 365,
+            "y": 520
+          },
+          {
+            "hex": "#76b800",
+            "label": "fragment center",
+            "x": 385,
+            "y": 520
+          },
+          {
+            "hex": "#7fb028",
+            "label": "fragment right",
+            "x": 398,
+            "y": 520
+          },
+          {
+            "hex": "#fffeff",
+            "label": "outside fragment right",
+            "x": 405,
+            "y": 520
+          }
+        ],
+        "edges": [
+          {
+            "at": 520,
+            "axis": "x",
+            "changes": [
+              {
+                "after": "#7fb40f",
+                "at": 378,
+                "before": "#fafffe"
+              }
+            ],
+            "from": 340,
+            "label": "isolated fragment width",
+            "to": 420
+          },
+          {
+            "at": 380,
+            "axis": "y",
+            "changes": [],
+            "from": 480,
+            "label": "isolated fragment height",
+            "to": 560
+          }
+        ],
+        "fps": 60,
+        "frames": [
+          {
+            "time": 17.95
+          }
+        ],
+        "height": 1080,
+        "sourceHeight": 1080,
+        "sourceWidth": 1920,
+        "width": 1920,
+        "images": []
+      },
+      "nativeBefore55": [
+        17.85,
+        18.05,
+        18.3,
+        29.216667,
+        29.416667,
+        29.716667
+      ],
+      "nativeViews56": [
+        17.85,
+        18.05,
+        18.3,
+        29.216667,
+        29.416667,
+        29.716667
+      ],
+      "nativeViews57": [
+        17.75,
+        17.85,
+        17.95,
+        29.116667,
+        29.216667,
+        29.316667
+      ],
+      "finalComparisonRevision": 58,
+      "compareReference": {
+        "note": "Reference (left) beside your timeline (right), one moment per row, at 17.75s, 17.85s, 17.95s, 18.05s, 18.3s, 18.85s, 29.117s, 29.217s, 29.317s, 29.417s, 29.717s, 30.217s. Differences: 17.75s 20, 17.85s 17, 17.95s 19, 18.05s 9, 18.3s 11, 18.85s 11, 29.117s 20, 29.217s 16, 29.317s 16, 29.417s 9, 29.717s 18, 30.217s 13.",
+        "next": "Every moment scores 25 or less: this check is done.",
+        "pass": 1,
+        "scores": [
+          {
+            "time": 17.75,
+            "difference": 20
+          },
+          {
+            "time": 17.85,
+            "difference": 17
+          },
+          {
+            "time": 17.95,
+            "difference": 19
+          },
+          {
+            "time": 18.05,
+            "difference": 9
+          },
+          {
+            "time": 18.3,
+            "difference": 11
+          },
+          {
+            "time": 18.85,
+            "difference": 11
+          },
+          {
+            "time": 29.117,
+            "difference": 20
+          },
+          {
+            "time": 29.217,
+            "difference": 16
+          },
+          {
+            "time": 29.317,
+            "difference": 16
+          },
+          {
+            "time": 29.417,
+            "difference": 9
+          },
+          {
+            "time": 29.717,
+            "difference": 18
+          },
+          {
+            "time": 30.217,
+            "difference": 13
+          }
+        ],
+        "images": [
+          "Reference (left) beside your timeline (right), 1",
+          "Reference (left) beside your timeline (right), 2",
+          "Reference (left) beside your timeline (right), 3",
+          "Reference (left) beside your timeline (right), 4"
+        ]
+      },
+      "pacing": [
+        {
+          "revision": 58,
+          "range": "17.65-18.85s",
+          "samples": "13 at 10 fps",
+          "changePerSecond": "18s 230%, 19s 15%",
+          "cuts": [],
+          "cameraMoves": 0,
+          "flags": [],
+          "next": "No pacing problems found in this range."
+        },
+        {
+          "revision": 58,
+          "range": "29.02-30.22s",
+          "samples": "13 at 10 fps",
+          "changePerSecond": "29s 164%, 30s 0%",
+          "cuts": [],
+          "cameraMoves": 0,
+          "flags": [],
+          "next": "No pacing problems found in this range."
+        }
+      ],
+      "motionMap": [
+        {
+          "range": {
+            "start": 17.65,
+            "end": 18.9
+          },
+          "differences": [
+            {
+              "time": 17.92,
+              "issue": "The reference camera moves here (zoom out 2%, 0.2s, none, it starts with an element slides left (middle) at 18.02s); yours does not.",
+              "fix": "tl.fromTo(camera, { scale: 0.997, xPercent: 0.03, yPercent: 0.02, rotation: -0.13 }, { scale: 0.978, xPercent: 0.01, yPercent: 0.02, rotation: -0.23, duration: 0.2, ease: 'none' }, 17.92)"
+            },
+            {
+              "time": 18.08,
+              "issue": "Camera move differs from the reference: ease none where the reference uses sine.in; bigger (zoom in 28% + pan right 0.9% + tilt down 4.3% vs zoom in 2% + pan left 0.9% + rotate 1°).",
+              "fix": "tl.fromTo(camera, { scale: 0.978, xPercent: 0.01, yPercent: 0.02, rotation: -0.23 }, { scale: 1.002, xPercent: 0.95, yPercent: 0.61, rotation: 0.81, duration: 0.23, ease: 'sine.in' }, 18.12)"
+            }
+          ]
+        },
+        {
+          "range": {
+            "start": 29.016667,
+            "end": 30.3
+          },
+          "differences": [
+            {
+              "time": 29.15,
+              "issue": "Camera move differs from the reference: ease sine.in where the reference uses sine.inOut; bigger (zoom in 21% + tilt down 1% vs zoom in 6% + rotate 1.4°).",
+              "fix": "tl.fromTo(camera, { scale: 1, xPercent: 0, yPercent: 0, rotation: 0 }, { scale: 1.06, xPercent: -0.6, yPercent: 0.37, rotation: 1.39, duration: 0.27, ease: 'sine.inOut' }, 29.05)"
+            },
+            {
+              "time": 29.58,
+              "issue": "Camera move differs from the reference: ease custom (closest named: power1.inOut) where the reference uses sine.out; starts 0.26s late; smaller (zoom in 2% vs zoom in 4%); 0.47s long vs 0.73s.",
+              "fix": "tl.fromTo(camera, { scale: 1.06, xPercent: -0.6, yPercent: 0.37, rotation: 1.39 }, { scale: 1.098, xPercent: -0.65, yPercent: 0.32, rotation: 1.38, duration: 0.73, ease: 'sine.out' }, 29.32)"
+            }
+          ]
+        }
+      ],
+      "remainingMotionMapDifferences": 4
+    },
+    "remainingDifferences": [
+      "Four composite camera-fit differences remain over the two reveal windows: proof recession and follow-up ease/magnitude, CTA opening magnitude/ease and later drift timing/ease. Authored camera tracks were preserved for this thickness request; the expanding mask and user-supplied background also contribute to fitted motion.",
+      "Exact rip silhouette and fragment layout remain approximations; supplied background geometry differs from the reference."
+    ],
+    "skills": [
+      "scene-engine/react-scenes",
+      "gsap/recipe-mask-wipe",
+      "gsap/recipe-fly-off"
+    ],
+    "evidenceFile": "/Users/zuramakaradze/.codex/scratch/revline-gsap-a/thickerRip58-evidence.json",
+    "sourceSHA256": "3ff2b44e52761b9f427cab42e18531a3df6038fdbd0d27e69b3e5f5f1bb482bc",
     "exported": false
   }
 }
