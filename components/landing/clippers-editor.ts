@@ -60,7 +60,7 @@ export function createEditor(root: HTMLElement) {
   }
   el(
     'export',
-    'right:55px;top:13px;width:84px;height:30px;background:#3a3a3a;border-radius:8px;font:500 13px var(--font-inter);color:#fff;display:flex;align-items:center;justify-content:center;gap:6px',
+    'right:55px;top:13px;width:84px;height:30px;background:#7337e7;border-radius:8px;font:500 13px var(--font-inter);color:#fff;display:flex;align-items:center;justify-content:center;gap:6px',
     `Export${ic('download', 14, '#fff', 2)}`,
     header,
   );
@@ -102,8 +102,8 @@ export function createEditor(root: HTMLElement) {
   );
   el(
     'send',
-    'right:9px;top:62px;width:31px;height:31px;background:#3a3a3a;border-radius:8px;display:grid;place-items:center',
-    ic('arrow-up', 15, '#ddd', 2),
+    'right:9px;top:62px;width:31px;height:31px;background:#4a2e85;border-radius:8px;display:grid;place-items:center',
+    ic('arrow-up', 15, '#c9b8ee', 2),
     composer,
   );
 
@@ -192,12 +192,12 @@ export function createEditor(root: HTMLElement) {
     bar,
   );
   tool('fit', 'chevrons-right-left', 'right:194px', '#a0a2a5', 15);
-  tool('compact', 'rows-3', 'right:173px', '#aaa', 15);
-  tool('ai-glow', 'orbit', 'right:152px', '#aaa', 15);
+  tool('compact', 'rows-3', 'right:173px', '#7a5bd6', 15);
+  tool('ai-glow', 'orbit', 'right:152px', '#7a5bd6', 15);
   el(
     'zoom',
     'right:77px;top:19px;width:68px;height:4px;border-radius:2px;background:#2c2c2c',
-    '<div style="width:45px;height:4px;border-radius:2px;background:#999"></div><div style="position:absolute;left:39px;top:-5px;width:14px;height:14px;border-radius:50%;background:#ccc"></div>',
+    '<div style="width:45px;height:4px;border-radius:2px;background:#6848b7"></div><div style="position:absolute;left:39px;top:-5px;width:14px;height:14px;border-radius:50%;background:#7838d7"></div>',
     bar,
   );
   tool('more', 'ellipsis', 'right:47px', '#9a9c9f');

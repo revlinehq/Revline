@@ -238,7 +238,7 @@ export function createClippersScene(root: HTMLElement, tl: gsap.core.Timeline) {
     tracks,
     'a1',
     'left:14px;top:148px;font:500 12px var(--font-inter);color:#d8d8d8;display:flex;gap:9px;align-items:center',
-    '<span style="width:6px;height:6px;border-radius:50%;background:#aaa"></span>A1',
+    '<span style="width:6px;height:6px;border-radius:50%;background:#a78bfa"></span>A1',
   );
   const lane = make(
     tracks,
@@ -304,7 +304,7 @@ export function createClippersScene(root: HTMLElement, tl: gsap.core.Timeline) {
   const audioLane = make(
     tracks,
     'source-audio',
-    'left:170px;top:134px;width:1329px;height:40px;border:1px solid #666;border-radius:4px;background:#343434;font:400 11px/28px var(--font-inter);padding:5px 9px;color:#ddd',
+    'left:170px;top:134px;width:1329px;height:40px;border:1px solid #625084;border-radius:4px;background:#392e4e;font:400 11px/28px var(--font-inter);padding:5px 9px;color:#dfd7ed',
     'Stream highlights.m4a',
   );
   const original = make(
@@ -431,12 +431,12 @@ export function createClippersScene(root: HTMLElement, tl: gsap.core.Timeline) {
   const playhead = make(
     tracks,
     'playhead',
-    'left:169px;top:8px;width:2px;height:236px;background:#aaa',
+    'left:169px;top:8px;width:2px;height:236px;background:#7a36db',
   );
   make(
     playhead,
     'cap',
-    'left:-5px;top:0;width:12px;height:15px;background:#aaa;clip-path:polygon(0 0,100% 0,100% 65%,50% 100%,0 65%)',
+    'left:-5px;top:0;width:12px;height:15px;background:#7a36db;clip-path:polygon(0 0,100% 0,100% 65%,50% 100%,0 65%)',
   );
   const counter = make(
     side,
@@ -447,7 +447,7 @@ export function createClippersScene(root: HTMLElement, tl: gsap.core.Timeline) {
   const scan = make(
     lane,
     'scan',
-    'left:0;top:0;width:100px;height:64px;background:linear-gradient(90deg,transparent,#ffffff50,transparent)',
+    'left:0;top:0;width:100px;height:64px;background:linear-gradient(90deg,transparent,#c8acff70,transparent)',
   );
   const trimGap = make(
     tracks,
@@ -457,7 +457,7 @@ export function createClippersScene(root: HTMLElement, tl: gsap.core.Timeline) {
   const trimEdge = make(
     tracks,
     'trim-edge',
-    'left:701.6px;top:50px;width:2px;height:130px;background:#aaa',
+    'left:701.6px;top:50px;width:2px;height:130px;background:#a78bfa',
   );
   tl.fromTo(
     trimGap,
@@ -528,12 +528,12 @@ export function createClippersScene(root: HTMLElement, tl: gsap.core.Timeline) {
   make(
     selected,
     'selected-creator',
-    'left:0;top:0;width:128.9px;height:44px;border:1px solid #bbb;border-radius:4px;',
+    'left:0;top:0;width:128.9px;height:44px;border:1px solid #b99be9;border-radius:4px;',
   );
   make(
     selected,
     'selected-content',
-    'left:0;top:52px;width:128.9px;height:44px;border:1px solid #bbb;border-radius:4px;',
+    'left:0;top:52px;width:128.9px;height:44px;border:1px solid #b99be9;border-radius:4px;',
   );
   tl.from(selected, { autoAlpha: 0, duration: 0 }, 100 / 60);
   tl.set(selected, { x: 3 * 132.9 }, 100 / 60);
@@ -550,7 +550,7 @@ export function createClippersScene(root: HTMLElement, tl: gsap.core.Timeline) {
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 180"><path fill="red" d="M250.346 28.075A32.18 32.18 0 0 0 227.69 5.418C207.824 0 127.87 0 127.87 0S47.912.164 28.046 5.582A32.18 32.18 0 0 0 5.39 28.24c-6.009 35.298-8.34 89.084.165 122.97a32.18 32.18 0 0 0 22.656 22.657c19.866 5.418 99.822 5.418 99.822 5.418s79.955 0 99.82-5.418a32.18 32.18 0 0 0 22.657-22.657c6.338-35.348 8.291-89.1-.164-123.134"/><path fill="#fff" d="m102.421 128.06l66.328-38.418l-66.328-38.418z"/></svg>';
 
   const styling = [
-    '<span style="background:#333;padding:5px 9px;border-radius:4px;font:600 12px var(--font-inter);letter-spacing:1.3px">SHROUD</span>',
+    '<span style="background:#7c3aed;padding:5px 9px;border-radius:4px;font:600 12px var(--font-inter);letter-spacing:1.3px">SHROUD</span>',
     '<span style="font:700 30px/.95 var(--landing-font-head);letter-spacing:-1px;text-shadow:0 2px 12px #0009">KAI CENAT</span>',
     '<span style="background:#f4f4f0;color:#111;padding:6px 10px;font:700 19px var(--landing-font-head)">DUKE DENNIS</span>',
     '<span style="font:500 24px/1 var(--landing-font-head);letter-spacing:-.8px;text-shadow:0 2px 12px #0008">CASEOH</span>',
