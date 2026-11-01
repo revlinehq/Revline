@@ -1,9 +1,9 @@
 {
   "projectId": "j970eespkq2j4crma0yhj5mpc18haer6",
   "timelineId": "main",
-  "revision": 50,
-  "status": "System Zero closing handoff corrected and verified; residual reference differences recorded",
-  "sourceSHA256": "5408fe9c6b7690a3a34f2b41032b21b1a1fbfc6a134c5d0914751b162fcb2db1",
+  "revision": 51,
+  "status": "Intro dither accelerated 2x and visually verified; historical reference residuals retained",
+  "sourceSHA256": "0dde55788ca45e5a62b5a8ebba858950b0523d610e33ea39c09ddbb14d5156ae",
   "changes": {
     "intro": [
       "GSAP background blur builds 2.8\u20133.05 s, holds through 4.3 s and resolves during the crisp dither handoff by 4.733333 s.",
@@ -513,6 +513,35 @@
             "difference": 24
           }
         ]
+      },
+      {
+        "revision": 51,
+        "scores": [
+          {
+            "time": 4.3,
+            "difference": 10
+          },
+          {
+            "time": 4.4,
+            "difference": 13
+          },
+          {
+            "time": 4.5,
+            "difference": 14
+          },
+          {
+            "time": 4.6,
+            "difference": 19
+          },
+          {
+            "time": 4.8,
+            "difference": 21
+          },
+          {
+            "time": 5,
+            "difference": 20
+          }
+        ]
       }
     ],
     "latestApplicableScores": [
@@ -532,24 +561,34 @@
         "revision": 47
       },
       {
-        "time": 4.35,
-        "difference": 11,
-        "revision": 44
+        "time": 4.3,
+        "difference": 10,
+        "revision": 51
       },
       {
         "time": 4.4,
-        "difference": 8,
-        "revision": 44
+        "difference": 13,
+        "revision": 51
       },
       {
         "time": 4.5,
-        "difference": 11,
-        "revision": 44
+        "difference": 14,
+        "revision": 51
       },
       {
         "time": 4.6,
-        "difference": 18,
-        "revision": 44
+        "difference": 19,
+        "revision": 51
+      },
+      {
+        "time": 4.8,
+        "difference": 21,
+        "revision": 51
+      },
+      {
+        "time": 5,
+        "difference": 20,
+        "revision": 51
       },
       {
         "time": 5.3,
@@ -1715,6 +1754,29 @@
       ],
       "remainingDifferenceCount": 1,
       "note": "The fitted camera ease is power1.in rather than sine.in. The transition classifier measures .10 s from 5.68 to 5.78 s, compared with .17 s from 5.62 to 5.78 s in the reference. The authored closing mask begins at 5.416667 s; the camera choreography remains unchanged."
+    },
+    "fasterDitherRevision51": {
+      "start": 4.2,
+      "end": 5.3,
+      "timelineStart": 4.2,
+      "differences": [
+        {
+          "time": 4.2,
+          "issue": "The reference camera moves here (zoom in 9%, 0.23s, sine.inOut, it starts with an element slides down (middle) at 4.23s); yours does not.",
+          "fix": "tl.fromTo(camera, { scale: 1, xPercent: 0, yPercent: 0, rotation: 0 }, { scale: 1.094, xPercent: -0.01, yPercent: -0.05, rotation: 0.02, duration: 0.23, ease: 'sine.inOut' }, 4.2)"
+        },
+        {
+          "time": 4.4,
+          "issue": "Your film has a transition here that the reference does not."
+        },
+        {
+          "time": 4.43,
+          "issue": "The reference camera moves here (zoom in 2%, 0.73s, power1.out, it starts with an element slides down (top) at 4.4s); yours does not.",
+          "fix": "tl.fromTo(camera, { scale: 1.094, xPercent: -0.01, yPercent: -0.05, rotation: 0.02 }, { scale: 1.121, xPercent: 0.07, yPercent: 0.08, rotation: -0.11, duration: 0.73, ease: 'power1.out' }, 4.43)"
+        }
+      ],
+      "remainingDifferenceCount": 3,
+      "note": "The extra measured transition at 4.4 s is the requested faster effect. Composite camera-fit residuals remain; camera tweens are unchanged."
     }
   },
   "cameraCauses": [
@@ -1915,6 +1977,25 @@
       "cameraMoves": 0,
       "flags": [],
       "next": "No pacing problems found in this range."
+    },
+    "fasterDitherRevision51": {
+      "revision": 51,
+      "range": "4.2-5.3s",
+      "samples": "12 at 10 fps",
+      "changePerSecond": "4s 187%, 5s 0%",
+      "cuts": [
+        4.4,
+        4.5
+      ],
+      "cameraMoves": 1,
+      "flags": [
+        {
+          "at": "4.2-4.3s",
+          "kind": "zoom-cut",
+          "reason": "The zoom is cut off at full speed by a cut at 4.3s: let it settle before the cut, or start the next shot on the same motion."
+        }
+      ],
+      "next": "Fix the flagged moments in the scene code (longer holds, eased moves, fewer changes per second), then run checkPacing on that range again. A flag you keep on purpose (a deliberate snap or flash) needs a reason you can name."
     }
   },
   "boundaries": {
@@ -1984,7 +2065,7 @@
     "patchesCompiled": true
   },
   "finalTimeline": {
-    "revision": 50,
+    "revision": 51,
     "sceneCount": 1,
     "clipCount": 8,
     "markers": 9,
@@ -3423,5 +3504,142 @@
     "otherProjectsChanged": false,
     "exported": false,
     "tools": "readFrames, measureFrame, trackReference, motionMap, patchScene, getFrames, compareReference, checkPacing and inspectTimeline used native Revline tools. Local code only archived source/metadata, checked service readiness and ran git."
+  },
+  "fasterIntroDither": {
+    "revision": 51,
+    "request": "The dither should be faster.",
+    "speedMultiplier": 2,
+    "onset": 4.3,
+    "before": {
+      "grainAndFocusDuration": 0.433333,
+      "paletteDuration": 0.583333,
+      "fullGreenStart": 4.9,
+      "fullGreenDuration": 0.35,
+      "fullGreenEnd": 5.25
+    },
+    "after": {
+      "grainAndFocusDuration": 0.216667,
+      "grainAndFocusEnd": 4.516667,
+      "paletteDuration": 0.291667,
+      "paletteEnd": 4.591667,
+      "fullGreenStart": 4.6,
+      "fullGreenDuration": 0.175,
+      "fullGreenEnd": 4.775
+    },
+    "change": "Halved the grain/focus, palette and full-green conversion intervals on the same GSAP clock. The helper palette tail is optional, preserving the upload section default.",
+    "nativeFramesViewed": [
+      4.3,
+      4.35,
+      4.4,
+      4.5,
+      4.6,
+      4.8,
+      5.65,
+      5.75,
+      5.766667
+    ],
+    "referenceRead": {
+      "start": 4.2,
+      "end": 5.2,
+      "fps": 10
+    },
+    "compareReference": [
+      {
+        "time": 4.3,
+        "difference": 10
+      },
+      {
+        "time": 4.4,
+        "difference": 13
+      },
+      {
+        "time": 4.5,
+        "difference": 14
+      },
+      {
+        "time": 4.6,
+        "difference": 19
+      },
+      {
+        "time": 4.8,
+        "difference": 21
+      },
+      {
+        "time": 5,
+        "difference": 20
+      }
+    ],
+    "maximumComparisonDifference": 21,
+    "allComparedMomentsAtOrBelow25": true,
+    "pacing": {
+      "revision": 51,
+      "range": "4.2-5.3s",
+      "samples": "12 at 10 fps",
+      "changePerSecond": "4s 187%, 5s 0%",
+      "cuts": [
+        4.4,
+        4.5
+      ],
+      "cameraMoves": 1,
+      "flags": [
+        {
+          "at": "4.2-4.3s",
+          "kind": "zoom-cut",
+          "reason": "The zoom is cut off at full speed by a cut at 4.3s: let it settle before the cut, or start the next shot on the same motion."
+        }
+      ],
+      "next": "Fix the flagged moments in the scene code (longer holds, eased moves, fewer changes per second), then run checkPacing on that range again. A flag you keep on purpose (a deliberate snap or flash) needs a reason you can name."
+    },
+    "retainedPacingReason": "The requested faster threshold change is classified as a zoom-cut at 4.2-4.3 s. There is no new authored camera cut or retiming; native frames show the intended faster dither buildup on the same 4.3 s reveal cue.",
+    "motionMap": {
+      "start": 4.2,
+      "end": 5.3,
+      "timelineStart": 4.2,
+      "differences": [
+        {
+          "time": 4.2,
+          "issue": "The reference camera moves here (zoom in 9%, 0.23s, sine.inOut, it starts with an element slides down (middle) at 4.23s); yours does not.",
+          "fix": "tl.fromTo(camera, { scale: 1, xPercent: 0, yPercent: 0, rotation: 0 }, { scale: 1.094, xPercent: -0.01, yPercent: -0.05, rotation: 0.02, duration: 0.23, ease: 'sine.inOut' }, 4.2)"
+        },
+        {
+          "time": 4.4,
+          "issue": "Your film has a transition here that the reference does not."
+        },
+        {
+          "time": 4.43,
+          "issue": "The reference camera moves here (zoom in 2%, 0.73s, power1.out, it starts with an element slides down (top) at 4.4s); yours does not.",
+          "fix": "tl.fromTo(camera, { scale: 1.094, xPercent: -0.01, yPercent: -0.05, rotation: 0.02 }, { scale: 1.121, xPercent: 0.07, yPercent: 0.08, rotation: -0.11, duration: 0.73, ease: 'power1.out' }, 4.43)"
+        }
+      ],
+      "remainingDifferenceCount": 3,
+      "note": "The extra measured transition at 4.4 s is the requested faster effect. Composite camera-fit residuals remain; camera tweens are unchanged."
+    },
+    "closingHandoff": "Frames at 5.65, 5.75 and 5.766667 s inspected at revision 51; previous closing correction is preserved.",
+    "scopeGuard": {
+      "passed": true,
+      "checked": [
+        9.917,
+        12.55,
+        15.167,
+        16.45,
+        17.4,
+        18.35,
+        19.333,
+        22.267,
+        25.217,
+        26.783,
+        28.083,
+        29.383,
+        29.4,
+        30.083,
+        30.767
+      ],
+      "note": "Code outside the scope changed; the 5 locked section(s) it reaches render the same, so it was saved."
+    },
+    "engine": "GSAP through useTimeline, one React scene film.",
+    "audioChanged": false,
+    "otherProjectsChanged": false,
+    "exported": false,
+    "tools": "Native Revline reads, renders, comparisons and pacing checks. Local scripts archived source/metadata and ran git checks."
   }
 }

@@ -3,10 +3,10 @@
   "projectName": "Engine test A: GSAP (RightNow rebuild)",
   "editor": "http://localhost:3001/editor/j970eespkq2j4crma0yhj5mpc18haer6",
   "timelineId": "main",
-  "revision": 50,
+  "revision": 51,
   "sceneClipId": "5b49332a-bc9f-4fc8-a8cd-383e406bf6a1",
   "sourceFile": "film.tsx.txt",
-  "sourceSHA256": "5408fe9c6b7690a3a34f2b41032b21b1a1fbfc6a134c5d0914751b162fcb2db1",
+  "sourceSHA256": "0dde55788ca45e5a62b5a8ebba858950b0523d610e33ea39c09ddbb14d5156ae",
   "duration": 30.966667,
   "fps": 60,
   "visualSceneCount": 1,
@@ -37,24 +37,34 @@
       "revision": 47
     },
     {
-      "time": 4.35,
-      "difference": 11,
-      "revision": 44
+      "time": 4.3,
+      "difference": 10,
+      "revision": 51
     },
     {
       "time": 4.4,
-      "difference": 8,
-      "revision": 44
+      "difference": 13,
+      "revision": 51
     },
     {
       "time": 4.5,
-      "difference": 11,
-      "revision": 44
+      "difference": 14,
+      "revision": 51
     },
     {
       "time": 4.6,
-      "difference": 18,
-      "revision": 44
+      "difference": 19,
+      "revision": 51
+    },
+    {
+      "time": 4.8,
+      "difference": 21,
+      "revision": 51
+    },
+    {
+      "time": 5,
+      "difference": 20,
+      "revision": 51
     },
     {
       "time": 5.3,
@@ -231,7 +241,8 @@
     "Exact cloud-source archive and single-scene/media/audio checks",
     "git diff --check",
     "Revision 47 green-dither and scatter correction: native details/boundaries, 3 compared iterations, 3 scoped motionMap diffs, and pacing checks; residuals recorded.",
-    "Revision 50 closing handoff: three rendered iterations, 12 final comparisons, native boundary/detail frames, scoped motionMap, and pacing with no flags."
+    "Revision 50 closing handoff: three rendered iterations, 12 final comparisons, native boundary/detail frames, scoped motionMap, and pacing with no flags.",
+    "Revision 51 dither speed: native before/after, six reference comparisons all <=21, scoped motionMap/pacing, and preserved closing handoff frames."
   ],
   "development": {
     "web": "Ready and left running on localhost:3001",
@@ -500,5 +511,79 @@
       "Incoming mark assembly, corner geometry and identity typography remain approximations; checked white handoff frames score 6-11/100."
     ],
     "frameReview": "Button edges narrow without re-expansion; text stays inside the closing mask before deliberate exit; background and old control leave completely; first identity glyph is centered, no unintended blank or leftover label; settled identity checked through 8 s."
+  },
+  "fasterIntroDither": {
+    "revision": 51,
+    "speedMultiplier": 2,
+    "onset": 4.3,
+    "before": {
+      "grainAndFocusDuration": 0.433333,
+      "paletteDuration": 0.583333,
+      "fullGreenStart": 4.9,
+      "fullGreenDuration": 0.35,
+      "fullGreenEnd": 5.25
+    },
+    "after": {
+      "grainAndFocusDuration": 0.216667,
+      "grainAndFocusEnd": 4.516667,
+      "paletteDuration": 0.291667,
+      "paletteEnd": 4.591667,
+      "fullGreenStart": 4.6,
+      "fullGreenDuration": 0.175,
+      "fullGreenEnd": 4.775
+    },
+    "compareReference": [
+      {
+        "time": 4.3,
+        "difference": 10
+      },
+      {
+        "time": 4.4,
+        "difference": 13
+      },
+      {
+        "time": 4.5,
+        "difference": 14
+      },
+      {
+        "time": 4.6,
+        "difference": 19
+      },
+      {
+        "time": 4.8,
+        "difference": 21
+      },
+      {
+        "time": 5,
+        "difference": 20
+      }
+    ],
+    "maximumComparisonDifference": 21,
+    "allComparedMomentsAtOrBelow25": true,
+    "retainedPacingReason": "The requested faster threshold change is classified as a zoom-cut at 4.2-4.3 s. There is no new authored camera cut or retiming; native frames show the intended faster dither buildup on the same 4.3 s reveal cue.",
+    "motionMap": {
+      "start": 4.2,
+      "end": 5.3,
+      "timelineStart": 4.2,
+      "differences": [
+        {
+          "time": 4.2,
+          "issue": "The reference camera moves here (zoom in 9%, 0.23s, sine.inOut, it starts with an element slides down (middle) at 4.23s); yours does not.",
+          "fix": "tl.fromTo(camera, { scale: 1, xPercent: 0, yPercent: 0, rotation: 0 }, { scale: 1.094, xPercent: -0.01, yPercent: -0.05, rotation: 0.02, duration: 0.23, ease: 'sine.inOut' }, 4.2)"
+        },
+        {
+          "time": 4.4,
+          "issue": "Your film has a transition here that the reference does not."
+        },
+        {
+          "time": 4.43,
+          "issue": "The reference camera moves here (zoom in 2%, 0.73s, power1.out, it starts with an element slides down (top) at 4.4s); yours does not.",
+          "fix": "tl.fromTo(camera, { scale: 1.094, xPercent: -0.01, yPercent: -0.05, rotation: 0.02 }, { scale: 1.121, xPercent: 0.07, yPercent: 0.08, rotation: -0.11, duration: 0.73, ease: 'power1.out' }, 4.43)"
+        }
+      ],
+      "remainingDifferenceCount": 3,
+      "note": "The extra measured transition at 4.4 s is the requested faster effect. Composite camera-fit residuals remain; camera tweens are unchanged."
+    },
+    "closingHandoff": "Frames at 5.65, 5.75 and 5.766667 s inspected at revision 51; previous closing correction is preserved."
   }
 }

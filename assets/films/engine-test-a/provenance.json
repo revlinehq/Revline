@@ -82,7 +82,7 @@
     "change": "Preserve requested motion range in frame snapshots"
   },
   "priority": "User requested reference structure and timing take precedence over generic one-second holds, no grids, and quiet house styling.",
-  "revision": 50,
+  "revision": 51,
   "verificationFile": "verification.json",
   "sourceFile": "film.tsx.txt",
   "soundEffects": {
@@ -115,19 +115,19 @@
     },
     "blurClear": {
       "start": 4.3,
-      "end": 4.733333,
+      "end": 4.516667,
       "ease": "sine.inOut"
     },
     "ditherBuild": {
       "start": 4.3,
-      "end": 4.733333,
+      "end": 4.516667,
       "ease": "Threshold: power1.out; focus, tone and palette: sine.inOut",
       "onsetThreshold": 0.18,
       "previousOnsetThreshold": 0.55,
       "correction": "Start with a threshold that reveals grain immediately, removing the visually clean lead-in while the label appears."
     },
     "engine": "GSAP useTimeline, deterministic seekable filter and opacity tweens",
-    "paletteEnd": 4.883333,
+    "paletteEnd": 4.591667,
     "sharedCue": {
       "name": "SYSTEM_ZERO_AT",
       "seconds": 4.3,
@@ -136,6 +136,11 @@
         "Background blur clear",
         "Visible dither onset"
       ]
+    },
+    "fullGreenBuild": {
+      "start": 4.6,
+      "end": 4.775,
+      "duration": 0.175
     }
   },
   "currentAudio": {
@@ -143,7 +148,7 @@
     "generatedMusicAndCuesMuted": true,
     "activeAudioAssetId": "j57eeahvakwfy1ntsewb2jm3zh8hb6ee"
   },
-  "sourceSHA256": "5408fe9c6b7690a3a34f2b41032b21b1a1fbfc6a134c5d0914751b162fcb2db1",
+  "sourceSHA256": "0dde55788ca45e5a62b5a8ebba858950b0523d610e33ea39c09ddbb14d5156ae",
   "fonts": [
     "JetBrains Mono",
     "Pixelify Sans"
@@ -192,5 +197,29 @@
     ],
     "engine": "GSAP through useTimeline, one React scene clip. No CSS animations or manual frame clock.",
     "tools": "readFrames, measureFrame, trackReference, motionMap, patchScene, getFrames, compareReference, checkPacing and inspectTimeline used native Revline tools. Local code only archived source/metadata, checked service readiness and ran git."
+  },
+  "fasterIntroDither": {
+    "revision": 51,
+    "speedMultiplier": 2,
+    "onset": 4.3,
+    "before": {
+      "grainAndFocusDuration": 0.433333,
+      "paletteDuration": 0.583333,
+      "fullGreenStart": 4.9,
+      "fullGreenDuration": 0.35,
+      "fullGreenEnd": 5.25
+    },
+    "after": {
+      "grainAndFocusDuration": 0.216667,
+      "grainAndFocusEnd": 4.516667,
+      "paletteDuration": 0.291667,
+      "paletteEnd": 4.591667,
+      "fullGreenStart": 4.6,
+      "fullGreenDuration": 0.175,
+      "fullGreenEnd": 4.775
+    },
+    "change": "Halved the grain/focus, palette and full-green conversion intervals on the same GSAP clock. The helper palette tail is optional, preserving the upload section default.",
+    "engine": "GSAP through useTimeline, one React scene film.",
+    "tools": "Native Revline reads, renders, comparisons and pacing checks. Local scripts archived source/metadata and ran git checks."
   }
 }

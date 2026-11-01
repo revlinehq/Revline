@@ -36,16 +36,16 @@ function DitherPlate({mode}:{mode:string}){
  const {media}=useScene();const id='ordered-dither-'+mode;
  return <svg className="dither" viewBox="0 0 2280 1440" preserveAspectRatio="none" style={FILL} width="100%" height="100%"><defs><filter id={id} x="0" y="0" width="100%" height="100%" colorInterpolationFilters="sRGB"><feColorMatrix in="SourceGraphic" type="matrix" values=".35 .85 -.25 0 0 .35 .85 -.25 0 0 .35 .85 -.25 0 0 0 0 0 1 0" result="luma"/><feImage href={DITHER_SCREEN} x="0" y="0" width="2280" height="1440" result="screen"/><feComposite className="dither-threshold" in="luma" in2="screen" operator="arithmetic" k1="0" k2={mode==='intro'?1:1.25} k3=".35" k4={mode==='intro'?-.10:-.24} result="screened"/><feComponentTransfer in="screened" result="binary"><feFuncR type="discrete" tableValues="0 1"/><feFuncG type="discrete" tableValues="0 1"/><feFuncB type="discrete" tableValues="0 1"/></feComponentTransfer><feGaussianBlur className="dither-focus" in="SourceGraphic" stdDeviation="0" result="focused"/><feColorMatrix className="dither-tone" in="focused" type="matrix" values={LUMA_MATRIX} result="tone"/><feComponentTransfer in="tone" result="palette"><feFuncR className="dither-red" type="table" tableValues={GREEN_RAMP_R}/><feFuncG className="dither-green" type="table" tableValues={GREEN_RAMP_G}/><feFuncB className="dither-blue" type="table" tableValues={GREEN_RAMP_B}/></feComponentTransfer><feBlend in="palette" in2="binary" mode="multiply"/></filter></defs><image href={media.landscape} width="2280" height="1440" preserveAspectRatio="xMidYMid slice" filter={'url(#'+id+')'}/></svg>;
 }
-function ditherHandoff(tl:gsap.core.Timeline,el:HTMLDivElement,at:number,duration:number,blur:number,fullGreen=false,onsetThreshold=.55){
+function ditherHandoff(tl:gsap.core.Timeline,el:HTMLDivElement,at:number,duration:number,blur:number,fullGreen=false,onsetThreshold=.55,paletteTail=.15){
  const layer=el.querySelector('.dither');
  const red=fullGreen?'0 .05 .25 .46 .46 .46 .46 .46 .46 .46 .46':GREEN_RAMP_R;const green=fullGreen?'0 .08 .4 .73 .73 .73 .73 .73 .73 .73 .73':GREEN_RAMP_G;const blue=fullGreen?'0 0 0 0 0 0 0 0 0 0 0':GREEN_RAMP_B;
  tl.set('.dither-tone',{attr:{values:COLOR_MATRIX}},at-.001).set('.dither-red',{attr:{tableValues:IDENTITY_RAMP}},at-.001).set('.dither-green',{attr:{tableValues:IDENTITY_RAMP}},at-.001).set('.dither-blue',{attr:{tableValues:IDENTITY_RAMP}},at-.001).set('.dither-focus',{attr:{stdDeviation:blur}},at-.001).set('.dither-threshold',{attr:{k4:onsetThreshold,k2:fullGreen?1.25:1}},at-.001).set(layer,{opacity:1},at)
   .to('.dither-threshold',{attr:{k4:fullGreen?-.12:-.24},duration,ease:'power1.out'},at)
   .to('.dither-focus',{attr:{stdDeviation:0},duration,ease:'sine.inOut'},at)
-  .to('.dither-tone',{attr:{values:LUMA_MATRIX},duration:duration+.15,ease:'sine.inOut'},at)
-  .to('.dither-red',{attr:{tableValues:red},duration:duration+.15,ease:'sine.inOut'},at)
-  .to('.dither-green',{attr:{tableValues:green},duration:duration+.15,ease:'sine.inOut'},at)
-  .to('.dither-blue',{attr:{tableValues:blue},duration:duration+.15,ease:'sine.inOut'},at);
+  .to('.dither-tone',{attr:{values:LUMA_MATRIX},duration:duration+paletteTail,ease:'sine.inOut'},at)
+  .to('.dither-red',{attr:{tableValues:red},duration:duration+paletteTail,ease:'sine.inOut'},at)
+  .to('.dither-green',{attr:{tableValues:green},duration:duration+paletteTail,ease:'sine.inOut'},at)
+  .to('.dither-blue',{attr:{tableValues:blue},duration:duration+paletteTail,ease:'sine.inOut'},at);
 }
 const OPENING_SCREEN='data:image/svg+xml,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="2280" height="1440"><defs><pattern id="p" width="44" height="44" patternUnits="userSpaceOnUse">'+[0,8,2,10,12,4,14,6,3,11,1,9,15,7,13,5].map((v,i)=>'<rect x="'+i%4*11+'" y="'+Math.floor(i/4)*11+'" width="11" height="11" fill="rgb('+v*17+','+v*17+','+v*17+')"/>').join('')+'</pattern></defs><rect width="100%" height="100%" fill="url(#p)"/></svg>');
 function OpeningDither(){
@@ -68,10 +68,10 @@ function Landscape({mode='intro'}:{mode?:'intro'|'upload'|'proof'|'cta'}){
    const cleanPhoto=el.querySelector('.clean-photo');
    seed(tl,cleanPhoto,{filter:'blur(0px)'});
    tl.to(cleanPhoto,{filter:'blur(8px)',duration:.25,ease:'power2.inOut'},2.8)
-    .to(cleanPhoto,{filter:'blur(0px)',duration:.433333,ease:'sine.inOut'},SYSTEM_ZERO_AT);
+    .to(cleanPhoto,{filter:'blur(0px)',duration:.216667,ease:'sine.inOut'},SYSTEM_ZERO_AT);
    seed(tl,dither,{opacity:.45});seed(tl,'.dither-red',{attr:{tableValues:'0 .06 .15 .27 .38 .44 .5 .65 .92 1 1'}});seed(tl,'.dither-green',{attr:{tableValues:'0 .10 .24 .38 .50 .58 .65 .75 .97 1 1'}});seed(tl,'.dither-blue',{attr:{tableValues:'0 .02 .06 .09 .13 .16 .19 .3 .84 1 1'}});tl.to(dither,{opacity:0,duration:.5,ease:'power1.inOut'},.05);tl.to('.opening-dither',{opacity:0,duration:.133333,ease:'sine.out'},.016667).set('.opening-dither',{display:'none'},.166667);
-   ditherHandoff(tl,el,SYSTEM_ZERO_AT,.433333,8,false,.18);
-   tl.to('.dither-red',{attr:{tableValues:'0 .02 .08 .20 .46 .46 .46 .46 .46 .46 .46'},duration:.35,ease:'power1.inOut'},4.9).to('.dither-green',{attr:{tableValues:'0 .04 .14 .36 .73 .73 .73 .73 .73 .73 .73'},duration:.35,ease:'power1.inOut'},4.9).to('.dither-blue',{attr:{tableValues:'0 0 0 0 0 0 0 0 0 0 0'},duration:.35,ease:'power1.inOut'},4.9);tl.to('.dither-threshold',{attr:{k4:-.06},duration:.17,ease:'circ.in'},5.55);
+   ditherHandoff(tl,el,SYSTEM_ZERO_AT,.216667,8,false,.18,.075);
+   tl.to('.dither-red',{attr:{tableValues:'0 .02 .08 .20 .46 .46 .46 .46 .46 .46 .46'},duration:.175,ease:'power1.inOut'},4.6).to('.dither-green',{attr:{tableValues:'0 .04 .14 .36 .73 .73 .73 .73 .73 .73 .73'},duration:.175,ease:'power1.inOut'},4.6).to('.dither-blue',{attr:{tableValues:'0 0 0 0 0 0 0 0 0 0 0'},duration:.175,ease:'power1.inOut'},4.6);tl.to('.dither-threshold',{attr:{k4:-.06},duration:.17,ease:'circ.in'},5.55);
   }else if(mode==='upload'){
    seed(tl,photo,{scale:1.1,y:0,rotation:2.2});tl.to(photo,{scale:1.221,y:15,duration:.233333,ease:'none'},.016667).to(photo,{scale:1.3431,y:35,duration:1.23,ease:'power2.out'},.25).to(photo,{scale:1.4626,y:3,rotation:2.12,duration:.27,ease:'power1.in'},1.583333).to(photo,{scale:1.68,y:-195,rotation:.9,duration:.4,ease:'none'},1.853333).to(photo,{scale:1.48,y:-300,rotation:-.5,duration:1.5,ease:CustomEase.create('uploadRecede','M0,0 C0.2,1.6 0.8,-0.4 1,1')},3.016667);
    seed(tl,'.clean-photo',{filter:'blur(2px)'});tl.to('.clean-photo',{filter:'blur(0px)',duration:.5,ease:'sine.inOut'},2.7);
