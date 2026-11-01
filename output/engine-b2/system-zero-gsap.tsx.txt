@@ -1,0 +1,404 @@
+
+import React from 'react';
+import { Beat, Layer, Icon, useScene, useTimeline } from 'revline';
+import { gsap } from 'gsap';
+import { CustomEase } from 'gsap/CustomEase';
+const LIME = '#76b800';
+const MONO = '"JetBrains Mono", monospace';
+const FILL = {position:'absolute',inset:0};
+const LOGO = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 120\" fill-rule=\"evenodd\"><path fill=\"#010101\" d=\"M 52.5 6 L 106.5 6 L 109 8.5 L 109 35.5 L 87 57.5 L 106.5 58 L 109 60.5 L 109 87.5 L 85.5 111 Q 80.1 111.6 80 110.5 L 80 88.5 L 78.5 88 L 77.5 87 L 57.5 87 L 33.5 111 L 28 111 L 28 88.5 L 26.5 88 L 25.5 87 L 4 87 L 4 82.5 L 28.5 58 L 54.5 58 L 57 60.5 L 57.5 81 L 80 58.5 L 80 36 L 77.5 35 L 28 35 L 28 30.5 L 52.5 6 Z\"/></svg>";
+const BODY_PATHS = [{"d":"M 139 5 L 331 5 L 331 131 L 304 131 L 304 164 L 274 164 L 274 101.5 L 273.5 101 L 247 101 L 247 68 L 112.5 68 L 112 67.5 L 112 35 L 139 35 L 139 5 Z","fill":"#fcfcfc"},{"d":"M 58 194 L 80.5 195 L 81.5 194 L 91.5 194 L 93.5 195 L 94.5 194 L 113.5 194 L 115 195.5 L 115 224 L 142 224 L 142 257 L 170 257 L 170 320 L 142 320 L 142 353 L 115 353 L 115 383 L 84 383 L 84 321.5 L 85 319.5 L 84 318.5 L 84 290 L 4 290 L 4 257 L 31 257 L 31 224 L 57.5 224 L 58 223.5 L 58 216.5 L 57 215.5 L 57 201.5 L 58 200.5 L 58 194 Z","fill":"#fcfcfc"},{"d":"M 247 194 L 272.5 194 L 275.5 195 L 276.5 194 L 331 194 L 331 256.5 L 330 257.5 L 331 258.5 L 331 320 L 304 320 L 304 353 L 274 353 L 274 290 L 193 290 L 193 258.5 L 194.5 257 L 220 257 L 220 224 L 247 224 L 247 194 Z","fill":"#fcfcfc"}];
+const EYE_PATHS = [{"d":"M 110 129 L 141.5 129 L 144 130 L 144 166 L 110 166 L 110 129 Z","fill":"#76b408"},{"d":"M 219.5 129 L 249.5 129 L 252 130 L 252 166 L 218 166 L 218 130.5 L 219.5 129 Z","fill":"#76b408"},{"d":"M 166.5 165 Q 171.9 164.4 174 166 L 174 171 L 175.5 171 L 177 174 L 185.5 174 L 186 172 L 187.5 172 L 190 166 L 196.5 165 Q 199.5 166.6 198 172 L 196 172 L 196 178 L 193 178 Q 194.1 180.7 191.5 180 L 186 182.5 L 185.5 184 L 178 184 L 176.5 181 L 170 180 Q 171 177 168 178 L 168 174.5 L 167 172 L 164 172 L 164 166 L 166.5 165 Z","fill":"#76b408"}];
+const CURSOR_PATH = "M 30.5 27 L 38.5 27 L 39 29.5 L 46 59.5 L 46 65.5 L 48 68.5 L 50 82.5 L 51.5 84 L 54 83 L 52 75.5 L 52 69.5 L 50 65.5 L 50 56 L 58.5 54 L 66 54 L 70 78 L 74 78 L 74 70.5 L 72 68.5 L 72 59.5 L 73.5 58 L 86 57 L 88 64.5 L 88 69.5 L 90 73.5 L 90 79.5 L 91.5 81 L 94 79.5 L 94 71.5 L 92 69.5 L 92 62 L 101 62 L 101 65.5 Q 102.6 68.5 108 67 L 116 102.5 L 116 114 L 112 115.5 L 114 122.5 L 114 133.5 L 110 136 L 110 148.5 L 108.5 149 L 87.5 154 L 82.5 154 L 77.5 156 L 72.5 156 L 68.5 158 L 55 158 L 54 148 L 46 148 L 46 142.5 Q 43.2 140.5 44 136 Q 37.7 137.5 36 133.5 Q 37.8 125.8 33.5 124 L 28.5 125 L 26 120.5 Q 26.8 114.4 25 112 L 18 112 L 18 108.5 Q 16.1 105.3 10 107 L 8 98.5 L 8 92 Q 13.8 88.9 24 90 L 25 95 Q 30.4 93.5 32 96.5 L 34 103.5 L 34 109.5 L 36 115 L 39 113.5 L 38 104.5 L 36 100.5 L 36 94.5 L 34 91.5 L 32 75.5 L 30 71.5 L 30 66.5 L 24 41.5 L 23 29 L 30.5 27 Z";
+CustomEase.create('introPull','M0,0 C0.9,0.8 0.2,-0.4 1,1');
+CustomEase.create('launcherCamera','M0,0 C1,0.6 0.5,0.8 1,1');
+CustomEase.create('uploadCamera','M0,0 C0.8,0.8 0.3,-0.4 1,1');
+CustomEase.create('benchmarkPull','M0,0 C0.5,0.4 1,-0.4 1,1');
+CustomEase.create('menuPush','M0,0 C0.7,0 0.26,1 1,1');
+CustomEase.create('referenceSettle','M0,0 C0.18,0.8 0.28,1.06 1,1');
+function Mark({size=100,color='#000',className=''}) {
+ return <span className={className} style={{display:'inline-block',width:size,height:size,color}} dangerouslySetInnerHTML={{__html:LOGO.replace(/#010101/g,color)}}/>;
+}
+function Guides({color=LIME}) {
+ return <><i style={{position:'absolute',left:-55,bottom:-42,width:34,height:34,borderLeft:'5px solid '+color,borderBottom:'5px solid '+color}}/><i style={{position:'absolute',right:-55,top:-42,width:34,height:34,borderRight:'5px solid '+color,borderTop:'5px solid '+color}}/></>;
+}
+function Typed({text,at=.01,cps=20,ink='#fff',size=72,className='',style={},initialChars=0}) {
+ const ref=useTimeline((tl,el)=>{
+   const chars=el.querySelectorAll('.char');
+   chars.forEach((c,i)=>{if(i>=initialChars){const t=at+(i-initialChars)/cps;tl.to(c,{opacity:1,duration:.001},t).to(c,{color:ink,duration:.22,ease:'power1.out'},t+.09);}});
+ },[text,at,cps,ink,initialChars]);
+ return <span ref={ref} className={className} style={{fontFamily:MONO,fontSize:size,fontWeight:400,whiteSpace:'pre',...style}}>{Array.from(text).map((c,i)=><span className="char" key={i} style={{display:'inline',opacity:i<initialChars?1:0,color:i<initialChars?ink:LIME}}>{c}</span>)}</span>;
+}
+function Hill() {
+ const {media}=useScene();
+ return <img src={media.hill} style={{...FILL,width:'100%',height:'100%',objectFit:'cover',filter:'blur(4px)',transform:'scale(1.01)'}}/>;
+}
+function DitherHill({id='dither'}) {
+ const {media}=useScene();
+ return <div style={{...FILL,background:LIME}}>
+  <svg style={{...FILL,width:'100%',height:'100%'}} viewBox="0 0 1920 1080" preserveAspectRatio="none">
+   <defs><filter id={id} colorInterpolationFilters="sRGB"><feColorMatrix type="saturate" values="0"/><feComponentTransfer><feFuncR type="linear" slope="2" intercept="-.65"/><feFuncG type="linear" slope="2" intercept="-.65"/><feFuncB type="linear" slope="2" intercept="-.65"/></feComponentTransfer><feComponentTransfer><feFuncR type="discrete" tableValues="0 0 0 .463 .463 .463 .463 .463 .463 .463 .463 .463 .463 .463 .463 1"/><feFuncG type="discrete" tableValues="0 0 0 .722 .722 .722 .722 .722 .722 .722 .722 .722 .722 .722 .722 1"/><feFuncB type="discrete" tableValues="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1"/></feComponentTransfer></filter>
+   <pattern id={id+'dots'} width="12" height="12" patternUnits="userSpaceOnUse"><rect width="3" height="3" fill="#000"/><rect x="6" y="6" width="3" height="3" fill="#000"/></pattern></defs>
+   <image href={media.hill} width="1920" height="1080" preserveAspectRatio="xMidYMid slice" filter={'url(#'+id+')'}/>
+   <rect width="1920" height="1080" fill={'url(#'+id+'dots)'} opacity=".55"/>
+  </svg>
+ </div>;
+}
+function PixelMascot({className='',size=340}) {
+ const ref=useTimeline((tl,el)=>{
+  tl.fromTo('.eye',{scaleY:1},{scaleY:.12,duration:.07,repeat:1,yoyo:true,repeatDelay:.04,ease:'power1.inOut'},.43);
+  tl.fromTo('.eye',{scaleY:1},{scaleY:.12,duration:.07,repeat:1,yoyo:true,repeatDelay:.04,ease:'power1.inOut'},2.64);
+  tl.to('.body',{opacity:.65,duration:.12,yoyo:true,repeat:1,ease:'steps(1)'},1.05);
+ });
+ return <svg ref={ref} className={className} viewBox="0 0 340 390" width={size} height={size*390/340}>
+  <defs><pattern id={'mascot-grid-'+className} width="27" height="30" patternUnits="userSpaceOnUse"><path d="M0 0H27V30" fill="none" stroke="#000" strokeWidth="1.6"/></pattern></defs>
+  <g className="body">{BODY_PATHS.map((p,i)=><path key={i} d={p.d} fill="#fcfcfc"/>)}
+  {BODY_PATHS.map((p,i)=><path key={'g'+i} d={p.d} fill={'url(#mascot-grid-'+className+')'}/>)}</g>
+  {EYE_PATHS.map((p,i)=><path key={i} className={i<2?'eye':'smile'} d={p.d} fill={LIME} style={{transformOrigin:'50% 50%',transformBox:'fill-box'}}/>)}
+ </svg>;
+}
+function Cursor({className='',size=145}) {
+ return <svg className={className} width={size} height={size*190/160} viewBox="0 0 160 190" style={{overflow:'visible',filter:'drop-shadow(3px 5px 0px #22380055)'}}><path d={CURSOR_PATH} fill="#fff" stroke={LIME} strokeWidth="8" strokeLinejoin="miter" paintOrder="stroke fill"/></svg>;
+}
+function Intro() {
+ const ref=useTimeline((tl,el)=>{
+  gsap.set(el.querySelectorAll('.intro-dither'),{opacity:1}); gsap.set(el.querySelectorAll('.launcher'),{opacity:0}); gsap.set(el.querySelectorAll('.zero-state'),{opacity:0});
+  gsap.set(el.querySelectorAll('.scene-camera'),{scale:2.05,y:-40,transformOrigin:'52% 78%'});
+  tl.fromTo('.scene-camera',{scale:2.05,x:0,y:-40,rotation:0,transformOrigin:'52% 78%'},{scale:1.068,x:-25,y:20,rotation:-.15,duration:2.77,ease:'introPull'},.001)
+    .to('.intro-dither',{opacity:0,duration:.6,ease:'power2.out'},.1)
+    .to('.introducing',{opacity:0,duration:.33,ease:'power2.in'},1.8)
+    .to('.launcher',{opacity:1,duration:.001},2.2)
+    .fromTo('.launcher-reveal',{clipPath:'inset(0% 0% 0% 85%)'},{clipPath:'inset(0% 0% 0% 75%)',duration:.45,ease:'sine.inOut'},2.2)
+    .to('.launcher-reveal',{clipPath:'inset(0% 0% 0% 0%)',duration:.55,ease:'power3.inOut'},2.65)
+    .fromTo('.launcher',{x:-180,scale:.42},{x:0,scale:1,duration:1.1,ease:'power2.out'},2.2)
+    .to('.scene-camera',{scale:1.308,x:-35,y:72,rotation:-.36,duration:2.13,ease:'launcherCamera'},2.77)
+    .to('.introducing',{scale:.809,x:-75,y:-10,duration:.8,ease:'sine.inOut'},1.233)
+    .to('.one-state',{y:70,opacity:0,duration:.2,ease:'power2.in'},4.13)
+    .fromTo('.zero-state',{y:-60,opacity:0},{y:0,opacity:1,duration:.24,ease:'power2.out'},4.25)
+    .to('.intro-dither',{opacity:1,duration:.55,ease:'power2.out'},4.3)
+    .to('.lime-tint',{opacity:1,duration:.4,ease:'power2.in'},5.3)
+    .to('.scene-camera',{scale:1.244,x:-32,y:61,rotation:-.47,duration:.4,ease:'power2.in'},5.333);
+ });
+ return <div ref={ref} style={FILL}>
+  <div className="scene-camera" style={FILL}><Hill/><div className="intro-dither" style={FILL}><DitherHill id="opening-dither"/><div className="lime-tint" style={{...FILL,background:LIME,mixBlendMode:"multiply",opacity:0}}/></div></div>
+  <div className="introducing" style={{position:'absolute',left:460,top:472,width:1000,textAlign:'center'}}><Typed text="Introducing" size={100} at={.075} cps={27}/></div>
+  <div className="launcher" style={{position:'absolute',left:465,top:455,width:990,height:150,opacity:0}}>
+   <div className="launcher-reveal" style={{...FILL,background:LIME,overflow:'hidden',color:'#111',display:'flex',alignItems:'center',padding:'0 50px'}}>
+    <span className="one-state" style={{position:'absolute',left:50,top:22}}><Typed text="system one" ink="#172000" at={2.82} cps={36} size={74} style={{fontWeight:600}}/></span>
+    <span className="zero-state" style={{display:'flex',alignItems:'center',gap:24,opacity:0}}><Mark size={68}/><span style={{fontSize:74,fontWeight:600}}><Typed text="system zero" at={4.29} cps={46} size={74} ink="#101900" style={{fontWeight:600}}/></span></span>
+    <span style={{position:'absolute',right:42,top:49,fontSize:45}}>▸</span>
+   </div><Guides/>
+  </div>
+ </div>;
+}
+
+function IdentityMark() {
+ const ref=useTimeline((tl,el)=>{
+  tl.fromTo('.logo-piece',{opacity:0},{opacity:1,duration:.05,stagger:.09,ease:'power1.out'},.001);
+  tl.to('.logo-piece path',{fill:'#000',duration:.23,stagger:.09,ease:'power1.out'},.22);
+ });
+ return <div ref={ref} className="identity-mark" style={{position:'relative',width:120,height:120,flexShrink:0}}>
+  {['inset(0% 0% 50% 0%)','inset(48% 50% 0% 0%)','inset(48% 0% 0% 48%)'].map((clipPath,i)=><span key={i} className="logo-piece" style={{...FILL,clipPath,opacity:0}}><Mark size={120} color={LIME}/></span>)}
+ </div>;
+}
+function Identity({ending=false}) {
+ const ref=useTimeline((tl,el)=>{
+  gsap.set(el.querySelectorAll('.identity-mark'),{x:282,opacity:.35,scale:.65}); gsap.set(el.querySelectorAll('.identity-guides'),{scale:.35,opacity:.5});
+  gsap.set(el.querySelectorAll('.byline'),{opacity:0});
+  tl.fromTo('.identity-mark',{x:282,opacity:.35,scale:.65},{x:282,opacity:1,scale:1,duration:.35,ease:'power2.out'},.02)
+    .to('.identity-mark',{x:0,duration:.45,ease:'power3.inOut'},.61)
+    .fromTo('.identity-guides',{scale:.35,opacity:.5},{scale:1,opacity:1,duration:.5,ease:'referenceSettle'},.61)
+    .to('.identity-row',{y:-28,duration:.42,ease:'power3.inOut'},1.48)
+    .to('.byline',{opacity:1,duration:.2,ease:'power2.out'},1.62);
+  if(!ending)tl.to('.identity-all',{scale:.98,opacity:.8,duration:.19,ease:'power2.in'},2.45);
+ });
+ return <div ref={ref} style={{...FILL,background:'#fff',color:'#000'}}>
+  <div className="identity-all" style={{position:'absolute',left:620,top:476,width:700,height:180}}>
+   <div className="identity-row" style={{display:'flex',alignItems:'center',height:120,gap:30}}>
+    <IdentityMark/>
+    <Typed text="SYSTEM ZERO" at={.8} cps={26} ink="#070706" size={76}/>
+   </div>
+   <div className="byline" style={{position:'absolute',left:245,top:125,fontSize:28,opacity:0}}>by RightNow</div>
+   <div className="identity-guides" style={{position:'absolute',inset:'-40px -5px -15px -25px'}}><Guides/></div>
+  </div>
+ </div>;
+}
+
+function WindowChrome({title='Window',children,className='',style={},large=false}) {
+ return <div className={className} style={{position:'absolute',background:'#000',color:'#eee',border:(large?'14':'5')+'px solid #bdbdbd',boxShadow:'inset 0 0 0 2px #050505',...style}}>
+  <div className="window-titlebar" style={{height:large?94:36,borderBottom:(large?'10':'3')+'px solid #aaa',display:'flex',alignItems:'center',justifyContent:'space-between',padding:large?'0 45px':'0 14px',fontSize:large?44:23,background:'#101010',lineHeight:1}}>
+   <span>{title}</span><span style={{display:'grid',placeItems:'center',height:large?65:27,width:large?65:27,background:'#aaa',color:'#000'}}><Icon name="x" size={large?55:25} strokeWidth={1.4}/></span>
+  </div>{children}
+ </div>;
+}
+function UploadMenu() {
+ return <div style={{position:'absolute',width:440,height:590,background:'#bbb',border:'3px solid #eee',borderRightColor:'#666',borderBottomColor:'#666',color:'#111',fontFamily:'Inter',padding:'8px 14px',boxSizing:'border-box'}}>
+  <div style={{height:74,display:'flex',alignItems:'center',gap:22,borderBottom:'3px solid #eee',fontSize:32}}><Mark size={45}/>system zero</div>
+  {['Videos','Images','Text','Codebases','PDFs','Anything...'].map((name,i)=><div className={'menu-row row-'+i} key={name} style={{height:i===5?85:74,display:'flex',alignItems:'center',gap:22,borderTop:i===5?'3px solid #eee':undefined,fontSize:32,position:'relative'}}>
+   <span style={{display:'grid',placeItems:'center',width:45,height:44,color:['#276c72','#2c748e','#fff','#d5bc26','#f9f9ef','#70a3be'][i],background:i===3?'#857528':undefined}}><Icon name={['film','image','file-text','folder-code','file','files'][i]} size={38} strokeWidth={1.7}/></span>
+   <span>{name}</span><span style={{marginLeft:'auto',fontSize:31}}>▸</span>
+  </div>)}
+  <div className="menu-tint" style={{...FILL,background:'#dcf6a9',opacity:.85}}/>
+ </div>;
+}
+function UploadTerminal() {
+ const ref=useTimeline((tl,el)=>{
+  tl.fromTo('.upload-bg',{scale:1.02,x:0,y:0,rotation:0},{scale:1.82,x:45.5,y:-224,rotation:-2.1,duration:2.53,ease:'uploadCamera'},.001)
+    .to('.upload-bg',{scale:1.67,x:42,y:-205,rotation:-2.11,duration:.37,ease:'circ.in'},2.567)
+    .fromTo('.upload-word',{x:0},{x:-510,duration:.47,ease:'power3.inOut'},.88)
+    .to('.upload-word',{opacity:0,duration:.4,ease:'power1.in'},1.65)
+    .fromTo('.any-file',{opacity:0},{opacity:1,duration:.3,ease:'power2.out'},1.02)
+    .to('.any-file',{opacity:0,duration:.4,ease:'power1.in'},1.68)
+    .fromTo('.menu-position',{x:340,y:-70,scale:.85,opacity:0},{x:0,y:0,scale:1,opacity:1,duration:.52,ease:'power3.out'},.82)
+    .to('.menu-tint',{opacity:0,duration:.6,ease:'power2.out'},.98)
+    .to('.menu-position',{scale:2.12,y:-200,x:-5,duration:.93,ease:'menuPush'},1.667)
+    .to('.menu-tint',{opacity:.83,duration:.34,ease:'power2.in'},2.68)
+    .to('.menu-position',{opacity:0,y:-540,duration:.31,ease:'power2.in'},2.9)
+    .fromTo('.upload-cursor',{opacity:0,x:1230,y:610,scale:.65},{opacity:1,x:1015,y:420,scale:.7,duration:.47,ease:'power3.out'},.89)
+    .to('.upload-cursor',{y:462,duration:.2,ease:'power2.inOut'},1.3)
+    .to('.upload-cursor',{x:1230,y:670,scale:1.1,rotation:-8,duration:.57,ease:'power4.inOut'},1.78)
+    .to('.upload-cursor',{x:1185,y:700,duration:.18,ease:'power2.out'},2.42)
+    .to('.upload-cursor',{scale:1,rotation:-5,duration:.08,yoyo:true,repeat:1,ease:'power1.inOut'},2.67)
+    .to('.upload-cursor',{opacity:0,duration:.14,ease:'power2.in'},2.96)
+    .fromTo('.upload-dither',{opacity:0,clipPath:'inset(100% 0% 0% 0%)'},{opacity:1,clipPath:'inset(0% 0% 0% 0%)',duration:.3,ease:'sine.out'},2.934)
+    .to('.upload-bg',{scale:1.20,x:23,y:-146,rotation:-2.23,duration:1.43,ease:'power3.out'},2.934)
+    .fromTo('.terminal-frame',{scale:.78,opacity:0,y:50},{scale:1,opacity:1,y:0,duration:.52,ease:'power3.out'},3.03)
+    .to('.terminal-frame',{scale:.98,y:8,duration:.52,ease:'sine.inOut'},3.55)
+    .to('.terminal-frame',{scale:1.82,x:0,y:-68,duration:.6,ease:'power3.in'},4.15)
+    .fromTo('.terminal-mascot',{opacity:0},{opacity:1,duration:.18,ease:'power2.out'},3.08)
+    .fromTo('.terminal-mascot .body',{opacity:0},{opacity:1,duration:.32,ease:'steps(4)'},3.53)
+    .to('.terminal-mascot',{x:-310,y:-5,duration:.51,ease:'power3.inOut'},4.25);
+  ['#111',LIME,'#111',LIME,'#111',LIME].forEach((color,i)=>tl.to('.row-'+i,{color,duration:.08,ease:'power1.out'},1.1+i*.27));
+ });
+ return <div ref={ref} style={{...FILL,background:'#000'}}>
+  <div className="upload-bg" style={FILL}><Hill/><div className="upload-dither" style={{...FILL,opacity:0}}><div style={{...FILL,transform:'scale(2)',transformOrigin:'50% 100%'}}><DitherHill id="upload-dither"/></div></div></div>
+  <div className="upload-word" style={{position:'absolute',left:790,top:475}}><Typed text="Upload" size={88} at={.04} cps={24}/></div>
+  <div className="any-file" style={{position:'absolute',left:1250,top:475,opacity:0}}><Typed text="any file" size={88} at={1.03} cps={24}/></div>
+  <div className="menu-position" style={{position:'absolute',left:740,top:280,width:440,height:590,opacity:0,transformOrigin:'50% 80%'}}><UploadMenu/></div>
+  <div className="upload-cursor" style={{position:'absolute',left:0,top:0,opacity:0}}><Cursor size={145}/></div>
+  <WindowChrome title="system zero" large className="terminal-frame" style={{left:350,top:170,width:1220,height:740,opacity:0,transformOrigin:'50% 50%'}}/>
+  <div className="terminal-mascot" style={{position:'absolute',left:790,top:350,opacity:0}}><PixelMascot className="terminal" size={340}/></div>
+  <div style={{position:"absolute",left:1060,top:477}}><Typed text="Ship this update?" size={36} at={4.517} cps={27}/></div>
+ </div>;
+}
+function ShipUpdate() {
+ const ref=useTimeline((tl,el)=>{
+  tl.fromTo('.ship-prompt',{opacity:1,y:0},{opacity:1,y:0,duration:.01},.001)
+   .to('.ship-prompt',{y:-127,duration:.85,ease:'power2.out'},.78);
+  const rows=el.querySelectorAll('.format-row');
+  tl.fromTo(rows,{opacity:0,y:4},{opacity:1,y:0,duration:.09,stagger:.17,ease:'power2.out'},.8);
+  rows.forEach((row,i)=>{tl.to(row,{color:LIME,duration:.01},.8+i*.17).to(row,{color:'#777',duration:.08},1.01+i*.17);});
+  tl.fromTo('.ship-content',{x:0},{x:-12,duration:2.6,ease:'sine.inOut'},.01);
+ });
+ return <div ref={ref} style={{...FILL,background:'#000'}}>
+  <div className="ship-content" style={FILL}>
+   <div style={{position:'absolute',left:480,top:345}}><PixelMascot className="ship" size={340}/></div>
+   <div className="ship-prompt" style={{position:'absolute',left:1060,top:477,fontSize:39,lineHeight:'1.45',opacity:0}}>
+    <Typed text="Ship this update?" size={36} at={.01} cps={27} initialChars={7}/>
+    {['Video','Images','Text','Codebase','PDF','YES/NO'].map((s,i)=><div className="format-row" key={s} style={{opacity:0,color:'#777',paddingLeft:36}}><span>{i===5?'> ':''}{s}</span></div>)}
+   </div>
+  </div>
+ </div>;
+}
+function DecisionResults() {
+ return <div style={{position:'absolute',left:770,top:408,fontSize:76,lineHeight:1.2}}>
+  {[['yes','yes-box',0,0,190,LIME],['93%','yes-percent',230,0,190,LIME],['no','no-box',0,164,150,'#111'],['7%','no-percent',190,164,150,'#111']].map(([text,name,x,y,w,color])=>
+   <div key={name} className={name} style={{position:'absolute',left:x,top:y,width:w,height:120,display:'grid',placeItems:'center',border:'4px solid '+color,color,background:'#fff',boxSizing:'border-box'}}>
+    <span className="result-value">{text}</span>
+    {[[-9,-9],['calc(100% - 1px)',-9],[-9,'calc(100% - 1px)'],['calc(100% - 1px)','calc(100% - 1px)']].map(([left,top],i)=><i key={i} style={{position:'absolute',left,top,width:9,height:9,background:color}}/>)}
+   </div>)}
+ </div>;
+}
+function Decision() {
+ const ref=useTimeline((tl,el)=>{
+  tl.fromTo('.results-camera',{scale:1.36,x:90,y:45,rotation:4.67},{scale:1.165,x:26,y:-15,rotation:3.95,duration:.3,ease:'sine.inOut'},.001)
+   .to('.results-camera',{scale:1.061,x:31,y:1,rotation:2.23,duration:.13,ease:'sine.inOut'},.3)
+   .to('.results-camera',{scale:1.02,x:3,y:-2,rotation:1.16,duration:.63,ease:'power2.out'},.433)
+   .to('.results-camera',{scale:1,x:0,y:0,rotation:0,duration:.17,ease:'expo.inOut'},1.067);
+  tl.fromTo('.yes-box',{x:460,y:270,rotation:5},{x:0,y:0,rotation:0,duration:.58,ease:'power3.inOut'},.02)
+   .fromTo('.no-box',{x:-270,y:240,rotation:-4},{x:0,y:0,rotation:0,duration:.58,ease:'power3.inOut'},.04)
+   .fromTo('.yes-percent',{x:-450,y:-260,rotation:-5},{x:0,y:0,rotation:0,duration:.58,ease:'power3.inOut'},.03)
+   .fromTo('.no-percent',{x:260,y:-190,rotation:4},{x:0,y:0,rotation:0,duration:.58,ease:'power3.inOut'},.05);
+  const yes={v:73},no={v:0};
+  const yp=el.querySelector('.yes-percent .result-value'),np=el.querySelector('.no-percent .result-value');
+  if(yp)tl.fromTo(yes,{v:73},{v:93,duration:.95,ease:'power2.out',onUpdate:()=>{yp.textContent=Math.round(yes.v)+'%';}},.52);
+  if(np)tl.fromTo(no,{v:0},{v:7,duration:.95,ease:'power2.out',onUpdate:()=>{np.textContent=Math.round(no.v)+'%';}},.52);
+  tl.to('.loose-pixel',{x:'+=45',y:'-=20',duration:1.7,ease:'sine.inOut',stagger:.025},.01);
+  tl.to(Array.from(el.querySelectorAll('.loose-pixel')).filter((_,i)=>i!==3),{opacity:0,duration:.25,stagger:.03,ease:'power2.out'},.72);
+ });
+ return <div ref={ref} style={{...FILL,background:'#fff'}}><div className="results-camera" style={FILL}><DecisionResults/>
+  {[{x:70,y:20},{x:990,y:132},{x:1490,y:95},{x:190,y:620},{x:1600,y:780},{x:1650,y:980},{x:500,y:920}].map((p,i)=><i key={i} className="loose-pixel" style={{position:'absolute',left:p.x,top:p.y,width:22,height:22,background:LIME}}/>)}
+ </div></div>;
+}
+
+function PixelIris({children,id,seconds=.83,power=.72,edgeLead=.035,edgeTrail=.085}) {
+ const {width,height}=useScene();
+ const rings=Array.from({length:34},()=>[]);
+ for(let y=0;y<36;y++)for(let x=0;x<64;x++){
+  const dx=(x-31.5)*30,dy=(y-17.5)*30;
+  const noise=((x*37+y*61)%13-6)*9;
+  const index=Math.min(33,Math.max(0,Math.floor((Math.hypot(dx,dy)+noise)/35)));
+  rings[index].push('M'+(x*30)+' '+(y*30)+'h30v30h-30Z');
+ }
+ const ref=useTimeline((tl,el)=>{
+  tl.to('.mask-full',{opacity:1,duration:.001},seconds+.03);
+  rings.forEach((_,i)=>{
+   const at=.001+Math.pow(i/33,power)*seconds;
+   tl.to('.mask-'+i,{opacity:1,duration:.001},at);
+   tl.to('.edge-'+i,{opacity:1,duration:.001},Math.max(.001,at-edgeLead))
+    .to('.edge-'+i,{opacity:0,duration:.001},at+edgeTrail);
+  });
+ });
+ return <div ref={ref} style={FILL}>
+  <svg style={{...FILL,width:'100%',height:'100%'}} viewBox="0 0 1920 1080">
+   <defs><mask id={id} maskUnits="userSpaceOnUse" x="0" y="0" width="1920" height="1080"><rect width="1920" height="1080" fill="#000"/>{rings.map((paths,i)=><path key={i} className={'mask-'+i} d={paths.join('')} fill="#fff" style={{opacity:0}}/>)}<rect className="mask-full" width="1920" height="1080" fill="#fff" style={{opacity:0}}/></mask></defs>
+   <foreignObject x="0" y="0" width="1920" height="1080" mask={'url(#'+id+')'}><div style={{position:'relative',width:1920,height:1080,overflow:'hidden'}}>{children}</div></foreignObject>
+   {rings.map((paths,i)=><path key={i} className={'edge-'+i} d={paths.join('')} fill={LIME} style={{opacity:0}}/>)}
+  </svg>
+ </div>;
+}
+function PixelGlobe() {
+ const rows=30,cols=56;
+ const cells=[];
+ for(let r=0;r<rows;r++)for(let c=0;c<cols;c++)cells.push({r,c});
+ const ref=useTimeline((tl,el)=>{
+  const samples=el.querySelectorAll('.texture-shape');
+  const nodes=el.querySelectorAll('.globe-cell');
+  const point=el.createSVGPoint();
+  const black=cells.map(({r,c})=>{
+   point.x=(((c/cols*2+.5)%1)*1.5-.25)*340;point.y=r/(rows-1)*390;
+   return Array.from(samples).some(path=>path.isPointInFill(point));
+  });
+  const state={angle:.28};
+  const project=(lon,lat)=>{
+   const radius=407*Math.cos(lat*.35);
+   const z=Math.cos(lon);
+   return [420+Math.sin(lon)*radius,450+Math.sin(lat)*455*(.78+.22*z)];
+  };
+  const draw=()=>{
+   cells.forEach(({r,c},i)=>{
+    const lon=c/cols*Math.PI*2+state.angle,lat=-1.37+r/rows*2.74;
+    const node=nodes[i];if(!node)return;
+    if(Math.cos(lon)<.02){node.style.display='none';return;}
+    node.style.display='';
+    const dlon=Math.PI*2/cols*.84,dlat=2.74/rows*.84;
+    const points=[project(lon-dlon/2,lat-dlat/2),project(lon+dlon/2,lat-dlat/2),project(lon+dlon/2,lat+dlat/2),project(lon-dlon/2,lat+dlat/2)];
+    node.setAttribute('d','M'+points.map(p=>p.map(v=>v.toFixed(1)).join(',')).join('L')+'Z');
+    node.setAttribute('fill',black[i]?'#050505':LIME);
+   });
+  };
+  draw();
+  tl.to(state,{angle:-1.45,duration:8.32,ease:'none',onUpdate:draw},.001);
+ });
+ return <svg ref={ref} viewBox="0 0 840 900" width="840" height="900" style={{overflow:'visible'}}>
+  <defs>{BODY_PATHS.map((p,i)=><path className="texture-shape" key={i} d={p.d}/>)}</defs>
+  {cells.map((p,i)=><path key={i} className="globe-cell" fill={LIME}/>)}
+  <path d="M15 25V9H31 M809 9H825V25 M15 875V891H31 M809 891H825V875" fill="none" stroke="#242424" strokeWidth="3"/>
+ </svg>;
+}
+function BenchmarkWindow({best=false,className='',style={}}) {
+ return <WindowChrome className={className} style={{width:best?1040:800,height:best?300:240,...style}}>
+  {best?<div style={{padding:'32px 44px',color:LIME}}>
+   <div className="price-note" style={{position:'absolute',left:44,top:49,fontSize:22,color:'#777',opacity:0}}>USD per 1,000 decisions</div>
+   <div className="best-label" style={{display:'flex',alignItems:'center',gap:22,fontSize:38}}><Mark size={45} color={LIME}/><span>System Zero</span></div>
+   <div className="best-latency" style={{position:'absolute',right:44,top:74,fontSize:42,opacity:0}}>0.05 s</div>
+   <div className="best-price" style={{position:'absolute',right:44,top:103,fontSize:37,opacity:0}}>USD 0.26</div>
+   <div className="bar-box" style={{height:30,border:'3px solid #aaa',marginTop:20,padding:3}}><div className="best-bar" style={{height:'100%',background:LIME,transformOrigin:'left'}}/></div>
+   <div className="token-note" style={{fontSize:30,color:'#5a731b',marginTop:22}}>1M tokens → ~1,400 pages</div>
+  </div>:<div style={{padding:'26px 34px',color:'#aaa'}}>
+   <div className="price-note" style={{position:'absolute',left:34,top:45,fontSize:20,color:'#777',opacity:0}}>USD per 1,000 decisions</div>
+   <div className="system-one" style={{fontSize:31}}>System One</div>
+   <div className="gpt-label" style={{fontSize:30,position:'absolute',left:34,top:67,opacity:0}}>GPT 5.6 Terra</div>
+   <div className="other-latency" style={{position:'absolute',right:34,top:67,fontSize:38,opacity:0}}>10.1 s</div>
+   <div className="other-price" style={{position:'absolute',right:34,top:93,fontSize:32,opacity:0}}>USD 30</div>
+   <div className="bar-box" style={{height:27,border:'3px solid #aaa',marginTop:19,padding:3}}><div className="other-bar" style={{height:'100%',background:'#aaa',transformOrigin:'left',transform:'scaleX(.08)'}}/></div>
+   <div className="token-note" style={{fontSize:25,color:'#555',marginTop:18}}>64K tokens → ~90 pages</div>
+  </div>}
+ </WindowChrome>;
+}
+function Benchmarks() {
+ const ref=useTimeline((tl,el)=>{
+  tl.fromTo('.benchmark-bg',{scale:1.06},{scale:1.135,duration:.2,ease:'expo.inOut'},.067)
+   .to('.benchmark-bg',{scale:1.116,duration:1.13,ease:'sine.in'},2.2)
+   .to('.benchmark-bg',{scale:1.015,x:41,y:-7,rotation:-.06,duration:3.7,ease:'benchmarkPull'},4.6)
+   .fromTo('.globe-placement',{scale:.03,x:0,y:0},{scale:1,x:0,y:0,duration:.68,ease:'power3.out'},.43)
+   .to('.globe-placement',{x:120,y:12,scale:.97,duration:1.2,ease:'sine.out'},3.0)
+   .to('.globe-placement',{x:230,y:18,scale:.93,duration:.95,ease:'power3.inOut'},5.43)
+   .fromTo('.best-window',{opacity:0,scale:.1,x:350,y:-80},{opacity:1,scale:.7,x:100,y:0,duration:.36,ease:'power3.out'},.54)
+   .to('.best-window',{scale:1,x:0,y:0,duration:.65,ease:'power2.out'},.9)
+   .fromTo('.best-bar',{scaleX:.03},{scaleX:1,duration:.64,ease:'power2.out'},.64)
+   .fromTo('.other-window',{opacity:0,scale:.15,x:0,y:0},{opacity:1,scale:1,x:0,y:0,duration:.85,ease:'power3.out'},1.43)
+   .to('.other-bar',{scaleX:.32,duration:1.15,ease:'sine.inOut'},1.57)
+   .to('.best-window',{x:360,y:65,scale:.95,duration:.75,ease:'sine.out'},3.08)
+   .to('.other-window',{x:-620,y:-30,scale:1,duration:.77,ease:'sine.out'},3.08)
+   .to('.best-bar',{scaleX:.025,duration:.24,ease:'power3.inOut'},3.46)
+   .to('.other-bar',{scaleX:.96,duration:.5,ease:'power2.out'},3.46)
+   .to('.system-one,.token-note',{opacity:0,duration:.12,ease:'power2.in'},3.31)
+   .fromTo('.best-latency,.other-latency,.gpt-label',{opacity:0},{opacity:1,duration:.12},3.45)
+   .to('.best-window',{x:420,y:-115,scale:.76,duration:.75,ease:'power3.inOut'},5.43)
+   .to('.other-window',{x:30,y:40,scale:.95,duration:.82,ease:'power3.inOut'},5.43)
+   .to('.best-latency,.other-latency',{opacity:0,duration:.1},5.43)
+   .to('.best-label',{y:26,duration:.25,ease:'power2.out'},5.5)
+   .to('.gpt-label',{y:26,duration:.25,ease:'power2.out'},5.5)
+   .to('.bar-box',{y:25,duration:.25,ease:'power2.out'},5.5)
+   .fromTo('.price-note,.best-price,.other-price',{opacity:0},{opacity:1,duration:.25,ease:'power2.out'},5.6)
+   .to('.best-bar',{scaleX:.009,duration:.35,ease:'power2.out'},5.6)
+   .to('.other-bar',{scaleX:1,duration:.35,ease:'power2.out'},5.6)
+   .to('.read-text,.once-text',{opacity:0,duration:.24,ease:'power2.in'},3.1)
+   .fromTo('.decide-text',{opacity:0},{opacity:1,duration:.13},3.45)
+   .fromTo('.latency-text',{opacity:0},{opacity:1,duration:.13},4.0)
+   .to('.decide-text,.latency-text',{opacity:0,duration:.22,ease:'power2.in'},5.35)
+   .fromTo('.price-text',{opacity:0},{opacity:1,duration:.12},5.67)
+   .fromTo('.price-sub',{opacity:0},{opacity:1,duration:.12},6.65)
+   .to('.benchmark-content',{scale:.906,x:41,y:-7,rotation:-.06,duration:3.7,ease:'benchmarkPull'},4.6);
+ });
+ return <div ref={ref} style={FILL}>
+  <div style={{...FILL,background:'#fff'}}><DecisionResults/></div>
+  <PixelIris id="benchmark-iris" seconds={.78}>
+   <div className="benchmark-bg" style={FILL}><Hill/></div>
+   <div className="benchmark-content" style={FILL}>
+    <div className="globe-placement" style={{position:'absolute',left:540,top:85,width:840,height:900}}><PixelGlobe/></div>
+    <BenchmarkWindow best className="best-window" style={{left:250,top:295,opacity:0,transformOrigin:'50% 50%'}}/>
+    <BenchmarkWindow className="other-window" style={{left:960,top:625,opacity:0,transformOrigin:'50% 50%'}}/>
+    <div className="read-text" style={{position:'absolute',left:110,top:805}}><Typed text="Read 1M tokens" size={70} at={.7} cps={24}/></div>
+    <div className="once-text" style={{position:'absolute',left:1450,top:310}}><Typed text="at once" size={70} at={1.48} cps={22}/></div>
+    <div className="decide-text" style={{position:'absolute',left:140,top:492,opacity:0}}><Typed text="Decide" size={70} at={3.45} cps={28}/></div>
+    <div className="latency-text" style={{position:'absolute',left:1450,top:780,opacity:0,borderBottom:'3px solid white'}}><Typed text="in 0.05s" size={70} at={4.03} cps={24}/></div>
+    <div className="price-text" style={{position:'absolute',left:150,top:785,opacity:0}}><Typed text="USD 0.26" size={76} at={5.67} cps={27}/></div>
+    <div className="price-sub" style={{position:'absolute',left:150,top:890,opacity:0,borderBottom:'2px solid #fff'}}><Typed text="per 1000 decisions" size={41} at={6.65} cps={38}/></div>
+   </div>
+  </PixelIris>
+ </div>;
+}
+function AvailableNow() {
+ const ref=useTimeline((tl,el)=>{
+  tl.fromTo('.cta-portal',{scale:.15,rotation:-8},{scale:1,rotation:0,duration:.78,ease:'power2.out'},.001);
+  tl.fromTo('.cta-camera',{scale:1,x:0,y:0,rotation:0},{scale:1.06,x:-6.7,y:-1.6,rotation:.55,duration:.97,ease:'power2.out'},.033)
+   .to('.cta-camera',{scale:.941,x:-3.26,y:-1.2,rotation:.26,duration:.7,ease:'power3.in'},1.2)
+   .fromTo('.cta-cursor',{x:80,y:80,opacity:0},{x:0,y:0,opacity:1,duration:.44,ease:'power3.out'},.05)
+   .to('.cta-cursor',{x:-10,y:8,duration:.65,ease:'sine.inOut'},.6)
+   .to('.cta-button',{backgroundColor:'#83c600',duration:.12,yoyo:true,repeat:1,ease:'power2.inOut'},.95);
+ });
+  return <div ref={ref} style={FILL}><PixelIris id="closing-iris" seconds={.7} power={1} edgeLead={.012} edgeTrail={.022}>
+  <div className="cta-portal" style={FILL}><div className="cta-camera" style={FILL}><div style={{...FILL,transform:'translateY(180px) scale(1.5)'}}><Hill/></div>
+   <div className="cta-button" style={{position:'absolute',left:690,top:450,width:540,height:155,background:LIME,border:'7px solid #b1d34a',outline:'5px solid #608900',boxShadow:'inset -6px -6px 0 #527a00',display:'flex',alignItems:'center',justifyContent:'center',gap:20,color:'#080f00',fontFamily:'Inter',fontSize:60}}>
+    <span>Available now</span><Icon name="arrow-up-right" size={44} strokeWidth={2.6}/><Guides/>
+   </div>
+   <div className="cta-cursor" style={{position:'absolute',left:1080,top:565}}><Cursor size={160}/></div>
+  </div></div>
+ </PixelIris></div>;
+}
+/* more parts */
+export default function SystemZeroFilm() {
+ return <Layer style={{background:'#fff',fontFamily:MONO,overflow:'hidden'}}>
+  <Beat id="opening" start={0} duration={5.767}><Intro/></Beat>
+  <Beat id="identity" start={5.767} duration={2.666}><Identity/></Beat>
+  <Beat id="upload" start={8.433} duration={4.767}><UploadTerminal/></Beat>
+  <Beat id="ship" start={13.2} duration={2.733}><ShipUpdate/></Beat>
+  <Beat id="decision" start={15.933} duration={1.8}><Decision/></Beat>
+  <Beat id="benchmarks" start={17.733} duration={8.334}><Benchmarks/></Beat>
+  <Beat id="closing" start={26.067} duration={3.766}><Identity ending/></Beat>
+  <Beat id="available" start={29.033} duration={1.934}><AvailableNow/></Beat>
+  {/* more beats */}
+ </Layer>;
+}

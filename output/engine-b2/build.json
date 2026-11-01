@@ -1,0 +1,413 @@
+{
+  "projectId": "j972kpbjxkdp8tpbaj7pkv01a58hd98j",
+  "title": "Engine test B2: GSAP (RightNow rebuild, new harness)",
+  "editorUrl": "http://localhost:3001/editor/j972kpbjxkdp8tpbaj7pkv01a58hd98j",
+  "revision": 22,
+  "duration": 30.967,
+  "fps": 60,
+  "sceneClipId": "7206c5d6-3533-4f32-b088-22ac79919f79",
+  "timelineId": "main",
+  "engine": "GSAP through Revline useTimeline",
+  "filmSource": "system-zero-gsap.tsx.txt",
+  "sourceFormatNote": "Exact saved scene source. .txt suffix keeps this editor-harness code out of the Next.js application TypeScript build.",
+  "reference": {
+    "assetId": "j574v24jq8q5q5cck9y59ethh58hc46f",
+    "onTimeline": false,
+    "retained": true,
+    "usedAsEditFootage": false,
+    "usedAsEditAudio": false
+  },
+  "originalMedia": {
+    "assetId": "j57e7ea34s1ty9kkn3h8jv61x98hc039",
+    "file": "original-hill.png",
+    "generator": "image_gen.imagegen",
+    "prompt": "Use case: photorealistic-natural. Asset type: original landscape backdrop for a 1920x1080 retro computer launch motion film. Generate ONE empty 16:9 wide photograph, no text, no logos, no UI. A single smooth bright green grassy hill filling the lower 52 percent, hill crest gently curved and highest on the left at 47 percent of image height, descending to the right at 64 percent. Sky occupies upper half, deeply saturated medium cobalt blue at top-right grading to pale blue near left horizon, a few soft white cumulus clouds clustered more on right and a wispy small cloud upper left. Fresh short grass with subtle horizontal wind patterns and large soft sun/shadow patches. Cheerful early 2000s desktop wallpaper photographic feel, rural California spring meadow, full midday sun, tiny dark green distant horizon only at extreme right. Absolutely no trees, buildings, people, objects, flowers, mountains or roads. Crisp natural grass texture, rich but realistic green and blue. Original scene, not a photo crop. Landscape 16:9."
+  },
+  "identity": "SVG logo, mascot and cursor traced through Revline traceShape. Menu icons use the scene-engine Icon library.",
+  "music": {
+    "title": "Deep Techno",
+    "artist": "Alejandro Magaña (A. M.)",
+    "library": "Mixkit",
+    "license": "Mixkit Free License",
+    "sourceStart": 18.608,
+    "playbackRate": 0.9958,
+    "gain": 0.35,
+    "referenceAudioUsed": false
+  },
+  "effects": [
+    {
+      "time": 5.766666666666667,
+      "name": "Identity pixel click",
+      "prompt": "Crisp retro computer UI click with a tiny clean digital chime",
+      "duration": 0.45426303854875283
+    },
+    {
+      "time": 11.366666666666667,
+      "name": "Terminal opens",
+      "prompt": "Short airy upward digital whoosh",
+      "duration": 0.5109523809523809
+    },
+    {
+      "time": 17.733333333333334,
+      "name": "Benchmark pixel iris",
+      "prompt": "Brief granular pixel burst expanding into a digital whoosh",
+      "duration": 0.84
+    },
+    {
+      "time": 29.033333333333335,
+      "name": "Availability pixel iris",
+      "prompt": "Pixel scatter into an airy reveal",
+      "duration": 0.7869387755102041
+    }
+  ],
+  "sections": [
+    {
+      "start": 0,
+      "end": 5.767,
+      "content": "Hill pullback, Introducing, system one launcher expands and changes to system zero, dither transition",
+      "assessment": "All main content and transitions present. Camera trajectory, launcher width cadence and dither differ."
+    },
+    {
+      "start": 5.767,
+      "end": 8.433,
+      "content": "Three logo pieces, SYSTEM ZERO typing, by RightNow",
+      "assessment": "Content and cut timing present. Type metrics and assembly timing remain approximate."
+    },
+    {
+      "start": 8.433,
+      "end": 13.2,
+      "content": "Upload any file, menu and hand cursor, push into menu, dither wipe and terminal mascot",
+      "assessment": "All main stages present. Menu icon artwork and camera staging differ; wipe measured longer than reference."
+    },
+    {
+      "start": 13.2,
+      "end": 15.933,
+      "content": "Ship this update? with Video, Images, Text, Codebase, PDF and YES/NO list",
+      "assessment": "Prompt and list present. Mascot poses, blink cadence and typography reveal remain approximate."
+    },
+    {
+      "start": 15.933,
+      "end": 17.733,
+      "content": "YES 93% and NO 7% result boxes, tilt and settling count-up",
+      "assessment": "Counts and four boxes present. Scatter positions and staged camera settle remain approximate."
+    },
+    {
+      "start": 17.733,
+      "end": 26.067,
+      "content": "Pixel iris, rotating globe, 1M versus 64K tokens, 0.05 versus 10.1s latency, USD 0.26 versus USD 30 pricing",
+      "assessment": "All benchmark states and text present. Globe projection, texture rotation, window entrances and foreground drift differ."
+    },
+    {
+      "start": 26.067,
+      "end": 29.033,
+      "content": "Closing identity reprise",
+      "assessment": "Closing cut matches. Logo assembly and type metrics remain approximate."
+    },
+    {
+      "start": 29.033,
+      "end": 30.967,
+      "content": "Pixel iris to original hill, Available now button and hand cursor, push and final pullback",
+      "assessment": "Reveal, button, cursor and camera response present. Iris edge pattern, onset, content growth and fitted camera path differ."
+    }
+  ],
+  "inspection": {
+    "referenceWholeVideoFrames": 16,
+    "referenceDenseSamplingFps": 10,
+    "referenceDenseSamplingRange": [
+      0,
+      30.967
+    ],
+    "methods": [
+      "readFrames",
+      "trackReference",
+      "measureFrame",
+      "traceShape",
+      "motionMap",
+      "compareReference",
+      "compareMotion",
+      "getFrames",
+      "checkPacing",
+      "getSound",
+      "checkSound"
+    ],
+    "motionMapWindows": [
+      [
+        0,
+        10.5
+      ],
+      [
+        10.5,
+        21
+      ],
+      [
+        21,
+        30.967
+      ]
+    ],
+    "finalClosingWindow": [
+      28.9,
+      30.967
+    ],
+    "snapshots": "Full diff windows use revision 20. Revisions 21 and 22 change only closing; the visual guard confirmed other sections unchanged. Closing diff and compareMotion use revision 22.",
+    "finalClosingComparison": {
+      "revision": 22,
+      "source": "frozen saved timeline",
+      "range": {
+        "start": 29,
+        "end": 29.65,
+        "fps": 15
+      },
+      "samples": 11,
+      "scores": [
+        {
+          "time": 29,
+          "difference": 56.8
+        },
+        {
+          "time": 29.067,
+          "difference": 40.3
+        },
+        {
+          "time": 29.133,
+          "difference": 28.5
+        },
+        {
+          "time": 29.2,
+          "difference": 21.2
+        },
+        {
+          "time": 29.267,
+          "difference": 21.8
+        },
+        {
+          "time": 29.333,
+          "difference": 18.9
+        },
+        {
+          "time": 29.4,
+          "difference": 11.8
+        },
+        {
+          "time": 29.467,
+          "difference": 17.8
+        },
+        {
+          "time": 29.533,
+          "difference": 19.3
+        },
+        {
+          "time": 29.6,
+          "difference": 19.2
+        },
+        {
+          "time": 29.65,
+          "difference": 18.6
+        }
+      ],
+      "next": "Inspect every pair against the numbered inventory. Fix missing or wrong transitions, onset, speed, layers, counts and content with patchScene before tuning colors or offsets. Compare cropped details and run compareMotion for the section. Recheck after edits; close out every item as matched or explicitly off. A low score alone never establishes a match.",
+      "images": [
+        "Reference (left) and timeline (right), 1",
+        "Reference (left) and timeline (right), 2",
+        "Reference (left) and timeline (right), 3",
+        "Reference (left) and timeline (right), 4"
+      ]
+    },
+    "finalClosingSound": {
+      "revision": 22,
+      "range": "28.9-30.97s",
+      "loudness": "-17.1 LUFS integrated, peak -2.7 dBFS",
+      "sounds": [
+        "Deep Techno - Alejandro Magaña (A. M.) (Mixkit) (music, clip 24fe9bbc-ab94-40ad-9f39-b9d1f903c5fe) 0s-30.967s gain 0.35",
+        "Availability pixel iris (sfx, clip 44ad9460-cf62-4135-a3a2-1deb993273e6) 29.033s-29.82s gain 0.6"
+      ],
+      "onsets": [
+        "29.001s -9.4 dB Deep Techno - Alejandro Magaña (A. M.) (Mixkit)",
+        "29.1s -7.2 dB Deep Techno - Alejandro Magaña (A. M.) (Mixkit)",
+        "29.54s -9.9 dB Deep Techno - Alejandro Magaña (A. M.) (Mixkit)",
+        "29.621s -10.4 dB Deep Techno - Alejandro Magaña (A. M.) (Mixkit)",
+        "30.132s -14.7 dB Deep Techno - Alejandro Magaña (A. M.) (Mixkit)",
+        "30.4s -18.3 dB Deep Techno - Alejandro Magaña (A. M.) (Mixkit)",
+        "30.583s -22.3 dB Deep Techno - Alejandro Magaña (A. M.) (Mixkit)",
+        "30.66s -23.6 dB Deep Techno - Alejandro Magaña (A. M.) (Mixkit)"
+      ],
+      "levels": {
+        "note": "Momentary loudness in LUFS each 0.1 s, then the loudest sample peak in dBFS that second.",
+        "seconds": [
+          "28.9s: -16 -15 -13 -13 -14 -14 -17 -16 -16 -17 (peak -3)",
+          "29.9s: -18 -22 -21 -21 -22 -22 -25 -27 -27 -31 (peak -14)"
+        ]
+      },
+      "visualHits": "29.067s 9%, 30.067s 1%",
+      "soundEffectOnsets": "29.051s Availability pixel iris",
+      "flags": [],
+      "next": "Every sound effect lands on its picture change in this range."
+    },
+    "fullSound": {
+      "revision": 22,
+      "range": "0-30.97s",
+      "loudness": "-16.6 LUFS integrated, peak -2.6 dBFS",
+      "sounds": [
+        "Deep Techno - Alejandro Magaña (A. M.) (Mixkit) (music, clip 24fe9bbc-ab94-40ad-9f39-b9d1f903c5fe) 0s-30.967s gain 0.35",
+        "Identity pixel click (sfx, clip 9fe49b11-37b5-4fcc-98a3-716f50e7fddf) 5.767s-6.221s gain 0.6",
+        "Terminal opens (sfx, clip 2d8d53b3-abe7-4b5c-8e3c-96adccac0356) 11.367s-11.878s gain 0.6",
+        "Benchmark pixel iris (sfx, clip 3cfa6e17-bed5-4c63-88e8-7140a94d609e) 17.733s-18.573s gain 0.6",
+        "Availability pixel iris (sfx, clip 44ad9460-cf62-4135-a3a2-1deb993273e6) 29.033s-29.82s gain 0.6"
+      ],
+      "onsets": [
+        "0.543s -9.3 dB Deep Techno - Alejandro Magaña (A. M.) (Mixkit)",
+        "1.074s -9.3 dB Deep Techno - Alejandro Magaña (A. M.) (Mixkit)",
+        "1.33s -17.1 dB Deep Techno - Alejandro Magaña (A. M.) (Mixkit)",
+        "1.591s -9.2 dB Deep Techno - Alejandro Magaña (A. M.) (Mixkit)",
+        "1.984s -9.8 dB Deep Techno - Alejandro Magaña (A. M.) (Mixkit)",
+        "2.099s -9.4 dB Deep Techno - Alejandro Magaña (A. M.) (Mixkit)",
+        "2.628s -9.1 dB Deep Techno - Alejandro Magaña (A. M.) (Mixkit)",
+        "3.404s -15.7 dB Deep Techno - Alejandro Magaña (A. M.) (Mixkit)",
+        "3.641s -9.2 dB Deep Techno - Alejandro Magaña (A. M.) (Mixkit)",
+        "3.927s -9.3 dB Deep Techno - Alejandro Magaña (A. M.) (Mixkit)",
+        "4.059s -10 dB Deep Techno - Alejandro Magaña (A. M.) (Mixkit)",
+        "4.167s -9.3 dB Deep Techno - Alejandro Magaña (A. M.) (Mixkit)",
+        "4.691s -9.2 dB Deep Techno - Alejandro Magaña (A. M.) (Mixkit)",
+        "5.49s -15.3 dB Deep Techno - Alejandro Magaña (A. M.) (Mixkit)",
+        "5.75s -4 dB Deep Techno - Alejandro Magaña (A. M.) (Mixkit)",
+        "5.843s -8.6 dB Deep Techno - Alejandro Magaña (A. M.) (Mixkit) + Identity pixel click",
+        "6.141s -9.8 dB Deep Techno - Alejandro Magaña (A. M.) (Mixkit)",
+        "6.763s -9.1 dB Deep Techno - Alejandro Magaña (A. M.) (Mixkit)",
+        "7.32s -9.4 dB Deep Techno - Alejandro Magaña (A. M.) (Mixkit)",
+        "7.81s -9.2 dB Deep Techno - Alejandro Magaña (A. M.) (Mixkit)",
+        "8.06s -9.3 dB Deep Techno - Alejandro Magaña (A. M.) (Mixkit)",
+        "8.19s -9.6 dB Deep Techno - Alejandro Magaña (A. M.) (Mixkit)",
+        "8.841s -9.2 dB Deep Techno - Alejandro Magaña (A. M.) (Mixkit)",
+        "9.094s -10.1 dB Deep Techno - Alejandro Magaña (A. M.) (Mixkit)",
+        "9.365s -9.6 dB Deep Techno - Alejandro Magaña (A. M.) (Mixkit)",
+        "9.65s -9.5 dB Deep Techno - Alejandro Magaña (A. M.) (Mixkit)",
+        "9.762s -9.9 dB Deep Techno - Alejandro Magaña (A. M.) (Mixkit)",
+        "9.884s -9.2 dB Deep Techno - Alejandro Magaña (A. M.) (Mixkit)",
+        "10.277s -9.5 dB Deep Techno - Alejandro Magaña (A. M.) (Mixkit)",
+        "10.407s -9.8 dB Deep Techno - Alejandro Magaña (A. M.) (Mixkit)",
+        "10.92s -9.6 dB Deep Techno - Alejandro Magaña (A. M.) (Mixkit)",
+        "11.172s -11.4 dB Deep Techno - Alejandro Magaña (A. M.) (Mixkit)",
+        "11.458s -7.1 dB Deep Techno - Alejandro Magaña (A. M.) (Mixkit)",
+        "11.831s -13.1 dB Deep Techno - Alejandro Magaña (A. M.) (Mixkit)",
+        "11.956s -9.6 dB Deep Techno - Alejandro Magaña (A. M.) (Mixkit)",
+        "12.221s -10.1 dB Deep Techno - Alejandro Magaña (A. M.) (Mixkit)",
+        "12.352s -10 dB Deep Techno - Alejandro Magaña (A. M.) (Mixkit)",
+        "12.48s -9.7 dB Deep Techno - Alejandro Magaña (A. M.) (Mixkit)",
+        "12.74s -13.5 dB Deep Techno - Alejandro Magaña (A. M.) (Mixkit)",
+        "13s -10.1 dB Deep Techno - Alejandro Magaña (A. M.) (Mixkit)",
+        "13.25s -13.8 dB Deep Techno - Alejandro Magaña (A. M.) (Mixkit)",
+        "13.521s -13.4 dB Deep Techno - Alejandro Magaña (A. M.) (Mixkit)",
+        "13.9s -14.9 dB Deep Techno - Alejandro Magaña (A. M.) (Mixkit)",
+        "14.041s -9.8 dB Deep Techno - Alejandro Magaña (A. M.) (Mixkit)",
+        "14.432s -10.7 dB Deep Techno - Alejandro Magaña (A. M.) (Mixkit)",
+        "14.562s -9.9 dB Deep Techno - Alejandro Magaña (A. M.) (Mixkit)",
+        "14.684s -10.3 dB Deep Techno - Alejandro Magaña (A. M.) (Mixkit)",
+        "14.814s -10.7 dB Deep Techno - Alejandro Magaña (A. M.) (Mixkit)",
+        "14.943s -9.4 dB Deep Techno - Alejandro Magaña (A. M.) (Mixkit)",
+        "15.02s -9.5 dB Deep Techno - Alejandro Magaña (A. M.) (Mixkit)",
+        "15.084s -9.2 dB Deep Techno - Alejandro Magaña (A. M.) (Mixkit)",
+        "15.211s -10.3 dB Deep Techno - Alejandro Magaña (A. M.) (Mixkit)",
+        "15.344s -9.9 dB Deep Techno - Alejandro Magaña (A. M.) (Mixkit)",
+        "15.414s -10.4 dB Deep Techno - Alejandro Magaña (A. M.) (Mixkit)",
+        "15.6s -10.9 dB Deep Techno - Alejandro Magaña (A. M.) (Mixkit)",
+        "15.731s -10.5 dB Deep Techno - Alejandro Magaña (A. M.) (Mixkit)",
+        "15.87s -9.3 dB Deep Techno - Alejandro Magaña (A. M.) (Mixkit)",
+        "15.991s -10.3 dB Deep Techno - Alejandro Magaña (A. M.) (Mixkit)",
+        "16.112s -10.1 dB Deep Techno - Alejandro Magaña (A. M.) (Mixkit)",
+        "16.25s -9.3 dB Deep Techno - Alejandro Magaña (A. M.) (Mixkit)",
+        "16.37s -9.3 dB Deep Techno - Alejandro Magaña (A. M.) (Mixkit)",
+        "16.45s -9.3 dB Deep Techno - Alejandro Magaña (A. M.) (Mixkit)",
+        "16.511s -9.4 dB Deep Techno - Alejandro Magaña (A. M.) (Mixkit)",
+        "16.62s -9.5 dB Deep Techno - Alejandro Magaña (A. M.) (Mixkit)",
+        "17.082s -9.3 dB Deep Techno - Alejandro Magaña (A. M.) (Mixkit)",
+        "17.15s -9.2 dB Deep Techno - Alejandro Magaña (A. M.) (Mixkit)",
+        "17.711s -7.9 dB Benchmark pixel iris",
+        "17.919s -8.6 dB Benchmark pixel iris",
+        "17.99s -10 dB Benchmark pixel iris",
+        "18.13s -8.8 dB Deep Techno - Alejandro Magaña (A. M.) (Mixkit) + Benchmark pixel iris",
+        "18.364s -10.7 dB Deep Techno - Alejandro Magaña (A. M.) (Mixkit) + Benchmark pixel iris",
+        "18.55s -9.5 dB Deep Techno - Alejandro Magaña (A. M.) (Mixkit) + Benchmark pixel iris",
+        "19.164s -9.2 dB Deep Techno - Alejandro Magaña (A. M.) (Mixkit)",
+        "19.231s -9.2 dB Deep Techno - Alejandro Magaña (A. M.) (Mixkit)",
+        "19.754s -9.3 dB Deep Techno - Alejandro Magaña (A. M.) (Mixkit)",
+        "20.011s -9.4 dB Deep Techno - Alejandro Magaña (A. M.) (Mixkit)",
+        "20.206s -10.3 dB Deep Techno - Alejandro Magaña (A. M.) (Mixkit)",
+        "20.271s -9.1 dB Deep Techno - Alejandro Magaña (A. M.) (Mixkit)",
+        "20.534s -9.3 dB Deep Techno - Alejandro Magaña (A. M.) (Mixkit)",
+        "20.663s -9.8 dB Deep Techno - Alejandro Magaña (A. M.) (Mixkit)"
+      ],
+      "moreOnsets": 40,
+      "levels": {
+        "note": "Momentary loudness in LUFS each 0.1 s, then the loudest sample peak in dBFS that second.",
+        "seconds": [
+          "0s: -25 -24 -24 -23 -22 -18 -17 -17 -17 -20 (peak -9)",
+          "1s: -19 -17 -17 -17 -19 -22 -17 -17 -16 -16 (peak -9)",
+          "2s: -19 -16 -16 -17 -17 -21 -17 -17 -17 -17 (peak -9)",
+          "3s: -20 -17 -17 -17 -17 -20 -19 -17 -17 -16 (peak -9)",
+          "4s: -17 -18 -15 -16 -17 -17 -21 -17 -17 -17 (peak -9)",
+          "5s: -17 -21 -17 -16 -17 -17 -21 -17 -15 -15 (peak -3)",
+          "6s: -15 -16 -17 -16 -17 -17 -18 -19 -17 -17 (peak -9)",
+          "7s: -17 -18 -21 -16 -17 -17 -17 -21 -17 -16 (peak -9)",
+          "8s: -15 -15 -15 -14 -14 -15 -16 -17 -17 -17 (peak -9)",
+          "9s: -17 -16 -16 -17 -17 -17 -16 -17 -17 -16 (peak -9)",
+          "10s: -17 -17 -17 -17 -17 -17 -17 -18 -17 -16 (peak -9)",
+          "11s: -16 -16 -18 -18 -18 -17 -16 -15 -16 -16 (peak -7)",
+          "12s: -17 -18 -18 -18 -18 -18 -19 -19 -20 -17 (peak -9)",
+          "13s: -17 -17 -17 -19 -20 -19 -19 -19 -17 -18 (peak -9)",
+          "14s: -17 -17 -19 -19 -19 -19 -18 -18 -18 -18 (peak -9)",
+          "15s: -16 -16 -16 -16 -18 -18 -17 -17 -16 -16 (peak -9)",
+          "16s: -16 -16 -16 -16 -15 -15 -14 -14 -15 -16 (peak -9)",
+          "17s: -18 -16 -15 -16 -16 -18 -19 -16 -16 -14 (peak -5)",
+          "18s: -14 -15 -14 -15 -15 -15 -16 -14 -15 -15 (peak -7)",
+          "19s: -16 -18 -16 -15 -16 -17 -19 -18 -16 -17 (peak -9)",
+          "20s: -15 -17 -17 -15 -16 -15 -16 -16 -14 -15 (peak -9)",
+          "21s: -16 -16 -18 -15 -15 -16 -17 -20 -17 -16 (peak -9)",
+          "22s: -16 -15 -17 -16 -15 -17 -15 -16 -15 -14 (peak -9)",
+          "23s: -15 -16 -17 -18 -15 -16 -16 -17 -20 -16 (peak -9)",
+          "24s: -16 -16 -15 -18 -16 -15 -16 -15 -16 -15 (peak -9)",
+          "25s: -15 -16 -16 -18 -17 -15 -16 -16 -18 -20 (peak -9)",
+          "26s: -16 -16 -15 -16 -18 -15 -16 -16 -15 -16 (peak -9)",
+          "27s: -14 -15 -15 -16 -18 -16 -15 -16 -17 -19 (peak -9)",
+          "28s: -18 -16 -17 -15 -17 -17 -15 -16 -15 -16 (peak -9)",
+          "29s: -16 -13 -14 -14 -15 -17 -16 -16 -17 -18 (peak -3)",
+          "30s: -22 -21 -21 -22 -22 -26 -27 -27 -31 (peak -15)"
+        ]
+      }
+    },
+    "soundAudition": "getSound returned loudness, onset and level analysis, not a playable audio block. No listening claim is made.",
+    "noExport": true
+  },
+  "remainingMotionDifferences": [
+    "Opening camera is split into two fitted moves rather than the reference single 2.77 s pullback; peak path residual 15.4%.",
+    "Second opening push peak path residual 6.9%. Upload entry peak path residual 6.4%; menu push peak 10.4%.",
+    "Terminal wipe fits as 0.87 s rather than reference 0.30 s bottom-to-top. The adjacent pullback stages merge in the motion fit.",
+    "Result box camera settle and globe/window entrances do not follow every measured element track.",
+    "Benchmark drift fits 2.067 s sine.in versus reference 3.967 s linear. Benchmark pullback peak residual 2.9%, with an extra late pullback detected.",
+    "Closing reveal fits a 23.1% peak camera-path residual and an extra 26% push. The code has the measured 6% camera tween, but the combined iris and content growth still differs.",
+    "Final pullback fits 0.17 s late and 0.53 s power2.in instead of 0.70 s power3.in.",
+    "Original landscape, ordered dither, modern menu icons, mascot poses, globe cells and irregular iris edge are visual approximations."
+  ],
+  "pacingFlagsKept": {
+    "opening": "Measured non-monotonic custom camera ease intentionally follows reference acceleration. Do not replace with a generic ease solely to silence detector flags.",
+    "closing": "Rapid expanding pixel reveal is a reference content transition. Its fast-growth, short-hold and simultaneous iris/cursor/camera flags remain explicit; it is not certified as a motion match."
+  },
+  "soundFlagsKept": "Music-only beats intentionally omit extra SFX. Granular iris bursts contain multiple micro-onsets; identity has multiple logo pieces. Full check flags are preserved in motion-diff.json; closing check has no flags.",
+  "skills": [
+    "scene-engine (main, edit-lanes, react-scenes, checklist)",
+    "gsap (main, transitions, recipe-typing, recipe-mask-wipe)",
+    "motion-design (main)",
+    "reference-footage (recreation)",
+    "music-and-sound (main)",
+    "Local imagegen and typescript-best-practices skills"
+  ],
+  "outsideRevline": [
+    "image_gen.imagegen created the original hill bitmap because Revline media-reading tools do not generate original raster artwork.",
+    "Ran only the upload script returned by uploadMedia, then finishUpload.",
+    "Read local skills and Next.js documentation; used filesystem and git tools to preserve this source and verification record.",
+    "No ffmpeg, Python or custom media-analysis code was used."
+  ],
+  "limitations": [
+    "A multi-frame render request timed out; shorter requests succeeded.",
+    "Motion fitting over a changing pixel mask and an original landscape reports camera and element differences; these remain off, not waived as matches.",
+    "This is a full-length reconstruction with acknowledged visual and motion differences, not a pixel-exact reproduction."
+  ]
+}
