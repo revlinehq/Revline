@@ -1,15 +1,16 @@
 {
   "projectId": "j970eespkq2j4crma0yhj5mpc18haer6",
   "timelineId": "main",
-  "revision": 43,
+  "revision": 44,
   "status": "Complete detailed visual audit; residual visual and camera-fit differences recorded",
-  "sourceSHA256": "d42868cb71e6431db671f4af00a8967535c4c99d9e35925e3dbd3150d9e67176",
+  "sourceSHA256": "aa0d8587a1885244e135c9f86c778af69fe11e0ffc59fd657e7fd2debe6097aa",
   "changes": {
     "intro": [
       "GSAP background blur builds 2.8\u20133.05 s, holds through 4.3 s and resolves during the crisp dither handoff by 4.733333 s.",
       "Image-tone SVG halftone, threshold and palette transfer replace a flat dotted layer.",
       "Corrected label swap, typing, control weight/arrow, pixel bits, green-highlight takeover and outgoing control hold.",
-      "Retimed the opening camera phases around the control changes."
+      "Retimed the opening camera phases around the control changes.",
+      "Revision 44: remove neutral threshold lead-in and share the 4.3 s cue with the System Zero suffix."
     ],
     "identity": [
       "Separated abstract identity logo from the pixel product mascot.",
@@ -88,6 +89,9 @@
       "43": [
         18,
         19
+      ],
+      "44": [
+        7
       ]
     },
     "reason": "The final scoped changes affect the menu entrance, cost-window resize and upward dither wipe. Each changed window is resampled; other sampled state is unchanged.",
@@ -216,6 +220,27 @@
             "difference": 28
           }
         ]
+      },
+      {
+        "revision": 44,
+        "scores": [
+          {
+            "time": 4.35,
+            "difference": 11
+          },
+          {
+            "time": 4.4,
+            "difference": 8
+          },
+          {
+            "time": 4.5,
+            "difference": 11
+          },
+          {
+            "time": 4.6,
+            "difference": 18
+          }
+        ]
       }
     ],
     "latestApplicableScores": [
@@ -225,9 +250,24 @@
         "revision": 39
       },
       {
+        "time": 4.35,
+        "difference": 11,
+        "revision": 44
+      },
+      {
+        "time": 4.4,
+        "difference": 8,
+        "revision": 44
+      },
+      {
+        "time": 4.5,
+        "difference": 11,
+        "revision": 44
+      },
+      {
         "time": 4.6,
         "difference": 18,
-        "revision": 39
+        "revision": 44
       },
       {
         "time": 9.3,
@@ -1200,7 +1240,26 @@
       "The upward dither is authored over 11.37\u201311.67 s; the composite fit still classifies a shorter transition around 11.4 s."
     ],
     "interpretation": "Rendered-composite fits still report residuals even for some requested tweens present in the source. No unresolved fit is marked as a pass.",
-    "remainingDifferenceCount": 29
+    "remainingDifferenceCount": 29,
+    "remainingDifferenceCountAppliesToRevision": 43,
+    "latestChangedRange": {
+      "start": 4.1,
+      "end": 4.9,
+      "timelineStart": 4.1,
+      "differences": [
+        {
+          "time": 4.1,
+          "issue": "Camera move differs from the reference: ease custom (closest named: sine.in) where the reference uses sine.inOut; 0.8s long vs 0.23s.",
+          "fix": "tl.fromTo(camera, { scale: 1, xPercent: 0, yPercent: 0, rotation: 0 }, { scale: 1.108, xPercent: 0, yPercent: -0.06, rotation: 0.08, duration: 0.23, ease: 'sine.inOut' }, 4.1)"
+        },
+        {
+          "time": 4.33,
+          "issue": "The reference camera moves here (zoom in 3%, 0.53s, power1.out, it starts with content changes (bottom, 8.3% of the frame) at 4.33s); yours does not.",
+          "fix": "tl.fromTo(camera, { scale: 1.108, xPercent: 0, yPercent: -0.06, rotation: 0.08 }, { scale: 1.146, xPercent: 0.02, yPercent: 0.03, rotation: 0.03, duration: 0.53, ease: 'power1.out' }, 4.33)"
+        }
+      ],
+      "note": "Camera choreography is unchanged; these composite camera-fit residuals remain."
+    }
   },
   "cameraCauses": [
     {
@@ -1393,7 +1452,7 @@
     "patchesCompiled": true
   },
   "finalTimeline": {
-    "revision": 43,
+    "revision": 44,
     "sceneCount": 1,
     "clipCount": 8,
     "markers": 9,
@@ -1405,5 +1464,97 @@
     "missingAssetRefs": [],
     "audioAndMarkersUnchanged": true
   },
-  "exported": false
+  "exported": false,
+  "previousFullAuditRevision": 43,
+  "systemZeroDitherSync": {
+    "revision": 44,
+    "request": "When System Zero appears, the dither should appear too; the dither was delayed.",
+    "cause": "The .55 threshold started visually neutral, so the tween ran without visible grain for several frames.",
+    "change": "System Zero suffix, blur clear and dither onset share SYSTEM_ZERO_AT = 4.3. The intro threshold starts at .18 so grain is visible immediately.",
+    "previousOnsetThreshold": 0.55,
+    "onsetThreshold": 0.18,
+    "referenceRead": {
+      "start": 4.1,
+      "end": 4.9,
+      "fps": 10
+    },
+    "nativeTimelineFramesViewed": [
+      4.2,
+      4.3,
+      4.316667,
+      4.35,
+      4.383333,
+      4.4,
+      4.5,
+      4.6,
+      4.7
+    ],
+    "renderedResult": "Grain is visible as zero fades in at 4.35 s; the previous frame at that time remained clean.",
+    "compareReference": [
+      {
+        "time": 4.35,
+        "difference": 11
+      },
+      {
+        "time": 4.4,
+        "difference": 8
+      },
+      {
+        "time": 4.5,
+        "difference": 11
+      },
+      {
+        "time": 4.6,
+        "difference": 18
+      }
+    ],
+    "pacing": {
+      "range": "4.1-4.9s",
+      "flags": []
+    },
+    "motionMap": {
+      "start": 4.1,
+      "end": 4.9,
+      "timelineStart": 4.1,
+      "differences": [
+        {
+          "time": 4.1,
+          "issue": "Camera move differs from the reference: ease custom (closest named: sine.in) where the reference uses sine.inOut; 0.8s long vs 0.23s.",
+          "fix": "tl.fromTo(camera, { scale: 1, xPercent: 0, yPercent: 0, rotation: 0 }, { scale: 1.108, xPercent: 0, yPercent: -0.06, rotation: 0.08, duration: 0.23, ease: 'sine.inOut' }, 4.1)"
+        },
+        {
+          "time": 4.33,
+          "issue": "The reference camera moves here (zoom in 3%, 0.53s, power1.out, it starts with content changes (bottom, 8.3% of the frame) at 4.33s); yours does not.",
+          "fix": "tl.fromTo(camera, { scale: 1.108, xPercent: 0, yPercent: -0.06, rotation: 0.08 }, { scale: 1.146, xPercent: 0.02, yPercent: 0.03, rotation: 0.03, duration: 0.53, ease: 'power1.out' }, 4.33)"
+        }
+      ],
+      "note": "Camera choreography is unchanged; these composite camera-fit residuals remain."
+    },
+    "scopeGuard": {
+      "passed": true,
+      "checked": [
+        6.3,
+        7.217,
+        8.15,
+        9.917,
+        12.55,
+        15.167,
+        16.45,
+        17.4,
+        18.35,
+        19.333,
+        22.267,
+        25.217,
+        26.783,
+        28.083,
+        29.383,
+        29.4,
+        30.083,
+        30.767
+      ],
+      "note": "Code outside the scope changed; the 6 locked section(s) it reaches render the same, so it was saved."
+    },
+    "audioChanged": false,
+    "exported": false
+  }
 }

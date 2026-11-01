@@ -3,10 +3,10 @@
   "projectName": "Engine test A: GSAP (RightNow rebuild)",
   "editor": "http://localhost:3001/editor/j970eespkq2j4crma0yhj5mpc18haer6",
   "timelineId": "main",
-  "revision": 43,
+  "revision": 44,
   "sceneClipId": "5b49332a-bc9f-4fc8-a8cd-383e406bf6a1",
   "sourceFile": "film.tsx.txt",
-  "sourceSHA256": "d42868cb71e6431db671f4af00a8967535c4c99d9e35925e3dbd3150d9e67176",
+  "sourceSHA256": "aa0d8587a1885244e135c9f86c778af69fe11e0ffc59fd657e7fd2debe6097aa",
   "duration": 30.966667,
   "fps": 60,
   "visualSceneCount": 1,
@@ -27,9 +27,24 @@
       "revision": 39
     },
     {
+      "time": 4.35,
+      "difference": 11,
+      "revision": 44
+    },
+    {
+      "time": 4.4,
+      "difference": 8,
+      "revision": 44
+    },
+    {
+      "time": 4.5,
+      "difference": 11,
+      "revision": 44
+    },
+    {
       "time": 4.6,
       "difference": 18,
-      "revision": 39
+      "revision": 44
     },
     {
       "time": 9.3,
@@ -135,5 +150,51 @@
     "web": "Ready and left running on localhost:3001",
     "worker": "Ready, 2 slots, left running"
   },
-  "exported": false
+  "exported": false,
+  "lastFullMotionMapRevision": 43,
+  "systemZeroDitherSync": {
+    "cue": 4.3,
+    "visibleTogetherAt": 4.35,
+    "onsetThreshold": 0.18,
+    "pacingFlags": [],
+    "scopeGuardPassed": true,
+    "checkedOtherSectionFrames": [
+      6.3,
+      7.217,
+      8.15,
+      9.917,
+      12.55,
+      15.167,
+      16.45,
+      17.4,
+      18.35,
+      19.333,
+      22.267,
+      25.217,
+      26.783,
+      28.083,
+      29.383,
+      29.4,
+      30.083,
+      30.767
+    ],
+    "compareReference": [
+      {
+        "time": 4.35,
+        "difference": 11
+      },
+      {
+        "time": 4.4,
+        "difference": 8
+      },
+      {
+        "time": 4.5,
+        "difference": 11
+      },
+      {
+        "time": 4.6,
+        "difference": 18
+      }
+    ]
+  }
 }

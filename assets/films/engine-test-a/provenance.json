@@ -82,7 +82,7 @@
     "change": "Preserve requested motion range in frame snapshots"
   },
   "priority": "User requested reference structure and timing take precedence over generic one-second holds, no grids, and quiet house styling.",
-  "revision": 43,
+  "revision": 44,
   "verificationFile": "verification.json",
   "sourceFile": "film.tsx.txt",
   "soundEffects": {
@@ -121,17 +121,29 @@
     "ditherBuild": {
       "start": 4.3,
       "end": 4.733333,
-      "ease": "Threshold: power1.out; focus, tone and palette: sine.inOut"
+      "ease": "Threshold: power1.out; focus, tone and palette: sine.inOut",
+      "onsetThreshold": 0.18,
+      "previousOnsetThreshold": 0.55,
+      "correction": "Start with a threshold that reveals grain immediately, removing the visually clean lead-in while the label appears."
     },
     "engine": "GSAP useTimeline, deterministic seekable filter and opacity tweens",
-    "paletteEnd": 4.883333
+    "paletteEnd": 4.883333,
+    "sharedCue": {
+      "name": "SYSTEM_ZERO_AT",
+      "seconds": 4.3,
+      "users": [
+        "System Zero suffix reveal",
+        "Background blur clear",
+        "Visible dither onset"
+      ]
+    }
   },
   "currentAudio": {
     "note": "The existing user soundtrack choice was preserved throughout this whole-film visual audit.",
     "generatedMusicAndCuesMuted": true,
     "activeAudioAssetId": "j57eeahvakwfy1ntsewb2jm3zh8hb6ee"
   },
-  "sourceSHA256": "d42868cb71e6431db671f4af00a8967535c4c99d9e35925e3dbd3150d9e67176",
+  "sourceSHA256": "aa0d8587a1885244e135c9f86c778af69fe11e0ffc59fd657e7fd2debe6097aa",
   "fonts": [
     "JetBrains Mono",
     "Pixelify Sans"
