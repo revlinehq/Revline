@@ -83,7 +83,7 @@
     "change": "Preserve requested motion range in frame snapshots"
   },
   "priority": "User requested reference structure and timing take precedence over generic one-second holds, no grids, and quiet house styling.",
-  "revision": 66,
+  "revision": 67,
   "verificationFile": "verification.json",
   "sourceFile": "film.tsx.txt",
   "soundEffects": {
@@ -149,7 +149,7 @@
     "generatedMusicAndCuesMuted": true,
     "activeAudioAssetId": "j57eeahvakwfy1ntsewb2jm3zh8hb6ee"
   },
-  "sourceSHA256": "86ae75252367a51b51132b67f5e8d4326b57109bb982b855f127ce898ac5d780",
+  "sourceSHA256": "25ff4419429daac487341bd9f5e2a77eb0d619327cd4ae5b58e85267f18a7aee",
   "fonts": [
     "JetBrains Mono",
     "Pixelify Sans"
@@ -382,6 +382,32 @@
       "Only Intro source changed; other components, background/dither/camera, audio, markers, and all other scene sections are byte-for-byte unchanged."
     ],
     "sourceSHA256": "86ae75252367a51b51132b67f5e8d4326b57109bb982b855f127ce898ac5d780",
+    "verificationFile": "verification.json",
+    "detailedAuditFile": "audit.json",
+    "exported": false
+  },
+  "introDitherSpeedAdjustment": {
+    "revision": 67,
+    "changes": [
+      "Shortened the intro System Zero dither build-up by about 25% overall: the final green palette now settles at 4.658333 s instead of 4.775 s, roughly seven frames earlier.",
+      "Kept the shared System Zero/dither onset at 4.3 s. Threshold/focus duration is 0.166667 s instead of 0.216667 s; palette tail is 0.05 s instead of 0.075 s.",
+      "Synced the clean-image blur release to the shorter 0.166667 s onset. The earlier 8 px blur build/hold is unchanged.",
+      "Moved the final green palette phase from 4.6 to 4.533333 s and shortened it from 0.175 to 0.125 s. Colors, thresholds, patterns, eases, foreground control, corners, chevron and camera are otherwise unchanged.",
+      "Changed only the three requested intro timing snippets; the Upload dither, opening olive dither, other sections, soundtrack and markers remain unchanged."
+    ],
+    "timing": {
+      "onset": 4.3,
+      "oldFullGreen": 4.775,
+      "newFullGreen": 4.658333,
+      "oldBuildUp": 0.475,
+      "newBuildUp": 0.358333,
+      "shorterPercent": 24.56,
+      "thresholdDuration": 0.166667,
+      "paletteTail": 0.05,
+      "fullGreenPhaseStart": 4.533333,
+      "fullGreenPhaseDuration": 0.125
+    },
+    "sourceSHA256": "25ff4419429daac487341bd9f5e2a77eb0d619327cd4ae5b58e85267f18a7aee",
     "verificationFile": "verification.json",
     "detailedAuditFile": "audit.json",
     "exported": false

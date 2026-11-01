@@ -68,10 +68,10 @@ function Landscape({mode='intro'}:{mode?:'intro'|'upload'|'proof'|'cta'}){
    const cleanPhoto=el.querySelector('.clean-photo');
    seed(tl,cleanPhoto,{filter:'blur(0px)'});
    tl.to(cleanPhoto,{filter:'blur(8px)',duration:.25,ease:'power2.inOut'},2.8)
-    .to(cleanPhoto,{filter:'blur(0px)',duration:.216667,ease:'sine.inOut'},SYSTEM_ZERO_AT);
+    .to(cleanPhoto,{filter:'blur(0px)',duration:.166667,ease:'sine.inOut'},SYSTEM_ZERO_AT);
    seed(tl,dither,{opacity:.45});seed(tl,'.dither-red',{attr:{tableValues:'0 .06 .15 .27 .38 .44 .5 .65 .92 1 1'}});seed(tl,'.dither-green',{attr:{tableValues:'0 .10 .24 .38 .50 .58 .65 .75 .97 1 1'}});seed(tl,'.dither-blue',{attr:{tableValues:'0 .02 .06 .09 .13 .16 .19 .3 .84 1 1'}});tl.to(dither,{opacity:0,duration:.5,ease:'power1.inOut'},.05);tl.to('.opening-dither',{opacity:0,duration:.133333,ease:'sine.out'},.016667).set('.opening-dither',{display:'none'},.166667);
-   ditherHandoff(tl,el,SYSTEM_ZERO_AT,.216667,8,false,.18,.075);
-   tl.to('.dither-red',{attr:{tableValues:'0 .02 .08 .20 .46 .46 .46 .46 .46 .46 .46'},duration:.175,ease:'power1.inOut'},4.6).to('.dither-green',{attr:{tableValues:'0 .04 .14 .36 .73 .73 .73 .73 .73 .73 .73'},duration:.175,ease:'power1.inOut'},4.6).to('.dither-blue',{attr:{tableValues:'0 0 0 0 0 0 0 0 0 0 0'},duration:.175,ease:'power1.inOut'},4.6);tl.to('.dither-threshold',{attr:{k4:-.06},duration:.17,ease:'circ.in'},5.55);
+   ditherHandoff(tl,el,SYSTEM_ZERO_AT,.166667,8,false,.18,.05);
+   tl.to('.dither-red',{attr:{tableValues:'0 .02 .08 .20 .46 .46 .46 .46 .46 .46 .46'},duration:.125,ease:'power1.inOut'},4.533333).to('.dither-green',{attr:{tableValues:'0 .04 .14 .36 .73 .73 .73 .73 .73 .73 .73'},duration:.125,ease:'power1.inOut'},4.533333).to('.dither-blue',{attr:{tableValues:'0 0 0 0 0 0 0 0 0 0 0'},duration:.125,ease:'power1.inOut'},4.533333);tl.to('.dither-threshold',{attr:{k4:-.06},duration:.17,ease:'circ.in'},5.55);
   }else if(mode==='upload'){
    seed(tl,photo,{scale:1.1,y:0,rotation:2.2});tl.to(photo,{scale:1.221,y:15,duration:.233333,ease:'none'},.016667).to(photo,{scale:1.3431,y:35,duration:1.23,ease:'power2.out'},.25).fromTo(photo,{scale:1.3431,y:35,rotation:2.2},{scale:1.68,y:-195,rotation:.9,duration:.333333,ease:'back.out(1.35)',immediateRender:false},2.3).fromTo(photo,{scale:1.68,y:-195,rotation:.9},{scale:1.16,y:-180,rotation:-.5,duration:.8,ease:'back.out(1.35)',immediateRender:false},3.0);
    seed(tl,'.clean-photo',{filter:'blur(2px)'});tl.to('.clean-photo',{filter:'blur(0px)',duration:.5,ease:'sine.inOut'},2.7);
