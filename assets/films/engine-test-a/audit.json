@@ -1,9 +1,9 @@
 {
   "projectId": "j970eespkq2j4crma0yhj5mpc18haer6",
   "timelineId": "main",
-  "revision": 61,
-  "status": "Continuous smiling pixel-ball growth verified at revision 61; placeholder swap removed and two scoped camera-fit differences recorded",
-  "sourceSHA256": "5d443f75296ed51ee4d3d2bb790bc965d67b83b65f256cbc722e1e24fa54d253",
+  "revision": 63,
+  "status": "Identity corner rectangles close before Upload at revision 63; scoped motionMap/pacing clean and overall lockup visual differences recorded",
+  "sourceSHA256": "e1c4e4b36c0cd55026eb75469a7b8f74e4857439f3976380dbcd878c2ab375f5",
   "changes": {
     "intro": [
       "GSAP background blur builds 2.8–3.05 s, holds through 4.3 s and resolves during the crisp dither handoff by 4.733333 s.",
@@ -2285,7 +2285,7 @@
     "patchesCompiled": true
   },
   "finalTimeline": {
-    "revision": 61,
+    "revision": 63,
     "sceneCount": 1,
     "clipCount": 8,
     "markers": 9,
@@ -6794,6 +6794,135 @@
     ],
     "evidenceFile": "/Users/zuramakaradze/.codex/scratch/revline-gsap-a/continuousSmileyBall61-evidence.json",
     "sourceSHA256": "5d443f75296ed51ee4d3d2bb790bc965d67b83b65f256cbc722e1e24fa54d253",
+    "exported": false
+  },
+  "identityCornerClose": {
+    "revision": 63,
+    "request": "At 08:20, System Zero, the rectangles should close a bit before transitioning.",
+    "scope": {
+      "start": 5.766667,
+      "end": 8.416667
+    },
+    "changes": [
+      "Added a subtle inward contraction to the first identity card corner rectangles from 8.15 to 8.4 s, finishing before the existing 8.416667 s Upload cut.",
+      "Corners contract to 95% width and 86% height over 0.25 s with power2.in, using an explicit fromTo for deterministic seeks.",
+      "Logo, text, byline, cut timing and all other source are unchanged. The closing identity at 26.05 s is excluded by the ending branch."
+    ],
+    "verification": {
+      "onlyCornerClosingAdded": true,
+      "sourceCharacters": 62776,
+      "referenceReads": [
+        {
+          "start": 7.6,
+          "end": 8.6,
+          "fps": 10
+        },
+        {
+          "start": 8.05,
+          "end": 8.45,
+          "fps": 30
+        }
+      ],
+      "referenceDetail": 8.4,
+      "referenceTrackSummary": {
+        "range": {
+          "start": 8.15,
+          "end": 8.4
+        },
+        "fit": 0.71,
+        "note": "The tiny corner shows downward/inward travel; fitted scale and rotation include box drift, so used the full-frame and dense edge positions for the final inset."
+      },
+      "nativeBefore61": [
+        7.8,
+        8.1,
+        8.3,
+        8.4,
+        8.433333,
+        8.6
+      ],
+      "nativeRevision62": [
+        8.1,
+        8.2,
+        8.3,
+        8.383333,
+        8.4,
+        8.433333
+      ],
+      "nativeRevision63": [
+        8.15,
+        8.3,
+        8.4
+      ],
+      "compareReference": {
+        "note": "Reference (left) beside your timeline (right), one moment per row, at 8.1s, 8.2s, 8.3s, 8.383s, 8.4s, 8.433s. Differences: 8.1s 23, 8.2s 24, 8.3s 24, 8.383s 25, 8.4s 26, 8.433s 16.",
+        "next": "Pass 1 of 3. Fix the 2 worst moments now (8.4s) with patchScene or editScene: read that moment with fps 10 if you have not, correct it, then compare again. Done when every moment scores 25 or less, or after 3 passes.",
+        "pass": 1,
+        "scores": [
+          {
+            "time": 8.1,
+            "difference": 23
+          },
+          {
+            "time": 8.2,
+            "difference": 24
+          },
+          {
+            "time": 8.3,
+            "difference": 24
+          },
+          {
+            "time": 8.383,
+            "difference": 25
+          },
+          {
+            "time": 8.4,
+            "difference": 26
+          },
+          {
+            "time": 8.433,
+            "difference": 16
+          }
+        ],
+        "images": [
+          "Reference (left) beside your timeline (right), 1",
+          "Reference (left) beside your timeline (right), 2"
+        ]
+      },
+      "pacing": {
+        "revision": 63,
+        "range": "7.95-8.65s",
+        "samples": "8 at 10 fps",
+        "changePerSecond": "8s 114%",
+        "cuts": [
+          8.45
+        ],
+        "cameraMoves": 1,
+        "flags": [],
+        "next": "No pacing problems found in this range."
+      },
+      "motionMap": {
+        "start": 8.05,
+        "end": 8.5,
+        "differences": []
+      },
+      "lockedSectionGuard": {
+        "passed": true,
+        "sections": 5,
+        "samples": 15
+      }
+    },
+    "remainingDifferences": [
+      "No motionMap differences over the changed 8.05-8.5 s window.",
+      "The final 8.4 s comparison remains 26/100 after the targeted inset correction. Other five frames score 16-25/100. Overall logo/type position, glyph and proportion differences persist; this is not an all-pass pixel-similarity claim."
+    ],
+    "skills": [
+      "scene-engine/react-scenes",
+      "scene-engine/checklist",
+      "gsap",
+      "gsap/recipe-morph"
+    ],
+    "evidenceFile": "/Users/zuramakaradze/.codex/scratch/revline-gsap-a/identityCornerClose63-evidence.json",
+    "sourceSHA256": "e1c4e4b36c0cd55026eb75469a7b8f74e4857439f3976380dbcd878c2ab375f5",
     "exported": false
   }
 }

@@ -83,7 +83,7 @@
     "change": "Preserve requested motion range in frame snapshots"
   },
   "priority": "User requested reference structure and timing take precedence over generic one-second holds, no grids, and quiet house styling.",
-  "revision": 61,
+  "revision": 63,
   "verificationFile": "verification.json",
   "sourceFile": "film.tsx.txt",
   "soundEffects": {
@@ -149,7 +149,7 @@
     "generatedMusicAndCuesMuted": true,
     "activeAudioAssetId": "j57eeahvakwfy1ntsewb2jm3zh8hb6ee"
   },
-  "sourceSHA256": "5d443f75296ed51ee4d3d2bb790bc965d67b83b65f256cbc722e1e24fa54d253",
+  "sourceSHA256": "e1c4e4b36c0cd55026eb75469a7b8f74e4857439f3976380dbcd878c2ab375f5",
   "fonts": [
     "JetBrains Mono",
     "Pixelify Sans"
@@ -355,6 +355,18 @@
       "Kept the 2048-tile mesh, thicker pixel rip, photo, benchmark windows, metrics, later camera choreography, soundtrack, and all source outside GridSphere unchanged."
     ],
     "sourceSHA256": "5d443f75296ed51ee4d3d2bb790bc965d67b83b65f256cbc722e1e24fa54d253",
+    "verificationFile": "verification.json",
+    "detailedAuditFile": "audit.json",
+    "exported": false
+  },
+  "identityCornerClose": {
+    "revision": 63,
+    "changes": [
+      "Added a subtle inward contraction to the first identity card corner rectangles from 8.15 to 8.4 s, finishing before the existing 8.416667 s Upload cut.",
+      "Corners contract to 95% width and 86% height over 0.25 s with power2.in, using an explicit fromTo for deterministic seeks.",
+      "Logo, text, byline, cut timing and all other source are unchanged. The closing identity at 26.05 s is excluded by the ending branch."
+    ],
+    "sourceSHA256": "e1c4e4b36c0cd55026eb75469a7b8f74e4857439f3976380dbcd878c2ab375f5",
     "verificationFile": "verification.json",
     "detailedAuditFile": "audit.json",
     "exported": false

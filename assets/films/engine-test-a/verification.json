@@ -3,10 +3,10 @@
   "projectName": "Engine test A: GSAP (RightNow rebuild)",
   "editor": "http://localhost:3001/editor/j970eespkq2j4crma0yhj5mpc18haer6",
   "timelineId": "main",
-  "revision": 61,
+  "revision": 63,
   "sceneClipId": "5b49332a-bc9f-4fc8-a8cd-383e406bf6a1",
   "sourceFile": "film.tsx.txt",
-  "sourceSHA256": "5d443f75296ed51ee4d3d2bb790bc965d67b83b65f256cbc722e1e24fa54d253",
+  "sourceSHA256": "e1c4e4b36c0cd55026eb75469a7b8f74e4857439f3976380dbcd878c2ab375f5",
   "duration": 30.966667,
   "fps": 60,
   "visualSceneCount": 1,
@@ -125,6 +125,36 @@
       "time": 8,
       "difference": 24,
       "revision": 50
+    },
+    {
+      "time": 8.1,
+      "difference": 23,
+      "revision": 63
+    },
+    {
+      "time": 8.2,
+      "difference": 24,
+      "revision": 63
+    },
+    {
+      "time": 8.3,
+      "difference": 24,
+      "revision": 63
+    },
+    {
+      "time": 8.383,
+      "difference": 25,
+      "revision": 63
+    },
+    {
+      "time": 8.4,
+      "difference": 26,
+      "revision": 63
+    },
+    {
+      "time": 8.433,
+      "difference": 16,
+      "revision": 63
     },
     {
       "time": 9.217,
@@ -398,7 +428,8 @@
     "Revision 58 thicker pixel rip: native source windows/details and color/edge sampling, before/after renders, 12 final reference comparisons all 9-20/100, two pacing windows with no flags, two motionMap diffs with four retained camera-fit differences.",
     "Revision 59 cursor-first spring: 12 native frames show held camera during the scan, stopped pointer, spring overshoot and settle before click; six locked sections render unchanged. Pacing has no flags. Twelve reference comparisons retain two deliberate late-push differences (28/29); motionMap records the corresponding two timing/ease differences.",
     "Revision 60 terminal background: exact one-tween source change, native recession/overshoot/settle and cover inspection, eight reference comparisons, scoped motionMap and pacing. Terminal source is unchanged; six locked sections pass render guard. One 29/100 comparison and two deliberate spring-speed flags retained with reasons.",
-    "Revision 61 continuous smiley ball: dense source crop and reference tracking, native adjacent frames through 18:14, later yaw checks, 12 final comparisons all 8-15/100, pacing without flags and two recorded motionMap differences. Exact source comparison confirms all code outside GridSphere unchanged."
+    "Revision 61 continuous smiley ball: dense source crop and reference tracking, native adjacent frames through 18:14, later yaw checks, 12 final comparisons all 8-15/100, pacing without flags and two recorded motionMap differences. Exact source comparison confirms all code outside GridSphere unchanged.",
+    "Revision 63 identity corners: dense source window and corner track, two rendered inset iterations, exact one-line source comparison, five locked sections unchanged, six final reference comparisons (one 26/100 residual), scoped motionMap with no differences and pacing with no flags."
   ],
   "development": {
     "web": "Ready and left running on localhost:3001",
@@ -1531,6 +1562,78 @@
     "remainingDifferences": [
       "Two composite camera-fit differences remain over 17.65-19.2 s, concerning fitted reveal timing/magnitude and later recession. They include mask/mesh growth in the camera estimate; no extra whole-camera tween was added for this object-only fix.",
       "Exact mesh projection/texture alignment, benchmark timings and supplied background geometry retain visual differences from the reference."
+    ],
+    "detailedAuditFile": "audit.json",
+    "exported": false
+  },
+  "identityCornerClose": {
+    "revision": 63,
+    "onlyCornerClosingAdded": true,
+    "nativeFrames": [
+      8.15,
+      8.3,
+      8.4
+    ],
+    "compareReference": {
+      "note": "Reference (left) beside your timeline (right), one moment per row, at 8.1s, 8.2s, 8.3s, 8.383s, 8.4s, 8.433s. Differences: 8.1s 23, 8.2s 24, 8.3s 24, 8.383s 25, 8.4s 26, 8.433s 16.",
+      "next": "Pass 1 of 3. Fix the 2 worst moments now (8.4s) with patchScene or editScene: read that moment with fps 10 if you have not, correct it, then compare again. Done when every moment scores 25 or less, or after 3 passes.",
+      "pass": 1,
+      "scores": [
+        {
+          "time": 8.1,
+          "difference": 23
+        },
+        {
+          "time": 8.2,
+          "difference": 24
+        },
+        {
+          "time": 8.3,
+          "difference": 24
+        },
+        {
+          "time": 8.383,
+          "difference": 25
+        },
+        {
+          "time": 8.4,
+          "difference": 26
+        },
+        {
+          "time": 8.433,
+          "difference": 16
+        }
+      ],
+      "images": [
+        "Reference (left) beside your timeline (right), 1",
+        "Reference (left) beside your timeline (right), 2"
+      ]
+    },
+    "motionMap": {
+      "start": 8.05,
+      "end": 8.5,
+      "differences": []
+    },
+    "pacing": {
+      "revision": 63,
+      "range": "7.95-8.65s",
+      "samples": "8 at 10 fps",
+      "changePerSecond": "8s 114%",
+      "cuts": [
+        8.45
+      ],
+      "cameraMoves": 1,
+      "flags": [],
+      "next": "No pacing problems found in this range."
+    },
+    "lockedSectionGuard": {
+      "passed": true,
+      "sections": 5,
+      "samples": 15
+    },
+    "remainingDifferences": [
+      "No motionMap differences over the changed 8.05-8.5 s window.",
+      "The final 8.4 s comparison remains 26/100 after the targeted inset correction. Other five frames score 16-25/100. Overall logo/type position, glyph and proportion differences persist; this is not an all-pass pixel-similarity claim."
     ],
     "detailedAuditFile": "audit.json",
     "exported": false

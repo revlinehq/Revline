@@ -4,6 +4,7 @@ import { Beat, useScene, useTimeline } from 'revline';
 import { gsap } from 'gsap';
 import { CustomEase } from 'gsap/CustomEase';
 
+  if(!ending)tl.fromTo(frame,{scaleX:1,scaleY:1},{scaleX:.95,scaleY:.86,duration:.25,ease:'power2.in',immediateRender:false},2.383333);
 const GREEN = '#76b900';
 const SYSTEM_ZERO_AT = 4.3;
 const MONO = '"JetBrains Mono", monospace';
