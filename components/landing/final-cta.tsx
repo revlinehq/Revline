@@ -40,7 +40,7 @@ export function LandingFinalCta() {
     } catch { setGoogle('failed'); }
   }
 
-  return <LandingSection className="landing-final" headingId="landing-final-heading">
+  return <LandingSection className="landing-final" headingId="landing-final-heading" data-nav-tone="dark">
     <div className="landing-final-card">
       <LandingHeading id="landing-final-heading" align="center" size="lg" title={<>Your next video is<br />one prompt away.</>} description="Upload a clip and see what Revline does with it." />
       <div className="landing-signup">

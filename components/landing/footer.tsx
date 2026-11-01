@@ -9,7 +9,7 @@ const footerNotes = [
 ];
 
 export function LandingFooter() {
-  return <footer className="landing-footer landing-section">
+  return <footer className="landing-footer landing-section" data-nav-tone="dark">
     <div className="landing-footer-brand"><Brand /><small>© 2026</small></div>
     <nav aria-label="Footer navigation">
       <a href="#pricing">Pricing</a>
