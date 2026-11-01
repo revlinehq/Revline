@@ -8,7 +8,8 @@ import { NEW_PROJECT_PATH } from '@/lib/workspace-routes';
 import { PRODUCTION_CLAUDE_MODEL_CHOICES } from '@/lib/ai/claude-model-policy';
 import { Fragment, memo, useCallback, useState, useEffect, useLayoutEffect, useMemo, useRef, type ComponentProps } from 'react';
 import { Check, ArrowUpRight, Lightbulb, RotateCcw, X } from 'lucide-react';
-import { AssistantEffortPicker, AssistantModelPicker } from './assistant-model-picker';
+import { AssistantModelPicker } from './assistant-model-picker';
+import { AssistantModePicker, useAssistantEditMode } from './assistant-mode-picker';
 import { EDITOR_MODELS, type ClaudeModelChoice, type EditorReasoningEffort, type EditorSpeedMode } from '@/lib/ai/claude-model';
 import { EditComposer, type ComposerAttachment } from '@/components/workspace/edit-composer';
 import { McpLogo } from '@/components/workspace/ai-app-logos';
@@ -131,6 +132,7 @@ function AssistantPanelBody({ messages, running, editing:editingTimeline=running
   const sendInFlight=useRef(false);
   const currentDraftKey=useRef(draftKey);currentDraftKey.current=draftKey;
   const [modelChoice, setModelChoice] = useState<ClaudeModelChoice>();
+  const editMode = useAssistantEditMode();
   // Undefined is Auto: the editor picks the effort per request.
   const [effortChoice, setEffortChoice] = useState<EditorReasoningEffort>();
   const chosenEffort = effortSwitcher ? effortChoice : undefined;
@@ -264,7 +266,7 @@ function AssistantPanelBody({ messages, running, editing:editingTimeline=running
     </MessageScrollerViewport><MessageScrollerButton /></MessageScroller>
     <div className="manual-composer-dock">
     {queued.length>0&&<div className="assistant-queue" aria-label="Queued messages"><div className="assistant-queue-heading"><span>{queued.length} queued{queuePaused?' · paused':''}</span>{queuePaused&&onResumeQueue&&<button type="button" onClick={()=>void onResumeQueue().catch(e=>setLocalError(userError(e,'Could not resume the queue.')))}>Resume queue</button>}</div>{queued.map((message,index)=><div className="assistant-queued-message" key={message.id}><span className="assistant-queue-number">{index+1}</span><div><p>{message.prompt}</p>{message.error&&<small>{message.error}</small>}</div><button type="button" aria-label={`Remove queued message ${index+1}`} onClick={()=>void onRemoveQueued?.(message.id).catch(e=>setLocalError(userError(e,'Could not remove queued message.')))}><X size={13}/></button></div>)}</div>}
-    <EditComposer allowQueue={conversationStarted&&!demo} attachments={attachments} onRemoveAttachment={onRemoveAttachment} requireMedia={requireMedia} actions={canChooseModel || claudeViaMcp ? <div className="assistant-model-controls"><AssistantModelPicker claudeViaMcp={claudeViaMcp} allowedModels={canChooseModel ? availableModels : [effectiveModelChoice]} value={effectiveModelChoice} onChange={chooseModel} disabled={answering}/>{canChooseModel&&effortSwitcher&&<AssistantEffortPicker value={effortChoice} live={liveEffort} onChange={setEffortChoice} disabled={answering}/>}</div> : undefined} variant="compact" className="manual-editor-composer" value={prompt} onChange={changePrompt} onSubmit={submit} onAttach={onAttach} placeholder={externalAgent ? `${externalAgent} is editing over MCP. What you send runs when it finishes.` : "What would you change next?"} disabled={composerBusy || sending || !!pendingReply} running={running && !externalAgent} onStop={onStop ? stop : undefined} stopping={stopState==='stopping'} />
+    <EditComposer allowQueue={conversationStarted&&!demo} attachments={attachments} onRemoveAttachment={onRemoveAttachment} requireMedia={requireMedia} actions={<div className="assistant-model-controls">{(canChooseModel || claudeViaMcp) && <AssistantModelPicker claudeViaMcp={claudeViaMcp} allowedModels={canChooseModel ? availableModels : [effectiveModelChoice]} value={effectiveModelChoice} onChange={chooseModel} disabled={answering} effort={canChooseModel && effortSwitcher ? { value: effortChoice, live: liveEffort, onChange: setEffortChoice } : undefined}/>}<AssistantModePicker {...editMode} disabled={answering}/></div>} variant="compact" className="manual-editor-composer" value={prompt} onChange={changePrompt} onSubmit={submit} onAttach={onAttach} placeholder={externalAgent ? `${externalAgent} is editing over MCP. What you send runs when it finishes.` : "What would you change next?"} disabled={composerBusy || sending || !!pendingReply} running={running && !externalAgent} onStop={onStop ? stop : undefined} stopping={stopState==='stopping'} />
     </div>
   </div>;
 }
