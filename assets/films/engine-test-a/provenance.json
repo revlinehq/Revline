@@ -82,7 +82,7 @@
     "change": "Preserve requested motion range in frame snapshots"
   },
   "priority": "User requested reference structure and timing take precedence over generic one-second holds, no grids, and quiet house styling.",
-  "revision": 59,
+  "revision": 60,
   "verificationFile": "verification.json",
   "sourceFile": "film.tsx.txt",
   "soundEffects": {
@@ -148,7 +148,7 @@
     "generatedMusicAndCuesMuted": true,
     "activeAudioAssetId": "j57eeahvakwfy1ntsewb2jm3zh8hb6ee"
   },
-  "sourceSHA256": "32efcb540e2c21d48ed72d33391cbe2c1c044520a55c909aa105b9e06c88730f",
+  "sourceSHA256": "6dc0f435447d3b97a1c0766136b2b3883537d4e174b504e6ee7efa22870b74b4",
   "fonts": [
     "JetBrains Mono",
     "Pixelify Sans"
@@ -328,6 +328,19 @@
     ],
     "priority": "The latest explicit instruction requires the cursor to finish moving down before the spring. The reference starts pushing earlier; moving the spring earlier to satisfy the similarity score would restore the overlap the user rejected. Preserved the requested wait instead.",
     "sourceSHA256": "32efcb540e2c21d48ed72d33391cbe2c1c044520a55c909aa105b9e06c88730f",
+    "verificationFile": "verification.json",
+    "detailedAuditFile": "audit.json",
+    "exported": false
+  },
+  "terminalBackgroundSpring": {
+    "revision": 60,
+    "changes": [
+      "Changed only the upload Landscape photo recession tween. All UploadTerminal source, terminal geometry, opening, mascot and prompt animations are unchanged.",
+      "Background now pulls from scale 1.68 to 1.16 over 0.8 s, starting at 11.416667 s on the terminal opening cue, with back.out(1.35) overshoot and settle.",
+      "Reframed the background from y=-195 to -180 with rotation 0.9 to -0.5 degrees; retained cover at the smallest overshoot scale and all actual-image/effect layers.",
+      "Preserved the cursor-first spring zoom, other Beats, soundtrack, reference asset, supplied Bliss background and project isolation."
+    ],
+    "sourceSHA256": "6dc0f435447d3b97a1c0766136b2b3883537d4e174b504e6ee7efa22870b74b4",
     "verificationFile": "verification.json",
     "detailedAuditFile": "audit.json",
     "exported": false

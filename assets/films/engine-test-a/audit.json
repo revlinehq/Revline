@@ -1,9 +1,9 @@
 {
   "projectId": "j970eespkq2j4crma0yhj5mpc18haer6",
   "timelineId": "main",
-  "revision": 59,
-  "status": "Cursor-first spring zoom verified at revision 59; two deliberate timing differences from reference retained to honor the requested wait",
-  "sourceSHA256": "32efcb540e2c21d48ed72d33391cbe2c1c044520a55c909aa105b9e06c88730f",
+  "revision": 60,
+  "status": "Terminal background spring zoom-out verified at revision 60; terminal source unchanged and reference motion/texture differences recorded",
+  "sourceSHA256": "6dc0f435447d3b97a1c0766136b2b3883537d4e174b504e6ee7efa22870b74b4",
   "changes": {
     "intro": [
       "GSAP background blur builds 2.8–3.05 s, holds through 4.3 s and resolves during the crisp dither handoff by 4.733333 s.",
@@ -2285,7 +2285,7 @@
     "patchesCompiled": true
   },
   "finalTimeline": {
-    "revision": 59,
+    "revision": 60,
     "sceneCount": 1,
     "clipCount": 8,
     "markers": 9,
@@ -6212,6 +6212,154 @@
     ],
     "evidenceFile": "/Users/zuramakaradze/.codex/scratch/revline-gsap-a/cursorSpring59-evidence.json",
     "sourceSHA256": "32efcb540e2c21d48ed72d33391cbe2c1c044520a55c909aa105b9e06c88730f",
+    "exported": false
+  },
+  "terminalBackgroundSpring": {
+    "revision": 60,
+    "request": "When the System Zero terminal opens, the background should spring zoom out. System Zero itself can stay as is.",
+    "scope": {
+      "start": 8.416667,
+      "end": 15.916667
+    },
+    "changes": [
+      "Changed only the upload Landscape photo recession tween. All UploadTerminal source, terminal geometry, opening, mascot and prompt animations are unchanged.",
+      "Background now pulls from scale 1.68 to 1.16 over 0.8 s, starting at 11.416667 s on the terminal opening cue, with back.out(1.35) overshoot and settle.",
+      "Reframed the background from y=-195 to -180 with rotation 0.9 to -0.5 degrees; retained cover at the smallest overshoot scale and all actual-image/effect layers.",
+      "Preserved the cursor-first spring zoom, other Beats, soundtrack, reference asset, supplied Bliss background and project isolation."
+    ],
+    "verification": {
+      "onlyBackgroundTweenChanged": true,
+      "sourceCharacters": 62594,
+      "compiled": true,
+      "nativeFrames": {
+        "revision": 60,
+        "times": [
+          11.416667,
+          11.5,
+          11.65,
+          11.9,
+          12.216667,
+          12.5
+        ]
+      },
+      "referenceRead": {
+        "start": 11.2,
+        "end": 12.5,
+        "fps": 10
+      },
+      "compareReference": {
+        "note": "Reference (left) beside your timeline (right), one moment per row, at 11.433s, 11.5s, 11.65s, 11.9s, 12.217s, 12.5s, 13.1s, 15.4s. Differences: 11.433s 20, 11.5s 16, 11.65s 29, 11.9s 7, 12.217s 6, 12.5s 5, 13.1s 14, 15.4s 18.",
+        "next": "Pass 1 of 3. Fix the 2 worst moments now (11.65s) with patchScene or editScene: read that moment with fps 10 if you have not, correct it, then compare again. Done when every moment scores 25 or less, or after 3 passes.",
+        "pass": 1,
+        "scores": [
+          {
+            "time": 11.433,
+            "difference": 20
+          },
+          {
+            "time": 11.5,
+            "difference": 16
+          },
+          {
+            "time": 11.65,
+            "difference": 29
+          },
+          {
+            "time": 11.9,
+            "difference": 7
+          },
+          {
+            "time": 12.217,
+            "difference": 6
+          },
+          {
+            "time": 12.5,
+            "difference": 5
+          },
+          {
+            "time": 13.1,
+            "difference": 14
+          },
+          {
+            "time": 15.4,
+            "difference": 18
+          }
+        ],
+        "images": [
+          "Reference (left) beside your timeline (right), 1",
+          "Reference (left) beside your timeline (right), 2",
+          "Reference (left) beside your timeline (right), 3"
+        ]
+      },
+      "motionMap": {
+        "start": 11.2,
+        "end": 12.5,
+        "differences": [
+          {
+            "time": 11.33,
+            "issue": "Camera move differs from the reference: ease none where the reference uses sine.in; bigger (zoom out 32% + pan right 8.7% + tilt down 6.7% + rotate -2.3° vs zoom out 12%); 0.57s long vs 0.2s.",
+            "fix": "tl.fromTo(camera, { scale: 1, xPercent: 0, yPercent: 0, rotation: 0 }, { scale: 0.885, xPercent: 0.07, yPercent: -0.36, rotation: 0.12, duration: 0.2, ease: 'sine.in' }, 11.2)"
+          },
+          {
+            "time": 11.4,
+            "issue": "The reference camera moves here (zoom out 11% + pan right 4.8% + rotate -1.9°, 0.2s, none, it starts with an element slides left (middle) at 11.43s); yours does not.",
+            "fix": "tl.fromTo(camera, { scale: 0.885, xPercent: 0.07, yPercent: -0.36, rotation: 0.12 }, { scale: 0.79, xPercent: -4.73, yPercent: -1.11, rotation: -1.8, duration: 0.2, ease: 'none' }, 11.4)"
+          },
+          {
+            "time": 11.43,
+            "issue": "Transition differs: yours is a wipe of 0.1s, the reference a wipe bottom to top of 0.3s."
+          },
+          {
+            "time": 11.6,
+            "issue": "The reference camera moves here (zoom out 14%, 0.87s, power1.out, it starts with an element scales up (bottom) at 11.6s); yours does not.",
+            "fix": "tl.fromTo(camera, { scale: 0.79, xPercent: -4.73, yPercent: -1.11, rotation: -1.8 }, { scale: 0.681, xPercent: -4.1, yPercent: -0.96, rotation: -1.83, duration: 0.87, ease: 'power1.out' }, 11.6)"
+          }
+        ]
+      },
+      "pacing": {
+        "revision": 60,
+        "range": "11.35-12.55s",
+        "samples": "13 at 10 fps",
+        "changePerSecond": "11s 226%, 12s 3%",
+        "cuts": [
+          11.45
+        ],
+        "cameraMoves": 2,
+        "flags": [
+          {
+            "at": "11.45-11.55s",
+            "kind": "jump",
+            "reason": "The camera jumps 18% in one sample at 11.5s: animate it over at least 0.4 s."
+          },
+          {
+            "at": "11.45-11.65s",
+            "kind": "too-fast",
+            "reason": "A zoom of 20% in 0.2 s, peaking at 168% of the frame per second: too fast to follow. Make it longer."
+          }
+        ],
+        "next": "Fix the flagged moments in the scene code (longer holds, eased moves, fewer changes per second), then run checkPacing on that range again. A flag you keep on purpose (a deliberate snap or flash) needs a reason you can name."
+      },
+      "lockedSectionGuard": {
+        "passed": true,
+        "sections": 6,
+        "samples": 18
+      }
+    },
+    "retainedPacingFlags": {
+      "count": 2,
+      "reason": "The requested spring uses a deliberately fast background pullback and a brief overshoot. The existing terminal remains stable and readable; extending or slowing its opening would violate the request to preserve it."
+    },
+    "remainingDifferences": [
+      "Four reference motion/transition differences remain in 11.2-12.5 s: the reference has a three-stage recession and a 0.3 s bottom-to-top wipe; this edit intentionally uses a single background spring at terminal opening and preserves the existing terminal wipe.",
+      "The 11.65 s comparison scores 29/100. Other seven comparisons score 5-20/100. Background image geometry/dither texture and existing terminal timing remain approximate; no all-pass similarity claim."
+    ],
+    "skills": [
+      "scene-engine/react-scenes",
+      "scene-engine/checklist",
+      "gsap"
+    ],
+    "evidenceFile": "/Users/zuramakaradze/.codex/scratch/revline-gsap-a/terminalBackground60-evidence.json",
+    "sourceSHA256": "6dc0f435447d3b97a1c0766136b2b3883537d4e174b504e6ee7efa22870b74b4",
     "exported": false
   }
 }
