@@ -1,9 +1,9 @@
 {
   "projectId": "j970eespkq2j4crma0yhj5mpc18haer6",
   "timelineId": "main",
-  "revision": 47,
-  "status": "Requested green-dither and pixel-scatter correction saved; remaining visual and camera-fit differences recorded",
-  "sourceSHA256": "d888d3adae00c1069524470a5f0ecdb403cea09f1e4f9bd3447803524fd934be",
+  "revision": 50,
+  "status": "System Zero closing handoff corrected and verified; residual reference differences recorded",
+  "sourceSHA256": "5408fe9c6b7690a3a34f2b41032b21b1a1fbfc6a134c5d0914751b162fcb2db1",
   "changes": {
     "intro": [
       "GSAP background blur builds 2.8\u20133.05 s, holds through 4.3 s and resolves during the crisp dither handoff by 4.733333 s.",
@@ -370,6 +370,149 @@
             "difference": 15
           }
         ]
+      },
+      {
+        "revision": 48,
+        "scores": [
+          {
+            "time": 5.3,
+            "difference": 17
+          },
+          {
+            "time": 5.5,
+            "difference": 16
+          },
+          {
+            "time": 5.65,
+            "difference": 18
+          },
+          {
+            "time": 5.733,
+            "difference": 42
+          },
+          {
+            "time": 5.75,
+            "difference": 41
+          },
+          {
+            "time": 5.767,
+            "difference": 75
+          },
+          {
+            "time": 5.8,
+            "difference": 60
+          },
+          {
+            "time": 5.85,
+            "difference": 20
+          },
+          {
+            "time": 6,
+            "difference": 11
+          },
+          {
+            "time": 6.45,
+            "difference": 15
+          }
+        ]
+      },
+      {
+        "revision": 49,
+        "scores": [
+          {
+            "time": 5.3,
+            "difference": 17
+          },
+          {
+            "time": 5.5,
+            "difference": 16
+          },
+          {
+            "time": 5.65,
+            "difference": 16
+          },
+          {
+            "time": 5.733,
+            "difference": 26
+          },
+          {
+            "time": 5.75,
+            "difference": 27
+          },
+          {
+            "time": 5.767,
+            "difference": 33
+          },
+          {
+            "time": 5.8,
+            "difference": 33
+          },
+          {
+            "time": 5.85,
+            "difference": 9
+          },
+          {
+            "time": 6,
+            "difference": 11
+          },
+          {
+            "time": 6.45,
+            "difference": 15
+          }
+        ]
+      },
+      {
+        "revision": 50,
+        "scores": [
+          {
+            "time": 5.3,
+            "difference": 17
+          },
+          {
+            "time": 5.5,
+            "difference": 16
+          },
+          {
+            "time": 5.65,
+            "difference": 16
+          },
+          {
+            "time": 5.733,
+            "difference": 26
+          },
+          {
+            "time": 5.75,
+            "difference": 27
+          },
+          {
+            "time": 5.767,
+            "difference": 6
+          },
+          {
+            "time": 5.8,
+            "difference": 11
+          },
+          {
+            "time": 5.85,
+            "difference": 10
+          },
+          {
+            "time": 6,
+            "difference": 10
+          },
+          {
+            "time": 6.45,
+            "difference": 14
+          },
+          {
+            "time": 6.7,
+            "difference": 19
+          },
+          {
+            "time": 8,
+            "difference": 24
+          }
+        ]
       }
     ],
     "latestApplicableScores": [
@@ -407,6 +550,66 @@
         "time": 4.6,
         "difference": 18,
         "revision": 44
+      },
+      {
+        "time": 5.3,
+        "difference": 17,
+        "revision": 50
+      },
+      {
+        "time": 5.5,
+        "difference": 16,
+        "revision": 50
+      },
+      {
+        "time": 5.65,
+        "difference": 16,
+        "revision": 50
+      },
+      {
+        "time": 5.733,
+        "difference": 26,
+        "revision": 50
+      },
+      {
+        "time": 5.75,
+        "difference": 27,
+        "revision": 50
+      },
+      {
+        "time": 5.767,
+        "difference": 6,
+        "revision": 50
+      },
+      {
+        "time": 5.8,
+        "difference": 11,
+        "revision": 50
+      },
+      {
+        "time": 5.85,
+        "difference": 10,
+        "revision": 50
+      },
+      {
+        "time": 6,
+        "difference": 10,
+        "revision": 50
+      },
+      {
+        "time": 6.45,
+        "difference": 14,
+        "revision": 50
+      },
+      {
+        "time": 6.7,
+        "difference": 19,
+        "revision": 50
+      },
+      {
+        "time": 8,
+        "difference": 24,
+        "revision": 50
       },
       {
         "time": 9.3,
@@ -1478,6 +1681,40 @@
       "remainingDifferenceCount": 7,
       "authoredCameraTweensChanged": false,
       "note": "Composite optical-flow fits include the photo, iris and fragments. Their camera estimates vary with effect appearance; the seven current fitted residuals are retained explicitly rather than reported as passing."
+    },
+    "closingButtonRevision50": {
+      "start": 5.25,
+      "end": 6.4,
+      "timelineStart": 5.25,
+      "differences": [
+        {
+          "time": 5.32,
+          "issue": "Camera move differs from the reference: ease power1.in where the reference uses sine.in.",
+          "fix": "tl.fromTo(camera, { scale: 1, xPercent: 0.01, yPercent: 0, rotation: 0 }, { scale: 0.931, xPercent: 0.01, yPercent: -0.09, rotation: 0.14, duration: 0.5, ease: 'sine.in' }, 5.32)"
+        }
+      ],
+      "referenceTransitions": [
+        {
+          "area": 100,
+          "duration": 0.17,
+          "ease": "circ.in",
+          "end": 5.78,
+          "kind": "transition",
+          "start": 5.62
+        }
+      ],
+      "timelineTransitions": [
+        {
+          "area": 100,
+          "duration": 0.1,
+          "ease": "circ.in",
+          "end": 5.78,
+          "kind": "transition",
+          "start": 5.68
+        }
+      ],
+      "remainingDifferenceCount": 1,
+      "note": "The fitted camera ease is power1.in rather than sine.in. The transition classifier measures .10 s from 5.68 to 5.78 s, compared with .17 s from 5.62 to 5.78 s in the reference. The authored closing mask begins at 5.416667 s; the camera choreography remains unchanged."
     }
   },
   "cameraCauses": [
@@ -1665,6 +1902,19 @@
         "flags": [],
         "next": "No pacing problems found in this range."
       }
+    },
+    "closingButtonRevision50": {
+      "revision": 50,
+      "range": "5.2-6.4s",
+      "samples": "13 at 10 fps",
+      "changePerSecond": "5s 210%, 6s 0%",
+      "cuts": [
+        5.7,
+        5.8
+      ],
+      "cameraMoves": 0,
+      "flags": [],
+      "next": "No pacing problems found in this range."
     }
   },
   "boundaries": {
@@ -1714,6 +1964,17 @@
       ],
       "allViewed": true,
       "finding": "No unintended blank or flash; the green seed square grows into the iris."
+    },
+    "closingButtonRevision50": {
+      "times": [
+        5.733333,
+        5.75,
+        5.766667,
+        5.783333,
+        5.8
+      ],
+      "allViewed": true,
+      "finding": "Old control/background leave at the identity cue; centered green sliver reveals into the destination mark without a blank frame or leftover label."
     }
   },
   "engine": {
@@ -1723,7 +1984,7 @@
     "patchesCompiled": true
   },
   "finalTimeline": {
-    "revision": 47,
+    "revision": 50,
     "sceneCount": 1,
     "clipCount": 8,
     "markers": 9,
@@ -2274,5 +2535,893 @@
     "exported": false,
     "verificationLimit": "The scene checklist comparison threshold of 35 is not met at .1 s. The explicit requirement to retain the supplied background is preserved. This correction does not claim a pixel-identical reference match.",
     "tools": "Reference reads, tracking, measurements, renders, pacing and comparisons all used native Revline tools. Local scripts only archived source and verification metadata and ran git checks."
+  },
+  "closingButtonHandoff": {
+    "revision": 50,
+    "request": "The System Zero button should smoothly close and at the same time transition into the next scene. Check the frames.",
+    "originalProblem": "Revision 47 kept the control full width until the Intro Beat unmounted at 5.766667 s; its label only shifted slightly, followed by a fully visible identity mark on white.",
+    "changes": [
+      "Control closes inward with clipPath from 5.416667 to 5.75 s while its label and icon translate inward. Its height settles from 170 to 160 px.",
+      "Final collapse and background clearing finish at the 5.766667 s identity cue. Explicit fromTo starting values prevent the second tween from widening the control again on a direct seek.",
+      "The intro Beat stays mounted to 5.9 s so the handoff is one continuous GSAP timeline across the identity marker. Hidden background is removed at 5.783333 s and the old intro is hidden at 5.8 s.",
+      "The incoming abstract mark starts as a centered green sliver and reveals over .28 s, with expanding corners and constant first-identity corner stroke weight.",
+      "Late dither coverage increases through its threshold rather than a flat green overlay, preserving the black grain during closure."
+    ],
+    "engine": "GSAP through useTimeline, one React scene clip. No CSS animations or manual frame clock.",
+    "referenceRead": {
+      "wholeWindow": {
+        "start": 5.15,
+        "end": 6.35,
+        "fps": 10
+      },
+      "controlCrop": {
+        "start": 5.35,
+        "end": 6.15,
+        "fps": 10,
+        "crop": {
+          "x": 200,
+          "y": 300,
+          "w": 1520,
+          "h": 500
+        }
+      },
+      "fastWindow": {
+        "start": 5.65,
+        "end": 5.95,
+        "fps": 30
+      },
+      "lastFrames": [
+        {
+          "time": 5.7
+        },
+        {
+          "change": 0.054,
+          "changed": {
+            "h": 504,
+            "w": 1520,
+            "x": 200,
+            "y": 300
+          },
+          "time": 5.717
+        },
+        {
+          "change": 0,
+          "time": 5.733
+        },
+        {
+          "change": 0.032,
+          "changed": {
+            "h": 504,
+            "w": 1511,
+            "x": 200,
+            "y": 300
+          },
+          "time": 5.75
+        },
+        {
+          "change": 0.464,
+          "changed": {
+            "h": 504,
+            "w": 1520,
+            "x": 200,
+            "y": 300
+          },
+          "time": 5.767
+        },
+        {
+          "change": 0,
+          "time": 5.783
+        },
+        {
+          "change": 0.001,
+          "changed": {
+            "h": 219,
+            "w": 209,
+            "x": 856,
+            "y": 433
+          },
+          "time": 5.8
+        },
+        {
+          "change": 0.002,
+          "changed": {
+            "h": 238,
+            "w": 228,
+            "x": 846,
+            "y": 424
+          },
+          "time": 5.817
+        }
+      ]
+    },
+    "measurements": [
+      {
+        "time": 5.4,
+        "data": {
+          "note": "Frame 1920x1080.",
+          "colors": [
+            {
+              "hex": "#76b800",
+              "label": "button fill",
+              "x": 960,
+              "y": 478
+            },
+            {
+              "hex": "#0e1110",
+              "label": "sky transition",
+              "x": 960,
+              "y": 200
+            }
+          ],
+          "edges": [
+            {
+              "at": 478,
+              "axis": "y",
+              "changes": [
+                {
+                  "after": "#082a00",
+                  "at": 201,
+                  "before": "#8ab724"
+                },
+                {
+                  "after": "#81a931",
+                  "at": 212,
+                  "before": "#0d2c00"
+                },
+                {
+                  "after": "#082900",
+                  "at": 222,
+                  "before": "#8fbb32"
+                },
+                {
+                  "after": "#001900",
+                  "at": 243,
+                  "before": "#96bf3b"
+                },
+                {
+                  "after": "#7fa826",
+                  "at": 255,
+                  "before": "#011f00"
+                },
+                {
+                  "after": "#7ea836",
+                  "at": 276,
+                  "before": "#082c00"
+                },
+                {
+                  "after": "#002100",
+                  "at": 288,
+                  "before": "#8fb92c"
+                },
+                {
+                  "after": "#729337",
+                  "at": 297,
+                  "before": "#002100"
+                },
+                {
+                  "after": "#012000",
+                  "at": 314,
+                  "before": "#75943b"
+                },
+                {
+                  "after": "#97bc3b",
+                  "at": 319,
+                  "before": "#012000"
+                },
+                {
+                  "after": "#022800",
+                  "at": 378,
+                  "before": "#73963f"
+                },
+                {
+                  "after": "#8ea95a",
+                  "at": 1550,
+                  "before": "#12220c"
+                }
+              ],
+              "from": 200,
+              "label": "button upper edge scan",
+              "to": 1720
+            },
+            {
+              "at": 590,
+              "axis": "y",
+              "changes": [
+                {
+                  "after": "#96be34",
+                  "at": 363,
+                  "before": "#193500"
+                },
+                {
+                  "after": "#001c00",
+                  "at": 1524,
+                  "before": "#79b112"
+                },
+                {
+                  "after": "#778c3a",
+                  "at": 1529,
+                  "before": "#012000"
+                },
+                {
+                  "after": "#859e3b",
+                  "at": 1550,
+                  "before": "#172a00"
+                },
+                {
+                  "after": "#1d3100",
+                  "at": 1556,
+                  "before": "#859e3b"
+                },
+                {
+                  "after": "#859848",
+                  "at": 1560,
+                  "before": "#1d3100"
+                },
+                {
+                  "after": "#738f42",
+                  "at": 1582,
+                  "before": "#0f2400"
+                },
+                {
+                  "after": "#122800",
+                  "at": 1587,
+                  "before": "#738f42"
+                },
+                {
+                  "after": "#899f3b",
+                  "at": 1647,
+                  "before": "#1d2e00"
+                },
+                {
+                  "after": "#061d00",
+                  "at": 1663,
+                  "before": "#7e9845"
+                },
+                {
+                  "after": "#778d36",
+                  "at": 1690,
+                  "before": "#0c2500"
+                },
+                {
+                  "after": "#092200",
+                  "at": 1706,
+                  "before": "#7c8d3a"
+                }
+              ],
+              "from": 200,
+              "label": "button lower edge scan",
+              "to": 1720
+            },
+            {
+              "at": 960,
+              "axis": "x",
+              "changes": [
+                {
+                  "after": "#0d1a00",
+                  "at": 402,
+                  "before": "#96bd3e"
+                },
+                {
+                  "after": "#9ab832",
+                  "at": 418,
+                  "before": "#2b360a"
+                },
+                {
+                  "after": "#111b0d",
+                  "at": 424,
+                  "before": "#85a918"
+                },
+                {
+                  "after": "#91ae3c",
+                  "at": 436,
+                  "before": "#0a1500"
+                },
+                {
+                  "after": "#141f0b",
+                  "at": 445,
+                  "before": "#91ae3c"
+                },
+                {
+                  "after": "#7cb816",
+                  "at": 455,
+                  "before": "#001700"
+                },
+                {
+                  "after": "#000a00",
+                  "at": 516,
+                  "before": "#7fb505"
+                },
+                {
+                  "after": "#809f3b",
+                  "at": 527,
+                  "before": "#000800"
+                },
+                {
+                  "after": "#000e02",
+                  "at": 530,
+                  "before": "#809f3b"
+                },
+                {
+                  "after": "#81ad0d",
+                  "at": 544,
+                  "before": "#001300"
+                },
+                {
+                  "after": "#000c00",
+                  "at": 554,
+                  "before": "#87b01e"
+                },
+                {
+                  "after": "#7fb412",
+                  "at": 564,
+                  "before": "#000900"
+                }
+              ],
+              "from": 350,
+              "label": "button height",
+              "to": 710
+            }
+          ],
+          "fps": 60,
+          "frames": [
+            {
+              "time": 5.4
+            }
+          ],
+          "height": 1080,
+          "sourceHeight": 1080,
+          "sourceWidth": 1920,
+          "width": 1920,
+          "images": []
+        }
+      },
+      {
+        "time": 5.65,
+        "data": {
+          "note": "Frame 1920x1080.",
+          "colors": [
+            {
+              "hex": "#76b800",
+              "label": "button fill",
+              "x": 960,
+              "y": 478
+            },
+            {
+              "hex": "#648419",
+              "label": "sky transition",
+              "x": 960,
+              "y": 200
+            }
+          ],
+          "edges": [
+            {
+              "at": 478,
+              "axis": "y",
+              "changes": [
+                {
+                  "after": "#97b936",
+                  "at": 1462,
+                  "before": "#577e1a"
+                },
+                {
+                  "after": "#52751b",
+                  "at": 1476,
+                  "before": "#94b83e"
+                },
+                {
+                  "after": "#7c9f4a",
+                  "at": 1486,
+                  "before": "#55791f"
+                },
+                {
+                  "after": "#5c8211",
+                  "at": 1490,
+                  "before": "#7c9f4a"
+                },
+                {
+                  "after": "#3b600d",
+                  "at": 1518,
+                  "before": "#8cb439"
+                },
+                {
+                  "after": "#8ab04f",
+                  "at": 1527,
+                  "before": "#3b600d"
+                }
+              ],
+              "from": 200,
+              "label": "button upper edge scan",
+              "to": 1720
+            },
+            {
+              "at": 590,
+              "axis": "y",
+              "changes": [
+                {
+                  "after": "#6c960f",
+                  "at": 1495,
+                  "before": "#89b827"
+                },
+                {
+                  "after": "#94c039",
+                  "at": 1501,
+                  "before": "#6c960f"
+                },
+                {
+                  "after": "#507d06",
+                  "at": 1504,
+                  "before": "#94c039"
+                },
+                {
+                  "after": "#97c343",
+                  "at": 1511,
+                  "before": "#507d06"
+                },
+                {
+                  "after": "#7da32d",
+                  "at": 1535,
+                  "before": "#9cc342"
+                },
+                {
+                  "after": "#698f1b",
+                  "at": 1580,
+                  "before": "#8eba38"
+                },
+                {
+                  "after": "#8db52d",
+                  "at": 1584,
+                  "before": "#698f1b"
+                },
+                {
+                  "after": "#628b07",
+                  "at": 1591,
+                  "before": "#8ab42b"
+                },
+                {
+                  "after": "#86b025",
+                  "at": 1594,
+                  "before": "#628b07"
+                },
+                {
+                  "after": "#68921e",
+                  "at": 1602,
+                  "before": "#8db433"
+                }
+              ],
+              "from": 200,
+              "label": "button lower edge scan",
+              "to": 1720
+            },
+            {
+              "at": 960,
+              "axis": "x",
+              "changes": [
+                {
+                  "after": "#2b3d09",
+                  "at": 406,
+                  "before": "#71a90a"
+                },
+                {
+                  "after": "#668328",
+                  "at": 416,
+                  "before": "#2d3f0b"
+                },
+                {
+                  "after": "#0d1211",
+                  "at": 636,
+                  "before": "#8dba2a"
+                }
+              ],
+              "from": 350,
+              "label": "button height",
+              "to": 710
+            }
+          ],
+          "fps": 60,
+          "frames": [
+            {
+              "time": 5.65
+            }
+          ],
+          "height": 1080,
+          "sourceHeight": 1080,
+          "sourceWidth": 1920,
+          "width": 1920,
+          "images": []
+        }
+      },
+      {
+        "time": 5.75,
+        "data": {
+          "note": "Frame 1920x1080.",
+          "colors": [
+            {
+              "hex": "#76b800",
+              "label": "button fill",
+              "x": 960,
+              "y": 478
+            },
+            {
+              "hex": "#8db22c",
+              "label": "sky transition",
+              "x": 960,
+              "y": 200
+            }
+          ],
+          "edges": [
+            {
+              "at": 478,
+              "axis": "y",
+              "changes": [
+                {
+                  "after": "#87bb22",
+                  "at": 323,
+                  "before": "#70a40d"
+                },
+                {
+                  "after": "#8bc428",
+                  "at": 427,
+                  "before": "#6aa407"
+                },
+                {
+                  "after": "#6aa40a",
+                  "at": 432,
+                  "before": "#8cc629"
+                },
+                {
+                  "after": "#83bc24",
+                  "at": 447,
+                  "before": "#6ea70d"
+                },
+                {
+                  "after": "#73ad0e",
+                  "at": 480,
+                  "before": "#8ac123"
+                },
+                {
+                  "after": "#89c22a",
+                  "at": 488,
+                  "before": "#71ab11"
+                },
+                {
+                  "after": "#68a20a",
+                  "at": 494,
+                  "before": "#85bf27"
+                },
+                {
+                  "after": "#6aa108",
+                  "at": 1525,
+                  "before": "#7eb51b"
+                },
+                {
+                  "after": "#89be27",
+                  "at": 1528,
+                  "before": "#6aa108"
+                },
+                {
+                  "after": "#84ba27",
+                  "at": 1550,
+                  "before": "#659b0d"
+                },
+                {
+                  "after": "#85bc22",
+                  "at": 1679,
+                  "before": "#6ca50d"
+                },
+                {
+                  "after": "#6fa60e",
+                  "at": 1714,
+                  "before": "#84b61e"
+                }
+              ],
+              "from": 200,
+              "label": "button upper edge scan",
+              "to": 1720
+            },
+            {
+              "at": 590,
+              "axis": "y",
+              "changes": [
+                {
+                  "after": "#69a008",
+                  "at": 1645,
+                  "before": "#83ba22"
+                },
+                {
+                  "after": "#6ca00c",
+                  "at": 1657,
+                  "before": "#7db31e"
+                },
+                {
+                  "after": "#7cb21d",
+                  "at": 1667,
+                  "before": "#699d08"
+                },
+                {
+                  "after": "#6ca10a",
+                  "at": 1714,
+                  "before": "#7fb31a"
+                }
+              ],
+              "from": 200,
+              "label": "button lower edge scan",
+              "to": 1720
+            },
+            {
+              "at": 960,
+              "axis": "x",
+              "changes": [
+                {
+                  "after": "#000c00",
+                  "at": 518,
+                  "before": "#80b606"
+                },
+                {
+                  "after": "#7cb40e",
+                  "at": 562,
+                  "before": "#001100"
+                },
+                {
+                  "after": "#0d1a00",
+                  "at": 640,
+                  "before": "#8ba92c"
+                },
+                {
+                  "after": "#5f642a",
+                  "at": 664,
+                  "before": "#2b2f07"
+                },
+                {
+                  "after": "#202500",
+                  "at": 668,
+                  "before": "#5f642a"
+                }
+              ],
+              "from": 350,
+              "label": "button height",
+              "to": 710
+            }
+          ],
+          "fps": 60,
+          "frames": [
+            {
+              "time": 5.75
+            }
+          ],
+          "height": 1080,
+          "sourceHeight": 1080,
+          "sourceWidth": 1920,
+          "width": 1920,
+          "images": []
+        }
+      }
+    ],
+    "tracking": {
+      "start": 5.4,
+      "end": 5.766667,
+      "fit": 0.75,
+      "result": "The control/label region shifts right and contracts slightly; track loses confidence at the white handoff. Exact pixel bounds are partly ambiguous against the matching green background, so native cropped frames informed the closing mask."
+    },
+    "nativeTimelineFramesViewed": {
+      "47": [
+        5.433333,
+        5.55,
+        5.65,
+        5.733333,
+        5.766667,
+        5.8
+      ],
+      "48": [
+        5.433333,
+        5.55,
+        5.65,
+        5.733333,
+        5.75,
+        5.766667,
+        5.783333,
+        5.8,
+        5.816667,
+        5.85,
+        5.9,
+        6.1
+      ],
+      "49": [
+        5.55,
+        5.65,
+        5.733333,
+        5.75,
+        5.766667,
+        5.8
+      ],
+      "50": [
+        5.716667,
+        5.733333,
+        5.75,
+        5.766667,
+        5.783333,
+        5.8,
+        5.85,
+        5.966667,
+        6.166667,
+        6.45,
+        6.7,
+        8.0
+      ]
+    },
+    "compareReference": [
+      {
+        "time": 5.3,
+        "difference": 17
+      },
+      {
+        "time": 5.5,
+        "difference": 16
+      },
+      {
+        "time": 5.65,
+        "difference": 16
+      },
+      {
+        "time": 5.733,
+        "difference": 26
+      },
+      {
+        "time": 5.75,
+        "difference": 27
+      },
+      {
+        "time": 5.767,
+        "difference": 6
+      },
+      {
+        "time": 5.8,
+        "difference": 11
+      },
+      {
+        "time": 5.85,
+        "difference": 10
+      },
+      {
+        "time": 6,
+        "difference": 10
+      },
+      {
+        "time": 6.45,
+        "difference": 14
+      },
+      {
+        "time": 6.7,
+        "difference": 19
+      },
+      {
+        "time": 8,
+        "difference": 24
+      }
+    ],
+    "maximumDifferenceInCheckedWindow": 27,
+    "allCheckedMomentsAtOrBelow35": true,
+    "pacing": {
+      "revision": 50,
+      "range": "5.2-6.4s",
+      "samples": "13 at 10 fps",
+      "changePerSecond": "5s 210%, 6s 0%",
+      "cuts": [
+        5.7,
+        5.8
+      ],
+      "cameraMoves": 0,
+      "flags": [],
+      "next": "No pacing problems found in this range."
+    },
+    "motionMap": {
+      "start": 5.25,
+      "end": 6.4,
+      "timelineStart": 5.25,
+      "differences": [
+        {
+          "time": 5.32,
+          "issue": "Camera move differs from the reference: ease power1.in where the reference uses sine.in.",
+          "fix": "tl.fromTo(camera, { scale: 1, xPercent: 0.01, yPercent: 0, rotation: 0 }, { scale: 0.931, xPercent: 0.01, yPercent: -0.09, rotation: 0.14, duration: 0.5, ease: 'sine.in' }, 5.32)"
+        }
+      ],
+      "referenceTransitions": [
+        {
+          "area": 100,
+          "duration": 0.17,
+          "ease": "circ.in",
+          "end": 5.78,
+          "kind": "transition",
+          "start": 5.62
+        }
+      ],
+      "timelineTransitions": [
+        {
+          "area": 100,
+          "duration": 0.1,
+          "ease": "circ.in",
+          "end": 5.78,
+          "kind": "transition",
+          "start": 5.68
+        }
+      ],
+      "remainingDifferenceCount": 1,
+      "note": "The fitted camera ease is power1.in rather than sine.in. The transition classifier measures .10 s from 5.68 to 5.78 s, compared with .17 s from 5.62 to 5.78 s in the reference. The authored closing mask begins at 5.416667 s; the camera choreography remains unchanged."
+    },
+    "remainingVisualDifferences": [
+      "The supplied image and dither pattern differ during the green closing frames (26-27/100 at 5.733-5.75 s).",
+      "Incoming mark assembly, corner geometry and identity typography remain approximations; checked white handoff frames score 6-11/100."
+    ],
+    "scopeGuards": [
+      {
+        "passed": true,
+        "checked": [
+          9.917,
+          12.55,
+          15.167,
+          16.45,
+          17.4,
+          18.35,
+          19.333,
+          22.267,
+          25.217,
+          26.783,
+          28.083,
+          29.383,
+          29.4,
+          30.083,
+          30.767
+        ],
+        "note": "Code outside the scope changed; the 5 locked section(s) it reaches render the same, so it was saved."
+      },
+      {
+        "passed": true,
+        "checked": [
+          9.917,
+          12.55,
+          15.167,
+          16.45,
+          17.4,
+          18.35,
+          19.333,
+          22.267,
+          25.217,
+          26.783,
+          28.083,
+          29.383,
+          29.4,
+          30.083,
+          30.767
+        ],
+        "note": "Code outside the scope changed; the 5 locked section(s) it reaches render the same, so it was saved."
+      },
+      {
+        "passed": true,
+        "checked": [
+          9.917,
+          12.55,
+          15.167,
+          16.45,
+          17.4,
+          18.35,
+          19.333,
+          22.267,
+          25.217,
+          26.783,
+          28.083,
+          29.383,
+          29.4,
+          30.083,
+          30.767
+        ],
+        "note": "Code outside the scope changed; the 5 locked section(s) it reaches render the same, so it was saved."
+      }
+    ],
+    "frameReview": "Button edges narrow without re-expansion; text stays inside the closing mask before deliberate exit; background and old control leave completely; first identity glyph is centered, no unintended blank or leftover label; settled identity checked through 8 s.",
+    "audioChanged": false,
+    "markersChanged": false,
+    "backgroundAssetChanged": false,
+    "otherProjectsChanged": false,
+    "exported": false,
+    "tools": "readFrames, measureFrame, trackReference, motionMap, patchScene, getFrames, compareReference, checkPacing and inspectTimeline used native Revline tools. Local code only archived source/metadata, checked service readiness and ran git."
   }
 }

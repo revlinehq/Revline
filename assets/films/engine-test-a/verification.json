@@ -3,10 +3,10 @@
   "projectName": "Engine test A: GSAP (RightNow rebuild)",
   "editor": "http://localhost:3001/editor/j970eespkq2j4crma0yhj5mpc18haer6",
   "timelineId": "main",
-  "revision": 47,
+  "revision": 50,
   "sceneClipId": "5b49332a-bc9f-4fc8-a8cd-383e406bf6a1",
   "sourceFile": "film.tsx.txt",
-  "sourceSHA256": "d888d3adae00c1069524470a5f0ecdb403cea09f1e4f9bd3447803524fd934be",
+  "sourceSHA256": "5408fe9c6b7690a3a34f2b41032b21b1a1fbfc6a134c5d0914751b162fcb2db1",
   "duration": 30.966667,
   "fps": 60,
   "visualSceneCount": 1,
@@ -55,6 +55,66 @@
       "time": 4.6,
       "difference": 18,
       "revision": 44
+    },
+    {
+      "time": 5.3,
+      "difference": 17,
+      "revision": 50
+    },
+    {
+      "time": 5.5,
+      "difference": 16,
+      "revision": 50
+    },
+    {
+      "time": 5.65,
+      "difference": 16,
+      "revision": 50
+    },
+    {
+      "time": 5.733,
+      "difference": 26,
+      "revision": 50
+    },
+    {
+      "time": 5.75,
+      "difference": 27,
+      "revision": 50
+    },
+    {
+      "time": 5.767,
+      "difference": 6,
+      "revision": 50
+    },
+    {
+      "time": 5.8,
+      "difference": 11,
+      "revision": 50
+    },
+    {
+      "time": 5.85,
+      "difference": 10,
+      "revision": 50
+    },
+    {
+      "time": 6,
+      "difference": 10,
+      "revision": 50
+    },
+    {
+      "time": 6.45,
+      "difference": 14,
+      "revision": 50
+    },
+    {
+      "time": 6.7,
+      "difference": 19,
+      "revision": 50
+    },
+    {
+      "time": 8,
+      "difference": 24,
+      "revision": 50
     },
     {
       "time": 9.3,
@@ -170,7 +230,8 @@
     "Whole-film checkPacing plus final changed ranges",
     "Exact cloud-source archive and single-scene/media/audio checks",
     "git diff --check",
-    "Revision 47 green-dither and scatter correction: native details/boundaries, 3 compared iterations, 3 scoped motionMap diffs, and pacing checks; residuals recorded."
+    "Revision 47 green-dither and scatter correction: native details/boundaries, 3 compared iterations, 3 scoped motionMap diffs, and pacing checks; residuals recorded.",
+    "Revision 50 closing handoff: three rendered iterations, 12 final comparisons, native boundary/detail frames, scoped motionMap, and pacing with no flags."
   ],
   "development": {
     "web": "Ready and left running on localhost:3001",
@@ -332,5 +393,112 @@
     },
     "retainedPacingFlagReason": "The existing linear opening pullback remains unchanged in this effect correction. Its no-ease-in flag at .5-1.4 s is retained; proof and CTA changed ranges have no pacing flags.",
     "verificationLimit": "The scene checklist comparison threshold of 35 is not met at .1 s. The explicit requirement to retain the supplied background is preserved. This correction does not claim a pixel-identical reference match."
+  },
+  "closingButtonHandoff": {
+    "revision": 50,
+    "compareReference": [
+      {
+        "time": 5.3,
+        "difference": 17
+      },
+      {
+        "time": 5.5,
+        "difference": 16
+      },
+      {
+        "time": 5.65,
+        "difference": 16
+      },
+      {
+        "time": 5.733,
+        "difference": 26
+      },
+      {
+        "time": 5.75,
+        "difference": 27
+      },
+      {
+        "time": 5.767,
+        "difference": 6
+      },
+      {
+        "time": 5.8,
+        "difference": 11
+      },
+      {
+        "time": 5.85,
+        "difference": 10
+      },
+      {
+        "time": 6,
+        "difference": 10
+      },
+      {
+        "time": 6.45,
+        "difference": 14
+      },
+      {
+        "time": 6.7,
+        "difference": 19
+      },
+      {
+        "time": 8,
+        "difference": 24
+      }
+    ],
+    "maximumDifferenceInCheckedWindow": 27,
+    "allCheckedMomentsAtOrBelow35": true,
+    "pacing": {
+      "revision": 50,
+      "range": "5.2-6.4s",
+      "samples": "13 at 10 fps",
+      "changePerSecond": "5s 210%, 6s 0%",
+      "cuts": [
+        5.7,
+        5.8
+      ],
+      "cameraMoves": 0,
+      "flags": [],
+      "next": "No pacing problems found in this range."
+    },
+    "motionMap": {
+      "start": 5.25,
+      "end": 6.4,
+      "timelineStart": 5.25,
+      "differences": [
+        {
+          "time": 5.32,
+          "issue": "Camera move differs from the reference: ease power1.in where the reference uses sine.in.",
+          "fix": "tl.fromTo(camera, { scale: 1, xPercent: 0.01, yPercent: 0, rotation: 0 }, { scale: 0.931, xPercent: 0.01, yPercent: -0.09, rotation: 0.14, duration: 0.5, ease: 'sine.in' }, 5.32)"
+        }
+      ],
+      "referenceTransitions": [
+        {
+          "area": 100,
+          "duration": 0.17,
+          "ease": "circ.in",
+          "end": 5.78,
+          "kind": "transition",
+          "start": 5.62
+        }
+      ],
+      "timelineTransitions": [
+        {
+          "area": 100,
+          "duration": 0.1,
+          "ease": "circ.in",
+          "end": 5.78,
+          "kind": "transition",
+          "start": 5.68
+        }
+      ],
+      "remainingDifferenceCount": 1,
+      "note": "The fitted camera ease is power1.in rather than sine.in. The transition classifier measures .10 s from 5.68 to 5.78 s, compared with .17 s from 5.62 to 5.78 s in the reference. The authored closing mask begins at 5.416667 s; the camera choreography remains unchanged."
+    },
+    "remainingVisualDifferences": [
+      "The supplied image and dither pattern differ during the green closing frames (26-27/100 at 5.733-5.75 s).",
+      "Incoming mark assembly, corner geometry and identity typography remain approximations; checked white handoff frames score 6-11/100."
+    ],
+    "frameReview": "Button edges narrow without re-expansion; text stays inside the closing mask before deliberate exit; background and old control leave completely; first identity glyph is centered, no unintended blank or leftover label; settled identity checked through 8 s."
   }
 }

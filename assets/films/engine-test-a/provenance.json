@@ -82,7 +82,7 @@
     "change": "Preserve requested motion range in frame snapshots"
   },
   "priority": "User requested reference structure and timing take precedence over generic one-second holds, no grids, and quiet house styling.",
-  "revision": 47,
+  "revision": 50,
   "verificationFile": "verification.json",
   "sourceFile": "film.tsx.txt",
   "soundEffects": {
@@ -143,7 +143,7 @@
     "generatedMusicAndCuesMuted": true,
     "activeAudioAssetId": "j57eeahvakwfy1ntsewb2jm3zh8hb6ee"
   },
-  "sourceSHA256": "d888d3adae00c1069524470a5f0ecdb403cea09f1e4f9bd3447803524fd934be",
+  "sourceSHA256": "5408fe9c6b7690a3a34f2b41032b21b1a1fbfc6a134c5d0914751b162fcb2db1",
   "fonts": [
     "JetBrains Mono",
     "Pixelify Sans"
@@ -180,5 +180,17 @@
     ],
     "engine": "All animation uses GSAP through useTimeline. SVG filters and inline texture definitions are procedural scene graphics.",
     "tools": "Reference reads, tracking, measurements, renders, pacing and comparisons all used native Revline tools. Local scripts only archived source and verification metadata and ran git checks."
+  },
+  "closingButtonHandoff": {
+    "revision": 50,
+    "changes": [
+      "Control closes inward with clipPath from 5.416667 to 5.75 s while its label and icon translate inward. Its height settles from 170 to 160 px.",
+      "Final collapse and background clearing finish at the 5.766667 s identity cue. Explicit fromTo starting values prevent the second tween from widening the control again on a direct seek.",
+      "The intro Beat stays mounted to 5.9 s so the handoff is one continuous GSAP timeline across the identity marker. Hidden background is removed at 5.783333 s and the old intro is hidden at 5.8 s.",
+      "The incoming abstract mark starts as a centered green sliver and reveals over .28 s, with expanding corners and constant first-identity corner stroke weight.",
+      "Late dither coverage increases through its threshold rather than a flat green overlay, preserving the black grain during closure."
+    ],
+    "engine": "GSAP through useTimeline, one React scene clip. No CSS animations or manual frame clock.",
+    "tools": "readFrames, measureFrame, trackReference, motionMap, patchScene, getFrames, compareReference, checkPacing and inspectTimeline used native Revline tools. Local code only archived source/metadata, checked service readiness and ran git."
   }
 }
