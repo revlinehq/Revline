@@ -3,10 +3,10 @@
   "projectName": "Engine test A: GSAP (RightNow rebuild)",
   "editor": "http://localhost:3001/editor/j970eespkq2j4crma0yhj5mpc18haer6",
   "timelineId": "main",
-  "revision": 60,
+  "revision": 61,
   "sceneClipId": "5b49332a-bc9f-4fc8-a8cd-383e406bf6a1",
   "sourceFile": "film.tsx.txt",
-  "sourceSHA256": "6dc0f435447d3b97a1c0766136b2b3883537d4e174b504e6ee7efa22870b74b4",
+  "sourceSHA256": "5d443f75296ed51ee4d3d2bb790bc965d67b83b65f256cbc722e1e24fa54d253",
   "duration": 30.966667,
   "fps": 60,
   "visualSceneCount": 1,
@@ -287,59 +287,64 @@
       "revision": 40
     },
     {
-      "time": 17.75,
-      "difference": 20,
-      "revision": 58
-    },
-    {
-      "time": 17.85,
-      "difference": 17,
-      "revision": 58
-    },
-    {
-      "time": 17.95,
-      "difference": 19,
-      "revision": 58
-    },
-    {
       "time": 18.05,
       "difference": 9,
-      "revision": 58
+      "revision": 61
+    },
+    {
+      "time": 18.15,
+      "difference": 13,
+      "revision": 61
+    },
+    {
+      "time": 18.2,
+      "difference": 15,
+      "revision": 61
+    },
+    {
+      "time": 18.217,
+      "difference": 13,
+      "revision": 61
+    },
+    {
+      "time": 18.233,
+      "difference": 12,
+      "revision": 61
+    },
+    {
+      "time": 18.25,
+      "difference": 8,
+      "revision": 61
     },
     {
       "time": 18.3,
       "difference": 11,
-      "revision": 58
+      "revision": 61
+    },
+    {
+      "time": 18.5,
+      "difference": 12,
+      "revision": 61
     },
     {
       "time": 18.85,
-      "difference": 11,
-      "revision": 58
+      "difference": 12,
+      "revision": 61
     },
     {
-      "time": 19.2,
-      "difference": 11,
-      "revision": 39
+      "time": 20.95,
+      "difference": 12,
+      "revision": 61
     },
     {
-      "time": 21.3,
-      "difference": 14,
-      "revision": 40
+      "time": 23.05,
+      "difference": 12,
+      "revision": 61
     },
     {
-      "time": 23.35,
-      "difference": 13,
-      "revision": 42
-    },
-    {
-      "time": 23.5,
-      "difference": 13,
-      "revision": 42
-    },
-    {
-      "time": 24.8,
-      "difference": 11,
-      "revision": 40
+      "time": 25.7,
+      "difference": 10,
+      "revision": 61
     },
     {
       "time": 29.117,
@@ -392,7 +397,8 @@
     "Revision 55 menu layers: exact 60 fps reference samples, three independently animated panels, native entrance and downstream interaction checks, 12 comparisons all 14-15/100, motionMap with no differences and pacing with no flags over 9.15-9.85 s.",
     "Revision 58 thicker pixel rip: native source windows/details and color/edge sampling, before/after renders, 12 final reference comparisons all 9-20/100, two pacing windows with no flags, two motionMap diffs with four retained camera-fit differences.",
     "Revision 59 cursor-first spring: 12 native frames show held camera during the scan, stopped pointer, spring overshoot and settle before click; six locked sections render unchanged. Pacing has no flags. Twelve reference comparisons retain two deliberate late-push differences (28/29); motionMap records the corresponding two timing/ease differences.",
-    "Revision 60 terminal background: exact one-tween source change, native recession/overshoot/settle and cover inspection, eight reference comparisons, scoped motionMap and pacing. Terminal source is unchanged; six locked sections pass render guard. One 29/100 comparison and two deliberate spring-speed flags retained with reasons."
+    "Revision 60 terminal background: exact one-tween source change, native recession/overshoot/settle and cover inspection, eight reference comparisons, scoped motionMap and pacing. Terminal source is unchanged; six locked sections pass render guard. One 29/100 comparison and two deliberate spring-speed flags retained with reasons.",
+    "Revision 61 continuous smiley ball: dense source crop and reference tracking, native adjacent frames through 18:14, later yaw checks, 12 final comparisons all 8-15/100, pacing without flags and two recorded motionMap differences. Exact source comparison confirms all code outside GridSphere unchanged."
   ],
   "development": {
     "web": "Ready and left running on localhost:3001",
@@ -1414,6 +1420,118 @@
       "sections": 6,
       "samples": 18
     },
+    "detailedAuditFile": "audit.json",
+    "exported": false
+  },
+  "continuousSmileyBall": {
+    "revision": 61,
+    "sourceOnlyGridSphereChanged": true,
+    "oldBadgeAndAbstractLogoRemoved": true,
+    "nativeFrames": [
+      18.05,
+      18.15,
+      18.2,
+      18.216667,
+      18.233333,
+      18.3,
+      18.35,
+      18.45,
+      18.6,
+      19.1,
+      21.7,
+      24.3
+    ],
+    "compareReference": {
+      "note": "Reference (left) beside your timeline (right), one moment per row, at 18.05s, 18.15s, 18.2s, 18.217s, 18.233s, 18.25s, 18.3s, 18.5s, 18.85s, 20.95s, 23.05s, 25.7s. Differences: 18.05s 9, 18.15s 13, 18.2s 15, 18.217s 13, 18.233s 12, 18.25s 8, 18.3s 11, 18.5s 12, 18.85s 12, 20.95s 12, 23.05s 12, 25.7s 10.",
+      "next": "Every moment scores 25 or less: this check is done.",
+      "pass": 1,
+      "scores": [
+        {
+          "time": 18.05,
+          "difference": 9
+        },
+        {
+          "time": 18.15,
+          "difference": 13
+        },
+        {
+          "time": 18.2,
+          "difference": 15
+        },
+        {
+          "time": 18.217,
+          "difference": 13
+        },
+        {
+          "time": 18.233,
+          "difference": 12
+        },
+        {
+          "time": 18.25,
+          "difference": 8
+        },
+        {
+          "time": 18.3,
+          "difference": 11
+        },
+        {
+          "time": 18.5,
+          "difference": 12
+        },
+        {
+          "time": 18.85,
+          "difference": 12
+        },
+        {
+          "time": 20.95,
+          "difference": 12
+        },
+        {
+          "time": 23.05,
+          "difference": 12
+        },
+        {
+          "time": 25.7,
+          "difference": 10
+        }
+      ],
+      "images": [
+        "Reference (left) beside your timeline (right), 1",
+        "Reference (left) beside your timeline (right), 2",
+        "Reference (left) beside your timeline (right), 3",
+        "Reference (left) beside your timeline (right), 4"
+      ]
+    },
+    "pacing": {
+      "revision": 61,
+      "range": "17.85-18.85s",
+      "samples": "11 at 10 fps",
+      "changePerSecond": "18s 227%",
+      "cuts": [],
+      "cameraMoves": 0,
+      "flags": [],
+      "next": "No pacing problems found in this range."
+    },
+    "motionMap": {
+      "start": 17.65,
+      "end": 19.2,
+      "differences": [
+        {
+          "time": 17.72,
+          "issue": "Camera move differs from the reference: starts 0.4s early; bigger (zoom in 68% + pan right 1.3% + tilt down 6.8% + rotate 0.6° vs zoom in 2% + pan left 0.9% + rotate 1°); 0.6s long vs 0.23s.",
+          "fix": "tl.fromTo(camera, { scale: 0.978, xPercent: 0.01, yPercent: 0.02, rotation: -0.23 }, { scale: 1.002, xPercent: 0.95, yPercent: 0.61, rotation: 0.81, duration: 0.23, ease: 'sine.in' }, 18.12)"
+        },
+        {
+          "time": 18.32,
+          "issue": "Camera move differs from the reference: starts 0.44s late; bigger (zoom out 4% + tilt up 1.4% vs zoom out 2%); 0.87s long vs 0.23s.",
+          "fix": "tl.fromTo(camera, { scale: 0.997, xPercent: 0.03, yPercent: 0.02, rotation: -0.13 }, { scale: 0.978, xPercent: 0.01, yPercent: 0.02, rotation: -0.23, duration: 0.23, ease: 'none' }, 17.88)"
+        }
+      ]
+    },
+    "remainingDifferences": [
+      "Two composite camera-fit differences remain over 17.65-19.2 s, concerning fitted reveal timing/magnitude and later recession. They include mask/mesh growth in the camera estimate; no extra whole-camera tween was added for this object-only fix.",
+      "Exact mesh projection/texture alignment, benchmark timings and supplied background geometry retain visual differences from the reference."
+    ],
     "detailedAuditFile": "audit.json",
     "exported": false
   }

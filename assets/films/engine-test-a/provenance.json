@@ -49,7 +49,8 @@
     "ctaLettering": {
       "method": "Fourteen native vector contours from traceShape, with static SVG morphology to restore thin pixel strokes.",
       "sourceTime": 30.3
-    }
+    },
+    "proofSphere": "Existing traced mascot contours plus ProductMark eyes and smile sampled onto the native 2048-tile mesh; one continuous GSAP growth, no substitute badge."
   },
   "music": {
     "title": "Deep Techno",
@@ -82,7 +83,7 @@
     "change": "Preserve requested motion range in frame snapshots"
   },
   "priority": "User requested reference structure and timing take precedence over generic one-second holds, no grids, and quiet house styling.",
-  "revision": 60,
+  "revision": 61,
   "verificationFile": "verification.json",
   "sourceFile": "film.tsx.txt",
   "soundEffects": {
@@ -148,7 +149,7 @@
     "generatedMusicAndCuesMuted": true,
     "activeAudioAssetId": "j57eeahvakwfy1ntsewb2jm3zh8hb6ee"
   },
-  "sourceSHA256": "6dc0f435447d3b97a1c0766136b2b3883537d4e174b504e6ee7efa22870b74b4",
+  "sourceSHA256": "5d443f75296ed51ee4d3d2bb790bc965d67b83b65f256cbc722e1e24fa54d253",
   "fonts": [
     "JetBrains Mono",
     "Pixelify Sans"
@@ -341,6 +342,19 @@
       "Preserved the cursor-first spring zoom, other Beats, soundtrack, reference asset, supplied Bliss background and project isolation."
     ],
     "sourceSHA256": "6dc0f435447d3b97a1c0766136b2b3883537d4e174b504e6ee7efa22870b74b4",
+    "verificationFile": "verification.json",
+    "detailedAuditFile": "audit.json",
+    "exported": false
+  },
+  "continuousSmileyBall": {
+    "revision": 61,
+    "changes": [
+      "Removed the substitute badge and the delayed sphere opacity reveal. The same mesh is present throughout the iris reveal.",
+      "Replaced the held scale followed by a new growth phase with one explicit scale 0.012 to 1 tween over 0.95 s, beginning at local 0.001 s, using a continuous CustomEase that accelerates through the former handoff.",
+      "Mapped the existing traced MASCOT_PATHS, ProductMark eye rectangles and smile path onto the sphere tiles. The smiley face persists through the later yaw turns.",
+      "Kept the 2048-tile mesh, thicker pixel rip, photo, benchmark windows, metrics, later camera choreography, soundtrack, and all source outside GridSphere unchanged."
+    ],
+    "sourceSHA256": "5d443f75296ed51ee4d3d2bb790bc965d67b83b65f256cbc722e1e24fa54d253",
     "verificationFile": "verification.json",
     "detailedAuditFile": "audit.json",
     "exported": false

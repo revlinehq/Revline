@@ -1,9 +1,9 @@
 {
   "projectId": "j970eespkq2j4crma0yhj5mpc18haer6",
   "timelineId": "main",
-  "revision": 60,
-  "status": "Terminal background spring zoom-out verified at revision 60; terminal source unchanged and reference motion/texture differences recorded",
-  "sourceSHA256": "6dc0f435447d3b97a1c0766136b2b3883537d4e174b504e6ee7efa22870b74b4",
+  "revision": 61,
+  "status": "Continuous smiling pixel-ball growth verified at revision 61; placeholder swap removed and two scoped camera-fit differences recorded",
+  "sourceSHA256": "5d443f75296ed51ee4d3d2bb790bc965d67b83b65f256cbc722e1e24fa54d253",
   "changes": {
     "intro": [
       "GSAP background blur builds 2.8–3.05 s, holds through 4.3 s and resolves during the crisp dither handoff by 4.733333 s.",
@@ -2285,7 +2285,7 @@
     "patchesCompiled": true
   },
   "finalTimeline": {
-    "revision": 60,
+    "revision": 61,
     "sceneCount": 1,
     "clipCount": 8,
     "markers": 9,
@@ -6360,6 +6360,440 @@
     ],
     "evidenceFile": "/Users/zuramakaradze/.codex/scratch/revline-gsap-a/terminalBackground60-evidence.json",
     "sourceSHA256": "6dc0f435447d3b97a1c0766136b2b3883537d4e174b504e6ee7efa22870b74b4",
+    "exported": false
+  },
+  "continuousSmileyBall": {
+    "revision": 61,
+    "request": "The pixel-ball zoom jumps into the frame around 18:14. Continue the quick zoom smoothly and show the smiley face instead of the random logo.",
+    "scope": {
+      "start": 17.65,
+      "end": 26.05
+    },
+    "cause": "A 200 px badge at parent scale 0.28 crossfaded into a roughly 910 px mesh while a separate growth tween began. The mesh sampled the abstract LOGO_PATH and had no eyes or smile.",
+    "changes": [
+      "Removed the substitute badge and the delayed sphere opacity reveal. The same mesh is present throughout the iris reveal.",
+      "Replaced the held scale followed by a new growth phase with one explicit scale 0.012 to 1 tween over 0.95 s, beginning at local 0.001 s, using a continuous CustomEase that accelerates through the former handoff.",
+      "Mapped the existing traced MASCOT_PATHS, ProductMark eye rectangles and smile path onto the sphere tiles. The smiley face persists through the later yaw turns.",
+      "Kept the 2048-tile mesh, thicker pixel rip, photo, benchmark windows, metrics, later camera choreography, soundtrack, and all source outside GridSphere unchanged."
+    ],
+    "verification": {
+      "sourceOnlyGridSphereChanged": true,
+      "oldBadgeAndAbstractLogoRemoved": true,
+      "compiled": true,
+      "sourceCharacters": 62640,
+      "referenceWindow": {
+        "start": 17.65,
+        "end": 19.15,
+        "fps": 10
+      },
+      "denseReference": {
+        "start": 18.05,
+        "end": 18.45,
+        "fps": 30,
+        "crop": {
+          "x": 600,
+          "y": 180,
+          "w": 740,
+          "h": 760
+        }
+      },
+      "referenceDetails": [
+        18.233333,
+        18.5
+      ],
+      "referenceTrack": {
+        "note": "Tracked 21 frames; the sheet shows 8 of them with the box drawn. Boxes are source pixels.",
+        "fps": 60,
+        "frames": [
+          {
+            "time": 18.217
+          },
+          {
+            "time": 18.267
+          },
+          {
+            "time": 18.317
+          },
+          {
+            "time": 18.367
+          },
+          {
+            "time": 18.4
+          },
+          {
+            "time": 18.45
+          },
+          {
+            "time": 18.5
+          },
+          {
+            "time": 18.55
+          }
+        ],
+        "height": 1004,
+        "moves": [
+          {
+            "duration": 0.2,
+            "ease": "sine.out",
+            "end": 18.433,
+            "fit": 0.73,
+            "from": {
+              "rotation": 0,
+              "scale": 1,
+              "x": 963,
+              "y": 530
+            },
+            "gsap": "tl.fromTo(el, { x: 963, y: 530, scale: 1 }, { x: 1053, y: 520, scale: 1.651, duration: 0.2, ease: 'sine.out' }, 18.233)",
+            "start": 18.233,
+            "to": {
+              "rotation": 0,
+              "scale": 1.651,
+              "x": 1053,
+              "y": 520
+            }
+          }
+        ],
+        "sourceHeight": 1080,
+        "sourceWidth": 1920,
+        "track": [
+          {
+            "confidence": 1,
+            "h": 330,
+            "rotation": 0,
+            "scale": 1,
+            "time": 18.217,
+            "w": 330,
+            "x": 798,
+            "y": 365
+          },
+          {
+            "confidence": 0.85,
+            "h": 330,
+            "rotation": 0,
+            "scale": 1,
+            "time": 18.233,
+            "w": 330,
+            "x": 798,
+            "y": 365
+          },
+          {
+            "confidence": 0.63,
+            "h": 350,
+            "rotation": 0,
+            "scale": 1.06,
+            "time": 18.25,
+            "w": 350,
+            "x": 806,
+            "y": 364
+          },
+          {
+            "confidence": 0.53,
+            "h": 350,
+            "rotation": 0,
+            "scale": 1.06,
+            "time": 18.267,
+            "w": 350,
+            "x": 830,
+            "y": 356
+          },
+          {
+            "confidence": 0.71,
+            "h": 382,
+            "rotation": 0,
+            "scale": 1.158,
+            "time": 18.283,
+            "w": 382,
+            "x": 820,
+            "y": 334
+          },
+          {
+            "confidence": 0.83,
+            "h": 418,
+            "rotation": 0,
+            "scale": 1.266,
+            "time": 18.3,
+            "w": 418,
+            "x": 811,
+            "y": 314
+          },
+          {
+            "confidence": 0.85,
+            "h": 443,
+            "rotation": 0,
+            "scale": 1.343,
+            "time": 18.317,
+            "w": 443,
+            "x": 805,
+            "y": 300
+          },
+          {
+            "confidence": 0.75,
+            "h": 470,
+            "rotation": 0,
+            "scale": 1.425,
+            "time": 18.333,
+            "w": 470,
+            "x": 794,
+            "y": 285
+          },
+          {
+            "confidence": 0.86,
+            "h": 484,
+            "rotation": 0,
+            "scale": 1.467,
+            "time": 18.35,
+            "w": 484,
+            "x": 791,
+            "y": 277
+          },
+          {
+            "confidence": 0.89,
+            "h": 499,
+            "rotation": 0,
+            "scale": 1.511,
+            "time": 18.367,
+            "w": 499,
+            "x": 788,
+            "y": 269
+          },
+          {
+            "confidence": 0.87,
+            "h": 514,
+            "rotation": 0,
+            "scale": 1.557,
+            "time": 18.383,
+            "w": 514,
+            "x": 784,
+            "y": 261
+          },
+          {
+            "confidence": 0.82,
+            "h": 529,
+            "rotation": 0,
+            "scale": 1.603,
+            "time": 18.4,
+            "w": 529,
+            "x": 778,
+            "y": 253
+          },
+          {
+            "confidence": 0.84,
+            "h": 545,
+            "rotation": 0,
+            "scale": 1.651,
+            "time": 18.417,
+            "w": 545,
+            "x": 776,
+            "y": 244
+          },
+          {
+            "confidence": 0.78,
+            "h": 545,
+            "rotation": 0,
+            "scale": 1.651,
+            "time": 18.433,
+            "w": 545,
+            "x": 780,
+            "y": 247
+          },
+          {
+            "confidence": 0.85,
+            "h": 545,
+            "rotation": 0,
+            "scale": 1.651,
+            "time": 18.45,
+            "w": 545,
+            "x": 783,
+            "y": 249
+          },
+          {
+            "confidence": 0.87,
+            "h": 545,
+            "rotation": 0,
+            "scale": 1.651,
+            "time": 18.467,
+            "w": 545,
+            "x": 785,
+            "y": 251
+          },
+          {
+            "confidence": 0.89,
+            "h": 545,
+            "rotation": 0,
+            "scale": 1.651,
+            "time": 18.483,
+            "w": 545,
+            "x": 790,
+            "y": 252
+          },
+          {
+            "confidence": 0.91,
+            "h": 545,
+            "rotation": 0,
+            "scale": 1.651,
+            "time": 18.5,
+            "w": 545,
+            "x": 791,
+            "y": 253
+          },
+          {
+            "confidence": 0.88,
+            "h": 545,
+            "rotation": 0,
+            "scale": 1.651,
+            "time": 18.517,
+            "w": 545,
+            "x": 795,
+            "y": 254
+          },
+          {
+            "confidence": 0.89,
+            "h": 545,
+            "rotation": 0,
+            "scale": 1.651,
+            "time": 18.533,
+            "w": 545,
+            "x": 798,
+            "y": 255
+          },
+          {
+            "confidence": 0.88,
+            "h": 545,
+            "rotation": 0,
+            "scale": 1.651,
+            "time": 18.55,
+            "w": 545,
+            "x": 801,
+            "y": 258
+          }
+        ],
+        "width": 1598,
+        "images": [
+          "Tracked frames, box drawn"
+        ]
+      },
+      "nativeBeforeRevision60": [
+        17.85,
+        18.05,
+        18.2,
+        18.233333,
+        18.3,
+        18.5
+      ],
+      "nativeAfterRevision61": [
+        18.05,
+        18.15,
+        18.2,
+        18.216667,
+        18.233333,
+        18.3,
+        18.35,
+        18.45,
+        18.6,
+        19.1,
+        21.7,
+        24.3
+      ],
+      "compareReference": {
+        "note": "Reference (left) beside your timeline (right), one moment per row, at 18.05s, 18.15s, 18.2s, 18.217s, 18.233s, 18.25s, 18.3s, 18.5s, 18.85s, 20.95s, 23.05s, 25.7s. Differences: 18.05s 9, 18.15s 13, 18.2s 15, 18.217s 13, 18.233s 12, 18.25s 8, 18.3s 11, 18.5s 12, 18.85s 12, 20.95s 12, 23.05s 12, 25.7s 10.",
+        "next": "Every moment scores 25 or less: this check is done.",
+        "pass": 1,
+        "scores": [
+          {
+            "time": 18.05,
+            "difference": 9
+          },
+          {
+            "time": 18.15,
+            "difference": 13
+          },
+          {
+            "time": 18.2,
+            "difference": 15
+          },
+          {
+            "time": 18.217,
+            "difference": 13
+          },
+          {
+            "time": 18.233,
+            "difference": 12
+          },
+          {
+            "time": 18.25,
+            "difference": 8
+          },
+          {
+            "time": 18.3,
+            "difference": 11
+          },
+          {
+            "time": 18.5,
+            "difference": 12
+          },
+          {
+            "time": 18.85,
+            "difference": 12
+          },
+          {
+            "time": 20.95,
+            "difference": 12
+          },
+          {
+            "time": 23.05,
+            "difference": 12
+          },
+          {
+            "time": 25.7,
+            "difference": 10
+          }
+        ],
+        "images": [
+          "Reference (left) beside your timeline (right), 1",
+          "Reference (left) beside your timeline (right), 2",
+          "Reference (left) beside your timeline (right), 3",
+          "Reference (left) beside your timeline (right), 4"
+        ]
+      },
+      "pacing": {
+        "revision": 61,
+        "range": "17.85-18.85s",
+        "samples": "11 at 10 fps",
+        "changePerSecond": "18s 227%",
+        "cuts": [],
+        "cameraMoves": 0,
+        "flags": [],
+        "next": "No pacing problems found in this range."
+      },
+      "motionMap": {
+        "start": 17.65,
+        "end": 19.2,
+        "differences": [
+          {
+            "time": 17.72,
+            "issue": "Camera move differs from the reference: starts 0.4s early; bigger (zoom in 68% + pan right 1.3% + tilt down 6.8% + rotate 0.6° vs zoom in 2% + pan left 0.9% + rotate 1°); 0.6s long vs 0.23s.",
+            "fix": "tl.fromTo(camera, { scale: 0.978, xPercent: 0.01, yPercent: 0.02, rotation: -0.23 }, { scale: 1.002, xPercent: 0.95, yPercent: 0.61, rotation: 0.81, duration: 0.23, ease: 'sine.in' }, 18.12)"
+          },
+          {
+            "time": 18.32,
+            "issue": "Camera move differs from the reference: starts 0.44s late; bigger (zoom out 4% + tilt up 1.4% vs zoom out 2%); 0.87s long vs 0.23s.",
+            "fix": "tl.fromTo(camera, { scale: 0.997, xPercent: 0.03, yPercent: 0.02, rotation: -0.13 }, { scale: 0.978, xPercent: 0.01, yPercent: 0.02, rotation: -0.23, duration: 0.23, ease: 'none' }, 17.88)"
+          }
+        ]
+      }
+    },
+    "remainingDifferences": [
+      "Two composite camera-fit differences remain over 17.65-19.2 s, concerning fitted reveal timing/magnitude and later recession. They include mask/mesh growth in the camera estimate; no extra whole-camera tween was added for this object-only fix.",
+      "Exact mesh projection/texture alignment, benchmark timings and supplied background geometry retain visual differences from the reference."
+    ],
+    "skills": [
+      "scene-engine/react-scenes",
+      "scene-engine/checklist",
+      "gsap",
+      "gsap/recipe-morph"
+    ],
+    "evidenceFile": "/Users/zuramakaradze/.codex/scratch/revline-gsap-a/continuousSmileyBall61-evidence.json",
+    "sourceSHA256": "5d443f75296ed51ee4d3d2bb790bc965d67b83b65f256cbc722e1e24fa54d253",
     "exported": false
   }
 }
