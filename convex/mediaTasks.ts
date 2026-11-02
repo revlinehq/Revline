@@ -104,7 +104,7 @@ export async function enqueueMediaTask(ctx: MutationCtx, input: Pick<Doc<'mediaT
   if (input.assetId && input.kind !== 'speakers' && input.kind !== 'frames' && input.kind !== 'video' && input.kind !== 'cutout' && input.kind !== 'derive' && input.kind !== 'read') {
     const existing = await ctx.db.query('mediaTasks').withIndex('by_asset_kind', q => q.eq('assetId', input.assetId).eq('kind', input.kind)).order('desc').take(10);
     const active = existing.find(task => (input.kind!=='preview'||task.previewVersion===input.previewVersion)&&['queued','running','retrying'].includes(task.status));
-    if(active&&input.kind==='preview'&&(active.requiredProcessorVersion??0)<29)await cancelMediaTask(ctx,active._id);
+    if(active&&input.kind==='preview'&&(active.requiredProcessorVersion??0)<(input.requiredProcessorVersion??0))await cancelMediaTask(ctx,active._id);
     else if (active) { if (input.analysisRequestId) await ctx.db.patch(active._id, { analysisRequestId: input.analysisRequestId }); return active._id; }
   }
   const requested = input.kind === 'video' ? input.videoRequest : input.kind === 'frames' ? input.frameRequest : undefined;
