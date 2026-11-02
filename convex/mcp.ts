@@ -155,9 +155,9 @@ export const duplicateProject = internalMutation({ args: { ownerId: v.string(), 
   return { projectId, editorUrl: editorUrl(projectId), note: 'A full copy with every timeline tab and its media. Edits to it never change the original.' };
 }});
 export const deleteProject = internalMutation({ args: { ownerId: v.string(), projectId: v.string() }, returns: v.any(), handler: async (ctx, args) => {
-  const project = await requireProject(ctx, projectIdOf(ctx, args.projectId), args.ownerId, false);
-  await beginProjectDeletion(ctx, args.ownerId, project);
-  return { deleted: true, title: project.title };
+  const project = await ctx.db.get(projectIdOf(ctx, args.projectId));
+  if(project)await beginProjectDeletion(ctx, args.ownerId, project);
+  return { deleted: true, ...(project?{title:project.title}:{}) };
 }});
 export const renameTimeline = internalMutation({ args: { ownerId: v.string(), projectId: v.string(), timelineId: v.string(), name: v.string() }, returns: v.any(), handler: async (ctx, args) => {
   await renameTabFor(ctx, args.ownerId, { projectId: projectIdOf(ctx, args.projectId), timelineId: args.timelineId, name: args.name });

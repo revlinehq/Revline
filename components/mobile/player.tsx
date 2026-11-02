@@ -4,6 +4,7 @@ import { Component, useEffect, useRef, useState, type ReactNode } from 'react';
 import { ConvexProvider, ConvexReactClient, useConvex, useQuery } from 'convex/react';
 import { z } from 'zod';
 import { api } from '@/convex/_generated/api';
+import type { Doc } from '@/convex/_generated/dataModel';
 import { Preview, type PreviewHandle } from '@/components/editor/preview';
 import { EditorStateProvider } from '@/components/editor/editor-state';
 import { createEditorStore } from '@/lib/editor/store';
@@ -77,12 +78,17 @@ export function MobilePlayer({ projectId }: { projectId: string }) {
 }
 
 function AuthenticatedPlayer({ projectId, timelineId, controls }: { projectId: string; timelineId?: string; controls: React.RefObject<PreviewHandle | null> }) {
-  const convex = useConvex();
   const project = useQuery(api.projects.get, { projectId, includeHistory: false });
-  const assets = useQuery(api.assets.list, project ? { projectId: project._id, limit: 200 } : 'skip');
-  const status = useQuery(api.assistant.status, project ? { projectId: project._id } : 'skip');
-  const draft = useQuery(api.assistant.livePreview, project && status?.running ? { projectId: project._id } : 'skip');
-  const snapshots = useQuery(api.timelineTabs.snapshots, project ? { projectId: project._id } : 'skip');
+  useEffect(()=>{if(project===null){controls.current?.pause();notify({kind:'error',message:'This project is no longer available.'});}},[project,controls]);
+  if(!project)return <p role="status">{project===null?'This project is no longer available.':'Loading preview…'}</p>;
+  return <AvailablePlayer key={projectId} project={project} timelineId={timelineId} controls={controls}/>;
+}
+function AvailablePlayer({ project, timelineId, controls }: { project:Doc<'projects'>; timelineId?: string; controls: React.RefObject<PreviewHandle | null> }) {
+  const projectId=project._id,convex=useConvex();
+  const assets = useQuery(api.assets.list, { projectId, limit: 200 });
+  const status = useQuery(api.assistant.status, { projectId });
+  const draft = useQuery(api.assistant.livePreview, status?.running ? { projectId } : 'skip');
+  const snapshots = useQuery(api.timelineTabs.snapshots, { projectId });
   const [store] = useState(() => createEditorStore(EMPTY_TIMELINE));
   const [time, setTime] = useState(0);
   const reportedAt = useRef(0);

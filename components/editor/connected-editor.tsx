@@ -1,6 +1,8 @@
 'use client';
 import { reportClientIncident } from '@/lib/incident-client';
 import { userError } from '@/lib/user-error';
+import Link from 'next/link';
+import { Button } from '@/components/ui/button';
 import { NEW_WORKSPACE_LABEL } from '@/lib/editor/workspace-labels';
 import { startTransition, useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { useStore } from 'zustand';
@@ -40,10 +42,15 @@ function editorLoading(projectId: string) {
 }
 export function ConnectedEditor({projectId}: {projectId:string}) {
   const {isAuthenticated}=useConvexAuth();
-  const project=useQuery(api.projects.get,isAuthenticated?{projectId:projectId as Id<'projects'>,includeHistory:false,sceneCode:'refs'}:'skip');
+  const project=useQuery(api.projects.get,isAuthenticated?{projectId,includeHistory:false,sceneCode:'refs'}:'skip');
+  if(project===null)return <div className="editor-boot"><h1>This project is no longer available.</h1><p>It may have been deleted. You can open another project from your library.</p><Button asChild variant="outline"><Link href="/chats">Your projects</Link></Button></div>;
+  if(!project)return editorLoading(projectId);
+  return <LoadedEditor key={projectId} projectId={projectId} project={project}/>;
+}
+function LoadedEditor({projectId,project}:{projectId:string;project:Doc<'projects'>}) {
   // Undo history is up to 10 full timelines. Subscribe to its small index and read each stored snapshot once:
   // snapshots never change, so their queries stay cached while they remain in history.
-  const historyIds=useQuery(api.projects.historyIndex,isAuthenticated?{projectId}:'skip');
+  const historyIds=useQuery(api.projects.historyIndex,{projectId});
   const snapshots=useQueries(useMemo(()=>Object.fromEntries((historyIds??[]).map(id=>[id,{query:api.projects.historySnapshot,args:{projectId,id,sceneCode:'refs'}}])),[historyIds,projectId]));
   const complete=historyIds!==undefined&&historyIds.every(id=>snapshots[id]!==undefined);
   const stored=useMemo(()=>historyIds&&complete?historyIds.flatMap(id=>{const timeline=snapshots[id];return timeline&&!(timeline instanceof Error)?[timeline as Timeline]:[];}):null,[historyIds,complete]);// eslint-disable-line react-hooks/exhaustive-deps
@@ -117,7 +124,7 @@ function ProjectEditor({project,storedTimeline}: {project:Doc<'projects'>;stored
   useEffect(()=>{setTitle(project.title);},[project.title]);
   const [saves]=useState(()=>createTimelineSaveQueue({timeline,revision:project.revision??0,history:project.history??[]},{
     save: edit=>save({projectId,...edit}),
-    load: async()=>{const fresh=await convex.query(api.projects.get,{projectId});return {timeline:fresh.timeline??{...EMPTY_TIMELINE,aspectRatio:fresh.aspectRatio},revision:fresh.revision??0,history:fresh.history??[]};},
+    load: async()=>{const fresh=await convex.query(api.projects.get,{projectId});if(!fresh)throw new Error('This project is no longer available.');return {timeline:fresh.timeline??{...EMPTY_TIMELINE,aspectRatio:fresh.aspectRatio},revision:fresh.revision??0,history:fresh.history??[]};},
     update: (next,kind,history)=>{timelineRef.current=next;store.getState().replace(next,kind==='remote'?history??true:false);},
     saving:setSaving,failed:setSaveFailed,
     error:(e,rejected)=>setError(rejected?`This edit couldn’t be saved and was undone. ${userError(e,'')}`.trim():userError(e, 'Could not save this edit.')),
