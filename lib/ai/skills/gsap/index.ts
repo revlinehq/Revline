@@ -1,4 +1,4 @@
-import type { EditorSkill } from '../index';
+import type { EditorSkill, EditorSkillPage } from '../index';
 import { SCENE_GSAP_PLUGINS } from '../../../editor/scene-modules';
 import { GREENSOCK_PAGES } from './pages';
 import { TRANSITION_RECIPE_PAGES } from './recipes';
@@ -35,9 +35,11 @@ Launch films and remakes are built from a handful of transitions: letter reveal,
 - \`gsap-performance\`: transform and opacity, few simultaneous heavy effects; skip the ScrollTrigger and mouse-follower parts.
 - \`gsap-utils\`: clamp, mapRange, normalize, interpolate, snap, wrap, distribute, toArray and selector for computing values; random and shuffle only while building.`;
 
+const rulesPage: EditorSkillPage = { name: 'revline', description: 'Read first: how GSAP works in Revline scenes (paused, seeked timelines; useTimeline; what never to use). Wins over the GreenSock pages.', body: RULES };
+
 export const gsapSkill: EditorSkill = {
   name: 'gsap',
   description: 'GSAP choreography for scenes: GreenSock\'s official skills (timeline, core, plugins, React, performance, utils) under Revline\'s rules for paused, frame-seeked timelines. Also transition recipes (letter reveal, write-on, mask wipe, blur-in and motion blur, morph, typing, fly-off). Read before writing staggers, word reveals, SplitText, MorphSVG or any multi-step motion in a scene.',
   body: RULES,
-  pages: [...TRANSITION_RECIPE_PAGES, ...GREENSOCK_PAGES],
+  pages: [rulesPage, ...TRANSITION_RECIPE_PAGES, ...GREENSOCK_PAGES],
 };

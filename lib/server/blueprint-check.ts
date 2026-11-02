@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import puppeteer from 'puppeteer';
+import { sceneRuntimeNames, SCENE_RUNTIME_BUNDLES } from '../editor/scene-modules';
 import sharp from 'sharp';
 import type { MediaTaskResult, MediaWorkItem } from '@/convex/mediaTasks';
 import { AnalysisError } from '@/lib/media-analysis/errors';
@@ -52,14 +53,17 @@ export function measure(screen: Pixels, work: Pick<Work, 'points' | 'lines'>): P
 async function render(work: Work, signal: AbortSignal) {
   if (!work.code) throw new AnalysisError('There is no code to render.', 400);
   const vendor = join(process.cwd(), 'public/vendor');
-  const runtime = (await readFile(join(vendor, 'scene-runtime.js'), 'utf8')).replace(/<\/script/gi, '<\\/script');
+  const scripts = await Promise.all(sceneRuntimeNames({ code: work.code }).map(async name => {
+    const code = await readFile(join(vendor, SCENE_RUNTIME_BUNDLES[name].file), 'utf8');
+    return `<script>${code.replace(/<\/script/gi, '<\\/script')}</script>`;
+  }));
   const allIcons = JSON.parse(await readFile(join(vendor, 'lucide-icons.json'), 'utf8')) as Record<string, string>;
   const icons = Object.fromEntries([...work.code.matchAll(/['"`]([a-z0-9]+(?:-[a-z0-9]+)*)['"`]/g)].map(match => match[1]).filter(name => allIcons[name] !== undefined).map(name => [name, allIcons[name]]));
   const brand = work.brand as { fonts?: { family: string; weight: string; url: string }[]; screens?: { name: string; url: string }[] } | null;
   const fonts = await Promise.all((brand?.fonts ?? []).filter(font => work.code!.includes(font.family)).map(async font => ({ family: font.family, weight: font.weight, data: (await download(font.url, signal)).data.toString('base64') })));
   const media = await Promise.all((brand?.screens ?? []).map(async screen => { const file = await download(screen.url, signal); return { name: screen.name, type: file.type, data: file.data.toString('base64') }; }));
   const { width, height } = work;
-  const frame = `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval'; style-src 'unsafe-inline'; img-src data: blob:; media-src data: blob:; font-src data: blob:"><style>html,body{margin:0;width:${width}px;height:${height}px;overflow:hidden;background:transparent}body{font-family:Arial,sans-serif;-webkit-font-smoothing:antialiased}#scene-root{position:absolute;inset:0;overflow:hidden}</style></head><body><div id="scene-root"></div><script>${runtime}</script></body></html>`;
+  const frame = `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval'; style-src 'unsafe-inline'; img-src data: blob:; media-src data: blob:; font-src data: blob:"><style>html,body{margin:0;width:${width}px;height:${height}px;overflow:hidden;background:transparent}body{font-family:Arial,sans-serif;-webkit-font-smoothing:antialiased}#scene-root{position:absolute;inset:0;overflow:hidden}</style></head><body><div id="scene-root"></div>${scripts.join('')}</body></html>`;
   const browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox', '--disable-dev-shm-usage'] });
   try {
     signal.throwIfAborted();
