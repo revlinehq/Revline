@@ -21,9 +21,9 @@ const portraits: PortraitClip[] = [
   { source: 'theo', card: 0, start: 1.65, duration: 9.75, sourceStart: 1.65 },
   { source: 'lex', card: 1, start: 3.65, duration: 7.75, sourceStart: 0 },
   { source: 'acquired', card: 2, start: 4.7, duration: 6.7, sourceStart: 0 },
-  { source: 'allin', card: 3, start: 6.8, duration: 4.6, sourceStart: 0 },
-  { source: 'dwarkesh', card: 4, start: 6.95, duration: 4.45, sourceStart: 0 },
-  { source: 'lenny', card: 5, start: 7.1, duration: 4.3, sourceStart: 0 },
+  { source: 'caseoh', card: 3, start: 6.8, duration: 4.6, sourceStart: 0 },
+  { source: 'xqc', card: 4, start: 6.95, duration: 4.45, sourceStart: 0 },
+  { source: 'jynxzi', card: 5, start: 7.1, duration: 4.3, sourceStart: 0 },
   {
     source: 'lex',
     card: 0,
@@ -32,7 +32,7 @@ const portraits: PortraitClip[] = [
     sourceStart: 0,
   },
   {
-    source: 'dwarkesh',
+    source: 'xqc',
     card: 0,
     start: 2.316666667,
     duration: 0.65,

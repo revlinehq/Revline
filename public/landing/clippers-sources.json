@@ -1,8 +1,8 @@
 {
-  "projectName": "Landing: podcast clips",
+  "projectName": "Landing: gaming and podcast clips",
   "projectId": "j97bb7yr3ebk478zhzbhf5cq8s8hf0v8",
   "developmentProjectUrl": "http://localhost:3001/editor/j97bb7yr3ebk478zhzbhf5cq8s8hf0v8",
-  "production": "Imported, clipped, reframed, captioned and normalized through Revline development MCP tools. Each timeline has its own caption identity, styled with native text tools and saved speech timing. Muted 360x640 H.264 previews and WebP posters use the saved timelines, rangeExportTimeline and Revline’s native composition renderer, followed by small-asset compression. The short Acquired preview loops. No exportVideo call or export job was created.",
+  "production": "Theo, Lex and Acquired retain their Revline-rendered, captioned 360x640 previews and source timelines. The gaming clips were restored with git show from b653a66c^, reframed to 360x640 with the original face/game split, and compressed as muted H.264 previews with WebP posters. Their editorial labels describe gameplay, not speech: CaseOh uses the serif fade, xQc uses teal mono word highlights, and Jynxzi uses yellow outlined capitals. The six caption looks from PR #14 remain distinct. Theo stays the wide opener; the short Acquired preview loops. Jynxzi loops the first 2.8 seconds to keep the gameplay visible instead of the inventory screen.",
   "sources": [
     {
       "asset": "theo",
@@ -55,57 +55,6 @@
       }
     },
     {
-      "asset": "dwarkesh",
-      "show": "Dwarkesh Podcast",
-      "episode": "Dario Amodei (Anthropic CEO)",
-      "moment": "Why AI scaling works is still an empirical mystery",
-      "sourceUrl": "https://www.youtube.com/watch?v=Nlkk3glap_U",
-      "sourceRangeSeconds": [
-        71.455,
-        96.945
-      ],
-      "previewSourceRangeSeconds": [
-        82.26,
-        86.86
-      ],
-      "timelineId": "fc73f5bd-f580-4004-9a9f-ce111f2da436",
-      "captionStyle": {
-        "name": "Teal mono karaoke",
-        "font": "geist-mono",
-        "color": "#9EF5E6",
-        "accent": "#54F2DD",
-        "background": "#171717E8",
-        "positionY": 0.68,
-        "animation": "karaoke",
-        "fontSize": 88
-      }
-    },
-    {
-      "asset": "lenny",
-      "show": "Lenny’s Podcast",
-      "episode": "Brian Chesky’s new playbook",
-      "moment": "How different technical stacks and dependencies slow teams",
-      "sourceUrl": "https://www.youtube.com/watch?v=4ef0juAMqoE",
-      "sourceRangeSeconds": [
-        583.845,
-        621.223
-      ],
-      "previewSourceRangeSeconds": [
-        583.845,
-        588.445
-      ],
-      "timelineId": "138edf91-fe25-4a40-8392-17cf15932c09",
-      "captionStyle": {
-        "name": "Yellow outlined capitals",
-        "font": "anton",
-        "color": "#FFE147",
-        "outline": "#171717",
-        "positionY": 0.74,
-        "animation": "none",
-        "fontSize": 100
-      }
-    },
-    {
       "asset": "acquired",
       "show": "Acquired",
       "episode": "NVIDIA CEO Jensen Huang",
@@ -131,20 +80,13 @@
       }
     },
     {
-      "asset": "allin",
-      "show": "All-In Podcast",
-      "episode": "Satya Nadella on AI’s Business Revolution",
-      "moment": "From edit suggestions to autonomous coding agents",
-      "sourceUrl": "https://www.youtube.com/watch?v=5nCbHsCG334",
-      "sourceRangeSeconds": [
-        194.735,
-        215.01
-      ],
-      "previewSourceRangeSeconds": [
-        199.455,
-        204.055
-      ],
-      "timelineId": "62024abc-699b-4684-b76d-e2e2161485b8",
+      "asset": "caseoh",
+      "show": "CaseOh",
+      "game": "Horror",
+      "sourceRevision": "b653a66c^",
+      "sourcePath": "public/landing/clippers-caseoh.mp4",
+      "captionText": "Horror game / live reaction",
+      "captionKind": "Editorial gameplay label",
       "captionStyle": {
         "name": "Serif lower third",
         "font": "lora",
@@ -152,6 +94,43 @@
         "positionY": 0.75,
         "animation": "fade",
         "fontSize": 82
+      }
+    },
+    {
+      "asset": "xqc",
+      "show": "xQc",
+      "game": "Overwatch",
+      "sourceRevision": "b653a66c^",
+      "sourcePath": "public/landing/clippers-xqc.mp4",
+      "captionText": "Overwatch / match reaction",
+      "captionKind": "Editorial gameplay label",
+      "captionStyle": {
+        "name": "Teal mono karaoke",
+        "font": "geist-mono",
+        "color": "#9EF5E6",
+        "accent": "#54F2DD",
+        "background": "#171717E8",
+        "positionY": 0.68,
+        "animation": "karaoke",
+        "fontSize": 88
+      }
+    },
+    {
+      "asset": "jynxzi",
+      "show": "Jynxzi",
+      "game": "Rainbow Six Siege",
+      "sourceRevision": "b653a66c^",
+      "sourcePath": "public/landing/clippers-jynxzi.mp4",
+      "captionText": "RAINBOW SIX / CLUTCH MOMENT",
+      "captionKind": "Editorial gameplay label",
+      "captionStyle": {
+        "name": "Yellow outlined capitals",
+        "font": "anton",
+        "color": "#FFE147",
+        "outline": "#171717",
+        "positionY": 0.74,
+        "animation": "none",
+        "fontSize": 100
       }
     }
   ]
