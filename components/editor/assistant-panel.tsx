@@ -8,10 +8,10 @@ import { NEW_PROJECT_PATH } from '@/lib/workspace-routes';
 import { PRODUCTION_CLAUDE_MODEL_CHOICES } from '@/lib/ai/claude-model-policy';
 import { Fragment, memo, useCallback, useState, useEffect, useLayoutEffect, useMemo, useRef, type ComponentProps } from 'react';
 import { Check, ArrowUpRight, Lightbulb, RotateCcw, X } from 'lucide-react';
-import type { EditorEditMode } from '@/lib/ai/edit-mode';
+import type { EditorEditModePreference } from '@/lib/ai/edit-mode';
 import { AssistantModelPicker } from './assistant-model-picker';
 import { AssistantModePicker, useAssistantEditMode } from './assistant-mode-picker';
-import { EDITOR_MODELS, type ClaudeModelChoice, type EditorReasoningEffort, type EditorSpeedMode } from '@/lib/ai/claude-model';
+import { EDITOR_MODELS, normalizeEditorReasoningEffort, type ClaudeModelChoice, type EditorReasoningEffort, type EditorSpeedMode } from '@/lib/ai/claude-model';
 import { EditComposer, type ComposerAttachment } from '@/components/workspace/edit-composer';
 import { McpLogo } from '@/components/workspace/ai-app-logos';
 import { AgentLogo } from '@/components/workspace/agent-logo';
@@ -102,17 +102,17 @@ function AssistantResponseText({ text, streaming }: { text: string; streaming: b
   return <ChatProse text={text} animate={receivedLive || streaming} />;
 }
 
-function AssistantPanelBody({ messages, running, editing:editingTimeline=running, configured, error, onSend, onRetry, onStop, hasClips, demo, onLoadMore, canLoadMore, onAttach, activity, activitySource, activityStartedAt, budgetUsed, draftKey, suggestions, onSuggestion, editSnapshot, canResumeEdit=false, defaultModelChoice, modelSwitcher = false, effortSwitcher = false, liveEffort, claudeViaMcp, allowedModels = PRODUCTION_CLAUDE_MODEL_CHOICES, attachments, onRemoveAttachment, composerBusy = false, requireMedia = false, conversationStarted = false, queued=[],queuePaused=false,onRemoveQueued,onResumeQueue,externalAgent,referenceMedia }: {
+function AssistantPanelBody({ messages, running, editing:editingTimeline=running, configured, error, onSend, onRetry, onStop, hasClips, demo, onLoadMore, canLoadMore, onAttach, activity, activitySource, activityStartedAt, budgetUsed, draftKey, suggestions, onSuggestion, editSnapshot, canResumeEdit=false, defaultModelChoice, defaultReasoningEffort, modelSwitcher = false, effortSwitcher = false, claudeViaMcp, allowedModels = PRODUCTION_CLAUDE_MODEL_CHOICES, attachments, onRemoveAttachment, composerBusy = false, requireMedia = false, conversationStarted = false, queued=[],queuePaused=false,onRemoveQueued,onResumeQueue,externalAgent,referenceMedia }: {
   externalAgent?: string | null;
   messages: ChatMessage[]; running: boolean; editing?:boolean; configured: boolean; error?: string | null;
   modelSwitcher?: boolean;
-  /** Development only: choose an effort, or see the one the editor picked. */
-  effortSwitcher?: boolean; liveEffort?: EditorReasoningEffort;
+  /** Development only: choose a fixed effort for each request. */
+  effortSwitcher?: boolean; liveEffort?: EditorReasoningEffort; defaultReasoningEffort?: EditorReasoningEffort;
   defaultModelChoice?:ClaudeModelChoice;
   allowedModels?: readonly ClaudeModelChoice[];
   claudeViaMcp?: boolean;
-  onSend: (text: string, modelChoice?: ClaudeModelChoice, reasoningEffort?: EditorReasoningEffort, speedMode?: EditorSpeedMode, editMode?: EditorEditMode) => Promise<void>; hasClips: boolean; demo: boolean;
-  onRetry?: (text: string, modelChoice?: ClaudeModelChoice, reasoningEffort?: EditorReasoningEffort, speedMode?: EditorSpeedMode, editMode?: EditorEditMode) => Promise<void>;
+  onSend: (text: string, modelChoice?: ClaudeModelChoice, reasoningEffort?: EditorReasoningEffort, speedMode?: EditorSpeedMode, editMode?: EditorEditModePreference) => Promise<void>; hasClips: boolean; demo: boolean;
+  onRetry?: (text: string, modelChoice?: ClaudeModelChoice, reasoningEffort?: EditorReasoningEffort, speedMode?: EditorSpeedMode, editMode?: EditorEditModePreference) => Promise<void>;
   onLoadMore?: () => void; canLoadMore?: boolean; onAttach?: () => void;
   attachments?: ComposerAttachment[]; onRemoveAttachment?: (id: string) => void; composerBusy?: boolean; requireMedia?: boolean;
   /** Playback URLs for reference breakdown cards, by asset id. */
@@ -123,7 +123,7 @@ function AssistantPanelBody({ messages, running, editing:editingTimeline=running
   budgetUsed?: number;
   onStop?: () => Promise<void>;
   suggestions?: { sourceName:string;clipId:string;items:SourceEditSuggestion[] };
-  onSuggestion?: (prompt:string,clipId:string,modelChoice?:ClaudeModelChoice,reasoningEffort?:EditorReasoningEffort,speedMode?:EditorSpeedMode,editMode?:EditorEditMode) => Promise<void>;
+  onSuggestion?: (prompt:string,clipId:string,modelChoice?:ClaudeModelChoice,reasoningEffort?:EditorReasoningEffort,speedMode?:EditorSpeedMode,editMode?:EditorEditModePreference) => Promise<void>;
   canResumeEdit?:boolean;
   editSnapshot?:AssistantEditSnapshot;
 }) {
@@ -134,9 +134,10 @@ function AssistantPanelBody({ messages, running, editing:editingTimeline=running
   const currentDraftKey=useRef(draftKey);currentDraftKey.current=draftKey;
   const [modelChoice, setModelChoice] = useState<ClaudeModelChoice>();
   const editMode = useAssistantEditMode();
-  // Undefined is Auto: the editor picks the effort per request.
+  // Unset choices follow the current deployment default.
   const [effortChoice, setEffortChoice] = useState<EditorReasoningEffort>();
-  const chosenEffort = effortSwitcher ? effortChoice : undefined;
+  const effectiveEffort = effortChoice ?? normalizeEditorReasoningEffort(defaultReasoningEffort);
+  const chosenEffort = effortSwitcher ? effectiveEffort : undefined;
   const supportedModels=allowedModels.filter(choice=>EDITOR_MODELS.some(model=>model.id===choice));
   const availableModels=supportedModels.length?supportedModels:PRODUCTION_CLAUDE_MODEL_CHOICES;
   const selectedModelChoice=modelChoice&&availableModels.some(choice=>choice===modelChoice)?modelChoice:undefined;
@@ -267,7 +268,7 @@ function AssistantPanelBody({ messages, running, editing:editingTimeline=running
     </MessageScrollerViewport><MessageScrollerButton /></MessageScroller>
     <div className="manual-composer-dock">
     {queued.length>0&&<div className="assistant-queue" aria-label="Queued messages"><div className="assistant-queue-heading"><span>{queued.length} queued{queuePaused?' · paused':''}</span>{queuePaused&&onResumeQueue&&<button type="button" onClick={()=>void onResumeQueue().catch(e=>setLocalError(userError(e,'Could not resume the queue.')))}>Resume queue</button>}</div>{queued.map((message,index)=><div className="assistant-queued-message" key={message.id}><span className="assistant-queue-number">{index+1}</span><div><p>{message.prompt}</p>{message.error&&<small>{message.error}</small>}</div><button type="button" aria-label={`Remove queued message ${index+1}`} onClick={()=>void onRemoveQueued?.(message.id).catch(e=>setLocalError(userError(e,'Could not remove queued message.')))}><X size={13}/></button></div>)}</div>}
-    <EditComposer slashCommands allowQueue={conversationStarted&&!demo} attachments={attachments} onRemoveAttachment={onRemoveAttachment} requireMedia={requireMedia} actions={<div className="assistant-model-controls">{(canChooseModel || claudeViaMcp) && <AssistantModelPicker claudeViaMcp={claudeViaMcp} allowedModels={canChooseModel ? availableModels : [effectiveModelChoice]} value={effectiveModelChoice} onChange={chooseModel} disabled={answering} effort={canChooseModel && effortSwitcher ? { value: effortChoice, live: liveEffort, onChange: setEffortChoice } : undefined}/>}<AssistantModePicker {...editMode} disabled={answering}/></div>} variant="compact" className="manual-editor-composer" value={prompt} onChange={changePrompt} onSubmit={submit} onAttach={onAttach} placeholder={externalAgent ? `${externalAgent} is editing over MCP. What you send runs when it finishes.` : "What would you change next?"} disabled={composerBusy || sending || !!pendingReply} running={running && !externalAgent} onStop={onStop ? stop : undefined} stopping={stopState==='stopping'} />
+    <EditComposer slashCommands allowQueue={conversationStarted&&!demo} attachments={attachments} onRemoveAttachment={onRemoveAttachment} requireMedia={requireMedia} actions={<div className="assistant-model-controls">{(canChooseModel || claudeViaMcp) && <AssistantModelPicker claudeViaMcp={claudeViaMcp} allowedModels={canChooseModel ? availableModels : [effectiveModelChoice]} value={effectiveModelChoice} onChange={chooseModel} disabled={answering} effort={canChooseModel && effortSwitcher ? { value: effectiveEffort, onChange: setEffortChoice } : undefined}/>}<AssistantModePicker {...editMode} disabled={answering}/></div>} variant="compact" className="manual-editor-composer" value={prompt} onChange={changePrompt} onSubmit={submit} onAttach={onAttach} placeholder={externalAgent ? `${externalAgent} is editing over MCP. What you send runs when it finishes.` : "What would you change next?"} disabled={composerBusy || sending || !!pendingReply} running={running && !externalAgent} onStop={onStop ? stop : undefined} stopping={stopState==='stopping'} />
     </div>
   </div>;
 }

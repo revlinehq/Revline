@@ -22,7 +22,7 @@ export const OPENAI_EDIT_MODELS = [
   { id: 'gpt-6.1-terra', label: 'GPT-6.1 Terra', modelId: 'gpt-6.1-terra', pricing: { input: 1, cacheRead: .05, cacheWrite: 1.25, output: 5 } },
   // No longer offered (Terra replaced it); kept so past costs and stale queued requests still resolve.
   // Cheaper agent model (third-party price trackers, Oct 2026); cache rates assume Sol's ratios.
-  // Rejects prompt_cache_options and the 'max' effort (OpenAI API, Oct 2026); reasoning modes are GPT-6 only.
+  // Rejects prompt_cache_options; reasoning modes are GPT-6 only.
   { id: 'gpt-5.4-mini', label: 'GPT-5.4 mini', modelId: 'gpt-5.4-mini', pricing: { input: .75, cacheRead: .075, cacheWrite: .9375, output: 4.5 }, legacyOptions: true },
 ] as const;
 // Google rates, USD / 1M tokens, from ai.google.dev/gemini-api/docs/pricing (2026-10-29): $2 input,
@@ -31,7 +31,7 @@ export const GOOGLE_EDIT_MODELS = [
   { id: 'gemini-4-argon', label: 'Gemini 4 Argon', shortLabel: 'Argon 4', modelId: 'gemini-4-argon' },
 ] as const;
 export const EDITOR_MODELS = [...OPENAI_EDIT_MODELS, CLAUDE_EDIT_MODELS[1], CLAUDE_EDIT_MODELS[2], ...GOOGLE_EDIT_MODELS] as const;
-export const EDITOR_REASONING_EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'] as const;
+export const EDITOR_REASONING_EFFORTS = ['low', 'medium', 'high', 'xhigh'] as const;
 export type EditorReasoningEffort = typeof EDITOR_REASONING_EFFORTS[number];
 export const EDITOR_SPEED_MODES = ['standard', 'fast'] as const;
 export type EditorSpeedMode = typeof EDITOR_SPEED_MODES[number];
@@ -65,31 +65,17 @@ export function resolveClaudeModel(modelChoice?: ClaudeModelChoice, env: ClaudeM
 /** The effort used when a request names none; EDITOR_DEFAULT_EFFORT sets it per deployment. */
 export function defaultEditorReasoningEffort(env: ClaudeModelEnvironment = process.env): EditorReasoningEffort {
   const effort = env.EDITOR_DEFAULT_EFFORT?.trim();
+  if (effort === 'max' || effort === 'ultra') return 'xhigh';
   return EDITOR_REASONING_EFFORTS.find(item => item === effort) ?? 'medium';
 }
 
-// The editor chooses effort per request; nobody picks it. High for films, scenes and retries,
-// low for one quick tweak, the deployment default (medium) for everything else.
-const HIGH_EFFORT_WORK = /\b(launch|film|teaser|trailer|announce\w*|motion[- ]design|scenes?|explainer|intro|outro|animat\w*|storyboard|beat sheet|recreat\w*|remake|clone|shot for shot)\b/i;
-const QUICK_TWEAK = /\b(trim|delete|move|mute|unmute|volume|louder|quieter|bigger|smaller|font|colou?r|bold|rename|speed|faster|slower|split|duplicate|crop|fade|white|black|red|yellow|blue|green|orange|pink)\b/i;
-const SMALL_TALK = /^(hi|hey|hello|thanks|thank you|ok|okay|cool|nice|great)\b[\s!.]*$/i;
-const HIGH_EFFORT_SKILLS = ['scene-engine', 'gsap', 'motion-design', 'explainer-scenes', 'overall-styling', 'explainer'];
-
-/** The effort a request starts at when none was chosen. */
-export function autoEditorReasoningEffort(prompt: string, { recovering = false } = {}, env: ClaudeModelEnvironment = process.env): EditorReasoningEffort {
-  if (recovering || HIGH_EFFORT_WORK.test(prompt)) return 'high';
-  if (SMALL_TALK.test(prompt.trim())) return 'low';
-  const words = prompt.trim().split(/\s+/).length;
-  if (words <= 12 && QUICK_TWEAK.test(prompt) && !/\b(and|then|also)\b|[,;]/i.test(prompt)) return 'low';
-  return defaultEditorReasoningEffort(env);
-}
-
-/** Scene work raises a run to high: once it reads a scene skill or writes a scene, the next steps write code. */
-export function stepsNeedHighEffort(steps: readonly { content: readonly unknown[] }[]) {
-  return steps.some(step => step.content.some(part => {
-    const call = part as { type?: string; toolName?: string; input?: { name?: unknown } };
-    return call.type === 'tool-call' && (call.toolName === 'addScene' || call.toolName === 'addScenes' || call.toolName === 'addFilm' || call.toolName === 'editScene' || (call.toolName === 'readSkill' && HIGH_EFFORT_SKILLS.includes(String(call.input?.name))));
-  }));
+/** Decode saved preferences and incoming requests into the four supported efforts. */
+export function normalizeEditorReasoningEffort(value: unknown, env: ClaudeModelEnvironment = process.env): EditorReasoningEffort {
+  if (value === undefined || value === null || value === 'auto') return defaultEditorReasoningEffort(env);
+  if (value === 'max' || value === 'ultra') return 'xhigh';
+  const effort = EDITOR_REASONING_EFFORTS.find(item => item === value);
+  if (!effort) throw new Error('Choose a supported reasoning effort.');
+  return effort;
 }
 
 export function defaultEditorModelChoice(env:ClaudeModelEnvironment=process.env):typeof EDITOR_MODELS[number]['id']|undefined {
@@ -97,9 +83,9 @@ export function defaultEditorModelChoice(env:ClaudeModelEnvironment=process.env)
   return EDITOR_MODELS.find(model=>model.modelId===selected.modelId)?.id;
 }
 
-export function validatePinnedClaudeModel(selection: ClaudeModelSelection, env: ClaudeModelEnvironment = process.env): ClaudeModelSelection {
+export function validatePinnedClaudeModel(input: Omit<ClaudeModelSelection, 'reasoningEffort'> & { reasoningEffort?: unknown }, env: ClaudeModelEnvironment = process.env): ClaudeModelSelection & { reasoningEffort: EditorReasoningEffort } {
+  const selection = { ...input, reasoningEffort: normalizeEditorReasoningEffort(input.reasoningEffort, env) };
   enforceClaudeModelPolicy(selection, env);
-  if (selection.reasoningEffort !== undefined && !EDITOR_REASONING_EFFORTS.includes(selection.reasoningEffort)) throw new Error('Choose a supported reasoning effort.');
   if (selection.speedMode !== undefined && (!EDITOR_SPEED_MODES.includes(selection.speedMode) || (selection.speedMode === 'fast' && !editorModelSupportsFast(selection)))) throw new Error('Fast mode is not available for this model.');
   const pinned = selection.provider === 'openai' || selection.provider === 'google' ? selection.modelChoice : CLAUDE_EDIT_MODELS.find(model => model.id === selection.modelChoice)?.modelId;
   if (selection.modelChoice !== undefined && pinned !== selection.modelId) throw new Error('Pinned editor model does not match its selection.');
@@ -107,11 +93,9 @@ export function validatePinnedClaudeModel(selection: ClaudeModelSelection, env: 
 }
 
 /** Capture manual effort with the model so a queued run cannot change settings. */
-export function withEditorReasoning(selection: ClaudeModelSelection, effort?: EditorReasoningEffort, env: ClaudeModelEnvironment = process.env): ClaudeModelSelection {
-  if (effort === undefined) return selection;
-  if (!claudeModelSwitcherEnabled(env)) throw new Error('Manual reasoning selection is currently disabled.');
-  if (!EDITOR_REASONING_EFFORTS.includes(effort)) throw new Error('Choose a supported reasoning effort.');
-  return { ...selection, reasoningEffort: effort };
+export function withEditorReasoning(selection: ClaudeModelSelection, effort?: string, env: ClaudeModelEnvironment = process.env): ClaudeModelSelection {
+  if (effort !== undefined && effort !== 'auto' && !claudeModelSwitcherEnabled(env)) throw new Error('Manual reasoning selection is currently disabled.');
+  return { ...selection, reasoningEffort: normalizeEditorReasoningEffort(effort, env) };
 }
 
 export function withEditorSpeed(selection: ClaudeModelSelection, speedMode?: EditorSpeedMode, env: ClaudeModelEnvironment = process.env): ClaudeModelSelection {
@@ -122,7 +106,7 @@ export function withEditorSpeed(selection: ClaudeModelSelection, speedMode?: Edi
 }
 
 /** Anthropic request options for the Claude editing models. */
-export function claudeProviderOptions(modelId: string, effort: EditorReasoningEffort = 'medium') {
+export function claudeProviderOptions(modelId: string, effort: EditorReasoningEffort = defaultEditorReasoningEffort()) {
   if (!/^(?:anthropic\/)?claude-(?:haiku|sonnet|opus)-5[.-]5$/.test(modelId)) return undefined;
   const anthropic = {
     cacheControl: { type: 'ephemeral', ttl: '5m' },
@@ -135,7 +119,7 @@ export function claudeProviderOptions(modelId: string, effort: EditorReasoningEf
 }
 
 /** Gemini thinks at low, medium or high; the higher editor efforts map to high. */
-export function googleProviderOptions(effort: EditorReasoningEffort = 'medium') {
+export function googleProviderOptions(effort: EditorReasoningEffort = defaultEditorReasoningEffort()) {
   const google = { thinkingConfig: { thinkingLevel: effort === 'low' || effort === 'medium' ? effort : 'high' } } satisfies GoogleGenerativeAIProviderOptions;
   return { google };
 }
@@ -143,12 +127,12 @@ export function googleProviderOptions(effort: EditorReasoningEffort = 'medium') 
 export function editorProviderOptions(selection: ClaudeModelSelection, cacheKey?: string) {
   if (selection.provider === 'google') return googleProviderOptions(selection.reasoningEffort ?? defaultEditorReasoningEffort());
   if (selection.provider !== 'openai') { const options = claudeProviderOptions(selection.modelId, selection.reasoningEffort); if (!options) throw new Error(GPT_ONLY_EDITING_ERROR); return options; }
-  // GPT-6 models take reasoning modes, cache retention and every effort; older
+  // GPT-6 models take reasoning modes, cache retention and all four efforts; older
   // models reject those request fields outright.
   const legacy = OPENAI_EDIT_MODELS.some(model => model.modelId === selection.modelId && 'legacyOptions' in model);
   const effort = selection.reasoningEffort ?? defaultEditorReasoningEffort();
   const openai = {
-    reasoningEffort: legacy && effort === 'max' ? 'xhigh' : effort, ...(legacy ? {} : { reasoningMode: 'standard' as const }), serviceTier: selection.speedMode === 'fast' ? 'fast' : 'default',
+    reasoningEffort: effort, ...(legacy ? {} : { reasoningMode: 'standard' as const }), serviceTier: selection.speedMode === 'fast' ? 'fast' : 'default',
     // History is managed by the existing Agent thread; retain encrypted reasoning
     // in its messages rather than relying on provider-side conversation storage.
     store: false, include: ['reasoning.encrypted_content'],
@@ -166,7 +150,7 @@ export function editorMaxOutputTokens(selection: ClaudeModelSelection) {
   if (selection.provider === 'anthropic') return 128_000;
   // GPT and Gemini need room for a whole scene (about 10k tokens of code) plus their reasoning in one step; a lower cap
   // cut scenes off mid-write ("reached the model output limit") or pushed models to shorten them. Billing is per token used.
-  const cap = { low: 32_768, medium: 49_152, high: 65_536, xhigh: 65_536, max: 65_536 }[selection.reasoningEffort ?? defaultEditorReasoningEffort()];
+  const cap = { low: 32_768, medium: 49_152, high: 65_536, xhigh: 65_536 }[selection.reasoningEffort ?? defaultEditorReasoningEffort()];
   // Gemini 4 Argon's documented outputTokenLimit is 32,768; asking for more can fail mid-turn.
   return selection.provider === 'google' ? Math.min(cap, 32_768) : cap;
 }

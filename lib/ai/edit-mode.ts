@@ -2,10 +2,12 @@ import { z } from 'zod';
 
 export const editorEditModeSchema = z.enum(['fast', 'precise']);
 export type EditorEditMode = z.infer<typeof editorEditModeSchema>;
-export const DEFAULT_EDITOR_EDIT_MODE: EditorEditMode = 'fast';
+export const editorEditModePreferenceSchema = z.enum(['auto', ...editorEditModeSchema.options]);
+export type EditorEditModePreference = z.infer<typeof editorEditModePreferenceSchema>;
+export const DEFAULT_EDITOR_EDIT_MODE: EditorEditModePreference = 'fast';
 
 /** Explicit builds and final deliveries start Precise; tool execution catches implicit builds. */
-export function editorModeForRequest(prompt: string, requested: EditorEditMode = 'precise'): EditorEditMode {
+export function editorModeForRequest(prompt: string, requested: EditorEditModePreference = 'precise'): EditorEditMode {
   const recreation = /\b(recreat\w*|remake|shot[- ]for[- ]shot|clone)\b|\b(copy|match|replicate)\b.{0,60}\b(reference|video|film|motion)\b/i;
   const build = /\b(build|create|generate|design)\b.{0,60}\b(film|launch|trailer|teaser|motion scene|animation|explainer|intro|outro)\b|\bmake\s+(?:(?:a|an|new)\s+|\d+\s*(?:s|sec(?:ond)?s?)[ -]+)+(?:[\w-]+[ -]+){0,3}(?:film|launch|trailer|teaser|scene|animation|explainer|intro|outro)\b|\b(from scratch|new film|new motion scene)\b/i;
   const final = /\b(publish|publication|export|final cut|final version|final delivery|ready to post|double[- ]check|full review|full checks)\b/i;

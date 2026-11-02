@@ -20,7 +20,7 @@ import { assistantFailureReason, providerErrorText } from "../../lib/ai/assistan
 import { activeOpenAIKey, editorOpenAI } from "../../lib/ai/openai-keys";
 import { anthropic } from "@ai-sdk/anthropic";
 import { google } from '@ai-sdk/google';
-import { assertEditorModelConfigured, resolveClaudeModel, validatePinnedClaudeModel, editorProviderOptions, editorMaxOutputTokens, defaultEditorReasoningEffort, autoEditorReasoningEffort, stepsNeedHighEffort, type ClaudeModelSelection, type EditorReasoningEffort } from "../../lib/ai/claude-model";
+import { assertEditorModelConfigured, resolveClaudeModel, validatePinnedClaudeModel, editorProviderOptions, editorMaxOutputTokens, type ClaudeModelSelection } from "../../lib/ai/claude-model";
 import { Agent, saveMessage } from "@convex-dev/agent";
 import { v, type ObjectType } from "convex/values";
 import { components, internal } from "../_generated/api";
@@ -73,7 +73,7 @@ export async function runEditorTurn(ctx: ActionCtx, args: EditorTurnArgs, hooks:
   try {
     const selection = validatePinnedClaudeModel(args.pinnedModel ?? resolveClaudeModel());
     selectedProvider = selection.provider;
-    costLog.selectModel(selection.modelId, selection.provider, selection.reasoningEffort ?? defaultEditorReasoningEffort(), selection.speedMode ?? 'standard');
+    costLog.selectModel(selection.modelId, selection.provider, selection.reasoningEffort, selection.speedMode ?? 'standard');
     assertEditorModelConfigured(selection);
     const { project, assets } = await ctx.runQuery(internal.assistant.getRun, { projectId: args.projectId, ownerId: args.ownerId, runId: args.runId });
     if(args.attachedAssetIds&&(args.attachedAssetIds.length>20||new Set(args.attachedAssetIds).size!==args.attachedAssetIds.length||args.attachedAssetIds.some(id=>!assets.some(asset=>asset._id===id))))throw new Error('Attached media is unavailable in this project.');
@@ -84,16 +84,7 @@ export async function runEditorTurn(ctx: ActionCtx, args: EditorTurnArgs, hooks:
     if (args.editMode === 'fast' && initialEditMode === 'precise' && !args.continuation) await announcePrecise();
     const recovery = args.recovery ?? project.aiRecovery;
     const recovering = recovery !== undefined || !!args.continuation;
-    // A chosen effort is kept (only the dev switcher offers one). On Auto, building a film (scenes, a launch film, a
-    // recreation) runs at high: the scene code and the timing are the work. Everything else stays at medium or low,
-    // and a repair pass raises low to medium.
-    const autoEffort = selection.reasoningEffort === undefined;
-    const requested = args.command?.name === 'inspo-motion' ? 'high' : autoEditorReasoningEffort(currentPrompt, { recovering });
-    let effort: EditorReasoningEffort = selection.reasoningEffort ?? (requested === 'high' ? 'high' : requested === 'low' ? 'low' : 'medium');
-    const withEffort = (value: EditorReasoningEffort) => ({ ...selection, reasoningEffort: value });
-    const showEffort = () => { costLog.selectModel(selection.modelId, selection.provider, effort, selection.speedMode ?? 'standard'); void ctx.runMutation(internal.assistant.recordEffort, { ...run, effort }).catch(() => {}); };
-    const raiseEffort = (value: EditorReasoningEffort = 'medium') => { effort = value; showEffort(); };
-    showEffort();
+    void ctx.runMutation(internal.assistant.recordEffort, { ...run, effort: selection.reasoningEffort }).catch(() => {});
     const toolkit = createEditorToolkit(ctx, { run, project, assets, recovering, editMode: initialEditMode, pendingFastFrames: args.continuation?.pendingFastFrames, onPrecise: announcePrecise, initialPlans: args.continuation && initialEditMode === 'precise' ? await ctx.runQuery(internal.compositionReview.readPlan, run) : [], selectedClipIds: args.selectedClipIds ?? (args.selectedClipId ? [args.selectedClipId] : []), playhead: args.playhead, publication: { threadId: args.threadId, promptMessageId: args.promptMessageId }, abortSignal });
     const { tools, editSession } = toolkit;
     session = editSession;
@@ -155,16 +146,13 @@ For edit requests, use one brief initial sentence stating the requested action, 
       abortSignal.throwIfAborted();
       if (pass > 0 && !await ctx.runQuery(internal.assistant.isRunActive, run)) return null;
       const offset = steps.length;
-      if (pass > 0 && autoEffort && effort === 'low') raiseEffort();
-      const passEffort = effort;
       const result = await agent.streamText(ctx, { threadId: args.threadId, userId: args.ownerId }, {
-        promptMessageId: args.promptMessageId, abortSignal, experimental_transform: mergeToolInputDeltas(), providerOptions: editorProviderOptions(withEffort(passEffort), cacheKey), maxOutputTokens: editorMaxOutputTokens(withEffort(passEffort)),
+        promptMessageId: args.promptMessageId, abortSignal, experimental_transform: mergeToolInputDeltas(), providerOptions: editorProviderOptions(selection, cacheKey), maxOutputTokens: editorMaxOutputTokens(selection),
         prepareStep: async ({ steps: current, messages }) => {
           const completedSteps = [...steps, ...current];
           const correctedError = completedSteps.some(step => step.content.some(value => value && typeof value === 'object' && 'type' in value && value.type === 'tool-error'));
           if (correctedError && !hasUnresolvedToolFailures(completedSteps)) await editSession.confirmRepairs();
-          if (autoEffort && effort !== 'high' && stepsNeedHighEffort([...steps, ...current])) raiseEffort('high');
-          return { activeTools: Object.keys(tools).filter(name => (!args.command || name !== 'exportVideo') && (toolkit.editMode() === 'precise' || !PRECISE_ONLY_TOOLS.has(name))), messages: [...messages, { role: 'system', content: editModeInstructions(toolkit.editMode()) }], ...(effort === passEffort ? {} : { providerOptions: editorProviderOptions(withEffort(effort), cacheKey), maxOutputTokens: editorMaxOutputTokens(withEffort(effort)) }) };
+          return { activeTools: Object.keys(tools).filter(name => (!args.command || name !== 'exportVideo') && (toolkit.editMode() === 'precise' || !PRECISE_ONLY_TOOLS.has(name))), messages: [...messages, { role: 'system', content: editModeInstructions(toolkit.editMode()) }] };
         },
         ...(repairFeedback ? {
           stopWhen: [({steps: current}) => current.length >= 8 || hasRepeatedToolFailures([...steps, ...current])],
