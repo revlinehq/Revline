@@ -2,8 +2,8 @@ import { z } from 'zod';
 import type { Clip } from './types';
 
 export const IMPACT_PRESETS = ['invert', 'black-white', 'posterize', 'manga'] as const;
-export const OVERLAY_PRESETS = ['light-leak', 'film-burn', 'lens-flare', 'dust', 'grain'] as const;
-export const OVERLAY_BLENDS = ['screen', 'add', 'overlay'] as const;
+const OVERLAY_PRESETS = ['light-leak', 'film-burn', 'lens-flare', 'dust', 'grain'] as const;
+const OVERLAY_BLENDS = ['screen', 'add', 'overlay'] as const;
 export const impactSettingsSchema = z.object({
   preset: z.enum(IMPACT_PRESETS), intensity: z.number().min(0).max(1),
   threshold: z.number().min(.05).max(.95), levels: z.number().int().min(2).max(8),

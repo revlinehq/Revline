@@ -2,7 +2,7 @@
 
 import { useSyncExternalStore } from 'react';
 
-export const INSPECTOR_STORAGE_KEY = 'revline-inspector-open';
+const INSPECTOR_STORAGE_KEY = 'revline-inspector-open';
 const changedEvent = 'revline:inspector-changed';
 let sessionOpen: boolean | undefined;
 

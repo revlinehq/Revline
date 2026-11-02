@@ -44,7 +44,7 @@ export function snapToSpeech(range: { start: number; end: number }, words: Speec
 
 /** Overlapping cuts of the same kind become one. Different kinds stay separate (and may overlap),
  * so a caller that keeps restarts still removes the pauses inside them. Sorted by start. */
-export function mergeCuts(cuts: CleanupCut[]): CleanupCut[] {
+function mergeCuts(cuts: CleanupCut[]): CleanupCut[] {
   const out: CleanupCut[] = [];
   for (const cut of [...cuts].sort((a, b) => a.start - b.start)) {
     const last = [...out].reverse().find(item => item.kind === cut.kind);

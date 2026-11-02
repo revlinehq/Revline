@@ -48,7 +48,7 @@ export async function detectSourceFacecam(source: string, directory: string, dur
   return facecamAnalysis.parse(analysis);
 }
 
-export function diarizedSpeakerTurns(transcript: Transcript): SpeakerAnalysis['turns'] {
+function diarizedSpeakerTurns(transcript: Transcript): SpeakerAnalysis['turns'] {
   const words = transcript.words;
   if (words.some(w => w.speaker === undefined)) throw new AnalysisError('Speaker diarization is unavailable. Run transcription with diarization on the updated worker.', 422);
   const turns: {

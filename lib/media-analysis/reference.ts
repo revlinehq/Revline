@@ -4,7 +4,7 @@ import type { ShotDetection } from './shots';
 import type { BeatMap } from './beat-map';
 
 /** A reference breakdown: measured shots, each split into parts, plus the style worth borrowing. */
-export const REFERENCE_VERSION = 1;
+const REFERENCE_VERSION = 1;
 /** Longer references outgrow one breakdown pass; trim them to the part that matters. */
 export const MAX_REFERENCE_SECONDS = 240;
 export const MAX_REFERENCE_SHOTS = 120;
@@ -12,11 +12,11 @@ const MAX_KEYFRAMES = 96;
 /** A cut within this of a beat counts as cut on the beat. */
 const ON_BEAT_SECONDS = .08;
 
-export const REFERENCE_GENRES = ['social-edit', 'motivation', 'launch-film', 'ad', 'music-video', 'vlog', 'tutorial', 'other'] as const;
-export const REFERENCE_TRANSITIONS = ['cut', 'dissolve', 'fade-black', 'fade-white', 'flash', 'blur', 'whip', 'zoom', 'spin', 'wipe', 'slide', 'glitch', 'match-cut', 'light-leak', 'other'] as const;
-export const REFERENCE_CAMERA = ['static', 'push-in', 'pull-out', 'pan', 'tilt', 'orbit', 'handheld', 'shake', 'speed-ramp', 'other'] as const;
+const REFERENCE_GENRES = ['social-edit', 'motivation', 'launch-film', 'ad', 'music-video', 'vlog', 'tutorial', 'other'] as const;
+const REFERENCE_TRANSITIONS = ['cut', 'dissolve', 'fade-black', 'fade-white', 'flash', 'blur', 'whip', 'zoom', 'spin', 'wipe', 'slide', 'glitch', 'match-cut', 'light-leak', 'other'] as const;
+const REFERENCE_CAMERA = ['static', 'push-in', 'pull-out', 'pan', 'tilt', 'orbit', 'handheld', 'shake', 'speed-ramp', 'other'] as const;
 export const REFERENCE_PARTS = ['background', 'footage', 'ui', 'title', 'caption', 'logo', 'product', 'person', 'cursor', 'shape', 'emoji', 'overlay', 'other'] as const;
-export const REFERENCE_SIGNATURES = ['transition', 'title', 'camera', 'pacing', 'look', 'effect'] as const;
+const REFERENCE_SIGNATURES = ['transition', 'title', 'camera', 'pacing', 'look', 'effect'] as const;
 
 // Model text is trimmed to size, never rejected for running long.
 const text = (max: number) => z.string().transform(value => value.trim().slice(0, max));

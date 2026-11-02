@@ -19,7 +19,7 @@ import {
 } from "./derive-media";
 
 const run = promisify(execFile);
-export const PARALLAX_MODELS = {
+const PARALLAX_MODELS = {
   depth: "fal-ai/image-preprocessors/depth-anything/v2",
   matte: "fal-ai/birefnet/v2",
   inpaint: "fal-ai/fast-sdxl/inpainting",

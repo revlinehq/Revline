@@ -103,7 +103,7 @@ function AssistantResponseText({ text, streaming }: { text: string; streaming: b
   return <ChatProse text={text} animate={receivedLive || streaming} />;
 }
 
-function AssistantPanelBody({ messages, running, editing:editingTimeline=running, configured, error, onSend, onRetry, onStop, hasClips, demo, onLoadMore, canLoadMore, onAttach, activity, activitySource, activityStartedAt, budgetUsed, draftKey, suggestions, onSuggestion, editSnapshot, canResumeEdit=false, defaultModelChoice, defaultReasoningEffort, modelSwitcher = false, effortSwitcher = false, claudeViaMcp, allowedModels = PRODUCTION_CLAUDE_MODEL_CHOICES, attachments, onRemoveAttachment, composerBusy = false, requireMedia = false, conversationStarted = false, queued=[],queuePaused=false,onRemoveQueued,onResumeQueue,externalAgent,referenceMedia }: {
+function AssistantPanelBody({ messages, running, configured, error, onSend, onRetry, onStop, hasClips, demo, onLoadMore, canLoadMore, onAttach, activity, activityStartedAt, budgetUsed, draftKey, suggestions, onSuggestion, editSnapshot, canResumeEdit=false, defaultModelChoice, defaultReasoningEffort, modelSwitcher = false, effortSwitcher = false, claudeViaMcp, allowedModels = PRODUCTION_CLAUDE_MODEL_CHOICES, attachments, onRemoveAttachment, composerBusy = false, requireMedia = false, conversationStarted = false, queued=[],queuePaused=false,onRemoveQueued,onResumeQueue,externalAgent,referenceMedia }: {
   externalAgent?: string | null;
   messages: ChatMessage[]; running: boolean; editing?:boolean; configured: boolean; error?: string | null;
   modelSwitcher?: boolean;
@@ -152,7 +152,6 @@ function AssistantPanelBody({ messages, running, editing:editingTimeline=running
   const answering = (running && !externalAgent) || sending || !!pendingReply || !!resumingTurnId;
   const waiting = answering || (!externalAgent && !!activity);
   const latestUser = messages.findLast(message => message.role === 'user');
-  const replyLabel = editingTimeline ? 'Editing…' : 'Replying…';
   const optimisticRequest = pendingReply && latestUser?.id === pendingReply.previousUserId ? pendingReply : null;
   // A long tool run can fill a page before its user message is loaded.
   // The visible assistant-only prefix is still the active turn, not a failed historical edit.
@@ -247,11 +246,6 @@ function AssistantPanelBody({ messages, running, editing:editingTimeline=running
         const groupMessages = group.messages;
         const replies = group.replies;
         const editing = group.id === turnId && waiting;
-        const currentReply = replies.at(-1);
-        // Steps left without results by Stop or a finished run are not still working.
-        const hasRunningTool = editing && replies.some(message=>message.steps?.some(step=>step.state==='running'));
-        const showingReply = !!currentReply?.text.trim() && !activity && !hasRunningTool && (currentReply.status === 'streaming' || answering);
-        const loading = editing && (!showingReply || stopState === 'stopping');
         const cards = group.cards;
         const requestMessage=groupMessages.find(message=>message.role==='user');
         // As in shadcn Chat: each person's message is its own anchored item; the reply is the item after it.

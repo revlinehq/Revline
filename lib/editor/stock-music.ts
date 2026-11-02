@@ -16,7 +16,5 @@ export type StockMusic = {
   beats: number[]; downbeats: number[]; accents: AudioHit[]; waveform: AudioWaveform; license: typeof MIXKIT_LICENSE.name;
 };
 export const STOCK_MUSIC_CATALOG: readonly StockMusic[] = catalog.map(track => ({ ...track, license: MIXKIT_LICENSE.name }));
-const byId = new Map(STOCK_MUSIC_CATALOG.map(track => [track.id, track]));
-export function stockMusic(id: string) { return byId.get(id); }
 /** The clip name carries the credit: title and artist, and where it is from. */
 export function stockMusicFileName(track: StockMusic) { return `${track.title} - ${track.artist} (Mixkit).mp3`.replace(/[\\/:*?"<>|]/g, ''); }

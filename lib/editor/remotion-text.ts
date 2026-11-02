@@ -9,7 +9,7 @@ export const REMOTION_TEXT_PRESETS = ['word-reveal', 'word-pop', 'slide-title', 
 export type RemotionTextPreset = typeof REMOTION_TEXT_PRESETS[number];
 export type WordTiming = { start: number; end: number };
 export const EXPRESSIVE_TEXT_DEFAULTS = { strength: 1, revealDuration: .65, stagger: .07 } as const;
-export const EXPRESSIVE_TEXT_LIMITS = { strength: [.2, 2], revealDuration: [.15, 3], stagger: [0, .18] } as const;
+const EXPRESSIVE_TEXT_LIMITS = { strength: [.2, 2], revealDuration: [.15, 3], stagger: [0, .18] } as const;
 export type RemotionTextTemplate = { preset: RemotionTextPreset; highlightColor?: string; duration?: number; offset?: number; wordTimings?: WordTiming[]; strength?: number; revealDuration?: number; stagger?: number };
 export const REMOTION_TEXT_LABELS: Record<RemotionTextPreset, string> = {
   'word-reveal': 'Word reveal', 'word-pop': 'Pop-in words', 'slide-title': 'Sliding title', karaoke: 'Karaoke',

@@ -14,13 +14,13 @@ export function timelineTimeAtPointer(x:number,geometry:{left:number;scrollLeft:
   const raw=Math.max(0,Math.min(geometry.end,(x-geometry.left+geometry.scrollLeft-geometry.origin)/geometry.px));
   return frameSeekTime(raw,geometry.fps,geometry.end);
 }
-export function closestSnap(value:number,marks:number[],threshold:number){
+function closestSnap(value:number,marks:number[],threshold:number){
   let best=value;let distance=threshold;
   for(const mark of marks){const next=Math.abs(mark-value);if(next<distance){best=mark;distance=next;}}
   return best;
 }
 /** A moving selection can magnetize either end of any selected clip. */
-export function snapMoveDelta(delta:number,members:Clip[],marks:number[],threshold:number){
+function snapMoveDelta(delta:number,members:Clip[],marks:number[],threshold:number){
   let correction=0,distance=threshold;
   for(const clip of members)for(const edge of [clip.start,clip.start+clip.duration])for(const mark of marks){
     const offset=mark-edge-delta;const next=Math.abs(offset);

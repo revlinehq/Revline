@@ -11,7 +11,7 @@ export const state = join(homedir(), '.revline-incidents');
 export const configFile = join(state, 'config.json');
 export const githubToken = () => readFile(join(state, 'github-token'), 'utf8').then(value => value.trim());
 export const endpointSchema = z.object({ deployment: z.enum(['dev', 'prod']), url: z.enum(['https://majestic-alpaca-541.convex.cloud', 'https://different-gnu-398.convex.cloud']), secret: z.string().min(32) }).refine(value => value.url === (value.deployment === 'dev' ? 'https://majestic-alpaca-541.convex.cloud' : 'https://different-gnu-398.convex.cloud'));
-export const configSchema = z.object({ repoRoot: z.string(), t3ProjectId: z.string(), endpoints: z.array(endpointSchema).min(1).max(2) });
+const configSchema = z.object({ repoRoot: z.string(), t3ProjectId: z.string(), endpoints: z.array(endpointSchema).min(1).max(2) });
 export const config = () => readFile(configFile, 'utf8').then(text => configSchema.parse(JSON.parse(text)));
 export const incidentSchema = z.object({
   _id: z.string(), fingerprint: z.string().regex(/^incident-v1-[a-f0-9]{64}$/), generation: z.number().int().positive(),
@@ -19,7 +19,7 @@ export const incidentSchema = z.object({
   count: z.number(), firstSeen: z.number(), lastSeen: z.number(), priority: z.number(), prUrl: z.string().optional(),
   samples: z.array(z.object({ at: z.number(), context: z.string(), projectId: z.string().optional(), runId: z.string().optional() })),
 });
-export const jobSchema = z.object({ incident: incidentSchema, claimToken: z.string(), branch: z.string(), directory: z.string().optional(), phase: z.enum(['starting', 'running', 'finished', 'failed']), workerPid: z.number().optional(), codexPid: z.number().optional(), threadId: z.string().optional(), threadLink: z.string().optional(), runId: z.string().optional(), prUrl: z.string().optional() });
+const jobSchema = z.object({ incident: incidentSchema, claimToken: z.string(), branch: z.string(), directory: z.string().optional(), phase: z.enum(['starting', 'running', 'finished', 'failed']), workerPid: z.number().optional(), codexPid: z.number().optional(), threadId: z.string().optional(), threadLink: z.string().optional(), runId: z.string().optional(), prUrl: z.string().optional() });
 export type Job = z.infer<typeof jobSchema>;
 export type Endpoint = z.infer<typeof endpointSchema>;
 export async function writeJob(path: string, job: Job) {

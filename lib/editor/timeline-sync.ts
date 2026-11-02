@@ -1,15 +1,7 @@
 import { deriveTrackCounts, normalizeTimeline, TIMELINE_LAYER_GROUPS, type Clip, type Timeline } from './types';
 import { reconcileTransitionEdits } from './clip-transitions';
 import { LOCAL_UNDO_LIMIT, timelineHistoryKey } from './timeline-history-key';
-
-function equal(a: unknown, b: unknown): boolean {
-  if (a === b) return true;
-  if (!a || !b || typeof a !== 'object' || typeof b !== 'object') return false;
-  if (Array.isArray(a) || Array.isArray(b)) return Array.isArray(a) && Array.isArray(b) && a.length === b.length && a.every((value, index) => equal(value, b[index]));
-  const left = a as Record<string, unknown>, right = b as Record<string, unknown>;
-  const keys = new Set([...Object.keys(left), ...Object.keys(right)]);
-  return [...keys].every(key => equal(left[key], right[key]));
-}
+import { equalTimelineValue as equal } from './timeline-equality';
 
 // Apply the user's changed fields to the latest timeline, preserving unrelated
 // live edits. A manual change wins on the fields it touches; deleted clips stay deleted.
@@ -79,7 +71,7 @@ export const TIMELINE_CONFLICT = 'The timeline changed elsewhere. Reload before 
 const RETRY_DELAYS = [1000, 2000, 5000, 10000, 30000];
 /** Application rejections are deterministic unless they report the AI lock, a
  * stale revision, or access (coded) state. Network and server faults are not. */
-export function rejectedEdit(error: unknown) {
+function rejectedEdit(error: unknown) {
   const data = error && typeof error === 'object' && 'data' in error ? error.data : undefined;
   return typeof data === 'string' && data !== TIMELINE_LOCKED && !/timeline changed elsewhere/i.test(data) && data !== 'Authentication required';
 }

@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { AnalysisError } from './errors';
 
-export const shotsSchema = z.object({ fps: z.number().positive().max(240), sourceTiming: z.object({ basis: z.literal('pts'), videoStart: z.number().nonnegative(), videoEnd: z.number().positive(), frameCount: z.number().int().positive() }).optional(), shots: z.array(z.object({ start: z.number().nonnegative(), end: z.number().positive(), startFrame: z.number().int().nonnegative(), endFrame: z.number().int().positive() })).min(1).max(1000) });
+const shotsSchema = z.object({ fps: z.number().positive().max(240), sourceTiming: z.object({ basis: z.literal('pts'), videoStart: z.number().nonnegative(), videoEnd: z.number().positive(), frameCount: z.number().int().positive() }).optional(), shots: z.array(z.object({ start: z.number().nonnegative(), end: z.number().positive(), startFrame: z.number().int().nonnegative(), endFrame: z.number().int().positive() })).min(1).max(1000) });
 export type ShotDetection = z.infer<typeof shotsSchema>;
 
 export function parseShots(value: unknown, duration: number): ShotDetection {

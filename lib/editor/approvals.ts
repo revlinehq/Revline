@@ -126,7 +126,7 @@ export function filmBeats(code: string) {
  * this before and after a patch says whether the patch touched the section. Undefined when the code
  * has no <Beat> with literal timing over the section, so the whole film counts.
  */
-export function sectionCode(scene: NonNullable<Clip['scene']>, section: { start: number; end: number }) {
+function sectionCode(scene: NonNullable<Clip['scene']>, section: { start: number; end: number }) {
   const owned = filmSections(scene).filter(beat => beat.start !== undefined && beat.duration !== undefined && beat.start < section.end - EPSILON && beat.start + beat.duration > section.start + EPSILON);
   if (!owned.length) return undefined;
   return reach(scene, owned.map(beat => beat.text)).parts.join('\n\u0000\n');

@@ -111,12 +111,6 @@ div.landing-hero-buttons>.landing-reveal-content{display:flex;align-items:center
 @keyframes landing-settle-media{from{opacity:.01;translate:0 32px;scale:.97}}
 .landing-product-window{display:block;width:100%;height:auto;aspect-ratio:16/9;object-fit:cover;border-radius:10px;background:#0b0c0e}
 
-/* Logos */
-.landing-logos{display:flex;flex-direction:column;align-items:center;gap:28px;padding-block:24px 88px}
-.landing-logos>p{font-size:14px;line-height:1.55;color:var(--l-fg-3)}
-.landing-logos ul{display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:20px 72px}
-.landing-logos li{font-size:22px;letter-spacing:-.3px;line-height:1.3;color:#b4b4ba}
-
 /* Revline's Agent is powerful: nested cards, each stage a small mock of its effect. */
 .landing-features{display:flex;flex-direction:column;gap:40px;padding-block:96px}
 .landing-feature-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px}
@@ -245,7 +239,6 @@ div.landing-hero-buttons>.landing-reveal-content{display:flex;align-items:center
   .landing-nav-links{gap:20px}
   .landing-hero h1{font-size:56px}
   .landing-feature-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
-  .landing-testimonial{padding-block:96px}
   .landing-faq{flex-direction:column;gap:32px}
   .landing-faq .landing-heading{width:100%}
   .landing-plans{flex-direction:column;align-items:center}
@@ -265,17 +258,12 @@ div.landing-hero-buttons>.landing-reveal-content{display:flex;align-items:center
   .landing-hero-buttons .landing-button{height:36px;padding-inline:14px;font-size:14px}
   .landing-hero-buttons .landing-agent-logos{display:none}
   .landing-product-window{border-radius:8px}
-  .landing-logos{padding-bottom:56px}
-  .landing-logos ul{gap:16px 36px}
-  .landing-logos li{font-size:18px}
   .landing-features,.landing-pricing,.landing-faq,.landing-mcp{padding-block:64px}
   .landing-features{gap:32px}
   .landing-feature-grid{grid-template-columns:minmax(0,1fr)}
   .landing-mcp-agents li{width:48px;height:48px;border-radius:14px}
   .landing-mcp-agents li+li{margin-left:-12px}
   .landing-mcp-agents img{width:34px;height:34px}
-  .landing-testimonial{padding-block:72px}
-  .landing-testimonial blockquote{font-size:24px}
   .landing-plan{padding:24px}
   .landing-final{padding-inline:12px}
   .landing-final-card{padding:56px 20px}
@@ -288,14 +276,20 @@ div.landing-hero-buttons>.landing-reveal-content{display:flex;align-items:center
 .landing-app-logos img{width:1.2em;height:1.2em;flex:none}
 .landing-clippers,.landing-motion-design{display:grid;grid-template-columns:minmax(0,7fr) minmax(0,13fr);grid-template-areas:"copy media";align-items:center;gap:48px;padding-block:96px}
 .landing-hero+.landing-clippers,.landing-clippers+.landing-motion-design{padding-top:32px}
-.landing-motion-design{grid-template-columns:minmax(0,13fr) minmax(0,7fr);grid-template-areas:"media copy"}
+.landing-motion-design{grid-template-columns:repeat(2,minmax(0,1fr));grid-template-areas:"media copy"}
 .landing-showcase-copy{grid-area:copy;display:flex;flex-direction:column;align-items:flex-start;gap:24px;min-width:0}
-.landing-clippers-frame,.landing-motion-design-frame{grid-area:media;min-width:0}
+.landing-clippers-frame,.landing-motion-design-film{grid-area:media;min-width:0}
+.landing-motion-design-film{width:100%;max-width:360px;justify-self:center;margin:0}
+.landing-motion-design-film figcaption{margin-top:12px;font-size:13px;line-height:1.5;color:#666;text-align:center;text-wrap:balance}
+.landing-motion-design-film figcaption a:hover{color:#111}
+.landing-motion-design-film figcaption a:focus-visible{outline:none}
 @media(max-width:760px){
   .landing-clippers,.landing-motion-design{grid-template-columns:minmax(0,1fr);grid-template-areas:"copy" "media";gap:32px;padding-block:64px}
   .landing-hero+.landing-clippers,.landing-clippers+.landing-motion-design{padding-top:0}
+  .landing-motion-design-film{max-width:320px}
 }
 .landing-clippers-frame,.landing-motion-design-frame{position:relative;width:100%;aspect-ratio:16/9;padding:0;overflow:hidden;border:1px solid #0000000f;border-radius:4px;background:#111;box-shadow:none}
+.landing-motion-design-frame{aspect-ratio:9/16}
 .landing-clippers-still,.landing-clippers-animation{position:absolute;inset:0;width:100%;height:100%;user-select:none}
 .landing-clippers-still{object-fit:contain;pointer-events:none}
 .landing-clippers-scene{position:absolute;left:0;top:0;width:1920px;height:1080px;transform-origin:0 0;overflow:hidden;background:#111;isolation:isolate}

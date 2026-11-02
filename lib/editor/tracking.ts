@@ -1,6 +1,6 @@
 import type { Clip, MediaAsset } from './types';
 export type FocusSample=NonNullable<Clip['focus']>[number];
-export function chooseFace(faces:{x:number;y:number;area:number}[],previous?:{x:number;y:number}) {
+function chooseFace(faces:{x:number;y:number;area:number}[],previous?:{x:number;y:number}) {
   return faces.slice().sort((a,b)=>previous ? Math.hypot(a.x-previous.x,a.y-previous.y)-Math.hypot(b.x-previous.x,b.y-previous.y) : b.area-a.area)[0];
 }
 /** Local face detection: footage stays in the browser; only crop keyframes are saved. */

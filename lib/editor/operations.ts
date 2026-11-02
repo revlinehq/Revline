@@ -262,7 +262,7 @@ export function placeOnFreeLayer(timeline: Timeline, clip: Clip): Timeline {
   return reconcileTransitionEdits(timeline, { ...next, tracks: deriveTrackCounts(next) });
 }
 /** Same-layer clip pairs overlapping by more than `tolerance` seconds; touching edges never overlap. */
-export function layerOverlaps(timeline: Timeline, tolerance = 0.000001): [Clip, Clip][] {
+function layerOverlaps(timeline: Timeline, tolerance = 0.000001): [Clip, Clip][] {
   const layers = new Map<string, Clip[]>();
   for (const clip of timeline.clips) {
     const key = `${layerGroup(clip.kind)}:${trackOf(clip)}`;

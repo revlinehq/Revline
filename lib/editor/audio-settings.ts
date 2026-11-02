@@ -61,7 +61,7 @@ function phaseFades(clip:Pick<Clip,'audio'|'duration'|'audioFadeTiming'>){
   const total=settings.fadeIn+settings.fadeOut,scale=total>duration&&total>0?duration/total:1;
   return{duration,fadeIn:settings.fadeIn*scale,fadeOut:settings.fadeOut*scale};
 }
-export function audioFadeGain(clip:Pick<Clip,'audio'|'duration'|'audioFadeTiming'>,elapsed:number){
+function audioFadeGain(clip:Pick<Clip,'audio'|'duration'|'audioFadeTiming'>,elapsed:number){
   const {duration,fadeIn,fadeOut}=phaseFades(clip),time=elapsed+(clip.audioFadeTiming?.offset??0),clamp=(value:number)=>Math.max(0,Math.min(1,value));
   return(fadeIn>0?clamp(time/fadeIn):1)*(fadeOut>0?clamp((duration-time)/fadeOut):1);
 }

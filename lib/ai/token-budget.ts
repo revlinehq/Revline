@@ -4,7 +4,7 @@ import { compactEditorPrompt } from './editor-context';
 
 // An anomaly backstop, not a work limit: a three-scene explainer (13 calls)
 // used ~10% of these ceilings. Only runaway tool loops should reach them.
-export const EDITOR_TOKEN_LIMITS = { requestBytes: 450_000, transportBytes: 24_000_000, inputTokens: 2_000_000, outputTokens: 150_000, outputPerCall: 128_000 } as const;
+const EDITOR_TOKEN_LIMITS = { requestBytes: 450_000, transportBytes: 24_000_000, inputTokens: 2_000_000, outputTokens: 150_000, outputPerCall: 128_000 } as const;
 /** Models with a 1M-token context hold a whole film's reads, logs and scene code: give their requests room before
  * anything is compacted or left out. Others keep the default ceiling. */
 const LONG_CONTEXT_MODELS = new Set(['claude-opus-5-5', 'claude-sonnet-5-5', 'gemini-4-argon']);
@@ -85,7 +85,7 @@ export class AssistantTokenBudgetError extends Error {
 const OMITTED_HISTORY_NOTE = 'Earlier messages in this conversation were left out to keep this request within its size limit. The project timeline and saved media analysis are current: inspect them instead of relying on omitted history.';
 
 /** Request bytes as the budget measures them: image payloads count as a placeholder. */
-export function editorPromptBytes(prompt: LanguageModelV4CallOptions['prompt']) {
+function editorPromptBytes(prompt: LanguageModelV4CallOptions['prompt']) {
   const placeholder = <T extends { type: string }>(part: T) => part.type === 'file' ? { ...part, data: '[image payload preserved]' } : part;
   return new TextEncoder().encode(JSON.stringify(prompt.map(message => message.role === 'system' ? message : { ...message, content: message.content.map(part => {
     if (part.type === 'tool-result' && part.output.type === 'content') return { ...part, output: { ...part.output, value: part.output.value.map(placeholder) } };
@@ -133,7 +133,7 @@ function thinTurns(prompt: Prompt, count: number, users: number[]): Prompt {
  * of skill pages and frame sheets; then the oldest turns are thinned to their words, keeping the motion log and every
  * request; only then are whole earlier turns dropped, oldest first. The current turn and every system message are
  * always kept, and a tool call always leaves with its result. Each stage only escalates within a run. */
-export function fitEditorPrompt(prompt: Prompt, overheadBytes: number, targetBytes: number, minimum: { compact?: boolean; thinned?: number; dropped?: number } | number = 0) {
+function fitEditorPrompt(prompt: Prompt, overheadBytes: number, targetBytes: number, minimum: { compact?: boolean; thinned?: number; dropped?: number } | number = 0) {
   const floor = typeof minimum === 'number' ? { dropped: minimum } : minimum;
   const fits = (candidate: Prompt) => editorPromptBytes(candidate) + overheadBytes <= targetBytes;
   let compact = !!floor.compact || !fits(prompt);

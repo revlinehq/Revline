@@ -9,7 +9,7 @@ const rounded = (value: number) => Math.round(value * 1e12) / 1e12;
 type Counts = { inputTokens: number | null; uncachedInputTokens: number | null; cacheReadTokens: number | null; cacheWriteTokens: number | null; outputTokens: number | null; reasoningTokens: number | null };
 
 /** Token estimates only: tool services, failed/unreported calls and account uplifts are excluded. */
-export function estimateEditorCallCost(model: string, provider: string, usage?: LanguageModelUsage, metadata?: ProviderMetadata) {
+function estimateEditorCallCost(model: string, provider: string, usage?: LanguageModelUsage, metadata?: ProviderMetadata) {
   const counts: Counts = {
     inputTokens: count(usage?.inputTokens) ? usage.inputTokens : null,
     uncachedInputTokens: count(usage?.inputTokenDetails?.noCacheTokens) ? usage.inputTokenDetails.noCacheTokens : null,

@@ -3,6 +3,9 @@
 Newest first. Each merged pull request adds its lines here, grouped by system.
 
 ## 2026-11-02
+- Codebase: Remove unused components and helpers, keep module-only exports private, and simplify timeline comparison, storage helpers and runner startup. Why: the user requested behaviour-preserving cleanup across the web, backend, workers and scripts.
+- Landing: Recover interrupted video loads, resume visible films and keep playable posters when autoplay is blocked. Why: Zura reported landing videos sometimes stayed stopped.
+- Landing: Replaced the motion-design demo with the final portrait motion study, a matching poster and source credit. Why: showcase the approved Revline film at its native aspect ratio.
 - iOS: Add expandable agent and export drawers, fixed Terra medium with Fast/Precise, consent and account deletion, draft legal pages and App Store automation. Why: make editing native and prepare a reviewed store release.
 - Incidents: Run fixers as visible T3 MCP threads at xhigh on the Linux PC, with a disabled-by-default systemd listener and non-defect filtering. Why: avoid Mac swapping and wasted Sol sessions.
 - Incidents: Capture user and agent failures, group repeats, and start local Sol fixes through Convex subscriptions. Why: turn failures into reviewed draft PRs immediately.

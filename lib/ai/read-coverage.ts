@@ -9,7 +9,7 @@ export type CoverageMoment = { start: number; end: number; kind?: string; peak?:
 type Window = { start: number; end: number };
 
 /** Frames a second at which a read shows a transition frame by frame. */
-export const DENSE_FPS = 10;
+const DENSE_FPS = 10;
 const EPSILON = .05;
 /** The longest change that is one transition rather than a stretch of several beats. */
 const SPLIT_MAX = 1.5;
