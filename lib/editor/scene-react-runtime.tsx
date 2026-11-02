@@ -10,6 +10,7 @@ import type { FrameAdapter } from '@hyperframes/core';
 import type { gsap as Gsap } from 'gsap';
 import { parseStartExpression } from '@hyperframes/core/runtime/start-expression';
 import type { SceneBrandContext } from './brand-kit';
+import type { SceneRuntimeModules } from './scene-modules';
 
 const { Activity, createContext, memo, useContext, useLayoutEffect, useMemo, useRef, useSyncExternalStore } = React;
 
@@ -397,4 +398,4 @@ export function createReactSceneAdapter(options: ReactSceneOptions): FrameAdapte
 }
 
 export const rendererBridge = { useSceneBridge, useScene };
-export const modules = { revline, react: React, 'react/jsx-runtime': ReactJSXRuntime };
+export const modules = { revline, react: React, 'react/jsx-runtime': ReactJSXRuntime } satisfies SceneRuntimeModules<'react'>;

@@ -9,6 +9,7 @@ import { Text3D as DreiText3D } from '@react-three/drei/core/Text3D';
 import { z } from 'zod';
 import { modelResourceUris } from './scene-three-resources';
 import { useSceneBridge, useScene } from './scene-react-runtime';
+import type { SceneRuntimeModules } from './scene-modules';
 
 function isConstructor(value: unknown): value is new (...args: never[]) => object {
   if (typeof value !== 'function') return false;
@@ -189,4 +190,4 @@ export function Text3D({ font, ...props }: Text3DProps) {
 }
 
 export { useThree };
-export const modules = { 'revline/three': { ThreeLayer, Model, Text3D, useThree }, three: THREE };
+export const modules = { 'revline/three': { ThreeLayer, Model, Text3D, useThree }, three: THREE } satisfies SceneRuntimeModules<'three'>;

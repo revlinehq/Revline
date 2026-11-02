@@ -86,7 +86,7 @@ export const MOTION_PROCESSOR_VERSION = 23;
 /** Frozen comparison crops, displayed rotation and bounded sound capture. */
 export const RECREATION_PROCESSOR_VERSION = 23;
 /** Interpolated reference crops must never run on workers that ignore keyframes. */
-export const REFERENCE_CROP_PROCESSOR_VERSION = 32;
+export const REFERENCE_CROP_PROCESSOR_VERSION = 33;
 
 export async function enqueueMediaTask(ctx: MutationCtx, input: Pick<Doc<'mediaTasks'>, 'ownerId' | 'projectId' | 'kind'> & Partial<Pick<Doc<'mediaTasks'>, 'assetId' | 'renderJobId' | 'analysisRequestId' | 'sourceUrl' | 'importRange' | 'sourcesOnly' | 'frameRequest' | 'videoRequest' | 'speakerRequest' | 'reviewId' | 'snapshotId' | 'readId' | 'blueprintCheckId' | 'cutoutId' | 'derivationId' | 'requiredProcessorVersion'|'previewVersion'|'lane'>>, beforeEnqueue?:()=>Promise<void>): Promise<Id<'mediaTasks'>> {
   const minimum = MIN_PROCESSOR_VERSION[input.kind];

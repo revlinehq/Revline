@@ -15,7 +15,7 @@ import { MorphSVGPlugin } from 'gsap/MorphSVGPlugin';
 import { MotionPathPlugin } from 'gsap/MotionPathPlugin';
 import { ScrambleTextPlugin } from 'gsap/ScrambleTextPlugin';
 import { TextPlugin } from 'gsap/TextPlugin';
-import { isReactScene, SCENE_GSAP_PLUGINS, sceneTransformOptions, splitExportDeclarations, type SceneGsapPlugin } from './scene-modules';
+import { assertSceneImport, isReactScene, SCENE_GSAP_PLUGINS, SCENE_RUNTIME_BUNDLES, sceneTransformOptions, splitExportDeclarations, type SceneGsapPlugin, type SceneRuntimeModules, type SceneRuntimeName } from './scene-modules';
 import type { FrameAdapter } from '@hyperframes/core';
 import type * as SceneReact from './scene-react-runtime';
 import type * as SceneThree from './scene-three-runtime';
@@ -34,10 +34,10 @@ gsap.registerPlugin(...Object.values(PLUGINS), ExpoScaleEase, RoughEase, SlowMo)
 
 // Marked as ES modules so a compiled `import gsap from 'gsap'` reads `default` (gsap itself), not the whole module.
 const gsapModule = { __esModule: true, gsap, default: gsap, ...PLUGINS, ExpoScaleEase, RoughEase, SlowMo };
-const MODULES: Record<string, unknown> = {
+const MODULES = {
   gsap: gsapModule, 'gsap/all': gsapModule, 'gsap/EasePack': { ExpoScaleEase, RoughEase, SlowMo },
-  ...Object.fromEntries(SCENE_GSAP_PLUGINS.map(name => [`gsap/${name}`, { __esModule: true, [name]: PLUGINS[name], default: PLUGINS[name] }])),
-};
+  ...Object.fromEntries(SCENE_GSAP_PLUGINS.map(name => [`gsap/${name}`, { __esModule: true, [name]: PLUGINS[name], default: PLUGINS[name] }])) as Record<`gsap/${SceneGsapPlugin}`, object>,
+} satisfies SceneRuntimeModules<'gsap'>;
 
 /** Lucide icons render like lucide-react: a 24-unit stroked SVG at the requested size. */
 function iconFactory(icons: Record<string, string>) {
@@ -51,8 +51,8 @@ function iconFactory(icons: Record<string, string>) {
 function post(message: Record<string, unknown>) { window.parent.postMessage({ source: 'revline-scene', ...message }, '*'); }
 
 /** The React scene runtime, present only in frames whose scene imports 'revline' (see scene-react-runtime). */
-const sceneThree = () => (window as unknown as { __revlineSceneThree?: typeof SceneThree }).__revlineSceneThree;
-const sceneReact = () => (window as unknown as { __revlineSceneReact?: typeof SceneReact }).__revlineSceneReact;
+const sceneThree = () => (window as unknown as Record<string, typeof SceneThree | undefined>)[SCENE_RUNTIME_BUNDLES.three.global];
+const sceneReact = () => (window as unknown as Record<string, typeof SceneReact | undefined>)[SCENE_RUNTIME_BUNDLES.react.global];
 
 /** Run a module and return its exports. React modules may import a React blueprint attached to the
  * scene as 'blueprint:<name>': a component kit that several beat clips share. */
@@ -61,8 +61,9 @@ function runModule(code: string, blueprints: { name: string; code: string }[], k
   if (react && !runtime) throw new Error('The React scene runtime did not load.');
   const compiled = transform(splitExportDeclarations(code), sceneTransformOptions(code)).code;
   const module = { exports: {} as Record<string, unknown> };
-  const modules: Record<string, unknown> = runtime ? { ...MODULES, ...runtime.modules, ...sceneThree()?.modules } : MODULES;
+  const runtimes = { gsap: MODULES, react: runtime?.modules, three: sceneThree()?.modules } satisfies Record<SceneRuntimeName, Record<string, unknown> | undefined>;
   const require = (name: string) => {
+    const runtimeName = assertSceneImport(name, react);
     if (react && name.startsWith('blueprint:')) {
       const wanted = name.slice(10).trim().toLowerCase(), found = blueprints.find(item => item.name.toLowerCase() === wanted);
       if (!found) throw new Error(`No blueprint "${name.slice(10)}" is attached to this scene. Attach it with blueprints on addScene or editScene.`);
@@ -70,7 +71,8 @@ function runModule(code: string, blueprints: { name: string; code: string }[], k
       if (!kits.has(wanted)) { kits.set(wanted, {}); kits.set(wanted, runModule(found.code, blueprints, kits)); }
       return kits.get(wanted);
     }
-    if (!(name in modules)) throw new Error(react ? `React scenes can import only revline, react, gsap and blueprint:<name>, not "${name}".` : `Scenes can import only gsap and its plugins, not "${name}".`);
+    const modules: Record<string, unknown> | undefined = runtimeName ? runtimes[runtimeName] : undefined;
+    if (!modules || !Object.hasOwn(modules, name)) throw new Error(`The ${SCENE_RUNTIME_BUNDLES[runtimeName!].label} did not load module "${name}". Rebuild the scene bundles and restart the media worker or renderer.`);
     return modules[name];
   };
   new Function('require', 'module', 'exports', compiled)(require, module, module.exports);
