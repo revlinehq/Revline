@@ -20,6 +20,9 @@ Films are React scenes (readSkill name "scene-engine" page "react-scenes"):
 - **All motion is GSAP on the frame clock.** Every move, even a single fade, is a GSAP tween in a \`useTimeline\` timeline, one per section: connected parts are the same tween, opens and closes overlap through position parameters (\`"<"\`, \`"-=0.2"\`), staggers come from GSAP, and SplitText, MorphSVG and DrawSVG run in it (read the gsap skill, readSkill name "gsap"). Never hand-time moves with \`progress()\` and \`mix()\` at typed seconds: that is what makes holds freeze, parts drift out of sync and moves jump. Never \`linear\` except for a constant drift.
 - **Correctness lives in scene-engine:** the frame clock, flash frames and preview speed (page \`react-scenes\`). This skill decides what to make; scene-engine decides how it renders correctly.
 
+## 3D direction
+Use real depth when it helps the subject: a camera push-in, a restrained orbit, or parallax between near and far objects. Mix the 3D object with readable HTML/GSAP titles in the same scene. Read scene-engine page \`three-scenes\` for ThreeLayer, camera/object timelines, lighting, models, type and CPU export limits. Use a soft fill and one directional key, matte materials and the confirmed brand palette; no sparkles or purple brand fills. All 3D motion follows the same paused GSAP timeline as 2D.
+
 ## Motion feel
 Motion has weight: things open, settle and follow through. A shape that just fades in, or slides at one speed and stops dead, reads as a template. In a recreation, the eases trackReference measures win; these rules fill in whatever the reference does not show.
 - **Never linear, never one curve for everything.** Entrances decelerate (\`expo.out\`, \`power3.out\`), exits accelerate (\`power2.in\`), moves from place to place use \`power3.inOut\`. Something that lands (a window, a card, a button) overshoots a little and settles (\`back.out(1.4)\`, or a small spring) over 0.4 to 0.7 s, not 0.2.

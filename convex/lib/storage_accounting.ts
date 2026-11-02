@@ -6,10 +6,10 @@ import type { MutationCtx, QueryCtx } from '../_generated/server';
 import { isStockAudioKey } from '../../lib/editor/stock-audio';
 
 type StoredObject = { r2Key?:string; storageId?:Id<'_storage'> };
-type ObjectDetails = StoredObject & { ownerId:string; fileName:string; kind:'video'|'audio'|'image'|'export'; size:number; createdAt:number; auxiliary?:boolean; pending?:boolean; jobId?:Id<'renderJobs'> };
+type ObjectDetails = StoredObject & { ownerId:string; fileName:string; kind:Doc<'storageObjects'>['kind']; size:number; createdAt:number; auxiliary?:boolean; pending?:boolean; jobId?:Id<'renderJobs'> };
 type Context = MutationCtx | QueryCtx;
 export function objectKey(source:StoredObject) { return source.r2Key ? `r2:${source.r2Key}` : source.storageId ? `convex:${source.storageId}` : null; }
-export const emptyStorage = { usedBytes:0,reservedBytes:0,videoBytes:0,audioBytes:0,imageBytes:0,exportBytes:0,fileCount:0 };
+export const emptyStorage = { usedBytes:0,reservedBytes:0,videoBytes:0,audioBytes:0,imageBytes:0,modelBytes:0,exportBytes:0,fileCount:0 };
 export async function storageAccount(ctx:Context,ownerId:string) { return ctx.db.query('storageAccounts').withIndex('by_owner',q=>q.eq('ownerId',ownerId)).unique(); }
 export async function accountingReady(ctx:Context) { return !!(await ctx.db.query('storageAccounting').withIndex('by_name',q=>q.eq('name','objects-v1')).unique())?.ready; }
 async function adjust(ctx:MutationCtx,ownerId:string,source:Pick<Doc<'storageObjects'>,'kind'|'size'|'pending'|'auxiliary'>,direction:1|-1) {

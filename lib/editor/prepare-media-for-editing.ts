@@ -38,7 +38,7 @@ export async function prepareMediaForEditing(
 
   const readAsset = () => bounded(() => convex.query(api.assets.get, { projectId, assetId }));
   let asset: MediaAsset = await readAsset();
-  if (asset.kind === 'image') return asset;
+  if (asset.kind === 'image' || asset.kind === 'model') return asset;
 
   function missingTasks(): PreparationKind[] {
     const missing: PreparationKind[] = [];

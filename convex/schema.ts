@@ -38,7 +38,7 @@ export const blueprintLineValidator = v.object({ axis: v.union(v.literal('x'), v
 export const brandScreenValidator = v.object({ name: v.string(), storageId: v.id('_storage'), width: v.optional(v.number()), height: v.optional(v.number()), note: v.optional(v.string()) });
 
 export const aspectRatio = v.union(v.literal("vertical"), v.literal("square"), v.literal("landscape"), v.literal("portrait-feed"), v.literal("classic"));
-export const assetKind = v.union(v.literal("video"), v.literal("audio"), v.literal("image"));
+export const assetKind = v.union(v.literal("video"), v.literal("audio"), v.literal("image"), v.literal("model"));
 export const waveformValidator = v.object({ peaks: v.string(), samplesPerSecond: v.number() });
 export const focusValidator = v.array(v.object({ time: v.number(), x: v.number(), y: v.number() }));
 export const motionKeyframeValidator = v.object({ time: v.number(), x: v.number(), y: v.number(), scale: v.number(), rotation: v.number(), opacity: v.number(), brightness: v.number() });
@@ -55,7 +55,7 @@ export const textStyleValidator = v.object({strokeWidth:v.number(),strokeColor:v
 export const audioSettingsValidator=v.object({role:v.union(v.literal('original'),v.literal('voice'),v.literal('music')),fadeIn:v.number(),fadeOut:v.number(),ducking:v.object({enabled:v.boolean(),amount:v.number(),attack:v.number(),release:v.number()})});
 const clipApprovalValidator = v.object({ note: v.optional(v.string()), at: v.number(), by: v.union(v.literal('user'), v.literal('agent')) });
 export const clipValidator = v.object({
-  id: v.string(), kind: v.union(assetKind, v.literal("caption"), v.literal("graphic"), v.literal("solid"), v.literal("scene"), v.literal("effect")),
+  id: v.string(), kind: v.union(v.literal("video"), v.literal("audio"), v.literal("image"), v.literal("caption"), v.literal("graphic"), v.literal("solid"), v.literal("scene"), v.literal("effect")),
   normalizedAudio:v.optional(v.object({assetId:v.string(),key:v.string(),targetLufs:v.number(),truePeak:v.number(),offset:v.optional(v.number())})), assetId: v.optional(v.string()), focus: v.optional(focusValidator), track: v.optional(v.number()), start: v.number(), duration: v.number(), sourceStart: v.number(),
   playbackRate: v.optional(v.number()),
   audio:v.optional(audioSettingsValidator),
@@ -311,7 +311,7 @@ export default defineSchema({
   timelineHistoryIndex:defineTable({projectId:v.id('projects'),keyVersion:v.number(),entries:v.array(v.object({id:v.id('timelineRevisions'),sequence:v.number(),key:v.string(),bytes:v.number()}))}).index('by_project',['projectId']),
   projectCatalog:defineTable({projectId:v.id('projects'),ownerId:v.string(),title:v.string(),aspectRatio,createdAt:v.number(),updatedAt:v.number(),clipCount:v.number(),aiRunning:v.boolean(),deleting:v.optional(v.boolean()),coverKind:v.optional(assetKind),coverStorageId:v.optional(v.id('_storage')),coverR2Key:v.optional(v.string())}).index('by_project',['projectId']).index('by_owner_updated',['ownerId','updatedAt']),
   projectDataMigration:defineTable({key:v.string(),cursor:v.union(v.string(),v.null()),completed:v.boolean()}).index('by_key',['key']),
-  storageAccounts: defineTable({ ownerId:v.string(), usedBytes:v.number(), reservedBytes:v.number(), videoBytes:v.number(), audioBytes:v.number(), imageBytes:v.number(), exportBytes:v.number(), fileCount:v.number() }).index('by_owner',['ownerId']),
+  storageAccounts: defineTable({ ownerId:v.string(), usedBytes:v.number(), reservedBytes:v.number(), videoBytes:v.number(), audioBytes:v.number(), imageBytes:v.number(), modelBytes:v.optional(v.number()), exportBytes:v.number(), fileCount:v.number() }).index('by_owner',['ownerId']),
   storageObjects: defineTable({ ownerId:v.string(), objectKey:v.string(), r2Key:v.optional(v.string()), storageId:v.optional(v.id('_storage')), fileName:v.string(), kind:v.union(assetKind,v.literal('export')), size:v.number(), createdAt:v.number(), auxiliary:v.boolean(), pending:v.boolean(), jobId:v.optional(v.id('renderJobs')) })
     .index('by_owner_key',['ownerId','objectKey']).index('by_owner_visible_size',['ownerId','auxiliary','pending','size']).index('by_owner_visible_created',['ownerId','auxiliary','pending','createdAt'])
     .index('by_owner_kind_size',['ownerId','auxiliary','pending','kind','size']).index('by_owner_kind_created',['ownerId','auxiliary','pending','kind','createdAt'])

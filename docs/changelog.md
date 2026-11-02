@@ -4,6 +4,7 @@ Newest first. Each merged pull request adds its lines here, grouped by system.
 
 ## 2026-11-02
 - Editor chat: Confirm tool saves with atomic revision receipts and shared tool classifications. Why: saved edits, reads and queued jobs must never produce false save failures.
+- Scenes: Added timeline-driven 3D layers, cameras, lights, models and extruded text beside HTML/GSAP. Why: mix real depth with motion design in preview, frame capture and CPU exports.
 - Landing: Mix three gaming clips with three podcast and interview clips, keeping six caption styles. Why: show clipping for both gaming streams and podcasts.
 - iOS: Match the website’s dark background, cards, elevated sheets, text and borders using shared named colors. Why: Keep the iPhone app consistent with Revline’s brand.
 - Media preparation: Skip Gemini overviews for speech; queue optional visual overviews after transcription and editor opening, with frame-tool fallbacks. Why: transcripts cover speech and Gemini must not block editing.
