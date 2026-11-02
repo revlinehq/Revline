@@ -8,6 +8,7 @@ import { NEW_PROJECT_PATH } from '@/lib/workspace-routes';
 import { PRODUCTION_CLAUDE_MODEL_CHOICES } from '@/lib/ai/claude-model-policy';
 import { Fragment, memo, useCallback, useState, useEffect, useLayoutEffect, useMemo, useRef, type ComponentProps } from 'react';
 import { Check, ArrowUpRight, Lightbulb, RotateCcw, X } from 'lucide-react';
+import type { EditorEditMode } from '@/lib/ai/edit-mode';
 import { AssistantModelPicker } from './assistant-model-picker';
 import { AssistantModePicker, useAssistantEditMode } from './assistant-mode-picker';
 import { EDITOR_MODELS, type ClaudeModelChoice, type EditorReasoningEffort, type EditorSpeedMode } from '@/lib/ai/claude-model';
@@ -110,8 +111,8 @@ function AssistantPanelBody({ messages, running, editing:editingTimeline=running
   defaultModelChoice?:ClaudeModelChoice;
   allowedModels?: readonly ClaudeModelChoice[];
   claudeViaMcp?: boolean;
-  onSend: (text: string, modelChoice?: ClaudeModelChoice, reasoningEffort?: EditorReasoningEffort, speedMode?: EditorSpeedMode) => Promise<void>; hasClips: boolean; demo: boolean;
-  onRetry?: (text: string, modelChoice?: ClaudeModelChoice, reasoningEffort?: EditorReasoningEffort, speedMode?: EditorSpeedMode) => Promise<void>;
+  onSend: (text: string, modelChoice?: ClaudeModelChoice, reasoningEffort?: EditorReasoningEffort, speedMode?: EditorSpeedMode, editMode?: EditorEditMode) => Promise<void>; hasClips: boolean; demo: boolean;
+  onRetry?: (text: string, modelChoice?: ClaudeModelChoice, reasoningEffort?: EditorReasoningEffort, speedMode?: EditorSpeedMode, editMode?: EditorEditMode) => Promise<void>;
   onLoadMore?: () => void; canLoadMore?: boolean; onAttach?: () => void;
   attachments?: ComposerAttachment[]; onRemoveAttachment?: (id: string) => void; composerBusy?: boolean; requireMedia?: boolean;
   /** Playback URLs for reference breakdown cards, by asset id. */
@@ -122,7 +123,7 @@ function AssistantPanelBody({ messages, running, editing:editingTimeline=running
   budgetUsed?: number;
   onStop?: () => Promise<void>;
   suggestions?: { sourceName:string;clipId:string;items:SourceEditSuggestion[] };
-  onSuggestion?: (prompt:string,clipId:string,modelChoice?:ClaudeModelChoice,reasoningEffort?:EditorReasoningEffort,speedMode?:EditorSpeedMode) => Promise<void>;
+  onSuggestion?: (prompt:string,clipId:string,modelChoice?:ClaudeModelChoice,reasoningEffort?:EditorReasoningEffort,speedMode?:EditorSpeedMode,editMode?:EditorEditMode) => Promise<void>;
   canResumeEdit?:boolean;
   editSnapshot?:AssistantEditSnapshot;
 }) {
@@ -202,7 +203,7 @@ function AssistantPanelBody({ messages, running, editing:editingTimeline=running
     const key=draftKey;sendInFlight.current=true;
     if (!retry) changePrompt('');
     setStopState(null); setSending(true); if(!running&&!queued.length)setPendingReply({ id: `pending-${crypto.randomUUID()}`, text: draft.trim(), previousUserId: latestUser?.id, previousError: error }); setLocalError('');
-    try { await (retry && onRetry ? onRetry : onSend)(draft.trim(), canChooseModel ? selectedModelChoice : undefined, chosenEffort); }
+    try { await (retry && onRetry ? onRetry : onSend)(draft.trim(), canChooseModel ? selectedModelChoice : undefined, chosenEffort, undefined, editMode.value); }
     catch (e) { if(currentDraftKey.current===key){if(!retry)changePrompt(draft);setPendingReply(null);setLocalError(userError(e, 'Could not send message'));} }
     finally { sendInFlight.current=false;setSending(false); }
   }
@@ -212,7 +213,7 @@ function AssistantPanelBody({ messages, running, editing:editingTimeline=running
     if (!suggestions || !onSuggestion || sendInFlight.current || sending || running || pendingReply || !configured) return;
     const request = `${suggestion.prompt}\n\nUse the selected clip from “${suggestions.sourceName}”, source ${suggestion.start.toFixed(2)}–${suggestion.end.toFixed(2)} seconds.`;
     sendInFlight.current=true;setStopState(null); setSending(true); setPendingReply({ id: `pending-${crypto.randomUUID()}`, text: request, previousUserId: latestUser?.id, previousError: error }); setLocalError('');
-    try { await onSuggestion(request, suggestions.clipId, canChooseModel ? selectedModelChoice : undefined, chosenEffort); }
+    try { await onSuggestion(request, suggestions.clipId, canChooseModel ? selectedModelChoice : undefined, chosenEffort, undefined, editMode.value); }
     catch (e) { setPendingReply(null); setLocalError(userError(e, 'Could not start this edit.')); }
     finally { sendInFlight.current=false;setSending(false); }
   }

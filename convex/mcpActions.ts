@@ -1,6 +1,7 @@
 "use node";
 import { v } from 'convex/values';
 import { z } from 'zod';
+import { editorEditModeSchema, PRECISE_MODE_NOTICE, type EditorEditMode } from '../lib/ai/edit-mode';
 import { internal } from './_generated/api';
 import { internalAction, type ActionCtx } from './_generated/server';
 import type { Doc, Id } from './_generated/dataModel';
@@ -15,7 +16,7 @@ import { startLocalUpload } from './mcpUploads';
 // Choice cards only exist in the editor's chat; MCP clients ask in their own way.
 // An MCP call still runs in one Convex action; stop before its ten-minute limit with a clear message.
 const CALL_LIMIT_MS = 9 * 60_000;
-const RUN_SCOPED_TOOLS = new Set(['planEffects', 'previewRender', 'getFrames', 'askUser', 'askBrandKit']);
+const RUN_SCOPED_TOOLS = new Set(['usePreciseMode', 'planEffects', 'previewRender', 'getFrames', 'askUser', 'askBrandKit']);
 const projectIdField = z.string().min(1).describe('Revline project ID from listProjects or getProject.');
 
 const PROJECT_TOOLS = {
@@ -46,7 +47,7 @@ const toJsonSchema = (schema: z.ZodType) => { const { $schema: _, ...json } = z.
 
 /** Editing tools act on one project, so each gains a required projectId. */
 function withProjectId(schema: JsonSchema): JsonSchema {
-  return { ...schema, type: 'object', properties: { projectId: toJsonSchema(projectIdField), timelineId: toJsonSchema(timelineIdField), ...(schema.properties ?? {}) }, required: ['projectId', ...(schema.required ?? []).filter(name => name !== 'projectId')] };
+  return { ...schema, type: 'object', properties: { projectId: toJsonSchema(projectIdField), timelineId: toJsonSchema(timelineIdField), editMode: toJsonSchema(editorEditModeSchema.optional().describe('Verification mode for this call. Defaults to precise for MCP. Fast uses local frame checks; builds and recreations still run Precise.')), ...(schema.properties ?? {}) }, required: ['projectId', ...(schema.required ?? []).filter(name => name !== 'projectId')] };
 }
 /** Which timeline tab a call works on. Without it, the call uses the project's open tab, which other agents may switch. */
 const timelineIdField = z.string().min(1).optional().describe('The timeline tab to work on (from listTimelines). Pass it whenever several agents may edit this project: the edit then always lands in this tab, whichever tab is open. Without it, the call acts on the open tab.');
@@ -180,14 +181,14 @@ function withImages(output: unknown, isError: boolean): CallResult {
   return { ...result({ ...rest, images: images.map(image => image.label) }, isError), images: images.map(image => ({ data: image.data, mimeType: image.mimeType })) };
 }
 
-async function readEditorTool(ctx: ActionCtx, ownerId: string, rawProjectId: string, name: string, input: unknown, timelineId?: string): Promise<CallResult> {
+async function readEditorTool(ctx: ActionCtx, ownerId: string, rawProjectId: string, name: string, input: unknown, timelineId?: string, editMode: EditorEditMode = 'precise'): Promise<CallResult> {
   try {
     const projectId = await ctx.runQuery(internal.mcp.readRun, { ownerId, projectId: rawProjectId });
     // A named tab is read from its stored timeline, on every reload the tool makes; the open tab stays as it is.
     const run = { projectId, ownerId, runId: readRunId(timelineId) };
     const { project, assets } = await ctx.runQuery(internal.assistant.getRun, run);
     const abortSignal = AbortSignal.timeout(CALL_LIMIT_MS);
-    const { tools } = editorTools(ctx, { run, project, assets, recovering: false, initialPlans: [], selectedClipIds: [], abortSignal, planlessEffects: true });
+    const { tools } = editorTools(ctx, { run, project, assets, recovering: false, initialPlans: [], selectedClipIds: [], abortSignal, planlessEffects: true, editMode });
     const tool = tools[name];
     const output = await tool.execute.call({ ...tool, ctx }, input, { toolCallId: crypto.randomUUID(), messages: [], abortSignal });
     return withImages(output, failed(output));
@@ -195,7 +196,8 @@ async function readEditorTool(ctx: ActionCtx, ownerId: string, rawProjectId: str
 }
 
 async function callEditorTool(ctx: ActionCtx, ownerId: string, name: string, raw: Record<string, unknown>, agentName?: string): Promise<CallResult> {
-  const { projectId: rawProjectId, timelineId: rawTimelineId, ...rawInput } = raw;
+  const { projectId: rawProjectId, timelineId: rawTimelineId, editMode: rawEditMode, ...rawInput } = raw;
+  const editMode = editorEditModeSchema.default('precise').parse(rawEditMode);
   if (typeof rawProjectId !== 'string' || !rawProjectId) return result('projectId is required. Call listProjects to find it.', true);
   if (rawTimelineId !== undefined && (typeof rawTimelineId !== 'string' || !rawTimelineId)) return result('timelineId must be a timeline id from listTimelines.', true);
   const timelineId = rawTimelineId as string | undefined;
@@ -205,7 +207,7 @@ async function callEditorTool(ctx: ActionCtx, ownerId: string, name: string, raw
   const parsed = known.inputSchema.safeParse(rawInput);
   if (!parsed.success) return result(`Invalid arguments: ${z.prettifyError(parsed.error)}`, true);
 
-  if (READ_ONLY_TOOLS.has(name)) return readEditorTool(ctx, ownerId, rawProjectId, name, parsed.data, timelineId);
+  if (READ_ONLY_TOOLS.has(name)) return readEditorTool(ctx, ownerId, rawProjectId, name, parsed.data, timelineId, editMode);
   // The tab switch and the edit lock happen in one transaction, so no other agent's tab switch can land in between.
   const { projectId, runId } = await ctx.runMutation(internal.mcp.beginRun, { ownerId, projectId: rawProjectId, ...(agentName ? { agentName } : {}), ...(timelineId ? { timelineId } : {}) });
   const run = { projectId, ownerId, runId };
@@ -215,9 +217,10 @@ async function callEditorTool(ctx: ActionCtx, ownerId: string, name: string, raw
   const watch = setInterval(() => { void ctx.runQuery(internal.assistant.isRunActive, run).then(active => { if (!active) controller.abort(); }).catch(() => controller.abort()); }, 2000);
   try {
     const { project, assets } = await ctx.runQuery(internal.assistant.getRun, run);
-    const { toolkit, tools } = editorTools(ctx, { run, project, assets, recovering: false, initialPlans: [], selectedClipIds: [], abortSignal, planlessEffects: true });
+    const { toolkit, tools } = editorTools(ctx, { run, project, assets, recovering: false, initialPlans: [], selectedClipIds: [], abortSignal, planlessEffects: true, editMode });
     const tool = tools[name];
-    const output = await tool.execute.call({ ...tool, ctx }, parsed.data, { toolCallId: crypto.randomUUID(), messages: [], abortSignal });
+    const rawOutput = await tool.execute.call({ ...tool, ctx }, parsed.data, { toolCallId: crypto.randomUUID(), messages: [], abortSignal });
+    const output = rawOutput && typeof rawOutput === 'object' ? { ...rawOutput, editMode: toolkit.editMode(), ...(editMode === 'fast' && toolkit.editMode() === 'precise' ? { modeNotice: PRECISE_MODE_NOTICE } : {}) } : rawOutput;
     // A destructive edit is staged privately; publish it as this call's one saved edit.
     const published = failed(output) ? false : await toolkit.editSession.complete('stop');
     return withImages(published && output && typeof output === 'object' ? { ...output, applied: true, saved: true, staged: false, revision: toolkit.editSession.revision } : output, failed(output));
