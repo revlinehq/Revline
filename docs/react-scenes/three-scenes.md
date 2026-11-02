@@ -26,6 +26,16 @@ Fly app `revline-render-dev`, image digest `sha256:4cd2cf0087f405b95cc63da0b4e7f
 
 The heavy job waited about 34 seconds for the new image/machine before its task began. The representative job waited about 69 seconds, including that startup and the heavy job ahead of it. These short clips emphasize fixed startup cost; timings are observations, not an export SLA.
 
+Final verification used image `sha256:920f3c96645bc3c3ffec539ebfb132b6d7c257ac03d45b7422569ca4eb416da2`, after rebasing on the latest main and fixing project-model media resolution. Three exports were submitted together to fresh dev machines with the same 16-vCPU/32-GB/8-worker software-GL profile. All three downloaded MP4s contain exactly 120 frames at 1920×1080 / 30 fps.
+
+| Final scene | Render phase | Seconds/frame | Task including preparation/upload |
+| --- | ---: | ---: | ---: |
+| Representative | 34.533 s | 0.2878 | 36.5 s |
+| Heavy | 34.505 s | 0.2875 | 36.6 s |
+| Project GLB animation + extruded text + HTML | 27.424 s | 0.2285 | 29.4 s |
+
+The final jobs waited roughly 73–84 seconds before rendering while Fly refreshed and started the new image. Short-clip browser initialization and concurrent cold starts dominate this round; the first sequential run above shows the warm-machine observation separately. Across measured runs, the representative scene took 0.078–0.288 s/frame and the heavier one 0.277–0.288 s/frame. The model/text scene also passed the actual getFrames handler (captureTimelineFrames), returning all three requested frames, and its exported middle frame was inspected at full resolution.
+
 Verification used `npm ci`, `npm run typecheck`, `npm run build`, headless Chromium against localhost:3008, the existing composition frame-capture engine at full 1080p, repeated/backward/direct-middle seeks, Beat unmount/remount, embedded animation, malformed-resource rejection, and real dev Fly exports. No test files or workers were added; existing media workers were left running.
 
 ## Review assets and licenses
