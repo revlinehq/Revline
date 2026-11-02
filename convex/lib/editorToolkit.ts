@@ -18,7 +18,7 @@ import {SPEED_RAMP_PRESET_IDS,presetAnchors,type SpeedRampPreset} from '../../li
 import {MASK_SHAPES} from '../../lib/editor/masks';
 import {attachMaskPatch,attachOverlayPatch,bakeMaskAnchors,pointsToSamples,streamedAttachmentPatch} from '../../lib/editor/tracking-attach';
 import {CAMERA_ZOOM_RANGE,SMOOTH_ZOOM_EASINGS} from '../../lib/editor/smooth-zoom-settings';
-import { modelTimeline, modelAssetAnalysis, modelAssetAnalysisWindows } from "../../lib/ai/editor-context";
+import { modelTimeline, modelAssetAnalysis, modelAssetAnalysisWindows, OPTIONAL_UNDERSTANDING_NOTE } from "../../lib/ai/editor-context";
 import { closeFootageGaps } from "../../lib/editor/close-gaps";
 import { createTool, storeFile } from "@convex-dev/agent";
 import { z } from "zod";
@@ -313,7 +313,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
   const zoomInput=z.object({direction:z.enum(['in','out']).optional(),amount:z.number().min(ZOOM_LIMITS.amount[0]).max(ZOOM_LIMITS.amount[1]).optional(),speed:z.number().min(ZOOM_LIMITS.speed[0]).max(ZOOM_LIMITS.speed[1]).optional(),centerX:z.number().min(0).max(1).optional(),centerY:z.number().min(0).max(1).optional()});
   const solidColorInput=z.object({color:z.string().regex(/^#[\da-f]{6}$/i).optional(),width:z.number().min(SOLID_COLOR_LIMITS.width[0]).max(SOLID_COLOR_LIMITS.width[1]).optional(),height:z.number().min(SOLID_COLOR_LIMITS.height[0]).max(SOLID_COLOR_LIMITS.height[1]).optional(),x:z.number().min(0).max(1).optional(),y:z.number().min(0).max(1).optional(),opacity:z.number().min(0).max(1).optional()});
   const textInput = z.object({ text: z.string().min(1).max(2000), track: z.number().int().min(1).max(24).optional(), start: z.number().min(0), duration: z.number().positive(), fontSize: z.number().min(8).max(300).optional(),fontFamily:fontFamily.optional(), color: textColor.optional(), background: textColor.optional(), blendMode: z.enum(BLEND_MODES).optional(), x: z.number().min(0).max(1).optional(), y: z.number().min(0).max(1).optional(), animation: z.enum(["none", "fade", "rise"]).optional(),textStyle:textStyleInput.optional() });
-  const withAnalysis = async <T,>(assetId: string, mode: "transcribe" | "understand" | "shots" | "beats" | "track" | "video" | "frames" | "reference" | "facecam" | "speakers", read: (request: Doc<"analysisRequests">) => Promise<T>, inspection?: { videoRequest?: VideoInspectionInput; frameRequest?: FrameInspectionInput; speakerRequest?:{start:number;end:number} }) => {
+  const withAnalysis = async <T,>(assetId: string, mode: "transcribe" | "shots" | "beats" | "track" | "video" | "frames" | "reference" | "facecam" | "speakers", read: (request: Doc<"analysisRequests">) => Promise<T>, inspection?: { videoRequest?: VideoInspectionInput; frameRequest?: FrameInspectionInput; speakerRequest?:{start:number;end:number} }) => {
     const requestId = await ctx.runMutation(internal.assistant.requestAnalysis, { ...run, assetId, mode, ...inspection });
     try {
       while (true) {
@@ -396,7 +396,8 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
   // task and leave the first waiting until it timed out.
   const sharedAnalyses = new Map<string, ReturnType<typeof analyzeOnce>>();
   const transcriptRefreshFailures = new Map<string, string>();
-  const analyze = async (assetId: string, mode: "transcribe" | "understand" | "shots" | "beats" | "track" | "reference" | "facecam" | "speakers", requireAudioActivity = false, speakerRequest?:{start:number;end:number}) => {
+  const understandingUnavailable = (assetId: string) => ({ assetId, mode: 'understand', analyzed: false, optional: true, understandingNote: OPTIONAL_UNDERSTANDING_NOTE });
+  const analyze = async (assetId: string, mode: "transcribe" | "shots" | "beats" | "track" | "reference" | "facecam" | "speakers", requireAudioActivity = false, speakerRequest?:{start:number;end:number}) => {
     const key = `${assetId}:${mode}:${JSON.stringify(speakerRequest??null)}`;
     const shared = sharedAnalyses.get(key);
     if (shared) {
@@ -408,11 +409,11 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
     sharedAnalyses.set(key, pending);
     return pending;
   };
-  const analyzeOnce = async (assetId: string, mode: "transcribe" | "understand" | "shots" | "beats" | "track" | "reference" | "facecam" | "speakers", requireAudioActivity = false, remeasure = false,speakerRequest?:{start:number;end:number}) => {
+  const analyzeOnce = async (assetId: string, mode: "transcribe" | "shots" | "beats" | "track" | "reference" | "facecam" | "speakers", requireAudioActivity = false, remeasure = false,speakerRequest?:{start:number;end:number}) => {
     if(!remeasure&&(mode==='facecam'||mode==='speakers')){const saved=await loadAsset(assetId),cached=saved.analysis?.speakers;if(mode==='facecam'?!!saved.analysis?.facecam:cached?.version===SPEAKER_ANALYSIS_VERSION&&cached.start<=(speakerRequest?.start??0)&&cached.end>=(speakerRequest?.end??saved.duration??0))return saved;}
-    if (!remeasure && (mode === 'understand' || mode === 'transcribe' || mode === 'reference')) {
+    if (!remeasure && (mode === 'transcribe' || mode === 'reference')) {
       const saved = await loadAsset(assetId);
-      if (mode === 'reference' ? readReference(saved.analysis?.reference)?.moments : mode === 'understand' ? saved.analysis?.understanding : currentTranscript(saved.analysis?.transcript) && (!requireAudioActivity || saved.analysis?.audioActivity?.version === AUDIO_ACTIVITY_VERSION)) return saved;
+      if (mode === 'reference' ? readReference(saved.analysis?.reference)?.moments : currentTranscript(saved.analysis?.transcript) && (!requireAudioActivity || saved.analysis?.audioActivity?.version === AUDIO_ACTIVITY_VERSION)) return saved;
     }
     const request = () => withAnalysis(assetId, mode, async request => {
       let next=await ctx.runQuery(internal.assistant.getRunAsset,{...run,assetId});
@@ -831,9 +832,10 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       return { ...result, clip: { ...clip, scene: { ...scene, codeCharacters: code.length, ...(blueprints ? { blueprints: blueprints.map(({ code: body, ...blueprint }) => ({ ...blueprint, codeCharacters: body.length })) } : {}) } }, sceneCode };
     } }),
     detectFacecam:createTool({description:'Detect the webcam OVERLAY panel and gameplay regions using local MediaPipe faces and temporally stable OpenCV rectangle edges in the media processor. No Gemini key is required. Returns normalized x/y/w/h rectangles, source sample times, confidence and explicit creator-only/gameplay-only/uncertain outcomes. Reuses saved source analysis. If no clear panel is found, use followSubject mode face or retain a wider view. Use applyLayout detectedRegions:true for automatic creator-top/gameplay-bottom crops; inspect layout changes between samples.',inputSchema:z.object({assetId:z.string()}),execute:async(_ctx,{assetId})=>{const asset=await analyze(assetId,'facecam');return {assetId:asset._id,...asset.analysis?.facecam,...(asset.analysis?.facecam?.samples.some(s=>s.kind==='uncertain')?{fallback:'Use followSubject mode face for uncertain layouts; keep a wider frame if no face is visible.'}:{})};}}),
-    analyzeMedia: createTool({ description: "Request real analysis of this project's uploaded media through durable background jobs. Transcribe word-timed speech, create a native Gemini video overview, measure music beats, track a visible face, or break down a reference video (mode reference: measured cuts, beats and moments (every change at 10 fps, motion inside a shot too, with M ids and the shot each falls in), every shot split into its parts, transitions, camera, title styles and the style worth borrowing; use it when the user shares footage to remake or to take style from, and read the reference-footage skill first). mode track uses face detection only; for other objects and moving-camera footage use trackPoints and attachToTrack. Use inspectVideo with the actual user question to find specific visual moments; a generic overview is not an answer to every editing question. Modes facecam and speakers detect overlay regions and diarized active speakers with visible face positions in the worker. Saved results are usable immediately; never invent unavailable results.", inputSchema: z.object({ assetId: z.string(), mode: z.enum(["transcribe", "understand", "beats", "track", "reference", "facecam", "speakers"]),start:z.number().min(0).optional(),end:z.number().positive().optional() }).refine(i=>(i.start===undefined&&i.end===undefined)||(i.mode==='speakers'&&i.start!==undefined&&i.end!==undefined&&i.end>i.start&&i.end-i.start<=120),{message:'Source start/end windows are for speaker analysis, up to 120 seconds.'}), execute: async (_ctx, input) => {
+    analyzeMedia: createTool({ description: "Request real analysis of this project's uploaded media through durable background jobs. Transcribe word-timed speech, create a native Gemini video overview, measure music beats, track a visible face, or break down a reference video (mode reference: measured cuts, beats and moments (every change at 10 fps, motion inside a shot too, with M ids and the shot each falls in), every shot split into its parts, transitions, camera, title styles and the style worth borrowing; use it when the user shares footage to remake or to take style from, and read the reference-footage skill first). mode track uses face detection only; for other objects and moving-camera footage use trackPoints and attachToTrack. Use inspectVideo with the actual user question to find specific visual moments; a generic overview is not an answer to every editing question. Modes facecam and speakers detect overlay regions and diarized active speakers with visible face positions in the worker. Scene understanding is optional: reuse a saved overview. New overviews run only after the editor opens and transcription confirms little meaningful speech. Speech footage uses transcript evidence instead. Skipped, pending or failed overviews return unavailable without waiting or retrying. Continue with transcript evidence and readFrames rather than reporting a provider error to the user. Saved results are usable immediately; never invent unavailable results.", inputSchema: z.object({ assetId: z.string(), mode: z.enum(["transcribe", "understand", "beats", "track", "reference", "facecam", "speakers"]),start:z.number().min(0).optional(),end:z.number().positive().optional() }).refine(i=>(i.start===undefined&&i.end===undefined)||(i.mode==='speakers'&&i.start!==undefined&&i.end!==undefined&&i.end>i.start&&i.end-i.start<=120),{message:'Source start/end windows are for speaker analysis, up to 120 seconds.'}), execute: async (_ctx, input) => {
       return reportAnalysisFailure(async () => {
-      const asset = await analyze(input.assetId, input.mode,false,input.start!==undefined&&input.end!==undefined?{start:input.start,end:input.end}:undefined);
+      const asset = input.mode === 'understand' ? await loadAsset(input.assetId) : await analyze(input.assetId, input.mode,false,input.start!==undefined&&input.end!==undefined?{start:input.start,end:input.end}:undefined);
+      if (input.mode === 'understand' && !asset.analysis?.understanding) return understandingUnavailable(input.assetId);
       return { analyzed: true, assetId: asset._id, mode: input.mode, ...(input.mode==='facecam'?{facecam:asset.analysis?.facecam}:{}), ...(input.mode==='speakers'?{start:asset.analysis?.speakers?.start,end:asset.analysis?.speakers?.end,identityScope:asset.analysis?.speakers?.identityScope,turnCount:asset.analysis?.speakers?.turns.length,framing:asset.analysis?.speakers?summarizeSpeakerFraming(asset.analysis.speakers,input.start,input.end):null,readTool:'inspectAssetAnalysis with start/end SOURCE seconds'}:{}), ...(input.mode === "transcribe" ? { segmentCount: asset.analysis?.transcript?.segments.length, wordCount: asset.analysis?.transcript?.words.length } : {}), ...(input.mode === "understand" ? { summary: asset.analysis?.understanding?.summary, sceneCount: asset.analysis?.understanding?.scenes.length } : {}), ...(input.mode === "beats" ? { bpm: asset.analysis?.beats?.bpm, beatCount: asset.analysis?.beats?.beats.length, downbeatCount: asset.analysis?.beats?.downbeats?.length ?? 0, accentCount: asset.analysis?.beats?.accents?.length ?? 0, dropCandidateCount: asset.analysis?.beats?.dropCandidates?.length ?? 0, engine: asset.analysis?.beats?.engine, confidence: asset.analysis?.beats?.confidence } : {}), ...(input.mode === "track" ? { sampleCount: asset.analysis?.focus?.length } : {}), ...(input.mode === "reference" ? referenceSummary(asset) : {}) };
       });
     } }),
@@ -1076,21 +1078,24 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       if (map?.engine !== BEAT_ANALYSIS_ENGINE || !beats?.length) throw new Error("Run Find beats on this source first; no current dedicated beat map is saved");
       return alignCutsToBeats(t, assets.map(asset => ({ ...asset, url: null })), input.musicAssetId, beats);
     }) }),
-    useStrongestMoment: createTool({ description: "Use the highest-scored scene from a saved footage understanding result. Replace this source's first video shot, or append a shot if it has not been used. Never guess a source moment.", inputSchema: z.object({ assetId: z.string() }), execute: async (_ctx, input) => savedCheckpoint(input.assetId,t => {
-      const asset = assets.find(a => a._id === input.assetId); const scenes = asset?.analysis?.understanding?.scenes;
-      if (asset?.kind !== "video" || !scenes?.length) throw new Error("Run Understand footage on this video first; no scene analysis is saved");
-      const scene = scenes.reduce((strongest, current) => current.score > strongest.score ? current : strongest);
-      const range = shotAlignedRange(scene, asset.analysis?.shots);
-      const existing = t.clips.find(clip => clip.kind === "video" && clip.assetId === input.assetId);
-      const start = existing?.start ?? timelineDuration(t);
-      const duration = Math.min(range.end - range.start, (asset.duration ?? range.end) - range.start) / (existing ? playbackRateOf(existing) : 1);
-      if (duration < 1 / t.fps) throw new Error("The strongest scene is shorter than one frame");
-      const id = existing?.id ?? crypto.randomUUID();
-      const next = existing ? t : addMediaClip(t, { ...asset, duration }, id, start);
-      const shot = find(next, id);
-      return placeOnFreeLayer(next, { ...shot, sourceStart: range.start, duration, focus: asset.analysis?.focus ? focusForClip(asset.analysis.focus, { ...shot, sourceStart: range.start, duration }) : undefined });
-    }) }),
-    inspectAssetAnalysis: createTool({ description: "Read this media's saved transcript, scene descriptions and measured shot boundaries. The default transcript includes sentence segments and a word-timing read hint. Supply start/end SOURCE seconds for the relevant sentence, preferably windows up to 30 seconds, to receive exact overlapping words with text/start/end. To read several sentences, pass them together as windows (up to eight) in ONE call rather than calling this tool once per window. Measured source audio quiet intervals, dense subject tracking and beat samples are summarized by default; ranged reads return their exact samples. Audio energy is not a visual observation or proof of silence. Visual descriptions remain intact. If absent, analysis has not been run; never invent results.", inputSchema: z.object({ assetId: z.string(), start: z.number().min(0).optional(), end: z.number().positive().optional(), windows: z.array(z.object({ start: z.number().min(0), end: z.number().positive() })).min(1).max(8).optional() }).refine(input => (input.start === undefined && input.end === undefined) || (input.start !== undefined && input.end !== undefined && input.end > input.start), { message: 'Provide a valid start/end SOURCE range together.' }), execute: async (_ctx, input) => {
+    useStrongestMoment: createTool({ description: "Use the highest-scored scene from a saved footage understanding result. Replace this source's first video shot, or append a shot if it has not been used. When scenes are unavailable, returns a hint to choose an evidenced range with readFrames and transcript tools instead. Never guess a source moment.", inputSchema: z.object({ assetId: z.string() }), execute: async (_ctx, input) => {
+      const asset = await loadAsset(input.assetId), scenes = asset.analysis?.understanding?.scenes;
+      if (asset.kind !== "video") throw new Error("Choose a video source");
+      if (!scenes?.length) return { ...understandingUnavailable(input.assetId), applied: false };
+      return checkpoint(t => {
+        const scene = scenes.reduce((strongest, current) => current.score > strongest.score ? current : strongest);
+        const range = shotAlignedRange(scene, asset.analysis?.shots);
+        const existing = t.clips.find(clip => clip.kind === "video" && clip.assetId === input.assetId);
+        const start = existing?.start ?? timelineDuration(t);
+        const duration = Math.min(range.end - range.start, (asset.duration ?? range.end) - range.start) / (existing ? playbackRateOf(existing) : 1);
+        if (duration < 1 / t.fps) throw new Error("The strongest scene is shorter than one frame");
+        const id = existing?.id ?? crypto.randomUUID();
+        const next = existing ? t : addMediaClip(t, { ...asset, duration }, id, start);
+        const shot = find(next, id);
+        return placeOnFreeLayer(next, { ...shot, sourceStart: range.start, duration, focus: asset.analysis?.focus ? focusForClip(asset.analysis.focus, { ...shot, sourceStart: range.start, duration }) : undefined });
+      });
+    } }),
+    inspectAssetAnalysis: createTool({ description: "Read this media's saved transcript, scene descriptions and measured shot boundaries. The default transcript includes sentence segments and a word-timing read hint. Supply start/end SOURCE seconds for the relevant sentence, preferably windows up to 30 seconds, to receive exact overlapping words with text/start/end. To read several sentences, pass them together as windows (up to eight) in ONE call rather than calling this tool once per window. Measured source audio quiet intervals, dense subject tracking and beat samples are summarized by default; ranged reads return their exact samples. Audio energy is not a visual observation or proof of silence. Visual descriptions remain intact. Scene understanding can be absent even when media is ready. Use saved transcript evidence and readFrames for missing visual context; do not wait for or retry an overview. Never invent results.", inputSchema: z.object({ assetId: z.string(), start: z.number().min(0).optional(), end: z.number().positive().optional(), windows: z.array(z.object({ start: z.number().min(0), end: z.number().positive() })).min(1).max(8).optional() }).refine(input => (input.start === undefined && input.end === undefined) || (input.start !== undefined && input.end !== undefined && input.end > input.start), { message: 'Provide a valid start/end SOURCE range together.' }), execute: async (_ctx, input) => {
       let asset = await loadAsset(input.assetId);
       // Transcripts made before windowed transcription merged repeated takes
       // and dropped speech. Refresh one before the model plans cuts from it;
@@ -1100,7 +1105,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
         catch (error) { transcriptRefreshFailures.set(asset._id, error instanceof Error ? error.message : 'unknown error'); }
       }
       const transcriptNote = asset.analysis?.transcript && !currentTranscript(asset.analysis.transcript) ? `This transcript predates current transcription and may merge repeated takes or miss speech${transcriptRefreshFailures.has(asset._id) ? `; refreshing it failed (${transcriptRefreshFailures.get(asset._id)})` : ''}. Treat lines missing from it as unverified, not absent, and ask the user rather than watching the footage to find them.` : undefined;
-      if (!asset.analysis) return { assetId: asset._id, unavailable: true };
+      if (!asset.analysis) return { assetId: asset._id, unavailable: true, understandingNote: OPTIONAL_UNDERSTANDING_NOTE };
       const read = input.windows ? modelAssetAnalysisWindows(asset.analysis, input.windows) : modelAssetAnalysis(asset.analysis, input.start !== undefined && input.end !== undefined ? { start: input.start, end: input.end } : undefined);
       return { assetId: asset._id, ...read, ...(transcriptNote ? { transcriptNote } : {}) };
     } }),

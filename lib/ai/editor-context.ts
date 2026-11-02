@@ -6,6 +6,7 @@ import { summarizeSpeakerFraming } from '../media-analysis/clipping';
 
 export const EDITOR_CONTEXT_NOTICE = 'Context loads the latest 100 saved messages plus associated steps needed to complete their tool calls. Older messages or superseded timeline snapshots may be omitted. Omission is not evidence that an event or edit is absent. Preserve recent user constraints and use the current timeline. Visual observations and images in this context remain intact. Before a creative decision needing absent visual evidence, inspect the relevant source window again (saved analysis may be reused). Read inspectClip for omitted motion/focus samples; never reconstruct source trims from a summary.';
 export const EDITOR_CONTEXT_BOUNDARY = '\nCURRENT EDIT CONTEXT:\n';
+export const OPTIONAL_UNDERSTANDING_NOTE = 'Scene understanding is optional and unavailable here; it is intentionally skipped for footage with meaningful speech. Continue with saved transcript and audio evidence; for visual evidence use readFrames and inspect the returned frames yourself. Do not wait for or repeatedly request an overview, and never invent unseen events. This does not block editing or require a user-facing error.';
 
 /** Agent contextHandler messages are ephemeral. Keep the instruction/history
  * prefix unchanged when the server asks the same request to finish a repair. */
@@ -43,6 +44,7 @@ export function modelAssetAnalysis(analysis: NonNullable<MediaAsset['analysis']>
   const inRange = (time: number) => !window || (time >= window.start && time <= window.end);
   const denseRead = (count: number) => ({ sampleCount: count, detailsOmitted: true, readTool: 'inspectAssetAnalysis with start/end SOURCE seconds' });
   return { ...observations,
+    ...(!analysis.understanding ? { understandingNote: OPTIONAL_UNDERSTANDING_NOTE } : {}),
     ...(facecam?{facecam:{...facecam,samples:window?facecam.samples.filter(s=>s.time>=window.start&&s.time<=window.end):facecam.samples}}:{}),
     ...(speakers?{speakers:{version:speakers.version,start:speakers.start,end:speakers.end,identityScope:speakers.identityScope,framingSummary:summarizeSpeakerFraming(speakers,window?.start,window?.end),...(window?{turns:speakers.turns.filter(t=>t.end>=window.start&&t.start<=window.end)}:{turnCount:speakers.turns.length,speakerIds:[...new Set(speakers.turns.map(t=>t.speaker))],turnSamples:denseRead(speakers.turns.length)}),focusSummary:denseRead(speakers.focus.length),...(window?{focus:speakers.focus.filter(s=>inRange(s.time)),...(speakers.version===2?{framing:speakers.framing.filter(frame=>frame.end>window.start&&frame.start<window.end)}:{})}:{})}}:{}),
     ...(window ? { sourceWindow: window } : {}),

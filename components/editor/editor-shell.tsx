@@ -86,6 +86,7 @@ export type EditorShellProps = {
   onAttachAsset?: (assetId:string)=>void;
   onSaveThumbnail?: (assetId:string,url:string)=>void;
   onPreviewReady?: (controller:PreviewHandle)=>void;
+  onOpened?: () => void;
   onRegisterStockAudio?: (catalogId:string)=>Promise<MediaAsset>;
   onShare?: () => void;
 };
@@ -306,7 +307,11 @@ export function EditorShell(p: EditorShellProps) {
     const timer=setTimeout(()=>setThumbnailsTimedOut(true),MAX_THUMBNAIL_OPENING_WAIT_MS);
     return()=>clearTimeout(timer);
   },[opening,playbackReady,audioPrepared,initialAnalysis,thumbnailsReady,openingAttempt]);
-  useEffect(()=>{if(!preparing&&!opening&&timeline.clips.length>0)openedOnce.current=true;},[preparing,opening,timeline.clips.length]);
+  useEffect(()=>{
+    if(preparing||opening)return;
+    if(timeline.clips.length>0)openedOnce.current=true;
+    p.onOpened?.();
+  },[preparing,opening,timeline.clips.length,p.onOpened]);
   const openingLog=useRef<{phase:string;started:number}|null>(null);
   useEffect(()=>{
     if(p.demo||p.embedded)return;

@@ -489,10 +489,11 @@ export const finish = internalMutation({ args: { ...runArgs, error: v.optional(v
 }});
 
 export const requestAnalysis = internalMutation({ args: { ...runArgs, assetId: v.string(), mode: analysisMode, speakerRequest:v.optional(speakerRequestValidator), frameRequest: v.optional(frameRequestValidator), videoRequest: v.optional(videoRequestValidator) }, returns: v.id("analysisRequests"), handler: async (ctx, args) => {
+  if (args.mode === 'understand') throw new ConvexError('Optional footage overviews start after the editor opens.');
   const project = await requireProject(ctx, args.projectId, args.ownerId);
   if (!project.aiRunning || project.aiRunId !== args.runId) throw new ConvexError("AI run is no longer active");
   const assetId = ctx.db.normalizeId("assets", args.assetId); const asset = assetId ? await ctx.db.get(assetId) : null;
-  if (!asset || asset.ownerId !== args.ownerId || asset.projectId !== args.projectId || asset.kind === "image" || ((args.mode === "understand" || args.mode === 'reference' || args.mode === "shots" || args.mode === "track" || args.mode === "facecam" || args.mode === "speakers" || args.mode === 'frames' || args.mode === 'video') && asset.kind !== "video")) throw new ConvexError("Choose suitable media from this project");
+  if (!asset || asset.ownerId !== args.ownerId || asset.projectId !== args.projectId || asset.kind === "image" || ((args.mode === 'reference' || args.mode === "shots" || args.mode === "track" || args.mode === "facecam" || args.mode === "speakers" || args.mode === 'frames' || args.mode === 'video') && asset.kind !== "video")) throw new ConvexError("Choose suitable media from this project");
   if(args.mode==='speakers'){
     const range=args.speakerRequest??{start:0,end:asset.duration??0};
     if(!Number.isFinite(range.start)||!Number.isFinite(range.end)||range.start<0||range.end<=range.start||range.end>(asset.duration??0)+.01||range.end-range.start>MAX_SPEAKER_WINDOW_SECONDS)throw new ConvexError(`Analyze active speakers in a source window of up to ${MAX_SPEAKER_WINDOW_SECONDS} seconds. Use followSubject on a retained clip.`);

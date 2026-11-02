@@ -3,7 +3,7 @@ import { initializeMediaCapacity } from './media_task_data';
 import type { MutationCtx, QueryCtx } from '../_generated/server';
 
 const MINUTE_MS = 60_000;
-/** One upload legitimately queues three tasks (extract, preview, understand),
+/** One video needs three tasks (extract, preview, then transcribe),
  * so the default admits eight sources transferring and preparing at once. */
 export const DEFAULT_MAX_ACTIVE_MEDIA_TASKS = 24;
 /** Fresh preparation tasks queued by one source upload. */
