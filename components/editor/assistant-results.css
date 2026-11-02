@@ -1,5 +1,6 @@
 .assistant-result-cards{display:grid;gap:6px;margin:10px 0 16px}
-.assistant-result-card{display:flex;align-items:center;gap:9px;min-height:32px;padding:0;border:0;border-radius:0;background:transparent;color:var(--foreground);font-size:12px;line-height:1.45}
+.assistant-result-card{display:flex;flex-direction:column;align-items:flex-start;gap:9px;min-height:32px;padding:0;border:0;border-radius:0;background:transparent;color:var(--foreground);font-size:12px;line-height:1.45}
+.assistant-result-card>button{margin-left:24px;max-width:calc(100% - 24px)}
 .assistant-result-card>svg{flex:none;color:var(--muted-foreground)}
 .assistant-result-card>div{min-width:0}
 .assistant-result-card small{display:block;margin-top:3px;color:var(--muted-foreground);font-size:11px;overflow-wrap:anywhere}

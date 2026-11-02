@@ -199,7 +199,7 @@ export const exportJob = internalQuery({ args: { ownerId: v.string(), jobId: v.s
 /** Render up to six timeline frames as export would; the worker answers within seconds. With pacing, it instead
  * samples the range at pacing.fps and returns measurements of its motion (checkPacing), not images; with sound, it
  * decodes the range's mix (getSound) and, for a check, matches its sound effects to picture changes (checkSound). */
-export const requestFrames = internalMutation({ args: { ownerId: v.string(), projectId: v.string(), times: v.array(v.number()), normalization:v.optional(normalizationRequestValidator), sourceSnapshotId: v.optional(v.id('frameSnapshots')), comparison: v.optional(v.object({ crop: v.optional(referenceBox) })), timelineId: v.optional(v.string()), runId: v.optional(v.string()), pacing: v.optional(pacingRequestValidator), motion: v.optional(v.object({ start: v.number(), end: v.number() })), sound: v.optional(soundRequestValidator), revision: v.optional(v.number()) }, returns: v.id('frameSnapshots'), handler: async (ctx, args) => {
+export const requestFrames = internalMutation({ args: { ownerId: v.string(), projectId: v.string(), times: v.array(v.number()), normalization:v.optional(normalizationRequestValidator), sourceSnapshotId: v.optional(v.id('frameSnapshots')), comparison: v.optional(v.object({ crop: v.optional(referenceBox), aspectRatio: v.optional(v.number()) })), timelineId: v.optional(v.string()), runId: v.optional(v.string()), pacing: v.optional(pacingRequestValidator), motion: v.optional(v.object({ start: v.number(), end: v.number() })), sound: v.optional(soundRequestValidator), revision: v.optional(v.number()) }, returns: v.id('frameSnapshots'), handler: async (ctx, args) => {
   await requireEditorAccess(ctx, args.ownerId);
   const project = await requireProject(ctx, projectIdOf(ctx, args.projectId), args.ownerId, false);
   const other = args.timelineId && args.timelineId !== activeTabOf(project) ? args.timelineId : undefined;
@@ -213,6 +213,7 @@ export const requestFrames = internalMutation({ args: { ownerId: v.string(), pro
   if (args.sourceSnapshotId && (!source || source.ownerId !== args.ownerId || source.projectId !== project._id || !source.sourceTimeline)) throw new ConvexError('The comparison snapshot is unavailable.');
   // A continued check uses its frozen source even after revision history has moved on.
   const past = revision === undefined || source ? null : await pastTimeline(ctx, project, other ?? activeTabOf(project), stored ?? currentTimeline(project), revision);
+  if (args.comparison?.aspectRatio !== undefined && (!Number.isFinite(args.comparison.aspectRatio) || args.comparison.aspectRatio <= 0)) throw new ConvexError('Use a positive comparison aspect ratio.');
   if (args.comparison?.crop && !comparisonCrop.safeParse(args.comparison.crop).success) throw new ConvexError('Keep the normalized comparison crop inside the frame.');
   const timeline = source?.sourceTimeline ?? past ?? now, duration = timelineDuration(timeline);
   if (!timeline.clips.length) throw new ConvexError('The timeline is empty; there is nothing to look at yet.');
