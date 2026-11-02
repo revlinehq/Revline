@@ -18,12 +18,20 @@ export function LandingMotionDesign() {
         />
         <LandingStartButton label="Start editing" size="sm" />
       </div>
-      <Card className="landing-motion-design-frame">
-        <LandingFeatureVideo
-          src="/landing/launch-film-original.mp4"
-          poster="/landing/launch-film-original-poster.webp"
-        />
-      </Card>
+      <figure className="landing-motion-design-film">
+        <Card className="landing-motion-design-frame">
+          <LandingFeatureVideo
+            src="/landing/motion-design-study.mp4"
+            poster="/landing/motion-design-study-poster.webp"
+          />
+        </Card>
+        <figcaption>
+          Recreated in Revline from a reel by{' '}
+          <a href="https://www.instagram.com/reel/DfMzGyNBdUH/" target="_blank" rel="noreferrer">
+            @hc.prath
+          </a>
+        </figcaption>
+      </figure>
     </LandingSection>
   );
 }
