@@ -13,7 +13,7 @@ export function watchPreviewMediaStalls(document:Document,readTime:()=>number,re
     const time=readTime(),now=Date.now();
     for(const media of document.querySelectorAll<HTMLMediaElement>('video[data-start],audio[data-start]')){
       const start=Number(media.dataset.start),end=start+Number(media.dataset.duration);
-      if(!media.isConnected||media.error||time<start||time>=end||media.tagName==='AUDIO'&&Number(media.dataset.volume??1)===0)continue;
+      if(media.hasAttribute('data-preview-pending')||!media.isConnected||media.error||time<start||time>=end||media.tagName==='AUDIO'&&Number(media.dataset.volume??1)===0)continue;
       if(previewMediaReady(media,time)){states.delete(media);continue;}
       const ranges=[];for(let i=0;i<media.buffered.length;i++)ranges.push([media.buffered.start(i),media.buffered.end(i)]);
       const signature=JSON.stringify([media.readyState,media.seeking,media.currentTime,ranges]);

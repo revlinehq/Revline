@@ -33,6 +33,8 @@ export async function releaseMediaObjects(ctx:MutationCtx,asset:StoredMedia){
   }
 }
 export async function removeMediaAttachment(ctx:MutationCtx,asset:Doc<'assets'>){
+  const segments=await ctx.db.query('previewSegments').withIndex('by_asset',q=>q.eq('assetId',asset._id)).collect();
+  for(const segment of segments){await ctx.db.delete(segment._id);await ctx.scheduler.runAfter(0,internal.r2.deleteObject,{key:segment.r2Key});await releaseAccountStorage(ctx,asset.ownerId,{r2Key:segment.r2Key},'preview');}
   await ctx.db.delete(asset._id);if(asset.analysisId&&!await ctx.db.query('assets').withIndex('by_analysis',q=>q.eq('analysisId',asset.analysisId)).first())await ctx.db.delete(asset.analysisId);await releaseMediaObjects(ctx,asset);await releaseAccountStorage(ctx,asset.ownerId,asset);if(asset.previewR2Key)await releaseAccountStorage(ctx,asset.ownerId,{r2Key:asset.previewR2Key},'preview');if(asset.thumbnailStorageId)await releaseAccountStorage(ctx,asset.ownerId,{storageId:asset.thumbnailStorageId},true);
 }
 export async function removeShareAssets(ctx:MutationCtx,shareId:Id<'timelineShares'>){

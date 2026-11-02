@@ -81,6 +81,7 @@ export function installTransitions(initial: TransitionSource[], projectFps: numb
     entry.frames = frames as [HTMLElement, HTMLElement]; return true;
   }
   function prepareVideo(video: HTMLVideoElement, target: number): Promise<void> {
+    target-=Number(video.dataset.previewOffset??0);
     if (video.readyState >= 2 && !video.seeking && Math.abs(video.currentTime - target) < .002) return Promise.resolve();
     const prior = seeks.get(video); if (prior && Math.abs(prior.target - target) < .002) return prior.promise;
     prior?.cancel();

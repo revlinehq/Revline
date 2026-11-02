@@ -1,3 +1,4 @@
+import { previewSourceAt } from './preview-segments';
 import { pixelTrackingSources } from './pixel-tracking-runtime';
 import { pixelTrackEndpoint } from '../media-analysis/pixel-track-reader';
 import { resolvedAudioTimeline } from './audio-normalization';
@@ -168,7 +169,8 @@ export function generateComposition(timeline: Timeline, assets: MediaAsset[], op
     }
     const asset = clip.assetId ? assetMap.get(clip.assetId) : undefined;
     const exportSource = clip.assetId ? options.assetUrls?.[clip.assetId] : undefined;
-    const source = exportSource ?? asset?.url;
+    const playback=options.preview&&asset?previewSourceAt(asset,clip.sourceStart):undefined;
+    const source = exportSource ?? playback?.url ?? asset?.url;
     if (!asset || !source) throw new Error('A clip references unavailable media.');
     if (asset.kind !== clip.kind) throw new Error('The clip kind does not match its media.');
     const src = mediaUrl(source, exportSource !== undefined);
@@ -204,7 +206,7 @@ export function generateComposition(timeline: Timeline, assets: MediaAsset[], op
     const volume = bounded(clip.volume, 1, 0, MAX_CLIP_VOLUME);
     const sound=audioFadeAttributes(clip);
     const audioAttrs=clip.kind==='video'||clip.kind==='audio'?` data-fade-in="${sound.fadeIn}" data-fade-out="${sound.fadeOut}" data-automation="${escapeHtml(withSpeedRamp(audioVolumeEnvelope(timeline,clip,volume),clip))}"`:'';
-    const attrs = `${timing} data-media-start="${attrTime(clip.sourceStart)}" data-volume="${volume}"${clip.kind === 'video' || clip.kind === 'audio' ? ` data-playback-rate="${playbackRateOf(clip)}"` : ''}${audioAttrs}`;
+    const attrs = `${timing} data-media-start="${attrTime(clip.sourceStart-(playback?.offset??0))}" data-preview-offset="${playback?.offset??0}"${playback?.pending?' data-preview-pending="true"':''} data-volume="${volume}"${clip.kind === 'video' || clip.kind === 'audio' ? ` data-playback-rate="${playbackRateOf(clip)}"` : ''}${audioAttrs}`;
     const outline = outlineFilter(clip.outline, scale);
     const frame = (media: string) => {
       const content = `<div id="${id}-motion" class="motion-frame"><div class="source-window" style="${windowStyle}">${media}</div></div>`;

@@ -110,8 +110,8 @@ export function startMediaWorker(options: MediaWorkerOptions) {
           const snapshot = await client.query(api.mediaTasks.work, credentials);
           signal.throwIfAborted();
           const result = await processMediaTask(snapshot, client, options.convexUrl, signal, percent => {
-            progress = Math.max(progress, Math.min(99, percent));
-            if (progress - reported >= 10) heartbeat();
+            progress = Math.max(progress, Math.min(snapshot.kind==='preview'?100:99, percent));
+            if (progress - reported >= (snapshot.kind==='preview'?1:10) && (snapshot.kind!=='preview'||Date.now()-renewedAt>=1000)) heartbeat();
           }, next => { if (activity !== next) { activity = next; heartbeat(); } }, exclusive);
           clearInterval(timer); clearInterval(cancelled); await heartbeats; signal.throwIfAborted();
           await client.mutation(api.mediaTasks.complete, { ...credentials, result });

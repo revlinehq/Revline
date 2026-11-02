@@ -1,4 +1,5 @@
 export function previewMediaReady(node:HTMLMediaElement,time:number) {
+  if(node.hasAttribute('data-preview-pending'))return false;
   if(node.readyState<2||node.seeking)return false;
   // Footage deliberately held at its final decoded frame has no future data.
   if(Number.isFinite(node.duration)&&node.duration-node.currentTime<=.05)return true;

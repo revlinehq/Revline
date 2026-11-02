@@ -2,11 +2,13 @@ import { guardPreviewBuffering } from './preview-buffering';
 import { waitForPreviewMedia } from './preview-readiness';
 import { warmPreviewMedia } from './preview-media-warmup';
 import { recoverMediaSource, watchPreviewMediaStalls } from './media-source-recovery';
+import { previewSourceAt } from './preview-segments';
+import { previewMediaReady } from './preview-readiness';
 import { sourceTimeAt } from './playback-rate';
 import type { MediaAsset, Timeline } from './types';
 
 export type PreviewTransport = EventTarget & { paused: boolean; play(): void; pause(): void; seek(time: number): void };
-export type PreviewMediaRefresh = (assetIds: string[]) => Promise<{ _id: string; url: string | null; previewUrl?: string | null }[]>;
+export type PreviewMediaRefresh = (assetIds: string[]) => Promise<{ _id: string; url: string | null; previewUrl?: string | null;previewSegments?:MediaAsset['previewSegments'] }[]>;
 export type PreviewMediaSessionOptions = {
   document: Document;
   transport: PreviewTransport;
@@ -19,7 +21,6 @@ export type PreviewMediaSessionOptions = {
   onSlowLoad?(): void;
   onDiagnostic?(reason: string): void;
 };
-type PlaybackAsset = MediaAsset & { previewUrl?: string | null };
 
 function redactedMessage(value: unknown, fallback: string) {
   const text = typeof value === 'string' ? value : fallback;
@@ -36,31 +37,66 @@ export function createPreviewMediaSession(options: PreviewMediaSessionOptions) {
   const refreshes = new Map<string, { stamp: string; promise: Promise<string | null> }>();
   const recovered = new Map<string, { original: string | null; url: string }>();
   const error = (message: string) => { if (!disposed) options.onError(redactedMessage(message, 'Could not load this media.')); };
+  let rangeWaiting=false;
+  const refreshedUrls=new Map<string,string>();
   const guard = guardPreviewBuffering(document, transport, readTime,
     options.onDiagnostic ? () => { if (!disposed) options.onDiagnostic?.('active media buffering exceeded 2s'); } : undefined,
-    waiting => { if (!disposed) options.onWaiting(waiting); });
+    waiting => { if (!disposed) options.onWaiting(waiting||rangeWaiting); });
+  function selectSources(time:number) {
+    let pending=false;
+    for(const media of document.querySelectorAll<HTMLMediaElement>('video[data-source-clip]')){
+      const clip=timeline.clips.find(clip=>clip.id===media.dataset.sourceClip),asset=assets.find(asset=>asset._id===clip?.assetId);
+      if(!clip||!asset)continue;
+      const active=time>=clip.start&&time<clip.start+clip.duration;
+      if(!active&&!media.hasAttribute('data-revline-transition-visible'))continue;
+      const sourceTime=sourceTimeAt(clip,Math.max(clip.start,Math.min(time,clip.start+clip.duration-1/timeline.fps)));
+      const selected=previewSourceAt(asset,sourceTime),url=selected.url?refreshedUrls.get(selected.url)??selected.url:null;
+      media.toggleAttribute('data-preview-pending',selected.pending);
+      if(selected.pending){
+        if(active)pending=true;
+        if(media.hasAttribute('src')){media.removeAttribute('src');media.load();}
+        continue;
+      }
+      const offset=selected.offset;
+      media.dataset.previewOffset=String(offset);media.dataset.mediaStart=String(clip.sourceStart-offset);
+      if(url&&media.getAttribute('src')!==url){
+        const replace=()=>{media.src=url;media.currentTime=Math.max(0,sourceTime-offset);};
+        if(active&&!transport.paused)guard.resync(replace);else replace();
+        if(active)pending=true;
+      }
+      if(active&&rangeWaiting&&!previewMediaReady(media,time))pending=true;
+    }
+    if(pending&&!rangeWaiting){rangeWaiting=true;options.onWaiting(true);}
+    else if(!pending&&rangeWaiting){rangeWaiting=false;if(!guard.isBuffering())options.onWaiting(false);}
+  }
+  selectSources(readTime());
+  const sourceTimer=setInterval(()=>selectSources(readTime()),100);
   const stopWarmup = warmPreviewMedia(document, readTime);
-  const playableUrl = (asset: PlaybackAsset | undefined) => asset?.url?.startsWith('blob:') ? asset.url : asset?.previewUrl ?? asset?.url ?? null;
-  const stamp = (asset: MediaAsset | undefined) => JSON.stringify([asset?.url, asset?.previewUrl, asset?.previewVersion, asset?.previewSize]);
+  const stamp = (asset: MediaAsset | undefined) => JSON.stringify([asset?.url, asset?.previewUrl, asset?.previewVersion, asset?.previewSize,asset?.previewSegments]);
   const nodeSource = (media: HTMLMediaElement) => media.getAttribute?.('src') ?? media.src;
   const currentRecovery = (media: HTMLMediaElement, request: { assetId: string; stamp: string; source: string | undefined }) => media.isConnected &&
     timeline.clips.find(clip => clip.id === media.dataset.sourceClip)?.assetId === request.assetId && stamp(assets.find(asset => asset._id === request.assetId)) === request.stamp && nodeSource(media) === request.source;
-  function refreshSource(assetId: string): Promise<string | null> {
-    const asset = assets.find(asset => asset._id === assetId) as PlaybackAsset | undefined;
-    const generation=stamp(asset),existing = refreshes.get(assetId);
+  function refreshSource(assetId: string,sourceTime:number): Promise<string | null> {
+    const asset = assets.find(asset => asset._id === assetId);
+    if(!asset)return Promise.resolve(null);
+    const generation=JSON.stringify([stamp(asset),previewSourceAt(asset,sourceTime).offset]),existing = refreshes.get(assetId);
     if (existing?.stamp===generation) return existing.promise;
-    const url = playableUrl(asset);
+    const url = previewSourceAt(asset,sourceTime).url;
     if (url?.startsWith('blob:') || !options.refreshMedia) return Promise.resolve(url);
     const request = Promise.resolve().then(() => options.refreshMedia!([assetId])).then(patches => {
       const patch = patches.find(patch => patch._id === assetId);
       // Playback refresh authorizes the derivative first when one exists.
-      return patch?.previewUrl ?? patch?.url ?? url;
+      if(!asset||!patch)return url;
+      const fresh=previewSourceAt({...asset,...patch},sourceTime).url;
+      if(url&&fresh)refreshedUrls.set(url,fresh);
+      return fresh;
     });
     const refresh={stamp:generation,promise:request};refreshes.set(assetId,refresh);
     void request.finally(() => { if (refreshes.get(assetId) === refresh) refreshes.delete(assetId); }).catch(() => {});
     return request;
   }
   async function recover(media: HTMLMediaElement, quiet = false) {
+    if(media.hasAttribute('data-preview-pending'))return;
     if (disposed || !media || !['VIDEO', 'AUDIO'].includes(media.tagName) || attempted.has(media)) return;
     const sourceClip = timeline.clips.find(clip => clip.id === media.dataset.sourceClip);
     if (!sourceClip?.assetId) return;
@@ -73,16 +109,16 @@ export function createPreviewMediaSession(options: PreviewMediaSessionOptions) {
       let cancel: (() => void) | undefined;
       const cancelled = new Promise<never>((_resolve, reject) => { cancel = () => reject(new DOMException('Preview source changed.', 'AbortError')); request.controller.signal.addEventListener('abort', cancel, { once: true }); });
       let fresh: string | null;
-      try { fresh = await Promise.race([refreshSource(sourceClip.assetId), cancelled]); }
+      try { fresh = await Promise.race([refreshSource(sourceClip.assetId,sourceTimeAt(sourceClip,readTime())), cancelled]); }
       finally { if (cancel) request.controller.signal.removeEventListener('abort', cancel); }
       request.controller.signal.throwIfAborted();
       if (!currentRecovery(media, request)) return;
       if (!fresh) throw new Error('No playable source.');
-      recovered.set(sourceClip.assetId, { original: assets.find(asset => asset._id === sourceClip.assetId)?.url ?? null, url: fresh });
+      if(!assets.find(asset=>asset._id===sourceClip.assetId)?.previewSegments?.length)recovered.set(sourceClip.assetId, { original: assets.find(asset => asset._id === sourceClip.assetId)?.url ?? null, url: fresh });
       request.source = fresh;
       await recoverMediaSource(media, fresh, {
         signal: request.controller.signal,
-        position: () => sourceTimeAt(timeline.clips.find(clip => clip.id === media.dataset.sourceClip) ?? sourceClip, readTime()),
+        position: () => sourceTimeAt(timeline.clips.find(clip => clip.id === media.dataset.sourceClip) ?? sourceClip, readTime())-Number(media.dataset.previewOffset??0),
         playing: () => {
           const current = timeline.clips.find(clip => clip.id === media.dataset.sourceClip), time = readTime();
           return !transport.paused && !!current && time >= current.start && time < current.start + current.duration;
@@ -115,7 +151,7 @@ export function createPreviewMediaSession(options: PreviewMediaSessionOptions) {
       });
     },
     update(nextTimeline: Timeline, nextAssets: MediaAsset[]) {
-      timeline = nextTimeline; assets = nextAssets;
+      timeline = nextTimeline; assets = nextAssets;selectSources(readTime());
       for (const [media, request] of recoveries) if (!currentRecovery(media, request)) request.controller.abort();
       for (const [id, value] of recovered) if (assets.find(asset => asset._id === id)?.url !== value.original) recovered.delete(id);
       // Live reconciliation may restore a still-expired prop URL. The source
@@ -135,16 +171,16 @@ export function createPreviewMediaSession(options: PreviewMediaSessionOptions) {
     },
     play() { if (!disposed) guard.play(); },
     pause() { if (!disposed) guard.pause(); },
-    seek(time: number) { if (!disposed) { guard.cancel(); transport.seek(time); } },
+    seek(time: number) { if (!disposed) { guard.cancel(); selectSources(time); transport.seek(time); } },
     resync(seek: () => void = () => transport.seek(readTime())) { if (!disposed) guard.resync(seek); },
     isPlaying: guard.isPlaying,
     isBuffering: guard.isBuffering,
     dispose() {
       if (disposed) return;
-      disposed = true; lifetime.abort(); stopStalls(); stopWarmup(); guard.dispose();
+      disposed = true; lifetime.abort(); clearInterval(sourceTimer);stopStalls(); stopWarmup(); guard.dispose();
       document.removeEventListener('error', mediaError, true);
       document.defaultView?.removeEventListener('revline-effects-error', effectsError);
-      refreshes.clear(); recovered.clear();
+      refreshes.clear(); recovered.clear();refreshedUrls.clear();
     },
   };
 }

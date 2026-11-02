@@ -77,6 +77,7 @@ export function warmPreviewMedia(document: Document, readTime: () => number): ()
       if (active(node) || transition || recentlyEnded || heldAtEnd(node)) keep.add(node);
     }
     for (const node of connected) {
+      if(node.hasAttribute('data-preview-pending'))continue;
       if (keep.has(node)) {
         // An active element that was released reloads at its current timeline position.
         if (restore(node) && active(node)) position(node, () => sourceTimeAt(node, readTime()));

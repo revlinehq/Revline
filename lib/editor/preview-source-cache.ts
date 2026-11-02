@@ -1,6 +1,6 @@
 import type { MediaAsset } from './types';
 
-/** Originals above this wait for a preview derivative; derivatives up to it download first. */
+/** Derivatives up to this size download before the preview first paints. */
 export const MAX_PREVIEW_BYTES = 64 * 1024 * 1024;
 // A derivative streamed by byte range stalls at every cold cut: each cut's element
 // fetches its own source position on first play. A few minutes of 720p60 footage
