@@ -21,19 +21,21 @@ struct RenameProjectView: View {
                 Section("Project name") {
                     TextField("Project name", text: $title)
                         .focused($focused).submitLabel(.done).onSubmit(saveIfPossible)
-                }
-                if let error = store.error { Section { ErrorBanner(message: error) } }
+                }.revlineRows()
+                if let error = store.error { Section { ErrorBanner(message: error) }.revlineRows() }
                 Section {
                     Button(action: save) {
                         ActionLabel(title: "Save changes", busyTitle: "Saving…", busy: saving)
                     }.buttonStyle(.borderedProminent).controlSize(.large).disabled(!canSave)
                 }.listRowBackground(Color.clear).listRowInsets(EdgeInsets())
             }
+            .revlineSurface(.revlinePopover)
             .navigationTitle("Rename project").navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel", action: dismiss.callAsFunction) } }
             .task { focused = true }
         }
         .presentationDetents([.medium, .large])
+        .presentationBackground(Color.revlinePopover)
         .presentationDragIndicator(.visible)
         .interactiveDismissDisabled(saving)
     }

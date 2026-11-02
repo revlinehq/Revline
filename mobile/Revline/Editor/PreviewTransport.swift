@@ -14,7 +14,7 @@ struct PreviewTransport: View {
                 player.scrubbing = editing
                 if editing { player.pause() } else { player.seek(player.time) }
             }.accessibilityLabel("Preview position")
-            Text(timecode(store.timeline?.duration ?? 0)).font(.subheadline.monospacedDigit()).foregroundStyle(.secondary)
+            Text(timecode(store.timeline?.duration ?? 0)).font(.subheadline.monospacedDigit()).foregroundStyle(Color.revlineMuted)
         }.padding(.horizontal)
     }
 }

@@ -38,6 +38,7 @@ struct ProjectView: View {
             }
         }
         .frame(maxWidth: .infinity)
+        .revlineSurface()
         .navigationTitle(store.project?.title ?? "Project").navigationBarTitleDisplayMode(.inline)
         .toolbar(.hidden, for: .tabBar)
         .toolbarBackground(.visible, for: .navigationBar)

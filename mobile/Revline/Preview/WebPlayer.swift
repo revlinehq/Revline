@@ -16,7 +16,7 @@ struct WebPlayer: UIViewRepresentable {
         configuration.userContentController.add(context.coordinator, name: "revline")
         let view = WKWebView(frame: .zero, configuration: configuration)
         view.isOpaque = false
-        view.backgroundColor = .black
+        view.backgroundColor = UIColor(.revlineBackground)
         view.scrollView.isScrollEnabled = false
         view.navigationDelegate = context.coordinator
         view.isInspectable = false

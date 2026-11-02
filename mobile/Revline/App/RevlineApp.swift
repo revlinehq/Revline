@@ -26,7 +26,9 @@ struct RevlineApp: App {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(.background)
+            .background(Color.revlineBackground.ignoresSafeArea())
+            .foregroundStyle(Color.revlineForeground)
+            .environment(\.clerkTheme, .revline)
             .preferredColorScheme(.dark)
         }
     }

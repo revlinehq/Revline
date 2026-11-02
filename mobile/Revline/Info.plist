@@ -57,7 +57,7 @@
 	<key>UILaunchScreen</key>
 	<dict>
 		<key>UIColorName</key>
-		<string>LaunchBackground</string>
+		<string>RevlineBackground</string>
 	</dict>
 	<key>UISupportedInterfaceOrientations</key>
 	<array>

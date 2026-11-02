@@ -16,7 +16,7 @@ struct ProjectsView: View {
         NavigationStack(path: $path) {
             List {
                 if let error = store.error {
-                    Section { ErrorBanner(message: error) { store.refreshID += 1 } }
+                    Section { ErrorBanner(message: error) { store.refreshID += 1 } }.revlineRows()
                 }
                 Section {
                     ForEach(filtered) { project in
@@ -24,9 +24,10 @@ struct ProjectsView: View {
                             Task { await store.remove(session, project: project) }
                         }
                     }
-                }
+                }.revlineRows()
             }
             .listStyle(.insetGrouped)
+            .revlineSurface()
             .overlay {
                 if store.loading && store.projects.isEmpty {
                     ProgressView("Loading projects…")

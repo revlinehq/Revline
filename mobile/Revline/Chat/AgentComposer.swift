@@ -61,7 +61,7 @@ struct AgentComposer: View {
             }
             .font(.subheadline)
         }
-        .padding().background(.bar)
+        .padding().background(Color.revlineCard)
         .toolbar {
             ToolbarItemGroup(placement: .keyboard) {
                 Spacer()

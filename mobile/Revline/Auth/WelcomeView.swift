@@ -18,7 +18,7 @@ struct WelcomeView: View {
                         .accessibilityLabel("A motion film made in Revline")
                     Text("Every cut. Your call.").font(.largeTitle).bold()
                     Text("Edit footage, find the best moments, and build motion in conversation.")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.revlineMuted)
                     Button("Explore Revline") { introduction = true }
                         .buttonStyle(.borderless).frame(minHeight: 44)
                     if let error { ErrorBanner(message: error) }
@@ -37,13 +37,14 @@ struct WelcomeView: View {
                         }
                     }.buttonStyle(.bordered).disabled(signingInWithApple)
                     Text("Your projects stay in sync across iPhone and the web.")
-                        .font(.footnote).foregroundStyle(.secondary).multilineTextAlignment(.center)
+                        .font(.footnote).foregroundStyle(Color.revlineMuted).multilineTextAlignment(.center)
                 }
                 .controlSize(.large).padding().frame(maxWidth: .infinity)
-                .background(.bar)
+                .background(Color.revlineCard)
             }
+            .revlineSurface()
             .navigationTitle("Revline")
-            .sheet(isPresented: $showAuth) { AuthView() }
+            .sheet(isPresented: $showAuth) { AuthView().presentationBackground(Color.revlinePopover) }
             .sheet(isPresented: $introduction) { OnboardingView { introduction = false } }
         }
     }

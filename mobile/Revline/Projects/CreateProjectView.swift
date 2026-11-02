@@ -29,7 +29,8 @@ struct CreateProjectView: View {
                 } footer: {
                     Text("Add footage or describe your first idea after creating the project.")
                 }
-                if let error { Section { ErrorBanner(message: error) } }
+                .revlineRows()
+                if let error { Section { ErrorBanner(message: error) }.revlineRows() }
                 Section {
                     Button { Task { await create() } } label: {
                         ActionLabel(title: "Create project", busyTitle: "Creating…", busy: store.busy)
@@ -37,11 +38,13 @@ struct CreateProjectView: View {
                 }.listRowBackground(Color.clear).listRowInsets(EdgeInsets())
             }
             .formStyle(.grouped)
+            .revlineSurface(.revlinePopover)
             .navigationTitle("New project").navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel", action: dismiss.callAsFunction) } }
             .task { titleFocused = true }
         }
         .presentationDetents([.medium, .large])
+        .presentationBackground(Color.revlinePopover)
         .presentationDragIndicator(.visible)
         .interactiveDismissDisabled(store.busy)
     }

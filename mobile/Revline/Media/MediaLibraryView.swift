@@ -23,7 +23,7 @@ struct MediaLibraryView: View {
                     }.disabled(store.importProgress != nil)
                     Button("Choose from Files", systemImage: "folder") { files = true }
                         .disabled(store.importProgress != nil)
-                }
+                }.revlineRows()
                 Section {
                     TextField("Paste a video link", text: $link)
                         .keyboardType(.URL).textContentType(.URL)
@@ -36,13 +36,14 @@ struct MediaLibraryView: View {
                 } header: { Text("Video link") } footer: {
                     Text("Attach a source to your prompt, then describe how to use it.")
                 }
+                .revlineRows()
                 if let progress = store.importProgress {
                     Section {
                         ProgressView(store.importLabel, value: progress)
                         Button("Cancel upload", role: .destructive) { store.uploadTask?.cancel() }
-                    }
+                    }.revlineRows()
                 }
-                if let error = localError ?? store.error { Section { ErrorBanner(message: error) } }
+                if let error = localError ?? store.error { Section { ErrorBanner(message: error) }.revlineRows() }
                 if store.mediaTasks.contains(where: \.active) {
                     Section("Processing") {
                         ForEach(store.mediaTasks.filter(\.active)) { task in
@@ -50,7 +51,7 @@ struct MediaLibraryView: View {
                                 Text(task.kind == "import" ? "Importing video…" : "Preparing media…")
                             }
                         }
-                    }
+                    }.revlineRows()
                 }
                 Section("Project media") {
                     if store.assets.isEmpty {
@@ -60,12 +61,13 @@ struct MediaLibraryView: View {
                         Button { toggleAttachment(asset.id) } label: {
                             MediaAssetRow(asset: asset, attached: store.attachedAssetIDs.contains(asset.id))
                         }
-                        .foregroundStyle(.primary)
+                        .foregroundStyle(Color.revlineForeground)
                         .accessibilityLabel("\(asset.fileName), \(store.attachedAssetIDs.contains(asset.id) ? "attached" : "attach to prompt")")
                     }
-                }
+                }.revlineRows()
             }
             .listStyle(.insetGrouped)
+            .revlineSurface(.revlinePopover)
             .navigationTitle("Media").navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done", action: dismiss.callAsFunction) } }
             .fileImporter(isPresented: $files, allowedContentTypes: [.movie, .image, .audio], allowsMultipleSelection: true) { result in
@@ -80,6 +82,7 @@ struct MediaLibraryView: View {
                 photos = []
             }
         }
+        .presentationBackground(Color.revlinePopover)
     }
 
     private var canImportLink: Bool { !importingLink && !link.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }

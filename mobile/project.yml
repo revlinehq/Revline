@@ -52,7 +52,7 @@ targets:
         CFBundleURLTypes:
           - CFBundleURLSchemes: [com.revline.app]
         UIUserInterfaceStyle: Dark
-        UILaunchScreen: {UIColorName: LaunchBackground}
+        UILaunchScreen: {UIColorName: RevlineBackground}
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
         ITSAppUsesNonExemptEncryption: false
         NSPhotoLibraryAddUsageDescription: Save your exported Revline videos to your photo library.
