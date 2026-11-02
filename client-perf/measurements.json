@@ -1,0 +1,59 @@
+{
+  "method": "Production Next.js --profile, React profiling renderer commit hook and Chrome performance traces. DEV account and real projects. 4x CPU for chat search, 1x for composer. Heavy host swapping makes wall times noisy; these are lab EventTiming maxima, not field INP.",
+  "workloads": {
+    "search": "Type revline into 100 chats",
+    "composer": "Type Make the opening tighter and keep the best moments. into the podcast editor"
+  },
+  "runs": {
+    "before-chats-search-final": {
+      "reactCommits": 7,
+      "reactMs": 1728.9,
+      "dropdownRenders": 192,
+      "longTasks": 22,
+      "longTaskMs": 9214,
+      "layoutPasses": 28,
+      "layoutMs": 80.6,
+      "maxEventTimingMs": 1664
+    },
+    "after-chats-search-final": {
+      "reactCommits": 7,
+      "reactMs": 118.3,
+      "dropdownRenders": 0,
+      "longTasks": 5,
+      "longTaskMs": 1604,
+      "layoutPasses": 13,
+      "layoutMs": 60.3,
+      "maxEventTimingMs": 1072
+    },
+    "before-podcast-typing-clean": {
+      "reactCommits": 51,
+      "reactMs": 112.3,
+      "dropdownRenders": 102,
+      "longTasks": 21,
+      "longTaskMs": 1574,
+      "layoutPasses": 155,
+      "layoutMs": 537.0,
+      "maxEventTimingMs": 6520
+    },
+    "after-editor-typing-final": {
+      "reactCommits": 54,
+      "reactMs": 37.6,
+      "dropdownRenders": 0,
+      "longTasks": 4,
+      "longTaskMs": 735,
+      "layoutPasses": 54,
+      "layoutMs": 8.3,
+      "maxEventTimingMs": 2624
+    }
+  },
+  "bundle": {
+    "before": {
+      "chunks": 19,
+      "rawKiB": 1303.4
+    },
+    "after": {
+      "chunks": 19,
+      "rawKiB": 1303.7
+    }
+  }
+}
