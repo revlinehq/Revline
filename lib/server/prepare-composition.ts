@@ -6,7 +6,8 @@ import { extname, join } from 'node:path';
 import { timelineDuration, type MediaAsset, type Timeline } from '../editor/types';
 import { TEXT_FONTS } from '../editor/text-fonts';
 import { isTransitionClip } from '../editor/clip-transitions';
-import { isReactScene, usesSceneThree } from '../editor/scene-modules';
+import { SCENE_RUNTIME_BUNDLES } from '../editor/scene-modules';
+import { sceneLayerSources } from '../editor/scene-layers';
 import { generateComposition, type ExportResolution } from '../editor/composition';
 import { downloadOwnedMedia,probeMedia } from '../media-analysis/io';
 import { AnalysisError } from '../media-analysis/errors';
@@ -85,8 +86,13 @@ export async function prepareComposition(directory:string,timeline:Timeline,asse
   await copyFile(join(process.cwd(),'public/vendor/gsap.min.js'),join(directory,'gsap.min.js'));
   await copyFile(join(process.cwd(),'public/vendor/visual-effects.js'),join(directory,'visual-effects.js'));
   if(timeline.clips.some(clip=>clip.kind==='graphic'||clip.kind==='caption'||isTransitionClip(clip)))await copyFile(join(process.cwd(),'public/vendor/remotion-runtime.js'),join(directory,'remotion-runtime.js'));
-  if(timeline.clips.some(clip=>clip.kind==='scene')){await copyFile(join(process.cwd(),'public/vendor/scene-runtime.js'),join(directory,'scene-runtime.js'));await copyFile(join(process.cwd(),'public/vendor/lucide-icons.json'),join(directory,'lucide-icons.json'));if(timeline.clips.some(clip=>clip.kind==='scene'&&isReactScene(clip.scene?.code??'')))await copyFile(join(process.cwd(),'public/vendor/scene-react.js'),join(directory,'scene-react.js'));}
-  if(timeline.clips.some(clip=>clip.scene&&usesSceneThree(clip.scene)))await copyFile(join(process.cwd(),'public/vendor/scene-three.js'),join(directory,'scene-three.js'));
+  const scenes = [timeline, ...referenceTimelines].flatMap(source => sceneLayerSources(source));
+  const runtimes = new Set(scenes.flatMap(scene => scene.runtimes));
+  for (const name of runtimes) {
+    const file = SCENE_RUNTIME_BUNDLES[name].file;
+    await copyFile(join(process.cwd(), 'public/vendor', file), join(directory, file));
+  }
+  if (scenes.length) await copyFile(join(process.cwd(), 'public/vendor/lucide-icons.json'), join(directory, 'lucide-icons.json'));
   for(const font of TEXT_FONTS)await copyFile(join(process.cwd(),'public/fonts',font.fileName),join(directory,font.fileName));
   // Brand-kit fonts and screens render from local copies, like media: the renderer never depends on the network.
   const brandFonts=[...new Set(timeline.clips.flatMap(clip=>clip.kind==='scene'?[...clip.scene?.brand?.fonts.map(font=>font.url)??[],...clip.scene?.brand?.screens?.map(screen=>screen.url)??[]]:[]))];
@@ -102,7 +108,7 @@ export async function prepareComposition(directory:string,timeline:Timeline,asse
   return {assetUrls,audioSourceOffsets};
 }
 export async function linkCompositionResources(root:string,directory:string,assetUrls:Record<string,string>){
-  for(const name of [...Object.values(assetUrls).map(url=>url.slice(2)),'gsap.min.js','visual-effects.js','remotion-runtime.js','scene-runtime.js','scene-react.js','scene-three.js','lucide-icons.json',...TEXT_FONTS.map(font=>font.fileName),...(await readdir(root)).filter(name=>/^pixel-track-.+\.json$/.test(name))]){
+  for(const name of [...Object.values(assetUrls).map(url=>url.slice(2)),'gsap.min.js','visual-effects.js','remotion-runtime.js',...Object.values(SCENE_RUNTIME_BUNDLES).map(bundle=>bundle.file),'lucide-icons.json',...TEXT_FONTS.map(font=>font.fileName),...(await readdir(root)).filter(name=>/^pixel-track-.+\.json$/.test(name))]){
     try{await access(join(root,name));}catch{continue;}
     await link(join(root,name),join(directory,name));
   }
@@ -138,7 +144,7 @@ export async function writeComposition(directory:string,timeline:Timeline,assets
   // so it mixed an extra unity-gain, 1x copy of each source's first audible clip.
   // Author media in that same form so every clip's sound is mixed exactly once.
   const mediaSrc=(url:string)=>(prefix+url.slice(2)).replace(/^\.\//,'');
-  await writeFile(join(directory,'index.html'),generateComposition(rendered,assets,{duration,pixelTrackFiles:await localPixelTrackFiles(directory),resolution,fps,gsapUrl:prefix+'gsap.min.js',visualEffectsUrl:prefix+'visual-effects.js',remotionRuntimeUrl:prefix+'remotion-runtime.js',sceneRuntimeUrl:prefix+'scene-runtime.js',fontUrl:prefix+'space-grotesk-latin.woff2',fontUrls:Object.fromEntries(TEXT_FONTS.map(font=>[font.id,prefix+font.fileName])),assetUrls:Object.fromEntries(Object.entries(assetUrls).map(([id,url])=>[id,mediaSrc(url)]))}));
+  await writeFile(join(directory,'index.html'),generateComposition(rendered,assets,{duration,pixelTrackFiles:await localPixelTrackFiles(directory),resolution,fps,gsapUrl:prefix+'gsap.min.js',visualEffectsUrl:prefix+'visual-effects.js',remotionRuntimeUrl:prefix+'remotion-runtime.js',sceneRuntimeUrl:prefix+SCENE_RUNTIME_BUNDLES.gsap.file,fontUrl:prefix+'space-grotesk-latin.woff2',fontUrls:Object.fromEntries(TEXT_FONTS.map(font=>[font.id,prefix+font.fileName])),assetUrls:Object.fromEntries(Object.entries(assetUrls).map(([id,url])=>[id,mediaSrc(url)]))}));
 }
 /** Keep original times/animation phases and source holds for transitions in the window. */
 export function reviewWindowTimeline(timeline:Timeline,start:number,end:number):Timeline {

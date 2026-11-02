@@ -2,6 +2,7 @@ import { copyFileSync, mkdirSync, cpSync, existsSync, readFileSync, readdirSync,
 import { join } from 'node:path';
 import { build } from 'esbuild';
 import { patchHyperframesPlaybackRuntime } from './hyperframes-playback-compat.mjs';
+import { SCENE_RUNTIME_BUNDLES } from '../lib/editor/scene-modules.ts';
 mkdirSync('public/vendor', { recursive: true });
 copyFileSync('node_modules/gsap/dist/gsap.min.js', 'public/vendor/gsap.min.js');
 const hyperframesVersion=JSON.parse(readFileSync('node_modules/@hyperframes/core/package.json','utf8')).version;
@@ -23,18 +24,16 @@ await build({ entryPoints: ['lib/editor/remotion-transitions-runtime.ts'], outfi
   writeFileSync('public/vendor/lucide-icons.json',JSON.stringify(icons));
   copyFileSync('node_modules/lucide-react/LICENSE','public/vendor/lucide-LICENSE');
 }
-// Scene frames run author TypeScript (compiled in the frame by sucrase) against GSAP and its plugins.
-await build({ entryPoints: ['lib/editor/scene-runtime.ts'], outfile: 'public/vendor/scene-runtime.js', bundle: true, minify: true, platform: 'browser', target: 'es2020', format: 'iife', globalName: '__revlineSceneRuntime', legalComments: 'linked' });
-// React scenes (opt-in) load React and their frame adapter from a second file, so GSAP scene frames stay as small as before.
-await build({ entryPoints: ['lib/editor/scene-react-runtime.tsx'], outfile: 'public/vendor/scene-react.js', bundle: true, minify: true, platform: 'browser', target: 'es2020', format: 'iife', globalName: '__revlineSceneReact', jsx: 'automatic', define: { 'process.env.NODE_ENV': '"production"' }, legalComments: 'linked' });
 await build({ entryPoints: ['lib/editor/remotion-runtime.ts'], outfile: 'public/vendor/remotion-runtime.js', bundle: true, minify: true, platform: 'browser', target: 'es2020', format: 'iife', globalName: '__revlineRemotion', jsx: 'automatic', define: { 'process.env.NODE_ENV': '"production"' }, legalComments: 'linked' });
 
-// Optional 3D scene renderer shares React and scene contexts with scene-react.js.
-await build({ entryPoints: ['lib/editor/scene-three-runtime.tsx'], outfile: 'public/vendor/scene-three.js', bundle: true, minify: true, platform: 'browser', target: 'es2020', format: 'iife', globalName: '__revlineSceneThree', jsx: 'automatic', define: { 'process.env.NODE_ENV': '"production"' }, legalComments: 'linked',
-  plugins: [{ name: 'scene-shared-react', setup(build) {
-    build.onResolve({ filter: /^(react|react\/jsx-runtime)$/ }, args => ({ path: args.path, namespace: 'shared-react' }));
-    build.onLoad({ filter: /.*/, namespace: 'shared-react' }, args => ({ contents: `module.exports = window.__revlineSceneReact.modules[${JSON.stringify(args.path)}];` }));
-    build.onResolve({ filter: /^\.\/scene-react-runtime$/ }, () => ({ path: 'bridge', namespace: 'shared-scene' }));
-    build.onLoad({ filter: /.*/, namespace: 'shared-scene' }, () => ({ contents: 'module.exports = window.__revlineSceneReact.rendererBridge;' }));
-  } }],
-});
+// Build every advertised scene runtime from the shared import registry.
+for (const [name, bundle] of Object.entries(SCENE_RUNTIME_BUNDLES)) {
+  await build({ entryPoints: [bundle.entry], outfile: join('public/vendor', bundle.file), bundle: true, minify: true, platform: 'browser', target: 'es2020', format: 'iife', globalName: bundle.global, jsx: 'automatic', define: { 'process.env.NODE_ENV': '"production"' }, legalComments: 'linked',
+    plugins: name !== 'three' ? [] : [{ name: 'scene-shared-react', setup(build) {
+      build.onResolve({ filter: /^(react|react\/jsx-runtime)$/ }, args => ({ path: args.path, namespace: 'shared-react' }));
+      build.onLoad({ filter: /.*/, namespace: 'shared-react' }, args => ({ contents: `module.exports = window[${JSON.stringify(SCENE_RUNTIME_BUNDLES.react.global)}].modules[${JSON.stringify(args.path)}];` }));
+      build.onResolve({ filter: /^\.\/scene-react-runtime$/ }, () => ({ path: 'bridge', namespace: 'shared-scene' }));
+      build.onLoad({ filter: /.*/, namespace: 'shared-scene' }, () => ({ contents: `module.exports = window[${JSON.stringify(SCENE_RUNTIME_BUNDLES.react.global)}].rendererBridge;` }));
+    } }],
+  });
+}

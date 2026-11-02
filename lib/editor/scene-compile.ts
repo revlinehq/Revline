@@ -1,7 +1,7 @@
 import { parse, type AnyNode, type Node } from 'acorn';
 import globals from 'globals';
 import { transform } from 'sucrase';
-import { isReactScene, usesSceneThree, REACT_SCENE_MODULES, SCENE_MODULES, sceneTransformOptions, splitExportDeclarations } from './scene-modules';
+import { assertSceneImport, isReactScene, usesSceneThree, sceneTransformOptions, splitExportDeclarations } from './scene-modules';
 
 /** Catch syntax and import mistakes before a scene is saved; build and render errors surface in the preview. */
 export function checkSceneCode(code: string) {
@@ -14,7 +14,7 @@ export function checkSceneCode(code: string) {
     throw new Error(`Scene code does not compile: ${message}${near(code, message)}${!react && /<[A-Za-z]/.test(code) ? ' GSAP scenes are plain TypeScript, not JSX: build HTML with innerHTML or document.createElement, or import from "revline" to write a React scene.' : ''}`);
   }
   for (const match of compiled.matchAll(/require\(\s*['"]([^'"]+)['"]\s*\)/g)) {
-    if (!SCENE_MODULES.has(match[1]) && !(react && (REACT_SCENE_MODULES.has(match[1]) || match[1].startsWith('blueprint:')))) throw new Error(react ? `React scenes can import only revline, revline/three, three, react, gsap and blueprint:<name>, not "${match[1]}".` : `Scenes can import only gsap and its plugins, not "${match[1]}".`);
+    assertSceneImport(match[1], react);
   }
   if (!/exports\.default\s*=|exports,\s*["']default["']/.test(compiled)) throw new Error(react ? 'A React scene must export default its component.' : 'A scene must export default a function that builds it.');
   if (usesSceneThree({ code })) {

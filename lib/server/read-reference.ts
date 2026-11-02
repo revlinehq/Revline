@@ -11,7 +11,7 @@ import { followBox } from '@/lib/media-analysis/follow-box';
 import { describeSounds } from '@/lib/media-analysis/gemini';
 import { detectOnsets, SOUND_RATE, visualHits } from '@/lib/media-analysis/sound';
 import { mapMotion, motionWindow } from '@/lib/inspo-motion/motion-map';
-import { cropBounds } from '@/lib/ai/reference-comparison';
+import { cropBounds, referenceCropAt } from '@/lib/ai/reference-comparison';
 import { measure } from './blueprint-check';
 import { forEachLimited } from './run-limited';
 import { traceShape } from './trace-shape';
@@ -296,9 +296,19 @@ async function readSounds(path: string, directory: string, source: Source, work:
 async function readMotion(path: string, source: Source, work: Work, signal: AbortSignal, onProgress: (percent: number) => void): Promise<Result> {
   if (work.end - work.start < .3 || work.end - work.start > 12) throw new AnalysisError('Map 0.3 to 12 s.', 400);
   const fps = 30, from = Math.floor(Math.max(0, work.start - .5) * fps) / fps, to = Math.min(work.end + .5, source.duration);
-  const crop = work.compareCrop ? cropBounds(work.compareCrop, source.width, source.height) : undefined;
+  const region = referenceCropAt(work.start, work.compareCrop, work.referenceCropKeyframes);
+  const crop = region ? cropBounds(region, source.width, source.height) : undefined;
   const width = 320, height = Math.max(2, Math.round(width * (crop?.height ?? source.height) / (crop?.width ?? source.width)));
-  const filter = [...(crop ? [`crop=${crop.width}:${crop.height}:${crop.left}:${crop.top}`] : []), `fps=${fps}`, `scale=${width}:${height}`, 'format=gray'].join(',');
+  // Perspective maps a time-varying source rectangle onto a fixed canvas, including width/height changes.
+  // Decode on displayed axes at full resolution; only reduce after selecting the region.
+  const keys = work.referenceCropKeyframes;
+  const coordinate = (field: 'x' | 'y' | 'w' | 'h') => keys![0].crop[field] + keys!.slice(1).map((key, index) => {
+    const a = keys![index];
+    return `+(${key.crop[field] - a.crop[field]})*clip((${from}+on/${fps}-${a.time})/${key.time - a.time},0,1)`;
+  }).join('');
+  const x = keys ? coordinate('x') : '', y = keys ? coordinate('y') : '', w = keys ? coordinate('w') : '', h = keys ? coordinate('h') : '';
+  const selection = keys ? [`perspective=x0='W*(${x})':y0='H*(${y})':x1='W*((${x})+(${w}))':y1='H*(${y})':x2='W*(${x})':y2='H*((${y})+(${h}))':x3='W*((${x})+(${w}))':y3='H*((${y})+(${h}))':sense=source:eval=frame`] : crop ? [`crop=${crop.width}:${crop.height}:${crop.left}:${crop.top}`] : [];
+  const filter = [`fps=${fps}`, ...selection, `scale=${width}:${height}`, 'format=gray'].join(',');
   const { stdout } = await run('ffmpeg', ['-v', 'error', '-ss', from.toFixed(6), '-t', (to - from).toFixed(6), '-i', path, '-map', '0:v:0', '-vf', filter, '-f', 'rawvideo', '-'], { signal, timeout: 120_000, encoding: 'buffer', maxBuffer: 512 * 1024 * 1024 });
   const size = width * height, frames = Array.from({ length: Math.floor(stdout.length / size) }, (_, index) => new Uint8Array(stdout.buffer, stdout.byteOffset + index * size, size));
   if (frames.length < 3) throw new AnalysisError('No frames could be read in that window.', 400);

@@ -1,3 +1,4 @@
+import { SCENE_RUNTIME_BUNDLES } from './scene-modules';
 import { previewSourceAt } from './preview-segments';
 import { pixelTrackingSources } from './pixel-tracking-runtime';
 import { pixelTrackEndpoint } from '../media-analysis/pixel-track-reader';
@@ -258,7 +259,7 @@ export function generateComposition(timeline: Timeline, assets: MediaAsset[], op
     return [[id, source]];
   }));
   const rawFontUrls = Object.fromEntries(TEXT_FONTS.map(font => [font.id, options.fontUrls?.[font.id] ?? (font.id === 'space-grotesk' ? options.fontUrl ?? defaultFontUrl : /^https?:/i.test(options.gsapUrl ?? '') ? new URL(`/fonts/${font.fileName}`, options.gsapUrl).href : `/fonts/${font.fileName}`)]));
-  const sceneRuntimeUrl = options.sceneRuntimeUrl ?? (/^https?:/i.test(options.gsapUrl ?? '') ? new URL('/vendor/scene-runtime.js', options.gsapUrl).href : '/vendor/scene-runtime.js');
+  const sceneRuntimeUrl = options.sceneRuntimeUrl ?? (/^https?:/i.test(options.gsapUrl ?? '') ? new URL(`/vendor/${SCENE_RUNTIME_BUNDLES.gsap.file}`, options.gsapUrl).href : `/vendor/${SCENE_RUNTIME_BUNDLES.gsap.file}`);
   mediaUrl(sceneRuntimeUrl);
   // Reserve runtime ownership before GSAP becomes discoverable. Otherwise a
   // late runtime leaves HyperFrames controlling its cached direct-GSAP adapter.
