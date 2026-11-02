@@ -1,11 +1,13 @@
 import { execFile, spawn } from 'node:child_process';
-import { availableParallelism, platform } from 'node:os';
+import { platform } from 'node:os';
+import { previewResources } from './processing-resources';
+import { previewChunkBoundaries } from './preview-chunks';
 import { resolve } from 'node:path';
 import { readFile, writeFile, rm } from 'node:fs/promises';
 import { promisify } from 'node:util';
 import { z } from 'zod';
 import { forEachLimited } from './run-limited';
-import { paddedPreviewRanges, previewChunks, type SourceRange } from '../editor/preview-segments';
+import { previewChunks, type SourceRange } from '../editor/preview-segments';
 
 const run = promisify(execFile);
 const streamSchema = z.object({
@@ -145,17 +147,6 @@ export async function runPreviewFfmpeg(
   });
 }
 
-export function previewResources() {
-  const configured = Number(process.env.MEDIA_PREVIEW_CPUS),
-    available = availableParallelism();
-  const cpus = Math.max(
-    1,
-    Math.min(4, available, Number.isInteger(configured) && configured > 0 ? configured : available),
-  );
-  const parallel = Math.min(2, cpus),
-    threads = Math.max(1, Math.floor(cpus / parallel));
-  return { parallel, threads };
-}
 export async function previewEncoder(signal: AbortSignal) {
   if (platform() === 'darwin' && process.env.MEDIA_PREVIEW_HARDWARE !== '0') {
     // Listing an encoder does not prove that this worker can open a hardware session.
@@ -256,72 +247,6 @@ export async function hasScrubbableKeyframes(input: string, signal: AbortSignal,
   return true;
 }
 
-/** Boundaries land on source frames, including VFR, so a segment never shows the next frame early. */
-export async function previewChunkBoundaries(
-  input: string,
-  source: Awaited<ReturnType<typeof inspectPreviewVideo>>,
-  signal: AbortSignal,
-  ranges: SourceRange[] = [],
-) {
-  const targets = [
-    ...new Set([
-      0,
-      ...Array.from({ length: Math.ceil(source.duration / 30) }, (_, index) => index * 30),
-      ...paddedPreviewRanges(source.duration, ranges).flatMap((range) => [range.start, range.end]),
-    ]),
-  ]
-    .filter((value) => value < source.duration)
-    .sort((a, b) => a - b);
-  const firstInBucket = new Map<number, number>();
-  await new Promise<void>((resolve, reject) => {
-    const child = spawn(
-      'ffprobe',
-      [
-        '-v',
-        'error',
-        '-select_streams',
-        'v:0',
-        '-show_packets',
-        '-show_entries',
-        'packet=pts_time',
-        '-of',
-        'csv=p=0',
-        input,
-      ],
-      { signal, stdio: ['ignore', 'pipe', 'pipe'] },
-    );
-    let pending = '',
-      stderr = '';
-    child.stdout.setEncoding('utf8');
-    child.stderr.setEncoding('utf8');
-    child.stdout.on('data', (data: string) => {
-      pending += data;
-      const lines = pending.split('\n');
-      pending = lines.pop() ?? '';
-      for (const line of lines) {
-        const time = Number.parseFloat(line) - source.origin;
-        if (!Number.isFinite(time) || time <= 0 || time >= source.duration) continue;
-        let low = 0,
-          high = targets.length;
-        while (low < high) {
-          const middle = (low + high) >>> 1;
-          if (targets[middle] <= time) low = middle + 1;
-          else high = middle;
-        }
-        const bucket = low - 1;
-        if (bucket > 0 && time < (firstInBucket.get(bucket) ?? Infinity)) firstInBucket.set(bucket, time);
-      }
-    });
-    child.stderr.on('data', (data: string) => {
-      stderr = (stderr + data).slice(-4096);
-    });
-    child.on('error', reject);
-    child.on('close', (code) =>
-      code === 0 ? resolve() : reject(new Error(`Could not read source frame boundaries: ${stderr}`)),
-    );
-  });
-  return [0, ...[...firstInBucket.values()].sort((a, b) => a - b)];
-}
 
 type EncodeOptions = {
   encoder: string;
@@ -528,12 +453,12 @@ export async function preparePreviewVideo(
       onProgress(Math.min(100, (seconds / source.duration) * 100)),
     );
   } else {
-    const { parallel, threads } = previewResources(),
-      encoder = await previewEncoder(signal),
+    const encoder = await previewEncoder(signal),
       ranges = options.ranges ?? [];
     const boundaries = await previewChunkBoundaries(input, source, signal, ranges),
       { priority, background } = previewChunks(source.duration, ranges, boundaries);
     const chunks = [...priority, ...background].map((range, index) => ({ ...range, path: `${output}.${index}.mp4` }));
+    const { parallel, threads } = previewResources(chunks.length);
     const priorityStarts = new Set(priority.map((range) => range.start)),
       total = priority.reduce((sum, range) => sum + range.end - range.start, 0),
       progress = new Map<number, number>();

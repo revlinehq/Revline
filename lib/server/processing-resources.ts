@@ -9,7 +9,8 @@ export function processingThreads() {
 
 /** Divide the host budget between simultaneous preview chunks, including short sources. */
 export function previewResources(chunks: number) {
-  const configured = Number(process.env.MEDIA_PREVIEW_CPUS ?? processingThreads());
+  const defaultBudget=process.env.MEDIA_PROCESSOR_THREADS===undefined?Math.min(4,availableParallelism()):processingThreads();
+  const configured = Number(process.env.MEDIA_PREVIEW_CPUS ?? defaultBudget);
   if (!Number.isInteger(configured) || configured < 1 || configured > 64) throw new Error('MEDIA_PREVIEW_CPUS must be between 1 and 64.');
   const cpus = Math.min(configured, availableParallelism());
   const parallel = Math.max(1, Math.min(2, cpus, chunks));
