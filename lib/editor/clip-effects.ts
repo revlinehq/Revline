@@ -163,16 +163,16 @@ export function validateClipEffects(clip: Clip) {
   if ((clip.motion?.length || clip.blendMode) && clip.kind === 'audio') throw new Error('Visual effects cannot be applied to audio.');
   if (clip.motionOffset !== undefined && (!Number.isFinite(clip.motionOffset))) throw new Error('Invalid motion offset.');
   if (!clip.motion) return;
-  if (clip.motion.length > 120) throw new Error('Use at most 120 motion keyframes per clip.');
+  if (clip.motion.length > 3604) throw new Error('Use at most 3604 motion keyframes per clip.');
   for (const [index, key] of clip.motion.entries()) {
     if (!Number.isFinite(key.time) || key.time < 0 || (index > 0 && key.time <= clip.motion[index - 1].time)) throw new Error('Motion keyframes need finite, increasing nonnegative times.');
     for (const property of Object.keys(bounds) as (keyof typeof bounds)[]) {
       // Centering a zoomed edge target can legitimately translate by more than
       // one canvas width. Keep ordinary text/FX limits; allow the camera keys
       // room for the inverse of an existing small or rotated static transform.
-      // Image object paths also invert their parent transform; their public
+      // Image and video object paths invert their parent transform; their public
       // canvas offsets stay bounded to one width/height before compilation.
-      const [min, max] = property === 'x' || property === 'y' ? (clip.cameraMotion || clip.smoothZoom) ? [-16, 16] : clip.kind === 'image' ? [-32, 32] : bounds[property] : bounds[property];
+      const [min, max] = property === 'x' || property === 'y' ? (clip.cameraMotion || clip.smoothZoom) ? [-16, 16] : (clip.kind === 'image' || clip.kind === 'video') ? [-32, 32] : bounds[property] : bounds[property];
       if (!Number.isFinite(key[property]) || key[property] < min || key[property] > max) throw new Error(`Motion ${property} is out of range.`);
     }
   }

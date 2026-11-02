@@ -1,3 +1,4 @@
+import { pixelTrackRequest, trackSeed, trackBox, type PixelTrackRequest, type PixelTrackResult } from '../../lib/media-analysis/pixel-track';
 import { completionRepairFeedback } from '../../lib/ai/tool-failures';
 import { editModeInstructions, PRECISE_ONLY_TOOLS, type EditorEditMode } from '../../lib/ai/edit-mode';
 import { FastFrameReview } from '../../lib/ai/fast-frame-review';
@@ -153,7 +154,7 @@ const GUARD_LIMIT = .002;
 /** Shown with approved work in inspectTimeline and inspectClip. */
 const APPROVED_RULE = 'Approved clips and sections are signed off by the user. Every editing tool refuses to change them. Edit around them; change one only when the user names it, by passing overrideApproved: true with overrideReason quoting the user.';
 /** Tools that never change clips, so they take no approved-work override. */
-const APPROVAL_FREE_TOOLS = new Set(['listTimelines', 'createTimeline', 'openTimeline', 'importVideoLink', 'getMediaTask', 'exportVideo', 'usePreciseMode', 'compareMotion', 'motionMap', 'planEffects', 'previewRender', 'inspectTimeline', 'inspectClip', 'diffScene', 'recordFix', 'analyzeMedia', 'inspectReference', 'inspectVideo', 'inspectFrames', 'inspectAssetAnalysis', 'markMusicBeats', 'addMarker', 'moveMarker', 'removeMarker', 'removeMarkers', 'remember', 'recallMemory', 'forget', 'compareReference', 'getFrames', 'askUser', 'askBrandKit', 'measureScreen', 'compareScreen', 'readFrames', 'listenReference', 'trackReference', 'measureFrame', 'matchFont', 'traceShape', 'findIcon', 'saveBlueprint', 'listBlueprints', 'getBlueprint', 'readSkill', 'listBrandKits', 'getBrandKit', 'createBrandKit', 'updateBrandKit', 'listVoices', 'analyzeColor', 'addLayer', 'approveClip', 'unapproveClip', 'getSound', 'checkSound', 'readBrief', 'updateBrief']);
+const APPROVAL_FREE_TOOLS = new Set(['listTimelines', 'createTimeline', 'openTimeline', 'importVideoLink', 'getMediaTask', 'exportVideo', 'usePreciseMode', 'compareMotion', 'motionMap', 'planEffects', 'previewRender', 'inspectTimeline', 'inspectClip', 'diffScene', 'recordFix', 'analyzeMedia', 'inspectReference', 'inspectVideo', 'inspectFrames', 'inspectAssetAnalysis', 'markMusicBeats', 'addMarker', 'moveMarker', 'removeMarker', 'removeMarkers', 'remember', 'recallMemory', 'forget', 'compareReference', 'getFrames', 'askUser', 'askBrandKit', 'measureScreen', 'compareScreen', 'readFrames', 'listenReference', 'trackReference', 'measureFrame', 'matchFont', 'traceShape', 'findIcon', 'saveBlueprint', 'listBlueprints', 'getBlueprint', 'readSkill', 'listBrandKits', 'getBrandKit', 'createBrandKit', 'updateBrandKit', 'listVoices', 'analyzeColor', 'trackPoints', 'addLayer', 'approveClip', 'unapproveClip', 'getSound', 'checkSound', 'readBrief', 'updateBrief']);
 
 /** The timeline windows a scene build covers. A film's beats are cuts of one continuous animation, so it is one window. */
 /** A getSound or checkSound result as the agent reads it: lists short enough to scan, one line per second of levels. */
@@ -323,7 +324,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
   const loadAsset=async(assetId:string)=>{const asset=await ctx.runQuery(internal.assistant.getRunAsset,{...run,assetId});const index=assets.findIndex(item=>item._id===asset._id);if(index<0)throw new Error('Choose media from this project');assets[index]=asset;return asset;};
   const savedCheckpoint=async(assetId:string,edit:(timeline:Timeline)=>Timeline)=>{await loadAsset(assetId);return checkpoint(edit);};
   // Processed copies (freeze stills, smooth slow motion, upscales) come from the media worker.
-  type DeriveInput={clipId:string;assetId:string;op:'freeze'|'slowmo'|'upscale'|'stats';start:number;end:number;time?:number;times?:number[];factor?:number;target?:number;fps?:number;placeLater:boolean};
+  type DeriveInput={clipId:string;assetId:string;op:'freeze'|'slowmo'|'upscale'|'stats'|'pixelTrack';tracking?:PixelTrackRequest;start:number;end:number;time?:number;times?:number[];factor?:number;target?:number;fps?:number;placeLater:boolean};
   const derive=(input:DeriveInput)=>ctx.runMutation(internal.derivations.startFromRun,{...run,...input});
   const adoptAsset=async(assetId:string)=>{const asset=await ctx.runQuery(internal.assistant.getRunAsset,{...run,assetId});const index=assets.findIndex(item=>item._id===asset._id);if(index<0)assets.push(asset);else assets[index]=asset;return asset;};
   // Color measured on the worker from a clip's source frames at timeline moments (default: three across the clip).
@@ -340,6 +341,48 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       if(row.status==='completed'&&row.stats)return row.stats as ColorStats[];
       if(Date.now()>deadline)throw new AnalysisStepError('Color measurement is taking too long. Try again in a minute.');
       await new Promise(resolve=>setTimeout(resolve,700));
+    }
+  };
+  const pixelSeedInput = z.union([trackSeed, z.object({ kind: z.literal('object'), noun: z.string().trim().min(1).max(120) }).strict(), z.object({ kind: z.literal('target'), targetId: z.string().min(1) }).strict()]);
+  const trackInput = z.object({ footageClipId: z.string().min(1), time: z.number().nonnegative(), seed: pixelSeedInput, start: z.number().nonnegative().optional(), end: z.number().positive().optional() }).strict();
+  const readPixelTrack = async (trackId: string, footage: Clip): Promise<PixelTrackResult & { trackId: string }> => {
+    const row = await ctx.runQuery(internal.derivations.runStatus, { ...run, derivationId: trackId });
+    if (row.sourceAssetId !== footage.assetId) throw new Error('This track belongs to different source footage.');
+    if (row.status !== 'completed' || !row.pixelTrack) throw new Error(row.error ?? 'The pixel track is not ready. Run trackPoints first.');
+    return { trackId, ...row.pixelTrack };
+  };
+  const measurePixelTrack = async (input: z.infer<typeof trackInput>) => {
+    await editSession.wait();
+    const footage = find(editSession.timeline, input.footageClipId);
+    if (footage.kind !== 'video' || !footage.assetId) throw new Error('Choose an uploaded video clip.');
+    const asset = await loadAsset(footage.assetId), start = input.start ?? footage.start, end = input.end ?? footage.start + footage.duration;
+    if (start < footage.start || end > footage.start + footage.duration + 1e-6 || input.time < start || input.time >= end) throw new Error('Seed time and tracking window must be inside the footage clip, in timeline seconds.');
+    let time = sourceTimeAt(footage, input.time);
+    let seed: PixelTrackRequest['seed'];
+    if (input.seed.kind === 'target') {
+      const target = zoomTargets.get(input.seed.targetId);
+      if (!target || target.assetId !== asset._id || Math.abs(target.time - time) > 1 / (target.sourceFps ?? 30) + 1e-6 || target.confidence === 'low') throw new Error('Use a confident inspectFrames target on this source at the seed time.');
+      seed = { kind: 'box', box: target.box }; time = target.time;
+    } else if (input.seed.kind === 'object') {
+      const frameRequest = { start: Math.max(footage.sourceStart, time - .02), end: Math.min(sourceEndOf(footage), time + .06), question: `Locate exactly one unambiguous ${input.seed.noun} for pixel tracking. Return its tight source-coordinate box. Return no targets if absent, occluded or ambiguous.` };
+      seed = await withAnalysis(asset._id, 'frames', async request => {
+        const targets = request.frameInspection?.targets?.filter(target => target.confidence !== 'low').sort((a, b) => Math.abs(a.time - time) - Math.abs(b.time - time)) ?? [];
+        const target = targets[0];
+        if (!target || targets.filter(item => item.frameIndex === target.frameIndex).length !== 1) throw new Error('The noun could not be localized unambiguously. Inspect the frame and choose a point or box.');
+        time = target.time;
+        return { kind: 'box' as const, box: trackBox.parse(target.box) };
+      }, { frameRequest });
+    } else seed = input.seed;
+    const tracking = pixelTrackRequest.parse({ start: sourceTimeAt(footage, start), end: sourceTimeAt(footage, end), time, seed });
+    const started = await derive({ clipId: footage.id, assetId: asset._id, op: 'pixelTrack', tracking, start: tracking.start, end: tracking.end, placeLater: false });
+    const deadline = Date.now() + 260_000;
+    while (true) {
+      abortSignal.throwIfAborted();
+      const row = await ctx.runQuery(internal.derivations.runStatus, { ...run, derivationId: started.derivationId });
+      if (row.status === 'failed') throw new AnalysisStepError(row.error ?? 'Pixel tracking failed.');
+      if (row.status === 'completed' && row.pixelTrack) return { trackId: started.derivationId, ...row.pixelTrack };
+      if (Date.now() > deadline) throw new AnalysisStepError(`Pixel tracking is still processing. Reuse trackId ${started.derivationId} with attachToTrack after it completes.`);
+      await new Promise(resolve => setTimeout(resolve, 700));
     }
   };
   const curveInput=z.array(z.tuple([z.number().min(0).max(1),z.number().min(0).max(1)])).min(2).max(16);
@@ -787,7 +830,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       const { code, blueprints, ...scene } = clip.scene!;
       return { ...result, clip: { ...clip, scene: { ...scene, codeCharacters: code.length, ...(blueprints ? { blueprints: blueprints.map(({ code: body, ...blueprint }) => ({ ...blueprint, codeCharacters: body.length })) } : {}) } }, sceneCode };
     } }),
-    analyzeMedia: createTool({ description: "Request real analysis of this project's uploaded media through durable background jobs. Transcribe word-timed speech, create a native Gemini video overview, measure music beats, track a visible face, or break down a reference video (mode reference: measured cuts, beats and moments (every change at 10 fps, motion inside a shot too, with M ids and the shot each falls in), every shot split into its parts, transitions, camera, title styles and the style worth borrowing; use it when the user shares footage to remake or to take style from, and read the reference-footage skill first). mode track uses face detection only; for a can or other object use inspectFrames and configureCameraMotion mode follow. Use inspectVideo with the actual user question to find specific visual moments; a generic overview is not an answer to every editing question. Saved results are usable immediately; never invent unavailable results.", inputSchema: z.object({ assetId: z.string(), mode: z.enum(["transcribe", "understand", "beats", "track", "reference"]) }), execute: async (_ctx, input) => {
+    analyzeMedia: createTool({ description: "Request real analysis of this project's uploaded media through durable background jobs. Transcribe word-timed speech, create a native Gemini video overview, measure music beats, track a visible face, or break down a reference video (mode reference: measured cuts, beats and moments (every change at 10 fps, motion inside a shot too, with M ids and the shot each falls in), every shot split into its parts, transitions, camera, title styles and the style worth borrowing; use it when the user shares footage to remake or to take style from, and read the reference-footage skill first). mode track uses face detection only; for other objects and moving-camera footage use trackPoints and attachToTrack. Use inspectVideo with the actual user question to find specific visual moments; a generic overview is not an answer to every editing question. Saved results are usable immediately; never invent unavailable results.", inputSchema: z.object({ assetId: z.string(), mode: z.enum(["transcribe", "understand", "beats", "track", "reference"]) }), execute: async (_ctx, input) => {
       return reportAnalysisFailure(async () => {
       const asset = await analyze(input.assetId, input.mode);
       return { analyzed: true, assetId: asset._id, mode: input.mode, ...(input.mode === "transcribe" ? { segmentCount: asset.analysis?.transcript?.segments.length, wordCount: asset.analysis?.transcript?.words.length } : {}), ...(input.mode === "understand" ? { summary: asset.analysis?.understanding?.summary, sceneCount: asset.analysis?.understanding?.scenes.length } : {}), ...(input.mode === "beats" ? { bpm: asset.analysis?.beats?.bpm, beatCount: asset.analysis?.beats?.beats.length, downbeatCount: asset.analysis?.beats?.downbeats?.length ?? 0, accentCount: asset.analysis?.beats?.accents?.length ?? 0, dropCandidateCount: asset.analysis?.beats?.dropCandidates?.length ?? 0, engine: asset.analysis?.beats?.engine, confidence: asset.analysis?.beats?.confidence } : {}), ...(input.mode === "track" ? { sampleCount: asset.analysis?.focus?.length } : {}), ...(input.mode === "reference" ? referenceSummary(asset) : {}) };
@@ -1359,21 +1402,26 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       const keys = bakeMaskAnchors(input.keyframes.map(key => ({ ...key, rotation: key.rotation ?? 0, feather: key.feather ?? 0 })), clip.motionOffset ?? 0);
       return patchClip(t, clip.id, { mask: { shape: input.shape, ...(input.invert ? { invert: true } : {}), ...(input.radius !== undefined ? { radius: input.radius } : {}), ...(input.points ? { points: input.points } : {}), ...(input.text ? { text: input.text } : {}), keys } });
     }) }),
-    attachToTrack: createTool({ description: "Make something follow a moving subject in a footage clip (a video with fixed framing: no camera motion, subject-follow crop or keyframes). target 'subject' uses Revline's subject tracker on the footage (runs it in the background first if needed); or give points: 2–120 {time: TIMELINE seconds, x, y: fractions 0..1 of the source frame} read from inspectFrames boxes for any other object (a license plate, a laptop, a ball). mode 'move' (default): clipId is an overlay (text, image, arrow/emoji graphic, solid, or video) whose center follows the target, plus offsetX/offsetY canvas fractions (e.g. offsetY -0.18 to sit above a head); replaces its motion. mode 'mask': clipId is the footage itself or a copy of it on a higher V layer; it gets a mask (mask.shape/width/height/feather/invert) centered on the target as it moves, e.g. duplicate the footage, setVisualEffects softBlur on the copy, then attach an ellipse mask to blur only a face or plate; or invert on a dimmed copy for a tracking spotlight. Saves immediately.", inputSchema: z.object({ clipId: z.string().min(1), footageClipId: z.string().min(1), target: z.union([z.literal('subject'), z.object({ points: z.array(z.object({ time: z.number().min(0), x: z.number().min(0).max(1), y: z.number().min(0).max(1) }).strict()).min(2).max(120) }).strict()]), mode: z.enum(['move', 'mask']).optional(), offsetX: z.number().min(-1).max(1).optional(), offsetY: z.number().min(-1).max(1).optional(), mask: z.object({ shape: z.enum(MASK_SHAPES), width: z.number().min(.005).max(4), height: z.number().min(.005).max(4), feather: z.number().min(0).max(200).optional(), invert: z.boolean().optional(), radius: z.number().min(0).max(.5).optional(), text: z.string().min(1).max(40).optional() }).strict().optional() }).strict(), execute: async (_ctx, input) => {
+    trackPoints: createTool({ description: "Track actual pixels forward AND backward from one TIMELINE seed time through a video, including moving cameras and gameplay. Read skill vfx page tracking. seed: {kind:'point',x,y} or {kind:'box',box:{left,top,right,bottom}} in normalized SOURCE coordinates from inspectFrames, {kind:'target',targetId} from inspectFrames at that time, or {kind:'object',noun:'red crate'} localized once automatically. Optional start/end are TIMELINE bounds, default whole clip; at most 30 SOURCE seconds / 3600 decoded frames. CPU worker returns dense per-frame SOURCE timestamps, confidence, box scale/rotation relative to seed, and stop reasons at cuts, occlusion, frame exit or unreliable evidence. No timeline changes. Reuse trackId with attachToTrack for multiple overlays. It does not guess hidden positions or resume past an occlusion.", inputSchema: trackInput, execute: async (_ctx, input) => reportAnalysisFailure(() => measurePixelTrack(input)) }),
+    attachToTrack: createTool({ description: "Attach text, image, graphic/hit marker, solid/glow or video to tracked pixels on moving-camera footage. target {trackId} reuses trackPoints; or {time,seed,start?,end?} runs it now, with TIMELINE seconds and the same point/box/targetId/noun seed. target 'subject' preserves face tracking, and legacy {points} remains supported. mode move follows the center plus offsetX/offsetY canvas fractions and hides the overlay outside the visible tracked range. Box tracks also follow scale/rotation unless followTransform:false. smoothing 0..1 defaults .35, a symmetric jitter filter. mode mask needs mask:{shape,width,height}; it animates its center/size/rotation on the footage or a synchronized copy. Saves immediately through the shared preview/export motion runtime.", inputSchema: z.object({ clipId: z.string().min(1), footageClipId: z.string().min(1), target: z.union([z.literal('subject'), z.object({ points: z.array(z.object({ time: z.number().min(0), x: z.number().min(0).max(1), y: z.number().min(0).max(1) }).strict()).min(2).max(120) }).strict(), z.object({ trackId: z.string().min(1) }).strict(), trackInput.omit({ footageClipId: true })]), mode: z.enum(['move', 'mask']).optional(), smoothing: z.number().min(0).max(1).optional(), followTransform: z.boolean().optional(), offsetX: z.number().min(-1).max(1).optional(), offsetY: z.number().min(-1).max(1).optional(), mask: z.object({ shape: z.enum(MASK_SHAPES), width: z.number().min(.005).max(4), height: z.number().min(.005).max(4), feather: z.number().min(0).max(200).optional(), invert: z.boolean().optional(), radius: z.number().min(0).max(.5).optional(), text: z.string().min(1).max(40).optional() }).strict().optional() }).strict(), execute: async (_ctx, input) => {
+      await editSession.wait();
       const selected = find(editSession.timeline, input.footageClipId), source = selected.assetId ? await loadAsset(selected.assetId) : undefined;
       if (!source) throw new Error('Choose an uploaded footage clip to track.');
       if (input.target === 'subject' && !source.analysis?.focus?.length) await analyze(source._id, 'track');
-      return checkpoint(t => {
+      const pixelTrack = input.target !== 'subject' && 'trackId' in input.target ? await readPixelTrack(input.target.trackId, selected) : input.target !== 'subject' && 'seed' in input.target ? await measurePixelTrack({ ...input.target, footageClipId: input.footageClipId }) : undefined;
+      const applied = await checkpoint(t => {
         const footage = find(t, input.footageClipId), clip = find(t, input.clipId), asset = assets.find(item => item._id === footage.assetId);
+        if (footage.assetId !== selected.assetId) throw new Error('The source changed during tracking. Track the new footage before attaching.');
         if (!asset) throw new Error('The footage media is unavailable.');
-        const samples = input.target === 'subject' ? asset.analysis?.focus ?? [] : pointsToSamples(footage, input.target.points);
+        const samples = pixelTrack?.samples ?? (input.target === 'subject' ? asset.analysis?.focus ?? [] : 'points' in input.target ? pointsToSamples(footage, input.target.points) : []);
         if (!samples.length) throw new Error('No moving subject was detected in this footage. Give points from inspectFrames instead.');
         if ((input.mode ?? 'move') === 'mask') {
           if (!input.mask) throw new Error('Mask mode needs mask: {shape, width, height}.');
-          return patchClip(t, clip.id, attachMaskPatch(clip, footage, asset, t.aspectRatio, samples, input.mask));
+          return patchClip(t, clip.id, attachMaskPatch(clip, footage, asset, t.aspectRatio, samples, input.mask, { smoothing: input.smoothing, followTransform: input.followTransform, fps: t.fps, seedTime: pixelTrack?.seedTime, visibleUntil: pixelTrack?.forward.time }));
         }
-        return patchClip(t, clip.id, attachOverlayPatch(clip, footage, asset, t.aspectRatio, samples, { x: input.offsetX ?? 0, y: input.offsetY ?? 0 }));
+        return patchClip(t, clip.id, attachOverlayPatch(clip, footage, asset, t.aspectRatio, samples, { x: input.offsetX ?? 0, y: input.offsetY ?? 0 }, { smoothing: input.smoothing, followTransform: input.followTransform, fps: t.fps, seedTime: pixelTrack?.seedTime, visibleUntil: pixelTrack?.forward.time }));
       });
+      return pixelTrack ? { ...applied, tracking: { trackId: pixelTrack.trackId, sampleCount: pixelTrack.samples.length, seedTime: pixelTrack.seedTime, firstSourceTime: pixelTrack.samples[0].time, lastSourceTime: pixelTrack.samples[pixelTrack.samples.length - 1].time, minConfidence: pixelTrack.samples.reduce((minimum, sample) => Math.min(minimum, sample.confidence), 1), backward: pixelTrack.backward, forward: pixelTrack.forward } } : applied;
     } }),
     setMotionBlur: createTool({ description: "Set motion blur on keyframed movement (animateClip paths on video, image, text or solid clips; camera paths keep their own blurAmount). amount 0..1 (0 off; .5 natural; 1 strong): slides and pans get directional blur along the motion, scale pops and punch-ins get radial blur, both scaled by speed so held frames stay sharp. Use for premium-feeling pop-ins, slides and whip moves. Saves immediately.", inputSchema: z.object({ clipIds: clipIdsInput, amount: z.number().min(0).max(1) }).strict(), execute: async (_ctx, input) => checkpoint(t => {
       let next = t;

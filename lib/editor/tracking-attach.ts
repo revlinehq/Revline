@@ -1,38 +1,62 @@
+import { MAX_TRACK_FRAMES } from '../media-analysis/pixel-track';
+import { boundedCameraMotion } from './camera-framing';
+import { motionAt, NEUTRAL_MOTION } from './motion-path';
 import { objectMotionPatch } from '../ai/object-motion';
-import { solidColorSettings } from './clip-effects';
+import { solidColorSettings, visibleMotion } from './clip-effects';
 import { bakeMaskAnchors, type ClipMask, type MaskShape } from './masks';
 import { sourceTimeAt, timelineTimeAtSource } from './playback-rate';
 import { DEFAULT_TRANSFORM, dimensions, type AspectRatio, type Clip, type MediaAsset } from './types';
 import { calculateVisualRect } from './visual-source-geometry';
 
 /** A tracked point: source seconds of the footage, and its position as fractions of the source frame. */
-export type TrackSample = { time: number; x: number; y: number };
+export type TrackSample = { time: number; x: number; y: number; confidence?: number; scale?: number; rotation?: number };
 const MAX_KEYS = 110;
+export type TrackAttachmentOptions = { smoothing?: number; followTransform?: boolean; fps?: number; seedTime?: number; visibleUntil?: number };
 
-/** Footage must hold still on the canvas for its pixels to map to fixed canvas positions. */
-function assertStillFraming(footage: Clip) {
+/** Tracking geometry applies to visual source clips. */
+function assertFootage(footage: Clip) {
   if (footage.kind !== 'video' && footage.kind !== 'image') throw new Error('Track a video or image clip.');
-  if (footage.cameraMotion || footage.smoothZoom || footage.focus?.length || footage.motion?.length) throw new Error('This footage is reframed by camera motion, subject-follow or keyframes. Attach to footage with fixed framing.');
 }
 
-/** A source-frame point to canvas fractions, through fit, crop and the footage's static transform. */
-function footageToCanvas(footage: Clip, asset: Pick<MediaAsset, 'width' | 'height'>, aspectRatio: AspectRatio, x: number, y: number) {
+/** Source pixels through the same aperture, focus, motion and static placement as composition.ts. */
+function footageMapper(footage: Clip, asset: Pick<MediaAsset, 'width' | 'height'>, aspectRatio: AspectRatio) {
   const { width, height } = dimensions(aspectRatio);
   if (!(asset.width! > 0 && asset.height! > 0)) throw new Error('The footage has no recorded dimensions. Re-import it.');
-  const rect = calculateVisualRect(asset.width!, asset.height!, width, height, footage.crop, undefined, footage.fit === 'contain' ? 'contain' : 'cover');
-  const frameX = rect.left + x * rect.width, frameY = rect.top + y * rect.height;
+  const focusAt = (at: number) => {
+    const keys = footage.focus ?? [], after = keys.findIndex(key => key.time >= at);
+    if (after <= 0) return keys[after < 0 ? keys.length - 1 : 0];
+    const a = keys[after - 1], b = keys[after], mix = (at - a.time) / (b.time - a.time);
+    return { time: at, x: a.x + (b.x - a.x) * mix, y: a.y + (b.y - a.y) * mix };
+  };
+  const fit = footage.fit === 'contain' ? 'contain' : 'cover';
+  const aperture = calculateVisualRect(asset.width!, asset.height!, width, height, footage.crop, focusAt(footage.sourceStart), fit).window;
+  const keys = boundedCameraMotion(footage, asset, aspectRatio, visibleMotion(footage));
   const transform = { ...DEFAULT_TRANSFORM, ...footage.transform }, angle = transform.rotation * Math.PI / 180;
-  // The frame is canvas-sized, offset to transform.x/y and scaled/rotated about its center.
-  const dx = (frameX - width / 2) * transform.scale, dy = (frameY - height / 2) * transform.scale;
-  return { frame: { x: frameX / width, y: frameY / height }, canvas: { x: transform.x + (dx * Math.cos(angle) - dy * Math.sin(angle)) / width, y: transform.y + (dx * Math.sin(angle) + dy * Math.cos(angle)) / height } };
+  return (x: number, y: number, time: number) => {
+    const rect = calculateVisualRect(asset.width!, asset.height!, width, height, footage.crop, focusAt(time), fit);
+    const motion = keys.length ? motionAt(keys, timelineTimeAtSource(footage, time) - footage.start) : NEUTRAL_MOTION;
+    const localX = aperture.left + rect.left - rect.window.left + x * rect.width - width / 2, localY = aperture.top + rect.top - rect.window.top + y * rect.height - height / 2, radians = motion.rotation * Math.PI / 180;
+    const frameX = width / 2 + motion.x * width + motion.scale * (localX * Math.cos(radians) - localY * Math.sin(radians));
+    const frameY = height / 2 + motion.y * height + motion.scale * (localX * Math.sin(radians) + localY * Math.cos(radians));
+    // The frame is canvas-sized, offset to transform.x/y and scaled/rotated about its center.
+    const dx = (frameX - width / 2) * transform.scale, dy = (frameY - height / 2) * transform.scale;
+    return { scale: motion.scale, rotation: motion.rotation, frame: { x: frameX / width, y: frameY / height }, canvas: { x: transform.x + (dx * Math.cos(angle) - dy * Math.sin(angle)) / width, y: transform.y + (dx * Math.sin(angle) + dy * Math.cos(angle)) / height } };
+  };
 }
 
 /** Samples within [start, end) timeline seconds, smoothed and thinned to the key budget. */
-function timelineSamples(footage: Clip, samples: TrackSample[], start: number, end: number) {
+function timelineSamples(footage: Clip, samples: TrackSample[], start: number, end: number, smoothing = .35) {
   const mapped = samples.map(sample => ({ ...sample, at: timelineTimeAtSource(footage, sample.time) })).filter(sample => sample.at >= Math.max(start, footage.start) - 1e-6 && sample.at <= Math.min(end, footage.start + footage.duration) + 1e-6).sort((a, b) => a.at - b.at);
-  if (mapped.length < 2) throw new Error('The tracked path does not cover this clip. Track the subject over the clip\'s time first.');
-  // Light 3-tap smoothing removes tracker jitter without lagging the path.
-  const smooth = mapped.map((sample, index) => { const window = mapped.slice(Math.max(0, index - 1), index + 2); return { at: sample.at, x: window.reduce((sum, item) => sum + item.x, 0) / window.length, y: window.reduce((sum, item) => sum + item.y, 0) / window.length }; });
+  if (mapped.length < 1) throw new Error('The tracked path does not cover this clip. Track the subject over the clip\'s time first.');
+  // A symmetric filter reduces subpixel jitter without adding temporal lag.
+  const smooth = mapped.map((sample, index) => {
+    if (index === 0 || index === mapped.length - 1) return sample;
+    const before = mapped[index - 1], after = mapped[index + 1];
+    return { ...sample, x: sample.x * (1 - smoothing) + (before.x + after.x) * smoothing / 2, y: sample.y * (1 - smoothing) + (before.y + after.y) * smoothing / 2,
+      scale: (sample.scale ?? 1) * (1 - smoothing) + ((before.scale ?? 1) + (after.scale ?? 1)) * smoothing / 2,
+      rotation: (sample.rotation ?? 0) * (1 - smoothing) + ((before.rotation ?? 0) + (after.rotation ?? 0)) * smoothing / 2 };
+  });
+  if (samples.some(sample => sample.confidence !== undefined)) return smooth;
   const stride = Math.max(1, Math.ceil(smooth.length / MAX_KEYS));
   const thinned = smooth.filter((_, index) => index % stride === 0);
   if (thinned.at(-1) !== smooth.at(-1)) thinned.push(smooth.at(-1)!);
@@ -55,28 +79,42 @@ function overlayCenter(overlay: Clip) {
 }
 
 /** Move an overlay so its center follows the tracked point (plus a canvas-fraction offset). */
-export function attachOverlayPatch(overlay: Clip, footage: Clip, asset: Pick<MediaAsset, 'width' | 'height'>, aspectRatio: AspectRatio, samples: TrackSample[], offset = { x: 0, y: 0 }) {
-  assertStillFraming(footage);
-  const center = overlayCenter(overlay), path = timelineSamples(footage, samples, overlay.start, overlay.start + overlay.duration);
+export function attachOverlayPatch(overlay: Clip, footage: Clip, asset: Pick<MediaAsset, 'width' | 'height'>, aspectRatio: AspectRatio, samples: TrackSample[], offset = { x: 0, y: 0 }, options: TrackAttachmentOptions = {}) {
+  assertFootage(footage);
+  const center = overlayCenter(overlay), path = timelineSamples(footage, samples, overlay.start, overlay.start + overlay.duration, options.smoothing);
+  const map = footageMapper(footage, asset, aspectRatio), seed = map(path[0].x, path[0].y, options.seedTime ?? path[0].time);
   const keyframes = path.map(sample => {
-    const { canvas } = footageToCanvas(footage, asset, aspectRatio, sample.x, sample.y);
+    const { canvas, scale, rotation } = map(sample.x, sample.y, sample.time);
     const x = canvas.x + offset.x - center.x, y = canvas.y + offset.y - center.y;
-    return { time: Math.min(overlay.duration, Math.max(0, sample.at - overlay.start)), x: Math.max(-1, Math.min(1, x)), y: Math.max(-1, Math.min(1, y)), scale: 1, rotation: 0, opacity: 1, brightness: 1 };
+    return { time: Math.min(overlay.duration, Math.max(0, sample.at - overlay.start)), x: Math.max(-1, Math.min(1, x)), y: Math.max(-1, Math.min(1, y)), scale: options.followTransform === false ? 1 : Math.max(.1, Math.min(10, (sample.scale ?? 1) * scale / seed.scale)), rotation: options.followTransform === false ? 0 : Math.max(-360, Math.min(360, (sample.rotation ?? 0) + rotation - seed.rotation)), opacity: 1, brightness: 1 };
   }).filter((key, index, keys) => index === 0 || key.time > keys[index - 1].time);
-  return objectMotionPatch(overlay, keyframes, { replaceMotion: true, aspectRatio });
+  const dense = samples.some(sample => sample.confidence !== undefined);
+  if (dense) {
+    const first = keyframes[0], last = keyframes[keyframes.length - 1];
+    const until = options.visibleUntil === undefined ? last.time + 1 / (options.fps ?? 60) : timelineTimeAtSource(footage, options.visibleUntil) - overlay.start;
+    if (first.time > 1e-6) keyframes.unshift({ ...first, time: Math.max(0, first.time - 1e-6), opacity: 0 });
+    if (until > last.time && until < overlay.duration) {
+      if (until - last.time > 2e-6) keyframes.push({ ...last, time: until - 1e-6 });
+      keyframes.push({ ...last, time: until, opacity: 0 });
+    }
+  }
+  return objectMotionPatch(overlay, keyframes, { replaceMotion: true, aspectRatio, maxKeyframes: dense ? MAX_TRACK_FRAMES + 4 : 120 });
 }
 
 /** A mask on `target` (the footage, or a styled copy of it) whose center follows the tracked point. */
-export function attachMaskPatch(target: Clip, footage: Clip, asset: Pick<MediaAsset, 'width' | 'height'>, aspectRatio: AspectRatio, samples: TrackSample[], shape: { shape: MaskShape; width: number; height: number; feather?: number; invert?: boolean; radius?: number; text?: string }): { mask: ClipMask } {
-  assertStillFraming(footage);
+export function attachMaskPatch(target: Clip, footage: Clip, asset: Pick<MediaAsset, 'width' | 'height'>, aspectRatio: AspectRatio, samples: TrackSample[], shape: { shape: MaskShape; width: number; height: number; feather?: number; invert?: boolean; radius?: number; text?: string }, options: TrackAttachmentOptions = {}): { mask: ClipMask } {
+  assertFootage(footage);
   if (target.kind !== 'video' && target.kind !== 'image') throw new Error('Mask a video or image clip.');
+  if (target.assetId !== footage.assetId) throw new Error('A tracked mask needs the footage itself or a synchronized copy of its source.');
   // Mask geometry lives in the masked clip's own frame, before its transform: a copy of the footage shares the footage's frame.
-  const path = timelineSamples(footage, samples, target.start, target.start + target.duration), offset = target.motionOffset ?? 0;
+  const path = timelineSamples(footage, samples, target.start, target.start + target.duration, options.smoothing), offset = target.motionOffset ?? 0;
+  const map = footageMapper(target, asset, aspectRatio), seed = map(path[0].x, path[0].y, options.seedTime ?? path[0].time);
   const keys = path.map(sample => {
-    const { frame } = footageToCanvas(footage, asset, aspectRatio, sample.x, sample.y);
-    return { time: Math.max(0, sample.at - target.start) + offset, x: frame.x, y: frame.y, width: shape.width, height: shape.height, rotation: 0, feather: shape.feather ?? 12 };
+    if (Math.abs(sourceTimeAt(target, sample.at) - sample.time) > 1e-4) throw new Error('Keep the masked copy synchronized with the tracked footage.');
+    const { frame, scale, rotation } = map(sample.x, sample.y, sample.time);
+    return { time: Math.max(0, sample.at - target.start) + offset, x: frame.x, y: frame.y, width: Math.max(.005, Math.min(4, shape.width * (options.followTransform === false ? 1 : (sample.scale ?? 1) * scale / seed.scale))), height: Math.max(.005, Math.min(4, shape.height * (options.followTransform === false ? 1 : (sample.scale ?? 1) * scale / seed.scale))), rotation: options.followTransform === false ? 0 : Math.max(-360, Math.min(360, (sample.rotation ?? 0) + rotation - seed.rotation)), feather: shape.feather ?? 12 };
   }).filter((key, index, list) => index === 0 || key.time > list[index - 1].time);
-  return { mask: { shape: shape.shape, ...(shape.invert ? { invert: true } : {}), ...(shape.radius !== undefined ? { radius: shape.radius } : {}), ...(shape.text ? { text: shape.text } : {}), keys } };
+  return { mask: { ...(samples.some(sample => sample.confidence !== undefined) ? { active: { start: keys[0].time, end: options.visibleUntil === undefined ? keys[keys.length - 1].time + 1 / (options.fps ?? 60) : timelineTimeAtSource(footage, options.visibleUntil) - target.start + offset } } : {}), shape: shape.shape, ...(shape.invert ? { invert: true } : {}), ...(shape.radius !== undefined ? { radius: shape.radius } : {}), ...(shape.text ? { text: shape.text } : {}), keys } };
 }
 
 export { bakeMaskAnchors };
