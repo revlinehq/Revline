@@ -20,5 +20,5 @@
 
 @supports (field-sizing:content){
   .edit-composer-compact [data-slot=input-group-control]{height:auto;overflow-y:auto}
-  .edit-composer-compact [data-slot=input-group-control]:placeholder-shown{field-sizing:fixed}
+  .edit-composer-compact [data-slot=input-group-control]:placeholder-shown{field-sizing:fixed;overflow-y:hidden}
 }
