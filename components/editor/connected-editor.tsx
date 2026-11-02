@@ -138,10 +138,10 @@ function ProjectEditor({project,storedTimeline}: {project:Doc<'projects'>;stored
   // The switched project has arrived (and was received above): the real timeline takes over.
   useEffect(()=>{if(pendingTab&&(project.activeTimelineId??'main')===pendingTab.id)setPendingTab(null);},[project.activeTimelineId,pendingTab]);
   const assets=useMemo<MediaAsset[]>(()=>[...(media??[]),...optimisticAssets.filter(asset=>!media?.some(a=>a._id===asset._id))].map((asset:MediaAsset)=>{
-    const analysis=mediaTasks?.find(task=>task.assetId===asset._id&&(task.kind==='understand'&&!asset.analysisKinds?.includes('understand')&&!asset.analysis?.understanding||task.kind==='transcribe'&&!asset.analysisKinds?.includes('transcribe')&&!asset.analysis?.transcript));
+    const analysis=mediaTasks?.find(task=>task.assetId===asset._id&&task.kind==='transcribe'&&!asset.analysisKinds?.includes('transcribe')&&!asset.analysis?.transcript);
     if(analysis&&analysis.status!=='completed'){
       const failed=analysis.status==='failed'||analysis.status==='cancelled';
-      return {...asset,preparation:{status:failed?'failed' as const:'processing' as const,message:failed?'Media analysis failed. Retry preparation.':analysis.activity?MEDIA_ACTIVITY_LABELS[analysis.activity]:analysis.kind==='transcribe'?'Listening to your footage…':'Watching your footage…'}};
+      return {...asset,preparation:{status:failed?'failed' as const:'processing' as const,message:failed?'Media analysis failed. Retry preparation.':analysis.activity?MEDIA_ACTIVITY_LABELS[analysis.activity]:'Listening to your footage…'}};
     }
     if(asset.kind!=='video'||asset.audioExtracted||asset.audioAssetId)return asset;
     const task=mediaTasks?.find(task=>task.kind==='extract'&&task.assetId===asset._id);

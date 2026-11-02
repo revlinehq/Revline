@@ -6,17 +6,17 @@ import { MEDIA_ACTIVITY_LABELS } from '@/lib/media-analysis/activity';
 import type { MediaAsset } from './types';
 
 type MediaClient = Pick<ConvexReactClient, 'mutation' | 'query'>;
-type PreparationKind = 'extract' | 'waveform' | 'understand' | 'transcribe';
+type PreparationKind = 'extract' | 'waveform' | 'transcribe';
 type TaskState = FunctionReturnType<typeof api.mediaTasks.get>;
 type PreparationTask = { taskId: Id<'mediaTasks'>; completed: boolean; state?: TaskState };
 export type EditingPreparationActivity = { phase: 'processing' | 'watching' | 'listening'; activity: string };
 
-const taskOrder: PreparationKind[] = ['extract', 'waveform', 'understand', 'transcribe'];
-const phases: Record<PreparationKind, EditingPreparationActivity['phase']> = { extract: 'processing', waveform: 'processing', understand: 'watching', transcribe: 'listening' };
-const labels: Record<PreparationKind, string> = { extract: 'Preparing audio…', waveform: 'Preparing waveform…', understand: 'Watching footage…', transcribe: 'Listening to audio…' };
+const taskOrder: PreparationKind[] = ['extract', 'waveform', 'transcribe'];
+const phases: Record<PreparationKind, EditingPreparationActivity['phase']> = { extract: 'processing', waveform: 'processing', transcribe: 'listening' };
+const labels: Record<PreparationKind, string> = { extract: 'Preparing audio…', waveform: 'Preparing waveform…', transcribe: 'Listening to audio…' };
 const timeoutMessage = 'Media preparation is taking longer than expected. Retry to check the existing background tasks; your upload is saved.';
 
-/** Reuses durable worker tasks; readiness requires mechanical preparation and saved analysis. */
+/** Uploads already queue an optional overview. Only audio preparation and transcription gate editing. */
 export async function prepareMediaForEditing(
   convex: MediaClient,
   projectId: Id<'projects'>,
@@ -44,7 +44,6 @@ export async function prepareMediaForEditing(
     const missing: PreparationKind[] = [];
     if (asset.kind === 'video') {
       if (!asset.audioExtracted) missing.push('extract');
-      if (!asset.analysis?.understanding) missing.push('understand');
       // Extraction is authoritative: a silent video needs no transcription task.
       if (asset.audioExtracted && asset.audioAssetId && !asset.analysis?.transcript) missing.push('transcribe');
     } else {
