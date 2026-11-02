@@ -66,7 +66,7 @@ export function startMediaWorker(options: MediaWorkerOptions) {
         state.activeTasks++; state.lastWorkAt = Date.now();
         const controller = new AbortController();
         const startedAt = Date.now(), deadline = AbortSignal.timeout(options.deadlineMs);
-        const signal = AbortSignal.any([controller.signal, shutdown, deadline]);
+        let signal = AbortSignal.any([controller.signal, shutdown, deadline]);
         const credentials = { taskId: task.taskId, leaseToken: task.leaseToken };
         let progress = 0, reported = -1, activity: MediaTaskActivity | undefined, heartbeats = Promise.resolve(), renewedAt = claimedAt, queued = false, writing = 0;
         // A transient transport failure retries on the next tick. Stop when Convex
@@ -106,6 +106,7 @@ export function startMediaWorker(options: MediaWorkerOptions) {
         options.log('media-started', { projectId: task.projectId, kind: task.kind, taskId: task.taskId });
         try {
           const snapshot = await client.query(api.mediaTasks.work, credentials);
+          if (snapshot.derive?.op === 'pixelTrack') signal = AbortSignal.any([controller.signal, shutdown]);
           signal.throwIfAborted();
           const result = await processMediaTask(snapshot, client, options.convexUrl, signal, percent => {
             progress = Math.max(progress, Math.min(99, percent));
@@ -116,7 +117,7 @@ export function startMediaWorker(options: MediaWorkerOptions) {
           options.log('media-completed', { projectId: task.projectId, runId: snapshot.aiRunId, taskId: task.taskId, kind: task.kind });
         } catch (error) {
           clearInterval(timer); clearInterval(cancelled); await heartbeats;
-          const timedOut = deadline.aborted;
+          const timedOut = signal.aborted && deadline.aborted;
           const retryable = task.kind !== 'review' && !(task.kind === 'render' && timedOut) && isRetryableAnalysisError(error);
           if (!shutdown.aborted && !controller.signal.aborted) {
             await client.mutation(api.mediaTasks.fail, { ...credentials, retryable, error: timedOut && task.kind === 'render' ? `The export exceeded its ${deadlineMinutes}-minute processing limit. Automatic retries were stopped.` : error instanceof Error ? error.message.slice(0, 1000) : 'Media processing failed.' }).catch(() => {});

@@ -4,13 +4,15 @@ import math
 import signal
 import subprocess
 import sys
+import sqlite3
+import tempfile
+from pathlib import Path
 
 import cv2
 import numpy as np
 
 signal.signal(signal.SIGTERM, lambda *_: sys.exit(143))
 cv2.setNumThreads(2)
-MAX_FRAMES = 3600
 LK = dict(winSize=(31, 31), maxLevel=5,
           criteria=(cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 30, .01))
 
@@ -199,7 +201,7 @@ class Tracker:
             return None, 'out-of-frame'
         self.scale *= math.hypot(matrix[0, 0], matrix[1, 0])
         self.rotation += math.degrees(math.atan2(matrix[1, 0], matrix[0, 0]))
-        if not .05 <= self.scale <= 20:
+        if not math.isfinite(self.scale) or self.scale <= 0:
             return None, 'unreliable'
         # Replenish in the moving support region instead of following old background corners.
         self.points = corners(gray, self.polygon)
@@ -209,47 +211,143 @@ class Tracker:
         return float(np.clip(confidence, 0, 1)), None
 
 
-def main(path, request):
-    metadata = json.loads(subprocess.check_output([
-        'ffprobe', '-v', 'error', '-select_streams', 'v:0', '-read_intervals',
-        '%'+str(request['end']+1), '-show_frames', '-show_entries',
-        'format=start_time:stream=avg_frame_rate,r_frame_rate:frame=best_effort_timestamp_time', '-of', 'json', path], timeout=60))
-    origin = float(metadata.get('format', {}).get('start_time', 0))
-    times = [float(frame['best_effort_timestamp_time'])-origin for frame in metadata['frames']]
-    indices = [i for i, t in enumerate(times) if request['start']-1e-6 <= t < request['end']-1e-6]
-    if not indices or len(indices) > MAX_FRAMES:
-        raise ValueError('Track at most 3600 decoded frames and 30 seconds at once.')
-    seed_index = min(indices, key=lambda i: abs(times[i]-request['time']))
-    capture = cv2.VideoCapture(path)
-    cursor = -2
-    video_origin = times[0]
+def emit(message):
+    print(json.dumps(message, separators=(',', ':'), allow_nan=False), flush=True)
 
-    def read(index):
-        nonlocal cursor
-        target = times[index]
-        if cursor == index-1:
-            ok, image = capture.read()
-            if ok and abs(capture.get(cv2.CAP_PROP_POS_MSEC)/1000+video_origin-target) < .0002:
-                cursor = index
+
+class SourceFrames:
+    """Disk-backed measured PTS, a streaming probe and a small reverse decode batch."""
+    def __init__(self, path, request):
+        self.request = request
+        self.temp = tempfile.TemporaryDirectory(prefix='revline-track-')
+        self.cache = sqlite3.connect(str(Path(self.temp.name)/'frames.sqlite'))
+        self.cache.execute('create table frames (frame_index integer primary key, time real not null)')
+        metadata = json.loads(subprocess.check_output([
+            'ffprobe', '-v', 'error', '-select_streams', 'v:0', '-show_entries',
+            'format=start_time:stream=avg_frame_rate,r_frame_rate', '-of', 'json', path]))
+        self.origin = float(metadata.get('format', {}).get('start_time', 0))
+        stream = metadata['streams'][0]
+        def rate(value):
+            a, b = value.split('/')
+            return float(a)/float(b) if float(b) else 0.
+        self.fps = rate(stream['avg_frame_rate']) or rate(stream['r_frame_rate'])
+        self.probe = subprocess.Popen([
+            'ffprobe', '-v', 'error', '-select_streams', 'v:0', '-show_frames',
+            '-show_entries', 'frame=best_effort_timestamp_time', '-of', 'compact=p=0:nk=0', path],
+            stdout=subprocess.PIPE, text=True)
+        self.capture = cv2.VideoCapture(path)
+        ok, _ = self.capture.read()
+        if not ok:
+            self.close()
+            raise ValueError('Could not decode the source video.')
+        # Decoder builds can expose a container/audio timestamp offset (notably WebM).
+        # Anchor their clock to the first measured video PTS, not an assumed zero.
+        self.decoder_origin = self.capture.get(cv2.CAP_PROP_POS_MSEC)/1000
+        self.frame_index, self.cursor = -1, 0
+        self.video_origin, self.ended = None, False
+
+    def next(self):
+        if self.ended:
+            return None
+        for line in self.probe.stdout:
+            value = next((part.split('=', 1)[1] for part in line.strip().split('|')
+                          if part.startswith('best_effort_timestamp_time=')), None)
+            if value is None:
+                continue
+            self.frame_index += 1
+            time = float(value)-self.origin
+            if self.video_origin is None:
+                self.video_origin = time
+            if time < self.request['start']-1e-6:
+                continue
+            if time >= self.request['end']-1e-6:
+                self.ended = True
+                return None
+            self.cache.execute('insert into frames values (?, ?)', (self.frame_index, time))
+            return self.frame_index, time
+        self.ended = True
+        if self.probe.wait() != 0:
+            raise ValueError('Could not read source frame timestamps.')
+        return None
+
+    def at(self, index):
+        saved = self.cache.execute('select frame_index,time from frames where frame_index=?', (index,)).fetchone()
+        if saved:
+            return saved
+        return self.next()
+
+    def seed(self):
+        previous = None
+        while True:
+            current = self.next()
+            if current is None:
+                if previous is None:
+                    raise ValueError('No source frame falls inside the requested window.')
+                return previous
+            if current[1] >= self.request['time']:
+                return min([point for point in (previous, current) if point is not None],
+                           key=lambda point: abs(point[1]-self.request['time']))
+            previous = current
+
+    def read(self, point):
+        index, target = point
+        if self.cursor == index-1:
+            ok, image = self.capture.read()
+            if ok and abs(self.capture.get(cv2.CAP_PROP_POS_MSEC)/1000+self.video_origin-self.decoder_origin-target) < .0002:
+                self.cursor = index
                 return cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-        # Seek before the measured PTS and decode up to it. Average-FPS frame
-        # arithmetic can seek to the wrong image on variable-rate recordings.
-        for margin in (.15, 1., 4.):
-            capture.set(cv2.CAP_PROP_POS_MSEC, max(0., target-video_origin-margin)*1000)
+        # Seek before a measured PTS. Average-FPS frame arithmetic is unsafe on VFR.
+        margin = .15
+        while True:
+            seek = max(0., target-self.video_origin-margin)
+            self.capture.set(cv2.CAP_PROP_POS_MSEC, seek*1000)
             while True:
-                ok, image = capture.read()
+                ok, image = self.capture.read()
                 if not ok:
                     break
-                actual = capture.get(cv2.CAP_PROP_POS_MSEC)/1000+video_origin
+                actual = self.capture.get(cv2.CAP_PROP_POS_MSEC)/1000+self.video_origin-self.decoder_origin
                 if abs(actual-target) < .0002:
-                    cursor = index
+                    self.cursor = index
                     return cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
                 if actual > target+.0002:
                     break
-        raise ValueError('Decoder PTS did not match the source frame at '+str(target))
+            if seek == 0:
+                raise ValueError('Decoder PTS did not match the source frame at '+str(target))
+            margin *= 4
 
+    def batches(self, seed, direction):
+        index = seed[0]
+        while True:
+            if direction == -1:
+                batch = self.cache.execute('select frame_index,time from frames where frame_index<? order by frame_index desc limit 12', (index,)).fetchall()
+            else:
+                batch = []
+                for _ in range(12):
+                    point = self.at(index+len(batch)+1)
+                    if point is None:
+                        break
+                    batch.append(point)
+            if not batch:
+                return
+            frames = {point[0]: self.read(point) for point in sorted(batch)}
+            yield [(point, frames.pop(point[0])) for point in batch]
+            index = batch[-1][0]
+
+    def close(self):
+        self.capture.release()
+        if self.probe.poll() is None:
+            self.probe.kill()
+        self.probe.wait()
+        self.probe.stdout.close()
+        self.cache.close()
+        self.temp.cleanup()
+
+
+def main(path, request):
+    source = SourceFrames(path, request)
     try:
-        seed_image = read(seed_index)
+        seed_point = source.seed()
+        seed_image = source.read(seed_point)
         h, w = seed_image.shape
         seed = request['seed']
         is_box = seed['kind'] == 'box'
@@ -263,59 +361,56 @@ def main(path, request):
             left, top = np.maximum(0, center-radius)
             right, bottom = np.minimum([w-1, h-1], center+radius)
         polygon = np.array([[left, top], [right, top], [right, bottom], [left, bottom]], np.float32)
+        header = dict(seedTime=seed_point[1], sourceFps=source.fps, width=w, height=h)
+        emit(dict(type='header', header=header))
+        count, minimum, first, last = 0, 1., seed_point[1], seed_point[1]
 
-        def sample(tracker, index, confidence):
-            point = tracker.center
-            row = dict(frameIndex=index, time=times[index], x=float(point[0]/w), y=float(point[1]/h),
-                       confidence=confidence, scale=tracker.scale if is_box else 1.,
-                       rotation=tracker.rotation if is_box else 0.)
+        def sample(tracker, point, confidence):
+            row = dict(frameIndex=point[0], time=point[1], x=float(tracker.center[0]/w), y=float(tracker.center[1]/h),
+                       confidence=round(confidence, 4), scale=tracker.scale if is_box else 1., rotation=round(tracker.rotation, 3) if is_box else 0.)
             if is_box:
                 p = tracker.polygon
                 row['box'] = dict(left=max(0., float(p[:, 0].min()/w)), top=max(0., float(p[:, 1].min()/h)),
                                   right=min(1., float(p[:, 0].max()/w)), bottom=min(1., float(p[:, 1].max()/h)))
+                row['box'] = {key: round(value, 6) for key, value in row['box'].items()}
             for key in ('x', 'y', 'scale'):
                 row[key] = round(row[key], 6)
-            row['confidence'] = round(row['confidence'], 4)
-            row['rotation'] = round(row['rotation'], 3)
-            if is_box:
-                row['box'] = {key: round(value, 6) for key, value in row['box'].items()}
             return row
 
-        initial = Tracker(seed_image, polygon, center)
-        samples = [sample(initial, seed_index, 1.)]
         stops = {}
         for direction, name in [(1, 'forward'), (-1, 'backward')]:
             tracker = Tracker(seed_image, polygon, center)
-            route = range(seed_index+direction, indices[-1]+1 if direction == 1 else indices[0]-1, direction)
+            pending, sequence = [], 0
+            def add(row):
+                nonlocal count, minimum, first, last
+                count += 1
+                minimum, first, last = min(minimum, row['confidence']), min(first, row['time']), max(last, row['time'])
+                pending.append(row)
+            if direction == 1:
+                add(sample(tracker, seed_point, 1.))
             stops[name] = dict(time=request['end'] if direction == 1 else request['start'], reason='boundary')
-            # Reverse decode in small batches, not a full-shot RAM buffer or one random seek per frame.
-            route = list(route)
-            for offset in range(0, len(route), 12):
-                batch = route[offset:offset+12]
-                frames = {i: read(i) for i in sorted(batch)}
-                stopped = False
-                for index in batch:
-                    confidence, reason = tracker.advance(frames.pop(index))
+            stopped = False
+            for batch in source.batches(seed_point, direction):
+                for point, gray in batch:
+                    confidence, reason = tracker.advance(gray)
                     if reason:
-                        stops[name] = dict(time=times[index], reason=reason)
+                        stops[name] = dict(time=point[1], reason=reason)
                         stopped = True
                         break
-                    samples.append(sample(tracker, index, confidence))
+                    add(sample(tracker, point, confidence))
+                    # Transport batches are repeated, never a shot/frame limit.
+                    if len(pending) >= 256:
+                        emit(dict(type='chunk', chunk=dict(direction=name, sequence=sequence, samples=sorted(pending, key=lambda row: row['frameIndex']))))
+                        pending, sequence = [], sequence+1
                 if stopped:
                     break
-        samples.sort(key=lambda row: row['frameIndex'])
-        def rate(value):
-            a, b = value.split('/')
-            return float(a)/float(b) if float(b) else 0.
-        stream = metadata['streams'][0]
-        fps = rate(stream['avg_frame_rate']) or rate(stream['r_frame_rate'])
-        if fps <= 0:
-            fps = 1/float(np.median(np.diff(times)))
-        return dict(engine='opencv-klt-template-v1', seedTime=times[seed_index], sourceFps=fps,
-                    width=w, height=h, samples=samples, **stops)
+            if pending:
+                emit(dict(type='chunk', chunk=dict(direction=name, sequence=sequence, samples=sorted(pending, key=lambda row: row['frameIndex']))))
+        emit(dict(type='complete', result=dict(engine='opencv-klt-template-v2', **header,
+                  sampleCount=count, minConfidence=minimum, firstTime=first, lastTime=last, **stops)))
     finally:
-        capture.release()
+        source.close()
 
 
 if __name__ == '__main__':
-    print(json.dumps(main(sys.argv[1], json.loads(sys.argv[2])), separators=(',', ':'), allow_nan=False))
+    main(sys.argv[1], json.loads(sys.argv[2]))

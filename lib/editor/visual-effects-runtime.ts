@@ -12,6 +12,7 @@ import { effectsAt, type EffectKeyframeLane } from './effect-keyframes';
 export { installAdjustmentLayers } from './adjustment-layers';
 export { installSolidColorLayers } from './solid-color-layers';
 export { installClipMasks } from './masks';
+export { installPixelTracking } from './pixel-tracking-runtime';
 export { installAudioReactive } from './audio-reactive';
 import { decodeLevels, hasReactiveEffects, reactiveEffectsAt, type AudioReactive } from './audio-reactive';
 import { HSL_CENTERS, curvesTexture, customAtlas, hslUniform, lookAtlas, type ColorFinishSource } from './color-finish';

@@ -1,3 +1,4 @@
+import { api as pixelTrackApi } from '../../convex/_generated/api';
 import { trackSourcePixels } from './track-source-pixels';
 import type { ExportResolution } from '@/lib/editor/composition';
 import { mkdtemp, rm, stat } from 'node:fs/promises';
@@ -184,7 +185,7 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
       if (!task.derive || asset.kind === 'audio') throw new AnalysisError('The processing request is unavailable.', 400);
       if (task.derive.op === 'pixelTrack') {
         if (!task.derive.tracking || asset.kind !== 'video') throw new AnalysisError('Pixel tracking request is missing.', 400);
-        return { pixelTrack: await runPhase('Tracking pixels', () => trackSourcePixels(source, task.derive!.tracking!, signal)) };
+        return { pixelTrack: await runPhase('Tracking pixels', () => trackSourcePixels(source, task.derive!.tracking!, signal, { header: header => (exclusive ?? (work => work()))(() => convex.mutation(pixelTrackApi.pixelTracks.begin, { ...credentials, header })), chunk: chunk => (exclusive ?? (work => work()))(() => convex.mutation(pixelTrackApi.pixelTracks.append, { ...credentials, ...chunk })) })) };
       }
       if (task.derive.op === 'stats') return { colorStats: await runPhase('Measuring color', () => measureColor(source, asset.kind as 'video' | 'image', task.derive!.times ?? [task.derive!.start], signal)) };
       const request = { ...task.derive, op: task.derive.op }, label = request.op === 'freeze' ? 'Capturing freeze frame' : request.op === 'slowmo' ? 'Interpolating slow motion' : 'Upscaling';

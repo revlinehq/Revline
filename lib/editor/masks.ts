@@ -23,7 +23,7 @@ export function validateMask(clip: Pick<Clip, 'kind'> & { mask?: ClipMask }) {
   if (clip.kind !== 'video' && clip.kind !== 'image') throw new Error('Masks apply to video or image clips.');
   if (!MASK_SHAPES.includes(mask.shape)) throw new Error('Choose a rectangle, ellipse, polygon or text mask.');
   if (mask.active && (!Number.isFinite(mask.active.start) || !Number.isFinite(mask.active.end) || mask.active.end <= mask.active.start)) throw new Error('The tracked mask needs a finite visible range.');
-  if (!mask.keys?.length || mask.keys.length > 3604) throw new Error('A mask needs 1 to 3604 keys.');
+  if (!mask.keys?.length) throw new Error('A mask needs at least one key.');
   mask.keys.forEach((key, index) => {
     if (!Number.isFinite(key.time) || index > 0 && key.time <= mask.keys[index - 1].time) throw new Error('Mask keys need increasing times.');
     for (const property of GEOMETRY) { const [min, max] = LIMITS[property]; if (!Number.isFinite(key[property]) || key[property] < min || key[property] > max) throw new Error(`Mask ${property} must be between ${min} and ${max}.`); }

@@ -89,6 +89,7 @@ import type * as processorDiagnostics from "../processorDiagnostics.js";
 import type * as projectDataMigration from "../projectDataMigration.js";
 import type * as projectDeletion from "../projectDeletion.js";
 import type * as projectTransfers from "../projectTransfers.js";
+import type * as pixelTracks from "../pixelTracks.js";
 import type * as projects from "../projects.js";
 import type * as r2 from "../r2.js";
 import type * as referenceReads from "../referenceReads.js";
@@ -191,6 +192,7 @@ declare const fullApi: ApiFromModules<{
   projectDataMigration: typeof projectDataMigration;
   projectDeletion: typeof projectDeletion;
   projectTransfers: typeof projectTransfers;
+  pixelTracks: typeof pixelTracks;
   projects: typeof projects;
   r2: typeof r2;
   referenceReads: typeof referenceReads;

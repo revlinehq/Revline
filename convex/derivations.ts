@@ -40,7 +40,7 @@ export async function startDerivation(ctx: MutationCtx, input: StartInput) {
     const tracking = pixelTrackRequest.parse(input.tracking);
     if (tracking.end > (asset.duration ?? 0) + 1e-6) throw new ConvexError('Track inside the source duration.');
     await requireMediaTaskCapacity(ctx, input.ownerId, 1);
-    const derivationId = await ctx.db.insert('derivations', { ownerId: input.ownerId, projectId: project._id, clipId: input.clipId, sourceAssetId: asset._id, op: 'pixelTrack', start: tracking.start, end: tracking.end, tracking, status: 'queued', createdAt: Date.now() });
+    const derivationId = await ctx.db.insert('derivations', { ownerId: input.ownerId, projectId: project._id, clipId: input.clipId, sourceAssetId: asset._id, op: 'pixelTrack', start: tracking.start, end: tracking.end, tracking, trackingToken: crypto.randomUUID(), status: 'queued', createdAt: Date.now() });
     await ctx.db.patch(derivationId, { taskId: await enqueueMediaTask(ctx, { ownerId: input.ownerId, projectId: project._id, assetId: asset._id, kind: 'derive', derivationId, requiredProcessorVersion: PIXEL_TRACK_PROCESSOR_VERSION }) });
     return { derivationId, status: 'queued' as const, estimatedUsd: 0 };
   }
@@ -114,7 +114,7 @@ export async function completeDerivation(ctx: MutationCtx, task: Doc<'mediaTasks
   if (row?.op === 'pixelTrack') {
     if (row.status !== 'queued' || !row.tracking || !pixelTrack) throw new ConvexError('Pixel tracking returned no result.');
     const result = parsePixelTrackResult(pixelTrack, row.tracking);
-    if (JSON.stringify(result).length > 850_000) throw new ConvexError('Track result exceeds the storage budget. Choose a shorter window.');
+    if (result.engine === 'opencv-klt-template-v2' && (row.trackingAttempt !== task.attempt || row.trackingCount !== result.sampleCount)) throw new ConvexError('Track chunks do not match the completion receipt.');
     await ctx.db.patch(row._id, { status: 'completed', pixelTrack: result });
     return;
   }
