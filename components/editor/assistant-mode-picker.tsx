@@ -8,7 +8,7 @@ import './assistant-model-picker.css';
 
 const EDIT_MODES = [
   { value: 'fast', label: 'Fast', description: 'Edits quickly with lighter checks' },
-  { value: 'precise', label: 'Precise', description: 'Watches full video like an editor' },
+  { value: 'precise', label: 'Precise', description: 'Watches full video like a human' },
 ] as const;
 
 /** The composer preference passed with each request, independent of the model and its effort. */
