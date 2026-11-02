@@ -39,6 +39,7 @@ export function assistantTurnPresentation(replies:readonly ChatMessage[],cards:r
   const savedIds=new Set(replies.flatMap(message=>(message.steps??[]).flatMap((step,index)=>step.output?.saved===true?[step.id??`${message.id}:${index}`]:[])));
   const reportedSaved=summaries.reduce((count,text)=>Math.max(count,Number(/^(\d+) (?:edits|changes?)/.exec(text)?.[1]??0)),0);
   const savedChanges=Math.max(savedIds.size,reportedSaved);
+  const saveFailed=failures.some(card=>card.saveFailed)||receipt?.status==='failed'||receipt?.status==='aborted';
   const hasDraft=!!receipt||replies.some(message=>message.steps?.some(step=>step.staged||step.output?.staged===true));
   const specific=detailCandidates.find(value=>assistantErrorDetail(value)!==fallback&&!failureSummary(value)&&!/^This step did not confirm|^No saved confirmation|^The replacement edit was not saved|^No timeline changes were saved/i.test(value));
   let detail=conflict?assistantErrorDetail(conflict):specific?assistantErrorDetail(specific):receipt&&receipt.status!=='saved'?'This replacement was not saved. Previously saved edits remain.':assistantErrorDetail(detailCandidates[0]);
@@ -49,6 +50,6 @@ export function assistantTurnPresentation(replies:readonly ChatMessage[],cards:r
   if(savedChanges)detail=`${savedChanges} ${savedChanges===1?'change was':'changes were'} saved. ${detail}`;
   return {
     replies:withoutFailureSummaries(replies),
-    cards:[...cards.filter(card=>card.state!=='error'&&card.state!=='running'),{key:'turn-failure',title:detail.includes('Some footage checks could not complete.')?'Footage check incomplete':savedChanges?'Edit partially completed':'Some steps are unfinished',detail,state:'error' as const}],
+    cards:[...cards.filter(card=>card.state!=='error'&&card.state!=='running'),{key:'turn-failure',title:detail.includes('Some footage checks could not complete.')?'Footage check incomplete':saveFailed?(savedChanges?'Edit partially completed':'Could not save edit'):savedChanges?'Changes saved; some steps are unfinished':'Some steps are unfinished',detail,state:'error' as const,saveFailed}],
   };
 }

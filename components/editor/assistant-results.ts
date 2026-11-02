@@ -9,7 +9,7 @@ export type { TimelinePublicationReceipt } from '@/lib/ai/publication-receipt';
 export type ChatTool = { id?: string; name: string; state: 'running' | 'done' | 'error' | 'stopped'; detail?: string; staged?: boolean; input?: Record<string, unknown>; output?: Record<string, unknown> };
 export type ChatBlock = { type:'text'; text:string } | { type:'tools'; steps:ChatTool[] } | { type:'thinking'; text:string };
 export type ChatMessage = { id:string;sourceId?:string;threadId?:string;role:string;text:string;status?:string;tools?:string[];steps?:ChatTool[];blocks?:ChatBlock[];publicationReceipt?:TimelinePublicationReceipt };
-export type ResultCard = { key: string; title: string; detail?: string; state: ChatTool['state']; staged?: boolean };
+export type ResultCard = { key: string; title: string; detail?: string; state: ChatTool['state']; staged?: boolean; saveFailed?: boolean };
 export const chatMessageKey = (message: { id: string; key?: string }) => message.key ?? message.id;
 export type AssistantEditSnapshot = { before:Timeline;after:Timeline;revision:number;canUndo:boolean;publishedDraft:boolean };
 export type SavedEditComparison = { before:Timeline;after:Timeline;revision:number;canUndo:boolean;publishedRevision?:number };
@@ -186,10 +186,10 @@ export function summarizeTools(steps: ChatTool[], evidence:{publishedRevision?:n
   return [...groups].map(([key, group]): ResultCard | null => {
     const step = group[0], name = TOOL_LABELS[step.name] ?? ['Working on your edit', 'Updated your edit'];
     const save = toolSaveReceipt(step.output);
-    if (step.state === 'error') return { key, title: save?.status === 'failed' ? `Could not save: ${step.name}` : save?.status === 'saved' ? `Changes saved; ${step.name} could not finish` : `Could not finish: ${step.name}`, detail: save?.status === 'failed' ? assistantErrorDetail(save.message) : step.detail, state: step.state };
+    if (step.state === 'error') return { key, title: save?.status === 'failed' ? `Could not save: ${step.name}` : save?.status === 'saved' ? `Changes saved; ${step.name} could not finish` : `Could not finish: ${step.name}`, detail: save?.status === 'failed' ? assistantErrorDetail(save.message) : step.detail, state: step.state, saveFailed: save?.status === 'failed' };
     if (step.state === 'running') return { key, title: name[0], state: step.state };
     const outputs = group.map(item => item.output ?? {});
-    if (save?.status === 'failed') return { key, title: `Could not save: ${step.name}`, detail: assistantErrorDetail(save.message), state: 'error' };
+    if (save?.status === 'failed') return { key, title: `Could not save: ${step.name}`, detail: assistantErrorDetail(save.message), state: 'error', saveFailed: true };
     if (save?.status === 'queued') return { key, title: `Queued: ${step.name}`, detail: typeof step.output?.note === 'string' ? step.output.note : 'Processing will continue in the background.', state: 'done' };
     // Old results without a receipt cannot prove a failed write. Keep them in the tool history.
     if (!step.staged && !SAVED_ELSEWHERE.has(step.name) && !outputs.some(output => hasSaveEvidence(output) || published(output))) return null;
@@ -214,7 +214,7 @@ export function summarizeTools(steps: ChatTool[], evidence:{publishedRevision?:n
     if (unchanged && !['markMusicBeats', 'removeMarker', 'removeMarkers'].includes(step.name)) title = 'No changes needed';
     const lowConfidence = outputs.some(output => output.status === 'low-confidence');
     const draftFailed=receipt&&(receipt.status==='failed'||receipt.status==='aborted')&&outputs.some(output=>output.revision===receipt.stagedRevision);
-    if(step.staged&&draftFailed)return {key,title:`Could not save: ${step.name}`,detail:'The replacement edit was not saved.',state:'error',staged:true};
+    if(step.staged&&draftFailed)return {key,title:`Could not save: ${step.name}`,detail:'The replacement edit was not saved.',state:'error',staged:true,saveFailed:true};
     const detail = [step.staged ? 'Awaiting save' : undefined, lowConfidence ? 'Beat detection has low confidence' : undefined].filter(Boolean).join(' · ') || undefined;
     return { key, title: step.staged && !unchanged ? `Prepared: ${title}` : title, detail, state: step.state, staged: step.staged };
   }).filter((card): card is ResultCard => card !== null);

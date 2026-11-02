@@ -89,7 +89,9 @@ A later error cannot erase a committed write. Only a known rolled-back mutation
 or a failed/aborted publication can produce a save-failure card, with the tool
 name. An unknown transport outcome is an interrupted step, not proof of a
 failed save. Legacy results without receipts stay in the tool history rather
-than becoming invented failures.
+than becoming invented failures. A read, render or cleanup error can report an
+unfinished step, but only an explicit failed write/publication gets a failed-save
+heading.
 
 The web agent inside Convex, Cloudflare runner and MCP all construct the same
 toolkit. The runner bridge exposes the scoped receipt functions; the nested
