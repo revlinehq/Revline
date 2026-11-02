@@ -157,7 +157,8 @@ export function setClipSpeedRamp(timeline: Timeline, id: string, anchors: RampAn
   return retimeLinked(next, ids, duration / clip.duration);
 }
 export function deleteClip(timeline: Timeline, id: string): Timeline { timeline = normalizeTimeline(timeline); const ids = new Set(linkedClipIds(timeline, [id])); return reconcileTransitionEdits(timeline, { ...timeline, clips: timeline.clips.filter(c => !ids.has(c.id)) }); }
-export function addMediaClip(timeline: Timeline, asset: { _id: string; kind: Clip['kind']; duration?: number; audioAssetId?: string; derivation?: string; preparation?: {message:string} }, id: string, at?: number, track = 1): Timeline {
+export function addMediaClip(timeline: Timeline, asset: { _id: string; kind: Clip['kind'] | 'model'; duration?: number; audioAssetId?: string; derivation?: string; preparation?: {message:string} }, id: string, at?: number, track = 1): Timeline {
+  if(asset.kind === 'model')throw new Error('Use this model inside a scene with ThreeLayer and Model, attaching it as scene media.');
   if(asset.preparation)throw new Error(asset.preparation.message);
   timeline = normalizeTimeline(timeline);
   const group = layerGroup(asset.kind);

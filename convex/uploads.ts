@@ -39,7 +39,7 @@ export const finish = internalMutation({ args: { ticketId: v.id("uploadTickets")
   if (!ticket || !ticket.receiving || ticket.consumed || ticket.storageId) throw new ConvexError("Upload ticket already used");
   if (!ticket.jobId) await requireEditorAccess(ctx, ticket.ownerId);
   const file=await ctx.db.system.get(args.storageId);if(!file)throw new ConvexError('Uploaded file not found');
-  const kind=ticket.jobId?'export':file.contentType?.startsWith('video/')?'video':file.contentType?.startsWith('audio/')?'audio':'image';
+  const kind=ticket.jobId?'export':file.contentType==='model/gltf-binary'?'model':file.contentType?.startsWith('video/')?'video':file.contentType?.startsWith('audio/')?'audio':'image';
   await recordStorageObject(ctx,{ownerId:ticket.ownerId,storageId:args.storageId,fileName:'Upload',size:file.size,kind,createdAt:Date.now(),pending:true,...(ticket.jobId?{jobId:ticket.jobId}:{})});
   await ctx.db.patch(ticket._id, { storageId: args.storageId, receiving: false }); return null;
 }});
