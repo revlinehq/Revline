@@ -1,3 +1,5 @@
+PRODUCT_BUNDLE_IDENTIFIER = com.revline.app
+REVLINE_SUBSCRIPTION_PRODUCT_ID = com.revline.app.monthly
 REVLINE_SIMULATOR_ENTITLEMENTS = $(SRCROOT)/Config/Simulator.entitlements
 REVLINE_ENVIRONMENT = development
 REVLINE_CONVEX_URL = https:/$()/majestic-alpaca-541.convex.cloud

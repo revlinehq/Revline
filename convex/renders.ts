@@ -21,7 +21,7 @@ import { cancelMediaTask, enqueueMediaTask, failMediaTask } from './mediaTasks';
 import { accountLimit } from './lib/account_limits';import { sceneMediaAssetIds } from '../lib/editor/scene-layers';
 
 const activeExportLimit = () => accountLimit('MAX_ACTIVE_EXPORTS_PER_ACCOUNT', 2, 1, 10);
-const startRenderForArgs = { projectId: v.id("projects"), resolution: v.number(), fps: v.number(), quality: v.string(), clipId:v.optional(v.string()), timelineId:v.optional(v.string()) };
+const startRenderForArgs = { burnCaptions: v.optional(v.boolean()), projectId: v.id("projects"), resolution: v.number(), fps: v.number(), quality: v.string(), clipId:v.optional(v.string()), timelineId:v.optional(v.string()) };
 export async function startRenderFor(ctx: MutationCtx, ownerId: string, args: ObjectType<typeof startRenderForArgs>) {
   await requireEditorAccess(ctx, ownerId); const project = await requireProject(ctx, args.projectId, ownerId);
   const ultra = await hasUltraPlan(ctx, ownerId);
@@ -35,6 +35,7 @@ export async function startRenderFor(ctx: MutationCtx, ownerId: string, args: Ob
   if(args.clipId!==undefined&&project.aiRunning)throw new ConvexError('Wait for the current AI edit to finish before exporting this clip.');
   let snapshot=saved;
   if(args.clipId!==undefined){try{snapshot=clipExportTimeline(saved,args.clipId);}catch(error){throw new ConvexError((error as Error).message);}}
+  if(args.burnCaptions === false) snapshot = {...snapshot, clips: snapshot.clips.filter(clip => clip.kind !== 'caption')};
   const timeline = await validateTimeline(ctx, project, snapshot); if (!timeline.clips.length) throw new ConvexError("Add a clip before exporting");
   if (timelineDuration(timeline) > MAX_EXPORT_SECONDS) throw new ConvexError("Exports currently support up to five minutes. Shorten the final edit before exporting; your full arrangement remains saved.");
   // With Fly, seats bound concurrent renders; beyond them exports wait in a longer queue.

@@ -1,11 +1,11 @@
 import ClerkKit
-import ClerkKitUI
 import SwiftUI
 
 struct SettingsView: View {
     @Environment(Clerk.self) private var clerk
     @Environment(AppSession.self) private var session
-    @State private var profile = false
+    @State private var deleting = false
+    @State private var consent = false
     @State private var confirmSignOut = false
 
     var body: some View {
@@ -13,15 +13,14 @@ struct SettingsView: View {
             List {
                 Section {
                     HStack {
-                        UserButton().frame(width: 44, height: 44)
+                        Image(systemName: "person.crop.circle").font(.largeTitle).frame(width: 44, height: 44).accessibilityHidden(true)
                         VStack(alignment: .leading) {
                             Text(clerk.user?.firstName ?? "Your account").font(.headline)
                             Text("Your workspace, everywhere.").font(.subheadline).foregroundStyle(Color.revlineMuted)
                         }
                     }
-                    Button("Manage account", systemImage: "person.crop.circle") { profile = true }
                 } footer: {
-                    Text("Manage your profile, sign-in methods, security, or delete your account.")
+                    Text("Your Revline account is shared with the web app.")
                 }
                 .revlineRows()
                 Section("Workspace") {
@@ -44,6 +43,11 @@ struct SettingsView: View {
                     if let error = session.purchases.error { ErrorBanner(message: error) }
                     else if let notice = session.purchases.notice { Text(notice).foregroundStyle(Color.revlineMuted) }
                 }.revlineRows()
+                Section("Privacy and account") {
+                    Button("AI data sharing", systemImage: "hand.raised") { consent = true }
+                    LegalLinks()
+                    Button("Delete account", systemImage: "person.crop.circle.badge.minus", role: .destructive) { deleting = true }
+                }.revlineRows()
                 Section("About") {
                     LabeledContent("Version", value: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0")
                     Text("Your projects and edits sync with Revline on the web.").foregroundStyle(Color.revlineMuted)
@@ -65,9 +69,8 @@ struct SettingsView: View {
             .listStyle(.insetGrouped)
             .revlineSurface()
             .navigationTitle("Account")
-            .sheet(isPresented: $profile) {
-                UserProfileView().presentationBackground(Color.revlinePopover)
-            }
+            .sheet(isPresented: $deleting) { DeleteAccountView() }
+            .sheet(isPresented: $consent) { AIConsentView() }
         }
     }
 }
