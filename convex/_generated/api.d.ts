@@ -52,6 +52,7 @@ import type * as lib_editSessionRebase from "../lib/editSessionRebase.js";
 import type * as lib_edit_mode from "../lib/edit_mode.js";
 import type * as lib_editorToolkit from "../lib/editorToolkit.js";
 import type * as lib_editorTurn from "../lib/editorTurn.js";
+import type * as lib_editor_command from "../lib/editor_command.js";
 import type * as lib_effect_plan from "../lib/effect_plan.js";
 import type * as lib_inspectTimeline from "../lib/inspectTimeline.js";
 import type * as lib_mcp_origin from "../lib/mcp_origin.js";
@@ -153,6 +154,7 @@ declare const fullApi: ApiFromModules<{
   "lib/edit_mode": typeof lib_edit_mode;
   "lib/editorToolkit": typeof lib_editorToolkit;
   "lib/editorTurn": typeof lib_editorTurn;
+  "lib/editor_command": typeof lib_editor_command;
   "lib/effect_plan": typeof lib_effect_plan;
   "lib/inspectTimeline": typeof lib_inspectTimeline;
   "lib/mcp_origin": typeof lib_mcp_origin;

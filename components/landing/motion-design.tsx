@@ -10,7 +10,7 @@ export function LandingMotionDesign() {
     >
       <LandingHeading
         id="landing-motion-design-heading"
-        title="Revline for Motion Design"
+        title="Revline for motion designers"
         description="Launch films, explainers and motion graphics, built from a prompt and editable on your timeline."
       />
       <div className="landing-motion-design-frame">
