@@ -17,3 +17,8 @@
 
 /* Landing stays light even when the account last used the dark workspace theme. */
 .landing .composer-upload-enabled{--ws-composer-bg:#fff;--ws-text:#292929;--ws-muted:#777;--ws-hover:#f2f2f2}
+
+@supports (field-sizing:content){
+  .edit-composer-compact [data-slot=input-group-control]{height:auto;overflow-y:auto}
+  .edit-composer-compact [data-slot=input-group-control]:placeholder-shown{field-sizing:fixed;overflow-y:hidden}
+}

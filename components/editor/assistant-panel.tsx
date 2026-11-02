@@ -138,7 +138,7 @@ function AssistantPanelBody({ messages, running, editing:editingTimeline=running
   const [effortChoice, setEffortChoice] = useState<EditorReasoningEffort>();
   const effectiveEffort = effortChoice ?? normalizeEditorReasoningEffort(defaultReasoningEffort);
   const chosenEffort = effortSwitcher ? effectiveEffort : undefined;
-  const supportedModels=allowedModels.filter(choice=>EDITOR_MODELS.some(model=>model.id===choice));
+  const supportedModels=useMemo(()=>allowedModels.filter(choice=>EDITOR_MODELS.some(model=>model.id===choice)),[allowedModels]);
   const availableModels=supportedModels.length?supportedModels:PRODUCTION_CLAUDE_MODEL_CHOICES;
   const selectedModelChoice=modelChoice&&availableModels.some(choice=>choice===modelChoice)?modelChoice:undefined;
   const effectiveModelChoice=selectedModelChoice??(defaultModelChoice&&availableModels.some(choice=>choice===defaultModelChoice)?defaultModelChoice:availableModels.includes('gpt-6.1-sol')?'gpt-6.1-sol':availableModels[0]??'gpt-6.1-sol');
@@ -183,7 +183,7 @@ function AssistantPanelBody({ messages, running, editing:editingTimeline=running
   useEffect(() => { try { setPrompt(draftKey ? sessionStorage.getItem(draftKey) ?? '' : ''); } catch { setPrompt(''); } }, [draftKey]);
   // The model picked for a project stays picked across reloads, so a long test never quietly switches models.
   useEffect(() => { try { const saved = draftKey ? localStorage.getItem(`${draftKey}:model`) : null; setModelChoice(EDITOR_MODELS.find(model => model.id === saved)?.id); } catch { /* The default model applies. */ } }, [draftKey]);
-  function chooseModel(value: ClaudeModelChoice) { setModelChoice(value); try { if (draftKey) localStorage.setItem(`${draftKey}:model`, value); } catch { /* The choice holds for this visit. */ } }
+  const chooseModel = useCallback((value: ClaudeModelChoice) => { setModelChoice(value); try { if (draftKey) localStorage.setItem(`${draftKey}:model`, value); } catch { /* The choice holds for this visit. */ } }, [draftKey]);
   useEffect(() => {
     if (!pendingReply) return;
     const newUser = latestUser && latestUser.id !== pendingReply.previousUserId;
@@ -218,6 +218,8 @@ function AssistantPanelBody({ messages, running, editing:editingTimeline=running
     catch (e) { setPendingReply(null); setLocalError(userError(e, 'Could not start this edit.')); }
     finally { sendInFlight.current=false;setSending(false); }
   }
+
+  const modelControls = useMemo(() => <div className="assistant-model-controls">{(canChooseModel || claudeViaMcp) && <AssistantModelPicker claudeViaMcp={claudeViaMcp} allowedModels={canChooseModel ? availableModels : [effectiveModelChoice]} value={effectiveModelChoice} onChange={chooseModel} disabled={answering} effort={canChooseModel && effortSwitcher ? { value: effectiveEffort, onChange: setEffortChoice } : undefined}/>}<AssistantModePicker value={editMode.value} onChange={editMode.onChange} disabled={answering}/></div>, [canChooseModel, claudeViaMcp, availableModels, effectiveModelChoice, chooseModel, answering, effortSwitcher, effectiveEffort, editMode.value, editMode.onChange]);
 
   return <div className="assistant-content">
     <MessageScroller><MessageScrollerViewport>
@@ -268,7 +270,7 @@ function AssistantPanelBody({ messages, running, editing:editingTimeline=running
     </MessageScrollerViewport><MessageScrollerButton /></MessageScroller>
     <div className="manual-composer-dock">
     {queued.length>0&&<div className="assistant-queue" aria-label="Queued messages"><div className="assistant-queue-heading"><span>{queued.length} queued{queuePaused?' · paused':''}</span>{queuePaused&&onResumeQueue&&<button type="button" onClick={()=>void onResumeQueue().catch(e=>setLocalError(userError(e,'Could not resume the queue.')))}>Resume queue</button>}</div>{queued.map((message,index)=><div className="assistant-queued-message" key={message.id}><span className="assistant-queue-number">{index+1}</span><div><p>{message.prompt}</p>{message.error&&<small>{message.error}</small>}</div><button type="button" aria-label={`Remove queued message ${index+1}`} onClick={()=>void onRemoveQueued?.(message.id).catch(e=>setLocalError(userError(e,'Could not remove queued message.')))}><X size={13}/></button></div>)}</div>}
-    <EditComposer slashCommands allowQueue={conversationStarted&&!demo} attachments={attachments} onRemoveAttachment={onRemoveAttachment} requireMedia={requireMedia} actions={<div className="assistant-model-controls">{(canChooseModel || claudeViaMcp) && <AssistantModelPicker claudeViaMcp={claudeViaMcp} allowedModels={canChooseModel ? availableModels : [effectiveModelChoice]} value={effectiveModelChoice} onChange={chooseModel} disabled={answering} effort={canChooseModel && effortSwitcher ? { value: effectiveEffort, onChange: setEffortChoice } : undefined}/>}<AssistantModePicker {...editMode} disabled={answering}/></div>} variant="compact" className="manual-editor-composer" value={prompt} onChange={changePrompt} onSubmit={submit} onAttach={onAttach} placeholder={externalAgent ? `${externalAgent} is editing over MCP. What you send runs when it finishes.` : "What would you change next?"} disabled={composerBusy || sending || !!pendingReply} running={running && !externalAgent} onStop={onStop ? stop : undefined} stopping={stopState==='stopping'} />
+    <EditComposer slashCommands allowQueue={conversationStarted&&!demo} attachments={attachments} onRemoveAttachment={onRemoveAttachment} requireMedia={requireMedia} actions={modelControls} variant="compact" className="manual-editor-composer" value={prompt} onChange={changePrompt} onSubmit={submit} onAttach={onAttach} placeholder={externalAgent ? `${externalAgent} is editing over MCP. What you send runs when it finishes.` : "What would you change next?"} disabled={composerBusy || sending || !!pendingReply} running={running && !externalAgent} onStop={onStop ? stop : undefined} stopping={stopState==='stopping'} />
     </div>
   </div>;
 }

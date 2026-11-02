@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '@clerk/nextjs';
 import { DEFAULT_EDITOR_EDIT_MODE, type EditorEditModePreference } from '@/lib/ai/edit-mode';
 import { InspectorSelect } from './inspector-select';
@@ -25,10 +25,10 @@ export function useAssistantEditMode() {
     setSelection({ storageKey, value: EDIT_MODES.find(mode => mode.value === saved)?.value ?? DEFAULT_EDITOR_EDIT_MODE });
   }, [storageKey]);
 
-  function chooseMode(value: EditorEditModePreference) {
+  const chooseMode = useCallback((value: EditorEditModePreference) => {
     setSelection({ storageKey, value });
     try { if (storageKey) localStorage.setItem(storageKey, value); } catch { /* Keep the choice for this visit. */ }
-  }
+  }, [storageKey]);
 
   return { value, onChange: chooseMode };
 }
