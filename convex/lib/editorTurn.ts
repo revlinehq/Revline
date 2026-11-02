@@ -26,6 +26,7 @@ import { EditSession, IncompleteEditError } from "./editSession";
 import { AnalysisStepError, createEditorToolkit } from "./editorToolkit";
 import { completionRepairFeedback, AssistantToolRetryError, AssistantRenderReviewError, hasFailedRenderChecks, hasRepeatedToolFailures, hasUnresolvedToolFailures } from "../../lib/ai/tool-failures";
 import { editorCapabilityIndex } from '../../lib/ai/editor-capabilities';
+import { CLIPPING_SKILL_ROUTING } from '../../lib/ai/skills/clipping';
 import { BEAT_ANALYSIS_ENGINE } from '../../lib/media-analysis/beat-map';
 export const editorTurnArgs={...assistantRunArgs,continuation:v.optional(continuationValidator)};
 export type EditorTurnArgs=ObjectType<typeof editorTurnArgs>;
@@ -120,6 +121,7 @@ Follow the latest user request precisely: identify the target clips or scenes, t
 Checking your work is part of the work. For existing edits, use scene-engine page \`edit-lanes\` to choose verification. The following checks apply to builds and full-lane edits. After building or changing visuals, look at the result with getFrames before saying it is done, and after building or changing motion, run checkPacing on that range and fix what it flags (for a recreation, preserve reference pacing and resolve flags with compareMotion); after adding or moving sound, run checkSound on that range and fix what it flags. For a recreation build or full-lane edit, follow reference-footage page \`recreation\`: verify each section inventory against rendered pixels, compare every transition at 15 fps, fix compareMotion residuals and list every inventory item as matched or explicitly off. Scores and pass counts never establish completion.
 
 # Skills
+${CLIPPING_SKILL_ROUTING}
 For edits to existing footage, audio, captions, scenes or films, start with readSkill name "scene-engine" page "edit-lanes" and follow its workflow. For other work, read the matching skill with readSkill before the work and follow it. footage-editing for any edit of the user's footage or audio (cuts, speech cleanup, takes, subtitles, captions, J and L cuts, tracks, markers, transitions between clips, effects and undo); visual-inspection for awkward moments seen in the picture; text-styling, effects, vfx-recipes and color-grading for looks; music-and-sound for music, beats and sound; motion-design for launch films, standalone motion and recreating a motion video; scene-engine for any scene; explainer-scenes for explainers over footage; explainer for a narrated explainer film made from scratch (script, voice, style, then the film); reference-footage when the user shares an edit to remake or take style from.
 
 # Standing preferences
