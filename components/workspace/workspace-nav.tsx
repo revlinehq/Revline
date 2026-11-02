@@ -6,10 +6,9 @@ import { NEW_WORKSPACE_LABEL } from '@/lib/editor/workspace-labels';
 import { useEffect, useRef, useState, type ReactNode, type MouseEvent } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { useClerk, useUser } from '@clerk/nextjs';
-import { signOutToSignIn } from '@/lib/auth/sign-out';
+import { useUser } from '@clerk/nextjs';
 import { useConvexAuth, useQuery } from 'convex/react';
-import { Check, ChevronDown, CircleAlert, Copy, Database, Download, Film, History, Link2, LoaderCircle, LogOut, Palette, PanelsTopLeft, Pencil, Plus, Redo2, UserRound, Undo2 } from 'lucide-react';
+import { Check, ChevronDown, CircleAlert, Copy, Download, Film, History, Link2, LoaderCircle, PanelsTopLeft, Pencil, Plus, Redo2, Undo2 } from 'lucide-react';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
 import { Brand } from './brand';
@@ -18,7 +17,7 @@ import { ProjectCover } from './project-cover';
 import { startNewWorkspace } from './start-new-workspace';
 import { PrimaryButton } from './primary-button';
 import { Button } from '@/components/ui/button';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { WorkspaceAccountMenu } from './account-menu';
 import { Input } from '@/components/ui/input';
 import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator } from '@/components/ui/breadcrumb';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
@@ -86,10 +85,8 @@ export function WorkspaceNav({ title = NEW_WORKSPACE_LABEL, editorHref, active =
   // Ticks while the menu is open so an agent's working state ends on time.
   const [clock, setClock] = useState(() => Date.now());
   useEffect(() => { if (!historyOpen) return; setClock(Date.now()); const timer = setInterval(() => setClock(Date.now()), 5000); return () => clearInterval(timer); }, [historyOpen]);
-  const { user, isSignedIn, isLoaded } = useUser();
-  const clerk = useClerk();
+  const { user } = useUser();
   const [accountError, setAccountError] = useState('');
-  const [signingOut, setSigningOut] = useState(false);
   const [renameOpen, setRenameOpen] = useState(false);
   const [newTitle, setNewTitle] = useState(title);
   // Account pages sit under the workspace; they show where you are, not the chat menu.
@@ -99,12 +96,6 @@ export function WorkspaceNav({ title = NEW_WORKSPACE_LABEL, editorHref, active =
   const [copiedId, setCopiedId] = useState(false);
   const [copyError, setCopyError] = useState('');
   const historyTrigger = useRef<HTMLButtonElement>(null);
-  const initial = (user?.firstName ?? user?.primaryEmailAddress?.emailAddress ?? 'D').slice(0, 1).toUpperCase();
-  async function signOut() {
-    setSigningOut(true); setAccountError('');
-    try { await signOutToSignIn(clerk); }
-    catch { setAccountError('Could not sign out. Please try again.'); setSigningOut(false); }
-  }
   async function rename() {
     if (!onRename || !newTitle.trim() || newTitle.trim().length > 120 || renameBusy) return;
     setRenameBusy(true); setRenameError('');
@@ -152,18 +143,7 @@ export function WorkspaceNav({ title = NEW_WORKSPACE_LABEL, editorHref, active =
       {onShare && !demo && <Button variant="outline" size="md" className="workspace-nav-share" onClick={onShare} disabled={shareDisabled} aria-description={shareDisabled ? 'Add a clip to share' : 'Share a link to this timeline'}><Link2 size={14} /><span>Share</span></Button>}
       {onExport && !demo && <span className="workspace-nav-action-hint"><Button size="md" className="workspace-nav-export" onClick={onExport} disabled={exportDisabled} aria-description={exportHint}>Export<Download size={13} /></Button></span>}
       {editorHref && <Button asChild variant="outline" size="md"><Link href={editorHref} className="workspace-editor-link" aria-label="Editor"><PanelsTopLeft size={14} /><span>Editor</span></Link></Button>}
-      <DropdownMenu><DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="workspace-account-trigger rounded-full p-0" aria-label="Open account menu" disabled={!isLoaded}><Avatar>{user?.imageUrl && <AvatarImage src={user.imageUrl} alt="" />}<AvatarFallback>{initial}</AvatarFallback></Avatar></Button></DropdownMenuTrigger>
-        <DropdownMenuContent align="end" sideOffset={12} className="workspace-menu workspace-account-menu">
-          <div className="workspace-account-identity"><Avatar size="lg">{user?.imageUrl && <AvatarImage src={user.imageUrl} alt="" />}<AvatarFallback>{initial}</AvatarFallback></Avatar><div><strong>{user?.fullName ?? (isSignedIn ? 'Your account' : 'Demo workspace')}</strong><span>{user?.primaryEmailAddress?.emailAddress ?? 'Sign in to save your work'}</span></div></div>
-          <DropdownMenuSeparator className="workspace-menu-divider" />
-          <DropdownMenuItem asChild className="workspace-menu-item"><Link href="/profile" aria-current={active === 'profile' ? 'page' : undefined}><UserRound size={16} />Profile</Link></DropdownMenuItem>
-          <DropdownMenuItem asChild className="workspace-menu-item"><Link href="/storage" aria-current={active === 'storage' ? 'page' : undefined}><Database size={16} />Cloud storage</Link></DropdownMenuItem>
-          <DropdownMenuItem asChild className="workspace-menu-item"><Link href="/brand-kits" aria-current={active === 'brand-kits' ? 'page' : undefined}><Palette size={16} />Brand kits</Link></DropdownMenuItem>
-          <DropdownMenuSeparator className="workspace-menu-divider" />
-          {isSignedIn ? <DropdownMenuItem className="workspace-menu-item" disabled={signingOut} onSelect={event => { event.preventDefault(); void signOut(); }}>{signingOut ? <LoaderCircle size={16} className="animate-spin" /> : <LogOut size={16} />}Sign out</DropdownMenuItem> : <DropdownMenuItem asChild className="workspace-menu-item"><Link href="/sign-in"><LogOut size={16} />Sign in</Link></DropdownMenuItem>}
-          {accountError && <p className="workspace-inline-error" role="alert">{accountError}</p>}
-        </DropdownMenuContent>
-      </DropdownMenu>
+      <WorkspaceAccountMenu active={active} error={accountError} />
     </div>
   </header><Dialog open={renameOpen} onOpenChange={open => { if (!renameBusy) setRenameOpen(open); }}><DialogContent className="workspace-dialog" onCloseAutoFocus={event => { event.preventDefault(); historyTrigger.current?.focus(); }}><DialogTitle>Rename chat</DialogTitle><DialogDescription>Give this conversation a name you can find later.</DialogDescription><form onSubmit={event => { event.preventDefault(); void rename(); }}><label className="workspace-form-field">Chat name<Input autoFocus value={newTitle} maxLength={120} onChange={event => setNewTitle(event.target.value)} /></label>{renameError && <p className="workspace-inline-error" role="alert">{renameError}</p>}<div className="workspace-dialog-actions"><Button variant="outline" size="md" type="button" onClick={() => setRenameOpen(false)} disabled={renameBusy}>Cancel</Button><PrimaryButton type="submit" disabled={renameBusy || !newTitle.trim()}>{renameBusy && <LoaderCircle size={14} className="animate-spin" />}Save name</PrimaryButton></div></form></DialogContent></Dialog></>;
 }

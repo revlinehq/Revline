@@ -80,6 +80,7 @@ div.landing-reveal,div.landing-reveal>.landing-reveal-content{display:inline-blo
 .landing-product-menu-note{font-size:12.5px;color:#8a8a8a}
 .landing-product-menu-new{padding:1px 6px;border:1px solid #e4e4e7;border-radius:999px;font-size:11px;font-weight:500;color:#5e5e5e}
 .landing-nav-right{display:flex;align-items:center;justify-self:end;gap:16px}
+.landing-nav-account{display:flex;align-items:center;gap:12px}
 .landing-nav-login{font-size:14px;font-weight:500;color:var(--l-fg-2);transition:color 140ms ease}
 .landing-nav-login:hover{color:var(--l-fg)}
 .landing-nav[data-tone=dark] .landing-nav-login{color:#ffffffa6}
@@ -286,6 +287,7 @@ div.landing-hero-buttons>.landing-reveal-content{display:flex;align-items:center
   .landing-heading h2{font-size:34px;letter-spacing:-.8px}
   .landing-nav .landing-nav-links,.landing-nav-login{display:none}
   .landing-nav{grid-template-columns:1fr auto}
+  .landing-nav-account{gap:8px}
   .landing-hero{gap:40px;padding-block:56px 64px}
   .landing-hero h1{font-size:40px;letter-spacing:-1px}
   .landing-hero h1 br,.landing-hero-copy>p br{display:none}
