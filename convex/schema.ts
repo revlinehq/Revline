@@ -11,6 +11,7 @@ import { aiCostRecordFields } from './lib/ai_cost';
 import { pacingRequestValidator, pacingResultValidator } from './lib/pacing_validator';
 import { soundRequestValidator, soundResultValidator } from './lib/sound_validator';
 import { alertFields } from './lib/discord_alert';
+import { saveIncidentCondition, saveIncidentEvidence, saveIncidentPublication } from './lib/save_incidents';
 
 export const brandColorValidator = v.object({ name: v.string(), value: v.string() });
 export const brandFontValidator = v.object({ family: v.string(), weight: v.string(), role: v.union(v.literal('heading'), v.literal('body'), v.literal('other')), url: v.string() });
@@ -237,6 +238,21 @@ export const publicMediaAsset = v.object({
 export const sharedChatMessage = v.object({role:v.union(v.literal('user'),v.literal('assistant')),text:v.string()});
 export const shareChatPreviewMessage = v.object({id:v.string(),...sharedChatMessage.fields});
 export default defineSchema({
+  // Operational diagnostics only. No editor subscription reads these tables.
+  saveIncidentRuns: defineTable({
+    runId: v.string(), projectId: v.id('projects'), ownerId: v.string(),
+    publication: v.optional(saveIncidentPublication), finishedAt: v.optional(v.number()),
+  }).index('by_run', ['runId']),
+  saveIncidentSteps: defineTable(saveIncidentEvidence)
+    .index('by_run_call', ['runId', 'toolCallId']),
+  saveIncidentGroups: defineTable({
+    deployment: v.union(v.literal('dev'), v.literal('prod')), deploymentName: v.string(),
+    fingerprint: v.string(), condition: saveIncidentCondition, toolName: v.string(),
+    count: v.number(), firstSeenAt: v.number(), lastSeenAt: v.number(),
+    status: v.union(v.literal('open'), v.literal('pr_open'), v.literal('fixed')),
+    prUrl: v.optional(v.string()), fixedAt: v.optional(v.number()),
+    latest: v.object(saveIncidentEvidence), latestPublication: v.optional(saveIncidentPublication),
+  }).index('by_fingerprint', ['fingerprint']).index('by_status_count', ['status', 'count']),
   projectTransferReceipts:defineTable({transferKey:v.string(),transferId:v.string(),sourceDeployment:v.string(),sourceProjectId:v.string(),sourceRevision:v.number(),fingerprint:v.string(),ownerId:v.string(),email:v.string(),projectId:v.id('projects'),shareId:v.id('timelineShares'),createdAt:v.number()}).index('by_key',['transferKey']),
   aiCostRecords:defineTable({ownerId:v.string(),projectId:v.id('projects'),runId:v.string(),threadId:v.optional(v.string()),promptMessageId:v.optional(v.string()),...aiCostRecordFields}).index('by_owner_recorded',['ownerId','recordedAt']).index('by_run_key',['runId','key']).index('by_owner_project_thread_prompt',['ownerId','projectId','threadId','promptMessageId']),
   assistantPlans:defineTable({projectId:v.id('projects'),ownerId:v.string(),runId:v.string(),plans:v.array(effectPlanValidator),originals:v.array(clipValidator),reviews:v.number(),createdAt:v.number()}).index('by_project',['projectId']),

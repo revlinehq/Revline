@@ -36,6 +36,7 @@ import { validateFrameInspectionInput } from '../lib/media-analysis/frame-inspec
 import { validateVideoInspectionInput } from '../lib/media-analysis/video-inspection';
 import { normalizeTimeline } from '../lib/editor/types';
 import {savePublicationReceipt} from './lib/publicationReceipt';
+import { finishIncidentRun, publishIncidentRun } from './lib/save_incidents';
 import { enqueueMediaTask, cancelMediaTask, detachAnalysisRequest } from './mediaTasks';
 import { consumeAssistantRequest, requireMediaTaskCapacity } from './lib/account_limits';
 import { assertEditorModelConfigured, claudeModelSwitcherEnabled, defaultEditorModelChoice, defaultEditorReasoningEffort, resolveClaudeModel, withEditorReasoning, withEditorSpeed } from '../lib/ai/claude-model';
@@ -389,7 +390,7 @@ export const saveGeneratedSound=internalMutation({args:{...runArgs,r2Key:v.strin
   await recordAssetStorage(ctx,asset);
   return hydrateAsset(ctx,asset);
 }});
-export const apply = internalMutation({ args: { ...runArgs, expectedRevision: v.number(), timeline: timelineValidator,publication:v.optional(v.object({threadId:v.string(),promptMessageId:v.string()})),tool:v.optional(v.string()) }, returns: v.number(), handler: async (ctx, args) => {
+export const apply = internalMutation({ args: { ...runArgs, expectedRevision: v.number(), timeline: timelineValidator,publication:v.optional(v.object({threadId:v.string(),promptMessageId:v.string()})),stagedPublication:v.optional(v.boolean()),tool:v.optional(v.string()) }, returns: v.number(), handler: async (ctx, args) => {
   const note=args.tool?{tool:args.tool}:undefined;
   const project = await requireProject(ctx, args.projectId, args.ownerId, false);
   if (project.aiRunId !== args.runId || !project.aiRunning) throw new ConvexError("AI run is no longer active");
@@ -405,6 +406,7 @@ export const apply = internalMutation({ args: { ...runArgs, expectedRevision: v.
     const values={projectId:project._id,ownerId:args.ownerId,runId:args.runId,baseRevision:revision,timeline,...change,sequence:(previous?.runId===args.runId?previous.sequence:0)+(unchanged?0:1),updatedAt:Date.now()};
     if(previous)await ctx.db.replace(previous._id,values);else await ctx.db.insert('aiTimelinePreviews',values);
     if(args.publication)await savePublicationReceipt(ctx,args.ownerId,{version:1,kind:'timeline-publication',status:'saved',...args.publication,runId:args.runId,stagedRevision:args.expectedRevision,revision});
+    if (args.stagedPublication) await publishIncidentRun(ctx, args.runId, args.expectedRevision, revision);
     return revision;
   };
   if (project.aiUndoRecorded && project.aiCheckpointRevision === args.expectedRevision) {
@@ -464,7 +466,9 @@ export const finish = internalMutation({ args: { ...runArgs, error: v.optional(v
   const project = await readProject(ctx,args.projectId);
   // A stopped action may finish after a new run starts. Its receipt belongs to
   // the original prompt; it must never stop or overwrite the newer run.
-  if(args.publication&&project?.ownerId===args.ownerId&&project.threadId===args.publication.threadId)await savePublicationReceipt(ctx,args.ownerId,{version:1,kind:'timeline-publication',runId:args.runId,...args.publication});
+  const publication = args.publication && project?.ownerId === args.ownerId && project.threadId === args.publication.threadId ? args.publication : undefined;
+  if(publication)await savePublicationReceipt(ctx,args.ownerId,{version:1,kind:'timeline-publication',runId:args.runId,...publication});
+  await finishIncidentRun(ctx, args.runId, publication);
   if (project?.ownerId === args.ownerId && project.aiRunId === args.runId) {
     await clearLivePreview(ctx,project._id);
     const requests = await ctx.db.query("analysisRequests").withIndex("by_projectId_runId", q => q.eq("projectId", args.projectId).eq("aiRunId", args.runId)).take(16);

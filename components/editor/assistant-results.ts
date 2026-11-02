@@ -3,6 +3,7 @@ import {assistantErrorDetail} from './assistant-turn-presentation';
 import type { TimelinePublicationReceipt } from '@/lib/ai/publication-receipt';
 import { unresolvedToolFailureIds } from '@/lib/ai/tool-failures';
 import { READ_ONLY_TOOLS } from '@/lib/ai/read-only-tools';
+import { SAVED_ELSEWHERE, hasSaveEvidence } from '@/lib/ai/save-confirmation';
 export type { TimelinePublicationReceipt } from '@/lib/ai/publication-receipt';
 
 export type ChatTool = { id?: string; name: string; state: 'running' | 'done' | 'error' | 'stopped'; detail?: string; staged?: boolean; input?: Record<string, unknown>; output?: Record<string, unknown> };
@@ -143,8 +144,6 @@ export const TOOL_LABELS: Record<string, [string, string]> = {
   inspectTimeline: ['Checking timeline', 'Checked timeline'], inspectClip: ['Checking clip', 'Checked clip'], inspectAssetAnalysis: ['Reading footage notes', 'Read footage notes'], analyzeMedia: ['Analyzing footage', 'Analyzed footage'], inspectVideo: ['Finding moments', 'Reviewed footage'], inspectFrames: ['Inspecting frames', 'Inspected frames'], inspectVideoFrames: ['Inspecting frames', 'Inspected frames'],
 };
 export { READ_ONLY_TOOLS };
-/** These save outside the timeline (memory, brand kits); their own result is the confirmation. */
-const SAVED_ELSEWHERE = new Set(['remember', 'forget', 'createBrandKit', 'updateBrandKit', 'saveBlueprint']);
 const count = (value: unknown) => typeof value === 'number' && Number.isInteger(value) && value >= 0 ? value : undefined;
 const isId = (value: unknown): value is string => typeof value === 'string' && value.length > 0;
 const noun = (n: number, singular: string, plural = `${singular}s`) => `${n} ${n === 1 ? singular : plural}`;
@@ -161,7 +160,7 @@ export function summarizeTools(steps: ChatTool[], evidence:{publishedRevision?:n
     if((step.state==='error'||step.output?.success===false)&&!unresolved.has(id))continue;
     if (step.state === 'done' && READ_ONLY_TOOLS.has(step.name)) continue;
     const staged = (step.staged === true || step.output?.staged === true)&&!published(step.output);
-    const savedEvidence = staged ? 'prepared' : SAVED_ELSEWHERE.has(step.name) || step.output?.saved === true || step.output?.unchanged === true || published(step.output) ? 'saved' : 'unconfirmed';
+    const savedEvidence = staged ? 'prepared' : SAVED_ELSEWHERE.has(step.name) || hasSaveEvidence(step.output) || published(step.output) ? 'saved' : 'unconfirmed';
     const kind = step.name === 'markMusicBeats' ? `-${step.output?.kind ?? 'beats'}` : '';
     const key = step.state === 'error' ? `${step.name}-error-${id}` : `${step.name}${kind}-${step.state}-${savedEvidence}`;
     groups.set(key, [...groups.get(key) ?? [], { ...step, staged }]);
@@ -171,7 +170,7 @@ export function summarizeTools(steps: ChatTool[], evidence:{publishedRevision?:n
     if (step.state === 'error') return { key, title: 'Could not finish this step', detail: step.detail, state: step.state };
     if (step.state === 'running') return { key, title: name[0], state: step.state };
     const outputs = group.map(item => item.output ?? {});
-    if (!step.staged && !SAVED_ELSEWHERE.has(step.name) && outputs.some(output => output.saved !== true && output.unchanged !== true&&!published(output))) return { key, title: 'Save not confirmed', detail: 'This step did not confirm a saved change.', state: 'error' };
+    if (!step.staged && !SAVED_ELSEWHERE.has(step.name) && outputs.some(output => !hasSaveEvidence(output)&&!published(output))) return { key, title: 'Save not confirmed', detail: 'This step did not confirm a saved change.', state: 'error' };
     const changed = outputs.flatMap(output => Array.isArray(output.changedClips) ? output.changedClips.map(record).filter(Boolean) as Record<string, unknown>[] : []);
     const changedIds = new Set(changed.map(clip => clip.id).filter(isId));
     const removedIds = new Set(outputs.flatMap(output => Array.isArray(output.removedClipIds) ? output.removedClipIds.filter(isId) : []));
