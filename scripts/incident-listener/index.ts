@@ -1,16 +1,17 @@
 import { ConvexClient } from 'convex/browser';
 import { spawn } from 'node:child_process';
 import { watch } from 'node:fs';
-import { mkdir, open, readdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, open, readdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
+import { incidentText } from '../../lib/incidents';
 import { api } from '../../convex/_generated/api';
-import { alive, config, incidentSchema, openPR, readJob, root, state, writeJob, type Endpoint, type Job } from './shared';
+import { alive, config, incidentSchema, openPRs, readJob, root, run, state, writeJob, type Endpoint, type Job } from './shared';
 
 await mkdir(join(state, 'jobs'), { recursive: true, mode: 0o700 });
 const lock = join(state, 'listener.pid');
-try { const previous = Number(await readFile(lock, 'utf8')); if (alive(previous)) process.exit(0); } catch { /* First install. */ }
-await writeFile(lock, String(process.pid), { mode: 0o600, flag: 'w' });
+// macOS shlock atomically creates the PID lock and recovers locks left by dead listeners.
+try { await run('/usr/bin/shlock', ['-p', String(process.pid), '-f', lock]); } catch { process.exit(0); }
 const settings = await config();
 const clients = settings.endpoints.map(endpoint => ({ endpoint, client: new ConvexClient(endpoint.url) }));
 const pending = new Map<string, { endpoint: Endpoint; incident: Job['incident'] }>();
@@ -45,42 +46,65 @@ async function drain() {
       dirty = false;
       let active = await activeJobs();
       const queue = [...pending.entries()].sort(([, a], [, b]) => b.incident.priority - a.incident.priority || a.incident.firstSeen - b.incident.firstSeen);
+      const prs = queue.length ? await openPRs() : [];
       for (const [key, { endpoint, incident }] of queue) {
-        if (active >= 2) break;
+        const existing = prs.find(pr => pr.body.includes(incident.fingerprint));
+        if (active >= 2 && !existing) continue;
         const connection = clients.find(item => item.endpoint === endpoint);
         if (!connection) continue;
         const client = connection.client;
         const claimToken = crypto.randomUUID();
         const args = { secret: endpoint.secret, id: incidentId(incident._id), generation: incident.generation, claimToken };
         // GitHub failure leaves the item pending, instead of risking a duplicate PR.
-        const existing = await openPR(incident.fingerprint);
-        if (!await client.mutation(api.incidents.claim, args)) { pending.delete(key); continue; }
-        pending.delete(key);
-        if (existing) {
-          await client.mutation(api.incidents.recordPR, { ...args, prUrl: existing.url });
-          console.info(`[incidents] ${incident.fingerprint} already has ${existing.url}`);
-          continue;
-        }
         const slug = `${incident.deployment}-${incident.fingerprint.slice(-12)}-${incident.generation}-${claimToken.slice(0, 8)}`;
         const path = join(state, 'jobs', `${slug}.json`);
         const job: Job = { incident, claimToken, branch: `incident/${slug}`, directory: join(homedir(), 'Developer', `revline-incident-${slug}`), phase: 'starting', workerPid: process.pid };
-        await writeJob(path, job);
-        const log = await open(join(state, `${slug}.log`), 'a', 0o600);
-        const worker = spawn(process.execPath, ['--import', 'tsx', join(root, 'scripts/incident-listener/worker.ts'), path], { cwd: root, stdio: ['ignore', log.fd, log.fd], detached: true });
-        await new Promise<void>((resolve, reject) => { worker.once('spawn', resolve); worker.once('error', reject); });
-        worker.unref();
-        await log.close();
-        active++;
-        console.info(`[incidents] Starting Sol for ${incident.deployment}/${incident.fingerprint} in ${job.directory}`);
+        try {
+          // Persist before claiming so a crash cannot leave an untraceable delivery claim.
+          await writeJob(path, job);
+          if (!await client.mutation(api.incidents.claim, args)) {
+            pending.delete(key);
+            await writeJob(path, { ...job, phase: 'finished' });
+            continue;
+          }
+          pending.delete(key);
+          if (existing) {
+            await client.mutation(api.incidents.recordPR, { ...args, prUrl: existing.url });
+            await writeJob(path, { ...job, phase: 'finished', prUrl: existing.url });
+            console.info(`[incidents] ${incident.fingerprint} already has ${existing.url}`);
+            continue;
+          }
+          const log = await open(join(state, `${slug}.log`), 'a', 0o600);
+          try {
+            const worker = spawn(process.execPath, ['--import', 'tsx', join(root, 'scripts/incident-listener/worker.ts'), path], { cwd: root, stdio: ['ignore', log.fd, log.fd, 'ipc'], detached: true });
+            await new Promise<void>((resolve, reject) => {
+              worker.once('message', () => resolve());
+              worker.once('error', reject);
+              worker.once('exit', () => reject(new Error('Worker exited before its launch handshake')));
+            });
+            // The worker cannot launch Sol until its PID is durable, including across listener restarts.
+            await writeJob(path, { ...job, workerPid: worker.pid });
+            worker.send('start');
+            worker.unref();
+          } finally { await log.close(); }
+          active++;
+          console.info(`[incidents] Starting Sol for ${incident.deployment}/${incident.fingerprint} in ${job.directory}`);
+        } catch {
+          await client.mutation(api.incidents.failed, { ...args, message: 'Local worker could not start; inspect the private job log.' });
+          await writeJob(path, { ...job, phase: 'failed' });
+        }
       }
     } while (dirty);
   } catch (error) {
-    console.error(`[incidents] Queue paused after ${error instanceof Error ? error.name : 'an error'}; next subscription or job event will resume it.`);
+    console.error(`[incidents] Queue paused after ${error instanceof Error ? incidentText(error.message, 500) : 'an error'}; next subscription or job event will resume it.`);
   } finally { draining = false; }
 }
 watch(join(state, 'jobs'), (_event, name) => { if (name?.endsWith('.json')) wake(); });
 for (const { endpoint, client } of clients) {
+  let connected = false;
   client.onUpdate(api.incidents.undelivered, { secret: endpoint.secret }, rows => {
+    if (!connected) console.info(`[incidents] ${endpoint.deployment} subscription ready.`);
+    connected = true;
     for (const [key, item] of pending) if (item.endpoint === endpoint) pending.delete(key);
     for (const row of rows) {
       const incident = incidentSchema.parse(row);
@@ -88,7 +112,7 @@ for (const { endpoint, client } of clients) {
       pending.set(`${endpoint.deployment}:${incident._id}`, { endpoint, incident });
     }
     wake();
-  }, () => console.error(`[incidents] ${endpoint.deployment} subscription unavailable; waiting for deployment/configuration.`));
+  }, () => { connected = false; console.error(`[incidents] ${endpoint.deployment} subscription unavailable; waiting for deployment/configuration.`); });
 }
 for (const signal of ['SIGTERM', 'SIGINT'] as const) process.once(signal, () => { void Promise.all(clients.map(({ client }) => client.close())).finally(async () => { await rm(lock, { force: true }); process.exit(0); }); });
 console.info('[incidents] Listening to dev and prod with outbound Convex subscriptions; concurrency 2.');

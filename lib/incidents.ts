@@ -3,14 +3,19 @@ export function incidentText(value: string, limit = 2000): string {
   return value
     .replace(/(?:^|\n|\s)(?:Object|Value|Arguments|Args|Validator):\s*[\s\S]*/i, ' [payload omitted]')
     .replace(/data:[^;\s]+;base64,[\w+/=]+/gi, '[media omitted]')
+    .replace(/\b(?:dev|prod|preview):[\w-]+\|[^\s"']+/gi, '[deployment credential]')
+    .replace(/\b[\da-f]{32,}\b/gi, '[opaque value]')
+    .replace(/\b[A-Za-z0-9+/_=-]{80,}\b/g, '[opaque value]')
+    .replace(/[^\s/\\]+\.(?:mp4|mov|webm|mkv|mp3|wav|m4a|png|jpe?g|gif|pdf|docx)\b/gi, '[media file]')
     .replace(/(?:Bearer\s+)[\w.+/=-]+/gi, 'Bearer [redacted]')
-    .replace(/\b(?:sk|pk|rk|whsec|ghp|github_pat|xox[baprs])[-_][\w.-]+/gi, '[redacted]')
+    .replace(/\b(?:sk|pk|rk|whsec|gh[pousr]|github_pat|xox[baprs])[-_][\w.-]+/gi, '[redacted]')
     .replace(/\beyJ[\w-]+\.[\w-]+\.[\w-]+/g, '[redacted]')
     .replace(/\b(?:secret|token|password|authorization|cookie|api[_-]?key|credential|signature)\b["']?\s*[:=]\s*["']?[^\s,"';}]+/gi, '[credential redacted]')
     .replace(/https?:\/\/[^\s)"'<>]+/g, value => { try { const url = new URL(value); return url.origin + url.pathname; } catch { return '[url]'; } })
     .replace(/[\w.+-]+@[\w.-]+\.[a-z]{2,}/gi, '[email]')
     .replace(/(?:\/Users\/|\/home\/)[^/\s]+/g, '/[home]')
     .replace(/(["'`])[^\n]*?\1/g, '[quoted value]')
+    .replace(/“[^”\n]*”|‘[^’\n]*’/g, '[quoted value]')
     .slice(0, limit);
 }
 

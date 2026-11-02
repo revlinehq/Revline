@@ -9,6 +9,7 @@ import { z } from 'zod';
 export const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 export const state = join(homedir(), '.revline-incidents');
 export const configFile = join(state, 'config.json');
+export const githubToken = () => readFile(join(state, 'github-token'), 'utf8').then(value => value.trim());
 export const endpointSchema = z.object({ deployment: z.enum(['dev', 'prod']), url: z.enum(['https://majestic-alpaca-541.convex.cloud', 'https://different-gnu-398.convex.cloud']), secret: z.string().min(32) }).refine(value => value.url === (value.deployment === 'dev' ? 'https://majestic-alpaca-541.convex.cloud' : 'https://different-gnu-398.convex.cloud'));
 export const configSchema = z.object({ repoRoot: z.string(), codex: z.string(), endpoints: z.array(endpointSchema).length(2) });
 export const config = () => readFile(configFile, 'utf8').then(text => configSchema.parse(JSON.parse(text)));
@@ -31,20 +32,24 @@ export function alive(pid: number | undefined) { if (!pid) return false; try { p
 export const run = promisify(execFile);
 export const repo = 'zuraHQ/revline-editor';
 const prSchema = z.object({ url: z.string().url(), state: z.string(), isDraft: z.boolean(), headRefName: z.string(), body: z.string(), title: z.string() });
-export async function openPR(fingerprint: string) {
-  const { stdout } = await run('gh', ['pr', 'list', '--repo', repo, '--state', 'open', '--json', 'url,state,isDraft,headRefName,body,title', '--limit', '1000']);
-  return z.array(prSchema).parse(JSON.parse(stdout)).find(pr => pr.body.includes(fingerprint));
+async function github(args: string[]) {
+  return await run('gh', args, { env: { ...process.env, GH_TOKEN: await githubToken() }, timeout: 180_000, maxBuffer: 4_000_000 });
+}
+export async function openPRs() {
+  const { stdout } = await github(['pr', 'list', '--repo', repo, '--state', 'open', '--json', 'url,state,isDraft,headRefName,body,title', '--limit', '1000']);
+  return z.array(prSchema).parse(JSON.parse(stdout));
 }
 export async function branchPR(branch: string) {
-  const { stdout } = await run('gh', ['pr', 'list', '--repo', repo, '--state', 'open', '--head', branch, '--json', 'url,state,isDraft,headRefName,body,title']);
+  const { stdout } = await github(['pr', 'list', '--repo', repo, '--state', 'open', '--head', branch, '--json', 'url,state,isDraft,headRefName,body,title']);
   return z.array(prSchema).parse(JSON.parse(stdout)).find(pr => pr.headRefName === branch && pr.isDraft && pr.title.startsWith('Incident: '));
 }
 
-export function launchCodex(binary: string, directory: string, brief: string, logFd: number) {
+export function launchCodex(binary: string, directory: string, brief: string, logFd: number, token: string) {
   // Give Sol public build settings and ordinary user tooling. Deployment files stay separate.
   const env = { ...process.env };
   for (const key of Object.keys(env)) if (!/^(PATH|HOME|USER|LOGNAME|SHELL|TMPDIR|LANG|TERM|CODEX_HOME)$/.test(key)) delete env[key];
-  const child = spawn(binary, ['exec', '--dangerously-bypass-approvals-and-sandbox', '-m', 'gpt-6.1-sol', '-c', 'model_reasoning_effort=xhigh', '-C', directory, '-'], { cwd: directory, env, stdio: ['pipe', logFd, logFd], detached: true });
+  env.GH_TOKEN = token;
+  const child = spawn(binary, ['exec', '--dangerously-bypass-approvals-and-sandbox', '-m', 'gpt-6.1-sol', '-c', 'model_reasoning_effort=xhigh', '-c', 'features.apps=false', '-c', 'mcp_servers={}', '-C', directory, '-'], { cwd: directory, env, stdio: ['pipe', logFd, logFd], detached: true });
   child.stdin?.end(brief);
   return child;
 }

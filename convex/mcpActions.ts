@@ -93,9 +93,9 @@ export const callTool = internalAction({ args: { ownerId: v.string(), agentName:
     const output = args.name in PROJECT_TOOLS
       ? await callProjectTool(ctx, args.ownerId, args.name as ProjectToolName, input)
       : await callEditorTool(ctx, args.ownerId, args.name, input, args.agentName);
-    if (output.isError) await ctx.runMutation(internal.incidents.reportIncident, { source: 'mcp', kind: 'tool-failure', message: output.text, context: { location: 'convex/mcpActions:callTool', toolName: args.name }, deployment: 'server' }).catch(() => {});
+    if (output.isError) await ctx.runMutation(internal.incidents.reportMcp, { ownerId: args.ownerId, projectId, toolName: args.name, message: output.text }).catch(() => {});
     return output;
-  } catch (error) { await ctx.runMutation(internal.incidents.reportIncident, { source: 'mcp', kind: 'tool-failure', message: message(error), stack: error instanceof Error ? error.stack : undefined, context: { location: 'convex/mcpActions:callTool', toolName: args.name }, deployment: 'server' }).catch(() => {}); return result(message(error), true); }
+  } catch (error) { await ctx.runMutation(internal.incidents.reportMcp, { ownerId: args.ownerId, projectId, toolName: args.name, message: message(error), stack: error instanceof Error ? error.stack : undefined }).catch(() => {}); return result(message(error), true); }
   finally { await touch(); }
 }});
 

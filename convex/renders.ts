@@ -1,3 +1,4 @@
+import { recordIncident, incidentDeployment } from './lib/incidents';
 import { MEDIA_PROCESSOR_VERSION } from '../lib/media-analysis/processor-version';
 import { deleteRenderSnapshot, saveRenderSnapshot } from './lib/render_snapshots';
 import { clipExportTimeline } from '../lib/editor/clip-export';
@@ -81,7 +82,10 @@ export const failStalled = internalMutation({ args: {}, returns: v.null(), handl
       const error = running ? STALLED_RENDER_ERROR : STALLED_QUEUE_ERROR;
       if (active) await failMediaTask(ctx, active._id, error);
       const current = await ctx.db.get(job._id);
-      if (current && (current.status === 'queued' || current.status === 'rendering')) await ctx.db.patch(job._id, { status: 'failed', error, updatedAt: now });
+      if (current && (current.status === 'queued' || current.status === 'rendering')) {
+        await recordIncident(ctx, { source: 'export', kind: 'export', message: error, context: { location: 'convex/renders:failStalled', jobId: job._id, taskKind: 'render' }, projectId: job.projectId, deployment: incidentDeployment() });
+        await ctx.db.patch(job._id, { status: 'failed', error, updatedAt: now });
+      }
     }
   }
   return null;

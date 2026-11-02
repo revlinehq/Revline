@@ -18,7 +18,7 @@ export async function recordIncident(ctx: MutationCtx, input: Infer<typeof incid
   };
   const message = incidentText(scrub(input.message));
   const context = scrub(incidentContext(input.context));
-  const diagnostic = z.object({ location: z.string().optional(), toolName: z.string().optional(), taskKind: z.string().optional() }).parse(JSON.parse(context));
+  const diagnostic = z.object({ location: z.string().optional(), toolName: z.string().optional(), taskKind: z.string().optional() }).catch({}).parse(JSON.parse(context));
   const location = diagnostic.location ?? input.stack?.split('\n').find(line => /\bat\b|:\d+:\d+/.test(line)) ?? input.source;
   const identity = [incidentNormalized(message), incidentNormalized(location), input.kind, diagnostic.toolName ?? diagnostic.taskKind ?? ''];
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(identity)));

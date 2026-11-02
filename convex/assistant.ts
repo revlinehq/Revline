@@ -472,7 +472,7 @@ export const finish = internalMutation({ args: { ...runArgs, error: v.optional(v
   const publication = args.publication && project?.ownerId === args.ownerId && project.threadId === args.publication.threadId ? args.publication : undefined;
   if(publication)await savePublicationReceipt(ctx,args.ownerId,{version:1,kind:'timeline-publication',runId:args.runId,...publication});
   await finishIncidentRun(ctx, args.runId, publication);
-  if (args.error && project?.ownerId === args.ownerId) await recordIncident(ctx, {
+  if (args.error && project?.ownerId === args.ownerId && project.aiRunId === args.runId) await recordIncident(ctx, {
     source: 'assistant', kind: 'turn-failure', message: args.error,
     context: { location: 'convex/assistant:finish', savedEdits: args.savedEdits },
     projectId: args.projectId, runId: args.runId, deployment: incidentDeployment(),

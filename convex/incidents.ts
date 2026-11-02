@@ -16,6 +16,11 @@ export const reportRunner = internalMutation({ args: { ...runScope, message: v.s
   await requireProject(ctx, args.projectId, args.ownerId);
   return await recordIncident(ctx, { source: 'cloudflare-agent-runner', kind: 'runner-error', message: args.message, stack: args.stack, context: { location: 'cloudflare/agent-runner:turn' }, projectId: args.projectId, runId: args.runId, deployment: incidentDeployment() });
 } });
+export const reportMcp = internalMutation({ args: { ownerId: v.string(), projectId: v.optional(v.string()), toolName: v.string(), message: v.string(), stack: v.optional(v.string()) }, handler: async (ctx, args) => {
+  const id = args.projectId ? ctx.db.normalizeId('projects', args.projectId) : null;
+  const projectId = id ? await requireProject(ctx, id, args.ownerId).then(() => id).catch(() => null) : null;
+  return await recordIncident(ctx, { source: 'mcp', kind: 'tool-failure', message: args.message, stack: args.stack, context: { location: 'convex/mcpActions:callTool', toolName: args.toolName }, ...(projectId ? { projectId } : {}), deployment: incidentDeployment() });
+} });
 
 export const reportClient = mutation({
   args: { source: v.string(), kind: v.string(), message: v.string(), stack: v.optional(v.string()), context: v.any(), projectId: v.optional(v.string()), runId: v.optional(v.string()) },
@@ -64,12 +69,12 @@ export const recordPR = mutation({ args: { ...claimed, prUrl: v.string() }, hand
   if (!/^https:\/\/github\.com\/zuraHQ\/revline-editor\/pull\/[1-9]\d*$/.test(args.prUrl)) throw new ConvexError('Invalid incident PR');
   const row = await ctx.db.get(args.id);
   if (!row || row.generation !== args.generation || row.claimToken !== args.claimToken) throw new ConvexError('Incident claim lost');
-  await ctx.db.patch(row._id, { status: 'pr_open', delivery: 'finished', prUrl: args.prUrl });
+  await ctx.db.patch(row._id, { ...(row.status === 'resolved' ? {} : { status: 'pr_open' as const }), delivery: 'finished', prUrl: args.prUrl });
 } });
 export const failed = mutation({ args: { ...claimed, message: v.string() }, handler: async (ctx, args) => {
   authorize(args.secret);
   const row = await ctx.db.get(args.id);
-  if (row?.generation === args.generation && row.claimToken === args.claimToken && !row.prUrl) await ctx.db.patch(row._id, { delivery: 'failed', deliveryError: args.message.slice(0, 300) });
+  if (row?.generation === args.generation && row.claimToken === args.claimToken && row.status !== 'resolved' && !row.prUrl) await ctx.db.patch(row._id, { delivery: 'failed', deliveryError: args.message.slice(0, 300) });
 } });
 export const resolve = mutation({ args: { ...identity, expectedCount: v.number() }, handler: async (ctx, args) => {
   authorize(args.secret);
@@ -79,7 +84,7 @@ export const resolve = mutation({ args: { ...identity, expectedCount: v.number()
 export const retry = mutation({ args: identity, handler: async (ctx, args) => {
   authorize(args.secret);
   const row = await ctx.db.get(args.id);
-  if (row?.generation === args.generation && row.delivery === 'failed') await ctx.db.patch(row._id, { delivery: 'pending', claimToken: undefined, deliveryError: undefined });
+  if (row?.generation === args.generation && row.delivery === 'failed' && row.status !== 'resolved') await ctx.db.patch(row._id, { delivery: 'pending', claimToken: undefined, deliveryError: undefined });
 } });
 export const details = internalQuery({ args: { id: v.id('incidents') }, handler: (ctx, args) => ctx.db.get(args.id) });
 export const relatedLogs = query({ args: { ...credentials, id: v.id('incidents') }, handler: async (ctx, args) => {
@@ -89,7 +94,7 @@ export const relatedLogs = query({ args: { ...credentials, id: v.id('incidents')
   const lines: string[] = [];
   for (const sample of row.samples) {
     lines.push(JSON.stringify(sample));
-    const context = z.object({ taskId: z.string().optional() }).parse(JSON.parse(sample.context));
+    const context = z.object({ taskId: z.string().optional() }).catch({}).parse(JSON.parse(sample.context));
     const taskId = context.taskId ? ctx.db.normalizeId('mediaTasks', context.taskId) : null;
     const task = taskId ? await ctx.db.get(taskId) : null;
     if (task && task.projectId === sample.projectId) lines.push(JSON.stringify({ event: 'media-task-state', taskId, kind: task.kind, status: task.status, attempt: task.attempt, error: task.error ? incidentText(task.error) : undefined, updatedAt: task.updatedAt }));

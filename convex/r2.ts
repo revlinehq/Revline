@@ -238,7 +238,7 @@ export const abort = action({ args: { uploadId: v.id('r2Uploads'), ...taskAuth }
 export const deleteObject = internalAction({ args: { key: v.string(),attempt:v.optional(v.number()) }, returns: v.null(), handler: async (ctx, args) => {
   if(isStockAudioKey(args.key))return null;
   try{await storageControl({ action: 'delete', key: args.key });}
-  catch(error){const attempt=args.attempt??0;if(attempt>=8)throw error;await ctx.scheduler.runAfter(Math.min(3600_000,60_000*2**attempt),internal.r2.deleteObject,{key:args.key,attempt:attempt+1});}
+  catch(error){const attempt=args.attempt??0;if(attempt>=8){await ctx.runMutation(internal.incidents.reportIncident,{source:'storage',kind:'delete-failure',message:error instanceof Error?error.message:'Storage deletion failed',stack:error instanceof Error?error.stack:undefined,context:{location:'convex/r2:deleteObject',taskKind:'delete',attempt},deployment:'server'}).catch(()=>{});throw error;}await ctx.scheduler.runAfter(Math.min(3600_000,60_000*2**attempt),internal.r2.deleteObject,{key:args.key,attempt:attempt+1});}
   return null;
 } });
 
@@ -251,7 +251,7 @@ export const cleanupLease = internalAction({ args: { uploadId: v.id('r2Uploads')
     if (!lease.completed && !isStockAudioKey(lease.key)) { await storageControl({ action: 'abort', key: lease.key, uploadId: lease.uploadId }); await storageControl({ action: 'delete', key: lease.key }); }
     await ctx.runMutation(internal.r2.removeLease, {uploadId:args.uploadId});
   } catch(error) {
-    const attempt=args.attempt??0;if(attempt>=8)throw error;
+    const attempt=args.attempt??0;if(attempt>=8){await ctx.runMutation(internal.incidents.reportIncident,{source:'storage',kind:'upload-failure',message:error instanceof Error?error.message:'Upload cleanup failed',stack:error instanceof Error?error.stack:undefined,context:{location:'convex/r2:cleanupLease',taskKind:'upload-cleanup',attempt},projectId:lease.projectId,deployment:'server'}).catch(()=>{});throw error;}
     await ctx.scheduler.runAfter(Math.min(3600_000,60_000*2**attempt),internal.r2.cleanupLease,{uploadId:args.uploadId,attempt:attempt+1});
   }
   return null;
