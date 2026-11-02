@@ -3,7 +3,7 @@ import { AnalysisError } from './errors';
 
 const sceneSchema = z.object({ start: z.number().nonnegative(), end: z.number().positive(), description: z.string().min(1).max(4000), score: z.number().min(0).max(1) });
 const suggestionSchema = z.object({ label: z.string().trim().min(1).max(60), prompt: z.string().trim().min(1).max(1000), start: z.number().nonnegative(), end: z.number().positive() });
-export const understandingSchema = z.object({ summary: z.string().min(1).max(8000), scenes: z.array(sceneSchema).min(1).max(100), suggestions: z.array(suggestionSchema).max(3).optional() });
+const understandingSchema = z.object({ summary: z.string().min(1).max(8000), scenes: z.array(sceneSchema).min(1).max(100), suggestions: z.array(suggestionSchema).max(3).optional() });
 export type Understanding = z.infer<typeof understandingSchema>;
 
 // Providers support different schema constraints; enforce all limits locally before saving.

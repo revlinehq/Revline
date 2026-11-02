@@ -5,7 +5,7 @@ import { playbackRateOf } from './playback-rate';
 import { normalizeTimeline, type Timeline } from './types';
 
 /** The timeline between start and end, rebased to 0, without editing the project. */
-export function rangeExportTimeline(input: Timeline, start: number, end: number): Timeline {
+function rangeExportTimeline(input: Timeline, start: number, end: number): Timeline {
   const timeline=normalizeTimeline(input);
   const clips=timeline.clips.flatMap(clip=>{
     const from=Math.max(start,clip.start),to=Math.min(end,clip.start+clip.duration);

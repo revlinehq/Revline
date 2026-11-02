@@ -17,7 +17,7 @@ export function hz(note: string | number): number {
   return 440 * 2 ** ((SEMIS[match[1]] + (Number(match[2]) - 4) * 12 - 9) / 12);
 }
 /** Deterministic uniform [0, 1) stream (xorshift32). */
-export function rng(seed: number) {
+function rng(seed: number) {
   let s = (seed * 2654435761) >>> 0 || 1;
   return () => { s ^= s << 13; s >>>= 0; s ^= s >>> 17; s ^= s << 5; s >>>= 0; return (s + .5) / 4294967296; };
 }
@@ -36,7 +36,7 @@ function coefficients(fc: number, kind: FilterKind, q: number) {
   return [b[0] / a0, b[1] / a0, b[2] / a0, -2 * c / a0, (1 - a) / a0] as const;
 }
 /** One second-order section (bilinear transform with prewarping; Q 1/√2 is Butterworth, as scipy's butter(2, ...)). */
-export function biquad(x: Mono, fc: number, kind: FilterKind, q = Math.SQRT1_2): Mono {
+function biquad(x: Mono, fc: number, kind: FilterKind, q = Math.SQRT1_2): Mono {
   const [b0, b1, b2, a1, a2] = coefficients(fc, kind, q), y = new Float64Array(x.length);
   let x1 = 0, x2 = 0, y1 = 0, y2 = 0;
   for (let i = 0; i < x.length; i++) { const v = b0 * x[i] + b1 * x1 + b2 * x2 - a1 * y1 - a2 * y2; x2 = x1; x1 = x[i]; y2 = y1; y1 = v; y[i] = v; }

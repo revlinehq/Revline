@@ -1,8 +1,8 @@
 import { z } from 'zod';
 import type { Clip } from '../editor/types';
 import { sourceEndOf, timelineTimeAtSource } from '../editor/playback-rate';
-export const MAX_FRAME_WINDOW = 3;
-export const MAX_INSPECTION_FRAMES = 12;
+const MAX_FRAME_WINDOW = 3;
+const MAX_INSPECTION_FRAMES = 12;
 export type FrameInspectionInput = { start: number; end: number; question: string };
 export type FrameGeometry = { sourceWidth:number; sourceHeight:number; decodedWidth:number; decodedHeight:number };
 export type FrameTarget = {frameIndex:number;time:number;label:string;confidence:'low'|'medium'|'high';box:{left:number;top:number;right:number;bottom:number}};

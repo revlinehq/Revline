@@ -8,7 +8,7 @@ export type TwoRowPosition = 'top' | 'bottom';
 type LayoutSource = Pick<MediaAsset, '_id' | 'kind' | 'width' | 'height' | 'analysis'>;
 
 /** Fill an exact half-canvas aperture using the existing undistorted source crop. */
-export function twoRowLayoutPatch(clip: Clip, asset: LayoutSource, aspectRatio: AspectRatio, row: TwoRowPosition, region?: {x:number;y:number;w:number;h:number}): Pick<Clip, 'crop' | 'fit' | 'transform'> {
+function twoRowLayoutPatch(clip: Clip, asset: LayoutSource, aspectRatio: AspectRatio, row: TwoRowPosition, region?: {x:number;y:number;w:number;h:number}): Pick<Clip, 'crop' | 'fit' | 'transform'> {
   if ((clip.kind !== 'video' && clip.kind !== 'image') || asset.kind !== clip.kind || asset._id !== clip.assetId) throw new Error('Choose a video or image source for the row layout.');
   if (row !== 'top' && row !== 'bottom') throw new Error('Choose the top or bottom row.');
   if (!asset.width || !asset.height || !Number.isFinite(asset.width) || !Number.isFinite(asset.height) || asset.width <= 0 || asset.height <= 0) throw new Error('Wait for the source dimensions before applying a row layout.');
@@ -47,7 +47,7 @@ export function applyTwoRowLayout(timeline: Timeline, assets: readonly LayoutSou
 }
 
 /** Refuse a changing or unverified layout instead of stretching a guessed box across the clip. */
-export function detectedRegionForClip(analysis:FacecamAnalysis|undefined,clip:Clip,row:TwoRowPosition){
+function detectedRegionForClip(analysis:FacecamAnalysis|undefined,clip:Clip,row:TwoRowPosition){
   const samples=analysis?.samples;
   if(!samples?.length)throw new Error('Run detectFacecam on this source first.');
   const before=samples.filter(s=>s.time<=clip.sourceStart).at(-1);

@@ -12,11 +12,11 @@ export const WIPE_DIRECTIONS = ['left', 'right', 'up', 'down'] as const;
 export const IRIS_SHAPES = ['circle', 'ellipse'] as const;
 export type TransitionWipeSettings = { wipeDirection: typeof WIPE_DIRECTIONS[number]; softness: number; centerX: number; centerY: number; shape: typeof IRIS_SHAPES[number] };
 export type ClipTransition = { fromClipId: string; toClipId: string; direction: TransitionDirection } & Partial<TransitionWipeSettings>;
-export const DEFAULT_TRANSITION_WIPE: TransitionWipeSettings = { wipeDirection: 'right', softness: .12, centerX: .5, centerY: .5, shape: 'circle' };
+const DEFAULT_TRANSITION_WIPE: TransitionWipeSettings = { wipeDirection: 'right', softness: .12, centerX: .5, centerY: .5, shape: 'circle' };
 export function transitionWipeSettings(settings: Partial<ClipTransition>): TransitionWipeSettings {
   return { wipeDirection: settings.wipeDirection ?? DEFAULT_TRANSITION_WIPE.wipeDirection, softness: settings.softness ?? DEFAULT_TRANSITION_WIPE.softness, centerX: settings.centerX ?? DEFAULT_TRANSITION_WIPE.centerX, centerY: settings.centerY ?? DEFAULT_TRANSITION_WIPE.centerY, shape: settings.shape ?? DEFAULT_TRANSITION_WIPE.shape };
 }
-export const DEFAULT_TRANSITION_DURATION = .6;
+const DEFAULT_TRANSITION_DURATION = .6;
 export const DEFAULT_TRANSITION_DIRECTION: TransitionDirection = 'clockwise';
 const tolerance = 1e-6;
 const isMedia = (clip: Clip) => clip.kind === 'video' || clip.kind === 'image';
@@ -72,8 +72,8 @@ function transitionCandidates(clips: Clip[], at: number, options: { aboveClipId?
   return candidates;
 }
 
-export function maxTransitionDuration(from: Clip, to: Clip, fps: number) { return Math.floor((2 * Math.min(from.duration, to.duration) + tolerance) * fps) / fps; }
-export function centeredTransitionRange(from: Clip, to: Clip, fps: number, requested = DEFAULT_TRANSITION_DURATION) {
+function maxTransitionDuration(from: Clip, to: Clip, fps: number) { return Math.floor((2 * Math.min(from.duration, to.duration) + tolerance) * fps) / fps; }
+function centeredTransitionRange(from: Clip, to: Clip, fps: number, requested = DEFAULT_TRANSITION_DURATION) {
   if (!Number.isFinite(requested) || requested < 2 / fps - tolerance) throw new Error('A transition must last at least two frames.');
   const duration = Math.min(Math.round(requested * fps) / fps, maxTransitionDuration(from, to, fps));
   if (duration < 2 / fps - tolerance) throw new Error('Both clips need at least one retained frame for a transition.');

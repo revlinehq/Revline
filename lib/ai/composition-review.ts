@@ -2,7 +2,7 @@ import { z } from 'zod';
 import type { EffectPlan } from './edit-plan';
 import { normalizeTimeline, trackOf, type Timeline } from '../editor/types';
 import { equalTimelineValue } from '../editor/timeline-equality';
-export const reviewObservations = z.object({
+const reviewObservations = z.object({
   observations:z.array(z.object({planId:z.string().max(80),verdict:z.enum(['pass','fail','unverifiable']),evidence:z.string().min(1).max(2000)})).min(1).max(2),
   uncertainty:z.string().max(2000),
 });
@@ -18,7 +18,7 @@ export function compositionReviewBudget(attempts:number,reviews:readonly {status
 }
 /** Review pixels depend on the visible window, including held transition
  * sources, rather than unrelated audio, markers or clips elsewhere. */
-export function compositionReviewScope(timeline:Timeline,start:number,end:number) {
+function compositionReviewScope(timeline:Timeline,start:number,end:number) {
   timeline=normalizeTimeline(timeline);
   const visible=timeline.clips.filter(clip=>clip.kind!=='audio'&&clip.start<end&&clip.start+clip.duration>start);
   const visibleIds=new Set(visible.map(clip=>clip.id));

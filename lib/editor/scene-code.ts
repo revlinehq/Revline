@@ -6,7 +6,7 @@ import type { Clip, Timeline } from './types';
  * Every edit rewrites (and every open editor re-reads) the timeline, so this keeps both small, and
  * identical code is stored once. Editing logic only ever sees timelines with their code restored.
  */
-export async function sceneCodeHash(code: string): Promise<string> {
+async function sceneCodeHash(code: string): Promise<string> {
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(code));
   return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('');
 }

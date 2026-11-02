@@ -36,7 +36,7 @@ export function ConnectedTimelineShareDialog({ projectId, onBeforePublish, ...pr
   return <TimelineShareDialog {...props} tabs={live} status={status} chatPreview={chatPreview} onChatPreviewChange={setPreviewEnabled} onPublish={async (chat, timelineIds) => { await onBeforePublish(); return publish({ projectId, ...(chat ? { chat } : {}), ...(timelineIds ? { timelineIds } : {}) }); }} onRevoke={() => revoke({ projectId })}/>;
 }
 
-export function TimelineShareDialog({ open, onOpenChange, title, timeline, assets, sceneThumbs, status, onPublish, onRevoke, publishDisabled, chatPreview, onChatPreviewChange, tabs }: Props) {
+function TimelineShareDialog({ open, onOpenChange, title, timeline, assets, sceneThumbs, status, onPublish, onRevoke, publishDisabled, chatPreview, onChatPreviewChange, tabs }: Props) {
   const [busy, setBusy] = useState<'publish' | 'revoke' | null>(null);
   const [error, setError] = useState(''), [copied, setCopied] = useState(false), [origin, setOrigin] = useState('');
   const [localId, setLocalId] = useState<string | null | undefined>();

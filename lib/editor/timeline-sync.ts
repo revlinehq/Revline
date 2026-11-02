@@ -79,7 +79,7 @@ export const TIMELINE_CONFLICT = 'The timeline changed elsewhere. Reload before 
 const RETRY_DELAYS = [1000, 2000, 5000, 10000, 30000];
 /** Application rejections are deterministic unless they report the AI lock, a
  * stale revision, or access (coded) state. Network and server faults are not. */
-export function rejectedEdit(error: unknown) {
+function rejectedEdit(error: unknown) {
   const data = error && typeof error === 'object' && 'data' in error ? error.data : undefined;
   return typeof data === 'string' && data !== TIMELINE_LOCKED && !/timeline changed elsewhere/i.test(data) && data !== 'Authentication required';
 }

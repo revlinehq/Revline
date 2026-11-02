@@ -3,7 +3,7 @@ import { normalizedRect } from '../media-analysis/clipping';
 import { withSourceFaceDecoder } from './source-face-decoder';
 
 const face = normalizedRect.safeExtend({ confidence: z.number().min(0).max(1), mouth: z.number().nonnegative().nullable(), appearance: z.array(z.number().min(0).max(1)).length(88).optional() });
-export const sourceFaceEvidence = z.object({ width: z.number().positive(), height: z.number().positive(), samples: z.array(z.object({ time: z.number().nonnegative(), faces: z.array(face) })) });
+const sourceFaceEvidence = z.object({ width: z.number().positive(), height: z.number().positive(), samples: z.array(z.object({ time: z.number().nonnegative(), faces: z.array(face) })) });
 export type SourceFaceEvidence = z.infer<typeof sourceFaceEvidence>;
 
 /** Decode native frames in the processor. Corner tiles preserve small webcam faces. */

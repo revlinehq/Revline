@@ -22,7 +22,7 @@ export { NEUTRAL_MOTION, motionAt, type MotionKeyframe } from './motion-path';
 
 export const BLEND_MODES = ['normal', 'screen', 'multiply', 'overlay', 'plus-lighter', 'difference'] as const;
 export type BlendMode = typeof BLEND_MODES[number];
-export const MOTION_PRESETS = ['none', 'fade', 'punch', 'shake', 'flash', 'pop'] as const;
+const MOTION_PRESETS = ['none', 'fade', 'punch', 'shake', 'flash', 'pop'] as const;
 export type MotionPreset = typeof MOTION_PRESETS[number];
 export const TIMED_EFFECT_PRESETS = ['punch', 'shake', 'flash', 'pop', 'cinematic-bars', 'quick-zoom-in', 'quick-zoom-out', 'zoom-blur', 'solid-color', 'impact-frame', 'texture-overlay'] as const;
 export type TimedEffectPreset=typeof TIMED_EFFECT_PRESETS[number];
@@ -43,19 +43,19 @@ export function solidColorPatch(clip:Clip,changes:Partial<SolidColorSettings>):P
   return {solidColor};
 }
 export type CinematicBarSettings = { size: number; speed: number };
-export const DEFAULT_CINEMATIC_BARS: CinematicBarSettings = { size: .12, speed: 1 };
-export const CINEMATIC_BAR_LIMITS = { size: [0, .5], speed: [.25, 4] } as const;
+const DEFAULT_CINEMATIC_BARS: CinematicBarSettings = { size: .12, speed: 1 };
+const CINEMATIC_BAR_LIMITS = { size: [0, .5], speed: [.25, 4] } as const;
 export type FrameShrinkSettings = { size: number; speed: number };
-export const DEFAULT_FRAME_SHRINK: FrameShrinkSettings = { size: .12, speed: 1 };
-export const FRAME_SHRINK_LIMITS = { size: [0, .45], speed: [.25, 4] } as const;
+const DEFAULT_FRAME_SHRINK: FrameShrinkSettings = { size: .12, speed: 1 };
+const FRAME_SHRINK_LIMITS = { size: [0, .45], speed: [.25, 4] } as const;
 export type ZoomSettings = { direction: 'in' | 'out'; amount: number; speed: number; centerX: number; centerY: number };
 export const ZOOM_LIMITS = { amount: [1, 3], speed: [.25, 4], centerX: [0, 1], centerY: [0, 1] } as const;
 export function isZoomPreset(preset: unknown): preset is 'quick-zoom-in' | 'quick-zoom-out' { return preset === 'quick-zoom-in' || preset === 'quick-zoom-out'; }
-export function zoomSettings(clip: Pick<Clip, 'effectPreset' | 'zoom' | 'motion'>): ZoomSettings {
+function zoomSettings(clip: Pick<Clip, 'effectPreset' | 'zoom' | 'motion'>): ZoomSettings {
   return clip.zoom ?? { direction: clip.effectPreset === 'quick-zoom-out' ? 'out' : 'in', amount: isZoomPreset(clip.effectPreset) && clip.motion?.length ? Math.max(1, ...clip.motion.map(frame => frame.scale)) : 1.2, speed: 1, centerX: .5, centerY: .5 };
 }
 /** One editable zoom recipe; speed adjusts its progression within the FX range. */
-export function zoomKeyframes(duration: number, settings: ZoomSettings): MotionKeyframe[] {
+function zoomKeyframes(duration: number, settings: ZoomSettings): MotionKeyframe[] {
   const steps = 16;
   return Array.from({ length: steps + 1 }, (_, index) => {
     const time = duration * index / steps, progress = Math.min(1, index / steps * settings.speed);
@@ -66,13 +66,13 @@ export function zoomKeyframes(duration: number, settings: ZoomSettings): MotionK
 const key = (time: number, changes: Partial<MotionKeyframe> = {}): MotionKeyframe => ({ time, ...NEUTRAL_MOTION, ...changes });
 export function cinematicBarSettings(clip: Pick<Clip, 'cinematicBars'>): CinematicBarSettings { return clip.cinematicBars ?? DEFAULT_CINEMATIC_BARS; }
 /** Clip length controls hold/end time; speed alone controls the entrance and exit. */
-export function cinematicBarKeyframes(duration: number, speed = 1): MotionKeyframe[] {
+function cinematicBarKeyframes(duration: number, speed = 1): MotionKeyframe[] {
   const movement = Math.min(.4 / speed, duration / 2);
   return [key(0, { opacity: 0 }), key(movement), key(duration - movement), key(duration, { opacity: 0 })].filter((frame, index, frames) => index === 0 || frame.time > frames[index - 1].time);
 }
-export function frameShrinkSettings(clip: Pick<Clip, 'frameShrink'>): FrameShrinkSettings { return clip.frameShrink ?? DEFAULT_FRAME_SHRINK; }
+function frameShrinkSettings(clip: Pick<Clip, 'frameShrink'>): FrameShrinkSettings { return clip.frameShrink ?? DEFAULT_FRAME_SHRINK; }
 /** Insets every side by size; sampled smoothstep uses the existing motion clock. */
-export function frameShrinkKeyframes(duration:number,settings:FrameShrinkSettings=DEFAULT_FRAME_SHRINK):MotionKeyframe[]{
+function frameShrinkKeyframes(duration:number,settings:FrameShrinkSettings=DEFAULT_FRAME_SHRINK):MotionKeyframe[]{
   const movement=Math.min(.4/settings.speed,duration/2),scale=Math.max(.1,1-2*settings.size),steps=8;
   const smooth=(p:number)=>p*p*(3-2*p),bounded=(value:number)=>Math.max(scale,Math.min(1,value));
   return [...Array.from({length:steps+1},(_,index)=>key(movement*index/steps,{scale:bounded(1+(scale-1)*smooth(index/steps))})),key(duration-movement,{scale}),...Array.from({length:steps},(_,index)=>key(duration-movement+movement*(index+1)/steps,{scale:bounded(scale+(1-scale)*smooth((index+1)/steps))}))]

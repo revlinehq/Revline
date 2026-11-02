@@ -4,7 +4,7 @@ import type { Clip } from './types';
  * it follows the subject's silhouette. Pixel sizes are measured at 1080 output height. */
 export type ClipOutline = { enabled: boolean; color: string; width: number; glow: number };
 export const DEFAULT_OUTLINE: Readonly<ClipOutline> = Object.freeze({ enabled: true, color: '#36f9f2', width: 5, glow: 28 });
-export const OUTLINE_LIMITS = { width: [0, 24], glow: [0, 80] } as const;
+const OUTLINE_LIMITS = { width: [0, 24], glow: [0, 80] } as const;
 
 export function validateOutline(clip: Pick<Clip, 'kind' | 'outline'>) {
   const outline = clip.outline;

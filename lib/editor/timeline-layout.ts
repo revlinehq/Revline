@@ -6,7 +6,7 @@ export const TIMELINE_RULER_HEIGHT=28;
 // Time zero starts flush against the timeline lane's left edge.
 export const TIMELINE_ORIGIN=0;
 // Every lane has 3px above and below its clip, including track group boundaries.
-export const TIMELINE_TRACK_GAP=6;
+const TIMELINE_TRACK_GAP=6;
 // A visible landing area makes adding a track above the stack easy to reach.
 // Drag auto-scroll is measured at the ruler boundary, independently of this space.
 export const TIMELINE_TOP_SPACE=24;
