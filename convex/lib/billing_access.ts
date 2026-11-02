@@ -29,14 +29,6 @@ export async function hasUltraPlan(ctx: QueryCtx | MutationCtx, ownerId: string)
   return (await editorSubscriptions(ctx, ownerId)).some(sub => isUltraSubscription(sub) && hasEditorAccess(sub));
 }
 
-/** On a free trial: editor access comes only from a trialing subscription (not a paid one or a complimentary grant). */
-export async function onFreeTrial(ctx: QueryCtx | MutationCtx, ownerId: string) {
-  if (await activeAppleEntitlement(ctx, ownerId)) return false;
-  if (!billingEnabled() || !billingConfigured() || await hasComplimentaryEditorAccess(ctx, ownerId)) return false;
-  const live = (await editorSubscriptions(ctx, ownerId)).filter(hasEditorAccess);
-  return live.length > 0 && live.every(sub => sub.status === 'trialing');
-}
-
 export async function requireEditorAccess(ctx: QueryCtx | MutationCtx, ownerId: string) {
   if (!billingEnabled()) return;
   if (await hasComplimentaryEditorAccess(ctx, ownerId)) return;
