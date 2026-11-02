@@ -1,6 +1,6 @@
 # Pixel tracking
 
-`trackPoints` tracks visible source pixels in the media processor. It accepts a footage clip, a timeline seed time and a normalized source point/box. An `inspectFrames` target ID can supply a box within the same tool session. A short noun uses the existing Gemini `inspectFrames` job once to localize a box, then runs the same pixel tracker. There is no SAM dependency.
+`trackPoints` tracks visible source pixels in the media processor. It accepts a footage clip, a timeline seed time and a normalized source point/box. An `inspectFrames` target ID can supply a box within the same tool session. A short noun is localized from one measured native source frame inside the media processor using `fal-ai/florence-2-large/open-vocabulary-detection`, then runs the same pixel tracker. Explicit point/box seeds and existing inspection targets make no grounding-provider call. `readFrames` supplies free source-frame inspection. There is no SAM dependency.
 
 ```json
 {
@@ -28,12 +28,12 @@ Pixels are decoded at full source resolution. Feature detection and optical flow
 
 Nothing was deployed from this branch. Deploy the matching components together, with development and production credentials kept separate:
 
-1. Rebuild the media processor image, including `scripts/track-pixels.py`, and restart the local development worker from the merged checkout. The integrated clipping/VFX/tracking release uses processor contract 26; pixel jobs require that contract or newer, and an older worker leaves them queued.
+1. Rebuild the media processor image and its Cloudflare edge controller, including `scripts/track-pixels.py`, `scripts/detect-facecam.py` and the vendored Face Landmarker model, and restart the local development worker from the merged checkout. The integrated clipping/VFX/tracking release uses processor contract 27; pixel jobs require that contract or newer, and an older worker leaves them queued.
 2. Deploy Convex schema/functions for tracking derivations, chunk storage/indexes, the `/pixel-track` HTTP route, task payloads/results and tools.
 3. Deploy the agent runner, which bundles the editor toolkit and skills.
 4. Deploy the frontend and the export image so streamed attachments and tracked-mask visibility agree in preview and export. Export machines need the render changes, not Python/OpenCV tracking dependencies.
 
-No required environment variables or model files are added. Optional `PIXEL_TRACK_PYTHON` selects a Python executable; otherwise the tracker uses `SCENE_DETECT_PYTHON`, then `.data/scene-detection/bin/python`. The shipped processor already installs the pinned OpenCV/NumPy environment. Noun localization uses the existing Gemini key/model configuration and needs working provider billing.
+No new pixel-tracking model files or required environment variables are added beyond the existing FAL_KEY for optional noun seeds. The combined clipping release also includes the vendored local Face Landmarker bundle; see `clipping-depth.md`. Optional `PIXEL_TRACK_PYTHON` selects a Python executable; otherwise the tracker uses `SCENE_DETECT_PYTHON`, then `.data/scene-detection/bin/python`. The shipped processor already installs the pinned OpenCV/NumPy environment. Noun localization uses the existing worker-only `FAL_KEY`. Gemini is never required; `MEDIA_VISION_GEMINI_FALLBACK=true` opts into a paid fallback with a working key. `getTrack` exposes `summary.grounding` with the proposed box, measured source time and provider. Florence can guess when the noun is absent and does not provide calibrated confidence: visually confirm that box before claiming object identity, or choose an explicit source point/box. Empty or multiple detections fail clearly.
 
 ## Verification recorded 2026-11-01
 

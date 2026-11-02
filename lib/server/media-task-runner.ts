@@ -200,7 +200,7 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
       if (!task.derive || asset.kind === 'audio') throw new AnalysisError('The processing request is unavailable.', 400);
       if (task.derive.op === 'pixelTrack') {
         if (!task.derive.tracking || asset.kind !== 'video') throw new AnalysisError('Pixel tracking request is missing.', 400);
-        return { pixelTrack: await runPhase('Tracking pixels', () => trackSourcePixels(source, task.derive!.tracking!, signal, { header: header => (exclusive ?? (work => work()))(() => convex.mutation(pixelTrackApi.pixelTracks.begin, { ...credentials, header })), chunk: chunk => (exclusive ?? (work => work()))(() => convex.mutation(pixelTrackApi.pixelTracks.append, { ...credentials, ...chunk })) })) };
+        return { pixelTrack: await runPhase('Tracking pixels', () => trackSourcePixels(source, directory, task.derive!.tracking!, signal, { header: header => (exclusive ?? (work => work()))(() => convex.mutation(pixelTrackApi.pixelTracks.begin, { ...credentials, header })), chunk: chunk => (exclusive ?? (work => work()))(() => convex.mutation(pixelTrackApi.pixelTracks.append, { ...credentials, ...chunk })) })) };
       }
       if (task.derive.op === 'stats') return { colorStats: await runPhase('Measuring color', () => measureColor(source, asset.kind as 'video' | 'image', task.derive!.times ?? [task.derive!.start], signal)) };
       const request = { ...task.derive, op: task.derive.op }, label = request.op === 'parallax' ? 'Preparing depth, foreground matte and inpainted background' : request.op === 'freeze' ? 'Capturing freeze frame' : request.op === 'slowmo' ? 'Interpolating slow motion' : 'Upscaling';
@@ -236,9 +236,7 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
     }
     if(task.kind==='facecam'||task.kind==='speakers'){
       if(!media.hasVideo)throw new AnalysisError('Clipping analysis needs a video source.',400);
-      const key=process.env.GOOGLE_GENERATIVE_AI_API_KEY;
-      if(!key)throw new AnalysisError('Gemini clipping analysis is not configured on the media worker.',503);
-      if(task.kind==='facecam')return {analysis:{facecam:asset.analysis?.facecam??await detectSourceFacecam(source,directory,media.duration,key,signal,onProgress)}};
+      if(task.kind==='facecam')return {analysis:{facecam:asset.analysis?.facecam??await detectSourceFacecam(source,directory,media.duration,signal,onProgress)}};
       const range=task.speakerRequest??{start:0,end:asset.duration??media.duration},cached=asset.analysis?.speakers;
       if(range.start<0||range.end<=range.start||range.end-range.start>MAX_SPEAKER_WINDOW_SECONDS||range.end>(asset.duration??media.duration)+.01)throw new AnalysisError('Active-speaker analysis needs a valid source window of up to 120 seconds.',400);
       if(cached&&cached.start<=range.start&&cached.end>=range.end)return {analysis:{speakers:cached}};
@@ -255,7 +253,7 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
         const audio=join(directory,'speaker-speech.mp3');await extractTranscriptionAudio(window,audio,signal);
         transcript=await transcribeWithDeepgram(audio,duration,speechKey,signal);
       }
-      const local=await trackSourceSpeakers(window,directory,duration,transcript,key,signal,onProgress);
+      const local=await trackSourceSpeakers(window,directory,duration,transcript,signal,onProgress);
       const speakers=speakerAnalysis.parse({...local,start:range.start,end:range.end,identityScope,turns:local.turns.map(t=>({...t,start:t.start+range.start,end:t.end+range.start})),focus:local.focus.map(p=>({...p,time:p.time+range.start}))});
       return {analysis:{speakers}};
     }

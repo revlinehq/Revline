@@ -3,7 +3,7 @@ import { ConvexHttpClient } from 'convex/browser';
 import { makeFunctionReference } from 'convex/server';
 import { MEDIA_PROCESSOR_VERSION } from '../../../lib/media-analysis/processor-version';
 
-type ProcessorSecrets = { RENDER_WORKER_SECRET: string; GOOGLE_GENERATIVE_AI_API_KEY: string; DEEPGRAM_API_KEY?: string; FAL_KEY?: string };
+type ProcessorSecrets = { RENDER_WORKER_SECRET: string; GOOGLE_GENERATIVE_AI_API_KEY?: string; MEDIA_VISION_GEMINI_FALLBACK?: string; DEEPGRAM_API_KEY?: string; FAL_KEY?: string };
 type Bindings = ProcessorEnv & ProcessorSecrets;
 const TIMEOUT_MS = 5 * 60_000;
 const INSTANCE_TYPE = 'standard-3';
@@ -67,7 +67,7 @@ export class MediaProcessor extends DurableObject<Bindings> {
   }
   private async ensureWorker(): Promise<void> {
     if (await this.ctx.storage.get('retired')) return;
-    if (!this.env.RENDER_WORKER_SECRET || !this.env.GOOGLE_GENERATIVE_AI_API_KEY) throw new Error('Production processing secrets are not configured.');
+    if (!this.env.RENDER_WORKER_SECRET) throw new Error('Production processing secrets are not configured.');
     const container = this.ctx.container!;
     const ultra = await this.ctx.storage.get('ultra') === true;
     const profile = ultra ? ULTRA_RESOURCE_PROFILE : RESOURCE_PROFILE;
@@ -90,7 +90,8 @@ export class MediaProcessor extends DurableObject<Bindings> {
         NEXT_PUBLIC_CONVEX_URL: this.env.NEXT_PUBLIC_CONVEX_URL,
         MEDIA_WORKER_URL: this.env.MEDIA_WORKER_URL,
         RENDER_WORKER_SECRET: this.env.RENDER_WORKER_SECRET,
-        GOOGLE_GENERATIVE_AI_API_KEY: this.env.GOOGLE_GENERATIVE_AI_API_KEY,
+        ...(this.env.GOOGLE_GENERATIVE_AI_API_KEY ? { GOOGLE_GENERATIVE_AI_API_KEY: this.env.GOOGLE_GENERATIVE_AI_API_KEY } : {}),
+        ...(this.env.MEDIA_VISION_GEMINI_FALLBACK ? { MEDIA_VISION_GEMINI_FALLBACK: this.env.MEDIA_VISION_GEMINI_FALLBACK } : {}),
         ...(this.env.DEEPGRAM_API_KEY ? { DEEPGRAM_API_KEY: this.env.DEEPGRAM_API_KEY } : {}),
         // Background removal (fal.ai); without it cut-out tasks fail with a clear message.
         ...(this.env.FAL_KEY ? { FAL_KEY: this.env.FAL_KEY } : {}),

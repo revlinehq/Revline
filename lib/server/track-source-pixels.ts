@@ -1,3 +1,4 @@
+import { localizeTrackingObject } from './localize-tracking-object';
 import { spawn } from 'node:child_process';
 import { join } from 'node:path';
 import { AnalysisError } from '../media-analysis/errors';
@@ -7,8 +8,14 @@ import type { z } from 'zod';
 type Sink = { header: (header: z.infer<typeof pixelTrackHeader>) => Promise<unknown>; chunk: (chunk: PixelTrackChunk) => Promise<unknown> };
 
 /** Consume NDJSON with stream backpressure; neither runtime nor output size limits the shot. */
-export async function trackSourcePixels(source: string, request: PixelTrackRequest, signal: AbortSignal, sink: Sink): Promise<PixelTrackSummary> {
-  const input = pixelTrackRequest.parse(request);
+export async function trackSourcePixels(source: string, directory: string, request: PixelTrackRequest, signal: AbortSignal, sink: Sink): Promise<PixelTrackSummary> {
+  let input = pixelTrackRequest.parse(request);
+  let grounding: PixelTrackSummary['grounding'];
+  if (input.seed.kind === 'object') {
+    const localized = await localizeTrackingObject(source, directory, input.time, input.seed.noun, signal);
+    grounding = { ...localized, noun: input.seed.noun };
+    input = pixelTrackRequest.parse({ ...input, time: localized.time, seed: { kind: 'box', box: localized.box } });
+  }
   const python = process.env.PIXEL_TRACK_PYTHON || process.env.SCENE_DETECT_PYTHON || join(process.cwd(), '.data/scene-detection/bin/python');
   const child = spawn(python, [join(process.cwd(), 'scripts/track-pixels.py'), source, JSON.stringify(input)], { signal, stdio: ['ignore', 'pipe', 'pipe'] });
   let stderr = '', spawnError: Error | undefined;
@@ -41,7 +48,7 @@ export async function trackSourcePixels(source: string, request: PixelTrackReque
     const code = await closed;
     signal.throwIfAborted();
     if (spawnError || code !== 0 || !result || buffer.trim()) throw new Error(spawnError?.message ?? (stderr || 'Tracking ended without a complete result.'));
-    return result;
+    return { ...result, ...(grounding ? { grounding } : {}) };
   } catch (error) {
     child.kill('SIGTERM'); await closed;
     if (signal.aborted) throw error;
