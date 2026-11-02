@@ -1,13 +1,13 @@
 /** Shared motion values, easing, sampling and evaluation for camera and object paths. */
 export type MotionKeyframe = { time: number; x: number; y: number; scale: number; rotation: number; opacity: number; brightness: number };
 export const NEUTRAL_MOTION = { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, brightness: 1 };
-export const MOTION_PROPERTIES = ['x', 'y', 'scale', 'rotation', 'opacity', 'brightness'] as const;
+const MOTION_PROPERTIES = ['x', 'y', 'scale', 'rotation', 'opacity', 'brightness'] as const;
 export const MOTION_EASINGS = ['linear', 'ease-in-out', 'ease-out', 'focused-spring'] as const;
 export type NamedMotionEasing = typeof MOTION_EASINGS[number];
 /** A CSS-style cubic-bézier [x1, y1, x2, y2]: x within 0..1, y may overshoot (-1..2) for anticipation or bounce. */
 export type CubicBezier = [number, number, number, number];
 export type MotionEasing = NamedMotionEasing | CubicBezier;
-export const isCubicBezier = (easing: unknown): easing is CubicBezier => Array.isArray(easing) && easing.length === 4 && easing.every(Number.isFinite) && easing[0] >= 0 && easing[0] <= 1 && easing[2] >= 0 && easing[2] <= 1 && easing[1] >= -1 && easing[1] <= 2 && easing[3] >= -1 && easing[3] <= 2;
+const isCubicBezier = (easing: unknown): easing is CubicBezier => Array.isArray(easing) && easing.length === 4 && easing.every(Number.isFinite) && easing[0] >= 0 && easing[0] <= 1 && easing[2] >= 0 && easing[2] <= 1 && easing[1] >= -1 && easing[1] <= 2 && easing[3] >= -1 && easing[3] <= 2;
 export const isMotionEasing = (easing: unknown): easing is MotionEasing => MOTION_EASINGS.includes(easing as NamedMotionEasing) || isCubicBezier(easing);
 
 /** y for a given x on a cubic-bézier curve: Newton steps on x(t), bisection fallback. */

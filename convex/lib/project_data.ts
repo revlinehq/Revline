@@ -96,7 +96,7 @@ async function writeHistory(ctx:MutationCtx,project:Doc<'projects'>,plan:History
   const index=await readHistoryIndex(ctx,project._id);
   if(index)await ctx.db.replace(index._id,{projectId:project._id,keyVersion:HISTORY_KEY_VERSION,entries});else await ctx.db.insert('timelineHistoryIndex',{projectId:project._id,keyVersion:HISTORY_KEY_VERSION,entries});
 }
-export async function syncProjectCatalog(ctx:MutationCtx,project:Doc<'projects'>) {
+async function syncProjectCatalog(ctx:MutationCtx,project:Doc<'projects'>) {
   const existing=await ctx.db.query('projectCatalog').withIndex('by_project',q=>q.eq('projectId',project._id)).unique();
   const values={projectId:project._id,ownerId:project.ownerId,title:project.title,aspectRatio:project.aspectRatio,createdAt:project.createdAt,updatedAt:project.updatedAt,clipCount:project.timeline?.clips.length??0,aiRunning:!!project.aiRunning,deleting:project.deleting};
   if(!existing){await ctx.db.insert('projectCatalog',values);return;}

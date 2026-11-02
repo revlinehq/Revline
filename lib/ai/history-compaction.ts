@@ -7,7 +7,7 @@ import type { ModelMessage } from 'ai';
  * short previews the AI can re-fetch with the same tool. A character budget then drops the oldest turns.
  * Old turns change only when a new turn starts, so the system prompt and tool definitions stay cached.
  */
-export const FULL_TURNS = 2, MAX_OLD_RESULT = 600, MAX_OLD_INPUT = 1200, HISTORY_BUDGET = 120_000;
+const FULL_TURNS = 2, MAX_OLD_RESULT = 600, MAX_OLD_INPUT = 1200, HISTORY_BUDGET = 120_000;
 
 const size = (value: unknown) => { try { return JSON.stringify(value)?.length ?? 0; } catch { return 0; } };
 const preview = (value: unknown, limit: number) => { const text = typeof value === 'string' ? value : JSON.stringify(value) ?? ''; return text.length > limit ? `${text.slice(0, limit)}…` : text; };

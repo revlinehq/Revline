@@ -13,7 +13,7 @@ export type SceneRuntimeName = keyof typeof SCENE_RUNTIME_BUNDLES;
 /** Each runtime must implement every import it advertises. */
 export type SceneRuntimeModules<Name extends SceneRuntimeName> = Record<typeof SCENE_RUNTIME_BUNDLES[Name]['modules'][number], unknown>;
 
-export function sceneModuleRuntime(name: string): SceneRuntimeName | undefined {
+function sceneModuleRuntime(name: string): SceneRuntimeName | undefined {
   return (Object.keys(SCENE_RUNTIME_BUNDLES) as SceneRuntimeName[]).find(runtime => SCENE_RUNTIME_BUNDLES[runtime].modules.some(module => module === name));
 }
 

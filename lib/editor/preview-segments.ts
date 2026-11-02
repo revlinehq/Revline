@@ -3,7 +3,7 @@ import type { MediaAsset, Timeline } from './types';
 
 export type SourceRange = { start: number; end: number };
 export type PreviewSegment = SourceRange & { url: string; size: number };
-export const PREVIEW_CHUNK_SECONDS = 30;
+const PREVIEW_CHUNK_SECONDS = 30;
 const PADDING_SECONDS = 2;
 
 export function previewChunks(duration: number, ranges: SourceRange[], boundaries?: number[]) {

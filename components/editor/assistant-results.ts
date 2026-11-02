@@ -10,7 +10,7 @@ export type ChatTool = { id?: string; name: string; state: 'running' | 'done' | 
 export type ChatBlock = { type:'text'; text:string } | { type:'tools'; steps:ChatTool[] } | { type:'thinking'; text:string };
 export type ChatMessage = { turnError?:string;turnResuming?:boolean;turnState?:'running'|'completed'|'failed'|'stopped';id:string;sourceId?:string;threadId?:string;role:string;text:string;status?:string;tools?:string[];steps?:ChatTool[];blocks?:ChatBlock[];publicationReceipt?:TimelinePublicationReceipt };
 export type ResultCard = { key: string; title: string; detail?: string; state: ChatTool['state']; staged?: boolean; saveFailed?: boolean };
-export const chatMessageKey = (message: { id: string; key?: string }) => message.key ?? message.id;
+const chatMessageKey = (message: { id: string; key?: string }) => message.key ?? message.id;
 export type AssistantEditSnapshot = { before:Timeline;after:Timeline;revision:number;canUndo:boolean;publishedDraft:boolean };
 export type SavedEditComparison = { before:Timeline;after:Timeline;revision:number;canUndo:boolean;publishedRevision?:number };
 export function matchesUndoSnapshot(snapshot:Pick<AssistantEditSnapshot,'before'|'after'>,current:Timeline,previous?:Timeline){
@@ -32,7 +32,7 @@ export function savedEditComparison(steps:ChatTool[],snapshot?:AssistantEditSnap
 
 const record = (value: unknown): Record<string, unknown> | undefined => value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : undefined;
 /** Only the server's persisted provider metadata can confirm a replacement publication. */
-export function publicationReceiptFromPart(value:unknown):TimelinePublicationReceipt|undefined {
+function publicationReceiptFromPart(value:unknown):TimelinePublicationReceipt|undefined {
   const part=record(value),receipt=record(record(record(part?.providerMetadata)?.revline)?.publicationReceipt);
   if(part?.type!=='text'||!receipt||receipt.version!==1||receipt.kind!=='timeline-publication'||typeof receipt.status!=='string'||!['saved','failed','aborted'].includes(receipt.status))return;
   if(!['runId','threadId','promptMessageId'].every(key=>typeof receipt[key]==='string'&&receipt[key].length>0)||typeof receipt.stagedRevision!=='number'||!Number.isSafeInteger(receipt.stagedRevision)||receipt.stagedRevision<0)return;
@@ -97,7 +97,7 @@ function unpack(value: unknown): { output?: Record<string, unknown>; error?: str
 }
 
 /** Stored Agent error-text results can arrive as output-available; that is not success. */
-export function chatToolFromPart(value: unknown): ChatTool | null {
+function chatToolFromPart(value: unknown): ChatTool | null {
   const part = record(value);
   if (!part || typeof part.type !== 'string' || !part.type.startsWith('tool-') || typeof part.state !== 'string') return null;
   const { output, error } = unpack(part.output);
@@ -137,7 +137,7 @@ export function toolImages(step: ChatTool): { label: string; src: string }[] {
   return [];
 }
 
-export const TOOL_LABELS: Record<string, [string, string]> = {
+const TOOL_LABELS: Record<string, [string, string]> = {
   updateBrief: ['Saving project brief', 'Saved project brief'],
   upscaleClip: ['Starting upscale', 'Started upscale'], smoothSlowMotion: ['Starting smooth slow motion', 'Started smooth slow motion'], removeBackground: ['Starting background removal', 'Started background removal'], importVideoLink: ['Importing media', 'Started media import'], exportVideo: ['Starting export', 'Started export'],
   setTextGradient: ['Styling gradient text', 'Styled gradient text'],

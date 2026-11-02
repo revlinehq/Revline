@@ -1,4 +1,5 @@
 import { threeScenesPage } from './three-scenes';
+import { threeCraftPage } from './three-craft';
 import { SCENE_FONT_FAMILIES, STARTER_SCENE_CODE } from '../../editor/scene-layers';
 import { SCENE_GSAP_PLUGINS } from '../../editor/scene-modules';
 import type { EditorSkill, EditorSkillPage } from './index';
@@ -28,6 +29,8 @@ const checklistPage: EditorSkillPage = {
   name: 'checklist',
   description: 'Full checks for builds and full-lane edits. Existing edits start with edit-lanes. First frames, cuts, beats, pacing, details, measurements, scope, limits and preview speed.',
   body: `# Checklist: before you hand it back
+
+For 3D builds, read page \`three-craft\` and check material identity, highlight/edge quality, contact cues, camera purpose and type clearance in rendered frames.
 
 For an existing scene or film edit, follow page \`edit-lanes\` first. Run every item below in Precise for a new build or full-lane edit. Fast follows edit-lanes instead. Render frames with getFrames (up to six per call) and look at them, and run checkPacing on the range you built or changed: stills cannot show speed, so motion that reads fine frame by frame can still be too fast to follow. Never report a film as done from the code alone.
 
@@ -166,5 +169,5 @@ Real screenshots, screen recordings, photos and logos from the project's media c
 \`\`\`ts
 ${STARTER_SCENE_CODE}\`\`\`
 `,
-  pages: [threeScenesPage, editLanesPage, reactScenesPage, checklistPage],
+  pages: [threeScenesPage, threeCraftPage, editLanesPage, reactScenesPage, checklistPage],
 };

@@ -8,7 +8,7 @@ export const flyRendersEnabled = () => process.env.RENDER_PROVIDER === 'fly';
 
 /** Exports one account renders at once; further exports wait in the queue.
  * Ultra exports carry lane 'ultra' from enqueue. */
-export const renderSeats = (lane?: 'ultra') => lane === 'ultra'
+const renderSeats = (lane?: 'ultra') => lane === 'ultra'
   ? accountLimit('RENDER_SEATS_ULTRA', 10, 1, 50)
   : accountLimit('RENDER_SEATS_STANDARD', 2, 1, 20);
 

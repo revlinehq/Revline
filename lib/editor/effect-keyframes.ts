@@ -10,7 +10,7 @@ export type EffectKey = { time: number; value: number };
 export type EffectKeyframeLane = { control: string; keys: EffectKey[] };
 export type EffectAnchor = EffectKey & { easing?: MotionEasing };
 
-export const MAX_EFFECT_LANES = 16, MAX_EFFECT_KEYS = 120;
+const MAX_EFFECT_LANES = 16, MAX_EFFECT_KEYS = 120;
 type Group = keyof typeof VISUAL_EFFECT_LIMITS;
 
 /** Every numeric control that can be keyframed, with its allowed range. */
@@ -37,7 +37,7 @@ export function validateEffectKeyframes(lanes: EffectKeyframeLane[] | undefined)
 }
 
 /** Value of a baked lane at a path time: linear between keys, held outside them. */
-export function laneValueAt(keys: EffectKey[], time: number) {
+function laneValueAt(keys: EffectKey[], time: number) {
   const after = keys.findIndex(key => key.time >= time);
   if (after === -1) return keys[keys.length - 1].value;
   if (after === 0) return keys[0].value;
@@ -57,7 +57,7 @@ export function effectsAt(effects: VisualEffects, lanes: EffectKeyframeLane[] | 
 }
 
 /** Bake eased anchors into linear keys (up to 32 steps per curved segment, within the key budget). */
-export function bakeEffectAnchors(anchors: EffectAnchor[], range: readonly [number, number]): EffectKey[] {
+function bakeEffectAnchors(anchors: EffectAnchor[], range: readonly [number, number]): EffectKey[] {
   if (!anchors.length || anchors.length > 9) throw new Error('Use between 1 and 9 effect anchors.');
   anchors.forEach((anchor, index) => {
     if (!Number.isFinite(anchor.time) || anchor.time < 0 || index > 0 && anchor.time <= anchors[index - 1].time) throw new Error('Effect anchors need finite, increasing nonnegative times.');

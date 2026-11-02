@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 export const editorEditModeSchema = z.enum(['fast', 'precise']);
 export type EditorEditMode = z.infer<typeof editorEditModeSchema>;
-export const editorEditModePreferenceSchema = z.enum(['auto', ...editorEditModeSchema.options]);
+const editorEditModePreferenceSchema = z.enum(['auto', ...editorEditModeSchema.options]);
 export type EditorEditModePreference = z.infer<typeof editorEditModePreferenceSchema>;
 export const DEFAULT_EDITOR_EDIT_MODE: EditorEditModePreference = 'fast';
 

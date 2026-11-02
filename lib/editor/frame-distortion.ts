@@ -1,7 +1,7 @@
 import type { FrameDistortion } from './visual-effects';
 
 /** Project a source point after a monotonic radial bend of the entire frame. */
-export function frameDistortionPoint(x:number,y:number,{horizontal,vertical,skew,bend=0}:FrameDistortion) {
+function frameDistortionPoint(x:number,y:number,{horizontal,vertical,skew,bend=0}:FrameDistortion) {
   const curve=1-.15*bend*(x*x+y*y);
   x*=curve;y*=curve;
   const depth=1+.35*horizontal*x+.35*vertical*y;
