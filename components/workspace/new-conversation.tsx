@@ -19,6 +19,9 @@ import { useMediaFileDrop } from '@/components/editor/media-file-drop';
 import { rememberOpeningFootage } from '@/lib/editor/footage-opening';
 import { rememberOpeningRequest } from '@/lib/editor/opening-request';
 import { useAssistantComposerControls } from '@/components/editor/assistant-composer-controls';
+import { Captions, CircleHelp, Clapperboard, Plus, Scissors } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { normalizeMediaFile } from '@/lib/editor/media-file';
 import { EditComposer } from './edit-composer';
 import { FootageProcessingCard, type FootageProcessingFile, type FootageProcessingPhase } from './footage-processing-card';
@@ -32,6 +35,11 @@ import './new-conversation.css';
 const briefKey = 'revline:next-brief';
 const cloudKey = 'revline:next-cloud-footage';
 type Processing = Omit<ProjectImportProgress, 'phase'> & { phase: FootageProcessingPhase };
+const startingPoints = [
+  { title: 'A tighter cut', detail: 'Remove pauses and false starts', prompt: 'Remove pauses and false starts from my footage.', icon: Scissors },
+  { title: 'A captioned clip', detail: 'Make every word easy to follow', prompt: 'Add clear, readable captions to my video.', icon: Captions },
+  { title: 'A launch teaser', detail: 'Start with a product and an idea', prompt: 'Create a 15-second launch teaser for my product.', icon: Clapperboard },
+];
 
 export function NewConversation() {
   const router = useRouter();
@@ -40,6 +48,9 @@ export function NewConversation() {
   const convex = useConvex();
   const { isLoaded, isSignedIn, userId } = useAuth();
   const { isAuthenticated, isLoading: authLoading } = useConvexAuth();
+  const projects = useQuery(api.projects.list, isAuthenticated ? { limit: 1 } : 'skip');
+  const firstProject = projects?.length === 0;
+  const [tourOpen, setTourOpen] = useState(false);
   const picker=useRef<HTMLInputElement>(null);
   const createProject = useMutation(api.projects.create);
   const saveTimeline = useMutation(api.projects.saveTimeline);
@@ -282,19 +293,28 @@ export function NewConversation() {
     return { id, name: asset?.fileName ?? 'Saved footage', kind: asset?.kind ?? 'video', url: asset?.url ?? undefined };
   }), ...previews];
 
-  return <div className="workspace-page new-conversation" {...fileDrop.handlers}>
+  return <div className={`workspace-page new-conversation${firstProject && !status ? ' new-conversation-empty' : ''}`} {...fileDrop.handlers}>
     <WorkspaceNav title={NEW_WORKSPACE_LABEL} />
     {status ? <FootageProcessingCard files={processingFiles} {...status} error={error} onRetry={() => void processFootage()} onReset={reset} onOpen={session.current.projectId ? () => void openPartialProject() : undefined}/> : <main className="new-conversation-main" aria-labelledby="new-conversation-title">
       <div className="new-conversation-start">
-        <div className="new-conversation-intro"><h1 id="new-conversation-title">Welcome{firstName ? `, ${firstName}` : ''}.</h1><p>Describe the video you want to make, or add your footage to get started.</p></div>
+        <div className="new-conversation-intro"><h1 id="new-conversation-title">{firstProject ? 'From an idea to a first cut.' : `Welcome${firstName ? `, ${firstName}` : ''}.`}</h1>{!firstProject && <p>Describe the video you want to make, or add your footage to get started.</p>}</div>
         <div className="new-conversation-entry" data-dragging={dragging || undefined} aria-busy={busy}>
           <EditComposer value={draft} onChange={changeDraft} onSubmit={submit} onAttach={() => picker.current?.click()} attachments={processingFiles} onRemoveAttachment={removeAttachment} actions={composerControls.actions} disabled={!draftReady || busy || !settings} placeholder="Describe the video you want to make…"/>
           <input ref={picker} type="file" accept="video/*,audio/*,image/*" multiple className="sr-only" tabIndex={-1} aria-label="Choose media to upload" onChange={event => { const files = Array.from(event.target.files ?? []); event.target.value = ''; if (files.length) attach(files); }}/>
           {error && <p className="new-conversation-error" role="alert">{error}</p>}
         </div>
+        {firstProject && <div className="new-conversation-guidance">
+          <div className="new-conversation-footage"><Button variant="outline" onClick={() => picker.current?.click()} disabled={!draftReady || busy}><Plus aria-hidden="true"/>Add footage</Button><span>or drop videos, audio, or images here</span></div>
+          <section className="new-conversation-examples" aria-labelledby="new-conversation-examples-title">
+            <h2 id="new-conversation-examples-title">Or borrow a starting point</h2>
+            <div>{startingPoints.map(({ title, detail, prompt, icon: Icon }) => <Button key={title} variant="outline" className="new-conversation-example" disabled={!draftReady || busy} onClick={() => { changeDraft(prompt); document.querySelector<HTMLTextAreaElement>('.new-conversation-entry textarea')?.focus({ preventScroll: true }); }}><Icon aria-hidden="true"/><span><strong>{title}</strong><span>{detail}</span></span></Button>)}</div>
+          </section>
+          <footer className="new-conversation-help"><Button variant="outline" onClick={() => setTourOpen(true)}><CircleHelp aria-hidden="true"/>Take a quick tour</Button></footer>
+        </div>}
       </div>
-      <RecentProjects/>
+      {!firstProject && <RecentProjects/>}
     </main>}
     {dragging && <div className="new-conversation-drop-note" role="status">{busy ? 'Your footage is processing…' : 'Drop to attach your footage'}</div>}
+    <Dialog open={tourOpen} onOpenChange={setTourOpen}><DialogContent className="workspace-dialog new-conversation-tour"><DialogHeader><DialogTitle>Your first edit</DialogTitle><DialogDescription>Start with an idea, your footage, or both.</DialogDescription></DialogHeader><ol><li><strong>Add your footage</strong><p>Use the plus button or drop videos, audio, or images into the page.</p></li><li><strong>Describe what you want</strong><p>Write your direction in the composer, or borrow a starting point.</p></li><li><strong>Make it your own</strong><p>Choose your model, effort and editing mode, then send. Keep refining in the editor.</p></li></ol><Button variant="outline" onClick={() => { setTourOpen(false); }}>Got it</Button></DialogContent></Dialog>
   </div>;
 }
