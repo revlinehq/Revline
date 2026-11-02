@@ -1,5 +1,7 @@
+import { reportClientFailure } from './incident-client';
 /** Convex transports safe application errors in data; never show its server stack. */
 export function userError(error:unknown,fallback='This action could not finish. Please retry.'):string {
+  reportClientFailure(error);
   if(error&&typeof error==='object'&&'data' in error) {
     const data=error.data;
     if(typeof data==='string')return data;

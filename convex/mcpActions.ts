@@ -92,7 +92,7 @@ export const callTool = internalAction({ args: { ownerId: v.string(), agentName:
   try {
     if (args.name in PROJECT_TOOLS) return await callProjectTool(ctx, args.ownerId, args.name as ProjectToolName, input);
     return await callEditorTool(ctx, args.ownerId, args.name, input, args.agentName);
-  } catch (error) { return result(message(error), true); }
+  } catch (error) { await ctx.runMutation(internal.incidents.reportIncident, { source: 'mcp', kind: 'tool-failure', message: message(error), stack: error instanceof Error ? error.stack : undefined, context: { location: 'convex/mcpActions:callTool', toolName: args.name }, deployment: 'server' }).catch(() => {}); return result(message(error), true); }
   finally { await touch(); }
 }});
 
