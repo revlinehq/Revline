@@ -9,7 +9,7 @@
 - Enabled Sign in with Apple (primary app) and Associated Domains capabilities on the new bundle identifier.
 - Registered the exact bundle and prefix in production Clerk, and enabled the native Apple provider. Verified Native API enabled, the native callback registered, and the production associated-domain file includes the exact team/bundle. Real sign-in still requires the owner.
 - App record creation is waiting for the owner because Apple’s API cannot create app records.
-- Built a signed Release archive for `com.zurahq.revline` under `Z42PHGH527`. Export for App Store Connect failed with Apple cloud-signing permission and missing distribution-profile errors. No IPA or TestFlight upload was produced.
+- Built and verified an Apple Development-signed Release archive for `com.zurahq.revline` under `Z42PHGH527`. Export for App Store Connect failed with Apple cloud-signing permission and missing distribution-profile errors. No IPA or TestFlight upload was produced.
 - No subscription group/product, listing metadata or screenshot upload has occurred because the app record is still absent.
 - No App Review submission or deployment to production was performed.
 

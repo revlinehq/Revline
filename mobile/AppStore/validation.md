@@ -4,15 +4,15 @@ November 2, 2026. This is a draft implementation, not an App Store readiness sig
 
 ## Verified so far
 
-- Debug Simulator builds and TypeScript checking passed after rebasing onto the merged save-recovery and shared-media cleanup changes. Final Release/build checks are recorded below when complete.
-- Installed and launched the Release build on the watched Revline iPhone Simulator. Inspected the real onboarding screenshot. The built Info.plist contains `com.zurahq.revline`, device family `[1]`, production Convex `different-gnu-398`, `https://tryrevline.com` and a live Clerk publishable key. No production endpoint was replaced with dev.
+- Final Debug and optimized Release Simulator builds passed with signing disabled. After rebasing onto origin/main, npm run typecheck and npm run build passed. No test-only files were added.
+- Installed and launched the Release build on the watched Revline iPhone Simulator. Inspected the real onboarding, welcome and live Clerk sign-in screens, including Apple and Google providers, Privacy and Terms, and no development-instance badge. No credentials were entered. The built Info.plist contains `com.zurahq.revline`, device family `[1]`, production Convex `different-gnu-398`, `https://tryrevline.com` and a live Clerk publishable key. No production endpoint was replaced with dev.
 - Production Clerk has the exact paid-team App ID Prefix and bundle registered. Native API reports enabled, the native callback is registered, and the public associated-domain file includes `Z42PHGH527.com.zurahq.revline`.
 - Created one empty disposable dev project through the native app: `Recline iOS validation dev` (`j97cg5w7vkw1pqsk2194kqr8jh8henc7`). The title was autocorrected before autocorrection was disabled. Other projects were not edited or exported.
-- Captured the old editor and keyboard, and the new projects screen. All six supplied design PNGs and both HTML references were inspected before implementation. Missing new editor-state captures must not be replaced with rendered design files.
+- Captured the old editor and keyboard, and the new projects screen. All six supplied design PNGs and both HTML references were inspected before implementation. Real collapsed/expanded/keyboard, export, projects, create, account and deletion-entry states were inspected. Empty-timeline captures are layout evidence, not proof of agent edits or renders.
 - Headless Chromium confirmed production `/privacy` and `/terms` return 404 before this change, and the local draft routes return 200 with the correct titles and footer links. The drafts explicitly require legal review.
 - Persistent drawer checks passed on the disposable empty project: collapsed and expanded states, multiline input above the software keyboard, outside-tap dismissal, native Fast/Precise selection, no model picker or clip strip, hidden editor tab bar and restored home bar. No prompt was submitted.
 - The trailing corner plus opens New project; cancellation returns to Projects. Export opens its real destination/captions controls and correctly disables rendering on an empty timeline.
-- The native iPhoneOS Release archive succeeded. App Store export failed with cloud-signing permission and missing distribution-profile errors; TestFlight was not uploaded.
+- The iPhoneOS Release archive passed strict codesign verification with the paid team’s existing Apple Development identity. App Store export failed with cloud-signing permission and missing distribution-profile errors; TestFlight was not uploaded.
 - App icon is 1024×1024 without alpha. Privacy manifest and Info.plist pass `plutil`; fastlane Ruby files pass syntax checks.
 - The App Store Connect key authenticates. The single-product plan was checked again and stops because the app record does not exist. No subscription, listing, screenshot or binary upload has occurred. See [actual external changes](asc-changes.md).
 
@@ -52,3 +52,11 @@ No successful edit prompt, Undo, short render, purchase, restore or destructive 
 6. Complete the [review checklist](review-checklist.md), including component/provider retention and real verification that web renewals stop during account deletion. Do not interpret owned application-row cleanup as a promise that legally retained Stripe or provider records are erased.
 
 PR screenshots belong on `pr-assets/mobile-brand-bg/`. App Store production captures belong in `Screenshots/6.9/` and `Screenshots/6.5/`; the empty folders are intentional pending real capture. Designs, errors, old builds and screenshots at other dimensions are not substitutes.
+
+## Final capture index
+
+Actual Simulator captures are stored on the PR assets branch under `mobile-brand-bg/after/editor-v2/`: `projects.png`, `projects-keyboard.png`, `collapsed.png`, `expanded.png`, `keyboard.png`, `multiline-keyboard.png`, `precise-keyboard.png`, `export.png`, `create.png`, `account.png`, `delete-account.png`, `ai-consent.png`, `release-welcome.png` and `release-sign-in.png`. The earlier baseline is under `before/editor-v2/`; supplied Pencil designs are explicitly labelled references under `references/`.
+
+The typed caption text in keyboard captures is an unsent local draft. No streaming response, edit result, duration change, Undo or render is represented as tested. Native format controls correctly show `1080p · 30 fps`; the empty project’s Save button is disabled. Final legal-route screenshots include the footer at desktop and phone widths and were taken in headless Chrome, with no visible browser.
+
+The watched Simulator remains booted and the production Release app is left at live Clerk sign-in for the owner. This worktree’s development frontend and one-slot media worker run on port 3002; both readiness logs were checked. Shared port 3001 was not edited or restarted.
