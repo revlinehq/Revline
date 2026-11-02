@@ -11,7 +11,7 @@ import { currentTimeline } from './lib/timeline';
 import { timelineDuration, type Timeline } from '../lib/editor/types';
 import { aspectRatio } from './schema';
 import { beginProjectDeletion, createProjectFor, duplicateProjectFor, listProjectsFor, renameProjectFor } from './projects';
-import { importVideoFor } from './mediaTasks';
+import { cancelMediaTask, importVideoFor } from './mediaTasks';
 import { exportFileName, startRenderFor } from './renders';
 import { activeTabOf, createTabFor, listTabsFor, openTabFor, removeTabFor, renameTabFor, storedTabTimeline } from './timelineTabs';
 import { loadSceneCode, storeSceneCode } from './lib/scene_code';
@@ -284,7 +284,10 @@ export const takeFrames = internalMutation({ args: { ownerId: v.string(), snapsh
 
 export const discardFrames = internalMutation({ args: { snapshotId: v.id('frameSnapshots') }, returns: v.null(), handler: async (ctx, args) => {
   const snapshot = await ctx.db.get(args.snapshotId);
-  if (snapshot && !snapshot.sound && !snapshot.pacing) await ctx.db.delete(snapshot._id);
+  if (snapshot && !snapshot.sound && !snapshot.pacing) {
+    if (snapshot.comparison && snapshot.status === 'queued' && snapshot.taskId) await cancelMediaTask(ctx, snapshot.taskId);
+    await ctx.db.delete(snapshot._id);
+  }
   return null;
 }});
 
