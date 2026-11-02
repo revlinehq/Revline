@@ -2,7 +2,7 @@ import { LandingNav } from '@/components/landing/nav';
 import { LandingHero } from '@/components/landing/hero';
 import { LandingUseCases } from '@/components/landing/use-cases';
 import { LandingFeatures } from '@/components/landing/features';
-import { LandingMotion } from '@/components/landing/motion';
+import { LandingMotionDesign } from '@/components/landing/motion-design';
 import { LandingInspo } from '@/components/landing/inspo';
 import { LandingClippers } from '@/components/landing/clippers';
 import { LandingMcp } from '@/components/landing/mcp';
@@ -19,8 +19,8 @@ export default function Home() {
     <LandingHero />
     <LandingUseCases />
     <LandingClippers />
+    <LandingMotionDesign />
     <LandingFeatures />
-    <LandingMotion />
     <LandingInspo />
     <LandingMcp />
     <LandingPricing />
