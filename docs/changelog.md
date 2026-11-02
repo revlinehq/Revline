@@ -3,7 +3,7 @@
 Newest first. Each merged pull request adds its lines here, grouped by system.
 
 ## 2026-11-02
-- Scenes: Share import rules and renderer bundles across saving, preview, capture and export. Why: accepted 3D imports could fail when a renderer omitted its bundle.
+- Scenes: Share import rules and renderer bundles across saving, preview, capture and export; require refreshed workers (contract 32). Why: accepted 3D imports could fail when a renderer omitted its bundle.
 - Editor recovery: Resume interrupted edits automatically within the existing repair budget and retry the same chat turn in place. Why: recovery must preserve saved work without duplicate user bubbles.
 - Editor chat: Confirm tool saves with atomic revision receipts, shared classifications and portable frame output. Why: saved edits, reads and queued jobs must never produce false save failures.
 - Storage: Make shared-media deletion and retries idempotent, report project cleanup failures, and handle disappeared projects calmly. Why: a shared project could abort a multi-file cascade.
