@@ -9,9 +9,9 @@
 - Enabled Sign in with Apple (primary app) and Associated Domains capabilities on the new bundle identifier.
 - Registered the exact bundle and prefix in production Clerk, and enabled the native Apple provider. Verified Native API enabled, the native callback registered, and the production associated-domain file includes the exact team/bundle. Real sign-in still requires the owner.
 - App record creation is waiting for the owner because Apple’s API cannot create app records.
-- Built and verified an Apple Development-signed Release archive for `com.zurahq.revline` under `Z42PHGH527`. Export for App Store Connect failed with Apple cloud-signing permission and missing distribution-profile errors. No IPA or TestFlight upload was produced.
+- Built and verified an Apple Development-signed Release archive for `com.zurahq.revline` under `Z42PHGH527`. Initial cloud export failed with Apple signing-permission/profile errors; local distribution signing then succeeded.
 - Created an Apple Distribution certificate (`4HWV3WW76L`) and matching “Revline App Store” iOS App Store profile (`44PDS32RZ6`) through the authorized API key. Imported the generated signing identity into this Mac’s login keychain and installed the profile. Private signing material remains outside git. No existing certificate was revoked.
-- Manual distribution export is waiting for the owner’s macOS Keychain authorization for codesign. No IPA or TestFlight upload is claimed.
+- Manual distribution export completed. Strict signature verification confirms the 18,781,674-byte `Revline.ipa` uses Apple Distribution under `Z42PHGH527` and the production configuration. The TestFlight upload was attempted and stopped at the missing App Store app record; no binary was uploaded.
 - No subscription group/product, listing metadata or screenshot upload has occurred because the app record is still absent.
 - No App Review submission or deployment to production was performed.
 

@@ -26,6 +26,7 @@ struct ProjectPreview: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity).background(Color.revlineBackground)
             }
         }
+        .accessibilityElement(children: .contain)
         .accessibilityLabel("Timeline preview")
     }
 }

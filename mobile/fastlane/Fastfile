@@ -108,4 +108,12 @@ platform :ios do
       ipa: File.expand_path("../.build/Revline.ipa", __dir__), skip_waiting_for_build_processing: true,
       distribute_external: false, skip_submission: true)
   end
+
+  desc "Upload an existing signed IPA to TestFlight, without submitting for review"
+  lane :upload_testflight do
+    ipa = File.expand_path(ENV.fetch("ASC_IPA_PATH", "../.build/Revline.ipa"), __dir__)
+    UI.user_error!("The signed IPA is missing. Run the archive lane or set ASC_IPA_PATH.") unless File.file?(ipa)
+    upload_to_testflight(api_key: revline_api_key, app_identifier: ENV.fetch("ASC_APP_IDENTIFIER", "com.revline.app"),
+      ipa: ipa, skip_waiting_for_build_processing: true, distribute_external: false, skip_submission: true)
+  end
 end

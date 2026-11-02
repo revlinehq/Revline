@@ -10,7 +10,7 @@ Requirements: Xcode 26.1+, Swift 6.2, XcodeGen (`brew install xcodegen`), Node 2
 
 1. Copy `Config/Local.example.xcconfig` to `Config/Debug.local.xcconfig`. Fill in the existing development Clerk publishable key and Frontend API hostname. This file is ignored by Git. Clerk secrets never belong in the app.
 2. Copy `Config/Secrets.example.xcconfig` to `Config/Secrets.xcconfig`. Fill in the Superwall public API key and the single App Store product identifier when provisioned. Both Debug and Release read this ignored file.
-3. In the repository root, provision the existing development `.env.local`, then run `npm ci` and `PORT=3002 npm run dev`. Wait for both `[web]` and `[worker]` readiness. Do not start or replace the main checkout's server on port 3001.
+3. In the repository root, provision the existing development `.env.local`, then run `npm ci` and `PORT=3021 npm run dev`. Wait for both `[web]` and `[worker]` readiness. Do not start or replace the main checkout's server on port 3001.
 4. Run `xcodegen generate --spec mobile/project.yml` from the repository root. The generated `mobile/Revline.xcodeproj` and package resolution are checked in, so XcodeGen is only needed after changing the specification or adding files.
 5. Connect the iPhone, enable Developer Mode, and select it as the Revline run destination in Xcode. In Signing & Capabilities, select the existing development team with automatic signing. The user completes any device trust prompts and signs in in the app.
 
@@ -36,12 +36,12 @@ Clerk is pinned to **1.5.8** because 1.5.9 through 1.6.2 use `weak let` in `Cler
 
 | Build | Convex | Web renderer | Clerk |
 | --- | --- | --- | --- |
-| Debug | `https://majestic-alpaca-541.convex.cloud` | `http://localhost:3002` | Existing dev instance via `Debug.local.xcconfig` |
+| Debug | `https://majestic-alpaca-541.convex.cloud` | `http://localhost:3021` | Existing dev instance via `Debug.local.xcconfig` |
 | Release | `https://different-gnu-398.convex.cloud` | `https://tryrevline.com` | Existing production instance via `Release.local.xcconfig`, `pk_live_` only |
 
 URLs come from xcconfig and Info.plist. Release validates the exact production backend and website and refuses a test Clerk key. A missing configuration produces a setup screen instead of silently using development. Local networking is allowed for the development renderer; remote services use HTTPS. On a physical phone, localhost refers to the phone itself. Override the Debug web URL with a development address reachable from the phone; the configured server must accept those connections. Do not point a production build at the development backend.
 
-The `/mobile/player` route must be present on the configured web server. Use this worktree on port 3002 or reuse the existing port 3001 server when its checkout includes that route. The hosted production site receives changes through the normal release process. No deployment is required to use the new native screens against the existing development API. New Apple billing functions require a later authorized Convex deployment.
+The `/mobile/player` route must be present on the configured web server. Use this worktree on port 3021 or reuse the existing port 3001 server when its checkout includes that route. The hosted production site receives changes through the normal release process. No deployment is required to use the new native screens against the existing development API. New Apple billing functions require a later authorized Convex deployment.
 
 If the main checkout already includes this route and its development server is running on port 3001, reuse it by adding `REVLINE_WEB_URL = http:/$()/localhost:3001` to the ignored `Debug.local.xcconfig`. This avoids an extra frontend and media worker when making native-only changes on a memory-constrained Mac. Do not edit or restart the main checkout's server. Release configuration is unaffected.
 

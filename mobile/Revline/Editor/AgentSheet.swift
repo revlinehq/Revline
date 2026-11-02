@@ -36,7 +36,7 @@ struct AgentSheet: View {
                 ConversationView(project: store)
                     .simultaneousGesture(TapGesture().onEnded { localKeyboardDismiss += 1 })
             }
-            if !collapsed, let error = store.error ?? store.status?.error ?? store.status?.unavailableReason {
+            if !collapsed, let error = store.error ?? store.status?.unavailableReason {
                 ErrorBanner(message: error) { store.error = nil; store.refreshID += 1 }.font(.subheadline).lineLimit(3).padding(.horizontal)
             }
             if let progress = store.importProgress {

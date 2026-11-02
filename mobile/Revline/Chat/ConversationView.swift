@@ -32,6 +32,10 @@ struct ConversationView: View {
                             }
                         }.padding(.horizontal, 16).padding(.bottom, 8)
                     }
+                    if let error = project.status?.error {
+                        ErrorBanner(message: error) { Task { await retryFailedTurn() } }
+                            .disabled(chat.loading || !chat.messages.contains(where: { $0.role == "user" }))
+                    }
                     Color.clear.frame(height: 1).id("latest")
                         .onAppear { followLatest = true }
                         .onDisappear { followLatest = false }
@@ -52,5 +56,11 @@ struct ConversationView: View {
             await chat.observe(session, projectID: project.id, threadID: project.project?.threadId)
         }
         .task(id: chat.streamSignature) { await chat.observeDeltas(session, projectID: project.id, threadID: project.project?.threadId) }
+    }
+
+    private func retryFailedTurn() async {
+        guard let message = chat.messages.last(where: { $0.role == "user" }) else { return }
+        project.error = nil
+        await project.mutate(session, "assistant:retry", arguments: ["projectId": project.id, "promptMessageId": message.id])
     }
 }

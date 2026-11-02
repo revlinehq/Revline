@@ -1,5 +1,5 @@
 import { clerkMiddleware } from "@clerk/nextjs/server";
-import type { NextFetchEvent, NextRequest } from "next/server";
+import { NextResponse, type NextFetchEvent, type NextRequest } from "next/server";
 
 const clerk = clerkMiddleware();
 
@@ -22,6 +22,9 @@ async function forwardToMcp(request: NextRequest) {
 }
 
 export default function proxy(request: NextRequest, event: NextFetchEvent) {
+  // This public renderer shell authenticates project reads with the native Convex JWT.
+  // A web-session handshake would navigate WKWebView outside its pinned player URL.
+  if (/^\/mobile\/player\/[^/]+\/?$/.test(request.nextUrl.pathname)) return NextResponse.next();
   return MCP_PATHS.test(request.nextUrl.pathname) ? forwardToMcp(request) : clerk(request, event);
 }
 

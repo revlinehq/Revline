@@ -17,7 +17,7 @@ Cloud export initially returned “Cloud signing permission error” and “No p
 
 The new signing private key is outside git at `~/.appstoreconnect/signing/revline/distribution.key`; the original App Store Connect `.p8` was not copied. `ASC_DISTRIBUTION_PROFILE` in the local `asc.env` selects the installed profile and manual App Store export. If that variable is absent, fastlane uses automatic signing. Both paths retain API-key authentication and never submit for review.
 
-The first local export is waiting for macOS Keychain authorization for codesign to use the distribution key. The owner must enter the Mac login password directly in that system dialog and choose Allow or Always Allow. The agent cannot operate SecurityAgent or enter that password. Do not send it in chat. After authorization, rerun `fastlane ios archive`; after the app record exists, use `fastlane ios testflight`.
+Local distribution export succeeded and the IPA passed strict signature verification under the Apple Distribution identity. It is at `mobile/.build/AppStoreExport/Revline.ipa` on this Mac. The existing-IPA TestFlight upload was attempted and stopped because the App Store app record is absent. If a future Keychain prompt appears, the owner must enter the Mac login password directly in the system dialog and choose Allow or Always Allow. The agent cannot operate SecurityAgent or enter that password. Do not send it in chat.
 
 On another Mac, an authorized team member must provision an Apple Distribution identity and matching profile securely or use Xcode → Settings → Accounts → Ivan Kolos → Manage Certificates. Do not put signing private keys in this repository. See [Apple’s cloud-managed certificate documentation](https://developer.apple.com/help/account/certificates/cloud-managed-certificates/). A development-signed archive is separate from successful App Store distribution export.
 
@@ -37,6 +37,7 @@ fastlane ios metadata                  # draft metadata only
 fastlane ios listing                   # draft metadata and reviewed screenshots
 fastlane ios archive                   # signed Release archive only
 fastlane ios testflight                # archive + upload to TestFlight, no external review submission
+ASC_IPA_PATH="$PWD/.build/AppStoreExport/Revline.ipa" fastlane ios upload_testflight # reuse the signed IPA without rebuilding
 ```
 
 `subscription.json` is the source for $39.00 USD/month in the USA, with Apple's recommended equalized price points in other storefronts and a one-week free introductory offer for eligible new subscribers. The script refuses a substitute base price or conflicting introductory offer. It reuses existing resources by product ID and logs successful writes to the ignored `.build/asc-subscription-changes.jsonl`. It never submits products or the app for review. App Store Connect may still require subscription review information, tax/banking details and agreements before products can be sold.
