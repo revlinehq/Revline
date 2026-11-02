@@ -374,14 +374,6 @@ export const getRunAsset=internalQuery({args:{...runArgs,assetId:v.string()},ret
   const id=ctx.db.normalizeId('assets',args.assetId),asset=id?await ctx.db.get(id):null;
   if(!asset||asset.ownerId!==args.ownerId||asset.projectId!==args.projectId)throw new ConvexError('Media not found');return hydrateAsset(ctx,asset);
 }});
-export const startRunUnderstanding = internalMutation({ args: { ...runArgs, assetId: v.string() }, returns: v.null(), handler: async (ctx, args) => {
-  await requireActiveRun(ctx, args);
-  const assetId = ctx.db.normalizeId('assets', args.assetId), asset = assetId ? await ctx.db.get(assetId) : null;
-  if (!asset || asset.kind !== 'video' || asset.ownerId !== args.ownerId || asset.projectId !== args.projectId) throw new ConvexError('Choose a video source');
-  const task = await ctx.db.query('mediaTasks').withIndex('by_asset_kind', q => q.eq('assetId', asset._id).eq('kind', 'understand')).order('desc').first();
-  if (!task) await enqueueMediaTask(ctx, { ownerId: args.ownerId, projectId: args.projectId, assetId: asset._id, kind: 'understand' }, () => requireMediaTaskCapacity(ctx, args.ownerId, 1, { ceiling: 2 }));
-  return null;
-} });
 /** The assistant's addSoundEffect attaches the shared catalog sound to this project before placing it. */
 export const attachRunStockAudio=internalMutation({args:{...runArgs,catalogId:v.string()},returns:assetDocument,handler:async(ctx,args)=>{
   const run=await projectRun(ctx,args.projectId,args.ownerId);if(run.aiRunId!==args.runId||!run.aiRunning)throw new ConvexError('AI run is no longer active');
@@ -497,10 +489,11 @@ export const finish = internalMutation({ args: { ...runArgs, error: v.optional(v
 }});
 
 export const requestAnalysis = internalMutation({ args: { ...runArgs, assetId: v.string(), mode: analysisMode, speakerRequest:v.optional(speakerRequestValidator), frameRequest: v.optional(frameRequestValidator), videoRequest: v.optional(videoRequestValidator) }, returns: v.id("analysisRequests"), handler: async (ctx, args) => {
+  if (args.mode === 'understand') throw new ConvexError('Optional footage overviews start after the editor opens.');
   const project = await requireProject(ctx, args.projectId, args.ownerId);
   if (!project.aiRunning || project.aiRunId !== args.runId) throw new ConvexError("AI run is no longer active");
   const assetId = ctx.db.normalizeId("assets", args.assetId); const asset = assetId ? await ctx.db.get(assetId) : null;
-  if (!asset || asset.ownerId !== args.ownerId || asset.projectId !== args.projectId || asset.kind === "image" || ((args.mode === "understand" || args.mode === 'reference' || args.mode === "shots" || args.mode === "track" || args.mode === "facecam" || args.mode === "speakers" || args.mode === 'frames' || args.mode === 'video') && asset.kind !== "video")) throw new ConvexError("Choose suitable media from this project");
+  if (!asset || asset.ownerId !== args.ownerId || asset.projectId !== args.projectId || asset.kind === "image" || ((args.mode === 'reference' || args.mode === "shots" || args.mode === "track" || args.mode === "facecam" || args.mode === "speakers" || args.mode === 'frames' || args.mode === 'video') && asset.kind !== "video")) throw new ConvexError("Choose suitable media from this project");
   if(args.mode==='speakers'){
     const range=args.speakerRequest??{start:0,end:asset.duration??0};
     if(!Number.isFinite(range.start)||!Number.isFinite(range.end)||range.start<0||range.end<=range.start||range.end>(asset.duration??0)+.01||range.end-range.start>MAX_SPEAKER_WINDOW_SECONDS)throw new ConvexError(`Analyze active speakers in a source window of up to ${MAX_SPEAKER_WINDOW_SECONDS} seconds. Use followSubject on a retained clip.`);

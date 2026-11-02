@@ -69,7 +69,7 @@ export const create = mutation({ args: { projectId: v.id("projects"), storageId:
     await requireMediaTaskCapacity(ctx,ownerId,uploadPreparationTasks(args.kind));
     await enqueueMediaTask(ctx,{ownerId,projectId:args.projectId,assetId,kind:args.kind==='video'?'extract':'waveform'});
     if(args.kind==='video')await enqueueMediaTask(ctx,{ownerId,projectId:args.projectId,assetId,kind:'preview'});
-    await enqueueMediaTask(ctx,{ownerId,projectId:args.projectId,assetId,kind:args.kind==='video'?'understand':'transcribe'});
+    if(args.kind==='audio')await enqueueMediaTask(ctx,{ownerId,projectId:args.projectId,assetId,kind:'transcribe'});
   }
   return assetId;
 }});

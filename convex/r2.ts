@@ -212,8 +212,7 @@ export const finish = internalMutation({ args: { uploadId: v.id('r2Uploads'), si
     if (Date.now() - lease._creationTime > UPLOAD_RESERVATION_MS) await requireMediaTaskCapacity(ctx, lease.ownerId, uploadPreparationTasks(lease.kind), { ceiling: 2, countUploads: false });
     await enqueueMediaTask(ctx, { ownerId: lease.ownerId, projectId: lease.projectId, assetId, kind: lease.kind === 'video' ? 'extract' : 'waveform' });
     if(lease.kind==='video')await enqueueMediaTask(ctx,{ownerId:lease.ownerId,projectId:lease.projectId,assetId,kind:'preview'});
-    if (lease.kind === 'video') await enqueueMediaTask(ctx, { ownerId: lease.ownerId, projectId: lease.projectId, assetId, kind: 'understand' });
-    else await enqueueMediaTask(ctx, { ownerId: lease.ownerId, projectId: lease.projectId, assetId, kind: 'transcribe' });
+    if (lease.kind === 'audio') await enqueueMediaTask(ctx, { ownerId: lease.ownerId, projectId: lease.projectId, assetId, kind: 'transcribe' });
   }
   return assetId;
 }});

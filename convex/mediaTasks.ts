@@ -9,6 +9,8 @@ import { loadSceneCode } from './lib/scene_code';
 import { renderSnapshot as loadRenderSnapshot } from './lib/render_snapshots';
 import { compositionReviewResult,effectPlanValidator } from './lib/effect_plan';
 import { hydrateAsset } from './lib/asset_analysis';
+import { shouldUnderstandFootage } from '../lib/media-analysis/overview-policy';
+import { TRANSCRIPT_VERSION } from '../lib/media-analysis/transcript';
 import { createProject,readProject,projectIdentity,projectRun } from './lib/project_data';
 import { requireEditorAccess } from './lib/billing_access';
 import { ConvexError, v, type Infer, type ObjectType } from 'convex/values';
@@ -219,12 +221,31 @@ export const settle = internalMutation({ args: { workflowId: vWorkflowId, result
 }});
 export const cleanup = internalMutation({ args: { workflowId: vWorkflowId }, returns: v.null(), handler: async (ctx, args) => { await mediaWorkflow.cleanup(ctx, args.workflowId); return null; } });
 
+/** Called only after the editor opens; meaningful speech needs no overview. */
+export const startOverview = mutation({ args: { projectId: v.id('projects'), assetId: v.id('assets') }, returns: v.null(), handler: async (ctx, args) => {
+  const ownerId = await requireOwner(ctx); await requireEditorAccess(ctx, ownerId); await requireProject(ctx, args.projectId, ownerId);
+  const asset = await ctx.db.get(args.assetId);
+  if (!asset || asset.ownerId !== ownerId || asset.projectId !== args.projectId) throw new ConvexError('Media not found');
+  let source = await hydrateAsset(ctx, asset);
+  if (source.kind === 'video' && source.audioExtracted && !source.audioAssetId && !source.analysis?.transcript) {
+    // No audio means no transcription job. Save that verified absence as an empty transcript.
+    const transcript = { words: [], segments: [], version: TRANSCRIPT_VERSION };
+    await saveAssetAnalysis(ctx, source, { transcript });
+    source = { ...source, analysis: { ...source.analysis, transcript } };
+  }
+  if (!shouldUnderstandFootage(source)) return null;
+  const previous = await ctx.db.query('mediaTasks').withIndex('by_asset_kind', q => q.eq('assetId', asset._id).eq('kind', 'understand')).order('desc').first();
+  if (!previous) await enqueueMediaTask(ctx, { ...args, ownerId, kind: 'understand' }, () => requireMediaTaskCapacity(ctx, ownerId, 1));
+  return null;
+} });
+
 export const start = mutation({ args: { projectId: v.id('projects'), assetId: v.id('assets'), kind: mediaTaskKind }, returns: v.id('mediaTasks'), handler: async (ctx, args): Promise<Id<'mediaTasks'>> => {
   const ownerId = await requireOwner(ctx); await requireEditorAccess(ctx, ownerId); await requireProject(ctx, args.projectId, ownerId);
   const asset = await ctx.db.get(args.assetId);
   if (!asset || asset.ownerId !== ownerId || asset.projectId !== args.projectId || asset.kind === 'image' || args.kind === 'render' || args.kind === 'import' || args.kind === 'review') throw new ConvexError('Choose media from this project.');
   if (args.kind === 'frames') throw new ConvexError('Frame inspection requires a scoped AI question and source window.');
   if (args.kind === 'video') throw new ConvexError('Native video inspection requires a scoped AI question and source window.');
+  if (args.kind === 'understand') throw new ConvexError('Optional footage overviews start after the editor opens.');
   if (['extract', 'preview', 'shots', 'understand', 'track', 'reference', 'read', 'facecam', 'speakers'].includes(args.kind) && asset.kind !== 'video') throw new ConvexError('This operation requires a video.');
   if(args.kind==='speakers'&&(asset.duration??0)>120)throw new ConvexError('Use followSubject or analyzeMedia with a bounded speaker source window.');
   if (args.kind === 'waveform' && asset.kind !== 'audio') throw new ConvexError('Waveforms require an audio source.');
@@ -618,7 +639,6 @@ const RESULT_HANDLERS: Record<Doc<'mediaTasks'>['kind'], ResultHandler> = {
     }
     await enqueueMediaTask(ctx, { ownerId: task.ownerId, projectId: task.projectId, assetId: output._id, kind: 'extract' });
     await enqueueMediaTask(ctx, { ownerId: task.ownerId, projectId: task.projectId, assetId: output._id, kind: 'preview' });
-    await enqueueMediaTask(ctx, { ownerId: task.ownerId, projectId: task.projectId, assetId: output._id, kind: 'understand' });
   },
   cutout: async (ctx, task) => {
     const cutout = task.cutoutId ? await ctx.db.get(task.cutoutId) : null;

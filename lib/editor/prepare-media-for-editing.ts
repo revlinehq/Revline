@@ -16,7 +16,7 @@ const phases: Record<PreparationKind, EditingPreparationActivity['phase']> = { e
 const labels: Record<PreparationKind, string> = { extract: 'Preparing audio…', waveform: 'Preparing waveform…', transcribe: 'Listening to audio…' };
 const timeoutMessage = 'Media preparation is taking longer than expected. Retry to check the existing background tasks; your upload is saved.';
 
-/** Uploads already queue an optional overview. Only audio preparation and transcription gate editing. */
+/** Only audio preparation and transcription gate editing; optional overviews start after opening. */
 export async function prepareMediaForEditing(
   convex: MediaClient,
   projectId: Id<'projects'>,
