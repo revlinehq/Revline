@@ -15,12 +15,11 @@ const providerLogo = (id: ClaudeModelChoice) => id.startsWith('gpt') ? <OpenAILo
 
 /** On Pro these run only through MCP (Claude Code, Claude Desktop), not in the editor chat. */
 const MCP_ONLY_MODELS: readonly ClaudeModelChoice[] = ['opus', 'sonnet'];
-const effortLabels: Record<EditorReasoningEffort, string> = { low: 'Low', medium: 'Medium', high: 'High', xhigh: 'X-high', max: 'Max' };
+const effortLabels: Record<EditorReasoningEffort, string> = { low: 'Low', medium: 'Medium', high: 'High', xhigh: 'X-high' };
 
 type EffortSelection = {
-  value?: EditorReasoningEffort;
-  live?: EditorReasoningEffort;
-  onChange: (value: EditorReasoningEffort | undefined) => void;
+  value: EditorReasoningEffort;
+  onChange: (value: EditorReasoningEffort) => void;
 };
 
 export function AssistantModelPicker({ value, onChange, disabled, allowedModels, claudeViaMcp = false, effort }: {
@@ -35,12 +34,12 @@ export function AssistantModelPicker({ value, onChange, disabled, allowedModels,
   const mcpOnly = (id: ClaudeModelChoice) => claudeViaMcp && MCP_ONLY_MODELS.includes(id);
   const models = EDITOR_MODELS.filter(model => allowedModels.includes(model.id) || mcpOnly(model.id));
   const selected = EDITOR_MODELS.find(model => model.id === value);
-  const effortLabel = effort?.value ? effortLabels[effort.value] : effort?.live ? `Auto · ${effortLabels[effort.live]}` : 'Auto';
+  const effortLabel = effort ? effortLabels[effort.value] : undefined;
   return <div className="assistant-model-picker assistant-combined-model-picker">
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button type="button" variant="ghost" size="sm" className="inspector-select-trigger" aria-label={`AI editing model${effort ? ' and reasoning effort' : ''}`} disabled={disabled}>
-          {providerLogo(value)}<span className="inspector-select-value">{selected && 'shortLabel' in selected ? selected.shortLabel : selected?.label}</span>{effort && <span className="assistant-model-effort">· {effort.value ? effortLabels[effort.value] : 'Auto'}</span>}<ChevronDown size={13}/>
+          {providerLogo(value)}<span className="inspector-select-value">{selected && 'shortLabel' in selected ? selected.shortLabel : selected?.label}</span>{effort && <span className="assistant-model-effort">· {effortLabel}</span>}<ChevronDown size={13}/>
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent className="workspace-menu inspector-select-menu assistant-picker-menu" aria-label="AI editing model options" sideOffset={5}>
@@ -59,11 +58,9 @@ export function AssistantModelPicker({ value, onChange, disabled, allowedModels,
           <DropdownMenuSub>
             <DropdownMenuSubTrigger className="workspace-menu-item assistant-effort-subtrigger">Reasoning effort<span className="assistant-effort-value">{effortLabel}</span></DropdownMenuSubTrigger>
             <DropdownMenuSubContent className="workspace-menu inspector-select-menu assistant-picker-menu assistant-effort-menu" aria-label="AI reasoning effort options">
-              <DropdownMenuRadioGroup value={effort.value ?? 'auto'} onValueChange={next => {
-                if (next === 'auto') effort.onChange(undefined);
-                else { const choice = EDITOR_REASONING_EFFORTS.find(item => item === next); if (choice) effort.onChange(choice); }
+              <DropdownMenuRadioGroup value={effort.value} onValueChange={next => {
+                const choice = EDITOR_REASONING_EFFORTS.find(item => item === next); if (choice) effort.onChange(choice);
               }}>
-                <DropdownMenuRadioItem value="auto" className="workspace-menu-item inspector-select-option">{effort.live ? `Auto · ${effortLabels[effort.live]}` : 'Auto'}</DropdownMenuRadioItem>
                 {EDITOR_REASONING_EFFORTS.map(choice => <DropdownMenuRadioItem key={choice} value={choice} className="workspace-menu-item inspector-select-option">{effortLabels[choice]}</DropdownMenuRadioItem>)}
               </DropdownMenuRadioGroup>
             </DropdownMenuSubContent>

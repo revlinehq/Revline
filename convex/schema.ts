@@ -3,7 +3,7 @@ import { normalizationRequestValidator, normalizationResultValidator } from './l
 import {editorCommandValidator} from './lib/editor_command';
 import {editorEditModeValidator} from './lib/edit_mode';
 import { vMessageDoc, vMessageStatus } from '@convex-dev/agent/validators';
-import {editorReasoningEffortValidator, pinnedClaudeModelValidator} from './lib/claude_model';
+import {storedEditorReasoningEffortValidator, pinnedClaudeModelValidator} from './lib/claude_model';
 import { effectPlanValidator, compositionReviewResult } from './lib/effect_plan';
 import { cutoutEffectValidator } from './lib/cutout_effect_validator';
 import { defineSchema, defineTable } from "convex/server";
@@ -279,7 +279,7 @@ export default defineSchema({
   agentRunnerTurns:defineTable({runId:v.string(),projectId:v.id('projects'),ownerId:v.string(),attempts:v.number(),claimId:v.optional(v.string()),seenAt:v.number(),storageIds:v.optional(v.array(v.string()))}).index('by_runId',['runId']),
   // Request nonces the agent runner bridge has accepted, kept for the signature window so a replay is refused.
   agentRunnerNonces:defineTable({nonce:v.string(),expiresAt:v.number()}).index('by_nonce',['nonce']).index('by_expiresAt',['expiresAt']),
-  aiBudgets:defineTable({projectId:v.id('projects'),runId:v.string(),used:v.number(),effort:v.optional(editorReasoningEffortValidator),updatedAt:v.number()}).index('by_project',['projectId']),
+  aiBudgets:defineTable({projectId:v.id('projects'),runId:v.string(),used:v.number(),effort:v.optional(storedEditorReasoningEffortValidator),updatedAt:v.number()}).index('by_project',['projectId']),
   aiTimelinePreviews:defineTable({projectId:v.id('projects'),ownerId:v.string(),runId:v.string(),baseRevision:v.number(),timeline:timelineValidator,label:v.string(),changedClipIds:v.array(v.string()),removedClips:v.array(clipValidator),at:v.number(),sequence:v.number(),updatedAt:v.number()}).index('by_project',['projectId']),
   assistantQueue:defineTable({command:v.optional(editorCommandValidator),projectId:v.id('projects'),ownerId:v.string(),prompt:v.string(),pinnedModel:pinnedClaudeModelValidator,editMode:v.optional(editorEditModeValidator),attachedAssetIds:v.optional(v.array(v.id('assets'))),selectedClipId:v.optional(v.string()),selectedClipIds:v.optional(v.array(v.string())),playhead:v.optional(v.number()),timelineId:v.optional(v.string()),error:v.optional(v.string()),createdAt:v.number()}).index('by_project',['projectId']),
   aiRuns:defineTable({projectId:v.id('projects'),ownerId:v.string(),...aiStateFields}).index('by_project',['projectId']),

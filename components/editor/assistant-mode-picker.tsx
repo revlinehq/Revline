@@ -2,11 +2,12 @@
 
 import { useEffect, useState } from 'react';
 import { useAuth } from '@clerk/nextjs';
-import { DEFAULT_EDITOR_EDIT_MODE, type EditorEditMode } from '@/lib/ai/edit-mode';
+import { DEFAULT_EDITOR_EDIT_MODE, type EditorEditModePreference } from '@/lib/ai/edit-mode';
 import { InspectorSelect } from './inspector-select';
 import './assistant-model-picker.css';
 
 const EDIT_MODES = [
+  { value: 'auto', label: 'Auto', description: 'Picks the right mode for each request' },
   { value: 'fast', label: 'Fast', description: 'Edits quickly with lighter checks' },
   { value: 'precise', label: 'Precise', description: 'Watches full video like a human' },
 ] as const;
@@ -15,7 +16,7 @@ const EDIT_MODES = [
 export function useAssistantEditMode() {
   const { userId } = useAuth();
   const storageKey = userId ? `revline:editor-mode:${userId}` : undefined;
-  const [selection, setSelection] = useState<{ storageKey: string | undefined; value: EditorEditMode }>({ storageKey: undefined, value: DEFAULT_EDITOR_EDIT_MODE });
+  const [selection, setSelection] = useState<{ storageKey: string | undefined; value: EditorEditModePreference }>({ storageKey: undefined, value: DEFAULT_EDITOR_EDIT_MODE });
   const value = selection.storageKey === storageKey ? selection.value : DEFAULT_EDITOR_EDIT_MODE;
 
   useEffect(() => {
@@ -24,7 +25,7 @@ export function useAssistantEditMode() {
     setSelection({ storageKey, value: EDIT_MODES.find(mode => mode.value === saved)?.value ?? DEFAULT_EDITOR_EDIT_MODE });
   }, [storageKey]);
 
-  function chooseMode(value: EditorEditMode) {
+  function chooseMode(value: EditorEditModePreference) {
     setSelection({ storageKey, value });
     try { if (storageKey) localStorage.setItem(storageKey, value); } catch { /* Keep the choice for this visit. */ }
   }
