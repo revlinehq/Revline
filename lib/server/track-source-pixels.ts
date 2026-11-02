@@ -1,20 +1,50 @@
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
+import { spawn } from 'node:child_process';
 import { join } from 'node:path';
 import { AnalysisError } from '../media-analysis/errors';
-import { parsePixelTrackResult, pixelTrackRequest, type PixelTrackRequest } from '../media-analysis/pixel-track';
-const run = promisify(execFile);
+import { parsePixelTrackResult, pixelTrackRequest, pixelTrackMessage, type PixelTrackRequest, type PixelTrackChunk, type PixelTrackSummary, type pixelTrackHeader } from '../media-analysis/pixel-track';
+import type { z } from 'zod';
 
-/** CPU tracking runs in the processor, with bounded memory and no model downloads. */
-export async function trackSourcePixels(source: string, request: PixelTrackRequest, signal: AbortSignal) {
+type Sink = { header: (header: z.infer<typeof pixelTrackHeader>) => Promise<unknown>; chunk: (chunk: PixelTrackChunk) => Promise<unknown> };
+
+/** Consume NDJSON with stream backpressure; neither runtime nor output size limits the shot. */
+export async function trackSourcePixels(source: string, request: PixelTrackRequest, signal: AbortSignal, sink: Sink): Promise<PixelTrackSummary> {
   const input = pixelTrackRequest.parse(request);
   const python = process.env.PIXEL_TRACK_PYTHON || process.env.SCENE_DETECT_PYTHON || join(process.cwd(), '.data/scene-detection/bin/python');
+  const child = spawn(python, [join(process.cwd(), 'scripts/track-pixels.py'), source, JSON.stringify(input)], { signal, stdio: ['ignore', 'pipe', 'pipe'] });
+  let stderr = '', spawnError: Error | undefined;
+  child.stderr.on('data', (data: Buffer) => { stderr = (stderr + data.toString()).slice(-1000); });
+  child.on('error', error => { spawnError = error; });
+  const closed = new Promise<number | null>(resolve => child.once('close', code => resolve(code)));
+  let result: PixelTrackSummary | undefined, headerSeen = false, count = 0;
+  const sequence = { forward: 0, backward: 0 };
   try {
-    const { stdout } = await run(python, [join(process.cwd(), 'scripts/track-pixels.py'), source, JSON.stringify(input)], { signal, timeout: 240_000, maxBuffer: 3 * 1024 * 1024 });
-    return parsePixelTrackResult(JSON.parse(stdout), input);
+    let buffer = '';
+    for await (const data of child.stdout) {
+      buffer += Buffer.isBuffer(data) ? data.toString() : String(data);
+      let newline: number;
+      while ((newline = buffer.indexOf('\n')) >= 0) {
+        const line = buffer.slice(0, newline); buffer = buffer.slice(newline + 1);
+        if (!line.trim()) continue;
+        const message = pixelTrackMessage.parse(JSON.parse(line));
+        if (message.type === 'header') { if (headerSeen) throw new Error('Duplicate tracker header.'); headerSeen = true; await sink.header(message.header); }
+        else if (message.type === 'chunk') {
+          const chunk = message.chunk;
+          if (!headerSeen || chunk.sequence !== sequence[chunk.direction]++ || chunk.samples.some((sample, index) => sample.time < input.start - 1e-6 || sample.time >= input.end || index > 0 && (sample.frameIndex !== chunk.samples[index - 1].frameIndex + 1 || sample.time <= chunk.samples[index - 1].time))) throw new Error('Tracker returned an invalid frame chunk.');
+          count += chunk.samples.length; await sink.chunk(chunk);
+        } else {
+          const parsed = parsePixelTrackResult(message.result, input);
+          if (parsed.engine !== 'opencv-klt-template-v2' || parsed.sampleCount !== count) throw new Error('Tracker summary does not match its chunks.');
+          result = parsed;
+        }
+      }
+    }
+    const code = await closed;
+    signal.throwIfAborted();
+    if (spawnError || code !== 0 || !result || buffer.trim()) throw new Error(spawnError?.message ?? (stderr || 'Tracking ended without a complete result.'));
+    return result;
   } catch (error) {
+    child.kill('SIGTERM'); await closed;
     if (signal.aborted) throw error;
-    const detail = error instanceof Error ? error.message : String(error);
-    throw new AnalysisError(`Pixel tracking failed. Check the seed is visible and textured, or choose a shorter window. ${detail.slice(-600)}`, 502, false);
+    throw new AnalysisError(`Pixel tracking failed. ${error instanceof Error ? error.message.slice(-1000) : String(error)}`, 502, false);
   }
 }

@@ -1,4 +1,5 @@
 import type { ImpactSettings, OverlaySettings, ParallaxSettings } from './montage-vfx';
+import type { PixelTrackBinding } from '../media-analysis/pixel-track';
 import type { TextGradient } from './text-gradient';
 import type { BlendMode, CinematicBarSettings, EffectPreset, SolidColorSettings, MotionKeyframe, FrameShrinkSettings, ZoomSettings } from './clip-effects';
 import type { ColorGrade, ZoomBlur, Glitch, InvertColors, Dither, NeonEdges, LensDistortion, FilmOverlay, Vhs, LightLeak, DirectionalBlur, TurbulentDisplace, LightSweep, SoftBlur, FrameDistortion, FrameCorners, Bloom } from './visual-effects';
@@ -72,6 +73,7 @@ export type Clip = {
   effectKeyframes?: EffectKeyframeLane[];
   /** 0..1: blur keyframed movement by its speed (directional for slides, radial for scale pops). */
   motionBlur?: number;
+  pixelTracking?: PixelTrackBinding;
   /** Speed ramp: playback rate over clip-local seconds (linked video and audio share it). */
   speedRamp?: RampPoint[];
   /** Shape/text mask with feathered edge, keyed in motion path time. */

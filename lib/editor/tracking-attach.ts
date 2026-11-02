@@ -1,4 +1,4 @@
-import { MAX_TRACK_FRAMES } from '../media-analysis/pixel-track';
+import type { PixelTrackBinding, PixelTrackReference, TrackGeometry, TrackMaskSettings } from '../media-analysis/pixel-track';
 import { boundedCameraMotion } from './camera-framing';
 import { motionAt, NEUTRAL_MOTION } from './motion-path';
 import { objectMotionPatch } from '../ai/object-motion';
@@ -10,7 +10,6 @@ import { calculateVisualRect } from './visual-source-geometry';
 
 /** A tracked point: source seconds of the footage, and its position as fractions of the source frame. */
 export type TrackSample = { time: number; x: number; y: number; confidence?: number; scale?: number; rotation?: number };
-const MAX_KEYS = 110;
 export type TrackAttachmentOptions = { smoothing?: number; followTransform?: boolean; fps?: number; seedTime?: number; visibleUntil?: number };
 
 /** Tracking geometry applies to visual source clips. */
@@ -44,7 +43,7 @@ function footageMapper(footage: Clip, asset: Pick<MediaAsset, 'width' | 'height'
   };
 }
 
-/** Samples within [start, end) timeline seconds, smoothed and thinned to the key budget. */
+/** Samples within the timeline interval, with symmetric jitter smoothing. */
 function timelineSamples(footage: Clip, samples: TrackSample[], start: number, end: number, smoothing = .35) {
   const mapped = samples.map(sample => ({ ...sample, at: timelineTimeAtSource(footage, sample.time) })).filter(sample => sample.at >= Math.max(start, footage.start) - 1e-6 && sample.at <= Math.min(end, footage.start + footage.duration) + 1e-6).sort((a, b) => a.at - b.at);
   if (mapped.length < 1) throw new Error('The tracked path does not cover this clip. Track the subject over the clip\'s time first.');
@@ -56,16 +55,12 @@ function timelineSamples(footage: Clip, samples: TrackSample[], start: number, e
       scale: (sample.scale ?? 1) * (1 - smoothing) + ((before.scale ?? 1) + (after.scale ?? 1)) * smoothing / 2,
       rotation: (sample.rotation ?? 0) * (1 - smoothing) + ((before.rotation ?? 0) + (after.rotation ?? 0)) * smoothing / 2 };
   });
-  if (samples.some(sample => sample.confidence !== undefined)) return smooth;
-  const stride = Math.max(1, Math.ceil(smooth.length / MAX_KEYS));
-  const thinned = smooth.filter((_, index) => index % stride === 0);
-  if (thinned.at(-1) !== smooth.at(-1)) thinned.push(smooth.at(-1)!);
-  return thinned;
+  return smooth;
 }
 
 /** Interpolate AI-provided points ({time: timeline seconds, x, y in source fractions}) into source-time samples. */
 export function pointsToSamples(footage: Clip, points: { time: number; x: number; y: number }[]): TrackSample[] {
-  if (points.length < 2 || points.length > 120) throw new Error('Give 2 to 120 tracked points.');
+  if (points.length < 2) throw new Error('Give at least two tracked points.');
   if (points.some((point, index) => !Number.isFinite(point.time) || index > 0 && point.time <= points[index - 1].time || point.x < 0 || point.x > 1 || point.y < 0 || point.y > 1)) throw new Error('Tracked points need increasing timeline times and x/y within 0..1 of the source frame.');
   return points.map(point => ({ time: sourceTimeAt(footage, point.time), x: point.x, y: point.y }));
 }
@@ -98,11 +93,11 @@ export function attachOverlayPatch(overlay: Clip, footage: Clip, asset: Pick<Med
       keyframes.push({ ...last, time: until, opacity: 0 });
     }
   }
-  return objectMotionPatch(overlay, keyframes, { replaceMotion: true, aspectRatio, maxKeyframes: dense ? MAX_TRACK_FRAMES + 4 : 120 });
+  return objectMotionPatch(overlay, keyframes, { replaceMotion: true, aspectRatio });
 }
 
 /** A mask on `target` (the footage, or a styled copy of it) whose center follows the tracked point. */
-export function attachMaskPatch(target: Clip, footage: Clip, asset: Pick<MediaAsset, 'width' | 'height'>, aspectRatio: AspectRatio, samples: TrackSample[], shape: { shape: MaskShape; width: number; height: number; feather?: number; invert?: boolean; radius?: number; text?: string }, options: TrackAttachmentOptions = {}): { mask: ClipMask } {
+export function attachMaskPatch(target: Clip, footage: Clip, asset: Pick<MediaAsset, 'width' | 'height'>, aspectRatio: AspectRatio, samples: TrackSample[], shape: { shape: MaskShape; width: number; height: number; feather?: number; invert?: boolean; radius?: number; text?: string }, options: TrackAttachmentOptions = {}): { mask: ClipMask; pixelTracking: undefined } {
   assertFootage(footage);
   if (target.kind !== 'video' && target.kind !== 'image') throw new Error('Mask a video or image clip.');
   if (target.assetId !== footage.assetId) throw new Error('A tracked mask needs the footage itself or a synchronized copy of its source.');
@@ -114,7 +109,27 @@ export function attachMaskPatch(target: Clip, footage: Clip, asset: Pick<MediaAs
     const { frame, scale, rotation } = map(sample.x, sample.y, sample.time);
     return { time: Math.max(0, sample.at - target.start) + offset, x: frame.x, y: frame.y, width: Math.max(.005, Math.min(4, shape.width * (options.followTransform === false ? 1 : (sample.scale ?? 1) * scale / seed.scale))), height: Math.max(.005, Math.min(4, shape.height * (options.followTransform === false ? 1 : (sample.scale ?? 1) * scale / seed.scale))), rotation: options.followTransform === false ? 0 : Math.max(-360, Math.min(360, (sample.rotation ?? 0) + rotation - seed.rotation)), feather: shape.feather ?? 12 };
   }).filter((key, index, list) => index === 0 || key.time > list[index - 1].time);
-  return { mask: { ...(samples.some(sample => sample.confidence !== undefined) ? { active: { start: keys[0].time, end: options.visibleUntil === undefined ? keys[keys.length - 1].time + 1 / (options.fps ?? 60) : timelineTimeAtSource(footage, options.visibleUntil) - target.start + offset } } : {}), shape: shape.shape, ...(shape.invert ? { invert: true } : {}), ...(shape.radius !== undefined ? { radius: shape.radius } : {}), ...(shape.text ? { text: shape.text } : {}), keys } };
+  return { pixelTracking: undefined, mask: { ...(samples.some(sample => sample.confidence !== undefined) ? { active: { start: keys[0].time, end: options.visibleUntil === undefined ? keys[keys.length - 1].time + 1 / (options.fps ?? 60) : timelineTimeAtSource(footage, options.visibleUntil) - target.start + offset } } : {}), shape: shape.shape, ...(shape.invert ? { invert: true } : {}), ...(shape.radius !== undefined ? { radius: shape.radius } : {}), ...(shape.text ? { text: shape.text } : {}), keys } };
 }
 
 export { bakeMaskAnchors };
+function geometry(clip: Clip): TrackGeometry {
+  const { id, kind, assetId, start, duration, sourceStart, playbackRate, speedRamp, focus, transform, crop, fit, motion, motionOffset, cameraMotion, smoothZoom } = clip;
+  return { id, kind, start, duration, sourceStart, ...(assetId === undefined ? {} : { assetId }), ...(playbackRate === undefined ? {} : { playbackRate }), ...(speedRamp ? { speedRamp } : {}), ...(focus ? { focus } : {}), ...(transform ? { transform } : {}), ...(crop ? { crop } : {}), ...(fit ? { fit } : {}), ...(motion ? { motion } : {}), ...(motionOffset === undefined ? {} : { motionOffset }), ...(cameraMotion ? { cameraMotion } : {}), ...(smoothZoom ? { smoothZoom } : {}) };
+}
+
+/** A compact reference replaces per-frame keys in the timeline document. */
+export function streamedAttachmentPatch(overlay: Clip, footage: Clip, asset: Pick<MediaAsset, 'width' | 'height'>, aspectRatio: AspectRatio, reference: PixelTrackReference, options: { mode: 'move' | 'mask'; offsetX?: number; offsetY?: number; smoothing?: number; followTransform?: boolean; mask?: TrackMaskSettings }): Partial<Clip> {
+  assertFootage(footage);
+  if (!asset.width || !asset.height) throw new Error('The footage needs source dimensions.');
+  const base = { reference, footage: geometry(footage), width: asset.width, height: asset.height, aspectRatio, attachedStart: overlay.start, attachedDuration: overlay.duration, attachedMotionOffset: options.mode === 'mask' ? overlay.motionOffset ?? 0 : 0, smoothing: options.smoothing ?? .35, followTransform: options.followTransform ?? true };
+  let pixelTracking: PixelTrackBinding;
+  if (options.mode === 'mask') {
+    if (!options.mask || !['image', 'video'].includes(overlay.kind) || overlay.assetId !== footage.assetId) throw new Error('Mask tracking needs mask settings and a synchronized source copy.');
+    pixelTracking = { ...base, mode: 'mask', target: geometry(overlay), mask: options.mask };
+    return { pixelTracking, mask: undefined };
+  }
+  overlayCenter(overlay);
+  pixelTracking = { ...base, mode: 'move', offsetX: options.offsetX ?? 0, offsetY: options.offsetY ?? 0 };
+  return { pixelTracking, motion: [{ time: 0, ...NEUTRAL_MOTION }], motionOffset: 0, cameraMotion: undefined, smoothZoom: undefined, ...(overlay.kind === 'caption' || overlay.kind === 'graphic' ? { animation: 'none' } : {}) };
+}

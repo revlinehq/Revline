@@ -106,6 +106,11 @@ const bounds = { x: [-1, 1], y: [-1, 1], scale: [0.1, CAMERA_ZOOM_RANGE[1]], rot
 
 export function validateClipEffects(clip: Clip) {
   validateMontageVfx(clip);
+  if (clip.pixelTracking) {
+    const binding = clip.pixelTracking;
+    if (!['video', 'image', 'caption', 'graphic', 'solid'].includes(clip.kind) || binding.mode === 'mask' && !['video', 'image'].includes(clip.kind)) throw new Error('Track a visual overlay or a source mask.');
+    if (!(binding.width > 0 && binding.height > 0 && binding.attachedDuration > 0) || ![binding.width, binding.height, binding.attachedStart, binding.attachedDuration, binding.attachedMotionOffset, binding.smoothing].every(Number.isFinite) || binding.smoothing < 0 || binding.smoothing > 1 || !binding.reference.trackId || !binding.reference.token) throw new Error('Invalid pixel tracking reference.');
+  }
   validatePlaybackRate(clip);
   validateVisualEffects(clip);
   validateEffectKeyframes(clip.effectKeyframes);
@@ -167,7 +172,6 @@ export function validateClipEffects(clip: Clip) {
   if ((clip.motion?.length || clip.blendMode) && clip.kind === 'audio') throw new Error('Visual effects cannot be applied to audio.');
   if (clip.motionOffset !== undefined && (!Number.isFinite(clip.motionOffset))) throw new Error('Invalid motion offset.');
   if (!clip.motion) return;
-  if (clip.motion.length > 3604) throw new Error('Use at most 3604 motion keyframes per clip.');
   for (const [index, key] of clip.motion.entries()) {
     if (!Number.isFinite(key.time) || key.time < 0 || (index > 0 && key.time <= clip.motion[index - 1].time)) throw new Error('Motion keyframes need finite, increasing nonnegative times.');
     for (const property of Object.keys(bounds) as (keyof typeof bounds)[]) {
@@ -201,7 +205,7 @@ export function motionPreset(clip: Clip, preset: MotionPreset | EffectPreset): P
 }
 
 export function offsetClipMotion(clip: Clip, delta: number): Partial<Clip> {
-  return { ...(clip.speedRamp?.length ? { speedRamp: shiftSpeedRamp(clip.speedRamp, delta) } : {}), ...(clip.motion?.length || clip.effectKeyframes?.length || clip.mask || clip.parallax ? { motionOffset: (clip.motionOffset ?? 0) + delta } : {}), ...(clip.overlay ? {overlayTiming:{duration:clip.overlayTiming?.duration??clip.duration,offset:(clip.overlayTiming?.offset??0)+delta}} : {}), ...textTemplateTimingPatch(clip, delta),...textGradientTimingPatch(clip,delta),...textAnimationTimingPatch(clip,delta),...audioFadeTimingPatch(clip,delta),...visualFadeTimingPatch(clip,delta) };
+  return { ...(clip.speedRamp?.length ? { speedRamp: shiftSpeedRamp(clip.speedRamp, delta) } : {}), ...(clip.motion?.length || clip.effectKeyframes?.length || clip.mask || clip.parallax || clip.pixelTracking ? { motionOffset: (clip.motionOffset ?? 0) + delta } : {}), ...(clip.overlay ? {overlayTiming:{duration:clip.overlayTiming?.duration??clip.duration,offset:(clip.overlayTiming?.offset??0)+delta}} : {}), ...textTemplateTimingPatch(clip, delta),...textGradientTimingPatch(clip,delta),...textAnimationTimingPatch(clip,delta),...audioFadeTimingPatch(clip,delta),...visualFadeTimingPatch(clip,delta) };
 }
 
 /** Effect handles stretch the currently visible pulse, including a previously split segment. */

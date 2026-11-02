@@ -1,3 +1,4 @@
+import { serve as servePixelTrack } from './pixelTracks';
 import { httpRouter } from "convex/server";
 import { httpAction } from "./_generated/server";
 import { processEvent } from "@convex-dev/stripe";
@@ -9,6 +10,7 @@ import { prepare as prepareMcpUpload } from './mcpUploads';
 import { registerAgentRunnerRoutes } from './agentRunnerHttp';
 import { discordWebhookUrl } from './lib/discord_alert';
 const http = httpRouter();
+http.route({ path: '/pixel-track', method: 'GET', handler: servePixelTrack });
 registerAlertWebhooks(http);
 registerMcpRoutes(http);
 http.route({ path: '/mcp/upload', method: 'POST', handler: prepareMcpUpload });

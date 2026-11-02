@@ -59,7 +59,7 @@ export function editorCapabilityIndex(){
     effects:catalog.effects.map(group=>({category:group.category,items:group.items.map(item=>item.name)})),
     timedFX:catalog.timedFX.map(({preset,name})=>({preset,name})),
     visual:Object.keys(catalog.visual),
-    tracking:{tools:['trackPoints','attachToTrack'],skill:'vfx',page:'tracking'},
+    tracking:{tools:['trackPoints','getTrack','attachToTrack'],skill:'vfx',page:'tracking'},
     objectMotion:{tool:catalog.objectMotion.tool},
     cameraMotion:{tool:catalog.cameraMotion.tool},
     text:{animations:catalog.text.animations.map(({preset,name})=>({preset,name})),looks:catalog.text.looks.map(({id,name})=>({id,name})),fonts:catalog.text.fonts.map(({id,name})=>({id,name}))},

@@ -1,3 +1,5 @@
+import { pixelTrackingSources } from './pixel-tracking-runtime';
+import { pixelTrackEndpoint } from '../media-analysis/pixel-track-reader';
 import { validateVisualTransform } from './visual-inputs';
 import { boundedCameraMotion } from './camera-framing';
 import { calculateVisualRect } from './visual-source-geometry';
@@ -26,6 +28,8 @@ import { dimensions, timelineDuration, deriveTrackCounts, normalizeTimeline, tra
 export type ExportResolution = 720 | 1080 | 2160;
 export type CompositionOptions = {
   preview?: boolean;
+  pixelTrackEndpoint?: string;
+  pixelTrackFiles?: Record<string, string>;
   resolution?: ExportResolution;
   fps?: 24 | 30 | 60;
   gsapUrl?: string;
@@ -97,6 +101,9 @@ export function trimmedFocus(clip: Clip) {
 /** One trusted template drives both the player and MP4 renderer. User text stays text. */
 export function generateComposition(timeline: Timeline, assets: MediaAsset[], options: CompositionOptions = {}) {
   timeline = normalizeTimeline(timeline);
+  const trackedSources = pixelTrackingSources(timeline.clips);
+  const backend = process.env.NEXT_PUBLIC_CONVEX_URL || process.env.CONVEX_URL;
+  const trackEndpoint = options.pixelTrackEndpoint ?? (backend ? pixelTrackEndpoint(backend) : '');
   const duration = timelineDuration(timeline);
   if (!Number.isFinite(duration)) throw new Error('Timeline duration must be finite.');
   const resolution = options.resolution ?? 1080;
@@ -264,7 +271,7 @@ html,body{margin:0;width:${width}px;height:${height}px;overflow:hidden;backgroun
 .scene-layer{position:absolute;inset:0;overflow:hidden;pointer-events:none;visibility:hidden}.scene-frame{position:absolute;left:0;top:0;border:0;background:transparent;color-scheme:normal;transform-origin:0 0;pointer-events:none}
 [data-revline-effects]{opacity:0!important}${options.preview?'video[data-revline-effects]{opacity:0.001!important}':''}.visual-effect-output{position:absolute;pointer-events:none}.solid-color-rectangle{position:absolute;z-index:2147483647;pointer-events:none;transform-origin:center}
 .cinematic-bars{position:absolute;inset:0;overflow:hidden;z-index:2147483647;pointer-events:none}.cinematic-bar{position:absolute;left:0;right:0;background:#000}.cinematic-bar.top{top:0;transform:translateY(-100%)}.cinematic-bar.bottom{bottom:0;transform:translateY(100%)}
-</style>${sharedRuntimeUrl?`<meta name="revline-remotion-runtime" content="${sharedRuntimeUrl}">`:''}${previewRuntimeBridge}<script src="${gsapUrl}"></script><script src="${visualEffectsUrl}"></script>${sceneScripts}</head><body><div id="composition" data-composition-id="revline" data-duration="${safeDuration}" data-width="${width}" data-height="${height}" data-fps="${fps}">${compositionNodes}</div><script>
+</style>${sharedRuntimeUrl?`<meta name="revline-remotion-runtime" content="${sharedRuntimeUrl}">`:''}${previewRuntimeBridge}${trackedSources.length && trackEndpoint ? `<meta name="revline-pixel-track-endpoint" content="${escapeHtml(trackEndpoint)}">` : ''}<script src="${gsapUrl}"></script><script src="${visualEffectsUrl}"></script>${sceneScripts}</head><body><div id="composition" data-composition-id="revline" data-duration="${safeDuration}" data-width="${width}" data-height="${height}" data-fps="${fps}">${compositionNodes}</div><script>
 const timeline=gsap.timeline({paused:true});
 ${animation.join('\n')}
 window.__revlineDurationTween=gsap.to({},{duration:${safeDuration},paused:true});timeline.add(window.__revlineDurationTween,0);window.__revlineDurationTween.paused(false);
@@ -277,6 +284,7 @@ if(window.__revlineVisualEffects.installVisualFades)window.__revlineVisualEffect
 if(window.__revlineRemotionText)window.__revlineTextLayerController=window.__revlineRemotionText.installTextLayers(${textSources});${hasText?"else throw new Error('Text renderer failed to load.');":''}
 ${sceneRuntimeScript(sceneLayerSources(timeline, resolution), sceneFonts(rawFontUrls), sceneRuntimeUrl, sceneMediaUrls, Object.fromEntries(Object.entries(options.assetUrls ?? {}).filter(([key]) => /^https?:/i.test(key))))}
 ${transitions.length ? `if(window.__revlineRemotionTransitions)window.__revlineRemotionTransitions.installTransitions(${JSON.stringify(transitions).replace(/</g, '\\u003c')},${timeline.fps});else throw new Error('Transition renderer failed to load.');` : ''}
+${trackedSources.length ? `window.__revlineVisualEffects.installPixelTracking(${JSON.stringify(trackedSources).replace(/</g, '\\u003c')},${JSON.stringify(trackEndpoint)},${JSON.stringify(options.pixelTrackFiles ?? {})},${fps},${resolution});` : ''}
 document.querySelectorAll('video,audio').forEach(media=>{media.volume=Math.min(1,Number(media.dataset.volume));media.preservesPitch=true;});
 </script></body></html>`;
 }

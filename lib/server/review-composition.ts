@@ -20,7 +20,7 @@ export async function reviewComposition(snapshot:NonNullable<MediaWorkItem['revi
   const key=process.env.GOOGLE_GENERATIVE_AI_API_KEY;if(!key)throw new AnalysisError('Gemini composition review is not configured.',503);
   const edited=reviewWindowTimeline(snapshot.timeline,snapshot.start,snapshot.end),reference=reviewWindowTimeline(snapshot.reference,snapshot.start,snapshot.end);
   const assets=snapshot.assets.filter(asset=>[...edited.clips,...reference.clips].some(clip=>clip.assetId===asset._id)) as (MediaAsset & {size:number})[];
-  const {assetUrls,audioSourceOffsets}=await prepareComposition(directory,edited,assets,convexUrl,signal);
+  const {assetUrls,audioSourceOffsets}=await prepareComposition(directory,edited,assets,convexUrl,signal,[reference]);
   for(const [name,timeline] of [['edited',edited],['reference',reference]] as const){const path=join(directory,name);await mkdir(path);await linkCompositionResources(directory,path,assetUrls);await writeComposition(path,timeline,assets,assetUrls,720,snapshot.timeline.fps as 24|30|60,'./',signal,audioSourceOffsets);}
   const times=compositionSampleTimes(snapshot.plans,snapshot.timeline.fps,snapshot.start,snapshot.end);
   onProgress(25);
@@ -50,7 +50,7 @@ export async function captureTimelineFrames(snapshot:NonNullable<MediaWorkItem['
   const {timeline,times,baseline}=snapshot,frame=1/timeline.fps,last=Math.max(0,timelineDuration(timeline)-frame);
   const sceneMedia=new Set([...sceneMediaAssetIds(timeline),...baseline?sceneMediaAssetIds(baseline):[]]);
   const assets=snapshot.assets.filter(asset=>sceneMedia.has(asset._id)||[...timeline.clips,...baseline?.clips??[]].some(clip=>clip.assetId===asset._id)) as (MediaAsset & {size:number})[];
-  const {assetUrls,audioSourceOffsets}=await prepareComposition(directory,timeline,assets,convexUrl,signal);
+  const {assetUrls,audioSourceOffsets}=await prepareComposition(directory,timeline,assets,convexUrl,signal,baseline?[baseline]:[]);
   // Listening to a range needs only its decoded audio, not a page.
   if(snapshot.sound&&!snapshot.sound.check){onProgress(40);return {frames:[],sound:await measureTimelineSound(snapshot,directory,assetUrls,audioSourceOffsets,{start:snapshot.sound.start,end:Math.min(snapshot.sound.end,timelineDuration(timeline))},signal)};}
   const path=join(directory,'edited');await mkdir(path);await linkCompositionResources(directory,path,assetUrls);

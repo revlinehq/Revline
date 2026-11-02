@@ -1,6 +1,7 @@
 import type { MediaAsset, Timeline } from './types';
 
-/** Content edits reconcile on the live clock; only the output format needs a new player. */
+/** Streamed attachments own async clock state; recreate it when their clips or node order change. */
 export function previewContentKey(timeline: Timeline, _assets: MediaAsset[]): string {
-  return JSON.stringify({fps:timeline.fps,aspectRatio:timeline.aspectRatio});
+  const tracking = timeline.clips.some(clip => clip.pixelTracking) ? timeline.clips.map(clip => clip.pixelTracking ? clip : { id: clip.id }) : undefined;
+  return JSON.stringify({fps:timeline.fps,aspectRatio:timeline.aspectRatio,tracking});
 }

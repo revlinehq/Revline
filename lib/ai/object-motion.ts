@@ -18,10 +18,9 @@ export function animateObjects(timeline:Timeline,commands:ObjectMotionCommand[])
 }
 
 /** Canvas-relative object animation shares camera easing without sharing its hierarchy. */
-export function objectMotionPatch(clip:Clip,keyframes:ObjectMotionAnchor[],options:{replaceMotion?:boolean;aspectRatio?:AspectRatio;maxKeyframes?:number}={}):Partial<Clip>{
+export function objectMotionPatch(clip:Clip,keyframes:ObjectMotionAnchor[],options:{replaceMotion?:boolean;aspectRatio?:AspectRatio}={}):Partial<Clip>{
   if(!['caption','graphic','image','video','solid'].includes(clip.kind))throw new Error('Animate a video, image, text or solid-color clip.');
   if((clip.cameraMotion||clip.smoothZoom)&&!options.replaceMotion)throw new Error('This clip has a camera animation. Explicitly authorize replacing its motion before animating it as an object.');
-  if(keyframes.length>(options.maxKeyframes??120))throw new Error('The object path exceeds its keyframe budget.');
   for(const point of keyframes){
     if(!Number.isFinite(point.time)||point.time<0||point.time>clip.duration+1e-6)throw new Error('Object keyframes must fit inside this clip in clip-local timeline seconds.');
     if(!Number.isFinite(point.x)||!Number.isFinite(point.y)||Math.abs(point.x)>1||Math.abs(point.y)>1)throw new Error('Object x/y offsets must use canvas fractions between -1 and 1.');
@@ -45,7 +44,7 @@ export function objectMotionPatch(clip:Clip,keyframes:ObjectMotionAnchor[],optio
   }
   const motion=eased?sampleMotionAnchors(anchors.map(point=>({...point,easing:point.easing??'linear'})),clip.duration):anchors.map(({easing:_easing,...point})=>({...point}));
   // The new path starts at offset 0; keep keyframed effects on the same clock.
-  const patch:Partial<Clip>={motion,motionOffset:0,cameraMotion:undefined,smoothZoom:undefined,...(clip.effectKeyframes?.length&&clip.motionOffset?{effectKeyframes:shiftEffectKeyframes(clip.effectKeyframes,-clip.motionOffset)}:{}),...(clip.kind==='caption'||clip.kind==='graphic'?{animation:'none' as const}:{} )};
+  const patch:Partial<Clip>={pixelTracking:undefined,motion,motionOffset:0,cameraMotion:undefined,smoothZoom:undefined,...(clip.effectKeyframes?.length&&clip.motionOffset?{effectKeyframes:shiftEffectKeyframes(clip.effectKeyframes,-clip.motionOffset)}:{}),...(clip.kind==='caption'||clip.kind==='graphic'?{animation:'none' as const}:{} )};
   validateClipEffects({...clip,...patch});
   return patch;
 }

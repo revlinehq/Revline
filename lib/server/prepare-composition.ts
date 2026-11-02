@@ -1,4 +1,5 @@
-import { copyFile, writeFile,link,access } from 'node:fs/promises';
+import { preparePixelTrackFiles, localPixelTrackFiles } from './pixel-track-files';
+import { copyFile, writeFile,link,access,readdir } from 'node:fs/promises';
 import { extname, join } from 'node:path';
 import type { MediaAsset, Timeline } from '../editor/types';
 import { TEXT_FONTS } from '../editor/text-fonts';
@@ -15,7 +16,7 @@ import { forEachLimited } from './run-limited';
 type CompositionAsset=MediaAsset&{size:number;ownerId?:string;projectId?:string;contentType?:string;r2Key?:string;storageId?:string};
 
 /** Shared trusted assets/runtime preparation for MP4 export and rendered review. */
-export async function prepareComposition(directory:string,timeline:Timeline,assets:CompositionAsset[],convexUrl:string,signal:AbortSignal) {
+export async function prepareComposition(directory:string,timeline:Timeline,assets:CompositionAsset[],convexUrl:string,signal:AbortSignal,referenceTimelines:Timeline[] = []) {
   const assetUrls:Record<string,string>={},audioSourceOffsets:Record<string,number>={};
   const audioWindows=new Map<string,{start:number;end:number}>();
   for(const clip of timeline.clips)if(clip.kind==='audio'&&clip.assetId&&(clip.volume??1)>0){
@@ -51,6 +52,7 @@ export async function prepareComposition(directory:string,timeline:Timeline,asse
     assetUrls[asset._id]=url;
     if(offset!==undefined)audioSourceOffsets[asset._id]=offset;
   }
+  await preparePixelTrackFiles(directory, { ...timeline, clips: [...timeline.clips, ...referenceTimelines.flatMap(reference => reference.clips)] }, convexUrl, signal);
   await copyFile(join(process.cwd(),'public/vendor/gsap.min.js'),join(directory,'gsap.min.js'));
   await copyFile(join(process.cwd(),'public/vendor/visual-effects.js'),join(directory,'visual-effects.js'));
   if(timeline.clips.some(clip=>clip.kind==='graphic'||clip.kind==='caption'||isTransitionClip(clip)))await copyFile(join(process.cwd(),'public/vendor/remotion-runtime.js'),join(directory,'remotion-runtime.js'));
@@ -70,7 +72,7 @@ export async function prepareComposition(directory:string,timeline:Timeline,asse
   return {assetUrls,audioSourceOffsets};
 }
 export async function linkCompositionResources(root:string,directory:string,assetUrls:Record<string,string>){
-  for(const name of [...Object.values(assetUrls).map(url=>url.slice(2)),'gsap.min.js','visual-effects.js','remotion-runtime.js','scene-runtime.js','scene-react.js','lucide-icons.json',...TEXT_FONTS.map(font=>font.fileName)]){
+  for(const name of [...Object.values(assetUrls).map(url=>url.slice(2)),'gsap.min.js','visual-effects.js','remotion-runtime.js','scene-runtime.js','scene-react.js','lucide-icons.json',...TEXT_FONTS.map(font=>font.fileName),...(await readdir(root)).filter(name=>/^pixel-track-.+\.json$/.test(name))]){
     try{await access(join(root,name));}catch{continue;}
     await link(join(root,name),join(directory,name));
   }
@@ -95,7 +97,7 @@ export async function writeComposition(directory:string,timeline:Timeline,assets
   // so it mixed an extra unity-gain, 1x copy of each source's first audible clip.
   // Author media in that same form so every clip's sound is mixed exactly once.
   const mediaSrc=(url:string)=>(prefix+url.slice(2)).replace(/^\.\//,'');
-  await writeFile(join(directory,'index.html'),generateComposition(rendered,assets,{resolution,fps,gsapUrl:prefix+'gsap.min.js',visualEffectsUrl:prefix+'visual-effects.js',remotionRuntimeUrl:prefix+'remotion-runtime.js',sceneRuntimeUrl:prefix+'scene-runtime.js',fontUrl:prefix+'space-grotesk-latin.woff2',fontUrls:Object.fromEntries(TEXT_FONTS.map(font=>[font.id,prefix+font.fileName])),assetUrls:Object.fromEntries(Object.entries(assetUrls).map(([id,url])=>[id,mediaSrc(url)]))}));
+  await writeFile(join(directory,'index.html'),generateComposition(rendered,assets,{pixelTrackFiles:await localPixelTrackFiles(directory),resolution,fps,gsapUrl:prefix+'gsap.min.js',visualEffectsUrl:prefix+'visual-effects.js',remotionRuntimeUrl:prefix+'remotion-runtime.js',sceneRuntimeUrl:prefix+'scene-runtime.js',fontUrl:prefix+'space-grotesk-latin.woff2',fontUrls:Object.fromEntries(TEXT_FONTS.map(font=>[font.id,prefix+font.fileName])),assetUrls:Object.fromEntries(Object.entries(assetUrls).map(([id,url])=>[id,mediaSrc(url)]))}));
 }
 /** Keep original times/animation phases and source holds for transitions in the window. */
 export function reviewWindowTimeline(timeline:Timeline,start:number,end:number):Timeline {
